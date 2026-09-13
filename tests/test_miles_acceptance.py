@@ -421,6 +421,7 @@ def case(tmp_path: Path) -> dict:
     generation.mkdir(parents=True)
     (checkpoint_root / "latest_checkpointed_iteration.txt").write_text("0\n")
     (generation / ".metadata").write_bytes(b"synthetic metadata")
+    (generation / "common.pt").write_bytes(b"synthetic common state")
     for rank in range(8):
         (generation / f"__{rank}_0.distcp").write_bytes(f"rank-{rank}-trained".encode())
     checkpoint_files = [
@@ -522,6 +523,9 @@ def case(tmp_path: Path) -> dict:
                     "base_policy_value_sha256": "sha256:" + f"{rank + 20:064x}",
                     "trained_policy_value_sha256": "sha256:"
                     + f"{rank + (40 if rank == 0 else 20):064x}",
+                    "trained_optimizer_value_sha256": "sha256:" + f"{rank + 60:064x}",
+                    "trained_scheduler_value_sha256": "sha256:" + f"{rank + 80:064x}",
+                    "trained_rng_value_sha256": "sha256:" + f"{rank + 100:064x}",
                     "policy_changed": rank == 0,
                 }
                 for rank in range(8)
@@ -532,6 +536,7 @@ def case(tmp_path: Path) -> dict:
             "scheduler_state_used_for_delta": False,
             "rng_state_used_for_delta": False,
             "metadata_used_for_delta": False,
+            "checkpoint_state_commitment_method": acceptance.RANK_STATE_COMMITMENT_METHOD,
             "reward_values_included": False,
         }
     )
@@ -664,6 +669,8 @@ def test_terminal_acceptance_reopens_every_gate_without_reward_values(case: dict
     assert result["status"] == "accepted"
     assert result["optimizer_update_proof"]["optimizer_updates"] == 1
     assert result["episode_audit"]["train_within_group_reward_variance_present"] is True
+    assert result["episode_audit"]["unique_challenge_instance_count"] == 10
+    assert result["episode_audit"]["unique_evidence_run_count"] == 10
     assert result["reward_values_included"] is False
     assert result["external_gpu_release_verified"] is True
     assert "synthetic training task" not in json.dumps(result)
@@ -881,6 +888,21 @@ def test_episode_rejects_non_digest_authoritative_verifier(case: dict) -> None:
 
     with pytest.raises(ValueError, match="verifier identity"):
         acceptance._episode(path, acceptance._dynamic_config(binding), "train")
+
+
+def test_episode_audit_rejects_reused_challenge_evidence_identity(case: dict) -> None:
+    source = case["episodes"][1]
+    target = case["episodes"][2]
+    reused = json.loads((source / "instance.json").read_bytes())["evidence_run_id"]
+    instance = json.loads((target / "instance.json").read_bytes())
+    instance["evidence_run_id"] = reused
+    _replace_episode_file(target, "instance.json", instance)
+    reward = json.loads((target / "reward.json").read_bytes())
+    reward["direct_authority_attestation"]["context"]["evidence_run_id"] = reused
+    _replace_episode_file(target, "reward.json", reward)
+
+    with pytest.raises(ValueError, match="unique authoritative reward variance"):
+        acceptance.episode_audit(case["plan"])
 
 
 def test_shallow_terminal_validation_still_rejects_extra_or_false_claims(case: dict) -> None:

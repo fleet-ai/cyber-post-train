@@ -31,7 +31,7 @@ from cyber_post_train.jobs import API_URLS, digest
 from evals.fleet import opencode_self_hosted as fleet
 
 from .miles_conversion import _write
-from .miles_reload import CHECKPOINT_SCHEMA, _verify_checkpoint
+from .miles_reload import CHECKPOINT_SCHEMA, RANK_STATE_COMMITMENT_METHOD, _verify_checkpoint
 from .miles_training import SCHEMA as TRAINING_SCHEMA
 from .miles_training import job_request
 from .rl_episode import _validate as validate_episode_config
@@ -125,6 +125,10 @@ _EPISODE_AUDIT_FIELDS = frozenset(
         "unique_authoritative_verifier_execution_count",
         "authoritative_verifier_execution_ids_sha256",
         "authoritative_verifier_bindings_sha256",
+        "unique_challenge_instance_count",
+        "challenge_instance_ids_sha256",
+        "unique_evidence_run_count",
+        "evidence_run_ids_sha256",
         "train_nonzero_reward_present",
         "train_within_group_reward_variance_present",
         "reward_values_included",
@@ -800,7 +804,9 @@ def _episode(path: Path, source: dict[str, Any], kind: str) -> dict[str, Any]:
     cleanup = values["cleanup.json"]
     instance_id = accepted.get("instance_id")
     if (
-        set(instance) != {"instance_id", "evidence_run_id"}
+        not isinstance(instance_id, str)
+        or not instance_id
+        or set(instance) != {"instance_id", "evidence_run_id"}
         or instance.get("instance_id") != instance_id
         or cleanup
         != {
@@ -906,6 +912,8 @@ def _episode(path: Path, source: dict[str, Any], kind: str) -> dict[str, Any]:
         "sample_index": int(path.name.rsplit("-s", 1)[1]),
         "score": score,
         "execution_id": execution_id,
+        "instance_id": instance_id,
+        "evidence_id": evidence_id,
         "assistant_messages": assistant,
         "tool_messages": tools,
         "report_submitted": accepted.get("done_reason") == "report_submitted",
@@ -976,11 +984,20 @@ def episode_audit(plan: dict[str, Any]) -> dict[str, Any]:
     }:
         raise ValueError("Miles episode sample identities changed")
     execution_ids = [row["execution_id"] for row in rows]
+    instance_ids = [row["instance_id"] for row in rows]
+    evidence_ids = [row["evidence_id"] for row in rows]
     train = [row for row in rows if row["kind"] == "train"]
     scores = [row["score"] for row in train]
     mean = math.fsum(scores) / len(scores)
     variance = math.fsum((score - mean) ** 2 for score in scores) / len(scores)
-    if len(set(execution_ids)) != 10 or not any(score > 0 for score in scores) or variance <= 0:
+    if (
+        len(set(execution_ids)) != 10
+        or len(set(instance_ids)) != 10
+        or len(set(evidence_ids)) != 10
+        or set(evidence_ids) & set(execution_ids)
+        or not any(score > 0 for score in scores)
+        or variance <= 0
+    ):
         raise ValueError("Miles canary lacks unique authoritative reward variance")
     verifier_bindings = sorted(
         {json.dumps(row["verifier"], sort_keys=True, separators=(",", ":")) for row in rows}
@@ -996,6 +1013,10 @@ def episode_audit(plan: dict[str, Any]) -> dict[str, Any]:
         "unique_authoritative_verifier_execution_count": 10,
         "authoritative_verifier_execution_ids_sha256": "sha256:" + digest(sorted(execution_ids)),
         "authoritative_verifier_bindings_sha256": "sha256:" + digest(verifier_bindings),
+        "unique_challenge_instance_count": 10,
+        "challenge_instance_ids_sha256": "sha256:" + digest(sorted(instance_ids)),
+        "unique_evidence_run_count": 10,
+        "evidence_run_ids_sha256": "sha256:" + digest(sorted(evidence_ids)),
         "train_nonzero_reward_present": True,
         "train_within_group_reward_variance_present": True,
         "reward_values_included": False,
@@ -1183,9 +1204,11 @@ def validate_policy_delta_observation(
 
     Distributed-checkpoint files mix model tensors with optimizer, scheduler,
     RNG, and metadata payloads.  A new filename or file digest therefore does
-    not prove a policy update.  The independent all-rank observer must hash
-    named policy tensor values before and after the update and bind those
-    high-entropy state digests to both exact checkpoint receipts.
+    not prove a policy update.  After the run, the independent all-rank
+    observer reopens the immutable sealed checkpoint: it hashes named policy
+    tensors before/after the update and seals the trained optimizer, scheduler,
+    and RNG commitments used by the later independent reload.  The training
+    process itself need not have emitted these observations.
     """
 
     sealed(value, POLICY_DELTA_SCHEMA)
@@ -1203,6 +1226,7 @@ def validate_policy_delta_observation(
         "scheduler_state_used_for_delta",
         "rng_state_used_for_delta",
         "metadata_used_for_delta",
+        "checkpoint_state_commitment_method",
         "reward_values_included",
         "sha256",
     }
@@ -1223,6 +1247,7 @@ def validate_policy_delta_observation(
         or value.get("scheduler_state_used_for_delta") is not False
         or value.get("rng_state_used_for_delta") is not False
         or value.get("metadata_used_for_delta") is not False
+        or value.get("checkpoint_state_commitment_method") != RANK_STATE_COMMITMENT_METHOD
         or value.get("reward_values_included") is not False
     ):
         raise ValueError("policy delta observation is incomplete or not checkpoint-bound")
@@ -1238,6 +1263,9 @@ def validate_policy_delta_observation(
             "trained_policy_structure_sha256",
             "base_policy_value_sha256",
             "trained_policy_value_sha256",
+            "trained_optimizer_value_sha256",
+            "trained_scheduler_value_sha256",
+            "trained_rng_value_sha256",
             "policy_changed",
         }
         base_value = str(row.get("base_policy_value_sha256", "")).removeprefix("sha256:")
@@ -1246,6 +1274,13 @@ def validate_policy_delta_observation(
         trained_structure = str(row.get("trained_policy_structure_sha256", "")).removeprefix(
             "sha256:"
         )
+        trained_optimizer = str(row.get("trained_optimizer_value_sha256", "")).removeprefix(
+            "sha256:"
+        )
+        trained_scheduler = str(row.get("trained_scheduler_value_sha256", "")).removeprefix(
+            "sha256:"
+        )
+        trained_rng = str(row.get("trained_rng_value_sha256", "")).removeprefix("sha256:")
         differs = base_value != trained_value
         if (
             set(row) != fields
@@ -1258,6 +1293,9 @@ def validate_policy_delta_observation(
             or trained_structure != base_structure
             or _SHA.fullmatch(base_value) is None
             or _SHA.fullmatch(trained_value) is None
+            or _SHA.fullmatch(trained_optimizer) is None
+            or _SHA.fullmatch(trained_scheduler) is None
+            or _SHA.fullmatch(trained_rng) is None
             or row.get("policy_changed") is not differs
         ):
             raise ValueError("policy delta rank observation is invalid or counter-only")
@@ -1636,6 +1674,8 @@ def validate_terminal(value: dict[str, Any], *, check_files: bool = True) -> dic
         or episode.get("infrastructure_invalid_count") != 0
         or episode.get("truncated_count") != 0
         or episode.get("unique_authoritative_verifier_execution_count") != 10
+        or episode.get("unique_challenge_instance_count") != 10
+        or episode.get("unique_evidence_run_count") != 10
         or episode.get("train_nonzero_reward_present") is not True
         or episode.get("train_within_group_reward_variance_present") is not True
         or episode.get("reward_values_included") is not False

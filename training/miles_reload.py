@@ -36,6 +36,7 @@ CONFIG_SCHEMA = "cyber_miles_rl_reload_config_v1"
 RELOAD_SCHEMA = "cyber_miles_rl_reload_v1"
 PREFLIGHT_SCHEMA = "cyber_miles_rl_reload_cpu_preflight_v1"
 RESULT_SCHEMA = "cyber_miles_rl_reload_validation_v1"
+RANK_STATE_COMMITMENT_METHOD = "miles_all_rank_model_optimizer_scheduler_rng_value_sha256_v1"
 NATIVE_DRIVER_SHA256 = "85dbfd31d41a84f9c2e79a2918583851fb53925630afa229e9cd0a154b170f46"
 DEADLINE_SECONDS = 1800
 RUNTIME_FILES = (
@@ -53,7 +54,7 @@ def _runtime() -> dict[str, str]:
 
 
 def _receipt(path: Path, *, schema: str | None = None) -> dict:
-    value = json.loads(path.read_bytes())
+    value, _ = _json_snapshot(path)
     if not isinstance(value, dict):
         raise ValueError("receipt must be an object")
     if schema is None:
@@ -64,6 +65,25 @@ def _receipt(path: Path, *, schema: str | None = None) -> dict:
     else:
         sealed(value, schema)
     return value
+
+
+def _json_snapshot(path: Path) -> tuple[dict, str]:
+    """Read one regular JSON file once and reject replacement during the read."""
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("receipt is missing or indirect")
+    before = path.stat()
+    payload = path.read_bytes()
+    after = path.stat()
+    fields = ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
+    if any(getattr(before, field) != getattr(after, field) for field in fields):
+        raise ValueError("receipt changed while being read")
+    try:
+        value = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("receipt is not valid JSON") from exc
+    if not isinstance(value, dict):
+        raise ValueError("receipt must be an object")
+    return value, hashlib.sha256(payload).hexdigest()
 
 
 def _checkpoint_inventory(root: Path, index: int, world_size: int) -> list[dict]:
@@ -89,9 +109,14 @@ def _checkpoint_inventory(root: Path, index: int, world_size: int) -> list[dict]
             files.append({"path": str(path.relative_to(root)), "size": size})
     names = {item["path"] for item in files}
     prefix = generation.name + "/"
-    shards = [name for name in names if name.startswith(prefix) and name.endswith(".distcp")]
-    if prefix + ".metadata" not in names or len(shards) < world_size:
-        raise ValueError("trained checkpoint lacks all-rank distributed state")
+    expected = {
+        tracker.name,
+        prefix + ".metadata",
+        prefix + "common.pt",
+        *(prefix + f"__{rank}_0.distcp" for rank in range(world_size)),
+    }
+    if names != expected:
+        raise ValueError("trained checkpoint is not one complete exact-rank DCP generation")
     return files
 
 
@@ -117,11 +142,9 @@ def _checkpoint_snapshot(root: Path, files: Sequence[Mapping[str, Any]]) -> list
 
 
 def _validate_source_plan(plan: dict) -> tuple[int, int]:
-    from .miles_training import job_request as source_request
-
-    # Reconstructing the original bundled request catches a stale/edited plan
-    # before the sealer accepts any checkpoint bytes.
-    source_request(plan)
+    # This sealer may run after the repository evolves.  Historical request
+    # identity is validated from the exact submitted source bytes by
+    # miles_acceptance; never reconstruct a past POST with current code here.
     if plan.get("schema") != SOURCE_SCHEMA or plan.get("execution", {}).get("image") != miles.IMAGE:
         raise ValueError("checkpoint sealing requires the exact Miles training plan")
     args = plan.get("arguments", {})
@@ -217,10 +240,114 @@ def _verify_checkpoint(manifest: dict, *, hashes: bool) -> list[dict]:
     return _checkpoint_snapshot(root, manifest["files"])
 
 
-def compile_reload(config: dict, *, relative_to: Path) -> dict:
-    from .sft import _known, _sfs_root, read_mapping
+def _sha256(value: object, label: str) -> str:
+    result = str(value).removeprefix("sha256:")
+    if len(result) != 64 or any(character not in "0123456789abcdef" for character in result):
+        raise ValueError(f"{label} is not an exact SHA-256")
+    return result
 
-    _known(config, {"schema", "name", "output_root", "checkpoint", "cluster"}, "Miles reload")
+
+def _terminal_binding(
+    locator: Mapping[str, Any],
+    *,
+    relative_to: Path,
+    manifest_path: Path,
+    manifest_file_sha256: str,
+    manifest: dict,
+) -> dict:
+    """Bind reload to a fully reopened terminal acceptance and saved rank state."""
+    from . import miles_acceptance
+
+    if not isinstance(locator, Mapping) or set(locator) != {
+        "receipt",
+        "file_sha256",
+        "receipt_sha256",
+    }:
+        raise ValueError("terminal acceptance locator fields changed")
+    path = relative_to / str(locator["receipt"])
+    terminal, terminal_file_sha256 = _json_snapshot(path)
+    if terminal_file_sha256 != _sha256(locator["file_sha256"], "terminal file digest"):
+        raise ValueError("Miles terminal acceptance file digest mismatch")
+    sealed(terminal, miles_acceptance.TERMINAL_SCHEMA)
+    terminal_receipt_sha256 = _sha256(terminal["sha256"], "terminal receipt digest")
+    if terminal_receipt_sha256 != _sha256(
+        locator["receipt_sha256"], "configured terminal receipt digest"
+    ):
+        raise ValueError("Miles terminal acceptance receipt digest mismatch")
+    miles_acceptance.validate_terminal(terminal, check_files=True)
+
+    checkpoint_reference = terminal.get("checkpoint_manifest")
+    policy_reference = terminal.get("policy_delta_observation")
+    if (
+        not isinstance(checkpoint_reference, dict)
+        or set(checkpoint_reference) != miles_acceptance._REFERENCE_FIELDS
+        or Path(checkpoint_reference.get("path", "")) != manifest_path
+        or _sha256(checkpoint_reference.get("file_sha256"), "accepted checkpoint file digest")
+        != manifest_file_sha256
+        or _sha256(checkpoint_reference.get("receipt_sha256"), "accepted checkpoint digest")
+        != _sha256(manifest.get("sha256"), "checkpoint manifest digest")
+        or not isinstance(policy_reference, dict)
+        or set(policy_reference) != miles_acceptance._REFERENCE_FIELDS
+    ):
+        raise ValueError("terminal acceptance does not bind the exact reload checkpoint")
+
+    policy_path = Path(policy_reference["path"])
+    policy, policy_file_sha256 = _json_snapshot(policy_path)
+    if (
+        policy_file_sha256
+        != _sha256(policy_reference["file_sha256"], "policy observation file digest")
+        or _sha256(policy.get("sha256"), "policy observation digest")
+        != _sha256(policy_reference["receipt_sha256"], "accepted policy observation digest")
+    ):
+        raise ValueError("accepted policy-state observation digest changed")
+    commitments = []
+    for rank, row in enumerate(policy["ranks"]):
+        commitments.append(
+            {
+                "rank": rank,
+                "model_tensor_count": row["policy_tensor_count"],
+                "model_local_numel": row["local_policy_numel"],
+                "model_structure_sha256": _sha256(
+                    row["trained_policy_structure_sha256"], "trained policy structure digest"
+                ),
+                "model_value_sha256": _sha256(
+                    row["trained_policy_value_sha256"], "trained policy value digest"
+                ),
+                "optimizer_value_sha256": _sha256(
+                    row["trained_optimizer_value_sha256"], "trained optimizer digest"
+                ),
+                "scheduler_value_sha256": _sha256(
+                    row["trained_scheduler_value_sha256"], "trained scheduler digest"
+                ),
+                "rng_value_sha256": _sha256(
+                    row["trained_rng_value_sha256"], "trained RNG digest"
+                ),
+            }
+        )
+    return {
+        "source_terminal_acceptance": {
+            "path": str(path),
+            "file_sha256": terminal_file_sha256,
+            "receipt_sha256": terminal_receipt_sha256,
+        },
+        "source_policy_delta_observation": {
+            "path": str(policy_path),
+            "file_sha256": policy_file_sha256,
+            "receipt_sha256": _sha256(policy["sha256"], "policy observation digest"),
+        },
+        "rank_state_commitment_method": RANK_STATE_COMMITMENT_METHOD,
+        "expected_rank_state_commitments": commitments,
+    }
+
+
+def compile_reload(config: dict, *, relative_to: Path) -> dict:
+    from .sft import _known, _sfs_root
+
+    _known(
+        config,
+        {"schema", "name", "output_root", "checkpoint", "terminal_acceptance", "cluster"},
+        "Miles reload",
+    )
     if config.get("schema") != CONFIG_SCHEMA:
         raise ValueError("Miles reload configuration schema mismatch")
     checkpoint = config["checkpoint"]
@@ -230,10 +357,10 @@ def compile_reload(config: dict, *, relative_to: Path) -> dict:
     if cluster.get("target") != "dev" or cluster.get("priority") != "c1":
         raise ValueError("Miles reload qualification is dev-only at c1")
     manifest_path = relative_to / checkpoint["manifest"]
-    expected_digest = checkpoint["sha256"].removeprefix("sha256:")
-    if len(expected_digest) != 64 or _hash(manifest_path) != expected_digest:
+    manifest, observed_manifest_file_sha256 = _json_snapshot(manifest_path)
+    expected_digest = _sha256(checkpoint["sha256"], "trained-checkpoint manifest file digest")
+    if observed_manifest_file_sha256 != expected_digest:
         raise ValueError("Miles trained-checkpoint manifest digest mismatch")
-    manifest = read_mapping(manifest_path)
     sealed(manifest, CHECKPOINT_SCHEMA)
     if (
         manifest.get("image") != miles.IMAGE
@@ -276,12 +403,20 @@ def compile_reload(config: dict, *, relative_to: Path) -> dict:
     for key in ("cpu_request", "cpu_limit", "memory_request", "memory_limit"):
         if quantity(resources[key]) < quantity(source_resources[key]):
             raise ValueError("reload cannot underreserve the successful source topology")
+    terminal = _terminal_binding(
+        config["terminal_acceptance"],
+        relative_to=relative_to,
+        manifest_path=manifest_path,
+        manifest_file_sha256=expected_digest,
+        manifest=manifest,
+    )
     plan = {
         "schema": RELOAD_SCHEMA,
         "run_name": config["name"],
         "output_root": output,
         "source_manifest": manifest,
         "source_manifest_file_sha256": expected_digest,
+        **terminal,
         "runtime_sha256": digest(_runtime()),
         "native_driver_sha256": NATIVE_DRIVER_SHA256,
         "optimizer_updates": 0,
@@ -334,6 +469,43 @@ _FORBIDDEN_FLAGS = frozenset(
         "--override-opt-param-scheduler",
     }
 )
+
+_RANK_COMMITMENT_FIELDS = frozenset(
+    {
+        "rank",
+        "model_tensor_count",
+        "model_local_numel",
+        "model_structure_sha256",
+        "model_value_sha256",
+        "optimizer_value_sha256",
+        "scheduler_value_sha256",
+        "rng_value_sha256",
+    }
+)
+
+
+def _rank_commitments(plan: Mapping[str, Any], manifest: Mapping[str, Any]) -> list[dict]:
+    rows = plan.get("expected_rank_state_commitments")
+    world = manifest.get("world_size")
+    if not isinstance(rows, list) or type(world) is not int or len(rows) != world:
+        raise ValueError("Miles reload lacks all saved rank-state commitments")
+    for rank, row in enumerate(rows):
+        if (
+            not isinstance(row, dict)
+            or set(row) != _RANK_COMMITMENT_FIELDS
+            or row.get("rank") != rank
+            or type(row.get("model_tensor_count")) is not int
+            or row["model_tensor_count"] < 1
+            or type(row.get("model_local_numel")) is not int
+            or row["model_local_numel"] < 1
+            or any(
+                _sha256(row.get(key), f"rank {rank} {key}") != row.get(key)
+                for key in _RANK_COMMITMENT_FIELDS
+                if key.endswith("_sha256")
+            )
+        ):
+            raise ValueError("Miles reload saved rank-state commitment is invalid")
+    return rows
 
 
 def reload_arguments(source: miles.MilesConfig, checkpoint_root: str) -> list[str]:
@@ -412,6 +584,8 @@ def native_args(plan: dict):
 
 def job_request(plan: dict) -> dict:
     manifest = plan["source_manifest"]
+    terminal = plan.get("source_terminal_acceptance")
+    policy = plan.get("source_policy_delta_observation")
     if (
         plan.get("schema") != RELOAD_SCHEMA
         or plan.get("runtime_sha256") != digest(_runtime())
@@ -429,8 +603,19 @@ def job_request(plan: dict) -> dict:
         not in miles.NATIVE_LAYOUTS
         or manifest.get("world_size")
         != manifest["topology"]["nodes"] * manifest["topology"]["gpus_per_node"]
+        or not isinstance(terminal, dict)
+        or set(terminal) != {"path", "file_sha256", "receipt_sha256"}
+        or not isinstance(policy, dict)
+        or set(policy) != {"path", "file_sha256", "receipt_sha256"}
+        or plan.get("rank_state_commitment_method") != RANK_STATE_COMMITMENT_METHOD
     ):
         raise ValueError("Miles reload runtime/plan drift")
+    for label, reference in (("terminal", terminal), ("policy", policy)):
+        if not isinstance(reference["path"], str) or not reference["path"].startswith("/"):
+            raise ValueError(f"Miles reload {label} receipt path is not absolute")
+        _sha256(reference["file_sha256"], f"{label} file digest")
+        _sha256(reference["receipt_sha256"], f"{label} receipt digest")
+    _rank_commitments(plan, manifest)
     sealed(manifest, CHECKPOINT_SCHEMA)
     resources = plan["execution"]["resources"]
     source_resources = manifest["source"]["execution"]["resources"]
@@ -526,81 +711,116 @@ def validate_preflight_receipt(plan: dict, request: dict, proof: dict) -> None:
         raise ValueError("missing or mismatched Miles reload CPU preflight")
 
 
-def _state_summary(value: Any, *, depth: int = 0) -> Any:
-    """Return tensor metadata and scalar state only; never tensor/model values."""
+def _tensor_value_sha256(value: Any) -> str:
+    """Hash raw tensor bytes in bounded chunks without returning any values."""
     import torch
 
-    if depth > 6:
-        return {"type": type(value).__name__}
+    tensor = value.detach()
+    if not tensor.is_contiguous():
+        tensor = tensor.contiguous()
+    raw = tensor.reshape(-1).view(torch.uint8)
+    result = hashlib.sha256()
+    chunk_bytes = 16 * 1024 * 1024
+    for start in range(0, raw.numel(), chunk_bytes):
+        chunk = raw[start : start + chunk_bytes].cpu()
+        result.update(chunk.numpy().tobytes())
+    return result.hexdigest()
+
+
+def _state_summary(value: Any, *, include_values: bool, depth: int = 0) -> Any:
+    """Return a canonical state tree; tensor payloads appear only as SHA-256."""
+    import torch
+
+    if depth > 32:
+        raise ValueError("Miles recoverable state is unexpectedly deeply nested")
     if isinstance(value, torch.Tensor):
-        return {
+        result = {
             "tensor": True,
             "shape": list(value.shape),
             "dtype": str(value.dtype),
             "requires_grad": bool(value.requires_grad),
-            "version": int(getattr(value, "_version", 0)),
         }
+        if include_values:
+            result["value_sha256"] = _tensor_value_sha256(value)
+        return result
     if value is None or isinstance(value, (bool, int, float, str)):
-        return value
+        return value if include_values else {"type": type(value).__name__}
     if isinstance(value, Mapping):
         return [
             {
                 "key": key if isinstance(key, (bool, int, float, str)) else type(key).__name__,
-                "value": _state_summary(item, depth=depth + 1),
+                "value": _state_summary(
+                    item, include_values=include_values, depth=depth + 1
+                ),
             }
             for key, item in value.items()
         ]
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
-        return [_state_summary(item, depth=depth + 1) for item in value]
+        return [
+            _state_summary(item, include_values=include_values, depth=depth + 1)
+            for item in value
+        ]
     return {"type": type(value).__name__}
 
 
 def _model_probe(model: Sequence[Any]) -> dict:
-    rows = []
+    structure, values = [], []
     for chunk_index, chunk in enumerate(model):
         for name, parameter in chunk.named_parameters():
-            rows.append(
-                {
-                    "chunk": chunk_index,
-                    "name": name,
-                    "shape": list(parameter.shape),
-                    "dtype": str(parameter.dtype),
-                    "requires_grad": bool(parameter.requires_grad),
-                    "version": int(getattr(parameter, "_version", 0)),
-                }
-            )
+            row = {
+                "chunk": chunk_index,
+                "name": name,
+                "shape": list(parameter.shape),
+                "dtype": str(parameter.dtype),
+                "requires_grad": bool(parameter.requires_grad),
+            }
+            structure.append(row)
+            values.append({**row, "value_sha256": _tensor_value_sha256(parameter)})
     return {
-        "tensors": len(rows),
-        "local_numel": sum(math.prod(item["shape"]) for item in rows),
-        "structure_sha256": digest(rows),
+        "tensors": len(structure),
+        "local_numel": sum(math.prod(item["shape"]) for item in structure),
+        "structure_sha256": digest(structure),
+        "value_sha256": digest(values),
     }
 
 
 def _optimizer_probe(optimizer: Any) -> dict:
-    pending, seen, state_rows, group_rows = [optimizer], set(), [], []
+    pending, seen, structure_rows, value_rows = [optimizer], set(), [], []
+    state_entries = parameter_groups = 0
     while pending:
         current = pending.pop()
         if current is None or id(current) in seen:
             continue
         seen.add(id(current))
-        state = getattr(current, "state", None)
-        if isinstance(state, Mapping):
-            state_rows.append(_state_summary(state))
-        groups = getattr(current, "param_groups", None)
-        if isinstance(groups, Sequence):
-            group_rows.append(_state_summary(groups))
+        state_dict = getattr(current, "state_dict", None)
+        snapshot = state_dict() if callable(state_dict) else None
+        if not isinstance(snapshot, Mapping):
+            snapshot = {
+                "state": getattr(current, "state", None),
+                "param_groups": getattr(current, "param_groups", None),
+            }
+        state = snapshot.get("state")
+        groups = snapshot.get("param_groups")
+        state_entries += len(state) if isinstance(state, Mapping) else 0
+        parameter_groups += (
+            len(groups)
+            if isinstance(groups, Sequence) and not isinstance(groups, (str, bytes, bytearray))
+            else 0
+        )
+        structure_rows.append(_state_summary(snapshot, include_values=False))
+        value_rows.append(_state_summary(snapshot, include_values=True))
         for attr in ("optimizer", "optimizers", "chained_optimizers"):
             child = getattr(current, attr, None)
             if isinstance(child, Sequence):
                 pending.extend(child)
             elif child is not None:
                 pending.append(child)
-    state_entries = sum(len(row) for row in state_rows)
     return {
         "objects": len(seen),
         "state_entries": state_entries,
-        "parameter_groups": sum(len(row) for row in group_rows),
-        "structure_sha256": digest({"state": state_rows, "groups": group_rows}),
+        "parameter_groups": parameter_groups,
+        "structure_sha256": digest(structure_rows),
+        "value_sha256": digest(value_rows),
     }
 
 
@@ -621,7 +841,8 @@ def _scheduler_probe(scheduler: Any) -> dict:
     state = scheduler.state_dict()
     return {
         "positive_progress_counters": _positive_scheduler_counters(state),
-        "state_sha256": digest(_state_summary(state)),
+        "structure_sha256": digest(_state_summary(state, include_values=False)),
+        "value_sha256": digest(_state_summary(state, include_values=True)),
     }
 
 
@@ -664,9 +885,11 @@ def _actor_probe(self) -> dict:
 
 
 def validate_rank_probes(
-    manifest: dict, start_ids: Sequence[int], before: Sequence[dict], after: Sequence[dict]
+    plan: dict, start_ids: Sequence[int], before: Sequence[dict], after: Sequence[dict]
 ) -> dict:
+    manifest = plan["source_manifest"]
     world = manifest["world_size"]
+    expected = _rank_commitments(plan, manifest)
     if len(start_ids) != world or set(start_ids) != {manifest["next_rollout_id"]}:
         raise ValueError("all Miles ranks did not restore the exact rollout index")
     if len(before) != world or len(after) != world:
@@ -677,7 +900,8 @@ def validate_rank_probes(
         raise ValueError("all-rank reload probe identity mismatch")
     if ordered_before != ordered_after:
         raise ValueError("model/optimizer/scheduler/RNG state changed during reload validation")
-    for row in ordered_before:
+    for rank, row in enumerate(ordered_before):
+        wanted = expected[rank]
         if (
             row["world_size"] != world
             or row["load"] != manifest["root"]
@@ -689,26 +913,35 @@ def validate_rank_probes(
             or row["use_checkpoint_opt_param_scheduler"] is not True
             or row["model"]["tensors"] < 1
             or row["model"]["local_numel"] < 1
+            or row["model"]["tensors"] != wanted["model_tensor_count"]
+            or row["model"]["local_numel"] != wanted["model_local_numel"]
+            or row["model"]["structure_sha256"] != wanted["model_structure_sha256"]
+            or row["model"]["value_sha256"] != wanted["model_value_sha256"]
             or row["optimizer"]["state_entries"] < 1
             or row["optimizer"]["parameter_groups"] < 1
+            or row["optimizer"]["value_sha256"] != wanted["optimizer_value_sha256"]
             or row["scheduler"]["positive_progress_counters"] < 1
+            or row["scheduler"]["value_sha256"] != wanted["scheduler_value_sha256"]
+            or row["rng_sha256"] != wanted["rng_value_sha256"]
         ):
-            raise ValueError("one Miles rank lacks exact recoverable training state")
+            raise ValueError("one Miles rank differs from the exact saved training state")
     return {
         "world_size": world,
         "ranks": list(range(world)),
         "restored_rollout_index": manifest["rollout_index"],
         "next_rollout_id": manifest["next_rollout_id"],
         "probe_set_sha256": digest(ordered_before),
+        "rank_state_commitments_sha256": digest(expected),
         "all_rank_model_loaded": True,
         "all_rank_optimizer_loaded": True,
         "all_rank_scheduler_loaded": True,
         "all_rank_rng_loaded": True,
+        "all_rank_state_commitments_match": True,
         "state_stable_across_zero_updates": True,
     }
 
 
-async def _load_all_ranks(args, manifest: dict) -> dict:
+async def _load_all_ranks(args, plan: dict) -> dict:
     import ray
     from miles.backends.megatron_utils import actor as actor_module
     from miles.ray.placement_group import allocate_train_group, create_placement_groups
@@ -737,7 +970,7 @@ async def _load_all_ranks(args, manifest: dict) -> dict:
         start_ids = await group.init()
         before = await group._broadcast("cyber_reload_probe")
         after = await group._broadcast("cyber_reload_probe")
-        return validate_rank_probes(manifest, start_ids, before, after)
+        return validate_rank_probes(plan, start_ids, before, after)
     finally:
         actor_module.MegatronTrainRayActor = original_actor
         if group is not None:
@@ -771,7 +1004,7 @@ def _native(plan: dict) -> dict:
         },
     )
     try:
-        result = asyncio.run(_load_all_ranks(args, manifest))
+        result = asyncio.run(_load_all_ranks(args, plan))
     finally:
         ray.shutdown()
     if _verify_checkpoint(manifest, hashes=False) != before:
@@ -812,12 +1045,21 @@ def run(plan: dict) -> dict:
                 "status": "reload_validated",
                 "plan_sha256": digest(plan),
                 "source_manifest_sha256": plan["source_manifest"]["sha256"].removeprefix("sha256:"),
+                "source_terminal_acceptance_sha256": plan["source_terminal_acceptance"][
+                    "receipt_sha256"
+                ],
+                "source_policy_delta_observation_sha256": plan[
+                    "source_policy_delta_observation"
+                ]["receipt_sha256"],
+                "rank_state_commitment_method": RANK_STATE_COMMITMENT_METHOD,
                 **proof,
                 "optimizer_updates": 0,
                 "rollouts": 0,
+                "verifier_calls": 0,
                 "forwards": 0,
                 "backwards": 0,
                 "checkpoint_writes": 0,
+                "wandb_events": 0,
                 "source_checkpoint_unchanged": True,
                 "external_gpu_release_verified": False,
                 "scientific_rl_acceptance": False,

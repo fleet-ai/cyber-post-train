@@ -6,6 +6,11 @@
     "manifest": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev3-seal/MILES_TRAINING_CHECKPOINT.json",
     "sha256": "sha256:REPLACE_WITH_EXACT_MANIFEST_FILE_SHA256"
   },
+  "terminal_acceptance": {
+    "receipt": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev3/MILES_TERMINAL_ACCEPTED.json",
+    "file_sha256": "sha256:REPLACE_WITH_EXACT_TERMINAL_FILE_SHA256",
+    "receipt_sha256": "sha256:REPLACE_WITH_EXACT_TERMINAL_RECEIPT_SHA256"
+  },
   "cluster": {
     "target": "dev",
     "priority": "c1",

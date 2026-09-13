@@ -38,6 +38,7 @@ def _manifest(tmp_path: Path) -> dict:
     generation.mkdir(parents=True)
     (root / "latest_checkpointed_iteration.txt").write_text("0\n")
     (generation / ".metadata").write_bytes(b"metadata")
+    (generation / "common.pt").write_bytes(b"common")
     for rank in range(8):
         (generation / f"__{rank}_0.distcp").write_bytes(f"rank-{rank}".encode())
     files = []
@@ -87,6 +88,30 @@ def _case(tmp_path: Path, monkeypatch) -> dict:
         "output_root": str(root),
         "source_manifest": manifest,
         "source_manifest_file_sha256": "d" * 64,
+        "source_terminal_acceptance": {
+            "path": str(tmp_path / "source/MILES_TERMINAL_ACCEPTED.json"),
+            "file_sha256": "e" * 64,
+            "receipt_sha256": "f" * 64,
+        },
+        "source_policy_delta_observation": {
+            "path": str(tmp_path / "source/POLICY_DELTA.json"),
+            "file_sha256": "1" * 64,
+            "receipt_sha256": "2" * 64,
+        },
+        "rank_state_commitment_method": miles_reload.RANK_STATE_COMMITMENT_METHOD,
+        "expected_rank_state_commitments": [
+            {
+                "rank": rank,
+                "model_tensor_count": 10,
+                "model_local_numel": 100,
+                "model_structure_sha256": f"{rank + 10:064x}",
+                "model_value_sha256": f"{rank + 20:064x}",
+                "optimizer_value_sha256": f"{rank + 30:064x}",
+                "scheduler_value_sha256": f"{rank + 40:064x}",
+                "rng_value_sha256": f"{rank + 50:064x}",
+            }
+            for rank in range(8)
+        ],
         "runtime_sha256": "e" * 64,
         "native_driver_sha256": miles_reload.NATIVE_DRIVER_SHA256,
         "optimizer_updates": 0,
@@ -137,21 +162,32 @@ def _case(tmp_path: Path, monkeypatch) -> dict:
             "status": "reload_validated",
             "plan_sha256": digest(plan),
             "source_manifest_sha256": manifest["sha256"],
+            "source_terminal_acceptance_sha256": plan["source_terminal_acceptance"][
+                "receipt_sha256"
+            ],
+            "source_policy_delta_observation_sha256": plan[
+                "source_policy_delta_observation"
+            ]["receipt_sha256"],
+            "rank_state_commitment_method": miles_reload.RANK_STATE_COMMITMENT_METHOD,
             "world_size": 8,
             "ranks": list(range(8)),
             "restored_rollout_index": 0,
             "next_rollout_id": 1,
             "probe_set_sha256": "f" * 64,
+            "rank_state_commitments_sha256": digest(plan["expected_rank_state_commitments"]),
             "all_rank_model_loaded": True,
             "all_rank_optimizer_loaded": True,
             "all_rank_scheduler_loaded": True,
             "all_rank_rng_loaded": True,
+            "all_rank_state_commitments_match": True,
             "state_stable_across_zero_updates": True,
             "optimizer_updates": 0,
             "rollouts": 0,
+            "verifier_calls": 0,
             "forwards": 0,
             "backwards": 0,
             "checkpoint_writes": 0,
+            "wandb_events": 0,
             "source_checkpoint_unchanged": True,
             "external_gpu_release_verified": False,
             "scientific_rl_acceptance": False,
@@ -290,6 +326,8 @@ def test_acceptance_binds_config_plan_terminal_zero_work_release_and_checkpoint(
     assert result["reload_plan"] == case["plan"]
     assert set(result["work_executed"].values()) == {0}
     assert result["source_checkpoint_unchanged_after_release"] is True
+    assert result["source_terminal_acceptance_sha256"] == "f" * 64
+    assert result["exact_rank_state_commitments_verified"] is True
     assert result["external_gpu_release_verified"] is True
     assert result["production_promotion_requires_this_receipt"] is True
     assert result["sha256"] == digest(
@@ -302,7 +340,15 @@ def test_acceptance_binds_config_plan_terminal_zero_work_release_and_checkpoint(
 
 @pytest.mark.parametrize(
     "field",
-    ["optimizer_updates", "rollouts", "forwards", "backwards", "checkpoint_writes"],
+    [
+        "optimizer_updates",
+        "rollouts",
+        "verifier_calls",
+        "forwards",
+        "backwards",
+        "checkpoint_writes",
+        "wandb_events",
+    ],
 )
 def test_acceptance_rejects_any_process_work(tmp_path, monkeypatch, field):
     case = _case(tmp_path, monkeypatch)
@@ -402,3 +448,36 @@ def test_accepted_receipt_rejects_input_tampering_and_cannot_be_replaced(tmp_pat
         acceptance.validate_accepted(result)
     with pytest.raises(FileExistsError, match="destination already exists"):
         _accept(case)
+
+
+def test_accepted_receipt_forbids_receipt_only_promotion(tmp_path, monkeypatch):
+    case = _case(tmp_path, monkeypatch)
+    result = _accept(case)
+
+    with pytest.raises(ValueError, match="reopening every referenced file"):
+        acceptance.validate_accepted(result, check_files=False)
+
+
+def test_acceptance_accepts_kubernetes_rfc3339_timestamps(tmp_path, monkeypatch):
+    case = _case(tmp_path, monkeypatch)
+    result = _rewrite(
+        case["result_path"],
+        {**case["result"], "completed_at": "2026-09-12T10:00:00Z"},
+    )
+    controller = deepcopy(case["controller"])
+    controller["pods"][0]["terminated_at"] = "2026-09-12T10:00:01Z"
+    controller["observed_at"] = "2026-09-12T10:00:02Z"
+    controller = _rewrite(case["controller_path"], controller)
+    release = deepcopy(case["release"])
+    release.update(
+        {
+            "controller_terminal_file_sha256": _file_sha256(case["controller_path"]),
+            "controller_terminal_sha256": controller["sha256"],
+            "observed_at": "2026-09-12T10:00:03Z",
+        }
+    )
+    _rewrite(case["release_path"], release)
+    case["result"] = result
+    case["controller"] = controller
+
+    assert _accept(case)["status"] == "accepted"

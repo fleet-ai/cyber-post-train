@@ -13,6 +13,7 @@ import json
 import math
 import numbers
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -36,11 +37,14 @@ def _fields(value: str) -> frozenset[str]:
 
 
 _PROCESS_FIELDS = _fields(
-    "schema status plan_sha256 source_manifest_sha256 world_size ranks "
-    "restored_rollout_index next_rollout_id probe_set_sha256 all_rank_model_loaded "
+    "schema status plan_sha256 source_manifest_sha256 source_terminal_acceptance_sha256 "
+    "source_policy_delta_observation_sha256 world_size ranks restored_rollout_index "
+    "next_rollout_id probe_set_sha256 rank_state_commitment_method "
+    "rank_state_commitments_sha256 all_rank_model_loaded "
     "all_rank_optimizer_loaded all_rank_scheduler_loaded all_rank_rng_loaded "
-    "state_stable_across_zero_updates optimizer_updates rollouts forwards backwards "
-    "checkpoint_writes source_checkpoint_unchanged external_gpu_release_verified "
+    "all_rank_state_commitments_match state_stable_across_zero_updates optimizer_updates "
+    "rollouts verifier_calls forwards backwards checkpoint_writes wandb_events "
+    "source_checkpoint_unchanged external_gpu_release_verified "
     "scientific_rl_acceptance completed_at sha256"
 )
 _CONTROLLER_FIELDS = _fields(
@@ -72,7 +76,9 @@ _ACCEPTED_FIELDS = _fields(
     "reload_result controller_terminal_path controller_terminal_file_sha256 "
     "controller_terminal external_release_path external_release_file_sha256 "
     "external_release source_manifest_sha256 source_checkpoint_unchanged_after_release "
-    "work_executed external_gpu_release_verified production_promotion_requires_this_receipt sha256"
+    "source_terminal_acceptance_sha256 source_policy_delta_observation_sha256 "
+    "rank_state_commitments_sha256 exact_rank_state_commitments_verified work_executed "
+    "external_gpu_release_verified production_promotion_requires_this_receipt sha256"
 )
 
 
@@ -96,9 +102,16 @@ def _snapshot(path: Path) -> tuple[dict[str, Any], str]:
 
 
 def _time(value: object) -> float:
-    if not isinstance(value, numbers.Real) or isinstance(value, bool) or not math.isfinite(value):
-        raise ValueError("terminal evidence timestamp is invalid")
-    return float(value)
+    if isinstance(value, numbers.Real) and not isinstance(value, bool) and math.isfinite(value):
+        return float(value)
+    if isinstance(value, str):
+        try:
+            parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ValueError("terminal evidence timestamp is invalid") from exc
+        if parsed.tzinfo is not None:
+            return parsed.timestamp()
+    raise ValueError("terminal evidence timestamp is invalid")
 
 
 def _integer(value: object, expected: int) -> bool:
@@ -125,12 +138,20 @@ def _process(value: dict, plan: dict) -> float:
         or value.get("status") != "reload_validated"
         or value.get("plan_sha256") != digest(plan)
         or value.get("source_manifest_sha256") != manifest["sha256"].removeprefix("sha256:")
+        or value.get("source_terminal_acceptance_sha256")
+        != plan["source_terminal_acceptance"]["receipt_sha256"]
+        or value.get("source_policy_delta_observation_sha256")
+        != plan["source_policy_delta_observation"]["receipt_sha256"]
+        or value.get("rank_state_commitment_method")
+        != miles_reload.RANK_STATE_COMMITMENT_METHOD
         or not _integer(value.get("world_size"), world_size)
         or value.get("ranks") != list(range(world_size))
         or not _integer(value.get("restored_rollout_index"), manifest["rollout_index"])
         or not _integer(value.get("next_rollout_id"), manifest["next_rollout_id"])
         or not isinstance(value.get("probe_set_sha256"), str)
         or _SHA256.fullmatch(value["probe_set_sha256"].removeprefix("sha256:")) is None
+        or value.get("rank_state_commitments_sha256")
+        != digest(plan["expected_rank_state_commitments"])
         or any(
             value.get(key) is not True
             for key in (
@@ -138,6 +159,7 @@ def _process(value: dict, plan: dict) -> float:
                 "all_rank_optimizer_loaded",
                 "all_rank_scheduler_loaded",
                 "all_rank_rng_loaded",
+                "all_rank_state_commitments_match",
                 "state_stable_across_zero_updates",
                 "source_checkpoint_unchanged",
             )
@@ -147,9 +169,11 @@ def _process(value: dict, plan: dict) -> float:
             for key in (
                 "optimizer_updates",
                 "rollouts",
+                "verifier_calls",
                 "forwards",
                 "backwards",
                 "checkpoint_writes",
+                "wandb_events",
             )
         )
         or value.get("external_gpu_release_verified") is not False
@@ -383,15 +407,7 @@ def accept_reload(
     # The exact reload runtime executes no rollout/verifier path, and its exact
     # request disables W&B.  The process receipt independently supplies the
     # remaining zero-work counters.  Seal all seven conclusions explicitly.
-    zero_work = {
-        "rollouts": 0,
-        "verifier_calls": 0,
-        "forwards": 0,
-        "backwards": 0,
-        "optimizer_updates": 0,
-        "checkpoint_writes": 0,
-        "wandb_events": 0,
-    }
+    zero_work = {key: result[key] for key in _WORK_FIELDS}
     accepted = {
         "schema": ACCEPTED_SCHEMA,
         "status": "accepted",
@@ -415,6 +431,14 @@ def accept_reload(
         "external_release": release,
         "source_manifest_sha256": plan["source_manifest"]["sha256"],
         "source_checkpoint_unchanged_after_release": True,
+        "source_terminal_acceptance_sha256": plan["source_terminal_acceptance"][
+            "receipt_sha256"
+        ],
+        "source_policy_delta_observation_sha256": plan[
+            "source_policy_delta_observation"
+        ]["receipt_sha256"],
+        "rank_state_commitments_sha256": result["rank_state_commitments_sha256"],
+        "exact_rank_state_commitments_verified": True,
         "work_executed": zero_work,
         "external_gpu_release_verified": True,
         "production_promotion_requires_this_receipt": True,
@@ -424,6 +448,8 @@ def accept_reload(
 
 def validate_accepted(value: dict, *, check_files: bool = True) -> dict:
     """Recompute an accepted receipt before a production-promotion consumer uses it."""
+    if not check_files:
+        raise ValueError("Miles reload promotion requires reopening every referenced file")
     sealed(value, ACCEPTED_SCHEMA)
     if set(value) != _ACCEPTED_FIELDS:
         raise ValueError("Miles accepted reload receipt fields changed")
@@ -440,6 +466,13 @@ def validate_accepted(value: dict, *, check_files: bool = True) -> dict:
         or value.get("reload_config_sha256") != digest(config)
         or value.get("reload_plan_sha256") != digest(plan)
         or value.get("source_manifest_sha256") != plan["source_manifest"]["sha256"]
+        or value.get("source_terminal_acceptance_sha256")
+        != plan["source_terminal_acceptance"]["receipt_sha256"]
+        or value.get("source_policy_delta_observation_sha256")
+        != plan["source_policy_delta_observation"]["receipt_sha256"]
+        or value.get("rank_state_commitments_sha256")
+        != digest(plan["expected_rank_state_commitments"])
+        or value.get("exact_rank_state_commitments_verified") is not True
         or value.get("source_checkpoint_unchanged_after_release") is not True
         or not isinstance(work, dict)
         or set(work) != _WORK_FIELDS
@@ -453,17 +486,16 @@ def validate_accepted(value: dict, *, check_files: bool = True) -> dict:
     result_path = Path(value["reload_result_path"])
     controller_path = Path(value["controller_terminal_path"])
     release_path = Path(value["external_release_path"])
-    if check_files:
-        for path, expected, file_key in (
-            (config_path, config, "reload_config_file_sha256"),
-            (plan_path, plan, "reload_plan_file_sha256"),
-            (result_path, result, "reload_result_file_sha256"),
-            (controller_path, controller, "controller_terminal_file_sha256"),
-            (release_path, release, "external_release_file_sha256"),
-        ):
-            observed, file_sha256 = _snapshot(path)
-            if observed != expected or file_sha256 != value[file_key]:
-                raise ValueError("Miles accepted reload input changed after acceptance")
+    for path, expected, file_key in (
+        (config_path, config, "reload_config_file_sha256"),
+        (plan_path, plan, "reload_plan_file_sha256"),
+        (result_path, result, "reload_result_file_sha256"),
+        (controller_path, controller, "controller_terminal_file_sha256"),
+        (release_path, release, "external_release_file_sha256"),
+    ):
+        observed, file_sha256 = _snapshot(path)
+        if observed != expected or file_sha256 != value[file_key]:
+            raise ValueError("Miles accepted reload input changed after acceptance")
     request = _validate_values(
         config=config,
         plan=plan,
@@ -473,7 +505,7 @@ def validate_accepted(value: dict, *, check_files: bool = True) -> dict:
         config_path=config_path,
         controller_path=controller_path,
         controller_file_sha256=value["controller_terminal_file_sha256"],
-        recompile=check_files,
+        recompile=True,
     )
     if value.get("request_sha256") != digest(request):
         raise ValueError("Miles accepted reload request binding changed")
@@ -484,4 +516,6 @@ def validate_accepted(value: dict, *, check_files: bool = True) -> dict:
         "controller_terminal_sha256": controller["sha256"],
         "external_release_sha256": release["sha256"],
         "source_manifest_sha256": value["source_manifest_sha256"],
+        "source_terminal_acceptance_sha256": value["source_terminal_acceptance_sha256"],
+        "rank_state_commitments_sha256": value["rank_state_commitments_sha256"],
     }

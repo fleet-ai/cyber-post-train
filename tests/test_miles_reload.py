@@ -12,6 +12,46 @@ from cyber_post_train.jobs import digest
 from training import miles
 from training import miles_reload as reload
 
+_REAL_TERMINAL_BINDING = reload._terminal_binding
+
+
+def _commitments() -> list[dict]:
+    return [
+        {
+            "rank": rank,
+            "model_tensor_count": 10,
+            "model_local_numel": 100,
+            "model_structure_sha256": f"{rank + 1:064x}",
+            "model_value_sha256": f"{rank + 21:064x}",
+            "optimizer_value_sha256": f"{rank + 41:064x}",
+            "scheduler_value_sha256": f"{rank + 61:064x}",
+            "rng_value_sha256": f"{rank + 81:064x}",
+        }
+        for rank in range(8)
+    ]
+
+
+def _terminal_binding() -> dict:
+    return {
+        "source_terminal_acceptance": {
+            "path": "/mnt/sfs/jobs/source-miles/MILES_TERMINAL_ACCEPTED.json",
+            "file_sha256": "e" * 64,
+            "receipt_sha256": "f" * 64,
+        },
+        "source_policy_delta_observation": {
+            "path": "/mnt/sfs/jobs/source-miles/POLICY_DELTA.json",
+            "file_sha256": "a" * 64,
+            "receipt_sha256": "b" * 64,
+        },
+        "rank_state_commitment_method": reload.RANK_STATE_COMMITMENT_METHOD,
+        "expected_rank_state_commitments": _commitments(),
+    }
+
+
+@pytest.fixture(autouse=True)
+def _accepted_terminal(monkeypatch):
+    monkeypatch.setattr(reload, "_terminal_binding", lambda *args, **kwargs: _terminal_binding())
+
 
 def _args(output: str = "/mnt/sfs/jobs/source-miles") -> miles.MilesConfig:
     return miles.MilesConfig(
@@ -63,6 +103,7 @@ def _terminal_source(tmp_path: Path) -> tuple[dict, Path]:
     generation.mkdir(parents=True)
     (checkpoint / "latest_checkpointed_iteration.txt").write_text("0\n")
     (generation / ".metadata").write_bytes(b"metadata")
+    (generation / "common.pt").write_bytes(b"common")
     for rank in range(8):
         (generation / f"__{rank}_0.distcp").write_bytes(f"rank-{rank}".encode())
     plan = _source_plan(source)
@@ -113,6 +154,7 @@ def _manifest(tmp_path: Path) -> tuple[dict, Path]:
                 "sha256": "c" * 64,
             },
             {"path": "iter_0000000/.metadata", "size": 8, "sha256": "d" * 64},
+            {"path": "iter_0000000/common.pt", "size": 6, "sha256": "e" * 64},
             *(
                 {
                     "path": f"iter_0000000/__{rank}_0.distcp",
@@ -141,6 +183,11 @@ def _config(manifest_path: Path) -> dict:
             "manifest": str(manifest_path),
             "sha256": "sha256:" + reload._hash(manifest_path),
         },
+        "terminal_acceptance": {
+            "receipt": "/mnt/sfs/jobs/source-miles/MILES_TERMINAL_ACCEPTED.json",
+            "file_sha256": "e" * 64,
+            "receipt_sha256": "f" * 64,
+        },
         "cluster": {
             "target": "dev",
             "priority": "c1",
@@ -157,7 +204,11 @@ def _config(manifest_path: Path) -> dict:
 def test_cpu_seal_binds_complete_all_rank_numeric_checkpoint(tmp_path, monkeypatch):
     from training import miles_training
 
-    monkeypatch.setattr(miles_training, "job_request", lambda _: {})
+    monkeypatch.setattr(
+        miles_training,
+        "job_request",
+        lambda _: pytest.fail("historical request reconstructed with current code"),
+    )
     plan, source = _terminal_source(tmp_path)
     output = tmp_path / "seal" / "checkpoint.json"
     output.parent.mkdir()
@@ -167,13 +218,16 @@ def test_cpu_seal_binds_complete_all_rank_numeric_checkpoint(tmp_path, monkeypat
     assert result["world_size"] == 8
     assert result["topology"] == {"nodes": 1, "gpus_per_node": 8}
     assert result["rollout_index"] == 0 and result["next_rollout_id"] == 1
-    assert len(result["files"]) == 10
+    assert len(result["files"]) == 11
     assert result["gpu_reload_verified"] is False
     assert result["sha256"] == digest({k: v for k, v in result.items() if k != "sha256"})
     assert not (source / "ACCEPTED.json").exists()
 
 
-@pytest.mark.parametrize("fault", ["missing_rank", "symlink", "tracker", "conflict", "receipt"])
+@pytest.mark.parametrize(
+    "fault",
+    ["missing_rank", "missing_common", "extra", "symlink", "tracker", "conflict", "receipt"],
+)
 def test_cpu_seal_rejects_partial_or_conflicting_source(tmp_path, monkeypatch, fault):
     from training import miles_training
 
@@ -182,6 +236,10 @@ def test_cpu_seal_rejects_partial_or_conflicting_source(tmp_path, monkeypatch, f
     checkpoint = source / "checkpoints"
     if fault == "missing_rank":
         (checkpoint / "iter_0000000/__7_0.distcp").unlink()
+    elif fault == "missing_common":
+        (checkpoint / "iter_0000000/common.pt").unlink()
+    elif fault == "extra":
+        (checkpoint / "iter_0000000/unbound.pt").write_bytes(b"unexpected")
     elif fault == "symlink":
         target = checkpoint / "iter_0000000/__7_0.distcp"
         target.unlink()
@@ -215,6 +273,63 @@ def test_reload_plan_is_dev_only_exact_topology_and_secret_free(tmp_path):
     assert request["env"]["MILES_EXPERIMENTAL_FT_TRAINER"] == "0"
     assert "FLEET_API_KEY" not in request["env"]
     assert "WANDB_API_KEY" not in request["env"]
+
+
+def test_terminal_binding_selects_exact_accepted_checkpoint_and_saved_state(
+    tmp_path, monkeypatch
+):
+    from training import miles_acceptance
+
+    manifest, manifest_path = _manifest(tmp_path)
+    policy_path = tmp_path / "POLICY_DELTA.json"
+    ranks = []
+    for expected in _commitments():
+        ranks.append(
+            {
+                "policy_tensor_count": expected["model_tensor_count"],
+                "local_policy_numel": expected["model_local_numel"],
+                "trained_policy_structure_sha256": expected["model_structure_sha256"],
+                "trained_policy_value_sha256": expected["model_value_sha256"],
+                "trained_optimizer_value_sha256": expected["optimizer_value_sha256"],
+                "trained_scheduler_value_sha256": expected["scheduler_value_sha256"],
+                "trained_rng_value_sha256": expected["rng_value_sha256"],
+            }
+        )
+    policy_body = {"schema": miles_acceptance.POLICY_DELTA_SCHEMA, "ranks": ranks}
+    policy = {**policy_body, "sha256": digest(policy_body)}
+    policy_path.write_text(json.dumps(policy))
+    terminal_path = tmp_path / "MILES_TERMINAL_ACCEPTED.json"
+    terminal_body = {
+        "schema": miles_acceptance.TERMINAL_SCHEMA,
+        "checkpoint_manifest": {
+            "path": str(manifest_path),
+            "file_sha256": "sha256:" + reload._hash(manifest_path),
+            "receipt_sha256": manifest["sha256"],
+        },
+        "policy_delta_observation": {
+            "path": str(policy_path),
+            "file_sha256": "sha256:" + reload._hash(policy_path),
+            "receipt_sha256": policy["sha256"],
+        },
+    }
+    terminal = {**terminal_body, "sha256": digest(terminal_body)}
+    terminal_path.write_text(json.dumps(terminal))
+    monkeypatch.setattr(miles_acceptance, "validate_terminal", lambda *args, **kwargs: {})
+
+    result = _REAL_TERMINAL_BINDING(
+        {
+            "receipt": str(terminal_path),
+            "file_sha256": reload._hash(terminal_path),
+            "receipt_sha256": terminal["sha256"],
+        },
+        relative_to=tmp_path,
+        manifest_path=manifest_path,
+        manifest_file_sha256=reload._hash(manifest_path),
+        manifest=manifest,
+    )
+
+    assert result["expected_rank_state_commitments"] == _commitments()
+    assert result["source_terminal_acceptance"]["receipt_sha256"] == terminal["sha256"]
 
 
 @pytest.mark.parametrize(
@@ -299,6 +414,7 @@ def test_argument_transform_rejects_recovery_bypass(monkeypatch, flag):
 
 
 def _rank(rank: int) -> dict:
+    expected = _commitments()[rank]
     return {
         "rank": rank,
         "world_size": 8,
@@ -309,42 +425,87 @@ def _rank(rank: int) -> dict:
         "no_load_rng": False,
         "finetune": False,
         "use_checkpoint_opt_param_scheduler": True,
-        "model": {"tensors": 10, "local_numel": 100, "structure_sha256": str(rank)},
+        "model": {
+            "tensors": 10,
+            "local_numel": 100,
+            "structure_sha256": expected["model_structure_sha256"],
+            "value_sha256": expected["model_value_sha256"],
+        },
         "optimizer": {
             "objects": 2,
             "state_entries": 3,
             "parameter_groups": 1,
-            "structure_sha256": str(rank),
+            "structure_sha256": f"{rank + 2:064x}",
+            "value_sha256": expected["optimizer_value_sha256"],
         },
-        "scheduler": {"positive_progress_counters": 1, "state_sha256": str(rank)},
-        "rng_sha256": str(rank),
+        "scheduler": {
+            "positive_progress_counters": 1,
+            "structure_sha256": f"{rank + 3:064x}",
+            "value_sha256": expected["scheduler_value_sha256"],
+        },
+        "rng_sha256": expected["rng_value_sha256"],
     }
 
 
 def test_all_rank_probe_requires_stable_model_optimizer_scheduler_and_rng():
-    manifest = {
-        "world_size": 8,
-        "rollout_index": 0,
-        "next_rollout_id": 1,
-        "root": "/mnt/sfs/jobs/source-miles/checkpoints",
+    plan = {
+        "source_manifest": {
+            "world_size": 8,
+            "rollout_index": 0,
+            "next_rollout_id": 1,
+            "root": "/mnt/sfs/jobs/source-miles/checkpoints",
+        },
+        "rank_state_commitment_method": reload.RANK_STATE_COMMITMENT_METHOD,
+        "expected_rank_state_commitments": _commitments(),
     }
     rows = [_rank(rank) for rank in range(8)]
-    result = reload.validate_rank_probes(manifest, [1] * 8, rows, rows)
+    result = reload.validate_rank_probes(plan, [1] * 8, rows, rows)
     assert result["ranks"] == list(range(8))
     assert result["all_rank_optimizer_loaded"] is True
     assert result["all_rank_rng_loaded"] is True
     assert result["state_stable_across_zero_updates"] is True
 
     with pytest.raises(ValueError, match="incomplete"):
-        reload.validate_rank_probes(manifest, [1] * 8, rows[:-1], rows[:-1])
+        reload.validate_rank_probes(plan, [1] * 8, rows[:-1], rows[:-1])
     changed = [dict(row) for row in rows]
     changed[7] = {**changed[7], "rng_sha256": "changed"}
     with pytest.raises(ValueError, match="state changed"):
-        reload.validate_rank_probes(manifest, [1] * 8, rows, changed)
+        reload.validate_rank_probes(plan, [1] * 8, rows, changed)
     empty = [dict(row) for row in rows]
     empty[0] = {**empty[0], "optimizer": {**empty[0]["optimizer"], "state_entries": 0}}
-    with pytest.raises(ValueError, match="recoverable training state"):
-        reload.validate_rank_probes(manifest, [1] * 8, empty, empty)
+    with pytest.raises(ValueError, match="exact saved training state"):
+        reload.validate_rank_probes(plan, [1] * 8, empty, empty)
+
+    wrong_values = [dict(row) for row in rows]
+    wrong_values[0] = {
+        **wrong_values[0],
+        "model": {**wrong_values[0]["model"], "value_sha256": "9" * 64},
+    }
+    with pytest.raises(ValueError, match="exact saved training state"):
+        reload.validate_rank_probes(plan, [1] * 8, wrong_values, wrong_values)
+
+
+def test_model_and_optimizer_commitments_are_value_sensitive_not_shape_only():
+    import torch
+
+    first = torch.nn.Linear(2, 2, bias=False)
+    second = torch.nn.Linear(2, 2, bias=False)
+    second.load_state_dict(first.state_dict())
+    before = reload._model_probe([first])
+    with torch.no_grad():
+        second.weight[0, 0] += 1
+    after = reload._model_probe([second])
+    assert before["structure_sha256"] == after["structure_sha256"]
+    assert before["value_sha256"] != after["value_sha256"]
+
+    optimizer = torch.optim.Adam(first.parameters(), lr=1e-3)
+    first(torch.ones(1, 2)).sum().backward()
+    optimizer.step()
+    optimizer_before = reload._optimizer_probe(optimizer)
+    optimizer.param_groups[0]["lr"] = 2e-3
+    optimizer_after = reload._optimizer_probe(optimizer)
+    assert optimizer_before["structure_sha256"] == optimizer_after["structure_sha256"]
+    assert optimizer_before["value_sha256"] != optimizer_after["value_sha256"]
 
 
 def test_cli_prepares_and_dispatches_miles_reload_without_network(tmp_path, monkeypatch):
@@ -473,6 +634,8 @@ def test_template_is_intentionally_unmaterialized_dev_c1():
     assert value["checkpoint"]["manifest"] == (
         "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev3-seal/MILES_TRAINING_CHECKPOINT.json"
     )
+    assert value["terminal_acceptance"]["receipt"].endswith("/MILES_TERMINAL_ACCEPTED.json")
     assert value["cluster"]["target"] == "dev"
     assert value["cluster"]["priority"] == "c1"
     assert "REPLACE_WITH" in value["checkpoint"]["sha256"]
+    assert "REPLACE_WITH" in value["terminal_acceptance"]["receipt_sha256"]
