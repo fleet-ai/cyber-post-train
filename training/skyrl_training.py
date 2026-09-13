@@ -123,6 +123,22 @@ ENGINE_DIAGNOSTIC_SUCCESSOR_CONFIG_FILE_SHA256 = (
 ENGINE_DIAGNOSTIC_SUCCESSOR_DATA_CONFIG_FILE_SHA256 = (
     "sha256:084bb9a65b77482e46f0218ff990a920abed2712de1e8cea4f8053dca594846e"
 )
+ENGINE_DIAGNOSTIC_CURRENT_CONFIG_PATH = "qwen38-rl-filtered-skyrl-engine-diagnostic-dev-v10.json"
+ENGINE_DIAGNOSTIC_CURRENT_CONFIG_NAME = "chris-q38-rldiag-dev10"
+ENGINE_DIAGNOSTIC_CURRENT_WANDB_RUN_ID = "chris-q38-rldiag-dev10"
+ENGINE_DIAGNOSTIC_CURRENT_OUTPUT_ROOT = "/mnt/sfs/jobs/chris-q38-rldiag-dev10"
+ENGINE_DIAGNOSTIC_CURRENT_DATA_ROOT = (
+    "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rldiag-inputs-dev10/data"
+)
+ENGINE_DIAGNOSTIC_CURRENT_PREPARED_ROOT = (
+    "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rldiag-inputs-dev10/prepared-v1"
+)
+ENGINE_DIAGNOSTIC_CURRENT_CONFIG_FILE_SHA256 = (
+    "sha256:9cfbb2b4bbbf97e84c1dc32f5dc4ebad5e6ddf670467b28e2019d4262f85ba9f"
+)
+ENGINE_DIAGNOSTIC_CURRENT_DATA_CONFIG_FILE_SHA256 = (
+    "sha256:b349aa746c333f98bdebcc0d4147b0c85080008c0d0b81bea6050bfcf847083a"
+)
 ENGINE_DIAGNOSTIC_MODEL_SHA256 = "dcfdcd6ecb6661741cd3a4b24dc5af7259642c8a6824773e0de70d55d7501179"
 ENGINE_DIAGNOSTIC_DATA_IDENTITY = {
     "selection_sha256": "sha256:8672a1bcb7073ee93d30c6cbc5b6a140d21571c8b58fc6100d7007a6f2e56a9e",
@@ -408,7 +424,7 @@ def _require_fresh_engine_diagnostic_identity(plan: object) -> None:
     if any(observed.get(key) == value for key, value in retired.items()):
         raise ValueError("terminal dev8 identity cannot be replayed")
 
-    successor = {
+    terminal_successor = {
         "run_name": ENGINE_DIAGNOSTIC_SUCCESSOR_CONFIG_NAME,
         "argument_name": ENGINE_DIAGNOSTIC_SUCCESSOR_CONFIG_NAME,
         "data_name": ENGINE_DIAGNOSTIC_SUCCESSOR_CONFIG_NAME,
@@ -420,8 +436,26 @@ def _require_fresh_engine_diagnostic_identity(plan: object) -> None:
         "data_manifest": ENGINE_DIAGNOSTIC_SUCCESSOR_DATA_ROOT + "/manifest.json",
         "cluster_target": "dev",
     }
-    successor_markers = {key: value for key, value in successor.items() if key != "cluster_target"}
-    if any(observed.get(key) == value for key, value in successor_markers.items()):
+    terminal_markers = {
+        key: value for key, value in terminal_successor.items() if key != "cluster_target"
+    }
+    if any(observed.get(key) == value for key, value in terminal_markers.items()):
+        raise ValueError("terminal dev9 identity cannot be replayed")
+
+    current = {
+        "run_name": ENGINE_DIAGNOSTIC_CURRENT_CONFIG_NAME,
+        "argument_name": ENGINE_DIAGNOSTIC_CURRENT_CONFIG_NAME,
+        "data_name": ENGINE_DIAGNOSTIC_CURRENT_CONFIG_NAME,
+        "wandb_run_id": ENGINE_DIAGNOSTIC_CURRENT_WANDB_RUN_ID,
+        "output_root": ENGINE_DIAGNOSTIC_CURRENT_OUTPUT_ROOT,
+        "argument_output_root": ENGINE_DIAGNOSTIC_CURRENT_OUTPUT_ROOT,
+        "train_data": ENGINE_DIAGNOSTIC_CURRENT_DATA_ROOT + "/train.jsonl",
+        "dev_data": ENGINE_DIAGNOSTIC_CURRENT_DATA_ROOT + "/dev.jsonl",
+        "data_manifest": ENGINE_DIAGNOSTIC_CURRENT_DATA_ROOT + "/manifest.json",
+        "cluster_target": "dev",
+    }
+    current_markers = {key: value for key, value in current.items() if key != "cluster_target"}
+    if any(observed.get(key) == value for key, value in current_markers.items()):
         resources = execution.get("resources")
         critical_args = {
             "nodes": 1,
@@ -438,7 +472,7 @@ def _require_fresh_engine_diagnostic_identity(plan: object) -> None:
             "memory_limit": "768Gi",
         }
         if (
-            any(observed.get(key) != value for key, value in successor.items())
+            any(observed.get(key) != value for key, value in current.items())
             or any(arguments.get(key) != value for key, value in critical_args.items())
             or arguments.get("wandb_entity") != "thefleet"
             or arguments.get("wandb_project") != "cyber-post-train"
@@ -454,7 +488,7 @@ def _require_fresh_engine_diagnostic_identity(plan: object) -> None:
             or execution.get("priority") != "c1"
             or resources != exact_resources
         ):
-            raise ValueError("dev9 identity is incomplete or mixed")
+            raise ValueError("dev10 identity is incomplete or mixed")
 
 
 def _engine_evidence_root() -> Path:

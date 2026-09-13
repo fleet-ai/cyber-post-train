@@ -95,9 +95,7 @@ def _fail(exc: Exception) -> None:
     raise typer.Exit(2) from None
 
 
-def _validate_engine_diagnostic_preview(
-    plan: dict, request: dict, preview_result: dict
-) -> dict:
+def _validate_engine_diagnostic_preview(plan: dict, request: dict, preview_result: dict) -> dict:
     """Accept omitted Pod identity only for the exact qualified dev9 image.
 
     The deployed dev Jobs API currently has no request field for a Pod security
@@ -110,9 +108,9 @@ def _validate_engine_diagnostic_preview(
 
     from training.skyrl_training import (
         DEV_KUBERNETES_NAMESPACE,
+        ENGINE_DIAGNOSTIC_CURRENT_CONFIG_NAME,
+        ENGINE_DIAGNOSTIC_CURRENT_OUTPUT_ROOT,
         ENGINE_DIAGNOSTIC_GPUS_PER_WORKER,
-        ENGINE_DIAGNOSTIC_SUCCESSOR_CONFIG_NAME,
-        ENGINE_DIAGNOSTIC_SUCCESSOR_OUTPUT_ROOT,
         ENGINE_DIAGNOSTIC_WORKERS,
         ENGINE_IMAGE_CPU_QUALIFICATION,
         IMAGE,
@@ -129,8 +127,8 @@ def _validate_engine_diagnostic_preview(
     qualified = _DEV9_ABSENT_RUNTIME_CONTEXT_QUALIFICATION
     execution = plan.get("execution", {})
     if (
-        plan.get("run_name") != ENGINE_DIAGNOSTIC_SUCCESSOR_CONFIG_NAME
-        or plan.get("output_root") != ENGINE_DIAGNOSTIC_SUCCESSOR_OUTPUT_ROOT
+        plan.get("run_name") != ENGINE_DIAGNOSTIC_CURRENT_CONFIG_NAME
+        or plan.get("output_root") != ENGINE_DIAGNOSTIC_CURRENT_OUTPUT_ROOT
         or execution.get("cluster_target") != "dev"
         or execution.get("image") != qualified["image"]
         or execution.get("image_cpu_qualification") != ENGINE_IMAGE_CPU_QUALIFICATION
@@ -141,9 +139,7 @@ def _validate_engine_diagnostic_preview(
         or request.get("env", {}).get("CYBER_EXPECTED_RUNTIME_GID") != "100"
     ):
         raise context_error
-    evidence_path = Path(__file__).resolve().parents[1] / qualified[
-        "default_user_evidence_path"
-    ]
+    evidence_path = Path(__file__).resolve().parents[1] / qualified["default_user_evidence_path"]
     try:
         evidence_bytes = evidence_path.read_bytes()
         evidence = json.loads(evidence_bytes)
@@ -156,8 +152,7 @@ def _validate_engine_diagnostic_preview(
     checks = evidence.get("checks", {})
     qualification_scope = evidence.get("qualification_scope", {})
     if (
-        hashlib.sha256(evidence_bytes).hexdigest()
-        != qualified["default_user_evidence_file_sha256"]
+        hashlib.sha256(evidence_bytes).hexdigest() != qualified["default_user_evidence_file_sha256"]
         or evidence.get("receipt_sha256")
         != hashlib.sha256(
             json.dumps(
@@ -165,8 +160,7 @@ def _validate_engine_diagnostic_preview(
             ).encode()
             + b"\n"
         ).hexdigest()
-        or evidence.get("receipt_sha256")
-        != qualified["default_user_evidence_receipt_sha256"]
+        or evidence.get("receipt_sha256") != qualified["default_user_evidence_receipt_sha256"]
         or evidence.get("status") != "qualified"
         or evidence.get("requested_image") != qualified["image"]
         or runtime.get("runtime_image_id") != qualified["image"]
@@ -205,8 +199,7 @@ def _validate_engine_diagnostic_preview(
         obj = yaml.safe_load(preview_result["manifest_yaml"])
         cluster = obj["spec"]["rayClusterSpec"]
         groups = [(1, cluster["headGroupSpec"]["template"])] + [
-            (group["replicas"], group["template"])
-            for group in cluster.get("workerGroupSpecs", [])
+            (group["replicas"], group["template"]) for group in cluster.get("workerGroupSpecs", [])
         ]
         pods = 0
         omitted_fields = 0
@@ -261,9 +254,7 @@ def _validate_engine_diagnostic_preview(
 def _reward_canary_default_user_evidence() -> dict:
     """Reopen the exact clean-pull proof used only by the reward-canary fallback."""
     qualified = _DEV9_ABSENT_RUNTIME_CONTEXT_QUALIFICATION
-    evidence_path = Path(__file__).resolve().parents[1] / qualified[
-        "default_user_evidence_path"
-    ]
+    evidence_path = Path(__file__).resolve().parents[1] / qualified["default_user_evidence_path"]
     try:
         evidence_bytes = evidence_path.read_bytes()
         evidence = json.loads(evidence_bytes)
@@ -278,8 +269,7 @@ def _reward_canary_default_user_evidence() -> dict:
     checks = evidence.get("checks", {})
     qualification_scope = evidence.get("qualification_scope", {})
     if (
-        hashlib.sha256(evidence_bytes).hexdigest()
-        != qualified["default_user_evidence_file_sha256"]
+        hashlib.sha256(evidence_bytes).hexdigest() != qualified["default_user_evidence_file_sha256"]
         or evidence.get("receipt_sha256")
         != hashlib.sha256(
             json.dumps(
@@ -287,8 +277,7 @@ def _reward_canary_default_user_evidence() -> dict:
             ).encode()
             + b"\n"
         ).hexdigest()
-        or evidence.get("receipt_sha256")
-        != qualified["default_user_evidence_receipt_sha256"]
+        or evidence.get("receipt_sha256") != qualified["default_user_evidence_receipt_sha256"]
         or evidence.get("status") != "qualified"
         or evidence.get("requested_image") != qualified["image"]
         or runtime.get("runtime_image_id") != qualified["image"]
@@ -370,8 +359,7 @@ def _validate_reward_canary_preview(plan: dict, request: dict, preview_result: d
         obj = yaml.safe_load(preview_result["manifest_yaml"])
         cluster = obj["spec"]["rayClusterSpec"]
         groups = [(1, cluster["headGroupSpec"]["template"])] + [
-            (group["replicas"], group["template"])
-            for group in cluster.get("workerGroupSpecs", [])
+            (group["replicas"], group["template"]) for group in cluster.get("workerGroupSpecs", [])
         ]
         pods = 0
         omitted_fields = 0
