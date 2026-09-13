@@ -523,6 +523,38 @@ is the sole exception. It also rejects weights-only/finetuning flags as recovery
 These guards do **not** yet expose an RL resume command: a complete, sealed native
 optimizer/RNG/checkpoint handoff and real distributed restore still need qualification.
 
+#### Qualify a trained Miles checkpoint before any successor
+
+After a one-step Miles dev run succeeds **and its eight GPUs are independently
+confirmed released**, seal its numeric distributed checkpoint on CPU:
+
+```sh
+cyber-post-train miles-rl-checkpoint-seal output/miles-dev-run \
+  --output /mnt/sfs/jobs/<distinct-seal-dir>/MILES_TRAINING_CHECKPOINT.json
+```
+
+Copy
+`configs/qualification/qwen38-miles-rl-reward-canary-reload-dev-v1.template.json`,
+replace its manifest path and SHA-256 with that exact create-once seal, then use
+the normal prepare rail:
+
+```sh
+cyber-post-train miles-rl-reload reload.json --output output/miles-reload
+cyber-post-train preflight output/miles-reload
+cyber-post-train preview output/miles-reload --cluster dev
+cyber-post-train submit output/miles-reload --cluster dev
+```
+
+This validator is dev-only and reuses the source run's exact eight-rank
+topology and resource floor. It starts only Miles' Megatron training actors,
+loads the model plus optimizer, scheduler and RNG state on every rank, and
+checks the sanitized state twice. It creates no rollout engine, performs no
+forward/backward or optimizer update, writes no checkpoint, and has no Fleet or
+W&B secret. `RELOAD_VALIDATED.json` is necessary recovery evidence, not proof
+of reward quality or model lift. Promotion still requires independent terminal
+Job/Pod evidence that every validator GPU was released. Never reuse a partial
+seal, edit a prepared request, or retry a failed validator under the same name.
+
 For **SkyRL**, use the same YAML and commands, with these differences:
 
 - Run CPU preflight as the pinned image's user `1000:100`, not root. Keep private

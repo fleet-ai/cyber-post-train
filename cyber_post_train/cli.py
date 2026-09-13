@@ -726,6 +726,8 @@ def preflight(directory: Path) -> None:
             from training.miles_conversion import preflight as check
         elif plan.get("schema") == "cyber_miles_training_v1":
             from training.miles_training import preflight as check
+        elif plan.get("schema") == "cyber_miles_rl_reload_v1":
+            from training.miles_reload import preflight as check
         elif plan.get("schema") == "cyber_skyrl_training_v1":
             if _skyrl_mode(plan, request) == "engine_diagnostic":
                 from training.skyrl_training import engine_diagnostic_preflight as check
@@ -823,6 +825,8 @@ def submit(
             if plan.get("schema") == "cyber_miles_conversion_v1"
             else "cyber_miles_training_cpu_preflight_v1"
             if plan.get("schema") == "cyber_miles_training_v1"
+            else "cyber_miles_rl_reload_cpu_preflight_v1"
+            if plan.get("schema") == "cyber_miles_rl_reload_v1"
             else (
                 "cyber_skyrl_engine_diagnostic_cpu_preflight_v1"
                 if skyrl_mode == "engine_diagnostic"
@@ -848,6 +852,10 @@ def submit(
                 preview_result = client.preview(request)
                 validate_preview(request, preview_result)
                 validate_reload_preview(request, preview_result)
+            elif plan.get("schema") == "cyber_miles_rl_reload_v1":
+                # This is deliberately a one-off dev gate. Re-read the live
+                # rendered shape immediately before its only allowed POST.
+                validate_preview(request, client.preview(request))
             elif skyrl_mode == "engine_diagnostic":
                 preview_result = client.preview(request)
                 validate_preview(request, preview_result)
@@ -901,6 +909,55 @@ def miles_seal(directory: Path, output: Annotated[Path, typer.Option("--output")
         plan, _ = _prepared(directory)
         result = seal(plan, output)
         _print({"sha256": result["sha256"], "files": len(result["files"]), "gpu_reload": False})
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("miles-rl-checkpoint-seal")
+def miles_rl_checkpoint_seal(
+    directory: Path, output: Annotated[Path, typer.Option("--output")]
+) -> None:
+    """CPU-only seal of one terminal Miles RL checkpoint; not reload acceptance."""
+    from training.miles_reload import seal_training_checkpoint
+    from training.miles_training import SCHEMA
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != SCHEMA:
+            raise ValueError("trained checkpoint sealing requires a prepared Miles RL plan")
+        result = seal_training_checkpoint(plan, output)
+        _print(
+            {
+                "sha256": result["sha256"],
+                "files": len(result["files"]),
+                "rollout_index": result["rollout_index"],
+                "gpu_reload_verified": False,
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("miles-rl-reload")
+def miles_rl_reload(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
+    """Prepare one dev-only, all-rank Miles restore with zero optimizer updates."""
+    from training.miles_reload import compile_reload, job_request
+    from training.sft import read_mapping
+
+    try:
+        plan = compile_reload(read_mapping(config), relative_to=config.resolve().parent)
+        request = job_request(plan)
+        _prepare(output, plan, request)
+        _print(
+            {
+                "prepared": str(output),
+                "checkpoint_rollout_index": plan["source_manifest"]["rollout_index"],
+                "gpus": request["workers"] * request["gpus_per_worker"],
+                "optimizer_updates": 0,
+                "rollouts": 0,
+                "submitted": False,
+            }
+        )
     except Exception as exc:
         _fail(exc)
 
