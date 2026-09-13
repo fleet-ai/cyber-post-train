@@ -1,4 +1,4 @@
-"""Pre-watched operator rail for dev3 Miles HF export and reload.
+"""Pre-watched operator rail for a digest-bound Miles canary HF export and reload.
 
 Export is one zero-GPU Kubernetes batch Job; reload is one one-GPU Jobs API
 RayJob.  Both paths open LIST-resource-version watches before their only create

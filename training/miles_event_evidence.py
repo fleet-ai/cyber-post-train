@@ -30,6 +30,9 @@ RELEASE_SCHEMA = "cyber_miles_external_release_v1"
 NAMESPACE = "fleet-train-jobs"
 WORLD_SIZE = 8
 DEV_KUBE_CONTEXT = "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb"
+HF_PLAN_SCHEMAS = frozenset(
+    {"cyber_miles_hf_export_job_plan_v1", "cyber_miles_hf_export_job_plan_v2"}
+)
 _HF_START_FIELDS = {
     "schema",
     "status",
@@ -163,7 +166,7 @@ def start_capture(
     if kube_context != DEV_KUBE_CONTEXT:
         raise ValueError("Miles event capture is not using the exact dev Kubernetes context")
     if (
-        plan.get("schema") == "cyber_miles_hf_export_job_plan_v1"
+        plan.get("schema") in HF_PLAN_SCHEMAS
         and namespace != "10394b76-e1d4-40b1-a8e2-7575e95df216"
     ):
         raise ValueError("Miles HF event capture namespace UID differs from exact dev")
@@ -193,7 +196,7 @@ def start_capture(
 def _validate_submission(
     submission: dict[str, Any], plan: dict[str, Any], *, check_files: bool
 ) -> dict[str, Any]:
-    if plan.get("schema") == "cyber_miles_hf_export_job_plan_v1":
+    if plan.get("schema") in HF_PLAN_SCHEMAS:
         from .miles_hf_export_job import validate_submission_binding
     else:
         from .miles_acceptance import validate_submission_binding
@@ -371,7 +374,7 @@ def compile_controller(
     submitted = _validate_submission(submission, plan, check_files=False)
     start_path = directory / "STARTED.json"
     start, start_file_sha256 = _read(start_path, START_SCHEMA)
-    hf_plan = plan.get("schema") == "cyber_miles_hf_export_job_plan_v1"
+    hf_plan = plan.get("schema") in HF_PLAN_SCHEMAS
     direct_export = hf_plan and plan.get("stage") == "export"
     expected_gpus = submitted.get("request", {}).get(
         "gpus" if direct_export else "gpus_per_worker", WORLD_SIZE
@@ -859,7 +862,7 @@ def compile_release(
     """Seal a separate post-terminal absence observation."""
 
     submitted = _validate_submission(submission, plan, check_files=False)
-    if plan.get("schema") == "cyber_miles_hf_export_job_plan_v1":
+    if plan.get("schema") in HF_PLAN_SCHEMAS:
         from .miles_hf_export import RELOAD_CONTROLLER_SCHEMA
         from .miles_hf_export_job import EXPORT_CONTROLLER_SCHEMA, validate_event_controller
 
@@ -874,7 +877,7 @@ def compile_release(
         controller, controller_file_sha256 = _read(controller_path, CONTROLLER_SCHEMA)
         validate_controller_observation(controller, plan, submission)
     if (
-        plan.get("schema") == "cyber_miles_hf_export_job_plan_v1"
+        plan.get("schema") in HF_PLAN_SCHEMAS
         and plan.get("stage") == "export"
     ):
         expected_absence = {
@@ -898,7 +901,7 @@ def compile_release(
     when = _time(observed_at, "release observation")
     if when < _time(controller["observed_at"], "controller terminal observation"):
         raise ValueError("Miles release observation predates terminal evidence")
-    if plan.get("schema") == "cyber_miles_hf_export_job_plan_v1":
+    if plan.get("schema") in HF_PLAN_SCHEMAS:
         validate_hf_release_journal(plan, submission, controller, when)
         from .miles_hf_export_job import release_from_event_journal
 

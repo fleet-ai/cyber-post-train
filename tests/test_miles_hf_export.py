@@ -13,10 +13,9 @@ import torch
 from safetensors.torch import save_file
 
 from cyber_post_train.jobs import digest
-from training import miles
+from training import miles, miles_promotion
 from training import miles_hf_export as export
 from training import miles_hf_export_job as export_job
-from training.miles_promotion import DEV3
 
 
 def _sealed(value: dict) -> dict:
@@ -37,6 +36,25 @@ def _prediction_probe(prediction: str = "a" * 64) -> dict:
         "task_content_included": False,
         "benchmark_content_included": False,
     }
+
+
+def _active_binding(source_plan_sha256: str) -> dict:
+    value = {
+        "schema": miles_promotion.ACTIVE_CANARY_SCHEMA,
+        "status": "accepted_dev_canary",
+        "reward_terminal_receipt_sha256": "sha256:" + "e" * 64,
+        "source_run_name": "synthetic-canary",
+        "source_commit": "f" * 40,
+        "source_plan_sha256": "sha256:" + source_plan_sha256,
+        "source_request_sha256": "sha256:" + "1" * 64,
+        "runtime_bundle_sha256": "sha256:" + "2" * 64,
+        "api_base_url": miles_promotion.DEV_API_BASE_URL,
+        "api_run_id": "11111111-1111-4111-8111-111111111111",
+        "api_run_name": "synthetic-canary-11111111",
+        "rayjob_uid": "22222222-2222-4222-8222-222222222222",
+        "workload_uid": "33333333-3333-4333-8333-333333333333",
+    }
+    return _sealed(value)
 
 
 def _write_json(path: Path, value: dict) -> str:
@@ -119,7 +137,7 @@ def case(tmp_path: Path, monkeypatch) -> dict:
             "source": {
                 "run_name": "synthetic",
                 "output_root": str(checkpoint_root.parent.parent),
-                "plan_sha256": DEV3["source_plan_sha256"],
+                "plan_sha256": "b" * 64,
                 "completion_sha256": "c" * 64,
                 "arguments": {"nodes": 1, "gpus_per_node": 8},
                 "execution": {"image": miles.IMAGE},
@@ -150,6 +168,11 @@ def case(tmp_path: Path, monkeypatch) -> dict:
     )
     terminal_path = tmp_path / "MILES_TERMINAL_ACCEPTED.json"
     terminal_file_sha256 = _write_json(terminal_path, terminal)
+    active_canary_binding = _active_binding(checkpoint["source"]["plan_sha256"])
+    active_canary_binding_path = tmp_path / "ACTIVE_CANARY_BINDING.json"
+    active_canary_binding_file_sha256 = _write_json(
+        active_canary_binding_path, active_canary_binding
+    )
     native_reload = _sealed(
         {
             "schema": export.NATIVE_RELOAD_SCHEMA,
@@ -172,7 +195,9 @@ def case(tmp_path: Path, monkeypatch) -> dict:
     monkeypatch.setattr(
         "training.miles_acceptance.validate_terminal", lambda _value, *, check_files: {}
     )
-    monkeypatch.setattr("training.miles_promotion._exact_dev3", lambda _value: None)
+    monkeypatch.setattr(
+        "training.miles_promotion._exact_active_canary", lambda _terminal, _binding: None
+    )
 
     def invoke(_source: Path, destination: Path, metadata: Path, _log: Path) -> None:
         shutil.copytree(raw, destination)
@@ -200,6 +225,8 @@ def case(tmp_path: Path, monkeypatch) -> dict:
         "raw": raw,
         "checkpoint_root": checkpoint_root,
         "checkpoint": checkpoint,
+        "active_canary_binding_path": active_canary_binding_path,
+        "active_canary_binding_sha256": active_canary_binding_file_sha256,
         "checkpoint_path": checkpoint_path,
         "checkpoint_sha256": checkpoint_file_sha256,
         "terminal_path": terminal_path,
@@ -212,6 +239,8 @@ def case(tmp_path: Path, monkeypatch) -> dict:
 
 def _run(case: dict) -> dict:
     return export.export(
+        active_canary_binding_path=case["active_canary_binding_path"],
+        active_canary_binding_sha256=case["active_canary_binding_sha256"],
         checkpoint_path=case["checkpoint_path"],
         checkpoint_sha256=case["checkpoint_sha256"],
         terminal_path=case["terminal_path"],
@@ -364,12 +393,18 @@ def test_converter_import_closure_is_exact_and_rejects_a_new_eager_module(
         export._miles_root()
 
 
-def test_export_rejects_terminal_outside_exact_active_dev3(case: dict, monkeypatch) -> None:
-    def reject(_terminal: dict) -> None:
-        raise ValueError("not exact active dev3")
+def test_export_rejects_terminal_outside_exact_active_canary(case: dict, monkeypatch) -> None:
+    def reject(_terminal: dict, _binding: dict) -> None:
+        raise ValueError("not exact active canary")
 
-    monkeypatch.setattr("training.miles_promotion._exact_dev3", reject)
-    with pytest.raises(ValueError, match="exact active dev3"):
+    monkeypatch.setattr("training.miles_promotion._exact_active_canary", reject)
+    with pytest.raises(ValueError, match="exact active canary"):
+        _run(case)
+
+
+def test_export_fails_closed_when_active_canary_digest_is_null(case: dict) -> None:
+    case["active_canary_binding_sha256"] = None
+    with pytest.raises(ValueError, match="digest is absent"):
         _run(case)
 
 
@@ -385,6 +420,8 @@ def test_observer_backed_native_reload_schema_and_prepared_runtime_reopen(case: 
     case["native_reload_sha256"] = export._hash(case["native_reload_path"])
 
     prepared = export.bind_source(
+        active_canary_binding_path=case["active_canary_binding_path"],
+        active_canary_binding_sha256=case["active_canary_binding_sha256"],
         checkpoint_path=case["checkpoint_path"],
         checkpoint_sha256=case["checkpoint_sha256"],
         terminal_path=case["terminal_path"],
@@ -395,6 +432,8 @@ def test_observer_backed_native_reload_schema_and_prepared_runtime_reopen(case: 
     )
     prepared.pop("checkpoint_manifest")
     result = export.export(
+        active_canary_binding_path=case["active_canary_binding_path"],
+        active_canary_binding_sha256=case["active_canary_binding_sha256"],
         checkpoint_path=case["checkpoint_path"],
         checkpoint_sha256=case["checkpoint_sha256"],
         terminal_path=case["terminal_path"],
@@ -456,7 +495,7 @@ def test_post_job_inspection_never_materializes_dcp_values(
         "file_sha256": artifact_file_sha256,
         "receipt_sha256": result["sha256"],
         "tensor_inventory_sha256": result["tensor_inventory_sha256"],
-        "active_dev3": DEV3,
+        "active_canary_binding": result["source"]["active_canary_binding"],
     }
 
     def forbidden(_generation: Path) -> list[dict]:

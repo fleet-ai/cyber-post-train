@@ -1,4 +1,4 @@
-"""Prepared dev execution rails for exact Miles dev3 HF export and reload.
+"""Prepared dev execution rails for an exact Miles canary HF export and reload.
 
 The CPU conversion is one direct, zero-GPU Kubernetes ``batch/v1`` Job.  The
 independent HF reopen/probe is one Jobs API RayJob with exactly one GPU.  Both
@@ -29,13 +29,13 @@ from cyber_post_train.jobs import API_URLS, bundled_request, canonical_gzip, dig
 from . import miles
 from .miles_conversion import _write
 
-CONFIG_SCHEMA = "cyber_miles_hf_export_job_config_v1"
-PLAN_SCHEMA = "cyber_miles_hf_export_job_plan_v1"
+CONFIG_SCHEMA = "cyber_miles_hf_export_job_config_v2"
+PLAN_SCHEMA = "cyber_miles_hf_export_job_plan_v2"
 PREFLIGHT_SCHEMA = "cyber_miles_hf_export_job_cpu_preflight_v1"
 SUBMISSION_SCHEMA = "cyber_miles_hf_export_job_submission_v1"
 EXPORT_CONTROLLER_SCHEMA = "cyber_miles_hf_export_controller_terminal_v1"
 EXPORT_RELEASE_SCHEMA = "cyber_miles_hf_export_external_release_v1"
-EXPORT_ACCEPTED_SCHEMA = "cyber_miles_hf_export_job_accepted_v1"
+EXPORT_ACCEPTED_SCHEMA = "cyber_miles_hf_export_job_accepted_v2"
 DEV_KUBE_CONTEXT = "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb"
 DEV_NAMESPACE = "fleet-train-jobs"
 DEV_NAMESPACE_UID = "10394b76-e1d4-40b1-a8e2-7575e95df216"
@@ -127,7 +127,8 @@ _EXPORT_ACCEPTED_FIELDS = _fields(
     "artifact_path artifact_file_sha256 artifact_receipt_sha256 tensor_inventory_sha256 "
     "controller_terminal_path controller_terminal_file_sha256 controller_terminal_sha256 "
     "external_release_path external_release_file_sha256 external_release_sha256 "
-    "source_plan_sha256 source_request_sha256 runtime_bundle_sha256 exact_dev3_source_verified "
+    "source_plan_sha256 source_request_sha256 runtime_bundle_sha256 active_canary_binding "
+    "exact_active_canary_source_verified "
     "exact_job_execution_verified external_gpu_release_verified create_once_verified "
     "serving_qualified sha256"
 )
@@ -191,7 +192,7 @@ def _disjoint(output: Path, sources: list[Path]) -> None:
 
 
 def compile_job(config: dict[str, Any]) -> dict[str, Any]:
-    """Compile and reopen one exact dev3 export or its one-GPU reload."""
+    """Compile and reopen one exact canary export or its one-GPU reload."""
     from . import miles_hf_export as hf
 
     if set(config) != {"schema", "stage", "name", "output_root", "source", "cluster"}:
@@ -216,10 +217,17 @@ def compile_job(config: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(source, dict):
         raise ValueError("Miles HF job source is absent")
     if stage == "export":
-        if set(source) != {"checkpoint", "terminal_acceptance", "native_reload_acceptance"}:
+        if set(source) != {
+            "active_canary_binding",
+            "checkpoint",
+            "terminal_acceptance",
+            "native_reload_acceptance",
+        }:
             raise ValueError("Miles HF export source fields changed")
         refs = {name: _reference(value, name) for name, value in source.items()}
         bound = hf.bind_source(
+            active_canary_binding_path=Path(refs["active_canary_binding"]["path"]),
+            active_canary_binding_sha256=refs["active_canary_binding"]["file_sha256"],
             checkpoint_path=Path(refs["checkpoint"]["path"]),
             checkpoint_sha256=refs["checkpoint"]["file_sha256"],
             terminal_path=Path(refs["terminal_acceptance"]["path"]),
@@ -230,7 +238,6 @@ def compile_job(config: dict[str, Any]) -> dict[str, Any]:
         plan_source = {key: bound[key] for key in refs}
         plan_source.update(
             source_plan_sha256=bound["source_plan_sha256"],
-            active_dev3=bound["active_dev3"],
             prediction_probe=bound["prediction_probe"],
         )
         artifact_path = str(Path(output_root) / "model")
@@ -283,8 +290,6 @@ def validate_plan(
     plan: Mapping[str, Any], *, check_files: bool, validate_historical: bool = True
 ) -> None:
     from . import miles_hf_export as hf
-    from .miles_promotion import DEV3
-
     stage = plan.get("stage")
     execution = plan.get("execution")
     if (
@@ -320,20 +325,24 @@ def validate_plan(
             "terminal_acceptance",
             "native_reload_acceptance",
             "source_plan_sha256",
-            "active_dev3",
+            "active_canary_binding",
             "prediction_probe",
         }:
             raise ValueError("Miles HF prepared export source fields changed")
-        for key in ("checkpoint", "terminal_acceptance", "native_reload_acceptance"):
+        for key in (
+            "active_canary_binding",
+            "checkpoint",
+            "terminal_acceptance",
+            "native_reload_acceptance",
+        ):
             _bound_reference(source.get(key), key)
         hf._validate_prediction_probe(source.get("prediction_probe"))
-        if (
-            source.get("active_dev3") != DEV3
-            or source.get("source_plan_sha256") != DEV3["source_plan_sha256"]
-        ):
-            raise ValueError("Miles HF export is not bound to exact active dev3")
+        if _SHA.fullmatch(str(source.get("source_plan_sha256", ""))) is None:
+            raise ValueError("Miles HF export source plan is not digest-bound")
         if check_files:
             bound = hf.bind_source(
+                active_canary_binding_path=Path(source["active_canary_binding"]["path"]),
+                active_canary_binding_sha256=source["active_canary_binding"]["file_sha256"],
                 checkpoint_path=Path(source["checkpoint"]["path"]),
                 checkpoint_sha256=source["checkpoint"]["file_sha256"],
                 terminal_path=Path(source["terminal_acceptance"]["path"]),
@@ -342,15 +351,8 @@ def validate_plan(
                 native_reload_sha256=source["native_reload_acceptance"]["file_sha256"],
                 validate_historical=validate_historical,
             )
-            if any(
-                source[key] != bound[key]
-                for key in (
-                    "checkpoint",
-                    "terminal_acceptance",
-                    "native_reload_acceptance",
-                    "prediction_probe",
-                )
-            ):
+            public = {key: item for key, item in bound.items() if key != "checkpoint_manifest"}
+            if source != public:
                 raise ValueError("Miles HF export source reference changed")
     else:
         if set(source) != {"export_acceptance", "export"}:
@@ -368,8 +370,13 @@ def validate_plan(
             )
             or not isinstance(export, dict)
             or set(export)
-            != {"path", "file_sha256", "receipt_sha256", "tensor_inventory_sha256", "active_dev3"}
-            or export.get("active_dev3") != DEV3
+            != {
+                "path",
+                "file_sha256",
+                "receipt_sha256",
+                "tensor_inventory_sha256",
+                "active_canary_binding",
+            }
             or _sfs(export.get("path"), "HF export") != export.get("path")
             or any(
                 _SHA.fullmatch(str(export.get(key, ""))) is None
@@ -377,6 +384,7 @@ def validate_plan(
             )
         ):
             raise ValueError("Miles HF reload export binding changed")
+        _bound_reference(export.get("active_canary_binding"), "active canary binding")
         if check_files:
             accepted, accepted_file_sha256 = _snapshot(Path(export_acceptance["path"]))
             if (
@@ -415,8 +423,6 @@ def _inspect_plan_bound_export(
     stability without moving a 27B DCP state dict into operator RAM.
     """
     from . import miles_hf_export as hf
-    from .miles_promotion import DEV3
-
     if plan.get("stage") != "export":
         raise ValueError("post-Job export inspection requires an export plan")
     expected_path = Path(plan["artifact_path"]) / "EXPORT.json"
@@ -431,7 +437,7 @@ def _inspect_plan_bound_export(
         "file_sha256": artifact_file_sha256,
         "receipt_sha256": str(artifact.get("sha256", "")).removeprefix("sha256:"),
         "tensor_inventory_sha256": artifact.get("tensor_inventory_sha256"),
-        "active_dev3": DEV3,
+        "active_canary_binding": plan["source"]["active_canary_binding"],
     }
     reopened, tensors = hf.inspect_export(
         path,
@@ -774,6 +780,8 @@ def run(plan: dict[str, Any]) -> dict[str, Any]:
             raise ValueError("CPU exporter received a visible GPU")
         source = plan["source"]
         return hf.export(
+            active_canary_binding_path=Path(source["active_canary_binding"]["path"]),
+            active_canary_binding_sha256=source["active_canary_binding"]["file_sha256"],
             checkpoint_path=Path(source["checkpoint"]["path"]),
             checkpoint_sha256=source["checkpoint"]["file_sha256"],
             terminal_path=Path(source["terminal_acceptance"]["path"]),
@@ -1811,7 +1819,8 @@ def accept_export_job(
             "source_plan_sha256": artifact["source"]["source_plan_sha256"],
             "source_request_sha256": submission["source_request_sha256"],
             "runtime_bundle_sha256": submission["runtime_bundle_sha256"],
-            "exact_dev3_source_verified": True,
+            "active_canary_binding": artifact["source"]["active_canary_binding"],
+            "exact_active_canary_source_verified": True,
             "exact_job_execution_verified": True,
             "external_gpu_release_verified": True,
             "create_once_verified": True,
@@ -1823,7 +1832,6 @@ def accept_export_job(
 def validate_export_accepted(value: dict[str, Any], *, check_files: bool = True) -> dict[str, Any]:
     """Reopen a fully observed export job before the reload stage consumes it."""
     from . import miles_hf_export as hf
-    from .miles_promotion import DEV3
     from .rl_runtime import sealed
 
     sealed(value, EXPORT_ACCEPTED_SCHEMA)
@@ -1847,11 +1855,10 @@ def validate_export_accepted(value: dict[str, Any], *, check_files: bool = True)
         set(value) != _EXPORT_ACCEPTED_FIELDS
         or value.get("status") != "accepted"
         or any(_SHA.fullmatch(str(value.get(key, ""))) is None for key in digest_fields)
-        or value.get("source_plan_sha256") != DEV3["source_plan_sha256"]
         or any(
             value.get(key) is not True
             for key in (
-                "exact_dev3_source_verified",
+                "exact_active_canary_source_verified",
                 "exact_job_execution_verified",
                 "external_gpu_release_verified",
                 "create_once_verified",
@@ -1860,6 +1867,7 @@ def validate_export_accepted(value: dict[str, Any], *, check_files: bool = True)
         or value.get("serving_qualified") is not False
     ):
         raise ValueError("accepted HF export job receipt is incomplete")
+    _bound_reference(value.get("active_canary_binding"), "active canary binding")
     if check_files:
         plan, plan_file_sha256 = _snapshot(Path(value["export_plan_path"]))
         submission, submission_file_sha256 = _snapshot(Path(value["submission_binding_path"]))
@@ -1897,6 +1905,10 @@ def validate_export_accepted(value: dict[str, Any], *, check_files: bool = True)
             != value["artifact_receipt_sha256"].removeprefix("sha256:")
             or artifact["tensor_inventory_sha256"]
             != value["tensor_inventory_sha256"].removeprefix("sha256:")
+            or artifact["source"]["active_canary_binding"]
+            != value["active_canary_binding"]
+            or plan["source"]["active_canary_binding"]
+            != value["active_canary_binding"]
             or submission["source_request_sha256"].removeprefix("sha256:")
             != value["source_request_sha256"].removeprefix("sha256:")
             or submission["runtime_bundle_sha256"].removeprefix("sha256:")
@@ -1909,7 +1921,7 @@ def validate_export_accepted(value: dict[str, Any], *, check_files: bool = True)
             "file_sha256": value["artifact_file_sha256"].removeprefix("sha256:"),
             "receipt_sha256": value["artifact_receipt_sha256"].removeprefix("sha256:"),
             "tensor_inventory_sha256": value["tensor_inventory_sha256"].removeprefix("sha256:"),
-            "active_dev3": DEV3,
+            "active_canary_binding": value["active_canary_binding"],
         },
         "source_request_sha256": value["source_request_sha256"],
         "runtime_bundle_sha256": value["runtime_bundle_sha256"],

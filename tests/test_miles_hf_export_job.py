@@ -15,7 +15,14 @@ from cyber_post_train.jobs import digest
 from training import miles, miles_event_evidence
 from training import miles_hf_export as hf
 from training import miles_hf_export_job as job
-from training.miles_promotion import DEV3
+
+
+def _active_binding_reference() -> dict[str, str]:
+    return {
+        "path": "/exact/ACTIVE_CANARY_BINDING.json",
+        "file_sha256": "9" * 64,
+        "receipt_sha256": "a" * 64,
+    }
 
 
 def _prediction_probe() -> dict:
@@ -59,8 +66,8 @@ def _plan(tmp_path: Path, stage: str) -> dict:
                 "file_sha256": "5" * 64,
                 "receipt_sha256": "6" * 64,
             },
-            "source_plan_sha256": DEV3["source_plan_sha256"],
-            "active_dev3": DEV3,
+            "source_plan_sha256": "b" * 64,
+            "active_canary_binding": _active_binding_reference(),
             "prediction_probe": _prediction_probe(),
         }
         if stage == "export"
@@ -75,7 +82,7 @@ def _plan(tmp_path: Path, stage: str) -> dict:
                 "file_sha256": "1" * 64,
                 "receipt_sha256": "2" * 64,
                 "tensor_inventory_sha256": "3" * 64,
-                "active_dev3": DEV3,
+                "active_canary_binding": _active_binding_reference(),
             },
         }
     )
@@ -180,7 +187,6 @@ def test_request_is_plan_bound_secretless_and_allocates_zero_export_gpus(
         ]
         == bundle_sha256
     )
-
     runtime = job._runtime()
     monkeypatch.setattr(
         job.subprocess,
@@ -210,6 +216,39 @@ def test_request_is_plan_bound_secretless_and_allocates_zero_export_gpus(
     expanded["source"]["unbound_input"] = {"path": "/tmp/private", "file_sha256": "0" * 64}
     with pytest.raises(ValueError, match="source fields"):
         job.job_request(expanded)
+
+
+def test_dev4_templates_are_inert_until_terminal_digests_exist() -> None:
+    root = Path(__file__).resolve().parents[1]
+    export_template = json.loads(
+        (root / "configs/qualification/qwen38-miles-hf-export-dev4-v1.template.json").read_text()
+    )
+    reload_template = json.loads(
+        (root / "configs/qualification/qwen38-miles-hf-reload-dev4-v1.template.json").read_text()
+    )
+
+    assert export_template["schema"] == job.CONFIG_SCHEMA
+    assert export_template["name"] == "q38-miles-hf-export-dev4-v1"
+    assert set(export_template["source"]) == {
+        "active_canary_binding",
+        "checkpoint",
+        "terminal_acceptance",
+        "native_reload_acceptance",
+    }
+    assert all(ref["file_sha256"] is None for ref in export_template["source"].values())
+    assert reload_template["schema"] == job.CONFIG_SCHEMA
+    assert reload_template["source"]["export_acceptance"]["file_sha256"] is None
+    with pytest.raises(ValueError, match="digest-bound"):
+        job.compile_job(export_template)
+    with pytest.raises(ValueError, match="digest-bound"):
+        job.compile_job(reload_template)
+
+
+def test_plan_rejects_null_active_canary_digest(tmp_path: Path) -> None:
+    plan = _plan(tmp_path, "export")
+    plan["source"]["active_canary_binding"]["file_sha256"] = None
+    with pytest.raises(ValueError, match="prepared reference"):
+        job.validate_plan(plan, check_files=False)
 
 
 def test_runtime_bundle_imports_in_an_isolated_checkout(tmp_path: Path) -> None:
@@ -444,7 +483,10 @@ def test_export_acceptance_is_create_once_and_reload_consumes_only_it(
     model = root / "model"
     model.mkdir(parents=True)
     artifact = {
-        "source": {"source_plan_sha256": DEV3["source_plan_sha256"]},
+        "source": {
+            "source_plan_sha256": "b" * 64,
+            "active_canary_binding": _active_binding_reference(),
+        },
         "tensor_inventory_sha256": "1" * 64,
         "sha256": "sha256:" + "2" * 64,
     }

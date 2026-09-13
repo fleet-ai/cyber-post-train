@@ -573,6 +573,18 @@ the native reload proof. The prediction digest is the semantic source binding
 for the later HF reload. Never launch a second eight-GPU reload job for the same
 accepted checkpoint.
 
+Before HF export, derive one create-once `ACTIVE_CANARY_BINDING.json` with
+`training.miles_promotion.accept_active_canary_binding`. The v2 export rail
+requires that digest-bound record alongside the checkpoint, terminal, and native
+reload receipts; it no longer selects a hard-coded canary generation. The inert
+dev4 templates are
+`configs/qualification/qwen38-miles-hf-export-dev4-v1.template.json` and
+`configs/qualification/qwen38-miles-hf-reload-dev4-v1.template.json`. Their
+terminal-derived digests are intentionally `null`: compilation must fail until
+the exact accepted dev4 artifacts exist and those values are replaced. A queued
+API identity is not terminal or reload evidence and must never be used to fill
+those fields.
+
 The standalone `miles-rl-reload` rail remains available when a genuinely
 separate reload execution is required for another checkpoint. Its legacy dev3
 template is only an input for a fresh dev4-bound config. In either mode, never

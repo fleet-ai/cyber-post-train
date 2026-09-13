@@ -140,7 +140,9 @@ that the independently reloaded HF export must match.
 
 Production remains closed unless both the training terminal and consolidated
 reload receipts revalidate from their referenced files. Promotion must then
-bind the exact dev3 identity, the frozen production data manifest, and the same
-qualified native topology. Export, serving parity, held-out Fleet evaluation,
-and paired Tensorlake WebExploitBench evaluation remain later gates. Only the
-weight payload may differ between paired base and post-training evaluation.
+derive and bind an immutable active-canary identity from that exact terminal,
+plus the frozen production data manifest and the same qualified native topology.
+No generation name is a selection authority. Export, serving parity, held-out
+Fleet evaluation, and paired Tensorlake WebExploitBench evaluation remain later
+gates. Only the weight payload may differ between paired base and post-training
+evaluation.

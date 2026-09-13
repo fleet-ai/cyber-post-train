@@ -626,8 +626,12 @@ def test_reload_release_query_rejects_any_still_present_exact_uid(monkeypatch) -
     ]
 
 
-def test_generic_submit_cannot_bypass_the_ttl_zero_watcher(monkeypatch) -> None:
-    plan = {"schema": "cyber_miles_hf_export_job_plan_v1"}
+@pytest.mark.parametrize(
+    "schema",
+    ("cyber_miles_hf_export_job_plan_v1", "cyber_miles_hf_export_job_plan_v2"),
+)
+def test_generic_submit_cannot_bypass_the_ttl_zero_watcher(monkeypatch, schema: str) -> None:
+    plan = {"schema": schema}
     monkeypatch.setattr(cli, "_prepared", lambda _directory: (plan, {}))
     monkeypatch.setattr(
         cli,
@@ -641,10 +645,14 @@ def test_generic_submit_cannot_bypass_the_ttl_zero_watcher(monkeypatch) -> None:
     assert "pre-POST TTL-zero watcher" in result.output
 
 
+@pytest.mark.parametrize(
+    "schema",
+    ("cyber_miles_hf_export_job_plan_v1", "cyber_miles_hf_export_job_plan_v2"),
+)
 def test_generic_prepared_reader_reopens_direct_job_without_jobs_api_validator(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, schema: str
 ) -> None:
-    plan = {"schema": "cyber_miles_hf_export_job_plan_v1", "stage": "export"}
+    plan = {"schema": schema, "stage": "export"}
     request = {"apiVersion": "batch/v1", "kind": "Job"}
     values = {
         tmp_path / "plan.json": plan,

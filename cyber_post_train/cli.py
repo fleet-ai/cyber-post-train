@@ -45,6 +45,9 @@ class Cluster(StrEnum):
 
 
 DEV_KUBE_CONTEXT = "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb"
+_MILES_HF_PLAN_SCHEMAS = frozenset(
+    {"cyber_miles_hf_export_job_plan_v1", "cyber_miles_hf_export_job_plan_v2"}
+)
 
 
 def _print(value: object) -> None:
@@ -85,7 +88,7 @@ def _prepared(directory: Path) -> tuple[dict, dict]:
     if receipt != {"plan_sha256": digest(plan), "request_sha256": digest(request)}:
         raise ValueError("prepared inputs changed; prepare a new directory, never edit a launch")
     if (
-        plan.get("schema") == "cyber_miles_hf_export_job_plan_v1"
+        plan.get("schema") in _MILES_HF_PLAN_SCHEMAS
         and plan.get("stage") == "export"
     ):
         from training.miles_hf_export_job import job_request, validate_plan
@@ -831,7 +834,7 @@ def preflight(directory: Path) -> None:
             from training.miles_training import preflight as check
         elif plan.get("schema") == "cyber_miles_rl_reload_v1":
             from training.miles_reload import preflight as check
-        elif plan.get("schema") == "cyber_miles_hf_export_job_plan_v1":
+        elif plan.get("schema") in _MILES_HF_PLAN_SCHEMAS:
             from training.miles_hf_export_job import preflight as check
         elif plan.get("schema") == "cyber_skyrl_training_v1":
             if _skyrl_mode(plan, request) == "engine_diagnostic":
@@ -920,7 +923,7 @@ def submit(
     """
     try:
         plan, request = _prepared(directory)
-        if plan.get("schema") == "cyber_miles_hf_export_job_plan_v1":
+        if plan.get("schema") in _MILES_HF_PLAN_SCHEMAS:
             raise JobsError(
                 "Miles HF jobs require the pre-POST TTL-zero watcher; "
                 "use python -m training.miles_hf_export_cli submit"
@@ -1137,7 +1140,7 @@ def miles_hf_bind_submission(
 
     try:
         plan, request = _prepared(directory)
-        if plan.get("schema") != "cyber_miles_hf_export_job_plan_v1":
+        if plan.get("schema") not in _MILES_HF_PLAN_SCHEMAS:
             raise ValueError("submission binding requires a prepared Miles HF job")
         result = compile_submission_binding(
             plan_path=directory / "plan.json",
@@ -1159,7 +1162,7 @@ def miles_hf_accept_export(directory: Path, submission: Path) -> None:
     try:
         plan, _ = _prepared(directory)
         if (
-            plan.get("schema") != "cyber_miles_hf_export_job_plan_v1"
+            plan.get("schema") not in _MILES_HF_PLAN_SCHEMAS
             or plan.get("stage") != "export"
         ):
             raise ValueError("export acceptance requires a prepared Miles HF export job")
@@ -1184,7 +1187,7 @@ def miles_hf_accept_reload(directory: Path, submission: Path) -> None:
     try:
         plan, _ = _prepared(directory)
         if (
-            plan.get("schema") != "cyber_miles_hf_export_job_plan_v1"
+            plan.get("schema") not in _MILES_HF_PLAN_SCHEMAS
             or plan.get("stage") != "reload"
         ):
             raise ValueError("reload acceptance requires a prepared Miles HF reload job")

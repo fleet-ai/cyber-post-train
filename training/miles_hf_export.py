@@ -40,7 +40,7 @@ from .post_sft_cast import (
     _shard_groups,
 )
 
-EXPORT_SCHEMA = "cyber_miles_native_hf_export_v1"
+EXPORT_SCHEMA = "cyber_miles_native_hf_export_v2"
 RELOAD_SCHEMA = "cyber_miles_hf_zero_update_reload_v1"
 RELOAD_CONTROLLER_SCHEMA = "cyber_miles_hf_reload_controller_terminal_v1"
 RELOAD_RELEASE_SCHEMA = "cyber_miles_hf_reload_external_release_v1"
@@ -133,8 +133,8 @@ _EXPORT_FIELDS = _fields(
     "create_only gpu_reload_verified completed_at sha256"
 )
 _EXPORT_SOURCE_FIELDS = _fields(
-    "checkpoint terminal_acceptance native_reload_acceptance source_plan_sha256 active_dev3 "
-    "prediction_probe"
+    "active_canary_binding checkpoint terminal_acceptance native_reload_acceptance "
+    "source_plan_sha256 prediction_probe"
 )
 _PREDICTION_FIELDS = _fields(
     "schema probe_id input_ids_sha256 sequence_length top_k selection_margin_threshold "
@@ -329,7 +329,9 @@ def _sealed(value: Any, schema: str) -> dict[str, Any]:
     return value
 
 
-def _snapshot_json(path: Path, expected_sha256: str) -> tuple[dict[str, Any], str]:
+def _snapshot_json(path: Path, expected_sha256: object) -> tuple[dict[str, Any], str]:
+    if not isinstance(expected_sha256, str):
+        raise ValueError("bound JSON file digest is absent")
     expected = expected_sha256.removeprefix("sha256:")
     if _SHA256.fullmatch(expected) is None or path.is_symlink() or not path.is_file():
         raise ValueError("bound JSON file is missing or indirect")
@@ -367,6 +369,8 @@ def _terminal_checkpoint_reference(terminal: dict[str, Any]) -> dict[str, str]:
 
 def bind_source(
     *,
+    active_canary_binding_path: Path,
+    active_canary_binding_sha256: str,
     checkpoint_path: Path,
     checkpoint_sha256: str,
     terminal_path: Path,
@@ -380,13 +384,17 @@ def bind_source(
     from .miles_reload import _verify_checkpoint
 
     checkpoint, checkpoint_file_sha256 = _snapshot_json(checkpoint_path, checkpoint_sha256)
+    active_canary_binding, active_canary_binding_file_sha256 = _snapshot_json(
+        active_canary_binding_path, active_canary_binding_sha256
+    )
     terminal, terminal_file_sha256 = _snapshot_json(terminal_path, terminal_sha256)
     native_reload, native_reload_file_sha256 = _snapshot_json(
         native_reload_path, native_reload_sha256
     )
     _sealed(checkpoint, CHECKPOINT_SCHEMA)
     reference = _terminal_checkpoint_reference(terminal)
-    miles_promotion._exact_dev3(terminal)
+    miles_promotion.validate_active_canary_binding(active_canary_binding)
+    miles_promotion._exact_active_canary(terminal, active_canary_binding)
     native_schema = native_reload.get("schema")
     if native_schema not in {NATIVE_RELOAD_SCHEMA, OBSERVER_NATIVE_RELOAD_SCHEMA}:
         raise ValueError("native reload acceptance schema is unsupported")
@@ -401,8 +409,9 @@ def bind_source(
         # The immutable prepared plan was compiled and preflighted with the full
         # historical validators in the tracked checkout. The isolated Jobs API
         # bundle has no .git directory, so it reopens those exact receipt bytes
-        # and the exact dev3 identities instead of pretending it can replay the
-        # historical source-commit proof from inside RUN_DIR/.runtime.
+        # and the digest-bound canary identity instead of pretending it can replay
+        # the historical source-commit proof from inside RUN_DIR/.runtime. The
+        # digest-bound active-canary record still fixes the exact accepted run.
         validated_reload = {
             "source_manifest_sha256": native_reload.get("source_manifest_sha256"),
             "source_terminal_acceptance_sha256": native_reload.get(
@@ -422,6 +431,8 @@ def bind_source(
         != checkpoint_self_sha256
         or validated_reload.get("source_terminal_acceptance_sha256", "").removeprefix("sha256:")
         != terminal["sha256"].removeprefix("sha256:")
+        or active_canary_binding.get("source_plan_sha256", "").removeprefix("sha256:")
+        != checkpoint.get("source", {}).get("plan_sha256", "").removeprefix("sha256:")
     ):
         raise ValueError("terminal/reload acceptance does not bind the selected checkpoint")
     source = checkpoint.get("source", {})
@@ -439,6 +450,11 @@ def bind_source(
         raise ValueError("source is not the exact Qwen3.8 TP4 x CP2 Miles profile")
     _verify_checkpoint(checkpoint, hashes=True)
     return {
+        "active_canary_binding": {
+            "path": str(active_canary_binding_path),
+            "file_sha256": active_canary_binding_file_sha256,
+            "receipt_sha256": active_canary_binding["sha256"].removeprefix("sha256:"),
+        },
         "checkpoint": {
             "path": str(checkpoint_path),
             "file_sha256": checkpoint_file_sha256,
@@ -455,7 +471,6 @@ def bind_source(
             "receipt_sha256": native_reload["sha256"].removeprefix("sha256:"),
         },
         "source_plan_sha256": checkpoint["source"]["plan_sha256"],
-        "active_dev3": dict(miles_promotion.DEV3),
         "prediction_probe": prediction_probe,
         "checkpoint_manifest": checkpoint,
     }
@@ -874,6 +889,8 @@ def _invoke_converter(source: Path, destination: Path, metadata: Path, log: Path
 
 def export(
     *,
+    active_canary_binding_path: Path,
+    active_canary_binding_sha256: str,
     checkpoint_path: Path,
     checkpoint_sha256: str,
     terminal_path: Path,
@@ -889,6 +906,8 @@ def export(
     if torch.cuda.is_available():
         raise ValueError("Miles HF export is CPU-only; GPU reload is a separate gate")
     source = bind_source(
+        active_canary_binding_path=active_canary_binding_path,
+        active_canary_binding_sha256=active_canary_binding_sha256,
         checkpoint_path=checkpoint_path,
         checkpoint_sha256=checkpoint_sha256,
         terminal_path=terminal_path,
@@ -1048,17 +1067,15 @@ def export(
 
 def _validate_export_source(source: Any) -> dict[str, Any]:
     """Reopen the exact historical receipts behind a published export."""
-    from .miles_promotion import DEV3
-
-    if (
-        not isinstance(source, dict)
-        or set(source) != _EXPORT_SOURCE_FIELDS
-        or source.get("active_dev3") != DEV3
-        or source.get("source_plan_sha256") != DEV3["source_plan_sha256"]
-    ):
-        raise ValueError("Miles HF export source is not exact active dev3")
+    if not isinstance(source, dict) or set(source) != _EXPORT_SOURCE_FIELDS:
+        raise ValueError("Miles HF export source is not exactly bound")
     references = {}
-    for name in ("checkpoint", "terminal_acceptance", "native_reload_acceptance"):
+    for name in (
+        "active_canary_binding",
+        "checkpoint",
+        "terminal_acceptance",
+        "native_reload_acceptance",
+    ):
         reference = source.get(name)
         if (
             not isinstance(reference, dict)
@@ -1072,6 +1089,8 @@ def _validate_export_source(source: Any) -> dict[str, Any]:
             raise ValueError("Miles HF export source reference changed")
         references[name] = reference
     rebound = bind_source(
+        active_canary_binding_path=Path(references["active_canary_binding"]["path"]),
+        active_canary_binding_sha256=references["active_canary_binding"]["file_sha256"],
         checkpoint_path=Path(references["checkpoint"]["path"]),
         checkpoint_sha256=references["checkpoint"]["file_sha256"],
         terminal_path=Path(references["terminal_acceptance"]["path"]),
@@ -1089,17 +1108,21 @@ def _validate_prepared_export(
     value: dict[str, Any], path: Path, expected_sha256: str, prepared: dict[str, Any]
 ) -> None:
     """Use only the exact export binding compiled by the full historical validator."""
-    from .miles_promotion import DEV3
-
     if (
         set(prepared)
-        != {"path", "file_sha256", "receipt_sha256", "tensor_inventory_sha256", "active_dev3"}
+        != {
+            "path",
+            "file_sha256",
+            "receipt_sha256",
+            "tensor_inventory_sha256",
+            "active_canary_binding",
+        }
         or prepared.get("path") != str(path)
         or prepared.get("file_sha256") != expected_sha256.removeprefix("sha256:")
         or prepared.get("receipt_sha256") != value["sha256"].removeprefix("sha256:")
         or prepared.get("tensor_inventory_sha256") != value.get("tensor_inventory_sha256")
-        or prepared.get("active_dev3") != DEV3
-        or value.get("source", {}).get("active_dev3") != DEV3
+        or prepared.get("active_canary_binding")
+        != value.get("source", {}).get("active_canary_binding")
     ):
         raise ValueError("Miles HF runtime export differs from its fully validated plan")
 
@@ -1110,8 +1133,6 @@ def inspect_export(
     *,
     prepared_export: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    from .miles_promotion import DEV3
-
     value, _ = _snapshot_json(path, expected_sha256)
     _sealed(value, EXPORT_SCHEMA)
     root = path.parent
@@ -1121,8 +1142,6 @@ def inspect_export(
     if (
         not isinstance(source, dict)
         or set(source) != _EXPORT_SOURCE_FIELDS
-        or source.get("source_plan_sha256") != DEV3["source_plan_sha256"]
-        or source.get("active_dev3") != DEV3
     ):
         raise ValueError("Miles HF export source binding changed")
     _validate_prediction_probe(source.get("prediction_probe"))
@@ -1971,7 +1990,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     commands = parser.add_subparsers(dest="command", required=True)
     export_parser = commands.add_parser("export")
-    for name in ("checkpoint", "terminal", "native-reload"):
+    for name in ("active-canary-binding", "checkpoint", "terminal", "native-reload"):
         export_parser.add_argument(f"--{name}", type=Path, required=True)
         export_parser.add_argument(f"--{name}-sha256", required=True)
     export_parser.add_argument("--output", type=Path, required=True)
@@ -1991,6 +2010,8 @@ def main() -> None:
     try:
         if args.command == "export":
             result = export(
+                active_canary_binding_path=args.active_canary_binding,
+                active_canary_binding_sha256=args.active_canary_binding_sha256,
                 checkpoint_path=args.checkpoint,
                 checkpoint_sha256=args.checkpoint_sha256,
                 terminal_path=args.terminal,
