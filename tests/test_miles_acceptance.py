@@ -1131,7 +1131,10 @@ def test_observer_reload_rejects_commitment_or_result_replacement(case: dict) ->
     _write_json(result_path, _seal(result))
     with pytest.raises(
         ValueError,
-        match="reference changed|differs from rederived observer evidence|restore commitments",
+        match=(
+            "reference changed|differs from rederived observer evidence|"
+            "restore commitments|zero-update restore"
+        ),
     ):
         miles_reload_acceptance.validate_accepted(accepted, check_files=True)
 
@@ -1166,11 +1169,17 @@ def test_policy_observer_result_can_truthfully_report_no_delta_but_not_accept(
         row["policy_changed"] = False
     result["changed_policy_ranks"] = []
     _write_json(result_path, _seal(result))
-    with pytest.raises(ValueError, match="restore commitments|changed-rank summary"):
+    with pytest.raises(
+        ValueError,
+        match="restore commitments|changed-rank summary|zero-update restore",
+    ):
         observer.validate_result(plan, json.loads(result_path.read_bytes()))
     case["policy_delta"].unlink()
 
-    with pytest.raises(ValueError, match="restore commitments|changed-rank summary"):
+    with pytest.raises(
+        ValueError,
+        match="restore commitments|changed-rank summary|zero-update restore",
+    ):
         observer.accept_policy_delta(
             plan,
             submission_path=submission_path,
