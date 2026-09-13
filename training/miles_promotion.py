@@ -741,12 +741,20 @@ def require_live_files(plan: dict[str, Any], prepared_directory: Path) -> None:
     if Path(output).exists() or Path(output).is_symlink():
         raise JobsError("Miles production output already exists")
     manifest = Path(PROD_DATA_MANIFEST)
-    observed = _snapshot(
-        manifest,
-        plan["execution"]["production_promotion"]["receipt"]["production_data_manifest"][
-            "file_sha256"
-        ],
-    )
+    if reward_canary:
+        # The bounded canary deliberately has no dev-promotion receipt. Its
+        # compiled plan already seals the exact parsed manifest, so reopen the
+        # stable file and require that byte snapshot to decode to that value.
+        observed = _snapshot(manifest, _sha256(manifest))
+        if observed != plan.get("data"):
+            raise ValueError("Miles production reward-canary data manifest changed")
+    else:
+        observed = _snapshot(
+            manifest,
+            plan["execution"]["production_promotion"]["receipt"]["production_data_manifest"][
+                "file_sha256"
+            ],
+        )
     _exact_data(observed)
 
 

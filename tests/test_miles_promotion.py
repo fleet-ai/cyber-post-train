@@ -51,9 +51,7 @@ def _active_canary_binding() -> dict:
         "source_run_name": miles_promotion.EXPECTED_DEV_CANARY["source_run_name"],
         "source_commit": miles_promotion.EXPECTED_DEV_CANARY["source_commit"],
         "source_plan_sha256": miles_promotion.EXPECTED_DEV_CANARY["source_plan_sha256"],
-        "source_request_sha256": miles_promotion.EXPECTED_DEV_CANARY[
-            "source_request_sha256"
-        ],
+        "source_request_sha256": miles_promotion.EXPECTED_DEV_CANARY["source_request_sha256"],
         "runtime_bundle_sha256": "sha256:" + "e" * 64,
         "api_base_url": miles_promotion.EXPECTED_DEV_CANARY["api_base_url"],
         "api_run_id": "11111111-1111-4111-8111-111111111111",
@@ -188,6 +186,28 @@ def test_existing_production_promoter_rejects_an_sft_seeded_policy() -> None:
     plan["arguments"]["model_root"] = sft_model["root"]
     with pytest.raises(ValueError, match="exact candidate"):
         miles_promotion.validate_embedded_promotion(plan, check_files=False)
+
+
+def test_reward_canary_live_files_reopen_its_plan_bound_data(tmp_path, monkeypatch) -> None:
+    data = _data()
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n")
+    prepared = tmp_path / "prepared"
+    prepared.mkdir()
+    output = tmp_path / "new-output"
+    plan = {
+        "data": data,
+        "execution": {"production_promotion": {"mode": miles_promotion.PROD_REWARD_CANARY_MODE}},
+    }
+    monkeypatch.setattr(miles_promotion, "PROD_DATA_MANIFEST", str(manifest))
+    monkeypatch.setattr(miles_promotion, "PROD_REWARD_CANARY_OUTPUT", str(output))
+    monkeypatch.setattr(miles_promotion, "validate_embedded_promotion", lambda *_a, **_k: True)
+
+    miles_promotion.require_live_files(plan, prepared)
+    changed = copy.deepcopy(plan)
+    changed["data"]["files"]["train"]["rows"] += 1
+    with pytest.raises(ValueError, match="data manifest changed"):
+        miles_promotion.require_live_files(changed, prepared)
 
 
 def test_promotion_cannot_hide_external_benchmark_feedback() -> None:
