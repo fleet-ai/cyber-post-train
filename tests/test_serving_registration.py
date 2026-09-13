@@ -17,7 +17,7 @@ def write(path, value):
 
 
 @pytest.fixture
-def prepared(tmp_path):
+def prepared(tmp_path, monkeypatch):
     tmp_path = tmp_path.resolve()
     stage = tmp_path / "cache" / "cyber-sft" / "selected-step50-v1"
     stage.mkdir(parents=True)
@@ -34,12 +34,16 @@ def prepared(tmp_path):
     export = s._signed(
         {
             "schema": "cyber_native_checkpoint_hf_export_v1",
-            "model_repo": "Qwen/Qwen3.8-27B",
+            "model_repo": s.MODEL_REPO,
+            "model_revision": s.MODEL_REVISION,
+            "output_root": str(stage),
             "dtype": "BF16",
             "optimizer_steps_executed": 0,
             "optimizer_step": 50,
             "source_checkpoint_receipt_sha256": "sha256:" + "a" * 64,
+            "source_manifest_file_sha256": "sha256:" + "9" * 64,
             "source_plan_sha256": "b" * 64,
+            "code_sha256": {"training/export.py": "c" * 64},
             "all_output_tensors_reopened_equal": True,
             "source_inventory_sizes_mtimes_unchanged": True,
             "files": {
@@ -52,6 +56,7 @@ def prepared(tmp_path):
         }
     )
     export_ref = write(stage / "EXPORT.json", export)
+    checker_sha256 = s.EXPORT_CHECK_SHA256
     gpu_ref = write(
         tmp_path / "GPU.json",
         s._signed(
@@ -63,12 +68,34 @@ def prepared(tmp_path):
                 "source_unchanged": True,
                 "finite_logits": True,
                 "synthetic_only": True,
+                "serving_qualified": False,
                 "optimizer_steps_executed": 0,
+                "attention_implementation": "eager",
+                "generated_tokens": 2,
+                "patched_linear_layers": 1,
+                "loader_contract": {
+                    "model_class": "Qwen3_5ForConditionalGeneration",
+                    "parameter_values": 1,
+                },
+                "checker_sha256": checker_sha256,
                 "export_sha256": export_ref["sha256"].removeprefix("sha256:"),
                 "export_receipt_sha256": export["receipt_sha256"],
             }
         ),
     )
+
+    def inspect(config):
+        checked_export = s._read(
+            Path(config["export"]["path"]), config["export"]["sha256"], signed=True
+        )
+        checked_gpu = s._read(
+            Path(config["gpu_check"]["path"]), config["gpu_check"]["sha256"], signed=True
+        )
+        if s._sha(checked_gpu["checker_sha256"]) != s._sha(s.EXPORT_CHECK_SHA256):
+            raise ValueError("GPU checker identity changed")
+        return checked_export, checked_gpu
+
+    monkeypatch.setattr(s, "_export_and_check", inspect)
     base = {
         "id": "qwen-base-v1",
         "spec": {
@@ -104,7 +131,7 @@ def prepared(tmp_path):
         },
     }
     config = {
-        "schema": s.SCHEMA,
+        "schema": s.SFT_SCHEMA,
         "base_registration": write(tmp_path / "base.json", base),
         "export": export_ref,
         "gpu_check": gpu_ref,
@@ -140,6 +167,12 @@ def prepared(tmp_path):
     directory = tmp_path / "prepared"
     s.prepare(config, directory)
     plan = s.load(directory)
+    evidence_manifest = {
+        "plan_sha256": "sha256:" + "1" * 64,
+        "runtime_result_file_sha256": "sha256:" + "2" * 64,
+        "runtime_result_receipt_sha256": "sha256:" + "3" * 64,
+        "external_file_sha256": "sha256:" + "4" * 64,
+    }
     dev = s._signed(
         {
             "schema": s.DEV_SCHEMA,
@@ -147,13 +180,32 @@ def prepared(tmp_path):
             "cluster": "dev",
             "api_base_url": "https://api.ft.dev.flt.build",
             "execution_contract_sha256": plan["execution_contract_sha256"],
+            "model_revision": plan["model_revision"],
+            "export_file_sha256": plan["export_file_sha256"],
             "export_receipt_sha256": plan["export_receipt_sha256"],
+            "source_checkpoint_receipt_sha256": plan["source_checkpoint_receipt_sha256"],
+            "source_manifest_file_sha256": plan["source_manifest_file_sha256"],
+            "source_plan_sha256": plan["source_plan_sha256"],
+            "export_code_sha256": plan["export_code_sha256"],
+            "gpu_check_file_sha256": plan["gpu_check_file_sha256"],
+            "gpu_check_receipt_sha256": plan["gpu_check_receipt_sha256"],
+            "gpu_checker_sha256": plan["gpu_checker_sha256"],
+            "optimizer_step": plan["optimizer_step"],
+            "export_manifest_sha256": plan["staged_manifest_sha256"],
             "checks": {key: True for key in s.DEV_CHECKS},
             "controller_uid": "11111111-2222-3333-4444-555555555555",
             "pod_uid": "66666666-7777-8888-9999-aaaaaaaaaaaa",
             "observed_at": "2026-09-11T00:00:00Z",
             "runtime_image_id": "example/sglang@sha256:" + "c" * 64,
-            "evidence_manifest_sha256": "sha256:" + "e" * 64,
+            "evidence_manifest": evidence_manifest,
+            "evidence_manifest_sha256": digest_json(evidence_manifest),
+            "optimizer_updates": 0,
+            "rollouts": 0,
+            "verifier_calls": 0,
+            "benchmark_attempts": 0,
+            "gpu_release_verified": True,
+            "serving_ready": False,
+            "production_registration_executed": False,
         }
     )
     dev_ref = write(tmp_path / "dev.json", dev)
@@ -332,6 +384,30 @@ def test_configurable_checkpoint_changes_only_identity(prepared):
     assert s.preview(directory, FakeClient(base))["server_dry_run"] is False
     with pytest.raises(FileExistsError):
         s.prepare(config, directory)
+
+
+def test_v2_registration_reader_contract_remains_compatible(prepared, tmp_path):
+    config, _, _, dev = prepared
+    legacy = copy.deepcopy(config)
+    legacy["schema"] = s.SCHEMA
+    directory = tmp_path / "legacy-v2"
+    s.prepare(legacy, directory)
+    plan = s.load(directory)
+    assert plan["schema"] == s.SCHEMA
+    assert "gpu_checker_sha256" not in plan
+    assert s._qualification(plan, Path(dev["path"]), dev["sha256"])["status"] == "passed"
+
+
+def test_v3_registration_source_digest_binds_export_validator_dependencies():
+    assert set(s._code(s.SFT_SCHEMA)) == {
+        "serving_registration.py",
+        "register_post_sft.py",
+        "io.py",
+        "export_check.py",
+        "checkpoints.py",
+        "post_sft_artifacts.py",
+        "sft_runtime.py",
+    }
 
 
 def test_miles_export_binds_update_reload_and_staged_identity(miles_prepared):

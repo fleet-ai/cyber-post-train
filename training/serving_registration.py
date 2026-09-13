@@ -27,9 +27,22 @@ API = "https://inference.flt.build/fleet/v1/models"
 ACCOUNT = "https://orchestrator.fleetai.com/v1/account"
 TEAM_ID = "a1025f0b-ad67-49fc-a023-51800ab43e84"
 SCHEMA = "cyber_exact_serving_registration_v2"
+SFT_SCHEMA = "cyber_exact_serving_registration_v3"
 MILES_SCHEMA = "cyber_exact_miles_serving_registration_v1"
 DEV_SCHEMA = "cyber_serving_dev_qualification_v1"
 MILES_UPDATE_SCHEMA = "cyber_miles_source_update_identity_v1"
+MODEL_REPO = "Qwen/Qwen3.8-27B"
+MODEL_REVISION = "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+EXPORT_CHECK_SHA256 = "609a56119743240bebce42497e5a27d24dd6fc531726d500a43a49ac4cfa4203"
+GPU_PATCHED_LINEAR_LAYERS = 48
+GPU_MODEL_TENSORS = 1184
+GPU_LOADER_CONTRACT = {
+    "model_class": "Qwen3_5ForConditionalGeneration",
+    "state_tensors": GPU_MODEL_TENSORS,
+    "named_parameters": GPU_MODEL_TENSORS,
+    "parameter_values": 27356728560,
+    "state_shapes_sha256": "55b2184455f50e80d6080cdb6967555d9d06fcebb518af9c3b9ec96cc37ef557",
+}
 HEX = re.compile(r"[0-9a-f]{64}")
 MODEL_ID = re.compile(r"[a-z0-9][a-z0-9-]{1,61}[a-z0-9]")
 DEV_CHECKS = {
@@ -40,16 +53,13 @@ DEV_CHECKS = {
     "context_continuation",
     "cleanup_verified",
 }
-MILES_DEV_FIELDS = {
+DEV_COMMON_FIELDS = {
     "schema",
     "status",
     "cluster",
     "api_base_url",
     "execution_contract_sha256",
     "export_receipt_sha256",
-    "source_update_identity_sha256",
-    "reload_acceptance_receipt_sha256",
-    "staged_manifest_sha256",
     "checks",
     "controller_uid",
     "pod_uid",
@@ -65,6 +75,24 @@ MILES_DEV_FIELDS = {
     "serving_ready",
     "production_registration_executed",
     "receipt_sha256",
+}
+MILES_DEV_FIELDS = DEV_COMMON_FIELDS | {
+    "source_update_identity_sha256",
+    "reload_acceptance_receipt_sha256",
+    "staged_manifest_sha256",
+}
+SFT_DEV_FIELDS = DEV_COMMON_FIELDS | {
+    "model_revision",
+    "export_file_sha256",
+    "source_checkpoint_receipt_sha256",
+    "source_manifest_file_sha256",
+    "source_plan_sha256",
+    "export_code_sha256",
+    "gpu_check_file_sha256",
+    "gpu_check_receipt_sha256",
+    "gpu_checker_sha256",
+    "optimizer_step",
+    "export_manifest_sha256",
 }
 MILES_DEV_EVIDENCE_FIELDS = {
     "plan_sha256",
@@ -363,12 +391,60 @@ def _stage(config: dict, export: dict, export_receipt_sha256: str) -> None:
         raise ValueError("staged weights are absent")
 
 
+def _export_and_check(config: dict) -> tuple[dict, dict]:
+    """Reopen one accepted SFT export and its exact zero-update GPU check."""
+    from . import export_check
+
+    export_path = Path(config["export"]["path"])
+    checker_sha256 = _sha(EXPORT_CHECK_SHA256)
+    if (
+        checker_sha256 != _sha(EXPORT_CHECK_SHA256)
+        or file_sha256(Path(export_check.__file__)) != checker_sha256
+    ):
+        raise ValueError("GPU checker is not the exact accepted implementation")
+    export, layout, gpu = export_check.inspect_accepted_export(
+        export_path,
+        config["export"]["sha256"],
+        Path(config["gpu_check"]["path"]),
+        config["gpu_check"]["sha256"],
+        checker_sha256,
+    )
+    if (
+        export.get("model_repo") != MODEL_REPO
+        or export.get("model_revision") != MODEL_REVISION
+        or export.get("output_root") != str(export_path.parent)
+        or type(export.get("optimizer_step")) is not int
+        or export["optimizer_step"] < 1
+        or export.get("trained_tensors") != GPU_MODEL_TENSORS
+        or len(layout) != GPU_MODEL_TENSORS + 15
+        or gpu.get("patched_linear_layers") != GPU_PATCHED_LINEAR_LAYERS
+        or gpu.get("loader_contract") != GPU_LOADER_CONTRACT
+    ):
+        raise ValueError("accepted export is not the exact Qwen3.8 revision/loader/output")
+    for key in (
+        "source_checkpoint_receipt_sha256",
+        "source_manifest_file_sha256",
+        "source_plan_sha256",
+    ):
+        _sha(export.get(key))
+    if not isinstance(export.get("code_sha256"), dict) or not export["code_sha256"]:
+        raise ValueError("accepted export lacks exact producer identity")
+    return export, gpu
+
+
 def _export_and_stage(config: dict) -> tuple[dict, dict]:
+    export, gpu = _export_and_check(config)
+    _stage(config, export, export["receipt_sha256"])
+    return export, gpu
+
+
+def _legacy_export_and_stage(config: dict) -> tuple[dict, dict]:
+    """Preserve the published V2 reader; new SFT registrations use V3."""
     export = _read(Path(config["export"]["path"]), config["export"]["sha256"], signed=True)
     gpu = _read(Path(config["gpu_check"]["path"]), config["gpu_check"]["sha256"], signed=True)
     if (
         export.get("schema") != "cyber_native_checkpoint_hf_export_v1"
-        or export.get("model_repo") != "Qwen/Qwen3.8-27B"
+        or export.get("model_repo") != MODEL_REPO
         or export.get("dtype") != "BF16"
         or export.get("optimizer_steps_executed") != 0
         or type(export.get("optimizer_step")) is not int
@@ -487,6 +563,16 @@ def _config(value: dict) -> dict:
             "model_id",
             "display_name",
         },
+        SFT_SCHEMA: {
+            "schema",
+            "base_registration",
+            "export",
+            "gpu_check",
+            "staging",
+            "storage",
+            "model_id",
+            "display_name",
+        },
         MILES_SCHEMA: {
             "schema",
             "base_registration",
@@ -510,7 +596,7 @@ def _config(value: dict) -> dict:
     }:
         raise ValueError("unexpected storage configuration fields")
     references = {"base_registration", "export", "staging"}
-    references.add("gpu_check" if schema == SCHEMA else "reload_acceptance")
+    references.add("gpu_check" if schema in {SCHEMA, SFT_SCHEMA} else "reload_acceptance")
     for name in references:
         ref = config[name]
         if not isinstance(ref, dict) or set(ref) != {"path", "sha256"}:
@@ -525,13 +611,36 @@ def _config(value: dict) -> dict:
 
 def _artifact(config: dict) -> tuple[dict, str, dict]:
     if config["schema"] == SCHEMA:
-        export, _ = _export_and_stage(config)
+        export, _ = _legacy_export_and_stage(config)
         receipt_sha256 = _sha(export["receipt_sha256"])
         return (
             export,
             receipt_sha256,
             {
                 "export_receipt_sha256": receipt_sha256,
+                "optimizer_step": export["optimizer_step"],
+                "staged_manifest_sha256": digest_json(export["files"]),
+            },
+        )
+    if config["schema"] == SFT_SCHEMA:
+        export, gpu = _export_and_stage(config)
+        receipt_sha256 = _sha(export["receipt_sha256"])
+        return (
+            export,
+            receipt_sha256,
+            {
+                "export_file_sha256": _sha(config["export"]["sha256"]),
+                "export_receipt_sha256": receipt_sha256,
+                "model_revision": MODEL_REVISION,
+                "source_checkpoint_receipt_sha256": _sha(
+                    export["source_checkpoint_receipt_sha256"]
+                ),
+                "source_manifest_file_sha256": _sha(export["source_manifest_file_sha256"]),
+                "source_plan_sha256": _sha(export["source_plan_sha256"]),
+                "export_code_sha256": digest_json(export["code_sha256"]),
+                "gpu_check_file_sha256": _sha(config["gpu_check"]["sha256"]),
+                "gpu_check_receipt_sha256": _sha(gpu["receipt_sha256"]),
+                "gpu_checker_sha256": _sha(EXPORT_CHECK_SHA256),
                 "optimizer_step": export["optimizer_step"],
                 "staged_manifest_sha256": digest_json(export["files"]),
             },
@@ -585,7 +694,7 @@ def load(directory: Path) -> dict:
     plan = _read(directory / "plan.json", signed=True)
     schema = plan.get("schema")
     if (
-        schema not in {SCHEMA, MILES_SCHEMA}
+        schema not in {SCHEMA, SFT_SCHEMA, MILES_SCHEMA}
         or plan.get("api") != API
         or plan.get("registration_code_sha256") != _code(schema)
     ):
@@ -611,7 +720,7 @@ def load(directory: Path) -> dict:
         "receipt_sha256",
     }
     if (
-        (schema == MILES_SCHEMA and set(plan) != common_fields | set(artifact))
+        (schema in {SFT_SCHEMA, MILES_SCHEMA} and set(plan) != common_fields | set(artifact))
         or base != plan["base_registration"]
         or registration != _candidate(config, base, export, revision=revision)
         or digest_json(registration) != plan["registration_sha256"]
@@ -635,7 +744,7 @@ def summary(plan: dict) -> dict:
         "execution_contract_sha256": plan["execution_contract_sha256"],
         "serving_ready": False,
     }
-    if plan["schema"] == SCHEMA:
+    if plan["schema"] in {SCHEMA, SFT_SCHEMA}:
         result["optimizer_step"] = plan["optimizer_step"]
     else:
         result.update(
@@ -653,6 +762,15 @@ def _code(schema: str = SCHEMA) -> dict:
     ]
     if schema == MILES_SCHEMA:
         names.append("miles_hf_export.py")
+    elif schema == SFT_SCHEMA:
+        names.extend(
+            [
+                "export_check.py",
+                "checkpoints.py",
+                "post_sft_artifacts.py",
+                "sft_runtime.py",
+            ]
+        )
     return {name: file_sha256(Path(__file__).with_name(name)) for name in names}
 
 
@@ -787,15 +905,38 @@ def preview(directory: Path, client: Client) -> dict:
 def _qualification(plan: dict, path: Path, expected: str) -> dict:
     proof = _read(path, expected, signed=True)
     image = plan["registration"]["spec"]["runtime"]["image"]
-    expected_image = image["repository"] + "@" + _sha(image["digest"])
-    runtime_image_matches = (
-        _runtime_image_digest(proof.get("runtime_image_id"))
-        == _sha(image["digest"]).removeprefix("sha256:")
-        if plan["schema"] == MILES_SCHEMA
-        else proof.get("runtime_image_id") == expected_image
-    )
+    if plan["schema"] == SCHEMA:
+        expected_image = image["repository"] + "@" + _sha(image["digest"])
+        if (
+            proof.get("schema") != DEV_SCHEMA
+            or proof.get("status") != "passed"
+            or proof.get("cluster") != "dev"
+            or proof.get("api_base_url") != "https://api.ft.dev.flt.build"
+            or _sha(proof.get("execution_contract_sha256")) != plan["execution_contract_sha256"]
+            or _sha(proof.get("export_receipt_sha256")) != plan["export_receipt_sha256"]
+            or set(proof.get("checks", {})) != DEV_CHECKS
+            or any(value is not True for value in proof["checks"].values())
+            or not proof.get("controller_uid")
+            or not proof.get("pod_uid")
+            or not proof.get("observed_at")
+            or proof.get("runtime_image_id") != expected_image
+        ):
+            raise ValueError("reviewed exact dev serving qualification is required")
+        for key in ("controller_uid", "pod_uid"):
+            if str(uuid.UUID(proof[key])) != proof[key]:
+                raise ValueError("dev object UID is not canonical")
+        if datetime.fromisoformat(proof["observed_at"].replace("Z", "+00:00")).tzinfo is None:
+            raise ValueError("dev evidence observation must have a timezone")
+        _sha(proof.get("evidence_manifest_sha256"))
+        return proof
+
+    expected_fields = SFT_DEV_FIELDS if plan["schema"] == SFT_SCHEMA else MILES_DEV_FIELDS
+    runtime_image_matches = _runtime_image_digest(proof.get("runtime_image_id")) == _sha(
+        image["digest"]
+    ).removeprefix("sha256:")
     if (
-        proof.get("schema") != DEV_SCHEMA
+        set(proof) != expected_fields
+        or proof.get("schema") != DEV_SCHEMA
         or proof.get("status") != "passed"
         or proof.get("cluster") != "dev"
         or proof.get("api_base_url") != "https://api.ft.dev.flt.build"
@@ -807,14 +948,6 @@ def _qualification(plan: dict, path: Path, expected: str) -> dict:
         or not proof.get("pod_uid")
         or not proof.get("observed_at")
         or not runtime_image_matches
-    ):
-        raise ValueError("reviewed exact dev serving qualification is required")
-    if plan["schema"] == MILES_SCHEMA and (
-        set(proof) != MILES_DEV_FIELDS
-        or _sha(proof.get("source_update_identity_sha256")) != plan["source_update_identity_sha256"]
-        or _sha(proof.get("reload_acceptance_receipt_sha256"))
-        != plan["reload_acceptance_receipt_sha256"]
-        or _sha(proof.get("staged_manifest_sha256")) != plan["staged_manifest_sha256"]
         or any(
             type(proof.get(key)) is not int or proof[key] != 0
             for key in ("optimizer_updates", "rollouts", "verifier_calls", "benchmark_attempts")
@@ -827,7 +960,30 @@ def _qualification(plan: dict, path: Path, expected: str) -> dict:
         or any(_sha(value) != value for value in proof["evidence_manifest"].values())
         or digest_json(proof["evidence_manifest"]) != proof.get("evidence_manifest_sha256")
     ):
+        raise ValueError("reviewed exact dev serving qualification is required")
+    if plan["schema"] == MILES_SCHEMA and (
+        _sha(proof.get("source_update_identity_sha256")) != plan["source_update_identity_sha256"]
+        or _sha(proof.get("reload_acceptance_receipt_sha256"))
+        != plan["reload_acceptance_receipt_sha256"]
+        or _sha(proof.get("staged_manifest_sha256")) != plan["staged_manifest_sha256"]
+    ):
         raise ValueError("Miles dev qualification does not bind the exact staged update")
+    if plan["schema"] == SFT_SCHEMA and (
+        proof.get("model_revision") != plan["model_revision"]
+        or plan["model_revision"] != MODEL_REVISION
+        or _sha(proof.get("export_file_sha256")) != plan["export_file_sha256"]
+        or _sha(proof.get("source_checkpoint_receipt_sha256"))
+        != plan["source_checkpoint_receipt_sha256"]
+        or _sha(proof.get("source_manifest_file_sha256")) != plan["source_manifest_file_sha256"]
+        or _sha(proof.get("source_plan_sha256")) != plan["source_plan_sha256"]
+        or _sha(proof.get("export_code_sha256")) != plan["export_code_sha256"]
+        or _sha(proof.get("gpu_check_file_sha256")) != plan["gpu_check_file_sha256"]
+        or _sha(proof.get("gpu_check_receipt_sha256")) != plan["gpu_check_receipt_sha256"]
+        or _sha(proof.get("gpu_checker_sha256")) != plan["gpu_checker_sha256"]
+        or proof.get("optimizer_step") != plan["optimizer_step"]
+        or _sha(proof.get("export_manifest_sha256")) != plan["staged_manifest_sha256"]
+    ):
+        raise ValueError("SFT dev qualification does not bind the exact accepted export")
     for key in ("controller_uid", "pod_uid"):
         if str(uuid.UUID(proof[key])) != proof[key]:
             raise ValueError("dev object UID is not canonical")

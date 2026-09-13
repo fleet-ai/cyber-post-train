@@ -45,12 +45,17 @@ with assertions or copy an old receipt onto a new artifact.
 
 ## Prepare inputs
 
-Use private JSON with schema `cyber_exact_serving_registration_v2` and exactly
-these fields. All evidence paths are absolute; bare or `sha256:`-prefixed file
-SHA-256 values are normalized.
+New teacher-SFT registrations use
+`cyber_exact_serving_registration_v3`. The historical
+`cyber_exact_serving_registration_v2` reader and its field semantics remain
+unchanged for replay; do not use V2 for new teacher-SFT registrations. All
+evidence paths are absolute; bare or `sha256:`-prefixed file SHA-256 values are
+normalized. V3 derives the approved `training/export_check.py` identity in code
+and binds that validator plus its local dependencies in the prepared plan; the
+checker is not a caller-controlled configuration field.
 
 For the accepted stronger-teacher V5 optimizer-step-186 export, start from
-[`qwen38-teacher-sft-v5-step186-serving-prod-v1.template.json`](../configs/qualification/qwen38-teacher-sft-v5-step186-serving-prod-v1.template.json).
+[`qwen38-teacher-sft-v5-step186-serving-prod-v2.template.json`](../configs/qualification/qwen38-teacher-sft-v5-step186-serving-prod-v2.template.json).
 It pins the accepted export and one-GPU reload file digests plus a proposed
 create-once model ID. Its `null` base path, staging, and storage fields are
 deliberate live-evidence gates, so the checked-in template is not a valid
@@ -66,8 +71,10 @@ registration request and cannot be executed directly.
 | `model_id` | New DNS-label identity, distinct from retained/active catalog models |
 | `display_name` | Explicit descriptive label without private content |
 
-The existing SFT schema and fields above are unchanged. A Miles RL artifact uses
-schema `cyber_exact_miles_serving_registration_v1`, replaces `gpu_check` with
+The V3 SFT fields above retain the same external configuration shape as V2.
+The checked-in `...serving-prod-v1.template.json` is frozen historical V2
+readiness evidence and is never rewritten as V3. A Miles RL artifact uses schema
+`cyber_exact_miles_serving_registration_v1`, replaces `gpu_check` with
 `reload_acceptance`, and keeps every other field identical:
 
 | Miles field | Required value |
@@ -124,6 +131,39 @@ preview explicitly returns `server_dry_run: false`. Unknown shapes stop the
 transaction instead of selecting a fallback.
 
 ## Dev qualification before future execution
+
+For the accepted stronger-teacher V5 step-186 export, start from
+[`qwen38-teacher-sft-v5-step186-serving-dev-v1.template.json`](../configs/qualification/qwen38-teacher-sft-v5-step186-serving-dev-v1.template.json).
+It pins the accepted export and GPU-check files; the checker implementation is
+derived internally. It leaves the run name, output root, dev PVC identity and
+absolute checkout-local base-registration path null, so the checked-in file
+cannot compile or launch. Fill a private copy and run all three commands from a
+CPU environment on the dev cluster that mounts the exact dev SFS:
+
+```bash
+uv run python -m cyber_post_train.cli serving-dev \
+  <private-teacher-v5-dev-config.json> --output <new-prepared-directory>
+uv run python -m cyber_post_train.cli preflight <new-prepared-directory>
+uv run python -m cyber_post_train.cli preview \
+  <new-prepared-directory> --cluster dev
+```
+
+The frozen request is one worker and one GPU, `c1` (expected effective priority
+10,000), no automatic requeue, TP1 BF16, the exact digest-pinned SGLang image,
+32 requested/96 limited CPUs and 256/768 GiB requested/limited memory. It runs
+only model-list, finite short-forward, continuation and forced public
+`identity`-tool probes, records no generated content, then stops the server.
+Startup, request and shutdown allowances are 30, 5 and 1 minutes respectively.
+
+The zero-GPU preflight reopens the accepted export/GPU-check validators, rehashes
+every payload file at its mounted dev-SFS path, and proves the target output
+directory is still absent. Submit repeats that rehash and absence check after
+the final dev preview. Running these commands on a laptop, prod mount, or a
+different PVC is not a valid gate. The bounded one-GPU dev canary itself is the
+pinned-SGLang-image/runtime proof; a clean failure there is acceptable evidence
+to fix the request before production. After terminal success and complete GPU
+release, create private UID-bound API/Kubernetes evidence and use
+`serving-dev-accept`. Do not register a persistent route from startup alone.
 
 The production registration command accepts separately reviewed
 `cyber_serving_dev_qualification_v1` evidence with `status: passed`, `cluster: dev`

@@ -49,6 +49,10 @@ _MILES_HF_PLAN_SCHEMAS = frozenset(
     {"cyber_miles_hf_export_job_plan_v1", "cyber_miles_hf_export_job_plan_v2"}
 )
 _MILES_SERVING_DEV_PLAN_SCHEMA = "cyber_miles_serving_dev_plan_v1"
+_SFT_SERVING_DEV_PLAN_SCHEMA = "cyber_sft_serving_dev_plan_v1"
+_SERVING_DEV_PLAN_SCHEMAS = frozenset(
+    {_MILES_SERVING_DEV_PLAN_SCHEMA, _SFT_SERVING_DEV_PLAN_SCHEMA}
+)
 
 
 def _print(value: object) -> None:
@@ -88,16 +92,13 @@ def _prepared(directory: Path) -> tuple[dict, dict]:
     )
     if receipt != {"plan_sha256": digest(plan), "request_sha256": digest(request)}:
         raise ValueError("prepared inputs changed; prepare a new directory, never edit a launch")
-    if (
-        plan.get("schema") in _MILES_HF_PLAN_SCHEMAS
-        and plan.get("stage") == "export"
-    ):
+    if plan.get("schema") in _MILES_HF_PLAN_SCHEMAS and plan.get("stage") == "export":
         from training.miles_hf_export_job import job_request, validate_plan
 
         validate_plan(plan, check_files=False)
         if request != job_request(plan):
             raise ValueError("prepared Kubernetes Job differs from its immutable plan")
-    elif plan.get("schema") == _MILES_SERVING_DEV_PLAN_SCHEMA:
+    elif plan.get("schema") in _SERVING_DEV_PLAN_SCHEMAS:
         from training.miles_serving_dev import job_request, validate_plan
 
         validate_plan(plan, check_files=False)
@@ -831,7 +832,7 @@ def _skyrl_mode(plan: dict, request: dict) -> str:
 def _require_prepared_cluster(plan: dict, cluster: Cluster) -> None:
     """Fail closed when an immutable training plan names one cluster."""
     target = plan.get("execution", {}).get("cluster_target")
-    if plan.get("schema") == _MILES_SERVING_DEV_PLAN_SCHEMA:
+    if plan.get("schema") in _SERVING_DEV_PLAN_SCHEMAS:
         target = plan.get("cluster_target")
     if target is not None and target != cluster.value:
         raise JobsError(f"prepared plan is {target}-cluster-only")
@@ -857,7 +858,7 @@ def preflight(directory: Path) -> None:
             from training.miles_reload import preflight as check
         elif plan.get("schema") in _MILES_HF_PLAN_SCHEMAS:
             from training.miles_hf_export_job import preflight as check
-        elif plan.get("schema") == _MILES_SERVING_DEV_PLAN_SCHEMA:
+        elif plan.get("schema") in _SERVING_DEV_PLAN_SCHEMAS:
             from training.miles_serving_dev import preflight as check
         elif plan.get("schema") == "cyber_skyrl_training_v1":
             if _skyrl_mode(plan, request) == "engine_diagnostic":
@@ -871,7 +872,8 @@ def preflight(directory: Path) -> None:
         if (directory / "PREFLIGHT.json").exists():
             raise ValueError("preflight already recorded")
         receipt = check(plan)
-        _write(directory / "PREFLIGHT.json", {**receipt, "sha256": digest(receipt)})
+        receipt = {**receipt, "sha256": digest(receipt)}
+        _write(directory / "PREFLIGHT.json", receipt)
         _print(receipt)
     except Exception as exc:
         _fail(exc)
@@ -895,8 +897,8 @@ def preview(
             raise JobsError("SkyRL engine diagnostics are dev-cluster-only")
         if plan.get("schema") == "cyber_skyrl_rl_reload_v1" and cluster != Cluster.dev:
             raise JobsError("SkyRL RL reload validators are dev-cluster-only")
-        if plan.get("schema") == _MILES_SERVING_DEV_PLAN_SCHEMA and cluster != Cluster.dev:
-            raise JobsError("Miles serving qualification is dev-cluster-only")
+        if plan.get("schema") in _SERVING_DEV_PLAN_SCHEMAS and cluster != Cluster.dev:
+            raise JobsError("serving qualification is dev-cluster-only")
         _require_prepared_cluster(plan, cluster)
         with _client(cluster) as client:
             result = client.preview(request)
@@ -960,8 +962,8 @@ def submit(
             raise JobsError("SkyRL engine diagnostics are dev-cluster-only")
         if plan.get("schema") == "cyber_skyrl_rl_reload_v1" and cluster != Cluster.dev:
             raise JobsError("SkyRL RL reload validators are dev-cluster-only")
-        if plan.get("schema") == _MILES_SERVING_DEV_PLAN_SCHEMA and cluster != Cluster.dev:
-            raise JobsError("Miles serving qualification is dev-cluster-only")
+        if plan.get("schema") in _SERVING_DEV_PLAN_SCHEMAS and cluster != Cluster.dev:
+            raise JobsError("serving qualification is dev-cluster-only")
         _require_prepared_cluster(plan, cluster)
         proof = _read(directory / "PREFLIGHT.json")
         expected = {
@@ -971,8 +973,12 @@ def submit(
             if plan.get("schema") == "cyber_miles_training_v1"
             else "cyber_miles_rl_reload_cpu_preflight_v1"
             if plan.get("schema") == "cyber_miles_rl_reload_v1"
-            else "cyber_miles_serving_dev_cpu_preflight_v1"
-            if plan.get("schema") == _MILES_SERVING_DEV_PLAN_SCHEMA
+            else (
+                "cyber_sft_serving_dev_cpu_preflight_v1"
+                if plan.get("schema") == _SFT_SERVING_DEV_PLAN_SCHEMA
+                else "cyber_miles_serving_dev_cpu_preflight_v1"
+            )
+            if plan.get("schema") in _SERVING_DEV_PLAN_SCHEMAS
             else (
                 "cyber_skyrl_engine_diagnostic_cpu_preflight_v1"
                 if skyrl_mode == "engine_diagnostic"
@@ -995,11 +1001,15 @@ def submit(
             from training.miles_reload import validate_preflight_receipt
 
             validate_preflight_receipt(plan, request, proof)
+        elif plan.get("schema") == _SFT_SERVING_DEV_PLAN_SCHEMA:
+            from training.miles_serving_dev import validate_preflight_receipt
+
+            validate_preflight_receipt(plan, request, proof)
         submission_journal = directory / "SUBMISSION.jsonl"
-        if cluster == Cluster.dev and plan.get("schema") in {
-            "cyber_miles_training_v1",
-            _MILES_SERVING_DEV_PLAN_SCHEMA,
-        }:
+        if cluster == Cluster.dev and (
+            plan.get("schema") == "cyber_miles_training_v1"
+            or plan.get("schema") in _SERVING_DEV_PLAN_SCHEMAS
+        ):
             # A preserved intent always wins over a fresh capacity observation.
             # submit_once repeats this check atomically at the actual POST boundary.
             if submission_journal.exists() or submission_journal.is_symlink():
@@ -1030,13 +1040,19 @@ def submit(
                 # This is deliberately a one-off dev gate. Re-read the live
                 # rendered shape immediately before its only allowed POST.
                 validate_preview(request, client.preview(request))
-            elif plan.get("schema") == _MILES_SERVING_DEV_PLAN_SCHEMA:
+            elif plan.get("schema") in _SERVING_DEV_PLAN_SCHEMAS:
                 # Re-open the exact artifact and rendered one-GPU shape at the
                 # POST boundary. Dev qualification never has a prod route.
-                from training.miles_serving_dev import validate_plan
+                from training.miles_serving_dev import (
+                    validate_plan,
+                    validate_preflight_receipt,
+                )
 
                 validate_plan(plan, check_files=True)
                 validate_preview(request, client.preview(request))
+                # Rehash the payload and recheck target absence after preview,
+                # immediately before the only allowed GPU POST.
+                validate_preflight_receipt(plan, request, proof)
             elif skyrl_mode == "engine_diagnostic":
                 preview_result = client.preview(request)
                 validate_preview(request, preview_result)
@@ -1081,9 +1097,10 @@ def miles_convert(config: Path, output: Annotated[Path, typer.Option("--output")
         _fail(exc)
 
 
+@app.command("serving-dev")
 @app.command("miles-serving-dev")
 def miles_serving_dev(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
-    """Prepare one exact one-GPU Qwen/Miles SGLang canary on dev only."""
+    """Prepare one exact one-GPU Qwen SGLang canary on dev only."""
     from training.miles_serving_dev import compile_plan, job_request
 
     try:
@@ -1104,6 +1121,7 @@ def miles_serving_dev(config: Path, output: Annotated[Path, typer.Option("--outp
         _fail(exc)
 
 
+@app.command("serving-dev-accept")
 @app.command("miles-serving-dev-accept")
 def miles_serving_dev_accept(
     directory: Path,
@@ -1118,8 +1136,8 @@ def miles_serving_dev_accept(
 
     try:
         plan, _ = _prepared(directory)
-        if plan.get("schema") != _MILES_SERVING_DEV_PLAN_SCHEMA:
-            raise ValueError("serving acceptance requires a prepared Miles dev canary")
+        if plan.get("schema") not in _SERVING_DEV_PLAN_SCHEMAS:
+            raise ValueError("serving acceptance requires a prepared Qwen dev canary")
         receipt = accept(
             plan,
             result.resolve(),
@@ -1259,10 +1277,7 @@ def miles_hf_accept_export(directory: Path, submission: Path) -> None:
 
     try:
         plan, _ = _prepared(directory)
-        if (
-            plan.get("schema") not in _MILES_HF_PLAN_SCHEMAS
-            or plan.get("stage") != "export"
-        ):
+        if plan.get("schema") not in _MILES_HF_PLAN_SCHEMAS or plan.get("stage") != "export":
             raise ValueError("export acceptance requires a prepared Miles HF export job")
         root = Path(plan["output_root"])
         result = accept_export_job(
@@ -1284,10 +1299,7 @@ def miles_hf_accept_reload(directory: Path, submission: Path) -> None:
 
     try:
         plan, _ = _prepared(directory)
-        if (
-            plan.get("schema") not in _MILES_HF_PLAN_SCHEMAS
-            or plan.get("stage") != "reload"
-        ):
+        if plan.get("schema") not in _MILES_HF_PLAN_SCHEMAS or plan.get("stage") != "reload":
             raise ValueError("reload acceptance requires a prepared Miles HF reload job")
         root = Path(plan["output_root"])
         result = accept_gpu_reload(

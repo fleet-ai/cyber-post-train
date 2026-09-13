@@ -1,4 +1,4 @@
-"""Bounded dev-only SGLang qualification for one accepted Miles HF export.
+"""Bounded dev-only SGLang qualification for one accepted Qwen HF export.
 
 This module never registers a persistent endpoint.  It compiles one generic
 Jobs API request, starts the exact production SGLang command on localhost,
@@ -35,6 +35,12 @@ PLAN_SCHEMA = "cyber_miles_serving_dev_plan_v1"
 RESULT_SCHEMA = "cyber_miles_serving_dev_result_v1"
 EXTERNAL_SCHEMA = "cyber_miles_serving_dev_external_v1"
 PREFLIGHT_SCHEMA = "cyber_miles_serving_dev_cpu_preflight_v1"
+SFT_CONFIG_SCHEMA = "cyber_sft_serving_dev_config_v1"
+SFT_PLAN_SCHEMA = "cyber_sft_serving_dev_plan_v1"
+SFT_RESULT_SCHEMA = "cyber_sft_serving_dev_result_v1"
+SFT_EXTERNAL_SCHEMA = "cyber_sft_serving_dev_external_v1"
+SFT_PREFLIGHT_SCHEMA = "cyber_sft_serving_dev_cpu_preflight_v1"
+PLAN_SCHEMAS = {PLAN_SCHEMA, SFT_PLAN_SCHEMA}
 DEV_QUALIFICATION_SCHEMA = "cyber_serving_dev_qualification_v1"
 DEV_CONTEXT = "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb"
 NAMESPACE = "fleet-train-jobs"
@@ -77,6 +83,23 @@ RESULT_FIELDS = {
     "completed_at",
     "sha256",
 }
+SFT_RESULT_FIELDS = RESULT_FIELDS - {
+    "reload_acceptance_receipt_sha256",
+    "source_update_identity_sha256",
+    "staged_manifest_sha256",
+} | {
+    "model_revision",
+    "export_file_sha256",
+    "gpu_check_receipt_sha256",
+    "gpu_check_file_sha256",
+    "gpu_checker_sha256",
+    "source_checkpoint_receipt_sha256",
+    "source_manifest_file_sha256",
+    "source_plan_sha256",
+    "export_code_sha256",
+    "export_manifest_sha256",
+    "optimizer_step",
+}
 PROBE_FIELDS = {
     "model_list_exact",
     "forward_completion_tokens",
@@ -106,6 +129,39 @@ EXTERNAL_FIELDS = {
     "release",
     "observed_at",
 }
+SFT_PREFLIGHT_FIELDS = {
+    "schema",
+    "status",
+    "dev_sfs",
+    "gpus",
+    "submitted",
+    "plan_sha256",
+    "request_sha256",
+    "output_root",
+    "output_root_absent",
+    "output_root_is_symlink",
+    "payload_root",
+    "payload_root_is_symlink",
+    "payload_rehashed",
+    "payload_file_count",
+    "payload_bytes",
+    "payload_manifest_sha256",
+    "runtime_sha256",
+    "execution_contract_sha256",
+    "model_revision",
+    "export_file_sha256",
+    "export_receipt_sha256",
+    "source_checkpoint_receipt_sha256",
+    "source_manifest_file_sha256",
+    "source_plan_sha256",
+    "export_code_sha256",
+    "export_manifest_sha256",
+    "gpu_check_file_sha256",
+    "gpu_check_receipt_sha256",
+    "gpu_checker_sha256",
+    "optimizer_step",
+    "sha256",
+}
 CONTROLLER_FIELDS = {"kind", "name", "uid", "status", "workload_uid", "raycluster_uid"}
 POD_FIELDS = {
     "name",
@@ -132,8 +188,10 @@ RUNTIME_FILES = (
     "training/io.py",
     "cyber_post_train/jobs.py",
 )
+SFT_RUNTIME_FILES = RUNTIME_FILES + ("training/serving_registration.py",)
 _SHA = re.compile(r"(?:sha256:)?[0-9a-f]{64}")
 _PREFIX = re.compile(r"[a-z0-9](?:[-a-z0-9]{0,29}[a-z0-9])?")
+_DNS_LABEL = re.compile(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?")
 _API_RUN = re.compile(r"[a-z0-9](?:[-a-z0-9]{0,52}[a-z0-9])?-[0-9a-f]{8}")
 _RUNTIME_IMAGE = re.compile(
     r"(?:(?:containerd|docker-pullable)://(?:[^@\s]+@)?|[^@\s]+@)"
@@ -203,9 +261,10 @@ def _reference(value: object, label: str) -> tuple[Path, str]:
     return path, _sha(value["file_sha256"])
 
 
-def _runtime_sources() -> dict[str, str]:
+def _runtime_sources(plan_or_config: dict[str, Any] | None = None) -> dict[str, str]:
     root = Path(__file__).resolve().parents[1]
-    sources = {name: (root / name).read_text() for name in RUNTIME_FILES}
+    names = SFT_RUNTIME_FILES if plan_or_config and _is_sft(plan_or_config) else RUNTIME_FILES
+    sources = {name: (root / name).read_text() for name in names}
     sources.update({"training/__init__.py": "", "cyber_post_train/__init__.py": ""})
     return sources
 
@@ -256,6 +315,31 @@ def _artifacts(config: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any], 
     return export, reload_receipt, {key: _sha(value) for key, value in validation.items()}
 
 
+def _sft_artifacts(config: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Reopen the accepted teacher-SFT export and its zero-update GPU check."""
+    from . import serving_registration
+
+    translated = {
+        name: {
+            "path": config[name]["path"],
+            "sha256": config[name]["file_sha256"],
+        }
+        for name in ("export", "gpu_check")
+    }
+    export, gpu_check = serving_registration._export_and_check(translated)
+    if export.get("model_repo") != MODEL_REPO or export.get("model_revision") != MODEL_REVISION:
+        raise ValueError("accepted SFT export is not the exact Qwen3.8 revision")
+    return export, gpu_check
+
+
+def _is_sft(plan_or_config: dict[str, Any]) -> bool:
+    return plan_or_config.get("schema") in {SFT_CONFIG_SCHEMA, SFT_PLAN_SCHEMA}
+
+
+def _plan_schema(config: dict[str, Any]) -> str:
+    return SFT_PLAN_SCHEMA if _is_sft(config) else PLAN_SCHEMA
+
+
 def _replace(args: list[str], flag: str, value: str) -> list[str]:
     if args.count(flag) != 1:
         raise ValueError(f"exact serving command requires one {flag}")
@@ -288,9 +372,8 @@ def compile_plan(config: dict[str, Any]) -> dict[str, Any]:
     """Validate accepted artifacts and freeze one dev-only one-GPU request."""
     from . import serving_registration
 
-    if (
-        set(config)
-        != {
+    fields = {
+        CONFIG_SCHEMA: {
             "schema",
             "name",
             "output_root",
@@ -298,10 +381,20 @@ def compile_plan(config: dict[str, Any]) -> dict[str, Any]:
             "export",
             "reload_acceptance",
             "cluster",
-        }
-        or config.get("schema") != CONFIG_SCHEMA
-    ):
-        raise ValueError("unexpected Miles serving dev configuration")
+        },
+        SFT_CONFIG_SCHEMA: {
+            "schema",
+            "name",
+            "output_root",
+            "base_registration",
+            "export",
+            "gpu_check",
+            "dev_sfs",
+            "cluster",
+        },
+    }
+    if config.get("schema") not in fields or set(config) != fields[config["schema"]]:
+        raise ValueError("unexpected Qwen serving dev configuration")
     if not _PREFIX.fullmatch(str(config.get("name", ""))):
         raise ValueError("dev canary name must be a Jobs API DNS prefix")
     output = _absolute(config.get("output_root"), "output root")
@@ -309,15 +402,39 @@ def compile_plan(config: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("dev canary output must be under /mnt/sfs/jobs")
     if config.get("cluster") != {"target": "dev", "priority": "c1"}:
         raise ValueError("serving qualification is one dev c1 canary")
+    if _is_sft(config):
+        dev_sfs = config.get("dev_sfs")
+        if (
+            not isinstance(dev_sfs, dict)
+            or set(dev_sfs) != {"namespace", "pvc_name", "pvc_uid", "mount_root"}
+            or dev_sfs.get("namespace") != NAMESPACE
+            or not _DNS_LABEL.fullmatch(str(dev_sfs.get("pvc_name", "")))
+            or dev_sfs.get("mount_root") != "/mnt/sfs"
+        ):
+            raise ValueError("exact dev namespace/PVC mount identity is required")
+        try:
+            pvc_uid = str(uuid.UUID(str(dev_sfs.get("pvc_uid", ""))))
+        except ValueError:
+            raise ValueError("exact dev namespace/PVC mount identity is required") from None
+        if pvc_uid != dev_sfs["pvc_uid"]:
+            raise ValueError("exact dev namespace/PVC mount identity is required")
 
     base_path, base_sha = _reference(config["base_registration"], "base registration")
     base = serving_registration._registration(_read(base_path, base_sha))
-    export, reload_receipt, reload_validation = _artifacts(config)
+    if _is_sft(config):
+        export, gpu_check = _sft_artifacts(config)
+        reload_receipt = reload_validation = None
+    else:
+        export, reload_receipt, reload_validation = _artifacts(config)
+        gpu_check = None
     if base["spec"]["model"].get("revision") != MODEL_REVISION:
         raise ValueError("base serving registration is not exact Qwen3.8-27B")
-    model_root = _absolute(export["output_root"], "Miles export root")
+    model_root = _absolute(
+        str(Path(config["export"]["path"]).parent) if _is_sft(config) else export["output_root"],
+        "export root",
+    )
     if model_root != Path(config["export"]["path"]).parent:
-        raise ValueError("Miles export root and receipt path differ")
+        raise ValueError("export root and receipt path differ")
     if _overlap(output, model_root):
         raise ValueError("dev evidence root must not overlap the immutable export")
 
@@ -330,7 +447,7 @@ def compile_plan(config: dict[str, Any]) -> dict[str, Any]:
     model.update(
         sourcePath=str(model_root),
         path=str(model_root),
-        revision=_sha(export["sha256"]),
+        revision=_sha(export["receipt_sha256"] if _is_sft(config) else export["sha256"]),
     )
     runtime["args"] = args
     serving_registration._registration(dev_registration)
@@ -341,20 +458,27 @@ def compile_plan(config: dict[str, Any]) -> dict[str, Any]:
     resources = dev_registration["spec"]["resources"]
     if resources["limits"].get("nvidia.com/gpu") != 1:
         raise ValueError("bounded dev qualification requires exact one-GPU serving shape")
-    update = _source_update_identity(export)
-    plan = {
-        "schema": PLAN_SCHEMA,
-        "run_name": config["name"],
-        "output_root": str(output),
-        "cluster_target": "dev",
-        "priority": "c1",
-        "base_registration": {
-            "path": str(base_path),
-            "file_sha256": base_sha,
-            "id": base["id"],
-            "revision": MODEL_REVISION,
-        },
-        "artifact": {
+    if _is_sft(config):
+        artifact = {
+            "export_path": config["export"]["path"],
+            "export_file_sha256": _sha(config["export"]["file_sha256"]),
+            "export_receipt_sha256": _sha(export["receipt_sha256"]),
+            "model_revision": MODEL_REVISION,
+            "gpu_check_path": config["gpu_check"]["path"],
+            "gpu_check_file_sha256": _sha(config["gpu_check"]["file_sha256"]),
+            "gpu_check_receipt_sha256": _sha(gpu_check["receipt_sha256"]),
+            "gpu_checker_sha256": _sha(serving_registration.EXPORT_CHECK_SHA256),
+            "source_checkpoint_receipt_sha256": _sha(export["source_checkpoint_receipt_sha256"]),
+            "source_manifest_file_sha256": _sha(export["source_manifest_file_sha256"]),
+            "source_plan_sha256": _sha(export["source_plan_sha256"]),
+            "export_code_sha256": digest_json(export["code_sha256"]),
+            "optimizer_step": export["optimizer_step"],
+            "export_manifest_sha256": digest_json(export["files"]),
+            "files": export["files"],
+        }
+    else:
+        update = _source_update_identity(export)
+        artifact = {
             "export_path": config["export"]["path"],
             "export_file_sha256": _sha(config["export"]["file_sha256"]),
             "export_receipt_sha256": _sha(export["sha256"]),
@@ -366,7 +490,21 @@ def compile_plan(config: dict[str, Any]) -> dict[str, Any]:
             "source_update_identity_sha256": digest_json(update),
             "staged_manifest_sha256": digest_json(export["files"]),
             "files": export["files"],
+        }
+    plan = {
+        "schema": _plan_schema(config),
+        "run_name": config["name"],
+        "output_root": str(output),
+        "cluster_target": "dev",
+        "priority": "c1",
+        "base_registration": {
+            "path": str(base_path),
+            "file_sha256": base_sha,
+            "id": base["id"],
+            "revision": MODEL_REVISION,
         },
+        **({"dev_sfs": copy.deepcopy(config["dev_sfs"])} if _is_sft(config) else {}),
+        "artifact": artifact,
         "serving": {
             "registration": dev_registration,
             "execution_contract_sha256": contract,
@@ -391,7 +529,7 @@ def compile_plan(config: dict[str, Any]) -> dict[str, Any]:
             "scores_observed": False,
             "webexploitbench_eligible_for_selection": False,
         },
-        "runtime_sha256": digest(_runtime_sources()),
+        "runtime_sha256": digest(_runtime_sources(config)),
     }
     return _sign(plan)
 
@@ -399,7 +537,9 @@ def compile_plan(config: dict[str, Any]) -> dict[str, Any]:
 def validate_plan(plan: dict[str, Any], *, check_files: bool) -> dict[str, Any]:
     from . import serving_registration
 
-    _sealed(plan, PLAN_SCHEMA)
+    if plan.get("schema") not in PLAN_SCHEMAS:
+        raise ValueError("unexpected Qwen serving dev plan schema")
+    _sealed(plan, plan["schema"])
     serving = plan.get("serving")
     artifact = plan.get("artifact")
     base_reference = plan.get("base_registration")
@@ -418,6 +558,7 @@ def validate_plan(plan: dict[str, Any], *, check_files: bool) -> dict[str, Any]:
             "probe",
             "runtime_sha256",
             "sha256",
+            *({"dev_sfs"} if _is_sft(plan) else set()),
         }
         or not _PREFIX.fullmatch(str(plan.get("run_name", "")))
         or plan.get("cluster_target") != "dev"
@@ -427,19 +568,41 @@ def validate_plan(plan: dict[str, Any], *, check_files: bool) -> dict[str, Any]:
         or not isinstance(base_reference, dict)
         or set(base_reference) != {"path", "file_sha256", "id", "revision"}
         or set(artifact)
-        != {
-            "export_path",
-            "export_file_sha256",
-            "export_receipt_sha256",
-            "reload_acceptance_path",
-            "reload_acceptance_file_sha256",
-            "reload_acceptance_receipt_sha256",
-            "reload_validation",
-            "source_update_identity",
-            "source_update_identity_sha256",
-            "staged_manifest_sha256",
-            "files",
-        }
+        != (
+            {
+                "export_path",
+                "export_file_sha256",
+                "export_receipt_sha256",
+                "model_revision",
+                "gpu_check_path",
+                "gpu_check_file_sha256",
+                "gpu_check_receipt_sha256",
+                "gpu_checker_sha256",
+                "source_checkpoint_receipt_sha256",
+                "source_manifest_file_sha256",
+                "source_plan_sha256",
+                "export_code_sha256",
+                "optimizer_step",
+                "export_manifest_sha256",
+                "files",
+            }
+            if _is_sft(plan)
+            else {
+                "export_path",
+                "export_file_sha256",
+                "export_receipt_sha256",
+                "reload_acceptance_path",
+                "reload_acceptance_file_sha256",
+                "reload_acceptance_receipt_sha256",
+                "reload_validation",
+                "source_update_identity",
+                "source_update_identity_sha256",
+                "staged_manifest_sha256",
+                "files",
+            }
+        )
+        or _absolute(plan.get("output_root"), "output root").parts[:4]
+        != ("/", "mnt", "sfs", "jobs")
         or set(serving)
         != {
             "registration",
@@ -463,9 +626,9 @@ def validate_plan(plan: dict[str, Any], *, check_files: bool) -> dict[str, Any]:
             "scores_observed": False,
             "webexploitbench_eligible_for_selection": False,
         }
-        or plan.get("runtime_sha256") != digest(_runtime_sources())
+        or plan.get("runtime_sha256") != digest(_runtime_sources(plan))
     ):
-        raise ValueError("Miles serving dev plan changed")
+        raise ValueError("Qwen serving dev plan changed")
     registered = serving_registration._registration(registration)
     runtime = registered["spec"]["runtime"]
     resources = registered["spec"]["resources"]
@@ -485,20 +648,31 @@ def validate_plan(plan: dict[str, Any], *, check_files: bool) -> dict[str, Any]:
         or serving.get("execution_contract_sha256") != expected_contract
         or registered["spec"]["resources"]["limits"].get("nvidia.com/gpu") != 1
     ):
-        raise ValueError("Miles serving registration/request contract changed")
+        raise ValueError("Qwen serving registration/request contract changed")
     _sha(serving.get("execution_contract_sha256"))
-    for key in (
-        "export_file_sha256",
-        "export_receipt_sha256",
-        "reload_acceptance_file_sha256",
-        "reload_acceptance_receipt_sha256",
-        "source_update_identity_sha256",
-        "staged_manifest_sha256",
-    ):
+    digest_keys = ["export_file_sha256", "export_receipt_sha256"]
+    digest_keys.extend(
+        (
+            "gpu_check_file_sha256",
+            "gpu_check_receipt_sha256",
+            "gpu_checker_sha256",
+            "source_checkpoint_receipt_sha256",
+            "source_manifest_file_sha256",
+            "source_plan_sha256",
+            "export_code_sha256",
+            "export_manifest_sha256",
+        )
+        if _is_sft(plan)
+        else (
+            "reload_acceptance_file_sha256",
+            "reload_acceptance_receipt_sha256",
+            "source_update_identity_sha256",
+            "staged_manifest_sha256",
+        )
+    )
+    for key in digest_keys:
         _sha(artifact.get(key))
     files = artifact.get("files")
-    reload_validation = artifact.get("reload_validation")
-    update_identity = artifact.get("source_update_identity")
     if (
         not isinstance(files, dict)
         or not files
@@ -512,35 +686,59 @@ def validate_plan(plan: dict[str, Any], *, check_files: bool) -> dict[str, Any]:
             or _SHA.fullmatch(str(info["sha256"])) is None
             for name, info in files.items()
         )
-        or digest_json(files) != artifact["staged_manifest_sha256"]
-        or not isinstance(reload_validation, dict)
-        or set(reload_validation)
-        != {
-            "export_receipt_sha256",
-            "prediction_sha256",
-            "reload_result_sha256",
-            "controller_terminal_sha256",
-            "external_release_sha256",
-        }
-        or any(_SHA.fullmatch(str(value)) is None for value in reload_validation.values())
-        or not isinstance(update_identity, dict)
-        or set(update_identity)
-        != {
-            "schema",
-            "source_plan_sha256",
-            "source_checkpoint_receipt_sha256",
-            "export_tensor_inventory_sha256",
-        }
+        or digest_json(files)
+        != artifact["export_manifest_sha256" if _is_sft(plan) else "staged_manifest_sha256"]
         or _absolute(artifact.get("export_path"), "export path")
         != Path(serving["model_root"]) / "EXPORT.json"
     ):
-        raise ValueError("Miles serving artifact manifest changed")
-    _absolute(artifact.get("reload_acceptance_path"), "reload acceptance path")
-    if (
-        digest_json(update_identity) != artifact["source_update_identity_sha256"]
-        or update_identity.get("schema") != "cyber_miles_source_update_identity_v1"
-    ):
-        raise ValueError("Miles source-update identity changed")
+        raise ValueError("Qwen serving artifact manifest changed")
+    if _is_sft(plan):
+        _absolute(artifact.get("gpu_check_path"), "GPU check path")
+        dev_sfs = plan.get("dev_sfs")
+        if (
+            artifact.get("model_revision") != MODEL_REVISION
+            or type(artifact.get("optimizer_step")) is not int
+            or artifact["optimizer_step"] < 1
+            or not isinstance(dev_sfs, dict)
+            or set(dev_sfs) != {"namespace", "pvc_name", "pvc_uid", "mount_root"}
+            or dev_sfs.get("namespace") != NAMESPACE
+            or not _DNS_LABEL.fullmatch(str(dev_sfs.get("pvc_name", "")))
+            or dev_sfs.get("mount_root") != "/mnt/sfs"
+        ):
+            raise ValueError("SFT serving checkpoint identity changed")
+        try:
+            pvc_uid = str(uuid.UUID(str(dev_sfs.get("pvc_uid", ""))))
+        except ValueError:
+            raise ValueError("SFT serving checkpoint identity changed") from None
+        if pvc_uid != dev_sfs["pvc_uid"]:
+            raise ValueError("SFT serving checkpoint identity changed")
+    else:
+        reload_validation = artifact.get("reload_validation")
+        update_identity = artifact.get("source_update_identity")
+        _absolute(artifact.get("reload_acceptance_path"), "reload acceptance path")
+        if (
+            not isinstance(reload_validation, dict)
+            or set(reload_validation)
+            != {
+                "export_receipt_sha256",
+                "prediction_sha256",
+                "reload_result_sha256",
+                "controller_terminal_sha256",
+                "external_release_sha256",
+            }
+            or any(_SHA.fullmatch(str(value)) is None for value in reload_validation.values())
+            or not isinstance(update_identity, dict)
+            or set(update_identity)
+            != {
+                "schema",
+                "source_plan_sha256",
+                "source_checkpoint_receipt_sha256",
+                "export_tensor_inventory_sha256",
+            }
+            or digest_json(update_identity) != artifact["source_update_identity_sha256"]
+            or update_identity.get("schema") != "cyber_miles_source_update_identity_v1"
+        ):
+            raise ValueError("Miles serving source/reload identity changed")
     if check_files:
         base_path, base_sha = _reference(
             {
@@ -561,21 +759,43 @@ def validate_plan(plan: dict[str, Any], *, check_files: bool) -> dict[str, Any]:
             "export": {
                 "path": artifact["export_path"],
                 "file_sha256": artifact["export_file_sha256"],
-            },
-            "reload_acceptance": {
+            }
+        }
+        if _is_sft(plan):
+            config["gpu_check"] = {
+                "path": artifact["gpu_check_path"],
+                "file_sha256": artifact["gpu_check_file_sha256"],
+            }
+            export, gpu_check = _sft_artifacts(config)
+            if (
+                _sha(export["receipt_sha256"]) != artifact["export_receipt_sha256"]
+                or export["model_revision"] != artifact["model_revision"]
+                or _sha(gpu_check["receipt_sha256"]) != artifact["gpu_check_receipt_sha256"]
+                or _sha(gpu_check["checker_sha256"]) != artifact["gpu_checker_sha256"]
+                or export["files"] != artifact["files"]
+                or _sha(export["source_checkpoint_receipt_sha256"])
+                != artifact["source_checkpoint_receipt_sha256"]
+                or _sha(export["source_manifest_file_sha256"])
+                != artifact["source_manifest_file_sha256"]
+                or _sha(export["source_plan_sha256"]) != artifact["source_plan_sha256"]
+                or digest_json(export["code_sha256"]) != artifact["export_code_sha256"]
+                or export["optimizer_step"] != artifact["optimizer_step"]
+            ):
+                raise ValueError("SFT serving artifact changed after preparation")
+        else:
+            config["reload_acceptance"] = {
                 "path": artifact["reload_acceptance_path"],
                 "file_sha256": artifact["reload_acceptance_file_sha256"],
-            },
-        }
-        export, reload_receipt, validation = _artifacts(config)
-        if (
-            _sha(export["sha256"]) != artifact["export_receipt_sha256"]
-            or _sha(reload_receipt["sha256"]) != artifact["reload_acceptance_receipt_sha256"]
-            or validation != artifact["reload_validation"]
-            or export["files"] != artifact["files"]
-            or _source_update_identity(export) != artifact["source_update_identity"]
-        ):
-            raise ValueError("Miles serving artifact changed after preparation")
+            }
+            export, reload_receipt, validation = _artifacts(config)
+            if (
+                _sha(export["sha256"]) != artifact["export_receipt_sha256"]
+                or _sha(reload_receipt["sha256"]) != artifact["reload_acceptance_receipt_sha256"]
+                or validation != artifact["reload_validation"]
+                or export["files"] != artifact["files"]
+                or _source_update_identity(export) != artifact["source_update_identity"]
+            ):
+                raise ValueError("Miles serving artifact changed after preparation")
     return plan
 
 
@@ -585,7 +805,12 @@ def job_request(plan: dict[str, Any], *, check_files: bool = True) -> dict[str, 
     serving = plan["serving"]
     request = {
         "name": plan["run_name"],
-        "title": plan["run_name"] + " bounded Miles SGLang dev qualification",
+        "title": plan["run_name"]
+        + (
+            " bounded Qwen SFT SGLang dev qualification"
+            if _is_sft(plan)
+            else " bounded Miles SGLang dev qualification"
+        ),
         "run_dir": plan["output_root"],
         "image": serving["image"],
         "workers": 1,
@@ -600,7 +825,7 @@ def job_request(plan: dict[str, Any], *, check_files: bool = True) -> dict[str, 
             "PYTHONUNBUFFERED": "1",
         },
     }
-    files = _runtime_sources()
+    files = _runtime_sources(plan)
     files["plan.json"] = canonical_json(plan)
     return bundled_request(
         request,
@@ -611,8 +836,45 @@ def job_request(plan: dict[str, Any], *, check_files: bool = True) -> dict[str, 
 
 
 def preflight(plan: dict[str, Any]) -> dict[str, Any]:
+    """Rehash all inputs without GPUs; SFT callers must run on dev-mounted SFS."""
     validate_plan(plan, check_files=True)
     request = job_request(plan)
+    if _is_sft(plan):
+        _require_output_absent(plan)
+        artifact = plan["artifact"]
+        files = artifact["files"]
+        return {
+            "schema": SFT_PREFLIGHT_SCHEMA,
+            "status": "passed",
+            "dev_sfs": copy.deepcopy(plan["dev_sfs"]),
+            "gpus": 0,
+            "submitted": False,
+            "plan_sha256": digest(plan),
+            "request_sha256": digest(request),
+            "output_root": plan["output_root"],
+            "output_root_absent": True,
+            "output_root_is_symlink": False,
+            "payload_root": plan["serving"]["model_root"],
+            "payload_root_is_symlink": False,
+            "payload_rehashed": True,
+            "payload_file_count": len(files),
+            "payload_bytes": sum(info["bytes"] for info in files.values()),
+            "payload_manifest_sha256": artifact["export_manifest_sha256"],
+            "runtime_sha256": plan["runtime_sha256"],
+            "execution_contract_sha256": plan["serving"]["execution_contract_sha256"],
+            "model_revision": artifact["model_revision"],
+            "export_file_sha256": artifact["export_file_sha256"],
+            "export_receipt_sha256": artifact["export_receipt_sha256"],
+            "source_checkpoint_receipt_sha256": artifact["source_checkpoint_receipt_sha256"],
+            "source_manifest_file_sha256": artifact["source_manifest_file_sha256"],
+            "source_plan_sha256": artifact["source_plan_sha256"],
+            "export_code_sha256": artifact["export_code_sha256"],
+            "export_manifest_sha256": artifact["export_manifest_sha256"],
+            "gpu_check_file_sha256": artifact["gpu_check_file_sha256"],
+            "gpu_check_receipt_sha256": artifact["gpu_check_receipt_sha256"],
+            "gpu_checker_sha256": artifact["gpu_checker_sha256"],
+            "optimizer_step": artifact["optimizer_step"],
+        }
     return {
         "schema": PREFLIGHT_SCHEMA,
         "status": "passed",
@@ -620,10 +882,67 @@ def preflight(plan: dict[str, Any]) -> dict[str, Any]:
         "plan_sha256": digest(plan),
         "request_sha256": digest(request),
         "export_receipt_sha256": plan["artifact"]["export_receipt_sha256"],
-        "reload_acceptance_receipt_sha256": plan["artifact"]["reload_acceptance_receipt_sha256"],
         "execution_contract_sha256": plan["serving"]["execution_contract_sha256"],
         "submitted": False,
+        "reload_acceptance_receipt_sha256": plan["artifact"]["reload_acceptance_receipt_sha256"],
     }
+
+
+def _require_output_absent(plan: dict[str, Any]) -> None:
+    output = _absolute(plan.get("output_root"), "output root")
+    if output.is_symlink() or output.exists():
+        raise ValueError("SFT serving target output/evidence directory is already claimed")
+
+
+def validate_preflight_receipt(
+    plan: dict[str, Any], request: dict[str, Any], proof: dict[str, Any]
+) -> None:
+    """Repeat the dev-SFS rehash and reopen its zero-GPU receipt before POST."""
+    if not _is_sft(plan):
+        return
+    validate_plan(plan, check_files=True)
+    if request != job_request(plan):
+        raise ValueError("SFT serving request differs from its immutable plan")
+    _require_output_absent(plan)
+    _sealed(proof, SFT_PREFLIGHT_SCHEMA)
+    artifact = plan["artifact"]
+    files = artifact["files"]
+    expected = {
+        "schema": SFT_PREFLIGHT_SCHEMA,
+        "status": "passed",
+        "dev_sfs": plan["dev_sfs"],
+        "gpus": 0,
+        "submitted": False,
+        "plan_sha256": digest(plan),
+        "request_sha256": digest(request),
+        "output_root": plan["output_root"],
+        "output_root_absent": True,
+        "output_root_is_symlink": False,
+        "payload_root": plan["serving"]["model_root"],
+        "payload_root_is_symlink": False,
+        "payload_rehashed": True,
+        "payload_file_count": len(files),
+        "payload_bytes": sum(info["bytes"] for info in files.values()),
+        "payload_manifest_sha256": artifact["export_manifest_sha256"],
+        "runtime_sha256": plan["runtime_sha256"],
+        "execution_contract_sha256": plan["serving"]["execution_contract_sha256"],
+        "model_revision": artifact["model_revision"],
+        "export_file_sha256": artifact["export_file_sha256"],
+        "export_receipt_sha256": artifact["export_receipt_sha256"],
+        "source_checkpoint_receipt_sha256": artifact["source_checkpoint_receipt_sha256"],
+        "source_manifest_file_sha256": artifact["source_manifest_file_sha256"],
+        "source_plan_sha256": artifact["source_plan_sha256"],
+        "export_code_sha256": artifact["export_code_sha256"],
+        "export_manifest_sha256": artifact["export_manifest_sha256"],
+        "gpu_check_file_sha256": artifact["gpu_check_file_sha256"],
+        "gpu_check_receipt_sha256": artifact["gpu_check_receipt_sha256"],
+        "gpu_checker_sha256": artifact["gpu_checker_sha256"],
+        "optimizer_step": artifact["optimizer_step"],
+    }
+    if set(proof) != SFT_PREFLIGHT_FIELDS or any(
+        proof.get(key) != value for key, value in expected.items()
+    ):
+        raise ValueError("SFT serving dev-SFS preflight is absent or stale")
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -838,35 +1157,53 @@ def run(plan_path: Path, plan_sha256: str) -> dict[str, Any]:
             probes = _probes(plan["run_name"])
         server_exit_code = _stop(process)
         _verify_runtime_payload(plan)
-        result = _sign(
-            {
-                "schema": RESULT_SCHEMA,
-                "status": "passed",
-                "plan_sha256": _sha(plan["sha256"]),
-                "request_sha256": digest_json(job_request(plan, check_files=False)),
-                "api_run_name": api_run_name,
-                "api_run_id": api_run_id,
-                "execution_contract_sha256": plan["serving"]["execution_contract_sha256"],
-                "export_receipt_sha256": plan["artifact"]["export_receipt_sha256"],
-                "reload_acceptance_receipt_sha256": plan["artifact"][
+        result_body = {
+            "schema": SFT_RESULT_SCHEMA if _is_sft(plan) else RESULT_SCHEMA,
+            "status": "passed",
+            "plan_sha256": _sha(plan["sha256"]),
+            "request_sha256": digest_json(job_request(plan, check_files=False)),
+            "api_run_name": api_run_name,
+            "api_run_id": api_run_id,
+            "execution_contract_sha256": plan["serving"]["execution_contract_sha256"],
+            "export_receipt_sha256": plan["artifact"]["export_receipt_sha256"],
+            "requested_runtime_image": plan["serving"]["image"],
+            "checks": {key: True for key in DEV_CHECKS},
+            "probes": probes,
+            "server_pid": process.pid,
+            "server_exit_code": server_exit_code,
+            "server_process_group_stopped": True,
+            "source_export_unchanged": True,
+            "optimizer_updates": 0,
+            "rollouts": 0,
+            "verifier_calls": 0,
+            "benchmark_attempts": 0,
+            "completed_at": datetime.now(UTC).isoformat(),
+        }
+        if _is_sft(plan):
+            result_body.update(
+                model_revision=plan["artifact"]["model_revision"],
+                export_file_sha256=plan["artifact"]["export_file_sha256"],
+                gpu_check_receipt_sha256=plan["artifact"]["gpu_check_receipt_sha256"],
+                gpu_check_file_sha256=plan["artifact"]["gpu_check_file_sha256"],
+                gpu_checker_sha256=plan["artifact"]["gpu_checker_sha256"],
+                source_checkpoint_receipt_sha256=plan["artifact"][
+                    "source_checkpoint_receipt_sha256"
+                ],
+                source_manifest_file_sha256=plan["artifact"]["source_manifest_file_sha256"],
+                source_plan_sha256=plan["artifact"]["source_plan_sha256"],
+                export_code_sha256=plan["artifact"]["export_code_sha256"],
+                optimizer_step=plan["artifact"]["optimizer_step"],
+                export_manifest_sha256=plan["artifact"]["export_manifest_sha256"],
+            )
+        else:
+            result_body.update(
+                reload_acceptance_receipt_sha256=plan["artifact"][
                     "reload_acceptance_receipt_sha256"
                 ],
-                "source_update_identity_sha256": plan["artifact"]["source_update_identity_sha256"],
-                "staged_manifest_sha256": plan["artifact"]["staged_manifest_sha256"],
-                "requested_runtime_image": plan["serving"]["image"],
-                "checks": {key: True for key in DEV_CHECKS},
-                "probes": probes,
-                "server_pid": process.pid,
-                "server_exit_code": server_exit_code,
-                "server_process_group_stopped": True,
-                "source_export_unchanged": True,
-                "optimizer_updates": 0,
-                "rollouts": 0,
-                "verifier_calls": 0,
-                "benchmark_attempts": 0,
-                "completed_at": datetime.now(UTC).isoformat(),
-            }
-        )
+                source_update_identity_sha256=plan["artifact"]["source_update_identity_sha256"],
+                staged_manifest_sha256=plan["artifact"]["staged_manifest_sha256"],
+            )
+        result = _sign(result_body)
         _once(root / "DEV_SERVING_RESULT.json", result)
         return result
     except Exception as error:
@@ -875,7 +1212,11 @@ def run(plan_path: Path, plan_sha256: str) -> dict[str, Any]:
                 _stop(process)
         failure = _sign(
             {
-                "schema": "cyber_miles_serving_dev_failure_v1",
+                "schema": (
+                    "cyber_sft_serving_dev_failure_v1"
+                    if _is_sft(plan)
+                    else "cyber_miles_serving_dev_failure_v1"
+                ),
                 "status": "failed",
                 "plan_sha256": _sha(plan["sha256"]),
                 "error_type": type(error).__name__,
@@ -900,7 +1241,10 @@ def accept(
 ) -> dict[str, Any]:
     """Create the receipt consumed by production registration, without a POST."""
     validate_plan(plan, check_files=True)
-    result = _sealed(_read(result_path, result_file_sha256), RESULT_SCHEMA)
+    result_schema = SFT_RESULT_SCHEMA if _is_sft(plan) else RESULT_SCHEMA
+    external_schema = SFT_EXTERNAL_SCHEMA if _is_sft(plan) else EXTERNAL_SCHEMA
+    result_fields = SFT_RESULT_FIELDS if _is_sft(plan) else RESULT_FIELDS
+    result = _sealed(_read(result_path, result_file_sha256), result_schema)
     external = _read(external_path, external_file_sha256)
     controller = external.get("controller")
     pod = external.get("pod")
@@ -908,19 +1252,14 @@ def accept(
     probes = result.get("probes")
     expected_image = plan["serving"]["image"]
     if (
-        set(result) != RESULT_FIELDS
+        set(result) != result_fields
         or set(external) != EXTERNAL_FIELDS
-        or external.get("schema") != EXTERNAL_SCHEMA
+        or external.get("schema") != external_schema
         or result.get("status") != "passed"
         or result.get("plan_sha256") != _sha(plan["sha256"])
         or result.get("request_sha256") != digest_json(job_request(plan))
         or result.get("execution_contract_sha256") != plan["serving"]["execution_contract_sha256"]
         or result.get("export_receipt_sha256") != plan["artifact"]["export_receipt_sha256"]
-        or result.get("reload_acceptance_receipt_sha256")
-        != plan["artifact"]["reload_acceptance_receipt_sha256"]
-        or result.get("source_update_identity_sha256")
-        != plan["artifact"]["source_update_identity_sha256"]
-        or result.get("staged_manifest_sha256") != plan["artifact"]["staged_manifest_sha256"]
         or result.get("checks") != {key: True for key in DEV_CHECKS}
         or result.get("optimizer_updates") != 0
         or result.get("rollouts") != 0
@@ -990,7 +1329,33 @@ def accept(
         }
         or external.get("observed_at") != release.get("observed_at")
     ):
-        raise ValueError("Miles serving dev result/release evidence is incomplete")
+        raise ValueError("Qwen serving dev result/release evidence is incomplete")
+    if _is_sft(plan):
+        if (
+            result.get("model_revision") != plan["artifact"]["model_revision"]
+            or result.get("export_file_sha256") != plan["artifact"]["export_file_sha256"]
+            or result.get("gpu_check_receipt_sha256")
+            != plan["artifact"]["gpu_check_receipt_sha256"]
+            or result.get("gpu_check_file_sha256") != plan["artifact"]["gpu_check_file_sha256"]
+            or result.get("gpu_checker_sha256") != plan["artifact"]["gpu_checker_sha256"]
+            or result.get("source_checkpoint_receipt_sha256")
+            != plan["artifact"]["source_checkpoint_receipt_sha256"]
+            or result.get("source_manifest_file_sha256")
+            != plan["artifact"]["source_manifest_file_sha256"]
+            or result.get("source_plan_sha256") != plan["artifact"]["source_plan_sha256"]
+            or result.get("export_code_sha256") != plan["artifact"]["export_code_sha256"]
+            or result.get("optimizer_step") != plan["artifact"]["optimizer_step"]
+            or result.get("export_manifest_sha256") != plan["artifact"]["export_manifest_sha256"]
+        ):
+            raise ValueError("SFT serving dev artifact evidence is incomplete")
+    elif (
+        result.get("reload_acceptance_receipt_sha256")
+        != plan["artifact"]["reload_acceptance_receipt_sha256"]
+        or result.get("source_update_identity_sha256")
+        != plan["artifact"]["source_update_identity_sha256"]
+        or result.get("staged_manifest_sha256") != plan["artifact"]["staged_manifest_sha256"]
+    ):
+        raise ValueError("Miles serving dev artifact evidence is incomplete")
     for value in (
         external.get("namespace_uid"),
         result["api_run_id"],
@@ -1000,9 +1365,9 @@ def accept(
         pod.get("uid"),
     ):
         if not isinstance(value, str) or str(uuid.UUID(value)) != value:
-            raise ValueError("Miles serving dev UID is not canonical")
+            raise ValueError("Qwen serving dev UID is not canonical")
     if not _API_RUN.fullmatch(str(result.get("api_run_name", ""))):
-        raise ValueError("Miles serving API run name is malformed")
+        raise ValueError("Qwen serving API run name is malformed")
     timestamps = []
     for value in (
         result.get("completed_at"),
@@ -1014,7 +1379,7 @@ def accept(
             not isinstance(value, str)
             or datetime.fromisoformat(value.replace("Z", "+00:00")).tzinfo is None
         ):
-            raise ValueError("Miles serving observation lacks timezone")
+            raise ValueError("Qwen serving observation lacks timezone")
         timestamps.append(datetime.fromisoformat(value.replace("Z", "+00:00")))
     if timestamps[1] < timestamps[0] or timestamps[2] < timestamps[1]:
         raise ValueError("release observation predates runtime completion")
@@ -1031,9 +1396,6 @@ def accept(
         "api_base_url": API_URLS["dev"],
         "execution_contract_sha256": plan["serving"]["execution_contract_sha256"],
         "export_receipt_sha256": plan["artifact"]["export_receipt_sha256"],
-        "source_update_identity_sha256": plan["artifact"]["source_update_identity_sha256"],
-        "reload_acceptance_receipt_sha256": plan["artifact"]["reload_acceptance_receipt_sha256"],
-        "staged_manifest_sha256": plan["artifact"]["staged_manifest_sha256"],
         "checks": {key: True for key in DEV_CHECKS},
         "controller_uid": controller["uid"],
         "pod_uid": pod["uid"],
@@ -1049,6 +1411,26 @@ def accept(
         "serving_ready": False,
         "production_registration_executed": False,
     }
+    if _is_sft(plan):
+        qualification.update(
+            model_revision=plan["artifact"]["model_revision"],
+            export_file_sha256=plan["artifact"]["export_file_sha256"],
+            gpu_check_receipt_sha256=plan["artifact"]["gpu_check_receipt_sha256"],
+            gpu_check_file_sha256=plan["artifact"]["gpu_check_file_sha256"],
+            gpu_checker_sha256=plan["artifact"]["gpu_checker_sha256"],
+            source_checkpoint_receipt_sha256=plan["artifact"]["source_checkpoint_receipt_sha256"],
+            source_manifest_file_sha256=plan["artifact"]["source_manifest_file_sha256"],
+            source_plan_sha256=plan["artifact"]["source_plan_sha256"],
+            export_code_sha256=plan["artifact"]["export_code_sha256"],
+            optimizer_step=plan["artifact"]["optimizer_step"],
+            export_manifest_sha256=plan["artifact"]["export_manifest_sha256"],
+        )
+    else:
+        qualification.update(
+            source_update_identity_sha256=plan["artifact"]["source_update_identity_sha256"],
+            reload_acceptance_receipt_sha256=plan["artifact"]["reload_acceptance_receipt_sha256"],
+            staged_manifest_sha256=plan["artifact"]["staged_manifest_sha256"],
+        )
     signed = {**qualification, "receipt_sha256": digest_json(qualification)}
     _once(output, signed)
     return signed

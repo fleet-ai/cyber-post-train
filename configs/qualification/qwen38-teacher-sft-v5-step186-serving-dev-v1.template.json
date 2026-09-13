@@ -1,0 +1,27 @@
+{
+  "schema": "cyber_sft_serving_dev_config_v1",
+  "name": null,
+  "output_root": null,
+  "base_registration": {
+    "path": null,
+    "file_sha256": "sha256:43e586e505887e00251362e580a8cf8f0fe8b4c303d6447f7d0839a134db35d0"
+  },
+  "export": {
+    "path": "/mnt/sfs/jobs/chris-cyber-q38-teacher-dense-v5/hf-export-v1/EXPORT.json",
+    "file_sha256": "sha256:96b3181e05c501343c97cfe803aada6884e406c7a112e0dc6c77461f090b8bab"
+  },
+  "gpu_check": {
+    "path": "/mnt/sfs/jobs/chris-q38-teacher-sft-hfcheck-v1/GPU_CHECK.json",
+    "file_sha256": "sha256:7fbfcfe16875722012cc2654d979545e22aa1fdca093987495dfff65173dfd8e"
+  },
+  "dev_sfs": {
+    "namespace": "fleet-train-jobs",
+    "pvc_name": null,
+    "pvc_uid": null,
+    "mount_root": "/mnt/sfs"
+  },
+  "cluster": {
+    "target": "dev",
+    "priority": "c1"
+  }
+}

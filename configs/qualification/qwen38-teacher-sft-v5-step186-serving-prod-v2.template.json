@@ -1,0 +1,28 @@
+{
+  "schema": "cyber_exact_serving_registration_v3",
+  "base_registration": {
+    "path": null,
+    "sha256": "sha256:43e586e505887e00251362e580a8cf8f0fe8b4c303d6447f7d0839a134db35d0"
+  },
+  "export": {
+    "path": "/mnt/sfs/jobs/chris-cyber-q38-teacher-dense-v5/hf-export-v1/EXPORT.json",
+    "sha256": "sha256:96b3181e05c501343c97cfe803aada6884e406c7a112e0dc6c77461f090b8bab"
+  },
+  "gpu_check": {
+    "path": "/mnt/sfs/jobs/chris-q38-teacher-sft-hfcheck-v1/GPU_CHECK.json",
+    "sha256": "sha256:7fbfcfe16875722012cc2654d979545e22aa1fdca093987495dfff65173dfd8e"
+  },
+  "staging": {
+    "path": null,
+    "sha256": null
+  },
+  "storage": {
+    "namespace": "inference",
+    "pvc_name": null,
+    "pvc_uid": null,
+    "staged_root": null,
+    "source_path": null
+  },
+  "model_id": "chris-q38-teacher-sft-v5-step186-v1",
+  "display_name": "Qwen3.8-27B stronger-teacher SFT V5 step 186"
+}
