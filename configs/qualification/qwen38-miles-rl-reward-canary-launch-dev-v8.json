@@ -1,0 +1,108 @@
+{
+  "schema": "cyber_miles_dev_canary_launch_v1",
+  "status": "configuration_only_unsubmitted",
+  "cluster_target": "dev",
+  "data_config": "configs/qualification/qwen38-miles-rl-reward-canary-data-dev-v8.json",
+  "run_config": "configs/qualification/qwen38-miles-rl-reward-canary-dev-v8.json",
+  "identities": {
+    "run_name": "chris-q38-miles-rlreward-dev8",
+    "cyber_run_id": "chris-q38-miles-rlreward-dev8",
+    "data_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev8-v1/data",
+    "prepared_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-preflight-dev8-v1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev8",
+    "wandb_run_id": "chris-q38-miles-rlreward-dev8"
+  },
+  "supersedes": {
+    "run_name": "chris-q38-miles-rlreward-dev7",
+    "api_run_name": "chris-q38-miles-rlreward-dev7-fa5c7491",
+    "api_run_id": "fa5c7491-a778-4ac8-965c-82d37be70b4c",
+    "rayjob_uid": "11bc3141-6261-49d5-98f4-a98f95ecf2d5",
+    "workload_uid": "1a73677b-0161-4502-acc1-0ac94c1ce75c",
+    "terminal_receipt": {
+      "path": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev7/NATIVE_REJECTED.json",
+      "file_sha256": "sha256:8f4d524da088e0db2ee086d8cbf2085799530e7b8899e601b417477bb7e0fa4a",
+      "self_digest_valid": true,
+      "status": "rejected",
+      "reason": "generation_incomplete_length"
+    },
+    "scientific_accounting": {
+      "accepted_reward_batches": 0,
+      "optimizer_updates": 0,
+      "checkpoints": 0,
+      "training_accepted": false
+    },
+    "release": {
+      "jobs_api_delete_calls": 1,
+      "jobs_api_delete_status": 204,
+      "api_absent": true,
+      "rayjob_absent": true,
+      "workload_absent": true,
+      "raycluster_absent": true,
+      "gpu_pods_absent": true,
+      "evidence_preserved": true
+    }
+  },
+  "scientific_delta": {
+    "field": "limits.max_tokens_per_turn",
+    "from": 4096,
+    "to": 8192,
+    "reason": "The predecessor ended before reward or optimization because one model turn reached the 4096-token generation cap.",
+    "all_other_data_model_task_split_harness_reward_and_training_fields_unchanged": true
+  },
+  "source": {
+    "minimum_tool_result_fix_commit": "43d324891afd6c83b933c8343a0f4ed3b050511f",
+    "data_build_mode": "fresh_authoritative_gets",
+    "old_data_reused": false,
+    "filtered_task_set_subset": true
+  },
+  "parity": {
+    "optimizer_updates": 1,
+    "total_train_samples": 8,
+    "dynamic_max_tokens_per_gpu": 8192,
+    "learning_rate": 2e-06,
+    "kl_loss_coefficient": 0.001,
+    "rollout_temperature": 0.7,
+    "tool_result_chars": 4000,
+    "parallelism": {
+      "tensor": 4,
+      "pipeline": 1,
+      "context": 2,
+      "sequence_parallel": true
+    },
+    "recompute": {
+      "granularity": "full",
+      "method": "uniform",
+      "layers": 1
+    },
+    "resources": {
+      "cpu_request": "32",
+      "cpu_limit": "32",
+      "memory_request": "1800Gi",
+      "memory_limit": "2400Gi"
+    }
+  },
+  "jobs_api_constraints": {
+    "priority_request": "c1",
+    "rendered_queue_priority": "q1",
+    "effective_priority": 10000,
+    "maximum_allowed_priority": "c1",
+    "requeue_if_preempted": false,
+    "current_rendered_shared_memory": "64Gi"
+  },
+  "required_gates": [
+    "dev7_digest_valid_rejection_and_release_evidence_pass",
+    "only_generation_cap_and_create_once_identities_change",
+    "generic_filtered_subset_self_digests_and_membership_pass",
+    "exact_image_focused_tests_pass",
+    "fresh_authoritative_data_build_passes",
+    "immutable_source_bundle_digest_valid",
+    "cpu_preflight_passes",
+    "native_argument_builder_emits_8192_tokens_per_turn",
+    "native_parser_observes_8192_tokens_per_turn_or_gpu_submission_stays_closed",
+    "jobs_api_preview_matches_one_8_gpu_c1_worker",
+    "fresh_api_output_wandb_and_journal_identities",
+    "authoritative_reward_and_one_update_evidence",
+    "step_1_native_checkpoint_and_policy_delta_evidence",
+    "terminal_resource_release_evidence"
+  ]
+}

@@ -1,0 +1,151 @@
+{
+  "schema": "cyber_qwen38_miles_rlreward_dev8_offline_final_audit_v1",
+  "recorded_at": "2026-09-14T11:21:30Z",
+  "classification": "offline_contract_qualified_live_submission_gates_required",
+  "source": {
+    "audited_history_commit": "4fa7b8190ae6b209d0c28f2de5cf3a98642e9fad",
+    "exact_request_source_commit": "d586bfb135973a5687ddb7c9a515eb5bd6dbd9d7",
+    "data_config": {
+      "path": "configs/qualification/qwen38-miles-rl-reward-canary-data-dev-v8.json",
+      "file_sha256": "sha256:c33483af346afd794237a4637f2a54d377ec87151d0efea8071fc66f2573c205"
+    },
+    "run_config": {
+      "path": "configs/qualification/qwen38-miles-rl-reward-canary-dev-v8.json",
+      "file_sha256": "sha256:2bb1a8db017d0aeb5841caaf491b4fb17a74e78bb7bb0c4b8e9f481eb52ce0c7"
+    },
+    "launch_contract": {
+      "path": "configs/qualification/qwen38-miles-rl-reward-canary-launch-dev-v8.json",
+      "file_sha256": "sha256:ddea71016eb14d3a7644bbd3f50bd608dfb01151c2426df4d78afdd9d9100798"
+    },
+    "prepared_plan": {
+      "file_sha256": "sha256:bcc9efb26847d4d946a13a53eb8b0a800e14945c38f5932b74acad1e54b0d588",
+      "canonical_sha256": "sha256:e9c21c3d32116f57533b307f580b457303c951d8e0007f7695d448cc7320bea6"
+    },
+    "prepared_request": {
+      "file_sha256": "sha256:9e67d15414e6f8af62d3379bea4403be390a6177b492d3cb04e5288f62649b80",
+      "canonical_sha256": "sha256:6c5d4396896ec9098c16b957ddcfa623ea12cea50ea010242f53b432772fa245",
+      "runtime_source_sha256": "sha256:d9164c4cb67e88116ebf2d7e56b130f864ea4c975d1f67ad6a98d049752a022e",
+      "runtime_bundle_sha256": "sha256:be46c1a1369de2681499aa80e751aff78f85d027a36a2faf288d52dd35718934",
+      "reconstructed_byte_for_byte_from_exact_source": true
+    }
+  },
+  "static_validation": {
+    "prepared_request_reopened_and_source_bound": true,
+    "prepared_directory_receipt_recreated_and_validated": true,
+    "current_request_validator_accepts_exact_request": true,
+    "exact_image_native_parser_receipt_digest_valid": true,
+    "exact_image_native_parser_observed_tokens_per_turn": 8192,
+    "exact_image_native_parser_executed_training_or_rollouts": false,
+    "zero_gpu_exact_image_preflight_receipt_digest_valid": true,
+    "focused_non_torch_tests_passed": true,
+    "ruff_passed": true,
+    "compileall_passed": true,
+    "torch_dependent_checkpoint_tests_run_locally": false,
+    "torch_dependent_checkpoint_test_limit": "The desktop test environment has no torch; checkpoint and reload contracts remain covered by static tests and require their pinned-image live gates after training."
+  },
+  "historical_qualification_provenance": {
+    "dev7_terminal_release_evidence_file_sha256": "sha256:fc4fe44d3a8f581d894e34c82e38620e8ccff9252631b5a7bc2ed98cbaaace0a",
+    "dev7_terminal_receipt_sha256": "sha256:8f4d524da088e0db2ee086d8cbf2085799530e7b8899e601b417477bb7e0fa4a",
+    "dev8_zero_gpu_preflight_evidence_file_sha256": "sha256:3658519f604be4b0041459abd737ad547298cfa428890e033c42278b979ca1ab",
+    "dev8_zero_gpu_preflight_receipt_sha256": "sha256:1bfa05bbef39732a7256bff01884260fc1042d3ad7cd45fc3c11bd3a52cc8ad4",
+    "dev8_parser_acceptance_evidence_file_sha256": "sha256:992a68194b1ebf480c38142def318a4a0db18d097b97f9d32c1af7675369c5ec",
+    "dev8_parser_acceptance_evidence_self_sha256": "sha256:79ecc242ccbc2f1d110d6483087b29122bc754ce40bebaffeca8bf570753e3ba",
+    "dev8_parser_receipt_sha256": "sha256:e19d31ec7886c147a94cc042ee906773d9c391190a00fe7bd1702b6b9b31d4db",
+    "dev8_auth_gate_evidence_file_sha256": "sha256:a3dc74561d7152a74d2108fc6e2e13bfddc51cfc7d634f2bbf0b6d81d9d71966",
+    "dev8_auth_gate_evidence_self_sha256": "sha256:866325677642da3d1263a28c3eae9bf19db5bd3884d2d8b7b235b0a2b4c06200"
+  },
+  "scientific_contract": {
+    "model": "Qwen/Qwen3.8-27B",
+    "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "initial_checkpoint_optimizer_steps": 0,
+    "train_tasks": 1,
+    "dev_tasks": 1,
+    "train_and_dev_lineages_disjoint": true,
+    "train_task_has_historical_nonzero_reward_prior": true,
+    "task_versions_and_verifiers_revalidated_at_episode_runtime": true,
+    "required_tools_in_order": [
+      "bash",
+      "submit_report"
+    ],
+    "optimizer_steps": 1,
+    "train_groups": 1,
+    "samples_per_group": 8,
+    "learning_rate": 0.000002,
+    "temperature": 0.7,
+    "kl_loss_coefficient": 0.001,
+    "max_tokens_per_turn": 8192,
+    "context_tokens": 98304,
+    "response_tokens": 81920,
+    "checkpoint_interval": 1,
+    "eval_interval": 1
+  },
+  "execution_contract": {
+    "cluster": "dev",
+    "priority_request": "c1",
+    "last_validated_rendered_queue": "q1",
+    "last_validated_effective_priority": 10000,
+    "workers": 1,
+    "gpus_per_worker": 8,
+    "total_gpus": 8,
+    "automatic_requeue": false,
+    "immutable_image_digest": true,
+    "named_secrets_only": [
+      "fleet-api",
+      "wandb-api"
+    ],
+    "secret_values_in_request": false,
+    "wandb_mode": "online",
+    "wandb_run_id_matches_run_name": true
+  },
+  "failure_and_acceptance_contract": {
+    "predecessor_may_not_be_retried": true,
+    "predecessor_reason": "generation_incomplete_length",
+    "predecessor_optimizer_updates": 0,
+    "predecessor_resources_released": true,
+    "budget_rejection_is_zero_exit_but_never_training_acceptance": true,
+    "unexpected_runtime_failure_is_nonzero_and_never_auto_retried": true,
+    "authoritative_reward_required": true,
+    "positive_train_reward_and_within_group_variance_required": true,
+    "finite_loss_and_positive_finite_gradient_required": true,
+    "named_policy_tensor_value_delta_required": true,
+    "complete_all_rank_step_1_checkpoint_required": true,
+    "scalar_only_wandb_observation_required": true,
+    "separate_zero_update_all_rank_reload_required_for_promotion": true,
+    "confirmed_episode_and_cluster_resource_release_required": true
+  },
+  "create_once_contract": {
+    "fresh_run_name": "chris-q38-miles-rlreward-dev8",
+    "fresh_output_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev8",
+    "fresh_wandb_run_id": "chris-q38-miles-rlreward-dev8",
+    "prepared_receipt_required": true,
+    "preflight_receipt_required": true,
+    "submission_journal_must_be_absent_before_post": true,
+    "api_output_wandb_and_journal_absence_must_be_rechecked_live": true,
+    "maximum_jobs_api_posts": 1
+  },
+  "readiness": {
+    "scientific_and_static_runtime_contract_ready": true,
+    "direct_submission_without_live_rechecks_ready": false,
+    "ready_for_one_post_login_dev_training_submission_after_all_live_gates": true,
+    "production_submission_authorized": false,
+    "reason_not_directly_ready": "Authentication lifetime, current dev render and capacity, fresh create-once identities, and the exact prepared/preflight receipt set are live state and must be reopened immediately before the only POST."
+  },
+  "remaining_live_only_gates": [
+    "fresh Nebius authentication that covers baseline dev, eight train episodes, after-training dev, checkpoint sealing, reload validation and release reconciliation",
+    "reopen the exact plan, request and matching PREPARED.json bytes",
+    "reopen or rerun the exact-image zero-GPU preflight and verify its complete digest-bound receipt",
+    "reconfirm the accepted native parser receipt for the exact plan",
+    "confirm the dev Jobs API render is one worker with eight GPUs at c1/q1 and no automatic requeue",
+    "confirm the API run name, output root, W&B run ID and submission journal are all absent",
+    "confirm one whole eight-GPU dev node fits and the owned-node cap remains satisfied",
+    "perform exactly one Jobs API POST and preserve the submission journal"
+  ],
+  "privacy": {
+    "prompts_or_traces_recorded_here": false,
+    "flags_or_answers_recorded_here": false,
+    "raw_rewards_or_scores_recorded_here": false,
+    "credentials_recorded_here": false,
+    "private_logs_recorded_here": false
+  },
+  "sha256": "sha256:0e09780f6428a904833c588db17ee2fb9a0e6a75fe013689d6ac2628f3ec8666"
+}
