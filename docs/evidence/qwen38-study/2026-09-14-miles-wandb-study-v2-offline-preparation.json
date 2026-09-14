@@ -1,0 +1,116 @@
+{
+  "schema": "cyber_qwen38_miles_wandb_study_v2_offline_preparation_v1",
+  "status": "prepared_inert_not_launchable",
+  "prepared_from_commit": "03764122",
+  "purpose": "Prepare an additive future Miles runtime and configuration revision that closes WBA-001 and WBA-004 without changing or reinterpreting the qualified Dev8 bytes.",
+  "method": {
+    "cluster_calls": 0,
+    "jobs_api_calls": 0,
+    "live_wandb_calls": 0,
+    "private_data_reads": 0,
+    "secrets_read": 0,
+    "submissions": 0
+  },
+  "bound_files": {
+    "wandb_contract_audit": {
+      "path": "docs/evidence/qwen38-study/2026-09-14-wandb-training-contract-audit-v1.json",
+      "file_sha256": "sha256:f5ce4fe97e3f7cfa9801f09204fa3c92c8a66b4896366139cef774ebb6d643eb"
+    },
+    "v2_wandb_adapter": {
+      "path": "training/miles_wandb.py",
+      "file_sha256": "sha256:dd2bfad800e5e56e22ef0f2eb8ac05b215e1bc831f22f252286245004f59e9e5"
+    },
+    "v2_compiler_runtime": {
+      "path": "training/miles_study_training.py",
+      "file_sha256": "sha256:0997709a114b41d79d44f890dbcab06ef867515e385f80c9fc52c211f6e91b4a"
+    },
+    "v2_inert_template": {
+      "path": "configs/qualification/qwen38-miles-wandb-study-dev-v9.template.json",
+      "file_sha256": "sha256:e7a11b5b847bb5954436ef0dd936616001c928afcf9e10b119244228a0e09bef"
+    },
+    "v2_tests": {
+      "path": "tests/test_qwen38_miles_wandb_study_v2.py",
+      "file_sha256": "sha256:e09b2d47260acbd606ffe55ebc0606e4d749c367e18507b3cd9ef2581a013bdc"
+    },
+    "dev8_config_unchanged": {
+      "path": "configs/qualification/qwen38-miles-rl-reward-canary-dev-v8.json",
+      "file_sha256": "sha256:2bb1a8db017d0aeb5841caaf491b4fb17a74e78bb7bb0c4b8e9f481eb52ce0c7"
+    },
+    "dev8_launch_unchanged": {
+      "path": "configs/qualification/qwen38-miles-rl-reward-canary-launch-dev-v8.json",
+      "file_sha256": "sha256:ddea71016eb14d3a7644bbd3f50bd608dfb01151c2426df4d78afdd9d9100798"
+    },
+    "dev8_arguments_source_unchanged": {
+      "path": "training/miles.py",
+      "file_sha256": "sha256:6b81894c81f7610e1af394a3d0a84304462a01eb056d8810cdcc72918ffe8b21"
+    },
+    "dev8_compiler_source_unchanged": {
+      "path": "training/miles_training.py",
+      "file_sha256": "sha256:c963e9d71599450c3b44fff47abc9a2a0a41311990586ce555ab600edf6dc227"
+    },
+    "dev8_acceptance_source_unchanged": {
+      "path": "training/miles_acceptance.py",
+      "file_sha256": "sha256:3524e9e3e7c6b52bee46adf0ebbd62c71efe175df40ff9bcec82d8e2696834d1"
+    }
+  },
+  "runtime_contract": {
+    "additive_module": "training.miles_study_training",
+    "runtime_sha256": "sha256:91052491c17bd2d1bd44f2270dcbfa7bef9575c0ba16ad7b6adcde1b3ccbb414",
+    "stable_study_group": "q38-fleet-rl-study-a-v1",
+    "fresh_unique_identity_per_run": true,
+    "explicit_fields": [
+      "entity",
+      "project",
+      "group",
+      "run_id",
+      "name",
+      "job_type",
+      "tags"
+    ],
+    "resume": "WANDB_RESUME=never; the primary SDK initialization also passes resume=never. Secondary distributed writers may join only that active exact ID with resume=allow.",
+    "remote_config": "The full immutable experiment-plan SHA-256 and W&B-contract SHA-256 are explicit sanitized remote config fields and are repeated in the local create-once receipt.",
+    "automatic_system_telemetry": false,
+    "history_keys": [
+      "train/step",
+      "train/loss",
+      "train/grad_norm",
+      "train/lr-pg_0",
+      "tokens/rollout_step",
+      "tokens/response_tokens",
+      "tokens/total_response_tokens"
+    ],
+    "axes": {
+      "optimizer": "train/step",
+      "token_exposure": "tokens/total_response_tokens"
+    },
+    "excluded": "All other native metrics, including rewards, scores, success/pass rates, eval metrics, task text, prompts, responses, traces, rich payloads, and artifacts."
+  },
+  "gates": {
+    "dev8_bytes_changed": false,
+    "dev8_acceptance_required": true,
+    "dev8_all_rank_zero_update_reload_required": true,
+    "fresh_v2_native_image_import_and_parser_qualification_required": true,
+    "fresh_v2_offline_wandb_sdk_self_test_required": true,
+    "fresh_v2_zero_gpu_cpu_preflight_required": true,
+    "fresh_dev_qualification_required": true,
+    "fresh_v2_dev_one_update_terminal_acceptance_required": true,
+    "fresh_v2_all_rank_zero_update_reload_required": true,
+    "production_authorized": false
+  },
+  "required_order": [
+    "Accept Dev8 reward variance, policy update, checkpoint, and terminal evidence under the existing exact Dev8 contract.",
+    "Pass the exact Dev8 all-rank zero-update checkpoint reload.",
+    "Freeze one complete v2 plan and regenerate its plan, request, and runtime digests.",
+    "Run pinned-image import/parser and offline W&B SDK tests, then the zero-GPU CPU preflight.",
+    "After warning-free c1 Dev preview and create-once absence/capacity gates, run one bounded fresh Dev v2 update.",
+    "Accept its terminal evidence and pass a fresh exact all-rank zero-update reload.",
+    "Only then materialize a comparative successor; production still requires a separate promotion decision."
+  ],
+  "tests": {
+    "ruff": "uv run ruff check training/miles_wandb.py training/miles_study_training.py tests/test_qwen38_miles_wandb_study_v2.py",
+    "ruff_result": "passed",
+    "pytest": "pytest -q tests/test_qwen38_miles_wandb_study_v2.py tests/test_qwen38_wandb_training_contract_audit.py",
+    "pytest_result": "15 passed"
+  },
+  "sha256": "sha256:a08c38785bc7599a23a816ee64fa4381acc9d0cc543718b2b50d69907550c05c"
+}
