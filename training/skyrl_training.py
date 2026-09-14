@@ -67,6 +67,9 @@ DEV8_ENGINE_IMAGE_CPU_QUALIFICATION = {
 DEV_KUBERNETES_CONTEXT = "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb"
 DEV_KUBERNETES_NAMESPACE = "fleet-train-jobs"
 DEV_KUBERNETES_NAMESPACE_UID = "10394b76-e1d4-40b1-a8e2-7575e95df216"
+PROD_KUBERNETES_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
+PROD_KUBERNETES_NAMESPACE = "fleet-train-jobs"
+PROD_KUBERNETES_NAMESPACE_UID = "fd6d2fcd-687a-4257-9dba-a034bb381e6b"
 ENGINE_DIAGNOSTIC_SOURCE_COMMIT = "6724567675252c2010ca6830a27d5c33ce562afc"
 ENGINE_DIAGNOSTIC_PLAN_FILE_SHA256 = (
     "sha256:ae3648c649e768a7c41d2d067e7b39b3ab5bd85af8095e4976950a0c9849fb3b"
@@ -154,6 +157,15 @@ ENGINE_DIAGNOSTIC_CURRENT_CONFIG_FILE_SHA256 = (
 )
 ENGINE_DIAGNOSTIC_CURRENT_DATA_CONFIG_FILE_SHA256 = (
     "sha256:b95b896a0cee0813751d63d939d73580598d51dc25e06142bfb6cfbae9244dbf"
+)
+ENGINE_DIAGNOSTIC_PROD_CONFIG_NAME = "chris-q38-rldiag-prod1"
+ENGINE_DIAGNOSTIC_PROD_WANDB_RUN_ID = ENGINE_DIAGNOSTIC_PROD_CONFIG_NAME
+ENGINE_DIAGNOSTIC_PROD_OUTPUT_ROOT = "/mnt/sfs/jobs/chris-q38-rldiag-prod1"
+ENGINE_DIAGNOSTIC_PROD_DATA_ROOT = (
+    "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rldiag-inputs-prod1/data"
+)
+ENGINE_DIAGNOSTIC_PROD_PREPARED_ROOT = (
+    "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rldiag-inputs-prod1/prepared-v1"
 )
 ENGINE_DIAGNOSTIC_MODEL_SHA256 = "dcfdcd6ecb6661741cd3a4b24dc5af7259642c8a6824773e0de70d55d7501179"
 ENGINE_DIAGNOSTIC_DATA_IDENTITY = {
@@ -403,6 +415,107 @@ _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-
 _SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 
 
+def is_prod_engine_diagnostic(plan: object) -> bool:
+    """Recognize only the authorized c1 prod fallback for the queued dev11 gate."""
+    if not isinstance(plan, Mapping):
+        return False
+    arguments = plan.get("arguments")
+    data = plan.get("data")
+    execution = plan.get("execution")
+    arguments = arguments if isinstance(arguments, Mapping) else {}
+    data = data if isinstance(data, Mapping) else {}
+    execution = execution if isinstance(execution, Mapping) else {}
+    expected_args = {
+        "name": ENGINE_DIAGNOSTIC_PROD_CONFIG_NAME,
+        "output_root": ENGINE_DIAGNOSTIC_PROD_OUTPUT_ROOT,
+        "model": "Qwen/Qwen3.8-27B",
+        "model_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+        "train_data": ENGINE_DIAGNOSTIC_PROD_DATA_ROOT + "/train.jsonl",
+        "dev_data": ENGINE_DIAGNOSTIC_PROD_DATA_ROOT + "/dev.jsonl",
+        "data_manifest": ENGINE_DIAGNOSTIC_PROD_DATA_ROOT + "/manifest.json",
+        "train_rows": 2,
+        "dev_rows": 1,
+        "wandb_entity": "thefleet",
+        "wandb_project": "cyber-post-train",
+        "wandb_run_id": ENGINE_DIAGNOSTIC_PROD_WANDB_RUN_ID,
+        "context_tokens": 98304,
+        "response_tokens": 81920,
+        "tokens_per_turn": 4096,
+        "max_turns": 80,
+        "nodes": 1,
+        "steps": 1,
+        "groups": 2,
+        "samples_per_prompt": 4,
+        "lr": 1e-6,
+        "eval_interval": 1,
+        "checkpoint_interval": 1,
+        "keep_checkpoints": 2,
+        "seed": 42,
+        "engine_start_timeout_seconds": 1800,
+        "engine_cleanup_timeout_seconds": 300,
+    }
+    expected_execution = {
+        "image": IMAGE,
+        "image_cpu_qualification": ENGINE_IMAGE_CPU_QUALIFICATION,
+        "cluster_target": "prod",
+        "priority": "c1",
+        "resources": {
+            "cpu_request": "64",
+            "cpu_limit": "64",
+            "memory_request": "512Gi",
+            "memory_limit": "768Gi",
+        },
+    }
+    markers = (
+        plan.get("run_name"),
+        arguments.get("name"),
+        data.get("name"),
+        arguments.get("wandb_run_id"),
+        plan.get("output_root"),
+        arguments.get("output_root"),
+        arguments.get("train_data"),
+        arguments.get("dev_data"),
+        arguments.get("data_manifest"),
+    )
+    expected_markers = (
+        ENGINE_DIAGNOSTIC_PROD_CONFIG_NAME,
+        ENGINE_DIAGNOSTIC_PROD_CONFIG_NAME,
+        ENGINE_DIAGNOSTIC_PROD_CONFIG_NAME,
+        ENGINE_DIAGNOSTIC_PROD_WANDB_RUN_ID,
+        ENGINE_DIAGNOSTIC_PROD_OUTPUT_ROOT,
+        ENGINE_DIAGNOSTIC_PROD_OUTPUT_ROOT,
+        ENGINE_DIAGNOSTIC_PROD_DATA_ROOT + "/train.jsonl",
+        ENGINE_DIAGNOSTIC_PROD_DATA_ROOT + "/dev.jsonl",
+        ENGINE_DIAGNOSTIC_PROD_DATA_ROOT + "/manifest.json",
+    )
+    if not any(value == expected for value, expected in zip(markers, expected_markers)):
+        return False
+    files = data.get("files") if isinstance(data.get("files"), Mapping) else {}
+    if (
+        tuple(markers) != expected_markers
+        or arguments != expected_args
+        or execution != expected_execution
+        or digest(plan.get("model")) != ENGINE_DIAGNOSTIC_MODEL_SHA256
+        or any(
+            data.get(key) != value
+            for key, value in ENGINE_DIAGNOSTIC_DATA_IDENTITY.items()
+            if key != "tokenizer_sha256"
+        )
+        or digest(data.get("tokenizer")) != ENGINE_DIAGNOSTIC_DATA_IDENTITY["tokenizer_sha256"]
+        or not _exact_integer(data.get("gpus"), 0)
+        or not _exact_integer(data.get("environment_creates"), 0)
+        or set(files) != {"train", "dev"}
+        or any(
+            not isinstance(files.get(split), Mapping)
+            or files[split].get("path") != split + ".jsonl"
+            or not _exact_integer(files[split].get("rows"), rows)
+            for split, rows in (("train", 2), ("dev", 1))
+        )
+    ):
+        raise ValueError("prod1 engine diagnostic identity is incomplete or mixed")
+    return True
+
+
 def _require_fresh_engine_diagnostic_identity(plan: object) -> None:
     """Retire dev8-dev10 and reject partial reuse of the fresh dev11 identity."""
     if not isinstance(plan, Mapping):
@@ -519,6 +632,7 @@ def _require_fresh_engine_diagnostic_identity(plan: object) -> None:
             or resources != exact_resources
         ):
             raise ValueError("dev11 identity is incomplete or mixed")
+    is_prod_engine_diagnostic(plan)
 
 
 def _engine_evidence_root() -> Path:
@@ -1909,6 +2023,12 @@ def validate_engine_diagnostic_preview(plan: dict, request: dict, preview: dict)
 
     if request != engine_diagnostic_request(plan):
         raise JobsError("engine diagnostic preview request differs from its exact plan")
+    target = plan.get("execution", {}).get("cluster_target")
+    if target == "prod" and not is_prod_engine_diagnostic(plan):
+        raise JobsError("production engine diagnostic is not the exact authorized fallback")
+    expected_namespace = (
+        PROD_KUBERNETES_NAMESPACE if target == "prod" else DEV_KUBERNETES_NAMESPACE
+    )
     try:
         obj = yaml.safe_load(preview["manifest_yaml"])
         cluster = obj["spec"]["rayClusterSpec"]
@@ -1935,7 +2055,7 @@ def validate_engine_diagnostic_preview(plan: dict, request: dict, preview: dict)
                 raise JobsError("engine diagnostic preview runtime user differs from 1000:100")
             pods += replicas
         if (
-            obj["metadata"]["namespace"] != DEV_KUBERNETES_NAMESPACE
+            obj["metadata"]["namespace"] != expected_namespace
             or pods != ENGINE_DIAGNOSTIC_WORKERS
             or request.get("workers") != ENGINE_DIAGNOSTIC_WORKERS
             or request.get("gpus_per_worker") != ENGINE_DIAGNOSTIC_GPUS_PER_WORKER

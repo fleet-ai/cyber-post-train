@@ -228,6 +228,8 @@ def _validate_engine_diagnostic_preview(plan: dict, request: dict, preview_resul
         ENGINE_DIAGNOSTIC_WORKERS,
         ENGINE_IMAGE_CPU_QUALIFICATION,
         IMAGE,
+        PROD_KUBERNETES_NAMESPACE,
+        is_prod_engine_diagnostic,
         validate_engine_diagnostic_preview,
     )
 
@@ -240,10 +242,16 @@ def _validate_engine_diagnostic_preview(plan: dict, request: dict, preview_resul
 
     qualified = _ENGINE_DIAGNOSTIC_ABSENT_RUNTIME_CONTEXT_QUALIFICATION
     execution = plan.get("execution", {})
+    prod_fallback = is_prod_engine_diagnostic(plan)
     if (
-        plan.get("run_name") != ENGINE_DIAGNOSTIC_CURRENT_CONFIG_NAME
-        or plan.get("output_root") != ENGINE_DIAGNOSTIC_CURRENT_OUTPUT_ROOT
-        or execution.get("cluster_target") != "dev"
+        not (
+            prod_fallback
+            or (
+                plan.get("run_name") == ENGINE_DIAGNOSTIC_CURRENT_CONFIG_NAME
+                and plan.get("output_root") == ENGINE_DIAGNOSTIC_CURRENT_OUTPUT_ROOT
+                and execution.get("cluster_target") == "dev"
+            )
+        )
         or execution.get("image") != qualified["image"]
         or execution.get("image_cpu_qualification") != ENGINE_IMAGE_CPU_QUALIFICATION
         or request.get("image") != qualified["image"]
@@ -307,6 +315,9 @@ def _validate_engine_diagnostic_preview(plan: dict, request: dict, preview_resul
         raise JobsError("absent engine diagnostic runtime user requires the exact qualified image")
 
     expected = {"runAsUser": 1000, "runAsGroup": 100, "runAsNonRoot": True}
+    expected_namespace = (
+        PROD_KUBERNETES_NAMESPACE if prod_fallback else DEV_KUBERNETES_NAMESPACE
+    )
     try:
         obj = yaml.safe_load(preview_result["manifest_yaml"])
         cluster = obj["spec"]["rayClusterSpec"]
@@ -341,7 +352,7 @@ def _validate_engine_diagnostic_preview(plan: dict, request: dict, preview_resul
             )
             pods += replicas
         if (
-            obj["metadata"]["namespace"] != DEV_KUBERNETES_NAMESPACE
+            obj["metadata"]["namespace"] != expected_namespace
             or pods != ENGINE_DIAGNOSTIC_WORKERS
             or omitted_fields == 0
         ):
@@ -894,7 +905,12 @@ def preview(
             and _skyrl_mode(plan, request) == "engine_diagnostic"
             and cluster != Cluster.dev
         ):
-            raise JobsError("SkyRL engine diagnostics are dev-cluster-only")
+            from training.skyrl_training import is_prod_engine_diagnostic
+
+            if cluster != Cluster.prod or not is_prod_engine_diagnostic(plan):
+                raise JobsError(
+                    "SkyRL engine diagnostics are dev-only except the exact prod fallback"
+                )
         if plan.get("schema") == "cyber_skyrl_rl_reload_v1" and cluster != Cluster.dev:
             raise JobsError("SkyRL RL reload validators are dev-cluster-only")
         if plan.get("schema") in _SERVING_DEV_PLAN_SCHEMAS and cluster != Cluster.dev:
@@ -959,7 +975,12 @@ def submit(
             _skyrl_mode(plan, request) if plan.get("schema") == "cyber_skyrl_training_v1" else None
         )
         if skyrl_mode == "engine_diagnostic" and cluster != Cluster.dev:
-            raise JobsError("SkyRL engine diagnostics are dev-cluster-only")
+            from training.skyrl_training import is_prod_engine_diagnostic
+
+            if cluster != Cluster.prod or not is_prod_engine_diagnostic(plan):
+                raise JobsError(
+                    "SkyRL engine diagnostics are dev-only except the exact prod fallback"
+                )
         if plan.get("schema") == "cyber_skyrl_rl_reload_v1" and cluster != Cluster.dev:
             raise JobsError("SkyRL RL reload validators are dev-cluster-only")
         if plan.get("schema") in _SERVING_DEV_PLAN_SCHEMAS and cluster != Cluster.dev:

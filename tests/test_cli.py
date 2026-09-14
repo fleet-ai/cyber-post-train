@@ -198,7 +198,7 @@ def test_skyrl_engine_diagnostic_cannot_target_production(prepared, monkeypatch,
 
     result = RUNNER.invoke(cli.app, [command, str(output), "--cluster", "prod"])
     assert result.exit_code == 2
-    assert "dev-cluster-only" in result.stderr
+    assert "dev-only except the exact prod fallback" in result.stderr
     assert calls == []
 
 
