@@ -1,0 +1,46 @@
+{
+  "schema": "cyber_run_scheduler_release_evidence_v1",
+  "observed_at": "2026-09-14T22:55:23Z",
+  "cluster": "dev",
+  "namespace": "fleet-train-jobs",
+  "api_run": {
+    "name": "chris-q38-miles-rlreward-dev8-514a98a4",
+    "run_id": "514a98a4-1a84-4e5f-93f1-1e55989c7434",
+    "status_before_release": "Suspended"
+  },
+  "rayjob": {
+    "uid": "c0703ee5-e87c-4a2d-afc3-a49afdd3518b",
+    "suspend": true,
+    "deployment_status": "Suspended",
+    "raycluster_created": false
+  },
+  "workload": {
+    "name": "rayjob-chris-q38-miles-rlreward-dev8-514a98a4-53b3b",
+    "uid": "d74d23c3-dbab-44a5-bc9b-1690a653abd1",
+    "quota_reserved_at": "2026-09-14T22:19:29Z",
+    "evicted_at": "2026-09-14T22:49:29Z",
+    "eviction_reason": "PodsReadyTimeout",
+    "pods_ready": false,
+    "admission_still_present_before_release": true
+  },
+  "scientific_accounting": {
+    "pods_created": 0,
+    "rollouts": 0,
+    "rewards": 0,
+    "optimizer_updates": 0,
+    "checkpoints": 0,
+    "training_accepted": false
+  },
+  "classification": "infrastructure_invalid_scheduler_contract",
+  "release": {
+    "requested_through_jobs_api": true,
+    "delete_http_status": 204,
+    "delete_calls": 1,
+    "api_absent": true,
+    "rayjob_absent": true,
+    "workload_absent": true,
+    "raycluster_absent": true,
+    "owned_gpu_pods_absent": true,
+    "verified_at": "2026-09-14T22:56:04Z"
+  }
+}

@@ -166,6 +166,46 @@ def test_reward_canary_config_is_c1_without_an_override_reason() -> None:
             miles_promotion._exact_reward_canary_config(changed)
 
 
+def test_reward_canary_v2_preserves_dev8_science_with_fresh_prod_identities() -> None:
+    data_path = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-data-prod-v2.json"
+    run_path = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-prod-v2.json"
+    data, config = json.loads(data_path.read_text()), json.loads(run_path.read_text())
+
+    miles_promotion._exact_reward_canary_config(config)
+    assert data["name"] == config["name"] == config["wandb"]["run_id"]
+    assert config["name"] == miles_promotion.PROD_REWARD_CANARY_V2_NAME
+    assert config["output_root"] == miles_promotion.PROD_REWARD_CANARY_V2_OUTPUT
+    assert data["output"] == miles_promotion.PROD_REWARD_CANARY_V2_DATA_ROOT
+    assert data["limits"] == miles_promotion.EXPECTED_REWARD_CANARY_V2_DATA["limits"]
+    assert data["limits"]["max_tokens_per_turn"] == 8192
+    assert data["limits"]["tool_result_chars"] == 4000
+    assert config["recipe"] == {
+        "nodes": 1,
+        "gpus_per_node": 8,
+        "steps": 1,
+        "groups": 1,
+        "samples_per_prompt": 8,
+        "lr": 2e-6,
+        "temperature": 0.7,
+        "kl_loss_coef": 0.001,
+        "max_tokens_per_gpu": 8192,
+        "eval_interval": 1,
+        "checkpoint_interval": 1,
+        "seed": 42,
+    }
+    assert config["cluster"] == {
+        "target": "prod",
+        "priority": "c1",
+        "resources": miles_promotion.PROD_REWARD_CANARY_RESOURCES,
+    }
+    assert config["production_promotion"] == {"mode": miles_promotion.PROD_REWARD_CANARY_V2_MODE}
+
+    changed = copy.deepcopy(config)
+    changed["recipe"]["steps"] = 2
+    with pytest.raises(ValueError, match="exact one-update arm"):
+        miles_promotion._exact_reward_canary_config(changed)
+
+
 def test_reward_canary_preview_requires_c1_without_an_override_reason(monkeypatch) -> None:
     from cyber_post_train import jobs
 

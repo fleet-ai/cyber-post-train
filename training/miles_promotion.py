@@ -32,6 +32,16 @@ PROD_REWARD_CANARY_RESOURCES = {
     "memory_request": "1800Gi",
     "memory_limit": "2400Gi",
 }
+PROD_REWARD_CANARY_V2_MODE = "reward_canary_v2"
+PROD_REWARD_CANARY_V2_NAME = "chris-q38-miles-prod2-canary"
+PROD_REWARD_CANARY_V2_OUTPUT = "/mnt/sfs/jobs/chris-q38-miles-prod2-canary-v1"
+PROD_REWARD_CANARY_V2_DATA_ROOT = "/mnt/sfs/jobs/chris-q38-miles-prod2-inputs-v1/data"
+PROD_REWARD_CANARY_V2_DATA_MANIFEST = PROD_REWARD_CANARY_V2_DATA_ROOT + "/manifest.json"
+PROD_REWARD_CANARY_V2_WANDB = {
+    "entity": "thefleet",
+    "project": "cyber-post-train",
+    "run_id": PROD_REWARD_CANARY_V2_NAME,
+}
 EXPERIMENT_OWNER_PREFIX = "chris-"
 FLEET_RUN_NAME_LABEL = "fleet.ai/run-name"
 PROD_MODEL_SHA256 = "dcfdcd6ecb6661741cd3a4b24dc5af7259642c8a6824773e0de70d55d7501179"
@@ -117,6 +127,23 @@ EXPECTED_DATA = {
         "tool_result_chars": 50000,
     },
     "rows": {"train": 59, "dev": 20},
+}
+EXPECTED_REWARD_CANARY_V2_DATA = {
+    "name": PROD_REWARD_CANARY_V2_NAME,
+    "selection_sha256": "sha256:5d562cd8c98f3a870006e4e2fb5d52e9f35e9ffd9a23a4fbf3fd1a9aa5a6e308",
+    "split_sha256": "sha256:f0135e613a00c1727c63ecf0623122fdbc3bf3c8682aee5175c556e05a38d044",
+    "tool_catalog_sha256": EXPECTED_DATA["tool_catalog_sha256"],
+    "tokenizer": EXPECTED_DATA["tokenizer"],
+    "limits": {
+        "context_tokens": 98304,
+        "response_tokens": 81920,
+        "max_tokens_per_turn": 8192,
+        "max_turns": 600,
+        "episode_seconds": 2400,
+        "tool_seconds": 330,
+        "tool_result_chars": 4000,
+    },
+    "rows": {"train": 1, "dev": 1},
 }
 BENCHMARK_ISOLATION = {
     "optimizer_split": "train",
@@ -237,18 +264,18 @@ def _reopen(reference: Any, *, check_files: bool) -> dict[str, Any] | None:
     return value
 
 
-def _exact_data(value: Any) -> None:
+def _exact_data(value: Any, expected: dict[str, Any] = EXPECTED_DATA) -> None:
     _sealed(value, "cyber_miles_data_v1")
     files = value.get("files", {})
     if (
-        value.get("name") != EXPECTED_DATA["name"]
-        or value.get("selection_sha256") != EXPECTED_DATA["selection_sha256"]
-        or value.get("split_sha256") != EXPECTED_DATA["split_sha256"]
-        or value.get("tool_catalog_sha256") != EXPECTED_DATA["tool_catalog_sha256"]
-        or value.get("tokenizer") != EXPECTED_DATA["tokenizer"]
+        value.get("name") != expected["name"]
+        or value.get("selection_sha256") != expected["selection_sha256"]
+        or value.get("split_sha256") != expected["split_sha256"]
+        or value.get("tool_catalog_sha256") != expected["tool_catalog_sha256"]
+        or value.get("tokenizer") != expected["tokenizer"]
         or value.get("template_sha256")
         != "sha256:38d42166599348d47ded69776c5389c89924045e6827089923a031379f8a3dfe"
-        or value.get("limits") != EXPECTED_DATA["limits"]
+        or value.get("limits") != expected["limits"]
         or value.get("gpus") != 0
         or value.get("environment_creates") != 0
         or set(files) != {"train", "dev"}
@@ -256,7 +283,7 @@ def _exact_data(value: Any) -> None:
             not isinstance(files[split], dict)
             or files[split].get("path") != split + ".jsonl"
             or files[split].get("rows") != rows
-            for split, rows in EXPECTED_DATA["rows"].items()
+            for split, rows in expected["rows"].items()
         )
     ):
         raise ValueError("Miles production data differs from the exact 59/20 split")
@@ -267,7 +294,10 @@ def _candidate_without_promotion(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def _is_reward_canary_marker(value: Any) -> bool:
-    return value == {"mode": PROD_REWARD_CANARY_MODE}
+    return value in (
+        {"mode": PROD_REWARD_CANARY_MODE},
+        {"mode": PROD_REWARD_CANARY_V2_MODE},
+    )
 
 
 def _exact_reward_canary_config(config: dict[str, Any]) -> None:
@@ -286,17 +316,32 @@ def _exact_reward_canary_config(config: dict[str, Any]) -> None:
         "checkpoint_interval": 1,
         "seed": 42,
     }
+    mode = config.get("production_promotion", {}).get("mode")
+    if mode == PROD_REWARD_CANARY_MODE:
+        expected_name = PROD_NAME
+        expected_output = PROD_REWARD_CANARY_OUTPUT
+        expected_data_root = PROD_DATA_ROOT
+        expected_data_manifest = PROD_DATA_MANIFEST
+        expected_wandb = PROD_REWARD_CANARY_WANDB
+    elif mode == PROD_REWARD_CANARY_V2_MODE:
+        expected_name = PROD_REWARD_CANARY_V2_NAME
+        expected_output = PROD_REWARD_CANARY_V2_OUTPUT
+        expected_data_root = PROD_REWARD_CANARY_V2_DATA_ROOT
+        expected_data_manifest = PROD_REWARD_CANARY_V2_DATA_MANIFEST
+        expected_wandb = PROD_REWARD_CANARY_V2_WANDB
+    else:
+        raise ValueError("Miles production reward canary mode is not supported")
     if (
-        config.get("name") != PROD_NAME
-        or config.get("output_root") != PROD_REWARD_CANARY_OUTPUT
-        or config.get("data") != {"manifest": PROD_DATA_MANIFEST, "root": PROD_DATA_ROOT}
+        config.get("name") != expected_name
+        or config.get("output_root") != expected_output
+        or config.get("data") != {"manifest": expected_data_manifest, "root": expected_data_root}
         or config.get("checkpoint")
         != {
             "manifest": "/mnt/sfs/jobs/chris-cpt-cleanup-q38-miles-base-v1/NATIVE_CHECKPOINT.json",
             "sha256": "sha256:b3d772de9121f442ea7b9a4c9a996f2a0a99cab8c49fe3083c148fe3eebd089c",
         }
         or config.get("recipe") != expected_recipe
-        or config.get("wandb") != PROD_REWARD_CANARY_WANDB
+        or config.get("wandb") != expected_wandb
         or config.get("cluster")
         != {
             "target": "prod",
@@ -525,7 +570,7 @@ def bind_production_promotion(config: dict[str, Any], relative_to: Path) -> dict
     reference = config.get("production_promotion")
     if _is_reward_canary_marker(reference):
         _exact_reward_canary_config(config)
-        return {"mode": PROD_REWARD_CANARY_MODE}
+        return dict(reference)
     _exact_candidate(config)
     if not isinstance(reference, dict) or set(reference) != _REF_FIELDS:
         raise ValueError("exact Miles production promotion receipt is required")
@@ -606,18 +651,37 @@ def _exact_reward_canary_plan(plan: dict[str, Any]) -> None:
     args = plan.get("arguments", {})
     execution = plan.get("execution", {})
     checkpoint = plan.get("checkpoint", {})
+    mode = execution.get("production_promotion", {}).get("mode")
+    if mode == PROD_REWARD_CANARY_MODE:
+        name = PROD_NAME
+        output = PROD_REWARD_CANARY_OUTPUT
+        data_root = PROD_DATA_ROOT
+        data_manifest = PROD_DATA_MANIFEST
+        wandb = PROD_REWARD_CANARY_WANDB
+        tokens_per_turn = 4096
+        expected_data = EXPECTED_DATA
+    elif mode == PROD_REWARD_CANARY_V2_MODE:
+        name = PROD_REWARD_CANARY_V2_NAME
+        output = PROD_REWARD_CANARY_V2_OUTPUT
+        data_root = PROD_REWARD_CANARY_V2_DATA_ROOT
+        data_manifest = PROD_REWARD_CANARY_V2_DATA_MANIFEST
+        wandb = PROD_REWARD_CANARY_V2_WANDB
+        tokens_per_turn = 8192
+        expected_data = EXPECTED_REWARD_CANARY_V2_DATA
+    else:
+        raise ValueError("compiled Miles production reward canary mode changed")
     expected = {
-        "name": PROD_NAME,
-        "output_root": PROD_REWARD_CANARY_OUTPUT,
+        "name": name,
+        "output_root": output,
         "model_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
         "policy_identity_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
         "torch_dist_root": BASE_CHECKPOINT["root"],
-        "train_data": PROD_DATA_ROOT + "/train.jsonl",
-        "dev_data": PROD_DATA_ROOT + "/dev.jsonl",
-        "data_manifest": PROD_DATA_MANIFEST,
-        "wandb_entity": PROD_REWARD_CANARY_WANDB["entity"],
-        "wandb_project": PROD_REWARD_CANARY_WANDB["project"],
-        "wandb_run_id": PROD_REWARD_CANARY_WANDB["run_id"],
+        "train_data": data_root + "/train.jsonl",
+        "dev_data": data_root + "/dev.jsonl",
+        "data_manifest": data_manifest,
+        "wandb_entity": wandb["entity"],
+        "wandb_project": wandb["project"],
+        "wandb_run_id": wandb["run_id"],
         "model": "Qwen/Qwen3.8-27B",
         "nodes": 1,
         "gpus_per_node": 8,
@@ -633,11 +697,11 @@ def _exact_reward_canary_plan(plan: dict[str, Any]) -> None:
         "seed": 42,
         "context_tokens": 98304,
         "response_tokens": 81920,
-        "tokens_per_turn": 4096,
+        "tokens_per_turn": tokens_per_turn,
     }
     if (
-        plan.get("run_name") != PROD_NAME
-        or plan.get("output_root") != PROD_REWARD_CANARY_OUTPUT
+        plan.get("run_name") != name
+        or plan.get("output_root") != output
         or args != expected
         or checkpoint.get("schema") != "cyber_miles_checkpoint_v1"
         or checkpoint.get("optimizer_steps") != 0
@@ -652,11 +716,11 @@ def _exact_reward_canary_plan(plan: dict[str, Any]) -> None:
             "priority": "c1",
             "resources": PROD_REWARD_CANARY_RESOURCES,
             "cluster_target": "prod",
-            "production_promotion": {"mode": PROD_REWARD_CANARY_MODE},
+            "production_promotion": {"mode": mode},
         }
     ):
         raise ValueError("compiled Miles production reward canary differs from the exact arm")
-    _exact_data(plan.get("data"))
+    _exact_data(plan.get("data"), expected_data)
 
 
 def validate_embedded_promotion(plan: dict[str, Any], *, check_files: bool = True) -> bool:
@@ -724,6 +788,29 @@ def validate_production_preview(
     }
 
 
+def _reward_canary_live_identity(
+    plan: dict[str, Any],
+) -> tuple[str, str, str, dict[str, str], dict[str, Any]]:
+    mode = plan.get("execution", {}).get("production_promotion", {}).get("mode")
+    if mode == PROD_REWARD_CANARY_MODE:
+        return (
+            PROD_NAME,
+            PROD_REWARD_CANARY_OUTPUT,
+            PROD_DATA_MANIFEST,
+            PROD_REWARD_CANARY_WANDB,
+            EXPECTED_DATA,
+        )
+    if mode == PROD_REWARD_CANARY_V2_MODE:
+        return (
+            PROD_REWARD_CANARY_V2_NAME,
+            PROD_REWARD_CANARY_V2_OUTPUT,
+            PROD_REWARD_CANARY_V2_DATA_MANIFEST,
+            PROD_REWARD_CANARY_V2_WANDB,
+            EXPECTED_REWARD_CANARY_V2_DATA,
+        )
+    raise JobsError("Miles production reward canary mode changed")
+
+
 def require_live_files(plan: dict[str, Any], prepared_directory: Path) -> None:
     if not validate_embedded_promotion(plan, check_files=True):
         return
@@ -732,10 +819,13 @@ def require_live_files(plan: dict[str, Any], prepared_directory: Path) -> None:
     ).is_symlink():
         raise JobsError("Miles production submission journal already exists")
     reward_canary = _is_reward_canary_marker(plan.get("execution", {}).get("production_promotion"))
-    output = PROD_REWARD_CANARY_OUTPUT if reward_canary else PROD_OUTPUT
+    if reward_canary:
+        _, output, manifest_path, _, expected_data = _reward_canary_live_identity(plan)
+    else:
+        output, manifest_path, expected_data = PROD_OUTPUT, PROD_DATA_MANIFEST, EXPECTED_DATA
     if Path(output).exists() or Path(output).is_symlink():
         raise JobsError("Miles production output already exists")
-    manifest = Path(PROD_DATA_MANIFEST)
+    manifest = Path(manifest_path)
     if reward_canary:
         # The bounded canary deliberately has no dev-promotion receipt. Its
         # compiled plan already seals the exact parsed manifest, so reopen the
@@ -750,7 +840,7 @@ def require_live_files(plan: dict[str, Any], prepared_directory: Path) -> None:
                 "file_sha256"
             ],
         )
-    _exact_data(observed)
+    _exact_data(observed, expected_data)
 
 
 def _kubectl_json(*arguments: str) -> dict[str, Any]:
@@ -850,12 +940,14 @@ def require_live_external(plan: dict[str, Any], client, *, wandb_api=None) -> di
     if not validate_embedded_promotion(plan, check_files=True):
         return {}
     reward_canary = _is_reward_canary_marker(plan.get("execution", {}).get("production_promotion"))
-    output = PROD_REWARD_CANARY_OUTPUT if reward_canary else PROD_OUTPUT
-    wandb_identity = PROD_REWARD_CANARY_WANDB if reward_canary else PROD_WANDB
+    if reward_canary:
+        run_name, output, _, wandb_identity, _ = _reward_canary_live_identity(plan)
+    else:
+        run_name, output, wandb_identity = PROD_NAME, PROD_OUTPUT, PROD_WANDB
     if any(
         not isinstance(row, dict)
-        or row.get("name") == PROD_NAME
-        or str(row.get("name", "")).startswith(PROD_NAME + "-")
+        or row.get("name") == run_name
+        or str(row.get("name", "")).startswith(run_name + "-")
         or row.get("run_dir") == output
         for row in client.all_runs()
     ):
