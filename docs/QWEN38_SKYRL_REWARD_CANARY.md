@@ -1,7 +1,21 @@
 # Qwen3.8 SkyRL reward-acquisition canary
 
-Status: **source-direct data eligible; GPU launch still blocked on the fresh dev11
-engine receipt and is not submitted or production-qualified**.
+Status: **the first reward run failed before grading because the live tool
+schema's dictionary order changed Qwen's rendered prompt. Its allocation was
+fully released. The v2 successor canonicalizes that already digest-verified
+schema before rendering; it remains unsubmitted until fresh data, image,
+preview, duplicate, output, W&B and capacity checks all pass.**
+
+The historical v1 inputs below are retained as the immutable record of that
+failed run. The deterministic successor uses
+[`qwen38-rl-reward-canary-dev-v2.json`](../configs/qualification/qwen38-rl-reward-canary-dev-v2.json),
+[`qwen38-rl-reward-canary-data-dev-v2.json`](../configs/qualification/qwen38-rl-reward-canary-data-dev-v2.json),
+[`qwen38-rl-reward-canary-task-set-v2.json`](../configs/data/qwen38-rl-reward-canary-task-set-v2.json),
+and
+[`qwen38-rl-reward-canary-exact-version-evidence-v2.json`](../configs/data/qwen38-rl-reward-canary-exact-version-evidence-v2.json).
+It changes no task, split, grader, model, sampling, optimizer or resource
+choice. The only runtime change is canonical ordering of the exact live MCP
+tool schema after its digest and budget checks pass.
 
 This is the smallest real RL run that preserves the qualified Qwen3.8 SkyRL
 shape: one dev-cluster node, eight GPUs, two TP4 rollout engines, eight training

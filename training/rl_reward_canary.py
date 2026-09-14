@@ -19,15 +19,15 @@ VERSION_RECEIPT_SCHEMA = "cyber_rl_reward_canary_task_version_receipt_v2"
 VERSION_OBSERVATION_SCHEMA = "cyber_rl_reward_canary_task_version_get_observation_v1"
 VERSION_SANITIZED_RESPONSE_SCHEMA = "cyber_rl_reward_canary_sanitized_task_version_response_v1"
 VERSION_ACQUISITION_JOURNAL_SCHEMA = "cyber_rl_reward_canary_task_version_get_journal_v1"
-TASK_SET_PATH = "configs/data/qwen38-rl-reward-canary-task-set-v1.json"
+TASK_SET_PATH = "configs/data/qwen38-rl-reward-canary-task-set-v2.json"
 SPLIT_PATH = "configs/data/qwen38-rl-reward-canary-split-v1.json"
-EXACT_VERSION_EVIDENCE_PATH = "configs/data/qwen38-rl-reward-canary-exact-version-evidence-v1.json"
+EXACT_VERSION_EVIDENCE_PATH = "configs/data/qwen38-rl-reward-canary-exact-version-evidence-v2.json"
 SOURCE_IDENTITY = {
     "task_set_file_sha256": (
-        "sha256:a1e32877cc6b4565a32acad245945685084ea3de9a97af6555c0b3e17baa9cd9"
+        "sha256:d4419253598fbcaf693a3c28f131bdbe852452bf60ce055386b4698d6e52aea8"
     ),
     "task_set_self_sha256": (
-        "sha256:15400d5e58c53c8c2258c826c39aa5545b14d1705bece3d927d09d38de76b157"
+        "sha256:ecb13f7b488a3c94a6c06068508f4e2d2a527340171eea0a9670c1bf79686b31"
     ),
     "split_file_sha256": (
         "sha256:c3a34993a932c2b29e2c70f45682ce03ee02d03a9c4493edbab45eb349cb64fa"
@@ -36,10 +36,10 @@ SOURCE_IDENTITY = {
         "sha256:8279ea19808ad1accb00d3f3145c3ec087030677786e0188251cfc197f306adf"
     ),
     "exact_version_evidence_file_sha256": (
-        "sha256:9d363d89bfa57a8a68e462f6b5bb9ba5fe81e88d61067d707efe526c5d74d896"
+        "sha256:fcfdf85272c6ef399b19b260fb89ea5785efbafb85e1c233b3d4265fd517f64f"
     ),
     "exact_version_evidence_self_sha256": (
-        "sha256:741ed34dff0644a63f558378ffb1f569bb40dc803090ed123bdab0a919ff9042"
+        "sha256:25a095c90c2c3fa2b7ce7c5f016b7cf997cded21e188736d199970f544db29bd"
     ),
     # The source package authorizes the direct selection; the successor package
     # proves why the non-current clone is rejected instead of treated as equal.
@@ -65,7 +65,7 @@ SOURCE_IDENTITY = {
         "sha256:f0c327d2ecc464610a5fd86e11b112870d28feb43d9155d7507d8fedbd87632b"
     ),
     "episode_runtime_file_sha256": (
-        "sha256:b7f3e9e2ef426e931f5eb8a07abadf4dedcfc9f84b66f61985fd1388ce7f261f"
+        "sha256:faa8aa3d75d0f1c18473dc92952148441893dcd9e99a40d9d8d76e9e8e6ae100"
     ),
     "fleet_binding_file_sha256": (
         "sha256:b28e267d02024ac979f4a0f39ee778e68331da490f5084c3e5a34136eff04707"
@@ -462,6 +462,7 @@ def _validate_tool_surface_authority(
         "episode_runtime": (
             b"catalog = (await mcp.list_tools()).tools",
             b"fleet.assert_required_task_tools(",
+            b"raw = json.loads(fleet.canonical_json(raw))",
             b'for name in config["execution"]["required_task_tools"]',
         ),
         "fleet_binding": (

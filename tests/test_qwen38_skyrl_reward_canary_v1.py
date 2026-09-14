@@ -20,10 +20,10 @@ from cyber_post_train.jobs import JobsError, digest
 from training import rl_data, rl_reward_canary, skyrl, skyrl_training
 
 ROOT = Path(__file__).resolve().parents[1]
-TASK_SET = ROOT / "configs/data/qwen38-rl-reward-canary-task-set-v1.json"
+TASK_SET = ROOT / "configs/data/qwen38-rl-reward-canary-task-set-v2.json"
 SPLIT = ROOT / "configs/data/qwen38-rl-reward-canary-split-v1.json"
-DATA = ROOT / "configs/qualification/qwen38-rl-reward-canary-data-dev-v1.json"
-RUN = ROOT / "configs/qualification/qwen38-rl-reward-canary-dev-v1.json"
+DATA = ROOT / "configs/qualification/qwen38-rl-reward-canary-data-dev-v2.json"
+RUN = ROOT / "configs/qualification/qwen38-rl-reward-canary-dev-v2.json"
 RELOAD = ROOT / ("configs/qualification/qwen38-rl-reward-canary-reload-dev-v1.template.json")
 FILTERED_TASK_SET = ROOT / "configs/data/qwen38-rl-filtered-canary-task-set-v1.json"
 DEV8_DATA = ROOT / (
@@ -39,7 +39,7 @@ PROD2_QUALIFICATION = ROOT / (
 SUCCESSOR_EVIDENCE = ROOT / (
     "configs/runs/qwen36-27b-native-rl-reward-acquisition-canary.pre-submit.json"
 )
-VERSION_EVIDENCE = ROOT / ("configs/data/qwen38-rl-reward-canary-exact-version-evidence-v1.json")
+VERSION_EVIDENCE = ROOT / ("configs/data/qwen38-rl-reward-canary-exact-version-evidence-v2.json")
 HORIZON_CONTRACT = ROOT / (
     "configs/runs/qwen38-27b-native-rl-reward-acquisition-canary.template.json"
 )
@@ -193,7 +193,7 @@ def test_task_selection_uses_the_authoritative_source_directly() -> None:
         == "sha256:" + hashlib.sha256(SUCCESSOR_EVIDENCE.read_bytes()).hexdigest()
     )
     assert provenance["exact_version_evidence"] == {
-        "path": "../data/qwen38-rl-reward-canary-exact-version-evidence-v1.json",
+        "path": "../data/qwen38-rl-reward-canary-exact-version-evidence-v2.json",
         "file_sha256": "sha256:" + hashlib.sha256(VERSION_EVIDENCE.read_bytes()).hexdigest(),
         "self_sha256": version_evidence["sha256"],
     }
@@ -314,12 +314,12 @@ def test_real_canary_is_one_dev_only_update_with_durable_evidence() -> None:
     data, run = load(DATA), load(RUN)
     dev8_data, dev8_run = load(DEV8_DATA), load(DEV8_RUN)
     assert data["name"] == run["name"] == run["wandb"]["run_id"]
-    assert data["name"] == "chris-q38-rlreward-dev1"
+    assert data["name"] == "chris-q38-rlreward-dev2"
     assert data["backend"] == run["backend"] == "skyrl"
-    assert run["output_root"] == "/mnt/sfs/jobs/chris-q38-rlreward-dev1"
+    assert run["output_root"] == "/mnt/sfs/jobs/chris-q38-rlreward-dev2"
     assert data["output"] == run["data"]["root"]
     assert run["data"]["manifest"] == data["output"] + "/manifest.json"
-    assert data["task_set"].endswith("qwen38-rl-reward-canary-task-set-v1.json")
+    assert data["task_set"].endswith("qwen38-rl-reward-canary-task-set-v2.json")
     assert data["split"].endswith("qwen38-rl-reward-canary-split-v1.json")
 
     for key in ("backend", "model_lock", "model_root"):

@@ -264,6 +264,34 @@ async def test_complete_valid_reward_including_genuine_zero(fixture, tmp_path, r
 
 
 @pytest.mark.asyncio
+async def test_live_tool_schema_order_is_canonicalized_before_prompt_render(fixture, tmp_path):
+    schema = {
+        "type": "object",
+        "properties": {"zeta": {"type": "string"}, "alpha": {"type": "integer"}},
+        "additionalProperties": False,
+    }
+    fixture.catalog = [
+        {"inputSchema": copy.deepcopy(schema), "description": "synthetic tool", "name": name}
+        for name in ("bash", "submit_report")
+    ]
+    fixture.config["execution"]["required_task_tool_catalog_sha256"] = fleet.sha256(
+        fleet.canonical_json(fixture.catalog)
+    )
+    seal(fixture.config)
+
+    class CanonicalOrderRecorder(Recorder):
+        def begin_segment(self, messages, tools):
+            super().begin_segment(messages, tools)
+            for tool in tools:
+                parameters = tool["function"]["parameters"]
+                assert list(parameters) == ["additionalProperties", "properties", "type"]
+                assert list(parameters["properties"]) == ["alpha", "zeta"]
+
+    await collect(fixture, tmp_path, CanonicalOrderRecorder())
+    assert fixture.deleted
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("phase", ["create", "score", "delete"])
 @pytest.mark.parametrize("error", ["http", "timeout"])
 async def test_mutations_once_never_become_zero(fixture, tmp_path, phase, error):

@@ -1,0 +1,53 @@
+{
+  "backend": "skyrl",
+  "name": "chris-q38-rlreward-dev2",
+  "output_root": "/mnt/sfs/jobs/chris-q38-rlreward-dev2",
+  "model": {
+    "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
+    "weights": "../models/qwen38-27b-1d4bf0f2.weights.json",
+    "root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2"
+  },
+  "data": {
+    "manifest": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-dev2/data/manifest.json",
+    "root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-dev2/data"
+  },
+  "prerequisites": {
+    "engine_diagnostic": {
+      "config_path": "qwen38-rl-filtered-skyrl-engine-diagnostic-prod-v2.json",
+      "config_file_sha256": "sha256:d366a6d4e576af3edc2c046a3d72db3712b443e0cfa4e2a252f2c38ceb81b9ba",
+      "terminal_receipt_path": "/mnt/sfs/jobs/chris-q38-rldiag-prod2/ENGINE_DIAGNOSTIC.json",
+      "terminal_receipt_file_sha256": "sha256:c11f209b4afa96428b147cdc767e158393cafc35e395377cb905ab6baca1ae73",
+      "qualification_path": "../../docs/evidence/qwen38-study/2026-09-14-skyrl-prod2-engine-qualification-v1.json",
+      "qualification_file_sha256": "sha256:072544d61e934045ab0fb8ee4192f094027a155fef5865cd2453793d23fce63d",
+      "qualification_self_sha256": "sha256:68aca88b88f629a307cd83aac1ec6a39dba948bcf265c886e69b6046e6263db6"
+    }
+  },
+  "recipe": {
+    "nodes": 1,
+    "steps": 1,
+    "groups": 1,
+    "samples_per_prompt": 8,
+    "lr": 0.000001,
+    "eval_interval": 1,
+    "checkpoint_interval": 1,
+    "keep_checkpoints": 2,
+    "seed": 42,
+    "engine_start_timeout_seconds": 1800,
+    "engine_cleanup_timeout_seconds": 300
+  },
+  "wandb": {
+    "entity": "thefleet",
+    "project": "cyber-post-train",
+    "run_id": "chris-q38-rlreward-dev2"
+  },
+  "cluster": {
+    "target": "dev",
+    "priority": "c1",
+    "resources": {
+      "cpu_request": "64",
+      "cpu_limit": "64",
+      "memory_request": "512Gi",
+      "memory_limit": "768Gi"
+    }
+  }
+}

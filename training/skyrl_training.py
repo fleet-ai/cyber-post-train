@@ -225,7 +225,7 @@ ENGINE_DIAGNOSTIC_DATA_IDENTITY = {
     },
 }
 REWARD_CANARY_DATA_CONTRACT = {
-    "selection_sha256": "sha256:15400d5e58c53c8c2258c826c39aa5545b14d1705bece3d927d09d38de76b157",
+    "selection_sha256": "sha256:ecb13f7b488a3c94a6c06068508f4e2d2a527340171eea0a9670c1bf79686b31",
     "split_sha256": "sha256:8279ea19808ad1accb00d3f3145c3ec087030677786e0188251cfc197f306adf",
     "tool_catalog_sha256": (
         "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
@@ -243,22 +243,22 @@ REWARD_CANARY_DATA_CONTRACT = {
 }
 REWARD_CANARY_RUNTIME_USER = {"uid": 1000, "gid": 100, "run_as_non_root": True}
 REWARD_CANARY_ARGUMENTS = {
-    "name": "chris-q38-rlreward-dev1",
-    "output_root": "/mnt/sfs/jobs/chris-q38-rlreward-dev1",
+    "name": "chris-q38-rlreward-dev2",
+    "output_root": "/mnt/sfs/jobs/chris-q38-rlreward-dev2",
     "model": "Qwen/Qwen3.8-27B",
     "model_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
     "train_data": (
-        "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-dev1/data/train.jsonl"
+        "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-dev2/data/train.jsonl"
     ),
-    "dev_data": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-dev1/data/dev.jsonl",
+    "dev_data": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-dev2/data/dev.jsonl",
     "data_manifest": (
-        "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-dev1/data/manifest.json"
+        "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-dev2/data/manifest.json"
     ),
     "train_rows": 1,
     "dev_rows": 1,
     "wandb_entity": "thefleet",
     "wandb_project": "cyber-post-train",
-    "wandb_run_id": "chris-q38-rlreward-dev1",
+    "wandb_run_id": "chris-q38-rlreward-dev2",
     "context_tokens": 98304,
     "response_tokens": 81920,
     "tokens_per_turn": 4096,

@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import importlib.metadata
+import json
 import math
 import os
 import re
@@ -448,6 +449,11 @@ async def collect(config, directory: Path, recorder, parse, *, client, request_m
                     fleet.sha256(fleet.canonical_json(raw)),
                 )
                 validate_tool_budget(raw, config["rl"]["tool_seconds"])
+                # Pydantic model_dump preserves field insertion order, while
+                # Qwen's Jinja template serializes dictionaries in that order.
+                # Normalize only after the canonical live-catalog digest passes
+                # so the runtime prompt is byte-identical to offline data prep.
+                raw = json.loads(fleet.canonical_json(raw))
                 by_name = {t["name"]: t for t in raw}
                 tools = [
                     {
