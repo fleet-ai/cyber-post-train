@@ -28,24 +28,46 @@ def test_public_report_does_not_reintroduce_unexplained_internal_terms() -> None
 
 def test_training_terms_have_visible_definitions() -> None:
     html = (ROOT / "site" / "index.html").read_text()
-    data = (ROOT / "site" / "training-decision-space.json").read_text()
 
-    assert 'id="experiment-definitions"' in html
-    for required_term in ("Supervised fine-tuning", "Reinforcement learning"):
-        assert required_term in data
+    assert "Supervised fine-tuning (SFT)" in html
+    assert "Reinforcement learning (RL)" in html
+    assert "Select any column title to read its plain-language meaning" in html
 
 
-def test_experiment_map_is_complete_and_well_formed() -> None:
+def test_experiment_plan_has_two_large_ranked_run_tables() -> None:
+    html = (ROOT / "site" / "index.html").read_text()
     data = json.loads((ROOT / "site" / "training-decision-space.json").read_text())
 
-    assert len(data["definitions"]) >= 50
-    assert len(data["sequence"]) == 7
-    assert len(data["decisions"]) >= 120
-    assert {row["priority"] for row in data["decisions"]} == {
-        "Hold fixed",
-        "Test now",
-        "Test later",
+    assert 'id="sft-plan-table"' in html
+    assert 'id="rl-plan-table"' in html
+    assert set(data["tables"]) == {"sft", "rl"}
+    assert "decisions" not in data
+
+    minimum_columns = {"sft": 75, "rl": 90}
+    minimum_runs = {"sft": 20, "rl": 20}
+    required_run_fields = {
+        "rank",
+        "run_id",
+        "research_question",
+        "status",
+        "why_priority",
+        "compare_with",
+        "launch_after",
     }
-    identities = [(row["area"], row["choice"]) for row in data["decisions"]]
-    assert len(identities) == len(set(identities))
-    assert all(row["values"] for row in data["decisions"])
+
+    for kind, table in data["tables"].items():
+        columns = [column for group in table["groups"] for column in group["columns"]]
+        keys = [column[0] for column in columns]
+        assert len(columns) >= minimum_columns[kind]
+        assert len(table["runs"]) >= minimum_runs[kind]
+        assert len(keys) == len(set(keys))
+        assert all(len(column) == 3 and all(column) for column in columns)
+        assert [run["rank"] for run in table["runs"]] == list(range(1, len(table["runs"]) + 1))
+        assert len({run["run_id"] for run in table["runs"]}) == len(table["runs"])
+
+        for run in table["runs"]:
+            assert required_run_fields <= run.keys()
+            assert set(run.get("changes", {})) <= set(keys)
+            for key in keys:
+                value = run.get(key, run.get("changes", {}).get(key, table["defaults"].get(key)))
+                assert value not in (None, ""), f"{kind} {run['run_id']} does not specify {key}"
