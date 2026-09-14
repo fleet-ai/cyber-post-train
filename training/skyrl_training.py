@@ -167,6 +167,9 @@ ENGINE_DIAGNOSTIC_PROD_DATA_ROOT = (
 ENGINE_DIAGNOSTIC_PROD_PREPARED_ROOT = (
     "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rldiag-inputs-prod1/prepared-v1"
 )
+ENGINE_DIAGNOSTIC_PROD_CONFIG_SHA256 = (
+    "480dae102f5f047cd68cd7e07acede5afebcbf1b22e39c60f94742ce70e4c989"
+)
 ENGINE_DIAGNOSTIC_MODEL_SHA256 = "dcfdcd6ecb6661741cd3a4b24dc5af7259642c8a6824773e0de70d55d7501179"
 ENGINE_DIAGNOSTIC_DATA_IDENTITY = {
     "selection_sha256": "sha256:8672a1bcb7073ee93d30c6cbc5b6a140d21571c8b58fc6100d7007a6f2e56a9e",
@@ -413,6 +416,11 @@ def _policy_state_digest(state: object) -> str:
 
 _UUID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}")
 _SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
+
+
+def is_prod_engine_diagnostic_config(config: object) -> bool:
+    """Identify the exact source config allowed to skip training-promotion gates."""
+    return isinstance(config, dict) and digest(config) == ENGINE_DIAGNOSTIC_PROD_CONFIG_SHA256
 
 
 def is_prod_engine_diagnostic(plan: object) -> bool:
@@ -1728,7 +1736,11 @@ def compile_rl(config, *, relative_to):
         raise ValueError("cluster target must be dev or prod")
     from .skyrl_promotion import bind_production_promotion
 
-    production_promotion = bind_production_promotion(config, relative_to)
+    production_promotion = (
+        None
+        if is_prod_engine_diagnostic_config(config)
+        else bind_production_promotion(config, relative_to)
+    )
     prerequisite = None
     if "prerequisites" in config:
         if target != "dev":
@@ -1841,7 +1853,7 @@ def job_request(plan):
         raise ValueError("reward source closure is only valid for exact canary data")
     if reward_canary:
         is_reward_canary(plan)
-    production = validate_embedded_promotion(plan)
+    production = None if is_prod_engine_diagnostic(plan) else validate_embedded_promotion(plan)
     if (
         plan["schema"] != SCHEMA
         or plan["runtime_sha256"] != digest(_runtime())
