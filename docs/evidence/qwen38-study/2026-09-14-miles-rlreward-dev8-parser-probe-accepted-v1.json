@@ -1,0 +1,121 @@
+{
+  "schema": "cyber_qwen38_miles_dev8_parser_probe_accepted_v1",
+  "recorded_at": "2026-09-14T08:58:02Z",
+  "classification": "native_parser_validated_at_8192_without_training_or_rollout",
+  "source": {
+    "implementation_commit": "091873c1a0d4006261100fa3aeca9b3a9403a868",
+    "prepared_evidence": "2026-09-14-miles-rlreward-dev8-parser-probe-prepared-v2.json",
+    "plan_sha256": "sha256:a0759ef79afea9645eed6953a6eb1e3228c43c14485a5810258621a08098d173",
+    "request_sha256": "sha256:ec301df9b6b81206942f92087103121a86c4cb7c16728ce4aae4a1de1b9b6f5f",
+    "source_plan_sha256": "sha256:e9c21c3d32116f57533b307f580b457303c951d8e0007f7695d448cc7320bea6"
+  },
+  "preflight": {
+    "schema": "cyber_miles_native_parser_probe_cpu_preflight_v1",
+    "status": "passed",
+    "receipt_sha256": "sha256:27121fb13f63250f0616d0029e520a166f6727a8e75b99569e5725ff6dab2e89",
+    "file_sha256": "sha256:87b0c2310c0479432056effc01a6bd99f5aff5fcf51b0483d3e2bc9215769128",
+    "exact_image_cpu_pod_uid": "02ec1ba9-9c07-407e-a840-2e2a75e97526",
+    "gpus": 0,
+    "native_parser_checked": false,
+    "training_authorized": false,
+    "pod_absent_after_delete": true
+  },
+  "launch_gates": {
+    "cluster": "dev",
+    "priority": "c1",
+    "preview_manifest_sha256": "sha256:141627add3aa30f1b1ba51c488aa2e6adeea3c7cd4a72dc0b44f4e5dfd91e296",
+    "preview_nodes": 1,
+    "preview_gpus": 1,
+    "output_absent_before_submit": true,
+    "output_freshness_pod_uid": "71d4cd05-57cb-4ba8-8a64-b9d2c8596676",
+    "output_freshness_mount_read_only": true,
+    "api_history_duplicate_count_before_submit": 0,
+    "ready_eight_gpu_dev_nodes_before_submit": 2,
+    "active_owned_gpu_nodes_before_submit": 0,
+    "authentication_expiry": "2026-09-14T10:12:11Z"
+  },
+  "submission": {
+    "post_count": 1,
+    "api_name": "chris-q38-miles-p8k-dev-v2-d6fe189f",
+    "api_job_id": "chris-q38-miles-p8k-dev-v2-d6fe189f-86nkq",
+    "rayjob_uid": "7983132e-fe05-4da9-9c76-ba2780258de0",
+    "workload_uid": "288d41d5-2bfc-4237-9b7e-38eed9bc8d9b",
+    "raycluster_uid": "bf082ab2-b43f-45fd-84a2-90deffb09005",
+    "pod_uid": "e8e8c075-406d-4791-8b70-bc4d0d66ab0e",
+    "output_root": "/mnt/sfs/jobs/chris-q38-miles-p8k-dev-v2",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33",
+    "workers": 1,
+    "gpus_per_worker": 1,
+    "automatic_requeue": false,
+    "deadline_seconds": 300,
+    "admitted_at": "2026-09-14T08:55:55Z",
+    "pod_started_at": "2026-09-14T08:55:56Z",
+    "finished_at": "2026-09-14T08:56:43Z",
+    "submission_journal_lines": 2,
+    "submission_journal_file_sha256": "sha256:4cee3b9e6f6b9f2240c235b6b951f315588499d0586a9d38a12766d62a2dd071"
+  },
+  "result": {
+    "api_status": "SUCCEEDED",
+    "rayjob_status": "SUCCEEDED",
+    "receipt": "PARSER_VALIDATED.json",
+    "receipt_sha256": "sha256:e19d31ec7886c147a94cc042ee906773d9c391190a00fe7bd1702b6b9b31d4db",
+    "receipt_digest_valid": true,
+    "native_parser_observation": {
+      "fleet_max_tokens_per_turn": 8192,
+      "rollout_max_context_len": 98304,
+      "rollout_max_response_len": 81920,
+      "actor_num_nodes": 1,
+      "actor_num_gpus_per_node": 8,
+      "num_rollout": 1,
+      "global_batch_size": 8,
+      "load_matches_source_checkpoint": true,
+      "ref_load_matches_source_checkpoint": true
+    },
+    "cuda_device_count": 1,
+    "distributed_initialized_before_or_after": false,
+    "rollouts": 0,
+    "task_requests": 0,
+    "verifier_calls": 0,
+    "reward_batches": 0,
+    "weights_loaded": 0,
+    "optimizer_steps": 0,
+    "checkpoints_written": 0,
+    "rejected_receipt_absent": true,
+    "failed_receipt_absent": true
+  },
+  "independent_verification": {
+    "read_only_sfs": true,
+    "gpu_requests": 0,
+    "pod_uid": "3b5e6872-70c2-46fe-bae3-30748f6f4d34",
+    "exit_code": 0,
+    "restarts": 0,
+    "pod_absent_after_delete": true
+  },
+  "release": {
+    "raycluster_absent": true,
+    "run_pods_absent": true,
+    "workload_finished": true,
+    "dev_gpu_requests_after_completion": 0,
+    "matching_api_runs": 1
+  },
+  "scientific_scope": {
+    "proved": "The exact native Miles parser sees max_tokens_per_turn 8192 and preserves the prepared Dev8 recipe bindings.",
+    "not_proved": "No task, rollout, reward, weight load, optimizer update, checkpoint, training stability or learning outcome was exercised.",
+    "source_training_topology_submitted": false
+  },
+  "external_actions": {
+    "production_actions": 0,
+    "c0_actions": 0,
+    "peer_actions": 0,
+    "training_jobs_created": 0,
+    "parser_probe_jobs_created": 1
+  },
+  "privacy": {
+    "prompts_or_traces_recorded_here": false,
+    "flags_or_answers_recorded_here": false,
+    "raw_rewards_or_scores_recorded_here": false,
+    "credentials_recorded_here": false,
+    "private_logs_recorded_here": false
+  },
+  "sha256": "79ecc242ccbc2f1d110d6483087b29122bc754ce40bebaffeca8bf570753e3ba"
+}
