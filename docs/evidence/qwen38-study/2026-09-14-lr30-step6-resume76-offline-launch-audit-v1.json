@@ -1,0 +1,263 @@
+{
+  "schema": "cyber_qwen38_teacher_lr30_step6_resume76_offline_launch_audit_v1",
+  "recorded_at": "2026-09-14T12:05:05Z",
+  "classification": "offline_contract_qualified_live_submission_gates_required",
+  "source": {
+    "preparation_commit": "ed38e610e6a25faa9c3f67015d9eaab758d9a7e6",
+    "audited_head": "66e71785bac9b6641ecc9bf333cae235f0d018fa",
+    "materialized_config": {
+      "path": "configs/qualification/qwen38-teacher-lr30-step6-resume-to76-dev-v1.json",
+      "file_sha256": "sha256:fbd5dfe2e2f298a5a131fb36d3b8e75882cd17af8d53a846725f6ec5cb08a1f2",
+      "canonical_sha256": "sha256:b0a084a8b20c6f3c0dbae06e3fa5617a164fa29471c2758df9fab18613405631"
+    },
+    "template": {
+      "path": "configs/qualification/qwen38-teacher-lr30-step6-resume-to76-dev-v1.template.json",
+      "file_sha256": "sha256:943d48666b131ae878e245d0ee24c6bf8a56c5805fdf256bcc1aced85d8f22cc",
+      "embedded_sha256": "sha256:0913f7106a04c40bb46b8edbb061f6a82764d19ca2aeceabe8a225c7fa67b7cb"
+    },
+    "producer_config": {
+      "path": "configs/qualification/qwen38-teacher-lr30-cosine-2x4-dev-v3.json",
+      "file_sha256": "sha256:79211cc2a4f44222215ebfa2f09bfb75ba41f12a838b240397ae2de41a116bf8"
+    },
+    "producer_terminal_evidence": {
+      "path": "docs/evidence/qwen38-study/2026-09-14-lr30-2x4-reload-terminal-v1.json",
+      "file_sha256": "sha256:65d612c63d3c4875ff25133eb2cfc5640482e9f01318853e9689c29f6c93d6d3",
+      "embedded_sha256": "sha256:e90da24580c3c1ec283b6e3700abb48d977c7b6d1972ffae6d003d9ca4a5d892"
+    },
+    "model_lock": {
+      "path": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+      "file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac"
+    },
+    "model_weights": {
+      "path": "configs/models/qwen38-27b-1d4bf0f2.weights.json",
+      "file_sha256": "sha256:80a5e9de066e068abb012a0e9bd144676813a31042bb578226472803f8e0e84f"
+    },
+    "corpus_manifest": {
+      "live_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher-a/manifest-available-a-outcome-v2.json",
+      "offline_byte_identical_copy": "/private/tmp/cpt-lr30-2x4-dev-v3-prep/manifest.json",
+      "file_sha256": "sha256:d7fcb3e0c8c7726f5d1175f831fa0e88af632f1c6b68c6101c8db3e2cf4b85f7",
+      "embedded_sha256": "sha256:1b083613c16362daf7c86fd8b458d99d7e167133df919602c21916314142c4dc"
+    },
+    "checkpoint_manifest": {
+      "live_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr30-2x4-dev-v3-reload-v1/checkpoint-step-6.json",
+      "offline_byte_identical_copy": "/private/tmp/cpt-lr30-reload-v1/checkpoint-step-6.json",
+      "file_sha256": "sha256:dddce9ebb49686b11718e3862d8fbebf422134ec86b83d70bf99f7dbb7400f36",
+      "receipt_sha256": "sha256:2b430fb9185a437ea9e1060c4ed75638fe4d793bbb7a9a58e408a57188773467"
+    }
+  },
+  "offline_prepared_artifact": {
+    "directory": "/private/tmp/cpt-lr30-resume76-dev-v1-offline-prepared",
+    "directory_mode": "0700",
+    "file_mode": "0600",
+    "plan": {
+      "bytes": 20952,
+      "file_sha256": "sha256:24e5570212103680bebe824c4a6e645bae85809095ccf94abb9da53284286263",
+      "canonical_sha256": "sha256:7efd7f8d5b0f9f3f96f5534dd7d67b1b31bc3712f3d1fd20dc2f26b09edbacfb"
+    },
+    "request": {
+      "bytes": 74690,
+      "file_sha256": "sha256:aae2a1e2ca505aa908aaba98913ac97aa2795b0c4c90fd9c58c1d4bf9a03f376",
+      "canonical_sha256": "sha256:8a6052c7c171cd02344c02d909c5cb299cb60de15cdcbb79aed6f5ac55058bfe"
+    },
+    "prepared_receipt": {
+      "bytes": 167,
+      "file_sha256": "sha256:87f11cc9ed3047aad73349e3bd2d83a2263e9516b3d63608f259979d7712c423",
+      "plan_sha256": "7efd7f8d5b0f9f3f96f5534dd7d67b1b31bc3712f3d1fd20dc2f26b09edbacfb",
+      "request_sha256": "8a6052c7c171cd02344c02d909c5cb299cb60de15cdcbb79aed6f5ac55058bfe"
+    },
+    "runtime_bundle": {
+      "canonical_gzip_bytes": 54446,
+      "canonical_gzip_sha256": "sha256:04afc5d299896c7eb2f5dd53cc720d5e293c81f94e077094491794031a6fb21c",
+      "decompressed_payload_sha256": "sha256:071e18037ad41b04d4671b1286de3142dcc5fbe89ccbfd63bedd337bd053e690",
+      "embedded_plan_equals_prepared_canonical_plan": true,
+      "largest_environment_value_bytes": 72596,
+      "linux_single_environment_value_limit_bytes": 131072,
+      "bootstrap_python_ast_parses": true
+    },
+    "runtime_files": {
+      "training/__init__.py": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "training/checkpoints.py": "sha256:7ddeed5dd3dde9d10c6db505eca2c1a5796bf57fee26ebfc70aa7c699738997d",
+      "training/recovery.py": "sha256:3f3f1801a283b07dd3a52507dd5d38ea61e8216311711292f621f2a83a2db30f",
+      "training/sft_runtime.py": "sha256:7b0787891acdf9ebe0b07475339248dce64b659a546691a7c445f99b52a20a8f"
+    },
+    "command_sha256": "sha256:361d2f90e09f26f46f0855f5c07812d75114f280db2d577d92abcbf4c0b6b1df",
+    "exact_request_reconstructed_from_source": true,
+    "live_or_network_calls_performed": 0,
+    "jobs_api_posts": 0,
+    "wandb_runs_created": 0
+  },
+  "checkpoint_and_recovery_contract": {
+    "source_checkpoint_path": "/mnt/sfs/jobs/chris-q38-lr30-2x4-dev-v3/checkpoints/global_step_6",
+    "source_optimizer_step": 6,
+    "source_plan_sha256": "sha256:457aa85b12a6d3740a97805e3b9013a749b33b6a574a660674785b7d3f914ee2",
+    "source_world_size": 8,
+    "source_checkpoint_files": 33,
+    "source_checkpoint_bytes": 324627486731,
+    "source_supervised_tokens": 70862,
+    "source_checkpoint_cpu_seal_accepted": true,
+    "source_checkpoint_all_rank_zero_update_reload_accepted": true,
+    "source_checkpoint_unchanged_after_reload": true,
+    "resume_plan_embeds_the_exact_manifest_and_all_file_digests": true,
+    "resume_mode": "resume",
+    "restores": [
+      "model",
+      "optimizer",
+      "scheduler",
+      "random-number state",
+      "sampler",
+      "supervised-token progress"
+    ],
+    "offline_checkpoint_payload_rehash_performed": false,
+    "offline_checkpoint_payload_rehash_limit": "The 324.6 GB checkpoint payload is on SFS, which this offline audit did not access. Its accepted seal must be reopened and independently rehashed live immediately before submission."
+  },
+  "scientific_contract": {
+    "model": "Qwen/Qwen3.8-27B",
+    "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "training_data_kind": "successful_teacher_dense_windows",
+    "dense_windows": 602,
+    "represented_train_tasks": 29,
+    "supervised_tokens": 700359,
+    "epochs": 1,
+    "global_batch_size": 8,
+    "microbatch_per_gpu": 1,
+    "learning_rate": 0.00003,
+    "scheduler": "cosine",
+    "warmup_ratio": 0.05,
+    "warmup_steps": 4,
+    "scheduler_state_is_restored_not_restarted": true,
+    "max_length": 16384,
+    "seed": 42,
+    "reference_cross_entropy_enabled": false,
+    "selection_mode": "task_outcomes_only"
+  },
+  "resume_math_and_cadence": {
+    "terminal_optimizer_step": 76,
+    "terminal_step_derivation": "ceil(602 dense windows / global batch 8) * 1 epoch",
+    "source_optimizer_step": 6,
+    "continuation_optimizer_steps": 70,
+    "continuation_global_step_range": [7, 76],
+    "source_steps_replayed": false,
+    "checkpoint_interval_steps": 6,
+    "new_checkpoint_steps": [12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 76],
+    "checkpoint_retention_count": 3,
+    "expected_retained_new_checkpoint_steps": [66, 72, 76],
+    "expected_terminal_supervised_tokens": 700359,
+    "wandb_scalar_event_interval_steps": 1,
+    "expected_new_wandb_scalar_events": 70,
+    "watchdog_poll_seconds": 60,
+    "watchdog_startup_seconds": 1800,
+    "watchdog_idle_seconds": 1200,
+    "watchdog_hard_seconds": 28800,
+    "watchdog_drain_seconds": 300
+  },
+  "execution_contract": {
+    "cluster": "dev",
+    "priority_request": "c1",
+    "expected_rendered_queue": "q1",
+    "expected_effective_priority": 10000,
+    "workers": 2,
+    "gpus_per_worker": 4,
+    "world_size": 8,
+    "total_gpus": 8,
+    "cpu_request_per_worker": "64",
+    "cpu_limit_per_worker": "64",
+    "memory_request_per_worker": "512Gi",
+    "memory_limit_per_worker": "768Gi",
+    "automatic_requeue": false,
+    "immutable_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "named_secrets_only": ["wandb-api"],
+    "secret_values_in_request": false,
+    "one_worker_by_eight_gpu_request_qualified": false,
+    "why_not_one_by_eight": "Resume mode rejects topology changes. The accepted producer and its exact checkpoint use two workers with four GPUs each. Only zero-update validation mode permits a same-world-size topology change.",
+    "single_physical_eight_gpu_node_colocation_observed_for_prior_reload": true,
+    "physical_node_placement_is_not_fixed_by_this_request": true
+  },
+  "wandb_contract": {
+    "mode": "online",
+    "entity": "thefleet",
+    "project": "cyber-post-train",
+    "group": "q38-blackbox-sft-dev-completion-v1",
+    "run_id": "chris-q38-lr30-resume76-dev-v1",
+    "name": "chris-q38-lr30-resume76-dev-v1",
+    "resume_policy": "never",
+    "new_identity_differs_from_source": true,
+    "source_and_continuation_are_two_immutable_linked_runs": true,
+    "identity_absence_checked_offline": false,
+    "identity_absence_is_a_live_pre_submit_gate": true,
+    "prompts_traces_flags_answers_credentials_raw_tensors_or_scores_logged": false
+  },
+  "terminal_failure_and_release_contract": {
+    "success_receipts_required": [
+      "STARTED.json",
+      "RECOVERED.json",
+      "WANDB.json",
+      "checkpoint_receipts/step-000076.json",
+      "TRAINING_COMPLETE.json"
+    ],
+    "watchdog_receipt_required_if_watchdog_intervenes": "WATCHDOG.json",
+    "unexpected_failure_receipt": "FAILED.json",
+    "unexpected_failure_exit_code": "nonzero",
+    "unexpected_failure_may_be_automatically_retried": false,
+    "tracking_incomplete_is_training_acceptance": false,
+    "terminal_checkpoint_requires_separate_create_once_cpu_seal": true,
+    "terminal_checkpoint_requires_independent_full_rehash": true,
+    "terminal_checkpoint_requires_separate_all_rank_zero_update_reload": true,
+    "runtime_writes_a_gpu_release_receipt": false,
+    "resource_release_evidence": "Reconcile Jobs API, RayJob, Workload, RayCluster and Pod identity after terminal state; require all exact owned objects and all eight GPUs released before acceptance or repair."
+  },
+  "static_validation": {
+    "materialized_config_matches_the_template_transform": true,
+    "compiler_accepts_with_byte_identical_offline_input_copies": true,
+    "plan_validator_accepts_without_live_file_reads": true,
+    "request_validator_accepts": true,
+    "prepared_receipt_matches_plan_and_request": true,
+    "runtime_bundle_digest_and_payload_verified": true,
+    "embedded_executable_runtime_files_match_current_source": true,
+    "embedded_package_initializer_intentionally_empty": true,
+    "bootstrap_syntax_verified": true,
+    "focused_non_dependency_tests_passed": true,
+    "ruff_passed": true,
+    "compileall_passed": true,
+    "numpy_torch_pyarrow_dependent_tests_run_locally": false,
+    "dependency_test_limit": "The offline desktop environment lacks numpy, torch and pyarrow. Exact-image CPU preflight and the accepted live all-rank reload remain mandatory."
+  },
+  "create_once_contract": {
+    "fresh_run_name": "chris-q38-lr30-resume76-dev-v1",
+    "fresh_output_root": "/mnt/sfs/jobs/chris-q38-lr30-resume76-dev-v1",
+    "fresh_prepared_dir": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr30-resume76-dev-v1/prepared",
+    "fresh_wandb_run_id": "chris-q38-lr30-resume76-dev-v1",
+    "source_checkpoint_is_read_only": true,
+    "pre_post_intent_required": true,
+    "submission_journal_must_be_absent_before_post": true,
+    "api_output_prepared_wandb_kubernetes_and_journal_absence_must_be_rechecked_live": true,
+    "maximum_jobs_api_posts": 1
+  },
+  "readiness": {
+    "scientific_and_static_runtime_contract_ready": true,
+    "direct_submission_without_live_rechecks_ready": false,
+    "ready_for_one_post_login_dev_submission_after_all_live_gates": true,
+    "production_submission_authorized": false,
+    "one_by_eight_request_authorized": false
+  },
+  "remaining_live_only_gates": [
+    "obtain fresh Nebius authentication that covers preflight, preview, the continuation, terminal checkpoint sealing, reload validation and release reconciliation",
+    "reopen the exact SFS corpus and step-6 checkpoint manifests, validate their self-digests, and independently rehash all 33 checkpoint files without changing the source",
+    "stage or reopen the exact create-once plan, request and matching PREPARED.json bytes at the declared SFS prepared directory",
+    "run the pinned-image zero-GPU CPU preflight against the exact SFS inputs and independently validate its digest-bound receipt",
+    "obtain a warning-free authenticated dev preview proving c1 maps to q1 value 10000, two workers by four GPUs, no requeue, exact image, resources, secrets and shutdown-on-exit",
+    "prove the API run name, output root, SFS prepared identity, W&B run ID, Kubernetes identity and submission journal are all absent; prove no accepted, active or ambiguous duplicate scientific cell exists",
+    "recheck source-checkpoint stability, current dev capacity and the owned-node cap immediately before submission",
+    "write one durable pre-POST intent, issue exactly one Jobs API POST, persist the response and never replay an ambiguous request",
+    "bind the returned API, RayJob, Workload, RayCluster and Pod UIDs and monitor recovery, steps 7 through 76, W&B scalar delivery, checkpoint cadence, utilization and watchdog evidence",
+    "after terminal success, independently validate all receipts, seal and fully rehash step 76, perform the separate all-rank zero-update reload, and confirm all exact owned objects and eight GPUs are released"
+  ],
+  "privacy": {
+    "prompts_or_traces_recorded_here": false,
+    "flags_or_answers_recorded_here": false,
+    "raw_rewards_or_scores_recorded_here": false,
+    "credentials_recorded_here": false,
+    "private_logs_recorded_here": false,
+    "raw_checkpoint_tensor_values_recorded_here": false
+  },
+  "sha256": "sha256:4866642eeeec646d605b390baa9788cc190a7415b2bb797ac68eb21d60b6590c"
+}
