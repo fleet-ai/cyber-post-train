@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Public, evidence-based reports from Fleet's cyber post-training project.">
+    <title>Fleet Cyber · Research report</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#report">Skip to report</a>
+    <header class="site-header">
+      <a class="wordmark" href="#webexploitbench" aria-label="Fleet Cyber report home">
+        <span class="mark" aria-hidden="true"></span>
+        <span>Fleet Cyber</span>
+      </a>
+      <nav class="tabs" aria-label="Reports">
+        <a data-tab-link="webexploitbench" href="#webexploitbench">WebExploitBench</a>
+        <a data-tab-link="task-curation" href="#task-curation">Task curation</a>
+      </nav>
+      <span class="edition">Research note · 01</span>
+    </header>
+
+    <main id="report">
+      <section class="page" data-tab-page="webexploitbench" aria-labelledby="wbe-title">
+        <div class="hero ruled">
+          <p class="eyebrow">Baseline evaluation · Qwen3.8-27B</p>
+          <h1 id="wbe-title">A broken judge erased real evidence.</h1>
+          <p class="dek">We ran the same model on the same 15 public web-security targets with two agent programs. Qwen Code produced a qualified baseline. OpenCode completed the work, but its judge was unavailable, so its recorded score is not a valid model result.</p>
+          <div class="hero-meta">
+            <span>WebExploitBench · Level 0</span>
+            <span>4 attempts per target</span>
+            <span>Reviewed 13 September 2026</span>
+          </div>
+        </div>
+
+        <aside class="finding" aria-label="Main finding">
+          <span class="finding-label">Main finding</span>
+          <p id="main-finding"></p>
+        </aside>
+
+        <section class="section" aria-labelledby="results-title">
+          <div class="section-heading">
+            <p class="section-index">01</p>
+            <div>
+              <h2 id="results-title">Results at a glance</h2>
+              <p>These are the benchmark’s recorded values. The OpenCode card is shown for auditability, but marked invalid because its scoring path was broken.</p>
+            </div>
+          </div>
+          <div id="result-cards" class="result-grid"></div>
+          <div class="metric-note">
+            <p><strong>Pass@1</strong> is the average share of known vulnerabilities found in one attempt.</p>
+            <p><strong>Pass@4</strong> is the share found at least once across four attempts.</p>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="comparison-title">
+          <div class="section-heading">
+            <p class="section-index">02</p>
+            <div>
+              <h2 id="comparison-title">What was—and was not—held constant</h2>
+              <p>A fair causal comparison changes one thing. These runs changed more than the harness.</p>
+            </div>
+          </div>
+          <div class="comparison-table-wrap">
+            <table class="comparison-table">
+              <thead><tr><th>Part of the experiment</th><th>Qwen Code run</th><th>OpenCode run</th><th>Matched?</th></tr></thead>
+              <tbody id="protocol-table"></tbody>
+            </table>
+          </div>
+          <p class="callout">Treat the difference as a comparison of two complete evaluation systems, not as proof that one harness alone caused the score change.</p>
+        </section>
+
+        <section class="section" aria-labelledby="task-title">
+          <div class="section-heading">
+            <p class="section-index">03</p>
+            <div>
+              <h2 id="task-title">Where the records contain evidence</h2>
+              <p>Green is Qwen Code’s recorded pass@4. Orange is OpenCode’s deterministic verifier signal—not its official score. The two bars answer different questions and must not be ranked directly.</p>
+            </div>
+          </div>
+          <div class="legend"><span><i class="swatch qwen"></i>Qwen Code recorded pass@4</span><span><i class="swatch open"></i>OpenCode verifier signal</span></div>
+          <div id="task-bars" class="task-bars"></div>
+        </section>
+
+        <section class="section" aria-labelledby="trace-title">
+          <div class="section-heading">
+            <p class="section-index">04</p>
+            <div>
+              <h2 id="trace-title">What the traces show</h2>
+              <p>We reviewed the full private execution records. The public summary describes behavior without publishing exploit steps or benchmark answers.</p>
+            </div>
+          </div>
+          <div id="trace-findings" class="finding-list"></div>
+        </section>
+
+        <section class="section compact" aria-labelledby="limits-title">
+          <div class="section-heading">
+            <p class="section-index">05</p>
+            <div>
+              <h2 id="limits-title">Limits and next test</h2>
+              <p id="limitations"></p>
+            </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="page" data-tab-page="task-curation" aria-labelledby="curation-title" hidden>
+        <div class="hero ruled">
+          <p class="eyebrow">Fleet data · frozen study roster</p>
+          <h1 id="curation-title">A task is useful only when failure means something.</h1>
+          <p class="dek">We checked 160 exact blackbox-exploit task versions and kept 89 whose environment, grading, and reproducibility evidence all passed.</p>
+          <div class="hero-meta">
+            <span>160 historical candidates</span>
+            <span>89 accepted</span>
+            <span>Outcome-blind filtering</span>
+          </div>
+        </div>
+
+        <aside class="finding" aria-label="Curation principle">
+          <span class="finding-label">Curation principle</span>
+          <p>A real model failure is valid data. A broken environment or grader is not. The filter never used model scores to choose tasks.</p>
+        </aside>
+
+        <section class="section" aria-labelledby="funnel-title">
+          <div class="section-heading">
+            <p class="section-index">01</p>
+            <div>
+              <h2 id="funnel-title">The filtering path</h2>
+              <p>Two independent gates were required: proof that the exact task had run correctly, and proof that its current inputs still resolve.</p>
+            </div>
+          </div>
+          <div id="filter-funnel" class="funnel"></div>
+          <div class="equation" aria-label="Eligibility equation"><span>Accepted run evidence</span><b>∩</b><span>Complete current bindings</span><b>=</b><strong>89 tasks</strong></div>
+        </section>
+
+        <section class="section" aria-labelledby="gates-title">
+          <div class="section-heading">
+            <p class="section-index">02</p>
+            <div><h2 id="gates-title">What “good” means</h2><p>Every accepted task version passed both checks below.</p></div>
+          </div>
+          <div class="gate-grid">
+            <article><span class="gate-number">1</span><h3>The run was real</h3><p>An independently checked receipt showed the exact environment ran, grading finished, the score was a real number, and cleanup completed.</p></article>
+            <article><span class="gate-number">2</span><h3>The task still reproduces</h3><p>The current starting data, environment, runtime seed, and grader still resolve to the same fixed identities.</p></article>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="method-title">
+          <div class="section-heading">
+            <p class="section-index">03</p>
+            <div><h2 id="method-title">How the audit was done</h2><p>The process was fixed before outcomes were considered.</p></div>
+          </div>
+          <div id="curation-methods" class="finding-list method-list"></div>
+        </section>
+
+        <section class="section" aria-labelledby="excluded-title">
+          <div class="section-heading">
+            <p class="section-index">04</p>
+            <div><h2 id="excluded-title">Why 71 versions were excluded</h2><p>These are evidence gaps, not claims that all 71 tasks are permanently broken.</p></div>
+          </div>
+          <div id="exclusion-bars" class="exclusion-bars"></div>
+          <p class="footnote">A separate binding audit found 17 versions without starting-data bindings and 11 without a fixed runtime-seed or grader pin. Those groups overlap with the 62 missing accepted run receipts, so they must not be added together.</p>
+        </section>
+
+        <section class="section" aria-labelledby="mix-title">
+          <div class="section-heading">
+            <p class="section-index">05</p>
+            <div><h2 id="mix-title">What remains</h2><p>The 89 accepted versions cover five applications. Most were rated medium difficulty.</p></div>
+          </div>
+          <div class="two-column">
+            <div><h3>Applications</h3><div id="app-mix" class="mini-bars"></div></div>
+            <div><h3>Difficulty</h3><div id="difficulty-mix" class="mini-bars"></div></div>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="split-title">
+          <div class="section-heading">
+            <p class="section-index">06</p>
+            <div><h2 id="split-title">Representative study splits</h2><p>Two outer splits test whether conclusions survive a different, still-balanced assignment.</p></div>
+          </div>
+          <div class="split-grid">
+            <article><span>Split A</span><b>59</b><small>train</small><b>20</b><small>development</small><b>10</b><small>sealed final</small></article>
+            <article><span>Split B</span><b>59</b><small>train</small><b>20</b><small>development</small><b>10</b><small>same sealed final</small></article>
+          </div>
+          <p class="callout">The split used application, environment, vulnerability family, and difficulty—not model outcomes, traces, scores, or loss.</p>
+        </section>
+
+        <section class="section compact" aria-labelledby="scope-title">
+          <div class="section-heading">
+            <p class="section-index">07</p>
+            <div>
+              <h2 id="scope-title">Scope and public evidence</h2>
+              <p>This audit covers the frozen 160-version study roster. It is not a census of every task now present in Fleet’s live catalog, and it is not a fresh health check of every environment today.</p>
+              <div class="source-links">
+                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/fleet-a62-task-split-v1.json">All 160 exact versions</a>
+                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/qwen-blackbox-eligible-v1.json">The 89 accepted versions</a>
+                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/docs/QWEN_BLACKBOX_TASK_FILTERING_REPORT_2026-09-12.md">Full filtering report</a>
+              </div>
+            </div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <footer>
+      <p>Fleet Cyber · Public research report</p>
+      <p>Results are versioned observations, not deployment claims.</p>
+    </footer>
+    <script src="report-data.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
