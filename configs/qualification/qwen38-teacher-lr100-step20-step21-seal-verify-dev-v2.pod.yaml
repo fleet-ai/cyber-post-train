@@ -1,0 +1,154 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: chris-q38-lr100-seal-verify-v2
+  namespace: fleet-train-jobs
+  annotations:
+    fleet.ai/prepared-offline-only: "true"
+    fleet.ai/create-requires-fresh-auth-and-live-gates: "true"
+spec:
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  priorityClassName: c1
+  activeDeadlineSeconds: 3600
+  terminationGracePeriodSeconds: 30
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 100
+    fsGroup: 100
+  containers:
+    - name: verifier
+      image: 661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+        - -lc
+        - |
+          set -eu
+          wheel=/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-dev-v2-stage-v1/cyber_post_train-0.1.0-py3-none-any.whl
+          test "$(sha256sum "$wheel" | awk '{print $1}')" = 3d310557cb2808390766a18d044aabd5d44f08c5c1c616bde150c2a1e4ebcf74
+          test ! -e /tmp/lr100-pair-verifier-package
+          python3 -m zipfile -e "$wheel" /tmp/lr100-pair-verifier-package
+          PYTHONPATH=/tmp/lr100-pair-verifier-package python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          import torch
+
+          from training.checkpoints import receipt, verify
+
+
+          if torch.cuda.is_available():
+              raise ValueError("checkpoint pair verification must not allocate a GPU")
+
+          run = Path("/mnt/sfs/jobs/chris-q38-ta8-lr100-dev-v2")
+          expected = (
+              {
+                  "step": 20,
+                  "manifest": Path(
+                      "/mnt/sfs/jobs/chris-q38-study-corpora-v1/"
+                      "lr100-dev-v2-checkpoint-seals-v1/step-20.json"
+                  ),
+                  "receipt": "54216c0e2a506f39b5437101e604e87c3e753adccf84ecdc937ac0c6177f89b8",
+              },
+              {
+                  "step": 21,
+                  "manifest": Path(
+                      "/mnt/sfs/jobs/chris-q38-study-corpora-v1/"
+                      "lr100-dev-v2-checkpoint-seals-v1/step-21.json"
+                  ),
+                  "receipt": "b82fd516e2e3c4bffa99d9cae718e6caaba4d7b9d1679885c41676ef3d754fa0",
+              },
+          )
+
+
+          def file_sha256(path: Path) -> str:
+              value = hashlib.sha256()
+              with path.open("rb") as stream:
+                  for chunk in iter(lambda: stream.read(8 * 1024 * 1024), b""):
+                      value.update(chunk)
+              return value.hexdigest()
+
+
+          rows = []
+          source_plan_sha256 = "f42894e871ee3ec2204e435cdf240d2641706f4d151bd4484b56edcf6716ada3"
+          for item in expected:
+              path = item["manifest"]
+              manifest_file_sha256 = file_sha256(path)
+              manifest = receipt(path)
+              if manifest["receipt_sha256"] != item["receipt"]:
+                  raise ValueError("checkpoint seal receipt differs from the offline binding")
+              verify(manifest, check_files=True)
+              if file_sha256(path) != manifest_file_sha256:
+                  raise ValueError("checkpoint seal changed during source rehash")
+              step = item["step"]
+              source = manifest["source_plan"]
+              recipe = source["recipe"]
+              if (
+                  manifest["optimizer_step"] != step
+                  or manifest["checkpoint_path"]
+                  != str(run / "checkpoints" / f"global_step_{step}")
+                  or manifest["world_size"] != 8
+                  or len(manifest["files"]) != 33
+                  or manifest["total_bytes"] != 324_627_486_731
+                  or manifest["gpu_reload_verified"] is not False
+                  or manifest["source_plan_sha256"] != source_plan_sha256
+                  or source["run_name"] != "chris-q38-ta8-lr100-dev-v2"
+                  or source["output_root"] != str(run)
+                  or recipe["nodes"] != 1
+                  or recipe["gpus_per_node"] != 8
+                  or recipe["lr"] != 0.0001
+                  or recipe["max_steps"] != 76
+                  or source["execution"]["image"]
+                  != "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4"
+              ):
+                  raise ValueError("checkpoint seal differs from the exact LR100 contract")
+              rows.append(
+                  {
+                      "optimizer_step": step,
+                      "manifest_file_sha256": manifest_file_sha256,
+                      "manifest_receipt_sha256": manifest["receipt_sha256"],
+                      "verified_files": len(manifest["files"]),
+                      "verified_bytes": manifest["total_bytes"],
+                      "mismatch_count": 0,
+                      "full_source_rehash": True,
+                  }
+              )
+
+          proof = {
+              "schema": "cyber_qwen38_lr100_checkpoint_pair_verifier_result_v1",
+              "pod_uid": os.environ["POD_UID"],
+              "source_plan_sha256": source_plan_sha256,
+              "checkpoints": rows,
+              "same_source_plan": True,
+              "read_only_sfs": True,
+              "raw_tensor_values_read": False,
+              "gpu_count": 0,
+          }
+          canonical = json.dumps(proof, sort_keys=True, separators=(",", ":")).encode()
+          proof["receipt_sha256"] = hashlib.sha256(canonical).hexdigest()
+          print(json.dumps(proof, sort_keys=True, separators=(",", ":")), flush=True)
+          PY
+      env:
+        - name: POD_UID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.uid
+      resources:
+        requests:
+          cpu: "2"
+          memory: 4Gi
+        limits:
+          cpu: "4"
+          memory: 8Gi
+      volumeMounts:
+        - name: sfs
+          mountPath: /mnt/sfs
+          readOnly: true
+  volumes:
+    - name: sfs
+      persistentVolumeClaim:
+        claimName: sfs-shared
+        readOnly: true
