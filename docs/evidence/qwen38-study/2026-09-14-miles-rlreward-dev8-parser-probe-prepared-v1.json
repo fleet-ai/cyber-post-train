@@ -1,0 +1,79 @@
+{
+  "schema": "cyber_qwen38_miles_dev8_parser_probe_prepared_v1",
+  "recorded_at": "2026-09-14T08:06:00Z",
+  "classification": "offline_prepared_gpu_submission_held_for_higher_priority_dev_reload",
+  "source": {
+    "implementation_commit": "bdef2364ca2ce1c452025df7d7ea31e3cb51df7e",
+    "dev8_parent_commit": "17bcaadff4c7cd237d44dfcdd8f13c2a448a6fec",
+    "source_plan_sha256": "sha256:e9c21c3d32116f57533b307f580b457303c951d8e0007f7695d448cc7320bea6",
+    "source_plan_file_sha256": "sha256:bcc9efb26847d4d946a13a53eb8b0a800e14945c38f5932b74acad1e54b0d588",
+    "runtime_file_sha256": "sha256:ab78a81f01801ce9cdc8d06f2eb8043ada7f0f0df37bc44f2bf2252177eeb318"
+  },
+  "prepared": {
+    "path": "/private/tmp/cpt-miles-dev8-parser-probe-v1",
+    "plan_file_sha256": "sha256:23176d603ac6e742f40563d4e228aa9d0226d2b0d491159b6ea1c5f29e5feb13",
+    "plan_sha256": "sha256:3e016297700c8919d6d59accbfc46f92c95025c9820f2b4655da0e0c02d5b9f7",
+    "request_file_sha256": "sha256:ea3661742c3e645fa2b36eb27b5d12f1ce632a8b2dc27255d366d1bd8669d4b8",
+    "request_sha256": "sha256:168d0582867025d337c27c61437bbd280b051e8fc0bb61b5c7cd73deb1af026b",
+    "prepared_file_sha256": "sha256:2b3a5aeffaa26873b687291cd390c3942a443b9dc50683cdae78e8531050a889",
+    "reconstruction_passed": true
+  },
+  "request": {
+    "cluster": "dev",
+    "priority": "c1",
+    "workers": 1,
+    "gpus_per_worker": 1,
+    "deadline_seconds": 300,
+    "secrets": [],
+    "automatic_requeue": false,
+    "source_training_topology": "1x8",
+    "expected_max_tokens_per_turn": 8192
+  },
+  "execution_boundary": {
+    "calls_exact_native_parser": true,
+    "stops_before_ray_initialization": true,
+    "rollouts": 0,
+    "task_requests": 0,
+    "verifier_calls": 0,
+    "reward_batches": 0,
+    "weights_loaded": 0,
+    "optimizer_steps": 0,
+    "checkpoints_written": 0,
+    "clean_rejection_receipt_on_contract_mismatch": true,
+    "unexpected_runtime_defects_remain_terminal_failures": true
+  },
+  "offline_validation": {
+    "ruff_check_passed": true,
+    "ruff_format_passed": true,
+    "focused_tests_passed": 9,
+    "cli_non_doctor_tests_passed": 74,
+    "doctor_excluded_reason": "Desktop environment lacks optional torch and pyarrow packages; this is not a probe-code failure.",
+    "prepared_bundle_reconstruction_passed": true
+  },
+  "external_actions": {
+    "jobs_api_preview_calls": 0,
+    "jobs_api_run_create_posts": 0,
+    "gpu_allocations_created": 0,
+    "production_actions": 0
+  },
+  "decision": {
+    "gpu_submission_authorized_by_this_record": false,
+    "submission_held": true,
+    "hold_reason": "The LR3e-5 two-by-four checkpoint reload is the higher-priority imminent dev GPU action.",
+    "remaining_gates": [
+      "exact-image zero-GPU packaged-entrypoint preflight",
+      "dev Jobs API preview",
+      "fresh output, API-history, capacity and auth-lifetime checks",
+      "explicit confirmation that the LR3e-5 reload is terminal and released",
+      "one create-once dev POST"
+    ]
+  },
+  "privacy": {
+    "prompts_or_traces_recorded_here": false,
+    "flags_or_answers_recorded_here": false,
+    "raw_rewards_or_scores_recorded_here": false,
+    "credentials_recorded_here": false,
+    "private_logs_recorded_here": false
+  },
+  "sha256": "c3f2a52abd34c0f59f013fa1a41ca9475dc4ec1977ddb595a8fb11c05341de00"
+}
