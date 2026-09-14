@@ -1,0 +1,71 @@
+{
+  "schema": "cyber_qwen38_miles_rlreward_dev_terminal_release_v1",
+  "recorded_at": "2026-09-14T07:29:03Z",
+  "classification": "clean_generation_budget_rejection_before_reward_or_optimization",
+  "run": {
+    "cluster": "dev",
+    "api_run_name": "chris-q38-miles-rlreward-dev7-fa5c7491",
+    "api_run_id": "fa5c7491-a778-4ac8-965c-82d37be70b4c",
+    "rayjob_uid": "11bc3141-6261-49d5-98f4-a98f95ecf2d5",
+    "workload_uid": "1a73677b-0161-4502-acc1-0ac94c1ce75c",
+    "output_root": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev7",
+    "controller_terminal_state": "SUCCEEDED"
+  },
+  "terminal_receipt": {
+    "path": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev7/NATIVE_REJECTED.json",
+    "mirrored_path": "/mnt/sfs/jobs/chris-q38-miles-rlreward-dev7/REJECTED.json",
+    "files_byte_identical": true,
+    "file_sha256": "sha256:8f4d524da088e0db2ee086d8cbf2085799530e7b8899e601b417477bb7e0fa4a",
+    "self_digest_valid": true,
+    "schema": "cyber_rl_native_rejection_v1",
+    "status": "rejected",
+    "reason": "generation_incomplete_length",
+    "plan_binding_matches_start_receipt": true
+  },
+  "scientific_accounting": {
+    "episode_packages": 1,
+    "batches_started": 1,
+    "accepted_reward_batches": 0,
+    "optimizer_updates": 0,
+    "checkpoints": 0,
+    "checkpoint_seals": 0,
+    "policy_delta_receipts": 0,
+    "terminal_acceptance_receipts": 0,
+    "reload_acceptance_receipts": 0,
+    "valid_training_outcome": false
+  },
+  "wandb": {
+    "identity_matches_plan": true,
+    "remote_state": "finished",
+    "safe_training_history_rows": 0,
+    "observed_optimizer_steps": [],
+    "safe_update_metric_names": [],
+    "logged_artifacts": 0,
+    "training_update_evidence_present": false
+  },
+  "release": {
+    "jobs_api_delete_calls": 1,
+    "jobs_api_delete_status": 204,
+    "api_absent_after_delete": true,
+    "rayjob_absent": true,
+    "workload_absent": true,
+    "raycluster_absent": true,
+    "gpu_pods_absent": true,
+    "sfs_evidence_preserved": true,
+    "resource_release_uncertain": false
+  },
+  "decision": {
+    "native_reload_applicable": false,
+    "production_rl_open": false,
+    "unchanged_retry_allowed": false,
+    "bounded_successor_allowed": true,
+    "bounded_successor_delta": "Increase only limits.max_tokens_per_turn from 4096 to 8192 with a fresh create-once identity."
+  },
+  "privacy": {
+    "prompts_or_traces_recorded_here": false,
+    "flags_or_answers_recorded_here": false,
+    "raw_rewards_or_scores_recorded_here": false,
+    "credentials_recorded_here": false,
+    "private_logs_recorded_here": false
+  }
+}

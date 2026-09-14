@@ -1,0 +1,120 @@
+{
+  "schema": "cyber_qwen38_miles_rlreward_dev8_zero_gpu_preflight_observation_v1",
+  "recorded_at": "2026-09-14T07:29:03Z",
+  "classification": "prepared_but_gpu_submission_blocked_on_native_parser_gate",
+  "source": {
+    "base_commit": "878421e8c56e77e8abaeabafa37a7431f0c9e368",
+    "bundle_sha256": "sha256:4494266c22d50ec9ecec84c85b1fd97f9877cf2965aebf3f6c6749b7513a8a1b",
+    "manifest_self_sha256": "sha256:07ba47a3c98e93e14fce03ef7172a53802977a01b77e89ec67b90ac2411abdcd",
+    "contains_credentials": false,
+    "contains_task_payloads": false,
+    "contains_external_benchmark_data": false
+  },
+  "configs": {
+    "data": {
+      "path": "configs/qualification/qwen38-miles-rl-reward-canary-data-dev-v8.json",
+      "file_sha256": "sha256:c33483af346afd794237a4637f2a54d377ec87151d0efea8071fc66f2573c205"
+    },
+    "run": {
+      "path": "configs/qualification/qwen38-miles-rl-reward-canary-dev-v8.json",
+      "file_sha256": "sha256:2bb1a8db017d0aeb5841caaf491b4fb17a74e78bb7bb0c4b8e9f481eb52ce0c7"
+    },
+    "launch": {
+      "path": "configs/qualification/qwen38-miles-rl-reward-canary-launch-dev-v8.json",
+      "file_sha256": "sha256:ddea71016eb14d3a7644bbd3f50bd608dfb01151c2426df4d78afdd9d9100798"
+    }
+  },
+  "scientific_delta": {
+    "field": "limits.max_tokens_per_turn",
+    "from": 4096,
+    "to": 8192,
+    "reason": "Dev7 cleanly rejected when one model turn exhausted the 4096-token generation cap.",
+    "all_other_task_split_model_harness_reward_and_training_fields_unchanged": true
+  },
+  "qualification": {
+    "pod": {
+      "name": "chris-q38-miles-rlreward-dev8-qualify-v1",
+      "uid": "1263fce8-d4d3-4cf2-a644-c017eea32633",
+      "phase": "Succeeded",
+      "exit_code": 0,
+      "restarts": 0,
+      "gpus_requested": 0
+    },
+    "receipt_path": "/mnt/sfs/jobs/chris-q38-miles-rlreward-preflight-dev8-v1/QUALIFICATION.json",
+    "receipt_file_sha256": "sha256:0d244d4279c5db3eaf59e282ac866bd6e78a826cf9c6c1296cf7d5904948774a",
+    "receipt_self_sha256": "sha256:5dfd9a9f9832aa9be0d27c95b0249c01a912fcd6a2e7f09c190be62aa82dadc6",
+    "receipt_self_digest_valid": true,
+    "status": "cpu_qualified_parser_blocked",
+    "plan_sha256": "sha256:e9c21c3d32116f57533b307f580b457303c951d8e0007f7695d448cc7320bea6",
+    "request_sha256": "sha256:6c5d4396896ec9098c16b957ddcfa623ea12cea50ea010242f53b432772fa245",
+    "cpu_preflight_self_sha256": "sha256:1bfa05bbef39732a7256bff01884260fc1042d3ad7cd45fc3c11bd3a52cc8ad4",
+    "preview_manifest_sha256": "sha256:2cc71bc799adac144991e469d9d72518d05ab738cd3808403258ecbf6feefe75",
+    "preview_shape": {
+      "workers": 1,
+      "gpus_per_worker": 8,
+      "gpus": 8,
+      "pod_priority_class": "c1",
+      "queue_priority_class": "q1",
+      "effective_priority_expected": 10000,
+      "requeue_if_preempted": false,
+      "shared_memory": "64Gi"
+    },
+    "native_argument_builder_observed_tokens_per_turn": 8192,
+    "jobs_api_preview_posts": 1,
+    "jobs_api_run_create_posts": 0,
+    "jobs_api_identity_matches_before": 0,
+    "jobs_api_identity_matches_after": 0,
+    "wandb_identity_absent_before": true,
+    "wandb_identity_absent_after": true,
+    "output_root_absent": true
+  },
+  "native_parser": {
+    "cpu_node_attempt": {
+      "attempted": true,
+      "passed": false,
+      "sanitized_error_class": "OSError",
+      "sanitized_error_digest": "sha256:1e8cff860e85d561f1b097e4f3323e853ce965f0e18ffa7d9c271699456af0c8"
+    },
+    "gpu_capable_host_zero_gpu_attempt": {
+      "pod": "chris-q38-miles-rlreward-dev8-parser-v2",
+      "pod_uid": "af1cba84-95c6-4b7b-a448-a9bff5805897",
+      "phase": "Succeeded",
+      "restarts": 0,
+      "gpus_requested": 0,
+      "cuda_devices_exposed": 0,
+      "passed": false,
+      "sanitized_error_class": "RuntimeError",
+      "sanitized_error_digest": "sha256:753e0e5e4f72441ae2c6df5754046b90869e807d425011174fa443f067072899"
+    },
+    "conclusion": "The native argument builder deterministically carries 8192 into the planned request, but the real native parser does not complete without its distributed CUDA runtime. This record does not claim parser qualification."
+  },
+  "static_tests": {
+    "focused_and_runtime_related_collected": 270,
+    "passed": 269,
+    "skipped": 1,
+    "failed": 0,
+    "full_desktop_collection_blocked_by_missing_optional_dependencies": [
+      "torch",
+      "psycopg"
+    ]
+  },
+  "live_state_after_preflight": {
+    "dev8_rayjobs": 0,
+    "dev8_workloads": 0,
+    "owned_running_gpu_pods": 0,
+    "owned_running_gpu_requests": 0
+  },
+  "decision": {
+    "gpu_training_submitted": false,
+    "production_training_submitted": false,
+    "gpu_submission_authorized_by_this_record": false,
+    "remaining_gate": "The exact native parser must complete and observe fleet_max_tokens_per_turn=8192 in an allowed runtime before a GPU training canary can be submitted."
+  },
+  "privacy": {
+    "prompts_or_traces_recorded_here": false,
+    "flags_or_answers_recorded_here": false,
+    "raw_rewards_or_scores_recorded_here": false,
+    "credentials_recorded_here": false,
+    "private_logs_recorded_here": false
+  }
+}
