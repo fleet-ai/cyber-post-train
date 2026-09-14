@@ -1,0 +1,204 @@
+{
+  "schema": "cyber_qwen38_teacher_sft_next_dev_completions_v1",
+  "study_id": "qwen38-blackbox-teacher-next-dev-completions-v1",
+  "status": "offline_prepared_no_live_calls",
+  "launchable": false,
+  "purpose": "Finish the two existing partial teacher-SFT learning-rate cells that provide the smallest high-value wide-contrast development comparison before adding another factor.",
+  "decision": {
+    "arm_count": 2,
+    "only_factor_varied_between_arms": "learning rate",
+    "learning_rate_values": [
+      0.00003,
+      0.0001
+    ],
+    "learning_rate_ratio_high_over_low": 3.3333333333333335,
+    "why_two": "Both cells already contain accepted finite optimizer progress, so exact continuation obtains two terminal checkpoints with less compute and less confounding than starting new fresh-base arms.",
+    "why_no_new_batch_epoch_scheduler_or_data_arm": "Changing a second scientific factor before this learning-rate contrast has held-out Fleet outcomes would prevent clean attribution and increase the search without current evidence.",
+    "fresh_base_restarts_prepared": false,
+    "source_optimizer_steps_replayed": false
+  },
+  "common_bindings": {
+    "model": {
+      "repository": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "lock_path": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+      "lock_file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+      "trainer_image_sha256": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4"
+    },
+    "filtered_split": {
+      "path": "configs/data/qwen-blackbox-study-split-a-v1.json",
+      "file_sha256": "sha256:2558d0346f5edd26d6a7cd85fc1774cb1be2339d588be1f7f967fc14689d6ccc",
+      "embedded_sha256": "sha256:9ce5ba7f4cb9c52f6adfdbe615ca2258358dc602d6a9bb665c2ccc29dc04f4b8",
+      "inventory_task_families": 89,
+      "train_task_families": 59,
+      "dev_task_families": 20,
+      "final_test_task_families": 10,
+      "full_taxonomy_available": true,
+      "balanced_dimensions": [
+        "application",
+        "environment",
+        "vulnerability family",
+        "difficulty"
+      ],
+      "split_unit": "reviewed task family; all lineage aliases and versions grouped",
+      "generalization_scope": "task-family-held-out; applications may be shared",
+      "final_test_lock_sha256": "sha256:dc625115be8c775de8ecf476bc0d8e06e71b6c7f4160ed50b25eb0308b30d8d7"
+    },
+    "training_corpus": {
+      "manifest": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher-a/manifest-available-a-outcome-v2.json",
+      "manifest_sha256": "sha256:1b083613c16362daf7c86fd8b458d99d7e167133df919602c21916314142c4dc",
+      "successor_evidence": {
+        "path": "docs/evidence/qwen38-study/2026-09-12-available-a-protocol-successor-v1.json",
+        "file_sha256": "sha256:46d1bf91c759475c0101208e98392db75a696f3cff8e79a2f29de28da1f520bc",
+        "embedded_sha256": "sha256:25a8ad7753f380d6cbb86ce5418b81ae71bd6799ffedb03ee55c74a31ec88dde"
+      },
+      "stage_evidence": {
+        "path": "docs/evidence/qwen38-study/2026-09-12-available-a-protocol-successor-stage-v1.json",
+        "file_sha256": "sha256:d6e0ad6b8f801162c447fc93b23eb42d51ddd6c84fd64c24d436df272f8b4bab",
+        "embedded_sha256": "sha256:8d56d5c229a39848547656a261b482abbc4a840439271ebfa981c59d3e8d9827"
+      },
+      "cpu_preflight_evidence": {
+        "path": "docs/evidence/qwen38-study/2026-09-12-lr-v2-cpu-preflight-preview-v1.json",
+        "file_sha256": "sha256:0220c738eece33dc556087557d5f1fe5f69b326c40e71e851c1201815c277b15",
+        "embedded_sha256": "sha256:92096067a0962fcebe9acb60954b03bed07720d896927333fdb9edd6724ed987"
+      },
+      "training_split_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863",
+      "source_selection_sha256": "sha256:cdf82a83e423c3de6556b8f0ca5eaf4cb358041cd3015a335250b473e4a5cfc7",
+      "tokenizer_identity_sha256": "sha256:61463c912eb610ee47b0ade3837572e5c048310b5be04bdf8164b9c15aa149e5",
+      "train_file_sha256": "sha256:a230b82655ccfea299ba8be12ac271706af89e98f81120e8289eefeeec9d2869",
+      "target_policy_sha256": "sha256:f371e87d02e6a32d32b511d9439caff97540709f17f346830d7989781c550cc1",
+      "dense_windows": 602,
+      "represented_train_tasks": 29,
+      "supervised_tokens": 700359,
+      "teacher_source_harness_claimed_by_this_plan": false,
+      "teacher_source_harness_note": "The sanitized corpus authority freezes the exact training bytes and target policy; this offline plan does not infer an unrecorded original teacher-collection harness."
+    },
+    "selection_protocol": {
+      "path": "configs/evaluation/qwen38-blackbox-fleet-dev-a-outcome-protocol-v2.json",
+      "file_sha256": "sha256:008d412bcdee122cd2b4f072e6f242496b3e8de1e8b07ad60e598de59202560e",
+      "embedded_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75",
+      "task_count": 20,
+      "pass_k": 4,
+      "attempt_seeds": [
+        42,
+        43,
+        44,
+        45
+      ],
+      "primary_metric": "fleet_dev_paired_mean_success_delta_4fixed",
+      "base_candidate_pairing": "exact task_version_id and attempt seed",
+      "harness": {
+        "name": "opencode",
+        "version": "1.18.27",
+        "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+        "provider_adapter": "@ai-sdk/openai-compatible",
+        "context_management": "opencode_1.18.27_native_compaction_autocontinue_v2",
+        "context_window_size": 262144,
+        "compaction_headroom_tokens": 20000,
+        "max_output_tokens": 32768,
+        "max_model_requests": 600,
+        "timeout_seconds": 28800,
+        "tools": [
+          "bash",
+          "submit_report"
+        ],
+        "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+      },
+      "sampling": {
+        "temperature": 0.6,
+        "top_p": 0.95
+      }
+    }
+  },
+  "ranked_arms": [
+    {
+      "rank": 1,
+      "arm_id": "teacher.available-a.lr-3e-5.batch-8.epoch-1.seed-42.resume-step6-to76",
+      "template": {
+        "path": "configs/qualification/qwen38-teacher-lr30-step6-resume-to76-dev-v1.template.json",
+        "file_sha256": "sha256:943d48666b131ae878e245d0ee24c6bf8a56c5805fdf256bcc1aced85d8f22cc",
+        "embedded_sha256": "sha256:0913f7106a04c40bb46b8edbb061f6a82764d19ca2aeceabe8a225c7fa67b7cb"
+      },
+      "learning_rate": 0.00003,
+      "source_optimizer_step": 6,
+      "terminal_optimizer_step": 76,
+      "remaining_optimizer_steps": 70,
+      "state": "waiting_fresh_live_gates",
+      "pre_resume_checkpoint_and_reload_accepted": true,
+      "rationale": "The checkpoint already passed an exact all-rank zero-update reload and independent rehash. This is the lowest-risk route to the first complete available-A outcome-only checkpoint and a held-out Fleet result."
+    },
+    {
+      "rank": 2,
+      "arm_id": "teacher.available-a.lr-1e-4.batch-8.epoch-1.seed-42.resume-step21-to76",
+      "template": {
+        "path": "configs/qualification/qwen38-teacher-lr100-step21-resume-to76-dev-v1.template.json",
+        "file_sha256": "sha256:4997a9a6211bf6be08b2a4833814ac034041f37a793e7df3c211060da02fd7fe",
+        "embedded_sha256": "sha256:b6e00a02cf43b2813b8b1e8411eb7307cfa7115e60e41291f651f00b9ea45cd4"
+      },
+      "learning_rate": 0.0001,
+      "source_optimizer_step": 21,
+      "terminal_optimizer_step": 76,
+      "remaining_optimizer_steps": 55,
+      "state": "blocked_waiting_checkpoint_pair_and_zero_update_reload_acceptance",
+      "pre_resume_checkpoint_and_reload_accepted": false,
+      "rationale": "This is the reviewed upper learning-rate boundary and a 3.33x contrast to LR3e-5. Its 21 finite steps make completion efficient, but its checkpoint cannot be continued until the outstanding pair proof and exact one-by-eight reload pass."
+    }
+  ],
+  "execution_order": {
+    "research_priority": [
+      "LR3e-5 completion",
+      "LR1e-4 completion"
+    ],
+    "parallelism_rule": "LR1e-4 may overlap LR3e-5 only after its own checkpoint/reload gate passes and the aggregate active experiment-node count including both requests remains at or below eight.",
+    "failure_rule": "A runtime defect or ambiguous producer freezes only the affected canonical cell for evidence review; never replay accepted progress."
+  },
+  "selection_firewall": {
+    "training_loss": {
+      "record_in_wandb": true,
+      "selection_eligible": false,
+      "role": "fitting diagnostic only"
+    },
+    "fleet_dev": {
+      "selection_eligible": true,
+      "only_metric": "fleet_dev_paired_mean_success_delta_4fixed",
+      "invalid_or_missing_pair_policy": "incomplete; never count infrastructure-invalid outcomes as model failures"
+    },
+    "fleet_final": {
+      "state": "locked_until_development_selection_is_frozen",
+      "selection_eligible": false
+    },
+    "webexploitbench": {
+      "state": "sealed_until_the_fleet_dev_selection_decision_is_frozen",
+      "hyperparameter_checkpoint_stopping_or_tiebreak_selection_eligible": false,
+      "allowed_role_after_unsealing": "external matched-harness report only"
+    }
+  },
+  "terminal_candidate_gate": [
+    "complete all planned optimizer steps with finite scalar evidence and acknowledged W&B sync",
+    "seal and independently rehash the terminal checkpoint",
+    "pass an exact all-rank zero-optimizer checkpoint reload",
+    "export deterministically to BF16 and pass full model and tokenizer reload",
+    "create-once stage and register serving with immutable identities",
+    "prove live serving parity",
+    "complete every exact base/candidate Fleet dev task-seed pair with valid authoritative outcomes",
+    "freeze the Fleet dev selection decision before unsealing any external benchmark"
+  ],
+  "live_prerequisites": [
+    "fresh Nebius and Jobs API authentication with enough lifetime to monitor and release each exact run",
+    "fresh exact-image CPU preflight and warning-free authenticated dev preview for each materialized continuation",
+    "unique W&B run identity and working W&B authentication",
+    "exact output prepared API Kubernetes and durable-journal duplicate checks",
+    "source checkpoint and seal integrity reverified immediately before materialization",
+    "LR1e-4 checkpoint-pair proof and zero-update reload acceptance",
+    "campaign-wide active-node accounting within the eight-node limit excluding inference endpoints",
+    "accepted matched base Fleet dev result or an exact base evaluation prepared under the same protocol"
+  ],
+  "execution": {
+    "kind": "sealed_metadata_only_not_a_job_request",
+    "cluster_or_api_calls_performed": 0,
+    "wandb_calls_performed": 0,
+    "jobs_submitted": 0,
+    "production_authorized": false
+  },
+  "sha256": "sha256:1c93695352a4dad2423fe56bfddcce95dd3d8ca51ee6e875822733ae4e585aeb"
+}
