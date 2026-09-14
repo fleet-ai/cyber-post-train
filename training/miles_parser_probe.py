@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 from pathlib import Path, PurePosixPath
 
@@ -76,6 +77,17 @@ def _sfs_output(value: object) -> str:
     ):
         raise ValueError("parser-probe output must be a canonical jobs path")
     return value
+
+
+def _run_root(plan: dict) -> Path:
+    """Bind receipts to the exact directory mounted by the Jobs API."""
+    value = os.environ.get("RUN_DIR")
+    if value != plan.get("output_root"):
+        raise RuntimeError("RUN_DIR does not match parser-probe output")
+    root = Path(value)
+    if root.is_symlink() or not root.is_dir():
+        raise RuntimeError("parser-probe output is not a direct directory")
+    return root
 
 
 def _expected(source: dict) -> dict:
@@ -262,10 +274,11 @@ def preflight(plan: dict) -> dict:
     }
 
 
-def run(plan: dict) -> dict:
+def run(plan: dict, *, run_root: Path | None = None) -> dict:
     import torch
 
     source = validate_plan(plan)
+    run_root = _run_root(plan) if run_root is None else run_root
     source_output = Path(source["output_root"])
     if source_output.exists():
         raise ProbeRejected("source_training_output_exists")
@@ -314,7 +327,7 @@ def run(plan: dict) -> dict:
         "distributed_initialized_before_or_after": False,
         **plan["operations"],
     }
-    return _write(Path(plan["output_root"]) / "PARSER_VALIDATED.json", result)
+    return _write(run_root / "PARSER_VALIDATED.json", result)
 
 
 def main() -> None:
@@ -325,11 +338,12 @@ def main() -> None:
     plan = json.loads(args.plan.read_text())
     if digest(plan) != args.sha256:
         raise SystemExit(2)
+    run_root = _run_root(plan)
     try:
-        result = run(plan)
+        result = run(plan, run_root=run_root)
     except ProbeRejected as exc:
         result = _write(
-            Path(plan["output_root"]) / "PARSER_REJECTED.json",
+            run_root / "PARSER_REJECTED.json",
             {
                 "schema": RECEIPT_SCHEMA,
                 "status": "rejected",
@@ -340,7 +354,7 @@ def main() -> None:
         )
     except BaseException as exc:
         _write(
-            Path(plan["output_root"]) / "FAILED.json",
+            run_root / "FAILED.json",
             {
                 "schema": RECEIPT_SCHEMA,
                 "status": "failed",

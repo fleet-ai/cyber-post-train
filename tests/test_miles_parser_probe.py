@@ -1,6 +1,7 @@
 import dataclasses
 import json
 import sys
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -106,7 +107,7 @@ def test_probe_calls_only_native_parser_and_records_8192(plan, monkeypatch) -> N
         "_write",
         lambda path, value: recorded.append((path, value)) or {**value, "sha256": "receipt"},
     )
-    result = probe.run(plan)
+    result = probe.run(plan, run_root=Path(plan["output_root"]))
     assert calls == ["native_parser"]
     assert result["status"] == "validated"
     assert result["native_parser_observation"]["fleet_max_tokens_per_turn"] == 8192
@@ -126,7 +127,17 @@ def test_probe_cleanly_rejects_without_one_visible_gpu(plan, monkeypatch) -> Non
     )
     monkeypatch.setattr(probe.Path, "exists", lambda path: False)
     with pytest.raises(probe.ProbeRejected, match="exactly_one_cuda_device_not_visible"):
-        probe.run(plan)
+        probe.run(plan, run_root=Path(plan["output_root"]))
+
+
+def test_probe_receipts_are_bound_to_platform_run_dir(plan, monkeypatch) -> None:
+    monkeypatch.setenv("RUN_DIR", plan["output_root"])
+    monkeypatch.setattr(probe.Path, "is_symlink", lambda _path: False)
+    monkeypatch.setattr(probe.Path, "is_dir", lambda _path: True)
+    assert probe._run_root(plan) == Path(plan["output_root"])
+    monkeypatch.setenv("RUN_DIR", plan["source_plan"]["output_root"])
+    with pytest.raises(RuntimeError, match="does not match"):
+        probe._run_root(plan)
 
 
 def test_probe_rejects_any_training_plan_or_resource_drift(plan, monkeypatch) -> None:
