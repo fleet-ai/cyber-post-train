@@ -1,1498 +1,1231 @@
 {
-  "schema": "qwen38_cyber_training_decision_space_v2",
+  "schema": "qwen38_cyber_ranked_experiment_plan_v3",
   "updated": "2026-09-13",
-  "scope": {
-    "model": "Qwen3.8-27B",
-    "goal": "Increase success on previously unseen Fleet blackbox cyber tasks through training.",
-    "included": "Training data, SFT, RL, combined schedules, fair evaluation, statistics, and reliable operations.",
-    "excluded": "Private benchmark content, task answers, prompts, traces, credentials, and live run results.",
-    "comparison_rule": "Call a gain training lift only when the trained checkpoint is the intended difference and all evaluation conditions are matched."
-  },
-  "priorities": {
-    "Hold fixed": "A change can make the comparison unfair or unsafe, so freeze it inside every base-versus-trained comparison.",
-    "Test now": "A high-value choice for the first controlled search waves.",
-    "Test later": "A refinement to study after basic SFT and reward-bearing RL are reliable."
-  },
-  "definitions": [
-    {
-      "term": "SFT",
-      "meaning": "Supervised fine-tuning: teach the model to predict actions from saved, verified successful attempts."
+  "goal": "Improve Qwen3.8-27B on blackbox web-security tasks using only Fleet cyber training tasks.",
+  "scope": "The rankings are informed starting points, not measured winners. Each comparison should change only the settings named by its shaded cells. The 20-task development set is used to choose settings. The 10-task final Fleet set stays untouched until finalists are chosen. WebExploitBench is run after accepted training runs as development evidence and cannot also be described as an untouched final test.",
+  "tables": {
+    "sft": {
+      "title": "Ranked supervised fine-tuning runs",
+      "groups": [
+        {
+          "label": "Run order",
+          "columns": [
+            ["rank", "Rank", "The recommended order. Rank 1 should finish before rank 2 unless it is blocked."],
+            ["run_id", "Run ID", "A stable short name for this exact training run."],
+            ["research_question", "Question this run answers", "The single main question this run is designed to answer."],
+            ["status", "Status", "Whether the run is first, waiting on evidence, or a later control."],
+            ["why_priority", "Why this rank", "Why this run belongs here instead of earlier or later."],
+            ["compare_with", "Compare with", "The run or untrained model that makes this result interpretable."],
+            ["launch_after", "Launch after", "The evidence required before this run uses GPUs."]
+          ]
+        },
+        {
+          "label": "Model",
+          "columns": [
+            ["model", "Model", "The model family and size being trained."],
+            ["start_checkpoint", "Starting checkpoint", "The exact model weights before this run begins."],
+            ["model_revision", "Model revision", "The immutable version of the starting model files."],
+            ["trainable_weights", "Weights changed", "Whether every model weight or only an added adapter is updated."],
+            ["precision", "Number precision", "The numerical format used for weights and calculations."],
+            ["trainer", "Training program", "The code that runs forward passes, backward passes, updates, and checkpoints."]
+          ]
+        },
+        {
+          "label": "Training data",
+          "columns": [
+            ["task_split", "Task split", "Which balanced assignment puts tasks into training, development, and final groups."],
+            ["train_pool", "Training tasks", "Tasks whose successful records may be learned from."],
+            ["dev_pool", "Development tasks", "Unseen tasks used to choose settings; never trained on."],
+            ["final_pool", "Final tasks", "Unseen tasks held back from every choice until the end."],
+            ["trace_source", "Attempt source", "Whose saved successful attempts supply the actions to learn."],
+            ["teacher_models", "Teacher models", "The stronger models allowed to contribute successful attempts."],
+            ["teacher_self_ratio", "Teacher : Qwen mix", "The share of target tokens from stronger models versus Qwen."],
+            ["success_rule", "Success requirement", "Evidence required before an attempt can become training data."],
+            ["trace_cap", "Attempts per task family", "The maximum saved attempts from one closely related task family."],
+            ["source_balance", "Source balancing", "How total learning weight is shared across model sources."],
+            ["task_balance", "Task balancing", "How learning weight is spread across task families."],
+            ["data_fraction", "Data used", "The fraction of eligible examples included."],
+            ["duplicate_rule", "Duplicate handling", "How copied or nearly copied attempts are removed."],
+            ["length_preference", "Length handling", "How short and long successful attempts are sampled."],
+            ["data_seed", "Data random seed", "The fixed number used for repeatable sampling."],
+            ["failed_trace_rule", "Failed attempts", "Whether unsuccessful attempts are excluded or used in a defined way."]
+          ]
+        },
+        {
+          "label": "Saved agent record",
+          "columns": [
+            ["source_harness", "Source agent program", "The program that let the model call tools in the saved attempt."],
+            ["conversation_format", "Conversation format", "How messages and tool results become Qwen tokens."],
+            ["tools", "Tools in record", "The tool calls represented in the saved attempt."],
+            ["compaction_rule", "Long-record rule", "What happens if an attempt was shortened to fit a context limit."],
+            ["tool_output_chars", "Tool-output limit", "The maximum tool-result characters preserved for one action."],
+            ["source_context", "Context kept", "How much earlier task and tool history is shown before an action."],
+            ["prompt_version", "Task instructions", "The exact blackbox task instructions in the record."]
+          ]
+        },
+        {
+          "label": "Training examples",
+          "columns": [
+            ["target_actions", "Actions learned", "Which model actions contribute prediction loss."],
+            ["context_only", "Context-only tokens", "Tokens shown to the model but excluded from prediction loss."],
+            ["window_tokens", "Example length", "The maximum tokens in one training example."],
+            ["context_tokens", "Earlier context allowance", "The tokens reserved for task history before learned actions."],
+            ["targets_per_window", "Actions per example", "How many consecutive model actions may be learned in one example."],
+            ["target_position", "Action position", "Where learned actions sit inside an example."],
+            ["stage_weights", "Task-stage weights", "Relative weight for exploration, exploitation, and reporting."],
+            ["long_trace_weight", "Long-attempt weight", "Whether long attempts get more total weight merely because they have more tokens."],
+            ["final_report_weight", "Final-report weight", "Extra weight on the final answer or flag submission."],
+            ["repeated_actions", "Repeated actions", "How exact repeated no-progress actions are handled."],
+            ["overlength", "Too-long actions", "What happens when one action cannot fit safely."],
+            ["cross_trace_packing", "Mix attempts together", "Whether unused space is filled with a different attempt."],
+            ["windows_per_trace", "Examples per attempt", "How many examples may be extracted from one attempt."],
+            ["curriculum", "Example order", "Whether examples are shuffled or ordered from easier to harder."],
+            ["curriculum_stages", "Training stages", "How many separately ordered data phases are used."],
+            ["loss_mask", "Tokens scored by loss", "The exact token types included in next-token prediction error."],
+            ["terminal_only", "Final action only", "Whether only the final answer is learned."],
+            ["example_order", "Shuffle policy", "How example order changes between passes over data."]
+          ]
+        },
+        {
+          "label": "Optimization",
+          "columns": [
+            ["optimizer", "Optimizer", "The rule that turns gradients into weight updates."],
+            ["learning_rate", "Learning rate", "The size of each weight update."],
+            ["schedule", "Learning-rate schedule", "How learning rate changes during the run."],
+            ["warmup", "Warmup", "The early fraction over which learning rate rises."],
+            ["global_batch", "Global batch size", "Total examples used for one update across all GPUs."],
+            ["microbatch", "Examples per GPU", "Examples processed at once on each GPU."],
+            ["gradient_accumulation", "Gradient accumulation", "Small batches combined before one update."],
+            ["epochs", "Passes over data", "Complete passes over the selected examples."],
+            ["weight_decay", "Weight decay", "A penalty that gently pulls weights toward smaller values."],
+            ["gradient_clip", "Gradient limit", "The largest allowed gradient norm."],
+            ["label_smoothing", "Label smoothing", "Whether target probability is spread to other tokens."],
+            ["dropout", "Dropout", "The fraction of hidden activations randomly removed."],
+            ["shuffle_seed", "Training random seed", "The fixed number controlling order and training randomness."],
+            ["nodes", "GPU nodes", "The number of eight-GPU computers used."],
+            ["gpus_per_node", "GPUs per node", "The GPUs used on each computer."],
+            ["checkpoint_every", "Checkpoint interval", "How often recoverable state is saved."],
+            ["checkpoints_kept", "Checkpoints kept", "How many recent checkpoints remain."],
+            ["wandb", "Experiment tracking", "What is sent to Weights & Biases; private prompts and records are excluded."]
+          ]
+        },
+        {
+          "label": "Evaluation and decision",
+          "columns": [
+            ["training_loss", "Training loss", "How often prediction error on training examples is recorded."],
+            ["fleet_dev_eval", "Fleet development test", "The unseen Fleet tasks run after training."],
+            ["dev_attempts", "Attempts per dev task", "Independent attempts on each development task."],
+            ["final_eval", "Final Fleet test", "When untouched final Fleet tasks may be used."],
+            ["webexploitbench", "WebExploitBench", "When the public benchmark is run and how its result is treated."],
+            ["external_harness", "Evaluation agent programs", "The programs around the model during external evaluation."],
+            ["checkpoint_choice", "Checkpoint selection", "How one saved checkpoint is chosen."],
+            ["stop_rule", "Early stop rule", "Evidence that ends training early."],
+            ["advance_rule", "Promotion rule", "Evidence required before a larger or later run."],
+            ["eval_seed", "Evaluation seeds", "The fixed randomness policy used for fair comparisons."],
+            ["relative_cost", "Relative GPU cost", "Rough cost versus the one-epoch one-node SFT baseline."]
+          ]
+        }
+      ],
+      "defaults": {
+        "model": "Qwen3.8-27B",
+        "start_checkpoint": "Exact untrained base model",
+        "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "trainable_weights": "All model weights",
+        "precision": "BF16, a 16-bit training number format",
+        "trainer": "Fleet full-weight SFT spread across 8 GPUs",
+        "task_split": "Balanced split A",
+        "train_pool": "59 filtered Fleet tasks",
+        "dev_pool": "20 balanced unseen Fleet tasks",
+        "final_pool": "10 untouched Fleet tasks",
+        "trace_source": "Verified stronger-teacher successes",
+        "teacher_models": "GPT, Claude Opus, and Grok",
+        "teacher_self_ratio": "100 : 0",
+        "success_rule": "Official task score proves success",
+        "trace_cap": "At most 2 attempts per task family",
+        "source_balance": "Equal teacher target-token shares",
+        "task_balance": "Equal target-token weight per task family",
+        "data_fraction": "100% of eligible examples",
+        "duplicate_rule": "Remove exact and near duplicates before splitting",
+        "length_preference": "Keep useful short and long attempts; balance by family",
+        "data_seed": "11",
+        "failed_trace_rule": "Exclude from supervised targets",
+        "source_harness": "Fleet V1 agent program",
+        "conversation_format": "Exact Qwen chat format",
+        "tools": "bash and submit_report",
+        "compaction_rule": "Use only exact reconstructed records; otherwise exclude",
+        "tool_output_chars": "50,000 characters",
+        "source_context": "Full clean history needed before each target action",
+        "prompt_version": "Frozen Fleet blackbox task instructions",
+        "target_actions": "Every useful assistant action once",
+        "context_only": "User, tool, and earlier assistant tokens",
+        "window_tokens": "16,384 tokens",
+        "context_tokens": "4,096 tokens",
+        "targets_per_window": "All consecutive target actions that fit",
+        "target_position": "At the end of the example",
+        "stage_weights": "Explore 1 · exploit 1 · report 1",
+        "long_trace_weight": "Equal total weight per task family",
+        "final_report_weight": "No extra weight",
+        "repeated_actions": "Collapse exact no-progress repetitions",
+        "overlength": "Exclude and count",
+        "cross_trace_packing": "No",
+        "windows_per_trace": "All eligible actions; no arbitrary cap",
+        "curriculum": "Fully shuffled",
+        "curriculum_stages": "1",
+        "loss_mask": "Chosen assistant-action tokens only",
+        "terminal_only": "No",
+        "example_order": "Reshuffle each pass",
+        "optimizer": "AdamW",
+        "learning_rate": "1e-6",
+        "schedule": "Constant",
+        "warmup": "0%",
+        "global_batch": "32 examples",
+        "microbatch": "1 example per GPU",
+        "gradient_accumulation": "4 steps",
+        "epochs": "1",
+        "weight_decay": "0",
+        "gradient_clip": "1.0",
+        "label_smoothing": "0",
+        "dropout": "0",
+        "shuffle_seed": "17",
+        "nodes": "1",
+        "gpus_per_node": "8",
+        "checkpoint_every": "25 optimizer updates",
+        "checkpoints_kept": "3",
+        "wandb": "All scalar training measures; no prompts or traces",
+        "training_loss": "Every optimizer update",
+        "fleet_dev_eval": "20 development tasks after the run",
+        "dev_attempts": "1 per task",
+        "final_eval": "Only after finalists are chosen",
+        "webexploitbench": "After every accepted run; development evidence",
+        "external_harness": "Frozen matched OpenCode and Qwen Code",
+        "checkpoint_choice": "Best Fleet dev result; earlier checkpoint wins a tie",
+        "stop_rule": "Non-finite loss or gradients, or a broken checkpoint",
+        "advance_rule": "Clean run and reload plus Fleet development lift",
+        "eval_seed": "Same fixed attempt seeds for every comparison",
+        "relative_cost": "1.0×"
+      },
+      "runs": [
+        {
+          "rank": 1,
+          "run_id": "SFT-01-teacher-broad",
+          "research_question": "Can balanced strong-teacher actions improve unseen Fleet tasks?",
+          "status": "Run first",
+          "why_priority": "Strong simple baseline; fixes the old five-window sampling weakness.",
+          "compare_with": "Untrained base Qwen",
+          "launch_after": "New data audit and one-step check pass",
+          "changes": {}
+        },
+        {
+          "rank": 2,
+          "run_id": "SFT-02-self-broad",
+          "research_question": "Does Qwen learn better from its own successful style?",
+          "status": "Run after SFT-01",
+          "why_priority": "Directly tests style matching at the same training dose.",
+          "compare_with": "SFT-01",
+          "launch_after": "SFT-01 data counts are frozen",
+          "changes": {
+            "trace_source": "Verified Qwen successes",
+            "teacher_models": "None",
+            "teacher_self_ratio": "0 : 100",
+            "source_balance": "One Qwen source"
+          }
+        },
+        {
+          "rank": 3,
+          "run_id": "SFT-03-mix-50-50",
+          "research_question": "Does an equal teacher-and-Qwen mixture combine strategy quality with style matching?",
+          "status": "Run after SFT-01 and SFT-02",
+          "why_priority": "A mixed source is a plausible winner and connects the first two results.",
+          "compare_with": "SFT-01 and SFT-02",
+          "launch_after": "Matched teacher and self token pools exist",
+          "changes": {
+            "trace_source": "Verified teacher and Qwen successes",
+            "teacher_self_ratio": "50 : 50",
+            "source_balance": "Equal teacher and Qwen target tokens"
+          }
+        },
+        {
+          "rank": 4,
+          "run_id": "SFT-04-key-actions",
+          "research_question": "Does removing navigation-only behavior concentrate learning on useful problem solving?",
+          "status": "Run after SFT-01",
+          "why_priority": "Extraction may matter more than small optimizer changes.",
+          "compare_with": "SFT-01",
+          "launch_after": "Action labels pass a blinded spot check",
+          "changes": {
+            "target_actions": "Exploration, exploit-changing, recovery, and report actions",
+            "stage_weights": "Explore 2 · exploit 2 · report 1",
+            "windows_per_trace": "One example per distinct useful action"
+          }
+        },
+        {
+          "rank": 5,
+          "run_id": "SFT-05-split-b",
+          "research_question": "Does the main teacher result repeat on a second balanced split?",
+          "status": "Run if SFT-01 lifts",
+          "why_priority": "Protects against a lucky development assignment.",
+          "compare_with": "SFT-01",
+          "launch_after": "SFT-01 shows Fleet development lift",
+          "changes": {
+            "task_split": "Balanced split B",
+            "train_pool": "59 split-B filtered Fleet tasks",
+            "dev_pool": "20 split-B unseen Fleet tasks"
+          }
+        },
+        {
+          "rank": 6,
+          "run_id": "SFT-06-lr-high",
+          "research_question": "Is learning rate 1e-6 too cautious?",
+          "status": "After data-source comparison",
+          "why_priority": "3e-6 is an informative high boundary.",
+          "compare_with": "Best of SFT-01 to SFT-04",
+          "launch_after": "Best data recipe is selected",
+          "changes": {"learning_rate": "3e-6"}
+        },
+        {
+          "rank": 7,
+          "run_id": "SFT-07-lr-low",
+          "research_question": "Is learning rate 1e-6 too aggressive?",
+          "status": "After data-source comparison",
+          "why_priority": "3e-7 tests the stable low boundary.",
+          "compare_with": "Best of SFT-01 to SFT-04",
+          "launch_after": "Best data recipe is selected",
+          "changes": {"learning_rate": "3e-7"}
+        },
+        {
+          "rank": 8,
+          "run_id": "SFT-08-batch-8",
+          "research_question": "Do noisier, more frequent updates generalize better?",
+          "status": "After data-source comparison",
+          "why_priority": "Batch 8 is the small useful boundary.",
+          "compare_with": "Best recipe at batch 32",
+          "launch_after": "Best data recipe is selected",
+          "changes": {"global_batch": "8 examples", "gradient_accumulation": "1 step"}
+        },
+        {
+          "rank": 9,
+          "run_id": "SFT-09-batch-64",
+          "research_question": "Do smoother, larger updates improve stability?",
+          "status": "After data-source comparison",
+          "why_priority": "Batch 64 explores the opposite boundary.",
+          "compare_with": "Best recipe at batch 32",
+          "launch_after": "Best data recipe is selected",
+          "changes": {"global_batch": "64 examples", "gradient_accumulation": "8 steps"}
+        },
+        {
+          "rank": 10,
+          "run_id": "SFT-10-two-epochs",
+          "research_question": "Is one pass too little for sparse successful records?",
+          "status": "After stable rate and batch",
+          "why_priority": "Two passes are the smallest meaningful dose increase.",
+          "compare_with": "Best one-epoch run",
+          "launch_after": "Stable learning rate and batch are selected",
+          "changes": {"epochs": "2", "relative_cost": "2.0×"}
+        },
+        {
+          "rank": 11,
+          "run_id": "SFT-11-four-epochs",
+          "research_question": "Does substantially more repetition help or overfit?",
+          "status": "Run after SFT-10",
+          "why_priority": "Four passes reveal the high-dose boundary.",
+          "compare_with": "SFT-10",
+          "launch_after": "SFT-10 stays stable",
+          "changes": {"epochs": "4", "relative_cost": "4.0×"}
+        },
+        {
+          "rank": 12,
+          "run_id": "SFT-12-mix-75-25",
+          "research_question": "Does a teacher-heavy mixture beat 50:50?",
+          "status": "If mixed data is promising",
+          "why_priority": "Refines the mix toward stronger strategy demonstrations.",
+          "compare_with": "SFT-03",
+          "launch_after": "SFT-03 matches or beats both single sources",
+          "changes": {
+            "trace_source": "Verified teacher and Qwen successes",
+            "teacher_self_ratio": "75 : 25",
+            "source_balance": "75% teacher and 25% Qwen target tokens"
+          }
+        },
+        {
+          "rank": 13,
+          "run_id": "SFT-13-mix-25-75",
+          "research_question": "Does a Qwen-heavy mixture beat 50:50?",
+          "status": "If mixed data is promising",
+          "why_priority": "Tests whether style matching matters more than teacher coverage.",
+          "compare_with": "SFT-03",
+          "launch_after": "SFT-03 matches or beats both single sources",
+          "changes": {
+            "trace_source": "Verified teacher and Qwen successes",
+            "teacher_self_ratio": "25 : 75",
+            "source_balance": "25% teacher and 75% Qwen target tokens"
+          }
+        },
+        {
+          "rank": 14,
+          "run_id": "SFT-14-window-8k",
+          "research_question": "Do shorter examples give cleaner local learning signals?",
+          "status": "After a winning data mix",
+          "why_priority": "8K may reduce unrelated context.",
+          "compare_with": "Winning 16K-window run",
+          "launch_after": "Data source and optimizer range are selected",
+          "changes": {"window_tokens": "8,192 tokens", "context_tokens": "2,048 tokens"}
+        },
+        {
+          "rank": 15,
+          "run_id": "SFT-15-window-32k",
+          "research_question": "Does more context teach multi-step exploit chains better?",
+          "status": "Run after SFT-14",
+          "why_priority": "32K may help long chains but costs more and can dilute the signal.",
+          "compare_with": "Winning 16K-window run",
+          "launch_after": "32K one-step memory check passes",
+          "changes": {
+            "window_tokens": "32,768 tokens",
+            "context_tokens": "8,192 tokens",
+            "relative_cost": "About 2.0×"
+          }
+        },
+        {
+          "rank": 16,
+          "run_id": "SFT-16-exploit-weight",
+          "research_question": "Should exploration and exploit-changing actions count twice as much as reporting?",
+          "status": "After a winning data mix",
+          "why_priority": "Tests whether easy final wording gets too much loss weight.",
+          "compare_with": "Same recipe with equal stage weights",
+          "launch_after": "Stage labels pass a blinded spot check",
+          "changes": {"stage_weights": "Explore 2 · exploit 2 · report 1"}
+        },
+        {
+          "rank": 17,
+          "run_id": "SFT-17-easy-to-hard",
+          "research_question": "Does learning simpler patterns before hard chains help?",
+          "status": "After a stable baseline",
+          "why_priority": "Plausible, but adds a new ordering confound.",
+          "compare_with": "Same recipe fully shuffled",
+          "launch_after": "Difficulty labels are stable",
+          "changes": {
+            "curriculum": "Easy tasks first, then all tasks",
+            "curriculum_stages": "2",
+            "example_order": "Shuffle inside each stage"
+          }
+        },
+        {
+          "rank": 18,
+          "run_id": "SFT-18-app-balanced",
+          "research_question": "Does equal application weight improve transfer?",
+          "status": "After a stable baseline",
+          "why_priority": "Prevents the largest source application from dominating.",
+          "compare_with": "Task-family-balanced winner",
+          "launch_after": "Application labels are complete",
+          "changes": {"task_balance": "Equal weight per application, then task family"}
+        },
+        {
+          "rank": 19,
+          "run_id": "SFT-19-gpt-only",
+          "research_question": "Are GPT successes alone a cleaner teacher?",
+          "status": "Only if teacher data wins",
+          "why_priority": "Teacher identity matters after the broad source question.",
+          "compare_with": "SFT-01",
+          "launch_after": "GPT covers the same task families",
+          "changes": {"teacher_models": "GPT only", "source_balance": "One teacher source"}
+        },
+        {
+          "rank": 20,
+          "run_id": "SFT-20-opus-only",
+          "research_question": "Are Claude Opus successes alone a cleaner teacher?",
+          "status": "Only if teacher data wins",
+          "why_priority": "Estimates source quality after the broader question.",
+          "compare_with": "SFT-01",
+          "launch_after": "Opus covers the same task families",
+          "changes": {"teacher_models": "Claude Opus only", "source_balance": "One teacher source"}
+        },
+        {
+          "rank": 21,
+          "run_id": "SFT-21-grok-only",
+          "research_question": "Are Grok successes alone a cleaner teacher?",
+          "status": "Only if teacher data wins",
+          "why_priority": "Completes the source comparison but has less coverage.",
+          "compare_with": "SFT-01",
+          "launch_after": "Grok covers the same task families",
+          "changes": {"teacher_models": "Grok only", "source_balance": "One teacher source"}
+        },
+        {
+          "rank": 22,
+          "run_id": "SFT-22-seed-repeat",
+          "research_question": "Does the winning result repeat with different randomness?",
+          "status": "For the leading recipe",
+          "why_priority": "Estimates training noise before a final claim.",
+          "compare_with": "Winner with seed 17",
+          "launch_after": "One clear leading recipe exists",
+          "changes": {
+            "data_seed": "29",
+            "shuffle_seed": "29",
+            "eval_seed": "Second fixed matched seed set"
+          }
+        },
+        {
+          "rank": 23,
+          "run_id": "SFT-23-lora",
+          "research_question": "Can a small adapter match full-weight fine-tuning more cheaply?",
+          "status": "Later efficiency study",
+          "why_priority": "Useful for cost, but maximum lift is the primary goal.",
+          "compare_with": "Best full-weight SFT",
+          "launch_after": "Best full-weight recipe is known",
+          "changes": {
+            "trainable_weights": "LoRA adapters only",
+            "trainer": "Fleet SFT with small trainable adapters",
+            "learning_rate": "1e-5",
+            "relative_cost": "About 0.5×"
+          }
+        },
+        {
+          "rank": 24,
+          "run_id": "SFT-24-final-only-control",
+          "research_question": "Can final-report learning lower loss without teaching exploitation?",
+          "status": "Negative control",
+          "why_priority": "Diagnoses shortcut learning; not expected to maximize performance.",
+          "compare_with": "SFT-01",
+          "launch_after": "Main extraction pipeline is stable",
+          "changes": {
+            "target_actions": "Final report and flag submission only",
+            "context_only": "All earlier problem-solving tokens",
+            "final_report_weight": "All supervised weight",
+            "windows_per_trace": "1",
+            "terminal_only": "Yes",
+            "relative_cost": "About 0.2×"
+          }
+        }
+      ]
     },
-    {
-      "term": "RL",
-      "meaning": "Reinforcement learning: let the model make fresh attempts, score them with the real task grader, and make actions from better attempts more likely."
-    },
-    {
-      "term": "Training example or window",
-      "meaning": "One bounded slice of a long saved attempt, containing earlier context plus one or more actions the model must learn to predict."
-    },
-    {
-      "term": "Agent software or harness",
-      "meaning": "The program around the model that formats conversations, exposes tools, manages long runs, and decides when an attempt ends."
-    },
-    {
-      "term": "Blackbox cyber task",
-      "meaning": "A challenge where the agent can interact with a running application but cannot inspect its source code."
-    },
-    {
-      "term": "Base model",
-      "meaning": "The unchanged Qwen3.8-27B model from which training starts."
-    },
-    {
-      "term": "Model weights",
-      "meaning": "The learned numbers inside a model that training changes."
-    },
-    {
-      "term": "Token",
-      "meaning": "A small unit of text used by the model; one word may contain one or several tokens."
-    },
-    {
-      "term": "Tokenizer",
-      "meaning": "The fixed rules that convert text and tool calls into tokens and back again."
-    },
-    {
-      "term": "Checkpoint",
-      "meaning": "A saved copy of the model plus the state needed to continue training."
-    },
-    {
-      "term": "Task family",
-      "meaning": "All versions of the same underlying challenge; every version stays in the same data split."
-    },
-    {
-      "term": "Training split",
-      "meaning": "Tasks the model may learn from."
-    },
-    {
-      "term": "Development split",
-      "meaning": "Unseen tasks used to choose settings and checkpoints."
-    },
-    {
-      "term": "Final test split",
-      "meaning": "Unseen tasks opened only after the training recipe is frozen."
-    },
-    {
-      "term": "Grader",
-      "meaning": "The program that checks what happened in a task and assigns the official result."
-    },
-    {
-      "term": "Trace",
-      "meaning": "The recorded conversation, tool actions, and observations from one task attempt."
-    },
-    {
-      "term": "Teacher trace",
-      "meaning": "A verified successful attempt produced by a stronger model."
-    },
-    {
-      "term": "Self trace",
-      "meaning": "A verified successful attempt produced by Qwen itself."
-    },
-    {
-      "term": "Supervised token",
-      "meaning": "A token in a saved successful action that SFT is asked to predict; context can be shown without being learned as a target."
-    },
-    {
-      "term": "Batch",
-      "meaning": "The training examples combined into one model update."
-    },
-    {
-      "term": "Global batch",
-      "meaning": "The total examples combined across all GPUs for one model update."
-    },
-    {
-      "term": "Learning rate",
-      "meaning": "How large each model update is."
-    },
-    {
-      "term": "Epoch",
-      "meaning": "One complete pass over the SFT training examples."
-    },
-    {
-      "term": "Loss",
-      "meaning": "The model prediction error; lower training loss means better imitation of saved examples, not necessarily better task solving."
-    },
-    {
-      "term": "Optimizer",
-      "meaning": "The calculation that turns prediction or reward feedback into a model-weight update."
-    },
-    {
-      "term": "Gradient",
-      "meaning": "The numerical signal showing how each model weight should move to reduce loss."
-    },
-    {
-      "term": "Warmup",
-      "meaning": "A gradual rise from tiny model updates at the start of training."
-    },
-    {
-      "term": "Weight decay",
-      "meaning": "A small pressure against unnecessarily large model-weight changes."
-    },
-    {
-      "term": "Low-rank adapter",
-      "meaning": "Small trainable matrices attached to a frozen model so that only a small share of its numbers must be updated."
-    },
-    {
-      "term": "Rollout",
-      "meaning": "One fresh RL attempt at a task."
-    },
-    {
-      "term": "Reward",
-      "meaning": "The numeric result used for RL; the simplest form is 1 for a verified solve and 0 for a genuine, correctly graded failure."
-    },
-    {
-      "term": "GRPO",
-      "meaning": "An RL method that compares several attempts at the same task. It can train without learning a separate estimate of expected future reward."
-    },
-    {
-      "term": "PPO",
-      "meaning": "An older RL method that normally learns an extra estimate of expected future reward. That estimate may be a small added output on the main model or a separate model, and it adds memory and complexity."
-    },
-    {
-      "term": "Dr. GRPO",
-      "meaning": "A version of GRPO designed to stop long answers from receiving unintended extra influence."
-    },
-    {
-      "term": "DAPO-style GRPO",
-      "meaning": "A GRPO variant that seeks task groups with useful reward differences and treats long responses more carefully."
-    },
-    {
-      "term": "GSPO",
-      "meaning": "An RL method that limits changes to a whole generated answer rather than each generated token separately."
-    },
-    {
-      "term": "KL penalty",
-      "meaning": "A cost for moving too far from the model that RL started from."
-    },
-    {
-      "term": "Clipping",
-      "meaning": "A limit on how much one update can change the probability of an action."
-    },
-    {
-      "term": "Entropy bonus",
-      "meaning": "An optional reward for keeping the model output varied."
-    },
-    {
-      "term": "Temperature",
-      "meaning": "A control for how varied fresh model output is; higher values make attempts less predictable."
-    },
-    {
-      "term": "Top-p",
-      "meaning": "A probability cutoff; top-p 0.9 keeps the smallest set of next tokens whose probabilities add to 90%."
-    },
-    {
-      "term": "pass@1",
-      "meaning": "The share of tasks solved with one attempt."
-    },
-    {
-      "term": "pass@4",
-      "meaning": "The share of tasks solved at least once in four attempts."
-    },
-    {
-      "term": "Seed",
-      "meaning": "A recorded random-number starting point; several seeds show how much luck affects a result."
-    },
-    {
-      "term": "Ablation",
-      "meaning": "A controlled comparison in which one planned choice changes and the rest stay fixed."
-    },
-    {
-      "term": "BF16",
-      "meaning": "A common 16-bit number format that uses less memory than ordinary 32-bit numbers during training."
-    },
-    {
-      "term": "Quantization",
-      "meaning": "Storing model numbers with fewer bits; it saves memory but can change behavior, so it is a separate experiment."
-    },
-    {
-      "term": "Canary",
-      "meaning": "A deliberately tiny run used to prove a setup works before an expensive run."
-    },
-    {
-      "term": "Confidence interval",
-      "meaning": "A range showing how much a result could change on a different but comparable task sample."
-    },
-    {
-      "term": "Hash",
-      "meaning": "A short digital fingerprint used to prove two files contain the same bytes."
-    },
-    {
-      "term": "Weights & Biases",
-      "meaning": "The experiment dashboard used to track training, reward, and run-health measurements without uploading private task content."
-    },
-    {
-      "term": "Experiment arm",
-      "meaning": "One version of an experiment, such as teacher-SFT at one learning rate."
-    },
-    {
-      "term": "Model service or endpoint",
-      "meaning": "A running copy of the model that accepts requests and returns generated output."
-    },
-    {
-      "term": "Packaged software image or container image",
-      "meaning": "A fixed bundle of code and software libraries used to run a job the same way again."
-    },
-    {
-      "term": "Data curriculum",
-      "meaning": "A planned order for showing training examples, such as basic investigation actions before complete solutions."
-    },
-    {
-      "term": "GPU-hour",
-      "meaning": "One graphics processor used for one hour."
-    },
-    {
-      "term": "Environment-hour",
-      "meaning": "One task website kept running for one hour."
-    },
-    {
-      "term": "Miles",
-      "meaning": "One of the repository's two software systems for running RL. It generates task attempts, gets scores from the task grader, and uses those scores to update the model."
-    },
-    {
-      "term": "SkyRL",
-      "meaning": "The repository's other software system for running RL. It serves the same broad purpose as Miles, so the first comparison should give both systems the same model, tasks, budgets, and update settings."
-    },
-    {
-      "term": "Number notation such as 1e-6",
-      "meaning": "A compact way to write a small number; 1e-6 means 0.000001."
+    "rl": {
+      "title": "Ranked reinforcement-learning runs",
+      "groups": [
+        {
+          "label": "Run order",
+          "columns": [
+            ["rank", "Rank", "The recommended order. Operational checks must pass before longer RL runs."],
+            ["run_id", "Run ID", "A stable short name for the exact run or current cluster job."],
+            ["research_question", "Question this run answers", "The single main question this run is designed to answer."],
+            ["status", "Status", "Whether the run failed cleanly, is queued, planned, or waiting on evidence."],
+            ["why_priority", "Why this rank", "Why this run belongs here instead of earlier or later."],
+            ["compare_with", "Compare with", "The run or starting model that makes this result interpretable."],
+            ["launch_after", "Launch after", "The evidence required before this run may use GPUs."]
+          ]
+        },
+        {
+          "label": "Model and training system",
+          "columns": [
+            ["model", "Model", "The model family and size being updated."],
+            ["start_checkpoint", "Starting checkpoint", "The exact model weights used before RL begins."],
+            ["model_revision", "Model revision", "The immutable version of the starting model files."],
+            ["backend", "RL training system", "The named software that generates attempts, computes rewards, and updates the model. SkyRL and Miles/FTI are two different implementations."],
+            ["algorithm", "RL algorithm", "The update method. GRPO compares several attempts on the same task and reinforces actions from attempts that score above their group average."],
+            ["trainable_weights", "Weights changed", "Whether all weights or only adapters are updated."],
+            ["precision", "Number precision", "The numerical format used for weights and calculations."],
+            ["reference_model", "Reference model", "The fixed model used to measure how far the policy moves."]
+          ]
+        },
+        {
+          "label": "Tasks and sampling",
+          "columns": [
+            ["task_split", "Task split", "Which balanced assignment puts tasks into training, development, and final groups."],
+            ["train_pool", "Training tasks", "Tasks used to collect fresh scored attempts for updates."],
+            ["dev_pool", "Development tasks", "Unseen tasks used to compare settings; never used for updates."],
+            ["final_pool", "Final tasks", "Unseen tasks held back until finalists are chosen."],
+            ["task_sampler", "Task sampling", "How training tasks are chosen for each update."],
+            ["curriculum", "Task order", "Whether tasks are mixed or ordered by difficulty."],
+            ["train_tasks_per_update", "Task groups per update", "Distinct tasks contributing scored groups to one update."],
+            ["replay", "Reuse old attempts", "Whether attempts from earlier updates are used again."],
+            ["data_seed", "Task random seed", "The fixed number controlling repeatable task sampling."]
+          ]
+        },
+        {
+          "label": "Agent and limits",
+          "columns": [
+            ["harness", "Agent program", "The program around Qwen that manages messages and tools."],
+            ["conversation_format", "Conversation format", "How messages and tool results become Qwen tokens."],
+            ["tools", "Tools", "The tools available during a training attempt."],
+            ["compaction", "Long-attempt handling", "How the agent continues near its token limit."],
+            ["context_tokens", "Total context limit", "The maximum tokens in the active conversation."],
+            ["response_tokens", "Generated-token allowance", "The maximum new model tokens in one attempt."],
+            ["tokens_per_turn", "Tokens per turn", "The maximum new model tokens in one response."],
+            ["max_turns", "Maximum turns", "The largest number of model responses in one attempt."],
+            ["episode_seconds", "Attempt time limit", "Wall-clock time allowed for a complete attempt."],
+            ["tool_seconds", "Tool-call time limit", "Wall-clock time allowed for one tool call."],
+            ["tool_output_chars", "Tool-output limit", "Maximum characters returned by one tool call."],
+            ["parallel_tools", "Parallel tool calls", "Whether multiple tool calls may run together."],
+            ["invalid_retry", "Invalid-attempt retry", "Whether a broken attempt is replaced, scored zero, or stops the batch."]
+          ]
+        },
+        {
+          "label": "Attempt generation",
+          "columns": [
+            ["samples_per_task", "Attempts per task group", "Independent attempts compared on one task."],
+            ["task_groups_per_update", "Groups generated", "Task groups generated for one update."],
+            ["total_rollouts_update", "Attempts per update", "Total fresh scored attempts used for one update."],
+            ["temperature", "Generation randomness", "Randomness used while sampling training attempts."],
+            ["top_p", "Probability cutoff", "Cumulative token probability kept during sampling."],
+            ["top_k", "Token-count cutoff", "Maximum next-token choices kept; disabled means no fixed count."],
+            ["generation_seed", "Generation random seed", "The fixed policy for attempt randomness."]
+          ]
+        },
+        {
+          "label": "Reward",
+          "columns": [
+            ["official_grader", "Score source", "The task's real hidden checker that supplies the score."],
+            ["outcome_reward", "Outcome reward", "How the official score becomes a number for RL."],
+            ["partial_reward", "Partial credit", "Whether verified intermediate progress contributes reward."],
+            ["report_bonus", "Report bonus", "Extra reward for written analysis beyond the official score."],
+            ["invalid_handling", "Broken attempt reward", "Reward assigned to a technically invalid attempt."],
+            ["timeout_handling", "Timeout reward", "Reward assigned when an attempt reaches a limit."],
+            ["zero_variance_groups", "All-same reward groups", "What happens when every attempt in a group gets the same reward."],
+            ["reward_normalization", "Reward normalization", "How scores are centered and scaled before updating."],
+            ["reward_clipping", "Reward limits", "Whether unusually high or low rewards are capped."],
+            ["reward_delay", "Reward timing", "When a score becomes available to the optimizer."]
+          ]
+        },
+        {
+          "label": "Policy update",
+          "columns": [
+            ["updates", "Optimizer updates", "Total RL weight updates planned."],
+            ["updates_per_batch", "Passes per fresh batch", "Optimizer passes over one new attempt batch."],
+            ["actor_lr", "Actor learning rate", "The size of each model update."],
+            ["optimizer", "Optimizer", "The rule that turns RL gradients into weight updates."],
+            ["advantage", "Advantage calculation", "How an attempt's reward is compared with peer attempts."],
+            ["kl_coefficient", "Stay-close penalty", "Penalty strength for moving away from the starting model."],
+            ["kl_reference_reset", "Reference reset", "Whether the stay-close reference changes during a long run."],
+            ["clip_lower", "Downward update limit", "How far a worse action's probability may fall in one update."],
+            ["clip_upper", "Upward update limit", "How far a better action's probability may rise in one update."],
+            ["loss_averaging", "Loss averaging", "Whether long and short responses receive equal total weight."],
+            ["entropy", "Randomness bonus", "An added loss term that rewards a broader action distribution."],
+            ["global_episode_batch", "Global attempt batch", "Total attempts contributing to one update."],
+            ["minibatch", "Groups per minibatch", "Task groups updated together."],
+            ["microbatch", "Responses per GPU", "Responses processed at once on each GPU."],
+            ["grad_accum", "Gradient accumulation", "Microbatches combined before one update."],
+            ["grad_clip", "Gradient limit", "The largest allowed gradient norm."],
+            ["weight_refresh", "Generator weight refresh", "How often generators receive updated weights."],
+            ["scheduler", "Learning-rate schedule", "How actor learning rate changes."],
+            ["warmup", "Warmup", "The early fraction over which actor learning rate rises."],
+            ["weight_decay", "Weight decay", "A penalty that gently pulls weights smaller."]
+          ]
+        },
+        {
+          "label": "Computing, tracking, and evaluation",
+          "columns": [
+            ["nodes", "GPU nodes", "The number of eight-GPU computers used."],
+            ["gpus_per_node", "GPUs per node", "The GPUs used on each computer."],
+            ["inference_engines", "Generation engines", "Model servers producing training attempts per node."],
+            ["tensor_parallel", "GPUs per generator", "GPUs cooperating to serve one Qwen copy."],
+            ["placement", "Generation and training placement", "Whether generation and updating share GPUs."],
+            ["priority", "Cluster priority", "The queue class; c1 is the highest authorized for this project."],
+            ["eval_interval", "Development-test interval", "How often unseen Fleet development tasks run."],
+            ["checkpoint_interval", "Checkpoint interval", "How often recoverable state is saved."],
+            ["keep_checkpoints", "Checkpoints kept", "How many recent checkpoints remain."],
+            ["wandb", "Experiment tracking", "What is sent to Weights & Biases; private prompts and traces are excluded."],
+            ["recovery_test", "Recovery check", "Whether a checkpoint reloads without another update."],
+            ["fleet_dev", "Fleet development test", "Unseen Fleet tasks used to choose settings."],
+            ["dev_attempts", "Attempts per dev task", "Independent attempts on each development task."],
+            ["final_eval", "Final Fleet test", "When untouched final Fleet tasks may be used."],
+            ["webexploitbench", "WebExploitBench", "When the public benchmark runs and how it is treated."],
+            ["external_harness", "Evaluation agent programs", "Frozen programs around the model in external evaluation."],
+            ["checkpoint_choice", "Checkpoint selection", "How one saved checkpoint is chosen."],
+            ["stop_rule", "Early stop rule", "Evidence that ends a run early."],
+            ["advance_rule", "Promotion rule", "Evidence required before a larger run."],
+            ["relative_cost", "Relative GPU cost", "Rough cost versus a one-update one-node canary."]
+          ]
+        }
+      ],
+      "defaults": {
+        "model": "Qwen3.8-27B",
+        "start_checkpoint": "Exact untrained base model",
+        "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "backend": "Fleet SkyRL RL system with Fleet V1 tasks",
+        "algorithm": "GRPO: compare attempts within each task group",
+        "trainable_weights": "All model weights",
+        "precision": "BF16, a 16-bit training number format",
+        "reference_model": "Exact starting checkpoint, frozen",
+        "task_split": "Balanced split A",
+        "train_pool": "59 filtered Fleet tasks",
+        "dev_pool": "20 balanced unseen Fleet tasks",
+        "final_pool": "10 untouched Fleet tasks",
+        "task_sampler": "Balance task family and application",
+        "curriculum": "Uniform mix",
+        "train_tasks_per_update": "1",
+        "replay": "None; fresh attempts only",
+        "data_seed": "11",
+        "harness": "Fleet V1 agent loop",
+        "conversation_format": "Exact Qwen chat format",
+        "tools": "bash and submit_report",
+        "compaction": "Fixed audited compaction policy",
+        "context_tokens": "98,304",
+        "response_tokens": "81,920",
+        "tokens_per_turn": "4,096",
+        "max_turns": "600",
+        "episode_seconds": "2,400 seconds",
+        "tool_seconds": "330 seconds",
+        "tool_output_chars": "50,000 characters",
+        "parallel_tools": "No",
+        "invalid_retry": "No silent retry; preserve and score zero",
+        "samples_per_task": "8",
+        "task_groups_per_update": "1",
+        "total_rollouts_update": "8",
+        "temperature": "1.0",
+        "top_p": "1.0",
+        "top_k": "Disabled",
+        "generation_seed": "Fixed recorded seed policy",
+        "official_grader": "Exact Fleet hidden checker",
+        "outcome_reward": "Official score from 0 to 1",
+        "partial_reward": "Verified official partial credit",
+        "report_bonus": "None",
+        "invalid_handling": "0 reward and visible invalid counter",
+        "timeout_handling": "0 reward and visible budget counter",
+        "zero_variance_groups": "Keep and record; no update signal",
+        "reward_normalization": "Within each task group",
+        "reward_clipping": "None",
+        "reward_delay": "After the complete task group finishes",
+        "updates": "1",
+        "updates_per_batch": "1",
+        "actor_lr": "1e-6",
+        "optimizer": "AdamW weight-update rule",
+        "advantage": "Group-relative normalized advantage",
+        "kl_coefficient": "0.001",
+        "kl_reference_reset": "Never",
+        "clip_lower": "0.20",
+        "clip_upper": "0.20",
+        "loss_averaging": "Per token, then per response",
+        "entropy": "0",
+        "global_episode_batch": "8 attempts",
+        "minibatch": "1 task group",
+        "microbatch": "1 response per GPU",
+        "grad_accum": "1",
+        "grad_clip": "1.0",
+        "weight_refresh": "After every update",
+        "scheduler": "Constant",
+        "warmup": "0%",
+        "weight_decay": "0",
+        "nodes": "1",
+        "gpus_per_node": "8",
+        "inference_engines": "2 per node",
+        "tensor_parallel": "4 GPUs per engine",
+        "placement": "Generation and training share the node",
+        "priority": "c1",
+        "eval_interval": "After the final update",
+        "checkpoint_interval": "Every update",
+        "keep_checkpoints": "2",
+        "wandb": "Loss, reward, lengths, invalids, updates, and GPU use; no prompts or traces",
+        "recovery_test": "Required before any longer successor",
+        "fleet_dev": "20 development tasks after the run",
+        "dev_attempts": "1 per task",
+        "final_eval": "Only after finalists are chosen",
+        "webexploitbench": "After every accepted run; development evidence",
+        "external_harness": "Frozen matched OpenCode and Qwen Code",
+        "checkpoint_choice": "Best Fleet dev result; earlier checkpoint wins a tie",
+        "stop_rule": "Non-finite values, no valid rewards, broken checkpoint, or confirmed stall",
+        "advance_rule": "Real reward, nonzero update, reload, clean release, and Fleet dev lift",
+        "relative_cost": "1.0×"
+      },
+      "runs": [
+        {
+          "rank": 1,
+          "run_id": "RL-01-skyrl-one-update-gate",
+          "research_question": "Can SkyRL complete one real scored Qwen update and reload it?",
+          "status": "Fix in progress, then run",
+          "why_priority": "The previous attempt found an opening-prompt token mismatch before grading; a corrected one-update gate still comes first.",
+          "compare_with": "Exact base model before update",
+          "launch_after": "Off-cluster reproduction proves the prompt-token fix",
+          "changes": {}
+        },
+        {
+          "rank": 2,
+          "run_id": "RL-02 / chris-q38-v1rl-c1-a3-ea459e04",
+          "research_question": "Can maintained Miles/FTI complete the same one-update gate?",
+          "status": "Queued as of 13 Sep",
+          "why_priority": "A second working implementation reduces system risk.",
+          "compare_with": "RL-01",
+          "launch_after": "A whole compatible node is available",
+          "changes": {
+            "backend": "Fleet Miles/FTI RL system with Fleet V1 tasks",
+            "algorithm": "GRPO through the Miles implementation",
+            "kl_coefficient": "0",
+            "clip_upper": "0.28",
+            "tokens_per_turn": "2,048"
+          }
+        },
+        {
+          "rank": 3,
+          "run_id": "RL-03-base-skyrl-10u",
+          "research_question": "Do ten updates from base Qwen produce Fleet development lift?",
+          "status": "After RL-01 passes",
+          "why_priority": "Shortest run long enough to show a trend after plumbing works.",
+          "compare_with": "Base Qwen and RL-01",
+          "launch_after": "RL-01 update and reload pass",
+          "changes": {
+            "train_tasks_per_update": "4",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "32",
+            "updates": "10",
+            "global_episode_batch": "32 attempts",
+            "minibatch": "4 task groups",
+            "eval_interval": "Every 5 updates",
+            "checkpoint_interval": "Every 5 updates",
+            "relative_cost": "About 40×"
+          }
+        },
+        {
+          "rank": 4,
+          "run_id": "RL-04-teacher-sft-start",
+          "research_question": "Does the best teacher-SFT checkpoint make RL learn faster?",
+          "status": "After a teacher-SFT winner",
+          "why_priority": "Directly tests the leading SFT-to-RL path.",
+          "compare_with": "RL-03",
+          "launch_after": "Teacher-SFT winner reloads and RL-03 is accepted",
+          "changes": {
+            "start_checkpoint": "Best teacher-SFT checkpoint",
+            "reference_model": "That teacher-SFT checkpoint, frozen",
+            "train_tasks_per_update": "4",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "32",
+            "updates": "10",
+            "global_episode_batch": "32 attempts",
+            "minibatch": "4 task groups",
+            "relative_cost": "About 40×"
+          }
+        },
+        {
+          "rank": 5,
+          "run_id": "RL-05-self-sft-start",
+          "research_question": "Does the best self-SFT checkpoint make RL learn faster?",
+          "status": "After a self-SFT winner",
+          "why_priority": "Self-SFT may preserve Qwen's own action style.",
+          "compare_with": "RL-03 and RL-04",
+          "launch_after": "Self-SFT winner reloads and RL-03 is accepted",
+          "changes": {
+            "start_checkpoint": "Best Qwen-self-SFT checkpoint",
+            "reference_model": "That self-SFT checkpoint, frozen",
+            "train_tasks_per_update": "4",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "32",
+            "updates": "10",
+            "global_episode_batch": "32 attempts",
+            "minibatch": "4 task groups",
+            "relative_cost": "About 40×"
+          }
+        },
+        {
+          "rank": 6,
+          "run_id": "RL-06-mixed-sft-start",
+          "research_question": "Does the best mixed-source SFT checkpoint give RL the strongest start?",
+          "status": "After a mixed-SFT winner",
+          "why_priority": "May combine teacher strategy coverage with Qwen-compatible style.",
+          "compare_with": "RL-03 to RL-05",
+          "launch_after": "Mixed-SFT winner reloads",
+          "changes": {
+            "start_checkpoint": "Best mixed teacher-and-self SFT checkpoint",
+            "reference_model": "That mixed-SFT checkpoint, frozen",
+            "train_tasks_per_update": "4",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "32",
+            "updates": "10",
+            "global_episode_batch": "32 attempts",
+            "minibatch": "4 task groups",
+            "relative_cost": "About 40×"
+          }
+        },
+        {
+          "rank": 7,
+          "run_id": "RL-07-miles-matched-10u",
+          "research_question": "Do SkyRL and Miles agree under a matched ten-update recipe?",
+          "status": "Only if RL-02 passes",
+          "why_priority": "Compare systems only after both prove one update.",
+          "compare_with": "RL-03",
+          "launch_after": "RL-02 and RL-03 reload cleanly",
+          "changes": {
+            "backend": "Fleet Miles/FTI RL system with Fleet V1 tasks",
+            "algorithm": "GRPO through the Miles implementation",
+            "train_tasks_per_update": "4",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "32",
+            "updates": "10",
+            "kl_coefficient": "0",
+            "clip_upper": "0.28",
+            "global_episode_batch": "32 attempts",
+            "minibatch": "4 task groups",
+            "relative_cost": "About 40×"
+          }
+        },
+        {
+          "rank": 8,
+          "run_id": "RL-08-lr-3e-7",
+          "research_question": "Would a three-times smaller update be more stable?",
+          "status": "After RL-03",
+          "why_priority": "RL is sensitive to update size; this is the first safer boundary.",
+          "compare_with": "RL-03",
+          "launch_after": "RL-03 has trusted update measures",
+          "changes": {
+            "train_tasks_per_update": "4",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "32",
+            "updates": "10",
+            "actor_lr": "3e-7",
+            "global_episode_batch": "32 attempts",
+            "minibatch": "4 task groups",
+            "relative_cost": "About 40×"
+          }
+        },
+        {
+          "rank": 9,
+          "run_id": "RL-09-lr-1e-7",
+          "research_question": "Does a very small update avoid drift or under-train?",
+          "status": "After RL-08",
+          "why_priority": "Explores the low boundary after the more likely 3e-7.",
+          "compare_with": "RL-03 and RL-08",
+          "launch_after": "RL-08 is stable",
+          "changes": {
+            "train_tasks_per_update": "4",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "32",
+            "updates": "10",
+            "actor_lr": "1e-7",
+            "global_episode_batch": "32 attempts",
+            "minibatch": "4 task groups",
+            "relative_cost": "About 40×"
+          }
+        },
+        {
+          "rank": 10,
+          "run_id": "RL-10-lr-3e-6",
+          "research_question": "Can a larger update learn faster without collapse?",
+          "status": "High-risk boundary",
+          "why_priority": "Informative but more likely to destabilize full-weight 27B training.",
+          "compare_with": "RL-03",
+          "launch_after": "Stopping and recovery are proven",
+          "changes": {
+            "train_tasks_per_update": "4",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "32",
+            "updates": "10",
+            "actor_lr": "3e-6",
+            "global_episode_batch": "32 attempts",
+            "minibatch": "4 task groups",
+            "relative_cost": "About 40×"
+          }
+        },
+        {
+          "rank": 11,
+          "run_id": "RL-11-16-samples",
+          "research_question": "Do more attempts per task improve advantage estimates?",
+          "status": "After learning rate is narrowed",
+          "why_priority": "Cleaner within-task comparison at twice the generation cost.",
+          "compare_with": "Best 8-sample run",
+          "launch_after": "Stable actor learning rate is selected",
+          "changes": {
+            "train_tasks_per_update": "4",
+            "samples_per_task": "16",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "64",
+            "updates": "10",
+            "global_episode_batch": "64 attempts",
+            "minibatch": "4 task groups",
+            "relative_cost": "About 80×"
+          }
+        },
+        {
+          "rank": 12,
+          "run_id": "RL-12-8-task-groups",
+          "research_question": "Does more task variety beat more attempts per task?",
+          "status": "After learning rate is narrowed",
+          "why_priority": "Uses the same 64 attempts as RL-11 across twice as many tasks.",
+          "compare_with": "RL-11",
+          "launch_after": "RL-11 cost and signal are measured",
+          "changes": {
+            "train_tasks_per_update": "8",
+            "task_groups_per_update": "8",
+            "total_rollouts_update": "64",
+            "updates": "10",
+            "global_episode_batch": "64 attempts",
+            "minibatch": "8 task groups",
+            "relative_cost": "About 80×"
+          }
+        },
+        {
+          "rank": 13,
+          "run_id": "RL-13-no-kl",
+          "research_question": "Is the stay-close penalty blocking useful movement?",
+          "status": "After a stable short recipe",
+          "why_priority": "Strong interpretable boundary, with drift risk.",
+          "compare_with": "Best run at KL 0.001",
+          "launch_after": "Policy-drift measures are trusted",
+          "changes": {
+            "train_tasks_per_update": "4",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "32",
+            "updates": "10",
+            "kl_coefficient": "0",
+            "global_episode_batch": "32 attempts",
+            "minibatch": "4 task groups",
+            "relative_cost": "About 40×"
+          }
+        },
+        {
+          "rank": 14,
+          "run_id": "RL-14-kl-0.01",
+          "research_question": "Would a ten-times stronger stay-close penalty help?",
+          "status": "After RL-13",
+          "why_priority": "Explores the conservative boundary.",
+          "compare_with": "Best run at KL 0.001",
+          "launch_after": "RL-13 gives a clean comparison",
+          "changes": {
+            "train_tasks_per_update": "4",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "32",
+            "updates": "10",
+            "kl_coefficient": "0.01",
+            "global_episode_batch": "32 attempts",
+            "minibatch": "4 task groups",
+            "relative_cost": "About 40×"
+          }
+        },
+        {
+          "rank": 15,
+          "run_id": "RL-15-asymmetric-clip",
+          "research_question": "Do larger upward than downward updates help rare successes?",
+          "status": "After a stable short recipe",
+          "why_priority": "0.20/0.28 is grounded in the maintained Miles recipe.",
+          "compare_with": "Best run at 0.20/0.20",
+          "launch_after": "Probability-ratio measures are trusted",
+          "changes": {
+            "train_tasks_per_update": "4",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "32",
+            "updates": "10",
+            "clip_upper": "0.28",
+            "global_episode_batch": "32 attempts",
+            "minibatch": "4 task groups",
+            "relative_cost": "About 40×"
+          }
+        },
+        {
+          "rank": 16,
+          "run_id": "RL-16-temp-0.7",
+          "research_question": "Do less-random attempts produce more usable rewards?",
+          "status": "After update settings stabilize",
+          "why_priority": "May raise success rate but reduce strategy diversity.",
+          "compare_with": "Best run at temperature 1.0",
+          "launch_after": "Stable update recipe is selected",
+          "changes": {
+            "train_tasks_per_update": "4",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "32",
+            "temperature": "0.7",
+            "updates": "10",
+            "global_episode_batch": "32 attempts",
+            "minibatch": "4 task groups",
+            "relative_cost": "About 40×"
+          }
+        },
+        {
+          "rank": 17,
+          "run_id": "RL-17-temp-1.2",
+          "research_question": "Do more-random attempts discover more strategies?",
+          "status": "After RL-16",
+          "why_priority": "Explores the opposite boundary but may waste attempts.",
+          "compare_with": "Best run at temperature 1.0",
+          "launch_after": "RL-16 gives a clean low-temperature comparison",
+          "changes": {
+            "train_tasks_per_update": "4",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "32",
+            "temperature": "1.2",
+            "updates": "10",
+            "global_episode_batch": "32 attempts",
+            "minibatch": "4 task groups",
+            "relative_cost": "About 40×"
+          }
+        },
+        {
+          "rank": 18,
+          "run_id": "RL-18-top-p-0.9",
+          "research_question": "Does removing the lowest-probability token tail help?",
+          "status": "After temperature is narrowed",
+          "why_priority": "Standard practical boundary, but overlaps with temperature.",
+          "compare_with": "Best run at top-p 1.0",
+          "launch_after": "Temperature range is selected",
+          "changes": {
+            "train_tasks_per_update": "4",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "32",
+            "top_p": "0.9",
+            "updates": "10",
+            "global_episode_batch": "32 attempts",
+            "minibatch": "4 task groups",
+            "relative_cost": "About 40×"
+          }
+        },
+        {
+          "rank": 19,
+          "run_id": "RL-19-app-balanced",
+          "research_question": "Does equal application sampling improve transfer?",
+          "status": "After a stable short recipe",
+          "why_priority": "Prevents the largest application from dominating updates.",
+          "compare_with": "Family-balanced winner",
+          "launch_after": "Task metadata and reward rates are complete",
+          "changes": {
+            "task_sampler": "Equal applications, then equal task families",
+            "train_tasks_per_update": "4",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "32",
+            "updates": "10",
+            "global_episode_batch": "32 attempts",
+            "minibatch": "4 task groups",
+            "relative_cost": "About 40×"
+          }
+        },
+        {
+          "rank": 20,
+          "run_id": "RL-20-replace-flat-groups",
+          "research_question": "Does replacing one all-same reward group increase useful signal?",
+          "status": "Only if flat groups are common",
+          "why_priority": "Useful only when many expensive groups have no variation.",
+          "compare_with": "Best run that keeps flat groups",
+          "launch_after": "At least 20% of groups have identical rewards",
+          "changes": {
+            "train_tasks_per_update": "4 useful groups",
+            "task_groups_per_update": "Generate up to 6 for 4 useful groups",
+            "total_rollouts_update": "32 to 48",
+            "zero_variance_groups": "Replace at most twice, then keep",
+            "updates": "10",
+            "global_episode_batch": "32 useful attempts",
+            "minibatch": "4 task groups",
+            "relative_cost": "40× to 60×"
+          }
+        },
+        {
+          "rank": 21,
+          "run_id": "RL-21-binary-reward",
+          "research_question": "Does success-only reward beat verified partial credit?",
+          "status": "Reward control",
+          "why_priority": "Simpler, but likely wastes genuine progress on hard tasks.",
+          "compare_with": "Best run with partial credit",
+          "launch_after": "Partial-credit meaning is audited",
+          "changes": {
+            "train_tasks_per_update": "4",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "32",
+            "outcome_reward": "1 only for full success; otherwise 0",
+            "partial_reward": "None",
+            "updates": "10",
+            "global_episode_batch": "32 attempts",
+            "minibatch": "4 task groups",
+            "relative_cost": "About 40×"
+          }
+        },
+        {
+          "rank": 22,
+          "run_id": "RL-22-shorter-budget",
+          "research_question": "Can shorter attempts keep reward while increasing throughput?",
+          "status": "Efficiency study",
+          "why_priority": "Shorten only after observed lengths show it is safe.",
+          "compare_with": "Best full-budget run",
+          "launch_after": "At least 90% of valid attempts fit",
+          "changes": {
+            "context_tokens": "65,536",
+            "response_tokens": "49,152",
+            "max_turns": "160",
+            "episode_seconds": "1,800 seconds",
+            "train_tasks_per_update": "4",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "32",
+            "updates": "10",
+            "global_episode_batch": "32 attempts",
+            "minibatch": "4 task groups",
+            "relative_cost": "About 30×"
+          }
+        },
+        {
+          "rank": 23,
+          "run_id": "RL-23-split-b",
+          "research_question": "Does the leading short result repeat on split B?",
+          "status": "For a leading recipe",
+          "why_priority": "Tests dependence on one lucky task assignment.",
+          "compare_with": "Leading split-A run",
+          "launch_after": "One clear split-A recipe leads",
+          "changes": {
+            "task_split": "Balanced split B",
+            "train_pool": "59 split-B filtered Fleet tasks",
+            "dev_pool": "20 split-B unseen Fleet tasks",
+            "train_tasks_per_update": "4",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "32",
+            "updates": "10",
+            "global_episode_batch": "32 attempts",
+            "minibatch": "4 task groups",
+            "relative_cost": "About 40×"
+          }
+        },
+        {
+          "rank": 24,
+          "run_id": "RL-24-seed-repeat",
+          "research_question": "Does the leading result repeat with different randomness?",
+          "status": "For a leading recipe",
+          "why_priority": "RL variance can be large; repeat before scaling duration.",
+          "compare_with": "Winner with seed 11",
+          "launch_after": "One clear leading recipe exists",
+          "changes": {
+            "data_seed": "29",
+            "generation_seed": "Second fixed recorded seed policy",
+            "train_tasks_per_update": "4",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "32",
+            "updates": "10",
+            "global_episode_batch": "32 attempts",
+            "minibatch": "4 task groups",
+            "relative_cost": "About 40×"
+          }
+        },
+        {
+          "rank": 25,
+          "run_id": "RL-25-finalist-50u",
+          "research_question": "Does the best short recipe keep improving over 50 updates?",
+          "status": "First longer finalist",
+          "why_priority": "Longer training follows only after major choices are narrowed.",
+          "compare_with": "Best accepted 10-update checkpoint",
+          "launch_after": "Leading short recipe repeats",
+          "changes": {
+            "start_checkpoint": "Best accepted SFT or base checkpoint",
+            "reference_model": "That exact starting checkpoint, frozen",
+            "train_tasks_per_update": "4",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "32",
+            "updates": "50",
+            "global_episode_batch": "32 attempts",
+            "minibatch": "4 task groups",
+            "eval_interval": "Every 10 updates",
+            "checkpoint_interval": "Every 10 updates",
+            "keep_checkpoints": "3",
+            "relative_cost": "About 200×"
+          }
+        },
+        {
+          "rank": 26,
+          "run_id": "RL-26-dr-grpo-control",
+          "research_question": "Does removing response-length bias help long tool-use attempts?",
+          "status": "Later algorithm study",
+          "why_priority": "Useful only after a stable standard-GRPO baseline.",
+          "compare_with": "Best standard-GRPO short run",
+          "launch_after": "Trusted length measures and a GRPO winner exist",
+          "changes": {
+            "algorithm": "Dr.GRPO length-bias control",
+            "advantage": "Group-relative advantage without standard-deviation scaling",
+            "loss_averaging": "Equal total weight per response",
+            "train_tasks_per_update": "4",
+            "task_groups_per_update": "4",
+            "total_rollouts_update": "32",
+            "updates": "10",
+            "global_episode_batch": "32 attempts",
+            "minibatch": "4 task groups",
+            "relative_cost": "About 40×"
+          }
+        }
+      ]
     }
-  ],
-  "sequence": [
-    {
-      "title": "1. Freeze fair measurement",
-      "detail": "Choose one primary agent-software setup, prove a valid base-model evaluation, and lock the approved tasks, splits, graders, budgets, and broken-run rule."
-    },
-    {
-      "title": "2. Find the best SFT examples",
-      "detail": "At one middle-of-the-road training setting, compare teacher traces, Qwen traces, and a 50:50 mixture measured by trained tokens. Compare training every eligible action with a task-balanced set of key actions, and repeat on split A and split B."
-    },
-    {
-      "title": "3. Tune SFT updates",
-      "detail": "For the two best data approaches, combine learning rates 3e-7, 1e-6, and 3e-6 with global batches 8, 32, and 64. Compare checkpoints after 1, 2, and 4 epochs, then repeat finalists three times with different random seeds."
-    },
-    {
-      "title": "4. Prove RL gets real learning signal",
-      "detail": "Run one-update Miles and SkyRL canaries with one training task and eight attempts. Continue only if the real grader produces useful reward differences, the model updates, a checkpoint saves, and that checkpoint reloads."
-    },
-    {
-      "title": "5. Choose the RL starting model",
-      "detail": "With identical tasks and attempt settings, compare RL from the base model, best teacher SFT, best self SFT, and best mixed SFT for ten updates."
-    },
-    {
-      "title": "6. Tune the working RL path",
-      "detail": "Vary RL learning rate, attempts per task, distance penalty, update limits, and task sampling in that order. Increase from 10 to 50 updates only after development improvement, and to 100–150 only after stable medium runs."
-    },
-    {
-      "title": "7. Test frozen finalists",
-      "detail": "Compare base, SFT-only, RL-from-base, and SFT-then-RL with three independent training runs each. Freeze the winners before opening the final Fleet tasks and any external benchmark reserved for final reporting."
-    }
-  ],
-  "decisions": [
-    {
-      "area": "1. Measurement and agent controls",
-      "choice": "Exact base weights",
-      "meaning": "The exact bytes of Qwen3.8-27B before training. Never compare against a model that merely has the same display name.",
-      "values": [
-        "Exact saved model version 1d4bf0f2... and its locked file hashes"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "1. Measurement and agent controls",
-      "choice": "Tokenizer and conversation format",
-      "meaning": "The rules that turn text and tool calls into model tokens. A formatting change can alter tool use by itself.",
-      "values": [
-        "The exact files locked with the base model"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "1. Measurement and agent controls",
-      "choice": "Numerical format",
-      "meaning": "How precisely weights are stored and computed. A smaller numerical format is a separate experiment.",
-      "values": [
-        "BF16 (the defined 16-bit format) for the Qwen runs described here",
-        "do not silently store weights with fewer bits"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "1. Measurement and agent controls",
-      "choice": "Harness",
-      "meaning": "The agent program around Qwen. A harness comparison requires a fresh base and trained result under each harness.",
-      "values": [
-        "Qwen Code and OpenCode are two separate experiment blocks. Choose one primary harness",
-        "never pool them"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "1. Measurement and agent controls",
-      "choice": "Harness version",
-      "meaning": "The exact source and packaged software image for the agent program. “OpenCode” or “Qwen Code” without a version is not enough.",
-      "values": [
-        "One version that cannot change after publication per experiment block"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "1. Measurement and agent controls",
-      "choice": "System instructions and tools",
-      "meaning": "The instructions and actions available to the agent. Tool definitions must be enforced by the running system, not only described in text.",
-      "values": [
-        "The task's exact instructions, command tool, and final-report tool (internally named bash and submit_report)"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "1. Measurement and agent controls",
-      "choice": "Conversation shortening",
-      "meaning": "Whether an overlong conversation is summarized and then continued. First prove that a shortened run really continues. Never call a context failure a model failure.",
-      "values": [
-        "Off, or one proven summarize-and-continue policy"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "1. Measurement and agent controls",
-      "choice": "Attempt budget",
-      "meaning": "Maximum time, turns, and tokens allowed for an evaluation attempt. Longer budgets often improve scores without training.",
-      "values": [
-        "One frozen budget derived from successful training-only traces",
-        "apply it to base and trained models"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "1. Measurement and agent controls",
-      "choice": "Model sampling during evaluation",
-      "meaning": "How random evaluation output is. Use the same values for both arms.",
-      "values": [
-        "One frozen temperature, probability cutoff, and seed policy"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "1. Measurement and agent controls",
-      "choice": "Task and grader versions",
-      "meaning": "The exact challenge, its starting state, and the program that scores it. Missing or mismatched grading is an infrastructure failure, not a zero.",
-      "values": [
-        "Version identifiers that cannot change after publication, plus file hashes"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "1. Measurement and agent controls",
-      "choice": "Broken-infrastructure rule",
-      "meaning": "What happens when a task website, model service, or grader breaks. Apply the same rule to every experiment arm.",
-      "values": [
-        "Preserve the attempt, mark it invalid, and retry only under a rule written before results are seen"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "2. Task set, split, and sampling",
-      "choice": "Task quality gate",
-      "meaning": "Which challenges count as real tasks rather than broken infrastructure. A genuine failed solve is eligible; an infrastructure failure is not.",
-      "values": [
-        "Only tasks with a demonstrated working environment, working grader, clean cleanup, and complete current launch information"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "2. Task set, split, and sampling",
-      "choice": "Split unit",
-      "meaning": "What stays together when tasks are divided. Never split individual windows or attempts at random.",
-      "values": [
-        "Entire task family, including all versions and sessions"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "2. Task set, split, and sampling",
-      "choice": "Split variant",
-      "meaning": "A different representative assignment of task families. The final 10 stay untouched; compare sensitivity across the two train/development assignments.",
-      "values": [
-        "Existing split A and split B, each 59/20/10"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "2. Task set, split, and sampling",
-      "choice": "Application balance",
-      "meaning": "The mix of products or web applications. Report both task-level and application-level results.",
-      "values": [
-        "Match the available application proportions, or give each application equal total weight"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "2. Task set, split, and sampling",
-      "choice": "Difficulty balance",
-      "meaning": "The mix of easier and harder tasks. Do not invent difficulty from test outcomes.",
-      "values": [
-        "Representative natural mix versus equalized easy/medium/hard weight, but only when difficulty labels are independently verified"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "2. Task set, split, and sampling",
-      "choice": "Vulnerability-family balance",
-      "meaning": "The mix of underlying bug types. Current opaque names are not a trustworthy classification of security weaknesses.",
-      "values": [
-        "Representative mix versus equal family weight, once reliable labels exist"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "2. Task set, split, and sampling",
-      "choice": "Per-task sampling weight",
-      "meaning": "How often each training task is selected. Uniform-by-family is the clean baseline.",
-      "values": [
-        "Uniform by task family",
-        "equal weight by application",
-        "favor tasks that are neither almost always solved nor almost always failed, based only on training results"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "2. Task set, split, and sampling",
-      "choice": "Repetition cap",
-      "meaning": "Whether tasks with many saved successes dominate SFT. Measure the mix by supervised tokens as well as trace count.",
-      "values": [
-        "At most 1, 2, or 4 traces per task family"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "2. Task set, split, and sampling",
-      "choice": "Curriculum order",
-      "meaning": "The order in which training examples are shown. The current pool has 82 medium, 6 hard, and 1 easy task, so it cannot support a meaningful easy-to-hard comparison.",
-      "values": [
-        "Fully shuffled",
-        "initial exploration and tool-use actions before complete solution chains"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "2. Task set, split, and sampling",
-      "choice": "Curriculum pace",
-      "meaning": "How quickly complete solutions enter after action-focused examples. Keep total examples and update count matched.",
-      "values": [
-        "All at once",
-        "two equal stages",
-        "three stages using 25%/35%/40% of updates"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "2. Task set, split, and sampling",
-      "choice": "Source age",
-      "meaning": "Whether old but still valid task versions remain in training. Never let versions cross task-family splits.",
-      "values": [
-        "Latest valid version only versus all version-compatible training traces"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "2. Task set, split, and sampling",
-      "choice": "Data amount",
-      "meaning": "How much approved training signal is used. This reveals whether quality, diversity, or raw quantity limits lift.",
-      "values": [
-        "25%, 50%, and 100% of task families, selected with the same representative sampler"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "3. Teacher traces, Qwen traces, and their mixture",
-      "choice": "Source model",
-      "meaning": "Which model produced the successful trace. Record exact source-model identity.",
-      "values": [
-        "Strong-teacher only",
-        "Qwen-only",
-        "mixed teachers",
-        "mixed teacher plus Qwen"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "3. Teacher traces, Qwen traces, and their mixture",
-      "choice": "Teacher identity",
-      "meaning": "Whether different strong models teach different behavior. Do not let one teacher win merely because it contributed more tokens.",
-      "values": [
-        "GPT-only",
-        "Grok-only when enough valid examples exist",
-        "balanced GPT/Grok mixture"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "3. Teacher traces, Qwen traces, and their mixture",
-      "choice": "Teacher:self ratio",
-      "meaning": "The share of SFT target tokens from strong models versus Qwen. Define the ratio by supervised tokens, not file rows.",
-      "values": [
-        "100:0, 75:25, 50:50, 25:75, 0:100. Start with 100:0, 50:50, 0:100"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "3. Teacher traces, Qwen traces, and their mixture",
-      "choice": "Success requirement",
-      "meaning": "Which saved attempts can teach the model. Never train SFT on a broken, ambiguous, truncated, or merely “completed” attempt.",
-      "values": [
-        "Verified successes only"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "3. Teacher traces, Qwen traces, and their mixture",
-      "choice": "Trace diversity",
-      "meaning": "How similar accepted examples may be. Preserve uncommon successful strategies while stopping one repeated pattern from dominating.",
-      "values": [
-        "Remove exact copies only",
-        "also remove very similar copies",
-        "choose a varied capped subset per task"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "3. Teacher traces, Qwen traces, and their mixture",
-      "choice": "Efficiency preference",
-      "meaning": "Whether shorter successful solutions get extra weight. A strong shortest-only filter can teach brittle shortcuts.",
-      "values": [
-        "No length preference",
-        "mild preference among equally correct traces"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "3. Teacher traces, Qwen traces, and their mixture",
-      "choice": "Iterative self-training",
-      "meaning": "Generate new Qwen attempts, keep verified successes, fine-tune, then repeat. Freeze each round and evaluate before using its outputs in the next.",
-      "values": [
-        "Zero, one, or two generate-filter-train rounds"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "3. Teacher traces, Qwen traces, and their mixture",
-      "choice": "Failed self traces",
-      "meaning": "Whether genuine failures are used as negative examples. Next-token imitation of failures teaches failure.",
-      "values": [
-        "Exclude from ordinary SFT",
-        "consider only in a separately defined preference or RL objective"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "4. Turning long traces into SFT examples",
-      "choice": "Action coverage",
-      "meaning": "Which assistant actions contribute to the loss that updates the model. Training every eligible action is the recommended baseline.",
-      "values": [
-        "Every eligible assistant action exactly once",
-        "final action only as a health-check comparison",
-        "key actions selected by rules written before training"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "4. Turning long traces into SFT examples",
-      "choice": "Context-only text",
-      "meaning": "Earlier text shown to the model but not learned as a target. The model should learn its actions, not copy server output or secrets.",
-      "values": [
-        "User text, tool output, and copied earlier assistant text receive zero training loss"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "4. Turning long traces into SFT examples",
-      "choice": "Window length",
-      "meaning": "The maximum tokens in one SFT row. Re-tokenize with the exact Qwen tokenizer.",
-      "values": [
-        "8,192",
-        "16,384",
-        "32,768 when memory permits. Start with 16,384"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "4. Turning long traces into SFT examples",
-      "choice": "Context allowance",
-      "meaning": "How much of the window is reserved for information before the target action. Longer context may help planning but reduces the number of target tokens per batch.",
-      "values": [
-        "2,048",
-        "4,096",
-        "8,192 tokens. Start with 4,096"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "4. Turning long traces into SFT examples",
-      "choice": "Number of targets per window",
-      "meaning": "Whether a row teaches one action or several nearby actions. Total target-token exposure must remain equal.",
-      "values": [
-        "One target per row",
-        "all fitting consecutive targets once"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "4. Turning long traces into SFT examples",
-      "choice": "Target placement",
-      "meaning": "Where the action appears in the window. Never split a tool call or its immediate result.",
-      "values": [
-        "Place the target action at the end",
-        "retain complete tool calls and their boundaries"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "4. Turning long traces into SFT examples",
-      "choice": "Early/middle/final weighting",
-      "meaning": "Whether discovery, exploitation, and final reporting receive equal influence. Avoid a training set dominated by the short final submission step.",
-      "values": [
-        "1:1:1",
-        "2:2:1",
-        "equal total weight per task"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "4. Turning long traces into SFT examples",
-      "choice": "Long-trace weighting",
-      "meaning": "Whether a long trace receives more total influence simply because it has more actions. Equal total weight per task family is the safest primary baseline.",
-      "values": [
-        "Equal per target",
-        "equal total per trace",
-        "equal total per task family"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "4. Turning long traces into SFT examples",
-      "choice": "Repeated-action handling",
-      "meaning": "How loops and repeated commands are treated. Preserve recovery behavior, not mechanical loops.",
-      "values": [
-        "Keep all valid actions",
-        "collapse exact repeated no-progress runs",
-        "cap consecutive duplicates at 1 or 2"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "4. Turning long traces into SFT examples",
-      "choice": "Overlength behavior",
-      "meaning": "What happens when a complete action and required context do not fit. Never silently cut tokens and pretend the example is intact.",
-      "values": [
-        "Count and exclude it",
-        "use a larger window in a separate experiment arm"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "4. Turning long traces into SFT examples",
-      "choice": "Automatically summarized traces",
-      "meaning": "Whether attempts containing an automatic conversation summary may enter SFT. A summary is not the original conversation.",
-      "values": [
-        "Exclude unless the conversation before and after the summary can be reconstructed exactly",
-        "then compare as a separate data group"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "4. Turning long traces into SFT examples",
-      "choice": "Tool-result size",
-      "meaning": "How much command output is retained as context. No hidden cutting.",
-      "values": [
-        "16,000 or 50,000 characters per tool result, always keeping the beginning and end and recording every cut"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "4. Turning long traces into SFT examples",
-      "choice": "Loss weighting by source",
-      "meaning": "How strongly each source type affects the update. Log the realized weights, not only requested ratios.",
-      "values": [
-        "Equal per supervised token",
-        "equal per task",
-        "teacher:self weights matching the declared mixture"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "5. SFT optimization",
-      "choice": "Learning rate",
-      "meaning": "Update size. Too low learns little; too high damages useful behavior. The repository default is 3e-6; the successful historical run used 1e-6.",
-      "values": [
-        "3e-7, 1e-6, 3e-6",
-        "1e-5 only as a brief high-risk test"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "5. SFT optimization",
-      "choice": "Global batch size",
-      "meaning": "Number of SFT windows combined per update across all GPUs. Also log supervised target tokens per update because windows have different lengths.",
-      "values": [
-        "8, 32, 64"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "5. SFT optimization",
-      "choice": "Microbatch per GPU",
-      "meaning": "Rows processed at once by each GPU before update signals are combined. This should not change the scientific result when global batch stays fixed, but it can cause small rounding differences.",
-      "values": [
-        "1 first",
-        "2 only if memory allows"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "5. SFT optimization",
-      "choice": "Epoch count",
-      "meaning": "How many complete passes are made over SFT rows. Evaluate saved checkpoints inside each run; do not assume the last epoch is best.",
-      "values": [
-        "1, 2, 4"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "5. SFT optimization",
-      "choice": "Total supervised tokens",
-      "meaning": "The actual amount of assistant output learned from. Equal row counts are not equal training doses.",
-      "values": [
-        "Match across data-mixture comparisons",
-        "report exact count per epoch and overall"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "5. SFT optimization",
-      "choice": "Learning-rate schedule",
-      "meaning": "Whether update size stays constant or decreases. Current supported path is constant.",
-      "values": [
-        "Constant",
-        "a smooth decrease from the peak to 10% of the peak"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "5. SFT optimization",
-      "choice": "Warmup",
-      "meaning": "A gradual rise from a tiny update size at the start. Current supported path uses 0%; the alternatives are SFT hypotheses, not values copied from an RL study.",
-      "values": [
-        "0%, 3%, 10% of updates"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "5. SFT optimization",
-      "choice": "Weight decay",
-      "meaning": "A small pressure against very large weight changes. First expose and lock the value the training program actually uses.",
-      "values": [
-        "0, 0.01, 0.1"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "5. SFT optimization",
-      "choice": "Gradient clipping",
-      "meaning": "A limit on unusually large update signals. Log how often the limit activates.",
-      "values": [
-        "Maximum update-signal size 0.5 or 1.0",
-        "disabled only as a health check"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "5. SFT optimization",
-      "choice": "Full-weight versus adapters",
-      "meaning": "Update all model weights or only small attached trainable matrices. The two methods have different learning capacity and model-saving paths.",
-      "values": [
-        "Update all weights as primary",
-        "low-rank adapters as a lower-cost comparison"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "5. SFT optimization",
-      "choice": "Example order seed",
-      "meaning": "Random order of SFT rows. One seed is enough for coarse rejection, not a final claim.",
-      "values": [
-        "At least 3 recorded seeds for finalists"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "5. SFT optimization",
-      "choice": "Checkpoint interval",
-      "meaning": "How often recoverable model state is saved. It should not change learning, but enables fair checkpoint selection and recovery.",
-      "values": [
-        "Every 10, 25, or 50 updates, plus final"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "5. SFT optimization",
-      "choice": "Checkpoint choice",
-      "meaning": "Which saved point becomes the candidate model. Do not choose from prediction error on held-out teacher text, the final Fleet tasks, or WebExploitBench.",
-      "values": [
-        "Highest success on the Fleet development tasks",
-        "use training loss only to detect broken or unstable learning"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "6. RL task and reward choices",
-      "choice": "Starting checkpoint",
-      "meaning": "The model RL begins from. This directly tests whether SFT is a useful RL warm start.",
-      "values": [
-        "Base Qwen",
-        "best teacher-SFT",
-        "best self-SFT",
-        "best mixed-SFT"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "6. RL task and reward choices",
-      "choice": "RL task split",
-      "meaning": "Tasks on which fresh RL attempts may run. Bind exact task and grader versions.",
-      "values": [
-        "The same training families used by the corresponding SFT arm",
-        "development and final test excluded"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "6. RL task and reward choices",
-      "choice": "Official reward source",
-      "meaning": "Which system decides success. A missing scoring ID makes the attempt invalid, not zero reward.",
-      "values": [
-        "The real grader locked to that exact task version, plus a unique ID for each scoring run"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "6. RL task and reward choices",
-      "choice": "Outcome reward",
-      "meaning": "Reward for the final task result. Binary reward is easiest to audit.",
-      "values": [
-        "Binary 0/1 first",
-        "verified partial progress in a separate later arm"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "6. RL task and reward choices",
-      "choice": "Partial-progress reward",
-      "meaning": "Credit for verified intermediate objectives. Use only progress confirmed by the grader, never a model's self-claim.",
-      "values": [
-        "Off",
-        "exact fraction provided by the grader",
-        "a separately studied blend only after the fraction is audited"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "6. RL task and reward choices",
-      "choice": "Report-format reward",
-      "meaning": "Extra credit for calling the final report tool correctly. A large format bonus can teach reporting without exploitation.",
-      "values": [
-        "None first",
-        "at most a small separately logged bonus later"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "6. RL task and reward choices",
-      "choice": "Invalid-attempt handling",
-      "meaning": "What happens when the environment, model service, or grader breaks. Do not turn infrastructure failures into negative model feedback.",
-      "values": [
-        "Exclude from model updates and preserve the reason"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "6. RL task and reward choices",
-      "choice": "Time-limit handling",
-      "meaning": "What happens when an otherwise healthy attempt reaches its declared time, turn, or token limit. Track time-limit rate alongside reward.",
-      "values": [
-        "Count it as a genuine model failure under the prewritten rule",
-        "mark it invalid only when infrastructure, rather than the model, caused the timeout"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "6. RL task and reward choices",
-      "choice": "Group reward variation",
-      "meaning": "Whether attempts at one task include both successes and failures. Ordinary GRPO learns nothing from all-zero or all-one groups.",
-      "values": [
-        "Require and log mixed-reward groups in the canary"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "6. RL task and reward choices",
-      "choice": "Zero-variation groups",
-      "meaning": "How groups with identical rewards are handled. Record every replacement because it changes which tasks training sees.",
-      "values": [
-        "Keep them and produce zero update as the baseline",
-        "later compare a fixed, prewritten replacement cap that seeks useful reward differences"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "6. RL task and reward choices",
-      "choice": "Task sampling for RL",
-      "meaning": "Which training task is attempted next. Use training outcomes only.",
-      "values": [
-        "Uniform by family",
-        "application-balanced",
-        "favor tasks that are neither near 0% nor near 100% solved"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "6. RL task and reward choices",
-      "choice": "Replay of old attempts",
-      "meaning": "Whether previously generated attempts are reused. Old attempts were generated by an older model and can bias updates.",
-      "values": [
-        "No replay for the primary fresh-attempt run",
-        "one bounded replay study later"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "RL implementation",
-      "meaning": "The training system that coordinates generation and updates. Do not treat one system merely starting as evidence of learning.",
-      "values": [
-        "Miles and SkyRL, first as matched one-step canaries"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "RL algorithm",
-      "meaning": "The rule that converts rewards into weight updates. Each algorithm needs its own verified implementation.",
-      "values": [
-        "GRPO first",
-        "Dr. GRPO, DAPO-style GRPO, and GSPO later",
-        "PPO only if its extra expected-reward estimate and added complexity are justified"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "Attempts per task",
-      "meaning": "Number of fresh responses compared for the same task. Larger groups improve the chance of mixed rewards but cost more website time.",
-      "values": [
-        "8 and 16",
-        "4 only when enough tasks combine into a total batch that divides evenly across all training GPUs"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "Different tasks per update",
-      "meaning": "Number of distinct task prompts contributing to one update. More tasks reduce dependence on one challenge.",
-      "values": [
-        "1, 2, 4, 8. Start with 1×8 for the canary, then 4×8 if speed allows"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "RL learning rate",
-      "meaning": "Update size for reward-based training. Several open GRPO recipes use 1e-6, but math tasks are not cyber agents.",
-      "values": [
-        "1e-7, 3e-7, 1e-6",
-        "3e-6 only as a brief high-risk test"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "Number of optimizer updates",
-      "meaning": "How long RL runs. More updates are not automatically better.",
-      "values": [
-        "1 reward canary",
-        "10 short search",
-        "50 medium",
-        "100–150 long only after development lift"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "Updates per batch of attempts",
-      "meaning": "How many times the same newly generated attempts are reused immediately. Reuse may learn more from each attempt but moves training farther from the model that generated the data.",
-      "values": [
-        "1 first",
-        "2 later"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "Reference model",
-      "meaning": "The fixed model used to measure how far RL moves. Log the exact reference checkpoint.",
-      "values": [
-        "The RL starting checkpoint",
-        "periodic reference reset only in a later long-run study"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "KL penalty size",
-      "meaning": "Strength of the cost for moving away from the reference model. Track the measured change, not only the requested number.",
-      "values": [
-        "0, 0.001, 0.01, 0.04. Start with 0.001 and compare 0"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "Clipping range",
-      "meaning": "Maximum change in action probability trusted in one update. The repository's Miles path already names the 0.2/0.28 shape.",
-      "values": [
-        "Equal lower and upper limits of 0.2",
-        "DAPO-style lower limit 0.2 and upper limit 0.28"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "Loss averaging",
-      "meaning": "Whether long and short attempts receive equal total weight or equal weight per token. Track response length because ordinary GRPO can favor long incorrect output.",
-      "values": [
-        "Equal per attempt",
-        "equal per trained token",
-        "Dr. GRPO adjustment that removes unintended extra weight from long answers"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "Entropy bonus",
-      "meaning": "An optional reward for keeping output varied. Use only if diversity collapses; too much produces noise.",
-      "values": [
-        "0",
-        "1e-4",
-        "1e-3"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "Rollout temperature",
-      "meaning": "Randomness while collecting training attempts. Evaluation temperature remains fixed separately.",
-      "values": [
-        "0.7, 1.0, 1.2. Start with 1.0"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "Probability cutoff",
-      "meaning": "How much of the model's token distribution remains available. “Top-p 0.9” keeps the smallest token set whose probabilities add to 90%.",
-      "values": [
-        "Top-p 0.9, 0.95, 1.0"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "Total context budget",
-      "meaning": "Maximum prompt plus generated tokens in one attempt. Any cutting caused by the limit must be reported.",
-      "values": [
-        "65,536 and 98,304. Start with the reviewed 98,304-token limit"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "Response budget",
-      "meaning": "Portion of total context available for model generation. It must remain below the total budget.",
-      "values": [
-        "49,152 and 81,920 tokens"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "Tokens per turn",
-      "meaning": "Maximum generated tokens before the next tool call or observation. A too-small turn cap can prevent complete commands or reports.",
-      "values": [
-        "2,048",
-        "4,096",
-        "8,192. Start with 4,096"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "Turn count",
-      "meaning": "Maximum model/tool cycles in one attempt. Use enough room to finish, then study efficiency.",
-      "values": [
-        "64 and 80 first",
-        "120 only if successful training-only traces justify it"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "Attempt time",
-      "meaning": "Real-time deadline for one full attempt. Base the choice on valid training-only completion times.",
-      "values": [
-        "1,800",
-        "2,400",
-        "3,600 seconds. Start with 2,400"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "Tool deadline",
-      "meaning": "Maximum time for one command. Client timeout must exceed the advertised tool timeout.",
-      "values": [
-        "At least 330 seconds for a five-minute server limit"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "Tool-output allowance",
-      "meaning": "Maximum command-result text returned to the model. Mark any cut clearly and use the same rule in every attempt.",
-      "values": [
-        "16,000 and 50,000 characters"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "Weight freshness",
-      "meaning": "How current the attempt-producing model is relative to the training model. An unlimited delay trains on behavior from an old model.",
-      "values": [
-        "Refresh it after every model update first",
-        "allow at most one-update delay later"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "Attempt generation and training placement",
-      "meaning": "Whether fresh attempts and model training share GPUs. This should mainly affect computing speed, but confirm that rounding and model-update timing remain comparable.",
-      "values": [
-        "Share the same GPUs first",
-        "separate them only for a matched speed study"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "Checkpoint and evaluation interval",
-      "meaning": "How often RL saves and checks development tasks. Keep the best and latest recoverable states.",
-      "values": [
-        "Every 1 step for canary",
-        "every 10 or 25 for longer runs",
-        "always final"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "7. RL attempts, model updates, and running system",
-      "choice": "Resume behavior",
-      "meaning": "Whether a stopped run continues from the exact next task/update. Restore weights, optimizer, random state, and data position together.",
-      "values": [
-        "One planned stop-and-resume test before a long run"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "8. Combined training schedules",
-      "choice": "Training path",
-      "meaning": "The ordered stages applied to Qwen. These are the core scientific arms.",
-      "values": [
-        "Base only",
-        "teacher-SFT",
-        "self-SFT",
-        "mixed-SFT",
-        "RL from base",
-        "teacher-SFT→RL",
-        "self-SFT→RL",
-        "mixed-SFT→RL"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "8. Combined training schedules",
-      "choice": "SFT before RL",
-      "meaning": "Whether imitation gives RL a better starting success rate. Match the RL task mix, number of attempts, and number of model updates.",
-      "values": [
-        "No SFT",
-        "best teacher-SFT",
-        "best self-SFT",
-        "best mixed-SFT"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "8. Combined training schedules",
-      "choice": "SFT after RL",
-      "meaning": "Whether a final imitation pass restores format or tool behavior. It can erase RL gains, so evaluate both sides.",
-      "values": [
-        "None first",
-        "very small mixed-SFT “recovery” pass later"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "8. Combined training schedules",
-      "choice": "Alternating stages",
-      "meaning": "Switch between SFT and RL more than once. Freeze and evaluate every boundary.",
-      "values": [
-        "One SFT→RL cycle first",
-        "two cycles later"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "8. Combined training schedules",
-      "choice": "General-data preservation",
-      "meaning": "Mix non-cyber instruction data to reduce forgetting. Non-cyber data is outside the current goal and must not be mixed into its main result.",
-      "values": [
-        "0% inside the current cyber-only project",
-        "5% or 10% only in a clearly separate follow-up study"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "8. Combined training schedules",
-      "choice": "Reference reset during long RL",
-      "meaning": "Move the KL reference to a newer checkpoint. ProRL motivates studying this for long runs, not using it by default.",
-      "values": [
-        "Never",
-        "once at the midpoint",
-        "every fixed 50 updates"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "9. Evaluation and model selection",
-      "choice": "Primary development measure",
-      "meaning": "The result used to choose recipes. Training loss and prediction error on teacher-written text are health checks, not the target.",
-      "values": [
-        "Fleet development pass@1, averaged equally across task families"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "9. Evaluation and model selection",
-      "choice": "Secondary development measures",
-      "meaning": "Other useful views of capability. Label them secondary before running.",
-      "values": [
-        "pass@4, verified partial progress, application-average success, completion time, turns, and tokens"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "9. Evaluation and model selection",
-      "choice": "Final measure",
-      "meaning": "The untouched score reported after selection. Open once per frozen finalist family. With only 10 tasks, treat small differences as uncertain.",
-      "values": [
-        "Fleet final-test pass@1",
-        "pass@4 as secondary",
-        "raw per-task outcomes"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "9. Evaluation and model selection",
-      "choice": "External benchmark",
-      "meaning": "A separate test of improvement beyond Fleet tasks. If its results help choose data, settings, or checkpoints, it is a development test—not independent final evidence.",
-      "values": [
-        "A newly validated, fair WebExploitBench comparison used only for reporting",
-        "reserve another untouched benchmark if WebExploitBench results influence choices"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "9. Evaluation and model selection",
-      "choice": "Harness transfer",
-      "meaning": "Whether lift survives a different agent program. A trained-versus-base comparison is required inside each harness.",
-      "values": [
-        "Primary harness result, then a separately matched Qwen Code/OpenCode pair"
-      ],
-      "priority": "Test later"
-    },
-    {
-      "area": "9. Evaluation and model selection",
-      "choice": "Evaluation attempts",
-      "meaning": "Number of tries per task. Never rerun a valid pass@1 zero.",
-      "values": [
-        "pass@1 for all search decisions",
-        "pass@4 for finalists"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "9. Evaluation and model selection",
-      "choice": "Checkpoint evaluation cadence",
-      "meaning": "How often training pauses for task evaluation. The development tasks must never enter training, and frequent repeated checks can overfit decisions to them.",
-      "values": [
-        "Track training loss continuously",
-        "run the full Fleet development test after each completed training run",
-        "for very long runs, optionally use one fixed small development subset at epoch or stage boundaries"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "9. Evaluation and model selection",
-      "choice": "Training repeats",
-      "meaning": "Independent training runs with different seeds. Evaluation attempts are not substitutes for training repeats.",
-      "values": [
-        "One for coarse screening",
-        "three for finalists"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "9. Evaluation and model selection",
-      "choice": "Paired task analysis",
-      "meaning": "Compare base and trained outcomes on the same task versions. Do not compare only two pooled percentages.",
-      "values": [
-        "Per-task win/loss/tie table and a paired resampling confidence interval: repeatedly resample whole task families and recalculate the lift"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "9. Evaluation and model selection",
-      "choice": "Confidence interval",
-      "meaning": "A range showing sampling uncertainty. Attempts on one task are related, not independent data points.",
-      "values": [
-        "Repeatedly resample whole task families, not individual attempts",
-        "report 95% intervals"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "9. Evaluation and model selection",
-      "choice": "Guard against a lucky search winner",
-      "meaning": "Avoid declaring the luckiest of many recipes a discovery. Report the number of experiment arms tried.",
-      "values": [
-        "Write down the search before it starts, use development data for ranking, and reserve the final test for a small frozen set"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "9. Evaluation and model selection",
-      "choice": "Minimum useful lift",
-      "meaning": "Smallest improvement worth the cost. With only 10 final tasks, only very large changes will be clear.",
-      "values": [
-        "Write down the minimum absolute increase in task success before running the search"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "9. Evaluation and model selection",
-      "choice": "Cost and efficiency",
-      "meaning": "Resources needed for each gain. The best model is not necessarily the most expensive winner.",
-      "values": [
-        "GPU-hours, environment-hours, generated tokens, and solved tasks per cost"
-      ],
-      "priority": "Test now"
-    },
-    {
-      "area": "9. Evaluation and model selection",
-      "choice": "Safety and general behavior",
-      "meaning": "Check whether cyber lift damages basic tool use or reporting. Keep this separate from the cyber success score.",
-      "values": [
-        "Fixed small test set for non-secret tool formatting and general instructions"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "10. Repeatability and run health",
-      "choice": "Model identity",
-      "meaning": "Hash every model, tokenizer, and conversation-format file.",
-      "values": [
-        "Required for every run"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "10. Repeatability and run health",
-      "choice": "Data identity",
-      "meaning": "Hash the task list, split, list of saved source attempts, prepared rows, and source weights actually used.",
-      "values": [
-        "Required for every run"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "10. Repeatability and run health",
-      "choice": "Training identity",
-      "meaning": "Record the exact saved code version, packaged software image, full settings, seed, GPU layout, and intended update count.",
-      "values": [
-        "Required for every run"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "10. Repeatability and run health",
-      "choice": "Reward identity",
-      "meaning": "Record exact task, environment, grader, tools, and one unique grader execution ID per RL attempt.",
-      "values": [
-        "Required for every run"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "10. Repeatability and run health",
-      "choice": "Evaluation identity",
-      "meaning": "Record checkpoint, model-service image, agent software, task and grader versions, budgets, seeds, and retry policy.",
-      "values": [
-        "Required for every run"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "10. Repeatability and run health",
-      "choice": "Progress",
-      "meaning": "Send training loss, reward, update size, output length, invalid-attempt rate, task mix, and checkpoint details to Weights & Biases, the experiment dashboard. Never upload prompts or traces.",
-      "values": [
-        "Required for every run"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "10. Repeatability and run health",
-      "choice": "Recovery",
-      "meaning": "Save model, optimizer, learning-rate state, the exact state of the random sequence, and the exact next data position. Test one stop and resume.",
-      "values": [
-        "Required for every run"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "10. Repeatability and run health",
-      "choice": "Completion",
-      "meaning": "Reload the exported model and prove it can produce numeric predictions without invalid numbers before using it for evaluation.",
-      "values": [
-        "Required for every run"
-      ],
-      "priority": "Hold fixed"
-    },
-    {
-      "area": "10. Repeatability and run health",
-      "choice": "Run status",
-      "meaning": "Separate “program started,” “model updated,” “valid score produced,” and “model improved.” They are different claims.",
-      "values": [
-        "Required for every run"
-      ],
-      "priority": "Hold fixed"
-    }
-  ]
+  }
 }

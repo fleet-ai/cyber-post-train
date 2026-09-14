@@ -17,7 +17,7 @@
       <nav class="tabs" aria-label="Reports">
         <a data-tab-link="webexploitbench" href="#webexploitbench">WebExploitBench</a>
         <a data-tab-link="task-quality" href="#task-quality">Task quality</a>
-        <a data-tab-link="experiment-map" href="#experiment-map">Experiment map</a>
+        <a data-tab-link="experiment-map" href="#experiment-map">Experiment plan</a>
       </nav>
       <span class="edition">Research note · 01</span>
     </header>
@@ -207,54 +207,60 @@
 
       <section class="page" data-tab-page="experiment-map" aria-labelledby="map-title" hidden>
         <div class="hero ruled">
-          <p class="eyebrow">Research plan · Qwen3.8-27B</p>
-          <h1 id="map-title">Every choice that can change how much the model improves.</h1>
-          <p class="dek">This map lists the practical choices in data, learning from saved successful attempts (SFT), learning from fresh scored attempts (RL), evaluation, and computing. Each row explains the choice in ordinary language, the values worth testing, and when to test it.</p>
+          <p class="eyebrow">Ranked research queue · Qwen3.8-27B</p>
+          <h1 id="map-title">The training runs, in the order we should do them.</h1>
+          <p class="dek">There are two tables: one for learning from saved successful attempts (SFT), and one for learning from new attempts that receive a score (RL). Every row is one concrete run. Every column is a setting that could change the result.</p>
           <div class="hero-meta">
             <span>Goal: better blackbox security performance</span>
-            <span>Practical ranges, not every imaginable value</span>
+            <span>Higher rows should run first</span>
+            <span>Scroll sideways to see every setting</span>
             <span>Updated 13 September 2026</span>
           </div>
         </div>
 
-        <aside class="finding" aria-label="How to use this map">
-          <span class="finding-label">How to use it</span>
-          <p>First hold the test itself fixed. Then vary a small number of high-impact training choices. Changing everything at once would make the result impossible to explain.</p>
+        <aside class="finding" aria-label="How the runs are ranked">
+          <span class="finding-label">How the order was chosen</span>
+          <p>Early runs answer the biggest questions with the fewest GPUs. Later runs tune smaller details or test whether a promising result repeats.</p>
         </aside>
 
-        <section class="section" aria-labelledby="definitions-title">
+        <section class="section" aria-labelledby="sft-plan-title">
           <div class="section-heading">
             <p class="section-index">01</p>
-            <div><h2 id="definitions-title">Plain-language glossary</h2><p>The main technical terms used in the map are explained here.</p></div>
+            <div><h2 id="sft-plan-title">SFT experiment queue</h2><p>Supervised fine-tuning (SFT) teaches the model to predict the useful actions in saved successful attempts. The first rows compare what examples to learn from before spending many runs tuning smaller numerical settings.</p></div>
           </div>
-          <div id="experiment-definitions" class="definition-grid"></div>
+          <div class="plan-key" aria-label="Table guide">
+            <span><i class="key-change" aria-hidden="true"></i>A shaded cell differs from the table’s standard setup.</span>
+            <span>Select any column title to read its plain-language meaning.</span>
+          </div>
+          <p id="sft-column-help" class="column-help" aria-live="polite">Select a column title to see what that setting means.</p>
+          <p id="sft-run-count" class="decision-count"></p>
+          <div id="sft-plan-table" class="experiment-table-wrap" tabindex="0" aria-label="Scrollable SFT experiment plan"></div>
         </section>
 
-        <section class="section" aria-labelledby="sequence-title">
+        <section class="section" aria-labelledby="rl-plan-title">
           <div class="section-heading">
             <p class="section-index">02</p>
-            <div><h2 id="sequence-title">Recommended order</h2><p>Test broad, high-impact choices first. Refine smaller details only after finding a promising range.</p></div>
+            <div><h2 id="rl-plan-title">RL experiment queue</h2><p>Reinforcement learning (RL) lets the model try a task, receive a score from the task’s real checker, and update toward attempts that scored better. The first rows prove the full loop works before larger or more adventurous runs.</p></div>
           </div>
-          <ol id="experiment-sequence" class="sequence-list"></ol>
+          <div class="plan-key" aria-label="Table guide">
+            <span><i class="key-change" aria-hidden="true"></i>A shaded cell differs from the table’s standard setup.</span>
+            <span>Select any column title to read its plain-language meaning.</span>
+          </div>
+          <p id="rl-column-help" class="column-help" aria-live="polite">Select a column title to see what that setting means.</p>
+          <p id="rl-run-count" class="decision-count"></p>
+          <div id="rl-plan-table" class="experiment-table-wrap" tabindex="0" aria-label="Scrollable RL experiment plan"></div>
         </section>
 
-        <section class="section" aria-labelledby="space-title">
+        <section class="section" aria-labelledby="reading-title">
           <div class="section-heading">
             <p class="section-index">03</p>
-            <div><h2 id="space-title">The full practical decision space</h2><p>“Hold fixed” means keep it identical so a comparison stays fair. “Test now” means it could materially change learning. “Test later” means it matters after the main choices are understood.</p></div>
+            <div><h2 id="reading-title">How to read the order</h2><p>These are ranked experiment plans, not claims that the listed settings are already best.</p></div>
           </div>
-          <div class="map-controls">
-            <label for="decision-search">Find a choice</label>
-            <input id="decision-search" type="search" placeholder="Try: batch size, reward, teacher, tools">
-            <label for="decision-area">Show an area</label>
-            <select id="decision-area"><option value="all">All areas</option></select>
-          </div>
-          <p id="decision-count" class="decision-count" aria-live="polite"></p>
-          <div class="decision-table-wrap">
-            <table class="decision-table">
-              <thead><tr><th>Area</th><th>Choice</th><th>What it means</th><th>Values worth testing</th><th>Priority</th></tr></thead>
-              <tbody id="decision-table"></tbody>
-            </table>
+          <div class="gate-grid reading-grid">
+            <article><span class="gate-number">1</span><h3>Compare the source of learning</h3><p>First compare strong-teacher attempts, Qwen’s own successes, and a mixture while keeping the amount of training and the optimizer settings matched.</p></article>
+            <article><span class="gate-number">2</span><h3>Find a stable numerical range</h3><p>Then vary learning rate, batch size, episode group size, and number of passes widely enough to find both under-training and instability.</p></article>
+            <article><span class="gate-number">3</span><h3>Refine the winning design</h3><p>Only after a clear winner appears should we tune window extraction, task sampling, reward details, and longer training.</p></article>
+            <article><span class="gate-number">4</span><h3>Confirm before the final test</h3><p>Repeat finalists on a second balanced split or random seed. Keep the final Fleet tasks untouched. WebExploitBench may run earlier, but then it counts as development evidence rather than a final independent test.</p></article>
           </div>
         </section>
 
@@ -263,7 +269,7 @@
             <p class="section-index">04</p>
             <div>
               <h2 id="map-sources-title">Where the suggested ranges came from</h2>
-              <p>These papers give us sensible starting points; they do not prove that a setting will work on long web-security tasks. Every value still has to earn its place on Fleet’s development tasks.</p>
+              <p>These papers and the working Fleet training code give us sensible starting points. They do not prove that a setting will work on long web-security tasks; every row must earn its place on Fleet’s development tasks.</p>
               <div class="source-links">
                 <a href="https://arxiv.org/abs/2505.09388">Qwen3 training report</a>
                 <a href="https://arxiv.org/abs/2203.14465">Learning from successful self-attempts</a>
@@ -279,7 +285,7 @@
         <section class="section compact" aria-labelledby="map-scope-title">
           <div class="section-heading">
             <p class="section-index">05</p>
-            <div><h2 id="map-scope-title">What this map does not do</h2><p id="experiment-scope"></p></div>
+            <div><h2 id="map-scope-title">What this plan does not claim</h2><p id="experiment-scope"></p></div>
           </div>
         </section>
       </section>
