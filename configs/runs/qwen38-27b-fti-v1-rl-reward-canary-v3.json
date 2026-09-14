@@ -1,0 +1,79 @@
+{
+  "schema": "cyber_fti_v1_rl_canary_v1",
+  "name": "chris-q38-v1rl-c1-a3",
+  "run_dir": "/mnt/sfs/jobs/chris-q38-v1rl-c1-a3",
+  "trainer": {
+    "model": "Qwen/Qwen3.8-27B",
+    "recipe": "qwen3.8-27b-256k",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:0ca02d9bc920e104d67c249172eb0e8b0cc34fc409e738f76f2efee44610dc59",
+    "fti_version": "0.9.2",
+    "fti_source_commit": "0b1af5684310ee244bf7bdb0028e5ef78c08098b",
+    "run_sh_sha256": "7fba883763eead8ab8ad7411c59e06f25dc19c81a970c6f225a6ad3cad65e0f8",
+    "run_fleet_sha256": "5efb5a99c9e07bf555703bd627b54651667f4d654b3010b4641059c4a5bab6c4"
+  },
+  "data": {
+    "study_split": {
+      "path": "configs/data/qwen-blackbox-study-split-a-v1.json",
+      "file_sha256": "2558d0346f5edd26d6a7cd85fc1774cb1be2339d588be1f7f967fc14689d6ccc"
+    },
+    "eligible_inventory": {
+      "path": "configs/data/qwen-blackbox-eligible-v1.json",
+      "file_sha256": "b12a755c7e65bc04694eab85d9b0c21fadc222207d7bcc6ed8f0c788e032589b"
+    },
+    "tasks": [
+      {
+        "task_key": "cysec1-2-fubspot-gen_blackbox-3e95b3814ffa6ad7be96940b__blackbox_ctf_v1",
+        "task_version_id": "484625a1-a0ee-4e12-b566-40eccc26802e"
+      }
+    ]
+  },
+  "episode": {
+    "max_turns": 160,
+    "max_tokens_per_turn": 4096,
+    "max_concurrent_envs": 8,
+    "request_timeout_s": 120,
+    "ready_timeout_s": 600,
+    "episode_timeout_s": 2400,
+    "tool_timeout_s": 330,
+    "grade_timeout_s": 900,
+    "ttl_seconds": 7200,
+    "tool_output_max_chars": 50000,
+    "vision": false,
+    "pass_conversation_to_verifier": false
+  },
+  "optimization": {
+    "optimizer_steps": 1,
+    "prompt_groups": 1,
+    "samples_per_prompt": 8,
+    "learning_rate": 1e-6,
+    "checkpoint_interval": 1,
+    "seed": 20260913
+  },
+  "wandb": {
+    "entity": "thefleet",
+    "project": "cyber-post-train",
+    "run_id": "chris-q38-v1rl-c1-a3"
+  },
+  "cluster": {
+    "nodes": 4,
+    "gpus_per_node": 8,
+    "priority": "c1",
+    "topology_mode": "preferred",
+    "resources": {
+      "cpu_request": "48",
+      "cpu_limit": "64",
+      "memory_request": "1500Gi",
+      "memory_limit": "2650Gi"
+    }
+  },
+  "acceptance": {
+    "exact_task_versions": false,
+    "finite_rewards": false,
+    "verifier_execution_ids": false,
+    "mixed_reward_group": false,
+    "optimizer_step": false,
+    "finite_nonzero_gradient": false,
+    "checkpoint": false,
+    "all_instances_released": false
+  }
+}
