@@ -170,6 +170,19 @@ ENGINE_DIAGNOSTIC_PROD_PREPARED_ROOT = (
 ENGINE_DIAGNOSTIC_PROD_CONFIG_SHA256 = (
     "480dae102f5f047cd68cd7e07acede5afebcbf1b22e39c60f94742ce70e4c989"
 )
+ENGINE_DIAGNOSTIC_PROD2_CONFIG_NAME = "chris-q38-rldiag-prod2"
+ENGINE_DIAGNOSTIC_PROD2_WANDB_RUN_ID = ENGINE_DIAGNOSTIC_PROD2_CONFIG_NAME
+ENGINE_DIAGNOSTIC_PROD2_OUTPUT_ROOT = "/mnt/sfs/jobs/chris-q38-rldiag-prod2"
+ENGINE_DIAGNOSTIC_PROD2_DATA_ROOT = (
+    "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rldiag-inputs-prod2/data"
+)
+ENGINE_DIAGNOSTIC_PROD2_PREPARED_ROOT = (
+    "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rldiag-inputs-prod2/prepared-v1"
+)
+ENGINE_DIAGNOSTIC_PROD2_CONFIG_SHA256 = (
+    "f5602c336f98dd772e0e26009fa8c8902bc2e4a67ba17e211ff9e88b5649109b"
+)
+VLLM_SAMPLER_ENV = {"VLLM_USE_FLASHINFER_SAMPLER": "0"}
 ENGINE_DIAGNOSTIC_MODEL_SHA256 = "dcfdcd6ecb6661741cd3a4b24dc5af7259642c8a6824773e0de70d55d7501179"
 ENGINE_DIAGNOSTIC_DATA_IDENTITY = {
     "selection_sha256": "sha256:8672a1bcb7073ee93d30c6cbc5b6a140d21571c8b58fc6100d7007a6f2e56a9e",
@@ -420,11 +433,14 @@ _SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 
 def is_prod_engine_diagnostic_config(config: object) -> bool:
     """Identify the exact source config allowed to skip training-promotion gates."""
-    return isinstance(config, dict) and digest(config) == ENGINE_DIAGNOSTIC_PROD_CONFIG_SHA256
+    return isinstance(config, dict) and digest(config) in {
+        ENGINE_DIAGNOSTIC_PROD_CONFIG_SHA256,
+        ENGINE_DIAGNOSTIC_PROD2_CONFIG_SHA256,
+    }
 
 
 def is_prod_engine_diagnostic(plan: object) -> bool:
-    """Recognize only the authorized c1 prod fallback for the queued dev11 gate."""
+    """Recognize only the two create-once c1 production engine gates."""
     if not isinstance(plan, Mapping):
         return False
     arguments = plan.get("arguments")
@@ -433,19 +449,71 @@ def is_prod_engine_diagnostic(plan: object) -> bool:
     arguments = arguments if isinstance(arguments, Mapping) else {}
     data = data if isinstance(data, Mapping) else {}
     execution = execution if isinstance(execution, Mapping) else {}
+    profiles = (
+        (
+            ENGINE_DIAGNOSTIC_PROD_CONFIG_NAME,
+            ENGINE_DIAGNOSTIC_PROD_WANDB_RUN_ID,
+            ENGINE_DIAGNOSTIC_PROD_OUTPUT_ROOT,
+            ENGINE_DIAGNOSTIC_PROD_DATA_ROOT,
+        ),
+        (
+            ENGINE_DIAGNOSTIC_PROD2_CONFIG_NAME,
+            ENGINE_DIAGNOSTIC_PROD2_WANDB_RUN_ID,
+            ENGINE_DIAGNOSTIC_PROD2_OUTPUT_ROOT,
+            ENGINE_DIAGNOSTIC_PROD2_DATA_ROOT,
+        ),
+    )
+    markers = (
+        plan.get("run_name"),
+        arguments.get("name"),
+        data.get("name"),
+        arguments.get("wandb_run_id"),
+        plan.get("output_root"),
+        arguments.get("output_root"),
+        arguments.get("train_data"),
+        arguments.get("dev_data"),
+        arguments.get("data_manifest"),
+    )
+    profile = next(
+        (
+            profile
+            for profile in profiles
+            if any(
+                value == expected
+                for value, expected in zip(
+                    markers,
+                    (
+                        profile[0],
+                        profile[0],
+                        profile[0],
+                        profile[1],
+                        profile[2],
+                        profile[2],
+                        profile[3] + "/train.jsonl",
+                        profile[3] + "/dev.jsonl",
+                        profile[3] + "/manifest.json",
+                    ),
+                )
+            )
+        ),
+        None,
+    )
+    if profile is None:
+        return False
+    name, wandb_run_id, output_root, data_root = profile
     expected_args = {
-        "name": ENGINE_DIAGNOSTIC_PROD_CONFIG_NAME,
-        "output_root": ENGINE_DIAGNOSTIC_PROD_OUTPUT_ROOT,
+        "name": name,
+        "output_root": output_root,
         "model": "Qwen/Qwen3.8-27B",
         "model_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
-        "train_data": ENGINE_DIAGNOSTIC_PROD_DATA_ROOT + "/train.jsonl",
-        "dev_data": ENGINE_DIAGNOSTIC_PROD_DATA_ROOT + "/dev.jsonl",
-        "data_manifest": ENGINE_DIAGNOSTIC_PROD_DATA_ROOT + "/manifest.json",
+        "train_data": data_root + "/train.jsonl",
+        "dev_data": data_root + "/dev.jsonl",
+        "data_manifest": data_root + "/manifest.json",
         "train_rows": 2,
         "dev_rows": 1,
         "wandb_entity": "thefleet",
         "wandb_project": "cyber-post-train",
-        "wandb_run_id": ENGINE_DIAGNOSTIC_PROD_WANDB_RUN_ID,
+        "wandb_run_id": wandb_run_id,
         "context_tokens": 98304,
         "response_tokens": 81920,
         "tokens_per_turn": 4096,
@@ -474,30 +542,17 @@ def is_prod_engine_diagnostic(plan: object) -> bool:
             "memory_limit": "768Gi",
         },
     }
-    markers = (
-        plan.get("run_name"),
-        arguments.get("name"),
-        data.get("name"),
-        arguments.get("wandb_run_id"),
-        plan.get("output_root"),
-        arguments.get("output_root"),
-        arguments.get("train_data"),
-        arguments.get("dev_data"),
-        arguments.get("data_manifest"),
-    )
     expected_markers = (
-        ENGINE_DIAGNOSTIC_PROD_CONFIG_NAME,
-        ENGINE_DIAGNOSTIC_PROD_CONFIG_NAME,
-        ENGINE_DIAGNOSTIC_PROD_CONFIG_NAME,
-        ENGINE_DIAGNOSTIC_PROD_WANDB_RUN_ID,
-        ENGINE_DIAGNOSTIC_PROD_OUTPUT_ROOT,
-        ENGINE_DIAGNOSTIC_PROD_OUTPUT_ROOT,
-        ENGINE_DIAGNOSTIC_PROD_DATA_ROOT + "/train.jsonl",
-        ENGINE_DIAGNOSTIC_PROD_DATA_ROOT + "/dev.jsonl",
-        ENGINE_DIAGNOSTIC_PROD_DATA_ROOT + "/manifest.json",
+        name,
+        name,
+        name,
+        wandb_run_id,
+        output_root,
+        output_root,
+        data_root + "/train.jsonl",
+        data_root + "/dev.jsonl",
+        data_root + "/manifest.json",
     )
-    if not any(value == expected for value, expected in zip(markers, expected_markers)):
-        return False
     files = data.get("files") if isinstance(data.get("files"), Mapping) else {}
     if (
         tuple(markers) != expected_markers
@@ -520,7 +575,7 @@ def is_prod_engine_diagnostic(plan: object) -> bool:
             for split, rows in (("train", 2), ("dev", 1))
         )
     ):
-        raise ValueError("prod1 engine diagnostic identity is incomplete or mixed")
+        raise ValueError(f"{name} engine diagnostic identity is incomplete or mixed")
     return True
 
 
@@ -1880,6 +1935,7 @@ def job_request(plan):
         "HF_HUB_OFFLINE": "1",
         "TRANSFORMERS_OFFLINE": "1",
         "TOKENIZERS_PARALLELISM": "false",
+        **VLLM_SAMPLER_ENV,
         "WANDB_MODE": "online",
         "WANDB_RUN_ID": args.wandb_run_id,
         "WANDB_DISABLE_CODE": "true",
@@ -2017,6 +2073,7 @@ def engine_diagnostic_request(plan):
                 "HF_HUB_OFFLINE": "1",
                 "TRANSFORMERS_OFFLINE": "1",
                 "TOKENIZERS_PARALLELISM": "false",
+                **VLLM_SAMPLER_ENV,
                 "CYBER_EXPECTED_RUNTIME_UID": str(REWARD_CANARY_RUNTIME_USER["uid"]),
                 "CYBER_EXPECTED_RUNTIME_GID": str(REWARD_CANARY_RUNTIME_USER["gid"]),
                 "PYTHONDONTWRITEBYTECODE": "1",
@@ -2264,6 +2321,38 @@ def _validate_vllm_startup_error_transport():
             )
 
 
+def _validate_vllm_sampler_fallback_contract() -> None:
+    """Prove the exact image selects vLLM's PyTorch sampler on Blackwell."""
+    if any(os.environ.get(key) != value for key, value in VLLM_SAMPLER_ENV.items()):
+        raise ValueError("vLLM sampler fallback environment is not exact")
+    vllm_envs = importlib.import_module("vllm.envs")
+    sampler = importlib.import_module("vllm.v1.sample.ops.topk_topp_sampler")
+    if vllm_envs.VLLM_USE_FLASHINFER_SAMPLER is not False:
+        raise ValueError("vLLM did not parse the FlashInfer sampler fallback")
+
+    class CudaPlatform:
+        @staticmethod
+        def is_cuda():
+            return True
+
+        @staticmethod
+        def is_cpu():
+            return False
+
+        @staticmethod
+        def is_xpu():
+            return False
+
+    original = sampler.current_platform
+    try:
+        sampler.current_platform = CudaPlatform()
+        instance = sampler.TopKTopPSampler()
+    finally:
+        sampler.current_platform = original
+    if instance.forward.__func__ is not instance.forward_native.__func__:
+        raise ValueError("vLLM did not select its PyTorch-native sampler fallback")
+
+
 def preflight(plan):
     # The pinned GPU image is UID 1000/GID 100. Root can read private staging
     # files that its trainer cannot; such a preflight is not representative.
@@ -2281,6 +2370,7 @@ def preflight(plan):
     rows = check_artifacts(plan)
     native_source()
     _validate_vllm_startup_error_transport()
+    _validate_vllm_sampler_fallback_contract()
     skyrl.native_config(skyrl.SkyRLConfig(**plan["arguments"]))
     tokenizer = AutoTokenizer.from_pretrained(
         plan["model"]["root"], trust_remote_code=False, local_files_only=True
@@ -2298,6 +2388,7 @@ def preflight(plan):
         "request_sha256": digest(request),
         "native_parser_checked": True,
         "startup_error_transport_checked": True,
+        "vllm_sampler_fallback_checked": True,
         "counts": {k: len(v) for k, v in rows.items()},
         "planned_steps": plan["arguments"]["steps"],
         "rl_qualified": False,
@@ -2321,6 +2412,7 @@ def engine_diagnostic_preflight(plan):
     check_inputs(plan)
     native_source()
     _validate_vllm_startup_error_transport()
+    _validate_vllm_sampler_fallback_contract()
     cfg = skyrl.diagnostic_native_config(skyrl.SkyRLConfig(**plan["arguments"]))
     shape = _diagnostic_shape(plan, cfg)
     build_vllm_cli_args(cfg)
@@ -2334,6 +2426,7 @@ def engine_diagnostic_preflight(plan):
         "native_parser_checked": True,
         "engine_cli_args_checked": True,
         "startup_error_transport_checked": True,
+        "vllm_sampler_fallback_checked": True,
         "model_files": len(plan["model"]["files"]),
         "task_rows_read": 0,
         "rollouts": False,
@@ -2558,6 +2651,7 @@ class _RouterMultiprocessing:
 
 def _ray_environment(plan, cfg, native, *, diagnostic=False):
     env = _string_environment(native["skyrl.train.utils.utils"].prepare_runtime_environment(cfg))
+    env.update(VLLM_SAMPLER_ENV)
     scrubbed = _credential_names(os.environ, env) if diagnostic else ()
     for name in scrubbed:
         env[name] = ""
@@ -3262,6 +3356,7 @@ def _native(plan):
     _require_engine_start_qualified_image(plan)
     require_production_runtime_identity(plan)
     rows, modules = check_artifacts(plan), native_source()
+    _validate_vllm_sampler_fallback_contract()
     args = skyrl.SkyRLConfig(**plan["arguments"])
     cfg = skyrl.native_config(args)
     base = modules["skyrl.train.entrypoints.main_base"].BasePPOExp
@@ -3357,6 +3452,7 @@ def engine_diagnostic(plan):
             check_inputs(plan)
             startup_phase = "native_validation"
             modules = native_source()
+            _validate_vllm_sampler_fallback_contract()
             cfg = skyrl.diagnostic_native_config(args)
             shape = _diagnostic_shape(plan, cfg)
             _write(

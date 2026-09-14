@@ -363,9 +363,35 @@ def prepared(data_setup, monkeypatch):  # noqa: F811
     plan = train.compile_rl(config, relative_to=data_setup.tmp)
     monkeypatch.setenv("CYBER_EXPECTED_RUNTIME_UID", "1000")
     monkeypatch.setenv("CYBER_EXPECTED_RUNTIME_GID", "100")
+    monkeypatch.setenv("VLLM_USE_FLASHINFER_SAMPLER", "0")
+    monkeypatch.setattr(train, "_validate_vllm_sampler_fallback_contract", lambda: None)
     monkeypatch.setattr(train.os, "geteuid", lambda: 1000)
     monkeypatch.setattr(train.os, "getegid", lambda: 100)
     return NS(config=config, plan=plan, state=data_setup)
+
+
+def test_vllm_sampler_fallback_contract_selects_native_path(monkeypatch):
+    class Sampler:
+        def __init__(self):
+            self.forward = self.forward_native
+
+        def forward_native(self):
+            return None
+
+    module = NS(current_platform=object(), TopKTopPSampler=Sampler)
+    monkeypatch.setenv("VLLM_USE_FLASHINFER_SAMPLER", "0")
+    monkeypatch.setitem(
+        sys.modules,
+        "vllm.envs",
+        NS(VLLM_USE_FLASHINFER_SAMPLER=False),
+    )
+    monkeypatch.setitem(sys.modules, "vllm.v1.sample.ops.topk_topp_sampler", module)
+
+    train._validate_vllm_sampler_fallback_contract()
+
+    monkeypatch.setenv("VLLM_USE_FLASHINFER_SAMPLER", "1")
+    with pytest.raises(ValueError, match="environment is not exact"):
+        train._validate_vllm_sampler_fallback_contract()
 
 
 def test_prepare_cli_and_portable_runtime_are_offline(prepared, monkeypatch):

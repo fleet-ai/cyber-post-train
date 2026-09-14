@@ -1,0 +1,50 @@
+{
+  "schema": "cyber_skyrl_engine_rejection_audit_v1",
+  "observed_at": "2026-09-14T03:58:00Z",
+  "run": {
+    "api_name": "chris-q38-rldiag-prod1-d2e00135",
+    "api_run_id": "d2e00135-49cc-442d-b5bc-3ab5ffd8e21d",
+    "rayjob_uid": "1f9686b5-8278-429a-9e24-a928915940ff",
+    "workload_uid": "5ab63276-a21c-4179-a89d-291902566da6",
+    "raycluster_uid": "07905cea-a405-4b84-b9cd-b5241c2bb6f4",
+    "head_pod_uid": "d17dce33-4681-4948-aa51-7e007e41ee5e",
+    "worker_pod_uid": "2374a90d-c599-4589-b80d-2bedf0016d8a",
+    "priority": "c1",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
+  },
+  "terminal": {
+    "api_status": "SUCCEEDED",
+    "finished_at": "2026-09-14T03:55:30Z",
+    "diagnostic_status": "engine_start_rejected",
+    "startup_phase": "engine_creation",
+    "receipt_path": "/mnt/sfs/jobs/chris-q38-rldiag-prod1/ENGINE_DIAGNOSTIC.json",
+    "receipt_file_sha256": "sha256:cf3ddb818365c968bd248c73eea5ae12192f73c463d4036cdafb2dddeffc69e6",
+    "receipt_self_sha256": "sha256:2be1d11af1902e86ce4339a30805f1ccb63d739086358b5a928f8022495c02fa"
+  },
+  "scientific_work": {
+    "task_rows": 0,
+    "rollouts": 0,
+    "verifier_calls": 0,
+    "optimizer_updates": 0,
+    "checkpoints": 0,
+    "wandb": false,
+    "rl_qualified": false
+  },
+  "diagnosis": {
+    "scope": "operator-reviewed private infrastructure evidence; no task or model content recorded",
+    "component": "FlashInfer top-k/top-p sampling kernel",
+    "failure_class": "compiled sampler kernel unavailable for B300/Blackwell",
+    "model_loading_reached": true,
+    "deterministic_control": {
+      "name": "VLLM_USE_FLASHINFER_SAMPLER",
+      "value": "0",
+      "effect": "select the pinned vLLM PyTorch-native sampler"
+    }
+  },
+  "release": {
+    "raycluster_absent": true,
+    "pods_absent": true,
+    "gpus_released": 8,
+    "cleanup_proven": true
+  }
+}
