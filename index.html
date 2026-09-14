@@ -16,7 +16,8 @@
       </a>
       <nav class="tabs" aria-label="Reports">
         <a data-tab-link="webexploitbench" href="#webexploitbench">WebExploitBench</a>
-        <a data-tab-link="task-curation" href="#task-curation">Task curation</a>
+        <a data-tab-link="task-quality" href="#task-quality">Task quality</a>
+        <a data-tab-link="experiment-map" href="#experiment-map">Experiment map</a>
       </nav>
       <span class="edition">Research note · 01</span>
     </header>
@@ -24,12 +25,12 @@
     <main id="report">
       <section class="page" data-tab-page="webexploitbench" aria-labelledby="wbe-title">
         <div class="hero ruled">
-          <p class="eyebrow">Baseline evaluation · Qwen3.8-27B</p>
-          <h1 id="wbe-title">A broken judge erased real evidence.</h1>
-          <p class="dek">We ran the same model on the same 15 public web-security targets with two agent programs. Qwen Code produced a qualified baseline. OpenCode completed the work, but its judge was unavailable, so its recorded score is not a valid model result.</p>
+          <p class="eyebrow">Starting-point test · Qwen3.8-27B</p>
+          <h1 id="wbe-title">Neither old test is a clean baseline.</h1>
+          <p class="dek">We tested the same model on 15 public web-security challenges. Qwen Code and OpenCode are two different programs that let the model use tools. Qwen Code produced a useful partial result, but 12 of its 60 attempts had technical problems. OpenCode’s score is unusable because the second AI that checks written security reports never worked.</p>
           <div class="hero-meta">
-            <span>WebExploitBench · Level 0</span>
-            <span>4 attempts per target</span>
+            <span>WebExploitBench · its easiest challenge set</span>
+            <span>4 attempts per website</span>
             <span>Reviewed 13 September 2026</span>
           </div>
         </div>
@@ -44,13 +45,13 @@
             <p class="section-index">01</p>
             <div>
               <h2 id="results-title">Results at a glance</h2>
-              <p>These are the benchmark’s recorded values. The OpenCode card is shown for auditability, but marked invalid because its scoring path was broken.</p>
+              <p>Qwen Code’s percentages below use only the part of the test that ran correctly. OpenCode’s saved numbers are shown so the scoring failure is visible, but they must not be used to judge the model.</p>
             </div>
           </div>
           <div id="result-cards" class="result-grid"></div>
           <div class="metric-note">
-            <p><strong>Pass@1</strong> is the average share of known vulnerabilities found in one attempt.</p>
-            <p><strong>Pass@4</strong> is the share found at least once across four attempts.</p>
+            <p><strong>Pass@1</strong> means the share of the benchmark’s known weaknesses found in one attempt.</p>
+            <p><strong>Pass@4</strong> means the share found at least once across four attempts.</p>
           </div>
         </section>
 
@@ -58,37 +59,38 @@
           <div class="section-heading">
             <p class="section-index">02</p>
             <div>
-              <h2 id="comparison-title">What was—and was not—held constant</h2>
-              <p>A fair causal comparison changes one thing. These runs changed more than the harness.</p>
+              <h2 id="comparison-title">What changed between the two tests</h2>
+              <p>To learn whether Qwen Code or OpenCode is better, only the agent program should change. Several other things changed too.</p>
             </div>
           </div>
           <div class="comparison-table-wrap">
             <table class="comparison-table">
-              <thead><tr><th>Part of the experiment</th><th>Qwen Code run</th><th>OpenCode run</th><th>Matched?</th></tr></thead>
+              <thead><tr><th>Part of the test</th><th>Qwen Code</th><th>OpenCode</th><th>Same?</th></tr></thead>
               <tbody id="protocol-table"></tbody>
             </table>
           </div>
-          <p class="callout">Treat the difference as a comparison of two complete evaluation systems, not as proof that one harness alone caused the score change.</p>
+          <p class="callout">We cannot use these two results to say which agent program is better. We need a new test in which everything except that program is the same.</p>
         </section>
 
         <section class="section" aria-labelledby="task-title">
           <div class="section-heading">
             <p class="section-index">03</p>
             <div>
-              <h2 id="task-title">Where the records contain evidence</h2>
-              <p>Green is Qwen Code’s recorded pass@4. Orange is OpenCode’s deterministic verifier signal—not its official score. The two bars answer different questions and must not be ranked directly.</p>
+              <h2 id="task-title">What each test managed to find</h2>
+              <p>Green reproduces Qwen Code’s saved four-attempt results by website. Orange shows where OpenCode triggered the benchmark’s automatic checks. Both contain incomplete coverage; the orange bars are not official scores because the AI report checker was broken.</p>
             </div>
           </div>
-          <div class="legend"><span><i class="swatch qwen"></i>Qwen Code recorded pass@4</span><span><i class="swatch open"></i>OpenCode verifier signal</span></div>
+          <div class="legend"><span><i class="swatch qwen"></i>Qwen Code saved result</span><span><i class="swatch open"></i>OpenCode automatic checks only</span></div>
           <div id="task-bars" class="task-bars"></div>
+          <p class="footnote">The green bars include incomplete coverage on some websites. The clean partial summary above removes six launch failures and six attempts whose website, model connection, or score check failed.</p>
         </section>
 
         <section class="section" aria-labelledby="trace-title">
           <div class="section-heading">
             <p class="section-index">04</p>
             <div>
-              <h2 id="trace-title">What the traces show</h2>
-              <p>We reviewed the full private execution records. The public summary describes behavior without publishing exploit steps or benchmark answers.</p>
+              <h2 id="trace-title">What happened during the attempts</h2>
+              <p>We reviewed the full private records of what the model did. This page summarizes them without revealing attack instructions or test answers.</p>
             </div>
           </div>
           <div id="trace-findings" class="finding-list"></div>
@@ -100,72 +102,74 @@
             <div>
               <h2 id="limits-title">Limits and next test</h2>
               <p id="limitations"></p>
+              <div class="source-links"><a href="https://github.com/fleet-ai/cyber-post-train/blob/main/docs/evidence/webexploitbench/2026-09-13-qwen38-harness-baseline-audit.md">Read the full audit</a></div>
             </div>
           </div>
         </section>
       </section>
 
-      <section class="page" data-tab-page="task-curation" aria-labelledby="curation-title" hidden>
+      <section class="page" data-tab-page="task-quality" aria-labelledby="quality-title" hidden>
         <div class="hero ruled">
-          <p class="eyebrow">Fleet data · frozen study roster</p>
-          <h1 id="curation-title">A task is useful only when failure means something.</h1>
-          <p class="dek">We checked 160 exact blackbox-exploit task versions and kept 89 whose environment, grading, and reproducibility evidence all passed.</p>
+          <p class="eyebrow">Fleet training data · 160 tasks reviewed</p>
+          <h1 id="quality-title">A broken task tells us nothing about the model.</h1>
+          <p class="dek">We examined 160 saved security challenges in which the model could use a website but could not inspect its source code. We kept 89 only after checking that each challenge had run correctly before and that all files needed to run and score it are still available.</p>
           <div class="hero-meta">
-            <span>160 historical candidates</span>
-            <span>89 accepted</span>
-            <span>Outcome-blind filtering</span>
+            <span>160 tasks in the saved list</span>
+            <span>89 passed both checks</span>
+            <span>Scores were not used for selection</span>
           </div>
         </div>
 
-        <aside class="finding" aria-label="Curation principle">
-          <span class="finding-label">Curation principle</span>
-          <p>A real model failure is valid data. A broken environment or grader is not. The filter never used model scores to choose tasks.</p>
+        <aside class="finding" aria-label="Selection rule">
+          <span class="finding-label">Selection rule</span>
+          <p>A genuine model failure is useful data. A broken website or broken scoring program is not. We never used model scores to decide which tasks to keep.</p>
         </aside>
 
         <section class="section" aria-labelledby="funnel-title">
           <div class="section-heading">
             <p class="section-index">01</p>
             <div>
-              <h2 id="funnel-title">The filtering path</h2>
-              <p>Two independent gates were required: proof that the exact task had run correctly, and proof that its current inputs still resolve.</p>
+              <h2 id="funnel-title">How 160 tasks became 89</h2>
+              <p>Every task had to pass two checks: a previous attempt completed and scored correctly, and everything needed to run the task again is still present.</p>
             </div>
           </div>
           <div id="filter-funnel" class="funnel"></div>
-          <div class="equation" aria-label="Eligibility equation"><span>Accepted run evidence</span><b>∩</b><span>Complete current bindings</span><b>=</b><strong>89 tasks</strong></div>
+          <div class="equation" aria-label="Task selection equation"><span>Worked correctly before</span><b>+</b><span>Can still be run today</span><b>=</b><strong>89 tasks</strong></div>
+          <p class="footnote">The two middle counts are separate, overlapping checks—not a step-by-step funnel. Some tasks passed only one of them; 89 passed both.</p>
         </section>
 
         <section class="section" aria-labelledby="gates-title">
           <div class="section-heading">
             <p class="section-index">02</p>
-            <div><h2 id="gates-title">What “good” means</h2><p>Every accepted task version passed both checks below.</p></div>
+            <div><h2 id="gates-title">What “good” means</h2><p>Every task we kept passed both checks below.</p></div>
           </div>
           <div class="gate-grid">
-            <article><span class="gate-number">1</span><h3>The run was real</h3><p>An independently checked receipt showed the exact environment ran, grading finished, the score was a real number, and cleanup completed.</p></article>
-            <article><span class="gate-number">2</span><h3>The task still reproduces</h3><p>The current starting data, environment, runtime seed, and grader still resolve to the same fixed identities.</p></article>
+            <article><span class="gate-number">1</span><h3>It worked in a previous test</h3><p>An independent record showed that the website started, a model attempt completed, scoring finished with a real number, and the temporary website was removed afterward.</p></article>
+            <article><span class="gate-number">2</span><h3>We can recreate it</h3><p>The exact website setup, starting information, hidden answer-checking code, and scoring program are all still available.</p></article>
           </div>
         </section>
 
         <section class="section" aria-labelledby="method-title">
           <div class="section-heading">
             <p class="section-index">03</p>
-            <div><h2 id="method-title">How the audit was done</h2><p>The process was fixed before outcomes were considered.</p></div>
+            <div><h2 id="method-title">How we checked the tasks</h2><p>We chose the checks before looking at whether the model succeeded or failed.</p></div>
           </div>
-          <div id="curation-methods" class="finding-list method-list"></div>
+          <div id="quality-methods" class="finding-list method-list"></div>
         </section>
 
         <section class="section" aria-labelledby="excluded-title">
           <div class="section-heading">
             <p class="section-index">04</p>
-            <div><h2 id="excluded-title">Why 71 versions were excluded</h2><p>These are evidence gaps, not claims that all 71 tasks are permanently broken.</p></div>
+            <div><h2 id="excluded-title">Why 71 tasks were excluded</h2><p>These are missing proof or missing files. They do not mean every excluded task is permanently broken.</p></div>
           </div>
           <div id="exclusion-bars" class="exclusion-bars"></div>
-          <p class="footnote">A separate binding audit found 17 versions without starting-data bindings and 11 without a fixed runtime-seed or grader pin. Those groups overlap with the 62 missing accepted run receipts, so they must not be added together.</p>
+          <p class="footnote">A second check found 17 tasks missing their starting information and 11 missing either the hidden answer-checking setup or the exact scoring program. Many of those tasks were already among the 62 without proof of a successful test, so adding these numbers together would count some tasks twice.</p>
         </section>
 
         <section class="section" aria-labelledby="mix-title">
           <div class="section-heading">
             <p class="section-index">05</p>
-            <div><h2 id="mix-title">What remains</h2><p>The 89 accepted versions cover five applications. Most were rated medium difficulty.</p></div>
+            <div><h2 id="mix-title">What remains</h2><p>The 89 tasks cover five web applications. Most were rated medium difficulty.</p></div>
           </div>
           <div class="two-column">
             <div><h3>Applications</h3><div id="app-mix" class="mini-bars"></div></div>
@@ -176,13 +180,13 @@
         <section class="section" aria-labelledby="split-title">
           <div class="section-heading">
             <p class="section-index">06</p>
-            <div><h2 id="split-title">Representative study splits</h2><p>Two outer splits test whether conclusions survive a different, still-balanced assignment.</p></div>
+            <div><h2 id="split-title">Balanced training and test groups</h2><p>We made two different balanced assignments. If both lead to the same conclusion, the result is less likely to depend on one lucky split.</p></div>
           </div>
           <div class="split-grid">
-            <article><span>Split A</span><b>59</b><small>train</small><b>20</b><small>development</small><b>10</b><small>sealed final</small></article>
-            <article><span>Split B</span><b>59</b><small>train</small><b>20</b><small>development</small><b>10</b><small>same sealed final</small></article>
+            <article><span>Group A</span><b>59</b><small>training</small><b>20</b><small>development, used to choose settings</small><b>10</b><small>final test, held back from all choices</small></article>
+            <article><span>Group B</span><b>59</b><small>training</small><b>20</b><small>development, used to choose settings</small><b>10</b><small>same held-back final test</small></article>
           </div>
-          <p class="callout">The split used application, environment, vulnerability family, and difficulty—not model outcomes, traces, scores, or loss.</p>
+          <p class="callout">We balanced the website, type of weakness, task family, and difficulty. We did not use model answers, model scores, or training loss.</p>
         </section>
 
         <section class="section compact" aria-labelledby="scope-title">
@@ -190,13 +194,92 @@
             <p class="section-index">07</p>
             <div>
               <h2 id="scope-title">Scope and public evidence</h2>
-              <p>This audit covers the frozen 160-version study roster. It is not a census of every task now present in Fleet’s live catalog, and it is not a fresh health check of every environment today.</p>
+              <p>This review covers one saved list of 160 tasks. It does not cover every Fleet task that exists today, and it does not prove that every website is healthy at this moment.</p>
               <div class="source-links">
-                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/fleet-a62-task-split-v1.json">All 160 exact versions</a>
-                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/qwen-blackbox-eligible-v1.json">The 89 accepted versions</a>
+                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/fleet-a62-task-split-v1.json">All 160 tasks reviewed</a>
+                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/qwen-blackbox-eligible-v1.json">The 89 tasks kept</a>
                 <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/docs/QWEN_BLACKBOX_TASK_FILTERING_REPORT_2026-09-12.md">Full filtering report</a>
               </div>
             </div>
+          </div>
+        </section>
+      </section>
+
+      <section class="page" data-tab-page="experiment-map" aria-labelledby="map-title" hidden>
+        <div class="hero ruled">
+          <p class="eyebrow">Research plan · Qwen3.8-27B</p>
+          <h1 id="map-title">Every choice that can change how much the model improves.</h1>
+          <p class="dek">This map lists the practical choices in data, learning from saved successful attempts (SFT), learning from fresh scored attempts (RL), evaluation, and computing. Each row explains the choice in ordinary language, the values worth testing, and when to test it.</p>
+          <div class="hero-meta">
+            <span>Goal: better blackbox security performance</span>
+            <span>Practical ranges, not every imaginable value</span>
+            <span>Updated 13 September 2026</span>
+          </div>
+        </div>
+
+        <aside class="finding" aria-label="How to use this map">
+          <span class="finding-label">How to use it</span>
+          <p>First hold the test itself fixed. Then vary a small number of high-impact training choices. Changing everything at once would make the result impossible to explain.</p>
+        </aside>
+
+        <section class="section" aria-labelledby="definitions-title">
+          <div class="section-heading">
+            <p class="section-index">01</p>
+            <div><h2 id="definitions-title">Plain-language glossary</h2><p>The main technical terms used in the map are explained here.</p></div>
+          </div>
+          <div id="experiment-definitions" class="definition-grid"></div>
+        </section>
+
+        <section class="section" aria-labelledby="sequence-title">
+          <div class="section-heading">
+            <p class="section-index">02</p>
+            <div><h2 id="sequence-title">Recommended order</h2><p>Test broad, high-impact choices first. Refine smaller details only after finding a promising range.</p></div>
+          </div>
+          <ol id="experiment-sequence" class="sequence-list"></ol>
+        </section>
+
+        <section class="section" aria-labelledby="space-title">
+          <div class="section-heading">
+            <p class="section-index">03</p>
+            <div><h2 id="space-title">The full practical decision space</h2><p>“Hold fixed” means keep it identical so a comparison stays fair. “Test now” means it could materially change learning. “Test later” means it matters after the main choices are understood.</p></div>
+          </div>
+          <div class="map-controls">
+            <label for="decision-search">Find a choice</label>
+            <input id="decision-search" type="search" placeholder="Try: batch size, reward, teacher, tools">
+            <label for="decision-area">Show an area</label>
+            <select id="decision-area"><option value="all">All areas</option></select>
+          </div>
+          <p id="decision-count" class="decision-count" aria-live="polite"></p>
+          <div class="decision-table-wrap">
+            <table class="decision-table">
+              <thead><tr><th>Area</th><th>Choice</th><th>What it means</th><th>Values worth testing</th><th>Priority</th></tr></thead>
+              <tbody id="decision-table"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="map-sources-title">
+          <div class="section-heading">
+            <p class="section-index">04</p>
+            <div>
+              <h2 id="map-sources-title">Where the suggested ranges came from</h2>
+              <p>These papers give us sensible starting points; they do not prove that a setting will work on long web-security tasks. Every value still has to earn its place on Fleet’s development tasks.</p>
+              <div class="source-links">
+                <a href="https://arxiv.org/abs/2505.09388">Qwen3 training report</a>
+                <a href="https://arxiv.org/abs/2203.14465">Learning from successful self-attempts</a>
+                <a href="https://arxiv.org/abs/2402.03300">GRPO training method</a>
+                <a href="https://arxiv.org/abs/2503.14476">RL with better reward-group selection</a>
+                <a href="https://arxiv.org/abs/2411.15124">Training and testing on separate task sets</a>
+                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/docs/TRAINING_DECISION_SPACE.md">Full methods and sources</a>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="section compact" aria-labelledby="map-scope-title">
+          <div class="section-heading">
+            <p class="section-index">05</p>
+            <div><h2 id="map-scope-title">What this map does not do</h2><p id="experiment-scope"></p></div>
           </div>
         </section>
       </section>
@@ -204,7 +287,7 @@
 
     <footer>
       <p>Fleet Cyber · Public research report</p>
-      <p>Results are versioned observations, not deployment claims.</p>
+      <p>Each result belongs to one exact test setup.</p>
     </footer>
     <script src="report-data.js"></script>
     <script src="app.js"></script>
