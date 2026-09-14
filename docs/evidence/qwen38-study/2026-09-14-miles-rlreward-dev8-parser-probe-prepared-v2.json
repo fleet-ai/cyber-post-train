@@ -1,0 +1,111 @@
+{
+  "schema": "cyber_qwen38_miles_dev8_parser_probe_prepared_v2",
+  "recorded_at": "2026-09-14T08:13:55Z",
+  "classification": "exact_image_cpu_preflight_passed_gpu_submission_held_for_higher_priority_dev_reload",
+  "supersedes": "2026-09-14-miles-rlreward-dev8-parser-probe-prepared-v1.json",
+  "source": {
+    "implementation_commit": "091873c1a0d4006261100fa3aeca9b3a9403a868",
+    "dev8_parent_commit": "17bcaadff4c7cd237d44dfcdd8f13c2a448a6fec",
+    "source_plan_sha256": "sha256:e9c21c3d32116f57533b307f580b457303c951d8e0007f7695d448cc7320bea6",
+    "source_plan_file_sha256": "sha256:bcc9efb26847d4d946a13a53eb8b0a800e14945c38f5932b74acad1e54b0d588",
+    "runtime_file_sha256": "sha256:9a248fffeb3f8f38f6873212be004a99dcba31bb679777a63c8f5729f13643ab"
+  },
+  "prepared": {
+    "path": "/private/tmp/cpt-miles-dev8-parser-probe-v2",
+    "run_name": "chris-q38-miles-p8k-dev-v2",
+    "output_root": "/mnt/sfs/jobs/chris-q38-miles-p8k-dev-v2",
+    "plan_file_sha256": "sha256:dd5ca6229f13000b52a1c452d66cf21ddf8d55134aa1f4d882dd731e00a8fdfc",
+    "plan_sha256": "sha256:a0759ef79afea9645eed6953a6eb1e3228c43c14485a5810258621a08098d173",
+    "request_file_sha256": "sha256:bb2f6cc0ad0a6a42ed4fe37d07e662c8308269f29bc55265d1ce590128b9ce66",
+    "request_sha256": "sha256:ec301df9b6b81206942f92087103121a86c4cb7c16728ce4aae4a1de1b9b6f5f",
+    "prepared_file_sha256": "sha256:c33bf1e1bb463b48fd7fb9107a5572930dba369cdc099fa4300ee21ad7f95460",
+    "reconstruction_passed": true,
+    "submission_record_absent": true
+  },
+  "request": {
+    "cluster": "dev",
+    "priority": "c1",
+    "workers": 1,
+    "gpus_per_worker": 1,
+    "deadline_seconds": 300,
+    "secrets": [],
+    "automatic_requeue": false,
+    "source_training_topology": "1x8",
+    "expected_max_tokens_per_turn": 8192
+  },
+  "execution_boundary": {
+    "calls_exact_native_parser": true,
+    "stops_before_ray_initialization": true,
+    "rollouts": 0,
+    "task_requests": 0,
+    "verifier_calls": 0,
+    "reward_batches": 0,
+    "weights_loaded": 0,
+    "optimizer_steps": 0,
+    "checkpoints_written": 0,
+    "receipts_bound_to_exact_platform_run_directory": true
+  },
+  "offline_validation": {
+    "ruff_check_passed": true,
+    "ruff_format_passed": true,
+    "focused_tests_passed": true,
+    "prepared_bundle_reconstruction_passed": true
+  },
+  "exact_image_cpu_checks": {
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33",
+    "jobs_or_rayjobs_created": 0,
+    "gpu_requests": 0,
+    "attempts": [
+      {
+        "pod": "chris-q38-miles-p8k-cpu-v1",
+        "pod_uid": "fd997009-c0a6-4813-8072-e8067e6634e6",
+        "outcome": "direct_harness_rejected_before_probe_because_run_directory_was_not_precreated",
+        "released": true
+      },
+      {
+        "pod": "chris-q38-miles-p8k-cpu-v2",
+        "pod_uid": "7d945d8e-b8f7-4cef-b8a5-d529027ac4eb",
+        "outcome": "clean_cpu_rejection_exposed_unmounted_receipt_path_and_caused_run_directory_binding_fix",
+        "released": true
+      },
+      {
+        "pod": "chris-q38-miles-p8k-cpu-v3",
+        "pod_uid": "205c931d-b800-49df-947a-0953c735ba53",
+        "outcome": "exact_bundle_started_and_cleanly_rejected_cpu_only_runtime",
+        "receipt": "PARSER_REJECTED.json",
+        "receipt_sha256": "sha256:0f6e7fbbbfaf9b4bc0b7507a9c2dde7b83a2da15eafedf65451968ef0d72ebdb",
+        "receipt_digest_valid": true,
+        "reason": "exactly_one_cuda_device_not_visible",
+        "all_operation_counts_zero": true,
+        "restarts": 0,
+        "released": true
+      }
+    ],
+    "all_probe_pods_absent_after_checks": true
+  },
+  "external_actions": {
+    "jobs_api_preview_calls": 0,
+    "jobs_api_run_create_posts": 0,
+    "gpu_allocations_created": 0,
+    "production_actions": 0
+  },
+  "decision": {
+    "gpu_submission_authorized_by_this_record": false,
+    "submission_held": true,
+    "hold_reason": "The LR3e-5 two-by-four checkpoint reload is the higher-priority imminent dev GPU action.",
+    "remaining_gates": [
+      "dev Jobs API preview",
+      "fresh output, API-history, capacity and authentication-lifetime checks",
+      "explicit confirmation that the LR3e-5 reload is terminal and released",
+      "one create-once dev POST"
+    ]
+  },
+  "privacy": {
+    "prompts_or_traces_recorded_here": false,
+    "flags_or_answers_recorded_here": false,
+    "raw_rewards_or_scores_recorded_here": false,
+    "credentials_recorded_here": false,
+    "private_logs_recorded_here": false
+  },
+  "sha256": "70c210e4a7202098e576aacba4bb67c2d46694cd2d748d427790c9d968181598"
+}
