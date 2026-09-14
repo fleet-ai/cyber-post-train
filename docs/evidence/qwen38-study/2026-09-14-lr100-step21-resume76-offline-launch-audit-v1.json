@@ -1,0 +1,356 @@
+{
+  "schema": "cyber_qwen38_teacher_lr100_step21_resume76_offline_launch_audit_v1",
+  "recorded_at": "2026-09-14T12:24:13Z",
+  "classification": "offline_contract_qualified_blocked_on_checkpoint_pair_and_reload",
+  "source": {
+    "preparation_commit": "ed38e610e6a25faa9c3f67015d9eaab758d9a7e6",
+    "audited_head": "e05f79b69ba8489c38c78643594882b91509b4d5",
+    "template": {
+      "path": "configs/qualification/qwen38-teacher-lr100-step21-resume-to76-dev-v1.template.json",
+      "file_sha256": "sha256:4997a9a6211bf6be08b2a4833814ac034041f37a793e7df3c211060da02fd7fe",
+      "embedded_sha256": "sha256:b6e00a02cf43b2813b8b1e8411eb7307cfa7115e60e41291f651f00b9ea45cd4"
+    },
+    "producer_config": {
+      "path": "configs/qualification/qwen38-teacher-lr100-cosine-layout-dev-v2.json",
+      "file_sha256": "sha256:e6b7f197cb716d235ea6054b5620cae70344191508ed707a37fd1fc2f27e8205"
+    },
+    "producer_terminal_evidence": {
+      "path": "docs/evidence/qwen38-study/2026-09-14-lr100-training-seal-handoff-v1.json",
+      "file_sha256": "sha256:301152aec845355a9c3d49f2d965025036d045baa8f1c370a322ce20dab390b0",
+      "embedded_sha256": "sha256:6690b52a85401afd6c34b1cd062033b1edf33a94b99fe8906f9560f6bb16aa2c"
+    },
+    "checkpoint_pair_verifier": {
+      "path": "configs/qualification/qwen38-teacher-lr100-step20-step21-seal-verify-dev-v2.pod.yaml",
+      "file_sha256": "sha256:d6350873b37b706accb4da4b335efd7aadcc072bdf500e01333ac3e1790d87b6"
+    },
+    "step21_reload_template": {
+      "path": "configs/qualification/qwen38-teacher-lr100-cosine-1x8-step21-reload-dev-v1.template.json",
+      "file_sha256": "sha256:85e236cafa1f087c602ba3442c8454e0ddd5e03fa628e042336b406178e87d5d",
+      "embedded_sha256": "sha256:87aa4091f18f599e6a5a849277aeb028e361f295b05becbdaf80b5255416ebb0"
+    },
+    "model_lock": {
+      "path": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+      "file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac"
+    },
+    "model_weights": {
+      "path": "configs/models/qwen38-27b-1d4bf0f2.weights.json",
+      "file_sha256": "sha256:80a5e9de066e068abb012a0e9bd144676813a31042bb578226472803f8e0e84f"
+    },
+    "producer_prepared_artifacts_observed_offline": {
+      "durable_repo_copy": false,
+      "plan_file_sha256": "sha256:6898858b268b7a42c39a8b020ae9fe041be7719f21b0e07231ead33e0190c689",
+      "plan_canonical_sha256": "sha256:f42894e871ee3ec2204e435cdf240d2641706f4d151bd4484b56edcf6716ada3",
+      "request_file_sha256": "sha256:40de8e3fad196d0eca390c0bd4bfdb57f1521d71af6b92454b0b6bb355be5170",
+      "request_canonical_sha256": "sha256:47915f4b3720f57817fce91a15f2efa4e4df9d3e4d0dd0c8dcc1bf497a2883da",
+      "prepared_receipt_file_sha256": "sha256:68e339f1caff9c5b153299c55f4b613d9a81d8fd3397889ef7368fd2edf2d889",
+      "content_copied_into_this_evidence": false
+    }
+  },
+  "hard_blockers_preserved": {
+    "checkpoint_pair_terminal_proof_accepted": false,
+    "step20_manifest_file_sha256": null,
+    "step21_manifest_file_sha256": null,
+    "step21_zero_update_all_rank_reload_accepted": false,
+    "step21_zero_update_reload_terminal_evidence_file_sha256": null,
+    "step21_zero_update_reload_terminal_evidence_receipt_sha256": null,
+    "source_checkpoint_payload_rehash_performed_by_this_audit": false,
+    "materialized_continuation_config_created": false,
+    "continuation_plan_created": false,
+    "continuation_request_created": false,
+    "continuation_runtime_bundle_created": false,
+    "continuation_launchable": false,
+    "reason": "The exact recovery manifest file SHA-256 and accepted all-rank reload evidence are inputs to the compiled plan. Sealing a plan, request, command or runtime-bundle digest before those gates would bind invented checkpoint evidence."
+  },
+  "conditional_materialization": {
+    "new_run_name": "chris-q38-lr100-resume76-dev-v1",
+    "new_output_root": "/mnt/sfs/jobs/chris-q38-lr100-resume76-dev-v1",
+    "new_prepared_dir": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-resume76-dev-v1/prepared",
+    "new_wandb_run_id": "chris-q38-lr100-resume76-dev-v1",
+    "blocked_config_projection_canonical_sha256": "sha256:814d0da78b0df87e809a4153cc935bd79c1ed0851992b12b8f2951b3de86eb13",
+    "blocked_projection_contains_null_recovery_sha256": true,
+    "allowed_transform": [
+      "remove source pause_after_step",
+      "replace only run name, output root and W&B identity/group/tags",
+      "add recovery mode resume with the exact accepted step-21 manifest path and its future file SHA-256"
+    ],
+    "preserve_every_other_source_config_field": true,
+    "exact_materialized_config_file_sha256": null,
+    "exact_plan_sha256": null,
+    "exact_request_sha256": null,
+    "exact_runtime_bundle_sha256": null,
+    "exact_command_sha256": null
+  },
+  "conditional_request_projection": {
+    "kind": "inert_fixed_field_projection_not_a_jobs_api_request",
+    "fixed_field_projection_canonical_sha256": "sha256:cf30a14b0bf75685430f99337b05b1b7a567490005ac3a946d1f8adb01f4ebbd",
+    "request": {
+      "name": "chris-q38-lr100-resume76-dev-v1",
+      "title": "chris-q38-lr100-resume76-dev-v1",
+      "run_dir": "/mnt/sfs/jobs/chris-q38-lr100-resume76-dev-v1",
+      "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+      "command": null,
+      "workers": 1,
+      "gpus_per_worker": 8,
+      "resources": {
+        "cpu_limit": "64",
+        "cpu_request": "64",
+        "memory_limit": "768Gi",
+        "memory_request": "512Gi"
+      },
+      "priority_class": "c1",
+      "requeueIfPreempted": false,
+      "secrets": [
+        "wandb-api"
+      ],
+      "env": {
+        "CYBER_SFT_BUNDLE": null,
+        "PYTHONPATH": "/mnt/sfs/jobs/chris-q38-lr100-resume76-dev-v1/.runtime",
+        "HF_HUB_OFFLINE": "1",
+        "TRANSFORMERS_OFFLINE": "1",
+        "TOKENIZERS_PARALLELISM": "false",
+        "WANDB_MODE": "online",
+        "WANDB_ENTITY": "thefleet",
+        "WANDB_PROJECT": "cyber-post-train",
+        "WANDB_RUN_ID": "chris-q38-lr100-resume76-dev-v1",
+        "WANDB_NAME": "chris-q38-lr100-resume76-dev-v1",
+        "WANDB_RUN_GROUP": "q38-blackbox-sft-dev-completion-v1",
+        "WANDB_TAGS": "qwen38,teacher-sft,dev-completion,outcome-only,resume-step-21,lr-1e-4,scheduler-cosine,warmup-5pct,available-a-provenance-v2",
+        "WANDB_DISABLE_CODE": "true",
+        "WANDB_CONSOLE": "off"
+      }
+    },
+    "fixed_fields_reconstructed_through_current_job_request_generator": true,
+    "request_validator_accepts_fixed_envelope_with_a_structural_inert_bundle": true,
+    "dynamic_fields_intentionally_unsealed": [
+      "request.command",
+      "request.env.CYBER_SFT_BUNDLE"
+    ],
+    "exact_request_bytes_available_before_live_blockers_pass": false
+  },
+  "runtime_binding": {
+    "compiler": {
+      "path": "training/sft.py",
+      "file_sha256": "sha256:c94ce592f57c06b365eb03254d0594ea7ccd30a282df1e18d5466b34a9226fcd"
+    },
+    "runtime_files": {
+      "training/__init__.py": "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "training/checkpoints.py": "sha256:7ddeed5dd3dde9d10c6db505eca2c1a5796bf57fee26ebfc70aa7c699738997d",
+      "training/recovery.py": "sha256:3f3f1801a283b07dd3a52507dd5d38ea61e8216311711292f621f2a83a2db30f",
+      "training/sft_runtime.py": "sha256:7b0787891acdf9ebe0b07475339248dce64b659a546691a7c445f99b52a20a8f"
+    },
+    "package_initializer_is_intentionally_empty_in_the_bundle": true,
+    "bundle_is_canonical_gzip_of_runtime_plan_and_recovery_files": true,
+    "bundle_transport_is_base64_and_single_environment_value_must_remain_below_131072_bytes": true,
+    "bootstrap_python_ast_must_parse": true,
+    "exact_bundle_and_bootstrap_hashes_depend_on_the_accepted_manifest": true
+  },
+  "checkpoint_and_recovery_contract": {
+    "source_checkpoint_path": "/mnt/sfs/jobs/chris-q38-ta8-lr100-dev-v2/checkpoints/global_step_21",
+    "source_checkpoint_manifest_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-dev-v2-checkpoint-seals-v1/step-21.json",
+    "source_checkpoint_manifest_receipt_sha256": "sha256:b82fd516e2e3c4bffa99d9cae718e6caaba4d7b9d1679885c41676ef3d754fa0",
+    "source_optimizer_step": 21,
+    "source_world_size": 8,
+    "source_layout": {
+      "workers": 1,
+      "gpus_per_worker": 8
+    },
+    "continuation_layout": {
+      "workers": 1,
+      "gpus_per_worker": 8
+    },
+    "source_checkpoint_files": 33,
+    "source_checkpoint_bytes": 324627486731,
+    "source_sampler_batches_in_epoch_expected": 21,
+    "resume_mode": "resume",
+    "restores": [
+      "model",
+      "optimizer",
+      "scheduler",
+      "random-number state",
+      "sampler",
+      "supervised-token progress"
+    ],
+    "resume_topology_change_allowed": false,
+    "source_checkpoint_is_read_only": true,
+    "source_steps_must_not_be_replayed": true
+  },
+  "scientific_contract": {
+    "model": "Qwen/Qwen3.8-27B",
+    "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "training_data_kind": "successful_teacher_dense_windows",
+    "dense_windows": 602,
+    "represented_train_tasks": 29,
+    "source_sessions": 71,
+    "eligible_assistant_responses": 3242,
+    "excluded_assistant_responses": 215,
+    "source_total_assistant_responses": 3457,
+    "supervised_tokens": 700359,
+    "epochs": 1,
+    "global_batch_size": 8,
+    "microbatch_per_gpu": 1,
+    "learning_rate": 0.0001,
+    "learning_rate_is_reviewed_upper_boundary": true,
+    "scheduler": "cosine",
+    "warmup_ratio": 0.05,
+    "warmup_steps": 4,
+    "scheduler_state_is_restored_not_restarted": true,
+    "max_length": 16384,
+    "seed": 42,
+    "reference_cross_entropy_enabled": false,
+    "selection_mode": "task_outcomes_only",
+    "training_loss_selection_eligible": false,
+    "webexploitbench_selection_eligible": false
+  },
+  "resume_math_and_cadence": {
+    "terminal_optimizer_step": 76,
+    "terminal_step_derivation": "ceil(602 dense windows / global batch 8) * 1 epoch",
+    "source_optimizer_step": 21,
+    "continuation_optimizer_steps": 55,
+    "continuation_global_step_range": [
+      22,
+      76
+    ],
+    "source_steps_replayed": false,
+    "checkpoint_interval_steps": 20,
+    "new_checkpoint_steps": [
+      40,
+      60,
+      76
+    ],
+    "checkpoint_retention_count": 3,
+    "expected_retained_new_checkpoint_steps": [
+      40,
+      60,
+      76
+    ],
+    "expected_terminal_supervised_tokens": 700359,
+    "wandb_scalar_event_interval_steps": 1,
+    "expected_new_wandb_scalar_events": 55,
+    "watchdog_poll_seconds": 60,
+    "watchdog_startup_seconds": 1800,
+    "watchdog_idle_seconds": 1200,
+    "watchdog_hard_seconds": 28800,
+    "watchdog_drain_seconds": 300
+  },
+  "wandb_contract": {
+    "mode": "online",
+    "entity": "thefleet",
+    "project": "cyber-post-train",
+    "group": "q38-blackbox-sft-dev-completion-v1",
+    "run_id": "chris-q38-lr100-resume76-dev-v1",
+    "name": "chris-q38-lr100-resume76-dev-v1",
+    "resume_policy": "never",
+    "new_identity_differs_from_source": true,
+    "source_and_continuation_are_two_immutable_linked_runs": true,
+    "expected_scalar_events": 55,
+    "expected_global_step_range": [
+      22,
+      76
+    ],
+    "required_scalar_fields": [
+      "train/global_step",
+      "train/loss",
+      "train/total_supervised_tokens",
+      "train/supervised_tokens",
+      "train/lr",
+      "train/grad_norm",
+      "train/grad_norm_finite",
+      "train/supervised_tokens_per_second"
+    ],
+    "tracking_incomplete_is_training_acceptance": false,
+    "identity_absence_checked_offline": false,
+    "identity_absence_is_a_live_pre_submit_gate": true,
+    "sensitive_training_or_benchmark_content_logged": false
+  },
+  "execution_contract": {
+    "cluster": "dev",
+    "priority_request": "c1",
+    "expected_rendered_queue": "q1",
+    "expected_effective_priority": 10000,
+    "workers": 1,
+    "gpus_per_worker": 8,
+    "world_size": 8,
+    "total_gpus": 8,
+    "cpu_request_per_worker": "64",
+    "cpu_limit_per_worker": "64",
+    "memory_request_per_worker": "512Gi",
+    "memory_limit_per_worker": "768Gi",
+    "automatic_requeue": false,
+    "immutable_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "named_secrets_only": [
+      "wandb-api"
+    ],
+    "secret_values_in_request": false,
+    "production_submission_authorized": false
+  },
+  "terminal_failure_and_release_contract": {
+    "success_receipts_required": [
+      "STARTED.json",
+      "RECOVERED.json",
+      "WANDB.json",
+      "checkpoint_receipts/step-000076.json",
+      "TRAINING_COMPLETE.json"
+    ],
+    "watchdog_receipt_required_if_watchdog_intervenes": "WATCHDOG.json",
+    "unexpected_failure_receipt": "FAILED.json",
+    "unexpected_failure_exit_code": "nonzero",
+    "unexpected_failure_may_be_automatically_retried": false,
+    "terminal_checkpoint_requires_separate_create_once_cpu_seal": true,
+    "terminal_checkpoint_requires_independent_full_rehash": true,
+    "terminal_checkpoint_requires_separate_all_rank_zero_update_reload": true,
+    "runtime_writes_a_gpu_release_receipt": false,
+    "preview_must_prove_shutdown_after_job_finishes": true,
+    "resource_release_evidence": "Reconcile Jobs API, RayJob, Workload, RayCluster and Pod UIDs after terminal state; require all exact owned objects and all eight GPUs released before acceptance or repair."
+  },
+  "readiness": {
+    "scientific_contract_qualified": true,
+    "fixed_request_envelope_qualified": true,
+    "exact_plan_request_command_and_bundle_sealed": false,
+    "direct_submission_ready": false,
+    "checkpoint_pair_and_reload_blockers_preserved": true,
+    "production_submission_authorized": false
+  },
+  "ordered_live_gates": [
+    "refresh Nebius authentication with enough lifetime for the pair verifier, reload, continuation, terminal sealing and release reconciliation",
+    "on the exact dev context prove the pair-verifier identity is absent and client/server dry-runs accept the zero-GPU read-only artifact",
+    "reopen the exact step-20 and step-21 seal paths and run exactly one zero-GPU pair verifier",
+    "independently validate one terminal pair proof, record both manifest file SHA-256 values and zero mismatches, then UID-delete the helper and confirm absence",
+    "materialize the exact one-by-eight step-21 zero-update reload with the accepted manifest digest and unique output, W&B, API, Kubernetes and journal identities",
+    "run pinned-image CPU preflight and authenticated dev preview; prove c1 maps to q1 value 10000, one worker by eight GPUs, no requeue and shutdown on exit",
+    "prove source stability, identity absence, a whole dev node, the campaign eight-node ceiling and a complete monitoring/release window; write one pre-POST intent and issue at most one reload POST",
+    "accept all-rank step-21 recovery with zero optimizer updates, no checkpoint write, byte-stable source and complete GPU release; preserve terminal evidence digests",
+    "fill every continuation-template null from the accepted pair and reload evidence, materialize the config and reconstruct exact plan, request, command and runtime-bundle bytes from the committed compiler/runtime",
+    "reopen exact corpus, model and recovery inputs; run pinned-image zero-GPU CPU preflight and independently validate its receipt",
+    "obtain a warning-free authenticated dev preview proving c1 to q1 value 10000, exact one-by-eight topology, immutable image, resources, named secret, no requeue and shutdown on exit",
+    "prove new output, prepared, W&B, API, Kubernetes and journal identities are absent; prove no accepted, active or ambiguous duplicate scientific cell exists",
+    "recheck source-checkpoint stability, current dev capacity and the campaign eight-node ceiling immediately before submission",
+    "write one durable pre-POST intent, issue exactly one continuation POST, persist the response and never replay an ambiguous request",
+    "bind API, RayJob, Workload, RayCluster and Pod UIDs and monitor recovery, steps 22 through 76, scalar coverage, checkpoints 40, 60 and 76, utilization and watchdog state",
+    "after terminal success independently validate receipts, seal and fully rehash step 76, run a separate all-rank zero-update reload and confirm every exact owned object and all eight GPUs released"
+  ],
+  "static_validation": {
+    "template_and_all_source_digests_match": true,
+    "conditional_config_transform_reconstructed": true,
+    "fixed_request_envelope_reconstructed_through_current_generator": true,
+    "current_request_validator_accepts_the_fixed_envelope": true,
+    "resume_topology_and_step_math_checked": true,
+    "wandb_scalar_and_identity_contract_checked": true,
+    "checkpoint_cadence_and_retention_checked": true,
+    "watchdog_failure_and_release_contract_checked": true,
+    "exact_plan_request_and_bundle_validation_deferred": true,
+    "defects_found_in_rank_two_template": 0,
+    "live_or_network_calls_performed": 0,
+    "jobs_api_posts": 0,
+    "wandb_runs_created": 0
+  },
+  "privacy": {
+    "prompts_or_traces_recorded_here": false,
+    "flags_or_answers_recorded_here": false,
+    "raw_rewards_or_scores_recorded_here": false,
+    "credentials_recorded_here": false,
+    "private_logs_recorded_here": false,
+    "raw_checkpoint_tensor_values_recorded_here": false,
+    "private_dataset_rows_recorded_here": false
+  },
+  "sha256": "sha256:65bda3de28d5528a38aa576d3c0f7e323d08d9c2e0167ba948b44365ad362102"
+}
