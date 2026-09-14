@@ -31,16 +31,12 @@ def test_dev6_is_a_fresh_c1_one_update_canary_on_the_filtered_set() -> None:
     assert task_set["sha256"] == sealed(task_set)
     assert split["sha256"] == sealed(split)
     selected = {(row["task_key"], row["task_version_id"]) for row in task_set["tasks"]}
-    parent = {
-        (row["task_key"], row["task_version_id"]) for row in parent_task_set["tasks"]
-    }
+    parent = {(row["task_key"], row["task_version_id"]) for row in parent_task_set["tasks"]}
     assignments = {
-        (row["task_key"], row["task_version_id"]): row["split"]
-        for row in split["tasks"]
+        (row["task_key"], row["task_version_id"]): row["split"] for row in split["tasks"]
     }
     parent_assignments = {
-        (row["task_key"], row["task_version_id"]): row["split"]
-        for row in parent_split["tasks"]
+        (row["task_key"], row["task_version_id"]): row["split"] for row in parent_split["tasks"]
     }
     assert selected == set(assignments) < parent
     assert assignments == {key: parent_assignments[key] for key in selected}
@@ -48,13 +44,17 @@ def test_dev6_is_a_fresh_c1_one_update_canary_on_the_filtered_set() -> None:
     assert "reward_signal_provenance" not in task_set
     evidence = task_set["selection_evidence"]
     assert evidence["parent_task_set_self_sha256"] == parent_task_set["sha256"]
-    assert evidence["parent_task_set_file_sha256"] == "sha256:" + hashlib.sha256(
-        (DATA / evidence["parent_task_set_path"]).read_bytes()
-    ).hexdigest()
+    assert (
+        evidence["parent_task_set_file_sha256"]
+        == "sha256:"
+        + hashlib.sha256((DATA / evidence["parent_task_set_path"]).read_bytes()).hexdigest()
+    )
     assert evidence["reward_prior_self_sha256"] == reward_prior["sha256"]
-    assert evidence["reward_prior_file_sha256"] == "sha256:" + hashlib.sha256(
-        (DATA / evidence["reward_prior_path"]).read_bytes()
-    ).hexdigest()
+    assert (
+        evidence["reward_prior_file_sha256"]
+        == "sha256:"
+        + hashlib.sha256((DATA / evidence["reward_prior_path"]).read_bytes()).hexdigest()
+    )
     train = next(key for key, value in assignments.items() if value == "train")
     selected_prior = reward_prior["selected_version"]
     assert train == (selected_prior["task_key"], selected_prior["task_version_id"])

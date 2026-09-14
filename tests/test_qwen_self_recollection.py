@@ -9,14 +9,8 @@ from training.io import digest_json, file_sha256
 
 ROOT = Path(__file__).parents[1]
 PLAN = ROOT / "configs/studies/qwen-blackbox-self-recollection-v1.json"
-AUDIT = (
-    ROOT
-    / "docs/evidence/qwen38-study/2026-09-11-self-sft-interface-audit-v2.json"
-)
-PARITY = (
-    ROOT
-    / "docs/evidence/qwen38-study/2026-09-12-self-trace-recorder-dense-parity-v1.json"
-)
+AUDIT = ROOT / "docs/evidence/qwen38-study/2026-09-11-self-sft-interface-audit-v2.json"
+PARITY = ROOT / "docs/evidence/qwen38-study/2026-09-12-self-trace-recorder-dense-parity-v1.json"
 
 
 def read(path: Path) -> dict:
@@ -83,9 +77,7 @@ def test_recollection_plan_is_sealed_nonlaunchable_and_binds_offline_evidence():
 def test_recollection_uses_only_representative_train_tasks_and_no_holdout():
     plan = read(PLAN)
     eligible = read(ROOT / plan["task_universe"]["path"])
-    assert file_sha256(ROOT / plan["model"]["lock_path"]) == plan["model"][
-        "lock_file_sha256"
-    ]
+    assert file_sha256(ROOT / plan["model"]["lock_path"]) == plan["model"]["lock_file_sha256"]
     assert eligible["sha256"] == plan["task_universe"]["sha256"]
     assert len(eligible["task_versions"]) == plan["task_universe"]["task_versions"] == 89
 
@@ -98,8 +90,7 @@ def test_recollection_uses_only_representative_train_tasks_and_no_holdout():
         assert split["sha256"] == binding["sha256"]
         assert split["training_split"]["sha256"] == binding["training_split_sha256"]
         train_sets[variant] = {
-            (row["task_key"], row["task_version_id"])
-            for row in split["training_split"]["tasks"]
+            (row["task_key"], row["task_version_id"]) for row in split["training_split"]["tasks"]
         }
         holdout_sets[variant] = {
             (row["task_key"], row["task_version_id"])
@@ -112,9 +103,7 @@ def test_recollection_uses_only_representative_train_tasks_and_no_holdout():
     union = train_sets["a"] | train_sets["b"]
     intersection = train_sets["a"] & train_sets["b"]
     assert len(union) == plan["splits"]["overlap"]["train_union_task_versions"] == 74
-    assert len(intersection) == plan["splits"]["overlap"][
-        "train_intersection_task_versions"
-    ] == 44
+    assert len(intersection) == plan["splits"]["overlap"]["train_intersection_task_versions"] == 44
     assert plan["collection"]["maximum_sessions"] == (
         len(union) * plan["collection"]["attempts_per_task_version"]
     )

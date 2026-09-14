@@ -220,8 +220,14 @@ class WatchBuffer:
     def start(self) -> None:
         namespace = _objects(
             [
-                "kubectl", "--context", events.DEV_KUBE_CONTEXT,
-                "get", "namespace", NAMESPACE, "--output", "json",
+                "kubectl",
+                "--context",
+                events.DEV_KUBE_CONTEXT,
+                "get",
+                "namespace",
+                NAMESPACE,
+                "--output",
+                "json",
             ]
         )
         if namespace.get("metadata", {}).get("uid") != NAMESPACE_UID:
@@ -229,8 +235,15 @@ class WatchBuffer:
         for resource in self.resources:
             listing = _objects(
                 [
-                    "kubectl", "--context", events.DEV_KUBE_CONTEXT,
-                    "get", resource, "--namespace", NAMESPACE, "--output", "json",
+                    "kubectl",
+                    "--context",
+                    events.DEV_KUBE_CONTEXT,
+                    "get",
+                    resource,
+                    "--namespace",
+                    NAMESPACE,
+                    "--output",
+                    "json",
                 ]
             )
             version = listing.get("metadata", {}).get("resourceVersion")
@@ -238,10 +251,19 @@ class WatchBuffer:
                 raise ValueError("Kubernetes list omitted its watch resource version")
             process = subprocess.Popen(
                 [
-                    "kubectl", "--context", events.DEV_KUBE_CONTEXT,
-                    "get", resource, "--namespace", NAMESPACE,
-                    "--watch-only", "--output-watch-events",
-                    "--resource-version", version, "--output", "json",
+                    "kubectl",
+                    "--context",
+                    events.DEV_KUBE_CONTEXT,
+                    "get",
+                    resource,
+                    "--namespace",
+                    NAMESPACE,
+                    "--watch-only",
+                    "--output-watch-events",
+                    "--resource-version",
+                    version,
+                    "--output",
+                    "json",
                 ],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.DEVNULL,
@@ -295,9 +317,7 @@ class WatchBuffer:
         if not isinstance(statuses, list):
             return False
         name = containers[0].get("name") if isinstance(containers[0], dict) else None
-        return sum(
-            isinstance(row, dict) and row.get("name") == name for row in statuses
-        ) == 1
+        return sum(isinstance(row, dict) and row.get("name") == name for row in statuses) == 1
 
     def preserve_ambiguous(
         self,
@@ -328,8 +348,10 @@ class WatchBuffer:
             if owner and owner[0] == "RayJob" and name_pattern.fullmatch(owner[1]):
                 rayjobs.add((owner[1], owner[2]))
         clusters = {
-            (str((raw.get("object") or {}).get("metadata", {}).get("name")),
-             str((raw.get("object") or {}).get("metadata", {}).get("uid")))
+            (
+                str((raw.get("object") or {}).get("metadata", {}).get("name")),
+                str((raw.get("object") or {}).get("metadata", {}).get("uid")),
+            )
             for raw in raws
             if (raw.get("object") or {}).get("kind") == "RayCluster"
             and self._owner(raw) is not None
@@ -342,18 +364,22 @@ class WatchBuffer:
             metadata = obj.get("metadata") or {}
             kind, owner = obj.get("kind"), self._owner(raw)
             accepted = (
-                kind == "RayJob"
-                and (str(metadata.get("name")), str(metadata.get("uid"))) in rayjobs
-            ) or (
-                kind in {"Workload", "RayCluster"}
-                and owner is not None
-                and owner[0] == "RayJob"
-                and (owner[1], owner[2]) in rayjobs
-            ) or (
-                kind == "Pod"
-                and owner is not None
-                and owner[0] == "RayCluster"
-                and (owner[1], owner[2]) in clusters
+                (
+                    kind == "RayJob"
+                    and (str(metadata.get("name")), str(metadata.get("uid"))) in rayjobs
+                )
+                or (
+                    kind in {"Workload", "RayCluster"}
+                    and owner is not None
+                    and owner[0] == "RayJob"
+                    and (owner[1], owner[2]) in rayjobs
+                )
+                or (
+                    kind == "Pod"
+                    and owner is not None
+                    and owner[0] == "RayCluster"
+                    and (owner[1], owner[2]) in clusters
+                )
             )
             if not accepted:
                 continue
@@ -372,9 +398,7 @@ class WatchBuffer:
                     "controller_status": (obj.get("status") or {}).get("jobStatus")
                     if kind == "RayJob"
                     else None,
-                    "phase": (obj.get("status") or {}).get("phase")
-                    if kind == "Pod"
-                    else None,
+                    "phase": (obj.get("status") or {}).get("phase") if kind == "Pod" else None,
                 }
             )
         try:
@@ -467,15 +491,14 @@ class WatchBuffer:
                                 progressed = True
                                 continue
                             statuses = obj.get("status", {}).get("containerStatuses") or []
-                            terminal_pod |= (
-                                obj.get("status", {}).get("phase") == "Succeeded"
-                                and any(
-                                    row.get("state", {}).get("terminated", {}).get("exitCode") == 0
-                                    and row.get("state", {}).get("terminated", {}).get("reason")
-                                    == "Completed"
-                                    for row in statuses
-                                    if isinstance(row, dict)
-                                )
+                            terminal_pod |= obj.get("status", {}).get(
+                                "phase"
+                            ) == "Succeeded" and any(
+                                row.get("state", {}).get("terminated", {}).get("exitCode") == 0
+                                and row.get("state", {}).get("terminated", {}).get("reason")
+                                == "Completed"
+                                for row in statuses
+                                if isinstance(row, dict)
                             )
                     if accepted:
                         recorded_at = max(time.time(), last_recorded_at)

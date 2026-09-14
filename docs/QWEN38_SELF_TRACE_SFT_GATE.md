@@ -79,9 +79,9 @@ a separately named treatment; the GPT-derived candidate is not silently reused.
 The immutable
 [`qwen38-self-trace-collection-request-v3.json`](../configs/qualification/qwen38-self-trace-collection-request-v3.json)
 (file SHA-256
-`sha256:32f4163fe9f86b05eb9ca80e14635ff9b1ed1902d87a4530aa5d75ccbe29a8d6`,
+`sha256:ba17ab244ee2e0d2227dd76c369a459f235f5cc62a002418df7e0470a94aa921`,
 self-digest
-`sha256:4d169f4f62ee1759e9288453e26fb2ad7720d9d30a2e434cd1045caeef2d777d`)
+`sha256:71afdefed1f1b7cfaeb0924eae7b71d5fce78e22bbf45f3aec659cedd7ae4f8f`)
 is the current offline gate. It binds the exact v2 predecessor bytes and
 self-digest, so the model, user-only prompt treatment, 74-task training roster,
 four attempts per task, limits, sampling, and 296-attempt roster cannot drift.
@@ -90,7 +90,7 @@ eleven-file source closure, including `training/rl_episode.py` after its sealed
 create/score-intent change and the new
 [`training/self_trace_collection_v3.py`](../training/self_trace_collection_v3.py)
 validator. The closure digest is
-`sha256:6f25bb2f2cca1b1d3d83bf928cb593089f40d091c9b025debc670b6e7def91d0`.
+`sha256:61efb1d12971759b374622574d22767cf379289bcd787cbd621eebda0ef7f331`.
 
 The request has two explicit null slots: `collector_qualification` and
 `direct_route_certificate`. The public
@@ -138,9 +138,9 @@ digests. It remains synthetic and makes no collector-image or live-route claim.
 The current-source v3 fixture is
 [`2026-09-13-self-trace-recorder-dense-parity-v3.json`](evidence/qwen38-study/2026-09-13-self-trace-recorder-dense-parity-v3.json).
 Its file SHA-256 is
-`sha256:b3a7a6815df678c68500bd2674cb34861437838e1397f8db4e8ff378d266b1ba`
+`sha256:e9d3bd216b5520faaa53fef4961b98fe21136fa2069b7e4ac6562b374aa6cda5`
 and its self-digest is
-`sha256:9ccf6dcb6b38bc44dd7192b5cf6ba9545a5cc6ba3664042c8c5d236f9702d5c1`.
+`sha256:d022015a383fcf45e725261c593bd4861bae1257bbdc731cafb16084489973ed`.
 It reruns the same two-turn synthetic recorder-to-dense proof against the v3
 source closure. It retains the exact token-ID, loss-mask, masked-observation,
 and assistant-target checks; it still loads no target model or private task

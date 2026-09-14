@@ -178,12 +178,18 @@ def audit_current_bindings(
                 "private_fields_persisted": False,
             }
         except (RuntimeError, ValueError) as error:
-            reason = SAFE_FAILURES.get(str(error), str(error) if str(error) in {
-                "cyber_subject_absent",
-                "atom_source_absent",
-                "atom_source_invalid",
-                "atom_source_duplicate",
-            } else "unclassified_binding_failure")
+            reason = SAFE_FAILURES.get(
+                str(error),
+                str(error)
+                if str(error)
+                in {
+                    "cyber_subject_absent",
+                    "atom_source_absent",
+                    "atom_source_invalid",
+                    "atom_source_duplicate",
+                }
+                else "unclassified_binding_failure",
+            )
             value = {
                 "schema": ROW_SCHEMA,
                 **identity,

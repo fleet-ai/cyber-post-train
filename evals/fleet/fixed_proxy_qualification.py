@@ -27,7 +27,7 @@ def _image(value: str) -> str:
 
 
 def _runner() -> str:
-    return r'''
+    return r"""
 import base64
 import hashlib
 import http.client
@@ -178,7 +178,7 @@ unsigned = {
     },
 }
 print(canonical({**unsigned, "sha256": digest(unsigned)}), flush=True)
-'''
+"""
 
 
 def build_config(plan: dict[str, Any], *, image: str, source: Path) -> dict[str, Any]:

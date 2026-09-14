@@ -402,9 +402,7 @@ def _source_bindings(
     if not isinstance(source_plan, dict):
         raise ValueError("source Miles plan is not a JSON object")
     miles_acceptance._canary(source_plan)
-    submission, submission_file_sha256 = _read(
-        submission_path, miles_acceptance.SUBMISSION_SCHEMA
-    )
+    submission, submission_file_sha256 = _read(submission_path, miles_acceptance.SUBMISSION_SCHEMA)
     miles_acceptance.validate_submission_binding(submission, source_plan, check_files=True)
     if Path(submission["source_plan_path"]) != source_plan_path:
         raise ValueError("source submission does not bind the selected plan path")
@@ -559,33 +557,26 @@ def _validate_plan(
     if check_files:
         source_path = Path(str(plan["source_plan_path"]))
         reopened_source, source_file_sha256 = _json_snapshot(source_path)
-        if (
-            reopened_source != source
-            or source_file_sha256 != plan["source_plan_file_sha256"].removeprefix("sha256:")
-        ):
+        if reopened_source != source or source_file_sha256 != plan[
+            "source_plan_file_sha256"
+        ].removeprefix("sha256:"):
             raise ValueError("source Miles plan file changed")
         submission, submission_file_sha256 = _read(
             Path(submission_ref["path"]), "cyber_miles_submitted_execution_binding_v1"
         )
-        if (
-            submission_file_sha256 != submission_ref["file_sha256"].removeprefix("sha256:")
-            or _sha(submission["sha256"], "source submission digest")
-            != submission_ref["receipt_sha256"].removeprefix("sha256:")
-        ):
+        if submission_file_sha256 != submission_ref["file_sha256"].removeprefix("sha256:") or _sha(
+            submission["sha256"], "source submission digest"
+        ) != submission_ref["receipt_sha256"].removeprefix("sha256:"):
             raise ValueError("source submission evidence changed")
         if (
-            submission.get("source_plan_sha256", "").removeprefix("sha256:")
-            != digest(source)
+            submission.get("source_plan_sha256", "").removeprefix("sha256:") != digest(source)
             or Path(str(submission.get("source_plan_path"))) != source_path
         ):
             raise ValueError("source submission does not bind the selected Miles plan")
-        checkpoint, checkpoint_file_sha256 = _read(
-            Path(checkpoint_ref["path"]), CHECKPOINT_SCHEMA
-        )
-        if (
-            checkpoint != trained
-            or checkpoint_file_sha256 != checkpoint_ref["file_sha256"].removeprefix("sha256:")
-        ):
+        checkpoint, checkpoint_file_sha256 = _read(Path(checkpoint_ref["path"]), CHECKPOINT_SCHEMA)
+        if checkpoint != trained or checkpoint_file_sha256 != checkpoint_ref[
+            "file_sha256"
+        ].removeprefix("sha256:"):
             raise ValueError("trained checkpoint manifest changed")
         _verify_checkpoint(trained, hashes=True)
         _base_checkpoint(source, hashes=True)
@@ -650,14 +641,25 @@ def _request_projection(
     if re.fullmatch(r"[a-f0-9]{40}", source_commit) is None:
         raise ValueError("observer source commit is not a full Git SHA")
     expected_keys = {
-        "name", "title", "run_dir", "image", "workers", "gpus_per_worker", "resources",
-        "priority_class", "requeueIfPreempted", "secrets", "env", "command",
+        "name",
+        "title",
+        "run_dir",
+        "image",
+        "workers",
+        "gpus_per_worker",
+        "resources",
+        "priority_class",
+        "requeueIfPreempted",
+        "secrets",
+        "env",
+        "command",
     }
     env = request.get("env")
     if not isinstance(env, dict):
         raise ValueError("observer request environment is absent")
     transport = {
-        key for key in env
+        key
+        for key in env
         if key == "CYBER_RUNTIME_BUNDLE" or re.fullmatch(r"CYBER_RUNTIME_BUNDLE_\d+", key)
     }
     ordinary_env = {key: value for key, value in env.items() if key not in transport}
@@ -798,8 +800,13 @@ def _submission_journal(path: Path, request: Mapping[str, Any]) -> tuple[list[di
     if (
         set(intent)
         != {
-            "state", "api_base_url", "request_sha256", "manifest_sha256",
-            "nodes", "gpus", "image",
+            "state",
+            "api_base_url",
+            "request_sha256",
+            "manifest_sha256",
+            "nodes",
+            "gpus",
+            "image",
         }
         or intent.get("state") != "POST_INTENT_DO_NOT_RETRY"
         or intent.get("api_base_url") != API_URLS["dev"]
@@ -811,8 +818,7 @@ def _submission_journal(path: Path, request: Mapping[str, Any]) -> tuple[list[di
         or set(response)
         != {"state", "name", "job_id", "run_dir", "status", "created_at", "finished_at"}
         or response.get("state") != "POST_RESPONSE"
-        or response.get("name")
-        != str(request["name"]) + "-" + str(response.get("job_id", ""))[:8]
+        or response.get("name") != str(request["name"]) + "-" + str(response.get("job_id", ""))[:8]
         or response.get("run_dir") != request["run_dir"]
         or response.get("status")
         not in {"queued", "PENDING", "QUEUED", "RUNNING", "SUCCEEDED", "FAILED", "STOPPED"}
@@ -828,9 +834,10 @@ def _submission_journal(path: Path, request: Mapping[str, Any]) -> tuple[list[di
         raise ValueError("observer Jobs API submission journal is incomplete or mismatched")
     _uuid(response.get("job_id"), "observer API run ID")
     created_at = _time(response.get("created_at"), "observer submission time")
-    if response.get("finished_at") is not None and _time(
-        response["finished_at"], "observer recovered terminal time"
-    ) < created_at:
+    if (
+        response.get("finished_at") is not None
+        and _time(response["finished_at"], "observer recovered terminal time") < created_at
+    ):
         raise ValueError("observer recovered terminal time predates submission")
     return rows, hashlib.sha256(payload).hexdigest()
 
@@ -1077,8 +1084,7 @@ def _controller_body(
             for row in by_kind[kind]
         )
         or any(
-            row["owner"]
-            != {"kind": "RayCluster", "name": raycluster_name, "uid": raycluster_uid}
+            row["owner"] != {"kind": "RayCluster", "name": raycluster_name, "uid": raycluster_uid}
             for row in by_kind["Pod"]
         )
     ):
@@ -1173,9 +1179,7 @@ def _controller_body(
             "start": _reference(start_path, start, start_file_sha256),
             "events": [
                 _reference(path, value, file_sha256)
-                for path, (value, file_sha256) in zip(
-                    event_paths, event_records, strict=True
-                )
+                for path, (value, file_sha256) in zip(event_paths, event_records, strict=True)
             ],
         },
         "observed_at": terminal_observed,
@@ -1206,10 +1210,19 @@ def validate_controller_observation(
     if (
         set(value)
         != {
-            "schema", "status", "observer_plan_sha256", "observer_request_sha256",
-            "api", "kubernetes", "execution", "event_journal", "observed_at",
+            "schema",
+            "status",
+            "observer_plan_sha256",
+            "observer_request_sha256",
+            "api",
+            "kubernetes",
+            "execution",
+            "event_journal",
+            "observed_at",
             "private_logs_included",
-            "metric_values_included", "task_content_included", "sha256",
+            "metric_values_included",
+            "task_content_included",
+            "sha256",
         }
         or value.get("status") != "succeeded"
         or value.get("observer_plan_sha256", "").removeprefix("sha256:") != digest(plan)
@@ -1275,8 +1288,15 @@ def validate_controller_observation(
         not isinstance(pod, dict)
         or set(pod)
         != {
-            "name", "uid", "owner_raycluster_uid", "phase", "exit_code",
-            "termination_reason", "runtime_image_id", "container_restarts", "gpus",
+            "name",
+            "uid",
+            "owner_raycluster_uid",
+            "phase",
+            "exit_code",
+            "termination_reason",
+            "runtime_image_id",
+            "container_restarts",
+            "gpus",
         }
         or _uuid(pod.get("uid"), "observer Pod UID") != pod.get("uid")
         or pod.get("owner_raycluster_uid") != raycluster["uid"]
@@ -1468,8 +1488,7 @@ def validate_release_query(
         or value.get("observer_plan_sha256", "").removeprefix("sha256:") != digest(plan)
         or value.get("observer_request_sha256") != submitted["request_sha256"]
         or value.get("controller_observation_sha256") != controller["sha256"]
-        or value.get("api")
-        != {**submitted["api"], "status": "SUCCEEDED"}
+        or value.get("api") != {**submitted["api"], "status": "SUCCEEDED"}
         or not isinstance(kube, dict)
         or set(kube)
         != {"context", "namespace", "namespace_uid", "objects", "quota_reservation_present"}
@@ -1514,11 +1533,25 @@ def validate_release_observation(
     if (
         set(value)
         != {
-            "schema", "status", "observer_plan_sha256", "observer_request_sha256",
-            "controller_observation_sha256", "controller_observation_file_sha256",
-            "release_query", "api_status", "controller_status", "identities", "raycluster_present",
-            "rayjob_present", "workload_present", "quota_reservation_present",
-            "gpu_pods_present", "active_gpus", "gpu_release_proven", "observed_at", "sha256",
+            "schema",
+            "status",
+            "observer_plan_sha256",
+            "observer_request_sha256",
+            "controller_observation_sha256",
+            "controller_observation_file_sha256",
+            "release_query",
+            "api_status",
+            "controller_status",
+            "identities",
+            "raycluster_present",
+            "rayjob_present",
+            "workload_present",
+            "quota_reservation_present",
+            "gpu_pods_present",
+            "active_gpus",
+            "gpu_release_proven",
+            "observed_at",
+            "sha256",
         }
         or value.get("status") != "released"
         or value.get("observer_plan_sha256", "").removeprefix("sha256:") != digest(plan)
@@ -1550,14 +1583,10 @@ def validate_release_observation(
         < _time(controller["observed_at"], "policy observer terminal evidence")
     ):
         raise ValueError("policy observer external release is incomplete")
-    query, query_file_sha256 = _read(
-        Path(value["release_query"]["path"]), RELEASE_QUERY_SCHEMA
-    )
-    if (
-        query_file_sha256 != value["release_query"]["file_sha256"].removeprefix("sha256:")
-        or query["sha256"].removeprefix("sha256:")
-        != value["release_query"]["receipt_sha256"].removeprefix("sha256:")
-    ):
+    query, query_file_sha256 = _read(Path(value["release_query"]["path"]), RELEASE_QUERY_SCHEMA)
+    if query_file_sha256 != value["release_query"]["file_sha256"].removeprefix("sha256:") or query[
+        "sha256"
+    ].removeprefix("sha256:") != value["release_query"]["receipt_sha256"].removeprefix("sha256:"):
         raise ValueError("policy observer release query reference changed")
     validate_release_query(query, plan, submission, controller)
 
@@ -1578,9 +1607,9 @@ def compile_release(
         "schema": RELEASE_SCHEMA,
         "status": "released",
         "observer_plan_sha256": "sha256:" + digest(plan),
-        "observer_request_sha256": validate_submission_binding(
-            submission, plan, check_files=False
-        )["request_sha256"],
+        "observer_request_sha256": validate_submission_binding(submission, plan, check_files=False)[
+            "request_sha256"
+        ],
         "controller_observation_sha256": controller["sha256"],
         "controller_observation_file_sha256": "sha256:" + controller_file_sha256,
         "release_query": _reference(release_query_path, query, query_file_sha256),
@@ -1648,9 +1677,7 @@ def native_args(plan: dict[str, Any], *, trained: bool):
     _validate_plan(plan, check_files=False, require_current_runtime=True)
     source = miles.MilesConfig(**plan["source_plan"]["arguments"])
     root = (
-        plan["trained_checkpoint"]["root"]
-        if trained
-        else plan["source_plan"]["checkpoint"]["root"]
+        plan["trained_checkpoint"]["root"] if trained else plan["source_plan"]["checkpoint"]["root"]
     )
     return _parse_args(source, root, trained=trained)
 
@@ -1919,17 +1946,24 @@ def _prediction_probe(self) -> dict[str, Any]:
 
 def validate_prediction_probe(value: object) -> dict[str, Any]:
     fields = {
-        "schema", "probe_id", "input_ids_sha256", "sequence_length", "top_k",
-        "selection_margin_threshold", "selection_margin_satisfied", "prediction_sha256",
-        "logits_included", "task_content_included", "benchmark_content_included",
+        "schema",
+        "probe_id",
+        "input_ids_sha256",
+        "sequence_length",
+        "top_k",
+        "selection_margin_threshold",
+        "selection_margin_satisfied",
+        "prediction_sha256",
+        "logits_included",
+        "task_content_included",
+        "benchmark_content_included",
     }
     if (
         not isinstance(value, dict)
         or set(value) != fields
         or value.get("schema") != PREDICTION_SCHEMA
         or value.get("probe_id") != PREDICTION_PROBE_ID
-        or value.get("input_ids_sha256")
-        != "sha256:" + digest(list(PREDICTION_INPUT_IDS))
+        or value.get("input_ids_sha256") != "sha256:" + digest(list(PREDICTION_INPUT_IDS))
         or value.get("sequence_length") != len(PREDICTION_INPUT_IDS)
         or value.get("top_k") != PREDICTION_TOP_K
         or value.get("selection_margin_threshold") != PREDICTION_MARGIN
@@ -2094,17 +2128,14 @@ def validate_result(plan: dict[str, Any], value: dict[str, Any]) -> list[int]:
         or value.get("observer_plan_sha256", "").removeprefix("sha256:") != digest(plan)
         or value.get("source_plan_sha256") != plan["source_plan_sha256"]
         or value.get("base_checkpoint_receipt_sha256") != plan["base_checkpoint_receipt_sha256"]
-        or value.get("trained_checkpoint_receipt_sha256")
-        != plan["trained_checkpoint"]["sha256"]
+        or value.get("trained_checkpoint_receipt_sha256") != plan["trained_checkpoint"]["sha256"]
         or value.get("world_size") != WORLD_SIZE
         or value.get("comparison_method") != COMPARISON_METHOD
-        or value.get("restored_next_rollout_id")
-        != plan["trained_checkpoint"]["next_rollout_id"]
+        or value.get("restored_next_rollout_id") != plan["trained_checkpoint"]["next_rollout_id"]
         or value.get("checkpoint_state_commitment_method") != RANK_STATE_COMMITMENT_METHOD
         or value.get("restore_method") != RESTORE_METHOD
         or value.get("trained_restore_count") != 2
-        or validate_prediction_probe(value.get("prediction_probe"))
-        != value.get("prediction_probe")
+        or validate_prediction_probe(value.get("prediction_probe")) != value.get("prediction_probe")
         or value.get("state_stable_across_zero_updates") is not True
         or value.get("work_executed") != _OBSERVER_WORK
         or value.get("base_checkpoint_unchanged") is not True
@@ -2126,8 +2157,7 @@ def validate_result(plan: dict[str, Any], value: dict[str, Any]) -> list[int]:
         scheduler = commitment.get("scheduler")
         if (
             not isinstance(model, dict)
-            or set(model)
-            != {"tensors", "local_numel", "structure_sha256", "value_sha256"}
+            or set(model) != {"tensors", "local_numel", "structure_sha256", "value_sha256"}
             or type(model.get("tensors")) is not int
             or model["tensors"] < 1
             or type(model.get("local_numel")) is not int
@@ -2141,12 +2171,12 @@ def validate_result(plan: dict[str, Any], value: dict[str, Any]) -> list[int]:
                 "structure_sha256",
                 "value_sha256",
             }
-            or any(type(optimizer.get(key)) is not int or optimizer[key] < 0 for key in (
-                "objects", "state_entries", "parameter_groups"
-            ))
+            or any(
+                type(optimizer.get(key)) is not int or optimizer[key] < 0
+                for key in ("objects", "state_entries", "parameter_groups")
+            )
             or not isinstance(scheduler, dict)
-            or set(scheduler)
-            != {"positive_progress_counters", "structure_sha256", "value_sha256"}
+            or set(scheduler) != {"positive_progress_counters", "structure_sha256", "value_sha256"}
             or type(scheduler.get("positive_progress_counters")) is not int
             or scheduler["positive_progress_counters"] < 0
             or any(
@@ -2263,8 +2293,7 @@ def validate_result(plan: dict[str, Any], value: dict[str, Any]) -> list[int]:
         ):
             raise ValueError("policy observer restore commitments are circular or unchanged")
         policy_changed = (
-            base_restored["model"]["value_sha256"]
-            != reference_restored["model"]["value_sha256"]
+            base_restored["model"]["value_sha256"] != reference_restored["model"]["value_sha256"]
         )
         if row.get("policy_changed") is not policy_changed:
             raise ValueError("policy observer policy-delta marker is invalid")
@@ -2331,13 +2360,9 @@ def _policy_body(
         "base_checkpoint_receipt_sha256": plan["base_checkpoint_receipt_sha256"],
         "trained_checkpoint_receipt_sha256": plan["trained_checkpoint"]["sha256"],
         "observer_plan_sha256": "sha256:" + digest(plan),
-        "observer_submission": _reference(
-            submission_path, submission, submission_file_sha256
-        ),
+        "observer_submission": _reference(submission_path, submission, submission_file_sha256),
         "observer_result": _reference(result_path, result, result_file_sha256),
-        "observer_controller": _reference(
-            controller_path, controller, controller_file_sha256
-        ),
+        "observer_controller": _reference(controller_path, controller, controller_file_sha256),
         "observer_release": _reference(release_path, release, release_file_sha256),
         "world_size": WORLD_SIZE,
         "comparison_method": COMPARISON_METHOD,
@@ -2404,37 +2429,49 @@ def validate_policy_evidence(
         )
     )
     expected_fields = {
-        "schema", "source_plan_sha256", "base_checkpoint_receipt_sha256",
-        "trained_checkpoint_receipt_sha256", "observer_plan_sha256",
-        "observer_submission", "observer_result", "observer_controller",
-        "observer_release", "world_size", "comparison_method", "ranks",
+        "schema",
+        "source_plan_sha256",
+        "base_checkpoint_receipt_sha256",
+        "trained_checkpoint_receipt_sha256",
+        "observer_plan_sha256",
+        "observer_submission",
+        "observer_result",
+        "observer_controller",
+        "observer_release",
+        "world_size",
+        "comparison_method",
+        "ranks",
         "prediction_probe",
-        "changed_policy_ranks", "policy_structure_matches",
-        "optimizer_state_used_for_delta", "scheduler_state_used_for_delta",
-        "rng_state_used_for_delta", "metadata_used_for_delta",
-        "checkpoint_state_commitment_method", "observer_work",
-        "source_checkpoints_unchanged", "observer_external_gpu_release_verified",
-        "reward_values_included", "task_content_included", "tensor_values_included",
+        "changed_policy_ranks",
+        "policy_structure_matches",
+        "optimizer_state_used_for_delta",
+        "scheduler_state_used_for_delta",
+        "rng_state_used_for_delta",
+        "metadata_used_for_delta",
+        "checkpoint_state_commitment_method",
+        "observer_work",
+        "source_checkpoints_unchanged",
+        "observer_external_gpu_release_verified",
+        "reward_values_included",
+        "task_content_included",
+        "tensor_values_included",
         "sha256",
     }
     if (
         set(value) != expected_fields
-        or value.get("source_plan_sha256", "").removeprefix("sha256:")
-        != digest(source_plan)
+        or value.get("source_plan_sha256", "").removeprefix("sha256:") != digest(source_plan)
         or value.get("base_checkpoint_receipt_sha256")
         != source_plan.get("checkpoint", {}).get("sha256")
         or value.get("trained_checkpoint_receipt_sha256") != checkpoint.get("sha256")
         or value.get("world_size") != WORLD_SIZE
         or value.get("comparison_method") != COMPARISON_METHOD
-        or validate_prediction_probe(value.get("prediction_probe"))
-        != value.get("prediction_probe")
+        or validate_prediction_probe(value.get("prediction_probe")) != value.get("prediction_probe")
         or value.get("policy_structure_matches") is not True
         or value.get("optimizer_state_used_for_delta") is not False
         or value.get("scheduler_state_used_for_delta") is not False
         or value.get("rng_state_used_for_delta") is not False
         or value.get("metadata_used_for_delta") is not False
-        or value.get("checkpoint_state_commitment_method")
-        != RANK_STATE_COMMITMENT_METHOD
+        or value.get("checkpoint_state_commitment_method") != RANK_STATE_COMMITMENT_METHOD
         or value.get("observer_work") != _OBSERVER_WORK
         or value.get("source_checkpoints_unchanged") is not True
         or value.get("observer_external_gpu_release_verified") is not True
@@ -2448,9 +2485,7 @@ def validate_policy_evidence(
     ):
         raise ValueError("policy delta is not bound to a complete independent observer")
     submission_ref = value["observer_submission"]
-    submission, submission_file_sha256 = _read(
-        Path(submission_ref["path"]), SUBMISSION_SCHEMA
-    )
+    submission, submission_file_sha256 = _read(Path(submission_ref["path"]), SUBMISSION_SCHEMA)
     plan_path = Path(submission["observer_plan_path"])
     from .miles_acceptance import _json_snapshot
 
@@ -2461,12 +2496,10 @@ def validate_policy_evidence(
     if (
         observer_plan["source_plan"] != source_plan
         or observer_plan["trained_checkpoint"] != checkpoint
-        or value["observer_plan_sha256"].removeprefix("sha256:")
-        != digest(observer_plan)
+        or value["observer_plan_sha256"].removeprefix("sha256:") != digest(observer_plan)
         or submission["observer_plan_file_sha256"].removeprefix("sha256:")
         != observer_plan_file_sha256
-        or submission_file_sha256
-        != submission_ref["file_sha256"].removeprefix("sha256:")
+        or submission_file_sha256 != submission_ref["file_sha256"].removeprefix("sha256:")
         or submission["sha256"].removeprefix("sha256:")
         != submission_ref["receipt_sha256"].removeprefix("sha256:")
     ):
@@ -2484,17 +2517,13 @@ def validate_policy_evidence(
     return len(value["changed_policy_ranks"])
 
 
-def _reopen_reference(
-    reference: Mapping[str, Any], schema: str
-) -> tuple[dict[str, Any], str]:
+def _reopen_reference(reference: Mapping[str, Any], schema: str) -> tuple[dict[str, Any], str]:
     if set(reference) != _REFERENCE_FIELDS:
         raise ValueError("observer-backed reload reference fields changed")
     value, file_sha256 = _read(Path(str(reference["path"])), schema)
-    if (
-        file_sha256 != str(reference["file_sha256"]).removeprefix("sha256:")
-        or _sha(value["sha256"], "observer-backed reload receipt digest")
-        != str(reference["receipt_sha256"]).removeprefix("sha256:")
-    ):
+    if file_sha256 != str(reference["file_sha256"]).removeprefix("sha256:") or _sha(
+        value["sha256"], "observer-backed reload receipt digest"
+    ) != str(reference["receipt_sha256"]).removeprefix("sha256:"):
         raise ValueError("observer-backed reload reference changed")
     return value, file_sha256
 
@@ -2660,8 +2689,7 @@ def validate_observer_reload_accepted(
         or value.get("world_size") != WORLD_SIZE
         or value.get("ranks") != list(range(WORLD_SIZE))
         or value.get("rank_state_commitment_method") != RANK_STATE_COMMITMENT_METHOD
-        or validate_prediction_probe(value.get("prediction_probe"))
-        != value.get("prediction_probe")
+        or validate_prediction_probe(value.get("prediction_probe")) != value.get("prediction_probe")
         or value.get("all_rank_model_loaded") is not True
         or value.get("all_rank_optimizer_loaded") is not True
         or value.get("all_rank_scheduler_loaded") is not True
@@ -2678,8 +2706,7 @@ def validate_observer_reload_accepted(
         or value.get("task_content_included") is not False
         or value.get("tensor_values_included") is not False
         or any(
-            not isinstance(value.get(name), dict)
-            or set(value[name]) != _REFERENCE_FIELDS
+            not isinstance(value.get(name), dict) or set(value[name]) != _REFERENCE_FIELDS
             for name in (
                 "terminal_acceptance",
                 "checkpoint_manifest",
@@ -2696,12 +2723,8 @@ def validate_observer_reload_accepted(
         raise ValueError("observer-backed reload differs from rederived evidence")
     return {
         "source_manifest_sha256": value["source_manifest_sha256"],
-        "source_terminal_acceptance_sha256": value[
-            "source_terminal_acceptance_sha256"
-        ],
-        "rank_state_commitments_sha256": value[
-            "rank_state_commitments_sha256"
-        ],
+        "source_terminal_acceptance_sha256": value["source_terminal_acceptance_sha256"],
+        "rank_state_commitments_sha256": value["rank_state_commitments_sha256"],
         "prediction_probe": value["prediction_probe"],
     }
 
@@ -2784,12 +2807,12 @@ def run(plan: dict[str, Any]) -> dict[str, Any]:
             "started_at": time.time(),
         },
     )
+
     def timeout(*_: object) -> None:
         raise TimeoutError
 
     previous = {
-        number: signal.signal(number, timeout)
-        for number in (signal.SIGALRM, signal.SIGTERM)
+        number: signal.signal(number, timeout) for number in (signal.SIGALRM, signal.SIGTERM)
     }
     signal.alarm(DEADLINE_SECONDS)
     try:

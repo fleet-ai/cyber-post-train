@@ -21,9 +21,12 @@ def _load() -> tuple[dict[str, object], str]:
 def test_dev5_v4_creator_evidence_is_self_digested_and_sanitized() -> None:
     evidence, serialized = _load()
     unsigned = {key: value for key, value in evidence.items() if key != "sha256"}
-    expected = "sha256:" + hashlib.sha256(
-        json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
+    expected = (
+        "sha256:"
+        + hashlib.sha256(
+            json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+    )
 
     assert evidence["sha256"] == expected
     assert "ASIA" not in serialized
@@ -50,9 +53,7 @@ def test_dev5_v4_creator_evidence_binds_exact_uid_runtime_and_reported_digests()
     }
     assert evidence["source"] == {
         "commit": "0e6970c7f16f8199b2fa583cb19937aeecdfcfd9",
-        "image_digest": (
-            "sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33"
-        ),
+        "image_digest": ("sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33"),
     }
 
     creator = evidence["creator"]
@@ -68,8 +69,7 @@ def test_dev5_v4_creator_evidence_binds_exact_uid_runtime_and_reported_digests()
     report = evidence["creator_report"]
     assert report["status"] == "accepted"
     assert report["terminal"]["path"] == (
-        "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev5-v3/"
-        "data-rebind-v4/TERMINAL.json"
+        "/mnt/sfs/jobs/chris-q38-miles-rlreward-inputs-dev5-v3/data-rebind-v4/TERMINAL.json"
     )
     assert report["terminal"]["reported_sha256"] == (
         "sha256:4291be0f88478f1b4b1811ebe462d521a87eed450bc8ea3a6f8454cb701680d9"

@@ -8,10 +8,7 @@ from pathlib import Path
 from training.io import digest_json, file_sha256
 
 ROOT = Path(__file__).parents[1]
-AUDIT = (
-    ROOT
-    / "docs/evidence/qwen38-study/2026-09-12-opencode-agent-image-live-gate-v1.json"
-)
+AUDIT = ROOT / "docs/evidence/qwen38-study/2026-09-12-opencode-agent-image-live-gate-v1.json"
 
 
 def read(path: Path) -> dict:
@@ -40,9 +37,7 @@ def test_source_and_live_contract_cannot_be_mistaken_for_deployment() -> None:
     assert pull_request["checks"]["pending_or_failed"] == 0
     assert openapi["local_build_path_present"] is True
     assert openapi["rewrite_timestamp_present"] is False
-    assert openapi["repository_validator_result"] == (
-        "rejected_missing_rewrite_timestamp"
-    )
+    assert openapi["repository_validator_result"] == ("rejected_missing_rewrite_timestamp")
     assert api["pod_ready"] is True
     assert api["pod_restarts"] == 0
     assert api["deployed_source_matches_unmodified_main_contract"] is True

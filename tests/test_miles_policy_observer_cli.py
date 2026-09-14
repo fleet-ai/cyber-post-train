@@ -46,9 +46,7 @@ def _object(
                 "containerStatuses": [
                     {
                         "name": "main",
-                        "state": {
-                            "terminated": {"exitCode": 0, "reason": "Completed"}
-                        },
+                        "state": {"terminated": {"exitCode": 0, "reason": "Completed"}},
                     }
                 ],
             }
@@ -232,9 +230,7 @@ def test_submit_opens_watch_before_exactly_one_post(monkeypatch, tmp_path):
     assert calls == ["intent", "watch", "post", "bind", "record", "close"]
 
 
-def test_api_down_after_lost_post_recovers_exact_run_without_a_second_post(
-    tmp_path, monkeypatch
-):
+def test_api_down_after_lost_post_recovers_exact_run_without_a_second_post(tmp_path, monkeypatch):
     request = {
         "name": "miles-observer",
         "run_dir": "/mnt/sfs/jobs/chris-q38-miles-reload-dev3",
@@ -350,9 +346,7 @@ def test_final_recovery_timeout_preserves_sanitized_possible_leak(tmp_path):
         run_id="11111111-1111-4111-8111-111111111111",
         status={"jobStatus": "RUNNING", "private": "must-not-be-saved"},
     )
-    candidate["object"]["spec"] = {
-        "runtimeEnvYAML": "API_TOKEN=must-not-be-saved"
-    }
+    candidate["object"]["spec"] = {"runtimeEnvYAML": "API_TOKEN=must-not-be-saved"}
     watcher.events.put((1.0, candidate))
 
     receipt = watcher.preserve_ambiguous(

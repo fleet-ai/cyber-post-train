@@ -7,8 +7,7 @@ from cyber_post_train.jobs import digest
 
 ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = ROOT / (
-    "docs/evidence/qwen38-study/"
-    "2026-09-12-skyrl-engine-diagnostic-dev5-terminal-v1.json"
+    "docs/evidence/qwen38-study/2026-09-12-skyrl-engine-diagnostic-dev5-terminal-v1.json"
 )
 
 

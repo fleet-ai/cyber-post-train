@@ -348,8 +348,7 @@ def _validate_parity_receipt(
             "context_tokens": qualification.get("context_tokens"),
         }
         or native["recorded_tokens_sha256"] != dense_receipt["reference_tokens_sha256"]
-        or native["recorded_loss_mask_sha256"]
-        != dense_receipt["reference_loss_mask_sha256"]
+        or native["recorded_loss_mask_sha256"] != dense_receipt["reference_loss_mask_sha256"]
         or not isinstance(observation, dict)
         or observation
         != {

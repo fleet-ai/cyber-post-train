@@ -1139,10 +1139,7 @@ def inspect_export(
     if root.is_symlink() or not root.is_dir():
         raise ValueError("Miles HF export root is missing or indirect")
     source = value.get("source")
-    if (
-        not isinstance(source, dict)
-        or set(source) != _EXPORT_SOURCE_FIELDS
-    ):
+    if not isinstance(source, dict) or set(source) != _EXPORT_SOURCE_FIELDS:
         raise ValueError("Miles HF export source binding changed")
     _validate_prediction_probe(source.get("prediction_probe"))
     checkpoint = _validate_export_source(value.get("source")) if prepared_export is None else None

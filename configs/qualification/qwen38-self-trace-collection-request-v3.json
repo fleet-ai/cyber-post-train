@@ -11,8 +11,8 @@
     "direct_route_certificate": null,
     "synthetic_parity_receipt": {
       "path": "../../docs/evidence/qwen38-study/2026-09-13-self-trace-recorder-dense-parity-v3.json",
-      "file_sha256": "sha256:b3a7a6815df678c68500bd2674cb34861437838e1397f8db4e8ff378d266b1ba",
-      "document_sha256": "sha256:9ccf6dcb6b38bc44dd7192b5cf6ba9545a5cc6ba3664042c8c5d236f9702d5c1"
+      "file_sha256": "sha256:e9d3bd216b5520faaa53fef4961b98fe21136fa2069b7e4ac6562b374aa6cda5",
+      "document_sha256": "sha256:d022015a383fcf45e725261c593bd4861bae1257bbdc731cafb16084489973ed"
     }
   },
   "source_closure": {
@@ -34,11 +34,11 @@
     },
     "rl_episode.py": {
       "path": "../../training/rl_episode.py",
-      "sha256": "sha256:bedd88e2ca45c74c2d4904f3767dce6aeccc358630c6f1f221fcc6ddd90c1d2a"
+      "sha256": "sha256:b7f3e9e2ef426e931f5eb8a07abadf4dedcfc9f84b66f61985fd1388ce7f261f"
     },
     "self_trace_collection.py": {
       "path": "../../training/self_trace_collection.py",
-      "sha256": "sha256:18d1d42a8524c1b34afdaa8128751e314058c37bec86e9948e6f9433d893c580"
+      "sha256": "sha256:c8da61006be0f15a6c47555a793bf3b49ed4cbfd107a08c107cd4585048cea84"
     },
     "self_trace_corpus.py": {
       "path": "../../training/self_trace_corpus.py",
@@ -68,5 +68,5 @@
     "job_submission_performed": false,
     "credentials_required": false
   },
-  "sha256": "sha256:4d169f4f62ee1759e9288453e26fb2ad7720d9d30a2e434cd1045caeef2d777d"
+  "sha256": "sha256:71afdefed1f1b7cfaeb0924eae7b71d5fce78e22bbf45f3aec659cedd7ae4f8f"
 }

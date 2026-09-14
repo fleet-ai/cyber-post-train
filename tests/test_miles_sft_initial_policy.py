@@ -118,8 +118,7 @@ def accepted(tmp_path, monkeypatch):
             miles_conversion._hash(export_path) != export_sha
             or miles_conversion._hash(gpu_path) != gpu_sha
             or observed_gpu.get("gpu_reload_verified") is not True
-            or observed_gpu.get("checker_sha256")
-            != checker_sha.removeprefix("sha256:")
+            or observed_gpu.get("checker_sha256") != checker_sha.removeprefix("sha256:")
         ):
             raise ValueError("strict synthetic acceptance failed")
         return observed_export, {}, observed_gpu
@@ -285,9 +284,7 @@ def test_runtime_stage_rejects_unbound_or_unsafe_copy(accepted, tmp_path, defect
     elif defect == "gpus":
         value["zero_gpus"] = True
     else:
-        config["runtime_stage"]["receipt"]["path"] = (
-            config["runtime_stage"]["root"] + "/STAGE.json"
-        )
+        config["runtime_stage"]["receipt"]["path"] = config["runtime_stage"]["root"] + "/STAGE.json"
     stage_path.unlink()
     write_receipt(stage_path, value)
     config["runtime_stage"]["receipt"]["sha256"] = miles_conversion._hash(stage_path)
@@ -335,8 +332,8 @@ def test_incomplete_or_mismatched_sft_handoff_is_rejected(accepted, tmp_path, de
             value["gpu_reload_verified"] = False
         path.unlink()
         write_receipt(path, value)
-        config["gpu_check" if path == gpu_path else "export"]["sha256"] = (
-            miles_conversion._hash(path)
+        config["gpu_check" if path == gpu_path else "export"]["sha256"] = miles_conversion._hash(
+            path
         )
         if path == export_path:
             gpu = json.loads(gpu_path.read_text())

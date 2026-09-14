@@ -72,8 +72,7 @@ def test_ta4m_reload_is_zero_update_native_validation_not_continuation() -> None
     assert reload["resources"]["requeueIfPreempted"] is False
     assert "optimizer_steps_executed_equals_zero" in reload["acceptance"]
     assert (
-        "validation_scope_equals_checkpoint_and_sampler_reload_only_no_ce"
-        in reload["acceptance"]
+        "validation_scope_equals_checkpoint_and_sampler_reload_only_no_ce" in reload["acceptance"]
     )
     assert all("resume" not in gate for gate in reload["acceptance"])
 
@@ -85,9 +84,7 @@ def test_ta4m_checkpoint_seal_is_cpu_only_and_create_once() -> None:
     assert seal["operation"] == "cpu_only_create_once"
     assert seal["gpu_reload_verified"] is False
     assert seal["source_checkpoint_path"].endswith("/checkpoints/global_step_1")
-    assert seal["source_checkpoint_receipt_path"].endswith(
-        "/checkpoint_receipts/step-000001.json"
-    )
+    assert seal["source_checkpoint_receipt_path"].endswith("/checkpoint_receipts/step-000001.json")
     source = value["source"]["prepared_dir"]
     assert seal["command"][2:5] == ["cyber-post-train", "checkpoint-seal", source]
     assert source == "/mnt/sfs/jobs/chris-q38-study-corpora-v1/metrics-canary-ta4m-v1"

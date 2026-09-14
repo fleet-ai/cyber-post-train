@@ -142,8 +142,7 @@ def _process(value: dict, plan: dict) -> float:
         != plan["source_terminal_acceptance"]["receipt_sha256"]
         or value.get("source_policy_delta_observation_sha256")
         != plan["source_policy_delta_observation"]["receipt_sha256"]
-        or value.get("rank_state_commitment_method")
-        != miles_reload.RANK_STATE_COMMITMENT_METHOD
+        or value.get("rank_state_commitment_method") != miles_reload.RANK_STATE_COMMITMENT_METHOD
         or not _integer(value.get("world_size"), world_size)
         or value.get("ranks") != list(range(world_size))
         or not _integer(value.get("restored_rollout_index"), manifest["rollout_index"])
@@ -431,12 +430,10 @@ def accept_reload(
         "external_release": release,
         "source_manifest_sha256": plan["source_manifest"]["sha256"],
         "source_checkpoint_unchanged_after_release": True,
-        "source_terminal_acceptance_sha256": plan["source_terminal_acceptance"][
+        "source_terminal_acceptance_sha256": plan["source_terminal_acceptance"]["receipt_sha256"],
+        "source_policy_delta_observation_sha256": plan["source_policy_delta_observation"][
             "receipt_sha256"
         ],
-        "source_policy_delta_observation_sha256": plan[
-            "source_policy_delta_observation"
-        ]["receipt_sha256"],
         "rank_state_commitments_sha256": result["rank_state_commitments_sha256"],
         "exact_rank_state_commitments_verified": True,
         "work_executed": zero_work,

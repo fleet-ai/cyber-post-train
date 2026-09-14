@@ -165,9 +165,9 @@ def _case(tmp_path: Path, monkeypatch) -> dict:
             "source_terminal_acceptance_sha256": plan["source_terminal_acceptance"][
                 "receipt_sha256"
             ],
-            "source_policy_delta_observation_sha256": plan[
-                "source_policy_delta_observation"
-            ]["receipt_sha256"],
+            "source_policy_delta_observation_sha256": plan["source_policy_delta_observation"][
+                "receipt_sha256"
+            ],
             "rank_state_commitment_method": miles_reload.RANK_STATE_COMMITMENT_METHOD,
             "world_size": 8,
             "ranks": list(range(8)),

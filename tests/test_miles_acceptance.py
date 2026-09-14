@@ -43,9 +43,7 @@ def _write_json(path: Path, value: object) -> None:
 def _bundle_without_path_validation(
     request: dict, files: dict[str, str], module: str, argv: list[str]
 ) -> dict:
-    payload = json.dumps(
-        {"files": files, "module": module, "argv": argv}, sort_keys=True
-    ).encode()
+    payload = json.dumps({"files": files, "module": module, "argv": argv}, sort_keys=True).encode()
     blob = gzip.compress(payload, mtime=0)
     encoded = base64.b64encode(blob).decode()
     return {
@@ -448,8 +446,7 @@ def _policy_observer_evidence(
             "prediction_probe": {
                 "schema": observer.PREDICTION_SCHEMA,
                 "probe_id": observer.PREDICTION_PROBE_ID,
-                "input_ids_sha256": "sha256:"
-                + digest(list(observer.PREDICTION_INPUT_IDS)),
+                "input_ids_sha256": "sha256:" + digest(list(observer.PREDICTION_INPUT_IDS)),
                 "sequence_length": len(observer.PREDICTION_INPUT_IDS),
                 "top_k": observer.PREDICTION_TOP_K,
                 "selection_margin_threshold": observer.PREDICTION_MARGIN,
@@ -530,9 +527,7 @@ def _policy_observer_evidence(
         version=4,
         owner=_owner("RayCluster", cluster_name, raycluster_uid),
         spec={
-            "containers": [
-                {"name": "ray-head", "resources": {"limits": {"nvidia.com/gpu": "8"}}}
-            ]
+            "containers": [{"name": "ray-head", "resources": {"limits": {"nvidia.com/gpu": "8"}}}]
         },
         status={
             "phase": "Succeeded",
@@ -1121,18 +1116,14 @@ def test_single_observer_run_also_satisfies_native_reload(case: dict) -> None:
     )
 
     assert result["source_terminal_acceptance_sha256"] == terminal["sha256"]
-    assert result["source_manifest_sha256"] == terminal["checkpoint_manifest"][
-        "receipt_sha256"
-    ]
+    assert result["source_manifest_sha256"] == terminal["checkpoint_manifest"]["receipt_sha256"]
     assert result["observer_gpu_jobs"] == 1
     assert result["additional_reload_gpu_jobs"] == 0
     assert result["state_stable_across_zero_updates"] is True
     assert result["external_gpu_release_verified"] is True
     validated = miles_reload_acceptance.validate_accepted(result, check_files=True)
     assert validated["source_terminal_acceptance_sha256"] == terminal["sha256"]
-    assert validated["source_manifest_sha256"] == terminal["checkpoint_manifest"][
-        "receipt_sha256"
-    ]
+    assert validated["source_manifest_sha256"] == terminal["checkpoint_manifest"]["receipt_sha256"]
     with pytest.raises(ValueError, match="reopening every referenced file"):
         miles_reload_acceptance.validate_accepted(result, check_files=False)
     with pytest.raises(FileExistsError):
@@ -1157,9 +1148,7 @@ def test_observer_reload_rejects_commitment_or_result_replacement(case: dict) ->
 
     result_path = Path(policy["observer_result"]["path"])
     result = json.loads(result_path.read_bytes())
-    result["ranks"][0]["trained_reload"]["restored"]["model"]["value_sha256"] = (
-        "sha256:" + "e" * 64
-    )
+    result["ranks"][0]["trained_reload"]["restored"]["model"]["value_sha256"] = "sha256:" + "e" * 64
     _write_json(result_path, _seal(result))
     with pytest.raises(
         ValueError,
@@ -1308,16 +1297,14 @@ def test_policy_observer_rejects_circular_or_unstable_restore_evidence(
         row["base"]["restored"]["optimizer"]["value_sha256"] = "sha256:" + "a" * 64
         row["base"]["live"] = copy.deepcopy(row["base"]["restored"])
     elif fault == "trained_preloads_collide":
-        row["trained_reload"]["preload"]["model"]["value_sha256"] = row[
-            "trained_reference"
-        ]["preload"]["model"]["value_sha256"]
+        row["trained_reload"]["preload"]["model"]["value_sha256"] = row["trained_reference"][
+            "preload"
+        ]["model"]["value_sha256"]
     elif fault == "trained_restore_not_overwritten":
         row["trained_reference"]["restored"]["optimizer"]["value_sha256"] = row[
             "trained_reference"
         ]["preload"]["optimizer"]["value_sha256"]
-        row["trained_reference"]["live"] = copy.deepcopy(
-            row["trained_reference"]["restored"]
-        )
+        row["trained_reference"]["live"] = copy.deepcopy(row["trained_reference"]["restored"])
     elif fault == "trained_restores_disagree":
         row["trained_reload"]["restored"]["rng_sha256"] = "sha256:" + "b" * 64
         row["trained_reload"]["live"] = copy.deepcopy(row["trained_reload"]["restored"])
@@ -1361,9 +1348,9 @@ def test_observer_release_rejects_a_still_present_exact_uid(case: dict) -> None:
     query_path = Path(release["release_query"]["path"])
     query = json.loads(query_path.read_bytes())
     query["kubernetes"]["objects"]["pod"]["present"] = True
-    query["kubernetes"]["objects"]["pod"]["observed_uid"] = query["kubernetes"][
-        "objects"
-    ]["pod"]["expected_uid"]
+    query["kubernetes"]["objects"]["pod"]["observed_uid"] = query["kubernetes"]["objects"]["pod"][
+        "expected_uid"
+    ]
     _write_json(query_path, _seal(query))
     checkpoint = json.loads(case["checkpoint"].read_bytes())
 

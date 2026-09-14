@@ -38,12 +38,10 @@ def test_route_audit_is_sealed_and_keeps_the_control_closed():
         protocol.UNBOUND_BASE_SERVING_FIELDS
     )
     assert audit["routes"]["shared"]["exact_frozen_revision"] is True
-    assert audit["routes"]["shared"]["assessment"][
-        "readiness_and_catalog_identity_passed"
-    ] is True
-    assert audit["routes"]["dedicated"]["assessment"][
-        "readiness_and_catalog_identity_passed"
-    ] is False
+    assert audit["routes"]["shared"]["assessment"]["readiness_and_catalog_identity_passed"] is True
+    assert (
+        audit["routes"]["dedicated"]["assessment"]["readiness_and_catalog_identity_passed"] is False
+    )
     assert audit["decision"] == {
         "classification": "operational_route_ready_but_exact_matched_control_blocked",
         "selected_existing_route": None,

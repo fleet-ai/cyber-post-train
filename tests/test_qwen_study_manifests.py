@@ -105,13 +105,9 @@ def test_filtered_rl_canary_is_sealed_and_drawn_only_from_eligible_tasks():
     catalog_bytes = json.dumps(
         catalog, ensure_ascii=True, sort_keys=True, separators=(",", ":")
     ).encode()
-    assert task_set["tool_catalog_sha256"] == "sha256:" + hashlib.sha256(
-        catalog_bytes
-    ).hexdigest()
+    assert task_set["tool_catalog_sha256"] == "sha256:" + hashlib.sha256(catalog_bytes).hexdigest()
 
-    eligible_ids = {
-        (row["task_key"], row["task_version_id"]) for row in eligible["task_versions"]
-    }
+    eligible_ids = {(row["task_key"], row["task_version_id"]) for row in eligible["task_versions"]}
     selected = {(row["task_key"], row["task_version_id"]) for row in task_set["tasks"]}
     split_ids = {(row["task_key"], row["task_version_id"]) for row in split["tasks"]}
     assert selected == split_ids

@@ -49,8 +49,7 @@ def frozen_runtime():
         for node in module.body
         if isinstance(node, ast.Assign)
         and any(
-            isinstance(target, ast.Name) and target.id == "RUNTIME_FILES"
-            for target in node.targets
+            isinstance(target, ast.Name) and target.id == "RUNTIME_FILES" for target in node.targets
         )
     )
     return {path: source(path) for path in files}
@@ -96,12 +95,8 @@ def test_dev5_prelaunch_evidence_binds_frozen_runtime_and_zero_training_scope():
     value = load(EVIDENCE)
     assert value["sha256"] == digest({k: v for k, v in value.items() if k != "sha256"})
     assert value["classification"] == "operational_gate_prepared_not_submitted"
-    assert value["correction"]["commit"] == (
-        "7599706f1b5626d7ad2588804c75ea85ceeb099b"
-    )
-    assert value["correction"]["causal_status"] == (
-        "strong_inference_not_terminally_bound"
-    )
+    assert value["correction"]["commit"] == ("7599706f1b5626d7ad2588804c75ea85ceeb099b")
+    assert value["correction"]["causal_status"] == ("strong_inference_not_terminally_bound")
 
     successor = value["successor"]
     assert successor["data_config_sha256"] == file_sha256(DATA_V5)

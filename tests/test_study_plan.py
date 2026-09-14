@@ -412,9 +412,7 @@ def test_tracked_template_is_explicit_and_gated_against_current_split_metadata()
 
 def test_frozen_teacher_lr_screen_recompiles_exactly():
     root = Path(__file__).resolve().parents[1]
-    source = read_study(
-        root / "configs/studies/qwen-blackbox-teacher-a-lr-screen-v1.json"
-    )
+    source = read_study(root / "configs/studies/qwen-blackbox-teacher-a-lr-screen-v1.json")
     frozen = json.loads(
         (root / "configs/studies/qwen-blackbox-teacher-a-lr-screen-v1.plan.json").read_text()
     )

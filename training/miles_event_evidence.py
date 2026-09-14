@@ -306,10 +306,7 @@ def _project_event(start: dict[str, Any], raw: Mapping[str, Any], observed_at: o
             priority_class=pod_spec.get("priorityClassName"),
             ttl_seconds_after_finished=spec.get("ttlSecondsAfterFinished"),
         )
-        if (
-            projection["name"] != start["api_run_name"]
-            or projection["uid"] != start["api_run_id"]
-        ):
+        if projection["name"] != start["api_run_name"] or projection["uid"] != start["api_run_id"]:
             raise ValueError("Job event identity differs from the exact Kubernetes create")
     elif kind == "RayJob":
         labels = metadata.get("labels") or {}
@@ -402,11 +399,15 @@ def compile_controller(
             or event["task_content_included"] is not False
         ):
             raise ValueError("Miles event journal identity or minimization changed")
-    kinds = ("Job", "Workload", "Pod") if direct_export else (
-        "RayJob",
-        "Workload",
-        "RayCluster",
-        "Pod",
+    kinds = (
+        ("Job", "Workload", "Pod")
+        if direct_export
+        else (
+            "RayJob",
+            "Workload",
+            "RayCluster",
+            "Pod",
+        )
     )
     by_kind = {kind: [row for row in events if row["kind"] == kind] for kind in kinds}
     if any(not rows for rows in by_kind.values()):
@@ -677,11 +678,15 @@ def validate_hf_event_journal(
             raise ValueError("Miles HF controller event-journal sequence or identity changed")
         previous_observed = observed
     direct_export = plan.get("stage") == "export"
-    kinds = ("Job", "Workload", "Pod") if direct_export else (
-        "RayJob",
-        "Workload",
-        "RayCluster",
-        "Pod",
+    kinds = (
+        ("Job", "Workload", "Pod")
+        if direct_export
+        else (
+            "RayJob",
+            "Workload",
+            "RayCluster",
+            "Pod",
+        )
     )
     by_kind = {kind: [row for row in events if row.get("kind") == kind] for kind in kinds}
     if any(not rows for rows in by_kind.values()):
@@ -715,8 +720,7 @@ def validate_hf_event_journal(
         if (
             rayjob_name != start["api_run_name"]
             or any(
-                row.get("owner")
-                != {"kind": "RayJob", "name": rayjob_name, "uid": rayjob_uid}
+                row.get("owner") != {"kind": "RayJob", "name": rayjob_name, "uid": rayjob_uid}
                 for kind in ("Workload", "RayCluster")
                 for row in by_kind[kind]
             )
@@ -735,9 +739,7 @@ def validate_hf_event_journal(
         _time(value, "Workload admission") for value in admissions
     ):
         raise ValueError("Miles HF controller capture did not precede admission")
-    if direct_export and any(
-        row.get("priority_class") != "q2" for row in by_kind["Workload"]
-    ):
+    if direct_export and any(row.get("priority_class") != "q2" for row in by_kind["Workload"]):
         raise ValueError("Miles HF direct export Workload queue priority changed")
     terminal_controllers = [
         row for row in by_kind[controller_kind] if row.get("controller_status") == "SUCCEEDED"
@@ -779,8 +781,7 @@ def validate_hf_event_journal(
         else {}
     )
     identity_matches = (
-        controller.get("job_name") == job_name
-        and controller.get("job_uid") == job_uid
+        controller.get("job_name") == job_name and controller.get("job_uid") == job_uid
         if direct_export
         else controller.get("rayjob_name") == rayjob_name
         and controller.get("rayjob_uid") == rayjob_uid
@@ -876,10 +877,7 @@ def compile_release(
 
         controller, controller_file_sha256 = _read(controller_path, CONTROLLER_SCHEMA)
         validate_controller_observation(controller, plan, submission)
-    if (
-        plan.get("schema") in HF_PLAN_SCHEMAS
-        and plan.get("stage") == "export"
-    ):
+    if plan.get("schema") in HF_PLAN_SCHEMAS and plan.get("stage") == "export":
         expected_absence = {
             "job_present": False,
             "workload_present": False,

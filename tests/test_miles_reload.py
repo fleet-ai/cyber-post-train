@@ -279,9 +279,7 @@ def test_reload_plan_is_dev_only_exact_topology_and_secret_free(tmp_path):
     assert "WANDB_API_KEY" not in request["env"]
 
 
-def test_terminal_binding_selects_exact_accepted_checkpoint_and_saved_state(
-    tmp_path, monkeypatch
-):
+def test_terminal_binding_selects_exact_accepted_checkpoint_and_saved_state(tmp_path, monkeypatch):
     from training import miles_acceptance
 
     manifest, manifest_path = _manifest(tmp_path)
@@ -572,9 +570,7 @@ def test_submit_requires_complete_zero_work_preflight_receipt(tmp_path, monkeypa
     ):
         changed = {**body, field: value}
         with pytest.raises(ValueError, match="missing or mismatched"):
-            reload.validate_preflight_receipt(
-                plan, request, {**changed, "sha256": digest(changed)}
-            )
+            reload.validate_preflight_receipt(plan, request, {**changed, "sha256": digest(changed)})
 
 
 def test_cli_submit_enforces_specialized_miles_reload_preflight(tmp_path, monkeypatch):
@@ -607,8 +603,9 @@ def test_cli_submit_enforces_specialized_miles_reload_preflight(tmp_path, monkey
         lambda _: nullcontext(
             SimpleNamespace(
                 preview=lambda value: value,
-                submit_once=lambda value, journal: calls.append(("submit", value, journal))
-                or {"status": "queued"},
+                submit_once=lambda value, journal: (
+                    calls.append(("submit", value, journal)) or {"status": "queued"}
+                ),
             )
         ),
     )

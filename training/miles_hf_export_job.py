@@ -290,6 +290,7 @@ def validate_plan(
     plan: Mapping[str, Any], *, check_files: bool, validate_historical: bool = True
 ) -> None:
     from . import miles_hf_export as hf
+
     stage = plan.get("stage")
     execution = plan.get("execution")
     if (
@@ -423,6 +424,7 @@ def _inspect_plan_bound_export(
     stability without moving a 27B DCP state dict into operator RAM.
     """
     from . import miles_hf_export as hf
+
     if plan.get("stage") != "export":
         raise ValueError("post-Job export inspection requires an export plan")
     expected_path = Path(plan["artifact_path"]) / "EXPORT.json"
@@ -545,8 +547,7 @@ def _kubernetes_job_request(plan: dict[str, Any]) -> dict[str, Any]:
     transport, bootstrap, bundle_sha256 = _runtime_transport(plan)
     ordinary = {**_COMMON_ENV, "CUDA_VISIBLE_DEVICES": "", "RUN_DIR": plan["output_root"]}
     env = [
-        {"name": name, "value": value}
-        for name, value in sorted({**ordinary, **transport}.items())
+        {"name": name, "value": value} for name, value in sorted({**ordinary, **transport}.items())
     ]
     labels = {
         "kueue.x-k8s.io/queue-name": DEV_QUEUE,
@@ -610,9 +611,7 @@ def _kubernetes_job_request(plan: dict[str, Any]) -> dict[str, Any]:
                             "terminationMessagePolicy": "File",
                         }
                     ],
-                    "volumes": [
-                        {"name": "sfs", "persistentVolumeClaim": {"claimName": SFS_CLAIM}}
-                    ],
+                    "volumes": [{"name": "sfs", "persistentVolumeClaim": {"claimName": SFS_CLAIM}}],
                 },
             },
         },
@@ -809,15 +808,12 @@ def _transport(request: Mapping[str, Any]) -> tuple[dict[str, Any], str]:
         if not isinstance(containers, list) or len(containers) != 1:
             raise ValueError("HF Kubernetes request container is absent")
         entries = containers[0].get("env")
-        if (
-            not isinstance(entries, list)
-            or any(
-                not isinstance(entry, Mapping)
-                or set(entry) != {"name", "value"}
-                or not isinstance(entry["name"], str)
-                or not isinstance(entry["value"], str)
-                for entry in entries
-            )
+        if not isinstance(entries, list) or any(
+            not isinstance(entry, Mapping)
+            or set(entry) != {"name", "value"}
+            or not isinstance(entry["name"], str)
+            or not isinstance(entry["value"], str)
+            for entry in entries
         ):
             raise ValueError("HF Kubernetes request environment is malformed")
         env: Mapping[str, Any] = {entry["name"]: entry["value"] for entry in entries}
@@ -1042,9 +1038,10 @@ def _jobs_submission_journal(
     ):
         raise ValueError("HF submission journal differs from the exact dev API POST")
     created_at = _time(response.get("created_at"), "HF Jobs API creation time")
-    if response.get("finished_at") is not None and _time(
-        response["finished_at"], "HF recovered terminal time"
-    ) < created_at:
+    if (
+        response.get("finished_at") is not None
+        and _time(response["finished_at"], "HF recovered terminal time") < created_at
+    ):
         raise ValueError("HF recovered terminal time predates submission")
     return {"intent": intent, "response": response}, hashlib.sha256(raw).hexdigest()
 
@@ -1557,10 +1554,7 @@ def _validate_export_controller(
         or value.get("api_run_name") != submitted["api"]["run_name"]
         or value.get("job_name") != submitted["api"]["run_name"]
         or value.get("job_uid") != submitted["api"]["run_id"]
-        or any(
-            _UUID.fullmatch(str(value.get(key))) is None
-            for key in ("job_uid", "workload_uid")
-        )
+        or any(_UUID.fullmatch(str(value.get(key))) is None for key in ("job_uid", "workload_uid"))
         or value.get("workload_owner_job_uid") != value.get("job_uid")
         or value.get("api_status") != "SUCCEEDED"
         or value.get("controller_status") != "SUCCEEDED"
@@ -1905,10 +1899,8 @@ def validate_export_accepted(value: dict[str, Any], *, check_files: bool = True)
             != value["artifact_receipt_sha256"].removeprefix("sha256:")
             or artifact["tensor_inventory_sha256"]
             != value["tensor_inventory_sha256"].removeprefix("sha256:")
-            or artifact["source"]["active_canary_binding"]
-            != value["active_canary_binding"]
-            or plan["source"]["active_canary_binding"]
-            != value["active_canary_binding"]
+            or artifact["source"]["active_canary_binding"] != value["active_canary_binding"]
+            or plan["source"]["active_canary_binding"] != value["active_canary_binding"]
             or submission["source_request_sha256"].removeprefix("sha256:")
             != value["source_request_sha256"].removeprefix("sha256:")
             or submission["runtime_bundle_sha256"].removeprefix("sha256:")
