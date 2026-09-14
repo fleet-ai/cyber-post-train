@@ -1,0 +1,110 @@
+{
+  "schema": "cyber_qwen_self_sft_next_dev_preparation_v1",
+  "prepared_on": "2026-09-14",
+  "status": "offline_plan_complete_live_and_data_gates_open",
+  "scope": "Read only checked-in sanitized metadata, code and prior evidence; prepare inert successor templates for one Qwen3.8 direct self-trace SFT dev canary.",
+  "audit": {
+    "current_direct_source": {
+      "collection_request_file_sha256": "sha256:32f4163fe9f86b05eb9ca80e14635ff9b1ed1902d87a4530aa5d75ccbe29a8d6",
+      "collection_request_embedded_sha256": "sha256:4d169f4f62ee1759e9288453e26fb2ad7720d9d30a2e434cd1045caeef2d777d",
+      "accepted_index_exists": false,
+      "accepted_corpus_exists": false,
+      "reason": "Collector qualification, a fresh direct-route certificate and reviewed create-once orchestration are absent."
+    },
+    "historical_sources": {
+      "exact_positive_qwen_sessions": 87,
+      "historical_harness": "OpenCode 1.18.27",
+      "direct_interface_compatible_sessions": 0,
+      "old_prepared_records": 35,
+      "old_prepared_windows": 175,
+      "old_prepared_supervised_tokens": 45676,
+      "admission": "excluded_from_the_new_direct_arm",
+      "reason": "The complete original request prefix and tool schemas are not bound, and the audited historical surface used different tool names."
+    },
+    "historical_self_sft": {
+      "optimizer_steps": 44,
+      "checkpoint_and_export_reload_evidence_exists": true,
+      "classification": "useful operational precedent only; not a matched direct-interface or teacher-source comparison"
+    },
+    "existing_filtered_templates": {
+      "index_episodes": 0,
+      "index_state": "pending_unsealed",
+      "corpus_state": "pending_unmaterialized",
+      "sft_state": "inert_not_a_valid_direct_harness_arm",
+      "conclusion": "The existing v1 files are configuration shapes only. They do not prove an accepted corpus or authorize training."
+    },
+    "next_arm": {
+      "count": 1,
+      "canonical_cell_id": "self.direct.split-a.lr-1e-5.batch-8.epoch-1.seed-42",
+      "role": "six-step dev operational and numerical gate",
+      "teacher_comparison_ready": false,
+      "reason": "One arm is the smallest useful gate. Additional learning-rate or epoch arms would be premature before accepted data, matched harness identity and matched source exposure exist."
+    }
+  },
+  "prepared_files": {
+    "study": {
+      "path": "configs/studies/qwen-blackbox-self-sft-next-dev-v1.json",
+      "file_sha256": "sha256:3f939d72999804a026b032106dad7542219b70da12646d82f2783d18c60093cf",
+      "embedded_sha256": "sha256:6ee5b58929ca8eb73b8740aa8fdb52bf3e011c3a3a42dd2d46c79a4f83345913"
+    },
+    "index_template": {
+      "path": "configs/qualification/qwen38-self-trace-index-a-v2.template.json",
+      "file_sha256": "sha256:83068cef4dc2a856016903ddfa049aad10af8f1213bfefbea8734f7553b6d554"
+    },
+    "corpus_template": {
+      "path": "configs/qualification/qwen38-self-trace-corpus-a-v2.template.json",
+      "file_sha256": "sha256:364ec6ffe33fdf1a85aa56a4240e7ec3bec8283889216bf7627e1849511a00b7"
+    },
+    "sft_template": {
+      "path": "configs/qualification/qwen38-self-sft-direct-a-lr10-dev-v2.template.json",
+      "file_sha256": "sha256:ecd0a8a4b8b1c0aa7c6723e6e2dc8f3a43329de3804dab0d38d35fb7233f17c6"
+    }
+  },
+  "scientific_controls": {
+    "primary_split": "representative split A: 59 train, 20 development and 10 final task families",
+    "held_out_sources_used_for_training": false,
+    "per_task_success_cap": 2,
+    "terminal_submission_dominance_caps": {
+      "response_share": 0.5,
+      "token_share": 0.5
+    },
+    "teacher_comparison_requires_common_task_family_and_supervised_token_exposure": true,
+    "matched_model_visible_harness_required": true,
+    "training_loss_is_selection_metric": false,
+    "webexploitbench_used_for_source_hyperparameter_or_checkpoint_selection": false
+  },
+  "operational_controls": {
+    "dev_first": true,
+    "priority_class": "c1",
+    "expected_effective_priority_value": 10000,
+    "automatic_requeue": false,
+    "create_once_output": true,
+    "wandb_scalar_only": true,
+    "checkpoint_interval_steps": 2,
+    "pause_after_step": 6,
+    "checkpoint_seal_reload_export_and_final_reload_required": true
+  },
+  "missing_before_any_live_work": [
+    "immutable SkyRL-direct collector qualification",
+    "fresh exact direct base-route certificate",
+    "reviewed create-once collection successor and nonempty digest-valid index",
+    "split-A train-only corpus manifest and source-selection receipt",
+    "matched SkyRL-direct Fleet development outcome protocol",
+    "common-family and supervised-token-exposure-matched teacher corpus",
+    "fresh committed-source tests, pinned-image preflight, dev Jobs API preview and duplicate checks"
+  ],
+  "claim_boundaries": {
+    "collection_authorized": false,
+    "training_authorized": false,
+    "evaluation_authorized": false,
+    "production_authorized": false,
+    "scientific_or_capability_result": false
+  },
+  "execution": {
+    "live_calls_performed": false,
+    "cluster_api_registry_wandb_or_model_calls_performed": false,
+    "private_prompts_traces_answers_flags_or_scores_read": false,
+    "credentials_used": false
+  },
+  "sha256": "sha256:b3bd592cf7a02005e10796f08d54bcb5b12ef67a879c6ad39e1d3b2b9a33af16"
+}

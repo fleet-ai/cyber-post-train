@@ -1,0 +1,255 @@
+{
+  "schema": "cyber_qwen_self_sft_next_dev_plan_v1",
+  "study_id": "qwen-blackbox-self-sft-next-dev-v1",
+  "status": "blocked_before_direct_collection_and_matched_harness",
+  "launchable": false,
+  "purpose": "Prepare one minimal direct Qwen self-trace SFT dev canary and the controls needed for a later teacher-versus-self source comparison.",
+  "model": {
+    "repo": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "lock_file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+    "weights_file_sha256": "sha256:80a5e9de066e068abb012a0e9bd144676813a31042bb578226472803f8e0e84f",
+    "initialization": "exact_fresh_base"
+  },
+  "source_audit": {
+    "current_direct_collection_request": {
+      "path": "configs/qualification/qwen38-self-trace-collection-request-v3.json",
+      "file_sha256": "sha256:32f4163fe9f86b05eb9ca80e14635ff9b1ed1902d87a4530aa5d75ccbe29a8d6",
+      "embedded_sha256": "sha256:4d169f4f62ee1759e9288453e26fb2ad7720d9d30a2e434cd1045caeef2d777d",
+      "status": "blocked_external_bindings",
+      "attempt_roster": {
+        "train_union_task_versions": 74,
+        "attempts_per_task_version": 4,
+        "attempts": 296
+      },
+      "missing": [
+        "immutable SkyRL-direct collector qualification",
+        "collection-time exact direct base-route certificate",
+        "reviewed create-once collection orchestration"
+      ]
+    },
+    "historical_interface_audit": {
+      "path": "docs/evidence/qwen38-study/2026-09-11-self-sft-interface-audit-v2.json",
+      "file_sha256": "sha256:48990f3e584101d3a53b8db00bb4c0c38945d480a814cba4602d13c573cba9bd",
+      "embedded_sha256": "sha256:b478d515e08ce371101d27208e49ac212f03388135e2c131eabbbc8c5b75fa2f",
+      "exact_positive_sessions": 87,
+      "positive_task_versions": 43,
+      "historical_harness": "OpenCode 1.18.27",
+      "direct_interface_compatible_sessions": 0,
+      "old_prepared_records": 35,
+      "old_prepared_windows": 175,
+      "old_prepared_supervised_tokens": 45676,
+      "admission": "forbidden_for_this_direct_interface_arm"
+    },
+    "historical_self_sft_artifact": {
+      "api_name": "chris-q38-self-lr1-v2-d736712b",
+      "output_root": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2",
+      "optimizer_steps": 44,
+      "classification": "operationally_sealed_historical_nonmatched_treatment",
+      "checkpoint_evidence": {
+        "path": "docs/evidence/qwen38-study/2026-09-13-sft-checkpoint-seals-v1.json",
+        "file_sha256": "sha256:a3a15f939ffe06bcfcd44e470e24b2eb64060ceaec6ec8f3e6fc89a2b7c43068",
+        "embedded_sha256": "sha256:cf9fc05916162930142f8bb976e7d60040b28760a4700b4ae555a25acf04bf02"
+      },
+      "export_and_reload_evidence": {
+        "path": "docs/evidence/qwen38-study/2026-09-13-sft-export-gpu-acceptance-v1.json",
+        "file_sha256": "sha256:70c2eaeaabce5c99d17a587eb6582f6523acdbc18f4e8a6f8666d330ec1a9d70",
+        "embedded_sha256": "sha256:13becbca46f8f503e2b84bef7b300986358caec4a86c6a31c34dd1e087a397b4"
+      },
+      "reuse_as_new_direct_arm": false,
+      "capability_or_teacher_comparison_claim": false
+    },
+    "existing_filtered_templates": {
+      "index": {
+        "path": "configs/qualification/qwen38-self-trace-index-a-v1.template.json",
+        "file_sha256": "sha256:019ee8f87463bc35be7d212c7abf2b6db2b61b64bedd5bb8604ff8741a85200e",
+        "producer_plan_sha256": "sha256:75ea082c4a2bf3886170fee30124b524b97036a1de9244677b30d4613e811212",
+        "episodes": 0,
+        "state": "pending_unsealed"
+      },
+      "corpus": {
+        "path": "configs/qualification/qwen38-self-trace-corpus-a-v1.template.json",
+        "file_sha256": "sha256:553962880a363b5e73b03b11efc2ed39d0771f5b0bcdcf1609b851dfdf185436",
+        "source_collection_bound": false,
+        "max_episodes_per_task_version": 3,
+        "fleet_dev_protocol_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75",
+        "state": "pending_unmaterialized"
+      },
+      "sft": {
+        "path": "configs/qualification/qwen38-self-trace-sft-a-dev-v1.template.json",
+        "file_sha256": "sha256:0a5e82598813385090f38593271bf5bf9bc8587ca7b54e0c51a9575f3251dfff",
+        "data_manifest_bound": false,
+        "fleet_dev_protocol_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75",
+        "state": "inert_not_a_valid_direct_harness_arm"
+      },
+      "conclusion": "The v1 files are useful shapes, not accepted data or a launchable treatment. Their producer binding predates v3 and their outcome protocol is OpenCode rather than skyrl_direct."
+    }
+  },
+  "representative_split": {
+    "primary": {
+      "id": "split-a",
+      "path": "configs/data/qwen-blackbox-study-split-a-v1.json",
+      "file_sha256": "sha256:2558d0346f5edd26d6a7cd85fc1774cb1be2339d588be1f7f967fc14689d6ccc",
+      "embedded_sha256": "sha256:9ce5ba7f4cb9c52f6adfdbe615ca2258358dc602d6a9bb665c2ccc29dc04f4b8",
+      "train_task_families": 59,
+      "dev_task_families": 20,
+      "final_task_families": 10,
+      "generalization_scope": "task-family-held-out; applications may be shared"
+    },
+    "train_projection": {
+      "path": "configs/data/qwen-blackbox-study-train-a-v1.json",
+      "file_sha256": "sha256:2222dd8475e67f5ccec1a3cfc871d53e06e77295fc996e949db50d3572d5c5e9",
+      "embedded_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863",
+      "task_versions": 59
+    },
+    "secondary_confirmation_only": {
+      "id": "split-b",
+      "path": "configs/data/qwen-blackbox-study-split-b-v1.json",
+      "file_sha256": "sha256:938ab045d07a33611c14ac01c50dda774eca280c1449482af7ba7e292c02e596",
+      "embedded_sha256": "sha256:282f2dec7912364c0f7c1db7ceaac39eb66d552ab226d7617a412fa8e881a50f",
+      "not_part_of_first_dev_arm": true
+    },
+    "final_test_lock": {
+      "path": "configs/data/qwen-blackbox-study-final-test-v1.json",
+      "file_sha256": "sha256:29ee37dcd34b07874fa0598c8b41dd5cc2875ab355a36be508d592a7f32d75a5",
+      "embedded_sha256": "sha256:dc625115be8c775de8ecf476bc0d8e06e71b6c7f4160ed50b25eb0308b30d8d7",
+      "training_or_hpo_eligible": false
+    },
+    "invariants": {
+      "task_family_is_split_unit": true,
+      "dev_and_final_sources_rejected_by_corpus_compiler": true,
+      "representative_application_environment_vulnerability_and_difficulty_metadata_preserved": true
+    }
+  },
+  "prepared_templates": {
+    "reviewed_index": {
+      "path": "configs/qualification/qwen38-self-trace-index-a-v2.template.json",
+      "file_sha256": "sha256:83068cef4dc2a856016903ddfa049aad10af8f1213bfefbea8734f7553b6d554",
+      "episodes": 0,
+      "materializable": false
+    },
+    "corpus": {
+      "path": "configs/qualification/qwen38-self-trace-corpus-a-v2.template.json",
+      "file_sha256": "sha256:364ec6ffe33fdf1a85aa56a4240e7ec3bec8283889216bf7627e1849511a00b7",
+      "max_episodes_per_task_version": 2,
+      "max_supervised_tokens_per_task_version": 49152,
+      "max_submit_token_share": 0.5,
+      "max_submit_response_share": 0.5,
+      "selection_reason": "Use at most two distinct verified successes per task version for the first source comparison so task frequency and the final submit action cannot dominate.",
+      "materializable": false
+    },
+    "first_dev_arm": {
+      "path": "configs/qualification/qwen38-self-sft-direct-a-lr10-dev-v2.template.json",
+      "file_sha256": "sha256:ecd0a8a4b8b1c0aa7c6723e6e2dc8f3a43329de3804dab0d38d35fb7233f17c6",
+      "canonical_cell_id": "self.direct.split-a.lr-1e-5.batch-8.epoch-1.seed-42",
+      "role": "six-step operational and numerical dev canary, not a capability result",
+      "recipe": {
+        "lr": 0.00001,
+        "scheduler": "cosine",
+        "warmup_ratio": 0.05,
+        "epochs": 1,
+        "global_batch": 8,
+        "microbatch_per_gpu": 1,
+        "max_length": 16384,
+        "checkpoint_interval": 2,
+        "pause_after_step": 6,
+        "seed": 42
+      },
+      "resources": {
+        "cluster": "dev",
+        "priority_class": "c1",
+        "expected_effective_priority_value": 10000,
+        "nodes": 1,
+        "gpus_per_node": 8,
+        "automatic_requeue": false
+      },
+      "create_once_output": "/mnt/sfs/jobs/chris-q38-self-a-lr10-dev-v2",
+      "wandb_scalar_only": true,
+      "launchable": false
+    }
+  },
+  "teacher_comparison": {
+    "ready": false,
+    "teacher_reference": {
+      "path": "configs/studies/qwen-blackbox-teacher-staged-search-v5.json",
+      "file_sha256": "sha256:84fb64162680180700c7ec457fa432eb702e602a9860f3b4b36fef227b50e405",
+      "embedded_sha256": "sha256:1806bd9f64eceae9b2a9fb5101337e9c3c9840112367e1cc6a5093235e5bff2c",
+      "central_recipe": "teacher.available-a.lr-1e-5.batch-8.epoch-1.seed-42"
+    },
+    "only_intended_difference": "verified successful source model: teacher versus exact fresh Qwen base",
+    "required_controls": [
+      "same exact train task-family intersection",
+      "same model-visible harness, prompt prefix, ordered tool schemas, tokenizer and chat template",
+      "same dense window construction and per-task source cap",
+      "same supervised-token exposure, optimizer recipe, seed and topology",
+      "same matched base-versus-checkpoint Fleet development outcome protocol and attempt seeds"
+    ],
+    "current_blockers": [
+      "No accepted direct Qwen self-trace index or corpus exists.",
+      "The direct self source is skyrl_direct with no compaction; the existing Fleet development and final protocols use OpenCode 1.18.27 with native compaction and continuation.",
+      "No common-family, exposure-matched teacher corpus has been materialized against the future self corpus."
+    ],
+    "resolution_rule": "Freeze a new matched-harness outcome protocol and exposure-matched teacher/self corpus pair after the self corpus exists; never relabel the existing OpenCode protocol as direct parity.",
+    "source_comparison_claim_allowed": false
+  },
+  "selection_policy": {
+    "training_loss": "fitting diagnostic only",
+    "primary_selection": "matched Fleet development task outcomes after checkpoint serving parity",
+    "webexploitbench": {
+      "source_selection_eligible": false,
+      "hyperparameter_selection_eligible": false,
+      "checkpoint_selection_eligible": false,
+      "unseal_only_after": "the Fleet development selection decision is frozen"
+    }
+  },
+  "acceptance_gates": {
+    "data": {
+      "collector_qualified": false,
+      "direct_route_certified": false,
+      "create_once_collection_authorized": false,
+      "reviewed_nonempty_index": false,
+      "split_a_train_only_corpus_sealed": false,
+      "matched_harness_protocol_sealed": false,
+      "teacher_self_common_family_exposure_pair_sealed": false
+    },
+    "pre_launch": {
+      "committed_source_tests_pass": false,
+      "pinned_image_preflight_pass": false,
+      "dev_jobs_api_preview_pass": false,
+      "duplicate_output_and_wandb_absence_proved": false,
+      "c1_effective_q1_proved": false
+    },
+    "runtime": {
+      "finite_loss_and_gradient_through_step_6": false,
+      "checkpoint_steps_2_4_6_present": false,
+      "wandb_scalar_history_complete": false,
+      "zero_restarts_and_useful_gpu_work": false
+    },
+    "post_run": {
+      "checkpoint_sealed": false,
+      "zero_update_all_rank_reload_pass": false,
+      "source_checkpoint_unchanged": false,
+      "complete_bf16_export_sealed": false,
+      "model_and_tokenizer_reload_pass": false,
+      "wandb_finish_acknowledged": false,
+      "all_resources_released": false
+    }
+  },
+  "claim_boundaries": {
+    "new_data_collected": false,
+    "new_corpus_materialized": false,
+    "new_training_run_created": false,
+    "hyperparameter_selected": false,
+    "teacher_self_comparison_completed": false,
+    "capability_lift_claim_allowed": false,
+    "production_authorized": false
+  },
+  "execution": {
+    "kind": "offline_metadata_and_inert_templates_only",
+    "live_calls_performed": false,
+    "cluster_or_api_mutations_performed": false,
+    "private_prompts_or_traces_read": false,
+    "credentials_used": false
+  },
+  "sha256": "sha256:6ee5b58929ca8eb73b8740aa8fdb52bf3e011c3a3a42dd2d46c79a4f83345913"
+}

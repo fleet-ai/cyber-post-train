@@ -1,0 +1,28 @@
+{
+  "schema": "cyber_qwen_direct_self_trace_index_v1",
+  "review_receipt_sha256": "PENDING_REVIEW_RECEIPT_SHA256",
+  "producer_plan_sha256": "sha256:4d169f4f62ee1759e9288453e26fb2ad7720d9d30a2e434cd1045caeef2d777d",
+  "route_certificate_sha256": "PENDING_EXACT_DIRECT_BASE_ROUTE_CERTIFICATE_SHA256",
+  "runtime_image": "PENDING_IMMUTABLE_SKYRL_DIRECT_IMAGE@sha256:PENDING",
+  "model": {
+    "repo": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+    "model_lock_file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+    "model_weights_file_sha256": "sha256:80a5e9de066e068abb012a0e9bd144676813a31042bb578226472803f8e0e84f",
+    "initialization": "exact_fresh_base"
+  },
+  "interface": {
+    "backend": "skyrl_direct",
+    "required_task_tools": [
+      "bash",
+      "submit_report"
+    ],
+    "required_task_tool_catalog_sha256": "PENDING_EXACT_DIRECT_TOOL_CATALOG_SHA256",
+    "compaction": "disabled",
+    "runtime_chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "recorder_source_sha256": "sha256:fb3a25b38f778b6f12932c271d2e6813f256ba213d179e967e6809b2653b3815"
+  },
+  "episodes": [],
+  "sha256": "PENDING_CANONICAL_SELF_DIGEST"
+}
