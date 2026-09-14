@@ -12,9 +12,7 @@ PLAN_PATH = ROOT / "configs/evaluation/qwen38-blackbox-fleet-dev-a-base-certific
 PAYLOAD_PATH = (
     ROOT / "docs/evidence/inference/2026-09-11-qwen38-shared-base-payload-readback-v1.json"
 )
-ROUTE_PATH = (
-    ROOT / "docs/evidence/inference/2026-09-11-qwen38-shared-base-route-component-v2.json"
-)
+ROUTE_PATH = ROOT / "docs/evidence/inference/2026-09-11-qwen38-shared-base-route-component-v2.json"
 PROXY_PATH = (
     ROOT / "docs/evidence/inference/2026-09-11-qwen38-fixed-proxy-dev-qualification-v1.json"
 )
@@ -41,9 +39,10 @@ def test_v2_plan_and_measured_base_components_validate() -> None:
         _read(ROUTE_PATH),
         root=ROOT,
     )
-    assert "inference_model_resource_version" not in plan["stable_candidate_base_route"][
-        "object_identity"
-    ]
+    assert (
+        "inference_model_resource_version"
+        not in plan["stable_candidate_base_route"]["object_identity"]
+    )
     assert plan["launchable"] is False
 
 

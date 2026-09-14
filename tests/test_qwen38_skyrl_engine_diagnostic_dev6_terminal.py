@@ -7,8 +7,7 @@ from cyber_post_train.jobs import digest
 
 ROOT = Path(__file__).resolve().parents[1]
 EVIDENCE = ROOT / (
-    "docs/evidence/qwen38-study/"
-    "2026-09-12-skyrl-engine-diagnostic-dev6-terminal-v1.json"
+    "docs/evidence/qwen38-study/2026-09-12-skyrl-engine-diagnostic-dev6-terminal-v1.json"
 )
 
 
@@ -75,4 +74,3 @@ def test_dev6_did_zero_training_work_and_released_everything():
         "gpus_held": 0,
     }
     assert value["audit_boundaries"]["private_logs_read"] is False
-

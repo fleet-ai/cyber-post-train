@@ -103,15 +103,14 @@ class KubernetesJobWatchBuffer(WatchBuffer):
                                 progressed = True
                                 continue
                             statuses = obj.get("status", {}).get("containerStatuses") or []
-                            terminal_pod |= (
-                                obj.get("status", {}).get("phase") == "Succeeded"
-                                and any(
-                                    row.get("state", {}).get("terminated", {}).get("exitCode") == 0
-                                    and row.get("state", {}).get("terminated", {}).get("reason")
-                                    == "Completed"
-                                    for row in statuses
-                                    if isinstance(row, dict)
-                                )
+                            terminal_pod |= obj.get("status", {}).get(
+                                "phase"
+                            ) == "Succeeded" and any(
+                                row.get("state", {}).get("terminated", {}).get("exitCode") == 0
+                                and row.get("state", {}).get("terminated", {}).get("reason")
+                                == "Completed"
+                                for row in statuses
+                                if isinstance(row, dict)
                             )
                     if accepted:
                         recorded_at = max(time.time(), last_recorded_at)
@@ -280,9 +279,7 @@ def _manifest_projection(value: dict[str, Any]) -> dict[str, Any]:
         "parallelism": spec.get("parallelism"),
         "activeDeadlineSeconds": spec.get("activeDeadlineSeconds"),
         "ttlSecondsAfterFinished": spec.get("ttlSecondsAfterFinished"),
-        "template_labels": {
-            name: template_labels.get(name) for name in sorted(label_names)
-        },
+        "template_labels": {name: template_labels.get(name) for name in sorted(label_names)},
         "restartPolicy": pod.get("restartPolicy"),
         "automountServiceAccountToken": pod.get("automountServiceAccountToken"),
         "priorityClassName": pod.get("priorityClassName"),

@@ -6,10 +6,7 @@ from pathlib import Path
 from training.io import digest_json
 
 ROOT = Path(__file__).resolve().parents[1]
-TEMPLATE = (
-    ROOT
-    / "configs/qualification/qwen38-teacher-scheduler-reload-dev-v2.template.json"
-)
+TEMPLATE = ROOT / "configs/qualification/qwen38-teacher-scheduler-reload-dev-v2.template.json"
 
 
 def _read() -> dict:
@@ -45,8 +42,7 @@ def test_scheduler_reload_sources_are_the_exact_step_six_pair() -> None:
         "chris-q38-ta4-cos5-dev2-9af1c840",
     ]
     assert [
-        (arm["source"]["scheduler"], arm["source"]["warmup_ratio"])
-        for arm in value["arms"]
+        (arm["source"]["scheduler"], arm["source"]["warmup_ratio"]) for arm in value["arms"]
     ] == [("constant_with_warmup", 0.0), ("cosine", 0.05)]
     assert [arm["source"]["expected_num_warmup_steps"] for arm in value["arms"]] == [
         0,
@@ -97,9 +93,7 @@ def test_reload_is_exact_four_rank_zero_update_validation() -> None:
     }
     transform = recovery["source_plan_transform"]
     assert transform["remove"] == ["pause_after_step"]
-    assert "recipe_including_scheduler_warmup_and_full_horizon" in transform[
-        "preserve_exactly"
-    ]
+    assert "recipe_including_scheduler_warmup_and_full_horizon" in transform["preserve_exactly"]
     assert recovery["tracking"]["training_loss_lr_gradient_and_supervised_token_events"] == 0
 
 

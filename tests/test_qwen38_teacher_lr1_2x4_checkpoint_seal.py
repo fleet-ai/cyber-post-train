@@ -40,9 +40,7 @@ def test_seal_accepts_cpu_integrity_but_not_gpu_reload_or_training() -> None:
     assert seal["files"] == evidence["source"]["files"] == 33
     assert seal["bytes"] == evidence["source"]["bytes"] == 324_627_486_731
     assert reload["recovery"]["manifest"] == seal["manifest_path"]
-    assert reload["recovery"]["sha256"] == seal["manifest_file_sha256"].removeprefix(
-        "sha256:"
-    )
+    assert reload["recovery"]["sha256"] == seal["manifest_file_sha256"].removeprefix("sha256:")
     assert reload["recovery"]["mode"] == "validate"
     assert acceptance["cpu_integrity_seal_accepted"] is True
     assert acceptance["checkpoint_reusable_for_bounded_zero_update_reload_test"] is True

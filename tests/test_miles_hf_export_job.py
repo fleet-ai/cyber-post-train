@@ -182,9 +182,7 @@ def test_request_is_plan_bound_secretless_and_allocates_zero_export_gpus(
     assert "training/miles_policy_observer.py" not in payload["files"]
     assert bundle_sha256 in container["command"][2]
     assert (
-        request["metadata"]["annotations"][
-            "cyber-post-train.fleet.ai/runtime-bundle-sha256"
-        ]
+        request["metadata"]["annotations"]["cyber-post-train.fleet.ai/runtime-bundle-sha256"]
         == bundle_sha256
     )
     runtime = job._runtime()
@@ -201,9 +199,7 @@ def test_request_is_plan_bound_secretless_and_allocates_zero_export_gpus(
     assert projection["gpus"] == 0 and observed_bundle == bundle_sha256
 
     changed = copy.deepcopy(request)
-    changed["spec"]["template"]["spec"]["containers"][0]["resources"]["requests"][
-        "memory"
-    ] = "64Gi"
+    changed["spec"]["template"]["spec"]["containers"][0]["resources"]["requests"]["memory"] = "64Gi"
     with pytest.raises(ValueError, match="request or source commit"):
         job._request_projection(plan, changed, source_commit="a" * 40, repo_root=tmp_path)
 
@@ -509,9 +505,7 @@ def test_export_acceptance_is_create_once_and_reload_consumes_only_it(
     monkeypatch.setattr(job, "validate_submission_binding", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(job, "_validate_export_controller", lambda *_args: artifact)
     monkeypatch.setattr(job, "_validate_export_release", lambda *_args: None)
-    monkeypatch.setattr(
-        job, "_inspect_plan_bound_export", lambda *_args, **_kwargs: (artifact, [])
-    )
+    monkeypatch.setattr(job, "_inspect_plan_bound_export", lambda *_args, **_kwargs: (artifact, []))
     monkeypatch.setattr(hf, "inspect_export", lambda *_args, **_kwargs: (artifact, []))
     output = root / "HF_EXPORT_ACCEPTED.json"
     accepted = job.accept_export_job(
@@ -623,18 +617,14 @@ def _reload_result(plan: dict) -> dict:
     return value
 
 
-def test_zero_gpu_batch_watch_compiles_exact_job_controller(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_zero_gpu_batch_watch_compiles_exact_job_controller(tmp_path: Path, monkeypatch) -> None:
     plan = _plan(tmp_path, "export")
     submission = _submission(plan)
     artifact_path = Path(plan["artifact_path"]) / "EXPORT.json"
     artifact_path.parent.mkdir(parents=True)
     artifact = {"completed_at": 1789214404.0, "sha256": "sha256:" + "a" * 64}
     artifact_path.write_text(json.dumps(artifact))
-    monkeypatch.setattr(
-        job, "_inspect_plan_bound_export", lambda *_args, **_kwargs: (artifact, [])
-    )
+    monkeypatch.setattr(job, "_inspect_plan_bound_export", lambda *_args, **_kwargs: (artifact, []))
     directory = tmp_path / "watch-export"
     miles_event_evidence.start_capture(
         plan,

@@ -291,9 +291,7 @@ def test_submit_uses_shared_boundary_and_journal(prepared, monkeypatch):
     assert json.loads(result.stdout)["status"] == "pending"
 
 
-def test_miles_dev_submit_fails_before_network_when_no_whole_gpu_node(
-    prepared, monkeypatch
-):
+def test_miles_dev_submit_fails_before_network_when_no_whole_gpu_node(prepared, monkeypatch):
     output, plan, request, _ = prepared
     plan["schema"] = "cyber_miles_training_v1"
     monkeypatch.setattr(cli, "_prepared", lambda _: (plan, request))
@@ -324,9 +322,7 @@ def test_miles_dev_submit_fails_before_network_when_no_whole_gpu_node(
                 "metadata": {"name": f"peer-{name}"},
                 "spec": {
                     "nodeName": name,
-                    "containers": [
-                        {"resources": {"requests": {"nvidia.com/gpu": "2"}}}
-                    ],
+                    "containers": [{"resources": {"requests": {"nvidia.com/gpu": "2"}}}],
                 },
                 "status": {"phase": "Running"},
             }
@@ -363,9 +359,7 @@ def _eight_gpu_inventory(used_by_node):
             {
                 "spec": {
                     "nodeName": f"gpu-{index}",
-                    "containers": [
-                        {"resources": {"limits": {"nvidia.com/gpu": str(used)}}}
-                    ],
+                    "containers": [{"resources": {"limits": {"nvidia.com/gpu": str(used)}}}],
                 },
                 "status": {"phase": "Running"},
             }
@@ -429,9 +423,7 @@ def test_dev_gpu_inventory_error_does_not_expose_kubectl_output(monkeypatch):
     monkeypatch.setattr(
         cli.subprocess,
         "run",
-        lambda *args, **kwargs: SimpleNamespace(
-            returncode=1, stdout=private, stderr=private
-        ),
+        lambda *args, **kwargs: SimpleNamespace(returncode=1, stdout=private, stderr=private),
     )
 
     with pytest.raises(JobsError) as exc:
@@ -440,9 +432,7 @@ def test_dev_gpu_inventory_error_does_not_expose_kubectl_output(monkeypatch):
     assert private not in str(exc.value)
 
 
-def test_miles_dev_existing_submission_journal_wins_before_gpu_inventory(
-    prepared, monkeypatch
-):
+def test_miles_dev_existing_submission_journal_wins_before_gpu_inventory(prepared, monkeypatch):
     output, plan, request, _ = prepared
     plan["schema"] = "cyber_miles_training_v1"
     monkeypatch.setattr(cli, "_prepared", lambda _: (plan, request))
@@ -488,18 +478,14 @@ def test_dev_gpu_fit_uses_scheduler_style_init_max_and_ignores_terminal_pods():
                         {"resources": {"requests": {"nvidia.com/gpu": "1"}}},
                         {"resources": {"limits": {"nvidia.com/gpu": "1"}}},
                     ],
-                    "initContainers": [
-                        {"resources": {"requests": {"nvidia.com/gpu": "3"}}}
-                    ],
+                    "initContainers": [{"resources": {"requests": {"nvidia.com/gpu": "3"}}}],
                 },
                 "status": {"phase": "Running"},
             },
             {
                 "spec": {
                     "nodeName": "gpu-b",
-                    "containers": [
-                        {"resources": {"requests": {"nvidia.com/gpu": "8"}}}
-                    ],
+                    "containers": [{"resources": {"requests": {"nvidia.com/gpu": "8"}}}],
                 },
                 "status": {"phase": "Succeeded"},
             },

@@ -53,8 +53,7 @@ def frozen_runtime():
         for node in module.body
         if isinstance(node, ast.Assign)
         and any(
-            isinstance(target, ast.Name) and target.id == "RUNTIME_FILES"
-            for target in node.targets
+            isinstance(target, ast.Name) and target.id == "RUNTIME_FILES" for target in node.targets
         )
     )
     return {path: frozen_source(path) for path in files}
@@ -120,9 +119,10 @@ def test_dev6_prelaunch_evidence_is_self_digesting_and_truthful():
     successor = value["successor"]
     assert successor["data_config_sha256"] == file_sha256(DATA_V6)
     assert successor["run_config_sha256"] == file_sha256(RUN_V6)
-    assert successor["skyrl_training_source_sha256"] == hashlib.sha256(
-        frozen_source("training/skyrl_training.py").encode()
-    ).hexdigest()
+    assert (
+        successor["skyrl_training_source_sha256"]
+        == hashlib.sha256(frozen_source("training/skyrl_training.py").encode()).hexdigest()
+    )
     assert successor["runtime_sha256"] == digest(frozen_runtime())
     assert successor["allowed_cluster"] == "dev"
     assert successor["priority_class"] == "c1"

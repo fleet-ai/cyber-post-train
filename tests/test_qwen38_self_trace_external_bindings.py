@@ -9,10 +9,7 @@ from pathlib import Path
 from training.io import digest_json, file_sha256
 
 ROOT = Path(__file__).parents[1]
-AUDIT = (
-    ROOT
-    / "docs/evidence/qwen38-study/2026-09-12-self-trace-external-binding-audit-v1.json"
-)
+AUDIT = ROOT / "docs/evidence/qwen38-study/2026-09-12-self-trace-external-binding-audit-v1.json"
 
 
 def read(path: Path) -> dict:
@@ -105,9 +102,7 @@ def test_known_prompt_bytes_are_candidate_provenance_not_qwen38_authority() -> N
     _, prior = bound(prompt["provenance"]["paired_canary_plan"])
     assert prior["model"]["repo"] == "Qwen/Qwen3.6-27B"
     assert prior["conversation_contract"]["system_prompt_path"] == candidate["path"]
-    assert prior["conversation_contract"]["system_prompt_sha256"] == candidate[
-        "file_sha256"
-    ]
+    assert prior["conversation_contract"]["system_prompt_sha256"] == candidate["file_sha256"]
     assert prompt["provenance"]["qwen38_direct_treatment_authority"] is False
 
 

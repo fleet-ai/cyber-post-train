@@ -227,8 +227,7 @@ def arguments(config: MilesConfig) -> list[str]:
         "recompute-num-layers": 1,
         "micro-batch-size": 1,
         "max-tokens-per-gpu": max_tokens_per_gpu,
-        "log-probs-max-tokens-per-gpu": max_tokens_per_gpu
-        * profile.log_prob_pass_multiplier,
+        "log-probs-max-tokens-per-gpu": max_tokens_per_gpu * profile.log_prob_pass_multiplier,
         "advantage-estimator": "grpo",
         "kl-loss-coef": config.kl_loss_coef,
         "kl-loss-type": "low_var_kl",

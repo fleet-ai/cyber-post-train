@@ -14,10 +14,7 @@ SOURCE = ROOT / "configs/qualification/qwen38-teacher-production-layout-dev-v1.j
 CADENCE = ROOT / "configs/qualification/qwen38-teacher-checkpoint-cadence-dev-v1.json"
 V3 = ROOT / "configs/studies/qwen-blackbox-teacher-staged-search-v3.json"
 V4 = ROOT / "configs/studies/qwen-blackbox-teacher-staged-search-v4.json"
-EVIDENCE = (
-    ROOT
-    / "docs/evidence/qwen38-study/2026-09-12-production-layout-reload-dev-v1.json"
-)
+EVIDENCE = ROOT / "docs/evidence/qwen38-study/2026-09-12-production-layout-reload-dev-v1.json"
 
 
 def read(path: Path) -> dict:
@@ -74,9 +71,7 @@ def test_cadence_canary_changes_only_identities_layout_and_checkpoint_gate() -> 
     restored["wandb"] = source["wandb"]
     restored["recipe"]["nodes"] = source["recipe"]["nodes"]
     restored["recipe"]["gpus_per_node"] = source["recipe"]["gpus_per_node"]
-    restored["recipe"]["checkpoint_interval"] = source["recipe"][
-        "checkpoint_interval"
-    ]
+    restored["recipe"]["checkpoint_interval"] = source["recipe"]["checkpoint_interval"]
     restored["pause_after_step"] = source["pause_after_step"]
     assert restored == source
 
@@ -136,12 +131,11 @@ def test_v4_fails_closed_on_the_exact_missing_split_a_base_control() -> None:
     assert binding["file_sha256"] == file_sha256(ROOT / binding["path"])
     assert binding["embedded_sha256"] == control["sha256"]
     assert binding["accepted_result_sha256"] is None
-    assert v3["evidence"]["fleet_dev_v2"]["base_controls"]["a"][
-        "accepted_result_sha256"
-    ] is None
-    assert "production_gate.base_control.accepted_result_sha256" in v4[
-        "production_gate"
-    ]["unresolved_dependencies"]
+    assert v3["evidence"]["fleet_dev_v2"]["base_controls"]["a"]["accepted_result_sha256"] is None
+    assert (
+        "production_gate.base_control.accepted_result_sha256"
+        in v4["production_gate"]["unresolved_dependencies"]
+    )
     assert control["serving_binding"]["launchable"] is False
     assert control["launch_gate"]["paid_or_scored_work_authorized_by_this_file"] is False
 

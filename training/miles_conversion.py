@@ -128,10 +128,9 @@ def _reopen_reference(reference: dict, label: str) -> tuple[dict, dict]:
     if not isinstance(receipt, dict):
         raise ValueError(f"{label} must be a JSON object")
     self_sha256 = _sha256(receipt.get("receipt_sha256"), f"{label} receipt digest")
-    if (
-        self_sha256 != _sha256(reference["receipt_sha256"], f"{label} receipt digest")
-        or self_sha256 != digest({k: v for k, v in receipt.items() if k != "receipt_sha256"})
-    ):
+    if self_sha256 != _sha256(
+        reference["receipt_sha256"], f"{label} receipt digest"
+    ) or self_sha256 != digest({k: v for k, v in receipt.items() if k != "receipt_sha256"}):
         raise ValueError(f"{label} self-digest mismatch")
     return receipt, {**reference, "file_sha256": _sha256(reference["file_sha256"], label)}
 
@@ -204,8 +203,7 @@ def _validate_runtime_stage(
         or value.get("zero_gpus") != 0
         or value.get("runtime_identity")
         != {"uid": 1000, "gid": 2000, "supplemental_groups": [100, 2000]}
-        or value.get("permissions")
-        != {"directory_mode": "0750", "file_mode": "0640", "gid": 2000}
+        or value.get("permissions") != {"directory_mode": "0750", "file_mode": "0640", "gid": 2000}
     ):
         raise ValueError("SFT runtime-stage receipt does not bind the accepted export")
     source = Path(accepted_root)
@@ -278,8 +276,7 @@ def _accepted_sft_model(
         or export.get("gpu_reload_verified") is not False
         or export.get("all_output_tensors_reopened_equal") is not True
         or export.get("source_inventory_sizes_mtimes_unchanged") is not True
-        or set(export.get("restored_base_tensors", []))
-        != set(QWEN36_EXACT_MTP_OMISSION_KEYS)
+        or set(export.get("restored_base_tensors", [])) != set(QWEN36_EXACT_MTP_OMISSION_KEYS)
         or type(export.get("trained_tensors")) is not int
         or export["trained_tensors"] < 1
     ):
@@ -304,10 +301,14 @@ def _accepted_sft_model(
     if observed_sidecars != expected_sidecars:
         raise ValueError("SFT HF export tokenizer/runtime sidecars differ from the model lock")
     reported_sidecars = export.get("sidecars")
-    if not isinstance(reported_sidecars, dict) or {
-        name: _sha256(value, "SFT HF export sidecar digest")
-        for name, value in reported_sidecars.items()
-    } != expected_sidecars:
+    if (
+        not isinstance(reported_sidecars, dict)
+        or {
+            name: _sha256(value, "SFT HF export sidecar digest")
+            for name, value in reported_sidecars.items()
+        }
+        != expected_sidecars
+    ):
         raise ValueError("SFT HF export sidecar receipt differs from the model lock")
     export_receipt_sha256 = _sha256(
         export_reference.get("receipt_sha256"), "SFT HF export receipt digest"
@@ -329,8 +330,7 @@ def _accepted_sft_model(
         ),
     }
     if any(
-        _sha256(export.get(key), f"SFT HF export {key}") != value
-        for key, value in expected.items()
+        _sha256(export.get(key), f"SFT HF export {key}") != value for key, value in expected.items()
     ):
         raise ValueError("SFT HF export differs from the selected source checkpoint or plan")
     weight_manifest_sha256 = _json_sha256(weight_files)
@@ -526,8 +526,7 @@ def _reopen_initial_policy(model: dict, *, strict: bool = False) -> None:
         )
         or _sha256(export.get("source_plan_sha256"), "SFT plan digest")
         != _sha256(source.get("source_plan_sha256"), "SFT plan digest")
-        or _json_sha256(export.get("code_sha256"))
-        != source.get("export_code_sha256")
+        or _json_sha256(export.get("code_sha256")) != source.get("export_code_sha256")
         or _sha256(gpu.get("checker_sha256"), "SFT checker digest")
         != _sha256(source.get("checker_sha256"), "SFT checker digest")
         or _sha256(gpu.get("export_sha256"), "GPU check export digest")

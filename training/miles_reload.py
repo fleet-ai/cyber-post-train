@@ -293,11 +293,10 @@ def _terminal_binding(
 
     policy_path = Path(policy_reference["path"])
     policy, policy_file_sha256 = _json_snapshot(policy_path)
-    if (
-        policy_file_sha256
-        != _sha256(policy_reference["file_sha256"], "policy observation file digest")
-        or _sha256(policy.get("sha256"), "policy observation digest")
-        != _sha256(policy_reference["receipt_sha256"], "accepted policy observation digest")
+    if policy_file_sha256 != _sha256(
+        policy_reference["file_sha256"], "policy observation file digest"
+    ) or _sha256(policy.get("sha256"), "policy observation digest") != _sha256(
+        policy_reference["receipt_sha256"], "accepted policy observation digest"
     ):
         raise ValueError("accepted policy-state observation digest changed")
     commitments = []
@@ -320,9 +319,7 @@ def _terminal_binding(
                 "scheduler_value_sha256": _sha256(
                     restored["scheduler"]["value_sha256"], "trained scheduler digest"
                 ),
-                "rng_value_sha256": _sha256(
-                    restored["rng_sha256"], "trained RNG digest"
-                ),
+                "rng_value_sha256": _sha256(restored["rng_sha256"], "trained RNG digest"),
             }
         )
     return {
@@ -690,9 +687,7 @@ def preflight(plan: dict) -> dict:
     snapshot = _verify_checkpoint(plan["source_manifest"], hashes=True)
     source = miles.MilesConfig(**plan["source_manifest"]["source"]["arguments"])
     argv = reload_arguments(source, plan["source_manifest"]["root"])
-    return _preflight_receipt(
-        plan, request, checkpoint_files=len(snapshot), native_arguments=argv
-    )
+    return _preflight_receipt(plan, request, checkpoint_files=len(snapshot), native_arguments=argv)
 
 
 def validate_preflight_receipt(plan: dict, request: dict, proof: dict) -> None:
@@ -750,16 +745,13 @@ def _state_summary(value: Any, *, include_values: bool, depth: int = 0) -> Any:
         return [
             {
                 "key": key if isinstance(key, (bool, int, float, str)) else type(key).__name__,
-                "value": _state_summary(
-                    item, include_values=include_values, depth=depth + 1
-                ),
+                "value": _state_summary(item, include_values=include_values, depth=depth + 1),
             }
             for key, item in value.items()
         ]
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         return [
-            _state_summary(item, include_values=include_values, depth=depth + 1)
-            for item in value
+            _state_summary(item, include_values=include_values, depth=depth + 1) for item in value
         ]
     return {"type": type(value).__name__}
 
@@ -1049,9 +1041,9 @@ def run(plan: dict) -> dict:
                 "source_terminal_acceptance_sha256": plan["source_terminal_acceptance"][
                     "receipt_sha256"
                 ],
-                "source_policy_delta_observation_sha256": plan[
-                    "source_policy_delta_observation"
-                ]["receipt_sha256"],
+                "source_policy_delta_observation_sha256": plan["source_policy_delta_observation"][
+                    "receipt_sha256"
+                ],
                 "rank_state_commitment_method": RANK_STATE_COMMITMENT_METHOD,
                 **proof,
                 "optimizer_updates": 0,

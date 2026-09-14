@@ -34,9 +34,7 @@ def test_balanced_corpora_are_train_only_private_and_still_dev_gated():
     for variant in value["variants"].values():
         assert variant["balanced_corpus_status"] == "materialized_private_train_only"
         assert re.fullmatch(r"sha256:[0-9a-f]{64}", variant["balanced_corpus_sha256"])
-        assert re.fullmatch(
-            r"sha256:[0-9a-f]{64}", variant["balanced_train_parquet_sha256"]
-        )
+        assert re.fullmatch(r"sha256:[0-9a-f]{64}", variant["balanced_train_parquet_sha256"])
 
 
 def test_teacher_balance_preserves_coverage_while_reducing_family_inequality():
@@ -69,9 +67,7 @@ def test_balanced_plan_is_reproducible_nonlaunchable_and_binds_the_treatment():
         "dev_cluster_qualification_required": True,
         "new_jobs_authorized": False,
     }
-    assert frozen["selection"]["teacher_reference_ce"] == (
-        "not_computed_or_used_for_selection"
-    )
+    assert frozen["selection"]["teacher_reference_ce"] == ("not_computed_or_used_for_selection")
     arms = frozen["stages"][0]["arms"]
     assert {(arm["split"], arm["source"]) for arm in arms} == {
         ("a", "teacher"),
@@ -81,8 +77,5 @@ def test_balanced_plan_is_reproducible_nonlaunchable_and_binds_the_treatment():
         bound = frozen["sources"][variant]["teacher"]
         treatment = exposure["variants"][variant]
         assert bound["corpus_sha256"] == treatment["balanced_corpus_sha256"]
-        assert (
-            bound["source_selection_sha256"]
-            == treatment["balanced_source_selection_sha256"]
-        )
+        assert bound["source_selection_sha256"] == treatment["balanced_source_selection_sha256"]
         assert bound["source_sessions"] == treatment["balanced"]["episodes"]

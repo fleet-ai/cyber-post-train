@@ -443,15 +443,19 @@ def _validate_tool_surface_authority(
         ),
         "scoring_route": "/v1/rollout-rewards/{task_key}/versions/{task_version_id}",
     }
-    if authority != {
-        "mode": "trainer_injected_reviewed_catalog_plus_runtime_mcp_exact_match",
-        "task_metadata_tools_required": False,
-        "source_metadata_tools": None,
-        "ordered_tools": ["bash", "submit_report"],
-        "tool_catalog_sha256": task_set.get("tool_catalog_sha256"),
-        "local_code": expected_code,
-        "reviewed_server_route": expected_route,
-    } or source_receipt.get("metadata_tools") is not None:
+    if (
+        authority
+        != {
+            "mode": "trainer_injected_reviewed_catalog_plus_runtime_mcp_exact_match",
+            "task_metadata_tools_required": False,
+            "source_metadata_tools": None,
+            "ordered_tools": ["bash", "submit_report"],
+            "tool_catalog_sha256": task_set.get("tool_catalog_sha256"),
+            "local_code": expected_code,
+            "reviewed_server_route": expected_route,
+        }
+        or source_receipt.get("metadata_tools") is not None
+    ):
         raise ValueError("reward canary tool-surface authority changed")
 
     markers = {
@@ -472,9 +476,7 @@ def _validate_tool_surface_authority(
         ),
     }
     for name, binding in expected_code.items():
-        payload = _bound_bytes(
-            evidence_path.parent / binding["path"], binding["file_sha256"]
-        )
+        payload = _bound_bytes(evidence_path.parent / binding["path"], binding["file_sha256"])
         if any(marker not in payload for marker in markers[name]):
             raise ValueError("reward canary tool enforcement source changed")
 

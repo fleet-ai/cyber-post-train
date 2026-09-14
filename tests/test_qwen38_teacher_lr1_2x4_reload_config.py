@@ -11,16 +11,14 @@ ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "configs/qualification/qwen38-teacher-lr1-cosine-2x4-dev-fallback-v1.json"
 RELOAD = ROOT / "configs/qualification/qwen38-teacher-lr1-cosine-2x4-reload-dev-v1.json"
 SOURCE_PREPARED = PurePosixPath(
-    "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr-dev-v2-qualified-inputs-v1/"
-    "lr1-2x4-fallback-v1"
+    "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr-dev-v2-qualified-inputs-v1/lr1-2x4-fallback-v1"
 )
 RELOAD_PREPARED = PurePosixPath(
     "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr1-2x4-reload-dev-v1/prepared-v1"
 )
 SEAL = {
     "manifest": (
-        "/mnt/sfs/jobs/chris-q38-study-corpora-v1/"
-        "lr1-2x4-dev-v1-reload-v1/checkpoint-step-6.json"
+        "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr1-2x4-dev-v1-reload-v1/checkpoint-step-6.json"
     ),
     "sha256": "0cbdb07de2ffabc928ba8b443a59814266653d658f4190aa81f6d9801a6fbcd2",
     "mode": "validate",
@@ -64,12 +62,12 @@ def test_reload_binds_the_verified_seal_and_preserves_full_horizon() -> None:
         "seed": 42,
     }
     preparation = read(
-        ROOT
-        / "docs/evidence/qwen38-study/2026-09-12-lr1-2x4-dev-fallback-preparation-v1.json"
+        ROOT / "docs/evidence/qwen38-study/2026-09-12-lr1-2x4-dev-fallback-preparation-v1.json"
     )
     assert preparation["scientific_binding"]["expected_max_steps"] == 76
-    assert preparation["scientific_binding"]["expected_corpus_manifest_sha256"] == (
-        reload["data"]["manifest_sha256"]
+    assert (
+        preparation["scientific_binding"]["expected_corpus_manifest_sha256"]
+        == (reload["data"]["manifest_sha256"])
     )
 
 
@@ -102,9 +100,7 @@ def test_sft_request_rail_keeps_reload_non_requeueing() -> None:
         "output_root": "/mnt/sfs/jobs/reload",
         "runtime_sha256": hashlib.sha256(Path(sft_runtime.__file__).read_bytes()).hexdigest(),
         "recovery": {},
-        "recovery_runtime_sha256": hashlib.sha256(
-            Path(recovery.__file__).read_bytes()
-        ).hexdigest(),
+        "recovery_runtime_sha256": hashlib.sha256(Path(recovery.__file__).read_bytes()).hexdigest(),
         "wandb": {
             "entity": "thefleet",
             "project": "cyber-post-train",

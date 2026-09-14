@@ -20,10 +20,7 @@ DATA_DERIVE_V5 = (
 )
 RUN_V5 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-dev-v5.json"
 LAUNCH_V5 = ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-launch-dev-v5.json"
-DEV3_RETIRED = (
-    ROOT
-    / "docs/evidence/qwen38-study/2026-09-13-miles-rlreward-dev3-retired-v1.json"
-)
+DEV3_RETIRED = ROOT / "docs/evidence/qwen38-study/2026-09-13-miles-rlreward-dev3-retired-v1.json"
 TASK_SET = ROOT / "configs/data/qwen38-rl-reward-canary-task-set-v1.json"
 SPLIT = ROOT / "configs/data/qwen38-rl-reward-canary-split-v1.json"
 TOOLS = ROOT / "configs/data/qwen38-rl-filtered-canary-tool-catalog-v1.json"
@@ -266,12 +263,11 @@ def test_v5_reuses_accepted_dev4_data_but_has_fresh_run_identity() -> None:
         "configs/qualification/qwen38-miles-rl-reward-canary-data-derive-dev-v5.json"
     )
     assert launch["source"]["metadata_only_successor_of_accepted_dev4_data"] is True
-    assert launch["source"]["source_data_manifest_file_sha256"] == derivation[
-        "source_manifest_file_sha256"
-    ]
-    assert launch["source"]["source_data_manifest_sha256"] == derivation[
-        "source_manifest_sha256"
-    ]
+    assert (
+        launch["source"]["source_data_manifest_file_sha256"]
+        == derivation["source_manifest_file_sha256"]
+    )
+    assert launch["source"]["source_data_manifest_sha256"] == derivation["source_manifest_sha256"]
     assert launch["source"]["source_data_limits_sha256"] == (
         "sha256:3a2ed37ae738321b3c6bf616b92e06b6a809987033b931cb2dda8024624ff32b"
     )
@@ -307,15 +303,17 @@ def test_v5_reuses_accepted_dev4_data_but_has_fresh_run_identity() -> None:
     assert launch["supersedes"]["gpu_allocations"] == 0
     assert launch["supersedes"]["optimizer_updates"] == 0
     assert run_v5["name"] not in json.dumps([data_v4, run_v4])
-    assert "webexploitbench" not in (
-        DATA_DERIVE_V5.read_text() + RUN_V5.read_text() + LAUNCH_V5.read_text()
-    ).lower()
+    assert (
+        "webexploitbench"
+        not in (DATA_DERIVE_V5.read_text() + RUN_V5.read_text() + LAUNCH_V5.read_text()).lower()
+    )
 
 
 def test_dev3_retirement_is_append_only_and_proves_zero_execution() -> None:
-    queued, retired = load(
-        ROOT / "docs/evidence/qwen38-study/2026-09-12-miles-rlreward-dev3-queued-v1.json"
-    ), load(DEV3_RETIRED)
+    queued, retired = (
+        load(ROOT / "docs/evidence/qwen38-study/2026-09-12-miles-rlreward-dev3-queued-v1.json"),
+        load(DEV3_RETIRED),
+    )
 
     assert retired["recorded_at"] == "2026-09-13T07:40:23Z"
     assert retired["run"]["api_run_id"] == queued["run"]["api_run_id"]

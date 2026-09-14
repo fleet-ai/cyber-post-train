@@ -478,9 +478,7 @@ def test_export_runs_one_create_once_converter_pass(case: dict, monkeypatch) -> 
     assert result["source_equivalence"]["all_trained_values_match_source"] is True
 
 
-def test_post_job_inspection_never_materializes_dcp_values(
-    case: dict, monkeypatch
-) -> None:
+def test_post_job_inspection_never_materializes_dcp_values(case: dict, monkeypatch) -> None:
     """Controller/export/reload acceptance must stay within operator RAM."""
 
     result = _run(case)
@@ -504,18 +502,14 @@ def test_post_job_inspection_never_materializes_dcp_values(
 
     monkeypatch.setattr(export, "_source_value_inventory", forbidden)
     monkeypatch.setattr(export_job, "validate_plan", lambda *_args, **_kwargs: None)
-    reopened, _ = export_job._inspect_plan_bound_export(
-        plan, artifact_path, artifact_file_sha256
-    )
+    reopened, _ = export_job._inspect_plan_bound_export(plan, artifact_path, artifact_file_sha256)
     assert reopened == result
     changed_plan = {
         **plan,
         "source": {**plan["source"], "source_plan_sha256": "f" * 64},
     }
     with pytest.raises(ValueError, match="plan-bound source evidence"):
-        export_job._inspect_plan_bound_export(
-            changed_plan, artifact_path, artifact_file_sha256
-        )
+        export_job._inspect_plan_bound_export(changed_plan, artifact_path, artifact_file_sha256)
 
     monkeypatch.setattr(export, "_validate_reload_result", lambda _value: 1.0)
     monkeypatch.setattr(export, "_validate_controller", lambda *_args: 2.0)

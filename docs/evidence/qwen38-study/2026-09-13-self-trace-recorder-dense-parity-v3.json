@@ -22,7 +22,7 @@
     "rendered_request_contract_sha256": "sha256:35786456f710c8f572ecb0b8493a3c6116a9a1673a1e62e734d455b955aa94fb",
     "compaction": "disabled"
   },
-  "source_closure_sha256": "sha256:6f25bb2f2cca1b1d3d83bf928cb593089f40d091c9b025debc670b6e7def91d0",
+  "source_closure_sha256": "sha256:61efb1d12971759b374622574d22767cf379289bcd787cbd621eebda0ef7f331",
   "fixture_sha256": "sha256:381900510001aa240a7df0595b45d18a60c17027b296493f6a6951e6ffd41071",
   "native": {
     "prompt_tokens_sha256": "sha256:a615eeaee21de5179de080de8c3052c8da901138406ba71c38c032845f7d54f4",
@@ -63,5 +63,5 @@
     "tool_arguments_or_results_emitted": false,
     "flags_scores_or_credentials_emitted": false
   },
-  "sha256": "sha256:9ccf6dcb6b38bc44dd7192b5cf6ba9545a5cc6ba3664042c8c5d236f9702d5c1"
+  "sha256": "sha256:d022015a383fcf45e725261c593bd4861bae1257bbdc731cafb16084489973ed"
 }

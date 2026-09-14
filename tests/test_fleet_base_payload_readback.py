@@ -50,9 +50,15 @@ def test_probe_rehashes_complete_payload_without_exposing_bytes(tmp_path: Path) 
     assert receipt["payload"]["file_count"] == len(payloads)
     assert receipt["payload"]["total_bytes"] == sum(map(len, payloads.values()))
     assert receipt["scope"]["gpu_requests"] == 0
-    assert all(receipt["scope"][key] == 0 for key in (
-        "prompt_requests", "completion_requests", "scoring_requests", "task_or_grading_requests"
-    ))
+    assert all(
+        receipt["scope"][key] == 0
+        for key in (
+            "prompt_requests",
+            "completion_requests",
+            "scoring_requests",
+            "task_or_grading_requests",
+        )
+    )
     assert receipt["sha256"] == readback.digest_json(
         {key: value for key, value in receipt.items() if key != "sha256"}
     )

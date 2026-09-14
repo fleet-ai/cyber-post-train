@@ -49,9 +49,7 @@ def test_numeric_canaries_keep_their_historical_runtime_and_rejection_policy() -
         "sha256:14448fc710ceb6105f54fbb9558f3d42e7fc96a193ba593390cca3f33c7e3db8"
     )
     assert runtime["sha256"] != file_sha256(ROOT / runtime["path"])
-    assert runtime["implementation_commit"] == (
-        "699fa577e96180695dad00d85b152f5302964699"
-    )
+    assert runtime["implementation_commit"] == ("699fa577e96180695dad00d85b152f5302964699")
     assert runtime["numeric_rejection"] == {
         "schema": "cyber_sft_numeric_rejection_policy_v1",
         "reason_codes": ["nonfinite_loss", "nonfinite_gradient_norm"],
@@ -81,6 +79,4 @@ def test_numeric_canaries_require_exact_upstream_and_per_arm_bindings() -> None:
         assert current in (None, False)
 
     assert "one_create_once_POST_per_arm_after_review" in value["pre_submit_gates"]
-    assert "aggregate_active_study_node_count_rechecked_below_eight" in value[
-        "pre_submit_gates"
-    ]
+    assert "aggregate_active_study_node_count_rechecked_below_eight" in value["pre_submit_gates"]

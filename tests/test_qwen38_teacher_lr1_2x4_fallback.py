@@ -14,19 +14,13 @@ from training.sft_runtime import optimizer_schedule
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "configs/qualification/qwen38-teacher-lr1-cosine-layout-dev-v2.json"
-FALLBACK = (
-    ROOT / "configs/qualification/qwen38-teacher-lr1-cosine-2x4-dev-fallback-v1.json"
-)
-CADENCE_CONFIG = (
-    ROOT / "configs/qualification/qwen38-teacher-checkpoint-cadence-dev-v1.json"
-)
+FALLBACK = ROOT / "configs/qualification/qwen38-teacher-lr1-cosine-2x4-dev-fallback-v1.json"
+CADENCE_CONFIG = ROOT / "configs/qualification/qwen38-teacher-checkpoint-cadence-dev-v1.json"
 CADENCE_EVIDENCE = (
-    ROOT
-    / "docs/evidence/qwen38-study/2026-09-12-checkpoint-cadence-reload-dev-v1.json"
+    ROOT / "docs/evidence/qwen38-study/2026-09-12-checkpoint-cadence-reload-dev-v1.json"
 )
 PREPARATION_EVIDENCE = (
-    ROOT
-    / "docs/evidence/qwen38-study/2026-09-12-lr1-2x4-dev-fallback-preparation-v1.json"
+    ROOT / "docs/evidence/qwen38-study/2026-09-12-lr1-2x4-dev-fallback-preparation-v1.json"
 )
 
 
@@ -131,9 +125,7 @@ def test_preparation_evidence_is_self_digesting_and_binds_source_and_cadence() -
         "full_terminal_provenance_complete": cadence["accepted_scope"][
             "full_terminal_provenance_complete"
         ],
-        "source_zero_restarts_verified": cadence["accepted_scope"][
-            "source_zero_restarts_verified"
-        ],
+        "source_zero_restarts_verified": cadence["accepted_scope"]["source_zero_restarts_verified"],
         "production_training_authorized": cadence["accepted_scope"][
             "production_training_authorized"
         ],

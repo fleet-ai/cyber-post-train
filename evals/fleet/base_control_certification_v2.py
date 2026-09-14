@@ -259,8 +259,7 @@ def validate_route_component(
         or execution.get("restart_count") != 0
         or execution.get("gpu_requests") != 0
         or not isinstance(execution_image, str)
-        or execution_image.split("@", 1)[-1]
-        != candidate["runtime"]["serving_image_digest"]
+        or execution_image.split("@", 1)[-1] != candidate["runtime"]["serving_image_digest"]
         or execution.get("deleted") is not True
         or execution.get("absence_confirmed") is not True
     ):
@@ -324,8 +323,7 @@ def validate_harness_partial(
         not isinstance(fixed, dict)
         or fixed.get("requested_image") != proxy["requested_image"]
         or not isinstance(observed_image, str)
-        or observed_image.split("@", 1)[-1]
-        != proxy["requested_image"].split("@", 1)[-1]
+        or observed_image.split("@", 1)[-1] != proxy["requested_image"].split("@", 1)[-1]
         or fixed.get("pod_uid") != proxy["helper"]["pod_uid"]
         or fixed.get("proxy_source_sha256") != proxy["proxy_source_sha256"]
         or fixed.get("server_dry_run_passed") is not True
@@ -352,10 +350,9 @@ def validate_harness_partial(
         raise ValueError("agent publication plan reference is incomplete")
     publication_path = root / reference["path"]
     publication = _read(publication_path)
-    if (
-        reference["file_sha256"] != file_sha256(publication_path)
-        or reference["sha256"] != publication.get("sha256")
-    ):
+    if reference["file_sha256"] != file_sha256(publication_path) or reference[
+        "sha256"
+    ] != publication.get("sha256"):
         raise ValueError("agent publication plan bytes or digest changed")
     validate_agent_publication_plan(publication, root=root)
     if harness.get("scope") != {
