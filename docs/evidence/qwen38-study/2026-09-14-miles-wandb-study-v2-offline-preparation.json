@@ -18,11 +18,11 @@
     },
     "v2_wandb_adapter": {
       "path": "training/miles_wandb.py",
-      "file_sha256": "sha256:dd2bfad800e5e56e22ef0f2eb8ac05b215e1bc831f22f252286245004f59e9e5"
+      "file_sha256": "sha256:b36cf92ec0a647e442067a1c9759979941fb4b1686836e98a855cd4e8014469b"
     },
     "v2_compiler_runtime": {
       "path": "training/miles_study_training.py",
-      "file_sha256": "sha256:0997709a114b41d79d44f890dbcab06ef867515e385f80c9fc52c211f6e91b4a"
+      "file_sha256": "sha256:81a6e7330c505df874b938e2fde28231cf7b5e00defa3816a841e3f10b28b96f"
     },
     "v2_inert_template": {
       "path": "configs/qualification/qwen38-miles-wandb-study-dev-v9.template.json",
@@ -30,7 +30,7 @@
     },
     "v2_tests": {
       "path": "tests/test_qwen38_miles_wandb_study_v2.py",
-      "file_sha256": "sha256:e09b2d47260acbd606ffe55ebc0606e4d749c367e18507b3cd9ef2581a013bdc"
+      "file_sha256": "sha256:e14b77bac88ed36f978efe3c51e3b16dba14969b92ebefaa3d98982530ada2b6"
     },
     "dev8_config_unchanged": {
       "path": "configs/qualification/qwen38-miles-rl-reward-canary-dev-v8.json",
@@ -112,5 +112,5 @@
     "pytest": "pytest -q tests/test_qwen38_miles_wandb_study_v2.py tests/test_qwen38_wandb_training_contract_audit.py",
     "pytest_result": "15 passed"
   },
-  "sha256": "sha256:a08c38785bc7599a23a816ee64fa4381acc9d0cc543718b2b50d69907550c05c"
+  "sha256": "sha256:77d0b3dca5b8e4424d91624e16f42d6d4690b063bee71ae212e6bafb9cf579f0"
 }

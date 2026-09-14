@@ -9,10 +9,7 @@ from training.io import digest_json, file_sha256
 from training.sft_runtime import OUTCOME_WANDB_HISTORY_KEYS
 
 ROOT = Path(__file__).resolve().parents[1]
-AUDIT = (
-    ROOT
-    / "docs/evidence/qwen38-study/2026-09-14-wandb-training-contract-audit-v1.json"
-)
+AUDIT = ROOT / "docs/evidence/qwen38-study/2026-09-14-wandb-training-contract-audit-v1.json"
 
 
 def load(path: Path) -> dict:
@@ -70,12 +67,9 @@ def test_sft_contract_has_one_scalar_schema_and_two_explicit_step_axes() -> None
 
 
 def test_sft_arm_identities_are_unique_and_comparison_groups_are_explicit() -> None:
-    lr30 = load(
-        ROOT / "configs/qualification/qwen38-teacher-lr30-step6-resume-to76-dev-v1.json"
-    )
+    lr30 = load(ROOT / "configs/qualification/qwen38-teacher-lr30-step6-resume-to76-dev-v1.json")
     lr100 = load(
-        ROOT
-        / "configs/qualification/qwen38-teacher-lr100-step21-resume-to76-dev-v1.template.json"
+        ROOT / "configs/qualification/qwen38-teacher-lr100-step21-resume-to76-dev-v1.template.json"
     )
     lr100_source = load(ROOT / lr100["source"]["config"]["path"])
     replacements = lr100["materialization"]["source_config_transform"]["replace"]
@@ -110,12 +104,8 @@ def test_sft_arm_identities_are_unique_and_comparison_groups_are_explicit() -> N
 
 
 def test_miles_contract_is_unique_scalar_only_but_not_yet_grouped_for_a_series() -> None:
-    config = load(
-        ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-dev-v8.json"
-    )
-    launch = load(
-        ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-launch-dev-v8.json"
-    )
+    config = load(ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-dev-v8.json")
+    launch = load(ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-launch-dev-v8.json")
     wandb = config["wandb"]
     assert wandb == {
         "entity": "thefleet",
@@ -159,12 +149,10 @@ def test_no_prepared_arm_is_safe_after_auth_alone_and_wbe_cannot_select_training
         assert arms[name]["status"] == "unsafe_not_launchable"
     assert audit["conclusion"]["external_benchmark_selection_excluded"] is True
     lr30 = load(
-        ROOT
-        / "configs/qualification/qwen38-teacher-lr30-step6-resume-to76-dev-v1.template.json"
+        ROOT / "configs/qualification/qwen38-teacher-lr30-step6-resume-to76-dev-v1.template.json"
     )
     lr100 = load(
-        ROOT
-        / "configs/qualification/qwen38-teacher-lr100-step21-resume-to76-dev-v1.template.json"
+        ROOT / "configs/qualification/qwen38-teacher-lr100-step21-resume-to76-dev-v1.template.json"
     )
     for arm in (lr30, lr100):
         assert arm["selection_evaluation"]["training_loss_selection_eligible"] is False

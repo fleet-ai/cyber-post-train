@@ -15,8 +15,7 @@ from training.io import digest_json, file_sha256
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "configs/qualification/qwen38-miles-wandb-study-dev-v9.template.json"
 EVIDENCE = (
-    ROOT
-    / "docs/evidence/qwen38-study/2026-09-14-miles-wandb-study-v2-offline-preparation.json"
+    ROOT / "docs/evidence/qwen38-study/2026-09-14-miles-wandb-study-v2-offline-preparation.json"
 )
 
 
@@ -54,9 +53,7 @@ def synthetic_wandb() -> dict:
 
 
 def contract() -> dict:
-    return miles_wandb.build_contract(
-        synthetic_wandb(), synthetic_plan(), "sha256:" + "d" * 64
-    )
+    return miles_wandb.build_contract(synthetic_wandb(), synthetic_plan(), "sha256:" + "d" * 64)
 
 
 def test_inert_template_preserves_dev8_and_lists_all_fresh_gates() -> None:
@@ -70,9 +67,7 @@ def test_inert_template_preserves_dev8_and_lists_all_fresh_gates() -> None:
         if isinstance(binding, dict):
             assert file_sha256(ROOT / binding["path"]) == binding["file_sha256"]
     assert all(item is None for item in value["blocked_bindings"].values())
-    assert value["future_identity"]["wandb"]["group"] != value["future_identity"][
-        "wandb"
-    ]["run_id"]
+    assert value["future_identity"]["wandb"]["group"] != value["future_identity"]["wandb"]["run_id"]
     assert "no_production_launch_from_this_template" in value["prohibitions"]
 
 
@@ -161,12 +156,8 @@ def test_additive_compiler_binds_full_plan_digest_into_portable_request(
         "compile_rl",
         lambda _config, relative_to: json.loads(json.dumps(base)),
     )
-    monkeypatch.setattr(
-        miles_study_training.v1, "job_request", lambda _plan: legacy_request
-    )
-    plan = miles_study_training.compile_rl(
-        {"wandb": synthetic_wandb()}, relative_to=tmp_path
-    )
+    monkeypatch.setattr(miles_study_training.v1, "job_request", lambda _plan: legacy_request)
+    plan = miles_study_training.compile_rl({"wandb": synthetic_wandb()}, relative_to=tmp_path)
     request = miles_study_training.job_request(plan)
     assert plan["schema"] == miles_study_training.SCHEMA
     assert plan["wandb"] == synthetic_wandb()
@@ -274,8 +265,7 @@ def test_adapter_rejects_nonfinite_public_scalars(monkeypatch) -> None:
 def test_v2_is_additive_and_dev8_runtime_sources_are_unchanged() -> None:
     audit = json.loads(
         (
-            ROOT
-            / "docs/evidence/qwen38-study/2026-09-14-wandb-training-contract-audit-v1.json"
+            ROOT / "docs/evidence/qwen38-study/2026-09-14-wandb-training-contract-audit-v1.json"
         ).read_bytes()
     )
     for key in ("miles_arguments", "miles_compiler", "miles_acceptance"):
@@ -284,6 +274,4 @@ def test_v2_is_additive_and_dev8_runtime_sources_are_unchanged() -> None:
     source = (ROOT / "training/miles_study_training.py").read_text()
     assert '"WANDB_RESUME": "never"' in (ROOT / "training/miles_wandb.py").read_text()
     assert '"worker_process_setup_hook": "training.miles_wandb.install_worker"' in source
-    assert "training/miles_wandb.py" not in (
-        ROOT / "training/miles_training.py"
-    ).read_text()
+    assert "training/miles_wandb.py" not in (ROOT / "training/miles_training.py").read_text()

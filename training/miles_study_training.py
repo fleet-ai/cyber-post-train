@@ -46,9 +46,7 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
     if not isinstance(wandb, dict):
         raise ValueError("W&B study contract is required")
     legacy = copy.deepcopy(config)
-    legacy["wandb"] = {
-        key: wandb[key] for key in ("entity", "project", "run_id")
-    }
+    legacy["wandb"] = {key: wandb[key] for key in ("entity", "project", "run_id")}
     plan = v1.compile_rl(legacy, relative_to=relative_to)
     plan["schema"] = SCHEMA
     plan["wandb"] = wandb
@@ -66,9 +64,7 @@ def job_request(plan: dict) -> dict:
     ):
         raise ValueError("Miles study plan/runtime/cluster drift")
     legacy_request = v1.job_request(_legacy_plan(plan))
-    contract = miles_wandb.build_contract(
-        plan["wandb"], plan, "sha256:" + digest(plan)
-    )
+    contract = miles_wandb.build_contract(plan["wandb"], plan, "sha256:" + digest(plan))
     files = _runtime()
     files.update(
         {
@@ -115,9 +111,7 @@ def native_source():
 
 def native_args(plan: dict):
     args = v1.native_args(_legacy_plan(plan))
-    contract = miles_wandb.build_contract(
-        plan["wandb"], plan, "sha256:" + digest(plan)
-    )
+    contract = miles_wandb.build_contract(plan["wandb"], plan, "sha256:" + digest(plan))
     args.wandb_group = contract["group"]
     args.wandb_run_id = contract["run_id"]
     return args
@@ -125,9 +119,7 @@ def native_args(plan: dict):
 
 def preflight(plan: dict) -> dict:
     legacy = v1.preflight(_legacy_plan(plan))
-    contract = miles_wandb.build_contract(
-        plan["wandb"], plan, "sha256:" + digest(plan)
-    )
+    contract = miles_wandb.build_contract(plan["wandb"], plan, "sha256:" + digest(plan))
     return {
         **legacy,
         "schema": "cyber_miles_training_cpu_preflight_v2",
@@ -149,9 +141,7 @@ def _native(plan: dict) -> None:
     validate_embedded_promotion(plan, check_files=False)
     check_artifacts(plan)
     args = native_args(plan)
-    contract = miles_wandb.build_contract(
-        plan["wandb"], plan, "sha256:" + digest(plan)
-    )
+    contract = miles_wandb.build_contract(plan["wandb"], plan, "sha256:" + digest(plan))
     miles_wandb.install(contract)
     source = native_source()
     spec = importlib.util.spec_from_file_location("cyber_native_miles_train", source)

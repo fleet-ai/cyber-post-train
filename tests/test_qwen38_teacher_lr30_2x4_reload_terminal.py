@@ -8,10 +8,7 @@ from pathlib import Path
 from training.io import digest_json, file_sha256
 
 ROOT = Path(__file__).resolve().parents[1]
-EVIDENCE = (
-    ROOT
-    / "docs/evidence/qwen38-study/2026-09-14-lr30-2x4-reload-terminal-v1.json"
-)
+EVIDENCE = ROOT / "docs/evidence/qwen38-study/2026-09-14-lr30-2x4-reload-terminal-v1.json"
 CONFIG = ROOT / "configs/qualification/qwen38-teacher-lr30-cosine-2x4-reload-dev-v1.json"
 
 

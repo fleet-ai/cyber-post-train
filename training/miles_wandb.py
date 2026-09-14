@@ -110,9 +110,7 @@ def request_env(contract: dict) -> dict[str, str]:
         "WANDB_DISABLE_GIT": "true",
         "WANDB_CONSOLE": "off",
         "WANDB__DISABLE_STATS": "true",
-        "CYBER_EXPERIMENT_PLAN_SHA256": contract["public_config"][
-            "experiment_plan_sha256"
-        ],
+        "CYBER_EXPERIMENT_PLAN_SHA256": contract["public_config"]["experiment_plan_sha256"],
         "CYBER_WANDB_CONTRACT_SHA256": contract["sha256"],
     }
 
@@ -188,9 +186,7 @@ def install_worker() -> None:
 
 def worker_env(contract: dict) -> dict[str, str]:
     value = request_env(contract)
-    value["CYBER_WANDB_CONTRACT_JSON"] = json.dumps(
-        contract, sort_keys=True, separators=(",", ":")
-    )
+    value["CYBER_WANDB_CONTRACT_JSON"] = json.dumps(contract, sort_keys=True, separators=(",", ":"))
     return value
 
 
