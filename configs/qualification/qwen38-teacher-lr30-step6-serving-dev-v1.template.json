@@ -1,0 +1,27 @@
+{
+  "schema": "cyber_sft_serving_dev_config_v1",
+  "name": "chris-q38-lr30-s6-serve-dev1",
+  "output_root": "/mnt/sfs/jobs/chris-q38-lr30-s6-serving-dev-v1",
+  "base_registration": {
+    "path": null,
+    "file_sha256": "sha256:43e586e505887e00251362e580a8cf8f0fe8b4c303d6447f7d0839a134db35d0"
+  },
+  "export": {
+    "path": "/mnt/sfs/jobs/chris-q38-lr30-2x4-dev-v3/hf-export-step6-v1/EXPORT.json",
+    "file_sha256": null
+  },
+  "gpu_check": {
+    "path": "/mnt/sfs/jobs/chris-q38-lr30-s6-hfcheck-v1/GPU_CHECK.json",
+    "file_sha256": null
+  },
+  "dev_sfs": {
+    "namespace": "fleet-train-jobs",
+    "pvc_name": null,
+    "pvc_uid": null,
+    "mount_root": "/mnt/sfs"
+  },
+  "cluster": {
+    "target": "dev",
+    "priority": "c1"
+  }
+}
