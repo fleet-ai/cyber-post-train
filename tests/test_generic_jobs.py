@@ -5,6 +5,7 @@ from pathlib import Path
 import httpx
 import pytest
 import yaml
+from click import unstyle
 from typer.testing import CliRunner
 
 from cyber_post_train import cli
@@ -750,7 +751,7 @@ def test_cli_rejects_unknown_cluster_before_client_creation(monkeypatch, command
     monkeypatch.setattr(cli, "Jobs", lambda *args, **kwargs: calls.append(args))
     result = CliRunner().invoke(cli.app, [command, "unused", "--cluster", cluster])
     assert result.exit_code == 2 and calls == []
-    assert "Invalid value for '--cluster'" in result.output
+    assert "Invalid value for '--cluster'" in unstyle(result.output)
 
 
 def test_exhaustive_pagination():

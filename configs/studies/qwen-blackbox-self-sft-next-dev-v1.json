@@ -14,8 +14,8 @@
   "source_audit": {
     "current_direct_collection_request": {
       "path": "configs/qualification/qwen38-self-trace-collection-request-v3.json",
-      "file_sha256": "sha256:32f4163fe9f86b05eb9ca80e14635ff9b1ed1902d87a4530aa5d75ccbe29a8d6",
-      "embedded_sha256": "sha256:4d169f4f62ee1759e9288453e26fb2ad7720d9d30a2e434cd1045caeef2d777d",
+      "file_sha256": "sha256:ba17ab244ee2e0d2227dd76c369a459f235f5cc62a002418df7e0470a94aa921",
+      "embedded_sha256": "sha256:71afdefed1f1b7cfaeb0924eae7b71d5fce78e22bbf45f3aec659cedd7ae4f8f",
       "status": "blocked_external_bindings",
       "attempt_roster": {
         "train_union_task_versions": 74,
@@ -124,7 +124,7 @@
   "prepared_templates": {
     "reviewed_index": {
       "path": "configs/qualification/qwen38-self-trace-index-a-v2.template.json",
-      "file_sha256": "sha256:83068cef4dc2a856016903ddfa049aad10af8f1213bfefbea8734f7553b6d554",
+      "file_sha256": "sha256:716f707c6ff7e876049a626386d0782f978dd2c5484294aa7f6ca651f242bfb1",
       "episodes": 0,
       "materializable": false
     },
@@ -251,5 +251,5 @@
     "private_prompts_or_traces_read": false,
     "credentials_used": false
   },
-  "sha256": "sha256:6ee5b58929ca8eb73b8740aa8fdb52bf3e011c3a3a42dd2d46c79a4f83345913"
+  "sha256": "sha256:75bb1e1dc551b37298cc18419236680e7c1b7136ae130ec93cfef5d9d0d1ff91"
 }

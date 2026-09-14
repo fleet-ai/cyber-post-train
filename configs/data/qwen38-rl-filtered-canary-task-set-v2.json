@@ -9,8 +9,8 @@
     "parent_task_set_file_sha256": "sha256:f4cf7cbe9e0dca9e8b5cf620127093d0f53baf86778d629682fba7111c90e6f0",
     "parent_task_set_self_sha256": "sha256:8672a1bcb7073ee93d30c6cbc5b6a140d21571c8b58fc6100d7007a6f2e56a9e",
     "reward_prior_path": "qwen38-rl-reward-canary-exact-version-evidence-v1.json",
-    "reward_prior_file_sha256": "sha256:fd93e1e2c59ec139c5734ea532d7e20b36db9708b0257ed4cab8d97a89e6e0e1",
-    "reward_prior_self_sha256": "sha256:a6a7547fc363d8a02ea49cdbb59a8c526a9fb439297b03191a4f638f5a284c96"
+    "reward_prior_file_sha256": "sha256:9d363d89bfa57a8a68e462f6b5bb9ba5fe81e88d61067d707efe526c5d74d896",
+    "reward_prior_self_sha256": "sha256:741ed34dff0644a63f558378ffb1f569bb40dc803090ed123bdab0a919ff9042"
   },
   "tasks": [
     {
@@ -40,5 +40,5 @@
       }
     }
   ],
-  "sha256": "sha256:5d562cd8c98f3a870006e4e2fb5d52e9f35e9ffd9a23a4fbf3fd1a9aa5a6e308"
+  "sha256": "sha256:697304e7ea8d01c680f8c35d7ae317a1380724ee69e396e24b41394eaab6016c"
 }

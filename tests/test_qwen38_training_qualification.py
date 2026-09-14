@@ -296,7 +296,7 @@ def test_reward_canary_has_exact_successors_long_horizon_and_no_test_leakage() -
     assert canary["title"] == "chris-cyber-qwen38-27b-native-rl-reward-canary-v1"
     assert canary["trainer"]["trainer_version_id"] is None
     assert canary_ids == [
-        "c99340e2-3801-5c3c-a50c-3b96cee4572f",
+        "54425601-6fd2-43d8-8cb9-e565b767676a",
         "ab5f2956-9fbb-54fb-afd8-67fe11402fa4",
     ]
     assert test_ids.isdisjoint(canary_ids)

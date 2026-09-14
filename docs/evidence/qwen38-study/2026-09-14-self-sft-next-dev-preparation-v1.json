@@ -5,8 +5,8 @@
   "scope": "Read only checked-in sanitized metadata, code and prior evidence; prepare inert successor templates for one Qwen3.8 direct self-trace SFT dev canary.",
   "audit": {
     "current_direct_source": {
-      "collection_request_file_sha256": "sha256:32f4163fe9f86b05eb9ca80e14635ff9b1ed1902d87a4530aa5d75ccbe29a8d6",
-      "collection_request_embedded_sha256": "sha256:4d169f4f62ee1759e9288453e26fb2ad7720d9d30a2e434cd1045caeef2d777d",
+      "collection_request_file_sha256": "sha256:ba17ab244ee2e0d2227dd76c369a459f235f5cc62a002418df7e0470a94aa921",
+      "collection_request_embedded_sha256": "sha256:71afdefed1f1b7cfaeb0924eae7b71d5fce78e22bbf45f3aec659cedd7ae4f8f",
       "accepted_index_exists": false,
       "accepted_corpus_exists": false,
       "reason": "Collector qualification, a fresh direct-route certificate and reviewed create-once orchestration are absent."
@@ -44,12 +44,12 @@
   "prepared_files": {
     "study": {
       "path": "configs/studies/qwen-blackbox-self-sft-next-dev-v1.json",
-      "file_sha256": "sha256:3f939d72999804a026b032106dad7542219b70da12646d82f2783d18c60093cf",
-      "embedded_sha256": "sha256:6ee5b58929ca8eb73b8740aa8fdb52bf3e011c3a3a42dd2d46c79a4f83345913"
+      "file_sha256": "sha256:8ed83de0a64a4c0d6cd41f90fda79339bdd68114e866c2e3ca89ceb224bb7e9d",
+      "embedded_sha256": "sha256:75bb1e1dc551b37298cc18419236680e7c1b7136ae130ec93cfef5d9d0d1ff91"
     },
     "index_template": {
       "path": "configs/qualification/qwen38-self-trace-index-a-v2.template.json",
-      "file_sha256": "sha256:83068cef4dc2a856016903ddfa049aad10af8f1213bfefbea8734f7553b6d554"
+      "file_sha256": "sha256:716f707c6ff7e876049a626386d0782f978dd2c5484294aa7f6ca651f242bfb1"
     },
     "corpus_template": {
       "path": "configs/qualification/qwen38-self-trace-corpus-a-v2.template.json",
@@ -106,5 +106,5 @@
     "private_prompts_traces_answers_flags_or_scores_read": false,
     "credentials_used": false
   },
-  "sha256": "sha256:b3bd592cf7a02005e10796f08d54bcb5b12ef67a879c6ad39e1d3b2b9a33af16"
+  "sha256": "sha256:532759874f728ca14f9abcdb8edba410d1c544aa8d16d0137a2970979926f8a8"
 }

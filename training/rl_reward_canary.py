@@ -24,10 +24,10 @@ SPLIT_PATH = "configs/data/qwen38-rl-reward-canary-split-v1.json"
 EXACT_VERSION_EVIDENCE_PATH = "configs/data/qwen38-rl-reward-canary-exact-version-evidence-v1.json"
 SOURCE_IDENTITY = {
     "task_set_file_sha256": (
-        "sha256:14a514e92c8922b42c5a88bfe031062f8b6b9a87adc31d825b4844e44ce11fe4"
+        "sha256:a1e32877cc6b4565a32acad245945685084ea3de9a97af6555c0b3e17baa9cd9"
     ),
     "task_set_self_sha256": (
-        "sha256:2d66f88325900d234ad26ef61930d4a5f7597ce96f54bca45bd05a2ed201b35d"
+        "sha256:15400d5e58c53c8c2258c826c39aa5545b14d1705bece3d927d09d38de76b157"
     ),
     "split_file_sha256": (
         "sha256:c3a34993a932c2b29e2c70f45682ce03ee02d03a9c4493edbab45eb349cb64fa"
@@ -36,10 +36,10 @@ SOURCE_IDENTITY = {
         "sha256:8279ea19808ad1accb00d3f3145c3ec087030677786e0188251cfc197f306adf"
     ),
     "exact_version_evidence_file_sha256": (
-        "sha256:fd93e1e2c59ec139c5734ea532d7e20b36db9708b0257ed4cab8d97a89e6e0e1"
+        "sha256:9d363d89bfa57a8a68e462f6b5bb9ba5fe81e88d61067d707efe526c5d74d896"
     ),
     "exact_version_evidence_self_sha256": (
-        "sha256:a6a7547fc363d8a02ea49cdbb59a8c526a9fb439297b03191a4f638f5a284c96"
+        "sha256:741ed34dff0644a63f558378ffb1f569bb40dc803090ed123bdab0a919ff9042"
     ),
     # The source package authorizes the direct selection; the successor package
     # proves why the non-current clone is rejected instead of treated as equal.
@@ -65,7 +65,7 @@ SOURCE_IDENTITY = {
         "sha256:f0c327d2ecc464610a5fd86e11b112870d28feb43d9155d7507d8fedbd87632b"
     ),
     "episode_runtime_file_sha256": (
-        "sha256:e0a821e98e32e32330ffe4c1b37b63c583fa3bc534b709efc710b0d77fe86569"
+        "sha256:b7f3e9e2ef426e931f5eb8a07abadf4dedcfc9f84b66f61985fd1388ce7f261f"
     ),
     "fleet_binding_file_sha256": (
         "sha256:b28e267d02024ac979f4a0f39ee778e68331da490f5084c3e5a34136eff04707"

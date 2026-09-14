@@ -14,7 +14,7 @@
   "bound_files": {
     "wandb_contract_audit": {
       "path": "docs/evidence/qwen38-study/2026-09-14-wandb-training-contract-audit-v1.json",
-      "file_sha256": "sha256:f5ce4fe97e3f7cfa9801f09204fa3c92c8a66b4896366139cef774ebb6d643eb"
+      "file_sha256": "sha256:bf51be212e8991a5c031745d03e4be07eab5132a6c7eacf61ee21701c2bff442"
     },
     "v2_wandb_adapter": {
       "path": "training/miles_wandb.py",
@@ -42,7 +42,7 @@
     },
     "dev8_arguments_source_unchanged": {
       "path": "training/miles.py",
-      "file_sha256": "sha256:6b81894c81f7610e1af394a3d0a84304462a01eb056d8810cdcc72918ffe8b21"
+      "file_sha256": "sha256:394f3e2f8a99ad0beba7a9a6bd339fc457bd69944a6ae443cf482da3cd0ae8f8"
     },
     "dev8_compiler_source_unchanged": {
       "path": "training/miles_training.py",
@@ -50,7 +50,7 @@
     },
     "dev8_acceptance_source_unchanged": {
       "path": "training/miles_acceptance.py",
-      "file_sha256": "sha256:3524e9e3e7c6b52bee46adf0ebbd62c71efe175df40ff9bcec82d8e2696834d1"
+      "file_sha256": "sha256:fe1584084f4c2ae873cb3e7a8a11d69b37e577c3f2ab41e56169e5896a201709"
     }
   },
   "runtime_contract": {
@@ -112,5 +112,5 @@
     "pytest": "pytest -q tests/test_qwen38_miles_wandb_study_v2.py tests/test_qwen38_wandb_training_contract_audit.py",
     "pytest_result": "15 passed"
   },
-  "sha256": "sha256:77d0b3dca5b8e4424d91624e16f42d6d4690b063bee71ae212e6bafb9cf579f0"
+  "sha256": "sha256:1982bd00cebeab7553871ed62a2d83c97699518bc7e7257284143ac5b713a1fa"
 }
