@@ -182,6 +182,28 @@ ENGINE_DIAGNOSTIC_PROD2_PREPARED_ROOT = (
 ENGINE_DIAGNOSTIC_PROD2_CONFIG_SHA256 = (
     "f5602c336f98dd772e0e26009fa8c8902bc2e4a67ba17e211ff9e88b5649109b"
 )
+ENGINE_DIAGNOSTIC_PROD2_CONFIG_PATH = (
+    "qwen38-rl-filtered-skyrl-engine-diagnostic-prod-v2.json"
+)
+ENGINE_DIAGNOSTIC_PROD2_CONFIG_FILE_SHA256 = (
+    "sha256:d366a6d4e576af3edc2c046a3d72db3712b443e0cfa4e2a252f2c38ceb81b9ba"
+)
+ENGINE_DIAGNOSTIC_PROD2_TERMINAL_PATH = (
+    "/mnt/sfs/jobs/chris-q38-rldiag-prod2/ENGINE_DIAGNOSTIC.json"
+)
+ENGINE_DIAGNOSTIC_PROD2_TERMINAL_FILE_SHA256 = (
+    "sha256:c11f209b4afa96428b147cdc767e158393cafc35e395377cb905ab6baca1ae73"
+)
+ENGINE_DIAGNOSTIC_PROD2_QUALIFICATION_PATH = (
+    "../../docs/evidence/qwen38-study/"
+    "2026-09-14-skyrl-prod2-engine-qualification-v1.json"
+)
+ENGINE_DIAGNOSTIC_PROD2_QUALIFICATION_FILE_SHA256 = (
+    "sha256:072544d61e934045ab0fb8ee4192f094027a155fef5865cd2453793d23fce63d"
+)
+ENGINE_DIAGNOSTIC_PROD2_QUALIFICATION_SELF_SHA256 = (
+    "sha256:68aca88b88f629a307cd83aac1ec6a39dba948bcf265c886e69b6046e6263db6"
+)
 VLLM_SAMPLER_ENV = {"VLLM_USE_FLASHINFER_SAMPLER": "0"}
 ENGINE_DIAGNOSTIC_MODEL_SHA256 = "dcfdcd6ecb6661741cd3a4b24dc5af7259642c8a6824773e0de70d55d7501179"
 ENGINE_DIAGNOSTIC_DATA_IDENTITY = {
@@ -1458,18 +1480,151 @@ def _compile_exact_engine_diagnostic(config, *, relative_to):
     return plan, engine_diagnostic_request(plan)
 
 
+def _validate_prod2_terminal_receipt(receipt: object) -> None:
+    if not isinstance(receipt, dict):
+        raise ValueError("prod2 engine receipt is not an object")
+    sealed(receipt, ENGINE_DIAGNOSTIC_SCHEMA)
+    cleanup = receipt.get("cleanup")
+    output = receipt.get("output_postconditions")
+    if (
+        receipt.get("plan_sha256")
+        != "9f332dd6cdde4b8ec8d3f7f456fcd71f5954068857a354459232f61a85f0f1d9"
+        or receipt.get("status") != "passed"
+        or receipt.get("startup_phase") != "complete"
+        or receipt.get("engine_start_state") != "all"
+        or receipt.get("engine_started") is not True
+        or receipt.get("diagnostic_completed") is not True
+        or receipt.get("engine_start_qualified") is not True
+        or receipt.get("training_qualified") is not False
+        or receipt.get("production_training_shape_qualified") is not False
+        or receipt.get("runtime_user") != {"uid": 1000, "gid": 100}
+        or any(
+            not _exact_integer(receipt.get(key), expected)
+            for key, expected in (
+                ("diagnostic_workers", 2),
+                ("diagnostic_gpus_per_worker", 4),
+                ("diagnostic_total_gpus", 8),
+                ("num_engines", 2),
+                ("tensor_parallel_size", 4),
+                ("ray_gpu_nodes_expected", 2),
+                ("ray_gpu_nodes_discovered", 2),
+                ("ray_gpu_nodes_probed", 2),
+                ("ray_actor_environment_probes_passed", 2),
+                ("ray_actor_environment_probe_failures", 0),
+                ("ray_actor_nonempty_scrubbed_credentials", 0),
+                ("router_start_attempts", 1),
+                ("router_environment_probes_passed", 1),
+                ("router_environment_probe_failures", 0),
+                ("task_rows_read", 0),
+                ("rollouts", 0),
+                ("verifier_calls", 0),
+                ("optimizer_steps", 0),
+                ("checkpoints_created", 0),
+                ("registry_actors_created", 0),
+            )
+        )
+        or receipt.get("checkpoint_created") is not False
+        or receipt.get("wandb_initialized") is not False
+        or receipt.get("credential_environment_isolation_proven") is not True
+        or receipt.get("ray_actor_environment_isolation_proven") is not True
+        or receipt.get("router_child_credential_environment_isolation") != "proven"
+        or not isinstance(cleanup, dict)
+        or cleanup.get("cleanup_proven") is not True
+        or not _exact_integer(cleanup.get("active_owned_actors"), 0)
+        or not _exact_integer(cleanup.get("active_owned_placement_groups"), 0)
+        or not isinstance(output, dict)
+        or output
+        != {
+            "checkpoint_artifacts": 0,
+            "episode_artifacts": 0,
+            "runtime_files_unchanged": True,
+            "task_artifacts": 0,
+            "unexpected_output_artifacts": 0,
+        }
+    ):
+        raise ValueError("prod2 receipt does not prove an accepted zero-work engine start")
+
+
+def _validate_prod2_qualification(value: object, receipt: dict) -> None:
+    if not isinstance(value, dict):
+        raise ValueError("prod2 engine qualification is not an object")
+    sealed(value, "cyber_skyrl_engine_qualification_v2")
+    cluster = value.get("cluster")
+    inputs = value.get("inputs")
+    run = value.get("run")
+    pods = value.get("pods")
+    observed = value.get("receipt")
+    release = value.get("release")
+    if (
+        value.get("status") != "accepted"
+        or value.get("sha256") != ENGINE_DIAGNOSTIC_PROD2_QUALIFICATION_SELF_SHA256
+        or cluster
+        != {
+            "name": "prod",
+            "api_base_url": API_URLS["prod"],
+            "kubernetes_context": PROD_KUBERNETES_CONTEXT,
+            "namespace": PROD_KUBERNETES_NAMESPACE,
+            "namespace_uid": "fd6d2fcd-687a-4257-9dba-a034bb381e6b",
+        }
+        or not isinstance(inputs, dict)
+        or inputs.get("config_path")
+        != "configs/qualification/" + ENGINE_DIAGNOSTIC_PROD2_CONFIG_PATH
+        or inputs.get("config_file_sha256") != ENGINE_DIAGNOSTIC_PROD2_CONFIG_FILE_SHA256
+        or inputs.get("config_sha256") != ENGINE_DIAGNOSTIC_PROD2_CONFIG_SHA256
+        or inputs.get("plan_sha256") != receipt.get("plan_sha256")
+        or inputs.get("request_sha256")
+        != "30f4a71e5edcdceb519b9ef1270c32de1558ec1067253121ccb7aba419dfe967"
+        or inputs.get("image") != IMAGE
+        or inputs.get("priority") != "c1"
+        or not _exact_integer(inputs.get("workers"), 2)
+        or not _exact_integer(inputs.get("gpus_per_worker"), 4)
+        or not isinstance(run, dict)
+        or run.get("api_run_name") != "chris-q38-rldiag-prod2-b2f5b01c"
+        or run.get("api_run_id") != "b2f5b01c-ef1b-4fc1-ae2b-c49f2c004f2a"
+        or run.get("rayjob_uid") != "6dc6f8b5-7ecb-406f-b63d-124624624b2c"
+        or run.get("workload_uid") != "ce4add52-5c26-4e56-a3fb-0114d86d75f5"
+        or run.get("raycluster_uid") != "26da88a9-a91a-4f18-ac55-518af37e5747"
+        or run.get("api_status") != "SUCCEEDED"
+        or run.get("kubernetes_status") != "SUCCEEDED"
+        or not isinstance(pods, list)
+        or len(pods) != 2
+        or [pod.get("uid") for pod in pods]
+        != [
+            "11d789aa-09db-43b6-9ff6-3dc61752973b",
+            "96f1013e-6019-414c-8472-03656775c350",
+        ]
+        or any(
+            not isinstance(pod, dict)
+            or pod.get("image") != IMAGE
+            or not _exact_integer(pod.get("gpus"), 4)
+            or not _exact_integer(pod.get("container_restarts"), 0)
+            for pod in pods
+        )
+        or not isinstance(observed, dict)
+        or observed.get("path") != ENGINE_DIAGNOSTIC_PROD2_TERMINAL_PATH
+        or observed.get("file_sha256") != ENGINE_DIAGNOSTIC_PROD2_TERMINAL_FILE_SHA256
+        or observed.get("self_sha256") != receipt.get("sha256")
+        or observed.get("status") != "passed"
+        or observed.get("engine_start_qualified") is not True
+        or not isinstance(release, dict)
+        or release.get("workload_finished") is not True
+        or release.get("raycluster_absent") is not True
+        or release.get("pod_uids_absent") != [pod["uid"] for pod in pods]
+        or not _exact_integer(release.get("active_gpus"), 0)
+        or release.get("gpu_release_proven") is not True
+        or value.get("scope")
+        != "Engine startup and resource release only; this is not reward, optimizer, "
+        "checkpoint, or RL acceptance."
+    ):
+        raise ValueError("prod2 engine qualification binding changed")
+
+
 def _accepted_engine_diagnostic(prerequisites, config, *, relative_to):
-    """Bind a successful zero-work dev diagnostic before a real reward run."""
+    """Bind the successful zero-work engine qualification before real reward."""
     if not isinstance(prerequisites, dict) or set(prerequisites) != {"engine_diagnostic"}:
         raise ValueError("exact accepted engine diagnostic prerequisite required")
     gate = prerequisites["engine_diagnostic"]
-    fields = {
-        "config_path",
-        "config_file_sha256",
-        "terminal_receipt_path",
-        "terminal_receipt_file_sha256",
-    }
-    if not isinstance(gate, dict) or set(gate) != fields:
+    if not isinstance(gate, dict):
         raise ValueError("engine diagnostic prerequisite schema changed")
     if (
         gate.get("config_path") == ENGINE_DIAGNOSTIC_CONFIG_PATH
@@ -1477,7 +1632,7 @@ def _accepted_engine_diagnostic(prerequisites, config, *, relative_to):
     ):
         raise ValueError(
             "terminal dev8 is historical and privacy-disqualified; an exact accepted "
-            "dev11 terminal receipt is required"
+            "prod2 terminal receipt is required"
         )
     if (
         gate.get("config_path") == ENGINE_DIAGNOSTIC_SUCCESSOR_CONFIG_PATH
@@ -1489,40 +1644,107 @@ def _accepted_engine_diagnostic(prerequisites, config, *, relative_to):
         or gate.get("config_file_sha256") == ENGINE_DIAGNOSTIC_REJECTED_CONFIG_FILE_SHA256
     ):
         raise ValueError("terminal rejected dev10 engine diagnostic cannot be promoted")
-    if (
-        gate.get("config_path") != ENGINE_DIAGNOSTIC_CURRENT_CONFIG_PATH
-        or gate.get("config_file_sha256") != ENGINE_DIAGNOSTIC_CURRENT_CONFIG_FILE_SHA256
-    ):
-        raise ValueError("exact accepted dev11 engine diagnostic prerequisite is not bound")
+    fields = {
+        "config_path",
+        "config_file_sha256",
+        "terminal_receipt_path",
+        "terminal_receipt_file_sha256",
+        "qualification_path",
+        "qualification_file_sha256",
+        "qualification_self_sha256",
+    }
+    if set(gate) != fields:
+        raise ValueError("engine diagnostic prerequisite schema changed")
+    expected = {
+        "config_path": ENGINE_DIAGNOSTIC_PROD2_CONFIG_PATH,
+        "config_file_sha256": ENGINE_DIAGNOSTIC_PROD2_CONFIG_FILE_SHA256,
+        "terminal_receipt_path": ENGINE_DIAGNOSTIC_PROD2_TERMINAL_PATH,
+        "terminal_receipt_file_sha256": ENGINE_DIAGNOSTIC_PROD2_TERMINAL_FILE_SHA256,
+        "qualification_path": ENGINE_DIAGNOSTIC_PROD2_QUALIFICATION_PATH,
+        "qualification_file_sha256": ENGINE_DIAGNOSTIC_PROD2_QUALIFICATION_FILE_SHA256,
+        "qualification_self_sha256": ENGINE_DIAGNOSTIC_PROD2_QUALIFICATION_SELF_SHA256,
+    }
+    if gate != expected:
+        raise ValueError("exact accepted prod2 engine diagnostic prerequisite is not bound")
     diagnostic_path = relative_to / gate["config_path"]
-    if not diagnostic_path.is_file() or diagnostic_path.is_symlink():
-        raise ValueError("exact engine diagnostic config is unavailable")
     diagnostic_payload, diagnostic_file_sha256 = _snapshot(diagnostic_path)
     if diagnostic_file_sha256 != gate.get("config_file_sha256"):
         raise ValueError("engine diagnostic config digest mismatch")
     diagnostic = json.loads(diagnostic_payload)
-    recipe = diagnostic.get("recipe", {})
     if (
-        diagnostic.get("backend") != "skyrl"
-        or diagnostic.get("name") != ENGINE_DIAGNOSTIC_CURRENT_CONFIG_NAME
-        or diagnostic.get("output_root") != ENGINE_DIAGNOSTIC_CURRENT_OUTPUT_ROOT
+        not is_prod_engine_diagnostic_config(diagnostic)
         or diagnostic.get("model") != config.get("model")
-        or diagnostic.get("cluster", {}).get("target") != "dev"
-        or diagnostic.get("cluster", {}).get("priority") != "c1"
-        or {key: recipe.get(key) for key in ("nodes", "steps", "groups", "samples_per_prompt")}
-        != {"nodes": 1, "steps": 1, "groups": 2, "samples_per_prompt": 4}
-        or recipe.get("engine_start_timeout_seconds", 1800) != 1800
-        or recipe.get("engine_cleanup_timeout_seconds", 300) != 300
     ):
-        raise ValueError("engine diagnostic is not the exact dev11 zero-work shape")
+        raise ValueError("engine diagnostic is not the exact accepted prod2 zero-work shape")
 
-    receipt_name, receipt_sha = (
-        gate.get("terminal_receipt_path"),
-        gate.get("terminal_receipt_file_sha256"),
+    terminal_payload, terminal_file_sha256 = _snapshot(Path(gate["terminal_receipt_path"]))
+    if terminal_file_sha256 != gate["terminal_receipt_file_sha256"]:
+        raise ValueError("prod2 terminal receipt digest mismatch")
+    terminal = json.loads(terminal_payload)
+    _validate_prod2_terminal_receipt(terminal)
+
+    qualification_payload, qualification_file_sha256 = _snapshot(
+        relative_to / gate["qualification_path"]
     )
-    if not isinstance(receipt_name, str) or not isinstance(receipt_sha, str):
-        raise ValueError("exact accepted dev11 terminal receipt is not bound")
-    raise ValueError("exact dev11 terminal acceptance bindings are not frozen yet")
+    if qualification_file_sha256 != gate["qualification_file_sha256"]:
+        raise ValueError("prod2 qualification file digest mismatch")
+    qualification = json.loads(qualification_payload)
+    _validate_prod2_qualification(qualification, terminal)
+
+    proof = {
+        "schema": "cyber_skyrl_engine_prerequisite_v2",
+        "status": "accepted",
+        **expected,
+        "terminal_receipt_self_sha256": terminal["sha256"],
+        "terminal_receipt": terminal,
+        "qualification": qualification,
+    }
+    proof["sha256"] = "sha256:" + digest(proof)
+    return proof
+
+
+def _validate_embedded_prod2_prerequisite(proof: dict) -> None:
+    fields = {
+        "schema",
+        "status",
+        "config_path",
+        "config_file_sha256",
+        "terminal_receipt_path",
+        "terminal_receipt_file_sha256",
+        "qualification_path",
+        "qualification_file_sha256",
+        "qualification_self_sha256",
+        "terminal_receipt_self_sha256",
+        "terminal_receipt",
+        "qualification",
+        "sha256",
+    }
+    if (
+        set(proof) != fields
+        or proof.get("status") != "accepted"
+        or proof.get("config_path") != ENGINE_DIAGNOSTIC_PROD2_CONFIG_PATH
+        or proof.get("config_file_sha256") != ENGINE_DIAGNOSTIC_PROD2_CONFIG_FILE_SHA256
+        or proof.get("terminal_receipt_path") != ENGINE_DIAGNOSTIC_PROD2_TERMINAL_PATH
+        or proof.get("terminal_receipt_file_sha256")
+        != ENGINE_DIAGNOSTIC_PROD2_TERMINAL_FILE_SHA256
+        or proof.get("qualification_path") != ENGINE_DIAGNOSTIC_PROD2_QUALIFICATION_PATH
+        or proof.get("qualification_file_sha256")
+        != ENGINE_DIAGNOSTIC_PROD2_QUALIFICATION_FILE_SHA256
+        or proof.get("qualification_self_sha256")
+        != ENGINE_DIAGNOSTIC_PROD2_QUALIFICATION_SELF_SHA256
+        or proof.get("sha256")
+        != "sha256:" + digest({key: value for key, value in proof.items() if key != "sha256"})
+    ):
+        raise ValueError("embedded prod2 engine prerequisite changed")
+    terminal = proof.get("terminal_receipt")
+    qualification = proof.get("qualification")
+    _validate_prod2_terminal_receipt(terminal)
+    _validate_prod2_qualification(qualification, terminal)
+    if (
+        proof.get("terminal_receipt_self_sha256") != terminal.get("sha256")
+        or proof.get("qualification_self_sha256") != qualification.get("sha256")
+    ):
+        raise ValueError("embedded prod2 engine prerequisite changed")
 
 
 def _validate_embedded_engine_prerequisite(proof, *, required=False):
@@ -1536,7 +1758,7 @@ def _validate_embedded_engine_prerequisite(proof, *, required=False):
     ):
         raise ValueError(
             "terminal dev8 prerequisite is historical and privacy-disqualified; "
-            "an exact accepted dev11 terminal receipt is required"
+            "an exact accepted prod2 terminal receipt is required"
         )
     if isinstance(proof, dict) and (
         proof.get("config_path") == ENGINE_DIAGNOSTIC_SUCCESSOR_CONFIG_PATH
@@ -1548,6 +1770,9 @@ def _validate_embedded_engine_prerequisite(proof, *, required=False):
         or proof.get("config_file_sha256") == ENGINE_DIAGNOSTIC_REJECTED_CONFIG_FILE_SHA256
     ):
         raise ValueError("terminal rejected dev10 engine prerequisite cannot be replayed")
+    if isinstance(proof, dict) and proof.get("schema") == "cyber_skyrl_engine_prerequisite_v2":
+        _validate_embedded_prod2_prerequisite(proof)
+        return
     fields = {
         "schema",
         "status",

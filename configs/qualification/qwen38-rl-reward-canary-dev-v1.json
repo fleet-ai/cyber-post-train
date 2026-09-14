@@ -13,10 +13,13 @@
   },
   "prerequisites": {
     "engine_diagnostic": {
-      "config_path": "qwen38-rl-filtered-skyrl-engine-diagnostic-dev-v9.json",
-      "config_file_sha256": "sha256:6b17e668cde7eaded5bb5df5a010568702f8260d2c4f71e61cb9396383515538",
-      "terminal_receipt_path": null,
-      "terminal_receipt_file_sha256": null
+      "config_path": "qwen38-rl-filtered-skyrl-engine-diagnostic-prod-v2.json",
+      "config_file_sha256": "sha256:d366a6d4e576af3edc2c046a3d72db3712b443e0cfa4e2a252f2c38ceb81b9ba",
+      "terminal_receipt_path": "/mnt/sfs/jobs/chris-q38-rldiag-prod2/ENGINE_DIAGNOSTIC.json",
+      "terminal_receipt_file_sha256": "sha256:c11f209b4afa96428b147cdc767e158393cafc35e395377cb905ab6baca1ae73",
+      "qualification_path": "../../docs/evidence/qwen38-study/2026-09-14-skyrl-prod2-engine-qualification-v1.json",
+      "qualification_file_sha256": "sha256:072544d61e934045ab0fb8ee4192f094027a155fef5865cd2453793d23fce63d",
+      "qualification_self_sha256": "sha256:68aca88b88f629a307cd83aac1ec6a39dba948bcf265c886e69b6046e6263db6"
     }
   },
   "recipe": {

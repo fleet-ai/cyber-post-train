@@ -30,7 +30,12 @@ DEV8_DATA = ROOT / (
     "configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-data-dev-v8.json"
 )
 DEV8_RUN = ROOT / ("configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-dev-v8.json")
-DEV9_RUN = ROOT / ("configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-dev-v9.json")
+PROD2_RUN = ROOT / (
+    "configs/qualification/qwen38-rl-filtered-skyrl-engine-diagnostic-prod-v2.json"
+)
+PROD2_QUALIFICATION = ROOT / (
+    "docs/evidence/qwen38-study/2026-09-14-skyrl-prod2-engine-qualification-v1.json"
+)
 SUCCESSOR_EVIDENCE = ROOT / (
     "configs/runs/qwen36-27b-native-rl-reward-acquisition-canary.pre-submit.json"
 )
@@ -373,17 +378,128 @@ def test_real_canary_is_one_dev_only_update_with_durable_evidence() -> None:
     assert data["output"] != dev8_data["output"]
     assert run["output_root"] != dev8_run["output_root"]
     gate = run["prerequisites"]["engine_diagnostic"]
-    assert gate["config_path"] == DEV9_RUN.name
+    assert gate["config_path"] == PROD2_RUN.name
     assert gate["config_file_sha256"] == (
-        "sha256:" + hashlib.sha256(DEV9_RUN.read_bytes()).hexdigest()
+        "sha256:" + hashlib.sha256(PROD2_RUN.read_bytes()).hexdigest()
     )
-    assert gate["terminal_receipt_path"] is gate["terminal_receipt_file_sha256"] is None
-    with pytest.raises(ValueError, match="terminal dev9 engine diagnostic cannot be promoted"):
-        skyrl_training._accepted_engine_diagnostic(
-            run["prerequisites"], run, relative_to=RUN.parent
-        )
-    with pytest.raises(ValueError, match="terminal dev9 engine diagnostic cannot be promoted"):
-        skyrl_training.compile_rl(run, relative_to=RUN.parent)
+    assert gate["terminal_receipt_path"] == skyrl_training.ENGINE_DIAGNOSTIC_PROD2_TERMINAL_PATH
+    assert gate["terminal_receipt_file_sha256"] == (
+        skyrl_training.ENGINE_DIAGNOSTIC_PROD2_TERMINAL_FILE_SHA256
+    )
+    assert gate["qualification_file_sha256"] == (
+        "sha256:" + hashlib.sha256(PROD2_QUALIFICATION.read_bytes()).hexdigest()
+    )
+    qualification = load(PROD2_QUALIFICATION)
+    assert_self_digest(qualification)
+    assert gate["qualification_self_sha256"] == qualification["sha256"]
+
+
+def _synthetic_prod2_receipt() -> dict:
+    receipt = {
+        "schema": skyrl_training.ENGINE_DIAGNOSTIC_SCHEMA,
+        "plan_sha256": "9f332dd6cdde4b8ec8d3f7f456fcd71f5954068857a354459232f61a85f0f1d9",
+        "status": "passed",
+        "startup_phase": "complete",
+        "engine_start_state": "all",
+        "engine_started": True,
+        "diagnostic_completed": True,
+        "engine_start_qualified": True,
+        "training_qualified": False,
+        "production_training_shape_qualified": False,
+        "runtime_user": {"uid": 1000, "gid": 100},
+        "diagnostic_workers": 2,
+        "diagnostic_gpus_per_worker": 4,
+        "diagnostic_total_gpus": 8,
+        "num_engines": 2,
+        "tensor_parallel_size": 4,
+        "ray_gpu_nodes_expected": 2,
+        "ray_gpu_nodes_discovered": 2,
+        "ray_gpu_nodes_probed": 2,
+        "ray_actor_environment_probes_passed": 2,
+        "ray_actor_environment_probe_failures": 0,
+        "ray_actor_nonempty_scrubbed_credentials": 0,
+        "router_start_attempts": 1,
+        "router_environment_probes_passed": 1,
+        "router_environment_probe_failures": 0,
+        "task_rows_read": 0,
+        "rollouts": 0,
+        "verifier_calls": 0,
+        "optimizer_steps": 0,
+        "checkpoints_created": 0,
+        "registry_actors_created": 0,
+        "checkpoint_created": False,
+        "wandb_initialized": False,
+        "credential_environment_isolation_proven": True,
+        "ray_actor_environment_isolation_proven": True,
+        "router_child_credential_environment_isolation": "proven",
+        "cleanup": {
+            "cleanup_proven": True,
+            "active_owned_actors": 0,
+            "active_owned_placement_groups": 0,
+        },
+        "output_postconditions": {
+            "checkpoint_artifacts": 0,
+            "episode_artifacts": 0,
+            "runtime_files_unchanged": True,
+            "task_artifacts": 0,
+            "unexpected_output_artifacts": 0,
+        },
+    }
+    receipt["sha256"] = digest(receipt)
+    return receipt
+
+
+def test_prod2_prerequisite_reopens_terminal_and_release_proofs(monkeypatch) -> None:
+    receipt = _synthetic_prod2_receipt()
+    qualification = load(PROD2_QUALIFICATION)
+    qualification["receipt"]["self_sha256"] = receipt["sha256"]
+    qualification["sha256"] = "sha256:" + digest(
+        {key: value for key, value in qualification.items() if key != "sha256"}
+    )
+    monkeypatch.setattr(
+        skyrl_training,
+        "ENGINE_DIAGNOSTIC_PROD2_QUALIFICATION_SELF_SHA256",
+        qualification["sha256"],
+    )
+
+    skyrl_training._validate_prod2_terminal_receipt(receipt)
+    skyrl_training._validate_prod2_qualification(qualification, receipt)
+    proof = {
+        "schema": "cyber_skyrl_engine_prerequisite_v2",
+        "status": "accepted",
+        "config_path": skyrl_training.ENGINE_DIAGNOSTIC_PROD2_CONFIG_PATH,
+        "config_file_sha256": skyrl_training.ENGINE_DIAGNOSTIC_PROD2_CONFIG_FILE_SHA256,
+        "terminal_receipt_path": skyrl_training.ENGINE_DIAGNOSTIC_PROD2_TERMINAL_PATH,
+        "terminal_receipt_file_sha256": (
+            skyrl_training.ENGINE_DIAGNOSTIC_PROD2_TERMINAL_FILE_SHA256
+        ),
+        "qualification_path": skyrl_training.ENGINE_DIAGNOSTIC_PROD2_QUALIFICATION_PATH,
+        "qualification_file_sha256": (
+            skyrl_training.ENGINE_DIAGNOSTIC_PROD2_QUALIFICATION_FILE_SHA256
+        ),
+        "qualification_self_sha256": qualification["sha256"],
+        "terminal_receipt_self_sha256": receipt["sha256"],
+        "terminal_receipt": receipt,
+        "qualification": qualification,
+    }
+    proof["sha256"] = "sha256:" + digest(proof)
+    skyrl_training._validate_embedded_engine_prerequisite(proof, required=True)
+
+    changed = deepcopy(proof)
+    changed["terminal_receipt"]["optimizer_steps"] = 1
+    changed["terminal_receipt"]["sha256"] = digest(
+        {
+            key: value
+            for key, value in changed["terminal_receipt"].items()
+            if key != "sha256"
+        }
+    )
+    changed["terminal_receipt_self_sha256"] = changed["terminal_receipt"]["sha256"]
+    changed["sha256"] = "sha256:" + digest(
+        {key: value for key, value in changed.items() if key != "sha256"}
+    )
+    with pytest.raises(ValueError, match="accepted zero-work engine start"):
+        skyrl_training._validate_embedded_engine_prerequisite(changed, required=True)
 
 
 def test_canary_prerequisite_is_bound_to_data_identity_not_run_name(skyrl_prepared) -> None:
