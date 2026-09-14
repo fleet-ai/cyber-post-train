@@ -50,6 +50,7 @@ _MILES_HF_PLAN_SCHEMAS = frozenset(
 )
 _MILES_SERVING_DEV_PLAN_SCHEMA = "cyber_miles_serving_dev_plan_v1"
 _SFT_SERVING_DEV_PLAN_SCHEMA = "cyber_sft_serving_dev_plan_v1"
+_MILES_PARSER_PROBE_SCHEMA = "cyber_miles_native_parser_probe_v1"
 _SERVING_DEV_PLAN_SCHEMAS = frozenset(
     {_MILES_SERVING_DEV_PLAN_SCHEMA, _SFT_SERVING_DEV_PLAN_SCHEMA}
 )
@@ -104,6 +105,12 @@ def _prepared(directory: Path) -> tuple[dict, dict]:
         validate_plan(plan, check_files=False)
         if request != job_request(plan, check_files=False):
             raise ValueError("prepared serving canary differs from its immutable plan")
+    elif plan.get("schema") == _MILES_PARSER_PROBE_SCHEMA:
+        from training.miles_parser_probe import job_request, validate_plan
+
+        validate_plan(plan)
+        if request != job_request(plan):
+            raise ValueError("prepared parser probe differs from its immutable plan")
     else:
         validate_request(request)
     return plan, request
@@ -860,6 +867,8 @@ def preflight(directory: Path) -> None:
             from training.miles_hf_export_job import preflight as check
         elif plan.get("schema") in _SERVING_DEV_PLAN_SCHEMAS:
             from training.miles_serving_dev import preflight as check
+        elif plan.get("schema") == _MILES_PARSER_PROBE_SCHEMA:
+            from training.miles_parser_probe import preflight as check
         elif plan.get("schema") == "cyber_skyrl_training_v1":
             if _skyrl_mode(plan, request) == "engine_diagnostic":
                 from training.skyrl_training import engine_diagnostic_preflight as check
@@ -899,6 +908,8 @@ def preview(
             raise JobsError("SkyRL RL reload validators are dev-cluster-only")
         if plan.get("schema") in _SERVING_DEV_PLAN_SCHEMAS and cluster != Cluster.dev:
             raise JobsError("serving qualification is dev-cluster-only")
+        if plan.get("schema") == _MILES_PARSER_PROBE_SCHEMA and cluster != Cluster.dev:
+            raise JobsError("Miles parser probes are dev-cluster-only")
         _require_prepared_cluster(plan, cluster)
         with _client(cluster) as client:
             result = client.preview(request)
@@ -964,6 +975,8 @@ def submit(
             raise JobsError("SkyRL RL reload validators are dev-cluster-only")
         if plan.get("schema") in _SERVING_DEV_PLAN_SCHEMAS and cluster != Cluster.dev:
             raise JobsError("serving qualification is dev-cluster-only")
+        if plan.get("schema") == _MILES_PARSER_PROBE_SCHEMA and cluster != Cluster.dev:
+            raise JobsError("Miles parser probes are dev-cluster-only")
         _require_prepared_cluster(plan, cluster)
         proof = _read(directory / "PREFLIGHT.json")
         expected = {
@@ -971,6 +984,8 @@ def submit(
             if plan.get("schema") == "cyber_miles_conversion_v1"
             else "cyber_miles_training_cpu_preflight_v1"
             if plan.get("schema") == "cyber_miles_training_v1"
+            else "cyber_miles_native_parser_probe_cpu_preflight_v1"
+            if plan.get("schema") == _MILES_PARSER_PROBE_SCHEMA
             else "cyber_miles_rl_reload_cpu_preflight_v1"
             if plan.get("schema") == "cyber_miles_rl_reload_v1"
             else (
@@ -1008,6 +1023,7 @@ def submit(
         submission_journal = directory / "SUBMISSION.jsonl"
         if cluster == Cluster.dev and (
             plan.get("schema") == "cyber_miles_training_v1"
+            or plan.get("schema") == _MILES_PARSER_PROBE_SCHEMA
             or plan.get("schema") in _SERVING_DEV_PLAN_SCHEMAS
         ):
             # A preserved intent always wins over a fresh capacity observation.
@@ -1093,6 +1109,41 @@ def miles_convert(config: Path, output: Annotated[Path, typer.Option("--output")
         plan = compile_conversion(read_mapping(config), relative_to=config.resolve().parent)
         _prepare(output, plan, job_request(plan))
         _print({"prepared": str(output), "optimizer_steps": 0, "gpus": 8, "submitted": False})
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("miles-parser-probe")
+def miles_parser_probe(
+    source_plan: Path,
+    name: Annotated[str, typer.Option("--name")],
+    output_root: Annotated[str, typer.Option("--output-root")],
+    output: Annotated[Path, typer.Option("--output")],
+) -> None:
+    """Prepare one dev-only, one-GPU native Miles parser check; no training."""
+    from training.io import file_sha256
+    from training.miles_parser_probe import compile_probe, job_request
+
+    try:
+        source = _read(source_plan)
+        plan = compile_probe(
+            source,
+            source_file_sha256=file_sha256(source_plan),
+            name=name,
+            output_root=output_root,
+        )
+        request = job_request(plan)
+        _prepare(output, plan, request)
+        _print(
+            {
+                "prepared": str(output),
+                "cluster": "dev",
+                "gpus": 1,
+                "optimizer_steps": 0,
+                "rollouts": 0,
+                "submitted": False,
+            }
+        )
     except Exception as exc:
         _fail(exc)
 
