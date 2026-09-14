@@ -1,0 +1,83 @@
+{
+  "schema": "cyber_qwen38_lr100_checkpoint_pair_verification_v1",
+  "recorded_at": "2026-09-14T18:05:05Z",
+  "classification": "accepted_read_only_checkpoint_pair_integrity_gate",
+  "source": {
+    "run_name": "chris-q38-ta8-lr100-dev-v2",
+    "source_plan_sha256": "sha256:f42894e871ee3ec2204e435cdf240d2641706f4d151bd4484b56edcf6716ada3",
+    "world_size": 8,
+    "layout": {
+      "workers": 1,
+      "gpus_per_worker": 8
+    }
+  },
+  "verifier": {
+    "cluster": "dev",
+    "namespace": "fleet-train-jobs",
+    "name": "chris-q38-lr100-seal-verify-v2",
+    "uid": "6cddc7db-f710-485c-81c1-f01604c04d39",
+    "manifest": "configs/qualification/qwen38-teacher-lr100-step20-step21-seal-verify-dev-v2.pod.yaml",
+    "manifest_file_sha256": "sha256:d6350873b37b706accb4da4b335efd7aadcc072bdf500e01333ac3e1790d87b6",
+    "requested_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "resolved_image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "node": "computeinstance-e04z8h89sgpw7kq06z",
+    "started_at": "2026-09-14T17:53:30Z",
+    "finished_at": "2026-09-14T18:05:05Z",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "termination_reason": "Completed",
+    "restart_count": 0,
+    "gpus": 0,
+    "sfs_read_only": true,
+    "deleted_at": "2026-09-14T18:06:07Z",
+    "deleted_with_uid_precondition": true,
+    "absence_verified": true
+  },
+  "checkpoint_pair": [
+    {
+      "optimizer_step": 20,
+      "checkpoint_path": "/mnt/sfs/jobs/chris-q38-ta8-lr100-dev-v2/checkpoints/global_step_20",
+      "manifest_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-dev-v2-checkpoint-seals-v1/step-20.json",
+      "manifest_file_sha256": "sha256:f74ea4f34c40737ac730789da6cccbdae8795564db6e1374b8341aacf3b1d031",
+      "manifest_receipt_sha256": "sha256:54216c0e2a506f39b5437101e604e87c3e753adccf84ecdc937ac0c6177f89b8",
+      "verified_files": 33,
+      "verified_bytes": 324627486731,
+      "full_source_rehash": true,
+      "mismatch_count": 0
+    },
+    {
+      "optimizer_step": 21,
+      "checkpoint_path": "/mnt/sfs/jobs/chris-q38-ta8-lr100-dev-v2/checkpoints/global_step_21",
+      "manifest_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-dev-v2-checkpoint-seals-v1/step-21.json",
+      "manifest_file_sha256": "sha256:9c16171d68be65475da725a6bad381ec1cdcaf7b882f41cbc04da0c96e5e3280",
+      "manifest_receipt_sha256": "sha256:b82fd516e2e3c4bffa99d9cae718e6caaba4d7b9d1679885c41676ef3d754fa0",
+      "verified_files": 33,
+      "verified_bytes": 324627486731,
+      "full_source_rehash": true,
+      "mismatch_count": 0
+    }
+  ],
+  "verifier_proof": {
+    "schema": "cyber_qwen38_lr100_checkpoint_pair_verifier_result_v1",
+    "receipt_sha256": "sha256:5e2939ec0cd977af47c4ff71a9b64815723d9f16307bb8226114a346b736a61b",
+    "self_digest_valid": true,
+    "same_source_plan": true,
+    "raw_tensor_values_read": false
+  },
+  "acceptance": {
+    "both_checkpoints_fully_rehashed": true,
+    "total_verified_files": 66,
+    "total_verified_bytes": 649254973462,
+    "mismatch_count": 0,
+    "step21_reload_gate_open": true,
+    "step21_checkpoint_accepted_as_model_quality_evidence": false,
+    "production_authorization_added": false
+  },
+  "privacy": {
+    "prompts_traces_flags_answers_or_scores_recorded": false,
+    "credentials_recorded": false,
+    "raw_tensor_values_recorded": false,
+    "private_logs_recorded": false
+  },
+  "sha256": "sha256:83eb27e94a76f468b14d2486acfa3953c3c75b204c9aa5f8ca5a672df332cd3f"
+}

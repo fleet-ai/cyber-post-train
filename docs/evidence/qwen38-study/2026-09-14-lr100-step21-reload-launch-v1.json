@@ -1,0 +1,120 @@
+{
+  "schema": "cyber_qwen38_lr100_step21_reload_launch_v1",
+  "recorded_at": "2026-09-14T18:17:24Z",
+  "classification": "submitted_queued_operational_reload_gate",
+  "checkpoint_pair_gate": {
+    "path": "docs/evidence/qwen38-study/2026-09-14-lr100-dev-checkpoint-pair-verification-v1.json",
+    "file_sha256": "sha256:25eec2936710bf10261a815934c456e48691adcdb1134285a707b5a7e44a697a",
+    "receipt_sha256": "sha256:83eb27e94a76f468b14d2486acfa3953c3c75b204c9aa5f8ca5a672df332cd3f",
+    "step21_manifest_file_sha256": "sha256:9c16171d68be65475da725a6bad381ec1cdcaf7b882f41cbc04da0c96e5e3280",
+    "full_source_rehash": true,
+    "mismatch_count": 0
+  },
+  "offline_correction": {
+    "caught_before_gpu_or_jobs_api_submission": true,
+    "invalid_template_identity": "chris-q38-ta8-lr100-step21-reload-dev-v1",
+    "invalid_identity_length": 40,
+    "supported_maximum_length": 31,
+    "corrected_identity": "chris-q38-lr100-r21-v1",
+    "corrected_identity_length": 22,
+    "changed_fields": [
+      "name",
+      "output_root",
+      "wandb.run_id",
+      "wandb.name"
+    ],
+    "model_data_recipe_and_recovery_unchanged": true,
+    "retired_partial_staging_root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-step21-reload-dev-v1",
+    "retired_partial_staging_root_has_no_prepared_run": true,
+    "retired_partial_staging_root_must_not_be_reused": true
+  },
+  "prepared": {
+    "config_path": "configs/qualification/qwen38-teacher-lr100-cosine-1x8-step21-reload-dev-v1.json",
+    "config_file_sha256": "sha256:93388a1176867d8c9f21d8b9874671221c54b6ea0e411665fc651ed3c5b9eb2d",
+    "root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-r21-v1-stage-v2/prepared",
+    "wheel_sha256": "sha256:5d10b58abd8ce8489c826cff7ef763a28309b8705aa08ee8df4ef26326fd8525",
+    "plan_file_sha256": "sha256:5c06283d8b10be3341d3157855e44884ba268bcd455f79172c12dac593c5a196",
+    "plan_sha256": "sha256:5e8447c956696084b6d2dd7c2d1437a5249f0d62c508bc0d64f960c45d0eeb0e",
+    "request_file_sha256": "sha256:65221f7d3e3e59792e0497fc00a1728d932a5f42ae0779d62f2b4ad7ccbffde3",
+    "request_sha256": "sha256:54a5de4a554863b9a5ff902f02ba1149c348a22ddf53638d72fc45984ad4d381",
+    "prepared_receipt_file_sha256": "sha256:0b5039264ef89b4422e4e7b2a1770fa783eab7f966c1f06a2e7029655ff9124e"
+  },
+  "cpu_preflight": {
+    "schema": "cyber_sft_cpu_preflight_v1",
+    "status": "passed",
+    "gpus": 0,
+    "receipt_sha256": "sha256:93fac4992ef1a3dc46b8e31e35d71bd9d1b8246a9301cfd79743acbae72a7242",
+    "file_sha256": "sha256:edb8ca357925c2d34eb89d54b1283347ca6b4ed1eae721a0de782eb61a0a10c6",
+    "train_rows": 602,
+    "train_tasks": 29,
+    "supervised_tokens": 700359,
+    "checked": [
+      "native_sources",
+      "model_files",
+      "dataset_files",
+      "native_config",
+      "tokenization",
+      "target_accounting"
+    ]
+  },
+  "live_gates": {
+    "cluster": "dev",
+    "jobs_api_base": "https://api.ft.dev.flt.build",
+    "kubernetes_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+    "namespace": "fleet-train-jobs",
+    "authenticated_preview_passed": true,
+    "preview_manifest_sha256": "sha256:aa658a7eeec2eca9880b33599f6226f38eb40c9ea04cf48e9240d49aab82db54",
+    "preview_nodes": 1,
+    "preview_gpus": 8,
+    "priority_class": "c1",
+    "effective_priority": 10000,
+    "requeue_if_preempted": false,
+    "shutdown_after_job_finishes": true,
+    "wandb_identity_present": false,
+    "jobs_api_duplicate_count": 0,
+    "kubernetes_duplicate_count": 0,
+    "output_present": false,
+    "submission_journal_present_before_post": false,
+    "active_owned_gpu_nodes_before_post": 0,
+    "requested_nodes": 1,
+    "active_node_cap": 8,
+    "within_active_node_cap": true
+  },
+  "submission": {
+    "jobs_api_post_calls": 1,
+    "journal_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-r21-v1-stage-v2/prepared/SUBMISSION.jsonl",
+    "journal_file_sha256": "sha256:a072e5ab24bb71bd22f942b23631595ee22ca19ffd7b586b368693883d021f55",
+    "journal_states": [
+      "POST_INTENT_DO_NOT_RETRY",
+      "POST_RESPONSE"
+    ],
+    "api_name": "chris-q38-lr100-r21-v1-e85027fb",
+    "api_job_id": null,
+    "rayjob_uid": "8dbd9e40-fb04-4ad1-a4b8-a5eaf6914511",
+    "workload_name": "rayjob-chris-q38-lr100-r21-v1-e85027fb-52b9e",
+    "workload_uid": "6733a410-c45f-4aef-97f1-8f345066e7c0",
+    "created_at": "2026-09-14T18:17:24Z",
+    "state": "queued_without_allocation",
+    "gpus_held": 0,
+    "raycluster_uid": null,
+    "pod_uids": []
+  },
+  "operation": {
+    "kind": "native_all_rank_checkpoint_reload",
+    "source_optimizer_step": 21,
+    "optimizer_steps_authorized": 0,
+    "workers": 1,
+    "gpus_per_worker": 8,
+    "world_size": 8,
+    "source_checkpoint_read_only": true,
+    "model_quality_claim": false,
+    "production_authorization_added": false
+  },
+  "privacy": {
+    "credentials_recorded": false,
+    "prompts_traces_flags_answers_or_scores_recorded": false,
+    "private_logs_recorded": false,
+    "raw_tensor_values_recorded": false
+  },
+  "sha256": "sha256:06b6fc0a9ecdb8ed958e70577abfce8a5a8365d85805ca2d3316400d35e81a4e"
+}
