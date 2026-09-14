@@ -1,0 +1,255 @@
+{
+  "schema": "cyber_qwen38_lr100_dev_training_checkpoint_seal_handoff_v1",
+  "classification": "operational_training_success_checkpoint_pair_verification_incomplete",
+  "purpose": "Record the exact LR1e-4 development training, tracking, checkpoint-creation, resource-release and CPU-sealing facts while keeping checkpoint-pair acceptance and GPU reload closed. This is an operational handoff, not model-quality evidence or a hyperparameter-selection result.",
+  "source": {
+    "config_path": "configs/qualification/qwen38-teacher-lr100-cosine-layout-dev-v2.json",
+    "config_file_sha256": "sha256:e6b7f197cb716d235ea6054b5620cae70344191508ed707a37fd1fc2f27e8205",
+    "prepared_root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-dev-v2-stage-v1/prepared",
+    "staging_root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-dev-v2-stage-v1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-ta8-lr100-dev-v2",
+    "plan_sha256": "sha256:f42894e871ee3ec2204e435cdf240d2641706f4d151bd4484b56edcf6716ada3",
+    "request_sha256": "sha256:47915f4b3720f57817fce91a15f2efa4e4df9d3e4d0dd0c8dcc1bf497a2883da",
+    "preview_manifest_sha256": "sha256:d600ed4b891a1c58eef0a18f3cc108a32bf1865ef87c391a4e0effff2b1fa5a5",
+    "staged_wheel_sha256": "sha256:3d310557cb2808390766a18d044aabd5d44f08c5c1c616bde150c2a1e4ebcf74",
+    "bundle_sha256": "sha256:4258a976f82d6b3bc536823179688dc9bd9916cc267fe7429819e40ed859e5ae",
+    "preflight_receipt_sha256": "sha256:a071eac0f4ee52eac78d43f9340ea16063e45d38d0d0a12450775aabd1181d57",
+    "preflight_independent_verification_sha256": "sha256:c2e2e1fdb264ee9b51141b6d8cdc98d024619255aeec0b976d3438cdafb2234f",
+    "submission_journal_file_sha256": "sha256:77f4a7da692c27d471614bc4fa8412de6f731be27f02fb367f443772b634d3e8"
+  },
+  "run": {
+    "cluster": "dev",
+    "jobs_api_base": "https://api.ft.dev.flt.build",
+    "kube_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+    "namespace": "fleet-train-jobs",
+    "api_name": "chris-q38-ta8-lr100-dev-v2-d44df148",
+    "api_run_id": null,
+    "api_run_id_not_captured_before_terminal_cleanup": true,
+    "api_job_id": "chris-q38-ta8-lr100-dev-v2-d44df148-swwff",
+    "rayjob_uid": "9354facc-d548-49f4-8ef1-41efc5339b44",
+    "workload_name": "rayjob-chris-q38-ta8-lr100-dev-v2-d44df148-6aae1",
+    "workload_uid": "f9b89e7a-ab91-4261-9f2e-20eb24eb3f01",
+    "raycluster_name": "chris-q38-ta8-lr100-dev-v2-d44df148-f75xb",
+    "raycluster_uid": "950bb073-6cd9-42e0-ad17-17d2ce91ab93",
+    "head_pod_name": "chris-q38-ta8-lr100-dev-v2-d44df148-f75xb-head-t5rs8",
+    "head_pod_uid": "c99ba2c1-f339-40d9-a5aa-f5b1a93ebe2b",
+    "created_and_admitted_at": "2026-09-14T09:05:43Z",
+    "pods_ready_at": "2026-09-14T09:06:01Z",
+    "terminal_at": "2026-09-14T09:32:00Z",
+    "requested_image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "resolved_runtime_image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "topology": {
+      "workers": 1,
+      "gpus_per_worker": 8,
+      "world_size": 8,
+      "physical_nodes_observed": 1
+    },
+    "priority_class": "c1",
+    "queue_priority_class": "q1",
+    "effective_priority": 10000,
+    "automatic_requeue": false,
+    "jobs_api_posts": 1
+  },
+  "pod_provenance": {
+    "exact_runtime_image_observed": true,
+    "zero_restarts_observed_while_running": true,
+    "pod_absent_at_terminal_reconciliation": true,
+    "final_restart_count": null,
+    "final_exit_code": null,
+    "full_lifecycle_zero_restart_claimed": false,
+    "limitation": "The exact Pod was gone before final container status capture, so its final restart count and exit code are irrecoverable; controller, Workload and terminal receipts establish the clean planned pause."
+  },
+  "terminal_controller_reconciliation": {
+    "jobs_api_status": "SUCCEEDED",
+    "rayjob_status": "SUCCEEDED",
+    "workload_finished": true,
+    "workload_terminal_reason": "Succeeded",
+    "raycluster_absent": true,
+    "head_pod_absent": true,
+    "released_gpus": 8,
+    "gpus_held": 0,
+    "active_dev_gpu_requests_after_release": 0,
+    "jobs_api_delete_required": false,
+    "jobs_api_delete_sent": false,
+    "independent_terminal_verification_sha256": "sha256:61ae4673638d410b2412ffbb3c8e8a4d0b2b8bb3ec3aaf28ed0f3d8add8f5516",
+    "independent_terminal_verifier": {
+      "name": "chris-q38-lr100-terminal-verify-v1",
+      "uid": "63faa9e2-3be9-4be3-9948-9ede289b7c0d",
+      "gpus": 0,
+      "deleted": true,
+      "absence_verified": true
+    }
+  },
+  "bounded_training": {
+    "planned_pause_after_optimizer_step": 21,
+    "full_scheduler_horizon_steps": 76,
+    "observed_optimizer_steps": 21,
+    "optimizer_step_sequence_contiguous_from_one": true,
+    "all_observed_losses_finite": true,
+    "all_observed_gradient_norms_finite": true,
+    "all_gradient_finite_markers_true": true,
+    "learning_rate_values_finite": true,
+    "local_metric_records": 21,
+    "reference_cross_entropy_enabled": false,
+    "teacher_cross_entropy_holdout_used": false,
+    "hyperparameter_selected": false,
+    "model_quality_claimed": false
+  },
+  "started_receipt": {
+    "path": "/mnt/sfs/jobs/chris-q38-ta8-lr100-dev-v2/STARTED.json",
+    "file_sha256": "sha256:5d6119bd243dbb960193ea285b9e93dfb60fddec526340dab0ca830d0a0ab82c",
+    "receipt_sha256": "sha256:49a9f697ffbd86018417e30b17cf50f5700b40db1ad75dcb0ec3ace2ddababf9"
+  },
+  "wandb": {
+    "run_id": "chris-q38-ta8-lr100-dev-v2",
+    "url": "https://wandb.ai/thefleet/cyber-post-train/runs/chris-q38-ta8-lr100-dev-v2",
+    "receipt_path": "/mnt/sfs/jobs/chris-q38-ta8-lr100-dev-v2/WANDB.json",
+    "receipt_file_sha256": "sha256:79184f78d1af9363cafa6a574f1a87b55853f6d871d401fd3b35a03c0961e0e5",
+    "receipt_sha256": "sha256:9a1f4dc582a9515bfe150e4f0648581edaa4713ba9571cb9fb34291764ea060a",
+    "tracking_status": "synced",
+    "finish_acknowledged": true,
+    "local_metric_events": 21,
+    "attempted_metric_events": 21,
+    "accepted_metric_events": 21,
+    "scalar_coverage_complete": true,
+    "automatic_system_telemetry": false
+  },
+  "terminal_receipt": {
+    "path": "/mnt/sfs/jobs/chris-q38-ta8-lr100-dev-v2/TRAINING_PAUSED.json",
+    "file_sha256": "sha256:f65ba30c87ebe9539b8a8b3d8c873f3e24b27834b77f8a4c5ae2d4f3c6b64883",
+    "receipt_sha256": "sha256:e70b9b10c7ac39728ad112ebd8c12a5cb4493ec2abac3c8c2a74e6471562d9d9",
+    "optimizer_step": 21,
+    "optimizer_steps_executed": 21,
+    "status": "training_paused"
+  },
+  "checkpoints": {
+    "step_20": {
+      "path": "/mnt/sfs/jobs/chris-q38-ta8-lr100-dev-v2/checkpoints/global_step_20",
+      "receipt_path": "/mnt/sfs/jobs/chris-q38-ta8-lr100-dev-v2/checkpoint_receipts/step-000020.json",
+      "receipt_file_sha256": "sha256:d1b1abfa5940ad68a23c680df45efb57b419f249695ad215d988b278a577b0e5",
+      "receipt_sha256": "sha256:45501c50acb31e047710ae424e0bb09d98b6a13ccb796a465b2cc8fc80b3c751",
+      "files": 33,
+      "bytes": 324627486731,
+      "producer_receipt_digest_valid": true
+    },
+    "step_21": {
+      "path": "/mnt/sfs/jobs/chris-q38-ta8-lr100-dev-v2/checkpoints/global_step_21",
+      "receipt_path": "/mnt/sfs/jobs/chris-q38-ta8-lr100-dev-v2/checkpoint_receipts/step-000021.json",
+      "receipt_file_sha256": "sha256:bfbb1085203afeaeb450bfe7a3c1cb87fd5a9ec3d01bc02a734f008c6384a86b",
+      "receipt_sha256": "sha256:328bfeaa4b831c0e40be1e71e87cc58617af2457961b9a61de0ba8096508e1c4",
+      "files": 33,
+      "bytes": 324627486731,
+      "producer_receipt_digest_valid": true
+    }
+  },
+  "checkpoint_seals": {
+    "root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-dev-v2-checkpoint-seals-v1",
+    "sealer": {
+      "name": "chris-q38-lr100-seal-v1",
+      "uid": "877395d5-f2b7-4f85-aa24-ddb9e35352db",
+      "started_at": "2026-09-14T09:35:36Z",
+      "finished_at": "2026-09-14T09:47:24Z",
+      "exit_code": 0,
+      "restarts": 0,
+      "gpus": 0,
+      "exact_image_observed": true,
+      "deleted": true,
+      "absence_verified": true
+    },
+    "step_20": {
+      "manifest_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-dev-v2-checkpoint-seals-v1/step-20.json",
+      "manifest_file_sha256": null,
+      "manifest_receipt_sha256": "sha256:54216c0e2a506f39b5437101e604e87c3e753adccf84ecdc937ac0c6177f89b8",
+      "files": 33,
+      "bytes": 324627486731,
+      "sealer_returned_digest_valid_receipt": true,
+      "gpu_reload_verified_in_manifest": false
+    },
+    "step_21": {
+      "manifest_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-dev-v2-checkpoint-seals-v1/step-21.json",
+      "manifest_file_sha256": null,
+      "manifest_receipt_sha256": "sha256:b82fd516e2e3c4bffa99d9cae718e6caaba4d7b9d1679885c41676ef3d754fa0",
+      "files": 33,
+      "bytes": 324627486731,
+      "sealer_returned_digest_valid_receipt": true,
+      "gpu_reload_verified_in_manifest": false
+    }
+  },
+  "independent_checkpoint_pair_verification": {
+    "state": "incomplete",
+    "accepted": false,
+    "helper": {
+      "name": "chris-q38-lr100-seal-verify-v1",
+      "uid": "0123a9d7-45eb-4277-a889-a481905e4af6",
+      "started_at": "2026-09-14T09:48:03Z",
+      "finished_at": "2026-09-14T10:02:03Z",
+      "main_container_exit_code": 0,
+      "main_container_reason": "Completed",
+      "restarts": 0,
+      "gpus": 0,
+      "read_only_sfs": true,
+      "deleted": true,
+      "absence_verified": true
+    },
+    "first_exec_attempt": {
+      "checkpoint_20_check_files_verify_returned_before_error": true,
+      "terminal_proof_emitted": false,
+      "error_class": "verifier_only_contract_key_typo",
+      "error_detail": "The verifier asserted recipe.learning_rate, while the frozen plan correctly stores the field as recipe.lr.",
+      "checkpoint_or_training_mutation": false
+    },
+    "corrected_exec_attempt": {
+      "local_python_syntax_check_passed": true,
+      "contract_key_changed_only_from_learning_rate_to_lr": true,
+      "terminal_proof_emitted": false,
+      "exec_exit_code": 137,
+      "interruption_reason": "The bounded helper's main sleep completed while the corrected full-pair rehash was still running.",
+      "checkpoint_20_full_rehash_proof_preserved": false,
+      "checkpoint_21_full_rehash_proof_preserved": false,
+      "checkpoint_or_training_mutation": false
+    },
+    "manifest_file_digests_independently_recorded": false,
+    "both_source_checkpoints_fully_rehashed_with_one_terminal_proof": false,
+    "next_required_action": "After fresh Nebius authentication provides a complete monitoring and cleanup window, run one reviewed zero-GPU exact-image read-only verifier to validate both manifest self-digests and fully rehash both source checkpoints. Preserve a terminal proof before deleting the helper."
+  },
+  "acceptance": {
+    "lr100_twenty_one_step_operational_dev_segment_accepted": true,
+    "training_tracking_and_checkpoint_creation_accepted": true,
+    "all_training_gpus_released": true,
+    "cpu_sealer_receipts_present_and_digest_valid": true,
+    "independent_checkpoint_pair_verification_accepted": false,
+    "checkpoint_pair_accepted_for_reload": false,
+    "gpu_reload_submitted": false,
+    "zero_optimizer_reload_accepted": false,
+    "hyperparameter_selected": false,
+    "model_quality_claimed": false,
+    "hf_export_accepted": false,
+    "serving_reload_accepted": false,
+    "live_eval_parity_accepted": false,
+    "production_training_authorized": false
+  },
+  "blocker": {
+    "kind": "fresh_nebius_authentication_required",
+    "exact_prior_kubernetes_auth_expiry": "2026-09-14T10:12:11Z",
+    "reason": "The remaining authentication lifetime could not safely cover another bounded verifier or the fixed reload startup and release window.",
+    "gpu_reload_remains_closed": true
+  },
+  "limitations": [
+    "The controller, optimizer, W&B and checkpoint-creation facts are accepted operational evidence; they do not show held-out-task lift.",
+    "Both CPU seal commands returned self-digest-valid receipts, but their manifest file digests and one terminal independent full-pair rehash proof were not preserved.",
+    "The step-20 verification call returned once before a verifier-only assertion typo, but no terminal proof was emitted; this is deliberately not checkpoint-pair acceptance.",
+    "No zero-optimizer GPU reload, HF export, serving reload or matched evaluation has been accepted for either LR100 checkpoint."
+  ],
+  "privacy": {
+    "private_trainer_logs_read": false,
+    "raw_tensor_values_read": false,
+    "prompts_traces_flags_answers_credentials_or_scores_read": false
+  },
+  "this_evidence_authoring_task": {
+    "kubernetes_or_jobs_api_mutations": 0,
+    "submissions": 0,
+    "cancellations": 0,
+    "credentials_read_or_persisted": false
+  },
+  "sha256": "sha256:6690b52a85401afd6c34b1cd062033b1edf33a94b99fe8906f9560f6bb16aa2c"
+}
