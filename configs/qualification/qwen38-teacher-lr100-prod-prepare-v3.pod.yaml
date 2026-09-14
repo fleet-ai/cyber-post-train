@@ -1,0 +1,125 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: chris-q38-lr100-prod-stage-v3
+  namespace: fleet-train-jobs
+  annotations:
+    fleet.ai/purpose: "zero-GPU immutable production continuation preparation"
+spec:
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  priorityClassName: c1
+  activeDeadlineSeconds: 1800
+  terminationGracePeriodSeconds: 30
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 100
+    fsGroup: 100
+  nodeSelector:
+    workload: fleetai-training-ng-cpu
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: fleetai-training-ng-cpu
+      effect: NoSchedule
+  containers:
+    - name: preparer
+      image: 661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+        - -lc
+        - |
+          set -eu
+          wheel=/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-r21-v1-stage-v2/cyber_post_train-0.1.0-py3-none-any.whl
+          target=/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-full-prod-v1-stage-v1/prepared
+          test "$(sha256sum "$wheel" | awk '{print $1}')" = 5d10b58abd8ce8489c826cff7ef763a28309b8705aa08ee8df4ef26326fd8525
+          test ! -e "$target"
+          test ! -e /tmp/lr100-prod-preparer-package
+          python3 -m zipfile -e "$wheel" /tmp/lr100-prod-preparer-package
+          PYTHONPATH=/tmp/lr100-prod-preparer-package python3 -m cyber_post_train train /inputs/qualification/config.json --output "$target"
+          PYTHONPATH=/tmp/lr100-prod-preparer-package python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          from cyber_post_train.jobs import digest
+
+          target = Path("/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-full-prod-v1-stage-v1/prepared")
+          plan = json.loads((target / "plan.json").read_text())
+          request = json.loads((target / "request.json").read_text())
+          prepared = json.loads((target / "PREPARED.json").read_text())
+          if prepared != {"plan_sha256": digest(plan), "request_sha256": digest(request)}:
+              raise ValueError("prepared receipt differs")
+          if (
+              plan["run_name"] != "chris-q38-lr100-full-v1"
+              or plan["output_root"] != "/mnt/sfs/jobs/chris-q38-lr100-full-v1"
+              or plan["recipe"]["max_steps"] != 76
+              or plan["recipe"]["lr"] != 0.0001
+              or plan["recipe"]["nodes"] != 1
+              or plan["recipe"]["gpus_per_node"] != 8
+              or plan["recovery"]["mode"] != "resume"
+              or plan["recovery"]["checkpoint"]["optimizer_step"] != 21
+              or request["priority_class"] != "c1"
+              or request["workers"] != 1
+              or request["gpus_per_worker"] != 8
+              or request["requeueIfPreempted"] is not False
+          ):
+              raise ValueError("compiled production continuation differs")
+
+          def file_sha(path):
+              value = hashlib.sha256()
+              value.update(path.read_bytes())
+              return value.hexdigest()
+
+          proof = {
+              "schema": "cyber_qwen38_lr100_prod_prepare_v1",
+              "pod_uid": os.environ["POD_UID"],
+              "plan_sha256": digest(plan),
+              "request_sha256": digest(request),
+              "plan_file_sha256": file_sha(target / "plan.json"),
+              "request_file_sha256": file_sha(target / "request.json"),
+              "prepared_file_sha256": file_sha(target / "PREPARED.json"),
+              "optimizer_step_start": 21,
+              "optimizer_step_terminal": 76,
+              "optimizer_steps_remaining": 55,
+              "priority_class": "c1",
+              "gpu_count": 0,
+          }
+          canonical = json.dumps(proof, sort_keys=True, separators=(",", ":")).encode()
+          proof["receipt_sha256"] = hashlib.sha256(canonical).hexdigest()
+          print(json.dumps(proof, sort_keys=True, separators=(",", ":")), flush=True)
+          PY
+      env:
+        - name: POD_UID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.uid
+      resources:
+        requests:
+          cpu: "2"
+          memory: 4Gi
+        limits:
+          cpu: "4"
+          memory: 8Gi
+      volumeMounts:
+        - name: sfs
+          mountPath: /mnt/sfs
+        - name: config
+          mountPath: /inputs
+          readOnly: true
+  volumes:
+    - name: sfs
+      persistentVolumeClaim:
+        claimName: sfs-shared
+    - name: config
+      configMap:
+        name: chris-q38-lr100-prod-cfg-v2
+        items:
+          - key: config.json
+            path: qualification/config.json
+          - key: qwen38-27b-1d4bf0f2.lock.json
+            path: models/qwen38-27b-1d4bf0f2.lock.json
+          - key: qwen38-27b-1d4bf0f2.weights.json
+            path: models/qwen38-27b-1d4bf0f2.weights.json

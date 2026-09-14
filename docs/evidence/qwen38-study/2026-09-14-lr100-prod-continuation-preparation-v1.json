@@ -1,0 +1,102 @@
+{
+  "schema": "cyber_qwen38_lr100_prod_continuation_preparation_v1",
+  "recorded_at": "2026-09-14T18:49:00Z",
+  "classification": "prepared_not_submitted_production_continuation",
+  "cluster": {
+    "target": "prod",
+    "kubernetes_context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+    "namespace": "fleet-train-jobs",
+    "priority_class": "c1",
+    "workload_priority_class": "q1",
+    "effective_priority": 10000
+  },
+  "source_gate": {
+    "checkpoint_optimizer_step": 21,
+    "checkpoint_manifest_file_sha256": "sha256:9c16171d68be65475da725a6bad381ec1cdcaf7b882f41cbc04da0c96e5e3280",
+    "checkpoint_files": 33,
+    "production_presence_evidence": "docs/evidence/qwen38-study/2026-09-14-lr100-prod-source-presence-v1.json",
+    "production_presence_evidence_file_sha256": "sha256:53063250139c6f62c42b1d7f8b45dea6b29a1442907e45e991698da7ff2a585e",
+    "production_presence_evidence_receipt_sha256": "sha256:3023ac5ddc807823fa4fd4ac82b33f3677ff464495559601444b71b21ab730c5",
+    "dev_zero_update_reload_accepted": false,
+    "production_submission_gate_open": false
+  },
+  "continuation": {
+    "config": "configs/qualification/qwen38-teacher-lr100-step21-resume-to76-prod-v1.json",
+    "config_file_sha256": "sha256:5726fd2d19c3f5c10fc03f8f4abfa0c23c4b760863a29827da39806f3419cdc7",
+    "prepared_root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-full-prod-v1-stage-v1/prepared",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lr100-full-v1",
+    "wandb_run_id": "chris-q38-lr100-full-v1",
+    "workers": 1,
+    "gpus_per_worker": 8,
+    "optimizer_step_start": 21,
+    "optimizer_step_terminal": 76,
+    "new_optimizer_updates": 55,
+    "learning_rate": 0.0001,
+    "scheduler": "cosine",
+    "warmup_ratio": 0.05,
+    "global_batch_size": 8,
+    "max_length": 16384,
+    "checkpoint_every_steps": 20,
+    "keep_last_checkpoints": 3,
+    "seed": 42,
+    "scientific_recipe_matches_source_except_identity_pause_and_recovery": true
+  },
+  "prepared": {
+    "wheel_sha256": "sha256:5d10b58abd8ce8489c826cff7ef763a28309b8705aa08ee8df4ef26326fd8525",
+    "plan_sha256": "sha256:9575aa6acac1c3290f8b8a897e735ce99c74ba28ce266e42502cf5be3b39eb94",
+    "plan_file_sha256": "sha256:d15a37ea4300cfa6869f1f603b881eeddb48d8569a251b80b74e3c54b1ad3b9c",
+    "request_sha256": "sha256:54706bef8d9715acc6896ba21ec899f2c64662367308da58f52f61d217f11bd1",
+    "request_file_sha256": "sha256:10521786a64db64e480e4a1258ae50e728a5a421484ee4ee2ff47b1fa1c7b053",
+    "prepared_file_sha256": "sha256:a5a327c5e9d5b40501eae9a03f7a335f3484d23681089d504731467f1f2432fb",
+    "preparer_receipt_sha256": "sha256:592e2ece309eafb22edd64a15caaceb55944d1bd77e98ff8af2358a3d37c98b9",
+    "preparer_proof_independently_validated": true,
+    "preparer_manifest": "configs/qualification/qwen38-teacher-lr100-prod-prepare-v3.pod.yaml",
+    "preparer_manifest_file_sha256": "sha256:a3f9a9f39b6feff1fbe1fa32dd1d13b96b6686413c853aa811e2fe7a7e0f009c",
+    "preparer_pod_terminal_success_and_absent": true,
+    "gpu_count": 0
+  },
+  "deep_preflight": {
+    "manifest": "configs/qualification/qwen38-teacher-lr100-prod-preflight-v1.pod.yaml",
+    "manifest_file_sha256": "sha256:fdd09fca1ca141573b0786986886e47784962fc91de00162936382755fac8ed4",
+    "pod_name": "chris-q38-lr100-prod-pre-v1",
+    "pod_uid": "26b8670c-40be-40eb-af00-7335567186b1",
+    "node": "computeinstance-e04nfmp12r41919v7j",
+    "requested_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "observed_image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "started_at": "2026-09-14T18:41:45Z",
+    "finished_at": "2026-09-14T18:48:17Z",
+    "terminal_phase": "Succeeded",
+    "exit_code": 0,
+    "restart_count": 0,
+    "gpu_count": 0,
+    "proof_receipt_sha256": "sha256:eea68a35a275122544e289e8a337c239dc6a069b96e411ddc473e60cac8702b9",
+    "preflight_receipt_sha256": "sha256:d79d32c86dfa8f66ab46aa1552cb5286bdb3b7878413524ed15490bcda9008aa",
+    "preflight_file_sha256": "sha256:684ff4a979b69756f166574734f92d564c25963a067c0f0c8d5e5d2131fdc130",
+    "proof_self_digest_independently_validated": true,
+    "train_rows": 602,
+    "train_tasks": 29,
+    "supervised_tokens": 700359,
+    "checked": [
+      "native_sources",
+      "model_files",
+      "dataset_files",
+      "native_config",
+      "tokenization",
+      "target_accounting"
+    ],
+    "exact_uid_rechecked_before_delete": true,
+    "pod_absent_after_delete": true
+  },
+  "submission": {
+    "jobs_api_post_calls": 0,
+    "training_submitted": false,
+    "next_action": "wait_for_exact_dev_zero_update_reload_acceptance_then_refresh_all_live_duplicate_capacity_auth_preview_and_output_gates"
+  },
+  "privacy": {
+    "credentials_recorded": false,
+    "prompts_traces_flags_answers_or_scores_recorded": false,
+    "private_logs_recorded": false,
+    "raw_tensor_values_recorded": false
+  },
+  "receipt_sha256": "sha256:51107ed849caf3e473d1b3eef7d62fa6b402a91e626332a4d6e9c98c3ec2f13d"
+}

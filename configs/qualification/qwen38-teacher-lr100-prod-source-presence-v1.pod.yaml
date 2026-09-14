@@ -1,0 +1,93 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: chris-q38-lr100-prod-src-v1
+  namespace: fleet-train-jobs
+  annotations:
+    fleet.ai/purpose: "read-only production SFS source-presence check"
+spec:
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  priorityClassName: c1
+  activeDeadlineSeconds: 900
+  terminationGracePeriodSeconds: 30
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 100
+    fsGroup: 100
+  nodeSelector:
+    workload: fleetai-training-ng-cpu
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: fleetai-training-ng-cpu
+      effect: NoSchedule
+  containers:
+    - name: verifier
+      image: 661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4
+      imagePullPolicy: IfNotPresent
+      command:
+        - python3
+        - -c
+        - |
+          import hashlib, json, os
+          from pathlib import Path
+
+          paths = {
+              "checkpoint_manifest": Path("/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-dev-v2-checkpoint-seals-v1/step-21.json"),
+              "checkpoint_root": Path("/mnt/sfs/jobs/chris-q38-ta8-lr100-dev-v2/checkpoints/global_step_21"),
+              "corpus_manifest": Path("/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher-a/manifest-available-a-outcome-v2.json"),
+              "corpus_train": Path("/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher-a/train.parquet"),
+              "model_config": Path("/mnt/sfs/models/qwen3.8-27b-1d4bf0f2/config.json"),
+          }
+          expected = {
+              "checkpoint_manifest": "9c16171d68be65475da725a6bad381ec1cdcaf7b882f41cbc04da0c96e5e3280",
+              "corpus_manifest": "d7fcb3e0c8c7726f5d1175f831fa0e88af632f1c6b68c6101c8db3e2cf4b85f7",
+          }
+
+          def sha(path):
+              value = hashlib.sha256()
+              with path.open("rb") as stream:
+                  for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                      value.update(chunk)
+              return value.hexdigest()
+
+          exists = {name: path.is_file() if name != "checkpoint_root" else path.is_dir() for name, path in paths.items()}
+          measured = {name: sha(paths[name]) for name in expected if exists[name]}
+          root = paths["checkpoint_root"]
+          checkpoint_files = sum(1 for path in root.rglob("*") if path.is_file()) if root.is_dir() else 0
+          proof = {
+              "schema": "cyber_qwen38_lr100_prod_source_presence_v1",
+              "pod_uid": os.environ["POD_UID"],
+              "exists": exists,
+              "measured_sha256": measured,
+              "expected_sha256": expected,
+              "checkpoint_files": checkpoint_files,
+              "all_required_present": all(exists.values()),
+              "small_file_digests_match": measured == expected,
+              "gpu_count": 0,
+          }
+          canonical = json.dumps(proof, sort_keys=True, separators=(",", ":")).encode()
+          proof["receipt_sha256"] = hashlib.sha256(canonical).hexdigest()
+          print(json.dumps(proof, sort_keys=True, separators=(",", ":")), flush=True)
+      env:
+        - name: POD_UID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.uid
+      resources:
+        requests:
+          cpu: "1"
+          memory: 2Gi
+        limits:
+          cpu: "2"
+          memory: 4Gi
+      volumeMounts:
+        - name: sfs
+          mountPath: /mnt/sfs
+          readOnly: true
+  volumes:
+    - name: sfs
+      persistentVolumeClaim:
+        claimName: sfs-shared
+        readOnly: true
