@@ -1,0 +1,277 @@
+{
+  "schema": "cyber_qwen38_wandb_training_contract_audit_v1",
+  "status": "offline_audit_complete",
+  "scope": "Current prepared Qwen3.8-27B SFT and RL arms named by the 2026-09-14 training artifact inventory. Historical completed runs are context, not launch candidates.",
+  "method": {
+    "live_wandb_calls": 0,
+    "private_data_reads": 0,
+    "cluster_calls": 0,
+    "jobs_api_calls": 0,
+    "secrets_read": 0,
+    "executable_or_prepared_config_bytes_changed": false,
+    "reason_no_runtime_edit": "Changing a compiler, runtime, or prepared config would invalidate the existing plan, request, runtime-bundle, and offline qualification digests. Proven comparison gaps are recorded as promotion blockers instead."
+  },
+  "bound_sources": {
+    "sft_compiler": {
+      "path": "training/sft.py",
+      "file_sha256": "sha256:c94ce592f57c06b365eb03254d0594ea7ccd30a282df1e18d5466b34a9226fcd"
+    },
+    "sft_runtime": {
+      "path": "training/sft_runtime.py",
+      "file_sha256": "sha256:7b0787891acdf9ebe0b07475339248dce64b659a546691a7c445f99b52a20a8f"
+    },
+    "miles_arguments": {
+      "path": "training/miles.py",
+      "file_sha256": "sha256:6b81894c81f7610e1af394a3d0a84304462a01eb056d8810cdcc72918ffe8b21"
+    },
+    "miles_compiler": {
+      "path": "training/miles_training.py",
+      "file_sha256": "sha256:c963e9d71599450c3b44fff47abc9a2a0a41311990586ce555ab600edf6dc227"
+    },
+    "miles_acceptance": {
+      "path": "training/miles_acceptance.py",
+      "file_sha256": "sha256:3524e9e3e7c6b52bee46adf0ebbd62c71efe175df40ff9bcec82d8e2696834d1"
+    },
+    "lr30_materialized_config": {
+      "path": "configs/qualification/qwen38-teacher-lr30-step6-resume-to76-dev-v1.json",
+      "file_sha256": "sha256:fbd5dfe2e2f298a5a131fb36d3b8e75882cd17af8d53a846725f6ec5cb08a1f2"
+    },
+    "lr30_template": {
+      "path": "configs/qualification/qwen38-teacher-lr30-step6-resume-to76-dev-v1.template.json",
+      "file_sha256": "sha256:943d48666b131ae878e245d0ee24c6bf8a56c5805fdf256bcc1aced85d8f22cc",
+      "embedded_sha256": "sha256:0913f7106a04c40bb46b8edbb061f6a82764d19ca2aeceabe8a225c7fa67b7cb"
+    },
+    "lr100_template": {
+      "path": "configs/qualification/qwen38-teacher-lr100-step21-resume-to76-dev-v1.template.json",
+      "file_sha256": "sha256:4997a9a6211bf6be08b2a4833814ac034041f37a793e7df3c211060da02fd7fe",
+      "embedded_sha256": "sha256:b6e00a02cf43b2813b8b1e8411eb7307cfa7115e60e41291f651f00b9ea45cd4"
+    },
+    "direct_self_sft_template": {
+      "path": "configs/qualification/qwen38-self-sft-direct-a-lr10-dev-v2.template.json",
+      "file_sha256": "sha256:ecd0a8a4b8b1c0aa7c6723e6e2dc8f3a43329de3804dab0d38d35fb7233f17c6"
+    },
+    "matched_sampling_pair_template": {
+      "path": "configs/qualification/qwen38-teacher-exposure-matched-sampling-pair-dev-v1.template.json",
+      "file_sha256": "sha256:14ef02cf849e721f622854bf4ff89bf0fafbf434bac63262c819ec9047218f51",
+      "embedded_sha256": "sha256:6510edece079ddba75769b8be3bbba831e6c215936b6a7665d53617c98baee2b"
+    },
+    "miles_dev8_config": {
+      "path": "configs/qualification/qwen38-miles-rl-reward-canary-dev-v8.json",
+      "file_sha256": "sha256:2bb1a8db017d0aeb5841caaf491b4fb17a74e78bb7bb0c4b8e9f481eb52ce0c7"
+    },
+    "miles_dev8_launch": {
+      "path": "configs/qualification/qwen38-miles-rl-reward-canary-launch-dev-v8.json",
+      "file_sha256": "sha256:ddea71016eb14d3a7644bbd3f50bd608dfb01151c2426df4d78afdd9d9100798"
+    },
+    "miles_dev8_offline_audit": {
+      "path": "docs/evidence/qwen38-study/2026-09-14-miles-rlreward-dev8-offline-final-audit-v1.json",
+      "file_sha256": "sha256:31c01687d2722535ae4e92397460efe2fca173a8c485b2d5ceba134d43703218",
+      "embedded_sha256": "sha256:0e09780f6428a904833c588db17ee2fb9a0e6a75fe013689d6ac2628f3ec8666"
+    },
+    "miles_prod2_template": {
+      "path": "configs/runs/qwen38-miles-rl-filtered-study-a-prod-v2.template.json",
+      "file_sha256": "sha256:785ea181ff4836336890b327d2c8efa5568821ac71fce170838d7b08a3121dfc",
+      "embedded_sha256": "sha256:589590cbdfb04e2fdf1da8e9425fccc32a98e232350509c4144a0adce86eb590"
+    },
+    "skyrl_prod1_template": {
+      "path": "configs/runs/qwen38-rl-filtered-study-a-prod-v1.template.json",
+      "file_sha256": "sha256:f01eb759064c65b2e6046964a3dce7b2f62065e8311104f3c713e8b28ff8c1e4",
+      "embedded_sha256": "sha256:86ea99cf042b470c14eb30235421a6a614f31f7c83c7528e603e387605d2263e"
+    }
+  },
+  "shared_policy": {
+    "entity": "thefleet",
+    "project": "cyber-post-train",
+    "secret_source": "named Jobs API secret wandb-api only; no API key is serialized in configs, plans, requests, receipts, or this audit",
+    "create_once": "Every run needs a unique run name, output root, W&B run ID, durable pre-POST intent, and fresh absence checks. No accepted or ambiguous identity may be reused.",
+    "training_selection": "Training loss and W&B telemetry are fitting and health diagnostics only. Fleet development task outcomes choose hyperparameters and checkpoints.",
+    "external_benchmark_firewall": "WebExploitBench rows, metrics, outcomes, and retry decisions are excluded from training, reward design, hyperparameter selection, checkpoint selection, and rerun decisions until the Fleet development decision is frozen.",
+    "checkpoint_evidence": "A W&B run never establishes checkpoint acceptance by itself. A digest-bound checkpoint seal and exact zero-optimizer reload remain separate required evidence."
+  },
+  "external_reference": {
+    "authority": "official W&B documentation",
+    "url": "https://docs.wandb.ai/models/track/environment-variables",
+    "relevant_contract": "WANDB_RESUME defaults to never when unset",
+    "use_in_this_audit": "This explains current Miles behavior but does not replace the mandatory fresh run-ID absence gate or authorize identity reuse."
+  },
+  "runtime_contracts": {
+    "sft": {
+      "project_group_name": "Entity, project, group, run ID, display name, and tags are present in each materialized config. Run ID and display name are create-once operational identities.",
+      "job_type": "No explicit W&B job_type is set. Source type and stage are encoded in stable tags.",
+      "resume_policy": "WANDB_RESUME=never is set by the runtime before SDK initialization. Training checkpoint continuation uses a new W&B run linked by the immutable recovery plan; it never appends to the source run.",
+      "history_keys": [
+        "train/global_step",
+        "train/loss",
+        "train/total_supervised_tokens",
+        "train/supervised_tokens",
+        "train/lr",
+        "train/grad_norm",
+        "train/grad_norm_finite",
+        "train/supervised_tokens_per_second"
+      ],
+      "step_axes": {
+        "optimizer_progress": "train/global_step, one-indexed",
+        "comparison_curve": "train/total_supervised_tokens, cumulative",
+        "reason": "Dense windows contain different numbers of supervised tokens, so token exposure is the fair cross-arm x-axis."
+      },
+      "immutable_config": "experiment_plan_sha256 binds the full resolved model, data, recipe, recovery checkpoint, and execution plan. Human-readable model, split, corpus, row, token, target-policy, resource, and selection fields are also added with allow_val_change=false.",
+      "scalar_only": true,
+      "automatic_system_telemetry": false,
+      "terminal_linkage": "WANDB.json is plan-bound and requires complete finite scalar coverage plus acknowledged finish/sync before SFT terminal tracking is accepted.",
+      "known_metadata_evidence_limit": "The local W&B receipt independently checks entity, project, and run ID, but does not independently read back display name, group, tags, or job_type from W&B. The immutable plan still binds the intended values."
+    },
+    "miles": {
+      "project_group_name": "Entity, project, and run ID are explicit. Native arguments set group equal to the unique run name, so every run forms a one-run group. Display name is checked against the run name by terminal observation.",
+      "job_type_and_tags": "No explicit job_type or tags contract exists.",
+      "resume_policy": "The request does not explicitly set WANDB_RESUME. Create-once W&B ID absence is a required live gate and the native no-random-suffix flag fixes identity; an accepted or ambiguous ID must never be submitted again.",
+      "history_keys_required_for_one_update_canary": [
+        "train/step",
+        "train/grad_norm",
+        "train/loss",
+        "train/lr-pg_0"
+      ],
+      "step_axis": "train/step is a zero-indexed optimizer-update index; the first and only Dev8 update is step 0.",
+      "immutable_config": "The sanitized W&B observation is cross-bound to exact plan and request digests. The current native W&B contract does not require the remote run config itself to expose those digests.",
+      "scalar_only": true,
+      "sensitive_metric_handling": "Reward, score, success, pass-rate, outcome, rollout/*, and eval/* values are excluded from the public observation. Rich payloads and logged artifacts are forbidden.",
+      "terminal_linkage": "One terminal acceptance cross-links the W&B observation, authoritative episode audit, policy-tensor delta, native checkpoint manifest, controller state, and external resource release. All-rank zero-update reload is still a separate promotion gate.",
+      "comparison_limit": "A one-run group is adequate for the Dev8 operational canary but not a clean multi-run or multi-generation research dashboard. A stable study group plus explicit job type, name, and tags must be added before a production comparative series is materialized."
+    }
+  },
+  "arms": [
+    {
+      "arm": "teacher.available-a.lr-3e-5.batch-8.epoch-1.seed-42.resume-step6-to76",
+      "backend": "sft",
+      "status": "conditionally_safe_after_fresh_live_gates",
+      "unsafe_after_auth_alone": true,
+      "reason": "The W&B binding is scientifically sound, but authentication alone does not satisfy fresh W&B/API/output/journal absence, preview, capacity, source-immutability, and one-POST gates.",
+      "wandb": {
+        "group": "q38-blackbox-sft-dev-completion-v1",
+        "run_id": "chris-q38-lr30-resume76-dev-v1",
+        "name": "chris-q38-lr30-resume76-dev-v1",
+        "expected_scalar_events": 70,
+        "global_step_range": [
+          7,
+          76
+        ]
+      },
+      "nonblocking_note": "Its accepted six-step source belongs to q38-blackbox-sft-dev-lr-v2, while the continuation belongs to the completion group. The immutable recovery binding preserves lineage, but one dashboard will not show the whole curve as a single run."
+    },
+    {
+      "arm": "teacher.available-a.lr-1e-4.batch-8.epoch-1.seed-42.resume-step21-to76",
+      "backend": "sft",
+      "status": "unsafe_not_launchable",
+      "unsafe_after_auth_alone": true,
+      "reason": "The source checkpoint pair has not been independently accepted and an exact zero-update reload has not passed. Materialization, plan, request, and fresh W&B identity evidence are intentionally absent.",
+      "wandb": {
+        "group": "q38-blackbox-sft-dev-completion-v1",
+        "run_id": "chris-q38-lr100-resume76-dev-v1",
+        "name": "chris-q38-lr100-resume76-dev-v1",
+        "expected_scalar_events": 55,
+        "global_step_range": [
+          22,
+          76
+        ]
+      }
+    },
+    {
+      "arm": "self.direct.split-a.lr-1e-5.batch-8.epoch-1.seed-42",
+      "backend": "sft",
+      "status": "unsafe_not_launchable",
+      "unsafe_after_auth_alone": true,
+      "reason": "The accepted direct-interface source collection, nonempty corpus, route certificate, and matched evaluation protocol do not exist. Pending placeholders deliberately prevent compilation.",
+      "wandb": {
+        "group": "q38-blackbox-self-direct-sft-dev-v2",
+        "run_id": "chris-q38-self-a-lr10-dev-v2",
+        "name": "chris-q38-self-a-lr10-dev-v2"
+      }
+    },
+    {
+      "arm": "qwen38-teacher-exposure-matched-sampling-a-v1",
+      "backend": "sft_pair",
+      "status": "unsafe_not_launchable",
+      "unsafe_after_auth_alone": true,
+      "reason": "Both arms remain blocked on a frozen Fleet-development learning-rate choice, exact runtime corpus bindings, CPU preflights, and live create-once gates.",
+      "wandb": {
+        "group": "q38-teacher-exposure-matched-sampling-a-v1",
+        "run_ids": [
+          "chris-q38-ta8-sampavail-dev-v1",
+          "chris-q38-ta8-sampbalanced-dev-v1"
+        ],
+        "shared_history_keys": 8,
+        "shared_series_step_axis": "train/total_supervised_tokens",
+        "expected_scalar_events_per_arm": 51,
+        "expected_terminal_total_supervised_tokens_per_arm": 419165
+      },
+      "comparison_quality": "The two runs share one study group and unique run IDs. Dose, step axis, scalar schema, model, recipe, and evaluation protocol are explicitly matched; only whole-episode sampling and operational identities may differ."
+    },
+    {
+      "arm": "chris-q38-miles-rlreward-dev8",
+      "backend": "miles_rl",
+      "status": "conditionally_safe_as_one_dev_operational_canary_after_all_live_gates",
+      "unsafe_after_auth_alone": true,
+      "reason": "Authentication alone does not satisfy source/data/preflight, exact preview, W&B/API/output/journal absence, capacity, and one-POST gates. It is not a production or comparative arm.",
+      "wandb": {
+        "group_derived_by_runtime": "chris-q38-miles-rlreward-dev8",
+        "run_id": "chris-q38-miles-rlreward-dev8",
+        "name_checked_by_terminal_observation": "chris-q38-miles-rlreward-dev8",
+        "expected_train_steps": [
+          0
+        ]
+      },
+      "promotion_limit": "No production comparison may use this result without accepted reward variance, one verified update, sealed checkpoint, exact all-rank reload, and separate stable comparative W&B grouping."
+    },
+    {
+      "arm": "chris-q38-miles-rl-prod2",
+      "backend": "miles_rl",
+      "status": "unsafe_not_launchable",
+      "unsafe_after_auth_alone": true,
+      "reason": "No accepted Dev8 reward/update/checkpoint/reload chain is bound; the template still names obsolete Dev7 qualification. Its one-run W&B group is not suitable for a comparative production series."
+    },
+    {
+      "arm": "chris-q38-rl-prod1",
+      "backend": "skyrl_rl",
+      "status": "unsafe_not_launchable",
+      "unsafe_after_auth_alone": true,
+      "reason": "No accepted engine, reward canary, policy update, checkpoint, all-rank reload, or production promotion is bound. A planned fresh W&B ID cannot upgrade those missing gates."
+    }
+  ],
+  "findings": [
+    {
+      "id": "WBA-001",
+      "severity": "production_comparison_blocker",
+      "scope": "Miles RL comparative runs",
+      "finding": "The native Miles group is hard-coded to the unique run name, and no explicit job type, display-name field, or tags contract exists.",
+      "required_fix": "Before materializing a production comparative series, add validated W&B group, display name, job type, and tags fields; preserve one stable study group across arms and generations while keeping every run ID unique. Regenerate exact plans, requests, runtime bundles, and qualification evidence after the runtime change."
+    },
+    {
+      "id": "WBA-002",
+      "severity": "evidence_completeness_gap",
+      "scope": "SFT W&B terminal evidence",
+      "finding": "The intended display name, group, and tags are immutable in the plan, but WANDB.json only independently checks entity, project, and run ID against the live SDK object.",
+      "required_fix": "For future materialized studies, add readback validation and sanitized receipt fields for display name, group, tags, and explicit job type. Regenerate plans because this changes runtime bytes. Existing arms remain interpretable through their plan digest."
+    },
+    {
+      "id": "WBA-003",
+      "severity": "organization_only",
+      "scope": "SFT LR30 and LR100 continuations",
+      "finding": "The continuation group differs from the source partial-run group.",
+      "required_fix": "No scientific fix is required. Use the immutable recovery link when joining source and continuation histories; do not append to the original run."
+    },
+    {
+      "id": "WBA-004",
+      "severity": "explicitness_gap",
+      "scope": "Miles W&B resume behavior",
+      "finding": "The request does not explicitly set WANDB_RESUME=never, although create-once ID absence is mandatory and the W&B SDK documents never as its default.",
+      "required_fix": "Set it explicitly in the next Miles runtime revision and regenerate exact evidence. Do not modify the already-qualified Dev8 bundle merely for this redundant setting."
+    }
+  ],
+  "conclusion": {
+    "cleanest_current_comparison": "The matched teacher sampling pair has the strongest cross-run W&B design, but remains intentionally nonlaunchable until its non-W&B scientific and live gates pass.",
+    "safe_current_one_off": "Miles Dev8 can be a bounded operational canary after every listed live gate; its telemetry is not yet a clean production study series.",
+    "no_arm_safe_after_auth_only": true,
+    "production_rl_safe": false,
+    "external_benchmark_selection_excluded": true
+  },
+  "sha256": "sha256:e2812582d9d73899f5c7d94d1712ebe8c2c8aa470b7847b577b11d2f9ee93a5e"
+}
