@@ -26,7 +26,7 @@ function setTab() {
   const titles = {
     "webexploitbench": "WebExploitBench · Fleet Cyber",
     "task-quality": "Task quality · Fleet Cyber",
-    "experiment-map": "Experiment map · Fleet Cyber"
+    "experiment-map": "Experiment plan · Fleet Cyber"
   };
   document.title = titles[tab];
   scrollTo({ top: 0, behavior: "instant" });
@@ -90,29 +90,60 @@ function renderFiltering() {
     <article><span>${String(i + 1).padStart(2, "0")}</span><div><h3>${item[0]}</h3><p>${item[1]}</p></div></article>`).join("");
 }
 
-function priorityClass(priority) {
-  if (priority === "Test now") return "test-now";
-  if (priority === "Test later") return "test-later";
-  return "hold-fixed";
+function tableColumns(table) {
+  return table.groups.flatMap(group => group.columns.map(([key, label, meaning]) => ({ key, label, meaning })));
 }
 
-function renderDecisionRows() {
-  const query = document.querySelector("#decision-search").value.trim().toLowerCase();
-  const area = document.querySelector("#decision-area").value;
-  const rows = experimentMap.decisions.filter(item => {
-    const searchable = [item.area, item.choice, item.meaning, ...item.values, item.priority].join(" ").toLowerCase();
-    return (area === "all" || item.area === area) && (!query || searchable.includes(query));
-  });
+function hasOwn(object, key) {
+  return Object.prototype.hasOwnProperty.call(object, key);
+}
 
-  document.querySelector("#decision-count").textContent = `${rows.length} of ${experimentMap.decisions.length} choices shown`;
-  document.querySelector("#decision-table").innerHTML = rows.map(item => `
-    <tr>
-      <th scope="row">${escapeHtml(item.area)}</th>
-      <td><strong>${escapeHtml(item.choice)}</strong></td>
-      <td>${escapeHtml(item.meaning)}</td>
-      <td>${item.values.map(escapeHtml).join("; ")}</td>
-      <td><span class="decision-priority ${priorityClass(item.priority)}">${escapeHtml(item.priority)}</span></td>
-    </tr>`).join("");
+function resolvedValue(table, run, key) {
+  if (hasOwn(run, key)) return run[key];
+  if (run.changes && hasOwn(run.changes, key)) return run.changes[key];
+  return table.defaults[key];
+}
+
+function displayValue(value) {
+  if (Array.isArray(value)) return value.join(" · ");
+  if (value === true) return "Yes";
+  if (value === false) return "No";
+  return value ?? "—";
+}
+
+function renderExperimentTable(kind) {
+  const table = experimentMap.tables[kind];
+  const columns = tableColumns(table);
+  const root = document.querySelector(`#${kind}-plan-table`);
+  const stickyClass = index => index < 3 ? ` sticky-column sticky-column-${index + 1}` : "";
+
+  root.innerHTML = `
+    <table class="experiment-table">
+      <caption>${escapeHtml(table.title)}. Rows are ordered from highest to lowest research priority.</caption>
+      <thead>
+        <tr class="column-groups">${table.groups.map(group => `<th colspan="${group.columns.length}" scope="colgroup">${escapeHtml(group.label)}</th>`).join("")}</tr>
+        <tr>${columns.map((column, index) => `
+          <th scope="col" class="${stickyClass(index)}">
+            <button type="button" class="column-button" data-table-kind="${kind}" data-column-key="${escapeHtml(column.key)}">${escapeHtml(column.label)}</button>
+          </th>`).join("")}</tr>
+      </thead>
+      <tbody>${table.runs.map(run => `
+        <tr>${columns.map((column, index) => {
+          const value = displayValue(resolvedValue(table, run, column.key));
+          const changed = run.changes && hasOwn(run.changes, column.key);
+          const tag = index === 0 ? "th" : "td";
+          const scope = index === 0 ? ' scope="row"' : "";
+          return `<${tag}${scope} class="${stickyClass(index)}${changed ? " changed-setting" : ""}">${escapeHtml(value)}</${tag}>`;
+        }).join("")}</tr>`).join("")}</tbody>
+    </table>`;
+
+  document.querySelector(`#${kind}-run-count`).textContent = `${table.runs.length} ranked runs · ${columns.length} settings shown for every run`;
+  root.querySelectorAll(".column-button").forEach(button => {
+    button.addEventListener("click", () => {
+      const column = columns.find(item => item.key === button.dataset.columnKey);
+      document.querySelector(`#${kind}-column-help`).innerHTML = `<strong>${escapeHtml(column.label)}:</strong> ${escapeHtml(column.meaning)}`;
+    });
+  });
 }
 
 async function renderExperimentMap() {
@@ -120,20 +151,12 @@ async function renderExperimentMap() {
     const response = await fetch("training-decision-space.json");
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     experimentMap = await response.json();
-    document.querySelector("#experiment-definitions").innerHTML = experimentMap.definitions.map(item => `
-      <article><h3>${escapeHtml(item.term)}</h3><p>${escapeHtml(item.meaning)}</p></article>`).join("");
-    document.querySelector("#experiment-sequence").innerHTML = experimentMap.sequence.map(item => `
-      <li><b>${escapeHtml(item.title)}</b><span>${escapeHtml(item.detail)}</span></li>`).join("");
-    document.querySelector("#experiment-scope").textContent = `${experimentMap.scope.comparison_rule} This map includes ${experimentMap.scope.included.toLowerCase()} It excludes ${experimentMap.scope.excluded.toLowerCase()}`;
-
-    const areas = [...new Set(experimentMap.decisions.map(item => item.area))];
-    const select = document.querySelector("#decision-area");
-    select.insertAdjacentHTML("beforeend", areas.map(area => `<option value="${escapeHtml(area)}">${escapeHtml(area)}</option>`).join(""));
-    document.querySelector("#decision-search").addEventListener("input", renderDecisionRows);
-    select.addEventListener("change", renderDecisionRows);
-    renderDecisionRows();
+    renderExperimentTable("sft");
+    renderExperimentTable("rl");
+    document.querySelector("#experiment-scope").textContent = experimentMap.scope;
   } catch (error) {
-    document.querySelector("#decision-count").textContent = "The experiment map could not be loaded.";
+    document.querySelector("#sft-run-count").textContent = "The SFT plan could not be loaded.";
+    document.querySelector("#rl-run-count").textContent = "The RL plan could not be loaded.";
   }
 }
 
