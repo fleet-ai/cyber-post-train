@@ -1,0 +1,44 @@
+{
+  "schema": "cyber_qwen38_teacher_exposure_matched_sampling_pair_preparation_v1",
+  "observed_at_utc": "2026-09-14T12:00:00Z",
+  "status": "offline_prepared_not_submitted",
+  "template": {
+    "path": "configs/qualification/qwen38-teacher-exposure-matched-sampling-pair-dev-v1.template.json",
+    "file_sha256": "sha256:14ef02cf849e721f622854bf4ff89bf0fafbf434bac63262c819ec9047218f51",
+    "embedded_sha256": "sha256:6510edece079ddba75769b8be3bbba831e6c215936b6a7665d53617c98baee2b"
+  },
+  "result": {
+    "split": "A from the filtered lineage-safe Qwen blackbox study",
+    "arms": [
+      "availability-shaped whole-episode control",
+      "balanced task-family whole-episode treatment"
+    ],
+    "matched_dose": {
+      "covered_task_families": 29,
+      "episodes": 50,
+      "dense_windows": 401,
+      "supervised_tokens": 419165,
+      "global_batch_size": 8,
+      "epochs": 1,
+      "optimizer_steps": 51
+    },
+    "only_intended_scientific_difference": "which qualified whole teacher episodes supply the matched training dose",
+    "evaluation_harness": "OpenCode 1.18.27 under the frozen Fleet development outcome protocol",
+    "external_benchmark_selection": "forbidden"
+  },
+  "scientific_limit": "The control approximates the source availability distribution under indivisible whole-episode and exact-dose constraints; it is not exact probability-proportional sampling, and aggregate input/context-token exposure is not matched.",
+  "blockers": [
+    "the Fleet-development learning-rate selection decision is not frozen",
+    "the exact private runtime corpus paths must be rebound and revalidated",
+    "both materialized configs still require local, pinned-image and authenticated dev preview gates",
+    "no dev training, checkpoint reload or Fleet-development outcome receipt exists for this pair"
+  ],
+  "live_actions": {
+    "kubernetes_calls": 0,
+    "jobs_api_preview_calls": 0,
+    "jobs_api_submit_calls": 0,
+    "wandb_runs_created": 0
+  },
+  "conclusion": "The pair is ready for deterministic materialization only after learning-rate selection freezes. It cannot currently be submitted and supports no capability or treatment claim.",
+  "sha256": "sha256:42ebd1706c075bc542fdbd14c52c46e205e4094b206ba807ed0c0fc591fb7d55"
+}
