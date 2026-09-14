@@ -1,0 +1,228 @@
+{
+  "schema": "cyber_qwen38_lr30_resume76_operator_watchdog_handoff_v1",
+  "recorded_at": "2026-09-14T13:02:49Z",
+  "classification": "offline_handoff_not_launch_authorization",
+  "purpose": "Provide one concise, sanitized operating contract for the exact LR3e-5 Qwen3.8 teacher-SFT development continuation from accepted step 6 through terminal step 76.",
+  "authority": {
+    "launchable_now": false,
+    "live_gates_satisfied": false,
+    "jobs_api_posts_performed": 0,
+    "kubernetes_mutations_performed": 0,
+    "wandb_runs_created": 0,
+    "automation_mutations_performed": 0,
+    "document_is_authorization": false,
+    "required_before_use": "The current standing user authorization and every listed live pre-submit gate must still hold. This record alone authorizes neither submission nor cancellation, deletion, retry, requeue, preemption, production promotion, evaluation or automation changes."
+  },
+  "immutable_candidate": {
+    "contract_commit": "e05f79b69ba8489c38c78643594882b91509b4d5",
+    "launch_audit": {
+      "path": "docs/evidence/qwen38-study/2026-09-14-lr30-step6-resume76-offline-launch-audit-v1.json",
+      "file_sha256": "sha256:e4b3cf7e03500a71ea6c43da34c2b1e0835861ce1937c551da49aac6f43d702d",
+      "embedded_sha256": "sha256:4866642eeeec646d605b390baa9788cc190a7415b2bb797ac68eb21d60b6590c"
+    },
+    "config": {
+      "path": "configs/qualification/qwen38-teacher-lr30-step6-resume-to76-dev-v1.json",
+      "file_sha256": "sha256:fbd5dfe2e2f298a5a131fb36d3b8e75882cd17af8d53a846725f6ec5cb08a1f2",
+      "canonical_sha256": "sha256:b0a084a8b20c6f3c0dbae06e3fa5617a164fa29471c2758df9fab18613405631"
+    },
+    "request_name": "chris-q38-lr30-resume76-dev-v1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lr30-resume76-dev-v1",
+    "prepared_root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr30-resume76-dev-v1/prepared",
+    "offline_prepared_root": "/private/tmp/cpt-lr30-resume76-dev-v1-offline-prepared",
+    "plan": {
+      "file_sha256": "sha256:24e5570212103680bebe824c4a6e645bae85809095ccf94abb9da53284286263",
+      "canonical_sha256": "sha256:7efd7f8d5b0f9f3f96f5534dd7d67b1b31bc3712f3d1fd20dc2f26b09edbacfb"
+    },
+    "request": {
+      "file_sha256": "sha256:aae2a1e2ca505aa908aaba98913ac97aa2795b0c4c90fd9c58c1d4bf9a03f376",
+      "canonical_sha256": "sha256:8a6052c7c171cd02344c02d909c5cb299cb60de15cdcbb79aed6f5ac55058bfe"
+    },
+    "prepared_receipt_file_sha256": "sha256:87f11cc9ed3047aad73349e3bd2d83a2263e9516b3d63608f259979d7712c423",
+    "runtime_bundle": {
+      "canonical_gzip_sha256": "sha256:04afc5d299896c7eb2f5dd53cc720d5e293c81f94e077094491794031a6fb21c",
+      "decompressed_payload_sha256": "sha256:071e18037ad41b04d4671b1286de3142dcc5fbe89ccbfd63bedd337bd053e690",
+      "command_sha256": "sha256:361d2f90e09f26f46f0855f5c07812d75114f280db2d577d92abcbf4c0b6b1df"
+    },
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4"
+  },
+  "source_checkpoint": {
+    "run_name": "chris-q38-lr30-2x4-dev-v3",
+    "api_name": "chris-q38-lr30-2x4-dev-v3-82201b1a",
+    "path": "/mnt/sfs/jobs/chris-q38-lr30-2x4-dev-v3/checkpoints/global_step_6",
+    "optimizer_step": 6,
+    "source_plan_sha256": "sha256:457aa85b12a6d3740a97805e3b9013a749b33b6a574a660674785b7d3f914ee2",
+    "manifest_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr30-2x4-dev-v3-reload-v1/checkpoint-step-6.json",
+    "manifest_file_sha256": "sha256:dddce9ebb49686b11718e3862d8fbebf422134ec86b83d70bf99f7dbb7400f36",
+    "manifest_receipt_sha256": "sha256:2b430fb9185a437ea9e1060c4ed75638fe4d793bbb7a9a58e408a57188773467",
+    "files": 33,
+    "bytes": 324627486731,
+    "world_size": 8,
+    "all_rank_zero_update_reload_accepted": true,
+    "must_remain_read_only_and_byte_identical": true,
+    "steps_1_through_6_must_not_be_replayed": true
+  },
+  "scientific_contract": {
+    "model": "Qwen/Qwen3.8-27B",
+    "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "training_data": "successful_teacher_dense_windows",
+    "corpus_manifest": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher-a/manifest-available-a-outcome-v2.json",
+    "corpus_manifest_sha256": "sha256:1b083613c16362daf7c86fd8b458d99d7e167133df919602c21916314142c4dc",
+    "dense_windows": 602,
+    "represented_train_tasks": 29,
+    "supervised_tokens": 700359,
+    "epochs": 1,
+    "global_batch_size": 8,
+    "microbatch_per_gpu": 1,
+    "learning_rate": 0.00003,
+    "scheduler": "cosine",
+    "warmup_ratio": 0.05,
+    "max_length": 16384,
+    "seed": 42,
+    "total_optimizer_steps": 76,
+    "checkpoint_interval": 6,
+    "keep_checkpoints": 3,
+    "reference_cross_entropy_enabled": false,
+    "selection_mode": "task_outcomes_only",
+    "fleet_dev_protocol_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75",
+    "webexploitbench_selection_eligible": false
+  },
+  "cluster_contract": {
+    "cluster": "dev",
+    "jobs_api_base": "https://api.ft.dev.flt.build",
+    "kube_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+    "namespace": "fleet-train-jobs",
+    "priority_class": "c1",
+    "expected_queue_priority": "q1",
+    "expected_effective_priority": 10000,
+    "workers": 2,
+    "gpus_per_worker": 4,
+    "world_size": 8,
+    "total_gpus": 8,
+    "maximum_physical_nodes_for_this_request": 2,
+    "maximum_active_owned_physical_nodes_across_dev_and_prod_excluding_four_inference_endpoints": 8,
+    "automatic_requeue": false,
+    "duplicate_posts_allowed": false,
+    "peer_preemption_allowed": false,
+    "production_submission_allowed": false,
+    "queue_without_allocation_is_idle": false,
+    "physical_node_count_rule": "After admission count distinct node names for this run's exact Pods. The two four-GPU workers may co-locate on one eight-GPU node; do not assume one or two physical nodes before binding the Pods."
+  },
+  "wandb_contract": {
+    "entity": "thefleet",
+    "project": "cyber-post-train",
+    "group": "q38-blackbox-sft-dev-completion-v1",
+    "run_id": "chris-q38-lr30-resume76-dev-v1",
+    "name": "chris-q38-lr30-resume76-dev-v1",
+    "resume_policy": "never",
+    "expected_new_scalar_events": 70,
+    "expected_global_step_range": [7, 76],
+    "identity_must_be_absent_before_post": true,
+    "source_and_continuation_are_separate_immutably_linked_runs": true,
+    "training_loss_is_a_fitting_diagnostic_not_a_selection_metric": true
+  },
+  "live_pre_submit_gates": [
+    "Fresh Nebius authority must cover preview, startup, the bounded run, terminal evidence and release reconciliation without exposing its token.",
+    "Reconstruct the exact plan, request, PREPARED receipt and runtime bundle; every digest above must match before use.",
+    "Reopen and validate the corpus and checkpoint manifests and independently rehash all 33 source-checkpoint files; the source must remain unchanged.",
+    "Run the pinned-image zero-GPU CPU preflight and independently validate its digest-bound receipt.",
+    "Obtain a warning-free authenticated dev preview that renders c1 to q1 value 10000, two workers by four GPUs, the exact image and resources, no requeue and shutdown on exit.",
+    "Prove the request name, output root, prepared root, W&B run ID, submission journal and Kubernetes identities are absent, with no accepted, active or ambiguous duplicate scientific cell.",
+    "Recheck live dev capacity and prove active owned physical nodes plus at most two requested nodes cannot exceed eight; never touch peer work.",
+    "Write one durable pre-POST intent, issue at most one Jobs API POST, preserve an ambiguous response without retry, and bind every returned immutable identity before interpreting state."
+  ],
+  "monitor_contract": {
+    "external_poll_seconds": 600,
+    "runtime_internal_poll_seconds": 60,
+    "queue_rule": "Queued without an allocation has no GPU-idle clock and is not a reason to duplicate, requeue, force admission or touch peers.",
+    "runtime_bounds": {
+      "startup_seconds": 1800,
+      "confirmed_idle_seconds": 1200,
+      "hard_runtime_seconds": 28800,
+      "checkpoint_drain_seconds_after_hard_bound": 300,
+      "idle_requires_all": [
+        "the 1800-second runtime startup allowance has elapsed",
+        "PROGRESS, ACTIVITY and checkpoint fingerprints have not changed for at least 1200 seconds",
+        "aggregate GPU utilization is available and below 1 percent",
+        "process I/O is available and advanced by less than 1 MiB per internal sample"
+      ],
+      "missing_telemetry_is_idle": false,
+      "external_observation_alone_may_cancel": false,
+      "authoritative_stall_signal": "A digest-valid WATCHDOG.json naming confirmed_no_progress_idle or hard_runtime_bound, reconciled with exact UID-bound live state."
+    },
+    "expected_progress": {
+      "recovery_step": 6,
+      "first_new_optimizer_step": 7,
+      "terminal_optimizer_step": 76,
+      "new_optimizer_steps": 70,
+      "checkpoint_steps": [12, 18, 24, 30, 36, 42, 48, 54, 60, 66, 72, 76],
+      "expected_retained_checkpoint_steps": [66, 72, 76],
+      "expected_terminal_supervised_tokens": 700359,
+      "required_success_receipts": [
+        "STARTED.json",
+        "RECOVERED.json",
+        "WANDB.json",
+        "checkpoint_receipts/step-000076.json",
+        "TRAINING_COMPLETE.json"
+      ]
+    },
+    "read_only_observations": [
+      "Jobs API state and immutable run ID",
+      "RayJob, Workload, RayCluster and Pod names, UIDs, ownership, conditions and timestamps",
+      "Pod readiness, exit state and restart counts",
+      "requested and resolved image identity",
+      "effective priority, worker shape and distinct physical node count",
+      "sanitized receipt presence, self-digest, optimizer step and checkpoint file-count or byte-count summaries",
+      "aggregate GPU utilization, model memory, process-I/O availability and output modification times"
+    ],
+    "forbidden_observations_or_output": [
+      "credentials or secret values",
+      "prompts, traces, flags, answers, task content or held-out benchmark material",
+      "private trainer logs or process command lines",
+      "raw tensors, optimizer values, samples or scores"
+    ],
+    "material_notifications": [
+      "The single POST is accepted or its response is ambiguous; include only the generated API name or ID and digest bindings.",
+      "The run is admitted and exact controller, Workload, RayCluster and Pod UIDs are bound, or topology, priority, image or ownership differs from preview.",
+      "STARTED and RECOVERED receipts validate, or recovery differs from exact step 6 and eight ranks.",
+      "The first new optimizer step 7 completes and each new checkpoint receipt appears at the frozen cadence.",
+      "A restart, preemption, nonfinite metric, tracking defect, stale progress suspicion, WATCHDOG state, FAILED receipt, nonzero exit or controller disagreement occurs.",
+      "Terminal step 76, W&B completion and the terminal checkpoint receipt validate, or any required terminal evidence is missing.",
+      "All exact owned objects and all eight GPUs release, or release remains uncertain after five minutes of one-minute terminal reconciliation."
+    ],
+    "routine_quiet_states": [
+      "unchanged queue state without an allocation",
+      "healthy step progress between checkpoint milestones",
+      "one missing utilization sample without other failure evidence",
+      "unchanged terminal evidence after release was already proven"
+    ]
+  },
+  "terminal_and_release_contract": {
+    "training_success_alone_accepts_checkpoint": false,
+    "after_step76_success": [
+      "Validate all terminal receipts against the exact plan and immutable UIDs.",
+      "Create and independently verify a no-replace CPU checkpoint seal with a complete file-by-file rehash.",
+      "Run a separate exact-topology all-rank zero-optimizer reload that restores model, optimizer, scheduler, random-number state, sampler and supervised-token progress.",
+      "Prove the source step-6 checkpoint remains unchanged and no checkpoint is written by the reload.",
+      "Reconcile Jobs API, RayJob, Workload, RayCluster and Pod state until all exact owned GPU allocations are absent."
+    ],
+    "terminal_release_poll_seconds": 60,
+    "terminal_release_uncertain_after_seconds": 300,
+    "release_action_rule": "Preserve evidence first. A separate live operator with current authority may release only this exact owned broken or confirmed-stalled allocation through the Jobs API. Never delete to hide a failure, never touch peers, and never retry automatically.",
+    "unexpected_failure_receipt": "FAILED.json",
+    "automatic_retry_allowed": false,
+    "automatic_requeue_allowed": false,
+    "production_promotion_allowed": false
+  },
+  "unresolved_until_live_post": [
+    "fresh_authentication_expiry",
+    "live_cpu_preflight_receipt",
+    "authenticated_dev_preview_receipt",
+    "duplicate_output_wandb_journal_and_kubernetes_absence_receipts",
+    "active_owned_node_count_and_free_capacity",
+    "generated_api_run_name_and_id",
+    "RayJob_Workload_RayCluster_and_Pod_names_and_UIDs",
+    "admission_and_runtime_start_timestamps",
+    "terminal_step76_checkpoint_W&B_reload_and_release_receipts"
+  ],
+  "sha256": "sha256:223b8beb2aca2280df88a406a5f7d7d6728d3a4ade2cd74505ad1722f9424ee2"
+}
