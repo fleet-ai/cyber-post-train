@@ -1,0 +1,69 @@
+{
+  "schema": "cyber_qwen38_miles_prod_live_identity_v1",
+  "status": "active_startup_and_baseline_episode",
+  "observed_at": "2026-09-14T23:55:54Z",
+  "source_commit": "e31b91ee703b2f25575def3e9d2e7490bc4e73f5",
+  "plan_sha256": "sha256:398629821f6c70fe6565dbe897f4f77c18f3c7273a9c9935f47cc00a4c830761",
+  "request_sha256": "sha256:677b881ff974076957f560337b865916e35b5a87b5634dcd3ef6ade0428425a0",
+  "submission_journal_sha256": "sha256:e896ac6f0d7a35a195f3575eeff3d881a07f75c1958591fa8a05d7b23b8f4a02",
+  "api": {
+    "base_url": "https://api.ft.flt.build",
+    "name": "chris-q38-miles-prod2-canary-856bf6a6",
+    "run_id": "856bf6a6-2158-4238-a98b-c97d616bfc16",
+    "status": "RUNNING"
+  },
+  "kubernetes": {
+    "context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+    "namespace": "fleet-train-jobs",
+    "namespace_uid": "fd6d2fcd-687a-4257-9dba-a034bb381e6b",
+    "rayjob": {
+      "name": "chris-q38-miles-prod2-canary-856bf6a6",
+      "uid": "bab3ec86-e381-4ed3-8736-d7f5551a038e",
+      "created_at": "2026-09-14T23:06:32Z",
+      "started_at": "2026-09-14T23:11:27Z"
+    },
+    "workload": {
+      "name": "rayjob-chris-q38-miles-prod2-canary-856bf6a6-a418d",
+      "uid": "97a2c21d-4210-4e82-a735-f167df702760",
+      "owner_rayjob_uid": "bab3ec86-e381-4ed3-8736-d7f5551a038e",
+      "admitted_at": "2026-09-14T23:11:27Z",
+      "queue_priority": 10000,
+      "resource_flavor": "b300-training"
+    },
+    "raycluster": {
+      "name": "chris-q38-miles-prod2-canary-856bf6a6-n9m94",
+      "uid": "0d59a1a7-32f8-4e77-bd9a-0718453f7c16",
+      "owner_rayjob_uid": "bab3ec86-e381-4ed3-8736-d7f5551a038e"
+    },
+    "pod": {
+      "name": "chris-q38-miles-prod2-canary-856bf6a6-n9m94-head-4qbnk",
+      "uid": "8b8b9b1b-b59c-4d4c-9e4a-9fbb0b49c1a3",
+      "owner_raycluster_uid": "0d59a1a7-32f8-4e77-bd9a-0718453f7c16",
+      "node": "computeinstance-e04q8ynv2hw2wgk4w4",
+      "priority_class": "c1",
+      "priority": 10000,
+      "gpus": 8,
+      "ready_at": "2026-09-14T23:11:48Z",
+      "container_started_at": "2026-09-14T23:11:37Z",
+      "runtime_image_id": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:d1d37c584e2aafdd47df1e1f3492ff3343eb3b83a5f658cf7ce2432ee8d6ef33",
+      "restart_count": 0
+    }
+  },
+  "progress": {
+    "start_receipt_sha256": "sha256:66632a2193712b5c53a3ea48ecdf99fb429df8b0f44b02afc6a6154563ba0bf9",
+    "baseline_episode_started": true,
+    "baseline_episode_start_receipt_sha256": "sha256:4bdf9b82b6f95c51de2695e8eb9451f77db99f4dfa24389fd25968a6af1ce28f",
+    "reward_terminal_present": false,
+    "optimizer_update_proven": false,
+    "checkpoint_present": false,
+    "terminal_state": null,
+    "resources_released": false
+  },
+  "privacy": {
+    "private_logs_read": false,
+    "prompts_traces_flags_answers_raw_rewards_read": false,
+    "credentials_included": false,
+    "metric_values_included": false
+  },
+  "sha256": "sha256:f5efa5de686bb9a99f00d180b1ea4207859be9dbb5d0bc6698ea3a2c5ac0cbe8"
+}
