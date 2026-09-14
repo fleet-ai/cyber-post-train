@@ -832,6 +832,7 @@ def job_request(plan: dict[str, Any], *, check_files: bool = True) -> dict[str, 
         files,
         "training.miles_serving_dev",
         ["run", "--plan", "plan.json", "--sha256", _sha(plan["sha256"])],
+        python_executable="python3",
     )
 
 

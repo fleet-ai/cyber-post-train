@@ -275,7 +275,7 @@ def test_legacy_miles_request_shape_and_title_are_unchanged(plan: dict) -> None:
         "priority_class": "c1",
         "requeueIfPreempted": False,
     }
-    assert request["command"].startswith("python -c ")
+    assert request["command"].startswith("python3 -c ")
 
 
 def test_compiles_teacher_sft_with_the_same_one_gpu_execution_contract(sft_plan: dict) -> None:

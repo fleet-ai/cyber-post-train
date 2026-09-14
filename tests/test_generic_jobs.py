@@ -93,6 +93,17 @@ def test_runtime_bundle_executes_exact_bytes_once(tmp_path):
     assert subprocess.run(command, env=broken, capture_output=True).returncode != 0
 
 
+def test_runtime_bundle_selects_only_a_known_python_executable():
+    from cyber_post_train.jobs import bundled_request
+
+    files = {"run.py": "pass"}
+    assert bundled_request(config(), files, "run", [], python_executable="python3")[
+        "command"
+    ].startswith("python3 -c ")
+    with pytest.raises(JobsError, match="Python executable"):
+        bundled_request(config(), files, "run", [], python_executable="python -O")
+
+
 @pytest.mark.parametrize("fault", ["missing", "escape", "absolute", "text"])
 def test_runtime_bundle_rejects_bad_content(fault):
     from cyber_post_train.jobs import bundled_request
