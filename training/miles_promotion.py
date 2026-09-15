@@ -1267,7 +1267,7 @@ def require_live_files(plan: dict[str, Any], prepared_directory: Path) -> None:
             ],
         )
     if observed.get("schema") == "cyber_miles_data_v2":
-        _exact_long_data(observed)
+        _exact_long_data(observed, expected_data)
     else:
         _exact_data(observed, expected_data)
 

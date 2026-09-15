@@ -290,7 +290,9 @@ def test_long_context_reward_canary_binds_exact_runtime_checkpoint_and_four_node
             miles_promotion._exact_reward_canary_config(invalid)
 
 
-def test_long_context_reward_canary_v2_uses_qualified_runtime_and_new_identity() -> None:
+def test_long_context_reward_canary_v2_uses_qualified_runtime_and_new_identity(
+    tmp_path, monkeypatch
+) -> None:
     config = json.loads(
         (
             ROOT
@@ -342,6 +344,28 @@ def test_long_context_reward_canary_v2_uses_qualified_runtime_and_new_identity()
     }
     data["sha256"] = "sha256:" + digest(data)
     miles_promotion._exact_long_data(data, expected)
+
+    manifest = tmp_path / "manifest.json"
+    manifest.write_text(json.dumps(data, sort_keys=True, separators=(",", ":")) + "\n")
+    prepared = tmp_path / "prepared"
+    prepared.mkdir()
+    output = tmp_path / "new-output"
+    plan = {
+        "data": data,
+        "execution": {
+            "production_promotion": {
+                "mode": miles_promotion.PROD_REWARD_CANARY_LONG_V2_MODE
+            }
+        },
+    }
+    monkeypatch.setattr(
+        miles_promotion, "PROD_REWARD_CANARY_LONG_V2_DATA_MANIFEST", str(manifest)
+    )
+    monkeypatch.setattr(
+        miles_promotion, "PROD_REWARD_CANARY_LONG_V2_OUTPUT", str(output)
+    )
+    monkeypatch.setattr(miles_promotion, "validate_embedded_promotion", lambda *_a, **_k: True)
+    miles_promotion.require_live_files(plan, prepared)
 
 
 def test_long_context_reward_canary_preview_is_exact_four_by_eight_c1(monkeypatch) -> None:
