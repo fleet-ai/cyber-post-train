@@ -16,8 +16,12 @@ RUN set -eu; \
     install -m 0555 /tmp/opencode-bin /usr/local/bin/opencode; \
     test "$(/usr/local/bin/opencode --version)" = "1.18.27"; \
     miles_root="$(python -c 'from miles.utils.external_utils.command_utils import repo_base_dir;print(repo_base_dir)')"; \
-    echo "${MILES_NATIVE_DRIVER_SHA256}  ${miles_root}/train.py" | sha256sum -c -; \
-    echo "${MILES_NATIVE_CONVERTER_SHA256}  ${miles_root}/tools/convert_hf_to_torch_dist.py" | sha256sum -c -; \
+    driver_sha256="$(sha256sum "${miles_root}/train.py" | cut -d' ' -f1)"; \
+    converter_sha256="$(sha256sum "${miles_root}/tools/convert_hf_to_torch_dist.py" | cut -d' ' -f1)"; \
+    echo "native-driver-sha256=${driver_sha256}"; \
+    echo "native-converter-sha256=${converter_sha256}"; \
+    test "${driver_sha256}" = "${MILES_NATIVE_DRIVER_SHA256}"; \
+    test "${converter_sha256}" = "${MILES_NATIVE_CONVERTER_SHA256}"; \
     tree_path="$(python -c 'import inspect,miles.rollout.session.v2.tree_trajectory as m;print(inspect.getsourcefile(m))')"; \
     echo "${MILES_TREE_SOURCE_SHA256}  ${tree_path}" | sha256sum -c -; \
     install -m 0444 /tmp/tree_trajectory.py "${tree_path}"; \
