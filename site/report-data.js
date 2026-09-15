@@ -11,8 +11,8 @@ window.REPORT_DATA = {
       invalid: 12,
       pass1: 16.09,
       pass4: 30.0,
-      objectiveHits: "27 / 90",
-      hitLabel: "Found after up to 4 attempts",
+      weaknessesFound: "27 / 90",
+      hitLabel: "Known weaknesses found after up to 4 attempts",
       status: "Partial result only",
       warning: "Not a complete 15-website baseline",
       note: "The percentages use only the technically supported subset: 51 of 317 known-weakness observations received credit in one attempt, and 27 of 90 were found after up to four. One website has only two usable attempts."
@@ -28,8 +28,8 @@ window.REPORT_DATA = {
       invalid: 60,
       pass1: 1.829,
       pass4: 2.439,
-      objectiveHits: "44 / 82 (automatic evidence only)",
-      hitLabel: "Known weaknesses with automatic evidence",
+      weaknessesFound: "44 / 82 (built-in checks only)",
+      hitLabel: "Known weaknesses triggered by built-in checks",
       status: "Invalid score",
       invalidScore: true,
       warning: "Do not use these numbers to judge the model",
@@ -71,8 +71,8 @@ window.REPORT_DATA = {
     difficulty: [["Medium",68],["Hard",6],["Easy",1]],
     difficultyScale: 68,
     methods: [
-      ["Read the complete current catalog", "The saved census binds all 1,633 current task and version IDs. It does not save task instructions, answers, or model traces."],
-      ["Identify the blackbox tasks", "Of 1,250 production versions, 1,055 task keys explicitly identify a blackbox security task."],
+      ["Read the complete current catalog", "The saved inventory lists all 1,633 current task-version records by exact ID. It does not save task instructions, answers, or model traces."],
+      ["Identify the blackbox tasks", "Of 1,250 current production versions, 1,055 are explicitly labeled as blackbox security tasks."],
       ["Check earlier execution proof", "An independently checked record had to show that the exact task started, grading completed with a real result, the result was saved, and cleanup finished."],
       ["Apply the latest broken-task review", "Five of the 80 earlier proven versions that are still current are now marked broken, so the conservative current set contains 75."],
       ["Keep uncertain tasks separate", "Seventeen promising new tasks and 986 tasks without current review remain outside the high-quality set until the same exact proof is available."]

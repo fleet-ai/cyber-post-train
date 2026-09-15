@@ -59,8 +59,9 @@ Mutable names, tags, catalog `current` pointers, a Ready Pod, or a dashboard lab
 
 - Status, diagnosis, and review requests are read-only. Do not infer permission to fix, deploy, submit, rerun, cancel, or mutate.
 - Default mutating or paid operations to preview. Recheck duplicates, exact identity, cost/session count, queue, and stop conditions immediately before execution.
-- Use meaningful ownership names and normal queues. Request supported pod priority
-  (`c1` for authorized high-priority training, `c2` for backfill); the current API
+- Use meaningful ownership names and normal queues. Request only supported pod
+  priority `c1` for current project work. Do not use another priority unless the
+  user later changes this rule explicitly. The current API
   derives queue priority and rejects explicit queue-priority overrides. Recheck
   live policy and effective Workload priority, not just labels. Never bypass
   admission, unsuspend manually, cancel, directly preempt, or change peer workloads.
@@ -70,10 +71,13 @@ Mutable names, tags, catalog `current` pointers, a Ready Pod, or a dashboard lab
   without mutating preserved objects/results or existing `retry_review` rows.
 - Do not mutate an immutable failed Job to retry it. Preserve it and create a reviewed successor only when authorized.
 - The Nebius development cluster is for bounded qualification and debugging only.
-  Give every dev workload a fixed deadline, release its Pods, Jobs, RayClusters,
-  Workloads, Services, and test model registrations when the check ends, and
-  verify the exact UIDs are absent. Never leave a model server, training run, or
-  other hosted workload there as ongoing capacity.
+  Give every new dev workload a fixed deadline no later than 30 minutes after
+  creation. On success, failure, irrelevance, or that deadline, immediately
+  delete its Pods, Jobs, RayJobs, RayClusters, Workloads, Services, controllers,
+  and test model registrations. Verify every recorded UID and named resource is
+  absent and its GPU allocation is exactly zero. Do not retain terminal objects
+  from new dev tests. Never leave a model server, training run, or other hosted
+  workload there as ongoing capacity.
 - An experiment-owned dedicated GPU serving or evaluation allocation needs an observed useful rollout consumer or a bounded, predeclared loading, warmup, or handoff exception. When neither holds, stop new claims, preserve in-flight evidence, release the owned allocation through its supported lifecycle, diagnose off-node, and create a fresh successor only after its gates pass. This does not apply to shared or hosted endpoints and never authorizes peer-workload mutation. Follow [`docs/GPU_RESOURCE_LIFECYCLE.md`](docs/GPU_RESOURCE_LIFECYCLE.md).
 - Merge authority follows the user's current instruction and repository ownership. Historical approval is not permanent authorization for a new shared-repository merge or deployment.
 

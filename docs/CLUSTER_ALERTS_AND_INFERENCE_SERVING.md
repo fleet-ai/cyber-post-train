@@ -90,12 +90,14 @@ checking the live deployment.
 ### Development cluster lifecycle
 
 Use the Nebius development cluster only for bounded tests of new or changed
-images, entrypoints, distributed startup, and cleanup behavior. A dev test must
-name its expected evidence, carry a fixed wall-clock deadline, and have an exact
-teardown path before it is created. When the test succeeds, fails, or becomes
-irrelevant, release every resource it created and verify the exact object UIDs
-and GPU allocation are gone. Terminal Kubernetes objects may remain as history
-only when they hold no compute or route.
+images, entrypoints, distributed startup, and cleanup behavior. Every new dev
+test must name its expected evidence, carry a fixed wall-clock deadline no later
+than **30 minutes after object creation**, and have an exact teardown path before
+it is created. At success, failure, irrelevance, or that deadline, immediately
+delete every Pod, Job, RayJob, RayCluster, Workload, Service, controller, and test
+model registration it created. Then verify every recorded UID and named resource
+is absent and the exact GPU allocation is zero. New dev tests may not retain a
+terminal object as history; preserve their evidence outside the live object.
 
 Do not use dev as a persistent model host, a spare inference pool, or a place to
 park an experiment between checks. A model needed by production evaluation must
@@ -112,8 +114,8 @@ typed model catalog. Matching Theseus schema:
 `services/fleet-train-api/src/fleet_train_api/schemas/rl_job.py` at
 `a70a7ee85e34f9858f5897b53c79e0f7f2e07b5e`.
 
-- Request pod priority `c1` for the authorized high-priority training class or
-  `c2` for backfill. Queue priority is now derived; explicit
+- Request pod priority `c1` for all current project work. Do not use another
+  priority unless the user explicitly changes this rule. Queue priority is derived; explicit
   `queue_priority_class` is rejected. Do not copy old `q1` payload overrides.
 - The schema documents Kueue workload preemption as disabled. This is not a
   guarantee against node failures, administrative cancellation or every other
@@ -127,7 +129,7 @@ typed model catalog. Matching Theseus schema:
   private trainer logs.
 
 The 2026-09-11 PriorityClass readback gives `c1` value 10,000 with
-`PreemptLowerPriority`, and `c2` value 5,000 with `Never`. Pod admission rejects
+`PreemptLowerPriority`. Pod admission rejects
 an explicit `preemptionPolicy: Never` paired with `c1`; a server dry-run catches
 this without creating anything. This field controls whether a Pod can displace
 others, not whether it is protected from interruption. It is separate from
@@ -156,6 +158,25 @@ Use the Fleet inference control plane for a persistent routed model. It owns one
 `InferenceModel`, one ready-only Service, one Deployment, gateway backends and routes,
 exact model staging, explicit pause/resume/retire actions, and serving metrics in the
 `inference` namespace.
+
+### Just-in-time model lifecycle
+
+The deployed control-plane instructions were rechecked on 2026-09-15. Read one
+registration with `GET /fleet/v1/models/<model-id>`. Change it only through
+`POST /fleet/v1/models/<model-id>/resume`, `/pause`, or `/retire`, with the exact
+quoted `resource_version` from that read in the `If-Match` header. A `202` means
+the requested state was recorded, not that reconciliation finished. Poll the item
+until its phase is `ready`, `paused`, or `retired`; a version conflict requires a
+fresh read and review, not a blind retry.
+
+Before resuming an experiment checkpoint, freeze its exact evaluation consumer,
+startup and handoff deadlines, and an independent owner monitor that is allowed to
+pause that one model if startup fails, the consumer never begins, or useful requests
+stop. Resume only when the consumer can start immediately. Pausing removes routes,
+drains bounded in-flight requests, scales the model to zero, and releases its GPUs.
+Treat pause as complete only after the API reports `paused` and Kubernetes confirms
+the exact serving Pods and GPU allocation are absent. This same just-in-time rule
+applies after success: never keep a trained checkpoint warm for a future evaluation.
 
 Do not implement a persistent endpoint as a never-ending Job or RayJob in
 `fleet-train-jobs`. That shape mixes serving lifecycle with batch success/failure,
@@ -199,5 +220,8 @@ serving transition.
 7. Pause new claims, drain within the frozen allowance, preserve evidence, and release
    experiment-owned capacity when consumption ends or stalls outside its allowance.
 
-Never preempt, reprioritize, unsuspend, cancel, or alter peer workloads to obtain serving
-capacity. A persistent serving request may wait for normal admission.
+Use only the current user-approved `c1`/`q1` priority for new experiment work and
+never submit at `c0`. Normal scheduler-managed c1 preemption is allowed; record
+any observed victim and admission evidence. Do not manually cancel, relabel,
+unsuspend, or otherwise alter a peer workload. A serving request may wait for
+normal admission, and a queued request holds no GPU.

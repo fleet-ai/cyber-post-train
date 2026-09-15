@@ -212,7 +212,7 @@
             <p class="section-index">08</p>
             <div>
               <h2 id="scope-title">Scope and public evidence</h2>
-              <p>This review covers the current OTS Cyber catalog. The full 1,055-task file is an inventory, not a claim that all 1,055 work. The 75-task file is the conservative set supported by exact earlier execution proof and current status.</p>
+              <p>This review covers the current Fleet Cyber task catalog. The full 1,055-task file is an inventory, not a claim that all 1,055 work. The 75-task file is the conservative set supported by exact earlier execution proof and current status.</p>
               <div class="source-links">
                 <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/fleet-blackbox-current-production-20260915-v1.json">All 1,055 current blackbox tasks</a>
                 <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/fleet-blackbox-current-high-quality-20260914-v1.json">The 75 tasks kept</a>
@@ -234,7 +234,7 @@
             <span>Goal: better blackbox security performance</span>
             <span>Higher rows should run first</span>
             <span>Scroll sideways to see every setting</span>
-            <span>Updated 13 September 2026</span>
+            <span>Updated 15 September 2026</span>
           </div>
         </div>
 
@@ -277,10 +277,10 @@
             <div><h2 id="reading-title">How to read the order</h2><p>These are ranked experiment plans, not claims that the listed settings are already best.</p></div>
           </div>
           <div class="gate-grid reading-grid">
-            <article><span class="gate-number">1</span><h3>Compare the source of learning</h3><p>First compare strong-teacher attempts, Qwen’s own successes, and a mixture while keeping the amount of training and the optimizer settings matched.</p></article>
+            <article><span class="gate-number">1</span><h3>Compare the source of learning</h3><p>First compare strong-teacher attempts, Qwen’s own successes, and a mixture while keeping the exact same task families, each family’s training weight, total training amount, and optimizer settings matched.</p></article>
             <article><span class="gate-number">2</span><h3>Find a stable numerical range</h3><p>Then vary learning rate, batch size, episode group size, and number of passes widely enough to find both under-training and instability.</p></article>
             <article><span class="gate-number">3</span><h3>Refine the winning design</h3><p>Only after a clear winner appears should we tune window extraction, task sampling, reward details, and longer training.</p></article>
-            <article><span class="gate-number">4</span><h3>Confirm before the final test</h3><p>Repeat finalists on a second balanced split or random seed. Keep the final Fleet tasks untouched. WebExploitBench may run earlier, but then it counts as development evidence rather than a final independent test.</p></article>
+            <article><span class="gate-number">4</span><h3>Confirm before the final test</h3><p>Repeat finalists on a second balanced split or random seed. Keep the final Fleet tasks untouched. WebExploitBench is a report-only transfer check: it never selects a recipe, checkpoint, or finalist.</p></article>
           </div>
         </section>
 

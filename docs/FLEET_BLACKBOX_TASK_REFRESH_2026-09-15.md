@@ -2,7 +2,8 @@
 
 ## Result
 
-Fleet's current OTS Cyber catalog contains **1,633 exact selected task
+Fleet's current **OTS Cyber** catalog—the Fleet project that groups the current
+cyber tasks—contains **1,633 exact selected task
 versions**. Of its **1,250 production versions**, **1,055** have task keys that
 explicitly identify them as blackbox security tasks.
 
