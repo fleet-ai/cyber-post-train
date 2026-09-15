@@ -1,0 +1,68 @@
+{
+  "schema": "cyber_qwen38_teacher186_serving_dev_ray_mismatch_v1",
+  "observed_at": "2026-09-15T01:47:27Z",
+  "cluster": "dev",
+  "kube_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+  "namespace": "fleet-train-jobs",
+  "checkpoint": {
+    "optimizer_step": 186,
+    "export_root": "/mnt/sfs/jobs/chris-cyber-q38-teacher-dense-v5/hf-export-v1",
+    "export_file_sha256": "sha256:96b3181e05c501343c97cfe803aada6884e406c7a112e0dc6c77461f090b8bab",
+    "export_receipt_sha256": "sha256:e6d59f5a58ce54b913d775cd71b81c64bd54637b53795df82baec0f71efefaf9",
+    "gpu_check_file_sha256": "sha256:7fbfcfe16875722012cc2654d979545e22aa1fdca093987495dfff65173dfd8e",
+    "gpu_check_receipt_sha256": "sha256:9bd229e3c85a092ccc5fca8c3183f57554f1c8a72b2724221f5c7507718a3392"
+  },
+  "prepared_request": {
+    "plan_file_sha256": "sha256:7f5699e7b485d962f9e3a267fd6688fda934d265389061eb132d7b0af6470540",
+    "request_file_sha256": "sha256:b290911b7c9b4aef667b7f9311576be52260795c7888611c9198daad4834418c",
+    "priority": "c1",
+    "gpus": 1,
+    "runtime_image": "lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1"
+  },
+  "failed_attempt": {
+    "api_name": "chris-q38-t186-serve-dev1-200ae965",
+    "api_run_id": "200ae965-16e6-4119-89b7-14fcfdddb829",
+    "rayjob_uid": "13fc3b81-07ef-47e3-bad4-ee28992e4f7a",
+    "workload_uid": "95de9833-7970-4fb5-b219-a3dac5fda50f",
+    "raycluster_uid": "f213543b-b7c9-413d-b066-e1f349be030e",
+    "pod_uid": "045d064a-fd21-443c-86fb-f3c124e9c639",
+    "container_restarts": 2,
+    "exit_code": 127,
+    "model_load_started": false,
+    "serving_probes_started": false,
+    "result_receipt_created": false,
+    "failure_receipt_created": false,
+    "output_file_count": 0,
+    "classification": "jobs_api_ray_bootstrap_incompatible_with_exact_sglang_image",
+    "cause": "The generic Jobs API bootstraps Ray before the requested entrypoint, while the exact SGLang serving image does not contain the Ray command."
+  },
+  "release": {
+    "delete_via_jobs_api_http_status": 204,
+    "rayjob_present": false,
+    "workload_present": false,
+    "raycluster_present": false,
+    "pod_present": false,
+    "active_gpus": 0,
+    "resource_release_verified": true
+  },
+  "repair": {
+    "generic_jobs_api_retry_allowed": false,
+    "native_kubernetes_canary_required": true,
+    "exact_sglang_image_import_check": {
+      "pod_uid": "f9145446-a95f-46c1-ace7-75988e4464a2",
+      "status": "Succeeded",
+      "exit_code": 0,
+      "container_restarts": 0,
+      "gpus": 0,
+      "runtime_image_digest_matched": true,
+      "required_modules_imported": true
+    }
+  },
+  "privacy": {
+    "credentials_recorded": false,
+    "private_logs_recorded": false,
+    "prompts_traces_flags_answers_or_scores_recorded": false,
+    "tensor_values_read_or_recorded": false
+  },
+  "sha256": "sha256:6b9dad104432713a2d2420d583173c3fc90e1a2f1e442fd8359abec3e66bb2c4"
+}
