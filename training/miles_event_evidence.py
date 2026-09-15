@@ -374,9 +374,11 @@ def compile_controller(
     start, start_file_sha256 = _read(start_path, START_SCHEMA)
     hf_plan = plan.get("schema") in HF_PLAN_SCHEMAS
     direct_export = hf_plan and plan.get("stage") == "export"
-    expected_gpus = submitted.get("request", {}).get(
+    request_projection = submission.get("request", {})
+    expected_gpus = request_projection.get(
         "gpus" if direct_export else "gpus_per_worker", WORLD_SIZE
     )
+    expected_workers = 1 if direct_export else request_projection.get("workers", 1)
     if (
         start["source_plan_sha256"].removeprefix("sha256:") != digest(plan)
         or start["source_request_sha256"] != submitted["request_sha256"]
@@ -411,12 +413,18 @@ def compile_controller(
         raise ValueError("Miles TTL-zero journal missed a lifecycle object")
     identities: dict[str, tuple[str, str]] = {}
     for kind, rows in by_kind.items():
+        if kind == "Pod":
+            continue
         values = {(row["name"], row["uid"]) for row in rows}
         if len(values) != 1:
             raise ValueError(f"Miles event journal contains multiple {kind} identities")
         identities[kind] = next(iter(values))
     workload_name, workload_uid = identities["Workload"]
-    pod_name, pod_uid = identities["Pod"]
+    pod_identities = sorted({(row["name"], row["uid"]) for row in by_kind["Pod"]})
+    if len(pod_identities) != expected_workers:
+        raise ValueError("Miles event journal Pod cardinality differs from the submitted topology")
+    if direct_export:
+        identities["Pod"] = pod_identities[0]
     if direct_export:
         job_name, job_uid = identities["Job"]
         if (
@@ -469,11 +477,14 @@ def compile_controller(
         and row["pod"]["exit_code"] == 0
         and row["pod"]["termination_reason"] == "Completed"
     ]
-    if not controller_terminal or not pod_terminal:
+    terminal_by_uid = {
+        uid: [row for row in pod_terminal if row["uid"] == uid]
+        for _, uid in pod_identities
+    }
+    if not controller_terminal or any(not rows for rows in terminal_by_uid.values()):
         raise ValueError("Miles event journal missed terminal success before TTL cleanup")
     terminal_controller = controller_terminal[-1]
-    terminal_pod = pod_terminal[-1]
-    pod = terminal_pod["pod"]
+    terminal_pods = [rows[-1] for rows in terminal_by_uid.values()]
     if (
         terminal_controller["ttl_seconds_after_finished"] != 0
         or terminal_controller["priority_class"] != expected_priority
@@ -484,17 +495,26 @@ def compile_controller(
                 or terminal_controller["raycluster_name"] != raycluster_name
             )
         )
-        or pod["container_restarts"] != 0
-        or pod["gpus"] != expected_gpus
-        or not isinstance(pod["runtime_image_id"], str)
-        or not pod["runtime_image_id"].endswith(plan["execution"]["image"].rsplit("@", 1)[1])
+        or any(
+            row["pod"]["container_restarts"] != 0
+            or row["pod"]["gpus"] != expected_gpus
+            or not isinstance(row["pod"]["runtime_image_id"], str)
+            or not row["pod"]["runtime_image_id"].endswith(
+                plan["execution"]["image"].rsplit("@", 1)[1]
+            )
+            for row in terminal_pods
+        )
     ):
         raise ValueError("Miles event journal terminal execution differs from the plan")
-    _time(pod["terminated_at"], "Pod termination")
+    for row in terminal_pods:
+        _time(row["pod"]["terminated_at"], "Pod termination")
     terminal_observed = max(
         _time(observed_at, "API terminal observation"),
         _time(terminal_controller["observed_at"], f"{controller_kind} terminal observation"),
-        _time(terminal_pod["observed_at"], "Pod terminal observation"),
+        *(
+            _time(row["observed_at"], "Pod terminal observation")
+            for row in terminal_pods
+        ),
     )
     if hf_plan:
         from .miles_hf_export_job import controller_from_event_journal
@@ -506,7 +526,7 @@ def compile_controller(
                 submission=submission,
                 start=start,
                 identities=identities,
-                pod=pod,
+                pod=terminal_pods[0]["pod"],
                 event_journal={
                     "directory": str(directory.resolve()),
                     "start": {
@@ -557,16 +577,17 @@ def compile_controller(
                 },
                 "pods": [
                     {
-                        "name": pod_name,
-                        "uid": pod_uid,
+                        "name": row["name"],
+                        "uid": row["uid"],
                         "owner_raycluster_uid": raycluster_uid,
-                        "phase": pod["phase"],
-                        "exit_code": pod["exit_code"],
-                        "termination_reason": pod["termination_reason"],
-                        "runtime_image_id": pod["runtime_image_id"],
-                        "container_restarts": pod["container_restarts"],
-                        "gpus": pod["gpus"],
+                        "phase": row["pod"]["phase"],
+                        "exit_code": row["pod"]["exit_code"],
+                        "termination_reason": row["pod"]["termination_reason"],
+                        "runtime_image_id": row["pod"]["runtime_image_id"],
+                        "container_restarts": row["pod"]["container_restarts"],
+                        "gpus": row["pod"]["gpus"],
                     }
+                    for row in sorted(terminal_pods, key=lambda item: (item["name"], item["uid"]))
                 ],
             },
             "execution": {
@@ -574,9 +595,9 @@ def compile_controller(
                 "priority_class": "c1",
                 "effective_priority": 10000,
                 "automatic_requeue": False,
-                "workers": 1,
+                "workers": expected_workers,
                 "gpus_per_worker": expected_gpus,
-                "total_gpus": expected_gpus,
+                "total_gpus": expected_workers * expected_gpus,
             },
             "observed_at": terminal_observed,
         },
@@ -933,7 +954,7 @@ def compile_release(
                 "rayjob_uid": kube["rayjob"]["uid"],
                 "workload_uid": kube["workload"]["uid"],
                 "raycluster_uid": kube["raycluster"]["uid"],
-                "pod_uids": [kube["pods"][0]["uid"]],
+                "pod_uids": sorted(pod["uid"] for pod in kube["pods"]),
             },
             **expected_absence,
             "gpu_release_proven": True,

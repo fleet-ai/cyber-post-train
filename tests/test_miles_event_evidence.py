@@ -138,15 +138,21 @@ def _journal(plan: dict, submission: dict, tmp_path: Path) -> tuple[Path, Path, 
     rayjob_uid = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
     workload_uid = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
     raycluster_uid = "dddddddd-dddd-4ddd-8ddd-dddddddddddd"
-    pod_uid = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"
+    workers = submission["request"]["workers"]
+    pod_uids = [
+        str(uuid.uuid5(uuid.NAMESPACE_URL, f"synthetic-ray-pod-{index}"))
+        for index in range(workers)
+    ]
     raycluster_name = "synthetic-raycluster"
     directory = tmp_path / "watch"
+    profile = cluster_profile(plan.get("execution", {}).get("cluster_target", "dev"))
     evidence.start_capture(
         plan,
         submission,
-        namespace_uid=miles_acceptance.NAMESPACE_UID,
+        namespace_uid=profile.namespace_uid,
         started_at="2026-09-12T12:00:00Z",
         directory=directory,
+        kube_context=profile.kube_context,
     )
     terminal_spec = {
         "shutdownAfterJobFinishes": True,
@@ -212,27 +218,30 @@ def _journal(plan: dict, submission: dict, tmp_path: Path) -> tuple[Path, Path, 
             }
         ],
     }
-    pod = _event(
-        "Pod",
-        "synthetic-ray-head",
-        pod_uid,
-        owner=_owner("RayCluster", raycluster_name, raycluster_uid),
-        spec=pod_spec,
-        status=pod_status,
-        version=4,
-    )
+    pods = [
+        _event(
+            "Pod",
+            f"synthetic-ray-pod-{index}",
+            pod_uid,
+            owner=_owner("RayCluster", raycluster_name, raycluster_uid),
+            spec=pod_spec,
+            status=pod_status,
+            version=4 + index,
+        )
+        for index, pod_uid in enumerate(pod_uids)
+    ]
     terminal_rayjob = copy.deepcopy(rayjob)
     terminal_rayjob["type"] = "DELETED"
-    terminal_rayjob["object"]["metadata"]["resourceVersion"] = "5"
+    terminal_rayjob["object"]["metadata"]["resourceVersion"] = str(4 + workers)
     terminal_rayjob["object"]["status"] = {
         "jobStatus": "SUCCEEDED",
         "rayClusterName": raycluster_name,
     }
-    for sequence, row in enumerate((rayjob, workload, raycluster, pod, terminal_rayjob)):
+    for sequence, row in enumerate((rayjob, workload, raycluster, *pods, terminal_rayjob)):
         evidence.record_event(
             directory,
             row,
-            observed_at=f"2026-09-12T12:00:0{sequence + 1}Z",
+            observed_at=f"2026-09-12T12:00:{sequence + 1:02d}Z",
             sequence=sequence,
         )
     controller_path = tmp_path / "CONTROLLER.json"
@@ -241,7 +250,7 @@ def _journal(plan: dict, submission: dict, tmp_path: Path) -> tuple[Path, Path, 
         submission,
         directory=directory,
         api_status="SUCCEEDED",
-        observed_at="2026-09-12T12:00:06Z",
+        observed_at=f"2026-09-12T12:00:{workers + 6:02d}Z",
         output=controller_path,
     )
     assert controller["kubernetes"]["rayjob"]["uid"] == rayjob_uid
@@ -258,7 +267,7 @@ def _journal(plan: dict, submission: dict, tmp_path: Path) -> tuple[Path, Path, 
             "gpu_pods_present": False,
             "active_gpus": 0,
         },
-        observed_at="2026-09-12T12:00:07Z",
+        observed_at=f"2026-09-12T12:00:{workers + 7:02d}Z",
         output=release_path,
     )
     return directory, controller_path, release_path
@@ -286,6 +295,51 @@ def test_ttl_zero_terminal_and_release_compile_after_all_objects_disappear(
         submission,
         not_before=1.0,
     )
+
+
+def test_prod_long_context_controller_binds_all_four_gpu_pods(
+    plan: dict, submission: dict, tmp_path: Path
+) -> None:
+    profile = cluster_profile("prod")
+    plan["schema"] = "cyber_miles_training_v2"
+    plan["execution"]["cluster_target"] = "prod"
+    plan["arguments"].update(
+        {
+            "nodes": 4,
+            "harness": "opencode",
+            "native_profile": "qwen3.8-27b-256k",
+            "context_tokens": 262_144,
+            "response_tokens": 245_760,
+            "tokens_per_turn": 32_768,
+            "max_tokens_per_gpu": 65_536,
+            "session_node_cap": 4_096,
+        }
+    )
+    submission["source_plan_sha256"] = "sha256:" + digest(plan)
+    submission["api"]["base_url"] = profile.api_base_url
+    submission["request"]["workers"] = 4
+    submission["request"]["runtime_argv"][-1] = digest(plan)
+    submission.pop("sha256")
+    submission["sha256"] = "sha256:" + digest(submission)
+
+    _, controller_path, release_path = _journal(plan, submission, tmp_path)
+
+    controller = __import__("json").loads(controller_path.read_bytes())
+    release = __import__("json").loads(release_path.read_bytes())
+    assert len(controller["kubernetes"]["pods"]) == 4
+    assert controller["execution"] == {
+        "requested_image": miles.IMAGE,
+        "priority_class": "c1",
+        "effective_priority": 10000,
+        "automatic_requeue": False,
+        "workers": 4,
+        "gpus_per_worker": 8,
+        "total_gpus": 32,
+    }
+    assert release["identities"]["pod_uids"] == sorted(
+        pod["uid"] for pod in controller["kubernetes"]["pods"]
+    )
+    miles_acceptance.validate_controller_observation(controller, plan, submission)
 
 
 def test_capture_start_derives_the_exact_prod_identity_from_the_plan(

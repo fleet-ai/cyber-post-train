@@ -66,7 +66,12 @@ RELEASE_QUERY_SCHEMA = "cyber_miles_policy_observer_release_query_v1"
 RELEASE_SCHEMA = "cyber_miles_policy_observer_release_v2"
 POLICY_SCHEMA = "cyber_miles_policy_tensor_delta_observation_v2"
 RELOAD_ACCEPTED_SCHEMA = "cyber_miles_policy_observer_reload_accepted_v2"
-WORLD_SIZE = 8
+# The reward-acquisition canary intentionally samples eight trajectories, but
+# its native training topology may be wider (the long-context contract is 4x8).
+# Keep the legacy name for historical callers while deriving every rank-oriented
+# check from the source plan.
+ROLLOUT_SAMPLES = 8
+WORLD_SIZE = ROLLOUT_SAMPLES
 DEADLINE_SECONDS = 1800
 COMPARISON_METHOD = "all_rank_named_policy_tensor_value_sha256_v2"
 RESTORE_METHOD = "independent_preload_sentinel_overwrite_and_reload_sha256_v1"
@@ -342,35 +347,20 @@ def _read(path: Path, schema: str | None = None) -> tuple[dict[str, Any], str]:
 
 
 def _source_canary(plan: Mapping[str, Any]) -> None:
-    args = plan.get("arguments")
-    execution = plan.get("execution")
-    data = plan.get("data")
-    model = plan.get("model")
-    files = data.get("files") if isinstance(data, Mapping) else None
-    if (
-        plan.get("schema") != "cyber_miles_training_v1"
-        or not isinstance(args, Mapping)
-        or not isinstance(execution, Mapping)
-        or not isinstance(model, Mapping)
-        or plan.get("run_name") != args.get("name")
-        or plan.get("output_root") != args.get("output_root")
-        or model.get("repo") != "Qwen/Qwen3.8-27B"
-        or args.get("model") != "Qwen/Qwen3.8-27B"
-        or args.get("nodes") != 1
-        or args.get("gpus_per_node") != WORLD_SIZE
-        or args.get("steps") != 1
-        or args.get("groups") != 1
-        or args.get("samples_per_prompt") != WORLD_SIZE
-        or args.get("eval_interval") != 1
-        or args.get("checkpoint_interval") != 1
-        or execution.get("image") != miles.IMAGE
-        or execution.get("priority") != "c1"
-        or not isinstance(files, Mapping)
-        or set(files) != {"train", "dev"}
-        or files["train"].get("rows") != 1
-        or files["dev"].get("rows") != 1
-    ):
-        raise ValueError("policy observer source is not the exact one-update Miles canary")
+    from .miles_acceptance import _canary
+
+    _canary(dict(plan))
+
+
+def _source_topology(plan: Mapping[str, Any]) -> tuple[int, int, int]:
+    from .miles_acceptance import _topology
+
+    return _topology(dict(plan))
+
+
+def _source_image(plan: Mapping[str, Any]) -> str:
+    _source_canary(plan)
+    return str(plan["execution"]["image"])
 
 
 def _base_checkpoint(plan: Mapping[str, Any], *, hashes: bool) -> list[dict[str, Any]]:
@@ -382,7 +372,7 @@ def _base_checkpoint(plan: Mapping[str, Any], *, hashes: bool) -> list[dict[str,
     observed = base_inventory(root)
     expected = [{key: row[key] for key in ("path", "size")} for row in checkpoint["files"]]
     if (
-        checkpoint.get("image") != miles.IMAGE
+        checkpoint.get("image") != _source_image(plan)
         or checkpoint.get("optimizer_steps") != 0
         or checkpoint.get("model") != plan.get("model")
         or observed != expected
@@ -443,6 +433,7 @@ def compile_observer(config: dict[str, Any], *, relative_to: Path) -> dict[str, 
     source_plan, submission, trained, refs = _source_bindings(
         source_plan_path, submission_path, checkpoint_path
     )
+    nodes, gpus_per_node, world_size = _source_topology(source_plan)
     if plan_cluster_target(source_plan) != target:
         raise ValueError("policy observer must run on its source checkpoint cluster")
     output = _sfs_root(config["output_root"], "observer output root")
@@ -479,7 +470,7 @@ def compile_observer(config: dict[str, Any], *, relative_to: Path) -> dict[str, 
             checkpoint_path, trained, refs["trained_checkpoint_file_sha256"]
         ),
         "base_checkpoint_receipt_sha256": source_plan["checkpoint"]["sha256"],
-        "world_size": WORLD_SIZE,
+        "world_size": world_size,
         "comparison_method": COMPARISON_METHOD,
         "rank_state_commitment_method": RANK_STATE_COMMITMENT_METHOD,
         "work_authorized": dict(_OBSERVER_WORK),
@@ -494,7 +485,7 @@ def compile_observer(config: dict[str, Any], *, relative_to: Path) -> dict[str, 
         },
         "execution": {
             "cluster_target": target,
-            "image": miles.IMAGE,
+            "image": _source_image(source_plan),
             "priority": "c1",
             "resources": resources,
         },
@@ -510,16 +501,18 @@ def _validate_plan(
     trained = plan.get("trained_checkpoint")
     submission_ref = plan.get("source_submission")
     checkpoint_ref = plan.get("trained_checkpoint_reference")
+    if not isinstance(source, dict):
+        raise ValueError("Miles policy observer source plan is absent")
+    nodes, gpus_per_node, world_size = _source_topology(source)
     if (
         set(plan) != _PLAN_FIELDS
         or plan.get("schema") != PLAN_SCHEMA
-        or not isinstance(source, dict)
         or plan.get("source_plan_sha256", "").removeprefix("sha256:") != digest(source)
         or _SHA.fullmatch(str(plan.get("source_plan_file_sha256"))) is None
         or not Path(str(plan.get("source_plan_path", ""))).is_absolute()
         or not Path(str(plan.get("output_root", ""))).is_absolute()
         or plan.get("base_checkpoint_receipt_sha256") != source.get("checkpoint", {}).get("sha256")
-        or plan.get("world_size") != WORLD_SIZE
+        or plan.get("world_size") != world_size
         or plan.get("comparison_method") != COMPARISON_METHOD
         or plan.get("rank_state_commitment_method") != RANK_STATE_COMMITMENT_METHOD
         or plan.get("work_authorized") != _OBSERVER_WORK
@@ -534,7 +527,7 @@ def _validate_plan(
             "trained_reload": RELOAD_SENTINEL,
         }
         or plan.get("execution", {}).get("cluster_target") != plan_cluster_target(source)
-        or plan.get("execution", {}).get("image") != miles.IMAGE
+        or plan.get("execution", {}).get("image") != _source_image(source)
         or plan.get("execution", {}).get("priority") != "c1"
         or not isinstance(submission_ref, dict)
         or set(submission_ref) != _REFERENCE_FIELDS
@@ -548,8 +541,8 @@ def _validate_plan(
     _source_canary(source)
     sealed(trained, CHECKPOINT_SCHEMA)
     if (
-        trained.get("world_size") != WORLD_SIZE
-        or trained.get("topology") != {"nodes": 1, "gpus_per_node": WORLD_SIZE}
+        trained.get("world_size") != world_size
+        or trained.get("topology") != {"nodes": nodes, "gpus_per_node": gpus_per_node}
         or trained.get("source", {}).get("plan_sha256") != digest(source)
         or Path(str(submission_ref["path"])) == Path(str(checkpoint_ref["path"]))
         or not Path(str(submission_ref["path"])).is_absolute()
@@ -609,7 +602,7 @@ def job_request(plan: dict[str, Any]) -> dict[str, Any]:
             "name": plan["run_name"],
             "title": plan["run_name"] + " zero-update policy observer",
             "run_dir": plan["output_root"],
-            "image": miles.IMAGE,
+            "image": plan["execution"]["image"],
             "workers": topology["nodes"],
             "gpus_per_worker": topology["gpus_per_node"],
             "resources": plan["execution"]["resources"],
@@ -668,14 +661,15 @@ def _request_projection(
         if key == "CYBER_RUNTIME_BUNDLE" or re.fullmatch(r"CYBER_RUNTIME_BUNDLE_\d+", key)
     }
     ordinary_env = {key: value for key, value in env.items() if key not in transport}
+    topology = plan["trained_checkpoint"]["topology"]
     if (
         set(request) != expected_keys
         or request.get("name") != plan["run_name"]
         or request.get("title") != plan["run_name"] + " zero-update policy observer"
         or request.get("run_dir") != plan["output_root"]
-        or request.get("image") != miles.IMAGE
-        or request.get("workers") != 1
-        or request.get("gpus_per_worker") != WORLD_SIZE
+        or request.get("image") != plan["execution"]["image"]
+        or request.get("workers") != topology["nodes"]
+        or request.get("gpus_per_worker") != topology["gpus_per_node"]
         or request.get("resources") != plan["execution"]["resources"]
         or request.get("priority_class") != "c1"
         or request.get("requeueIfPreempted") is not False
@@ -808,6 +802,7 @@ def _submission_journal(
         raise ValueError("observer Jobs API journal must contain one intent and one response")
     intent, response = rows
     profile = cluster_profile(plan_cluster_target(plan))
+    topology = plan["trained_checkpoint"]["topology"]
     if (
         set(intent)
         != {
@@ -818,9 +813,9 @@ def _submission_journal(
         or intent.get("api_base_url") != profile.api_base_url
         or intent.get("request_sha256") != digest(request)
         or _SHA.fullmatch(str(intent.get("manifest_sha256"))) is None
-        or intent.get("nodes") != 1
-        or intent.get("gpus") != WORLD_SIZE
-        or intent.get("image") != miles.IMAGE
+        or intent.get("nodes") != topology["nodes"]
+        or intent.get("gpus") != topology["nodes"] * topology["gpus_per_node"]
+        or intent.get("image") != plan["execution"]["image"]
         or set(response)
         != {"state", "name", "job_id", "run_dir", "status", "created_at", "finished_at"}
         or response.get("state") != "POST_RESPONSE"
@@ -857,6 +852,7 @@ def validate_submission_binding(
     sealed(value, SUBMISSION_SCHEMA)
     api = value.get("api")
     request = value.get("request")
+    topology = plan["trained_checkpoint"]["topology"]
     profile = cluster_profile(plan_cluster_target(plan))
     if (
         set(value) != _SUBMISSION_FIELDS
@@ -877,9 +873,9 @@ def validate_submission_binding(
         or set(request) != _SUBMISSION_REQUEST_FIELDS
         or request.get("name") != plan["run_name"]
         or request.get("run_dir") != plan["output_root"]
-        or request.get("image") != miles.IMAGE
-        or request.get("workers") != 1
-        or request.get("gpus_per_worker") != WORLD_SIZE
+        or request.get("image") != plan["execution"]["image"]
+        or request.get("workers") != topology["nodes"]
+        or request.get("gpus_per_worker") != topology["gpus_per_node"]
         or request.get("resources") != plan["execution"]["resources"]
         or request.get("priority_class") != "c1"
         or request.get("automatic_requeue") is not False
@@ -1038,6 +1034,9 @@ def _controller_body(
     submitted = validate_submission_binding(submission, plan, check_files=True)
     target = plan_cluster_target(plan)
     profile = cluster_profile(target)
+    topology = plan["trained_checkpoint"]["topology"]
+    expected_workers = topology["nodes"]
+    expected_gpus = topology["gpus_per_node"]
     start_path = directory / "STARTED.json"
     start, start_file_sha256 = events._read(start_path, events.START_SCHEMA)
     intent_ref = start.get("capture_intent")
@@ -1085,6 +1084,8 @@ def _controller_body(
         raise ValueError("policy observer journal missed a lifecycle object")
     identities: dict[str, tuple[str, str]] = {}
     for kind, rows in by_kind.items():
+        if kind == "Pod":
+            continue
         values = {(row["name"], row["uid"]) for row in rows}
         if len(values) != 1:
             raise ValueError(f"policy observer journal contains multiple {kind} identities")
@@ -1092,7 +1093,9 @@ def _controller_body(
     rayjob_name, rayjob_uid = identities["RayJob"]
     workload_name, workload_uid = identities["Workload"]
     raycluster_name, raycluster_uid = identities["RayCluster"]
-    pod_name, pod_uid = identities["Pod"]
+    pod_identities = sorted({(row["name"], row["uid"]) for row in by_kind["Pod"]})
+    if len(pod_identities) != expected_workers:
+        raise ValueError("policy observer Pod cardinality differs from its topology")
     if (
         rayjob_name != start["api_run_name"]
         or any(
@@ -1122,26 +1125,39 @@ def _controller_body(
         and row["pod"]["exit_code"] == 0
         and row["pod"]["termination_reason"] == "Completed"
     ]
-    if not terminal_jobs or not terminal_pods:
+    terminal_by_uid = {
+        uid: [row for row in terminal_pods if row["uid"] == uid]
+        for _, uid in pod_identities
+    }
+    if not terminal_jobs or any(not rows for rows in terminal_by_uid.values()):
         raise ValueError("policy observer journal missed terminal success")
-    terminal_job, terminal_pod = terminal_jobs[-1], terminal_pods[-1]
-    pod = terminal_pod["pod"]
+    terminal_job = terminal_jobs[-1]
+    terminal_pods = [rows[-1] for rows in terminal_by_uid.values()]
     if (
         terminal_job["shutdown_after_job_finishes"] is not True
         or terminal_job["ttl_seconds_after_finished"] != 0
         or terminal_job["priority_class"] != "c1"
         or terminal_job["raycluster_name"] != raycluster_name
-        or pod["container_restarts"] != 0
-        or pod["gpus"] != WORLD_SIZE
-        or not isinstance(pod["runtime_image_id"], str)
-        or not pod["runtime_image_id"].endswith(plan["execution"]["image"].rsplit("@", 1)[1])
+        or any(
+            row["pod"]["container_restarts"] != 0
+            or row["pod"]["gpus"] != expected_gpus
+            or not isinstance(row["pod"]["runtime_image_id"], str)
+            or not row["pod"]["runtime_image_id"].endswith(
+                plan["execution"]["image"].rsplit("@", 1)[1]
+            )
+            for row in terminal_pods
+        )
     ):
         raise ValueError("policy observer terminal execution differs from its plan")
-    events._time(pod["terminated_at"], "policy observer Pod termination")
+    for row in terminal_pods:
+        events._time(row["pod"]["terminated_at"], "policy observer Pod termination")
     terminal_observed = max(
         events._time(observed_at, "policy observer API terminal observation"),
         events._time(terminal_job["observed_at"], "policy observer RayJob terminal event"),
-        events._time(terminal_pod["observed_at"], "policy observer Pod terminal event"),
+        *(
+            events._time(row["observed_at"], "policy observer Pod terminal event")
+            for row in terminal_pods
+        ),
     )
     return {
         "schema": CONTROLLER_SCHEMA,
@@ -1171,16 +1187,17 @@ def _controller_body(
             },
             "pods": [
                 {
-                    "name": pod_name,
-                    "uid": pod_uid,
+                    "name": row["name"],
+                    "uid": row["uid"],
                     "owner_raycluster_uid": raycluster_uid,
-                    "phase": pod["phase"],
-                    "exit_code": pod["exit_code"],
-                    "termination_reason": pod["termination_reason"],
-                    "runtime_image_id": pod["runtime_image_id"],
-                    "container_restarts": pod["container_restarts"],
-                    "gpus": pod["gpus"],
+                    "phase": row["pod"]["phase"],
+                    "exit_code": row["pod"]["exit_code"],
+                    "termination_reason": row["pod"]["termination_reason"],
+                    "runtime_image_id": row["pod"]["runtime_image_id"],
+                    "container_restarts": row["pod"]["container_restarts"],
+                    "gpus": row["pod"]["gpus"],
                 }
+                for row in sorted(terminal_pods, key=lambda item: (item["name"], item["uid"]))
             ],
         },
         "execution": {
@@ -1188,9 +1205,9 @@ def _controller_body(
             "priority_class": "c1",
             "effective_priority": 10000,
             "automatic_requeue": False,
-            "workers": 1,
-            "gpus_per_worker": WORLD_SIZE,
-            "total_gpus": WORLD_SIZE,
+            "workers": expected_workers,
+            "gpus_per_worker": expected_gpus,
+            "total_gpus": expected_workers * expected_gpus,
         },
         "event_journal": {
             "intent": intent_ref,
@@ -1229,6 +1246,9 @@ def validate_controller_observation(
     workload = kube.get("workload") if isinstance(kube, dict) else None
     raycluster = kube.get("raycluster") if isinstance(kube, dict) else None
     expected_image = plan["execution"]["image"].rsplit("@sha256:", 1)[1]
+    topology = plan["trained_checkpoint"]["topology"]
+    expected_workers = topology["nodes"]
+    expected_gpus = topology["gpus_per_node"]
     if (
         set(value)
         != {
@@ -1268,16 +1288,16 @@ def validate_controller_observation(
         or _uuid(raycluster.get("uid"), "observer RayCluster UID") != raycluster.get("uid")
         or raycluster.get("owner_rayjob_uid") != rayjob.get("uid")
         or not isinstance(pods, list)
-        or len(pods) != 1
+        or len(pods) != expected_workers
         or execution
         != {
             "requested_image": plan["execution"]["image"],
             "priority_class": "c1",
             "effective_priority": 10000,
             "automatic_requeue": False,
-            "workers": 1,
-            "gpus_per_worker": WORLD_SIZE,
-            "total_gpus": WORLD_SIZE,
+            "workers": expected_workers,
+            "gpus_per_worker": expected_gpus,
+            "total_gpus": expected_workers * expected_gpus,
         }
         or not isinstance(journal, dict)
         or set(journal) != {"intent", "start", "events"}
@@ -1296,24 +1316,26 @@ def validate_controller_observation(
         or value.get("task_content_included") is not False
     ):
         raise ValueError("policy observer controller evidence is incomplete")
-    pod = pods[0]
-    if (
-        not isinstance(pod, dict)
-        or set(pod)
-        != {
-            "name", "uid", "owner_raycluster_uid", "phase", "exit_code",
-            "termination_reason", "runtime_image_id", "container_restarts", "gpus",
-        }
-        or _uuid(pod.get("uid"), "observer Pod UID") != pod.get("uid")
-        or pod.get("owner_raycluster_uid") != raycluster["uid"]
-        or pod.get("phase") != "Succeeded"
-        or pod.get("exit_code") != 0
-        or pod.get("termination_reason") != "Completed"
-        or _image_digest(pod.get("runtime_image_id")) != expected_image
-        or pod.get("container_restarts") != 0
-        or pod.get("gpus") != WORLD_SIZE
-    ):
-        raise ValueError("policy observer Pod evidence is incomplete")
+    if len({pod.get("uid") for pod in pods if isinstance(pod, dict)}) != expected_workers:
+        raise ValueError("policy observer Pod identities are incomplete")
+    for pod in pods:
+        if (
+            not isinstance(pod, dict)
+            or set(pod)
+            != {
+                "name", "uid", "owner_raycluster_uid", "phase", "exit_code",
+                "termination_reason", "runtime_image_id", "container_restarts", "gpus",
+            }
+            or _uuid(pod.get("uid"), "observer Pod UID") != pod.get("uid")
+            or pod.get("owner_raycluster_uid") != raycluster["uid"]
+            or pod.get("phase") != "Succeeded"
+            or pod.get("exit_code") != 0
+            or pod.get("termination_reason") != "Completed"
+            or _image_digest(pod.get("runtime_image_id")) != expected_image
+            or pod.get("container_restarts") != 0
+            or pod.get("gpus") != expected_gpus
+        ):
+            raise ValueError("policy observer Pod evidence is incomplete")
     _time(value.get("observed_at"), "policy observer controller observation")
     if check_files:
         start_path = Path(journal["start"]["path"])
@@ -1348,6 +1370,27 @@ def compile_controller(
     )
     validate_controller_observation({**body, "sha256": digest(body)}, plan, submission)
     return _write(output, body)
+
+
+def _release_targets(kube: Mapping[str, Any]) -> dict[str, tuple[str, str, str]]:
+    targets = {
+        "rayjob": ("rayjobs.ray.io", kube["rayjob"]["name"], kube["rayjob"]["uid"]),
+        "workload": (
+            "workloads.kueue.x-k8s.io",
+            kube["workload"]["name"],
+            kube["workload"]["uid"],
+        ),
+        "raycluster": (
+            "rayclusters.ray.io",
+            kube["raycluster"]["name"],
+            kube["raycluster"]["uid"],
+        ),
+    }
+    pods = sorted(kube["pods"], key=lambda row: (row["name"], row["uid"]))
+    for index, pod in enumerate(pods):
+        key = "pod" if len(pods) == 1 else f"pod:{index}"
+        targets[key] = ("pods", pod["name"], pod["uid"])
+    return targets
 
 
 def collect_release_query(
@@ -1395,20 +1438,7 @@ def collect_release_query(
     if (namespace or {}).get("metadata", {}).get("uid") != profile.namespace_uid:
         raise ValueError("release query is not bound to the exact namespace UID")
     kube = controller["kubernetes"]
-    targets = {
-        "rayjob": ("rayjobs.ray.io", kube["rayjob"]["name"], kube["rayjob"]["uid"]),
-        "workload": (
-            "workloads.kueue.x-k8s.io",
-            kube["workload"]["name"],
-            kube["workload"]["uid"],
-        ),
-        "raycluster": (
-            "rayclusters.ray.io",
-            kube["raycluster"]["name"],
-            kube["raycluster"]["uid"],
-        ),
-        "pod": ("pods", kube["pods"][0]["name"], kube["pods"][0]["uid"]),
-    }
+    targets = _release_targets(kube)
     objects: dict[str, Any] = {}
     for key, (resource, name, uid) in targets.items():
         observed = get(resource, name)
@@ -1481,12 +1511,19 @@ def validate_release_query(
     kube = value.get("kubernetes")
     objects = kube.get("objects") if isinstance(kube, dict) else None
     controller_kube = controller["kubernetes"]
-    expected = {
-        "rayjob": ("rayjobs.ray.io", controller_kube["rayjob"]),
-        "workload": ("workloads.kueue.x-k8s.io", controller_kube["workload"]),
-        "raycluster": ("rayclusters.ray.io", controller_kube["raycluster"]),
-        "pod": ("pods", controller_kube["pods"][0]),
+    targets = _release_targets(controller_kube)
+    identities = {
+        "rayjob": controller_kube["rayjob"],
+        "workload": controller_kube["workload"],
+        "raycluster": controller_kube["raycluster"],
     }
+    pods = sorted(controller_kube["pods"], key=lambda row: (row["name"], row["uid"]))
+    identities.update(
+        {
+            ("pod" if len(pods) == 1 else f"pod:{index}"): pod
+            for index, pod in enumerate(pods)
+        }
+    )
     if (
         set(value) != _RELEASE_QUERY_FIELDS
         or value.get("status") != "released"
@@ -1503,7 +1540,7 @@ def validate_release_query(
         or kube.get("namespace_uid") != profile.namespace_uid
         or kube.get("quota_reservation_present") is not False
         or not isinstance(objects, dict)
-        or set(objects) != set(expected)
+        or set(objects) != set(targets)
         or value.get("active_gpus") != 0
         or value.get("private_logs_included") is not False
         or value.get("metric_values_included") is not False
@@ -1512,7 +1549,8 @@ def validate_release_query(
         < _time(controller["observed_at"], "policy observer terminal evidence")
     ):
         raise ValueError("policy observer release query is incomplete")
-    for key, (resource, identity) in expected.items():
+    for key, (resource, _name, _uid) in targets.items():
+        identity = identities[key]
         if objects[key] != {
             "resource": resource,
             "name": identity["name"],
@@ -1562,7 +1600,7 @@ def validate_release_observation(
             "rayjob_uid": kube["rayjob"]["uid"],
             "workload_uid": kube["workload"]["uid"],
             "raycluster_uid": kube["raycluster"]["uid"],
-            "pod_uids": [kube["pods"][0]["uid"]],
+            "pod_uids": sorted(pod["uid"] for pod in kube["pods"]),
         }
         or value.get("raycluster_present") is not False
         or value.get("rayjob_present") is not False
@@ -1617,7 +1655,7 @@ def compile_release(
             "rayjob_uid": kube["rayjob"]["uid"],
             "workload_uid": kube["workload"]["uid"],
             "raycluster_uid": kube["raycluster"]["uid"],
-            "pod_uids": [kube["pods"][0]["uid"]],
+            "pod_uids": sorted(pod["uid"] for pod in kube["pods"]),
         },
         "raycluster_present": False,
         "rayjob_present": False,
@@ -1661,8 +1699,8 @@ def _parse_args(source: miles.MilesConfig, checkpoint_root: str, *, trained: boo
         "use_checkpoint_opt_param_scheduler": trained,
         "use_wandb": False,
         "colocate": False,
-        "actor_num_nodes": 1,
-        "actor_num_gpus_per_node": WORLD_SIZE,
+        "actor_num_nodes": source.nodes,
+        "actor_num_gpus_per_node": source.gpus_per_node,
     }
     if any(getattr(args, key) != value for key, value in expected.items()):
         raise ValueError("native parser changed policy observer load semantics")
@@ -2024,8 +2062,8 @@ async def _probe_group(args, marker: int) -> tuple[list[Any], list[dict[str, Any
         pgs = create_placement_groups(args)
         group = allocate_train_group(
             args=args,
-            num_nodes=1,
-            num_gpus_per_node=WORLD_SIZE,
+            num_nodes=args.actor_num_nodes,
+            num_gpus_per_node=args.actor_num_gpus_per_node,
             pg=pgs["actor"],
             role="actor",
             with_ref=False,
@@ -2049,14 +2087,16 @@ def _rank_rows(
     base: Sequence[dict[str, Any]],
     trained_reference: Sequence[dict[str, Any]],
     trained_reload: Sequence[dict[str, Any]],
+    *,
+    world_size: int = WORLD_SIZE,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
-    if any(len(rows) != WORLD_SIZE for rows in (base, trained_reference, trained_reload)):
+    if any(len(rows) != world_size for rows in (base, trained_reference, trained_reload)):
         raise ValueError("policy observer did not receive all ranks")
     base = sorted(base, key=lambda row: row["rank"])
     trained_reference = sorted(trained_reference, key=lambda row: row["rank"])
     trained_reload = sorted(trained_reload, key=lambda row: row["rank"])
     if any(
-        [row["rank"] for row in rows] != list(range(WORLD_SIZE))
+        [row["rank"] for row in rows] != list(range(world_size))
         for rows in (base, trained_reference, trained_reload)
     ):
         raise ValueError("policy observer rank identity mismatch")
@@ -2079,9 +2119,9 @@ def _rank_rows(
         base_model = base_load["restored"]["model"]
         trained_model = reference_load["restored"]["model"]
         if (
-            before["world_size"] != WORLD_SIZE
-            or reference["world_size"] != WORLD_SIZE
-            or reloaded["world_size"] != WORLD_SIZE
+            before["world_size"] != world_size
+            or reference["world_size"] != world_size
+            or reloaded["world_size"] != world_size
             or base_model["tensors"] < 1
             or base_model["local_numel"] < 1
             or trained_model["tensors"] != base_model["tensors"]
@@ -2121,7 +2161,7 @@ def validate_result(plan: dict[str, Any], value: dict[str, Any]) -> list[int]:
         or value.get("base_checkpoint_receipt_sha256") != plan["base_checkpoint_receipt_sha256"]
         or value.get("trained_checkpoint_receipt_sha256")
         != plan["trained_checkpoint"]["sha256"]
-        or value.get("world_size") != WORLD_SIZE
+        or value.get("world_size") != plan["world_size"]
         or value.get("comparison_method") != COMPARISON_METHOD
         or value.get("restored_next_rollout_id")
         != plan["trained_checkpoint"]["next_rollout_id"]
@@ -2139,7 +2179,7 @@ def validate_result(plan: dict[str, Any], value: dict[str, Any]) -> list[int]:
         or value.get("task_content_included") is not False
         or value.get("tensor_values_included") is not False
         or not isinstance(rows, list)
-        or len(rows) != WORLD_SIZE
+        or len(rows) != plan["world_size"]
     ):
         raise ValueError("policy observer result is incomplete or mismatched")
 
@@ -2316,7 +2356,7 @@ def _policy_body(
     validate_submission_binding(submission, plan, check_files=True)
     result, result_file_sha256 = _read(result_path, RESULT_SCHEMA)
     changed = validate_result(plan, result)
-    if changed != list(range(WORLD_SIZE)):
+    if changed != list(range(plan["world_size"])):
         raise ValueError(
             "trained checkpoint lacks an all-rank independently observed policy tensor delta"
         )
@@ -2364,7 +2404,7 @@ def _policy_body(
             controller_path, controller, controller_file_sha256
         ),
         "observer_release": _reference(release_path, release, release_file_sha256),
-        "world_size": WORLD_SIZE,
+        "world_size": plan["world_size"],
         "comparison_method": COMPARISON_METHOD,
         "prediction_probe": result["prediction_probe"],
         "ranks": result["ranks"],
@@ -2442,6 +2482,7 @@ def validate_policy_evidence(
         "reward_values_included", "task_content_included", "tensor_values_included",
         "sha256",
     }
+    _nodes, _gpus_per_node, world_size = _source_topology(source_plan)
     if (
         set(value) != expected_fields
         or value.get("source_plan_sha256", "").removeprefix("sha256:")
@@ -2449,7 +2490,7 @@ def validate_policy_evidence(
         or value.get("base_checkpoint_receipt_sha256")
         != source_plan.get("checkpoint", {}).get("sha256")
         or value.get("trained_checkpoint_receipt_sha256") != checkpoint.get("sha256")
-        or value.get("world_size") != WORLD_SIZE
+        or value.get("world_size") != world_size
         or value.get("comparison_method") != COMPARISON_METHOD
         or validate_prediction_probe(value.get("prediction_probe"))
         != value.get("prediction_probe")
@@ -2632,8 +2673,8 @@ def _observer_reload_body(terminal_path: Path) -> dict[str, Any]:
         "observer_result": policy["observer_result"],
         "observer_controller": policy["observer_controller"],
         "observer_release": policy["observer_release"],
-        "world_size": WORLD_SIZE,
-        "ranks": list(range(WORLD_SIZE)),
+        "world_size": result["world_size"],
+        "ranks": list(range(result["world_size"])),
         "restored_rollout_index": checkpoint["rollout_index"],
         "restored_next_rollout_id": result["restored_next_rollout_id"],
         "rank_state_commitment_method": RANK_STATE_COMMITMENT_METHOD,
@@ -2679,11 +2720,13 @@ def validate_observer_reload_accepted(
     if not check_files:
         raise ValueError("observer-backed reload requires reopening every referenced file")
     sealed(value, RELOAD_ACCEPTED_SCHEMA)
+    world_size = value.get("world_size")
     if (
         set(value) != _RELOAD_ACCEPTED_FIELDS
         or value.get("status") != "accepted"
-        or value.get("world_size") != WORLD_SIZE
-        or value.get("ranks") != list(range(WORLD_SIZE))
+        or type(world_size) is not int
+        or world_size < 1
+        or value.get("ranks") != list(range(world_size))
         or value.get("rank_state_commitment_method") != RANK_STATE_COMMITMENT_METHOD
         or validate_prediction_probe(value.get("prediction_probe"))
         != value.get("prediction_probe")
@@ -2765,7 +2808,12 @@ def _native(plan: dict[str, Any]) -> dict[str, Any]:
         or _base_checkpoint(plan["source_plan"], hashes=True) != base_before
     ):
         raise ValueError("a source checkpoint changed during policy observation")
-    rows, prediction_probe = _rank_rows(base, trained_reference, trained_reload)
+    rows, prediction_probe = _rank_rows(
+        base,
+        trained_reference,
+        trained_reload,
+        world_size=plan["world_size"],
+    )
     return {
         "schema": RESULT_SCHEMA,
         "status": "observed",
@@ -2773,7 +2821,7 @@ def _native(plan: dict[str, Any]) -> dict[str, Any]:
         "source_plan_sha256": plan["source_plan_sha256"],
         "base_checkpoint_receipt_sha256": plan["base_checkpoint_receipt_sha256"],
         "trained_checkpoint_receipt_sha256": plan["trained_checkpoint"]["sha256"],
-        "world_size": WORLD_SIZE,
+        "world_size": plan["world_size"],
         "comparison_method": COMPARISON_METHOD,
         "ranks": rows,
         "changed_policy_ranks": [row["rank"] for row in rows if row["policy_changed"]],

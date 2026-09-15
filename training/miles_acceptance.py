@@ -33,8 +33,8 @@ from evals.fleet import opencode_self_hosted as fleet
 from .miles_cluster import cluster_profile, plan_cluster_target
 from .miles_conversion import _write
 from .miles_reload import CHECKPOINT_SCHEMA, _verify_checkpoint
+from .miles_training import LONG_CONTEXT_SCHEMA, RUNTIME_FILES, job_request
 from .miles_training import SCHEMA as TRAINING_SCHEMA
-from .miles_training import job_request
 from .rl_episode import _validate as validate_episode_config
 from .rl_runtime import sealed
 
@@ -51,19 +51,7 @@ NAMESPACE = cluster_profile("dev").namespace
 NAMESPACE_UID = cluster_profile("dev").namespace_uid
 WORLD_SIZE = 8
 
-_SUBMITTED_RUNTIME_FILES = (
-    "training/miles_training.py",
-    "training/miles.py",
-    "training/miles_conversion.py",
-    "training/miles_promotion.py",
-    "training/miles_rollout.py",
-    "training/miles_text.py",
-    "training/rl_episode.py",
-    "training/rl_runtime.py",
-    "training/sft_runtime.py",
-    "evals/fleet/opencode_self_hosted.py",
-    "cyber_post_train/jobs.py",
-)
+_SUBMITTED_RUNTIME_FILES = RUNTIME_FILES
 _SUBMITTED_ENV = {
     "PYTHONPATH": "/root/Megatron-LM",
     "HF_HUB_OFFLINE": "1",
@@ -308,14 +296,17 @@ def _canary(plan: dict[str, Any]) -> dict[str, Any]:
     profile = cluster_profile(plan_cluster_target(plan))
     image = execution.get("image") if isinstance(execution, dict) else None
     checkpoint = plan.get("checkpoint", {})
+    long_horizon = plan.get("schema") == LONG_CONTEXT_SCHEMA
+    nodes = 4 if long_horizon else 1
+    gpus_per_node = 8
     if (
-        plan.get("schema") != TRAINING_SCHEMA
+        plan.get("schema") not in {TRAINING_SCHEMA, LONG_CONTEXT_SCHEMA}
         or plan.get("run_name") != args.get("name")
         or plan.get("output_root") != args.get("output_root")
         or plan.get("model", {}).get("repo") != "Qwen/Qwen3.8-27B"
         or args.get("model") != "Qwen/Qwen3.8-27B"
-        or args.get("nodes") != 1
-        or args.get("gpus_per_node") != WORLD_SIZE
+        or args.get("nodes") != nodes
+        or args.get("gpus_per_node") != gpus_per_node
         or args.get("steps") != 1
         or args.get("groups") != 1
         or args.get("samples_per_prompt") != WORLD_SIZE
@@ -328,6 +319,18 @@ def _canary(plan: dict[str, Any]) -> dict[str, Any]:
         or profile.namespace != NAMESPACE
         or _SHA.fullmatch(str(plan.get("runtime_sha256"))) is None
         or _SHA.fullmatch(str(plan.get("native_driver_sha256"))) is None
+        or (
+            long_horizon
+            and (
+                args.get("harness") != "opencode"
+                or args.get("native_profile") != "qwen3.8-27b-256k"
+                or args.get("context_tokens") != 262_144
+                or args.get("response_tokens") != 245_760
+                or args.get("tokens_per_turn") != 32_768
+                or args.get("max_tokens_per_gpu") != 65_536
+                or args.get("session_node_cap") != 4_096
+            )
+        )
     ):
         raise ValueError("terminal acceptance requires the exact one-update Miles canary")
     files = plan.get("data", {}).get("files", {})
@@ -338,6 +341,15 @@ def _canary(plan: dict[str, Any]) -> dict[str, Any]:
     ):
         raise ValueError("reward canary requires one frozen train and dev task")
     return args
+
+
+def _topology(plan: dict[str, Any]) -> tuple[int, int, int]:
+    """Return the already-validated worker, per-worker GPU and rank counts."""
+
+    args = _canary(plan)
+    nodes = args["nodes"]
+    gpus = args["gpus_per_node"]
+    return nodes, gpus, nodes * gpus
 
 
 def reconstruct_current_request(plan: dict[str, Any]) -> dict[str, Any]:
@@ -422,14 +434,15 @@ def _submitted_request(
     }
     ordinary_env = {key: value for key, value in env.items() if key not in transport_names}
     expected_env = {**_SUBMITTED_ENV, "WANDB_RUN_ID": args["wandb_run_id"]}
+    nodes, gpus_per_node, _ = _topology(plan)
     if (
         set(request) != expected_keys
         or request.get("name") != plan["run_name"]
         or request.get("title") != plan["run_name"] + " native Miles RL"
         or request.get("run_dir") != plan["output_root"]
         or request.get("image") != plan["execution"]["image"]
-        or request.get("workers") != 1
-        or request.get("gpus_per_worker") != WORLD_SIZE
+        or request.get("workers") != nodes
+        or request.get("gpus_per_worker") != gpus_per_node
         or request.get("resources") != plan["execution"]["resources"]
         or request.get("priority_class") != "c1"
         or request.get("requeueIfPreempted") is not False
@@ -457,6 +470,9 @@ def _submitted_request(
     if not isinstance(payload, dict) or set(payload) != {"files", "module", "argv"}:
         raise ValueError("submitted runtime bundle fields changed")
     files = payload.get("files")
+    required_runtime_files = set(_SUBMITTED_RUNTIME_FILES)
+    if plan.get("schema") != LONG_CONTEXT_SCHEMA:
+        required_runtime_files.discard("training/miles_opencode.py")
     if (
         not isinstance(files, dict)
         or any(
@@ -465,7 +481,7 @@ def _submitted_request(
         or payload.get("module") != "training.miles_training"
         or payload.get("argv") != ["--plan", "plan.json", "--sha256", digest(plan)]
         or files.get("plan.json") != json.dumps(plan, sort_keys=True, separators=(",", ":"))
-        or not set(_SUBMITTED_RUNTIME_FILES).issubset(files)
+        or not required_runtime_files.issubset(files)
     ):
         raise ValueError("submitted runtime bundle is not bound to the exact Miles plan")
     source_files = {path: files[path] for path in _SUBMITTED_RUNTIME_FILES}
@@ -554,6 +570,7 @@ def validate_submission_binding(
     projection = value.get("request")
     api = value.get("api")
     profile = cluster_profile(plan_cluster_target(plan))
+    nodes, gpus_per_node, _ = _topology(plan)
     if (
         set(value) != _SUBMISSION_FIELDS
         or re.fullmatch(r"[a-f0-9]{40}", str(value.get("source_commit"))) is None
@@ -566,8 +583,8 @@ def validate_submission_binding(
         or projection.get("name") != plan["run_name"]
         or projection.get("run_dir") != plan["output_root"]
         or projection.get("image") != plan["execution"]["image"]
-        or projection.get("workers") != 1
-        or projection.get("gpus_per_worker") != WORLD_SIZE
+        or projection.get("workers") != nodes
+        or projection.get("gpus_per_worker") != gpus_per_node
         or projection.get("resources") != plan["execution"]["resources"]
         or projection.get("priority_class") != "c1"
         or projection.get("automatic_requeue") is not False
@@ -626,7 +643,12 @@ def _source_configs(plan: dict[str, Any]) -> dict[str, dict[str, Any]]:
         "arguments"
     ]["model_root"]
     manifest_path = Path(plan["arguments"]["data_manifest"])
-    manifest, _ = _read(manifest_path, schema="cyber_miles_data_v1")
+    data_schema = (
+        "cyber_miles_data_v2"
+        if plan.get("schema") == LONG_CONTEXT_SCHEMA
+        else "cyber_miles_data_v1"
+    )
+    manifest, _ = _read(manifest_path, schema=data_schema)
     if manifest != plan["data"]:
         raise ValueError("staged Miles data manifest differs from the plan")
     for split in ("train", "dev"):
@@ -1244,6 +1266,7 @@ def validate_controller_observation(
     target = plan_cluster_target(plan)
     profile = cluster_profile(target)
     expected_image = plan["execution"]["image"].rsplit("@sha256:", 1)[1]
+    nodes, gpus_per_node, world_size = _topology(plan)
     if (
         set(value)
         != {
@@ -1290,7 +1313,7 @@ def validate_controller_observation(
         or raycluster.get("owner_rayjob_uid") != rayjob.get("uid")
         or not isinstance(raycluster.get("name"), str)
         or not isinstance(pods, list)
-        or len(pods) != 1
+        or len(pods) != nodes
         or not isinstance(execution, dict)
         or execution
         != {
@@ -1298,36 +1321,41 @@ def validate_controller_observation(
             "priority_class": "c1",
             "effective_priority": 10000,
             "automatic_requeue": False,
-            "workers": 1,
-            "gpus_per_worker": WORLD_SIZE,
-            "total_gpus": WORLD_SIZE,
+            "workers": nodes,
+            "gpus_per_worker": gpus_per_node,
+            "total_gpus": world_size,
         }
     ):
         raise ValueError("controller observation differs from the exact canary cluster")
-    pod = pods[0]
-    if (
-        set(pod)
-        != {
-            "name",
-            "uid",
-            "owner_raycluster_uid",
-            "phase",
-            "exit_code",
-            "termination_reason",
-            "runtime_image_id",
-            "container_restarts",
-            "gpus",
-        }
-        or _uuid(pod.get("uid"), "Pod UID") != pod.get("uid")
-        or pod.get("owner_raycluster_uid") != raycluster["uid"]
-        or pod.get("phase") != "Succeeded"
-        or pod.get("exit_code") != 0
-        or pod.get("termination_reason") != "Completed"
-        or _image_digest(pod.get("runtime_image_id")) != expected_image
-        or pod.get("container_restarts") != 0
-        or pod.get("gpus") != WORLD_SIZE
-    ):
-        raise ValueError("controller Pod observation is incomplete or mismatched")
+    pod_fields = {
+        "name",
+        "uid",
+        "owner_raycluster_uid",
+        "phase",
+        "exit_code",
+        "termination_reason",
+        "runtime_image_id",
+        "container_restarts",
+        "gpus",
+    }
+    pod_uids: set[str] = set()
+    for pod in pods:
+        uid = pod.get("uid") if isinstance(pod, dict) else None
+        if (
+            not isinstance(pod, dict)
+            or set(pod) != pod_fields
+            or _uuid(uid, "Pod UID") != uid
+            or uid in pod_uids
+            or pod.get("owner_raycluster_uid") != raycluster["uid"]
+            or pod.get("phase") != "Succeeded"
+            or pod.get("exit_code") != 0
+            or pod.get("termination_reason") != "Completed"
+            or _image_digest(pod.get("runtime_image_id")) != expected_image
+            or pod.get("container_restarts") != 0
+            or pod.get("gpus") != gpus_per_node
+        ):
+            raise ValueError("controller Pod observation is incomplete or mismatched")
+        pod_uids.add(uid)
     _time(value.get("observed_at"), "controller observation")
 
 
@@ -1383,7 +1411,7 @@ def validate_release_observation(
             "rayjob_uid": kube["rayjob"]["uid"],
             "workload_uid": kube["workload"]["uid"],
             "raycluster_uid": kube["raycluster"]["uid"],
-            "pod_uids": [kube["pods"][0]["uid"]],
+            "pod_uids": sorted(pod["uid"] for pod in kube["pods"]),
         }
         or value.get("raycluster_present") is not False
         or value.get("rayjob_present") is not False
@@ -1403,11 +1431,12 @@ def _checkpoint(plan: dict[str, Any], path: Path) -> tuple[dict[str, Any], str]:
     _verify_checkpoint(manifest, hashes=True)
     source = manifest.get("source", {})
     completion, _ = _read(Path(plan["output_root"]) / "NATIVE_TRAINING_COMPLETE.json")
+    nodes, gpus_per_node, world_size = _topology(plan)
     if (
         manifest.get("rollout_index") != 0
         or manifest.get("next_rollout_id") != 1
-        or manifest.get("world_size") != WORLD_SIZE
-        or manifest.get("topology") != {"nodes": 1, "gpus_per_node": WORLD_SIZE}
+        or manifest.get("world_size") != world_size
+        or manifest.get("topology") != {"nodes": nodes, "gpus_per_node": gpus_per_node}
         or manifest.get("model") != plan["model"]
         or source.get("run_name") != plan["run_name"]
         or source.get("output_root") != plan["output_root"]
@@ -1608,7 +1637,7 @@ def validate_terminal(value: dict[str, Any], *, check_files: bool = True) -> dic
         or update.get("optimizer_updates") != 1
         or update.get("policy_tensor_payload_changed_from_base") is not True
         or type(update.get("changed_policy_ranks")) is not int
-        or not 1 <= update["changed_policy_ranks"] <= WORLD_SIZE
+        or update["changed_policy_ranks"] < 1
         or update.get("counter_only_claim") is not False
         or not all(
             isinstance(reference, dict) and set(reference) == _REFERENCE_FIELDS
@@ -1626,6 +1655,9 @@ def validate_terminal(value: dict[str, Any], *, check_files: bool = True) -> dic
     plan, _ = _json_snapshot(Path(submission_value["source_plan_path"]))
     if not isinstance(plan, dict):
         raise ValueError("Miles terminal source plan is not an object")
+    _, _, world_size = _topology(plan)
+    if update["changed_policy_ranks"] > world_size:
+        raise ValueError("Miles terminal changed-rank count exceeds checkpoint topology")
     expected = _compile(
         plan,
         submission_binding_path=Path(submission["path"]),
