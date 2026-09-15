@@ -1,0 +1,35 @@
+{
+  "name": "chris-q38-miles-lc-full1",
+  "backend": "miles",
+  "task_set": "../data/qwen38-rl-filtered-study-a-task-set-v1.json",
+  "split": "../data/qwen38-rl-filtered-study-a-split-v1.json",
+  "tool_catalog": "../data/qwen38-rl-filtered-canary-tool-catalog-v1.json",
+  "model_lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
+  "model_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+  "output": "/mnt/sfs/jobs/chris-q38-miles-lc-full1-inputs/data",
+  "harness": {
+    "name": "opencode",
+    "version": "1.18.27",
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_segmented_v1",
+    "context_window_size": 262144,
+    "max_output_tokens": 32768,
+    "max_model_requests": 2048,
+    "job_hard_seconds": 32400,
+    "compaction_buffer_tokens": 20000,
+    "compaction_reserved_tokens": 52768,
+    "compaction_threshold_tokens": 176608,
+    "summary_max_tokens": 4096,
+    "preserve_recent_tokens": 15000,
+    "summary_token_treatment": "excluded_separate_session_v1",
+    "session_node_cap": 4096,
+    "binary_sha256": "sha256:bddf894e5c2bc3d8cf452bd6e5ab2273bbe4a37eeeb9aec848d3d7d20db1f256"
+  },
+  "limits": {
+    "context_tokens": 262144,
+    "response_tokens": 245760,
+    "max_tokens_per_turn": 32768,
+    "max_turns": 2048,
+    "episode_seconds": 28800,
+    "tool_seconds": 330
+  }
+}

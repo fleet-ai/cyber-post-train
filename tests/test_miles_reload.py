@@ -774,3 +774,27 @@ def test_template_is_intentionally_unmaterialized_dev_c1():
     assert value["cluster"]["priority"] == "c1"
     assert "REPLACE_WITH" in value["checkpoint"]["sha256"]
     assert "REPLACE_WITH" in value["terminal_acceptance"]["receipt_sha256"]
+
+
+def test_long_context_prod_template_is_inert_and_source_bound():
+    root = Path(__file__).resolve().parents[1]
+    path = root / (
+        "configs/qualification/"
+        "qwen38-miles-opencode-long-context-reload-prod-v1.template.json"
+    )
+    value = json.loads(path.read_text())
+    assert value["schema"] == reload.CONFIG_SCHEMA
+    assert value["name"] == "chris-q38-miles-lc-reload1"
+    assert value["output_root"] == "/mnt/sfs/jobs/chris-q38-miles-lc-reload1"
+    assert value["checkpoint"]["manifest"] == (
+        "/mnt/sfs/jobs/chris-q38-miles-lc-canary1-seal/"
+        "MILES_TRAINING_CHECKPOINT.json"
+    )
+    assert value["terminal_acceptance"]["receipt"] == (
+        "/mnt/sfs/jobs/chris-q38-miles-lc-canary1/MILES_TERMINAL_ACCEPTED.json"
+    )
+    assert value["cluster"]["target"] == "prod"
+    assert value["cluster"]["priority"] == "c1"
+    assert "REPLACE_WITH" in value["checkpoint"]["sha256"]
+    assert "REPLACE_WITH" in value["terminal_acceptance"]["file_sha256"]
+    assert "REPLACE_WITH" in value["terminal_acceptance"]["receipt_sha256"]
