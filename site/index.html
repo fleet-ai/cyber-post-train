@@ -110,42 +110,47 @@
 
       <section class="page" data-tab-page="task-quality" aria-labelledby="quality-title" hidden>
         <div class="hero ruled">
-          <p class="eyebrow">Fleet training data · 160 tasks reviewed</p>
+          <p class="eyebrow">Fleet training data · current catalog checked</p>
           <h1 id="quality-title">A broken task tells us nothing about the model.</h1>
-          <p class="dek">We examined 160 saved security challenges in which the model could use a website but could not inspect its source code. We kept 89 only after checking that each challenge had run correctly before and that all files needed to run and score it are still available.</p>
+          <p class="dek">We found 1,054 current production security tasks in which the model can use a website but cannot inspect its source code. Only 75 currently meet our strict standard: an earlier attempt proved the exact task ran and scored correctly, the same version is still selected, and the latest review does not mark it as broken.</p>
           <div class="hero-meta">
-            <span>160 tasks in the saved list</span>
-            <span>89 passed both checks</span>
+            <span>1,054 current blackbox tasks</span>
+            <span>75 passed every current check</span>
+            <span>42 have a fully successful exact attempt</span>
+            <span>52 currently marked broken</span>
+            <span>17 promising tasks still need exact proof</span>
+            <span>Fixed split: 50 train · 17 development · 8 final test</span>
             <span>Scores were not used for selection</span>
           </div>
         </div>
 
         <aside class="finding" aria-label="Selection rule">
           <span class="finding-label">Selection rule</span>
-          <p>A genuine model failure is useful data. A broken website or broken scoring program is not. We never used model scores to decide which tasks to keep.</p>
+          <p>A genuine model failure is useful data. A broken website or broken scoring program is not. “Production” and “has an automatic answer check” are not enough on their own.</p>
         </aside>
 
         <section class="section" aria-labelledby="funnel-title">
           <div class="section-heading">
             <p class="section-index">01</p>
             <div>
-              <h2 id="funnel-title">How 160 tasks became 89</h2>
-              <p>Every task had to pass two checks: a previous attempt completed and scored correctly, and everything needed to run the task again is still present.</p>
+              <h2 id="funnel-title">How 1,054 tasks became 75</h2>
+              <p>We required earlier proof from the exact task version, kept only versions that are still selected for production, and removed anything now marked broken.</p>
             </div>
           </div>
           <div id="filter-funnel" class="funnel"></div>
-          <div class="equation" aria-label="Task selection equation"><span>Worked correctly before</span><b>+</b><span>Can still be run today</span><b>=</b><strong>89 tasks</strong></div>
-          <p class="footnote">The two middle counts are separate, overlapping checks—not a step-by-step funnel. Some tasks passed only one of them; 89 passed both.</p>
+          <div class="equation" aria-label="Task selection equation"><span>Worked and scored correctly before</span><b>+</b><span>Still current and not known broken</span><b>=</b><strong>75 tasks</strong></div>
+          <p class="footnote">The other 979 tasks are not all broken. Most simply lack the complete, independently checked proof required by this conservative filter.</p>
         </section>
 
         <section class="section" aria-labelledby="gates-title">
           <div class="section-heading">
             <p class="section-index">02</p>
-            <div><h2 id="gates-title">What “good” means</h2><p>Every task we kept passed both checks below.</p></div>
+            <div><h2 id="gates-title">What “good” means</h2><p>Every task we kept passed all three checks below.</p></div>
           </div>
           <div class="gate-grid">
-            <article><span class="gate-number">1</span><h3>It worked in a previous test</h3><p>An independent record showed that the website started, a model attempt completed, scoring finished with a real number, and the temporary website was removed afterward.</p></article>
-            <article><span class="gate-number">2</span><h3>We can recreate it</h3><p>The exact website setup, starting information, hidden answer-checking code, and scoring program are all still available.</p></article>
+            <article><span class="gate-number">1</span><h3>It worked in a previous test</h3><p>An independent record showed that the website started, grading finished with a real result, the result was saved, and the temporary website was removed afterward.</p></article>
+            <article><span class="gate-number">2</span><h3>The exact version is still current</h3><p>The catalog still selects the same task version for production and still has its automatic answer check attached.</p></article>
+            <article><span class="gate-number">3</span><h3>No newer review says it is broken</h3><p>Five previously proven task versions are now marked broken, so they are not in the current 75-task set.</p></article>
           </div>
         </section>
 
@@ -160,16 +165,16 @@
         <section class="section" aria-labelledby="excluded-title">
           <div class="section-heading">
             <p class="section-index">04</p>
-            <div><h2 id="excluded-title">Why 71 tasks were excluded</h2><p>These are missing proof or missing files. They do not mean every excluded task is permanently broken.</p></div>
+            <div><h2 id="excluded-title">What remains outside the 75</h2><p>Known broken tasks are excluded. Unreviewed and partly proven tasks stay separate until the same complete proof is available.</p></div>
           </div>
           <div id="exclusion-bars" class="exclusion-bars"></div>
-          <p class="footnote">A second check found 17 tasks missing their starting information and 11 missing either the hidden answer-checking setup or the exact scoring program. Many of those tasks were already among the 62 without proof of a successful test, so adding these numbers together would count some tasks twice.</p>
+          <p class="footnote">The 985 unreviewed tasks include 75 tasks with strong earlier execution proof. Current review status and earlier execution proof answer different questions, so these bars should not be added together.</p>
         </section>
 
         <section class="section" aria-labelledby="mix-title">
           <div class="section-heading">
             <p class="section-index">05</p>
-            <div><h2 id="mix-title">What remains</h2><p>The 89 tasks cover five web applications. Most were rated medium difficulty.</p></div>
+            <div><h2 id="mix-title">What remains</h2><p>The 75-task conservative set covers five web applications. Most were rated medium difficulty.</p></div>
           </div>
           <div class="two-column">
             <div><h3>Applications</h3><div id="app-mix" class="mini-bars"></div></div>
@@ -177,28 +182,43 @@
           </div>
         </section>
 
-        <section class="section" aria-labelledby="split-title">
+        <section class="section" aria-labelledby="coverage-title">
           <div class="section-heading">
             <p class="section-index">06</p>
-            <div><h2 id="split-title">Balanced training and test groups</h2><p>We made two different balanced assignments. If both lead to the same conclusion, the result is less likely to depend on one lucky split.</p></div>
+            <div><h2 id="coverage-title">Which tasks already have successful examples?</h2><p>A task can work correctly even when the model fails it. For training from saved examples, we separately need a fully successful attempt.</p></div>
           </div>
-          <div class="split-grid">
-            <article><span>Group A</span><b>59</b><small>training</small><b>20</b><small>development, used to choose settings</small><b>10</b><small>final test, held back from all choices</small></article>
-            <article><span>Group B</span><b>59</b><small>training</small><b>20</b><small>development, used to choose settings</small><b>10</b><small>same held-back final test</small></article>
+          <div class="gate-grid">
+            <article><span class="gate-number">42</span><h3>Exact success proven</h3><p>For 42 of the 75 retained tasks, the saved record is tied to the exact current task version and proves a complete success.</p></article>
+            <article><span class="gate-number">33</span><h3>Valid failure proven</h3><p>For 33 retained tasks, the checked attempt is a genuine model failure. This does not prove that every other attempt failed.</p></article>
           </div>
-          <p class="callout">We balanced the website, type of weakness, task family, and difficulty. We did not use model answers, model scores, or training loss.</p>
+          <p class="callout">Across all 1,054 current blackbox tasks, 44 have exact success proof, but two of those are now marked broken and stay excluded. Another 36 have an exact valid failure. The remaining 974 lack exact version-specific execution proof in this review.</p>
+        </section>
+
+        <section class="section" aria-labelledby="split-title">
+          <div class="section-heading">
+            <p class="section-index">07</p>
+            <div><h2 id="split-title">A fixed 50/17/8 study split</h2><p>Every retained task includes reviewed application, environment, task-family, type-of-weakness, and difficulty information. We used those labels to make one reproducible assignment.</p></div>
+          </div>
+          <div class="gate-grid">
+            <article><span class="gate-number">50</span><h3>Training</h3><p>These tasks may be used to fit the model.</p></article>
+            <article><span class="gate-number">17</span><h3>Development</h3><p>Use these tasks to compare settings and choose a recipe.</p></article>
+            <article><span class="gate-number">8</span><h3>Final test</h3><p>Keep these untouched until the recipe has been chosen.</p></article>
+          </div>
+          <p class="callout">Related versions of one task family cannot cross groups. Applications, environments, difficulty ratings, and weakness labels were balanced as closely as this small dataset allows. A label with only one task cannot appear in all three groups; the report states this limit instead of calling it representative.</p>
         </section>
 
         <section class="section compact" aria-labelledby="scope-title">
           <div class="section-heading">
-            <p class="section-index">07</p>
+            <p class="section-index">08</p>
             <div>
               <h2 id="scope-title">Scope and public evidence</h2>
-              <p>This review covers one saved list of 160 tasks. It does not cover every Fleet task that exists today, and it does not prove that every website is healthy at this moment.</p>
+              <p>This review covers the current OTS Cyber catalog. The full 1,054-task file is an inventory, not a claim that all 1,054 work. The 75-task file is the conservative set supported by exact earlier execution proof and current status.</p>
               <div class="source-links">
-                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/fleet-a62-task-split-v1.json">All 160 tasks reviewed</a>
-                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/qwen-blackbox-eligible-v1.json">The 89 tasks kept</a>
-                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/docs/QWEN_BLACKBOX_TASK_FILTERING_REPORT_2026-09-12.md">Full filtering report</a>
+                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/fleet-blackbox-current-production-20260914-v1.json">All 1,054 current blackbox tasks</a>
+                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/fleet-blackbox-current-high-quality-20260914-v1.json">The 75 tasks kept</a>
+                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/fleet-blackbox-current-study-split-20260914-v2.json">The fixed 50/17/8 study split</a>
+                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/fleet-blackbox-training-coverage-20260914-v1.json">Tasks with proven successful examples</a>
+                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/docs/FLEET_BLACKBOX_TASK_REFRESH_2026-09-14.md">Full filtering report</a>
               </div>
             </div>
           </div>
