@@ -66,13 +66,13 @@ compactions across more than 1,024 nodes.
 - FTI version/profile: `0.8.4`, `qwen3.8-27b-256k`
 - Miles commit: `2799fe386320c156334bf763ad4d7ca0f85dca4e`
 - Original Miles session-tree file: `sha256:fd978a1ef2617f4bf30850fedd197e546cdc9c6542b00b03df502cbb285fc732`
-- Installed native Miles driver: `sha256:34693c11173e69a402228bd1d732122eef9fdb6e5d105660dfdd5eae0b1b954c`
-- Installed native checkpoint converter: `sha256:b5faeaf7bc80b7c98534ff763f43ae45768f6f93425f9cd536551a48ab462425`
+- Installed native Miles driver: `sha256:85dbfd31d41a84f9c2e79a2918583851fb53925630afa229e9cd0a154b170f46`
+- Installed native checkpoint converter: `sha256:0c2541d30073777a30344273a3773844a70ca1961287520c0496a1cec18d43f6`
 - Patched installed session-tree file: `sha256:59bed80a62a8ab94e0bb9012f4f9f0290245a5c8db6feadd0997a7bfb57025ee`
 - OpenCode tag/commit: `v1.18.27`, `4b7e19e315cca414121ba1d61523fef74bb3ae8b`
 - OpenCode Linux binary: `sha256:bddf894e5c2bc3d8cf452bd6e5ab2273bbe4a37eeeb9aec848d3d7d20db1f256`
 - Qwen3.8 fixed chat template: `sha256:38d42166599348d47ded69776c5389c89924045e6827089923a031379f8a3dfe`
-- Derived-image source bundle: `sha256:6717853ffda874184f1ba6fec5a2b9acbcadedbe185f6878d7f5a59d2db3e4ea`
+- Derived-image source bundle: `sha256:ced372ef375bb7a8ff5946a204a3f1b5a8b53d01ade6959312f86c9412fc1913`
 
 ## Remaining gates
 

@@ -25,8 +25,8 @@ LONG_CONTEXT_LAYOUT = (4, 8)
 # Native entrypoints in the FTI 0.8.4 image that carries the 256K profile.
 # Keep these separate from the legacy image pins in the conversion/training
 # modules: accepting either digest for either image would weaken the boundary.
-LONG_NATIVE_DRIVER_SHA256 = "34693c11173e69a402228bd1d732122eef9fdb6e5d105660dfdd5eae0b1b954c"
-LONG_NATIVE_CONVERTER_SHA256 = "b5faeaf7bc80b7c98534ff763f43ae45768f6f93425f9cd536551a48ab462425"
+LONG_NATIVE_DRIVER_SHA256 = "85dbfd31d41a84f9c2e79a2918583851fb53925630afa229e9cd0a154b170f46"
+LONG_NATIVE_CONVERTER_SHA256 = "0c2541d30073777a30344273a3773844a70ca1961287520c0496a1cec18d43f6"
 LONG_INSTALLED_SESSION_TREE_SHA256 = (
     "59bed80a62a8ab94e0bb9012f4f9f0290245a5c8db6feadd0997a7bfb57025ee"
 )
