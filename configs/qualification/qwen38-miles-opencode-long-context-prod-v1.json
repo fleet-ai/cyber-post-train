@@ -1,0 +1,58 @@
+{
+  "backend": "miles",
+  "name": "chris-q38-miles-lc-canary1",
+  "output_root": "/mnt/sfs/jobs/chris-q38-miles-lc-canary1",
+  "model": {
+    "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
+    "weights": "../models/qwen38-27b-1d4bf0f2.weights.json",
+    "root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2"
+  },
+  "data": {
+    "manifest": "/mnt/sfs/jobs/chris-q38-miles-lc-canary1-inputs/data/manifest.json",
+    "root": "/mnt/sfs/jobs/chris-q38-miles-lc-canary1-inputs/data"
+  },
+  "checkpoint": {
+    "manifest": "/mnt/sfs/jobs/chris-q38-miles-lc-base1/NATIVE_CHECKPOINT.json",
+    "sha256": "sha256:7caa9fcb93a50d93f52e62d68f14e313add3e6b510d1abb42ca747dafd0923a0"
+  },
+  "recipe": {
+    "nodes": 4,
+    "gpus_per_node": 8,
+    "steps": 1,
+    "groups": 1,
+    "samples_per_prompt": 8,
+    "lr": 0.000002,
+    "temperature": 0.7,
+    "kl_loss_coef": 0.001,
+    "max_tokens_per_gpu": 65536,
+    "eval_interval": 1,
+    "checkpoint_interval": 1,
+    "seed": 42,
+    "native_profile": "qwen3.8-27b-256k",
+    "harness": "opencode",
+    "session_node_cap": 4096
+  },
+  "wandb": {
+    "entity": "thefleet",
+    "project": "cyber-post-train",
+    "run_id": "chris-q38-miles-lc-canary1"
+  },
+  "cluster": {
+    "target": "prod",
+    "priority": "c1",
+    "resources": {
+      "cpu_request": "64",
+      "cpu_limit": "128",
+      "memory_request": "1536Gi",
+      "memory_limit": "2048Gi"
+    }
+  },
+  "runtime": {
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:22c6c624ae95e1886aeab8c9921642b7753232856eb41fb618a70c52975b0a18",
+    "receipt": "qwen38-miles-opencode-long-context-runtime-v1.json",
+    "sha256": "sha256:a7599e67fe88e987fcfcc380a27dd2c568d329d9fcc97858d4b01fc4299bae6c"
+  },
+  "production_promotion": {
+    "mode": "reward_canary_opencode_long_v1"
+  }
+}

@@ -636,6 +636,8 @@ def job_request(plan: dict) -> dict:
         for name in (
             "training/miles_conversion.py",
             "training/miles.py",
+            "training/miles_training.py",
+            "training/rl_runtime.py",
             "training/export_check.py",
             "training/checkpoints.py",
             "training/post_sft_artifacts.py",

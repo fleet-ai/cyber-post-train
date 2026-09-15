@@ -241,6 +241,85 @@ def test_reward_canary_v3_changes_only_the_per_turn_generation_horizon() -> None
     assert science(data_v3, run_v3) == science(data_v2, run_v2)
 
 
+def test_long_context_reward_canary_binds_exact_runtime_checkpoint_and_four_nodes() -> None:
+    config = json.loads(
+        (
+            ROOT
+            / "configs/qualification/qwen38-miles-opencode-long-context-prod-v1.json"
+        ).read_text()
+    )
+
+    miles_promotion._exact_reward_canary_config(config)
+    assert config["name"] == config["wandb"]["run_id"]
+    assert config["checkpoint"] == miles_promotion.PROD_REWARD_CANARY_LONG_V1_CHECKPOINT
+    assert config["runtime"] == miles_promotion.PROD_REWARD_CANARY_LONG_V1_RUNTIME
+    assert config["recipe"] == {
+        "nodes": 4,
+        "gpus_per_node": 8,
+        "steps": 1,
+        "groups": 1,
+        "samples_per_prompt": 8,
+        "lr": 2e-6,
+        "temperature": 0.7,
+        "kl_loss_coef": 0.001,
+        "max_tokens_per_gpu": 65536,
+        "eval_interval": 1,
+        "checkpoint_interval": 1,
+        "seed": 42,
+        "native_profile": "qwen3.8-27b-256k",
+        "harness": "opencode",
+        "session_node_cap": 4096,
+    }
+    assert config["cluster"] == {
+        "target": "prod",
+        "priority": "c1",
+        "resources": miles_promotion.PROD_REWARD_CANARY_LONG_V1_RESOURCES,
+    }
+
+    for section, key, changed in (
+        ("recipe", "nodes", 1),
+        ("recipe", "session_node_cap", 1024),
+        ("recipe", "harness", "direct"),
+        ("runtime", "image", miles.IMAGE),
+        ("checkpoint", "sha256", "sha256:" + "0" * 64),
+        ("cluster", "priority", "c0"),
+    ):
+        invalid = copy.deepcopy(config)
+        invalid[section][key] = changed
+        with pytest.raises(ValueError, match="exact one-update arm"):
+            miles_promotion._exact_reward_canary_config(invalid)
+
+
+def test_long_context_reward_canary_preview_is_exact_four_by_eight_c1(monkeypatch) -> None:
+    from cyber_post_train import jobs
+
+    plan = {
+        "execution": {
+            "production_promotion": {
+                "mode": miles_promotion.PROD_REWARD_CANARY_LONG_V1_MODE
+            }
+        }
+    }
+    request = {
+        "workers": 4,
+        "gpus_per_worker": 8,
+        "priority_class": "c1",
+        "requeueIfPreempted": False,
+        "resources": miles_promotion.PROD_REWARD_CANARY_LONG_V1_RESOURCES,
+    }
+    monkeypatch.setattr(miles_promotion, "validate_embedded_promotion", lambda *_a, **_k: True)
+    monkeypatch.setattr(jobs, "validate_preview", lambda *_a, **_k: {"nodes": 4})
+    assert miles_promotion.validate_production_preview(plan, request, {}) == {
+        "production_reward_canary": "validated",
+        "rendered_nodes": 4,
+        "effective_priority_expected": 10000,
+    }
+
+    invalid = {**request, "workers": 1}
+    with pytest.raises(JobsError, match="exact 4x8 c1/no-requeue"):
+        miles_promotion.validate_production_preview(plan, invalid, {})
+
+
 def test_reward_canary_preview_requires_c1_without_an_override_reason(monkeypatch) -> None:
     from cyber_post_train import jobs
 
@@ -304,6 +383,42 @@ def test_reward_canary_live_gate_reads_only_c1_priority(monkeypatch) -> None:
     assert observed["effective_priority"] == 10000
     assert ("get", "priorityclass", "c1") in seen
     assert all("c0" not in args for args in seen)
+
+
+def test_long_context_reward_canary_live_gate_reserves_four_nodes(monkeypatch) -> None:
+    class Client:
+        @staticmethod
+        def all_runs():
+            return []
+
+    class Wandb:
+        @staticmethod
+        def run(_):
+            raise RuntimeError("Could not find run")
+
+    def kubectl(*args):
+        if args[:2] == ("get", "namespace"):
+            return {"metadata": {"uid": miles_promotion.PROD_NAMESPACE_UID}}
+        if args[:2] == ("get", "priorityclass"):
+            return {
+                "metadata": {"name": "c1"},
+                "value": 10000,
+                "preemptionPolicy": "PreemptLowerPriority",
+            }
+        return {"items": []}
+
+    plan = {
+        "execution": {
+            "production_promotion": {
+                "mode": miles_promotion.PROD_REWARD_CANARY_LONG_V1_MODE
+            }
+        }
+    }
+    monkeypatch.setattr(miles_promotion, "validate_embedded_promotion", lambda *_a, **_k: True)
+    monkeypatch.setattr(miles_promotion, "_kubectl_json", kubectl)
+    observed = miles_promotion.require_live_external(plan, Client(), wandb_api=Wandb())
+    assert observed["candidate_nodes"] == 4
+    assert observed["node_limit"] == 8
 
 
 def test_embedded_promotion_rechecks_the_complete_compiled_candidate() -> None:

@@ -52,6 +52,45 @@ PROD_REWARD_CANARY_V3_WANDB = {
     "project": "cyber-post-train",
     "run_id": PROD_REWARD_CANARY_V3_NAME,
 }
+PROD_REWARD_CANARY_LONG_V1_MODE = "reward_canary_opencode_long_v1"
+PROD_REWARD_CANARY_LONG_V1_NAME = "chris-q38-miles-lc-canary1"
+PROD_REWARD_CANARY_LONG_V1_OUTPUT = "/mnt/sfs/jobs/chris-q38-miles-lc-canary1"
+PROD_REWARD_CANARY_LONG_V1_DATA_ROOT = (
+    "/mnt/sfs/jobs/chris-q38-miles-lc-canary1-inputs/data"
+)
+PROD_REWARD_CANARY_LONG_V1_DATA_MANIFEST = (
+    PROD_REWARD_CANARY_LONG_V1_DATA_ROOT + "/manifest.json"
+)
+PROD_REWARD_CANARY_LONG_V1_WANDB = {
+    "entity": "thefleet",
+    "project": "cyber-post-train",
+    "run_id": PROD_REWARD_CANARY_LONG_V1_NAME,
+}
+PROD_REWARD_CANARY_LONG_V1_RESOURCES = {
+    "cpu_request": "64",
+    "cpu_limit": "128",
+    "memory_request": "1536Gi",
+    "memory_limit": "2048Gi",
+}
+PROD_REWARD_CANARY_LONG_V1_IMAGE = (
+    "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:"
+    "22c6c624ae95e1886aeab8c9921642b7753232856eb41fb618a70c52975b0a18"
+)
+PROD_REWARD_CANARY_LONG_V1_RUNTIME = {
+    "image": PROD_REWARD_CANARY_LONG_V1_IMAGE,
+    "receipt": "qwen38-miles-opencode-long-context-runtime-v1.json",
+    "sha256": "sha256:a7599e67fe88e987fcfcc380a27dd2c568d329d9fcc97858d4b01fc4299bae6c",
+}
+PROD_REWARD_CANARY_LONG_V1_CHECKPOINT = {
+    "manifest": "/mnt/sfs/jobs/chris-q38-miles-lc-base1/NATIVE_CHECKPOINT.json",
+    "sha256": "sha256:7caa9fcb93a50d93f52e62d68f14e313add3e6b510d1abb42ca747dafd0923a0",
+}
+PROD_REWARD_CANARY_LONG_V1_CHECKPOINT_ROOT = (
+    "/mnt/sfs/jobs/chris-q38-miles-lc-base1/torch-dist"
+)
+PROD_REWARD_CANARY_LONG_V1_CHECKPOINT_RECEIPT_SHA256 = (
+    "7337a9bd828023f685c3c15870de2ce6874e156dcb7b7f92d6bd99e3722641e4"
+)
 EXPERIMENT_OWNER_PREFIX = "chris-"
 FLEET_RUN_NAME_LABEL = "fleet.ai/run-name"
 PROD_MODEL_SHA256 = "dcfdcd6ecb6661741cd3a4b24dc5af7259642c8a6824773e0de70d55d7501179"
@@ -161,6 +200,40 @@ EXPECTED_REWARD_CANARY_V3_DATA = {
     "limits": {
         **EXPECTED_REWARD_CANARY_V2_DATA["limits"],
         "max_tokens_per_turn": 32768,
+    },
+}
+EXPECTED_REWARD_CANARY_LONG_V1_DATA = {
+    "name": PROD_REWARD_CANARY_LONG_V1_NAME,
+    "selection_sha256": EXPECTED_REWARD_CANARY_V2_DATA["selection_sha256"],
+    "split_sha256": EXPECTED_REWARD_CANARY_V2_DATA["split_sha256"],
+    "tool_catalog_sha256": EXPECTED_DATA["tool_catalog_sha256"],
+    "tokenizer": EXPECTED_DATA["tokenizer"],
+    "limits": {
+        "context_tokens": 262144,
+        "response_tokens": 245760,
+        "max_tokens_per_turn": 32768,
+        "max_turns": 2048,
+        "episode_seconds": 28800,
+        "tool_seconds": 330,
+    },
+    "rows": {"train": 1, "dev": 1},
+    "files": {
+        "train": {
+            "path": "train.jsonl",
+            "rows": 1,
+            "max_prompt_tokens": 1261,
+            "sha256": (
+                "sha256:a24ec7460100723d13e86f6d57075cdb65ba8be18a6ff015d5c52b0b230dd362"
+            ),
+        },
+        "dev": {
+            "path": "dev.jsonl",
+            "rows": 1,
+            "max_prompt_tokens": 1276,
+            "sha256": (
+                "sha256:51680c07d5d977630492436946cddd86199178df80e5489ded229411270eb51e"
+            ),
+        },
     },
 }
 BENCHMARK_ISOLATION = {
@@ -307,6 +380,28 @@ def _exact_data(value: Any, expected: dict[str, Any] = EXPECTED_DATA) -> None:
         raise ValueError("Miles production data differs from the exact 59/20 split")
 
 
+def _exact_long_data(value: Any) -> None:
+    from .miles_opencode import harness_contract
+
+    expected = EXPECTED_REWARD_CANARY_LONG_V1_DATA
+    _sealed(value, "cyber_miles_data_v2")
+    if (
+        value.get("name") != expected["name"]
+        or value.get("selection_sha256") != expected["selection_sha256"]
+        or value.get("split_sha256") != expected["split_sha256"]
+        or value.get("tool_catalog_sha256") != expected["tool_catalog_sha256"]
+        or value.get("tokenizer") != expected["tokenizer"]
+        or value.get("template_sha256")
+        != "sha256:38d42166599348d47ded69776c5389c89924045e6827089923a031379f8a3dfe"
+        or value.get("limits") != expected["limits"]
+        or value.get("harness") != harness_contract()
+        or value.get("files") != expected["files"]
+        or value.get("gpus") != 0
+        or value.get("environment_creates") != 0
+    ):
+        raise ValueError("Miles long-context canary data differs from the exact Fleet split")
+
+
 def _candidate_without_promotion(config: dict[str, Any]) -> dict[str, Any]:
     return {key: item for key, item in config.items() if key != "production_promotion"}
 
@@ -316,12 +411,13 @@ def _is_reward_canary_marker(value: Any) -> bool:
         {"mode": PROD_REWARD_CANARY_MODE},
         {"mode": PROD_REWARD_CANARY_V2_MODE},
         {"mode": PROD_REWARD_CANARY_V3_MODE},
+        {"mode": PROD_REWARD_CANARY_LONG_V1_MODE},
     )
 
 
 def _exact_reward_canary_config(config: dict[str, Any]) -> None:
     """Admit one bounded production reward/update canary, never a full run."""
-    expected_recipe = {
+    legacy_recipe = {
         "nodes": 1,
         "gpus_per_node": 8,
         "steps": 1,
@@ -342,37 +438,84 @@ def _exact_reward_canary_config(config: dict[str, Any]) -> None:
         expected_data_root = PROD_DATA_ROOT
         expected_data_manifest = PROD_DATA_MANIFEST
         expected_wandb = PROD_REWARD_CANARY_WANDB
+        expected_recipe = legacy_recipe
+        expected_resources = PROD_REWARD_CANARY_RESOURCES
+        expected_checkpoint = {
+            "manifest": (
+                "/mnt/sfs/jobs/chris-cpt-cleanup-q38-miles-base-v1/NATIVE_CHECKPOINT.json"
+            ),
+            "sha256": (
+                "sha256:b3d772de9121f442ea7b9a4c9a996f2a0a99cab8c49fe3083c148fe3eebd089c"
+            ),
+        }
+        expected_runtime = None
     elif mode == PROD_REWARD_CANARY_V2_MODE:
         expected_name = PROD_REWARD_CANARY_V2_NAME
         expected_output = PROD_REWARD_CANARY_V2_OUTPUT
         expected_data_root = PROD_REWARD_CANARY_V2_DATA_ROOT
         expected_data_manifest = PROD_REWARD_CANARY_V2_DATA_MANIFEST
         expected_wandb = PROD_REWARD_CANARY_V2_WANDB
+        expected_recipe = legacy_recipe
+        expected_resources = PROD_REWARD_CANARY_RESOURCES
+        expected_checkpoint = {
+            "manifest": (
+                "/mnt/sfs/jobs/chris-cpt-cleanup-q38-miles-base-v1/NATIVE_CHECKPOINT.json"
+            ),
+            "sha256": (
+                "sha256:b3d772de9121f442ea7b9a4c9a996f2a0a99cab8c49fe3083c148fe3eebd089c"
+            ),
+        }
+        expected_runtime = None
     elif mode == PROD_REWARD_CANARY_V3_MODE:
         expected_name = PROD_REWARD_CANARY_V3_NAME
         expected_output = PROD_REWARD_CANARY_V3_OUTPUT
         expected_data_root = PROD_REWARD_CANARY_V3_DATA_ROOT
         expected_data_manifest = PROD_REWARD_CANARY_V3_DATA_MANIFEST
         expected_wandb = PROD_REWARD_CANARY_V3_WANDB
+        expected_recipe = legacy_recipe
+        expected_resources = PROD_REWARD_CANARY_RESOURCES
+        expected_checkpoint = {
+            "manifest": (
+                "/mnt/sfs/jobs/chris-cpt-cleanup-q38-miles-base-v1/NATIVE_CHECKPOINT.json"
+            ),
+            "sha256": (
+                "sha256:b3d772de9121f442ea7b9a4c9a996f2a0a99cab8c49fe3083c148fe3eebd089c"
+            ),
+        }
+        expected_runtime = None
+    elif mode == PROD_REWARD_CANARY_LONG_V1_MODE:
+        expected_name = PROD_REWARD_CANARY_LONG_V1_NAME
+        expected_output = PROD_REWARD_CANARY_LONG_V1_OUTPUT
+        expected_data_root = PROD_REWARD_CANARY_LONG_V1_DATA_ROOT
+        expected_data_manifest = PROD_REWARD_CANARY_LONG_V1_DATA_MANIFEST
+        expected_wandb = PROD_REWARD_CANARY_LONG_V1_WANDB
+        expected_recipe = {
+            **legacy_recipe,
+            "nodes": 4,
+            "max_tokens_per_gpu": 65536,
+            "native_profile": "qwen3.8-27b-256k",
+            "harness": "opencode",
+            "session_node_cap": 4096,
+        }
+        expected_resources = PROD_REWARD_CANARY_LONG_V1_RESOURCES
+        expected_checkpoint = PROD_REWARD_CANARY_LONG_V1_CHECKPOINT
+        expected_runtime = PROD_REWARD_CANARY_LONG_V1_RUNTIME
     else:
         raise ValueError("Miles production reward canary mode is not supported")
     if (
         config.get("name") != expected_name
         or config.get("output_root") != expected_output
         or config.get("data") != {"manifest": expected_data_manifest, "root": expected_data_root}
-        or config.get("checkpoint")
-        != {
-            "manifest": "/mnt/sfs/jobs/chris-cpt-cleanup-q38-miles-base-v1/NATIVE_CHECKPOINT.json",
-            "sha256": "sha256:b3d772de9121f442ea7b9a4c9a996f2a0a99cab8c49fe3083c148fe3eebd089c",
-        }
+        or config.get("checkpoint") != expected_checkpoint
         or config.get("recipe") != expected_recipe
         or config.get("wandb") != expected_wandb
         or config.get("cluster")
         != {
             "target": "prod",
             "priority": "c1",
-            "resources": PROD_REWARD_CANARY_RESOURCES,
+            "resources": expected_resources,
         }
+        or config.get("runtime") != expected_runtime
         or not _is_reward_canary_marker(config.get("production_promotion"))
     ):
         raise ValueError("Miles production reward canary differs from its exact one-update arm")
@@ -641,6 +784,10 @@ def _exact_plan(plan: dict[str, Any]) -> None:
         "context_tokens": 98304,
         "response_tokens": 81920,
         "tokens_per_turn": 4096,
+        "native_profile": "qwen3.8-27b",
+        "harness": "direct",
+        "runtime_image": miles.IMAGE,
+        "session_node_cap": 1024,
     }
     # Historical base-policy plans predate the explicit scientific-policy
     # identity.  Missing/None and the exact runtime root are equivalent only
@@ -701,14 +848,60 @@ def _exact_reward_canary_plan(plan: dict[str, Any]) -> None:
         wandb = PROD_REWARD_CANARY_V3_WANDB
         tokens_per_turn = 32768
         expected_data = EXPECTED_REWARD_CANARY_V3_DATA
+        nodes = 1
+        max_tokens_per_gpu = 8192
+        context_tokens = 98304
+        response_tokens = 81920
+        native_profile = "qwen3.8-27b"
+        harness = "direct"
+        runtime_image = miles.IMAGE
+        session_node_cap = 1024
+        checkpoint_root = BASE_CHECKPOINT["root"]
+        checkpoint_receipt_sha256 = BASE_CHECKPOINT["receipt_sha256"]
+        resources = PROD_REWARD_CANARY_RESOURCES
+    elif mode == PROD_REWARD_CANARY_LONG_V1_MODE:
+        name = PROD_REWARD_CANARY_LONG_V1_NAME
+        output = PROD_REWARD_CANARY_LONG_V1_OUTPUT
+        data_root = PROD_REWARD_CANARY_LONG_V1_DATA_ROOT
+        data_manifest = PROD_REWARD_CANARY_LONG_V1_DATA_MANIFEST
+        wandb = PROD_REWARD_CANARY_LONG_V1_WANDB
+        tokens_per_turn = 32768
+        expected_data = EXPECTED_REWARD_CANARY_LONG_V1_DATA
+        nodes = 4
+        max_tokens_per_gpu = 65536
+        context_tokens = 262144
+        response_tokens = 245760
+        native_profile = "qwen3.8-27b-256k"
+        harness = "opencode"
+        runtime_image = PROD_REWARD_CANARY_LONG_V1_IMAGE
+        session_node_cap = 4096
+        checkpoint_root = PROD_REWARD_CANARY_LONG_V1_CHECKPOINT_ROOT
+        checkpoint_receipt_sha256 = PROD_REWARD_CANARY_LONG_V1_CHECKPOINT_RECEIPT_SHA256
+        resources = PROD_REWARD_CANARY_LONG_V1_RESOURCES
     else:
         raise ValueError("compiled Miles production reward canary mode changed")
+    if mode in {
+        PROD_REWARD_CANARY_MODE,
+        PROD_REWARD_CANARY_V2_MODE,
+        PROD_REWARD_CANARY_V3_MODE,
+    }:
+        nodes = 1
+        max_tokens_per_gpu = 8192
+        context_tokens = 98304
+        response_tokens = 81920
+        native_profile = "qwen3.8-27b"
+        harness = "direct"
+        runtime_image = miles.IMAGE
+        session_node_cap = 1024
+        checkpoint_root = BASE_CHECKPOINT["root"]
+        checkpoint_receipt_sha256 = BASE_CHECKPOINT["receipt_sha256"]
+        resources = PROD_REWARD_CANARY_RESOURCES
     expected = {
         "name": name,
         "output_root": output,
         "model_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
         "policy_identity_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
-        "torch_dist_root": BASE_CHECKPOINT["root"],
+        "torch_dist_root": checkpoint_root,
         "train_data": data_root + "/train.jsonl",
         "dev_data": data_root + "/dev.jsonl",
         "data_manifest": data_manifest,
@@ -716,7 +909,7 @@ def _exact_reward_canary_plan(plan: dict[str, Any]) -> None:
         "wandb_project": wandb["project"],
         "wandb_run_id": wandb["run_id"],
         "model": "Qwen/Qwen3.8-27B",
-        "nodes": 1,
+        "nodes": nodes,
         "gpus_per_node": 8,
         "steps": 1,
         "groups": 1,
@@ -724,13 +917,17 @@ def _exact_reward_canary_plan(plan: dict[str, Any]) -> None:
         "lr": 2e-6,
         "temperature": 0.7,
         "kl_loss_coef": 0.001,
-        "max_tokens_per_gpu": 8192,
+        "max_tokens_per_gpu": max_tokens_per_gpu,
         "eval_interval": 1,
         "checkpoint_interval": 1,
         "seed": 42,
-        "context_tokens": 98304,
-        "response_tokens": 81920,
+        "context_tokens": context_tokens,
+        "response_tokens": response_tokens,
         "tokens_per_turn": tokens_per_turn,
+        "native_profile": native_profile,
+        "harness": harness,
+        "runtime_image": runtime_image,
+        "session_node_cap": session_node_cap,
     }
     if (
         plan.get("run_name") != name
@@ -738,22 +935,26 @@ def _exact_reward_canary_plan(plan: dict[str, Any]) -> None:
         or args != expected
         or checkpoint.get("schema") != "cyber_miles_checkpoint_v1"
         or checkpoint.get("optimizer_steps") != 0
-        or checkpoint.get("root") != BASE_CHECKPOINT["root"]
-        or checkpoint.get("sha256", "").removeprefix("sha256:") != BASE_CHECKPOINT["receipt_sha256"]
-        or checkpoint.get("image") != miles.IMAGE
+        or checkpoint.get("root") != checkpoint_root
+        or checkpoint.get("sha256", "").removeprefix("sha256:")
+        != checkpoint_receipt_sha256
+        or checkpoint.get("image") != runtime_image
         or checkpoint.get("model") != plan.get("model")
         or digest(plan.get("model")) != PROD_MODEL_SHA256
         or execution
         != {
-            "image": miles.IMAGE,
+            "image": runtime_image,
             "priority": "c1",
-            "resources": PROD_REWARD_CANARY_RESOURCES,
+            "resources": resources,
             "cluster_target": "prod",
             "production_promotion": {"mode": mode},
         }
     ):
         raise ValueError("compiled Miles production reward canary differs from the exact arm")
-    _exact_data(plan.get("data"), expected_data)
+    if mode == PROD_REWARD_CANARY_LONG_V1_MODE:
+        _exact_long_data(plan.get("data"))
+    else:
+        _exact_data(plan.get("data"), expected_data)
 
 
 def validate_embedded_promotion(plan: dict[str, Any], *, check_files: bool = True) -> bool:
@@ -792,15 +993,27 @@ def validate_production_preview(
 
     rendered = validate_preview(request, preview)
     if _is_reward_canary_marker(plan.get("execution", {}).get("production_promotion")):
+        long_horizon = (
+            plan.get("execution", {}).get("production_promotion", {}).get("mode")
+            == PROD_REWARD_CANARY_LONG_V1_MODE
+        )
+        workers = 4 if long_horizon else 1
+        resources = (
+            PROD_REWARD_CANARY_LONG_V1_RESOURCES
+            if long_horizon
+            else PROD_REWARD_CANARY_RESOURCES
+        )
         if (
-            request.get("workers") != 1
+            request.get("workers") != workers
             or request.get("gpus_per_worker") != 8
             or request.get("priority_class") != "c1"
             or "priority_reason" in request
             or request.get("requeueIfPreempted") is not False
-            or request.get("resources") != PROD_REWARD_CANARY_RESOURCES
+            or request.get("resources") != resources
         ):
-            raise JobsError("Miles production reward canary preview is not exact 1x8 c1/no-requeue")
+            raise JobsError(
+                f"Miles production reward canary preview is not exact {workers}x8 c1/no-requeue"
+            )
         return {
             "production_reward_canary": "validated",
             "rendered_nodes": rendered["nodes"],
@@ -849,6 +1062,14 @@ def _reward_canary_live_identity(
             PROD_REWARD_CANARY_V3_WANDB,
             EXPECTED_REWARD_CANARY_V3_DATA,
         )
+    if mode == PROD_REWARD_CANARY_LONG_V1_MODE:
+        return (
+            PROD_REWARD_CANARY_LONG_V1_NAME,
+            PROD_REWARD_CANARY_LONG_V1_OUTPUT,
+            PROD_REWARD_CANARY_LONG_V1_DATA_MANIFEST,
+            PROD_REWARD_CANARY_LONG_V1_WANDB,
+            EXPECTED_REWARD_CANARY_LONG_V1_DATA,
+        )
     raise JobsError("Miles production reward canary mode changed")
 
 
@@ -881,7 +1102,10 @@ def require_live_files(plan: dict[str, Any], prepared_directory: Path) -> None:
                 "file_sha256"
             ],
         )
-    _exact_data(observed, expected_data)
+    if observed.get("schema") == "cyber_miles_data_v2":
+        _exact_long_data(observed)
+    else:
+        _exact_data(observed, expected_data)
 
 
 def _kubectl_json(*arguments: str) -> dict[str, Any]:
@@ -1039,13 +1263,19 @@ def require_live_external(plan: dict[str, Any], client, *, wandb_api=None) -> di
             else:
                 unscheduled += 1
     active = len(active_nodes) + unscheduled
-    if active + 1 > 8:
+    candidate_nodes = (
+        4
+        if plan.get("execution", {}).get("production_promotion", {}).get("mode")
+        == PROD_REWARD_CANARY_LONG_V1_MODE
+        else 1
+    )
+    if active + candidate_nodes > 8:
         raise JobsError("Miles production node budget would exceed eight")
     return {
         "jobs_api_absent": True,
         "wandb_absent": True,
         "active_experiment_nodes": active,
-        "candidate_nodes": 1,
+        "candidate_nodes": candidate_nodes,
         "node_limit": 8,
         "effective_priority": priority["value"],
     }

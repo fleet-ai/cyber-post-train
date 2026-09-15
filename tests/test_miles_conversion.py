@@ -1,5 +1,7 @@
 """Native conversion boundaries with synthetic files; no GPUs or environment creates."""
 
+import base64
+import gzip
 import hashlib
 import json
 import os
@@ -72,6 +74,14 @@ def test_conversion_compiles_only_native_loading_not_training(plan):
     assert request["secrets"] == [] and request["env"]["HF_HUB_OFFLINE"] == "1"
     assert len(plan["model"]["files"]) == 28
     assert plan["optimizer_steps"] == 0 and plan["deadline_seconds"] == 1800
+
+
+def test_conversion_bundle_contains_long_runtime_validator_dependencies(plan):
+    request = convert.job_request(plan)
+    bundle = json.loads(
+        gzip.decompress(base64.b64decode(request["env"]["CYBER_RUNTIME_BUNDLE"], validate=True))
+    )
+    assert {"training/miles_training.py", "training/rl_runtime.py"} <= set(bundle["files"])
 
 
 def test_long_conversion_requires_and_binds_qualified_derived_image(config, tmp_path):

@@ -47,6 +47,12 @@ DEV_KUBE_CONTEXT = "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb"
 _MILES_HF_PLAN_SCHEMAS = frozenset(
     {"cyber_miles_hf_export_job_plan_v1", "cyber_miles_hf_export_job_plan_v2"}
 )
+_MILES_CONVERSION_PLAN_SCHEMAS = frozenset(
+    {"cyber_miles_conversion_v1", "cyber_miles_conversion_v2"}
+)
+_MILES_TRAINING_PLAN_SCHEMAS = frozenset(
+    {"cyber_miles_training_v1", "cyber_miles_training_v2"}
+)
 _MILES_SERVING_DEV_PLAN_SCHEMA = "cyber_miles_serving_dev_plan_v1"
 _SFT_SERVING_DEV_PLAN_SCHEMA = "cyber_sft_serving_dev_plan_v1"
 _MILES_PARSER_PROBE_SCHEMA = "cyber_miles_native_parser_probe_v1"
@@ -755,7 +761,7 @@ def _require_prepared_cluster(plan: dict, cluster: Cluster) -> None:
         raise JobsError(f"prepared plan is {target}-cluster-only")
     if (
         cluster == Cluster.prod
-        and plan.get("schema") in {"cyber_skyrl_training_v1", "cyber_miles_training_v1"}
+        and plan.get("schema") in {"cyber_skyrl_training_v1", *_MILES_TRAINING_PLAN_SCHEMAS}
         and target != Cluster.prod.value
     ):
         raise JobsError("production RL requires an explicit prod-cluster plan")
@@ -767,9 +773,9 @@ def preflight(directory: Path) -> None:
 
     try:
         plan, request = _prepared(directory)
-        if plan.get("schema") == "cyber_miles_conversion_v1":
+        if plan.get("schema") in _MILES_CONVERSION_PLAN_SCHEMAS:
             from training.miles_conversion import preflight as check
-        elif plan.get("schema") == "cyber_miles_training_v1":
+        elif plan.get("schema") in _MILES_TRAINING_PLAN_SCHEMAS:
             from training.miles_training import preflight as check
         elif plan.get("schema") == "cyber_miles_rl_reload_v1":
             from training.miles_reload import preflight as check
@@ -837,7 +843,7 @@ def preview(
 
             validated.update(_validate_reward_canary_preview(plan, request, result))
             validated.update(validate_production_preview(plan, request, result))
-        elif plan.get("schema") == "cyber_miles_training_v1":
+        elif plan.get("schema") in _MILES_TRAINING_PLAN_SCHEMAS:
             from training.miles_promotion import validate_production_preview
 
             validated.update(validate_production_preview(plan, request, result))
@@ -891,9 +897,9 @@ def submit(
         proof = _read(directory / "PREFLIGHT.json")
         expected = {
             "schema": "cyber_miles_conversion_cpu_preflight_v1"
-            if plan.get("schema") == "cyber_miles_conversion_v1"
+            if plan.get("schema") in _MILES_CONVERSION_PLAN_SCHEMAS
             else "cyber_miles_training_cpu_preflight_v1"
-            if plan.get("schema") == "cyber_miles_training_v1"
+            if plan.get("schema") in _MILES_TRAINING_PLAN_SCHEMAS
             else "cyber_miles_native_parser_probe_cpu_preflight_v1"
             if plan.get("schema") == _MILES_PARSER_PROBE_SCHEMA
             else "cyber_miles_rl_reload_cpu_preflight_v1"
@@ -934,7 +940,7 @@ def submit(
         if submission_journal.exists() or submission_journal.is_symlink():
             raise JobsError("submission journal already exists; reconcile, never repeat POST")
         with _client(cluster) as client:
-            if plan.get("schema") == "cyber_miles_training_v1":
+            if plan.get("schema") in _MILES_TRAINING_PLAN_SCHEMAS:
                 from training.miles_promotion import (
                     require_live_external,
                     require_live_files,
