@@ -303,6 +303,20 @@ def test_long_context_reward_canary_v2_uses_qualified_runtime_and_new_identity()
     assert config["output_root"] == miles_promotion.PROD_REWARD_CANARY_LONG_V2_OUTPUT
     assert config["wandb"] == miles_promotion.PROD_REWARD_CANARY_LONG_V2_WANDB
     assert config["runtime"] == miles_promotion.PROD_REWARD_CANARY_LONG_V2_RUNTIME
+    assert config["checkpoint"] == (
+        miles_promotion.PROD_REWARD_CANARY_LONG_V2_CHECKPOINT
+    )
+    assert config["checkpoint"] != (
+        miles_promotion.PROD_REWARD_CANARY_LONG_V1_CHECKPOINT
+    )
+    assert (
+        miles_promotion.PROD_REWARD_CANARY_LONG_V2_CHECKPOINT_ROOT
+        != miles_promotion.PROD_REWARD_CANARY_LONG_V1_CHECKPOINT_ROOT
+    )
+    assert (
+        miles_promotion.PROD_REWARD_CANARY_LONG_V2_CHECKPOINT_RECEIPT_SHA256
+        != miles_promotion.PROD_REWARD_CANARY_LONG_V1_CHECKPOINT_RECEIPT_SHA256
+    )
     assert config["runtime"]["image"].endswith(
         "@sha256:dc1a41ac386c9f7377e7a6f7b92a402830e308855aa2632413af25917f38dd93"
     )

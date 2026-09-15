@@ -114,6 +114,16 @@ PROD_REWARD_CANARY_LONG_V2_RUNTIME = {
     "receipt": "qwen38-miles-opencode-long-context-runtime-v1.json",
     "sha256": "sha256:a2edd96163b9ebefd46f27f71d3787fb4da447ccaaa0e2b79d415895533676bc",
 }
+PROD_REWARD_CANARY_LONG_V2_CHECKPOINT = {
+    "manifest": "/mnt/sfs/jobs/chris-q38-miles-lc-base1-prod1/NATIVE_CHECKPOINT.json",
+    "sha256": "sha256:10cc7a78e6e74140858cd307feab9aa846d389cbfd91e35ed12760122c46ace2",
+}
+PROD_REWARD_CANARY_LONG_V2_CHECKPOINT_ROOT = (
+    "/mnt/sfs/jobs/chris-q38-miles-lc-base1-prod1/torch-dist"
+)
+PROD_REWARD_CANARY_LONG_V2_CHECKPOINT_RECEIPT_SHA256 = (
+    "5885f89feb3d3e646221c61e18713dce29b4117827306336895f5bf95073d4d0"
+)
 EXPERIMENT_OWNER_PREFIX = "chris-"
 FLEET_RUN_NAME_LABEL = "fleet.ai/run-name"
 PROD_MODEL_SHA256 = "dcfdcd6ecb6661741cd3a4b24dc5af7259642c8a6824773e0de70d55d7501179"
@@ -590,7 +600,11 @@ def _exact_reward_canary_config(config: dict[str, Any]) -> None:
             "session_node_cap": 4096,
         }
         expected_resources = PROD_REWARD_CANARY_LONG_V1_RESOURCES
-        expected_checkpoint = PROD_REWARD_CANARY_LONG_V1_CHECKPOINT
+        expected_checkpoint = (
+            PROD_REWARD_CANARY_LONG_V2_CHECKPOINT
+            if successor
+            else PROD_REWARD_CANARY_LONG_V1_CHECKPOINT
+        )
         expected_runtime = (
             PROD_REWARD_CANARY_LONG_V2_RUNTIME
             if successor
@@ -1003,8 +1017,16 @@ def _exact_reward_canary_plan(plan: dict[str, Any]) -> None:
             else PROD_REWARD_CANARY_LONG_V1_IMAGE
         )
         session_node_cap = 4096
-        checkpoint_root = PROD_REWARD_CANARY_LONG_V1_CHECKPOINT_ROOT
-        checkpoint_receipt_sha256 = PROD_REWARD_CANARY_LONG_V1_CHECKPOINT_RECEIPT_SHA256
+        checkpoint_root = (
+            PROD_REWARD_CANARY_LONG_V2_CHECKPOINT_ROOT
+            if successor
+            else PROD_REWARD_CANARY_LONG_V1_CHECKPOINT_ROOT
+        )
+        checkpoint_receipt_sha256 = (
+            PROD_REWARD_CANARY_LONG_V2_CHECKPOINT_RECEIPT_SHA256
+            if successor
+            else PROD_REWARD_CANARY_LONG_V1_CHECKPOINT_RECEIPT_SHA256
+        )
         resources = PROD_REWARD_CANARY_LONG_V1_RESOURCES
     else:
         raise ValueError("compiled Miles production reward canary mode changed")
