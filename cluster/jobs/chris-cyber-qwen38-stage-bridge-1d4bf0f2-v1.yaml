@@ -1,0 +1,75 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-cyber-qwen38-stage-bridge-1d4bf0f2-v1
+  namespace: fleet-train-jobs
+  labels:
+    kueue.x-k8s.io/queue-name: training-lq
+    cyber-post-train.fleet.ai/owner: chris
+    cyber-post-train.fleet.ai/experiment: qwen38-stage-bridge-1d4bf0f2-v1
+    cyber-post-train.fleet.ai/model: qwen38
+spec:
+  suspend: true
+  backoffLimit: 0
+  activeDeadlineSeconds: 86400
+  ttlSecondsAfterFinished: 604800
+  template:
+    metadata:
+      labels:
+        kueue.x-k8s.io/queue-name: training-lq
+        cyber-post-train.fleet.ai/owner: chris
+        cyber-post-train.fleet.ai/experiment: qwen38-stage-bridge-1d4bf0f2-v1
+        cyber-post-train.fleet.ai/model: qwen38
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: ghcr-pull
+      nodeSelector:
+        workload: fleetai-training-ng-cpu
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: fleetai-training-ng-cpu
+          effect: NoSchedule
+      containers:
+        - name: stage
+          image: ghcr.io/fleet-ai/miles-fleet/trainer@sha256:98920a4e25fadc3f31fafc18eff072313386edf5b352a23d13f4bb2d9e5f0a4c
+          env:
+            - name: HF_HOME
+              value: /mnt/sfs/hf-cache/chris-cyber-qwen38-stage-bridge-v1
+            - name: HF_XET_HIGH_PERFORMANCE
+              value: "1"
+            - name: HF_XET_NUM_CONCURRENT_RANGE_GETS
+              value: "32"
+          command:
+            - python
+            - /bundle/model_stage_bridge.py
+            - execute
+            - --plan
+            - /bundle/plan.json
+            - --model-lock
+            - /bundle/model-lock.json
+            - --work-root
+            - /mnt/sfs/models/Qwen/Qwen3.8-27B/.transactions
+          resources:
+            requests:
+              cpu: "8"
+              memory: 16Gi
+              ephemeral-storage: 20Gi
+            limits:
+              cpu: "16"
+              memory: 32Gi
+              ephemeral-storage: 40Gi
+          volumeMounts:
+            - name: bundle
+              mountPath: /bundle
+              readOnly: true
+            - name: sfs
+              mountPath: /mnt/sfs
+      volumes:
+        - name: bundle
+          configMap:
+            name: chris-cyber-qwen38-stage-bridge-1d4bf0f2-v1
+        - name: sfs
+          persistentVolumeClaim:
+            claimName: sfs-shared
