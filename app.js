@@ -16,7 +16,7 @@ function escapeHtml(value) {
 
 function setTab() {
   const requested = location.hash.slice(1);
-  const tab = ["webexploitbench", "task-quality", "experiment-map"].includes(requested) ? requested : "webexploitbench";
+  const tab = ["web-evals", "webexploitbench", "task-quality", "experiment-map"].includes(requested) ? requested : "web-evals";
   document.querySelectorAll("[data-tab-page]").forEach(page => { page.hidden = page.dataset.tabPage !== tab; });
   document.querySelectorAll("[data-tab-link]").forEach(link => {
     const active = link.dataset.tabLink === tab;
@@ -24,6 +24,7 @@ function setTab() {
     if (active) link.setAttribute("aria-current", "page"); else link.removeAttribute("aria-current");
   });
   const titles = {
+    "web-evals": "WEB evaluations · Fleet Cyber",
     "webexploitbench": "WebExploitBench · Fleet Cyber",
     "task-quality": "Task quality · Fleet Cyber",
     "experiment-map": "Experiment plan · Fleet Cyber"
