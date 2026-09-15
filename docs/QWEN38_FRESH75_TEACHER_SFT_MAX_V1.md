@@ -106,6 +106,30 @@ validated the terminal and checkpoint receipts. The acceptance evidence is
 230-step V4 run was submitted once at `c1` only after that gate passed; it was
 queued without allocation at the evidence timestamp.
 
+The full run later completed all 230 planned optimizer steps and consumed
+2,072,122 supervised tokens. Its final `global_step_230` checkpoint is sealed
+by a self-digesting manifest and a separate full-payload rehash: 33 files,
+324,627,486,795 bytes, manifest-file SHA-256
+`bf92e29d9f19dd589201214f25fe8d0e3b0f65de14ec08fc573217f50580a486`,
+and embedded receipt SHA-256
+`9542502631b47cd730ccecb5938650103ed999bf4a4a6cf7d16d9be09c317cab`.
+This proves terminal training and exact checkpoint bytes. It does not yet prove
+that the model can be loaded for inference or served.
+
+The [step-230 promotion template](../configs/qualification/qwen38-fresh75-step230-promotion-v1.template.json)
+freezes the remaining gates. The existing create-once CPU export must finish
+and be accepted before the CPU integrity check is rendered. Only after that
+check passes may one bounded, one-GPU, zero-optimizer reload run be rendered.
+Serving then requires create-once staging, a temporary serving test, production
+registration, and fresh base-versus-candidate parity. Any development-cluster
+serving test is temporary, has a fixed lifetime, and must release all resources
+on success or failure; a persistent development endpoint is forbidden.
+
+The public preparation receipt is
+`docs/evidence/qwen38-fresh75-step230-promotion-prepared-20260915.json`. It is
+explicitly non-launchable and does not claim that the in-progress export has
+succeeded.
+
 There is no held-out teacher-token loss. W&B records training loss and runtime
 health. Checkpoint choice must use task outcomes on the frozen 17-task Fleet
 development split.
@@ -122,3 +146,6 @@ After a checkpoint is sealed and exported:
 
 Every evaluation must bind the exact checkpoint receipt, task selection,
 harness image/config, model-serving identity, and sampling settings.
+The step-230 checkpoint is the recipe's predeclared final step. WebExploitBench
+is external reporting only and cannot select this or any other checkpoint,
+change the recipe, or serve as a retry signal.
