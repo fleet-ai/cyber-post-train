@@ -17,6 +17,9 @@ from training import model_stage as stage
 ROOT = Path(__file__).resolve().parents[1]
 FAILED_V1 = ROOT / "configs/qualification/qwen38-fresh75-step230-inference-stage-v1.json"
 PRODUCTION = ROOT / "configs/qualification/qwen38-fresh75-step230-inference-stage-v2.json"
+ACCEPTED_V2 = (
+    ROOT / "docs/evidence/qwen38-fresh75-step230-inference-stage-v2-accepted-20260915.json"
+)
 SOURCE = ROOT / "training/model_stage.py"
 
 
@@ -117,6 +120,49 @@ def test_production_plan_is_exact_successor_of_preserved_failed_v1() -> None:
     assert failed_v1["execution"]["pod_name"] == "chris-q38-f75-p230-stage-v1"
     assert failed_v1["execution"]["config_map_name"] == "chris-q38-f75-p230-stage-v1"
     assert production == expected
+
+
+def test_v2_acceptance_evidence_is_self_digesting_and_records_one_post_then_get() -> None:
+    evidence = json.loads(ACCEPTED_V2.read_text())
+    plan = stage.read_plan(PRODUCTION)
+    assert evidence["sha256"] == stage.digest_json(stage._unsigned(evidence, "sha256"))
+    assert evidence["staging"]["plan_file_sha256"] == stage._digest_bytes(PRODUCTION.read_bytes())
+    assert evidence["staging"]["plan_sha256"] == plan["plan_sha256"]
+    assert evidence["staging"]["receipt_sha256"] == (
+        "sha256:b1f9073be0fb3dca15847d7240d7c62fcad1f1d77c05542b0d8234c8134f7af8"
+    )
+    assert evidence["staging"]["payload"] == {
+        "manifest_sha256": (
+            "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029"
+        ),
+        "file_count": 29,
+        "total_bytes": 55_586_032_099,
+        "exact_size_and_sha256_verified": True,
+        "create_once_atomic_promotion_verified": True,
+        "post_promotion_readback_verified": True,
+    }
+    registration = evidence["registration"]
+    assert registration["post_count"] == 1
+    assert registration["second_post_performed"] is False
+    assert registration["post_response_contained_exact_full_spec"] is False
+    assert registration["acceptance_source"] == "exact_authenticated_get_reconciliation"
+    assert registration["desired_registration_sha256"] == stage.digest_json(
+        plan["desired_registration"]
+    )
+    assert registration["get_readback"] == {
+        "full_spec_exact": True,
+        "phase": "paused",
+        "desired_state": "paused",
+        "minimum_replicas": 0,
+        "active_pods": 0,
+        "priority_class": "c1",
+        "model_revision": (
+            "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029"
+        ),
+        "gpus_allocated": 0,
+    }
+    assert evidence["cleanup"]["gpus_held_after_cleanup"] == 0
+    assert registration["serving_qualified"] is False
 
 
 def test_streams_once_then_idempotently_reopens_without_network(tmp_path: Path) -> None:

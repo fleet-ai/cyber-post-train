@@ -124,12 +124,20 @@ executed zero optimizer steps, proved the source unchanged, and released its
 GPU. The exact terminal identities and signed receipt hashes are in the
 [reload acceptance evidence](evidence/qwen38-fresh75-step230-reload-accepted-20260915.json).
 
-This proves that the final checkpoint is reloadable. It does not yet prove that
-the model is served correctly. Serving still requires create-once staging,
-temporary serving qualification, production registration, and fresh
-base-versus-candidate parity. Any development-cluster serving test is temporary,
-has a fixed lifetime, and must release all resources on success or failure; a
-persistent development endpoint is forbidden.
+This proves that the final checkpoint is reloadable. Its exact 29-file export
+is now also staged create-once at
+`/models/chris-q38-fresh75-step230-v1`, and the matching inference model was
+registered once and reconciled by an exact GET. The registration is paused at
+zero replicas, has no active Pod, and holds no GPU. The immutable
+[staging and registration evidence](evidence/qwen38-fresh75-step230-inference-stage-v2-accepted-20260915.json)
+records both the successful transfer and the distinction between the one POST
+and the authoritative GET readback.
+
+This still does not prove that the model is served correctly. Serving requires
+temporary live qualification and fresh base-versus-candidate parity. Any
+development-cluster serving test is temporary, has a fixed lifetime, and must
+release all resources on success or failure; a persistent development endpoint
+is forbidden.
 
 The earlier public preparation receipt is
 `docs/evidence/qwen38-fresh75-step230-promotion-prepared-20260915.json`. It is
