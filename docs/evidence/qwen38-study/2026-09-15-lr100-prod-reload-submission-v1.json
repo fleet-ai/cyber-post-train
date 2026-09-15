@@ -86,6 +86,21 @@
     "initial_state": "queued_without_allocation",
     "initial_gpu_allocation": 0
   },
+  "admission": {
+    "admitted_at": "2026-09-15T00:59:02Z",
+    "cluster_queue": "training-cq",
+    "resource_flavor": "b300-training",
+    "raycluster_name": "chris-q38-lr100-r21-prod-v3-ba2aa6db-mkh84",
+    "raycluster_uid": "3fda3aee-b7af-4141-b707-03453b328672",
+    "raycluster_state": "ready",
+    "pod_name": "chris-q38-lr100-r21-prod-v3-ba2aa6db-mkh84-head-dffcl",
+    "pod_uid": "7acd040d-e1e1-467c-aab6-b4553d99aa28",
+    "pod_ready_at": "2026-09-15T00:59:26Z",
+    "restart_count": 0,
+    "allocated_nodes": 1,
+    "allocated_gpus": 8,
+    "startup_deadline": "2026-09-15T01:29:26Z"
+  },
   "acceptance": {
     "zero_update_reload_complete": false,
     "source_checkpoint_unchanged": false,
