@@ -77,6 +77,16 @@
     "allocated_gpus": 8,
     "startup_deadline": "2026-09-15T01:08:59Z"
   },
+  "first_new_optimizer_progress": {
+    "observed_at_unix": 1789433627.3194735,
+    "optimizer_step": 7,
+    "phase": "training",
+    "progress_receipt_sha256": "b468552bee1f4d5020fe14921c2c006d6637c97aadef6739a710464c2017c490",
+    "source_resume_step": 6,
+    "new_optimizer_updates": 1,
+    "restart_count": 0,
+    "wandb_initialized": true
+  },
   "acceptance": {
     "training_complete": false,
     "terminal_checkpoint_sealed": false,
