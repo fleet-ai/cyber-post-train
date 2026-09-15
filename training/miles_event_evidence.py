@@ -20,6 +20,7 @@ from typing import Any
 
 from cyber_post_train.jobs import digest
 
+from .miles_cluster import cluster_profile, plan_cluster_target
 from .miles_conversion import _write
 from .rl_runtime import sealed
 
@@ -29,7 +30,7 @@ CONTROLLER_SCHEMA = "cyber_miles_controller_terminal_observation_v1"
 RELEASE_SCHEMA = "cyber_miles_external_release_v1"
 NAMESPACE = "fleet-train-jobs"
 WORLD_SIZE = 8
-DEV_KUBE_CONTEXT = "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb"
+DEV_KUBE_CONTEXT = cluster_profile("dev").kube_context
 HF_PLAN_SCHEMAS = frozenset(
     {"cyber_miles_hf_export_job_plan_v1", "cyber_miles_hf_export_job_plan_v2"}
 )
@@ -163,13 +164,10 @@ def start_capture(
     submitted = _validate_submission(submission, plan, check_files=False)
     run_id = _uuid(submitted["api"]["run_id"], "API run ID")
     namespace = _uuid(namespace_uid, "namespace UID")
-    if kube_context != DEV_KUBE_CONTEXT:
-        raise ValueError("Miles event capture is not using the exact dev Kubernetes context")
-    if (
-        plan.get("schema") in HF_PLAN_SCHEMAS
-        and namespace != "10394b76-e1d4-40b1-a8e2-7575e95df216"
-    ):
-        raise ValueError("Miles HF event capture namespace UID differs from exact dev")
+    target = plan_cluster_target(plan)
+    profile = cluster_profile(target)
+    if kube_context != profile.kube_context or namespace != profile.namespace_uid:
+        raise ValueError("Miles event capture cluster identity differs from its exact plan target")
     directory.mkdir(parents=True, mode=0o700, exist_ok=False)
     return _write(
         directory / "STARTED.json",
@@ -181,7 +179,7 @@ def start_capture(
             "api_base_url": submitted["api"]["base_url"],
             "api_run_id": run_id,
             "api_run_name": submitted["api"]["run_name"],
-            "cluster": "dev",
+            "cluster": target,
             "kube_context": kube_context,
             "namespace": NAMESPACE,
             "namespace_uid": namespace,

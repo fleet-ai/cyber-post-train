@@ -11,6 +11,7 @@ import pytest
 from cyber_post_train.jobs import digest
 from training import miles, miles_acceptance
 from training import miles_event_evidence as evidence
+from training.miles_cluster import cluster_profile
 
 
 def _owner(kind: str, name: str, uid: str) -> list[dict]:
@@ -285,6 +286,42 @@ def test_ttl_zero_terminal_and_release_compile_after_all_objects_disappear(
         submission,
         not_before=1.0,
     )
+
+
+def test_capture_start_derives_the_exact_prod_identity_from_the_plan(
+    plan: dict, submission: dict, tmp_path: Path
+) -> None:
+    plan["execution"]["cluster_target"] = "prod"
+    profile = cluster_profile("prod")
+    submission["source_plan_sha256"] = "sha256:" + digest(plan)
+    submission["runtime_source_sha256"] = "sha256:" + plan["runtime_sha256"]
+    submission["api"]["base_url"] = profile.api_base_url
+    submission["request"]["runtime_argv"][-1] = digest(plan)
+    submission.pop("sha256")
+    submission["sha256"] = "sha256:" + digest(submission)
+
+    started = evidence.start_capture(
+        plan,
+        submission,
+        namespace_uid=profile.namespace_uid,
+        started_at="2026-09-12T12:00:00Z",
+        directory=tmp_path / "prod-watch",
+        kube_context=profile.kube_context,
+    )
+    assert started["cluster"] == "prod"
+    assert started["api_base_url"] == profile.api_base_url
+    assert started["kube_context"] == profile.kube_context
+    assert started["namespace_uid"] == profile.namespace_uid
+
+    with pytest.raises(ValueError, match="cluster identity"):
+        evidence.start_capture(
+            plan,
+            submission,
+            namespace_uid=cluster_profile("dev").namespace_uid,
+            started_at="2026-09-12T12:00:00Z",
+            directory=tmp_path / "wrong-watch",
+            kube_context=profile.kube_context,
+        )
 
 
 def test_event_journal_fails_closed_if_capture_started_after_admission(
