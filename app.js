@@ -83,9 +83,9 @@ function renderSimpleBars(selector, rows, total) {
 
 function renderFiltering() {
   renderFunnel();
-  renderSimpleBars("#exclusion-bars", data.filtering.exclusions, 71);
-  renderSimpleBars("#app-mix", data.filtering.apps, 24);
-  renderSimpleBars("#difficulty-mix", data.filtering.difficulty, 82);
+  renderSimpleBars("#exclusion-bars", data.filtering.exclusions, data.filtering.exclusionScale);
+  renderSimpleBars("#app-mix", data.filtering.apps, data.filtering.appScale);
+  renderSimpleBars("#difficulty-mix", data.filtering.difficulty, data.filtering.difficultyScale);
   document.querySelector("#quality-methods").innerHTML = data.filtering.methods.map((item, i) => `
     <article><span>${String(i + 1).padStart(2, "0")}</span><div><h3>${item[0]}</h3><p>${item[1]}</p></div></article>`).join("");
 }
