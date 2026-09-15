@@ -22,6 +22,7 @@ from training.sft_runtime import (
     dense_rows,
     explicit_tracking_class,
     finalize_failed_run,
+    public_failure_details,
     retention_steps,
     sft_overrides,
     tokenize_rows,
@@ -719,11 +720,27 @@ def test_failure_finalize_is_independent_of_disk_and_summary(
 
     monkeypatch.setattr(Path, "open", controlled_open)
     # Tracker may be None if W&B created a run but native construction then failed.
-    trainer = SimpleNamespace(tracker=None, _ray_gpu_monitor=None, global_step=17)
+    trainer = SimpleNamespace(
+        tracker=None,
+        _ray_gpu_monitor=None,
+        global_step=17,
+        plan={"plan_sha256": "a" * 64},
+        public_runtime_stage="native_worker_initializing",
+    )
     failures = finalize_failed_run(trainer, tmp_path, ValueError("synthetic original failure"))
     assert calls == ["summary", 1]
     assert ("private_log" in failures) == disk_failure
     assert ("tracking_summary" in failures) == summary_failure
+    assert "failure_stage" not in failures
+    stage = json.loads((tmp_path / "FAILURE_STAGE.json").read_text())
+    receipt = stage.pop("receipt_sha256")
+    assert receipt == _unsigned_digest(stage)
+    assert stage == {
+        "error_class": "ValueError",
+        "optimizer_step": 17,
+        "plan_sha256": "a" * 64,
+        "stage": "native_worker_initializing",
+    }
 
 
 def test_native_destructor_cannot_mark_failure_successful():
@@ -742,6 +759,21 @@ def test_native_destructor_cannot_mark_failure_successful():
     # Successful shutdown still explicitly invokes normal native finish.
     tracker.finish()
     assert calls == [0]
+
+
+def test_public_failure_details_unwraps_safe_missing_key():
+    wrapper = RuntimeError("remote worker failed")
+    wrapper.cause = KeyError("optimizer_config")
+    assert public_failure_details(wrapper) == {
+        "error_class": "KeyError",
+        "missing_key": "optimizer_config",
+    }
+
+
+def test_public_failure_details_never_emits_arbitrary_key_text():
+    assert public_failure_details(KeyError("private value with spaces")) == {
+        "error_class": "KeyError"
+    }
 
 
 @pytest.mark.skipif(
@@ -800,6 +832,9 @@ def test_initial_backload_completes_dense_worker_setup_once(tmp_path, monkeypatc
     monkeypatch.setattr(SFTTrainer, "_init_workers", init)
     trainer = _make_trainer_class()(cfg, backend, value)
     trainer._init_workers()
+    stage = json.loads((tmp_path / "RUNTIME_STAGE.json").read_text())
+    assert stage["stage"] == "device_ready"
+    assert stage.pop("receipt_sha256") == _unsigned_digest(stage)
     expected = [("init", {})]
     if dense:
         expected.append(("backload", {"backload_optimizer": False, "backload_model": True}))

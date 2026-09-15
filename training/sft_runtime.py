@@ -31,6 +31,16 @@ SKYRL_REVISION = "f5bc3b78dfddfb352870d5d7430cd226e5785838"
 DENSE_SCHEMA = "cyber_sft_runtime_dense_v1"
 DENSE_FORMAT = "pretokenized_assistant_segments_v1"
 DENSE_EXCLUSION_REASONS = {"overlength_assistant_target", "overlength_required_previous_round"}
+PUBLIC_RUNTIME_STAGES = {
+    "trainer_constructed",
+    "tracker_initializing",
+    "tracker_ready",
+    "tracker_bypassed_for_setup_probe",
+    "native_worker_initializing",
+    "native_worker_ready",
+    "device_backload_started",
+    "device_ready",
+}
 WATCHDOG_POLL_SECONDS = 60
 WATCHDOG_STARTUP_SECONDS = 30 * 60
 WATCHDOG_IDLE_SECONDS = 20 * 60
@@ -779,9 +789,58 @@ def explicit_tracking_class(base):
     return ExplicitTracking
 
 
+def public_failure_details(error: BaseException) -> dict:
+    """Return a narrow, non-secret fingerprint for setup contract failures."""
+    chain = []
+    current = error
+    seen = set()
+    while isinstance(current, BaseException) and id(current) not in seen:
+        chain.append(current)
+        seen.add(id(current))
+        current = getattr(current, "cause", None) or current.__cause__ or current.__context__
+
+    missing_key = None
+    for item in chain:
+        if isinstance(item, KeyError) and len(item.args) == 1 and isinstance(item.args[0], str):
+            candidate = item.args[0]
+            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]{0,127}", candidate):
+                missing_key = candidate
+                break
+    if missing_key is None:
+        for item in chain:
+            match = re.search(
+                r"(?:^|\n)KeyError: ['\"]([A-Za-z_][A-Za-z0-9_.-]{0,127})['\"](?:\n|$)",
+                str(item),
+            )
+            if match:
+                missing_key = match.group(1)
+                break
+
+    error_class = "KeyError" if missing_key else type(chain[-1]).__name__
+    details = {"error_class": error_class}
+    if missing_key:
+        details["missing_key"] = missing_key
+    return details
+
+
 def finalize_failed_run(trainer, output: Path, error: BaseException) -> list[str]:
     """Best-effort independent cleanup: storage/SDK defects cannot skip exit1."""
     failures = []
+    try:
+        stage = getattr(trainer, "public_runtime_stage", None)
+        if stage not in PUBLIC_RUNTIME_STAGES:
+            stage = "trainer_constructed"
+        write_receipt(
+            output / "FAILURE_STAGE.json",
+            {
+                **public_failure_details(error),
+                "optimizer_step": getattr(trainer, "global_step", 0),
+                "plan_sha256": trainer.plan["plan_sha256"],
+                "stage": stage,
+            },
+        )
+    except BaseException:
+        failures.append("failure_stage")
     try:
         with (output / "private-runtime-failure.log").open("a") as stream:
             traceback.print_exc(file=stream)
@@ -900,8 +959,25 @@ def _make_trainer_class():
             self.best = None
             self.extra_train_metrics = {}
             self.target_tokens_seen = 0
+            self.public_runtime_stage = "trainer_constructed"
+
+        def _record_runtime_stage(self, stage):
+            if stage not in PUBLIC_RUNTIME_STAGES:
+                raise ValueError("unknown public runtime stage")
+            self.public_runtime_stage = stage
+            write_receipt(
+                self.output / "RUNTIME_STAGE.json",
+                {
+                    "optimizer_step": self.global_step,
+                    "plan_sha256": self.plan["plan_sha256"],
+                    "stage": stage,
+                    "observed_at_unix": time.time(),
+                },
+                replace=True,
+            )
 
         def _init_workers(self):
+            self._record_runtime_stage("native_worker_initializing")
             selection = contextlib.nullcontext()
             if "recovery" in self.plan:
                 from training.recovery import use_worker
@@ -913,12 +989,14 @@ def _make_trainer_class():
                 selection = use_worker(self.plan)
             with selection:
                 super()._init_workers()
+            self._record_runtime_stage("native_worker_ready")
             if self.plan["schema"] == DENSE_SCHEMA or "lora" in self.plan:
                 # Pinned FSDP2 initialization broadcasts non-persistent buffers
                 # (including RoPE inv_freq) back to CPU. Turning off colocation
                 # skips the dispatcher's usual initial backload as well as its
                 # repeated offloads. Explicitly finish initialization ONCE via
                 # the native all-rank API; never recreate buffers or cast values.
+                self._record_runtime_stage("device_backload_started")
                 actor = self.dispatch._actor_groups["policy"]
                 replies = actor.backload_to_gpu(backload_optimizer=False, backload_model=True)
                 expected = self.plan["recipe"]["nodes"] * self.plan["recipe"]["gpus_per_node"]
@@ -938,8 +1016,10 @@ def _make_trainer_class():
                         "observed_at_unix": time.time(),
                     },
                 )
+            self._record_runtime_stage("device_ready")
 
         def _init_tracker(self):
+            self._record_runtime_stage("tracker_initializing")
             self.tracker = explicit_tracking_class(Tracking)(
                 project_name=self.cfg.trainer.project_name,
                 experiment_name=self.cfg.trainer.run_name,
@@ -1009,6 +1089,7 @@ def _make_trainer_class():
                 self.output / "WANDB.json",
                 {"url": run.url, "run_id": run.id, "project": run.project, "entity": run.entity},
             )
+            self._record_runtime_stage("tracker_ready")
 
         def _load_split(self, split):
             import pyarrow.parquet as pq
@@ -1255,12 +1336,46 @@ def _run_training(plan: dict) -> dict:
         raise RuntimeError(f"SFT runtime failed: {type(exc).__name__}") from None
 
 
+def _run_setup_probe(plan: dict) -> dict:
+    """Exercise exact model/FSDP setup without data loading or optimizer steps."""
+    cfg, skyrl_cfg = build_runtime_configs(plan)
+    skyrl_cfg.trainer.log_path = str(Path(plan["output_root"]) / "private_logs")
+    trainer_class = _make_trainer_class()
+
+    def bypass_tracker(trainer):
+        trainer.tracker = None
+        trainer._record_runtime_stage("tracker_bypassed_for_setup_probe")
+
+    trainer_class._init_tracker = bypass_tracker
+    trainer = trainer_class(cfg, skyrl_cfg, plan)
+    try:
+        trainer.setup()
+        return {
+            "optimizer_steps": 0,
+            "plan_sha256": plan["plan_sha256"],
+            "stage": trainer.public_runtime_stage,
+            "status": "setup_validated",
+        }
+    except BaseException as exc:
+        return {
+            **public_failure_details(exc),
+            "optimizer_steps": 0,
+            "plan_sha256": plan["plan_sha256"],
+            "stage": trainer.public_runtime_stage,
+            "status": "setup_rejected",
+        }
+    finally:
+        with contextlib.suppress(BaseException):
+            trainer.shutdown()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--plan-sha256", required=True)
     parser.add_argument("--validate-only", action="store_true")
     parser.add_argument("--preflight-tokenize", action="store_true")
+    parser.add_argument("--setup-probe", action="store_true")
     args = parser.parse_args()
     _checked_file(args.plan, args.plan_sha256)
     plan = json.loads(args.plan.read_text())
@@ -1304,6 +1419,39 @@ def main():
         return
     output = Path(plan["output_root"])
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if args.setup_probe:
+        write_receipt(
+            output / "SETUP_PROBE_STARTED.json",
+            {"plan_sha256": plan["plan_sha256"], "started_at_unix": time.time()},
+        )
+        ray = None
+        try:
+            import ray
+            from skyrl.train.utils.utils import initialize_ray
+
+            _, cfg = build_runtime_configs(plan)
+            cfg.trainer.log_path = str(output / "private_logs")
+            initialize_ray(cfg)
+            result = _run_setup_probe(plan)
+        except BaseException as exc:
+            result = {
+                **public_failure_details(exc),
+                "optimizer_steps": 0,
+                "plan_sha256": plan["plan_sha256"],
+                "stage": "probe_bootstrap",
+                "status": "setup_rejected",
+            }
+        finally:
+            if ray is not None and ray.is_initialized():
+                ray.shutdown()
+        terminal = (
+            "SETUP_VALIDATED.json"
+            if result["status"] == "setup_validated"
+            else "SETUP_REJECTED.json"
+        )
+        write_receipt(output / terminal, result)
+        print(json.dumps(result, sort_keys=True), flush=True)
+        return
     write_receipt(
         output / "STARTED.json",
         {"plan_sha256": plan["plan_sha256"], "started_at_unix": time.time()},
