@@ -9,7 +9,36 @@ PUBLIC_FILES = [
     ROOT / "site" / "report-data.js",
     ROOT / "site" / "app.js",
     ROOT / "site" / "training-decision-space.json",
+    ROOT / "site" / "web-evals.json",
+    ROOT / "site" / "web-evals.js",
 ]
+
+
+def test_web_results_separate_partial_rescore_from_invalid_original() -> None:
+    history = json.loads((ROOT / "site/web-evals.json").read_text())
+    assert len(history["runs"]) == len({run["id"] for run in history["runs"]})
+    rescore = history["runs"][0]
+    assert rescore["judge"] == "GPT-5.5-2026-04-23"
+    assert (rescore["status"], rescore["usable"], rescore["planned"]) == ("partial", 44, 60)
+    assert rescore["metrics"][0] == {
+        "label": "Known-weakness checks passed", "numerator": 45, "denominator": 278
+    }
+    original = next(run for run in history["runs"]
+                    if run["id"] == rescore["config"]["Source campaign"])
+    assert original["status"] == "invalid" and original["metrics"] == []
+    for run in history["runs"]:
+        if run["status"] in {"invalid", "planned", "incomplete"}:
+            assert run["metrics"] == []
+        assert all(run[key] for key in ("id", "model", "checkpoint", "harness", "judge"))
+
+
+def test_web_page_has_search_configs_and_explicit_static_status() -> None:
+    html = (ROOT / "site/index.html").read_text()
+    script = (ROOT / "site/web-evals.js").read_text()
+    history = json.loads((ROOT / "site/web-evals.json").read_text())
+    assert 'id="web-search"' in html and 'id="web-status"' in html
+    assert "Settings and evidence" in script
+    assert "not a live cloud dashboard" in history["scope"]
 
 
 def test_public_report_does_not_reintroduce_unexplained_internal_terms() -> None:

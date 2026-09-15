@@ -10,12 +10,13 @@
   <body>
     <a class="skip-link" href="#report">Skip to report</a>
     <header class="site-header">
-      <a class="wordmark" href="#webexploitbench" aria-label="Fleet Cyber report home">
+      <a class="wordmark" href="#web-evals" aria-label="Fleet Cyber report home">
         <span class="mark" aria-hidden="true"></span>
         <span>Fleet Cyber</span>
       </a>
       <nav class="tabs" aria-label="Reports">
-        <a data-tab-link="webexploitbench" href="#webexploitbench">WebExploitBench</a>
+        <a data-tab-link="web-evals" href="#web-evals">WEB evaluations</a>
+        <a data-tab-link="webexploitbench" href="#webexploitbench">Early audit</a>
         <a data-tab-link="task-quality" href="#task-quality">Task quality</a>
         <a data-tab-link="experiment-map" href="#experiment-map">Experiment plan</a>
       </nav>
@@ -23,7 +24,23 @@
     </header>
 
     <main id="report">
+      <section class="page" data-tab-page="web-evals" aria-labelledby="web-evals-title">
+        <div class="hero ruled">
+          <p class="eyebrow">WebExploitBench · results and progress</p>
+          <h1 id="web-evals-title">WebExploitBench evaluations.</h1>
+          <p class="dek">What ran, which model answered, which program gave it tools, and which AI checked its reports. Completed results, partial evidence and technical failures stay separate.</p>
+          <div class="hero-meta"><span id="web-updated">Loading evidence date…</span><a href="web-evals.json">Download the public records</a></div>
+        </div>
+        <aside class="finding"><span class="finding-label">Latest checked result</span><p>GPT successfully rescored 44 saved Qwen3.8 OpenCode attempts. The mean attempt score is 16.2%. This covers 13 websites, not the complete 15-website baseline.</p></aside>
+        <section class="section compact" aria-labelledby="web-history-title">
+          <div class="section-heading"><p class="section-index">01</p><div><h2 id="web-history-title">Evaluation history</h2><p id="web-scope"></p></div></div>
+          <div class="web-help"><p><strong>Collection</strong> is the model working on a website and saving its actions and reports. <strong>Scoring</strong> checks that saved work afterward. A failed report-checking AI does not require another model attempt.</p><p><strong>Known-weakness checks passed</strong> counts successful checks across usable attempts. <strong>Mean attempt score</strong> gives each attempt equal weight. Partial coverage and different settings prevent a direct ranking.</p></div>
+          <div class="web-filters"><label>Find a model or campaign<input type="search" id="web-search" placeholder="e.g. GPT, fresh75, OpenCode"></label><label>Result type<select id="web-status"><option value="">All records</option value="complete">Complete results</option><option value="partial">Partial results</option><option value="invalid">Invalid scoring</option><option value="incomplete">Incomplete</option><option value="test">Small tests</option><option value="planned">Not launched</option></select></label></div>
+          <p id="web-count" aria-live="polite">Loading evaluations…</p><div id="web-campaigns"></div>
+        </section>
+      </section>
       <section class="page" data-tab-page="webexploitbench" aria-labelledby="wbe-title">
+        <p class="callout">Historical audit, reviewed September 13. The failed OpenCode scoring was later repaired with GPT. See <a href="#web-evals">WEB evaluations</a> for the newer results and current progress.</p>
         <div class="hero ruled">
           <p class="eyebrow">Starting-point test · Qwen3.8-27B</p>
           <h1 id="wbe-title">Neither old test is a clean baseline.</h1>
@@ -317,5 +334,6 @@
     </footer>
     <script src="report-data.js"></script>
     <script src="app.js"></script>
+    <script src="web-evals.js"></script>
   </body>
 </html>

@@ -11,6 +11,37 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
+.web-campaign { background: var(--white); border: 1px solid var(--line); margin: 24px 0; padding: 28px; }
+.web-campaign-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+.web-campaign h3 { margin: 0 0 20px; font-size: 1.35rem; }
+.web-status { padding: 6px 10px; font-size: .78rem; border: 1px solid var(--line); white-space: nowrap; }
+.web-status.complete { background: var(--green-soft); }
+.web-status.partial { border-color: var(--green); }
+.web-status.invalid, .web-status.incomplete { background: #f7e6dd; }
+.web-config { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 18px; }
+.web-config dt, .web-detail dt { color: var(--muted); font-size: .8rem; }
+.web-config dd, .web-detail dd { margin: 4px 0 0; overflow-wrap: anywhere; }
+.web-stages { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; border-block: 1px solid var(--line); }
+.web-stages strong { display: block; font-size: .8rem; }
+.web-metrics p { color: var(--green); font-size: 1.2rem; }
+.web-metrics .web-no-score { color: var(--muted); font-size: .9rem; }
+.web-campaign details { border-top: 1px solid var(--line); padding-top: 15px; }
+.web-campaign summary { cursor: pointer; }
+.web-detail div { display: grid; grid-template-columns: 220px minmax(0,1fr); padding: 8px 0; border-bottom: 1px solid var(--line); gap: 15px; }
+.web-filters { display: flex; gap: 24px; margin-top: 25px; }
+.web-filters label { display: grid; gap: 8px; font-size: .85rem; }
+.web-filters input, .web-filters select { font: inherit; color: var(--ink); background: var(--white); padding: 12px; border: 1px solid var(--line); min-height: 44px; }
+.web-help { max-width: 850px; color: var(--muted); }
+@media (max-width: 760px) {
+  .web-config { grid-template-columns: 1fr 1fr; }
+  .web-stages, .web-detail div { grid-template-columns: 1fr; gap: 0; }
+  .web-campaign-heading, .web-filters { flex-direction: column; }
+  .web-campaign { padding: 20px; }
+  .site-header { height: auto !important; min-height: 72px; grid-template-columns: 1fr !important; gap: 10px; padding-block: 12px; }
+  .tabs { gap: 16px; height: 38px; overflow-x: auto; white-space: nowrap; }
+  .edition { display: none; }
+}
 html { scroll-behavior: smooth; }
 body { margin: 0; color: var(--ink); background: var(--paper); font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.55; }
 a { color: inherit; }
