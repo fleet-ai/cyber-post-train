@@ -17,7 +17,7 @@ evidence of training lift.
 This page maps the practical choices worth studying. It does not propose one
 giant grid containing every combination. We should first hold the measurement
 system fixed, test the few choices most likely to matter, and only then refine
-the winner.
+the setting with the strongest Fleet development result.
 
 ## Plain-language key
 
@@ -94,8 +94,9 @@ the winner.
   change if a different but comparable set of tasks had been sampled.
 - **Hash:** a short digital fingerprint of file contents. Matching hashes are
   used to prove two runs used the same bytes.
-- **Low-rank adapter:** small trainable matrices attached to a frozen model so
-  that only a small share of its numbers must be updated.
+- **Low-rank adapter (often shortened to LoRA):** small trainable matrices
+  attached to a frozen model so that only a small share of its numbers must be
+  updated.
 - **Ablation:** a controlled comparison in which one planned choice changes and
   the rest stay fixed.
 - **Data curriculum:** a planned order for showing training examples, such as
@@ -158,7 +159,7 @@ important.
 |---|---|---|---|
 | Task quality gate | Which challenges count as real tasks rather than broken infrastructure. | Only tasks with a demonstrated working environment, working grader, clean cleanup, and complete current launch information. | **Must control.** A genuine failed solve is eligible; an infrastructure failure is not. |
 | Split unit | What stays together when tasks are divided. | Entire task family, including all versions and sessions. | **Must control.** Never split individual windows or attempts at random. |
-| Split variant | A different representative assignment of task families. | Use the frozen 50/17/8 split first. A later split B may reassign only the current 50 training and 17 development families; the exact 8 final families stay locked. | **Test later for a leading recipe.** The current splitter lacks a final-lock input, so split B is blocked until that guard and its tests exist. Never improvise a split after seeing results. |
+| Split variant | A different representative assignment of task families. | Use the frozen 50/17/8 split for every row in the current table. Add a later split only after its exact assignment and final-set lock are published before training. | **Test later.** Never improvise a split after seeing results. |
 | Application balance | The mix of products or web applications. | Match the available application proportions, or give each application equal total weight. | **Test now.** Report both task-level and application-level results. |
 | Difficulty balance | The mix of easier and harder tasks. | Representative natural mix versus equalized easy/medium/hard weight, but only when difficulty labels are independently verified. | **Test later.** Do not invent difficulty from test outcomes. |
 | Vulnerability-family balance | The mix of underlying bug types. | Representative mix versus equal family weight, once reliable labels exist. | **Test later.** Current opaque names are not a trustworthy classification of security weaknesses. |
@@ -184,7 +185,7 @@ result.
 |---|---|---|---|
 | Source model | Which model produced the successful trace. | Strong-teacher only; Qwen-only; mixed teachers; mixed teacher plus Qwen. | **Test now.** Record exact source-model identity. |
 | Teacher identity | Whether different strong models teach different behavior. | GPT-only; Grok-only when enough valid examples exist; balanced GPT/Grok mixture. | **Test now.** Do not let one teacher win merely because it contributed more tokens. |
-| Teacher:self ratio | The share of SFT target tokens from strong models versus Qwen. | 100:0, 75:25, 50:50, 25:75, 0:100. Start with 100:0, 50:50, 0:100. | **Test now.** Define the ratio by supervised tokens, not file rows. |
+| Teacher:self ratio | The share of supervised assistant tokens from strong models versus Qwen. | 100:0, 75:25, 50:50, 25:75, 0:100. Start with 100:0, 50:50, 0:100. | **Test now.** Define the ratio by supervised tokens, not file rows. |
 | Success requirement | Which saved attempts can teach the model. | Verified successes only. | **Must control.** Never train SFT on a broken, ambiguous, truncated, or merely “completed” attempt. |
 | Trace diversity | How similar accepted examples may be. | Remove exact copies only; also remove very similar copies; choose a varied capped subset per task. | **Test now.** Preserve uncommon successful strategies while stopping one repeated pattern from dominating. |
 | Efficiency preference | Whether shorter successful solutions get extra weight. | No length preference; mild preference among equally correct traces. | **Test later.** A strong shortest-only filter can teach brittle shortcuts. |
@@ -203,8 +204,8 @@ tool choice, exploitation, verification, and reporting.
 | Action coverage | Which assistant actions contribute to the loss that updates the model. | Every eligible assistant action exactly once; final action only as a health-check comparison; key actions selected by rules written before training. | **Test now.** Training every eligible action is the recommended baseline. |
 | Context-only text | Earlier text shown to the model but not learned as a target. | User text, tool output, and copied earlier assistant text receive zero training loss. | **Must control.** The model should learn its actions, not copy server output or secrets. |
 | Window length | The maximum tokens in one SFT row. | 8,192; 16,384; 32,768 when memory permits. Start with 16,384. | **Test now.** Re-tokenize with the exact Qwen tokenizer. |
-| Context allowance | How much of the window is reserved for information before the target action. | 2,048; 4,096; 8,192 tokens. Start with 4,096. | **Test now.** Longer context may help planning but reduces the number of target tokens per batch. |
-| Number of targets per window | Whether a row teaches one action or several nearby actions. | One target per row; all fitting consecutive targets once. | **Test now.** Total target-token exposure must remain equal. |
+| Context allowance | How much of the window is reserved for information before the target action. | 2,048; 4,096; 8,192 tokens. Start with 4,096. | **Test now.** Longer context may help planning but reduces the number of supervised assistant tokens per batch. |
+| Number of targets per window | Whether a row teaches one action or several nearby actions. | One target per row; all fitting consecutive targets once. | **Test now.** The total number of supervised assistant tokens across all passes must remain equal. |
 | Target placement | Where the action appears in the window. | Place the target action at the end; retain complete tool calls and their boundaries. | **Test now.** Never split a tool call or its immediate result. |
 | Early/middle/final weighting | Whether discovery, exploitation, and final reporting receive equal influence. | 1:1:1; 2:2:1; equal total weight per task. | **Test now.** Avoid a training set dominated by the short final submission step. |
 | Long-trace weighting | Whether a long trace receives more total influence simply because it has more actions. | Equal per target; equal total per trace; equal total per task family. | **Test now.** Equal total weight per task family is the safest primary baseline. |
@@ -223,10 +224,10 @@ One extreme value may be used only in a short canary if its stability is unknown
 | Variable | What it means | Values worth testing | Level and decision |
 |---|---|---|---|
 | Learning rate | Update size. Too low learns little; too high damages useful behavior. | 3e-6, 1e-5, and a short 3e-5 stability canary. | **Test now.** The accepted Fresh75 run used 1e-5; explore one geometric boundary on either side before narrowing. |
-| Global batch size | Number of SFT windows combined per update across all GPUs. | 8, 32, 64. With 916 rows, two complete passes, and the trainer's kept final partial batch, these produce 230, 58, and 30 updates respectively: `passes × ceil(rows ÷ batch)`. | **Test now.** Also log supervised target tokens per update because windows have different lengths. |
+| Global batch size | Number of SFT windows combined per update across all GPUs. | 8, 32, 64. With 916 rows, two complete passes, and the trainer's kept final partial batch, these produce 230, 58, and 30 updates respectively: `passes × ceil(rows ÷ batch)`. | **Test now.** Also log supervised assistant tokens per update because windows have different lengths. |
 | Microbatch per GPU | Rows processed at once by each GPU before update signals are combined. | 1 first; 2 only if memory allows. | **Test later.** This should not change the scientific result when global batch stays fixed, but it can cause small rounding differences. |
-| Epoch count | How many complete passes are made over SFT rows. | 1, 2, 4. | **Test now.** Evaluate saved checkpoints inside each run; do not assume the last epoch is best. |
-| Total supervised tokens | The actual amount of assistant output learned from. | Match across data-mixture comparisons; report exact count per epoch and overall. | **Must control.** Equal row counts are not equal training doses. |
+| Epoch count | How many complete passes are made over SFT rows. | 1, 2, 4. | **Test now.** Evaluate saved checkpoints inside each run; do not assume the last epoch has the highest task score. |
+| Total supervised tokens | The actual amount of assistant output learned from. | Match across data-mixture comparisons; report exact count per epoch and overall. | **Must control.** Equal row counts do not mean equal amounts of training. |
 | Learning-rate schedule | Whether update size stays constant or decreases. | Constant; a smooth decrease from the peak to 10% of the peak. | **Test later.** Current supported path is constant. |
 | Warmup | A gradual rise from a tiny update size at the start. | 0%, 3%, 10% of updates. | **Test later.** Current supported path uses 0%; the alternatives are SFT hypotheses, not values copied from an RL study. |
 | Weight decay | A small pressure against very large weight changes. | 0, 0.01, 0.1. | **Test later.** First expose and lock the value the training program actually uses. |
@@ -250,7 +251,7 @@ and a recoverable checkpoint is saved.
 
 | Variable | What it means | Values worth testing | Level and decision |
 |---|---|---|---|
-| Starting checkpoint | The model RL begins from. | Base Qwen; best teacher-SFT; best self-SFT; best mixed-SFT. | **Test now.** This directly tests whether SFT is a useful RL warm start. |
+| Starting checkpoint | The model RL begins from. | Base Qwen; the accepted SFT-01 step-230 teacher checkpoint; the accepted seed-20260914 final checkpoint from SFT-02; the accepted seed-20260914 final checkpoint from SFT-03. | **Test now.** These are four explicit starts, so each comparison can be launched again from the same recorded model rather than whichever model happens to score highest later. |
 | RL task split | Tasks on which fresh RL attempts may run. | The same training families used by the corresponding SFT arm; development and final test excluded. | **Must control.** Bind exact task and grader versions. |
 | Official reward source | Which system decides success. | The real grader locked to that exact task version, plus a unique ID for each scoring run. | **Must control.** A missing scoring ID makes the attempt invalid, not zero reward. |
 | Outcome reward | Reward for the final task result. | Binary 0/1 first; verified partial progress in a separate later arm. | **Test now.** Binary reward is easiest to audit. |
@@ -267,13 +268,17 @@ and a recoverable checkpoint is saved.
 
 The repository has two implementation paths, Miles and SkyRL. They are training
 systems, not scientific algorithms by themselves. Miles is the primary path;
-SkyRL is a matched fallback and implementation control. Scale only a path that
-produces a real reward-bearing update, checkpoint, successful reload, and clean
-resource release.
+SkyRL is a separately qualified implementation control. It uses one or two
+8-GPU nodes, two generation engines per node, four GPUs per engine, colocated
+generation and training, a 98,304-token context, an 81,920-token generated-token
+allowance, 4,096 tokens per turn, at most 64 turns, and no compaction or automatic
+replacement of invalid attempts. It is therefore not a topology- or limit-matched
+Miles run. Scale only a path that produces a real reward-bearing update,
+checkpoint, successful reload, and clean resource release.
 
 | Variable | What it means | Values worth testing | Level and decision |
 |---|---|---|---|
-| RL implementation | The training system that coordinates generation and updates. | Miles one-update gate first; SkyRL only as a matched fallback or later control. | **Test now operationally.** Do not treat one system merely starting as evidence of learning. |
+| RL implementation | The training system that coordinates generation and updates. | Miles one-update gate first; SkyRL as a separately reported native fallback or later control. | **Test now operationally.** Do not treat one system merely starting as evidence of learning, and do not describe SkyRL's different topology and limits as matched. |
 | RL algorithm | The rule that converts rewards into weight updates. | GRPO first; Dr. GRPO, DAPO-style GRPO, and GSPO later; PPO only if its extra expected-reward estimate and added complexity are justified. | **Test later after GRPO works.** Each algorithm needs its own verified implementation. |
 | Attempts per task | Number of fresh responses compared for the same task. | 8 and 16; 4 only when enough tasks combine into a total batch that divides evenly across all training GPUs. | **Test now.** Larger groups improve the chance of mixed rewards but cost more website time. |
 | Different tasks per update | Number of distinct task prompts contributing to one update. | 1, 2, 4, 8. Start with 1×8 for the canary, then 4×8 if speed allows. | **Test now.** More tasks reduce dependence on one challenge. |
@@ -297,7 +302,7 @@ resource release.
 | Tool-output allowance | Maximum command-result text returned to the model. | 16,000 and 50,000 characters. | **Test now.** Mark any cut clearly and use the same rule in every attempt. |
 | Weight freshness | How current the attempt-producing model is relative to the training model. | Refresh it after every model update first; allow at most one-update delay later. | **Test later.** An unlimited delay trains on behavior from an old model. |
 | Attempt generation and training placement | Whether fresh attempts and model training share GPUs. | Share the same GPUs first; separate them only for a matched speed study. | **Test later.** This should mainly affect computing speed, but confirm that rounding and model-update timing remain comparable. |
-| Checkpoint and evaluation interval | How often RL saves and checks development tasks. | Every update for the one-update gate; every 5 updates for matched 10-update comparisons; every 10 or 25 for longer runs; always final. | **Must control operationally.** A starting-checkpoint or algorithm comparison must not also change this timing. Keep the best and latest recoverable states. |
+| Checkpoint and evaluation interval | How often RL saves and checks development tasks. | Every update for the one-update gate; every 5 updates for matched 10-update comparisons; every 10 or 25 for longer runs; always final. | **Must control operationally.** A starting-checkpoint or algorithm comparison must not also change this timing. Keep the highest-development-score state and the latest recoverable state. |
 | Resume behavior | Whether a stopped run continues from the exact next task/update. | One planned stop-and-resume test before a long run. | **Must control.** Restore weights, optimizer, random state, and data position together. |
 
 Why these anchors? DeepSeekMath used GRPO with learning rate 1e-6, 64 attempts
@@ -313,7 +318,7 @@ attempt is very different from a math answer.
 | Variable | What it means | Values worth testing | Level and decision |
 |---|---|---|---|
 | Training path | The ordered stages applied to Qwen. | Base only; teacher-SFT; self-SFT; mixed-SFT; RL from base; teacher-SFT→RL; self-SFT→RL; mixed-SFT→RL. | **Test now.** These are the core scientific arms. |
-| SFT before RL | Whether imitation gives RL a better starting success rate. | No SFT; best teacher-SFT; best self-SFT; best mixed-SFT. | **Test now.** Match the RL task mix, number of attempts, and number of model updates. |
+| SFT before RL | Whether imitation gives RL a better starting success rate. | No SFT; accepted SFT-01 step 230; accepted SFT-02 seed-20260914 final step 230; accepted SFT-03 seed-20260914 final step 230. | **Test now.** Match the RL task mix, number of attempts, and number of model updates. |
 | SFT after RL | Whether a final imitation pass restores format or tool behavior. | None first; very small mixed-SFT “recovery” pass later. | **Test later.** It can erase RL gains, so evaluate both sides. |
 | Alternating stages | Switch between SFT and RL more than once. | One SFT→RL cycle first; two cycles later. | **Test later.** Freeze and evaluate every boundary. |
 | General-data preservation | Mix non-cyber instruction data to reduce forgetting. | 0% inside the current cyber-only project; 5% or 10% only in a clearly separate follow-up study. | **Test later.** Non-cyber data is outside the current goal and must not be mixed into its main result. |
@@ -333,9 +338,9 @@ attempt is very different from a math answer.
 | Training repeats | Independent training runs with different seeds. | One for coarse screening; three for finalists. | **Must control for claims.** Evaluation attempts are not substitutes for training repeats. |
 | Paired task analysis | Compare base and trained outcomes on the same task versions. | Per-task win/loss/tie table and a paired resampling confidence interval: repeatedly resample whole task families and recalculate the lift. | **Must control.** Do not compare only two pooled percentages. |
 | Confidence interval | A range showing sampling uncertainty. | Repeatedly resample whole task families, not individual attempts; report 95% intervals. | **Must control.** Attempts on one task are related, not independent data points. |
-| Guard against a lucky search winner | Avoid declaring the luckiest of many recipes a discovery. | Write down the search before it starts, use development data for ranking, and reserve the final test for a small frozen set. | **Must control.** Report the number of experiment arms tried. |
+| Guard against a lucky search result | Avoid declaring the luckiest of many recipes a discovery. | Write down the search before it starts, use development data for ranking, and reserve the final test for a small frozen set. | **Must control.** Report the number of experiment arms tried. |
 | Minimum useful lift | Smallest improvement worth the cost. | Write down the minimum absolute increase in task success before running the search. | **Must control.** With only 8 final tasks, only very large changes will be clear. |
-| Cost and efficiency | Resources needed for each gain. | GPU-hours, environment-hours, generated tokens, and solved tasks per cost. | **Test now.** The best model is not necessarily the most expensive winner. |
+| Cost and efficiency | Resources needed for each gain. | GPU-hours, environment-hours, generated tokens, and solved tasks per cost. | **Test now.** The strongest measured model is not necessarily the most expensive one. |
 | Safety and general behavior | Check whether cyber lift damages basic tool use or reporting. | Fixed small test set for non-secret tool formatting and general instructions. | **Must control.** Keep this separate from the cyber success score. |
 
 ## 10. Repeatability and run health
@@ -354,6 +359,12 @@ Every run should record the following before it starts:
 | Completion | Reload the exported model and prove it can produce numeric predictions without invalid numbers before using it for evaluation. |
 | Run status | Separate “program started,” “model updated,” “valid score produced,” and “model improved.” They are different claims. |
 
+The ranked rows predeclare SFT data/shuffle seeds 20260914, 20260915, and
+20260916 and RL data/training/generation seeds 42, 43, and 44 for each primary
+source or starting checkpoint. The paired development evaluation seed remains
+20260914 in every repeat so the evaluation cases do not change with the
+training randomness.
+
 ## Recommended search order
 
 The order below learns the most while limiting expensive combinations.
@@ -364,25 +375,30 @@ The order below learns the most while limiting expensive combinations.
 2. **Find the SFT example design.** Start from the accepted Fresh75 settings:
    learning rate 1e-5, batch 8, and two epochs. Compare teacher traces, Qwen
    traces, and a 50:50 mixture over the exact same 37 task families. Match each
-   family's supervised-token weight, 2,072,122 total supervised-target token
-   exposures, and 230 optimizer updates; train every eligible action versus a
-   task-balanced set of key actions. A later split B may reassign only the
-   current training and development families and must lock the exact final 8.
-3. **Tune SFT update settings.** For the best two data approaches, combine each
-   learning rate (3e-6, 1e-5, 3e-5) with each batch size (8, 32, 64), and evaluate checkpoints from epochs
+   family's supervised-token weight, 2,072,122 supervised assistant tokens
+   across two passes, and 230 optimizer updates; train every eligible action versus a
+   task-balanced set of key actions. Do not add another split until its exact
+   training/development assignment and unchanged final 8 are frozen in advance.
+3. **Tune SFT update settings.** The ranked table names the exact source run for
+   every comparison. For those explicit rows, combine each learning rate
+   (3e-6, 1e-5, 3e-5) with each batch size (8, 32, 64), and evaluate checkpoints from epochs
    1/2/4. Reject unstable settings early. Repeat finalists with three seeds.
 4. **Acquire real RL reward.** Run the Miles one-update 1-task × 8-attempt gate
    with 262,144-token live context, proved compaction, at least 1,000 turns, and
-   a multi-hour episode limit. Use SkyRL only as a matched fallback or later
-   control. Advance only with real mixed rewards, a nonzero update, a
+   a multi-hour episode limit. Use SkyRL only as a separately reported native
+   fallback or later control under the fixed limits above. Advance only with
+   real mixed rewards, a nonzero update, a
    recoverable checkpoint, successful reload, and clean release.
-5. **Find an RL starting point.** Compare base, best teacher-SFT, best self-SFT,
-   and best mixed-SFT at 10 updates with identical tasks and rollout settings.
+5. **Find an RL starting point.** Compare the exact base, accepted Fresh75
+   step-230 teacher-SFT, SFT-02 seed-20260914 self-SFT, and SFT-03 seed-20260914
+   mixed-SFT starts at 10 updates with identical Miles tasks and rollout settings.
 6. **Tune the working RL path.** Search learning rate, attempts per task, KL
    penalty, clipping, and task sampling in that order. Use 50 updates only for
    settings with development lift; use 100–150 only after a stable medium run.
-7. **Test the core finalists.** Compare base, SFT-only, RL-from-base, and SFT→RL
-   with three training seeds. Freeze winners before opening the final Fleet set.
+7. **Test the predeclared core finalists.** The table schedules exact seed
+   42/43/44 RL rows for base, teacher-SFT, self-SFT, and mixed-SFT starts, and
+   exact 20260914/20260915/20260916 SFT rows for the three source arms. Freeze
+   the chosen identities before opening the final Fleet set.
    Run the matched report-only WebExploitBench transfer check immediately after
    every accepted checkpoint, but never use those benchmark results to choose a
    recipe, checkpoint, or finalist.

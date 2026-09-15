@@ -90,12 +90,14 @@ checking the live deployment.
 ### Development cluster lifecycle
 
 Use the Nebius development cluster only for bounded tests of new or changed
-images, entrypoints, distributed startup, and cleanup behavior. A dev test must
-name its expected evidence, carry a fixed wall-clock deadline, and have an exact
-teardown path before it is created. When the test succeeds, fails, or becomes
-irrelevant, release every resource it created and verify the exact object UIDs
-and GPU allocation are gone. Terminal Kubernetes objects may remain as history
-only when they hold no compute or route.
+images, entrypoints, distributed startup, and cleanup behavior. Every new dev
+test must name its expected evidence, carry a fixed wall-clock deadline no later
+than **30 minutes after object creation**, and have an exact teardown path before
+it is created. At success, failure, irrelevance, or that deadline, immediately
+delete every Pod, Job, RayJob, RayCluster, Workload, Service, controller, and test
+model registration it created. Then verify every recorded UID and named resource
+is absent and the exact GPU allocation is zero. New dev tests may not retain a
+terminal object as history; preserve their evidence outside the live object.
 
 Do not use dev as a persistent model host, a spare inference pool, or a place to
 park an experiment between checks. A model needed by production evaluation must

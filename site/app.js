@@ -42,7 +42,7 @@ function renderResults() {
         <div><b>${pct(run.pass1)}</b><small>pass@1</small></div>
         <div><b>${pct(run.pass4)}</b><small>pass@4</small></div>
       </div>
-      <dl><div><dt>${run.attemptLabel}</dt><dd>${run.attempts}</dd></div><div><dt>${run.scoreLabel}</dt><dd>${run.scored ?? "Not checked yet"}</dd></div><div><dt>${run.hitLabel}</dt><dd>${run.objectiveHits}</dd></div></dl>
+      <dl><div><dt>${run.attemptLabel}</dt><dd>${run.attempts}</dd></div><div><dt>${run.scoreLabel}</dt><dd>${run.scored ?? "Not checked yet"}</dd></div><div><dt>${run.hitLabel}</dt><dd>${run.weaknessesFound}</dd></div></dl>
       <p>${run.note}</p>
     </article>`).join("");
   document.querySelector("#main-finding").textContent = "Qwen Code gives us a genuine partial result from 48 usable attempts, not the complete 15-website baseline we intended. OpenCode’s saved 2.4% four-attempt result is not a real model score: its AI report checker failed on all 206 submitted findings.";
