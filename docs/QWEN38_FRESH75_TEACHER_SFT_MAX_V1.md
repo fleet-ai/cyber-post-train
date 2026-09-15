@@ -49,6 +49,40 @@ found that train-only validation still tried to check an absent teacher-token
 development file. The V2 plan includes the regression-tested fix; V1 never
 created a training job or allocated a GPU.
 
+## First V2 submission and setup diagnosis
+
+The first V2 production submission stopped at optimizer step zero with a public
+`KeyError` classification and produced no checkpoint. Its old runtime preserved
+the traceback privately but did not publish the missing key or an exact setup
+stage. The approved public evidence therefore cannot identify that key after the
+fact, and this document does not guess one.
+
+Two direct, clean-exit development-cluster probes then exercised the same pinned
+image, model bytes, eight-rank FSDP setup, and all-rank device backload without
+loading training data or creating an optimizer step:
+
+- `chris-q38-f75-setup-probe-v1` passed through `device_ready`; its validated
+  setup receipt digest is
+  `520f7d397ecd2f81d459790ad385ad795e6d51aff403472e7004271d0c65b69b`.
+- `chris-q38-f75-tracker-probe-v2-b5fda280` additionally exercised the exact
+  production W&B initialization path with a new run identity. Its W&B receipt
+  digest is
+  `2e670e3ee7a429fcc7dd9a72d81fb4445f5e232a41e0cb6b7ca30d1ebfdd828c`
+  and its validated setup receipt digest is
+  `48c1baae3711b8236f73c8085c61486565161151a525f9aa5bc50b51bdd63d75`.
+
+Both Pods exited zero with no restarts and were deleted after terminal receipt
+validation. This rules out a deterministic corpus-schema, W&B binding, model
+file, FSDP configuration, or explicit-backload defect in the exercised setup
+path. The remaining diagnosis is a non-reproduced production-only native/Ray
+initialization failure; it is an inference, not an identified missing-key bug.
+No production retry is authorized from this evidence alone.
+
+The runtime now records a digest-bound public setup stage and, for a simple
+non-secret `KeyError`, an allowlisted missing-key name. Its setup-probe mode
+catches setup failures into a truthful exit-zero rejection receipt so diagnosis
+does not create a failed training job or a Slack failure alert.
+
 There is no held-out teacher-token loss. W&B records training loss and runtime
 health. Checkpoint choice must use task outcomes on the frozen 17-task Fleet
 development split.
