@@ -423,7 +423,7 @@ def compile_controller(
     pod_identities = sorted({(row["name"], row["uid"]) for row in by_kind["Pod"]})
     if len(pod_identities) != expected_workers:
         raise ValueError("Miles event journal Pod cardinality differs from the submitted topology")
-    if direct_export:
+    if expected_workers == 1:
         identities["Pod"] = pod_identities[0]
     if direct_export:
         job_name, job_uid = identities["Job"]
