@@ -69,6 +69,11 @@ Mutable names, tags, catalog `current` pointers, a Ready Pod, or a dashboard lab
   distinct pending-row claim before another create. Reconcile terminal evidence
   without mutating preserved objects/results or existing `retry_review` rows.
 - Do not mutate an immutable failed Job to retry it. Preserve it and create a reviewed successor only when authorized.
+- The Nebius development cluster is for bounded qualification and debugging only.
+  Give every dev workload a fixed deadline, release its Pods, Jobs, RayClusters,
+  Workloads, Services, and test model registrations when the check ends, and
+  verify the exact UIDs are absent. Never leave a model server, training run, or
+  other hosted workload there as ongoing capacity.
 - An experiment-owned dedicated GPU serving or evaluation allocation needs an observed useful rollout consumer or a bounded, predeclared loading, warmup, or handoff exception. When neither holds, stop new claims, preserve in-flight evidence, release the owned allocation through its supported lifecycle, diagnose off-node, and create a fresh successor only after its gates pass. This does not apply to shared or hosted endpoints and never authorizes peer-workload mutation. Follow [`docs/GPU_RESOURCE_LIFECYCLE.md`](docs/GPU_RESOURCE_LIFECYCLE.md).
 - Merge authority follows the user's current instruction and repository ownership. Historical approval is not permanent authorization for a new shared-repository merge or deployment.
 

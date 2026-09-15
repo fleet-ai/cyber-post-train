@@ -87,6 +87,22 @@ checking the live deployment.
 
 ## Resource choice
 
+### Development cluster lifecycle
+
+Use the Nebius development cluster only for bounded tests of new or changed
+images, entrypoints, distributed startup, and cleanup behavior. A dev test must
+name its expected evidence, carry a fixed wall-clock deadline, and have an exact
+teardown path before it is created. When the test succeeds, fails, or becomes
+irrelevant, release every resource it created and verify the exact object UIDs
+and GPU allocation are gone. Terminal Kubernetes objects may remain as history
+only when they hold no compute or route.
+
+Do not use dev as a persistent model host, a spare inference pool, or a place to
+park an experiment between checks. A model needed by production evaluation must
+move through the supported production inference lifecycle after its bounded dev
+qualification. Losing the local operator process is not permission to leave a
+dev allocation behind; the owning monitor must reconcile and release it.
+
 ### Jobs API policy checked 2026-09-10
 
 The deployed `https://api.ft.flt.build/v1/openapi.json` exposes generic
