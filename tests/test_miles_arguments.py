@@ -209,8 +209,8 @@ def test_bounded_counts_and_native_optimizer(config, native_boundary):
     assert "--disable-grpo-std-normalization" in argv
     assert "--dynamic-sampling-filter-path" not in argv and "--use-fault-tolerance" not in argv
     assert "--no-save-optim" not in argv and "--no-save-rng" not in argv
-    assert value(argv, "load") == value(argv, "save") == cfg.output_root + "/checkpoints"
-    assert value(argv, "ref-load") == cfg.torch_dist_root
+    assert value(argv, "load") == value(argv, "ref-load") == cfg.torch_dist_root
+    assert value(argv, "save") == cfg.output_root + "/checkpoints"
     assert value(argv, "fleet-tito-model") == "qwen35"
     assert value(argv, "fleet-policy-identity-root") == cfg.model_root
     assert value(argv, "rollout-max-prompt-len") == str(cfg.context_tokens - cfg.response_tokens)

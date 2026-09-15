@@ -15,6 +15,15 @@ from types import ModuleType, SimpleNamespace
 from cyber_post_train.jobs import digest
 from training import miles, miles_opencode, miles_training
 
+CHECKPOINT_ROOT = Path("/mnt/sfs/jobs/chris-cpt-cleanup-q38-miles-base-v1/torch-dist")
+CHECKPOINT_RECEIPT = Path(
+    "/mnt/sfs/jobs/chris-cpt-cleanup-q38-miles-base-v1/NATIVE_CHECKPOINT.json"
+)
+CHECKPOINT_RECEIPT_FILE_SHA256 = (
+    "b3d772de9121f442ea7b9a4c9a996f2a0a99cab8c49fe3083c148fe3eebd089c"
+)
+CHECKPOINT_RECEIPT_SHA256 = "19c8e93482530170e0f648815ab74233719e6f2b3bb7879a6564b42c3abec371"
+
 
 def sha256(path: Path) -> str:
     with path.open("rb") as stream:
@@ -88,6 +97,12 @@ def qualify() -> dict:
             model_config_sha256
             == "191e0af232104ed8b65258cf3fb2b842e288008baca7633c11b82a1ac7203aab"
         )
+        assert CHECKPOINT_ROOT.is_dir()
+        assert sha256(CHECKPOINT_RECEIPT) == CHECKPOINT_RECEIPT_FILE_SHA256
+        checkpoint_receipt = json.loads(CHECKPOINT_RECEIPT.read_text())
+        assert checkpoint_receipt["sha256"] == CHECKPOINT_RECEIPT_SHA256
+        assert checkpoint_receipt["root"] == str(CHECKPOINT_ROOT)
+        assert checkpoint_receipt["optimizer_steps"] == 0
     from miles.utils.external_utils.command_utils import repo_base_dir
 
     miles_root = Path(repo_base_dir)
@@ -114,7 +129,7 @@ def qualify() -> dict:
         name="q38-long-runtime-qualification",
         output_root="/mnt/sfs/jobs/q38-long-runtime-qualification",
         model_root=str(model_root),
-        torch_dist_root="/mnt/sfs/models/q38-long-runtime-qualification/torch-dist",
+        torch_dist_root=str(CHECKPOINT_ROOT),
         train_data="/mnt/sfs/data/q38-long-runtime-qualification/train.jsonl",
         dev_data="/mnt/sfs/data/q38-long-runtime-qualification/dev.jsonl",
         data_manifest="/mnt/sfs/data/q38-long-runtime-qualification/manifest.json",
@@ -162,6 +177,8 @@ def qualify() -> dict:
         ),
         "sglang-router-policy": "consistent_hashing",
         "fleet-session-node-cap": "4096",
+        "load": str(CHECKPOINT_ROOT),
+        "ref-load": str(CHECKPOINT_ROOT),
     }
     assert all(option(argv, key) == value for key, value in expected.items())
     assert "--chat-template-path" not in argv
@@ -194,6 +211,7 @@ def qualify() -> dict:
         assert parsed.use_session_server == "v2"
         assert parsed.max_seq_len == 262144
         assert parsed.tito_model == "qwen38small"
+        assert parsed.load == parsed.ref_load == str(CHECKPOINT_ROOT)
         assert sha256(Path(parsed.chat_template_path)) == miles.LONG_TITO_TEMPLATE_SHA256
         assert parsed.sglang_router_policy == "consistent_hashing"
 
@@ -309,6 +327,11 @@ def qualify() -> dict:
         "installed_session_tree_sha256": ("sha256:" + miles.LONG_INSTALLED_SESSION_TREE_SHA256),
         "build_source_sha256": build_source_sha256,
         "model_config_sha256": "sha256:" + str(model_config_sha256),
+        "parser_checkpoint_root": str(CHECKPOINT_ROOT),
+        "parser_checkpoint_receipt_file_sha256": (
+            "sha256:" + CHECKPOINT_RECEIPT_FILE_SHA256
+        ),
+        "parser_checkpoint_receipt_sha256": CHECKPOINT_RECEIPT_SHA256,
         "checks": checks,
     }
     value["sha256"] = digest(value)

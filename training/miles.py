@@ -261,7 +261,10 @@ def arguments(config: MilesConfig) -> list[str]:
         "train-backend": "megatron",
         "hf-checkpoint": config.model_root,
         "ref-load": config.torch_dist_root,
-        "load": config.output_root + "/checkpoints",
+        # The first run starts from the accepted zero-step conversion.  A
+        # later resume must be a separately bound successor, never an implicit
+        # read from a create-once output directory.
+        "load": config.torch_dist_root,
         "save": config.output_root + "/checkpoints",
         "save-interval": config.checkpoint_interval,
         "prompt-data": config.train_data,

@@ -96,6 +96,15 @@ def test_long_conversion_requires_and_binds_qualified_derived_image(config, tmp_
         "model_config_sha256": (
             "sha256:191e0af232104ed8b65258cf3fb2b842e288008baca7633c11b82a1ac7203aab"
         ),
+        "parser_checkpoint_root": (
+            "/mnt/sfs/jobs/chris-cpt-cleanup-q38-miles-base-v1/torch-dist"
+        ),
+        "parser_checkpoint_receipt_file_sha256": (
+            "sha256:b3d772de9121f442ea7b9a4c9a996f2a0a99cab8c49fe3083c148fe3eebd089c"
+        ),
+        "parser_checkpoint_receipt_sha256": (
+            "19c8e93482530170e0f648815ab74233719e6f2b3bb7879a6564b42c3abec371"
+        ),
         "opencode_version": "1.18.27",
         "opencode_source_commit": "4b7e19e315cca414121ba1d61523fef74bb3ae8b",
         "opencode_binary_sha256": (
