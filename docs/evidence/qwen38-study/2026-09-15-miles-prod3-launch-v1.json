@@ -1,0 +1,64 @@
+{
+  "schema": "cyber_qwen38_miles_prod3_launch_v1",
+  "observed_at": "2026-09-15T00:30:45Z",
+  "scientific_change_from_prod2": {
+    "field": "limits.max_tokens_per_turn",
+    "before": 8192,
+    "after": 32768,
+    "all_other_scientific_fields_unchanged": true
+  },
+  "immutable_inputs": {
+    "source_commit": "8907812f8db719eaeabb69c662d8c5e85fd7450c",
+    "plan_sha256": "sha256:57c4349daeeecb41dae1b81d3b19f1ef939eefeed2aab4bed5ecdaf21287e9a1",
+    "plan_file_sha256": "sha256:2f70706f10011fa861e0d3bd1a62e9bfcb57d7158c4bd64e11d1dd50cd8982d9",
+    "request_sha256": "sha256:afdc261b1225201169633407dd1b6774de53f32903a42a5243a2804e0b273caa",
+    "request_file_sha256": "sha256:3e8a7e5e9b5b747c7ec32df3b3892af00be3eed582ee78309efa8d9bcfb46a00",
+    "runtime_bundle_sha256": "sha256:7f0a0df4fd5401e2dcf66f63b2f6da4598d78595235551f7170a05f09715dd0f",
+    "runtime_source_sha256": "sha256:bff61e2c0a6457f601765df8a9b15892d3ce19f23b502d13d14e8fa63dced10d",
+    "train_data_sha256": "sha256:e0019d7630f4ecb210fb3134b4d0906370f803b408bdc60c77b82f4931959112",
+    "dev_data_sha256": "sha256:52a0384b0fc083fb55f05a174574dada803341598f9b8a77527a86cf01711d72",
+    "data_manifest_sha256": "sha256:0cd655f2787310b56d87ab66d1cb380408b8e178048ac97363c0f54f203ff05d",
+    "preflight_sha256": "sha256:a78fdd5d7e5bc0d899013912b430d91fe953f9e78348256860cfa5b4b44b43bb",
+    "runtime_binding_sha256": "sha256:413d411e465ee9fc34683d6ece6fcf4e4837148a0bc7ace0f315e143f8fb3901"
+  },
+  "submission": {
+    "submitted_at": "2026-09-15T00:25:29Z",
+    "jobs_api_post_count": 1,
+    "api_run_id": "38a19dd2-35c0-4bc2-9ba9-41957b94cf1a",
+    "api_run_name": "chris-q38-miles-prod3-canary-38a19dd2",
+    "rayjob_uid": "31bb615a-8e0b-465a-bd25-9274743e661c",
+    "workload_uid": "b2fbd284-2a7b-4f7d-a6d2-cbe3be559861",
+    "output_root": "/mnt/sfs/jobs/chris-q38-miles-prod3-canary-v1",
+    "priority_class": "c1",
+    "automatic_requeue": false,
+    "submission_binding_sha256": "sha256:841d343047b191ef56b006d3e5506a2f0ce2494004f1daa21f8556658ef88a27"
+  },
+  "lifecycle_capture": {
+    "started_at": "2026-09-15T00:24:54Z",
+    "started_before_submission": true,
+    "capture_start_sha256": "sha256:ab5f40a69a7f5dc3728aa32a81ab2f5ea158fb014472f51cc09bcbb1102b3e5c",
+    "rayjob_added_event_sha256": "sha256:c276a00096eb4b8490a145eeab71221a7c0b645bea60fcea84f7ec582b53ef13",
+    "workload_added_event_sha256": "sha256:b34e85209806c594734a643474c70799ab5630926a26910226dee580f4750a87"
+  },
+  "state": {
+    "api_status": "Suspended",
+    "quota_reserved": false,
+    "raycluster_created": false,
+    "pod_created": false,
+    "gpu_count_held": 0,
+    "classification": "queued_without_allocation"
+  },
+  "operator_cpu_pod": {
+    "name": "chris-q38-prod3-submit-cpu-v1",
+    "uid": "b9733697-4c20-415b-99d0-cdb5b2c4bc95",
+    "gpus": 0,
+    "restarts": 0,
+    "deleted_after_binding": true,
+    "absence_verified": true
+  },
+  "private_logs_included": false,
+  "metric_values_included": false,
+  "task_content_included": false,
+  "secret_values_included": false,
+  "sha256": "1df422d5e7332747d5d5b4a64b1b446f10ec228cb5d919ab974f6e182a824a38"
+}
