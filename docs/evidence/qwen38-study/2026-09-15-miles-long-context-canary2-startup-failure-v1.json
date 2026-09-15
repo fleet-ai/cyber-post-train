@@ -90,7 +90,7 @@
     "pods_absent_by_run_prefix": true,
     "gpus_released": 32,
     "possible_resource_leak": false,
-    "reconciled_at": "2026-09-15T09:02:00Z"
+    "reconciled_at": "2026-09-15T09:02:49Z"
   },
   "correction": {
     "source_commit": "958860aaf771eb2b5e4cbf572bb0f310dceef9f5",
@@ -155,5 +155,5 @@
     "checkpoint creation",
     "scientific RL acceptance"
   ],
-  "sha256": "sha256:c3648550bbbb92e76bd594c5e8bf07acbfd27e2965b516fd530495001af522f8"
+  "sha256": "sha256:336223d348a7e43b8bbed150887ace046f45c48e12e085a4ab3506b84726cba0"
 }
