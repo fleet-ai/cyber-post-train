@@ -1,0 +1,18 @@
+{
+  "source_manifest": "/mnt/sfs/jobs/chris-q38-miles-lc-canary2-inputs/data/manifest.json",
+  "source_manifest_file_sha256": "sha256:7c726746ca1a3ec45984a24554d4efbfdc13da6fa115a13a10dfa7fecaf84975",
+  "source_manifest_sha256": "sha256:4ec8a1ae470c4d86728adf929cf496556f7b15bd3acdfc7bc56d57682bbd8910",
+  "source_policy_identity_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+  "expected_limits": {
+    "context_tokens": 262144,
+    "response_tokens": 245760,
+    "max_tokens_per_turn": 32768,
+    "max_turns": 2048,
+    "episode_seconds": 28800,
+    "tool_seconds": 330
+  },
+  "mode": "run_id_rebind",
+  "name": "chris-q38-miles-lc-canary3",
+  "policy_identity_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+  "output": "/mnt/sfs/jobs/chris-q38-miles-lc-canary3-inputs/data"
+}
