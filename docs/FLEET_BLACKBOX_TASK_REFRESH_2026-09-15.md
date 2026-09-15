@@ -23,6 +23,17 @@ sets. This is the intended conservative behavior: publication and production
 status are useful supply signals, but they do not prove that an environment and
 its grading work end to end.
 
+### Later same-day recheck
+
+A second metadata-only census ending at **16:16 UTC** found the same 1,633
+selected versions, 1,055 production blackbox tasks, 75 retained tasks, and 17
+pending candidates. The Artifact Registry contained two additional task-source
+records, but neither had entered the authoritative task catalog. The training
+split and public counts therefore remain unchanged. The compact
+[recheck record](evidence/fleet-task-inventory-20260915/catalog-recheck-1616-v1.json)
+binds the exact program, prior census, output digests, and zero-change result
+without duplicating another 1,633-row census in Git.
+
 ## Reproducible files
 
 - [All 1,055 current production blackbox task versions](../configs/data/fleet-blackbox-current-production-20260915-v1.json)

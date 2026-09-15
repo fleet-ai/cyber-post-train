@@ -12,6 +12,7 @@ PENDING = DATA / "fleet-blackbox-qa-candidates-20260914-v1.json"
 COVERAGE = DATA / "fleet-blackbox-training-coverage-20260915-v1.json"
 CENSUS = EVIDENCE / "catalog-census-v1.json"
 ADMIN = EVIDENCE / "admin-workflow-count-v1.json"
+RECHECK = EVIDENCE / "catalog-recheck-1616-v1.json"
 
 
 def assert_self_digest(value: dict) -> None:
@@ -27,6 +28,20 @@ def assert_self_digest(value: dict) -> None:
         ).hexdigest()
     )
     assert value["sha256"] == expected
+
+
+def digest_json(value: dict) -> str:
+    return (
+        "sha256:"
+        + hashlib.sha256(
+            json.dumps(
+                value,
+                ensure_ascii=False,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+    )
 
 
 def rows(value: dict) -> list[dict]:
@@ -99,6 +114,48 @@ def test_live_census_and_admin_workflow_count_keep_evidence_tiers_separate() -> 
     assert admin["accepted_entry_inventory_available"] is False
     assert "not an accepted-task" in admin["meaning"]
     assert admin["private_content_persisted"] is False
+
+
+def test_later_recheck_is_self_digesting_and_proves_no_selection_change() -> None:
+    recheck = json.loads(RECHECK.read_text())
+    receipt = recheck.pop("receipt_sha256")
+    assert receipt == digest_json(recheck)
+
+    census = json.loads(CENSUS.read_text())
+    all_tasks = load(ALL)
+    filtered = load(FILTERED)
+    pending = load(PENDING)
+    coverage = json.loads(COVERAGE.read_text())
+    semantic_coverage = {
+        key: value for key, value in coverage.items() if key not in {"observed_through", "sha256"}
+    }
+    program = ROOT / recheck["program"]["path"]
+
+    assert recheck["program"]["file_sha256"] == (
+        "sha256:" + hashlib.sha256(program.read_bytes()).hexdigest()
+    )
+    assert recheck["prior_census"]["receipt_sha256"] == census["sha256"]
+    assert recheck["prior_census"]["observed_through"] == census["observed_through"]
+    assert recheck["recheck"]["all_blackbox_receipt_sha256"] == all_tasks["sha256"]
+    assert recheck["recheck"]["high_quality_receipt_sha256"] == filtered["sha256"]
+    assert recheck["recheck"]["pending_receipt_sha256"] == pending["sha256"]
+    assert recheck["recheck"]["training_coverage_semantic_sha256"] == digest_json(semantic_coverage)
+    assert recheck["recheck"]["production_blackbox_versions"] == all_tasks["task_count"]
+    assert recheck["recheck"]["high_quality_versions"] == filtered["task_count"]
+    assert recheck["recheck"]["pending_quality_candidates"] == pending["task_count"]
+    assert (
+        recheck["recheck"]["current_exact_execution_receipts"]
+        == coverage["counts"]["current_exact_receipt_task_keys"]
+    )
+    assert recheck["change_since_prior_census"] == {
+        "catalog_selected_versions": 0,
+        "production_versions": 0,
+        "production_blackbox_versions": 0,
+        "high_quality_versions": 0,
+        "pending_quality_candidates": 0,
+        "published_task_source_keys": 2,
+    }
+    assert recheck["private_content_persisted"] is False
 
 
 def test_filtered_tasks_have_reviewed_split_metadata_and_provenance() -> None:
