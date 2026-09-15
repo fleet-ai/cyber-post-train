@@ -1,7 +1,7 @@
 {
   "backend": "skyrl",
-  "name": "chris-q38-f75-teacher-max-v1",
-  "output_root": "/mnt/sfs/jobs/chris-q38-f75-teacher-max-v1",
+  "name": "chris-q38-f75-teacher-max-v2",
+  "output_root": "/mnt/sfs/jobs/chris-q38-f75-teacher-max-v2",
   "model": {
     "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
     "weights": "../models/qwen38-27b-1d4bf0f2.weights.json",
@@ -28,8 +28,8 @@
     "entity": "thefleet",
     "project": "cyber-post-train",
     "group": "qwen38-fresh75-teacher-max-v1",
-    "run_id": "chris-q38-f75-teacher-max-v1",
-    "name": "chris-q38-f75-teacher-max-v1",
+    "run_id": "chris-q38-f75-teacher-max-v2",
+    "name": "chris-q38-f75-teacher-max-v2",
     "tags": [
       "qwen38",
       "teacher-sft",
@@ -37,7 +37,8 @@
       "task-rich-windows",
       "maximum-qualified-data",
       "outcome-only",
-      "full-run"
+      "full-run",
+      "train-only-preflight-v2"
     ]
   },
   "cluster": {
