@@ -58,7 +58,7 @@
     "pod_name": "chris-q38-f75-p230-stage-v1",
     "config_map_name": "chris-q38-f75-p230-stage-v1",
     "image": "lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
-    "runtime_source_sha256": "sha256:276b5d4ab8a58d22283aefb93742bf3dbb974531c56ff30d49a38231ec6075ea",
+    "runtime_source_sha256": "sha256:ab43d324d46e35712534f3ed8418807a924a7505feb30416538fc36b38fc01b6",
     "priority_class": "c1",
     "gpus": 0,
     "restart_policy": "Never",
@@ -327,5 +327,5 @@
     "serving_qualified_by_staging": false,
     "registration_or_resume_performed_by_this_plan": false
   },
-  "plan_sha256": "sha256:fe82cc8825a94582b2dc07122bc2ea8436582f70c8a58dcc6b7a4c481f8c4338"
+  "plan_sha256": "sha256:78f37bb1daa3359ca3bb607315fd4d6a153a16d5dd188230c56b6be2f161ed10"
 }
