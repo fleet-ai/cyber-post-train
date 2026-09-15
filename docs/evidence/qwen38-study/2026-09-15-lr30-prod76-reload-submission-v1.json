@@ -139,11 +139,36 @@
     "source_checkpoint_unchanged_after_reload": true,
     "proof_receipt_sha256": "1ee2edd3624e69b756dc0f1dc282fd2eb8f1e2d6c63f10431867dd6e0aca7749"
   },
+  "bf16_export": {
+    "manifest": "configs/qualification/qwen38-teacher-lr30-step76-hf-export-prod-v1.pod.yaml",
+    "manifest_file_sha256": "b47732acf62aa21cb262cb9c06028bc980afb3f68cb4b9b9a7c560cddc7829ea",
+    "pod_name": "chris-q38-lr30-p76-export-v1",
+    "pod_uid": "bc66aa8f-3be2-4eae-9b17-dc0fc0b2d57a",
+    "phase": "Succeeded",
+    "finished_at": "2026-09-15T01:32:39Z",
+    "exit_code": 0,
+    "restart_count": 0,
+    "gpu_count": 0,
+    "output_path": "/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/hf-export-step76-v1",
+    "partial_path_absent": true,
+    "receipt_file_sha256": "39cedfb644aa955b450e42eb98494276c1bdce85a9760b2b038b67823ff7b9e5",
+    "receipt_sha256": "983bf6daa2f8b7680560c834cbfb76fb8fe7fba5a273f116b9b3e80ef9f97538",
+    "receipt_digest_valid": true,
+    "optimizer_step": 76,
+    "optimizer_steps_executed": 0,
+    "dtype": "BF16",
+    "trained_tensors": 1184,
+    "restored_base_tensors": 15,
+    "tensor_count": 1199,
+    "tensor_bytes": 55562855904,
+    "source_checkpoint_unchanged": true,
+    "all_output_tensors_reopened_equal": true
+  },
   "acceptance": {
     "zero_update_reload_complete": true,
     "source_checkpoint_unchanged": true,
     "resources_released": true,
-    "bf16_export_complete": false,
+    "bf16_export_complete": true,
     "webexploitbench_evaluation_complete": false
   }
 }
