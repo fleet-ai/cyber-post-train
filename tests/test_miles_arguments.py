@@ -132,6 +132,7 @@ def test_bounded_counts_and_native_optimizer(config, native_boundary):
     assert value(argv, "fleet-tito-model") == "qwen35"
     assert value(argv, "rollout-max-prompt-len") == str(cfg.context_tokens - cfg.response_tokens)
     assert value(argv, "rollout-seed") == str(cfg.seed)
+    assert "--distributed-backend" not in argv
 
 
 @pytest.mark.parametrize("fault", ["template", "backend", "vision", "tito", "overlap", "retry"])

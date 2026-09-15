@@ -171,6 +171,32 @@ def test_submit_uses_shared_boundary_and_journal(prepared, monkeypatch):
     assert json.loads(result.stdout)["status"] == "pending"
 
 
+def test_submit_rejects_pre_gate_preparation_before_network(prepared, monkeypatch):
+    output, plan, request, _ = prepared
+    record_preflight(output, plan, request)
+    (output / "PREPARED.json").write_text(
+        json.dumps(
+            {
+                "plan_sha256": digest(plan),
+                "request_sha256": digest(request),
+            }
+        )
+    )
+    monkeypatch.setattr(cli, "_client", lambda: pytest.fail("stale gate reached network"))
+    assert RUNNER.invoke(cli.app, ["submit", str(output)]).exit_code == 2
+
+
+def test_submit_regenerates_request_with_current_source_and_gates(prepared, monkeypatch):
+    output, plan, request, _ = prepared
+    record_preflight(output, plan, request)
+    changed = {**request, "command": request["command"] + " --new-source"}
+    monkeypatch.setattr(sft, "job_request", lambda _: changed)
+    monkeypatch.setattr(cli, "_client", lambda: pytest.fail("stale request reached network"))
+    result = RUNNER.invoke(cli.app, ["submit", str(output)])
+    assert result.exit_code == 2
+    assert "No automatic retry" in result.stderr
+
+
 def test_preview_and_status_are_read_only(prepared, monkeypatch):
     output, _, request, _ = prepared
     fake = SimpleNamespace(

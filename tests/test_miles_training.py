@@ -124,6 +124,18 @@ def test_miles_allows_larger_explicit_resources(config, tmp_path):
     assert request["resources"]["memory_limit"] == "2304Gi"
 
 
+def test_long_context_production_remains_blocked_without_external_startup_gate(config, tmp_path):
+    path = tmp_path / "data.json"
+    value = json.loads(path.read_text())
+    value["schema"] = "cyber_miles_data_v2"
+    value["sha256"] = "sha256:" + digest(
+        {key: item for key, item in value.items() if key != "sha256"}
+    )
+    path.write_text(json.dumps(value))
+    with pytest.raises(ValueError, match="externally sealed 32-GPU startup"):
+        train.compile_rl(config, relative_to=tmp_path)
+
+
 @pytest.mark.parametrize(
     "fault",
     [

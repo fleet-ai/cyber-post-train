@@ -13,6 +13,7 @@ import typer
 from .jobs import Jobs, JobsError, digest, validate_preview, validate_request
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
+PREPARATION_GATE_VERSION = 2
 
 
 def _print(value: object) -> None:
@@ -42,7 +43,12 @@ def _prepare(output: Path, plan: dict, request: dict) -> None:
     _write(output / "request.json", request)
     _write(
         output / "PREPARED.json",
-        {"plan_sha256": digest(plan), "request_sha256": digest(request)},
+        {
+            "schema": "cyber_post_train_prepared_v1",
+            "gate_version": PREPARATION_GATE_VERSION,
+            "plan_sha256": digest(plan),
+            "request_sha256": digest(request),
+        },
     )
 
 
@@ -50,10 +56,47 @@ def _prepared(directory: Path) -> tuple[dict, dict]:
     plan, request, receipt = (
         _read(directory / name) for name in ("plan.json", "request.json", "PREPARED.json")
     )
-    if receipt != {"plan_sha256": digest(plan), "request_sha256": digest(request)}:
+    current = {
+        "schema": "cyber_post_train_prepared_v1",
+        "gate_version": PREPARATION_GATE_VERSION,
+        "plan_sha256": digest(plan),
+        "request_sha256": digest(request),
+    }
+    legacy = {key: current[key] for key in ("plan_sha256", "request_sha256")}
+    if receipt not in (current, legacy):
         raise ValueError("prepared inputs changed; prepare a new directory, never edit a launch")
     validate_request(request)
     return plan, request
+
+
+def _current_request(plan: dict) -> dict:
+    """Re-render a prepared request through the current, source-bound backend."""
+    schema = plan.get("schema")
+    if schema == "cyber_miles_conversion_v1":
+        from training.miles_conversion import job_request
+    elif schema in {"cyber_miles_training_v1", "cyber_miles_training_v2"}:
+        from training.miles_training import job_request
+    elif schema == "cyber_skyrl_training_v1":
+        from training.skyrl_training import job_request
+    else:
+        from training.sft import job_request
+
+    return job_request(plan)
+
+
+def _submission_gate(directory: Path, plan: dict, request: dict) -> None:
+    receipt = _read(directory / "PREPARED.json")
+    if receipt != {
+        "schema": "cyber_post_train_prepared_v1",
+        "gate_version": PREPARATION_GATE_VERSION,
+        "plan_sha256": digest(plan),
+        "request_sha256": digest(request),
+    }:
+        raise ValueError("prepared request predates the current submission gate; prepare again")
+    if _current_request(plan) != request:
+        raise ValueError(
+            "prepared request is stale under the current source and gates; prepare again"
+        )
 
 
 def _client() -> Jobs:
@@ -242,6 +285,7 @@ def submit(directory: Path) -> None:
     """
     try:
         plan, request = _prepared(directory)
+        _submission_gate(directory, plan, request)
         proof = _read(directory / "PREFLIGHT.json")
         expected = {
             "schema": "cyber_miles_conversion_cpu_preflight_v1"
