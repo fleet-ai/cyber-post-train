@@ -1,6 +1,8 @@
 """Launch boundaries use synthetic metadata, never real GPU or Fleet requests."""
 
+import base64
 import ctypes
+import gzip
 import hashlib
 import json
 import os
@@ -91,6 +93,38 @@ def test_compiler_and_portable_job_have_native_identity(plan):
     assert plan["arguments"]["policy_identity_root"] == plan["model"]["root"]
     assert "FLEET_API_KEY" not in request["env"]
     assert "WANDB_API_KEY" not in request["env"]
+
+
+def test_portable_bundle_contains_dynamic_preflight_dependencies(plan, tmp_path):
+    request = train.job_request(plan)
+    transport = request["env"]
+    if "CYBER_RUNTIME_BUNDLE" in transport:
+        encoded = transport["CYBER_RUNTIME_BUNDLE"]
+    else:
+        keys = sorted(
+            (key for key in transport if key.startswith("CYBER_RUNTIME_BUNDLE_")),
+            key=lambda key: int(key.rsplit("_", 1)[1]),
+        )
+        encoded = "".join(transport[key] for key in keys)
+    bundle = json.loads(gzip.decompress(base64.b64decode(encoded, validate=True)))
+    for name, text in bundle["files"].items():
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            "import sys;sys.path.insert(0,sys.argv[1]);import training.rl_data",
+            str(tmp_path),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_miles_plan_can_bind_one_cluster(config, tmp_path):
