@@ -101,10 +101,73 @@
     "allocated_gpus": 8,
     "startup_deadline": "2026-09-15T01:29:26Z"
   },
+  "terminal_reload": {
+    "finished_at": "2026-09-15T01:10:58Z",
+    "jobs_api_status": "SUCCEEDED",
+    "rayjob_status": "SUCCEEDED",
+    "rayjob_deployment_status": "Complete",
+    "rayjob_failed_count": 0,
+    "rayjob_succeeded_count": 1,
+    "workload_finished": true,
+    "workload_terminal_reason": "Succeeded",
+    "raycluster_absent": true,
+    "pod_absent": true,
+    "released_gpus": 8,
+    "gpus_held": 0,
+    "observed_at": "2026-09-15T01:11:36Z"
+  },
+  "receipts": {
+    "started": {
+      "file_sha256": "e921aafd4c8c8df7c694f3140699ab4c88939c3cd0edfc1ac551e79dbc96db11",
+      "receipt_sha256": "52ecb29f9d7a2a48e6b3de3017d942c6584ac8b1a37a59980286039ba0f03352",
+      "digest_valid": true
+    },
+    "recovered": {
+      "file_sha256": "7b0fddfba0755dc31fdcd227aaceb7055b43991df72c8819928771d7eade7db3",
+      "receipt_sha256": "9dc6e5076a7c19c716272ea26b6877bf19f0ff692a70d98b13c8ca1d7a459522",
+      "digest_valid": true,
+      "optimizer_step": 21,
+      "rank_count": 8,
+      "rank_ids": [0, 1, 2, 3, 4, 5, 6, 7],
+      "rank_optimizer_steps": [21],
+      "optimizer_states_per_rank": [851],
+      "scheduler_restored_all_ranks": true,
+      "sampler_restored": true
+    },
+    "reload_validated": {
+      "file_sha256": "edc5df002b577ae6b7924b44b20922e3a6e12eff2bc804a5d4670786766bfffb",
+      "receipt_sha256": "f27a6f8ee620291b1604b542a80dd162ad6a7b75cc0aef110b9be99032e80eff",
+      "digest_valid": true,
+      "status": "reload_validated",
+      "optimizer_step": 21,
+      "optimizer_steps_executed": 0,
+      "validation_scope": "checkpoint_and_sampler_reload_only_no_ce"
+    },
+    "failure_or_rejection_present": false
+  },
+  "independent_post_reload_verification": {
+    "manifest": "configs/qualification/qwen38-teacher-lr100-step21-reload-terminal-verify-prod-v3.pod.yaml",
+    "pod_name": "chris-q38-lr100-r21-prod-v3-verify",
+    "pod_uid": "26385f22-27c6-43ce-ab08-1675b3fc5725",
+    "phase": "Succeeded",
+    "finished_at": "2026-09-15T01:18:39Z",
+    "exit_code": 0,
+    "restart_count": 0,
+    "gpu_count": 0,
+    "read_only_sfs": true,
+    "image_sha256": "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "source_manifest_file_sha256": "9c16171d68be65475da725a6bad381ec1cdcaf7b882f41cbc04da0c96e5e3280",
+    "source_manifest_receipt_sha256": "b82fd516e2e3c4bffa99d9cae718e6caaba4d7b9d1679885c41676ef3d754fa0",
+    "verified_files": 33,
+    "verified_bytes": 324627486731,
+    "mismatch_count": 0,
+    "source_checkpoint_unchanged_after_reload": true,
+    "proof_receipt_sha256": "5f6e8f0e482c18f6f77663e039d336965ff256e4cbc6252d0eea4acc4b74bc8b"
+  },
   "acceptance": {
-    "zero_update_reload_complete": false,
-    "source_checkpoint_unchanged": false,
-    "resources_released": false,
+    "zero_update_reload_complete": true,
+    "source_checkpoint_unchanged": true,
+    "resources_released": true,
     "continuation_authorized": false
   }
 }

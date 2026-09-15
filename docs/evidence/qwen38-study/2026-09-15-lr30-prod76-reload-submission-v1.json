@@ -76,10 +76,73 @@
     "allocated_gpus": 8,
     "startup_deadline": "2026-09-15T01:29:35Z"
   },
+  "terminal_reload": {
+    "finished_at": "2026-09-15T01:11:53Z",
+    "jobs_api_status": "SUCCEEDED",
+    "rayjob_status": "SUCCEEDED",
+    "rayjob_deployment_status": "Complete",
+    "rayjob_failed_count": 0,
+    "rayjob_succeeded_count": 1,
+    "workload_finished": true,
+    "workload_terminal_reason": "Succeeded",
+    "raycluster_absent": true,
+    "head_pod_absent": true,
+    "worker_pod_absent": true,
+    "released_gpus": 8,
+    "gpus_held": 0,
+    "observed_at": "2026-09-15T01:12:32Z"
+  },
+  "receipts": {
+    "started": {
+      "file_sha256": "afbe15a543ec0fa434be453e28f275a799081d16ba62ca948548a55d879d0464",
+      "receipt_sha256": "1e5ed8d75ba612d114f5b8a60176a61029f18733a693de5c0e466d57ccc2a593",
+      "digest_valid": true
+    },
+    "recovered": {
+      "file_sha256": "9ca0ce1eee461458899569e33ae925450be51583e3ac4eff2494c30e8fd3ae22",
+      "receipt_sha256": "569c8a84eb566ded136420679ec1adaf672eb151c510d6b0e3b861d9ac04343f",
+      "digest_valid": true,
+      "optimizer_step": 76,
+      "rank_count": 8,
+      "rank_ids": [0, 1, 2, 3, 4, 5, 6, 7],
+      "rank_optimizer_steps": [76],
+      "optimizer_states_per_rank": [851],
+      "scheduler_restored_all_ranks": true,
+      "sampler_restored": true
+    },
+    "reload_validated": {
+      "file_sha256": "0b9f3a408ab2b8baa6f93cebfa64613acb18789b6c228f52cbdb960a0cfdbf36",
+      "receipt_sha256": "bbf1cf2171a3d6b1203a774682fcb406b13335df95718657c82cd5bb422c2005",
+      "digest_valid": true,
+      "status": "reload_validated",
+      "optimizer_step": 76,
+      "optimizer_steps_executed": 0,
+      "validation_scope": "checkpoint_and_sampler_reload_only_no_ce"
+    },
+    "failure_or_rejection_present": false
+  },
+  "independent_post_reload_verification": {
+    "pod_name": "chris-q38-lr30-p76-seal-verify-v2",
+    "pod_uid": "56fd31cf-e98f-4c2d-9f4b-fd8a33c13667",
+    "phase": "Succeeded",
+    "finished_at": "2026-09-15T01:18:38Z",
+    "exit_code": 0,
+    "restart_count": 0,
+    "gpu_count": 0,
+    "read_only_sfs": true,
+    "image_sha256": "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "manifest_file_sha256": "cc4e2997e120a80bb1e209dc027f18e12ce1ebe12639594d28e23b08c459cf1a",
+    "manifest_receipt_sha256": "1252a1a9d5556fa118f03d1b2fe5687e0e9505ccf622e2f86743a26b77dffa64",
+    "verified_files": 33,
+    "verified_bytes": 324627487179,
+    "mismatch_count": 0,
+    "source_checkpoint_unchanged_after_reload": true,
+    "proof_receipt_sha256": "1ee2edd3624e69b756dc0f1dc282fd2eb8f1e2d6c63f10431867dd6e0aca7749"
+  },
   "acceptance": {
-    "zero_update_reload_complete": false,
-    "source_checkpoint_unchanged": false,
-    "resources_released": false,
+    "zero_update_reload_complete": true,
+    "source_checkpoint_unchanged": true,
+    "resources_released": true,
     "bf16_export_complete": false,
     "webexploitbench_evaluation_complete": false
   }
