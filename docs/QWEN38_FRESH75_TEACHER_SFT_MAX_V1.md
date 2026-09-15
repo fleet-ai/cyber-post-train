@@ -83,6 +83,12 @@ reached `device_ready`, then failed before optimizer step one because
 outcome-only plan intentionally contains only `datasets["train"]`. The
 RayCluster, Pod, and all eight GPUs were released; V3 must never be retried.
 
+This repeated because the earlier compiler-side train-only preflight fix and
+the runtime loader fix were on different experiment branches. The Fresh75
+branch contained the former but did not contain the latter, and its setup probe
+ended before the loader call. Treating those partial gates as equivalent was
+the operational error.
+
 The correction is commit `a3dce55a`. The loader now returns no evaluation
 dataset for a plan without `dev`, and the setup probe explicitly exercises that
 branch. A CPU-only Pod in the exact pinned trainer image then ran the real
