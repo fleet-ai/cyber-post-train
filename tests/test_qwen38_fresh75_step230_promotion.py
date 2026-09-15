@@ -53,8 +53,7 @@ def test_exact_terminal_checkpoint_is_bound() -> None:
     assert checkpoint == {
         "path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/checkpoints/global_step_230",
         "manifest_path": (
-            "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/"
-            "checkpoint-seals-step230-v1/step-230.json"
+            "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/checkpoint-seals-step230-v1/step-230.json"
         ),
         "manifest_file_sha256": (
             "sha256:bf92e29d9f19dd589201214f25fe8d0e3b0f65de14ec08fc573217f50580a486"
@@ -76,11 +75,13 @@ def test_export_checks_are_create_once_zero_update_and_ordered() -> None:
     assert export["create_once"] is True and export["gpu_count"] == 0
     assert export["expected"]["optimizer_step"] == 230
     assert export["expected"]["optimizer_steps_executed"] == 0
-    assert export["expected"]["source_checkpoint_receipt_sha256"] == (
-        plan["source"]["checkpoint"]["manifest_receipt_sha256"]
+    assert (
+        export["expected"]["source_checkpoint_receipt_sha256"]
+        == (plan["source"]["checkpoint"]["manifest_receipt_sha256"])
     )
-    assert export["expected"]["source_manifest_file_sha256"] == (
-        plan["source"]["checkpoint"]["manifest_file_sha256"]
+    assert (
+        export["expected"]["source_manifest_file_sha256"]
+        == (plan["source"]["checkpoint"]["manifest_file_sha256"])
     )
     assert export["expected"]["model_revision"] == plan["source"]["model_revision"]
     assert export["expected"]["dtype"] == "BF16"
