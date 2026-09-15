@@ -44,6 +44,15 @@
       "nodes": 4,
       "gpus_per_node": 8
     },
+    "canary_terminal_failure": {
+      "status": "failed_released",
+      "failed_at": "2026-09-15T05:57:16Z",
+      "error_class": "RuntimeError",
+      "evidence_path": "docs/evidence/qwen38-study/2026-09-15-miles-long-context-canary1-startup-failure-v1.json",
+      "evidence_receipt_sha256": "sha256:094473016594ed7530e3ea03a7c03df58cea684b16bd8a55a9827964eb44a3b9",
+      "gpus_released": 32,
+      "possible_resource_leak": false
+    },
     "canary_terminal_acceptance": null,
     "canary_checkpoint_manifest": null,
     "canary_native_reload_acceptance": null,
@@ -152,9 +161,10 @@
     "total_experiment_nodes_after_admission_at_most_eight"
   ],
   "blocked_reasons": [
-    "The exact long-context canary is queued and has no accepted reward/update/checkpoint terminal receipt.",
+    "The first exact long-context canary failed before model loading because its runtime image contained two invalid vendored Qwen3-ASR generated-doc contracts; all 32 GPUs were released.",
+    "A corrected immutable image must pass zero-GPU full-driver import and bounded CUDA parser/import qualification before a deterministic successor.",
     "No all-rank zero-update reload has accepted that canary checkpoint.",
     "Live duplicate, W&B, preview, and node-budget checks can only run immediately before submission."
   ],
-  "sha256": "sha256:db7b17821cf47f0cac5c2d9a72fd2e787fa61e4f74dd394da694606948c8b478"
+  "sha256": "sha256:4192fec95594c50830ad66c694d4ae6ba70b154c419fa0d2f7a9e4e93146f720"
 }

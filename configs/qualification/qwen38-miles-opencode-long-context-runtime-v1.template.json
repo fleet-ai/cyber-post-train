@@ -13,10 +13,11 @@
     "native_driver_sha256": "sha256:85dbfd31d41a84f9c2e79a2918583851fb53925630afa229e9cd0a154b170f46",
     "native_converter_sha256": "sha256:0c2541d30073777a30344273a3773844a70ca1961287520c0496a1cec18d43f6",
     "installed_session_tree_sha256": "sha256:59bed80a62a8ab94e0bb9012f4f9f0290245a5c8db6feadd0997a7bfb57025ee",
+    "megatron_qwen3_asr_source_sha256": "sha256:90ebb373c06195ad4a8d117e17ed154ffc67c78ccc370fe7f5dcab78ae864355",
     "opencode_version": "1.18.27",
     "opencode_commit": "4b7e19e315cca414121ba1d61523fef74bb3ae8b",
     "opencode_binary_sha256": "sha256:bddf894e5c2bc3d8cf452bd6e5ab2273bbe4a37eeeb9aec848d3d7d20db1f256",
-    "build_source_sha256": "sha256:8297c85db51eeeeb0c9f480cab0dc96598ab3d28da10f2844f1ff25a47be1546"
+    "build_source_sha256": "sha256:d5a3c5ae5aa1588a5ed24623d346b87813cbe331e7ac8a96dd8d2a60e1965e37"
   },
   "contract": {
     "model": "Qwen/Qwen3.8-27B",
@@ -44,6 +45,8 @@
   },
   "required_image_checks": {
     "installed_source_digest_checked": false,
+    "megatron_qwen3_asr_docstrings_checked": false,
+    "native_driver_import_checked": false,
     "opencode_binary_checked": false,
     "native_256k_parser_checked": false,
     "qwen38_profile_template_checked": false,

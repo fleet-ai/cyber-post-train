@@ -125,6 +125,10 @@ def test_long_conversion_requires_and_binds_qualified_derived_image(config, tmp_
         "installed_tito_source_sha256": (
             "sha256:72650e3b337d69d237088c03cafa12b066a2c31fe1ffd96fab2d49d832f4a33c"
         ),
+        "megatron_qwen3_asr_source_sha256": (
+            "sha256:" + miles_training.QWEN3_ASR_PATCHED_SHA256
+        ),
+        "native_driver_import_mode": "cuda",
         "miles_tree_source_sha256": (
             "sha256:fd978a1ef2617f4bf30850fedd197e546cdc9c6542b00b03df502cbb285fc732"
         ),

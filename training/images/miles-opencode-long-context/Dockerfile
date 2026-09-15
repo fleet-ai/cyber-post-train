@@ -16,6 +16,7 @@ COPY opencode /tmp/opencode-bin
 COPY tree_trajectory.py /tmp/tree_trajectory.py
 COPY tito_tokenizer.py /tmp/tito_tokenizer.py
 COPY qwen3.8_small_and_flash_next_fixed.jinja /tmp/qwen3.8_small_and_flash_next_fixed.jinja
+COPY patch_qwen3_asr_docstrings.py /tmp/patch_qwen3_asr_docstrings.py
 
 RUN set -eu; \
     echo "${OPENCODE_BINARY_SHA256}  /tmp/opencode-bin" | sha256sum -c -; \
@@ -43,9 +44,11 @@ RUN set -eu; \
     install -m 0444 /tmp/qwen3.8_small_and_flash_next_fixed.jinja "${tito_template}"; \
     echo "${MILES_TITO_PATCHED_SHA256}  ${tito_path}" | sha256sum -c -; \
     echo "${QWEN38_TITO_TEMPLATE_SHA256}  ${tito_template}" | sha256sum -c -; \
+    qwen3_asr_path="$(python -c 'import pathlib,sysconfig;print(pathlib.Path(sysconfig.get_paths()["purelib"])/"megatron/bridge/models/qwen3_asr/hf_qwen3_asr/modeling_qwen3_asr.py")')"; \
+    python /tmp/patch_qwen3_asr_docstrings.py "${qwen3_asr_path}"; \
     MILES_SESSION_MAX_NODES=4096 python -c 'from miles.rollout.session.v2.tree_trajectory import MAX_NODES;assert MAX_NODES == 4096'; \
     python -c 'from miles.utils.chat_template_utils.tito_tokenizer import TITOTokenizerType, resolve_fixed_chat_template, resolve_reasoning_and_tool_call_parser; from pathlib import Path; import hashlib; assert TITOTokenizerType("qwen38small").value == "qwen38small"; path, kwargs = resolve_fixed_chat_template("qwen38small"); assert hashlib.sha256(Path(path).read_bytes()).hexdigest() == "38d42166599348d47ded69776c5389c89924045e6827089923a031379f8a3dfe"; assert kwargs == {"preserve_thinking": True, "reasoning_effort": "xhigh"}; assert resolve_reasoning_and_tool_call_parser("qwen38small") == ("qwen3", "qwen3_coder")'; \
-    rm -f /tmp/opencode-bin /tmp/tree_trajectory.py /tmp/tito_tokenizer.py /tmp/qwen3.8_small_and_flash_next_fixed.jinja
+    rm -f /tmp/opencode-bin /tmp/tree_trajectory.py /tmp/tito_tokenizer.py /tmp/qwen3.8_small_and_flash_next_fixed.jinja /tmp/patch_qwen3_asr_docstrings.py
 
 ENV OPENCODE_DISABLE_AUTOUPDATE=true \
     OPENCODE_DISABLE_SHARE=true \

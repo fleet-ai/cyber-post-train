@@ -12,6 +12,12 @@ and is never committed. Publish the resulting image by digest, then record an
 exact zero-GPU source check and a dev 4x8 parser/qualification receipt before any
 production configuration may refer to it.
 
+Megatron Bridge 0.5.0 eagerly imports its vendored Qwen3-ASR model registry even
+for text-only Qwen training. Transformers 5.12.1 reports two missing
+`cache_position` argument docs in that vendored file. The image applies an
+exact-source, exact-output two-docstring patch so the normal validator remains
+enabled; it does not disable or monkeypatch the validator.
+
 Required qualification:
 
 1. default import reports 1024 nodes; `MILES_SESSION_MAX_NODES=4096` reports
@@ -22,7 +28,9 @@ Required qualification:
    262144 context, 245760 response, 65536 train tokens per GPU, radix-cache
    affinity via `consistent_hashing`, and the upstream `qwen38small` TITO
    family with the exact Qwen3.8 profile template and parsers;
-4. a dev run proves repeated native OpenCode compaction, one authoritative
+4. the complete native driver imports through a CUDA-stub process with no
+   undocumented-signature findings before any GPU allocation;
+5. a dev run proves repeated native OpenCode compaction, one authoritative
    reward per original rollout, finite nonzero update, durable checkpoint,
    release, and zero-update reload.
 

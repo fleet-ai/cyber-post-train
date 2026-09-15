@@ -1,0 +1,98 @@
+{
+  "schema": "cyber_miles_long_context_canary_startup_failure_v1",
+  "status": "diagnosed_released",
+  "source_commit": "bf54a098f4fd77857a590b36b9c2c0e028224a1b",
+  "run": {
+    "api_name": "chris-q38-miles-lc-canary1-2eb152dd",
+    "api_run_id": "2eb152dd-8cd7-4802-8d26-788f2361346b",
+    "rayjob_uid": "ad03cb9e-755f-491b-a997-28e75db97a56",
+    "workload_uid": "f789db64-9158-46bd-acbc-5d99df88d4a0",
+    "raycluster_uid": "2a0a4077-28c0-431c-bce4-172a8bb6dd10",
+    "pod_uids": [
+      "a720561f-cf77-4ab6-973d-fa74d5f833a9",
+      "9f4fccb3-f326-479a-b533-95c9fd53442c",
+      "a578827e-e391-4bdc-9b19-8a3e274a7124",
+      "a9a102ac-4c0f-401a-9611-a596592d7dc1"
+    ],
+    "cluster": "prod",
+    "namespace": "fleet-train-jobs",
+    "priority_class": "c1",
+    "workers": 4,
+    "gpus_per_worker": 8,
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:22c6c624ae95e1886aeab8c9921642b7753232856eb41fb618a70c52975b0a18",
+    "runtime_bundle_sha256": "sha256:45ece11b1a0d3f138b43a8dd291d1c06744e969fbc86dafeee7baa2b0ddd1e9b",
+    "output_root": "/mnt/sfs/jobs/chris-q38-miles-lc-canary1",
+    "queued_at": "2026-09-15T04:29:09Z",
+    "admitted_at": "2026-09-15T05:53:22Z",
+    "ready_at": "2026-09-15T05:54:39Z",
+    "failed_at": "2026-09-15T05:57:16Z",
+    "container_restarts": 0
+  },
+  "terminal_evidence": {
+    "started_file_sha256": "sha256:753321a8173caccabffd042422fe2cebdbdb347ec56ca7dd7e3c78d3fdb4c9f6",
+    "failed_file_sha256": "sha256:7fe4abceca2f1180ddb1a647e98cfd8436eb2bd4ba49ba38e1e5b68d092f4c13",
+    "failed_receipt_sha256": "sha256:bd3ca553cc13e68a08faf6e9be20991561c342913cad0a1b6ee62678d8555cd8",
+    "error_class": "RuntimeError",
+    "native_failure_absent": true,
+    "native_rejected_absent": true,
+    "native_training_complete_absent": true,
+    "optimizer_update_absent": true,
+    "checkpoint_absent": true
+  },
+  "root_cause": {
+    "megatron_bridge_version": "0.5.0+7f0fb345",
+    "transformers_version": "5.12.1",
+    "mechanism": "Megatron Bridge eagerly imports its vendored Qwen3-ASR registry during the text-only native Miles driver startup.",
+    "defect": "Two vendored Qwen3-ASR forward signatures contain cache_position while their generated argument docs omit it.",
+    "affected_symbols": [
+      "Qwen3ASRThinkerTextModel.forward",
+      "Qwen3ASRThinkerForConditionalGeneration.forward"
+    ],
+    "installed_source_sha256": "sha256:bfdb9bff47ea68a1e72924d7f7ea83a16bde921c731298f1cd346d99c4b46b40",
+    "corrected_source_sha256": "sha256:90ebb373c06195ad4a8d117e17ed154ffc67c78ccc370fe7f5dcab78ae864355",
+    "qualification_gap": "The earlier parser gate called miles.utils.arguments.parse_args but did not import the complete native train.py driver."
+  },
+  "cpu_proof": {
+    "probe_name": "q38-miles-bridge-driver-probe2",
+    "probe_uid": "c60db657-67dc-416f-8314-7bc802c2bd78",
+    "priority_class": "fleet-train-high",
+    "gpu_requests": 0,
+    "container_restarts": 0,
+    "exit_code": 0,
+    "cuda_stub": "/usr/local/cuda-13.0/targets/x86_64-linux/lib/stubs/libcuda.so",
+    "unpatched_signature_findings": 2,
+    "corrected_signature_findings": 0,
+    "unpatched_driver_imported": true,
+    "corrected_driver_imported": true,
+    "deleted": true,
+    "deletion_confirmed": true
+  },
+  "release": {
+    "jobs_api_delete_count": 1,
+    "jobs_api_delete_http_status": 204,
+    "reconciled_at": "2026-09-15T05:59:33Z",
+    "rayjob_absent": true,
+    "workload_absent": true,
+    "raycluster_absent": true,
+    "pods_absent": true,
+    "gpus_released": 32,
+    "jobs_api_status_after_delete": 404,
+    "possible_resource_leak": false
+  },
+  "correction": {
+    "scope": "Add only the two missing vendored Qwen3-ASR cache_position argument docs against exact before/after hashes; keep the Transformers validator enabled.",
+    "new_required_gates": [
+      "exact corrected Qwen3-ASR source digest",
+      "complete native driver import with CUDA stubs on zero-GPU capacity",
+      "complete native driver import and 256K parser on a bounded CUDA qualification Pod"
+    ],
+    "gpu_successor_allowed": false
+  },
+  "claims_excluded": [
+    "reward acquisition",
+    "optimizer update",
+    "checkpoint creation",
+    "scientific RL acceptance"
+  ],
+  "sha256": "sha256:094473016594ed7530e3ea03a7c03df58cea684b16bd8a55a9827964eb44a3b9"
+}

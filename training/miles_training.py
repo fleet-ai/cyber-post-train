@@ -58,9 +58,14 @@ LONG_RUNTIME_BASE_IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:"
     "b713f93d8da719a08aa20f1c45752d32a40d72b95159f410cdb6046d5ed1cf5d"
 )
+QWEN3_ASR_PATCHED_SHA256 = (
+    "90ebb373c06195ad4a8d117e17ed154ffc67c78ccc370fe7f5dcab78ae864355"
+)
 LONG_RUNTIME_CHECKS = frozenset(
     {
         "installed_source_digest_checked",
+        "megatron_qwen3_asr_docstrings_checked",
+        "native_driver_import_checked",
         "opencode_binary_checked",
         "native_256k_parser_checked",
         "qwen38_profile_template_checked",
@@ -110,6 +115,9 @@ def _validate_long_runtime_receipt(
         != "257992eb52bfa1f5248b5a5ae8f5a959be500788"
         or receipt.get("installed_tito_source_sha256")
         != "sha256:72650e3b337d69d237088c03cafa12b066a2c31fe1ffd96fab2d49d832f4a33c"
+        or receipt.get("megatron_qwen3_asr_source_sha256")
+        != "sha256:" + QWEN3_ASR_PATCHED_SHA256
+        or receipt.get("native_driver_import_mode") != "cuda"
         or receipt.get("miles_tree_source_sha256")
         != "sha256:fd978a1ef2617f4bf30850fedd197e546cdc9c6542b00b03df502cbb285fc732"
         or receipt.get("native_driver_sha256") != "sha256:" + miles.LONG_NATIVE_DRIVER_SHA256

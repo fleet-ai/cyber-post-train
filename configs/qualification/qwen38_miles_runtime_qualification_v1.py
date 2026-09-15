@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import inspect
+import io
 import json
 import os
 import re
 import subprocess
 import sys
+import sysconfig
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 from types import ModuleType, SimpleNamespace
 
@@ -81,6 +85,7 @@ def qualify() -> dict:
     image = os.environ["QUALIFICATION_IMAGE"]
     build_source_sha256 = os.environ["QUALIFICATION_BUILD_SOURCE_SHA256"]
     parse_native = os.environ.get("QUALIFICATION_NATIVE_PARSE") == "1"
+    driver_import_mode = os.environ.get("QUALIFICATION_NATIVE_DRIVER_IMPORT_MODE")
     model_root = Path(
         os.environ.get(
             "QUALIFICATION_MODEL_ROOT", "/mnt/sfs/models/q38-long-runtime-qualification/hf"
@@ -117,6 +122,11 @@ def qualify() -> dict:
     assert sha256(tree_path) == miles.LONG_INSTALLED_SESSION_TREE_SHA256
     tito_path = miles_root / "miles/utils/chat_template_utils/tito_tokenizer.py"
     assert sha256(tito_path) == "72650e3b337d69d237088c03cafa12b066a2c31fe1ffd96fab2d49d832f4a33c"
+    qwen3_asr_path = (
+        Path(sysconfig.get_paths()["purelib"])
+        / "megatron/bridge/models/qwen3_asr/hf_qwen3_asr/modeling_qwen3_asr.py"
+    )
+    assert sha256(qwen3_asr_path) == miles_training.QWEN3_ASR_PATCHED_SHA256
 
     binary = Path(miles_opencode.OPENCODE_BINARY)
     assert sha256(binary) == miles_opencode.OPENCODE_BINARY_SHA256
@@ -197,6 +207,16 @@ def qualify() -> dict:
     )
 
     if parse_native:
+        assert driver_import_mode in {"cuda_stub", "cuda"}
+        driver_output = io.StringIO()
+        spec = importlib.util.spec_from_file_location(
+            "qualified_miles_native_driver", miles_root / "train.py"
+        )
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        with redirect_stdout(driver_output), redirect_stderr(driver_output):
+            spec.loader.exec_module(module)
+        assert "signature, but not documented" not in driver_output.getvalue()
         os.environ["MILES_USE_LEGACY_ROLLOUT_V1"] = "0"
         from miles.utils.arguments import parse_args
 
@@ -288,6 +308,7 @@ def qualify() -> dict:
 
     checks = {key: True for key in miles_training.LONG_RUNTIME_CHECKS}
     checks["native_256k_parser_checked"] = parse_native
+    checks["native_driver_import_checked"] = driver_import_mode in {"cuda_stub", "cuda"}
     if not parse_native:
         value = {
             "schema": "cyber_miles_opencode_source_qualification_v1",
@@ -300,13 +321,18 @@ def qualify() -> dict:
             "miles_source_commit": "9e178ca16839b0600155f3927f57ce0670b8f453",
             "miles_tito_backport_commit": "257992eb52bfa1f5248b5a5ae8f5a959be500788",
             "installed_tito_source_sha256": "sha256:" + sha256(tito_path),
+            "megatron_qwen3_asr_source_sha256": "sha256:" + sha256(qwen3_asr_path),
             "checks": checks,
         }
         value["sha256"] = digest(value)
         return value
     value = {
         "schema": "cyber_miles_opencode_runtime_qualification_v1",
-        "status": "image_qualified_for_dev",
+        "status": (
+            "image_qualified_for_dev"
+            if driver_import_mode == "cuda"
+            else "image_qualified_cpu"
+        ),
         "source_commit": source_commit,
         "qualification_script_sha256": "sha256:" + sha256(Path(__file__)),
         "image": image,
@@ -319,6 +345,8 @@ def qualify() -> dict:
         "miles_source_commit": "9e178ca16839b0600155f3927f57ce0670b8f453",
         "miles_tito_backport_commit": "257992eb52bfa1f5248b5a5ae8f5a959be500788",
         "installed_tito_source_sha256": "sha256:" + sha256(tito_path),
+        "megatron_qwen3_asr_source_sha256": "sha256:" + sha256(qwen3_asr_path),
+        "native_driver_import_mode": driver_import_mode,
         "miles_tree_source_sha256": (
             "sha256:fd978a1ef2617f4bf30850fedd197e546cdc9c6542b00b03df502cbb285fc732"
         ),
