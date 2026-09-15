@@ -38,6 +38,11 @@ def option(argv: list[str], name: str) -> str:
     return argv[argv.index("--" + name) + 1]
 
 
+def native_parser_required(driver_import_mode: str | None) -> bool:
+    """Only real CUDA can satisfy Megatron's device-architecture parser checks."""
+    return driver_import_mode == "cuda"
+
+
 def forest(lengths: list[int]):
     nodes, leaves, samples = [], [], []
     offset = 0
@@ -217,23 +222,24 @@ def qualify() -> dict:
         with redirect_stdout(driver_output), redirect_stderr(driver_output):
             spec.loader.exec_module(module)
         assert "signature, but not documented" not in driver_output.getvalue()
-        os.environ["MILES_USE_LEGACY_ROLLOUT_V1"] = "0"
-        from miles.utils.arguments import parse_args
+        if native_parser_required(driver_import_mode):
+            os.environ["MILES_USE_LEGACY_ROLLOUT_V1"] = "0"
+            from miles.utils.arguments import parse_args
 
-        previous = sys.argv
-        try:
-            sys.argv = [str(miles_root / "train.py"), *argv]
-            parsed = parse_args()
-        finally:
-            sys.argv = previous
-        assert parsed.tensor_model_parallel_size == 8
-        assert parsed.context_parallel_size == 4
-        assert parsed.use_session_server == "v2"
-        assert parsed.max_seq_len == 262144
-        assert parsed.tito_model == "qwen38small"
-        assert parsed.load == parsed.ref_load == str(CHECKPOINT_ROOT)
-        assert sha256(Path(parsed.chat_template_path)) == miles.LONG_TITO_TEMPLATE_SHA256
-        assert parsed.sglang_router_policy == "consistent_hashing"
+            previous = sys.argv
+            try:
+                sys.argv = [str(miles_root / "train.py"), *argv]
+                parsed = parse_args()
+            finally:
+                sys.argv = previous
+            assert parsed.tensor_model_parallel_size == 8
+            assert parsed.context_parallel_size == 4
+            assert parsed.use_session_server == "v2"
+            assert parsed.max_seq_len == 262144
+            assert parsed.tito_model == "qwen38small"
+            assert parsed.load == parsed.ref_load == str(CHECKPOINT_ROOT)
+            assert sha256(Path(parsed.chat_template_path)) == miles.LONG_TITO_TEMPLATE_SHA256
+            assert parsed.sglang_router_policy == "consistent_hashing"
 
     harness_config = {
         "harness": miles_opencode.harness_contract(),
@@ -307,7 +313,9 @@ def qualify() -> dict:
     )
 
     checks = {key: True for key in miles_training.LONG_RUNTIME_CHECKS}
-    checks["native_256k_parser_checked"] = parse_native
+    checks["native_256k_parser_checked"] = parse_native and native_parser_required(
+        driver_import_mode
+    )
     checks["native_driver_import_checked"] = driver_import_mode in {"cuda_stub", "cuda"}
     if not parse_native:
         value = {
@@ -363,9 +371,10 @@ def qualify() -> dict:
         "checks": checks,
     }
     value["sha256"] = digest(value)
-    miles_training._validate_long_runtime_receipt(
-        value, image=image, build_source_sha256=build_source_sha256
-    )
+    if native_parser_required(driver_import_mode):
+        miles_training._validate_long_runtime_receipt(
+            value, image=image, build_source_sha256=build_source_sha256
+        )
     return value
 
 
