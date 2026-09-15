@@ -1,0 +1,68 @@
+{
+  "schema": "cyber_self_sft_readiness_v1",
+  "status": "blocked",
+  "model": {
+    "repo": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+  },
+  "study_split": {
+    "path": "configs/data/fleet-blackbox-current-study-split-20260914-v2.json",
+    "file_sha256": "sha256:28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb",
+    "logical_sha256": "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c"
+  },
+  "evidence_source": {
+    "schema_version": "fleet-cyber-readonly-receipt-validation-v1",
+    "file_sha256": "sha256:5654c8d6ae9408e337bf431fbf996e257420a21f1d9fdcafdd97c42ca44a1816",
+    "logical_sha256": "sha256:722fe6fed4b43be9b1dd855e95292e89e6e3c7fd29d117c7d0cd4f4c44c4f619",
+    "observed_at": "2026-09-11T21:00:58.845291+00:00",
+    "prompts_or_traces_included": false,
+    "scores_included": false
+  },
+  "exact_current_version_coverage": {
+    "all_qwen_candidates": 74,
+    "all_task_versions": 38,
+    "train_candidates": 37,
+    "train_task_versions": 18,
+    "dev_candidates_excluded": 16,
+    "dev_task_versions_excluded": 7,
+    "final_test_candidates_excluded": 6,
+    "final_test_task_versions_excluded": 4,
+    "outside_current_inventory_candidates_excluded": 15,
+    "outside_current_inventory_task_versions_excluded": 9,
+    "prepared_clean_train_candidates": 15,
+    "certified_progress_bearing_train_candidates": 0,
+    "train_roster_sha256": "sha256:9c951a32897b8c8596dd9814dd77f3d804cfe02e86857329eced5132ca502b70",
+    "prepared_clean_train_roster_sha256": "sha256:84e444b528f2234aa4e68cd28ba5ef384abfe72dccbc7229a26d4925131167ba"
+  },
+  "harness": {
+    "name": "opencode",
+    "version": "1.18.27",
+    "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v1",
+    "context_window_size": 262144,
+    "compaction_headroom_tokens": 20000,
+    "train_candidate_count": 37
+  },
+  "train_candidate_state": {
+    "exact_stored_runtime_binding": 37,
+    "clean_trace_manifest": 36,
+    "prepared_source": 15,
+    "pending_context_and_compaction_qualification": 36,
+    "excluded_malformed_trace": 1,
+    "compaction_occurrence_proven": 0
+  },
+  "blockers": [
+    "The receipt audit is metadata-only; the normalized self-trace source bytes and a dense corpus are not available in this checkout.",
+    "No train candidate has completed the required context-retention and compaction-fidelity qualification.",
+    "Non-submit action coverage, completed non-submit tool rounds, and terminal-submit token share have not been certified under the task-rich target policy."
+  ],
+  "unblock_gate": [
+    "Recover only the 37 exact train-split source sessions bound by train_roster_sha256; never recover or train on dev/final candidates.",
+    "Reject the malformed trace and prove exact harness/runtime/source digests for every remaining source.",
+    "Certify context and compaction fidelity plus at least one non-submit tool response and one completed non-submit tool round per source.",
+    "Apply the same task-rich window policy and terminal-submit share caps as the teacher corpus, then issue a new immutable manifest."
+  ],
+  "launch_authorized": false,
+  "gpu_jobs_submitted": 0,
+  "sha256": "sha256:0a9367680e7039cd1f83e86b3dc5d534e8ef67a64dcd1711588172aaeba73f77"
+}

@@ -45,6 +45,7 @@ def validate(plan: dict, *, check_files: bool) -> None:
         "lora",
         "split_manifest_sha256",
         "corpus_manifest_sha256",
+        "validation_mode",
     ):
         if plan.get(key) != source.get(key):
             raise ValueError("recovery cannot change model, data, topology or scientific recipe")

@@ -113,6 +113,58 @@ def test_compile_uses_exact_model_manifest_and_complete_epochs(config, tmp_path)
     assert hashlib.sha256(content["runtime"].encode()).hexdigest() == plan["runtime_sha256"]
 
 
+def test_compile_training_loss_only_plan_has_no_reference_dev_dataset(config, tmp_path):
+    source, manifest, save = config
+    manifest["validation_mode"] = "task_outcomes_only"
+    manifest["files"].pop("dev")
+    save(manifest)
+    source["recipe"] = {"eval_interval": 0, "checkpoint_interval": 2}
+
+    plan = sft.compile_sft(source, relative_to=tmp_path)
+    assert plan["validation_mode"] == "task_outcomes_only"
+    assert set(plan["datasets"]) == {"train"}
+    assert plan["recipe"]["eval_interval"] == 0
+    assert sft.job_request(plan)["env"]["WANDB_MODE"] == "online"
+
+
+@pytest.mark.parametrize("unexpected", [False, True])
+def test_train_only_preflight_exercises_native_loader(monkeypatch, unexpected):
+    from training import sft_runtime
+
+    calls = []
+
+    class Trainer:
+        def load_eval_dataset(self):
+            calls.append(self.plan)
+            return object() if unexpected else None
+
+    monkeypatch.setattr(sft_runtime, "_make_trainer_class", lambda: Trainer)
+    plan = {"datasets": {"train": {}}}
+    if unexpected:
+        with pytest.raises(ValueError, match="unexpectedly produced"):
+            sft._check_native_dataset_loader(plan)
+    else:
+        sft._check_native_dataset_loader(plan)
+    assert calls == [plan]
+
+
+@pytest.mark.parametrize(
+    "validation_mode,eval_interval",
+    [("task_outcomes_only", 50), ("teacher_cross_entropy", 0)],
+)
+def test_corpus_validation_mode_and_ce_interval_must_agree(
+    config, tmp_path, validation_mode, eval_interval
+):
+    source, manifest, save = config
+    manifest["validation_mode"] = validation_mode
+    if validation_mode == "task_outcomes_only":
+        manifest["files"].pop("dev")
+    save(manifest)
+    source["recipe"] = {"eval_interval": eval_interval}
+    with pytest.raises(ValueError, match="task-outcome evaluation"):
+        sft.compile_sft(source, relative_to=tmp_path)
+
+
 def test_compiler_binds_planned_pause_without_shortening_recipe(config, tmp_path):
     source, _, _ = config
     original = sft.compile_sft(source, relative_to=tmp_path)

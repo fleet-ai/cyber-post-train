@@ -1,4 +1,4 @@
-"""Pinned SkyRL SFT with task-held-out loss, W&B, and recoverable saves.
+"""Pinned SkyRL SFT with scalar W&B telemetry and recoverable saves.
 
 The trainer/worker methods used here were inspected at SkyRL f5bc3b78. This
 module deliberately keeps the native training loop and optimizer. It adds
@@ -31,6 +31,16 @@ SKYRL_REVISION = "f5bc3b78dfddfb352870d5d7430cd226e5785838"
 DENSE_SCHEMA = "cyber_sft_runtime_dense_v1"
 DENSE_FORMAT = "pretokenized_assistant_segments_v1"
 DENSE_EXCLUSION_REASONS = {"overlength_assistant_target", "overlength_required_previous_round"}
+PUBLIC_RUNTIME_STAGES = {
+    "trainer_constructed",
+    "tracker_initializing",
+    "tracker_ready",
+    "tracker_bypassed_for_setup_probe",
+    "native_worker_initializing",
+    "native_worker_ready",
+    "device_backload_started",
+    "device_ready",
+}
 WATCHDOG_POLL_SECONDS = 60
 WATCHDOG_STARTUP_SECONDS = 30 * 60
 WATCHDOG_IDLE_SECONDS = 20 * 60
@@ -141,8 +151,9 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         "keep_checkpoints",
         "max_steps",
     ):
-        if type(recipe[key]) is not int or recipe[key] <= 0:
-            raise ValueError("recipe counts must be positive integers")
+        minimum = 0 if key == "eval_interval" else 1
+        if type(recipe[key]) is not int or recipe[key] < minimum:
+            raise ValueError("recipe counts must be positive integers; eval_interval may be zero")
     if type(recipe["seed"]) is not int or not 0 <= recipe["seed"] < 2**32:
         raise ValueError("seed must be an unsigned 32-bit integer")
     if (
@@ -155,7 +166,7 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         recipe["nodes"] * recipe["gpus_per_node"] * recipe["microbatch_per_gpu"]
     ):
         raise ValueError("global batch must divide evenly across GPU microbatches")
-    if recipe["checkpoint_interval"] != recipe["eval_interval"]:
+    if recipe["eval_interval"] and recipe["checkpoint_interval"] != recipe["eval_interval"]:
         raise ValueError("every periodic validation needs a corresponding saved checkpoint")
     if plan.get("resume_from"):
         raise ValueError(
@@ -175,8 +186,18 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
             or recovery.get("mode") == "validate"
         ):
             raise ValueError("planned pause must follow new work and precede full completion")
-    train, dev = (plan["datasets"][key] for key in ("train", "dev"))
-    for dataset in (train, dev):
+    training_only = plan.get("validation_mode") == "task_outcomes_only"
+    if training_only != (recipe["eval_interval"] == 0):
+        raise ValueError("task-outcome evaluation and zero CE interval must be selected together")
+    if training_only and set(plan["datasets"]) != {"train"}:
+        raise ValueError("task-outcome training must not load a teacher-reference dev artifact")
+    if not training_only and set(plan["datasets"]) != {"train", "dev"}:
+        raise ValueError("teacher CE validation requires train and dev artifacts")
+    if training_only and plan.get("recovery", {}).get("mode") == "validate":
+        raise ValueError("zero-step CE validation is unavailable without a dev artifact")
+    train = plan["datasets"]["train"]
+    dev = plan["datasets"].get("dev")
+    for dataset in plan["datasets"].values():
         if not re.fullmatch(r"(?:sha256:)?[a-f0-9]{64}", dataset["sha256"]):
             raise ValueError("dataset digest missing or invalid")
         if any(not isinstance(k, str) or not k.strip() for k in dataset["task_keys"]):
@@ -203,17 +224,18 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         raise ValueError("dense teacher data requires its separately versioned plan")
     # Pinned worker per-row diagnostics are suffix-only. Keep the bound dev set
     # on the qualified contiguous last-assistant path, never sparse-mask eval.
-    if dev.get("format") == DENSE_FORMAT:
+    if dev and dev.get("format") == DENSE_FORMAT:
         raise ValueError("held-out evaluation must remain contiguous last-assistant windows")
-    train_keys, dev_keys = set(train["task_keys"]), set(dev["task_keys"])
-    if not dev_keys or len(dev_keys) != len(dev["task_keys"]):
+    train_keys = set(train["task_keys"])
+    dev_keys = set(dev["task_keys"]) if dev else set()
+    if dev and (not dev_keys or len(dev_keys) != len(dev["task_keys"])):
         raise ValueError("validation must bind distinct nonempty held-out tasks")
     if not train_keys or train_keys & dev_keys:
         raise ValueError("train/dev task overlap or empty training task set")
-    if train["path"] == dev["path"] or any(
-        type(x["rows"]) is not int or x["rows"] <= 0 for x in (train, dev)
+    if (dev and train["path"] == dev["path"]) or any(
+        type(x["rows"]) is not int or x["rows"] <= 0 for x in plan["datasets"].values()
     ):
-        raise ValueError("distinct nonempty train/dev artifacts required")
+        raise ValueError("every selected dataset must be nonempty and paths must be distinct")
     if recipe["max_steps"] != math.ceil(train["rows"] / recipe["batch_size"]) * recipe["epochs"]:
         raise ValueError("max_steps must equal complete epochs with the native kept tail batch")
     model = plan["model"]
@@ -249,7 +271,7 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         if not isinstance(plan["wandb"][key], str) or not plan["wandb"][key].strip():
             raise ValueError("complete W&B run identity required")
     if check_files:
-        for spec in (train, dev):
+        for spec in plan["datasets"].values():
             _checked_file(Path(spec["path"]), spec["sha256"])
         for item in model["files"]:
             _checked_file(Path(model["root"]) / item["path"], item["sha256"])
@@ -271,6 +293,7 @@ def validate_runtime_sources(root: Path | None = None) -> None:
 def sft_overrides(plan: dict) -> dict:
     r, w = plan["recipe"], plan["wandb"]
     output = Path(plan["output_root"])
+    training_only = plan.get("validation_mode") == "task_outcomes_only"
     options = {
         "strategy": "fsdp",
         "model.path": plan["model"]["root"],
@@ -294,9 +317,7 @@ def sft_overrides(plan: dict) -> dict:
         "seed": r["seed"],
         "dataset_name": plan["datasets"]["train"]["path"],
         "dataset_split": "train",
-        "eval_dataset_name": plan["datasets"]["dev"]["path"],
-        "eval_dataset_split": "validation",
-        "eval_before_train": True,
+        "eval_before_train": not training_only,
         "eval_interval": r["eval_interval"],
         "ckpt_path": str(output / "checkpoints"),
         "ckpt_interval": r["checkpoint_interval"],
@@ -310,6 +331,13 @@ def sft_overrides(plan: dict) -> dict:
         "num_workers": 0,
         "dataloader_num_workers": 0,
     }
+    if not training_only:
+        options.update(
+            {
+                "eval_dataset_name": plan["datasets"]["dev"]["path"],
+                "eval_dataset_split": "validation",
+            }
+        )
     if plan["schema"] == DENSE_SCHEMA:
         options.update(
             {"fsdp_config.cpu_offload": False, "optimizer_config.offload_after_step": False}
@@ -761,9 +789,58 @@ def explicit_tracking_class(base):
     return ExplicitTracking
 
 
+def public_failure_details(error: BaseException) -> dict:
+    """Return a narrow, non-secret fingerprint for setup contract failures."""
+    chain = []
+    current = error
+    seen = set()
+    while isinstance(current, BaseException) and id(current) not in seen:
+        chain.append(current)
+        seen.add(id(current))
+        current = getattr(current, "cause", None) or current.__cause__ or current.__context__
+
+    missing_key = None
+    for item in chain:
+        if isinstance(item, KeyError) and len(item.args) == 1 and isinstance(item.args[0], str):
+            candidate = item.args[0]
+            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]{0,127}", candidate):
+                missing_key = candidate
+                break
+    if missing_key is None:
+        for item in chain:
+            match = re.search(
+                r"(?:^|\n)KeyError: ['\"]([A-Za-z_][A-Za-z0-9_.-]{0,127})['\"](?:\n|$)",
+                str(item),
+            )
+            if match:
+                missing_key = match.group(1)
+                break
+
+    error_class = "KeyError" if missing_key else type(chain[-1]).__name__
+    details = {"error_class": error_class}
+    if missing_key:
+        details["missing_key"] = missing_key
+    return details
+
+
 def finalize_failed_run(trainer, output: Path, error: BaseException) -> list[str]:
     """Best-effort independent cleanup: storage/SDK defects cannot skip exit1."""
     failures = []
+    try:
+        stage = getattr(trainer, "public_runtime_stage", None)
+        if stage not in PUBLIC_RUNTIME_STAGES:
+            stage = "trainer_constructed"
+        write_receipt(
+            output / "FAILURE_STAGE.json",
+            {
+                **public_failure_details(error),
+                "optimizer_step": getattr(trainer, "global_step", 0),
+                "plan_sha256": trainer.plan["plan_sha256"],
+                "stage": stage,
+            },
+        )
+    except BaseException:
+        failures.append("failure_stage")
     try:
         with (output / "private-runtime-failure.log").open("a") as stream:
             traceback.print_exc(file=stream)
@@ -847,7 +924,8 @@ def _make_trainer_class():
             if event.global_step == event.total_steps:
                 control.should_save = True
             if event.global_step == trainer.plan.get("pause_after_step"):
-                control.should_save = control.should_evaluate = True
+                control.should_save = True
+                control.should_evaluate = "dev" in trainer.plan["datasets"]
 
         def on_eval_end(self, trainer, event, control):
             metrics = event.metrics
@@ -881,8 +959,25 @@ def _make_trainer_class():
             self.best = None
             self.extra_train_metrics = {}
             self.target_tokens_seen = 0
+            self.public_runtime_stage = "trainer_constructed"
+
+        def _record_runtime_stage(self, stage):
+            if stage not in PUBLIC_RUNTIME_STAGES:
+                raise ValueError("unknown public runtime stage")
+            self.public_runtime_stage = stage
+            write_receipt(
+                self.output / "RUNTIME_STAGE.json",
+                {
+                    "optimizer_step": self.global_step,
+                    "plan_sha256": self.plan["plan_sha256"],
+                    "stage": stage,
+                    "observed_at_unix": time.time(),
+                },
+                replace=True,
+            )
 
         def _init_workers(self):
+            self._record_runtime_stage("native_worker_initializing")
             selection = contextlib.nullcontext()
             if "recovery" in self.plan:
                 from training.recovery import use_worker
@@ -894,12 +989,14 @@ def _make_trainer_class():
                 selection = use_worker(self.plan)
             with selection:
                 super()._init_workers()
+            self._record_runtime_stage("native_worker_ready")
             if self.plan["schema"] == DENSE_SCHEMA or "lora" in self.plan:
                 # Pinned FSDP2 initialization broadcasts non-persistent buffers
                 # (including RoPE inv_freq) back to CPU. Turning off colocation
                 # skips the dispatcher's usual initial backload as well as its
                 # repeated offloads. Explicitly finish initialization ONCE via
                 # the native all-rank API; never recreate buffers or cast values.
+                self._record_runtime_stage("device_backload_started")
                 actor = self.dispatch._actor_groups["policy"]
                 replies = actor.backload_to_gpu(backload_optimizer=False, backload_model=True)
                 expected = self.plan["recipe"]["nodes"] * self.plan["recipe"]["gpus_per_node"]
@@ -919,8 +1016,10 @@ def _make_trainer_class():
                         "observed_at_unix": time.time(),
                     },
                 )
+            self._record_runtime_stage("device_ready")
 
         def _init_tracker(self):
+            self._record_runtime_stage("tracker_initializing")
             self.tracker = explicit_tracking_class(Tracking)(
                 project_name=self.cfg.trainer.project_name,
                 experiment_name=self.cfg.trainer.run_name,
@@ -950,14 +1049,18 @@ def _make_trainer_class():
                     "model_revision": self.plan["model"]["revision"],
                     "split_manifest_sha256": self.plan.get("split_manifest_sha256"),
                     "train_rows": self.plan["datasets"]["train"]["rows"],
-                    "dev_rows": self.plan["datasets"]["dev"]["rows"],
-                    "dev_tasks": len(self.plan["datasets"]["dev"]["task_keys"]),
+                    "dev_rows": self.plan["datasets"].get("dev", {}).get("rows", 0),
+                    "dev_tasks": len(self.plan["datasets"].get("dev", {}).get("task_keys", [])),
                     "target_policy": (
                         "visible_all_assistant_once"
                         if self.plan["schema"] == DENSE_SCHEMA
                         else "visible_last_assistant_message"
                     ),
-                    "dev_target_policy": "visible_last_assistant_message",
+                    "dev_target_policy": (
+                        "visible_last_assistant_message"
+                        if "dev" in self.plan["datasets"]
+                        else "none_fresh_task_outcomes_after_training"
+                    ),
                     "train_expected_supervised_tokens": self.plan["datasets"]["train"].get(
                         "supervised_tokens"
                     ),
@@ -973,7 +1076,11 @@ def _make_trainer_class():
                     ),
                     "corpus_manifest_sha256": self.plan.get("corpus_manifest_sha256"),
                     "execution_resources": self.plan.get("execution", {}).get("resources"),
-                    "selection_metric": "eval/task_macro_loss",
+                    "selection_metric": (
+                        "eval/task_macro_loss"
+                        if "dev" in self.plan["datasets"]
+                        else "fresh_fleet_dev_task_success_rate"
+                    ),
                     "inline_hf_export": False,
                 },
                 allow_val_change=False,
@@ -982,6 +1089,7 @@ def _make_trainer_class():
                 self.output / "WANDB.json",
                 {"url": run.url, "run_id": run.id, "project": run.project, "entity": run.entity},
             )
+            self._record_runtime_stage("tracker_ready")
 
         def _load_split(self, split):
             import pyarrow.parquet as pq
@@ -1001,6 +1109,8 @@ def _make_trainer_class():
             return self._load_split("train")
 
         def load_eval_dataset(self):
+            if "dev" not in self.plan["datasets"]:
+                return None
             self.dev_rows = self._load_split("dev")
             return self.dev_rows
 
@@ -1147,7 +1257,10 @@ def training_result(trainer, *, paused: bool) -> dict:
         raise ValueError("final checkpoint optimizer step mismatch")
     # A native step counter/pointer alone does not prove a saved, evaluated
     # checkpoint. Both complete and deliberately paused runs need the receipts.
-    for kind in ("checkpoint_receipts", "validation"):
+    terminal_receipts = ["checkpoint_receipts"]
+    if "dev" in plan["datasets"]:
+        terminal_receipts.append("validation")
+    for kind in terminal_receipts:
         path = trainer.output / kind / f"step-{expected:06d}.json"
         if path.is_symlink():
             raise ValueError("terminal receipt must not be a symlink")
@@ -1225,12 +1338,51 @@ def _run_training(plan: dict) -> dict:
         raise RuntimeError(f"SFT runtime failed: {type(exc).__name__}") from None
 
 
+def _run_setup_probe(plan: dict, *, with_tracker: bool = False) -> dict:
+    """Exercise exact model/FSDP setup and the no-dev loader without optimizer steps."""
+    cfg, skyrl_cfg = build_runtime_configs(plan)
+    skyrl_cfg.trainer.log_path = str(Path(plan["output_root"]) / "private_logs")
+    trainer_class = _make_trainer_class()
+
+    if not with_tracker:
+
+        def bypass_tracker(trainer):
+            trainer.tracker = None
+            trainer._record_runtime_stage("tracker_bypassed_for_setup_probe")
+
+        trainer_class._init_tracker = bypass_tracker
+    trainer = trainer_class(cfg, skyrl_cfg, plan)
+    try:
+        trainer.setup()
+        if "dev" not in plan["datasets"] and trainer.load_eval_dataset() is not None:
+            raise ValueError("task-outcome training unexpectedly produced an eval dataset")
+        return {
+            "optimizer_steps": 0,
+            "plan_sha256": plan["plan_sha256"],
+            "stage": trainer.public_runtime_stage,
+            "status": "setup_validated",
+        }
+    except BaseException as exc:
+        return {
+            **public_failure_details(exc),
+            "optimizer_steps": 0,
+            "plan_sha256": plan["plan_sha256"],
+            "stage": trainer.public_runtime_stage,
+            "status": "setup_rejected",
+        }
+    finally:
+        with contextlib.suppress(BaseException):
+            trainer.shutdown()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--plan-sha256", required=True)
     parser.add_argument("--validate-only", action="store_true")
     parser.add_argument("--preflight-tokenize", action="store_true")
+    parser.add_argument("--setup-probe", action="store_true")
+    parser.add_argument("--setup-probe-with-tracker", action="store_true")
     args = parser.parse_args()
     _checked_file(args.plan, args.plan_sha256)
     plan = json.loads(args.plan.read_text())
@@ -1266,7 +1418,7 @@ def main():
             json.dumps(
                 {
                     "status": "validated",
-                    "dev_tasks": len(plan["datasets"]["dev"]["task_keys"]),
+                    "dev_tasks": len(plan["datasets"].get("dev", {}).get("task_keys", [])),
                     "max_steps": plan["recipe"]["max_steps"],
                 }
             )
@@ -1274,6 +1426,41 @@ def main():
         return
     output = Path(plan["output_root"])
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if args.setup_probe or args.setup_probe_with_tracker:
+        write_receipt(
+            output / "SETUP_PROBE_STARTED.json",
+            {"plan_sha256": plan["plan_sha256"], "started_at_unix": time.time()},
+        )
+        ray = None
+        try:
+            if args.setup_probe_with_tracker:
+                _configure_wandb(plan)
+            import ray
+            from skyrl.train.utils.utils import initialize_ray
+
+            _, cfg = build_runtime_configs(plan)
+            cfg.trainer.log_path = str(output / "private_logs")
+            initialize_ray(cfg)
+            result = _run_setup_probe(plan, with_tracker=args.setup_probe_with_tracker)
+        except BaseException as exc:
+            result = {
+                **public_failure_details(exc),
+                "optimizer_steps": 0,
+                "plan_sha256": plan["plan_sha256"],
+                "stage": "probe_bootstrap",
+                "status": "setup_rejected",
+            }
+        finally:
+            if ray is not None and ray.is_initialized():
+                ray.shutdown()
+        terminal = (
+            "SETUP_VALIDATED.json"
+            if result["status"] == "setup_validated"
+            else "SETUP_REJECTED.json"
+        )
+        write_receipt(output / terminal, result)
+        print(json.dumps(result, sort_keys=True), flush=True)
+        return
     write_receipt(
         output / "STARTED.json",
         {"plan_sha256": plan["plan_sha256"], "started_at_unix": time.time()},

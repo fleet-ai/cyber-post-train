@@ -113,8 +113,14 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
         lock["revision"],
     ):
         raise ValueError("corpus tokenizer differs from model")
+    validation_mode = manifest.get("validation_mode", "teacher_cross_entropy")
+    if validation_mode not in {"teacher_cross_entropy", "task_outcomes_only"}:
+        raise ValueError("unsupported corpus validation mode")
+    required_splits = ("train", "dev") if validation_mode == "teacher_cross_entropy" else ("train",)
+    if set(manifest["files"]) != set(required_splits):
+        raise ValueError("corpus files differ from its validation mode")
     datasets = {}
-    for split in ("train", "dev"):
+    for split in required_splits:
         entry = manifest["files"][split]
         path = PurePosixPath(entry["path"])
         if path.is_absolute() or ".." in path.parts or not path.parts:
@@ -126,8 +132,14 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
     overrides = config.get("recipe", {})
     _known(overrides, set(RECIPE), "recipe")
     recipe = {**RECIPE, **overrides}
-    if any(type(recipe[k]) is not int or recipe[k] <= 0 for k in RECIPE if k not in {"lr", "seed"}):
-        raise ValueError("recipe counts must be positive integers")
+    if any(
+        type(recipe[k]) is not int or recipe[k] < (0 if k == "eval_interval" else 1)
+        for k in RECIPE
+        if k not in {"lr", "seed"}
+    ):
+        raise ValueError("recipe counts must be positive integers; eval_interval may be zero")
+    if (validation_mode == "task_outcomes_only") != (recipe["eval_interval"] == 0):
+        raise ValueError("task-outcome evaluation requires eval_interval: 0 and no CE dev file")
     if type(datasets["train"]["rows"]) is not int or datasets["train"]["rows"] <= 0:
         raise ValueError("training corpus must have a positive integer row count")
     recipe["max_steps"] = (
@@ -148,6 +160,7 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
         "wandb": dict(config["wandb"]),
         "split_manifest_sha256": manifest["split_sha256"],
         "corpus_manifest_sha256": manifest["sha256"],
+        "validation_mode": validation_mode,
         "runtime_sha256": hashlib.sha256(runtime).hexdigest(),
         "execution": {
             "image": IMAGE,
@@ -274,6 +287,18 @@ def job_request(plan: dict) -> dict:
     }
 
 
+def _check_native_dataset_loader(plan: dict) -> None:
+    if "dev" in plan["datasets"]:
+        return
+    from .sft_runtime import _make_trainer_class
+
+    trainer_class = _make_trainer_class()
+    trainer = trainer_class.__new__(trainer_class)
+    trainer.plan = plan
+    if trainer.load_eval_dataset() is not None:
+        raise ValueError("task-outcome training unexpectedly produced an eval dataset")
+
+
 def preflight(plan: dict) -> dict:
     """CPU-only checks in the pinned image, with staged inputs mounted.
 
@@ -292,6 +317,7 @@ def preflight(plan: dict) -> dict:
     validate_plan(plan)
     validate_runtime_sources()
     build_runtime_configs(plan)
+    _check_native_dataset_loader(plan)
     AutoConfig.from_pretrained(
         plan["model"]["root"], local_files_only=True, trust_remote_code=False
     )
@@ -323,6 +349,7 @@ def preflight(plan: dict) -> dict:
             "model_files",
             "dataset_files",
             "native_config",
+            "native_train_only_loader",
             "tokenization",
             "target_accounting",
         ],

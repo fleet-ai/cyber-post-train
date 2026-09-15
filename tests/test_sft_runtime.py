@@ -6,7 +6,7 @@ import json
 import pickle
 import sys
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -17,11 +17,13 @@ from training.sft_runtime import (
     PlannedPause,
     ProgressWatchdog,
     _make_trainer_class,
+    _run_setup_probe,
     _unsigned_digest,
     build_runtime_configs,
     dense_rows,
     explicit_tracking_class,
     finalize_failed_run,
+    public_failure_details,
     retention_steps,
     sft_overrides,
     tokenize_rows,
@@ -84,6 +86,97 @@ def plan(tmp_path):
     }
 
 
+@pytest.mark.parametrize("with_tracker", [False, True])
+def test_setup_probe_selects_real_tracker_only_when_requested(tmp_path, monkeypatch, with_tracker):
+    events = []
+
+    class ProbeTrainer:
+        def __init__(self, cfg, skyrl_cfg, value):
+            self.plan = value
+            self.public_runtime_stage = "trainer_constructed"
+
+        def _record_runtime_stage(self, stage):
+            events.append(stage)
+            self.public_runtime_stage = stage
+
+        def _init_tracker(self):
+            events.append("real_tracker")
+
+        def setup(self):
+            self._init_tracker()
+            self.public_runtime_stage = "device_ready"
+
+        def shutdown(self):
+            events.append("shutdown")
+
+    monkeypatch.setattr(
+        "training.sft_runtime.build_runtime_configs",
+        lambda value: (SimpleNamespace(), SimpleNamespace(trainer=SimpleNamespace(log_path=None))),
+    )
+    monkeypatch.setattr("training.sft_runtime._make_trainer_class", lambda: ProbeTrainer)
+
+    result = _run_setup_probe(plan(tmp_path), with_tracker=with_tracker)
+
+    assert result["status"] == "setup_validated"
+    assert result["optimizer_steps"] == 0
+    assert ("real_tracker" in events) is with_tracker
+    assert ("tracker_bypassed_for_setup_probe" in events) is (not with_tracker)
+    assert events[-1] == "shutdown"
+
+
+def test_setup_probe_exercises_train_only_eval_loader(tmp_path, monkeypatch):
+    events = []
+
+    class ProbeTrainer:
+        def __init__(self, cfg, skyrl_cfg, value):
+            self.plan = value
+            self.public_runtime_stage = "trainer_constructed"
+
+        def setup(self):
+            self.public_runtime_stage = "device_ready"
+
+        def load_eval_dataset(self):
+            events.append("eval_loader_checked")
+            return None
+
+        def shutdown(self):
+            events.append("shutdown")
+
+    monkeypatch.setattr(
+        "training.sft_runtime.build_runtime_configs",
+        lambda value: (SimpleNamespace(), SimpleNamespace(trainer=SimpleNamespace(log_path=None))),
+    )
+    monkeypatch.setattr("training.sft_runtime._make_trainer_class", lambda: ProbeTrainer)
+    value = plan(tmp_path)
+    value["validation_mode"] = "task_outcomes_only"
+    value["datasets"].pop("dev")
+    value["recipe"].update(eval_interval=0, checkpoint_interval=2)
+
+    result = _run_setup_probe(value)
+
+    assert result["status"] == "setup_validated"
+    assert events == ["eval_loader_checked", "shutdown"]
+
+
+def test_train_only_wrapper_returns_no_eval_dataset(monkeypatch):
+    modules = {
+        "skyrl.backends.skyrl_train.training_batch": {"pad_training_input_batch": None},
+        "skyrl.train.sft_trainer": {"SFTTrainer": object, "tokenize_chat_example": None},
+        "skyrl.train.utils.callbacks": {"TrainingCallback": object},
+        "skyrl.train.utils.tracking": {"Tracking": object},
+        "skyrl.train.utils.utils": {"Timer": object},
+    }
+    for name, values in modules.items():
+        module = ModuleType(name)
+        module.__dict__.update(values)
+        monkeypatch.setitem(sys.modules, name, module)
+    trainer_class = _make_trainer_class()
+    trainer = trainer_class.__new__(trainer_class)
+    trainer.plan = {"datasets": {"train": {}}}
+
+    assert trainer.load_eval_dataset() is None
+
+
 def test_recipe_keeps_tail_batch_and_disables_inline_export(tmp_path):
     value = plan(tmp_path)
     validate_plan(value, check_files=False)
@@ -94,6 +187,36 @@ def test_recipe_keeps_tail_batch_and_disables_inline_export(tmp_path):
     assert options["eval_interval"] == 2
     assert options["max_ckpts_to_keep"] == -1  # custom latest-plus-best retention
     assert options["logger"] == "wandb"
+
+
+def test_task_outcome_mode_logs_training_only_and_keeps_checkpointing(tmp_path):
+    value = plan(tmp_path)
+    value["validation_mode"] = "task_outcomes_only"
+    value["datasets"].pop("dev")
+    value["recipe"].update(eval_interval=0, checkpoint_interval=2)
+    validate_plan(value, check_files=False)
+    options = sft_overrides(value)
+    assert options["eval_interval"] == 0
+    assert options["ckpt_interval"] == 2
+    assert options["eval_before_train"] is False
+    assert "eval_dataset_name" not in options
+    assert "eval_dataset_split" not in options
+
+
+def test_task_outcome_mode_checks_only_the_present_train_file(tmp_path, monkeypatch):
+    value = plan(tmp_path)
+    value["validation_mode"] = "task_outcomes_only"
+    value["datasets"].pop("dev")
+    value["recipe"].update(eval_interval=0, checkpoint_interval=2)
+    checked = []
+    monkeypatch.setattr(
+        "training.sft_runtime._checked_file", lambda path, sha: checked.append(path)
+    )
+
+    validate_plan(value, check_files=True)
+
+    assert Path("/data/train.parquet") in checked
+    assert all(path is not None for path in checked)
 
 
 @pytest.mark.parametrize("pause", [0, -1, True, 1.5, 6, 7, None])
@@ -143,6 +266,33 @@ def test_training_result_distinguishes_partial_and_complete(tmp_path, paused):
     trainer.global_step += 1
     with pytest.raises(ValueError, match="optimizer step mismatch"):
         training_result(trainer, paused=paused)
+
+
+def test_training_only_completion_requires_checkpoint_but_no_ce_receipt(tmp_path):
+    value = plan(tmp_path)
+    value["validation_mode"] = "task_outcomes_only"
+    value["datasets"].pop("dev")
+    value["recipe"].update(eval_interval=0, checkpoint_interval=2)
+    trainer = SimpleNamespace(
+        plan=value,
+        output=tmp_path,
+        global_step=6,
+        target_tokens_seen=16,
+        best=None,
+    )
+    (tmp_path / "checkpoints").mkdir()
+    (tmp_path / "checkpoints/latest_ckpt_global_step.txt").write_text("6")
+    write_receipt(
+        tmp_path / "checkpoint_receipts/step-000006.json",
+        {
+            "optimizer_step": 6,
+            "plan_sha256": value["plan_sha256"],
+            "checkpoint_path": str(tmp_path / "checkpoints/global_step_6"),
+        },
+    )
+    result = training_result(trainer, paused=False)
+    assert result["status"] == "training_complete"
+    assert result["best"] is None
 
 
 @pytest.mark.parametrize(
@@ -662,11 +812,27 @@ def test_failure_finalize_is_independent_of_disk_and_summary(
 
     monkeypatch.setattr(Path, "open", controlled_open)
     # Tracker may be None if W&B created a run but native construction then failed.
-    trainer = SimpleNamespace(tracker=None, _ray_gpu_monitor=None, global_step=17)
+    trainer = SimpleNamespace(
+        tracker=None,
+        _ray_gpu_monitor=None,
+        global_step=17,
+        plan={"plan_sha256": "a" * 64},
+        public_runtime_stage="native_worker_initializing",
+    )
     failures = finalize_failed_run(trainer, tmp_path, ValueError("synthetic original failure"))
     assert calls == ["summary", 1]
     assert ("private_log" in failures) == disk_failure
     assert ("tracking_summary" in failures) == summary_failure
+    assert "failure_stage" not in failures
+    stage = json.loads((tmp_path / "FAILURE_STAGE.json").read_text())
+    receipt = stage.pop("receipt_sha256")
+    assert receipt == _unsigned_digest(stage)
+    assert stage == {
+        "error_class": "ValueError",
+        "optimizer_step": 17,
+        "plan_sha256": "a" * 64,
+        "stage": "native_worker_initializing",
+    }
 
 
 def test_native_destructor_cannot_mark_failure_successful():
@@ -685,6 +851,21 @@ def test_native_destructor_cannot_mark_failure_successful():
     # Successful shutdown still explicitly invokes normal native finish.
     tracker.finish()
     assert calls == [0]
+
+
+def test_public_failure_details_unwraps_safe_missing_key():
+    wrapper = RuntimeError("remote worker failed")
+    wrapper.cause = KeyError("optimizer_config")
+    assert public_failure_details(wrapper) == {
+        "error_class": "KeyError",
+        "missing_key": "optimizer_config",
+    }
+
+
+def test_public_failure_details_never_emits_arbitrary_key_text():
+    assert public_failure_details(KeyError("private value with spaces")) == {
+        "error_class": "KeyError"
+    }
 
 
 @pytest.mark.skipif(
@@ -743,6 +924,9 @@ def test_initial_backload_completes_dense_worker_setup_once(tmp_path, monkeypatc
     monkeypatch.setattr(SFTTrainer, "_init_workers", init)
     trainer = _make_trainer_class()(cfg, backend, value)
     trainer._init_workers()
+    stage = json.loads((tmp_path / "RUNTIME_STAGE.json").read_text())
+    assert stage["stage"] == "device_ready"
+    assert stage.pop("receipt_sha256") == _unsigned_digest(stage)
     expected = [("init", {})]
     if dense:
         expected.append(("backload", {"backload_optimizer": False, "backload_model": True}))
@@ -943,7 +1127,10 @@ def test_native_checkpoint_reopens_metadata_before_recording_success(tmp_path, m
 @pytest.mark.parametrize("interval", [2, 4])
 @pytest.mark.parametrize("dense", [False, True])
 @pytest.mark.parametrize("pause", [None, 1])
-def test_exact_native_loop_eval_never_optimizes_and_saves_final(tmp_path, interval, dense, pause):
+@pytest.mark.parametrize("outcomes_only", [False, True])
+def test_exact_native_loop_eval_never_optimizes_and_saves_final(
+    tmp_path, interval, dense, pause, outcomes_only
+):
     """Exercise the real SkyRL loop/collator with synthetic CPU worker outputs."""
     import torch
     from skyrl.train.config.sft_config import SFTConfig, build_skyrl_config_for_sft
@@ -958,6 +1145,10 @@ def test_exact_native_loop_eval_never_optimizes_and_saves_final(tmp_path, interv
             format=DENSE_FORMAT, supervised_tokens=51, assistant_responses=34, source_sessions=17
         )
     value["recipe"]["eval_interval"] = value["recipe"]["checkpoint_interval"] = interval
+    if outcomes_only:
+        value["validation_mode"] = "task_outcomes_only"
+        value["datasets"].pop("dev")
+        value["recipe"]["eval_interval"] = 0
     if pause is not None:
         value["pause_after_step"] = pause
     cfg = SFTConfig.from_cli_overrides(sft_overrides(value))
@@ -996,7 +1187,8 @@ def test_exact_native_loop_eval_never_optimizes_and_saves_final(tmp_path, interv
         trainer.dev_rows = dev_rows
         return dev_rows
 
-    trainer.load_eval_dataset = load_dev
+    if not outcomes_only:
+        trainer.load_eval_dataset = load_dev
 
     class Dispatcher:
         steps = 0
@@ -1015,6 +1207,7 @@ def test_exact_native_loop_eval_never_optimizes_and_saves_final(tmp_path, interv
             return 1.0
 
         def forward(self, model, batch, loss_fn, loss_fn_config):
+            assert not outcomes_only, "outcome-only SFT must not run reference CE"
             self.eval_at.append(self.steps)
             # Preserve a selected earlier checkpoint when the final step is worse.
             raw_loss = 0.5 if self.steps == interval else 1.0
@@ -1042,21 +1235,28 @@ def test_exact_native_loop_eval_never_optimizes_and_saves_final(tmp_path, interv
     final_step = pause or value["recipe"]["max_steps"]
     assert trainer.dispatch.steps == final_step
     expected_steps = sorted({0, final_step} | set(range(interval, final_step + 1, interval)))
-    assert sorted(set(trainer.dispatch.eval_at)) == expected_steps
+    assert sorted(set(trainer.dispatch.eval_at)) == ([] if outcomes_only else expected_steps)
     assert trainer.dispatch.checkpoints == expected_steps[1:]
     assert trainer.global_step == final_step
     assert int((tmp_path / "checkpoints/latest_ckpt_global_step.txt").read_text()) == final_step
-    best_step = interval if interval <= final_step else 0
+    best_step = interval if interval <= final_step and not outcomes_only else 0
     retained = {f"global_step_{final_step}"} | (
         {f"global_step_{best_step}"} if best_step else set()
     )
     assert {p.name for p in (tmp_path / "checkpoints").glob("global_step_*")} == retained
-    assert trainer.best["optimizer_step"] == best_step
-    assert len(list((tmp_path / "validation").glob("*.json"))) == len(expected_steps)
+    if outcomes_only:
+        assert trainer.best is None
+    else:
+        assert trainer.best["optimizer_step"] == best_step
+    assert len(list((tmp_path / "validation").glob("*.json"))) == (
+        0 if outcomes_only else len(expected_steps)
+    )
     assert len([item for _, item in logs if "train/loss" in item]) == final_step
     assert all("train/lr" in item for _, item in logs if "train/loss" in item)
     assert logs[-1][1]["train/global_step"] == final_step
-    assert logs[-1][0] == final_step + int(not pause and final_step % interval != 0)
+    assert logs[-1][0] == final_step + int(
+        not outcomes_only and not pause and final_step % interval != 0
+    )
     assert trainer.target_tokens_seen == (
         8 * (3 if dense else 2) if pause else 51 if dense else 17 * 2 * 2
     )
