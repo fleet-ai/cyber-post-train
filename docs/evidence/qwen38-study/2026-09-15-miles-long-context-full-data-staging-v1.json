@@ -1,0 +1,84 @@
+{
+  "schema": "cyber_miles_long_context_full_data_staging_v1",
+  "status": "accepted",
+  "source_commit": "8077796836b75a1f1a2f2b33ea23f47d134b6c3a",
+  "source_branch": "codex/miles-dev8-normal-queue",
+  "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:22c6c624ae95e1886aeab8c9921642b7753232856eb41fb618a70c52975b0a18",
+  "runtime_bundle": {
+    "sha256": "sha256:bb7f603d6999762750b489676add76c76fe5e8be75e8335865496e2cef907d7b",
+    "configmap_uid": "913aa2db-da0e-4232-b4f5-8195b352dc5f",
+    "deleted": true,
+    "deletion_confirmed": true
+  },
+  "data_config": {
+    "path": "configs/runs/qwen38-miles-opencode-long-context-full-v1.data.json",
+    "file_sha256": "sha256:80a20a5eab4ef083cd6f28129a727bc31148a2c906b3af67e4cfa3f3af3af851"
+  },
+  "staging_pod": {
+    "name": "q38-miles-lc-full1-data-stage1",
+    "uid": "920e5d2a-3a3f-4453-8385-fc47f531b674",
+    "cluster": "prod",
+    "namespace": "fleet-train-jobs",
+    "node": "computeinstance-e04nfmp12r41919v7j",
+    "priority_class": "c1",
+    "started_at": "2026-09-15T05:19:14Z",
+    "finished_at": "2026-09-15T05:20:48Z",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "container_restarts": 0,
+    "gpu_requests": 0,
+    "gpu_limits": 0,
+    "runtime_image_id_matches_request": true,
+    "deleted": true,
+    "deletion_confirmed": true
+  },
+  "terminal_receipt": {
+    "path": "/mnt/sfs/jobs/chris-q38-miles-lc-full1-inputs-evidence1/TERMINAL.json",
+    "file_sha256": "sha256:699fe437bf43ce27e3e8fe7a2eec91af86b86723e992dab708ca810a55141bfb",
+    "receipt_sha256": "sha256:1d8f33120250f80ed26a1e6a1fc2fe80ce2368f2f4495819ca50d076b40c7219"
+  },
+  "manifest": {
+    "path": "/mnt/sfs/jobs/chris-q38-miles-lc-full1-inputs/data/manifest.json",
+    "file_sha256": "sha256:5674871480c94440470050c4320f36dc87e1f84579615dece4d78d71d7a9c3e8",
+    "receipt_sha256": "sha256:6493b9c4cea49bf5f73c6c9ac78309b804b2974de35352698529d8d4e5e36263",
+    "files": {
+      "train": {
+        "rows": 59,
+        "sha256": "sha256:ea2455ea2a0c2917a7a51ebeee599ac880fd3384cb8fc875619a6e744e5217e0",
+        "max_prompt_tokens": 1706
+      },
+      "dev": {
+        "rows": 20,
+        "sha256": "sha256:9ae8f41b1e5525c361422a82a466706ed335f1976a72885342810e568efbd37d",
+        "max_prompt_tokens": 1276
+      }
+    },
+    "gpus": 0,
+    "environment_creates": 0
+  },
+  "independent_verifier_pod": {
+    "name": "q38-miles-lc-full1-data-verify1",
+    "uid": "e5aa48b6-2544-4a58-8178-6302f15d380a",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "container_restarts": 0,
+    "gpu_requests": 0,
+    "runtime_image_id_matches_request": true,
+    "verified": [
+      "terminal self-digest and accepted status",
+      "manifest file digest and self-digest",
+      "59 train and 20 dev records",
+      "per-file byte digests and create-once private permissions",
+      "zero GPU and zero environment-creation declarations"
+    ],
+    "deleted": true,
+    "deletion_confirmed": true
+  },
+  "claims_excluded": [
+    "reward acquisition",
+    "optimizer update",
+    "checkpoint creation",
+    "queued canary admission"
+  ],
+  "sha256": "sha256:90dcc5f150feb0c8e5d00d43f59997eafb0c7b30513b0cfcc31bd509b8d1c91f"
+}

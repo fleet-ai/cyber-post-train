@@ -49,12 +49,25 @@
     "canary_native_reload_acceptance": null,
     "production_data_manifest": {
       "path": "/mnt/sfs/jobs/chris-q38-miles-lc-full1-inputs/data/manifest.json",
-      "file_sha256": null,
-      "receipt_sha256": null,
+      "file_sha256": "sha256:5674871480c94440470050c4320f36dc87e1f84579615dece4d78d71d7a9c3e8",
+      "receipt_sha256": "sha256:6493b9c4cea49bf5f73c6c9ac78309b804b2974de35352698529d8d4e5e36263",
       "rows": {
         "train": 59,
         "dev": 20
       }
+    },
+    "production_data_staging": {
+      "source_commit": "8077796836b75a1f1a2f2b33ea23f47d134b6c3a",
+      "bundle_sha256": "sha256:bb7f603d6999762750b489676add76c76fe5e8be75e8335865496e2cef907d7b",
+      "configmap_uid": "913aa2db-da0e-4232-b4f5-8195b352dc5f",
+      "staging_pod_uid": "920e5d2a-3a3f-4453-8385-fc47f531b674",
+      "verification_pod_uid": "e5aa48b6-2544-4a58-8178-6302f15d380a",
+      "terminal_file": "/mnt/sfs/jobs/chris-q38-miles-lc-full1-inputs-evidence1/TERMINAL.json",
+      "terminal_file_sha256": "sha256:699fe437bf43ce27e3e8fe7a2eec91af86b86723e992dab708ca810a55141bfb",
+      "terminal_receipt_sha256": "sha256:1d8f33120250f80ed26a1e6a1fc2fe80ce2368f2f4495819ca50d076b40c7219",
+      "evidence_path": "docs/evidence/qwen38-study/2026-09-15-miles-long-context-full-data-staging-v1.json",
+      "evidence_file_sha256": "sha256:acb317909406d741a8a1e96810e447498a64221ccdf952371f9b57cc7b62d7d2",
+      "evidence_receipt_sha256": "sha256:90dcc5f150feb0c8e5d00d43f59997eafb0c7b30513b0cfcc31bd509b8d1c91f"
     }
   },
   "candidate_run": {
@@ -141,8 +154,7 @@
   "blocked_reasons": [
     "The exact long-context canary is queued and has no accepted reward/update/checkpoint terminal receipt.",
     "No all-rank zero-update reload has accepted that canary checkpoint.",
-    "The full 59-train/20-dev long-context data manifest has not been staged and digest-bound.",
     "Live duplicate, W&B, preview, and node-budget checks can only run immediately before submission."
   ],
-  "sha256": "sha256:01f7fd581e3dee95489d96c23ef81bac394ca5e0a72f05c96fd1ad5347de1e3c"
+  "sha256": "sha256:db7b17821cf47f0cac5c2d9a72fd2e787fa61e4f74dd394da694606948c8b478"
 }

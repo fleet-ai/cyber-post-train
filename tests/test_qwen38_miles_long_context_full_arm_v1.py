@@ -139,6 +139,28 @@ def test_full_arm_binds_exact_queued_canary_and_post_training_handoffs() -> None
     assert '"c0"' not in json.dumps(arm).lower()
     assert '"q0"' not in json.dumps(arm).lower()
     assert "webexploitbench" not in json.dumps(run).lower()
+    staged = arm["qualification"]["production_data_manifest"]
+    assert staged == {
+        "path": "/mnt/sfs/jobs/chris-q38-miles-lc-full1-inputs/data/manifest.json",
+        "file_sha256": (
+            "sha256:5674871480c94440470050c4320f36dc87e1f84579615dece4d78d71d7a9c3e8"
+        ),
+        "receipt_sha256": (
+            "sha256:6493b9c4cea49bf5f73c6c9ac78309b804b2974de35352698529d8d4e5e36263"
+        ),
+        "rows": {"train": 59, "dev": 20},
+    }
+    staging = arm["qualification"]["production_data_staging"]
+    assert staging["source_commit"] == "8077796836b75a1f1a2f2b33ea23f47d134b6c3a"
+    assert staging["staging_pod_uid"] == "920e5d2a-3a3f-4453-8385-fc47f531b674"
+    assert staging["verification_pod_uid"] == "e5aa48b6-2544-4a58-8178-6302f15d380a"
+    evidence = load(ROOT / staging["evidence_path"])
+    assert staging["evidence_file_sha256"] == file_sha256(ROOT / staging["evidence_path"])
+    assert staging["evidence_receipt_sha256"] == evidence["sha256"]
+    assert evidence["sha256"] == "sha256:" + digest(
+        {key: value for key, value in evidence.items() if key != "sha256"}
+    )
+    assert not any("data manifest has not been staged" in row for row in arm["blocked_reasons"])
     handoff = arm["post_training_handoff"]
     assert handoff["native_reload_template"].endswith(
         "qwen38-miles-opencode-long-context-reload-prod-v1.template.json"
