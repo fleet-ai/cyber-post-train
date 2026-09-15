@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: chris-q38-lr1-step6-manifest-read-v1
+  namespace: fleet-train-jobs
+  annotations:
+    fleet.ai/purpose: "read the immutable accepted LR1 step-6 checkpoint manifest for offline continuation planning"
+spec:
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  priorityClassName: c1
+  activeDeadlineSeconds: 300
+  terminationGracePeriodSeconds: 30
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 100
+    fsGroup: 100
+  containers:
+    - name: reader
+      image: 661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4
+      imagePullPolicy: IfNotPresent
+      command:
+        - python3
+        - -c
+        - |
+          import hashlib
+          import json
+          from pathlib import Path
+
+          path = Path("/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr1-2x4-dev-v1-reload-v1/checkpoint-step-6.json")
+          raw = path.read_bytes()
+          if hashlib.sha256(raw).hexdigest() != "0cbdb07de2ffabc928ba8b443a59814266653d658f4190aa81f6d9801a6fbcd2":
+              raise ValueError("LR1 checkpoint manifest file digest mismatch")
+          value = json.loads(raw)
+          if value.get("receipt_sha256") != "b6feb7649659e46d494215940c4575dee2de8c5cd6de2dadd30955d043bd72f7":
+              raise ValueError("LR1 checkpoint receipt digest mismatch")
+          print(json.dumps(value, indent=2, sort_keys=True), flush=True)
+      resources:
+        requests:
+          cpu: "100m"
+          memory: 128Mi
+        limits:
+          cpu: "1"
+          memory: 1Gi
+      volumeMounts:
+        - name: sfs
+          mountPath: /mnt/sfs
+          readOnly: true
+  nodeSelector:
+    workload: fleetai-training-ng-cpu
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: fleetai-training-ng-cpu
+      effect: NoSchedule
+  volumes:
+    - name: sfs
+      persistentVolumeClaim:
+        claimName: sfs-shared
+        readOnly: true

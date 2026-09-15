@@ -1,0 +1,116 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: chris-q38-lr100-r21-presence-audit-v1
+  namespace: fleet-train-jobs
+  annotations:
+    fleet.ai/purpose: "read-only audit of the vanished LR100 reload object's durable output"
+spec:
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  priorityClassName: c1
+  activeDeadlineSeconds: 600
+  terminationGracePeriodSeconds: 30
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 100
+    fsGroup: 100
+  containers:
+    - name: auditor
+      image: 661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4
+      imagePullPolicy: IfNotPresent
+      command:
+        - python3
+        - -c
+        - |
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path("/mnt/sfs/jobs/chris-q38-lr100-r21-v1")
+          allowed = (
+              "STARTED.json",
+              "RECOVERED.json",
+              "RELOAD_VALIDATED.json",
+              "RELOAD_REJECTED.json",
+              "FAILED.json",
+              "TRAINING_PAUSED.json",
+              "TRAINING_COMPLETE.json",
+          )
+
+
+          def sha256(path):
+              value = hashlib.sha256()
+              with path.open("rb") as stream:
+                  for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                      value.update(chunk)
+              return value.hexdigest()
+
+
+          receipts = {}
+          for name in allowed:
+              path = root / name
+              if not path.is_file() or path.is_symlink():
+                  continue
+              row = {"file_sha256": sha256(path), "bytes": path.stat().st_size}
+              try:
+                  value = json.loads(path.read_text())
+              except (UnicodeDecodeError, json.JSONDecodeError):
+                  value = {}
+              for key in (
+                  "receipt_sha256",
+                  "status",
+                  "optimizer_step",
+                  "optimizer_steps_executed",
+                  "validation_scope",
+                  "world_size",
+              ):
+                  if key in value:
+                      row[key] = value[key]
+              receipts[name] = row
+
+          files = [path for path in root.rglob("*") if path.is_file() and not path.is_symlink()] if root.is_dir() else []
+          proof = {
+              "schema": "cyber_qwen38_lr100_step21_reload_presence_audit_v1",
+              "pod_uid": os.environ["POD_UID"],
+              "root_exists": root.is_dir() and not root.is_symlink(),
+              "file_count": len(files),
+              "total_bytes": sum(path.stat().st_size for path in files),
+              "receipts": receipts,
+              "read_only_sfs": True,
+              "gpu_count": 0,
+              "private_logs_read": False,
+              "tensor_values_read": False,
+          }
+          canonical = json.dumps(proof, sort_keys=True, separators=(",", ":")).encode()
+          proof["receipt_sha256"] = hashlib.sha256(canonical).hexdigest()
+          print(json.dumps(proof, sort_keys=True, separators=(",", ":")), flush=True)
+      env:
+        - name: POD_UID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.uid
+      resources:
+        requests:
+          cpu: "1"
+          memory: 512Mi
+        limits:
+          cpu: "2"
+          memory: 2Gi
+      volumeMounts:
+        - name: sfs
+          mountPath: /mnt/sfs
+          readOnly: true
+  nodeSelector:
+    workload: fleetai-training-ng-cpu
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: fleetai-training-ng-cpu
+      effect: NoSchedule
+  volumes:
+    - name: sfs
+      persistentVolumeClaim:
+        claimName: sfs-shared
+        readOnly: true

@@ -1,0 +1,23 @@
+{
+  "schema": "cyber_qwen38_lr100_step21_reload_absence_audit_v1",
+  "audited_at": "2026-09-15T00:05:17Z",
+  "cluster": "dev",
+  "api_name": "chris-q38-lr100-r21-v1-e85027fb",
+  "output_root": "/mnt/sfs/jobs/chris-q38-lr100-r21-v1",
+  "auditor": {
+    "pod_name": "chris-q38-lr100-r21-presence-audit-v1",
+    "pod_uid": "64800bba-b32d-439e-af27-a5a04765ed95",
+    "phase": "Succeeded",
+    "restart_count": 0,
+    "gpu_count": 0,
+    "read_only_sfs": true
+  },
+  "result": {
+    "root_exists": false,
+    "file_count": 0,
+    "total_bytes": 0,
+    "receipts": {},
+    "receipt_sha256": "192263745018de5a8c1a08797e03f521a39dc820febe66ea5a21ca5593598a12"
+  },
+  "conclusion": "The expired API and Kubernetes objects left no durable output. The reload was never admitted far enough to start and cannot be accepted or resumed. Any retry must use a fresh create-once identity while preserving the exact source checkpoint and zero-update contract."
+}
