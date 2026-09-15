@@ -72,7 +72,7 @@ compactions across more than 1,024 nodes.
 - OpenCode tag/commit: `v1.18.27`, `4b7e19e315cca414121ba1d61523fef74bb3ae8b`
 - OpenCode Linux binary: `sha256:bddf894e5c2bc3d8cf452bd6e5ab2273bbe4a37eeeb9aec848d3d7d20db1f256`
 - Qwen3.8 fixed chat template: `sha256:38d42166599348d47ded69776c5389c89924045e6827089923a031379f8a3dfe`
-- Derived-image source bundle: `sha256:56077adb7471a36022f5fe543830bbeab2265604079916614370d333d5fa018e`
+- Derived-image source bundle: `sha256:8316484e616f96d6374bbe77df9df79e182fd70762d56003af7165d82236a948`
 
 ## Remaining gates
 
