@@ -79,6 +79,30 @@ def data(config: Path) -> None:
         _fail(exc)
 
 
+@app.command("data-subset")
+def data_subset(config: Path) -> None:
+    """Subset immutable dense SFT corpora to one frozen train split. CPU only."""
+    from training.corpus_subset import build
+    from training.sft import read_mapping
+
+    try:
+        _print(build(read_mapping(config), relative_to=config.resolve().parent))
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("data-fleet-teachers")
+def data_fleet_teachers(config: Path) -> None:
+    """Build train-only SFT data from digest-bound Fleet success evidence. CPU only."""
+    from training.fleet_teacher_corpus import build
+    from training.sft import read_mapping
+
+    try:
+        _print(build(read_mapping(config), relative_to=config.resolve().parent))
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command("model-lock")
 def model_lock(repo: str, revision: str, output: Annotated[Path, typer.Option("--output")]) -> None:
     """Pin public HF model metadata. No weights, GPUs, remote code or compatibility claim."""

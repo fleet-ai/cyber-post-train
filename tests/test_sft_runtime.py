@@ -96,6 +96,20 @@ def test_recipe_keeps_tail_batch_and_disables_inline_export(tmp_path):
     assert options["logger"] == "wandb"
 
 
+def test_task_outcome_mode_logs_training_only_and_keeps_checkpointing(tmp_path):
+    value = plan(tmp_path)
+    value["validation_mode"] = "task_outcomes_only"
+    value["datasets"].pop("dev")
+    value["recipe"].update(eval_interval=0, checkpoint_interval=2)
+    validate_plan(value, check_files=False)
+    options = sft_overrides(value)
+    assert options["eval_interval"] == 0
+    assert options["ckpt_interval"] == 2
+    assert options["eval_before_train"] is False
+    assert "eval_dataset_name" not in options
+    assert "eval_dataset_split" not in options
+
+
 @pytest.mark.parametrize("pause", [0, -1, True, 1.5, 6, 7, None])
 def test_invalid_planned_pause_is_rejected(tmp_path, pause):
     value = plan(tmp_path)
@@ -143,6 +157,33 @@ def test_training_result_distinguishes_partial_and_complete(tmp_path, paused):
     trainer.global_step += 1
     with pytest.raises(ValueError, match="optimizer step mismatch"):
         training_result(trainer, paused=paused)
+
+
+def test_training_only_completion_requires_checkpoint_but_no_ce_receipt(tmp_path):
+    value = plan(tmp_path)
+    value["validation_mode"] = "task_outcomes_only"
+    value["datasets"].pop("dev")
+    value["recipe"].update(eval_interval=0, checkpoint_interval=2)
+    trainer = SimpleNamespace(
+        plan=value,
+        output=tmp_path,
+        global_step=6,
+        target_tokens_seen=16,
+        best=None,
+    )
+    (tmp_path / "checkpoints").mkdir()
+    (tmp_path / "checkpoints/latest_ckpt_global_step.txt").write_text("6")
+    write_receipt(
+        tmp_path / "checkpoint_receipts/step-000006.json",
+        {
+            "optimizer_step": 6,
+            "plan_sha256": value["plan_sha256"],
+            "checkpoint_path": str(tmp_path / "checkpoints/global_step_6"),
+        },
+    )
+    result = training_result(trainer, paused=False)
+    assert result["status"] == "training_complete"
+    assert result["best"] is None
 
 
 @pytest.mark.parametrize(

@@ -60,6 +60,12 @@ and copied earlier responses receive no loss. Complete recent tool rounds must
 fit; exclusions remain accounted for. Dev uses a deterministic bounded spread
 of last-response windows, not whichever windows happen to have the lowest loss.
 
+For a current-catalog teacher corpus, use `cyber-post-train
+data-fleet-teachers request.json`. This offline path additionally binds each
+normalized record to a success-evidence receipt, the exact high-quality task
+version, and the representative 50/17/8 split. It emits train data only; select
+checkpoints with fresh task outcomes instead of held-out teacher-token loss.
+
 ## Configuration
 
 ```yaml

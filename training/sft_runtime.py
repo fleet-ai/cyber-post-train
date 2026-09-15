@@ -1,4 +1,4 @@
-"""Pinned SkyRL SFT with task-held-out loss, W&B, and recoverable saves.
+"""Pinned SkyRL SFT with scalar W&B telemetry and recoverable saves.
 
 The trainer/worker methods used here were inspected at SkyRL f5bc3b78. This
 module deliberately keeps the native training loop and optimizer. It adds
@@ -141,8 +141,9 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         "keep_checkpoints",
         "max_steps",
     ):
-        if type(recipe[key]) is not int or recipe[key] <= 0:
-            raise ValueError("recipe counts must be positive integers")
+        minimum = 0 if key == "eval_interval" else 1
+        if type(recipe[key]) is not int or recipe[key] < minimum:
+            raise ValueError("recipe counts must be positive integers; eval_interval may be zero")
     if type(recipe["seed"]) is not int or not 0 <= recipe["seed"] < 2**32:
         raise ValueError("seed must be an unsigned 32-bit integer")
     if (
@@ -155,7 +156,7 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         recipe["nodes"] * recipe["gpus_per_node"] * recipe["microbatch_per_gpu"]
     ):
         raise ValueError("global batch must divide evenly across GPU microbatches")
-    if recipe["checkpoint_interval"] != recipe["eval_interval"]:
+    if recipe["eval_interval"] and recipe["checkpoint_interval"] != recipe["eval_interval"]:
         raise ValueError("every periodic validation needs a corresponding saved checkpoint")
     if plan.get("resume_from"):
         raise ValueError(
@@ -175,8 +176,18 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
             or recovery.get("mode") == "validate"
         ):
             raise ValueError("planned pause must follow new work and precede full completion")
-    train, dev = (plan["datasets"][key] for key in ("train", "dev"))
-    for dataset in (train, dev):
+    training_only = plan.get("validation_mode") == "task_outcomes_only"
+    if training_only != (recipe["eval_interval"] == 0):
+        raise ValueError("task-outcome evaluation and zero CE interval must be selected together")
+    if training_only and set(plan["datasets"]) != {"train"}:
+        raise ValueError("task-outcome training must not load a teacher-reference dev artifact")
+    if not training_only and set(plan["datasets"]) != {"train", "dev"}:
+        raise ValueError("teacher CE validation requires train and dev artifacts")
+    if training_only and plan.get("recovery", {}).get("mode") == "validate":
+        raise ValueError("zero-step CE validation is unavailable without a dev artifact")
+    train = plan["datasets"]["train"]
+    dev = plan["datasets"].get("dev")
+    for dataset in plan["datasets"].values():
         if not re.fullmatch(r"(?:sha256:)?[a-f0-9]{64}", dataset["sha256"]):
             raise ValueError("dataset digest missing or invalid")
         if any(not isinstance(k, str) or not k.strip() for k in dataset["task_keys"]):
@@ -203,17 +214,18 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         raise ValueError("dense teacher data requires its separately versioned plan")
     # Pinned worker per-row diagnostics are suffix-only. Keep the bound dev set
     # on the qualified contiguous last-assistant path, never sparse-mask eval.
-    if dev.get("format") == DENSE_FORMAT:
+    if dev and dev.get("format") == DENSE_FORMAT:
         raise ValueError("held-out evaluation must remain contiguous last-assistant windows")
-    train_keys, dev_keys = set(train["task_keys"]), set(dev["task_keys"])
-    if not dev_keys or len(dev_keys) != len(dev["task_keys"]):
+    train_keys = set(train["task_keys"])
+    dev_keys = set(dev["task_keys"]) if dev else set()
+    if dev and (not dev_keys or len(dev_keys) != len(dev["task_keys"])):
         raise ValueError("validation must bind distinct nonempty held-out tasks")
     if not train_keys or train_keys & dev_keys:
         raise ValueError("train/dev task overlap or empty training task set")
-    if train["path"] == dev["path"] or any(
-        type(x["rows"]) is not int or x["rows"] <= 0 for x in (train, dev)
+    if (dev and train["path"] == dev["path"]) or any(
+        type(x["rows"]) is not int or x["rows"] <= 0 for x in plan["datasets"].values()
     ):
-        raise ValueError("distinct nonempty train/dev artifacts required")
+        raise ValueError("every selected dataset must be nonempty and paths must be distinct")
     if recipe["max_steps"] != math.ceil(train["rows"] / recipe["batch_size"]) * recipe["epochs"]:
         raise ValueError("max_steps must equal complete epochs with the native kept tail batch")
     model = plan["model"]
@@ -271,6 +283,7 @@ def validate_runtime_sources(root: Path | None = None) -> None:
 def sft_overrides(plan: dict) -> dict:
     r, w = plan["recipe"], plan["wandb"]
     output = Path(plan["output_root"])
+    training_only = plan.get("validation_mode") == "task_outcomes_only"
     options = {
         "strategy": "fsdp",
         "model.path": plan["model"]["root"],
@@ -294,9 +307,7 @@ def sft_overrides(plan: dict) -> dict:
         "seed": r["seed"],
         "dataset_name": plan["datasets"]["train"]["path"],
         "dataset_split": "train",
-        "eval_dataset_name": plan["datasets"]["dev"]["path"],
-        "eval_dataset_split": "validation",
-        "eval_before_train": True,
+        "eval_before_train": not training_only,
         "eval_interval": r["eval_interval"],
         "ckpt_path": str(output / "checkpoints"),
         "ckpt_interval": r["checkpoint_interval"],
@@ -310,6 +321,13 @@ def sft_overrides(plan: dict) -> dict:
         "num_workers": 0,
         "dataloader_num_workers": 0,
     }
+    if not training_only:
+        options.update(
+            {
+                "eval_dataset_name": plan["datasets"]["dev"]["path"],
+                "eval_dataset_split": "validation",
+            }
+        )
     if plan["schema"] == DENSE_SCHEMA:
         options.update(
             {"fsdp_config.cpu_offload": False, "optimizer_config.offload_after_step": False}
@@ -847,7 +865,8 @@ def _make_trainer_class():
             if event.global_step == event.total_steps:
                 control.should_save = True
             if event.global_step == trainer.plan.get("pause_after_step"):
-                control.should_save = control.should_evaluate = True
+                control.should_save = True
+                control.should_evaluate = "dev" in trainer.plan["datasets"]
 
         def on_eval_end(self, trainer, event, control):
             metrics = event.metrics
@@ -950,14 +969,18 @@ def _make_trainer_class():
                     "model_revision": self.plan["model"]["revision"],
                     "split_manifest_sha256": self.plan.get("split_manifest_sha256"),
                     "train_rows": self.plan["datasets"]["train"]["rows"],
-                    "dev_rows": self.plan["datasets"]["dev"]["rows"],
-                    "dev_tasks": len(self.plan["datasets"]["dev"]["task_keys"]),
+                    "dev_rows": self.plan["datasets"].get("dev", {}).get("rows", 0),
+                    "dev_tasks": len(self.plan["datasets"].get("dev", {}).get("task_keys", [])),
                     "target_policy": (
                         "visible_all_assistant_once"
                         if self.plan["schema"] == DENSE_SCHEMA
                         else "visible_last_assistant_message"
                     ),
-                    "dev_target_policy": "visible_last_assistant_message",
+                    "dev_target_policy": (
+                        "visible_last_assistant_message"
+                        if "dev" in self.plan["datasets"]
+                        else "none_fresh_task_outcomes_after_training"
+                    ),
                     "train_expected_supervised_tokens": self.plan["datasets"]["train"].get(
                         "supervised_tokens"
                     ),
@@ -973,7 +996,11 @@ def _make_trainer_class():
                     ),
                     "corpus_manifest_sha256": self.plan.get("corpus_manifest_sha256"),
                     "execution_resources": self.plan.get("execution", {}).get("resources"),
-                    "selection_metric": "eval/task_macro_loss",
+                    "selection_metric": (
+                        "eval/task_macro_loss"
+                        if "dev" in self.plan["datasets"]
+                        else "fresh_fleet_dev_task_success_rate"
+                    ),
                     "inline_hf_export": False,
                 },
                 allow_val_change=False,
@@ -1147,7 +1174,10 @@ def training_result(trainer, *, paused: bool) -> dict:
         raise ValueError("final checkpoint optimizer step mismatch")
     # A native step counter/pointer alone does not prove a saved, evaluated
     # checkpoint. Both complete and deliberately paused runs need the receipts.
-    for kind in ("checkpoint_receipts", "validation"):
+    terminal_receipts = ["checkpoint_receipts"]
+    if "dev" in plan["datasets"]:
+        terminal_receipts.append("validation")
+    for kind in terminal_receipts:
         path = trainer.output / kind / f"step-{expected:06d}.json"
         if path.is_symlink():
             raise ValueError("terminal receipt must not be a symlink")
@@ -1266,7 +1296,7 @@ def main():
             json.dumps(
                 {
                     "status": "validated",
-                    "dev_tasks": len(plan["datasets"]["dev"]["task_keys"]),
+                    "dev_tasks": len(plan["datasets"].get("dev", {}).get("task_keys", [])),
                     "max_steps": plan["recipe"]["max_steps"],
                 }
             )
