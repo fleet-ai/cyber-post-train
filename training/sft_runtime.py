@@ -261,7 +261,7 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         if not isinstance(plan["wandb"][key], str) or not plan["wandb"][key].strip():
             raise ValueError("complete W&B run identity required")
     if check_files:
-        for spec in (train, dev):
+        for spec in plan["datasets"].values():
             _checked_file(Path(spec["path"]), spec["sha256"])
         for item in model["files"]:
             _checked_file(Path(model["root"]) / item["path"], item["sha256"])

@@ -110,6 +110,22 @@ def test_task_outcome_mode_logs_training_only_and_keeps_checkpointing(tmp_path):
     assert "eval_dataset_split" not in options
 
 
+def test_task_outcome_mode_checks_only_the_present_train_file(tmp_path, monkeypatch):
+    value = plan(tmp_path)
+    value["validation_mode"] = "task_outcomes_only"
+    value["datasets"].pop("dev")
+    value["recipe"].update(eval_interval=0, checkpoint_interval=2)
+    checked = []
+    monkeypatch.setattr(
+        "training.sft_runtime._checked_file", lambda path, sha: checked.append(path)
+    )
+
+    validate_plan(value, check_files=True)
+
+    assert Path("/data/train.parquet") in checked
+    assert all(path is not None for path in checked)
+
+
 @pytest.mark.parametrize("pause", [0, -1, True, 1.5, 6, 7, None])
 def test_invalid_planned_pause_is_rejected(tmp_path, pause):
     value = plan(tmp_path)
