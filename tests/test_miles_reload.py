@@ -15,7 +15,7 @@ from training import miles_reload as reload
 _REAL_TERMINAL_BINDING = reload._terminal_binding
 
 
-def _commitments() -> list[dict]:
+def _commitments(world_size: int = 8) -> list[dict]:
     return [
         {
             "rank": rank,
@@ -27,11 +27,11 @@ def _commitments() -> list[dict]:
             "scheduler_value_sha256": f"{rank + 61:064x}",
             "rng_value_sha256": f"{rank + 81:064x}",
         }
-        for rank in range(8)
+        for rank in range(world_size)
     ]
 
 
-def _terminal_binding() -> dict:
+def _terminal_binding(world_size: int = 8) -> dict:
     return {
         "source_terminal_acceptance": {
             "path": "/mnt/sfs/jobs/source-miles/MILES_TERMINAL_ACCEPTED.json",
@@ -44,13 +44,17 @@ def _terminal_binding() -> dict:
             "receipt_sha256": "b" * 64,
         },
         "rank_state_commitment_method": reload.RANK_STATE_COMMITMENT_METHOD,
-        "expected_rank_state_commitments": _commitments(),
+        "expected_rank_state_commitments": _commitments(world_size),
     }
 
 
 @pytest.fixture(autouse=True)
 def _accepted_terminal(monkeypatch):
-    monkeypatch.setattr(reload, "_terminal_binding", lambda *args, **kwargs: _terminal_binding())
+    monkeypatch.setattr(
+        reload,
+        "_terminal_binding",
+        lambda *args, **kwargs: _terminal_binding(kwargs["manifest"]["world_size"]),
+    )
 
 
 def _args(output: str = "/mnt/sfs/jobs/source-miles") -> miles.MilesConfig:
@@ -71,6 +75,23 @@ def _args(output: str = "/mnt/sfs/jobs/source-miles") -> miles.MilesConfig:
         groups=1,
         samples_per_prompt=8,
         checkpoint_interval=1,
+    )
+
+
+def _long_args(output: str = "/mnt/sfs/jobs/source-miles-long") -> miles.MilesConfig:
+    return dataclasses.replace(
+        _args(output),
+        name="source-miles-long",
+        wandb_run_id="source-miles-long",
+        nodes=4,
+        context_tokens=262_144,
+        response_tokens=245_760,
+        tokens_per_turn=32_768,
+        max_tokens_per_gpu=65_536,
+        native_profile=miles.LONG_CONTEXT_PROFILE,
+        harness="opencode",
+        runtime_image="registry.invalid/miles@sha256:" + "a" * 64,
+        session_node_cap=4_096,
     )
 
 
@@ -228,6 +249,56 @@ def test_cpu_seal_binds_complete_all_rank_numeric_checkpoint(tmp_path, monkeypat
     assert not (source / "ACCEPTED.json").exists()
 
 
+def test_cpu_seal_accepts_exact_long_context_4x8_checkpoint(tmp_path):
+    source = tmp_path / "source-long"
+    checkpoint = source / "checkpoints"
+    generation = checkpoint / "iter_0000000"
+    generation.mkdir(parents=True)
+    (checkpoint / "latest_checkpointed_iteration.txt").write_text("0\n")
+    (generation / ".metadata").write_bytes(b"metadata")
+    (generation / "common.pt").write_bytes(b"common")
+    for rank in range(32):
+        (generation / f"__{rank}_0.distcp").write_bytes(f"rank-{rank}".encode())
+    arguments = dataclasses.asdict(_long_args(str(source)))
+    plan = {
+        "schema": reload.LONG_SOURCE_SCHEMA,
+        "run_name": arguments["name"],
+        "output_root": str(source),
+        "model": {"repo": "Qwen/Qwen3.8-27B", "revision": "synthetic"},
+        "arguments": arguments,
+        "native_driver_sha256": miles.LONG_NATIVE_DRIVER_SHA256,
+        "execution": {
+            "cluster_target": "prod",
+            "image": arguments["runtime_image"],
+            "priority": "c1",
+            "resources": {
+                "cpu_request": "64",
+                "cpu_limit": "128",
+                "memory_request": "1536Gi",
+                "memory_limit": "2048Gi",
+            },
+        },
+    }
+    reload._write(
+        source / "NATIVE_TRAINING_COMPLETE.json",
+        {
+            "status": "native_loop_returned",
+            "plan_sha256": digest(plan),
+            "checkpoint_rollout_index": 0,
+            "completed_batches": 3,
+            "optimizer_update_independently_verified": False,
+            "checkpoint_reload_verified": False,
+        },
+    )
+
+    result = reload.seal_training_checkpoint(plan, tmp_path / "long-seal.json")
+
+    assert result["image"] == arguments["runtime_image"]
+    assert result["world_size"] == 32
+    assert result["topology"] == {"nodes": 4, "gpus_per_node": 8}
+    assert len(result["files"]) == 35
+
+
 @pytest.mark.parametrize(
     "fault",
     ["missing_rank", "missing_common", "extra", "symlink", "tracker", "conflict", "receipt"],
@@ -279,9 +350,64 @@ def test_reload_plan_is_dev_only_exact_topology_and_secret_free(tmp_path):
     assert "WANDB_API_KEY" not in request["env"]
 
 
-def test_terminal_binding_selects_exact_accepted_checkpoint_and_saved_state(
-    tmp_path, monkeypatch
-):
+def test_reload_plan_preserves_long_context_4x8_prod_topology(tmp_path):
+    manifest, path = _manifest(tmp_path)
+    arguments = dataclasses.asdict(_long_args())
+    image = arguments["runtime_image"]
+    manifest.update(
+        {
+            "image": image,
+            "root": arguments["output_root"] + "/checkpoints",
+            "world_size": 32,
+            "topology": {"nodes": 4, "gpus_per_node": 8},
+        }
+    )
+    manifest["source"].update(
+        {
+            "run_name": arguments["name"],
+            "output_root": arguments["output_root"],
+            "arguments": arguments,
+            "execution": {
+                **manifest["source"]["execution"],
+                "cluster_target": "prod",
+                "image": image,
+            },
+            "native_driver_sha256": miles.LONG_NATIVE_DRIVER_SHA256,
+        }
+    )
+    manifest["files"].extend(
+        {
+            "path": f"iter_0000000/__{rank}_0.distcp",
+            "size": 7,
+            "sha256": f"{rank + 1:064x}",
+        }
+        for rank in range(8, 32)
+    )
+    manifest["sha256"] = digest({k: v for k, v in manifest.items() if k != "sha256"})
+    path.write_text(json.dumps(manifest))
+    config = _config(path)
+    config.update(
+        {
+            "name": "q38-miles-reload-prod",
+            "output_root": "/mnt/sfs/jobs/q38-miles-reload-prod",
+        }
+    )
+    config["checkpoint"]["sha256"] = "sha256:" + reload._hash(path)
+    config["cluster"]["target"] = "prod"
+
+    plan = reload.compile_reload(config, relative_to=tmp_path)
+    request = reload.job_request(plan)
+
+    assert plan["execution"]["cluster_target"] == "prod"
+    assert plan["execution"]["image"] == image
+    assert plan["native_driver_sha256"] == miles.LONG_NATIVE_DRIVER_SHA256
+    assert request["workers"] == 4
+    assert request["gpus_per_worker"] == 8
+    assert request["image"] == image
+    assert request["priority_class"] == "c1"
+
+
+def test_terminal_binding_selects_exact_accepted_checkpoint_and_saved_state(tmp_path, monkeypatch):
     from training import miles_acceptance
 
     manifest, manifest_path = _manifest(tmp_path)
@@ -572,9 +698,7 @@ def test_submit_requires_complete_zero_work_preflight_receipt(tmp_path, monkeypa
     ):
         changed = {**body, field: value}
         with pytest.raises(ValueError, match="missing or mismatched"):
-            reload.validate_preflight_receipt(
-                plan, request, {**changed, "sha256": digest(changed)}
-            )
+            reload.validate_preflight_receipt(plan, request, {**changed, "sha256": digest(changed)})
 
 
 def test_cli_submit_enforces_specialized_miles_reload_preflight(tmp_path, monkeypatch):
@@ -607,8 +731,9 @@ def test_cli_submit_enforces_specialized_miles_reload_preflight(tmp_path, monkey
         lambda _: nullcontext(
             SimpleNamespace(
                 preview=lambda value: value,
-                submit_once=lambda value, journal: calls.append(("submit", value, journal))
-                or {"status": "queued"},
+                submit_once=lambda value, journal: (
+                    calls.append(("submit", value, journal)) or {"status": "queued"}
+                ),
             )
         ),
     )

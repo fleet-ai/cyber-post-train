@@ -31,6 +31,7 @@ from .miles_conversion import _hash, _write
 from .rl_runtime import sealed
 
 SOURCE_SCHEMA = "cyber_miles_training_v1"
+LONG_SOURCE_SCHEMA = "cyber_miles_training_v2"
 CHECKPOINT_SCHEMA = "cyber_miles_training_checkpoint_v1"
 CONFIG_SCHEMA = "cyber_miles_rl_reload_config_v1"
 RELOAD_SCHEMA = "cyber_miles_rl_reload_v1"
@@ -145,18 +146,41 @@ def _validate_source_plan(plan: dict) -> tuple[int, int]:
     # This sealer may run after the repository evolves.  Historical request
     # identity is validated from the exact submitted source bytes by
     # miles_acceptance; never reconstruct a past POST with current code here.
-    if plan.get("schema") != SOURCE_SCHEMA or plan.get("execution", {}).get("image") != miles.IMAGE:
+    values = plan.get("arguments", {})
+    long_horizon = plan.get("schema") == LONG_SOURCE_SCHEMA
+    expected_layout = miles.LONG_CONTEXT_LAYOUT if long_horizon else None
+    expected_driver = miles.LONG_NATIVE_DRIVER_SHA256 if long_horizon else NATIVE_DRIVER_SHA256
+    runtime_image = values.get("runtime_image", miles.IMAGE)
+    if plan.get("schema") not in {SOURCE_SCHEMA, LONG_SOURCE_SCHEMA}:
         raise ValueError("checkpoint sealing requires the exact Miles training plan")
-    args = plan.get("arguments", {})
-    nodes, gpus = args.get("nodes"), args.get("gpus_per_node")
+    nodes, gpus = values.get("nodes"), values.get("gpus_per_node")
     if (
         type(nodes) is not int
         or type(gpus) is not int
-        or (nodes, gpus) not in miles.NATIVE_LAYOUTS
-        or args.get("steps") != 1
-        or args.get("checkpoint_interval") != 1
-        or plan.get("output_root") != args.get("output_root")
-        or plan.get("native_driver_sha256") != NATIVE_DRIVER_SHA256
+        or (
+            (nodes, gpus) != expected_layout
+            if long_horizon
+            else (nodes, gpus) not in miles.NATIVE_LAYOUTS
+        )
+        or (
+            long_horizon
+            and (
+                values.get("harness") != "opencode"
+                or values.get("native_profile") != miles.LONG_CONTEXT_PROFILE
+                or values.get("context_tokens") != 262_144
+                or values.get("response_tokens") != 245_760
+                or values.get("tokens_per_turn") != 32_768
+                or values.get("max_tokens_per_gpu") != 65_536
+                or values.get("session_node_cap") != 4_096
+                or runtime_image == miles.IMAGE
+            )
+        )
+        or (not long_horizon and runtime_image != miles.IMAGE)
+        or plan.get("execution", {}).get("image") != runtime_image
+        or values.get("steps") != 1
+        or values.get("checkpoint_interval") != 1
+        or plan.get("output_root") != values.get("output_root")
+        or plan.get("native_driver_sha256") != expected_driver
     ):
         raise ValueError("reload qualification requires one saved update on a native Miles layout")
     return nodes, gpus
@@ -202,7 +226,7 @@ def seal_training_checkpoint(plan: dict, output: Path) -> dict:
         output,
         {
             "schema": CHECKPOINT_SCHEMA,
-            "image": miles.IMAGE,
+            "image": plan["execution"]["image"],
             "root": str(checkpoint),
             "rollout_index": 0,
             "next_rollout_id": 1,
@@ -293,11 +317,10 @@ def _terminal_binding(
 
     policy_path = Path(policy_reference["path"])
     policy, policy_file_sha256 = _json_snapshot(policy_path)
-    if (
-        policy_file_sha256
-        != _sha256(policy_reference["file_sha256"], "policy observation file digest")
-        or _sha256(policy.get("sha256"), "policy observation digest")
-        != _sha256(policy_reference["receipt_sha256"], "accepted policy observation digest")
+    if policy_file_sha256 != _sha256(
+        policy_reference["file_sha256"], "policy observation file digest"
+    ) or _sha256(policy.get("sha256"), "policy observation digest") != _sha256(
+        policy_reference["receipt_sha256"], "accepted policy observation digest"
     ):
         raise ValueError("accepted policy-state observation digest changed")
     commitments = []
@@ -320,9 +343,7 @@ def _terminal_binding(
                 "scheduler_value_sha256": _sha256(
                     restored["scheduler"]["value_sha256"], "trained scheduler digest"
                 ),
-                "rng_value_sha256": _sha256(
-                    restored["rng_sha256"], "trained RNG digest"
-                ),
+                "rng_value_sha256": _sha256(restored["rng_sha256"], "trained RNG digest"),
             }
         )
     return {
@@ -355,8 +376,9 @@ def compile_reload(config: dict, *, relative_to: Path) -> dict:
     cluster = config["cluster"]
     _known(checkpoint, {"manifest", "sha256"}, "checkpoint")
     _known(cluster, {"target", "priority", "resources"}, "cluster")
-    if cluster.get("target") != "dev" or cluster.get("priority") != "c1":
-        raise ValueError("Miles reload qualification is dev-only at c1")
+    target = cluster.get("target")
+    if target not in {"dev", "prod"} or cluster.get("priority") != "c1":
+        raise ValueError("Miles reload qualification requires its source cluster at c1")
     manifest_path = relative_to / checkpoint["manifest"]
     manifest, observed_manifest_file_sha256 = _json_snapshot(manifest_path)
     expected_digest = _sha256(checkpoint["sha256"], "trained-checkpoint manifest file digest")
@@ -364,13 +386,7 @@ def compile_reload(config: dict, *, relative_to: Path) -> dict:
         raise ValueError("Miles trained-checkpoint manifest digest mismatch")
     sealed(manifest, CHECKPOINT_SCHEMA)
     if (
-        manifest.get("image") != miles.IMAGE
-        or (
-            manifest.get("topology", {}).get("nodes"),
-            manifest.get("topology", {}).get("gpus_per_node"),
-        )
-        not in miles.NATIVE_LAYOUTS
-        or manifest.get("world_size")
+        manifest.get("world_size")
         != manifest["topology"]["nodes"] * manifest["topology"]["gpus_per_node"]
         or manifest.get("next_rollout_id") != manifest.get("rollout_index") + 1
         or manifest.get("source_optimizer_update_claimed") is not False
@@ -379,6 +395,12 @@ def compile_reload(config: dict, *, relative_to: Path) -> dict:
         raise ValueError("trained-checkpoint manifest is outside the qualified Miles contract")
     source_args = miles.MilesConfig(**manifest["source"]["arguments"])
     source_args.validate()
+    source_target = manifest["source"]["execution"].get("cluster_target", "dev")
+    source_driver = (
+        miles.LONG_NATIVE_DRIVER_SHA256
+        if source_args.harness == "opencode"
+        else NATIVE_DRIVER_SHA256
+    )
     if (
         source_args.name != manifest["source"]["run_name"]
         or source_args.output_root != manifest["source"]["output_root"]
@@ -387,8 +409,10 @@ def compile_reload(config: dict, *, relative_to: Path) -> dict:
         or source_args.nodes != manifest["topology"]["nodes"]
         or source_args.gpus_per_node != manifest["topology"]["gpus_per_node"]
         or source_args.steps != 1
-        or manifest["source"]["execution"].get("image") != miles.IMAGE
-        or manifest["source"]["native_driver_sha256"] != NATIVE_DRIVER_SHA256
+        or manifest.get("image") != source_args.runtime_image
+        or manifest["source"]["execution"].get("image") != source_args.runtime_image
+        or source_target != target
+        or manifest["source"]["native_driver_sha256"] != source_driver
     ):
         raise ValueError("source topology/recipe differs from the sealed checkpoint")
     output = _sfs_root(config["output_root"], "output root")
@@ -419,13 +443,13 @@ def compile_reload(config: dict, *, relative_to: Path) -> dict:
         "source_manifest_file_sha256": expected_digest,
         **terminal,
         "runtime_sha256": digest(_runtime()),
-        "native_driver_sha256": NATIVE_DRIVER_SHA256,
+        "native_driver_sha256": source_driver,
         "optimizer_updates": 0,
         "rollouts": 0,
         "deadline_seconds": DEADLINE_SECONDS,
         "execution": {
-            "cluster_target": "dev",
-            "image": miles.IMAGE,
+            "cluster_target": target,
+            "image": source_args.runtime_image,
             "priority": "c1",
             "resources": resources,
         },
@@ -585,23 +609,25 @@ def native_args(plan: dict):
 
 def job_request(plan: dict) -> dict:
     manifest = plan["source_manifest"]
+    source = miles.MilesConfig(**manifest.get("source", {}).get("arguments", {}))
+    source.validate()
     terminal = plan.get("source_terminal_acceptance")
     policy = plan.get("source_policy_delta_observation")
     if (
         plan.get("schema") != RELOAD_SCHEMA
         or plan.get("runtime_sha256") != digest(_runtime())
-        or plan.get("native_driver_sha256") != NATIVE_DRIVER_SHA256
+        or plan.get("native_driver_sha256")
+        != manifest.get("source", {}).get("native_driver_sha256")
         or plan.get("optimizer_updates") != 0
         or plan.get("rollouts") != 0
         or plan.get("deadline_seconds") != DEADLINE_SECONDS
-        or plan.get("execution", {}).get("cluster_target") != "dev"
-        or plan["execution"].get("image") != miles.IMAGE
+        or plan.get("execution", {}).get("cluster_target")
+        != manifest.get("source", {}).get("execution", {}).get("cluster_target", "dev")
+        or plan["execution"].get("image") != manifest.get("image")
         or plan["execution"].get("priority") != "c1"
-        or (
-            manifest.get("topology", {}).get("nodes"),
-            manifest.get("topology", {}).get("gpus_per_node"),
-        )
-        not in miles.NATIVE_LAYOUTS
+        or manifest.get("image") != source.runtime_image
+        or manifest.get("topology")
+        != {"nodes": source.nodes, "gpus_per_node": source.gpus_per_node}
         or manifest.get("world_size")
         != manifest["topology"]["nodes"] * manifest["topology"]["gpus_per_node"]
         or not isinstance(terminal, dict)
@@ -634,7 +660,7 @@ def job_request(plan: dict) -> dict:
             "name": plan["run_name"],
             "title": plan["run_name"] + " all-rank zero-update Miles reload",
             "run_dir": plan["output_root"],
-            "image": miles.IMAGE,
+            "image": plan["execution"]["image"],
             "workers": topology["nodes"],
             "gpus_per_worker": topology["gpus_per_node"],
             "resources": resources,
@@ -690,9 +716,7 @@ def preflight(plan: dict) -> dict:
     snapshot = _verify_checkpoint(plan["source_manifest"], hashes=True)
     source = miles.MilesConfig(**plan["source_manifest"]["source"]["arguments"])
     argv = reload_arguments(source, plan["source_manifest"]["root"])
-    return _preflight_receipt(
-        plan, request, checkpoint_files=len(snapshot), native_arguments=argv
-    )
+    return _preflight_receipt(plan, request, checkpoint_files=len(snapshot), native_arguments=argv)
 
 
 def validate_preflight_receipt(plan: dict, request: dict, proof: dict) -> None:
@@ -750,16 +774,13 @@ def _state_summary(value: Any, *, include_values: bool, depth: int = 0) -> Any:
         return [
             {
                 "key": key if isinstance(key, (bool, int, float, str)) else type(key).__name__,
-                "value": _state_summary(
-                    item, include_values=include_values, depth=depth + 1
-                ),
+                "value": _state_summary(item, include_values=include_values, depth=depth + 1),
             }
             for key, item in value.items()
         ]
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         return [
-            _state_summary(item, include_values=include_values, depth=depth + 1)
-            for item in value
+            _state_summary(item, include_values=include_values, depth=depth + 1) for item in value
         ]
     return {"type": type(value).__name__}
 
@@ -1049,9 +1070,9 @@ def run(plan: dict) -> dict:
                 "source_terminal_acceptance_sha256": plan["source_terminal_acceptance"][
                     "receipt_sha256"
                 ],
-                "source_policy_delta_observation_sha256": plan[
-                    "source_policy_delta_observation"
-                ]["receipt_sha256"],
+                "source_policy_delta_observation_sha256": plan["source_policy_delta_observation"][
+                    "receipt_sha256"
+                ],
                 "rank_state_commitment_method": RANK_STATE_COMMITMENT_METHOD,
                 **proof,
                 "optimizer_updates": 0,
