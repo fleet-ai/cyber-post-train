@@ -105,6 +105,11 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
         _sfs_root(model["root"], "model root"),
     )
     metadata = read_mapping(relative_to / data["manifest"])
+    if metadata.get("schema") == "cyber_miles_data_v2":
+        raise ValueError(
+            "long-context Miles production is blocked until an externally sealed "
+            "32-GPU startup qualification is integrated"
+        )
     _sealed(metadata, "cyber_miles_data_v1")
     cp_path = relative_to / checkpoint["manifest"]
     if _hash(cp_path) != checkpoint["sha256"].removeprefix("sha256:"):
