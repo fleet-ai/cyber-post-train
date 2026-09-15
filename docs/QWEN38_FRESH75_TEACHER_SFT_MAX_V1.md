@@ -33,8 +33,8 @@ Parquet digests.
 
 ## Training recipe
 
-The run configuration is
-`configs/runs/qwen38-fresh75-teacher-sft-largest-v2.json`:
+The current successor configuration is
+`configs/runs/qwen38-fresh75-teacher-sft-largest-full-v4.json`:
 
 - Qwen3.8-27B at exact revision `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0`
 - two epochs, global batch 8, microbatch 1 per GPU
@@ -42,12 +42,11 @@ The run configuration is
 - 230 optimizer steps: `ceil(916 / 8) * 2`
 - checkpoint every 20 steps, retaining the newest three
 - one 8-GPU node at `c1` priority
-- W&B run `thefleet/cyber-post-train/chris-q38-f75-teacher-max-v2`
+- W&B run `thefleet/cyber-post-train/chris-q38-f75-max-full-v4`
 
 The unsubmitted V1 plan was retired after its zero-GPU pinned-image preflight
 found that train-only validation still tried to check an absent teacher-token
-development file. The V2 plan includes the regression-tested fix; V1 never
-created a training job or allocated a GPU.
+development file. V1 never created a training job or allocated a GPU.
 
 ## First V2 submission and setup diagnosis
 
@@ -72,16 +71,25 @@ loading training data or creating an optimizer step:
   `48c1baae3711b8236f73c8085c61486565161151a525f9aa5bc50b51bdd63d75`.
 
 Both Pods exited zero with no restarts and were deleted after terminal receipt
-validation. This rules out a deterministic corpus-schema, W&B binding, model
+validation. They ruled out a deterministic corpus-schema, W&B binding, model
 file, FSDP configuration, or explicit-backload defect in the exercised setup
-path. The remaining diagnosis is a non-reproduced production-only native/Ray
-initialization failure; it is an inference, not an identified missing-key bug.
-No production retry is authorized from this evidence alone.
+path. They did **not** exercise the native loop's evaluation-loader
+initialization, so they were not a sufficient promotion gate for a plan without
+a `dev` dataset.
 
-The runtime now records a digest-bound public setup stage and, for a simple
-non-secret `KeyError`, an allowlisted missing-key name. Its setup-probe mode
-catches setup failures into a truthful exit-zero rejection receipt so diagnosis
-does not create a failed training job or a Slack failure alert.
+V3 made that gap observable. `chris-q38-f75-max-canary-v3-6feeb90c`
+reached `device_ready`, then failed before optimizer step one because
+`load_eval_dataset()` unconditionally indexed `datasets["dev"]`. Its immutable
+outcome-only plan intentionally contains only `datasets["train"]`. The
+RayCluster, Pod, and all eight GPUs were released; V3 must never be retried.
+
+The correction is commit `a3dce55a`. The loader now returns no evaluation
+dataset for a plan without `dev`, and the setup probe explicitly exercises that
+branch. A CPU-only Pod in the exact pinned trainer image then ran the real
+SkyRL training loop across all 16 checkpoint/evaluation combinations: 16
+passed, zero failed, zero GPUs, zero restarts. The durable evidence is
+`docs/evidence/qwen38-fresh75-nodev-fix-20260915.json`. V4 uses new run,
+output, request, and W&B identities; neither the V2 nor V3 output is reused.
 
 There is no held-out teacher-token loss. W&B records training loss and runtime
 health. Checkpoint choice must use task outcomes on the frozen 17-task Fleet
