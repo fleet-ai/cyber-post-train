@@ -1,0 +1,69 @@
+{
+  "schema": "cyber_qwen38_lr30_prod76_reload_submission_evidence_v1",
+  "source": {
+    "optimizer_step": 76,
+    "checkpoint_manifest_file_sha256": "cc4e2997e120a80bb1e209dc027f18e12ce1ebe12639594d28e23b08c459cf1a",
+    "checkpoint_receipt_sha256": "1252a1a9d5556fa118f03d1b2fe5687e0e9505ccf622e2f86743a26b77dffa64",
+    "independent_full_rehash_receipt_sha256": "f969924bc51cab0baffe77236a34d175bdcdae5585e1bdb6b9637d6301a8ce87"
+  },
+  "target": {
+    "run_name": "chris-q38-lr30-r76-prod-v1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lr30-r76-prod-v1",
+    "mode": "validate",
+    "optimizer_steps_to_execute": 0,
+    "nodes": 2,
+    "gpus_per_node": 4,
+    "priority_class": "c1",
+    "derived_queue_priority_class": "q1",
+    "automatic_requeue": false
+  },
+  "preflight": {
+    "pod_name": "chris-q38-lr30-r76-prod-v1-preflight",
+    "pod_uid": "9b465bd9-11b2-4b2e-ac7b-c5421163358f",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "restart_count": 0,
+    "gpu_count": 0,
+    "plan_sha256": "468452b21be8d0a56979684b76c0b99cd71af1a8314edeaf5c30578a0aa528e0",
+    "request_sha256": "0881882977af0f1ea4d00b1285209771687e95088953f09a7116d95210140aa2",
+    "receipt_sha256": "5b8a904b978c8c16e36bd64aa9959458aa6250e48575c8bbda32f8acb0847c28",
+    "train_rows": 602,
+    "train_tasks": 29,
+    "supervised_tokens": 700359
+  },
+  "output_absence_gate": {
+    "pod_name": "chris-q38-lr30-r76-prod-v1-output-audit",
+    "pod_uid": "ca99661d-0784-4a23-9ee0-498b236b20d0",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "restart_count": 0,
+    "gpu_count": 0,
+    "read_only_sfs": true,
+    "output_absent": true
+  },
+  "preview": {
+    "cluster": "prod",
+    "manifest_sha256": "966036487b442e165141c1eb46b74809faf2a2b5f02943d5e9d2058d77ea7020",
+    "nodes": 2,
+    "gpus": 8,
+    "submitted": false
+  },
+  "submission": {
+    "post_count": 1,
+    "created_at": "2026-09-15T00:32:17Z",
+    "api_run_id": "aad6ca09-030c-401e-a931-efa2c7fe0503",
+    "rayjob_name": "chris-q38-lr30-r76-prod-v1-aad6ca09",
+    "rayjob_uid": "7111c199-6a95-45d3-afc5-59258aa78f42",
+    "workload_name": "rayjob-chris-q38-lr30-r76-prod-v1-aad6ca09-595bd",
+    "workload_uid": "24b1f4fc-389b-4d1d-a65a-57071aa6c2c8",
+    "initial_state": "queued_without_allocation",
+    "initial_gpu_allocation": 0
+  },
+  "acceptance": {
+    "zero_update_reload_complete": false,
+    "source_checkpoint_unchanged": false,
+    "resources_released": false,
+    "bf16_export_complete": false,
+    "webexploitbench_evaluation_complete": false
+  }
+}
