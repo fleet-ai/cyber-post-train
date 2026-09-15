@@ -271,6 +271,9 @@ def arguments(config: MilesConfig) -> list[str]:
         "data-source-path": "training.miles_text.TextDataSource",
         "input-key": "input",
         "metadata-key": "metadata",
+        # Miles defaults this to None.  Spell out the first rollout so the
+        # native parser and our create-once checkpoint semantics agree.
+        "start-rollout-id": 0,
         "num-rollout": config.steps,
         "num-steps-per-rollout": 1,
         "rollout-batch-size": config.groups,

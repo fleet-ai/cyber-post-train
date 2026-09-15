@@ -180,6 +180,7 @@ def test_bounded_counts_and_native_optimizer(config, native_boundary):
         max_tokens_per_gpu=8192,
     )
     argv = miles.arguments(cfg)
+    assert value(argv, "start-rollout-id") == "0"
     assert value(argv, "num-rollout") == "9"
     assert value(argv, "num-steps-per-rollout") == "1"
     assert value(argv, "rollout-batch-size") == value(argv, "over-sampling-batch-size") == "4"
@@ -267,6 +268,7 @@ def test_long_context_uses_native_256k_shape_and_session_v2(config, native_bound
             max_tokens_per_gpu=65536,
         )
     )
+    assert value(argv, "start-rollout-id") == "0"
     assert value(argv, "tensor-model-parallel-size") == "8"
     assert value(argv, "context-parallel-size") == "4"
     assert value(argv, "rollout-max-context-len") == "262144"

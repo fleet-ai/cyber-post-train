@@ -859,6 +859,52 @@ def test_parsed_native_semantics_and_argv_restoration(plan, monkeypatch):
     assert sys.argv is before
 
 
+def test_long_native_parser_receives_explicit_first_rollout(plan, monkeypatch):
+    """Cover the exact pre-rollout mismatch that failed canary2."""
+    plan["arguments"]["harness"] = "opencode"
+    captured = {}
+
+    def generated(config):
+        assert config.harness == "opencode"
+        return ["--start-rollout-id", "0"]
+
+    def parse_args():
+        captured["start_rollout_id"] = int(sys.argv[sys.argv.index("--start-rollout-id") + 1])
+        return NS(
+            data_source_path="training.miles_text.TextDataSource",
+            tool_key="tools",
+            start_rollout_id=captured["start_rollout_id"],
+            load=plan["checkpoint"]["root"],
+            ref_load=plan["checkpoint"]["root"],
+            hf_checkpoint=plan["model"]["root"],
+            fleet_policy_identity_root=plan["arguments"]["policy_identity_root"],
+            num_rollout=plan["arguments"]["steps"],
+            num_steps_per_rollout=1,
+            global_batch_size=(
+                plan["arguments"]["groups"] * plan["arguments"]["samples_per_prompt"]
+            ),
+            calculate_per_token_loss=True,
+            grpo_std_normalization=False,
+            use_session_server="v2",
+            max_seq_len=262_144,
+            tito_model="qwen38small",
+            custom_agent_function_path="training.miles_opencode.run",
+            session_sample_picker_path="training.miles_opencode.pick_compaction_segments",
+            session_sample_postprocessor_path=(
+                "training.miles_opencode.postprocess_compaction_segments"
+            ),
+            sglang_router_policy="consistent_hashing",
+        )
+
+    monkeypatch.setattr(train, "native_source_for_plan", lambda _plan: Path("synthetic.py"))
+    monkeypatch.setattr(miles, "arguments", generated)
+    monkeypatch.setitem(sys.modules, "miles.utils.arguments", NS(parse_args=parse_args))
+    before = sys.argv
+    args = train.native_args(plan)
+    assert captured["start_rollout_id"] == args.start_rollout_id == 0
+    assert sys.argv is before
+
+
 @pytest.fixture
 def preflight_inputs(artifacts, tmp_path, monkeypatch):
     from training import rl_data
