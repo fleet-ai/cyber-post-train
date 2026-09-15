@@ -1,0 +1,90 @@
+{
+  "schema": "fleet_platform_v2_cyber_compositions_v1",
+  "source_selection": {
+    "path": "configs/data/fleet-a62-task-split-v1.json",
+    "file_sha256": "sha256:ab444cb664ffb4da351e4d33298cc052f848f2833487807bf984a753fa7c3b47",
+    "manifest_digest": "sha256:fb09668f8de77e6baee37dc1e3162a7617ca9a0a450da9ca53422c17bfbc942a",
+    "source_job_id": "a62dd51f-a52b-4941-8207-4679e4b25b51",
+    "task_count": 160,
+    "split_counts": {
+      "train": 130,
+      "dev": 10,
+      "test": 20
+    }
+  },
+  "source_imports": {
+    "source_team_id": "a1025f0b-ad67-49fc-a023-51800ab43e84",
+    "namespace": "gentle-ember-ledger",
+    "repository": "fleet-cyber-a62-frozen",
+    "required_state": "published",
+    "tag_algorithm": "{split}-{split_local_index:03d}-{task_version_id_prefix8}"
+  },
+  "destination": {
+    "namespace": "gentle-ember-ledger",
+    "repository": "fleet-cyber-a62-frozen",
+    "create_destination": false,
+    "advance_latest": false,
+    "conflict_mode": "auto"
+  },
+  "publication_protocol": {
+    "preview_then_publish": true,
+    "publish_only_previewed_request": true,
+    "require_expected_root": true,
+    "require_expected_revision": true,
+    "require_expected_task_digest": true,
+    "require_all_selected_imports_published": true,
+    "allow_partial_composition": false
+  },
+  "compositions": [
+    {
+      "composition_id": "all160",
+      "included_splits": [
+        "train",
+        "dev",
+        "test"
+      ],
+      "task_count": 160,
+      "version_tag": "all160-fb09668f-v1",
+      "published_reference": "gentle-ember-ledger/fleet-cyber-a62-frozen:all160-fb09668f-v1",
+      "membership_sha256": "sha256:06cc58e63520c9d2d30c8e4b84557bc254fa37929e3ba2f009aabe2da497856e"
+    },
+    {
+      "composition_id": "train130",
+      "included_splits": [
+        "train"
+      ],
+      "task_count": 130,
+      "version_tag": "train130-fb09668f-v1",
+      "published_reference": "gentle-ember-ledger/fleet-cyber-a62-frozen:train130-fb09668f-v1",
+      "membership_sha256": "sha256:5f67ba5ce0953387bba24c633dda3ab49bd12093e8e6f4ce86a6689bbc083e96"
+    },
+    {
+      "composition_id": "dev10",
+      "included_splits": [
+        "dev"
+      ],
+      "task_count": 10,
+      "version_tag": "dev10-fb09668f-v1",
+      "published_reference": "gentle-ember-ledger/fleet-cyber-a62-frozen:dev10-fb09668f-v1",
+      "membership_sha256": "sha256:160e39557d6ac8f3c9ddd12f2924eb5837092c7ecbf6d2dd89ecdd5532bb585c"
+    },
+    {
+      "composition_id": "test20",
+      "included_splits": [
+        "test"
+      ],
+      "task_count": 20,
+      "version_tag": "test20-fb09668f-v1",
+      "published_reference": "gentle-ember-ledger/fleet-cyber-a62-frozen:test20-fb09668f-v1",
+      "membership_sha256": "sha256:10b4903b109c10c180afbbb3d39ecf0d62a9af6b24b3a3aa75efd1238e1d6bb8"
+    }
+  ],
+  "privacy": {
+    "task_content_included": false,
+    "prompts_included": false,
+    "traces_included": false,
+    "scores_included": false,
+    "credentials_included": false
+  },
+  "spec_sha256": "sha256:7129ab8292ab0c050f2f751b361574f60c459aab6a1a652dab151505e1739542"
+}
