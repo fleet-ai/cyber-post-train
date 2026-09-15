@@ -206,6 +206,41 @@ def test_reward_canary_v2_preserves_dev8_science_with_fresh_prod_identities() ->
         miles_promotion._exact_reward_canary_config(changed)
 
 
+def test_reward_canary_v3_changes_only_the_per_turn_generation_horizon() -> None:
+    data_v2 = json.loads(
+        (ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-data-prod-v2.json").read_text()
+    )
+    run_v2 = json.loads(
+        (ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-prod-v2.json").read_text()
+    )
+    data_v3 = json.loads(
+        (ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-data-prod-v3.json").read_text()
+    )
+    run_v3 = json.loads(
+        (ROOT / "configs/qualification/qwen38-miles-rl-reward-canary-prod-v3.json").read_text()
+    )
+
+    miles_promotion._exact_reward_canary_config(run_v3)
+    assert data_v3["limits"]["max_tokens_per_turn"] == 32768
+    assert data_v3["limits"] == miles_promotion.EXPECTED_REWARD_CANARY_V3_DATA["limits"]
+    assert run_v3["production_promotion"] == {
+        "mode": miles_promotion.PROD_REWARD_CANARY_V3_MODE
+    }
+
+    def science(data, run):
+        data = copy.deepcopy(data)
+        run = copy.deepcopy(run)
+        data["name"] = run["name"] = run["wandb"]["run_id"] = "IDENTITY"
+        data["output"] = "DATA"
+        run["output_root"] = "OUTPUT"
+        run["data"] = {"manifest": "MANIFEST", "root": "DATA"}
+        run["production_promotion"] = {"mode": "MODE"}
+        data["limits"].pop("max_tokens_per_turn")
+        return data, run
+
+    assert science(data_v3, run_v3) == science(data_v2, run_v2)
+
+
 def test_reward_canary_preview_requires_c1_without_an_override_reason(monkeypatch) -> None:
     from cyber_post_train import jobs
 

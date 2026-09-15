@@ -42,6 +42,16 @@ PROD_REWARD_CANARY_V2_WANDB = {
     "project": "cyber-post-train",
     "run_id": PROD_REWARD_CANARY_V2_NAME,
 }
+PROD_REWARD_CANARY_V3_MODE = "reward_canary_v3"
+PROD_REWARD_CANARY_V3_NAME = "chris-q38-miles-prod3-canary"
+PROD_REWARD_CANARY_V3_OUTPUT = "/mnt/sfs/jobs/chris-q38-miles-prod3-canary-v1"
+PROD_REWARD_CANARY_V3_DATA_ROOT = "/mnt/sfs/jobs/chris-q38-miles-prod3-inputs-v1/data"
+PROD_REWARD_CANARY_V3_DATA_MANIFEST = PROD_REWARD_CANARY_V3_DATA_ROOT + "/manifest.json"
+PROD_REWARD_CANARY_V3_WANDB = {
+    "entity": "thefleet",
+    "project": "cyber-post-train",
+    "run_id": PROD_REWARD_CANARY_V3_NAME,
+}
 EXPERIMENT_OWNER_PREFIX = "chris-"
 FLEET_RUN_NAME_LABEL = "fleet.ai/run-name"
 PROD_MODEL_SHA256 = "dcfdcd6ecb6661741cd3a4b24dc5af7259642c8a6824773e0de70d55d7501179"
@@ -144,6 +154,14 @@ EXPECTED_REWARD_CANARY_V2_DATA = {
         "tool_result_chars": 4000,
     },
     "rows": {"train": 1, "dev": 1},
+}
+EXPECTED_REWARD_CANARY_V3_DATA = {
+    **EXPECTED_REWARD_CANARY_V2_DATA,
+    "name": PROD_REWARD_CANARY_V3_NAME,
+    "limits": {
+        **EXPECTED_REWARD_CANARY_V2_DATA["limits"],
+        "max_tokens_per_turn": 32768,
+    },
 }
 BENCHMARK_ISOLATION = {
     "optimizer_split": "train",
@@ -297,6 +315,7 @@ def _is_reward_canary_marker(value: Any) -> bool:
     return value in (
         {"mode": PROD_REWARD_CANARY_MODE},
         {"mode": PROD_REWARD_CANARY_V2_MODE},
+        {"mode": PROD_REWARD_CANARY_V3_MODE},
     )
 
 
@@ -329,6 +348,12 @@ def _exact_reward_canary_config(config: dict[str, Any]) -> None:
         expected_data_root = PROD_REWARD_CANARY_V2_DATA_ROOT
         expected_data_manifest = PROD_REWARD_CANARY_V2_DATA_MANIFEST
         expected_wandb = PROD_REWARD_CANARY_V2_WANDB
+    elif mode == PROD_REWARD_CANARY_V3_MODE:
+        expected_name = PROD_REWARD_CANARY_V3_NAME
+        expected_output = PROD_REWARD_CANARY_V3_OUTPUT
+        expected_data_root = PROD_REWARD_CANARY_V3_DATA_ROOT
+        expected_data_manifest = PROD_REWARD_CANARY_V3_DATA_MANIFEST
+        expected_wandb = PROD_REWARD_CANARY_V3_WANDB
     else:
         raise ValueError("Miles production reward canary mode is not supported")
     if (
@@ -668,6 +693,14 @@ def _exact_reward_canary_plan(plan: dict[str, Any]) -> None:
         wandb = PROD_REWARD_CANARY_V2_WANDB
         tokens_per_turn = 8192
         expected_data = EXPECTED_REWARD_CANARY_V2_DATA
+    elif mode == PROD_REWARD_CANARY_V3_MODE:
+        name = PROD_REWARD_CANARY_V3_NAME
+        output = PROD_REWARD_CANARY_V3_OUTPUT
+        data_root = PROD_REWARD_CANARY_V3_DATA_ROOT
+        data_manifest = PROD_REWARD_CANARY_V3_DATA_MANIFEST
+        wandb = PROD_REWARD_CANARY_V3_WANDB
+        tokens_per_turn = 32768
+        expected_data = EXPECTED_REWARD_CANARY_V3_DATA
     else:
         raise ValueError("compiled Miles production reward canary mode changed")
     expected = {
@@ -807,6 +840,14 @@ def _reward_canary_live_identity(
             PROD_REWARD_CANARY_V2_DATA_MANIFEST,
             PROD_REWARD_CANARY_V2_WANDB,
             EXPECTED_REWARD_CANARY_V2_DATA,
+        )
+    if mode == PROD_REWARD_CANARY_V3_MODE:
+        return (
+            PROD_REWARD_CANARY_V3_NAME,
+            PROD_REWARD_CANARY_V3_OUTPUT,
+            PROD_REWARD_CANARY_V3_DATA_MANIFEST,
+            PROD_REWARD_CANARY_V3_WANDB,
+            EXPECTED_REWARD_CANARY_V3_DATA,
         )
     raise JobsError("Miles production reward canary mode changed")
 

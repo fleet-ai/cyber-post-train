@@ -1,0 +1,57 @@
+{
+  "schema": "cyber_qwen38_miles_prod2_clean_rejection_v1",
+  "observed_at": "2026-09-15T00:11:10Z",
+  "run": {
+    "api_base_url": "https://api.ft.flt.build",
+    "api_run_id": "856bf6a6-2158-4238-a98b-c97d616bfc16",
+    "api_run_name": "chris-q38-miles-prod2-canary-856bf6a6",
+    "rayjob_uid": "bab3ec86-e381-4ed3-8736-d7f5551a038e",
+    "workload_uid": "97a2c21d-4210-4e82-a735-f167df702760",
+    "raycluster_uid": "0d59a1a7-32f8-4e77-bd9a-0718453f7c16",
+    "pod_uid": "8b8b9b1b-b59c-4d4c-9e4a-9fbb0b49c1a3",
+    "output_root": "/mnt/sfs/jobs/chris-q38-miles-prod2-canary-v1",
+    "plan_sha256": "sha256:398629821f6c70fe6565dbe897f4f77c18f3c7273a9c9935f47cc00a4c830761"
+  },
+  "controller_terminal": {
+    "api_status": "SUCCEEDED",
+    "rayjob_status": "SUCCEEDED",
+    "finished_at": "2026-09-14T23:56:46Z",
+    "entrypoint_exit_code": 0
+  },
+  "scientific_terminal": {
+    "receipt": "NATIVE_REJECTED.json",
+    "file_sha256": "sha256:09c1ffcac55765014e9c9afe454e2370218ba5537b9fc76a127e73a074b72f64",
+    "receipt_sha256": "sha256:2495ad3850f2a30ea89dd93a76d770c8c702ce069d57bb06b5e7a462afa7303b",
+    "status": "rejected",
+    "reason": "generation_incomplete_length"
+  },
+  "acceptance_gates": {
+    "authoritative_reward_observed": false,
+    "nonzero_reward_variance_observed": false,
+    "finite_nonzero_optimizer_update_observed": false,
+    "durable_checkpoint_observed": false,
+    "checkpoint_reload_validated": false,
+    "wandb_update_telemetry_observed": false
+  },
+  "release": {
+    "verified_at": "2026-09-15T00:11:10Z",
+    "raycluster_absent": true,
+    "pod_absent": true,
+    "gpu_count_held": 0
+  },
+  "classification": "clean_controller_success_and_scientific_rejection_not_rl_training_success",
+  "bounded_successor": {
+    "fresh_create_once_identity_required": true,
+    "only_scientific_delta": "limits.max_tokens_per_turn increases from 8192 to 32768 so a normal reasoning turn is not cut at the previously observed local cap",
+    "unchanged": [
+      "model_and_base_checkpoint",
+      "task_versions_and_train_dev_split",
+      "harness_and_authoritative_reward",
+      "one_update_and_eight_samples",
+      "learning_rate_temperature_and_kl",
+      "total_context_and_response_budgets",
+      "tool_contract_and_episode_limits"
+    ]
+  },
+  "sha256": "9cc2dcfe68d7fc1d37382df615414ec3dfabcb13376801b938209604d9a9a778"
+}
