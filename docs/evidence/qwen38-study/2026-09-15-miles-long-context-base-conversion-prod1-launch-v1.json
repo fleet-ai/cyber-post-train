@@ -1,0 +1,86 @@
+{
+  "schema": "cyber_miles_long_context_base_conversion_prod1_launch_v1",
+  "observed_at": "2026-09-15T07:18:13Z",
+  "status": "queued_without_allocation",
+  "immutable_inputs": {
+    "source_commit": "4f3628fc38c5105978bb0afcaa04dafa7fa8162b",
+    "source_bundle_sha256": "sha256:689528a83e4071b39b8ad7dcfea5a05f21df42075fc6859215c7f8a2d3d16697",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:dc1a41ac386c9f7377e7a6f7b92a402830e308855aa2632413af25917f38dd93",
+    "request_sha256": "sha256:6127aaa758f32bd0ce0a8b78686bda2ea97cfb4d80ba6d6a2e63913209f008cc",
+    "preview_manifest_sha256": "sha256:f0e6baa24559bf51da63cea5cf3bea363df1871119fbd4ca72cda175e890f494",
+    "runtime_qualification_receipt_file_sha256": "sha256:a2edd96163b9ebefd46f27f71d3787fb4da447ccaaa0e2b79d415895533676bc",
+    "runtime_qualification_receipt_sha256": "sha256:0597e05ee1d6557fe5f3ebc2cda80bcb4cf92db4ac93863b767df2084d7dac43"
+  },
+  "preview": {
+    "cluster": "prod",
+    "namespace": "fleet-train-jobs",
+    "pod_name": "q38-miles-lc-base1-prod1-preview1-4f3628fc",
+    "pod_uid": "cf871208-f604-4dee-9f14-6362d8a2bc27",
+    "configmap_uid": "a93d33da-a0e6-418f-baa8-ac506834d33a",
+    "status": "passed",
+    "gpus": 0,
+    "restarts": 0,
+    "finished_at": "2026-09-15T07:14:25Z",
+    "pod_deleted": true,
+    "configmap_deleted": true,
+    "absence_verified": true
+  },
+  "submission": {
+    "jobs_api_post_count": 1,
+    "api_base_url": "https://api.ft.flt.build",
+    "api_run_name": "chris-q38-miles-lc-base1-prod1-46b0c27b",
+    "api_run_id": "46b0c27b-b99d-4541-91b5-3c9b683031dd",
+    "rayjob_uid": "9c542a63-1e53-41ac-b8fd-d56bea8a34a5",
+    "workload_name": "rayjob-chris-q38-miles-lc-base1-prod1-46b0c27b-a5c15",
+    "workload_uid": "8d5845d8-b080-4a7e-89ec-eac4a4264c8f",
+    "output_root": "/mnt/sfs/jobs/chris-q38-miles-lc-base1-prod1",
+    "priority_class": "c1",
+    "queue_priority": "q1",
+    "effective_priority": 10000,
+    "automatic_requeue": false,
+    "optimizer_steps": 0,
+    "nodes": 1,
+    "gpus_per_node": 8,
+    "submitted_at": "2026-09-15T07:18:13Z"
+  },
+  "operator_cpu_submitter": {
+    "pod_name": "q38-miles-lc-base1-prod1-submit1-4f3628fc",
+    "pod_uid": "564b2c9b-3d8f-44fb-8989-ea9d4f4f4d06",
+    "configmap_uid": "d7163304-6a0a-4eeb-86b6-bfc9b7bca603",
+    "gpus": 0,
+    "restarts": 0,
+    "exit_code": 0,
+    "finished_at": "2026-09-15T07:18:13Z",
+    "pod_deleted": true,
+    "configmap_deleted": true,
+    "absence_verified": true
+  },
+  "capacity_gate": {
+    "observed_experiment_nodes_before_submit": 1,
+    "candidate_nodes": 1,
+    "total_after_submit_if_admitted": 2,
+    "node_limit": 8,
+    "standing_inference_endpoints_excluded": true
+  },
+  "queue_state": {
+    "quota_reserved": false,
+    "raycluster_created": false,
+    "pod_created": false,
+    "gpus_allocated": 0,
+    "reason": "one whole topology-compatible B300 node is not currently assignable",
+    "queueing_is_not_idle_allocation": true
+  },
+  "scientific_contract": {
+    "exact_model": "Qwen3.8-27B",
+    "native_profile": "qwen3.8-27b-256k",
+    "conversion_only": true,
+    "optimizer_steps": 0,
+    "source_checkpoint_preserved": true,
+    "cpu_seal_required_after_gpu_release": true,
+    "reward_requests": 0,
+    "external_benchmark_rows": 0
+  },
+  "secret_values_included": false,
+  "private_logs_included": false,
+  "sha256": "sha256:c4796079ec2795ceaf1ed6fe7a761291ff2b2c711a6391173ba41b6f20683b2d"
+}
