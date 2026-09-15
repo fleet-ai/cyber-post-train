@@ -17,6 +17,7 @@ from training.sft_runtime import (
     PlannedPause,
     ProgressWatchdog,
     _make_trainer_class,
+    _run_setup_probe,
     _unsigned_digest,
     build_runtime_configs,
     dense_rows,
@@ -83,6 +84,44 @@ def plan(tmp_path):
             "tags": ["test"],
         },
     }
+
+
+@pytest.mark.parametrize("with_tracker", [False, True])
+def test_setup_probe_selects_real_tracker_only_when_requested(tmp_path, monkeypatch, with_tracker):
+    events = []
+
+    class ProbeTrainer:
+        def __init__(self, cfg, skyrl_cfg, value):
+            self.plan = value
+            self.public_runtime_stage = "trainer_constructed"
+
+        def _record_runtime_stage(self, stage):
+            events.append(stage)
+            self.public_runtime_stage = stage
+
+        def _init_tracker(self):
+            events.append("real_tracker")
+
+        def setup(self):
+            self._init_tracker()
+            self.public_runtime_stage = "device_ready"
+
+        def shutdown(self):
+            events.append("shutdown")
+
+    monkeypatch.setattr(
+        "training.sft_runtime.build_runtime_configs",
+        lambda value: (SimpleNamespace(), SimpleNamespace(trainer=SimpleNamespace(log_path=None))),
+    )
+    monkeypatch.setattr("training.sft_runtime._make_trainer_class", lambda: ProbeTrainer)
+
+    result = _run_setup_probe(plan(tmp_path), with_tracker=with_tracker)
+
+    assert result["status"] == "setup_validated"
+    assert result["optimizer_steps"] == 0
+    assert ("real_tracker" in events) is with_tracker
+    assert ("tracker_bypassed_for_setup_probe" in events) is (not with_tracker)
+    assert events[-1] == "shutdown"
 
 
 def test_recipe_keeps_tail_batch_and_disables_inline_export(tmp_path):

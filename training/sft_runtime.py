@@ -1336,17 +1336,19 @@ def _run_training(plan: dict) -> dict:
         raise RuntimeError(f"SFT runtime failed: {type(exc).__name__}") from None
 
 
-def _run_setup_probe(plan: dict) -> dict:
+def _run_setup_probe(plan: dict, *, with_tracker: bool = False) -> dict:
     """Exercise exact model/FSDP setup without data loading or optimizer steps."""
     cfg, skyrl_cfg = build_runtime_configs(plan)
     skyrl_cfg.trainer.log_path = str(Path(plan["output_root"]) / "private_logs")
     trainer_class = _make_trainer_class()
 
-    def bypass_tracker(trainer):
-        trainer.tracker = None
-        trainer._record_runtime_stage("tracker_bypassed_for_setup_probe")
+    if not with_tracker:
 
-    trainer_class._init_tracker = bypass_tracker
+        def bypass_tracker(trainer):
+            trainer.tracker = None
+            trainer._record_runtime_stage("tracker_bypassed_for_setup_probe")
+
+        trainer_class._init_tracker = bypass_tracker
     trainer = trainer_class(cfg, skyrl_cfg, plan)
     try:
         trainer.setup()
@@ -1376,6 +1378,7 @@ def main():
     parser.add_argument("--validate-only", action="store_true")
     parser.add_argument("--preflight-tokenize", action="store_true")
     parser.add_argument("--setup-probe", action="store_true")
+    parser.add_argument("--setup-probe-with-tracker", action="store_true")
     args = parser.parse_args()
     _checked_file(args.plan, args.plan_sha256)
     plan = json.loads(args.plan.read_text())
@@ -1419,20 +1422,22 @@ def main():
         return
     output = Path(plan["output_root"])
     output.mkdir(parents=True, exist_ok=True, mode=0o700)
-    if args.setup_probe:
+    if args.setup_probe or args.setup_probe_with_tracker:
         write_receipt(
             output / "SETUP_PROBE_STARTED.json",
             {"plan_sha256": plan["plan_sha256"], "started_at_unix": time.time()},
         )
         ray = None
         try:
+            if args.setup_probe_with_tracker:
+                _configure_wandb(plan)
             import ray
             from skyrl.train.utils.utils import initialize_ray
 
             _, cfg = build_runtime_configs(plan)
             cfg.trainer.log_path = str(output / "private_logs")
             initialize_ray(cfg)
-            result = _run_setup_probe(plan)
+            result = _run_setup_probe(plan, with_tracker=args.setup_probe_with_tracker)
         except BaseException as exc:
             result = {
                 **public_failure_details(exc),
