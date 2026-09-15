@@ -1,0 +1,82 @@
+{
+  "schema": "cyber_inference_model_stream_stage_registration_acceptance_v1",
+  "date": "2026-09-15",
+  "classification": "exact_payload_staged_and_paused_registration_reconciled_serving_not_yet_qualified",
+  "staging": {
+    "plan_path": "configs/qualification/qwen38-fresh75-step230-inference-stage-v2.json",
+    "plan_file_sha256": "sha256:9160efdad1dd43d479ef6e6a8fba70bc5dfa9c6787f24eea11bfc565d68a5ade",
+    "plan_sha256": "sha256:be811ec866c64ade8a0dfae298cc29a48c32f6b6ffe38b4773db65cc6253713a",
+    "runtime_source_sha256": "sha256:ab43d324d46e35712534f3ed8418807a924a7505feb30416538fc36b38fc01b6",
+    "namespace": "inference",
+    "image": "lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+    "priority_class": "c1",
+    "gpus": 0,
+    "active_deadline_seconds": 5400,
+    "config_map": {
+      "name": "chris-q38-f75-p230-stage-v2",
+      "uid": "5aed0285-e3fa-4ebb-956a-69ae7462734b",
+      "created_at": "2026-09-15T10:11:33Z"
+    },
+    "pod": {
+      "name": "chris-q38-f75-p230-stage-v2",
+      "uid": "50d3ac40-a821-415e-8864-663dca3a4ba4",
+      "created_at": "2026-09-15T10:11:34Z",
+      "status": "Succeeded",
+      "terminal_at": "2026-09-15T10:17:36Z",
+      "exit_code": 0,
+      "restart_count": 0
+    },
+    "receipt_path": "/models/chris-q38-fresh75-step230-v1/.fleet-acceptance.json",
+    "receipt_sha256": "sha256:b1f9073be0fb3dca15847d7240d7c62fcad1f1d77c05542b0d8234c8134f7af8",
+    "payload": {
+      "manifest_sha256": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
+      "file_count": 29,
+      "total_bytes": 55586032099,
+      "exact_size_and_sha256_verified": true,
+      "create_once_atomic_promotion_verified": true,
+      "post_promotion_readback_verified": true
+    }
+  },
+  "cleanup": {
+    "pod_deleted": true,
+    "pod_uid_absent": true,
+    "pod_name_absent": true,
+    "config_map_deleted": true,
+    "config_map_uid_absent": true,
+    "config_map_name_absent": true,
+    "gpus_held_after_cleanup": 0
+  },
+  "registration": {
+    "model_id": "chris-q38-fresh75-step230-v1",
+    "inference_model_uid": "d51cf7c4-3ab8-4912-8f73-dfe7153acdb4",
+    "idempotency_key": "fresh75-step230-b1f9073be0fb3dca",
+    "post_count": 1,
+    "second_post_performed": false,
+    "post_response_contained_exact_full_spec": false,
+    "acceptance_source": "exact_authenticated_get_reconciliation",
+    "acceptance_note": "The single POST response envelope did not echo the full exact spec. Acceptance came from the subsequent exact GET reconciliation; the response shape was not a registration failure and no second POST was sent.",
+    "desired_registration_sha256": "sha256:ff2e160b6d25ac02d56f260d26d2fbcd8eeb0b2cf0fa4327c5c7f939a661cb0a",
+    "get_readback": {
+      "full_spec_exact": true,
+      "phase": "paused",
+      "desired_state": "paused",
+      "minimum_replicas": 0,
+      "active_pods": 0,
+      "priority_class": "c1",
+      "model_revision": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
+      "gpus_allocated": 0
+    },
+    "serving_qualified": false
+  },
+  "next_gate": {
+    "state": "temporary_serving_qualification_and_fresh_parity_pending",
+    "external_evaluation_launchable": false,
+    "reason": "The exact model payload is staged and its paused registration is reconciled, but the model has not yet passed live serving qualification or fresh base-versus-candidate parity."
+  },
+  "sanitization": {
+    "credentials_included": false,
+    "prompts_traces_flags_answers_or_scores_included": false,
+    "raw_logs_included": false
+  },
+  "sha256": "sha256:c36201add360a49c6c359c5435fe8875f25b2541484d05d3dc8f163ab7659e41"
+}
