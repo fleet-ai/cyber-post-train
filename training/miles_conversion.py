@@ -21,7 +21,7 @@ from pathlib import Path
 
 from cyber_post_train.jobs import bundled_request, digest, quantity
 
-from .miles import IMAGE
+from . import miles
 
 SCHEMA = "cyber_miles_conversion_v1"
 CONVERTER_SHA256 = "0c2541d30073777a30344273a3773844a70ca1961287520c0496a1cec18d43f6"
@@ -62,7 +62,8 @@ def compile_conversion(config: dict, *, relative_to: Path) -> dict:
     from .models import bound_model
     from .sft import RESOURCES, _known, _sfs_root, read_mapping
 
-    _known(config, {"name", "output_root", "model", "cluster"}, "Miles conversion")
+    _known(config, {"name", "output_root", "model", "cluster", "profile"}, "Miles conversion")
+    prof = miles.profile_for(config.get("profile", "qwen3.8-27b"))
     model = config["model"]
     _known(model, {"lock", "weights", "root"}, "model")
     cluster = config.get("cluster", {})
@@ -88,12 +89,13 @@ def compile_conversion(config: dict, *, relative_to: Path) -> dict:
         "run_name": config["name"],
         "output_root": output,
         "model": bound,
+        "profile": prof.recipe,
         "runtime_sha256": _hash(Path(__file__)),
         "native_converter_sha256": CONVERTER_SHA256,
         "optimizer_steps": 0,
         "deadline_seconds": DEADLINE_SECONDS,
         "execution": {
-            "image": IMAGE,
+            "image": prof.image,
             "priority": cluster.get("priority", "c1"),
             "resources": {**RESOURCES, **cluster.get("resources", {})},
         },
@@ -107,7 +109,7 @@ def job_request(plan: dict) -> dict:
         plan["schema"] != SCHEMA
         or plan["runtime_sha256"] != _hash(Path(__file__))
         or plan["native_converter_sha256"] != CONVERTER_SHA256
-        or plan["execution"]["image"] != IMAGE
+        or plan["execution"]["image"] != miles.image_for(plan.get("profile", "qwen3.8-27b"))
         or plan["optimizer_steps"] != 0
         or plan["deadline_seconds"] != DEADLINE_SECONDS
     ):
@@ -133,7 +135,7 @@ def job_request(plan: dict) -> dict:
             "name": plan["run_name"],
             "title": plan["run_name"] + " zero-step native conversion",
             "run_dir": plan["output_root"],
-            "image": IMAGE,
+            "image": plan["execution"]["image"],
             "workers": 1,
             "gpus_per_worker": 8,
             "resources": plan["execution"]["resources"],
@@ -366,7 +368,7 @@ def seal(plan: dict, output: Path) -> dict:
         {
             "schema": "cyber_miles_checkpoint_v1",
             "model": plan["model"],
-            "image": IMAGE,
+            "image": miles.image_for(plan.get("profile", "qwen3.8-27b")),
             "root": str(checkpoint),
             "plan_sha256": digest(plan),
             "conversion_receipt_sha256": receipt["sha256"],

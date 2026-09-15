@@ -15,6 +15,14 @@ import pytest
 from evals.fleet import opencode_self_hosted as fleet
 from training import rl_episode as rl
 
+
+@pytest.fixture(autouse=True)
+def _reset_episode_slots():
+    rl._episode_slots = None
+    yield
+    rl._episode_slots = None
+
+
 TASK = "11111111-1111-4111-8111-111111111111"
 EVIDENCE = "22222222-2222-4222-8222-222222222222"
 EXECUTION = "33333333-3333-4333-8333-333333333333"
@@ -663,6 +671,7 @@ def native(fixture, tmp_path, monkeypatch):
             fleet_tito_model="qwen35",
             fleet_max_tokens_per_turn=4096,
             rollout_max_context_len=32768,
+            cyber_max_concurrent_episodes=4,
         ),
         sample=NS(
             metadata={
@@ -827,9 +836,28 @@ def test_native_flags_are_required_and_typed():
             "qwen35",
             "--fleet-max-tokens-per-turn",
             "4096",
+            "--cyber-max-concurrent-episodes",
+            "32",
         ]
     )
     assert args.fleet_max_tokens_per_turn == 4096 and args.fleet_tito_model == "qwen35"
+    assert args.cyber_max_concurrent_episodes == 32
+
+
+@pytest.mark.asyncio
+async def test_episode_admission_gate_is_bounded_and_stable():
+    """One reviewed ceiling per rollout process; a later disagreement is a fault."""
+    gate = rl.episode_slots(3)
+    assert gate is rl.episode_slots(3) and gate._value == 3
+    with pytest.raises(rl.InvalidEpisode, match="episode_admission_limit_changed"):
+        rl.episode_slots(4)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("limit", [0, 257, 1.0, True])
+async def test_invalid_episode_admission_limits_are_rejected(limit):
+    with pytest.raises(rl.InvalidEpisode, match="invalid_episode_admission_limit"):
+        rl.episode_slots(limit)
 
 
 @pytest.mark.asyncio
