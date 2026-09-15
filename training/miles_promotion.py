@@ -124,6 +124,20 @@ PROD_REWARD_CANARY_LONG_V2_CHECKPOINT_ROOT = (
 PROD_REWARD_CANARY_LONG_V2_CHECKPOINT_RECEIPT_SHA256 = (
     "5885f89feb3d3e646221c61e18713dce29b4117827306336895f5bf95073d4d0"
 )
+PROD_REWARD_CANARY_LONG_V3_MODE = "reward_canary_opencode_long_v3"
+PROD_REWARD_CANARY_LONG_V3_NAME = "chris-q38-miles-lc-canary3"
+PROD_REWARD_CANARY_LONG_V3_OUTPUT = "/mnt/sfs/jobs/chris-q38-miles-lc-canary3"
+PROD_REWARD_CANARY_LONG_V3_DATA_ROOT = (
+    "/mnt/sfs/jobs/chris-q38-miles-lc-canary3-inputs/data"
+)
+PROD_REWARD_CANARY_LONG_V3_DATA_MANIFEST = (
+    PROD_REWARD_CANARY_LONG_V3_DATA_ROOT + "/manifest.json"
+)
+PROD_REWARD_CANARY_LONG_V3_WANDB = {
+    "entity": "thefleet",
+    "project": "cyber-post-train",
+    "run_id": PROD_REWARD_CANARY_LONG_V3_NAME,
+}
 EXPERIMENT_OWNER_PREFIX = "chris-"
 FLEET_RUN_NAME_LABEL = "fleet.ai/run-name"
 PROD_MODEL_SHA256 = "dcfdcd6ecb6661741cd3a4b24dc5af7259642c8a6824773e0de70d55d7501179"
@@ -299,6 +313,78 @@ EXPECTED_REWARD_CANARY_LONG_V2_DATA = {
     "derivation_sha256": (
         "sha256:c7a7405f72b43a5dfd239eca3f8720fcd4117db2d7d1f53c31ed123c7d5fe9e6"
     ),
+}
+EXPECTED_REWARD_CANARY_LONG_V3_DATA = {
+    **EXPECTED_REWARD_CANARY_LONG_V1_DATA,
+    "name": PROD_REWARD_CANARY_LONG_V3_NAME,
+    "files": {
+        "train": {
+            "path": "train.jsonl",
+            "rows": 1,
+            "max_prompt_tokens": 1261,
+            "sha256": (
+                "sha256:09064ac2e8511b63f818a3232d52c197df2dc14dca8235854a322b5cb842ba2a"
+            ),
+        },
+        "dev": {
+            "path": "dev.jsonl",
+            "rows": 1,
+            "max_prompt_tokens": 1276,
+            "sha256": (
+                "sha256:b45eddc239a9edc036fc0b964ea2578faba50da99f908810cc8c906aef34b3cc"
+            ),
+        },
+    },
+    "manifest_file_sha256": (
+        "sha256:ee894f75ca41c07af14cd2dc6bf869e35575fa2df9b285cab04896c8ed116934"
+    ),
+    "manifest_self_sha256": (
+        "sha256:f729c1ad3205d05cc572f34dc0267265151323b9b61e2d38abad89c6fdbdedc0"
+    ),
+    "derivation_sha256": (
+        "sha256:c7a7405f72b43a5dfd239eca3f8720fcd4117db2d7d1f53c31ed123c7d5fe9e6"
+    ),
+}
+_LONG_CANARIES = {
+    PROD_REWARD_CANARY_LONG_V1_MODE: {
+        "name": PROD_REWARD_CANARY_LONG_V1_NAME,
+        "output": PROD_REWARD_CANARY_LONG_V1_OUTPUT,
+        "data_root": PROD_REWARD_CANARY_LONG_V1_DATA_ROOT,
+        "data_manifest": PROD_REWARD_CANARY_LONG_V1_DATA_MANIFEST,
+        "wandb": PROD_REWARD_CANARY_LONG_V1_WANDB,
+        "expected_data": EXPECTED_REWARD_CANARY_LONG_V1_DATA,
+        "image": PROD_REWARD_CANARY_LONG_V1_IMAGE,
+        "runtime": PROD_REWARD_CANARY_LONG_V1_RUNTIME,
+        "checkpoint": PROD_REWARD_CANARY_LONG_V1_CHECKPOINT,
+        "checkpoint_root": PROD_REWARD_CANARY_LONG_V1_CHECKPOINT_ROOT,
+        "checkpoint_receipt": PROD_REWARD_CANARY_LONG_V1_CHECKPOINT_RECEIPT_SHA256,
+    },
+    PROD_REWARD_CANARY_LONG_V2_MODE: {
+        "name": PROD_REWARD_CANARY_LONG_V2_NAME,
+        "output": PROD_REWARD_CANARY_LONG_V2_OUTPUT,
+        "data_root": PROD_REWARD_CANARY_LONG_V2_DATA_ROOT,
+        "data_manifest": PROD_REWARD_CANARY_LONG_V2_DATA_MANIFEST,
+        "wandb": PROD_REWARD_CANARY_LONG_V2_WANDB,
+        "expected_data": EXPECTED_REWARD_CANARY_LONG_V2_DATA,
+        "image": PROD_REWARD_CANARY_LONG_V2_IMAGE,
+        "runtime": PROD_REWARD_CANARY_LONG_V2_RUNTIME,
+        "checkpoint": PROD_REWARD_CANARY_LONG_V2_CHECKPOINT,
+        "checkpoint_root": PROD_REWARD_CANARY_LONG_V2_CHECKPOINT_ROOT,
+        "checkpoint_receipt": PROD_REWARD_CANARY_LONG_V2_CHECKPOINT_RECEIPT_SHA256,
+    },
+    PROD_REWARD_CANARY_LONG_V3_MODE: {
+        "name": PROD_REWARD_CANARY_LONG_V3_NAME,
+        "output": PROD_REWARD_CANARY_LONG_V3_OUTPUT,
+        "data_root": PROD_REWARD_CANARY_LONG_V3_DATA_ROOT,
+        "data_manifest": PROD_REWARD_CANARY_LONG_V3_DATA_MANIFEST,
+        "wandb": PROD_REWARD_CANARY_LONG_V3_WANDB,
+        "expected_data": EXPECTED_REWARD_CANARY_LONG_V3_DATA,
+        "image": PROD_REWARD_CANARY_LONG_V2_IMAGE,
+        "runtime": PROD_REWARD_CANARY_LONG_V2_RUNTIME,
+        "checkpoint": PROD_REWARD_CANARY_LONG_V2_CHECKPOINT,
+        "checkpoint_root": PROD_REWARD_CANARY_LONG_V2_CHECKPOINT_ROOT,
+        "checkpoint_receipt": PROD_REWARD_CANARY_LONG_V2_CHECKPOINT_RECEIPT_SHA256,
+    },
 }
 BENCHMARK_ISOLATION = {
     "optimizer_split": "train",
@@ -490,6 +576,7 @@ def _is_reward_canary_marker(value: Any) -> bool:
         {"mode": PROD_REWARD_CANARY_V3_MODE},
         {"mode": PROD_REWARD_CANARY_LONG_V1_MODE},
         {"mode": PROD_REWARD_CANARY_LONG_V2_MODE},
+        {"mode": PROD_REWARD_CANARY_LONG_V3_MODE},
     )
 
 
@@ -564,33 +651,14 @@ def _exact_reward_canary_config(config: dict[str, Any]) -> None:
     elif mode in {
         PROD_REWARD_CANARY_LONG_V1_MODE,
         PROD_REWARD_CANARY_LONG_V2_MODE,
+        PROD_REWARD_CANARY_LONG_V3_MODE,
     }:
-        successor = mode == PROD_REWARD_CANARY_LONG_V2_MODE
-        expected_name = (
-            PROD_REWARD_CANARY_LONG_V2_NAME
-            if successor
-            else PROD_REWARD_CANARY_LONG_V1_NAME
-        )
-        expected_output = (
-            PROD_REWARD_CANARY_LONG_V2_OUTPUT
-            if successor
-            else PROD_REWARD_CANARY_LONG_V1_OUTPUT
-        )
-        expected_data_root = (
-            PROD_REWARD_CANARY_LONG_V2_DATA_ROOT
-            if successor
-            else PROD_REWARD_CANARY_LONG_V1_DATA_ROOT
-        )
-        expected_data_manifest = (
-            PROD_REWARD_CANARY_LONG_V2_DATA_MANIFEST
-            if successor
-            else PROD_REWARD_CANARY_LONG_V1_DATA_MANIFEST
-        )
-        expected_wandb = (
-            PROD_REWARD_CANARY_LONG_V2_WANDB
-            if successor
-            else PROD_REWARD_CANARY_LONG_V1_WANDB
-        )
+        binding = _LONG_CANARIES[mode]
+        expected_name = binding["name"]
+        expected_output = binding["output"]
+        expected_data_root = binding["data_root"]
+        expected_data_manifest = binding["data_manifest"]
+        expected_wandb = binding["wandb"]
         expected_recipe = {
             **legacy_recipe,
             "nodes": 4,
@@ -600,16 +668,8 @@ def _exact_reward_canary_config(config: dict[str, Any]) -> None:
             "session_node_cap": 4096,
         }
         expected_resources = PROD_REWARD_CANARY_LONG_V1_RESOURCES
-        expected_checkpoint = (
-            PROD_REWARD_CANARY_LONG_V2_CHECKPOINT
-            if successor
-            else PROD_REWARD_CANARY_LONG_V1_CHECKPOINT
-        )
-        expected_runtime = (
-            PROD_REWARD_CANARY_LONG_V2_RUNTIME
-            if successor
-            else PROD_REWARD_CANARY_LONG_V1_RUNTIME
-        )
+        expected_checkpoint = binding["checkpoint"]
+        expected_runtime = binding["runtime"]
     else:
         raise ValueError("Miles production reward canary mode is not supported")
     if (
@@ -972,61 +1032,26 @@ def _exact_reward_canary_plan(plan: dict[str, Any]) -> None:
     elif mode in {
         PROD_REWARD_CANARY_LONG_V1_MODE,
         PROD_REWARD_CANARY_LONG_V2_MODE,
+        PROD_REWARD_CANARY_LONG_V3_MODE,
     }:
-        successor = mode == PROD_REWARD_CANARY_LONG_V2_MODE
-        name = (
-            PROD_REWARD_CANARY_LONG_V2_NAME
-            if successor
-            else PROD_REWARD_CANARY_LONG_V1_NAME
-        )
-        output = (
-            PROD_REWARD_CANARY_LONG_V2_OUTPUT
-            if successor
-            else PROD_REWARD_CANARY_LONG_V1_OUTPUT
-        )
-        data_root = (
-            PROD_REWARD_CANARY_LONG_V2_DATA_ROOT
-            if successor
-            else PROD_REWARD_CANARY_LONG_V1_DATA_ROOT
-        )
-        data_manifest = (
-            PROD_REWARD_CANARY_LONG_V2_DATA_MANIFEST
-            if successor
-            else PROD_REWARD_CANARY_LONG_V1_DATA_MANIFEST
-        )
-        wandb = (
-            PROD_REWARD_CANARY_LONG_V2_WANDB
-            if successor
-            else PROD_REWARD_CANARY_LONG_V1_WANDB
-        )
+        binding = _LONG_CANARIES[mode]
+        name = binding["name"]
+        output = binding["output"]
+        data_root = binding["data_root"]
+        data_manifest = binding["data_manifest"]
+        wandb = binding["wandb"]
+        expected_data = binding["expected_data"]
         tokens_per_turn = 32768
-        expected_data = (
-            EXPECTED_REWARD_CANARY_LONG_V2_DATA
-            if successor
-            else EXPECTED_REWARD_CANARY_LONG_V1_DATA
-        )
         nodes = 4
         max_tokens_per_gpu = 65536
         context_tokens = 262144
         response_tokens = 245760
         native_profile = "qwen3.8-27b-256k"
         harness = "opencode"
-        runtime_image = (
-            PROD_REWARD_CANARY_LONG_V2_IMAGE
-            if successor
-            else PROD_REWARD_CANARY_LONG_V1_IMAGE
-        )
+        runtime_image = binding["image"]
         session_node_cap = 4096
-        checkpoint_root = (
-            PROD_REWARD_CANARY_LONG_V2_CHECKPOINT_ROOT
-            if successor
-            else PROD_REWARD_CANARY_LONG_V1_CHECKPOINT_ROOT
-        )
-        checkpoint_receipt_sha256 = (
-            PROD_REWARD_CANARY_LONG_V2_CHECKPOINT_RECEIPT_SHA256
-            if successor
-            else PROD_REWARD_CANARY_LONG_V1_CHECKPOINT_RECEIPT_SHA256
-        )
+        checkpoint_root = binding["checkpoint_root"]
+        checkpoint_receipt_sha256 = binding["checkpoint_receipt"]
         resources = PROD_REWARD_CANARY_LONG_V1_RESOURCES
     else:
         raise ValueError("compiled Miles production reward canary mode changed")
@@ -1104,6 +1129,7 @@ def _exact_reward_canary_plan(plan: dict[str, Any]) -> None:
     if mode in {
         PROD_REWARD_CANARY_LONG_V1_MODE,
         PROD_REWARD_CANARY_LONG_V2_MODE,
+        PROD_REWARD_CANARY_LONG_V3_MODE,
     }:
         _exact_long_data(plan.get("data"), expected_data)
     else:
@@ -1151,6 +1177,7 @@ def validate_production_preview(
             in {
                 PROD_REWARD_CANARY_LONG_V1_MODE,
                 PROD_REWARD_CANARY_LONG_V2_MODE,
+                PROD_REWARD_CANARY_LONG_V3_MODE,
             }
         )
         workers = 4 if long_horizon else 1
@@ -1233,6 +1260,14 @@ def _reward_canary_live_identity(
             PROD_REWARD_CANARY_LONG_V2_DATA_MANIFEST,
             PROD_REWARD_CANARY_LONG_V2_WANDB,
             EXPECTED_REWARD_CANARY_LONG_V2_DATA,
+        )
+    if mode == PROD_REWARD_CANARY_LONG_V3_MODE:
+        return (
+            PROD_REWARD_CANARY_LONG_V3_NAME,
+            PROD_REWARD_CANARY_LONG_V3_OUTPUT,
+            PROD_REWARD_CANARY_LONG_V3_DATA_MANIFEST,
+            PROD_REWARD_CANARY_LONG_V3_WANDB,
+            EXPECTED_REWARD_CANARY_LONG_V3_DATA,
         )
     raise JobsError("Miles production reward canary mode changed")
 
@@ -1433,6 +1468,7 @@ def require_live_external(plan: dict[str, Any], client, *, wandb_api=None) -> di
         in {
             PROD_REWARD_CANARY_LONG_V1_MODE,
             PROD_REWARD_CANARY_LONG_V2_MODE,
+            PROD_REWARD_CANARY_LONG_V3_MODE,
         }
         else 1
     )

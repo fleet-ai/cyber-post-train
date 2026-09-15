@@ -368,6 +368,49 @@ def test_long_context_reward_canary_v2_uses_qualified_runtime_and_new_identity(
     miles_promotion.require_live_files(plan, prepared)
 
 
+def test_long_context_reward_canary_v3_changes_only_run_identity() -> None:
+    config_v2 = json.loads(
+        (
+            ROOT
+            / "configs/qualification/qwen38-miles-opencode-long-context-prod-v2.json"
+        ).read_text()
+    )
+    config_v3 = json.loads(
+        (
+            ROOT
+            / "configs/qualification/qwen38-miles-opencode-long-context-prod-v3.json"
+        ).read_text()
+    )
+
+    miles_promotion._exact_reward_canary_config(config_v3)
+    assert config_v3["name"] == miles_promotion.PROD_REWARD_CANARY_LONG_V3_NAME
+    assert config_v3["output_root"] == miles_promotion.PROD_REWARD_CANARY_LONG_V3_OUTPUT
+    assert config_v3["wandb"] == miles_promotion.PROD_REWARD_CANARY_LONG_V3_WANDB
+    assert config_v3["production_promotion"] == {
+        "mode": miles_promotion.PROD_REWARD_CANARY_LONG_V3_MODE
+    }
+    assert config_v3["checkpoint"] == config_v2["checkpoint"]
+    assert config_v3["runtime"] == config_v2["runtime"]
+    assert config_v3["recipe"] == config_v2["recipe"]
+    assert config_v3["cluster"] == config_v2["cluster"]
+
+    expected = miles_promotion.EXPECTED_REWARD_CANARY_LONG_V3_DATA
+    assert expected["files"]["train"]["sha256"] == (
+        "sha256:09064ac2e8511b63f818a3232d52c197df2dc14dca8235854a322b5cb842ba2a"
+    )
+    assert expected["files"]["dev"]["sha256"] == (
+        "sha256:b45eddc239a9edc036fc0b964ea2578faba50da99f908810cc8c906aef34b3cc"
+    )
+    assert expected["manifest_self_sha256"] == (
+        "sha256:f729c1ad3205d05cc572f34dc0267265151323b9b61e2d38abad89c6fdbdedc0"
+    )
+
+    invalid = copy.deepcopy(config_v3)
+    invalid["name"] = config_v2["name"]
+    with pytest.raises(ValueError, match="exact one-update arm"):
+        miles_promotion._exact_reward_canary_config(invalid)
+
+
 def test_long_context_reward_canary_preview_is_exact_four_by_eight_c1(monkeypatch) -> None:
     from cyber_post_train import jobs
 
