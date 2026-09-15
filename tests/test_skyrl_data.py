@@ -41,9 +41,16 @@ def skyrl(setup, monkeypatch):  # noqa: F811
                 env = "changed"
             return prompt, env, row, str(index)
 
-    monkeypatch.setattr(
-        data, "_native_skyrl", lambda *args: (tokenizer, tokenizer, Dataset, identity)
-    )
+    def native_skyrl(lock, _root):
+        selected = lock or setup.lock
+        current_identity = {
+            **identity,
+            "repo": selected["repo"],
+            "revision": selected["revision"],
+        }
+        return tokenizer, tokenizer, Dataset, current_identity
+
+    monkeypatch.setattr(data, "_native_skyrl", native_skyrl)
     return setup
 
 

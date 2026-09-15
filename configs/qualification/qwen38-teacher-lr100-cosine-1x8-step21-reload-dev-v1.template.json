@@ -1,0 +1,202 @@
+{
+  "schema": "cyber_qwen38_lr100_step21_1x8_reload_template_v1",
+  "status": "blocked_waiting_independent_checkpoint_pair_verification",
+  "launchable": false,
+  "cluster_or_api_mutations_performed": false,
+  "source": {
+    "cluster": "dev",
+    "config_path": "configs/qualification/qwen38-teacher-lr100-cosine-layout-dev-v2.json",
+    "config_file_sha256": "sha256:e6b7f197cb716d235ea6054b5620cae70344191508ed707a37fd1fc2f27e8205",
+    "config_name": "chris-q38-ta8-lr100-dev-v2",
+    "output_root": "/mnt/sfs/jobs/chris-q38-ta8-lr100-dev-v2",
+    "prepared_dir": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-dev-v2-stage-v1/prepared",
+    "plan_sha256": "f42894e871ee3ec2204e435cdf240d2641706f4d151bd4484b56edcf6716ada3",
+    "request_sha256": "47915f4b3720f57817fce91a15f2efa4e4df9d3e4d0dd0c8dcc1bf497a2883da",
+    "api_name": "chris-q38-ta8-lr100-dev-v2-d44df148",
+    "api_job_id": "chris-q38-ta8-lr100-dev-v2-d44df148-swwff",
+    "rayjob_uid": "9354facc-d548-49f4-8ef1-41efc5339b44",
+    "workload_uid": "f9b89e7a-ab91-4261-9f2e-20eb24eb3f01",
+    "raycluster_uid": "950bb073-6cd9-42e0-ad17-17d2ce91ab93",
+    "pod_uid": "c99ba2c1-f339-40d9-a5aa-f5b1a93ebe2b",
+    "requested_image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "terminal_handoff": {
+      "path": "docs/evidence/qwen38-study/2026-09-14-lr100-training-seal-handoff-v1.json",
+      "file_sha256": "sha256:301152aec845355a9c3d49f2d965025036d045baa8f1c370a322ce20dab390b0",
+      "embedded_sha256": "sha256:6690b52a85401afd6c34b1cd062033b1edf33a94b99fe8906f9560f6bb16aa2c",
+      "jobs_api_state": "SUCCEEDED",
+      "rayjob_state": "SUCCEEDED",
+      "workload_state": "Succeeded",
+      "optimizer_step": 21,
+      "optimizer_steps_executed": 21,
+      "wandb_tracking_status": "synced",
+      "resource_release_verified": true,
+      "terminal_pod_status_irrecoverable": true,
+      "full_lifecycle_zero_restart_claimed": false
+    }
+  },
+  "checkpoint_pair_verification": {
+    "operation": "exact_image_zero_gpu_read_only_full_pair_rehash",
+    "verifier_artifact_path": "configs/qualification/qwen38-teacher-lr100-step20-step21-seal-verify-dev-v2.pod.yaml",
+    "verifier_artifact_file_sha256": "sha256:d6350873b37b706accb4da4b335efd7aadcc072bdf500e01333ac3e1790d87b6",
+    "expected_pod_name": "chris-q38-lr100-seal-verify-v2",
+    "active_deadline_seconds": 3600,
+    "gpus": 0,
+    "read_only_sfs": true,
+    "step_20": {
+      "checkpoint_path": "/mnt/sfs/jobs/chris-q38-ta8-lr100-dev-v2/checkpoints/global_step_20",
+      "checkpoint_receipt_file_sha256": "sha256:d1b1abfa5940ad68a23c680df45efb57b419f249695ad215d988b278a577b0e5",
+      "checkpoint_receipt_sha256": "sha256:45501c50acb31e047710ae424e0bb09d98b6a13ccb796a465b2cc8fc80b3c751",
+      "manifest_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-dev-v2-checkpoint-seals-v1/step-20.json",
+      "manifest_file_sha256": null,
+      "manifest_receipt_sha256": "sha256:54216c0e2a506f39b5437101e604e87c3e753adccf84ecdc937ac0c6177f89b8",
+      "files": 33,
+      "bytes": 324627486731
+    },
+    "step_21": {
+      "checkpoint_path": "/mnt/sfs/jobs/chris-q38-ta8-lr100-dev-v2/checkpoints/global_step_21",
+      "checkpoint_receipt_file_sha256": "sha256:bfbb1085203afeaeb450bfe7a3c1cb87fd5a9ec3d01bc02a734f008c6384a86b",
+      "checkpoint_receipt_sha256": "sha256:328bfeaa4b831c0e40be1e71e87cc58617af2457961b9a61de0ba8096508e1c4",
+      "manifest_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-dev-v2-checkpoint-seals-v1/step-21.json",
+      "manifest_file_sha256": null,
+      "manifest_receipt_sha256": "sha256:b82fd516e2e3c4bffa99d9cae718e6caaba4d7b9d1679885c41676ef3d754fa0",
+      "files": 33,
+      "bytes": 324627486731
+    },
+    "required_terminal_evidence_path": "docs/evidence/qwen38-study/2026-09-14-lr100-dev-checkpoint-pair-verification-v1.json",
+    "required_terminal_evidence_file_sha256": null,
+    "required_terminal_evidence_receipt_sha256": null,
+    "both_source_checkpoints_fully_rehashed": null,
+    "mismatch_count": null,
+    "helper_uid": null,
+    "helper_exit_code": null,
+    "helper_restart_count": null,
+    "helper_deleted": null,
+    "helper_absence_verified": null
+  },
+  "reload": {
+    "operation": "native_all_rank_checkpoint_reload",
+    "cluster": "dev",
+    "template_path": "configs/qualification/qwen38-teacher-lr100-cosine-1x8-step21-reload-dev-v1.template.json",
+    "materialized_config_path": "configs/qualification/qwen38-teacher-lr100-cosine-1x8-step21-reload-dev-v1.json",
+    "materialized_config_file_sha256": null,
+    "new_run_name": "chris-q38-ta8-lr100-step21-reload-dev-v1",
+    "new_output_root": "/mnt/sfs/jobs/chris-q38-ta8-lr100-step21-reload-dev-v1",
+    "new_wandb_run_id": "chris-q38-ta8-lr100-step21-reload-dev-v1",
+    "new_wandb_name": "chris-q38-ta8-lr100-step21-reload-dev-v1",
+    "prepared_dir": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-step21-reload-dev-v1/prepared",
+    "source_config_transform": {
+      "remove": [
+        "pause_after_step"
+      ],
+      "replace": {
+        "name": "chris-q38-ta8-lr100-step21-reload-dev-v1",
+        "output_root": "/mnt/sfs/jobs/chris-q38-ta8-lr100-step21-reload-dev-v1",
+        "wandb.run_id": "chris-q38-ta8-lr100-step21-reload-dev-v1",
+        "wandb.name": "chris-q38-ta8-lr100-step21-reload-dev-v1"
+      },
+      "add": {
+        "recovery": {
+          "manifest": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-dev-v2-checkpoint-seals-v1/step-21.json",
+          "sha256": null,
+          "mode": "validate"
+        }
+      },
+      "preserve_every_other_field": true
+    },
+    "optimizer_steps_authorized": 0,
+    "expected_world_size": 8,
+    "expected_workers": 1,
+    "expected_gpus_per_worker": 8,
+    "priority_class": "c1",
+    "expected_queue_priority": "q1",
+    "expected_priority_value": 10000,
+    "requeueIfPreempted": false,
+    "plan_sha256": null,
+    "request_sha256": null,
+    "pinned_image_preflight_sha256": null,
+    "dev_preview_sha256": null,
+    "source_and_destinations_absent_or_exact_verified": null,
+    "wandb_identity_unused_verified": null,
+    "active_owned_node_cap_verified": null,
+    "fresh_auth_safety_window_verified": null,
+    "jobs_api_post_calls_performed": 0
+  },
+  "topology_scope": {
+    "source_layout": {
+      "nodes": 1,
+      "gpus_per_node": 8,
+      "world_size": 8
+    },
+    "reload_layout": {
+      "nodes": 1,
+      "gpus_per_node": 8,
+      "world_size": 8
+    },
+    "scope": "exact_lr100_step21_one_by_eight_dev_checkpoint_only",
+    "operational_only": true,
+    "production_authorization_added": false,
+    "step20_reload_covered": false
+  },
+  "pre_materialization_gates": [
+    "fresh_nebius_authentication_has_enough_lifetime_for_verifier_startup_execution_and_uid_bound_cleanup",
+    "exact_verifier_pod_name_and_uid_history_are_absent",
+    "verifier_artifact_passes_client_and_server_dry_run_on_the_exact_dev_context",
+    "step20_and_step21_seal_paths_and_receipt_digests_match_this_template",
+    "zero_gpu_verifier_runs_as_its_main_process_in_the_exact_pinned_image_with_read_only_sfs",
+    "one_terminal_proof_records_both_manifest_file_digests_full_source_rehashes_and_zero_mismatches",
+    "verifier_helper_is_uid_deleted_and_absence_is_confirmed",
+    "successor_pair_evidence_is_self_digest_valid_and_binds_this_template_and_verifier_artifact",
+    "materialized_reload_changes_only_identity_pause_removal_and_validate_mode_step21_recovery",
+    "new_output_prepared_wandb_api_kubernetes_and_journal_identities_are_absent",
+    "pinned_image_cpu_preflight_passes_with_the_exact_verified_step21_manifest",
+    "authenticated_dev_preview_matches_one_worker_eight_gpus_c1_q1_10000_no_requeue",
+    "aggregate_owned_node_cap_capacity_and_monitoring_release_window_are_rechecked_before_one_post"
+  ],
+  "reload_acceptance": [
+    "jobs_api_rayjob_and_workload_terminal_success",
+    "digest_valid_RECOVERED_json",
+    "digest_valid_RELOAD_VALIDATED_json",
+    "optimizer_steps_executed_equals_zero",
+    "optimizer_step_equals_twenty_one",
+    "validation_scope_equals_checkpoint_and_sampler_reload_only_no_ce",
+    "all_eight_ranks_restore_model_optimizer_scheduler_and_rng_state",
+    "sampler_cursor_and_supervised_token_progress_restore_exactly",
+    "source_checkpoint_inventory_and_hashes_remain_unchanged",
+    "reload_writes_no_training_checkpoint_or_training_completion_receipt",
+    "exact_one_worker_eight_gpu_source_and_reload_layout",
+    "zero_restarts",
+    "all_eight_gpus_released"
+  ],
+  "unresolved_bindings": [
+    "checkpoint_pair_verification.step_20.manifest_file_sha256",
+    "checkpoint_pair_verification.step_21.manifest_file_sha256",
+    "checkpoint_pair_verification.required_terminal_evidence_file_sha256",
+    "checkpoint_pair_verification.required_terminal_evidence_receipt_sha256",
+    "checkpoint_pair_verification.both_source_checkpoints_fully_rehashed",
+    "checkpoint_pair_verification.mismatch_count",
+    "checkpoint_pair_verification.helper_uid",
+    "checkpoint_pair_verification.helper_exit_code",
+    "checkpoint_pair_verification.helper_restart_count",
+    "checkpoint_pair_verification.helper_deleted",
+    "checkpoint_pair_verification.helper_absence_verified",
+    "reload.materialized_config_file_sha256",
+    "reload.source_config_transform.add.recovery.sha256",
+    "reload.plan_sha256",
+    "reload.request_sha256",
+    "reload.pinned_image_preflight_sha256",
+    "reload.dev_preview_sha256",
+    "reload.source_and_destinations_absent_or_exact_verified",
+    "reload.wandb_identity_unused_verified",
+    "reload.active_owned_node_cap_verified",
+    "reload.fresh_auth_safety_window_verified"
+  ],
+  "execution": {
+    "kind": "offline_preparation_only_not_a_job_request",
+    "kubernetes_calls_performed": 0,
+    "jobs_api_preview_calls_performed": 0,
+    "jobs_api_submit_calls_performed": 0,
+    "wandb_runs_created": 0
+  },
+  "interpretation": "This immutable template prepares only the next gates for the exact LR100 step-21 checkpoint. It does not accept the checkpoint pair, authorize Pod creation, materialize a reload config, submit a GPU reload, select LR1e-4, measure model quality, or authorize production.",
+  "sha256": "sha256:87aa4091f18f599e6a5a849277aeb028e361f295b05becbdaf80b5255416ebb0"
+}

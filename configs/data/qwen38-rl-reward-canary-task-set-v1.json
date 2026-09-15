@@ -11,8 +11,8 @@
     "source_rule": "Eligibility is derived from the authoritative exact-version GET matching the reviewed source runtime and verifier pins. Task metadata.tools is not a runtime authority: data preparation injects the reviewed catalog and each episode independently requires the live MCP catalog to match before model interaction. Historical reward remains only a task-selection prior.",
     "exact_version_evidence": {
       "path": "../data/qwen38-rl-reward-canary-exact-version-evidence-v1.json",
-      "file_sha256": "sha256:fd93e1e2c59ec139c5734ea532d7e20b36db9708b0257ed4cab8d97a89e6e0e1",
-      "self_sha256": "sha256:a6a7547fc363d8a02ea49cdbb59a8c526a9fb439297b03191a4f638f5a284c96"
+      "file_sha256": "sha256:9d363d89bfa57a8a68e462f6b5bb9ba5fe81e88d61067d707efe526c5d74d896",
+      "self_sha256": "sha256:741ed34dff0644a63f558378ffb1f569bb40dc803090ed123bdab0a919ff9042"
     }
   },
   "tasks": [
@@ -43,5 +43,5 @@
       }
     }
   ],
-  "sha256": "sha256:2d66f88325900d234ad26ef61930d4a5f7597ce96f54bca45bd05a2ed201b35d"
+  "sha256": "sha256:15400d5e58c53c8c2258c826c39aa5545b14d1705bece3d927d09d38de76b157"
 }

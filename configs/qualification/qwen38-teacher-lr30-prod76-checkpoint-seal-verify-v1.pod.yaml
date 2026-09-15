@@ -1,0 +1,135 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: chris-q38-lr30-p76-seal-verify-v1
+  namespace: fleet-train-jobs
+  annotations:
+    fleet.ai/purpose: "independent read-only verification of the completed LR30 step-76 checkpoint seal"
+spec:
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  priorityClassName: c1
+  activeDeadlineSeconds: 3600
+  terminationGracePeriodSeconds: 30
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 100
+    fsGroup: 100
+  containers:
+    - name: verifier
+      image: 661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+        - -lc
+        - |
+          set -eu
+          wheel=/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/checkpoint-sealer-code-v1/cyber_post_train-0.1.0-py3-none-any.whl
+          test "$(sha256sum "$wheel" | cut -d' ' -f1)" = 5d10b58abd8ce8489c826cff7ef763a28309b8705aa08ee8df4ef26326fd8525
+          test ! -e /tmp/lr30-prod76-seal-verifier-package
+          python3 -m zipfile -e "$wheel" /tmp/lr30-prod76-seal-verifier-package
+          PYTHONPATH=/tmp/lr30-prod76-seal-verifier-package python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          import torch
+
+          from training.checkpoints import receipt, verify
+
+
+          if torch.cuda.is_available():
+              raise ValueError("checkpoint seal verification must remain CPU-only")
+
+          run = Path("/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1")
+          plan_path = run / ".runtime/plan.json"
+          manifest_path = run / "checkpoint-seals-v1/step-76.json"
+
+
+          def file_sha256(path: Path) -> str:
+              value = hashlib.sha256()
+              with path.open("rb") as stream:
+                  for chunk in iter(lambda: stream.read(8 * 1024 * 1024), b""):
+                      value.update(chunk)
+              return value.hexdigest()
+
+
+          manifest_file_sha256 = file_sha256(manifest_path)
+          manifest = receipt(manifest_path)
+          verify(manifest, check_files=True)
+          if file_sha256(manifest_path) != manifest_file_sha256:
+              raise ValueError("checkpoint seal changed during independent verification")
+
+          plan = manifest["source_plan"]
+          recipe = plan["recipe"]
+          terminal = receipt(run / "TRAINING_COMPLETE.json")
+          if (
+              manifest["optimizer_step"] != 76
+              or manifest["checkpoint_path"] != str(run / "checkpoints/global_step_76")
+              or manifest["world_size"] != 8
+              or len(manifest["files"]) != 33
+              or manifest["gpu_reload_verified"] is not False
+              or manifest["source_plan_sha256"] != "3051b473d88e91ac7c24efcfb2e8c1f54c722854abc1e864f99cd885eb92249b"
+              or plan["run_name"] != "chris-q38-lr30-resume76-prod-v1"
+              or plan["output_root"] != str(run)
+              or recipe["nodes"] != 2
+              or recipe["gpus_per_node"] != 4
+              or recipe["lr"] != 0.00003
+              or recipe["max_steps"] != 76
+              or recipe["eval_interval"] != 0
+              or terminal.get("status") != "training_complete"
+              or terminal.get("optimizer_step") != 76
+              or not terminal.get("wandb_tracking", {}).get("acceptance_ready")
+          ):
+              raise ValueError("checkpoint seal differs from the frozen LR30 production contract")
+
+          proof = {
+              "schema": "cyber_qwen38_lr30_prod76_checkpoint_seal_verifier_result_v1",
+              "pod_uid": os.environ["POD_UID"],
+              "manifest_path": str(manifest_path),
+              "manifest_file_sha256": manifest_file_sha256,
+              "manifest_receipt_sha256": manifest["receipt_sha256"],
+              "optimizer_step": manifest["optimizer_step"],
+              "world_size": manifest["world_size"],
+              "verified_files": len(manifest["files"]),
+              "verified_bytes": manifest["total_bytes"],
+              "mismatch_count": 0,
+              "full_source_rehash": True,
+              "source_plan_file_rehashed": True,
+              "read_only_sfs": True,
+              "gpu_count": 0,
+              "raw_tensor_values_read": False,
+          }
+          canonical = json.dumps(proof, sort_keys=True, separators=(",", ":")).encode()
+          proof["receipt_sha256"] = hashlib.sha256(canonical).hexdigest()
+          print(json.dumps(proof, sort_keys=True, separators=(",", ":")), flush=True)
+          PY
+      env:
+        - name: POD_UID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.uid
+      resources:
+        requests:
+          cpu: "4"
+          memory: 8Gi
+        limits:
+          cpu: "8"
+          memory: 16Gi
+      volumeMounts:
+        - name: sfs
+          mountPath: /mnt/sfs
+          readOnly: true
+  nodeSelector:
+    workload: fleetai-training-ng-cpu
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: fleetai-training-ng-cpu
+      effect: NoSchedule
+  volumes:
+    - name: sfs
+      persistentVolumeClaim:
+        claimName: sfs-shared
+        readOnly: true

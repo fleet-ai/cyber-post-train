@@ -82,8 +82,17 @@ def canonical_gzip(payload: bytes) -> bytes:
     return blob[:9] + b"\xff" + blob[10:]
 
 
-def bundled_request(request: dict, files: dict[str, str], module: str, argv: list[str]) -> dict:
+def bundled_request(
+    request: dict,
+    files: dict[str, str],
+    module: str,
+    argv: list[str],
+    *,
+    python_executable: str = "python",
+) -> dict:
     """Embed small, public runtime inputs in a create-once Jobs API entrypoint."""
+    if python_executable not in {"python", "python3"}:
+        raise JobsError("bootstrap Python executable must be python or python3")
     if module.replace(".", "/") + ".py" not in files or not files:
         raise JobsError("entry module is absent from runtime bundle")
     for name in files:
@@ -123,7 +132,7 @@ def bundled_request(request: dict, files: dict[str, str], module: str, argv: lis
     )
     result = {
         **request,
-        "command": "python -c " + shlex.quote(bootstrap),
+        "command": python_executable + " -c " + shlex.quote(bootstrap),
         "env": {**request.get("env", {}), **transport},
     }
     validate_request(result)

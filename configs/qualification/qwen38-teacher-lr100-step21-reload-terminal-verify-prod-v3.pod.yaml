@@ -1,0 +1,149 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: chris-q38-lr100-r21-prod-v3-verify
+  namespace: fleet-train-jobs
+  annotations:
+    fleet.ai/purpose: "read-only post-reload receipt and checkpoint verification"
+spec:
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  priorityClassName: c1
+  activeDeadlineSeconds: 3600
+  terminationGracePeriodSeconds: 30
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 100
+    fsGroup: 100
+  containers:
+    - name: verifier
+      image: 661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+        - -lc
+        - |
+          set -eu
+          wheel=/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-r21-v1-stage-v2/cyber_post_train-0.1.0-py3-none-any.whl
+          test "$(sha256sum "$wheel" | awk '{print $1}')" = 5d10b58abd8ce8489c826cff7ef763a28309b8705aa08ee8df4ef26326fd8525
+          test ! -e /tmp/lr100-prod-v3-terminal-verifier-package
+          python3 -m zipfile -e "$wheel" /tmp/lr100-prod-v3-terminal-verifier-package
+          PYTHONPATH=/tmp/lr100-prod-v3-terminal-verifier-package python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          import torch
+
+          from training.checkpoints import receipt, verify
+
+          if torch.cuda.is_available():
+              raise ValueError("reload terminal verification must not allocate a GPU")
+
+          source_manifest_path = Path(
+              "/mnt/sfs/jobs/chris-q38-study-corpora-v1/"
+              "lr100-dev-v2-checkpoint-seals-v1/step-21.json"
+          )
+          source_manifest = receipt(source_manifest_path)
+          verify(source_manifest, check_files=True)
+          root = Path("/mnt/sfs/jobs/chris-q38-lr100-r21-prod-v3")
+          started = receipt(root / "STARTED.json")
+          recovered = receipt(root / "RECOVERED.json")
+          validated = receipt(root / "RELOAD_VALIDATED.json")
+          expected_reload_plan = "79c5a8ca3b38a5557c20846a7963e49d1e31c6186404710e6fe5fdddbd768df0"
+          expected_source_plan = "f42894e871ee3ec2204e435cdf240d2641706f4d151bd4484b56edcf6716ada3"
+          expected_source_manifest = "b82fd516e2e3c4bffa99d9cae718e6caaba4d7b9d1679885c41676ef3d754fa0"
+          ranks = recovered.get("ranks")
+          if (
+              started.get("plan_sha256") != expected_reload_plan
+              or recovered.get("plan_sha256") != expected_reload_plan
+              or recovered.get("source_plan_sha256") != expected_source_plan
+              or recovered.get("source_manifest_sha256") != expected_source_manifest
+              or recovered.get("optimizer_step") != 21
+              or not isinstance(ranks, list)
+              or sorted(row.get("rank") for row in ranks) != list(range(8))
+              or any(row.get("optimizer_step") != 21 for row in ranks)
+              or any(row.get("optimizer_states") != 851 for row in ranks)
+              or any(row.get("scheduler_restored") is not True for row in ranks)
+              or recovered.get("sampler_restored") is not True
+              or validated.get("status") != "reload_validated"
+              or validated.get("plan_sha256") != expected_reload_plan
+              or validated.get("source_manifest_sha256") != expected_source_manifest
+              or validated.get("optimizer_step") != 21
+              or validated.get("optimizer_steps_executed") != 0
+              or validated.get("validation_scope")
+              != "checkpoint_and_sampler_reload_only_no_ce"
+              or (root / "checkpoints").exists()
+              or any(
+                  (root / name).exists()
+                  for name in (
+                      "FAILED.json",
+                      "RELOAD_REJECTED.json",
+                      "TRAINING_PAUSED.json",
+                      "TRAINING_COMPLETE.json",
+                  )
+              )
+          ):
+              raise ValueError("reload terminal evidence differs from the accepted contract")
+
+          def file_sha(path):
+              value = hashlib.sha256()
+              value.update(path.read_bytes())
+              return value.hexdigest()
+
+          proof = {
+              "schema": "cyber_qwen38_lr100_step21_prod_v3_reload_terminal_verifier_result_v1",
+              "pod_uid": os.environ["POD_UID"],
+              "source_manifest_file_sha256": file_sha(source_manifest_path),
+              "source_manifest_receipt_sha256": source_manifest["receipt_sha256"],
+              "source_checkpoint_files_verified": len(source_manifest["files"]),
+              "source_checkpoint_bytes_verified": source_manifest["total_bytes"],
+              "source_checkpoint_mismatch_count": 0,
+              "started_file_sha256": file_sha(root / "STARTED.json"),
+              "started_receipt_sha256": started["receipt_sha256"],
+              "recovered_file_sha256": file_sha(root / "RECOVERED.json"),
+              "recovered_receipt_sha256": recovered["receipt_sha256"],
+              "reload_validated_file_sha256": file_sha(root / "RELOAD_VALIDATED.json"),
+              "reload_validated_receipt_sha256": validated["receipt_sha256"],
+              "optimizer_step": 21,
+              "optimizer_steps_executed": 0,
+              "ranks_restored": 8,
+              "sampler_restored": True,
+              "source_checkpoint_unchanged": True,
+              "reload_output_checkpoint_present": False,
+              "failure_or_rejection_receipt_present": False,
+              "gpu_count": 0,
+          }
+          canonical = json.dumps(proof, sort_keys=True, separators=(",", ":")).encode()
+          proof["receipt_sha256"] = hashlib.sha256(canonical).hexdigest()
+          print(json.dumps(proof, sort_keys=True, separators=(",", ":")), flush=True)
+          PY
+      env:
+        - name: POD_UID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.uid
+      resources:
+        requests:
+          cpu: "2"
+          memory: 4Gi
+        limits:
+          cpu: "4"
+          memory: 8Gi
+      volumeMounts:
+        - name: sfs
+          mountPath: /mnt/sfs
+          readOnly: true
+  nodeSelector:
+    workload: fleetai-training-ng-cpu
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: fleetai-training-ng-cpu
+      effect: NoSchedule
+  volumes:
+    - name: sfs
+      persistentVolumeClaim:
+        claimName: sfs-shared
+        readOnly: true

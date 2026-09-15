@@ -1,0 +1,65 @@
+{
+  "schema": "cyber_qwen38_lr30_prod76_checkpoint_seal_evidence_v1",
+  "source_run": {
+    "name": "chris-q38-lr30-resume76-prod-v1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1",
+    "optimizer_step": 76,
+    "world_size": 8,
+    "training_terminal": "training_complete",
+    "wandb_tracking": "synced"
+  },
+  "sealer": {
+    "pod_name": "chris-q38-lr30-p76-seal-v1",
+    "pod_uid": "b90fccd2-8c0e-48bc-a1d6-e8a952a12158",
+    "started_at": "2026-09-15T00:01:40Z",
+    "finished_at": "2026-09-15T00:07:49Z",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "restart_count": 0,
+    "gpu_count": 0,
+    "source_preserved": true,
+    "tensor_values_read": false
+  },
+  "manifest": {
+    "path": "/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/checkpoint-seals-v1/step-76.json",
+    "receipt_sha256": "1252a1a9d5556fa118f03d1b2fe5687e0e9505ccf622e2f86743a26b77dffa64",
+    "checkpoint_files": 33,
+    "checkpoint_bytes": 324627487179,
+    "gpu_reload_verified": false
+  },
+  "verifier_attempts": [
+    {
+      "pod_name": "chris-q38-lr30-p76-seal-verify-v1",
+      "pod_uid": "2de38328-8ec1-4d54-9886-109f1263071f",
+      "phase": "Failed",
+      "exit_code": 1,
+      "restart_count": 0,
+      "gpu_count": 0,
+      "checkpoint_verify_completed_before_failure": true,
+      "failure_class": "verifier_expected_pretty_printed_plan_file_sha256_instead_of_the_manifest_bound_canonical_plan_sha256",
+      "checkpoint_or_training_mutated": false,
+      "successor": "chris-q38-lr30-p76-seal-verify-v2"
+    },
+    {
+      "pod_name": "chris-q38-lr30-p76-seal-verify-v2",
+      "pod_uid": "8269fa77-4bba-421b-87d1-7d8234e6e197",
+      "phase": "Succeeded",
+      "exit_code": 0,
+      "restart_count": 0,
+      "gpu_count": 0,
+      "read_only_sfs": true,
+      "full_source_rehash": true,
+      "source_plan_file_rehashed": true,
+      "verified_files": 33,
+      "verified_bytes": 324627487179,
+      "mismatch_count": 0,
+      "receipt_sha256": "f969924bc51cab0baffe77236a34d175bdcdae5585e1bdb6b9637d6301a8ce87"
+    }
+  ],
+  "acceptance": {
+    "cpu_seal_complete": true,
+    "independent_full_rehash_complete": true,
+    "zero_update_gpu_reload_complete": false,
+    "checkpoint_ready_for_export_or_evaluation": false
+  }
+}

@@ -1,0 +1,295 @@
+{
+  "schema": "cyber_qwen38_teacher_exposure_matched_sampling_pair_template_v1",
+  "pair_id": "qwen38-teacher-exposure-matched-sampling-a-v1",
+  "status": "offline_prepared_blocked_on_fleet_dev_lr_selection_and_live_dev_gates",
+  "launchable": false,
+  "question": "At an identical supervised-token and optimizer-step dose, does balancing successful teacher episodes across covered task families improve held-out Fleet development outcomes relative to an availability-shaped control?",
+  "scientific_correction": "The control is availability-shaped, not an exact unbiased availability-proportional sample: whole episodes and the exact episode, window and supervised-token constraints make exact parent proportions generally impossible.",
+  "prerequisites": {
+    "learning_rate_selection": {
+      "study_path": "configs/studies/qwen-blackbox-teacher-staged-search-v5.json",
+      "study_file_sha256": "sha256:84fb64162680180700c7ec457fa432eb702e602a9860f3b4b36fef227b50e405",
+      "study_embedded_sha256": "sha256:1806bd9f64eceae9b2a9fb5101337e9c3c9840112367e1cc6a5093235e5bff2c",
+      "required_field": "lr_outcome_barrier.selection_decision_sha256",
+      "selection_decision_sha256": null,
+      "selected_learning_rate": null,
+      "selection_source": "fresh matched Fleet development outcomes only",
+      "state": "blocking"
+    },
+    "exposure_control": {
+      "path": "configs/studies/qwen-blackbox-teacher-exposure-matched-control-v1.json",
+      "file_sha256": "sha256:9e65d8f535948cd9cff31495a63005addd8c936ce5ab3fd324e46cfc3c1d927e",
+      "embedded_sha256": "sha256:85e53884d624bb8ad4c47cd56588242e09650b283b1fff562b6e18c8160a4b88",
+      "matched_control_materialization_acceptance_sha256": "sha256:e9e60d6f54e5226a5427808a6d4ea33213a5a1b88688f974da7b429285cec987",
+      "state": "sanitized_lock_and_opaque_materialization_acceptance_present"
+    }
+  },
+  "frozen_common_contract": {
+    "model": {
+      "repo": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+      "lock_path": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+      "lock_file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+      "weights_path": "configs/models/qwen38-27b-1d4bf0f2.weights.json",
+      "weights_file_sha256": "sha256:80a5e9de066e068abb012a0e9bd144676813a31042bb578226472803f8e0e84f",
+      "initialization": "fresh_exact_base_for_each_arm"
+    },
+    "split": {
+      "path": "configs/data/qwen-blackbox-study-split-a-v1.json",
+      "file_sha256": "sha256:2558d0346f5edd26d6a7cd85fc1774cb1be2339d588be1f7f967fc14689d6ccc",
+      "embedded_sha256": "sha256:9ce5ba7f4cb9c52f6adfdbe615ca2258358dc602d6a9bb665c2ccc29dc04f4b8",
+      "training_split_sha256": "sha256:2d20dac7d5b9bb29f6aa44369c5dd2efed9c78bd3ca4d32ed021f04843ae6863",
+      "train_task_families": 59,
+      "dev_task_families": 20,
+      "final_test_task_families": 10,
+      "split_unit": "reviewed task family; all aliases and versions grouped",
+      "scope": "task-family-held-out; applications may be shared"
+    },
+    "training_interface": {
+      "source": "verified-success teacher episodes from the split-A training partition only",
+      "teacher_source_harness": "unknown_not_inferred_from_sanitized_corpus_receipts",
+      "format": "pretokenized_assistant_segments_v1",
+      "target_policy_sha256": "sha256:f371e87d02e6a32d32b511d9439caff97540709f17f346830d7989781c550cc1",
+      "chat_template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+      "tokenizer_backend_sha256": "ffb7a28b27dabcc333662fd3e0b0005d9e79a1c22e31453ab5a3017fbd5f25c0",
+      "dense_target_policy": "each eligible assistant target exactly once per epoch; copied context and tool observations masked",
+      "teacher_reference_cross_entropy": "not_computed"
+    },
+    "recipe": {
+      "backend": "skyrl",
+      "optimizer_family": "pinned_native_skyrl_full_weight_sft_optimizer_with_no_arm_override",
+      "learning_rate": null,
+      "scheduler": "cosine",
+      "warmup_ratio": 0.05,
+      "warmup_steps": 3,
+      "epochs": 1,
+      "global_batch_size": 8,
+      "microbatch_per_gpu": 1,
+      "nodes": 1,
+      "gpus_per_node": 8,
+      "world_size": 8,
+      "max_length": 16384,
+      "dense_windows": 401,
+      "supervised_tokens": 419165,
+      "optimizer_steps": 51,
+      "optimizer_steps_derivation": "ceil(401 dense windows / global batch 8) * 1 epoch",
+      "checkpoint_interval": 20,
+      "terminal_checkpoint_step": 51,
+      "keep_checkpoints": 3,
+      "seed": 42,
+      "validation_mode": "task_outcomes_only",
+      "eval_interval": 0
+    },
+    "runtime": {
+      "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+      "compiler_path": "training/sft.py",
+      "compiler_file_sha256": "sha256:c94ce592f57c06b365eb03254d0594ea7ccd30a282df1e18d5466b34a9226fcd",
+      "runtime_path": "training/sft_runtime.py",
+      "runtime_file_sha256": "sha256:7b0787891acdf9ebe0b07475339248dce64b659a546691a7c445f99b52a20a8f",
+      "only_intended_scientific_difference": "arm data sampling binding"
+    },
+    "wandb": {
+      "entity": "thefleet",
+      "project": "cyber-post-train",
+      "group": "q38-teacher-exposure-matched-sampling-a-v1",
+      "history_keys": [
+        "train/global_step",
+        "train/loss",
+        "train/total_supervised_tokens",
+        "train/supervised_tokens",
+        "train/lr",
+        "train/grad_norm",
+        "train/grad_norm_finite",
+        "train/supervised_tokens_per_second"
+      ],
+      "series_step_axis": "train/total_supervised_tokens",
+      "expected_scalar_events_per_arm": 51,
+      "expected_terminal_total_supervised_tokens_per_arm": 419165,
+      "automatic_system_telemetry": false,
+      "training_loss_role": "fitting_diagnostic_only",
+      "forbidden_payloads": [
+        "credentials",
+        "prompts",
+        "messages",
+        "traces",
+        "flags",
+        "answers",
+        "token_ids",
+        "task_scores",
+        "evaluation_outcomes",
+        "external_benchmark_results"
+      ]
+    },
+    "fleet_development_evaluation": {
+      "protocol_path": "configs/evaluation/qwen38-blackbox-fleet-dev-a-outcome-protocol-v2.json",
+      "protocol_file_sha256": "sha256:008d412bcdee122cd2b4f072e6f242496b3e8de1e8b07ad60e598de59202560e",
+      "protocol_embedded_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75",
+      "harness": "opencode",
+      "harness_version": "1.18.27",
+      "attempt_seeds": [
+        42,
+        43,
+        44,
+        45
+      ],
+      "task_count": 20,
+      "pass_k": 4,
+      "primary_metric": "fleet_dev_paired_mean_success_delta_4fixed",
+      "selection_eligible": true
+    }
+  },
+  "arms": [
+    {
+      "id": "availability-shaped-control-a",
+      "role": "control",
+      "data": {
+        "sampling": "availability_shaped_exact_dose_control",
+        "runtime_manifest_path": null,
+        "runtime_root": null,
+        "corpus_manifest_sha256": "sha256:8faa6e559c00cc3623a1bc03cc7364ba00611e51caa95d2d845b884ddbd7a93f",
+        "train_parquet_sha256": "sha256:e4e388835160ca3c04fb5bd9c2f309756705f452f67daae7284857f965b3541a",
+        "source_selection_sha256": "sha256:91af179896e5d4c052abfce13664e3dae46554aa4f6b9cf28c8fe885c516e706",
+        "selected_episode_ids_sha256": "sha256:e1d56c191584fddd942109c83fe4c4f60c8a4a58f86f4f09e75e9e2eb26739eb",
+        "covered_task_families": 29,
+        "episodes": 50,
+        "dense_windows": 401,
+        "supervised_tokens": 419165,
+        "family_supervised_token_gini": 0.279557264
+      },
+      "operational_identity": {
+        "run_name": "chris-q38-ta8-sampavail-dev-v1",
+        "output_root": "/mnt/sfs/jobs/chris-q38-ta8-sampavail-dev-v1",
+        "wandb_run_id": "chris-q38-ta8-sampavail-dev-v1",
+        "wandb_name": "chris-q38-ta8-sampavail-dev-v1"
+      }
+    },
+    {
+      "id": "balanced-task-family-a",
+      "role": "treatment",
+      "data": {
+        "sampling": "balanced_task_family_whole_episode",
+        "runtime_manifest_path": null,
+        "runtime_root": null,
+        "corpus_manifest_sha256": "sha256:b8aa6d6f9ae19fd509a90c3d2b6343631386d6bc14b019e620810da274bd9cf8",
+        "train_parquet_sha256": "sha256:e59e05912bdadbbd0f147a02a5da500fc8242bf565fb0206c0e36c0394289d9b",
+        "source_selection_sha256": "sha256:3b9baf93e9a94a508e3c3193c01ef8d5623c39789cf4fc6fe7a97e4388f88d9b",
+        "selected_episode_ids_sha256": null,
+        "covered_task_families": 29,
+        "episodes": 50,
+        "dense_windows": 401,
+        "supervised_tokens": 419165,
+        "family_supervised_token_gini": 0.187766401
+      },
+      "operational_identity": {
+        "run_name": "chris-q38-ta8-sampbalanced-dev-v1",
+        "output_root": "/mnt/sfs/jobs/chris-q38-ta8-sampbalanced-dev-v1",
+        "wandb_run_id": "chris-q38-ta8-sampbalanced-dev-v1",
+        "wandb_name": "chris-q38-ta8-sampbalanced-dev-v1"
+      }
+    }
+  ],
+  "pair_contract": {
+    "exactly_matched": [
+      "fresh base initialization",
+      "model revision and files",
+      "filtered split A",
+      "covered task-family set",
+      "teacher source eligibility and dense-target policy",
+      "episodes",
+      "dense windows",
+      "supervised tokens",
+      "optimizer steps",
+      "selected learning rate",
+      "native optimizer family",
+      "scheduler and warmup",
+      "batch and microbatch",
+      "epoch count",
+      "training seed",
+      "topology and image",
+      "checkpoint policy",
+      "W&B scalar schema",
+      "OpenCode Fleet development outcome protocol"
+    ],
+    "allowed_differences": [
+      "whole-episode data sampling binding",
+      "create-once run, output and W&B identities"
+    ],
+    "prohibited": [
+      "partial episodes",
+      "duplicated target tokens",
+      "epoch-count dose correction",
+      "teacher-source harness inference",
+      "held-out or score-based source selection",
+      "WebExploitBench input or selection",
+      "using training loss to choose the treatment"
+    ]
+  },
+  "admission": {
+    "cluster": "dev",
+    "priority_class": "c1",
+    "expected_queue_priority": "q1",
+    "expected_priority_value": 10000,
+    "requeue_if_preempted": false,
+    "requested_nodes_per_arm": 1,
+    "maximum_pair_nodes": 2,
+    "maximum_active_experiment_nodes_excluding_inference": 8,
+    "production_submission_authorized": false
+  },
+  "pre_materialization_gates": [
+    "freeze the split-A Fleet-development learning-rate decision and its digest before filling either arm learning rate",
+    "bind the same selected learning rate into both arms without changing any other common recipe field",
+    "locate the exact accepted private split-A matched-control and balanced corpus manifests without resolving a mutable alias",
+    "independently validate each private corpus layout and acceptance receipt without reading or exposing its payload",
+    "materialize two normal SFT configs whose only scientific difference is the arm data binding and whose operational identities are unique"
+  ],
+  "pre_submit_gates": [
+    "rehash every committed model split corpus runtime compiler protocol and template binding",
+    "run local and pinned-image CPU preflight for both exact materialized configs",
+    "preview both configs against Fleet dev and require c1 to resolve to q1 value 10000 with requeue disabled",
+    "prove both output prepared API Kubernetes W&B and journal identities are absent",
+    "prove no accepted active or ambiguous producer exists for either canonical cell",
+    "recheck fresh authentication exact dev capacity and the aggregate eight-node ceiling",
+    "write a durable intent before at most one POST per arm; never repair or debug this path in production"
+  ],
+  "acceptance": {
+    "per_arm": [
+      "51 contiguous finite optimizer updates and exactly 419165 cumulative supervised tokens",
+      "51 complete scalar-only W&B events with acknowledged finish and sync",
+      "terminal step-51 checkpoint sealed and independently rehashed",
+      "exact eight-rank zero-optimizer reload restores model optimizer scheduler RNG sampler and token progress",
+      "zero restarts and all exact owned allocations released"
+    ],
+    "pair": [
+      "compiled plans differ only in corpus bindings and create-once operational identities",
+      "both terminal receipts prove identical learning-rate optimizer schedule batch epoch token step checkpoint telemetry and evaluation bindings",
+      "fresh OpenCode Fleet-development outcomes complete under the frozen paired protocol before any treatment decision",
+      "WebExploitBench remains sealed and selection-ineligible"
+    ]
+  },
+  "unresolved_bindings": [
+    "prerequisites.learning_rate_selection.selection_decision_sha256",
+    "prerequisites.learning_rate_selection.selected_learning_rate",
+    "arms[0].data.runtime_manifest_path",
+    "arms[0].data.runtime_root",
+    "arms[1].data.runtime_manifest_path",
+    "arms[1].data.runtime_root",
+    "arms[1].data.selected_episode_ids_sha256",
+    "materialized_config_file_sha256_per_arm",
+    "prepared_plan_and_request_sha256_per_arm",
+    "pinned_image_cpu_preflight_sha256_per_arm",
+    "authenticated_dev_preview_sha256_per_arm",
+    "duplicate_output_wandb_journal_and_capacity_receipts",
+    "jobs_api_run_ids_and_kubernetes_uids",
+    "terminal_training_checkpoint_reload_wandb_and_release_receipts",
+    "paired_fleet_dev_outcome_receipts"
+  ],
+  "execution": {
+    "kind": "offline_template_only_not_a_job_request",
+    "kubernetes_calls_performed": 0,
+    "jobs_api_preview_calls_performed": 0,
+    "jobs_api_submit_calls_performed": 0,
+    "wandb_runs_created": 0
+  },
+  "sha256": "sha256:6510edece079ddba75769b8be3bbba831e6c215936b6a7665d53617c98baee2b"
+}

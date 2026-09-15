@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: chris-q38-lr100-r21-v2-preflight
+  namespace: fleet-train-jobs
+  annotations:
+    fleet.ai/purpose: "zero-GPU pinned-image preflight for the fresh LR100 step-21 reload successor"
+spec:
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  priorityClassName: c1
+  activeDeadlineSeconds: 3600
+  terminationGracePeriodSeconds: 30
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 100
+    fsGroup: 100
+  containers:
+    - name: preflight
+      image: 661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+        - -lc
+        - |
+          set -eu
+          wheel=/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-r21-v1-stage-v2/cyber_post_train-0.1.0-py3-none-any.whl
+          test "$(sha256sum "$wheel" | cut -d' ' -f1)" = 5d10b58abd8ce8489c826cff7ef763a28309b8705aa08ee8df4ef26326fd8525
+          test ! -e /tmp/lr100-r21-v2-preflight-package
+          python3 -m zipfile -e "$wheel" /tmp/lr100-r21-v2-preflight-package
+          cp /prepared-input/plan.json /work/plan.json
+          cp /prepared-input/request.json /work/request.json
+          cp /prepared-input/PREPARED.json /work/PREPARED.json
+          PYTHONPATH=/tmp/lr100-r21-v2-preflight-package python3 -m cyber_post_train preflight /work
+          PYTHONPATH=/tmp/lr100-r21-v2-preflight-package python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          from cyber_post_train.jobs import digest
+
+          root = Path("/work")
+          plan = json.loads((root / "plan.json").read_text())
+          request = json.loads((root / "request.json").read_text())
+          proof = json.loads((root / "PREFLIGHT.json").read_text())
+          if (
+              plan["run_name"] != "chris-q38-lr100-r21-v2"
+              or plan["output_root"] != "/mnt/sfs/jobs/chris-q38-lr100-r21-v2"
+              or plan["recipe"]["lr"] != 0.0001
+              or plan["recipe"]["nodes"] != 1
+              or plan["recipe"]["gpus_per_node"] != 8
+              or plan["recovery"]["mode"] != "validate"
+              or plan["recovery"]["checkpoint"]["optimizer_step"] != 21
+              or request["priority_class"] != "c1"
+              or request["workers"] != 1
+              or request["gpus_per_worker"] != 8
+              or request["requeueIfPreempted"] is not False
+              or proof.get("schema") != "cyber_sft_cpu_preflight_v1"
+              or proof.get("status") != "passed"
+              or proof.get("gpus") != 0
+              or proof.get("plan_sha256") != digest(plan)
+              or proof.get("request_sha256") != digest(request)
+              or proof.get("counts", {}).get("train", {}).get("rows") != 602
+              or proof.get("counts", {}).get("train", {}).get("tasks") != 29
+              or proof.get("counts", {}).get("train", {}).get("supervised_tokens") != 700359
+          ):
+              raise ValueError("LR100 reload successor preflight differs from its frozen contract")
+          print(json.dumps(proof, sort_keys=True, separators=(",", ":")), flush=True)
+          PY
+      envFrom:
+        - secretRef:
+            name: wandb-api
+      resources:
+        requests:
+          cpu: "8"
+          memory: 32Gi
+        limits:
+          cpu: "12"
+          memory: 48Gi
+      volumeMounts:
+        - name: sfs
+          mountPath: /mnt/sfs
+          readOnly: true
+        - name: prepared
+          mountPath: /prepared-input
+          readOnly: true
+        - name: work
+          mountPath: /work
+  nodeSelector:
+    workload: fleetai-training-ng-cpu
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: fleetai-training-ng-cpu
+      effect: NoSchedule
+  volumes:
+    - name: sfs
+      persistentVolumeClaim:
+        claimName: sfs-shared
+        readOnly: true
+    - name: prepared
+      configMap:
+        name: chris-q38-lr100-r21-v2-prepared
+    - name: work
+      emptyDir: {}

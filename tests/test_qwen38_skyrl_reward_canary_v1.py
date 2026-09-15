@@ -238,6 +238,9 @@ def test_task_selection_uses_the_authoritative_source_directly() -> None:
     assert tools["task_metadata_tools_required"] is False
     assert tools["source_metadata_tools"] is None
     assert tools["ordered_tools"] == ["bash", "submit_report"]
+    assert tools["local_code"]["episode_runtime"]["file_sha256"] == (
+        "sha256:" + hashlib.sha256((ROOT / "training/rl_episode.py").read_bytes()).hexdigest()
+    )
     rl_reward_canary.validate_exact_version_evidence(
         task_set,
         split,

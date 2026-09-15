@@ -1,0 +1,112 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: chris-q38-lr100-prod-pre-v1
+  namespace: fleet-train-jobs
+  annotations:
+    fleet.ai/purpose: "zero-GPU pinned-image production continuation preflight"
+spec:
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  priorityClassName: c1
+  activeDeadlineSeconds: 3600
+  terminationGracePeriodSeconds: 30
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 100
+    fsGroup: 100
+  nodeSelector:
+    workload: fleetai-training-ng-cpu
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: fleetai-training-ng-cpu
+      effect: NoSchedule
+  containers:
+    - name: preflight
+      image: 661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+        - -lc
+        - |
+          set -eu
+          wheel=/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-r21-v1-stage-v2/cyber_post_train-0.1.0-py3-none-any.whl
+          target=/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-full-prod-v1-stage-v1/prepared
+          test "$(sha256sum "$wheel" | awk '{print $1}')" = 5d10b58abd8ce8489c826cff7ef763a28309b8705aa08ee8df4ef26326fd8525
+          test -f "$target/PREPARED.json"
+          test ! -e "$target/PREFLIGHT.json"
+          test ! -e /tmp/lr100-prod-preflight-package
+          python3 -m zipfile -e "$wheel" /tmp/lr100-prod-preflight-package
+          PYTHONPATH=/tmp/lr100-prod-preflight-package python3 -m cyber_post_train preflight "$target"
+          PYTHONPATH=/tmp/lr100-prod-preflight-package python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          from cyber_post_train.jobs import digest
+
+          target = Path("/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-full-prod-v1-stage-v1/prepared")
+          plan = json.loads((target / "plan.json").read_text())
+          request = json.loads((target / "request.json").read_text())
+          proof = json.loads((target / "PREFLIGHT.json").read_text())
+          if (
+              proof.get("schema") != "cyber_sft_cpu_preflight_v1"
+              or proof.get("status") != "passed"
+              or proof.get("gpus") != 0
+              or proof.get("plan_sha256") != digest(plan)
+              or proof.get("request_sha256") != digest(request)
+              or proof.get("sha256") != digest({key: value for key, value in proof.items() if key != "sha256"})
+              or proof.get("counts", {}).get("train", {}).get("rows") != 602
+              or proof.get("counts", {}).get("train", {}).get("tasks") != 29
+              or proof.get("counts", {}).get("train", {}).get("supervised_tokens") != 700359
+          ):
+              raise ValueError("production continuation preflight differs")
+
+          def file_sha(path):
+              value = hashlib.sha256()
+              value.update(path.read_bytes())
+              return value.hexdigest()
+
+          result = {
+              "schema": "cyber_qwen38_lr100_prod_preflight_result_v1",
+              "pod_uid": os.environ["POD_UID"],
+              "preflight_receipt_sha256": proof["sha256"],
+              "preflight_file_sha256": file_sha(target / "PREFLIGHT.json"),
+              "plan_sha256": proof["plan_sha256"],
+              "request_sha256": proof["request_sha256"],
+              "train_rows": 602,
+              "train_tasks": 29,
+              "supervised_tokens": 700359,
+              "optimizer_step_start": 21,
+              "optimizer_step_terminal": 76,
+              "checked": proof["checked"],
+              "gpu_count": 0,
+          }
+          canonical = json.dumps(result, sort_keys=True, separators=(",", ":")).encode()
+          result["receipt_sha256"] = hashlib.sha256(canonical).hexdigest()
+          print(json.dumps(result, sort_keys=True, separators=(",", ":")), flush=True)
+          PY
+      envFrom:
+        - secretRef:
+            name: wandb-api
+      env:
+        - name: POD_UID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.uid
+      resources:
+        requests:
+          cpu: "8"
+          memory: 32Gi
+        limits:
+          cpu: "12"
+          memory: 48Gi
+      volumeMounts:
+        - name: sfs
+          mountPath: /mnt/sfs
+  volumes:
+    - name: sfs
+      persistentVolumeClaim:
+        claimName: sfs-shared

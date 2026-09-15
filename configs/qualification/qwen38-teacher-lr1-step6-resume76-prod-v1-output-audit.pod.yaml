@@ -1,0 +1,69 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: chris-q38-lr1-r76-prod-v1-output-audit
+  namespace: fleet-train-jobs
+  annotations:
+    fleet.ai/purpose: "zero-GPU read-only output-absence gate immediately before the LR1 continuation POST"
+spec:
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  priorityClassName: c1
+  activeDeadlineSeconds: 900
+  terminationGracePeriodSeconds: 30
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 100
+    fsGroup: 100
+  containers:
+    - name: audit
+      image: 661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+        - -lc
+        - |
+          set -eu
+          output=/mnt/sfs/jobs/chris-q38-lr1-r76-prod-v1
+          test ! -e "$output"
+          python3 - <<'PY'
+          import json
+          import os
+
+          print(json.dumps({
+              "schema": "cyber_sft_output_absence_audit_v1",
+              "output_root": "/mnt/sfs/jobs/chris-q38-lr1-r76-prod-v1",
+              "output_absent": True,
+              "read_only_sfs": True,
+              "gpus": 0,
+              "pod_uid": os.environ["POD_UID"],
+          }, sort_keys=True, separators=(",", ":")), flush=True)
+          PY
+      env:
+        - name: POD_UID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.uid
+      resources:
+        requests:
+          cpu: "1"
+          memory: 1Gi
+        limits:
+          cpu: "2"
+          memory: 2Gi
+      volumeMounts:
+        - name: sfs
+          mountPath: /mnt/sfs
+          readOnly: true
+  nodeSelector:
+    workload: fleetai-training-ng-cpu
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: fleetai-training-ng-cpu
+      effect: NoSchedule
+  volumes:
+    - name: sfs
+      persistentVolumeClaim:
+        claimName: sfs-shared
+        readOnly: true

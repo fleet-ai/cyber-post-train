@@ -37,7 +37,10 @@ def test_production_layout_reload_is_zero_update_eight_rank_dev_recovery() -> No
     assert reload["recipe"]["gpus_per_node"] == 8
     assert reload["cluster"]["priority"] == "c1"
     assert reload["recovery"] == {
-        "manifest": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/ta8-cos5-dev3-reload-v1/checkpoint-step-6.json",
+        "manifest": (
+            "/mnt/sfs/jobs/chris-q38-study-corpora-v1/"
+            "ta8-cos5-dev3-reload-v1/checkpoint-step-6.json"
+        ),
         "sha256": "7b04d753c77855551ae3c3b1a9cf674d55aba609f0b5f82c85b54c1f29a85be4",
         "mode": "validate",
     }

@@ -1,0 +1,106 @@
+{
+  "schema": "cyber_qwen38_lr100_step21_export_preparation_v1",
+  "observed_at": "2026-09-14T10:50:20Z",
+  "classification": "offline_export_plan_prepared_checkpoint_not_yet_export_accepted",
+  "purpose": "Audit the exact LR1e-4 step-21 native checkpoint handoff and freeze the smallest dev-first path to a complete BF16 Hugging Face export without treating checkpoint creation, CPU sealing, or a prepared plan as export acceptance.",
+  "prepared_against_commit": "fce678271c892016d76a181922d876c503336ef8",
+  "checkpoint_audit": {
+    "path": "/mnt/sfs/jobs/chris-q38-ta8-lr100-dev-v2/checkpoints/global_step_21",
+    "optimizer_step": 21,
+    "files": 33,
+    "bytes": 324627486731,
+    "producer_receipt_file_sha256": "sha256:bfbb1085203afeaeb450bfe7a3c1cb87fd5a9ec3d01bc02a734f008c6384a86b",
+    "producer_receipt_sha256": "sha256:328bfeaa4b831c0e40be1e71e87cc58617af2457961b9a61de0ba8096508e1c4",
+    "seal_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/lr100-dev-v2-checkpoint-seals-v1/step-21.json",
+    "seal_receipt_sha256": "sha256:b82fd516e2e3c4bffa99d9cae718e6caaba4d7b9d1679885c41676ef3d754fa0",
+    "seal_file_sha256_preserved": false,
+    "pair_verification_accepted": false,
+    "native_zero_update_reload_accepted": false,
+    "accepted_for_export": false,
+    "reason": "The training run, step-21 checkpoint creation, self-digesting CPU seal, W&B sync and GPU release are operationally accepted. One independent full-pair rehash proof and the exact all-rank zero-update native reload still must pass before export."
+  },
+  "source_evidence": {
+    "handoff_path": "docs/evidence/qwen38-study/2026-09-14-lr100-training-seal-handoff-v1.json",
+    "handoff_file_sha256": "sha256:301152aec845355a9c3d49f2d965025036d045baa8f1c370a322ce20dab390b0",
+    "handoff_receipt_sha256": "sha256:6690b52a85401afd6c34b1cd062033b1edf33a94b99fe8906f9560f6bb16aa2c",
+    "reload_template_path": "configs/qualification/qwen38-teacher-lr100-cosine-1x8-step21-reload-dev-v1.template.json",
+    "reload_template_file_sha256": "sha256:85e236cafa1f087c602ba3442c8454e0ddd5e03fa628e042336b406178e87d5d",
+    "reload_template_receipt_sha256": "sha256:87aa4091f18f599e6a5a849277aeb028e361f295b05becbdaf80b5255416ebb0"
+  },
+  "mechanism_reuse": {
+    "evidence_path": "docs/evidence/qwen38-study/2026-09-13-sft-export-gpu-acceptance-v1.json",
+    "evidence_file_sha256": "sha256:70c2eaeaabce5c99d17a587eb6582f6523acdbc18f4e8a6f8666d330ec1a9d70",
+    "evidence_receipt_sha256": "sha256:13becbca46f8f503e2b84bef7b300986358caec4a86c6a31c34dd1e087a397b4",
+    "established_fact": "The same exact Qwen3.8 revision and training image already produced accepted complete BF16 exports plus one-GPU synthetic reloads for native checkpoints at steps 44 and 186.",
+    "lr100_inference": "The implementation is a qualified candidate for step 21 because checkpoint format, model revision, image, topology world size and export contract match. This is mechanism evidence, not evidence that the LR100 checkpoint bytes have passed export."
+  },
+  "prepared_plan": {
+    "path": "configs/qualification/qwen38-teacher-lr100-step21-hf-export-dev-v1.template.json",
+    "file_sha256": "sha256:51b17705342c1666412ecbd6dd25acb5e7075f0660f5bd4c1c1931af892bb06d",
+    "receipt_sha256": "sha256:cc0c1510931dc056678dcc0c7108a7589c2d8b310573872d5d4cd56214e00b91",
+    "launchable": false,
+    "cluster": "dev",
+    "priority_ceiling": "c1/q1",
+    "cpu_export_gpus": 0,
+    "cpu_check_gpus": 0,
+    "gpu_check_gpus": 1,
+    "production_authorized": false
+  },
+  "qualified_sequence_after_prerequisites": [
+    "Reopen one accepted pair-verification proof and exact step-21 native-reload acceptance; require zero optimizer updates, all eight ranks restored, unchanged source and complete release.",
+    "With fresh access, verify the exact manifest digest and that output, partial, receipt, API, Kubernetes and journal identities are absent.",
+    "Server-dry-run and create once on dev one zero-GPU CPU export using the exact pinned image and training.export implementation.",
+    "Independently rehash the published export and load its full model structure on CPU with zero GPUs.",
+    "Prepare, preflight, preview and submit at most once through the dev Jobs API one c1/q1 one-GPU synthetic reload with no optimizer step and no task data.",
+    "Accept only after immutable receipts, exact source stability, finite synthetic logits, zero restarts and full resource release are independently reconciled."
+  ],
+  "live_prerequisites": [
+    "fresh_nebius_authentication_with_a_complete_monitoring_and_cleanup_window",
+    "digest_valid_terminal_checkpoint_pair_verification_evidence",
+    "exact_step21_seal_file_sha256_from_that_pair_proof",
+    "digest_valid_exact_one_by_eight_native_reload_acceptance_with_zero_updates",
+    "all_reload_gpus_released",
+    "exact_dev_image_source_and_destination_preflights",
+    "all_create_once_output_partial_receipt_api_kubernetes_wandb_and_journal_identities_absent",
+    "server_dry_run_for_zero_gpu_cpu_jobs",
+    "authenticated_dev_jobs_api_preview_for_one_gpu_c1_q1_check",
+    "owned_node_cap_and_no_peer_touch_rechecked"
+  ],
+  "closed_gates": {
+    "checkpoint_pair_accepted": false,
+    "native_reload_accepted": false,
+    "cpu_export_accepted": false,
+    "cpu_check_accepted": false,
+    "gpu_export_reload_accepted": false,
+    "serving_qualified": false,
+    "production_authorized": false,
+    "evaluation_authorized": false,
+    "hyperparameter_selected": false,
+    "model_quality_claimed": false
+  },
+  "verification": {
+    "test_path": "tests/test_qwen38_teacher_lr100_step21_hf_export_template.py",
+    "test_file_sha256": "sha256:a024958234ac737234824430d28d11d58ea6ce0b8887a519c94d4f37c2f2b356",
+    "focused_static_and_cli_tests_passed": 12,
+    "ruff_check_passed": true,
+    "ruff_format_check_passed": true,
+    "json_parse_passed": true,
+    "desktop_tensor_suite_run": false,
+    "desktop_tensor_suite_reason": "The desktop environment has no Torch installation. The tensor implementation is unchanged and its exact Qwen3.8 real-checkpoint behavior is bound to the prior accepted dev evidence; the later live pinned-image preflight remains mandatory."
+  },
+  "execution": {
+    "kind": "offline_preparation_only",
+    "kubernetes_calls_performed": 0,
+    "jobs_api_calls_performed": 0,
+    "wandb_calls_performed": 0,
+    "tensorlake_calls_performed": 0,
+    "gpu_nodes_allocated": 0
+  },
+  "privacy": {
+    "credentials_read_or_persisted": false,
+    "private_logs_read": false,
+    "raw_tensor_values_read": false,
+    "prompts_traces_flags_answers_rewards_or_scores_read": false
+  },
+  "sha256": "sha256:3f0fa0a2ff09c151574792aaa68fb42d07ff792fba49ee85a0ca7dd245ddcfbb"
+}

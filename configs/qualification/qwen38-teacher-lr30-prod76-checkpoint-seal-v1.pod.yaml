@@ -1,0 +1,106 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: chris-q38-lr30-p76-seal-v1
+  namespace: fleet-train-jobs
+  annotations:
+    fleet.ai/purpose: "create-once CPU seal of the completed LR30 step-76 checkpoint"
+spec:
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  priorityClassName: c1
+  activeDeadlineSeconds: 3600
+  terminationGracePeriodSeconds: 30
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 100
+    fsGroup: 100
+  nodeSelector:
+    workload: fleetai-training-ng-cpu
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: fleetai-training-ng-cpu
+      effect: NoSchedule
+  containers:
+    - name: sealer
+      image: 661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+        - -lc
+        - |
+          set -eu
+          wheel=/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/checkpoint-sealer-code-v1/cyber_post_train-0.1.0-py3-none-any.whl
+          test "$(sha256sum "$wheel" | cut -d' ' -f1)" = 5d10b58abd8ce8489c826cff7ef763a28309b8705aa08ee8df4ef26326fd8525
+          test ! -e /tmp/lr30-prod76-sealer-package
+          python3 -m zipfile -e "$wheel" /tmp/lr30-prod76-sealer-package
+          PYTHONPATH=/tmp/lr30-prod76-sealer-package python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          import torch
+
+          from training.checkpoints import receipt, seal
+
+          if torch.cuda.is_available():
+              raise ValueError("checkpoint sealing must remain CPU-only")
+
+          run = Path("/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1")
+          plan_path = run / ".runtime/plan.json"
+          output = run / "checkpoint-seals-v1/step-76.json"
+          terminal = receipt(run / "TRAINING_COMPLETE.json")
+          plan = json.loads(plan_path.read_text())
+          if (
+              output.exists()
+              or plan["run_name"] != "chris-q38-lr30-resume76-prod-v1"
+              or plan["output_root"] != str(run)
+              or plan["recipe"]["max_steps"] != 76
+              or plan["recipe"]["lr"] != 0.00003
+              or plan["recipe"]["nodes"] != 2
+              or plan["recipe"]["gpus_per_node"] != 4
+              or plan["recipe"]["eval_interval"] != 0
+              or terminal.get("status") != "training_complete"
+              or terminal.get("optimizer_step") != 76
+              or not terminal.get("wandb_tracking", {}).get("acceptance_ready")
+          ):
+              raise ValueError("terminal run differs from the frozen LR30 production contract")
+
+          result = seal(plan, 76, output, source_plan_file=plan_path)
+          proof = {
+              "schema": "cyber_qwen38_lr30_prod76_checkpoint_seal_result_v1",
+              "pod_uid": os.environ["POD_UID"],
+              "manifest_path": str(output),
+              "manifest_receipt_sha256": result["receipt_sha256"],
+              "optimizer_step": result["optimizer_step"],
+              "world_size": result["world_size"],
+              "checkpoint_files": len(result["files"]),
+              "checkpoint_bytes": result["total_bytes"],
+              "gpu_reload_verified": result["gpu_reload_verified"],
+              "gpu_count": 0,
+              "source_preserved": True,
+              "private_logs_read": False,
+              "tensor_values_read": False,
+          }
+          print(json.dumps(proof, sort_keys=True, separators=(",", ":")), flush=True)
+          PY
+      env:
+        - name: POD_UID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.uid
+      resources:
+        requests:
+          cpu: "4"
+          memory: 8Gi
+        limits:
+          cpu: "8"
+          memory: 16Gi
+      volumeMounts:
+        - name: sfs
+          mountPath: /mnt/sfs
+  volumes:
+    - name: sfs
+      persistentVolumeClaim:
+        claimName: sfs-shared

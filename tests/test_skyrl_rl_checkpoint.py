@@ -84,7 +84,7 @@ def source_plan() -> dict:
             "schema": "cyber_skyrl_data_v1",
             "name": checkpoint.SOURCE_RUN_NAME,
             "selection_sha256": (
-                "sha256:2d66f88325900d234ad26ef61930d4a5f7597ce96f54bca45bd05a2ed201b35d"
+                "sha256:15400d5e58c53c8c2258c826c39aa5545b14d1705bece3d927d09d38de76b157"
             ),
             "split_sha256": (
                 "sha256:8279ea19808ad1accb00d3f3145c3ec087030677786e0188251cfc197f306adf"

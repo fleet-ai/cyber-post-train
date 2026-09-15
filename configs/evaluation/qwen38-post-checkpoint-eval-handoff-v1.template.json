@@ -1,0 +1,205 @@
+{
+  "schema": "cyber_qwen38_post_checkpoint_eval_handoff_v1",
+  "handoff_id": "qwen38-post-checkpoint-eval-handoff-v1",
+  "state": "blocked_waiting_exact_candidate_and_live_serving_evidence",
+  "launchable": false,
+  "paid_or_scored_work_authorized": false,
+  "purpose": "Bind one accepted Qwen3.8-27B checkpoint to a matched Fleet development evaluation for scientific selection and a separate sealed WebExploitBench report.",
+  "model": {
+    "repository": "Qwen/Qwen3.8-27B",
+    "base_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "allowed_treatment_kinds": [
+      "teacher_sft",
+      "self_sft",
+      "rl",
+      "sft_then_rl"
+    ]
+  },
+  "applicability": {
+    "training_harness_family": "opencode",
+    "training_harness_version": "1.18.27",
+    "training_harness_release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "rule": "Use this handoff only when an immutable training-arm receipt proves the same OpenCode implementation and version. A Qwen Code, unknown, or different training harness requires a new reviewed protocol rather than relabeling this one.",
+    "cross_surface_limit": "Fleet and WebExploitBench use different task-specific submission tools and graders. Harness matching means the same OpenCode binary and transport family, while each base/candidate pair remains byte-for-byte matched within its own evaluation surface."
+  },
+  "binding_template": {
+    "treatment_kind": null,
+    "training_arm_id": null,
+    "training_plan_sha256": null,
+    "training_terminal_acceptance_receipt_sha256": null,
+    "training_input_manifest_sha256": null,
+    "training_harness_contract_sha256": null,
+    "checkpoint_step": null,
+    "checkpoint_seal_receipt_sha256": null,
+    "checkpoint_freeze_receipt_sha256": null,
+    "export_receipt_sha256": null,
+    "weights_manifest_sha256": null,
+    "tokenizer_manifest_sha256": null,
+    "chat_template_sha256": null,
+    "staging_receipt_sha256": null,
+    "base_served_model_id": null,
+    "candidate_served_model_id": null,
+    "base_serving_registration_receipt_sha256": null,
+    "candidate_serving_registration_receipt_sha256": null,
+    "base_serving_route_profile_sha256": null,
+    "candidate_serving_route_profile_sha256": null,
+    "serving_execution_contract_sha256": null,
+    "live_base_candidate_parity_receipt_sha256": null,
+    "serving_image_digest": null,
+    "normalized_server_arguments_sha256": null,
+    "fleet_agent_image_digest": null,
+    "fleet_proxy_image_digest": null,
+    "external_benchmark_inputs_used_for_training": null,
+    "external_benchmark_outputs_used_for_training": null,
+    "external_benchmark_outcomes_used_for_training": null,
+    "external_benchmark_derived_inputs_used_for_training": null
+  },
+  "fleet_development_selection": {
+    "role": "only_hyperparameter_and_checkpoint_selection_surface",
+    "split_choice_rule": "The candidate training plan must already bind exactly one protocol digest below. Never choose A or B after seeing outcomes.",
+    "splits": {
+      "a": {
+        "parent_protocol": {
+          "path": "configs/evaluation/qwen38-blackbox-fleet-dev-a-outcome-protocol-v2.json",
+          "file_sha256": "sha256:008d412bcdee122cd2b4f072e6f242496b3e8de1e8b07ad60e598de59202560e",
+          "embedded_sha256": "sha256:3c2c65eed748b16b50ef992327324b1fcaad84b190456c4aefe69c6efe748f75"
+        },
+        "base_control": {
+          "path": "configs/evaluation/qwen38-blackbox-fleet-dev-a-base-control-v2.json",
+          "file_sha256": "sha256:14bba8c4fcbeb7c8b289de7e68f33712181ae3a8f31e4095bf545824f35e9144",
+          "embedded_sha256": "sha256:db3a37d00654eb4fdfabaf3f53999a0ef2b82a6c2bf9b9c0851aeb25116ac913"
+        },
+        "task_set": {
+          "path": "configs/evaluation/qwen38-blackbox-fleet-dev-a-task-set-v1.json",
+          "file_sha256": "sha256:c83fbb2291898351b6a99f6f4f25dff30aeff295cee503031ff606d97a1c88f4",
+          "embedded_sha256": "sha256:914a67b587a8d2f5a523ab652eeaec15f8f9d5dbec559c25ff176b01777a6c96"
+        }
+      },
+      "b": {
+        "parent_protocol": {
+          "path": "configs/evaluation/qwen38-blackbox-fleet-dev-b-outcome-protocol-v2.json",
+          "file_sha256": "sha256:bae310dce0d3ecb0a097640fe14dd943c71a9116fbefd21c45f02a79869d8f09",
+          "embedded_sha256": "sha256:01f9c8b28cdc08ef8c089600b96450d747fe92447a60cbd4d60256b6302e5388"
+        },
+        "base_control": {
+          "path": "configs/evaluation/qwen38-blackbox-fleet-dev-b-base-control-v2.json",
+          "file_sha256": "sha256:55d1b0a16488b2d250eb397e4adb48ae4086506a264556dd37d44360238c84d2",
+          "embedded_sha256": "sha256:81e093211a15f71b3980420ccbd20652c8d233b82ae795a6a428f6422b6f4f86"
+        },
+        "task_set": {
+          "path": "configs/evaluation/qwen38-blackbox-fleet-dev-b-task-set-v1.json",
+          "file_sha256": "sha256:1c29fa0618418278d8ce80a2a8f769bc350b0a06251314b6b1da037567c56658",
+          "embedded_sha256": "sha256:6f654f7493fa3803fc014efcfdc1be4a27e6518bc29ad9d401fe3823a59fbab2"
+        }
+      }
+    },
+    "frozen_design": {
+      "task_families": 20,
+      "pass_k": 4,
+      "attempt_seeds": [
+        42,
+        43,
+        44,
+        45
+      ],
+      "harness": "opencode",
+      "harness_version": "1.18.27",
+      "context_window_size": 262144,
+      "max_output_tokens": 32768,
+      "tools": [
+        "bash",
+        "submit_report"
+      ],
+      "primary_metric": "fleet_dev_paired_mean_success_delta_4fixed",
+      "pairing_unit": "exact task_version_id and attempt seed",
+      "valid_outcome_retry": "forbidden"
+    },
+    "execution": {
+      "controller_location": "authorized CPU worker with Docker and durable private storage",
+      "new_or_changed_cluster_executable_requires_dev_first": true,
+      "maximum_pod_priority_class": "c1",
+      "expected_queue_priority_class": "q1",
+      "expected_priority_value": 10000,
+      "c0_or_q0_allowed": false,
+      "gpu_job_required_for_controller": false
+    },
+    "outcome_firewall": {
+      "training_data_eligible": false,
+      "wandb_export_allowed": false,
+      "training_loss_selection_eligible": false,
+      "webexploitbench_selection_or_tiebreak_eligible": false,
+      "infrastructure_invalid_counts_as_model_failure": false
+    }
+  },
+  "webexploitbench_reporting": {
+    "role": "sealed_external_reporting_only",
+    "parent_protocol": {
+      "path": "configs/evaluation/qwen38-post-training-webexploitbench-tensorlake-parent-v1.json",
+      "file_sha256": "sha256:ead0ede3ab9569e7a5e3b3346bf4b23f81d0a708dd1e4e0078e7f04a0be8d83d",
+      "embedded_sha256": "sha256:65991229a6e394891d156aa83549e9074477881781b0d238629180a6ea88f432"
+    },
+    "paired_plan_template": {
+      "path": "configs/evaluation/qwen38-post-training-webexploitbench-tensorlake-paired-plan-v1.template.json",
+      "file_sha256": "sha256:e892001a14938eb07fb8cda54be2b07dec215d359fd54dd8bc45bbd9c83ecb88",
+      "embedded_sha256": "sha256:4ec7e5bf5c0ec8e9b3de1873559b04b3a6aba8827b31fabd7c49b7439bc86d87"
+    },
+    "matched_harness": {
+      "harness": "opencode",
+      "harness_version": "1.18.27",
+      "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+      "context_window_size": 262144,
+      "max_output_tokens": 32768,
+      "task_specific_tools": [
+        "web_bash",
+        "web_submit_findings"
+      ],
+      "base_candidate_identity_rule": "The base and candidate must use the same adapter image, prompt and tool schemas, CAGE and benchmark revisions, judge, sampling, budgets, resources, retry policy and qualified snapshot; only the exact student weight manifest may differ."
+    },
+    "execution": {
+      "provider": "tensorlake",
+      "kubernetes_queue_used_for_scored_sandboxes": false,
+      "tensorlake_has_kubernetes_priority_field": false,
+      "maximum_priority_for_any_separately_authorized_cluster_helper": "c1/q1",
+      "candidate_only_run_is_capability_comparison": false,
+      "paired_controller_launch_implemented": false
+    },
+    "selection_firewall": {
+      "training_data_eligible": false,
+      "preference_data_eligible": false,
+      "reward_data_eligible": false,
+      "retrieval_prompt_or_skill_eligible": false,
+      "hyperparameter_selection_eligible": false,
+      "checkpoint_selection_eligible": false,
+      "stopping_tiebreaking_or_retry_signal_eligible": false,
+      "wandb_export_allowed": false,
+      "outcome_or_validity_access_before_fleet_selection_freeze": false,
+      "failure_analysis_before_fleet_selection_freeze": false
+    },
+    "current_launch_gate": "blocked_until_two_arm_snapshot qualification, paired project parity, fresh duplicate inventory, both controller previews, and an enforcing paired controller are implemented and independently validated"
+  },
+  "eligibility_gates_in_order": [
+    "terminal training acceptance with finite real updates and an immutable training plan",
+    "stable self-digesting checkpoint seal plus exact native zero-update reload",
+    "deterministic BF16 export with complete weights, tokenizer and chat-template manifests plus reload",
+    "create-once staging and immutable base and candidate serving registrations",
+    "fresh live base/candidate parity through the exact evaluator route, with tokenizer, template, precision, quantization, engine, arguments, parsers, context and images bound",
+    "training harness evidence proves OpenCode 1.18.27; otherwise this handoff is inapplicable",
+    "the training plan preselects exactly one frozen Fleet development split before outcomes",
+    "fresh Fleet account, exact task, route and image preflight plus absent private result and claim identities",
+    "complete authoritative paired Fleet outcomes for every frozen task and seed, preserved privately and excluded from W&B",
+    "freeze the Fleet development selection decision before opening any WebExploitBench outcome or validity information",
+    "fresh WebExploitBench paired duplicate inventory and qualified two-arm snapshot prove no previous pair or result roots",
+    "both WebExploitBench controller previews and the enforcing counterbalanced paired controller pass separate review",
+    "every exact owned resource is terminally reconciled and released before acceptance"
+  ],
+  "execution_record": {
+    "kind": "offline_template_only_not_an_evaluation_plan",
+    "network_calls_performed": 0,
+    "cluster_calls_performed": 0,
+    "jobs_submitted": 0,
+    "tensorlake_sandboxes_created": 0,
+    "benchmark_payloads_read": 0,
+    "benchmark_outcomes_read": 0
+  },
+  "sha256": "sha256:ad6c5706cb5f3a4418117ce06f7417a90f06161448b911bdecc5befb310067f0"
+}

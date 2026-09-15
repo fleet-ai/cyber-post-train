@@ -5,6 +5,7 @@ from pathlib import Path
 import httpx
 import pytest
 import yaml
+from click import unstyle
 from typer.testing import CliRunner
 
 from cyber_post_train import cli
@@ -91,6 +92,17 @@ def test_runtime_bundle_executes_exact_bytes_once(tmp_path):
     assert subprocess.run(command, env=env, capture_output=True).returncode != 0
     broken = {**env, "CYBER_RUNTIME_BUNDLE": "YQ=="}
     assert subprocess.run(command, env=broken, capture_output=True).returncode != 0
+
+
+def test_runtime_bundle_selects_only_a_known_python_executable():
+    from cyber_post_train.jobs import bundled_request
+
+    files = {"run.py": "pass"}
+    assert bundled_request(config(), files, "run", [], python_executable="python3")[
+        "command"
+    ].startswith("python3 -c ")
+    with pytest.raises(JobsError, match="Python executable"):
+        bundled_request(config(), files, "run", [], python_executable="python -O")
 
 
 @pytest.mark.parametrize("fault", ["missing", "escape", "absolute", "text"])
@@ -739,7 +751,7 @@ def test_cli_rejects_unknown_cluster_before_client_creation(monkeypatch, command
     monkeypatch.setattr(cli, "Jobs", lambda *args, **kwargs: calls.append(args))
     result = CliRunner().invoke(cli.app, [command, "unused", "--cluster", cluster])
     assert result.exit_code == 2 and calls == []
-    assert "Invalid value for '--cluster'" in result.output
+    assert "Invalid value for '--cluster'" in unstyle(result.output)
 
 
 def test_exhaustive_pagination():

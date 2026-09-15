@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 from training.io import digest_json, file_sha256
 
 ROOT = Path(__file__).resolve().parents[1]
 PLAN_PATH = ROOT / "configs/studies/qwen-blackbox-teacher-staged-search-v3.json"
+PLAN_SOURCE_COMMIT = "c95f85007ea302b3cd0f8abbc19aca481a06ce04"
 
 
 def read(path: Path) -> dict:
@@ -26,6 +29,21 @@ def plan() -> dict:
 def assert_bound_json(binding: dict) -> dict:
     value = read(ROOT / binding["path"])
     assert binding["file_sha256"] == file_sha256(ROOT / binding["path"])
+    assert binding["embedded_sha256"] == value["sha256"]
+    assert value["sha256"] == digest_json(
+        {key: item for key, item in value.items() if key != "sha256"}
+    )
+    return value
+
+
+def frozen_bytes(commit: str, path: str) -> bytes:
+    return subprocess.check_output(["git", "show", f"{commit}:{path}"], cwd=ROOT)
+
+
+def assert_bound_json_at_commit(binding: dict, commit: str) -> dict:
+    payload = frozen_bytes(commit, binding["path"])
+    value = json.loads(payload)
+    assert binding["file_sha256"] == "sha256:" + hashlib.sha256(payload).hexdigest()
     assert binding["embedded_sha256"] == value["sha256"]
     assert value["sha256"] == digest_json(
         {key: item for key, item in value.items() if key != "sha256"}
@@ -84,8 +102,12 @@ def test_v3_binds_scheduler_gate_and_classifies_numeric_canaries_only() -> None:
         "frozen_evidence_pin_tests": "71ac12300b2ecad668d1016b1b871bfc6b2b993b",
     }
     for component in ("runtime", "compiler"):
-        assert scheduler[component]["file_sha256"] == file_sha256(
-            ROOT / scheduler[component]["path"]
+        payload = frozen_bytes(
+            scheduler["implementation_commits"]["runtime_and_compiler"],
+            scheduler[component]["path"],
+        )
+        assert scheduler[component]["file_sha256"] == (
+            "sha256:" + hashlib.sha256(payload).hexdigest()
         )
     assert scheduler["candidate_pair_for_scientific_arms"] == {
         "scheduler": "cosine",
@@ -155,7 +177,9 @@ def test_v3_preserves_capacity_priority_tracking_and_sealing_boundaries() -> Non
         wandb["forbidden_payloads"]
     )
 
-    web = assert_bound_json(value["evidence"]["webexploitbench_parent"])
+    web = assert_bound_json_at_commit(
+        value["evidence"]["webexploitbench_parent"], PLAN_SOURCE_COMMIT
+    )
     assert web["results"]["sealed_during_hpo_and_checkpoint_selection"] is True
     assert web["results"]["may_select_or_retime_training"] is False
     assert value["study_invariants"]["webexploitbench"] == (

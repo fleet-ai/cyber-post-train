@@ -1,0 +1,96 @@
+{
+  "schema": "cyber_qwen38_lr1_prod76_submission_evidence_v1",
+  "source": {
+    "optimizer_step": 6,
+    "checkpoint_manifest_file_sha256": "0cbdb07de2ffabc928ba8b443a59814266653d658f4190aa81f6d9801a6fbcd2",
+    "checkpoint_receipt_sha256": "b6feb7649659e46d494215940c4575dee2de8c5cd6de2dadd30955d043bd72f7",
+    "zero_update_reload_accepted": true
+  },
+  "target": {
+    "run_name": "chris-q38-lr1-r76-prod-v1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lr1-r76-prod-v1",
+    "optimizer_step_start": 6,
+    "optimizer_step_terminal": 76,
+    "learning_rate": 0.000001,
+    "nodes": 2,
+    "gpus_per_node": 4,
+    "priority_class": "c1",
+    "derived_queue_priority_class": "q1",
+    "automatic_requeue": false
+  },
+  "preflight": {
+    "pod_name": "chris-q38-lr1-r76-prod-v1-preflight",
+    "pod_uid": "dbfd3c89-0975-45f0-9a65-998cb68db24c",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "restart_count": 0,
+    "gpu_count": 0,
+    "plan_sha256": "662bf3c6f4fa92d98f0815ff7ef457d7724102e98414ef7e692a490f12f77d5f",
+    "request_sha256": "3b3f58aef4a1f37b75f7feab2a7d4dfb10525956f8852fbf33cbfb6b62062322",
+    "receipt_sha256": "e51a17d7a961a25833966e88b671b286fa18c7e63bd93cdff436ee19a773986e",
+    "train_rows": 602,
+    "train_tasks": 29,
+    "supervised_tokens": 700359
+  },
+  "output_absence_gate": {
+    "pod_name": "chris-q38-lr1-r76-prod-v1-output-audit",
+    "pod_uid": "524ddfe7-476b-48d8-a1d2-aed62b360439",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "restart_count": 0,
+    "gpu_count": 0,
+    "read_only_sfs": true,
+    "output_absent": true
+  },
+  "preview": {
+    "cluster": "prod",
+    "manifest_sha256": "15d18c2bec82fcd7d11f5a533d5b66ea1d7df77dba8890693b39a081776a8d94",
+    "nodes": 2,
+    "gpus": 8,
+    "submitted": false
+  },
+  "submission": {
+    "post_count": 1,
+    "created_at": "2026-09-15T00:30:03Z",
+    "api_run_id": "5c65fed3-f83e-41f1-be97-63d4934694e1",
+    "rayjob_name": "chris-q38-lr1-r76-prod-v1-5c65fed3",
+    "rayjob_uid": "4f627a73-7498-4b88-b7a1-a3a4ebb12bcb",
+    "workload_name": "rayjob-chris-q38-lr1-r76-prod-v1-5c65fed3-38fde",
+    "workload_uid": "c6e6286a-0b9c-4c59-8809-bc91263e6e66",
+    "initial_state": "queued_without_allocation",
+    "initial_gpu_allocation": 0
+  },
+  "admission": {
+    "admitted_at": "2026-09-15T00:38:22Z",
+    "cluster_queue": "training-cq",
+    "resource_flavor": "b300-training",
+    "raycluster_name": "chris-q38-lr1-r76-prod-v1-5c65fed3-2dh9x",
+    "raycluster_uid": "490dd39c-c92d-4029-ac4c-b8e82a1a771e",
+    "raycluster_state": "ready",
+    "head_pod_name": "chris-q38-lr1-r76-prod-v1-5c65fed3-2dh9x-head-p4rl8",
+    "head_pod_uid": "81279b52-8f86-4055-8988-2e8488560411",
+    "worker_pod_name": "chris-q38-lr1-r76-prod-v1-5c65fed3-2dh9x-gpu-worker-sqf56",
+    "worker_pod_uid": "cf6378ce-60cb-4de1-9685-2496d4050c10",
+    "pods_ready_at": "2026-09-15T00:38:59Z",
+    "restart_count": 0,
+    "allocated_nodes": 2,
+    "allocated_gpus": 8,
+    "startup_deadline": "2026-09-15T01:08:59Z"
+  },
+  "first_new_optimizer_progress": {
+    "observed_at_unix": 1789433627.3194735,
+    "optimizer_step": 7,
+    "phase": "training",
+    "progress_receipt_sha256": "b468552bee1f4d5020fe14921c2c006d6637c97aadef6739a710464c2017c490",
+    "source_resume_step": 6,
+    "new_optimizer_updates": 1,
+    "restart_count": 0,
+    "wandb_initialized": true
+  },
+  "acceptance": {
+    "training_complete": false,
+    "terminal_checkpoint_sealed": false,
+    "resources_released": false,
+    "webexploitbench_evaluation_complete": false
+  }
+}

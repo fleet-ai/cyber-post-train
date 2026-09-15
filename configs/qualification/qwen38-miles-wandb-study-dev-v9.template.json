@@ -1,0 +1,85 @@
+{
+  "schema": "cyber_qwen38_miles_wandb_study_dev_v9_template_v1",
+  "status": "blocked_not_launchable",
+  "launchable": false,
+  "purpose": "Inert successor for fresh Dev qualification of the additive Miles W&B comparative-study runtime. It does not replace, resume, or change Dev8.",
+  "compiler": "training.miles_study_training.compile_rl",
+  "preserved_dev8": {
+    "config": {
+      "path": "configs/qualification/qwen38-miles-rl-reward-canary-dev-v8.json",
+      "file_sha256": "sha256:2bb1a8db017d0aeb5841caaf491b4fb17a74e78bb7bb0c4b8e9f481eb52ce0c7"
+    },
+    "launch": {
+      "path": "configs/qualification/qwen38-miles-rl-reward-canary-launch-dev-v8.json",
+      "file_sha256": "sha256:ddea71016eb14d3a7644bbd3f50bd608dfb01151c2426df4d78afdd9d9100798"
+    },
+    "rule": "Never rebuild or reinterpret Dev8 with v2 runtime bytes. Accept and reload its exact existing checkpoint under its own evidence contract first."
+  },
+  "future_identity": {
+    "run_name": "chris-q38-miles-wb-dev9",
+    "output_root": "/mnt/sfs/jobs/chris-q38-miles-wb-dev9",
+    "wandb": {
+      "entity": "thefleet",
+      "project": "cyber-post-train",
+      "group": "q38-fleet-rl-study-a-v1",
+      "run_id": "chris-q38-miles-wb-dev9",
+      "name": "chris-q38-miles-wb-dev9",
+      "job_type": "rl-train",
+      "tags": [
+        "backend:miles",
+        "model:qwen38-27b",
+        "phase:dev-qualification",
+        "study:fleet-blackbox-rl-a"
+      ],
+      "resume": "never",
+      "history_keys": [
+        "train/step",
+        "train/loss",
+        "train/grad_norm",
+        "train/lr-pg_0",
+        "tokens/rollout_step",
+        "tokens/response_tokens",
+        "tokens/total_response_tokens"
+      ],
+      "axes": {
+        "optimizer": "train/step",
+        "token_exposure": "tokens/total_response_tokens"
+      }
+    }
+  },
+  "blocked_bindings": {
+    "dev8_accepted_reward_and_update_terminal": null,
+    "dev8_digest_bound_checkpoint_seal": null,
+    "dev8_exact_all_rank_zero_update_reload": null,
+    "v2_native_image_import_and_parser_qualification": null,
+    "v2_cpu_preflight": null,
+    "v2_offline_wandb_sdk_self_test": null,
+    "v2_fresh_dev_one_update_acceptance": null,
+    "v2_fresh_dev_exact_all_rank_zero_update_reload": null
+  },
+  "required_order": [
+    "accept_dev8_reward_variance_policy_update_and_checkpoint_without_changing_dev8_bytes",
+    "pass_exact_dev8_all_rank_zero_update_reload",
+    "freeze_a_complete_v2_plan_and_regenerate_plan_request_and_runtime_digests",
+    "pass_v2_pinned_image_import_parser_and_offline_wandb_contract_self_test",
+    "pass_v2_zero_gpu_cpu_preflight",
+    "pass_fresh_v2_dev_one_update_canary_and_terminal_evidence",
+    "pass_fresh_v2_all_rank_zero_update_checkpoint_reload",
+    "only_then_materialize_a_comparative_successor_or_consider_production"
+  ],
+  "live_gates_after_offline_qualification": [
+    "warning_free_dev_preview_c1_no_requeue",
+    "fresh_jobs_api_name_output_root_submission_journal_and_wandb_id_absence",
+    "exact_dev_capacity_and_owned_node_budget",
+    "one_durable_intent_and_exactly_one_post"
+  ],
+  "prohibitions": [
+    "no_live_call_from_this_template",
+    "no_dev8_bundle_change",
+    "no_resume_or_append_to_an_existing_wandb_run",
+    "no_reward_score_success_response_task_text_or_artifact_in_wandb",
+    "no_webexploitbench_input_to_training_reward_hpo_checkpoint_selection_or_retry",
+    "no_production_launch_from_this_template"
+  ],
+  "sha256": "sha256:3293fa6e780d002e9f143121dd2ab6d526288d43e024c31e8a6d3f631050567d"
+}

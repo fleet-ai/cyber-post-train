@@ -1,0 +1,89 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: chris-q38-lr30-p76-export-v1
+  namespace: fleet-train-jobs
+  annotations:
+    fleet.ai/purpose: "create-once zero-GPU BF16 export of the accepted LR30 step-76 checkpoint"
+spec:
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  priorityClassName: c1
+  activeDeadlineSeconds: 14400
+  terminationGracePeriodSeconds: 60
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 100
+    fsGroup: 100
+  containers:
+    - name: exporter
+      image: 661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4
+      imagePullPolicy: IfNotPresent
+      command:
+        - /bin/sh
+        - -lc
+        - |
+          set -eu
+          wheel=/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/checkpoint-sealer-code-v1/cyber_post_train-0.1.0-py3-none-any.whl
+          manifest=/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/checkpoint-seals-v1/step-76.json
+          output=/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/hf-export-step76-v1
+          test "$(sha256sum "$wheel" | cut -d' ' -f1)" = 5d10b58abd8ce8489c826cff7ef763a28309b8705aa08ee8df4ef26326fd8525
+          test "$(sha256sum "$manifest" | cut -d' ' -f1)" = cc4e2997e120a80bb1e209dc027f18e12ce1ebe12639594d28e23b08c459cf1a
+          test ! -e "$output"
+          test ! -e "$output.partial"
+          test ! -e /tmp/lr30-p76-export-package
+          python3 -m zipfile -e "$wheel" /tmp/lr30-p76-export-package
+          PYTHONPATH=/tmp/lr30-p76-export-package python3 -m cyber_post_train checkpoint-export \
+            "$manifest" \
+            --sha256 cc4e2997e120a80bb1e209dc027f18e12ce1ebe12639594d28e23b08c459cf1a \
+            --output "$output"
+          PYTHONPATH=/tmp/lr30-p76-export-package python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          receipt = json.loads(Path(
+              "/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/hf-export-step76-v1/EXPORT.json"
+          ).read_text())
+          if (
+              receipt.get("schema") != "cyber_native_checkpoint_hf_export_v1"
+              or receipt.get("optimizer_step") != 76
+              or receipt.get("optimizer_steps_executed") != 0
+              or receipt.get("gpu_reload_verified") is not False
+              or receipt.get("dtype") != "BF16"
+              or receipt.get("trained_tensors", 0) + len(receipt.get("restored_base_tensors", [])) != 1199
+              or receipt.get("tensor_bytes") != 55562855904
+              or receipt.get("source_inventory_sizes_mtimes_unchanged") is not True
+              or receipt.get("all_output_tensors_reopened_equal") is not True
+          ):
+              raise ValueError("LR30 step-76 BF16 export receipt differs")
+          print(json.dumps({
+              "schema": receipt["schema"],
+              "optimizer_step": receipt["optimizer_step"],
+              "optimizer_steps_executed": receipt["optimizer_steps_executed"],
+              "dtype": receipt["dtype"],
+              "tensor_count": receipt["trained_tensors"] + len(receipt["restored_base_tensors"]),
+              "tensor_bytes": receipt["tensor_bytes"],
+              "receipt_sha256": receipt["receipt_sha256"],
+          }, sort_keys=True, separators=(",", ":")), flush=True)
+          PY
+      resources:
+        requests:
+          cpu: "4"
+          memory: 32Gi
+        limits:
+          cpu: "8"
+          memory: 48Gi
+      volumeMounts:
+        - name: sfs
+          mountPath: /mnt/sfs
+  nodeSelector:
+    workload: fleetai-training-ng-cpu
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: fleetai-training-ng-cpu
+      effect: NoSchedule
+  volumes:
+    - name: sfs
+      persistentVolumeClaim:
+        claimName: sfs-shared

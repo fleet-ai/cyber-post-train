@@ -1,0 +1,46 @@
+{
+  "schema": "cyber_qwen38_lr100_prod_source_presence_evidence_v1",
+  "recorded_at": "2026-09-14T18:31:00Z",
+  "classification": "read_only_zero_gpu_production_source_preflight",
+  "cluster": {
+    "target": "prod",
+    "kubernetes_context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+    "namespace": "fleet-train-jobs"
+  },
+  "pod": {
+    "name": "chris-q38-lr100-prod-src-v1",
+    "uid": "8bf2872b-b4a1-4524-aded-2e25ab2c62b5",
+    "manifest": "configs/qualification/qwen38-teacher-lr100-prod-source-presence-v1.pod.yaml",
+    "manifest_file_sha256": "sha256:8d18c633dcd08acdf8e3f75554ce59de3b2a20e77eb0c02c41df0e4135904428",
+    "requested_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "terminal_phase": "Succeeded",
+    "exit_code": 0,
+    "restart_count": 0,
+    "gpu_count": 0
+  },
+  "proof": {
+    "receipt_sha256": "sha256:174129632db6845ccd76dedc51874ed9f76300333c95112684d2dbfb97200c40",
+    "self_digest_independently_validated": true,
+    "all_required_present": true,
+    "checkpoint_files": 33,
+    "checkpoint_manifest_file_sha256": "sha256:9c16171d68be65475da725a6bad381ec1cdcaf7b882f41cbc04da0c96e5e3280",
+    "corpus_manifest_file_sha256": "sha256:d7fcb3e0c8c7726f5d1175f831fa0e88af632f1c6b68c6101c8db3e2cf4b85f7",
+    "model_config_present": true,
+    "corpus_train_present": true,
+    "checkpoint_root_present": true
+  },
+  "scope": {
+    "source_checkpoint_fully_rehashed_in_prior_dev_pair_proof": true,
+    "this_probe_only_rehashed_small_manifests": true,
+    "training_submitted": false,
+    "raw_weights_or_tensor_values_read": false,
+    "credentials_recorded": false,
+    "prompts_traces_flags_answers_or_scores_recorded": false
+  },
+  "cleanup": {
+    "exact_uid_rechecked_before_delete": true,
+    "pod_absent_after_delete": true,
+    "gpu_resources_released": true
+  },
+  "receipt_sha256": "sha256:3023ac5ddc807823fa4fd4ac82b33f3677ff464495559601444b71b21ab730c5"
+}

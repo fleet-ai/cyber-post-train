@@ -1,0 +1,99 @@
+{
+  "schema": "cyber_qwen38_lr30_step6_export_preparation_v1",
+  "status": "prepared_offline_not_launched",
+  "prepared_at": "2026-09-14T10:51:37Z",
+  "purpose": "Freeze the smallest fail-closed path from the accepted LR3e-5 step-6 native checkpoint through complete BF16 export, synthetic GPU reload, non-scored development serving and persistent serving parity. This does not select the checkpoint or authorize evaluation.",
+  "source": {
+    "run_name": "chris-q38-lr30-2x4-dev-v3",
+    "checkpoint_path": "/mnt/sfs/jobs/chris-q38-lr30-2x4-dev-v3/checkpoints/global_step_6",
+    "optimizer_step": 6,
+    "source_plan_sha256": "sha256:457aa85b12a6d3740a97805e3b9013a749b33b6a574a660674785b7d3f914ee2",
+    "checkpoint_manifest_file_sha256": "sha256:dddce9ebb49686b11718e3862d8fbebf422134ec86b83d70bf99f7dbb7400f36",
+    "checkpoint_manifest_receipt_sha256": "sha256:2b430fb9185a437ea9e1060c4ed75638fe4d793bbb7a9a58e408a57188773467",
+    "accepted_reload_evidence": {
+      "path": "docs/evidence/qwen38-study/2026-09-14-lr30-2x4-reload-terminal-v1.json",
+      "file_sha256": "sha256:65d612c63d3c4875ff25133eb2cfc5640482e9f01318853e9689c29f6c93d6d3",
+      "receipt_sha256": "sha256:e90da24580c3c1ec283b6e3700abb48d977c7b6d1972ffae6d003d9ca4a5d892"
+    },
+    "native_all_rank_reload_accepted": true,
+    "source_checkpoint_unchanged": true,
+    "native_reload_optimizer_steps_executed": 0
+  },
+  "prepared_artifacts": {
+    "export_qualification": {
+      "path": "configs/qualification/qwen38-teacher-lr30-step6-hf-export-dev-v1.template.json",
+      "file_sha256": "sha256:d7c6bfe701050daa1dee4cc2d3e3d56dcc7c7a1e6ca69ac7c69b4f97d425c450",
+      "receipt_sha256": "sha256:d764c195d676975a29c313bcb45733f7b67925819369799bf9c9d7914bf075e7",
+      "launchable": false
+    },
+    "dev_serving": {
+      "path": "configs/qualification/qwen38-teacher-lr30-step6-serving-dev-v1.template.json",
+      "file_sha256": "sha256:488c7593c84d82e932804582dc02cc276e23315ccefa63d5990558c49da9a94c",
+      "launchable": false
+    },
+    "persistent_serving": {
+      "path": "configs/qualification/qwen38-teacher-lr30-step6-serving-prod-v1.template.json",
+      "file_sha256": "sha256:e4fe9b99b6fd670c0a34cb94c236b374be7448dd75102e9dc8b5fa2d0680f633",
+      "launchable": false
+    },
+    "focused_test": {
+      "path": "tests/test_qwen38_teacher_lr30_step6_export_qualification.py",
+      "file_sha256": "sha256:c22f7718b92fa4f85c39cfd1de8d97ecc55530692f923e5a19d8283e35870485"
+    }
+  },
+  "offline_validation": {
+    "focused_tests_passed": 6,
+    "desktop_tensor_suite_run": false,
+    "desktop_tensor_suite_not_run_reason": "The desktop environment does not provide torch and the exact pinned training image is not locally cached. The unchanged exporter has prior real-Qwen3.8 acceptance evidence; the live pinned-image CPU and GPU checks remain mandatory.",
+    "fail_closed_live_nulls_exhaustive": true,
+    "accepted_source_cross_checked": true,
+    "current_export_code_digests_cross_checked": true,
+    "generic_jobs_request_validation_passed": true,
+    "dev_serving_template_rejected_until_measured_bindings_exist": true,
+    "persistent_registration_template_rejected_until_measured_bindings_exist": true,
+    "dev_first": true,
+    "priority_class": "c1",
+    "expected_queue_priority_class": "q1",
+    "c0_or_q0_present": false
+  },
+  "live_gates_remaining": [
+    "Refresh Nebius access and recheck that the exact source seal is unchanged and both export destinations are absent.",
+    "Run one CPU-only create-once export with the pinned training image, then independently validate its self-digest, complete BF16 tensor layout, exact sidecars and unchanged source.",
+    "Run one CPU-only meta-loader check and preserve its digest-valid receipt outside the immutable export.",
+    "Preview and submit at most one c1/q1 one-GPU development synthetic reload through the Jobs API, validate finite forward and two-token generation with zero optimizer updates, then prove terminal release.",
+    "Fill the development serving template only from the accepted export, GPU check, current base registration and observed dev SFS identity; run one bounded non-scored SGLang canary and independently accept its release evidence.",
+    "Create-once stage the exact accepted export into observed inference storage, rehash it there, then prepare and preview the persistent registration from measured staging evidence.",
+    "Register only after development acceptance, wait for completion, and prove matched base/candidate engine, parser, context, decoding, model bytes and live-route behavior before any benchmark attempt."
+  ],
+  "acceptance": {
+    "native_checkpoint_reload_accepted": true,
+    "bf16_export_accepted": false,
+    "one_gpu_export_reload_accepted": false,
+    "dev_serving_accepted": false,
+    "persistent_serving_accepted": false,
+    "live_parity_accepted": false,
+    "webexploitbench_eligible": false,
+    "capability_claimed": false
+  },
+  "execution": {
+    "kubernetes_calls": 0,
+    "jobs_api_calls": 0,
+    "inference_api_calls": 0,
+    "wandb_calls": 0,
+    "tensorlake_calls": 0,
+    "gpu_allocations": 0
+  },
+  "privacy": {
+    "credentials_read_or_recorded": false,
+    "training_prompts_traces_flags_answers_or_scores_read": false,
+    "benchmark_payloads_or_outcomes_read": false,
+    "private_logs_or_tensor_values_read": false
+  },
+  "limitations": [
+    "This package is an offline operation plan and set of fail-closed templates, not evidence that any new artifact or endpoint exists.",
+    "The source is a planned pause at step 6 of a 76-step arm; it is not a completed hyperparameter arm and has not been selected by a Fleet development outcome.",
+    "The synthetic GPU check proves loadability only; the separate development serving canary and persistent live-parity gates remain mandatory.",
+    "WebExploitBench remains sealed evaluation-only and cannot select this checkpoint, recipe, retry or stopping rule."
+  ],
+  "sha256": "sha256:6e2c8c8d1170737be832bdf84e16eef696c279d500b761a0aee9cc107c380fa9"
+}
