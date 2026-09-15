@@ -127,6 +127,27 @@ def test_compile_training_loss_only_plan_has_no_reference_dev_dataset(config, tm
     assert sft.job_request(plan)["env"]["WANDB_MODE"] == "online"
 
 
+@pytest.mark.parametrize("unexpected", [False, True])
+def test_train_only_preflight_exercises_native_loader(monkeypatch, unexpected):
+    from training import sft_runtime
+
+    calls = []
+
+    class Trainer:
+        def load_eval_dataset(self):
+            calls.append(self.plan)
+            return object() if unexpected else None
+
+    monkeypatch.setattr(sft_runtime, "_make_trainer_class", lambda: Trainer)
+    plan = {"datasets": {"train": {}}}
+    if unexpected:
+        with pytest.raises(ValueError, match="unexpectedly produced"):
+            sft._check_native_dataset_loader(plan)
+    else:
+        sft._check_native_dataset_loader(plan)
+    assert calls == [plan]
+
+
 @pytest.mark.parametrize(
     "validation_mode,eval_interval",
     [("task_outcomes_only", 50), ("teacher_cross_entropy", 0)],

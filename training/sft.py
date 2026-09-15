@@ -287,6 +287,18 @@ def job_request(plan: dict) -> dict:
     }
 
 
+def _check_native_dataset_loader(plan: dict) -> None:
+    if "dev" in plan["datasets"]:
+        return
+    from .sft_runtime import _make_trainer_class
+
+    trainer_class = _make_trainer_class()
+    trainer = trainer_class.__new__(trainer_class)
+    trainer.plan = plan
+    if trainer.load_eval_dataset() is not None:
+        raise ValueError("task-outcome training unexpectedly produced an eval dataset")
+
+
 def preflight(plan: dict) -> dict:
     """CPU-only checks in the pinned image, with staged inputs mounted.
 
@@ -305,6 +317,7 @@ def preflight(plan: dict) -> dict:
     validate_plan(plan)
     validate_runtime_sources()
     build_runtime_configs(plan)
+    _check_native_dataset_loader(plan)
     AutoConfig.from_pretrained(
         plan["model"]["root"], local_files_only=True, trust_remote_code=False
     )
@@ -336,6 +349,7 @@ def preflight(plan: dict) -> dict:
             "model_files",
             "dataset_files",
             "native_config",
+            "native_train_only_loader",
             "tokenization",
             "target_accounting",
         ],
