@@ -432,8 +432,8 @@ def test_long_horizon_data_binds_native_tito_and_exact_compaction_contract(setup
     assert result["submitted"] is False
     assert manifest["schema"] == "cyber_miles_data_v2"
     assert manifest["harness"] == miles_opencode.harness_contract()
-    assert setup.native_families == [("qwen35",)]
-    assert episode["model"]["tito_family"] == "qwen35"
+    assert setup.native_families == [("qwen38small",)]
+    assert episode["model"]["tito_family"] == "qwen38small"
     assert episode["model"]["served_id"] == "model"
     assert episode["rl"] == setup.config["limits"]
     assert "tool_result_chars" not in episode["rl"]

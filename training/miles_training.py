@@ -64,7 +64,7 @@ LONG_RUNTIME_CHECKS = frozenset(
         "opencode_binary_checked",
         "native_256k_parser_checked",
         "qwen38_profile_template_checked",
-        "native_qwen35_tito_checked",
+        "native_qwen38_tito_backport_checked",
         "native_radix_affinity_route_checked",
         "forced_repeated_compaction_checked",
         "more_than_1024_nodes_checked",
@@ -99,7 +99,11 @@ def _validate_long_runtime_receipt(
         or receipt.get("opencode_source_commit") != "4b7e19e315cca414121ba1d61523fef74bb3ae8b"
         or receipt.get("opencode_binary_sha256")
         != "sha256:bddf894e5c2bc3d8cf452bd6e5ab2273bbe4a37eeeb9aec848d3d7d20db1f256"
-        or receipt.get("miles_source_commit") != "2799fe386320c156334bf763ad4d7ca0f85dca4e"
+        or receipt.get("miles_source_commit") != "9e178ca16839b0600155f3927f57ce0670b8f453"
+        or receipt.get("miles_tito_backport_commit")
+        != "257992eb52bfa1f5248b5a5ae8f5a959be500788"
+        or receipt.get("installed_tito_source_sha256")
+        != "sha256:72650e3b337d69d237088c03cafa12b066a2c31fe1ffd96fab2d49d832f4a33c"
         or receipt.get("miles_tree_source_sha256")
         != "sha256:fd978a1ef2617f4bf30850fedd197e546cdc9c6542b00b03df502cbb285fc732"
         or receipt.get("native_driver_sha256") != "sha256:" + miles.LONG_NATIVE_DRIVER_SHA256
@@ -603,7 +607,7 @@ def preflight(plan):
         if (
             tito_template is None
             or _hash(Path(tito_template)) != miles.LONG_TITO_TEMPLATE_SHA256
-            or kwargs != {"preserve_thinking": True}
+            or kwargs != {"preserve_thinking": True, "reasoning_effort": "xhigh"}
         ):
             raise ValueError("native Qwen3.8 TITO family changed")
         if resolve_reasoning_and_tool_call_parser(miles_opencode.TITO_FAMILY) != (
@@ -611,7 +615,11 @@ def preflight(plan):
             "qwen3_coder",
         ):
             raise ValueError("native Qwen3.8 reasoning/tool parser changed")
-    chat_template_path = argv[argv.index("--chat-template-path") + 1]
+    chat_template_path = (
+        tito_template
+        if config.harness == "opencode"
+        else argv[argv.index("--chat-template-path") + 1]
+    )
     source = TextDataSource(
         SimpleNamespace(
             rollout_global_dataset=True,

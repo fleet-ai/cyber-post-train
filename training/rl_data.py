@@ -102,7 +102,7 @@ def _native(lock, root, tito_family="qwen35"):
     if torch.cuda.is_available():
         raise ValueError("RL data preparation must not hold a GPU")
     tokenizer, identity = local_tokenizer(lock, Path(root))
-    if tito_family != "qwen35":
+    if tito_family not in {"qwen35", "qwen38small"}:
         raise ValueError("unqualified Qwen TITO family")
     template_path = TEMPLATES / "qwen3.8_fixed.jinja"
     template = template_path.read_bytes()

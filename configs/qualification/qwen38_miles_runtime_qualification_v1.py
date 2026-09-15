@@ -1,4 +1,4 @@
-"""Zero-GPU in-image qualification for the exact Qwen3.8 Miles runtime."""
+"""In-image source gate and GPU parser gate for the exact Qwen3.8 Miles runtime."""
 
 from __future__ import annotations
 
@@ -71,13 +71,23 @@ def qualify() -> dict:
     source_commit = os.environ["QUALIFICATION_SOURCE_COMMIT"]
     image = os.environ["QUALIFICATION_IMAGE"]
     build_source_sha256 = os.environ["QUALIFICATION_BUILD_SOURCE_SHA256"]
-    model_root = Path(os.environ["QUALIFICATION_MODEL_ROOT"])
+    parse_native = os.environ.get("QUALIFICATION_NATIVE_PARSE") == "1"
+    model_root = Path(
+        os.environ.get(
+            "QUALIFICATION_MODEL_ROOT", "/mnt/sfs/models/q38-long-runtime-qualification/hf"
+        )
+    )
     assert re.fullmatch(r"[a-f0-9]{40}", source_commit)
     assert re.fullmatch(r"[^@\s]+@sha256:[a-f0-9]{64}", image)
     assert re.fullmatch(r"sha256:[a-f0-9]{64}", build_source_sha256)
     assert model_root.is_absolute()
-    model_config_sha256 = sha256(model_root / "config.json")
-    assert model_config_sha256 == "191e0af232104ed8b65258cf3fb2b842e288008baca7633c11b82a1ac7203aab"
+    model_config_sha256 = None
+    if parse_native:
+        model_config_sha256 = sha256(model_root / "config.json")
+        assert (
+            model_config_sha256
+            == "191e0af232104ed8b65258cf3fb2b842e288008baca7633c11b82a1ac7203aab"
+        )
     from miles.utils.external_utils.command_utils import repo_base_dir
 
     miles_root = Path(repo_base_dir)
@@ -90,6 +100,8 @@ def qualify() -> dict:
 
     tree_path = Path(inspect.getsourcefile(tree_module) or "")
     assert sha256(tree_path) == miles.LONG_INSTALLED_SESSION_TREE_SHA256
+    tito_path = miles_root / "miles/utils/chat_template_utils/tito_tokenizer.py"
+    assert sha256(tito_path) == "72650e3b337d69d237088c03cafa12b066a2c31fe1ffd96fab2d49d832f4a33c"
 
     binary = Path(miles_opencode.OPENCODE_BINARY)
     assert sha256(binary) == miles_opencode.OPENCODE_BINARY_SHA256
@@ -140,8 +152,8 @@ def qualify() -> dict:
         "rollout-max-response-len": "245760",
         "max-tokens-per-gpu": "65536",
         "fleet-max-tokens-per-turn": "32768",
-        "tito-model": "qwen35",
-        "fleet-tito-model": "qwen35",
+        "tito-model": "qwen38small",
+        "fleet-tito-model": "qwen38small",
         "use-session-server": "v2",
         "custom-agent-function-path": "training.miles_opencode.run",
         "session-sample-picker-path": "training.miles_opencode.pick_compaction_segments",
@@ -152,36 +164,38 @@ def qualify() -> dict:
         "fleet-session-node-cap": "4096",
     }
     assert all(option(argv, key) == value for key, value in expected.items())
-    assert sha256(Path(option(argv, "chat-template-path"))) == miles.TEMPLATE_SHA256
+    assert "--chat-template-path" not in argv
 
     from miles.utils.chat_template_utils.tito_tokenizer import (
         resolve_fixed_chat_template,
         resolve_reasoning_and_tool_call_parser,
     )
 
-    template, kwargs = resolve_fixed_chat_template("qwen35")
+    template, kwargs = resolve_fixed_chat_template("qwen38small")
     assert template and sha256(Path(template)) == miles.LONG_TITO_TEMPLATE_SHA256
-    assert kwargs == {"preserve_thinking": True}
-    assert resolve_reasoning_and_tool_call_parser("qwen35") == (
+    assert kwargs == {"preserve_thinking": True, "reasoning_effort": "xhigh"}
+    assert resolve_reasoning_and_tool_call_parser("qwen38small") == (
         "qwen3",
         "qwen3_coder",
     )
 
-    os.environ["MILES_USE_LEGACY_ROLLOUT_V1"] = "0"
-    from miles.utils.arguments import parse_args
+    if parse_native:
+        os.environ["MILES_USE_LEGACY_ROLLOUT_V1"] = "0"
+        from miles.utils.arguments import parse_args
 
-    previous = sys.argv
-    try:
-        sys.argv = [str(miles_root / "train.py"), *argv]
-        parsed = parse_args()
-    finally:
-        sys.argv = previous
-    assert parsed.tensor_model_parallel_size == 8
-    assert parsed.context_parallel_size == 4
-    assert parsed.use_session_server == "v2"
-    assert parsed.max_seq_len == 262144
-    assert parsed.tito_model == "qwen35"
-    assert parsed.sglang_router_policy == "consistent_hashing"
+        previous = sys.argv
+        try:
+            sys.argv = [str(miles_root / "train.py"), *argv]
+            parsed = parse_args()
+        finally:
+            sys.argv = previous
+        assert parsed.tensor_model_parallel_size == 8
+        assert parsed.context_parallel_size == 4
+        assert parsed.use_session_server == "v2"
+        assert parsed.max_seq_len == 262144
+        assert parsed.tito_model == "qwen38small"
+        assert sha256(Path(parsed.chat_template_path)) == miles.LONG_TITO_TEMPLATE_SHA256
+        assert parsed.sglang_router_policy == "consistent_hashing"
 
     harness_config = {
         "harness": miles_opencode.harness_contract(),
@@ -255,6 +269,23 @@ def qualify() -> dict:
     )
 
     checks = {key: True for key in miles_training.LONG_RUNTIME_CHECKS}
+    checks["native_256k_parser_checked"] = parse_native
+    if not parse_native:
+        value = {
+            "schema": "cyber_miles_opencode_source_qualification_v1",
+            "status": "source_qualified_zero_gpu",
+            "source_commit": source_commit,
+            "qualification_script_sha256": "sha256:" + sha256(Path(__file__)),
+            "image": image,
+            "base_image": miles_training.LONG_RUNTIME_BASE_IMAGE,
+            "build_source_sha256": build_source_sha256,
+            "miles_source_commit": "9e178ca16839b0600155f3927f57ce0670b8f453",
+            "miles_tito_backport_commit": "257992eb52bfa1f5248b5a5ae8f5a959be500788",
+            "installed_tito_source_sha256": "sha256:" + sha256(tito_path),
+            "checks": checks,
+        }
+        value["sha256"] = digest(value)
+        return value
     value = {
         "schema": "cyber_miles_opencode_runtime_qualification_v1",
         "status": "image_qualified_for_dev",
@@ -267,7 +298,9 @@ def qualify() -> dict:
         "opencode_version": "1.18.27",
         "opencode_source_commit": "4b7e19e315cca414121ba1d61523fef74bb3ae8b",
         "opencode_binary_sha256": "sha256:" + miles_opencode.OPENCODE_BINARY_SHA256,
-        "miles_source_commit": "2799fe386320c156334bf763ad4d7ca0f85dca4e",
+        "miles_source_commit": "9e178ca16839b0600155f3927f57ce0670b8f453",
+        "miles_tito_backport_commit": "257992eb52bfa1f5248b5a5ae8f5a959be500788",
+        "installed_tito_source_sha256": "sha256:" + sha256(tito_path),
         "miles_tree_source_sha256": (
             "sha256:fd978a1ef2617f4bf30850fedd197e546cdc9c6542b00b03df502cbb285fc732"
         ),
@@ -275,7 +308,7 @@ def qualify() -> dict:
         "native_converter_sha256": "sha256:" + miles.LONG_NATIVE_CONVERTER_SHA256,
         "installed_session_tree_sha256": ("sha256:" + miles.LONG_INSTALLED_SESSION_TREE_SHA256),
         "build_source_sha256": build_source_sha256,
-        "model_config_sha256": "sha256:" + model_config_sha256,
+        "model_config_sha256": "sha256:" + str(model_config_sha256),
         "checks": checks,
     }
     value["sha256"] = digest(value)

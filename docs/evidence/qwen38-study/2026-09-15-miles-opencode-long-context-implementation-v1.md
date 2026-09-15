@@ -49,13 +49,14 @@ only its local session credential and runner token; Fleet, W&B, and cloud
 credentials are not copied into it. The task prompt is supplied over standard
 input rather than exposed in the process command line.
 
-FTI 0.8.4 labels this native profile's TITO family as `qwen35` and pairs it
-with its vendored `qwen3.8_fixed.jinja` profile template. The installed Miles
-enum does not contain `qwen38small`; a zero-GPU in-image gate caught and
-rejected that earlier adapter assumption before training. The corrected path
-uses the exact source-compatible pair selected by FTI: `qwen35` TITO semantics,
-`preserve_thinking=true`, and the digest-bound Qwen3.8 profile template. It
-also binds the inherited `qwen3` reasoning parser and `qwen3_coder` tool parser.
+FTI 0.8.4 labels this native profile's TITO family as `qwen35` but selects its
+distinct `qwen3.8_fixed.jinja` template. Installed Miles correctly rejects that
+combination because a named TITO family owns exactly one fixed template. The
+base image's Miles checkout (`9e178ca1`) missed upstream commit `257992eb`,
+which adds `qwen38small`; that upstream template is byte-for-byte identical to
+FTI's Qwen3.8 template. The derived image backports those two exact upstream
+files and binds `preserve_thinking=true`, `reasoning_effort=xhigh`, the `qwen3`
+reasoning parser, and the `qwen3_coder` tool parser.
 
 Miles' default 1,024-node session limit is unchanged for existing jobs. The
 derived image accepts an explicit bounded `MILES_SESSION_MAX_NODES=4096` value,
@@ -66,16 +67,54 @@ compactions across more than 1,024 nodes.
 
 - FTI image base: `sha256:b713f93d8da719a08aa20f1c45752d32a40d72b95159f410cdb6046d5ed1cf5d`
 - FTI version/profile: `0.8.4`, `qwen3.8-27b-256k`
-- Miles commit: `2799fe386320c156334bf763ad4d7ca0f85dca4e`
+- Installed Miles commit: `9e178ca16839b0600155f3927f57ce0670b8f453`
+- Qwen3.8 TITO backport: `257992eb52bfa1f5248b5a5ae8f5a959be500788`
 - Original Miles session-tree file: `sha256:fd978a1ef2617f4bf30850fedd197e546cdc9c6542b00b03df502cbb285fc732`
 - Installed native Miles driver: `sha256:85dbfd31d41a84f9c2e79a2918583851fb53925630afa229e9cd0a154b170f46`
 - Installed native checkpoint converter: `sha256:0c2541d30073777a30344273a3773844a70ca1961287520c0496a1cec18d43f6`
 - Patched installed session-tree file: `sha256:59bed80a62a8ab94e0bb9012f4f9f0290245a5c8db6feadd0997a7bfb57025ee`
-- Derived image: `sha256:04c1b4ed1c6faebba80fb0220496af0994f52a89a702638083420905a15724bf`
+- Superseded pre-backport image: `sha256:04c1b4ed1c6faebba80fb0220496af0994f52a89a702638083420905a15724bf`
 - OpenCode tag/commit: `v1.18.27`, `4b7e19e315cca414121ba1d61523fef74bb3ae8b`
 - OpenCode Linux binary: `sha256:bddf894e5c2bc3d8cf452bd6e5ab2273bbe4a37eeeb9aec848d3d7d20db1f256`
 - Qwen3.8 fixed chat template: `sha256:38d42166599348d47ded69776c5389c89924045e6827089923a031379f8a3dfe`
-- Derived-image source bundle: `sha256:d6f52880e12e99565c8ed7da74eda76c872b0e52ee95528daccd34d1fa1b9052`
+- Corrected derived-image source bundle: `sha256:8297c85db51eeeeb0c9f480cab0dc96598ab3d28da10f2844f1ff25a47be1546`
+
+## Qualification evidence before the backport
+
+These probes are defect-discovery evidence, not successful runtime
+qualification. They used no Fleet task, generated no reward, and performed no
+optimizer update.
+
+- BuildKit gate `q38-miles-runtime-qual-a3c379c0` (Job UID
+  `cdce05af-ad51-49af-bdcc-337c81d0d656`) cleanly proved that the installed
+  enum did not contain `qwen38small`.
+- BuildKit gate `q38-miles-runtime-qual-b4fb7162` (Job UID
+  `1dd1f70e-9860-40e5-a937-ddb59dffde48`) reached the native Megatron import
+  and then proved that its full parser requires a real CUDA runtime. This is why
+  the immutable image gate is zero-GPU source validation and the parser gate is
+  a separate bounded GPU probe.
+- Direct clean-exit parser Pod `q38-miles-runtime-gpu-qual-d43e57f2` (UID
+  `2427d850-c81a-4daa-960c-4e2f3ce5b2a6`) used one GPU and rejected a missing
+  exact model path. Direct clean-exit parser Pod
+  `q38-miles-runtime-gpu-qual-7cc25f64` (UID
+  `ad1b6e01-9c0a-423b-9748-f8de7f0d1393`) used the exact model config and
+  rejected the invalid `qwen35` plus Qwen3.8-template combination. Both Pods
+  exited `Succeeded`, restarted zero times, and released their GPU; neither was
+  a training Job or Slack-alerting failed Job.
+- Zero-GPU source-inspection Pods bound the base checkout and source files:
+  `q38-miles-tito-contract-inspect-v2` (UID
+  `f5bd23b7-c543-49e3-8098-1ee761ce9ebe`),
+  `q38-miles-template-contract-inspect-v2` (UID
+  `460cb09d-6fd2-47a0-9b7f-138e5e5a9b34`), and
+  `q38-miles-source-hash-inspect-v1` (UID
+  `df6492e1-5db7-4169-af3e-0d646dc0515b`). Each succeeded with zero restarts.
+
+The minimal correction is exact upstream Miles commit `257992eb`: install its
+`qwen38small` tokenizer registration and byte-identical Qwen3.8 template, pass
+`--tito-model qwen38small`, and omit `--chat-template-path`. The named family
+then owns and automatically resolves the template, `preserve_thinking=true`,
+`reasoning_effort=xhigh`, reasoning parser `qwen3`, and tool parser
+`qwen3_coder`. No local model family or alternate template is invented.
 
 ## Remaining gates
 

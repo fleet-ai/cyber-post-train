@@ -416,7 +416,11 @@ def _long_runtime_receipt(image, *, build_source_sha256="sha256:" + "b" * 64):
         "opencode_binary_sha256": (
             "sha256:bddf894e5c2bc3d8cf452bd6e5ab2273bbe4a37eeeb9aec848d3d7d20db1f256"
         ),
-        "miles_source_commit": "2799fe386320c156334bf763ad4d7ca0f85dca4e",
+        "miles_source_commit": "9e178ca16839b0600155f3927f57ce0670b8f453",
+        "miles_tito_backport_commit": "257992eb52bfa1f5248b5a5ae8f5a959be500788",
+        "installed_tito_source_sha256": (
+            "sha256:72650e3b337d69d237088c03cafa12b066a2c31fe1ffd96fab2d49d832f4a33c"
+        ),
         "miles_tree_source_sha256": (
             "sha256:fd978a1ef2617f4bf30850fedd197e546cdc9c6542b00b03df502cbb285fc732"
         ),

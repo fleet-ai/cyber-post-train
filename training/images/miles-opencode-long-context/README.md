@@ -9,7 +9,7 @@ The build fails unless the installed Miles tree, native training driver, and
 native checkpoint converter have the exact reviewed SHA-256 digests, and the
 supplied OpenCode binary has its pinned SHA-256. The binary is a build input
 and is never committed. Publish the resulting image by digest, then record an
-exact CPU parser check and a dev 4x8 qualification receipt before any
+exact zero-GPU source check and a dev 4x8 parser/qualification receipt before any
 production configuration may refer to it.
 
 Required qualification:
@@ -20,9 +20,13 @@ Required qualification:
    disjoint compaction segments without truncated nodes;
 3. the exact `qwen3.8-27b-256k` arguments parse as TP8 x CP4 on 4 x 8 GPUs,
    262144 context, 245760 response, 65536 train tokens per GPU, radix-cache
-   affinity via `consistent_hashing`, FTI's `qwen35` TITO family paired with
-   its exact Qwen3.8 profile template, and the `qwen3` reasoning /
-   `qwen3_coder` tool parsers;
+   affinity via `consistent_hashing`, and the upstream `qwen38small` TITO
+   family with the exact Qwen3.8 profile template and parsers;
 4. a dev run proves repeated native OpenCode compaction, one authoritative
    reward per original rollout, finite nonzero update, durable checkpoint,
    release, and zero-update reload.
+
+The base image's installed Miles checkout is `9e178ca1`; its Fleet branch
+missed upstream Qwen3.8 TITO support even though FTI already ships the Qwen3.8
+profile. The build backports exact upstream commit `257992eb` and refuses any
+different checkout or source-file hash.
