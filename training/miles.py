@@ -30,6 +30,7 @@ LONG_NATIVE_CONVERTER_SHA256 = "0c2541d30073777a30344273a3773844a70ca1961287520c
 LONG_INSTALLED_SESSION_TREE_SHA256 = (
     "59bed80a62a8ab94e0bb9012f4f9f0290245a5c8db6feadd0997a7bfb57025ee"
 )
+LONG_TITO_TEMPLATE_SHA256 = "ca447731ed457cb460b7522ea9edb986d52e4ea62c5d8482365146592d69b1b9"
 
 
 @dataclass(frozen=True)
@@ -223,16 +224,20 @@ def arguments(config: MilesConfig) -> list[str]:
     tito_family = profile.tito_model
     template: Path | None = profile_template
     if long_horizon:
-        from miles.utils.chat_template_utils.tito_tokenizer import resolve_fixed_chat_template
+        from miles.utils.chat_template_utils.tito_tokenizer import (
+            resolve_fixed_chat_template,
+            resolve_reasoning_and_tool_call_parser,
+        )
 
-        resolved, kwargs = resolve_fixed_chat_template("qwen38small")
+        resolved, kwargs = resolve_fixed_chat_template(profile.tito_model)
         if (
             resolved is None
-            or hashlib.sha256(Path(resolved).read_bytes()).hexdigest() != TEMPLATE_SHA256
-            or kwargs != {"preserve_thinking": True, "reasoning_effort": "xhigh"}
+            or hashlib.sha256(Path(resolved).read_bytes()).hexdigest() != LONG_TITO_TEMPLATE_SHA256
+            or kwargs != {"preserve_thinking": True}
+            or resolve_reasoning_and_tool_call_parser(profile.tito_model)
+            != ("qwen3", "qwen3_coder")
         ):
-            raise ValueError("Qwen3.8 session template family changed")
-        tito_family, template = "qwen38small", None
+            raise ValueError("native Qwen3.8 TITO family changed")
     argv = shlex.split(load_model_args(profile.megatron_model_type))
     parallel_args = profile.parallel_args_by_shape.get((config.nodes, config.gpus_per_node))
     if not isinstance(parallel_args, str):

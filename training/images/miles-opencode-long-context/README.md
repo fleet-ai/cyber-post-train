@@ -20,8 +20,9 @@ Required qualification:
    disjoint compaction segments without truncated nodes;
 3. the exact `qwen3.8-27b-256k` arguments parse as TP8 x CP4 on 4 x 8 GPUs,
    262144 context, 245760 response, 65536 train tokens per GPU, radix-cache
-   affinity via `consistent_hashing`, the `qwen38small` template digest, and
-   its `qwen3` reasoning / `qwen3_coder` tool parsers;
+   affinity via `consistent_hashing`, FTI's `qwen35` TITO family paired with
+   its exact Qwen3.8 profile template, and the `qwen3` reasoning /
+   `qwen3_coder` tool parsers;
 4. a dev run proves repeated native OpenCode compaction, one authoritative
    reward per original rollout, finite nonzero update, durable checkpoint,
    release, and zero-update reload.

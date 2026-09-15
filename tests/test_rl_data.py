@@ -411,7 +411,7 @@ def test_exact_task_set_get_only_native_retention_and_private_files(setup):
     assert len(setup.calls) == 3
 
 
-def test_long_horizon_data_binds_qwen38small_and_exact_compaction_contract(setup):
+def test_long_horizon_data_binds_native_tito_and_exact_compaction_contract(setup):
     from training import miles_opencode
 
     setup.config["harness"] = miles_opencode.harness_contract()
@@ -432,8 +432,8 @@ def test_long_horizon_data_binds_qwen38small_and_exact_compaction_contract(setup
     assert result["submitted"] is False
     assert manifest["schema"] == "cyber_miles_data_v2"
     assert manifest["harness"] == miles_opencode.harness_contract()
-    assert setup.native_families == [("qwen38small",)]
-    assert episode["model"]["tito_family"] == "qwen38small"
+    assert setup.native_families == [("qwen35",)]
+    assert episode["model"]["tito_family"] == "qwen35"
     assert episode["model"]["served_id"] == "model"
     assert episode["rl"] == setup.config["limits"]
     assert "tool_result_chars" not in episode["rl"]

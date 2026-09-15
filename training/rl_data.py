@@ -96,26 +96,15 @@ def selection(task_set: dict, split: dict) -> list[dict]:
 def _native(lock, root, tito_family="qwen35"):
     import torch
     from fti.trainers.miles.run_fleet import TEMPLATES
-    from miles.utils.chat_template_utils.tito_tokenizer import (
-        get_tito_tokenizer,
-        resolve_fixed_chat_template,
-    )
+    from miles.utils.chat_template_utils.tito_tokenizer import get_tito_tokenizer
     from miles.utils.data import Dataset
 
     if torch.cuda.is_available():
         raise ValueError("RL data preparation must not hold a GPU")
     tokenizer, identity = local_tokenizer(lock, Path(root))
-    if tito_family == "qwen35":
-        template_path = TEMPLATES / "qwen3.8_fixed.jinja"
-    elif tito_family == "qwen38small":
-        resolved, kwargs = resolve_fixed_chat_template(tito_family)
-        if kwargs != {"preserve_thinking": True, "reasoning_effort": "xhigh"}:
-            raise ValueError("native Qwen3.8 TITO kwargs changed")
-        template_path = Path(resolved) if resolved is not None else None
-        if template_path is None:
-            raise ValueError("native Qwen3.8 TITO template is absent")
-    else:
+    if tito_family != "qwen35":
         raise ValueError("unqualified Qwen TITO family")
+    template_path = TEMPLATES / "qwen3.8_fixed.jinja"
     template = template_path.read_bytes()
     if fleet.sha256(template) != "sha256:" + miles.TEMPLATE_SHA256:
         raise ValueError("native Qwen template drift")

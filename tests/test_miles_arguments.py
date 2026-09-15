@@ -147,12 +147,13 @@ def native_boundary(tmp_path, monkeypatch):
     model.load_model_args = lambda name: "--num-layers 64"
     tito = ModuleType("miles.utils.chat_template_utils.tito_tokenizer")
     tito.resolve_fixed_chat_template = lambda name: (
-        (str(template), {"preserve_thinking": True, "reasoning_effort": "xhigh"})
-        if name == "qwen38small"
-        else (None, {})
+        (str(template), {"preserve_thinking": True}) if name == "qwen35" else (None, {})
     )
     tito.resolve_reasoning_and_tool_call_parser = lambda name: (
-        ("qwen3", "qwen3_coder") if name == "qwen38small" else (None, None)
+        ("qwen3", "qwen3_coder") if name == "qwen35" else (None, None)
+    )
+    monkeypatch.setattr(
+        miles, "LONG_TITO_TEMPLATE_SHA256", hashlib.sha256(template.read_bytes()).hexdigest()
     )
     monkeypatch.setitem(sys.modules, runtime.__name__, runtime)
     monkeypatch.setitem(sys.modules, model.__name__, model)
@@ -272,10 +273,10 @@ def test_long_context_uses_native_256k_shape_and_session_v2(config, native_bound
     assert value(argv, "custom-generate-function-path") == "training.miles_opencode.generate"
     assert value(argv, "custom-agent-function-path") == "training.miles_opencode.run"
     assert value(argv, "use-session-server") == "v2"
-    assert value(argv, "tito-model") == value(argv, "fleet-tito-model") == "qwen38small"
+    assert value(argv, "tito-model") == value(argv, "fleet-tito-model") == "qwen35"
     assert value(argv, "fleet-session-node-cap") == "4096"
     assert value(argv, "sglang-router-policy") == "consistent_hashing"
-    assert "--chat-template-path" not in argv
+    assert value(argv, "chat-template-path") == str(native_boundary[1])
 
 
 @pytest.mark.parametrize(

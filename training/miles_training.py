@@ -63,8 +63,8 @@ LONG_RUNTIME_CHECKS = frozenset(
         "installed_source_digest_checked",
         "opencode_binary_checked",
         "native_256k_parser_checked",
-        "qwen38small_template_checked",
-        "qwen38small_parser_checked",
+        "qwen38_profile_template_checked",
+        "native_qwen35_tito_checked",
         "native_radix_affinity_route_checked",
         "forced_repeated_compaction_checked",
         "more_than_1024_nodes_checked",
@@ -371,6 +371,7 @@ def job_request(plan):
 
 def check_artifacts(plan):
     """Read private payloads mechanically; return no task text or model tensors."""
+    from . import miles_opencode
     from .rl_episode import _validate
 
     check_inputs(plan)
@@ -425,7 +426,7 @@ def check_artifacts(plan):
                 or (
                     long_horizon
                     and (
-                        cfg["model"].get("tito_family") != "qwen38small"
+                        cfg["model"].get("tito_family") != miles_opencode.TITO_FAMILY
                         or cfg["model"].get("served_id") != "model"
                     )
                 )
@@ -503,11 +504,13 @@ def native_args(plan):
             "grpo_std_normalization": False,
         }
         if plan["arguments"]["harness"] == "opencode":
+            from . import miles_opencode
+
             expected.update(
                 {
                     "use_session_server": "v2",
                     "max_seq_len": 262_144,
-                    "tito_model": "qwen38small",
+                    "tito_model": miles_opencode.TITO_FAMILY,
                     "custom_agent_function_path": "training.miles_opencode.run",
                     "session_sample_picker_path": (
                         "training.miles_opencode.pick_compaction_segments"
@@ -592,19 +595,21 @@ def preflight(plan):
             resolve_reasoning_and_tool_call_parser,
         )
 
-        chat_template_path, kwargs = resolve_fixed_chat_template("qwen38small")
-        if chat_template_path is None or kwargs != {
-            "preserve_thinking": True,
-            "reasoning_effort": "xhigh",
-        }:
-            raise ValueError("native Qwen3.8 TITO template changed")
-        if resolve_reasoning_and_tool_call_parser("qwen38small") != (
+        from . import miles_opencode
+
+        tito_template, kwargs = resolve_fixed_chat_template(miles_opencode.TITO_FAMILY)
+        if (
+            tito_template is None
+            or _hash(Path(tito_template)) != miles.LONG_TITO_TEMPLATE_SHA256
+            or kwargs != {"preserve_thinking": True}
+        ):
+            raise ValueError("native Qwen3.8 TITO family changed")
+        if resolve_reasoning_and_tool_call_parser(miles_opencode.TITO_FAMILY) != (
             "qwen3",
             "qwen3_coder",
         ):
             raise ValueError("native Qwen3.8 reasoning/tool parser changed")
-    else:
-        chat_template_path = argv[argv.index("--chat-template-path") + 1]
+    chat_template_path = argv[argv.index("--chat-template-path") + 1]
     source = TextDataSource(
         SimpleNamespace(
             rollout_global_dataset=True,

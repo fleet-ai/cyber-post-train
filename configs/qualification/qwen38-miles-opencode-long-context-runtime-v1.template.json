@@ -14,11 +14,11 @@
     "opencode_version": "1.18.27",
     "opencode_commit": "4b7e19e315cca414121ba1d61523fef74bb3ae8b",
     "opencode_binary_sha256": "sha256:bddf894e5c2bc3d8cf452bd6e5ab2273bbe4a37eeeb9aec848d3d7d20db1f256",
-    "build_source_sha256": "sha256:ced372ef375bb7a8ff5946a204a3f1b5a8b53d01ade6959312f86c9412fc1913"
+    "build_source_sha256": "sha256:d6f52880e12e99565c8ed7da74eda76c872b0e52ee95528daccd34d1fa1b9052"
   },
   "contract": {
     "model": "Qwen/Qwen3.8-27B",
-    "tito_family": "qwen38small",
+    "tito_family": "qwen35",
     "reasoning_parser": "qwen3",
     "tool_call_parser": "qwen3_coder",
     "chat_template_sha256": "sha256:38d42166599348d47ded69776c5389c89924045e6827089923a031379f8a3dfe",
@@ -44,8 +44,8 @@
     "installed_source_digest_checked": false,
     "opencode_binary_checked": false,
     "native_256k_parser_checked": false,
-    "qwen38small_template_checked": false,
-    "qwen38small_parser_checked": false,
+    "qwen38_profile_template_checked": false,
+    "native_qwen35_tito_checked": false,
     "native_radix_affinity_route_checked": false,
     "forced_repeated_compaction_checked": false,
     "more_than_1024_nodes_checked": false,

@@ -1,6 +1,8 @@
 # Qwen3.8 long-horizon Miles/OpenCode implementation
 
-Status: implemented and offline-tested; image build and cluster qualification have not run.
+Status: implemented and offline-tested. The first derived image was built; a
+zero-GPU in-image gate found the TITO-family mismatch described below. The
+source-compatible correction is awaiting an exact image requalification.
 This record is not an RL-success or production-promotion receipt.
 
 ## Why the earlier canary cannot be promoted
@@ -47,13 +49,13 @@ only its local session credential and runner token; Fleet, W&B, and cloud
 credentials are not copied into it. The task prompt is supplied over standard
 input rather than exposed in the process command line.
 
-FTI 0.8.4 still labels this native profile's TITO family as `qwen35`. The
-profile's vendored `qwen3.8_fixed.jinja` bytes exactly match the template that
-Miles resolves for `qwen38small`. The long-horizon path therefore binds
-`qwen38small`, `preserve_thinking=true`, and `reasoning_effort=xhigh`, and
-rejects a template or cross-field mismatch instead of trusting either name.
-Image qualification also binds the inherited `qwen3` reasoning parser and
-`qwen3_coder` tool parser.
+FTI 0.8.4 labels this native profile's TITO family as `qwen35` and pairs it
+with its vendored `qwen3.8_fixed.jinja` profile template. The installed Miles
+enum does not contain `qwen38small`; a zero-GPU in-image gate caught and
+rejected that earlier adapter assumption before training. The corrected path
+uses the exact source-compatible pair selected by FTI: `qwen35` TITO semantics,
+`preserve_thinking=true`, and the digest-bound Qwen3.8 profile template. It
+also binds the inherited `qwen3` reasoning parser and `qwen3_coder` tool parser.
 
 Miles' default 1,024-node session limit is unchanged for existing jobs. The
 derived image accepts an explicit bounded `MILES_SESSION_MAX_NODES=4096` value,
@@ -69,14 +71,15 @@ compactions across more than 1,024 nodes.
 - Installed native Miles driver: `sha256:85dbfd31d41a84f9c2e79a2918583851fb53925630afa229e9cd0a154b170f46`
 - Installed native checkpoint converter: `sha256:0c2541d30073777a30344273a3773844a70ca1961287520c0496a1cec18d43f6`
 - Patched installed session-tree file: `sha256:59bed80a62a8ab94e0bb9012f4f9f0290245a5c8db6feadd0997a7bfb57025ee`
+- Derived image: `sha256:04c1b4ed1c6faebba80fb0220496af0994f52a89a702638083420905a15724bf`
 - OpenCode tag/commit: `v1.18.27`, `4b7e19e315cca414121ba1d61523fef74bb3ae8b`
 - OpenCode Linux binary: `sha256:bddf894e5c2bc3d8cf452bd6e5ab2273bbe4a37eeeb9aec848d3d7d20db1f256`
 - Qwen3.8 fixed chat template: `sha256:38d42166599348d47ded69776c5389c89924045e6827089923a031379f8a3dfe`
-- Derived-image source bundle: `sha256:ced372ef375bb7a8ff5946a204a3f1b5a8b53d01ade6959312f86c9412fc1913`
+- Derived-image source bundle: `sha256:d6f52880e12e99565c8ed7da74eda76c872b0e52ee95528daccd34d1fa1b9052`
 
 ## Remaining gates
 
-1. Build and publish the derived image by immutable digest.
+1. Rebuild the final reviewed source bundle and bind its immutable image digest.
 2. Inside that image, verify installed source/binary/template hashes, parse the
    native four-node profile, and repeat the greater-than-1,024-node compaction
    tests.

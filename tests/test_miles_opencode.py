@@ -22,7 +22,7 @@ def _config():
         "model": {
             "repo": "Qwen/Qwen3.8-27B",
             "served_id": "model",
-            "tito_family": "qwen38small",
+            "tito_family": opencode.TITO_FAMILY,
             "runtime_chat_template_sha256": "sha256:" + opencode.TEMPLATE_SHA256,
         },
         "environment": {"ttl_seconds": 32400},
