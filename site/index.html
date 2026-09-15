@@ -112,9 +112,9 @@
         <div class="hero ruled">
           <p class="eyebrow">Fleet training data · current catalog checked</p>
           <h1 id="quality-title">A broken task tells us nothing about the model.</h1>
-          <p class="dek">We found 1,054 current production security tasks in which the model can use a website but cannot inspect its source code. Only 75 currently meet our strict standard: an earlier attempt proved the exact task ran and scored correctly, the same version is still selected, and the latest review does not mark it as broken.</p>
+          <p class="dek">We found 1,055 current production security tasks in which the model can use a website but cannot inspect its source code. Only 75 currently meet our strict standard: an earlier attempt proved the exact task ran and scored correctly, the same version is still selected, and the latest review does not mark it as broken.</p>
           <div class="hero-meta">
-            <span>1,054 current blackbox tasks</span>
+            <span>1,055 current blackbox tasks</span>
             <span>75 passed every current check</span>
             <span>42 have a fully successful exact attempt</span>
             <span>52 currently marked broken</span>
@@ -133,13 +133,13 @@
           <div class="section-heading">
             <p class="section-index">01</p>
             <div>
-              <h2 id="funnel-title">How 1,054 tasks became 75</h2>
+              <h2 id="funnel-title">How 1,055 tasks became 75</h2>
               <p>We required earlier proof from the exact task version, kept only versions that are still selected for production, and removed anything now marked broken.</p>
             </div>
           </div>
           <div id="filter-funnel" class="funnel"></div>
           <div class="equation" aria-label="Task selection equation"><span>Worked and scored correctly before</span><b>+</b><span>Still current and not known broken</span><b>=</b><strong>75 tasks</strong></div>
-          <p class="footnote">The other 979 tasks are not all broken. Most simply lack the complete, independently checked proof required by this conservative filter.</p>
+          <p class="footnote">The other 980 tasks are not all broken. Most simply lack the complete, independently checked proof required by this conservative filter.</p>
         </section>
 
         <section class="section" aria-labelledby="gates-title">
@@ -168,7 +168,7 @@
             <div><h2 id="excluded-title">What remains outside the 75</h2><p>Known broken tasks are excluded. Unreviewed and partly proven tasks stay separate until the same complete proof is available.</p></div>
           </div>
           <div id="exclusion-bars" class="exclusion-bars"></div>
-          <p class="footnote">The 985 unreviewed tasks include 75 tasks with strong earlier execution proof. Current review status and earlier execution proof answer different questions, so these bars should not be added together.</p>
+          <p class="footnote">The 986 unreviewed tasks include 75 tasks with strong earlier execution proof. Current review status and earlier execution proof answer different questions, so these bars should not be added together.</p>
         </section>
 
         <section class="section" aria-labelledby="mix-title">
@@ -191,7 +191,7 @@
             <article><span class="gate-number">42</span><h3>Exact success proven</h3><p>For 42 of the 75 retained tasks, the saved record is tied to the exact current task version and proves a complete success.</p></article>
             <article><span class="gate-number">33</span><h3>Valid failure proven</h3><p>For 33 retained tasks, the checked attempt is a genuine model failure. This does not prove that every other attempt failed.</p></article>
           </div>
-          <p class="callout">Across all 1,054 current blackbox tasks, 44 have exact success proof, but two of those are now marked broken and stay excluded. Another 36 have an exact valid failure. The remaining 974 lack exact version-specific execution proof in this review.</p>
+          <p class="callout">Across all 1,055 current blackbox tasks, 44 have exact success proof, but two of those are now marked broken and stay excluded. Another 36 have an exact valid failure. The remaining 975 lack exact version-specific execution proof in this review.</p>
         </section>
 
         <section class="section" aria-labelledby="split-title">
@@ -212,13 +212,13 @@
             <p class="section-index">08</p>
             <div>
               <h2 id="scope-title">Scope and public evidence</h2>
-              <p>This review covers the current OTS Cyber catalog. The full 1,054-task file is an inventory, not a claim that all 1,054 work. The 75-task file is the conservative set supported by exact earlier execution proof and current status.</p>
+              <p>This review covers the current OTS Cyber catalog. The full 1,055-task file is an inventory, not a claim that all 1,055 work. The 75-task file is the conservative set supported by exact earlier execution proof and current status.</p>
               <div class="source-links">
-                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/fleet-blackbox-current-production-20260914-v1.json">All 1,054 current blackbox tasks</a>
+                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/fleet-blackbox-current-production-20260915-v1.json">All 1,055 current blackbox tasks</a>
                 <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/fleet-blackbox-current-high-quality-20260914-v1.json">The 75 tasks kept</a>
                 <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/fleet-blackbox-current-study-split-20260914-v2.json">The fixed 50/17/8 study split</a>
-                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/fleet-blackbox-training-coverage-20260914-v1.json">Tasks with proven successful examples</a>
-                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/docs/FLEET_BLACKBOX_TASK_REFRESH_2026-09-14.md">Full filtering report</a>
+                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/fleet-blackbox-training-coverage-20260915-v1.json">Tasks with proven successful examples</a>
+                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/docs/FLEET_BLACKBOX_TASK_REFRESH_2026-09-15.md">Full filtering report</a>
               </div>
             </div>
           </div>

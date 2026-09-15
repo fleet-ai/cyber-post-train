@@ -4,20 +4,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "configs" / "data"
-ALL = DATA / "fleet-blackbox-current-production-20260914-v1.json"
+EVIDENCE = ROOT / "docs" / "evidence" / "fleet-task-inventory-20260915"
+PREVIOUS_ALL = DATA / "fleet-blackbox-current-production-20260914-v1.json"
+ALL = DATA / "fleet-blackbox-current-production-20260915-v1.json"
 FILTERED = DATA / "fleet-blackbox-current-high-quality-20260914-v1.json"
 PENDING = DATA / "fleet-blackbox-qa-candidates-20260914-v1.json"
-COVERAGE = DATA / "fleet-blackbox-training-coverage-20260914-v1.json"
+COVERAGE = DATA / "fleet-blackbox-training-coverage-20260915-v1.json"
+CENSUS = EVIDENCE / "catalog-census-v1.json"
+ADMIN = EVIDENCE / "admin-workflow-count-v1.json"
 
 
-def rows(value: dict) -> list[dict]:
-    fields = [field for field in ("tasks", "task_versions") if field in value]
-    assert len(fields) == 1
-    return value[fields[0]]
-
-
-def load(path: Path) -> dict:
-    value = json.loads(path.read_text())
+def assert_self_digest(value: dict) -> None:
     expected = (
         "sha256:"
         + hashlib.sha256(
@@ -30,6 +27,17 @@ def load(path: Path) -> dict:
         ).hexdigest()
     )
     assert value["sha256"] == expected
+
+
+def rows(value: dict) -> list[dict]:
+    fields = [field for field in ("tasks", "task_versions") if field in value]
+    assert len(fields) == 1
+    return value[fields[0]]
+
+
+def load(path: Path) -> dict:
+    value = json.loads(path.read_text())
+    assert_self_digest(value)
     assert value["task_count"] == len(rows(value))
     return value
 
@@ -45,7 +53,7 @@ def test_current_blackbox_inventory_and_filters_are_exact_subsets() -> None:
     filtered = load(FILTERED)
     pending = load(PENDING)
 
-    assert all_tasks["task_count"] == 1054
+    assert all_tasks["task_count"] == 1055
     assert filtered["task_count"] == 75
     assert pending["task_count"] == 17
     all_ids = identities(all_tasks)
@@ -55,6 +63,42 @@ def test_current_blackbox_inventory_and_filters_are_exact_subsets() -> None:
     assert all(row["task_shape"] == "blackbox" for row in rows(all_tasks))
     assert all(row["qa_status"] != "broken_task" for row in rows(filtered))
     assert all(row["qa_status"] in {"clean", "agent_failure"} for row in rows(pending))
+
+
+def test_current_inventory_is_one_exact_addition_from_the_previous_refresh() -> None:
+    previous = load(PREVIOUS_ALL)
+    current = load(ALL)
+    previous_ids = identities(previous)
+    current_ids = identities(current)
+
+    assert not (previous_ids - current_ids)
+    assert len(current_ids - previous_ids) == 1
+    added = [
+        row
+        for row in rows(current)
+        if (row["task_id"], row["task_version_id"]) in current_ids - previous_ids
+    ]
+    assert len(added) == 1
+    assert added[0]["task_shape"] == "blackbox"
+    assert added[0]["qa_status"] == "not_analyzed"
+
+
+def test_live_census_and_admin_workflow_count_keep_evidence_tiers_separate() -> None:
+    census = json.loads(CENSUS.read_text())
+    admin = json.loads(ADMIN.read_text())
+    assert_self_digest(census)
+    assert_self_digest(admin)
+
+    assert census["catalog"]["task_count"] == 1633
+    assert census["catalog"]["lifecycle_status"]["production"] == 1250
+    assert census["current_production_quality"]["task_shape"]["blackbox"] == 1055
+    assert census["refreshed_selections"]["conservative_current_receipt_proven"] == 75
+    assert census["private_content_persisted"] is False
+
+    assert admin["matching_top_level_workflows"] == 176
+    assert admin["accepted_entry_inventory_available"] is False
+    assert "not an accepted-task" in admin["meaning"]
+    assert admin["private_content_persisted"] is False
 
 
 def test_filtered_tasks_have_reviewed_split_metadata_and_provenance() -> None:
@@ -90,18 +134,7 @@ def test_public_manifests_contain_no_private_payload_fields() -> None:
 
 def test_training_coverage_is_task_key_only_and_partitions_current_inventory() -> None:
     coverage = json.loads(COVERAGE.read_text())
-    expected = (
-        "sha256:"
-        + hashlib.sha256(
-            json.dumps(
-                {key: item for key, item in coverage.items() if key != "sha256"},
-                ensure_ascii=False,
-                sort_keys=True,
-                separators=(",", ":"),
-            ).encode()
-        ).hexdigest()
-    )
-    assert coverage["sha256"] == expected
+    assert_self_digest(coverage)
     successes = coverage["current_exact_success_proven_task_keys"]
     failures = coverage["current_exact_canonical_failure_task_keys"]
     high_quality_successes = coverage["high_quality_exact_success_proven_task_keys"]
@@ -125,7 +158,7 @@ def test_training_coverage_is_task_key_only_and_partitions_current_inventory() -
     assert len(set(high_quality_failures)) == len(high_quality_failures) == 33
     assert len(set(excluded_successes)) == len(excluded_successes) == 2
     assert len(set(excluded_failures)) == len(excluded_failures) == 3
-    assert len(set(missing)) == len(missing) == 974
+    assert len(set(missing)) == len(missing) == 975
     assert not (set(successes) & set(failures))
     assert set(high_quality_successes) | set(excluded_successes) == set(successes)
     assert set(high_quality_failures) | set(excluded_failures) == set(failures)

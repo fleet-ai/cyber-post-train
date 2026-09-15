@@ -34,6 +34,16 @@ def test_training_terms_have_visible_definitions() -> None:
     assert "Select any column title to read its plain-language meaning" in html
 
 
+def test_public_task_report_points_to_the_latest_exact_inventory() -> None:
+    html = (ROOT / "site" / "index.html").read_text()
+    data = (ROOT / "site" / "report-data.js").read_text()
+
+    assert "1,055 current blackbox tasks" in html
+    assert "fleet-blackbox-current-production-20260915-v1.json" in html
+    assert "docs/FLEET_BLACKBOX_TASK_REFRESH_2026-09-15.md" in html
+    assert 'funnel: [["Current production blackbox tasks",1055]' in data
+
+
 def test_experiment_plan_has_two_large_ranked_run_tables() -> None:
     html = (ROOT / "site" / "index.html").read_text()
     data = json.loads((ROOT / "site" / "training-decision-space.json").read_text())
