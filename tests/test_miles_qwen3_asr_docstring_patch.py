@@ -42,3 +42,21 @@ def test_pinned_bridge_source_and_patched_digests_are_fixed() -> None:
     )
     dockerfile = (PATCHER.parent / "Dockerfile").read_text()
     assert "python /tmp/patch_qwen3_asr_docstrings.py" in dockerfile
+
+
+def test_opencode_release_is_downloaded_with_archive_and_binary_pins() -> None:
+    dockerfile = (PATCHER.parent / "Dockerfile").read_text()
+    assert "ARG OPENCODE_VERSION=1.18.27" in dockerfile
+    assert (
+        "ARG OPENCODE_ARCHIVE_SHA256="
+        "4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702"
+    ) in dockerfile
+    assert (
+        "ARG OPENCODE_BINARY_SHA256="
+        "bddf894e5c2bc3d8cf452bd6e5ab2273bbe4a37eeeb9aec848d3d7d20db1f256"
+    ) in dockerfile
+    assert (
+        "https://github.com/anomalyco/opencode/releases/download/v"
+        in dockerfile
+    )
+    assert "COPY opencode " not in dockerfile

@@ -6,11 +6,13 @@ OpenCode 1.18.27 executable, and raises Miles session-v2's node cap only when
 `MILES_SESSION_MAX_NODES` is explicitly set. The old default remains 1024.
 
 The build fails unless the installed Miles tree, native training driver, and
-native checkpoint converter have the exact reviewed SHA-256 digests, and the
-supplied OpenCode binary has its pinned SHA-256. The binary is a build input
-and is never committed. Publish the resulting image by digest, then record an
-exact zero-GPU source check and a dev 4x8 parser/qualification receipt before any
-production configuration may refer to it.
+native checkpoint converter have the exact reviewed SHA-256 digests. It fetches
+the official OpenCode release archive and checks both the archive and extracted
+binary digests. This keeps Git-based BuildKit builds reproducible without
+committing the binary or relying on a local-context upload. Publish the resulting
+image by digest, then record an exact zero-GPU source check and a bounded dev
+CUDA parser/qualification receipt before any production configuration may refer
+to it.
 
 Megatron Bridge 0.5.0 eagerly imports its vendored Qwen3-ASR model registry even
 for text-only Qwen training. Transformers 5.12.1 reports two missing

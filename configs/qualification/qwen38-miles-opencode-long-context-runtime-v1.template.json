@@ -17,7 +17,7 @@
     "opencode_version": "1.18.27",
     "opencode_commit": "4b7e19e315cca414121ba1d61523fef74bb3ae8b",
     "opencode_binary_sha256": "sha256:bddf894e5c2bc3d8cf452bd6e5ab2273bbe4a37eeeb9aec848d3d7d20db1f256",
-    "build_source_sha256": "sha256:d5a3c5ae5aa1588a5ed24623d346b87813cbe331e7ac8a96dd8d2a60e1965e37"
+    "build_source_sha256": "sha256:441853f27031f2e9c60c70a04e862080bc815c5eaf191c82f183f9824d469a72"
   },
   "contract": {
     "model": "Qwen/Qwen3.8-27B",

@@ -1,6 +1,8 @@
 ARG BASE_IMAGE=661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:b713f93d8da719a08aa20f1c45752d32a40d72b95159f410cdb6046d5ed1cf5d
 FROM ${BASE_IMAGE}
 
+ARG OPENCODE_VERSION=1.18.27
+ARG OPENCODE_ARCHIVE_SHA256=4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702
 ARG OPENCODE_BINARY_SHA256=bddf894e5c2bc3d8cf452bd6e5ab2273bbe4a37eeeb9aec848d3d7d20db1f256
 ARG MILES_TREE_SOURCE_SHA256=fd978a1ef2617f4bf30850fedd197e546cdc9c6542b00b03df502cbb285fc732
 ARG MILES_NATIVE_DRIVER_SHA256=85dbfd31d41a84f9c2e79a2918583851fb53925630afa229e9cd0a154b170f46
@@ -12,17 +14,21 @@ ARG MILES_TITO_BACKPORT_COMMIT=257992eb52bfa1f5248b5a5ae8f5a959be500788
 ARG MILES_TITO_PATCHED_SHA256=72650e3b337d69d237088c03cafa12b066a2c31fe1ffd96fab2d49d832f4a33c
 ARG QWEN38_TITO_TEMPLATE_SHA256=38d42166599348d47ded69776c5389c89924045e6827089923a031379f8a3dfe
 
-COPY opencode /tmp/opencode-bin
 COPY tree_trajectory.py /tmp/tree_trajectory.py
 COPY tito_tokenizer.py /tmp/tito_tokenizer.py
 COPY qwen3.8_small_and_flash_next_fixed.jinja /tmp/qwen3.8_small_and_flash_next_fixed.jinja
 COPY patch_qwen3_asr_docstrings.py /tmp/patch_qwen3_asr_docstrings.py
 
 RUN set -eu; \
+    python -c 'import sys,urllib.request; urllib.request.urlretrieve("https://github.com/anomalyco/opencode/releases/download/v" + sys.argv[1] + "/opencode-linux-x64.tar.gz", "/tmp/opencode.tar.gz")' "${OPENCODE_VERSION}"; \
+    echo "${OPENCODE_ARCHIVE_SHA256}  /tmp/opencode.tar.gz" | sha256sum -c -; \
+    tar -xzf /tmp/opencode.tar.gz -C /tmp opencode; \
+    mv /tmp/opencode /tmp/opencode-bin; \
+    rm -f /tmp/opencode.tar.gz; \
     echo "${OPENCODE_BINARY_SHA256}  /tmp/opencode-bin" | sha256sum -c -; \
     chmod 0555 /tmp/opencode-bin; \
     install -m 0555 /tmp/opencode-bin /usr/local/bin/opencode; \
-    test "$(/usr/local/bin/opencode --version)" = "1.18.27"; \
+    test "$(/usr/local/bin/opencode --version)" = "${OPENCODE_VERSION}"; \
     miles_root="$(python -c 'from miles.utils.external_utils.command_utils import repo_base_dir;print(repo_base_dir)')"; \
     test "$(git -C "${miles_root}" rev-parse HEAD)" = "${MILES_SOURCE_COMMIT}"; \
     driver_sha256="$(sha256sum "${miles_root}/train.py" | cut -d' ' -f1)"; \
