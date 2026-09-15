@@ -1,0 +1,15 @@
+{
+  "cuda_hardware_claimed": false,
+  "gpu_requests": 0,
+  "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:dc1a41ac386c9f7377e7a6f7b92a402830e308855aa2632413af25917f38dd93",
+  "native_parser_checked": true,
+  "plan_canonical_sha256": "sha256:f9c7ed726c9e3a0289dcc98a55fcc128c6431105de7874f387caf209303061c3",
+  "plan_file_sha256": "sha256:f9c7ed726c9e3a0289dcc98a55fcc128c6431105de7874f387caf209303061c3",
+  "raw_parser_output_included": false,
+  "schema": "cyber_miles_initial_rollout_parser_preflight_v1",
+  "sha256": "sha256:83557e4f4b78f7df93c308885eb938a1d13d79000711520f2985b0d2b7fb0b14",
+  "source_commit": "958860aaf771eb2b5e4cbf572bb0f310dceef9f5",
+  "source_file_sha256": "sha256:4c22c1a0e4e1c9817d90b9cea93fb730eb6b876d8a3eb5beb3e235e8a69874f1",
+  "start_rollout_id": 0,
+  "status": "accepted"
+}

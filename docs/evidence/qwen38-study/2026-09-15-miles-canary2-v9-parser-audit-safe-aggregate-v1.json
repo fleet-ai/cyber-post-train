@@ -1,0 +1,46 @@
+{
+  "schema": "cyber_miles_canary2_v9_parser_audit_safe_aggregate_v1",
+  "status": "diagnosed",
+  "pod": {
+    "name": "chris-q38-miles-canary2-failure-audit-v9",
+    "uid": "32909d3f-103d-478f-bf00-d14c228312ed",
+    "cluster": "prod",
+    "namespace": "fleet-train-jobs",
+    "gpus": 0,
+    "deleted": true,
+    "deletion_confirmed": true
+  },
+  "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:dc1a41ac386c9f7377e7a6f7b92a402830e308855aa2632413af25917f38dd93",
+  "source_plan_sha256": "sha256:f9c7ed726c9e3a0289dcc98a55fcc128c6431105de7874f387caf209303061c3",
+  "results": [
+    {
+      "stage": "embedded_promotion",
+      "status": "passed"
+    },
+    {
+      "stage": "native_parser",
+      "status": "failed",
+      "error_class": "ValueError",
+      "guard_file": "training/miles_training.py",
+      "guard_line": 545,
+      "guard_function": "native_args"
+    }
+  ],
+  "parser_mismatch_fields": [
+    "start_rollout_id"
+  ],
+  "expected_start_rollout_id": 0,
+  "observed_start_rollout_id": null,
+  "cuda_stub_and_property_monkeypatch_used": true,
+  "cuda_hardware_claimed": false,
+  "raw_error_messages_included": false,
+  "private_log_read_or_included": false,
+  "claims_excluded": [
+    "CUDA hardware qualification",
+    "rollout execution",
+    "verifier reward",
+    "optimizer update",
+    "checkpoint creation"
+  ],
+  "sha256": "sha256:dd253b4f58a26af5bcccbd1cb45a7185b04b7dada945c317673c6cebed604e15"
+}
