@@ -1,0 +1,51 @@
+{
+  "schema": "cyber_miles_long_context_data_derivation_evidence_v1",
+  "status": "derived_released",
+  "source_commit": "43658e962bf579380b2cd0fc638cee1fbc0081d0",
+  "source_bundle_sha256": "sha256:bcdc1e3eca6a93bfa162b22820f38f3095c235f588d4ff953a7cf731b7b17783",
+  "source": {
+    "root": "/mnt/sfs/jobs/chris-q38-miles-lc-canary1-inputs/data",
+    "manifest_file_sha256": "sha256:1a87b89a7b1f28460321805fbd789851ba9d9455b8ba4d0615bb459d63be95c5",
+    "manifest_self_sha256": "sha256:7b9165ddb2275f93ecf198fa79a5bce5454f9af8d04c6bb65a81c7b62d8560d9",
+    "stable_read": true
+  },
+  "destination": {
+    "root": "/mnt/sfs/jobs/chris-q38-miles-lc-canary2-inputs/data",
+    "manifest_file_sha256": "sha256:7c726746ca1a3ec45984a24554d4efbfdc13da6fa115a13a10dfa7fecaf84975",
+    "manifest_self_sha256": "sha256:4ec8a1ae470c4d86728adf929cf496556f7b15bd3acdfc7bc56d57682bbd8910",
+    "derivation_sha256": "sha256:c7a7405f72b43a5dfd239eca3f8720fcd4117db2d7d1f53c31ed123c7d5fe9e6",
+    "mode": "metadata_only_run_id_rebind",
+    "train_rows": 1,
+    "dev_rows": 1,
+    "train_file_sha256": "sha256:1175fee4acc49cdd9c83b32dc68052dd89d65d65600acf54f8b33c1c44a72ea0",
+    "dev_file_sha256": "sha256:ebd9b7e22fd912cbf2c7151bcb155b7dab6ee19e406ecf493131015e9cb66b10"
+  },
+  "execution": {
+    "cluster": "prod",
+    "namespace": "fleet-train-jobs",
+    "priority_class": "c1",
+    "pod_name": "q38-miles-lc-data-derive2-43658e96",
+    "pod_uid": "891c319e-f6a4-4f0d-81ae-0b5bda295037",
+    "configmap_uid": "1c054bba-231f-41fd-9eab-fa3501958783",
+    "node": "computeinstance-e04ey45871amzpv56q",
+    "active_deadline_seconds": 900,
+    "gpu_requests": 0,
+    "started_at": "2026-09-15T06:53:12Z",
+    "finished_at": "2026-09-15T06:53:12Z",
+    "exit_code": 0,
+    "container_restarts": 0,
+    "pod_deleted": true,
+    "configmap_deleted": true,
+    "deletion_confirmed": true,
+    "possible_resource_leak": false
+  },
+  "scientific_boundaries": {
+    "source_payloads_unchanged": true,
+    "only_run_identity_and_signed_config_digest_changed": true,
+    "network_requests": 0,
+    "environment_creates": 0,
+    "gpu_use": 0,
+    "external_benchmark_rows": 0
+  },
+  "sha256": "sha256:e4f0157b9446c696ce774e8f0436c7d034d8165d58c46a98a33340eb7efd0736"
+}

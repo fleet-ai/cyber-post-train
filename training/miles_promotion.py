@@ -259,6 +259,37 @@ EXPECTED_REWARD_CANARY_LONG_V1_DATA = {
         },
     },
 }
+EXPECTED_REWARD_CANARY_LONG_V2_DATA = {
+    **EXPECTED_REWARD_CANARY_LONG_V1_DATA,
+    "name": PROD_REWARD_CANARY_LONG_V2_NAME,
+    "files": {
+        "train": {
+            "path": "train.jsonl",
+            "rows": 1,
+            "max_prompt_tokens": 1261,
+            "sha256": (
+                "sha256:1175fee4acc49cdd9c83b32dc68052dd89d65d65600acf54f8b33c1c44a72ea0"
+            ),
+        },
+        "dev": {
+            "path": "dev.jsonl",
+            "rows": 1,
+            "max_prompt_tokens": 1276,
+            "sha256": (
+                "sha256:ebd9b7e22fd912cbf2c7151bcb155b7dab6ee19e406ecf493131015e9cb66b10"
+            ),
+        },
+    },
+    "manifest_file_sha256": (
+        "sha256:7c726746ca1a3ec45984a24554d4efbfdc13da6fa115a13a10dfa7fecaf84975"
+    ),
+    "manifest_self_sha256": (
+        "sha256:4ec8a1ae470c4d86728adf929cf496556f7b15bd3acdfc7bc56d57682bbd8910"
+    ),
+    "derivation_sha256": (
+        "sha256:c7a7405f72b43a5dfd239eca3f8720fcd4117db2d7d1f53c31ed123c7d5fe9e6"
+    ),
+}
 BENCHMARK_ISOLATION = {
     "optimizer_split": "train",
     "fleet_dev_is_evaluation_only": True,
@@ -403,10 +434,11 @@ def _exact_data(value: Any, expected: dict[str, Any] = EXPECTED_DATA) -> None:
         raise ValueError("Miles production data differs from the exact 59/20 split")
 
 
-def _exact_long_data(value: Any) -> None:
+def _exact_long_data(
+    value: Any, expected: dict[str, Any] = EXPECTED_REWARD_CANARY_LONG_V1_DATA
+) -> None:
     from .miles_opencode import harness_contract
 
-    expected = EXPECTED_REWARD_CANARY_LONG_V1_DATA
     _sealed(value, "cyber_miles_data_v2")
     if (
         value.get("name") != expected["name"]
@@ -421,6 +453,18 @@ def _exact_long_data(value: Any) -> None:
         or value.get("files") != expected["files"]
         or value.get("gpus") != 0
         or value.get("environment_creates") != 0
+        or (
+            expected.get("derivation_sha256") is None
+            and "derivation" in value
+        )
+        or (
+            expected.get("derivation_sha256") is not None
+            and (
+                not isinstance(value.get("derivation"), dict)
+                or value["derivation"].get("sha256")
+                != expected["derivation_sha256"]
+            )
+        )
     ):
         raise ValueError("Miles long-context canary data differs from the exact Fleet split")
 
@@ -942,7 +986,11 @@ def _exact_reward_canary_plan(plan: dict[str, Any]) -> None:
             else PROD_REWARD_CANARY_LONG_V1_WANDB
         )
         tokens_per_turn = 32768
-        expected_data = EXPECTED_REWARD_CANARY_LONG_V1_DATA
+        expected_data = (
+            EXPECTED_REWARD_CANARY_LONG_V2_DATA
+            if successor
+            else EXPECTED_REWARD_CANARY_LONG_V1_DATA
+        )
         nodes = 4
         max_tokens_per_gpu = 65536
         context_tokens = 262144
@@ -1035,7 +1083,7 @@ def _exact_reward_canary_plan(plan: dict[str, Any]) -> None:
         PROD_REWARD_CANARY_LONG_V1_MODE,
         PROD_REWARD_CANARY_LONG_V2_MODE,
     }:
-        _exact_long_data(plan.get("data"))
+        _exact_long_data(plan.get("data"), expected_data)
     else:
         _exact_data(plan.get("data"), expected_data)
 
@@ -1162,7 +1210,7 @@ def _reward_canary_live_identity(
             PROD_REWARD_CANARY_LONG_V2_OUTPUT,
             PROD_REWARD_CANARY_LONG_V2_DATA_MANIFEST,
             PROD_REWARD_CANARY_LONG_V2_WANDB,
-            EXPECTED_REWARD_CANARY_LONG_V1_DATA,
+            EXPECTED_REWARD_CANARY_LONG_V2_DATA,
         )
     raise JobsError("Miles production reward canary mode changed")
 

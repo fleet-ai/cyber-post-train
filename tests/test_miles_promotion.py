@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from cyber_post_train.jobs import JobsError, digest
-from training import miles, miles_promotion
+from training import miles, miles_opencode, miles_promotion
 from training.models import bound_model
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -309,6 +309,25 @@ def test_long_context_reward_canary_v2_uses_qualified_runtime_and_new_identity()
     assert config["production_promotion"] == {
         "mode": miles_promotion.PROD_REWARD_CANARY_LONG_V2_MODE
     }
+
+    expected = miles_promotion.EXPECTED_REWARD_CANARY_LONG_V2_DATA
+    data = {
+        "schema": "cyber_miles_data_v2",
+        "name": expected["name"],
+        "selection_sha256": expected["selection_sha256"],
+        "split_sha256": expected["split_sha256"],
+        "tokenizer": copy.deepcopy(expected["tokenizer"]),
+        "template_sha256": "sha256:" + miles.TEMPLATE_SHA256,
+        "tool_catalog_sha256": expected["tool_catalog_sha256"],
+        "limits": copy.deepcopy(expected["limits"]),
+        "harness": miles_opencode.harness_contract(),
+        "files": copy.deepcopy(expected["files"]),
+        "gpus": 0,
+        "environment_creates": 0,
+        "derivation": {"sha256": expected["derivation_sha256"]},
+    }
+    data["sha256"] = "sha256:" + digest(data)
+    miles_promotion._exact_long_data(data, expected)
 
 
 def test_long_context_reward_canary_preview_is_exact_four_by_eight_c1(monkeypatch) -> None:
