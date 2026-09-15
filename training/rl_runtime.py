@@ -248,7 +248,8 @@ def run(plan, plan_path, *, backend):
     process, reason = None, None
     try:
         try:
-            backend.native_source()
+            validator = getattr(backend, "native_source_for_plan", None)
+            validator(plan) if validator is not None else backend.native_source()
             name = backend.MODULE.removeprefix("training.").removesuffix("_training")
             with (root / f"private-{name}.log").open("x") as log:
                 os.chmod(log.name, 0o600)
@@ -267,7 +268,12 @@ def run(plan, plan_path, *, backend):
                     stderr=subprocess.STDOUT,
                     start_new_session=True,
                 )
-                watchdog = ProgressWatchdog(time.monotonic())
+                hard_seconds = getattr(backend, "watchdog_hard_seconds", lambda _: None)(plan)
+                watchdog = (
+                    ProgressWatchdog(time.monotonic())
+                    if hard_seconds is None
+                    else ProgressWatchdog(time.monotonic(), hard_seconds=hard_seconds)
+                )
                 previous_checkpoint = ()
                 while process.poll() is None:
                     try:

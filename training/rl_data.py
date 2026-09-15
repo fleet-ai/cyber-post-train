@@ -93,20 +93,34 @@ def selection(task_set: dict, split: dict) -> list[dict]:
     return sorted(rows, key=lambda r: (r["split"], r["task_key"], r["task_version_id"]))
 
 
-def _native(lock, root):
+def _native(lock, root, tito_family="qwen35"):
     import torch
     from fti.trainers.miles.run_fleet import TEMPLATES
-    from miles.utils.chat_template_utils.tito_tokenizer import get_tito_tokenizer
+    from miles.utils.chat_template_utils.tito_tokenizer import (
+        get_tito_tokenizer,
+        resolve_fixed_chat_template,
+    )
     from miles.utils.data import Dataset
 
     if torch.cuda.is_available():
         raise ValueError("RL data preparation must not hold a GPU")
     tokenizer, identity = local_tokenizer(lock, Path(root))
-    template = (TEMPLATES / "qwen3.8_fixed.jinja").read_bytes()
+    if tito_family == "qwen35":
+        template_path = TEMPLATES / "qwen3.8_fixed.jinja"
+    elif tito_family == "qwen38small":
+        resolved, kwargs = resolve_fixed_chat_template(tito_family)
+        if kwargs != {"preserve_thinking": True, "reasoning_effort": "xhigh"}:
+            raise ValueError("native Qwen3.8 TITO kwargs changed")
+        template_path = Path(resolved) if resolved is not None else None
+        if template_path is None:
+            raise ValueError("native Qwen3.8 TITO template is absent")
+    else:
+        raise ValueError("unqualified Qwen TITO family")
+    template = template_path.read_bytes()
     if fleet.sha256(template) != "sha256:" + miles.TEMPLATE_SHA256:
         raise ValueError("native Qwen template drift")
     tokenizer.chat_template = template.decode()
-    return tokenizer, get_tito_tokenizer(tokenizer, "qwen35"), Dataset, identity
+    return tokenizer, get_tito_tokenizer(tokenizer, tito_family), Dataset, identity
 
 
 def _native_skyrl(lock, root):
@@ -137,6 +151,7 @@ def build(config: dict, *, relative_to: Path, client) -> dict:
             "model_lock",
             "model_root",
             "limits",
+            "harness",
             "output",
         },
         "RL data",
@@ -174,16 +189,27 @@ def build(config: dict, *, relative_to: Path, client) -> dict:
     if lock["repo"] != "Qwen/Qwen3.8-27B":
         raise ValueError("native RL data profile currently targets Qwen3.8-27B")
     root = _sfs_root(config["model_root"], "model root")
+    from . import miles_opencode
+
+    harness = copy.deepcopy(config.get("harness"))
+    long_horizon = harness is not None
+    if long_horizon and (backend != "miles" or harness != miles_opencode.harness_contract()):
+        raise ValueError("long-horizon RL requires the exact OpenCode contract")
     limits = copy.deepcopy(config["limits"])
-    response_tokens = limits.pop("response_tokens")
+    response_tokens = limits["response_tokens"]
+    episode_limits = copy.deepcopy(limits)
+    if not long_horizon:
+        episode_limits.pop("response_tokens")
+    tito_family = miles_opencode.TITO_FAMILY if long_horizon else "qwen35"
     episode = {
         "run_id": config["name"],
         "model": {
             "repo": lock["repo"],
             "revision": lock["revision"],
             "root": root,
-            "tito_family": "qwen35",
+            "tito_family": tito_family,
             "runtime_chat_template_sha256": "sha256:" + miles.TEMPLATE_SHA256,
+            **({"served_id": "model"} if long_horizon else {}),
         },
         "authority": AUTHORITY,
         "execution": {
@@ -191,19 +217,28 @@ def build(config: dict, *, relative_to: Path, client) -> dict:
             "required_task_tool_catalog_sha256": task_set["tool_catalog_sha256"],
         },
         "environment": {"ttl_seconds": 32400},
-        "rl": limits,
+        "rl": episode_limits,
+        **({"harness": harness} if long_horizon else {}),
     }
     episode["config_sha256"] = fleet.digest_without(episode, "config_sha256")
     rl_episode._validate(episode)
     rl_episode.validate_tool_budget(catalog, limits["tool_seconds"])
+    context_ceiling = miles_opencode.CONTEXT_TOKENS if long_horizon else 98_304
     if type(response_tokens) is not int or not (
-        limits["max_tokens_per_turn"] <= response_tokens < limits["context_tokens"] <= 98304
+        limits["max_tokens_per_turn"]
+        <= response_tokens
+        < limits["context_tokens"]
+        <= context_ceiling
     ):
         raise ValueError("response/context budget outside native Qwen profile")
     prompt_budget = limits["context_tokens"] - response_tokens
-    tokenizer, tito, Dataset, tokenizer_identity = (
-        _native(lock, root) if backend == "miles" else _native_skyrl(lock, root)
-    )
+    if backend == "skyrl":
+        tokenizer, tito, Dataset, tokenizer_identity = _native_skyrl(lock, root)
+    elif long_horizon:
+        tokenizer, tito, Dataset, tokenizer_identity = _native(lock, root, tito_family)
+    else:
+        # Retain the two-argument boundary used by existing callers/tests.
+        tokenizer, tito, Dataset, tokenizer_identity = _native(lock, root)
     if backend == "skyrl":
         episode["model"].pop("tito_family")
         episode["model"]["runtime_chat_template_sha256"] = fleet.sha256(
@@ -319,7 +354,7 @@ def build(config: dict, *, relative_to: Path, client) -> dict:
             "max_prompt_tokens": max(lengths[group]),
         }
     manifest = {
-        "schema": f"cyber_{backend}_data_v1",
+        "schema": ("cyber_miles_data_v2" if long_horizon else f"cyber_{backend}_data_v1"),
         "name": config["name"],
         "selection_sha256": task_set["sha256"],
         "split_sha256": split["sha256"],
@@ -327,6 +362,7 @@ def build(config: dict, *, relative_to: Path, client) -> dict:
         "template_sha256": episode["model"]["runtime_chat_template_sha256"],
         "tool_catalog_sha256": task_set["tool_catalog_sha256"],
         "limits": config["limits"],
+        **({"harness": harness} if long_horizon else {}),
         "files": files,
         "gpus": 0,
         "environment_creates": 0,

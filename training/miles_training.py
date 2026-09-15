@@ -13,6 +13,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -27,6 +28,7 @@ from .miles_conversion import _hash, check_inputs, inventory
 from .rl_runtime import sealed as _sealed
 
 SCHEMA = "cyber_miles_training_v1"
+LONG_CONTEXT_SCHEMA = "cyber_miles_training_v2"
 MODULE = "training.miles_training"
 # Colocated generation, Megatron and CPU offload have a different RAM peak
 # from SFT. The real Qwen canary exhausted its inherited 768-GiB limit.
@@ -42,6 +44,7 @@ RUNTIME_FILES = (
     "training/miles_training.py",
     "training/miles.py",
     "training/miles_conversion.py",
+    "training/miles_opencode.py",
     "training/miles_promotion.py",
     "training/miles_rollout.py",
     "training/miles_text.py",
@@ -51,11 +54,94 @@ RUNTIME_FILES = (
     "evals/fleet/opencode_self_hosted.py",
     "cyber_post_train/jobs.py",
 )
+LONG_RUNTIME_BASE_IMAGE = (
+    "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:"
+    "b713f93d8da719a08aa20f1c45752d32a40d72b95159f410cdb6046d5ed1cf5d"
+)
+LONG_RUNTIME_CHECKS = frozenset(
+    {
+        "installed_source_digest_checked",
+        "opencode_binary_checked",
+        "native_256k_parser_checked",
+        "qwen38small_template_checked",
+        "qwen38small_parser_checked",
+        "native_radix_affinity_route_checked",
+        "forced_repeated_compaction_checked",
+        "more_than_1024_nodes_checked",
+        "one_reward_per_rollout_checked",
+        "summary_tokens_excluded_checked",
+        "no_primary_tool_prefix_truncation_checked",
+    }
+)
 
 
 def _runtime():
     root = Path(__file__).resolve().parents[1]
     return {name: (root / name).read_text() for name in RUNTIME_FILES}
+
+
+def _validate_long_runtime_receipt(
+    receipt: object, *, image: str, build_source_sha256: str | None = None
+) -> dict:
+    """Validate an image qualification, never a scientific RL acceptance."""
+    if not isinstance(receipt, dict):
+        raise ValueError("long-context runtime image qualification is absent")
+    _sealed(receipt, "cyber_miles_opencode_runtime_qualification_v1")
+    if (
+        receipt.get("status") != "image_qualified_for_dev"
+        or receipt.get("image") != image
+        or receipt.get("base_image") != LONG_RUNTIME_BASE_IMAGE
+        or receipt.get("fti_version") != "0.8.4"
+        or receipt.get("native_profile") != "qwen3.8-27b-256k"
+        or receipt.get("opencode_version") != "1.18.27"
+        or receipt.get("opencode_source_commit") != "4b7e19e315cca414121ba1d61523fef74bb3ae8b"
+        or receipt.get("opencode_binary_sha256")
+        != "sha256:bddf894e5c2bc3d8cf452bd6e5ab2273bbe4a37eeeb9aec848d3d7d20db1f256"
+        or receipt.get("miles_source_commit") != "2799fe386320c156334bf763ad4d7ca0f85dca4e"
+        or receipt.get("miles_tree_source_sha256")
+        != "sha256:fd978a1ef2617f4bf30850fedd197e546cdc9c6542b00b03df502cbb285fc732"
+        or receipt.get("native_driver_sha256") != "sha256:" + miles.LONG_NATIVE_DRIVER_SHA256
+        or receipt.get("native_converter_sha256") != "sha256:" + miles.LONG_NATIVE_CONVERTER_SHA256
+        or receipt.get("installed_session_tree_sha256")
+        != "sha256:" + miles.LONG_INSTALLED_SESSION_TREE_SHA256
+        or set(receipt.get("checks", {})) != LONG_RUNTIME_CHECKS
+        or not all(receipt["checks"].values())
+        or not re.fullmatch(r"[^@\s]+@sha256:[a-f0-9]{64}", image)
+        or not re.fullmatch(r"sha256:[a-f0-9]{64}", str(receipt.get("build_source_sha256", "")))
+        or (
+            build_source_sha256 is not None
+            and receipt.get("build_source_sha256") != build_source_sha256
+        )
+    ):
+        raise ValueError("long-context runtime image has not passed exact qualification")
+    return receipt
+
+
+def _bind_long_runtime(value: object, relative_to: Path) -> dict:
+    """Bind a built and parser-qualified image for the first dev canary."""
+    from .sft import _known, read_mapping
+
+    if not isinstance(value, dict):
+        raise ValueError("long-context runtime image qualification is absent")
+    _known(value, {"image", "receipt", "sha256"}, "long-context runtime")
+    if not isinstance(value.get("sha256"), str) or not re.fullmatch(
+        r"sha256:[a-f0-9]{64}", value["sha256"]
+    ):
+        raise ValueError("long-context runtime receipt digest is malformed")
+    path = relative_to / value["receipt"]
+    if _hash(path) != value["sha256"].removeprefix("sha256:"):
+        raise ValueError("long-context runtime receipt file changed")
+    receipt = read_mapping(path)
+    root = Path(__file__).resolve().parents[1]
+    build_files = {
+        str(path.relative_to(root)): path.read_text()
+        for path in sorted((root / "training/images/miles-opencode-long-context").glob("*"))
+        if path.is_file()
+    }
+    build_source_sha256 = "sha256:" + digest(build_files)
+    return _validate_long_runtime_receipt(
+        receipt, image=value["image"], build_source_sha256=build_source_sha256
+    )
 
 
 def compile_rl(config: dict, *, relative_to: Path) -> dict:
@@ -74,6 +160,7 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
             "wandb",
             "cluster",
             "production_promotion",
+            "runtime",
         },
         "RL",
     )
@@ -120,6 +207,9 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
             "eval_interval",
             "checkpoint_interval",
             "seed",
+            "native_profile",
+            "harness",
+            "session_node_cap",
         },
         "Miles recipe",
     )
@@ -132,13 +222,18 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
         if not isinstance(policy_identity_root, str):
             raise ValueError("accepted SFT policy identity is absent")
     metadata = read_mapping(relative_to / data["manifest"])
-    _sealed(metadata, "cyber_miles_data_v1")
+    long_horizon = metadata.get("schema") == "cyber_miles_data_v2"
+    _sealed(metadata, "cyber_miles_data_v2" if long_horizon else "cyber_miles_data_v1")
+    runtime = _bind_long_runtime(config.get("runtime"), relative_to) if long_horizon else None
+    if not long_horizon and config.get("runtime") is not None:
+        raise ValueError("legacy Miles does not accept an alternate runtime")
     cp_path = relative_to / checkpoint["manifest"]
     if _hash(cp_path) != checkpoint["sha256"].removeprefix("sha256:"):
         raise ValueError("native checkpoint manifest file digest mismatch")
     cp = read_mapping(cp_path)
     _sealed(cp, "cyber_miles_checkpoint_v1")
-    if cp["model"] != bound or cp["image"] != miles.IMAGE or cp["optimizer_steps"] != 0:
+    runtime_image = runtime["image"] if runtime is not None else miles.IMAGE
+    if cp["model"] != bound or cp["image"] != runtime_image or cp["optimizer_steps"] != 0:
         raise ValueError("RL requires an exact zero-step conversion of its initial policy")
     root = Path(_sfs_root(data["root"], "data root"))
     limits = metadata["limits"]
@@ -158,6 +253,7 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
         context_tokens=limits["context_tokens"],
         response_tokens=limits["response_tokens"],
         tokens_per_turn=limits["max_tokens_per_turn"],
+        runtime_image=runtime_image,
         **recipe,
     )
     args.validate()
@@ -174,7 +270,7 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
         if Path(item["path"]).name != item["path"]:
             raise ValueError("data file must be directly inside its immutable root")
     plan = {
-        "schema": SCHEMA,
+        "schema": LONG_CONTEXT_SCHEMA if long_horizon else SCHEMA,
         "run_name": args.name,
         "output_root": args.output_root,
         "model": bound,
@@ -182,9 +278,11 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
         "checkpoint": cp,
         "arguments": dataclasses.asdict(args),
         "runtime_sha256": digest(_runtime()),
-        "native_driver_sha256": NATIVE_DRIVER_SHA256,
+        "native_driver_sha256": (
+            miles.LONG_NATIVE_DRIVER_SHA256 if long_horizon else NATIVE_DRIVER_SHA256
+        ),
         "execution": {
-            "image": miles.IMAGE,
+            "image": runtime_image,
             "priority": cluster.get("priority", "c1"),
             "resources": {**RESOURCES, **cluster.get("resources", {})},
             **({"cluster_target": target} if target is not None else {}),
@@ -194,6 +292,7 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
                 else {}
             ),
         },
+        **({"runtime_qualification": runtime} if runtime is not None else {}),
     }
     job_request(plan)
     return plan
@@ -205,15 +304,22 @@ def job_request(plan):
     validate_embedded_promotion(plan, check_files=True)
     args = miles.MilesConfig(**plan["arguments"])
     args.validate()
+    if args.harness == "opencode":
+        receipt = plan.get("runtime_qualification")
+        _validate_long_runtime_receipt(receipt, image=args.runtime_image)
+    elif "runtime_qualification" in plan:
+        raise ValueError("legacy plan carries an alternate runtime qualification")
     if (
-        plan["schema"] != SCHEMA
+        plan["schema"] != (LONG_CONTEXT_SCHEMA if args.harness == "opencode" else SCHEMA)
         or plan["runtime_sha256"] != digest(_runtime())
-        or plan["native_driver_sha256"] != NATIVE_DRIVER_SHA256
-        or plan["execution"]["image"] != miles.IMAGE
+        or plan["native_driver_sha256"]
+        != (miles.LONG_NATIVE_DRIVER_SHA256 if args.harness == "opencode" else NATIVE_DRIVER_SHA256)
+        or plan["execution"]["image"] != args.runtime_image
         or "priority_reason" in plan["execution"]
         or plan["execution"].get("cluster_target") not in {None, "dev", "prod"}
         or plan["run_name"] != args.name
         or plan["output_root"] != args.output_root
+        or (args.harness == "opencode" and plan["execution"]["priority"] != "c1")
     ):
         raise ValueError("Miles plan/runtime drift")
     resources = plan["execution"]["resources"]
@@ -233,7 +339,7 @@ def job_request(plan):
             "name": args.name,
             "title": args.name + " native Miles RL",
             "run_dir": args.output_root,
-            "image": miles.IMAGE,
+            "image": args.runtime_image,
             "workers": args.nodes,
             "gpus_per_worker": args.gpus_per_node,
             "resources": resources,
@@ -249,6 +355,7 @@ def job_request(plan):
                 "TOKENIZERS_PARALLELISM": "false",
                 "CUDA_DEVICE_MAX_CONNECTIONS": "1",
                 "MILES_USE_LEGACY_ROLLOUT_V1": "0",
+                "MILES_SESSION_MAX_NODES": str(args.session_node_cap),
                 "WANDB_MODE": "online",
                 "WANDB_RUN_ID": args.wandb_run_id,
                 "WANDB_DISABLE_CODE": "true",
@@ -279,6 +386,7 @@ def check_artifacts(plan):
     args = plan["arguments"]
     path = Path(args["data_manifest"])
     data = json.loads(path.read_text())
+    long_horizon = data.get("schema") == "cyber_miles_data_v2"
     if data != plan["data"]:
         raise ValueError("staged data manifest changed")
     runtime_model_root = plan["model"]["root"]
@@ -314,7 +422,20 @@ def check_artifacts(plan):
                 or cfg["model"]["repo"] != plan["model"]["repo"]
                 or cfg["model"]["revision"] != plan["model"]["revision"]
                 or cfg["model"]["root"] != policy_identity_root
-                or cfg["rl"] != {k: v for k, v in data["limits"].items() if k != "response_tokens"}
+                or (
+                    long_horizon
+                    and (
+                        cfg["model"].get("tito_family") != "qwen38small"
+                        or cfg["model"].get("served_id") != "model"
+                    )
+                )
+                or cfg["rl"]
+                != (
+                    data["limits"]
+                    if long_horizon
+                    else {k: v for k, v in data["limits"].items() if k != "response_tokens"}
+                )
+                or (cfg.get("harness") != (data.get("harness") if long_horizon else None))
                 or cfg["execution"]["required_task_tool_catalog_sha256"]
                 != data["tool_catalog_sha256"]
                 or cfg["initial_prompt_sha256"]
@@ -325,13 +446,32 @@ def check_artifacts(plan):
     return selected
 
 
-def native_source():
+def _native_source(expected):
     from miles.utils.external_utils.command_utils import repo_base_dir
 
     path = Path(repo_base_dir) / "train.py"
-    if _hash(path) != NATIVE_DRIVER_SHA256:
+    if _hash(path) != expected:
         raise ValueError("native Miles training driver changed")
     return path
+
+
+def native_source():
+    return _native_source(NATIVE_DRIVER_SHA256)
+
+
+def native_source_for_plan(plan):
+    """Plan-aware hook used by the shared lifecycle before spawning Miles."""
+    if plan["arguments"]["harness"] == "opencode":
+        return _native_source(miles.LONG_NATIVE_DRIVER_SHA256)
+    return native_source()
+
+
+def watchdog_hard_seconds(plan):
+    if plan["arguments"]["harness"] == "opencode":
+        from .miles_opencode import JOB_HARD_SECONDS
+
+        return JOB_HARD_SECONDS
+    return None
 
 
 def native_args(plan):
@@ -340,7 +480,10 @@ def native_args(plan):
 
     previous = sys.argv
     try:
-        sys.argv = [str(native_source()), *miles.arguments(miles.MilesConfig(**plan["arguments"]))]
+        sys.argv = [
+            str(native_source_for_plan(plan)),
+            *miles.arguments(miles.MilesConfig(**plan["arguments"])),
+        ]
         args = parse_args()
         expected = {
             "data_source_path": "training.miles_text.TextDataSource",
@@ -359,6 +502,22 @@ def native_args(plan):
             "calculate_per_token_loss": True,
             "grpo_std_normalization": False,
         }
+        if plan["arguments"]["harness"] == "opencode":
+            expected.update(
+                {
+                    "use_session_server": "v2",
+                    "max_seq_len": 262_144,
+                    "tito_model": "qwen38small",
+                    "custom_agent_function_path": "training.miles_opencode.run",
+                    "session_sample_picker_path": (
+                        "training.miles_opencode.pick_compaction_segments"
+                    ),
+                    "session_sample_postprocessor_path": (
+                        "training.miles_opencode.postprocess_compaction_segments"
+                    ),
+                    "sglang_router_policy": "consistent_hashing",
+                }
+            )
         if any(getattr(args, k) != v for k, v in expected.items()):
             raise ValueError("native parsed training/load semantics changed")
         return args
@@ -426,7 +585,26 @@ def preflight(plan):
     # first in the bounded GPU child. Do not mock CUDA to claim CPU qualification.
     config = miles.MilesConfig(**plan["arguments"])
     argv = miles.arguments(config)
-    native_source()
+    native_source_for_plan(plan)
+    if config.harness == "opencode":
+        from miles.utils.chat_template_utils.tito_tokenizer import (
+            resolve_fixed_chat_template,
+            resolve_reasoning_and_tool_call_parser,
+        )
+
+        chat_template_path, kwargs = resolve_fixed_chat_template("qwen38small")
+        if chat_template_path is None or kwargs != {
+            "preserve_thinking": True,
+            "reasoning_effort": "xhigh",
+        }:
+            raise ValueError("native Qwen3.8 TITO template changed")
+        if resolve_reasoning_and_tool_call_parser("qwen38small") != (
+            "qwen3",
+            "qwen3_coder",
+        ):
+            raise ValueError("native Qwen3.8 reasoning/tool parser changed")
+    else:
+        chat_template_path = argv[argv.index("--chat-template-path") + 1]
     source = TextDataSource(
         SimpleNamespace(
             rollout_global_dataset=True,
@@ -437,7 +615,7 @@ def preflight(plan):
             input_key="input",
             metadata_key="metadata",
             hf_checkpoint=config.model_root,
-            chat_template_path=argv[argv.index("--chat-template-path") + 1],
+            chat_template_path=chat_template_path,
             prompt_data=config.train_data,
             rollout_max_prompt_len=config.context_tokens - config.response_tokens,
             rollout_seed=config.seed,
@@ -498,7 +676,7 @@ def _native(plan):
     # including stalled storage, before Ray or model loading begins.
     check_artifacts(plan)
     args = native_args(plan)
-    source = native_source()
+    source = native_source_for_plan(plan)
     spec = importlib.util.spec_from_file_location("cyber_native_miles_train", source)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -511,6 +689,7 @@ def _native(plan):
                 + ":"
                 + os.environ.get("PYTHONPATH", ""),
                 "MILES_USE_LEGACY_ROLLOUT_V1": "0",
+                "MILES_SESSION_MAX_NODES": str(plan["arguments"]["session_node_cap"]),
             }
         },
     )

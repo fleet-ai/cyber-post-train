@@ -400,6 +400,185 @@ def test_plan_and_cli_roundtrip_are_offline(config, tmp_path, monkeypatch):
     assert CliRunner().invoke(cli.app, ["rl", str(source), "--output", str(output)]).exit_code == 2
 
 
+def _long_runtime_receipt(image, *, build_source_sha256="sha256:" + "b" * 64):
+    value = {
+        "schema": "cyber_miles_opencode_runtime_qualification_v1",
+        "status": "image_qualified_for_dev",
+        "image": image,
+        "base_image": train.LONG_RUNTIME_BASE_IMAGE,
+        "fti_version": "0.8.4",
+        "native_profile": "qwen3.8-27b-256k",
+        "opencode_version": "1.18.27",
+        "opencode_source_commit": "4b7e19e315cca414121ba1d61523fef74bb3ae8b",
+        "opencode_binary_sha256": (
+            "sha256:bddf894e5c2bc3d8cf452bd6e5ab2273bbe4a37eeeb9aec848d3d7d20db1f256"
+        ),
+        "miles_source_commit": "2799fe386320c156334bf763ad4d7ca0f85dca4e",
+        "miles_tree_source_sha256": (
+            "sha256:fd978a1ef2617f4bf30850fedd197e546cdc9c6542b00b03df502cbb285fc732"
+        ),
+        "native_driver_sha256": "sha256:" + miles.LONG_NATIVE_DRIVER_SHA256,
+        "native_converter_sha256": "sha256:" + miles.LONG_NATIVE_CONVERTER_SHA256,
+        "installed_session_tree_sha256": ("sha256:" + miles.LONG_INSTALLED_SESSION_TREE_SHA256),
+        "build_source_sha256": build_source_sha256,
+        "checks": {key: True for key in train.LONG_RUNTIME_CHECKS},
+    }
+    return {**value, "sha256": digest(value)}
+
+
+def test_long_compiler_binds_four_node_image_data_checkpoint_and_session(config, tmp_path):
+    from training import miles_opencode
+
+    image = "registry.test/miles-opencode@sha256:" + "a" * 64
+    root = ROOT / "training/images/miles-opencode-long-context"
+    build_source = "sha256:" + digest(
+        {
+            str(path.relative_to(ROOT)): path.read_text()
+            for path in sorted(root.glob("*"))
+            if path.is_file()
+        }
+    )
+    receipt = _long_runtime_receipt(image, build_source_sha256=build_source)
+    runtime_path = tmp_path / "runtime.json"
+    runtime_path.write_text(json.dumps(receipt))
+    data_path = tmp_path / "data.json"
+    data = json.loads(data_path.read_text())
+    data.update(
+        {
+            "schema": "cyber_miles_data_v2",
+            "limits": {
+                "context_tokens": miles_opencode.CONTEXT_TOKENS,
+                "response_tokens": miles_opencode.TOTAL_RESPONSE_TOKENS,
+                "max_tokens_per_turn": miles_opencode.MAX_TOKENS_PER_TURN,
+                "max_turns": miles_opencode.MAX_MODEL_REQUESTS,
+                "episode_seconds": miles_opencode.EPISODE_SECONDS,
+                "tool_seconds": 300,
+            },
+            "harness": miles_opencode.harness_contract(),
+        }
+    )
+    data["sha256"] = "sha256:" + digest({k: v for k, v in data.items() if k != "sha256"})
+    data_path.write_text(json.dumps(data))
+    checkpoint_path = tmp_path / "checkpoint.json"
+    checkpoint = json.loads(checkpoint_path.read_text())
+    checkpoint["image"] = image
+    checkpoint["sha256"] = digest({k: v for k, v in checkpoint.items() if k != "sha256"})
+    checkpoint_path.write_text(json.dumps(checkpoint))
+    config["checkpoint"]["sha256"] = train._hash(checkpoint_path)
+    config["recipe"].update(
+        {
+            "nodes": 4,
+            "gpus_per_node": 8,
+            "max_tokens_per_gpu": 65536,
+            "native_profile": "qwen3.8-27b-256k",
+            "harness": "opencode",
+            "session_node_cap": 4096,
+        }
+    )
+    config["cluster"] = {"target": "dev", "priority": "c1"}
+    config["runtime"] = {
+        "image": image,
+        "receipt": str(runtime_path),
+        "sha256": "sha256:" + train._hash(runtime_path),
+    }
+
+    result = train.compile_rl(config, relative_to=tmp_path)
+    request = train.job_request(result)
+
+    assert result["schema"] == train.LONG_CONTEXT_SCHEMA
+    assert result["runtime_qualification"] == receipt
+    assert result["native_driver_sha256"] == miles.LONG_NATIVE_DRIVER_SHA256
+    assert train.watchdog_hard_seconds(result) == miles_opencode.JOB_HARD_SECONDS
+    assert request["image"] == image
+    assert request["workers"] == 4 and request["gpus_per_worker"] == 8
+    assert request["env"]["MILES_SESSION_MAX_NODES"] == "4096"
+    assert request["priority_class"] == "c1"
+
+
+def test_long_runtime_receipt_is_image_qualification_not_circular_rl_acceptance():
+    image = "registry.test/miles-opencode@sha256:" + "a" * 64
+    receipt = _long_runtime_receipt(image)
+    assert train._validate_long_runtime_receipt(receipt, image=image) is receipt
+    assert "finite_nonzero_update_checked" not in receipt["checks"]
+    assert "zero_update_reload_checked" not in receipt["checks"]
+
+
+def test_long_runtime_qualification_template_matches_source_and_contract():
+    from training import miles_opencode
+
+    path = (
+        Path(__file__).parents[1]
+        / "configs/qualification/qwen38-miles-opencode-long-context-runtime-v1.template.json"
+    )
+    template = json.loads(path.read_text())
+    root = Path(__file__).parents[1]
+    build_files = {
+        str(source.relative_to(root)): source.read_text()
+        for source in sorted((root / "training/images/miles-opencode-long-context").glob("*"))
+        if source.is_file()
+    }
+    assert template["status"] == "not_run" and template["production_allowed"] is False
+    assert template["derived_image"] is None
+    assert template["sources"]["build_source_sha256"] == "sha256:" + digest(build_files)
+    assert template["sources"]["native_driver_sha256"] == (
+        "sha256:" + miles.LONG_NATIVE_DRIVER_SHA256
+    )
+    assert template["sources"]["native_converter_sha256"] == (
+        "sha256:" + miles.LONG_NATIVE_CONVERTER_SHA256
+    )
+    assert template["sources"]["installed_session_tree_sha256"] == (
+        "sha256:" + miles.LONG_INSTALLED_SESSION_TREE_SHA256
+    )
+    assert template["contract"] == {
+        "model": "Qwen/Qwen3.8-27B",
+        "tito_family": miles_opencode.TITO_FAMILY,
+        "reasoning_parser": "qwen3",
+        "tool_call_parser": "qwen3_coder",
+        "chat_template_sha256": "sha256:" + miles_opencode.TEMPLATE_SHA256,
+        "sglang_router_policy": "consistent_hashing",
+        "nodes": 4,
+        "gpus_per_node": 8,
+        "context_tokens": miles_opencode.CONTEXT_TOKENS,
+        "response_tokens": miles_opencode.TOTAL_RESPONSE_TOKENS,
+        "max_tokens_per_model_call": miles_opencode.MAX_TOKENS_PER_TURN,
+        "max_model_requests": miles_opencode.MAX_MODEL_REQUESTS,
+        "job_hard_seconds": miles_opencode.JOB_HARD_SECONDS,
+        "episode_seconds": miles_opencode.EPISODE_SECONDS,
+        "environment_ttl_seconds": miles_opencode.INSTANCE_TTL_SECONDS,
+        "compaction_threshold_tokens": miles_opencode.COMPACTION_THRESHOLD_TOKENS,
+        "compaction_reserved_tokens": miles_opencode.COMPACTION_RESERVED_TOKENS,
+        "compaction_summary_tokens": miles_opencode.SUMMARY_MAX_TOKENS,
+        "preserve_recent_tokens": miles_opencode.PRESERVE_RECENT_TOKENS,
+        "session_node_cap": miles_opencode.SESSION_NODE_CAP,
+        "summary_token_treatment": miles_opencode.SUMMARY_TOKEN_TREATMENT,
+        "primary_tool_result_prefix_truncation": False,
+    }
+
+
+@pytest.mark.parametrize("fault", ["image", "check", "extra_check", "source", "digest"])
+def test_long_runtime_receipt_fails_closed(fault):
+    image = "registry.test/miles-opencode@sha256:" + "a" * 64
+    receipt = _long_runtime_receipt(image)
+    if fault == "image":
+        receipt["image"] = "registry.test/other@sha256:" + "a" * 64
+    elif fault == "check":
+        receipt["checks"]["native_256k_parser_checked"] = False
+    elif fault == "extra_check":
+        receipt["checks"]["finite_nonzero_update_checked"] = True
+    elif fault == "source":
+        receipt["build_source_sha256"] = "sha256:" + "c" * 64
+    else:
+        receipt["sha256"] = "0" * 64
+    if fault != "digest":
+        receipt["sha256"] = digest({k: v for k, v in receipt.items() if k != "sha256"})
+    with pytest.raises(ValueError):
+        train._validate_long_runtime_receipt(
+            receipt,
+            image=image,
+            build_source_sha256="sha256:" + "b" * 64,
+        )
+
+
 @pytest.fixture
 def artifacts(plan, tmp_path, monkeypatch):
     from evals.fleet import opencode_self_hosted as fleet
@@ -601,6 +780,21 @@ def test_native_source_is_exact(tmp_path, monkeypatch):
         train.native_source()
 
 
+def test_long_native_source_uses_only_the_new_image_digest(tmp_path, monkeypatch):
+    path = tmp_path / "train.py"
+    path.write_text("synthetic FTI 0.8.4 native source")
+    monkeypatch.setitem(
+        sys.modules, "miles.utils.external_utils.command_utils", NS(repo_base_dir=tmp_path)
+    )
+    monkeypatch.setattr(miles, "LONG_NATIVE_DRIVER_SHA256", train._hash(path))
+    plan = {"arguments": {"harness": "opencode"}}
+    assert train.native_source_for_plan(plan) == path
+    monkeypatch.setattr(train, "NATIVE_DRIVER_SHA256", train._hash(path))
+    path.write_text("changed")
+    with pytest.raises(ValueError):
+        train.native_source_for_plan(plan)
+
+
 def test_native_namespace_uses_request_environment_and_fails_before_gpu(tmp_path):
     namespace = tmp_path / "megatron/post_training"
     namespace.mkdir(parents=True)
@@ -613,7 +807,7 @@ def test_native_namespace_uses_request_environment_and_fails_before_gpu(tmp_path
 
 
 def test_parsed_native_semantics_and_argv_restoration(plan, monkeypatch):
-    monkeypatch.setattr(train, "native_source", lambda: Path("synthetic.py"))
+    monkeypatch.setattr(train, "native_source", lambda _plan=None: Path("synthetic.py"))
     monkeypatch.setattr(miles, "arguments", lambda cfg: ["--chat-template-path", "synthetic"])
     args = NS(
         data_source_path="training.miles_text.TextDataSource",

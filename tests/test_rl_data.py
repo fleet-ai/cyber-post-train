@@ -87,6 +87,7 @@ def setup(tmp_path, monkeypatch):
         calls=[],
         tmp=tmp_path,
         native_calls=[],
+        native_families=[],
         drift=None,
         bad_tokens=False,
     )
@@ -148,11 +149,12 @@ def setup(tmp_path, monkeypatch):
         "chat_template_sha256": "e" * 64,
         "backend_sha256": "f" * 64,
     }
-    monkeypatch.setattr(
-        data,
-        "_native",
-        lambda lock, root: (Tokenizer(), Tokenizer(), Dataset, tokenizer_identity),
-    )
+
+    def native_stub(lock, root, *family):
+        state.native_families.append(family)
+        return Tokenizer(), Tokenizer(), Dataset, tokenizer_identity
+
+    monkeypatch.setattr(data, "_native", native_stub)
 
     def handler(request):
         state.calls.append(request)
@@ -407,6 +409,34 @@ def test_exact_task_set_get_only_native_retention_and_private_files(setup):
     with pytest.raises(FileExistsError):
         build(setup)
     assert len(setup.calls) == 3
+
+
+def test_long_horizon_data_binds_qwen38small_and_exact_compaction_contract(setup):
+    from training import miles_opencode
+
+    setup.config["harness"] = miles_opencode.harness_contract()
+    setup.config["limits"] = {
+        "context_tokens": miles_opencode.CONTEXT_TOKENS,
+        "response_tokens": miles_opencode.TOTAL_RESPONSE_TOKENS,
+        "max_tokens_per_turn": miles_opencode.MAX_TOKENS_PER_TURN,
+        "max_turns": miles_opencode.MAX_MODEL_REQUESTS,
+        "episode_seconds": miles_opencode.EPISODE_SECONDS,
+        "tool_seconds": 300,
+    }
+
+    result = build(setup)
+
+    manifest = json.loads((setup.tmp / "out/manifest.json").read_text())
+    row = json.loads((setup.tmp / "out/train.jsonl").read_text())
+    episode = row["metadata"]["cyber_config"]
+    assert result["submitted"] is False
+    assert manifest["schema"] == "cyber_miles_data_v2"
+    assert manifest["harness"] == miles_opencode.harness_contract()
+    assert setup.native_families == [("qwen38small",)]
+    assert episode["model"]["tito_family"] == "qwen38small"
+    assert episode["model"]["served_id"] == "model"
+    assert episode["rl"] == setup.config["limits"]
+    assert "tool_result_chars" not in episode["rl"]
 
 
 @pytest.mark.parametrize(

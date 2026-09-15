@@ -74,6 +74,68 @@ def test_conversion_compiles_only_native_loading_not_training(plan):
     assert plan["optimizer_steps"] == 0 and plan["deadline_seconds"] == 1800
 
 
+def test_long_conversion_requires_and_binds_qualified_derived_image(config, tmp_path):
+    from training import miles, miles_training
+
+    image = "registry.test/miles-opencode@sha256:" + "a" * 64
+    root = ROOT / "training/images/miles-opencode-long-context"
+    build_source = "sha256:" + digest(
+        {
+            str(path.relative_to(ROOT)): path.read_text()
+            for path in sorted(root.glob("*"))
+            if path.is_file()
+        }
+    )
+    receipt = {
+        "schema": "cyber_miles_opencode_runtime_qualification_v1",
+        "status": "image_qualified_for_dev",
+        "image": image,
+        "base_image": miles_training.LONG_RUNTIME_BASE_IMAGE,
+        "fti_version": "0.8.4",
+        "native_profile": "qwen3.8-27b-256k",
+        "opencode_version": "1.18.27",
+        "opencode_source_commit": "4b7e19e315cca414121ba1d61523fef74bb3ae8b",
+        "opencode_binary_sha256": (
+            "sha256:bddf894e5c2bc3d8cf452bd6e5ab2273bbe4a37eeeb9aec848d3d7d20db1f256"
+        ),
+        "miles_source_commit": "2799fe386320c156334bf763ad4d7ca0f85dca4e",
+        "miles_tree_source_sha256": (
+            "sha256:fd978a1ef2617f4bf30850fedd197e546cdc9c6542b00b03df502cbb285fc732"
+        ),
+        "native_driver_sha256": "sha256:" + miles.LONG_NATIVE_DRIVER_SHA256,
+        "native_converter_sha256": ("sha256:" + miles.LONG_NATIVE_CONVERTER_SHA256),
+        "installed_session_tree_sha256": ("sha256:" + miles.LONG_INSTALLED_SESSION_TREE_SHA256),
+        "build_source_sha256": build_source,
+        "checks": {key: True for key in miles_training.LONG_RUNTIME_CHECKS},
+    }
+    receipt["sha256"] = digest(receipt)
+    receipt_path = tmp_path / "runtime.json"
+    receipt_path.write_text(json.dumps(receipt))
+    config.update(
+        {
+            "native_profile": "qwen3.8-27b-256k",
+            "runtime": {
+                "image": image,
+                "receipt": str(receipt_path),
+                "sha256": "sha256:" + convert._hash(receipt_path),
+            },
+        }
+    )
+
+    result = convert.compile_conversion(config, relative_to=ROOT)
+    request = convert.job_request(result)
+
+    assert result["schema"] == convert.LONG_CONTEXT_SCHEMA
+    assert result["runtime_qualification"] == receipt
+    assert result["native_converter_sha256"] == miles.LONG_NATIVE_CONVERTER_SHA256
+    assert request["image"] == image
+    assert request["priority_class"] == "c1"
+
+    del config["runtime"]
+    with pytest.raises(ValueError, match="qualification is absent"):
+        convert.compile_conversion(config, relative_to=ROOT)
+
+
 @pytest.mark.parametrize(
     "defect", ["unknown", "glm", "overlap", "ancestor", "resources", "priority"]
 )

@@ -748,6 +748,12 @@ def test_watchdog_hard_bound_and_fixed_checkpoint_drain():
     assert ProgressWatchdog(0).observe(28800, "training", 80, 100) == "hard_runtime_bound"
 
 
+def test_watchdog_accepts_an_explicit_long_horizon_bound():
+    watch = ProgressWatchdog(0, hard_seconds=32400)
+    assert watch.observe(28800, "training", 80, 100) is None
+    assert watch.observe(32400, "training", 80, 100) == "hard_runtime_bound"
+
+
 @pytest.mark.parametrize(
     "disk_failure,summary_failure", [(True, False), (False, True), (True, True)]
 )

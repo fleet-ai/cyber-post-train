@@ -233,6 +233,13 @@ def _validate(config):
     tool_sha = config["execution"]["required_task_tool_catalog_sha256"]
     if not re.fullmatch(r"sha256:[a-f0-9]{64}", tool_sha):
         raise InvalidEpisode("unpinned_tool_catalog")
+    if config.get("harness") is not None:
+        # The OpenCode path owns its native compaction and deliberately does
+        # not use this legacy direct-agent tool-result prefix truncation.
+        from .miles_opencode import validate_episode
+
+        validate_episode(config)
+        return
     limits = config["rl"]
     if set(limits) != {
         "max_turns",

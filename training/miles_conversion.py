@@ -23,9 +23,10 @@ from pathlib import Path, PurePosixPath
 
 from cyber_post_train.jobs import bundled_request, digest, quantity
 
-from .miles import IMAGE
+from .miles import IMAGE, LONG_CONTEXT_PROFILE, LONG_NATIVE_CONVERTER_SHA256
 
 SCHEMA = "cyber_miles_conversion_v1"
+LONG_CONTEXT_SCHEMA = "cyber_miles_conversion_v2"
 CONVERTER_SHA256 = "0c2541d30073777a30344273a3773844a70ca1961287520c0496a1cec18d43f6"
 DEADLINE_SECONDS = 1800
 SFT_SOURCE_SCHEMA = "cyber_miles_sft_initial_policy_v1"
@@ -128,10 +129,9 @@ def _reopen_reference(reference: dict, label: str) -> tuple[dict, dict]:
     if not isinstance(receipt, dict):
         raise ValueError(f"{label} must be a JSON object")
     self_sha256 = _sha256(receipt.get("receipt_sha256"), f"{label} receipt digest")
-    if (
-        self_sha256 != _sha256(reference["receipt_sha256"], f"{label} receipt digest")
-        or self_sha256 != digest({k: v for k, v in receipt.items() if k != "receipt_sha256"})
-    ):
+    if self_sha256 != _sha256(
+        reference["receipt_sha256"], f"{label} receipt digest"
+    ) or self_sha256 != digest({k: v for k, v in receipt.items() if k != "receipt_sha256"}):
         raise ValueError(f"{label} self-digest mismatch")
     return receipt, {**reference, "file_sha256": _sha256(reference["file_sha256"], label)}
 
@@ -204,8 +204,7 @@ def _validate_runtime_stage(
         or value.get("zero_gpus") != 0
         or value.get("runtime_identity")
         != {"uid": 1000, "gid": 2000, "supplemental_groups": [100, 2000]}
-        or value.get("permissions")
-        != {"directory_mode": "0750", "file_mode": "0640", "gid": 2000}
+        or value.get("permissions") != {"directory_mode": "0750", "file_mode": "0640", "gid": 2000}
     ):
         raise ValueError("SFT runtime-stage receipt does not bind the accepted export")
     source = Path(accepted_root)
@@ -278,8 +277,7 @@ def _accepted_sft_model(
         or export.get("gpu_reload_verified") is not False
         or export.get("all_output_tensors_reopened_equal") is not True
         or export.get("source_inventory_sizes_mtimes_unchanged") is not True
-        or set(export.get("restored_base_tensors", []))
-        != set(QWEN36_EXACT_MTP_OMISSION_KEYS)
+        or set(export.get("restored_base_tensors", [])) != set(QWEN36_EXACT_MTP_OMISSION_KEYS)
         or type(export.get("trained_tensors")) is not int
         or export["trained_tensors"] < 1
     ):
@@ -304,10 +302,14 @@ def _accepted_sft_model(
     if observed_sidecars != expected_sidecars:
         raise ValueError("SFT HF export tokenizer/runtime sidecars differ from the model lock")
     reported_sidecars = export.get("sidecars")
-    if not isinstance(reported_sidecars, dict) or {
-        name: _sha256(value, "SFT HF export sidecar digest")
-        for name, value in reported_sidecars.items()
-    } != expected_sidecars:
+    if (
+        not isinstance(reported_sidecars, dict)
+        or {
+            name: _sha256(value, "SFT HF export sidecar digest")
+            for name, value in reported_sidecars.items()
+        }
+        != expected_sidecars
+    ):
         raise ValueError("SFT HF export sidecar receipt differs from the model lock")
     export_receipt_sha256 = _sha256(
         export_reference.get("receipt_sha256"), "SFT HF export receipt digest"
@@ -329,8 +331,7 @@ def _accepted_sft_model(
         ),
     }
     if any(
-        _sha256(export.get(key), f"SFT HF export {key}") != value
-        for key, value in expected.items()
+        _sha256(export.get(key), f"SFT HF export {key}") != value for key, value in expected.items()
     ):
         raise ValueError("SFT HF export differs from the selected source checkpoint or plan")
     weight_manifest_sha256 = _json_sha256(weight_files)
@@ -526,8 +527,7 @@ def _reopen_initial_policy(model: dict, *, strict: bool = False) -> None:
         )
         or _sha256(export.get("source_plan_sha256"), "SFT plan digest")
         != _sha256(source.get("source_plan_sha256"), "SFT plan digest")
-        or _json_sha256(export.get("code_sha256"))
-        != source.get("export_code_sha256")
+        or _json_sha256(export.get("code_sha256")) != source.get("export_code_sha256")
         or _sha256(gpu.get("checker_sha256"), "SFT checker digest")
         != _sha256(source.get("checker_sha256"), "SFT checker digest")
         or _sha256(gpu.get("export_sha256"), "GPU check export digest")
@@ -541,11 +541,29 @@ def _reopen_initial_policy(model: dict, *, strict: bool = False) -> None:
 def compile_conversion(config: dict, *, relative_to: Path) -> dict:
     from .sft import RESOURCES, _known, _sfs_root
 
-    _known(config, {"name", "output_root", "model", "cluster"}, "Miles conversion")
+    _known(
+        config,
+        {"name", "output_root", "model", "cluster", "native_profile", "runtime"},
+        "Miles conversion",
+    )
     model = config["model"]
     cluster = config.get("cluster", {})
     _known(cluster, {"priority", "resources"}, "cluster")
     bound = bind_model_source(model, relative_to=relative_to)
+    native_profile = config.get("native_profile", "qwen3.8-27b")
+    long_horizon = native_profile == LONG_CONTEXT_PROFILE
+    if long_horizon:
+        from .miles_training import _bind_long_runtime
+
+        runtime = _bind_long_runtime(config.get("runtime"), relative_to)
+        runtime_image = runtime["image"]
+        if cluster.get("priority", "c1") != "c1":
+            raise ValueError("long-context conversion requires its immutable c1 runtime")
+    elif native_profile != "qwen3.8-27b" or config.get("runtime") is not None:
+        raise ValueError("unsupported conversion profile/runtime pairing")
+    else:
+        runtime = None
+        runtime_image = IMAGE
     output = _sfs_root(config["output_root"], "output root")
     if bound["repo"] != "Qwen/Qwen3.8-27B":
         raise ValueError("only the exact native Qwen3.8 text conversion is supported")
@@ -558,16 +576,20 @@ def compile_conversion(config: dict, *, relative_to: Path) -> dict:
     ):
         raise ValueError("model and output directories must not overlap")
     plan = {
-        "schema": SCHEMA,
+        "schema": LONG_CONTEXT_SCHEMA if long_horizon else SCHEMA,
         "run_name": config["name"],
         "output_root": output,
         "model": bound,
         "runtime_sha256": _hash(Path(__file__)),
-        "native_converter_sha256": CONVERTER_SHA256,
+        "native_converter_sha256": (
+            LONG_NATIVE_CONVERTER_SHA256 if long_horizon else CONVERTER_SHA256
+        ),
         "optimizer_steps": 0,
+        **({"native_profile": native_profile} if long_horizon else {}),
+        **({"runtime_qualification": runtime} if runtime is not None else {}),
         "deadline_seconds": DEADLINE_SECONDS,
         "execution": {
-            "image": IMAGE,
+            "image": runtime_image,
             "priority": cluster.get("priority", "c1"),
             "resources": {**RESOURCES, **cluster.get("resources", {})},
         },
@@ -577,11 +599,28 @@ def compile_conversion(config: dict, *, relative_to: Path) -> dict:
 
 
 def job_request(plan: dict) -> dict:
+    long_horizon = plan.get("native_profile") == LONG_CONTEXT_PROFILE
+    expected_image = plan["execution"]["image"] if long_horizon else IMAGE
+    if long_horizon:
+        from .miles_training import _validate_long_runtime_receipt
+
+        _validate_long_runtime_receipt(plan.get("runtime_qualification"), image=expected_image)
+    elif "runtime_qualification" in plan:
+        raise ValueError("legacy conversion carries an alternate runtime qualification")
     if (
-        plan["schema"] != SCHEMA
+        plan["schema"] != (LONG_CONTEXT_SCHEMA if long_horizon else SCHEMA)
         or plan["runtime_sha256"] != _hash(Path(__file__))
-        or plan["native_converter_sha256"] != CONVERTER_SHA256
-        or plan["execution"]["image"] != IMAGE
+        or plan["native_converter_sha256"]
+        != (LONG_NATIVE_CONVERTER_SHA256 if long_horizon else CONVERTER_SHA256)
+        or plan["execution"]["image"] != expected_image
+        or (
+            long_horizon
+            and (
+                expected_image == IMAGE
+                or re.fullmatch(r"[^@\s]+@sha256:[a-f0-9]{64}", expected_image) is None
+                or plan["execution"]["priority"] != "c1"
+            )
+        )
         or plan["optimizer_steps"] != 0
         or plan["deadline_seconds"] != DEADLINE_SECONDS
     ):
@@ -612,7 +651,7 @@ def job_request(plan: dict) -> dict:
             "name": plan["run_name"],
             "title": plan["run_name"] + " zero-step native conversion",
             "run_dir": plan["output_root"],
-            "image": IMAGE,
+            "image": expected_image,
             "workers": 1,
             "gpus_per_worker": 8,
             "resources": plan["execution"]["resources"],
@@ -652,10 +691,15 @@ def native_arguments(plan: dict) -> list[str]:
     from miles.utils.external_utils.command_utils import repo_base_dir
     from miles.utils.external_utils.model_args_utils import load_model_args
 
-    profile = _RECIPES["qwen3.8-27b"]
+    profile = _RECIPES[plan.get("native_profile", "qwen3.8-27b")]
     source = Path(repo_base_dir) / "tools/convert_hf_to_torch_dist.py"
+    expected_source_sha256 = (
+        LONG_NATIVE_CONVERTER_SHA256
+        if plan.get("native_profile") == LONG_CONTEXT_PROFILE
+        else CONVERTER_SHA256
+    )
     if (
-        _hash(source) != CONVERTER_SHA256
+        _hash(source) != expected_source_sha256
         or profile.backend != "megatron"
         or profile.vision
         or profile.megatron_model_type != "qwen3.8-27B"
@@ -790,7 +834,7 @@ def run(plan: dict) -> dict:
         return _write(
             root / "CONVERSION_COMPLETE.json",
             {
-                "schema": SCHEMA,
+                "schema": plan["schema"],
                 "status": "native_conversion_complete",
                 "plan_sha256": digest(plan),
                 "native_argv_sha256": digest(argv),
@@ -848,7 +892,7 @@ def seal(plan: dict, output: Path) -> dict:
         {
             "schema": "cyber_miles_checkpoint_v1",
             "model": plan["model"],
-            "image": IMAGE,
+            "image": plan["execution"]["image"],
             "root": str(checkpoint),
             "plan_sha256": digest(plan),
             "conversion_receipt_sha256": receipt["sha256"],

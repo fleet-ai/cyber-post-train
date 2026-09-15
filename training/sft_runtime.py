@@ -826,8 +826,11 @@ def retention_steps(saved: set[int], best_step: int, keep_latest: int) -> set[in
 class ProgressWatchdog:
     """Bounded fail-closed resource watchdog; unavailable telemetry is not idle."""
 
-    def __init__(self, started_at: float):
+    def __init__(self, started_at: float, *, hard_seconds: int | None = None):
         self.started_at = started_at
+        self.hard_seconds = WATCHDOG_HARD_SECONDS if hard_seconds is None else hard_seconds
+        if type(self.hard_seconds) is not int or self.hard_seconds < 1:
+            raise ValueError("watchdog hard limit must be a positive integer")
         self.last_progress = started_at
         self.previous_marker = None
         self.previous_io = None
@@ -853,8 +856,8 @@ class ProgressWatchdog:
         )
         self.previous_io = process_io
         elapsed = now - self.started_at
-        if elapsed >= WATCHDOG_HARD_SECONDS and (
-            not checkpoint_advancing or elapsed >= WATCHDOG_HARD_SECONDS + WATCHDOG_DRAIN_SECONDS
+        if elapsed >= self.hard_seconds and (
+            not checkpoint_advancing or elapsed >= self.hard_seconds + WATCHDOG_DRAIN_SECONDS
         ):
             return "hard_runtime_bound"
         if changed or io_advanced or gpu_mean is None or process_io is None or gpu_mean >= 1:

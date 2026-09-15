@@ -12,7 +12,7 @@ import math
 import re
 import shlex
 from dataclasses import dataclass
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:"
@@ -20,6 +20,16 @@ IMAGE = (
 )
 TEMPLATE_SHA256 = "38d42166599348d47ded69776c5389c89924045e6827089923a031379f8a3dfe"
 NATIVE_LAYOUTS = frozenset({(1, 8), (2, 8)})
+LONG_CONTEXT_PROFILE = "qwen3.8-27b-256k"
+LONG_CONTEXT_LAYOUT = (4, 8)
+# Native entrypoints in the FTI 0.8.4 image that carries the 256K profile.
+# Keep these separate from the legacy image pins in the conversion/training
+# modules: accepting either digest for either image would weaken the boundary.
+LONG_NATIVE_DRIVER_SHA256 = "34693c11173e69a402228bd1d732122eef9fdb6e5d105660dfdd5eae0b1b954c"
+LONG_NATIVE_CONVERTER_SHA256 = "b5faeaf7bc80b7c98534ff763f43ae45768f6f93425f9cd536551a48ab462425"
+LONG_INSTALLED_SESSION_TREE_SHA256 = (
+    "59bed80a62a8ab94e0bb9012f4f9f0290245a5c8db6feadd0997a7bfb57025ee"
+)
 
 
 @dataclass(frozen=True)
@@ -54,6 +64,10 @@ class MilesConfig:
     context_tokens: int = 98304
     response_tokens: int = 81920
     tokens_per_turn: int = 4096
+    native_profile: str = "qwen3.8-27b"
+    harness: str = "direct"
+    runtime_image: str = IMAGE
+    session_node_cap: int = 1024
 
     def validate(self):
         if self.model != "Qwen/Qwen3.8-27B":
@@ -113,8 +127,30 @@ class MilesConfig:
         ):
             if type(getattr(self, key)) is not int or getattr(self, key) < 1:
                 raise ValueError("Miles counts must be positive integers")
-        if (self.nodes, self.gpus_per_node) not in NATIVE_LAYOUTS:
-            raise ValueError("unsupported Qwen Miles node/GPU layout")
+        long_horizon = self.native_profile == LONG_CONTEXT_PROFILE or self.harness == "opencode"
+        if long_horizon:
+            if (
+                self.native_profile != LONG_CONTEXT_PROFILE
+                or self.harness != "opencode"
+                or (self.nodes, self.gpus_per_node) != LONG_CONTEXT_LAYOUT
+                or self.context_tokens != 262_144
+                or self.response_tokens != 245_760
+                or self.tokens_per_turn != 32_768
+                or self.max_tokens_per_gpu != 65_536
+                or self.session_node_cap != 4_096
+                or self.runtime_image == IMAGE
+            ):
+                raise ValueError("long-horizon Qwen requires the exact native 256K contract")
+        elif (
+            self.native_profile != "qwen3.8-27b"
+            or self.harness != "direct"
+            or (self.nodes, self.gpus_per_node) not in NATIVE_LAYOUTS
+            or self.runtime_image != IMAGE
+            or self.session_node_cap != 1024
+        ):
+            raise ValueError("unsupported Qwen Miles node/GPU layout or runtime contract")
+        if not re.fullmatch(r"[^@\s]+@sha256:[a-f0-9]{64}", self.runtime_image):
+            raise ValueError("Miles runtime image must be immutable")
         if self.samples_per_prompt < 2:
             raise ValueError("Qwen profile requires grouped GRPO samples")
         if self.steps % self.eval_interval:
@@ -143,7 +179,13 @@ class MilesConfig:
             or self.max_tokens_per_gpu > self.context_tokens
         ):
             raise ValueError("dynamic token budget must fit the native Qwen context envelope")
-        if not self.tokens_per_turn <= self.response_tokens < self.context_tokens <= 98304:
+        context_ceiling = 262_144 if long_horizon else 98_304
+        if (
+            not self.tokens_per_turn
+            <= self.response_tokens
+            < self.context_tokens
+            <= context_ceiling
+        ):
             raise ValueError("generation budgets exceed the native Qwen context envelope")
 
 
@@ -163,12 +205,34 @@ def arguments(config: MilesConfig) -> list[str]:
     from fti.trainers.miles.run_fleet import _RECIPES, TEMPLATES
     from miles.utils.external_utils.model_args_utils import load_model_args
 
-    profile = _RECIPES["qwen3.8-27b"]
-    template = TEMPLATES / profile.chat_template
-    if hashlib.sha256(template.read_bytes()).hexdigest() != TEMPLATE_SHA256:
+    profile = _RECIPES[config.native_profile]
+    profile_template = TEMPLATES / profile.chat_template
+    if hashlib.sha256(profile_template.read_bytes()).hexdigest() != TEMPLATE_SHA256:
         raise ValueError("native Qwen chat template changed")
     if profile.backend != "megatron" or profile.vision or profile.tito_model != "qwen35":
         raise ValueError("native Qwen profile changed")
+    long_horizon = config.native_profile == LONG_CONTEXT_PROFILE
+    if long_horizon and (
+        profile.max_context_len != 262_144
+        or profile.max_response_len != 245_760
+        or profile.max_tokens_per_gpu != 65_536
+        or set(profile.parallel_args_by_shape) != {LONG_CONTEXT_LAYOUT}
+        or profile.rollout_num_gpus_per_engine != 1
+    ):
+        raise ValueError("native Qwen 256K profile changed")
+    tito_family = profile.tito_model
+    template: Path | None = profile_template
+    if long_horizon:
+        from miles.utils.chat_template_utils.tito_tokenizer import resolve_fixed_chat_template
+
+        resolved, kwargs = resolve_fixed_chat_template("qwen38small")
+        if (
+            resolved is None
+            or hashlib.sha256(Path(resolved).read_bytes()).hexdigest() != TEMPLATE_SHA256
+            or kwargs != {"preserve_thinking": True, "reasoning_effort": "xhigh"}
+        ):
+            raise ValueError("Qwen3.8 session template family changed")
+        tito_family, template = "qwen38small", None
     argv = shlex.split(load_model_args(profile.megatron_model_type))
     parallel_args = profile.parallel_args_by_shape.get((config.nodes, config.gpus_per_node))
     if not isinstance(parallel_args, str):
@@ -206,29 +270,32 @@ def arguments(config: MilesConfig) -> list[str]:
         "rollout-temperature": config.temperature,
         "seed": config.seed,
         "rollout-seed": config.seed,
-        "custom-generate-function-path": "training.rl_episode.generate",
+        "custom-generate-function-path": (
+            "training.miles_opencode.generate" if long_horizon else "training.rl_episode.generate"
+        ),
         "rollout-function-path": "training.miles_rollout.Rollout",
         "eval-function-path": "training.miles_rollout.Rollout",
         "cyber-run-id": config.name,
         "cyber-output-root": config.output_root + "/episodes",
         "cyber-data-manifest": config.data_manifest,
         "fleet-policy-identity-root": resolved_policy_identity_root(config),
-        "fleet-tito-model": profile.tito_model,
+        "fleet-tito-model": tito_family,
         "fleet-max-tokens-per-turn": config.tokens_per_turn,
-        "chat-template-path": str(template),
         "actor-num-nodes": config.nodes,
         "actor-num-gpus-per-node": config.gpus_per_node,
         "num-gpus-per-node": config.gpus_per_node,
         "rollout-num-gpus-per-engine": profile.rollout_num_gpus_per_engine,
         "sglang-mem-fraction-static": profile.sglang_mem_fraction_static,
-        "router-policy": "round_robin",
+        # The native Qwen profile keeps the radix cache enabled.  Preserve
+        # FTI's measured affinity route so every turn reaches the engine that
+        # owns that episode's cached prefix.
+        "sglang-router-policy": "consistent_hashing",
         "recompute-granularity": "full",
         "recompute-method": "uniform",
         "recompute-num-layers": 1,
         "micro-batch-size": 1,
         "max-tokens-per-gpu": max_tokens_per_gpu,
-        "log-probs-max-tokens-per-gpu": max_tokens_per_gpu
-        * profile.log_prob_pass_multiplier,
+        "log-probs-max-tokens-per-gpu": max_tokens_per_gpu * profile.log_prob_pass_multiplier,
         "advantage-estimator": "grpo",
         "kl-loss-coef": config.kl_loss_coef,
         "kl-loss-type": "low_var_kl",
@@ -250,6 +317,22 @@ def arguments(config: MilesConfig) -> list[str]:
         "wandb-mode": "online",
         "wandb-dir": config.output_root + "/wandb",
     }
+    if template is not None:
+        values["chat-template-path"] = str(template)
+    if long_horizon:
+        values.update(
+            {
+                "custom-agent-function-path": "training.miles_opencode.run",
+                "use-session-server": "v2",
+                "max-seq-len": config.context_tokens,
+                "tito-model": tito_family,
+                "session-sample-picker-path": "training.miles_opencode.pick_compaction_segments",
+                "session-sample-postprocessor-path": (
+                    "training.miles_opencode.postprocess_compaction_segments"
+                ),
+                "fleet-session-node-cap": config.session_node_cap,
+            }
+        )
     for key, value in values.items():
         argv.extend(("--" + key, str(value)))
     argv.extend(("--eval-prompt-data", "fleet-dev", config.dev_data))
@@ -288,10 +371,11 @@ def arguments(config: MilesConfig) -> list[str]:
         for index, flag in enumerate(argv[:-1])
         if flag.startswith("--") and not argv[index + 1].startswith("--")
     }
+    expected_tp, expected_cp = ("8", "4") if long_horizon else ("4", "2")
     if (
-        options.get("--tensor-model-parallel-size") != "4"
+        options.get("--tensor-model-parallel-size") != expected_tp
         or options.get("--pipeline-model-parallel-size") != "1"
-        or options.get("--context-parallel-size") != "2"
+        or options.get("--context-parallel-size") != expected_cp
         or "--sequence-parallel" not in flags
         or options.get("--recompute-granularity") != "full"
         or options.get("--recompute-method") != "uniform"

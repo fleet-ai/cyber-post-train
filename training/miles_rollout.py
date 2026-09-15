@@ -16,6 +16,7 @@ from pathlib import Path
 
 from evals.fleet import opencode_self_hosted as fleet
 
+from .miles_opencode import SUMMARY_TOKEN_TREATMENT
 from .rl_episode import EpisodeBudgetExceeded, InvalidEpisode, budget_stop, validate_samples
 
 
@@ -43,8 +44,13 @@ class Rollout:
             "load_debug_rollout_data",
             "use_dynamic_global_batch_size",
         )
+        generate_paths = {
+            "training.rl_episode.generate": "cyber_miles_data_v1",
+            "training.miles_opencode.generate": "cyber_miles_data_v2",
+        }
+        self.data_schema = generate_paths.get(args.custom_generate_function_path)
         if any(getattr(args, key, False) for key in forbidden) or (
-            args.custom_generate_function_path != "training.rl_episode.generate"
+            self.data_schema is None
             or args.rollout_function_path != args.eval_function_path
             or not args.rollout_global_dataset
         ):
@@ -56,7 +62,7 @@ class Rollout:
         manifest_path = Path(args.cyber_data_manifest)
         manifest = json.loads(manifest_path.read_bytes())
         if (
-            manifest.get("schema") != "cyber_miles_data_v1"
+            manifest.get("schema") != self.data_schema
             or manifest.get("sha256") != fleet.digest_without(manifest, "sha256")
             or manifest.get("name") != args.cyber_run_id
             or manifest.get("template_sha256")
@@ -206,6 +212,13 @@ class Rollout:
                 # It must NOT be the batch counter shared by competing samples.
                 sample.rollout_id = sample.index
                 sample.metadata["cyber_batch"] = {"kind": kind, "rollout_id": rid}
+                suffix = f"-{kind}-r{rid}-s{sample.index}"
+                if len(self.args.cyber_run_id) + len(suffix) > 101:
+                    raise InvalidEpisode("native_attempt_identity_too_long")
+                sample.metadata["cyber_attempt"] = {
+                    "run_id": self.args.cyber_run_id + suffix,
+                    "output_root": self.args.cyber_output_root,
+                }
             intent = {
                 "schema": "cyber_miles_batch_v1",
                 "batch_id": batch_id,
@@ -229,6 +242,7 @@ class Rollout:
                     for group in groups
                 ]
             data = [task.result() for task in tasks]
+            segment_counts = []
             for source_group, group in zip(groups, data, strict=True):
                 if len(group) != len(source_group):
                     raise InvalidEpisode("generated_group_count_mismatch")
@@ -246,11 +260,40 @@ class Rollout:
                         for s in segments
                     ):
                         raise InvalidEpisode("generated_episode_identity_or_reward_mismatch")
+                    if self.data_schema == "cyber_miles_data_v2":
+                        expected = len(segments)
+                        if any(
+                            s.metadata.get("cyber_segment")
+                            != {
+                                "index": index,
+                                "count": expected,
+                                "summary_token_treatment": SUMMARY_TOKEN_TREATMENT,
+                            }
+                            for index, s in enumerate(segments)
+                        ):
+                            raise InvalidEpisode("compaction_segment_evidence_mismatch")
+                        segment_counts.append(expected)
+                    else:
+                        segment_counts.append(len(segments))
+            collected = {
+                **intent,
+                **(
+                    {
+                        "compaction": {
+                            "episodes": len(segment_counts),
+                            "segments": sum(segment_counts),
+                            "compacted_episodes": sum(count > 1 for count in segment_counts),
+                        }
+                    }
+                    if self.data_schema == "cyber_miles_data_v2"
+                    else {}
+                ),
+            }
             fleet.write_json_once(
                 directory / "COLLECTED.json",
                 {
-                    **intent,
-                    "sha256": fleet.sha256(fleet.canonical_json(intent)),
+                    **collected,
+                    "sha256": fleet.sha256(fleet.canonical_json(collected)),
                 },
             )
             if evaluation:

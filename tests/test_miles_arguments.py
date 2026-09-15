@@ -121,11 +121,42 @@ def native_boundary(tmp_path, monkeypatch):
         log_prob_pass_multiplier=2,
     )
     runtime = ModuleType("fti.trainers.miles.run_fleet")
-    runtime.TEMPLATES, runtime._RECIPES = tmp_path, {"qwen3.8-27b": profile}
+    long_profile = NS(
+        **{
+            **profile.__dict__,
+            "parallel_args_by_shape": {
+                (4, 8): (
+                    "--tensor-model-parallel-size 8 --sequence-parallel "
+                    "--pipeline-model-parallel-size 1 --context-parallel-size 4 "
+                    "--expert-model-parallel-size 1 --expert-tensor-parallel-size 1"
+                )
+            },
+            "max_context_len": 262144,
+            "max_response_len": 245760,
+            "max_tokens_per_gpu": 65536,
+        }
+    )
+    runtime.TEMPLATES, runtime._RECIPES = (
+        tmp_path,
+        {
+            "qwen3.8-27b": profile,
+            "qwen3.8-27b-256k": long_profile,
+        },
+    )
     model = ModuleType("miles.utils.external_utils.model_args_utils")
     model.load_model_args = lambda name: "--num-layers 64"
+    tito = ModuleType("miles.utils.chat_template_utils.tito_tokenizer")
+    tito.resolve_fixed_chat_template = lambda name: (
+        (str(template), {"preserve_thinking": True, "reasoning_effort": "xhigh"})
+        if name == "qwen38small"
+        else (None, {})
+    )
+    tito.resolve_reasoning_and_tool_call_parser = lambda name: (
+        ("qwen3", "qwen3_coder") if name == "qwen38small" else (None, None)
+    )
     monkeypatch.setitem(sys.modules, runtime.__name__, runtime)
     monkeypatch.setitem(sys.modules, model.__name__, model)
+    monkeypatch.setitem(sys.modules, tito.__name__, tito)
     return profile, template
 
 
@@ -216,6 +247,65 @@ def test_runtime_and_policy_identity_paths_are_distinct_native_arguments(config,
     argv = miles.arguments(replace(config, policy_identity_root=accepted))
     assert value(argv, "hf-checkpoint") == config.model_root
     assert value(argv, "fleet-policy-identity-root") == accepted
+
+
+def test_long_context_uses_native_256k_shape_and_session_v2(config, native_boundary):
+    argv = miles.arguments(
+        replace(
+            config,
+            nodes=4,
+            native_profile="qwen3.8-27b-256k",
+            harness="opencode",
+            runtime_image="registry.test/miles-opencode@sha256:" + "a" * 64,
+            session_node_cap=4096,
+            context_tokens=262144,
+            response_tokens=245760,
+            tokens_per_turn=32768,
+            max_tokens_per_gpu=65536,
+        )
+    )
+    assert value(argv, "tensor-model-parallel-size") == "8"
+    assert value(argv, "context-parallel-size") == "4"
+    assert value(argv, "rollout-max-context-len") == "262144"
+    assert value(argv, "rollout-max-response-len") == "245760"
+    assert value(argv, "max-tokens-per-gpu") == "65536"
+    assert value(argv, "custom-generate-function-path") == "training.miles_opencode.generate"
+    assert value(argv, "custom-agent-function-path") == "training.miles_opencode.run"
+    assert value(argv, "use-session-server") == "v2"
+    assert value(argv, "tito-model") == value(argv, "fleet-tito-model") == "qwen38small"
+    assert value(argv, "fleet-session-node-cap") == "4096"
+    assert value(argv, "sglang-router-policy") == "consistent_hashing"
+    assert "--chat-template-path" not in argv
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"nodes": 1},
+        {"context_tokens": 98304},
+        {"response_tokens": 81920},
+        {"tokens_per_turn": 4096},
+        {"max_tokens_per_gpu": 32768},
+        {"session_node_cap": 1024},
+        {"runtime_image": miles.IMAGE},
+        {"harness": "direct"},
+    ],
+)
+def test_long_context_rejects_partial_contract_changes(config, native_boundary, changes):
+    base = replace(
+        config,
+        nodes=4,
+        native_profile="qwen3.8-27b-256k",
+        harness="opencode",
+        runtime_image="registry.test/miles-opencode@sha256:" + "a" * 64,
+        session_node_cap=4096,
+        context_tokens=262144,
+        response_tokens=245760,
+        tokens_per_turn=32768,
+        max_tokens_per_gpu=65536,
+    )
+    with pytest.raises(ValueError, match="exact native 256K contract"):
+        miles.arguments(replace(base, **changes))
 
 
 def test_unknown_configuration_fields_rejected(config):
