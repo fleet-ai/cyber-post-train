@@ -290,6 +290,27 @@ def test_long_context_reward_canary_binds_exact_runtime_checkpoint_and_four_node
             miles_promotion._exact_reward_canary_config(invalid)
 
 
+def test_long_context_reward_canary_v2_uses_qualified_runtime_and_new_identity() -> None:
+    config = json.loads(
+        (
+            ROOT
+            / "configs/qualification/qwen38-miles-opencode-long-context-prod-v2.json"
+        ).read_text()
+    )
+
+    miles_promotion._exact_reward_canary_config(config)
+    assert config["name"] == miles_promotion.PROD_REWARD_CANARY_LONG_V2_NAME
+    assert config["output_root"] == miles_promotion.PROD_REWARD_CANARY_LONG_V2_OUTPUT
+    assert config["wandb"] == miles_promotion.PROD_REWARD_CANARY_LONG_V2_WANDB
+    assert config["runtime"] == miles_promotion.PROD_REWARD_CANARY_LONG_V2_RUNTIME
+    assert config["runtime"]["image"].endswith(
+        "@sha256:dc1a41ac386c9f7377e7a6f7b92a402830e308855aa2632413af25917f38dd93"
+    )
+    assert config["production_promotion"] == {
+        "mode": miles_promotion.PROD_REWARD_CANARY_LONG_V2_MODE
+    }
+
+
 def test_long_context_reward_canary_preview_is_exact_four_by_eight_c1(monkeypatch) -> None:
     from cyber_post_train import jobs
 

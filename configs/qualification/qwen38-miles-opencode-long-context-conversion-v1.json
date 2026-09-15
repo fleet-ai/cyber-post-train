@@ -8,9 +8,9 @@
   },
   "native_profile": "qwen3.8-27b-256k",
   "runtime": {
-    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:22c6c624ae95e1886aeab8c9921642b7753232856eb41fb618a70c52975b0a18",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:dc1a41ac386c9f7377e7a6f7b92a402830e308855aa2632413af25917f38dd93",
     "receipt": "qwen38-miles-opencode-long-context-runtime-v1.json",
-    "sha256": "sha256:a7599e67fe88e987fcfcc380a27dd2c568d329d9fcc97858d4b01fc4299bae6c"
+    "sha256": "sha256:a2edd96163b9ebefd46f27f71d3787fb4da447ccaaa0e2b79d415895533676bc"
   },
   "cluster": {
     "priority": "c1"

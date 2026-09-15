@@ -91,6 +91,29 @@ PROD_REWARD_CANARY_LONG_V1_CHECKPOINT_ROOT = (
 PROD_REWARD_CANARY_LONG_V1_CHECKPOINT_RECEIPT_SHA256 = (
     "7337a9bd828023f685c3c15870de2ce6874e156dcb7b7f92d6bd99e3722641e4"
 )
+PROD_REWARD_CANARY_LONG_V2_MODE = "reward_canary_opencode_long_v2"
+PROD_REWARD_CANARY_LONG_V2_NAME = "chris-q38-miles-lc-canary2"
+PROD_REWARD_CANARY_LONG_V2_OUTPUT = "/mnt/sfs/jobs/chris-q38-miles-lc-canary2"
+PROD_REWARD_CANARY_LONG_V2_DATA_ROOT = (
+    "/mnt/sfs/jobs/chris-q38-miles-lc-canary2-inputs/data"
+)
+PROD_REWARD_CANARY_LONG_V2_DATA_MANIFEST = (
+    PROD_REWARD_CANARY_LONG_V2_DATA_ROOT + "/manifest.json"
+)
+PROD_REWARD_CANARY_LONG_V2_WANDB = {
+    "entity": "thefleet",
+    "project": "cyber-post-train",
+    "run_id": PROD_REWARD_CANARY_LONG_V2_NAME,
+}
+PROD_REWARD_CANARY_LONG_V2_IMAGE = (
+    "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:"
+    "dc1a41ac386c9f7377e7a6f7b92a402830e308855aa2632413af25917f38dd93"
+)
+PROD_REWARD_CANARY_LONG_V2_RUNTIME = {
+    "image": PROD_REWARD_CANARY_LONG_V2_IMAGE,
+    "receipt": "qwen38-miles-opencode-long-context-runtime-v1.json",
+    "sha256": "sha256:a2edd96163b9ebefd46f27f71d3787fb4da447ccaaa0e2b79d415895533676bc",
+}
 EXPERIMENT_OWNER_PREFIX = "chris-"
 FLEET_RUN_NAME_LABEL = "fleet.ai/run-name"
 PROD_MODEL_SHA256 = "dcfdcd6ecb6661741cd3a4b24dc5af7259642c8a6824773e0de70d55d7501179"
@@ -412,6 +435,7 @@ def _is_reward_canary_marker(value: Any) -> bool:
         {"mode": PROD_REWARD_CANARY_V2_MODE},
         {"mode": PROD_REWARD_CANARY_V3_MODE},
         {"mode": PROD_REWARD_CANARY_LONG_V1_MODE},
+        {"mode": PROD_REWARD_CANARY_LONG_V2_MODE},
     )
 
 
@@ -483,12 +507,36 @@ def _exact_reward_canary_config(config: dict[str, Any]) -> None:
             ),
         }
         expected_runtime = None
-    elif mode == PROD_REWARD_CANARY_LONG_V1_MODE:
-        expected_name = PROD_REWARD_CANARY_LONG_V1_NAME
-        expected_output = PROD_REWARD_CANARY_LONG_V1_OUTPUT
-        expected_data_root = PROD_REWARD_CANARY_LONG_V1_DATA_ROOT
-        expected_data_manifest = PROD_REWARD_CANARY_LONG_V1_DATA_MANIFEST
-        expected_wandb = PROD_REWARD_CANARY_LONG_V1_WANDB
+    elif mode in {
+        PROD_REWARD_CANARY_LONG_V1_MODE,
+        PROD_REWARD_CANARY_LONG_V2_MODE,
+    }:
+        successor = mode == PROD_REWARD_CANARY_LONG_V2_MODE
+        expected_name = (
+            PROD_REWARD_CANARY_LONG_V2_NAME
+            if successor
+            else PROD_REWARD_CANARY_LONG_V1_NAME
+        )
+        expected_output = (
+            PROD_REWARD_CANARY_LONG_V2_OUTPUT
+            if successor
+            else PROD_REWARD_CANARY_LONG_V1_OUTPUT
+        )
+        expected_data_root = (
+            PROD_REWARD_CANARY_LONG_V2_DATA_ROOT
+            if successor
+            else PROD_REWARD_CANARY_LONG_V1_DATA_ROOT
+        )
+        expected_data_manifest = (
+            PROD_REWARD_CANARY_LONG_V2_DATA_MANIFEST
+            if successor
+            else PROD_REWARD_CANARY_LONG_V1_DATA_MANIFEST
+        )
+        expected_wandb = (
+            PROD_REWARD_CANARY_LONG_V2_WANDB
+            if successor
+            else PROD_REWARD_CANARY_LONG_V1_WANDB
+        )
         expected_recipe = {
             **legacy_recipe,
             "nodes": 4,
@@ -499,7 +547,11 @@ def _exact_reward_canary_config(config: dict[str, Any]) -> None:
         }
         expected_resources = PROD_REWARD_CANARY_LONG_V1_RESOURCES
         expected_checkpoint = PROD_REWARD_CANARY_LONG_V1_CHECKPOINT
-        expected_runtime = PROD_REWARD_CANARY_LONG_V1_RUNTIME
+        expected_runtime = (
+            PROD_REWARD_CANARY_LONG_V2_RUNTIME
+            if successor
+            else PROD_REWARD_CANARY_LONG_V1_RUNTIME
+        )
     else:
         raise ValueError("Miles production reward canary mode is not supported")
     if (
@@ -859,12 +911,36 @@ def _exact_reward_canary_plan(plan: dict[str, Any]) -> None:
         checkpoint_root = BASE_CHECKPOINT["root"]
         checkpoint_receipt_sha256 = BASE_CHECKPOINT["receipt_sha256"]
         resources = PROD_REWARD_CANARY_RESOURCES
-    elif mode == PROD_REWARD_CANARY_LONG_V1_MODE:
-        name = PROD_REWARD_CANARY_LONG_V1_NAME
-        output = PROD_REWARD_CANARY_LONG_V1_OUTPUT
-        data_root = PROD_REWARD_CANARY_LONG_V1_DATA_ROOT
-        data_manifest = PROD_REWARD_CANARY_LONG_V1_DATA_MANIFEST
-        wandb = PROD_REWARD_CANARY_LONG_V1_WANDB
+    elif mode in {
+        PROD_REWARD_CANARY_LONG_V1_MODE,
+        PROD_REWARD_CANARY_LONG_V2_MODE,
+    }:
+        successor = mode == PROD_REWARD_CANARY_LONG_V2_MODE
+        name = (
+            PROD_REWARD_CANARY_LONG_V2_NAME
+            if successor
+            else PROD_REWARD_CANARY_LONG_V1_NAME
+        )
+        output = (
+            PROD_REWARD_CANARY_LONG_V2_OUTPUT
+            if successor
+            else PROD_REWARD_CANARY_LONG_V1_OUTPUT
+        )
+        data_root = (
+            PROD_REWARD_CANARY_LONG_V2_DATA_ROOT
+            if successor
+            else PROD_REWARD_CANARY_LONG_V1_DATA_ROOT
+        )
+        data_manifest = (
+            PROD_REWARD_CANARY_LONG_V2_DATA_MANIFEST
+            if successor
+            else PROD_REWARD_CANARY_LONG_V1_DATA_MANIFEST
+        )
+        wandb = (
+            PROD_REWARD_CANARY_LONG_V2_WANDB
+            if successor
+            else PROD_REWARD_CANARY_LONG_V1_WANDB
+        )
         tokens_per_turn = 32768
         expected_data = EXPECTED_REWARD_CANARY_LONG_V1_DATA
         nodes = 4
@@ -873,7 +949,11 @@ def _exact_reward_canary_plan(plan: dict[str, Any]) -> None:
         response_tokens = 245760
         native_profile = "qwen3.8-27b-256k"
         harness = "opencode"
-        runtime_image = PROD_REWARD_CANARY_LONG_V1_IMAGE
+        runtime_image = (
+            PROD_REWARD_CANARY_LONG_V2_IMAGE
+            if successor
+            else PROD_REWARD_CANARY_LONG_V1_IMAGE
+        )
         session_node_cap = 4096
         checkpoint_root = PROD_REWARD_CANARY_LONG_V1_CHECKPOINT_ROOT
         checkpoint_receipt_sha256 = PROD_REWARD_CANARY_LONG_V1_CHECKPOINT_RECEIPT_SHA256
@@ -951,7 +1031,10 @@ def _exact_reward_canary_plan(plan: dict[str, Any]) -> None:
         }
     ):
         raise ValueError("compiled Miles production reward canary differs from the exact arm")
-    if mode == PROD_REWARD_CANARY_LONG_V1_MODE:
+    if mode in {
+        PROD_REWARD_CANARY_LONG_V1_MODE,
+        PROD_REWARD_CANARY_LONG_V2_MODE,
+    }:
         _exact_long_data(plan.get("data"))
     else:
         _exact_data(plan.get("data"), expected_data)
@@ -995,7 +1078,10 @@ def validate_production_preview(
     if _is_reward_canary_marker(plan.get("execution", {}).get("production_promotion")):
         long_horizon = (
             plan.get("execution", {}).get("production_promotion", {}).get("mode")
-            == PROD_REWARD_CANARY_LONG_V1_MODE
+            in {
+                PROD_REWARD_CANARY_LONG_V1_MODE,
+                PROD_REWARD_CANARY_LONG_V2_MODE,
+            }
         )
         workers = 4 if long_horizon else 1
         resources = (
@@ -1068,6 +1154,14 @@ def _reward_canary_live_identity(
             PROD_REWARD_CANARY_LONG_V1_OUTPUT,
             PROD_REWARD_CANARY_LONG_V1_DATA_MANIFEST,
             PROD_REWARD_CANARY_LONG_V1_WANDB,
+            EXPECTED_REWARD_CANARY_LONG_V1_DATA,
+        )
+    if mode == PROD_REWARD_CANARY_LONG_V2_MODE:
+        return (
+            PROD_REWARD_CANARY_LONG_V2_NAME,
+            PROD_REWARD_CANARY_LONG_V2_OUTPUT,
+            PROD_REWARD_CANARY_LONG_V2_DATA_MANIFEST,
+            PROD_REWARD_CANARY_LONG_V2_WANDB,
             EXPECTED_REWARD_CANARY_LONG_V1_DATA,
         )
     raise JobsError("Miles production reward canary mode changed")
@@ -1266,7 +1360,10 @@ def require_live_external(plan: dict[str, Any], client, *, wandb_api=None) -> di
     candidate_nodes = (
         4
         if plan.get("execution", {}).get("production_promotion", {}).get("mode")
-        == PROD_REWARD_CANARY_LONG_V1_MODE
+        in {
+            PROD_REWARD_CANARY_LONG_V1_MODE,
+            PROD_REWARD_CANARY_LONG_V2_MODE,
+        }
         else 1
     )
     if active + candidate_nodes > 8:

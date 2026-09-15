@@ -439,6 +439,38 @@ def test_long_horizon_data_binds_native_tito_and_exact_compaction_contract(setup
     assert "tool_result_chars" not in episode["rl"]
 
 
+def test_long_horizon_run_id_derivation_preserves_compaction_contract(setup):
+    from training import miles_opencode
+
+    setup.config["harness"] = miles_opencode.harness_contract()
+    setup.config["limits"] = {
+        "context_tokens": miles_opencode.CONTEXT_TOKENS,
+        "response_tokens": miles_opencode.TOTAL_RESPONSE_TOKENS,
+        "max_tokens_per_turn": miles_opencode.MAX_TOKENS_PER_TURN,
+        "max_turns": miles_opencode.MAX_MODEL_REQUESTS,
+        "episode_seconds": miles_opencode.EPISODE_SECONDS,
+        "tool_seconds": 300,
+    }
+    build(setup)
+    config = run_id_derivation_config(setup)
+
+    result = derive_data.derive(config, relative_to=setup.tmp)
+
+    assert result["submitted"] is False
+    source = json.loads((setup.tmp / "out/manifest.json").read_text())
+    derived = json.loads((setup.tmp / "derived/manifest.json").read_text())
+    assert derived["schema"] == "cyber_miles_data_v2"
+    assert derived["harness"] == source["harness"] == miles_opencode.harness_contract()
+    assert derived["limits"] == source["limits"]
+    for split in ("train", "dev"):
+        original = json.loads((setup.tmp / f"out/{split}.jsonl").read_text())
+        successor = json.loads((setup.tmp / f"derived/{split}.jsonl").read_text())
+        assert successor["input"] == original["input"]
+        assert successor["metadata"]["cyber_config"]["run_id"] == config["name"]
+        assert successor["metadata"]["cyber_config"]["harness"] == source["harness"]
+        assert successor["metadata"]["cyber_config"]["rl"] == source["limits"]
+
+
 @pytest.mark.parametrize(
     "fault",
     [

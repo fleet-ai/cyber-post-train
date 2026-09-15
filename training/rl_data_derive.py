@@ -23,7 +23,7 @@ from .rl_data import AUTHORITY, _sealed, selection
 from .sft import _known, _sfs_root
 
 DERIVATION_SCHEMA = "cyber_miles_data_derivation_v1"
-_MANIFEST_FIELDS = {
+_MANIFEST_FIELDS_V1 = {
     "schema",
     "name",
     "selection_sha256",
@@ -37,6 +37,7 @@ _MANIFEST_FIELDS = {
     "environment_creates",
     "sha256",
 }
+_MANIFEST_FIELDS_V2 = _MANIFEST_FIELDS_V1 | {"harness"}
 _POLICY_TRANSFORMED_FIELDS = [
     "metadata.cyber_config.run_id",
     "metadata.cyber_config.model.root",
@@ -85,14 +86,23 @@ def _write_once(path: Path, payload: bytes) -> None:
         os.fsync(stream.fileno())
 
 
-def _rows(payload: bytes, *, split: str, manifest: dict, source_root: str) -> list[dict]:
+def _rows(
+    payload: bytes,
+    *,
+    split: str,
+    manifest: dict,
+    source_root: str,
+    long_horizon: bool,
+) -> list[dict]:
     if not payload.endswith(b"\n"):
         raise ValueError("source Miles JSONL must end with one complete row")
     lines = payload.splitlines()
     if not lines:
         raise ValueError("source Miles split is empty")
     values = []
-    expected_limits = {k: v for k, v in manifest["limits"].items() if k != "response_tokens"}
+    expected_limits = copy.deepcopy(manifest["limits"])
+    if not long_horizon:
+        expected_limits.pop("response_tokens")
     for line in lines:
         row = _json_object(line, "source Miles row")
         if fleet.canonical_json(row) != line or set(row) != {"input", "metadata"}:
@@ -110,22 +120,23 @@ def _rows(payload: bytes, *, split: str, manifest: dict, source_root: str) -> li
         rl_episode._validate(config)
         model = config.get("model")
         execution = config.get("execution")
+        expected_model_fields = {
+            "repo",
+            "revision",
+            "root",
+            "tito_family",
+            "runtime_chat_template_sha256",
+        } | ({"served_id"} if long_horizon else set())
         if (
             metadata["split"] != split
             or config.get("run_id") != manifest["name"]
             or not isinstance(model, dict)
-            or set(model)
-            != {
-                "repo",
-                "revision",
-                "root",
-                "tito_family",
-                "runtime_chat_template_sha256",
-            }
+            or set(model) != expected_model_fields
             or model["repo"] != manifest["tokenizer"]["repo"]
             or model["revision"] != manifest["tokenizer"]["revision"]
             or model["root"] != source_root
-            or model["tito_family"] != "qwen35"
+            or model["tito_family"] != ("qwen38small" if long_horizon else "qwen35")
+            or (long_horizon and model["served_id"] != "model")
             or model["runtime_chat_template_sha256"] != manifest["template_sha256"]
             or config.get("authority") != AUTHORITY
             or execution
@@ -134,6 +145,10 @@ def _rows(payload: bytes, *, split: str, manifest: dict, source_root: str) -> li
                 "required_task_tool_catalog_sha256": manifest["tool_catalog_sha256"],
             }
             or config.get("rl") != expected_limits
+            or (
+                long_horizon
+                and config.get("harness") != manifest["harness"]
+            )
             or config.get("initial_prompt_sha256") != fleet.sha256(prompt.encode())
         ):
             raise ValueError("source Miles row identity changed")
@@ -183,9 +198,14 @@ def derive(config: dict, *, relative_to: Path) -> dict:
     ):
         raise ValueError("source manifest file digest mismatch")
     manifest = _json_object(source_payload, "source manifest")
-    if set(manifest) != _MANIFEST_FIELDS:
+    schema = manifest.get("schema")
+    long_horizon = schema == "cyber_miles_data_v2"
+    expected_manifest_fields = _MANIFEST_FIELDS_V2 if long_horizon else _MANIFEST_FIELDS_V1
+    if schema not in {"cyber_miles_data_v1", "cyber_miles_data_v2"} or set(
+        manifest
+    ) != expected_manifest_fields:
         raise ValueError("source must be an original accepted Miles data manifest")
-    _sealed(manifest, "cyber_miles_data_v1")
+    _sealed(manifest, schema)
     if manifest["sha256"] != _sha(config["source_manifest_sha256"], "source manifest self digest"):
         raise ValueError("source manifest self digest mismatch")
     if (
@@ -206,8 +226,11 @@ def derive(config: dict, *, relative_to: Path) -> dict:
         "max_turns",
         "episode_seconds",
         "tool_seconds",
-        "tool_result_chars",
     }
+    if not long_horizon:
+        required_limits.add("tool_result_chars")
+    from . import miles_opencode
+
     if (
         not isinstance(limits, dict)
         or set(limits) != required_limits
@@ -215,7 +238,8 @@ def derive(config: dict, *, relative_to: Path) -> dict:
         or not limits["max_tokens_per_turn"]
         <= limits["response_tokens"]
         < limits["context_tokens"]
-        <= 98304
+        <= (miles_opencode.CONTEXT_TOKENS if long_horizon else 98304)
+        or (long_horizon and manifest.get("harness") != miles_opencode.harness_contract())
     ):
         raise ValueError("source Miles limits changed")
     if config["expected_limits"] != limits:
@@ -280,7 +304,13 @@ def derive(config: dict, *, relative_to: Path) -> dict:
         payload = _stable_bytes(root / item["path"], "source " + item["path"])
         if fleet.sha256(payload) != _sha(item["sha256"], "source split digest"):
             raise ValueError("source Miles split digest mismatch")
-        rows = _rows(payload, split=split, manifest=manifest, source_root=source_policy_root)
+        rows = _rows(
+            payload,
+            split=split,
+            manifest=manifest,
+            source_root=source_policy_root,
+            long_horizon=long_horizon,
+        )
         if len(rows) != item["rows"]:
             raise ValueError("source Miles row count changed")
         for row in rows:

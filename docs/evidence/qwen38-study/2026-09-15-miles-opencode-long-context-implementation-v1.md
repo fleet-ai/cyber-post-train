@@ -1,9 +1,11 @@
 # Qwen3.8 long-horizon Miles/OpenCode implementation
 
-Status: implemented and offline-tested. The first derived image was built; a
-zero-GPU in-image gate found the TITO-family mismatch described below. The
-source-compatible correction is awaiting an exact image requalification.
-This record is not an RL-success or production-promotion receipt.
+Status: runtime-qualified. The corrected immutable image passed both a
+zero-GPU full-driver-import gate and a bounded real-CUDA native-parser gate.
+Both dev probes were deleted immediately after their terminal receipts and no
+dev GPU remains allocated. This record is not an RL-success or
+production-promotion receipt: real reward, an optimizer update, checkpoint
+creation, and checkpoint reload remain separate gates.
 
 ## Why the earlier canary cannot be promoted
 
@@ -73,11 +75,15 @@ compactions across more than 1,024 nodes.
 - Installed native Miles driver: `sha256:85dbfd31d41a84f9c2e79a2918583851fb53925630afa229e9cd0a154b170f46`
 - Installed native checkpoint converter: `sha256:0c2541d30073777a30344273a3773844a70ca1961287520c0496a1cec18d43f6`
 - Patched installed session-tree file: `sha256:59bed80a62a8ab94e0bb9012f4f9f0290245a5c8db6feadd0997a7bfb57025ee`
+- Patched Megatron Qwen3-ASR source: `sha256:90ebb373c06195ad4a8d117e17ed154ffc67c78ccc370fe7f5dcab78ae864355`
 - Superseded pre-backport image: `sha256:04c1b4ed1c6faebba80fb0220496af0994f52a89a702638083420905a15724bf`
+- Qualified derived image: `sha256:dc1a41ac386c9f7377e7a6f7b92a402830e308855aa2632413af25917f38dd93`
+- Image source commit: `3d97b6bbb30fefa97f08959b0ce9b50c86cd947f`
+- Qualification source commit: `75afd1241d1042855f793a4069c321d6ee9e452b`
 - OpenCode tag/commit: `v1.18.27`, `4b7e19e315cca414121ba1d61523fef74bb3ae8b`
 - OpenCode Linux binary: `sha256:bddf894e5c2bc3d8cf452bd6e5ab2273bbe4a37eeeb9aec848d3d7d20db1f256`
 - Qwen3.8 fixed chat template: `sha256:38d42166599348d47ded69776c5389c89924045e6827089923a031379f8a3dfe`
-- Corrected derived-image source bundle: `sha256:8297c85db51eeeeb0c9f480cab0dc96598ab3d28da10f2844f1ff25a47be1546`
+- Corrected derived-image source bundle: `sha256:441853f27031f2e9c60c70a04e862080bc815c5eaf191c82f183f9824d469a72`
 
 ## Qualification evidence before the backport
 
@@ -116,20 +122,42 @@ then owns and automatically resolves the template, `preserve_thinking=true`,
 `reasoning_effort=xhigh`, reasoning parser `qwen3`, and tool parser
 `qwen3_coder`. No local model family or alternate template is invented.
 
+## Accepted runtime qualification
+
+The immutable BuildKit image completed at 2026-09-15T06:24:26Z with exit zero,
+zero restarts, and no GPU. Its exact Job and Pod were deleted and their absence
+was verified. A zero-GPU CPU probe then imported the complete native driver and
+checked the installed hashes and compaction behavior. It deliberately did not
+claim the native 256K parser, because that parser queries a real CUDA device.
+
+The bounded CUDA probe `q38-miles-runtime-gpu-qual-75afd124` (Pod UID
+`bd9d6722-d6a5-44b1-aa17-27fbde972203`) used one dev GPU under c1 with a
+600-second hard deadline. It ran for 34 seconds, exited zero with no restart,
+and validated the real-CUDA native driver, the complete four-node 256K parser,
+the Qwen3.8 TITO/template binding, exact OpenCode binary, repeated compaction
+through more than 1,024 nodes, one episode reward across compaction segments,
+summary-token exclusion, and untruncated primary tool results. Its receipt
+digest is
+`sha256:0597e05ee1d6557fe5f3ebc2cda80bcb4cf92db4ac93863b767df2084d7dac43`.
+The exact Pod and immutable ConfigMap were deleted immediately; a readback
+found zero active `q38-miles` dev Pods or GPUs.
+
+The machine-readable receipt is
+`configs/qualification/qwen38-miles-opencode-long-context-runtime-v1.json`.
+Exact operational identities and release evidence are in
+`docs/evidence/qwen38-study/2026-09-15-miles-long-context-runtime-qualification-v1.json`.
+
 ## Remaining gates
 
-1. Rebuild the final reviewed source bundle and bind its immutable image digest.
-2. On a real GPU node, bind the exact Qwen3.8 model config
-   (`sha256:191e0af232104ed8b65258cf3fb2b842e288008baca7633c11b82a1ac7203aab`),
-   verify installed source/binary/template hashes, parse the native four-node
-   profile, and repeat the greater-than-1,024-node compaction tests. The full
-   Megatron parser loads CUDA and therefore is not a zero-GPU BuildKit gate.
-3. Create an exact zero-step native checkpoint using that same image.
-4. Run one c1 dev canary on the exact four-node topology. It must prove repeated
-   compaction, one authoritative reward per rollout, reward variance, a finite
-   nonzero update, a durable checkpoint, and clean release.
-5. Reload the checkpoint with zero optimizer updates. Only then may a fresh c1
-   production canary be prepared. Full RL remains closed until that canary passes.
+1. Complete exact output, duplicate, and aggregate node-cap checks for one c1
+   four-node reward-acquisition canary. Dev may only be used for bounded tests;
+   it must never host a durable service or an unattended long run.
+2. Run the canary against real Fleet tasks and the authoritative verifier. It
+   must show non-constant real reward before a finite nonzero optimizer update,
+   then write a durable checkpoint and release all four nodes.
+3. Reload that exact checkpoint with zero optimizer updates. Only after the
+   reload gate passes may a longer production arm be prepared. Full RL remains
+   closed until these scientific gates pass.
 
-The machine-readable, deliberately unaccepted qualification template is
+The original qualification plan remains in
 `configs/qualification/qwen38-miles-opencode-long-context-runtime-v1.template.json`.

@@ -28,8 +28,8 @@
     },
     "runtime_receipt": {
       "path": "configs/qualification/qwen38-miles-opencode-long-context-runtime-v1.json",
-      "file_sha256": "sha256:a7599e67fe88e987fcfcc380a27dd2c568d329d9fcc97858d4b01fc4299bae6c",
-      "receipt_sha256": "sha256:1733d00b93265253bde1c398cfca80bf1d0ec7882396474763ee88d230dcf9d9"
+      "file_sha256": "sha256:a2edd96163b9ebefd46f27f71d3787fb4da447ccaaa0e2b79d415895533676bc",
+      "receipt_sha256": "sha256:0597e05ee1d6557fe5f3ebc2cda80bcb4cf92db4ac93863b767df2084d7dac43"
     }
   },
   "qualification": {
@@ -129,13 +129,13 @@
       }
     },
     "runtime": {
-      "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:22c6c624ae95e1886aeab8c9921642b7753232856eb41fb618a70c52975b0a18",
+      "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:dc1a41ac386c9f7377e7a6f7b92a402830e308855aa2632413af25917f38dd93",
       "receipt": "../qualification/qwen38-miles-opencode-long-context-runtime-v1.json",
-      "sha256": "sha256:a7599e67fe88e987fcfcc380a27dd2c568d329d9fcc97858d4b01fc4299bae6c"
+      "sha256": "sha256:a2edd96163b9ebefd46f27f71d3787fb4da447ccaaa0e2b79d415895533676bc"
     },
     "production_promotion": null
   },
-  "candidate_run_sha256": "sha256:96332658be66422f6214d5fd58f670acaf15d47c370415f8af5e44bc57d834dd",
+  "candidate_run_sha256": "sha256:7815f2f1638e9e5747e3088d98b99f1de451aa44acdc1fb7a021eec7396c1cad",
   "scientific_boundaries": {
     "optimizer_split": "train",
     "fleet_dev_is_evaluation_only": true,
@@ -162,9 +162,9 @@
   ],
   "blocked_reasons": [
     "The first exact long-context canary failed before model loading because its runtime image contained two invalid vendored Qwen3-ASR generated-doc contracts; all 32 GPUs were released.",
-    "A corrected immutable image must pass zero-GPU full-driver import and bounded CUDA parser/import qualification before a deterministic successor.",
+    "The corrected immutable image has passed zero-GPU full-driver import and bounded real-CUDA 256K parser qualification, but no real-reward successor canary has yet accepted.",
     "No all-rank zero-update reload has accepted that canary checkpoint.",
     "Live duplicate, W&B, preview, and node-budget checks can only run immediately before submission."
   ],
-  "sha256": "sha256:4192fec95594c50830ad66c694d4ae6ba70b154c419fa0d2f7a9e4e93146f720"
+  "sha256": "sha256:b490a31623c7e9d21cda46abb24d9c5b13cfb528fb2002b84de66be41ce0fa0b"
 }
