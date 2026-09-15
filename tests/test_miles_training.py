@@ -408,6 +408,9 @@ def _long_runtime_receipt(image, *, build_source_sha256="sha256:" + "b" * 64):
         "base_image": train.LONG_RUNTIME_BASE_IMAGE,
         "fti_version": "0.8.4",
         "native_profile": "qwen3.8-27b-256k",
+        "model_config_sha256": (
+            "sha256:191e0af232104ed8b65258cf3fb2b842e288008baca7633c11b82a1ac7203aab"
+        ),
         "opencode_version": "1.18.27",
         "opencode_source_commit": "4b7e19e315cca414121ba1d61523fef74bb3ae8b",
         "opencode_binary_sha256": (

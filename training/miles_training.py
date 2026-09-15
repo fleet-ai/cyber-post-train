@@ -93,6 +93,8 @@ def _validate_long_runtime_receipt(
         or receipt.get("base_image") != LONG_RUNTIME_BASE_IMAGE
         or receipt.get("fti_version") != "0.8.4"
         or receipt.get("native_profile") != "qwen3.8-27b-256k"
+        or receipt.get("model_config_sha256")
+        != "sha256:191e0af232104ed8b65258cf3fb2b842e288008baca7633c11b82a1ac7203aab"
         or receipt.get("opencode_version") != "1.18.27"
         or receipt.get("opencode_source_commit") != "4b7e19e315cca414121ba1d61523fef74bb3ae8b"
         or receipt.get("opencode_binary_sha256")

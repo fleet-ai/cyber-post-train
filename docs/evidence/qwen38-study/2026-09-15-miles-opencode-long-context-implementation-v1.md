@@ -80,9 +80,11 @@ compactions across more than 1,024 nodes.
 ## Remaining gates
 
 1. Rebuild the final reviewed source bundle and bind its immutable image digest.
-2. Inside that image, verify installed source/binary/template hashes, parse the
-   native four-node profile, and repeat the greater-than-1,024-node compaction
-   tests.
+2. On a real GPU node, bind the exact Qwen3.8 model config
+   (`sha256:191e0af232104ed8b65258cf3fb2b842e288008baca7633c11b82a1ac7203aab`),
+   verify installed source/binary/template hashes, parse the native four-node
+   profile, and repeat the greater-than-1,024-node compaction tests. The full
+   Megatron parser loads CUDA and therefore is not a zero-GPU BuildKit gate.
 3. Create an exact zero-step native checkpoint using that same image.
 4. Run one c1 dev canary on the exact four-node topology. It must prove repeated
    compaction, one authoritative reward per rollout, reward variance, a finite

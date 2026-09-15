@@ -6,6 +6,7 @@
   "sources": {
     "fti_version": "0.8.4",
     "native_profile": "qwen3.8-27b-256k",
+    "model_config_sha256": "sha256:191e0af232104ed8b65258cf3fb2b842e288008baca7633c11b82a1ac7203aab",
     "miles_commit": "2799fe386320c156334bf763ad4d7ca0f85dca4e",
     "miles_tree_sha256": "sha256:fd978a1ef2617f4bf30850fedd197e546cdc9c6542b00b03df502cbb285fc732",
     "native_driver_sha256": "sha256:85dbfd31d41a84f9c2e79a2918583851fb53925630afa229e9cd0a154b170f46",

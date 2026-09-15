@@ -71,9 +71,13 @@ def qualify() -> dict:
     source_commit = os.environ["QUALIFICATION_SOURCE_COMMIT"]
     image = os.environ["QUALIFICATION_IMAGE"]
     build_source_sha256 = os.environ["QUALIFICATION_BUILD_SOURCE_SHA256"]
+    model_root = Path(os.environ["QUALIFICATION_MODEL_ROOT"])
     assert re.fullmatch(r"[a-f0-9]{40}", source_commit)
     assert re.fullmatch(r"[^@\s]+@sha256:[a-f0-9]{64}", image)
     assert re.fullmatch(r"sha256:[a-f0-9]{64}", build_source_sha256)
+    assert model_root.is_absolute()
+    model_config_sha256 = sha256(model_root / "config.json")
+    assert model_config_sha256 == "191e0af232104ed8b65258cf3fb2b842e288008baca7633c11b82a1ac7203aab"
     from miles.utils.external_utils.command_utils import repo_base_dir
 
     miles_root = Path(repo_base_dir)
@@ -97,7 +101,7 @@ def qualify() -> dict:
     config = miles.MilesConfig(
         name="q38-long-runtime-qualification",
         output_root="/mnt/sfs/jobs/q38-long-runtime-qualification",
-        model_root="/mnt/sfs/models/q38-long-runtime-qualification/hf",
+        model_root=str(model_root),
         torch_dist_root="/mnt/sfs/models/q38-long-runtime-qualification/torch-dist",
         train_data="/mnt/sfs/data/q38-long-runtime-qualification/train.jsonl",
         dev_data="/mnt/sfs/data/q38-long-runtime-qualification/dev.jsonl",
@@ -271,6 +275,7 @@ def qualify() -> dict:
         "native_converter_sha256": "sha256:" + miles.LONG_NATIVE_CONVERTER_SHA256,
         "installed_session_tree_sha256": ("sha256:" + miles.LONG_INSTALLED_SESSION_TREE_SHA256),
         "build_source_sha256": build_source_sha256,
+        "model_config_sha256": "sha256:" + model_config_sha256,
         "checks": checks,
     }
     value["sha256"] = digest(value)
