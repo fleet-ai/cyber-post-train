@@ -63,19 +63,19 @@ window.REPORT_DATA = {
     ["Qwen Code provides only a partial result", "After removing all 12 technical failures, 48 usable attempts found 16.1% of known-weakness observations per attempt and 30.0% of the supported weaknesses after up to four attempts. This is descriptive evidence, not the complete baseline we intended."]
   ],
   filtering: {
-    funnel: [["Current production blackbox tasks",1054],["Earlier run proof and still current",80],["Passed every current check",75]],
-    exclusions: [["Not yet analyzed by the current task review",985],["Known broken",52],["Promising new candidates still missing exact run proof",17]],
-    exclusionScale: 985,
+    funnel: [["Current production blackbox tasks",1055],["Earlier run proof and still current",80],["Passed every current check",75]],
+    exclusions: [["Not yet analyzed by the current task review",986],["Known broken",52],["Promising new candidates still missing exact run proof",17]],
+    exclusionScale: 986,
     apps: [["Current",21],["Fira",19],["Fakelook",17],["Fentry",11],["Fubspot",7]],
     appScale: 21,
     difficulty: [["Medium",68],["Hard",6],["Easy",1]],
     difficultyScale: 68,
     methods: [
-      ["Read the complete current catalog", "The saved census binds all 1,632 current task and version IDs. It does not save task instructions, answers, or model traces."],
-      ["Identify the blackbox tasks", "Of 1,249 production versions, 1,054 task keys explicitly identify a blackbox security task."],
+      ["Read the complete current catalog", "The saved census binds all 1,633 current task and version IDs. It does not save task instructions, answers, or model traces."],
+      ["Identify the blackbox tasks", "Of 1,250 production versions, 1,055 task keys explicitly identify a blackbox security task."],
       ["Check earlier execution proof", "An independently checked record had to show that the exact task started, grading completed with a real result, the result was saved, and cleanup finished."],
       ["Apply the latest broken-task review", "Five of the 80 earlier proven versions that are still current are now marked broken, so the conservative current set contains 75."],
-      ["Keep uncertain tasks separate", "Seventeen promising new tasks and 985 tasks without current review remain outside the high-quality set until the same exact proof is available."]
+      ["Keep uncertain tasks separate", "Seventeen promising new tasks and 986 tasks without current review remain outside the high-quality set until the same exact proof is available."]
     ]
   }
 };
