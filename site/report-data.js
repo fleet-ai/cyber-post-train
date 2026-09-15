@@ -71,8 +71,8 @@ window.REPORT_DATA = {
     difficulty: [["Medium",68],["Hard",6],["Easy",1]],
     difficultyScale: 68,
     methods: [
-      ["Read the complete current catalog", "The saved census binds all 1,633 current task and version IDs. It does not save task instructions, answers, or model traces."],
-      ["Identify the blackbox tasks", "Of 1,250 production versions, 1,055 task keys explicitly identify a blackbox security task."],
+      ["Read the complete current catalog", "The saved inventory lists all 1,633 current task-version records by exact ID. It does not save task instructions, answers, or model traces."],
+      ["Identify the blackbox tasks", "Of 1,250 current production versions, 1,055 are explicitly labeled as blackbox security tasks."],
       ["Check earlier execution proof", "An independently checked record had to show that the exact task started, grading completed with a real result, the result was saved, and cleanup finished."],
       ["Apply the latest broken-task review", "Five of the 80 earlier proven versions that are still current are now marked broken, so the conservative current set contains 75."],
       ["Keep uncertain tasks separate", "Seventeen promising new tasks and 986 tasks without current review remain outside the high-quality set until the same exact proof is available."]

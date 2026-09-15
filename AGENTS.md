@@ -59,8 +59,9 @@ Mutable names, tags, catalog `current` pointers, a Ready Pod, or a dashboard lab
 
 - Status, diagnosis, and review requests are read-only. Do not infer permission to fix, deploy, submit, rerun, cancel, or mutate.
 - Default mutating or paid operations to preview. Recheck duplicates, exact identity, cost/session count, queue, and stop conditions immediately before execution.
-- Use meaningful ownership names and normal queues. Request supported pod priority
-  (`c1` for authorized high-priority training, `c2` for backfill); the current API
+- Use meaningful ownership names and normal queues. Request only supported pod
+  priority `c1` for current project work. Do not use another priority unless the
+  user later changes this rule explicitly. The current API
   derives queue priority and rejects explicit queue-priority overrides. Recheck
   live policy and effective Workload priority, not just labels. Never bypass
   admission, unsuspend manually, cancel, directly preempt, or change peer workloads.

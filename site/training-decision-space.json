@@ -1,8 +1,8 @@
 {
   "schema": "qwen38_cyber_ranked_experiment_plan_v3",
-  "updated": "2026-09-13",
+  "updated": "2026-09-15",
   "goal": "Improve Qwen3.8-27B on blackbox web-security tasks using only Fleet cyber training tasks.",
-  "scope": "The rankings are informed starting points, not measured winners. Each comparison should change only the settings named by its shaded cells. The 20-task development set is used to choose settings. The 10-task final Fleet set stays untouched until finalists are chosen. WebExploitBench is run after accepted training runs as development evidence and cannot also be described as an untouched final test.",
+  "scope": "The rankings are informed starting points, not measured winners. Each comparison should change only the settings named by its shaded cells. The fixed 17-task Fleet development set is used to choose settings. The 8-task final Fleet set stays untouched until finalists are chosen. WebExploitBench is run immediately after every accepted checkpoint as a report-only transfer check, but it is never used to choose training settings, checkpoints, or finalists.",
   "tables": {
     "sft": {
       "title": "Ranked supervised fine-tuning runs",
@@ -104,6 +104,7 @@
             ["shuffle_seed", "Training random seed", "The fixed number controlling order and training randomness."],
             ["nodes", "GPU nodes", "The number of eight-GPU computers used."],
             ["gpus_per_node", "GPUs per node", "The GPUs used on each computer."],
+            ["priority", "Cluster priority", "The supported queue class. Every current project run uses c1 and never c0."],
             ["checkpoint_every", "Checkpoint interval", "How often recoverable state is saved."],
             ["checkpoints_kept", "Checkpoints kept", "How many recent checkpoints remain."],
             ["wandb", "Experiment tracking", "What is sent to Weights & Biases; private prompts and records are excluded."]
@@ -122,7 +123,7 @@
             ["stop_rule", "Early stop rule", "Evidence that ends training early."],
             ["advance_rule", "Promotion rule", "Evidence required before a larger or later run."],
             ["eval_seed", "Evaluation seeds", "The fixed randomness policy used for fair comparisons."],
-            ["relative_cost", "Relative GPU cost", "Rough cost versus the one-epoch one-node SFT baseline."]
+            ["relative_cost", "Relative GPU cost", "Rough cost versus the accepted Fresh75 SFT run."]
           ]
         }
       ],
@@ -132,40 +133,40 @@
         "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
         "trainable_weights": "All model weights",
         "precision": "BF16, a 16-bit training number format",
-        "trainer": "Fleet full-weight SFT spread across 8 GPUs",
-        "task_split": "Balanced split A",
-        "train_pool": "59 filtered Fleet tasks",
-        "dev_pool": "20 balanced unseen Fleet tasks",
-        "final_pool": "10 untouched Fleet tasks",
+        "trainer": "Fleet SkyRL full-weight SFT spread across 8 GPUs",
+        "task_split": "Fixed representative split from 14 September 2026",
+        "train_pool": "50 execution-proven Fleet tasks",
+        "dev_pool": "17 representative unseen Fleet tasks",
+        "final_pool": "8 untouched Fleet tasks",
         "trace_source": "Verified stronger-teacher successes",
-        "teacher_models": "GPT, Claude Opus, and Grok",
+        "teacher_models": "113 GPT sessions, 1 Grok session, and 1 Kimi session",
         "teacher_self_ratio": "100 : 0",
         "success_rule": "Official task score proves success",
-        "trace_cap": "At most 2 attempts per task family",
-        "source_balance": "Equal teacher target-token shares",
-        "task_balance": "Equal target-token weight per task family",
+        "trace_cap": "No per-family cap; all 115 qualifying sessions",
+        "source_balance": "Natural accepted-source mix; no teacher reweighting",
+        "task_balance": "Every fitting action once across 37 covered training tasks; no task reweighting",
         "data_fraction": "100% of eligible examples",
-        "duplicate_rule": "Remove exact and near duplicates before splitting",
-        "length_preference": "Keep useful short and long attempts; balance by family",
-        "data_seed": "11",
+        "duplicate_rule": "Remove exact trajectory and exact window duplicates only",
+        "length_preference": "Keep every fitting task-rich action; no family length reweighting",
+        "data_seed": "20260914 for deterministic corpus construction",
         "failed_trace_rule": "Exclude from supervised targets",
-        "source_harness": "Fleet V1 agent program",
+        "source_harness": "Qualified tool-use source records",
         "conversation_format": "Exact Qwen chat format",
         "tools": "bash and submit_report",
         "compaction_rule": "Use only exact reconstructed records; otherwise exclude",
         "tool_output_chars": "50,000 characters",
-        "source_context": "Full clean history needed before each target action",
+        "source_context": "Task anchor, complete prior rounds, and up to 4,096 optional earlier tokens; no token truncation",
         "prompt_version": "Frozen Fleet blackbox task instructions",
         "target_actions": "Every useful assistant action once",
         "context_only": "User, tool, and earlier assistant tokens",
         "window_tokens": "16,384 tokens",
         "context_tokens": "4,096 tokens",
         "targets_per_window": "All consecutive target actions that fit",
-        "target_position": "At the end of the example",
-        "stage_weights": "Explore 1 · exploit 1 · report 1",
-        "long_trace_weight": "Equal total weight per task family",
+        "target_position": "One or more consecutive original assistant actions after complete context",
+        "stage_weights": "Uniform supervised action tokens; no stage labels or extra report weight",
+        "long_trace_weight": "Every eligible action once, so longer qualifying sessions contribute more actions",
         "final_report_weight": "No extra weight",
-        "repeated_actions": "Collapse exact no-progress repetitions",
+        "repeated_actions": "Keep unless the complete trajectory or training window is an exact duplicate",
         "overlength": "Exclude and count",
         "cross_trace_packing": "No",
         "windows_per_trace": "All eligible actions; no arbitrary cap",
@@ -175,73 +176,105 @@
         "terminal_only": "No",
         "example_order": "Reshuffle each pass",
         "optimizer": "AdamW",
-        "learning_rate": "1e-6",
+        "learning_rate": "1e-5",
         "schedule": "Constant",
         "warmup": "0%",
-        "global_batch": "32 examples",
+        "global_batch": "8 examples",
         "microbatch": "1 example per GPU",
-        "gradient_accumulation": "4 steps",
-        "epochs": "1",
+        "gradient_accumulation": "1 step",
+        "epochs": "2",
         "weight_decay": "0",
         "gradient_clip": "1.0",
         "label_smoothing": "0",
         "dropout": "0",
-        "shuffle_seed": "17",
+        "shuffle_seed": "20260914",
         "nodes": "1",
         "gpus_per_node": "8",
-        "checkpoint_every": "25 optimizer updates",
+        "priority": "c1",
+        "checkpoint_every": "20 optimizer updates",
         "checkpoints_kept": "3",
         "wandb": "All scalar training measures; no prompts or traces",
         "training_loss": "Every optimizer update",
-        "fleet_dev_eval": "20 development tasks after the run",
+        "fleet_dev_eval": "17 development tasks after the run",
         "dev_attempts": "1 per task",
         "final_eval": "Only after finalists are chosen",
-        "webexploitbench": "After every accepted run; development evidence",
-        "external_harness": "Frozen matched OpenCode and Qwen Code",
+        "webexploitbench": "Immediately after every accepted checkpoint; report-only transfer check, never a selection signal",
+        "external_harness": "Frozen OpenCode 1.18.27 only",
         "checkpoint_choice": "Best Fleet dev result; earlier checkpoint wins a tie",
         "stop_rule": "Non-finite loss or gradients, or a broken checkpoint",
         "advance_rule": "Clean run and reload plus Fleet development lift",
         "eval_seed": "Same fixed attempt seeds for every comparison",
-        "relative_cost": "1.0×"
+        "relative_cost": "2 data passes and 230 optimizer updates: 2 × ceil(916 examples ÷ 8); the trainer keeps the last partial batch"
       },
       "runs": [
         {
           "rank": 1,
-          "run_id": "SFT-01-teacher-broad",
-          "research_question": "Can balanced strong-teacher actions improve unseen Fleet tasks?",
-          "status": "Run first",
-          "why_priority": "Strong simple baseline; fixes the old five-window sampling weakness.",
+          "run_id": "SFT-01-teacher-broad / Fresh75 step 230",
+          "research_question": "Can a broad natural mix of verified strong-teacher actions improve unseen Fleet tasks?",
+          "status": "Training completed; evaluation pending",
+          "why_priority": "This broad-action teacher run finished 230 updates and now needs matched Fleet and OpenCode evaluation.",
           "compare_with": "Untrained base Qwen",
-          "launch_after": "New data audit and one-step check pass",
-          "changes": {}
+          "launch_after": "Do not relaunch; reload the accepted checkpoint, then immediately run the report-only OpenCode transfer check and the fixed Fleet development set without using transfer scores for any selection",
+          "changes": {
+            "trainer": "Fleet SkyRL full-weight SFT spread across 8 GPUs",
+            "teacher_models": "113 GPT sessions, 1 Grok session, and 1 Kimi session",
+            "trace_cap": "No per-family cap; all 115 qualifying sessions",
+            "source_balance": "Natural accepted-source mix; no teacher reweighting",
+            "task_balance": "Every fitting action once across 37 covered training tasks; no task reweighting",
+            "duplicate_rule": "Remove exact trajectory and exact window duplicates only",
+            "length_preference": "Keep every fitting task-rich action; no family length reweighting",
+            "data_seed": "20260914 for deterministic corpus construction",
+            "source_harness": "Qualified tool-use source records",
+            "source_context": "Task anchor, complete prior rounds, and up to 4,096 optional earlier tokens; no token truncation",
+            "target_position": "One or more consecutive original assistant actions after complete context",
+            "stage_weights": "Uniform supervised action tokens; no stage labels or extra report weight",
+            "long_trace_weight": "Every eligible action once, so longer qualifying sessions contribute more actions",
+            "repeated_actions": "Keep unless the complete trajectory or training window is an exact duplicate",
+            "global_batch": "8 examples",
+            "gradient_accumulation": "1 step",
+            "epochs": "2",
+            "learning_rate": "1e-5",
+            "shuffle_seed": "20260914",
+            "checkpoint_every": "20 optimizer updates",
+            "checkpoint_choice": "Predeclared final step 230; Fleet development evaluation is still pending",
+            "relative_cost": "2 data passes and 230 optimizer updates: 2 × ceil(916 examples ÷ 8); the trainer keeps the last partial batch"
+          }
         },
         {
           "rank": 2,
           "run_id": "SFT-02-self-broad",
           "research_question": "Does Qwen learn better from its own successful style?",
-          "status": "Run after SFT-01",
+          "status": "Blocked pending an exact OpenCode self corpus and dose matcher",
           "why_priority": "Directly tests style matching at the same training dose.",
           "compare_with": "SFT-01",
-          "launch_after": "SFT-01 data counts are frozen",
+          "launch_after": "A current-split Qwen-success corpus with its exact OpenCode request prefix covers the exact same 37 task families as SFT-01, and a tested sampler matches every family's SFT-01 target-token weight, 2,072,122 total target-token exposures, and 230 updates",
           "changes": {
+            "train_pool": "The exact same 37 training task families covered by SFT-01",
             "trace_source": "Verified Qwen successes",
             "teacher_models": "None",
             "teacher_self_ratio": "0 : 100",
-            "source_balance": "One Qwen source"
+            "source_balance": "One Qwen source",
+            "task_balance": "Match SFT-01's exact supervised-token total separately for each of the same 37 task families",
+            "data_fraction": "Deterministically sample or repeat to 1,036,061 supervised target tokens per pass",
+            "relative_cost": "Match SFT-01: 2,072,122 target-token exposures and 230 optimizer updates"
           }
         },
         {
           "rank": 3,
           "run_id": "SFT-03-mix-50-50",
           "research_question": "Does an equal teacher-and-Qwen mixture combine strategy quality with style matching?",
-          "status": "Run after SFT-01 and SFT-02",
+          "status": "Blocked pending both exact source corpora and the dose matcher",
           "why_priority": "A mixed source is a plausible winner and connects the first two results.",
           "compare_with": "SFT-01 and SFT-02",
-          "launch_after": "Matched teacher and self token pools exist",
+          "launch_after": "Teacher and exact OpenCode self pools both cover the exact same 37 task families as SFT-01, and a tested sampler makes each family 50% teacher and 50% Qwen while matching that family's SFT-01 target-token weight, 2,072,122 total exposures, and 230 updates",
           "changes": {
+            "train_pool": "The exact same 37 training task families covered by SFT-01",
             "trace_source": "Verified teacher and Qwen successes",
             "teacher_self_ratio": "50 : 50",
-            "source_balance": "Equal teacher and Qwen target tokens"
+            "source_balance": "Equal teacher and Qwen target tokens",
+            "task_balance": "Within each of the same 37 task families, match SFT-01's exact supervised-token total and split it 50:50 between teacher and Qwen",
+            "data_fraction": "Deterministically sample or repeat to 1,036,061 supervised target tokens per pass",
+            "relative_cost": "Match SFT-01: 2,072,122 target-token exposures and 230 optimizer updates"
           }
         },
         {
@@ -251,56 +284,63 @@
           "status": "Run after SFT-01",
           "why_priority": "Extraction may matter more than small optimizer changes.",
           "compare_with": "SFT-01",
-          "launch_after": "Action labels pass a blinded spot check",
+          "launch_after": "Action labels pass a blinded spot check and a tested sampler matches 2,072,122 target-token exposures plus 230 updates",
           "changes": {
             "target_actions": "Exploration, exploit-changing, recovery, and report actions",
             "stage_weights": "Explore 2 · exploit 2 · report 1",
-            "windows_per_trace": "One example per distinct useful action"
+            "windows_per_trace": "One example per distinct useful action",
+            "data_fraction": "Deterministically sample or repeat to 1,036,061 supervised target tokens per pass",
+            "relative_cost": "Match SFT-01: 2,072,122 target-token exposures and 230 optimizer updates"
           }
         },
         {
           "rank": 5,
           "run_id": "SFT-05-split-b",
           "research_question": "Does the main teacher result repeat on a second balanced split?",
-          "status": "Run if SFT-01 lifts",
+          "status": "Blocked until the splitter can lock the final set",
           "why_priority": "Protects against a lucky development assignment.",
           "compare_with": "SFT-01",
-          "launch_after": "SFT-01 shows Fleet development lift",
+          "launch_after": "SFT-01 shows Fleet development lift and tested split tooling can reassign only the current 50 train plus 17 development families while preserving the exact final 8",
           "changes": {
-            "task_split": "Balanced split B",
-            "train_pool": "59 split-B filtered Fleet tasks",
-            "dev_pool": "20 split-B unseen Fleet tasks"
+            "task_split": "A separately frozen split B over only the current train and development families",
+            "train_pool": "50 reassigned tasks from the current non-final 67",
+            "dev_pool": "17 reassigned unseen tasks from the current non-final 67",
+            "final_pool": "The same exact 8 untouched final tasks, locked by identity"
           }
         },
         {
           "rank": 6,
           "run_id": "SFT-06-lr-high",
-          "research_question": "Is learning rate 1e-6 too cautious?",
+          "research_question": "Is learning rate 1e-5 too cautious?",
           "status": "After data-source comparison",
-          "why_priority": "3e-6 is an informative high boundary.",
+          "why_priority": "3e-5 is an informative high boundary and must begin as a short stability canary.",
+          "compare_with": "Best of SFT-01 to SFT-04",
+          "launch_after": "Best data recipe is selected",
+          "changes": {"learning_rate": "3e-5"}
+        },
+        {
+          "rank": 7,
+          "run_id": "SFT-07-lr-low",
+          "research_question": "Is learning rate 1e-5 too aggressive?",
+          "status": "After data-source comparison",
+          "why_priority": "3e-6 tests the stable low boundary.",
           "compare_with": "Best of SFT-01 to SFT-04",
           "launch_after": "Best data recipe is selected",
           "changes": {"learning_rate": "3e-6"}
         },
         {
-          "rank": 7,
-          "run_id": "SFT-07-lr-low",
-          "research_question": "Is learning rate 1e-6 too aggressive?",
-          "status": "After data-source comparison",
-          "why_priority": "3e-7 tests the stable low boundary.",
-          "compare_with": "Best of SFT-01 to SFT-04",
-          "launch_after": "Best data recipe is selected",
-          "changes": {"learning_rate": "3e-7"}
-        },
-        {
           "rank": 8,
-          "run_id": "SFT-08-batch-8",
-          "research_question": "Do noisier, more frequent updates generalize better?",
+          "run_id": "SFT-08-batch-32",
+          "research_question": "Do smoother, less frequent updates generalize better than batch 8?",
           "status": "After data-source comparison",
-          "why_priority": "Batch 8 is the small useful boundary.",
-          "compare_with": "Best recipe at batch 32",
+          "why_priority": "Batch 32 is the first larger-batch boundary relative to the accepted batch-8 run.",
+          "compare_with": "Best recipe at batch 8",
           "launch_after": "Best data recipe is selected",
-          "changes": {"global_batch": "8 examples", "gradient_accumulation": "1 step"}
+          "changes": {
+            "global_batch": "32 examples",
+            "gradient_accumulation": "4 steps",
+            "relative_cost": "2 data passes and 58 optimizer updates: 2 × ceil(916 examples ÷ 32); the trainer keeps the last partial batch"
+          }
         },
         {
           "rank": 9,
@@ -308,19 +348,23 @@
           "research_question": "Do smoother, larger updates improve stability?",
           "status": "After data-source comparison",
           "why_priority": "Batch 64 explores the opposite boundary.",
-          "compare_with": "Best recipe at batch 32",
+          "compare_with": "Best recipe at batch 8 and batch 32",
           "launch_after": "Best data recipe is selected",
-          "changes": {"global_batch": "64 examples", "gradient_accumulation": "8 steps"}
+          "changes": {
+            "global_batch": "64 examples",
+            "gradient_accumulation": "8 steps",
+            "relative_cost": "2 data passes and 30 optimizer updates: 2 × ceil(916 examples ÷ 64); the trainer keeps the last partial batch"
+          }
         },
         {
           "rank": 10,
-          "run_id": "SFT-10-two-epochs",
-          "research_question": "Is one pass too little for sparse successful records?",
+          "run_id": "SFT-10-one-epoch",
+          "research_question": "Does one pass generalize better than the accepted two-pass dose?",
           "status": "After stable rate and batch",
-          "why_priority": "Two passes are the smallest meaningful dose increase.",
-          "compare_with": "Best one-epoch run",
+          "why_priority": "One pass tests the lower-dose boundary against the accepted two-pass run.",
+          "compare_with": "Best two-epoch run",
           "launch_after": "Stable learning rate and batch are selected",
-          "changes": {"epochs": "2", "relative_cost": "2.0×"}
+          "changes": {"epochs": "1", "relative_cost": "1 data pass; about half the accepted run's exposure"}
         },
         {
           "rank": 11,
@@ -328,9 +372,9 @@
           "research_question": "Does substantially more repetition help or overfit?",
           "status": "Run after SFT-10",
           "why_priority": "Four passes reveal the high-dose boundary.",
-          "compare_with": "SFT-10",
-          "launch_after": "SFT-10 stays stable",
-          "changes": {"epochs": "4", "relative_cost": "4.0×"}
+          "compare_with": "SFT-01 and SFT-10",
+          "launch_after": "The one- and two-epoch runs stay stable",
+          "changes": {"epochs": "4", "relative_cost": "4 data passes; twice the accepted run's exposure"}
         },
         {
           "rank": 12,
@@ -339,11 +383,13 @@
           "status": "If mixed data is promising",
           "why_priority": "Refines the mix toward stronger strategy demonstrations.",
           "compare_with": "SFT-03",
-          "launch_after": "SFT-03 matches or beats both single sources",
+          "launch_after": "SFT-03 matches or beats both single sources and the same tested dose matcher is used",
           "changes": {
             "trace_source": "Verified teacher and Qwen successes",
             "teacher_self_ratio": "75 : 25",
-            "source_balance": "75% teacher and 25% Qwen target tokens"
+            "source_balance": "75% teacher and 25% Qwen target tokens",
+            "data_fraction": "Deterministically sample or repeat to 1,036,061 supervised target tokens per pass",
+            "relative_cost": "Match SFT-01: 2,072,122 target-token exposures and 230 optimizer updates"
           }
         },
         {
@@ -353,11 +399,13 @@
           "status": "If mixed data is promising",
           "why_priority": "Tests whether style matching matters more than teacher coverage.",
           "compare_with": "SFT-03",
-          "launch_after": "SFT-03 matches or beats both single sources",
+          "launch_after": "SFT-03 matches or beats both single sources and the same tested dose matcher is used",
           "changes": {
             "trace_source": "Verified teacher and Qwen successes",
             "teacher_self_ratio": "25 : 75",
-            "source_balance": "25% teacher and 75% Qwen target tokens"
+            "source_balance": "25% teacher and 75% Qwen target tokens",
+            "data_fraction": "Deterministically sample or repeat to 1,036,061 supervised target tokens per pass",
+            "relative_cost": "Match SFT-01: 2,072,122 target-token exposures and 230 optimizer updates"
           }
         },
         {
@@ -425,8 +473,13 @@
           "status": "Only if teacher data wins",
           "why_priority": "Teacher identity matters after the broad source question.",
           "compare_with": "SFT-01",
-          "launch_after": "GPT covers the same task families",
-          "changes": {"teacher_models": "GPT only", "source_balance": "One teacher source"}
+          "launch_after": "GPT covers the same task families and the same tested dose matcher is used",
+          "changes": {
+            "teacher_models": "GPT only",
+            "source_balance": "One teacher source",
+            "data_fraction": "Deterministically sample or repeat to 1,036,061 supervised target tokens per pass",
+            "relative_cost": "Match SFT-01: 2,072,122 target-token exposures and 230 optimizer updates"
+          }
         },
         {
           "rank": 20,
@@ -435,8 +488,13 @@
           "status": "Only if teacher data wins",
           "why_priority": "Estimates source quality after the broader question.",
           "compare_with": "SFT-01",
-          "launch_after": "Opus covers the same task families",
-          "changes": {"teacher_models": "Claude Opus only", "source_balance": "One teacher source"}
+          "launch_after": "Opus covers the same task families and the same tested dose matcher is used",
+          "changes": {
+            "teacher_models": "Claude Opus only",
+            "source_balance": "One teacher source",
+            "data_fraction": "Deterministically sample or repeat to 1,036,061 supervised target tokens per pass",
+            "relative_cost": "Match SFT-01: 2,072,122 target-token exposures and 230 optimizer updates"
+          }
         },
         {
           "rank": 21,
@@ -445,8 +503,13 @@
           "status": "Only if teacher data wins",
           "why_priority": "Completes the source comparison but has less coverage.",
           "compare_with": "SFT-01",
-          "launch_after": "Grok covers the same task families",
-          "changes": {"teacher_models": "Grok only", "source_balance": "One teacher source"}
+          "launch_after": "Grok covers the same task families and the same tested dose matcher is used",
+          "changes": {
+            "teacher_models": "Grok only",
+            "source_balance": "One teacher source",
+            "data_fraction": "Deterministically sample or repeat to 1,036,061 supervised target tokens per pass",
+            "relative_cost": "Match SFT-01: 2,072,122 target-token exposures and 230 optimizer updates"
+          }
         },
         {
           "rank": 22,
@@ -454,12 +517,11 @@
           "research_question": "Does the winning result repeat with different randomness?",
           "status": "For the leading recipe",
           "why_priority": "Estimates training noise before a final claim.",
-          "compare_with": "Winner with seed 17",
+          "compare_with": "Winner with data and training random seeds 20260914",
           "launch_after": "One clear leading recipe exists",
           "changes": {
-            "data_seed": "29",
-            "shuffle_seed": "29",
-            "eval_seed": "Second fixed matched seed set"
+            "data_seed": "20260915 for deterministic resampling of the winning recipe",
+            "shuffle_seed": "20260915"
           }
         },
         {
@@ -553,7 +615,7 @@
             ["tool_seconds", "Tool-call time limit", "Wall-clock time allowed for one tool call."],
             ["tool_output_chars", "Tool-output limit", "Maximum characters returned by one tool call."],
             ["parallel_tools", "Parallel tool calls", "Whether multiple tool calls may run together."],
-            ["invalid_retry", "Invalid-attempt retry", "Whether a broken attempt is replaced, scored zero, or stops the batch."]
+            ["invalid_retry", "Invalid-attempt retry", "The bounded rule for excluding and replacing a technically broken attempt. A broken attempt is never scored as a model failure."]
           ]
         },
         {
@@ -575,8 +637,8 @@
             ["outcome_reward", "Outcome reward", "How the official score becomes a number for RL."],
             ["partial_reward", "Partial credit", "Whether verified intermediate progress contributes reward."],
             ["report_bonus", "Report bonus", "Extra reward for written analysis beyond the official score."],
-            ["invalid_handling", "Broken attempt reward", "Reward assigned to a technically invalid attempt."],
-            ["timeout_handling", "Timeout reward", "Reward assigned when an attempt reaches a limit."],
+            ["invalid_handling", "Broken attempt handling", "How a technically invalid attempt is preserved and kept out of reward and training."],
+            ["timeout_handling", "Time-limit handling", "How a genuine model attempt at the fixed limit is distinguished from a technical timeout."],
             ["zero_variance_groups", "All-same reward groups", "What happens when every attempt in a group gets the same reward."],
             ["reward_normalization", "Reward normalization", "How scores are centered and scaled before updating."],
             ["reward_clipping", "Reward limits", "Whether unusually high or low rewards are capped."],
@@ -630,7 +692,7 @@
             ["checkpoint_choice", "Checkpoint selection", "How one saved checkpoint is chosen."],
             ["stop_rule", "Early stop rule", "Evidence that ends a run early."],
             ["advance_rule", "Promotion rule", "Evidence required before a larger run."],
-            ["relative_cost", "Relative GPU cost", "Rough cost versus a one-update one-node canary."]
+            ["relative_cost", "Relative GPU cost", "Rough cost versus the one-update four-node Miles gate."]
           ]
         }
       ],
@@ -638,33 +700,33 @@
         "model": "Qwen3.8-27B",
         "start_checkpoint": "Exact untrained base model",
         "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
-        "backend": "Fleet SkyRL RL system with Fleet V1 tasks",
-        "algorithm": "GRPO: compare attempts within each task group",
+        "backend": "Fleet Miles/FTI RL system with the qualified OpenCode adapter for Fleet tasks",
+        "algorithm": "GRPO through Miles: compare attempts within each task group",
         "trainable_weights": "All model weights",
         "precision": "BF16, a 16-bit training number format",
         "reference_model": "Exact starting checkpoint, frozen",
-        "task_split": "Balanced split A",
-        "train_pool": "59 filtered Fleet tasks",
-        "dev_pool": "20 balanced unseen Fleet tasks",
-        "final_pool": "10 untouched Fleet tasks",
+        "task_split": "Fixed representative split from 14 September 2026",
+        "train_pool": "50 execution-proven Fleet tasks",
+        "dev_pool": "17 representative unseen Fleet tasks",
+        "final_pool": "8 untouched Fleet tasks",
         "task_sampler": "Balance task family and application",
         "curriculum": "Uniform mix",
         "train_tasks_per_update": "1",
         "replay": "None; fresh attempts only",
         "data_seed": "11",
-        "harness": "Fleet V1 agent loop",
+        "harness": "OpenCode 1.18.27 through the qualified Miles adapter",
         "conversation_format": "Exact Qwen chat format",
-        "tools": "bash and submit_report",
-        "compaction": "Fixed audited compaction policy",
-        "context_tokens": "98,304",
-        "response_tokens": "81,920",
-        "tokens_per_turn": "4,096",
-        "max_turns": "600",
-        "episode_seconds": "2,400 seconds",
+        "tools": "The exact OpenCode challenge-shell and report-submission tool interface",
+        "compaction": "Audited OpenCode compaction that preserves task and tool state",
+        "context_tokens": "262,144 tokens before each compaction",
+        "response_tokens": "No small cumulative cap; bounded by turns, time, and verified compaction",
+        "tokens_per_turn": "32,768",
+        "max_turns": "1,200",
+        "episode_seconds": "14,400 seconds (4 hours)",
         "tool_seconds": "330 seconds",
         "tool_output_chars": "50,000 characters",
         "parallel_tools": "No",
-        "invalid_retry": "No silent retry; preserve and score zero",
+        "invalid_retry": "Preserve and exclude the invalid attempt; allow at most one predeclared replacement for its slot; abort the update if the full valid group is still incomplete",
         "samples_per_task": "8",
         "task_groups_per_update": "1",
         "total_rollouts_update": "8",
@@ -676,8 +738,8 @@
         "outcome_reward": "Official score from 0 to 1",
         "partial_reward": "Verified official partial credit",
         "report_bonus": "None",
-        "invalid_handling": "0 reward and visible invalid counter",
-        "timeout_handling": "0 reward and visible budget counter",
+        "invalid_handling": "Exclude from rewards and optimizer input; keep a visible invalid counter; never convert a technical failure into zero reward",
+        "timeout_handling": "A healthy attempt that reaches the fixed model time limit receives its official score; a technical timeout is excluded as invalid",
         "zero_variance_groups": "Keep and record; no update signal",
         "reward_normalization": "Within each task group",
         "reward_clipping": "None",
@@ -702,22 +764,22 @@
         "scheduler": "Constant",
         "warmup": "0%",
         "weight_decay": "0",
-        "nodes": "1",
+        "nodes": "4",
         "gpus_per_node": "8",
-        "inference_engines": "2 per node",
-        "tensor_parallel": "4 GPUs per engine",
-        "placement": "Generation and training share the node",
+        "inference_engines": "Miles distributed generation workers under the exact qualified contract",
+        "tensor_parallel": "8 GPUs per model copy; context parallel size 4",
+        "placement": "Exact qualified 4-node, 32-GPU Miles placement; no inferred alternative",
         "priority": "c1",
-        "eval_interval": "After the final update",
-        "checkpoint_interval": "Every update",
+        "eval_interval": "Every 5 updates",
+        "checkpoint_interval": "Every 5 updates",
         "keep_checkpoints": "2",
         "wandb": "Loss, reward, lengths, invalids, updates, and GPU use; no prompts or traces",
         "recovery_test": "Required before any longer successor",
-        "fleet_dev": "20 development tasks after the run",
+        "fleet_dev": "17 development tasks after the run",
         "dev_attempts": "1 per task",
         "final_eval": "Only after finalists are chosen",
-        "webexploitbench": "After every accepted run; development evidence",
-        "external_harness": "Frozen matched OpenCode and Qwen Code",
+        "webexploitbench": "Immediately after every accepted checkpoint; report-only transfer check, never a selection signal",
+        "external_harness": "Frozen OpenCode 1.18.27 only",
         "checkpoint_choice": "Best Fleet dev result; earlier checkpoint wins a tie",
         "stop_rule": "Non-finite values, no valid rewards, broken checkpoint, or confirmed stall",
         "advance_rule": "Real reward, nonzero update, reload, clean release, and Fleet dev lift",
@@ -726,36 +788,40 @@
       "runs": [
         {
           "rank": 1,
-          "run_id": "RL-01-skyrl-one-update-gate",
-          "research_question": "Can SkyRL complete one real scored Qwen update and reload it?",
-          "status": "Fix in progress, then run",
-          "why_priority": "The previous attempt found an opening-prompt token mismatch before grading; a corrected one-update gate still comes first.",
+          "run_id": "RL-01-miles-one-update-gate",
+          "research_question": "Can Miles complete one real scored Qwen update and reload it?",
+          "status": "Startup qualification repair in progress",
+          "why_priority": "A measured one-update Miles gate is the shortest path to a trustworthy RL checkpoint.",
           "compare_with": "Exact base model before update",
-          "launch_after": "Off-cluster reproduction proves the prompt-token fix",
-          "changes": {}
+          "launch_after": "The local startup qualification, exact-image check, cleanup test, and duplicate check all pass",
+          "changes": {
+            "eval_interval": "After the final update (one update)",
+            "checkpoint_interval": "Every update",
+            "advance_rule": "At least one valid task group has real reward variation, one finite nonzero optimizer update completes, the checkpoint reloads, and every owned GPU is cleanly released; Fleet development lift is not required for this operational gate"
+          }
         },
         {
           "rank": 2,
-          "run_id": "RL-02 / chris-q38-v1rl-c1-a3-ea459e04",
-          "research_question": "Can maintained Miles/FTI complete the same one-update gate?",
-          "status": "Queued as of 13 Sep",
-          "why_priority": "A second working implementation reduces system risk.",
+          "run_id": "RL-02-skyrl-one-update-control",
+          "research_question": "Can SkyRL reproduce the same one-update result if an implementation control is needed?",
+          "status": "Fallback after Miles",
+          "why_priority": "An alternative implementation is useful only after the primary Miles path is measured or genuinely blocked.",
           "compare_with": "RL-01",
-          "launch_after": "A whole compatible node is available",
+          "launch_after": "RL-01 is accepted or has a proved Miles-specific blocker",
           "changes": {
-            "backend": "Fleet Miles/FTI RL system with Fleet V1 tasks",
-            "algorithm": "GRPO through the Miles implementation",
-            "kl_coefficient": "0",
-            "clip_upper": "0.28",
-            "tokens_per_turn": "2,048"
+            "backend": "Fleet SkyRL RL system using the same OpenCode task contract",
+            "algorithm": "GRPO through SkyRL with Miles-matched mathematical settings",
+            "eval_interval": "After the final update (one update)",
+            "checkpoint_interval": "Every update",
+            "advance_rule": "At least one valid task group has real reward variation, one finite nonzero optimizer update completes, the checkpoint reloads, and every owned GPU is cleanly released; Fleet development lift is not required for this operational gate"
           }
         },
         {
           "rank": 3,
-          "run_id": "RL-03-base-skyrl-10u",
+          "run_id": "RL-03-base-miles-10u",
           "research_question": "Do ten updates from base Qwen produce Fleet development lift?",
           "status": "After RL-01 passes",
-          "why_priority": "Shortest run long enough to show a trend after plumbing works.",
+          "why_priority": "Shortest Miles run long enough to show a trend after the one-update gate works.",
           "compare_with": "Base Qwen and RL-01",
           "launch_after": "RL-01 update and reload pass",
           "changes": {
@@ -765,8 +831,6 @@
             "updates": "10",
             "global_episode_batch": "32 attempts",
             "minibatch": "4 task groups",
-            "eval_interval": "Every 5 updates",
-            "checkpoint_interval": "Every 5 updates",
             "relative_cost": "About 40×"
           }
         },
@@ -832,21 +896,19 @@
         },
         {
           "rank": 7,
-          "run_id": "RL-07-miles-matched-10u",
-          "research_question": "Do SkyRL and Miles agree under a matched ten-update recipe?",
+          "run_id": "RL-07-skyrl-matched-10u",
+          "research_question": "Do Miles and SkyRL agree under a matched ten-update recipe?",
           "status": "Only if RL-02 passes",
           "why_priority": "Compare systems only after both prove one update.",
           "compare_with": "RL-03",
           "launch_after": "RL-02 and RL-03 reload cleanly",
           "changes": {
-            "backend": "Fleet Miles/FTI RL system with Fleet V1 tasks",
-            "algorithm": "GRPO through the Miles implementation",
+            "backend": "Fleet SkyRL RL system using the same OpenCode task contract",
+            "algorithm": "GRPO through the SkyRL implementation with Miles-matched mathematical settings",
             "train_tasks_per_update": "4",
             "task_groups_per_update": "4",
             "total_rollouts_update": "32",
             "updates": "10",
-            "kl_coefficient": "0",
-            "clip_upper": "0.28",
             "global_episode_batch": "32 attempts",
             "minibatch": "4 task groups",
             "relative_cost": "About 40×"
@@ -1144,14 +1206,15 @@
           "rank": 23,
           "run_id": "RL-23-split-b",
           "research_question": "Does the leading short result repeat on split B?",
-          "status": "For a leading recipe",
+          "status": "Blocked until the splitter can lock the final set",
           "why_priority": "Tests dependence on one lucky task assignment.",
           "compare_with": "Leading split-A run",
-          "launch_after": "One clear split-A recipe leads",
+          "launch_after": "One clear split-A recipe leads and tested split tooling can reassign only the current 50 train plus 17 development families while preserving the exact final 8",
           "changes": {
-            "task_split": "Balanced split B",
-            "train_pool": "59 split-B filtered Fleet tasks",
-            "dev_pool": "20 split-B unseen Fleet tasks",
+            "task_split": "A separately frozen split B over only the current train and development families",
+            "train_pool": "50 reassigned tasks from the current non-final 67",
+            "dev_pool": "17 reassigned unseen tasks from the current non-final 67",
+            "final_pool": "The same exact 8 untouched final tasks, locked by identity",
             "train_tasks_per_update": "4",
             "task_groups_per_update": "4",
             "total_rollouts_update": "32",
@@ -1167,10 +1230,9 @@
           "research_question": "Does the leading result repeat with different randomness?",
           "status": "For a leading recipe",
           "why_priority": "RL variance can be large; repeat before scaling duration.",
-          "compare_with": "Winner with seed 11",
+          "compare_with": "Winner with the original generation seed policy",
           "launch_after": "One clear leading recipe exists",
           "changes": {
-            "data_seed": "29",
             "generation_seed": "Second fixed recorded seed policy",
             "train_tasks_per_update": "4",
             "task_groups_per_update": "4",

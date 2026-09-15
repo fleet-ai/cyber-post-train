@@ -1,6 +1,6 @@
 # Qwen3.8-27B cyber training decision space
 
-Last updated: 2026-09-13
+Last updated: 2026-09-15
 
 ## The question
 
@@ -108,12 +108,12 @@ the winner.
   bundle of code and software libraries used to run a job the same way again.
 - **GPU-hour:** one graphics processor used for one hour.
 - **Environment-hour:** one task website kept running for one hour.
-- **Miles:** one of the repository's two software systems for running RL. It
+- **Miles:** the primary software system for the current RL program. It
   generates task attempts, gets scores from the task grader, and uses those
   scores to update the model.
-- **SkyRL:** the repository's other software system for running RL. It serves
-  the same broad purpose as Miles, so the first comparison should give both
-  systems the same model, tasks, budgets, and update settings.
+- **SkyRL:** an alternative RL implementation kept as a controlled fallback.
+  It should be compared with Miles only after the primary Miles path has made
+  a real update or has a proved implementation-specific blocker.
 - **Number notation such as 1e-6:** a compact way to write a small number;
   `1e-6` means `0.000001`.
 
@@ -135,8 +135,8 @@ the experiment means.
 | Exact base weights | The exact bytes of Qwen3.8-27B before training. | Exact saved model version `1d4bf0f2...` and its locked file hashes. | **Must control.** Never compare against a model that merely has the same display name. |
 | Tokenizer and conversation format | The rules that turn text and tool calls into model tokens. | The exact files locked with the base model. | **Must control.** A formatting change can alter tool use by itself. |
 | Numerical format | How precisely weights are stored and computed. | BF16 (the defined 16-bit format) for the Qwen runs described here; do not silently store weights with fewer bits. | **Must control.** A smaller numerical format is a separate experiment. |
-| Harness | The agent program around Qwen. | Qwen Code and OpenCode are two separate experiment blocks. Choose one primary harness; never pool them. | **Test now, but match within each block.** A harness comparison requires a fresh base and trained result under each harness. |
-| Harness version | The exact source and packaged software image for the agent program. | One version that cannot change after publication per experiment block. | **Must control.** “OpenCode” or “Qwen Code” without a version is not enough. |
+| Harness | The agent program around Qwen. | Use OpenCode for every new WebExploitBench arm. Historical Qwen Code results are not part of the current comparison. | **Must control.** A trained model and its base comparator must use the same OpenCode program. |
+| Harness version | The exact source and packaged software image for the agent program. | OpenCode 1.18.27 with one immutable packaged image per comparison. | **Must control.** “OpenCode” without an exact version and image is not enough. |
 | System instructions and tools | The instructions and actions available to the agent. | The task's exact instructions, command tool, and final-report tool (internally named `bash` and `submit_report`). | **Must control.** Tool definitions must be enforced by the running system, not only described in text. |
 | Conversation shortening | Whether an overlong conversation is summarized and then continued. | Off, or one proven summarize-and-continue policy. | **Test later.** First prove that a shortened run really continues. Never call a context failure a model failure. |
 | Attempt budget | Maximum time, turns, and tokens allowed for an evaluation attempt. | One frozen budget derived from successful training-only traces; apply it to base and trained models. | **Must control.** Longer budgets often improve scores without training. |
@@ -146,23 +146,25 @@ the experiment means.
 
 ## 2. Task set, split, and sampling
 
-The current strict public manifest retains 89 runnable, previously validated
-task versions from a historical set of 160. Two representative split variants
-each contain 59 training tasks, 20 development tasks, and the same 10 final-test
-tasks. Ten final tasks can reveal a large change but cannot support a precise
-claim; increasing the high-quality task pool remains important.
+The current catalog contains 1,055 production blackbox task versions. The
+conservative execution-proven set contains 75: 50 training tasks, 17
+development tasks, and 8 untouched final-test tasks. The split keeps reviewed
+task families together and balances application, environment, difficulty, and
+vulnerability labels as closely as the small set permits. Eight final tasks can
+reveal only a large change, so expanding the execution-proven pool remains
+important.
 
 | Variable | What it means | Values worth testing | Level and decision |
 |---|---|---|---|
 | Task quality gate | Which challenges count as real tasks rather than broken infrastructure. | Only tasks with a demonstrated working environment, working grader, clean cleanup, and complete current launch information. | **Must control.** A genuine failed solve is eligible; an infrastructure failure is not. |
 | Split unit | What stays together when tasks are divided. | Entire task family, including all versions and sessions. | **Must control.** Never split individual windows or attempts at random. |
-| Split variant | A different representative assignment of task families. | Existing split A and split B, each 59/20/10. | **Test now.** The final 10 stay untouched; compare sensitivity across the two train/development assignments. |
+| Split variant | A different representative assignment of task families. | Use the frozen 50/17/8 split first. A later split B may reassign only the current 50 training and 17 development families; the exact 8 final families stay locked. | **Test later for a leading recipe.** The current splitter lacks a final-lock input, so split B is blocked until that guard and its tests exist. Never improvise a split after seeing results. |
 | Application balance | The mix of products or web applications. | Match the available application proportions, or give each application equal total weight. | **Test now.** Report both task-level and application-level results. |
 | Difficulty balance | The mix of easier and harder tasks. | Representative natural mix versus equalized easy/medium/hard weight, but only when difficulty labels are independently verified. | **Test later.** Do not invent difficulty from test outcomes. |
 | Vulnerability-family balance | The mix of underlying bug types. | Representative mix versus equal family weight, once reliable labels exist. | **Test later.** Current opaque names are not a trustworthy classification of security weaknesses. |
 | Per-task sampling weight | How often each training task is selected. | Uniform by task family; equal weight by application; favor tasks that are neither almost always solved nor almost always failed, based only on training results. | **Test now.** Uniform-by-family is the clean baseline. |
 | Repetition cap | Whether tasks with many saved successes dominate SFT. | At most 1, 2, or 4 traces per task family. | **Test now.** Measure the mix by supervised tokens as well as trace count. |
-| Curriculum order | The order in which training examples are shown. | Fully shuffled; initial exploration and tool-use actions before complete solution chains. | **Test now.** The current pool has 82 medium, 6 hard, and 1 easy task, so it cannot support a meaningful easy-to-hard comparison. |
+| Curriculum order | The order in which training examples are shown. | Fully shuffled; initial exploration and tool-use actions before complete solution chains. | **Test now.** The current pool has 68 medium, 6 hard, and 1 easy task, so it cannot support a meaningful easy-to-hard comparison. |
 | Curriculum pace | How quickly complete solutions enter after action-focused examples. | All at once; two equal stages; three stages using 25%/35%/40% of updates. | **Test later.** Keep total examples and update count matched. |
 | Source age | Whether old but still valid task versions remain in training. | Latest valid version only versus all version-compatible training traces. | **Test later.** Never let versions cross task-family splits. |
 | Data amount | How much approved training signal is used. | 25%, 50%, and 100% of task families, selected with the same representative sampler. | **Test now.** This reveals whether quality, diversity, or raw quantity limits lift. |
@@ -172,8 +174,11 @@ claim; increasing the high-quality task pool remains important.
 Teacher and self traces answer different questions. Teacher traces test whether
 Qwen can imitate strategies it did not reliably discover. Self traces preserve
 Qwen's own style and test whether verified self-generated successes can be
-amplified. They should be compared at matched task coverage and matched numbers
-of supervised tokens.
+amplified. A source-only comparison must use the exact same task families and
+the exact same supervised-token weight for each family, as well as the same
+total number of supervised tokens and optimizer updates. Otherwise task coverage
+or family weighting, rather than teacher versus Qwen style, could explain the
+result.
 
 | Variable | What it means | Values worth testing | Level and decision |
 |---|---|---|---|
@@ -217,8 +222,8 @@ One extreme value may be used only in a short canary if its stability is unknown
 
 | Variable | What it means | Values worth testing | Level and decision |
 |---|---|---|---|
-| Learning rate | Update size. Too low learns little; too high damages useful behavior. | 3e-7, 1e-6, 3e-6; 1e-5 only as a brief high-risk test. | **Test now.** The repository default is 3e-6; the successful historical run used 1e-6. |
-| Global batch size | Number of SFT windows combined per update across all GPUs. | 8, 32, 64. | **Test now.** Also log supervised target tokens per update because windows have different lengths. |
+| Learning rate | Update size. Too low learns little; too high damages useful behavior. | 3e-6, 1e-5, and a short 3e-5 stability canary. | **Test now.** The accepted Fresh75 run used 1e-5; explore one geometric boundary on either side before narrowing. |
+| Global batch size | Number of SFT windows combined per update across all GPUs. | 8, 32, 64. With 916 rows, two complete passes, and the trainer's kept final partial batch, these produce 230, 58, and 30 updates respectively: `passes × ceil(rows ÷ batch)`. | **Test now.** Also log supervised target tokens per update because windows have different lengths. |
 | Microbatch per GPU | Rows processed at once by each GPU before update signals are combined. | 1 first; 2 only if memory allows. | **Test later.** This should not change the scientific result when global batch stays fixed, but it can cause small rounding differences. |
 | Epoch count | How many complete passes are made over SFT rows. | 1, 2, 4. | **Test now.** Evaluate saved checkpoints inside each run; do not assume the last epoch is best. |
 | Total supervised tokens | The actual amount of assistant output learned from. | Match across data-mixture comparisons; report exact count per epoch and overall. | **Must control.** Equal row counts are not equal training doses. |
@@ -251,7 +256,7 @@ and a recoverable checkpoint is saved.
 | Outcome reward | Reward for the final task result. | Binary 0/1 first; verified partial progress in a separate later arm. | **Test now.** Binary reward is easiest to audit. |
 | Partial-progress reward | Credit for verified intermediate objectives. | Off; exact fraction provided by the grader; a separately studied blend only after the fraction is audited. | **Test later.** Use only progress confirmed by the grader, never a model's self-claim. |
 | Report-format reward | Extra credit for calling the final report tool correctly. | None first; at most a small separately logged bonus later. | **Test later.** A large format bonus can teach reporting without exploitation. |
-| Invalid-attempt handling | What happens when the environment, model service, or grader breaks. | Exclude from model updates and preserve the reason. | **Must control.** Do not turn infrastructure failures into negative model feedback. |
+| Invalid-attempt handling | What happens when the environment, model service, or grader breaks. | Preserve and exclude the attempt from reward and training. Allow at most one replacement for that slot under the written rule; abort the update if the full valid group is still incomplete. | **Must control.** Never give a technical failure zero reward: that would turn broken infrastructure into negative model feedback. |
 | Time-limit handling | What happens when an otherwise healthy attempt reaches its declared time, turn, or token limit. | Count it as a genuine model failure under the prewritten rule; mark it invalid only when infrastructure, rather than the model, caused the timeout. | **Must control.** Track time-limit rate alongside reward. |
 | Group reward variation | Whether attempts at one task include both successes and failures. | Require and log mixed-reward groups in the canary. | **Must control before scale.** Ordinary GRPO learns nothing from all-zero or all-one groups. |
 | Zero-variation groups | How groups with identical rewards are handled. | Keep them and produce zero update as the baseline; later compare a fixed, prewritten replacement cap that seeks useful reward differences. | **Test now after baseline works.** Record every replacement because it changes which tasks training sees. |
@@ -261,13 +266,14 @@ and a recoverable checkpoint is saved.
 ## 7. RL attempts, model updates, and running system
 
 The repository has two implementation paths, Miles and SkyRL. They are training
-systems, not scientific algorithms by themselves. First compare them with the
-same model, data, reward, group shape, and one-step canary. Scale only a path
-that produces a real nonzero reward, update, checkpoint, and successful reload.
+systems, not scientific algorithms by themselves. Miles is the primary path;
+SkyRL is a matched fallback and implementation control. Scale only a path that
+produces a real reward-bearing update, checkpoint, successful reload, and clean
+resource release.
 
 | Variable | What it means | Values worth testing | Level and decision |
 |---|---|---|---|
-| RL implementation | The training system that coordinates generation and updates. | Miles and SkyRL, first as matched one-step canaries. | **Test now operationally.** Do not treat one system merely starting as evidence of learning. |
+| RL implementation | The training system that coordinates generation and updates. | Miles one-update gate first; SkyRL only as a matched fallback or later control. | **Test now operationally.** Do not treat one system merely starting as evidence of learning. |
 | RL algorithm | The rule that converts rewards into weight updates. | GRPO first; Dr. GRPO, DAPO-style GRPO, and GSPO later; PPO only if its extra expected-reward estimate and added complexity are justified. | **Test later after GRPO works.** Each algorithm needs its own verified implementation. |
 | Attempts per task | Number of fresh responses compared for the same task. | 8 and 16; 4 only when enough tasks combine into a total batch that divides evenly across all training GPUs. | **Test now.** Larger groups improve the chance of mixed rewards but cost more website time. |
 | Different tasks per update | Number of distinct task prompts contributing to one update. | 1, 2, 4, 8. Start with 1×8 for the canary, then 4×8 if speed allows. | **Test now.** More tasks reduce dependence on one challenge. |
@@ -281,16 +287,17 @@ that produces a real nonzero reward, update, checkpoint, and successful reload.
 | Entropy bonus | An optional reward for keeping output varied. | 0; 1e-4; 1e-3. | **Test later.** Use only if diversity collapses; too much produces noise. |
 | Rollout temperature | Randomness while collecting training attempts. | 0.7, 1.0, 1.2. Start with 1.0. | **Test now.** Evaluation temperature remains fixed separately. |
 | Probability cutoff | How much of the model's token distribution remains available. | Top-p 0.9, 0.95, 1.0. | **Test later.** “Top-p 0.9” keeps the smallest token set whose probabilities add to 90%. |
-| Total context budget | Maximum prompt plus generated tokens in one attempt. | 65,536 and 98,304. Start with the reviewed 98,304-token limit. | **Test now carefully.** Any cutting caused by the limit must be reported. |
-| Response budget | Portion of total context available for model generation. | 49,152 and 81,920 tokens. | **Test now carefully.** It must remain below the total budget. |
-| Tokens per turn | Maximum generated tokens before the next tool call or observation. | 2,048; 4,096; 8,192. Start with 4,096. | **Test now.** A too-small turn cap can prevent complete commands or reports. |
-| Turn count | Maximum model/tool cycles in one attempt. | 64 and 80 first; 120 only if successful training-only traces justify it. | **Test now.** Use enough room to finish, then study efficiency. |
-| Attempt time | Real-time deadline for one full attempt. | 1,800; 2,400; 3,600 seconds. Start with 2,400. | **Test now operationally.** Base the choice on valid training-only completion times. |
+| Live context before shortening | Maximum prompt plus generated tokens kept verbatim before the agent shortens its conversation and continues. | 262,144 tokens. A smaller-context arm is an efficiency study only after the long-context path works. | **Must control now.** Reaching the limit must trigger proved continuation, not end the task or silently drop the attempt. |
+| Conversation shortening | How a long episode continues after the live context fills. | Audited OpenCode compaction that preserves task state, tool state, and a verifiable summary. | **Must control now.** A compacted episode is trainable only when its continuation record can be reconstructed exactly. |
+| Cumulative response budget | Total model output allowed across all compacted segments. | No small token cap independent of the declared turn and time limits. | **Must control now.** The old 81,920-token cap is too small for the intended long cyber episodes. |
+| Tokens per turn | Maximum generated tokens before the next tool call or observation. | 8,192; 16,384; 32,768. Start with 32,768. | **Test later for efficiency.** A small cap can prevent complete commands or reports. |
+| Turn count | Maximum model/tool cycles in one attempt. | 1,200 first; 2,000 only when training-only evidence shows the extra room is used. | **Must control now.** More than 1,000 steps must be possible without a context-overflow error. |
+| Attempt time | Real-time deadline for one full attempt. | 7,200; 14,400; 28,800 seconds. Start with four hours. | **Test now operationally.** Base later reductions on valid training-only completion times, not WebExploitBench. |
 | Tool deadline | Maximum time for one command. | At least 330 seconds for a five-minute server limit. | **Must control.** Client timeout must exceed the advertised tool timeout. |
 | Tool-output allowance | Maximum command-result text returned to the model. | 16,000 and 50,000 characters. | **Test now.** Mark any cut clearly and use the same rule in every attempt. |
 | Weight freshness | How current the attempt-producing model is relative to the training model. | Refresh it after every model update first; allow at most one-update delay later. | **Test later.** An unlimited delay trains on behavior from an old model. |
 | Attempt generation and training placement | Whether fresh attempts and model training share GPUs. | Share the same GPUs first; separate them only for a matched speed study. | **Test later.** This should mainly affect computing speed, but confirm that rounding and model-update timing remain comparable. |
-| Checkpoint and evaluation interval | How often RL saves and checks development tasks. | Every 1 step for canary; every 10 or 25 for longer runs; always final. | **Must control operationally.** Keep the best and latest recoverable states. |
+| Checkpoint and evaluation interval | How often RL saves and checks development tasks. | Every update for the one-update gate; every 5 updates for matched 10-update comparisons; every 10 or 25 for longer runs; always final. | **Must control operationally.** A starting-checkpoint or algorithm comparison must not also change this timing. Keep the best and latest recoverable states. |
 | Resume behavior | Whether a stopped run continues from the exact next task/update. | One planned stop-and-resume test before a long run. | **Must control.** Restore weights, optimizer, random state, and data position together. |
 
 Why these anchors? DeepSeekMath used GRPO with learning rate 1e-6, 64 attempts
@@ -318,16 +325,16 @@ attempt is very different from a math answer.
 |---|---|---|---|
 | Primary development measure | The result used to choose recipes. | Fleet development pass@1, averaged equally across task families. | **Must control.** Training loss and prediction error on teacher-written text are health checks, not the target. |
 | Secondary development measures | Other useful views of capability. | pass@4, verified partial progress, application-average success, completion time, turns, and tokens. | **Must control.** Label them secondary before running. |
-| Final measure | The untouched score reported after selection. | Fleet final-test pass@1; pass@4 as secondary; raw per-task outcomes. | **Must control.** Open once per frozen finalist family. With only 10 tasks, treat small differences as uncertain. |
-| External benchmark | A separate test of improvement beyond Fleet tasks. | A newly validated, fair WebExploitBench comparison used only for reporting; reserve another untouched benchmark if WebExploitBench results influence choices. | **Must control.** If its results help choose data, settings, or checkpoints, it is a development test—not independent final evidence. |
-| Harness transfer | Whether lift survives a different agent program. | Primary harness result, then a separately matched Qwen Code/OpenCode pair. | **Test later.** A trained-versus-base comparison is required inside each harness. |
+| Final measure | The untouched score reported after selection. | Fleet final-test pass@1; pass@4 as secondary; raw per-task outcomes. | **Must control.** Open once per frozen finalist family. With only 8 tasks, treat small differences as uncertain. |
+| External benchmark | A separate test of improvement beyond Fleet tasks. | Immediately run the newly validated, fair WebExploitBench comparison after every accepted checkpoint, used only for reporting; reserve another untouched benchmark if WebExploitBench results influence choices. | **Must control.** Never use its result to choose data, settings, checkpoints, or finalists. If that boundary is crossed, it becomes a development test rather than independent transfer evidence. |
+| WebExploitBench harness | The agent program used for every external benchmark arm. | OpenCode 1.18.27 only, with the same immutable image, limits, tools, prompt, and scoring path for base and trained checkpoints. | **Must control.** Do not revive the historical Qwen Code arm for current selection or claims. |
 | Evaluation attempts | Number of tries per task. | pass@1 for all search decisions; pass@4 for finalists. | **Must control.** Never rerun a valid pass@1 zero. |
 | Checkpoint evaluation cadence | How often training pauses for task evaluation. | Track training loss continuously; run the full Fleet development test after each completed training run; for very long runs, optionally use one fixed small development subset at epoch or stage boundaries. | **Test now operationally.** The development tasks must never enter training, and frequent repeated checks can overfit decisions to them. |
 | Training repeats | Independent training runs with different seeds. | One for coarse screening; three for finalists. | **Must control for claims.** Evaluation attempts are not substitutes for training repeats. |
 | Paired task analysis | Compare base and trained outcomes on the same task versions. | Per-task win/loss/tie table and a paired resampling confidence interval: repeatedly resample whole task families and recalculate the lift. | **Must control.** Do not compare only two pooled percentages. |
 | Confidence interval | A range showing sampling uncertainty. | Repeatedly resample whole task families, not individual attempts; report 95% intervals. | **Must control.** Attempts on one task are related, not independent data points. |
 | Guard against a lucky search winner | Avoid declaring the luckiest of many recipes a discovery. | Write down the search before it starts, use development data for ranking, and reserve the final test for a small frozen set. | **Must control.** Report the number of experiment arms tried. |
-| Minimum useful lift | Smallest improvement worth the cost. | Write down the minimum absolute increase in task success before running the search. | **Must control.** With only 10 final tasks, only very large changes will be clear. |
+| Minimum useful lift | Smallest improvement worth the cost. | Write down the minimum absolute increase in task success before running the search. | **Must control.** With only 8 final tasks, only very large changes will be clear. |
 | Cost and efficiency | Resources needed for each gain. | GPU-hours, environment-hours, generated tokens, and solved tasks per cost. | **Test now.** The best model is not necessarily the most expensive winner. |
 | Safety and general behavior | Check whether cyber lift damages basic tool use or reporting. | Fixed small test set for non-secret tool formatting and general instructions. | **Must control.** Keep this separate from the cyber success score. |
 
@@ -351,27 +358,34 @@ Every run should record the following before it starts:
 
 The order below learns the most while limiting expensive combinations.
 
-1. **Freeze measurement.** Choose one primary harness and prove a valid matched
-   Qwen base evaluation. Lock the 89-task eligible set, split A/B, exact grader,
-   budgets, and invalid-run rule.
-2. **Find the SFT example design.** At learning rate 1e-6, batch 32, and one
-   epoch, compare teacher traces, Qwen traces, and a 50:50 mixture measured by
-   trained tokens; train every eligible action versus a task-balanced set of key
-   actions; and compare split A with split B.
+1. **Freeze measurement.** Prove a valid OpenCode base evaluation. Lock the
+   75-task execution-proven set, the exact 50/17/8 split, grader, budgets, and
+   invalid-run rule.
+2. **Find the SFT example design.** Start from the accepted Fresh75 settings:
+   learning rate 1e-5, batch 8, and two epochs. Compare teacher traces, Qwen
+   traces, and a 50:50 mixture over the exact same 37 task families. Match each
+   family's supervised-token weight, 2,072,122 total supervised-target token
+   exposures, and 230 optimizer updates; train every eligible action versus a
+   task-balanced set of key actions. A later split B may reassign only the
+   current training and development families and must lock the exact final 8.
 3. **Tune SFT update settings.** For the best two data approaches, combine each
-   learning rate (3e-7, 1e-6, 3e-6) with each batch size (8, 32, 64), and evaluate checkpoints from epochs
+   learning rate (3e-6, 1e-5, 3e-5) with each batch size (8, 32, 64), and evaluate checkpoints from epochs
    1/2/4. Reject unstable settings early. Repeat finalists with three seeds.
-4. **Acquire real RL reward.** For both Miles and SkyRL, run a matched one-update
-   1-task × 8-attempt canary. Advance only a path with real mixed rewards, a
-   nonzero update, a recoverable checkpoint, and a successful reload.
+4. **Acquire real RL reward.** Run the Miles one-update 1-task × 8-attempt gate
+   with 262,144-token live context, proved compaction, at least 1,000 turns, and
+   a multi-hour episode limit. Use SkyRL only as a matched fallback or later
+   control. Advance only with real mixed rewards, a nonzero update, a
+   recoverable checkpoint, successful reload, and clean release.
 5. **Find an RL starting point.** Compare base, best teacher-SFT, best self-SFT,
    and best mixed-SFT at 10 updates with identical tasks and rollout settings.
 6. **Tune the working RL path.** Search learning rate, attempts per task, KL
    penalty, clipping, and task sampling in that order. Use 50 updates only for
    settings with development lift; use 100–150 only after a stable medium run.
 7. **Test the core finalists.** Compare base, SFT-only, RL-from-base, and SFT→RL
-   with three training seeds. Freeze winners before opening the final Fleet set
-   and WebExploitBench.
+   with three training seeds. Freeze winners before opening the final Fleet set.
+   Run the matched report-only WebExploitBench transfer check immediately after
+   every accepted checkpoint, but never use those benchmark results to choose a
+   recipe, checkpoint, or finalist.
 
 Use **successive halving** for large searches: run every setting for a small,
 equal budget, keep only settings that pass health checks and show development
@@ -380,7 +394,7 @@ on obviously unstable settings while preserving a written selection rule.
 
 ## What not to combine into one conclusion
 
-- A Qwen Code result and an OpenCode result.
+- A historical Qwen Code result and the current OpenCode result.
 - A shared model service and a separately hosted service unless they are proven
   to use the same model bytes and generation settings.
 - A binary-reward run and a partial-credit run.
@@ -395,7 +409,7 @@ Project evidence:
 
 - [Scientific controls](SCIENTIFIC_PROTOCOL.md)
 - [Training guide](TRAINING.md)
-- [Current 160-to-89 task filtering report](QWEN_BLACKBOX_TASK_FILTERING_REPORT_2026-09-12.md)
+- [Current 1,055-to-75 task refresh](FLEET_BLACKBOX_TASK_REFRESH_2026-09-15.md)
 - [Task and source eligibility audit](QWEN_BLACKBOX_TASK_ELIGIBILITY_2026-09-11.md)
 - [Qwen3.6 study evidence, including SFT and RL failure modes](QWEN36_STUDY_EVIDENCE.md)
 - [Repository consolidation and backend qualification](CONSOLIDATION.md)
