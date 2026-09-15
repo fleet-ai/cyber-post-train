@@ -1,0 +1,74 @@
+{
+  "schema": "cyber_miles_4x8_terminal_evidence_qualification_v2",
+  "status": "accepted",
+  "source_commit": "483ff57981c17567b84d47dc129c0c186a038c51",
+  "source_branch": "codex/miles-dev8-normal-queue",
+  "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:22c6c624ae95e1886aeab8c9921642b7753232856eb41fb618a70c52975b0a18",
+  "runtime_bundle": {
+    "sha256": "sha256:35da7986b49c9a7af5e40082e0c11503fe7ec26f3abfcd3786a77121af7de686",
+    "configmap_uid": "d1aedb04-29e7-46d1-8846-2b432d5a722b",
+    "asset_configmap_uid": "b679b131-c9a0-49fd-a14e-287ef9ba2a8c"
+  },
+  "accepted_pod": {
+    "name": "q38-miles-observer-code-test8",
+    "uid": "f6ec7a8c-5646-4576-9e49-cce13c260c87",
+    "cluster": "dev",
+    "namespace": "fleet-train-jobs",
+    "node": "computeinstance-e04z8h89sgpw7kq06z",
+    "priority_class": "c2",
+    "started_at": "2026-09-15T05:07:26Z",
+    "finished_at": "2026-09-15T05:08:00Z",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "pytest_exit_code": 0,
+    "container_restarts": 0,
+    "gpu_requests": 0,
+    "gpu_limits": 0,
+    "runtime_image_id_matches_request": true,
+    "deleted": true,
+    "deletion_confirmed": true
+  },
+  "tests": {
+    "selected": [
+      "tests/test_miles_event_evidence.py",
+      "tests/test_miles_acceptance.py",
+      "tests/test_miles_reload.py",
+      "tests/test_miles_hf_export_job.py"
+    ],
+    "collected": 98,
+    "passed": 98,
+    "failed": 0
+  },
+  "qualified_contract": {
+    "legacy_topology": "1x8",
+    "long_context_topology": "4x8",
+    "long_context_world_size": 32,
+    "rollout_samples": 8,
+    "multi_pod_uid_binding": true,
+    "multi_pod_exact_release_query": true,
+    "dynamic_submitted_image_binding": true,
+    "single_pod_hf_event_identity_compatibility": true,
+    "zero_update_observer": true
+  },
+  "supersedes": {
+    "path": "docs/evidence/qwen38-study/2026-09-15-miles-4x8-terminal-evidence-qualification-v1.json",
+    "receipt_sha256": "sha256:6a3b4529625401da64f062f5f89b264ab82194a27637615574552d8f6f0ebd15"
+  },
+  "non_accepting_packaging_attempts": [
+    {
+      "pod_uid": "7f6c7e6a-6767-4f20-81ef-d7827b5b6500",
+      "reason": "Test package omitted evals from its temporary Git commit and mounted qualification templates under the wrong path",
+      "pod_exit_code": 0,
+      "pytest_exit_code": 1,
+      "gpu_requests": 0,
+      "deleted": true
+    }
+  ],
+  "claims_excluded": [
+    "reward acquisition",
+    "optimizer update",
+    "checkpoint creation",
+    "GPU runtime acceptance"
+  ],
+  "sha256": "sha256:d165f3db4ae83b01c892058cd90bd1cbdba351b7cf80d07f2f062733fee1932e"
+}
