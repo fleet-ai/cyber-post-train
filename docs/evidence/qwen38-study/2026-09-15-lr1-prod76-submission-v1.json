@@ -60,6 +60,23 @@
     "initial_state": "queued_without_allocation",
     "initial_gpu_allocation": 0
   },
+  "admission": {
+    "admitted_at": "2026-09-15T00:38:22Z",
+    "cluster_queue": "training-cq",
+    "resource_flavor": "b300-training",
+    "raycluster_name": "chris-q38-lr1-r76-prod-v1-5c65fed3-2dh9x",
+    "raycluster_uid": "490dd39c-c92d-4029-ac4c-b8e82a1a771e",
+    "raycluster_state": "ready",
+    "head_pod_name": "chris-q38-lr1-r76-prod-v1-5c65fed3-2dh9x-head-p4rl8",
+    "head_pod_uid": "81279b52-8f86-4055-8988-2e8488560411",
+    "worker_pod_name": "chris-q38-lr1-r76-prod-v1-5c65fed3-2dh9x-gpu-worker-sqf56",
+    "worker_pod_uid": "cf6378ce-60cb-4de1-9685-2496d4050c10",
+    "pods_ready_at": "2026-09-15T00:38:59Z",
+    "restart_count": 0,
+    "allocated_nodes": 2,
+    "allocated_gpus": 8,
+    "startup_deadline": "2026-09-15T01:08:59Z"
+  },
   "acceptance": {
     "training_complete": false,
     "terminal_checkpoint_sealed": false,
