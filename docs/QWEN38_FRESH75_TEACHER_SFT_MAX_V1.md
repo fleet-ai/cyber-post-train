@@ -97,6 +97,15 @@ passed, zero failed, zero GPUs, zero restarts. The durable evidence is
 `docs/evidence/qwen38-fresh75-nodev-fix-20260915.json`. V4 uses new run,
 output, request, and W&B identities; neither the V2 nor V3 output is reused.
 
+The V4 one-step canary then completed successfully with zero restarts. It
+executed one finite optimizer step, wrote a matching native checkpoint and
+planned-pause receipt, and released all eight GPUs. A separate zero-GPU Pod in
+the pinned image reopened its sampler/trainer metadata and independently
+validated the terminal and checkpoint receipts. The acceptance evidence is
+`docs/evidence/qwen38-fresh75-v4-canary-accepted-20260915.json`. The exact full
+230-step V4 run was submitted once at `c1` only after that gate passed; it was
+queued without allocation at the evidence timestamp.
+
 There is no held-out teacher-token loss. W&B records training loss and runtime
 health. Checkpoint choice must use task outcomes on the frozen 17-task Fleet
 development split.
