@@ -1109,6 +1109,8 @@ def _make_trainer_class():
             return self._load_split("train")
 
         def load_eval_dataset(self):
+            if "dev" not in self.plan["datasets"]:
+                return None
             self.dev_rows = self._load_split("dev")
             return self.dev_rows
 
@@ -1337,7 +1339,7 @@ def _run_training(plan: dict) -> dict:
 
 
 def _run_setup_probe(plan: dict, *, with_tracker: bool = False) -> dict:
-    """Exercise exact model/FSDP setup without data loading or optimizer steps."""
+    """Exercise exact model/FSDP setup and the no-dev loader without optimizer steps."""
     cfg, skyrl_cfg = build_runtime_configs(plan)
     skyrl_cfg.trainer.log_path = str(Path(plan["output_root"]) / "private_logs")
     trainer_class = _make_trainer_class()
@@ -1352,6 +1354,8 @@ def _run_setup_probe(plan: dict, *, with_tracker: bool = False) -> dict:
     trainer = trainer_class(cfg, skyrl_cfg, plan)
     try:
         trainer.setup()
+        if "dev" not in plan["datasets"] and trainer.load_eval_dataset() is not None:
+            raise ValueError("task-outcome training unexpectedly produced an eval dataset")
         return {
             "optimizer_steps": 0,
             "plan_sha256": plan["plan_sha256"],

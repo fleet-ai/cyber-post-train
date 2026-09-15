@@ -6,7 +6,7 @@ import json
 import pickle
 import sys
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -122,6 +122,59 @@ def test_setup_probe_selects_real_tracker_only_when_requested(tmp_path, monkeypa
     assert ("real_tracker" in events) is with_tracker
     assert ("tracker_bypassed_for_setup_probe" in events) is (not with_tracker)
     assert events[-1] == "shutdown"
+
+
+def test_setup_probe_exercises_train_only_eval_loader(tmp_path, monkeypatch):
+    events = []
+
+    class ProbeTrainer:
+        def __init__(self, cfg, skyrl_cfg, value):
+            self.plan = value
+            self.public_runtime_stage = "trainer_constructed"
+
+        def setup(self):
+            self.public_runtime_stage = "device_ready"
+
+        def load_eval_dataset(self):
+            events.append("eval_loader_checked")
+            return None
+
+        def shutdown(self):
+            events.append("shutdown")
+
+    monkeypatch.setattr(
+        "training.sft_runtime.build_runtime_configs",
+        lambda value: (SimpleNamespace(), SimpleNamespace(trainer=SimpleNamespace(log_path=None))),
+    )
+    monkeypatch.setattr("training.sft_runtime._make_trainer_class", lambda: ProbeTrainer)
+    value = plan(tmp_path)
+    value["validation_mode"] = "task_outcomes_only"
+    value["datasets"].pop("dev")
+    value["recipe"].update(eval_interval=0, checkpoint_interval=2)
+
+    result = _run_setup_probe(value)
+
+    assert result["status"] == "setup_validated"
+    assert events == ["eval_loader_checked", "shutdown"]
+
+
+def test_train_only_wrapper_returns_no_eval_dataset(monkeypatch):
+    modules = {
+        "skyrl.backends.skyrl_train.training_batch": {"pad_training_input_batch": None},
+        "skyrl.train.sft_trainer": {"SFTTrainer": object, "tokenize_chat_example": None},
+        "skyrl.train.utils.callbacks": {"TrainingCallback": object},
+        "skyrl.train.utils.tracking": {"Tracking": object},
+        "skyrl.train.utils.utils": {"Timer": object},
+    }
+    for name, values in modules.items():
+        module = ModuleType(name)
+        module.__dict__.update(values)
+        monkeypatch.setitem(sys.modules, name, module)
+    trainer_class = _make_trainer_class()
+    trainer = trainer_class.__new__(trainer_class)
+    trainer.plan = {"datasets": {"train": {}}}
+
+    assert trainer.load_eval_dataset() is None
 
 
 def test_recipe_keeps_tail_batch_and_disables_inline_export(tmp_path):
@@ -1074,7 +1127,10 @@ def test_native_checkpoint_reopens_metadata_before_recording_success(tmp_path, m
 @pytest.mark.parametrize("interval", [2, 4])
 @pytest.mark.parametrize("dense", [False, True])
 @pytest.mark.parametrize("pause", [None, 1])
-def test_exact_native_loop_eval_never_optimizes_and_saves_final(tmp_path, interval, dense, pause):
+@pytest.mark.parametrize("outcomes_only", [False, True])
+def test_exact_native_loop_eval_never_optimizes_and_saves_final(
+    tmp_path, interval, dense, pause, outcomes_only
+):
     """Exercise the real SkyRL loop/collator with synthetic CPU worker outputs."""
     import torch
     from skyrl.train.config.sft_config import SFTConfig, build_skyrl_config_for_sft
@@ -1089,6 +1145,10 @@ def test_exact_native_loop_eval_never_optimizes_and_saves_final(tmp_path, interv
             format=DENSE_FORMAT, supervised_tokens=51, assistant_responses=34, source_sessions=17
         )
     value["recipe"]["eval_interval"] = value["recipe"]["checkpoint_interval"] = interval
+    if outcomes_only:
+        value["validation_mode"] = "task_outcomes_only"
+        value["datasets"].pop("dev")
+        value["recipe"]["eval_interval"] = 0
     if pause is not None:
         value["pause_after_step"] = pause
     cfg = SFTConfig.from_cli_overrides(sft_overrides(value))
@@ -1127,7 +1187,8 @@ def test_exact_native_loop_eval_never_optimizes_and_saves_final(tmp_path, interv
         trainer.dev_rows = dev_rows
         return dev_rows
 
-    trainer.load_eval_dataset = load_dev
+    if not outcomes_only:
+        trainer.load_eval_dataset = load_dev
 
     class Dispatcher:
         steps = 0
@@ -1146,6 +1207,7 @@ def test_exact_native_loop_eval_never_optimizes_and_saves_final(tmp_path, interv
             return 1.0
 
         def forward(self, model, batch, loss_fn, loss_fn_config):
+            assert not outcomes_only, "outcome-only SFT must not run reference CE"
             self.eval_at.append(self.steps)
             # Preserve a selected earlier checkpoint when the final step is worse.
             raw_loss = 0.5 if self.steps == interval else 1.0
@@ -1173,21 +1235,28 @@ def test_exact_native_loop_eval_never_optimizes_and_saves_final(tmp_path, interv
     final_step = pause or value["recipe"]["max_steps"]
     assert trainer.dispatch.steps == final_step
     expected_steps = sorted({0, final_step} | set(range(interval, final_step + 1, interval)))
-    assert sorted(set(trainer.dispatch.eval_at)) == expected_steps
+    assert sorted(set(trainer.dispatch.eval_at)) == ([] if outcomes_only else expected_steps)
     assert trainer.dispatch.checkpoints == expected_steps[1:]
     assert trainer.global_step == final_step
     assert int((tmp_path / "checkpoints/latest_ckpt_global_step.txt").read_text()) == final_step
-    best_step = interval if interval <= final_step else 0
+    best_step = interval if interval <= final_step and not outcomes_only else 0
     retained = {f"global_step_{final_step}"} | (
         {f"global_step_{best_step}"} if best_step else set()
     )
     assert {p.name for p in (tmp_path / "checkpoints").glob("global_step_*")} == retained
-    assert trainer.best["optimizer_step"] == best_step
-    assert len(list((tmp_path / "validation").glob("*.json"))) == len(expected_steps)
+    if outcomes_only:
+        assert trainer.best is None
+    else:
+        assert trainer.best["optimizer_step"] == best_step
+    assert len(list((tmp_path / "validation").glob("*.json"))) == (
+        0 if outcomes_only else len(expected_steps)
+    )
     assert len([item for _, item in logs if "train/loss" in item]) == final_step
     assert all("train/lr" in item for _, item in logs if "train/loss" in item)
     assert logs[-1][1]["train/global_step"] == final_step
-    assert logs[-1][0] == final_step + int(not pause and final_step % interval != 0)
+    assert logs[-1][0] == final_step + int(
+        not outcomes_only and not pause and final_step % interval != 0
+    )
     assert trainer.target_tokens_seen == (
         8 * (3 if dense else 2) if pause else 51 if dense else 17 * 2 * 2
     )

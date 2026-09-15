@@ -1,0 +1,49 @@
+{
+  "scope": "Fresh75 outcome-only SFT step-zero failure and CPU-only regression qualification",
+  "failed_canary": {
+    "name": "chris-q38-f75-max-canary-v3-6feeb90c",
+    "rayjob_uid": "8f463bd8-621f-4773-b626-5f758a312ea6",
+    "workload_uid": "402ea158-f0b8-4fe2-823b-f2174d1dc725",
+    "output_root": "/mnt/sfs/jobs/chris-q38-f75-max-canary-v3",
+    "optimizer_steps": 0,
+    "failure_class": "KeyError",
+    "missing_key": "dev",
+    "cause": "The task-outcome-only plan intentionally had no teacher-reference dev dataset, but the runtime wrapper unconditionally indexed datasets.dev when the native SkyRL loop initialized its optional evaluation loader.",
+    "released": {
+      "raycluster_absent": true,
+      "cluster_pods": 0,
+      "active_gpus": 0,
+      "workload_terminal": true
+    }
+  },
+  "correction": {
+    "behavior": "The evaluation loader now returns no dataset when the immutable plan has no dev split. The zero-step setup probe also exercises this branch.",
+    "training_runtime_sha256": "c5ed919dd3b08c68ad1213547949e36df7645f81a24113aeb0123ca1d02c2a08",
+    "test_source_sha256": "42ac372708830471e7499a9f431ea493eec1a97b3adbc8d2d8eca88e9325fad6",
+    "local": {
+      "runtime_tests_passed": 102,
+      "runtime_tests_skipped_for_missing_native_image": 33,
+      "focused_outcome_tests_passed": 6,
+      "ruff": "passed"
+    }
+  },
+  "pinned_image_cpu_qualification": {
+    "cluster": "dev",
+    "namespace": "fleet-train-jobs",
+    "pod": "chris-q38-sft-nodev-native-v1",
+    "pod_uid": "8a7d2f2d-e04c-4dd7-aedf-4aad39bba434",
+    "configmap_uid": "34374781-4a42-445e-ab04-5bf114391c95",
+    "node": "computeinstance-e04sacc1ch7cqdvg57",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "started_at": "2026-09-15T03:26:23Z",
+    "finished_at": "2026-09-15T03:26:34Z",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "native_loop_cases_passed": 16,
+    "native_loop_cases_failed": 0,
+    "test_output_sha256": "4572c54c756bf21ddb1d3149c6da1f09d085fad08a9aee033e7e519556503b26",
+    "launcher_sha256": "98c1e65c42342744ce5a9b4337f2aa447a10de8e71fa772c62c5d628740444c3"
+  },
+  "successor_state": "No replacement GPU canary or full run had been submitted when this evidence was recorded. New immutable identities and a fresh preflight are required."
+}
