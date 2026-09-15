@@ -72,10 +72,13 @@ authorize a new student rollout.
 ## Current qualification status
 
 The orchestration tests cover partial failure, cleanup, restart behavior and
-judge/collection separation. Live environment qualification is still underway.
-Fresh75 step230 is accepted and registered but remains paused until a consumer
-can run. The completed GPT rescore demonstrates recovery of older stored work;
-it is not by itself an end-to-end qualification of this new controller.
+judge/collection separation. The no-model environment qualification passed all
+15 sites, including their exact agent and evaluator images and required files.
+Fresh75 step230 passed GPU reload and live-serving checks. Its first full
+collection, `fresh75-step230-opencode-web-p1-v3`, is active. The workflow is not
+yet end-to-end proven until that campaign preserves, downloads and releases all
+accepted collections. The completed GPT rescore demonstrates recovery of older
+stored work; it is not by itself that end-to-end proof.
 
 See [Tensorlake execution instructions](../evals/webexploitbench/tensorlake/README.md)
 for preparation and sealed-plan requirements. The command deliberately does not

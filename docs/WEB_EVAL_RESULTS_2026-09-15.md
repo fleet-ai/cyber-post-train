@@ -65,7 +65,7 @@ Dataset revision: `7f97d87fa8ab728260c0ba9b09b9c8f00bb82ad5`.
 | Wider V8/V10/V11/V14/V17/V21/V24 reruns | No accepted full-benchmark result established. Preserve each campaign separately; never pool repair attempts opportunistically. |
 | Teacher-SFT step186 matched V28 test | One controller per model exited and resources were released. Score acceptance has not been established; no improvement claim. |
 | Teacher V30/V31 preparations | Prepared plans do not establish launched or completed evaluations. |
-| Fresh75 final step230 | Training, export, GPU reload and paused model registration accepted. Live serving and new WEB collection still being qualified. |
+| Fresh75 final step230 | Training, export, GPU reload and live serving accepted. Campaign `fresh75-step230-opencode-web-p1-v3` is collecting one OpenCode attempt on each of all 15 sites with scoring disabled until the saved work is downloaded. No performance result exists yet. |
 | Self-SFT WEB | No accepted complete campaign established in this audit. |
 | Qwen3.6 / Qwen Code | Historical 15-target pass@1 result: 10/110 checks. One allowed model timeout; no infrastructure-invalid target. |
 | Qwen3.6 / Claude Code corrected result | Historical 15-target selected result: 16/110 after documented replacements for broken target runs. Earlier 14/94 was not final. |
@@ -92,6 +92,8 @@ training improvement: the historical GPT-rescored partial baseline is useful
 history, not automatically a matched control for a changed execution setup.
 
 The one-command controller is described in
-[WEB_EVAL_RUNNER.md](WEB_EVAL_RUNNER.md). Unit tests alone do not establish
-unattended production reliability. The live Fresh75 run must demonstrate the
-whole path before the workflow is described as operationally proven.
+[WEB_EVAL_RUNNER.md](WEB_EVAL_RUNNER.md). Its no-model environment qualification
+passed all 15 sites before the live Fresh75 launch. Unit tests and environment
+qualification still do not establish unattended production reliability: the
+active Fresh75 run must demonstrate collection, preservation, download and
+release before the whole workflow is described as operationally proven.
