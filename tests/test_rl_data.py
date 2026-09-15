@@ -15,11 +15,41 @@ from training import rl_data as data
 from training import rl_data_derive as derive_data
 
 NATIVE = data._native
+ROOT = Path(__file__).parents[1]
 
 
 def seal(value):
     value["sha256"] = "sha256:" + digest({k: v for k, v in value.items() if k != "sha256"})
     return value
+
+
+def test_long_canary3_rebinds_the_original_accepted_manifest() -> None:
+    previous = json.loads(
+        (
+            ROOT
+            / "configs/qualification/qwen38-miles-opencode-long-context-data-prod-v2.json"
+        ).read_text()
+    )
+    successor = json.loads(
+        (
+            ROOT
+            / "configs/qualification/qwen38-miles-opencode-long-context-data-prod-v3.json"
+        ).read_text()
+    )
+
+    for field in (
+        "source_manifest",
+        "source_manifest_file_sha256",
+        "source_manifest_sha256",
+        "source_policy_identity_root",
+        "policy_identity_root",
+        "expected_limits",
+        "mode",
+    ):
+        assert successor[field] == previous[field]
+    assert successor["name"] == "chris-q38-miles-lc-canary3"
+    assert successor["output"] == "/mnt/sfs/jobs/chris-q38-miles-lc-canary3-inputs/data"
+    assert "canary2-inputs" not in successor["source_manifest"]
 
 
 @pytest.fixture
