@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from cyber_post_train.jobs import API_URLS
 from training import miles_policy_observer_cli as cli
 
 
@@ -253,7 +254,7 @@ def test_api_down_after_lost_post_recovers_exact_run_without_a_second_post(
                 json.dumps(
                     {
                         "state": "POST_INTENT_DO_NOT_RETRY",
-                        "api_base_url": cli.API_URLS["dev"],
+                            "api_base_url": API_URLS["dev"],
                         "request_sha256": cli.digest(observed),
                     }
                 )
@@ -298,7 +299,7 @@ def test_lost_post_response_rejects_name_match_with_different_output(tmp_path):
         json.dumps(
             {
                 "state": "POST_INTENT_DO_NOT_RETRY",
-                "api_base_url": cli.API_URLS["dev"],
+                    "api_base_url": API_URLS["dev"],
                 "request_sha256": cli.digest(request),
             }
         )
@@ -334,7 +335,7 @@ def test_final_recovery_timeout_preserves_sanitized_possible_leak(tmp_path):
         json.dumps(
             {
                 "state": "POST_INTENT_DO_NOT_RETRY",
-                "api_base_url": cli.API_URLS["dev"],
+                    "api_base_url": API_URLS["dev"],
                 "request_sha256": cli.digest(request),
             }
         )

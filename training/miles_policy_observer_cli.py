@@ -16,11 +16,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from cyber_post_train.jobs import API_URLS, Jobs, digest
+from cyber_post_train.jobs import Jobs, digest
 
 from . import miles_event_evidence as events
 from . import miles_policy_observer as observer
-from .miles_acceptance import NAMESPACE, NAMESPACE_UID, _json_snapshot
+from .miles_acceptance import _json_snapshot
+from .miles_cluster import cluster_profile, plan_cluster_target
 
 _RESOURCES = (
     "rayjobs.ray.io",
@@ -47,6 +48,7 @@ def _recover_created_run(
     request: dict[str, Any],
     journal: Path,
     *,
+    cluster_target: str = "dev",
     timeout_seconds: float = 60.0,
 ) -> dict[str, Any]:
     """Recover one lost create response by reads only; never issue another POST."""
@@ -56,10 +58,11 @@ def _recover_created_run(
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise ValueError("ambiguous Jobs API POST has no readable intent journal") from error
     intent = rows[0] if len(rows) == 1 and isinstance(rows[0], dict) else None
+    profile = cluster_profile(cluster_target)
     if (
         intent is None
         or intent.get("state") != "POST_INTENT_DO_NOT_RETRY"
-        or intent.get("api_base_url") != API_URLS["dev"]
+        or intent.get("api_base_url") != profile.api_base_url
         or intent.get("request_sha256") != digest(request)
     ):
         raise ValueError("ambiguous Jobs API POST has no exact dev intent to reconcile")
@@ -145,6 +148,7 @@ def submit_once_or_reconcile(
     request: dict[str, Any],
     journal: Path,
     *,
+    cluster_target: str = "dev",
     recovery_timeout_seconds: float = 60.0,
 ) -> dict[str, Any]:
     try:
@@ -156,6 +160,7 @@ def submit_once_or_reconcile(
             jobs,
             request,
             journal,
+            cluster_target=cluster_target,
             timeout_seconds=recovery_timeout_seconds,
         )
 
@@ -208,29 +213,32 @@ def _preflight_submission(args: argparse.Namespace) -> tuple[dict[str, Any], dic
 class WatchBuffer:
     """Open gap-free resource-version watches before the only mutating POST."""
 
-    def __init__(self, resources: tuple[str, ...] = _RESOURCES) -> None:
+    def __init__(
+        self, resources: tuple[str, ...] = _RESOURCES, *, cluster_target: str = "dev"
+    ) -> None:
         if not resources or any(
             not isinstance(resource, str) or not resource for resource in resources
         ):
             raise ValueError("Kubernetes watch resources are absent")
         self.resources = resources
+        self.profile = cluster_profile(cluster_target)
         self.processes: list[subprocess.Popen[str]] = []
         self.events: queue.Queue[tuple[float, dict[str, Any]] | BaseException] = queue.Queue()
 
     def start(self) -> None:
         namespace = _objects(
             [
-                "kubectl", "--context", events.DEV_KUBE_CONTEXT,
-                "get", "namespace", NAMESPACE, "--output", "json",
+                "kubectl", "--context", self.profile.kube_context,
+                "get", "namespace", self.profile.namespace, "--output", "json",
             ]
         )
-        if namespace.get("metadata", {}).get("uid") != NAMESPACE_UID:
-            raise ValueError("kubectl is not bound to the exact dev3 namespace UID")
+        if namespace.get("metadata", {}).get("uid") != self.profile.namespace_uid:
+            raise ValueError("kubectl is not bound to the exact namespace UID")
         for resource in self.resources:
             listing = _objects(
                 [
-                    "kubectl", "--context", events.DEV_KUBE_CONTEXT,
-                    "get", resource, "--namespace", NAMESPACE, "--output", "json",
+                    "kubectl", "--context", self.profile.kube_context,
+                    "get", resource, "--namespace", self.profile.namespace, "--output", "json",
                 ]
             )
             version = listing.get("metadata", {}).get("resourceVersion")
@@ -238,8 +246,8 @@ class WatchBuffer:
                 raise ValueError("Kubernetes list omitted its watch resource version")
             process = subprocess.Popen(
                 [
-                    "kubectl", "--context", events.DEV_KUBE_CONTEXT,
-                    "get", resource, "--namespace", NAMESPACE,
+                    "kubectl", "--context", self.profile.kube_context,
+                    "get", resource, "--namespace", self.profile.namespace,
                     "--watch-only", "--output-watch-events",
                     "--resource-version", version, "--output", "json",
                 ],
@@ -384,7 +392,7 @@ class WatchBuffer:
         value = {
             "schema": "cyber_miles_ambiguous_submission_v1",
             "status": "possible_active_resource_leak",
-            "api_base_url": API_URLS["dev"],
+            "api_base_url": self.profile.api_base_url,
             "request_sha256": digest(request),
             "request_name_prefix": request["name"],
             "run_dir": request["run_dir"],
@@ -516,24 +524,27 @@ class WatchBuffer:
 
 def submit(args: argparse.Namespace) -> None:
     plan, request = _preflight_submission(args)
+    target = plan_cluster_target(plan)
+    profile = cluster_profile(target)
     token = os.environ.get("FLEET_API_KEY", "")
-    watcher = WatchBuffer()
+    watcher = WatchBuffer() if target == "dev" else WatchBuffer(cluster_target=target)
     observer.start_capture_intent(
         plan,
         request,
-        namespace_uid=NAMESPACE_UID,
+        namespace_uid=profile.namespace_uid,
         started_at=time.time(),
         directory=args.watch_directory,
-        kube_context=events.DEV_KUBE_CONTEXT,
+        kube_context=profile.kube_context,
     )
     try:
         watcher.start()
-        with Jobs(token, base_url=API_URLS["dev"]) as jobs:
+        with Jobs(token, base_url=profile.api_base_url) as jobs:
             try:
                 submit_once_or_reconcile(
                     jobs,
                     request,
                     args.journal,
+                    cluster_target=target,
                     recovery_timeout_seconds=args.watch_timeout_seconds,
                 )
             except Exception as error:
@@ -568,7 +579,8 @@ def submit(args: argparse.Namespace) -> None:
 
 def controller(args: argparse.Namespace) -> None:
     plan, submission = _json(args.plan), _json(args.submission)
-    with Jobs(os.environ.get("FLEET_API_KEY", ""), base_url=API_URLS["dev"]) as jobs:
+    profile = cluster_profile(plan_cluster_target(plan))
+    with Jobs(os.environ.get("FLEET_API_KEY", ""), base_url=profile.api_base_url) as jobs:
         status = jobs.status(submission["api"]["run_name"])
     observer.compile_controller(
         plan,
@@ -582,7 +594,8 @@ def controller(args: argparse.Namespace) -> None:
 
 def release(args: argparse.Namespace) -> None:
     plan, submission = _json(args.plan), _json(args.submission)
-    with Jobs(os.environ.get("FLEET_API_KEY", ""), base_url=API_URLS["dev"]) as jobs:
+    profile = cluster_profile(plan_cluster_target(plan))
+    with Jobs(os.environ.get("FLEET_API_KEY", ""), base_url=profile.api_base_url) as jobs:
         observer.collect_release_query(
             plan,
             submission,

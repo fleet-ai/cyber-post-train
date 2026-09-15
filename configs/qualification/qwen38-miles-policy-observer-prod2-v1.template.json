@@ -1,0 +1,20 @@
+{
+  "schema": "cyber_miles_policy_observer_config_v2",
+  "name": "chris-q38-miles-prod2-observer",
+  "output_root": "/mnt/sfs/jobs/chris-q38-miles-prod2-observer-v1",
+  "source": {
+    "plan": "/mnt/sfs/jobs/chris-q38-miles-prod2-evidence-v1/source/plan.json",
+    "submission_binding": "/mnt/sfs/jobs/chris-q38-miles-prod2-evidence-v1/SUBMITTED_EXECUTION.json",
+    "trained_checkpoint_manifest": "/mnt/sfs/jobs/chris-q38-miles-prod2-evidence-v1/MILES_TRAINING_CHECKPOINT.json"
+  },
+  "cluster": {
+    "target": "prod",
+    "priority": "c1",
+    "resources": {
+      "cpu_request": "32",
+      "cpu_limit": "32",
+      "memory_request": "1800Gi",
+      "memory_limit": "2400Gi"
+    }
+  }
+}

@@ -36,9 +36,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from cyber_post_train.jobs import API_URLS, bundled_request, digest, quantity
+from cyber_post_train.jobs import bundled_request, digest, quantity
 
 from . import miles
+from .miles_cluster import cluster_profile, plan_cluster_target
 from .miles_conversion import _hash, _write
 from .miles_conversion import inventory as base_inventory
 from .miles_reload import (
@@ -79,6 +80,7 @@ REFERENCE_SENTINEL = 202
 RELOAD_SENTINEL = 303
 RUNTIME_FILES = (
     "training/miles_policy_observer.py",
+    "training/miles_cluster.py",
     "training/miles_reload.py",
     "training/miles.py",
     "training/miles_conversion.py",
@@ -431,14 +433,18 @@ def compile_observer(config: dict[str, Any], *, relative_to: Path) -> dict[str, 
     cluster = config["cluster"]
     _known(source, {"plan", "submission_binding", "trained_checkpoint_manifest"}, "source")
     _known(cluster, {"target", "priority", "resources"}, "cluster")
-    if cluster.get("target") != "dev" or cluster.get("priority") != "c1":
-        raise ValueError("policy observation is a dev-only c1 qualification")
+    target = cluster.get("target")
+    cluster_profile(target)
+    if cluster.get("priority") != "c1":
+        raise ValueError("policy observation requires c1 priority")
     source_plan_path = (relative_to / source["plan"]).resolve()
     submission_path = (relative_to / source["submission_binding"]).resolve()
     checkpoint_path = (relative_to / source["trained_checkpoint_manifest"]).resolve()
     source_plan, submission, trained, refs = _source_bindings(
         source_plan_path, submission_path, checkpoint_path
     )
+    if plan_cluster_target(source_plan) != target:
+        raise ValueError("policy observer must run on its source checkpoint cluster")
     output = _sfs_root(config["output_root"], "observer output root")
     output_path = Path(output)
     protected = {
@@ -487,7 +493,7 @@ def compile_observer(config: dict[str, Any], *, relative_to: Path) -> dict[str, 
             "trained_reload": RELOAD_SENTINEL,
         },
         "execution": {
-            "cluster_target": "dev",
+            "cluster_target": target,
             "image": miles.IMAGE,
             "priority": "c1",
             "resources": resources,
@@ -527,7 +533,7 @@ def _validate_plan(
             "trained_reference": REFERENCE_SENTINEL,
             "trained_reload": RELOAD_SENTINEL,
         }
-        or plan.get("execution", {}).get("cluster_target") != "dev"
+        or plan.get("execution", {}).get("cluster_target") != plan_cluster_target(source)
         or plan.get("execution", {}).get("image") != miles.IMAGE
         or plan.get("execution", {}).get("priority") != "c1"
         or not isinstance(submission_ref, dict)
@@ -536,6 +542,7 @@ def _validate_plan(
         or set(checkpoint_ref) != _REFERENCE_FIELDS
     ):
         raise ValueError("Miles policy observer plan drift")
+    cluster_profile(plan["execution"]["cluster_target"])
     if require_current_runtime and plan["runtime_sha256"] != digest(_runtime()):
         raise ValueError("Miles policy observer runtime differs from the compiled plan")
     _source_canary(source)
@@ -744,8 +751,11 @@ def compile_submission_binding(
     bundle_sha256, projection = _request_projection(
         plan, request, source_commit, repo_root or Path(__file__).resolve().parents[1]
     )
-    journal, journal_file_sha256 = _submission_journal(submission_journal_path, request)
+    journal, journal_file_sha256 = _submission_journal(
+        submission_journal_path, request, plan
+    )
     run_id = _uuid(journal[1]["job_id"], "observer API run ID")
+    profile = cluster_profile(plan_cluster_target(plan))
     submitted_at = journal[1]["created_at"]
     _time(submitted_at, "observer submission time")
     return _write(
@@ -763,7 +773,7 @@ def compile_submission_binding(
             "submission_journal_file_sha256": "sha256:" + journal_file_sha256,
             "runtime_bundle_sha256": "sha256:" + bundle_sha256,
             "api": {
-                "base_url": API_URLS["dev"],
+                "base_url": profile.api_base_url,
                 "run_id": run_id,
                 "run_name": plan["run_name"] + "-" + run_id[:8],
             },
@@ -777,7 +787,9 @@ def compile_submission_binding(
     )
 
 
-def _submission_journal(path: Path, request: Mapping[str, Any]) -> tuple[list[dict], str]:
+def _submission_journal(
+    path: Path, request: Mapping[str, Any], plan: Mapping[str, Any]
+) -> tuple[list[dict], str]:
     from .miles_acceptance import _time, _uuid
 
     if path.is_symlink() or not path.is_file():
@@ -795,6 +807,7 @@ def _submission_journal(path: Path, request: Mapping[str, Any]) -> tuple[list[di
     if len(rows) != 2 or any(not isinstance(row, dict) for row in rows):
         raise ValueError("observer Jobs API journal must contain one intent and one response")
     intent, response = rows
+    profile = cluster_profile(plan_cluster_target(plan))
     if (
         set(intent)
         != {
@@ -802,7 +815,7 @@ def _submission_journal(path: Path, request: Mapping[str, Any]) -> tuple[list[di
             "nodes", "gpus", "image",
         }
         or intent.get("state") != "POST_INTENT_DO_NOT_RETRY"
-        or intent.get("api_base_url") != API_URLS["dev"]
+        or intent.get("api_base_url") != profile.api_base_url
         or intent.get("request_sha256") != digest(request)
         or _SHA.fullmatch(str(intent.get("manifest_sha256"))) is None
         or intent.get("nodes") != 1
@@ -844,6 +857,7 @@ def validate_submission_binding(
     sealed(value, SUBMISSION_SCHEMA)
     api = value.get("api")
     request = value.get("request")
+    profile = cluster_profile(plan_cluster_target(plan))
     if (
         set(value) != _SUBMISSION_FIELDS
         or re.fullmatch(r"[a-f0-9]{40}", str(value.get("source_commit"))) is None
@@ -856,7 +870,7 @@ def validate_submission_binding(
         or _SHA.fullmatch(str(value.get("runtime_bundle_sha256"))) is None
         or not isinstance(api, dict)
         or set(api) != {"base_url", "run_id", "run_name"}
-        or api.get("base_url") != API_URLS["dev"]
+        or api.get("base_url") != profile.api_base_url
         or _UUID.fullmatch(str(api.get("run_id"))) is None
         or api.get("run_name") != plan["run_name"] + "-" + str(api.get("run_id"))[:8]
         or not isinstance(request, dict)
@@ -895,7 +909,7 @@ def validate_submission_binding(
             plan, reopened_request, value["source_commit"], Path(__file__).resolve().parents[1]
         )
         journal, journal_file_sha256 = _submission_journal(
-            Path(value["submission_journal_path"]), reopened_request
+            Path(value["submission_journal_path"]), reopened_request, plan
         )
         if (
             value["runtime_bundle_sha256"].removeprefix("sha256:") != bundle
@@ -920,16 +934,17 @@ def start_capture_intent(
     kube_context: str,
 ) -> dict[str, Any]:
     """Commit the exact watch target before the single Jobs API POST."""
-    from . import miles_event_evidence as events
-    from .miles_acceptance import NAMESPACE, NAMESPACE_UID, _time, _uuid
+    from .miles_acceptance import _time, _uuid
 
     _validate_plan(plan, check_files=False, require_current_runtime=False)
+    target = plan_cluster_target(plan)
+    profile = cluster_profile(target)
     if (
         request != job_request(plan)
-        or kube_context != events.DEV_KUBE_CONTEXT
-        or namespace_uid != NAMESPACE_UID
+        or kube_context != profile.kube_context
+        or namespace_uid != profile.namespace_uid
     ):
-        raise ValueError("observer capture intent differs from exact dev3 request")
+        raise ValueError("observer capture intent differs from its exact cluster request")
     _time(started_at, "observer capture-intent start")
     namespace = _uuid(namespace_uid, "observer namespace UID")
     directory.mkdir(parents=True, mode=0o700, exist_ok=False)
@@ -941,9 +956,9 @@ def start_capture_intent(
             "observer_plan_sha256": "sha256:" + digest(plan),
             "observer_request_sha256": "sha256:" + digest(request),
             "requested_name": plan["run_name"],
-            "api_base_url": API_URLS["dev"],
+            "api_base_url": profile.api_base_url,
             "kube_context": kube_context,
-            "namespace": NAMESPACE,
+            "namespace": profile.namespace,
             "namespace_uid": namespace,
             "started_at": started_at,
             "private_logs_included": False,
@@ -964,6 +979,8 @@ def start_capture(
     from .miles_acceptance import _time
 
     _validate_plan(plan, check_files=False, require_current_runtime=False)
+    target = plan_cluster_target(plan)
+    profile = cluster_profile(target)
     submitted = validate_submission_binding(submission, plan, check_files=False)
     intent, intent_file_sha256 = _read(intent_path, CAPTURE_INTENT_SCHEMA)
     directory = intent_path.parent
@@ -974,8 +991,9 @@ def start_capture(
         or intent.get("observer_request_sha256") != submitted["request_sha256"]
         or intent.get("requested_name") != plan["run_name"]
         or intent.get("api_base_url") != submitted["api"]["base_url"]
-        or intent.get("kube_context") != events.DEV_KUBE_CONTEXT
-        or intent.get("namespace") != "fleet-train-jobs"
+        or intent.get("kube_context") != profile.kube_context
+        or intent.get("namespace") != profile.namespace
+        or intent.get("namespace_uid") != profile.namespace_uid
         or intent.get("private_logs_included") is not False
         or intent.get("metric_values_included") is not False
         or intent.get("task_content_included") is not False
@@ -993,7 +1011,7 @@ def start_capture(
             "api_base_url": submitted["api"]["base_url"],
             "api_run_id": submitted["api"]["run_id"],
             "api_run_name": submitted["api"]["run_name"],
-            "cluster": "dev",
+            "cluster": target,
             "kube_context": intent["kube_context"],
             "namespace": intent["namespace"],
             "namespace_uid": intent["namespace_uid"],
@@ -1018,6 +1036,8 @@ def _controller_body(
     from . import miles_event_evidence as events
 
     submitted = validate_submission_binding(submission, plan, check_files=True)
+    target = plan_cluster_target(plan)
+    profile = cluster_profile(target)
     start_path = directory / "STARTED.json"
     start, start_file_sha256 = events._read(start_path, events.START_SCHEMA)
     intent_ref = start.get("capture_intent")
@@ -1029,6 +1049,10 @@ def _controller_body(
         or start["source_request_sha256"] != submitted["request_sha256"]
         or start["api_run_id"] != submitted["api"]["run_id"]
         or start["api_run_name"] != submitted["api"]["run_name"]
+        or start.get("cluster") != target
+        or start.get("kube_context") != profile.kube_context
+        or start.get("namespace") != profile.namespace
+        or start.get("namespace_uid") != profile.namespace_uid
         or start.get("kube_context") != intent.get("kube_context")
         or start.get("started_at") != intent.get("started_at")
         or intent_file_sha256 != intent_ref["file_sha256"].removeprefix("sha256:")
@@ -1192,10 +1216,12 @@ def validate_controller_observation(
     *,
     check_files: bool = True,
 ) -> None:
-    from .miles_acceptance import NAMESPACE, NAMESPACE_UID, _image_digest, _time, _uuid
+    from .miles_acceptance import _image_digest, _time, _uuid
 
     sealed(value, CONTROLLER_SCHEMA)
     submitted = validate_submission_binding(submission, plan, check_files=False)
+    target = plan_cluster_target(plan)
+    profile = cluster_profile(target)
     api, kube, execution = value.get("api"), value.get("kubernetes"), value.get("execution")
     journal = value.get("event_journal")
     pods = kube.get("pods") if isinstance(kube, dict) else None
@@ -1225,9 +1251,9 @@ def validate_controller_observation(
         or not isinstance(kube, dict)
         or set(kube)
         != {"cluster", "namespace", "namespace_uid", "rayjob", "workload", "raycluster", "pods"}
-        or kube.get("cluster") != "dev"
-        or kube.get("namespace") != NAMESPACE
-        or kube.get("namespace_uid") != NAMESPACE_UID
+        or kube.get("cluster") != target
+        or kube.get("namespace") != profile.namespace
+        or kube.get("namespace_uid") != profile.namespace_uid
         or not isinstance(rayjob, dict)
         or set(rayjob) != {"name", "uid", "status"}
         or rayjob.get("name") != submitted["api"]["run_name"]
@@ -1334,18 +1360,17 @@ def collect_release_query(
     run_command: Any = subprocess.run,
     clock: Any = time.time,
 ) -> dict[str, Any]:
-    """Read exact dev/API identities after TTL cleanup; never trust booleans."""
-    from . import miles_event_evidence as events
-    from .miles_acceptance import NAMESPACE, NAMESPACE_UID
+    """Read exact API/Kubernetes identities after TTL cleanup; never trust booleans."""
 
     controller, _ = _read(controller_path, CONTROLLER_SCHEMA)
     validate_controller_observation(controller, plan, submission)
     submitted = validate_submission_binding(submission, plan, check_files=True)
+    profile = cluster_profile(plan_cluster_target(plan))
 
     def get(resource: str, name: str, *, namespace: bool = True) -> dict[str, Any] | None:
-        command = ["kubectl", "--context", events.DEV_KUBE_CONTEXT, "get", resource, name]
+        command = ["kubectl", "--context", profile.kube_context, "get", resource, name]
         if namespace:
-            command.extend(("--namespace", NAMESPACE, "--ignore-not-found"))
+            command.extend(("--namespace", profile.namespace, "--ignore-not-found"))
         command.extend(("--output", "json"))
         process = run_command(
             command,
@@ -1354,21 +1379,21 @@ def collect_release_query(
             check=False,
         )
         if process.returncode:
-            raise ValueError("exact dev Kubernetes release query failed")
+            raise ValueError("exact Kubernetes release query failed")
         payload = process.stdout
         if not payload:
             return None
         try:
             value = json.loads(payload)
         except (UnicodeDecodeError, json.JSONDecodeError) as error:
-            raise ValueError("exact dev Kubernetes release query returned invalid JSON") from error
+            raise ValueError("exact Kubernetes release query returned invalid JSON") from error
         if not isinstance(value, dict):
-            raise ValueError("exact dev Kubernetes release query returned a non-object")
+            raise ValueError("exact Kubernetes release query returned a non-object")
         return value
 
-    namespace = get("namespace", NAMESPACE, namespace=False)
-    if (namespace or {}).get("metadata", {}).get("uid") != NAMESPACE_UID:
-        raise ValueError("release query is not bound to the exact dev3 namespace UID")
+    namespace = get("namespace", profile.namespace, namespace=False)
+    if (namespace or {}).get("metadata", {}).get("uid") != profile.namespace_uid:
+        raise ValueError("release query is not bound to the exact namespace UID")
     kube = controller["kubernetes"]
     targets = {
         "rayjob": ("rayjobs.ray.io", kube["rayjob"]["name"], kube["rayjob"]["uid"]),
@@ -1390,7 +1415,7 @@ def collect_release_query(
         metadata = observed.get("metadata", {}) if observed else {}
         observed_uid = metadata.get("uid") if observed else None
         if observed and (
-            metadata.get("namespace") != NAMESPACE
+            metadata.get("namespace") != profile.namespace
             or metadata.get("name") != name
             or observed_uid != uid
         ):
@@ -1427,9 +1452,9 @@ def collect_release_query(
                 "status": api["status"],
             },
             "kubernetes": {
-                "context": events.DEV_KUBE_CONTEXT,
-                "namespace": NAMESPACE,
-                "namespace_uid": NAMESPACE_UID,
+                "context": profile.kube_context,
+                "namespace": profile.namespace,
+                "namespace_uid": profile.namespace_uid,
                 "objects": objects,
                 "quota_reservation_present": False,
             },
@@ -1448,11 +1473,11 @@ def validate_release_query(
     submission: dict[str, Any],
     controller: dict[str, Any],
 ) -> None:
-    from . import miles_event_evidence as events
-    from .miles_acceptance import NAMESPACE, NAMESPACE_UID, _time
+    from .miles_acceptance import _time
 
     sealed(value, RELEASE_QUERY_SCHEMA)
     submitted = validate_submission_binding(submission, plan, check_files=False)
+    profile = cluster_profile(plan_cluster_target(plan))
     kube = value.get("kubernetes")
     objects = kube.get("objects") if isinstance(kube, dict) else None
     controller_kube = controller["kubernetes"]
@@ -1473,9 +1498,9 @@ def validate_release_query(
         or not isinstance(kube, dict)
         or set(kube)
         != {"context", "namespace", "namespace_uid", "objects", "quota_reservation_present"}
-        or kube.get("context") != events.DEV_KUBE_CONTEXT
-        or kube.get("namespace") != NAMESPACE
-        or kube.get("namespace_uid") != NAMESPACE_UID
+        or kube.get("context") != profile.kube_context
+        or kube.get("namespace") != profile.namespace
+        or kube.get("namespace_uid") != profile.namespace_uid
         or kube.get("quota_reservation_present") is not False
         or not isinstance(objects, dict)
         or set(objects) != set(expected)

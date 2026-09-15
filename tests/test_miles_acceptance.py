@@ -1109,6 +1109,35 @@ def test_terminal_acceptance_reopens_every_gate_without_reward_values(case: dict
         _accept(case)
 
 
+def test_controller_acceptance_binds_explicit_prod_cluster(case: dict) -> None:
+    plan = copy.deepcopy(case["plan"])
+    plan["execution"]["cluster_target"] = "prod"
+    submission = copy.deepcopy(case["submission"])
+    submission["source_plan_sha256"] = "sha256:" + digest(plan)
+    submission["request"]["runtime_argv"] = [
+        "--plan",
+        "plan.json",
+        "--sha256",
+        digest(plan),
+    ]
+    submission["api"]["base_url"] = API_URLS["prod"]
+    submission = _seal(submission)
+    controller = json.loads(case["controller"].read_bytes())
+    controller["source_plan_sha256"] = "sha256:" + digest(plan)
+    controller["api"]["base_url"] = API_URLS["prod"]
+    controller["kubernetes"]["cluster"] = "prod"
+    controller["kubernetes"]["namespace_uid"] = (
+        "fd6d2fcd-687a-4257-9dba-a034bb381e6b"
+    )
+    controller = _seal(controller)
+
+    acceptance.validate_controller_observation(controller, plan, submission)
+    controller["kubernetes"]["namespace_uid"] = acceptance.NAMESPACE_UID
+    controller = _seal(controller)
+    with pytest.raises(ValueError, match="exact canary cluster"):
+        acceptance.validate_controller_observation(controller, plan, submission)
+
+
 def test_single_observer_run_also_satisfies_native_reload(case: dict) -> None:
     terminal = _accept(case)
     terminal_path = case["root"] / "MILES_TERMINAL_ACCEPTED.json"

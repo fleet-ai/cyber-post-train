@@ -3,7 +3,8 @@
 The Miles dev canary needs an independent, value-sensitive proof that its
 sealed checkpoint contains a real policy update. The same proof must also show
 that Miles can restore the full native state without performing more work.
-`training.miles_policy_observer` provides one create-once `1x8` dev job for
+`training.miles_policy_observer` provides one create-once `1x8` job on the
+same cluster as the source checkpoint for
 both purposes. A second eight-GPU reload job is neither required nor allowed by
 this path.
 
@@ -86,7 +87,8 @@ all-eight-rank policy delta.
      --source-commit <exact-40-character-commit>
    ```
 
-   The request is dev `c1`, one worker, eight GPUs, no secret, W&B disabled,
+   The request is `c1` on the source checkpoint's exact cluster, one worker,
+   eight GPUs, no secret, W&B disabled,
    and no requeue. The watch may remain open for up to 12 hours while queued;
    queued without allocation is not idle. An ambiguous POST is reconciled,
    never repeated.
@@ -135,6 +137,14 @@ The final reload receipt exposes the generic
 by promotion and export. It records `observer_gpu_jobs: 1` and
 `additional_reload_gpu_jobs: 0`, and carries the fixed prediction-probe contract
 that the independently reloaded HF export must match.
+
+## Cluster binding
+
+The observer accepts only the fixed `dev` and `prod` identities in
+`training/miles_cluster.py`. Its Jobs API, Kubernetes context, Fleet namespace
+UID, output, and source-checkpoint cluster are derived from the sealed plan;
+callers cannot provide a URL or context. Historical plans with no target retain
+the old `dev` meaning. New production plans must state `cluster_target: prod`.
 
 ## Promotion boundary
 

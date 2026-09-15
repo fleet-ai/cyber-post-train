@@ -27,9 +27,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from cyber_post_train.jobs import API_URLS, digest
+from cyber_post_train.jobs import digest
 from evals.fleet import opencode_self_hosted as fleet
 
+from .miles_cluster import cluster_profile, plan_cluster_target
 from .miles_conversion import _write
 from .miles_reload import CHECKPOINT_SCHEMA, _verify_checkpoint
 from .miles_training import SCHEMA as TRAINING_SCHEMA
@@ -44,8 +45,10 @@ WANDB_SCHEMA = "cyber_miles_wandb_scalar_observation_v1"
 POLICY_DELTA_SCHEMA = "cyber_miles_policy_tensor_delta_observation_v2"
 CONTROLLER_SCHEMA = "cyber_miles_controller_terminal_observation_v1"
 RELEASE_SCHEMA = "cyber_miles_external_release_v1"
-NAMESPACE = "fleet-train-jobs"
-NAMESPACE_UID = "10394b76-e1d4-40b1-a8e2-7575e95df216"
+NAMESPACE = cluster_profile("dev").namespace
+# Backwards-compatible name used by historical dev evidence and tests. New
+# evidence derives its immutable namespace UID from the plan's cluster target.
+NAMESPACE_UID = cluster_profile("dev").namespace_uid
 WORLD_SIZE = 8
 
 _SUBMITTED_RUNTIME_FILES = (
@@ -302,6 +305,7 @@ def _canary(plan: dict[str, Any]) -> dict[str, Any]:
 
     args = plan.get("arguments", {})
     execution = plan.get("execution", {})
+    profile = cluster_profile(plan_cluster_target(plan))
     image = execution.get("image") if isinstance(execution, dict) else None
     checkpoint = plan.get("checkpoint", {})
     if (
@@ -321,6 +325,7 @@ def _canary(plan: dict[str, Any]) -> dict[str, Any]:
         or re.fullmatch(r"[^\s]+@sha256:[a-f0-9]{64}", image) is None
         or checkpoint.get("image") != image
         or execution.get("priority") != "c1"
+        or profile.namespace != NAMESPACE
         or _SHA.fullmatch(str(plan.get("runtime_sha256"))) is None
         or _SHA.fullmatch(str(plan.get("native_driver_sha256"))) is None
     ):
@@ -508,6 +513,7 @@ def compile_submission_binding(
         repo_root or Path(__file__).resolve().parents[1],
     )
     run_id = _uuid(api_run_id, "API run ID")
+    profile = cluster_profile(plan_cluster_target(plan))
     _time(submitted_at, "submission time")
     return _write(
         output,
@@ -524,7 +530,7 @@ def compile_submission_binding(
             "runtime_source_sha256": "sha256:" + plan["runtime_sha256"],
             "runtime_source_commit_match": True,
             "api": {
-                "base_url": API_URLS["dev"],
+                "base_url": profile.api_base_url,
                 "run_id": run_id,
                 "run_name": plan["run_name"] + "-" + run_id[:8],
             },
@@ -547,6 +553,7 @@ def validate_submission_binding(
     sealed(value, SUBMISSION_SCHEMA)
     projection = value.get("request")
     api = value.get("api")
+    profile = cluster_profile(plan_cluster_target(plan))
     if (
         set(value) != _SUBMISSION_FIELDS
         or re.fullmatch(r"[a-f0-9]{40}", str(value.get("source_commit"))) is None
@@ -570,7 +577,7 @@ def validate_submission_binding(
         or projection.get("runtime_argv") != ["--plan", "plan.json", "--sha256", digest(plan)]
         or not isinstance(api, dict)
         or set(api) != {"base_url", "run_id", "run_name"}
-        or api.get("base_url") != API_URLS["dev"]
+        or api.get("base_url") != profile.api_base_url
         or _UUID.fullmatch(str(api.get("run_id"))) is None
         or api.get("run_name") != plan["run_name"] + "-" + str(api.get("run_id"))[:8]
         or value.get("jobs_api_post_count") != 1
@@ -1234,6 +1241,8 @@ def validate_controller_observation(
     workload = kube.get("workload") if isinstance(kube, dict) else None
     raycluster = kube.get("raycluster") if isinstance(kube, dict) else None
     api_name = api.get("run_name") if isinstance(api, dict) else None
+    target = plan_cluster_target(plan)
+    profile = cluster_profile(target)
     expected_image = plan["execution"]["image"].rsplit("@sha256:", 1)[1]
     if (
         set(value)
@@ -1262,9 +1271,9 @@ def validate_controller_observation(
         or not isinstance(kube, dict)
         or set(kube)
         != {"cluster", "namespace", "namespace_uid", "rayjob", "workload", "raycluster", "pods"}
-        or kube.get("cluster") != "dev"
-        or kube.get("namespace") != NAMESPACE
-        or kube.get("namespace_uid") != NAMESPACE_UID
+        or kube.get("cluster") != target
+        or kube.get("namespace") != profile.namespace
+        or kube.get("namespace_uid") != profile.namespace_uid
         or not isinstance(rayjob, dict)
         or set(rayjob) != {"name", "uid", "status"}
         or rayjob.get("name") != api_name
@@ -1294,7 +1303,7 @@ def validate_controller_observation(
             "total_gpus": WORLD_SIZE,
         }
     ):
-        raise ValueError("controller observation differs from the exact dev canary")
+        raise ValueError("controller observation differs from the exact canary cluster")
     pod = pods[0]
     if (
         set(pod)
