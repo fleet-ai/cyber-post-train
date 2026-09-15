@@ -247,6 +247,21 @@ def test_renderer_is_an_immutable_bounded_zero_gpu_direct_pod() -> None:
         "name": "FILEBROWSER_USER",
         "value": "christopher@fleet.so",
     }
+    bundle_mounts = [mount for mount in container["volumeMounts"] if mount["name"] == "bundle"]
+    assert bundle_mounts == [
+        {
+            "name": "bundle",
+            "mountPath": "/bundle/model_stage.py",
+            "subPath": "model_stage.py",
+            "readOnly": True,
+        },
+        {
+            "name": "bundle",
+            "mountPath": "/bundle/plan.json",
+            "subPath": "plan.json",
+            "readOnly": True,
+        },
+    ]
     assert not any(obj["kind"] in {"Job", "RayJob", "Deployment", "Service"} for obj in objects)
     assert pod["metadata"]["namespace"] == "inference"
     assert "api_key" not in rendered.lower()

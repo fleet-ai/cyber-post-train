@@ -769,7 +769,18 @@ def render_manifest(plan: Mapping[str, Any], source_path: Path, plan_path: Path)
                         "readOnlyRootFilesystem": True,
                     },
                     "volumeMounts": [
-                        {"name": "bundle", "mountPath": "/bundle", "readOnly": True},
+                        {
+                            "name": "bundle",
+                            "mountPath": "/bundle/model_stage.py",
+                            "subPath": "model_stage.py",
+                            "readOnly": True,
+                        },
+                        {
+                            "name": "bundle",
+                            "mountPath": "/bundle/plan.json",
+                            "subPath": "plan.json",
+                            "readOnly": True,
+                        },
                         {"name": "models", "mountPath": "/models"},
                     ],
                 }
