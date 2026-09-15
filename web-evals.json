@@ -54,9 +54,10 @@
       "source": "https://github.com/fleet-ai/cyber-post-train/blob/codex/web-evals-dashboard-runner/docs/WEB_EVAL_RESULTS_2026-09-15.md"
     },
     {
-      "id": "fresh75-web-pending", "name": "Fresh75 checkpoint · new separated evaluation", "date": "2026-09-15", "model": "Qwen3.8-27B", "checkpoint": "Fresh75 final step 230; serving readiness being checked", "harness": "OpenCode 1.18.27", "judge": "Not yet frozen; scoring will be separate", "platform": "Tensorlake", "status": "planned",
-      "collection": "Not launched", "scoring": "Not launched", "planned": null, "usable": null, "targets": "15 planned websites", "attempts_per_target": null, "metrics": [],
-      "note": "This entry tracks preparation. It is not an active evaluation or a performance result. The checkpoint and complete settings must be checked before launch.", "config": {},
+      "id": "fresh75-step230-opencode-web-p1-v3", "name": "Fresh75 checkpoint · separated evaluation", "date": "2026-09-15", "model": "Qwen3.8-27B", "checkpoint": "Fresh75 final step 230", "harness": "OpenCode 1.18.27", "judge": "None during collection; scoring is a separate later step", "platform": "Tensorlake", "status": "active",
+      "collection": "In progress", "scoring": "Not started; no judge can invalidate or erase collection", "planned": 15, "usable": null, "targets": "15 intended websites", "attempts_per_target": 1, "metrics": [],
+      "note": "Active collection, not a performance result. The checkpoint passed GPU reload and live-serving checks. All 15 website environments passed a separate no-model qualification before launch. Results remain blank until collection, download and scoring records pass their checks.",
+      "config": {"Campaign": "fresh75-step230-opencode-web-p1-v3", "Model context limit, tokens": 262144, "Temperature": 0, "Maximum attempts per website": 1, "Maximum simultaneous attempts": 15, "Attempt timeout": "8 hours", "Agent memory": "48 GiB", "Scoring during collection": "Disabled", "Launch-plan SHA-256": "50bf2d12e050f81725ab8b3f8f756466fa20f9b93678cfb2a79b3cb32773737c", "Environment qualification": "All 15 websites passed"},
       "source": "https://github.com/fleet-ai/cyber-post-train/blob/codex/web-evals-dashboard-runner/docs/WEB_EVAL_RESULTS_2026-09-15.md"
     },
     {
