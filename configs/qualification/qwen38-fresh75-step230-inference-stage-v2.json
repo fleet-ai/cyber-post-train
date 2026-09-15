@@ -1,0 +1,331 @@
+{
+  "schema": "cyber_inference_model_stream_stage_plan_v1",
+  "purpose": "Stream the exact accepted Fresh75 step-230 BF16 export into the inference PVC without deserializing or duplicating the weights.",
+  "source": {
+    "export_receipt": {
+      "sfs_path": "/jobs/chris-q38-f75-max-full-v4/hf-export-step230-v1/EXPORT.json",
+      "file_sha256": "sha256:7b4ed0c07cc0f9ed6a5cbdac7d3ad0b3bc08ba63447fc2d56e47885c3daa7c4f",
+      "receipt_sha256": "sha256:1bd81c78575c32fa52dc4ab9c7002d95db5028047fa52cc36297aa1954c3d2d3",
+      "required_fields": {
+        "schema": "cyber_native_checkpoint_hf_export_v1",
+        "source_checkpoint_receipt_sha256": "9542502631b47cd730ccecb5938650103ed999bf4a4a6cf7d16d9be09c317cab",
+        "source_manifest_file_sha256": "bf92e29d9f19dd589201214f25fe8d0e3b0f65de14ec08fc573217f50580a486",
+        "source_plan_sha256": "8733a752b461963609b3614f49b6d2ec04cd02779b189347e476b3532f0590b2",
+        "model_repo": "Qwen/Qwen3.8-27B",
+        "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "output_root": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/hf-export-step230-v1",
+        "optimizer_step": 230,
+        "optimizer_steps_executed": 0,
+        "gpu_reload_verified": false,
+        "trained_tensors": 1184,
+        "tensor_values": 27781427952,
+        "tensor_bytes": 55562855904,
+        "dtype": "BF16",
+        "source_inventory_sizes_mtimes_unchanged": true,
+        "all_output_tensors_reopened_equal": true
+      }
+    },
+    "gpu_check_receipt": {
+      "sfs_path": "/jobs/chris-q38-f75-step230-export-gpu-check-v1/GPU_CHECK.json",
+      "file_sha256": "sha256:30cb5f9687d1cb08f8e78b9f425391807f0f16c0cefe712d97d9b155cf73b791",
+      "receipt_sha256": "sha256:43e40b5397f3db4fb6b603cb9774f9aa862d570c3191d8f71e7c14b599be6f01",
+      "required_fields": {
+        "schema": "cyber_hf_export_check_v1",
+        "status": "passed",
+        "export_sha256": "7b4ed0c07cc0f9ed6a5cbdac7d3ad0b3bc08ba63447fc2d56e47885c3daa7c4f",
+        "export_receipt_sha256": "1bd81c78575c32fa52dc4ab9c7002d95db5028047fa52cc36297aa1954c3d2d3",
+        "optimizer_steps_executed": 0,
+        "gpus": 1,
+        "gpu_reload_verified": true,
+        "serving_qualified": false,
+        "synthetic_only": true,
+        "source_unchanged": true,
+        "attention_implementation": "eager",
+        "finite_logits": true,
+        "generated_tokens": 2
+      }
+    },
+    "payload": {
+      "mapping": "exact EXPORT.files object with bare per-file SHA-256 values",
+      "file_count": 29,
+      "manifest_sha256": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
+      "maximum_file_bytes": 4294967296,
+      "maximum_total_bytes": 68719476736
+    }
+  },
+  "execution": {
+    "namespace": "inference",
+    "pod_name": "chris-q38-f75-p230-stage-v2",
+    "config_map_name": "chris-q38-f75-p230-stage-v2",
+    "image": "lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+    "runtime_source_sha256": "sha256:ab43d324d46e35712534f3ed8418807a924a7505feb30416538fc36b38fc01b6",
+    "priority_class": "c1",
+    "gpus": 0,
+    "restart_policy": "Never",
+    "active_deadline_seconds": 5400,
+    "resource_shape": {
+      "cpu_request": "4",
+      "cpu_limit": "8",
+      "memory_request": "8Gi",
+      "memory_limit": "16Gi",
+      "ephemeral_storage_request": "1Gi",
+      "ephemeral_storage_limit": "2Gi"
+    },
+    "teardown": "Delete the exact Pod and ConfigMap after terminal receipt validation and verify both UIDs absent."
+  },
+  "destination": {
+    "model_id": "chris-q38-fresh75-step230-v1",
+    "path": "/models/chris-q38-fresh75-step230-v1",
+    "acceptance_path": "/models/chris-q38-fresh75-step230-v1/.fleet-acceptance.json",
+    "must_be_absent": true,
+    "atomic_transaction": "directory_rename_noreplace_v1"
+  },
+  "registration_source": {
+    "id": "chris-q38-fresh75-step20-v1",
+    "observed_state": "paused",
+    "observed_active_pods": 0,
+    "spec_sha256": "sha256:7c1cfc3ea4a95833536bf7044842ef8d89945542a4a757c922d5c3b74cbd7e74",
+    "spec": {
+      "cache": {
+        "enabled": true,
+        "workers": 16
+      },
+      "capabilities": [
+        "chat_completions",
+        "reasoning",
+        "streaming",
+        "tool_calling"
+      ],
+      "desiredState": "paused",
+      "displayName": "Qwen3.8-27B Fresh75 teacher-max SFT V4 step 20",
+      "model": {
+        "dataParallelAttention": false,
+        "dataParallelSize": 1,
+        "path": "/scratch/models/chris-q38-fresh75-step20-v1",
+        "precision": "bf16",
+        "revision": "sha256:f3bd812eb907a3e1a33a166a1d31310b5d2ce295937b932ebfdf8911da86ad93",
+        "sourcePath": "/models/chris-q38-fresh75-step20-v1",
+        "tensorParallelSize": 8
+      },
+      "placement": {
+        "nodeGroup": "fleetai-training-ng-gpu",
+        "priorityClassName": "c1"
+      },
+      "resources": {
+        "limits": {
+          "cpu": "192",
+          "memory": "2Ti",
+          "nvidia.com/gpu": 8
+        },
+        "requests": {
+          "cpu": "96",
+          "memory": "1Ti",
+          "nvidia.com/gpu": 8
+        }
+      },
+      "routing": {
+        "enabled": true
+      },
+      "runtime": {
+        "args": [
+          "--model-path",
+          "/scratch/models/chris-q38-fresh75-step20-v1",
+          "--served-model-name",
+          "chris-q38-fresh75-step20-v1",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "8000",
+          "--trust-remote-code",
+          "--tp-size",
+          "1",
+          "--context-length",
+          "262144",
+          "--kv-cache-dtype",
+          "fp8_e4m3",
+          "--mem-fraction-static",
+          "0.85",
+          "--attention-backend",
+          "trtllm_mha",
+          "--chunked-prefill-size",
+          "32768",
+          "--max-prefill-tokens",
+          "32768",
+          "--mamba-full-memory-ratio",
+          "4.58",
+          "--reasoning-parser",
+          "qwen3",
+          "--tool-call-parser",
+          "qwen3_coder",
+          "--enable-metrics",
+          "--enable-mfu-metrics",
+          "--enable-metrics-for-all-schedulers",
+          "--dp-size",
+          "8",
+          "--load-balance-method",
+          "total_tokens",
+          "--speculative-algorithm",
+          "NEXTN",
+          "--speculative-num-steps",
+          "3",
+          "--speculative-eagle-topk",
+          "1",
+          "--speculative-num-draft-tokens",
+          "4"
+        ],
+        "command": [
+          "python3",
+          "-m",
+          "sglang.launch_server"
+        ],
+        "engine": "sglang",
+        "env": [
+          {
+            "name": "HF_HUB_OFFLINE",
+            "value": "1"
+          },
+          {
+            "name": "TRANSFORMERS_OFFLINE",
+            "value": "1"
+          }
+        ],
+        "healthPath": "/health",
+        "image": {
+          "digest": "sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+          "repository": "lmsysorg/sglang"
+        },
+        "lockMemory": false,
+        "port": 8000
+      },
+      "scaling": {
+        "minReplicas": 0
+      }
+    }
+  },
+  "desired_registration": {
+    "id": "chris-q38-fresh75-step230-v1",
+    "spec": {
+      "cache": {
+        "enabled": true,
+        "workers": 16
+      },
+      "capabilities": [
+        "chat_completions",
+        "reasoning",
+        "streaming",
+        "tool_calling"
+      ],
+      "desiredState": "paused",
+      "displayName": "Qwen3.8-27B Fresh75 teacher-max SFT V4 step 230",
+      "model": {
+        "dataParallelAttention": false,
+        "dataParallelSize": 1,
+        "path": "/scratch/models/chris-q38-fresh75-step230-v1",
+        "precision": "bf16",
+        "revision": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
+        "sourcePath": "/models/chris-q38-fresh75-step230-v1",
+        "tensorParallelSize": 8
+      },
+      "placement": {
+        "nodeGroup": "fleetai-training-ng-gpu",
+        "priorityClassName": "c1"
+      },
+      "resources": {
+        "limits": {
+          "cpu": "192",
+          "memory": "2Ti",
+          "nvidia.com/gpu": 8
+        },
+        "requests": {
+          "cpu": "96",
+          "memory": "1Ti",
+          "nvidia.com/gpu": 8
+        }
+      },
+      "routing": {
+        "enabled": true
+      },
+      "runtime": {
+        "args": [
+          "--model-path",
+          "/scratch/models/chris-q38-fresh75-step230-v1",
+          "--served-model-name",
+          "chris-q38-fresh75-step230-v1",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "8000",
+          "--trust-remote-code",
+          "--tp-size",
+          "1",
+          "--context-length",
+          "262144",
+          "--kv-cache-dtype",
+          "fp8_e4m3",
+          "--mem-fraction-static",
+          "0.85",
+          "--attention-backend",
+          "trtllm_mha",
+          "--chunked-prefill-size",
+          "32768",
+          "--max-prefill-tokens",
+          "32768",
+          "--mamba-full-memory-ratio",
+          "4.58",
+          "--reasoning-parser",
+          "qwen3",
+          "--tool-call-parser",
+          "qwen3_coder",
+          "--enable-metrics",
+          "--enable-mfu-metrics",
+          "--enable-metrics-for-all-schedulers",
+          "--dp-size",
+          "8",
+          "--load-balance-method",
+          "total_tokens",
+          "--speculative-algorithm",
+          "NEXTN",
+          "--speculative-num-steps",
+          "3",
+          "--speculative-eagle-topk",
+          "1",
+          "--speculative-num-draft-tokens",
+          "4"
+        ],
+        "command": [
+          "python3",
+          "-m",
+          "sglang.launch_server"
+        ],
+        "engine": "sglang",
+        "env": [
+          {
+            "name": "HF_HUB_OFFLINE",
+            "value": "1"
+          },
+          {
+            "name": "TRANSFORMERS_OFFLINE",
+            "value": "1"
+          }
+        ],
+        "healthPath": "/health",
+        "image": {
+          "digest": "sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+          "repository": "lmsysorg/sglang"
+        },
+        "lockMemory": false,
+        "port": 8000
+      },
+      "scaling": {
+        "minReplicas": 0
+      }
+    }
+  },
+  "scientific_boundary": {
+    "optimizer_updates": 0,
+    "external_benchmark_content_or_outcomes_used": false,
+    "serving_qualified_by_staging": false,
+    "registration_or_resume_performed_by_this_plan": false
+  },
+  "plan_sha256": "sha256:be811ec866c64ade8a0dfae298cc29a48c32f6b6ffe38b4773db65cc6253713a"
+}

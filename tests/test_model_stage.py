@@ -15,7 +15,8 @@ import yaml
 from training import model_stage as stage
 
 ROOT = Path(__file__).resolve().parents[1]
-PRODUCTION = ROOT / "configs/qualification/qwen38-fresh75-step230-inference-stage-v1.json"
+FAILED_V1 = ROOT / "configs/qualification/qwen38-fresh75-step230-inference-stage-v1.json"
+PRODUCTION = ROOT / "configs/qualification/qwen38-fresh75-step230-inference-stage-v2.json"
 SOURCE = ROOT / "training/model_stage.py"
 
 
@@ -103,6 +104,19 @@ def test_production_plan_is_self_digesting_and_exact_registration_clone() -> Non
     assert desired["spec"]["scaling"]["minReplicas"] == 0
     assert desired["spec"]["placement"]["priorityClassName"] == "c1"
     assert desired["spec"]["model"]["revision"] == plan["source"]["payload"]["manifest_sha256"]
+
+
+def test_production_plan_is_exact_successor_of_preserved_failed_v1() -> None:
+    failed_v1 = stage.read_plan(FAILED_V1)
+    production = stage.read_plan(PRODUCTION)
+    expected = copy.deepcopy(failed_v1)
+    expected["execution"]["pod_name"] = "chris-q38-f75-p230-stage-v2"
+    expected["execution"]["config_map_name"] = "chris-q38-f75-p230-stage-v2"
+    _rehash_plan(expected)
+
+    assert failed_v1["execution"]["pod_name"] == "chris-q38-f75-p230-stage-v1"
+    assert failed_v1["execution"]["config_map_name"] == "chris-q38-f75-p230-stage-v1"
+    assert production == expected
 
 
 def test_streams_once_then_idempotently_reopens_without_network(tmp_path: Path) -> None:
