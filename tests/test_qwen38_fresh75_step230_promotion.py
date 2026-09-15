@@ -11,6 +11,7 @@ from training.io import digest_json, file_sha256
 ROOT = Path(__file__).resolve().parents[1]
 PLAN = ROOT / "configs/qualification/qwen38-fresh75-step230-promotion-v1.template.json"
 EVIDENCE = ROOT / "docs/evidence/qwen38-fresh75-step230-promotion-prepared-20260915.json"
+ACCEPTED = ROOT / "docs/evidence/qwen38-fresh75-step230-reload-accepted-20260915.json"
 
 
 def read(path: Path) -> dict:
@@ -136,8 +137,47 @@ def test_external_benchmark_cannot_select_or_change_checkpoint() -> None:
     assert firewall["fleet_final_test_may_select_checkpoint"] is False
 
 
+def test_later_reload_acceptance_is_exact_zero_update_and_released() -> None:
+    accepted = read(ACCEPTED)
+    assert accepted["sha256"] == digest_json(unsigned(accepted))
+    assert accepted["classification"] == (
+        "exact_bf16_export_cpu_and_gpu_reload_accepted_serving_not_yet_qualified"
+    )
+    assert accepted["training"]["checkpoint_receipt_sha256"] == (
+        "sha256:9542502631b47cd730ccecb5938650103ed999bf4a4a6cf7d16d9be09c317cab"
+    )
+    assert accepted["export"]["dtype"] == "BF16"
+    assert accepted["export"]["tensor_count"] == 1199
+    assert accepted["export"]["optimizer_steps_executed"] == 0
+    assert accepted["cpu_check"]["status"] == "passed"
+    assert accepted["cpu_check"]["gpus"] == 0
+    gpu = accepted["gpu_check"]
+    assert gpu["jobs_api_status"] == "SUCCEEDED"
+    assert gpu["priority_class"] == "c1" and gpu["queue_priority_class"] == "q1"
+    assert gpu["status"] == "passed"
+    assert gpu["gpus"] == 1 and gpu["optimizer_steps_executed"] == 0
+    assert gpu["gpu_reload_verified"] is True
+    assert gpu["finite_logits"] is True and gpu["generated_tokens"] == 2
+    assert gpu["source_unchanged"] is True and gpu["serving_qualified"] is False
+    release = accepted["release"]
+    assert release["raycluster_absent"] is True
+    assert release["pod_absent"] is True
+    assert release["workload_finished"] is True
+    assert release["gpu_allocation_released"] is True
+    assert release["verification_reader_gpus"] == 0
+    assert release["verification_reader_deleted_and_absent"] is True
+    assert release["upstream_reader_gpus"] == 0
+    assert release["upstream_reader_deleted_and_absent"] is True
+    assert accepted["next_gate"]["external_evaluation_launchable"] is False
+    assert accepted["scientific_boundary"]["webexploitbench_content_or_outcomes_used"] is False
+
+
 def test_public_artifacts_contain_no_secret_or_private_payload() -> None:
-    text = PLAN.read_text(encoding="utf-8") + EVIDENCE.read_text(encoding="utf-8")
+    text = (
+        PLAN.read_text(encoding="utf-8")
+        + EVIDENCE.read_text(encoding="utf-8")
+        + ACCEPTED.read_text(encoding="utf-8")
+    )
     assert re.search(r"\bsk_[A-Za-z0-9_-]{20,}", text) is None
     assert re.search(r"\btl_apiKey_[A-Za-z0-9_-]{20,}", text) is None
     assert "FLAG{" not in text

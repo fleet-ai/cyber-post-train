@@ -117,18 +117,25 @@ This proves terminal training and exact checkpoint bytes. It does not yet prove
 that the model can be loaded for inference or served.
 
 The [step-230 promotion template](../configs/qualification/qwen38-fresh75-step230-promotion-v1.template.json)
-freezes the remaining gates. The existing create-once CPU export must finish
-and be accepted before the CPU integrity check is rendered. Only after that
-check passes may one bounded, one-GPU, zero-optimizer reload run be rendered.
-Serving then requires create-once staging, a temporary serving test, production
-registration, and fresh base-versus-candidate parity. Any development-cluster
-serving test is temporary, has a fixed lifetime, and must release all resources
-on success or failure; a persistent development endpoint is forbidden.
+froze the remaining gates before they ran. The create-once BF16 export, its
+CPU integrity check, and the bounded one-GPU reload have now all passed. The
+one-GPU check loaded the complete exported model, produced finite output,
+executed zero optimizer steps, proved the source unchanged, and released its
+GPU. The exact terminal identities and signed receipt hashes are in the
+[reload acceptance evidence](evidence/qwen38-fresh75-step230-reload-accepted-20260915.json).
 
-The public preparation receipt is
+This proves that the final checkpoint is reloadable. It does not yet prove that
+the model is served correctly. Serving still requires create-once staging,
+temporary serving qualification, production registration, and fresh
+base-versus-candidate parity. Any development-cluster serving test is temporary,
+has a fixed lifetime, and must release all resources on success or failure; a
+persistent development endpoint is forbidden.
+
+The earlier public preparation receipt is
 `docs/evidence/qwen38-fresh75-step230-promotion-prepared-20260915.json`. It is
-explicitly non-launchable and does not claim that the in-progress export has
-succeeded.
+an immutable record of the pre-execution state and does not claim that the then
+in-progress export had succeeded. The later acceptance evidence above records
+the completed export and reload gates without rewriting that history.
 
 There is no held-out teacher-token loss. W&B records training loss and runtime
 health. Checkpoint choice must use task outcomes on the frozen 17-task Fleet
