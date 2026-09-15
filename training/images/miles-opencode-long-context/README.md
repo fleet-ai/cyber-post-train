@@ -5,8 +5,9 @@ starts from the immutable FTI 0.8.4 Miles image, installs the exact Linux
 OpenCode 1.18.27 executable, and raises Miles session-v2's node cap only when
 `MILES_SESSION_MAX_NODES` is explicitly set. The old default remains 1024.
 
-The build fails unless the installed Miles tree, native training driver, and
-native checkpoint converter have the exact reviewed SHA-256 digests. It fetches
+The build fails unless the installed Miles tree, native training driver,
+distributed-initialization sources, Megatron optimizer, and native checkpoint
+converter have the exact reviewed Git/SHA-256 identities. It fetches
 the official OpenCode release archive and checks both the archive and extracted
 binary digests. This keeps Git-based BuildKit builds reproducible without
 committing the binary or relying on a local-context upload. Publish the resulting
@@ -32,11 +33,22 @@ Required qualification:
    family with the exact Qwen3.8 profile template and parsers;
 4. the complete native driver imports through a CUDA-stub process with no
    undocumented-signature findings before any GPU allocation;
-5. a dev run proves repeated native OpenCode compaction, one authoritative
-   reward per original rollout, finite nonzero update, durable checkpoint,
-   release, and zero-update reload.
+5. an exact 4 x 8, 32-rank clean-exit qualification uses the hybrid
+   `cpu:gloo,cuda:nccl` world, initializes the complete Qwen model and Megatron
+   optimizer through its parameter-group object collective, performs no
+   rollout/reward/update/checkpoint write, and releases all 32 GPUs;
+6. only then may a reward canary prove repeated native OpenCode compaction, one
+   authoritative reward per original rollout, finite nonzero update, durable
+   checkpoint, release, and zero-update reload.
 
 The base image's installed Miles checkout is `9e178ca1`; its Fleet branch
 missed upstream Qwen3.8 TITO support even though FTI already ships the Qwen3.8
 profile. The build backports exact upstream commit `257992eb` and refuses any
 different checkout or source-file hash.
+
+The 32-rank gate is required because a one-process CUDA parser check cannot
+exercise distributed optimizer construction. The first 4 x 8 canary reached
+that stage with a CUDA-only default world and failed its Python-object gather
+before any rollout. The proposed hybrid default leaves CUDA tensor collectives
+on NCCL while routing default-world object metadata over Gloo; it remains
+unqualified until the exact 32-rank gate passes.

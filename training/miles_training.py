@@ -70,6 +70,20 @@ LONG_RUNTIME_BASE_IMAGE = (
 QWEN3_ASR_PATCHED_SHA256 = (
     "90ebb373c06195ad4a8d117e17ed154ffc67c78ccc370fe7f5dcab78ae864355"
 )
+MEGATRON_COMMIT = "e8f574511105db3b58a61f90da178101d8ab2d45"
+MEGATRON_OPTIMIZER_SHA256 = (
+    "2bad8558ca6b818406186fd9df6b052bb77ae82c9336d340e1c6e3ed71d9e66a"
+)
+MILES_DISTRIBUTED_SOURCE_SHA256 = {
+    "arguments": "b26c0702fe4a51c30444aae78b55e5e56aa0e1fc4f6e7d51ebdc7fb91f452eae",
+    "distributed_utils": "13a688b49217b7655fedaed5fea7bd6559939a0a9e134c6b0dedfe1f38e0aecf",
+    "train_actor": "fff8943500088eefb4e45f435704d43fadf210b931db9daab1d4777972e9a783",
+    "actor": "eecd72a4387511916add2c97d9e2dad6716db9097fd6ec471468c1f7edc074b9",
+    "model": "faef15f54f5db2748194c6938f08e0e5686ef4e1c464a67bb4f373466d8885d6",
+    "reloadable_process_group": (
+        "1e52bb83599cab206ca1291994591a096439f5e501b82821b604ef91c45433fd"
+    ),
+}
 LONG_RUNTIME_CHECKS = frozenset(
     {
         "installed_source_digest_checked",
@@ -80,11 +94,28 @@ LONG_RUNTIME_CHECKS = frozenset(
         "qwen38_profile_template_checked",
         "native_qwen38_tito_backport_checked",
         "native_radix_affinity_route_checked",
+        "hybrid_backend_mapping_checked",
         "forced_repeated_compaction_checked",
         "more_than_1024_nodes_checked",
         "one_reward_per_rollout_checked",
         "summary_tokens_excluded_checked",
         "no_primary_tool_prefix_truncation_checked",
+    }
+)
+DISTRIBUTED_STARTUP_CHECKS = frozenset(
+    {
+        "hybrid_world_initialized",
+        "world_gloo_barrier_completed",
+        "model_initialized",
+        "optimizer_param_group_object_collective_completed",
+        "optimizer_initialized",
+        "rollouts_zero",
+        "reward_calls_zero",
+        "optimizer_updates_zero",
+        "checkpoint_writes_zero",
+        "exit_zero",
+        "restarts_zero",
+        "all_resources_released",
     }
 )
 
@@ -101,6 +132,8 @@ def _validate_long_runtime_receipt(
     if not isinstance(receipt, dict):
         raise ValueError("long-context runtime image qualification is absent")
     _sealed(receipt, "cyber_miles_opencode_runtime_qualification_v1")
+    root = Path(__file__).resolve().parents[1]
+    qualifier = root / "configs/qualification/qwen38_miles_runtime_qualification_v1.py"
     if (
         receipt.get("status") != "image_qualified_for_dev"
         or receipt.get("image") != image
@@ -120,6 +153,13 @@ def _validate_long_runtime_receipt(
         or receipt.get("opencode_binary_sha256")
         != "sha256:bddf894e5c2bc3d8cf452bd6e5ab2273bbe4a37eeeb9aec848d3d7d20db1f256"
         or receipt.get("miles_source_commit") != "9e178ca16839b0600155f3927f57ce0670b8f453"
+        or receipt.get("megatron_commit") != MEGATRON_COMMIT
+        or receipt.get("megatron_optimizer_sha256")
+        != "sha256:" + MEGATRON_OPTIMIZER_SHA256
+        or receipt.get("miles_distributed_source_sha256")
+        != {key: "sha256:" + value for key, value in MILES_DISTRIBUTED_SOURCE_SHA256.items()}
+        or receipt.get("qualification_script_sha256") != "sha256:" + _hash(qualifier)
+        or receipt.get("runtime_source_sha256") != "sha256:" + digest(_runtime())
         or receipt.get("miles_tito_backport_commit")
         != "257992eb52bfa1f5248b5a5ae8f5a959be500788"
         or receipt.get("installed_tito_source_sha256")
@@ -135,6 +175,7 @@ def _validate_long_runtime_receipt(
         != "sha256:" + miles.LONG_INSTALLED_SESSION_TREE_SHA256
         or set(receipt.get("checks", {})) != LONG_RUNTIME_CHECKS
         or not all(receipt["checks"].values())
+        or not re.fullmatch(r"[a-f0-9]{40}", str(receipt.get("source_commit", "")))
         or not re.fullmatch(r"[^@\s]+@sha256:[a-f0-9]{64}", image)
         or not re.fullmatch(r"sha256:[a-f0-9]{64}", str(receipt.get("build_source_sha256", "")))
         or (
@@ -144,6 +185,77 @@ def _validate_long_runtime_receipt(
     ):
         raise ValueError("long-context runtime image has not passed exact qualification")
     return receipt
+
+
+def _distributed_startup_contract(*, runtime: dict, checkpoint: dict) -> dict:
+    return {
+        "image": runtime["image"],
+        "source_commit": runtime["source_commit"],
+        "runtime_qualification_sha256": "sha256:"
+        + str(runtime["sha256"]).removeprefix("sha256:"),
+        "runtime_source_sha256": "sha256:" + digest(_runtime()),
+        "checkpoint_root": checkpoint["root"],
+        "checkpoint_sha256": "sha256:"
+        + str(checkpoint["sha256"]).removeprefix("sha256:"),
+        "native_profile": miles.LONG_CONTEXT_PROFILE,
+        "distributed_backend": miles.LONG_DISTRIBUTED_BACKEND,
+        "nodes": 4,
+        "gpus_per_node": 8,
+        "world_size": 32,
+        "tensor_parallel_size": 8,
+        "context_parallel_size": 4,
+    }
+
+
+def _validate_distributed_startup_receipt(receipt: object, *, contract: dict) -> dict:
+    """Require real 32-rank optimizer construction before a reward canary."""
+    if not isinstance(receipt, dict):
+        raise ValueError("exact 4x8 distributed optimizer startup qualification is absent")
+    _sealed(receipt, "cyber_miles_distributed_startup_qualification_v1")
+    qualification = receipt.get("qualification")
+    sources = receipt.get("installed_sources")
+    if (
+        receipt.get("status") != "accepted_released"
+        or receipt.get("contract") != contract
+        or sources
+        != {
+            "megatron_commit": MEGATRON_COMMIT,
+            "megatron_optimizer_sha256": "sha256:" + MEGATRON_OPTIMIZER_SHA256,
+            "miles_commit": "9e178ca16839b0600155f3927f57ce0670b8f453",
+            "miles_distributed_source_sha256": {
+                key: "sha256:" + value
+                for key, value in MILES_DISTRIBUTED_SOURCE_SHA256.items()
+            },
+        }
+        or set(receipt.get("checks", {})) != DISTRIBUTED_STARTUP_CHECKS
+        or not all(receipt["checks"].values())
+        or not isinstance(qualification, dict)
+        or qualification.get("priority_class") != "c1"
+        or qualification.get("workers") != 4
+        or qualification.get("gpus_per_worker") != 8
+        or qualification.get("world_size") != 32
+        or qualification.get("exit_code") != 0
+        or qualification.get("container_restarts") != 0
+        or qualification.get("gpus_released") != 32
+        or qualification.get("resource_absence_verified") is not True
+        or not 1 <= qualification.get("active_deadline_seconds", 0) <= 3600
+    ):
+        raise ValueError("exact 4x8 distributed optimizer startup is not qualified")
+    return receipt
+
+
+def _bind_distributed_startup(value: object, relative_to: Path, *, contract: dict) -> dict:
+    from .sft import _known, read_mapping
+
+    if not isinstance(value, dict):
+        raise ValueError("exact 4x8 distributed optimizer startup qualification is absent")
+    _known(value, {"receipt", "sha256"}, "distributed startup qualification")
+    if not re.fullmatch(r"sha256:[a-f0-9]{64}", str(value.get("sha256", ""))):
+        raise ValueError("distributed startup receipt digest is malformed")
+    path = relative_to / value["receipt"]
+    if _hash(path) != value["sha256"].removeprefix("sha256:"):
+        raise ValueError("distributed startup qualification receipt changed")
+    return _validate_distributed_startup_receipt(read_mapping(path), contract=contract)
 
 
 def _bind_long_runtime(value: object, relative_to: Path) -> dict:
@@ -190,6 +302,7 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
             "cluster",
             "production_promotion",
             "runtime",
+            "distributed_startup",
         },
         "RL",
     )
@@ -256,6 +369,8 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
     runtime = _bind_long_runtime(config.get("runtime"), relative_to) if long_horizon else None
     if not long_horizon and config.get("runtime") is not None:
         raise ValueError("legacy Miles does not accept an alternate runtime")
+    if not long_horizon and config.get("distributed_startup") is not None:
+        raise ValueError("legacy Miles does not accept a distributed startup qualification")
     cp_path = relative_to / checkpoint["manifest"]
     if _hash(cp_path) != checkpoint["sha256"].removeprefix("sha256:"):
         raise ValueError("native checkpoint manifest file digest mismatch")
@@ -286,6 +401,15 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
         **recipe,
     )
     args.validate()
+    startup = (
+        _bind_distributed_startup(
+            config.get("distributed_startup"),
+            relative_to,
+            contract=_distributed_startup_contract(runtime=runtime, checkpoint=cp),
+        )
+        if long_horizon
+        else None
+    )
     if (
         metadata["name"] != args.name
         or metadata["tokenizer"]["repo"] != bound["repo"]
@@ -322,6 +446,11 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
             ),
         },
         **({"runtime_qualification": runtime} if runtime is not None else {}),
+        **(
+            {"distributed_startup_qualification": startup}
+            if startup is not None
+            else {}
+        ),
     }
     job_request(plan)
     return plan
@@ -336,8 +465,16 @@ def job_request(plan):
     if args.harness == "opencode":
         receipt = plan.get("runtime_qualification")
         _validate_long_runtime_receipt(receipt, image=args.runtime_image)
+        _validate_distributed_startup_receipt(
+            plan.get("distributed_startup_qualification"),
+            contract=_distributed_startup_contract(
+                runtime=receipt, checkpoint=plan["checkpoint"]
+            ),
+        )
     elif "runtime_qualification" in plan:
         raise ValueError("legacy plan carries an alternate runtime qualification")
+    elif "distributed_startup_qualification" in plan:
+        raise ValueError("legacy plan carries a distributed startup qualification")
     if (
         plan["schema"] != (LONG_CONTEXT_SCHEMA if args.harness == "opencode" else SCHEMA)
         or plan["runtime_sha256"] != digest(_runtime())
@@ -548,6 +685,7 @@ def native_args(plan):
                         "training.miles_opencode.postprocess_compaction_segments"
                     ),
                     "sglang_router_policy": "consistent_hashing",
+                    "distributed_backend": miles.LONG_DISTRIBUTED_BACKEND,
                 }
             )
         if any(getattr(args, k) != v for k, v in expected.items()):

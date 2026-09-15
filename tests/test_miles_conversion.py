@@ -97,9 +97,10 @@ def test_long_conversion_requires_and_binds_qualified_derived_image(config, tmp_
         }
     )
     receipt = {
-        "schema": "cyber_miles_opencode_runtime_qualification_v1",
-        "status": "image_qualified_for_dev",
-        "image": image,
+            "schema": "cyber_miles_opencode_runtime_qualification_v1",
+            "status": "image_qualified_for_dev",
+            "source_commit": "1" * 40,
+            "image": image,
         "base_image": miles_training.LONG_RUNTIME_BASE_IMAGE,
         "fti_version": "0.8.4",
         "native_profile": "qwen3.8-27b-256k",
@@ -121,6 +122,14 @@ def test_long_conversion_requires_and_binds_qualified_derived_image(config, tmp_
             "sha256:bddf894e5c2bc3d8cf452bd6e5ab2273bbe4a37eeeb9aec848d3d7d20db1f256"
         ),
         "miles_source_commit": "9e178ca16839b0600155f3927f57ce0670b8f453",
+        "megatron_commit": miles_training.MEGATRON_COMMIT,
+        "megatron_optimizer_sha256": (
+            "sha256:" + miles_training.MEGATRON_OPTIMIZER_SHA256
+        ),
+        "miles_distributed_source_sha256": {
+            key: "sha256:" + value
+            for key, value in miles_training.MILES_DISTRIBUTED_SOURCE_SHA256.items()
+        },
         "miles_tito_backport_commit": "257992eb52bfa1f5248b5a5ae8f5a959be500788",
         "installed_tito_source_sha256": (
             "sha256:72650e3b337d69d237088c03cafa12b066a2c31fe1ffd96fab2d49d832f4a33c"
@@ -136,6 +145,11 @@ def test_long_conversion_requires_and_binds_qualified_derived_image(config, tmp_
         "native_converter_sha256": ("sha256:" + miles.LONG_NATIVE_CONVERTER_SHA256),
         "installed_session_tree_sha256": ("sha256:" + miles.LONG_INSTALLED_SESSION_TREE_SHA256),
         "build_source_sha256": build_source,
+        "qualification_script_sha256": "sha256:"
+        + convert._hash(
+            ROOT / "configs/qualification/qwen38_miles_runtime_qualification_v1.py"
+        ),
+        "runtime_source_sha256": "sha256:" + digest(miles_training._runtime()),
         "checks": {key: True for key in miles_training.LONG_RUNTIME_CHECKS},
     }
     receipt["sha256"] = digest(receipt)

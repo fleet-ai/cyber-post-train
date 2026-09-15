@@ -1,0 +1,75 @@
+{
+  "schema": "cyber_miles_distributed_startup_qualification_plan_v1",
+  "status": "not_run",
+  "launchable": false,
+  "failed_canary": {
+    "api_run_id": "6504294e-49e4-4821-a4cc-a37f1d4b98b4",
+    "rayjob_uid": "6d19fd69-34f1-40bf-a2cd-aca2c28c33cc",
+    "terminal_evidence": "../../docs/evidence/qwen38-study/2026-09-15-miles-long-context-canary3-terminal-failed-v1.json",
+    "terminal_evidence_sha256": "sha256:fa344fa7596e42cdb020a75c6ac3aad22f75e3abc9f1e976978fc2e814d4bfd6"
+  },
+  "proposed_delta": {
+    "distributed_backend": "cpu:gloo,cuda:nccl",
+    "reason": "Use Gloo for default-world Python-object metadata and NCCL for CUDA tensor collectives.",
+    "unchanged_retry": false,
+    "derived_image": null,
+    "source_commit": null
+  },
+  "installed_sources": {
+    "megatron_commit": "e8f574511105db3b58a61f90da178101d8ab2d45",
+    "megatron_optimizer_sha256": "sha256:2bad8558ca6b818406186fd9df6b052bb77ae82c9336d340e1c6e3ed71d9e66a",
+    "miles_commit": "9e178ca16839b0600155f3927f57ce0670b8f453",
+    "miles_distributed_source_sha256": {
+      "arguments": "sha256:b26c0702fe4a51c30444aae78b55e5e56aa0e1fc4f6e7d51ebdc7fb91f452eae",
+      "distributed_utils": "sha256:13a688b49217b7655fedaed5fea7bd6559939a0a9e134c6b0dedfe1f38e0aecf",
+      "train_actor": "sha256:fff8943500088eefb4e45f435704d43fadf210b931db9daab1d4777972e9a783",
+      "actor": "sha256:eecd72a4387511916add2c97d9e2dad6716db9097fd6ec471468c1f7edc074b9",
+      "model": "sha256:faef15f54f5db2748194c6938f08e0e5686ef4e1c464a67bb4f373466d8885d6",
+      "reloadable_process_group": "sha256:1e52bb83599cab206ca1291994591a096439f5e501b82821b604ef91c45433fd"
+    }
+  },
+  "contract": {
+    "image": null,
+    "source_commit": null,
+    "runtime_qualification_sha256": null,
+    "runtime_source_sha256": null,
+    "checkpoint_root": null,
+    "checkpoint_sha256": null,
+    "native_profile": "qwen3.8-27b-256k",
+    "nodes": 4,
+    "gpus_per_node": 8,
+    "world_size": 32,
+    "tensor_parallel_size": 8,
+    "context_parallel_size": 4,
+    "zero_rollouts": true,
+    "zero_reward_calls": true,
+    "zero_optimizer_updates": true,
+    "zero_checkpoint_writes": true
+  },
+  "execution": {
+    "cluster": "prod",
+    "priority_class": "c1",
+    "queue_priority": "q1",
+    "active_deadline_seconds": 3600,
+    "requeue_if_preempted": false,
+    "create_once": true,
+    "direct_clean_exit": true,
+    "dev_resources_allowed": false
+  },
+  "required_checks": {
+    "hybrid_world_initialized": false,
+    "world_gloo_barrier_completed": false,
+    "model_initialized": false,
+    "optimizer_param_group_object_collective_completed": false,
+    "optimizer_initialized": false,
+    "rollouts_zero": false,
+    "reward_calls_zero": false,
+    "optimizer_updates_zero": false,
+    "checkpoint_writes_zero": false,
+    "exit_zero": false,
+    "restarts_zero": false,
+    "all_resources_released": false
+  },
+  "receipt_schema": "cyber_miles_distributed_startup_qualification_v1",
+  "successor_reward_canary_allowed": false
+}

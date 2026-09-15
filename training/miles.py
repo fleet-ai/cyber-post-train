@@ -22,6 +22,7 @@ TEMPLATE_SHA256 = "38d42166599348d47ded69776c5389c89924045e6827089923a031379f8a3
 NATIVE_LAYOUTS = frozenset({(1, 8), (2, 8)})
 LONG_CONTEXT_PROFILE = "qwen3.8-27b-256k"
 LONG_CONTEXT_LAYOUT = (4, 8)
+LONG_DISTRIBUTED_BACKEND = "cpu:gloo,cuda:nccl"
 # Native entrypoints in the FTI 0.8.4 image that carries the 256K profile.
 # Keep these separate from the legacy image pins in the conversion/training
 # modules: accepting either digest for either image would weaken the boundary.
@@ -338,6 +339,12 @@ def arguments(config: MilesConfig) -> list[str]:
     if long_horizon:
         values.update(
             {
+                # Megatron aligns optimizer parameter-group metadata with a
+                # default-world object collective.  A CUDA-only world routes
+                # that Python-object exchange through NCCL.  The hybrid world
+                # keeps tensor collectives on NCCL and routes object metadata
+                # through Gloo instead.
+                "distributed-backend": LONG_DISTRIBUTED_BACKEND,
                 "custom-agent-function-path": "training.miles_opencode.run",
                 "use-session-server": "v2",
                 "max-seq-len": config.context_tokens,
@@ -396,6 +403,10 @@ def arguments(config: MilesConfig) -> list[str]:
         or options.get("--recompute-granularity") != "full"
         or options.get("--recompute-method") != "uniform"
         or options.get("--recompute-num-layers") != "1"
+        or (
+            long_horizon
+            and options.get("--distributed-backend") != LONG_DISTRIBUTED_BACKEND
+        )
     ):
         raise ValueError("native Qwen parallelism or full-recompute safety envelope changed")
     return argv

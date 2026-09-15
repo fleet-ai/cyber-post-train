@@ -132,6 +132,38 @@ def qualify() -> dict:
         / "megatron/bridge/models/qwen3_asr/hf_qwen3_asr/modeling_qwen3_asr.py"
     )
     assert sha256(qwen3_asr_path) == miles_training.QWEN3_ASR_PATCHED_SHA256
+    megatron_root = Path("/root/Megatron-LM")
+    megatron_optimizer_path = megatron_root / "megatron/core/optimizer/__init__.py"
+    assert (
+        subprocess.run(
+            ["git", "-C", str(megatron_root), "rev-parse", "HEAD"],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=30,
+        ).stdout.strip()
+        == miles_training.MEGATRON_COMMIT
+    )
+    assert sha256(megatron_optimizer_path) == miles_training.MEGATRON_OPTIMIZER_SHA256
+    distributed_sources = {
+        "arguments": miles_root / "miles/utils/arguments.py",
+        "distributed_utils": miles_root / "miles/utils/distributed_utils.py",
+        "train_actor": miles_root / "miles/ray/train_actor.py",
+        "actor": miles_root / "miles/backends/megatron_utils/actor.py",
+        "model": miles_root / "miles/backends/megatron_utils/model.py",
+        "reloadable_process_group": miles_root
+        / "miles/utils/reloadable_process_group.py",
+    }
+    assert {
+        key: sha256(path) for key, path in distributed_sources.items()
+    } == miles_training.MILES_DISTRIBUTED_SOURCE_SHA256
+    from torch.distributed.distributed_c10d import BackendConfig
+
+    backend_config = BackendConfig(miles.LONG_DISTRIBUTED_BACKEND)
+    assert {
+        str(device): str(backend)
+        for device, backend in backend_config.device_backend_map.items()
+    } == {"cpu": "gloo", "cuda": "nccl"}
 
     binary = Path(miles_opencode.OPENCODE_BINARY)
     assert sha256(binary) == miles_opencode.OPENCODE_BINARY_SHA256
@@ -191,6 +223,7 @@ def qualify() -> dict:
             "training.miles_opencode.postprocess_compaction_segments"
         ),
         "sglang-router-policy": "consistent_hashing",
+        "distributed-backend": miles.LONG_DISTRIBUTED_BACKEND,
         "fleet-session-node-cap": "4096",
         "load": str(CHECKPOINT_ROOT),
         "ref-load": str(CHECKPOINT_ROOT),
@@ -240,6 +273,7 @@ def qualify() -> dict:
             assert parsed.load == parsed.ref_load == str(CHECKPOINT_ROOT)
             assert sha256(Path(parsed.chat_template_path)) == miles.LONG_TITO_TEMPLATE_SHA256
             assert parsed.sglang_router_policy == "consistent_hashing"
+            assert parsed.distributed_backend == miles.LONG_DISTRIBUTED_BACKEND
 
     harness_config = {
         "harness": miles_opencode.harness_contract(),
@@ -330,6 +364,13 @@ def qualify() -> dict:
             "miles_tito_backport_commit": "257992eb52bfa1f5248b5a5ae8f5a959be500788",
             "installed_tito_source_sha256": "sha256:" + sha256(tito_path),
             "megatron_qwen3_asr_source_sha256": "sha256:" + sha256(qwen3_asr_path),
+            "megatron_commit": miles_training.MEGATRON_COMMIT,
+            "megatron_optimizer_sha256": "sha256:" + sha256(megatron_optimizer_path),
+            "miles_distributed_source_sha256": {
+                key: "sha256:" + sha256(path)
+                for key, path in distributed_sources.items()
+            },
+            "runtime_source_sha256": "sha256:" + digest(miles_training._runtime()),
             "checks": checks,
         }
         value["sha256"] = digest(value)
@@ -354,6 +395,13 @@ def qualify() -> dict:
         "miles_tito_backport_commit": "257992eb52bfa1f5248b5a5ae8f5a959be500788",
         "installed_tito_source_sha256": "sha256:" + sha256(tito_path),
         "megatron_qwen3_asr_source_sha256": "sha256:" + sha256(qwen3_asr_path),
+        "megatron_commit": miles_training.MEGATRON_COMMIT,
+        "megatron_optimizer_sha256": "sha256:" + sha256(megatron_optimizer_path),
+        "miles_distributed_source_sha256": {
+            key: "sha256:" + sha256(path)
+            for key, path in distributed_sources.items()
+        },
+        "runtime_source_sha256": "sha256:" + digest(miles_training._runtime()),
         "native_driver_import_mode": driver_import_mode,
         "miles_tree_source_sha256": (
             "sha256:fd978a1ef2617f4bf30850fedd197e546cdc9c6542b00b03df502cbb285fc732"

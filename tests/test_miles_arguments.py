@@ -280,6 +280,7 @@ def test_long_context_uses_native_256k_shape_and_session_v2(config, native_bound
     assert value(argv, "tito-model") == value(argv, "fleet-tito-model") == "qwen38small"
     assert value(argv, "fleet-session-node-cap") == "4096"
     assert value(argv, "sglang-router-policy") == "consistent_hashing"
+    assert value(argv, "distributed-backend") == miles.LONG_DISTRIBUTED_BACKEND
     assert "--chat-template-path" not in argv
 
 

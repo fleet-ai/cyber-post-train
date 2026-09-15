@@ -1,11 +1,11 @@
 # Qwen3.8 long-horizon Miles/OpenCode implementation
 
-Status: runtime-qualified. The corrected immutable image passed both a
-zero-GPU full-driver-import gate and a bounded real-CUDA native-parser gate.
-Both dev probes were deleted immediately after their terminal receipts and no
-dev GPU remains allocated. This record is not an RL-success or
-production-promotion receipt: real reward, an optimizer update, checkpoint
-creation, and checkpoint reload remain separate gates.
+Status: parser/compaction-qualified but distributed startup rejected. The
+corrected immutable image passed a zero-GPU full-driver-import gate and a
+bounded real-CUDA native-parser gate. The first exact 4 x 8 production canary
+then failed while Megatron constructed optimizer parameter groups, before any
+rollout, reward, optimizer update, or checkpoint. All 32 GPUs were released.
+The former one-process runtime receipt is no longer sufficient for submission.
 
 ## Why the earlier canary cannot be promoted
 
@@ -18,7 +18,7 @@ must not qualify a full RL run.
 
 ## Qualified design
 
-The successor uses the native FTI `qwen3.8-27b-256k` profile: 262,144 context
+The candidate design uses the native FTI `qwen3.8-27b-256k` profile: 262,144 context
 tokens, 245,760 response tokens, tensor parallel 8, context parallel 4, and four
 8-GPU nodes. It runs exact OpenCode 1.18.27 through Miles session server v2 for
 up to 2,048 model calls and eight hours. The Fleet environment lifetime is nine
@@ -149,15 +149,27 @@ Exact operational identities and release evidence are in
 
 ## Remaining gates
 
-1. Complete exact output, duplicate, and aggregate node-cap checks for one c1
-   four-node reward-acquisition canary. Dev may only be used for bounded tests;
-   it must never host a durable service or an unattended long run.
-2. Run the canary against real Fleet tasks and the authoritative verifier. It
+1. Build a fresh immutable image whose build gate binds the installed Megatron
+   optimizer and Miles distributed-startup source digests. The proposed
+   long-profile argument is `--distributed-backend cpu:gloo,cuda:nccl`, so
+   Python-object metadata uses Gloo while CUDA tensor collectives remain on
+   NCCL. This is a correction candidate, not an accepted fix.
+2. Run a bounded c1 exact 4 x 8, 32-rank clean-exit qualification. It must
+   initialize the complete model and optimizer through the parameter-group
+   object collective, perform zero rollout/reward/update/checkpoint work, and
+   prove release of all 32 GPUs. A one-GPU parser check cannot replace it.
+3. Only after that sealed gate passes, run a newly named canary against real
+   Fleet tasks and the authoritative verifier. It
    must show non-constant real reward before a finite nonzero optimizer update,
    then write a durable checkpoint and release all four nodes.
-3. Reload that exact checkpoint with zero optimizer updates. Only after the
+4. Reload that exact checkpoint with zero optimizer updates. Only after the
    reload gate passes may a longer production arm be prepared. Full RL remains
    closed until these scientific gates pass.
+
+The sanitized canary terminal record is
+`2026-09-15-miles-long-context-canary3-terminal-failed-v1.json`. The inert
+startup plan is
+`../../../configs/qualification/qwen38-miles-opencode-distributed-startup-v1.template.json`.
 
 The original qualification plan remains in
 `configs/qualification/qwen38-miles-opencode-long-context-runtime-v1.template.json`.

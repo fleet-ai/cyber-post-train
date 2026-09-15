@@ -438,6 +438,7 @@ def _long_runtime_receipt(image, *, build_source_sha256="sha256:" + "b" * 64):
     value = {
         "schema": "cyber_miles_opencode_runtime_qualification_v1",
         "status": "image_qualified_for_dev",
+        "source_commit": "1" * 40,
         "image": image,
         "base_image": train.LONG_RUNTIME_BASE_IMAGE,
         "fti_version": "0.8.4",
@@ -460,6 +461,12 @@ def _long_runtime_receipt(image, *, build_source_sha256="sha256:" + "b" * 64):
             "sha256:bddf894e5c2bc3d8cf452bd6e5ab2273bbe4a37eeeb9aec848d3d7d20db1f256"
         ),
         "miles_source_commit": "9e178ca16839b0600155f3927f57ce0670b8f453",
+        "megatron_commit": train.MEGATRON_COMMIT,
+        "megatron_optimizer_sha256": "sha256:" + train.MEGATRON_OPTIMIZER_SHA256,
+        "miles_distributed_source_sha256": {
+            key: "sha256:" + value
+            for key, value in train.MILES_DISTRIBUTED_SOURCE_SHA256.items()
+        },
         "miles_tito_backport_commit": "257992eb52bfa1f5248b5a5ae8f5a959be500788",
         "installed_tito_source_sha256": (
             "sha256:72650e3b337d69d237088c03cafa12b066a2c31fe1ffd96fab2d49d832f4a33c"
@@ -475,7 +482,45 @@ def _long_runtime_receipt(image, *, build_source_sha256="sha256:" + "b" * 64):
         "native_converter_sha256": "sha256:" + miles.LONG_NATIVE_CONVERTER_SHA256,
         "installed_session_tree_sha256": ("sha256:" + miles.LONG_INSTALLED_SESSION_TREE_SHA256),
         "build_source_sha256": build_source_sha256,
+        "qualification_script_sha256": "sha256:"
+        + train._hash(
+            ROOT / "configs/qualification/qwen38_miles_runtime_qualification_v1.py"
+        ),
+        "runtime_source_sha256": "sha256:" + digest(train._runtime()),
         "checks": {key: True for key in train.LONG_RUNTIME_CHECKS},
+    }
+    return {**value, "sha256": digest(value)}
+
+
+def _distributed_startup_receipt(runtime, checkpoint):
+    value = {
+        "schema": "cyber_miles_distributed_startup_qualification_v1",
+        "status": "accepted_released",
+        "contract": train._distributed_startup_contract(
+            runtime=runtime, checkpoint=checkpoint
+        ),
+        "installed_sources": {
+            "megatron_commit": train.MEGATRON_COMMIT,
+            "megatron_optimizer_sha256": "sha256:"
+            + train.MEGATRON_OPTIMIZER_SHA256,
+            "miles_commit": "9e178ca16839b0600155f3927f57ce0670b8f453",
+            "miles_distributed_source_sha256": {
+                key: "sha256:" + value
+                for key, value in train.MILES_DISTRIBUTED_SOURCE_SHA256.items()
+            },
+        },
+        "qualification": {
+            "priority_class": "c1",
+            "workers": 4,
+            "gpus_per_worker": 8,
+            "world_size": 32,
+            "active_deadline_seconds": 1800,
+            "exit_code": 0,
+            "container_restarts": 0,
+            "gpus_released": 32,
+            "resource_absence_verified": True,
+        },
+        "checks": {key: True for key in train.DISTRIBUTED_STARTUP_CHECKS},
     }
     return {**value, "sha256": digest(value)}
 
@@ -519,6 +564,13 @@ def test_long_compiler_binds_four_node_image_data_checkpoint_and_session(config,
     checkpoint["sha256"] = digest({k: v for k, v in checkpoint.items() if k != "sha256"})
     checkpoint_path.write_text(json.dumps(checkpoint))
     config["checkpoint"]["sha256"] = train._hash(checkpoint_path)
+    startup = _distributed_startup_receipt(receipt, checkpoint)
+    startup_path = tmp_path / "distributed-startup.json"
+    startup_path.write_text(json.dumps(startup))
+    config["distributed_startup"] = {
+        "receipt": str(startup_path),
+        "sha256": "sha256:" + train._hash(startup_path),
+    }
     config["recipe"].update(
         {
             "nodes": 4,
@@ -541,12 +593,17 @@ def test_long_compiler_binds_four_node_image_data_checkpoint_and_session(config,
 
     assert result["schema"] == train.LONG_CONTEXT_SCHEMA
     assert result["runtime_qualification"] == receipt
+    assert result["distributed_startup_qualification"] == startup
     assert result["native_driver_sha256"] == miles.LONG_NATIVE_DRIVER_SHA256
     assert train.watchdog_hard_seconds(result) == miles_opencode.JOB_HARD_SECONDS
     assert request["image"] == image
     assert request["workers"] == 4 and request["gpus_per_worker"] == 8
     assert request["env"]["MILES_SESSION_MAX_NODES"] == "4096"
     assert request["priority_class"] == "c1"
+    missing_startup = json.loads(json.dumps(result))
+    del missing_startup["distributed_startup_qualification"]
+    with pytest.raises(ValueError, match="distributed optimizer startup qualification"):
+        train.job_request(missing_startup)
 
 
 def test_long_runtime_receipt_is_image_qualification_not_circular_rl_acceptance():
@@ -555,6 +612,51 @@ def test_long_runtime_receipt_is_image_qualification_not_circular_rl_acceptance(
     assert train._validate_long_runtime_receipt(receipt, image=image) is receipt
     assert "finite_nonzero_update_checked" not in receipt["checks"]
     assert "zero_update_reload_checked" not in receipt["checks"]
+
+
+def test_pre_canary3_runtime_receipt_cannot_authorize_a_successor():
+    receipt = json.loads(
+        (
+            ROOT
+            / "configs/qualification/qwen38-miles-opencode-long-context-runtime-v1.json"
+        ).read_text()
+    )
+    with pytest.raises(ValueError, match="has not passed exact qualification"):
+        train._validate_long_runtime_receipt(receipt, image=receipt["image"])
+
+
+@pytest.mark.parametrize(
+    "fault", ["backend", "collective", "source", "release", "digest"]
+)
+def test_distributed_startup_receipt_fails_closed(fault):
+    image = "registry.test/miles-opencode@sha256:" + "a" * 64
+    runtime = _long_runtime_receipt(image)
+    checkpoint = {
+        "root": "/mnt/sfs/jobs/synthetic-base/torch-dist",
+        "sha256": "b" * 64,
+    }
+    receipt = _distributed_startup_receipt(runtime, checkpoint)
+    if fault == "backend":
+        receipt["contract"]["distributed_backend"] = "nccl"
+    elif fault == "collective":
+        receipt["checks"]["optimizer_param_group_object_collective_completed"] = False
+    elif fault == "source":
+        receipt["installed_sources"]["megatron_optimizer_sha256"] = "sha256:" + "0" * 64
+    elif fault == "release":
+        receipt["qualification"]["resource_absence_verified"] = False
+    else:
+        receipt["sha256"] = "0" * 64
+    if fault != "digest":
+        receipt["sha256"] = digest(
+            {key: value for key, value in receipt.items() if key != "sha256"}
+        )
+    with pytest.raises(ValueError):
+        train._validate_distributed_startup_receipt(
+            receipt,
+            contract=train._distributed_startup_contract(
+                runtime=runtime, checkpoint=checkpoint
+            ),
+        )
 
 
 def test_long_runtime_qualification_template_matches_source_and_contract():
@@ -583,6 +685,14 @@ def test_long_runtime_qualification_template_matches_source_and_contract():
     assert template["sources"]["installed_session_tree_sha256"] == (
         "sha256:" + miles.LONG_INSTALLED_SESSION_TREE_SHA256
     )
+    assert template["sources"]["megatron_commit"] == train.MEGATRON_COMMIT
+    assert template["sources"]["megatron_optimizer_sha256"] == (
+        "sha256:" + train.MEGATRON_OPTIMIZER_SHA256
+    )
+    assert template["sources"]["miles_distributed_source_sha256"] == {
+        key: "sha256:" + value
+        for key, value in train.MILES_DISTRIBUTED_SOURCE_SHA256.items()
+    }
     assert template["contract"] == {
         "model": "Qwen/Qwen3.8-27B",
         "tito_family": miles_opencode.TITO_FAMILY,
@@ -590,6 +700,7 @@ def test_long_runtime_qualification_template_matches_source_and_contract():
         "tool_call_parser": "qwen3_coder",
         "chat_template_sha256": "sha256:" + miles_opencode.TEMPLATE_SHA256,
         "sglang_router_policy": "consistent_hashing",
+        "distributed_backend": miles.LONG_DISTRIBUTED_BACKEND,
         "nodes": 4,
         "gpus_per_node": 8,
         "context_tokens": miles_opencode.CONTEXT_TOKENS,
@@ -607,6 +718,29 @@ def test_long_runtime_qualification_template_matches_source_and_contract():
         "summary_token_treatment": miles_opencode.SUMMARY_TOKEN_TREATMENT,
         "primary_tool_result_prefix_truncation": False,
     }
+
+
+def test_distributed_startup_qualification_template_is_inert_and_exact():
+    path = (
+        ROOT
+        / "configs/qualification/qwen38-miles-opencode-distributed-startup-v1.template.json"
+    )
+    template = json.loads(path.read_text())
+    assert template["status"] == "not_run"
+    assert template["launchable"] is False
+    assert template["successor_reward_canary_allowed"] is False
+    assert template["proposed_delta"]["distributed_backend"] == (
+        miles.LONG_DISTRIBUTED_BACKEND
+    )
+    assert template["installed_sources"]["megatron_commit"] == train.MEGATRON_COMMIT
+    assert template["installed_sources"]["megatron_optimizer_sha256"] == (
+        "sha256:" + train.MEGATRON_OPTIMIZER_SHA256
+    )
+    assert template["required_checks"] == {
+        key: False for key in train.DISTRIBUTED_STARTUP_CHECKS
+    }
+    assert template["execution"]["priority_class"] == "c1"
+    assert template["execution"]["dev_resources_allowed"] is False
 
 
 @pytest.mark.parametrize("fault", ["image", "check", "extra_check", "source", "digest"])
@@ -928,6 +1062,9 @@ def test_long_native_parser_receives_explicit_first_rollout(plan, monkeypatch):
                 "training.miles_opencode.postprocess_compaction_segments"
             ),
             sglang_router_policy="consistent_hashing",
+            distributed_backend=captured.get(
+                "distributed_backend", miles.LONG_DISTRIBUTED_BACKEND
+            ),
         )
 
     monkeypatch.setattr(train, "native_source_for_plan", lambda _plan: Path("synthetic.py"))
@@ -936,6 +1073,10 @@ def test_long_native_parser_receives_explicit_first_rollout(plan, monkeypatch):
     before = sys.argv
     args = train.native_args(plan)
     assert captured["start_rollout_id"] == args.start_rollout_id == 0
+    assert args.distributed_backend == miles.LONG_DISTRIBUTED_BACKEND
+    captured["distributed_backend"] = "nccl"
+    with pytest.raises(ValueError, match="parsed training/load semantics changed"):
+        train.native_args(plan)
     assert sys.argv is before
 
 

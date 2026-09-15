@@ -28,3 +28,13 @@ def test_cpu_import_receipt_cannot_be_mistaken_for_cuda_acceptance() -> None:
         "if native_parser_required(driver_import_mode):\n        "
         "miles_training._validate_long_runtime_receipt"
     ) in source
+
+
+def test_runtime_gate_binds_hybrid_world_and_installed_distributed_sources() -> None:
+    source = QUALIFIER.read_text()
+    assert '"distributed-backend": miles.LONG_DISTRIBUTED_BACKEND' in source
+    assert "parsed.distributed_backend == miles.LONG_DISTRIBUTED_BACKEND" in source
+    assert "backend_config.device_backend_map.items()" in source
+    assert '{"cpu": "gloo", "cuda": "nccl"}' in source
+    assert '"megatron_optimizer_sha256"' in source
+    assert '"miles_distributed_source_sha256"' in source
