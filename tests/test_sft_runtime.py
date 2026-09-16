@@ -1280,6 +1280,7 @@ def test_chunked_sft_lm_head_matches_full_causal_ce(monkeypatch, is_vlm):
 
     monkeypatch.setattr(torch_utils, "FLASH_ATTN_CROSS_ENTROPY_LOSS_AVAILABLE", False)
     torch.manual_seed(7)
+    events = []
 
     class Backbone(torch.nn.Module):
         def __init__(self):
@@ -1295,9 +1296,12 @@ def test_chunked_sft_lm_head_matches_full_causal_ce(monkeypatch, is_vlm):
         def __init__(self):
             super().__init__(5, 19, bias=False)
             self.largest_tokens = 0
+            self.track_events = True
 
         def forward(self, value):
             self.largest_tokens = max(self.largest_tokens, value.shape[1])
+            if self.track_events:
+                events.append("lm_head")
             return super().forward(value)
 
     class Causal(torch.nn.Module):
@@ -1311,6 +1315,7 @@ def test_chunked_sft_lm_head_matches_full_causal_ce(monkeypatch, is_vlm):
 
     causal = Causal()
     reference = copy.deepcopy(causal)
+    reference.lm_head.track_events = False
     wrapper = HFModelWrapper.__new__(HFModelWrapper)
     torch.nn.Module.__init__(wrapper)
     wrapper.model = causal
@@ -1318,9 +1323,8 @@ def test_chunked_sft_lm_head_matches_full_causal_ce(monkeypatch, is_vlm):
     wrapper.remove_microbatch_padding = False
     wrapper.sequence_parallel_size = 1
     wrapper.fleet_sft_lm_head_chunk_tokens = 3
-    root_hooks = []
-    causal.register_forward_pre_hook(lambda *_: root_hooks.append("pre"))
-    causal.register_forward_hook(lambda *_: root_hooks.append("post"))
+    causal.register_forward_pre_hook(lambda *_: events.append("pre"))
+    causal.register_forward_hook(lambda *_: events.append("post"))
     sequences = torch.tensor([[1, 4, 2, 8, 3, 7, 5, 6, 9]])
     attention = torch.ones_like(sequences)
 
@@ -1339,7 +1343,9 @@ def test_chunked_sft_lm_head_matches_full_causal_ce(monkeypatch, is_vlm):
     expected = torch.log_softmax(full_logits, dim=-1).gather(-1, labels.unsqueeze(-1)).squeeze(-1)
     expected = expected[:, :-1]
     assert output == {}
-    assert root_hooks == ["pre", "post"]
+    assert events[0] == "pre"
+    assert events[-1] == "post"
+    assert events[1:-1] == ["lm_head", "lm_head", "lm_head"]
     assert causal.forward.__func__ is Causal.forward
     assert causal.lm_head.largest_tokens == 3
     assert (causal.model.last_position_ids is None) is is_vlm

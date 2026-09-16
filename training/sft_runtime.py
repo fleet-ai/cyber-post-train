@@ -942,44 +942,48 @@ def chunked_sft_forward(
         "position_ids": None if self.is_vlm else position_ids_fwd,
         "use_cache": False,
     }
+    labels = torch.roll(sequences_fwd, shifts=-1, dims=1)
+
+    def selected_logprobs(module, hidden, target):
+        logits = module.lm_head(hidden)
+        if temperature != 1.0:
+            logits = logits / temperature
+        return model_wrapper.logprobs_from_logits(logits, target, inplace_backward=True)
+
+    def chunked_causal_forward(module, **kwargs):
+        hidden_states = module.model(**kwargs).last_hidden_state
+        chunks = []
+        for start in range(0, hidden_states.shape[1], chunk_tokens):
+            stop = min(start + chunk_tokens, hidden_states.shape[1])
+            hidden, target = hidden_states[:, start:stop], labels[:, start:stop]
+            if torch.is_grad_enabled() and hidden.requires_grad:
+                value = checkpoint(
+                    lambda h, t: selected_logprobs(module, h, t),
+                    hidden,
+                    target,
+                    use_reentrant=False,
+                )
+            else:
+                value = selected_logprobs(module, hidden, target)
+            chunks.append(value)
+        return torch.cat(chunks, dim=1)
+
     # The causal model itself is the FSDP2 root. Calling `.model` directly
     # bypasses its pre/post-forward hooks and leaves root-owned parameters as
-    # DTensors. Temporarily replace only the Python forward implementation so
-    # `causal_model(...)` still executes those hooks while returning the final
-    # hidden states instead of allocating the full vocabulary logits.
+    # DTensors. Projecting after the root returns is also invalid because its
+    # LM head may already be re-sharded. Temporarily replace only the Python
+    # forward implementation so one FSDP lifecycle covers both the backbone
+    # and the bounded vocabulary projection.
     had_instance_forward = "forward" in causal_model.__dict__
     instance_forward = causal_model.__dict__.get("forward")
-
-    def backbone_only_forward(module, **kwargs):
-        return module.model(**kwargs)
-
-    causal_model.forward = types.MethodType(backbone_only_forward, causal_model)
+    causal_model.forward = types.MethodType(chunked_causal_forward, causal_model)
     try:
-        outputs = causal_model(**backbone_kwargs)
+        log_probs = causal_model(**backbone_kwargs)
     finally:
         if had_instance_forward:
             causal_model.forward = instance_forward
         else:
             del causal_model.forward
-    hidden_states = outputs.last_hidden_state
-    labels = torch.roll(sequences_fwd, shifts=-1, dims=1)
-
-    def selected_logprobs(hidden, target):
-        logits = causal_model.lm_head(hidden)
-        if temperature != 1.0:
-            logits = logits / temperature
-        return model_wrapper.logprobs_from_logits(logits, target, inplace_backward=True)
-
-    chunks = []
-    for start in range(0, hidden_states.shape[1], chunk_tokens):
-        stop = min(start + chunk_tokens, hidden_states.shape[1])
-        hidden, target = hidden_states[:, start:stop], labels[:, start:stop]
-        if torch.is_grad_enabled() and hidden.requires_grad:
-            value = checkpoint(selected_logprobs, hidden, target, use_reentrant=False)
-        else:
-            value = selected_logprobs(hidden, target)
-        chunks.append(value)
-    log_probs = torch.cat(chunks, dim=1)
 
     if self.remove_microbatch_padding:
         batch_size, seqlen = attention_mask.shape
