@@ -150,6 +150,7 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         "lm_head_chunk_tokens",
         "mlp_chunk_tokens",
         "rmsnorm_chunk_tokens",
+        "gdn_chunk_tokens",
         "layer_checkpoint_group_size",
         "eval_interval",
         "checkpoint_interval",
@@ -181,9 +182,7 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
     if world_size % sequence_parallel_size:
         raise ValueError("sequence parallel size must divide the GPU world size")
     data_parallel_size = world_size // sequence_parallel_size
-    if recipe["batch_size"] % (
-        data_parallel_size * recipe["microbatch_per_gpu"]
-    ):
+    if recipe["batch_size"] % (data_parallel_size * recipe["microbatch_per_gpu"]):
         raise ValueError("global batch must divide evenly across data-parallel microbatches")
     if recipe["lm_head_chunk_tokens"] > recipe["max_length"]:
         raise ValueError("LM-head chunk cannot exceed the model context")
@@ -191,6 +190,8 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         raise ValueError("MLP chunk cannot exceed the model context")
     if recipe["rmsnorm_chunk_tokens"] > recipe["max_length"]:
         raise ValueError("RMSNorm chunk cannot exceed the model context")
+    if recipe["gdn_chunk_tokens"] > recipe["max_length"] or recipe["gdn_chunk_tokens"] % 64:
+        raise ValueError("Gated DeltaNet chunk must divide into 64-token kernel blocks")
     if recipe["layer_checkpoint_group_size"] > 64:
         raise ValueError("Qwen layer checkpoint group cannot exceed 64 layers")
     if recipe["eval_interval"] and recipe["checkpoint_interval"] != recipe["eval_interval"]:
@@ -339,9 +340,8 @@ def sft_overrides(plan: dict) -> dict:
         "model_config_kwargs.fleet_force_qwen35_torch_gdn": True,
         "model_config_kwargs.fleet_sft_lm_head_chunk_tokens": r["lm_head_chunk_tokens"],
         "model_config_kwargs.fleet_sft_mlp_chunk_tokens": r["mlp_chunk_tokens"],
-        "model_config_kwargs.fleet_sft_rmsnorm_chunk_tokens": r[
-            "rmsnorm_chunk_tokens"
-        ],
+        "model_config_kwargs.fleet_sft_rmsnorm_chunk_tokens": r["rmsnorm_chunk_tokens"],
+        "model_config_kwargs.fleet_sft_gdn_chunk_tokens": r["gdn_chunk_tokens"],
         "model_config_kwargs.fleet_sft_layer_checkpoint_group_size": r[
             "layer_checkpoint_group_size"
         ],
@@ -383,6 +383,7 @@ def sft_overrides(plan: dict) -> dict:
         options.pop("model_config_kwargs.fleet_force_qwen35_torch_gdn")
         options.pop("model_config_kwargs.fleet_sft_mlp_chunk_tokens")
         options.pop("model_config_kwargs.fleet_sft_rmsnorm_chunk_tokens")
+        options.pop("model_config_kwargs.fleet_sft_gdn_chunk_tokens")
         options.pop("model_config_kwargs.fleet_sft_layer_checkpoint_group_size")
         options.update(
             {
@@ -1032,6 +1033,95 @@ def chunked_sft_forward(
     return (action_log_probs, {}) if return_output else action_log_probs
 
 
+def checkpointed_qwen35_gdn_rule(
+    query,
+    key,
+    value,
+    g,
+    beta,
+    chunk_size=64,
+    initial_state=None,
+    output_final_state=False,
+    use_qk_l2norm_in_kernel=False,
+    *,
+    outer_chunk_tokens,
+    implementation,
+):
+    """Preserve Qwen's Torch delta rule with bounded recurrent autograd history.
+
+    The fallback kernel already carries an exact recurrent state between its
+    64-token blocks, but one 262k call leaves every block in a single autograd
+    graph.  Checkpoint larger, 64-aligned sequence segments and pass the same
+    recurrent state between them.  Backward then recomputes one segment at a
+    time without changing any token, state transition, output, or gradient.
+    """
+    import torch
+    from torch.utils.checkpoint import checkpoint
+
+    if (
+        type(outer_chunk_tokens) is not int
+        or outer_chunk_tokens < chunk_size
+        or outer_chunk_tokens % chunk_size
+    ):
+        raise ValueError("Gated DeltaNet checkpoint chunks must align to its kernel blocks")
+    if query.ndim != 4 or query.shape[1] <= 0:
+        raise ValueError("Gated DeltaNet needs a nonempty sequence")
+
+    outputs = []
+    state = initial_state
+    for start in range(0, query.shape[1], outer_chunk_tokens):
+        stop = min(start + outer_chunk_tokens, query.shape[1])
+        segment = (
+            query[:, start:stop],
+            key[:, start:stop],
+            value[:, start:stop],
+            g[:, start:stop],
+            beta[:, start:stop],
+        )
+        needs_grad = torch.is_grad_enabled() and any(x.requires_grad for x in segment)
+        if state is None:
+
+            def run(q, k, v, decay, step):
+                return implementation(
+                    q,
+                    k,
+                    v,
+                    decay,
+                    step,
+                    chunk_size=chunk_size,
+                    initial_state=None,
+                    output_final_state=True,
+                    use_qk_l2norm_in_kernel=use_qk_l2norm_in_kernel,
+                )
+
+            output, state = (
+                checkpoint(run, *segment, use_reentrant=False) if needs_grad else run(*segment)
+            )
+        else:
+
+            def run(q, k, v, decay, step, previous_state):
+                return implementation(
+                    q,
+                    k,
+                    v,
+                    decay,
+                    step,
+                    chunk_size=chunk_size,
+                    initial_state=previous_state,
+                    output_final_state=True,
+                    use_qk_l2norm_in_kernel=use_qk_l2norm_in_kernel,
+                )
+
+            inputs = (*segment, state)
+            output, state = (
+                checkpoint(run, *inputs, use_reentrant=False)
+                if needs_grad or state.requires_grad
+                else run(*inputs)
+            )
+        outputs.append(output)
+    return torch.cat(outputs, dim=1), state if output_final_state else None
+
+
 def chunked_qwen35_mlp_forward(self, hidden_states):
     """Evaluate Qwen's pointwise MLP in bounded token slices.
 
@@ -1197,6 +1287,7 @@ def install_chunked_sft_worker(
     lm_head_chunk_tokens: int,
     mlp_chunk_tokens: int,
     rmsnorm_chunk_tokens: int,
+    gdn_chunk_tokens: int,
     layer_checkpoint_group_size: int,
 ):
     """Install one job-local Ray worker using bounded Qwen projections."""
@@ -1207,6 +1298,7 @@ def install_chunked_sft_worker(
     class ChunkedSFTPolicyWorker(FSDPPolicyWorkerBase):
         def init_model(self, *args, **kwargs):
             from skyrl.backends.skyrl_train.workers.model_wrapper import HFModelWrapper
+            from transformers.models.qwen3_5 import modeling_qwen3_5
             from transformers.models.qwen3_5.modeling_qwen3_5 import (
                 Qwen3_5MLP,
                 Qwen3_5RMSNorm,
@@ -1223,6 +1315,9 @@ def install_chunked_sft_worker(
             configured_rmsnorm = self.cfg.policy.model_config_kwargs.pop(
                 "fleet_sft_rmsnorm_chunk_tokens", None
             )
+            configured_gdn = self.cfg.policy.model_config_kwargs.pop(
+                "fleet_sft_gdn_chunk_tokens", None
+            )
             configured_group = self.cfg.policy.model_config_kwargs.pop(
                 "fleet_sft_layer_checkpoint_group_size", None
             )
@@ -1232,6 +1327,8 @@ def install_chunked_sft_worker(
                 raise ValueError("chunked MLP worker configuration drift")
             if configured_rmsnorm != rmsnorm_chunk_tokens:
                 raise ValueError("chunked RMSNorm worker configuration drift")
+            if configured_gdn != gdn_chunk_tokens:
+                raise ValueError("chunked Gated DeltaNet worker configuration drift")
             if configured_group != layer_checkpoint_group_size:
                 raise ValueError("layer checkpoint group worker configuration drift")
             HFModelWrapper.fleet_sft_lm_head_chunk_tokens = lm_head_chunk_tokens
@@ -1242,9 +1339,20 @@ def install_chunked_sft_worker(
             Qwen3_5RMSNorm.forward = chunked_qwen35_rmsnorm_forward
             Qwen3_5RMSNormGated.fleet_sft_rmsnorm_chunk_tokens = rmsnorm_chunk_tokens
             Qwen3_5RMSNormGated.forward = chunked_qwen35_rmsnorm_gated_forward
-            Qwen3_5TextModel.fleet_sft_layer_checkpoint_group_size = (
-                layer_checkpoint_group_size
-            )
+            native_gdn_rule = modeling_qwen3_5.torch_chunk_gated_delta_rule
+            if getattr(native_gdn_rule, "__name__", None) != "torch_chunk_gated_delta_rule":
+                raise ValueError("native Qwen Gated DeltaNet rule has already been replaced")
+
+            def bounded_gdn_rule(*args, **kwargs):
+                return checkpointed_qwen35_gdn_rule(
+                    *args,
+                    **kwargs,
+                    outer_chunk_tokens=gdn_chunk_tokens,
+                    implementation=native_gdn_rule,
+                )
+
+            modeling_qwen3_5.torch_chunk_gated_delta_rule = bounded_gdn_rule
+            Qwen3_5TextModel.fleet_sft_layer_checkpoint_group_size = layer_checkpoint_group_size
             Qwen3_5TextModel.forward = grouped_qwen35_text_forward
             return super().init_model(*args, **kwargs)
 
@@ -1371,6 +1479,7 @@ def _make_trainer_class():
                     self.plan["recipe"]["lm_head_chunk_tokens"],
                     self.plan["recipe"]["mlp_chunk_tokens"],
                     self.plan["recipe"]["rmsnorm_chunk_tokens"],
+                    self.plan["recipe"]["gdn_chunk_tokens"],
                     self.plan["recipe"]["layer_checkpoint_group_size"],
                 )
             with selection:

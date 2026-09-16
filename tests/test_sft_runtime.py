@@ -20,6 +20,7 @@ from training.sft_runtime import (
     _run_setup_probe,
     _unsigned_digest,
     build_runtime_configs,
+    checkpointed_qwen35_gdn_rule,
     chunked_qwen35_mlp_forward,
     chunked_qwen35_rmsnorm_forward,
     chunked_qwen35_rmsnorm_gated_forward,
@@ -78,6 +79,7 @@ def plan(tmp_path):
             "lm_head_chunk_tokens": 4096,
             "mlp_chunk_tokens": 4096,
             "rmsnorm_chunk_tokens": 4096,
+            "gdn_chunk_tokens": 1024,
             "layer_checkpoint_group_size": 8,
             "eval_interval": 2,
             "checkpoint_interval": 2,
@@ -228,6 +230,14 @@ def test_projection_chunk_cannot_exceed_context(tmp_path, field):
     value = plan(tmp_path)
     value["recipe"][field] = value["recipe"]["max_length"] + 1
     with pytest.raises(ValueError, match="chunk cannot exceed"):
+        validate_plan(value, check_files=False)
+
+
+@pytest.mark.parametrize("chunk", [63, 65, 16448])
+def test_gdn_chunk_must_be_64_aligned_and_within_context(tmp_path, chunk):
+    value = plan(tmp_path)
+    value["recipe"]["gdn_chunk_tokens"] = chunk
+    with pytest.raises(ValueError, match="Gated DeltaNet chunk"):
         validate_plan(value, check_files=False)
 
 
@@ -1431,9 +1441,49 @@ def test_chunked_qwen35_mlp_matches_native_output_and_gradients():
     for actual_parameter, expected_parameter in zip(
         chunked.parameters(), native.parameters(), strict=True
     ):
-        assert torch.allclose(
-            actual_parameter.grad, expected_parameter.grad, atol=1e-6, rtol=1e-6
-        )
+        assert torch.allclose(actual_parameter.grad, expected_parameter.grad, atol=1e-6, rtol=1e-6)
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("torch") is None or importlib.util.find_spec("transformers") is None,
+    reason="requires pinned training image; CPU-only",
+)
+@pytest.mark.parametrize("sequence_length", [48, 64])
+def test_checkpointed_qwen35_gdn_matches_native_output_state_and_gradients(sequence_length):
+    """State-carrying checkpoint segments preserve the exact Torch delta rule."""
+    import torch
+    from transformers.models.qwen3_5.modeling_qwen3_5 import torch_chunk_gated_delta_rule
+
+    torch.manual_seed(31)
+    shape = (1, sequence_length, 2, 4)
+    native_inputs = [torch.randn(*shape, requires_grad=True) for _ in range(3)]
+    native_inputs += [
+        (-torch.rand(1, sequence_length, 2)).requires_grad_(),
+        torch.rand(1, sequence_length, 2, requires_grad=True),
+    ]
+    chunked_inputs = [value.detach().clone().requires_grad_(True) for value in native_inputs]
+
+    expected, expected_state = torch_chunk_gated_delta_rule(
+        *native_inputs,
+        chunk_size=16,
+        output_final_state=True,
+        use_qk_l2norm_in_kernel=True,
+    )
+    actual, actual_state = checkpointed_qwen35_gdn_rule(
+        *chunked_inputs,
+        chunk_size=16,
+        output_final_state=True,
+        use_qk_l2norm_in_kernel=True,
+        outer_chunk_tokens=32,
+        implementation=torch_chunk_gated_delta_rule,
+    )
+    assert torch.equal(actual, expected)
+    assert torch.equal(actual_state, expected_state)
+
+    (expected.square().mean() + expected_state.square().mean()).backward()
+    (actual.square().mean() + actual_state.square().mean()).backward()
+    for chunked, native in zip(chunked_inputs, native_inputs, strict=True):
+        assert torch.equal(chunked.grad, native.grad)
 
 
 @pytest.mark.skipif(
@@ -1457,18 +1507,14 @@ def test_chunked_qwen35_norms_match_native_output_and_gradients():
         native_input = chunked_input.detach().clone().requires_grad_(True)
         chunked_gate = torch.randn(2, 11, 16, requires_grad=True) if kind == "gated" else None
         native_gate = (
-            chunked_gate.detach().clone().requires_grad_(True)
-            if chunked_gate is not None
-            else None
+            chunked_gate.detach().clone().requires_grad_(True) if chunked_gate is not None else None
         )
 
         if kind == "plain":
             actual = chunked_qwen35_rmsnorm_forward(chunked, chunked_input)
             expected = native(native_input)
         else:
-            actual = chunked_qwen35_rmsnorm_gated_forward(
-                chunked, chunked_input, chunked_gate
-            )
+            actual = chunked_qwen35_rmsnorm_gated_forward(chunked, chunked_input, chunked_gate)
             expected = native(native_input, native_gate)
         assert torch.allclose(actual, expected, atol=1e-6, rtol=1e-6)
 
@@ -1514,12 +1560,8 @@ def test_grouped_qwen35_layers_match_native_output_and_gradients():
     config._attn_implementation = "eager"
     grouped = Qwen3_5TextModel(config)
     native = copy.deepcopy(grouped)
-    grouped.gradient_checkpointing_enable(
-        gradient_checkpointing_kwargs={"use_reentrant": False}
-    )
-    native.gradient_checkpointing_enable(
-        gradient_checkpointing_kwargs={"use_reentrant": False}
-    )
+    grouped.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
+    native.gradient_checkpointing_enable(gradient_checkpointing_kwargs={"use_reentrant": False})
     grouped.train()
     native.train()
     grouped.fleet_sft_layer_checkpoint_group_size = 2
@@ -1534,9 +1576,7 @@ def test_grouped_qwen35_layers_match_native_output_and_gradients():
     for actual_parameter, expected_parameter in zip(
         grouped.parameters(), native.parameters(), strict=True
     ):
-        assert torch.allclose(
-            actual_parameter.grad, expected_parameter.grad, atol=1e-5, rtol=1e-5
-        )
+        assert torch.allclose(actual_parameter.grad, expected_parameter.grad, atol=1e-5, rtol=1e-5)
 
 
 @pytest.mark.skipif(

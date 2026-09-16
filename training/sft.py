@@ -37,6 +37,7 @@ RECIPE = {
     "lm_head_chunk_tokens": 4096,
     "mlp_chunk_tokens": 4096,
     "rmsnorm_chunk_tokens": 4096,
+    "gdn_chunk_tokens": 1024,
     "layer_checkpoint_group_size": 8,
     "eval_interval": 50,
     "checkpoint_interval": 50,
