@@ -21,6 +21,8 @@ from training.sft_runtime import (
     _unsigned_digest,
     build_runtime_configs,
     chunked_qwen35_mlp_forward,
+    chunked_qwen35_rmsnorm_forward,
+    chunked_qwen35_rmsnorm_gated_forward,
     chunked_sft_forward,
     dense_rows,
     explicit_tracking_class,
@@ -75,6 +77,7 @@ def plan(tmp_path):
             "max_length": 16384,
             "lm_head_chunk_tokens": 4096,
             "mlp_chunk_tokens": 4096,
+            "rmsnorm_chunk_tokens": 4096,
             "layer_checkpoint_group_size": 8,
             "eval_interval": 2,
             "checkpoint_interval": 2,
@@ -218,7 +221,9 @@ def test_identity_parallel_recipe_rejects_incomplete_data_parallel_batch(tmp_pat
         validate_plan(value, check_files=False)
 
 
-@pytest.mark.parametrize("field", ["lm_head_chunk_tokens", "mlp_chunk_tokens"])
+@pytest.mark.parametrize(
+    "field", ["lm_head_chunk_tokens", "mlp_chunk_tokens", "rmsnorm_chunk_tokens"]
+)
 def test_projection_chunk_cannot_exceed_context(tmp_path, field):
     value = plan(tmp_path)
     value["recipe"][field] = value["recipe"]["max_length"] + 1
@@ -1429,6 +1434,58 @@ def test_chunked_qwen35_mlp_matches_native_output_and_gradients():
         assert torch.allclose(
             actual_parameter.grad, expected_parameter.grad, atol=1e-6, rtol=1e-6
         )
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("torch") is None or importlib.util.find_spec("transformers") is None,
+    reason="requires pinned training image; CPU-only",
+)
+def test_chunked_qwen35_norms_match_native_output_and_gradients():
+    """Chunking preserves both Qwen RMSNorm implementations and gradients."""
+    import torch
+    from transformers.models.qwen3_5.modeling_qwen3_5 import (
+        Qwen3_5RMSNorm,
+        Qwen3_5RMSNormGated,
+    )
+
+    torch.manual_seed(23)
+    for kind in ("plain", "gated"):
+        chunked = Qwen3_5RMSNorm(16) if kind == "plain" else Qwen3_5RMSNormGated(16)
+        native = copy.deepcopy(chunked)
+        chunked.fleet_sft_rmsnorm_chunk_tokens = 3
+        chunked_input = torch.randn(2, 11, 16, requires_grad=True)
+        native_input = chunked_input.detach().clone().requires_grad_(True)
+        chunked_gate = torch.randn(2, 11, 16, requires_grad=True) if kind == "gated" else None
+        native_gate = (
+            chunked_gate.detach().clone().requires_grad_(True)
+            if chunked_gate is not None
+            else None
+        )
+
+        if kind == "plain":
+            actual = chunked_qwen35_rmsnorm_forward(chunked, chunked_input)
+            expected = native(native_input)
+        else:
+            actual = chunked_qwen35_rmsnorm_gated_forward(
+                chunked, chunked_input, chunked_gate
+            )
+            expected = native(native_input, native_gate)
+        assert torch.allclose(actual, expected, atol=1e-6, rtol=1e-6)
+
+        actual.square().mean().backward()
+        expected.square().mean().backward()
+        assert torch.allclose(chunked_input.grad, native_input.grad, atol=1e-6, rtol=1e-6)
+        if chunked_gate is not None:
+            assert torch.allclose(chunked_gate.grad, native_gate.grad, atol=1e-6, rtol=1e-6)
+        for actual_parameter, expected_parameter in zip(
+            chunked.parameters(), native.parameters(), strict=True
+        ):
+            assert torch.allclose(
+                actual_parameter.grad,
+                expected_parameter.grad,
+                atol=1e-6,
+                rtol=1e-6,
+            )
 
 
 @pytest.mark.skipif(

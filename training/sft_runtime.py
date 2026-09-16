@@ -149,6 +149,7 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         "max_length",
         "lm_head_chunk_tokens",
         "mlp_chunk_tokens",
+        "rmsnorm_chunk_tokens",
         "layer_checkpoint_group_size",
         "eval_interval",
         "checkpoint_interval",
@@ -188,6 +189,8 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         raise ValueError("LM-head chunk cannot exceed the model context")
     if recipe["mlp_chunk_tokens"] > recipe["max_length"]:
         raise ValueError("MLP chunk cannot exceed the model context")
+    if recipe["rmsnorm_chunk_tokens"] > recipe["max_length"]:
+        raise ValueError("RMSNorm chunk cannot exceed the model context")
     if recipe["layer_checkpoint_group_size"] > 64:
         raise ValueError("Qwen layer checkpoint group cannot exceed 64 layers")
     if recipe["eval_interval"] and recipe["checkpoint_interval"] != recipe["eval_interval"]:
@@ -336,6 +339,9 @@ def sft_overrides(plan: dict) -> dict:
         "model_config_kwargs.fleet_force_qwen35_torch_gdn": True,
         "model_config_kwargs.fleet_sft_lm_head_chunk_tokens": r["lm_head_chunk_tokens"],
         "model_config_kwargs.fleet_sft_mlp_chunk_tokens": r["mlp_chunk_tokens"],
+        "model_config_kwargs.fleet_sft_rmsnorm_chunk_tokens": r[
+            "rmsnorm_chunk_tokens"
+        ],
         "model_config_kwargs.fleet_sft_layer_checkpoint_group_size": r[
             "layer_checkpoint_group_size"
         ],
@@ -376,6 +382,7 @@ def sft_overrides(plan: dict) -> dict:
 
         options.pop("model_config_kwargs.fleet_force_qwen35_torch_gdn")
         options.pop("model_config_kwargs.fleet_sft_mlp_chunk_tokens")
+        options.pop("model_config_kwargs.fleet_sft_rmsnorm_chunk_tokens")
         options.pop("model_config_kwargs.fleet_sft_layer_checkpoint_group_size")
         options.update(
             {
@@ -1056,6 +1063,48 @@ def chunked_qwen35_mlp_forward(self, hidden_states):
     return torch.cat(outputs, dim=-2)
 
 
+def chunked_qwen35_rmsnorm_forward(self, hidden_states):
+    """Preserve Qwen RMSNorm while bounding its full-sequence F32 scratch."""
+    import torch
+
+    chunk_tokens = getattr(self, "fleet_sft_rmsnorm_chunk_tokens", None)
+    if type(chunk_tokens) is not int or chunk_tokens <= 0:
+        raise ValueError("invalid Qwen RMSNorm chunk size")
+    scale = 1.0 + self.weight.float()
+    outputs = []
+    for value in hidden_states.split(chunk_tokens, dim=-2):
+        normalized = self._norm(value.float())
+        outputs.append((normalized * scale).type_as(value))
+    return torch.cat(outputs, dim=-2)
+
+
+def chunked_qwen35_rmsnorm_gated_forward(self, hidden_states, gate=None):
+    """Preserve gated RMSNorm while bounding its F32 state and gate scratch."""
+    import torch
+
+    chunk_tokens = getattr(self, "fleet_sft_rmsnorm_chunk_tokens", None)
+    if type(chunk_tokens) is not int or chunk_tokens <= 0:
+        raise ValueError("invalid Qwen gated RMSNorm chunk size")
+    if gate is None or gate.shape != hidden_states.shape:
+        raise ValueError("Qwen gated RMSNorm requires a matching gate")
+    outputs = []
+    for value, gate_value in zip(
+        hidden_states.split(chunk_tokens, dim=-2),
+        gate.split(chunk_tokens, dim=-2),
+        strict=True,
+    ):
+        input_dtype = value.dtype
+        value = value.to(torch.float32)
+        variance = value.pow(2).mean(-1, keepdim=True)
+        value = value * torch.rsqrt(variance + self.variance_epsilon)
+        value = self.weight * value.to(input_dtype)
+        # Qwen3.5 fixes this gate to SiLU. The exact-image kernel wrapper does
+        # not preserve the local fallback class's descriptive `activation` attr.
+        value = value * torch.nn.functional.silu(gate_value.to(torch.float32))
+        outputs.append(value.to(input_dtype))
+    return torch.cat(outputs, dim=-2)
+
+
 def grouped_qwen35_text_forward(
     self,
     input_ids=None,
@@ -1147,6 +1196,7 @@ def grouped_qwen35_text_forward(
 def install_chunked_sft_worker(
     lm_head_chunk_tokens: int,
     mlp_chunk_tokens: int,
+    rmsnorm_chunk_tokens: int,
     layer_checkpoint_group_size: int,
 ):
     """Install one job-local Ray worker using bounded Qwen projections."""
@@ -1159,6 +1209,8 @@ def install_chunked_sft_worker(
             from skyrl.backends.skyrl_train.workers.model_wrapper import HFModelWrapper
             from transformers.models.qwen3_5.modeling_qwen3_5 import (
                 Qwen3_5MLP,
+                Qwen3_5RMSNorm,
+                Qwen3_5RMSNormGated,
                 Qwen3_5TextModel,
             )
 
@@ -1168,6 +1220,9 @@ def install_chunked_sft_worker(
             configured_mlp = self.cfg.policy.model_config_kwargs.pop(
                 "fleet_sft_mlp_chunk_tokens", None
             )
+            configured_rmsnorm = self.cfg.policy.model_config_kwargs.pop(
+                "fleet_sft_rmsnorm_chunk_tokens", None
+            )
             configured_group = self.cfg.policy.model_config_kwargs.pop(
                 "fleet_sft_layer_checkpoint_group_size", None
             )
@@ -1175,12 +1230,18 @@ def install_chunked_sft_worker(
                 raise ValueError("chunked LM-head worker configuration drift")
             if configured_mlp != mlp_chunk_tokens:
                 raise ValueError("chunked MLP worker configuration drift")
+            if configured_rmsnorm != rmsnorm_chunk_tokens:
+                raise ValueError("chunked RMSNorm worker configuration drift")
             if configured_group != layer_checkpoint_group_size:
                 raise ValueError("layer checkpoint group worker configuration drift")
             HFModelWrapper.fleet_sft_lm_head_chunk_tokens = lm_head_chunk_tokens
             HFModelWrapper.forward = chunked_sft_forward
             Qwen3_5MLP.fleet_sft_mlp_chunk_tokens = mlp_chunk_tokens
             Qwen3_5MLP.forward = chunked_qwen35_mlp_forward
+            Qwen3_5RMSNorm.fleet_sft_rmsnorm_chunk_tokens = rmsnorm_chunk_tokens
+            Qwen3_5RMSNorm.forward = chunked_qwen35_rmsnorm_forward
+            Qwen3_5RMSNormGated.fleet_sft_rmsnorm_chunk_tokens = rmsnorm_chunk_tokens
+            Qwen3_5RMSNormGated.forward = chunked_qwen35_rmsnorm_gated_forward
             Qwen3_5TextModel.fleet_sft_layer_checkpoint_group_size = (
                 layer_checkpoint_group_size
             )
@@ -1309,6 +1370,7 @@ def _make_trainer_class():
                 install_chunked_sft_worker(
                     self.plan["recipe"]["lm_head_chunk_tokens"],
                     self.plan["recipe"]["mlp_chunk_tokens"],
+                    self.plan["recipe"]["rmsnorm_chunk_tokens"],
                     self.plan["recipe"]["layer_checkpoint_group_size"],
                 )
             with selection:
