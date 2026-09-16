@@ -161,3 +161,54 @@ def test_builder_rejects_any_holdout_family_version(tmp_path, monkeypatch):
     config["evidence"]["sha256"] = file_sha256(evidence)
     with pytest.raises(ValueError, match="held-out task family"):
         corpus.build(copy.deepcopy(config), relative_to=tmp_path)
+
+
+def test_builder_salvages_only_complete_prefix_before_orphan_result(tmp_path, monkeypatch):
+    config = _fixture(tmp_path, monkeypatch)
+    row = _record("session", "train-task", "train-version")
+    row["messages"].insert(
+        4,
+        {"role": "tool", "content": "legacy orphan", "tool_call_id": "missing-call"},
+    )
+    row["content_digest"] = digest_json({k: v for k, v in row.items() if k != "content_digest"})
+    normalized = Path(config["normalized"]["path"])
+    evidence = Path(config["evidence"]["path"])
+    normalized.write_text(json.dumps(row) + "\n")
+    evidence.write_text(json.dumps(_evidence(row)) + "\n")
+    config["normalized"]["sha256"] = file_sha256(normalized)
+    config["evidence"]["sha256"] = file_sha256(evidence)
+
+    result = corpus.build(config, relative_to=tmp_path)
+
+    assert result["train"]["source_sessions"] == 1
+    manifest = json.loads((tmp_path / "output/manifest.json").read_text())
+    assert manifest["catalog_provenance"]["lifecycle_prefix_salvages"] == 1
+    rows = pq.read_table(tmp_path / "output/train.parquet").to_pylist()
+    assert len(rows[0]["target_spans"]) == 1
+    selection = json.loads((tmp_path / "output/source-selection.private.jsonl").read_text())
+    assert selection["lifecycle_prefix_salvage"] == {
+        "reason": "orphan_or_duplicate_tool_result",
+        "kept_messages": 4,
+        "dropped_messages": 3,
+        "original_assistant_responses": 2,
+        "retained_assistant_responses": 1,
+    }
+
+
+def test_builder_discards_a_duplicate_payload_as_one_whole_source(tmp_path, monkeypatch):
+    config = _fixture(tmp_path, monkeypatch)
+    rows = [
+        _record("session-a", "train-task-a", "train-version-a"),
+        _record("session-b", "train-task-b", "train-version-b"),
+    ]
+    normalized = Path(config["normalized"]["path"])
+    evidence = Path(config["evidence"]["path"])
+    normalized.write_text("".join(json.dumps(row) + "\n" for row in rows))
+    evidence.write_text("".join(json.dumps(_evidence(row)) + "\n" for row in rows))
+    config["normalized"]["sha256"] = file_sha256(normalized)
+    config["evidence"]["sha256"] = file_sha256(evidence)
+
+    result = corpus.build(config, relative_to=tmp_path)
+
+    assert result["train"]["source_sessions"] == 1
+    assert result["whole_source_exclusions"] == {"exact_window_payload_duplicate": 1}

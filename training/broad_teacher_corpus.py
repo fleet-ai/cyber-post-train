@@ -143,8 +143,15 @@ def _canonical_tool(name: str, arguments: dict) -> tuple[str, dict, bool]:
     return name, arguments, wrapped
 
 
-def _broad_messages(record: dict) -> tuple[dict, list[dict], str | None]:
-    """Preserve valid visible turns and normalize only exact tool aliases."""
+def _broad_messages(record: dict) -> tuple[dict, list[dict], str | None, dict | None]:
+    """Preserve the complete valid prefix and normalize only exact tool aliases.
+
+    Some legacy full-success transcripts contain a malformed suffix: an orphan
+    tool result, an incomplete tool round, or an invalid serialized call.  A
+    complete prefix before that boundary is still observed training evidence.
+    We retain it only when it ends with no pending call and contains at least
+    one assistant response; the exact cut is digest-bound in the transform.
+    """
     transformed = copy.deepcopy(record)
     raw = transformed.get("messages")
     if not isinstance(raw, list) or len(raw) < 3 or [m.get("role") for m in raw[:2]] != [
@@ -153,15 +160,21 @@ def _broad_messages(record: dict) -> tuple[dict, list[dict], str | None]:
     ]:
         raise Excluded("missing_original_system_and_task_anchor")
     pending, seen, operations = set(), set(), []
-    for message in raw:
+    pending_start = None
+    cut, issue = len(raw), None
+    for message_index, message in enumerate(raw):
         role = message.get("role")
         if role not in {"system", "user", "assistant", "tool"}:
-            raise Excluded("unsupported_message_role")
+            cut, issue = message_index, "unsupported_message_role"
+            break
         if role != "tool" and pending:
-            raise Excluded("missing_tool_result_before_next_message")
+            cut, issue = pending_start, "missing_tool_result_before_next_message"
+            break
         calls = message.get("tool_calls") or []
         if role != "assistant" and calls:
-            raise Excluded("tool_call_outside_assistant")
+            cut, issue = message_index, "tool_call_outside_assistant"
+            break
+        local_ids, local_operations = set(), []
         for call in calls:
             call_id = call.get("id")
             function = call.get("function")
@@ -169,47 +182,92 @@ def _broad_messages(record: dict) -> tuple[dict, list[dict], str | None]:
                 not isinstance(call_id, str)
                 or not call_id
                 or call_id in seen
+                or call_id in local_ids
                 or not isinstance(function, dict)
                 or not isinstance(function.get("name"), str)
                 or not function["name"]
             ):
-                raise Excluded("invalid_or_duplicate_tool_call")
+                cut, issue = message_index, "invalid_or_duplicate_tool_call"
+                break
             arguments = function.get("arguments")
             try:
                 arguments = json.loads(arguments) if isinstance(arguments, str) else arguments
             except (TypeError, ValueError):
-                raise Excluded("invalid_tool_arguments") from None
+                cut, issue = message_index, "invalid_tool_arguments"
+                break
             if not isinstance(arguments, dict):
-                raise Excluded("invalid_tool_arguments")
+                cut, issue = message_index, "invalid_tool_arguments"
+                break
             original = function["name"]
-            name, arguments, wrapped = _canonical_tool(original, arguments)
+            try:
+                name, arguments, wrapped = _canonical_tool(original, arguments)
+            except Excluded as exc:
+                cut, issue = message_index, exc.reason
+                break
             if wrapped or name != original:
-                operations.append({"call_id": call_id, "from": original, "to": name})
+                local_operations.append(
+                    {
+                        "source_message_index": message_index,
+                        "call_id": call_id,
+                        "from": original,
+                        "to": name,
+                    }
+                )
             function["name"], function["arguments"] = name, arguments
-            seen.add(call_id)
-            pending.add(call_id)
+            local_ids.add(call_id)
+        if issue:
+            break
+        if local_ids:
+            if pending_start is None:
+                pending_start = message_index
+            seen.update(local_ids)
+            pending.update(local_ids)
+            operations.extend(local_operations)
         if role == "tool":
             call_id = message.get("tool_call_id")
             if call_id not in pending:
-                raise Excluded("orphan_or_duplicate_tool_result")
+                cut = pending_start if pending else message_index
+                issue = "orphan_or_duplicate_tool_result"
+                break
             pending.remove(call_id)
-    if pending:
-        raise Excluded("missing_terminal_tool_result")
+            if not pending:
+                pending_start = None
+    if not issue and pending:
+        cut, issue = pending_start, "missing_terminal_tool_result"
+    salvage = None
+    if issue:
+        retained = raw[:cut]
+        if not any(message.get("role") == "assistant" for message in retained):
+            raise Excluded(issue)
+        salvage = {
+            "reason": issue,
+            "kept_messages": len(retained),
+            "dropped_messages": len(raw) - len(retained),
+            "original_assistant_responses": sum(
+                message.get("role") == "assistant" for message in raw
+            ),
+            "retained_assistant_responses": sum(
+                message.get("role") == "assistant" for message in retained
+            ),
+        }
+        raw = retained
+        operations = [item for item in operations if item["source_message_index"] < cut]
     if not any(message.get("role") == "assistant" for message in raw):
         raise Excluded("no_assistant_targets")
     visible = [_normalized_for_template(message) for message in raw]
     receipt = None
-    if operations:
+    if operations or salvage:
         receipt = digest_json(
             {
-                "schema": "cyber_exact_tool_alias_normalization_v1",
+                "schema": "cyber_visible_trace_normalization_v2",
                 "input_record_sha256": digest_json(record),
-                "operations": operations,
+                "exact_tool_alias_operations": operations,
+                "lifecycle_prefix_salvage": salvage,
                 "output_messages_sha256": digest_json(visible),
             }
         )
     transformed["messages"] = visible
-    return transformed, visible, receipt
+    return transformed, visible, receipt, salvage
 
 
 def build(config: dict, *, relative_to: Path) -> dict:
@@ -291,7 +349,8 @@ def build(config: dict, *, relative_to: Path) -> dict:
     task_keys, task_versions, seen_records = set(), set(), set()
     row_count = supervised = responses = source_total = excluded_responses = 0
     min_tokens, max_tokens, token_lengths = None, 0, []
-    suffixes_removed = 0
+    suffixes_removed = prefix_salvages = prefix_dropped_messages = 0
+    prefix_dropped_assistants = 0
     try:
         for original in iter_jsonl(sources["normalized"]):
             sid = original.get("record_id")
@@ -324,7 +383,7 @@ def build(config: dict, *, relative_to: Path) -> dict:
                 exclusions["not_selected_verified_teacher_success"] += 1
                 continue
             try:
-                transformed, messages, interface_sha = _broad_messages(original)
+                transformed, messages, interface_sha, salvage = _broad_messages(original)
                 transformed, suffix_sha, removed = _strip_finalize_suffix(transformed)
                 transform_sha = (
                     digest_json([interface_sha, suffix_sha]) if interface_sha else suffix_sha
@@ -346,14 +405,19 @@ def build(config: dict, *, relative_to: Path) -> dict:
                     "task-key:" + str(identity[0]),
                     transform_sha,
                 )
+                if salvage:
+                    selection["lifecycle_prefix_salvage"] = salvage
             except Excluded as exc:
                 exclusions[exc.reason] += 1
                 continue
+            fingerprints = [
+                digest_json([row["input_ids"], row["loss_mask"]]) for row in packed
+            ]
+            if any(fingerprint in window_payloads for fingerprint in fingerprints):
+                exclusions["exact_window_payload_duplicate"] += 1
+                continue
+            window_payloads.update(fingerprints)
             for row in packed:
-                fingerprint = digest_json([row["input_ids"], row["loss_mask"]])
-                if fingerprint in window_payloads:
-                    raise ValueError("partial source removal would break target coverage")
-                window_payloads.add(fingerprint)
                 row.update(
                     {
                         "source_harness_mode": source["harness_mode"],
@@ -379,6 +443,13 @@ def build(config: dict, *, relative_to: Path) -> dict:
             writer.write_table(pa.Table.from_pylist(packed, schema=_arrow_schema(pa)))
             trajectories.add(trajectory)
             selections.append(selection)
+            if salvage:
+                prefix_salvages += 1
+                prefix_dropped_messages += salvage["dropped_messages"]
+                prefix_dropped_assistants += (
+                    salvage["original_assistant_responses"]
+                    - salvage["retained_assistant_responses"]
+                )
             row_count += len(packed)
             supervised += local_counts["supervised_tokens"]
             responses += local_counts["assistant_responses"]
@@ -437,6 +508,9 @@ def build(config: dict, *, relative_to: Path) -> dict:
             "teacher_model_sessions": dict(sorted(models.items())),
             "harness_mode_sessions": dict(sorted(harnesses.items())),
             "terminal_finalize_suffixes_removed": suffixes_removed,
+            "lifecycle_prefix_salvages": prefix_salvages,
+            "lifecycle_prefix_dropped_messages": prefix_dropped_messages,
+            "lifecycle_prefix_dropped_assistant_responses": prefix_dropped_assistants,
             "transcript_route": "GET /v1/sessions/{session_id}/transcript",
         },
         "token_length_distribution": {
@@ -452,6 +526,8 @@ def build(config: dict, *, relative_to: Path) -> dict:
             "certification is not required.",
             "The reviewed Fleet dev and final-test task families are excluded across every "
             "version.",
+            "For legacy transcripts with a malformed lifecycle suffix, only the maximal "
+            "fully paired prefix is retained and its exact cut is recorded privately.",
         ],
     }
     manifest["sha256"] = "sha256:" + digest(manifest)
