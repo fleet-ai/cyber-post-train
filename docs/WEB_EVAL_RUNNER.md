@@ -16,9 +16,10 @@ a laptop sleeping is not an unattended execution service.
 
 The command connects the existing tested operators:
 
-1. Create one owned Tensorlake machine per selected task, within the fixed
-   concurrency cap. A launch plan controls the exact model, task order,
-   OpenCode version, budgets, prepared filesystem and source-file hashes.
+1. Create the first task as a canary. The other tasks remain unallocated until
+   that canary has produced and preserved a score-free collection. A launch
+   plan controls the exact model, task order, OpenCode version, budgets,
+   prepared filesystem and source-file hashes.
 2. Collect attempts **without a judge**.
 3. Check completeness and preserve the work in a filesystem snapshot.
 4. Release the collection machine. Temporarily restore the snapshot on a small
@@ -28,7 +29,9 @@ The command connects the existing tested operators:
 `task-NNNN/status.json` is readable progress, not scientific acceptance.
 The underlying collection, download and score records contain the checked
 digests. A technical failure is reported as needing review, never as a zero
-model score. Other independent tasks continue if one task fails.
+model score. If the canary fails before collection, the remaining tasks do not
+launch. After the canary succeeds, other independent tasks continue if one
+task fails.
 
 ## Restart safely
 
@@ -71,14 +74,16 @@ authorize a new student rollout.
 
 ## Current qualification status
 
-The orchestration tests cover partial failure, cleanup, restart behavior and
-judge/collection separation. The no-model environment qualification passed all
-15 sites, including their exact agent and evaluator images and required files.
-Fresh75 step230 passed GPU reload and live-serving checks. Its first full
-collection, `fresh75-step230-opencode-web-p1-v3`, is active. The workflow is not
-yet end-to-end proven until that campaign preserves, downloads and releases all
-accepted collections. The completed GPT rescore demonstrates recovery of older
-stored work; it is not by itself that end-to-end proof.
+The orchestration tests cover partial failure, cleanup, restart behavior,
+judge/collection separation, and the one-task collection canary. Fresh75
+campaign `fresh75-step230-opencode-web-p1-v3` is terminally
+infrastructure-invalid: nine restored machines failed readiness before any
+model call, six tasks were never created, and there are no rollouts or scores.
+The nine launched machines were released and Fresh75 serving was paused. The
+source-only environment qualification was therefore insufficient. A new
+snapshot must be checked after restoration before a replacement canary starts.
+The completed GPT rescore demonstrates recovery of older stored work; it is not
+by itself end-to-end proof for this controller.
 
 See [Tensorlake execution instructions](../evals/webexploitbench/tensorlake/README.md)
 for preparation and sealed-plan requirements. The command deliberately does not

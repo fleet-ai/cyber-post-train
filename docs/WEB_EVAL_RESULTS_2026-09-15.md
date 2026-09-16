@@ -65,7 +65,7 @@ Dataset revision: `7f97d87fa8ab728260c0ba9b09b9c8f00bb82ad5`.
 | Wider V8/V10/V11/V14/V17/V21/V24 reruns | No accepted full-benchmark result established. Preserve each campaign separately; never pool repair attempts opportunistically. |
 | Teacher-SFT step186 matched V28 test | One controller per model exited and resources were released. Score acceptance has not been established; no improvement claim. |
 | Teacher V30/V31 preparations | Prepared plans do not establish launched or completed evaluations. |
-| Fresh75 final step230 | Training, export, GPU reload and live serving accepted. Campaign `fresh75-step230-opencode-web-p1-v3` is collecting one OpenCode attempt on each of all 15 sites with scoring disabled until the saved work is downloaded. No performance result exists yet. |
+| Fresh75 final step230 | Training, export and GPU reload were accepted, but campaign `fresh75-step230-opencode-web-p1-v3` is infrastructure-invalid. Nine restored machines failed readiness before any Qwen call; six tasks were held at creation. There are zero usable rollouts and no score. The nine launched machines were released and serving was paused. |
 | Self-SFT WEB | No accepted complete campaign established in this audit. |
 | Qwen3.6 / Qwen Code | Historical 15-target pass@1 result: 10/110 checks. One allowed model timeout; no infrastructure-invalid target. |
 | Qwen3.6 / Claude Code corrected result | Historical 15-target selected result: 16/110 after documented replacements for broken target runs. Earlier 14/94 was not final. |
@@ -93,7 +93,9 @@ history, not automatically a matched control for a changed execution setup.
 
 The one-command controller is described in
 [WEB_EVAL_RUNNER.md](WEB_EVAL_RUNNER.md). Its no-model environment qualification
-passed all 15 sites before the live Fresh75 launch. Unit tests and environment
-qualification still do not establish unattended production reliability: the
-active Fresh75 run must demonstrate collection, preservation, download and
-release before the whole workflow is described as operationally proven.
+passed all 15 sites only in the source machine. That was insufficient: all nine
+machines restored from the resulting snapshot failed
+`snapshot_runtime_readiness` before any model call. The failure is preserved in
+[the Fresh75 infrastructure incident](evidence/webexploitbench/2026-09-15-fresh75-p1-v3-infrastructure-invalid.json).
+A successor must pass a check inside a newly restored machine and preserve one
+real collection canary before the remaining tasks launch.

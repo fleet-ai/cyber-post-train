@@ -54,10 +54,10 @@
       "source": "https://github.com/fleet-ai/cyber-post-train/blob/codex/web-evals-dashboard-runner/docs/WEB_EVAL_RESULTS_2026-09-15.md"
     },
     {
-      "id": "fresh75-step230-opencode-web-p1-v3", "name": "Fresh75 checkpoint · separated evaluation", "date": "2026-09-15", "model": "Qwen3.8-27B", "checkpoint": "Fresh75 final step 230", "harness": "OpenCode 1.18.27", "judge": "None during collection; scoring is a separate later step", "platform": "Tensorlake", "status": "active",
-      "collection": "In progress", "scoring": "Not started; no judge can invalidate or erase collection", "planned": 15, "usable": null, "targets": "15 intended websites", "attempts_per_target": 1, "metrics": [],
-      "note": "Active collection, not a performance result. The checkpoint passed GPU reload and live-serving checks. All 15 website environments passed a separate no-model qualification before launch. Results remain blank until collection, download and scoring records pass their checks.",
-      "config": {"Campaign": "fresh75-step230-opencode-web-p1-v3", "Model context limit, tokens": 262144, "Temperature": 0, "Maximum attempts per website": 1, "Maximum simultaneous attempts": 15, "Attempt timeout": "8 hours", "Agent memory": "48 GiB", "Scoring during collection": "Disabled", "Launch-plan SHA-256": "50bf2d12e050f81725ab8b3f8f756466fa20f9b93678cfb2a79b3cb32773737c", "Environment qualification": "All 15 websites passed"},
+      "id": "fresh75-step230-opencode-web-p1-v3", "name": "Fresh75 checkpoint · failed infrastructure launch", "date": "2026-09-15", "model": "Qwen3.8-27B", "checkpoint": "Fresh75 final step 230", "harness": "OpenCode 1.18.27", "judge": "None", "platform": "Tensorlake", "status": "incomplete",
+      "collection": "0 usable; nine restored machines failed their startup check; six were never created", "scoring": "Not started; no model attempts existed to score", "planned": 15, "usable": 0, "targets": "0 of 15", "attempts_per_target": 1, "metrics": [],
+      "note": "This is not a model result and is not a score of zero. Every launched machine failed before Qwen was called because the restored evaluation environment was not ready. The nine launched machines were released and Fresh75 serving was paused. A replacement must first pass one freshly restored environment and one saved rollout canary.",
+      "config": {"Campaign": "fresh75-step230-opencode-web-p1-v3", "Model context limit, tokens": 262144, "Temperature": 0, "Maximum attempts per website": 1, "Maximum simultaneous attempts": 15, "Attempt timeout": "8 hours", "Agent memory": "48 GiB", "Scoring during collection": "Disabled", "Launch-plan SHA-256": "50bf2d12eb898895286ae8e401d3cba1bfd0f5b9ba8cc65c846036a5bd702fe9", "Failure point": "Restored-environment startup check", "Model attempts": 0},
       "source": "https://github.com/fleet-ai/cyber-post-train/blob/codex/web-evals-dashboard-runner/docs/WEB_EVAL_RESULTS_2026-09-15.md"
     },
     {
