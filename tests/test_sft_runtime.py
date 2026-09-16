@@ -1306,6 +1306,9 @@ def test_chunked_sft_lm_head_matches_full_causal_ce(monkeypatch, is_vlm):
             self.model = Backbone()
             self.lm_head = TrackingHead()
 
+        def forward(self, **kwargs):
+            raise AssertionError("native vocabulary projection must remain bypassed")
+
     causal = Causal()
     reference = copy.deepcopy(causal)
     wrapper = HFModelWrapper.__new__(HFModelWrapper)
@@ -1315,6 +1318,9 @@ def test_chunked_sft_lm_head_matches_full_causal_ce(monkeypatch, is_vlm):
     wrapper.remove_microbatch_padding = False
     wrapper.sequence_parallel_size = 1
     wrapper.fleet_sft_lm_head_chunk_tokens = 3
+    root_hooks = []
+    causal.register_forward_pre_hook(lambda *_: root_hooks.append("pre"))
+    causal.register_forward_hook(lambda *_: root_hooks.append("post"))
     sequences = torch.tensor([[1, 4, 2, 8, 3, 7, 5, 6, 9]])
     attention = torch.ones_like(sequences)
 
@@ -1333,6 +1339,8 @@ def test_chunked_sft_lm_head_matches_full_causal_ce(monkeypatch, is_vlm):
     expected = torch.log_softmax(full_logits, dim=-1).gather(-1, labels.unsqueeze(-1)).squeeze(-1)
     expected = expected[:, :-1]
     assert output == {}
+    assert root_hooks == ["pre", "post"]
+    assert causal.forward.__func__ is Causal.forward
     assert causal.lm_head.largest_tokens == 3
     assert (causal.model.last_position_ids is None) is is_vlm
     assert torch.allclose(actual, expected, atol=1e-6, rtol=1e-6)

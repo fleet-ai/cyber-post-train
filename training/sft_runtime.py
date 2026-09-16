@@ -900,6 +900,8 @@ def chunked_sft_forward(
     projection/cross-entropy in bounded token slices.  Backward recomputes one
     slice at a time and preserves the exact causal CE objective.
     """
+    import types
+
     import numpy as np
     import torch
     from skyrl.backends.skyrl_train.workers import model_wrapper
@@ -940,11 +942,25 @@ def chunked_sft_forward(
         "position_ids": None if self.is_vlm else position_ids_fwd,
         "use_cache": False,
     }
-    # Qwen3.8 is published as a conditional-generation model even for this
-    # text-only corpus.  Calling its `.model` matches SkyRL's native VLM path:
-    # no vision tensors are supplied and the Qwen backbone derives its own 3-D
-    # text positions.  Only the vocabulary projection is replaced.
-    outputs = causal_model.model(**backbone_kwargs)
+    # The causal model itself is the FSDP2 root. Calling `.model` directly
+    # bypasses its pre/post-forward hooks and leaves root-owned parameters as
+    # DTensors. Temporarily replace only the Python forward implementation so
+    # `causal_model(...)` still executes those hooks while returning the final
+    # hidden states instead of allocating the full vocabulary logits.
+    had_instance_forward = "forward" in causal_model.__dict__
+    instance_forward = causal_model.__dict__.get("forward")
+
+    def backbone_only_forward(module, **kwargs):
+        return module.model(**kwargs)
+
+    causal_model.forward = types.MethodType(backbone_only_forward, causal_model)
+    try:
+        outputs = causal_model(**backbone_kwargs)
+    finally:
+        if had_instance_forward:
+            causal_model.forward = instance_forward
+        else:
+            del causal_model.forward
     hidden_states = outputs.last_hidden_state
     labels = torch.roll(sequences_fwd, shifts=-1, dims=1)
 
