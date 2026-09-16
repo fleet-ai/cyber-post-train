@@ -413,7 +413,9 @@ def build(config: dict, *, relative_to: Path) -> dict:
             fingerprints = [
                 digest_json([row["input_ids"], row["loss_mask"]]) for row in packed
             ]
-            if any(fingerprint in window_payloads for fingerprint in fingerprints):
+            if len(fingerprints) != len(set(fingerprints)) or any(
+                fingerprint in window_payloads for fingerprint in fingerprints
+            ):
                 exclusions["exact_window_payload_duplicate"] += 1
                 continue
             window_payloads.update(fingerprints)
