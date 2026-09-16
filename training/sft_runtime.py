@@ -1274,7 +1274,13 @@ def grouped_qwen35_text_forward(
             return value
 
         if self.training and torch.is_grad_enabled() and hidden_states.requires_grad:
-            hidden_states = checkpoint(run_group, hidden_states, use_reentrant=False)
+            # Reentrant outer checkpointing deliberately runs the first group
+            # forward under no_grad.  That prevents the nested GDN segment
+            # checkpoints from retaining every group's full Q/K/V projections
+            # until the end of a 262k forward.  During backward the group is
+            # recomputed with gradients enabled, so the segment checkpoints
+            # bound recurrent history while preserving exact gradients.
+            hidden_states = checkpoint(run_group, hidden_states, use_reentrant=True)
         else:
             hidden_states = run_group(hidden_states)
     return Qwen3_5ModelOutputWithPast(

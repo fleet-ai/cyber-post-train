@@ -1490,6 +1490,64 @@ def test_checkpointed_qwen35_gdn_matches_native_output_state_and_gradients(seque
     importlib.util.find_spec("torch") is None or importlib.util.find_spec("transformers") is None,
     reason="requires pinned training image; CPU-only",
 )
+def test_reentrant_outer_checkpoint_defers_nested_gdn_history_until_backward():
+    """The outer forward saves no recurrent graph but backward remains exact."""
+    import torch
+    from torch.utils.checkpoint import checkpoint
+    from transformers.models.qwen3_5.modeling_qwen3_5 import torch_chunk_gated_delta_rule
+
+    torch.manual_seed(37)
+    hidden = torch.randn(1, 96, 2, 4, requires_grad=True)
+    reference = hidden.detach().clone().requires_grad_(True)
+    grad_modes = []
+
+    def run(value):
+        query, key, projected = value, value * 0.75, value * 1.25
+        decay = (-torch.sigmoid(value[..., 0])).contiguous()
+        step = torch.sigmoid(value[..., 1]).contiguous()
+
+        def observed(*args, **kwargs):
+            grad_modes.append(torch.is_grad_enabled())
+            return torch_chunk_gated_delta_rule(*args, **kwargs)
+
+        output, _ = checkpointed_qwen35_gdn_rule(
+            query,
+            key,
+            projected,
+            decay,
+            step,
+            chunk_size=16,
+            output_final_state=True,
+            use_qk_l2norm_in_kernel=True,
+            outer_chunk_tokens=32,
+            implementation=observed,
+        )
+        return output
+
+    actual = checkpoint(run, hidden, use_reentrant=True)
+    expected, _ = torch_chunk_gated_delta_rule(
+        reference,
+        reference * 0.75,
+        reference * 1.25,
+        -torch.sigmoid(reference[..., 0]),
+        torch.sigmoid(reference[..., 1]),
+        chunk_size=16,
+        output_final_state=True,
+        use_qk_l2norm_in_kernel=True,
+    )
+    assert torch.equal(actual, expected)
+    assert grad_modes == [False, False, False]
+
+    actual.square().mean().backward()
+    expected.square().mean().backward()
+    assert torch.equal(hidden.grad, reference.grad)
+    assert grad_modes[:3] == [False, False, False] and any(grad_modes[3:])
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("torch") is None or importlib.util.find_spec("transformers") is None,
+    reason="requires pinned training image; CPU-only",
+)
 def test_chunked_qwen35_norms_match_native_output_and_gradients():
     """Chunking preserves both Qwen RMSNorm implementations and gradients."""
     import torch
