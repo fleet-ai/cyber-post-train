@@ -25,6 +25,7 @@ from training.sft_runtime import (
     dense_rows,
     explicit_tracking_class,
     finalize_failed_run,
+    grouped_qwen35_text_forward,
     public_failure_details,
     retention_steps,
     sft_overrides,
@@ -74,6 +75,7 @@ def plan(tmp_path):
             "max_length": 16384,
             "lm_head_chunk_tokens": 4096,
             "mlp_chunk_tokens": 4096,
+            "layer_checkpoint_group_size": 8,
             "eval_interval": 2,
             "checkpoint_interval": 2,
             "keep_checkpoints": 1,
@@ -221,6 +223,13 @@ def test_projection_chunk_cannot_exceed_context(tmp_path, field):
     value = plan(tmp_path)
     value["recipe"][field] = value["recipe"]["max_length"] + 1
     with pytest.raises(ValueError, match="chunk cannot exceed"):
+        validate_plan(value, check_files=False)
+
+
+def test_qwen_layer_checkpoint_group_cannot_exceed_model(tmp_path):
+    value = plan(tmp_path)
+    value["recipe"]["layer_checkpoint_group_size"] = 65
+    with pytest.raises(ValueError, match="cannot exceed 64"):
         validate_plan(value, check_files=False)
 
 
@@ -1419,6 +1428,57 @@ def test_chunked_qwen35_mlp_matches_native_output_and_gradients():
     ):
         assert torch.allclose(
             actual_parameter.grad, expected_parameter.grad, atol=1e-6, rtol=1e-6
+        )
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("torch") is None or importlib.util.find_spec("transformers") is None,
+    reason="requires pinned training image; CPU-only",
+)
+def test_grouped_qwen35_layers_match_native_output_and_gradients():
+    """Grouping changes saved activations, not the Qwen objective or gradients."""
+    import torch
+    from transformers.models.qwen3_5.configuration_qwen3_5 import Qwen3_5TextConfig
+    from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5TextModel
+
+    torch.manual_seed(29)
+    config = Qwen3_5TextConfig(
+        vocab_size=64,
+        hidden_size=32,
+        intermediate_size=64,
+        num_hidden_layers=4,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        head_dim=8,
+        max_position_embeddings=128,
+        layer_types=["full_attention"] * 4,
+        use_cache=False,
+    )
+    config._attn_implementation = "eager"
+    grouped = Qwen3_5TextModel(config)
+    native = copy.deepcopy(grouped)
+    grouped.gradient_checkpointing_enable(
+        gradient_checkpointing_kwargs={"use_reentrant": False}
+    )
+    native.gradient_checkpointing_enable(
+        gradient_checkpointing_kwargs={"use_reentrant": False}
+    )
+    grouped.train()
+    native.train()
+    grouped.fleet_sft_layer_checkpoint_group_size = 2
+    tokens = torch.randint(0, config.vocab_size, (1, 31))
+
+    actual = grouped_qwen35_text_forward(grouped, input_ids=tokens).last_hidden_state
+    expected = native(input_ids=tokens).last_hidden_state
+    assert torch.allclose(actual, expected, atol=1e-5, rtol=1e-5)
+
+    actual.square().mean().backward()
+    expected.square().mean().backward()
+    for actual_parameter, expected_parameter in zip(
+        grouped.parameters(), native.parameters(), strict=True
+    ):
+        assert torch.allclose(
+            actual_parameter.grad, expected_parameter.grad, atol=1e-5, rtol=1e-5
         )
 
 

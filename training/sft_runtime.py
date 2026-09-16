@@ -149,6 +149,7 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         "max_length",
         "lm_head_chunk_tokens",
         "mlp_chunk_tokens",
+        "layer_checkpoint_group_size",
         "eval_interval",
         "checkpoint_interval",
         "keep_checkpoints",
@@ -187,6 +188,8 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         raise ValueError("LM-head chunk cannot exceed the model context")
     if recipe["mlp_chunk_tokens"] > recipe["max_length"]:
         raise ValueError("MLP chunk cannot exceed the model context")
+    if recipe["layer_checkpoint_group_size"] > 64:
+        raise ValueError("Qwen layer checkpoint group cannot exceed 64 layers")
     if recipe["eval_interval"] and recipe["checkpoint_interval"] != recipe["eval_interval"]:
         raise ValueError("every periodic validation needs a corresponding saved checkpoint")
     if plan.get("resume_from"):
@@ -333,6 +336,9 @@ def sft_overrides(plan: dict) -> dict:
         "model_config_kwargs.fleet_force_qwen35_torch_gdn": True,
         "model_config_kwargs.fleet_sft_lm_head_chunk_tokens": r["lm_head_chunk_tokens"],
         "model_config_kwargs.fleet_sft_mlp_chunk_tokens": r["mlp_chunk_tokens"],
+        "model_config_kwargs.fleet_sft_layer_checkpoint_group_size": r[
+            "layer_checkpoint_group_size"
+        ],
         "logger": "wandb",
         "project_name": w["project"],
         "run_name": w["name"],
@@ -370,6 +376,7 @@ def sft_overrides(plan: dict) -> dict:
 
         options.pop("model_config_kwargs.fleet_force_qwen35_torch_gdn")
         options.pop("model_config_kwargs.fleet_sft_mlp_chunk_tokens")
+        options.pop("model_config_kwargs.fleet_sft_layer_checkpoint_group_size")
         options.update(
             {
                 "model.lora.rank": plan["lora"]["rank"],
@@ -1049,7 +1056,99 @@ def chunked_qwen35_mlp_forward(self, hidden_states):
     return torch.cat(outputs, dim=-2)
 
 
-def install_chunked_sft_worker(lm_head_chunk_tokens: int, mlp_chunk_tokens: int):
+def grouped_qwen35_text_forward(
+    self,
+    input_ids=None,
+    attention_mask=None,
+    position_ids=None,
+    past_key_values=None,
+    inputs_embeds=None,
+    use_cache=None,
+    **kwargs,
+):
+    """Run exact Qwen layers in checkpoint groups, retaining fewer 262k boundaries."""
+    import torch
+    from torch.utils.checkpoint import checkpoint
+    from transformers.cache_utils import DynamicCache
+    from transformers.masking_utils import create_causal_mask
+    from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5ModelOutputWithPast
+
+    if (input_ids is None) == (inputs_embeds is None):
+        raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+    if inputs_embeds is None:
+        inputs_embeds = self.embed_tokens(input_ids)
+    if use_cache and past_key_values is None:
+        past_key_values = DynamicCache(config=self.config)
+    if position_ids is None:
+        seen = past_key_values.get_seq_length() if past_key_values is not None else 0
+        position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + seen
+        position_ids = position_ids.view(1, 1, -1).expand(4, inputs_embeds.shape[0], -1)
+    elif position_ids.ndim == 2:
+        position_ids = position_ids[None, ...].expand(4, position_ids.shape[0], -1)
+    if position_ids.ndim == 3 and position_ids.shape[0] == 4:
+        text_position_ids = position_ids[0]
+        position_ids = position_ids[1:]
+    else:
+        text_position_ids = None
+
+    causal_mask = create_causal_mask(
+        config=self.config,
+        inputs_embeds=inputs_embeds,
+        attention_mask=attention_mask,
+        past_key_values=past_key_values,
+        position_ids=text_position_ids,
+    )
+    linear_attn_mask = (
+        self._update_linear_attn_mask(attention_mask, past_key_values)
+        if "linear_attention" in self.config.layer_types
+        else attention_mask
+    )
+    position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
+    layers = self.layers[: self.config.num_hidden_layers]
+    group_size = getattr(self, "fleet_sft_layer_checkpoint_group_size", None)
+    if type(group_size) is not int or not 1 <= group_size <= len(layers):
+        raise ValueError("invalid Qwen layer checkpoint group size")
+
+    hidden_states = inputs_embeds
+    for start in range(0, len(layers), group_size):
+        stop = min(start + group_size, len(layers))
+
+        def run_group(value, start=start, stop=stop):
+            for index in range(start, stop):
+                layer = layers[index]
+                # Transformers otherwise checkpoints every 262k layer boundary.
+                layer.gradient_checkpointing = False
+                layer_mask = (
+                    linear_attn_mask
+                    if self.config.layer_types[index] == "linear_attention"
+                    else causal_mask
+                )
+                value = layer(
+                    value,
+                    position_embeddings=position_embeddings,
+                    attention_mask=layer_mask,
+                    position_ids=text_position_ids,
+                    past_key_values=past_key_values,
+                    use_cache=use_cache,
+                    **kwargs,
+                )
+            return value
+
+        if self.training and torch.is_grad_enabled() and hidden_states.requires_grad:
+            hidden_states = checkpoint(run_group, hidden_states, use_reentrant=False)
+        else:
+            hidden_states = run_group(hidden_states)
+    return Qwen3_5ModelOutputWithPast(
+        last_hidden_state=self.norm(hidden_states),
+        past_key_values=past_key_values,
+    )
+
+
+def install_chunked_sft_worker(
+    lm_head_chunk_tokens: int,
+    mlp_chunk_tokens: int,
+    layer_checkpoint_group_size: int,
+):
     """Install one job-local Ray worker using bounded Qwen projections."""
     import ray
     from skyrl.backends.skyrl_train.workers.fsdp import fsdp_worker
@@ -1058,7 +1157,10 @@ def install_chunked_sft_worker(lm_head_chunk_tokens: int, mlp_chunk_tokens: int)
     class ChunkedSFTPolicyWorker(FSDPPolicyWorkerBase):
         def init_model(self, *args, **kwargs):
             from skyrl.backends.skyrl_train.workers.model_wrapper import HFModelWrapper
-            from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5MLP
+            from transformers.models.qwen3_5.modeling_qwen3_5 import (
+                Qwen3_5MLP,
+                Qwen3_5TextModel,
+            )
 
             configured_lm_head = self.cfg.policy.model_config_kwargs.pop(
                 "fleet_sft_lm_head_chunk_tokens", None
@@ -1066,14 +1168,23 @@ def install_chunked_sft_worker(lm_head_chunk_tokens: int, mlp_chunk_tokens: int)
             configured_mlp = self.cfg.policy.model_config_kwargs.pop(
                 "fleet_sft_mlp_chunk_tokens", None
             )
+            configured_group = self.cfg.policy.model_config_kwargs.pop(
+                "fleet_sft_layer_checkpoint_group_size", None
+            )
             if configured_lm_head != lm_head_chunk_tokens:
                 raise ValueError("chunked LM-head worker configuration drift")
             if configured_mlp != mlp_chunk_tokens:
                 raise ValueError("chunked MLP worker configuration drift")
+            if configured_group != layer_checkpoint_group_size:
+                raise ValueError("layer checkpoint group worker configuration drift")
             HFModelWrapper.fleet_sft_lm_head_chunk_tokens = lm_head_chunk_tokens
             HFModelWrapper.forward = chunked_sft_forward
             Qwen3_5MLP.fleet_sft_mlp_chunk_tokens = mlp_chunk_tokens
             Qwen3_5MLP.forward = chunked_qwen35_mlp_forward
+            Qwen3_5TextModel.fleet_sft_layer_checkpoint_group_size = (
+                layer_checkpoint_group_size
+            )
+            Qwen3_5TextModel.forward = grouped_qwen35_text_forward
             return super().init_model(*args, **kwargs)
 
     fsdp_worker.PolicyWorker = ray.remote(num_gpus=1)(ChunkedSFTPolicyWorker)
@@ -1198,6 +1309,7 @@ def _make_trainer_class():
                 install_chunked_sft_worker(
                     self.plan["recipe"]["lm_head_chunk_tokens"],
                     self.plan["recipe"]["mlp_chunk_tokens"],
+                    self.plan["recipe"]["layer_checkpoint_group_size"],
                 )
             with selection:
                 super()._init_workers()
