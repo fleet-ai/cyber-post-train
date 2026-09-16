@@ -1,5 +1,6 @@
 /* Public, aggregate-only campaign history. No credentials or private trace URLs. */
 const webStatuses = {
+  active: "Running now",
   complete: "Complete result", partial: "Partial result", invalid: "Invalid scoring",
   incomplete: "Incomplete / needs checking", test: "Small system test", planned: "Not launched"
 };

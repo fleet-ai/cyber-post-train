@@ -17,17 +17,35 @@ PUBLIC_FILES = [
 def test_web_results_separate_partial_rescore_from_invalid_original() -> None:
     history = json.loads((ROOT / "site/web-evals.json").read_text())
     assert len(history["runs"]) == len({run["id"] for run in history["runs"]})
-    rescore = history["runs"][0]
+    rescore = next(
+        run for run in history["runs"] if run["id"] == "chris-wbe-q38-opencode-v12-gpt55-rescore-v1"
+    )
     assert rescore["judge"] == "GPT-5.5-2026-04-23"
     assert (rescore["status"], rescore["usable"], rescore["planned"]) == ("partial", 44, 60)
     assert rescore["metrics"][0] == {
-        "label": "Known-weakness checks passed", "numerator": 45, "denominator": 278
+        "label": "Known-weakness checks passed",
+        "numerator": 45,
+        "denominator": 278,
     }
-    original = next(run for run in history["runs"]
-                    if run["id"] == rescore["config"]["Source campaign"])
+    original = next(
+        run for run in history["runs"] if run["id"] == rescore["config"]["Source campaign"]
+    )
     assert original["status"] == "invalid" and original["metrics"] == []
+    fresh75 = next(
+        run for run in history["runs"] if run["id"] == "fresh75-step230-opencode-web-p1-gpt55-v1"
+    )
+    assert (fresh75["status"], fresh75["usable"], fresh75["planned"]) == (
+        "complete",
+        15,
+        15,
+    )
+    assert fresh75["metrics"][0] == {
+        "label": "Known-weakness checks passed",
+        "numerator": 3,
+        "denominator": 110,
+    }
     for run in history["runs"]:
-        if run["status"] in {"invalid", "planned", "incomplete"}:
+        if run["status"] in {"active", "invalid", "planned", "incomplete"}:
             assert run["metrics"] == []
         assert all(run[key] for key in ("id", "model", "checkpoint", "harness", "judge"))
 

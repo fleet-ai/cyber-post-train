@@ -1,8 +1,70 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-09-15",
+  "updated_at": "2026-09-16",
   "scope": "A checked history, not a live cloud dashboard. A missing result is never counted as a model failure. Different models, judges, agent programs and attempt budgets are not directly comparable.",
   "runs": [
+    {
+      "id": "fresh75-step230-opencode-web-p1-gpt55-v1",
+      "name": "Fresh75 checkpoint · complete GPT-scored evaluation",
+      "date": "2026-09-16",
+      "model": "Qwen3.8-27B",
+      "checkpoint": "Fresh75 final step 230",
+      "harness": "OpenCode 1.18.27",
+      "judge": "GPT-5.5-2026-04-23",
+      "platform": "Tensorlake collection; separate GPT scoring",
+      "status": "complete",
+      "collection": "15 usable attempts; every website covered",
+      "scoring": "15 saved attempts scored; all result bundles independently verified",
+      "planned": 15,
+      "usable": 15,
+      "targets": "15 of 15",
+      "attempts_per_target": 1,
+      "metrics": [
+        {"label": "Known-weakness checks passed", "numerator": 3, "denominator": 110},
+        {"label": "Mean attempt score", "percent": 2.0207570207570205}
+      ],
+      "note": "This is a complete pass@1 result: one attempt on each website. Three attempts earned a non-zero score. It is not yet evidence of improvement because the older base-model result used four attempts per website and a different run. A matched base-model control is still needed.",
+      "config": {
+        "Benchmark": "WebExploitBench Level 0; 15 websites",
+        "Benchmark revision": "7f97d87fa8ab728260c0ba9b09b9c8f00bb82ad5",
+        "Evaluation program (CAGE) revision": "09a191c565230cebb8255899d622d23c7ddeff33",
+        "Model context limit, tokens": 262144,
+        "Temperature": 0,
+        "Scoring during collection": "Disabled; saved attempts were scored later",
+        "Successful checks": "3 of 110",
+        "Attempts with a non-zero score": "3 of 15",
+        "Scoring errors": 0,
+        "Collection-set receipt SHA-256": "673b3a311c3ee7d85d5f76d5453953ad6a7ad84c9248ce0addac2206c200fab5",
+        "Scoring completion receipt SHA-256": "2c4790458c67cd076d5339919b03ca9b0b22170f779a6d4dbd41fb0b3d7d0c72"
+      },
+      "source": "https://github.com/fleet-ai/cyber-post-train/blob/codex/web-evals-dashboard-runner/docs/WEB_EVAL_RESULTS_2026-09-15.md"
+    },
+    {
+      "id": "fresh75-step230-opencode-web-p8-v2",
+      "name": "Fresh75 checkpoint · pass@8 evaluation",
+      "date": "2026-09-16",
+      "model": "Qwen3.8-27B",
+      "checkpoint": "Fresh75 final step 230",
+      "harness": "OpenCode 1.18.27",
+      "judge": "Not scored during collection",
+      "platform": "Tensorlake",
+      "status": "active",
+      "collection": "Task-0 safety check running before the remaining websites fan out",
+      "scoring": "Not started; scoring is deliberately separate",
+      "planned": 120,
+      "usable": null,
+      "targets": "15 intended websites",
+      "attempts_per_target": 8,
+      "metrics": [],
+      "note": "This run plans eight independent attempts on each of 15 websites. No performance number is shown while collection is in progress. Saved attempts will remain available even if later scoring has a problem.",
+      "config": {
+        "Campaign": "fresh75-step230-opencode-web-p8-v2",
+        "Maximum simultaneous website workers": 8,
+        "Scoring during collection": "Disabled",
+        "Launch-plan SHA-256": "c673cfac5cce412f1018009a7c2cd025d98fea0238b9bb3df4bbc2e002f6d864"
+      },
+      "source": "https://github.com/fleet-ai/cyber-post-train/blob/codex/web-evals-dashboard-runner/docs/WEB_EVAL_RESULTS_2026-09-15.md"
+    },
     {
       "id": "chris-wbe-q38-opencode-v12-gpt55-rescore-v1",
       "name": "Qwen3.8 baseline · GPT rescore",

@@ -17,6 +17,7 @@
 .web-campaign h3 { margin: 0 0 20px; font-size: 1.35rem; }
 .web-status { padding: 6px 10px; font-size: .78rem; border: 1px solid var(--line); white-space: nowrap; }
 .web-status.complete { background: var(--green-soft); }
+.web-status.active { background: #e8f1ff; border-color: #85a9dc; }
 .web-status.partial { border-color: var(--green); }
 .web-status.invalid, .web-status.incomplete { background: #f7e6dd; }
 .web-config { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 18px; }

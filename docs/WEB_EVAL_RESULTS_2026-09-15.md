@@ -65,7 +65,7 @@ Dataset revision: `7f97d87fa8ab728260c0ba9b09b9c8f00bb82ad5`.
 | Wider V8/V10/V11/V14/V17/V21/V24 reruns | No accepted full-benchmark result established. Preserve each campaign separately; never pool repair attempts opportunistically. |
 | Teacher-SFT step186 matched V28 test | One controller per model exited and resources were released. Score acceptance has not been established; no improvement claim. |
 | Teacher V30/V31 preparations | Prepared plans do not establish launched or completed evaluations. |
-| Fresh75 final step230 | Training, export and GPU reload were accepted, but campaign `fresh75-step230-opencode-web-p1-v3` is infrastructure-invalid. Nine restored machines failed readiness before any Qwen call; six tasks were held at creation. There are zero usable rollouts and no score. The nine launched machines were released and serving was paused. |
+| Fresh75's first WEB launch | Campaign `fresh75-step230-opencode-web-p1-v3` is infrastructure-invalid. It produced no model attempts. A later repaired pass@1 campaign is reported separately below. |
 | Self-SFT WEB | No accepted complete campaign established in this audit. |
 | Qwen3.6 / Qwen Code | Historical 15-target pass@1 result: 10/110 checks. One allowed model timeout; no infrastructure-invalid target. |
 | Qwen3.6 / Claude Code corrected result | Historical 15-target selected result: 16/110 after documented replacements for broken target runs. Earlier 14/94 was not final. |
@@ -82,14 +82,49 @@ Supporting repository records:
 - [Fresh75 export and reload](evidence/qwen38-fresh75-step230-reload-accepted-20260915.json)
 - [Fresh75 staged weights and paused registration](evidence/qwen38-fresh75-step230-inference-stage-v2-accepted-20260915.json)
 
-## What the next run tests
+## Fresh75 step 230, complete pass@1 evaluation
 
-Use Fresh75's **predeclared final step230**, not a checkpoint selected using WEB
-results. Collect with OpenCode, preserve and download the unscored work, then
-score a separate copy with a frozen judge. A judge outage must not cause new
-student attempts. Compare with a newly matched base control before claiming
-training improvement: the historical GPT-rescored partial baseline is useful
-history, not automatically a matched control for a changed execution setup.
+On September 16, the repaired two-stage pipeline completed one OpenCode attempt
+on every WebExploitBench website and then scored the 15 saved attempts with
+`gpt-5.5-2026-04-23`. Collection and scoring were separate: a scoring failure
+could not erase or rerun the model's work.
+
+| Quantity | Verified value |
+| --- | --- |
+| Student | Qwen3.8-27B, Fresh75 final step 230 |
+| Agent program | OpenCode 1.18.27 |
+| Attempts | 15/15 usable; one per website |
+| Judge | `gpt-5.5-2026-04-23` |
+| Scored attempts | 15/15; no scoring error |
+| Passed known-weakness checks | 3/110 = 2.73% |
+| Mean attempt score | 2.0208% |
+| Attempts with a non-zero score | 3/15 |
+
+The collection-set receipt is
+`sha256:673b3a311c3ee7d85d5f76d5453953ad6a7ad84c9248ce0addac2206c200fab5`.
+The scoring completion receipt is
+`sha256:2c4790458c67cd076d5339919b03ca9b0b22170f779a6d4dbd41fb0b3d7d0c72`.
+All 15 score bundles were reopened and independently checked against their
+sealed scoring plans after completion.
+
+This is a complete pass@1 measurement, but it does **not** establish training
+improvement. The historical base-model result used pass@4 and came from a
+different execution campaign. A matched base-model control using the same
+collection and scoring settings is required for a lift claim.
+
+A new Fresh75 pass@8 campaign,
+`fresh75-step230-opencode-web-p8-v2`, is collecting eight independent attempts
+per website (120 planned attempts). Its task-0 safety check runs before the
+remaining sites fan out. Scoring remains disabled during collection and will be
+performed from the saved attempts afterward.
+
+## What remains
+
+The current pass@8 run measures Fresh75's predeclared final step230 with wider
+sampling. The next scientific comparison should run a base-model control with
+the same OpenCode, task, attempt-budget and scoring settings. The historical
+GPT-rescored partial baseline is useful history, but it is not a matched control
+for this run.
 
 The one-command controller is described in
 [WEB_EVAL_RUNNER.md](WEB_EVAL_RUNNER.md). Its no-model environment qualification
@@ -99,6 +134,6 @@ machines restored from the resulting snapshot failed
 [the Fresh75 infrastructure incident](evidence/webexploitbench/2026-09-15-fresh75-p1-v3-infrastructure-invalid.json).
 The preparation path had explicitly made a filesystem-only Tensorlake snapshot,
 which cold-boots without preserving the Docker daemon's running state. The
-successor now binds a memory snapshot and inherits its exact machine resources.
-It must still pass a check inside a newly restored machine and preserve one real
-collection canary before the remaining tasks launch.
+successful successor binds a memory snapshot, inherits its exact machine
+resources and checks each restored machine before any model call. The pass@8
+campaign repeats the same safety gate before wider collection.
