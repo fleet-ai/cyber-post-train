@@ -20,6 +20,7 @@ from training.sft_runtime import (
     _run_setup_probe,
     _unsigned_digest,
     build_runtime_configs,
+    chunked_sft_forward,
     dense_rows,
     explicit_tracking_class,
     finalize_failed_run,
@@ -69,6 +70,7 @@ def plan(tmp_path):
             "gpus_per_node": 8,
             "lr": 1e-6,
             "max_length": 16384,
+            "lm_head_chunk_tokens": 4096,
             "eval_interval": 2,
             "checkpoint_interval": 2,
             "keep_checkpoints": 1,
@@ -1264,6 +1266,80 @@ def test_exact_native_loop_eval_never_optimizes_and_saves_final(
     assert result["status"] == ("training_paused" if pause else "training_complete")
     assert result["planned_optimizer_steps"] == value["recipe"]["max_steps"]
     assert not (tmp_path / "hf_exports").exists()
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("skyrl") is None, reason="requires pinned training image; CPU-only"
+)
+@pytest.mark.parametrize("is_vlm", [False, True])
+def test_chunked_sft_lm_head_matches_full_causal_ce(monkeypatch, is_vlm):
+    """Bounded projection preserves selected log-probs and both parameter gradients."""
+    import torch
+    from skyrl.backends.skyrl_train.utils import torch_utils
+    from skyrl.backends.skyrl_train.workers.model_wrapper import HFModelWrapper
+
+    monkeypatch.setattr(torch_utils, "FLASH_ATTN_CROSS_ENTROPY_LOSS_AVAILABLE", False)
+    torch.manual_seed(7)
+
+    class Backbone(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.embed = torch.nn.Embedding(19, 5)
+            self.last_position_ids = object()
+
+        def forward(self, input_ids, position_ids=None, **kwargs):
+            self.last_position_ids = position_ids
+            return SimpleNamespace(last_hidden_state=self.embed(input_ids))
+
+    class TrackingHead(torch.nn.Linear):
+        def __init__(self):
+            super().__init__(5, 19, bias=False)
+            self.largest_tokens = 0
+
+        def forward(self, value):
+            self.largest_tokens = max(self.largest_tokens, value.shape[1])
+            return super().forward(value)
+
+    class Causal(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.model = Backbone()
+            self.lm_head = TrackingHead()
+
+    causal = Causal()
+    reference = copy.deepcopy(causal)
+    wrapper = HFModelWrapper.__new__(HFModelWrapper)
+    torch.nn.Module.__init__(wrapper)
+    wrapper.model = causal
+    wrapper.is_vlm = is_vlm
+    wrapper.remove_microbatch_padding = False
+    wrapper.sequence_parallel_size = 1
+    wrapper.fleet_sft_lm_head_chunk_tokens = 3
+    sequences = torch.tensor([[1, 4, 2, 8, 3, 7, 5, 6, 9]])
+    attention = torch.ones_like(sequences)
+
+    actual, output = chunked_sft_forward(
+        wrapper,
+        sequences,
+        8,
+        attention_mask=attention,
+        return_output=True,
+        compute_entropy=True,
+        entropy_requires_grad=False,
+    )
+    full_hidden = reference.model(input_ids=sequences).last_hidden_state
+    full_logits = reference.lm_head(full_hidden)
+    labels = torch.roll(sequences, shifts=-1, dims=1)
+    expected = torch.log_softmax(full_logits, dim=-1).gather(-1, labels.unsqueeze(-1)).squeeze(-1)
+    expected = expected[:, :-1]
+    assert output == {}
+    assert causal.lm_head.largest_tokens == 3
+    assert (causal.model.last_position_ids is None) is is_vlm
+    assert torch.allclose(actual, expected, atol=1e-6, rtol=1e-6)
+    actual.sum().backward()
+    expected.sum().backward()
+    assert torch.allclose(causal.model.embed.weight.grad, reference.model.embed.weight.grad)
+    assert torch.allclose(causal.lm_head.weight.grad, reference.lm_head.weight.grad)
 
 
 @pytest.mark.skipif(

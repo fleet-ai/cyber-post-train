@@ -146,6 +146,7 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         "nodes",
         "gpus_per_node",
         "max_length",
+        "lm_head_chunk_tokens",
         "eval_interval",
         "checkpoint_interval",
         "keep_checkpoints",
@@ -166,6 +167,8 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         recipe["nodes"] * recipe["gpus_per_node"] * recipe["microbatch_per_gpu"]
     ):
         raise ValueError("global batch must divide evenly across GPU microbatches")
+    if recipe["lm_head_chunk_tokens"] > recipe["max_length"]:
+        raise ValueError("LM-head chunk cannot exceed the model context")
     if recipe["eval_interval"] and recipe["checkpoint_interval"] != recipe["eval_interval"]:
         raise ValueError("every periodic validation needs a corresponding saved checkpoint")
     if plan.get("resume_from"):
@@ -310,6 +313,7 @@ def sft_overrides(plan: dict) -> dict:
         "placement.num_gpus_per_node": r["gpus_per_node"],
         "sequence_parallel_size": 1,
         "model_config_kwargs.fleet_force_qwen35_torch_gdn": True,
+        "model_config_kwargs.fleet_sft_lm_head_chunk_tokens": r["lm_head_chunk_tokens"],
         "logger": "wandb",
         "project_name": w["project"],
         "run_name": w["name"],
@@ -875,6 +879,126 @@ def finalize_failed_run(trainer, output: Path, error: BaseException) -> list[str
     return failures
 
 
+def chunked_sft_forward(
+    self,
+    sequences,
+    num_actions,
+    attention_mask=None,
+    temperature=1.0,
+    return_output=False,
+    compute_entropy=False,
+    entropy_requires_grad=True,
+    pixel_values=None,
+    image_grid_thw=None,
+    mm_token_type_ids=None,
+):
+    """Project long Qwen hidden states without materializing all vocabulary logits.
+
+    The native wrapper projects every token to the 248,320-wide vocabulary at
+    once.  A 262,144-token row therefore asks for a 121-GiB BF16 tensor on each
+    rank.  SFT needs only the selected-token log probability, so checkpoint the
+    projection/cross-entropy in bounded token slices.  Backward recomputes one
+    slice at a time and preserves the exact causal CE objective.
+    """
+    import numpy as np
+    import torch
+    from skyrl.backends.skyrl_train.workers import model_wrapper
+    from torch.utils.checkpoint import checkpoint
+
+    if (
+        pixel_values is not None
+        or image_grid_thw is not None
+        or mm_token_type_ids is not None
+        or self.sequence_parallel_size != 1
+        or (compute_entropy and entropy_requires_grad)
+    ):
+        raise ValueError("chunked LM head is restricted to text-only SFT without entropy loss")
+    chunk_tokens = getattr(self, "fleet_sft_lm_head_chunk_tokens", None)
+    if type(chunk_tokens) is not int or chunk_tokens <= 0:
+        raise ValueError("chunked LM-head token bound is missing")
+
+    position_ids = attention_mask.long().cumsum(-1) - 1
+    position_ids.masked_fill_(attention_mask == 0, 1)
+    sequences_fwd, position_ids_fwd, attention_mask_fwd = sequences, position_ids, attention_mask
+    nnz_indices = None
+    if self.remove_microbatch_padding:
+        with torch.no_grad():
+            sequences_fwd, nnz_indices, _, _, _ = model_wrapper.unpad_input(
+                sequences.unsqueeze(-1), attention_mask=attention_mask
+            )
+            sequences_fwd = sequences_fwd.transpose(0, 1)
+            position_ids_fwd, _, _, _, _ = model_wrapper.unpad_input(
+                position_ids.unsqueeze(-1), attention_mask
+            )
+            position_ids_fwd = position_ids_fwd.transpose(0, 1)
+            attention_mask_fwd = None
+
+    causal_model = self.model
+    backbone_kwargs = {
+        "input_ids": sequences_fwd,
+        "attention_mask": attention_mask_fwd,
+        "position_ids": None if self.is_vlm else position_ids_fwd,
+        "use_cache": False,
+    }
+    # Qwen3.8 is published as a conditional-generation model even for this
+    # text-only corpus.  Calling its `.model` matches SkyRL's native VLM path:
+    # no vision tensors are supplied and the Qwen backbone derives its own 3-D
+    # text positions.  Only the vocabulary projection is replaced.
+    outputs = causal_model.model(**backbone_kwargs)
+    hidden_states = outputs.last_hidden_state
+    labels = torch.roll(sequences_fwd, shifts=-1, dims=1)
+
+    def selected_logprobs(hidden, target):
+        logits = causal_model.lm_head(hidden)
+        if temperature != 1.0:
+            logits = logits / temperature
+        return model_wrapper.logprobs_from_logits(logits, target, inplace_backward=True)
+
+    chunks = []
+    for start in range(0, hidden_states.shape[1], chunk_tokens):
+        stop = min(start + chunk_tokens, hidden_states.shape[1])
+        hidden, target = hidden_states[:, start:stop], labels[:, start:stop]
+        if torch.is_grad_enabled() and hidden.requires_grad:
+            value = checkpoint(selected_logprobs, hidden, target, use_reentrant=False)
+        else:
+            value = selected_logprobs(hidden, target)
+        chunks.append(value)
+    log_probs = torch.cat(chunks, dim=1)
+
+    if self.remove_microbatch_padding:
+        batch_size, seqlen = attention_mask.shape
+        log_probs = model_wrapper.pad_input(
+            log_probs.transpose(0, 1), indices=nnz_indices, batch=batch_size, seqlen=seqlen
+        ).squeeze(-1)
+
+    if isinstance(num_actions, list):
+        num_actions = num_actions[0] if len(num_actions) == 1 else np.array(num_actions)
+    action_log_probs = log_probs[:, -num_actions - 1 : -1]
+    return (action_log_probs, {}) if return_output else action_log_probs
+
+
+def install_chunked_sft_worker(chunk_tokens: int):
+    """Install one job-local Ray worker using the bounded SFT projection."""
+    import ray
+    from skyrl.backends.skyrl_train.workers.fsdp import fsdp_worker
+    from skyrl.backends.skyrl_train.workers.fsdp.fsdp_worker import FSDPPolicyWorkerBase
+
+    class ChunkedSFTPolicyWorker(FSDPPolicyWorkerBase):
+        def init_model(self, *args, **kwargs):
+            from skyrl.backends.skyrl_train.workers.model_wrapper import HFModelWrapper
+
+            configured = self.cfg.policy.model_config_kwargs.pop(
+                "fleet_sft_lm_head_chunk_tokens", None
+            )
+            if configured != chunk_tokens:
+                raise ValueError("chunked LM-head worker configuration drift")
+            HFModelWrapper.fleet_sft_lm_head_chunk_tokens = chunk_tokens
+            HFModelWrapper.forward = chunked_sft_forward
+            return super().init_model(*args, **kwargs)
+
+    fsdp_worker.PolicyWorker = ray.remote(num_gpus=1)(ChunkedSFTPolicyWorker)
+
+
 class PlannedPause(Exception):
     """Exit the native loop only after the requested save, validation and log."""
 
@@ -987,6 +1111,11 @@ def _make_trainer_class():
                 from training.glm_runtime import use_worker
 
                 selection = use_worker(self.plan)
+            elif self.plan["model"]["repo"] in {
+                "Qwen/Qwen3.8-27B",
+                "Qwen/Qwen3.6-27B",
+            }:
+                install_chunked_sft_worker(self.plan["recipe"]["lm_head_chunk_tokens"])
             with selection:
                 super()._init_workers()
             self._record_runtime_stage("native_worker_ready")

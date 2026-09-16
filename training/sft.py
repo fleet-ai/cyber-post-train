@@ -33,6 +33,7 @@ RECIPE = {
     "gpus_per_node": 8,
     "lr": 3e-6,
     "max_length": 16384,
+    "lm_head_chunk_tokens": 4096,
     "eval_interval": 50,
     "checkpoint_interval": 50,
     "keep_checkpoints": 3,
