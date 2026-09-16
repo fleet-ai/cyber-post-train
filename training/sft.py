@@ -299,6 +299,62 @@ def _check_native_dataset_loader(plan: dict) -> None:
         raise ValueError("task-outcome training unexpectedly produced an eval dataset")
 
 
+def _preflight_dense_parquet(path: Path, spec: dict, tokenizer, *, max_length: int) -> dict:
+    """Validate dense corpora one complete Parquet row group at a time.
+
+    Corpus builders keep a source session within one row group.  This preserves
+    exact whole-source target coverage without materializing a multi-gigabyte
+    long-context corpus as Python lists during CPU preflight.
+    """
+    import pyarrow.parquet as pq
+
+    from .sft_runtime import DENSE_FORMAT, dense_rows
+
+    parquet = pq.ParquetFile(path)
+    seen_sessions, seen_windows, task_keys = set(), set(), set()
+    totals = {
+        "rows": 0,
+        "source_sessions": 0,
+        "supervised_tokens": 0,
+        "assistant_responses": 0,
+        "source_total_assistant_responses": 0,
+        "excluded_assistant_responses": 0,
+    }
+    for index in range(parquet.num_row_groups):
+        rows = parquet.read_row_group(index).to_pylist()
+        sessions = {row["source_session_id"]: row for row in rows}
+        windows = {row["window_id"] for row in rows}
+        if seen_sessions & set(sessions) or len(windows) != len(rows) or seen_windows & windows:
+            raise ValueError("dense source/window crosses or duplicates Parquet row groups")
+        local = {
+            "rows": len(rows),
+            "task_keys": sorted({row["task_key"] for row in rows}),
+            "format": DENSE_FORMAT,
+            "source_sessions": len(sessions),
+            "supervised_tokens": sum(row["target_token_count"] for row in rows),
+            "assistant_responses": sum(len(row["target_spans"]) for row in rows),
+            "source_total_assistant_responses": sum(
+                row["source_assistant_count"] for row in sessions.values()
+            ),
+            "excluded_assistant_responses": sum(
+                len(row["excluded_assistant_targets"]) for row in sessions.values()
+            ),
+        }
+        dense_rows(rows, local, max_length=max_length, vocab_size=len(tokenizer))
+        for key in totals:
+            totals[key] += local[key]
+        seen_sessions.update(sessions)
+        seen_windows.update(windows)
+        task_keys.update(local["task_keys"])
+    if any(totals[key] != spec[key] for key in totals) or task_keys != set(spec["task_keys"]):
+        raise ValueError("streamed dense corpus inventory differs from manifest")
+    return {
+        "rows": totals["rows"],
+        "tasks": len(task_keys),
+        "supervised_tokens": totals["supervised_tokens"],
+    }
+
+
 def preflight(plan: dict) -> dict:
     """CPU-only checks in the pinned image, with staged inputs mounted.
 
@@ -310,7 +366,12 @@ def preflight(plan: dict) -> dict:
     from skyrl.train.sft_trainer import tokenize_chat_example
     from transformers import AutoConfig, AutoTokenizer
 
-    from .sft_runtime import build_runtime_configs, prepare_rows, validate_runtime_sources
+    from .sft_runtime import (
+        DENSE_FORMAT,
+        build_runtime_configs,
+        prepare_rows,
+        validate_runtime_sources,
+    )
 
     if torch.cuda.is_available():
         raise ValueError("run data/runtime preflight without GPU allocation")
@@ -326,6 +387,14 @@ def preflight(plan: dict) -> dict:
     )
     counts = {}
     for split, spec in plan["datasets"].items():
+        if spec.get("format") == DENSE_FORMAT:
+            counts[split] = _preflight_dense_parquet(
+                Path(spec["path"]),
+                spec,
+                tokenizer,
+                max_length=plan["recipe"]["max_length"],
+            )
+            continue
         rows = prepare_rows(
             pq.read_table(spec["path"]).to_pylist(),
             spec,
