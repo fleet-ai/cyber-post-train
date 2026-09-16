@@ -21,7 +21,9 @@ The command connects the existing tested operators:
    plan controls the exact model, task order, OpenCode version, budgets,
    prepared filesystem and source-file hashes.
 2. Collect attempts **without a judge**.
-3. Check completeness and preserve the work in a filesystem snapshot.
+3. Check completeness and preserve the prepared Docker daemon, images, files,
+   and process state in a memory snapshot. A filesystem-only snapshot cold-boots
+   and is not sufficient for this nested-Docker evaluator.
 4. Release the collection machine. Temporarily restore the snapshot on a small
    CPU machine to download and verify the collection, then release that machine.
 5. Optionally score a separate local copy using a frozen judge configuration.

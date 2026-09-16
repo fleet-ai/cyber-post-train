@@ -97,5 +97,8 @@ passed all 15 sites only in the source machine. That was insufficient: all nine
 machines restored from the resulting snapshot failed
 `snapshot_runtime_readiness` before any model call. The failure is preserved in
 [the Fresh75 infrastructure incident](evidence/webexploitbench/2026-09-15-fresh75-p1-v3-infrastructure-invalid.json).
-A successor must pass a check inside a newly restored machine and preserve one
-real collection canary before the remaining tasks launch.
+The preparation path had explicitly made a filesystem-only Tensorlake snapshot,
+which cold-boots without preserving the Docker daemon's running state. The
+successor now binds a memory snapshot and inherits its exact machine resources.
+It must still pass a check inside a newly restored machine and preserve one real
+collection canary before the remaining tasks launch.
