@@ -88,12 +88,6 @@ SOURCE_SHA256 = {
     "skyrl/backends/skyrl_train/distributed/dispatch.py": (
         "165db3891b96b3fb92a98727f9290989f9f67b0a0dc8398a622b249762c9fe2e"
     ),
-    "skyrl/backends/skyrl_train/distributed/ulysses/utils.py": (
-        "150a2436cbd6791bbaa22fa8128b6af336ad746217b6ab50b3e1f0c4c5e1260b"
-    ),
-    "skyrl/backends/skyrl_train/distributed/ulysses/monkey_patch.py": (
-        "035cc525d5d24bc00b94c471c1883ea8ba2ff63008096197fc14f631feb095bd"
-    ),
     "skyrl/backends/skyrl_train/distributed/fsdp_strategy.py": (
         "a987a4bd509a43af1d27a92b1a933455f1f812e0da8a5ad733a68bcf2d67cd63"
     ),
@@ -154,6 +148,7 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         "sequence_parallel_size",
         "max_length",
         "lm_head_chunk_tokens",
+        "mlp_chunk_tokens",
         "eval_interval",
         "checkpoint_interval",
         "keep_checkpoints",
@@ -172,6 +167,15 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         raise ValueError("learning rate outside reviewed SFT range")
     world_size = recipe["nodes"] * recipe["gpus_per_node"]
     sequence_parallel_size = recipe["sequence_parallel_size"]
+    # Qwen3.5/3.8 interleaves full attention with recurrent Gated DeltaNet
+    # layers. SkyRL's Ulysses helper slices the sequence but propagates no GDN
+    # state between partitions, so SP>1 changes the model rather than merely
+    # distributing it. Keep the exact recurrent computation on every rank.
+    if (
+        plan["model"]["repo"] in {"Qwen/Qwen3.8-27B", "Qwen/Qwen3.6-27B"}
+        and sequence_parallel_size != 1
+    ):
+        raise ValueError("Qwen Gated DeltaNet SFT requires sequence_parallel_size: 1")
     if world_size % sequence_parallel_size:
         raise ValueError("sequence parallel size must divide the GPU world size")
     data_parallel_size = world_size // sequence_parallel_size
@@ -181,6 +185,8 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         raise ValueError("global batch must divide evenly across data-parallel microbatches")
     if recipe["lm_head_chunk_tokens"] > recipe["max_length"]:
         raise ValueError("LM-head chunk cannot exceed the model context")
+    if recipe["mlp_chunk_tokens"] > recipe["max_length"]:
+        raise ValueError("MLP chunk cannot exceed the model context")
     if recipe["eval_interval"] and recipe["checkpoint_interval"] != recipe["eval_interval"]:
         raise ValueError("every periodic validation needs a corresponding saved checkpoint")
     if plan.get("resume_from"):
@@ -326,6 +332,7 @@ def sft_overrides(plan: dict) -> dict:
         "sequence_parallel_size": r["sequence_parallel_size"],
         "model_config_kwargs.fleet_force_qwen35_torch_gdn": True,
         "model_config_kwargs.fleet_sft_lm_head_chunk_tokens": r["lm_head_chunk_tokens"],
+        "model_config_kwargs.fleet_sft_mlp_chunk_tokens": r["mlp_chunk_tokens"],
         "logger": "wandb",
         "project_name": w["project"],
         "run_name": w["name"],
@@ -362,6 +369,7 @@ def sft_overrides(plan: dict) -> dict:
         from training.glm_runtime import TARGETS
 
         options.pop("model_config_kwargs.fleet_force_qwen35_torch_gdn")
+        options.pop("model_config_kwargs.fleet_sft_mlp_chunk_tokens")
         options.update(
             {
                 "model.lora.rank": plan["lora"]["rank"],
@@ -948,23 +956,8 @@ def chunked_sft_forward(
 
     causal_model = self.model
     labels = torch.roll(sequences_fwd, shifts=-1, dims=1)
-    sp_padding = 0
-    if self.sequence_parallel_size > 1:
-        attention_mask_fwd = None if self.remove_microbatch_padding else attention_mask_fwd
-        sequences_fwd, position_ids_fwd, attention_mask_fwd, sp_padding = (
-            model_wrapper.ulysses_pad_and_slice_inputs(
-                sequences_fwd,
-                position_ids_fwd,
-                attention_mask_fwd,
-                self.sequence_parallel_size,
-            )
-        )
-        labels, _, _, _ = model_wrapper.ulysses_pad_and_slice_inputs(
-            labels,
-            None,
-            None,
-            self.sequence_parallel_size,
-        )
+    if self.sequence_parallel_size != 1:
+        raise ValueError("chunked Qwen SFT forbids sequence parallelism across recurrent GDN")
     backbone_kwargs = {
         "input_ids": sequences_fwd,
         "attention_mask": attention_mask_fwd,
@@ -1013,14 +1006,6 @@ def chunked_sft_forward(
         else:
             del causal_model.forward
 
-    if self.sequence_parallel_size > 1:
-        log_probs = model_wrapper.gather_outputs_and_unpad(
-            log_probs,
-            gather_dim=log_probs.ndim - 1,
-            unpad_dim=log_probs.ndim - 1,
-            padding_size=sp_padding,
-        )
-
     if self.remove_microbatch_padding:
         batch_size, seqlen = attention_mask.shape
         log_probs = model_wrapper.pad_input(
@@ -1033,8 +1018,39 @@ def chunked_sft_forward(
     return (action_log_probs, {}) if return_output else action_log_probs
 
 
-def install_chunked_sft_worker(chunk_tokens: int):
-    """Install one job-local Ray worker using the bounded SFT projection."""
+def chunked_qwen35_mlp_forward(self, hidden_states):
+    """Evaluate Qwen's pointwise MLP in bounded token slices.
+
+    Chunking the token dimension preserves the gate/up/down computation for
+    every token while avoiding the full 262k-token intermediate activation.
+    Per-chunk activation checkpointing also keeps backward from retaining all
+    gate/up intermediates at once during the decoder-layer recomputation.
+    """
+    import torch
+    from torch.utils.checkpoint import checkpoint
+
+    chunk_tokens = getattr(self, "fleet_sft_mlp_chunk_tokens", None)
+    if type(chunk_tokens) is not int or chunk_tokens <= 0:
+        raise ValueError("chunked Qwen MLP token bound is missing")
+    if hidden_states.ndim < 2 or hidden_states.shape[-2] <= 0:
+        raise ValueError("chunked Qwen MLP requires a nonempty token dimension")
+
+    def project(value):
+        return self.down_proj(self.act_fn(self.gate_proj(value)) * self.up_proj(value))
+
+    outputs = []
+    for start in range(0, hidden_states.shape[-2], chunk_tokens):
+        value = hidden_states[..., start : start + chunk_tokens, :]
+        if torch.is_grad_enabled() and value.requires_grad:
+            value = checkpoint(project, value, use_reentrant=False)
+        else:
+            value = project(value)
+        outputs.append(value)
+    return torch.cat(outputs, dim=-2)
+
+
+def install_chunked_sft_worker(lm_head_chunk_tokens: int, mlp_chunk_tokens: int):
+    """Install one job-local Ray worker using bounded Qwen projections."""
     import ray
     from skyrl.backends.skyrl_train.workers.fsdp import fsdp_worker
     from skyrl.backends.skyrl_train.workers.fsdp.fsdp_worker import FSDPPolicyWorkerBase
@@ -1042,14 +1058,22 @@ def install_chunked_sft_worker(chunk_tokens: int):
     class ChunkedSFTPolicyWorker(FSDPPolicyWorkerBase):
         def init_model(self, *args, **kwargs):
             from skyrl.backends.skyrl_train.workers.model_wrapper import HFModelWrapper
+            from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5MLP
 
-            configured = self.cfg.policy.model_config_kwargs.pop(
+            configured_lm_head = self.cfg.policy.model_config_kwargs.pop(
                 "fleet_sft_lm_head_chunk_tokens", None
             )
-            if configured != chunk_tokens:
+            configured_mlp = self.cfg.policy.model_config_kwargs.pop(
+                "fleet_sft_mlp_chunk_tokens", None
+            )
+            if configured_lm_head != lm_head_chunk_tokens:
                 raise ValueError("chunked LM-head worker configuration drift")
-            HFModelWrapper.fleet_sft_lm_head_chunk_tokens = chunk_tokens
+            if configured_mlp != mlp_chunk_tokens:
+                raise ValueError("chunked MLP worker configuration drift")
+            HFModelWrapper.fleet_sft_lm_head_chunk_tokens = lm_head_chunk_tokens
             HFModelWrapper.forward = chunked_sft_forward
+            Qwen3_5MLP.fleet_sft_mlp_chunk_tokens = mlp_chunk_tokens
+            Qwen3_5MLP.forward = chunked_qwen35_mlp_forward
             return super().init_model(*args, **kwargs)
 
     fsdp_worker.PolicyWorker = ray.remote(num_gpus=1)(ChunkedSFTPolicyWorker)
@@ -1171,7 +1195,10 @@ def _make_trainer_class():
                 "Qwen/Qwen3.8-27B",
                 "Qwen/Qwen3.6-27B",
             }:
-                install_chunked_sft_worker(self.plan["recipe"]["lm_head_chunk_tokens"])
+                install_chunked_sft_worker(
+                    self.plan["recipe"]["lm_head_chunk_tokens"],
+                    self.plan["recipe"]["mlp_chunk_tokens"],
+                )
             with selection:
                 super()._init_workers()
             self._record_runtime_stage("native_worker_ready")
