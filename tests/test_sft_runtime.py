@@ -68,6 +68,7 @@ def plan(tmp_path):
             "microbatch_per_gpu": 1,
             "nodes": 1,
             "gpus_per_node": 8,
+            "sequence_parallel_size": 1,
             "lr": 1e-6,
             "max_length": 16384,
             "lm_head_chunk_tokens": 4096,
@@ -189,6 +190,28 @@ def test_recipe_keeps_tail_batch_and_disables_inline_export(tmp_path):
     assert options["eval_interval"] == 2
     assert options["max_ckpts_to_keep"] == -1  # custom latest-plus-best retention
     assert options["logger"] == "wandb"
+
+
+def test_sequence_parallel_recipe_uses_effective_data_parallel_size(tmp_path):
+    value = plan(tmp_path)
+    value["recipe"].update(sequence_parallel_size=4, batch_size=8, max_steps=6)
+    validate_plan(value, check_files=False)
+    assert sft_overrides(value)["sequence_parallel_size"] == 4
+
+
+@pytest.mark.parametrize("sequence_parallel_size", [0, 3, 32])
+def test_sequence_parallel_recipe_rejects_invalid_world_factor(tmp_path, sequence_parallel_size):
+    value = plan(tmp_path)
+    value["recipe"]["sequence_parallel_size"] = sequence_parallel_size
+    with pytest.raises(ValueError, match="recipe counts|sequence parallel"):
+        validate_plan(value, check_files=False)
+
+
+def test_sequence_parallel_recipe_rejects_incomplete_data_parallel_batch(tmp_path):
+    value = plan(tmp_path)
+    value["recipe"].update(sequence_parallel_size=4, batch_size=3, max_steps=12)
+    with pytest.raises(ValueError, match="data-parallel microbatches"):
+        validate_plan(value, check_files=False)
 
 
 def test_task_outcome_mode_logs_training_only_and_keeps_checkpointing(tmp_path):

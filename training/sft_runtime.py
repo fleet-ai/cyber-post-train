@@ -88,6 +88,12 @@ SOURCE_SHA256 = {
     "skyrl/backends/skyrl_train/distributed/dispatch.py": (
         "165db3891b96b3fb92a98727f9290989f9f67b0a0dc8398a622b249762c9fe2e"
     ),
+    "skyrl/backends/skyrl_train/distributed/ulysses/utils.py": (
+        "150a2436cbd6791bbaa22fa8128b6af336ad746217b6ab50b3e1f0c4c5e1260b"
+    ),
+    "skyrl/backends/skyrl_train/distributed/ulysses/monkey_patch.py": (
+        "035cc525d5d24bc00b94c471c1883ea8ba2ff63008096197fc14f631feb095bd"
+    ),
     "skyrl/backends/skyrl_train/distributed/fsdp_strategy.py": (
         "a987a4bd509a43af1d27a92b1a933455f1f812e0da8a5ad733a68bcf2d67cd63"
     ),
@@ -145,6 +151,7 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         "microbatch_per_gpu",
         "nodes",
         "gpus_per_node",
+        "sequence_parallel_size",
         "max_length",
         "lm_head_chunk_tokens",
         "eval_interval",
@@ -163,10 +170,15 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         or not 0 < recipe["lr"] <= 1e-4
     ):
         raise ValueError("learning rate outside reviewed SFT range")
+    world_size = recipe["nodes"] * recipe["gpus_per_node"]
+    sequence_parallel_size = recipe["sequence_parallel_size"]
+    if world_size % sequence_parallel_size:
+        raise ValueError("sequence parallel size must divide the GPU world size")
+    data_parallel_size = world_size // sequence_parallel_size
     if recipe["batch_size"] % (
-        recipe["nodes"] * recipe["gpus_per_node"] * recipe["microbatch_per_gpu"]
+        data_parallel_size * recipe["microbatch_per_gpu"]
     ):
-        raise ValueError("global batch must divide evenly across GPU microbatches")
+        raise ValueError("global batch must divide evenly across data-parallel microbatches")
     if recipe["lm_head_chunk_tokens"] > recipe["max_length"]:
         raise ValueError("LM-head chunk cannot exceed the model context")
     if recipe["eval_interval"] and recipe["checkpoint_interval"] != recipe["eval_interval"]:
@@ -311,7 +323,7 @@ def sft_overrides(plan: dict) -> dict:
         "optimizer_config.num_warmup_steps": 0,
         "placement.num_nodes": r["nodes"],
         "placement.num_gpus_per_node": r["gpus_per_node"],
-        "sequence_parallel_size": 1,
+        "sequence_parallel_size": r["sequence_parallel_size"],
         "model_config_kwargs.fleet_force_qwen35_torch_gdn": True,
         "model_config_kwargs.fleet_sft_lm_head_chunk_tokens": r["lm_head_chunk_tokens"],
         "logger": "wandb",
@@ -911,7 +923,6 @@ def chunked_sft_forward(
         pixel_values is not None
         or image_grid_thw is not None
         or mm_token_type_ids is not None
-        or self.sequence_parallel_size != 1
         or (compute_entropy and entropy_requires_grad)
     ):
         raise ValueError("chunked LM head is restricted to text-only SFT without entropy loss")
@@ -936,13 +947,30 @@ def chunked_sft_forward(
             attention_mask_fwd = None
 
     causal_model = self.model
+    labels = torch.roll(sequences_fwd, shifts=-1, dims=1)
+    sp_padding = 0
+    if self.sequence_parallel_size > 1:
+        attention_mask_fwd = None if self.remove_microbatch_padding else attention_mask_fwd
+        sequences_fwd, position_ids_fwd, attention_mask_fwd, sp_padding = (
+            model_wrapper.ulysses_pad_and_slice_inputs(
+                sequences_fwd,
+                position_ids_fwd,
+                attention_mask_fwd,
+                self.sequence_parallel_size,
+            )
+        )
+        labels, _, _, _ = model_wrapper.ulysses_pad_and_slice_inputs(
+            labels,
+            None,
+            None,
+            self.sequence_parallel_size,
+        )
     backbone_kwargs = {
         "input_ids": sequences_fwd,
         "attention_mask": attention_mask_fwd,
         "position_ids": None if self.is_vlm else position_ids_fwd,
         "use_cache": False,
     }
-    labels = torch.roll(sequences_fwd, shifts=-1, dims=1)
 
     def selected_logprobs(module, hidden, target):
         logits = module.lm_head(hidden)
@@ -984,6 +1012,14 @@ def chunked_sft_forward(
             causal_model.forward = instance_forward
         else:
             del causal_model.forward
+
+    if self.sequence_parallel_size > 1:
+        log_probs = model_wrapper.gather_outputs_and_unpad(
+            log_probs,
+            gather_dim=log_probs.ndim - 1,
+            unpad_dim=log_probs.ndim - 1,
+            padding_size=sp_padding,
+        )
 
     if self.remove_microbatch_padding:
         batch_size, seqlen = attention_mask.shape

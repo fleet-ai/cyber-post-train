@@ -31,6 +31,7 @@ RECIPE = {
     "microbatch_per_gpu": 1,
     "nodes": 1,
     "gpus_per_node": 8,
+    "sequence_parallel_size": 1,
     "lr": 3e-6,
     "max_length": 16384,
     "lm_head_chunk_tokens": 4096,
