@@ -107,6 +107,14 @@ pulling the pinned image within its five-minute deadline and was deleted. No
 further observer or training successor was submitted after the operator asked
 that nothing new be launched.
 
+After the terminal evidence was captured, the operator requested full cleanup.
+The exact terminal V1 and V2 RayJobs were deleted through the supported Jobs
+API (HTTP 204 for each). Their owner-bound per-run Secrets and terminal
+Workloads were garbage-collected. A final inventory found zero matching Pods,
+Jobs, RayJobs, RayClusters, Workloads, Services, ConfigMaps or Secrets on both
+the production and development clusters. The Jobs API history rows and durable
+SFS output roots remain as provenance; neither reserves cluster resources.
+
 The two-node, exact-262k, full-parameter shape is therefore **not qualified**.
 The next experiment must be a separately reviewed memory intervention, not an
 unchanged retry. The highest-information candidates are persistent optimizer
