@@ -150,6 +150,15 @@ counts. Train and dev are distinct immutable artifacts and task families.
    resources, normal queue, derived priority, Secret references and release policy.
 4. Review ownership, access expiry, experiment-wide allocated resources and the
    canary evidence. Use a shared durable prepared directory with one submitter.
+
+For a topology-only downsize test of an already prepared Qwen3.8 SFT plan, use
+`cyber-post-train train-topology-canary PREPARED_DIR --nodes 2 --name NEW_NAME
+--output-root /mnt/sfs/jobs/NEW_NAME --output NEW_PREPARED_DIR`. The command keeps
+the model, data, objective, context, global batch, learning rate, seed and
+checkpoint recipe unchanged, changes only the node count and run identity, and
+forces a clean stop after optimizer step one. It only prepares files; the usual
+zero-GPU `preflight`, live `preview`, duplicate checks and `submit` gates still
+apply. This is a capacity qualification, not a matched throughput comparison.
    `cyber-post-train submit output/my-run` checks preflight, exhaustively checks API
    duplicates, previews again and records a fsynced intent before its only POST.
    An uncertain POST blocks reuse: reconcile it, never delete the journal or make

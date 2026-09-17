@@ -1,0 +1,112 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: chris-q38-t3k262-2n-pre-v1
+  namespace: fleet-train-jobs
+  annotations:
+    fleet.ai/purpose: qwen38-262k-two-node-zero-gpu-preflight
+spec:
+  automountServiceAccountToken: false
+  restartPolicy: Never
+  priorityClassName: c1
+  activeDeadlineSeconds: 1800
+  terminationGracePeriodSeconds: 30
+  securityContext:
+    runAsUser: 1000
+    runAsGroup: 100
+    fsGroup: 100
+  nodeSelector:
+    workload: fleetai-training-ng-cpu
+  tolerations:
+    - key: workload
+      operator: Equal
+      value: fleetai-training-ng-cpu
+      effect: NoSchedule
+  containers:
+    - name: preflight
+      image: 661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4
+      imagePullPolicy: IfNotPresent
+      command: [bash, -lc]
+      args:
+        - |
+          set -eu
+          mkdir /tmp/prepared /tmp/package
+          cp /prepared-input/PREPARED.json /prepared-input/plan.json /prepared-input/request.json /tmp/prepared/
+          python3 -m zipfile -e /wheel-input/cyber_post_train-0.1.0-py3-none-any.whl /tmp/package
+          PYTHONPATH=/tmp/package python3 -m cyber_post_train preflight /tmp/prepared
+          PYTHONPATH=/tmp/package python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          from cyber_post_train.jobs import digest
+
+          root = Path("/tmp/prepared")
+          plan = json.loads((root / "plan.json").read_text())
+          request = json.loads((root / "request.json").read_text())
+          proof = json.loads((root / "PREFLIGHT.json").read_text())
+          recipe = plan["recipe"]
+          counts = proof.get("counts", {}).get("train", {})
+          expected = {
+              "schema": "cyber_sft_cpu_preflight_v1",
+              "status": "passed",
+              "gpus": 0,
+              "plan_sha256": digest(plan),
+              "request_sha256": digest(request),
+          }
+          if (
+              any(proof.get(key) != value for key, value in expected.items())
+              or proof.get("sha256") != digest({key: value for key, value in proof.items() if key != "sha256"})
+              or plan["run_name"] != "chris-q38-t3k262-2n-can-v1"
+              or plan["output_root"] != "/mnt/sfs/jobs/chris-q38-t3k262-2n-can-v1"
+              or recipe["nodes"] != 2
+              or recipe["gpus_per_node"] != 8
+              or recipe["batch_size"] != 64
+              or recipe["microbatch_per_gpu"] != 1
+              or recipe["max_length"] != 262144
+              or recipe["max_steps"] != 2
+              or recipe["sequence_parallel_size"] != 1
+              or plan["pause_after_step"] != 1
+              or request["workers"] != 2
+              or request["gpus_per_worker"] != 8
+              or request["priority_class"] != "c1"
+              or request["requeueIfPreempted"] is not False
+              or counts.get("rows") != 112
+              or counts.get("tasks") != 27
+              or counts.get("supervised_tokens") != 3022959
+          ):
+              raise ValueError("two-node SFT preflight evidence differs")
+          print(json.dumps({
+              "status": "passed",
+              "receipt_sha256": proof["sha256"],
+              "nodes": 2,
+              "gpus": 16,
+              "gradient_accumulation_rounds": 4,
+              **counts,
+          }, sort_keys=True))
+          PY
+      resources:
+        requests:
+          cpu: "8"
+          memory: 32Gi
+        limits:
+          cpu: "12"
+          memory: 48Gi
+      volumeMounts:
+        - name: sfs
+          mountPath: /mnt/sfs
+        - name: wheel-input
+          mountPath: /wheel-input
+          readOnly: true
+        - name: prepared-input
+          mountPath: /prepared-input
+          readOnly: true
+  volumes:
+    - name: sfs
+      persistentVolumeClaim:
+        claimName: sfs-shared
+    - name: wheel-input
+      configMap:
+        name: chris-q38-t3k262-2n-v1-wheel
+    - name: prepared-input
+      configMap:
+        name: chris-q38-t3k262-2n-v1-plan

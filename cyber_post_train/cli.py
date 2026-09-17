@@ -213,6 +213,36 @@ def train(config: Path, output: Annotated[Path, typer.Option("--output")]) -> No
         _fail(exc)
 
 
+@app.command("train-topology-canary")
+def train_topology_canary(
+    source: Path,
+    name: Annotated[str, typer.Option("--name")],
+    output_root: Annotated[str, typer.Option("--output-root")],
+    nodes: Annotated[int, typer.Option("--nodes")],
+    output: Annotated[Path, typer.Option("--output")],
+) -> None:
+    """Prepare a smaller-node step-one SFT canary from immutable inputs. No GPU."""
+    from training.sft import job_request, topology_canary
+
+    try:
+        parent, request = _prepared(source)
+        _submission_gate(source, parent, request)
+        plan = topology_canary(parent, name=name, output_root=output_root, nodes=nodes)
+        request = job_request(plan)
+        _prepare(output, plan, request)
+        _print(
+            {
+                "prepared": str(output),
+                "parent_plan_sha256": digest(parent),
+                "steps_before_pause": plan["pause_after_step"],
+                "gpus": request["workers"] * request["gpus_per_worker"],
+                "submitted": False,
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command()
 def rl(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
     """Prepare native Miles or SkyRL RL. No GPU, environment creation or submission."""

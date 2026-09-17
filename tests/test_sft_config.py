@@ -178,6 +178,53 @@ def test_compiler_binds_planned_pause_without_shortening_recipe(config, tmp_path
     assert request["requeueIfPreempted"] is False
 
 
+def test_topology_canary_changes_only_allocation_identity_and_pause(config, tmp_path):
+    source, _, _ = config
+    source["recipe"] = {
+        "nodes": 8,
+        "batch_size": 64,
+        "epochs": 2,
+        "eval_interval": 0,
+        "checkpoint_interval": 1,
+    }
+    manifest = json.loads((tmp_path / "corpus.json").read_text())
+    manifest["validation_mode"] = "task_outcomes_only"
+    manifest["files"].pop("dev")
+    unsigned = {k: v for k, v in manifest.items() if k != "sha256"}
+    manifest["sha256"] = "sha256:" + digest(unsigned)
+    (tmp_path / "corpus.json").write_text(json.dumps(manifest))
+    parent = sft.compile_sft(source, relative_to=tmp_path)
+
+    plan = sft.topology_canary(
+        parent,
+        name="q38-two-node-canary",
+        output_root="/mnt/sfs/jobs/q38-two-node-canary",
+        nodes=2,
+    )
+    assert plan["recipe"] == {**parent["recipe"], "nodes": 2}
+    assert plan["pause_after_step"] == 1
+    assert plan["run_name"] == plan["wandb"]["name"] == plan["wandb"]["run_id"]
+    assert plan["output_root"] == "/mnt/sfs/jobs/q38-two-node-canary"
+    assert "8-node-fsdp" not in plan["wandb"]["tags"]
+    assert plan["wandb"]["tags"][-2:] == ["2-node-fsdp", "topology-only-canary"]
+    assert sft.job_request(plan)["workers"] == 2
+    assert parent["recipe"]["nodes"] == 8
+
+
+@pytest.mark.parametrize("nodes", [0, 8, 9])
+def test_topology_canary_rejects_non_downsize(config, tmp_path, nodes):
+    source, _, _ = config
+    source["recipe"] = {"nodes": 8, "batch_size": 64, "epochs": 2}
+    parent = sft.compile_sft(source, relative_to=tmp_path)
+    with pytest.raises(ValueError, match="smaller positive"):
+        sft.topology_canary(
+            parent,
+            name="q38-two-node-canary",
+            output_root="/mnt/sfs/jobs/q38-two-node-canary",
+            nodes=nodes,
+        )
+
+
 @pytest.fixture
 def glm_config(config):
     source, manifest, save = config

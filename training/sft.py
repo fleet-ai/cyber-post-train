@@ -8,6 +8,7 @@ data path alone, or recipe override is resolved after submission.
 from __future__ import annotations
 
 import base64
+import copy
 import hashlib
 import json
 import math
@@ -202,6 +203,33 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
         bind(plan, config["recovery"], relative_to=relative_to)
     if "pause_after_step" in config:
         plan["pause_after_step"] = config["pause_after_step"]
+    validate_plan(plan, check_files=False)
+    validate_request(job_request(plan))
+    return plan
+
+
+def topology_canary(parent: dict, *, name: str, output_root: str, nodes: int) -> dict:
+    """Derive a pause-after-step-one capacity canary without changing science."""
+    validate_plan(parent, check_files=False)
+    if "recovery" in parent or parent["model"]["repo"] != "Qwen/Qwen3.8-27B":
+        raise ValueError("topology canaries require a fresh Qwen3.8 SFT plan")
+    if type(nodes) is not int or not 1 <= nodes < parent["recipe"]["nodes"]:
+        raise ValueError("topology canary nodes must be a smaller positive allocation")
+    if parent["recipe"]["max_steps"] < 2:
+        raise ValueError("topology canary needs at least two planned steps")
+    if parent["execution"]["priority"] != "c1":
+        raise ValueError("topology canary must use c1 priority")
+
+    plan = copy.deepcopy(parent)
+    plan["run_name"] = name
+    plan["output_root"] = _sfs_root(output_root, "output root")
+    plan["recipe"]["nodes"] = nodes
+    plan["pause_after_step"] = 1
+    plan["wandb"]["run_id"] = name
+    plan["wandb"]["name"] = name
+    plan["wandb"]["tags"] = [
+        tag for tag in plan["wandb"].get("tags", []) if not tag.endswith("-node-fsdp")
+    ] + [f"{nodes}-node-fsdp", "topology-only-canary"]
     validate_plan(plan, check_files=False)
     validate_request(job_request(plan))
     return plan
