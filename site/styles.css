@@ -25,8 +25,14 @@
 .web-config dd, .web-detail dd { margin: 4px 0 0; overflow-wrap: anywhere; }
 .web-stages { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; border-block: 1px solid var(--line); }
 .web-stages strong { display: block; font-size: .8rem; }
-.web-metrics p { color: var(--green); font-size: 1.2rem; }
-.web-metrics .web-no-score { color: var(--muted); font-size: .9rem; }
+.web-metrics { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 1px; margin: 22px 0; background: var(--line); border: 1px solid var(--line); }
+.web-metrics div { min-height: 124px; padding: 16px; background: var(--white); }
+.web-metrics dt { color: var(--muted); font-size: .75rem; }
+.web-metrics dd { margin: 6px 0; color: var(--green); font-family: Georgia, serif; font-size: 2rem; }
+.web-metrics small { display: block; color: var(--muted); font-size: .72rem; line-height: 1.35; }
+.web-metrics .metric-unavailable { color: var(--muted); font-family: inherit; font-size: 1rem; }
+.paper-results th:first-child { min-width: 170px; }
+.paper-results td:nth-child(n+3) { font-variant-numeric: tabular-nums; font-weight: 650; }
 .web-campaign details { border-top: 1px solid var(--line); padding-top: 15px; }
 .web-campaign summary { cursor: pointer; }
 .web-detail div { display: grid; grid-template-columns: 220px minmax(0,1fr); padding: 8px 0; border-bottom: 1px solid var(--line); gap: 15px; }
@@ -37,6 +43,7 @@
 @media (max-width: 760px) {
   .web-config { grid-template-columns: 1fr 1fr; }
   .web-stages, .web-detail div { grid-template-columns: 1fr; gap: 0; }
+  .web-metrics { grid-template-columns: 1fr; }
   .web-campaign-heading, .web-filters { flex-direction: column; }
   .web-campaign { padding: 20px; }
   .site-header { height: auto !important; min-height: 72px; grid-template-columns: 1fr !important; gap: 10px; padding-block: 12px; }

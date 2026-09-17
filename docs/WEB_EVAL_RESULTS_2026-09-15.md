@@ -6,6 +6,28 @@ invalid scoring, small system tests, incomplete campaigns and unlaunched plans.
 Raw reports, task answers, exploit files, judge requests and credentials remain
 private. Unknown settings are marked unknown rather than reconstructed by guess.
 
+## Standard result format and the paper's reference results
+
+The public page now uses the original paper's three Level-0 columns for every
+campaign: Pass@1, Pass@3 (Avg.), and Pass@3 (Max). A blank source record is shown
+as “not available,” never as zero. Partial values state their exact coverage out
+of the benchmark's 110 known weaknesses.
+
+The paper's published Level-0 web-exploitation results are:
+
+| Model | Agent program | Pass@1 | Pass@3 (Avg.) | Pass@3 (Max) |
+| --- | --- | ---: | ---: | ---: |
+| GPT-5.5 | Codex 0.133.0 | 19.09% | 16.06% | 28.18% |
+| Claude-Opus-4.7 | Claude Code 2.1.150 | 16.36% | 14.55% | 26.36% |
+| GLM-5.1 | Claude Code 2.1.150 | 11.82% | 8.18% | 15.45% |
+| DeepSeek-V4-Pro | Claude Code 2.1.150 | 10.00% | 8.18% | 18.18% |
+| Qwen-3.7-Max | Qwen Code 0.16.1 | 10.91% | 12.42% | 20.91% |
+| Kimi-2.6 | Kimi Code 1.44.0 | 3.64% | 3.03% | 8.18% |
+
+Those results cover all 110 Level-0 weaknesses with three independent attempts.
+They are reference context, not matched controls for Fleet's OpenCode campaigns:
+the agent programs, model versions, budgets and scoring setups differ.
+
 ## Qwen3.8 OpenCode baseline, rescored with GPT
 
 The source campaign is
@@ -126,6 +148,7 @@ integrity check with zero scoring failures.
 | Attempts | 104/120 usable; eight on each of 13 websites |
 | Judge | `gpt-5.5-2026-04-23` |
 | Benchmark coverage | 100/110 known weaknesses; 13/15 websites |
+| Pass@1 | 2.000%; first designated attempt, partial 100/110 coverage |
 | Pass@3 (Avg.) | 3.125% |
 | Pass@3 (Max) | 4.9643% |
 

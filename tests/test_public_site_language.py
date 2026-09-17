@@ -72,6 +72,30 @@ def test_web_page_has_search_configs_and_explicit_static_status() -> None:
     assert "not a live cloud dashboard" in history["scope"]
 
 
+def test_web_page_standardizes_paper_metrics_and_quotes_published_results() -> None:
+    history = json.loads((ROOT / "site/web-evals.json").read_text())
+    html = (ROOT / "site/index.html").read_text()
+    script = (ROOT / "site/web-evals.js").read_text()
+    keys = {"pass_at_1", "pass_at_3_avg", "pass_at_3_max"}
+
+    assert history["schema_version"] == 2
+    assert history["metric_standard"]["expected_vulnerabilities"] == 110
+    assert len(history["paper_reference"]["results"]) == 6
+    qwen = next(
+        result
+        for result in history["paper_reference"]["results"]
+        if result["model"] == "Qwen-3.7-Max"
+    )
+    assert (qwen["pass_at_1"], qwen["pass_at_3_avg"], qwen["pass_at_3_max"]) == (
+        10.91,
+        12.42,
+        20.91,
+    )
+    assert all(set(run["paper_metrics"]) == keys for run in history["runs"])
+    assert 'id="paper-reference-body"' in html
+    assert "Not available" in script
+
+
 def test_public_report_does_not_reintroduce_unexplained_internal_terms() -> None:
     text = "\n".join(path.read_text().lower() for path in PUBLIC_FILES)
     unexplained_internal_phrases = {

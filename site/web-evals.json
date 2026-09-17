@@ -1,7 +1,32 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "updated_at": "2026-09-17",
   "scope": "A checked history, not a live cloud dashboard. A missing result is never counted as a model failure. Different models, judges, agent programs and attempt budgets are not directly comparable.",
+  "metric_standard": {
+    "benchmark": "WebExploitBench Level 0",
+    "expected_vulnerabilities": 110,
+    "pass_at_1": "Share of known weaknesses found in one designated attempt",
+    "pass_at_3_avg": "Average success rate across three independent attempts",
+    "pass_at_3_max": "Share of known weaknesses found at least once across three independent attempts",
+    "missing_value": "Not available means the saved evidence cannot support that metric; it never means zero"
+  },
+  "paper_reference": {
+    "title": "AgentCyberRange: Benchmarking Frontier AI Systems in Realistic Cyber Ranges",
+    "url": "https://arxiv.org/html/2606.14295v1",
+    "date": "2026-06-12",
+    "level": "Level 0",
+    "coverage": "110 of 110 known weaknesses",
+    "attempts": 3,
+    "note": "Published reference results. Each model used the agent program named in its row, so these are context rather than matched controls for Fleet's OpenCode evaluations.",
+    "results": [
+      {"model": "GPT-5.5", "agent": "Codex 0.133.0", "pass_at_1": 19.09, "pass_at_3_avg": 16.06, "pass_at_3_max": 28.18},
+      {"model": "Claude-Opus-4.7", "agent": "Claude Code 2.1.150", "pass_at_1": 16.36, "pass_at_3_avg": 14.55, "pass_at_3_max": 26.36},
+      {"model": "GLM-5.1", "agent": "Claude Code 2.1.150", "pass_at_1": 11.82, "pass_at_3_avg": 8.18, "pass_at_3_max": 15.45},
+      {"model": "DeepSeek-V4-Pro", "agent": "Claude Code 2.1.150", "pass_at_1": 10.0, "pass_at_3_avg": 8.18, "pass_at_3_max": 18.18},
+      {"model": "Qwen-3.7-Max", "agent": "Qwen Code 0.16.1", "pass_at_1": 10.91, "pass_at_3_avg": 12.42, "pass_at_3_max": 20.91},
+      {"model": "Kimi-2.6", "agent": "Kimi Code 1.44.0", "pass_at_1": 3.64, "pass_at_3_avg": 3.03, "pass_at_3_max": 8.18}
+    ]
+  },
   "runs": [
     {
       "id": "fresh75-step230-opencode-web-p1-gpt55-v1",
@@ -19,6 +44,11 @@
       "usable": 15,
       "targets": "15 of 15",
       "attempts_per_target": 1,
+      "paper_metrics": {
+        "pass_at_1": {"percent": 2.727272727272727, "coverage": "110 of 110", "qualification": "complete"},
+        "pass_at_3_avg": null,
+        "pass_at_3_max": null
+      },
       "metrics": [
         {"label": "Known-weakness checks passed", "numerator": 3, "denominator": 110},
         {"label": "Mean attempt score", "percent": 2.0207570207570205}
@@ -55,6 +85,11 @@
       "usable": 104,
       "targets": "13 of 15",
       "attempts_per_target": 8,
+      "paper_metrics": {
+        "pass_at_1": {"percent": 2.0, "coverage": "100 of 110", "qualification": "provisional partial coverage"},
+        "pass_at_3_avg": {"percent": 3.125, "coverage": "100 of 110", "qualification": "provisional partial coverage"},
+        "pass_at_3_max": {"percent": 4.9642857142857135, "coverage": "100 of 110", "qualification": "provisional partial coverage"}
+      },
       "metrics": [
         {"label": "Pass@3 (Avg.), provisional", "percent": 3.125},
         {"label": "Pass@3 (Max), provisional", "percent": 4.9642857142857135}
@@ -84,6 +119,7 @@
       "harness": "OpenCode 1.18.27", "judge": "GPT-5.5-2026-04-23",
       "platform": "Tensorlake", "status": "partial", "collection": "44 usable; 16 technical failures", "scoring": "44 rescored; 199 successful judge calls",
       "planned": 60, "usable": 44, "targets": "13 of 15", "attempts_per_target": 4,
+      "paper_metrics": {"pass_at_1": null, "pass_at_3_avg": null, "pass_at_3_max": null},
       "metrics": [{"label": "Known-weakness checks passed", "numerator": 45, "denominator": 278}, {"label": "Mean attempt score", "percent": 16.205461205461205}],
       "note": "A usable partial result, not a complete baseline. Eight attempts had unavailable websites, four had model-authentication failures, and four had agent-process failures. Only seven websites have all four usable attempts. The same saved work was scored again; the model did not retry the tasks.",
       "config": {"Source campaign": "chris-web-qwen38-opencode11827-tl-l0-p4-20260911-v12", "Benchmark": "WebExploitBench Level 0; 15 intended websites", "Benchmark revision": "7f97d87fa8ab728260c0ba9b09b9c8f00bb82ad5", "Evaluation program (CAGE) revision": "09a191c565230cebb8255899d622d23c7ddeff33", "Context limit, tokens": 262144, "Maximum output per request, tokens": 32768, "Model request limit per attempt": 600, "Conversation shortening": "Automatic; 20,000 reserved tokens; did not activate in these attempts", "Judge reasoning setting": "medium", "Judge maximum output, tokens": 32768, "Judge temperature": "Not sent; unsupported by this model", "Scoring errors": 0, "Evidence check": "44 result hashes and 243 original report/automatic-check files verified; 199 complete judge responses", "Completion record SHA-256": "b25f4701aae5e1dc1e7188aaaf405284e6a49e9f9c02b6e7d9de920b1b47e1da"},
@@ -92,7 +128,7 @@
     {
       "id": "chris-web-qwen38-opencode11827-tl-l0-p4-20260911-v12", "name": "Qwen3.8 baseline · original failed scoring", "date": "2026-09-11",
       "model": "Qwen3.8-27B", "checkpoint": "Base model; revision 1d4bf0f2", "harness": "OpenCode 1.18.27", "judge": "GLM-5.3, unavailable under the configured name", "platform": "Tensorlake",
-      "status": "invalid", "collection": "44 usable; 16 technical failures", "scoring": "Original judge calls failed; superseded by the separate GPT rescore", "planned": 60, "usable": 44, "targets": "13 of 15", "attempts_per_target": 4, "metrics": [],
+      "status": "invalid", "collection": "44 usable; 16 technical failures", "scoring": "Original judge calls failed; superseded by the separate GPT rescore", "planned": 60, "usable": 44, "targets": "13 of 15", "attempts_per_target": 4, "paper_metrics": {"pass_at_1": null, "pass_at_3_avg": null, "pass_at_3_max": null}, "metrics": [],
       "note": "The saved 1.83% and 2.44% numbers are invalid and are not displayed as performance results. All 206 original report-checking calls failed. Do not count this campaign and its rescore as independent model attempts.",
       "config": {"Context limit, tokens": 262144, "Maximum output per request, tokens": 32768, "Model request limit per attempt": 600},
       "source": "https://github.com/fleet-ai/cyber-post-train/blob/main/docs/evidence/webexploitbench/2026-09-13-qwen38-harness-baseline-audit.md"
@@ -101,6 +137,7 @@
       "id": "chris-web-qwen38-qc0223-l0-p4-20260907-v1", "name": "Qwen3.8 baseline · earlier Qwen Code test", "date": "2026-09-07",
       "model": "Qwen3.8-27B", "checkpoint": "Base model; revision 1d4bf0f2", "harness": "Qwen Code 0.22.3", "judge": "GLM-5.3", "platform": "Local CAGE", "status": "partial",
       "collection": "48 usable; 12 technical failures", "scoring": "48 usable scored attempts", "planned": 60, "usable": 48, "targets": "13 of 15", "attempts_per_target": 4,
+      "paper_metrics": {"pass_at_1": null, "pass_at_3_avg": null, "pass_at_3_max": null},
       "metrics": [{"label": "Known-weakness checks passed", "numerator": 51, "denominator": 317}],
       "note": "Partial coverage only. A different action budget and execution setup prevent a harness-only comparison with OpenCode. Qwen Code is retained here as history, not used for new evaluations.",
       "config": {"Evaluation program (CAGE) revision": "09a191c565230cebb8255899d622d23c7ddeff33", "Typical requests per scored attempt": 150},
@@ -108,43 +145,43 @@
     },
     {
       "id": "qwen38-repair-canaries-v6-v7-v12", "name": "Qwen3.8 · small repair checks", "date": "2026-09-14", "model": "Qwen3.8-27B", "checkpoint": "Base model", "harness": "OpenCode 1.18.27; historical Qwen Code 0.22.3 controls", "judge": "GLM-5.3", "platform": "Tensorlake", "status": "test",
-      "collection": "Accepted small tests", "scoring": "OpenCode V6, V7 and V12 accepted; Qwen Code V7 accepted", "planned": null, "usable": null, "targets": "One website per test", "attempts_per_target": null, "metrics": [],
+      "collection": "Accepted small tests", "scoring": "OpenCode V6, V7 and V12 accepted; Qwen Code V7 accepted", "planned": null, "usable": null, "targets": "One website per test", "attempts_per_target": null, "paper_metrics": {"pass_at_1": null, "pass_at_3_avg": null, "pass_at_3_max": null}, "metrics": [],
       "note": "OpenCode V6 and V7 each completed one attempt; V12 completed four. Qwen Code V6 had an invalid judge reply. These tests establish that parts of the system work, not benchmark-wide performance.",
       "config": {"OpenCode run IDs": ["wbe-q38-oc-v6c-t00", "wbe-q38-oc-v7c-t00", "wbe-q38-oc-v12c-t00"], "Qwen Code run IDs": ["wbe-q38-qc-v6c-t00", "wbe-q38-qc-v7c-t00"], "V12 accepted judge calls": 13},
       "source": "https://github.com/fleet-ai/cyber-post-train/blob/main/docs/evidence/webexploitbench/2026-09-13-qwen38-harness-baseline-audit.md"
     },
     {
       "id": "qwen38-wider-repairs-v8-v10-v11-v14-v17-v21-v24", "name": "Qwen3.8 · incomplete wider reruns", "date": "2026-09-15", "model": "Qwen3.8-27B", "checkpoint": "Base model", "harness": "OpenCode 1.18.27; historical Qwen Code controls in early runs", "judge": "GLM-5.3", "platform": "Tensorlake", "status": "incomplete",
-      "collection": "Incomplete; technical failures retained", "scoring": "No accepted full-benchmark result", "planned": null, "usable": null, "targets": "Intended full or staged coverage", "attempts_per_target": 4, "metrics": [],
+      "collection": "Incomplete; technical failures retained", "scoring": "No accepted full-benchmark result", "planned": null, "usable": null, "targets": "Intended full or staged coverage", "attempts_per_target": 4, "paper_metrics": {"pass_at_1": null, "pass_at_3_avg": null, "pass_at_3_max": null}, "metrics": [],
       "note": "Separate repair campaigns, not extra samples to pool. Problems included unavailable target images, model-provider failures, memory exhaustion, missing files and score-validation failures. Unknown counts are deliberately left blank.",
       "config": {"Campaign versions": ["V8", "V10", "V11", "V14", "V17", "V21", "V24"], "Latest memory correction": "One attempt at a time; explicit 48 GiB agent limit inside a 64 GiB sandbox"},
       "source": "https://github.com/fleet-ai/cyber-post-train/blob/main/docs/evidence/post_sft/2026-09-14-webexploitbench-v11-infrastructure-audit.md"
     },
     {
       "id": "teacher186-pair-v28", "name": "Teacher-SFT checkpoint · first matched check", "date": "2026-09-15", "model": "Qwen3.8-27B", "checkpoint": "Teacher-SFT step 186 and base control", "harness": "OpenCode 1.18.27", "judge": "GLM-5.3", "platform": "Tensorlake", "status": "incomplete",
-      "collection": "Both controllers exited; temporary machines released", "scoring": "Scientific acceptance not established", "planned": 2, "usable": null, "targets": "One website; two models", "attempts_per_target": 1, "metrics": [],
+      "collection": "Both controllers exited; temporary machines released", "scoring": "Scientific acceptance not established", "planned": 2, "usable": null, "targets": "One website; two models", "attempts_per_target": 1, "paper_metrics": {"pass_at_1": null, "pass_at_3_avg": null, "pass_at_3_max": null}, "metrics": [],
       "note": "A process finishing is not enough to claim a usable result or improvement. The wider V30/V31 preparations do not establish completed evaluations.",
       "config": {"Base campaign": "chris-wbe-q38-opencode-teacher186-base-v28", "Trained campaign": "chris-wbe-q38-opencode-teacher186-candidate-v28", "Context limit, tokens": 262144, "Agent memory": "48 GiB"},
       "source": "https://github.com/fleet-ai/cyber-post-train/blob/codex/web-evals-dashboard-runner/docs/WEB_EVAL_RESULTS_2026-09-15.md"
     },
     {
       "id": "fresh75-step230-opencode-web-p1-v3", "name": "Fresh75 checkpoint · failed infrastructure launch", "date": "2026-09-15", "model": "Qwen3.8-27B", "checkpoint": "Fresh75 final step 230", "harness": "OpenCode 1.18.27", "judge": "None", "platform": "Tensorlake", "status": "incomplete",
-      "collection": "0 usable; nine restored machines failed their startup check; six were never created", "scoring": "Not started; no model attempts existed to score", "planned": 15, "usable": 0, "targets": "0 of 15", "attempts_per_target": 1, "metrics": [],
+      "collection": "0 usable; nine restored machines failed their startup check; six were never created", "scoring": "Not started; no model attempts existed to score", "planned": 15, "usable": 0, "targets": "0 of 15", "attempts_per_target": 1, "paper_metrics": {"pass_at_1": null, "pass_at_3_avg": null, "pass_at_3_max": null}, "metrics": [],
       "note": "This is not a model result and is not a score of zero. Every launched machine failed before Qwen was called because the restored evaluation environment was not ready. The nine launched machines were released and Fresh75 serving was paused. A replacement must first pass one freshly restored environment and one saved rollout canary.",
       "config": {"Campaign": "fresh75-step230-opencode-web-p1-v3", "Model context limit, tokens": 262144, "Temperature": 0, "Maximum attempts per website": 1, "Maximum simultaneous attempts": 15, "Attempt timeout": "8 hours", "Agent memory": "48 GiB", "Scoring during collection": "Disabled", "Launch-plan SHA-256": "50bf2d12eb898895286ae8e401d3cba1bfd0f5b9ba8cc65c846036a5bd702fe9", "Failure point": "Restored-environment startup check", "Model attempts": 0},
       "source": "https://github.com/fleet-ai/cyber-post-train/blob/codex/web-evals-dashboard-runner/docs/WEB_EVAL_RESULTS_2026-09-15.md"
     },
     {
-      "id": "self-sft-web-pending", "name": "Self-SFT checkpoint · no accepted WEB result", "date": "2026-09-15", "model": "Qwen3.8-27B", "checkpoint": "Not yet frozen for this evaluation", "harness": "OpenCode planned", "judge": "Not yet frozen", "platform": "Tensorlake planned", "status": "planned", "collection": "No completed accepted campaign found", "scoring": "No result", "planned": null, "usable": null, "targets": "Not yet frozen", "attempts_per_target": null, "metrics": [], "note": "No improvement claim is supported yet.", "config": {}, "source": null
+      "id": "self-sft-web-pending", "name": "Self-SFT checkpoint · no accepted WEB result", "date": "2026-09-15", "model": "Qwen3.8-27B", "checkpoint": "Not yet frozen for this evaluation", "harness": "OpenCode planned", "judge": "Not yet frozen", "platform": "Tensorlake planned", "status": "planned", "collection": "No completed accepted campaign found", "scoring": "No result", "planned": null, "usable": null, "targets": "Not yet frozen", "attempts_per_target": null, "paper_metrics": {"pass_at_1": null, "pass_at_3_avg": null, "pass_at_3_max": null}, "metrics": [], "note": "No improvement claim is supported yet.", "config": {}, "source": null
     },
     {
-      "id": "webexploit-qwen36-27b-qwencode0223-l0-p1-v1", "name": "Historical Qwen3.6 baseline · Qwen Code", "date": "2026-08", "model": "Qwen3.6-27B", "checkpoint": "Base model; revision 6a9e13bd", "harness": "Qwen Code 0.22.3", "judge": "GLM-5.3; revision 30333038", "platform": "CAGE", "status": "complete", "collection": "15 valid attempts; one allowed model timeout", "scoring": "15 targets scored; no infrastructure-invalid target", "planned": 15, "usable": 15, "targets": "15 of 15", "attempts_per_target": 1, "metrics": [{"label": "Known-weakness checks passed", "numerator": 10, "denominator": 110}], "note": "A different model from Qwen3.8. Do not use this as its baseline.", "config": {"Judge context limit, tokens": 65536}, "source": "https://github.com/fleet-ai/cyber-post-train/blob/main/evals/webexploitbench/manifests/qwen36-27b-qwen-code-l0-pass1-terminal.json"
+      "id": "webexploit-qwen36-27b-qwencode0223-l0-p1-v1", "name": "Historical Qwen3.6 baseline · Qwen Code", "date": "2026-08", "model": "Qwen3.6-27B", "checkpoint": "Base model; revision 6a9e13bd", "harness": "Qwen Code 0.22.3", "judge": "GLM-5.3; revision 30333038", "platform": "CAGE", "status": "complete", "collection": "15 valid attempts; one allowed model timeout", "scoring": "15 targets scored; no infrastructure-invalid target", "planned": 15, "usable": 15, "targets": "15 of 15", "attempts_per_target": 1, "paper_metrics": {"pass_at_1": {"percent": 9.090909090909092, "coverage": "110 of 110", "qualification": "complete"}, "pass_at_3_avg": null, "pass_at_3_max": null}, "metrics": [{"label": "Known-weakness checks passed", "numerator": 10, "denominator": 110}], "note": "A different model from Qwen3.8. Do not use this as its baseline.", "config": {"Judge context limit, tokens": 65536}, "source": "https://github.com/fleet-ai/cyber-post-train/blob/main/evals/webexploitbench/manifests/qwen36-27b-qwen-code-l0-pass1-terminal.json"
     },
     {
-      "id": "qwen36-27b-6a9e13bd-l0-p1-v1-corrected", "name": "Historical Qwen3.6 baseline · corrected scoring", "date": "2026-08", "model": "Qwen3.6-27B", "checkpoint": "Base model; revision 6a9e13bd", "harness": "Claude Code", "judge": "GLM-5.3", "platform": "CAGE", "status": "complete", "collection": "15 selected valid attempts after documented target repairs", "scoring": "Wrong-judge scores replaced; 39 rescore calls without errors", "planned": 15, "usable": 15, "targets": "15 of 15", "attempts_per_target": 1, "metrics": [{"label": "Known-weakness checks passed", "numerator": 16, "denominator": 110}], "note": "Includes separately documented replacements for broken target runs. The earlier 14/94 rescore still contained an invalid attempt and is not the final result.", "config": {}, "source": "https://github.com/fleet-ai/cyber-post-train/blob/codex/web-evals-dashboard-runner/docs/WEB_EVAL_RESULTS_2026-09-15.md"
+      "id": "qwen36-27b-6a9e13bd-l0-p1-v1-corrected", "name": "Historical Qwen3.6 baseline · corrected scoring", "date": "2026-08", "model": "Qwen3.6-27B", "checkpoint": "Base model; revision 6a9e13bd", "harness": "Claude Code", "judge": "GLM-5.3", "platform": "CAGE", "status": "complete", "collection": "15 selected valid attempts after documented target repairs", "scoring": "Wrong-judge scores replaced; 39 rescore calls without errors", "planned": 15, "usable": 15, "targets": "15 of 15", "attempts_per_target": 1, "paper_metrics": {"pass_at_1": {"percent": 14.545454545454545, "coverage": "110 of 110", "qualification": "complete"}, "pass_at_3_avg": null, "pass_at_3_max": null}, "metrics": [{"label": "Known-weakness checks passed", "numerator": 16, "denominator": 110}], "note": "Includes separately documented replacements for broken target runs. The earlier 14/94 rescore still contained an invalid attempt and is not the final result.", "config": {}, "source": "https://github.com/fleet-ai/cyber-post-train/blob/codex/web-evals-dashboard-runner/docs/WEB_EVAL_RESULTS_2026-09-15.md"
     },
     {
-      "id": "chris-web-glm53-qc0223-l0-p4-20260907-v1", "name": "Historical GLM5.3 baseline · incomplete", "date": "2026-09-07", "model": "GLM5.3", "checkpoint": "Base model", "harness": "Qwen Code 0.22.3", "judge": "Not independently revalidated in this audit", "platform": "CAGE", "status": "incomplete", "collection": "Interim records only", "scoring": "No final validated full result established", "planned": 60, "usable": null, "targets": "15 intended websites", "attempts_per_target": 4, "metrics": [], "note": "An interim dashboard number is not a final model comparison.", "config": {}, "source": null
+      "id": "chris-web-glm53-qc0223-l0-p4-20260907-v1", "name": "Historical GLM5.3 baseline · incomplete", "date": "2026-09-07", "model": "GLM5.3", "checkpoint": "Base model", "harness": "Qwen Code 0.22.3", "judge": "Not independently revalidated in this audit", "platform": "CAGE", "status": "incomplete", "collection": "Interim records only", "scoring": "No final validated full result established", "planned": 60, "usable": null, "targets": "15 intended websites", "attempts_per_target": 4, "paper_metrics": {"pass_at_1": null, "pass_at_3_avg": null, "pass_at_3_max": null}, "metrics": [], "note": "An interim dashboard number is not a final model comparison.", "config": {}, "source": null
     }
   ]
 }
