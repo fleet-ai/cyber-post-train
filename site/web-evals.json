@@ -26,6 +26,64 @@
       {"model": "Kimi-2.6", "agent": "Kimi Code 1.44.0", "pass_at_1": 3.64, "pass_at_3_avg": 3.03, "pass_at_3_max": 8.18}
     ]
   },
+  "results_analysis": {
+    "summary": "Why Smoke test 1 looks much worse than the baseline, and what we can actually conclude.",
+    "lead": "The low Smoke test 1 score is real for the saved attempts, but the current evidence does not establish that supervised fine-tuning made the model worse. The two campaigns did not test the same set of websites with the same number of usable attempts, and the detailed attempt review found a large change in how long the model kept working.",
+    "verdicts": [
+      {
+        "claim": "Did Smoke test 1 genuinely score poorly?",
+        "verdict": "Yes",
+        "reason": "All 104 saved attempts were scored with the official benchmark code. The score files passed independent checks and the GPT report checker had zero errors."
+      },
+      {
+        "claim": "Did fine-tuning definitely hurt Qwen?",
+        "verdict": "Not established",
+        "reason": "The baseline and Smoke test 1 cover different incomplete slices, use four versus eight planned attempts per website, and were not run as a matched pair."
+      },
+      {
+        "claim": "Is there a concerning behavior change?",
+        "verdict": "Yes, provisionally",
+        "reason": "The fine-tuned model usually stopped after far fewer model calls, web actions and submitted findings than the available baseline traces."
+      }
+    ],
+    "comparison_limits": [
+      "The baseline has 44 usable attempts from 13 websites; Smoke test 1 has 104 from a different set of 13 websites. Only 11 websites appear in both saved sets.",
+      "The baseline Pass@3 numbers cover 71 of 110 known weaknesses. Smoke test 1 covers 100 of 110. A percentage over one incomplete slice cannot be subtracted from a percentage over another slice as if both were the full benchmark.",
+      "The baseline planned four attempts per website and Smoke test 1 planned eight. The published Pass@3 calculation handles extra attempts fairly, but the campaigns still differ in collection conditions.",
+      "The two model services were not frozen as one matched experiment. Differences in serving speed, retries or other run conditions could affect how much work the model completed.",
+      "Five Smoke test 1 attempts ended with model-service errors rather than a normal finish. They must be classified consistently before a final matched comparison."
+    ],
+    "trace_review": {
+      "scope": "The detailed behavior review covered all 104 Smoke test 1 attempts and the 25 baseline attempts for which the local audit workspace contained both a GPT score and complete model-call and tool-use records. The 25-attempt baseline sample is incomplete, so it is evidence about behavior, not a capability estimate.",
+      "observed": [
+        {"measure": "Typical number of model calls", "smoke": "91", "baseline": "295"},
+        {"measure": "Typical web command actions", "smoke": "98", "baseline": "292"},
+        {"measure": "Typical number of submitted findings", "smoke": "2", "baseline": "4"},
+        {"measure": "Attempts with any scoring credit", "smoke": "22 of 104", "baseline": "12 of 25"},
+        {"measure": "Normal finishes", "smoke": "99 of 104", "baseline": "21 of 25"}
+      ],
+      "caution": "Typical means the median: half the attempts were above it and half below it. The baseline sample contains only 25 of its 44 scored attempts and its website mix differs, so these figures should not be treated as a controlled model comparison. Time spent was also examined, but it is omitted here because waiting on different model services makes elapsed time especially misleading."
+    },
+    "explanations": [
+      "The most direct observation is lower persistence: Smoke test 1 usually searched less and submitted fewer findings before ending normally. That can lower benchmark coverage even when individual actions are reasonable.",
+      "Supervised fine-tuning teaches the student to imitate the saved Fleet training traces. It does not directly reward finding more WebExploitBench weaknesses. A change that helps on Fleet tasks can fail to transfer to a different benchmark.",
+      "How training windows were sampled may matter. If shorter or final-answer portions received too much weight, the model could learn to conclude and report sooner while receiving too little practice in long exploration. This is a plausible cause, not yet a proven one.",
+      "The fine-tuning data came from successful teacher work, but imitation can also copy the teacher's stopping and reporting style. The training loss can improve without improving the outside task score.",
+      "Different website coverage and run conditions can exaggerate or reduce the visible gap. They must be removed before assigning the difference to fine-tuning."
+    ],
+    "ruled_out": [
+      "A broken GPT scoring pass does not explain the Smoke test 1 result: all saved attempts were scored, the checker returned complete replies, and no scoring error was recorded.",
+      "The page does not count the 16 missing attempts as model failures. Every score states the number of known weaknesses it actually covers.",
+      "Selecting a favorable set of three attempts does not explain either Pass@3 value. The calculation includes every possible group of three among the usable attempts."
+    ],
+    "next_test": [
+      "Run the base model and the fine-tuned checkpoint on the same 15 websites, with the same OpenCode version, model settings, context limit, time and action limits, attempt count, serving setup and GPT scoring.",
+      "Pair results website by website and predefine how technical failures are excluded. Do not replace a failed attempt with a hand-picked favorable attempt.",
+      "Compare both security weaknesses found and behavior: model calls, web actions, submitted findings, normal stopping and technical failures.",
+      "Report the difference with uncertainty across websites. Only that matched result can support a claim that fine-tuning improved or harmed general web-exploitation ability."
+    ],
+    "conclusion": "Treat Smoke test 1 as a genuine warning, not a verdict. Its saved work is weak and notably less persistent, but the present baseline is not matched closely enough to measure the effect of fine-tuning."
+  },
   "runs": [
     {
       "id": "smoke-test-1",

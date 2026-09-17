@@ -33,6 +33,40 @@ function renderWebRows(runs) {
     </article>`).join("");
 }
 
+function renderResultsAnalysis(analysis) {
+  const verdicts = analysis.verdicts.map(item => `<article>
+    <p class="analysis-label">${escapeHtml(item.verdict)}</p>
+    <h4>${escapeHtml(item.claim)}</h4>
+    <p>${escapeHtml(item.reason)}</p>
+  </article>`).join("");
+  const observed = analysis.trace_review.observed.map(item => `<tr>
+    <th scope="row">${escapeHtml(item.measure)}</th><td>${escapeHtml(item.smoke)}</td><td>${escapeHtml(item.baseline)}</td>
+  </tr>`).join("");
+  const list = items => `<ul>${items.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`;
+
+  document.querySelector("#web-results-analysis").innerHTML = `<details class="results-analysis">
+    <summary><span>Results analysis</span><small>${escapeHtml(analysis.summary)}</small></summary>
+    <div class="analysis-body">
+      <p class="analysis-lead">${escapeHtml(analysis.lead)}</p>
+      <h3>What the evidence supports</h3>
+      <div class="analysis-verdicts">${verdicts}</div>
+      <h3>Why the headline scores are not a fair model comparison</h3>
+      ${list(analysis.comparison_limits)}
+      <h3>What the saved attempts show</h3>
+      <p>${escapeHtml(analysis.trace_review.scope)}</p>
+      <div class="analysis-observed"><table aria-label="Behavior seen in the saved attempts"><thead><tr><th>Measure</th><th>Smoke test 1</th><th>Available baseline sample</th></tr></thead><tbody>${observed}</tbody></table></div>
+      <p class="analysis-caution">${escapeHtml(analysis.trace_review.caution)}</p>
+      <h3>Best explanation at present</h3>
+      ${list(analysis.explanations)}
+      <h3>What was ruled out</h3>
+      ${list(analysis.ruled_out)}
+      <h3>The test that will settle it</h3>
+      ${list(analysis.next_test)}
+      <p class="analysis-conclusion"><strong>Current conclusion:</strong> ${escapeHtml(analysis.conclusion)}</p>
+    </div>
+  </details>`;
+}
+
 async function renderWebEvaluations() {
   try {
     const response = await fetch("web-evals.json", {cache:"no-store"});
@@ -42,6 +76,7 @@ async function renderWebEvaluations() {
     document.querySelector("#web-scope").textContent = history.scope;
     renderPaperReference(history.paper_reference);
     renderWebRows(history.runs);
+    renderResultsAnalysis(history.results_analysis);
   } catch {
     document.querySelector("#web-count").textContent = "Evaluation history could not load. Please reload; no results have been inferred.";
   }

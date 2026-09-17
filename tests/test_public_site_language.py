@@ -78,6 +78,22 @@ def test_web_page_standardizes_paper_metrics_and_quotes_published_results() -> N
     assert "metric-unavailable" not in script
 
 
+def test_web_page_has_detailed_results_analysis_behind_one_disclosure() -> None:
+    history = json.loads((ROOT / "site/web-evals.json").read_text())
+    html = (ROOT / "site/index.html").read_text()
+    script = (ROOT / "site/web-evals.js").read_text()
+    analysis = history["results_analysis"]
+
+    assert 'id="web-results-analysis"' in html
+    assert "Results analysis" in script
+    assert len(analysis["verdicts"]) == 3
+    assert len(analysis["trace_review"]["observed"]) >= 5
+    assert len(analysis["comparison_limits"]) >= 5
+    assert len(analysis["explanations"]) >= 5
+    assert len(analysis["next_test"]) >= 4
+    assert "not establish" in analysis["lead"]
+
+
 def test_public_report_does_not_reintroduce_unexplained_internal_terms() -> None:
     text = "\n".join(path.read_text().lower() for path in PUBLIC_FILES)
     unexplained_internal_phrases = {
