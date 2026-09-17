@@ -77,3 +77,39 @@ V2 is prepared under `chris-q38-t3k262-2n-can-v2`, plan SHA-256
 `6241e3cb1d0eae75fb37339911d0464661f6920ea736dc8b293c483af8f3e7ba`
 and request SHA-256
 `145fdff44eb3330eb931198beee73fc5e55c0690e29d947261a192617cddd836`.
+
+## V2 terminal result
+
+V2 was submitted exactly once as API run
+`chris-q38-t3k262-2n-can-v2-07c9e6c2`. It was bound to RayJob UID
+`4ab5bb14-c93d-4c29-97aa-fa3b32d2a66b`, Workload UID
+`d58969a2-45f5-4784-9556-ba105a74ad8a`, RayCluster UID
+`d40d468c-d2c7-42e6-a386-71346d09013e`, head Pod UID
+`26ced027-9a23-4e83-98b4-faa9ae1bc62f`, and worker Pod UID
+`cd79a9fe-aa4f-4f73-bbfc-fa186db1efa2`. Both Pods used the exact image, became
+Ready with zero restarts, and the runtime environment contained exactly
+`PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`.
+
+The run reached `device_ready` and performed sustained long-context compute on
+all 16 GPUs. GPU memory crossed several activation peaks, reaching about 272
+GiB per GPU, then falling and rising again across the four required gradient
+accumulation rounds. It survived beyond V1's failure duration, demonstrating
+that expandable segments fixed the first fragmentation failure. Nevertheless,
+the Ray job terminally failed at 2026-09-17T06:25:41Z with a nested
+out-of-memory error. The W&B terminal summary reported optimizer counter 1,
+but no durable `PROGRESS.json`, checkpoint receipt or planned-pause receipt was
+committed. The counter therefore cannot be treated as an accepted optimizer
+update and V2 produced no reusable checkpoint.
+
+The Workload is terminally `Finished/Failed`; the RayCluster and both Pods are
+gone, so all 16 GPUs were released. A read-only CPU observer did not finish
+pulling the pinned image within its five-minute deadline and was deleted. No
+further observer or training successor was submitted after the operator asked
+that nothing new be launched.
+
+The two-node, exact-262k, full-parameter shape is therefore **not qualified**.
+The next experiment must be a separately reviewed memory intervention, not an
+unchanged retry. The highest-information candidates are persistent optimizer
+state offload (the closest transferable part of Neeraj's Miles recipe) and a
+smaller exact context ceiling. Either change needs its own one-step canary and
+cannot inherit V1/V2 acceptance.
