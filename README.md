@@ -11,8 +11,10 @@ Preview locally:
 python3 -m http.server 8080 --directory site
 ```
 
-The deployed site is served from the repository's `gh-pages` branch. Update
-`report-data.js`, review the rendered pages, then publish the exact static files.
+The deployed site is served from the repository's `gh-pages` branch. WEB history
+is in `web-evals.json`; `web-evals.js` renders its searchable results and settings.
+Update the evidence date and supporting records, review the rendered pages, then
+publish the exact static files. This is a reviewed snapshot, not a live API feed.
 
 ## Writing standard
 
