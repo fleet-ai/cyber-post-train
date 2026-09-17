@@ -28,10 +28,10 @@
         <div class="hero ruled">
           <p class="eyebrow">WebExploitBench · results and progress</p>
           <h1 id="web-evals-title">WebExploitBench evaluations.</h1>
-          <p class="dek">What ran, which model answered, which program gave it tools, and which AI checked its reports. Completed results, partial evidence and technical failures stay separate.</p>
+          <p class="dek">Two checked Qwen3.8 results, shown in the same format as the original paper. We only display evaluations that have scores.</p>
           <div class="hero-meta"><span id="web-updated">Loading evidence date…</span><a href="web-evals.json">Download the public records</a></div>
         </div>
-        <aside class="finding"><span class="finding-label">Latest checked result</span><p>Fresh75's provisional Pass@3 result covers 104 scored attempts on 13 of 15 websites: 3.13% average success and 4.96% success at least once within three attempts. The missing two websites are still being recovered, so these are not final benchmark numbers.</p></aside>
+        <aside class="finding"><span class="finding-label">Latest checked result</span><p>Smoke test 1 covers 104 scored attempts on 13 of 15 websites: 3.13% average success and 4.96% success at least once within three attempts. The missing two websites are still being recovered, so these are not final benchmark numbers.</p></aside>
         <section class="section" aria-labelledby="paper-results-title">
           <div class="section-heading"><p class="section-index">01</p><div><h2 id="paper-results-title">Results published with the benchmark.</h2><p>The original paper reports the same three measures for every model at Level 0. These numbers are useful context, but the models used different agent programs, so they are not matched comparisons with our OpenCode runs.</p></div></div>
           <div class="comparison-table-wrap">
@@ -44,9 +44,16 @@
           <p class="source-links"><a id="paper-reference-link" href="https://arxiv.org/html/2606.14295v1">Read the original paper</a></p>
         </section>
         <section class="section compact" aria-labelledby="web-history-title">
-          <div class="section-heading"><p class="section-index">02</p><div><h2 id="web-history-title">Evaluation history</h2><p id="web-scope"></p></div></div>
-          <div class="web-help"><p><strong>Collection</strong> is the model working on a website and saving its actions and reports. <strong>Scoring</strong> checks that saved work afterward. A failed report-checking AI does not require another model attempt.</p><p><strong>Pass@1</strong> is the share found in one designated attempt. <strong>Pass@3 (Avg.)</strong> averages success across three attempts. <strong>Pass@3 (Max)</strong> is the share found at least once within those three attempts. Every campaign below uses these same columns. “Not available” means the saved evidence cannot support that measure; it never means zero.</p><p>Our current Fresh75 campaign ran eight attempts. Its Pass@3 values average every possible group of three, so no favorable group is hand-picked. A partial result always states exactly how many of the benchmark's 110 known weaknesses it covers.</p></div>
-          <div class="web-filters"><label>Find a model or campaign<input type="search" id="web-search" placeholder="e.g. GPT, fresh75, OpenCode"></label><label>Result type<select id="web-status"><option value="">All records</option><option value="active">Running now</option><option value="complete">Complete results</option><option value="partial">Partial results</option><option value="invalid">Invalid scoring</option><option value="incomplete">Incomplete</option><option value="test">Small tests</option><option value="planned">Not launched</option></select></label></div>
+          <div class="section-heading"><p class="section-index">02</p><div><h2 id="web-history-title">What the three scores mean</h2><p>Each percentage counts known security weaknesses, not websites. Higher is better.</p></div></div>
+          <div class="metric-explainer">
+            <article><h3>Pass@1</h3><p>Use one designated attempt. Report the percentage of known weaknesses it found.</p></article>
+            <article><h3>Pass@3 (Avg.)</h3><p>Run three attempts separately and average their three success rates. This describes a typical attempt.</p></article>
+            <article><h3>Pass@3 (Max)</h3><p>Count a weakness if any of the three attempts found it. This describes their combined coverage.</p></article>
+          </div>
+          <p class="footnote">Pass@3 (Max) is normally higher because different attempts can find different weaknesses. When more than three attempts were saved, we include every possible group of three rather than choosing the best group.</p>
+        </section>
+        <section class="section compact" aria-labelledby="our-web-results-title">
+          <div class="section-heading"><p class="section-index">03</p><div><h2 id="our-web-results-title">Our Qwen3.8 results</h2><p id="web-scope"></p></div></div>
           <p id="web-count" aria-live="polite">Loading evaluations…</p><div id="web-campaigns"></div>
         </section>
       </section>
