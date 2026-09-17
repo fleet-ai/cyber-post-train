@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-09-16",
+  "updated_at": "2026-09-17",
   "scope": "A checked history, not a live cloud dashboard. A missing result is never counted as a model failure. Different models, judges, agent programs and attempt budgets are not directly comparable.",
   "runs": [
     {
@@ -40,28 +40,40 @@
       "source": "https://github.com/fleet-ai/cyber-post-train/blob/codex/web-evals-dashboard-runner/docs/WEB_EVAL_RESULTS_2026-09-15.md"
     },
     {
-      "id": "fresh75-step230-opencode-web-p8-v2",
-      "name": "Fresh75 checkpoint · pass@8 evaluation",
-      "date": "2026-09-16",
+      "id": "fresh75-step230-opencode-web-p8-v3",
+      "name": "Fresh75 checkpoint · provisional Pass@3 result",
+      "date": "2026-09-17",
       "model": "Qwen3.8-27B",
       "checkpoint": "Fresh75 final step 230",
       "harness": "OpenCode 1.18.27",
-      "judge": "Not scored during collection",
-      "platform": "Tensorlake",
-      "status": "active",
-      "collection": "Task-0 safety check running before the remaining websites fan out",
-      "scoring": "Not started; scoring is deliberately separate",
+      "judge": "GPT-5.5-2026-04-23",
+      "platform": "Tensorlake collection; separate GPT scoring",
+      "status": "partial",
+      "collection": "104 usable attempts across 13 of 15 websites; 16 attempts are still being recovered",
+      "scoring": "104 saved attempts scored; all 13 result bundles independently verified; no scoring failures",
       "planned": 120,
-      "usable": null,
-      "targets": "15 intended websites",
+      "usable": 104,
+      "targets": "13 of 15",
       "attempts_per_target": 8,
-      "metrics": [],
-      "note": "This run plans eight independent attempts on each of 15 websites. No performance number is shown while collection is in progress. Saved attempts will remain available even if later scoring has a problem.",
+      "metrics": [
+        {"label": "Pass@3 (Avg.), provisional", "percent": 3.125},
+        {"label": "Pass@3 (Max), provisional", "percent": 4.9642857142857135}
+      ],
+      "note": "This is a provisional result, not the full benchmark. It covers 100 of 110 known weaknesses on 13 websites. For each weakness, we calculated every possible three-attempt group among the eight saved attempts, so no favorable group was hand-picked. The result will be recalculated when the remaining 16 attempts arrive.",
       "config": {
-        "Campaign": "fresh75-step230-opencode-web-p8-v2",
+        "Campaign": "fresh75-step230-opencode-web-p8-v3",
+        "Benchmark": "WebExploitBench Level 0; 15 websites intended",
+        "Benchmark revision": "7f97d87fa8ab728260c0ba9b09b9c8f00bb82ad5",
+        "Evaluation program (CAGE) revision": "09a191c565230cebb8255899d622d23c7ddeff33",
+        "Model context limit, tokens": 262144,
+        "Temperature": 0,
         "Maximum simultaneous website workers": 8,
-        "Scoring during collection": "Disabled",
-        "Launch-plan SHA-256": "c673cfac5cce412f1018009a7c2cd025d98fea0238b9bb3df4bbc2e002f6d864"
+        "Scoring during collection": "Disabled; saved attempts were scored later",
+        "Scored attempts": "104 of 120 planned",
+        "Eligible known weaknesses": "100 of 110",
+        "Pass@3 calculation": "Average across every possible group of three from each website's eight attempts",
+        "Scoring errors": 0,
+        "Launch-plan SHA-256": "dc1624529136dfbd3aba1d6f0b858c9d7c1c30d8f8e2acbc3c7fa72072a149fb"
       },
       "source": "https://github.com/fleet-ai/cyber-post-train/blob/codex/web-evals-dashboard-runner/docs/WEB_EVAL_RESULTS_2026-09-15.md"
     },

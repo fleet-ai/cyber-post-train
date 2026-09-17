@@ -112,16 +112,36 @@ improvement. The historical base-model result used pass@4 and came from a
 different execution campaign. A matched base-model control using the same
 collection and scoring settings is required for a lift claim.
 
-A new Fresh75 pass@8 campaign,
-`fresh75-step230-opencode-web-p8-v2`, is collecting eight independent attempts
-per website (120 planned attempts). Its task-0 safety check runs before the
-remaining sites fan out. Scoring remains disabled during collection and will be
-performed from the saved attempts afterward.
+## Fresh75 step 230, provisional Pass@3 from the pass@8 campaign
+
+The wider campaign `fresh75-step230-opencode-web-p8-v3` has produced 104 usable
+attempts across 13 of 15 websites. All 104 saved attempts were scored separately
+with `gpt-5.5-2026-04-23`, and all 13 scoring results passed an independent
+integrity check with zero scoring failures.
+
+| Quantity | Provisional verified value |
+| --- | --- |
+| Student | Qwen3.8-27B, Fresh75 final step 230 |
+| Agent program | OpenCode 1.18.27 |
+| Attempts | 104/120 usable; eight on each of 13 websites |
+| Judge | `gpt-5.5-2026-04-23` |
+| Benchmark coverage | 100/110 known weaknesses; 13/15 websites |
+| Pass@3 (Avg.) | 3.125% |
+| Pass@3 (Max) | 4.9643% |
+
+These are **partial-coverage, provisional numbers**, not a full benchmark
+result. The calculation follows the paper's two Pass@3 views. Pass@3 (Avg.) is
+the average success rate across attempts. Pass@3 (Max) counts a known weakness
+as found when at least one of three attempts finds it. Because this campaign has
+eight attempts per website rather than exactly three, the calculation averages
+over every possible three-attempt group among those eight attempts. This avoids
+hand-picking a favorable trio. The numbers will be recomputed after the final 16
+attempts from the remaining two websites are available and scored.
 
 ## What remains
 
-The current pass@8 run measures Fresh75's predeclared final step230 with wider
-sampling. The next scientific comparison should run a base-model control with
+The current pass@8 run still needs the final 16 attempts from two websites. The
+next scientific comparison should run a base-model control with
 the same OpenCode, task, attempt-budget and scoring settings. The historical
 GPT-rescored partial baseline is useful history, but it is not a matched control
 for this run.

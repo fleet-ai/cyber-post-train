@@ -44,6 +44,19 @@ def test_web_results_separate_partial_rescore_from_invalid_original() -> None:
         "numerator": 3,
         "denominator": 110,
     }
+    fresh75_pass8 = next(
+        run for run in history["runs"] if run["id"] == "fresh75-step230-opencode-web-p8-v3"
+    )
+    assert (fresh75_pass8["status"], fresh75_pass8["usable"], fresh75_pass8["planned"]) == (
+        "partial",
+        104,
+        120,
+    )
+    assert fresh75_pass8["targets"] == "13 of 15"
+    assert fresh75_pass8["metrics"] == [
+        {"label": "Pass@3 (Avg.), provisional", "percent": 3.125},
+        {"label": "Pass@3 (Max), provisional", "percent": 4.9642857142857135},
+    ]
     for run in history["runs"]:
         if run["status"] in {"active", "invalid", "planned", "incomplete"}:
             assert run["metrics"] == []
