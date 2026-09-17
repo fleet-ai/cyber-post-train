@@ -21,6 +21,12 @@ new cluster submissions or imply that every model/backend is qualified.
 
 ## Training
 
+Plan a small evidence-based study before launching a sweep:
+[literature-informed experiment generator](docs/TRAINING_DECISION_SPACE.md).
+`node scripts/plan-experiments.cjs --stage first` emits three research
+specifications without contacting the cluster. The matching reusable skill is
+[`literature-informed-experiments`](skills/literature-informed-experiments/SKILL.md).
+
 Use one editable YAML file for model/data manifests, hyperparameters, resources
 and W&B. The [training guide](docs/TRAINING.md) explains the fields and gates.
 

@@ -14,6 +14,7 @@ Read this file before acting. Then select only the skill matching the work and r
 | Design, launch, or interpret matched evaluations | [`cyber-eval-parity`](skills/cyber-eval-parity/SKILL.md) |
 | Diagnose a job or assemble status/terminal evidence | [`cyber-run-evidence`](skills/cyber-run-evidence/SKILL.md) |
 | Convert a lesson into code, tests, docs, or agent guidance | [`cyber-experiment-maintainer`](skills/cyber-experiment-maintainer/SKILL.md) |
+| Research and prioritize compute-budgeted experiment proposals (no launch) | [`literature-informed-experiments`](skills/literature-informed-experiments/SKILL.md) |
 | Observe, drain, release, or replace experiment-owned dedicated GPU capacity | [`cyber-gpu-steward`](skills/cyber-gpu-steward/SKILL.md) |
 
 Before creating any Kubernetes Job, RayJob, or persistent inference service on the
