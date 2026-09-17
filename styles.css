@@ -39,6 +39,28 @@
 .metric-explainer { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; margin: 24px 0; border: 1px solid var(--line); background: var(--line); }
 .metric-explainer article { padding: 22px; background: var(--white); }
 .metric-explainer h3 { margin-top: 0; }
+.results-analysis { margin: 34px 0 0; border: 1px solid var(--green); background: var(--white); }
+.results-analysis > summary { display: grid; grid-template-columns: 190px 1fr; gap: 18px; align-items: center; padding: 20px 22px; cursor: pointer; }
+.results-analysis > summary::marker { color: var(--orange); }
+.results-analysis > summary span { color: var(--green); font-weight: 750; }
+.results-analysis > summary small { color: var(--muted); font-size: .86rem; }
+.analysis-body { padding: 30px; border-top: 1px solid var(--line); }
+.analysis-body h3 { margin: 38px 0 14px; font-family: Georgia, "Times New Roman", serif; font-size: 1.45rem; font-weight: 400; }
+.analysis-lead { max-width: 880px; margin: 0; font-family: Georgia, "Times New Roman", serif; font-size: 1.35rem; line-height: 1.4; }
+.analysis-verdicts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; border: 1px solid var(--line); background: var(--line); }
+.analysis-verdicts article { padding: 20px; background: var(--white); }
+.analysis-verdicts h4 { margin: 6px 0 10px; font-size: 1rem; }
+.analysis-verdicts p { margin: 0; color: var(--muted); font-size: .86rem; }
+.analysis-verdicts .analysis-label { color: var(--orange); font-size: .7rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
+.analysis-body li { margin: 9px 0; }
+.analysis-observed { margin: 20px 0 10px; overflow-x: auto; border: 1px solid var(--line); }
+.analysis-observed table { min-width: 670px; }
+.analysis-observed thead { background: var(--green); color: white; }
+.analysis-observed thead th { color: white; }
+.analysis-observed tbody th { color: var(--muted); font-weight: 400; }
+.analysis-observed td { font-weight: 650; }
+.analysis-caution { color: var(--muted); font-size: .8rem; }
+.analysis-conclusion { margin: 34px 0 0; padding: 20px; border-left: 3px solid var(--orange); background: var(--green-soft); }
 @media (max-width: 760px) {
   .web-config { grid-template-columns: 1fr 1fr; }
   .web-stages, .web-detail div { grid-template-columns: 1fr; gap: 0; }
@@ -46,6 +68,9 @@
   .web-campaign-heading { flex-direction: column; }
   .metric-explainer { grid-template-columns: 1fr; }
   .web-campaign { padding: 20px; }
+  .results-analysis > summary { grid-template-columns: 1fr; gap: 4px; }
+  .analysis-body { padding: 22px; }
+  .analysis-verdicts { grid-template-columns: 1fr; }
   .site-header { height: auto !important; min-height: 72px; grid-template-columns: 1fr !important; gap: 10px; padding-block: 12px; }
   .tabs { gap: 16px; height: 38px; overflow-x: auto; white-space: nowrap; }
   .edition { display: none; }
