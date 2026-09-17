@@ -1,10 +1,4 @@
 /* Public, aggregate-only campaign history. No credentials or private trace URLs. */
-const webStatuses = {
-  active: "Running now",
-  complete: "Complete result", partial: "Partial result", invalid: "Invalid scoring",
-  incomplete: "Incomplete / needs checking", test: "Small system test", planned: "Not launched"
-};
-
 const paperMetricLabels = {
   pass_at_1: "Pass@1",
   pass_at_3_avg: "Pass@3 (Avg.)",
@@ -12,7 +6,6 @@ const paperMetricLabels = {
 };
 
 function standardizedMetric(key, metric) {
-  if (!metric) return `<div><dt>${paperMetricLabels[key]}</dt><dd class="metric-unavailable">Not available</dd><small>Saved evidence cannot support this measure.</small></div>`;
   return `<div><dt>${paperMetricLabels[key]}</dt><dd>${Number(metric.percent).toFixed(2)}%</dd><small>${escapeHtml(metric.coverage)} weaknesses · ${escapeHtml(metric.qualification)}</small></div>`;
 }
 
@@ -26,15 +19,10 @@ function renderPaperReference(paper) {
 }
 
 function renderWebRows(runs) {
-  const search = document.querySelector("#web-search").value.toLowerCase();
-  const status = document.querySelector("#web-status").value;
-  const selected = runs.filter(run => (!status || run.status === status) &&
-    [run.name, run.id, run.model, run.harness, run.judge].join(" ").toLowerCase().includes(search));
-  document.querySelector("#web-count").textContent = `${selected.length} of ${runs.length} campaign records or repair groups`;
-  document.querySelector("#web-campaigns").innerHTML = selected.map(run => `
+  document.querySelector("#web-count").textContent = `${runs.length} checked results`;
+  document.querySelector("#web-campaigns").innerHTML = runs.map(run => `
     <article class="web-campaign" id="web-${escapeHtml(run.id)}">
-      <div class="web-campaign-heading"><div><p class="eyebrow">${escapeHtml(run.date)}</p><h3>${escapeHtml(run.name)}</h3></div>
-        <span class="web-status ${escapeHtml(run.status)}">${escapeHtml(webStatuses[run.status])}</span></div>
+      <div class="web-campaign-heading"><div><p class="eyebrow">${escapeHtml(run.date)} · partial coverage</p><h3>${escapeHtml(run.name)}</h3></div></div>
       <dl class="web-config"><div><dt>Model</dt><dd>${escapeHtml(run.model)}</dd></div><div><dt>Agent program</dt><dd>${escapeHtml(run.harness)}</dd></div><div><dt>Report-checking AI</dt><dd>${escapeHtml(run.judge)}</dd></div><div><dt>Websites covered</dt><dd>${escapeHtml(run.targets)}</dd></div></dl>
       <div class="web-stages"><p><strong>Collection</strong> ${escapeHtml(run.collection)}</p><p><strong>Scoring</strong> ${escapeHtml(run.scoring)}</p></div>
       <dl class="web-metrics">${Object.entries(paperMetricLabels).map(([key]) => standardizedMetric(key, run.paper_metrics[key])).join("")}</dl>
@@ -42,7 +30,7 @@ function renderWebRows(runs) {
       <details><summary>Settings and evidence</summary><dl class="web-detail">
         ${Object.entries({"Campaign ID":run.id,"Checkpoint":run.checkpoint,"Execution platform":run.platform,"Planned attempts":run.planned ?? "Not established","Usable attempts":run.usable ?? "Not established","Planned attempts per website":run.attempts_per_target ?? "Not frozen / varies",...run.config}).map(([k,v]) => `<div><dt>${escapeHtml(k)}</dt><dd>${escapeHtml(Array.isArray(v) ? v.join("; ") : v)}</dd></div>`).join("")}
       </dl>${run.source ? `<p><a href="${escapeHtml(run.source)}">Read the supporting record</a> · Repository access may be required.</p>` : "<p>No public supporting record yet; no score is claimed.</p>"}</details>
-    </article>`).join("") || "<p>No matching campaigns.</p>";
+    </article>`).join("");
 }
 
 async function renderWebEvaluations() {
@@ -53,7 +41,6 @@ async function renderWebEvaluations() {
     document.querySelector("#web-updated").textContent = `Last evidence review: ${history.updated_at}`;
     document.querySelector("#web-scope").textContent = history.scope;
     renderPaperReference(history.paper_reference);
-    for (const id of ["web-search", "web-status"]) document.querySelector(`#${id}`).addEventListener("input", () => renderWebRows(history.runs));
     renderWebRows(history.runs);
   } catch {
     document.querySelector("#web-count").textContent = "Evaluation history could not load. Please reload; no results have been inferred.";

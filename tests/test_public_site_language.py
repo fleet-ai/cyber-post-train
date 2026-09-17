@@ -14,62 +14,44 @@ PUBLIC_FILES = [
 ]
 
 
-def test_web_results_separate_partial_rescore_from_invalid_original() -> None:
+def test_web_page_only_shows_two_scored_qwen_results() -> None:
     history = json.loads((ROOT / "site/web-evals.json").read_text())
-    assert len(history["runs"]) == len({run["id"] for run in history["runs"]})
-    rescore = next(
-        run for run in history["runs"] if run["id"] == "chris-wbe-q38-opencode-v12-gpt55-rescore-v1"
-    )
-    assert rescore["judge"] == "GPT-5.5-2026-04-23"
-    assert (rescore["status"], rescore["usable"], rescore["planned"]) == ("partial", 44, 60)
-    assert rescore["metrics"][0] == {
-        "label": "Known-weakness checks passed",
-        "numerator": 45,
-        "denominator": 278,
-    }
-    original = next(
-        run for run in history["runs"] if run["id"] == rescore["config"]["Source campaign"]
-    )
-    assert original["status"] == "invalid" and original["metrics"] == []
-    fresh75 = next(
-        run for run in history["runs"] if run["id"] == "fresh75-step230-opencode-web-p1-gpt55-v1"
-    )
-    assert (fresh75["status"], fresh75["usable"], fresh75["planned"]) == (
-        "complete",
-        15,
-        15,
-    )
-    assert fresh75["metrics"][0] == {
-        "label": "Known-weakness checks passed",
-        "numerator": 3,
-        "denominator": 110,
-    }
-    fresh75_pass8 = next(
-        run for run in history["runs"] if run["id"] == "fresh75-step230-opencode-web-p8-v3"
-    )
-    assert (fresh75_pass8["status"], fresh75_pass8["usable"], fresh75_pass8["planned"]) == (
-        "partial",
-        104,
-        120,
-    )
-    assert fresh75_pass8["targets"] == "13 of 15"
-    assert fresh75_pass8["metrics"] == [
-        {"label": "Pass@3 (Avg.), provisional", "percent": 3.125},
-        {"label": "Pass@3 (Max), provisional", "percent": 4.9642857142857135},
+    assert [run["name"] for run in history["runs"]] == [
+        "Smoke test 1",
+        "Baseline Qwen3.8-27B",
     ]
+    smoke, baseline = history["runs"]
+    assert (smoke["status"], smoke["usable"], smoke["planned"]) == ("partial", 104, 120)
+    assert smoke["paper_metrics"]["pass_at_3_avg"]["percent"] == 3.125
+    assert smoke["paper_metrics"]["pass_at_3_max"]["percent"] == 4.9642857142857135
+    assert (baseline["status"], baseline["usable"], baseline["planned"]) == (
+        "partial",
+        44,
+        60,
+    )
+    assert baseline["paper_metrics"] == {
+        "pass_at_1": {"percent": 9.25925925925926, "coverage": "54 of 110", "qualification": "partial coverage"},
+        "pass_at_3_avg": {"percent": 14.666666666666666, "coverage": "71 of 110", "qualification": "partial coverage"},
+        "pass_at_3_max": {"percent": 24.0, "coverage": "71 of 110", "qualification": "partial coverage"},
+    }
     for run in history["runs"]:
-        if run["status"] in {"active", "invalid", "planned", "incomplete"}:
-            assert run["metrics"] == []
         assert all(run[key] for key in ("id", "model", "checkpoint", "harness", "judge"))
+        assert all(run["paper_metrics"].values())
 
 
-def test_web_page_has_search_configs_and_explicit_static_status() -> None:
+def test_web_page_is_small_and_explains_the_metrics() -> None:
     html = (ROOT / "site/index.html").read_text()
+    web_page = html.split('data-tab-page="web-evals"', 1)[1].split(
+        'data-tab-page="webexploitbench"', 1
+    )[0]
     script = (ROOT / "site/web-evals.js").read_text()
     history = json.loads((ROOT / "site/web-evals.json").read_text())
-    assert 'id="web-search"' in html and 'id="web-status"' in html
+    assert 'id="web-search"' not in html and 'id="web-status"' not in html
+    assert "What the three scores mean" in html
+    assert "Smoke test 1" in web_page
+    assert "Fresh75" not in web_page
     assert "Settings and evidence" in script
-    assert "not a live cloud dashboard" in history["scope"]
+    assert "Two checked Qwen3.8 results" in history["scope"]
 
 
 def test_web_page_standardizes_paper_metrics_and_quotes_published_results() -> None:
@@ -93,7 +75,7 @@ def test_web_page_standardizes_paper_metrics_and_quotes_published_results() -> N
     )
     assert all(set(run["paper_metrics"]) == keys for run in history["runs"])
     assert 'id="paper-reference-body"' in html
-    assert "Not available" in script
+    assert "metric-unavailable" not in script
 
 
 def test_public_report_does_not_reintroduce_unexplained_internal_terms() -> None:
