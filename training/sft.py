@@ -230,6 +230,10 @@ def topology_canary(parent: dict, *, name: str, output_root: str, nodes: int) ->
     plan["wandb"]["tags"] = [
         tag for tag in plan["wandb"].get("tags", []) if not tag.endswith("-node-fsdp")
     ] + [f"{nodes}-node-fsdp", "topology-only-canary"]
+    # Long, differently sized activation buffers can leave enough total HBM
+    # stranded across allocator segments to reject the next full hidden-state
+    # tensor. This changes allocation strategy, not model arithmetic.
+    plan["cuda_allocator"] = "expandable_segments:True"
     validate_plan(plan, check_files=False)
     validate_request(job_request(plan))
     return plan
@@ -241,6 +245,8 @@ def job_request(plan: dict) -> dict:
     This avoids a separate GPU or cluster Job just to copy a Python script.
     The bundle is checked before unpacking into a create-once owned directory.
     """
+    if plan.get("cuda_allocator") not in (None, "expandable_segments:True"):
+        raise ValueError("unsupported CUDA allocator configuration")
     runtime = Path(__file__).with_name("sft_runtime.py").read_bytes()
     if hashlib.sha256(runtime).hexdigest() != plan["runtime_sha256"]:
         raise ValueError("local runtime changed since this plan was compiled")
@@ -300,6 +306,11 @@ def job_request(plan: dict) -> dict:
         "secrets": ["wandb-api"],
         "env": {
             "CYBER_SFT_BUNDLE": base64.b64encode(compressed).decode(),
+            **(
+                {"PYTORCH_CUDA_ALLOC_CONF": plan["cuda_allocator"]}
+                if "cuda_allocator" in plan
+                else {}
+            ),
             **(
                 {"PYTHONPATH": str(Path(plan["output_root"]) / ".runtime")}
                 if "extra_files" in contents

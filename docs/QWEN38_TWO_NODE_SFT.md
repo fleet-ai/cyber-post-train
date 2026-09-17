@@ -46,3 +46,34 @@ loader behavior, tokenization, and target accounting: 112 windows, 27 tasks and
 
 This preflight rules out source, packaging, binding and data defects. Only a
 real two-node GPU canary can determine peak memory and distributed runtime fit.
+
+## V1 result and bounded successor
+
+V1 reached `device_ready`, loaded and actively used all 16 GPUs, and spent about
+44 minutes in the first accumulated training step with zero restarts. It peaked
+near 271 GiB per GPU. The sanitized failure receipt then recorded a CUDA
+out-of-memory error in backward recomputation of the Qwen MLP. No progress or
+checkpoint receipt was committed, so V1 is failed capacity evidence—not a
+successful optimizer update.
+
+The failed allocation was 2.50 GiB with 2.00 GiB physically free while PyTorch
+held 9.10 GiB reserved but unused. The exact runtime recommended expandable
+allocator segments for this fragmentation signature. V2 therefore changes only
+the allocator to `expandable_segments:True`; all model, data, objective,
+context, batch, learning-rate and checkpoint settings remain identical. If V2
+cannot commit a finite step and checkpoint, two-node 262k SFT remains blocked
+pending a separately reviewed memory change such as optimizer offload.
+
+V1 run evidence is bound to API run
+`chris-q38-t3k262-2n-can-v1-7cc622e0`, RayJob UID
+`acfc81f3-5bb9-43f0-9be1-ee01f7c45a77`, Workload UID
+`6404bae8-1c81-4b09-9f60-6c7a7b17db19`, failure receipt SHA-256
+`8b9f1d21fd6d5c852d016ebc3cf07fd3933bf72b794cfa9ca6f4c3160d61385f`,
+and failure-stage receipt SHA-256
+`03a62045ce6faff4560c2f676269dc90c3c6af381c7288f1d299a74f72594a5b`.
+Its Workload is terminally `Finished/Failed`; its RayCluster and Pods are gone.
+
+V2 is prepared under `chris-q38-t3k262-2n-can-v2`, plan SHA-256
+`6241e3cb1d0eae75fb37339911d0464661f6920ea736dc8b293c483af8f3e7ba`
+and request SHA-256
+`145fdff44eb3330eb931198beee73fc5e55c0690e29d947261a192617cddd836`.

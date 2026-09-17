@@ -207,7 +207,10 @@ def test_topology_canary_changes_only_allocation_identity_and_pause(config, tmp_
     assert plan["output_root"] == "/mnt/sfs/jobs/q38-two-node-canary"
     assert "8-node-fsdp" not in plan["wandb"]["tags"]
     assert plan["wandb"]["tags"][-2:] == ["2-node-fsdp", "topology-only-canary"]
-    assert sft.job_request(plan)["workers"] == 2
+    request = sft.job_request(plan)
+    assert request["workers"] == 2
+    assert plan["cuda_allocator"] == "expandable_segments:True"
+    assert request["env"]["PYTORCH_CUDA_ALLOC_CONF"] == "expandable_segments:True"
     assert parent["recipe"]["nodes"] == 8
 
 
