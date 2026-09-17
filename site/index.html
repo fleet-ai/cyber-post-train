@@ -227,87 +227,60 @@
 
       <section class="page" data-tab-page="experiment-map" aria-labelledby="map-title" hidden>
         <div class="hero ruled">
-          <p class="eyebrow">Ranked research queue · Qwen3.8-27B</p>
-          <h1 id="map-title">The training runs, in the order we should do them.</h1>
-          <p class="dek">There are two tables: one for learning from saved successful attempts (SFT), and one for learning from new attempts that receive a score (RL). Every row is one concrete run. Every column is a setting that could change the result.</p>
-          <div class="hero-meta">
-            <span>Goal: better blackbox security performance</span>
-            <span>Higher rows should run first</span>
-            <span>Scroll sideways to see every setting</span>
-            <span>Updated 15 September 2026</span>
-          </div>
+          <p class="eyebrow">Literature-informed experiments · Qwen3.8-27B</p>
+          <h1 id="map-title">Fewer runs.<br>Better questions.</h1>
+          <p class="dek">A research plan, not a giant grid. Start from the closest published recipes, test meaningful alternatives, and spend more only when held-out task results justify it.</p>
+          <div class="hero-meta"><span>15 SFT proposals · 4 RL proposals</span><span>8 essential columns</span><span>Research reviewed 16 September 2026</span></div>
         </div>
+        <aside class="finding"><span class="finding-label">The first three runs</span><p>All eligible teacher data. Two passes. Batch 16. Compare learning rates of 5×10⁻⁶, 2×10⁻⁵ and 1×10⁻⁶ before narrowing the search.</p></aside>
 
-        <aside class="finding" aria-label="How the runs are ranked">
-          <span class="finding-label">How the order was chosen</span>
-          <p>Early runs answer the biggest questions with the fewest GPUs. Later runs tune smaller details or test whether a promising result repeats.</p>
-        </aside>
-
-        <section class="section" aria-labelledby="sft-plan-title">
-          <div class="section-heading">
-            <p class="section-index">01</p>
-            <div><h2 id="sft-plan-title">SFT experiment queue</h2><p>Supervised fine-tuning (SFT) teaches the model to predict the useful actions in saved successful attempts. The first rows compare what examples to learn from before spending many runs tuning smaller numerical settings.</p></div>
-          </div>
-          <div class="plan-key" aria-label="Table guide">
-            <span><i class="key-change" aria-hidden="true"></i>A shaded cell differs from the table’s standard setup.</span>
-            <span>Select any column title to read its plain-language meaning.</span>
-          </div>
-          <p id="sft-column-help" class="column-help" aria-live="polite">Select a column title to see what that setting means.</p>
-          <p id="sft-run-count" class="decision-count"></p>
-          <div id="sft-plan-table" class="experiment-table-wrap" tabindex="0" aria-label="Scrollable SFT experiment plan"></div>
-        </section>
-
-        <section class="section" aria-labelledby="rl-plan-title">
-          <div class="section-heading">
-            <p class="section-index">02</p>
-            <div><h2 id="rl-plan-title">RL experiment queue</h2><p>Reinforcement learning (RL) lets the model try a task, receive a score from the task’s real checker, and update toward attempts that scored better. The first rows prove the full loop works before larger or more adventurous runs.</p></div>
-          </div>
-          <div class="plan-key" aria-label="Table guide">
-            <span><i class="key-change" aria-hidden="true"></i>A shaded cell differs from the table’s standard setup.</span>
-            <span>Select any column title to read its plain-language meaning.</span>
-          </div>
-          <p id="rl-column-help" class="column-help" aria-live="polite">Select a column title to see what that setting means.</p>
-          <p id="rl-run-count" class="decision-count"></p>
-          <div id="rl-plan-table" class="experiment-table-wrap" tabindex="0" aria-label="Scrollable RL experiment plan"></div>
-        </section>
-
-        <section class="section" aria-labelledby="reading-title">
-          <div class="section-heading">
-            <p class="section-index">03</p>
-            <div><h2 id="reading-title">How to read the order</h2><p>These are ranked experiment plans, not claims that the listed settings are already best.</p></div>
-          </div>
-          <div class="gate-grid reading-grid">
-            <article><span class="gate-number">1</span><h3>Compare the source of learning</h3><p>First compare strong-teacher attempts, Qwen’s own successes, and a mixture while keeping the exact same task families, each family’s training weight, total training amount, and optimizer settings matched.</p></article>
-            <article><span class="gate-number">2</span><h3>Find a stable numerical range</h3><p>Then vary learning rate, batch size, episode group size, and number of passes widely enough to find both under-training and instability.</p></article>
-            <article><span class="gate-number">3</span><h3>Refine the winning design</h3><p>Only after a clear winner appears should we tune window extraction, task sampling, reward details, and longer training.</p></article>
-            <article><span class="gate-number">4</span><h3>Confirm before the final test</h3><p>Repeat finalists on a second balanced split or random seed. Keep the final Fleet tasks untouched. WebExploitBench is a report-only transfer check: it never selects a recipe, checkpoint, or finalist.</p></article>
-          </div>
-        </section>
-
-        <section class="section" aria-labelledby="map-sources-title">
-          <div class="section-heading">
-            <p class="section-index">04</p>
-            <div>
-              <h2 id="map-sources-title">Where the suggested ranges came from</h2>
-              <p>These papers and the working Fleet training code give us sensible starting points. They do not prove that a setting will work on long web-security tasks; every row must earn its place on Fleet’s development tasks.</p>
-              <div class="source-links">
-                <a href="https://arxiv.org/abs/2505.09388">Qwen3 training report</a>
-                <a href="https://arxiv.org/abs/2203.14465">Learning from successful self-attempts</a>
-                <a href="https://arxiv.org/abs/2402.03300">GRPO training method</a>
-                <a href="https://arxiv.org/abs/2503.14476">RL with better reward-group selection</a>
-                <a href="https://arxiv.org/abs/2411.15124">Training and testing on separate task sets</a>
-                <a href="https://github.com/fleet-ai/cyber-post-train/blob/main/docs/TRAINING_DECISION_SPACE.md">Full methods and sources</a>
-              </div>
+        <div id="experiment-content">
+          <section class="section" aria-labelledby="sft-plan-title">
+            <div class="section-heading"><p class="section-index">01</p><div><h2 id="sft-plan-title">Choose the next useful runs.</h2><p>Supervised fine-tuning (SFT) learns from saved successful attempts. Every row is a proposed training run. Open its name for the question, comparison, prerequisites and sources.</p></div></div>
+            <div class="planner-controls">
+              <label>Research stage<select id="plan-stage"><option value="first">1 · Start here</option><option value="data">2 · Compare data</option><option value="efficient">3 · Spend on promising ideas</option><option value="confirm">4 · Confirm the result</option><option value="all">See the whole plan</option></select></label>
+              <label>Maximum proposals<select id="plan-limit"><option value="3">3 runs</option><option value="6">6 runs</option><option value="15">15 runs</option></select></label>
+              <label>First-stage Fleet-dev choice<select id="plan-winner"><option value="">Not chosen</option><option value="S01">S01 · 5e-6</option><option value="S02">S02 · 2e-5</option><option value="S03">S03 · 1e-6</option></select></label>
+              <label>Completed recipe to repeat<select id="plan-finalist"><option value="">Not chosen</option></select></label>
             </div>
-          </div>
-        </section>
+            <p class="footnote">Choosing a row here explores the plan; it does not assert that the run finished or authorize a launch. Later settings are filled in only after an explicit choice. “LoRA” means training added low-rank matrices instead of all model weights.</p>
+            <p id="sft-run-count" class="decision-count" aria-live="polite"></p>
+            <div id="sft-plan-table" class="experiment-table-wrap" tabindex="0" aria-label="Scrollable SFT experiment plan"></div>
+            <p id="sft-column-help" class="column-help" aria-live="polite">Select any column title to read its plain-language meaning.</p>
+            <p id="plan-budget-note" class="footnote"></p>
+            <div class="plan-actions"><button id="download-json" type="button">Download specifications · JSON</button><button id="download-csv" type="button">Download table · CSV</button></div>
+            <details class="plan-explanation"><summary>What stays fixed, and what “two epochs” costs</summary>
+              <p>Proposed common setup: exact Qwen3.8-27B; assistant-token prediction loss; AdamW optimizer with β₁=0.9, β₂=0.95, ε=10⁻⁸, no weight decay and gradient clipping at 1. Start the learning rate gradually over the first 10% of updates, then reduce it to zero with a cosine schedule. These optimizer details are our controlled starting choices, not proven optimal values.</p>
+              <p>Keep the same data, split, training seed (42) and evaluation program within each comparison. W&amp;B records numeric training loss, gradients, learning rate, useful token counts, throughput and checkpoints. We do not add teacher-imitation loss on held-out traces.</p>
+              <p>An epoch is one pass through the frozen examples. With N examples, effective batch B and E epochs, the kept-final-batch rule gives E × ceil(N/B) optimizer updates. The generator calculates this only when supplied actual example counts. Example count is not task count; two data pools with two epochs can still contain very different amounts of training.</p>
+              <p>Measure total processed tokens as well as tokens the model learns to predict. Estimate GPU-hours from the exact data length distribution, trainer and node layout, plus export and Fleet dev evaluation. Eight simultaneous nodes is a concurrency limit, not a total compute budget. Do not assume LoRA or a larger batch saves time.</p>
+            </details>
+          </section>
 
-        <section class="section compact" aria-labelledby="map-scope-title">
-          <div class="section-heading">
-            <p class="section-index">05</p>
-            <div><h2 id="map-scope-title">What this plan does not claim</h2><p id="experiment-scope"></p></div>
-          </div>
-        </section>
+          <section class="section" aria-labelledby="research-controls-title">
+            <div class="section-heading"><p class="section-index">02</p><div><h2 id="research-controls-title">Protect the comparison.</h2><p>The most important decisions are often what the model learns from, what stays hidden, and how success is measured.</p></div></div>
+            <div id="plan-controls-notes" class="plan-explanations"></div>
+            <div class="callout"><strong>Implementation is separate from the proposal.</strong><p id="plan-runtime-gap"></p></div>
+          </section>
+
+          <section class="section" aria-labelledby="rl-plan-title">
+            <div class="section-heading"><p class="section-index">03</p><div><h2 id="rl-plan-title">Then test learning by doing.</h2><p>Reinforcement learning (RL) learns from fresh attempts scored by the real task checker. This smaller, lower-confidence follow-on plan is not part of the SFT budget selector.</p></div></div>
+            <div id="rl-plan-table" class="experiment-table-wrap" tabindex="0" aria-label="Scrollable RL experiment plan"></div>
+            <p id="rl-column-help" class="column-help" aria-live="polite">Select any column title to read its plain-language meaning.</p>
+            <details class="plan-explanation"><summary>RL settings and prerequisites</summary><p>Proposed common setup: GRPO (compare rewards within attempts of the same task), full-weight updates, one optimization pass per collection, constant learning rate, clipping range 0.2, token-mean loss, no added KL penalty initially, seed 42. These are hypotheses; preserve the exact qualified Miles implementation rather than silently translating them to another trainer.</p><p>Before these full runs, prove real reward variation, a finite parameter update and a reloadable checkpoint. Use the same frozen OpenCode tool program throughout; retain 262,144 live tokens with validated native compaction and separately frozen multi-hour/long-turn budgets. A broken environment or context overflow is not a genuine zero reward. Compacted histories need correct per-segment action probabilities before RL training.</p><p>Compare both valid attempt counts and elapsed GPU-hours: 8 tasks × 4 attempts and 4 tasks × 8 attempts each collect 32 attempts, but can take different amounts of time. Do not import scores or any training hints from WebExploitBench.</p></details>
+          </section>
+
+          <section class="section" aria-labelledby="map-sources-title">
+            <div class="section-heading"><p class="section-index">04</p><div><h2 id="map-sources-title">Evidence, not magic numbers.</h2><p>No source below establishes the optimal settings for Qwen3.8 on Fleet. The closest evidence is security-task SFT on Qwen3; same-size agent recipes and controlled optimization studies supply useful alternatives.</p></div></div>
+            <div id="plan-sources" class="literature-grid"></div>
+          </section>
+
+          <section class="section compact" aria-labelledby="map-scope-title">
+            <div class="section-heading"><p class="section-index">05</p><div><h2 id="map-scope-title">How we decide what comes next.</h2><p>Use the same held-out Fleet development tasks for screening. Repeat promising recipes with new training seeds; retain an untouched final Fleet set. WebExploitBench is a report-only transfer check: freeze each checkpoint and test setup before evaluation, and never use those results to choose later recipes.</p><p id="experiment-scope"></p></div></div>
+            <div class="callout">Do not run every row automatically. If the first three recipes all fail to improve task success, inspect training-signal coverage and data quality before spending on adapters or dozens of optimizer settings.</div>
+            <div class="source-links"><a href="https://github.com/fleet-ai/cyber-post-train/blob/codex/literature-informed-experiments/docs/TRAINING_DECISION_SPACE.md">Research method &amp; command-line generator</a><a href="https://github.com/fleet-ai/cyber-post-train/blob/codex/literature-informed-experiments/skills/literature-informed-experiments/SKILL.md">Reusable research-planning skill</a></div>
+          </section>
+        </div>
       </section>
     </main>
 
@@ -316,6 +289,8 @@
       <p>Each result belongs to one exact test setup.</p>
     </footer>
     <script src="report-data.js"></script>
+    <script src="experiment-plan.js"></script>
+    <script src="experiment-view.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

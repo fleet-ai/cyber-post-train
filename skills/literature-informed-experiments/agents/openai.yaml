@@ -1,0 +1,4 @@
+interface:
+  display_name: "Literature-informed experiments"
+  short_description: "Plan useful training sweeps from primary research"
+  default_prompt: "Use $literature-informed-experiments to research nearby recipes and propose a compact, prioritized training study within our compute budget."

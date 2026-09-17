@@ -1,5 +1,4 @@
 const data = window.REPORT_DATA;
-let experimentMap;
 
 function pct(value) {
   return value == null ? "—" : `${value.toFixed(1)}%`;
@@ -90,75 +89,6 @@ function renderFiltering() {
     <article><span>${String(i + 1).padStart(2, "0")}</span><div><h3>${item[0]}</h3><p>${item[1]}</p></div></article>`).join("");
 }
 
-function tableColumns(table) {
-  return table.groups.flatMap(group => group.columns.map(([key, label, meaning]) => ({ key, label, meaning })));
-}
-
-function hasOwn(object, key) {
-  return Object.prototype.hasOwnProperty.call(object, key);
-}
-
-function resolvedValue(table, run, key) {
-  if (hasOwn(run, key)) return run[key];
-  if (run.changes && hasOwn(run.changes, key)) return run.changes[key];
-  return table.defaults[key];
-}
-
-function displayValue(value) {
-  if (Array.isArray(value)) return value.join(" · ");
-  if (value === true) return "Yes";
-  if (value === false) return "No";
-  return value ?? "—";
-}
-
-function renderExperimentTable(kind) {
-  const table = experimentMap.tables[kind];
-  const columns = tableColumns(table);
-  const root = document.querySelector(`#${kind}-plan-table`);
-  const stickyClass = index => index < 3 ? ` sticky-column sticky-column-${index + 1}` : "";
-
-  root.innerHTML = `
-    <table class="experiment-table">
-      <caption>${escapeHtml(table.title)}. Rows are ordered from highest to lowest research priority.</caption>
-      <thead>
-        <tr class="column-groups">${table.groups.map(group => `<th colspan="${group.columns.length}" scope="colgroup">${escapeHtml(group.label)}</th>`).join("")}</tr>
-        <tr>${columns.map((column, index) => `
-          <th scope="col" class="${stickyClass(index)}">
-            <button type="button" class="column-button" data-table-kind="${kind}" data-column-key="${escapeHtml(column.key)}">${escapeHtml(column.label)}</button>
-          </th>`).join("")}</tr>
-      </thead>
-      <tbody>${table.runs.map(run => `
-        <tr>${columns.map((column, index) => {
-          const value = displayValue(resolvedValue(table, run, column.key));
-          const changed = run.changes && hasOwn(run.changes, column.key);
-          const tag = index === 0 ? "th" : "td";
-          const scope = index === 0 ? ' scope="row"' : "";
-          return `<${tag}${scope} class="${stickyClass(index)}${changed ? " changed-setting" : ""}">${escapeHtml(value)}</${tag}>`;
-        }).join("")}</tr>`).join("")}</tbody>
-    </table>`;
-
-  document.querySelector(`#${kind}-run-count`).textContent = `${table.runs.length} ranked runs · ${columns.length} settings shown for every run`;
-  root.querySelectorAll(".column-button").forEach(button => {
-    button.addEventListener("click", () => {
-      const column = columns.find(item => item.key === button.dataset.columnKey);
-      document.querySelector(`#${kind}-column-help`).innerHTML = `<strong>${escapeHtml(column.label)}:</strong> ${escapeHtml(column.meaning)}`;
-    });
-  });
-}
-
-async function renderExperimentMap() {
-  try {
-    const response = await fetch("training-decision-space.json");
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    experimentMap = await response.json();
-    renderExperimentTable("sft");
-    renderExperimentTable("rl");
-    document.querySelector("#experiment-scope").textContent = experimentMap.scope;
-  } catch (error) {
-    document.querySelector("#sft-run-count").textContent = "The SFT plan could not be loaded.";
-    document.querySelector("#rl-run-count").textContent = "The RL plan could not be loaded.";
-  }
-}
 
 renderResults();
 renderProtocol();

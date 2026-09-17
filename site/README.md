@@ -14,6 +14,20 @@ python3 -m http.server 8080 --directory site
 The deployed site is served from the repository's `gh-pages` branch. Update
 `report-data.js`, review the rendered pages, then publish the exact static files.
 
+## Experiment planner
+
+`training-decision-space.json` holds the curated literature and candidate rows.
+`experiment-plan.js` is shared by the browser and the read-only Node CLI;
+`experiment-view.js` renders the compact tables, explanations and downloads.
+See [the method and budget format](../docs/TRAINING_DECISION_SPACE.md).
+Run `node scripts/plan-experiments.cjs --help` from the repository root (Node 18+).
+
+For a plan-only release, fetch the latest `gh-pages` first and preserve all
+non-plan sections, scripts and result data. The deployed evaluation dashboard
+can be ahead of main; copying the entire main-branch `site/` would roll it back.
+Publish only the reviewed plan section, planner assets, and the corresponding
+script/CSS changes, then verify the live page and unchanged result-file hashes.
+
 ## Writing standard
 
 Write for a reader who knows neither Fleet nor machine learning. Prefer the
