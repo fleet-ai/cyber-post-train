@@ -266,8 +266,13 @@ recovery:
 Use the same prepare/preflight/preview/submit commands. Model, data, recipe,
 topology and trainer image must stay unchanged. Both modes restore every rank's
 optimizer/scheduler and the saved sampler cursor; a missing state is an error,
-never a warning followed by a fresh start. Validation performs held-out forward
-passes and writes `RELOAD_VALIDATED.json`, without saving or updating the model.
+never a warning followed by a fresh start. Validation writes
+`RELOAD_VALIDATED.json`, without saving or updating the model. For a source with
+teacher cross-entropy validation, it also performs the original held-out forward
+passes. For a `task_outcomes_only` source it never loads a dev transcript or runs
+CE: its explicit `checkpoint_state_only` result proves state restoration, not a
+forward pass or improved capability. The separate HF export GPU check and matched
+task evaluation remain required; no held-out metric is invented for this path.
 Continuation requires recorded supervised-token progress and starts at the next
 step; completed runs and older checkpoints without that progress cannot be
 silently continued. Never run a source trainer and its recovery concurrently.

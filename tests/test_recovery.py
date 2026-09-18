@@ -196,6 +196,78 @@ def test_validation_never_enters_train_or_saves_or_optimizes(tmp_path, monkeypat
     assert not (tmp_path / "RELOAD_VALIDATED.json").exists()  # producer publishes after return
 
 
+def test_task_outcome_recovery_never_loads_dev_or_runs_ce(tmp_path, monkeypatch):
+    p, manifest, _ = source(tmp_path)
+    p["validation_mode"] = "task_outcomes_only"
+    p["datasets"].pop("dev")
+    p["recipe"]["eval_interval"] = 0
+    p.update(plan_sha256="a" * 64, recovery={"mode": "validate", "checkpoint": manifest})
+    calls, logged = [], []
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("no dev load, CE evaluation, training, save or optimizer step")
+
+    trainer = SimpleNamespace(
+        plan=p,
+        load_dataset=lambda: [1],
+        build_train_dataloader=lambda rows: rows,
+        load_eval_dataset=forbidden,
+        build_eval_dataloader=forbidden,
+        run_eval=forbidden,
+        train=forbidden,
+        save_checkpoint=forbidden,
+        optim_step=forbidden,
+        tracker=SimpleNamespace(log=lambda data, **kwargs: logged.append(data)),
+        shutdown=lambda: calls.append("shutdown"),
+    )
+
+    def restored(value):
+        assert value.train_dataloader == [1]
+        calls.append("restored")
+        return 2
+
+    monkeypatch.setattr(recovery, "load", restored)
+    result = recovery.validate_only(trainer)
+    assert result["validation_scope"] == "checkpoint_state_only"
+    assert result["optimizer_steps_executed"] == 0 and result["optimizer_step"] == 2
+    assert "held_out" not in result
+    assert calls == ["restored", "shutdown"] and logged == [{"train/global_step": 2}]
+
+
+def test_plan_accepts_exact_task_outcomes_only_checkpoint_validation(tmp_path):
+    p, root, out = fixture(tmp_path)
+    p.pop("plan_sha256", None)
+    p.update(
+        run_name="old-run",
+        validation_mode="task_outcomes_only",
+        execution={"image": "image@sha256:" + "a" * 64},
+    )
+    p["recipe"]["eval_interval"] = 0
+    p["datasets"].pop("dev")
+    (tmp_path / "checkpoint_receipts/step-000002.json").unlink()
+    write_receipt(
+        tmp_path / "checkpoint_receipts/step-000002.json",
+        {
+            "optimizer_step": 2,
+            "checkpoint_path": str(root),
+            "plan_sha256": _unsigned_digest(p),
+        },
+    )
+    checkpoints.seal(p, 2, out)
+    new = copy.deepcopy(p)
+    new.update(run_name="new-run", output_root=str(tmp_path.parent / "new-run"))
+    new["wandb"]["run_id"] = "new-run"
+    recovery.bind(
+        new,
+        {"manifest": str(out), "sha256": recovery.digest(out), "mode": "validate"},
+        relative_to=tmp_path,
+    )
+    from training.sft_runtime import validate_plan
+
+    validate_plan(new, check_files=False)
+    assert set(new["datasets"]) == {"train"}
+
+
 @pytest.mark.parametrize(
     "defect", [None, "missing_rank", "duplicate_rank", "wrong_step", "sampler"]
 )
