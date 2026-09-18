@@ -91,7 +91,11 @@ def _opener(objects: dict[str, bytes], calls: list[str] | None = None):
 
 def test_production_plan_is_self_digesting_and_exact_registration_clone() -> None:
     plan = stage.read_plan(PRODUCTION)
-    assert plan["execution"]["runtime_source_sha256"] == stage._digest_bytes(SOURCE.read_bytes())
+    # Historical source remains bound to its published digest, not today's code.
+    assert (
+        plan["execution"]["runtime_source_sha256"]
+        == json.loads(FAILED_V1.read_text())["execution"]["runtime_source_sha256"]
+    )
     assert plan["source"]["payload"] == {
         "mapping": "exact EXPORT.files object with bare per-file SHA-256 values",
         "file_count": 29,
@@ -283,9 +287,16 @@ def test_registration_drift_is_rejected_even_with_new_plan_digest(tmp_path: Path
         stage.validate_plan(plan)
 
 
-def test_renderer_is_an_immutable_bounded_zero_gpu_direct_pod() -> None:
+def test_renderer_is_an_immutable_bounded_zero_gpu_direct_pod(tmp_path: Path) -> None:
     plan = stage.read_plan(PRODUCTION)
-    rendered = stage.render_manifest(plan, SOURCE, PRODUCTION)
+    with pytest.raises(ValueError, match="renderer source differs"):
+        stage.render_manifest(plan, SOURCE, PRODUCTION)
+    # A changed runtime needs a new plan, never a rewrite of historical evidence.
+    plan["execution"]["runtime_source_sha256"] = stage._digest_bytes(SOURCE.read_bytes())
+    _rehash_plan(plan)
+    new_plan = tmp_path / "plan.json"
+    new_plan.write_text(json.dumps(plan))
+    rendered = stage.render_manifest(plan, SOURCE, new_plan)
     objects = list(yaml.safe_load_all(rendered))
     assert [obj["kind"] for obj in objects] == ["ConfigMap", "Pod"]
     config_map, pod = objects
@@ -325,3 +336,133 @@ def test_renderer_is_an_immutable_bounded_zero_gpu_direct_pod() -> None:
     assert not any(obj["kind"] in {"Job", "RayJob", "Deployment", "Service"} for obj in objects)
     assert pod["metadata"]["namespace"] == "inference"
     assert "api_key" not in rendered.lower()
+
+
+def _portable_fixture(tmp_path, monkeypatch):
+    plan, objects, environment = _fixture(tmp_path)
+    plan["schema"] = stage.PORTABLE_PLAN_SCHEMA
+    plan.pop("registration_source")
+    plan.pop("desired_registration")
+    execution = plan["execution"]
+    execution.pop("pod_name")
+    execution.update(
+        kind="Job",
+        job_name="chris-ar-stage-test",
+        config_map_name="chris-ar-stage-test",
+        backoff_limit=0,
+        run_as_user=1000,
+        run_as_group=100,
+    )
+    plan["destination"].update(
+        path="/models/chris-autoresearch/test",
+        acceptance_path="/models/chris-autoresearch/test/" + stage.ACCEPTANCE,
+    )
+    plan["source"]["payload"]["maximum_total_bytes"] = 4096
+    plan["source"]["payload"]["maximum_file_bytes"] = 128
+    environment.update(JOB_NAME=execution["job_name"], POD_NAME=execution["job_name"] + "-abcde")
+    real_open, real_rename = stage.os.open, stage._rename_noreplace
+
+    def mapped_open(path, *args, **kwargs):
+        return real_open(tmp_path if path == "/models" else path, *args, **kwargs)
+
+    def mapped_rename(parent, source, dest, path):
+        return real_rename(parent, source, dest, tmp_path / "chris-autoresearch")
+
+    monkeypatch.setattr(stage.os, "open", mapped_open)
+    monkeypatch.setattr(stage, "_rename_noreplace", mapped_rename)
+    monkeypatch.setattr(stage.os, "geteuid", lambda: 1000)
+    (tmp_path / "chris-autoresearch").mkdir()
+    return _rehash_plan(plan), objects, environment
+
+
+def test_portable_stage_uses_real_stream_and_atomic_readback(tmp_path, monkeypatch):
+    plan, objects, environment = _portable_fixture(tmp_path, monkeypatch)
+    receipt = stage.execute_stage(plan, open_source=_opener(objects), environment=environment)
+    assert receipt["source"]["gpu_reload_verified"] is True
+    assert receipt["execution"]["pod_name"] == environment["POD_NAME"]
+    final = tmp_path / "chris-autoresearch/test"
+    assert len(list(final.iterdir())) == 30
+    assert stage.execute_stage(plan, open_source=_opener({}), environment={}) == receipt
+    (final / "payload-00.bin").write_bytes(b"tampered")
+    with pytest.raises(ValueError, match="payload differs"):
+        stage.execute_stage(plan, open_source=_opener({}), environment={})
+
+
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "parent_escape",
+        "unowned",
+        "retry",
+        "namespace",
+        "registration",
+        "model_revision",
+        "job_identity",
+    ],
+)
+def test_portable_stage_fails_closed(tmp_path, monkeypatch, defect):
+    plan, objects, environment = _portable_fixture(tmp_path, monkeypatch)
+    if defect == "parent_escape":
+        plan["destination"]["path"] = "/models/chris-autoresearch/../peer"
+    elif defect == "unowned":
+        plan["execution"]["job_name"] = "peer-job"
+    elif defect == "retry":
+        plan["execution"]["backoff_limit"] = 1
+    elif defect == "namespace":
+        plan["execution"]["namespace"] = "default"
+    elif defect == "registration":
+        plan["desired_registration"] = {}
+    elif defect == "model_revision":
+        plan["source"]["export_receipt"]["required_fields"]["model_revision"] = "main"
+    else:
+        environment["JOB_NAME"] = "different-job"
+    _rehash_plan(plan)
+    with pytest.raises(ValueError):
+        stage.execute_stage(plan, open_source=_opener(objects), environment=environment)
+    assert not (tmp_path / "chris-autoresearch/test").exists()
+
+
+def test_portable_renderer_is_zero_retry_cpu_job(tmp_path, monkeypatch):
+    plan, _, _ = _portable_fixture(tmp_path, monkeypatch)
+    path = tmp_path / "portable.json"
+    path.write_text(json.dumps(plan))
+    config, job = list(yaml.safe_load_all(stage.render_manifest(plan, SOURCE, path)))
+    assert config["immutable"] is True
+    assert job["kind"] == "Job"
+    assert job["spec"]["backoffLimit"] == 0
+    assert job["spec"]["activeDeadlineSeconds"] <= 5400
+    pod = job["spec"]["template"]["spec"]
+    assert pod["priorityClassName"] == "c1"
+    assert pod["restartPolicy"] == "Never"
+    assert pod["nodeSelector"] == {"workload": "fleetai-training-ng-cpu"}
+    assert "nvidia.com/gpu" not in json.dumps(pod["containers"][0]["resources"])
+    assert pod["securityContext"] == {"runAsUser": 1000, "runAsGroup": 100}
+    assert pod["initContainers"][0]["securityContext"]["runAsUser"] == 0
+    assert pod["initContainers"][0]["securityContext"]["capabilities"] == {
+        "drop": ["ALL"],
+        "add": ["CHOWN", "DAC_OVERRIDE"],
+    }
+    assert pod["containers"][0]["securityContext"]["capabilities"] == {"drop": ["ALL"]}
+    assert (
+        pod["containers"][0]["env"][-1]["valueFrom"]["fieldRef"]["fieldPath"]
+        == "metadata.labels['batch.kubernetes.io/job-name']"
+    )
+
+
+def test_provision_never_chowns_existing_wrong_owner(tmp_path, monkeypatch):
+    plan, _, _ = _portable_fixture(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.setattr(stage.os, "fchown", lambda *args: calls.append(args))
+    with pytest.raises(ValueError, match="left unchanged"):
+        stage.provision_parent(plan)
+    assert calls == []
+
+
+def test_provision_creates_only_absent_parent(tmp_path, monkeypatch):
+    plan, _, _ = _portable_fixture(tmp_path, monkeypatch)
+    (tmp_path / "chris-autoresearch").rmdir()
+    calls = []
+    monkeypatch.setattr(stage.os, "fchown", lambda *args: calls.append(args))
+    stage.provision_parent(plan)
+    assert len(calls) == 1 and calls[0][1:] == (1000, 100)
+    assert list((tmp_path / "chris-autoresearch").iterdir()) == []
