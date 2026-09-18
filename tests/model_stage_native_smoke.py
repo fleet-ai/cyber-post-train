@@ -16,6 +16,7 @@ def run(payload):
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         plan, objects, environment = payload["plan"], payload["objects"], payload["environment"]
+        (root / "chris-autoresearch").mkdir()
         # Only this fixture's /models open is redirected. Linux atomic rename
         # still uses the actual directory descriptors and no-replace syscall.
         original_open = os.open

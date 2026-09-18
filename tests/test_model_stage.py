@@ -350,6 +350,8 @@ def _portable_fixture(tmp_path, monkeypatch):
         job_name="chris-ar-stage-test",
         config_map_name="chris-ar-stage-test",
         backoff_limit=0,
+        run_as_user=1000,
+        run_as_group=100,
     )
     plan["destination"].update(
         path="/models/chris-autoresearch/test",
@@ -368,6 +370,8 @@ def _portable_fixture(tmp_path, monkeypatch):
 
     monkeypatch.setattr(stage.os, "open", mapped_open)
     monkeypatch.setattr(stage, "_rename_noreplace", mapped_rename)
+    monkeypatch.setattr(stage.os, "geteuid", lambda: 1000)
+    (tmp_path / "chris-autoresearch").mkdir()
     return _rehash_plan(plan), objects, environment
 
 
@@ -432,7 +436,32 @@ def test_portable_renderer_is_zero_retry_cpu_job(tmp_path, monkeypatch):
     assert pod["restartPolicy"] == "Never"
     assert pod["nodeSelector"] == {"workload": "fleetai-training-ng-cpu"}
     assert "nvidia.com/gpu" not in json.dumps(pod["containers"][0]["resources"])
+    assert pod["securityContext"] == {"runAsUser": 1000, "runAsGroup": 100}
+    assert pod["initContainers"][0]["securityContext"]["runAsUser"] == 0
+    assert pod["initContainers"][0]["securityContext"]["capabilities"] == {
+        "drop": ["ALL"],
+        "add": ["CHOWN"],
+    }
     assert (
         pod["containers"][0]["env"][-1]["valueFrom"]["fieldRef"]["fieldPath"]
         == "metadata.labels['batch.kubernetes.io/job-name']"
     )
+
+
+def test_provision_never_chowns_existing_wrong_owner(tmp_path, monkeypatch):
+    plan, _, _ = _portable_fixture(tmp_path, monkeypatch)
+    calls = []
+    monkeypatch.setattr(stage.os, "fchown", lambda *args: calls.append(args))
+    with pytest.raises(ValueError, match="left unchanged"):
+        stage.provision_parent(plan)
+    assert calls == []
+
+
+def test_provision_creates_only_absent_parent(tmp_path, monkeypatch):
+    plan, _, _ = _portable_fixture(tmp_path, monkeypatch)
+    (tmp_path / "chris-autoresearch").rmdir()
+    calls = []
+    monkeypatch.setattr(stage.os, "fchown", lambda *args: calls.append(args))
+    stage.provision_parent(plan)
+    assert len(calls) == 1 and calls[0][1:] == (1000, 100)
+    assert list((tmp_path / "chris-autoresearch").iterdir()) == []

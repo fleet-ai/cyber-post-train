@@ -211,6 +211,8 @@ def validate_plan(plan: Mapping[str, Any]) -> None:
             raise ValueError("portable staging does not create or select a registration")
         if execution.get("kind") != "Job" or execution.get("backoff_limit") != 0:
             raise ValueError("portable staging requires a bounded zero-retry Job")
+        if execution.get("run_as_user") != 1000 or execution.get("run_as_group") != 100:
+            raise ValueError("portable staging requires the reviewed non-root runtime identity")
         if not re.fullmatch(r"chris-ar-[a-z0-9-]{1,44}", execution["job_name"]):
             raise ValueError("portable staging requires an owned Job name")
         if execution["config_map_name"] != execution["job_name"]:
@@ -536,6 +538,7 @@ def _execution_identity(plan: Mapping[str, Any], environment: Mapping[str, str])
     if portable and (
         environment.get("JOB_NAME") != execution["job_name"]
         or not environment.get("POD_NAME", "").startswith(execution["job_name"] + "-")
+        or os.geteuid() != execution["run_as_user"]
     ):
         raise ValueError("downward-API Job identity differs from the stage plan")
     expected = {
@@ -621,6 +624,46 @@ def _validate_staged(
         os.close(directory)
 
 
+def provision_parent(plan: Mapping[str, Any]) -> None:
+    """Create only the dedicated parent, never chown an existing tree.
+
+    Runs in the short root init container. All streaming remains UID 1000.
+    Existing parents must already have the intended ownership and permissions.
+    """
+    validate_plan(plan)
+    if plan.get("schema") != PORTABLE_PLAN_SCHEMA:
+        raise ValueError("only portable plans may provision the owned model parent")
+    models = os.open("/models", os.O_RDONLY | os.O_NOFOLLOW | os.O_DIRECTORY)
+    try:
+        created = False
+        try:
+            os.mkdir("chris-autoresearch", 0o755, dir_fd=models)
+            created = True
+        except FileExistsError:
+            pass
+        parent = _open_directory_at(models, "chris-autoresearch")
+        try:
+            if created:
+                os.fchmod(parent, 0o755)
+                os.fchown(parent, 1000, 100)
+                os.fsync(parent)
+                os.fsync(models)
+            else:
+                identity = os.fstat(parent)
+                if (identity.st_uid, identity.st_gid, stat.S_IMODE(identity.st_mode)) != (
+                    1000,
+                    100,
+                    0o755,
+                ):
+                    raise ValueError(
+                        "existing model parent has different ownership; left unchanged"
+                    )
+        finally:
+            os.close(parent)
+    finally:
+        os.close(models)
+
+
 def execute_stage(
     plan: Mapping[str, Any], *, open_source: OpenSource, environment: Mapping[str, str]
 ) -> dict[str, Any]:
@@ -629,16 +672,11 @@ def execute_stage(
     validate_plan(plan)
     destination = Path(str(plan["destination"]["path"]))
     parent_path = destination.parent
-    # The dedicated shared parent may not exist for the first experiment. Open
-    # each component without following symlinks; never mkdir arbitrary ancestors.
+    # A short exclusive initializer provisions the parent. The non-root worker
+    # cannot create directories at the shared root or alter its permissions.
     if plan.get("schema") == PORTABLE_PLAN_SCHEMA:
         models = os.open("/models", os.O_RDONLY | os.O_NOFOLLOW | os.O_DIRECTORY)
         try:
-            try:
-                os.mkdir("chris-autoresearch", 0o755, dir_fd=models)
-                os.fsync(models)
-            except FileExistsError:
-                pass
             parent = _open_directory_at(models, "chris-autoresearch")
         finally:
             os.close(models)
@@ -847,6 +885,19 @@ def render_objects(
         },
     }
     if portable:
+        pod["spec"]["securityContext"] = {"runAsUser": 1000, "runAsGroup": 100}
+        initializer = json.loads(json.dumps(pod["spec"]["containers"][0]))
+        initializer.update(
+            name="provision-owned-parent", args=["provision", "--plan", "/bundle/plan.json"]
+        )
+        initializer["securityContext"].update(
+            runAsUser=0, runAsGroup=0, capabilities={"drop": ["ALL"], "add": ["CHOWN"]}
+        )
+        initializer["resources"] = {
+            "requests": {"cpu": "100m", "memory": "128Mi"},
+            "limits": {"cpu": "1", "memory": "256Mi"},
+        }
+        pod["spec"]["initContainers"] = [initializer]
         pod["spec"]["containers"][0]["env"].append(
             {
                 "name": "JOB_NAME",
@@ -880,11 +931,17 @@ def main() -> None:
     commands = parser.add_subparsers(dest="command", required=True)
     execute = commands.add_parser("execute")
     execute.add_argument("--plan", type=Path, required=True)
+    provision = commands.add_parser("provision")
+    provision.add_argument("--plan", type=Path, required=True)
     render = commands.add_parser("render")
     render.add_argument("--plan", type=Path, required=True)
     render.add_argument("--source", type=Path, default=Path(__file__))
     args = parser.parse_args()
     plan = read_plan(args.plan)
+    if args.command == "provision":
+        provision_parent(plan)
+        print(json.dumps({"owned_parent_ready": True, "uid": 1000, "gid": 100, "gpus": 0}))
+        return
     if args.command == "render":
         print(render_manifest(plan, args.source, args.plan), end="")
         return

@@ -71,6 +71,13 @@ its intent before creation, reconcile uncertain creates, monitor exact UIDs and
 count real failures even outside the training namespace. The stage does not
 register or resume a model, allocate GPUs, train, or evaluate any task.
 
+The image default user is not a storage contract. V2 pins the streaming worker
+to UID 1000 / GID 100. A short root initializer, with only the CHOWN capability,
+creates the dedicated absent parent and assigns ownership; it never changes an
+existing tree. An existing parent must already have the exact intended owner
+and mode. Do not switch the whole transfer to root or recursively chmod shared
+storage to work around permissions.
+
 Historical v1 plans and evidence are unchanged and must be replayed using their
 original pinned source. Updating this implementation requires a newly digested
 plan; never rewrite an old plan's source hash in place.
