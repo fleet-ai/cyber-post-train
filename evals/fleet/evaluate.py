@@ -165,10 +165,14 @@ def compile_eval(config: dict, *, relative_to: Path) -> dict:
             raise ValueError("model aliases must be lowercase names; dots and hyphens are allowed")
         if (
             set(model) != {"repository", "revision", "session_model"}
-            or not re.fullmatch(r"[a-f0-9]{40}", model["revision"])
+            or not isinstance(model["revision"], str)
+            or not re.fullmatch(r"[a-f0-9]{40}|[a-f0-9]{64}", model["revision"])
             or not all(isinstance(v, str) and v for v in model.values())
         ):
-            raise ValueError("model needs repository, exact revision and catalog session identity")
+            raise ValueError(
+                "model needs repository, exact commit or export SHA-256 "
+                "and catalog session identity"
+            )
     for block, route in routes.items():
         _name(block)
         if set(route) != {
