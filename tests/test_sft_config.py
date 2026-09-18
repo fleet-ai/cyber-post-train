@@ -113,6 +113,51 @@ def test_compile_uses_exact_model_manifest_and_complete_epochs(config, tmp_path)
     assert hashlib.sha256(content["runtime"].encode()).hexdigest() == plan["runtime_sha256"]
 
 
+def test_entrypoint_deadline_is_bound_without_changing_recipe(config, tmp_path):
+    source, _, _ = config
+    unbounded = sft.compile_sft(source, relative_to=tmp_path)
+    source["cluster"] = {"entrypoint_seconds": 3600}
+    bounded = sft.compile_sft(source, relative_to=tmp_path)
+    assert bounded["recipe"] == unbounded["recipe"]
+    assert bounded["execution"]["entrypoint_seconds"] == 3600
+    assert sft.job_request(bounded)["command"].startswith(
+        "timeout --signal=TERM --kill-after=30s 3600s python -c "
+    )
+    assert sft.job_request(unbounded)["command"].startswith("python -c ")
+    assert digest(sft.job_request(bounded)) != digest(sft.job_request(unbounded))
+
+
+@pytest.mark.parametrize("bound", [None, True, 0, 59, 28801, 1.5, "3600"])
+def test_invalid_entrypoint_deadline_rejected(config, tmp_path, bound):
+    source, _, _ = config
+    source["cluster"] = {"entrypoint_seconds": bound}
+    with pytest.raises(ValueError, match="entrypoint_seconds"):
+        sft.compile_sft(source, relative_to=tmp_path)
+
+
+def test_timeout_preflight_checks_return_codes(monkeypatch):
+    from subprocess import CompletedProcess
+
+    monkeypatch.setattr(sft.shutil, "which", lambda _: "/usr/bin/timeout")
+    observed = []
+
+    def run(argv, **kwargs):
+        observed.append(argv)
+        assert argv[:4] == ["/usr/bin/timeout", "--signal=TERM", "--kill-after=1s", "1s"]
+        assert kwargs["timeout"] == 4
+        return CompletedProcess(argv, [0, 7, 124][len(observed) - 1])
+
+    monkeypatch.setattr(sft.subprocess, "run", run)
+    sft.check_entrypoint_timeout()
+    assert len(observed) == 3
+    monkeypatch.setattr(sft.subprocess, "run", lambda *a, **k: CompletedProcess(a, 0))
+    with pytest.raises(ValueError, match="timeout behavior"):
+        sft.check_entrypoint_timeout()
+    monkeypatch.setattr(sft.shutil, "which", lambda _: None)
+    with pytest.raises(ValueError, match="requires GNU timeout"):
+        sft.check_entrypoint_timeout()
+
+
 def test_compile_training_loss_only_plan_has_no_reference_dev_dataset(config, tmp_path):
     source, manifest, save = config
     manifest["validation_mode"] = "task_outcomes_only"

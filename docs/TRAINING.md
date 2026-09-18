@@ -100,6 +100,7 @@ wandb:
   tags: [teacher, sft]
 cluster:
   priority: c1
+  entrypoint_seconds: 3600       # optional smaller remote execution limit
 ```
 
 Relative manifest paths resolve beside the YAML file. Model and data roots are
@@ -245,6 +246,17 @@ The runtime has fixed startup, no-progress and hard-runtime bounds. A confirmed
 stall preserves evidence and exits truthfully; the Jobs API releases the allocation.
 An independent monitor must confirm release and handle access failures explicitly.
 Do not suppress alerts or hold GPUs while debugging a failed allocation.
+
+For bounded pilots, `cluster.entrypoint_seconds` (60–28,800 seconds) adds an
+outer GNU `timeout` around the entire entrypoint, including input validation.
+CPU preflight exercises success, failure and timeout behavior in the exact image.
+At expiry it sends TERM, then KILL after at most 30 seconds. An expiry is a real
+failure, never a successful training result. The normal RayJob shutdown policy
+then releases the allocation; independently verify that release. This limit does
+not include queueing, image pulling or controller teardown, which still require
+the owner monitor and separate startup/drain allowances. Include those allowances
+and the 30-second kill grace in compute reservations. Omission preserves historical
+request rendering. It does not change the scientific recipe or scheduler horizon.
 
 `TRAINING_COMPLETE.json` means optimization and checkpoint production completed;
 it does not mean the checkpoint is inference-ready or improves task success.

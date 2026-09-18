@@ -136,6 +136,11 @@ def _checked_file(path: Path, expected: str) -> None:
 
 
 def validate_plan(plan: dict, *, check_files: bool = True) -> None:
+    bound = plan.get("execution", {}).get("entrypoint_seconds")
+    if "entrypoint_seconds" in plan.get("execution", {}) and (
+        type(bound) is not int or not 60 <= bound <= 28800
+    ):
+        raise ValueError("entrypoint_seconds must be an integer between 60 and 28800")
     if plan.get("schema") not in ("cyber_sft_runtime_v2", DENSE_SCHEMA):
         raise ValueError("unsupported SFT runtime plan")
     recipe = plan["recipe"]

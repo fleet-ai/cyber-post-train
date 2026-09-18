@@ -12,6 +12,8 @@ import hashlib
 import json
 import math
 import shlex
+import shutil
+import subprocess
 from pathlib import Path, PurePosixPath
 
 import yaml
@@ -146,7 +148,7 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
         math.ceil(datasets["train"]["rows"] / recipe["batch_size"]) * recipe["epochs"]
     )
     cluster = config.get("cluster", {})
-    _known(cluster, {"priority", "resources"}, "cluster")
+    _known(cluster, {"priority", "resources", "entrypoint_seconds"}, "cluster")
     runtime = Path(__file__).with_name("sft_runtime.py").read_bytes()
     plan = {
         "schema": DENSE_SCHEMA
@@ -168,6 +170,8 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
             "resources": {**RESOURCES, **cluster.get("resources", {})},
         },
     }
+    if "entrypoint_seconds" in cluster:
+        plan["execution"]["entrypoint_seconds"] = cluster["entrypoint_seconds"]
     # The native GDN compatibility hook is currently qualified only for these
     # Qwen architectures. Do not silently substitute the GLM Flash model or
     # claim the full GLM FP8 checkpoint uses this ordinary full-weight loader.
@@ -252,12 +256,21 @@ def job_request(plan: dict) -> dict:
         "runpy.run_path(str(p/'sft_runtime.py'),run_name='__main__')"
     )
     w, execution, r = plan["wandb"], plan["execution"], plan["recipe"]
+    command = "python -c " + shlex.quote(bootstrap)
+    if "entrypoint_seconds" in execution:
+        seconds = execution["entrypoint_seconds"]
+        if type(seconds) is not int or not 60 <= seconds <= 28800:
+            raise ValueError("entrypoint_seconds must be an integer between 60 and 28800")
+        # Starts before source/data validation, unlike the in-trainer watchdog.
+        # KubeRay shuts down the owned cluster when this entrypoint exits.
+        # This does not time queueing, image pull or controller teardown.
+        command = f"timeout --signal=TERM --kill-after=30s {seconds}s " + command
     return {
         "name": plan["run_name"],
         "title": w["name"],
         "run_dir": plan["output_root"],
         "image": execution["image"],
-        "command": "python -c " + shlex.quote(bootstrap),
+        "command": command,
         "workers": r["nodes"],
         "gpus_per_worker": r["gpus_per_node"],
         "resources": execution["resources"],
@@ -314,6 +327,8 @@ def preflight(plan: dict) -> dict:
 
     if torch.cuda.is_available():
         raise ValueError("run data/runtime preflight without GPU allocation")
+    if "entrypoint_seconds" in plan["execution"]:
+        check_entrypoint_timeout()
     validate_plan(plan)
     validate_runtime_sources()
     build_runtime_configs(plan)
@@ -355,3 +370,23 @@ def preflight(plan: dict) -> dict:
         ],
         "counts": counts,
     }
+
+
+def check_entrypoint_timeout() -> None:
+    """Exercise the exact image's timeout binary, including child termination."""
+    executable = shutil.which("timeout")
+    if executable is None:
+        raise ValueError("bounded entrypoint requires GNU timeout in the runtime image")
+    for script, expected in (
+        ("pass", 0),
+        ("raise SystemExit(7)", 7),
+        ("import time;time.sleep(10)", 124),
+    ):
+        result = subprocess.run(
+            [executable, "--signal=TERM", "--kill-after=1s", "1s", "python", "-c", script],
+            capture_output=True,
+            timeout=4,
+            check=False,
+        )
+        if result.returncode != expected:
+            raise ValueError("runtime image timeout behavior differs from its contract")
