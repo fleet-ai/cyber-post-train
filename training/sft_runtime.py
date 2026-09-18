@@ -193,8 +193,6 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         raise ValueError("task-outcome training must not load a teacher-reference dev artifact")
     if not training_only and set(plan["datasets"]) != {"train", "dev"}:
         raise ValueError("teacher CE validation requires train and dev artifacts")
-    if training_only and plan.get("recovery", {}).get("mode") == "validate":
-        raise ValueError("zero-step CE validation is unavailable without a dev artifact")
     train = plan["datasets"]["train"]
     dev = plan["datasets"].get("dev")
     for dataset in plan["datasets"].values():

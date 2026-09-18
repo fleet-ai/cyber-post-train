@@ -216,19 +216,32 @@ def load(trainer) -> int:
 
 
 def validate_only(trainer) -> dict:
-    """Load and evaluate; deliberately never call train(), save() or optimizer.step()."""
+    """Restore exact state; evaluate only when the original plan includes CE.
+
+    Task-outcomes-only validation proves recovery, not a forward pass or model
+    quality. HF export checking and matched evaluation are separate operations.
+    Never call train(), save(), or optimizer.step() in either path.
+    """
     trainer.train_dataloader = trainer.build_train_dataloader(trainer.load_dataset())
-    trainer.eval_dataloader = trainer.build_eval_dataloader(trainer.load_eval_dataset())
+    training_only = trainer.plan.get("validation_mode") == "task_outcomes_only"
+    if not training_only:
+        trainer.eval_dataloader = trainer.build_eval_dataloader(trainer.load_eval_dataset())
     trainer.global_step = load(trainer)
-    metrics, _ = trainer.run_eval()
+    metrics = {}
+    if not training_only:
+        metrics, _ = trainer.run_eval()
     result = {
         "status": "reload_validated",
         "optimizer_steps_executed": 0,
         "optimizer_step": trainer.global_step,
-        "held_out": metrics,
+        "validation_scope": "checkpoint_state_only"
+        if training_only
+        else "checkpoint_and_held_out_ce",
         "plan_sha256": trainer.plan["plan_sha256"],
         "source_manifest_sha256": trainer.plan["recovery"]["checkpoint"]["receipt_sha256"],
     }
+    if not training_only:
+        result["held_out"] = metrics
     trainer.tracker.log(
         {"train/global_step": trainer.global_step, **{"eval/" + k: v for k, v in metrics.items()}},
         step=trainer.global_step,
