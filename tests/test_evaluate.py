@@ -127,6 +127,32 @@ def test_model_alias_accepts_version_dots(configuration, tmp_path):
     assert all(row["model_id"] == "qwen3.8-27b" for row in evaluation.plan_rows(plan))
 
 
+def test_export_revision_survives_prepare_load_and_live_catalog_check(configuration, tmp_path):
+    revision = "f" * 64
+    configuration["models"]["student"]["revision"] = revision
+    directory = tmp_path / "checkpoint-eval"
+    evaluation.prepare(configuration, directory, relative_to=tmp_path)
+    plan = evaluation.load(directory)
+    assert {r["model_revision"] for r in evaluation.plan_rows(plan)} == {revision}
+    model, route = plan["models"]["student"], plan["routes"]["shared"]
+    with endpoint_client(route, model) as client:
+        assert evaluation.check_route(route, model, client)["revision"] == revision
+    with (
+        endpoint_client(route, {**model, "revision": "a" * 64}) as client,
+        pytest.raises(RuntimeError, match="identity/readiness drift"),
+    ):
+        evaluation.check_route(route, model, client)
+
+
+@pytest.mark.parametrize(
+    "revision", ["main", "a" * 39, "a" * 41, "a" * 63, "a" * 65, "A" * 64, 123]
+)
+def test_model_revision_is_exact_and_not_a_label(configuration, tmp_path, revision):
+    configuration["models"]["student"]["revision"] = revision
+    with pytest.raises(ValueError, match="exact commit or export"):
+        evaluation.compile_eval(configuration, relative_to=tmp_path)
+
+
 @pytest.mark.parametrize(
     "mutate",
     [

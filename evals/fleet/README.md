@@ -57,6 +57,13 @@ The task set's `tasks` rows require `task_key`, `task_version_id`, `env_key`,
 Use reviewed UUIDs and versioned runtime tuples, never mutable current selectors.
 Historical outcome fields are not copied into the new plan.
 
+Model `revision` is the exact lowercase 40-character source commit for a base
+model or the full 64-character SHA-256 export identity for a trained model.
+It must equal the inference catalog's `model_revision`; never truncate an export
+hash to resemble a Git commit or substitute the base revision for trained weights.
+Accepting the identifier is not checkpoint acceptance: trained arms still require
+the export, staging and live-parity evidence described below.
+
 Exact task GET must also expose starting data (`seed_config` or both legacy
 data fields). Fleet deliberately rejects historical versions missing this
 record; an instance POST cannot recover it. Preflight fails before any rollout.
