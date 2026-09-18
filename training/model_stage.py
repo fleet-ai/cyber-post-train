@@ -891,7 +891,13 @@ def render_objects(
             name="provision-owned-parent", args=["provision", "--plan", "/bundle/plan.json"]
         )
         initializer["securityContext"].update(
-            runAsUser=0, runAsGroup=0, capabilities={"drop": ["ALL"], "add": ["CHOWN"]}
+            # The image's interpreter is under the ray user's private home.
+            # Root with all capabilities dropped cannot traverse it. Keep the
+            # needed DAC override confined to this short, fixed initializer;
+            # the weight-streaming worker remains non-root with no capabilities.
+            runAsUser=0,
+            runAsGroup=0,
+            capabilities={"drop": ["ALL"], "add": ["CHOWN", "DAC_OVERRIDE"]},
         )
         initializer["resources"] = {
             "requests": {"cpu": "100m", "memory": "128Mi"},

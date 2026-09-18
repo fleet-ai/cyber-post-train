@@ -440,8 +440,9 @@ def test_portable_renderer_is_zero_retry_cpu_job(tmp_path, monkeypatch):
     assert pod["initContainers"][0]["securityContext"]["runAsUser"] == 0
     assert pod["initContainers"][0]["securityContext"]["capabilities"] == {
         "drop": ["ALL"],
-        "add": ["CHOWN"],
+        "add": ["CHOWN", "DAC_OVERRIDE"],
     }
+    assert pod["containers"][0]["securityContext"]["capabilities"] == {"drop": ["ALL"]}
     assert (
         pod["containers"][0]["env"][-1]["valueFrom"]["fieldRef"]["fieldPath"]
         == "metadata.labels['batch.kubernetes.io/job-name']"
