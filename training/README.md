@@ -53,3 +53,24 @@ Use [cluster operations](../docs/CLUSTER_ALERTS_AND_INFERENCE_SERVING.md) and th
 [training skill](../skills/cyber-train-operator/SKILL.md) before paid operations.
 Historical model-specific reports and immutable run configs remain provenance;
 they do not override today's API contract, resource budget or user authorization.
+
+## Copying an accepted model to inference storage
+
+`model_stage.py` supports `cyber_inference_model_stream_stage_plan_v2` for a
+new accepted BF16 export. Unlike the historical v1 plan, v2 does not clone a
+particular old model registration. It binds the exact export/GPU-check receipts,
+their full file inventory, model revision and optimizer step, then streams and
+rehashes files into `/models/chris-autoresearch/<owned-destination>`. Publication
+is atomic and never replaces another directory. An identical existing result
+can be independently read back; corrupted or incomplete copies are not accepted.
+
+The renderer produces an immutable ConfigMap and a c1 CPU-only inference Job
+with zero retries and a fixed deadline. Inference storage lives on a different
+PVC from training SFS, which is why the worker runs there. The caller must record
+its intent before creation, reconcile uncertain creates, monitor exact UIDs and
+count real failures even outside the training namespace. The stage does not
+register or resume a model, allocate GPUs, train, or evaluate any task.
+
+Historical v1 plans and evidence are unchanged and must be replayed using their
+original pinned source. Updating this implementation requires a newly digested
+plan; never rewrite an old plan's source hash in place.

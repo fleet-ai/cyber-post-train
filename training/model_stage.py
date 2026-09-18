@@ -25,6 +25,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, BinaryIO
 
 PLAN_SCHEMA = "cyber_inference_model_stream_stage_plan_v1"
+PORTABLE_PLAN_SCHEMA = "cyber_inference_model_stream_stage_plan_v2"
 RECEIPT_SCHEMA = "cyber_inference_model_stream_stage_receipt_v1"
 FILEBROWSER_ORIGIN = "http://filebrowser.fleet-train-data-plane.svc.cluster.local"
 ACCEPTANCE = ".fleet-acceptance.json"
@@ -91,7 +92,8 @@ def read_plan(path: Path) -> dict[str, Any]:
 
 
 def validate_plan(plan: Mapping[str, Any]) -> None:
-    if plan.get("schema") != PLAN_SCHEMA:
+    portable = plan.get("schema") == PORTABLE_PLAN_SCHEMA
+    if plan.get("schema") not in {PLAN_SCHEMA, PORTABLE_PLAN_SCHEMA}:
         raise ValueError("unsupported model-stage plan schema")
     expected = _sha(plan.get("plan_sha256"), "plan_sha256")
     if digest_json(_unsigned(plan, "plan_sha256")) != expected:
@@ -143,14 +145,17 @@ def validate_plan(plan: Mapping[str, Any]) -> None:
     ):
         raise ValueError("GPU-check binding does not preserve the accepted reload gate")
     payload = _mapping(source.get("payload"), "payload binding")
-    if payload.get("file_count") != 29:
-        raise ValueError("Fresh75 stage must bind exactly 29 payload files")
+    count = payload.get("file_count")
+    if (not portable and count != 29) or (
+        portable and (type(count) is not int or not 1 <= count <= 4096)
+    ):
+        raise ValueError("payload file count is outside the reviewed bound")
     if not isinstance(payload.get("maximum_total_bytes"), int) or not (
-        55_562_855_904 <= payload["maximum_total_bytes"] <= 64 * 1024**3
+        (1 if portable else 55_562_855_904) <= payload["maximum_total_bytes"] <= 64 * 1024**3
     ):
         raise ValueError("payload total-byte cap is missing or unreasonable")
     if not isinstance(payload.get("maximum_file_bytes"), int) or not (
-        3 * 1024**3 <= payload["maximum_file_bytes"] <= 4 * 1024**3
+        (1 if portable else 3 * 1024**3) <= payload["maximum_file_bytes"] <= 4 * 1024**3
     ):
         raise ValueError("payload per-file cap is missing or unreasonable")
     _sha(payload.get("manifest_sha256"), "payload manifest_sha256")
@@ -164,10 +169,11 @@ def validate_plan(plan: Mapping[str, Any]) -> None:
         or not 1 <= execution["active_deadline_seconds"] <= 5400
     ):
         raise ValueError("staging must be a bounded, zero-GPU c1 inference Pod")
-    for field in ("pod_name", "config_map_name"):
+    for field in ("job_name", "config_map_name") if portable else ("pod_name", "config_map_name"):
         value = execution.get(field)
         if (
             not isinstance(value, str)
+            or len(value) > 63
             or re.fullmatch(r"[a-z0-9](?:[-a-z0-9]*[a-z0-9])?", value) is None
         ):
             raise ValueError(f"execution {field} is not a DNS label")
@@ -190,14 +196,36 @@ def validate_plan(plan: Mapping[str, Any]) -> None:
     if (
         not isinstance(path, str)
         or not Path(path).is_absolute()
-        or PurePosixPath(path).name != destination.get("model_id")
+        or (not portable and PurePosixPath(path).name != destination.get("model_id"))
+        or ".." in PurePosixPath(path).parts
         or PurePosixPath(path).name in {"", ".", ".."}
         or destination.get("must_be_absent") is not True
         or destination.get("acceptance_path") != str(Path(path) / ACCEPTANCE)
         or destination.get("atomic_transaction") != "directory_rename_noreplace_v1"
     ):
         raise ValueError("destination must bind one create-once absolute model directory")
-    _validate_registration_clone(plan)
+    if portable:
+        # Copying weights and registering an endpoint are independent operations.
+        # Never rewrite a historical registration to fit a new experiment.
+        if "registration_source" in plan or "desired_registration" in plan:
+            raise ValueError("portable staging does not create or select a registration")
+        if execution.get("kind") != "Job" or execution.get("backoff_limit") != 0:
+            raise ValueError("portable staging requires a bounded zero-retry Job")
+        if not re.fullmatch(r"chris-ar-[a-z0-9-]{1,44}", execution["job_name"]):
+            raise ValueError("portable staging requires an owned Job name")
+        if execution["config_map_name"] != execution["job_name"]:
+            raise ValueError("portable staging config must share its owned Job name")
+        if not re.fullmatch(r"/models/chris-autoresearch/[a-z0-9-]{1,63}", path):
+            raise ValueError("portable staging destination must be an owned model directory")
+        if (
+            type(export_fields.get("optimizer_step")) is not int
+            or export_fields["optimizer_step"] <= 0
+            or not export_fields.get("model_repo")
+            or not re.fullmatch(r"[0-9a-f]{40}", str(export_fields.get("model_revision", "")))
+        ):
+            raise ValueError("portable staging must bind the exact trained model and step")
+    else:
+        _validate_registration_clone(plan)
     scientific = _mapping(plan.get("scientific_boundary"), "scientific boundary")
     if scientific != {
         "optimizer_updates": 0,
@@ -504,9 +532,15 @@ def _rename_noreplace(parent: int, source: str, destination: str, path: Path) ->
 
 def _execution_identity(plan: Mapping[str, Any], environment: Mapping[str, str]) -> dict[str, Any]:
     execution = _mapping(plan.get("execution"), "execution")
+    portable = plan.get("schema") == PORTABLE_PLAN_SCHEMA
+    if portable and (
+        environment.get("JOB_NAME") != execution["job_name"]
+        or not environment.get("POD_NAME", "").startswith(execution["job_name"] + "-")
+    ):
+        raise ValueError("downward-API Job identity differs from the stage plan")
     expected = {
         "namespace": execution["namespace"],
-        "pod_name": execution["pod_name"],
+        "pod_name": environment.get("POD_NAME", "") if portable else execution["pod_name"],
     }
     observed = {
         "namespace": environment.get("POD_NAMESPACE", ""),
@@ -595,7 +629,21 @@ def execute_stage(
     validate_plan(plan)
     destination = Path(str(plan["destination"]["path"]))
     parent_path = destination.parent
-    parent = os.open(parent_path, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_DIRECTORY", 0))
+    # The dedicated shared parent may not exist for the first experiment. Open
+    # each component without following symlinks; never mkdir arbitrary ancestors.
+    if plan.get("schema") == PORTABLE_PLAN_SCHEMA:
+        models = os.open("/models", os.O_RDONLY | os.O_NOFOLLOW | os.O_DIRECTORY)
+        try:
+            try:
+                os.mkdir("chris-autoresearch", 0o755, dir_fd=models)
+                os.fsync(models)
+            except FileExistsError:
+                pass
+            parent = _open_directory_at(models, "chris-autoresearch")
+        finally:
+            os.close(models)
+    else:
+        parent = os.open(parent_path, os.O_RDONLY | os.O_NOFOLLOW | getattr(os, "O_DIRECTORY", 0))
     suffix = str(plan["plan_sha256"]).removeprefix("sha256:")[:12]
     partial_name = f".partial-{destination.name}-{suffix}"
     try:
@@ -668,10 +716,15 @@ def execute_stage(
         os.close(parent)
 
 
-def render_manifest(plan: Mapping[str, Any], source_path: Path, plan_path: Path) -> str:
-    """Render an immutable ConfigMap and one bounded direct Pod; perform no submission."""
+def render_objects(
+    plan: Mapping[str, Any], source_path: Path, plan_path: Path
+) -> list[dict[str, Any]]:
+    """Render an immutable ConfigMap and bounded CPU worker; perform no submission.
 
-    import yaml
+    Legacy plans retain their original Pod contract; v2 uses a zero-retry Job.
+    The inference namespace is required by its model PVC, not an alert exemption.
+    Callers must journal creation and count terminal failures in their own policy.
+    """
 
     validate_plan(plan)
     execution = plan["execution"]
@@ -683,9 +736,11 @@ def render_manifest(plan: Mapping[str, Any], source_path: Path, plan_path: Path)
         raise ValueError("renderer source differs from the stage plan")
     if read_plan(plan_path) != dict(plan):
         raise ValueError("renderer plan bytes differ from the supplied plan")
+    portable = plan.get("schema") == PORTABLE_PLAN_SCHEMA
+    name = execution["job_name" if portable else "pod_name"]
     labels = {
         "cyber-post-train.fleet.ai/owner": "chris",
-        "cyber-post-train.fleet.ai/experiment": execution["pod_name"],
+        "cyber-post-train.fleet.ai/experiment": name,
         "cyber-post-train.fleet.ai/purpose": "model-stage",
     }
     config_map = {
@@ -706,7 +761,7 @@ def render_manifest(plan: Mapping[str, Any], source_path: Path, plan_path: Path)
         "apiVersion": "v1",
         "kind": "Pod",
         "metadata": {
-            "name": execution["pod_name"],
+            "name": name,
             "namespace": execution["namespace"],
             "labels": labels,
         },
@@ -791,7 +846,33 @@ def render_manifest(plan: Mapping[str, Any], source_path: Path, plan_path: Path)
             ],
         },
     }
-    return yaml.safe_dump_all([config_map, pod], sort_keys=False)
+    if portable:
+        pod["spec"]["containers"][0]["env"].append(
+            {
+                "name": "JOB_NAME",
+                "valueFrom": {
+                    "fieldRef": {"fieldPath": "metadata.labels['batch.kubernetes.io/job-name']"}
+                },
+            }
+        )
+        job = {
+            "apiVersion": "batch/v1",
+            "kind": "Job",
+            "metadata": pod["metadata"],
+            "spec": {
+                "backoffLimit": 0,
+                "activeDeadlineSeconds": execution["active_deadline_seconds"],
+                "template": {"metadata": {"labels": labels}, "spec": pod["spec"]},
+            },
+        }
+        return [config_map, job]
+    return [config_map, pod]
+
+
+def render_manifest(plan: Mapping[str, Any], source_path: Path, plan_path: Path) -> str:
+    import yaml
+
+    return yaml.safe_dump_all(render_objects(plan, source_path, plan_path), sort_keys=False)
 
 
 def main() -> None:
