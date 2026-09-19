@@ -27,6 +27,7 @@ RUNTIME_EVIDENCE_ONLY_V3_SCORING_KEYS = (
     "multi_app_aggregation_mode",
     "scoring_mode",
 )
+SCORING_INTENT_SCHEMA = "fleet-selfhosted-scoring-intent-v1"
 DIRECT_AUTHORITY_ATTESTATION_SCHEMA = "fleet-direct-authority-attestation-v1"
 TRANSIENT_READ_STATUS_CODES = {429, 502, 503, 504}
 MAX_READ_ATTEMPTS = 6
@@ -1307,6 +1308,29 @@ def build_scoring_payload(
     return payload
 
 
+def build_scoring_intent(
+    config: dict[str, Any],
+    *,
+    instance_id: str,
+    evidence_run_id: str,
+    scoring_payload: dict[str, Any],
+) -> dict[str, Any]:
+    """Bind the exact scoring request before its one allowed POST."""
+    intent = {
+        "schema_version": SCORING_INTENT_SCHEMA,
+        "run_id": config["run_id"],
+        "task_key": config["task"]["key"],
+        "task_version_id": config["task"]["version_id"],
+        "instance_id": instance_id,
+        "evidence_run_id": evidence_run_id,
+        "scoring_payload_mode": config["authority"].get("scoring_payload_mode"),
+        "request_keys": sorted(scoring_payload),
+        "request_sha256": sha256(canonical_json(scoring_payload)),
+    }
+    intent["scoring_intent_sha256"] = sha256(canonical_json(intent))
+    return intent
+
+
 def assert_authoritative_routes_deployed(
     client: httpx.Client, config: dict[str, Any]
 ) -> dict[str, Any]:
@@ -1875,18 +1899,12 @@ def run(
             final_answer=final_answer,
             messages=messages,
         )
-        scoring_intent = {
-            "schema_version": "fleet-selfhosted-scoring-intent-v1",
-            "run_id": config["run_id"],
-            "task_key": config["task"]["key"],
-            "task_version_id": config["task"]["version_id"],
-            "instance_id": instance_id,
-            "evidence_run_id": evidence_run_id,
-            "scoring_payload_mode": config["authority"].get("scoring_payload_mode"),
-            "request_keys": sorted(scoring_payload),
-            "request_sha256": sha256(canonical_json(scoring_payload)),
-        }
-        scoring_intent["scoring_intent_sha256"] = sha256(canonical_json(scoring_intent))
+        scoring_intent = build_scoring_intent(
+            config,
+            instance_id=instance_id,
+            evidence_run_id=evidence_run_id,
+            scoring_payload=scoring_payload,
+        )
         write_json_once(out_dir / "scoring-intent.json", scoring_intent)
         if safe_scoring_intent_sink is not None:
             safe_scoring_intent_sink(scoring_intent)

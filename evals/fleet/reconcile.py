@@ -21,7 +21,7 @@ OBSERVATION_SCHEMA = "fleet-selfhosted-authority-observation-v1"
 PLAN_SCHEMA = "fleet-selfhosted-reconcile-plan-v1"
 RESOURCE_SNAPSHOT_SCHEMA = "fleet-selfhosted-resource-snapshot-v1"
 RESOURCE_PLAN_SCHEMA = "fleet-selfhosted-resource-plan-v1"
-SCORING_INTENT_SCHEMA = "fleet-selfhosted-scoring-intent-v1"
+SCORING_INTENT_SCHEMA = self_hosted.SCORING_INTENT_SCHEMA
 
 
 class ReconcileError(RuntimeError):
@@ -42,7 +42,48 @@ def _digest(value: dict[str, Any]) -> str:
     return self_hosted.sha256(self_hosted.canonical_json(value))
 
 
-def _terminal_stream_receipt(attempt_dir: Path) -> dict[str, Any]:
+def _harness_name(binding: dict[str, Any]) -> str:
+    harness = binding.get("harness")
+    if harness is None:
+        return "qwen_code"
+    if not isinstance(harness, dict) or harness.get("name") not in {"qwen_code", "opencode"}:
+        raise ReconcileError("binding has an unsupported harness identity")
+    return str(harness["name"])
+
+
+def _terminal_stream_receipt(attempt_dir: Path, binding: dict[str, Any]) -> dict[str, Any]:
+    if _harness_name(binding) == "opencode":
+        path = attempt_dir / "agent-output" / "opencode-stream.jsonl"
+        process = _load_object(attempt_dir / "agent-process.json")
+        if set(process) != {"harness", "exit_code", "timed_out"}:
+            raise ReconcileError("OpenCode process receipt fields are invalid")
+        exit_code = process.get("exit_code")
+        timed_out = process.get("timed_out")
+        if (
+            process.get("harness") != "opencode"
+            or isinstance(exit_code, bool)
+            or not isinstance(exit_code, int)
+            or not isinstance(timed_out, bool)
+        ):
+            raise ReconcileError("OpenCode process receipt is invalid")
+        try:
+            events, malformed = self_hosted.load_opencode_trace(path)
+            termination = self_hosted.opencode_termination(
+                events,
+                malformed_lines=malformed,
+                exit_code=exit_code,
+                timed_out=timed_out,
+            )
+        except (OSError, RuntimeError) as exc:
+            raise ReconcileError("OpenCode stream is missing or invalid") from exc
+        if termination != "completed":
+            raise ReconcileError("OpenCode stream is not a successful terminal model outcome")
+        return {
+            "terminal": True,
+            "stream_sha256": self_hosted.sha256(path.read_bytes()),
+            "num_turns": sum(event.get("type") == "step_finish" for event in events),
+        }
+
     path = attempt_dir / "agent-output" / "qwen-stream.jsonl"
     try:
         lines = path.read_text(errors="replace").splitlines()
@@ -69,12 +110,22 @@ def _terminal_stream_receipt(attempt_dir: Path) -> dict[str, Any]:
 
 
 def _conversation_evidence(
-    attempt_dir: Path,
+    attempt_dir: Path, binding: dict[str, Any]
 ) -> tuple[dict[str, Any], list[dict[str, Any]], str]:
-    events, canonical_trace, malformed = self_hosted.load_qwen_chat_trace(attempt_dir / "qwen-home")
+    if _harness_name(binding) == "opencode":
+        canonical_trace = attempt_dir / "agent-output" / "opencode-stream.jsonl"
+        try:
+            events, malformed = self_hosted.load_opencode_trace(canonical_trace)
+            messages = self_hosted.normalize_opencode_conversation(events)
+        except (OSError, RuntimeError, ValueError) as exc:
+            raise ReconcileError("OpenCode conversation is missing or invalid") from exc
+    else:
+        events, canonical_trace, malformed = self_hosted.load_qwen_chat_trace(
+            attempt_dir / "qwen-home"
+        )
+        messages = self_hosted.normalize_qwen_conversation(events)
     if malformed:
-        raise ReconcileError("Qwen chat contains malformed records")
-    messages = self_hosted.normalize_qwen_conversation(events)
+        raise ReconcileError("agent conversation contains malformed records")
     calls: set[str] = set()
     results: set[str] = set()
     for message in messages:
@@ -84,14 +135,17 @@ def _conversation_evidence(
                 call_id = str(call.get("id") or "")
                 if call_id:
                     calls.add(call_id)
-        if message.get("role") == "tool" and str(
-            (message.get("metadata") or {}).get("qwen_tool_name") or ""
-        ).endswith("submit_report"):
+        metadata = message.get("metadata") or {}
+        tool_name = metadata.get("qwen_tool_name") or metadata.get("opencode_tool_name")
+        if message.get("role") == "tool" and str(tool_name or "").endswith("submit_report"):
             call_id = str(message.get("tool_call_id") or "")
             if call_id:
                 results.add(call_id)
     final_answer = self_hosted.final_answer_from_conversation(messages)
-    stream = attempt_dir / "agent-output" / "qwen-stream.jsonl"
+    stream_name = (
+        "opencode-stream.jsonl" if _harness_name(binding) == "opencode" else "qwen-stream.jsonl"
+    )
+    stream = attempt_dir / "agent-output" / stream_name
     if not final_answer and stream.exists():
         final_answer = self_hosted.extract_final_answer(stream)
     receipt = {
@@ -235,15 +289,23 @@ def _resource_plan(
         raise ReconcileError("resource plan self-digest mismatch")
     _validate_identity(plan, binding, runtime, label="resource plan")
     suffix = hashlib.sha256(binding["run_id"].encode()).hexdigest()[:8]
-    expected_containers = {
+    legacy_containers = {
         f"qwen-agent-{suffix}",
         f"qwen-model-proxy-{suffix}",
         f"qwen-mcp-proxy-{suffix}",
     }
+    current_containers = {
+        f"agent-runtime-{suffix}",
+        f"agent-model-proxy-{suffix}",
+        f"agent-mcp-proxy-{suffix}",
+    }
     containers = plan.get("containers")
-    if not isinstance(containers, list) or set(containers) != expected_containers:
+    if not isinstance(containers, list) or set(containers) not in (
+        legacy_containers,
+        current_containers,
+    ):
         raise ReconcileError("resource plan container identities drifted")
-    if len(containers) != len(expected_containers):
+    if len(containers) != len(set(containers)):
         raise ReconcileError("resource plan contains duplicate containers")
     network = plan.get("network")
     if not isinstance(network, str) or not network or network == "bridge":
@@ -254,16 +316,15 @@ def _resource_plan(
 def _scoring_payload(
     binding: dict[str, Any], runtime: dict[str, Any], messages: list[dict[str, Any]], final: str
 ) -> dict[str, Any]:
-    authority = binding.get("authority")
-    if not isinstance(authority, dict):
-        raise ReconcileError("binding lacks authoritative scoring controls")
-    return {
-        "instance_id": runtime["instance_id"],
-        "final_answer": final,
-        "conversation": messages,
-        "scoring_mode": authority.get("scoring_mode"),
-        "multi_app_aggregation_mode": authority.get("multi_app_aggregation_mode"),
-    }
+    try:
+        return self_hosted.build_scoring_payload(
+            binding,
+            instance_id=runtime["instance_id"],
+            final_answer=final,
+            messages=messages,
+        )
+    except (KeyError, RuntimeError) as exc:
+        raise ReconcileError("binding lacks valid authoritative scoring controls") from exc
 
 
 def _scoring_intent(
@@ -276,7 +337,7 @@ def _scoring_intent(
     if not path.exists():
         return False
     intent = _load_object(path)
-    expected_fields = {
+    legacy_fields = {
         "schema_version",
         "run_id",
         "instance_id",
@@ -284,13 +345,35 @@ def _scoring_intent(
         "request_sha256",
         "scoring_intent_sha256",
     }
-    if set(intent) != expected_fields or intent.get("schema_version") != SCORING_INTENT_SCHEMA:
+    current_fields = legacy_fields | {
+        "task_key",
+        "task_version_id",
+        "scoring_payload_mode",
+        "request_keys",
+    }
+    intent_fields = set(intent)
+    if (
+        intent_fields not in (legacy_fields, current_fields)
+        or intent.get("schema_version") != SCORING_INTENT_SCHEMA
+    ):
         raise ReconcileError("scoring intent schema or fields are invalid")
     supplied_digest = intent["scoring_intent_sha256"]
     unsigned = {key: value for key, value in intent.items() if key != "scoring_intent_sha256"}
     if supplied_digest != _digest(unsigned):
         raise ReconcileError("scoring intent self-digest mismatch")
     _validate_identity(intent, binding, runtime, label="scoring intent")
+    if intent_fields == current_fields:
+        authority = binding.get("authority")
+        expected = {
+            "task_key": binding["task"]["key"],
+            "task_version_id": binding["task"]["version_id"],
+            "scoring_payload_mode": (
+                authority.get("scoring_payload_mode") if isinstance(authority, dict) else None
+            ),
+            "request_keys": sorted(scoring_payload),
+        }
+        if any(intent.get(field) != value for field, value in expected.items()):
+            raise ReconcileError("scoring intent producer metadata drifted")
     if intent.get("request_sha256") != self_hosted.sha256(
         self_hosted.canonical_json(scoring_payload)
     ):
@@ -363,8 +446,8 @@ def build_plan(
     binding = _load_object(attempt_dir / "binding.json")
     runtime = _load_object(attempt_dir / "runtime-binding.json")
     resources, resource_plan_sha256 = _resource_plan(attempt_dir, binding, runtime)
-    stream = _terminal_stream_receipt(attempt_dir)
-    conversation, messages, final_answer = _conversation_evidence(attempt_dir)
+    stream = _terminal_stream_receipt(attempt_dir, binding)
+    conversation, messages, final_answer = _conversation_evidence(attempt_dir, binding)
     scoring_payload = _scoring_payload(binding, runtime, messages, final_answer)
     scoring_intent_exists = _scoring_intent(attempt_dir, binding, runtime, scoring_payload)
     local = _local_reward(attempt_dir, binding, runtime)

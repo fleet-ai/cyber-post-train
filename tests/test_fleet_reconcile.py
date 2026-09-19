@@ -119,6 +119,80 @@ def _attempt(tmp_path: Path, *, report: bool = True) -> Path:
     return attempt
 
 
+def _current_opencode_attempt(tmp_path: Path, *, scoring_payload_mode: str | None) -> Path:
+    attempt = _attempt(tmp_path)
+    binding = json.loads((attempt / "binding.json").read_text())
+    binding["harness"] = {"name": "opencode"}
+    if scoring_payload_mode is not None:
+        binding["authority"]["scoring_payload_mode"] = scoring_payload_mode
+    _write(attempt / "binding.json", binding)
+    runtime = json.loads((attempt / "runtime-binding.json").read_text())
+
+    run_id = binding["run_id"]
+    suffix = hashlib.sha256(run_id.encode()).hexdigest()[:8]
+    _write(
+        attempt / "resource-plan.json",
+        _with_digest(
+            {
+                "schema_version": reconcile.RESOURCE_PLAN_SCHEMA,
+                "run_id": run_id,
+                "instance_id": runtime["instance_id"],
+                "evidence_run_id": runtime["evidence_run_id"],
+                "containers": [
+                    f"agent-runtime-{suffix}",
+                    f"agent-model-proxy-{suffix}",
+                    f"agent-mcp-proxy-{suffix}",
+                ],
+                "network": "private",
+            },
+            "resource_plan_sha256",
+        ),
+    )
+    _write(
+        attempt / "agent-process.json",
+        {"harness": "opencode", "exit_code": 0, "timed_out": False},
+    )
+    events = [
+        {
+            "type": "text",
+            "part": {"type": "text", "id": "text-1", "text": "finished"},
+        },
+        {
+            "type": "tool",
+            "part": {
+                "type": "tool",
+                "id": "tool-1",
+                "tool": "fleet_submit_report",
+                "state": {
+                    "status": "completed",
+                    "input": {"redacted": True},
+                    "output": "accepted",
+                },
+            },
+        },
+        {"type": "step_finish", "part": {"reason": "stop"}},
+    ]
+    stream = attempt / "agent-output" / "opencode-stream.jsonl"
+    stream.write_text("".join(json.dumps(event) + "\n" for event in events))
+    messages = self_hosted.normalize_opencode_conversation(events)
+    payload = self_hosted.build_scoring_payload(
+        binding,
+        instance_id=runtime["instance_id"],
+        final_answer=self_hosted.final_answer_from_conversation(messages),
+        messages=messages,
+    )
+    _write(
+        attempt / "scoring-intent.json",
+        self_hosted.build_scoring_intent(
+            binding,
+            instance_id=runtime["instance_id"],
+            evidence_run_id=runtime["evidence_run_id"],
+            scoring_payload=payload,
+        ),
+    )
+    return attempt
+
+
 def _observation(*, results: list[dict] | None = None, status: str = "running") -> dict:
     return _with_digest(
         {
@@ -324,6 +398,45 @@ def test_scoring_intent_must_match_exact_preserved_request(tmp_path: Path) -> No
     _with_digest(intent, "scoring_intent_sha256")
     _write(attempt / "scoring-intent.json", intent)
     with pytest.raises(reconcile.ReconcileError, match="preserved trace"):
+        reconcile.build_plan(attempt)
+
+
+@pytest.mark.parametrize(
+    "scoring_payload_mode",
+    [None, self_hosted.RUNTIME_EVIDENCE_ONLY_V3],
+)
+def test_current_opencode_attempt_round_trips_through_recovery(
+    tmp_path: Path, scoring_payload_mode: str | None
+) -> None:
+    attempt = _current_opencode_attempt(tmp_path, scoring_payload_mode=scoring_payload_mode)
+
+    plan = reconcile.build_plan(attempt)
+
+    assert plan["model_outcome"]["terminal"] is True
+    assert plan["conversation"]["submit_report_completed"] is True
+    assert plan["scoring_intent_exists"] is True
+    assert plan["rerun_model"] is False
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("task_key", "other-task"),
+        ("scoring_payload_mode", "unknown-mode"),
+        ("request_keys", ["instance_id"]),
+    ],
+)
+def test_live_producer_scoring_intent_metadata_drift_fails_closed(
+    tmp_path: Path, field: str, value
+) -> None:
+    attempt = _current_opencode_attempt(tmp_path, scoring_payload_mode=None)
+    intent = json.loads((attempt / "scoring-intent.json").read_text())
+    intent[field] = value
+    intent.pop("scoring_intent_sha256")
+    _with_digest(intent, "scoring_intent_sha256")
+    _write(attempt / "scoring-intent.json", intent)
+
+    with pytest.raises(reconcile.ReconcileError, match="producer metadata drifted"):
         reconcile.build_plan(attempt)
 
 
