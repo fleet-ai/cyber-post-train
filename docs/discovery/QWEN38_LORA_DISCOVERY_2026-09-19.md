@@ -32,10 +32,15 @@ but no qualified exact-Qwen3.8 LoRA production recipe:
 | LoRA RL | A retired `dataminer_v2` PEFT prototype performed real Qwen3.8 LoRA-GRPO updates. Current SkyRL has a Qwen3.5-architecture Megatron bridge, LoRA, and per-turn training support that make it a strong exact-model candidate. | The old prototype truncated updates, was not a supported Fleet recipe, and could not train compacted histories. Current SkyRL has no exact Fleet Qwen3.8 LoRA cyber receipt or Fleet compaction integration yet. |
 | WebExploitBench | TensorLake collection and scoring can be separated. Unmerged commit [`ad7d05c0`](https://github.com/fleet-ai/cyber-post-train/blob/ad7d05c0/docs/WEB_EVAL_RESULTS_2026-09-15.md#fresh75-step-230-complete-pass1-evaluation) reports 15/15 scored Fresh75 attempts (3/110), but its private receipt bytes are not in current main and no matched base exists. | There is no complete matched OpenCode base-versus-trained comparison that can establish lift. |
 
-Therefore the initial production candidate is **current SkyRL Megatron LoRA**,
-not Miles. It must use per-turn training records so context compaction remains
-valid. The older full-weight recipes remain controls and infrastructure
-references, not substitutes for the requested LoRA experiments.
+Therefore the leading implementation candidate is **current SkyRL Megatron
+LoRA**, not Miles. It is not currently launchable for exact Qwen3.8. Static
+review found two code-level gaps that must be repaired and tested first: the SFT
+configuration does not route Qwen3.8 through SkyRL's text-only Qwen3.5 bridge,
+and the default Megatron `all-linear` target list has no proof that it covers
+Qwen3.8's Gated-DeltaNet projections. It must also use per-turn training records
+so context compaction remains valid. The older full-weight recipes remain
+controls and infrastructure references, not substitutes for the requested LoRA
+experiments.
 
 ## Historical training evidence
 
@@ -160,6 +165,81 @@ turn samples unless the loss explicitly normalizes by trajectory. That choice
 must be predeclared and logged so “longer” is not silently treated as “more
 important.” Generic save, reload, and vLLM adapter-sync code is present, but no
 exact-Qwen3.8 receipt proves those paths yet.
+
+### Static qualification findings at the pinned SkyRL revision
+
+The review of `fleet-ai/skyrl-fleet-v2@fe1ad6c154f6c40bfcfb3c514f5afe3b1dbed5a4`
+found two confirmed launch blockers and one missing acceptance test:
+
+1. `skyrl/train/config/sft_config.py::build_skyrl_config_for_sft` does not copy
+   a `language_model_only` setting into the internal policy configuration, and
+   the public `SFTConfig` has no corresponding field. By contrast,
+   `megatron_worker.py::init_configs` only forces the text-only
+   `Qwen3_5TextForCausalLM` bridge when `language_model_only=True`. Without that
+   route, the unified conditional-generation bridge self-packs the model and
+   conflicts with SkyRL's packed SFT path. This must be a typed configuration
+   field, copied consistently to the trainer and exact-image tested; a command-
+   line override that the SFT config silently drops is not a repair.
+2. `megatron_worker.py::configure_lora` maps Megatron `all-linear` to only
+   `linear_qkv`, `linear_proj`, `linear_fc1`, and `linear_fc2`. Qwen3.8 has 48
+   Gated-DeltaNet linear-attention layers in addition to 16 full-attention
+   layers. No exact-model trainable-parameter census currently proves that this
+   fixed target list reaches the intended Gated-DeltaNet projections. The
+   qualification must enumerate every adapter tensor by layer and fail if any
+   intended linear projection is absent or any base tensor is trainable.
+3. SkyRL has generic adapter checkpoint and vLLM synchronization code, but its
+   trainer-level Megatron LoRA checkpoint test remains excluded/TODO and there
+   is no exact-Qwen3.8 save, zero-step reload, merge, or sampler-parity test.
+   The current adapter reload and HF export paths use `strict=False`; reload
+   rejects unexpected keys but does not reject missing adapter keys. Exact-model
+   acceptance must therefore add a complete expected-key manifest rather than
+   treating a non-throwing load as success.
+4. Neither bundled cyber-facing generator is currently a valid compaction path.
+   The Harbor generator explicitly rejects summarization and asserts that an
+   episode has one segment. The ThunderAgent integration imports and calls
+   parent interfaces that are absent at this revision, does not emit the
+   trajectory-boundary fields required by step-wise training, and re-tokenizes
+   messages. Core step-wise data structures can represent discontinuous prompts,
+   but a repaired environment adapter must produce exact per-turn tokens and
+   trajectory IDs after real compaction.
+
+These findings prevent a paid exact-model SFT or RL submission. The correct
+next action is a code-and-test repair followed by the CPU/image and synthetic
+distributed gates below, not a speculative cluster canary.
+
+### Supported image-build path and its current blockers
+
+Fleet's supported build route is `ftl build` against the development image API,
+which creates a batch job in the development cluster's `buildkit` namespace and
+publishes an immutable ECR digest. It is not the old SkyRL raw-`kubectl` Docker-
+in-Docker script: that script targets a retired AWS cluster, uses a branch and
+short mutable tags, injects a GitHub token, and directly creates and deletes
+privileged jobs.
+
+The supported route cannot yet build the chosen SkyRL revision:
+
+- The current candidate commit
+  `fe1ad6c154f6c40bfcfb3c514f5afe3b1dbed5a4` does not contain the Fleet-v2
+  Dockerfile. That integration exists on the older Fleet branch around
+  `a3ab2d6da6ffe897fc00a143013efbaf6c940361`, so using it unchanged would test
+  different SkyRL code.
+- The development BuildKit role currently permits publication only to
+  `fleet/miles-trainer`. A dedicated immutable SkyRL repository must be created
+  and added to the role through Terraform before a build is attempted.
+- The older SkyRL Dockerfile requests a BuildKit secret named `gh_token`, while
+  the supported Fleet image API provides private-Git access through an SSH
+  mount and does not provide that secret. The Dockerfile must use the server-
+  supplied SSH contract, or the API must gain a server-managed secret. A token
+  must never be passed as a build argument.
+
+There is no image-build preview endpoint: `ftl build submit` creates a real
+development build job and pushes an image. Before that call, resolve every
+source and platform reference to a full commit, run the exact-checkout CPU
+tests, verify authenticated read-only API routing, verify the repository/IAM
+and secret contracts, and predeclare the output tag as the full source commit.
+After success, record the returned digest immediately and consume only
+`repository@sha256:...`; non-Miles build records disappear after the build-job
+retention window.
 
 ## Failure lessons that become launch requirements
 

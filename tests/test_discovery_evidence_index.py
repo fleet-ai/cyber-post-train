@@ -35,6 +35,11 @@ def test_qwen38_lora_evidence_index_is_internally_consistent():
     assert budget["consumed_since_reset"] == 0
     assert budget["any_submitted_goal_owned_dev_or_production_cluster_job_that_terminally_fails_consumes_budget"]
 
+    image_build = value["image_build_qualification"]
+    assert image_build["status"] == "blocked_before_submission"
+    assert image_build["failure_budget_consumed"] == 0
+    assert len(image_build["blockers"]) == 3
+
     tasks = value["task_inventory"]
     assert tasks["current_blackbox_task_keys"] == 1055
     assert tasks["current_exact_receipt_task_keys"] == 80

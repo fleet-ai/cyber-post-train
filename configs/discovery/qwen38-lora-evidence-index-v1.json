@@ -98,9 +98,22 @@
       "lora_supported": true,
       "execution_evidence": "Qwen3.5-family examples and tests only; no exact-Qwen3.8 Fleet cyber receipt",
       "use": "leading_qualification_candidate",
-      "limitation": "architecture bridge compatibility, exact tensor conversion, Fleet environment integration, actual compaction, save/reload, and sampler synchronization still require proof"
+      "limitation": "not launchable as pinned: SFT config does not expose/copy language_model_only to select the Qwen3.8 text bridge; fixed Megatron all-linear targets omit named Gated-DeltaNet projections and lack an exact coverage census; Harbor rejects summarization; ThunderAgent integration is broken and emits no step-wise trajectory boundaries; trainer-level Megatron LoRA checkpoint test is TODO; reload/export do not reject missing adapter keys; exact tensor conversion, Fleet integration, actual compaction, save/reload, merge, and sampler synchronization still require proof"
     }
   ],
+  "image_build_qualification": {
+    "supported_route": "ftl build -> https://api.ft.dev.flt.build/v1/images/build -> dev buildkit namespace -> Fleet ECR digest",
+    "candidate_source_revision": "fleet-ai/skyrl-fleet-v2@fe1ad6c154f6c40bfcfb3c514f5afe3b1dbed5a4",
+    "status": "blocked_before_submission",
+    "failure_budget_consumed": 0,
+    "blockers": [
+      "candidate revision has no Fleet-v2 Dockerfile; existing integration is on older revision a3ab2d6da6ffe897fc00a143013efbaf6c940361",
+      "development BuildKit IAM currently permits only fleet/miles-trainer, not an immutable SkyRL ECR repository",
+      "older Dockerfile requires gh_token but supported image API supplies SSH private-Git access instead"
+    ],
+    "prohibited_shortcut": "do not use the legacy raw-kubectl privileged Docker-in-Docker script or pass credentials as build arguments",
+    "acceptance": "full source and platform commit pins, exact-checkout CPU tests, reviewed ECR/IAM and SSH-secret contract, API success with matching Job UID and sha256 digest, then digest-only image qualification"
+  },
   "sft_attempts": [
     {
       "id": "q38-sep7-original-teacher",
