@@ -1,7 +1,6 @@
 import json
 from pathlib import Path
 
-
 ROOT = Path(__file__).parents[1]
 INDEX = ROOT / "configs/discovery/qwen38-lora-evidence-index-v1.json"
 
@@ -23,8 +22,10 @@ def test_qwen38_lora_evidence_index_is_internally_consistent():
     all_names = sft_names + rl_names
     assert len(all_names) == len(set(all_names)) == summary["named_training_runs_indexed"] == 62
     assert len(value["checkpoints"]) == summary["checkpoint_entries_indexed"] == 7
-    assert len(value["webexploitbench_evaluations"]) == summary["webexploitbench_evaluation_lineages_indexed"] == 8
-    assert len(value["fleet_heldout_evaluations"]) == summary["fleet_evaluation_lineages_indexed"] == 3
+    assert len(value["webexploitbench_evaluations"]) == 8
+    assert summary["webexploitbench_evaluation_lineages_indexed"] == 8
+    assert len(value["fleet_heldout_evaluations"]) == 3
+    assert summary["fleet_evaluation_lineages_indexed"] == 3
     assert summary["accepted_sft_checkpoints"] == len(accepted) == 4
     assert summary["accepted_rl_checkpoints"] == 0
     assert summary["accepted_matched_webexploitbench_comparisons"] == 0
@@ -33,7 +34,9 @@ def test_qwen38_lora_evidence_index_is_internally_consistent():
     budget = value["failure_budget_reset"]
     assert budget["max_terminal_failed_cluster_jobs"] == 10
     assert budget["consumed_since_reset"] == 0
-    assert budget["any_submitted_goal_owned_dev_or_production_cluster_job_that_terminally_fails_consumes_budget"]
+    assert budget[
+        "any_submitted_goal_owned_dev_or_production_cluster_job_that_terminally_fails_consumes_budget"
+    ]
 
     image_build = value["image_build_qualification"]
     assert image_build["status"] == "blocked_before_submission"

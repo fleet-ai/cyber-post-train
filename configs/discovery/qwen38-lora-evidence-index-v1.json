@@ -93,6 +93,7 @@
     {
       "id": "skyrl-fleet-v2-current",
       "repository_revision": "fleet-ai/skyrl-fleet-v2@fe1ad6c154f6c40bfcfb3c514f5afe3b1dbed5a4",
+      "fleet_integration_revision": "fleet-ai/skyrl-fleet-v2@a3ab2d6da6ffe897fc00a143013efbaf6c940361",
       "exact_model": false,
       "method": "Megatron_LoRA_SFT_and_step_wise_GRPO_candidate",
       "lora_supported": true,
@@ -103,11 +104,13 @@
   ],
   "image_build_qualification": {
     "supported_route": "ftl build -> https://api.ft.dev.flt.build/v1/images/build -> dev buildkit namespace -> Fleet ECR digest",
-    "candidate_source_revision": "fleet-ai/skyrl-fleet-v2@fe1ad6c154f6c40bfcfb3c514f5afe3b1dbed5a4",
+    "upstream_core_revision": "fleet-ai/skyrl-fleet-v2@fe1ad6c154f6c40bfcfb3c514f5afe3b1dbed5a4",
+    "fleet_integration_revision": "fleet-ai/skyrl-fleet-v2@a3ab2d6da6ffe897fc00a143013efbaf6c940361",
+    "candidate_source_revision": null,
     "status": "blocked_before_submission",
     "failure_budget_consumed": 0,
     "blockers": [
-      "candidate revision has no Fleet-v2 Dockerfile; existing integration is on older revision a3ab2d6da6ffe897fc00a143013efbaf6c940361",
+      "qualification fixes are based on the core revision while the Dockerfile and Fleet runtime are on descendant a3ab2d6da6ffe897fc00a143013efbaf6c940361; the final candidate must contain both and receive a new immutable commit",
       "development BuildKit IAM currently permits only fleet/miles-trainer, not an immutable SkyRL ECR repository",
       "older Dockerfile requires gh_token but supported image API supplies SSH private-Git access instead"
     ],

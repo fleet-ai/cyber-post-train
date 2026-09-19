@@ -168,7 +168,11 @@ exact-Qwen3.8 receipt proves those paths yet.
 
 ### Static qualification findings at the pinned SkyRL revision
 
-The review of `fleet-ai/skyrl-fleet-v2@fe1ad6c154f6c40bfcfb3c514f5afe3b1dbed5a4`
+The core review used
+`fleet-ai/skyrl-fleet-v2@fe1ad6c154f6c40bfcfb3c514f5afe3b1dbed5a4`.
+The Fleet integration branch at
+`a3ab2d6da6ffe897fc00a143013efbaf6c940361` is a descendant, and the four
+affected core files are byte-identical across the two revisions. The review
 found two confirmed launch blockers and one missing acceptance test:
 
 1. `skyrl/train/config/sft_config.py::build_skyrl_config_for_sft` does not copy
@@ -218,11 +222,13 @@ privileged jobs.
 
 The supported route cannot yet build the chosen SkyRL revision:
 
-- The current candidate commit
+- The upstream core commit
   `fe1ad6c154f6c40bfcfb3c514f5afe3b1dbed5a4` does not contain the Fleet-v2
-  Dockerfile. That integration exists on the older Fleet branch around
-  `a3ab2d6da6ffe897fc00a143013efbaf6c940361`, so using it unchanged would test
-  different SkyRL code.
+  Dockerfile. The Fleet integration commit
+  `a3ab2d6da6ffe897fc00a143013efbaf6c940361` is 29 commits ahead and supplies
+  the Dockerfile and environment. The qualification fixes must be rebased onto
+  that exact descendant so the built image contains both the reviewed core and
+  the Fleet runtime; building either ancestor alone would test the wrong source.
 - The development BuildKit role currently permits publication only to
   `fleet/miles-trainer`. A dedicated immutable SkyRL repository must be created
   and added to the role through Terraform before a build is attempted.
