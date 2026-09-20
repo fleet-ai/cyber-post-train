@@ -13,7 +13,8 @@ runtime plan digest, and recipe. The validator is
 
 ## What the queue does
 
-For every training arm, it reserves unique names for:
+For every training arm and every checkpoint step that its immutable recipe can
+emit, it can reserve unique names for:
 
 - one new checkpoint-serving route;
 - one matched OpenCode WebExploitBench task-0 canary;
@@ -31,6 +32,33 @@ evaluation packet. Every arm may run on the 17 development tasks because those
 tasks were excluded from training and are the declared checkpoint-selection
 set. The eight final-test tasks may run once, after a single checkpoint has
 been selected without using the final-test outcomes.
+
+Checkpoint-directory presence is not acceptance. An interval checkpoint can
+enter this queue only with its own full checkpoint seal, payload rehash,
+zero-update export, and zero-update reload receipt. A caller selects an interval
+with `--optimizer-step`; a step the recipe could not have emitted is rejected.
+Because a full-weight checkpoint is about 303 GB and each run retains only the
+latest three, the operational priority is scientifically spaced states rather
+than every adjacent save: the final state, an early state, and a middle state
+when that arm can change the learning-curve decision. The mechanism still
+supports every independently accepted step under identical controls.
+
+The preservation and evaluation order is:
+
+1. every accepted final checkpoint, with batch-64 and batch-32 first because
+   they finish earliest and test the widest batch boundary;
+2. one early and one middle checkpoint for batch-32, learning-rate `3e-6`, the
+   `1e-5` reference arm, and batch-16, which currently provide the most useful
+   learning-rate/batch-size comparison;
+3. one-epoch final, then a middle state, to separate training duration from
+   optimizer settings;
+4. sparse checkpoints from the low-learning-rate and four-epoch boundaries;
+   and
+5. any additional interval only when its training metrics or Fleet-development
+   result can change a decision already represented above.
+
+This ordering is a storage and decision policy, not an acceptance claim. A
+surviving directory that has not passed the receipt gates remains ineligible.
 
 ## Why the queue cannot launch a model prematurely
 
@@ -83,6 +111,10 @@ uv run python -m evals.webexploitbench.tensorlake.fresh75_v2_eval_queue \
   --arm b64-lr1e5-e2 \
   --output /private/tmp/b64-eval-packet.json
 ```
+
+To render an interval-checkpoint packet, add for example
+`--optimizer-step 20`. Its route and campaign names include that step so they
+cannot collide with the final-checkpoint packet.
 
 Adding `--qualification <accepted-receipt.json>` does not launch anything. It
 only reopens the exact receipt, checks every terminal and zero-update gate, and

@@ -1,0 +1,260 @@
+{
+  "schema_version": "qwen38_accepted_self_sft_eval_packet_v1",
+  "status": "sealed_waiting_for_serving_qualification",
+  "checkpoint": {
+    "checkpoint_id": "q38-self-sft-step44",
+    "lineage_kind": "self_sft",
+    "run_name": "chris-q38-self-lr1-v2-d736712b",
+    "api_run_id": "d736712b-d33c-418f-a405-3a1f8d8c01c7",
+    "rayjob_uid": "d5d1d6ab-1605-4b10-b101-136fcb96ffbc",
+    "terminal_state": "SUCCEEDED",
+    "optimizer_step": 44,
+    "checkpoint_path": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/checkpoints/global_step_44",
+    "export_path": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/hf-export-v1",
+    "training_data": {
+      "successful_sessions": 35,
+      "tasks": 20,
+      "windows": 175,
+      "supervised_tokens": 45676,
+      "source_harness": "opencode-1.18.27"
+    },
+    "evidence_index": {
+      "path": "configs/discovery/qwen38-lora-evidence-index-v1.json",
+      "file_sha256": "sha256:adb6b89328a3d8fb5249fea01f36c67da94ad0a4a2e295d08e5477ae2b9866c9"
+    },
+    "checkpoint_seal": {
+      "evidence_locator": "git:e76bb622:docs/evidence/qwen38-study/2026-09-13-sft-checkpoint-seals-v1.json",
+      "manifest_path": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/checkpoint-seals-v1/checkpoint-step-44.json",
+      "manifest_file_sha256": "sha256:0094cfeb62f120b55d9e2f7fdfd4217c4c0aab66f369e3c52c89fc5e7ccfff9b",
+      "receipt_sha256": "sha256:bf8237a5837dd75bf1163b5a5e134e1349417599c1a28f022b91281c2c7b7885",
+      "checkpoint_files": 33,
+      "checkpoint_bytes": 324627486795,
+      "producer_pod_uid": "fefa8ec1-d63c-4013-8e3f-24a110f02e9f",
+      "verifier_pod_uid": "6aad5b3b-a62c-4157-8937-061483bec3f0",
+      "full_payload_rehashed": true,
+      "source_stable": true
+    },
+    "export_reload": {
+      "evidence_locator": "git:0d0c97e1:docs/evidence/qwen38-study/2026-09-13-sft-export-gpu-acceptance-v1.json",
+      "export_receipt_path": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/hf-export-v1/EXPORT.json",
+      "export_file_sha256": "sha256:7d3d56da513488dab485114b49b4fe34c5efe4c2526577c0063a2cbc87413e50",
+      "export_receipt_sha256": "sha256:12f06f12a35f9c0509610f8bed8cb685fc23864490ec5de7739ee1e6aa48f606",
+      "tensor_count": 1199,
+      "tensor_bytes": 55562855904,
+      "dtype": "BF16",
+      "optimizer_steps_executed": 0,
+      "gpu_check": {
+        "api_name": "chris-q38-self-hfcheck-v1-4da583be",
+        "rayjob_uid": "ca872fa6-6a2b-46aa-aa48-105e19115c19",
+        "workload_uid": "c04a965a-74cd-4dd5-8b37-42177ea40b13",
+        "pod_uid": "b3d13079-86bb-4dfd-b51b-184cfcc4f0e3",
+        "status": "SUCCEEDED",
+        "plan_sha256": "sha256:cc41d800059605d7633e6c47fd4601165dbe7d07b90925be08d10db7459e395c",
+        "request_sha256": "sha256:c2c5d3d09b39d0bca803d90782c50926e997b85035a026522cd896227d4a398c",
+        "file_sha256": "sha256:e866e6381a4a79bf1cb759016afde3aa5756bc707e047572e7edc59b18a4653c",
+        "receipt_sha256": "sha256:9fed9b8368d58213af9999abe18d73dd5fb83cd273ee7923b57321f6c4d31e12",
+        "finite_logits": true,
+        "optimizer_steps_executed": 0,
+        "source_unchanged": true,
+        "resources_released": true
+      },
+      "independent_verifier": {
+        "pod_uid": "dcc11fe3-89ce-48a7-822d-f80898be22ad",
+        "status": "Succeeded",
+        "file_sha256": "sha256:fb0fb24d0ed14bc9702047f40b1f186467ce9314d04bcf372436efafba53584f",
+        "receipt_sha256": "sha256:81ef61d9506ac92331698b9391dcddcfc22853b8ef88ee70f80da433376123c0",
+        "full_payloads_rehashed": true,
+        "source_identities_validated": true
+      },
+      "serving_qualified": false
+    }
+  },
+  "base_model": {
+    "model_id": "qwen3.8-27b",
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "weight_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+    "lock_path": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+    "lock_file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+    "sealed_route_uid": "d06c0531-7181-41ad-a3fd-cd8e3e774ab9"
+  },
+  "serving": {
+    "candidate_model_id": "chris-q38-self-sft-step44-wbe-v1",
+    "create_once": true,
+    "initial_state": "paused",
+    "priority": "c1",
+    "nodes": 1,
+    "gpus": 8,
+    "min_replicas": 0,
+    "requires_new_uid": true,
+    "existing_route_forbidden": true,
+    "fresh_live_parity_required": true
+  },
+  "webexploitbench": {
+    "protocol_source": {
+      "path": "configs/evaluation/qwen38-fresh75-step230-opencode-wbe-matched-v1.json",
+      "file_sha256": "sha256:0eef151dd9f1740005152c1aceb3cd664cb3033aac3bef1b2f45f9c81d3c7016"
+    },
+    "benchmark": {
+      "repository": "AgentCyberRange/WebExploitBench",
+      "revision": "7f97d87fa8ab728260c0ba9b09b9c8f00bb82ad5",
+      "cage_commit": "09a191c565230cebb8255899d622d23c7ddeff33",
+      "cage_patch_set_sha256": "sha256:baf629de2ea13a5648f9de792514efcd73c71667c1ffe375b8669cbc1ad72b51",
+      "target_count": 15,
+      "task_order_sha256": "sha256:1e9536e872e1ae602fea5034e08f059a712f056a7cf7bc8521cc88e8aab7357d",
+      "canary_task_index": 0
+    },
+    "shared_snapshot": {
+      "snapshot_id": "9ex8su1qpaf3o6f0r5wmz",
+      "task_count": 15,
+      "task_order_sha256": "sha256:1e9536e872e1ae602fea5034e08f059a712f056a7cf7bc8521cc88e8aab7357d",
+      "qualification_receipt_sha256": "sha256:bb060c786ea4213ded3673ff31a6a2b81278ac497092b89dc7c1bdc418cf89f3",
+      "full15_receipt_sha256": "sha256:dc9cb28d6e335cad93a5384d0d9eba084d9cab102dea6a7ce0f0b67de9c2f9a7",
+      "runner_sha256": "sha256:0a4c783b46709825ea41f8a0802e7b209e6960253c3cb6d1fd0055834c276e43"
+    },
+    "harness": "opencode-1.18.27",
+    "collection": "score_free_immutable_rollout_bundles",
+    "scoring": "separate_resumable_stage",
+    "selection_use": "reporting_only",
+    "base_control": {
+      "model_id": "qwen3.8-27b",
+      "sealed_route_uid": "d06c0531-7181-41ad-a3fd-cd8e3e774ab9",
+      "policy": "reuse_exact_common_control_else_create_once",
+      "reuse_requires_exact_protocol_and_accepted_immutable_bundle": true,
+      "fresh_duplicate_census_required": true
+    },
+    "canary": {
+      "pair_id": "q38-self44-wbe-c1-pair-v1",
+      "base_campaign_id": "q38-base-self44-oc-wbe-c1-v1",
+      "candidate_campaign_id": "q38-self44-oc-wbe-c1-v1",
+      "base_sandbox_prefix": "q38-b-self44-c1-v1-",
+      "candidate_sandbox_prefix": "q38-c-self44-c1-v1-",
+      "task_count": 1,
+      "pass_k": 1,
+      "attempts_per_arm": 1
+    },
+    "full": {
+      "logical_task_count": 15,
+      "logical_pass_k": 4,
+      "logical_attempts_per_arm": 60,
+      "physical_replicas": [
+        {
+          "replica_index": 0,
+          "pair_id": "q38-self44-wbe-r0-pair-v1",
+          "base_campaign_id": "q38-base-self44-oc-wbe-r0-v1",
+          "candidate_campaign_id": "q38-self44-oc-wbe-r0-v1",
+          "base_sandbox_prefix": "q38-b-self44-r0-v1-",
+          "candidate_sandbox_prefix": "q38-c-self44-r0-v1-",
+          "task_count": 15,
+          "pass_k": 1,
+          "attempts_per_arm": 15
+        },
+        {
+          "replica_index": 1,
+          "pair_id": "q38-self44-wbe-r1-pair-v1",
+          "base_campaign_id": "q38-base-self44-oc-wbe-r1-v1",
+          "candidate_campaign_id": "q38-self44-oc-wbe-r1-v1",
+          "base_sandbox_prefix": "q38-b-self44-r1-v1-",
+          "candidate_sandbox_prefix": "q38-c-self44-r1-v1-",
+          "task_count": 15,
+          "pass_k": 1,
+          "attempts_per_arm": 15
+        },
+        {
+          "replica_index": 2,
+          "pair_id": "q38-self44-wbe-r2-pair-v1",
+          "base_campaign_id": "q38-base-self44-oc-wbe-r2-v1",
+          "candidate_campaign_id": "q38-self44-oc-wbe-r2-v1",
+          "base_sandbox_prefix": "q38-b-self44-r2-v1-",
+          "candidate_sandbox_prefix": "q38-c-self44-r2-v1-",
+          "task_count": 15,
+          "pass_k": 1,
+          "attempts_per_arm": 15
+        },
+        {
+          "replica_index": 3,
+          "pair_id": "q38-self44-wbe-r3-pair-v1",
+          "base_campaign_id": "q38-base-self44-oc-wbe-r3-v1",
+          "candidate_campaign_id": "q38-self44-oc-wbe-r3-v1",
+          "base_sandbox_prefix": "q38-b-self44-r3-v1-",
+          "candidate_sandbox_prefix": "q38-c-self44-r3-v1-",
+          "task_count": 15,
+          "pass_k": 1,
+          "attempts_per_arm": 15
+        }
+      ]
+    }
+  },
+  "fleet_holdout": {
+    "split_manifest": {
+      "path": "configs/data/fleet-blackbox-current-study-split-20260914-v2.json",
+      "file_sha256": "sha256:28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb"
+    },
+    "split_sha256": "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
+    "development": {
+      "campaign_id": "q38-self44-fleet-dev17-p1-v1",
+      "harness": "opencode-1.18.27",
+      "selection_sha256": "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
+      "task_version_ids": [
+        "2e363dca-e74d-4855-a002-6761dc7f9f0f",
+        "18079a9c-cb79-4013-aa08-54092c415165",
+        "d6c906fc-ef92-4ce6-ab9c-54a9b7eb9037",
+        "037704a7-fc03-4cf6-a8da-3f3e3933717e",
+        "139ff10d-8c00-4bd6-9437-e6fbcccf2f4d",
+        "f1ce26fc-39b6-442c-a03c-3c18f99e119f",
+        "78971e60-851b-4f6a-85d8-ecb3391d2af2",
+        "e13f62eb-170a-40c6-86bf-3c3f3829e3d8",
+        "1407dcf7-46ad-4b82-8aa1-f88307dd8264",
+        "05d09c55-ccdf-4d26-b06d-b851a2314a35",
+        "d4f5e664-d4fd-4492-a103-429260ad9e99",
+        "2cb87286-a35e-4ba0-a949-1d93dfbd229a",
+        "eefe304c-499d-4c9e-b09c-8aa0fab87213",
+        "fb68f600-9850-4cc2-86e7-a4f554e5f93f",
+        "b6efa2e4-7743-4b8b-a014-832d90cd5e39",
+        "51b23680-27fa-4bdd-a077-16669f3f0e18",
+        "383a2b61-e82b-4426-9a2b-d5372c92e346"
+      ],
+      "pass_k": 1
+    },
+    "final_test": {
+      "status": "forbidden_until_single_checkpoint_selected",
+      "selection_sha256": "sha256:9623149c4a021bc13ed2cf94ca26e107b30c18816cf3c02d76b5020cab5066f4",
+      "task_version_ids": [
+        "e33aaed0-491b-46e8-8891-55d99c80ef56",
+        "ba912601-1184-4dcd-9e9d-2fce22543e4b",
+        "9375a9b9-04e5-4f6f-ad47-286121278992",
+        "5287e180-64ea-487b-982a-d08a38c05fa2",
+        "8c0b249c-8946-4ec3-8609-d74631af547e",
+        "f8533754-39ad-4683-b9c1-d26bc24dfd14",
+        "8e5c7c45-7259-420d-ba12-0381465d864e",
+        "ee77cfbf-ceed-487f-a19d-3922aaaf4bad"
+      ],
+      "pass_k": 1,
+      "policy": "once_after_checkpoint_selection"
+    }
+  },
+  "resource_policy": {
+    "priority": "c1",
+    "project_node_cap": 8,
+    "candidate_route_nodes": 1,
+    "candidate_route_gpus": 8,
+    "admit_only_after_one_project_node_released": true,
+    "release_when_no_useful_rollout_consumer": true
+  },
+  "activation_gates": [
+    "checkpoint_manifest_materialized_and_full_payload_rehashed",
+    "export_receipt_materialized_and_payload_rehashed",
+    "source_checkpoint_unchanged_after_zero_step_reload",
+    "candidate_route_name_absent",
+    "create_once_paused_c1_route_with_new_uid",
+    "project_active_nodes_at_most_eight_after_route_admission",
+    "fresh_base_candidate_serving_parity",
+    "fresh_tensorlake_duplicate_census",
+    "paired_score_free_task0_canary_acceptance",
+    "full_collection_only_after_canary_acceptance",
+    "scoring_only_from_immutable_rollout_bundles",
+    "fleet_development_eval_pass1",
+    "fleet_final_test_only_once_after_checkpoint_selection"
+  ],
+  "packet_sha256": "sha256:326b1f061870b3314530f6bdb08574e8ed925ebd96eca5fe98ec11f1568c8933"
+}
