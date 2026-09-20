@@ -45,7 +45,7 @@ PROD_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 NAMESPACE = "fleet-train-jobs"
 RUN_NAME = "chris-q38-rlreward-prod4"
 STAGE_NAME = "chris-q38-prod4-data-v1"
-PREFLIGHT_NAME = "chris-q38-prod4-preflight-v3"
+PREFLIGHT_NAME = "chris-q38-prod4-preflight-v4"
 STAGE_RECEIPT = "/dev/termination-log"
 UPLOAD = Path("/tmp/autoresearch-upload.tar.gz")
 PACKET_SCHEMA = "cyber_skyrl_reward_direct_rayjob_packet_v1"
@@ -610,14 +610,6 @@ def preflight_job_manifest(plan: dict[str, Any]) -> dict[str, Any]:
     )
 
 
-def _wandb_run_absent(error: BaseException, path: str) -> bool:
-    response = getattr(error, "response", None)
-    nested = getattr(error, "exc", None)
-    return getattr(response, "status_code", None) == 404 or (
-        type(nested) is ValueError and str(nested) == f"Could not find run <Run {path} (not found)>"
-    )
-
-
 class PreflightGateError(Exception):
     def __init__(self, phase: str, error: BaseException) -> None:
         super().__init__(phase)
@@ -636,32 +628,34 @@ def preflight_runtime(plan: dict[str, Any]) -> dict[str, Any]:
             "scientific_preflight_contract",
             ValueError("prod4 scientific CPU preflight failed"),
         )
-    try:
-        import wandb
-        from wandb.errors import CommError
-    except BaseException as exc:
-        raise PreflightGateError("wandb_client_import", exc) from None
-
+    # W&B run creation is deliberately create-once at the training boundary:
+    # ScalarTracking calls wandb.init(..., resume="never") with the immutable
+    # plan-bound ID.  A pre-submit read of that ID is not an authoritative
+    # existence test: W&B 0.21.1 wraps missing-run, subscription and transient
+    # service failures in the same CommError surface.  Requiring that lookup
+    # turned an optional observability read into a false scientific blocker.
+    # Prove the credential injection and exact local binding here; the actual
+    # W&B service accepts or rejects the create-once ID at runtime before any
+    # rollout/optimizer work.
     if not os.environ.get("WANDB_API_KEY"):
         raise PreflightGateError(
             "wandb_credential", RuntimeError("prod4 W&B read credential is absent")
         )
     arguments = plan["arguments"]
-    path = "/".join(
-        (arguments["wandb_entity"], arguments["wandb_project"], arguments["wandb_run_id"])
-    )
-    try:
-        wandb.Api(timeout=30).run(path)
-    except CommError as exc:
-        # W&B 0.21.1 turns its own exact missing-run ValueError into a
-        # CommError with no response object.  Accept only that exact SDK
-        # sentinel (or an explicit HTTP 404); every service/auth error
-        # still fails closed.
-        if not _wandb_run_absent(exc, path):
-            raise PreflightGateError("wandb_lookup", exc) from None
-    else:
+    wandb_binding = {
+        "entity": arguments.get("wandb_entity"),
+        "project": arguments.get("wandb_project"),
+        "run_id": arguments.get("wandb_run_id"),
+        "resume": "never",
+    }
+    if wandb_binding != {
+        "entity": "thefleet",
+        "project": "cyber-post-train",
+        "run_id": RUN_NAME,
+        "resume": "never",
+    }:
         raise PreflightGateError(
-            "wandb_run_exists", FileExistsError("prod4 W&B run ID already exists")
+            "wandb_binding", ValueError("prod4 W&B create-once binding changed")
         )
     return _seal(
         {
@@ -675,7 +669,8 @@ def preflight_runtime(plan: dict[str, Any]) -> dict[str, Any]:
             "planned_steps": proof["planned_steps"],
             "native_parser_checked": proof["native_parser_checked"],
             "output_absent": True,
-            "wandb_run_id_absent": True,
+            "wandb_create_once": wandb_binding,
+            "wandb_remote_lookup": "deferred_to_runtime_start",
             "checked_at": _stamp(),
         }
     )
@@ -977,7 +972,14 @@ def authorize(
         or preflight_receipt.get("gpus") != 0
         or preflight_receipt.get("runtime_user") != {"uid": 1000, "gid": 100}
         or preflight_receipt.get("output_absent") is not True
-        or preflight_receipt.get("wandb_run_id_absent") is not True
+        or preflight_receipt.get("wandb_create_once")
+        != {
+            "entity": "thefleet",
+            "project": "cyber-post-train",
+            "run_id": RUN_NAME,
+            "resume": "never",
+        }
+        or preflight_receipt.get("wandb_remote_lookup") != "deferred_to_runtime_start"
         or preflight_receipt.get("counts") != {"train": 1, "dev": 1}
         or preflight_receipt.get("planned_steps") != 1
         or preflight_receipt.get("native_parser_checked") is not True

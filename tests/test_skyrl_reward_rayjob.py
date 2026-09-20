@@ -24,23 +24,6 @@ from training import dev_cleanup_observer as cleanup
 from training import skyrl_reward_rayjob as direct
 
 
-def test_wandb_missing_run_contract_is_exact() -> None:
-    path = "thefleet/cyber-post-train/chris-q38-rlreward-prod4"
-
-    class Error(Exception):
-        pass
-
-    exact = Error()
-    exact.exc = ValueError(f"Could not find run <Run {path} (not found)>")
-    assert direct._wandb_run_absent(exact, path)
-    wrong_path = Error()
-    wrong_path.exc = ValueError("Could not find run <Run other/project/id (not found)>")
-    assert not direct._wandb_run_absent(wrong_path, path)
-    service_error = Error()
-    service_error.exc = ValueError("HTTP 500")
-    assert not direct._wandb_run_absent(service_error, path)
-
-
 def test_preflight_rejection_is_sanitized() -> None:
     error = direct.PreflightGateError("scientific_preflight", ValueError("private detail"))
     assert error.phase == "scientific_preflight"
@@ -436,7 +419,13 @@ def _launch_evidence(plan: dict, request: dict, preview: dict, staged: dict) -> 
             "planned_steps": 1,
             "native_parser_checked": True,
             "output_absent": True,
-            "wandb_run_id_absent": True,
+            "wandb_create_once": {
+                "entity": "thefleet",
+                "project": "cyber-post-train",
+                "run_id": direct.RUN_NAME,
+                "resume": "never",
+            },
+            "wandb_remote_lookup": "deferred_to_runtime_start",
             "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
     )

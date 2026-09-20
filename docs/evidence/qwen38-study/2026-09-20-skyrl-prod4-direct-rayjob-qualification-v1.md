@@ -78,17 +78,19 @@ No server dry-run allocated a Pod, node, CPU, or GPU.
 ## Remaining live gates
 
 The first production CPU preflight (`chris-q38-prod4-preflight-v1`) exited before
-writing a receipt and released cleanly with zero GPUs and zero restarts. A bounded
-read-only reproduction identified the exact defect: W&B 0.21.1 represents an absent
-run as a `CommError` whose nested exception is the SDK's exact `ValueError` sentinel,
-not as a response carrying HTTP status 404. The original check therefore rejected the
-desired "run is absent" result. The create-once successor is
-`chris-q38-prod4-preflight-v2`; it accepts only that exact SDK sentinel or an explicit
-404 and still fails closed for authentication and service failures. The v2 successor
-also exited without a receipt, so v3 additionally emits a sealed, sanitized rejection
-receipt naming the failed preflight phase and hashing (rather than recording) the error
-message. This closes the evidence gap without exposing private data. No model, data,
-reward, optimizer, checkpoint, sampling, or GPU setting changed.
+writing a receipt and released cleanly with zero GPUs and zero restarts. V2 accepted
+W&B 0.21.1's missing-run sentinel but still exited without a receipt. V3 added a
+sealed rejection receipt and proved the remaining failure was the optional remote W&B
+lookup, not model/data parsing: it rejected at `wandb_lookup` with a sanitized
+`CommError` and then released cleanly. W&B 0.21.1 does not provide a stable distinction
+between missing-run, subscription, and transient service errors at that read surface.
+
+V4 therefore removes that non-authoritative remote read from the scientific preflight.
+It still requires the injected W&B credential and validates the exact immutable
+entity/project/run ID plus `resume="never"`. Runtime `wandb.init` is the authoritative
+create-once boundary and executes before rollout or optimizer work. This avoids making
+an observability read a false training blocker while preserving no-resume semantics.
+No model, data, reward, optimizer, checkpoint, sampling, or GPU setting changed.
 
 Before the sole GPU create, the operator must:
 
