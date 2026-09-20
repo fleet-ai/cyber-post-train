@@ -1,4 +1,4 @@
-# Qwen3.8 LoRA development qualification: V4–V8
+# Qwen3.8 LoRA development qualification: V4–V9
 
 Date: 2026-09-20  
 Scope: development cluster only; no production Jobs API submission occurred.
@@ -133,6 +133,39 @@ data, task text, trainer logs, traces, credentials, and W&B secrets.
   trainer logs or relaxed checks.
 - Cleanup: the GPU Pod, CPU reader, and ConfigMap were deleted. The final dev
   census showed zero active GPU requests.
+
+## V9: native checkpoint filename contract identified
+
+- CPU preflight Pod UID: `0228ad74-88b5-4d56-ad02-b1fb92777b44`
+- Training Pod: `chris-q38-lora-sft-c1-v9-dev-e7861133`
+- Training Pod UID: `0ae7c423-06d6-489a-b8fd-1f451e5429be`
+- Canonical plan SHA-256:
+  `ac3a3f0faccdeb4881cb1466b6985bf8bb3b5f3803fc39350ae60ccc15d8fa1f`
+- Result: exact-image preflight passed the same 866 rows, 35 task versions,
+  and 998,652 supervised tokens. The GPU run had zero restarts, completed its
+  real optimizer step and finalized the native checkpoint, then stopped before
+  the first checkpoint-inventory boundary. A bounded zero-GPU reader inspected
+  names and sizes only and showed that every expected adapter shard exists and
+  is nonempty. The native writer names rank `N` as
+  `adapter_tpN_pp0_cp0_dp0_ep0_etpN.pt`; the validator incorrectly expected
+  `etp0` for ranks 1 through 7. No weight contents or private trainer logs were
+  read.
+- Evidence: `QUALIFICATION_STAGE.json` file SHA-256
+  `1ea2ca6cfe276db0322ae1859484a794e0a87a8782bab2219e82343f77440a1e`;
+  `FAILURE_STAGE.json` file SHA-256
+  `17e5ad342466a0c4e05065d047d726c9b0b3c3a05278f4836d8cf5104b33574f`;
+  `FAILED.json` file SHA-256
+  `0481e490deeca011dbbc76660b0b3ee97106f4f3a2f254f8e1e6214485155b47`;
+  `metrics.jsonl` file SHA-256
+  `11d7455613aa3ba2087f4ea0ff488fc5c47cbd2af7ca655ecc64cb0828b2b445`.
+- Repair: V10 recognizes the exact native rank-coordinate names in both the
+  runtime receipt producer and the independent artifact validator. Topology is
+  unchanged: TP8 with expert-tensor parallel size one. The `etpN` text is the
+  native checkpoint writer's filename coordinate, not an eight-way expert
+  tensor-parallel setting.
+- Cleanup: the failed GPU Pod was deleted immediately. Both zero-GPU readers
+  and the ConfigMap were deleted; the final dev census showed zero GPU
+  requests.
 
 ## Production status
 

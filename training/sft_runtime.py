@@ -266,8 +266,8 @@ QWEN38_LORA_ONE_STEP_PLAN = {
         "wandb",
     ],
     "schema": DENSE_SCHEMA,
-    "run_name": "chris-q38-lora-sft-c1-v9",
-    "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v9",
+    "run_name": "chris-q38-lora-sft-c1-v10",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v10",
     "model": {
         "repo": "Qwen/Qwen3.8-27B",
         "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
@@ -316,8 +316,8 @@ QWEN38_LORA_ONE_STEP_PLAN = {
         "entity": "thefleet",
         "project": "cyber-post-train",
         "group": "qwen38-lora-sft-goal-v1",
-        "run_id": "chris-q38-lora-sft-c1-v9",
-        "name": "chris-q38-lora-sft-c1-v9",
+        "run_id": "chris-q38-lora-sft-c1-v10",
+        "name": "chris-q38-lora-sft-c1-v10",
         "tags": [
             "qwen38",
             "lora",
@@ -335,6 +335,7 @@ QWEN38_LORA_ONE_STEP_PLAN = {
             "float32-lr-consensus-repair",
             "post-checkpoint-boundary-evidence-repair",
             "receipt-invariant-boundary-evidence-repair",
+            "native-adapter-rank-coordinate-repair",
         ],
     },
 }
@@ -1511,7 +1512,7 @@ def _qwen38_checkpoint_inventory(checkpoint: Path) -> tuple[dict, dict]:
         raise ValueError("qualified checkpoint root is missing or a symlink")
     files = {}
     roles = {"adapter": [], "optimizer_and_rng": [], "metadata": []}
-    adapter_pattern = re.compile(r"policy/adapter_tp([0-7])_pp0_cp0_dp0_ep0_etp0\.pt")
+    adapter_pattern = re.compile(r"policy/adapter_tp([0-7])_pp0_cp0_dp0_ep0_etp([0-7])\.pt")
     optimizer_pattern = re.compile(r"policy/__\d+_\d+\.distcp")
     for path in sorted(checkpoint.rglob("*")):
         if path.is_symlink():
@@ -1534,7 +1535,13 @@ def _qwen38_checkpoint_inventory(checkpoint: Path) -> tuple[dict, dict]:
     roles["adapter"].sort(key=lambda name: int(adapter_pattern.fullmatch(name).group(1)))
     for name in ("optimizer_and_rng", "metadata"):
         roles[name].sort()
-    expected_adapters = [f"policy/adapter_tp{rank}_pp0_cp0_dp0_ep0_etp0.pt" for rank in range(8)]
+    # Megatron Bridge writes the no-expert-parallel TP8 adapter shards with
+    # the expert-tensor rank label equal to the tensor-parallel rank. This is
+    # a filename coordinate emitted by the native writer, not an assertion
+    # that expert tensor parallelism has size eight.
+    expected_adapters = [
+        f"policy/adapter_tp{rank}_pp0_cp0_dp0_ep0_etp{rank}.pt" for rank in range(8)
+    ]
     if (
         roles["adapter"] != expected_adapters
         or not roles["optimizer_and_rng"]
@@ -1657,7 +1664,7 @@ def _qwen38_reconcile_evidence(
             ):
                 raise ValueError("adapter tensor metadata changed or is invalid")
 
-        adapter_path = checkpoint / f"policy/adapter_tp{rank}_pp0_cp0_dp0_ep0_etp0.pt"
+        adapter_path = checkpoint / f"policy/adapter_tp{rank}_pp0_cp0_dp0_ep0_etp{rank}.pt"
         payload = torch.load(adapter_path, map_location="cpu", weights_only=True)
         if not isinstance(payload, dict) or set(payload) != {"model_state_dict"}:
             raise ValueError("adapter checkpoint payload has unknown or missing fields")

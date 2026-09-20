@@ -506,7 +506,9 @@ def validate_checkpoint_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
         for role in roles
     ):
         raise ValueError("checkpoint file roles must be nonempty unique lists")
-    expected_adapters = [f"policy/adapter_tp{rank}_pp0_cp0_dp0_ep0_etp0.pt" for rank in range(8)]
+    expected_adapters = [
+        f"policy/adapter_tp{rank}_pp0_cp0_dp0_ep0_etp{rank}.pt" for rank in range(8)
+    ]
     if roles["adapter"] != expected_adapters:
         raise ValueError("checkpoint adapter files differ from the exact TP8 rank layout")
     if not {"data.pt", "trainer_state.pt", "policy/huggingface/config.json"}.issubset(

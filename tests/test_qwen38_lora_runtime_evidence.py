@@ -81,7 +81,7 @@ def finalized_checkpoint(root: Path) -> tuple[list[dict], list[dict]]:
         after.append(snapshot(rank, last, updates=1, gradient=0.25))
         torch.save(
             {"model_state_dict": {ADAPTER: last}},
-            policy / f"adapter_tp{rank}_pp0_cp0_dp0_ep0_etp0.pt",
+            policy / f"adapter_tp{rank}_pp0_cp0_dp0_ep0_etp{rank}.pt",
         )
     for path in (
         root / "data.pt",
@@ -113,6 +113,17 @@ def test_reconcile_reopens_every_adapter_shard_and_accepts_one_update(
     assert all(row["after_sha256"] == row["checkpoint_sha256"] for row in shards)
     assert evidence["adapter_updated_tensor_count"] == 8
     assert "tensor(" not in repr(evidence)
+
+
+def test_checkpoint_inventory_rejects_mismatched_native_rank_coordinates(
+    tmp_path: Path,
+) -> None:
+    finalized_checkpoint(tmp_path)
+    source = tmp_path / "policy/adapter_tp4_pp0_cp0_dp0_ep0_etp4.pt"
+    source.rename(tmp_path / "policy/adapter_tp4_pp0_cp0_dp0_ep0_etp0.pt")
+
+    with pytest.raises(ValueError, match="file roles are incomplete"):
+        _qwen38_checkpoint_inventory(tmp_path)
 
 
 def test_checkpoint_finalization_rejects_duplicate_or_missing_rank() -> None:
@@ -163,7 +174,7 @@ def test_reconcile_rejects_saved_adapter_that_differs_from_live_post_update(
     tmp_path: Path,
 ) -> None:
     before, after = finalized_checkpoint(tmp_path)
-    path = tmp_path / "policy/adapter_tp4_pp0_cp0_dp0_ep0_etp0.pt"
+    path = tmp_path / "policy/adapter_tp4_pp0_cp0_dp0_ep0_etp4.pt"
     torch.save({"model_state_dict": {ADAPTER: torch.ones(2, 4, dtype=torch.bfloat16)}}, path)
     with pytest.raises(ValueError, match="differs from the live post-update"):
         _qwen38_reconcile_evidence(

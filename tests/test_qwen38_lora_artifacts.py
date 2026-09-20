@@ -184,7 +184,7 @@ def adapter_parameters(census: dict) -> dict:
 
 def checkpoint() -> dict:
     source = plan()
-    adapters = [f"policy/adapter_tp{rank}_pp0_cp0_dp0_ep0_etp0.pt" for rank in range(8)]
+    adapters = [f"policy/adapter_tp{rank}_pp0_cp0_dp0_ep0_etp{rank}.pt" for rank in range(8)]
     optimizer = ["policy/.metadata", "policy/__0_0.distcp"]
     metadata = [
         "data.pt",
