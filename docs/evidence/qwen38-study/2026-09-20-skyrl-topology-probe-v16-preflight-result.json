@@ -1,0 +1,71 @@
+{
+  "active_gpus": 0,
+  "armed_at": "2026-09-20T15:25:04Z",
+  "context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+  "created_at": "2026-09-20T15:25:09Z",
+  "deletion_requested_at": "2026-09-20T15:26:25Z",
+  "exit_codes": [
+    0
+  ],
+  "expected_gpus": 0,
+  "image_ids": [
+    "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
+  ],
+  "job_id": "",
+  "kind": "job",
+  "manifest_sha256": "sha256:e9d893cefcb1a2248b0ccfe4b74a4df33147043c79a1e0c8a0df932a5496a1ae",
+  "maximum_seconds": 1200,
+  "name": "chris-q38-skyrl-probe-preflight-v28",
+  "namespace": "fleet-train-jobs",
+  "observer_error_class": "",
+  "peak_gpus": 0,
+  "plan_sha256": "sha256:812d2f88d737487c1ef8a24d0156d9c5c7148dba4727a2890b8d25cfa399a231",
+  "pod_names": [
+    "chris-q38-skyrl-probe-preflight-v28-7bpvj"
+  ],
+  "pod_uids": [
+    "3954566f-0d4b-4de9-99b6-87931154daf3"
+  ],
+  "pods_present": false,
+  "raycluster_name": "",
+  "raycluster_present": false,
+  "raycluster_uid": "",
+  "rayjob_name": "",
+  "rayjob_present": false,
+  "rayjob_uid": "",
+  "receipt": {
+    "create_once_output_absent": true,
+    "fleetjob_manifest_sha256": "6d88c070addcbb83abee18b5c0b159dce85a85ad70778e82a9293790e8a9f05f",
+    "gpus": 0,
+    "optimizer_steps": 0,
+    "plan_sha256": "812d2f88d737487c1ef8a24d0156d9c5c7148dba4727a2890b8d25cfa399a231",
+    "preflight_job_manifest_sha256": "e9d893cefcb1a2248b0ccfe4b74a4df33147043c79a1e0c8a0df932a5496a1ae",
+    "request_sha256": "e645c84dda9a3e0fe8e9752ec8e5bf6396d38eedcbe56f7dcf29cdcbfd4d39f4",
+    "rollout_episodes": 0,
+    "runtime_user": {
+      "gid": 100,
+      "uid": 1000
+    },
+    "schema": "cyber_skyrl_topology_probe_cpu_preflight_v1",
+    "sha256": "sha256:89842f2837f75d00be1ecda963d905c3107ab642f10ae2b66f63d9b022d668d9",
+    "status": "passed",
+    "task_rows_read": 0,
+    "vllm_sampler_environment": {
+      "VLLM_USE_FLASHINFER_SAMPLER": "0"
+    }
+  },
+  "release_observed_at": "2026-09-20T15:26:42Z",
+  "restarts": 0,
+  "schema": "cyber_dev_cleanup_observer_result_v1",
+  "sha256": "sha256:f6ce46b25b8a4e8d3a062d34f97753fa03e34b429b86735b190f521d976a8dd1",
+  "status": "released",
+  "target_present": false,
+  "terminal_status": "Succeeded",
+  "termination_reasons": [
+    "Completed"
+  ],
+  "uid": "0e29826a-a814-4173-87ac-023a1edde594",
+  "workload_name": "",
+  "workload_present": false,
+  "workload_uid": ""
+}
