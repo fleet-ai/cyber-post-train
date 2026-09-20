@@ -84,15 +84,62 @@ the current state of all 13 identities and prove that no equivalent Fresh75
 base/candidate campaign is active or already accepted. The 2026-09-20 snapshot
 is evidence for planning, not permission to launch later.
 
-## Exact blocker
+## Read-only serving discovery
 
-The Fresh75 payload is staged and registered, but its route is **paused**, has
-zero active replicas, and is not available to the evaluator. The base model's
-older observation is also not a current paired serving proof.
+At `2026-09-20T10:08:00Z`, authenticated reads of the serving control plane
+showed:
+
+- the shared base route `qwen3.8-27b` was ready with two replicas, base revision
+  `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0`, resource version `30388276`,
+  and full-spec digest
+  `sha256:935294640178869a97ecacb2ac7aa7853a6a7d742f493acc918e0ae589652f0d`;
+- the existing Fresh75 registration `chris-q38-fresh75-step230-v1` was safely
+  paused with zero replicas and resource version `28721222`; and
+- the proposed successor ID `chris-q38-fresh75-step230-wbe-v1` was absent
+  (`GET` returned 404).
+
+The live base `/model_info` and `/server_info` endpoints also responded. Their
+full read-only response digests were
+`sha256:c1c69bc87b0915cab1624d1024392fdeca9741bcd4611973396b3d0550a76a40`
+and
+`sha256:51fc9534d9edcfa77240b7a43f91c7edf897d3458afb2f6a4b4bdf30245b0fed`.
+The server reported context length 262,144, data parallel 8, tensor parallel 1,
+KV-cache format `fp8_e4m3`, Qwen reasoning and tool parsers, no weight
+quantization, and SGLang `0.5.19`. Raw responses were not committed because
+server metadata can contain private operational fields; these projected facts
+must be freshly checked against the candidate during live parity.
+
+The old Fresh75 registration must **not** simply be resumed. The shared base
+route now runs data parallel 8 / tensor parallel 1 with image digest
+`sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9`,
+the Qwen request compatibility shim and three additional runtime flags. The old
+candidate registration records data parallel 1 / tensor parallel 8 metadata,
+uses an older image and command, and lacks those flags. It also records the
+payload-manifest digest as its model revision, while strict collection
+provenance expects the accepted export-receipt digest. Resuming it would change
+more than weights and invalidate the matched comparison.
+
+The read-only preflight renderer in
+`evals/webexploitbench/tensorlake/fresh75_canary_preflight.py` therefore builds a
+new **paused c1** registration from the freshly observed base spec. It changes
+only the route name, staged model paths, accepted export-receipt identity,
+priority and zero-replica paused lifecycle. Its current preview spec digest is
+`sha256:cdad3122886c0670f841169d2b2f69eb67d35a03b0c781a7f13847c8557eac19`.
+That digest is planning evidence, not create permission: the base must be read
+again before registration.
+
+The independent Kubernetes read could not be refreshed in this pass because
+the local Nebius login needed renewal. No Kubernetes fact was inferred from the
+control-plane response. The operator must refresh access and prove that both
+current `InferenceModel` objects match their control-plane reads before creating
+or resuming anything.
+
+## Exact remaining blockers
 
 Before the paired canary can be sealed and launched, an authorized operator must
-temporarily serve the exact Fresh75 model and establish a current base route,
-then produce one fresh receipt proving that:
+create the one paused successor (only if a fresh GET still says it is absent),
+record its new UID in a successor study plan, temporarily serve it, and produce
+one fresh receipt proving that:
 
 1. both routes are ready;
 2. the candidate route serves the exact accepted step-230 export;
@@ -101,14 +148,83 @@ then produce one fresh receipt proving that:
 4. identical continuation, forward-generation and tool-call probes pass on
    both models.
 
-Only after that proof and the fresh TensorLake duplicate check may the exact
-score-free canary collection plans be sealed. This work deliberately did not
-resume or serve either model.
+There is also one TensorLake plan-construction blocker. Pair sealing requires
+both arms to use the same qualified filesystem snapshot. Current snapshot
+qualification binds one arm-specific OpenCode project and one student-only
+model registry, so one existing snapshot cannot validate both distinct arms.
+The snapshot qualifier must first produce one score-free shared snapshot whose
+receipt covers both arm-specific projects. This qualification must make zero
+student requests and zero judge requests.
+
+One local evidence tool is also still missing. The repository validates the
+Qwen3.8 registration and live-parity receipt schemas, but it has no production
+capturer for those schemas. `post_sft_evidence.py` is tied to the older Qwen3.6
+serving contract and must not be reused by changing constants. A Qwen3.8
+capturer must bind the fresh successor UID, exact export, staged file hashes,
+Deployment/ReplicaSet/Pod identities, current base identity, full runtime
+contract and content-free continuation/tool probes. It must pass the existing
+strict validators before the candidate is resumed.
+
+The current process did not contain a TensorLake credential, so a fresh live
+`GET /sandboxes` duplicate census was not possible. The 13 old `q38-s10`
+sandboxes remain reserved, and the absence of equivalent Fresh75 campaigns must
+be re-proved within ten minutes of launch.
+
+Only after the serving proof, shared snapshot qualification and fresh duplicate
+check may the exact score-free canary collection plans be sealed. This work
+deliberately did not register, resume or serve a model and did not create or
+change TensorLake work.
+
+## Exact canary arm blueprints
+
+The preflight renderer freezes two concrete but deliberately unsealed arm
+blueprints:
+
+| Arm | Served model | Campaign | Sandbox prefix | Work |
+|---|---|---|---|---|
+| Base | `qwen3.8-27b` | `q38-base-f75p230-oc-wbe-c1-v1` | `q38-b-f75-c1-v1-` | target 0, pass@1, collect only |
+| Candidate | `chris-q38-fresh75-step230-wbe-v1` | `q38-f75p230-oc-wbe-c1-v1` | `q38-c-f75-c1-v1-` | target 0, pass@1, collect only |
+
+Both require OpenCode, the same new pair-qualified snapshot, deferred scoring,
+fresh serving parity and a fresh duplicate census. They become executable plans
+only after `collection_launcher.seal_plan` validates each arm and
+`collection_pair.seal_pair` validates the pair.
 
 ## Next action
 
-When serving is authorized, qualify the two live routes and record fresh parity.
-Then reconcile TensorLake inventory read-only, seal the two canary collection
-arms under the plan's new identities, seal their pair, and launch only the
-paired pass@1 canary. Do not prepare or launch the 15-by-4 stage until the exact
-canary acceptance exists.
+1. Refresh Nebius read access and capture the base and old candidate from both
+   the serving control plane and Kubernetes.
+2. Read the successor ID again. If it is still absent, create exactly one paused
+   c1 registration from the fresh base spec; otherwise reconcile it and do not
+   POST again.
+3. Record the returned UID in a new sealed study plan, then qualify one shared
+   TensorLake snapshot for both arm projects.
+4. Reconcile TensorLake inventory read-only, seal the two canary collection
+   arms and their pair, and only then resume the candidate so the consumer can
+   start immediately.
+5. Prove live parity, collect one score-free rollout per arm, pause the candidate
+   and prove zero-GPU release, then score the two saved rollouts.
+
+Do not prepare or launch the 15-by-4 stage until the exact canary acceptance
+exists.
+
+### Reproducible preflight command
+
+The preflight tool performs no network calls and cannot mutate either system. It
+accepts raw serving-control-plane responses plus raw `kubectl get ... -o json`
+objects and writes one create-once local receipt:
+
+```bash
+uv run python -m evals.webexploitbench.tensorlake.fresh75_canary_preflight build \
+  --study-plan configs/evaluation/qwen38-fresh75-step230-opencode-wbe-matched-v1.json \
+  --base-api .private/fresh75-wbe/base.api.json \
+  --candidate-api .private/fresh75-wbe/candidate.api.json \
+  --base-kubernetes .private/fresh75-wbe/base.kube.json \
+  --candidate-kubernetes .private/fresh75-wbe/candidate.kube.json \
+  --observed-at <UTC-TIMESTAMP> \
+  --output .private/fresh75-wbe/preflight.json
+```
+
+The output remains blocked by design. It renders the safe successor and the two
+collection blueprints; it never registers, resumes, launches, scores or pauses
+anything.
