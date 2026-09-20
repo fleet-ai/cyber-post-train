@@ -14,6 +14,7 @@ Use this checklist at the transition named in the request. Do not execute later 
 - Authenticated server preview is HTTP-successful and has no errors.
 - Preview binds exact task versions, environment versions, verifiers, ordered tools, step semantics, resources, queue, image, and output roots.
 - Preview proves the root Job or RayJob annotation `fleet.ai/failure-alerts: "off"`; request intent or a Pod-template annotation is insufficient.
+- The SFT-only direct-create compatibility rail may add that root annotation before creation only after its transform-aware validator proves the deployed API omitted it and no other reviewed field drifted. It must also prove and remove only the generated Fleet credential Secret reference that current SFT does not consume, pass server dry-run, and journal before one create.
 - Planned session and GPU cost match the requested canary or run.
 - Duplicate title and create-only destination checks are clean.
 - Scheduler admission is allowed to wait; never bypass or displace peer jobs.

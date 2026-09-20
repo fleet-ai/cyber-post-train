@@ -19,6 +19,7 @@ Read [references/gates.md](references/gates.md) before submitting training, expo
 ## Operate through the supported rail
 
 - Use the generic Jobs API through the repository CLI. Run CPU preflight in the pinned image; preview the rendered request; explicitly submit once with a shared durable journal. Reconcile ambiguous POSTs instead of retrying.
+- If and only if a live API preview for a source-bound SFT request omits the root alert annotation while all other reviewed fields remain exact, use the repository's documented `direct-submit-sft` compatibility rail. It consumes that preview, proves SFT needs no Fleet credential Secret, server-dry-runs, journals and executes one Kubernetes create. Never reproduce the transform by hand or extend it to RL/conversion.
 - Disable failed-job notifications on every project-owned Job and RayJob with the top-level annotation `fleet.ai/failure-alerts: "off"`. Generic Jobs API requests must set `failureAlerts: false`, and their exact preview must prove the annotation before submission. Do not patch a live object after creation. This does not disable idle-GPU alerts or change cleanup duties.
 - Use normal admission and meaningful owner-specific names. Request `c1` when authorized or `c2` for backfill; the current API derives queue priority. Recheck live policy. Never bypass admission, unsuspend manually, preempt, cancel, or modify another owner's workload.
 - Resolve images to immutable digests and record both the requested image and runtime `imageID`. A tag, Ready Pod, or catalog row alone is insufficient evidence.

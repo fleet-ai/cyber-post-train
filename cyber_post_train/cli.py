@@ -100,6 +100,27 @@ def _submission_gate(directory: Path, plan: dict, request: dict) -> None:
         )
 
 
+def _require_preflight(directory: Path, plan: dict, request: dict) -> None:
+    proof = _read(directory / "PREFLIGHT.json")
+    expected = {
+        "schema": "cyber_miles_conversion_cpu_preflight_v1"
+        if plan.get("schema") == "cyber_miles_conversion_v1"
+        else "cyber_miles_training_cpu_preflight_v1"
+        if plan.get("schema") == "cyber_miles_training_v1"
+        else "cyber_skyrl_training_cpu_preflight_v1"
+        if plan.get("schema") == "cyber_skyrl_training_v1"
+        else "cyber_sft_cpu_preflight_v1",
+        "status": "passed",
+        "gpus": 0,
+        "plan_sha256": digest(plan),
+        "request_sha256": digest(request),
+    }
+    if proof.get("sha256") != digest({k: v for k, v in proof.items() if k != "sha256"}) or any(
+        proof.get(k) != v for k, v in expected.items()
+    ):
+        raise ValueError("missing or mismatched CPU preflight")
+
+
 def _client() -> Jobs:
     return Jobs(os.environ.get("FLEET_API_KEY", ""))
 
@@ -320,35 +341,44 @@ def submit(directory: Path) -> None:
     try:
         plan, request = _prepared(directory)
         _submission_gate(directory, plan, request)
-        proof = _read(directory / "PREFLIGHT.json")
-        expected = {
-            "schema": (
-                "cyber_miles_conversion_cpu_preflight_v1"
-                if plan.get("schema") == "cyber_miles_conversion_v1"
-                else (
-                    "cyber_miles_training_cpu_preflight_v1"
-                    if plan.get("schema") == "cyber_miles_training_v1"
-                    else (
-                        "cyber_skyrl_training_cpu_preflight_v1"
-                        if plan.get("schema") == "cyber_skyrl_training_v1"
-                        else "cyber_sft_cpu_preflight_v1"
-                    )
-                )
-            ),
-            "status": "passed",
-            "gpus": 0,
-            "plan_sha256": digest(plan),
-            "request_sha256": digest(request),
-        }
-        if proof.get("sha256") != digest({k: v for k, v in proof.items() if k != "sha256"}) or any(
-            proof.get(k) != v for k, v in expected.items()
-        ):
-            raise ValueError("missing or mismatched CPU preflight")
+        _require_preflight(directory, plan, request)
         # Repeat the SFS check immediately before the API census/preview/POST.
         # A preflight receipt is immutable evidence, not a filesystem lock.
         _require_output_absent(request)
         with _client() as client:
             result = client.submit_once(request, directory / "SUBMISSION.jsonl")
+        _print(result)
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("direct-submit-sft")
+def direct_submit_sft(
+    directory: Path,
+    context: Annotated[str, typer.Option("--context")],
+) -> None:
+    """Create one SFT RayJob when API preview omits only the alert annotation.
+
+    This fallback still uses a fresh live Jobs API preview. It removes the
+    API-only Fleet credential Secret, injects the required root annotation,
+    performs a Kubernetes server dry-run and records a durable create intent.
+    It then executes exactly one ``kubectl create`` and never retries, applies
+    or patches. Prefer normal ``submit`` whenever its preview is qualified.
+    """
+    from .direct_submit import DIRECT_JOURNAL, Kubectl, direct_submit_sft_once
+
+    try:
+        plan, request = _prepared(directory)
+        _submission_gate(directory, plan, request)
+        _require_preflight(directory, plan, request)
+        with _client() as client:
+            result = direct_submit_sft_once(
+                plan=plan,
+                request=request,
+                jobs=client,
+                kubectl=Kubectl(context),
+                journal=directory / DIRECT_JOURNAL,
+            )
         _print(result)
     except Exception as exc:
         _fail(exc)

@@ -341,6 +341,16 @@ class Jobs:
         validate_preview(config, result)
         return result
 
+    def raw_preview(self, config: dict) -> dict:
+        """Return the live render without declaring it submission-qualified.
+
+        The maintained direct-SFT fallback consumes this response and performs
+        its own stricter, transform-aware validation.  All normal Jobs API
+        submissions must continue to use :meth:`preview`.
+        """
+        validate_request(config)
+        return self.request("POST", "/v1/runs/preview", json=config)
+
     def status(self, name: str) -> dict:
         if not re.fullmatch(r"[a-z0-9-]+", name):
             raise JobsError("invalid run name")
