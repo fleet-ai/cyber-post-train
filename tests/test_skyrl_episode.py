@@ -269,10 +269,27 @@ def test_native_parser_forms(body, expected):
     assert sky.parse("<tool_call>" + body + "</tool_call>") == expected
 
 
-def test_parser_never_silently_drops_multiple_calls():
+def test_parser_preserves_multiple_calls_in_order():
     assert sky.parse("no call") is None
-    with pytest.raises(rl_episode.InvalidEpisode, match="multiple_calls"):
-        sky.parse('<tool_call>{"name":"bash"}</tool_call>' * 2)
+    assert sky.parse(
+        '<tool_call>{"name":"bash","arguments":{"script":"one"}}</tool_call>'
+        '<tool_call>{"name":"bash","arguments":{"script":"two"}}</tool_call>'
+    ) == [
+        {"name": "bash", "arguments": {"script": "one"}},
+        {"name": "bash", "arguments": {"script": "two"}},
+    ]
+
+
+def test_parallel_observations_receive_one_masked_next_turn_header(setup):
+    value = recorder(setup)
+    value.begin_segment([], [])
+    observations = [
+        {"role": "tool", "content": "one", "name": "bash"},
+        {"role": "tool", "content": "two", "name": "bash"},
+    ]
+    assert value.append_observations(observations, []) == observations
+    assert value.recording.tokens == [1, 2, 10, 11, 12]
+    assert value.recording.loss_mask == [0, 0, 0]
 
 
 @pytest.mark.asyncio

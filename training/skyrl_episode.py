@@ -36,14 +36,15 @@ def _module(name, expected):
 
 
 def parse(text):
-    """Keep the native parser; this initial adapter permits one call per turn."""
+    """Keep every parsed call from one sampled turn in its original order."""
     calls = parse_tool_calls(text)
-    if len(calls) > 1:
-        raise InvalidEpisode("multiple_calls_not_qualified")
     if not calls:
         return None
-    function = calls[0]["function"]
-    return {"name": function["name"], "arguments": json.loads(function["arguments"])}
+    parsed = []
+    for call in calls:
+        function = call["function"]
+        parsed.append({"name": function["name"], "arguments": json.loads(function["arguments"])})
+    return parsed[0] if len(parsed) == 1 else parsed
 
 
 @asynccontextmanager
@@ -238,6 +239,24 @@ class Recorder:
         )
         self._append(ids, [0] * len(ids), [0.0] * len(ids))
         return message
+
+    def append_observations(self, messages, images):
+        """Encode one ordered parallel-tool result group and one next-turn header."""
+        if (
+            images
+            or self.recording is None
+            or self.finalized
+            or not isinstance(messages, list)
+            or len(messages) < 2
+        ):
+            raise InvalidEpisode("unsupported_observation_group")
+        ids = (
+            self.tokenizer.encode("\n", add_special_tokens=False)
+            + list(self.encode(messages, self.tokenizer))
+            + self.header
+        )
+        self._append(ids, [0] * len(ids), [0.0] * len(ids))
+        return messages
 
     def finalize(self, reward, metadata, env_time):
         if self.recording is None or self.finalized:

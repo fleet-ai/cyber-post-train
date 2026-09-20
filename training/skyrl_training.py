@@ -160,8 +160,8 @@ def compile_rl(config, *, relative_to):
         metadata["tokenizer"][k] != bound[k] for k in ("repo", "revision")
     ):
         raise ValueError("run/model/data identity mismatch")
-    cluster_target = qualification["cluster_target"] if qualification else cluster.get(
-        "target", "prod"
+    cluster_target = (
+        qualification["cluster_target"] if qualification else cluster.get("target", "prod")
     )
     if cluster_target not in API_URLS:
         raise ValueError("cluster target must be dev or prod")
@@ -433,6 +433,17 @@ def preflight(plan):
         raise ValueError("native template changed")
     for split in rows:
         dataset(plan, tokenizer, split, rows[split])
+    from .skyrl_episode import parse as parse_qwen_tools
+
+    multi_tool_probe = parse_qwen_tools(
+        '<tool_call>{"name":"bash","arguments":{"script":"true"}}</tool_call>'
+        '<tool_call>{"name":"submit_report","arguments":{"flags":[],"explanation":""}}</tool_call>'
+    )
+    if multi_tool_probe != [
+        {"name": "bash", "arguments": {"script": "true"}},
+        {"name": "submit_report", "arguments": {"flags": [], "explanation": ""}},
+    ]:
+        raise ValueError("native ordered multi-tool parser changed")
     return {
         "schema": "cyber_skyrl_training_cpu_preflight_v1",
         "status": "passed",
@@ -441,6 +452,7 @@ def preflight(plan):
         "plan_sha256": digest(plan),
         "request_sha256": digest(request),
         "native_parser_checked": True,
+        "ordered_multi_tool_parser_checked": True,
         "counts": {k: len(v) for k, v in rows.items()},
         "planned_steps": plan["arguments"]["steps"],
         "rl_qualified": False,

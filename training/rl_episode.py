@@ -307,39 +307,57 @@ async def _agent(recorder, session, messages, tools, limits, parse):
             if turn.finish == "length" and not isinstance(turn.text, str):
                 reason = "generation_incomplete_nontext"
             raise (EpisodeBudgetExceeded if reason in BUDGET_STOPS else InvalidEpisode)(reason)
-        call = parse(turn.text)
-        if call is not None and (
+        parsed = parse(turn.text)
+        calls = parsed if isinstance(parsed, list) else ([] if parsed is None else [parsed])
+        if any(
             not isinstance(call, dict)
             or not isinstance(call.get("name"), str)
             or not isinstance(call.get("arguments"), dict)
+            for call in calls
         ):
             raise InvalidEpisode("tool_parser_contract_invalid")
-        messages.append(recorder.append_assistant(turn.text, call, index))
-        if call is None:
+        messages.append(recorder.append_assistant(turn.text, parsed, index))
+        if not calls:
             return messages, "model_stop", env_time
-        start = time.monotonic()
-        if call["name"] not in {"bash", "submit_report"}:
-            text, error = "Tool unavailable: only bash and submit_report are permitted.", True
+        observations, submitted = [], False
+        for offset, call in enumerate(calls):
+            start = time.monotonic()
+            if call["name"] not in {"bash", "submit_report"}:
+                text, error = "Tool unavailable: only bash and submit_report are permitted.", True
+            else:
+                async with asyncio.timeout(limits["tool_seconds"]):
+                    result = await session.call_tool(call["name"], arguments=call["arguments"])
+                if any(block.type != "text" for block in result.content):
+                    raise InvalidEpisode("non_text_tool_result")
+                text = "\n".join(block.text for block in result.content)
+                error = getattr(result, "is_error", getattr(result, "isError", None))
+                if type(error) is not bool:
+                    raise InvalidEpisode("tool_error_status_missing")
+            env_time += time.monotonic() - start
+            if len(text) > limits["tool_result_chars"]:
+                raise InvalidEpisode("tool_result_exceeds_budget")
+            tool_call_id = (
+                f"call_{index:06d}" if len(calls) == 1 else f"call_{index:06d}_{offset:03d}"
+            )
+            observations.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call_id,
+                    "name": call["name"],
+                    "content": text,
+                }
+            )
+            if call["name"] == "submit_report" and not error:
+                submitted = True
+                break
+        if len(observations) == 1:
+            messages.append(recorder.append_observation(observations[0], []))
         else:
-            async with asyncio.timeout(limits["tool_seconds"]):
-                result = await session.call_tool(call["name"], arguments=call["arguments"])
-            if any(block.type != "text" for block in result.content):
-                raise InvalidEpisode("non_text_tool_result")
-            text = "\n".join(block.text for block in result.content)
-            error = getattr(result, "is_error", getattr(result, "isError", None))
-            if type(error) is not bool:
-                raise InvalidEpisode("tool_error_status_missing")
-        env_time += time.monotonic() - start
-        if len(text) > limits["tool_result_chars"]:
-            raise InvalidEpisode("tool_result_exceeds_budget")
-        message = {
-            "role": "tool",
-            "tool_call_id": f"call_{index:06d}",
-            "name": call["name"],
-            "content": text,
-        }
-        messages.append(recorder.append_observation(message, []))
-        if call["name"] == "submit_report" and not error:
+            append_group = getattr(recorder, "append_observations", None)
+            if not callable(append_group):
+                raise InvalidEpisode("recorder_parallel_tools_unsupported")
+            messages.extend(append_group(observations, []))
+        if submitted:
             return messages, "report_submitted", env_time
     raise EpisodeBudgetExceeded("turn_budget_exhausted")
 

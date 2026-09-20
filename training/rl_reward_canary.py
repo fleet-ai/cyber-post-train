@@ -15,7 +15,7 @@ from cyber_post_train.jobs import digest
 from evals.fleet import opencode_self_hosted as fleet
 
 ROOT = Path(__file__).resolve().parents[1]
-PROFILE = "qwen38_skyrl_reward_canary_v4"
+PROFILE = "qwen38_skyrl_reward_canary_v5"
 IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
     "89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
@@ -23,9 +23,10 @@ IMAGE = (
 TASK_SET_PATH = "configs/data/qwen38-rl-reward-canary-task-set-v3.json"
 SPLIT_PATH = "configs/data/qwen38-rl-reward-canary-split-v1.json"
 EVIDENCE_PATH = "configs/data/qwen38-rl-reward-canary-exact-version-evidence-v3.json"
+RUNTIME_EVIDENCE_PATH = "configs/data/qwen38-rl-reward-canary-exact-version-evidence-v4.json"
 HORIZON_PATH = "configs/data/qwen38-rl-reward-canary-horizon-v1.json"
 TOOL_CATALOG_PATH = "configs/data/qwen38-rl-filtered-canary-tool-catalog-v1.json"
-QUALIFICATION_PATH = "configs/qualification/qwen38-rl-reward-canary-port-v4.json"
+QUALIFICATION_PATH = "configs/qualification/qwen38-rl-reward-canary-port-v5.json"
 
 TASK_SET_FILE_SHA256 = "sha256:c3ee0a239dcb836b1951e65eda5a9813360a0378747716df8d8ca3753e741517"
 TASK_SET_SELF_SHA256 = "sha256:9b88bac1510720926ea041d942044804d6c54c083a0ea56d07cae5f448685909"
@@ -33,15 +34,21 @@ SPLIT_FILE_SHA256 = "sha256:c3a34993a932c2b29e2c70f45682ce03ee02d03a9c4493edbab4
 SPLIT_SELF_SHA256 = "sha256:8279ea19808ad1accb00d3f3145c3ec087030677786e0188251cfc197f306adf"
 EVIDENCE_FILE_SHA256 = "sha256:73be894762968970c8cf0454281fe13d46615e40039b61b8f8a97c8cc883f365"
 EVIDENCE_SELF_SHA256 = "sha256:50491796b829388164faefc5fb9a9ad09fac89a8d94648a1791240f91826a285"
+RUNTIME_EVIDENCE_FILE_SHA256 = (
+    "sha256:27dc04429a26048a136d2994ad3021b5eee7d38c619fd8a392da0fa4de5f178b"
+)
+RUNTIME_EVIDENCE_SELF_SHA256 = (
+    "sha256:b8f62326425816d6fa04e78eabd9dd130c9bae1997e69e1da09f46413eb80191"
+)
 HORIZON_FILE_SHA256 = "sha256:435866421cc4cdcc4a5598c92112fadfc5c01634c076334df57d6d46b2fe7b85"
 HORIZON_SELF_SHA256 = "sha256:a4e861dedcf0538633e15e1762bca9f37156dfc392dda70a8fc50df06020076e"
 TOOL_CATALOG_FILE_SHA256 = "sha256:e4a3c4fb5b5c34cdaf64ec568eb31fcc0d55a63cc0a134808db348c65d7b6858"
 TOOL_CATALOG_SHA256 = "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
 QUALIFICATION_FILE_SHA256 = (
-    "sha256:e18e8d6695daf3a96821fae43e51263c0f1c5a8866e339bea70fb6d0ed27a680"
+    "sha256:dc83c51b9d1ec8ec965a87d5a7868d299e72acdfccc5cbe8f333cf1f6294804c"
 )
 QUALIFICATION_SELF_SHA256 = (
-    "sha256:bab0bd6e8924289f9f01d8ae379a9fc30f726b7723468d7d012d949e41555a80"
+    "sha256:68511e2527189d385900d920d9ddd8bd57240cab9bbf5c31577ae1375c4a982d"
 )
 
 LIMITS = {
@@ -107,7 +114,7 @@ RUNTIME_SOURCES = {
         "sha256:f0c327d2ecc464610a5fd86e11b112870d28feb43d9155d7507d8fedbd87632b"
     ),
     "training/rl_episode.py": (
-        "sha256:8bb64464bad854ab477bec1149bc0d53e4e656f1292b8a47ad31687446ba1dfe"
+        "sha256:6d55701203ad3b4327e4fd6eb8a6ba9508a09ca6331dd097872607dcfac25464"
     ),
     "evals/fleet/opencode_self_hosted.py": (
         "sha256:428e9f2e4d4c758c4f682cbed314cf96b866d051b34fa0eea8757a3aad97aa1d"
@@ -120,9 +127,9 @@ PORT_COMMITS = {
 }
 SUBMISSION_BLOCKERS = [
     "v17_topology_receipt_and_release_not_yet_accepted",
-    "prod4_data_not_yet_staged_and_digest_verified",
-    "prod4_cpu_preflight_and_jobs_preview_not_yet_recorded",
-    "prod4_jobs_kubernetes_sfs_wandb_absence_not_yet_rechecked",
+    "prod5_data_not_yet_staged_and_digest_verified",
+    "prod5_cpu_preflight_and_jobs_preview_not_yet_recorded",
+    "prod5_jobs_kubernetes_sfs_wandb_absence_not_yet_rechecked",
 ]
 TOPOLOGY_SUCCESSOR = {
     "config_path": "qwen38-skyrl-topology-probe-dev-v2.json",
@@ -277,15 +284,18 @@ def validate_source_package(
     task_set = _bound_json(task_set_path, TASK_SET_FILE_SHA256)
     split = _bound_json(split_path, SPLIT_FILE_SHA256)
     evidence = _bound_json(ROOT / EVIDENCE_PATH, EVIDENCE_FILE_SHA256)
+    runtime_evidence = _bound_json(ROOT / RUNTIME_EVIDENCE_PATH, RUNTIME_EVIDENCE_FILE_SHA256)
     horizon = _bound_json(ROOT / HORIZON_PATH, HORIZON_FILE_SHA256)
     _sealed(task_set, "cyber_rl_task_set_v1")
     _sealed(split, "cyber_task_split_v1")
     _sealed(evidence, "cyber_rl_exact_version_evidence_v1")
+    _sealed(runtime_evidence, "cyber_rl_exact_version_evidence_v1")
     _sealed(horizon, "cyber_rl_reward_canary_horizon_v1")
     if (
         task_set["sha256"] != TASK_SET_SELF_SHA256
         or split["sha256"] != SPLIT_SELF_SHA256
         or evidence["sha256"] != EVIDENCE_SELF_SHA256
+        or runtime_evidence["sha256"] != RUNTIME_EVIDENCE_SELF_SHA256
         or horizon["sha256"] != HORIZON_SELF_SHA256
     ):
         raise ValueError("reward canary source self identity changed")
@@ -364,7 +374,10 @@ def validate_source_package(
         ):
             raise ValueError("reward canary task runtime or verifier identity changed")
 
-    authority = evidence["tool_surface_authority"]
+    immutable_runtime_keys = set(evidence) - {"purpose", "tool_surface_authority", "sha256"}
+    if any(runtime_evidence[key] != evidence[key] for key in immutable_runtime_keys):
+        raise ValueError("reward canary runtime evidence changed task or horizon authority")
+    authority = runtime_evidence["tool_surface_authority"]
     local_code = authority["local_code"]
     for name, path in (
         ("data_preparation", "training/rl_data.py"),
@@ -384,7 +397,7 @@ def validate_source_package(
     ):
         raise ValueError("reward canary tool authority changed")
 
-    horizon_binding = evidence["episode_horizon"]
+    horizon_binding = runtime_evidence["episode_horizon"]
     if horizon_binding != {
         "max_turns": 600,
         "contract_path": "qwen38-rl-reward-canary-horizon-v1.json",
@@ -462,7 +475,7 @@ def _validate_qualification(path: Path) -> dict:
     if path.resolve() != (ROOT / QUALIFICATION_PATH).resolve():
         raise ValueError("unknown reward-canary qualification closure")
     value = _bound_json(path, QUALIFICATION_FILE_SHA256)
-    _sealed(value, "cyber_qwen38_skyrl_reward_canary_port_v4")
+    _sealed(value, "cyber_qwen38_skyrl_reward_canary_port_v5")
     if (
         value["sha256"] != QUALIFICATION_SELF_SHA256
         or value["source"] != PORT_COMMITS
@@ -577,7 +590,7 @@ def validate_run_config(
     ):
         raise ValueError("reward-canary model, data, recipe, resource, or identity drift")
     result = {
-        "schema": "cyber_qwen38_skyrl_reward_canary_plan_binding_v4",
+        "schema": "cyber_qwen38_skyrl_reward_canary_plan_binding_v5",
         "profile": PROFILE,
         "source_proof": proof,
         "qualification_file_sha256": QUALIFICATION_FILE_SHA256,
@@ -598,7 +611,7 @@ def validate_plan_binding(binding: object, metadata: dict, arguments: dict) -> d
         raise ValueError("reward-canary plan lacks its source binding")
     body = {key: item for key, item in binding.items() if key != "sha256"}
     if (
-        binding.get("schema") != "cyber_qwen38_skyrl_reward_canary_plan_binding_v4"
+        binding.get("schema") != "cyber_qwen38_skyrl_reward_canary_plan_binding_v5"
         or binding.get("sha256") != "sha256:" + digest(body)
         or binding.get("profile") != PROFILE
         or binding.get("source_proof") != source_proof()

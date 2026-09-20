@@ -218,6 +218,10 @@ class Recorder:
         assert images == []
         return message
 
+    def append_observations(self, messages, images):
+        assert images == [] and len(messages) > 1
+        return messages
+
     def finalize(self, reward, meta, env_time):
         self.finalized = True
         self.sample_value.status = NS(name="COMPLETED")
@@ -230,13 +234,13 @@ def parse(text):
     return None if text == "done" else {"name": text, "arguments": {}}
 
 
-async def collect(fixture, tmp_path, recorder=None):
+async def collect(fixture, tmp_path, recorder=None, parser=parse):
     async with fixture.client:
         return await rl.collect(
             fixture.config,
             tmp_path / "episode",
             recorder or Recorder(),
-            parse,
+            parser,
             client=fixture.client,
         )
 
@@ -260,6 +264,32 @@ async def test_complete_valid_reward_including_genuine_zero(fixture, tmp_path, r
         await rl.collect(
             fixture.config, tmp_path / "episode", Recorder(), parse, client=fixture.client
         )
+
+
+@pytest.mark.asyncio
+async def test_multiple_tool_calls_in_one_turn_are_executed_and_recorded_in_order(
+    fixture, tmp_path
+):
+    fixture.reward["reward"] = fixture.reward["cyber_verification_result"]["reward"] = 0.5
+    recorder = Recorder([NS(text="parallel", finish="ok")])
+
+    def parallel(text):
+        assert text == "parallel"
+        return [
+            {"name": "bash", "arguments": {}},
+            {"name": "submit_report", "arguments": {}},
+        ]
+
+    samples = await collect(fixture, tmp_path, recorder, parallel)
+    assert samples[0].reward == 0.5
+    assert fixture.tool_calls == [("bash", {}), ("submit_report", {})]
+    conversation = json.loads((tmp_path / "episode/conversation.json").read_text())
+    tools = [message for message in conversation["messages"] if message["role"] == "tool"]
+    assert [message["name"] for message in tools] == ["bash", "submit_report"]
+    assert [message["tool_call_id"] for message in tools] == [
+        "call_000000_000",
+        "call_000000_001",
+    ]
 
 
 @pytest.mark.asyncio
@@ -544,11 +574,12 @@ async def test_tool_error_can_be_corrected(fixture, tmp_path):
 
 @pytest.mark.asyncio
 async def test_bad_parser_contract_is_not_a_zero(fixture, tmp_path, monkeypatch):
-    monkeypatch.setattr(
-        sys.modules[__name__], "parse", lambda text: {"name": "bash", "arguments": []}
-    )
     with pytest.raises(rl.InvalidEpisode, match="tool_parser_contract_invalid"):
-        await collect(fixture, tmp_path)
+        await collect(
+            fixture,
+            tmp_path,
+            parser=lambda text: {"name": "bash", "arguments": []},
+        )
     assert fixture.deleted and not fixture.tool_calls
 
 
