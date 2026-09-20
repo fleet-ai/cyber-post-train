@@ -79,6 +79,37 @@ def test_seal_plan_rejects_noncanonical_input_or_overlapping_output(
             run_dir="/mnt/sfs/jobs/chris-q38-lora-export-v1",
         )
 
+
+def test_seal_plan_can_bind_separate_exact_sfs_runtime_receipt(
+    tmp_path: Path, monkeypatch
+) -> None:
+    receipt = tmp_path / export.CHECKPOINT_FILENAME
+    file_sha256 = write_checkpoint(receipt)
+    monkeypatch.setattr(export, "validate_checkpoint_receipt", lambda value: checkpoint_identity())
+
+    plan = export.seal_plan(
+        receipt,
+        checkpoint_file_sha256=file_sha256,
+        checkpoint_runtime_path=(
+            "/mnt/sfs/jobs/chris-q38-lora-prod-can-v1/QWEN38_LORA_CHECKPOINT.json"
+        ),
+        run_name="chris-q38-lora-prod-exp-v1",
+        run_dir="/mnt/sfs/jobs/chris-q38-lora-prod-exp-v1",
+    )
+
+    assert plan["checkpoint_receipt"]["path"] == (
+        "/mnt/sfs/jobs/chris-q38-lora-prod-can-v1/QWEN38_LORA_CHECKPOINT.json"
+    )
+
+    with pytest.raises(ValueError, match="direct SFS job receipt"):
+        export.seal_plan(
+            receipt,
+            checkpoint_file_sha256=file_sha256,
+            checkpoint_runtime_path="/tmp/QWEN38_LORA_CHECKPOINT.json",
+            run_name="chris-q38-lora-prod-exp-v2",
+            run_dir="/mnt/sfs/jobs/chris-q38-lora-prod-exp-v2",
+        )
+
     exact = tmp_path / export.CHECKPOINT_FILENAME
     exact_sha = write_checkpoint(exact)
     with pytest.raises(ValueError, match="must not overlap"):

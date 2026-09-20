@@ -122,11 +122,23 @@ def seal_plan(
     checkpoint_receipt: Path,
     *,
     checkpoint_file_sha256: str,
+    checkpoint_runtime_path: str | None = None,
     run_name: str,
     run_dir: str,
 ) -> dict:
     """Bind a runnable plan only from one accepted checkpoint receipt."""
     receipt, identity = _read_checkpoint(checkpoint_receipt, checkpoint_file_sha256)
+    runtime_receipt = _canonical_path(
+        checkpoint_runtime_path or str(checkpoint_receipt),
+        "checkpoint receipt runtime path",
+    )
+    if runtime_receipt.name != CHECKPOINT_FILENAME:
+        raise ValueError("checkpoint runtime input must be one exact QWEN38_LORA_CHECKPOINT.json")
+    if checkpoint_runtime_path is not None and (
+        runtime_receipt.parts[:4] != ("/", "mnt", "sfs", "jobs")
+        or len(runtime_receipt.parts) != 6
+    ):
+        raise ValueError("checkpoint runtime input must be one direct SFS job receipt")
     root = _canonical_path(run_dir, "run directory")
     if root.parts[:4] != ("/", "mnt", "sfs", "jobs") or len(root.parts) != 5:
         raise ValueError("run directory must be one direct child of /mnt/sfs/jobs")
@@ -141,7 +153,7 @@ def seal_plan(
         "run_dir": str(root),
         "output_root": str(root / "merged-hf"),
         "checkpoint_receipt": {
-            "path": str(checkpoint_receipt),
+            "path": str(runtime_receipt),
             "file_sha256": checkpoint_file_sha256,
             "receipt_sha256": identity["receipt_sha256"],
         },
