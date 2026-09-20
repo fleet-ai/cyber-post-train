@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "observed_at": "2026-09-20T22:35:00Z",
+  "purpose": "Create-once checkpoint and evaluation ledger for the Qwen3.8-27B Fleet cyber lift study. A row is not a capability result until its exact matched evaluation is accepted.",
+  "comparison_contract": {
+    "webexploitbench_harness": "opencode",
+    "qwen_code_allowed": false,
+    "web_rollout_and_scoring_separated": true,
+    "fleet_holdout_binding": {
+      "split_file": "configs/data/fleet-blackbox-current-study-split-20260914-v2.json",
+      "split_file_sha256": "sha256:28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb",
+      "dev_selection_sha256": "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
+      "dev_exact_task_versions": 17,
+      "final_test_selection_sha256": "sha256:9623149c4a021bc13ed2cf94ca26e107b30c18816cf3c02d76b5020cab5066f4",
+      "final_test_exact_task_versions": 8,
+      "selection_rule": "Submit the exact task_version_id values in the frozen split. Use dev for experiment iteration and keep final_test sealed until a checkpoint-selection rule is frozen."
+    },
+    "matched_control_required": true,
+    "duplicate_identity_fields": [
+      "artifact_id",
+      "benchmark",
+      "task_set_digest",
+      "harness_identity",
+      "serving_identity",
+      "sampling_identity",
+      "budget_identity",
+      "pass_k",
+      "seed",
+      "retry_policy",
+      "scoring_protocol"
+    ]
+  },
+  "controls": [
+    {
+      "artifact_id": "qwen38-27b-base-matched-control",
+      "kind": "base_model_control",
+      "priority": 1,
+      "motivation": "Establish the matched OpenCode baseline required to attribute any WEB or Fleet difference to post-training rather than to serving, harness, task, or scoring drift.",
+      "web_status": "collection_canary_in_repair",
+      "fleet_status": "not_started",
+      "notes": "V20 failed while launching the target before the agent or model ran. Collection export then rejected the incomplete record because it had no final evidence reference. This is plumbing evidence, not a capability result; no score request was made."
+    }
+  ],
+  "accepted_checkpoints": [
+    {
+      "artifact_id": "q38-fresh75-step230",
+      "checkpoint_path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/checkpoints/global_step_230",
+      "export_path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/hf-export-step230-v1",
+      "serving_status": "registered_paused_not_live_parity_qualified",
+      "priority": 1,
+      "motivation": "Evaluate the strongest existing broad full-SFT artifact and determine whether its supervised training transfers to held-out exploitation capability.",
+      "web_status": "needs_fresh_matched_pair",
+      "web_evidence": "One valid standalone 15-of-15 OpenCode pass-at-1 run exists, but it lacks a newly matched base arm. A wider pass-at-8 effort is incomplete at 104 of 120 sessions.",
+      "fleet_status": "not_started",
+      "next_action": "Qualify exact serving parity, then launch matched OpenCode WEB and representative exact-version Fleet holdout evaluations."
+    },
+    {
+      "artifact_id": "q38-teacher-dense-v5-step186",
+      "checkpoint_path": "/mnt/sfs/jobs/chris-cyber-q38-teacher-dense-v5/checkpoints/global_step_186",
+      "export_path": "/mnt/sfs/jobs/chris-cyber-q38-teacher-dense-v5/hf-export-v1",
+      "serving_status": "not_qualified",
+      "priority": 2,
+      "motivation": "Measure whether imitation of successful stronger-teacher trajectories transfers to unseen blackbox exploitation tasks.",
+      "web_status": "no_accepted_result",
+      "fleet_status": "not_started",
+      "next_action": "Qualify serving, then run the same matched WEB and Fleet protocols as the base control."
+    },
+    {
+      "artifact_id": "q38-self-sft-step44",
+      "checkpoint_path": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/checkpoints/global_step_44",
+      "export_path": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/hf-export-v1",
+      "serving_status": "not_qualified",
+      "priority": 3,
+      "motivation": "Separate the effect of self-imitation from stronger-teacher imitation under the same evaluation contract.",
+      "web_status": "not_started",
+      "fleet_status": "not_started",
+      "next_action": "Qualify serving, then run the same matched WEB and Fleet protocols as the base control."
+    },
+    {
+      "artifact_id": "q38-available-a-lr30-step76",
+      "checkpoint_path": "/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/checkpoints/global_step_76",
+      "export_path": "/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/hf-export-step76-v1",
+      "serving_status": "not_qualified",
+      "priority": 4,
+      "motivation": "Test whether the aggressive learning-rate recipe produced useful capability change rather than merely lower imitation loss or destructive drift.",
+      "web_status": "not_started",
+      "fleet_status": "not_started",
+      "next_action": "Qualify serving, then run the same matched WEB and Fleet protocols as the base control."
+    }
+  ],
+  "in_progress_candidates": [
+    {
+      "artifact_id": "q38-lora-broad-lr3e-5",
+      "run_name": "chris-q38-lora-sft-a1-v1-2d8da9b3",
+      "priority_when_accepted": 1,
+      "motivation": "Primary broad-data LoRA anchor: test whether 57.4M supervised tokens across 496 task families produce transferable lift with a moderate adaptation rate.",
+      "status": "failed_at_step_48_checkpoint_40_preserved_pending_diagnosis"
+    },
+    {
+      "artifact_id": "q38-lora-broad-lr1e-5",
+      "run_name": "chris-q38-lora-lr1-v1-0ae26be3",
+      "priority_when_accepted": 2,
+      "motivation": "Conservative learning-rate control: test whether slower adaptation better preserves base capability while learning the broad corpus.",
+      "status": "initializing"
+    },
+    {
+      "artifact_id": "q38-lora-broad-lr1e-4",
+      "run_name": "chris-q38-lora-lr100-v1-7200fd5f",
+      "priority_when_accepted": 3,
+      "motivation": "Upper learning-rate exploration: test whether the broad corpus is underfit at the anchor rate or whether faster adaptation destabilizes transfer.",
+      "status": "training"
+    },
+    {
+      "artifact_id": "q38-full-weight-broad-b8-lr3e-6",
+      "run_name": "chris-q38-t3k32-b8-v1-0cb9fe51",
+      "priority_when_accepted": 1,
+      "motivation": "Primary broad-data full-weight reference: measure the higher-capacity alternative to LoRA on the same 57.4M-token, 32K-context corpus before isolating batch-size and learning-rate effects.",
+      "status": "initializing"
+    }
+  ],
+  "excluded_artifacts": [
+    {
+      "artifact_id": "q38-available-a-lr100-step21",
+      "reason": "Operational-only canary without an accepted export."
+    },
+    {
+      "artifact_id": "q38-available-a-lr1-step76",
+      "reason": "Unverified checkpoint without an accepted export."
+    },
+    {
+      "artifact_id": "q38-sep7-step300",
+      "reason": "Failed or partial run whose exact durable checkpoint root was not retained."
+    },
+    {
+      "artifact_id": "q38-lora-step1-qualification",
+      "reason": "One-step engineering qualification artifact, not a capability candidate."
+    }
+  ]
+}
