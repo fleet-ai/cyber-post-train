@@ -1,0 +1,55 @@
+{
+  "backend": "skyrl",
+  "name": "chris-q38-t3k32-b16-v1",
+  "output_root": "/mnt/sfs/jobs/chris-q38-t3k32-b16-v1",
+  "model": {
+    "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
+    "weights": "../models/qwen38-27b-1d4bf0f2.weights.json",
+    "root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2"
+  },
+  "data": {
+    "manifest": "../data/qwen38-teacher3k-32k-v1.manifest.json",
+    "root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher3k-32k-v1/data-v1"
+  },
+  "recipe": {
+    "epochs": 1,
+    "batch_size": 16,
+    "microbatch_per_gpu": 1,
+    "nodes": 1,
+    "gpus_per_node": 8,
+    "lr": 0.000003,
+    "max_length": 32768,
+    "eval_interval": 0,
+    "checkpoint_interval": 225,
+    "keep_checkpoints": 5,
+    "seed": 20260920
+  },
+  "wandb": {
+    "entity": "thefleet",
+    "project": "cyber-post-train",
+    "group": "qwen38-teacher3k-32k-v1",
+    "run_id": "chris-q38-t3k32-b16-v1",
+    "name": "chris-q38-t3k32-b16-v1",
+    "tags": [
+      "qwen38",
+      "teacher-sft",
+      "broad-data",
+      "57m-unique-supervised-tokens",
+      "32k",
+      "batch16",
+      "lr3e-6",
+      "one-epoch",
+      "outcome-only",
+      "full-weight"
+    ]
+  },
+  "cluster": {
+    "priority": "c1",
+    "resources": {
+      "cpu_request": "64",
+      "cpu_limit": "64",
+      "memory_request": "512Gi",
+      "memory_limit": "768Gi"
+    }
+  }
+}

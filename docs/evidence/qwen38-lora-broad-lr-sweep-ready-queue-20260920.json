@@ -1,0 +1,109 @@
+{
+  "schema": "cyber_qwen38_lora_broad_lr_sweep_ready_queue_v1",
+  "status": "local_launch_artifacts_ready_external_gates_pending",
+  "observed_at": "2026-09-20T21:21:13Z",
+  "scientific_control": {
+    "anchor_config_path": "configs/runs/qwen38-27b-lora-sft-r64-a32-anchor-v1.json",
+    "anchor_config_file_sha256": "sha256:afb5e10f6a703ef033ceb4031785b5353773c2777e3d5fc1109bb4fbabfd83af",
+    "anchor_plan_sha256": "sha256:ddcb3d621c44f8c612539537bf88de74966d0b151fc396f57542435b32cb29a2",
+    "anchor_request_sha256": "sha256:f6a75a173c70be4a112af8d62e3511d0e25baaa48c58dced7a0aeac9f7bcf406",
+    "learning_rate": 0.00003,
+    "adapter": {
+      "type": "lora",
+      "rank": 64,
+      "alpha": 32,
+      "target_modules": "all-linear",
+      "init_method": "kaiming",
+      "dropout": 0.0
+    },
+    "global_batch": 8,
+    "max_length": 32768,
+    "epochs": 1,
+    "max_steps": 1837,
+    "seed": 20260919
+  },
+  "corpus": {
+    "manifest_path": "configs/data/qwen38-teacher3k-32k-v1.manifest.json",
+    "manifest_file_sha256": "sha256:ebcf6677e51adb22f73602c210281a3f4a847c257155da6ed48cd1c6cba9f3c8",
+    "manifest_sha256": "sha256:a8d08609991d7960cdcdab826bd07c3216bfcd3aa8f6fb33ab7a5fd29648d6f5",
+    "split_sha256": "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
+    "train_parquet_sha256": "sha256:bf245db073fcd5a39ff6f90f6fc322710a3694408845bc27bfb6d9eaa6c41e0c",
+    "rows": 14693,
+    "successful_source_sessions": 2886,
+    "unique_supervised_tokens": 57384881,
+    "assistant_responses": 176654,
+    "task_keys": 496
+  },
+  "production_qualification": {
+    "acceptance_path": "configs/qualification/qwen38-lora-prod-step1-export-acceptance-v1.json",
+    "acceptance_file_sha256": "sha256:3165649c4552a37f50dd74be6ee14421671295007eaad1dab31ab929a066c979",
+    "acceptance_handoff_sha256": "8e1370ee28f8e366a3306446ab5a328b513e1d76fa0a317c9d70ca315fbbc1f2",
+    "export_receipt_file_sha256": "bfeedcac2a82f25696e7d102de3b5f509ded9539a9a07d65c39a94a1c58bc7a2",
+    "export_receipt_sha256": "237d90b34377599284c2358cd2611dfe2487a812a7179fc7460ed6ff3541ca76",
+    "export_dtype": "BF16",
+    "optimizer_steps_executed_during_export": 0,
+    "adapter_checkpoint_reload_verified": true,
+    "merged_model_reload_verified": true,
+    "finite_logits": true
+  },
+  "variants": [
+    {
+      "queue_order_within_new_variants": 1,
+      "literature_plan_priority": 3,
+      "hypothesis": "A three-times lower update size may preserve useful base behavior while learning the same broad cyber demonstrations.",
+      "only_scientific_change_from_anchor": "learning_rate",
+      "config_path": "configs/runs/qwen38-27b-lora-sft-r64-a32-lr1e5-v1.json",
+      "config_file_sha256": "sha256:c89ef3868dc72abb6ca4b959106d555a0f97b2a9659c8b0aff7a551f595e8d05",
+      "run_name": "chris-q38-lora-lr1-v1",
+      "output_root": "/mnt/sfs/jobs/chris-q38-lora-lr1-v1",
+      "learning_rate": 0.00001,
+      "max_steps": 1837,
+      "plan_sha256": "sha256:d76629f0ee174a176a89346ee76c28269f6c3371c70fbbbd89811da4f9740ace",
+      "request_sha256": "sha256:94077fa8780b5a80517c11bebe2fd76cf503ee94aab5eb2797f25477a5c10c27",
+      "request_bytes": 119280,
+      "priority_class": "c1",
+      "workers": 1,
+      "gpus_per_worker": 8,
+      "submitted": false
+    },
+    {
+      "queue_order_within_new_variants": 2,
+      "literature_plan_priority": 5,
+      "hypothesis": "A roughly three-times higher update size tests the useful upper edge without changing data, capacity, batch, context, or duration.",
+      "only_scientific_change_from_anchor": "learning_rate",
+      "config_path": "configs/runs/qwen38-27b-lora-sft-r64-a32-lr1e4-v1.json",
+      "config_file_sha256": "sha256:0173487be68e4d8f447831e7e6d17bdb7a8d9c43316ab715652734f459fc9cb5",
+      "run_name": "chris-q38-lora-lr100-v1",
+      "output_root": "/mnt/sfs/jobs/chris-q38-lora-lr100-v1",
+      "learning_rate": 0.0001,
+      "max_steps": 1837,
+      "plan_sha256": "sha256:6c71454f17c8fc0849af96afc82ebb8caca2a540a844d95d0082b5a8f2b29dcd",
+      "request_sha256": "sha256:1dbf249d3141fe62c47403d65f078351fbaaf80303537545c87d5c9d133fdfe2",
+      "request_bytes": 119304,
+      "priority_class": "c1",
+      "workers": 1,
+      "gpus_per_worker": 8,
+      "submitted": false
+    }
+  ],
+  "local_validation": {
+    "config_compilation": "passed",
+    "offline_prepare_cli_gate_version_2": "passed",
+    "immutable_plan_binding": "passed",
+    "request_render_and_validation": "passed",
+    "single_factor_comparison": "passed",
+    "mutation_rejection_tests": "passed",
+    "network_writes": 0,
+    "cluster_posts": 0,
+    "kubernetes_objects_created": 0
+  },
+  "external_gates_before_submit": [
+    "exact-image CPU preflight against the staged model and corpus",
+    "authenticated Jobs API preview with no warnings or errors",
+    "live duplicate-title and create-once output-root absence checks",
+    "live c1 policy and total active-node budget check"
+  ],
+  "submission_blocker": null,
+  "failure_budget_policy": "removed_by_user_2026-09-20; failures remain evidence and trigger cleanup/repair, not a submission stop",
+  "receipt_sha256": "0e35d103c2ab4770b6102cb2489f28006bd4cce5a5d0c76ca605cbbcf7bc2b7b"
+}

@@ -1,0 +1,81 @@
+{
+  "schema": "cyber_qwen38_lora_export_acceptance_handoff_v1",
+  "status": "export_accepted_waiting_for_immutable_stage",
+  "source_export_plan": {
+    "path": "configs/qualification/qwen38-lora-prod-step1-zero-update-export-v1.json",
+    "file_sha256": "b6211bcda10efd606200f946ceb40e6b39284d5cea7ba4310a090278a48994e4",
+    "plan_sha256": "ad782c488be7ed0f648c5f1ff82e4cc1dbfdf38abcba3861d4ab124ec2335a3a",
+    "request_sha256": "9a9a9566c8554b2ba5a8e8c10b14bed24ad4dd158a442e5dff03028a01e76f11"
+  },
+  "execution": {
+    "rayjob_name": "chris-q38-lora-prod-exp-v1-34e3dcf5",
+    "rayjob_uid": "30279c0f-2ef5-4003-9045-eb318961c4aa",
+    "workload_uid": "e5ad6724-379f-4bff-9992-7dca246b1a49",
+    "raycluster_name": "chris-q38-lora-prod-exp-v1-34e3dcf5-fgm9s",
+    "raycluster_uid": "f140b798-ca93-4151-b027-af49f8cf65c3",
+    "pod_name": "chris-q38-lora-prod-exp-v1-34e3dcf5-fgm9s-head-zx65s",
+    "pod_uid": "c621bd6c-cefd-4f4a-b206-df50c9515a84",
+    "start_time": "2026-09-20T15:13:41Z",
+    "end_time": "2026-09-20T15:40:48Z",
+    "job_status": "SUCCEEDED",
+    "restart_count": 0
+  },
+  "export_receipt": {
+    "path": "/mnt/sfs/jobs/chris-q38-lora-prod-exp-v1/QWEN38_LORA_MERGED_HF_EXPORT.json",
+    "file_sha256": "bfeedcac2a82f25696e7d102de3b5f509ded9539a9a07d65c39a94a1c58bc7a2",
+    "receipt_sha256": "237d90b34377599284c2358cd2611dfe2487a812a7179fc7460ed6ff3541ca76",
+    "schema": "cyber_qwen38_megatron_lora_merged_hf_export_v1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lora-prod-exp-v1/merged-hf",
+    "optimizer_step": 1,
+    "optimizer_steps_executed": 0,
+    "dtype": "BF16",
+    "merge_method": "megatron_bridge_lora_merge_v1",
+    "base_tensor_count": 1199,
+    "merged_tensor_count": 1199,
+    "tensor_bytes": 55562855904,
+    "source_base_unchanged": true,
+    "source_checkpoint_unchanged": true,
+    "adapter_checkpoint_reload_verified": true,
+    "optimizer_resume_verified": true,
+    "all_output_tensors_reopened_equal": true,
+    "deterministic_merge": true,
+    "merged_model_reload_verified": true,
+    "finite_logits": true,
+    "gpu_reload_verified": true,
+    "remote_revalidation_required_before_stage": true
+  },
+  "resource_release": {
+    "observed_at": "2026-09-20T15:45:32Z",
+    "pod_count": 0,
+    "raycluster_count": 0,
+    "allocated_gpus": 0
+  },
+  "broad_training_anchor": {
+    "operational_gate": "accepted_one_step_lora_and_reload",
+    "allows_broad_lora_preflight": true,
+    "allows_external_submit": false,
+    "submit_blocker": "global_cluster_failure_budget_reconciliation"
+  },
+  "serving_and_evaluation": {
+    "external_mutation_authorized": false,
+    "serving_model_id": "chris-q38-lora-prod-s1-wbe-v1",
+    "route_initial_state": "paused",
+    "priority": "c1",
+    "webexploitbench_canary_pair_id": "q38-lora-prod-s1-oc-wbe-c1",
+    "fleet_development_campaign_id": "q38-lora-prod-s1-fleet-dev17-p1",
+    "webexploitbench_collection": "score_free_immutable_rollout_bundles",
+    "webexploitbench_scoring": "separate_resumable_stage",
+    "fleet_final_test": "closed_until_development_selection"
+  },
+  "remaining_gates": [
+    "reopen_and_validate_remote_export_receipt",
+    "immutable_stage_with_full_payload_manifest",
+    "create_once_paused_c1_serving_route_with_new_uid",
+    "live_base_candidate_serving_parity",
+    "fresh_tensorlake_duplicate_census",
+    "paired_score_free_webexploitbench_task0_canary",
+    "frozen_fleet_development_evaluation",
+    "separate_webexploitbench_scoring"
+  ],
+  "handoff_sha256": "8e1370ee28f8e366a3306446ab5a328b513e1d76fa0a317c9d70ca315fbbc1f2"
+}

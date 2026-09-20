@@ -38,7 +38,11 @@ def prepared(data_setup):  # noqa: F811
         },
         "data": {"manifest": "out/manifest.json", "root": "/mnt/sfs/data/synthetic-rl"},
         "recipe": {"groups": 1, "samples_per_prompt": 8, "steps": 2, "lr": 1e-6},
-        "wandb": {"entity": "synthetic", "project": "synthetic", "run_id": "synthetic-rl"},
+        "wandb": {
+            "entity": "synthetic",
+            "project": "synthetic",
+            "run_id": "synthetic-rl",
+        },
     }
     plan = train.compile_rl(config, relative_to=data_setup.tmp)
     return NS(config=config, plan=plan, state=data_setup)
@@ -289,7 +293,13 @@ def completed(prepared):
     plan, root = prepared.plan, prepared.state.tmp / "result"
     plan["output_root"] = str(root)
     args = plan["arguments"]
-    for phase, step in (("eval", 0), ("train", 1), ("eval", 1), ("train", 2), ("eval", 2)):
+    for phase, step in (
+        ("eval", 0),
+        ("train", 1),
+        ("eval", 1),
+        ("train", 2),
+        ("eval", 2),
+    ):
         directory = root / f"episodes/batches/{phase}-{step}"
         directory.mkdir(parents=True)
         value = {
@@ -309,7 +319,8 @@ def completed(prepared):
 
 
 @pytest.mark.parametrize(
-    "fault", [None, "failed", "batch", "digest", "missing", "pointer", "sampler", "policy"]
+    "fault",
+    [None, "failed", "batch", "digest", "missing", "pointer", "sampler", "policy"],
 )
 def test_terminal_checks_do_not_fabricate_acceptance(completed, fault):
     plan, root = completed
@@ -383,7 +394,11 @@ def test_scalar_tracking_does_not_upload_private_exceptions(prepared, monkeypatc
 
 def test_native_sources_are_checked_without_inventing_a_driver(monkeypatch):
     calls = []
-    monkeypatch.setattr(sft_runtime, "validate_runtime_sources", lambda: calls.append("runtime"))
+    monkeypatch.setattr(
+        sft_runtime,
+        "validate_runtime_sources",
+        lambda _plan=None: calls.append("runtime"),
+    )
     monkeypatch.setattr(train, "_module", lambda name, sha: (calls.append((name, sha)), name)[1])
     assert train.native_source() == {name: name for name in train.NATIVE}
     assert calls == ["runtime", *train.NATIVE.items()]
@@ -400,16 +415,23 @@ def test_native_wrapper_keeps_native_loop_and_truthful_finalization(prepared, mo
     monkeypatch.setattr(train, "check_artifacts", lambda _: result_rows)
     monkeypatch.setattr(train.skyrl, "native_config", lambda _: "native-config")
     monkeypatch.setattr(
-        train, "dataset", lambda p, t, split, rows: (calls.append((split, rows)), rows)[1]
+        train,
+        "dataset",
+        lambda p, t, split, rows: (calls.append((split, rows)), rows)[1],
     )
     monkeypatch.setattr(train, "ScalarTracking", lambda p: "scalar-tracker")
     monkeypatch.setattr(
-        skyrl_rollout, "Generator", lambda *a, **kw: (calls.append((a, kw)), "generator")[1]
+        skyrl_rollout,
+        "Generator",
+        lambda *a, **kw: (calls.append((a, kw)), "generator")[1],
     )
     monkeypatch.setitem(
         sys.modules,
         "ray",
-        NS(init=lambda **kw: calls.append(("ray", kw)), shutdown=lambda: calls.append("shutdown")),
+        NS(
+            init=lambda **kw: calls.append(("ray", kw)),
+            shutdown=lambda: calls.append("shutdown"),
+        ),
     )
 
     def finish(**kw):
@@ -418,7 +440,9 @@ def test_native_wrapper_keeps_native_loop_and_truthful_finalization(prepared, mo
             raise RuntimeError("synthetic tracking failure")
 
     monkeypatch.setitem(
-        sys.modules, "wandb", NS(run=None if fault == "no_tracking" else NS(), finish=finish)
+        sys.modules,
+        "wandb",
+        NS(run=None if fault == "no_tracking" else NS(), finish=finish),
     )
     monkeypatch.setitem(
         sys.modules,
@@ -471,7 +495,10 @@ def test_native_wrapper_keeps_native_loop_and_truthful_finalization(prepared, mo
     if fault == "no_tracking":
         assert not any(isinstance(call, tuple) and call[0] == "finish" for call in calls)
     else:
-        assert ("finish", {"exit_code": 0 if fault in (None, "tracking") else 1}) in calls
+        assert (
+            "finish",
+            {"exit_code": 0 if fault in (None, "tracking") else 1},
+        ) in calls
     assert calls[0][0] == "ray" and calls[0][1]["address"] == "auto"
     assert not calls[0][1]["log_to_driver"]
     assert calls[0][1]["runtime_env"]["env_vars"]["PINNED"] == "yes"
@@ -548,7 +575,9 @@ def test_native_main_preserves_sanitized_failure(prepared, monkeypatch, capsys, 
     path.write_text(json.dumps(plan))
     monkeypatch.setattr(train, "job_request", lambda _: None)
     monkeypatch.setattr(
-        sys, "argv", [train.MODULE, "--plan", str(path), "--sha256", digest(plan), "--native"]
+        sys,
+        "argv",
+        [train.MODULE, "--plan", str(path), "--sha256", digest(plan), "--native"],
     )
 
     def fail(_):
@@ -579,7 +608,9 @@ def test_native_main_records_budget_rejection_without_acceptance(prepared, monke
     path.write_text(json.dumps(plan))
     monkeypatch.setattr(train, "job_request", lambda _: None)
     monkeypatch.setattr(
-        sys, "argv", [train.MODULE, "--plan", str(path), "--sha256", digest(plan), "--native"]
+        sys,
+        "argv",
+        [train.MODULE, "--plan", str(path), "--sha256", digest(plan), "--native"],
     )
 
     def reject(_):
@@ -597,7 +628,9 @@ def test_module_entry_rejects_missing_plan_without_private_path(tmp_path, monkey
 
     monkeypatch.delitem(sys.modules, train.MODULE)
     monkeypatch.setattr(
-        sys, "argv", [train.MODULE, "--plan", str(tmp_path / "private-plan"), "--sha256", "0" * 64]
+        sys,
+        "argv",
+        [train.MODULE, "--plan", str(tmp_path / "private-plan"), "--sha256", "0" * 64],
     )
     with pytest.raises(SystemExit) as error:
         runpy.run_module(train.MODULE, run_name="__main__")
@@ -612,6 +645,7 @@ def test_skyrl_preflight_cli_and_submission_proof_dispatch(prepared, monkeypatch
     plan, root = prepared.plan, prepared.state.tmp / "prepared"
     request = train.job_request(plan)
     cli._prepare(root, plan, request)
+    monkeypatch.setattr(cli, "_require_output_absent", lambda _: None)
     monkeypatch.setattr(
         train,
         "preflight",

@@ -1,0 +1,134 @@
+{
+  "schema": "cyber_qwen38_lora_one_step_canary_failure_v1",
+  "date": "2026-09-20",
+  "classification": "infrastructure-invalid",
+  "scientific_disposition": "no_optimizer_checkpoint_or_model_outcome",
+  "run": {
+    "name": "chris-q38-lora-sft-c1-v1-c923fc5e",
+    "api_run_id": "c923fc5e-b0e9-4134-a1d1-77c0c3a90fa2",
+    "api_job_id": "chris-q38-lora-sft-c1-v1-c923fc5e-jsr56",
+    "namespace": "fleet-train-jobs",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v1",
+    "admitted_at": "2026-09-20T06:24:47Z",
+    "controller_terminal_at": "2026-09-20T06:35:51Z",
+    "controller_terminal_state": "Failed",
+    "controller_terminal_reason": "AppFailed"
+  },
+  "kubernetes_identity": {
+    "rayjob": {
+      "name": "chris-q38-lora-sft-c1-v1-c923fc5e",
+      "uid": "ecc24758-671f-4fc4-be71-a79517d80f57"
+    },
+    "raycluster": {
+      "name": "chris-q38-lora-sft-c1-v1-c923fc5e-zmfbw",
+      "uid": "eab83804-7839-4f1f-93af-8448724879f6"
+    },
+    "workload": {
+      "name": "rayjob-chris-q38-lora-sft-c1-v1-c923fc5e-30d22",
+      "uid": "56739b4a-3739-414e-9e8c-247fd8059465"
+    },
+    "pod": {
+      "name": "chris-q38-lora-sft-c1-v1-c923fc5e-zmfbw-head-zws5m",
+      "uid": "0a7a7eff-6bbf-4f4f-82a2-c2401b15510d"
+    }
+  },
+  "image": {
+    "requested": "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317",
+    "runtime_image_id": null,
+    "runtime_image_id_preserved": false
+  },
+  "bindings": {
+    "plan_sha256": "sha256:183a8f7027ea518782548c4960cb9169f54b792c218c9a5940d55f14fc8caca1",
+    "request_sha256": "sha256:ba27b332c4d6df79ea2b3e01eeb79624f23345833dd57866ff7294fd560fa05f",
+    "template_sha256": "sha256:a39e076f4393c1c269a2353455915b11b9f855ada919a5e5c3b0394cca8ee7a9",
+    "runtime_sha256": "sha256:1b8d6d986a9c6a114c329577ad4809f39a1a2122eb5475946aa8e802b70d1a47"
+  },
+  "failure": {
+    "stage": "device_ready",
+    "error_class": "AttributeError",
+    "optimizer_steps": 0,
+    "checkpoint_present": false,
+    "model_outcome_present": false,
+    "one_step_gate_satisfied": false
+  },
+  "durable_evidence": {
+    "failed_receipt_filename": "FAILED.json",
+    "failed_receipt_file_sha256": "sha256:4a9e27a2c5d0403394050ae50ffa0e6e296561b3af18efa63b06e9c9c3c8f251",
+    "failed_receipt_self_sha256": "sha256:e8ee0bc7cf2c84344f513db0398f4893f17e4b157ac9be5b6fdfb17c7690ee03"
+  },
+  "failure_budget": {
+    "consumed": 1,
+    "limit": 10,
+    "remaining": 9
+  },
+  "release": {
+    "authority": "Jobs API",
+    "pre_delete_exact_run_verified": true,
+    "request": {
+      "method": "DELETE",
+      "path": "/v1/runs/chris-q38-lora-sft-c1-v1-c923fc5e",
+      "http_status": 204
+    },
+    "primary_objects_absent_at": "2026-09-20T06:40:35Z",
+    "primary_objects": [
+      {
+        "kind": "RayJob",
+        "name": "chris-q38-lora-sft-c1-v1-c923fc5e",
+        "uid": "ecc24758-671f-4fc4-be71-a79517d80f57",
+        "absent": true
+      },
+      {
+        "kind": "RayCluster",
+        "name": "chris-q38-lora-sft-c1-v1-c923fc5e-zmfbw",
+        "uid": "eab83804-7839-4f1f-93af-8448724879f6",
+        "absent": true
+      },
+      {
+        "kind": "Workload",
+        "name": "rayjob-chris-q38-lora-sft-c1-v1-c923fc5e-30d22",
+        "uid": "56739b4a-3739-414e-9e8c-247fd8059465",
+        "absent": true
+      },
+      {
+        "kind": "Pod",
+        "name": "chris-q38-lora-sft-c1-v1-c923fc5e-zmfbw-head-zws5m",
+        "uid": "0a7a7eff-6bbf-4f4f-82a2-c2401b15510d",
+        "absent": true
+      }
+    ],
+    "helper_pods": [
+      {
+        "purpose": "failure_receipt_reader",
+        "name": "chris-q38-lora-c1-failure-reader-v1",
+        "uid": "dd9f37ee-91fa-487d-860b-65efff51e116",
+        "exit_code": 0,
+        "gpus": 0,
+        "deleted": true,
+        "absent": true
+      },
+      {
+        "purpose": "jobs_api_release",
+        "name": "chris-q38-lora-c1-release-v1",
+        "uid": "f6d28806-7e1c-4a1a-8e56-8910e66be6fa",
+        "started_at": "2026-09-20T06:40:30Z",
+        "terminal_at": "2026-09-20T06:40:32Z",
+        "exit_code": 0,
+        "gpus": 0,
+        "deleted": true,
+        "absent": true
+      }
+    ],
+    "gpu_allocation": {
+      "allocated_before_release": 8,
+      "released": 8,
+      "held_after_release": 0
+    }
+  },
+  "sanitization": {
+    "raw_logs_included": false,
+    "failure_messages_included": false,
+    "secrets_or_credentials_included": false,
+    "error_detail": "class_only"
+  },
+  "sha256": "sha256:ad4c99dc695a931207e8b95741688210abbcff4c8cbfbc8f25239e1e6311d05a"
+}

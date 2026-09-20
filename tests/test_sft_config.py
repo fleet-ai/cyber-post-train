@@ -15,7 +15,7 @@ from types import SimpleNamespace
 import pytest
 
 from cyber_post_train.jobs import digest
-from training import sft
+from training import sft, sft_runtime
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -79,7 +79,10 @@ def config(tmp_path):
                 "weights": str(ROOT / "configs/models/qwen38-27b-1d4bf0f2.weights.json"),
                 "root": "/mnt/sfs/models/test-base",
             },
-            "data": {"manifest": "corpus.json", "root": "/mnt/sfs/datasets/test-corpus"},
+            "data": {
+                "manifest": "corpus.json",
+                "root": "/mnt/sfs/datasets/test-corpus",
+            },
             "wandb": {
                 "entity": "test-team",
                 "project": "test-project",
@@ -107,6 +110,7 @@ def test_compile_uses_exact_model_manifest_and_complete_epochs(config, tmp_path)
     assert request["priority_class"] == "c1"
     assert "queue_priority_class" not in request
     assert request["secrets"] == ["wandb-api"]
+    assert "image_pull_secrets" not in request
     assert request == sft.job_request(plan)
     content = json.loads(gzip.decompress(base64.b64decode(request["env"]["CYBER_SFT_BUNDLE"])))
     assert json.loads(content["plan"]) == plan
@@ -205,6 +209,7 @@ def test_glm_compiler_binds_full_base_adapter_and_worker_bundle(glm_config, tmp_
     assert plan["model"]["repo"] == "zai-org/GLM-5.3"
     assert plan["lora"] == {"rank": 16, "alpha": 32}
     assert request["workers"] == 2 and request["gpus_per_worker"] == 8
+    assert "image_pull_secrets" not in request
     content = json.loads(gzip.decompress(base64.b64decode(request["env"]["CYBER_SFT_BUNDLE"])))
     assert content["extra_files"]["training/__init__.py"] == ""
     helper = content["extra_files"]["training/glm_runtime.py"]
@@ -213,6 +218,397 @@ def test_glm_compiler_binds_full_base_adapter_and_worker_bundle(glm_config, tmp_
     plan["glm_runtime_sha256"] = "0" * 64
     with pytest.raises(ValueError, match="GLM runtime changed"):
         sft.job_request(plan)
+
+
+@pytest.fixture
+def qwen38_lora_config(config, monkeypatch, tmp_path):
+    monkeypatch.setattr(sft_runtime, "QWEN38_MEGATRON_SKYRL_REVISION", "f" * 40)
+    monkeypatch.setattr(
+        sft_runtime,
+        "QWEN38_MEGATRON_IMAGE",
+        "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:" + "d" * 64,
+    )
+    source_census = {"skyrl/train/sft_trainer.py": "e" * 64}
+    monkeypatch.setattr(sft_runtime, "QWEN38_MEGATRON_SOURCE_SHA256", source_census)
+    monkeypatch.setattr(
+        sft_runtime,
+        "QWEN38_MEGATRON_SOURCE_CENSUS_SHA256",
+        hashlib.sha256(
+            json.dumps(source_census, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+    )
+    source, manifest, save = config
+    manifest["validation_mode"] = "task_outcomes_only"
+    manifest["files"].pop("dev")
+    save(manifest)
+    source["name"] = "chris-q38-lora-sft-c1-v1"
+    source["output_root"] = "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v1"
+    source["model"]["root"] = "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2"
+    source["recipe"] = {
+        "epochs": 1,
+        "batch_size": 1,
+        "microbatch_per_gpu": 1,
+        "nodes": 1,
+        "gpus_per_node": 8,
+        "lr": 3e-5,
+        "max_length": 16384,
+        "eval_interval": 0,
+        "checkpoint_interval": 1,
+        "keep_checkpoints": 3,
+        "seed": 20260919,
+    }
+    source["lora"] = dict(sft_runtime.QWEN38_LORA)
+    source["runtime"] = {
+        "skyrl_source_commit": sft_runtime.QWEN38_MEGATRON_SKYRL_REVISION,
+        "image": sft_runtime.QWEN38_MEGATRON_IMAGE,
+    }
+    source["pause_after_step"] = 1
+    source["cluster"] = {
+        "priority": "c1",
+        "resources": {
+            "cpu_request": "64",
+            "cpu_limit": "64",
+            "memory_request": "512Gi",
+            "memory_limit": "768Gi",
+        },
+    }
+    source["wandb"] = {
+        "entity": "thefleet",
+        "project": "cyber-post-train",
+        "group": "qwen38-lora-sft-goal-v1",
+        "run_id": source["name"],
+        "name": source["name"],
+        "tags": [
+            "qwen38",
+            "lora",
+            "teacher-sft",
+            "rank64",
+            "alpha32",
+            "exact-model-gate",
+            "planned-pause-step1",
+            "task-outcomes-only",
+        ],
+    }
+    # Give this offline fixture a complete synthetic identity so the tests can
+    # prove every reviewed field remains fail-closed independently of the real
+    # V2 corpus binding.
+    original_validate = sft.validate_plan
+    monkeypatch.setattr(sft, "validate_plan", lambda *_args, **_kwargs: None)
+    synthetic_plan = sft.compile_sft(source, relative_to=tmp_path)
+    monkeypatch.setattr(sft, "validate_plan", original_validate)
+    monkeypatch.setattr(
+        sft_runtime,
+        "QWEN38_LORA_ONE_STEP_PLAN",
+        sft_runtime._qwen38_lora_one_step_identity(synthetic_plan),
+    )
+    return source
+
+
+def test_qwen38_megatron_binding_rejects_incomplete_source_census(monkeypatch):
+    monkeypatch.setattr(sft_runtime, "QWEN38_MEGATRON_SKYRL_REVISION", "f" * 40)
+    monkeypatch.setattr(
+        sft_runtime,
+        "QWEN38_MEGATRON_IMAGE",
+        "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:" + "d" * 64,
+    )
+    incomplete = dict(sft_runtime.QWEN38_MEGATRON_SOURCE_SHA256)
+    incomplete.pop(next(iter(incomplete)))
+    monkeypatch.setattr(sft_runtime, "QWEN38_MEGATRON_SOURCE_SHA256", incomplete)
+    with pytest.raises(ValueError, match="qualification binding is unresolved"):
+        sft_runtime.qwen38_megatron_binding()
+
+
+def test_qwen38_production_canary_binds_verified_leak_free_corpus():
+    binding = sft_runtime.qwen38_lora_one_step_plan_binding()
+    assert binding["datasets_sha256"] == (
+        "219efad0257ff29b3057c91de88144542f8617a124079c5a20c79cf80b071f72"
+    )
+    assert binding["corpus_manifest_sha256"] == (
+        "sha256:5db5600ac9f403fd147b2ecbf6068b514d075d07ac683d97bc83319c6e89d149"
+    )
+    assert binding["split_manifest_sha256"] == (
+        "sha256:b7b536940995a0d4b8674a4bdadd6240ef88dc1c07200a93f27b592ac8c046ea"
+    )
+    assert binding["recipe"]["max_steps"] == 866
+    assert binding["pause_after_step"] == 1
+
+
+def test_qwen38_megatron_lora_compiles_only_exact_one_step_gate(qwen38_lora_config, tmp_path):
+    plan = sft.compile_sft(qwen38_lora_config, relative_to=tmp_path)
+    request = sft.job_request(plan)
+    options = sft_runtime.sft_overrides(plan)
+
+    assert plan["lora"] == sft_runtime.QWEN38_LORA
+    assert plan["skyrl_runtime"] == {
+        "source_commit": sft_runtime.QWEN38_MEGATRON_SKYRL_REVISION,
+        "source_files_sha256": sft_runtime.QWEN38_MEGATRON_SOURCE_SHA256,
+    }
+    assert plan["qualification_gate"]["accepted_for_production"] is False
+    assert plan["qualification_gate"]["training_success_is_acceptance"] is False
+    assert (
+        "deterministic_merge_and_export" in plan["qualification_gate"]["later_zero_step_evidence"]
+    )
+    assert request["priority_class"] == "c1"
+    assert request["image"] == qwen38_lora_config["runtime"]["image"]
+    assert request["secrets"] == ["wandb-api"]
+    assert request["image_pull_secrets"] == ["ghcr-pull"]
+    assert request["env"]["WANDB_MODE"] == "online"
+    assert request["env"]["FLA_TILELANG"] == "0"
+    contents = json.loads(gzip.decompress(base64.b64decode(request["env"]["CYBER_SFT_BUNDLE"])))
+    assert set(contents["extra_files"]) == {
+        "training/__init__.py",
+        "training/io.py",
+        "training/qwen38_lora_artifacts.py",
+        "training/sft_runtime.py",
+    }
+    assert contents["extra_files"]["training/sft_runtime.py"] == contents["runtime"]
+    assert request["env"]["PYTHONPATH"] == plan["output_root"] + "/.runtime:/opt/skyrl"
+    assert request["env"]["SKYRL_PYTHONPATH_EXPORT"] == "1"
+    assert options == {
+        **options,
+        "strategy": "megatron",
+        "language_model_only": True,
+        "megatron_config.tensor_model_parallel_size": 8,
+        "megatron_config.pipeline_model_parallel_size": 1,
+        "megatron_config.context_parallel_size": 1,
+        "megatron_config.lora_config.lora_type": "lora",
+        "megatron_config.lora_config.merge_lora": True,
+        "model.lora.rank": 64,
+        "model.lora.alpha": 32,
+        "model.lora.dropout": 0.0,
+        "model.lora.init_method": "kaiming",
+        "model.lora.target_modules": "all-linear",
+        "optimizer_config.weight_decay": 0.01,
+        "optimizer_config.max_grad_norm": 1.0,
+        "remove_microbatch_padding": True,
+        "use_sequence_packing": False,
+    }
+    assert "model_config_kwargs.fleet_force_qwen35_torch_gdn" not in options
+
+
+def test_qwen38_bootstrap_stages_terminal_receipt_validator_without_checkout(
+    qwen38_lora_config, tmp_path
+):
+    plan = sft.compile_sft(qwen38_lora_config, relative_to=tmp_path)
+    request = sft.job_request(plan)
+    contents = json.loads(gzip.decompress(base64.b64decode(request["env"]["CYBER_SFT_BUNDLE"])))
+    root = tmp_path / "runtime"
+    for relative, text in contents["extra_files"].items():
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            (
+                "import sys;sys.path.insert(0,sys.argv[1]);"
+                "from training.qwen38_lora_artifacts import validate_checkpoint_receipt;"
+                "from training import sft_runtime;"
+                "assert callable(validate_checkpoint_receipt);"
+                "assert sft_runtime.QWEN38_MEGATRON_SOURCE_SHA256"
+            ),
+            str(root),
+        ],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "missing_runtime",
+        "missing_image",
+        "missing_lora_field",
+        "source",
+        "tag",
+        "image_repo",
+        "image_digest",
+        "priority",
+        "run_name",
+        "output_root",
+        "wandb_entity",
+        "wandb_project",
+        "wandb_group",
+        "wandb_run_id",
+        "wandb_name",
+        "wandb_tag",
+        "wandb_extra_tag",
+        "wandb_tag_order",
+        "nodes",
+        "gpus",
+        "batch",
+        "microbatch",
+        "length",
+        "lr",
+        "epochs",
+        "seed",
+        "checkpoint_interval",
+        "keep_checkpoints",
+        "cpu_request",
+        "cpu_limit",
+        "memory_request",
+        "memory_limit",
+        "model_root",
+        "data_root",
+        "pause",
+        "lora_type",
+        "target_modules",
+        "rank",
+        "alpha",
+        "init_method",
+        "dropout",
+    ],
+)
+def test_qwen38_megatron_lora_rejects_unqualified_variants(qwen38_lora_config, tmp_path, defect):
+    source = copy.deepcopy(qwen38_lora_config)
+    if defect == "missing_runtime":
+        source.pop("runtime")
+    elif defect == "missing_image":
+        source["runtime"].pop("image")
+    elif defect == "missing_lora_field":
+        source["lora"].pop("dropout")
+    elif defect == "source":
+        source["runtime"]["skyrl_source_commit"] = "0" * 40
+    elif defect == "tag":
+        source["runtime"]["image"] = "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer:latest"
+    elif defect == "image_repo":
+        source["runtime"]["image"] = "ghcr.io/example/trainer@sha256:" + "d" * 64
+    elif defect == "image_digest":
+        source["runtime"]["image"] = "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:" + "c" * 64
+    elif defect == "priority":
+        source["cluster"]["priority"] = "c0"
+    elif defect == "run_name":
+        source["name"] = "other"
+    elif defect == "output_root":
+        source["output_root"] = "/mnt/sfs/jobs/other"
+    elif defect == "wandb_entity":
+        source["wandb"]["entity"] = "other"
+    elif defect == "wandb_project":
+        source["wandb"]["project"] = "other"
+    elif defect == "wandb_group":
+        source["wandb"]["group"] = "other"
+    elif defect == "wandb_run_id":
+        source["wandb"]["run_id"] = "other"
+    elif defect == "wandb_name":
+        source["wandb"]["name"] = "other"
+    elif defect == "wandb_tag":
+        source["wandb"]["tags"].remove("exact-model-gate")
+    elif defect == "wandb_extra_tag":
+        source["wandb"]["tags"].append("unreviewed")
+    elif defect == "wandb_tag_order":
+        source["wandb"]["tags"].reverse()
+    elif defect == "pause":
+        source.pop("pause_after_step")
+    elif defect in {
+        "nodes",
+        "gpus",
+        "batch",
+        "microbatch",
+        "length",
+        "lr",
+        "epochs",
+        "seed",
+        "checkpoint_interval",
+        "keep_checkpoints",
+    }:
+        key = {
+            "gpus": "gpus_per_node",
+            "batch": "batch_size",
+            "microbatch": "microbatch_per_gpu",
+            "length": "max_length",
+        }.get(defect, defect)
+        source["recipe"][key] = {
+            "nodes": 2,
+            "gpus": 4,
+            "batch": 2,
+            "microbatch": 2,
+            "length": 32768,
+            "lr": 1e-5,
+            "epochs": 2,
+            "seed": 123,
+            "checkpoint_interval": 2,
+            "keep_checkpoints": 99,
+        }[defect]
+    elif defect in {
+        "cpu_request",
+        "cpu_limit",
+        "memory_request",
+        "memory_limit",
+    }:
+        source["cluster"]["resources"][defect] = "1" if defect.startswith("cpu") else "1Gi"
+    elif defect == "model_root":
+        source["model"]["root"] = "/mnt/sfs/models/other"
+    elif defect == "data_root":
+        source["data"]["root"] = "/mnt/sfs/datasets/other"
+    else:
+        source["lora"][defect] = {
+            "lora_type": "canonical_lora",
+            "target_modules": ["linear_qkv"],
+            "rank": 32,
+            "alpha": 64,
+            "init_method": "normal",
+            "dropout": 0.1,
+        }[defect]
+        if defect == "lora_type":
+            source["lora"]["type"] = source["lora"].pop("lora_type")
+    with pytest.raises(ValueError):
+        sft.compile_sft(source, relative_to=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "defect",
+    [
+        "corpus_manifest",
+        "split_manifest",
+        "dataset_path",
+        "dataset_digest",
+        "dataset_task_keys",
+        "dataset_rows_and_max_steps",
+        "model_revision",
+        "model_weight_manifest",
+        "model_file_digest",
+        "runtime_source_file",
+        "qualification_gate",
+        "unexpected_plan_field",
+    ],
+)
+def test_qwen38_megatron_lora_rejects_mutated_compiled_identity(
+    qwen38_lora_config, tmp_path, defect
+):
+    plan = sft.compile_sft(qwen38_lora_config, relative_to=tmp_path)
+    if defect == "corpus_manifest":
+        plan["corpus_manifest_sha256"] = "sha256:" + "0" * 64
+    elif defect == "split_manifest":
+        plan["split_manifest_sha256"] = "sha256:" + "0" * 64
+    elif defect == "dataset_path":
+        plan["datasets"]["train"]["path"] = "/mnt/sfs/datasets/other/train.parquet"
+    elif defect == "dataset_digest":
+        plan["datasets"]["train"]["sha256"] = "sha256:" + "0" * 64
+    elif defect == "dataset_task_keys":
+        plan["datasets"]["train"]["task_keys"].append("unreviewed-task")
+    elif defect == "dataset_rows_and_max_steps":
+        plan["datasets"]["train"]["rows"] += 1
+        plan["recipe"]["max_steps"] += 1
+    elif defect == "model_revision":
+        plan["model"]["revision"] = "0" * 40
+    elif defect == "model_weight_manifest":
+        plan["model"]["weight_manifest_sha256"] = "sha256:" + "0" * 64
+    elif defect == "model_file_digest":
+        plan["model"]["files"][0]["sha256"] = "0" * 64
+    elif defect == "runtime_source_file":
+        source_files = plan["skyrl_runtime"]["source_files_sha256"]
+        source_files[next(iter(source_files))] = "0" * 64
+    elif defect == "qualification_gate":
+        plan["qualification_gate"]["accepted_for_production"] = True
+    elif defect == "unexpected_plan_field":
+        plan["unreviewed"] = True
+    with pytest.raises(ValueError):
+        sft_runtime.validate_plan(plan, check_files=False)
 
 
 @pytest.mark.parametrize("defect", ["rank", "alpha", "missing", "extra", "memory", "nodes", "cpu"])
@@ -252,7 +648,12 @@ def test_glm_bootstrap_imports_worker_in_child_without_checkout(glm_config, tmp_
     argv[0] = sys.executable
     # Exclude this desktop's editable-install import hook as well as the cwd.
     argv.insert(1, "-S")
-    env = {**os.environ, **request["env"], "RUN_DIR": str(run), "PYTHONPATH": str(run / ".runtime")}
+    env = {
+        **os.environ,
+        **request["env"],
+        "RUN_DIR": str(run),
+        "PYTHONPATH": str(run / ".runtime"),
+    }
     result = subprocess.run(argv, cwd=run, env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     assert (run / ".runtime/training/glm_runtime.py").read_text() == helper
@@ -267,6 +668,7 @@ def test_recovery_bootstrap_imports_complete_package_without_checkout(
     # Bootstrap import boundary only; manifest validity has independent tests.
     plan["recovery"] = {"mode": "validate"}
     plan["recovery_runtime_sha256"] = recovery.digest(Path(recovery.__file__))
+    monkeypatch.setattr(sft, "validate_plan", lambda *_args, **_kwargs: None)
     request = sft.job_request(plan)
     files = json.loads(gzip.decompress(base64.b64decode(request["env"]["CYBER_SFT_BUNDLE"])))
     assert files["extra_files"]["training/sft_runtime.py"] == files["runtime"]
@@ -281,7 +683,9 @@ def test_recovery_bootstrap_imports_complete_package_without_checkout(
     original = Path.read_bytes
     runtime_file = Path(sft.__file__).with_name("sft_runtime.py")
     monkeypatch.setattr(
-        Path, "read_bytes", lambda p: entry.encode() if p == runtime_file else original(p)
+        Path,
+        "read_bytes",
+        lambda p: entry.encode() if p == runtime_file else original(p),
     )
     plan["runtime_sha256"] = hashlib.sha256(entry.encode()).hexdigest()
     request = sft.job_request(plan)
@@ -289,7 +693,12 @@ def test_recovery_bootstrap_imports_complete_package_without_checkout(
     run.mkdir()
     argv = shlex.split(request["command"])
     argv[:1] = [sys.executable, "-S"]
-    env = {**os.environ, **request["env"], "RUN_DIR": str(run), "PYTHONPATH": str(run / ".runtime")}
+    env = {
+        **os.environ,
+        **request["env"],
+        "RUN_DIR": str(run),
+        "PYTHONPATH": str(run / ".runtime"),
+    }
     result = subprocess.run(argv, cwd=run, env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     plan["recovery_runtime_sha256"] = "0" * 64
@@ -423,8 +832,7 @@ def test_bootstrap_executes_bound_bytes_and_never_overwrites(config, tmp_path, m
     request = sft.job_request(plan)
     argv = shlex.split(request["command"])
     argv[0] = sys.executable
-    output = tmp_path / "run"
-    output.mkdir()
+    output = tmp_path / "missing" / "run"
     env = {**os.environ, **request["env"], "RUN_DIR": str(output)}
     result = subprocess.run(argv, env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
@@ -472,7 +880,7 @@ def test_cpu_preflight_checks_files_and_actual_target_accounting(
         spec.update(path=str(path), sha256=hashlib.sha256(path.read_bytes()).hexdigest())
     calls = []
 
-    def native():
+    def native(_plan=None):
         calls.append("native")
         if defect == "native":
             raise ValueError("native source mismatch")
@@ -487,7 +895,9 @@ def test_cpu_preflight_checks_files_and_actual_target_accounting(
         }
 
     monkeypatch.setitem(
-        sys.modules, "skyrl.train.sft_trainer", SimpleNamespace(tokenize_chat_example=tokenize)
+        sys.modules,
+        "skyrl.train.sft_trainer",
+        SimpleNamespace(tokenize_chat_example=tokenize),
     )
     monkeypatch.setattr(torch.cuda, "is_available", lambda: defect == "gpu")
     monkeypatch.setattr(sft_runtime, "validate_runtime_sources", native)

@@ -1,0 +1,20 @@
+{
+  "schema": "cyber_dense_target_length_audit_v1",
+  "source_manifest_sha256": "sha256:d0641cc7baf082c0b1d9bd494112ad8562b9c332cb5be5a7696249d9101a96a8",
+  "source_train_parquet_sha256": "sha256:86452a28af5c77b48c1e53e13a6d8fd9d483eec350d22214cd7717127502a7b1",
+  "exact_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "pod_name": "chris-q38-broad-data-target-audit-v10",
+  "pod_uid": "db19d0fc-152e-4373-9b73-8ea9271e91dc",
+  "pod_phase": "Succeeded",
+  "container_restarts": 0,
+  "gpu_count": 0,
+  "source_rows": 3679,
+  "assistant_targets": 176654,
+  "maximum_target_tokens": 4700,
+  "targets_over_16384": 0,
+  "targets_over_24576": 0,
+  "targets_over_28672": 0,
+  "targets_over_32768": 0,
+  "pod_deleted_and_absence_verified": true,
+  "conclusion": "Every supervised assistant target fits whole inside a 32768-token window. A lossless 32K re-windowing can preserve all targets without truncation or splitting."
+}

@@ -14,6 +14,7 @@ from .jobs import Jobs, JobsError, digest, validate_preview, validate_request
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
 PREPARATION_GATE_VERSION = 2
+SFS_JOBS_ROOT = Path("/mnt/sfs/jobs")
 
 
 def _print(value: object) -> None:
@@ -99,8 +100,43 @@ def _submission_gate(directory: Path, plan: dict, request: dict) -> None:
         )
 
 
+def _require_preflight(directory: Path, plan: dict, request: dict) -> None:
+    proof = _read(directory / "PREFLIGHT.json")
+    expected = {
+        "schema": "cyber_miles_conversion_cpu_preflight_v1"
+        if plan.get("schema") == "cyber_miles_conversion_v1"
+        else "cyber_miles_training_cpu_preflight_v1"
+        if plan.get("schema") == "cyber_miles_training_v1"
+        else "cyber_skyrl_training_cpu_preflight_v1"
+        if plan.get("schema") == "cyber_skyrl_training_v1"
+        else "cyber_sft_cpu_preflight_v1",
+        "status": "passed",
+        "gpus": 0,
+        "plan_sha256": digest(plan),
+        "request_sha256": digest(request),
+    }
+    if proof.get("sha256") != digest({k: v for k, v in proof.items() if k != "sha256"}) or any(
+        proof.get(k) != v for k, v in expected.items()
+    ):
+        raise ValueError("missing or mismatched CPU preflight")
+
+
 def _client() -> Jobs:
     return Jobs(os.environ.get("FLEET_API_KEY", ""))
+
+
+def _require_output_absent(request: dict, *, jobs_root: Path = SFS_JOBS_ROOT) -> None:
+    """Prove the create-once output is absent from a host that can see SFS.
+
+    Treat an unavailable SFS mount as unknown, never as evidence of absence.
+    The Jobs API duplicate census remains a separate check because an old API
+    record and an existing filesystem output are independent failure modes.
+    """
+    if not jobs_root.is_dir():
+        raise ValueError("the shared /mnt/sfs/jobs mount is unavailable for output checks")
+    output = Path(request["run_dir"])
+    if output.exists() or output.is_symlink():
+        raise ValueError("training output already exists; use a new reviewed run identity")
 
 
 def _fail(exc: Exception) -> None:
@@ -138,6 +174,18 @@ def data_subset(config: Path) -> None:
 def data_fleet_teachers(config: Path) -> None:
     """Build train-only SFT data from digest-bound Fleet success evidence. CPU only."""
     from training.fleet_teacher_corpus import build
+    from training.sft import read_mapping
+
+    try:
+        _print(build(read_mapping(config), relative_to=config.resolve().parent))
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("data-rechunk")
+def data_rechunk(config: Path) -> None:
+    """Re-window a sealed dense SFT corpus at a smaller context. CPU only."""
+    from training.dense_rechunk import build
     from training.sft import read_mapping
 
     try:
@@ -186,7 +234,13 @@ def rl_data(config: Path) -> None:
             follow_redirects=False,
             transport=httpx.HTTPTransport(retries=0),
         ) as client:
-            _print(build(read_mapping(config), relative_to=config.resolve().parent, client=client))
+            _print(
+                build(
+                    read_mapping(config),
+                    relative_to=config.resolve().parent,
+                    client=client,
+                )
+            )
     except Exception as exc:
         _fail(exc)
 
@@ -246,7 +300,8 @@ def preflight(directory: Path) -> None:
     """Validate staged training/conversion inputs in the pinned image, without GPUs."""
 
     try:
-        plan, _ = _prepared(directory)
+        plan, request = _prepared(directory)
+        _require_output_absent(request)
         if plan.get("schema") == "cyber_miles_conversion_v1":
             from training.miles_conversion import preflight as check
         elif plan.get("schema") == "cyber_miles_training_v1":
@@ -286,26 +341,44 @@ def submit(directory: Path) -> None:
     try:
         plan, request = _prepared(directory)
         _submission_gate(directory, plan, request)
-        proof = _read(directory / "PREFLIGHT.json")
-        expected = {
-            "schema": "cyber_miles_conversion_cpu_preflight_v1"
-            if plan.get("schema") == "cyber_miles_conversion_v1"
-            else "cyber_miles_training_cpu_preflight_v1"
-            if plan.get("schema") == "cyber_miles_training_v1"
-            else "cyber_skyrl_training_cpu_preflight_v1"
-            if plan.get("schema") == "cyber_skyrl_training_v1"
-            else "cyber_sft_cpu_preflight_v1",
-            "status": "passed",
-            "gpus": 0,
-            "plan_sha256": digest(plan),
-            "request_sha256": digest(request),
-        }
-        if proof.get("sha256") != digest({k: v for k, v in proof.items() if k != "sha256"}) or any(
-            proof.get(k) != v for k, v in expected.items()
-        ):
-            raise ValueError("missing or mismatched CPU preflight")
+        _require_preflight(directory, plan, request)
+        # Repeat the SFS check immediately before the API census/preview/POST.
+        # A preflight receipt is immutable evidence, not a filesystem lock.
+        _require_output_absent(request)
         with _client() as client:
             result = client.submit_once(request, directory / "SUBMISSION.jsonl")
+        _print(result)
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("direct-submit-sft")
+def direct_submit_sft(
+    directory: Path,
+    context: Annotated[str, typer.Option("--context")],
+) -> None:
+    """Create one SFT RayJob when API preview omits only the alert annotation.
+
+    This fallback still uses a fresh live Jobs API preview. It removes the
+    API-only Fleet credential Secret, injects the required root annotation,
+    performs a Kubernetes server dry-run and records a durable create intent.
+    It then executes exactly one ``kubectl create`` and never retries, applies
+    or patches. Prefer normal ``submit`` whenever its preview is qualified.
+    """
+    from .direct_submit import DIRECT_JOURNAL, Kubectl, direct_submit_sft_once
+
+    try:
+        plan, request = _prepared(directory)
+        _submission_gate(directory, plan, request)
+        _require_preflight(directory, plan, request)
+        with _client() as client:
+            result = direct_submit_sft_once(
+                plan=plan,
+                request=request,
+                jobs=client,
+                kubectl=Kubectl(context),
+                journal=directory / DIRECT_JOURNAL,
+            )
         _print(result)
     except Exception as exc:
         _fail(exc)
@@ -320,7 +393,14 @@ def miles_convert(config: Path, output: Annotated[Path, typer.Option("--output")
     try:
         plan = compile_conversion(read_mapping(config), relative_to=config.resolve().parent)
         _prepare(output, plan, job_request(plan))
-        _print({"prepared": str(output), "optimizer_steps": 0, "gpus": 8, "submitted": False})
+        _print(
+            {
+                "prepared": str(output),
+                "optimizer_steps": 0,
+                "gpus": 8,
+                "submitted": False,
+            }
+        )
     except Exception as exc:
         _fail(exc)
 
@@ -333,7 +413,13 @@ def miles_seal(directory: Path, output: Annotated[Path, typer.Option("--output")
     try:
         plan, _ = _prepared(directory)
         result = seal(plan, output)
-        _print({"sha256": result["sha256"], "files": len(result["files"]), "gpu_reload": False})
+        _print(
+            {
+                "sha256": result["sha256"],
+                "files": len(result["files"]),
+                "gpu_reload": False,
+            }
+        )
     except Exception as exc:
         _fail(exc)
 

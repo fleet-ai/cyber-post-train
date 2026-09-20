@@ -16,8 +16,12 @@ from training.sft_runtime import (
     EvalAccumulator,
     PlannedPause,
     ProgressWatchdog,
+    _create_runtime_output,
     _make_trainer_class,
+    _qwen38_policy_learning_rate,
+    _reconcile_worker_learning_rates,
     _run_setup_probe,
+    _setup_probe_plan,
     _unsigned_digest,
     build_runtime_configs,
     dense_rows,
@@ -111,7 +115,10 @@ def test_setup_probe_selects_real_tracker_only_when_requested(tmp_path, monkeypa
 
     monkeypatch.setattr(
         "training.sft_runtime.build_runtime_configs",
-        lambda value: (SimpleNamespace(), SimpleNamespace(trainer=SimpleNamespace(log_path=None))),
+        lambda value: (
+            SimpleNamespace(),
+            SimpleNamespace(trainer=SimpleNamespace(log_path=None)),
+        ),
     )
     monkeypatch.setattr("training.sft_runtime._make_trainer_class", lambda: ProbeTrainer)
 
@@ -144,7 +151,10 @@ def test_setup_probe_exercises_train_only_eval_loader(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "training.sft_runtime.build_runtime_configs",
-        lambda value: (SimpleNamespace(), SimpleNamespace(trainer=SimpleNamespace(log_path=None))),
+        lambda value: (
+            SimpleNamespace(),
+            SimpleNamespace(trainer=SimpleNamespace(log_path=None)),
+        ),
     )
     monkeypatch.setattr("training.sft_runtime._make_trainer_class", lambda: ProbeTrainer)
     value = plan(tmp_path)
@@ -158,10 +168,285 @@ def test_setup_probe_exercises_train_only_eval_loader(tmp_path, monkeypatch):
     assert events == ["eval_loader_checked", "shutdown"]
 
 
+def _qwen38_setup_probe_snapshots():
+    adapter = "model.layers.0.linear_qkv.adapter.linear_in"
+    trainable_rows = [{"name": adapter, "dtype": "BF16", "shape": [2, 4], "numel": 8}]
+    return [
+        {
+            "rank": {
+                "world_rank": rank,
+                "tp_rank": rank,
+                "tp_size": 8,
+                "pp_rank": 0,
+                "pp_size": 1,
+                "cp_rank": 0,
+                "cp_size": 1,
+                "dp_rank": 0,
+                "dp_size": 1,
+            },
+            "target_census": {"selector": "all-linear"},
+            "adapters": {
+                adapter: {
+                    "logical_target": "linear_qkv",
+                    "dtype": "BF16",
+                    "global_shape": [2, 32],
+                    "local_shape": [2, 4],
+                    "sharding": {"tensor_parallel": True, "partition_dim": 1},
+                    "sha256": f"{rank + 1:064x}",
+                }
+            },
+            "trainable": {
+                "parameter_count": 1,
+                "elements": 8,
+                "manifest_sha256": _unsigned_digest(trainable_rows),
+                "unexpected_parameters": [],
+                "nontrainable_adapter_parameters": [],
+            },
+            "frozen_base": {
+                "parameter_count": 2,
+                "elements": 16,
+                "bytes": 32,
+                "manifest_sha256": f"{rank + 100:064x}",
+            },
+            "successful_optimizer_updates": 0,
+            "last_gradient_norm": None,
+        }
+        for rank in range(8)
+    ]
+
+
+def _run_qwen38_setup_probe_with_snapshots(tmp_path, monkeypatch, snapshots):
+    events = []
+
+    class ProbeTrainer:
+        def __init__(self, cfg, skyrl_cfg, value):
+            self.plan = value
+            self.public_runtime_stage = "trainer_constructed"
+            self.dispatch = SimpleNamespace(
+                collect_lora_qualification_snapshots=self.collect_snapshots
+            )
+
+        def collect_snapshots(self, model):
+            events.append(("collect_lora_qualification_snapshots", model))
+            return snapshots
+
+        def _policy_learning_rate(self):
+            events.append("policy_learning_rate")
+            return value["recipe"]["lr"]
+
+        def load_dataset(self):
+            events.append("load_dataset")
+
+            class Dataset:
+                sequence_lengths = [8] * value["datasets"]["train"]["rows"]
+
+                def __len__(self):
+                    return len(self.sequence_lengths)
+
+            return Dataset()
+
+        def _log_dataset_stats(self, dataset):
+            events.append(("dataset_stats", len(dataset.sequence_lengths)))
+
+        def setup(self):
+            events.append("setup")
+            self.public_runtime_stage = "device_ready"
+
+        def shutdown(self):
+            events.append("shutdown")
+
+    monkeypatch.setattr(
+        "training.sft_runtime.build_runtime_configs",
+        lambda value: (
+            SimpleNamespace(),
+            SimpleNamespace(trainer=SimpleNamespace(log_path=None)),
+        ),
+    )
+    monkeypatch.setattr("training.sft_runtime._make_trainer_class", lambda: ProbeTrainer)
+    value = plan(tmp_path)
+    value["lora"] = {}
+
+    return _run_setup_probe(value), events, value
+
+
+def test_qwen38_setup_probe_validates_complete_pre_step_snapshot(tmp_path, monkeypatch):
+    result, events, value = _run_qwen38_setup_probe_with_snapshots(
+        tmp_path, monkeypatch, _qwen38_setup_probe_snapshots()
+    )
+
+    assert result == {
+        "dataset_contract_rows": value["datasets"]["train"]["rows"],
+        "initial_learning_rate": value["recipe"]["lr"],
+        "learning_rate_rank_count": 8,
+        "optimizer_steps": 0,
+        "plan_sha256": value["plan_sha256"],
+        "snapshot_rank_count": 8,
+        "stage": "device_ready",
+        "status": "setup_validated",
+    }
+    assert events == [
+        "setup",
+        ("collect_lora_qualification_snapshots", "policy"),
+        "policy_learning_rate",
+        "load_dataset",
+        ("dataset_stats", value["datasets"]["train"]["rows"]),
+        "shutdown",
+    ]
+
+
+@pytest.mark.parametrize("defect", ["incomplete", "malformed"])
+def test_qwen38_setup_probe_rejects_invalid_pre_step_snapshot(tmp_path, monkeypatch, defect):
+    snapshots = _qwen38_setup_probe_snapshots()
+    if defect == "incomplete":
+        snapshots.pop()
+    else:
+        snapshots[3]["rank"]["tp_size"] = 7
+
+    result, events, value = _run_qwen38_setup_probe_with_snapshots(tmp_path, monkeypatch, snapshots)
+
+    assert result == {
+        "error_class": "ValueError",
+        "optimizer_steps": 0,
+        "plan_sha256": value["plan_sha256"],
+        "stage": "device_ready",
+        "status": "setup_rejected",
+    }
+    assert events == [
+        "setup",
+        ("collect_lora_qualification_snapshots", "policy"),
+        "shutdown",
+    ]
+
+
+def test_reconcile_worker_learning_rates_requires_exact_all_rank_consensus():
+    assert _reconcile_worker_learning_rates([3e-5] * 8, expected_ranks=8) == 3e-5
+
+
+@pytest.mark.parametrize(
+    ("values", "expected_ranks"),
+    [
+        ([3e-5] * 7, 8),
+        ([3e-5] * 9, 8),
+        (None, 8),
+        ([None] * 8, 8),
+        ([True] * 8, 8),
+        (["3e-5"] * 8, 8),
+        ([0.0] * 8, 8),
+        ([-3e-5] * 8, 8),
+        ([float("nan")] * 8, 8),
+        ([float("inf")] * 8, 8),
+        ([3e-5] * 7 + [2e-5], 8),
+        ([3e-5], 0),
+    ],
+)
+def test_reconcile_worker_learning_rates_rejects_invalid_evidence(values, expected_ranks):
+    with pytest.raises(ValueError):
+        _reconcile_worker_learning_rates(values, expected_ranks=expected_ranks)
+
+
+def test_qwen38_policy_learning_rate_queries_every_planned_rank(monkeypatch, tmp_path):
+    events = []
+    refs = [object() for _ in range(8)]
+
+    class Group:
+        actor_infos = [object() for _ in range(8)]
+
+        def async_run_ray_method(self, dispatch_type, method):
+            events.append((dispatch_type, method))
+            return refs
+
+    fake_ray = ModuleType("ray")
+    fake_ray.get = lambda observed: events.append(("ray.get", observed is refs)) or [3e-5] * 8
+    monkeypatch.setitem(sys.modules, "ray", fake_ray)
+    value = plan(tmp_path)
+    value["lora"] = {}
+    dispatch = SimpleNamespace(_actor_groups={"policy": Group()})
+
+    assert _qwen38_policy_learning_rate(dispatch, value) == 3e-5
+    assert events == [("pass_through", "get_lr"), ("ray.get", True)]
+
+
+@pytest.mark.parametrize("defect", ["actor_count", "ref_count", "result_count"])
+def test_qwen38_policy_learning_rate_rejects_incomplete_dispatch(monkeypatch, tmp_path, defect):
+    calls = []
+    refs = [object() for _ in range(7 if defect == "ref_count" else 8)]
+
+    class Group:
+        actor_infos = [object() for _ in range(7 if defect == "actor_count" else 8)]
+
+        def async_run_ray_method(self, dispatch_type, method):
+            calls.append((dispatch_type, method))
+            return refs
+
+    fake_ray = ModuleType("ray")
+    fake_ray.get = lambda observed: [3e-5] * (7 if defect == "result_count" else 8)
+    monkeypatch.setitem(sys.modules, "ray", fake_ray)
+    value = plan(tmp_path)
+    value["lora"] = {}
+
+    with pytest.raises(ValueError):
+        _qwen38_policy_learning_rate(SimpleNamespace(_actor_groups={"policy": Group()}), value)
+    assert calls == ([] if defect == "actor_count" else [("pass_through", "get_lr")])
+
+
+def test_setup_probe_plan_uses_new_create_once_owned_output(tmp_path):
+    jobs_root = tmp_path / "jobs"
+    jobs_root.mkdir()
+    value = plan(tmp_path)
+    value["plan_sha256"] = "f" * 64
+    destination = jobs_root / "chris-q38-lora-setup-probe-dev-v1"
+
+    probe = _setup_probe_plan(value, destination, jobs_root=jobs_root)
+
+    assert probe["output_root"] == str(destination)
+    assert probe["plan_sha256"] == value["plan_sha256"]
+    assert value["output_root"] == str(tmp_path)
+    assert not destination.exists()
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "unowned-probe-v1",
+        "chris-q38-lora-setup-probe-UPPER",
+        "chris-q38-lora-setup-probe-" + "x" * 81,
+    ],
+)
+def test_setup_probe_plan_rejects_unowned_or_noncanonical_output(tmp_path, name):
+    jobs_root = tmp_path / "jobs"
+    jobs_root.mkdir()
+
+    with pytest.raises(ValueError, match="new specific owned SFS directory"):
+        _setup_probe_plan(plan(tmp_path), jobs_root / name, jobs_root=jobs_root)
+
+
+def test_setup_probe_plan_rejects_existing_output(tmp_path):
+    jobs_root = tmp_path / "jobs"
+    jobs_root.mkdir()
+    destination = jobs_root / "chris-q38-lora-setup-probe-dev-v1"
+    destination.mkdir()
+
+    with pytest.raises(ValueError, match="already exists"):
+        _setup_probe_plan(plan(tmp_path), destination, jobs_root=jobs_root)
+
+
+def test_setup_probe_output_creation_is_atomic_and_create_once(tmp_path):
+    destination = tmp_path / "chris-q38-lora-setup-probe-dev-v1"
+
+    _create_runtime_output(destination, setup_probe=True)
+
+    assert destination.is_dir()
+    with pytest.raises(FileExistsError):
+        _create_runtime_output(destination, setup_probe=True)
+
+
 def test_train_only_wrapper_returns_no_eval_dataset(monkeypatch):
     modules = {
         "skyrl.backends.skyrl_train.training_batch": {"pad_training_input_batch": None},
-        "skyrl.train.sft_trainer": {"SFTTrainer": object, "tokenize_chat_example": None},
+        "skyrl.train.sft_trainer": {
+            "SFTTrainer": object,
+            "tokenize_chat_example": None,
+        },
         "skyrl.train.utils.callbacks": {"TrainingCallback": object},
         "skyrl.train.utils.tracking": {"Tracking": object},
         "skyrl.train.utils.utils": {"Timer": object},
@@ -175,6 +460,43 @@ def test_train_only_wrapper_returns_no_eval_dataset(monkeypatch):
     trainer.plan = {"datasets": {"train": {}}}
 
     assert trainer.load_eval_dataset() is None
+
+
+def test_custom_train_loader_uses_native_dataset_contract(monkeypatch):
+    """The pinned image reads ``sequence_lengths`` before building its loader."""
+
+    class TextDataset:
+        def __init__(self, rows):
+            self.rows = rows
+
+        @property
+        def sequence_lengths(self):
+            return [len(row["input_ids"]) for row in self.rows]
+
+    modules = {
+        "skyrl.backends.skyrl_train.training_batch": {"pad_training_input_batch": None},
+        "skyrl.train.dataset.sft_dataset": {"TextDataset": TextDataset},
+        "skyrl.train.sft_trainer": {
+            "SFTTrainer": object,
+            "tokenize_chat_example": None,
+        },
+        "skyrl.train.utils.callbacks": {"TrainingCallback": object},
+        "skyrl.train.utils.tracking": {"Tracking": object},
+        "skyrl.train.utils.utils": {"Timer": object},
+    }
+    for name, values in modules.items():
+        module = ModuleType(name)
+        module.__dict__.update(values)
+        monkeypatch.setitem(sys.modules, name, module)
+    trainer_class = _make_trainer_class()
+    trainer = trainer_class.__new__(trainer_class)
+    rows = [{"input_ids": [1, 2]}, {"input_ids": [3, 4, 5]}]
+    trainer._load_split = lambda split: rows if split == "train" else None
+
+    dataset = trainer.load_dataset()
+
+    assert dataset.rows is rows
+    assert dataset.sequence_lengths == [2, 3]
 
 
 def test_recipe_keeps_tail_batch_and_disables_inline_export(tmp_path):
@@ -217,6 +539,78 @@ def test_task_outcome_mode_checks_only_the_present_train_file(tmp_path, monkeypa
 
     assert Path("/data/train.parquet") in checked
     assert all(path is not None for path in checked)
+
+
+def test_qwen38_source_inventory_reads_each_bound_file_once(tmp_path, monkeypatch):
+    from training import sft_runtime as runtime
+
+    model_root = tmp_path / "model"
+    model_root.mkdir()
+    model_files = []
+    for name, contents in (("config.json", b"config"), ("weights.bin", b"weights")):
+        path = model_root / name
+        path.write_bytes(contents)
+        model_files.append({"path": name, "sha256": runtime.digest(path)})
+    dataset = tmp_path / "train.parquet"
+    dataset.write_bytes(b"dataset")
+    value = {
+        "model": {"root": str(model_root), "files": model_files},
+        "datasets": {"train": {"path": str(dataset), "sha256": runtime.digest(dataset)}},
+    }
+    calls = []
+    original_digest = runtime.digest
+
+    def counted_digest(path):
+        calls.append(path)
+        return original_digest(path)
+
+    monkeypatch.setattr(runtime, "digest", counted_digest)
+    inventory = runtime._qwen38_source_inventory(value)
+
+    expected = [model_root / "config.json", model_root / "weights.bin", dataset]
+    assert calls == expected
+    assert inventory["file_count"] == 3
+    assert inventory["total_bytes"] == sum(path.stat().st_size for path in expected)
+
+
+def test_qwen38_training_entrypoint_defers_complete_reads_to_remote_worker(
+    monkeypatch,
+):
+    from training import sft_runtime as runtime
+
+    value = {"model": {"repo": "Qwen/Qwen3.8-27B"}, "lora": {}}
+    events = []
+    monkeypatch.setattr(
+        runtime,
+        "validate_plan",
+        lambda _plan, *, check_files: events.append(("plan", check_files)),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_qwen38_source_inventory",
+        lambda _plan: events.append(("model_and_data", True)),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_qwen38_runtime_source_inventory",
+        lambda _plan: events.append(("runtime", True)),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "validate_runtime_sources",
+        lambda _plan: events.append(("legacy_runtime_check", True)),
+    )
+
+    runtime._validate_entrypoint_sources(value, verify_qwen_files=False)
+    assert events == [("plan", False)]
+
+    events.clear()
+    runtime._validate_entrypoint_sources(value, verify_qwen_files=True)
+    assert events == [
+        ("plan", False),
+        ("model_and_data", True),
+        ("runtime", True),
+    ]
 
 
 @pytest.mark.parametrize("pause", [0, -1, True, 1.5, 6, 7, None])
@@ -320,7 +714,11 @@ def test_partial_result_requires_exact_evidence(tmp_path, defect):
     if defect == "missing":
         path.unlink()
     elif defect in {"digest", "step", "plan"}:
-        key = {"digest": "receipt_sha256", "step": "optimizer_step", "plan": "plan_sha256"}[defect]
+        key = {
+            "digest": "receipt_sha256",
+            "step": "optimizer_step",
+            "plan": "plan_sha256",
+        }[defect]
         proof[key] = "wrong"
         if defect != "digest":
             proof["receipt_sha256"] = _unsigned_digest(
@@ -422,6 +820,9 @@ def test_outer_runtime_only_accepts_valid_planned_pause(tmp_path, monkeypatch, o
         setup=lambda: calls.append("setup"),
         train=train,
         shutdown=lambda: calls.append("shutdown"),
+        dispatch=SimpleNamespace(
+            finalize_pending_saves=lambda _model: calls.append("finalize_pending_saves")
+        ),
     )
     monkeypatch.setattr(runtime, "_configure_wandb", lambda _: None)
     monkeypatch.setattr(
@@ -439,16 +840,32 @@ def test_outer_runtime_only_accepts_valid_planned_pause(tmp_path, monkeypatch, o
             == summary["status"]
             == ("training_paused" if outcome == "pause" else "training_complete")
         )
-        assert calls == ["setup", "shutdown"]
+        assert calls == (
+            ["setup", "finalize_pending_saves", "shutdown"]
+            if outcome == "pause"
+            else ["setup", "shutdown"]
+        )
     else:
         with pytest.raises(RuntimeError, match="SFT runtime failed"):
             runtime._run_training(value)
-        assert calls == ["setup", "failed"]
+        assert calls == (
+            ["setup", "finalize_pending_saves", "failed"]
+            if outcome == "bad_pause"
+            else ["setup", "failed"]
+        )
         assert summary == {}
 
 
 @pytest.mark.parametrize(
-    "defect", ["overlap", "wrong_steps", "duplicate_dev", "same_file", "fractional_steps", "resume"]
+    "defect",
+    [
+        "overlap",
+        "wrong_steps",
+        "duplicate_dev",
+        "same_file",
+        "fractional_steps",
+        "resume",
+    ],
 )
 def test_plan_rejects_leakage_and_wrong_step_semantics(tmp_path, defect):
     value = plan(tmp_path)
@@ -622,7 +1039,10 @@ def test_dense_targets_once_and_context_holes_masked():
     actual = dense_rows(rows, spec, max_length=16, vocab_size=32)
     assert actual[0]["num_actions"] == 7  # suffix width, NOT four target tokens
     assert actual[0]["loss_mask"] == [1, 1, 0, 0, 1, 1, 0]
-    assert actual[1]["loss_mask"] == [1, 1]  # copied earlier responses are outside target suffix
+    assert actual[1]["loss_mask"] == [
+        1,
+        1,
+    ]  # copied earlier responses are outside target suffix
     assert sum(sum(x["loss_mask"]) for x in actual) == 6
 
 
@@ -800,7 +1220,8 @@ def test_failure_finalize_is_independent_of_disk_and_summary(
                 raise RuntimeError("synthetic SDK failure")
 
     sdk = SimpleNamespace(
-        run=SimpleNamespace(summary=Summary()), finish=lambda exit_code: calls.append(exit_code)
+        run=SimpleNamespace(summary=Summary()),
+        finish=lambda exit_code: calls.append(exit_code),
     )
     monkeypatch.setitem(sys.modules, "wandb", sdk)
     original_open = Path.open
@@ -833,6 +1254,56 @@ def test_failure_finalize_is_independent_of_disk_and_summary(
         "plan_sha256": "a" * 64,
         "stage": "native_worker_initializing",
     }
+
+
+def test_failure_finalize_includes_only_known_qualification_stage(tmp_path, monkeypatch):
+    monkeypatch.setitem(sys.modules, "wandb", SimpleNamespace(run=None))
+    trainer = SimpleNamespace(
+        _ray_gpu_monitor=None,
+        global_step=1,
+        plan={"plan_sha256": "b" * 64},
+        public_runtime_stage="device_ready",
+        public_qualification_stage="worker_lr_validation_started",
+    )
+
+    assert finalize_failed_run(trainer, tmp_path, ValueError("private failure")) == []
+
+    stage = json.loads((tmp_path / "FAILURE_STAGE.json").read_text())
+    assert stage.pop("receipt_sha256") == _unsigned_digest(stage)
+    assert stage == {
+        "error_class": "ValueError",
+        "optimizer_step": 1,
+        "plan_sha256": "b" * 64,
+        "qualification_stage": "worker_lr_validation_started",
+        "stage": "device_ready",
+    }
+
+
+def test_qwen38_post_checkpoint_qualification_boundaries_are_public():
+    from training.sft_runtime import QWEN38_QUALIFICATION_STAGES
+
+    assert {
+        "checkpoint_finalization_started",
+        "checkpoint_finalization_complete",
+        "post_update_snapshot_started",
+        "post_update_snapshot_complete",
+        "qualification_receipt_preparation_started",
+        "checkpoint_inventory_validated",
+        "trainer_step_evidence_validated",
+        "adapter_reconciliation_started",
+        "adapter_reconciliation_complete",
+        "source_revalidation_started",
+        "source_revalidation_complete",
+        "runtime_revalidation_complete",
+        "source_immutability_validated",
+        "source_plan_validated",
+        "qualification_receipt_prepared",
+        "terminal_result_validated",
+        "wandb_finish_started",
+        "wandb_finished",
+        "trainer_shutdown_complete",
+        "qualification_receipt_validated",
+    } <= QWEN38_QUALIFICATION_STAGES
 
 
 def test_native_destructor_cannot_mark_failure_successful():
@@ -868,8 +1339,37 @@ def test_public_failure_details_never_emits_arbitrary_key_text():
     }
 
 
+def test_public_failure_details_extracts_standard_missing_attribute():
+    wrapper = RuntimeError(
+        "private remote context\n"
+        "AttributeError: 'WorkerDispatch' object has no attribute "
+        "'collect_lora_qualification_snapshots'"
+    )
+    assert public_failure_details(wrapper) == {
+        "error_class": "AttributeError",
+        "missing_attribute": "collect_lora_qualification_snapshots",
+    }
+
+
+@pytest.mark.parametrize(
+    "private_message",
+    [
+        "private token and endpoint",
+        "private object has no attribute 'secret_token'",
+        "AttributeError: private object has no attribute 'secret_token'",
+    ],
+)
+def test_public_failure_details_never_emits_arbitrary_attribute_text(private_message):
+    details = public_failure_details(AttributeError(private_message))
+
+    assert details == {"error_class": "AttributeError"}
+    assert private_message not in json.dumps(details)
+    assert "secret_token" not in json.dumps(details)
+
+
 @pytest.mark.skipif(
-    importlib.util.find_spec("skyrl") is None, reason="requires pinned training image; CPU-only"
+    importlib.util.find_spec("skyrl") is None,
+    reason="requires pinned training image; CPU-only",
 )
 def test_dense_resolved_config_and_dispatch_cannot_offload(tmp_path):
     from skyrl.backends.skyrl_train.workers.worker_dispatch import WorkerDispatch
@@ -896,7 +1396,8 @@ def test_dense_resolved_config_and_dispatch_cannot_offload(tmp_path):
 
 
 @pytest.mark.skipif(
-    importlib.util.find_spec("skyrl") is None, reason="requires pinned training image; CPU-only"
+    importlib.util.find_spec("skyrl") is None,
+    reason="requires pinned training image; CPU-only",
 )
 @pytest.mark.parametrize("dense", [False, True])
 def test_initial_backload_completes_dense_worker_setup_once(tmp_path, monkeypatch, dense):
@@ -914,7 +1415,8 @@ def test_initial_backload_completes_dense_worker_setup_once(tmp_path, monkeypatc
         return [None] * 8
 
     actor = SimpleNamespace(
-        backload_to_gpu=backload, offload_to_cpu=lambda **kwargs: calls.append(("offload", kwargs))
+        backload_to_gpu=backload,
+        offload_to_cpu=lambda **kwargs: calls.append(("offload", kwargs)),
     )
 
     def init(self):
@@ -942,7 +1444,8 @@ def test_initial_backload_completes_dense_worker_setup_once(tmp_path, monkeypatc
 
 
 @pytest.mark.skipif(
-    importlib.util.find_spec("skyrl") is None, reason="requires pinned training image; CPU-only"
+    importlib.util.find_spec("skyrl") is None,
+    reason="requires pinned training image; CPU-only",
 )
 @pytest.mark.parametrize("replies", [None, [None] * 7, ["unexpected"] * 8])
 def test_initial_backload_rejects_incomplete_acknowledgement(tmp_path, monkeypatch, replies):
@@ -964,9 +1467,12 @@ def test_initial_backload_rejects_incomplete_acknowledgement(tmp_path, monkeypat
 
 
 @pytest.mark.skipif(
-    importlib.util.find_spec("skyrl") is None, reason="requires pinned training image; CPU-only"
+    importlib.util.find_spec("skyrl") is None,
+    reason="requires pinned training image; CPU-only",
 )
-def test_native_backload_moves_nonpersistent_buffers_without_changing_values(monkeypatch):
+def test_native_backload_moves_nonpersistent_buffers_without_changing_values(
+    monkeypatch,
+):
     import torch
     from skyrl.backends.skyrl_train.distributed import fsdp_utils
     from skyrl.backends.skyrl_train.distributed.fsdp_strategy import FSDPStrategy
@@ -1008,7 +1514,8 @@ def test_native_backload_moves_nonpersistent_buffers_without_changing_values(mon
 
 
 @pytest.mark.skipif(
-    importlib.util.find_spec("skyrl") is None, reason="requires pinned training image; CPU-only"
+    importlib.util.find_spec("skyrl") is None,
+    reason="requires pinned training image; CPU-only",
 )
 def test_dense_wandb_config_has_only_bound_metadata(tmp_path, monkeypatch):
     import skyrl.train.utils.tracking as tracking
@@ -1066,7 +1573,8 @@ def test_dense_wandb_config_has_only_bound_metadata(tmp_path, monkeypatch):
 
 
 @pytest.mark.skipif(
-    importlib.util.find_spec("skyrl") is None, reason="requires pinned training image; CPU-only"
+    importlib.util.find_spec("skyrl") is None,
+    reason="requires pinned training image; CPU-only",
 )
 @pytest.mark.parametrize(
     "defect", [None, "missing", "empty", "partial", "cursor", "step", "symlink"]
@@ -1122,7 +1630,118 @@ def test_native_checkpoint_reopens_metadata_before_recording_success(tmp_path, m
 
 
 @pytest.mark.skipif(
-    importlib.util.find_spec("skyrl") is None, reason="requires pinned training image; CPU-only"
+    importlib.util.find_spec("skyrl") is None,
+    reason="requires pinned training image; CPU-only",
+)
+@pytest.mark.parametrize("metric_lr", [3e-5, 2.9999999242136255e-5])
+def test_qwen38_train_step_queries_all_rank_lr_before_optimizer(monkeypatch, tmp_path, metric_lr):
+    import ray
+    import torch
+    from skyrl.train.config.sft_config import SFTConfig, build_skyrl_config_for_sft
+
+    value = plan(tmp_path)
+    value["lora"] = {}
+    value["pause_after_step"] = 1
+    cfg = SFTConfig.from_cli_overrides(sft_overrides(value))
+    trainer = _make_trainer_class()(cfg, build_skyrl_config_for_sft(cfg), value)
+    trainer._torch_profiler_enabled = False
+    events = []
+    refs = [object() for _ in range(8)]
+
+    class Group:
+        actor_infos = [object() for _ in range(8)]
+
+        def async_run_ray_method(self, dispatch_type, method):
+            events.append("get_lr")
+            assert (dispatch_type, method) == ("pass_through", "get_lr")
+            return refs
+
+    class Dispatcher:
+        _actor_groups = {"policy": Group()}
+
+        def forward_backward(self, model, batch, loss_fn):
+            events.append("forward_backward")
+            assert (model, loss_fn) == ("policy", "cross_entropy")
+            return SimpleNamespace(metrics={"loss": 1.0, "policy_lr": metric_lr})
+
+        def optim_step(self, model):
+            events.append("optim_step")
+            assert model == "policy"
+            return 1.0
+
+    monkeypatch.setattr(
+        ray,
+        "get",
+        lambda observed: events.append("ray.get") or [3e-5] * 8,
+    )
+    trainer.dispatch = Dispatcher()
+
+    result = trainer.train_step({"loss_mask": torch.tensor([[1, 0]])}, step=0)
+
+    assert events == ["forward_backward", "get_lr", "ray.get", "optim_step"]
+    assert result["loss"] == 1.0
+    assert result["grad_norm"] == 1.0
+    assert trainer.extra_train_metrics["train/lr"] == 3e-5
+    assert trainer.extra_train_metrics["train/supervised_tokens"] == 1
+    qualification = json.loads((tmp_path / "QUALIFICATION_STAGE.json").read_text())
+    assert qualification.pop("receipt_sha256") == _unsigned_digest(qualification)
+    assert qualification["stage"] == "step_evidence_ready"
+    assert qualification["optimizer_step"] == 0
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("skyrl") is None,
+    reason="requires pinned training image; CPU-only",
+)
+@pytest.mark.parametrize(
+    ("rates", "metric_lr"),
+    [
+        ([3e-5] * 7 + [2e-5], 3e-5),
+        ([3e-5] * 8, 2e-5),
+    ],
+)
+def test_qwen38_train_step_rejects_lr_defect_before_optimizer(
+    monkeypatch, tmp_path, rates, metric_lr
+):
+    import ray
+    import torch
+    from skyrl.train.config.sft_config import SFTConfig, build_skyrl_config_for_sft
+
+    value = plan(tmp_path)
+    value["lora"] = {}
+    cfg = SFTConfig.from_cli_overrides(sft_overrides(value))
+    trainer = _make_trainer_class()(cfg, build_skyrl_config_for_sft(cfg), value)
+    trainer._torch_profiler_enabled = False
+    refs = [object() for _ in range(8)]
+    optimizer_calls = []
+
+    class Group:
+        actor_infos = [object() for _ in range(8)]
+
+        def async_run_ray_method(self, dispatch_type, method):
+            return refs
+
+    class Dispatcher:
+        _actor_groups = {"policy": Group()}
+
+        def forward_backward(self, model, batch, loss_fn):
+            return SimpleNamespace(metrics={"loss": 1.0, "policy_lr": metric_lr})
+
+        def optim_step(self, model):
+            optimizer_calls.append(model)
+            return 1.0
+
+    monkeypatch.setattr(ray, "get", lambda observed: rates)
+    trainer.dispatch = Dispatcher()
+
+    with pytest.raises(ValueError):
+        trainer.train_step({"loss_mask": torch.tensor([[1, 0]])}, step=0)
+    assert optimizer_calls == []
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("skyrl") is None,
+    reason="requires pinned training image; CPU-only",
 )
 @pytest.mark.parametrize("interval", [2, 4])
 @pytest.mark.parametrize("dense", [False, True])
@@ -1142,7 +1761,10 @@ def test_exact_native_loop_eval_never_optimizes_and_saves_final(
         value["schema"] = DENSE_SCHEMA
         value["recipe"].update(epochs=1, max_steps=3)
         value["datasets"]["train"].update(
-            format=DENSE_FORMAT, supervised_tokens=51, assistant_responses=34, source_sessions=17
+            format=DENSE_FORMAT,
+            supervised_tokens=51,
+            assistant_responses=34,
+            source_sessions=17,
         )
     value["recipe"]["eval_interval"] = value["recipe"]["checkpoint_interval"] = interval
     if outcomes_only:
@@ -1253,6 +1875,7 @@ def test_exact_native_loop_eval_never_optimizes_and_saves_final(
     )
     assert len([item for _, item in logs if "train/loss" in item]) == final_step
     assert all("train/lr" in item for _, item in logs if "train/loss" in item)
+    assert all(item["train/lr"] == 1e-6 for _, item in logs if "train/loss" in item)
     assert logs[-1][1]["train/global_step"] == final_step
     assert logs[-1][0] == final_step + int(
         not outcomes_only and not pause and final_step % interval != 0
@@ -1267,7 +1890,8 @@ def test_exact_native_loop_eval_never_optimizes_and_saves_final(
 
 
 @pytest.mark.skipif(
-    importlib.util.find_spec("skyrl") is None, reason="requires pinned training image; CPU-only"
+    importlib.util.find_spec("skyrl") is None,
+    reason="requires pinned training image; CPU-only",
 )
 @pytest.mark.parametrize("dp_size", [1, 8])
 def test_native_sparse_ce_forward_backward_matches_causal_reference(monkeypatch, dp_size):
@@ -1341,7 +1965,9 @@ def test_native_sparse_ce_forward_backward_matches_causal_reference(monkeypatch,
     reference_logits = values.clone().requires_grad_(True)
     full_mask = torch.cat([torch.zeros(size, length - width), batch["loss_mask"]], dim=1)
     per_token = torch.nn.functional.cross_entropy(
-        reference_logits[:, :-1, :].transpose(1, 2), batch["sequences"][:, 1:], reduction="none"
+        reference_logits[:, :-1, :].transpose(1, 2),
+        batch["sequences"][:, 1:],
+        reduction="none",
     )
     expected = (per_token * full_mask[:, 1:]).sum()
     (expected * dp_size).backward()

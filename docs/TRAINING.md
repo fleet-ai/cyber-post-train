@@ -159,6 +159,42 @@ counts. Train and dev are distinct immutable artifacts and task families.
 5. `cyber-post-train status <returned-name>` reads sanitized state. Monitor the
    exact API/Kubernetes UIDs, progress receipts, utilization and checkpoints too.
 
+### SFT-only direct-create fallback
+
+Use the normal Jobs API `submit` command whenever its preview carries the exact
+root annotation `fleet.ai/failure-alerts: "off"`. If the deployed API still
+omits only that annotation, a maintained fallback is available for a prepared
+SFT run after the same CPU preflight and source-freshness gates:
+
+```sh
+uv run cyber-post-train direct-submit-sft /shared/prepared-run \
+  --context <explicit-production-or-development-context>
+```
+
+The fallback is deliberately narrow. It fetches a fresh API preview, proves the
+saved request is the current SFT render and needs only the `wandb-api` Secret,
+then rejects warnings or drift in identity, c1/q1 priority, normal suspension,
+release-on-exit, image, command, resources, environment, Secret references, or
+node count. It replaces the API's zero UUID/name placeholders with one fresh
+UUID/name, removes only the preview-generated run-scoped `*-fleet-key` Secret
+reference that SFT does not consume, and adds the alert annotation to the root
+RayJob. Every other preview field is preserved.
+
+Before creation it checks the complete Jobs API history and Kubernetes Job and
+RayJob inventories for the name, output directory and run identity, performs a
+Kubernetes server dry-run, and repeats the duplicate checks. It then writes and
+fsyncs `DIRECT_SUBMISSION.jsonl` before exactly one `kubectl create`. It never
+uses `apply`, `patch`, automatic retry, or `POST /v1/runs`. A transport error
+after that intent is ambiguous: reconcile the exact recorded name and UUID;
+never delete the journal or invoke the command again. Because direct-created
+runs are not Jobs API records, monitor them by their Kubernetes UID and durable
+training receipts rather than `cyber-post-train status`.
+
+This path refuses RL, conversion, requests with Fleet credential Secrets,
+non-c1 priority, an already-qualified API preview, or any unreviewed placeholder
+or generated field. It is a compatibility bridge, not permission to bypass
+normal admission or scientific gates.
+
 The API injects W&B from the existing `wandb-api` Secret. Never put its value in
 YAML or argv. Track scalars, configuration identities and checkpoint metadata;
 do not upload task text, traces or source code. Reuse neither a W&B run ID nor a

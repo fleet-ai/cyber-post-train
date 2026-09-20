@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from collections.abc import Mapping
 from typing import Any
@@ -16,6 +17,13 @@ def _mapping(value: Any, field: str) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
         raise ValueError(f"evaluation protocol {field} must be an object")
     return value
+
+
+def _exact_fields(value: Mapping[str, Any], fields: set[str], label: str) -> None:
+    """Reject silent additions as well as omissions in a scientific control."""
+
+    if set(value) != fields:
+        raise ValueError(f"evaluation protocol {label} has unknown or missing fields")
 
 
 def _required_text(value: Mapping[str, Any], field: str) -> str:
@@ -86,6 +94,94 @@ def validate_eval_protocol(value: Mapping[str, Any]) -> str:
     for field in ("temperature", "top_p", "max_output_tokens"):
         if not isinstance(sampling.get(field), (int, float)):
             raise ValueError(f"evaluation protocol sampling.{field} must be numeric")
+
+    context = _mapping(value.get("context"), "context")
+    _exact_fields(
+        context,
+        {
+            "management",
+            "max_context_tokens",
+            "max_input_tokens",
+            "automatic_compaction",
+            "automatic_continuation",
+            "compaction_reserved_tokens",
+            "compaction_headroom_tokens",
+            "renderer_source_sha256",
+        },
+        "context",
+    )
+    _required_text(context, "management")
+    for field in ("max_context_tokens", "max_input_tokens"):
+        if type(context[field]) is not int or context[field] < 1:
+            raise ValueError(f"evaluation protocol context.{field} must be positive")
+    for field in ("automatic_compaction", "automatic_continuation"):
+        if type(context[field]) is not bool:
+            raise ValueError(f"evaluation protocol context.{field} must be boolean")
+    for field in ("compaction_reserved_tokens", "compaction_headroom_tokens"):
+        if type(context[field]) is not int or context[field] < 0:
+            raise ValueError(f"evaluation protocol context.{field} must be nonnegative")
+    if (
+        context["max_input_tokens"] + sampling["max_output_tokens"] != context["max_context_tokens"]
+        or context["compaction_reserved_tokens"] >= context["max_input_tokens"]
+        or context["compaction_headroom_tokens"] > context["compaction_reserved_tokens"]
+        or not context["automatic_compaction"]
+        or not context["automatic_continuation"]
+    ):
+        raise ValueError("evaluation protocol context/compaction controls are inconsistent")
+    _sha256(context, "renderer_source_sha256")
+
+    retry = _mapping(value.get("retry"), "retry")
+    _exact_fields(retry, {"model_request", "scientific_attempt"}, "retry")
+    request_retry = _mapping(retry.get("model_request"), "retry.model_request")
+    _exact_fields(
+        request_retry,
+        {
+            "policy",
+            "maximum_attempts",
+            "retryable_http_statuses",
+            "retry_transport_errors",
+            "backoff_seconds",
+            "jitter_fraction",
+            "implementation_source_sha256",
+        },
+        "retry.model_request",
+    )
+    _required_text(request_retry, "policy")
+    attempts = request_retry["maximum_attempts"]
+    statuses = request_retry["retryable_http_statuses"]
+    backoff = request_retry["backoff_seconds"]
+    jitter = request_retry["jitter_fraction"]
+    if type(attempts) is not int or attempts < 1:
+        raise ValueError("evaluation protocol retry attempts must be positive")
+    if (
+        not isinstance(statuses, list)
+        or any(type(status) is not int or not 100 <= status <= 599 for status in statuses)
+        or len(set(statuses)) != len(statuses)
+        or type(request_retry["retry_transport_errors"]) is not bool
+        or not isinstance(backoff, list)
+        or len(backoff) != attempts - 1
+        or any(
+            type(delay) not in {int, float} or not math.isfinite(delay) or delay < 0
+            for delay in backoff
+        )
+        or type(jitter) not in {int, float}
+        or not math.isfinite(jitter)
+        or not 0 <= jitter <= 1
+    ):
+        raise ValueError("evaluation protocol model-request retry controls are invalid")
+    if attempts == 1 and (statuses or request_retry["retry_transport_errors"] or backoff or jitter):
+        raise ValueError("evaluation protocol no-retry request policy contains retry behavior")
+    _sha256(request_retry, "implementation_source_sha256")
+
+    attempt_retry = _mapping(retry.get("scientific_attempt"), "retry.scientific_attempt")
+    _exact_fields(
+        attempt_retry,
+        {"automatic_retry", "max_retries"},
+        "retry.scientific_attempt",
+    )
+    if attempt_retry != {"automatic_retry": False, "max_retries": 0}:
+        raise ValueError("evaluation protocol scientific attempts must never retry automatically")
+
     budgets = _mapping(value.get("budgets"), "budgets")
     for field in ("max_agent_steps", "max_duration_minutes"):
         if not isinstance(budgets.get(field), int) or budgets[field] < 1:

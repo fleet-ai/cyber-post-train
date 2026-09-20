@@ -1,0 +1,77 @@
+{
+  "schema": "cyber_qwen38_lora_production_canary_submission_v1",
+  "observed_at": "2026-09-20T14:33:41Z",
+  "classification": "admitted_nonterminal_production_canary",
+  "scientific_disposition": "one_step_lora_canary_running_no_capability_claim",
+  "bindings": {
+    "plan_sha256": "sha256:33fc02619b07e9dd2bf21fc886ed4e41069151e32d70824e0a572223c86ce677",
+    "request_sha256": "sha256:13632bb2e3ca7b2b0f361d2b41a7b6b06fa506a85e31c635a4403624c967b1cf",
+    "runtime_bundle_sha256": "sha256:9e0dad5e3e71e1f03248f55633635af87bb5f776c296aa12833869e707cf1248",
+    "preview_manifest_sha256": "sha256:6a90f0c1479c41833e63f530715967fd2300f80c9cee42d2a17142181e1f20cd",
+    "image": "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317"
+  },
+  "preflight": {
+    "pod_name": "chris-q38-lora-prodcan-preflight-v1",
+    "pod_uid": "b09ba7d6-2fca-4ad4-9c72-6f01d8fb1b03",
+    "status": "succeeded",
+    "restarts": 0,
+    "gpus": 0,
+    "deleted_and_absent": true,
+    "receipt_file_sha256": "sha256:c72710fe70e22d0241542822f9d403b8018c37276f1cf326b4822589e96aa5dd",
+    "receipt_self_sha256": "sha256:0e5504fd6be7f18f2c370d1d0beda4a4d7da38d0436d86d4ebbda89d428d0c5c",
+    "dataset": {
+      "rows": 866,
+      "task_versions": 35,
+      "supervised_tokens": 998652
+    }
+  },
+  "submission": {
+    "submitted_once": true,
+    "api_run_id": "5b882e67-611a-4840-a270-54c100351be0",
+    "api_job_id": "chris-q38-lora-prod-can-v1-5b882e67-vpf7s",
+    "rayjob_name": "chris-q38-lora-prod-can-v1-5b882e67",
+    "rayjob_uid": "363685d1-873a-4f2a-9770-383ea9c06d2a",
+    "workload_name": "rayjob-chris-q38-lora-prod-can-v1-5b882e67-10e87",
+    "workload_uid": "1ea7e479-8cde-4bb6-8e1e-ebe81248ecdd",
+    "raycluster_name": "chris-q38-lora-prod-can-v1-5b882e67-hp5zs",
+    "raycluster_uid": "3e40717b-bfbd-4514-a822-1e9a6a4b976e",
+    "pod_name": "chris-q38-lora-prod-can-v1-5b882e67-hp5zs-head-rcp7w",
+    "pod_uid": "a05a3b9b-ae5b-4139-9c1c-59447a5a83b0",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lora-prod-can-v1",
+    "priority_class": "c1",
+    "queue_priority": "q1",
+    "nodes": 1,
+    "gpus_per_node": 8,
+    "total_gpus": 8,
+    "admitted_at": "2026-09-20T14:29:40Z",
+    "node": "computeinstance-e04f324s4mayq2tapm",
+    "state_at_observation": "Pending/PodInitializing",
+    "restarts_at_observation": 0,
+    "terminal_at_observation": false
+  },
+  "bounded_helper_incident": {
+    "scope": "zero_gpu_submission_helper_only",
+    "first_helper_pod_uid_prefix_observed": "34abe692",
+    "failure_class": "sfs_staging_path_not_writable_by_image_user",
+    "jobs_api_post_created": false,
+    "gpus_allocated": 0,
+    "slack_alert_triggered": false,
+    "repair": "stage immutable controls below an existing writable owned SFS tree with uid 1000 gid 100",
+    "successor_helper_pod_name": "chris-q38-lora-prodcan-submit-v2",
+    "successor_helper_pod_uid": "fdda4741-2af9-41dd-996f-66b97879e11d",
+    "successor_post_result": "one_jobs_api_post_succeeded"
+  },
+  "acceptance_gate": {
+    "required_optimizer_steps": 1,
+    "required_finite_loss_and_gradient": true,
+    "required_reloadable_lora_checkpoint": true,
+    "required_resource_release": true,
+    "capability_claim": false
+  },
+  "sanitization": {
+    "raw_logs_included": false,
+    "private_traces_included": false,
+    "tensor_values_included": false,
+    "credentials_included": false
+  }
+}
