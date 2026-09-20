@@ -246,6 +246,18 @@ def test_observer_accepts_only_digest_valid_sanitized_failure_receipt() -> None:
     assert cleanup._validated_receipt(json.dumps(receipt), kind="job") is None
 
 
+def test_observer_accepts_digest_valid_model_stage_receipt() -> None:
+    receipt = _seal(
+        {
+            "schema": "cyber_skyrl_model_artifact_stage_receipt_v1",
+            "status": "published",
+            "plan_sha256": "0" * 64,
+            "files": 28,
+        }
+    )
+    assert cleanup._validated_receipt(json.dumps(receipt), kind="job") == receipt
+
+
 def test_observer_retries_one_transient_kubectl_timeout(tmp_path) -> None:
     cluster = FakeJobCluster()
     calls = 0
