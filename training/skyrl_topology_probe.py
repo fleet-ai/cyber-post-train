@@ -47,8 +47,8 @@ RECEIPT_VERIFY_SCHEMA = "cyber_skyrl_topology_probe_receipt_verification_v1"
 RECEIPT_VERIFY_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_receipt_verification_rejection_v1"
 RECEIPT_VERIFY_PACKET_SCHEMA = "cyber_skyrl_topology_probe_receipt_verification_job_packet_v1"
 RECEIPT_VERIFY_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_receipt_verification_job_preview_v1"
-PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v25"
-RECEIPT_VERIFY_NAME = "chris-q38-skyrl-probe-receipt-v13"
+PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v26"
+RECEIPT_VERIFY_NAME = "chris-q38-skyrl-probe-receipt-v14"
 PREFLIGHT_RECEIPT = "/dev/termination-log"
 FAILURE_RECEIPT = "TOPOLOGY_PROBE_FAILED.json"
 MODULE = "training.skyrl_topology_probe"
@@ -57,7 +57,7 @@ IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
     "89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
 )
-MODEL_BINDING_SHA256 = "e71d00df4e29a312746e1c17b794f18b0163ddc456406b5c02c809fb189bd9be"
+MODEL_BINDING_SHA256 = "8f468f80e792eb589606dab0c0d57c87ada0b7dbb3a2f60e47c12f70af69eca2"
 RUNTIME_FILES = (
     "training/skyrl_topology_probe.py",
     "training/skyrl.py",
@@ -100,7 +100,7 @@ def _expected_execution() -> dict:
         "namespace": "fleet-train-jobs",
         "project_name": "fleetjob-dev",
         "auth_secret": {"name": "fleet-api", "key": "FLEET_API_KEY"},
-        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v13",
+        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v14",
         "output_pvc": "sfs-shared",
         "output_registry_mount": "/mnt/cyber-output-registry",
         "output_registry_subpath": "models/fleetjob-dev",
@@ -469,7 +469,10 @@ def fleetjob_manifest(plan: dict) -> dict:
     }
     head = {
         "rayStartParams": {
-            "num-cpus": "0",
+            # Inference-server placement groups need schedulable CPU as well
+            # as GPU resources.  A GPU head that advertises zero Ray CPUs can
+            # own all eight devices yet leave both TP4 groups unschedulable.
+            "num-cpus": execution["resources"]["cpu_request"],
             "num-gpus": str(execution["gpus_on_head"]),
         },
         "template": {
@@ -1090,11 +1093,14 @@ def run(plan: dict) -> dict:
     setup = None
     started = time.time()
     setup_error = None
+    setup_phase = "model_inventory"
     gpu_node_runtime_users = None
     try:
         with _Deadline(plan["deadlines"]["setup_seconds"], "engine setup"):
             _verify_model(plan)
+            setup_phase = "ray_initialization"
             ray.init(address="auto", log_to_driver=False)
+            setup_phase = "gpu_node_inventory"
             nodes = [
                 row
                 for row in ray.nodes()
@@ -1113,6 +1119,7 @@ def run(plan: dict) -> dict:
                     "physical_node": os.environ.get("FLEET_NODE_NAME", ""),
                 }
 
+            setup_phase = "gpu_runtime_identity"
             gpu_node_runtime_users = ray.get(
                 [
                     runtime_user.options(
@@ -1132,6 +1139,7 @@ def run(plan: dict) -> dict:
             physical_nodes = {row["physical_node"] for row in gpu_node_runtime_users}
             if physical_nodes != {os.environ.get("FLEET_NODE_NAME")}:
                 raise ValueError("probe GPU pods are not on one physical node")
+            setup_phase = "inference_engine_setup"
             setup = create_inference_servers(
                 cfg.generator.inference_engine,
                 build_vllm_cli_args(cfg),
@@ -1140,7 +1148,7 @@ def run(plan: dict) -> dict:
             if len(tuple(setup.server_groups)) != 2 or len(tuple(setup.server_urls)) != 2:
                 raise ValueError("probe did not start both TP4 engine groups")
     except BaseException as exc:
-        setup_error = exc
+        setup_error = ProbeGateError(f"{setup_phase}_{type(exc).__name__}")
     try:
         with _Deadline(plan["deadlines"]["cleanup_seconds"], "engine cleanup"):
             _stop_setup(setup, ray)

@@ -61,7 +61,7 @@ def test_probe_is_distinct_dev_only_bounded_and_zero_update(plan) -> None:
     assert request["env"]["CYBER_EXPECTED_RUNTIME_GID"] == "100"
     assert plan["model"]["repo"] == "Qwen/Qwen3.8-27B"
     assert plan["model"]["revision"] == ("1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0")
-    assert plan["model"]["root"] == ("/mnt/sfs/jobs/chris-q38-skyrl-probe-v13/models/base")
+    assert plan["model"]["root"] == ("/mnt/sfs/jobs/chris-q38-skyrl-probe-v14/models/base")
     assert plan["execution"]["model_artifact"]["path"] == (
         "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4"
     )
@@ -75,13 +75,13 @@ def test_probe_fleetjob_is_one_eight_gpu_pod_with_zero_replica_group(plan) -> No
     manifest = probe.fleetjob_manifest(plan)
     spec = manifest["spec"]
     assert manifest["metadata"] == {
-        "name": "chris-q38-skyrl-probe-v13",
+        "name": "chris-q38-skyrl-probe-v14",
         "namespace": "fleet-train-jobs",
     }
     assert spec["fleet"] == {
         "projectName": "fleetjob-dev",
         "auth": {"secretRef": {"name": "fleet-api", "key": "FLEET_API_KEY"}},
-        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v13",
+        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v14",
         "models": [
             {
                 "path": "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4",
@@ -116,6 +116,7 @@ def test_probe_fleetjob_is_one_eight_gpu_pod_with_zero_replica_group(plan) -> No
     assert head["resources"]["limits"]["nvidia.com/gpu"] == "8"
     assert head["resources"]["requests"]["nvidia.com/gpu"] == "8"
     assert cluster["headGroupSpec"]["rayStartParams"]["num-gpus"] == "8"
+    assert cluster["headGroupSpec"]["rayStartParams"]["num-cpus"] == "64"
     assert len(workers) == 1
     assert (workers[0]["replicas"], workers[0]["minReplicas"], workers[0]["maxReplicas"]) == (
         0,
