@@ -364,6 +364,49 @@ def test_direct_rayjob_observer_binds_children_receipt_and_releases(tmp_path) ->
     assert result["receipt"]["status"] == "setup_and_internal_cleanup_passed"
 
 
+def test_production_recovery_observer_adopts_only_the_exact_live_uid(tmp_path) -> None:
+    cluster = FakeDirectRayJobCluster()
+    cluster.target_reads = 1  # The exact RayJob already exists before arming.
+    uid = "00000000-0000-0000-0000-000000000020"
+    observer = _observer(
+        tmp_path,
+        cluster,
+        context=cleanup.PROD_CONTEXT,
+        kind="rayjob",
+        name="probe",
+        maximum_seconds=1800,
+        expected_gpus=8,
+        profile="production-recovery",
+        expected_uid=uid,
+    )
+    result = observer.run()
+    armed = json.loads((tmp_path / "ARMED.json").read_text())
+    assert armed["schema"] == cleanup.RECOVERY_ARMED_SCHEMA
+    assert armed["expected_uid"] == uid
+    assert armed["recovered_existing_target"] is True
+    assert result["schema"] == cleanup.RECOVERY_RESULT_SCHEMA
+    assert result["recovered_existing_target_uid"] == uid
+    assert result["status"] == "released"
+
+
+def test_production_recovery_observer_rejects_another_live_uid(tmp_path) -> None:
+    cluster = FakeDirectRayJobCluster()
+    cluster.target_reads = 1
+    observer = _observer(
+        tmp_path,
+        cluster,
+        context=cleanup.PROD_CONTEXT,
+        kind="rayjob",
+        name="probe",
+        maximum_seconds=1800,
+        expected_gpus=8,
+        profile="production-recovery",
+        expected_uid="00000000-0000-0000-0000-000000000099",
+    )
+    with pytest.raises(cleanup.ObserverError, match="UID differs"):
+        observer.arm()
+
+
 def test_observer_rejects_prod_route_or_excess_deadline(tmp_path) -> None:
     with pytest.raises(cleanup.ObserverError, match="development cluster"):
         _observer(tmp_path, FakeJobCluster(), context="prod")

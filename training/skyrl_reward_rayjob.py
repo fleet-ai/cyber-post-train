@@ -1069,6 +1069,13 @@ def create_once(
     duplicate = duplicate_checks(plan, token=token, runner=runner, jobs_factory=jobs_factory)
     final_render = server_dry_run(expected, context=PROD_CONTEXT, runner=runner)
     validate_preview(plan, request, source_preview, expected, final_render, context=PROD_CONTEXT)
+    # Duplicate reconciliation and API inventory can be slow.  Recheck the
+    # observer immediately before recording create intent so an observer that
+    # exited during those reads can never authorize an unwatched workload.
+    try:
+        os.kill(authorization["observer"]["observer_pid"], 0)
+    except (KeyError, OSError, TypeError) as exc:
+        raise JobsError("prod4 cleanup observer exited before create") from exc
     journal = directory / "DIRECT_RAYJOB_CREATE.jsonl"
     if journal.exists() or journal.is_symlink():
         raise JobsError("prod4 create intent exists; reconcile, never retry")

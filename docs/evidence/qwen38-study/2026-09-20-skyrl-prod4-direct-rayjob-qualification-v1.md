@@ -137,3 +137,16 @@ At the first post-create read, the Pod was scheduled on
 `computeinstance-e04az8ppqdsr7e9pah`, initializing with zero restarts, and the
 root RayJob still carried `fleet.ai/failure-alerts: "off"`. These facts prove
 launch identity and admission only; the scientific acceptance gates above remain open.
+
+The pre-create observer exposed one transport defect after the create: the complete
+Kubernetes and Jobs API duplicate census took slightly longer than its 120-second
+target-appearance allowance, so it exited 12 seconds before the RayJob was created.
+The create call had verified that process before beginning the census, but had not
+rechecked it immediately before create. No scientific workload setting or cluster
+object was changed in response. A recovery observer was attached to the exact existing
+RayJob UID and refuses any replacement UID; its armed receipt has SHA-256
+`8db96ce16e421e45671f4399852d66d790577f08d69a2db048eab9b85638c1d3`.
+The durable repair adds a distinct, truthful recovery-observer schema, raises the
+production pre-create appearance allowance to five minutes, and rechecks observer
+liveness immediately before writing create intent. Future creates therefore fail
+closed if their observer exits during duplicate reconciliation.

@@ -29,6 +29,8 @@ ARMED_SCHEMA = "cyber_dev_cleanup_observer_armed_v1"
 RESULT_SCHEMA = "cyber_dev_cleanup_observer_result_v1"
 DIRECT_ARMED_SCHEMA = "cyber_direct_cleanup_observer_armed_v1"
 DIRECT_RESULT_SCHEMA = "cyber_direct_cleanup_observer_result_v1"
+RECOVERY_ARMED_SCHEMA = "cyber_direct_cleanup_recovery_observer_armed_v1"
+RECOVERY_RESULT_SCHEMA = "cyber_direct_cleanup_recovery_observer_result_v1"
 TERMINAL_RAY_STATUSES = {"SUCCEEDED": "Succeeded", "FAILED": "Failed"}
 KUBECTL_ATTEMPTS = 3
 KUBECTL_TIMEOUT_SECONDS = 20
@@ -140,6 +142,7 @@ class Observer:
         poll_seconds: float = 2.0,
         release_seconds: int = 300,
         profile: str = "development",
+        expected_uid: str = "",
         run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
     ) -> None:
         profiles = {
@@ -156,6 +159,12 @@ class Observer:
                 DIRECT_RESULT_SCHEMA,
                 1800,
             ),
+            "production-recovery": (
+                PROD_CONTEXT,
+                RECOVERY_ARMED_SCHEMA,
+                RECOVERY_RESULT_SCHEMA,
+                12 * 60 * 60,
+            ),
         }
         if profile not in profiles:
             raise ObserverError("cleanup observer profile is invalid")
@@ -170,8 +179,17 @@ class Observer:
             raise ObserverError("cleanup observer deadline is invalid")
         if profile == "production-direct" and kind != "rayjob":
             raise ObserverError("production direct observer requires a root RayJob")
+        if profile == "production-recovery" and kind != "rayjob":
+            raise ObserverError("production recovery observer requires a root RayJob")
         if profile == "production-cpu" and kind != "job":
             raise ObserverError("production CPU observer requires a root Job")
+        if profile == "production-recovery":
+            try:
+                UUID(expected_uid)
+            except (TypeError, ValueError) as exc:
+                raise ObserverError("production recovery observer requires an exact UID") from exc
+        elif expected_uid:
+            raise ObserverError("only a recovery observer may bind an existing UID")
         if expected_gpus not in {0, 8} or (kind == "job") != (expected_gpus == 0):
             raise ObserverError("cleanup observer GPU contract is invalid")
         for value in (plan_sha256, manifest_sha256):
@@ -194,6 +212,7 @@ class Observer:
         self.profile = profile
         self.armed_schema = armed_schema
         self.result_schema = result_schema
+        self.expected_uid = expected_uid
         self._run = run
         self.snapshot = Snapshot()
         self.armed_at = ""
@@ -261,7 +280,20 @@ class Observer:
         return self._get(self._target_resource(), self.name)
 
     def arm(self) -> dict:
-        if self._target() is not None:
+        target = self._target()
+        recovery = {}
+        if self.expected_uid:
+            if target is None:
+                raise ObserverError("recovery cleanup target is absent")
+            uid, created = self._metadata(target)
+            if uid != self.expected_uid:
+                raise ObserverError("recovery cleanup target UID differs")
+            recovery = {
+                "recovered_existing_target": True,
+                "expected_uid": uid,
+                "target_created_at": created,
+            }
+        elif target is not None:
             raise ObserverError("cleanup target already exists")
         self.armed_at = _stamp(_now())
         evidence = _seal(
@@ -278,6 +310,7 @@ class Observer:
                 "manifest_sha256": self.manifest_sha256,
                 "armed_at": self.armed_at,
                 "observer_pid": os.getpid(),
+                **recovery,
             }
         )
         _write_create_once(self.armed_path, evidence)
@@ -296,9 +329,11 @@ class Observer:
 
     def _bind(self, resource: dict) -> None:
         uid, created = self._metadata(resource)
+        if self.expected_uid and uid != self.expected_uid:
+            raise ObserverError("recovery cleanup target UID changed")
         if self.snapshot.uid and uid != self.snapshot.uid:
             raise ObserverError("cleanup target name was reused with another UID")
-        if _parse_stamp(created) < _parse_stamp(self.armed_at):
+        if not self.expected_uid and _parse_stamp(created) < _parse_stamp(self.armed_at):
             raise ObserverError("cleanup target predates the armed observer")
         self.snapshot.uid = uid
         self.snapshot.created_at = created
@@ -571,13 +606,19 @@ class Observer:
                 "receipt": receipt,
                 "observer_error_class": observer_error_class,
                 "deletion_requested_at": self.deletion_requested_at,
+                **(
+                    {"recovered_existing_target_uid": self.expected_uid}
+                    if self.expected_uid
+                    else {}
+                ),
                 **release,
             }
         )
 
     def run(self) -> dict:
         self.arm()
-        creation_deadline = time.monotonic() + min(120, self.maximum_seconds)
+        creation_allowance = 300 if self.profile == "production-direct" else 120
+        creation_deadline = time.monotonic() + min(creation_allowance, self.maximum_seconds)
         observer_error: BaseException | None = None
         try:
             consecutive_observation_failures = 0
@@ -685,9 +726,15 @@ def main() -> None:
     parser.add_argument("--manifest-sha256", required=True)
     parser.add_argument("--armed", type=Path, required=True)
     parser.add_argument("--result", type=Path, required=True)
+    parser.add_argument("--expected-uid", default="")
     parser.add_argument(
         "--profile",
-        choices=("development", "production-direct", "production-cpu"),
+        choices=(
+            "development",
+            "production-direct",
+            "production-cpu",
+            "production-recovery",
+        ),
         default="development",
     )
     args = parser.parse_args()
@@ -704,6 +751,7 @@ def main() -> None:
             armed_path=args.armed,
             result_path=args.result,
             profile=args.profile,
+            expected_uid=args.expected_uid,
         )
         result = observer.run()
         print(json.dumps({"status": result["status"], "sha256": result["sha256"]}))
