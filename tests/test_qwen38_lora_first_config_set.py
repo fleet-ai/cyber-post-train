@@ -18,6 +18,9 @@ QUALIFICATION = (
 CORPUS_QUALIFICATION = (
     ROOT / "configs" / "qualification" / "qwen38-lora-one-step-corpus-2026-09-20-v1.json"
 )
+TRAINING_QUALIFICATION = (
+    ROOT / "configs" / "qualification" / "qwen38-lora-one-step-training-2026-09-20-v1.json"
+)
 QUALIFIED_SOURCE = "7e9356c8e02e7382e84b8484638baccdd1bbf680"
 QUALIFIED_IMAGE = (
     "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:"
@@ -39,6 +42,22 @@ RETIRED_GATE_TEMPLATES = [
 
 def read(path: Path) -> dict:
     return json.loads(path.read_text())
+
+
+def test_one_step_training_qualification_is_digest_bound_and_not_production_acceptance():
+    value = read(TRAINING_QUALIFICATION)
+    expected = value.pop("receipt_sha256")
+    actual = hashlib.sha256(
+        json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
+
+    assert expected == actual
+    assert value["status"] == "accepted"
+    assert value["evidence"]["optimizer_step"] == 1
+    assert value["evidence"]["independent_validation"] is True
+    assert value["evidence"]["gpu_released"] is True
+    assert value["accepted_for_production"] is False
+    assert value["remaining_gate"].startswith("zero_update_checkpoint_reload")
 
 
 def test_first_qwen38_lora_sft_templates_freeze_supported_surface():

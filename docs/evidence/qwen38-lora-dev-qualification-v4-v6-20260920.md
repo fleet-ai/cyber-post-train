@@ -1,4 +1,4 @@
-# Qwen3.8 LoRA development qualification: V4–V9
+# Qwen3.8 LoRA development qualification: V4–V10
 
 Date: 2026-09-20  
 Scope: development cluster only; no production Jobs API submission occurred.
@@ -167,8 +167,50 @@ data, task text, trainer logs, traces, credentials, and W&B secrets.
   and the ConfigMap were deleted; the final dev census showed zero GPU
   requests.
 
+## V10: one-step training gate accepted
+
+- CPU preflight Pod UID: `d4d03591-69ec-4720-b1af-b08226180269`
+- Training Pod: `chris-q38-lora-sft-c1-v10-dev-5d96e6a9`
+- Training Pod UID: `4e555f21-b77b-4aff-b3fa-75ef360e4d22`
+- Independent validator Pod UID: `9ec1618a-3112-46bd-a7a6-3deb70139198`
+- Exact image:
+  `ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317`
+- Canonical plan SHA-256:
+  `89d9e6da47a83c4dd95075acafca05bf14a2b3a4f3f5a10a508b2bd8e0fb63b5`
+- Runtime SHA-256:
+  `5d96e6a9c2b1640681084e322ee55288458ede1c2f0f85952435a5d3a6e989a8`
+- Result: exact-image CPU preflight passed 866 rows, 35 task versions and
+  998,652 supervised tokens. The GPU run started at 10:42:47Z, exited zero at
+  10:50:18Z, and had zero restarts. It completed exactly one finite optimizer
+  update, finalized the complete native TP8 adapter checkpoint, reconciled the
+  saved shards to the live post-update adapters, proved the frozen base and
+  source inventories unchanged, flushed W&B, and published a planned-pause
+  receipt. The terminal public stage is `qualification_receipt_validated`.
+- Evidence: checkpoint receipt file SHA-256
+  `2f914db630534a4cc2f036b646e40244565c68f67f810af5061dff1912e3f062`;
+  checkpoint receipt self-digest
+  `7a5a8c0ed29c35ee4ddf5430fbcf235885c6a1405a800d0041d1931ba3a6abd6`;
+  `TRAINING_PAUSED.json` file SHA-256
+  `395b436b35b37aa2d22d6e3f2cf52a0c0388b9116eb43aa5104370cc127cee4a`;
+  `QUALIFICATION_STAGE.json` file SHA-256
+  `4599b03b3e727a2ed9b130aedc250a90fed3e8ef15d08ff719630c694d7849a1`;
+  `metrics.jsonl` file SHA-256
+  `6f817d21981d2a4d80c039324be17610ebf28f70efb7c85ab6c2231aab4cbbf8`.
+- Independent validation: a separate exact-image CPU-only Pod reopened the
+  receipt with `training.qwen38_lora_artifacts.validate_checkpoint_receipt`,
+  verified its self-digest, exact schema and optimizer step, and exited zero.
+  It did not read task text, private logs or model-weight contents.
+- Cleanup: the successful GPU Pod was deleted immediately after terminal state.
+  The reader, independent validator, preflight Pod and ConfigMap were also
+  deleted. The final development-cluster census showed zero GPU requests.
+- Remaining gate: this accepted adapter checkpoint is not yet a serving or
+  evaluation artifact. A separate zero-update job must reload it, merge it into
+  the exact BF16 base, export and independently reopen every tensor, and reload
+  the complete model and tokenizer before any production anchor or evaluation.
+
 ## Production status
 
 These were development qualifications, not production runs. The production
 failure count is still **0/10**, and no production identity has been submitted
-for this one-step LoRA gate.
+for this one-step LoRA gate. V10 is accepted only for the one-step checkpoint
+stage; the separate zero-update merge/export gate remains mandatory.

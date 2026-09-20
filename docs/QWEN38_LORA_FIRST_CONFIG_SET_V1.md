@@ -1,16 +1,19 @@
 # First Qwen3.8-27B LoRA configuration set
 
-Status: **trainer image and leak-free V2 one-step corpus qualified and bound;
-CPU preflight pending; GPU canary not launched** (2026-09-20)
+Status: **one-step LoRA training gate accepted on the development cluster;
+separate zero-update reload/merge/export gate pending** (2026-09-20)
 
 This set freezes the first exact-model SFT gate, the first literature-informed
 SFT anchor, and the two matched evaluation contracts. The exact one-step
 template now binds the independently qualified source/image pair recorded in
 [`qwen38-lora-megatron-trainer-image-2026-09-20-v1.json`](../configs/qualification/qwen38-lora-megatron-trainer-image-2026-09-20-v1.json).
-No training or evaluation was launched by that qualification. The one-step run
-still requires the normal exact-image CPU preflight, authenticated preview,
-duplicate, output-root and resource checks. The production anchor and both
-evaluation contracts remain fail-closed. The earlier Fresh75 corpus cannot be
+The V10 development run subsequently passed exact-image CPU preflight, one
+finite forward/backward/optimizer update, native TP8 adapter checkpoint save,
+strict adapter/frozen-base/source reconciliation, W&B finalization, planned
+pause, independent receipt validation, and GPU release. The production anchor
+and both evaluation contracts remain fail-closed until the separate zero-update
+checkpoint reload, deterministic merge/export, and full model/tokenizer reload
+gate also passes. The earlier Fresh75 corpus cannot be
 used for this study as-is: two of its 37 task families are in the later frozen
 ten-family final test set. A CPU-only, create-once filter has now published and
 independently verified the leak-free V2 successor. Its exact public manifest is
@@ -20,8 +23,7 @@ and its sanitized qualification record is
 The one-step template now points to that exact V2 manifest and staged root. The
 exact runtime gate binds its payload-derived dataset, split and corpus digests,
 866-row full-epoch ceiling, and planned pause after optimizer step 1. The
-exact-image CPU preflight, authenticated preview and real training acceptance
-remain pending. Corpus qualification and binding are not training acceptance.
+one-step checkpoint stage is accepted; it is not yet a merged serving artifact.
 
 ## Training templates
 
