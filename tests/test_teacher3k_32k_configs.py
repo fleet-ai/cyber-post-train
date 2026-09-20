@@ -1,3 +1,4 @@
+import hashlib
 import json
 from pathlib import Path
 
@@ -127,3 +128,33 @@ def test_teacher3k_32k_runs_have_unique_external_identities():
         assert len(values) == len(set(values))
     run_ids = [config["wandb"]["run_id"] for config in configs]
     assert len(run_ids) == len(set(run_ids))
+
+
+def test_teacher3k_fullweight_launch_receipt_is_bound_and_nonterminal():
+    receipt = json.loads(
+        (EVIDENCE / "qwen38-teacher3k-fullweight-sweep-launch-20260920.json").read_text()
+    )
+    claimed = receipt.pop("receipt_sha256")
+    observed = hashlib.sha256(
+        json.dumps(receipt, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
+
+    assert claimed == observed
+    assert receipt["scientific_disposition"] == "nonterminal_training_evidence_no_capability_claim"
+    assert receipt["interpretation"] == {
+        **receipt["interpretation"],
+        "finite_update_gate_passed": True,
+        "checkpoint_gate_passed": False,
+        "capability_claim": False,
+    }
+    assert [run["arm"] for run in receipt["runs"]] == [
+        "batch8_lr3e-6_reference",
+        "batch16_lr3e-6_batch_control",
+        "batch8_lr1e-6_learning_rate_control",
+    ]
+    assert all(run["submission"]["submitted_once"] for run in receipt["runs"])
+    assert all(
+        run["live_evidence"]["optimizer_step_at_observation"] >= 1
+        for run in receipt["runs"]
+    )
+    assert all(run["live_evidence"]["restarts"] == 0 for run in receipt["runs"])

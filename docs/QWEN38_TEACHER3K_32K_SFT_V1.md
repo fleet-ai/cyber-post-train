@@ -38,6 +38,14 @@ time while holding the corpus, seed, topology, context, and epoch count fixed:
 1. learning rate 1e-6 at batch 8;
 2. global batch 16 at learning rate 3e-6 (two accumulation steps).
 
+All three arms were admitted as create-once c1 jobs on September 20, 2026, and
+each completed at least one finite optimizer update with zero container
+restarts. The exact Kubernetes identities, immutable bindings, first-step
+evidence, motivations, and W&B links are recorded in
+[`qwen38-teacher3k-fullweight-sweep-launch-20260920.json`](evidence/qwen38-teacher3k-fullweight-sweep-launch-20260920.json).
+That receipt is nonterminal operational evidence, not a checkpoint-acceptance or
+capability claim.
+
 The original 57.38M-token 262K corpus remains sealed for later 64K/96K
 curriculum treatments. Those are separate topology/length studies and are not
 evidence that exact 262K full-weight training fits on one or two nodes.
