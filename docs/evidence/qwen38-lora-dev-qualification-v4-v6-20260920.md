@@ -1,4 +1,4 @@
-# Qwen3.8 LoRA development qualification: V4–V6
+# Qwen3.8 LoRA development qualification: V4–V7
 
 Date: 2026-09-20  
 Scope: development cluster only; no production Jobs API submission occurred.
@@ -67,6 +67,42 @@ data, task text, trainer logs, traces, credentials, and W&B secrets.
   positive, complete, and identical before this comparison.
 - Cleanup: the failed GPU Pod, CPU reader, and ConfigMap were deleted. A final
   name-scoped census found no remaining V6 objects or GPU requests.
+
+## V7: optimizer step and checkpoint succeeded; final qualification did not
+
+- CPU preflight Pod UID: `7ea90cdc-374e-48d0-9a2e-bb1e324df164`
+- Training Pod: `chris-q38-lora-sft-c1-v7-dev-7c1f3ea2`
+- Training Pod UID: `12eaf3c1-c24e-41c8-8b41-128be10dbf35`
+- Canonical plan SHA-256:
+  `796a29f784cd9abc6cd4c4e89254fd8114817ac901c7eb2f92af15927740a129`
+- Result: exact-image preflight passed the same 866 rows, 35 task versions,
+  and 998,652 supervised tokens. The GPU run had zero restarts and completed a
+  finite forward/backward pass plus optimizer update. Its sanitized scalar
+  record reports optimizer step 1, finite loss `0.4274914860725403`, finite
+  positive LoRA gradient norm `1.200891378263028`, learning rate `3e-5`, and
+  185 supervised target tokens. The native checkpoint exists at exact step 1,
+  its pointer reads `1`, and the digest-bound checkpoint receipt exists.
+- Gate outcome: this is real successful learning work, but the run is not yet
+  qualified for production. A later strict post-checkpoint check raised a
+  public `ValueError` before `QWEN38_LORA_CHECKPOINT.json` and
+  `TRAINING_PAUSED.json` could be published. The failure therefore lies after
+  step evidence and native checkpoint creation, not in model setup, the
+  forward/backward pass, the optimizer, or checkpoint writing.
+- Evidence: `QUALIFICATION_STAGE.json` file SHA-256
+  `4bf59963d1ca841b187ffff370dd00fbbfd8a70b2f8e23a81fc908b9f9689aff`;
+  `FAILURE_STAGE.json` file SHA-256
+  `58caab3cf83895e82280558e0fcfa8401ab59b535387832fd7ffcce4715977dd`;
+  `FAILED.json` file SHA-256
+  `31d4ac42b5d060148b842e8c1f2eb41a9020e597372d0ca65b37b8f89d84d2c`;
+  `metrics.jsonl` file SHA-256
+  `f9465fa3e8e882e7b76c31cb5215efc6387fb1abe1f5f2c54c47712e2b088b0d`.
+- Next repair: add sanitized one-step-only boundaries around checkpoint drain,
+  post-update adapter collection, receipt preparation, terminal validation,
+  W&B flush, trainer shutdown, and final receipt validation. A fresh identity
+  can then locate and repair the exact post-checkpoint contract without reading
+  private trainer logs or weakening any acceptance check.
+- Cleanup: the exact GPU Pod and every CPU reader were deleted. The final dev
+  census showed zero active GPU requests.
 
 ## Production status
 
