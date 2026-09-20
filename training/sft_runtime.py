@@ -24,6 +24,7 @@ import hashlib
 import importlib.util
 import json
 import math
+import numbers
 import os
 import re
 import shutil
@@ -232,8 +233,8 @@ QWEN38_LORA_ONE_STEP_PLAN = {
         "wandb",
     ],
     "schema": DENSE_SCHEMA,
-    "run_name": "chris-q38-lora-sft-c1-v3",
-    "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v3",
+    "run_name": "chris-q38-lora-sft-c1-v4",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v4",
     "model": {
         "repo": "Qwen/Qwen3.8-27B",
         "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
@@ -282,8 +283,8 @@ QWEN38_LORA_ONE_STEP_PLAN = {
         "entity": "thefleet",
         "project": "cyber-post-train",
         "group": "qwen38-lora-sft-goal-v1",
-        "run_id": "chris-q38-lora-sft-c1-v3",
-        "name": "chris-q38-lora-sft-c1-v3",
+        "run_id": "chris-q38-lora-sft-c1-v4",
+        "name": "chris-q38-lora-sft-c1-v4",
         "tags": [
             "qwen38",
             "lora",
@@ -295,6 +296,7 @@ QWEN38_LORA_ONE_STEP_PLAN = {
             "task-outcomes-only",
             "runtime-path-repair",
             "native-dataset-contract-repair",
+            "all-rank-lr-evidence-repair",
         ],
     },
 }
@@ -435,6 +437,43 @@ def _checked_file(path: Path, expected: str) -> None:
 
 def _is_qwen38_lora(plan: dict) -> bool:
     return "lora" in plan and plan.get("model", {}).get("repo") == "Qwen/Qwen3.8-27B"
+
+
+def _reconcile_worker_learning_rates(values: list, *, expected_ranks: int) -> float:
+    """Require one finite, positive, identical optimizer LR from every rank."""
+    if type(expected_ranks) is not int or expected_ranks <= 0:
+        raise ValueError("learning-rate rank count is invalid")
+    if not isinstance(values, list) or len(values) != expected_ranks:
+        raise ValueError("learning-rate evidence does not cover every rank")
+    rates = []
+    for value in values:
+        if isinstance(value, bool) or not isinstance(value, numbers.Real):
+            raise ValueError("learning-rate evidence is not numeric")
+        rate = float(value)
+        if not math.isfinite(rate) or rate <= 0:
+            raise ValueError("learning-rate evidence is not finite and positive")
+        rates.append(rate)
+    if any(rate != rates[0] for rate in rates[1:]):
+        raise ValueError("learning-rate evidence differs across ranks")
+    return rates[0]
+
+
+def _qwen38_policy_learning_rate(dispatch, plan: dict) -> float:
+    """Read the impending optimizer LR from every exact Qwen3.8 policy rank."""
+    if not _is_qwen38_lora(plan):
+        raise ValueError("all-rank learning-rate evidence is Qwen3.8-LoRA-only")
+    expected = plan["recipe"]["nodes"] * plan["recipe"]["gpus_per_node"]
+    groups = getattr(dispatch, "_actor_groups", None)
+    group = groups.get("policy") if isinstance(groups, dict) else None
+    actor_infos = getattr(group, "actor_infos", None)
+    if not isinstance(actor_infos, list) or len(actor_infos) != expected:
+        raise ValueError("policy actor group does not contain every planned rank")
+    refs = group.async_run_ray_method("pass_through", "get_lr")
+    if not isinstance(refs, list) or len(refs) != expected:
+        raise ValueError("learning-rate query did not dispatch to every rank")
+    import ray
+
+    return _reconcile_worker_learning_rates(ray.get(refs), expected_ranks=expected)
 
 
 def validate_plan(plan: dict, *, check_files: bool = True) -> None:
@@ -2133,6 +2172,9 @@ def _make_trainer_class():
                 return load(self)
             return super().load_checkpoint()
 
+        def _policy_learning_rate(self):
+            return _qwen38_policy_learning_rate(self.dispatch, self.plan)
+
         def run_eval(self):
             accumulator = EvalAccumulator()
             cursor = batches = 0
@@ -2171,18 +2213,31 @@ def _make_trainer_class():
             )
 
         def train_step(self, batch, step):
-            # Exact upstream calls, preserving the LR scalar it otherwise drops.
+            # Exact upstream calls.  Megatron emits ``policy_lr`` before the
+            # update, while the generic dispatcher drops its all-rank shape.
+            # Query every native optimizer rank before mutation so missing,
+            # divergent or invalid evidence cannot produce an unaudited step.
             timings = {}
             with Timer("forward_backward", timings):
                 output = self.dispatch.forward_backward("policy", batch, loss_fn="cross_entropy")
+            loss = float(output.metrics.get("final_loss", output.metrics.get("loss", float("nan"))))
+            if _is_qwen38_lora(self.plan):
+                lr = self._policy_learning_rate()
+                metric_lr = _reconcile_worker_learning_rates(
+                    [output.metrics.get("policy_lr")], expected_ranks=1
+                )
+                if metric_lr != lr:
+                    raise ValueError("worker metric learning rate differs from optimizer ranks")
+            else:
+                lr = float(output.metrics["lr"])
+            if not math.isfinite(loss) or not math.isfinite(lr) or lr <= 0:
+                raise ValueError("nonfinite training metric")
             with Timer("optim_step", timings):
                 grad_norm = self.dispatch.optim_step("policy")
             if self._torch_profiler_enabled:
                 self.dispatch.profile_step("policy")
-            loss = float(output.metrics.get("final_loss", output.metrics.get("loss", float("nan"))))
-            lr = float(output.metrics["lr"])
             gradient = float(grad_norm)
-            if not all(math.isfinite(x) for x in (loss, lr, gradient)) or (
+            if not math.isfinite(gradient) or (
                 _is_qwen38_lora(self.plan) and gradient <= 0
             ):
                 raise ValueError("nonfinite training metric")
@@ -2443,11 +2498,20 @@ def _run_setup_probe(plan: dict, *, with_tracker: bool = False) -> dict:
         trainer.setup()
         snapshot_rank_count = None
         qwen38_dataset_rows = None
+        qwen38_initial_lr = None
         if _is_qwen38_lora(plan):
             snapshots = trainer.dispatch.collect_lora_qualification_snapshots("policy")
             snapshot_rank_count = len(
                 _qwen38_rank_snapshots(snapshots, stage="setup probe pre-step")
             )
+            qwen38_initial_lr = trainer._policy_learning_rate()
+            if not math.isclose(
+                qwen38_initial_lr,
+                float(plan["recipe"]["lr"]),
+                rel_tol=1e-12,
+                abs_tol=0.0,
+            ):
+                raise ValueError("Qwen3.8 native optimizer LR does not match the plan")
             # Exercise the exact pinned image's post-setup dataset interface.
             # SkyRL reads ``sequence_lengths`` before it constructs the first
             # dataloader; an earlier probe stopped just short of that boundary
@@ -2474,6 +2538,10 @@ def _run_setup_probe(plan: dict, *, with_tracker: bool = False) -> dict:
         }
         if snapshot_rank_count is not None:
             result["snapshot_rank_count"] = snapshot_rank_count
+            result["learning_rate_rank_count"] = (
+                plan["recipe"]["nodes"] * plan["recipe"]["gpus_per_node"]
+            )
+            result["initial_learning_rate"] = qwen38_initial_lr
         if qwen38_dataset_rows is not None:
             result["dataset_contract_rows"] = qwen38_dataset_rows
         return result

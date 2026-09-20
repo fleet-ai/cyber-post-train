@@ -18,6 +18,8 @@ from training.sft_runtime import (
     ProgressWatchdog,
     _create_runtime_output,
     _make_trainer_class,
+    _qwen38_policy_learning_rate,
+    _reconcile_worker_learning_rates,
     _run_setup_probe,
     _setup_probe_plan,
     _unsigned_digest,
@@ -228,6 +230,10 @@ def _run_qwen38_setup_probe_with_snapshots(tmp_path, monkeypatch, snapshots):
             events.append(("collect_lora_qualification_snapshots", model))
             return snapshots
 
+        def _policy_learning_rate(self):
+            events.append("policy_learning_rate")
+            return value["recipe"]["lr"]
+
         def load_dataset(self):
             events.append("load_dataset")
 
@@ -270,6 +276,8 @@ def test_qwen38_setup_probe_validates_complete_pre_step_snapshot(tmp_path, monke
 
     assert result == {
         "dataset_contract_rows": value["datasets"]["train"]["rows"],
+        "initial_learning_rate": value["recipe"]["lr"],
+        "learning_rate_rank_count": 8,
         "optimizer_steps": 0,
         "plan_sha256": value["plan_sha256"],
         "snapshot_rank_count": 8,
@@ -279,6 +287,7 @@ def test_qwen38_setup_probe_validates_complete_pre_step_snapshot(tmp_path, monke
     assert events == [
         "setup",
         ("collect_lora_qualification_snapshots", "policy"),
+        "policy_learning_rate",
         "load_dataset",
         ("dataset_stats", value["datasets"]["train"]["rows"]),
         "shutdown",
@@ -307,6 +316,83 @@ def test_qwen38_setup_probe_rejects_invalid_pre_step_snapshot(tmp_path, monkeypa
         ("collect_lora_qualification_snapshots", "policy"),
         "shutdown",
     ]
+
+
+def test_reconcile_worker_learning_rates_requires_exact_all_rank_consensus():
+    assert _reconcile_worker_learning_rates([3e-5] * 8, expected_ranks=8) == 3e-5
+
+
+@pytest.mark.parametrize(
+    ("values", "expected_ranks"),
+    [
+        ([3e-5] * 7, 8),
+        ([3e-5] * 9, 8),
+        (None, 8),
+        ([None] * 8, 8),
+        ([True] * 8, 8),
+        (["3e-5"] * 8, 8),
+        ([0.0] * 8, 8),
+        ([-3e-5] * 8, 8),
+        ([float("nan")] * 8, 8),
+        ([float("inf")] * 8, 8),
+        ([3e-5] * 7 + [2e-5], 8),
+        ([3e-5], 0),
+    ],
+)
+def test_reconcile_worker_learning_rates_rejects_invalid_evidence(values, expected_ranks):
+    with pytest.raises(ValueError):
+        _reconcile_worker_learning_rates(values, expected_ranks=expected_ranks)
+
+
+def test_qwen38_policy_learning_rate_queries_every_planned_rank(monkeypatch, tmp_path):
+    events = []
+    refs = [object() for _ in range(8)]
+
+    class Group:
+        actor_infos = [object() for _ in range(8)]
+
+        def async_run_ray_method(self, dispatch_type, method):
+            events.append((dispatch_type, method))
+            return refs
+
+    fake_ray = ModuleType("ray")
+    fake_ray.get = (
+        lambda observed: events.append(("ray.get", observed is refs)) or [3e-5] * 8
+    )
+    monkeypatch.setitem(sys.modules, "ray", fake_ray)
+    value = plan(tmp_path)
+    value["lora"] = {}
+    dispatch = SimpleNamespace(_actor_groups={"policy": Group()})
+
+    assert _qwen38_policy_learning_rate(dispatch, value) == 3e-5
+    assert events == [("pass_through", "get_lr"), ("ray.get", True)]
+
+
+@pytest.mark.parametrize("defect", ["actor_count", "ref_count", "result_count"])
+def test_qwen38_policy_learning_rate_rejects_incomplete_dispatch(
+    monkeypatch, tmp_path, defect
+):
+    calls = []
+    refs = [object() for _ in range(7 if defect == "ref_count" else 8)]
+
+    class Group:
+        actor_infos = [object() for _ in range(7 if defect == "actor_count" else 8)]
+
+        def async_run_ray_method(self, dispatch_type, method):
+            calls.append((dispatch_type, method))
+            return refs
+
+    fake_ray = ModuleType("ray")
+    fake_ray.get = lambda observed: [3e-5] * (7 if defect == "result_count" else 8)
+    monkeypatch.setitem(sys.modules, "ray", fake_ray)
+    value = plan(tmp_path)
+    value["lora"] = {}
+
+    with pytest.raises(ValueError):
+        _qwen38_policy_learning_rate(
+            SimpleNamespace(_actor_groups={"policy": Group()}), value
+        )
+    assert calls == ([] if defect == "actor_count" else [("pass_through", "get_lr")])
 
 
 def test_setup_probe_plan_uses_new_create_once_owned_output(tmp_path):
@@ -1503,6 +1589,110 @@ def test_native_checkpoint_reopens_metadata_before_recording_success(tmp_path, m
     importlib.util.find_spec("skyrl") is None,
     reason="requires pinned training image; CPU-only",
 )
+def test_qwen38_train_step_queries_all_rank_lr_before_optimizer(monkeypatch, tmp_path):
+    import ray
+    import torch
+    from skyrl.train.config.sft_config import SFTConfig, build_skyrl_config_for_sft
+
+    value = plan(tmp_path)
+    value["lora"] = {}
+    cfg = SFTConfig.from_cli_overrides(sft_overrides(value))
+    trainer = _make_trainer_class()(cfg, build_skyrl_config_for_sft(cfg), value)
+    trainer._torch_profiler_enabled = False
+    events = []
+    refs = [object() for _ in range(8)]
+
+    class Group:
+        actor_infos = [object() for _ in range(8)]
+
+        def async_run_ray_method(self, dispatch_type, method):
+            events.append("get_lr")
+            assert (dispatch_type, method) == ("pass_through", "get_lr")
+            return refs
+
+    class Dispatcher:
+        _actor_groups = {"policy": Group()}
+
+        def forward_backward(self, model, batch, loss_fn):
+            events.append("forward_backward")
+            assert (model, loss_fn) == ("policy", "cross_entropy")
+            return SimpleNamespace(metrics={"loss": 1.0, "policy_lr": 3e-5})
+
+        def optim_step(self, model):
+            events.append("optim_step")
+            assert model == "policy"
+            return 1.0
+
+    monkeypatch.setattr(
+        ray,
+        "get",
+        lambda observed: events.append("ray.get") or [3e-5] * 8,
+    )
+    trainer.dispatch = Dispatcher()
+
+    result = trainer.train_step({"loss_mask": torch.tensor([[1, 0]])}, step=0)
+
+    assert events == ["forward_backward", "get_lr", "ray.get", "optim_step"]
+    assert result["loss"] == 1.0
+    assert result["grad_norm"] == 1.0
+    assert trainer.extra_train_metrics["train/lr"] == 3e-5
+    assert trainer.extra_train_metrics["train/supervised_tokens"] == 1
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("skyrl") is None,
+    reason="requires pinned training image; CPU-only",
+)
+@pytest.mark.parametrize(
+    ("rates", "metric_lr"),
+    [
+        ([3e-5] * 7 + [2e-5], 3e-5),
+        ([3e-5] * 8, 2e-5),
+    ],
+)
+def test_qwen38_train_step_rejects_lr_defect_before_optimizer(
+    monkeypatch, tmp_path, rates, metric_lr
+):
+    import ray
+    import torch
+    from skyrl.train.config.sft_config import SFTConfig, build_skyrl_config_for_sft
+
+    value = plan(tmp_path)
+    value["lora"] = {}
+    cfg = SFTConfig.from_cli_overrides(sft_overrides(value))
+    trainer = _make_trainer_class()(cfg, build_skyrl_config_for_sft(cfg), value)
+    trainer._torch_profiler_enabled = False
+    refs = [object() for _ in range(8)]
+    optimizer_calls = []
+
+    class Group:
+        actor_infos = [object() for _ in range(8)]
+
+        def async_run_ray_method(self, dispatch_type, method):
+            return refs
+
+    class Dispatcher:
+        _actor_groups = {"policy": Group()}
+
+        def forward_backward(self, model, batch, loss_fn):
+            return SimpleNamespace(metrics={"loss": 1.0, "policy_lr": metric_lr})
+
+        def optim_step(self, model):
+            optimizer_calls.append(model)
+            return 1.0
+
+    monkeypatch.setattr(ray, "get", lambda observed: rates)
+    trainer.dispatch = Dispatcher()
+
+    with pytest.raises(ValueError):
+        trainer.train_step({"loss_mask": torch.tensor([[1, 0]])}, step=0)
+    assert optimizer_calls == []
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec("skyrl") is None,
+    reason="requires pinned training image; CPU-only",
+)
 @pytest.mark.parametrize("interval", [2, 4])
 @pytest.mark.parametrize("dense", [False, True])
 @pytest.mark.parametrize("pause", [None, 1])
@@ -1635,6 +1825,9 @@ def test_exact_native_loop_eval_never_optimizes_and_saves_final(
     )
     assert len([item for _, item in logs if "train/loss" in item]) == final_step
     assert all("train/lr" in item for _, item in logs if "train/loss" in item)
+    assert all(
+        item["train/lr"] == 1e-6 for _, item in logs if "train/loss" in item
+    )
     assert logs[-1][1]["train/global_step"] == final_step
     assert logs[-1][0] == final_step + int(
         not outcomes_only and not pause and final_step % interval != 0

@@ -23,10 +23,11 @@ QUALIFIED_IMAGE = (
     "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:"
     "7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317"
 )
-GATE_TEMPLATE = RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v3.template.json"
+GATE_TEMPLATE = RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v4.template.json"
 RETIRED_GATE_TEMPLATES = [
     RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v1.template.json",
     RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v2.template.json",
+    RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v3.template.json",
 ]
 
 
@@ -74,8 +75,8 @@ def test_first_qwen38_lora_sft_templates_freeze_supported_surface():
         assert len(value["name"]) <= 31
 
     assert gate["pause_after_step"] == 1
-    assert gate["name"] == "chris-q38-lora-sft-c1-v3"
-    assert gate["output_root"] == "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v3"
+    assert gate["name"] == "chris-q38-lora-sft-c1-v4"
+    assert gate["output_root"] == "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v4"
     assert gate["recipe"]["batch_size"] == 1
     assert gate["recipe"]["max_length"] == 16384
     assert gate["data"] == {
