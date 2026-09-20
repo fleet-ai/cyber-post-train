@@ -15,6 +15,7 @@ TASK_SET = ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.jso
 CONFIG = ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-matched-pass1-v1.json"
 BASE_CONFIG = ROOT / "configs/evaluation/qwen38-base-fleet-dev17-opencode-pass1-v1.json"
 CANDIDATE_CONFIG = ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-opencode-pass1-v1.json"
+TEACHER_CONFIG = ROOT / "configs/evaluation/qwen38-teacher-v5-fleet-dev17-opencode-pass1-v1.json"
 BACKLOG = ROOT / "configs/evaluation/qwen38-fleet-dev17-backlog-v1.json"
 SUCCESSOR_JOB = ROOT / "evals/fleet/cluster/qwen38-base-dev17-opencode-pass1-v1-job.yaml"
 SUCCESSOR_SCRIPT = ROOT / "evals/fleet/scripts/run_qwen38_dev17_single_arm_v1.sh"
@@ -82,6 +83,20 @@ def test_candidate_only_arm_preserves_exact_pairing_protocol():
     )
     for field in ("selection", "treatment", "images", "sampling", "pass_k"):
         assert candidate[field] == paired[field]
+
+
+def test_teacher_only_arm_preserves_exact_base_protocol():
+    base = evaluate.compile_eval(read(BASE_CONFIG), relative_to=BASE_CONFIG.parent)
+    teacher = evaluate.compile_eval(read(TEACHER_CONFIG), relative_to=TEACHER_CONFIG.parent)
+    assert len(evaluate.plan_rows(teacher)) == 17
+    assert set(teacher["models"]) == {"teacher-v5-step186"}
+    assert teacher["models"]["teacher-v5-step186"]["revision"] == (
+        "sha256:e6d59f5a58ce54b913d775cd71b81c64bd54637b53795df82baec0f71efefaf9"
+    )
+    assert teacher["routes"]["teacher"]["served_id"] == ("chris-q38-teacher-v5-step186-web-v1")
+    assert teacher["routes"]["teacher"]["task_versions"] == base["routes"]["base"]["task_versions"]
+    for field in ("selection", "treatment", "images", "sampling", "pass_k"):
+        assert teacher[field] == base[field]
 
 
 def test_backlog_reuses_frozen_protocol_and_unique_create_once_targets():
