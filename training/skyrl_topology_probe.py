@@ -10,13 +10,17 @@ post-terminal receipt bound to the exact API and Kubernetes identities.
 from __future__ import annotations
 
 import argparse
+import copy
+import hashlib
 import json
 import os
 import signal
 import threading
 import time
 from contextlib import suppress
+from datetime import UTC, datetime
 from pathlib import Path
+from uuid import UUID
 
 from cyber_post_train.jobs import API_URLS, JobsError, bundled_request, digest, quantity
 
@@ -27,6 +31,8 @@ SCHEMA = "cyber_skyrl_topology_probe_v1"
 CONFIG_SCHEMA = "cyber_skyrl_topology_probe_config_v1"
 RECEIPT_SCHEMA = "cyber_skyrl_topology_probe_receipt_v1"
 RELEASE_SCHEMA = "cyber_skyrl_topology_probe_release_v1"
+FLEETJOB_PACKET_SCHEMA = "cyber_skyrl_topology_probe_fleetjob_packet_v1"
+FLEETJOB_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_fleetjob_preview_v1"
 MODULE = "training.skyrl_topology_probe"
 CONFIG_PATH = ROOT / "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json"
 IMAGE = (
@@ -60,19 +66,33 @@ def _runtime() -> dict[str, str]:
     return {name: (ROOT / name).read_text() for name in RUNTIME_FILES}
 
 
-def _config(path: Path) -> dict:
-    from .sft import read_mapping
-
-    if path.resolve() != CONFIG_PATH.resolve() or path.is_symlink():
-        raise ValueError("unknown SkyRL topology probe configuration")
-    value = read_mapping(path)
-    _validate_seal(value, CONFIG_SCHEMA)
-    expected = {
+def _expected_execution() -> dict:
+    return {
         "cluster_target": "dev",
         "jobs_api_base_url": API_URLS["dev"],
+        "submission_transport": "fleetjob",
+        "kubernetes_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+        "namespace": "fleet-train-jobs",
+        "project_name": "fleetjob-dev",
+        "auth_secret": {"name": "fleet-api", "key": "FLEET_API_KEY"},
+        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v1",
+        "model_artifact": {
+            "path": "Qwen/Qwen3.8-27B",
+            "mount_path": "base",
+            "read_only": True,
+            "required": True,
+        },
+        "ray_version": "2.49.2",
         "priority": "c1",
+        "queue_priority": "q1",
         "workers": 1,
         "gpus_per_worker": 8,
+        "head_resources": {
+            "cpu_request": "4",
+            "cpu_limit": "8",
+            "memory_request": "16Gi",
+            "memory_limit": "32Gi",
+        },
         "resources": {
             "cpu_request": "64",
             "cpu_limit": "64",
@@ -80,6 +100,16 @@ def _config(path: Path) -> dict:
             "memory_limit": "768Gi",
         },
     }
+
+
+def _config(path: Path) -> dict:
+    from .sft import read_mapping
+
+    if path.resolve() != CONFIG_PATH.resolve() or path.is_symlink():
+        raise ValueError("unknown SkyRL topology probe configuration")
+    value = read_mapping(path)
+    _validate_seal(value, CONFIG_SCHEMA)
+    expected = _expected_execution()
     if (
         value["execution"] != expected
         or value["engine"]
@@ -88,7 +118,8 @@ def _config(path: Path) -> dict:
         != {"setup_seconds": 1200, "cleanup_seconds": 300, "total_seconds": 1500}
         or value["deadlines"]["setup_seconds"] + value["deadlines"]["cleanup_seconds"]
         != value["deadlines"]["total_seconds"]
-        or value["submission_gate"].get("preview_authorized") is not True
+        or value["submission_gate"].get("preview_authorized") is not False
+        or value["submission_gate"].get("fleetjob_preview_authorized") is not True
         or value["submission_gate"].get("submission_authorized") is not False
     ):
         raise ValueError("SkyRL topology probe contract changed")
@@ -166,19 +197,22 @@ def _validate(plan: dict) -> skyrl.SkyRLConfig:
         != {"num_engines": 2, "tensor_parallel_size": 4, "context_tokens": 98304}
         or plan.get("deadlines")
         != {"setup_seconds": 1200, "cleanup_seconds": 300, "total_seconds": 1500}
-        or execution.get("image") != IMAGE
-        or execution.get("cluster_target") != "dev"
-        or execution.get("jobs_api_base_url") != API_URLS["dev"]
-        or (execution.get("workers"), execution.get("gpus_per_worker")) != (1, 8)
+        or execution != {"image": IMAGE, **_expected_execution()}
+        or plan.get("output_root")
+        != execution.get("mount_root", "") + "/models/run"
+        or arguments.model_root
+        != execution.get("mount_root", "")
+        + "/models/"
+        + execution.get("model_artifact", {}).get("mount_path", "")
         or plan.get("qualification")
         != {
             "profile": "qwen38_skyrl_topology_probe_dev_v1",
             "submission_gate": {
-                "preview_authorized": True,
+                "preview_authorized": False,
+                "fleetjob_preview_authorized": True,
                 "submission_authorized": False,
                 "blockers": [
                     "cpu_preflight_not_yet_recorded",
-                    "runtime_user_preview_not_yet_validated",
                     "external_release_observer_not_yet_bound",
                 ],
             },
@@ -196,7 +230,7 @@ def _validate(plan: dict) -> skyrl.SkyRLConfig:
     return arguments
 
 
-def request(plan: dict) -> dict:
+def request(plan: dict, *, fleetjob_transport: bool = False) -> dict:
     arguments = _validate(plan)
     execution = plan["execution"]
     files = _runtime()
@@ -209,6 +243,11 @@ def request(plan: dict) -> dict:
         }
     )
     files["plan.json"] = json.dumps(plan, sort_keys=True, separators=(",", ":"))
+    options = (
+        {"transport_split_threshold": 30000, "transport_chunk_size": 30000}
+        if fleetjob_transport
+        else {}
+    )
     return bundled_request(
         {
             "name": arguments.name,
@@ -234,6 +273,202 @@ def request(plan: dict) -> dict:
         files,
         MODULE,
         ["--plan", "plan.json", "--sha256", digest(plan)],
+        **options,
+    )
+
+
+def _env(value: dict[str, str]) -> list[dict[str, str]]:
+    return [{"name": key, "value": item} for key, item in sorted(value.items())]
+
+
+def _container(
+    plan: dict,
+    environment: dict[str, str],
+    resources: dict,
+    *,
+    gpus: int = 0,
+) -> dict:
+    requests = {
+        "cpu": resources["cpu_request"],
+        "memory": resources["memory_request"],
+    }
+    limits = {
+        "cpu": resources["cpu_limit"],
+        "memory": resources["memory_limit"],
+    }
+    if gpus:
+        requests["nvidia.com/gpu"] = str(gpus)
+        limits["nvidia.com/gpu"] = str(gpus)
+    return {
+        "name": "ray",
+        "image": plan["execution"]["image"],
+        "env": _env(environment),
+        "securityContext": {
+            "allowPrivilegeEscalation": False,
+            "privileged": False,
+            "runAsGroup": 100,
+            "runAsNonRoot": True,
+            "runAsUser": 1000,
+        },
+        "resources": {"requests": requests, "limits": limits},
+    }
+
+
+def fleetjob_manifest(plan: dict) -> dict:
+    """Render the current, dev-only FleetJob launch transport.
+
+    FleetJob is the supported cluster interface for new workloads.  The legacy
+    Jobs API cannot express an explicit runtime user, so it remains sealed into
+    the plan for route-reconciliation only and is not an authorized launch
+    path for this probe.
+    """
+    _validate(plan)
+    execution = plan["execution"]
+    bundled = request(plan, fleetjob_transport=True)
+    head_env = {**bundled["env"], "RUN_DIR": plan["output_root"]}
+    worker_env = {
+        key: value
+        for key, value in head_env.items()
+        if not key.startswith("CYBER_RUNTIME_BUNDLE")
+    }
+    head = {
+        "rayStartParams": {"num-cpus": "0", "num-gpus": "0"},
+        "template": {
+            "metadata": {},
+            "spec": {
+                "priorityClassName": execution["priority"],
+                "containers": [
+                    _container(plan, head_env, execution["head_resources"])
+                ],
+            },
+        },
+    }
+    worker = {
+        "groupName": "gpu",
+        "replicas": 1,
+        "minReplicas": 1,
+        "maxReplicas": 1,
+        "rayStartParams": {"num-gpus": "8"},
+        "template": {
+            "metadata": {},
+            "spec": {
+                "priorityClassName": execution["priority"],
+                "containers": [
+                    _container(
+                        plan,
+                        worker_env,
+                        execution["resources"],
+                        gpus=execution["gpus_per_worker"],
+                    )
+                ],
+            },
+        },
+    }
+    return {
+        "apiVersion": "fleet.ai/v1alpha1",
+        "kind": "FleetJob",
+        "metadata": {
+            "name": plan["run_name"],
+            "namespace": execution["namespace"],
+        },
+        "spec": {
+            "fleet": {
+                "projectName": execution["project_name"],
+                "auth": {"secretRef": execution["auth_secret"]},
+                "mountRoot": execution["mount_root"],
+                "models": [
+                    {
+                        "path": execution["model_artifact"]["path"],
+                        "mountPath": execution["model_artifact"]["mount_path"],
+                        "readOnly": execution["model_artifact"]["read_only"],
+                        "required": execution["model_artifact"]["required"],
+                    }
+                ],
+                "wandb": {"mode": "disabled"},
+            },
+            "kueue": {
+                "queueName": "training-lq",
+                "queuePriorityClass": execution["queue_priority"],
+            },
+            "job": {
+                "apiVersion": "ray.io/v1",
+                "kind": "RayJob",
+                "metadata": {
+                    "annotations": {"ray/kueue-admission-scope": "job"}
+                },
+                "spec": {
+                    "entrypoint": bundled["command"],
+                    # The process has its own 25-minute setup/cleanup bound.  The
+                    # RayJob also has a hard 30-minute ceiling so a wedged
+                    # entrypoint cannot outlive the development-cluster limit.
+                    "activeDeadlineSeconds": 1800,
+                    "backoffLimit": 0,
+                    "shutdownAfterJobFinishes": True,
+                    "rayClusterSpec": {
+                        "rayVersion": execution["ray_version"],
+                        "enableInTreeAutoscaling": False,
+                        "headGroupSpec": head,
+                        "workerGroupSpecs": [worker],
+                    },
+                },
+            },
+        },
+    }
+
+
+def fleetjob_packet(plan: dict) -> dict:
+    manifest = fleetjob_manifest(plan)
+    execution = plan["execution"]
+    return _seal(
+        {
+            "schema": FLEETJOB_PACKET_SCHEMA,
+            "plan_sha256": digest(plan),
+            "manifest_sha256": digest(manifest),
+            "kubernetes_context": execution["kubernetes_context"],
+            "namespace": execution["namespace"],
+            "name": plan["run_name"],
+            "submitted": False,
+        }
+    )
+
+
+def validate_fleetjob_preview(plan: dict, manifest: dict, rendered: dict) -> dict:
+    """Validate the server-dry-run object without retaining its private env."""
+    if manifest != fleetjob_manifest(plan):
+        raise JobsError("topology probe FleetJob differs from its immutable plan")
+    expected = copy.deepcopy(manifest)
+    actual = copy.deepcopy(rendered)
+    metadata = actual.get("metadata", {})
+    finalizers = metadata.pop("finalizers", [])
+    creation_timestamp = metadata.pop("creationTimestamp", None)
+    generation = metadata.pop("generation", None)
+    uid = metadata.pop("uid", None)
+    if (
+        finalizers != ["fleet.ai/fleetjob-cleanup"]
+        or not isinstance(creation_timestamp, str)
+        or not creation_timestamp
+        or generation != 1
+        or not isinstance(uid, str)
+        or not uid
+        or actual != expected
+    ):
+        raise JobsError("FleetJob server dry-run changed the topology probe")
+    execution = plan["execution"]
+    return _seal(
+        {
+            "schema": FLEETJOB_PREVIEW_SCHEMA,
+            "status": "passed",
+            "plan_sha256": digest(plan),
+            "manifest_sha256": digest(manifest),
+            "server_render_sha256": digest(rendered),
+            "kubernetes_context": execution["kubernetes_context"],
+            "namespace": execution["namespace"],
+            "name": plan["run_name"],
+            "gpu_nodes": 1,
+            "gpus": 8,
+            "runtime_user": {"uid": 1000, "gid": 100},
+            "submitted": False,
+        }
     )
 
 
@@ -246,6 +481,7 @@ def preflight(plan: dict) -> dict:
     if torch.cuda.is_available():
         raise ValueError("probe preflight is CPU-only")
     arguments = _validate(plan)
+    _verify_model(plan)
     cfg = skyrl.diagnostic_native_config(arguments)
     build_vllm_cli_args(cfg)
     req = request(plan)
@@ -256,6 +492,7 @@ def preflight(plan: dict) -> dict:
         "runtime_user": {"uid": 1000, "gid": 100},
         "plan_sha256": digest(plan),
         "request_sha256": digest(req),
+        "fleetjob_manifest_sha256": digest(fleetjob_manifest(plan)),
         "task_rows_read": 0,
         "rollout_episodes": 0,
         "optimizer_steps": 0,
@@ -290,6 +527,21 @@ class _Deadline:
     def __exit__(self, *_):
         signal.setitimer(signal.ITIMER_REAL, 0)
         signal.signal(signal.SIGALRM, self.previous)
+
+
+def _verify_model(plan: dict) -> None:
+    """Prove that the FleetJob model mount matches the exact model lock."""
+    root = Path(plan["model"]["root"])
+    for item in plan["model"]["files"]:
+        path = root / item["path"]
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("probe model artifact is missing or mutable")
+        if "size" in item and path.stat().st_size != item["size"]:
+            raise ValueError("probe model artifact has the wrong size")
+        with path.open("rb") as stream:
+            actual = hashlib.file_digest(stream, "sha256").hexdigest()
+        if actual != item["sha256"].removeprefix("sha256:"):
+            raise ValueError("probe model artifact digest changed")
 
 
 def _stop_setup(setup, ray) -> None:
@@ -343,6 +595,7 @@ def run(plan: dict) -> dict:
         raise FileExistsError("probe output contains a scientific artifact")
 
     import ray
+    from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
     from skyrl.backends.skyrl_train.inference_servers.setup import create_inference_servers
     from skyrl.backends.skyrl_train.inference_servers.utils import build_vllm_cli_args
 
@@ -350,8 +603,10 @@ def run(plan: dict) -> dict:
     setup = None
     started = time.time()
     setup_error = None
+    worker_runtime_user = None
     try:
         with _Deadline(plan["deadlines"]["setup_seconds"], "engine setup"):
+            _verify_model(plan)
             ray.init(address="auto", log_to_driver=False)
             nodes = [
                 row
@@ -360,6 +615,23 @@ def run(plan: dict) -> dict:
             ]
             if len(nodes) != 1 or quantity(nodes[0]["Resources"]["GPU"]) != 8:
                 raise ValueError("probe requires exactly one live eight-GPU Ray node")
+
+            @ray.remote(num_cpus=0)
+            def runtime_user():
+                import os
+
+                return {"uid": os.geteuid(), "gid": os.getegid()}
+
+            worker_runtime_user = ray.get(
+                runtime_user.options(
+                    scheduling_strategy=NodeAffinitySchedulingStrategy(
+                        nodes[0]["NodeID"], soft=False
+                    )
+                ).remote(),
+                timeout=30,
+            )
+            if worker_runtime_user != {"uid": 1000, "gid": 100}:
+                raise ValueError("probe GPU worker must use image user 1000:100")
             setup = create_inference_servers(
                 cfg.generator.inference_engine,
                 build_vllm_cli_args(cfg),
@@ -389,6 +661,10 @@ def run(plan: dict) -> dict:
             **plan["scientific_work"],
             "engines_started": 2,
             "tensor_parallel_size": 4,
+            "runtime_users": {
+                "driver": {"uid": 1000, "gid": 100},
+                "gpu_worker": worker_runtime_user,
+            },
             "ray_shutdown_called": True,
             "external_release_required": True,
         }
@@ -397,31 +673,91 @@ def run(plan: dict) -> dict:
 
 def validate_release(plan: dict, receipt: dict, observation: dict) -> dict:
     """Seal a later read-only observation that the exact allocation disappeared."""
+    _validate(plan)
     _validate_seal(receipt, RECEIPT_SCHEMA)
+    if (
+        receipt.get("status") != "setup_and_internal_cleanup_passed"
+        or receipt.get("plan_sha256") != digest(plan)
+        or receipt.get("runtime_users")
+        != {
+            "driver": {"uid": 1000, "gid": 100},
+            "gpu_worker": {"uid": 1000, "gid": 100},
+        }
+        or any(receipt.get(key) != 0 for key in plan["scientific_work"])
+        or receipt.get("engines_started") != 2
+        or receipt.get("tensor_parallel_size") != 4
+        or receipt.get("ray_shutdown_called") is not True
+        or receipt.get("external_release_required") is not True
+    ):
+        raise ValueError("probe receipt is not the exact accepted internal cleanup")
     required = {
-        "api_run_id",
+        "kubernetes_context",
+        "namespace",
+        "fleetjob_name",
+        "job_id",
+        "fleetjob_uid",
         "rayjob_uid",
         "workload_uid",
-        "pod_uid",
+        "raycluster_uid",
+        "pod_uids",
         "terminal_status",
+        "fleetjob_present",
         "rayjob_present",
         "workload_present",
-        "pod_present",
+        "raycluster_present",
+        "pods_present",
         "active_gpus",
+        "created_at",
+        "deletion_requested_at",
+        "release_observed_at",
     }
+    presence = {
+        "fleetjob_present",
+        "rayjob_present",
+        "workload_present",
+        "raycluster_present",
+        "pods_present",
+    }
+    identities = {
+        "job_id",
+        "fleetjob_uid",
+        "rayjob_uid",
+        "workload_uid",
+        "raycluster_uid",
+    }
+    try:
+        timestamps = [
+            datetime.strptime(observation[key], "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+            for key in ("created_at", "deletion_requested_at", "release_observed_at")
+        ]
+        uuid_values = [UUID(observation[key]) for key in identities]
+        uuid_values.extend(UUID(value) for value in observation["pod_uids"])
+    except (AttributeError, KeyError, TypeError, ValueError):
+        timestamps, uuid_values = [], []
     if (
         set(observation) != required
+        or observation.get("kubernetes_context")
+        != plan["execution"]["kubernetes_context"]
+        or observation.get("namespace") != plan["execution"]["namespace"]
+        or observation.get("fleetjob_name") != plan["run_name"]
         or any(
             not isinstance(observation[key], str) or not observation[key]
             for key in required
-            - {"rayjob_present", "workload_present", "pod_present", "active_gpus"}
+            - presence
+            - {"active_gpus", "pod_uids"}
         )
-        or observation["terminal_status"] not in {"SUCCEEDED", "FAILED", "CANCELLED"}
-        or any(
-            observation[key] is not False
-            for key in ("rayjob_present", "workload_present", "pod_present")
-        )
+        or len(uuid_values) != 7
+        or not isinstance(observation["pod_uids"], list)
+        or len(observation["pod_uids"]) != 2
+        or len(set(observation["pod_uids"])) != 2
+        or any(not isinstance(value, str) or not value for value in observation["pod_uids"])
+        or observation["terminal_status"] not in {"Succeeded", "Failed", "Deleted"}
+        or any(observation[key] is not False for key in presence)
+        or type(observation["active_gpus"]) is not int
         or observation["active_gpus"] != 0
+        or len(timestamps) != 3
+        or not timestamps[0] <= timestamps[1] <= timestamps[2]
+        or (timestamps[1] - timestamps[0]).total_seconds() > 1800
     ):
         raise ValueError("exact topology-probe release was not proven")
     return _seal(

@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import subprocess
 from pathlib import Path
 from typing import Annotated
 
@@ -279,23 +280,86 @@ def rl(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
 @app.command("rl-topology-probe")
 def rl_topology_probe(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
     """Prepare the sealed zero-update one-node development setup probe."""
-    from training.skyrl_topology_probe import compile_probe, request
+    from training.skyrl_topology_probe import (
+        compile_probe,
+        fleetjob_manifest,
+        fleetjob_packet,
+        request,
+    )
 
     try:
         plan = compile_probe(config)
         prepared_request = request(plan)
         _prepare(output, plan, prepared_request)
+        manifest = fleetjob_manifest(plan)
+        _write(output / "fleetjob.json", manifest)
+        _write(output / "FLEETJOB_PREPARED.json", fleetjob_packet(plan))
         _print(
             {
                 "prepared": str(output),
                 "cluster_target": "dev",
+                "submission_transport": "fleetjob",
+                "kubernetes_context": plan["execution"]["kubernetes_context"],
                 "gpus": 8,
                 "rollout_episodes": 0,
                 "optimizer_steps": 0,
                 "maximum_seconds": 1500,
+                "submission_authorized": False,
                 "submitted": False,
             }
         )
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-topology-probe-preview")
+def rl_topology_probe_preview(directory: Path) -> None:
+    """Server-dry-run the exact dev FleetJob; no workload is created."""
+    from training.skyrl_topology_probe import (
+        SCHEMA,
+        fleetjob_manifest,
+        fleetjob_packet,
+        validate_fleetjob_preview,
+    )
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != SCHEMA:
+            raise ValueError("prepared directory is not a topology probe")
+        gate = plan.get("qualification", {}).get("submission_gate", {})
+        if gate.get("fleetjob_preview_authorized") is not True:
+            raise ValueError("FleetJob server dry-run is not authorized")
+        manifest = _read(directory / "fleetjob.json")
+        packet = _read(directory / "FLEETJOB_PREPARED.json")
+        if manifest != fleetjob_manifest(plan) or packet != fleetjob_packet(plan):
+            raise ValueError("topology probe FleetJob packet changed")
+        if (directory / "FLEETJOB_PREVIEW.json").exists():
+            raise ValueError("FleetJob preview already recorded")
+        execution = plan["execution"]
+        result = subprocess.run(
+            [
+                "kubectl",
+                "--context",
+                execution["kubernetes_context"],
+                "--namespace",
+                execution["namespace"],
+                "create",
+                "--dry-run=server",
+                "--filename",
+                str(directory / "fleetjob.json"),
+                "--output",
+                "json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode:
+            raise JobsError("FleetJob server dry-run failed; no workload was created")
+        rendered = json.loads(result.stdout)
+        proof = validate_fleetjob_preview(plan, manifest, rendered)
+        _write(directory / "FLEETJOB_PREVIEW.json", proof)
+        _print(proof)
     except Exception as exc:
         _fail(exc)
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import copy
+import hashlib
+import json
 import os
 import subprocess
 import sys
@@ -44,10 +46,79 @@ def test_probe_is_distinct_dev_only_bounded_and_zero_update(plan) -> None:
         "checkpoints": 0,
     }
     gate = plan["qualification"]["submission_gate"]
-    assert gate["preview_authorized"] is True
+    assert gate["preview_authorized"] is False
+    assert gate["fleetjob_preview_authorized"] is True
     assert gate["submission_authorized"] is False
     assert request["env"]["CYBER_EXPECTED_RUNTIME_UID"] == "1000"
     assert request["env"]["CYBER_EXPECTED_RUNTIME_GID"] == "100"
+
+
+def test_probe_fleetjob_is_one_gpu_node_with_cpu_head_and_explicit_user(plan) -> None:
+    manifest = probe.fleetjob_manifest(plan)
+    spec = manifest["spec"]
+    assert manifest["metadata"] == {
+        "name": "chris-q38-skyrl-probe-v1",
+        "namespace": "fleet-train-jobs",
+    }
+    assert spec["fleet"] == {
+        "projectName": "fleetjob-dev",
+        "auth": {"secretRef": {"name": "fleet-api", "key": "FLEET_API_KEY"}},
+        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v1",
+        "models": [
+            {
+                "path": "Qwen/Qwen3.8-27B",
+                "mountPath": "base",
+                "readOnly": True,
+                "required": True,
+            }
+        ],
+        "wandb": {"mode": "disabled"},
+    }
+    assert spec["kueue"] == {"queueName": "training-lq", "queuePriorityClass": "q1"}
+    cluster = spec["job"]["spec"]["rayClusterSpec"]
+    assert spec["job"]["spec"]["activeDeadlineSeconds"] == 1800
+    assert spec["job"]["spec"]["backoffLimit"] == 0
+    assert spec["job"]["spec"]["shutdownAfterJobFinishes"] is True
+    head = cluster["headGroupSpec"]["template"]["spec"]["containers"][0]
+    workers = cluster["workerGroupSpecs"]
+    assert "nvidia.com/gpu" not in head["resources"]["limits"]
+    assert len(workers) == 1 and workers[0]["replicas"] == 1
+    gpu = workers[0]["template"]["spec"]["containers"][0]
+    assert gpu["resources"]["limits"]["nvidia.com/gpu"] == "8"
+    expected_user = {
+        "allowPrivilegeEscalation": False,
+        "privileged": False,
+        "runAsGroup": 100,
+        "runAsNonRoot": True,
+        "runAsUser": 1000,
+    }
+    assert head["securityContext"] == gpu["securityContext"] == expected_user
+    head_env = {row["name"]: row["value"] for row in head["env"]}
+    assert head_env["RUN_DIR"] == plan["output_root"]
+    assert max(map(len, head_env.values())) <= 30000
+    assert not any(
+        row["name"].startswith("CYBER_RUNTIME_BUNDLE") for row in gpu["env"]
+    )
+
+
+def test_probe_fleetjob_preview_accepts_only_exact_server_mutation(plan) -> None:
+    manifest = probe.fleetjob_manifest(plan)
+    rendered = copy.deepcopy(manifest)
+    rendered["metadata"].update(
+        {
+            "creationTimestamp": "2026-09-20T00:00:00Z",
+            "finalizers": ["fleet.ai/fleetjob-cleanup"],
+            "generation": 1,
+            "uid": "00000000-0000-0000-0000-000000000001",
+        }
+    )
+    proof = probe.validate_fleetjob_preview(plan, manifest, rendered)
+    assert proof["schema"] == probe.FLEETJOB_PREVIEW_SCHEMA
+    assert proof["runtime_user"] == {"uid": 1000, "gid": 100}
+    changed = copy.deepcopy(rendered)
+    changed["spec"]["job"]["spec"]["backoffLimit"] = 1
+    with pytest.raises(JobsError, match="changed"):
+        probe.validate_fleetjob_preview(plan, manifest, changed)
 
 
 def test_probe_runtime_bundle_imports_without_source_checkout(plan, tmp_path) -> None:
@@ -76,6 +147,11 @@ def test_probe_runtime_bundle_imports_without_source_checkout(plan, tmp_path) ->
     [
         ("cluster_target", "prod"),
         ("jobs_api_base_url", "https://api.ft.flt.build"),
+        ("submission_transport", "jobs-api"),
+        ("kubernetes_context", "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"),
+        ("namespace", "default"),
+        ("priority", "c0"),
+        ("queue_priority", "q0"),
         ("workers", 2),
         ("gpus_per_worker", 4),
     ],
@@ -86,6 +162,42 @@ def test_probe_rejects_topology_or_route_substitution(plan, field, value) -> Non
         probe.request(plan)
 
 
+def test_probe_rejects_model_mount_or_head_resource_substitution(plan) -> None:
+    for mutation in (
+        lambda value: value["execution"]["model_artifact"].update(path="other/model"),
+        lambda value: value["execution"]["model_artifact"].update(mount_path="other"),
+        lambda value: value["execution"]["head_resources"].update(cpu_request="2"),
+        lambda value: value.update(output_root="/mnt/sfs/jobs/other/models/run"),
+    ):
+        changed = copy.deepcopy(plan)
+        mutation(changed)
+        with pytest.raises(ValueError, match="plan changed"):
+            probe.fleetjob_manifest(changed)
+
+
+def test_probe_verifies_every_exact_model_file(tmp_path) -> None:
+    model = tmp_path / "model"
+    model.mkdir()
+    payload = b"exact model bytes"
+    (model / "weight.safetensors").write_bytes(payload)
+    plan = {
+        "model": {
+            "root": str(model),
+            "files": [
+                {
+                    "path": "weight.safetensors",
+                    "size": len(payload),
+                    "sha256": "sha256:" + hashlib.sha256(payload).hexdigest(),
+                }
+            ],
+        }
+    }
+    probe._verify_model(plan)
+    (model / "weight.safetensors").write_bytes(payload + b"changed")
+    with pytest.raises(ValueError, match="wrong size"):
+        probe._verify_model(plan)
+
+
 def test_probe_preflight_parses_engine_without_tasks_or_gpu(plan, monkeypatch) -> None:
     monkeypatch.setattr(probe.os, "geteuid", lambda: 1000)
     monkeypatch.setattr(probe.os, "getegid", lambda: 100)
@@ -93,6 +205,7 @@ def test_probe_preflight_parses_engine_without_tasks_or_gpu(plan, monkeypatch) -
     monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
     cfg = NS(generator=NS(inference_engine=object()))
     monkeypatch.setattr(probe.skyrl, "diagnostic_native_config", lambda _: cfg)
+    monkeypatch.setattr(probe, "_verify_model", lambda _: None)
     calls = []
     monkeypatch.setitem(
         sys.modules,
@@ -178,23 +291,45 @@ def test_release_receipt_requires_exact_terminal_absence_and_zero_gpus(plan) -> 
             "schema": probe.RECEIPT_SCHEMA,
             "status": "setup_and_internal_cleanup_passed",
             "plan_sha256": digest(plan),
+            **plan["scientific_work"],
+            "engines_started": 2,
+            "tensor_parallel_size": 4,
+            "runtime_users": {
+                "driver": {"uid": 1000, "gid": 100},
+                "gpu_worker": {"uid": 1000, "gid": 100},
+            },
+            "ray_shutdown_called": True,
+            "external_release_required": True,
         }
     )
     observation = {
-        "api_run_id": "run-uuid",
-        "rayjob_uid": "rayjob-uuid",
-        "workload_uid": "workload-uuid",
-        "pod_uid": "pod-uuid",
-        "terminal_status": "SUCCEEDED",
+        "kubernetes_context": plan["execution"]["kubernetes_context"],
+        "namespace": plan["execution"]["namespace"],
+        "fleetjob_name": plan["run_name"],
+        "job_id": "00000000-0000-0000-0000-000000000001",
+        "fleetjob_uid": "00000000-0000-0000-0000-000000000002",
+        "rayjob_uid": "00000000-0000-0000-0000-000000000003",
+        "workload_uid": "00000000-0000-0000-0000-000000000004",
+        "raycluster_uid": "00000000-0000-0000-0000-000000000005",
+        "pod_uids": [
+            "00000000-0000-0000-0000-000000000006",
+            "00000000-0000-0000-0000-000000000007",
+        ],
+        "terminal_status": "Succeeded",
+        "fleetjob_present": False,
         "rayjob_present": False,
         "workload_present": False,
-        "pod_present": False,
+        "raycluster_present": False,
+        "pods_present": False,
         "active_gpus": 0,
+        "created_at": "2026-09-20T00:00:00Z",
+        "deletion_requested_at": "2026-09-20T00:29:59Z",
+        "release_observed_at": "2026-09-20T00:31:00Z",
     }
     release = probe.validate_release(plan, receipt, observation)
     assert release["schema"] == probe.RELEASE_SCHEMA and release["status"] == "released"
     for field, value in (
-        ("pod_present", True),
+        ("pods_present", True),
         ("active_gpus", 8),
         ("terminal_status", "RUNNING"),
     ):
@@ -202,6 +337,16 @@ def test_release_receipt_requires_exact_terminal_absence_and_zero_gpus(plan) -> 
         changed[field] = value
         with pytest.raises(ValueError, match="release was not proven"):
             probe.validate_release(plan, receipt, changed)
+    late = copy.deepcopy(observation)
+    late["deletion_requested_at"] = "2026-09-20T00:30:01Z"
+    late["release_observed_at"] = "2026-09-20T00:31:00Z"
+    with pytest.raises(ValueError, match="release was not proven"):
+        probe.validate_release(plan, receipt, late)
+    wrong_plan = copy.deepcopy(receipt)
+    wrong_plan["plan_sha256"] = "0" * 64
+    wrong_plan = probe._seal(wrong_plan)
+    with pytest.raises(ValueError, match="exact accepted internal cleanup"):
+        probe.validate_release(plan, wrong_plan, observation)
 
 
 def test_probe_cli_prepares_but_external_gate_stays_closed(tmp_path) -> None:
@@ -215,6 +360,48 @@ def test_probe_cli_prepares_but_external_gate_stays_closed(tmp_path) -> None:
     )
     assert response.exit_code == 0, response.output
     plan, _ = cli._prepared(output)
-    cli._external_action_gate(plan, "preview")
+    assert (output / "fleetjob.json").exists()
+    assert (output / "FLEETJOB_PREPARED.json").exists()
+    with pytest.raises(ValueError, match="preview blocked by qualification gate"):
+        cli._external_action_gate(plan, "preview")
     with pytest.raises(ValueError, match="submit blocked by qualification gate"):
         cli._external_action_gate(plan, "submit")
+
+
+def test_probe_cli_server_preview_is_bound_to_exact_dev_context(tmp_path, monkeypatch) -> None:
+    from typer.testing import CliRunner
+
+    output = tmp_path / "prepared"
+    runner = CliRunner()
+    assert runner.invoke(
+        cli.app, ["rl-topology-probe", str(CONFIG), "--output", str(output)]
+    ).exit_code == 0
+    plan, _ = cli._prepared(output)
+    rendered = probe.fleetjob_manifest(plan)
+    rendered["metadata"].update(
+        {
+            "creationTimestamp": "2026-09-20T00:00:00Z",
+            "finalizers": ["fleet.ai/fleetjob-cleanup"],
+            "generation": 1,
+            "uid": "00000000-0000-0000-0000-000000000001",
+        }
+    )
+    seen = []
+
+    def dry_run(argv, **kwargs):
+        seen.append((argv, kwargs))
+        return NS(returncode=0, stdout=json.dumps(rendered), stderr="")
+
+    monkeypatch.setattr(cli.subprocess, "run", dry_run)
+    response = runner.invoke(cli.app, ["rl-topology-probe-preview", str(output)])
+    assert response.exit_code == 0, response.output
+    command, options = seen[0]
+    assert command[:3] == [
+        "kubectl",
+        "--context",
+        "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+    ]
+    assert "--dry-run=server" in command and "create" in command
+    assert "prod" not in " ".join(command)
+    assert options["timeout"] == 60
+    assert (output / "FLEETJOB_PREVIEW.json").exists()

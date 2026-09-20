@@ -138,6 +138,39 @@ def test_large_runtime_bundle_is_chunked_and_digest_checked(tmp_path):
         bundled_request(value, {"run.py": "pass"}, "run", [])
 
 
+def test_runtime_bundle_can_obey_stricter_fleetjob_env_limit() -> None:
+    import random
+
+    from cyber_post_train.jobs import bundled_request
+
+    payload = random.Random(43).randbytes(60000).hex()
+    request = bundled_request(
+        config(),
+        {"run.py": "pass", "payload.txt": payload},
+        "run",
+        [],
+        transport_split_threshold=30000,
+        transport_chunk_size=30000,
+    )
+    chunks = {
+        key: value
+        for key, value in request["env"].items()
+        if key.startswith("CYBER_RUNTIME_BUNDLE")
+    }
+    assert len(chunks) > 1
+    assert max(map(len, chunks.values())) <= 30000
+    for threshold, size in ((0, 1), (30000, 30001), (120001, 30000)):
+        with pytest.raises(JobsError, match="transport limits"):
+            bundled_request(
+                config(),
+                {"run.py": "pass"},
+                "run",
+                [],
+                transport_split_threshold=threshold,
+                transport_chunk_size=size,
+            )
+
+
 def test_environment_size_limit_counts_utf8_bytes_and_name():
     value = config()
     value["env"]["DATA"] = "a" * (131072 - len("DATA") - 2)

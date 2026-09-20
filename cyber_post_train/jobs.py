@@ -90,7 +90,15 @@ def canonical_gzip(payload: bytes) -> bytes:
     return blob[:9] + b"\xff" + blob[10:]
 
 
-def bundled_request(request: dict, files: dict[str, str], module: str, argv: list[str]) -> dict:
+def bundled_request(
+    request: dict,
+    files: dict[str, str],
+    module: str,
+    argv: list[str],
+    *,
+    transport_split_threshold: int = 120000,
+    transport_chunk_size: int = 48000,
+) -> dict:
     """Embed small, public runtime inputs in a create-once Jobs API entrypoint."""
     if module.replace(".", "/") + ".py" not in files or not files:
         raise JobsError("entry module is absent from runtime bundle")
@@ -108,11 +116,18 @@ def bundled_request(request: dict, files: dict[str, str], module: str, argv: lis
         key.startswith("CYBER_RUNTIME_BUNDLE") for key in request.get("env", {})
     ):
         raise JobsError("runtime bundle is too large or overrides reserved transport fields")
+    if not (
+        1 <= transport_chunk_size <= transport_split_threshold <= 120000
+    ):
+        raise JobsError("runtime bundle transport limits are invalid")
     transport = {"CYBER_RUNTIME_BUNDLE": encoded}
     expression = "os.environ.pop('CYBER_RUNTIME_BUNDLE')"
-    if len(encoded) > 120000:
+    if len(encoded) > transport_split_threshold:
         # Linux limits EACH argument/env value, even when total ARG_MAX is free.
-        parts = [encoded[i : i + 48000] for i in range(0, len(encoded), 48000)]
+        parts = [
+            encoded[i : i + transport_chunk_size]
+            for i in range(0, len(encoded), transport_chunk_size)
+        ]
         transport = {f"CYBER_RUNTIME_BUNDLE_{i}": part for i, part in enumerate(parts)}
         expression = (
             f"''.join(os.environ.pop('CYBER_RUNTIME_BUNDLE_'+str(i)) for i in range({len(parts)}))"

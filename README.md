@@ -64,12 +64,21 @@ uv run cyber-post-train rl-topology-probe \
   --output /shared/new-probe-plan
 ```
 
-The sealed probe has a 25-minute total bound, receives no Fleet or W&B secret,
-reads no task rows, performs no rollout or optimizer step, and cannot write a
-checkpoint. Its prepared plan is permanently bound to the development Jobs API;
-use `status <name> --prepared <directory>` so later reads use that same route.
-Submission remains blocked until CPU preflight, a preview proving UID 1000/GID
-100, and an exact post-terminal resource-release observer are all recorded.
+The sealed probe has a 25-minute process bound and a 30-minute RayJob deadline.
+It receives only Fleet authentication through a named Kubernetes Secret, disables
+W&B, reads no task rows, performs no rollout or optimizer step, and cannot write a
+checkpoint. It uses the current FleetJob interface: one CPU coordination Pod plus
+one eight-GPU worker Pod. The prepared plan is permanently bound to the development
+Kubernetes context, namespace, project, queue, model mount, image and runtime user.
+Server-validate the exact create-once object without creating it:
+
+```sh
+uv run cyber-post-train rl-topology-probe-preview /shared/new-probe-plan
+```
+
+Submission remains blocked until the exact-image CPU preflight and an independent
+30-minute cleanup/release observer are recorded. See the
+[probe runbook](docs/QWEN38_SKYRL_TOPOLOGY_PROBE_DEV_V1.md).
 
 ## Evaluation
 
