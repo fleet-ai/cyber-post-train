@@ -8,6 +8,15 @@
   },
   "arm_id": "b8-lr1e5-e1",
   "training_observation_sha256": "sha256:6cb849801b41a1301294f80115cbd84e524a63a7d0826c32e936edbee524b6cb",
+  "source_plan": {
+    "path": "configs/qualification/qwen38-fresh75-e1-step115-source-plan-v1.json",
+    "file_sha256": "sha256:50a6215e116a9bdb58a0383640d96a65e5f38e3ed2f72e2c427a2814a0467eac",
+    "plan_sha256": "sha256:12fea04c9080cf44443a239cbaa957233ac578842817c5b60dd4343271320702",
+    "producer_git_commit": "8599ef5a",
+    "producer_config_path": "configs/runs/qwen38-fresh75-teacher-sft-one-epoch-v2.json",
+    "runtime_sha256": "sha256:b1bc58cc8edd112bbbddf1e729c448d06d2c83c0ba0fa2390829791998c9b3a4",
+    "reconstruction_status": "accepted_exact"
+  },
   "checkpoint_selection": {
     "optimizer_step": 115,
     "checkpoint_path": "/mnt/sfs/jobs/chris-q38-f75-e1-v2/checkpoints/global_step_115",
@@ -52,5 +61,5 @@
     "separate_scoring_from_immutable_rollout_bundles",
     "fleet_development_eval"
   ],
-  "handoff_sha256": "sha256:525c583bbf0bf23323eae631e9523d93fc18d506c4922b384c64a097fc1a88ec"
+  "handoff_sha256": "sha256:c8db2ba4cdcc808a0b4f216f7e7eea35fba1b992843bf4d0f0a9f4e4787efbd1"
 }

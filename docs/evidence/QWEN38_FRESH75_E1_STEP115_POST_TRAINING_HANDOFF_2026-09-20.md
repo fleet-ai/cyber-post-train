@@ -26,6 +26,17 @@ It is checked by
 - Final checkpoint-saved receipt file SHA-256:
   `fd92b96e9bb8f843eca6c3cde9f155d6a99c96faf3f89ce52dc602c99ff7a319`
 
+The exact immutable training plan is now checked in as
+[`qwen38-fresh75-e1-step115-source-plan-v1.json`](../../configs/qualification/qwen38-fresh75-e1-step115-source-plan-v1.json).
+It was reconstructed from producer commit `8599ef5a` and
+`configs/runs/qwen38-fresh75-teacher-sft-one-epoch-v2.json`. Its canonical
+SHA-256 is exactly the value in `STARTED.json`,
+`12fea04c9080cf44443a239cbaa957233ac578842817c5b60dd4343271320702`,
+and its embedded runtime SHA-256 is exactly
+`b1bc58cc8edd112bbbddf1e729c448d06d2c83c0ba0fa2390829791998c9b3a4`.
+This closes source-plan identity drift for the CPU checkpoint seal; it does
+not itself seal or reload the checkpoint.
+
 The metrics file has one row for every optimizer step. The recorded training
 loss is finite at both endpoints: `0.6419628859` at step 1 and `0.3676480651`
 at step 115. This is evidence that optimization ran and training loss fell on
