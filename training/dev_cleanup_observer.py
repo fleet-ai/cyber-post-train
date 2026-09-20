@@ -68,11 +68,17 @@ def _validated_receipt(message: object, *, kind: str) -> dict | None:
         return None
     body = {key: item for key, item in value.items() if key != "sha256"}
     schemas = {
-        "job": "cyber_skyrl_topology_probe_cpu_preflight_v1",
-        "fleetjob": "cyber_skyrl_topology_probe_receipt_v1",
+        "job": {
+            "cyber_skyrl_topology_probe_cpu_preflight_v1",
+            "cyber_skyrl_topology_probe_cpu_preflight_failure_v1",
+        },
+        "fleetjob": {
+            "cyber_skyrl_topology_probe_receipt_v1",
+            "cyber_skyrl_topology_probe_failure_v1",
+        },
     }
     if (
-        value.get("schema") != schemas[kind]
+        value.get("schema") not in schemas[kind]
         or value.get("sha256") != "sha256:" + digest(body)
     ):
         return None
@@ -94,6 +100,8 @@ class Snapshot:
     pod_names: set[str] = field(default_factory=set)
     pod_uids: set[str] = field(default_factory=set)
     image_ids: set[str] = field(default_factory=set)
+    exit_codes: set[int] = field(default_factory=set)
+    termination_reasons: set[str] = field(default_factory=set)
     restarts: int = 0
     peak_gpus: int = 0
     receipt: dict | None = None
@@ -259,6 +267,12 @@ class Observer:
                     self.snapshot.image_ids.add(image_id)
                 terminated = status.get("state", {}).get("terminated")
                 if isinstance(terminated, dict):
+                    exit_code = terminated.get("exitCode")
+                    reason = terminated.get("reason")
+                    if type(exit_code) is int:
+                        self.snapshot.exit_codes.add(exit_code)
+                    if isinstance(reason, str) and reason:
+                        self.snapshot.termination_reasons.add(reason)
                     receipt = _validated_receipt(
                         terminated.get("message"), kind=self.kind
                     )
@@ -429,6 +443,7 @@ class Observer:
         accepted = (
             self.snapshot.terminal_status == "Succeeded"
             and receipt is not None
+            and receipt.get("status") != "failed"
             and self.snapshot.peak_gpus == self.expected_gpus
         )
         status = "released" if accepted else "released_without_accepted_execution"
@@ -458,6 +473,8 @@ class Observer:
                 "pod_names": sorted(self.snapshot.pod_names),
                 "pod_uids": sorted(self.snapshot.pod_uids),
                 "image_ids": sorted(self.snapshot.image_ids),
+                "exit_codes": sorted(self.snapshot.exit_codes),
+                "termination_reasons": sorted(self.snapshot.termination_reasons),
                 "restarts": self.snapshot.restarts,
                 "peak_gpus": self.snapshot.peak_gpus,
                 "receipt": receipt,

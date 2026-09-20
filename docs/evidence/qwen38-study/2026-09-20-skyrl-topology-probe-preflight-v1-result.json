@@ -1,0 +1,44 @@
+{
+  "active_gpus": 0,
+  "armed_at": "2026-09-20T10:52:15Z",
+  "context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+  "created_at": "2026-09-20T10:52:20Z",
+  "deletion_requested_at": "2026-09-20T10:52:41Z",
+  "expected_gpus": 0,
+  "image_ids": [
+    "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
+  ],
+  "job_id": "",
+  "kind": "job",
+  "manifest_sha256": "sha256:7610b99e4191b119afcaec3252f21227b30238d8a42998bb65e7d38098a310a3",
+  "maximum_seconds": 1200,
+  "name": "chris-q38-skyrl-probe-preflight-v1",
+  "namespace": "fleet-train-jobs",
+  "peak_gpus": 0,
+  "plan_sha256": "sha256:f136f05cda84114b10ba6df50cd6cb521294c992fdba2b550489f896d985118d",
+  "pod_names": [
+    "chris-q38-skyrl-probe-preflight-v1-8hz5d"
+  ],
+  "pod_uids": [
+    "254705a2-5a0b-4bf4-b9d1-08a09aaa030a"
+  ],
+  "pods_present": false,
+  "raycluster_name": "",
+  "raycluster_present": false,
+  "raycluster_uid": "",
+  "rayjob_name": "",
+  "rayjob_present": false,
+  "rayjob_uid": "",
+  "receipt": null,
+  "release_observed_at": "2026-09-20T10:52:46Z",
+  "restarts": 0,
+  "schema": "cyber_dev_cleanup_observer_result_v1",
+  "sha256": "sha256:1cf9bac7f0f949bd230a4750dc947fc51f3bfa76dec9d4560994946d2ecf9ca5",
+  "status": "released_without_accepted_execution",
+  "target_present": false,
+  "terminal_status": "Failed",
+  "uid": "5aa65ab1-2d24-42d5-8e97-26fddece41b6",
+  "workload_name": "",
+  "workload_present": false,
+  "workload_uid": ""
+}

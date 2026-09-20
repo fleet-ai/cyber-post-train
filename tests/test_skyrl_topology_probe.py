@@ -323,7 +323,8 @@ def test_probe_preflight_parses_engine_without_tasks_or_gpu(plan, monkeypatch) -
         "skyrl.backends.skyrl_train.inference_servers.utils",
         NS(build_vllm_cli_args=lambda value: calls.append(value)),
     )
-    receipt = probe.preflight(plan)
+    phases = []
+    receipt = probe.preflight(plan, phases.append)
     assert receipt["schema"] == "cyber_skyrl_topology_probe_cpu_preflight_v1"
     assert receipt["request_sha256"] == digest(
         probe.request(plan, fleetjob_transport=True, cpu_preflight=True)
@@ -332,6 +333,17 @@ def test_probe_preflight_parses_engine_without_tasks_or_gpu(plan, monkeypatch) -
     assert receipt["task_rows_read"] == 0
     assert receipt["rollout_episodes"] == receipt["optimizer_steps"] == 0
     assert receipt["create_once_output_absent"] is True
+    assert phases == [
+        "runtime_identity",
+        "runtime_imports",
+        "zero_gpu",
+        "plan_validation",
+        "writable_empty_destination",
+        "create_once_destination_absence",
+        "model_inventory",
+        "native_engine_arguments",
+        "receipt",
+    ]
 
 
 def test_probe_destination_must_be_empty_and_writable(plan, tmp_path) -> None:

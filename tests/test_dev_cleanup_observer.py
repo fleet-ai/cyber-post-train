@@ -229,3 +229,17 @@ def test_observer_rejects_prod_route_or_excess_deadline(tmp_path) -> None:
         _observer(tmp_path, FakeJobCluster(), context="prod")
     with pytest.raises(cleanup.ObserverError, match="deadline"):
         _observer(tmp_path, FakeJobCluster(), maximum_seconds=1801)
+
+
+def test_observer_accepts_only_digest_valid_sanitized_failure_receipt() -> None:
+    receipt = _seal(
+        {
+            "schema": "cyber_skyrl_topology_probe_cpu_preflight_failure_v1",
+            "status": "failed",
+            "phase": "model_inventory",
+            "error_class": "ValueError",
+        }
+    )
+    assert cleanup._validated_receipt(json.dumps(receipt), kind="job") == receipt
+    receipt["phase"] = "changed"
+    assert cleanup._validated_receipt(json.dumps(receipt), kind="job") is None

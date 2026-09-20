@@ -17,6 +17,7 @@ import os
 import signal
 import threading
 import time
+from collections.abc import Callable
 from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
@@ -35,7 +36,9 @@ FLEETJOB_PACKET_SCHEMA = "cyber_skyrl_topology_probe_fleetjob_packet_v1"
 FLEETJOB_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_fleetjob_preview_v1"
 PREFLIGHT_PACKET_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_packet_v1"
 PREFLIGHT_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_preview_v1"
-PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v1"
+PREFLIGHT_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_cpu_preflight_failure_v1"
+PROBE_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_failure_v1"
+PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v2"
 PREFLIGHT_RECEIPT = "/dev/termination-log"
 MODULE = "training.skyrl_topology_probe"
 CONFIG_PATH = ROOT / "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json"
@@ -700,20 +703,30 @@ def validate_preflight_job_preview(
     )
 
 
-def preflight(plan: dict) -> dict:
+def preflight(plan: dict, progress: Callable[[str], None] | None = None) -> dict:
+    mark = progress or (lambda _: None)
+    mark("runtime_identity")
     if (os.geteuid(), os.getegid()) != (1000, 100):
         raise ValueError("probe preflight requires image user 1000:100")
+    mark("runtime_imports")
     import torch
     from skyrl.backends.skyrl_train.inference_servers.utils import build_vllm_cli_args
 
+    mark("zero_gpu")
     if torch.cuda.is_available():
         raise ValueError("probe preflight is CPU-only")
+    mark("plan_validation")
     arguments = _validate(plan)
+    mark("writable_empty_destination")
     _validate_destination(plan)
+    mark("create_once_destination_absence")
     _validate_create_once_absence(plan)
+    mark("model_inventory")
     _verify_model(plan)
+    mark("native_engine_arguments")
     cfg = skyrl.diagnostic_native_config(arguments)
     build_vllm_cli_args(cfg)
+    mark("receipt")
     req = request(plan, fleetjob_transport=True, cpu_preflight=True)
     return {
         "schema": "cyber_skyrl_topology_probe_cpu_preflight_v1",
@@ -1043,27 +1056,64 @@ def main() -> None:
     parser.add_argument("--cpu-preflight", action="store_true")
     parser.add_argument("--receipt", type=Path)
     args = parser.parse_args()
+    phase = "plan_loading"
+    plan = None
+
+    def mark(value: str) -> None:
+        nonlocal phase
+        phase = value
+
     try:
         plan = json.loads(args.plan.read_bytes())
+        phase = "plan_digest"
         if digest(plan) != args.sha256:
             raise ValueError("plan digest mismatch")
+        phase = "request_validation"
         request(plan)
         if args.cpu_preflight:
             if args.receipt != Path(PREFLIGHT_RECEIPT):
                 raise ValueError("CPU preflight receipt binding mismatch")
-            receipt = _seal(preflight(plan))
+            receipt = _seal(preflight(plan, mark))
             _write_receipt(Path(PREFLIGHT_RECEIPT), receipt, exclusive=False)
             print(json.dumps({"status": receipt["status"], "sha256": receipt["sha256"]}))
             return
         if args.receipt != Path(PREFLIGHT_RECEIPT):
             raise ValueError("GPU probe receipt binding mismatch")
+        phase = "gpu_topology_probe"
         receipt = run(plan)
         path = Path(plan["output_root"]) / "TOPOLOGY_PROBE.json"
         _write_receipt(path, receipt, exclusive=True)
         _write_receipt(Path(PREFLIGHT_RECEIPT), receipt, exclusive=False)
         print(json.dumps({"status": receipt["status"], "sha256": receipt["sha256"]}))
     except BaseException as exc:
-        print(json.dumps({"status": "failed", "error_class": type(exc).__name__}))
+        failure = _seal(
+            {
+                "schema": (
+                    PREFLIGHT_FAILURE_SCHEMA if args.cpu_preflight else PROBE_FAILURE_SCHEMA
+                ),
+                "status": "failed",
+                "phase": phase,
+                "error_class": type(exc).__name__,
+                "plan_sha256": args.sha256,
+                "task_rows_read": 0,
+                "rollout_episodes": 0,
+                "optimizer_steps": 0,
+                "checkpoints": 0,
+            }
+        )
+        if args.receipt == Path(PREFLIGHT_RECEIPT):
+            with suppress(Exception):
+                _write_receipt(Path(PREFLIGHT_RECEIPT), failure, exclusive=False)
+        print(
+            json.dumps(
+                {
+                    "status": "failed",
+                    "phase": phase,
+                    "error_class": type(exc).__name__,
+                    "sha256": failure["sha256"],
+                }
+            )
+        )
         raise SystemExit(1) from None
 
 
