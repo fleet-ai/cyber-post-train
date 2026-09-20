@@ -5,6 +5,14 @@ the exact SkyRL image load the pinned Qwen3.8-27B model and start two tensor-par
 inference engines on one eight-GPU development node, then stop them and release the
 allocation cleanly?
 
+The current `v16` execution reached `SUCCEEDED` with zero restarts and released
+all eight GPUs. Its cleanup observer did not capture the public container receipt
+before teardown, and no existing production Pod can see the development SFS path.
+The result therefore proves successful execution and release, but it does **not**
+yet pass this gate. The failure budget is 10/10, so no new cluster workload is
+authorized. The exact evidence and this distinction are sealed in
+`docs/evidence/qwen38-study/2026-09-20-skyrl-topology-probe-v16-qualification-summary.json`.
+
 It deliberately cannot read a training row, create an episode, call a verifier,
 take an optimizer step, or write a checkpoint. Passing it does not qualify RL.
 The separate 2,400-second scientific reward canary is unchanged and remains closed
@@ -12,37 +20,37 @@ until its own reward, optimizer, checkpoint and cleanup gates pass.
 
 ## Frozen shape
 
-- FleetJob name: `chris-q38-skyrl-probe-v9`
+- terminal FleetJob identity: `chris-q38-skyrl-probe-v16`
 - development context: `nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb`
 - namespace/project: `fleet-train-jobs` / `fleetjob-dev`
 - priority: Kubernetes `c1`, queue `q1`
 - image: `fleet/skyrl-train` at the exact digest in the config
-- topology: one Ray head requesting four GPUs plus one worker Pod requesting four
-  GPUs. Both Pod sets use the B300 flavor and Kueue places both on the same physical
-  eight-GPU node
-- Kueue topology: the head and `gpu` worker group are explicitly q1. The worker
-  group requests unconstrained topology, and the runtime refuses acceptance unless
-  the two exact Ray Pods report the same physical node before either TP4 engine is
-  accepted
-- head resources: 4 CPU / 16 GiB requested, 8 CPU / 32 GiB limited, plus four GPUs
-- worker resources: 64 CPU / 512 GiB requested, 64 CPU / 768 GiB limited
-- runtime identity on both Pods: UID 1000, GID 100
+- topology: one Ray head requesting all eight GPUs. The zero-replica worker group
+  remains only because the FleetJob controller requires that structural group; it
+  owns no Pod and no GPU
+- Kueue topology: the head and dormant `gpu` worker group are explicitly q1. The
+  runtime refuses acceptance unless Ray sees exactly one live GPU node with exactly
+  eight GPUs before either TP4 engine is accepted
+- GPU-head resources: 64 CPU / 512 GiB requested, 64 CPU / 768 GiB limited, plus
+  eight GPUs. These CPUs must also be advertised to Ray so the two engine placement
+  groups are schedulable
+- dormant worker template: 2 CPU / 4 GiB requested, 4 CPU / 8 GiB limited, with
+  zero replicas
+- runtime identity on the GPU Pod: UID 1000, GID 100
 - input model: read-only Fleet artifact
-  `Qwen/Qwen3.8-27B/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0`
-  mounted directly at `models/base`. Fleet artifact paths are SFS-relative below
-  `models/`, so the CPU and GPU gates name the same exact revision directory. The
-  controller resolves the artifact before mounting it; it does
-  not add a revision-named child directory. The compiled plan remains bound to
-  revision `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0`, and every mounted file is
-  checked against that exact size and SHA-256 inventory before engine startup.
-  Standard Hugging Face symlinks are allowed only when they resolve to regular
-  files whose bytes match those exact digests
+  `fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4`, mounted directly at `models/base`.
+  The artifact is a create-once, hardlink-preserving staging of exact revision
+  `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0`; the CPU and GPU gates verify all 28
+  files against the exact size and SHA-256 inventory before engine startup
 - zero-GPU preflight source:
-  `models/Qwen/Qwen3.8-27B/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0`
-  is mounted directly at that same immutable runtime root. This exact PVC subpath
-  must equal `models/` plus the FleetJob artifact path
+  `models/fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4` is mounted directly at that
+  same immutable runtime root. This exact PVC subpath must equal `models/` plus
+  the FleetJob artifact path
 - output: the controller-created, run-owned `models/run` directory; only the sanitized probe receipt is
   accepted there
+- vLLM sampler: `VLLM_USE_FLASHINFER_SAMPLER=0`; the exact-image CPU gate proves
+  vLLM parses this as false and selects its native sampler rather than the
+  unavailable FlashInfer top-k/top-p kernel on B300
 - W&B: disabled; no task, benchmark or W&B credential is delivered
 - process limit: 20 minutes for exact model verification and engine setup, then five
   minutes for engine cleanup
@@ -50,8 +58,7 @@ until its own reward, optimizer, checkpoint and cleanup gates pass.
   no later than 30 minutes after the FleetJob was created
 - retries: none
 
-The probe reserves exactly one physical GPU node and eight GPUs split 4+4 across
-the Ray head and worker Pods.
+The probe reserves exactly one physical GPU node and all eight GPUs on its Ray head.
 
 ## Prepare and validate without creating a workload
 
@@ -98,10 +105,11 @@ Do not create the FleetJob until every item is true:
 5. The development server dry-run passes again immediately before creation.
 6. An independent observer is already running. It has the exact context,
    namespace and name; after creation it records the FleetJob UID, Fleet job ID,
-   RayJob UID, Workload UID, RayCluster UID and both Pod UIDs. It is authorized to
+   RayJob UID, Workload UID, RayCluster UID and head Pod UID. It is authorized to
    delete only that exact FleetJob.
 7. The observer has a fixed deletion time no later than 30 minutes after FleetJob
-   creation. It deletes sooner on success, failure, irrelevance or a stalled setup.
+   creation. After terminal status it waits at most 30 seconds for the public
+   receipt, then deletes; it also deletes at the fixed deadline for a stalled setup.
 8. The operator has confirmed that adding eight development GPUs remains inside
    the current experiment-owned resource allowance.
 
@@ -122,7 +130,7 @@ uv run --locked python -m training.dev_cleanup_observer \
   --context nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb \
   --namespace fleet-train-jobs \
   --kind job \
-  --name chris-q38-skyrl-probe-preflight-v19 \
+  --name chris-q38-skyrl-probe-preflight-v28 \
   --maximum-seconds 1200 \
   --expected-gpus 0 \
   --plan-sha256 sha256:<exact-plan-digest> \
@@ -148,17 +156,23 @@ The create command revalidates every nested digest, confirms the observer proces
 is still alive, checks the exact name on development and production, repeats the
 development server dry-run and records the created UID. A missing or invalid
 sanitized termination receipt makes the gate fail even when cleanup succeeds.
+When Ray becomes terminal, the observer gives Kubernetes at most 30 seconds to
+expose the declared public termination-message file before it performs the same
+unconditional exact-UID delete. This fixes the receipt race observed on `v16`
+without extending the 30-minute allocation bound. A separate zero-GPU, read-only
+Job must still validate the durable SFS receipt after release; execution status
+alone is never acceptance.
 
 ## Evidence while it runs
 
 Record only sanitized operational facts:
 
 - the exact object UIDs listed above;
-- actual image IDs, Pod nodes, priority classes, restart counts and eight-GPU
-  request on the worker;
+- actual image ID, Pod node, priority class, restart count and eight-GPU request
+  on the Ray head;
 - timestamps for creation, admission, Pod readiness, process start and finish;
 - the sealed `TOPOLOGY_PROBE.json` digest and its scalar fields; and
-- whether either Pod, the RayCluster or the Workload remains after deletion.
+- whether the head Pod, RayCluster or Workload remains after deletion.
 
 Do not read or publish raw model weights, the private engine log, runtime bundle,
 credentials, task text, prompts, trajectories or benchmark data.
@@ -167,7 +181,7 @@ credentials, task text, prompts, trajectories or benchmark data.
 
 The operational probe passes only when all of these are true:
 
-- both Pods ran as UID 1000/GID 100 with the exact image and zero restarts;
+- the GPU Pod ran as UID 1000/GID 100 with the exact image and zero restarts;
 - the model mount matched the complete exact-revision inventory;
 - exactly one live Ray GPU node exposed exactly eight GPUs;
 - two inference-engine groups started, each with tensor parallel size four;
@@ -181,11 +195,11 @@ never permission to launch the scientific canary.
 
 ## Release proof
 
-At terminal status—or at the fixed deadline—the observer deletes the exact
-FleetJob by name only after confirming its recorded UID. It then waits until all
-of the following recorded objects are absent: FleetJob, RayJob, Workload,
-RayCluster, head Pod and GPU-worker Pod. It also verifies that the exact allocation
-uses zero GPUs.
+At terminal status—or at the fixed deadline—the observer waits no more than 30
+seconds for the public termination receipt, then deletes the exact FleetJob by
+name only after confirming its recorded UID. It then waits until all of the
+following recorded objects are absent: FleetJob, RayJob, Workload, RayCluster and
+head Pod. It also verifies that the exact allocation uses zero GPUs.
 
 The sanitized observation supplied to `validate_release` must contain exactly:
 
@@ -193,13 +207,13 @@ The sanitized observation supplied to `validate_release` must contain exactly:
 {
   "kubernetes_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
   "namespace": "fleet-train-jobs",
-  "fleetjob_name": "chris-q38-skyrl-probe-v9",
+  "fleetjob_name": "chris-q38-skyrl-probe-v16",
   "job_id": "<Fleet job UUID>",
   "fleetjob_uid": "<FleetJob UID>",
   "rayjob_uid": "<RayJob UID>",
   "workload_uid": "<Workload UID>",
   "raycluster_uid": "<RayCluster UID>",
-  "pod_uids": ["<head Pod UID>", "<GPU-worker Pod UID>"],
+  "pod_uids": ["<head Pod UID>"],
   "terminal_status": "Succeeded",
   "fleetjob_present": false,
   "rayjob_present": false,
