@@ -369,3 +369,71 @@ def test_teacher3k_later_context_runs_compile_as_one_node_canary_first_arms(
     assert request["gpus_per_worker"] == 8
     assert request["priority_class"] == "c1"
     assert request["requeueIfPreempted"] is False
+
+
+@pytest.mark.parametrize("context", ["64", "96"])
+def test_teacher3k_later_context_full_arms_change_only_identity_and_lifecycle(context):
+    canary = json.loads(
+        (RUNS / f"qwen38-teacher3k-{context}k-canary-b8-lr3e6-v1.json").read_text()
+    )
+    full = json.loads(
+        (RUNS / f"qwen38-teacher3k-{context}k-full-b8-lr3e6-v1.json").read_text()
+    )
+
+    expected = json.loads(json.dumps(canary))
+    expected["name"] = full["name"]
+    expected["output_root"] = full["output_root"]
+    expected.pop("pause_after_step")
+    expected["wandb"]["run_id"] = full["wandb"]["run_id"]
+    expected["wandb"]["name"] = full["wandb"]["name"]
+    expected["wandb"]["tags"] = full["wandb"]["tags"]
+    assert full == expected
+    assert "one-step-canary" in canary["wandb"]["tags"]
+    assert "one-epoch" in full["wandb"]["tags"]
+
+    canary_plan = sft.compile_sft(canary, relative_to=RUNS)
+    full_plan = sft.compile_sft(full, relative_to=RUNS)
+    expected_plan = json.loads(json.dumps(canary_plan))
+    expected_plan["run_name"] = full_plan["run_name"]
+    expected_plan["output_root"] = full_plan["output_root"]
+    expected_plan.pop("pause_after_step")
+    expected_plan["wandb"]["run_id"] = full_plan["wandb"]["run_id"]
+    expected_plan["wandb"]["name"] = full_plan["wandb"]["name"]
+    expected_plan["wandb"]["tags"] = full_plan["wandb"]["tags"]
+    assert full_plan == expected_plan
+
+
+@pytest.mark.parametrize(("context", "position"), [("64", 0), ("96", 1)])
+def test_teacher3k_later_context_ready_queue_binds_current_inputs(context, position):
+    evidence = json.loads(
+        (
+            EVIDENCE
+            / "qwen38-teacher3k-long-context-full-ready-queue-20260920.json"
+        ).read_text()
+    )
+    row = evidence["full_run_queue"][position]
+    config_path = ROOT / row["config"]
+    config = json.loads(config_path.read_text())
+    plan = sft.compile_sft(config, relative_to=RUNS)
+    request = sft.job_request(plan)
+
+    assert evidence["status"] == "scientifically_qualified_queue_held_no_submission"
+    assert hashlib.sha256(config_path.read_bytes()).hexdigest() == row["config_file_sha256"]
+    assert sft.digest(plan) == row["plan_sha256"]
+    assert sft.digest(request) == row["request_sha256"]
+    assert plan["recipe"]["max_length"] == int(context) * 1024
+    assert plan["recipe"]["max_steps"] == row["planned_optimizer_steps"]
+    assert request["workers"] == 1
+    assert request["gpus_per_worker"] == 8
+    assert request["priority_class"] == "c1"
+    assert request["requeueIfPreempted"] is False
+
+    gate = evidence["accepted_canary_gates"][position]
+    gate_path = ROOT / gate["evidence"]
+    gate_evidence = json.loads(gate_path.read_text())
+    assert hashlib.sha256(gate_path.read_bytes()).hexdigest() == gate["evidence_file_sha256"]
+    assert gate_evidence["status"] == "accepted_one_step_and_released"
+    assert gate_evidence["treatment"]["context_length"] == int(context) * 1024
+    assert gate_evidence["scientific_result"]["optimizer_step"] == 1
+    assert gate_evidence["scientific_result"]["finite_metrics"] is True
+    assert gate_evidence["resource_release"]["active_gpus"] == 0
