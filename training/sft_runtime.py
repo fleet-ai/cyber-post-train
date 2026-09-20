@@ -74,6 +74,17 @@ QWEN38_QUALIFICATION_STAGES = {
     "optimizer_update_returned",
     "gradient_validated",
     "step_evidence_ready",
+    "checkpoint_finalization_started",
+    "checkpoint_finalization_complete",
+    "post_update_snapshot_started",
+    "post_update_snapshot_complete",
+    "qualification_receipt_preparation_started",
+    "qualification_receipt_prepared",
+    "terminal_result_validated",
+    "wandb_finish_started",
+    "wandb_finished",
+    "trainer_shutdown_complete",
+    "qualification_receipt_validated",
 }
 WATCHDOG_POLL_SECONDS = 60
 WATCHDOG_STARTUP_SECONDS = 30 * 60
@@ -246,8 +257,8 @@ QWEN38_LORA_ONE_STEP_PLAN = {
         "wandb",
     ],
     "schema": DENSE_SCHEMA,
-    "run_name": "chris-q38-lora-sft-c1-v7",
-    "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v7",
+    "run_name": "chris-q38-lora-sft-c1-v8",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v8",
     "model": {
         "repo": "Qwen/Qwen3.8-27B",
         "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
@@ -296,8 +307,8 @@ QWEN38_LORA_ONE_STEP_PLAN = {
         "entity": "thefleet",
         "project": "cyber-post-train",
         "group": "qwen38-lora-sft-goal-v1",
-        "run_id": "chris-q38-lora-sft-c1-v7",
-        "name": "chris-q38-lora-sft-c1-v7",
+        "run_id": "chris-q38-lora-sft-c1-v8",
+        "name": "chris-q38-lora-sft-c1-v8",
         "tags": [
             "qwen38",
             "lora",
@@ -313,6 +324,7 @@ QWEN38_LORA_ONE_STEP_PLAN = {
             "dev-init-contract-repair",
             "step-boundary-evidence-repair",
             "float32-lr-consensus-repair",
+            "post-checkpoint-boundary-evidence-repair",
         ],
     },
 }
@@ -2470,9 +2482,11 @@ def _run_training(plan: dict) -> dict:
             # before reading any file, collecting post-update hashes, or
             # preparing a qualification receipt.
             if _is_qwen38_lora(plan):
+                trainer._record_qualification_stage("checkpoint_finalization_started")
                 qwen38_checkpoint_finalization = (
                     trainer.dispatch.finalize_lora_qualification_checkpoint("policy")
                 )
+                trainer._record_qualification_stage("checkpoint_finalization_complete")
             else:
                 trainer.dispatch.finalize_pending_saves("policy")
         qwen38_receipt = None
@@ -2481,7 +2495,10 @@ def _run_training(plan: dict) -> dict:
                 raise ValueError("Qwen3.8 qualification did not stop at its one-step gate")
             if qwen38_source_before is None or qwen38_runtime_before is None:
                 raise ValueError("Qwen3.8 pre-step source inventory is missing")
+            trainer._record_qualification_stage("post_update_snapshot_started")
             qwen38_lora_after = trainer.dispatch.collect_lora_qualification_snapshots("policy")
+            trainer._record_qualification_stage("post_update_snapshot_complete")
+            trainer._record_qualification_stage("qualification_receipt_preparation_started")
             qwen38_receipt = _prepare_qwen38_checkpoint_receipt(
                 trainer,
                 qwen38_lora_before,
@@ -2490,7 +2507,10 @@ def _run_training(plan: dict) -> dict:
                 qwen38_source_before,
                 qwen38_runtime_before,
             )
+            trainer._record_qualification_stage("qualification_receipt_prepared")
         result = training_result(trainer, paused=paused)
+        if _is_qwen38_lora(plan):
+            trainer._record_qualification_stage("terminal_result_validated")
         import wandb
 
         wandb.run.summary.update(
@@ -2505,14 +2525,17 @@ def _run_training(plan: dict) -> dict:
         if qwen38_receipt is not None:
             # Qualification requires an observed successful flush, not the
             # upstream best-effort Tracking.finish() wrapper.
+            trainer._record_qualification_stage("wandb_finish_started")
             wandb.finish(exit_code=0)
             if wandb.run is not None:
                 raise ValueError("W&B run remained active after finish")
             trainer.tracker = None
+            trainer._record_qualification_stage("wandb_finished")
         trainer.shutdown()
         if qwen38_receipt is not None:
             from training.qwen38_lora_artifacts import validate_checkpoint_receipt
 
+            trainer._record_qualification_stage("trainer_shutdown_complete")
             if wandb.run is not None:
                 raise ValueError("W&B run reappeared or remained active after trainer shutdown")
             qwen38_receipt["wandb"] = _qwen38_wandb_evidence(trainer)
@@ -2521,6 +2544,7 @@ def _run_training(plan: dict) -> dict:
                 "receipt_sha256": _unsigned_digest(qwen38_receipt),
             }
             validate_checkpoint_receipt(signed)
+            trainer._record_qualification_stage("qualification_receipt_validated")
             receipt_path = trainer.output / "QWEN38_LORA_CHECKPOINT.json"
             write_receipt(receipt_path, qwen38_receipt)
             written = json.loads(receipt_path.read_text())

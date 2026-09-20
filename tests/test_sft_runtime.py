@@ -1279,6 +1279,24 @@ def test_failure_finalize_includes_only_known_qualification_stage(tmp_path, monk
     }
 
 
+def test_qwen38_post_checkpoint_qualification_boundaries_are_public():
+    from training.sft_runtime import QWEN38_QUALIFICATION_STAGES
+
+    assert {
+        "checkpoint_finalization_started",
+        "checkpoint_finalization_complete",
+        "post_update_snapshot_started",
+        "post_update_snapshot_complete",
+        "qualification_receipt_preparation_started",
+        "qualification_receipt_prepared",
+        "terminal_result_validated",
+        "wandb_finish_started",
+        "wandb_finished",
+        "trainer_shutdown_complete",
+        "qualification_receipt_validated",
+    } <= QWEN38_QUALIFICATION_STAGES
+
+
 def test_native_destructor_cannot_mark_failure_successful():
     calls = []
 
