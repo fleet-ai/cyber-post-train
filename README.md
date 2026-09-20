@@ -99,6 +99,7 @@ to start a new experiment. Shared and dedicated serving remain explicit blocks.
 
 See [AGENTS.md](AGENTS.md), [CONTRIBUTING.md](CONTRIBUTING.md),
 [scientific controls](docs/SCIENTIFIC_PROTOCOL.md),
-[cluster policy and alerts](docs/CLUSTER_ALERTS_AND_INFERENCE_SERVING.md), and
+[cluster policy and alerts](docs/CLUSTER_ALERTS_AND_INFERENCE_SERVING.md),
+[operational lessons](docs/OPERATIONAL_LESSONS.md), and
 [consolidation status](docs/CONSOLIDATION.md). Dated evidence is historical, not
 live state. Raw outputs, datasets, checkpoints and secrets belong outside Git.

@@ -110,6 +110,15 @@ Do not interpret all-zero reward as model incapability when trajectories truncat
 
 For every material failure, ask whether a durable correction belongs in code, a regression test, `AGENTS.md`, a focused skill, a receipt/config, or narrative docs. Prefer deterministic enforcement in code. Add skill guidance only for stable decisions that recur across runs; never hardcode current job IDs, secrets, mutable state, or benchmark content into a skill.
 
+When a failure class recurs, do not scale or repeat it from chat memory alone.
+Before the next scaled successor, it MUST leave all four durable layers: a
+sanitized immutable receipt or config, a deterministic code guard at the
+narrowest owned boundary, a regression test for that guard, and a concise entry
+in [`docs/OPERATIONAL_LESSONS.md`](docs/OPERATIONAL_LESSONS.md) or its focused
+runbook. If an external service owns the failing boundary, local code must fail
+closed at preview or preflight and link the exact upstream repair. Prose is not
+a substitute for an enforceable guard.
+
 ## Handoff standard
 
 Lead with the outcome. State what is running, what has not launched, the last verified transition, the next gate, blockers, and any user action required. Link exact PRs/jobs and evidence paths where useful. Never make the reader infer whether an optimizer step, scored evaluation, serving route, or artifact publication actually occurred.
