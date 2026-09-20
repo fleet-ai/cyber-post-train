@@ -31,6 +31,7 @@ KUBECTL_ATTEMPTS = 3
 KUBECTL_TIMEOUT_SECONDS = 20
 MAX_CONSECUTIVE_OBSERVATION_FAILURES = 5
 DELETE_REQUEST_MARGIN_SECONDS = 60
+TERMINAL_RECEIPT_GRACE_SECONDS = 30
 
 
 class ObserverError(RuntimeError):
@@ -521,6 +522,7 @@ class Observer:
                     raise ObserverError("cleanup target was not created after arming")
                 time.sleep(self.poll_seconds)
             created = _parse_stamp(self.snapshot.created_at)
+            terminal_receipt_deadline: float | None = None
             while True:
                 elapsed = (_now() - created).total_seconds()
                 if elapsed >= self.maximum_seconds - DELETE_REQUEST_MARGIN_SECONDS:
@@ -537,6 +539,29 @@ class Observer:
                     if consecutive_observation_failures >= MAX_CONSECUTIVE_OBSERVATION_FAILURES:
                         raise
                 if self.snapshot.terminal_status:
+                    # A RayJob can report terminal before its long-running Ray
+                    # container terminates.  Kubernetes exposes the declared
+                    # termination-message file only after that container
+                    # terminates, so deleting immediately races and loses the
+                    # public sealed receipt.  Give shutdownAfterJobFinishes a
+                    # short, fixed grace period; the normal deadline and
+                    # unconditional UID-bound delete remain authoritative.
+                    now = time.monotonic()
+                    if self.kind == "fleetjob" and self.snapshot.receipt is None:
+                        if terminal_receipt_deadline is None:
+                            remaining = max(
+                                0.0,
+                                self.maximum_seconds
+                                - DELETE_REQUEST_MARGIN_SECONDS
+                                - elapsed,
+                            )
+                            terminal_receipt_deadline = now + min(
+                                TERMINAL_RECEIPT_GRACE_SECONDS,
+                                remaining,
+                            )
+                        if now < terminal_receipt_deadline:
+                            time.sleep(min(self.poll_seconds, terminal_receipt_deadline - now))
+                            continue
                     break
                 time.sleep(
                     min(

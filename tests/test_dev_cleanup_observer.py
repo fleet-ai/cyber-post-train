@@ -190,6 +190,58 @@ class FakeFleetCluster:
         raise AssertionError(args)
 
 
+class DelayedFleetReceiptCluster(FakeFleetCluster):
+    """Ray reports success one observation before the Pod exposes its receipt."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.rayjob_reads = 0
+        self.pod_list_reads = 0
+
+    def __call__(self, argv, **kwargs):
+        args = argv[5:]
+        if args[:3] == ["get", "rayjob", "ray-probe"]:
+            self.rayjob_reads += 1
+            value = None
+            if not self.deleted:
+                value = self._object(
+                    "ray-probe",
+                    12,
+                    status={
+                        "rayClusterName": "cluster-probe",
+                        "jobStatus": "RUNNING" if self.rayjob_reads == 1 else "SUCCEEDED",
+                    },
+                )
+            return NS(returncode=0, stdout=json.dumps(value) if value else "", stderr="")
+        if args[:2] == ["get", "pod"] and "--selector" in args:
+            self.pod_list_reads += 1
+            items = []
+            if not self.deleted:
+                state = (
+                    {"running": {}}
+                    if self.pod_list_reads < 3
+                    else {"terminated": {"message": json.dumps(self.receipt)}}
+                )
+                items.append(
+                    self._object(
+                        "probe-pod-15",
+                        15,
+                        spec={"containers": [{"resources": {"requests": {"nvidia.com/gpu": 8}}}]},
+                        status={
+                            "containerStatuses": [
+                                {
+                                    "restartCount": 0,
+                                    "imageID": "registry/image@sha256:" + "b" * 64,
+                                    "state": state,
+                                }
+                            ]
+                        },
+                    )
+                )
+            return NS(returncode=0, stdout=json.dumps({"items": items}), stderr="")
+        return super().__call__(argv, **kwargs)
+
+
 def test_fleetjob_observer_binds_all_uids_and_exact_eight_gpus(tmp_path) -> None:
     observer = _observer(
         tmp_path,
@@ -207,6 +259,24 @@ def test_fleetjob_observer_binds_all_uids_and_exact_eight_gpus(tmp_path) -> None
     assert result["workload_uid"].endswith("000000000013")
     assert result["raycluster_uid"].endswith("000000000014")
     assert result["receipt"]["status"] == "setup_and_internal_cleanup_passed"
+
+
+def test_fleetjob_observer_waits_bounded_time_for_terminal_receipt(tmp_path) -> None:
+    cluster = DelayedFleetReceiptCluster()
+    observer = _observer(
+        tmp_path,
+        cluster,
+        kind="fleetjob",
+        name="probe",
+        maximum_seconds=1800,
+        expected_gpus=8,
+    )
+    result = observer.run()
+    assert result["status"] == "released"
+    assert result["terminal_status"] == "Succeeded"
+    assert result["receipt"]["status"] == "setup_and_internal_cleanup_passed"
+    assert cluster.rayjob_reads >= 3
+    assert cluster.pod_list_reads >= 3
 
 
 def test_observer_rejects_prod_route_or_excess_deadline(tmp_path) -> None:
