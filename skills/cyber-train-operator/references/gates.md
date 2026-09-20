@@ -13,6 +13,7 @@ Use this checklist at the transition named in the request. Do not execute later 
 
 - Authenticated server preview is HTTP-successful and has no errors.
 - Preview binds exact task versions, environment versions, verifiers, ordered tools, step semantics, resources, queue, image, and output roots.
+- Preview proves the root Job or RayJob annotation `fleet.ai/failure-alerts: "off"`; request intent or a Pod-template annotation is insufficient.
 - Planned session and GPU cost match the requested canary or run.
 - Duplicate title and create-only destination checks are clean.
 - Scheduler admission is allowed to wait; never bypass or displace peer jobs.

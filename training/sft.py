@@ -263,6 +263,7 @@ def job_request(plan: dict) -> dict:
         "resources": execution["resources"],
         "priority_class": execution["priority"],
         "requeueIfPreempted": False,
+        "failureAlerts": False,
         "secrets": ["wandb-api"],
         "env": {
             "CYBER_SFT_BUNDLE": base64.b64encode(compressed).decode(),

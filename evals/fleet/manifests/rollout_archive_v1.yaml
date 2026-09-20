@@ -22,6 +22,8 @@ kind: Job
 metadata:
   name: chris-cyber-rollout-archive-r7-v1
   namespace: fleet-train-jobs
+  annotations:
+    fleet.ai/failure-alerts: "off"
   labels:
     owner: chris
     fleet.ai/submitted-by: chris

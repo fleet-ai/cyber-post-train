@@ -101,7 +101,9 @@ backoff limit `2147483647`, and absence of `activeDeadlineSeconds` and
 `podFailurePolicy`. These are preserved deployment bindings, **not a policy for new
 controllers**. New controllers return nonzero for unexpected controller defects;
 handled cell outcomes require truthful private results and sanitized terminal
-receipts. Do not hide defects behind unlimited restart loops or suppress alerts.
+receipts. Every newly rendered successor also carries the supported top-level
+annotation `fleet.ai/failure-alerts: "off"`; this suppresses only the failed-job
+notification and does not hide its real terminal state or idle GPU use.
 
 Normal queue/default priority remains the default. A current, explicit priority
 exception can use `--workload-priority-class <name>` together with

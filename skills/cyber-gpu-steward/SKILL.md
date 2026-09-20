@@ -8,6 +8,10 @@ description: Govern observed consumer-aware drain, release, and create-once repl
 Keep experiment-owned dedicated GPU capacity tied to useful, scientifically controlled
 rollout work.
 
+The supported top-level Job/RayJob annotation `fleet.ai/failure-alerts: "off"`
+suppresses failed-job Slack and Better Stack delivery only. It never exempts an
+allocation from idle-GPU monitoring, drain bounds, or prompt resource release.
+
 ## Orient
 
 1. Read repository `AGENTS.md` and [the dedicated GPU lifecycle](../../docs/GPU_RESOURCE_LIFECYCLE.md).

@@ -29,6 +29,7 @@ def prepared(tmp_path, monkeypatch):
         "gpus_per_worker": 8,
         "priority_class": "c1",
         "requeueIfPreempted": False,
+        "failureAlerts": False,
         "resources": {
             "cpu_request": "4",
             "cpu_limit": "8",

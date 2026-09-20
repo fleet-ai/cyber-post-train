@@ -83,6 +83,7 @@ def test_jobs_request_is_create_once_c1_and_contains_no_plain_task_prompt():
     assert request["workers"] == 4 and request["gpus_per_worker"] == 8
     assert request.get("privileged", False) is False
     assert request["priority_class"] == "c1" and request["requeueIfPreempted"] is False
+    assert request["failureAlerts"] is False
     assert request["run_dir"] == "/mnt/sfs/jobs/" + request["name"]
     assert value["data"]["tasks"][0]["task_key"] not in request["command"]
     assert "Run the versioned Fleet task." not in request["command"]

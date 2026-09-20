@@ -29,6 +29,9 @@ API_URLS = {
     "dev": "https://api.ft.dev.flt.build",
     "prod": API_URL,
 }
+FAILURE_ALERT_REQUEST_FIELD = "failureAlerts"
+FAILURE_ALERT_ANNOTATION = "fleet.ai/failure-alerts"
+FAILURE_ALERT_OFF = "off"
 
 
 class JobsError(ValueError):
@@ -184,6 +187,8 @@ def validate_request(config: dict) -> None:
         raise JobsError("queue priority is derived by the platform; omit queue_priority_class")
     if config.get("requeueIfPreempted") is not False:
         raise JobsError("automatic requeue must be disabled; resume is an explicit decision")
+    if config.get(FAILURE_ALERT_REQUEST_FIELD) is not False:
+        raise JobsError("failed-job alerts must be explicitly disabled for every project job")
     if type(config.get("privileged", False)) is not bool:
         raise JobsError("privileged must be a boolean")
     if config.get("privileged") and config["gpus_per_worker"] != 8:
@@ -234,8 +239,11 @@ def validate_preview(config: dict, preview: dict) -> dict:
             raise JobsError("preview queue priority differs from requested pod priority")
         if meta["labels"].get("fleet.ai/requeue-if-preempted") != "false":
             raise JobsError("preview requeue policy drift")
-        if meta["annotations"].get("fleet.ai/run-dir") != config["run_dir"]:
+        annotations = meta["annotations"]
+        if annotations.get("fleet.ai/run-dir") != config["run_dir"]:
             raise JobsError("preview output directory drift")
+        if annotations.get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF:
+            raise JobsError("preview does not disable failed-job alerts")
         if not (spec["suspend"] is True and spec["shutdownAfterJobFinishes"] is True):
             raise JobsError("preview must queue normally and release on exit")
         if spec["entrypoint"] != config["command"]:

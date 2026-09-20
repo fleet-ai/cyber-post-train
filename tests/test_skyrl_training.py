@@ -59,6 +59,7 @@ def test_prepare_cli_and_portable_runtime_are_offline(prepared, monkeypatch):
     request = train.job_request(plan)
     assert IMAGE == train.IMAGE == request["image"]
     assert request["priority_class"] == "c1" and not request["requeueIfPreempted"]
+    assert request["failureAlerts"] is False
     assert request["workers"] * request["gpus_per_worker"] == 8
     assert request["secrets"] == ["fleet-api", "wandb-api"]
     assert request["env"]["CYBER_EXPECTED_RUNTIME_UID"] == "1000"

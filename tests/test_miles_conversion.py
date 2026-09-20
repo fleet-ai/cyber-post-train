@@ -69,6 +69,7 @@ def test_conversion_compiles_only_native_loading_not_training(plan):
     assert request == convert.job_request(plan)
     assert request["workers"] == 1 and request["gpus_per_worker"] == 8
     assert request["priority_class"] == "c1" and request["requeueIfPreempted"] is False
+    assert request["failureAlerts"] is False
     assert request["secrets"] == [] and request["env"]["HF_HUB_OFFLINE"] == "1"
     assert len(plan["model"]["files"]) == 28
     assert plan["optimizer_steps"] == 0 and plan["deadline_seconds"] == 1800

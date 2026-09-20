@@ -44,6 +44,8 @@ kind: Job
 metadata:
   name: chris-cyber-qwen36-sft-stage-574bd7b3-v1
   namespace: inference
+  annotations:
+    fleet.ai/failure-alerts: "off"
   labels:
     cyber-post-train.fleet.ai/owner: chris
     cyber-post-train.fleet.ai/experiment: qwen36-sft-stage-574bd7b3-v1

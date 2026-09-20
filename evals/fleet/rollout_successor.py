@@ -20,6 +20,8 @@ POSTGRES_MODULES = ("rollout_ledger.py", "rollout_postgres.py", "rollout_worker.
 ALERT_SAFE_POLICY_ANNOTATION = "cyber-post-train.fleet.ai/alert-safe-job-policy"
 ALERT_SAFE_POLICY_VERSION = "retry-without-terminal-failure-v1"
 ALERT_SAFE_BACKOFF_LIMIT = 2_147_483_647
+FAILURE_ALERT_ANNOTATION = "fleet.ai/failure-alerts"
+FAILURE_ALERT_OFF = "off"
 CONCURRENCY_STAGE_ANNOTATION = "cyber-post-train.fleet.ai/concurrency-stage"
 WORKLOAD_PRIORITY_LABEL = "kueue.x-k8s.io/priority-class"
 WORKLOAD_PRIORITY_UID_ANNOTATION = "cyber-post-train.fleet.ai/workload-priority-class-uid"
@@ -135,6 +137,7 @@ def clone_job(
     spec.pop("maxFailedIndexes", None)
     spec.pop("podFailurePolicy", None)
     metadata.setdefault("annotations", {})[ALERT_SAFE_POLICY_ANNOTATION] = ALERT_SAFE_POLICY_VERSION
+    metadata["annotations"][FAILURE_ALERT_ANNOTATION] = FAILURE_ALERT_OFF
     template_metadata = spec.setdefault("template", {}).setdefault("metadata", {})
     _clean_metadata(template_metadata)
     template_metadata.setdefault("labels", {})[REFILL_LABEL] = refiller_id

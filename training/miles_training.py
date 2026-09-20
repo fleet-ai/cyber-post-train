@@ -204,6 +204,7 @@ def job_request(plan):
             "resources": resources,
             "priority_class": plan["execution"]["priority"],
             "requeueIfPreempted": False,
+            "failureAlerts": False,
             "secrets": ["fleet-api", "wandb-api"],
             "env": {
                 # The editable Megatron install omits post_training. Native
