@@ -158,6 +158,12 @@ The two previously missing local construction paths are now implemented:
   receipts and its tests pass those receipts back through the collection
   provenance validator. Raw probe text is discarded in memory and never enters
   either receipt.
+- `checkpoint_route_successor.py` seals the one new route ID and returned UID
+  on top of the unchanged checkpoint study. It requires matching paused,
+  zero-replica control-plane and Kubernetes readbacks, the exact preflight
+  spec, c1 priority and the accepted export-receipt revision. Every later live
+  launch gate and serving-evidence capture reopens this binding; neither can
+  silently fall back to the retired route.
 - shared snapshot qualification accepts exactly one base project and one
   candidate project, proves that both are score-free OpenCode collection
   projects, and binds them to one qualified filesystem snapshot before the
@@ -177,12 +183,12 @@ be re-proved within ten minutes of launch.
 
 Only after the serving proof, shared snapshot qualification and fresh duplicate
 check may the exact score-free canary collection plans be sealed. The checked-in
-study currently names the safely paused old registration. After the one allowed
-successor registration returns a new UID, its model ID and UID must be bound in
-a create-once successor study/live-gate artifact before launch; the old model ID
-must never be substituted back into a collection plan. This work deliberately
-did not register, resume or serve a model and did not create or change
-TensorLake work.
+study continues to bind the safely paused old registration as artifact history;
+the create-once successor-route receipt overlays only the new serving ID and
+UID. The live launch gate requires that exact receipt and compares the parity
+proof to the successor, while all checkpoint and export fields still come from
+the original study. This work deliberately did not register, resume or serve a
+model and did not create or change TensorLake work.
 
 ## Exact canary arm blueprints
 
@@ -206,8 +212,8 @@ only after `collection_launcher.seal_plan` validates each arm and
 2. Read the successor ID again. If it is still absent, create exactly one paused
    c1 registration from the fresh base spec; otherwise reconcile it and do not
    POST again.
-3. Record the returned UID in a new sealed study plan, then qualify one shared
-   TensorLake snapshot for both arm projects.
+3. Seal the returned UID with `checkpoint_route_successor.py`, then qualify one
+   shared TensorLake snapshot for both arm projects.
 4. Reconcile TensorLake inventory read-only, seal the two canary collection
    arms and their pair, and only then resume the candidate so the consumer can
    start immediately.
@@ -238,6 +244,44 @@ The output remains blocked by design. It renders the safe successor and the two
 collection blueprints; it never registers, resumes, launches, scores or pauses
 anything.
 
+### Reproducible successor-route binding
+
+After the exact successor has been created in the paused state, capture fresh
+read-only API and Kubernetes objects and seal them locally:
+
+```bash
+uv run python -m evals.webexploitbench.tensorlake.checkpoint_route_successor seal \
+  --study-plan configs/evaluation/qwen38-fresh75-step230-opencode-wbe-matched-v1.json \
+  --preflight .private/fresh75-wbe/preflight.json \
+  --successor-api .private/fresh75-wbe/successor.api.json \
+  --successor-kubernetes .private/fresh75-wbe/successor.kube.json \
+  --observed-at <UTC-TIMESTAMP> \
+  --output .private/fresh75-wbe/successor-route-binding.json
+```
+
+This command has no HTTP or Kubernetes client and cannot mutate the route. It
+fails unless both readbacks describe the exact new UID, exact preflight spec,
+paused phase, zero replicas, zero active Pods, c1 priority and the accepted
+checkpoint export revision. The output is create-once.
+
+After live parity and the fresh TensorLake inventory exist, put their exact
+file references plus the successor binding reference in an unsigned gate draft
+and seal it:
+
+```bash
+uv run python -m evals.webexploitbench.tensorlake.checkpoint_collection_study \
+  seal-live-gate \
+  --plan configs/evaluation/qwen38-fresh75-step230-opencode-wbe-matched-v1.json \
+  --draft .private/fresh75-wbe/canary-live-gate.draft.json \
+  --output .private/fresh75-wbe/canary-live-gate.json
+```
+
+The sealer reopens the successor binding, live parity and all 13 reserved
+sandbox identities, and refuses a census or parity observation older than ten
+minutes. `authorize-stage` rechecks the same receipt immediately before the
+collection consumer starts. The `full` stage additionally requires the exact
+canary-acceptance receipt.
+
 ### Reproducible Qwen3.8 evidence capture
 
 After the exact successor has been registered once, the collection plans and
@@ -248,6 +292,7 @@ serving evidence with:
 uv run python -m evals.webexploitbench.tensorlake.qwen38_serving_evidence capture \
   --study-plan configs/evaluation/qwen38-fresh75-step230-opencode-wbe-matched-v1.json \
   --preflight .private/fresh75-wbe/preflight.json \
+  --route-binding .private/fresh75-wbe/successor-route-binding.json \
   --provenance .private/fresh75-wbe/checkpoint-export-references.json \
   --stage-acceptance docs/evidence/qwen38-fresh75-step230-inference-stage-v2-accepted-20260915.json \
   --model-lock configs/models/qwen38-27b-1d4bf0f2.lock.json \
