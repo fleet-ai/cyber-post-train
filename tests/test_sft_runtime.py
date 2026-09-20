@@ -356,9 +356,7 @@ def test_qwen38_policy_learning_rate_queries_every_planned_rank(monkeypatch, tmp
             return refs
 
     fake_ray = ModuleType("ray")
-    fake_ray.get = (
-        lambda observed: events.append(("ray.get", observed is refs)) or [3e-5] * 8
-    )
+    fake_ray.get = lambda observed: events.append(("ray.get", observed is refs)) or [3e-5] * 8
     monkeypatch.setitem(sys.modules, "ray", fake_ray)
     value = plan(tmp_path)
     value["lora"] = {}
@@ -369,9 +367,7 @@ def test_qwen38_policy_learning_rate_queries_every_planned_rank(monkeypatch, tmp
 
 
 @pytest.mark.parametrize("defect", ["actor_count", "ref_count", "result_count"])
-def test_qwen38_policy_learning_rate_rejects_incomplete_dispatch(
-    monkeypatch, tmp_path, defect
-):
+def test_qwen38_policy_learning_rate_rejects_incomplete_dispatch(monkeypatch, tmp_path, defect):
     calls = []
     refs = [object() for _ in range(7 if defect == "ref_count" else 8)]
 
@@ -389,9 +385,7 @@ def test_qwen38_policy_learning_rate_rejects_incomplete_dispatch(
     value["lora"] = {}
 
     with pytest.raises(ValueError):
-        _qwen38_policy_learning_rate(
-            SimpleNamespace(_actor_groups={"policy": Group()}), value
-        )
+        _qwen38_policy_learning_rate(SimpleNamespace(_actor_groups={"policy": Group()}), value)
     assert calls == ([] if defect == "actor_count" else [("pass_through", "get_lr")])
 
 
@@ -1262,6 +1256,29 @@ def test_failure_finalize_is_independent_of_disk_and_summary(
     }
 
 
+def test_failure_finalize_includes_only_known_qualification_stage(tmp_path, monkeypatch):
+    monkeypatch.setitem(sys.modules, "wandb", SimpleNamespace(run=None))
+    trainer = SimpleNamespace(
+        _ray_gpu_monitor=None,
+        global_step=1,
+        plan={"plan_sha256": "b" * 64},
+        public_runtime_stage="device_ready",
+        public_qualification_stage="worker_lr_validation_started",
+    )
+
+    assert finalize_failed_run(trainer, tmp_path, ValueError("private failure")) == []
+
+    stage = json.loads((tmp_path / "FAILURE_STAGE.json").read_text())
+    assert stage.pop("receipt_sha256") == _unsigned_digest(stage)
+    assert stage == {
+        "error_class": "ValueError",
+        "optimizer_step": 1,
+        "plan_sha256": "b" * 64,
+        "qualification_stage": "worker_lr_validation_started",
+        "stage": "device_ready",
+    }
+
+
 def test_native_destructor_cannot_mark_failure_successful():
     calls = []
 
@@ -1596,6 +1613,7 @@ def test_qwen38_train_step_queries_all_rank_lr_before_optimizer(monkeypatch, tmp
 
     value = plan(tmp_path)
     value["lora"] = {}
+    value["pause_after_step"] = 1
     cfg = SFTConfig.from_cli_overrides(sft_overrides(value))
     trainer = _make_trainer_class()(cfg, build_skyrl_config_for_sft(cfg), value)
     trainer._torch_profiler_enabled = False
@@ -1637,6 +1655,10 @@ def test_qwen38_train_step_queries_all_rank_lr_before_optimizer(monkeypatch, tmp
     assert result["grad_norm"] == 1.0
     assert trainer.extra_train_metrics["train/lr"] == 3e-5
     assert trainer.extra_train_metrics["train/supervised_tokens"] == 1
+    qualification = json.loads((tmp_path / "QUALIFICATION_STAGE.json").read_text())
+    assert qualification.pop("receipt_sha256") == _unsigned_digest(qualification)
+    assert qualification["stage"] == "step_evidence_ready"
+    assert qualification["optimizer_step"] == 0
 
 
 @pytest.mark.skipif(
@@ -1825,9 +1847,7 @@ def test_exact_native_loop_eval_never_optimizes_and_saves_final(
     )
     assert len([item for _, item in logs if "train/loss" in item]) == final_step
     assert all("train/lr" in item for _, item in logs if "train/loss" in item)
-    assert all(
-        item["train/lr"] == 1e-6 for _, item in logs if "train/loss" in item
-    )
+    assert all(item["train/lr"] == 1e-6 for _, item in logs if "train/loss" in item)
     assert logs[-1][1]["train/global_step"] == final_step
     assert logs[-1][0] == final_step + int(
         not outcomes_only and not pause and final_step % interval != 0

@@ -62,6 +62,19 @@ PUBLIC_RUNTIME_STAGES = {
     "device_backload_started",
     "device_ready",
 }
+QWEN38_QUALIFICATION_STAGES = {
+    "forward_backward_started",
+    "forward_backward_complete",
+    "rank_lr_query_started",
+    "rank_lr_query_complete",
+    "worker_lr_validation_started",
+    "worker_lr_validated",
+    "lr_consensus_validated",
+    "optimizer_update_started",
+    "optimizer_update_returned",
+    "gradient_validated",
+    "step_evidence_ready",
+}
 WATCHDOG_POLL_SECONDS = 60
 WATCHDOG_STARTUP_SECONDS = 30 * 60
 WATCHDOG_IDLE_SECONDS = 20 * 60
@@ -233,8 +246,8 @@ QWEN38_LORA_ONE_STEP_PLAN = {
         "wandb",
     ],
     "schema": DENSE_SCHEMA,
-    "run_name": "chris-q38-lora-sft-c1-v5",
-    "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v5",
+    "run_name": "chris-q38-lora-sft-c1-v6",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v6",
     "model": {
         "repo": "Qwen/Qwen3.8-27B",
         "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
@@ -283,8 +296,8 @@ QWEN38_LORA_ONE_STEP_PLAN = {
         "entity": "thefleet",
         "project": "cyber-post-train",
         "group": "qwen38-lora-sft-goal-v1",
-        "run_id": "chris-q38-lora-sft-c1-v5",
-        "name": "chris-q38-lora-sft-c1-v5",
+        "run_id": "chris-q38-lora-sft-c1-v6",
+        "name": "chris-q38-lora-sft-c1-v6",
         "tags": [
             "qwen38",
             "lora",
@@ -298,6 +311,7 @@ QWEN38_LORA_ONE_STEP_PLAN = {
             "native-dataset-contract-repair",
             "all-rank-lr-evidence-repair",
             "dev-init-contract-repair",
+            "step-boundary-evidence-repair",
         ],
     },
 }
@@ -1278,10 +1292,17 @@ def finalize_failed_run(trainer, output: Path, error: BaseException) -> list[str
         stage = getattr(trainer, "public_runtime_stage", None)
         if stage not in PUBLIC_RUNTIME_STAGES:
             stage = "trainer_constructed"
+        qualification_stage = getattr(trainer, "public_qualification_stage", None)
+        qualification = (
+            {"qualification_stage": qualification_stage}
+            if qualification_stage in QWEN38_QUALIFICATION_STAGES
+            else {}
+        )
         write_receipt(
             output / "FAILURE_STAGE.json",
             {
                 **public_failure_details(error),
+                **qualification,
                 "optimizer_step": getattr(trainer, "global_step", 0),
                 "plan_sha256": trainer.plan["plan_sha256"],
                 "stage": stage,
@@ -1984,6 +2005,7 @@ def _make_trainer_class():
             self.last_step_evidence = None
             self.wandb_binding = None
             self.public_runtime_stage = "trainer_constructed"
+            self.public_qualification_stage = None
 
         def _record_runtime_stage(self, stage):
             if stage not in PUBLIC_RUNTIME_STAGES:
@@ -1991,6 +2013,24 @@ def _make_trainer_class():
             self.public_runtime_stage = stage
             write_receipt(
                 self.output / "RUNTIME_STAGE.json",
+                {
+                    "optimizer_step": self.global_step,
+                    "plan_sha256": self.plan["plan_sha256"],
+                    "stage": stage,
+                    "observed_at_unix": time.time(),
+                },
+                replace=True,
+            )
+
+        def _record_qualification_stage(self, stage):
+            """Expose only the last completed one-step boundary, never model data."""
+            if not (_is_qwen38_lora(self.plan) and self.plan.get("pause_after_step") == 1):
+                return
+            if stage not in QWEN38_QUALIFICATION_STAGES:
+                raise ValueError("unknown public qualification stage")
+            self.public_qualification_stage = stage
+            write_receipt(
+                self.output / "QUALIFICATION_STAGE.json",
                 {
                     "optimizer_step": self.global_step,
                     "plan_sha256": self.plan["plan_sha256"],
@@ -2219,33 +2259,48 @@ def _make_trainer_class():
             # Query every native optimizer rank before mutation so missing,
             # divergent or invalid evidence cannot produce an unaudited step.
             timings = {}
+            if _is_qwen38_lora(self.plan):
+                self._record_qualification_stage("forward_backward_started")
             with Timer("forward_backward", timings):
                 output = self.dispatch.forward_backward("policy", batch, loss_fn="cross_entropy")
+            if _is_qwen38_lora(self.plan):
+                self._record_qualification_stage("forward_backward_complete")
             loss = float(output.metrics.get("final_loss", output.metrics.get("loss", float("nan"))))
             if _is_qwen38_lora(self.plan):
+                self._record_qualification_stage("rank_lr_query_started")
                 lr = self._policy_learning_rate()
+                self._record_qualification_stage("rank_lr_query_complete")
+                self._record_qualification_stage("worker_lr_validation_started")
                 metric_lr = _reconcile_worker_learning_rates(
                     [output.metrics.get("policy_lr")], expected_ranks=1
                 )
+                self._record_qualification_stage("worker_lr_validated")
                 if metric_lr != lr:
                     raise ValueError("worker metric learning rate differs from optimizer ranks")
+                self._record_qualification_stage("lr_consensus_validated")
             else:
                 lr = float(output.metrics["lr"])
             if not math.isfinite(loss) or not math.isfinite(lr) or lr <= 0:
                 raise ValueError("nonfinite training metric")
+            if _is_qwen38_lora(self.plan):
+                self._record_qualification_stage("optimizer_update_started")
             with Timer("optim_step", timings):
                 grad_norm = self.dispatch.optim_step("policy")
+            if _is_qwen38_lora(self.plan):
+                self._record_qualification_stage("optimizer_update_returned")
             if self._torch_profiler_enabled:
                 self.dispatch.profile_step("policy")
             gradient = float(grad_norm)
-            if not math.isfinite(gradient) or (
-                _is_qwen38_lora(self.plan) and gradient <= 0
-            ):
+            if not math.isfinite(gradient) or (_is_qwen38_lora(self.plan) and gradient <= 0):
                 raise ValueError("nonfinite training metric")
+            if _is_qwen38_lora(self.plan):
+                self._record_qualification_stage("gradient_validated")
             self.last_step_evidence = {
                 "forward_loss": loss,
                 "lora_gradient_norm": gradient,
             }
+            if _is_qwen38_lora(self.plan):
+                self._record_qualification_stage("step_evidence_ready")
             targets = int((batch["loss_mask"] > 0).sum().item())
             self.target_tokens_seen += targets
             self.extra_train_metrics = {
