@@ -14,6 +14,7 @@ SPLIT = ROOT / "configs/data/fleet-blackbox-current-study-split-20260914-v2.json
 TASK_SET = ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json"
 CONFIG = ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-matched-pass1-v1.json"
 BASE_CONFIG = ROOT / "configs/evaluation/qwen38-base-fleet-dev17-opencode-pass1-v1.json"
+BACKLOG = ROOT / "configs/evaluation/qwen38-fleet-dev17-backlog-v1.json"
 SUCCESSOR_JOB = ROOT / "evals/fleet/cluster/qwen38-base-dev17-opencode-pass1-v1-job.yaml"
 SUCCESSOR_SCRIPT = ROOT / "evals/fleet/scripts/run_qwen38_dev17_single_arm_v1.sh"
 
@@ -63,6 +64,22 @@ def test_base_only_arm_preserves_exact_pairing_protocol():
     assert base["routes"]["base"] == paired["routes"]["base"]
     for field in ("selection", "treatment", "images", "sampling", "pass_k"):
         assert base[field] == paired[field]
+
+
+def test_backlog_reuses_frozen_protocol_and_unique_create_once_targets():
+    backlog = read(BACKLOG)
+    base = evaluate.compile_eval(read(BASE_CONFIG), relative_to=BASE_CONFIG.parent)
+    protocol = backlog["frozen_protocol"]
+    assert protocol["selection_sha256"] == read(TASK_SET)["selection_sha256"]
+    assert protocol["harness"] == base["treatment"]["harness"]
+    assert protocol["sampling"] == base["sampling"]
+    assert protocol["images"] == base["images"]
+    assert protocol["pass_k"] == base["pass_k"] == 1
+    outputs = [row["output_root"] for row in backlog["candidates"]]
+    databases = [row["database"] for row in backlog["candidates"]]
+    assert len(outputs) == len(set(outputs)) == 4
+    assert len(databases) == len(set(databases)) == 4
+    assert backlog["frozen_protocol"]["final_test_access"] == "sealed"
 
 
 def test_successor_is_alert_silent_cpu_only_and_create_once():
