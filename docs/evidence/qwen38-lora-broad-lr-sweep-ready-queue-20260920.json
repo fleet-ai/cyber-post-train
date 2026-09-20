@@ -1,12 +1,12 @@
 {
   "schema": "cyber_qwen38_lora_broad_lr_sweep_ready_queue_v1",
   "status": "local_launch_artifacts_ready_external_gates_pending",
-  "observed_at": "2026-09-20T21:21:13Z",
+  "observed_at": "2026-09-20T23:50:30Z",
   "scientific_control": {
     "anchor_config_path": "configs/runs/qwen38-27b-lora-sft-r64-a32-anchor-v1.json",
     "anchor_config_file_sha256": "sha256:afb5e10f6a703ef033ceb4031785b5353773c2777e3d5fc1109bb4fbabfd83af",
-    "anchor_plan_sha256": "sha256:87efd86dd703f875c75ec64dea2b036be1bc766aba18dc7cd2fe4041ec62dcc1",
-    "anchor_request_sha256": "sha256:bb0420c3b9877897c2447427c928ebaee871216851800604a8c57702ffc7c890",
+    "anchor_plan_sha256": "sha256:17ffa11610f69d7df5a45f6a7dbfe213556290f42295a98edbfd1ea563a0cdbf",
+    "anchor_request_sha256": "sha256:2ae45c7abf1a7aab322987614afd49ac6ea99bd34c37b12e77f5461ba1fb09a9",
     "learning_rate": 0.00003,
     "adapter": {
       "type": "lora",
@@ -58,9 +58,9 @@
       "output_root": "/mnt/sfs/jobs/chris-q38-lora-lr1-v1",
       "learning_rate": 0.00001,
       "max_steps": 1837,
-      "plan_sha256": "sha256:7fe82c6b3f774f6657168b494da4a461da71abb51b4e9f9fef51b0bc240ff3bc",
-      "request_sha256": "sha256:f318b14c4249fde652fa70d7fb9a338537e51a19979ea72127c85deb0f4957f2",
-      "request_bytes": 120432,
+      "plan_sha256": "sha256:f9c83556f0b5b2239e44a56c2889478df26f7bbcbc49b77a8ab16abe02668412",
+      "request_sha256": "sha256:9e0b1159877a08c3638588158ef4a00f4cb43946c23900121a0487de12bff2ac",
+      "request_bytes": 120856,
       "priority_class": "c1",
       "workers": 1,
       "gpus_per_worker": 8,
@@ -77,9 +77,9 @@
       "output_root": "/mnt/sfs/jobs/chris-q38-lora-lr100-v1",
       "learning_rate": 0.0001,
       "max_steps": 1837,
-      "plan_sha256": "sha256:898e81ee3dfadd9661908e5b34f718f49433794b2ae5e65d82cbb10f915e4151",
-      "request_sha256": "sha256:fd25807513b097feb1510edc766277a6946a1f0168e3153d607655811df3cacb",
-      "request_bytes": 120452,
+      "plan_sha256": "sha256:53a9162fe27868cfcdd41835660147873365f65926cf0d7d0b8d4eb87de6318e",
+      "request_sha256": "sha256:96c25f99187bb00815597cdbba7560ffa0af8285c5589edf98a31c7f2b88965e",
+      "request_bytes": 120876,
       "priority_class": "c1",
       "workers": 1,
       "gpus_per_worker": 8,
@@ -105,5 +105,5 @@
   ],
   "submission_blocker": null,
   "failure_budget_policy": "removed_by_user_2026-09-20; failures remain evidence and trigger cleanup/repair, not a submission stop",
-  "receipt_sha256": "f81aef93e2973090b292aededd02a742c7d0fde12fb0da17618271689ca15d69"
+  "receipt_sha256": "ddf168331c53a5faa18da6a4820f00ec370fdbd8b068f843f74f7bc563b1c335"
 }
