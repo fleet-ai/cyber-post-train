@@ -135,8 +135,7 @@ def seal_plan(
     if runtime_receipt.name != CHECKPOINT_FILENAME:
         raise ValueError("checkpoint runtime input must be one exact QWEN38_LORA_CHECKPOINT.json")
     if checkpoint_runtime_path is not None and (
-        runtime_receipt.parts[:4] != ("/", "mnt", "sfs", "jobs")
-        or len(runtime_receipt.parts) != 6
+        runtime_receipt.parts[:4] != ("/", "mnt", "sfs", "jobs") or len(runtime_receipt.parts) != 6
     ):
         raise ValueError("checkpoint runtime input must be one direct SFS job receipt")
     root = _canonical_path(run_dir, "run directory")
@@ -263,6 +262,7 @@ def job_request(plan: dict) -> dict:
             "resources": plan["resources"],
             "priority_class": "c1",
             "requeueIfPreempted": False,
+            "failureAlerts": False,
             "secrets": [],
             "image_pull_secrets": ["ghcr-pull"],
             "env": {
@@ -482,11 +482,15 @@ def complete_native_export_from_base(
     def read_index(root: Path) -> dict[str, str]:
         value = json.loads((root / "model.safetensors.index.json").read_text())
         weight_map = value.get("weight_map")
-        if not isinstance(weight_map, dict) or not weight_map or any(
-            not isinstance(name, str)
-            or not isinstance(shard, str)
-            or not re.fullmatch(r"model-\d{5}-of-\d{5}\.safetensors", shard)
-            for name, shard in weight_map.items()
+        if (
+            not isinstance(weight_map, dict)
+            or not weight_map
+            or any(
+                not isinstance(name, str)
+                or not isinstance(shard, str)
+                or not re.fullmatch(r"model-\d{5}-of-\d{5}\.safetensors", shard)
+                for name, shard in weight_map.items()
+            )
         ):
             raise ValueError("HF tensor index is incomplete or unsafe")
         return weight_map
@@ -502,11 +506,11 @@ def complete_native_export_from_base(
         raise ValueError("native export omitted a non-frozen language tensor")
     base_shards = set(base_map.values())
     partial_shards = set(partial_map.values())
-    if (
-        base_shards != {name for name in base_files if name.endswith(".safetensors")}
-        or partial_shards
-        != {path.name for path in partial.iterdir() if path.suffix == ".safetensors"}
-    ):
+    if base_shards != {
+        name for name in base_files if name.endswith(".safetensors")
+    } or partial_shards != {
+        path.name for path in partial.iterdir() if path.suffix == ".safetensors"
+    }:
         raise ValueError("native/base shard files differ from their exact tensor indexes")
 
     destination.mkdir(mode=0o700)
@@ -668,9 +672,9 @@ def _start_reload_model_subprocess(root: Path, run_root: Path):
     )
     env = os.environ.copy()
     env["CUDA_VISIBLE_DEVICES"] = "0"
-    env["PYTHONPATH"] = os.pathsep.join(
-        [str(package_root), env.get("PYTHONPATH", "")]
-    ).rstrip(os.pathsep)
+    env["PYTHONPATH"] = os.pathsep.join([str(package_root), env.get("PYTHONPATH", "")]).rstrip(
+        os.pathsep
+    )
     with log_path.open("xb") as stream:
         process = subprocess.Popen(
             [sys.executable, "-c", code],
@@ -730,10 +734,7 @@ def run(plan: dict) -> dict:
     partial_first = run_root / ".native-partial-first"
     partial_second = run_root / ".native-partial-second"
     _stage("destination_check")
-    if any(
-        path.exists() or path.is_symlink()
-        for path in (final, partial_first, partial_second)
-    ):
+    if any(path.exists() or path.is_symlink() for path in (final, partial_first, partial_second)):
         raise FileExistsError("create-once export destination already exists")
     _stage("checkpoint_validation")
     checkpoint_path = Path(plan["checkpoint_receipt"]["path"])

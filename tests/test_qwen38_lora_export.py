@@ -80,9 +80,7 @@ def test_seal_plan_rejects_noncanonical_input_or_overlapping_output(
         )
 
 
-def test_seal_plan_can_bind_separate_exact_sfs_runtime_receipt(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_seal_plan_can_bind_separate_exact_sfs_runtime_receipt(tmp_path: Path, monkeypatch) -> None:
     receipt = tmp_path / export.CHECKPOINT_FILENAME
     file_sha256 = write_checkpoint(receipt)
     monkeypatch.setattr(export, "validate_checkpoint_receipt", lambda value: checkpoint_identity())
@@ -135,6 +133,7 @@ def test_job_request_is_exact_image_create_once_c1_and_score_free(
     )
 
     request = export.job_request(plan)
+    assert request["failureAlerts"] is False
     validate_request(request)
     assert request["image"] == export.QWEN38_MEGATRON_IMAGE
     assert request["workers"] == 1 and request["gpus_per_worker"] == 8
@@ -389,12 +388,16 @@ def test_completion_restores_only_frozen_visual_and_mtp_base_layout(tmp_path: Pa
         repeated,
         base_files=base_files,
     )
-    assert result == repeated_result == {
-        "base_tensor_count": 3,
-        "native_tensor_count": 1,
-        "restored_frozen_tensor_count": 2,
-        "restored_prefixes": ["model", "mtp"],
-    }
+    assert (
+        result
+        == repeated_result
+        == {
+            "base_tensor_count": 3,
+            "native_tensor_count": 1,
+            "restored_frozen_tensor_count": 2,
+            "restored_prefixes": ["model", "mtp"],
+        }
+    )
     base_inspection = export.inspect_hf_export(base)
     completed_inspection = export.inspect_hf_export(completed)
     assert completed_inspection == export.inspect_hf_export(repeated)

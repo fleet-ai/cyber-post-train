@@ -82,9 +82,7 @@ def seal(args: argparse.Namespace) -> dict:
 
 def verify(args: argparse.Namespace) -> dict:
     control = Path(args.control_dir)
-    checkpoint, _ = _read_checkpoint(
-        Path(args.checkpoint_receipt), args.checkpoint_file_sha256
-    )
+    checkpoint, _ = _read_checkpoint(Path(args.checkpoint_receipt), args.checkpoint_file_sha256)
     export_path = Path(args.run_dir) / RECEIPT_FILENAME
     export = json.loads(export_path.read_text())
     identity = validate_export_receipt(

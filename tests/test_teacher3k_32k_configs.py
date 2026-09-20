@@ -20,10 +20,7 @@ def test_teacher3k_32k_manifest_preserves_unique_targets_and_exclusions():
         (EVIDENCE / "qwen38-teacher3k-32k-materialization-receipt-20260920.json").read_text()
     )
     verification = json.loads(
-        (
-            EVIDENCE
-            / "qwen38-teacher3k-32k-independent-verification-20260920.json"
-        ).read_text()
+        (EVIDENCE / "qwen38-teacher3k-32k-independent-verification-20260920.json").read_text()
     )
 
     assert manifest["sha256"] == MANIFEST_SHA256
@@ -44,12 +41,9 @@ def test_teacher3k_32k_manifest_preserves_unique_targets_and_exclusions():
     assert len(manifest["files"]["train"]["task_keys"]) == 496
     assert manifest["rechunk_provenance"]["task_versions_preserved"] == 1_176
     assert (
-        manifest["rechunk_provenance"]["held_out_task_families_excluded_across_all_versions"]
-        == 25
+        manifest["rechunk_provenance"]["held_out_task_families_excluded_across_all_versions"] == 25
     )
-    assert not any(
-        "webexploit" in key.lower() for key in manifest["files"]["train"]["task_keys"]
-    )
+    assert not any("webexploit" in key.lower() for key in manifest["files"]["train"]["task_keys"])
     assert receipt["manifest_sha256"] == verification["manifest_sha256"] == MANIFEST_SHA256
     assert receipt["train_parquet_sha256"] == verification["train_sha256"] == TRAIN_SHA256
     assert receipt["supervised_tokens"] == verification["supervised_tokens"] == 57_384_881
