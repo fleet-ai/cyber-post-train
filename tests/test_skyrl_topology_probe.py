@@ -59,13 +59,13 @@ def test_probe_fleetjob_is_one_gpu_node_with_cpu_head_and_explicit_user(plan) ->
     manifest = probe.fleetjob_manifest(plan)
     spec = manifest["spec"]
     assert manifest["metadata"] == {
-        "name": "chris-q38-skyrl-probe-v2",
+        "name": "chris-q38-skyrl-probe-v3",
         "namespace": "fleet-train-jobs",
     }
     assert spec["fleet"] == {
         "projectName": "fleetjob-dev",
         "auth": {"secretRef": {"name": "fleet-api", "key": "FLEET_API_KEY"}},
-        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v2",
+        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v3",
         "models": [
             {
                 "path": "Qwen/Qwen3.8-27B",
@@ -83,7 +83,6 @@ def test_probe_fleetjob_is_one_gpu_node_with_cpu_head_and_explicit_user(plan) ->
         "workerGroups": {
             "gpu": {
                 "queuePriorityClass": "q1",
-                "topology": {"mode": "unconstrained"},
             }
         },
     }

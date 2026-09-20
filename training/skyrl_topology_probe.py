@@ -38,7 +38,7 @@ PREFLIGHT_PACKET_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_packet_v1"
 PREFLIGHT_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_preview_v1"
 PREFLIGHT_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_cpu_preflight_rejection_v1"
 PROBE_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_failure_v1"
-PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v12"
+PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v13"
 PREFLIGHT_RECEIPT = "/dev/termination-log"
 MODULE = "training.skyrl_topology_probe"
 CONFIG_PATH = ROOT / "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json"
@@ -88,7 +88,7 @@ def _expected_execution() -> dict:
         "namespace": "fleet-train-jobs",
         "project_name": "fleetjob-dev",
         "auth_secret": {"name": "fleet-api", "key": "FLEET_API_KEY"},
-        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v2",
+        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v3",
         "output_pvc": "sfs-shared",
         "output_registry_mount": "/mnt/cyber-output-registry",
         "output_registry_subpath": "models/fleetjob-dev",
@@ -381,7 +381,6 @@ def _fleetjob(
                 "workerGroups": {
                     "gpu": {
                         "queuePriorityClass": execution["queue_priority"],
-                        "topology": {"mode": "unconstrained"},
                     }
                 },
             },
