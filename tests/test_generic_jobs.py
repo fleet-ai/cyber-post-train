@@ -576,3 +576,39 @@ def test_status_is_allowlisted_and_name_cannot_inject_route():
         assert api.status("safe")["status"] == "SUCCEEDED"
         with pytest.raises(JobsError):
             api.status("../runs")
+
+
+def test_delete_accepts_exact_empty_204_and_never_parses_json():
+    seen = []
+
+    def handler(req):
+        seen.append((req.method, req.url.path))
+        return httpx.Response(204)
+
+    with client(handler) as api:
+        assert api.delete("owned-run-1234abcd") == {
+            "name": "owned-run-1234abcd",
+            "deleted": True,
+            "http_status": 204,
+        }
+    assert seen == [("DELETE", "/v1/runs/owned-run-1234abcd")]
+
+
+@pytest.mark.parametrize(
+    "response",
+    [httpx.Response(200, json={}), httpx.Response(202), httpx.Response(204, content=b"unexpected")],
+)
+def test_delete_rejects_every_noncanonical_success_response(response):
+    with (
+        client(lambda req: response) as api,
+        pytest.raises(JobsError, match="reconcile|unexpected"),
+    ):
+        api.delete("owned-run-1234abcd")
+
+
+def test_delete_rejects_invalid_name_before_network():
+    with (
+        client(lambda req: pytest.fail("network must not be called")) as api,
+        pytest.raises(JobsError, match="invalid run name"),
+    ):
+        api.delete("../runs")

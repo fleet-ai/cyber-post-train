@@ -238,7 +238,7 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
         # compares every scientific, data, resource, runtime and W&B field.
         qualification = (
             QWEN38_LORA_PRODUCTION_QUALIFICATION
-            if config["name"] in QWEN38_LORA_BROAD_FULL_PLANS
+            if config["name"] in QWEN38_LORA_BROAD_FULL_PLANS or "recovery" in config
             else QWEN38_LORA_QUALIFICATION
         )
         plan["qualification_gate"] = copy.deepcopy(qualification)

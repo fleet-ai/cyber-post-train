@@ -12,7 +12,7 @@ import json
 from pathlib import Path
 
 from . import checkpoints
-from .sft_runtime import digest, write_receipt
+from .sft_runtime import _is_qwen38_lora, digest, write_receipt
 
 
 def bind(plan: dict, config: dict, *, relative_to: Path) -> None:
@@ -99,11 +99,38 @@ def equal_state(left, right) -> bool:
     return left == right
 
 
-def worker_class(plan: dict):
-    from skyrl.backends.skyrl_train.workers.fsdp.fsdp_worker import FSDPPolicyWorkerBase
+def megatron_optimizer_steps(optimizer) -> list[float]:
+    """Read every available Megatron/FusedAdam counter after native restore."""
+    values = []
+    optimizers = getattr(optimizer, "chained_optimizers", [optimizer])
+    for wrapper in optimizers:
+        inner = getattr(wrapper, "optimizer", None)
+        if inner is None:
+            continue
+        for group in inner.param_groups:
+            if "step" in group:
+                value = group["step"]
+                values.append(float(value.item() if hasattr(value, "item") else value))
+        for state in inner.state.values():
+            if "step" in state:
+                value = state["step"]
+                values.append(float(value.item() if hasattr(value, "item") else value))
+    return values
 
-    parent = FSDPPolicyWorkerBase
-    if "lora" in plan:
+
+def worker_class(plan: dict):
+    qwen38_megatron = _is_qwen38_lora(plan)
+    if qwen38_megatron:
+        from skyrl.backends.skyrl_train.workers.megatron.megatron_worker import (
+            MegatronPolicyWorkerBase,
+        )
+
+        parent = MegatronPolicyWorkerBase
+    else:
+        from skyrl.backends.skyrl_train.workers.fsdp.fsdp_worker import FSDPPolicyWorkerBase
+
+        parent = FSDPPolicyWorkerBase
+    if "lora" in plan and not qwen38_megatron:
         from .glm_runtime import worker_class as glm_worker
 
         parent = glm_worker(plan)
@@ -122,6 +149,22 @@ def worker_class(plan: dict):
             ):
                 raise ValueError("recovery must restore exact model, optimizer and scheduler")
             super().load_checkpoint(ckpt_dir, True, True)
+            if qwen38_megatron:
+                scheduler_state = self.scheduler.state_dict()
+                if scheduler_state.get("num_steps") != expected:
+                    raise ValueError("loaded Megatron scheduler step differs from checkpoint")
+                steps = megatron_optimizer_steps(self.optimizer)
+                if not steps or any(step != expected for step in steps):
+                    raise ValueError("loaded Megatron optimizer counters differ from checkpoint")
+                import torch.distributed as dist
+
+                return {
+                    "rank": dist.get_rank(),
+                    "optimizer_step": expected,
+                    "optimizer_states": len(steps),
+                    "scheduler_restored": True,
+                    "backend": "megatron",
+                }
             steps = [float(s["step"].item()) for s in self.optimizer.state.values() if "step" in s]
             if not steps or any(s != expected for s in steps):
                 raise ValueError("loaded optimizer counters differ from the checkpoint")
@@ -156,14 +199,18 @@ def worker_class(plan: dict):
 @contextlib.contextmanager
 def use_worker(plan: dict):
     import ray
-    from skyrl.backends.skyrl_train.workers.fsdp import fsdp_worker
 
-    original = fsdp_worker.PolicyWorker
-    fsdp_worker.PolicyWorker = ray.remote(num_gpus=1)(worker_class(plan))
+    if _is_qwen38_lora(plan):
+        from skyrl.backends.skyrl_train.workers.megatron import megatron_worker as worker_module
+    else:
+        from skyrl.backends.skyrl_train.workers.fsdp import fsdp_worker as worker_module
+
+    original = worker_module.PolicyWorker
+    worker_module.PolicyWorker = ray.remote(num_gpus=1)(worker_class(plan))
     try:
         yield
     finally:
-        fsdp_worker.PolicyWorker = original
+        worker_module.PolicyWorker = original
 
 
 def load(trainer) -> int:

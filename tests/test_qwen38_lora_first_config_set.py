@@ -339,6 +339,34 @@ def test_broad_lora_lr_variants_are_exact_single_factor_controls(path, expected)
     assert {key for key in plan["recipe"] if plan["recipe"][key] != anchor["recipe"][key]} == {"lr"}
 
 
+def test_qwen38_recovery_gets_a_fresh_identity_only_from_exact_broad_source(monkeypatch):
+    from training import recovery, sft, sft_runtime
+
+    source = sft.compile_sft(read(PRODUCTION_ANCHOR), relative_to=RUNS)
+    resumed = copy.deepcopy(source)
+    resumed.update(
+        run_name="chris-q38-lora-anchor-resume-v1",
+        output_root="/mnt/sfs/jobs/chris-q38-lora-anchor-resume-v1",
+    )
+    resumed["wandb"].update(
+        run_id="chris-q38-lora-anchor-resume-v1",
+        name="chris-q38-lora-anchor-resume-v1",
+    )
+    resumed["recovery"] = {
+        "mode": "resume",
+        "checkpoint": {"source_plan": source, "optimizer_step": 40},
+    }
+    resumed["pause_after_step"] = 42
+    monkeypatch.setattr(recovery, "validate", lambda plan, check_files: None)
+
+    sft_runtime.validate_plan(resumed, check_files=False)
+
+    resumed["recovery"]["checkpoint"]["source_plan"] = copy.deepcopy(source)
+    resumed["recovery"]["checkpoint"]["source_plan"]["recipe"]["lr"] = 5e-5
+    with pytest.raises(ValueError, match="production-qualified broad"):
+        sft_runtime.validate_plan(resumed, check_files=False)
+
+
 @pytest.mark.parametrize("path", BROAD_LR_VARIANTS)
 @pytest.mark.parametrize(
     ("field", "replacement"),

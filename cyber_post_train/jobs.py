@@ -356,6 +356,29 @@ class Jobs:
             raise JobsError("invalid run name")
         return safe_status(self.request("GET", "/v1/runs/" + quote(name, safe="")))
 
+    def delete(self, name: str) -> dict:
+        """Release one exact Jobs API run; success is exactly HTTP 204.
+
+        DELETE is deliberately not routed through :meth:`request`: the API's
+        successful response has no JSON body.  A transport error is uncertain,
+        so callers must reconcile GET/Kubernetes state instead of repeating it.
+        """
+        if not re.fullmatch(r"[a-z0-9-]+", name):
+            raise JobsError("invalid run name")
+        try:
+            response = self.client.request("DELETE", "/v1/runs/" + quote(name, safe=""))
+        except httpx.RequestError:
+            raise JobsError(
+                "Jobs API DELETE transport failed; reconcile before any further action"
+            ) from None
+        if response.status_code != 204:
+            raise JobsError(
+                f"Jobs API DELETE returned HTTP {response.status_code}; reconcile before retry"
+            )
+        if response.content:
+            raise JobsError("Jobs API DELETE returned an unexpected response body")
+        return {"name": name, "deleted": True, "http_status": 204}
+
     def submit_once(self, config: dict, journal: Path) -> dict:
         validate_request(config)
         if journal.exists() or journal.is_symlink():

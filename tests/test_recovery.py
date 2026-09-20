@@ -10,7 +10,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 import torch
-from test_checkpoints import fixture
+from test_checkpoints import fixture, qwen38_megatron_fixture
 
 from training import checkpoints, recovery
 from training.sft_runtime import _unsigned_digest, write_receipt
@@ -46,6 +46,38 @@ def test_recovery_binds_exact_sealed_source_and_never_changes_recipe(tmp_path):
     assert p["recovery"]["checkpoint"] == manifest
     assert manifest["training_progress"] == {"supervised_tokens": 64, "best": None}
     assert not Path(p["output_root"]).exists()
+
+
+def test_recovery_accepts_sealed_qwen38_megatron_checkpoint(tmp_path, monkeypatch):
+    source_plan, _, manifest_path = qwen38_megatron_fixture(tmp_path, monkeypatch)
+    checkpoints.seal(source_plan, 2, manifest_path)
+    new = copy.deepcopy(source_plan)
+    new.update(run_name="qwen38-resume", output_root=str(tmp_path.parent / "qwen38-resume"))
+    new["wandb"]["run_id"] = "qwen38-resume"
+    recovery.bind(
+        new,
+        {
+            "manifest": manifest_path.name,
+            "sha256": recovery.digest(manifest_path),
+            "mode": "resume",
+        },
+        relative_to=tmp_path,
+    )
+    assert new["recovery"]["checkpoint"]["schema"] == checkpoints.QWEN38_MEGATRON_SCHEMA
+    assert new["recovery"]["checkpoint"]["optimizer_step"] == 2
+
+
+def test_megatron_optimizer_steps_reads_chained_group_and_state_counters():
+    first = SimpleNamespace(
+        optimizer=SimpleNamespace(
+            param_groups=[{"step": 40}], state={"x": {"step": torch.tensor(40)}}
+        )
+    )
+    second = SimpleNamespace(
+        optimizer=SimpleNamespace(param_groups=[{}], state={"y": {"step": torch.tensor(40.0)}})
+    )
+    value = SimpleNamespace(chained_optimizers=[first, second])
+    assert recovery.megatron_optimizer_steps(value) == [40.0, 40.0, 40.0]
 
 
 @pytest.mark.parametrize(
@@ -354,7 +386,8 @@ def test_native_resume_restores_exact_update_and_complete_epoch_coverage(
             def dp_size(self, role):
                 return 1
 
-            def forward_backward(self, role, batch, loss_fn):
+            def forward_backward(self, role, batch, loss_fn, return_per_token_outputs):
+                assert return_per_token_outputs is False
                 if t.global_step == stop:
                     raise RuntimeError("synthetic interruption after saved step")
                 valid = batch["loss_mask"].sum(1) > 0

@@ -21,6 +21,7 @@ from training.sft_runtime import (
     _qwen38_policy_learning_rate,
     _reconcile_worker_learning_rates,
     _run_setup_probe,
+    _scalar_sft_forward_backward,
     _setup_probe_plan,
     _unsigned_digest,
     build_runtime_configs,
@@ -36,6 +37,24 @@ from training.sft_runtime import (
     validate_runtime_sources,
     write_receipt,
 )
+
+
+def test_scalar_sft_forward_backward_disables_unused_per_token_outputs():
+    calls = []
+
+    class Dispatcher:
+        def forward_backward(self, *args, **kwargs):
+            calls.append((args, kwargs))
+            return "result"
+
+    batch = object()
+    assert _scalar_sft_forward_backward(Dispatcher(), batch) == "result"
+    assert calls == [
+        (
+            ("policy", batch),
+            {"loss_fn": "cross_entropy", "return_per_token_outputs": False},
+        )
+    ]
 
 
 def plan(tmp_path):
@@ -1659,9 +1678,10 @@ def test_qwen38_train_step_queries_all_rank_lr_before_optimizer(monkeypatch, tmp
     class Dispatcher:
         _actor_groups = {"policy": Group()}
 
-        def forward_backward(self, model, batch, loss_fn):
+        def forward_backward(self, model, batch, loss_fn, return_per_token_outputs):
             events.append("forward_backward")
             assert (model, loss_fn) == ("policy", "cross_entropy")
+            assert return_per_token_outputs is False
             return SimpleNamespace(metrics={"loss": 1.0, "policy_lr": metric_lr})
 
         def optim_step(self, model):
@@ -1724,7 +1744,8 @@ def test_qwen38_train_step_rejects_lr_defect_before_optimizer(
     class Dispatcher:
         _actor_groups = {"policy": Group()}
 
-        def forward_backward(self, model, batch, loss_fn):
+        def forward_backward(self, model, batch, loss_fn, return_per_token_outputs):
+            assert return_per_token_outputs is False
             return SimpleNamespace(metrics={"loss": 1.0, "policy_lr": metric_lr})
 
         def optim_step(self, model):
@@ -1820,8 +1841,9 @@ def test_exact_native_loop_eval_never_optimizes_and_saves_final(
         def dp_size(self, model):
             return 8
 
-        def forward_backward(self, model, batch, loss_fn):
+        def forward_backward(self, model, batch, loss_fn, return_per_token_outputs):
             assert loss_fn == "cross_entropy"
+            assert return_per_token_outputs is False
             return SimpleNamespace(metrics={"loss": 1.0, "lr": 1e-6})
 
         def optim_step(self, model):
