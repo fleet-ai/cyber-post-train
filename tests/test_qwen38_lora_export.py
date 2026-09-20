@@ -191,6 +191,58 @@ def test_plan_and_runtime_expose_no_evaluation_or_optimizer_path() -> None:
     assert source.count("trainer.dispatch.save_hf_model") == 2
     assert "AutoModelForCausalLM.from_pretrained" in source
     assert "AutoTokenizer.from_pretrained" in source
+    assert "ray.remote(num_cpus=4, num_gpus=1)" not in source
+    assert "_start_reload_model_subprocess" in source
+
+
+def test_full_reload_uses_an_isolated_visible_gpu_without_a_ray_lease(
+    tmp_path: Path, monkeypatch
+) -> None:
+    captured = {}
+
+    class Process:
+        def wait(self, timeout):
+            captured["timeout"] = timeout
+            return 0
+
+        def poll(self):
+            return 0
+
+    def popen(args, **kwargs):
+        captured["args"] = args
+        captured["kwargs"] = kwargs
+        return Process()
+
+    monkeypatch.setattr(export.subprocess, "Popen", popen)
+    process, result_path = export._start_reload_model_subprocess(
+        tmp_path / "merged-hf",
+        tmp_path,
+    )
+    assert captured["args"][:2] == [export.sys.executable, "-c"]
+    assert captured["kwargs"]["env"]["CUDA_VISIBLE_DEVICES"] == "0"
+    assert str(Path(export.__file__).resolve().parents[1]) in captured["kwargs"]["env"][
+        "PYTHONPATH"
+    ].split(export.os.pathsep)
+    assert (tmp_path / "private_logs" / "merged-model-reload.log").is_file()
+
+    result_path.write_text(
+        json.dumps(
+            {
+                "model_class": "QwenModel",
+                "tokenizer_class": "QwenTokenizer",
+                "logit_values": 42,
+                "finite_logits": True,
+            }
+        )
+    )
+    assert export._finish_reload_model_subprocess(process, result_path) == {
+        "model_class": "QwenModel",
+        "tokenizer_class": "QwenTokenizer",
+        "logit_values": 42,
+        "finite_logits": True,
+    }
+    assert captured["timeout"] == 900
+    assert not result_path.exists()
 
 
 def test_plan_validation_rejects_any_mutated_scientific_boundary(

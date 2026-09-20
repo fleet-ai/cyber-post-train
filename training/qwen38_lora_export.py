@@ -22,6 +22,8 @@ import math
 import os
 import re
 import shutil
+import subprocess
+import sys
 import time
 from contextlib import ExitStack
 from pathlib import Path, PurePosixPath
@@ -626,6 +628,72 @@ def _reload_model(root: str) -> dict:
     }
 
 
+def _start_reload_model_subprocess(root: Path, run_root: Path):
+    """Start an isolated one-GPU reload without waiting on Ray GPU leases.
+
+    The TP8 export actors may remain alive until the driver shuts Ray down.  A
+    Ray task asking for another GPU can therefore wait forever even though the
+    dedicated B300 has ample physical memory for the independent reload.  A
+    fresh Python process with exactly GPU 0 visible preserves process and CUDA
+    isolation while avoiding that scheduler dependency.
+    """
+    result_path = run_root / ".merged-model-reload.json"
+    log_root = run_root / "private_logs"
+    log_path = log_root / "merged-model-reload.log"
+    if (
+        result_path.exists()
+        or result_path.is_symlink()
+        or log_path.exists()
+        or log_path.is_symlink()
+    ):
+        raise FileExistsError("independent reload control output already exists")
+    log_root.mkdir(mode=0o700, exist_ok=True)
+    package_root = Path(__file__).resolve().parents[1]
+    code = (
+        "from pathlib import Path; "
+        "from training.qwen38_lora_export import _reload_model, _write_new; "
+        f"_write_new(Path({str(result_path)!r}), _reload_model({str(root)!r}))"
+    )
+    env = os.environ.copy()
+    env["CUDA_VISIBLE_DEVICES"] = "0"
+    env["PYTHONPATH"] = os.pathsep.join(
+        [str(package_root), env.get("PYTHONPATH", "")]
+    ).rstrip(os.pathsep)
+    with log_path.open("xb") as stream:
+        process = subprocess.Popen(
+            [sys.executable, "-c", code],
+            env=env,
+            stdout=stream,
+            stderr=subprocess.STDOUT,
+        )
+    return process, result_path
+
+
+def _finish_reload_model_subprocess(process, result_path: Path) -> dict:
+    try:
+        return_code = process.wait(timeout=900)
+    except subprocess.TimeoutExpired as exc:
+        process.kill()
+        process.wait(timeout=30)
+        raise RuntimeError("independent merged-model reload exceeded its bound") from exc
+    if return_code != 0 or not result_path.is_file() or result_path.is_symlink():
+        raise RuntimeError("independent merged-model reload failed")
+    value = json.loads(result_path.read_text())
+    result_path.unlink()
+    if (
+        set(value) != {"model_class", "tokenizer_class", "logit_values", "finite_logits"}
+        or not isinstance(value["model_class"], str)
+        or not value["model_class"]
+        or not isinstance(value["tokenizer_class"], str)
+        or not value["tokenizer_class"]
+        or type(value["logit_values"]) is not int
+        or value["logit_values"] <= 0
+        or value["finite_logits"] is not True
+    ):
+        raise ValueError("independent merged-model reload result is invalid")
+    return value
+
+
 def _write_new(path: Path, value: dict) -> None:
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
     with os.fdopen(descriptor, "w") as stream:
@@ -678,9 +746,11 @@ def run(plan: dict) -> dict:
     _, cfg = build_runtime_configs_for_ray(receipt, plan)
     _stage("ray_initialization")
     initialize_ray(cfg)
+    reload_process = None
     try:
-        # The coordinator task owns the eight TP actors. Returning from the task
-        # releases that actor ownership before the independent one-GPU reload.
+        # The coordinator task owns the eight TP actors. They may retain their
+        # Ray GPU leases until driver shutdown, so the later independent reload
+        # uses an isolated subprocess instead of requesting a ninth Ray lease.
         _stage("distributed_reload_and_dual_export")
         reload_evidence = ray.get(
             ray.remote(num_cpus=1)(_distributed_export).remote(
@@ -709,6 +779,8 @@ def run(plan: dict) -> dict:
             final,
             base_files=base_files,
         )
+        _stage("full_model_tokenizer_reload_start")
+        reload_process, reload_result_path = _start_reload_model_subprocess(final, run_root)
         shutil.rmtree(partial_first)
         shutil.rmtree(partial_second)
         _stage("published_export_reopen")
@@ -728,12 +800,20 @@ def run(plan: dict) -> dict:
         _stage("adapter_change_check")
         if changed <= 0:
             raise ValueError("merged export contains no adapter-derived tensor changes")
-        _stage("full_model_tokenizer_reload")
-        reload_result = ray.get(
-            ray.remote(num_cpus=4, num_gpus=1)(_reload_model).remote(str(final)),
-            timeout=1800,
+        _stage("full_model_tokenizer_reload_wait")
+        reload_result = _finish_reload_model_subprocess(
+            reload_process,
+            reload_result_path,
         )
+        reload_process = None
     finally:
+        if reload_process is not None and reload_process.poll() is None:
+            reload_process.terminate()
+            try:
+                reload_process.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                reload_process.kill()
+                reload_process.wait(timeout=30)
         if ray.is_initialized():
             ray.shutdown()
     _stage("source_immutability_recheck")

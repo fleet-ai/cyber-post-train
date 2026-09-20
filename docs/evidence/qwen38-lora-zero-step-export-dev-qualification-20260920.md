@@ -153,3 +153,36 @@ Pod `chris-q38-lora-export-c1-v4`, UID
 `2547746a-c422-46a9-97a7-d2285b27afb3`, was created c1/TP8 and was initially
 Pending without allocation. It remains fail-closed until an independently
 validated terminal export receipt exists.
+
+### v4 terminal and scheduler-independent reload repair
+
+v4 ran from `12:45:05Z` until its fixed `13:15:05Z` development deadline.
+It had zero restarts and zero optimizer updates. It completed the native merge
+and published the complete candidate tree, then reached the sanitized
+`full_model_tokenizer_reload` stage. Kubernetes recorded `DeadlineExceeded`
+and stopped the container exactly at 1,800 seconds. The terminal failure
+receipt has file SHA-256
+`025e555106720cec6c5b7cd6ce949dbc0b6fa38963ac49682403c1bc65cd2e11` and
+records `SystemExit`, elapsed time `1799.164`, plan SHA-256
+`52cb4b09f213b99c6422261ae145d6581f2e24610b654dea4beea43e5ea41f50`,
+and zero optimizer steps. No accepted export receipt exists. The exact Pod was
+deleted after its UID was rechecked and is absent.
+
+The failure was a resource-lifecycle defect, not a merge or model outcome. At
+the final stage, all eight Megatron actor processes were still alive and held
+GPU memory. The independent reload was expressed as a new Ray task requesting
+one GPU, so it waited behind the TP8 actors' eight existing Ray GPU leases even
+though the dedicated B300 had ample physical memory. Extending the development
+deadline would hide that defect and is not permitted.
+
+The next successor instead starts a fresh Python process with only GPU 0
+visible immediately after the complete export is published. This preserves an
+independent process, CUDA context, complete model/tokenizer reopen and finite
+logit check, but it does not ask Ray for a ninth logical GPU lease. The reload
+runs concurrently with the existing read-only full-layout verification. Its
+stdout and stderr remain in the private run log; only the validated four-field
+reload result enters the public receipt. Every existing deterministic merge,
+BF16 tensor, base-layout, source-immutability and zero-optimizer gate remains
+unchanged. Forty-four focused tests pass, three tensor tests skip locally only
+because this worktree's test environment does not include Torch, and Ruff
+passes.
