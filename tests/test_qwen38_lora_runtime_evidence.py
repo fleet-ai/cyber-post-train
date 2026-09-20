@@ -200,6 +200,7 @@ def test_checkpoint_receipt_uses_one_post_step_source_read(monkeypatch, tmp_path
         plan=plan,
         output=tmp_path,
         last_step_evidence={"forward_loss": 1.5, "lora_gradient_norm": 0.25},
+        _record_qualification_stage=lambda _stage: None,
     )
     source = {
         "file_count": 29,
