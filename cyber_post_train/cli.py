@@ -427,6 +427,173 @@ def rl_topology_probe_preview(directory: Path) -> None:
         _fail(exc)
 
 
+@app.command("rl-topology-probe-authorize")
+def rl_topology_probe_authorize(
+    directory: Path,
+    cpu_result: Annotated[Path, typer.Option("--cpu-result")],
+    observer_armed: Annotated[Path, typer.Option("--observer-armed")],
+) -> None:
+    """Bind a passed CPU gate and a live cleanup observer to one GPU create."""
+    from training.skyrl_topology_probe import SCHEMA
+    from training.skyrl_topology_probe_launch import authorize
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != SCHEMA:
+            raise ValueError("prepared directory is not a topology probe")
+        value = authorize(
+            plan,
+            cpu_result=_read(cpu_result),
+            cpu_preview=_read(directory / "PREFLIGHT_JOB_PREVIEW.json"),
+            fleetjob_preview=_read(directory / "FLEETJOB_PREVIEW.json"),
+            fleetjob_observer=_read(observer_armed),
+        )
+        pid = value["fleetjob_observer"]["observer_pid"]
+        os.kill(pid, 0)
+        _write(directory / "LAUNCH_AUTHORIZED.json", value)
+        _print(
+            {
+                "status": value["status"],
+                "name": plan["run_name"],
+                "plan_sha256": value["plan_sha256"],
+                "manifest_sha256": value["fleetjob_manifest_sha256"],
+                "authorization_sha256": value["sha256"],
+                "observer_pid": pid,
+                "submitted": False,
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-topology-probe-create")
+def rl_topology_probe_create(directory: Path) -> None:
+    """Create the one evidence-authorized development FleetJob."""
+    from uuid import UUID
+
+    from training.skyrl_topology_probe import (
+        SCHEMA,
+        fleetjob_manifest,
+        fleetjob_packet,
+        validate_fleetjob_preview,
+    )
+    from training.skyrl_topology_probe_launch import _seal, validate
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != SCHEMA:
+            raise ValueError("prepared directory is not a topology probe")
+        manifest = _read(directory / "fleetjob.json")
+        packet = _read(directory / "FLEETJOB_PREPARED.json")
+        if manifest != fleetjob_manifest(plan) or packet != fleetjob_packet(plan):
+            raise ValueError("topology probe FleetJob packet changed")
+        authorization = _read(directory / "LAUNCH_AUTHORIZED.json")
+        validate(plan, authorization)
+        observer_pid = authorization["fleetjob_observer"]["observer_pid"]
+        os.kill(observer_pid, 0)
+        if (directory / "FLEETJOB_CREATED.json").exists():
+            raise ValueError("topology probe creation is already recorded")
+
+        execution = plan["execution"]
+        contexts = (
+            execution["kubernetes_context"],
+            "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+        )
+        for context in contexts:
+            lookup = subprocess.run(
+                [
+                    "kubectl",
+                    "--context",
+                    context,
+                    "--namespace",
+                    execution["namespace"],
+                    "get",
+                    "fleetjob",
+                    plan["run_name"],
+                    "--ignore-not-found",
+                    "--output=name",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=45,
+            )
+            if lookup.returncode:
+                raise JobsError("topology probe duplicate check failed")
+            if lookup.stdout.strip():
+                raise JobsError("topology probe name already exists")
+
+        preview = subprocess.run(
+            [
+                "kubectl",
+                "--context",
+                execution["kubernetes_context"],
+                "--namespace",
+                execution["namespace"],
+                "create",
+                "--dry-run=server",
+                "--filename",
+                str(directory / "fleetjob.json"),
+                "--output=json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if preview.returncode:
+            raise JobsError("topology probe final server preview failed")
+        validate_fleetjob_preview(plan, manifest, json.loads(preview.stdout))
+
+        result = subprocess.run(
+            [
+                "kubectl",
+                "--context",
+                execution["kubernetes_context"],
+                "--namespace",
+                execution["namespace"],
+                "create",
+                "--filename",
+                str(directory / "fleetjob.json"),
+                "--output=json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode:
+            raise JobsError("topology probe create failed")
+        resource = json.loads(result.stdout)
+        metadata = resource.get("metadata", {})
+        uid = metadata.get("uid")
+        created_at = metadata.get("creationTimestamp")
+        UUID(uid)
+        if (
+            resource.get("apiVersion") != manifest["apiVersion"]
+            or resource.get("kind") != manifest["kind"]
+            or metadata.get("name") != plan["run_name"]
+            or metadata.get("namespace") != execution["namespace"]
+            or resource.get("spec") != manifest["spec"]
+            or not isinstance(created_at, str)
+            or not created_at
+        ):
+            raise JobsError("created topology probe differs from its authorization")
+        receipt = _seal(
+            {
+                "schema": "cyber_skyrl_topology_probe_created_v1",
+                "status": "created",
+                "name": plan["run_name"],
+                "uid": uid,
+                "created_at": created_at,
+                "plan_sha256": authorization["plan_sha256"],
+                "manifest_sha256": authorization["fleetjob_manifest_sha256"],
+                "authorization_sha256": authorization["sha256"],
+            }
+        )
+        _write(directory / "FLEETJOB_CREATED.json", receipt)
+        _print(receipt)
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command()
 def preflight(directory: Path) -> None:
     """Validate staged training/conversion inputs in the pinned image, without GPUs."""

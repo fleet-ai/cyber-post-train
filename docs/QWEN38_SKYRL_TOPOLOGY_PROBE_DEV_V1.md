@@ -96,8 +96,11 @@ Do not create the FleetJob until every item is true:
 8. The operator has confirmed that adding eight development GPUs remains inside
    the current experiment-owned resource allowance.
 
-The checked-in config keeps `submission_authorized` false while items 3 and 6 are
-open. Do not bypass that closed gate with a manual `kubectl create`.
+The checked-in config always keeps `submission_authorized` false. Passing it does
+not authorize a create by editing the plan. Instead, the launch command requires a
+separate create-once authorization that embeds the released CPU result, both
+server-preview receipts and the already-armed GPU observer. Do not bypass that
+evidence gate with a manual `kubectl create`.
 
 Arm the independent observer before creating either Job. The foreground process
 writes `ARMED.json` only after proving the exact name is absent. It then binds the
@@ -121,8 +124,21 @@ uv run --locked python -m training.dev_cleanup_observer \
 
 For the GPU probe use `--kind fleetjob`, the FleetJob name and manifest digest,
 `--maximum-seconds 1800`, and `--expected-gpus 8`. Keep that process alive before
-the single create. A missing or invalid sanitized termination receipt makes the
-gate fail even when cleanup succeeds.
+the single create. Then authorize and create through the checked command surface:
+
+```sh
+uv run --locked cyber-post-train rl-topology-probe-authorize \
+  /absolute/new/probe-packet \
+  --cpu-result /absolute/PREFLIGHT_OBSERVER_RESULT.json \
+  --observer-armed /absolute/GPU_OBSERVER_ARMED.json
+uv run --locked cyber-post-train rl-topology-probe-create \
+  /absolute/new/probe-packet
+```
+
+The create command revalidates every nested digest, confirms the observer process
+is still alive, checks the exact name on development and production, repeats the
+development server dry-run and records the created UID. A missing or invalid
+sanitized termination receipt makes the gate fail even when cleanup succeeds.
 
 ## Evidence while it runs
 

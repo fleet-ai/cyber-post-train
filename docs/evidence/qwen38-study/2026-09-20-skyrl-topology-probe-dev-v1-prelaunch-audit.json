@@ -1,8 +1,8 @@
 {
   "schema": "cyber_skyrl_topology_probe_prelaunch_audit_v1",
-  "status": "blocked_not_submitted",
+  "status": "cpu_gate_passed_not_submitted",
   "classification": "operational_gate",
-  "observed_at": "2026-09-20T11:34:36Z",
+  "observed_at": "2026-09-20T11:37:09Z",
   "identity": {
     "name": "chris-q38-skyrl-probe-v1",
     "cluster": "dev",
@@ -202,6 +202,21 @@
     "released": true,
     "successor_change": "use the sealed accepted development staging alias only for the raw-PVC CPU preflight while retaining the controller-supported artifact key for the GPU FleetJob"
   },
+  "accepted_cpu_preflight_v11": {
+    "name": "chris-q38-skyrl-probe-preflight-v11",
+    "status": "passed_and_released",
+    "observer_result": "docs/evidence/qwen38-study/2026-09-20-skyrl-topology-probe-preflight-v11-result.json",
+    "observer_result_sha256": "sha256:bfac370fecd1b51cf189011a4c757476c5d71a5f3df585caa7048a8d74a8cd03",
+    "job_uid": "c919e06c-0d80-4b26-a1be-d51871ffe8d7",
+    "pod_uid": "f994d28b-bc93-4c97-93ad-f6be6626da0b",
+    "receipt_sha256": "sha256:5b8228f6a06e7fb57d3c9e5f3f31d2ea50d6bad4b04918b7d140fb7db63756b7",
+    "terminal_status": "Succeeded",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "create_once_output_absent": true,
+    "released": true
+  },
   "contract": {
     "cpu_head": true,
     "gpu_workers": 1,
@@ -230,16 +245,15 @@
     "legacy_run_name_absent_in_prod": true,
     "exact_image_cached_locally": false,
     "local_ecr_pull_authorized": false,
-    "cpu_preflight_passed": false,
+    "cpu_preflight_passed": true,
     "external_release_observer_implemented_and_tested": true,
     "external_release_observer_bound": false,
     "external_objects_created_or_changed": false
   },
   "blockers": [
-    "cpu_preflight_not_yet_recorded",
     "external_release_observer_not_yet_bound"
   ],
   "safe_to_create": false,
-  "next_action": "Run the exact-image zero-GPU preflight with the exact model mount, bind an independent 30-minute UID-aware cleanup observer, regenerate and re-preview the packet, then make a separate reviewed launch decision.",
-  "sha256": "sha256:332905819153e7e08f18fd278f5f92fbbcb2f381d58454b785fbfc25b199e2ef"
+  "next_action": "Bind the independent 30-minute UID-aware GPU cleanup observer, seal the separate evidence authorization, repeat exact duplicate and server-preview checks, then create the one development topology probe.",
+  "sha256": "sha256:44c2b7812423e7fea8ab83388eab0cdcbedc5b811ef2cf3fd7780371b0f8e7e9"
 }
