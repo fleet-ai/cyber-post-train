@@ -12,8 +12,10 @@ The comparison changes only the model weights:
 
 - base: `Qwen/Qwen3.8-27B` at revision
   `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0`;
-- candidate: the accepted Fresh75 checkpoint after optimizer step 230, served
-  under model ID `chris-q38-fresh75-step230-v1`;
+- candidate: the accepted Fresh75 checkpoint after optimizer step 230. Its
+  payload was originally staged under `chris-q38-fresh75-step230-v1`, but the
+  matched evaluation must use the new base-cloned route
+  `chris-q38-fresh75-step230-wbe-v1`;
 - harness: OpenCode;
 - benchmark: all 15 WebExploitBench targets at the pinned benchmark and CAGE
   revisions in the sealed plan.
@@ -148,22 +150,25 @@ one fresh receipt proving that:
 4. identical continuation, forward-generation and tool-call probes pass on
    both models.
 
-There is also one TensorLake plan-construction blocker. Pair sealing requires
-both arms to use the same qualified filesystem snapshot. Current snapshot
-qualification binds one arm-specific OpenCode project and one student-only
-model registry, so one existing snapshot cannot validate both distinct arms.
-The snapshot qualifier must first produce one score-free shared snapshot whose
-receipt covers both arm-specific projects. This qualification must make zero
-student requests and zero judge requests.
+The two previously missing local construction paths are now implemented:
 
-One local evidence tool is also still missing. The repository validates the
-Qwen3.8 registration and live-parity receipt schemas, but it has no production
-capturer for those schemas. `post_sft_evidence.py` is tied to the older Qwen3.6
-serving contract and must not be reused by changing constants. A Qwen3.8
-capturer must bind the fresh successor UID, exact export, staged file hashes,
-Deployment/ReplicaSet/Pod identities, current base identity, full runtime
-contract and content-free continuation/tool probes. It must pass the existing
-strict validators before the candidate is resumed.
+- `qwen38_serving_evidence.py` binds the exact checkpoint, export, staging
+  acceptance, model lock, new route UID, Deployment/ReplicaSet/Pod chain,
+  runtime image and fixed content-free probes. It emits the two existing strict
+  receipts and its tests pass those receipts back through the collection
+  provenance validator. Raw probe text is discarded in memory and never enters
+  either receipt.
+- shared snapshot qualification accepts exactly one base project and one
+  candidate project, proves that both are score-free OpenCode collection
+  projects, and binds them to one qualified filesystem snapshot before the
+  normal pair sealer compares the two arm plans.
+
+The serving tool also supplies the bounded release monitor. It may perform one
+resource-version-bound `pause` request only when the frozen startup, consumer
+handoff, useful-request idle, maximum-runtime or terminal condition requires
+release. It then polls until the API reports `paused`, the exact owned Pods are
+absent and the derived GPU allocation is zero. It has no register, resume,
+retire, TensorLake or evaluation-launch command.
 
 The current process did not contain a TensorLake credential, so a fresh live
 `GET /sandboxes` duplicate census was not possible. The 13 old `q38-s10`
@@ -171,9 +176,13 @@ sandboxes remain reserved, and the absence of equivalent Fresh75 campaigns must
 be re-proved within ten minutes of launch.
 
 Only after the serving proof, shared snapshot qualification and fresh duplicate
-check may the exact score-free canary collection plans be sealed. This work
-deliberately did not register, resume or serve a model and did not create or
-change TensorLake work.
+check may the exact score-free canary collection plans be sealed. The checked-in
+study currently names the safely paused old registration. After the one allowed
+successor registration returns a new UID, its model ID and UID must be bound in
+a create-once successor study/live-gate artifact before launch; the old model ID
+must never be substituted back into a collection plan. This work deliberately
+did not register, resume or serve a model and did not create or change
+TensorLake work.
 
 ## Exact canary arm blueprints
 
@@ -228,3 +237,47 @@ uv run python -m evals.webexploitbench.tensorlake.fresh75_canary_preflight build
 The output remains blocked by design. It renders the safe successor and the two
 collection blueprints; it never registers, resumes, launches, scores or pauses
 anything.
+
+### Reproducible Qwen3.8 evidence capture
+
+After the exact successor has been registered once, the collection plans and
+consumer are ready to start, and the route has been resumed, capture fresh
+serving evidence with:
+
+```bash
+uv run python -m evals.webexploitbench.tensorlake.qwen38_serving_evidence capture \
+  --study-plan configs/evaluation/qwen38-fresh75-step230-opencode-wbe-matched-v1.json \
+  --preflight .private/fresh75-wbe/preflight.json \
+  --provenance .private/fresh75-wbe/checkpoint-export-references.json \
+  --stage-acceptance docs/evidence/qwen38-fresh75-step230-inference-stage-v2-accepted-20260915.json \
+  --model-lock configs/models/qwen38-27b-1d4bf0f2.lock.json \
+  --kubernetes-context <PRODUCTION-CONTEXT> \
+  --registration-output .private/fresh75-wbe/serving-registration.json \
+  --live-parity-output .private/fresh75-wbe/live-parity.json
+```
+
+The provenance file contains only absolute local paths and file hashes for the
+exact checkpoint and export receipts. The command first verifies that both
+routes are ready, then checks model/server metadata before sending its three
+fixed non-benchmark probes. Both output paths are create-once. It refuses the
+old candidate route, any base/candidate runtime drift, a non-c1 candidate,
+changed artifact bytes or a route that is not backed by one exact ready
+Deployment/ReplicaSet/Pod chain.
+
+The lifecycle policy is a small private JSON file with schema
+`qwen38_checkpoint_serving_lifecycle_v1`. It binds the new model ID and UID,
+registration/resume/ready/consumer/useful-request timestamps, terminal outcome
+and the five deadline values already frozen in the preflight. A read-only check
+is:
+
+```bash
+uv run python -m evals.webexploitbench.tensorlake.qwen38_serving_evidence monitor \
+  --policy .private/fresh75-wbe/lifecycle.json \
+  --kubernetes-context <PRODUCTION-CONTEXT>
+```
+
+It exits nonzero when a pause or further release wait is required. Add
+`--execute` only for the independently owned monitor that is explicitly
+authorized to pause this one exact successor. The pause path uses the resource
+version from the immediately preceding GET and never retries an uncertain
+write.
