@@ -22,6 +22,9 @@ SELF_SFT = ROOT / "configs/qualification/qwen38-self-sft-step44-inference-stage-
 ACCEPTED_V2 = (
     ROOT / "docs/evidence/qwen38-fresh75-step230-inference-stage-v2-accepted-20260915.json"
 )
+ACCEPTED_SELF_SFT = (
+    ROOT / "docs/evidence/qwen38-self-sft-step44-inference-stage-v1-accepted-20260920.json"
+)
 SOURCE = ROOT / "training/model_stage.py"
 
 
@@ -242,6 +245,47 @@ def test_v2_acceptance_evidence_is_self_digesting_and_records_one_post_then_get(
         ),
         "gpus_allocated": 0,
     }
+    assert evidence["cleanup"]["gpus_held_after_cleanup"] == 0
+    assert registration["serving_qualified"] is False
+
+
+def test_self_sft_acceptance_records_exact_stage_and_one_paused_registration() -> None:
+    evidence = json.loads(ACCEPTED_SELF_SFT.read_text())
+    plan = current_stage.read_plan(SELF_SFT)
+    assert evidence["sha256"] == stage.digest_json(stage._unsigned(evidence, "sha256"))
+    assert evidence["staging"]["plan_file_sha256"] == stage._digest_bytes(SELF_SFT.read_bytes())
+    assert evidence["staging"]["plan_sha256"] == plan["plan_sha256"]
+    assert evidence["staging"]["receipt_sha256"] == (
+        "sha256:20460ed56f955b7054d60d944aa9e0e1a95a4eef53907df3a0dc2b345c3e87a8"
+    )
+    assert evidence["staging"]["payload"] == {
+        "manifest_sha256": (
+            "sha256:a0e55bebe9d78ac76c012446ae0147a421cd333e2a6bf2bb6f4fb3450fa776fe"
+        ),
+        "file_count": 29,
+        "total_bytes": 55_586_032_099,
+        "exact_size_and_sha256_verified": True,
+        "create_once_atomic_promotion_verified": True,
+        "post_promotion_readback_verified": True,
+    }
+    registration = evidence["registration"]
+    assert registration["post_count"] == 1
+    assert registration["second_post_performed"] is False
+    assert registration["desired_registration_sha256"] == stage.digest_json(
+        plan["desired_registration"]
+    )
+    assert registration["server_normalization"] == {
+        "only_added_field": "spec.scaling.replicas",
+        "value": 1,
+        "normalized_full_spec_exact": True,
+        "note": (
+            "The API materializes its default desired replica count even while the route is "
+            "paused. Paused state and minReplicas=0 kept active pods and allocated GPUs at zero."
+        ),
+    }
+    assert registration["get_readback"]["phase"] == "paused"
+    assert registration["get_readback"]["active_pods"] == 0
+    assert registration["get_readback"]["gpus_allocated"] == 0
     assert evidence["cleanup"]["gpus_held_after_cleanup"] == 0
     assert registration["serving_qualified"] is False
 
