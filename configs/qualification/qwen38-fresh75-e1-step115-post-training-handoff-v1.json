@@ -1,0 +1,56 @@
+{
+  "schema_version": "qwen38_fresh75_v2_post_training_handoff_v1",
+  "status": "training_accepted_waiting_for_checkpoint_payload_seal",
+  "queue": {
+    "path": "configs/evaluation/qwen38-fresh75-v2-checkpoint-eval-queue-v1.json",
+    "file_sha256": "sha256:6447432a0167144cc277f54b9a2a676c4a8cf27b7c6d1aabc28252c748962acd",
+    "queue_sha256": "sha256:17ae60e2473d117baba8a74ab4d0cbf3b8c0a3bd5e77d73f046eb84bd063deb4"
+  },
+  "arm_id": "b8-lr1e5-e1",
+  "training_observation_sha256": "sha256:6cb849801b41a1301294f80115cbd84e524a63a7d0826c32e936edbee524b6cb",
+  "checkpoint_selection": {
+    "optimizer_step": 115,
+    "checkpoint_path": "/mnt/sfs/jobs/chris-q38-f75-e1-v2/checkpoints/global_step_115",
+    "checkpoint_saved_receipt_path": "/mnt/sfs/jobs/chris-q38-f75-e1-v2/checkpoint_receipts/step-000115.json",
+    "checkpoint_saved_receipt_file_sha256": "sha256:fd92b96e9bb8f843eca6c3cde9f155d6a99c96faf3f89ce52dc602c99ff7a319",
+    "checkpoint_saved_receipt_sha256": "sha256:17eb31f0dc0e371471965037b6bdc812328df71eea94db63e553af3a0c15f269",
+    "retained_checkpoints": [
+      80,
+      100,
+      115
+    ],
+    "scientific_role": "one_epoch_final",
+    "payload_seal_status": "required_not_yet_accepted"
+  },
+  "resource_release": {
+    "observed_at": "2026-09-20T14:28:30Z",
+    "pod_count": 0,
+    "raycluster_count": 0,
+    "workload_count": 0,
+    "allocated_gpus": 0
+  },
+  "next_stage": {
+    "operation": "seal_export_reload_and_stage_checkpoint_115",
+    "external_mutation_authorized": false,
+    "serving_model_id": "chris-q38-f75v2-b8-lr1e5-e1-wbe",
+    "route_initial_state": "paused",
+    "priority": "c1",
+    "webexploitbench_canary_pair_id": "q38-f75v2-b8-lr1e5-e1-oc-wbe-c1",
+    "fleet_development_campaign_id": "q38-f75v2-b8-lr1e5-e1-fleet-dev17-p1"
+  },
+  "remaining_gates": [
+    "checkpoint_payload_manifest_and_full_rehash",
+    "zero_optimizer_step_bf16_export",
+    "zero_optimizer_step_reload_and_source_unchanged",
+    "create_once_inference_staging",
+    "create_once_paused_c1_route_with_new_uid",
+    "fresh_base_candidate_serving_parity",
+    "project_active_nodes_at_most_eight_after_route_admission",
+    "fresh_tensorlake_duplicate_census",
+    "paired_score_free_task0_canary_acceptance",
+    "full_collection_only_after_canary_acceptance",
+    "separate_scoring_from_immutable_rollout_bundles",
+    "fleet_development_eval"
+  ],
+  "handoff_sha256": "sha256:525c583bbf0bf23323eae631e9523d93fc18d506c4922b384c64a097fc1a88ec"
+}

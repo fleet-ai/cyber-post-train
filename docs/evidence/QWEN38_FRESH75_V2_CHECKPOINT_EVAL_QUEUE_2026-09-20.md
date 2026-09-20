@@ -1,7 +1,7 @@
 # Fresh75 V2 checkpoint evaluation queue
 
 Eight Fresh75 V2 supervised-training runs were active when this queue was
-sealed. Each run uses the same exact Qwen3.8-27B base, the same 916-example
+first sealed. Each run uses the same exact Qwen3.8-27B base, the same 916-example
 Fresh75 corpus, one eight-GPU node, and `c1` priority. The deliberate
 differences are batch size, learning rate, and epoch count.
 
@@ -10,6 +10,15 @@ The machine-readable source of truth is
 It binds every Training API run, RayJob, Workload, Pod, output directory,
 runtime plan digest, and recipe. The validator is
 [`fresh75_v2_eval_queue.py`](../../evals/webexploitbench/tensorlake/fresh75_v2_eval_queue.py).
+
+The queue now also carries immutable terminal observations as individual arms
+finish. The one-epoch arm `b8-lr1e5-e1` succeeded at optimizer step 115. Its
+training-complete receipt, final checkpoint-saved receipt, 115-row metrics
+file, and exact resource release are digest-bound in the queue. This establishes
+training completion only. It does not establish a complete checkpoint payload,
+an exported model, a reloadable model, a serving route, or capability lift.
+The next fail-closed handoff is
+[`qwen38-fresh75-e1-step115-post-training-handoff-v1.json`](../../configs/qualification/qwen38-fresh75-e1-step115-post-training-handoff-v1.json).
 
 ## What the queue does
 
