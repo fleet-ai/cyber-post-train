@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "observed_at": "2026-09-20T23:06:21Z",
+  "observed_at": "2026-09-20T23:32:30Z",
   "purpose": "Create-once checkpoint and evaluation ledger for the Qwen3.8-27B Fleet cyber lift study. A row is not a capability result until its exact matched evaluation is accepted.",
   "serving_readiness_matrix": "configs/evaluation/qwen38-checkpoint-serving-readiness-v1.json",
   "comparison_contract": {
@@ -37,9 +37,42 @@
       "kind": "base_model_control",
       "priority": 1,
       "motivation": "Establish the matched OpenCode baseline required to attribute any WEB or Fleet difference to post-training rather than to serving, harness, task, or scoring drift.",
-      "web_status": "collection_canary_in_repair",
-      "fleet_status": "not_started",
-      "notes": "V20 failed while launching the target before the agent or model ran. Collection export then rejected the incomplete record because it had no final evidence reference. This is plumbing evidence, not a capability result; no score request was made."
+      "web_status": "zero_model_qualification_v23_accepted_collection_not_started",
+      "web_qualification": {
+        "transaction": "wbe-fresh75-pair-v23",
+        "plan_sha256": "sha256:84866ab09e0239d36841a6cb710abdc1bd6e24000c991c218248a2eb2ae96248",
+        "sandbox_id": "rkh5en6icbvn36saw04tp",
+        "snapshot_id": "0i1wjuz507886crtxobeh",
+        "acceptance_receipt_sha256": "sha256:5618a722ac6f57a721d9f4b827465fddb248dccc65d28b9f12350789ec75cd5f",
+        "complete_receipt_sha256": "sha256:4f6eb574c54ebd86851745e3a22e6867bb33c752f7caf0cb9582fb7501582bf1",
+        "release_receipt_sha256": "sha256:302ac952ffbf6bb1fcce013899bb9299831971fc205ea2e8e9f7b4708f08f83c",
+        "model_or_benchmark_attempts": 0
+      },
+      "fleet_status": "dev17_v2_running_zero_valid_sessions",
+      "fleet_dev17_v1": {
+        "job_name": "chris-q38-f75-dev17-p1-v1",
+        "job_uid": "338c0625-98b3-4682-bda4-92223c67389c",
+        "pod_name": "chris-q38-f75-dev17-p1-v1-hmpjx",
+        "pod_uid": "e5ac864f-8954-4402-8bfc-d5194a0edbdd",
+        "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-p1-v1",
+        "database": "q38_f75_dev17_p1_v1",
+        "valid_sessions": 0,
+        "failure_class": "setup_only_image_identity_comparison",
+        "resource_status": "released"
+      },
+      "fleet_dev17_v2": {
+        "job_name": "chris-q38-f75-dev17-p1-v2",
+        "job_uid": "a8a32c87-7e92-40e9-9fd7-e1fdf6fb7cf1",
+        "pod_name": "chris-q38-f75-dev17-p1-v2-nqvjf",
+        "pod_uid": "6bf320b2-5f47-4d1a-9d62-98d5ab608dd6",
+        "configmap_uid": "04e3a6e3-3e2b-4ec0-96c2-c5960a2e3de1",
+        "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-p1-v2",
+        "database": "q38_f75_dev17_p1_v2",
+        "planned_sessions": 34,
+        "valid_sessions": 0,
+        "resource_status": "running_cpu_only"
+      },
+      "notes": "WEB V23 accepted the zero-model paired qualification and released its sandbox; no collection or scoring campaign exists yet. Fleet dev17 v1 failed setup-only before a database, session, or model call because the OCI index parent digest was compared with the resolved linux/amd64 child image ID. Fleet dev17 v2 is a create-once corrected successor and has not yet produced a valid session. None of these events is capability evidence."
     }
   ],
   "accepted_checkpoints": [
@@ -50,10 +83,10 @@
       "serving_status": "live_target_available_not_live_parity_qualified",
       "priority": 1,
       "motivation": "Evaluate the strongest existing broad full-SFT artifact and determine whether its supervised training transfers to held-out exploitation capability.",
-      "web_status": "needs_fresh_matched_pair",
-      "web_evidence": "One valid standalone 15-of-15 OpenCode pass-at-1 run exists, but it lacks a newly matched base arm. A wider pass-at-8 effort is incomplete at 104 of 120 sessions.",
-      "fleet_status": "not_started",
-      "next_action": "Use the exact live target in the serving-readiness matrix to qualify matched parity and duplicate identity, then launch matched OpenCode WEB and representative exact-version Fleet holdout evaluations."
+      "web_status": "zero_model_qualification_v23_accepted_collection_not_started",
+      "web_evidence": "One valid standalone 15-of-15 OpenCode pass-at-1 run exists, but it lacks a newly matched base arm. A wider pass-at-8 effort is incomplete at 104 of 120 sessions. V23 accepted the paired zero-model launch qualification and released its sandbox; it made zero benchmark, model, judge, or scoring attempts.",
+      "fleet_status": "dev17_v2_running_zero_valid_sessions",
+      "next_action": "Run the live duplicate census, launch exactly one matched WEB task per arm from the accepted V23 qualification, then expand only after accepted collections. Accept the first valid base and Fresh75 dev17 sessions from the live v2 CPU evaluator before allowing the remaining matched sessions to proceed."
     },
     {
       "artifact_id": "q38-teacher-dense-v5-step186",
@@ -95,28 +128,152 @@
       "run_name": "chris-q38-lora-sft-a1-v1-2d8da9b3",
       "priority_when_accepted": 1,
       "motivation": "Primary broad-data LoRA anchor: test whether 57.4M supervised tokens across 496 task families produce transferable lift with a moderate adaptation rate.",
-      "status": "failed_at_step_48_checkpoint_40_preserved_pending_diagnosis"
+      "status": "failed_cuda_oom_during_step_49_after_step_48_checkpoint_40_preserved_resources_released",
+      "run_identity": {
+        "rayjob_name": "chris-q38-lora-sft-a1-v1-2d8da9b3",
+        "rayjob_uid": "bb29544f-0bed-41ed-bf9e-57b0ad8a6e75",
+        "workload_name": "rayjob-chris-q38-lora-sft-a1-v1-2d8da9b3-699ab",
+        "workload_uid": "849881fd-a561-4eb6-996f-c0238b6afb52",
+        "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-a1-v1"
+      },
+      "checkpoint": {
+        "optimizer_step": 40,
+        "path": "/mnt/sfs/jobs/chris-q38-lora-sft-a1-v1/checkpoints/global_step_40",
+        "receipt_sha256": "sha256:8aaca6c5a8eb42a8a08e643f62232111b8b74a87573d8c873ce1906c42eb4864"
+      },
+      "failure_receipt_sha256": "sha256:dc287b17bc01ea0d6f77304a012b9e705988f829eb3d8641ec80765eabd2128c"
     },
     {
       "artifact_id": "q38-lora-broad-lr1e-5",
       "run_name": "chris-q38-lora-lr1-v1-0ae26be3",
       "priority_when_accepted": 2,
       "motivation": "Conservative learning-rate control: test whether slower adaptation better preserves base capability while learning the broad corpus.",
-      "status": "initializing"
+      "status": "operator_stopped_after_checkpoint_40_last_completed_step_43_to_prevent_known_memory_growth_resources_released",
+      "run_identity": {
+        "api_run_id": "0ae26be3-39a6-4851-9cfd-2ef501a94ff6",
+        "rayjob_name": "chris-q38-lora-lr1-v1-0ae26be3",
+        "rayjob_uid": "1554dba5-dad2-4ac8-a7ec-63b9d3a59bb0",
+        "workload_name": "rayjob-chris-q38-lora-lr1-v1-0ae26be3-73e53",
+        "workload_uid": "3e574411-f551-4572-a03c-5cb12aa8e5b0",
+        "pod_name": "chris-q38-lora-lr1-v1-0ae26be3-spgks-head-v4kd9",
+        "pod_uid": "3cf4044f-28bf-4ed3-be01-ccf68744e55d",
+        "output_root": "/mnt/sfs/jobs/chris-q38-lora-lr1-v1"
+      },
+      "checkpoint": {
+        "optimizer_step": 40,
+        "path": "/mnt/sfs/jobs/chris-q38-lora-lr1-v1/checkpoints/global_step_40",
+        "receipt_sha256": "sha256:86a5294fc5bd2e46e170685d1ba4041fa29dc9090e1b9fcadada09bb9453a855"
+      }
     },
     {
       "artifact_id": "q38-lora-broad-lr1e-4",
       "run_name": "chris-q38-lora-lr100-v1-7200fd5f",
       "priority_when_accepted": 3,
       "motivation": "Upper learning-rate exploration: test whether the broad corpus is underfit at the anchor rate or whether faster adaptation destabilizes transfer.",
-      "status": "training"
+      "status": "operator_stopped_after_checkpoint_40_last_completed_step_41_to_prevent_known_memory_growth_resources_released",
+      "run_identity": {
+        "rayjob_name": "chris-q38-lora-lr100-v1-7200fd5f",
+        "output_root": "/mnt/sfs/jobs/chris-q38-lora-lr100-v1"
+      },
+      "checkpoint": {
+        "optimizer_step": 40,
+        "path": "/mnt/sfs/jobs/chris-q38-lora-lr100-v1/checkpoints/global_step_40",
+        "receipt_sha256": "sha256:39bbbae115ddd029a23557cff1c7cd772e2e9761d20922dda42de8d0082a4497"
+      }
     },
     {
       "artifact_id": "q38-full-weight-broad-b8-lr3e-6",
       "run_name": "chris-q38-t3k32-b8-v1-0cb9fe51",
       "priority_when_accepted": 1,
       "motivation": "Primary broad-data full-weight reference: measure the higher-capacity alternative to LoRA on the same 57.4M-token, 32K-context corpus before isolating batch-size and learning-rate effects.",
-      "status": "initializing"
+      "status": "training_finite_step_22_zero_restarts_checkpoint_due_step_450",
+      "run_identity": {
+        "api_run_id": "0cb9fe51-ac56-4e99-8b91-6bfbc6cc7db0",
+        "rayjob_name": "chris-q38-t3k32-b8-v1-0cb9fe51",
+        "rayjob_uid": "6f311376-1c42-4faa-b82a-57b51bfbed85",
+        "workload_name": "rayjob-chris-q38-t3k32-b8-v1-0cb9fe51-ec0f0",
+        "workload_uid": "2d5c1c8a-3e0c-4170-9a32-1e9bddb73183",
+        "raycluster_name": "chris-q38-t3k32-b8-v1-0cb9fe51-5dwwd",
+        "raycluster_uid": "5a974057-6ea8-4f2d-8c0d-80b9c8cc9f44",
+        "pod_name": "chris-q38-t3k32-b8-v1-0cb9fe51-5dwwd-head-5v8nq",
+        "pod_uid": "826b5de3-85df-4d66-a785-6085b7ad93a3",
+        "output_root": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v1",
+        "plan_sha256": "sha256:43aeb254df849992e12fbb1c3021bde3e793e7d3d04e06f2ea711e35c761b8cd",
+        "wandb_url": "https://wandb.ai/thefleet/cyber-post-train/runs/chris-q38-t3k32-b8-v1"
+      }
+    },
+    {
+      "artifact_id": "q38-full-weight-broad-b16-lr3e-6",
+      "run_name": "chris-q38-t3k32-b16-v1-46ca50db",
+      "priority_when_accepted": 2,
+      "motivation": "Batch-size control on the primary broad-data full-weight recipe: test whether doubling global batch from 8 to 16 improves optimization stability and throughput while holding model, corpus, context length, learning rate, seed, and one-epoch token exposure fixed.",
+      "status": "training_finite_step_3_zero_restarts_checkpoint_due_step_225",
+      "run_identity": {
+        "api_run_id": "46ca50db-8aa6-49ae-a2a7-b216ee0c7c01",
+        "rayjob_name": "chris-q38-t3k32-b16-v1-46ca50db",
+        "rayjob_uid": "7a57b843-f45d-4a24-93ed-8a817e03387e",
+        "workload_name": "rayjob-chris-q38-t3k32-b16-v1-46ca50db-4d276",
+        "workload_uid": "e7101200-d826-4644-89cb-5e3379c496be",
+        "raycluster_name": "chris-q38-t3k32-b16-v1-46ca50db-99mq7",
+        "raycluster_uid": "305621bf-fdce-47ef-bfba-05f55e63d2b7",
+        "pod_name": "chris-q38-t3k32-b16-v1-46ca50db-99mq7-head-psw2m",
+        "pod_uid": "d1c9fa07-402b-4978-a8bd-5a730555cca3",
+        "output_root": "/mnt/sfs/jobs/chris-q38-t3k32-b16-v1",
+        "plan_sha256": "sha256:70a8a1e813f9e0d9effb677da49c7326d8d4a5091113f937dc2539c9a0b7ea3a",
+        "wandb_url": "https://wandb.ai/thefleet/cyber-post-train/runs/chris-q38-t3k32-b16-v1"
+      }
+    },
+    {
+      "artifact_id": "q38-full-weight-broad-b8-lr1e-6",
+      "run_name": "chris-q38-t3k32-lr1-v1-4291c635",
+      "priority_when_accepted": 3,
+      "motivation": "Learning-rate control on the primary broad-data full-weight recipe: test whether reducing LR from 3e-6 to 1e-6 better preserves base capability while learning the same 57.4M-token corpus, holding model, data, batch size, context, seed, topology, and one-epoch exposure fixed.",
+      "status": "training_finite_step_6_zero_restarts_checkpoint_due_step_450",
+      "run_identity": {
+        "api_run_id": "4291c635-872a-42c3-a66f-92d5cedab3bf",
+        "rayjob_name": "chris-q38-t3k32-lr1-v1-4291c635",
+        "rayjob_uid": "8847f01f-2366-4a88-88de-2d900ed676d8",
+        "workload_name": "rayjob-chris-q38-t3k32-lr1-v1-4291c635-a0e80",
+        "workload_uid": "0ad6a382-24e6-4a1d-a07c-48d50ecbb0f5",
+        "raycluster_name": "chris-q38-t3k32-lr1-v1-4291c635-gr745",
+        "raycluster_uid": "ff05735f-bd99-497b-8539-d28f3f31759b",
+        "pod_name": "chris-q38-t3k32-lr1-v1-4291c635-gr745-head-tmhsh",
+        "pod_uid": "9b2b48d4-476a-44b6-8974-c8d6cd8162cb",
+        "output_root": "/mnt/sfs/jobs/chris-q38-t3k32-lr1-v1",
+        "plan_sha256": "sha256:e3d88ecb5cb7ad35f4b971831583e6d4900345e88b45d0bf7af0b8c242b5d27e",
+        "wandb_url": "https://wandb.ai/thefleet/cyber-post-train/runs/chris-q38-t3k32-lr1-v1"
+      }
+    },
+    {
+      "artifact_id": "q38-skyrl-reward-prod4-step1",
+      "run_name": "chris-q38-rlreward-prod4",
+      "priority_when_accepted": 1,
+      "motivation": "First serious Qwen3.8 SkyRL learning gate rather than a topology smoke test: use one exact train task and one exact dev task to collect eight genuine Fleet episodes, require reward variation, perform one finite optimizer update at LR 1e-6, compare pre/post dev performance, and save a reloadable step-1 checkpoint before scaling RL.",
+      "status": "failed_before_collection_multiple_tool_calls_not_qualified_zero_updates_resources_released",
+      "run_identity": {
+        "api_run_id": "4f6c20f0-d210-52d9-a9c7-4c484f98ca7a",
+        "rayjob_name": "chris-q38-rlreward-prod4",
+        "rayjob_uid": "21d311b0-136d-4831-a5de-341ff9d12c87",
+        "workload_name": "rayjob-chris-q38-rlreward-prod4-77b49",
+        "workload_uid": "9e8b6058-acca-4a4f-9c79-bfe17dc85a34",
+        "raycluster_name": "chris-q38-rlreward-prod4-bpb2k",
+        "raycluster_uid": "5c1dea98-b6af-46de-9659-aed9b74628fe",
+        "pod_name": "chris-q38-rlreward-prod4-bpb2k-head-dw6b5",
+        "pod_uid": "b36e390f-9da0-487c-a57d-4e0aaff6ded5",
+        "output_root": "/mnt/sfs/jobs/chris-q38-rlreward-prod4",
+        "plan_sha256": "sha256:25d0abf30da462a6ba67c6ac8a3fc95f3f89a9a08e3ea295b21e8a22481630b3",
+        "request_sha256": "sha256:98a83dbbab61f360a12ec6389adb55de637ded64dcceaa1debf0d791e754cef4",
+        "wandb_url": "https://wandb.ai/thefleet/cyber-post-train/runs/chris-q38-rlreward-prod4"
+      },
+      "failure": {
+        "phase": "agent_interaction",
+        "error_class": "InvalidEpisode",
+        "reason": "multiple_calls_not_qualified",
+        "native_failure_receipt_sha256": "sha256:cbc41545f426f42cad31fe9e0bc9fa124548309424db8f80bff0a106bccd0635",
+        "failed_receipt_sha256": "sha256:df796d5f21e35438dab5845d3b24b86dfaf738b809b4b253697b7349ae2559bd",
+        "collected_batches": 0,
+        "optimizer_steps": 0
+      }
     }
   ],
   "excluded_artifacts": [
