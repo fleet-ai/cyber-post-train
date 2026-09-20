@@ -800,6 +800,29 @@ def checkpoint_seal(
         _fail(exc)
 
 
+@app.command("rl-checkpoint-seal")
+def rl_checkpoint_seal(directory: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
+    """CPU-only: accept and seal one terminal native SkyRL RL checkpoint."""
+    from training.skyrl_posttrain import seal_checkpoint
+
+    try:
+        plan, _ = _prepared(directory)
+        result = seal_checkpoint(plan, output)
+        _print(
+            {
+                k: result[k]
+                for k in (
+                    "optimizer_step",
+                    "total_bytes",
+                    "receipt_sha256",
+                    "optimizer_update_verified",
+                )
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command()
 def doctor() -> None:
     """Check installed modules only; NOT model, cluster or scientific readiness."""
@@ -830,6 +853,33 @@ def checkpoint_export(
 
     try:
         result = export(manifest, sha256, output)
+        _print(
+            {
+                k: result[k]
+                for k in (
+                    "output_root",
+                    "optimizer_step",
+                    "tensor_bytes",
+                    "receipt_sha256",
+                    "gpu_reload_verified",
+                )
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-checkpoint-export")
+def rl_checkpoint_export(
+    manifest: Path,
+    sha256: Annotated[str, typer.Option("--sha256")],
+    output: Annotated[Path, typer.Option("--output")],
+) -> None:
+    """CPU-only: zero-update BF16 export from a sealed native SkyRL RL checkpoint."""
+    from training.skyrl_posttrain import export_checkpoint
+
+    try:
+        result = export_checkpoint(manifest, sha256, output)
         _print(
             {
                 k: result[k]

@@ -279,13 +279,9 @@ def test_development_status_requires_and_uses_prepared_route(prepared, monkeypat
     seen = []
     fake = SimpleNamespace(status=lambda name: seen.append(name) or {"name": name})
     monkeypatch.setattr(cli, "_client", lambda selected=None: nullcontext(fake))
-    result = RUNNER.invoke(
-        cli.app, ["status", "synthetic", "--prepared", str(dev)]
-    )
+    result = RUNNER.invoke(cli.app, ["status", "synthetic", "--prepared", str(dev)])
     assert result.exit_code == 0 and seen == ["synthetic"]
-    assert RUNNER.invoke(
-        cli.app, ["status", "other", "--prepared", str(dev)]
-    ).exit_code == 2
+    assert RUNNER.invoke(cli.app, ["status", "other", "--prepared", str(dev)]).exit_code == 2
 
 
 def test_conversion_uses_same_prepare_preflight_submit_rail(prepared, monkeypatch, tmp_path):
@@ -606,6 +602,8 @@ def test_checkpoint_check_explicit_gpu_and_redacted_failure(tmp_path, monkeypatc
         ["status"],
         ["checkpoint-seal"],
         ["checkpoint-export"],
+        ["rl-checkpoint-seal"],
+        ["rl-checkpoint-export"],
         ["checkpoint-check"],
     ],
 )

@@ -21,6 +21,7 @@ MODEL_WEIGHTS = ROOT / "configs/models/qwen38-27b-1d4bf0f2.weights.json"
 SERVING_TEMPLATE = ROOT / "configs/qualification/qwen38-fresh75-step230-inference-stage-v2.json"
 PACKET_DIR = ROOT / "configs/qualification"
 EVIDENCE = ROOT / "docs/evidence/qwen38-study/2026-09-20-skyrl-production-posttrain-queue-v1.json"
+POSTTRAIN_ADAPTER = ROOT / "training/skyrl_posttrain.py"
 
 IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
@@ -162,12 +163,12 @@ def export_and_reload(run: dict, schedule: dict) -> tuple[dict, dict]:
     step = schedule["terminal_step"]
     export_root = f"{run['output_root']}/hf-export-step{step}-v1"
     export = {
-        "state": "blocked_waiting_training_acceptance_and_RL_checkpoint_export_adapter",
+        "state": "blocked_waiting_training_acceptance",
         "launchable": False,
-        "tooling_blocker": (
-            "training.checkpoints and training.export currently validate only SFT runtime plans; "
-            "native SkyRL RL needs a tested plan-bound seal/export adapter before execution"
-        ),
+        "tooling_ready": True,
+        "adapter": source(POSTTRAIN_ADAPTER),
+        "checkpoint_manifest_schema": "cyber_native_skyrl_rl_checkpoint_manifest_v1",
+        "export_receipt_schema": "cyber_native_skyrl_rl_hf_export_v1",
         "source_checkpoint": schedule["terminal_checkpoint"],
         "source_manifest": schedule["seal_manifest"],
         "output_root": export_root,
@@ -416,11 +417,11 @@ def build() -> dict[Path, dict]:
             "common_blockers": [
                 "prod4_canary_terminal_acceptance_and_release_not_yet_bound",
                 "five_production_training_arms_not_yet_terminally_accepted",
-                "RL_specific_checkpoint_seal_and_BF16_export_adapter_not_implemented",
                 "exact_export_reload_staging_registration_and_live_parity_receipts_absent",
                 "fresh_matched_Fleet_dev_and_WebExploitBench_plans_not_sealable_before_routes_exist",
             ],
             "ready_now": [
+                "RL_specific_plan_bound_checkpoint_seal_and_BF16_export_adapter_implemented",
                 "five_unique_output_and_checkpoint_schedules_bound",
                 "terminal_reward_update_and_reload_acceptance_contract_bound",
                 "create_once_zero_update_export_and_reload_contract_bound",

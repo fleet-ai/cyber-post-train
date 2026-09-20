@@ -82,7 +82,12 @@ def test_reward_update_checkpoint_export_and_reload_gates_fail_closed() -> None:
             in (acceptance["requirements"])
         )
         assert value["export"]["launchable"] is False
-        assert "only SFT runtime plans" in value["export"]["tooling_blocker"]
+        assert value["export"]["tooling_ready"] is True
+        assert value["export"]["adapter"]["path"] == "training/skyrl_posttrain.py"
+        assert (
+            value["export"]["checkpoint_manifest_schema"]
+            == "cyber_native_skyrl_rl_checkpoint_manifest_v1"
+        )
         assert value["export"]["gpus"] == value["export"]["optimizer_updates"] == 0
         assert value["export"]["create_once"] is True
         assert (
@@ -161,7 +166,8 @@ def test_evidence_rehashes_every_packet() -> None:
         )
         assert row["packet_self_sha256"] == value["sha256"]
         assert row["launchable"] is False
+    assert not any("adapter_not_implemented" in blocker for blocker in evidence["common_blockers"])
     assert (
-        "RL_specific_checkpoint_seal_and_BF16_export_adapter_not_implemented"
-        in evidence["common_blockers"]
+        "RL_specific_plan_bound_checkpoint_seal_and_BF16_export_adapter_implemented"
+        in evidence["ready_now"]
     )

@@ -299,7 +299,13 @@
     "routes_created_or_changed": 0
   },
   "export": {
+    "adapter": {
+      "file_sha256": "sha256:310b12303a5538a5e2aa923975b9756cba110b33ac2380f134fed6ec12bd6acd",
+      "path": "training/skyrl_posttrain.py"
+    },
+    "checkpoint_manifest_schema": "cyber_native_skyrl_rl_checkpoint_manifest_v1",
     "create_once": true,
+    "export_receipt_schema": "cyber_native_skyrl_rl_hf_export_v1",
     "gpus": 0,
     "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
     "launchable": false,
@@ -316,8 +322,8 @@
     ],
     "source_checkpoint": "/mnt/sfs/jobs/chris-q38-skyrl10-seed43/checkpoints/global_step_10",
     "source_manifest": "/mnt/sfs/jobs/chris-q38-skyrl10-seed43/checkpoint-seals-v1/step-10.json",
-    "state": "blocked_waiting_training_acceptance_and_RL_checkpoint_export_adapter",
-    "tooling_blocker": "training.checkpoints and training.export currently validate only SFT runtime plans; native SkyRL RL needs a tested plan-bound seal/export adapter before execution"
+    "state": "blocked_waiting_training_acceptance",
+    "tooling_ready": true
   },
   "firewall": {
     "external_benchmark_content_or_outcomes_read": 0,
@@ -481,7 +487,7 @@
       "release_and_exact_UID_absence_required_on_success_or_failure": true
     }
   },
-  "sha256": "sha256:d03436b77b555ac86f221521d61fca2f06ba3e2d44fa646f2448012ec1695b2b",
+  "sha256": "sha256:254d6354f1858e2c7c0fecd2f4c259eedd236e551be0aab74836a275a977a3fd",
   "state": "offline_blocked_waiting_training_acceptance",
   "training_acceptance": {
     "accepted": false,

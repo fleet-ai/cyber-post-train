@@ -5,8 +5,8 @@
       "launchable": false,
       "name": "chris-q38-skyrl10-a1",
       "packet": "configs/qualification/qwen38-skyrl-production-posttrain-a1-v1.json",
-      "packet_file_sha256": "sha256:9b7eb4f30cdd2f03aa99b30a0275563848a65d689ac86baab1f415129de061a0",
-      "packet_self_sha256": "sha256:6a54244cad636ac1891d230ed7ce95a086600448269d43b7040ff81579b651a1",
+      "packet_file_sha256": "sha256:4fd5bfdd8b59b34742766c2eda8a7a7b70d8db644476922e776df7cccce46d66",
+      "packet_self_sha256": "sha256:df125c36868d16006793665bd66d81689cfb4bc568cdaf563a19e9722f6b325b",
       "terminal_checkpoint": "/mnt/sfs/jobs/chris-q38-skyrl10-a1/checkpoints/global_step_10"
     },
     {
@@ -14,8 +14,8 @@
       "launchable": false,
       "name": "chris-q38-skyrl10-lr3e7",
       "packet": "configs/qualification/qwen38-skyrl-production-posttrain-lr3e7-v1.json",
-      "packet_file_sha256": "sha256:0f60fbc6619d34d6100ca0bac12aeaf4e02c7e252ab6e8abf6a5bf62190e063e",
-      "packet_self_sha256": "sha256:db48cd5c7abf7bf7d1dda4dfb98b6d72fb0f82c800a57a06505793251dcfdf81",
+      "packet_file_sha256": "sha256:6d69fa16ca5711a5cb4cd914b96e1abaca4e37a21c261e0579433982fefb752f",
+      "packet_self_sha256": "sha256:e88932e800e9a45ced3eb51eabe880770155823d2582129f671478b70fcc51c2",
       "terminal_checkpoint": "/mnt/sfs/jobs/chris-q38-skyrl10-lr3e7/checkpoints/global_step_10"
     },
     {
@@ -23,8 +23,8 @@
       "launchable": false,
       "name": "chris-q38-skyrl10-lr3e6",
       "packet": "configs/qualification/qwen38-skyrl-production-posttrain-lr3e6-v1.json",
-      "packet_file_sha256": "sha256:88795132e817bf5021f8206b7043bd2031fe05075ab3c10fdb8986a9207ed594",
-      "packet_self_sha256": "sha256:2fb75d2febed8778bfd0d89b90b7494c79d9615bc46b3e59e57217870bd7d982",
+      "packet_file_sha256": "sha256:be09976dae5ab3211c828b99c6746d6964c30efae92bfb5fa3e9f5898b83eedd",
+      "packet_self_sha256": "sha256:281c6cf0d6dc040ac718ecf0c468ffb4ff3990e8b786ea491f4671dc51e68a98",
       "terminal_checkpoint": "/mnt/sfs/jobs/chris-q38-skyrl10-lr3e6/checkpoints/global_step_10"
     },
     {
@@ -32,8 +32,8 @@
       "launchable": false,
       "name": "chris-q38-skyrl10-seed43",
       "packet": "configs/qualification/qwen38-skyrl-production-posttrain-seed43-v1.json",
-      "packet_file_sha256": "sha256:a099a4b54e10eadcf02acb53b668ff419f3a1663f15f45156a5c0a605a91fad2",
-      "packet_self_sha256": "sha256:d03436b77b555ac86f221521d61fca2f06ba3e2d44fa646f2448012ec1695b2b",
+      "packet_file_sha256": "sha256:328f6c609a8f69bdcfc8d619b526536ee949d9bc1000a8defb78ac71cc1c9d79",
+      "packet_self_sha256": "sha256:254d6354f1858e2c7c0fecd2f4c259eedd236e551be0aab74836a275a977a3fd",
       "terminal_checkpoint": "/mnt/sfs/jobs/chris-q38-skyrl10-seed43/checkpoints/global_step_10"
     },
     {
@@ -41,20 +41,20 @@
       "launchable": false,
       "name": "chris-q38-skyrl50-a1",
       "packet": "configs/qualification/qwen38-skyrl-production-posttrain-dose50-v1.json",
-      "packet_file_sha256": "sha256:55af0810189d0284376c80089e5c8f0524a919ce06b437203009b10026bc129b",
-      "packet_self_sha256": "sha256:3f56ac0b9fa6dfab8a1787596381f1a218ba31a936d739084f20b16f108f750e",
+      "packet_file_sha256": "sha256:8525abb72a483e05180e3cc7300b7e86923bed8a0a6e20de9853b31979f83c13",
+      "packet_self_sha256": "sha256:11b9d1353775741783c26e41accc97b4dd5bbabfdb1ee00c5c932f3877eed015",
       "terminal_checkpoint": "/mnt/sfs/jobs/chris-q38-skyrl50-a1/checkpoints/global_step_50"
     }
   ],
   "common_blockers": [
     "prod4_canary_terminal_acceptance_and_release_not_yet_bound",
     "five_production_training_arms_not_yet_terminally_accepted",
-    "RL_specific_checkpoint_seal_and_BF16_export_adapter_not_implemented",
     "exact_export_reload_staging_registration_and_live_parity_receipts_absent",
     "fresh_matched_Fleet_dev_and_WebExploitBench_plans_not_sealable_before_routes_exist"
   ],
   "external_mutations": 0,
   "ready_now": [
+    "RL_specific_plan_bound_checkpoint_seal_and_BF16_export_adapter_implemented",
     "five_unique_output_and_checkpoint_schedules_bound",
     "terminal_reward_update_and_reload_acceptance_contract_bound",
     "create_once_zero_update_export_and_reload_contract_bound",
@@ -64,5 +64,5 @@
   ],
   "schema": "cyber_qwen38_skyrl_posttrain_queue_evidence_v1",
   "scope": "offline_no_submit_no_stage_no_serve_no_eval",
-  "sha256": "sha256:b443082389ea4e4f24b55264b92a11b3b4f95bcc8b5bcadd48b719ef3434f77a"
+  "sha256": "sha256:50529ae7ba257e410c65b1fffc5f228f651856f3a3ab692cbda781fc952e7f2b"
 }
