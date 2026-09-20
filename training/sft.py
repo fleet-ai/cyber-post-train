@@ -324,9 +324,22 @@ def job_request(plan: dict) -> dict:
     ).encode()
     compressed = canonical_gzip(bundle)
     bundle_sha = hashlib.sha256(compressed).hexdigest()
+    encoded = base64.b64encode(compressed).decode()
+    transport = {"CYBER_SFT_BUNDLE": encoded}
+    bundle_expression = "os.environ.pop('CYBER_SFT_BUNDLE')"
+    if len(encoded) > 120000:
+        # Linux limits each argument/environment value independently. Recovery
+        # plans embed their sealed checkpoint inventory, so split only the
+        # transport representation and reassemble the exact digest-bound bytes
+        # before decoding.
+        parts = [encoded[index : index + 48000] for index in range(0, len(encoded), 48000)]
+        transport = {f"CYBER_SFT_BUNDLE_{index}": value for index, value in enumerate(parts)}
+        bundle_expression = (
+            f"''.join(os.environ.pop('CYBER_SFT_BUNDLE_'+str(i)) for i in range({len(parts)}))"
+        )
     bootstrap = (
         "import base64,gzip,hashlib,importlib,json,os,pathlib,runpy,sys;"
-        "b=base64.b64decode(os.environ.pop('CYBER_SFT_BUNDLE'),validate=True);"
+        f"b=base64.b64decode({bundle_expression},validate=True);"
         f"assert hashlib.sha256(b).hexdigest()=={bundle_sha!r};"
         "v=json.loads(gzip.decompress(b));"
         "p=pathlib.Path(os.environ['RUN_DIR'])/'.runtime';p.mkdir(parents=True,mode=0o700);"
@@ -357,7 +370,7 @@ def job_request(plan: dict) -> dict:
             else {}
         ),
         "env": {
-            "CYBER_SFT_BUNDLE": base64.b64encode(compressed).decode(),
+            **transport,
             **(
                 {
                     "PYTHONPATH": str(Path(plan["output_root"]) / ".runtime")

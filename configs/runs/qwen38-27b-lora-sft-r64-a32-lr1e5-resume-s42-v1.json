@@ -1,0 +1,74 @@
+{
+  "backend": "skyrl",
+  "name": "chris-q38-lora-r1-s42-v1",
+  "output_root": "/mnt/sfs/jobs/chris-q38-lora-r1-s42-v1",
+  "model": {
+    "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
+    "weights": "../models/qwen38-27b-1d4bf0f2.weights.json",
+    "root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2"
+  },
+  "data": {
+    "manifest": "../data/qwen38-teacher3k-32k-v1.manifest.json",
+    "root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher3k-32k-v1/data-v1"
+  },
+  "recipe": {
+    "epochs": 1,
+    "batch_size": 8,
+    "microbatch_per_gpu": 1,
+    "nodes": 1,
+    "gpus_per_node": 8,
+    "lr": 0.00001,
+    "max_length": 32768,
+    "eval_interval": 0,
+    "checkpoint_interval": 20,
+    "keep_checkpoints": 3,
+    "seed": 20260919
+  },
+  "lora": {
+    "type": "lora",
+    "target_modules": "all-linear",
+    "rank": 64,
+    "alpha": 32,
+    "init_method": "kaiming",
+    "dropout": 0.0
+  },
+  "runtime": {
+    "skyrl_source_commit": "7e9356c8e02e7382e84b8484638baccdd1bbf680",
+    "image": "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317"
+  },
+  "recovery": {
+    "manifest": "../qualification/qwen38-lora-lr1-step40-megatron-checkpoint-v1.json",
+    "sha256": "89bef1d4d8d19848c63f787d0c1f90b3c7db6f4a74afb2bfd045f6aeede00e09",
+    "mode": "resume"
+  },
+  "pause_after_step": 42,
+  "wandb": {
+    "entity": "thefleet",
+    "project": "cyber-post-train",
+    "group": "qwen38-lora-sft-goal-v1",
+    "run_id": "chris-q38-lora-r1-s42-v1",
+    "name": "chris-q38-lora-r1-s42-v1",
+    "tags": [
+      "qwen38",
+      "lora",
+      "teacher-sft",
+      "rank64",
+      "alpha32",
+      "57m-unique-supervised-tokens",
+      "32k",
+      "lr1e-5",
+      "memory-repair-resume-canary",
+      "step40-to-step42",
+      "task-outcomes-only"
+    ]
+  },
+  "cluster": {
+    "priority": "c1",
+    "resources": {
+      "cpu_request": "64",
+      "cpu_limit": "64",
+      "memory_request": "512Gi",
+      "memory_limit": "768Gi"
+    }
+  }
+}
