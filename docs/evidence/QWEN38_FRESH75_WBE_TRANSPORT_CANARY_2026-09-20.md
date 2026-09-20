@@ -314,3 +314,29 @@ deferred-scoring tests passed before execution. V18 qualification execution,
 one base-only score-free task-0 canary, and separate deferred scoring are the
 only authorized next actions. Candidate activation and wider fanout remain
 closed until the base canary is accepted.
+
+V18 qualification subsequently completed and released its exact sandbox:
+
+- qualification sandbox: `223em95sp7d75i20srq2e`;
+- accepted filesystem snapshot: `f86xgggsbyvdx4aeobtxd`;
+- completion receipt:
+  `sha256:7b8b096d4ff75d60cc41e10572561a6352af82dacca2f506a1ebd3b6980ac40a`;
+- task-0 qualification receipt:
+  `sha256:2144e1f39b2f755ccd18ae234ba4e8ee643e1be0ab0743a82e2ba3c228cdc09a`;
+- full-15 qualification receipt:
+  `sha256:c7ee9be5bdb202387c886508df451a7f27a11c9a2e6e1e0e4089fffc634874c1`;
+- release receipt:
+  `sha256:fdb8394861a2bd2eae79c0549932a8be1b31767e0e6283c8c28d34cf164a342f`;
+- released provider state: `terminated`.
+
+The single corrected base-only task-0 collection plan is now resealed against
+that exact V18 chain. It uses OpenCode, pass@1, no scoring during collection,
+explicit internet access for the Fleet inference route, and create-once sandbox
+name `q38-b-f75-c1-v18-t00`. Its plan self-digest is
+`sha256:4d78b39cfe1c87437bfa605579168ac377a6fcd87b7abf643d7599a404c30dd5`,
+plan-file SHA-256 is
+`sha256:10b27b63efed2debdeede27c3691c9dfe802a14e3bcc8162dd17495ade83d1ed`,
+and protocol digest is
+`sha256:8f25f0b176acae321fdd33ae08ed532affc5d3e9d3af49a3e9c9634ec47827f6`.
+It remains subject to a fresh duplicate census and base-route read immediately
+before its one create request.
