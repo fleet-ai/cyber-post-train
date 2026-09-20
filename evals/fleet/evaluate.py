@@ -19,6 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import httpx
+import yaml
 
 from cyber_post_train.jobs import digest
 from evals.fleet import opencode_self_hosted as harness
@@ -26,7 +27,6 @@ from evals.fleet import rollout_ledger as ledger
 from evals.fleet import rollout_postgres as postgres
 from evals.fleet import rollout_worker as worker
 from evals.fleet.fixed_proxy import completion_overrides
-from training.sft import _known, read_mapping
 
 CATALOG_FIELDS = {"engine", "precision", "tensor_parallel_size"}
 MODEL_FIELDS = {"model_path", "model_type", "architectures"}
@@ -58,6 +58,22 @@ RUNTIME_FILES = (
     "fixed_proxy.py",
     "exact_pass4_crypto.py",
 )
+
+
+def read_mapping(path: Path) -> dict:
+    text = path.read_text()
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError:
+        value = yaml.safe_load(text)
+    if not isinstance(value, dict):
+        raise ValueError("configuration/manifest must be a mapping")
+    return value
+
+
+def _known(value: dict, names: set[str], label: str) -> None:
+    if not isinstance(value, dict) or value.keys() - names:
+        raise ValueError(f"unknown fields in {label}; check the documented configuration")
 
 
 def runtime_identity() -> dict:
@@ -163,12 +179,17 @@ def compile_eval(config: dict, *, relative_to: Path) -> dict:
     for name, model in models.items():
         if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9][a-z0-9.-]{0,63}", name):
             raise ValueError("model aliases must be lowercase names; dots and hyphens are allowed")
+        revision = model.get("revision")
         if (
             set(model) != {"repository", "revision", "session_model"}
-            or not re.fullmatch(r"[a-f0-9]{40}", model["revision"])
+            or not isinstance(revision, str)
+            or re.fullmatch(r"(?:[a-f0-9]{40}|sha256:[a-f0-9]{64})", revision) is None
             or not all(isinstance(v, str) and v for v in model.values())
         ):
-            raise ValueError("model needs repository, exact revision and catalog session identity")
+            raise ValueError(
+                "model needs repository, exact source-or-payload revision "
+                "and catalog session identity"
+            )
     for block, route in routes.items():
         _name(block)
         if set(route) != {

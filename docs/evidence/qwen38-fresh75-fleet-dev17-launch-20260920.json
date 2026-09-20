@@ -1,0 +1,82 @@
+{
+  "schema": "qwen38_fresh75_fleet_dev17_launch_v1",
+  "observed_at": "2026-09-20T23:19:17Z",
+  "purpose": "Launch the first create-once matched held-out Fleet comparison of the exact base route and the accepted Fresh75 step-230 checkpoint on the frozen development split.",
+  "science": {
+    "config_path": "configs/evaluation/qwen38-fresh75-fleet-dev17-matched-pass1-v1.json",
+    "config_file_sha256": "sha256:a33d9648838a61cf7c7744c151807744daf2ab02768a97543e35bc2666ad5d0b",
+    "plan_sha256": "sha256:4bbc4d02295d37083b751e9d21c13ba1dbcec1db30807ea48bf1713679882734",
+    "task_set_path": "configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json",
+    "task_set_file_sha256": "sha256:79c834e739246da29aca9513965ecfc7032f8df7744eb2245ce0303aba1b97c5",
+    "split_file_sha256": "sha256:28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb",
+    "selection_sha256": "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
+    "role": "development_heldout",
+    "final_test_access": "sealed",
+    "task_versions": 17,
+    "models": 2,
+    "total_sessions": 34,
+    "pass_k": 1,
+    "automatic_retry": false,
+    "harness": "opencode",
+    "harness_version": "1.18.27",
+    "context_window_size": 262144,
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v2",
+    "sampling": {
+      "temperature": 0.6,
+      "top_p": 0.95,
+      "seed": 42
+    }
+  },
+  "arms": {
+    "base": {
+      "served_id": "qwen3.8-27b",
+      "repository": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "session_model": "qwen/qwen3.8-27b",
+      "serving_profile": "bf16_tp1_dp8_262144"
+    },
+    "candidate": {
+      "artifact_id": "q38-fresh75-step230",
+      "served_id": "chris-q38-fresh75-step230-web-v1",
+      "inference_model_uid": "d048104e-ade6-49d2-b088-d3819e606061",
+      "revision": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
+      "session_model": "self-hosted/chris-q38-fresh75-step230-web-v1",
+      "serving_profile": "bf16_tp1_dp8_262144"
+    }
+  },
+  "harness_build": {
+    "job_name": "chris-q38-dev17-harness-build-v1",
+    "job_uid": "5b8de009-bec8-4d27-a8dc-ce61ffd08722",
+    "created_at": "2026-09-20T23:10:02Z",
+    "completed_at": "2026-09-20T23:10:49Z",
+    "restarts": 0,
+    "gpu_count": 0,
+    "image_id": "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92",
+    "image_tar_sha256": "sha256:b14bdf558990087504a95e209ff0c0e84039633f6d28b2cdbc483cd845c0c410",
+    "build_receipt_file_sha256": "sha256:4781514a8431d6d87c671c49120639062f5a8e3afb016a04360752c896181745"
+  },
+  "duplicate_preflight": {
+    "successful_pod_name": "chris-q38-f75-dev17-preflight-v3",
+    "successful_pod_uid": "0a6aca0d-f6d9-4259-9a41-697dc42c3516",
+    "output_root_absent": true,
+    "dedicated_database_absent": true,
+    "lesson": "The PostgreSQL network policy requires the exact postgres-client pod label. Two earlier read-only Pods lacked it, timed out before connecting, and created no evaluation or database state."
+  },
+  "execution": {
+    "job_name": "chris-q38-f75-dev17-p1-v1",
+    "job_uid": "338c0625-98b3-4682-bda4-92223c67389c",
+    "pod_name": "chris-q38-f75-dev17-p1-v1-hmpjx",
+    "pod_uid": "e5ac864f-8954-4402-8bfc-d5194a0edbdd",
+    "created_at": "2026-09-20T23:19:17Z",
+    "namespace": "fleet-train-jobs",
+    "priority_class": "c1",
+    "failure_alert_annotation": "off",
+    "gpu_count": 0,
+    "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-p1-v1",
+    "dedicated_database": "q38_f75_dev17_p1_v1",
+    "immutable_configmap_uid": "e8c671db-84eb-4ffa-81d8-ffb40eb59ac5",
+    "state_at_observation": "Pending/PodInitializing",
+    "restart_count": 0
+  },
+  "result_status": "in_progress_no_accepted_result_yet"
+}
