@@ -150,6 +150,40 @@ that pair, not a merely well-formed digest. The broad anchor remains blocked:
 the real one-step evidence and later zero-update reload/merge gate must first
 be independently accepted. A template is not a workaround for either gate.
 
+## Separate zero-step merge/export lane
+
+`training/qwen38_lora_export.py` is the create-once producer and Jobs API
+request renderer for the post-checkpoint gate. It can seal a plan only from an
+accepted `QWEN38_LORA_CHECKPOINT.json`; the accepted receipt supplies the
+checkpoint path, exact base revision and inventory, TP8 adapter census, and all
+source-plan identities. The plan cannot substitute a checkpoint path, base
+model, adapter selector, or mutable model reference. It binds the same exact
+trainer image, one eight-GPU node, priority `c1`, offline model loading, zero
+W&B/Fleet secrets, zero external evaluation, and a distinct create-once output
+root. No external job has been launched by adding this lane.
+
+The pinned native SkyRL calls exist, but their internal adapter load and HF
+export use non-strict state-dict handling. The producer therefore does not
+treat successful return as acceptance. After native checkpoint/optimizer/RNG
+reload, it hashes the live adapter values on every TP8 rank and requires exact
+agreement with every `checkpoint_sha256` in the accepted receipt; it likewise
+requires the accepted trainable and frozen-base rank manifests and observes
+zero successful optimizer updates. It then exports the same live state twice,
+requires equal tensor values and sidecars, reopens every indexed tensor,
+requires a complete BF16 layout identical to the exact base with at least one
+adapter-derived value change, and proves the base and checkpoint inputs are
+unchanged.
+
+Only after the distributed workers release does a separate one-GPU task reload
+the complete flat Hugging Face model and tokenizer from the create-once output
+and require finite logits on a fixed non-task string. The producer then emits
+the existing
+`cyber_qwen38_megatron_lora_merged_hf_export_v1` receipt and validates it
+against the source checkpoint receipt before an exclusive write. An incomplete
+or failed destination is preserved and is never retried in place. This closes
+the known native strictness gap through independent exact evidence; it does not
+claim that the upstream native APIs themselves became strict.
+
 ## Exact one-step source and image binding
 
 The one-step template contains this exact immutable image reference:
