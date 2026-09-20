@@ -6,13 +6,37 @@ import pytest
 import yaml
 
 from cyber_post_train.jobs import (
+    API_URLS,
     Jobs,
     JobsError,
+    plan_api_target,
     quantity,
     safe_status,
     validate_preview,
     validate_request,
 )
+
+
+def test_plan_api_target_is_immutable_and_closed() -> None:
+    assert plan_api_target(None) == ("prod", API_URLS["prod"])
+    assert plan_api_target({}) == ("prod", API_URLS["prod"])
+    for target in ("dev", "prod"):
+        plan = {
+            "execution": {
+                "cluster_target": target,
+                "jobs_api_base_url": API_URLS[target],
+            }
+        }
+        assert plan_api_target(plan) == (target, API_URLS[target])
+    for execution in (
+        {"cluster_target": "dev"},
+        {"jobs_api_base_url": API_URLS["dev"]},
+        {"cluster_target": "dev", "jobs_api_base_url": API_URLS["prod"]},
+        {"cluster_target": "prod", "jobs_api_base_url": API_URLS["dev"]},
+        {"cluster_target": "staging", "jobs_api_base_url": "https://example.invalid"},
+    ):
+        with pytest.raises(JobsError, match="incomplete or mismatched"):
+            plan_api_target({"execution": execution})
 
 
 def config():

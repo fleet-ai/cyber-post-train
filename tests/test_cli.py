@@ -164,7 +164,9 @@ def test_submit_uses_shared_boundary_and_journal(prepared, monkeypatch):
         calls.append((config, journal))
         return {"name": "synthetic-12345678", "status": "pending"}
 
-    monkeypatch.setattr(cli, "_client", lambda: nullcontext(SimpleNamespace(submit_once=submit)))
+    monkeypatch.setattr(
+        cli, "_client", lambda _plan=None: nullcontext(SimpleNamespace(submit_once=submit))
+    )
     result = RUNNER.invoke(cli.app, ["submit", str(output)])
     assert result.exit_code == 0
     assert calls == [(request, output / "SUBMISSION.jsonl")]
@@ -203,7 +205,7 @@ def test_preview_and_status_are_read_only(prepared, monkeypatch):
         preview=lambda config: {"synthetic": config},
         status=lambda name: {"name": name, "status": "RUNNING"},
     )
-    monkeypatch.setattr(cli, "_client", lambda: nullcontext(fake))
+    monkeypatch.setattr(cli, "_client", lambda _plan=None: nullcontext(fake))
     monkeypatch.setattr(
         cli, "validate_preview", lambda config, result: {"nodes": config["workers"]}
     )
@@ -231,8 +233,59 @@ def test_missing_auth_and_sdk_errors_never_print_sensitive_contents(monkeypatch)
 
 def test_jobs_use_standard_fleet_identity_not_a_second_token(monkeypatch):
     monkeypatch.setenv("FLEET_API_KEY", "synthetic-operator-key")
-    monkeypatch.setattr(cli, "Jobs", lambda token: {"received": token})
-    assert cli._client() == {"received": "synthetic-operator-key"}
+    monkeypatch.setattr(
+        cli, "Jobs", lambda token, *, base_url: {"received": token, "base_url": base_url}
+    )
+    assert cli._client() == {
+        "received": "synthetic-operator-key",
+        "base_url": "https://api.ft.flt.build",
+    }
+
+
+def test_client_route_comes_only_from_immutable_plan(monkeypatch):
+    calls = []
+    monkeypatch.setenv("FLEET_API_KEY", "synthetic-operator-key")
+    monkeypatch.setattr(
+        cli,
+        "Jobs",
+        lambda token, *, base_url: calls.append((token, base_url)) or {"base_url": base_url},
+    )
+    plan = {
+        "execution": {
+            "cluster_target": "dev",
+            "jobs_api_base_url": "https://api.ft.dev.flt.build",
+        }
+    }
+    assert cli._client(plan) == {"base_url": "https://api.ft.dev.flt.build"}
+    assert calls == [("synthetic-operator-key", "https://api.ft.dev.flt.build")]
+    plan["execution"]["jobs_api_base_url"] = "https://api.ft.flt.build"
+    with pytest.raises(Exception, match="incomplete or mismatched"):
+        cli._client(plan)
+    assert len(calls) == 1
+
+
+def test_development_status_requires_and_uses_prepared_route(prepared, monkeypatch):
+    output, plan, _, _ = prepared
+    plan["run_name"] = "synthetic"
+    plan["execution"] = {
+        "cluster_target": "dev",
+        "jobs_api_base_url": "https://api.ft.dev.flt.build",
+    }
+    request = cli._read(output / "request.json")
+    # Replace the create-once fixture in a separate prepared directory so its
+    # receipt remains digest-bound rather than mutating a launch in place.
+    dev = output.parent / "dev-prepared"
+    cli._prepare(dev, plan, request)
+    seen = []
+    fake = SimpleNamespace(status=lambda name: seen.append(name) or {"name": name})
+    monkeypatch.setattr(cli, "_client", lambda selected=None: nullcontext(fake))
+    result = RUNNER.invoke(
+        cli.app, ["status", "synthetic", "--prepared", str(dev)]
+    )
+    assert result.exit_code == 0 and seen == ["synthetic"]
+    assert RUNNER.invoke(
+        cli.app, ["status", "other", "--prepared", str(dev)]
+    ).exit_code == 2
 
 
 def test_conversion_uses_same_prepare_preflight_submit_rail(prepared, monkeypatch, tmp_path):
@@ -263,7 +316,7 @@ def test_conversion_uses_same_prepare_preflight_submit_rail(prepared, monkeypatc
     monkeypatch.setattr(
         cli,
         "_client",
-        lambda: nullcontext(
+        lambda _plan=None: nullcontext(
             SimpleNamespace(
                 submit_once=lambda *args: calls.append(args) or {"name": "synthetic-12345678"},
             )

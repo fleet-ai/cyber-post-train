@@ -7,6 +7,7 @@
   },
   "execution": {
     "cluster_target": "dev",
+    "jobs_api_base_url": "https://api.ft.dev.flt.build",
     "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
     "environment": {
       "VLLM_USE_FLASHINFER_SAMPLER": "0"
@@ -45,10 +46,10 @@
     "blockers": [
       "fresh_main_based_cpu_preflight_and_preview_not_yet_recorded",
       "fresh_jobs_sfs_wandb_identity_absence_not_yet_proven",
-      "dev_api_target_not_bound_by_current_main_jobs_client",
+      "fresh_plan_bound_dev_route_not_yet_preview_validated",
       "preserved_2400_second_episode_conflicts_with_30_minute_dev_deadline_policy",
       "one_by_eight_training_topology_not_qualified_by_two_by_four_engine_receipt"
     ]
   },
-  "sha256": "sha256:cbd2d9b29de72bf61654b8e1ba7d35d9c66a05642dd970bb86ee7384dbec9827"
+  "sha256": "sha256:1df57c9b6fad809d0b8b02b51293d3b22f3006de0c73ad1910c4c6a54398ab41"
 }

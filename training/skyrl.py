@@ -206,3 +206,22 @@ def native_config(config: SkyRLConfig):
     cfg = modules["skyrl.train.config.config"].SkyRLTrainConfig.from_cli_overrides(values)
     modules["skyrl.train.utils.utils"].validate_cfg(cfg)
     return cfg
+
+
+def diagnostic_native_config(config: SkyRLConfig):
+    """Parse only the engine topology while disabling training telemetry."""
+    from .skyrl_episode import _module
+
+    values = overrides(config)
+    values.update(
+        {
+            "trainer.logger": "console",
+            "trainer.enable_ray_gpu_monitor": False,
+        }
+    )
+    modules = {name: _module(name, sha) for name, sha in NATIVE_SOURCES.items()}
+    cfg = modules["skyrl.train.config.config"].SkyRLTrainConfig.from_cli_overrides(values)
+    modules["skyrl.train.utils.utils"].validate_cfg(cfg)
+    if cfg.trainer.logger != "console" or cfg.trainer.enable_ray_gpu_monitor is not False:
+        raise ValueError("native diagnostic telemetry controls changed")
+    return cfg

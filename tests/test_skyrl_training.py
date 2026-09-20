@@ -22,6 +22,14 @@ from training import skyrl_training as train
 ROOT = Path(__file__).resolve().parents[1]
 
 
+@pytest.fixture(autouse=True)
+def reviewed_runtime_user(monkeypatch):
+    monkeypatch.setenv("CYBER_EXPECTED_RUNTIME_UID", "1000")
+    monkeypatch.setenv("CYBER_EXPECTED_RUNTIME_GID", "100")
+    monkeypatch.setattr(train.os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(train.os, "getegid", lambda: 100)
+
+
 @pytest.fixture
 def prepared(data_setup):  # noqa: F811
     lock = ROOT / "configs/models/qwen38-27b-1d4bf0f2.lock.json"
@@ -53,6 +61,8 @@ def test_prepare_cli_and_portable_runtime_are_offline(prepared, monkeypatch):
     assert request["priority_class"] == "c1" and not request["requeueIfPreempted"]
     assert request["workers"] * request["gpus_per_worker"] == 8
     assert request["secrets"] == ["fleet-api", "wandb-api"]
+    assert request["env"]["CYBER_EXPECTED_RUNTIME_UID"] == "1000"
+    assert request["env"]["CYBER_EXPECTED_RUNTIME_GID"] == "100"
     assert "API_KEY" not in str(request["env"])
     assert plan["arguments"]["steps"] == plan["native_overrides"]["trainer.max_training_steps"] == 2
     source = tmp / "launch.json"
@@ -90,6 +100,17 @@ def test_prepare_cli_and_portable_runtime_are_offline(prepared, monkeypatch):
         capture_output=True,
     )
     assert result.returncode == 0, result.stderr.decode()
+
+
+def test_gpu_runtime_user_gate_is_fail_closed(monkeypatch):
+    train.validate_gpu_runtime_user()
+    monkeypatch.setattr(train.os, "geteuid", lambda: 0)
+    with pytest.raises(ValueError, match="user 1000:100"):
+        train.validate_gpu_runtime_user()
+    monkeypatch.setattr(train.os, "geteuid", lambda: 1000)
+    monkeypatch.delenv("CYBER_EXPECTED_RUNTIME_GID")
+    with pytest.raises(ValueError, match="user 1000:100"):
+        train.validate_gpu_runtime_user()
 
 
 @pytest.mark.parametrize(
@@ -639,7 +660,7 @@ def test_skyrl_preflight_cli_and_submission_proof_dispatch(prepared, monkeypatch
             calls.append((value, path))
             return {"status": "synthetic-only"}
 
-    monkeypatch.setattr(cli, "_client", Client)
+    monkeypatch.setattr(cli, "_client", lambda _plan=None: Client())
     assert CliRunner().invoke(cli.app, ["submit", str(root)]).exit_code == 0
     assert calls == [(request, root / "SUBMISSION.jsonl")]
     proof["schema"] = "cyber_miles_training_cpu_preflight_v1"

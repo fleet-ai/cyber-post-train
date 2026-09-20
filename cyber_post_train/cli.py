@@ -10,7 +10,7 @@ from typing import Annotated
 
 import typer
 
-from .jobs import Jobs, JobsError, digest, validate_preview, validate_request
+from .jobs import Jobs, JobsError, digest, plan_api_target, validate_preview, validate_request
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
 PREPARATION_GATE_VERSION = 2
@@ -78,6 +78,8 @@ def _current_request(plan: dict) -> dict:
         from training.miles_training import job_request
     elif schema == "cyber_skyrl_training_v1":
         from training.skyrl_training import job_request
+    elif schema == "cyber_skyrl_topology_probe_v1":
+        from training.skyrl_topology_probe import request as job_request
     else:
         from training.sft import job_request
 
@@ -125,8 +127,15 @@ def _external_action_gate(plan: dict, action: str) -> None:
     raise ValueError(f"{action} blocked by qualification gate: {', '.join(blockers)}")
 
 
-def _client() -> Jobs:
-    return Jobs(os.environ.get("FLEET_API_KEY", ""))
+def _client(plan: dict | None = None) -> Jobs:
+    """Create the client for the route sealed into ``plan``.
+
+    This function intentionally has no cluster argument.  Moving a launch to a
+    different cluster requires a newly prepared plan and therefore new plan,
+    request and preflight digests.
+    """
+    _, base_url = plan_api_target(plan)
+    return Jobs(os.environ.get("FLEET_API_KEY", ""), base_url=base_url)
 
 
 def _fail(exc: Exception) -> None:
@@ -267,6 +276,30 @@ def rl(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
         _fail(exc)
 
 
+@app.command("rl-topology-probe")
+def rl_topology_probe(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
+    """Prepare the sealed zero-update one-node development setup probe."""
+    from training.skyrl_topology_probe import compile_probe, request
+
+    try:
+        plan = compile_probe(config)
+        prepared_request = request(plan)
+        _prepare(output, plan, prepared_request)
+        _print(
+            {
+                "prepared": str(output),
+                "cluster_target": "dev",
+                "gpus": 8,
+                "rollout_episodes": 0,
+                "optimizer_steps": 0,
+                "maximum_seconds": 1500,
+                "submitted": False,
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command()
 def preflight(directory: Path) -> None:
     """Validate staged training/conversion inputs in the pinned image, without GPUs."""
@@ -279,6 +312,8 @@ def preflight(directory: Path) -> None:
             from training.miles_training import preflight as check
         elif plan.get("schema") == "cyber_skyrl_training_v1":
             from training.skyrl_training import preflight as check
+        elif plan.get("schema") == "cyber_skyrl_topology_probe_v1":
+            from training.skyrl_topology_probe import preflight as check
         else:
             from training.sft import preflight as check
         if (directory / "PREFLIGHT.json").exists():
@@ -296,9 +331,19 @@ def preview(directory: Path) -> None:
     try:
         plan, request = _prepared(directory)
         _external_action_gate(plan, "preview")
-        with _client() as client:
+        with _client(plan) as client:
             result = client.preview(request)
-        _print({"submitted": False, **validate_preview(request, result)})
+        if plan.get("schema") == "cyber_skyrl_training_v1":
+            from training.skyrl_training import validate_preview as validate_skyrl_preview
+
+            validated = validate_skyrl_preview(plan, request, result)
+        elif plan.get("schema") == "cyber_skyrl_topology_probe_v1":
+            from training.skyrl_topology_probe import validate_preview as validate_probe_preview
+
+            validated = validate_probe_preview(plan, request, result)
+        else:
+            validated = validate_preview(request, result)
+        _print({"submitted": False, **validated})
     except Exception as exc:
         _fail(exc)
 
@@ -322,6 +367,8 @@ def submit(directory: Path) -> None:
             if plan.get("schema") == "cyber_miles_training_v1"
             else "cyber_skyrl_training_cpu_preflight_v1"
             if plan.get("schema") == "cyber_skyrl_training_v1"
+            else "cyber_skyrl_topology_probe_cpu_preflight_v1"
+            if plan.get("schema") == "cyber_skyrl_topology_probe_v1"
             else "cyber_sft_cpu_preflight_v1",
             "status": "passed",
             "gpus": 0,
@@ -332,7 +379,7 @@ def submit(directory: Path) -> None:
             proof.get(k) != v for k, v in expected.items()
         ):
             raise ValueError("missing or mismatched CPU preflight")
-        with _client() as client:
+        with _client(plan) as client:
             result = client.submit_once(request, directory / "SUBMISSION.jsonl")
         _print(result)
     except Exception as exc:
@@ -367,10 +414,18 @@ def miles_seal(directory: Path, output: Annotated[Path, typer.Option("--output")
 
 
 @app.command()
-def status(name: str) -> None:
-    """Read sanitized Jobs API state. Does not return private trainer logs."""
+def status(
+    name: str,
+    prepared: Annotated[Path | None, typer.Option("--prepared")] = None,
+) -> None:
+    """Read sanitized state; a development run requires its prepared plan."""
     try:
-        with _client() as client:
+        plan = None
+        if prepared is not None:
+            plan, _ = _prepared(prepared)
+            if plan.get("run_name") != name:
+                raise ValueError("status name differs from the prepared plan")
+        with _client(plan) as client:
             _print(client.status(name))
     except Exception as exc:
         _fail(exc)

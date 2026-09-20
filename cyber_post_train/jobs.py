@@ -25,10 +25,38 @@ import httpx
 import yaml
 
 API_URL = "https://api.ft.flt.build"
+API_URLS = {
+    "dev": "https://api.ft.dev.flt.build",
+    "prod": API_URL,
+}
 
 
 class JobsError(ValueError):
     pass
+
+
+def plan_api_target(plan: dict | None) -> tuple[str, str]:
+    """Return the immutable Jobs API route carried by a prepared plan.
+
+    Older plans predate explicit cluster routing and remain production-bound.
+    Once either routing field is present, both are mandatory and must match the
+    closed target table.  There is deliberately no environment or CLI override:
+    changing cluster is a new plan, request digest, preflight and launch.
+    """
+    if plan is None:
+        return "prod", API_URLS["prod"]
+    if not isinstance(plan, dict):
+        raise JobsError("prepared plan must be an object")
+    execution = plan.get("execution", {})
+    if not isinstance(execution, dict):
+        raise JobsError("prepared plan execution binding is malformed")
+    target = execution.get("cluster_target")
+    base_url = execution.get("jobs_api_base_url")
+    if target is None and base_url is None:
+        return "prod", API_URLS["prod"]
+    if target not in API_URLS or base_url != API_URLS[target]:
+        raise JobsError("prepared plan Jobs API target is incomplete or mismatched")
+    return target, base_url
 
 
 def digest(value: Any) -> str:

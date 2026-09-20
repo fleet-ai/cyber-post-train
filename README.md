@@ -55,6 +55,22 @@ base checkpoint; SkyRL loads the pinned HF base directly. Preparation does not t
 the [qualification status](docs/CONSOLIDATION.md) distinguishes tested plumbing
 from real reward/optimizer evidence.
 
+SkyRL has a separate development-only topology probe for checking the exact
+one-node, two-TP4-engine setup before any scientific canary is considered:
+
+```sh
+uv run cyber-post-train rl-topology-probe \
+  configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json \
+  --output /shared/new-probe-plan
+```
+
+The sealed probe has a 25-minute total bound, receives no Fleet or W&B secret,
+reads no task rows, performs no rollout or optimizer step, and cannot write a
+checkpoint. Its prepared plan is permanently bound to the development Jobs API;
+use `status <name> --prepared <directory>` so later reads use that same route.
+Submission remains blocked until CPU preflight, a preview proving UID 1000/GID
+100, and an exact post-terminal resource-release observer are all recorded.
+
 ## Evaluation
 
 ```sh

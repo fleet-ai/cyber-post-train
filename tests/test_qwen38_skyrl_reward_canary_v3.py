@@ -174,7 +174,7 @@ def test_external_job_endpoints_are_blocked_before_client_creation(monkeypatch) 
         cli._external_action_gate(plan, "submit")
 
 
-@pytest.mark.parametrize("fault", ["recipe", "source", "binding", "image"])
+@pytest.mark.parametrize("fault", ["recipe", "source", "binding", "image", "route"])
 def test_scientific_or_source_drift_fails_closed(monkeypatch, fault: str) -> None:
     run = load(RUN)
     manifest = metadata(run)
@@ -196,7 +196,10 @@ def test_scientific_or_source_drift_fails_closed(monkeypatch, fault: str) -> Non
         plan, _ = compile_canary(monkeypatch)
         if fault == "binding":
             plan["qualification"]["source_proof"]["limits"]["max_turns"] = 80
-        else:
+        elif fault == "image":
             plan["execution"]["image"] = skyrl_training.IMAGE
+        else:
+            plan["execution"]["cluster_target"] = "prod"
+            plan["execution"]["jobs_api_base_url"] = "https://api.ft.flt.build"
         with pytest.raises(ValueError):
             skyrl_training.job_request(plan)

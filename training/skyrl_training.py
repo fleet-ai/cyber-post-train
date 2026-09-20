@@ -19,7 +19,7 @@ import time
 from contextlib import suppress
 from pathlib import Path
 
-from cyber_post_train.jobs import bundled_request, digest, quantity
+from cyber_post_train.jobs import API_URLS, JobsError, bundled_request, digest, quantity
 
 from . import skyrl
 from .miles_conversion import _hash, check_inputs
@@ -99,7 +99,7 @@ def compile_rl(config, *, relative_to):
     _known(model, {"lock", "weights", "root"}, "model")
     _known(data, {"manifest", "root"}, "data")
     _known(w, {"entity", "project", "run_id"}, "W&B")
-    _known(cluster, {"priority", "resources"}, "cluster")
+    _known(cluster, {"priority", "resources", "target"}, "cluster")
     _known(
         recipe,
         {
@@ -160,6 +160,11 @@ def compile_rl(config, *, relative_to):
         metadata["tokenizer"][k] != bound[k] for k in ("repo", "revision")
     ):
         raise ValueError("run/model/data identity mismatch")
+    cluster_target = qualification["cluster_target"] if qualification else cluster.get(
+        "target", "prod"
+    )
+    if cluster_target not in API_URLS:
+        raise ValueError("cluster target must be dev or prod")
     plan = {
         "schema": SCHEMA,
         "run_name": args.name,
@@ -174,6 +179,8 @@ def compile_rl(config, *, relative_to):
             "image": qualification["image"] if qualification else IMAGE,
             "priority": cluster.get("priority", "c1"),
             "resources": {**RESOURCES, **cluster.get("resources", {})},
+            "cluster_target": cluster_target,
+            "jobs_api_base_url": API_URLS[cluster_target],
         },
     }
     if qualification is not None:
@@ -186,11 +193,13 @@ def job_request(plan):
     args = skyrl.SkyRLConfig(**plan["arguments"])
     qualification = plan.get("qualification")
     image, extra_env = IMAGE, {}
+    bound_route = None
     if qualification is not None:
         from .rl_reward_canary import validate_plan_binding
 
         binding = validate_plan_binding(qualification, plan["data"], plan["arguments"])
         image, extra_env = binding["image"], binding["environment"]
+        bound_route = (binding["cluster_target"], binding["jobs_api_base_url"])
     if (
         plan["schema"] != SCHEMA
         or plan["runtime_sha256"] != digest(_runtime())
@@ -199,6 +208,17 @@ def job_request(plan):
         or plan["execution"]["image"] != image
         or plan["run_name"] != args.name
         or plan["output_root"] != args.output_root
+        or plan["execution"].get("cluster_target") not in API_URLS
+        or plan["execution"].get("jobs_api_base_url")
+        != API_URLS[plan["execution"]["cluster_target"]]
+        or (
+            bound_route is not None
+            and (
+                plan["execution"]["cluster_target"],
+                plan["execution"]["jobs_api_base_url"],
+            )
+            != bound_route
+        )
     ):
         raise ValueError("SkyRL plan/runtime drift")
     resources = plan["execution"]["resources"]
@@ -232,6 +252,8 @@ def job_request(plan):
                 "WANDB_DISABLE_CODE": "true",
                 "WANDB_CONSOLE": "off",
                 "PYTHONUNBUFFERED": "1",
+                "CYBER_EXPECTED_RUNTIME_UID": "1000",
+                "CYBER_EXPECTED_RUNTIME_GID": "100",
                 **extra_env,
             },
         },
@@ -239,6 +261,73 @@ def job_request(plan):
         MODULE,
         ["--plan", "plan.json", "--sha256", digest(plan)],
     )
+
+
+def validate_gpu_runtime_user() -> None:
+    """Fail before model loading if the GPU process is not the reviewed user."""
+    expected = (
+        os.environ.get("CYBER_EXPECTED_RUNTIME_UID"),
+        os.environ.get("CYBER_EXPECTED_RUNTIME_GID"),
+    )
+    if expected != ("1000", "100") or (os.geteuid(), os.getegid()) != (1000, 100):
+        raise ValueError("SkyRL GPU runtime must use the pinned image user 1000:100")
+
+
+def validate_preview(plan: dict, request: dict, preview: dict) -> dict:
+    """Require the rendered GPU containers to run as UID 1000/GID 100.
+
+    Generic preview validation covers resources, queueing, image, secrets and
+    command identity.  This profile gate additionally checks the effective pod
+    and container security contexts.  Missing identity is not inferred from an
+    image Dockerfile; the preview must prove it.
+    """
+    if job_request(plan) != request:
+        raise JobsError("SkyRL preview request differs from its immutable plan")
+    return validate_gpu_runtime_preview(request, preview)
+
+
+def validate_gpu_runtime_preview(request: dict, preview: dict) -> dict:
+    """Validate the common pinned-image runtime identity for SkyRL GPU jobs."""
+    import yaml
+
+    from cyber_post_train.jobs import validate_preview as validate_generic_preview
+
+    result = validate_generic_preview(request, preview)
+    try:
+        obj = yaml.safe_load(preview["manifest_yaml"])
+        cluster = obj["spec"]["rayClusterSpec"]
+        templates = [cluster["headGroupSpec"]["template"]] + [
+            group["template"]
+            for group in cluster.get("workerGroupSpecs", [])
+            if group.get("replicas", 0)
+        ]
+        checked = 0
+        for template in templates:
+            pod = template["spec"]
+            pod_context = pod.get("securityContext", {})
+            containers = [
+                container
+                for container in pod["containers"]
+                if quantity(
+                    container.get("resources", {}).get("limits", {}).get("nvidia.com/gpu", 0)
+                )
+                > 0
+            ]
+            if len(containers) != 1:
+                raise JobsError("SkyRL preview must contain one GPU container per pod")
+            context = {**pod_context, **containers[0].get("securityContext", {})}
+            if (
+                context.get("runAsUser") != 1000
+                or context.get("runAsGroup") != 100
+                or context.get("runAsNonRoot") is not True
+            ):
+                raise JobsError("SkyRL preview does not prove runtime user 1000:100")
+            checked += 1
+    except (KeyError, TypeError, yaml.YAMLError) as exc:
+        raise JobsError("malformed SkyRL Jobs API preview") from exc
+    if checked != request["workers"]:
+        raise JobsError("SkyRL preview runtime-user worker count drift")
+    return {**result, "runtime_user": {"uid": 1000, "gid": 100}, "workers_checked": checked}
 
 
 def check_artifacts(plan):
@@ -548,6 +637,7 @@ def main():
         if digest(plan) != args.sha256:
             raise ValueError("plan digest mismatch")
         job_request(plan)
+        validate_gpu_runtime_user()
         if args.native:
             try:
                 _native(plan)

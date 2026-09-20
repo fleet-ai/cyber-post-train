@@ -38,10 +38,10 @@ HORIZON_SELF_SHA256 = "sha256:a4e861dedcf0538633e15e1762bca9f37156dfc392dda70a8f
 TOOL_CATALOG_FILE_SHA256 = "sha256:e4a3c4fb5b5c34cdaf64ec568eb31fcc0d55a63cc0a134808db348c65d7b6858"
 TOOL_CATALOG_SHA256 = "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
 QUALIFICATION_FILE_SHA256 = (
-    "sha256:b44deb720d961f1acb43d83834f97bd796d61f79d55bb8aa0ebb9b1abd22e766"
+    "sha256:362e4d2f234fba0b3e148f2f4119150b639e4ae46357f87cfd27357889d71ec1"
 )
 QUALIFICATION_SELF_SHA256 = (
-    "sha256:cbd2d9b29de72bf61654b8e1ba7d35d9c66a05642dd970bb86ee7384dbec9827"
+    "sha256:1df57c9b6fad809d0b8b02b51293d3b22f3006de0c73ad1910c4c6a54398ab41"
 )
 
 LIMITS = {
@@ -121,7 +121,7 @@ PORT_COMMITS = {
 SUBMISSION_BLOCKERS = [
     "fresh_main_based_cpu_preflight_and_preview_not_yet_recorded",
     "fresh_jobs_sfs_wandb_identity_absence_not_yet_proven",
-    "dev_api_target_not_bound_by_current_main_jobs_client",
+    "fresh_plan_bound_dev_route_not_yet_preview_validated",
     "preserved_2400_second_episode_conflicts_with_30_minute_dev_deadline_policy",
     "one_by_eight_training_topology_not_qualified_by_two_by_four_engine_receipt",
 ]
@@ -446,6 +446,7 @@ def _validate_qualification(path: Path) -> dict:
         or value["execution"]
         != {
             "cluster_target": "dev",
+            "jobs_api_base_url": "https://api.ft.dev.flt.build",
             "image": IMAGE,
             "environment": {"VLLM_USE_FLASHINFER_SAMPLER": "0"},
         }
@@ -547,6 +548,7 @@ def validate_run_config(
         "image": qualification["execution"]["image"],
         "environment": qualification["execution"]["environment"],
         "cluster_target": qualification["execution"]["cluster_target"],
+        "jobs_api_base_url": qualification["execution"]["jobs_api_base_url"],
         "submission_gate": qualification["submission_gate"],
     }
     result["sha256"] = "sha256:" + digest(result)
@@ -568,6 +570,7 @@ def validate_plan_binding(binding: object, metadata: dict, arguments: dict) -> d
         or binding.get("image") != IMAGE
         or binding.get("environment") != {"VLLM_USE_FLASHINFER_SAMPLER": "0"}
         or binding.get("cluster_target") != "dev"
+        or binding.get("jobs_api_base_url") != "https://api.ft.dev.flt.build"
         or binding.get("submission_gate")
         != {
             "preview_authorized": False,
