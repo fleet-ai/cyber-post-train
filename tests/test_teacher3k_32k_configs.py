@@ -288,3 +288,84 @@ def test_teacher3k_later_context_treatments_are_sealed_and_distinct(
     assert request["destination"]["output_root"].endswith(
         f"/teacher3k-{max_length // 1024}k-v1/data-v1"
     )
+
+
+@pytest.mark.parametrize(
+    (
+        "filename",
+        "name",
+        "manifest_sha256",
+        "max_length",
+        "steps",
+        "checkpoint_interval",
+        "pause",
+    ),
+    [
+        (
+            "qwen38-teacher3k-64k-canary-b8-lr3e6-v1.json",
+            "chris-q38-t3k64-can-v1",
+            "sha256:377720bd39a7dcb2f5c0dfd152fc9f955d4726f3f13c358dd57cac18bc84a2ae",
+            65_536,
+            1_120,
+            275,
+            1,
+        ),
+        (
+            "qwen38-teacher3k-64k-full-b8-lr3e6-v1.json",
+            "chris-q38-t3k64-b8-v1",
+            "sha256:377720bd39a7dcb2f5c0dfd152fc9f955d4726f3f13c358dd57cac18bc84a2ae",
+            65_536,
+            1_120,
+            275,
+            None,
+        ),
+        (
+            "qwen38-teacher3k-96k-canary-b8-lr3e6-v1.json",
+            "chris-q38-t3k96-can-v1",
+            "sha256:8297f035f4c5b0446578cfa46897733273286f76e55d486c9598452e5585a479",
+            98_304,
+            856,
+            210,
+            1,
+        ),
+        (
+            "qwen38-teacher3k-96k-full-b8-lr3e6-v1.json",
+            "chris-q38-t3k96-b8-v1",
+            "sha256:8297f035f4c5b0446578cfa46897733273286f76e55d486c9598452e5585a479",
+            98_304,
+            856,
+            210,
+            None,
+        ),
+    ],
+)
+def test_teacher3k_later_context_runs_compile_as_one_node_canary_first_arms(
+    filename,
+    name,
+    manifest_sha256,
+    max_length,
+    steps,
+    checkpoint_interval,
+    pause,
+):
+    config = json.loads((RUNS / filename).read_text())
+    plan = sft.compile_sft(config, relative_to=RUNS)
+    request = sft.job_request(plan)
+
+    assert plan["run_name"] == name
+    assert plan["corpus_manifest_sha256"] == manifest_sha256
+    assert plan["validation_mode"] == "task_outcomes_only"
+    assert plan["recipe"] == {
+        **plan["recipe"],
+        "max_length": max_length,
+        "max_steps": steps,
+        "checkpoint_interval": checkpoint_interval,
+        "keep_checkpoints": 5,
+        "batch_size": 8,
+        "lr": 3e-6,
+    }
+    assert plan.get("pause_after_step") == pause
+    assert request["workers"] == 1
+    assert request["gpus_per_worker"] == 8
+    assert request["priority_class"] == "c1"
+    assert request["requeueIfPreempted"] is False
