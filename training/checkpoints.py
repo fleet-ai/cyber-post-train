@@ -14,7 +14,15 @@ import re
 from dataclasses import asdict
 from pathlib import Path
 
-from .sft_runtime import _unsigned_digest, digest, validate_plan, write_receipt
+from .sft_runtime import (
+    _is_qwen38_lora,
+    _unsigned_digest,
+    digest,
+    validate_plan,
+    write_receipt,
+)
+
+QWEN38_MEGATRON_SCHEMA = "cyber_qwen38_megatron_checkpoint_manifest_v1"
 
 
 def receipt(path: Path) -> dict:
@@ -46,6 +54,48 @@ def checkpoint_files(root: Path, world_size: int, *, adapter: bool = False) -> d
             raise ValueError("checkpoint topology differs from the plan")
     if any(path.stat().st_size <= 0 for path in files.values()):
         raise ValueError("empty checkpoint payload")
+    return dict(sorted(files.items()))
+
+
+def qwen38_megatron_checkpoint_files(root: Path, world_size: int) -> dict[str, Path]:
+    """Reopen the exact TP8 Megatron-LoRA checkpoint layout.
+
+    This is intentionally separate from the FSDP and PEFT layouts above.  A
+    Megatron distributed checkpoint is not interchangeable with either one.
+    """
+    if world_size != 8 or root.is_symlink() or not root.is_dir():
+        raise ValueError("Qwen3.8 Megatron checkpoint requires one real TP8 root")
+    files = {}
+    for path in root.rglob("*"):
+        if path.is_symlink():
+            raise ValueError("checkpoint contains a symlink")
+        if path.is_file():
+            files[path.relative_to(root).as_posix()] = path
+    required = {
+        "data.pt",
+        "trainer_state.pt",
+        "policy/.metadata",
+        "policy/common.pt",
+        "policy/metadata.json",
+        "policy/huggingface/chat_template.jinja",
+        "policy/huggingface/config.json",
+        "policy/huggingface/generation_config.json",
+        "policy/huggingface/processor_config.json",
+        "policy/huggingface/tokenizer.json",
+        "policy/huggingface/tokenizer_config.json",
+    }
+    required |= {f"policy/__{rank}_0.distcp" for rank in range(8)}
+    required |= {f"policy/adapter_tp{rank}_pp0_cp0_dp0_ep0_etp{rank}.pt" for rank in range(8)}
+    if set(files) != required or any(path.stat().st_size <= 0 for path in files.values()):
+        raise ValueError("incomplete or unexpected Qwen3.8 Megatron checkpoint layout")
+    metadata = json.loads(files["policy/metadata.json"].read_text())
+    if metadata != {
+        "common_backend": "torch",
+        "common_backend_version": 1,
+        "sharded_backend": "torch_dist",
+        "sharded_backend_version": 1,
+    }:
+        raise ValueError("Qwen3.8 Megatron checkpoint backend metadata drift")
     return dict(sorted(files.items()))
 
 
@@ -110,6 +160,62 @@ def _adapter_binding(plan: dict, step: int, root: Path, inventory: dict) -> None
         raise ValueError("adapter configuration differs from the plan")
 
 
+def _seal_qwen38_megatron(plan: dict, step: int, output: Path, *, progress=None) -> dict:
+    """Seal one trusted native TP8 Megatron checkpoint without loading weights."""
+    import torch
+
+    run = Path(plan["output_root"])
+    root = run / "checkpoints" / f"global_step_{step}"
+    saved = receipt(run / "checkpoint_receipts" / f"step-{step:06d}.json")
+    expected = {
+        "plan_sha256": _unsigned_digest(plan),
+        "optimizer_step": step,
+        "checkpoint_path": str(root),
+    }
+    if any(saved.get(key) != value for key, value in expected.items()):
+        raise ValueError("checkpoint receipt differs from source plan/step/path")
+    files = qwen38_megatron_checkpoint_files(root, 8)
+    before = {name: (path.stat().st_size, path.stat().st_mtime_ns) for name, path in files.items()}
+    trainer = torch.load(files["trainer_state.pt"], map_location="cpu", weights_only=False)
+    sampler = torch.load(files["data.pt"], map_location="cpu", weights_only=False)
+    if trainer.get("global_step") != step:
+        raise ValueError("saved trainer step differs from checkpoint receipt")
+    epoch_steps = math.ceil(plan["datasets"]["train"]["rows"] / plan["recipe"]["batch_size"])
+    yielded = (step - 1) % epoch_steps + 1
+    if sampler.get("_num_yielded") != yielded:
+        raise ValueError("saved sampler cursor differs from completed optimizer step")
+    inventory, total = {}, 0
+    for name, path in files.items():
+        inventory[name] = {"bytes": before[name][0], "sha256": digest(path)}
+        total += before[name][0]
+        if progress:
+            progress(len(inventory), total)
+    after = qwen38_megatron_checkpoint_files(root, 8)
+    if set(after) != set(files) or any(
+        (path.stat().st_size, path.stat().st_mtime_ns) != before[name]
+        for name, path in after.items()
+    ):
+        raise ValueError("checkpoint changed while sealing")
+    result = {
+        "schema": QWEN38_MEGATRON_SCHEMA,
+        "source_plan_sha256": _unsigned_digest(plan),
+        "source_plan": plan,
+        "checkpoint_path": str(root),
+        "optimizer_step": step,
+        "world_size": 8,
+        "tensor_parallel_size": 8,
+        "sampler_batches_in_epoch": yielded,
+        "files": inventory,
+        "total_bytes": total,
+        "gpu_reload_verified": False,
+    }
+    if "training_progress" in saved:
+        result["training_progress"] = saved["training_progress"]
+        _validate_progress(result)
+    write_receipt(output, result)
+    return receipt(output)
+
+
 def seal(plan: dict, step: int, output: Path, *, progress=None) -> dict:
     import torch
 
@@ -124,6 +230,8 @@ def seal(plan: dict, step: int, output: Path, *, progress=None) -> dict:
         raise ValueError("never write into the source checkpoint")
     if output.exists() or output.is_symlink():
         raise FileExistsError("checkpoint manifest already exists")
+    if _is_qwen38_lora(plan):
+        return _seal_qwen38_megatron(plan, step, output, progress=progress)
     saved = receipt(run / "checkpoint_receipts" / f"step-{step:06d}.json")
     expected = {
         "plan_sha256": _unsigned_digest(plan),
@@ -179,6 +287,8 @@ def seal(plan: dict, step: int, output: Path, *, progress=None) -> dict:
 
 
 def verify(manifest: dict, *, check_files: bool = True) -> None:
+    if manifest.get("schema") == QWEN38_MEGATRON_SCHEMA:
+        return _verify_qwen38_megatron(manifest, check_files=check_files)
     if (
         manifest.get("receipt_sha256")
         != _unsigned_digest({k: v for k, v in manifest.items() if k != "receipt_sha256"})
@@ -227,6 +337,68 @@ def verify(manifest: dict, *, check_files: bool = True) -> None:
                 raise ValueError("checkpoint file digest/size mismatch")
         if adapter:
             _adapter_binding(plan, step, expected, manifest["files"])
+
+
+def _verify_qwen38_megatron(manifest: dict, *, check_files: bool) -> None:
+    if manifest.get("receipt_sha256") != _unsigned_digest(
+        {key: value for key, value in manifest.items() if key != "receipt_sha256"}
+    ):
+        raise ValueError("checkpoint manifest digest mismatch")
+    expected_fields = {
+        "schema",
+        "source_plan_sha256",
+        "source_plan",
+        "checkpoint_path",
+        "optimizer_step",
+        "world_size",
+        "tensor_parallel_size",
+        "sampler_batches_in_epoch",
+        "files",
+        "total_bytes",
+        "gpu_reload_verified",
+        "receipt_sha256",
+    }
+    if "training_progress" in manifest:
+        expected_fields.add("training_progress")
+    if set(manifest) != expected_fields:
+        raise ValueError("Qwen3.8 Megatron checkpoint manifest fields drift")
+    plan = manifest["source_plan"]
+    validate_plan(plan, check_files=False)
+    if not _is_qwen38_lora(plan):
+        raise ValueError("Megatron checkpoint source is not the qualified Qwen3.8 LoRA plan")
+    step = manifest["optimizer_step"]
+    root = Path(plan["output_root"]) / "checkpoints" / f"global_step_{step}"
+    epoch_steps = math.ceil(plan["datasets"]["train"]["rows"] / plan["recipe"]["batch_size"])
+    if (
+        type(step) is not int
+        or not 0 < step <= plan["recipe"]["max_steps"]
+        or manifest["source_plan_sha256"] != _unsigned_digest(plan)
+        or manifest["checkpoint_path"] != str(root)
+        or manifest["world_size"] != 8
+        or manifest["tensor_parallel_size"] != 8
+        or manifest["sampler_batches_in_epoch"] != (step - 1) % epoch_steps + 1
+        or manifest["gpu_reload_verified"] is not False
+        or manifest["total_bytes"] != sum(spec["bytes"] for spec in manifest["files"].values())
+    ):
+        raise ValueError("Qwen3.8 Megatron checkpoint manifest bindings disagree")
+    for name, spec in manifest["files"].items():
+        path = Path(name)
+        if path.is_absolute() or ".." in path.parts or not path.parts or str(path) != name:
+            raise ValueError("checkpoint file escapes source root")
+        if set(spec) != {"bytes", "sha256"} or type(spec["bytes"]) is not int or spec["bytes"] <= 0:
+            raise ValueError("invalid checkpoint file record")
+        if not re.fullmatch(r"[a-f0-9]{64}", spec["sha256"]):
+            raise ValueError("invalid checkpoint file digest")
+    if "training_progress" in manifest:
+        _validate_progress(manifest)
+    if check_files:
+        files = qwen38_megatron_checkpoint_files(root, 8)
+        if set(files) != set(manifest["files"]):
+            raise ValueError("checkpoint inventory changed")
+        for name, path in files.items():
+            spec = manifest["files"][name]
+            if path.stat().st_size != spec["bytes"] or digest(path) != spec["sha256"]:
+                raise ValueError("checkpoint file digest/size mismatch")
 
 
 def _validate_progress(manifest: dict) -> None:

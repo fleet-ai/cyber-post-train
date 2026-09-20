@@ -11,6 +11,99 @@ from training import checkpoints as c
 from training.sft_runtime import _unsigned_digest, write_receipt
 
 
+def qwen38_megatron_fixture(tmp_path, monkeypatch):
+    p = plan(tmp_path)
+    p.pop("plan_sha256")
+    p["recipe"].update(nodes=1, gpus_per_node=8)
+    p["model"]["repo"] = "Qwen/Qwen3.8-27B"
+    p["run_name"] = "qwen38-source"
+    p["execution"] = {"image": "trainer@sha256:" + "a" * 64}
+    p["lora"] = {
+        "type": "lora",
+        "target_modules": "all-linear",
+        "rank": 64,
+        "alpha": 32,
+        "init_method": "kaiming",
+        "dropout": 0.0,
+    }
+    root = tmp_path / "checkpoints/global_step_2"
+    policy = root / "policy"
+    hf = policy / "huggingface"
+    hf.mkdir(parents=True)
+    torch.save({"global_step": 2}, root / "trainer_state.pt")
+    torch.save({"_num_yielded": 2}, root / "data.pt")
+    (policy / ".metadata").write_bytes(b"metadata")
+    torch.save({"lr_scheduler": {"num_steps": 2}}, policy / "common.pt")
+    (policy / "metadata.json").write_text(
+        json.dumps(
+            {
+                "common_backend": "torch",
+                "common_backend_version": 1,
+                "sharded_backend": "torch_dist",
+                "sharded_backend_version": 1,
+            }
+        )
+    )
+    for name in (
+        "chat_template.jinja",
+        "config.json",
+        "generation_config.json",
+        "processor_config.json",
+        "tokenizer.json",
+        "tokenizer_config.json",
+    ):
+        (hf / name).write_text("{}")
+    for rank in range(8):
+        (policy / f"__{rank}_0.distcp").write_bytes(f"optimizer-{rank}".encode())
+        torch.save(
+            {"model_state_dict": {f"rank{rank}.adapter": torch.ones(1)}},
+            policy / f"adapter_tp{rank}_pp0_cp0_dp0_ep0_etp{rank}.pt",
+        )
+    write_receipt(
+        tmp_path / "checkpoint_receipts/step-000002.json",
+        {
+            "plan_sha256": _unsigned_digest(p),
+            "optimizer_step": 2,
+            "checkpoint_path": str(root),
+            "training_progress": {"supervised_tokens": 64, "best": None},
+        },
+    )
+    monkeypatch.setattr(c, "_is_qwen38_lora", lambda value: True)
+    monkeypatch.setattr(c, "validate_plan", lambda value, check_files: None)
+    return p, root, tmp_path / "qwen38-sealed.json"
+
+
+def test_qwen38_megatron_checkpoint_uses_distinct_seal_and_layout(tmp_path, monkeypatch):
+    p, root, out = qwen38_megatron_fixture(tmp_path, monkeypatch)
+    result = c.seal(p, 2, out)
+    assert result["schema"] == c.QWEN38_MEGATRON_SCHEMA
+    assert result["tensor_parallel_size"] == 8
+    assert result["training_progress"] == {"supervised_tokens": 64, "best": None}
+    c.verify(result)
+    c.verify(result, check_files=False)
+    (root / "policy/unexpected.pt").write_bytes(b"unexpected")
+    with pytest.raises(ValueError, match="Megatron checkpoint layout"):
+        c.verify(result)
+
+
+@pytest.mark.parametrize("defect", ["missing", "metadata", "step", "sampler", "tamper"])
+def test_qwen38_megatron_checkpoint_seal_fails_closed(tmp_path, monkeypatch, defect):
+    p, root, out = qwen38_megatron_fixture(tmp_path, monkeypatch)
+    if defect == "missing":
+        (root / "policy/__7_0.distcp").unlink()
+    elif defect == "metadata":
+        (root / "policy/metadata.json").write_text("{}")
+    elif defect == "step":
+        torch.save({"global_step": 1}, root / "trainer_state.pt")
+    elif defect == "sampler":
+        torch.save({"_num_yielded": 1}, root / "data.pt")
+    else:
+        p["recipe"]["lr"] *= 2
+    with pytest.raises(ValueError):
+        c.seal(p, 2, out)
+    assert not out.exists()
+
+
 def adapter_fixture(tmp_path, defect=None):
     from safetensors.torch import save_file
 

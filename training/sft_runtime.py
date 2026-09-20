@@ -837,6 +837,16 @@ def _qwen38_policy_learning_rate(dispatch, plan: dict) -> float:
     return _reconcile_worker_learning_rates(ray.get(refs), expected_ranks=expected)
 
 
+def _scalar_sft_forward_backward(dispatch, batch):
+    """Run SFT without constructing unused per-token worker outputs."""
+    return dispatch.forward_backward(
+        "policy",
+        batch,
+        loss_fn="cross_entropy",
+        return_per_token_outputs=False,
+    )
+
+
 def validate_plan(plan: dict, *, check_files: bool = True) -> None:
     if plan.get("schema") not in ("cyber_sft_runtime_v2", DENSE_SCHEMA):
         raise ValueError("unsupported SFT runtime plan")
@@ -962,6 +972,25 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
             expected_qualification = QWEN38_LORA_QUALIFICATION
         elif identity == broad_identity:
             expected_qualification = QWEN38_LORA_PRODUCTION_QUALIFICATION
+        elif "recovery" in plan:
+            # A continuation needs a fresh run/output/W&B identity, so it
+            # cannot equal one of the frozen broad-plan identities.  Admit it
+            # only when its sealed source independently reopens as one of
+            # those exact production-qualified plans; recovery.validate above
+            # already requires every scientific/data/topology field to remain
+            # identical to that source.
+            source_plan = plan["recovery"]["checkpoint"]["source_plan"]
+            source_identity = _qwen38_lora_one_step_identity(source_plan)
+            source_broad_identity = (
+                qwen38_lora_broad_full_plan_binding(source_plan.get("run_name", ""))
+                if source_plan.get("run_name") in QWEN38_LORA_BROAD_FULL_PLANS
+                else None
+            )
+            expected_qualification = (
+                QWEN38_LORA_PRODUCTION_QUALIFICATION
+                if source_identity == source_broad_identity
+                else None
+            )
         else:
             expected_qualification = None
         runtime = plan.get("skyrl_runtime")
@@ -2641,7 +2670,11 @@ def _make_trainer_class():
             if _is_qwen38_lora(self.plan):
                 self._record_qualification_stage("forward_backward_started")
             with Timer("forward_backward", timings):
-                output = self.dispatch.forward_backward("policy", batch, loss_fn="cross_entropy")
+                # SFT consumes scalar metrics only.  The pinned SkyRL trainer
+                # explicitly disables its per-token outputs here; keep the
+                # audited override identical so 32K batches do not construct
+                # and transport unused logprob/loss arrays every step.
+                output = _scalar_sft_forward_backward(self.dispatch, batch)
             if _is_qwen38_lora(self.plan):
                 self._record_qualification_stage("forward_backward_complete")
             loss = float(output.metrics.get("final_loss", output.metrics.get("loss", float("nan"))))

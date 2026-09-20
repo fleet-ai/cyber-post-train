@@ -460,6 +460,16 @@ def status(name: str) -> None:
         _fail(exc)
 
 
+@app.command("release")
+def release(name: str) -> None:
+    """Release one exact project-owned Jobs API run; never retries DELETE."""
+    try:
+        with _client() as client:
+            _print(client.delete(name))
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command("checkpoint-seal")
 def checkpoint_seal(
     directory: Path, step: int, output: Annotated[Path, typer.Option("--output")]
