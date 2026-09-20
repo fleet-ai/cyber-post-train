@@ -6,6 +6,18 @@ Status: **prepared but not launchable**. No model was resumed, no TensorLake
 sandbox was created or changed, and no evaluation was launched while preparing
 this plan.
 
+Execution update at `2026-09-20T10:41:44Z`: the exact paused c1 successor was
+created once and reconciled as
+`chris-q38-fresh75-step230-wbe-v1`, UID
+`fa7dafb6-a700-4eb7-b955-e40255420617`. Both the serving API and Kubernetes
+reported paused, zero desired/ready replicas and zero active Pods; no GPU was
+allocated and the model was not resumed. Its create-once route-binding digest
+is `sha256:554004df3a35638fa3a7eb9bf6beb3ccae095a12f4b3a70bcbc54f9fb087fbdc`.
+The sanitized observation is
+[`qwen38-fresh75-step230-wbe-successor-20260920.json`](qwen38-fresh75-step230-wbe-successor-20260920.json).
+TensorLake inventory and snapshot qualification remain undone because the
+operator environment did not expose an approved TensorLake credential.
+
 ## What will be compared
 
 The comparison changes only the model weights:
@@ -243,6 +255,16 @@ uv run python -m evals.webexploitbench.tensorlake.fresh75_canary_preflight build
 The output remains blocked by design. It renders the safe successor and the two
 collection blueprints; it never registers, resumes, launches, scores or pauses
 anything.
+
+The later successful refresh also established an important response-shape
+detail. The serving API's resource version is the value used for its If-Match
+actions, while Kubernetes advances the CR metadata resource version on status
+writes; the two values do not need to be equal. Likewise, the serving API
+restates the GPU request while the Kubernetes CR may omit it when it is exactly
+equal to the GPU limit. The preflight now binds both resource versions and only
+normalizes that GPU request when API request, API limit and Kubernetes limit
+are exactly equal. Full spec, UID, generation, phase and replica checks remain
+fail-closed.
 
 ### Reproducible successor-route binding
 

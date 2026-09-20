@@ -1,0 +1,43 @@
+{
+  "creation": {
+    "post_count": 1,
+    "post_repeated": false,
+    "post_response_required_reconciliation": true,
+    "reconciled_receipt_sha256": "sha256:be05d8a15db200532e526e470ab21752ccd142ad6748a8d949934f0afff25128"
+  },
+  "gpus_allocated": 0,
+  "observed_at": "2026-09-20T10:42:34Z",
+  "preflight_sha256": "sha256:4b8478056acabe19aeba3aef1863d84080dee41101a7fd5ed43ba15460be1c65",
+  "private_content_included": false,
+  "receipt_sha256": "sha256:b03bfc38a2d0f7c5c204c342a8e894decce1ef93de162d7ce67db63367d81cf6",
+  "release_proof": {
+    "gpus_requested": 0,
+    "owned_deployments": 1,
+    "owned_pods": 0,
+    "owned_replicasets": 1
+  },
+  "route_binding_sha256": "sha256:554004df3a35638fa3a7eb9bf6beb3ccae095a12f4b3a70bcbc54f9fb087fbdc",
+  "schema": "qwen38_fresh75_step230_wbe_successor_observation_v1",
+  "serving_resumed": false,
+  "status": "paused_zero_gpu_bound",
+  "study_plan_sha256": "sha256:3b37094868cc0dec65411cd552f67424eefbd9e01af1b5035b65bf54f535100d",
+  "successor": {
+    "active_pods": 0,
+    "control_plane_resource_version": "30417612",
+    "desired_replicas": 0,
+    "generation": 1,
+    "inference_model_uid": "fa7dafb6-a700-4eb7-b955-e40255420617",
+    "kubernetes_resource_version": "30417707",
+    "model_id": "chris-q38-fresh75-step230-wbe-v1",
+    "observed_generation": 1,
+    "phase": "paused",
+    "priority_class": "c1",
+    "ready_replicas": 0,
+    "spec_sha256": "sha256:cdad3122886c0670f841169d2b2f69eb67d35a03b0c781a7f13847c8557eac19"
+  },
+  "tensorlake": {
+    "blocker": "credential_not_available_in_operator_environment",
+    "census_performed": false,
+    "snapshot_qualification_performed": false
+  }
+}
