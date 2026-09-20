@@ -30,7 +30,7 @@
       "motivation": "Establish the matched OpenCode baseline required to attribute any WEB or Fleet difference to post-training rather than to serving, harness, task, or scoring drift.",
       "web_status": "collection_canary_in_repair",
       "fleet_status": "not_started",
-      "notes": "V20 model interaction completed, but collection export failed. It is plumbing evidence, not a capability result; no score request was made."
+      "notes": "V20 failed while launching the target before the agent or model ran. Collection export then rejected the incomplete record because it had no final evidence reference. This is plumbing evidence, not a capability result; no score request was made."
     }
   ],
   "accepted_checkpoints": [
