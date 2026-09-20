@@ -275,7 +275,7 @@ def test_observer_retries_one_transient_kubectl_timeout(tmp_path) -> None:
     assert result["observer_error_class"] == ""
 
 
-def test_observer_persists_cleanup_after_repeated_observation_timeout(tmp_path) -> None:
+def test_observer_recovers_after_one_exhausted_kubectl_read(tmp_path) -> None:
     cluster = FakeJobCluster()
     timeouts = 0
 
@@ -295,7 +295,34 @@ def test_observer_persists_cleanup_after_repeated_observation_timeout(tmp_path) 
     result = _observer(tmp_path, flaky).run()
     assert timeouts == 3
     assert cluster.deleted is True
+    assert result["status"] == "released"
+    assert result["observer_error_class"] == ""
+    assert result["target_present"] is result["pods_present"] is False
+    assert json.loads((tmp_path / "RESULT.json").read_text()) == result
+
+
+def test_observer_releases_after_bounded_consecutive_read_failures(tmp_path) -> None:
+    cluster = FakeJobCluster()
+    timeouts = 0
+
+    def unavailable(argv, **kwargs):
+        nonlocal timeouts
+        args = argv[5:]
+        if (
+            args[:2] == ["get", "pod"]
+            and "--selector" in args
+            and not cluster.deleted
+        ):
+            timeouts += 1
+            raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
+        return cluster(argv, **kwargs)
+
+    result = _observer(tmp_path, unavailable).run()
+    assert timeouts == (
+        cleanup.KUBECTL_ATTEMPTS
+        * cleanup.MAX_CONSECUTIVE_OBSERVATION_FAILURES
+    )
+    assert cluster.deleted is True
     assert result["status"] == "released_without_accepted_execution"
     assert result["observer_error_class"] == "ObserverError"
     assert result["target_present"] is result["pods_present"] is False
-    assert json.loads((tmp_path / "RESULT.json").read_text()) == result

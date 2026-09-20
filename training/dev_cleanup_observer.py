@@ -27,6 +27,10 @@ NAMESPACE = "fleet-train-jobs"
 ARMED_SCHEMA = "cyber_dev_cleanup_observer_armed_v1"
 RESULT_SCHEMA = "cyber_dev_cleanup_observer_result_v1"
 TERMINAL_RAY_STATUSES = {"SUCCEEDED": "Succeeded", "FAILED": "Failed"}
+KUBECTL_ATTEMPTS = 3
+KUBECTL_TIMEOUT_SECONDS = 20
+MAX_CONSECUTIVE_OBSERVATION_FAILURES = 5
+DELETE_REQUEST_MARGIN_SECONDS = 60
 
 
 class ObserverError(RuntimeError):
@@ -167,23 +171,22 @@ class Observer:
             *arguments,
         ]
         result = None
-        for attempt in range(3):
+        for attempt in range(KUBECTL_ATTEMPTS):
             try:
                 result = self._run(
                     command,
                     capture_output=True,
                     text=True,
-                    timeout=45,
+                    timeout=KUBECTL_TIMEOUT_SECONDS,
                 )
-                break
+                if result.returncode == 0:
+                    break
             except subprocess.TimeoutExpired:
-                if attempt == 2:
-                    raise ObserverError(
-                        "development-cluster observation timed out"
-                    ) from None
+                result = None
+            if attempt + 1 < KUBECTL_ATTEMPTS:
                 time.sleep(min(self.poll_seconds, 1.0))
         if result is None:  # pragma: no cover - the loop either returns or raises
-            raise ObserverError("development-cluster observation failed")
+            raise ObserverError("development-cluster observation timed out")
         if result.returncode:
             raise ObserverError("development-cluster observation failed")
         return result.stdout
@@ -506,25 +509,64 @@ class Observer:
         creation_deadline = time.monotonic() + min(120, self.maximum_seconds)
         observer_error: BaseException | None = None
         try:
+            consecutive_observation_failures = 0
             while not self.snapshot.uid:
-                resource = self._target()
-                if resource is not None:
-                    self.observe(resource)
-                    break
+                try:
+                    resource = self._target()
+                    if resource is not None:
+                        self.observe(resource)
+                        consecutive_observation_failures = 0
+                        break
+                except ObserverError:
+                    consecutive_observation_failures += 1
+                    if (
+                        consecutive_observation_failures
+                        >= MAX_CONSECUTIVE_OBSERVATION_FAILURES
+                    ):
+                        raise
+                    # _bind runs before child discovery.  If the exact target
+                    # UID was bound and a later read failed, continue through
+                    # the normal observation loop instead of treating that
+                    # transient child read as a failed workload.
+                    if self.snapshot.uid:
+                        break
                 if time.monotonic() >= creation_deadline:
                     raise ObserverError("cleanup target was not created after arming")
                 time.sleep(self.poll_seconds)
             created = _parse_stamp(self.snapshot.created_at)
             while True:
-                resource = self._same_target()
-                if resource is None:
-                    self.snapshot.terminal_status = self.snapshot.terminal_status or "Deleted"
-                    break
-                self.observe(resource)
                 elapsed = (_now() - created).total_seconds()
-                if self.snapshot.terminal_status or elapsed >= self.maximum_seconds:
+                if elapsed >= self.maximum_seconds - DELETE_REQUEST_MARGIN_SECONDS:
                     break
-                time.sleep(min(self.poll_seconds, max(0.1, self.maximum_seconds - elapsed)))
+                try:
+                    resource = self._same_target()
+                    if resource is None:
+                        self.snapshot.terminal_status = (
+                            self.snapshot.terminal_status or "Deleted"
+                        )
+                        break
+                    self.observe(resource)
+                    consecutive_observation_failures = 0
+                except ObserverError:
+                    consecutive_observation_failures += 1
+                    if (
+                        consecutive_observation_failures
+                        >= MAX_CONSECUTIVE_OBSERVATION_FAILURES
+                    ):
+                        raise
+                if self.snapshot.terminal_status:
+                    break
+                time.sleep(
+                    min(
+                        self.poll_seconds,
+                        max(
+                            0.1,
+                            self.maximum_seconds
+                            - DELETE_REQUEST_MARGIN_SECONDS
+                            - elapsed,
+                        ),
+                    )
+                )
         except BaseException as exc:
             observer_error = exc
         finally:

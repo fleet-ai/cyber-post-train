@@ -38,7 +38,7 @@ PREFLIGHT_PACKET_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_packet_v1"
 PREFLIGHT_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_preview_v1"
 PREFLIGHT_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_cpu_preflight_rejection_v1"
 PROBE_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_failure_v1"
-PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v22"
+PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v23"
 PREFLIGHT_RECEIPT = "/dev/termination-log"
 FAILURE_RECEIPT = "TOPOLOGY_PROBE_FAILED.json"
 MODULE = "training.skyrl_topology_probe"
@@ -47,7 +47,7 @@ IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
     "89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
 )
-MODEL_BINDING_SHA256 = "89a330e575f5d87d54a5f5c8ed42df86bfe6223429d7f98e0604878e255784b4"
+MODEL_BINDING_SHA256 = "597edadfbe0f8e6896edc3f18ebedd8be7a37f4fb91d232ba69695eb75858fee"
 RUNTIME_FILES = (
     "training/skyrl_topology_probe.py",
     "training/skyrl.py",
@@ -90,7 +90,7 @@ def _expected_execution() -> dict:
         "namespace": "fleet-train-jobs",
         "project_name": "fleetjob-dev",
         "auth_secret": {"name": "fleet-api", "key": "FLEET_API_KEY"},
-        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v11",
+        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v12",
         "output_pvc": "sfs-shared",
         "output_registry_mount": "/mnt/cyber-output-registry",
         "output_registry_subpath": "models/fleetjob-dev",

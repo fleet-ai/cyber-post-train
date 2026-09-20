@@ -63,7 +63,7 @@ def test_probe_is_distinct_dev_only_bounded_and_zero_update(plan) -> None:
         "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
     )
     assert plan["model"]["root"] == (
-        "/mnt/sfs/jobs/chris-q38-skyrl-probe-v11/models/base"
+        "/mnt/sfs/jobs/chris-q38-skyrl-probe-v12/models/base"
     )
     assert plan["execution"]["model_artifact"]["path"] == (
         "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4"
@@ -78,13 +78,13 @@ def test_probe_fleetjob_is_two_four_gpu_pods_with_explicit_user(plan) -> None:
     manifest = probe.fleetjob_manifest(plan)
     spec = manifest["spec"]
     assert manifest["metadata"] == {
-        "name": "chris-q38-skyrl-probe-v11",
+        "name": "chris-q38-skyrl-probe-v12",
         "namespace": "fleet-train-jobs",
     }
     assert spec["fleet"] == {
         "projectName": "fleetjob-dev",
         "auth": {"secretRef": {"name": "fleet-api", "key": "FLEET_API_KEY"}},
-        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v11",
+        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v12",
         "models": [
             {
                 "path": "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4",
