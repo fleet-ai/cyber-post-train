@@ -1,6 +1,6 @@
 {
   "schema": "qwen38_fleet_dev17_backlog_v1",
-  "observed_at": "2026-09-20T23:40:12Z",
+  "observed_at": "2026-09-20T23:56:44Z",
   "purpose": "Launch each accepted Qwen3.8 checkpoint as a separate candidate arm against the already-running exact base control, without opening the sealed final set.",
   "frozen_protocol": {
     "task_set": "configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json",
@@ -50,16 +50,25 @@
     "job_name": "chris-q38-base-dev17-p1-v1",
     "job_uid": "c37c4dff-e5fc-4132-8a44-8e93b66cd248",
     "evaluation_plan_sha256": "sha256:c5a95bef1923b117a25b9098f37a4675ccc9c00979a15e04e404e33e479aec56",
-    "cell_ledger_plan_sha256": "sha256:dfa968993a60c5fe4898cdaf4d7ef42a5d2807026518879747cf9b2abb7010aa"
+    "cell_ledger_plan_sha256": "sha256:dfa968993a60c5fe4898cdaf4d7ef42a5d2807026518879747cf9b2abb7010aa",
+    "accepted_sessions": 4
   },
   "candidates": [
     {
       "priority": 1,
       "artifact_id": "q38-fresh75-step230",
       "revision": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
-      "status": "waiting_for_base_runtime_matched_replacement_route",
+      "status": "running_real_model_calls_zero_authoritative_sessions_yet",
       "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-fresh75-p1-v1",
-      "database": "q38_fresh75_dev17_p1_v1"
+      "database": "q38_fresh75_dev17_p1_v1",
+      "job_name": "chris-q38-fresh75-dev17-p1-v1",
+      "job_uid": "162061f7-9185-44f8-babc-5ae17f4c5800",
+      "pod_uid": "29776b7e-e3e6-4b38-bb98-9e29b6883ac2",
+      "configmap_uid": "80b267ea-baba-42e6-b0f4-09f6b5548b03",
+      "live_parity_receipt_sha256": "sha256:609934e6f0d80618aa1640267f862e4398aa501d994138f1a520044caebe408e",
+      "evaluation_plan_sha256": "sha256:9d77927c6a0938d7f9a4b2785aabf29b81dc8563741a35f96ffc86eb670f53e5",
+      "cell_ledger_plan_sha256": "sha256:ea478285633b2ad523ba6e0d7ba5d4b44759bfc4cf06d82cc62e9f85aab5ccba",
+      "evidence": "docs/evidence/qwen38-fresh75-fleet-dev17-candidate-launch-20260920.json"
     },
     {
       "priority": 2,
