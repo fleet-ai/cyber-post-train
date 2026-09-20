@@ -20,22 +20,23 @@ allocation was created.
 
 The scientific recipe and data bindings did not change. The launch transport
 now requires the exact root annotation
-`fleet.ai/failure-alerts: "off"` on every generated Kubernetes Job, FleetJob,
-and RayJob. Generic Jobs API requests bind `failureAlerts: false` and reject a
+`fleet.ai/failure-alerts: "off"` on every generated Kubernetes Job and RayJob.
+The outer FleetJob is a separate wrapper and is deliberately unannotated.
+Generic Jobs API requests bind `failureAlerts: false` and reject a
 preview that does not render the root RayJob annotation.
 
 The repaired development identities are:
 
-- plan: `fbdd777447219623623fc9679aecc65f3b3c692aa20a9d49a4cc66ae29e43774`
-- sealed request: `87e3a0971f1d700d57194cc87fb1ec3b1df0e16fc1dfca9d8f634bf0a4209e37`
-- CPU preflight Job: `92a39c456d53f57e8ccbcc8a56b3427d815ed1c70e2c40464e0e7b1d2444aa37`
-- FleetJob: `1fc00898bbe35739db9896a2765bad734ee616d72c0caa26f1f73434208ba223`
-- receipt-verifier Job: `255ae49210d50c285bf9ad4c4a330cc3ccc95070bd0dca9e0d19cc81420a4668`
+- plan: `b398e73ba3124c4f22e53aceb9ac7924916ba2a3027a3f780261d184505ae678`
+- sealed request: `def61728802c80a304a5f2ffdc0c1c22dae785737f2f23c03e9455b1712bda83`
+- CPU preflight Job: `64f06f9a9ed4db4de4cd2ce3afa2b84b25b8f7d4be471c32dd96e3842004ef14`
+- FleetJob: `0f8c7f3f5a6772fd4aaef706d8d2a638e6e7b24cb87edc6c3b0937d95bd6f389`
+- receipt-verifier Job: `1409b89a9c113ff6ca2b7cb1afcfdc8428c0bd475b123d0820f185c684e8edfe`
 
 The repaired production canary compiles locally to:
 
-- plan: `d6b36b07f1fcb9075e96f5d4918aecdf204c8ad2f3fa8d5d29527bfc9c777c9c`
-- Jobs API request: `bb69d48afd9d6a1cafea678dbc408f803dda93e4e32bb42a23aac620da7c224c`
+- plan: `25d0abf30da462a6ba67c6ac8a3fc95f3f89a9a08e3ea295b21e8a22481630b3`
+- Jobs API request: `98a83dbbab61f360a12ec6389adb55de637ded64dcceaa1debf0d791e754cef4`
 
 ## Exact non-creating preview commands
 
@@ -44,13 +45,13 @@ The packet used in this pass was prepared with:
 ```sh
 uv run --locked cyber-post-train rl-topology-probe \
   configs/qualification/qwen38-skyrl-topology-probe-dev-v2.json \
-  --output /private/tmp/q38-skyrl-alert-optout.uV0xth/packet
+  --output /private/tmp/q38-skyrl-rayjob-optout.dACZ9u/packet
 uv run --locked cyber-post-train rl-topology-probe-preflight-preview \
-  /private/tmp/q38-skyrl-alert-optout.uV0xth/packet
+  /private/tmp/q38-skyrl-rayjob-optout.dACZ9u/packet
 uv run --locked cyber-post-train rl-topology-probe-preview \
-  /private/tmp/q38-skyrl-alert-optout.uV0xth/packet
+  /private/tmp/q38-skyrl-rayjob-optout.dACZ9u/packet
 uv run --locked cyber-post-train rl-topology-probe-receipt-preview \
-  /private/tmp/q38-skyrl-alert-optout.uV0xth/packet
+  /private/tmp/q38-skyrl-rayjob-optout.dACZ9u/packet
 ```
 
 All preview commands use `kubectl create --dry-run=server`; they do not create
@@ -59,18 +60,17 @@ an object.
 ## Server result
 
 - The zero-GPU CPU preflight Job passed server dry-run. Its sanitized proof is
-  `sha256:3dcb6833e9e0ebdf3790bbaf2e136bd380295b7669a03890ada8497ccf913569`.
+  `sha256:673afacf9c2ed5c6785f4ffbb1d886f4e2292e641858950267c4adc0e5ca86aa`.
   The server-rendered object digest is
-  `e75aa6483e2c1f1355a95a824e85a626ce537cb10b33984c154abaa4c9ba1ca0`.
+  `cc413777ab8874719b650eba817b72a96c086ea9cf0cf6191c8f7b9592cbfe48`.
 - The zero-GPU receipt-verifier Job passed server dry-run. Its sanitized proof
-  is `sha256:e54ef36ae1f818c13110ab64950387bd0b980a2de2f4011564941cd6a063dc80`.
+  is `sha256:2a6e66a19698220d9051b37b1858bd44f011340122b0d06ffc8d5d8e8324314a`.
   The server-rendered object digest is
-  `4e56e739d2548881301e2d15d462f93d4f68130b552e4ab4ef7e74283b16e0cc`.
-- The exact annotated FleetJob was denied by the current development admission
-  webhook. Removing both alert annotations makes the same server dry-run pass;
-  retaining only the FleetJob annotation is denied because Fleet identity and
-  queue metadata are controller-owned, and retaining only the embedded RayJob
-  annotation is also denied. No FleetJob was created.
+  `a6801e09be3f5b62483ee66433c6894d13773ec2dfee92c3b04d5f5dd2ddefb8`.
+- The outer FleetJob carried no alert annotation. Its embedded root RayJob did
+  carry `fleet.ai/failure-alerts: "off"`, and the current development admission
+  webhook denied that exact FleetJob. Removing only the embedded RayJob alert
+  annotation makes the same server dry-run pass. No FleetJob was created.
 
 Therefore the current FleetJob interface does **not** support this mandatory
 alert-safe launch. The development GPU topology probe remains blocked until the
@@ -87,7 +87,8 @@ not proof that the deployed server supports the annotation.
 
 ## Regression coverage
 
-The focused suite asserts the annotation on the CPU preflight Job, FleetJob,
-embedded RayJob, receipt-verifier Job, and generic SkyRL request. It removes
-each annotation in turn and requires validation to fail. The suite result was
+The focused suite asserts the annotation on the CPU preflight Job, embedded
+RayJob, receipt-verifier Job, and generic SkyRL request. It also asserts that
+the outer FleetJob remains unannotated. It removes each required annotation in
+turn and requires validation to fail. The suite result was
 `246 passed, 1 skipped`.

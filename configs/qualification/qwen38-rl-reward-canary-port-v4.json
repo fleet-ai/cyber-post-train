@@ -45,11 +45,11 @@
     "config_file_sha256": "sha256:ceb413e27765dbbd88865c9f22ad186ee4f39387de93874111714f7861f9d529",
     "config_self_sha256": "sha256:f7d53ee426ee4f23e1c608bc17583f5f105ac30b6a8c19b04f966b908cc47d52",
     "name": "chris-q38-skyrl-probe-v17",
-    "plan_sha256": "sha256:fbdd777447219623623fc9679aecc65f3b3c692aa20a9d49a4cc66ae29e43774",
-    "request_sha256": "sha256:87e3a0971f1d700d57194cc87fb1ec3b1df0e16fc1dfca9d8f634bf0a4209e37",
-    "fleetjob_manifest_sha256": "sha256:1fc00898bbe35739db9896a2765bad734ee616d72c0caa26f1f73434208ba223",
-    "preflight_manifest_sha256": "sha256:92a39c456d53f57e8ccbcc8a56b3427d815ed1c70e2c40464e0e7b1d2444aa37",
-    "receipt_verifier_manifest_sha256": "sha256:255ae49210d50c285bf9ad4c4a330cc3ccc95070bd0dca9e0d19cc81420a4668",
+    "plan_sha256": "sha256:b398e73ba3124c4f22e53aceb9ac7924916ba2a3027a3f780261d184505ae678",
+    "request_sha256": "sha256:def61728802c80a304a5f2ffdc0c1c22dae785737f2f23c03e9455b1712bda83",
+    "fleetjob_manifest_sha256": "sha256:0f8c7f3f5a6772fd4aaef706d8d2a638e6e7b24cb87edc6c3b0937d95bd6f389",
+    "preflight_manifest_sha256": "sha256:64f06f9a9ed4db4de4cd2ce3afa2b84b25b8f7d4be471c32dd96e3842004ef14",
+    "receipt_verifier_manifest_sha256": "sha256:1409b89a9c113ff6ca2b7cb1afcfdc8428c0bd475b123d0820f185c684e8edfe",
     "required_terminal_receipt": "TOPOLOGY_PROBE.json",
     "terminal_receipt_grace_seconds": 30,
     "accepted": false
@@ -70,5 +70,5 @@
       "prod4_jobs_kubernetes_sfs_wandb_absence_not_yet_rechecked"
     ]
   },
-  "sha256": "sha256:b807be61a8113a968769df54be6cf3901e94bbb927ab76e3d817f3d53ed805f1"
+  "sha256": "sha256:bab0bd6e8924289f9f01d8ae379a9fc30f726b7723468d7d012d949e41555a80"
 }

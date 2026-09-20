@@ -29,16 +29,16 @@ def plan():
 
 def test_probe_is_distinct_dev_only_bounded_and_zero_update(plan) -> None:
     request = probe.request(plan)
-    assert digest(plan) == "fbdd777447219623623fc9679aecc65f3b3c692aa20a9d49a4cc66ae29e43774"
-    assert digest(request) == "87e3a0971f1d700d57194cc87fb1ec3b1df0e16fc1dfca9d8f634bf0a4209e37"
+    assert digest(plan) == "b398e73ba3124c4f22e53aceb9ac7924916ba2a3027a3f780261d184505ae678"
+    assert digest(request) == "def61728802c80a304a5f2ffdc0c1c22dae785737f2f23c03e9455b1712bda83"
     assert digest(probe.fleetjob_manifest(plan)) == (
-        "1fc00898bbe35739db9896a2765bad734ee616d72c0caa26f1f73434208ba223"
+        "0f8c7f3f5a6772fd4aaef706d8d2a638e6e7b24cb87edc6c3b0937d95bd6f389"
     )
     assert digest(probe.preflight_job_manifest(plan)) == (
-        "92a39c456d53f57e8ccbcc8a56b3427d815ed1c70e2c40464e0e7b1d2444aa37"
+        "64f06f9a9ed4db4de4cd2ce3afa2b84b25b8f7d4be471c32dd96e3842004ef14"
     )
     assert digest(probe.receipt_verify_job_manifest(plan)) == (
-        "255ae49210d50c285bf9ad4c4a330cc3ccc95070bd0dca9e0d19cc81420a4668"
+        "1409b89a9c113ff6ca2b7cb1afcfdc8428c0bd475b123d0820f185c684e8edfe"
     )
     assert plan["schema"] == probe.SCHEMA
     assert plan["execution"]["cluster_target"] == "dev"
@@ -90,7 +90,6 @@ def test_probe_fleetjob_is_one_eight_gpu_pod_with_zero_replica_group(plan) -> No
     assert manifest["metadata"] == {
         "name": "chris-q38-skyrl-probe-v17",
         "namespace": "fleet-train-jobs",
-        "annotations": {"fleet.ai/failure-alerts": "off"},
     }
     assert spec["job"]["metadata"]["annotations"] == {
         "ray/kueue-admission-scope": "job",
@@ -382,17 +381,15 @@ def test_probe_fleetjob_preview_accepts_only_exact_server_mutation(plan) -> None
     with pytest.raises(JobsError, match="changed"):
         probe.validate_fleetjob_preview(plan, manifest, changed)
 
-    for path in (
-        ("metadata", "annotations"),
-        ("spec", "job", "metadata", "annotations"),
-    ):
-        changed = copy.deepcopy(rendered)
-        target = changed
-        for key in path:
-            target = target[key]
-        target.pop("fleet.ai/failure-alerts")
-        with pytest.raises(JobsError, match="changed"):
-            probe.validate_fleetjob_preview(plan, manifest, changed)
+    changed = copy.deepcopy(rendered)
+    changed["spec"]["job"]["metadata"]["annotations"].pop("fleet.ai/failure-alerts")
+    with pytest.raises(JobsError, match="changed"):
+        probe.validate_fleetjob_preview(plan, manifest, changed)
+
+    changed = copy.deepcopy(rendered)
+    changed["metadata"]["annotations"] = {"fleet.ai/failure-alerts": "off"}
+    with pytest.raises(JobsError, match="changed"):
+        probe.validate_fleetjob_preview(plan, manifest, changed)
 
 
 def test_probe_runtime_bundle_imports_without_source_checkout(plan, tmp_path) -> None:

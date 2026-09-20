@@ -417,11 +417,7 @@ def _fleetjob(
     return {
         "apiVersion": "fleet.ai/v1alpha1",
         "kind": "FleetJob",
-        "metadata": {
-            "name": name,
-            "namespace": execution["namespace"],
-            "annotations": {FAILURE_ALERT_ANNOTATION: FAILURE_ALERT_OFF},
-        },
+        "metadata": {"name": name, "namespace": execution["namespace"]},
         "spec": {
             "fleet": {
                 "projectName": execution["project_name"],

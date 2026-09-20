@@ -50,16 +50,16 @@ check.
 
 The exact prepared topology packet is bound to:
 
-- plan SHA-256 `fbdd777447219623623fc9679aecc65f3b3c692aa20a9d49a4cc66ae29e43774`;
-- request SHA-256 `87e3a0971f1d700d57194cc87fb1ec3b1df0e16fc1dfca9d8f634bf0a4209e37`;
-- FleetJob manifest SHA-256 `1fc00898bbe35739db9896a2765bad734ee616d72c0caa26f1f73434208ba223`;
-- CPU-preflight manifest SHA-256 `92a39c456d53f57e8ccbcc8a56b3427d815ed1c70e2c40464e0e7b1d2444aa37`;
-- receipt-verifier manifest SHA-256 `255ae49210d50c285bf9ad4c4a330cc3ccc95070bd0dca9e0d19cc81420a4668`.
+- plan SHA-256 `b398e73ba3124c4f22e53aceb9ac7924916ba2a3027a3f780261d184505ae678`;
+- request SHA-256 `def61728802c80a304a5f2ffdc0c1c22dae785737f2f23c03e9455b1712bda83`;
+- FleetJob manifest SHA-256 `0f8c7f3f5a6772fd4aaef706d8d2a638e6e7b24cb87edc6c3b0937d95bd6f389`;
+- CPU-preflight manifest SHA-256 `64f06f9a9ed4db4de4cd2ce3afa2b84b25b8f7d4be471c32dd96e3842004ef14`;
+- receipt-verifier manifest SHA-256 `1409b89a9c113ff6ca2b7cb1afcfdc8428c0bd475b123d0820f185c684e8edfe`.
 
 The locally compiled scientific packet is bound to plan SHA-256
-`d6b36b07f1fcb9075e96f5d4918aecdf204c8ad2f3fa8d5d29527bfc9c777c9c`
+`25d0abf30da462a6ba67c6ac8a3fc95f3f89a9a08e3ea295b21e8a22481630b3`
 and request SHA-256
-`bb69d48afd9d6a1cafea678dbc408f803dda93e4e32bb42a23aac620da7c224c`.
+`98a83dbbab61f360a12ec6389adb55de637ded64dcceaa1debf0d791e754cef4`.
 Those digests do not authorize submission.
 
 ## Why submission is blocked
@@ -75,12 +75,10 @@ remain:
 4. execution of the encoded read-only Jobs/Kubernetes/SFS/W&B absence guard
    immediately before the one allowed create.
 
-The current development FleetJob admission webhook rejects the mandatory
-root `fleet.ai/failure-alerts: "off"` annotation on both the FleetJob and its
-embedded RayJob. The zero-GPU preflight and receipt-verifier server dry-runs
-pass with the annotation, but the GPU FleetJob cannot be created until the
-FleetJob interface can preserve that annotation on the generated RayJob or the
-probe moves to another alert-safe transport. The exact evidence is recorded in
+The outer FleetJob is not a Kubernetes Job or RayJob and therefore carries no
+alert annotation. The mandatory root `fleet.ai/failure-alerts: "off"`
+annotation remains on its embedded RayJob and on both zero-GPU Jobs. Exact
+server-preview evidence is recorded in
 [`2026-09-20-skyrl-alert-optout-launch-repair-v1.md`](evidence/qwen38-study/2026-09-20-skyrl-alert-optout-launch-repair-v1.md).
 
 The offline defects for the five full arms are repaired. Each arm now has an
