@@ -1606,7 +1606,8 @@ def test_native_checkpoint_reopens_metadata_before_recording_success(tmp_path, m
     importlib.util.find_spec("skyrl") is None,
     reason="requires pinned training image; CPU-only",
 )
-def test_qwen38_train_step_queries_all_rank_lr_before_optimizer(monkeypatch, tmp_path):
+@pytest.mark.parametrize("metric_lr", [3e-5, 2.9999999242136255e-5])
+def test_qwen38_train_step_queries_all_rank_lr_before_optimizer(monkeypatch, tmp_path, metric_lr):
     import ray
     import torch
     from skyrl.train.config.sft_config import SFTConfig, build_skyrl_config_for_sft
@@ -1634,7 +1635,7 @@ def test_qwen38_train_step_queries_all_rank_lr_before_optimizer(monkeypatch, tmp
         def forward_backward(self, model, batch, loss_fn):
             events.append("forward_backward")
             assert (model, loss_fn) == ("policy", "cross_entropy")
-            return SimpleNamespace(metrics={"loss": 1.0, "policy_lr": 3e-5})
+            return SimpleNamespace(metrics={"loss": 1.0, "policy_lr": metric_lr})
 
         def optim_step(self, model):
             events.append("optim_step")

@@ -246,8 +246,8 @@ QWEN38_LORA_ONE_STEP_PLAN = {
         "wandb",
     ],
     "schema": DENSE_SCHEMA,
-    "run_name": "chris-q38-lora-sft-c1-v6",
-    "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v6",
+    "run_name": "chris-q38-lora-sft-c1-v7",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v7",
     "model": {
         "repo": "Qwen/Qwen3.8-27B",
         "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
@@ -296,8 +296,8 @@ QWEN38_LORA_ONE_STEP_PLAN = {
         "entity": "thefleet",
         "project": "cyber-post-train",
         "group": "qwen38-lora-sft-goal-v1",
-        "run_id": "chris-q38-lora-sft-c1-v6",
-        "name": "chris-q38-lora-sft-c1-v6",
+        "run_id": "chris-q38-lora-sft-c1-v7",
+        "name": "chris-q38-lora-sft-c1-v7",
         "tags": [
             "qwen38",
             "lora",
@@ -312,6 +312,7 @@ QWEN38_LORA_ONE_STEP_PLAN = {
             "all-rank-lr-evidence-repair",
             "dev-init-contract-repair",
             "step-boundary-evidence-repair",
+            "float32-lr-consensus-repair",
         ],
     },
 }
@@ -2275,7 +2276,12 @@ def _make_trainer_class():
                     [output.metrics.get("policy_lr")], expected_ranks=1
                 )
                 self._record_qualification_stage("worker_lr_validated")
-                if metric_lr != lr:
+                # ``policy_lr`` passes through SkyRL's scalar all-reduce, which
+                # materializes Python values as float32 before returning them.
+                # The direct optimizer query remains a Python float.  Compare
+                # within a bound far tighter than any meaningful schedule
+                # change while accepting that one expected float32 round trip.
+                if not math.isclose(metric_lr, lr, rel_tol=1e-6, abs_tol=0.0):
                     raise ValueError("worker metric learning rate differs from optimizer ranks")
                 self._record_qualification_stage("lr_consensus_validated")
             else:
