@@ -54,7 +54,7 @@ an explicit DNS-resolution failure. Any other error still stops after its first
 attempt. Therefore this repair cannot replay an accepted model request or a
 benchmark attempt. Focused readiness/supervisor tests and Ruff pass.
 
-## V6 active canary
+## V6 terminal bootstrap stall
 
 The fresh V6 base plan is
 `sha256:65dace903c2eb0d9ac81ba0267d2150e8f1749c434c7c63c64cd4c8220abf5b7`.
@@ -65,7 +65,7 @@ and the pair receipt is
 
 At launch, a fresh provider census found the create-once name absent and the
 shared base route was independently Ready with two replicas in both the Fleet
-API and Kubernetes. The active score-free collection is:
+API and Kubernetes. The score-free collection was:
 
 - sandbox: `8b990zf3pca8rpek6qkfj`
 - process: `1510`
@@ -73,11 +73,8 @@ API and Kubernetes. The active score-free collection is:
 - terminal supervisor plan:
   `sha256:ee6f8d863e7909ee30169a96d36849f47b85d917fb2fdbd83aac627da270931e`
 
-This note does not mark V6 accepted. Acceptance requires the content-free
-collection receipt, filesystem snapshot receipt, and confirmed sandbox release.
-
-The only sanitized phase indicator available while V6 is live still reports
-`bootstrap` / `initializing`, and the provider process remains active. Separate
+The only sanitized phase indicator available while V6 was live reported
+`bootstrap` / `initializing`, and the provider process remained active. Separate
 read-only existence probes found no CAGE-preflight, benchmark-validation, or
 collection-acceptance receipt, so no benchmark attempt or scoring stage is
 known to have started. A process-tree probe found the controller waiting on a
@@ -85,18 +82,55 @@ Docker child. The runner used by V6 did not place a deadline around each CAGE
 preflight Docker call; therefore one stuck call could outlive the otherwise
 bounded DNS retry schedule.
 
+After more than twenty minutes with the same evidence, the stall met the fixed
+watchdog. A write-ahead release claim bound the exact sandbox and process before
+one provider delete. The provider then reported the sandbox terminated, and a
+fresh inventory contained no live row with its ID or name.
+
+- sanitized stall evidence receipt:
+  `sha256:e4455c5c0c32d8de45137632db88a86ed7980937af71735cd6633ce7c4c0e1db`
+- release receipt:
+  `sha256:aa1fab471b8592f18b4233de20d66938452886c99538741a4dc66b0dd2c9e9f9`
+- terminal classification: bootstrap transport stall; zero accepted benchmark
+  attempts and zero scoring attempts
+
 The successor runner now gives every CAGE preflight Docker call a strict
 five-minute deadline. A timed-out call is not treated as DNS and cannot be
 retried: it produces a terminal score-free collection failure for preservation
-and release. This hardening does not alter the active V6 sandbox or its sealed
-runner digest. Any successor must rebuild and reseal its plans against the new
-runner digest.
+and release. This hardening did not alter V6 or its sealed runner digest. Any
+successor must rebuild and reseal its plans against the new runner digest.
+
+## V7 bounded successor
+
+Exactly one successor was sealed against the bounded runner. A fresh provider
+inventory of 339 sandboxes found both create-once V7 names absent and no live
+V6 predecessor. The duplicate-census receipt is
+`sha256:0f3842425c3fa034065b7889e05e53b1eb08d8b6e52c5796a9663a70b648b009`.
+
+- base plan:
+  `sha256:46f8ae5480f4aaf1fb331d41ed0d0349509b67ba56ae6c0aef081b1ff8e86522`
+- candidate plan:
+  `sha256:753d26e02d69fc23b83c677508c356276826e57ce7f12b72e6a5e24a43b1f66a`
+- pair receipt:
+  `sha256:dde4772aeba1b749fb8c9a3c4afb01c2e4f96422d7d8ae81c59ac57155e6c2a1`
+- bounded runner:
+  `sha256:bd4aa3c1cf27f63ae151c818873e6070a0a23f55b34934457338c357aafb3742`
+- baseline sandbox: `udrfx303h58nqrl6ipil7`
+- baseline process: `1684`
+- campaign: `q38-base-f75p230-oc-wbe-c1-v3`
+
+V7 starts only the baseline task-0 score-free transport canary. Its terminal
+supervisor will preserve an accepted or sanitized-failure snapshot and release
+the exact sandbox. No full expansion, candidate collection, or scoring is
+authorized until this canary accepts.
 
 ## Prepared expansion
 
-Four sealed V6 replicas contain 15 distinct benchmark tasks per arm. Together
+Four sealed V6 replicas contain 15 distinct benchmark tasks per arm. They are
+historical and cannot be launched against the changed runner digest. Together
 they represent 60 baseline and 60 candidate score-free attempts. The baseline
-60 may start only after the V6 task-0 transport canary accepts. Candidate work
+60 must be rebuilt and resealed only after the V7 task-0 transport canary
+accepts. Candidate work
 also requires a newly Ready exact candidate route and fresh live-parity and
 duplicate checks. No expansion was launched when this note was written.
 
