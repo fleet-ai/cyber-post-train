@@ -33,6 +33,10 @@ RECEIPT_SCHEMA = "cyber_skyrl_topology_probe_receipt_v1"
 RELEASE_SCHEMA = "cyber_skyrl_topology_probe_release_v1"
 FLEETJOB_PACKET_SCHEMA = "cyber_skyrl_topology_probe_fleetjob_packet_v1"
 FLEETJOB_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_fleetjob_preview_v1"
+PREFLIGHT_PACKET_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_packet_v1"
+PREFLIGHT_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_preview_v1"
+PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v1"
+PREFLIGHT_RECEIPT = "/dev/termination-log"
 MODULE = "training.skyrl_topology_probe"
 CONFIG_PATH = ROOT / "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json"
 IMAGE = (
@@ -76,6 +80,9 @@ def _expected_execution() -> dict:
         "project_name": "fleetjob-dev",
         "auth_secret": {"name": "fleet-api", "key": "FLEET_API_KEY"},
         "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v1",
+        "output_pvc": "sfs-shared",
+        "output_registry_mount": "/mnt/cyber-output-registry",
+        "output_registry_subpath": "models/fleetjob-dev",
         "model_artifact": {
             "path": "Qwen/Qwen3.8-27B",
             "mount_path": "base",
@@ -118,6 +125,7 @@ def _config(path: Path) -> dict:
         != {"setup_seconds": 1200, "cleanup_seconds": 300, "total_seconds": 1500}
         or value["deadlines"]["setup_seconds"] + value["deadlines"]["cleanup_seconds"]
         != value["deadlines"]["total_seconds"]
+        or value["submission_gate"].get("cpu_preflight_authorized") is not True
         or value["submission_gate"].get("preview_authorized") is not False
         or value["submission_gate"].get("fleetjob_preview_authorized") is not True
         or value["submission_gate"].get("submission_authorized") is not False
@@ -198,7 +206,8 @@ def _validate(plan: dict) -> skyrl.SkyRLConfig:
         or plan.get("deadlines")
         != {"setup_seconds": 1200, "cleanup_seconds": 300, "total_seconds": 1500}
         or execution != {"image": IMAGE, **_expected_execution()}
-        or plan.get("output_root") != execution.get("mount_root", "") + "/run"
+        or plan.get("output_root")
+        != execution.get("mount_root", "") + "/models/run"
         or arguments.model_root
         != execution.get("mount_root", "")
         + "/models/"
@@ -207,6 +216,7 @@ def _validate(plan: dict) -> skyrl.SkyRLConfig:
         != {
             "profile": "qwen38_skyrl_topology_probe_dev_v1",
             "submission_gate": {
+                "cpu_preflight_authorized": True,
                 "preview_authorized": False,
                 "fleetjob_preview_authorized": True,
                 "submission_authorized": False,
@@ -229,7 +239,12 @@ def _validate(plan: dict) -> skyrl.SkyRLConfig:
     return arguments
 
 
-def request(plan: dict, *, fleetjob_transport: bool = False) -> dict:
+def request(
+    plan: dict,
+    *,
+    fleetjob_transport: bool = False,
+    cpu_preflight: bool = False,
+) -> dict:
     arguments = _validate(plan)
     execution = plan["execution"]
     files = _runtime()
@@ -247,6 +262,11 @@ def request(plan: dict, *, fleetjob_transport: bool = False) -> dict:
         if fleetjob_transport
         else {}
     )
+    argv = ["--plan", "plan.json", "--sha256", digest(plan)]
+    if fleetjob_transport:
+        argv.extend(["--receipt", PREFLIGHT_RECEIPT])
+    if cpu_preflight:
+        argv.append("--cpu-preflight")
     return bundled_request(
         {
             "name": arguments.name,
@@ -271,7 +291,7 @@ def request(plan: dict, *, fleetjob_transport: bool = False) -> dict:
         },
         files,
         MODULE,
-        ["--plan", "plan.json", "--sha256", digest(plan)],
+        argv,
         **options,
     )
 
@@ -313,63 +333,20 @@ def _container(
     }
 
 
-def fleetjob_manifest(plan: dict) -> dict:
-    """Render the current, dev-only FleetJob launch transport.
-
-    FleetJob is the supported cluster interface for new workloads.  The legacy
-    Jobs API cannot express an explicit runtime user, so it remains sealed into
-    the plan for route-reconciliation only and is not an authorized launch
-    path for this probe.
-    """
-    _validate(plan)
+def _fleetjob(
+    plan: dict,
+    *,
+    name: str,
+    command: str,
+    head: dict,
+    workers: list[dict],
+    active_deadline_seconds: int,
+) -> dict:
     execution = plan["execution"]
-    bundled = request(plan, fleetjob_transport=True)
-    head_env = {**bundled["env"], "RUN_DIR": plan["output_root"]}
-    worker_env = {
-        key: value
-        for key, value in head_env.items()
-        if not key.startswith("CYBER_RUNTIME_BUNDLE")
-    }
-    head = {
-        "rayStartParams": {"num-cpus": "0", "num-gpus": "0"},
-        "template": {
-            "metadata": {},
-            "spec": {
-                "priorityClassName": execution["priority"],
-                "containers": [
-                    _container(plan, head_env, execution["head_resources"])
-                ],
-            },
-        },
-    }
-    worker = {
-        "groupName": "gpu",
-        "replicas": 1,
-        "minReplicas": 1,
-        "maxReplicas": 1,
-        "rayStartParams": {"num-gpus": "8"},
-        "template": {
-            "metadata": {},
-            "spec": {
-                "priorityClassName": execution["priority"],
-                "containers": [
-                    _container(
-                        plan,
-                        worker_env,
-                        execution["resources"],
-                        gpus=execution["gpus_per_worker"],
-                    )
-                ],
-            },
-        },
-    }
     return {
         "apiVersion": "fleet.ai/v1alpha1",
         "kind": "FleetJob",
-        "metadata": {
-            "name": plan["run_name"],
-            "namespace": execution["namespace"],
-        },
+        "metadata": {"name": name, "namespace": execution["namespace"]},
         "spec": {
             "fleet": {
                 "projectName": execution["project_name"],
@@ -396,19 +373,152 @@ def fleetjob_manifest(plan: dict) -> dict:
                     "annotations": {"ray/kueue-admission-scope": "job"}
                 },
                 "spec": {
-                    "entrypoint": bundled["command"],
-                    # The process has its own 25-minute setup/cleanup bound.  The
-                    # RayJob also has a hard 30-minute ceiling so a wedged
-                    # entrypoint cannot outlive the development-cluster limit.
-                    "activeDeadlineSeconds": 1800,
+                    "entrypoint": command,
+                    "activeDeadlineSeconds": active_deadline_seconds,
                     "backoffLimit": 0,
                     "shutdownAfterJobFinishes": True,
                     "rayClusterSpec": {
                         "rayVersion": execution["ray_version"],
                         "enableInTreeAutoscaling": False,
                         "headGroupSpec": head,
-                        "workerGroupSpecs": [worker],
+                        "workerGroupSpecs": workers,
                     },
+                },
+            },
+        },
+    }
+
+
+def fleetjob_manifest(plan: dict) -> dict:
+    """Render the current, dev-only FleetJob launch transport."""
+    _validate(plan)
+    execution = plan["execution"]
+    bundled = request(plan, fleetjob_transport=True)
+    head_env = {**bundled["env"], "RUN_DIR": plan["output_root"]}
+    worker_env = {
+        key: value
+        for key, value in head_env.items()
+        if not key.startswith("CYBER_RUNTIME_BUNDLE")
+    }
+    head = {
+        "rayStartParams": {"num-cpus": "0", "num-gpus": "0"},
+        "template": {
+            "metadata": {},
+            "spec": {
+                "priorityClassName": execution["priority"],
+                "containers": [
+                    _container(plan, head_env, execution["head_resources"])
+                ],
+            },
+        },
+    }
+    head_container = head["template"]["spec"]["containers"][0]
+    head_container.update(
+        {
+            "terminationMessagePath": PREFLIGHT_RECEIPT,
+            "terminationMessagePolicy": "File",
+        }
+    )
+    worker = {
+        "groupName": "gpu",
+        "replicas": 1,
+        "minReplicas": 1,
+        "maxReplicas": 1,
+        "rayStartParams": {"num-gpus": "8"},
+        "template": {
+            "metadata": {},
+            "spec": {
+                "priorityClassName": execution["priority"],
+                "containers": [
+                    _container(
+                        plan,
+                        worker_env,
+                        execution["resources"],
+                        gpus=execution["gpus_per_worker"],
+                    )
+                ],
+            },
+        },
+    }
+    return _fleetjob(
+        plan,
+        name=plan["run_name"],
+        command=bundled["command"],
+        head=head,
+        workers=[worker],
+        active_deadline_seconds=1800,
+    )
+
+
+def preflight_job_manifest(plan: dict) -> dict:
+    """Render the zero-GPU, exact-image/model Kubernetes preflight Job."""
+    _validate(plan)
+    execution = plan["execution"]
+    gate = plan["qualification"]["submission_gate"]
+    if gate["cpu_preflight_authorized"] is not True:
+        raise JobsError("topology probe CPU preflight is not authorized")
+    bundled = request(plan, fleetjob_transport=True, cpu_preflight=True)
+    head_env = {
+        **bundled["env"],
+        "RUN_DIR": plan["output_root"],
+        "CYBER_CREATE_ONCE_ROOT": execution["output_registry_mount"],
+    }
+    container = _container(plan, head_env, execution["head_resources"])
+    container.update(
+        {
+            "command": ["/bin/sh", "-lc", "exec " + bundled["command"]],
+            "terminationMessagePath": PREFLIGHT_RECEIPT,
+            "terminationMessagePolicy": "File",
+            "volumeMounts": [
+                {
+                    "name": "model",
+                    "mountPath": plan["model"]["root"],
+                    "readOnly": True,
+                    "subPath": "models/" + execution["model_artifact"]["path"],
+                },
+                {
+                    "name": "output",
+                    "mountPath": plan["output_root"],
+                },
+                {
+                    "name": "output-registry",
+                    "mountPath": execution["output_registry_mount"],
+                    "readOnly": True,
+                    "subPath": execution["output_registry_subpath"],
+                },
+            ],
+        }
+    )
+    return {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": {"name": PREFLIGHT_NAME, "namespace": execution["namespace"]},
+        "spec": {
+            "activeDeadlineSeconds": 1200,
+            "backoffLimit": 0,
+            "template": {
+                "metadata": {},
+                "spec": {
+                    "automountServiceAccountToken": False,
+                    "containers": [container],
+                    "priorityClassName": execution["priority"],
+                    "restartPolicy": "Never",
+                    "volumes": [
+                        {
+                            "name": "model",
+                            "persistentVolumeClaim": {
+                                "claimName": execution["output_pvc"]
+                            },
+                        },
+                        {
+                            "name": "output-registry",
+                            "persistentVolumeClaim": {
+                                "claimName": execution["output_pvc"],
+                                "readOnly": True,
+                            },
+                        },
+                        {"name": "output", "emptyDir": {}},
+                    ],
                 },
             },
         },
@@ -431,11 +541,24 @@ def fleetjob_packet(plan: dict) -> dict:
     )
 
 
-def validate_fleetjob_preview(plan: dict, manifest: dict, rendered: dict) -> dict:
-    """Validate the server-dry-run object without retaining its private env."""
-    if manifest != fleetjob_manifest(plan):
-        raise JobsError("topology probe FleetJob differs from its immutable plan")
-    expected = copy.deepcopy(manifest)
+def preflight_job_packet(plan: dict) -> dict:
+    manifest = preflight_job_manifest(plan)
+    execution = plan["execution"]
+    return _seal(
+        {
+            "schema": PREFLIGHT_PACKET_SCHEMA,
+            "plan_sha256": digest(plan),
+            "manifest_sha256": digest(manifest),
+            "kubernetes_context": execution["kubernetes_context"],
+            "namespace": execution["namespace"],
+            "name": PREFLIGHT_NAME,
+            "submitted": False,
+        }
+    )
+
+
+def _validate_server_render(expected: dict, rendered: dict) -> None:
+    expected = copy.deepcopy(expected)
     actual = copy.deepcopy(rendered)
     metadata = actual.get("metadata", {})
     finalizers = metadata.pop("finalizers", [])
@@ -452,6 +575,87 @@ def validate_fleetjob_preview(plan: dict, manifest: dict, rendered: dict) -> dic
         or actual != expected
     ):
         raise JobsError("FleetJob server dry-run changed the topology probe")
+
+
+def _validate_preflight_job_render(expected: dict, rendered: dict) -> None:
+    """Allow only deterministic Kubernetes Job defaults in server dry-run."""
+    expected = copy.deepcopy(expected)
+    actual = copy.deepcopy(rendered)
+    status = actual.pop("status", None)
+    metadata = actual.get("metadata", {})
+    timestamp = metadata.pop("creationTimestamp", None)
+    generation = metadata.pop("generation", None)
+    uid = metadata.pop("uid", None)
+    labels = metadata.pop("labels", None)
+    name = expected["metadata"]["name"]
+    generated_labels = {
+        "batch.kubernetes.io/controller-uid": uid,
+        "batch.kubernetes.io/job-name": name,
+        "controller-uid": uid,
+        "job-name": name,
+    }
+    spec = actual.get("spec", {})
+    defaults = {
+        "completionMode": spec.pop("completionMode", None),
+        "completions": spec.pop("completions", None),
+        "manualSelector": spec.pop("manualSelector", None),
+        "parallelism": spec.pop("parallelism", None),
+        "podReplacementPolicy": spec.pop("podReplacementPolicy", None),
+        "selector": spec.pop("selector", None),
+        "suspend": spec.pop("suspend", None),
+    }
+    template = spec.get("template", {})
+    template_labels = template.get("metadata", {}).pop("labels", None)
+    pod = template.get("spec", {})
+    pod_defaults = {
+        "dnsPolicy": pod.pop("dnsPolicy", None),
+        "schedulerName": pod.pop("schedulerName", None),
+        "securityContext": pod.pop("securityContext", None),
+        "terminationGracePeriodSeconds": pod.pop("terminationGracePeriodSeconds", None),
+    }
+    containers = pod.get("containers", [])
+    image_pull_policy = (
+        containers[0].pop("imagePullPolicy", None) if len(containers) == 1 else None
+    )
+    if (
+        status != {}
+        or not isinstance(timestamp, str)
+        or not timestamp
+        or generation != 1
+        or not isinstance(uid, str)
+        or not uid
+        or labels != generated_labels
+        or template_labels != generated_labels
+        or defaults
+        != {
+            "completionMode": "NonIndexed",
+            "completions": 1,
+            "manualSelector": False,
+            "parallelism": 1,
+            "podReplacementPolicy": "TerminatingOrFailed",
+            "selector": {
+                "matchLabels": {"batch.kubernetes.io/controller-uid": uid}
+            },
+            "suspend": False,
+        }
+        or pod_defaults
+        != {
+            "dnsPolicy": "ClusterFirst",
+            "schedulerName": "default-scheduler",
+            "securityContext": {},
+            "terminationGracePeriodSeconds": 30,
+        }
+        or image_pull_policy != "IfNotPresent"
+        or actual != expected
+    ):
+        raise JobsError("CPU preflight server dry-run changed the exact Job")
+
+
+def validate_fleetjob_preview(plan: dict, manifest: dict, rendered: dict) -> dict:
+    """Validate the server-dry-run object without retaining its private env."""
+    if manifest != fleetjob_manifest(plan):
+        raise JobsError("topology probe FleetJob differs from its immutable plan")
+    _validate_server_render(manifest, rendered)
     execution = plan["execution"]
     return _seal(
         {
@@ -471,6 +675,31 @@ def validate_fleetjob_preview(plan: dict, manifest: dict, rendered: dict) -> dic
     )
 
 
+def validate_preflight_job_preview(
+    plan: dict, manifest: dict, rendered: dict
+) -> dict:
+    if manifest != preflight_job_manifest(plan):
+        raise JobsError("topology probe preflight differs from its immutable plan")
+    _validate_preflight_job_render(manifest, rendered)
+    execution = plan["execution"]
+    return _seal(
+        {
+            "schema": PREFLIGHT_PREVIEW_SCHEMA,
+            "status": "passed",
+            "plan_sha256": digest(plan),
+            "manifest_sha256": digest(manifest),
+            "server_render_sha256": digest(rendered),
+            "kubernetes_context": execution["kubernetes_context"],
+            "namespace": execution["namespace"],
+            "name": PREFLIGHT_NAME,
+            "gpu_nodes": 0,
+            "gpus": 0,
+            "runtime_user": {"uid": 1000, "gid": 100},
+            "submitted": False,
+        }
+    )
+
+
 def preflight(plan: dict) -> dict:
     if (os.geteuid(), os.getegid()) != (1000, 100):
         raise ValueError("probe preflight requires image user 1000:100")
@@ -481,10 +710,11 @@ def preflight(plan: dict) -> dict:
         raise ValueError("probe preflight is CPU-only")
     arguments = _validate(plan)
     _validate_destination(plan)
+    _validate_create_once_absence(plan)
     _verify_model(plan)
     cfg = skyrl.diagnostic_native_config(arguments)
     build_vllm_cli_args(cfg)
-    req = request(plan)
+    req = request(plan, fleetjob_transport=True, cpu_preflight=True)
     return {
         "schema": "cyber_skyrl_topology_probe_cpu_preflight_v1",
         "status": "passed",
@@ -493,9 +723,11 @@ def preflight(plan: dict) -> dict:
         "plan_sha256": digest(plan),
         "request_sha256": digest(req),
         "fleetjob_manifest_sha256": digest(fleetjob_manifest(plan)),
+        "preflight_job_manifest_sha256": digest(preflight_job_manifest(plan)),
         "task_rows_read": 0,
         "rollout_episodes": 0,
         "optimizer_steps": 0,
+        "create_once_output_absent": True,
     }
 
 
@@ -545,14 +777,36 @@ def _verify_model(plan: dict) -> None:
 
 
 def _validate_destination(plan: dict) -> Path:
-    """Require one absent, writable, run-owned receipt directory."""
+    """Require one empty, writable, run-owned receipt directory."""
     root = Path(plan["output_root"])
-    parent = root.parent
-    if root.exists():
-        raise FileExistsError("probe output already exists")
-    if not parent.is_dir() or not os.access(parent, os.W_OK | os.X_OK):
-        raise PermissionError("probe output parent is not writable")
+    if not root.is_dir() or not os.access(root, os.W_OK | os.X_OK):
+        raise PermissionError("probe output is not a writable directory")
+    if any(root.iterdir()):
+        raise FileExistsError("probe output is not create-once empty")
     return root
+
+
+def _validate_create_once_absence(plan: dict) -> Path:
+    """Prove the controller-owned destination does not already exist on SFS."""
+    execution = plan["execution"]
+    registry_root = os.environ.get("CYBER_CREATE_ONCE_ROOT")
+    if registry_root != execution["output_registry_mount"]:
+        raise ValueError("create-once registry mount binding mismatch")
+    target = (
+        Path(registry_root)
+        / plan["run_name"]
+        / Path(plan["output_root"]).relative_to(execution["mount_root"])
+    )
+    if target.exists() or target.is_symlink():
+        raise FileExistsError("create-once topology-probe output already exists")
+    return target
+
+
+def _write_receipt(path: Path, receipt: dict, *, exclusive: bool) -> None:
+    flags = os.O_WRONLY | os.O_CREAT | (os.O_EXCL if exclusive else os.O_TRUNC)
+    fd = os.open(path, flags, 0o600)
+    with os.fdopen(fd, "w") as stream:
+        stream.write(json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n")
 
 
 def _stop_setup(setup, ray) -> None:
@@ -601,7 +855,6 @@ def run(plan: dict) -> dict:
     if (os.geteuid(), os.getegid()) != (1000, 100):
         raise ValueError("probe GPU runtime requires image user 1000:100")
     root = _validate_destination(plan)
-    root.mkdir(mode=0o700, parents=False, exist_ok=False)
     forbidden = ("episodes", "checkpoints", "exports")
     if any((root / name).exists() for name in forbidden):
         raise FileExistsError("probe output contains a scientific artifact")
@@ -787,17 +1040,27 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--sha256", required=True)
+    parser.add_argument("--cpu-preflight", action="store_true")
+    parser.add_argument("--receipt", type=Path)
     args = parser.parse_args()
     try:
         plan = json.loads(args.plan.read_bytes())
         if digest(plan) != args.sha256:
             raise ValueError("plan digest mismatch")
         request(plan)
+        if args.cpu_preflight:
+            if args.receipt != Path(PREFLIGHT_RECEIPT):
+                raise ValueError("CPU preflight receipt binding mismatch")
+            receipt = _seal(preflight(plan))
+            _write_receipt(Path(PREFLIGHT_RECEIPT), receipt, exclusive=False)
+            print(json.dumps({"status": receipt["status"], "sha256": receipt["sha256"]}))
+            return
+        if args.receipt != Path(PREFLIGHT_RECEIPT):
+            raise ValueError("GPU probe receipt binding mismatch")
         receipt = run(plan)
         path = Path(plan["output_root"]) / "TOPOLOGY_PROBE.json"
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        with os.fdopen(fd, "w") as stream:
-            stream.write(json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n")
+        _write_receipt(path, receipt, exclusive=True)
+        _write_receipt(Path(PREFLIGHT_RECEIPT), receipt, exclusive=False)
         print(json.dumps({"status": receipt["status"], "sha256": receipt["sha256"]}))
     except BaseException as exc:
         print(json.dumps({"status": "failed", "error_class": type(exc).__name__}))

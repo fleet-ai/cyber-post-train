@@ -25,7 +25,7 @@ until its own reward, optimizer, checkpoint and cleanup gates pass.
 - input model: read-only Fleet model mount `Qwen/Qwen3.8-27B` at `models/base`;
   every file is checked against the exact repository revision and SHA-256 inventory
   before engine startup
-- output: the create-once run-owned `run` directory; only the sanitized probe receipt is
+- output: the controller-created, run-owned `models/run` directory; only the sanitized probe receipt is
   accepted there
 - W&B: disabled; no task, benchmark or W&B credential is delivered
 - process limit: 20 minutes for exact model verification and engine setup, then five
@@ -45,11 +45,13 @@ Use a new directory. Preparation and server dry-run make no cluster object:
 uv run --locked cyber-post-train rl-topology-probe \
   configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json \
   --output /absolute/new/probe-packet
+uv run --locked cyber-post-train rl-topology-probe-preflight-preview \
+  /absolute/new/probe-packet
 uv run --locked cyber-post-train rl-topology-probe-preview \
   /absolute/new/probe-packet
 ```
 
-The second command uses `kubectl create --dry-run=server` against the context and
+The last two commands use `kubectl create --dry-run=server` against the context and
 namespace sealed into the plan. It fails if the server changes the image, model
 mount, topology, resources, priority, deadline, command, environment or security
 settings. It saves only a sanitized proof; the server response containing the
@@ -67,9 +69,13 @@ Do not create the FleetJob until every item is true:
    used to prepare the packet.
 2. `PREPARED.json`, `FLEETJOB_PREPARED.json`, and `FLEETJOB_PREVIEW.json` all
    validate and bind the same plan and manifest digests.
-3. A CPU-only preflight has run in the exact image as UID 1000/GID 100 with the
-   exact model mount. It must verify the runtime imports, native engine arguments,
-   all model-file sizes and SHA-256 digests, and record zero visible GPUs.
+3. A CPU-only Kubernetes Job has run in the exact image as UID 1000/GID 100 with
+   zero requested GPUs, the exact read-only model mount, and a separate read-only
+   view of the FleetJob output registry. It must verify the runtime imports,
+   native engine arguments, all model-file sizes and SHA-256 digests, prove the
+   future FleetJob output path is absent, and record zero visible GPUs. Its
+   sanitized result comes only from the Kubernetes termination message; logs are
+   never an evidence source.
 4. The exact name is absent from both development and production FleetJobs and
    from both legacy Jobs APIs. The output destination contains no previous probe
    receipt, runtime directory, episode, checkpoint or export.
@@ -85,6 +91,31 @@ Do not create the FleetJob until every item is true:
 
 The checked-in config keeps `submission_authorized` false while items 3 and 6 are
 open. Do not bypass that closed gate with a manual `kubectl create`.
+
+Arm the independent observer before creating either Job. The foreground process
+writes `ARMED.json` only after proving the exact name is absent. It then binds the
+first observed UID, deletes only that UID after success, failure or the deadline,
+and writes `RESULT.json` only after the workload and its recorded children are
+absent:
+
+```sh
+uv run --locked python -m training.dev_cleanup_observer \
+  --context nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb \
+  --namespace fleet-train-jobs \
+  --kind job \
+  --name chris-q38-skyrl-probe-preflight-v1 \
+  --maximum-seconds 1200 \
+  --expected-gpus 0 \
+  --plan-sha256 sha256:<exact-plan-digest> \
+  --manifest-sha256 sha256:<exact-preflight-manifest-digest> \
+  --armed /absolute/new/PREFLIGHT_OBSERVER_ARMED.json \
+  --result /absolute/new/PREFLIGHT_OBSERVER_RESULT.json
+```
+
+For the GPU probe use `--kind fleetjob`, the FleetJob name and manifest digest,
+`--maximum-seconds 1800`, and `--expected-gpus 8`. Keep that process alive before
+the single create. A missing or invalid sanitized termination receipt makes the
+gate fail even when cleanup succeeds.
 
 ## Evidence while it runs
 

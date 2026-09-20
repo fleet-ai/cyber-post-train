@@ -284,6 +284,8 @@ def rl_topology_probe(config: Path, output: Annotated[Path, typer.Option("--outp
         compile_probe,
         fleetjob_manifest,
         fleetjob_packet,
+        preflight_job_manifest,
+        preflight_job_packet,
         request,
     )
 
@@ -294,6 +296,11 @@ def rl_topology_probe(config: Path, output: Annotated[Path, typer.Option("--outp
         manifest = fleetjob_manifest(plan)
         _write(output / "fleetjob.json", manifest)
         _write(output / "FLEETJOB_PREPARED.json", fleetjob_packet(plan))
+        _write(output / "preflight-job.json", preflight_job_manifest(plan))
+        _write(
+            output / "PREFLIGHT_JOB_PREPARED.json",
+            preflight_job_packet(plan),
+        )
         _print(
             {
                 "prepared": str(output),
@@ -308,6 +315,62 @@ def rl_topology_probe(config: Path, output: Annotated[Path, typer.Option("--outp
                 "submitted": False,
             }
         )
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-topology-probe-preflight-preview")
+def rl_topology_probe_preflight_preview(directory: Path) -> None:
+    """Server-dry-run the exact zero-GPU dev preflight; create nothing."""
+    from training.skyrl_topology_probe import (
+        SCHEMA,
+        preflight_job_manifest,
+        preflight_job_packet,
+        validate_preflight_job_preview,
+    )
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != SCHEMA:
+            raise ValueError("prepared directory is not a topology probe")
+        gate = plan.get("qualification", {}).get("submission_gate", {})
+        if gate.get("cpu_preflight_authorized") is not True:
+            raise ValueError("topology probe CPU preflight is not authorized")
+        path = directory / "preflight-job.json"
+        manifest = _read(path)
+        packet = _read(directory / "PREFLIGHT_JOB_PREPARED.json")
+        if (
+            manifest != preflight_job_manifest(plan)
+            or packet != preflight_job_packet(plan)
+        ):
+            raise ValueError("topology probe preflight packet changed")
+        proof_path = directory / "PREFLIGHT_JOB_PREVIEW.json"
+        if proof_path.exists():
+            raise ValueError("topology probe preflight preview already recorded")
+        execution = plan["execution"]
+        result = subprocess.run(
+            [
+                "kubectl",
+                "--context",
+                execution["kubernetes_context"],
+                "--namespace",
+                execution["namespace"],
+                "create",
+                "--dry-run=server",
+                "--filename",
+                str(path),
+                "--output",
+                "json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode:
+            raise JobsError("CPU preflight server dry-run failed; nothing was created")
+        proof = validate_preflight_job_preview(plan, manifest, json.loads(result.stdout))
+        _write(proof_path, proof)
+        _print(proof)
     except Exception as exc:
         _fail(exc)
 
