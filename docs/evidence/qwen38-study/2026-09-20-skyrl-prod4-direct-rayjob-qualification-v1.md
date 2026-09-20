@@ -150,3 +150,48 @@ The durable repair adds a distinct, truthful recovery-observer schema, raises th
 production pre-create appearance allowance to five minutes, and rechecks observer
 liveness immediately before writing create intent. Future creates therefore fail
 closed if their observer exits during duplicate reconciliation.
+
+## Terminal result and bounded successor
+
+Prod4 terminated before collecting any train episode. The sealed native failure
+classified the defect as `InvalidEpisode` at `skyrl_episode.py::parse`: Qwen emitted
+more than one valid tool call in one sampled turn, while the adapter accepted exactly
+one. This was an adapter limitation, not a task, reward, optimizer, model-loading, or
+cluster failure.
+
+- native failure self SHA-256:
+  `cbc41545f426f42cad31fe9e0bc9fa124548309424db8f80bff0a106bccd0635`;
+- root failure self SHA-256:
+  `df796d5f21e35438dab5845d3b24b86dfaf738b809b4b253697b7349ae2559bd`;
+- UID-bound recovery-observer result SHA-256:
+  `472a20a618f7bcbc233872d7f1959108ee4fe3f9e1dbd0a5f5773a575cd23a0d`;
+- accepted train episodes: zero;
+- optimizer updates: zero;
+- checkpoints: zero.
+
+The observer deleted the exact owned RayJob and confirmed that its Workload,
+RayCluster, Pod, and all eight GPUs were gone. The separate zero-GPU evidence-reader
+Pod was subsequently deleted by exact UID as well. Prod4 must never be retried or
+resumed.
+
+The deterministic successor is prod5. It preserves model, task split, eight genuine
+Fleet episodes, authoritative rewards, optimizer recipe, before/after evaluation, and
+checkpoint gates. The only runtime change is ordered support for every valid tool call
+in one sampled turn: calls execute in emitted order and all tool results are masked as
+one observation group before the next assistant header. The focused RL suite passed
+222 tests with two expected skips. Repair commit: `f285ed72`.
+
+Prod5 frozen identities at preparation time:
+
+- plan SHA-256: `e61591e0a95d33990296e2786abddf0f67d87b01f8c6bd5f54a6a217bcbaea31`;
+- request SHA-256: `0ecb6155d986362556a9758274eb439b3b8912a85c178bdcfdf3becc7a3231e6`;
+- bundled runtime SHA-256:
+  `7db4616ab57dea0609424753e23d315de4b9fc430eb3864b99e1f5fd9dc02270`;
+- direct root-RayJob manifest SHA-256:
+  `59d20f929f23b569d1207d991762d5d151d38a0c3185dd5f1186708a8d4a6b8c`;
+- private input archive SHA-256:
+  `a5a7ee8334ec384365e7629376ec4fb150399aab14517b37b813153fb38d3719`.
+
+Prod5 remains scientifically unaccepted until it records genuine authoritative reward
+variation, one finite optimizer update, a reloadable step-1 checkpoint, matched
+before/after development results, and complete GPU release.
