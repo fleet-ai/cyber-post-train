@@ -21,13 +21,13 @@ def plan():
 
 def test_stage_plan_is_dev_only_zero_science_and_create_once(plan) -> None:
     assert plan["schema"] == stage.PLAN_SCHEMA
-    assert plan["name"] == "chris-q38-modelstage-v3"
+    assert plan["name"] == "chris-q38-modelstage-v4"
     assert plan["execution"] == stage._expected_execution()
     assert plan["execution"]["cluster_target"] == "dev"
     assert plan["execution"]["priority"] == "c1"
     assert plan["execution"]["deadline_seconds"] == 1200
     assert plan["execution"]["artifact_path"] == (
-        "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v3"
+        "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4"
     )
     assert plan["model"]["repo"] == "Qwen/Qwen3.8-27B"
     assert plan["model"]["revision"] == (
@@ -40,7 +40,7 @@ def test_stage_plan_is_dev_only_zero_science_and_create_once(plan) -> None:
 def test_stage_job_is_zero_gpu_single_models_mount_and_explicit_user(plan) -> None:
     manifest = stage.job_manifest(plan)
     assert manifest["metadata"] == {
-        "name": "chris-q38-modelstage-v3",
+        "name": "chris-q38-modelstage-v4",
         "namespace": "fleet-train-jobs",
     }
     assert manifest["spec"]["activeDeadlineSeconds"] == 1200
@@ -174,17 +174,20 @@ def _small_plan(plan: dict, tmp_path: Path, monkeypatch) -> tuple[dict, Path, Pa
     return value, source, project / "artifact"
 
 
-def test_stage_publishes_hardlinked_exact_inventory_atomically(
+def test_stage_publishes_copied_exact_inventory_atomically(
     plan, tmp_path: Path, monkeypatch
 ) -> None:
     value, source, artifact = _small_plan(plan, tmp_path, monkeypatch)
     receipt = stage.stage(value)
     assert receipt["schema"] == stage.RECEIPT_SCHEMA
     assert receipt["status"] == "published"
-    assert receipt["files"] == receipt["hardlinks_verified"] == 1
+    assert receipt["files"] == receipt["copies_verified"] == 1
     assert receipt["optimizer_steps"] == receipt["rollout_episodes"] == 0
     assert artifact.is_dir() and not artifact.is_symlink()
-    assert os.path.samefile(source / "tokenizer.json", artifact / "tokenizer.json")
+    assert not os.path.samefile(source / "tokenizer.json", artifact / "tokenizer.json")
+    assert (source / "tokenizer.json").read_bytes() == (
+        artifact / "tokenizer.json"
+    ).read_bytes()
     saved = json.loads((artifact / ".CYBER_ARTIFACT.json").read_text())
     assert saved == receipt
     assert not any(path.name.startswith(".artifact.tmp-") for path in artifact.parent.iterdir())

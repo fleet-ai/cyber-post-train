@@ -1,6 +1,6 @@
 {
   "schema": "cyber_skyrl_model_artifact_stage_config_v1",
-  "name": "chris-q38-modelstage-v3",
+  "name": "chris-q38-modelstage-v4",
   "model": {
     "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
     "weights": "../models/qwen38-27b-1d4bf0f2.weights.json"
@@ -14,10 +14,11 @@
     "models_subpath": "models",
     "models_mount": "/mnt/models",
     "source_alias": "qwen3.8-27b-1d4bf0f2",
-    "artifact_path": "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v3",
+    "artifact_path": "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4",
+    "transfer_method": "copy_and_verify",
     "runtime_uid": 1000,
     "runtime_gid": 100,
     "deadline_seconds": 1200
   },
-  "sha256": "sha256:9052492bd8edac7a5b14357d2d38fb2e04e372bac03989a8ed25859093091af3"
+  "sha256": "sha256:d55f4234590a7079170650df1992e6e81142ca28204fedd1061dc7202550bd34"
 }

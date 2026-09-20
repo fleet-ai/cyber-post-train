@@ -63,10 +63,10 @@ def test_probe_is_distinct_dev_only_bounded_and_zero_update(plan) -> None:
         "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
     )
     assert plan["model"]["root"] == (
-        "/mnt/sfs/jobs/chris-q38-skyrl-probe-v9/models/base"
+        "/mnt/sfs/jobs/chris-q38-skyrl-probe-v10/models/base"
     )
     assert plan["execution"]["model_artifact"]["path"] == (
-        "Qwen/Qwen3.8-27B/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+        "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4"
     )
     assert (
         "models/" + plan["execution"]["model_artifact"]["path"]
@@ -78,19 +78,16 @@ def test_probe_fleetjob_is_two_four_gpu_pods_with_explicit_user(plan) -> None:
     manifest = probe.fleetjob_manifest(plan)
     spec = manifest["spec"]
     assert manifest["metadata"] == {
-        "name": "chris-q38-skyrl-probe-v9",
+        "name": "chris-q38-skyrl-probe-v10",
         "namespace": "fleet-train-jobs",
     }
     assert spec["fleet"] == {
         "projectName": "fleetjob-dev",
         "auth": {"secretRef": {"name": "fleet-api", "key": "FLEET_API_KEY"}},
-        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v9",
+        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v10",
         "models": [
             {
-                "path": (
-                    "Qwen/Qwen3.8-27B/"
-                    "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
-                ),
+                "path": "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4",
                 "mountPath": "base",
                 "readOnly": True,
                 "required": True,
@@ -166,10 +163,7 @@ def test_probe_cpu_preflight_is_zero_gpu_exact_mount_and_explicit_user(plan) -> 
         "name": "model",
         "mountPath": plan["model"]["root"],
         "readOnly": True,
-        "subPath": (
-            "models/Qwen/Qwen3.8-27B/"
-            "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
-        ),
+        "subPath": "models/fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4",
     }
     assert mounts["output-registry"] == {
         "name": "output-registry",

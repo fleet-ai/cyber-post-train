@@ -83,7 +83,8 @@ def _expected_execution() -> dict:
         "models_subpath": "models",
         "models_mount": "/mnt/models",
         "source_alias": "qwen3.8-27b-1d4bf0f2",
-        "artifact_path": "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v3",
+        "artifact_path": "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4",
+        "transfer_method": "copy_and_verify",
         "runtime_uid": 1000,
         "runtime_gid": 100,
         "deadline_seconds": 1200,
@@ -138,7 +139,7 @@ def _validate(plan: dict) -> None:
     artifact = PurePosixPath(execution["artifact_path"])
     if (
         plan.get("schema") != PLAN_SCHEMA
-        or plan.get("name") != "chris-q38-modelstage-v3"
+        or plan.get("name") != "chris-q38-modelstage-v4"
         or plan.get("image") != IMAGE
         or plan.get("execution") != execution
         or plan.get("source_root")
@@ -488,11 +489,19 @@ def stage(plan: dict) -> dict:
             destination = temp / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             try:
-                os.link(source, destination, follow_symlinks=True)
+                with source.open("rb") as input_stream, destination.open("xb") as output_stream:
+                    shutil.copyfileobj(input_stream, output_stream, length=16 * 1024 * 1024)
+                    output_stream.flush()
+                    os.fsync(output_stream.fileno())
             except OSError as exc:
-                raise StageGateError(f"hardlink_failed_{index:02d}") from exc
-            if not os.path.samefile(source, destination):
-                raise StageGateError(f"hardlink_identity_mismatch_{index:02d}")
+                raise StageGateError(f"copy_failed_{index:02d}") from exc
+            if destination.stat().st_size != size:
+                raise StageGateError(f"copy_size_mismatch_{index:02d}")
+            with destination.open("rb") as stream:
+                actual = hashlib.file_digest(stream, "sha256").hexdigest()
+            if actual != item["sha256"].removeprefix("sha256:"):
+                raise StageGateError(f"copy_digest_mismatch_{index:02d}")
+            destination.chmod(0o444)
             total += size
         receipt = _seal(
             {
@@ -504,7 +513,7 @@ def stage(plan: dict) -> dict:
                 "artifact_path": execution["artifact_path"],
                 "files": len(files),
                 "bytes": total,
-                "hardlinks_verified": len(files),
+                "copies_verified": len(files),
                 **plan["scientific_work"],
             }
         )
