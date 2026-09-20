@@ -6,7 +6,15 @@
     "webexploitbench_harness": "opencode",
     "qwen_code_allowed": false,
     "web_rollout_and_scoring_separated": true,
-    "fleet_holdout_binding": "exact_eval_task_version_id",
+    "fleet_holdout_binding": {
+      "split_file": "configs/data/fleet-blackbox-current-study-split-20260914-v2.json",
+      "split_file_sha256": "sha256:28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb",
+      "dev_selection_sha256": "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
+      "dev_exact_task_versions": 17,
+      "final_test_selection_sha256": "sha256:9623149c4a021bc13ed2cf94ca26e107b30c18816cf3c02d76b5020cab5066f4",
+      "final_test_exact_task_versions": 8,
+      "selection_rule": "Submit the exact task_version_id values in the frozen split. Use dev for experiment iteration and keep final_test sealed until a checkpoint-selection rule is frozen."
+    },
     "matched_control_required": true,
     "duplicate_identity_fields": [
       "artifact_id",
