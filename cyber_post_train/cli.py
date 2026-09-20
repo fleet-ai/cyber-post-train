@@ -384,6 +384,32 @@ def direct_submit_sft(
         _fail(exc)
 
 
+@app.command("pod-publish-file")
+def pod_publish_file(
+    source: Path,
+    context: Annotated[str, typer.Option("--context")],
+    pod: Annotated[str, typer.Option("--pod")],
+    destination: Annotated[str, typer.Option("--destination")],
+    namespace: Annotated[str, typer.Option("--namespace")] = "fleet-train-jobs",
+    container: Annotated[str | None, typer.Option("--container")] = None,
+) -> None:
+    """Copy, verify, then atomically publish one file inside an existing Pod."""
+    from .pod_transfer import PodTransfer
+
+    try:
+        _print(
+            PodTransfer(context).publish(
+                source,
+                namespace=namespace,
+                pod=pod,
+                destination=destination,
+                container=container,
+            )
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command("miles-convert")
 def miles_convert(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
     """Prepare native Qwen checkpoint conversion. No submission, download or optimization."""

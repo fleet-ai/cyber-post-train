@@ -159,6 +159,25 @@ counts. Train and dev are distinct immutable artifacts and task families.
 5. `cyber-post-train status <returned-name>` reads sanitized state. Monitor the
    exact API/Kubernetes UIDs, progress receipts, utilization and checkpoints too.
 
+When an operator must transfer a prepared archive from a local machine into an
+already-running CPU preflight Pod, never copy directly to the filename that the
+worker watches. A direct copy makes the final name visible before all bytes have
+arrived. Use the digest-checked atomic publisher instead:
+
+```sh
+uv run cyber-post-train pod-publish-file prepared.tar.gz \
+  --context <explicit-cluster-context> \
+  --pod <exact-preflight-pod> \
+  --container <exact-container> \
+  --destination /tmp/prepared.tar.gz
+```
+
+It copies to a unique sibling name, checks the complete file's SHA-256 and byte
+count inside the Pod, then creates the final name atomically without replacing an
+existing file. A watcher therefore sees either no final file or the complete
+verified archive. A failed transfer is not retried automatically; inspect the
+exact Pod and use a fresh reviewed destination or successor as appropriate.
+
 ### SFT-only direct-create fallback
 
 Use the normal Jobs API `submit` command whenever its preview carries the exact
