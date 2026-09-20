@@ -63,7 +63,7 @@ def test_probe_is_distinct_dev_only_bounded_and_zero_update(plan) -> None:
         "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
     )
     assert plan["model"]["root"] == (
-        "/mnt/sfs/jobs/chris-q38-skyrl-probe-v10/models/base"
+        "/mnt/sfs/jobs/chris-q38-skyrl-probe-v11/models/base"
     )
     assert plan["execution"]["model_artifact"]["path"] == (
         "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4"
@@ -78,13 +78,13 @@ def test_probe_fleetjob_is_two_four_gpu_pods_with_explicit_user(plan) -> None:
     manifest = probe.fleetjob_manifest(plan)
     spec = manifest["spec"]
     assert manifest["metadata"] == {
-        "name": "chris-q38-skyrl-probe-v10",
+        "name": "chris-q38-skyrl-probe-v11",
         "namespace": "fleet-train-jobs",
     }
     assert spec["fleet"] == {
         "projectName": "fleetjob-dev",
         "auth": {"secretRef": {"name": "fleet-api", "key": "FLEET_API_KEY"}},
-        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v10",
+        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v11",
         "models": [
             {
                 "path": "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4",
@@ -109,7 +109,7 @@ def test_probe_fleetjob_is_two_four_gpu_pods_with_explicit_user(plan) -> None:
     cluster = spec["job"]["spec"]["rayClusterSpec"]
     assert spec["job"]["spec"]["activeDeadlineSeconds"] == 1800
     assert spec["job"]["spec"]["backoffLimit"] == 0
-    assert spec["job"]["spec"]["shutdownAfterJobFinishes"] is True
+    assert spec["job"]["spec"]["shutdownAfterJobFinishes"] is False
     head = cluster["headGroupSpec"]["template"]["spec"]["containers"][0]
     workers = cluster["workerGroupSpecs"]
     assert head["resources"]["limits"]["nvidia.com/gpu"] == "4"
@@ -570,7 +570,7 @@ def _preview(request, *, identity=True):
         },
         "spec": {
             "suspend": True,
-            "shutdownAfterJobFinishes": True,
+            "shutdownAfterJobFinishes": False,
             "entrypoint": request["command"],
             "rayClusterSpec": {
                 "headGroupSpec": {"template": template},
@@ -585,8 +585,48 @@ def test_probe_preview_requires_effective_uid_gid(plan) -> None:
     request = probe.request(plan)
     result = probe.validate_preview(plan, request, _preview(request))
     assert result["runtime_user"] == {"uid": 1000, "gid": 100}
+    assert result["shutdown_after_job_finishes"] is False
+    assert result["cleanup_authority"] == "uid_bound_observer"
     with pytest.raises(JobsError, match="does not prove runtime user"):
         probe.validate_preview(plan, request, _preview(request, identity=False))
+
+
+def test_probe_preview_requires_observer_owned_cleanup(plan) -> None:
+    request = probe.request(plan)
+    preview = _preview(request)
+    rendered = yaml.safe_load(preview["manifest_yaml"])
+    rendered["spec"]["shutdownAfterJobFinishes"] = True
+    preview["manifest_yaml"] = yaml.safe_dump(rendered)
+    with pytest.raises(JobsError, match="UID-bound observer"):
+        probe.validate_preview(plan, request, preview)
+
+    rendered["spec"].pop("shutdownAfterJobFinishes")
+    preview["manifest_yaml"] = yaml.safe_dump(rendered)
+    with pytest.raises(JobsError, match="malformed topology probe"):
+        probe.validate_preview(plan, request, preview)
+
+
+def test_probe_failure_receipt_is_durable_and_create_once(plan, tmp_path) -> None:
+    changed = copy.deepcopy(plan)
+    changed["output_root"] = str(tmp_path)
+    failure = probe._seal(
+        {
+            "schema": probe.PROBE_FAILURE_SCHEMA,
+            "status": "failed",
+            "phase": "gpu_topology_probe",
+            "error_class": "ProbeGateError",
+            "error_code": "model_file_digest_mismatch_00",
+            "plan_sha256": digest(changed),
+            "task_rows_read": 0,
+            "rollout_episodes": 0,
+            "optimizer_steps": 0,
+            "checkpoints": 0,
+        }
+    )
+    probe._persist_probe_failure(changed, failure)
+    assert json.loads((tmp_path / probe.FAILURE_RECEIPT).read_bytes()) == failure
+    with pytest.raises(FileExistsError):
+        probe._persist_probe_failure(changed, failure)
 
 
 def test_release_receipt_requires_exact_terminal_absence_and_zero_gpus(plan) -> None:

@@ -38,15 +38,16 @@ PREFLIGHT_PACKET_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_packet_v1"
 PREFLIGHT_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_preview_v1"
 PREFLIGHT_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_cpu_preflight_rejection_v1"
 PROBE_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_failure_v1"
-PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v21"
+PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v22"
 PREFLIGHT_RECEIPT = "/dev/termination-log"
+FAILURE_RECEIPT = "TOPOLOGY_PROBE_FAILED.json"
 MODULE = "training.skyrl_topology_probe"
 CONFIG_PATH = ROOT / "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json"
 IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
     "89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
 )
-MODEL_BINDING_SHA256 = "e39f08a4f7a1164158790051abac9736aee5db82fa5fd74189152c1a30d82b67"
+MODEL_BINDING_SHA256 = "89a330e575f5d87d54a5f5c8ed42df86bfe6223429d7f98e0604878e255784b4"
 RUNTIME_FILES = (
     "training/skyrl_topology_probe.py",
     "training/skyrl.py",
@@ -89,7 +90,7 @@ def _expected_execution() -> dict:
         "namespace": "fleet-train-jobs",
         "project_name": "fleetjob-dev",
         "auth_secret": {"name": "fleet-api", "key": "FLEET_API_KEY"},
-        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v10",
+        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v11",
         "output_pvc": "sfs-shared",
         "output_registry_mount": "/mnt/cyber-output-registry",
         "output_registry_subpath": "models/fleetjob-dev",
@@ -426,7 +427,10 @@ def _fleetjob(
                     "entrypoint": command,
                     "activeDeadlineSeconds": active_deadline_seconds,
                     "backoffLimit": 0,
-                    "shutdownAfterJobFinishes": True,
+                    # Keep terminal pods until the already-armed observer has
+                    # captured their sealed termination receipt. The observer
+                    # then deletes this exact UID under its 30-minute bound.
+                    "shutdownAfterJobFinishes": False,
                     "rayClusterSpec": {
                         "rayVersion": execution["ray_version"],
                         "enableInTreeAutoscaling": False,
@@ -800,11 +804,41 @@ def preflight(plan: dict, progress: Callable[[str], None] | None = None) -> dict
 
 
 def validate_preview(plan: dict, req: dict, preview: dict) -> dict:
+    """Validate the legacy Jobs-API rendering without weakening its defaults.
+
+    Normal Jobs-API runs must ask KubeRay to tear their clusters down when the
+    entrypoint terminates.  This probe is the one deliberate exception: its
+    independently armed, UID-bound observer needs the failed head Pod to remain
+    long enough to capture the sealed termination receipt, and then deletes the
+    exact FleetJob under the plan's 30-minute limit.  Validate every ordinary
+    Jobs-API invariant by applying the generic validator to an in-memory copy
+    with its normal cleanup flag restored; the submitted/rendered object itself
+    must explicitly carry the probe-only ``False`` value.
+    """
+    import yaml
+
     from .skyrl_training import validate_gpu_runtime_preview
 
     if request(plan) != req:
         raise JobsError("topology probe request differs from its immutable plan")
-    return validate_gpu_runtime_preview(req, preview)
+    try:
+        rendered = yaml.safe_load(preview["manifest_yaml"])
+        if rendered["spec"]["shutdownAfterJobFinishes"] is not False:
+            raise JobsError(
+                "topology probe preview must retain pods for its UID-bound observer"
+            )
+        generic_rendered = copy.deepcopy(rendered)
+        generic_rendered["spec"]["shutdownAfterJobFinishes"] = True
+        generic_preview = {**preview, "manifest_yaml": yaml.safe_dump(generic_rendered)}
+    except (KeyError, TypeError, yaml.YAMLError) as exc:
+        raise JobsError("malformed topology probe Jobs API preview") from exc
+    result = validate_gpu_runtime_preview(req, generic_preview)
+    return {
+        **result,
+        "manifest_sha256": digest(rendered),
+        "shutdown_after_job_finishes": False,
+        "cleanup_authority": "uid_bound_observer",
+    }
 
 
 class _Deadline:
@@ -905,6 +939,17 @@ def _write_receipt(path: Path, receipt: dict, *, exclusive: bool) -> None:
     fd = os.open(path, flags, 0o600)
     with os.fdopen(fd, "w") as stream:
         stream.write(json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n")
+
+
+def _persist_probe_failure(plan: dict, failure: dict) -> None:
+    """Retain one sanitized receipt when KubeRay removes a failed pod quickly."""
+    _validate_seal(failure, PROBE_FAILURE_SCHEMA)
+    if failure.get("plan_sha256") != digest(plan):
+        raise ValueError("probe failure receipt is not bound to its plan")
+    root = Path(plan["output_root"])
+    if root.is_symlink() or not root.is_dir() or not os.access(root, os.W_OK | os.X_OK):
+        raise ValueError("probe failure destination is unavailable")
+    _write_receipt(root / FAILURE_RECEIPT, failure, exclusive=True)
 
 
 def _stop_setup(setup, ray) -> None:
@@ -1219,6 +1264,9 @@ def main() -> None:
         if args.receipt == Path(PREFLIGHT_RECEIPT):
             with suppress(Exception):
                 _write_receipt(Path(PREFLIGHT_RECEIPT), failure, exclusive=False)
+        if not args.cpu_preflight and phase == "gpu_topology_probe" and isinstance(plan, dict):
+            with suppress(Exception):
+                _persist_probe_failure(plan, failure)
         print(
             json.dumps(
                 {
