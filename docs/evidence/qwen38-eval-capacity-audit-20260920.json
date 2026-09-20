@@ -1,0 +1,210 @@
+{
+  "schema": "cyber_qwen38_eval_capacity_audit_v1",
+  "observed_at": "2026-09-20T09:32:03Z",
+  "mode": "read_only",
+  "source": {
+    "repository_commit": "607b7b0bb30d798a3af1ba5f17e1ebc9f2366a77",
+    "checkpoint_index": "configs/discovery/qwen38-lora-evidence-index-v1.json",
+    "checkpoint_index_sha256": "adb6b89328a3d8fb5249fea01f36c67da94ad0a4a2e295d08e5477ae2b9866c9",
+    "fresh75_serving_receipt_sha256": "54926eddc4a64600d85e4004a0df39165fac6c7b6bfa176db2aa596db639ff3c",
+    "tensorlake_snapshot_qualification_plan_sha256": "0c314c57ec15c1bfa68112176199bd1b712bcaea97125b62aead88f4f50c28af",
+    "tensorlake_snapshot_qualification_evidence_sha256": "eb08b17f0c244495911f1ef182720f78035225476b22440fff527889c4dbfade"
+  },
+  "summary": {
+    "accepted_checkpoints": 4,
+    "accepted_rl_checkpoints": 0,
+    "accepted_matched_webexploitbench_comparisons": 0,
+    "accepted_trained_checkpoint_fleet_holdout_evaluations": 0,
+    "immediately_launchable_scored_evaluations": 0,
+    "active_project_webexploitbench_sandboxes": 0
+  },
+  "accepted_checkpoints": [
+    {
+      "id": "q38-fresh75-step230",
+      "checkpoint_path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/checkpoints/global_step_230",
+      "export_path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/hf-export-step230-v1",
+      "serving_model_id": "chris-q38-fresh75-step230-v1",
+      "serving_model_uid": "d51cf7c4-3ab8-4912-8f73-dfe7153acdb4",
+      "serving_resource_version": "28721222",
+      "serving_qualification": "accepted",
+      "current_serving_state": "paused",
+      "current_routing_state": "disabled"
+    },
+    {
+      "id": "q38-teacher-dense-v5-step186",
+      "checkpoint_path": "/mnt/sfs/jobs/chris-cyber-q38-teacher-dense-v5/checkpoints/global_step_186",
+      "export_path": "/mnt/sfs/jobs/chris-cyber-q38-teacher-dense-v5/hf-export-v1",
+      "serving_qualification": "not_qualified"
+    },
+    {
+      "id": "q38-self-sft-step44",
+      "checkpoint_path": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/checkpoints/global_step_44",
+      "export_path": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/hf-export-v1",
+      "serving_qualification": "not_qualified"
+    },
+    {
+      "id": "q38-available-a-lr30-step76",
+      "checkpoint_path": "/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/checkpoints/global_step_76",
+      "export_path": "/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/hf-export-step76-v1",
+      "serving_qualification": "not_qualified"
+    }
+  ],
+  "webexploitbench_evidence": [
+    {
+      "id": "fresh75-step230-complete-pass1",
+      "run_id": "fresh75-step230-opencode-web-p1-gpt55-v1",
+      "state": "valid_model_outcome",
+      "coverage": "15_of_15_collected_and_scored",
+      "result": {
+        "hits": 3,
+        "objective_observations": 110,
+        "micro_pass1": 0.0273
+      },
+      "dedupe_rule": "do_not_repeat_this_standalone_pass1_identity",
+      "scientific_gap": "no_matched_base_control"
+    },
+    {
+      "id": "fresh75-step230-provisional-pass3",
+      "run_id": "fresh75-step230-opencode-web-p8-v3",
+      "state": "partial",
+      "coverage": "104_of_120_attempts_across_13_of_15_targets",
+      "dedupe_rule": "do_not_treat_as_a_complete_comparison"
+    },
+    {
+      "id": "teacher186-v28-pair",
+      "state": "unverified",
+      "coverage": "controllers_exited_and_resources_released_but_score_acceptance_not_established",
+      "dedupe_rule": "reconcile_the_existing_identity_before_any_successor"
+    },
+    {
+      "id": "q38-opencode-base-v12-gpt-rescore",
+      "run_id": "chris-web-qwen38-opencode11827-tl-l0-p4-20260911-v12",
+      "state": "partial",
+      "coverage": "44_of_60_attempts",
+      "dedupe_rule": "not_a_complete_matched_base_control"
+    },
+    {
+      "id": "q38-matched-v4-v24-lineage",
+      "state": "operational_canaries_only",
+      "coverage": "no_complete_matched_comparison",
+      "dedupe_rule": "retain_as_historical_engineering_evidence_only"
+    }
+  ],
+  "fleet_holdout_evidence": [
+    {
+      "id": "fresh75-fleet-dev17-final8",
+      "state": "not_launched_or_no_accepted_receipt_found"
+    },
+    {
+      "id": "q38-exact-easiest100-pass4-base-ledger",
+      "state": "partial_training_task_campaign_not_heldout"
+    },
+    {
+      "id": "q38-reward-calibration-v1-v2",
+      "state": "partial_infrastructure_incident_not_post_training_eval"
+    }
+  ],
+  "tensorlake_inventory": {
+    "endpoint": "GET /sandboxes",
+    "total_visible": 362,
+    "status_counts": {
+      "running": 299,
+      "suspended": 63
+    },
+    "active_project_webexploitbench": 0,
+    "active_unattributed_fixed_pool": {
+      "count": 299,
+      "name_prefix": "fleet-tlp-",
+      "interpretation": "not_counted_as_project_evaluation_usage_without_owner_mapping"
+    },
+    "capacity_interpretation": "the_project_has_no_active_webexploitbench_sandbox; account_wide_headroom_cannot_be_derived_from_the_unattributed_pool"
+  },
+  "ambiguous_tensorlake_lineage": {
+    "campaign_prefix": "q38-s10-web-p4-v1",
+    "finding": "thirteen_suspended_timeout_sandboxes_exist_but_no_local_plan_receipt_or_durable_index_binding_was_found",
+    "action_before_dispatch": "recover_or_classify_the_campaign_identity_model_coverage_and_result_claims",
+    "sandboxes": [
+      {"name": "q38-s10-web-p4-v1-t01", "id": "3a7yrkpnw2d6r8byt8kea"},
+      {"name": "q38-s10-web-p4-v1-t02", "id": "pkwk3jkspy3zomubr005u"},
+      {"name": "q38-s10-web-p4-v1-t03", "id": "ggjok0431dbj3ipub6kn9"},
+      {"name": "q38-s10-web-p4-v1-t04-download", "id": "gjq1yhuws819eq92lrt4o"},
+      {"name": "q38-s10-web-p4-v1-t06", "id": "4n16x7nwoyrog6p3jj1ud"},
+      {"name": "q38-s10-web-p4-v1-t07", "id": "wekyhb7agrolkw9zf7496"},
+      {"name": "q38-s10-web-p4-v1-t08", "id": "7d0ghwsorwxr2d3v1ftyu"},
+      {"name": "q38-s10-web-p4-v1-t09", "id": "dvfcfpwgfq6uvp03nctaq"},
+      {"name": "q38-s10-web-p4-v1-t10", "id": "cdsqufv814npb04ixdxwg"},
+      {"name": "q38-s10-web-p4-v1-t11", "id": "mfpxgx7zdw7bzcilx7www"},
+      {"name": "q38-s10-web-p4-v1-t12", "id": "1epyqfsktds1380z1z8x6"},
+      {"name": "q38-s10-web-p4-v1-t13", "id": "1crsmy3as8t1lw20k5diu"},
+      {"name": "q38-s10-web-p4-v1-t14", "id": "sliaj5f5eh2cyhugfnebf"}
+    ]
+  },
+  "duplicate_prevention": [
+    "seal_a_no_clobber_plan_with_exact_model_harness_task_and_scorer_identities",
+    "use_unique_campaign_sandbox_run_result_and_snapshot_ids",
+    "persist_create_and_score_claims_before_remote_calls",
+    "hold_ambiguous_claims_for_reconciliation_instead_of_redispatching",
+    "reconcile_live_inventory_and_terminal_receipts_before_dispatch",
+    "require_symmetric_base_and_candidate_bindings_for_a_matched_pair",
+    "require_exact_checkpoint_export_serving_and_live_parity_receipts",
+    "run_one_task_one_attempt_paired_canary_before_the_full_fifteen_task_pass4_pair"
+  ],
+  "ranked_eval_prerequisites": [
+    {
+      "rank": 1,
+      "checkpoint": "q38-fresh75-step230",
+      "evaluation": "matched_opencode_webexploitbench_base_vs_candidate",
+      "why": "highest_confidence_checkpoint_and_only_candidate_with_accepted_serving_qualification",
+      "blockers": [
+        "candidate_is_currently_paused",
+        "matched_base_arm_must_be_created_or_frozen",
+        "both_arms_need_current_live_parity_receipts",
+        "a_new_unique_paired_plan_and_one_task_canary_are_required",
+        "the_q38_s10_timeout_lineage_must_be_classified_to_prevent_duplicate_work"
+      ]
+    },
+    {
+      "rank": 2,
+      "checkpoint": "q38-fresh75-step230",
+      "evaluation": "representative_fleet_holdout",
+      "why": "no_accepted_trained_checkpoint_fleet_holdout_exists",
+      "blockers": [
+        "exact_holdout_task_versions_are_not_bound_in_an_accepted_plan",
+        "the_opencode_protocol_and_scoring_contract_must_be_frozen",
+        "the_candidate_route_is_paused"
+      ]
+    },
+    {
+      "rank": 3,
+      "checkpoint": "q38-teacher-dense-v5-step186",
+      "evaluation": "matched_opencode_webexploitbench_then_fleet_holdout",
+      "why": "accepted_teacher_checkpoint_with_no_accepted_post_training_eval",
+      "blockers": [
+        "serving_stage_registration_reload_and_live_parity_are_not_qualified",
+        "the_old_v28_pair_identity_must_be_reconciled",
+        "a_new_matched_pair_must_pass_the_one_task_canary"
+      ]
+    },
+    {
+      "rank": 4,
+      "checkpoint": "q38-self-sft-step44",
+      "evaluation": "matched_opencode_webexploitbench_then_fleet_holdout",
+      "why": "accepted_self_sft_checkpoint_with_no_accepted_post_training_eval",
+      "blockers": [
+        "serving_stage_registration_reload_and_live_parity_are_not_qualified",
+        "a_new_matched_pair_must_pass_the_one_task_canary"
+      ]
+    },
+    {
+      "rank": 5,
+      "checkpoint": "q38-available-a-lr30-step76",
+      "evaluation": "matched_opencode_webexploitbench_then_fleet_holdout",
+      "why": "accepted_lr30_checkpoint_with_no_accepted_post_training_eval",
+      "blockers": [
+        "serving_stage_registration_reload_and_live_parity_are_not_qualified",
+        "a_new_matched_pair_must_pass_the_one_task_canary"
+      ]
+    }
+  ],
+  "mutation_statement": "no_external_job_was_launched_cancelled_resumed_or_modified"
+}
