@@ -8,8 +8,8 @@
     "root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2"
   },
   "data": {
-    "manifest": "../data/qwen38-lora-broad-teacher-actions-32k-v1.manifest.json",
-    "root": "/mnt/sfs/jobs/chris-q38-lora-corpora-v1/broad-teacher-actions-32k-v1/data"
+    "manifest": "../data/qwen38-teacher3k-32k-v1.manifest.json",
+    "root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher3k-32k-v1/data-v1"
   },
   "recipe": {
     "epochs": 1,
@@ -48,7 +48,7 @@
       "teacher-sft",
       "rank64",
       "alpha32",
-      "broad-data",
+      "57m-unique-supervised-tokens",
       "32k",
       "anchor",
       "task-outcomes-only"

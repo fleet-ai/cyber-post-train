@@ -119,7 +119,15 @@ def test_first_qwen38_lora_sft_templates_freeze_supported_surface():
     assert anchor["runtime"] == {"skyrl_source_commit": None, "image": None}
     assert anchor["recipe"]["batch_size"] == 8
     assert anchor["recipe"]["max_length"] == 32768
-    assert "broad-teacher-actions" in anchor["data"]["manifest"]
+    assert anchor["data"] == {
+        "manifest": "../data/qwen38-teacher3k-32k-v1.manifest.json",
+        "root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher3k-32k-v1/data-v1",
+    }
+    broad = read(DATA / "qwen38-teacher3k-32k-v1.manifest.json")["files"]["train"]
+    assert broad["rows"] == 14693
+    assert broad["source_sessions"] == 2886
+    assert broad["supervised_tokens"] == 57384881
+    assert len(broad["task_keys"]) == 496
 
 
 @pytest.mark.parametrize("retired", RETIRED_GATE_TEMPLATES)

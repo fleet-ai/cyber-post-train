@@ -30,7 +30,7 @@ one-step checkpoint stage is accepted; it is not yet a merged serving artifact.
 | Purpose | File | Frozen treatment |
 |---|---|---|
 | Exact-model one-step gate | `configs/runs/qwen38-27b-lora-sft-r64-a32-one-step-v10.template.json` | exact Qwen3.8 revision; BF16 Megatron LoRA rank 64 / alpha 32 over all linear layers; TP8 / PP1 / CP1 / DP1; learning rate `3e-5`; global batch 1; one 8-GPU node; 16,384-token final-test-family-free V2 Fresh75 corpus; 866 rows and payload-derived `max_steps=866`; planned pause after optimizer step 1; c1; W&B. V1 through V9 are retired qualification identities. V10 retains the validated runtime, native dataset, all-rank learning-rate, dev init, sanitized step-boundary, float32 learning-rate, and receipt-boundary repairs. It binds receipt validation to the native Megatron-Bridge adapter filename coordinates observed in the finalized TP8 checkpoint: each `tpN` shard carries the matching `etpN` filename label even though expert-tensor parallel size remains one. |
-| First production anchor | `configs/runs/qwen38-27b-lora-sft-r64-a32-anchor-v1.template.json` | exact Qwen3.8 revision; BF16 LoRA rank 64 / alpha 32; learning rate `3e-5`; global batch 8; one 8-GPU node; one epoch; 32,768-token broad teacher-action corpus; c1; W&B |
+| First production anchor | `configs/runs/qwen38-27b-lora-sft-r64-a32-anchor-v1.template.json` | exact Qwen3.8 revision; BF16 LoRA rank 64 / alpha 32; learning rate `3e-5`; global batch 8; one 8-GPU node; one epoch; 57,384,881 supervised teacher tokens packed into 14,693 windows of at most 32,768 tokens; c1; W&B |
 
 The one-step gate reuses every eligible row it safely can from the immutable
 Fresh75 teacher corpus, after removing complete source sessions from every task
