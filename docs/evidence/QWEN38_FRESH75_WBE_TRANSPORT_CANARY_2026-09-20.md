@@ -100,7 +100,7 @@ retried: it produces a terminal score-free collection failure for preservation
 and release. This hardening did not alter V6 or its sealed runner digest. Any
 successor must rebuild and reseal its plans against the new runner digest.
 
-## V7 bounded successor
+## V7 bounded successor and terminal result
 
 Exactly one successor was sealed against the bounded runner. A fresh provider
 inventory of 339 sandboxes found both create-once V7 names absent and no live
@@ -119,10 +119,47 @@ V6 predecessor. The duplicate-census receipt is
 - baseline process: `1684`
 - campaign: `q38-base-f75p230-oc-wbe-c1-v3`
 
-V7 starts only the baseline task-0 score-free transport canary. Its terminal
-supervisor will preserve an accepted or sanitized-failure snapshot and release
-the exact sandbox. No full expansion, candidate collection, or scoring is
-authorized until this canary accepts.
+V7 started only the baseline task-0 score-free transport canary. After more
+than 2,200 seconds, the provider still reported process 1684 as running with no
+exit code or signal. Direct bounded reads could not retrieve the sanitized
+lifecycle, benchmark-validation, or collection-acceptance receipts. The
+supervisor itself was repeatedly waiting on the sandbox management origin.
+No private process output, task text, model output, flag, answer, or score was
+read.
+
+This crossed the same fixed 1,200-second no-receipt watchdog used for V6. A
+write-ahead claim bound the exact sandbox and process before one provider
+delete. The provider then reported the sandbox terminated, and the fresh
+inventory contained no active row with its ID or name.
+
+- terminal evidence:
+  [`qwen38-fresh75-wbe-v7-stalled-release-20260920.json`](qwen38-fresh75-wbe-v7-stalled-release-20260920.json)
+- evidence receipt:
+  `sha256:e74457b7a8ce8603c64f284ebab029236d0d572ff4b1f2b8fca21331e29edc22`
+- release receipt:
+  `sha256:776f210fd8e41a2b1c7aed8a6369c57e646ff22aba5a0548665c7d0af6e2b6fb`
+- provider state after release: `terminated`
+- active matching sandboxes after release: 0
+
+The truthful classification is narrower than “the rollout failed”: the run
+did not produce a sanitized receipt that proves the benchmark started, and the
+management path could not provide usable lifecycle evidence. Full expansion,
+candidate collection, and scoring therefore remained closed.
+
+## V8 management-readback repair
+
+The collection launcher now reopens one immutable qualification receipt from
+the live sandbox filesystem and requires exact byte equality before it writes
+the collection-process claim or dispatches the rollout. An unavailable file
+API or changed receipt stops before any model process can start. A successful
+check writes a local, sandbox-bound management-readback receipt.
+
+This changes the launcher's source digest, so the V7 canary and four prepared
+expansion replicas are historical evidence only. They must never be launched
+under the repaired code. A successor requires a freshly qualified shared
+snapshot, freshly sealed launch and pair receipts, and a fresh duplicate
+census. The first successor remains one baseline task-0 canary; there is no
+fanout until its early lifecycle and terminal collection receipts are accepted.
 
 ## Prepared expansion
 
@@ -132,6 +169,11 @@ the bounded runner. The baseline 60 may start only after the V7 task-0
 transport canary accepts and a fresh duplicate census remains clean. Candidate
 work also requires a newly Ready exact candidate route and fresh live-parity
 and duplicate checks. No expansion was launched when this note was written.
+
+These V7 plans are now retired because the management-readback repair changes
+the launcher's sealed source digest. The table remains as historical evidence;
+none of these exact plans may be launched. A fresh shared-snapshot
+qualification and new launch receipts are required first.
 
 | Replica | Base plan | Candidate plan | Pair receipt |
 |---|---|---|---|
