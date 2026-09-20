@@ -267,12 +267,13 @@ def job_request(plan: dict) -> dict:
     # the full plan so a hand-written or stale prepared directory cannot bypass
     # the Qwen LoRA source/image/c1/evidence gates.
     validate_plan(plan, check_files=False)
+    qwen38_lora = plan.get("model", {}).get("repo") == "Qwen/Qwen3.8-27B" and "lora" in plan
     runtime = Path(__file__).with_name("sft_runtime.py").read_bytes()
     if hashlib.sha256(runtime).hexdigest() != plan["runtime_sha256"]:
         raise ValueError("local runtime changed since this plan was compiled")
     plan_bytes = json.dumps(plan, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     contents = {"runtime": runtime.decode(), "plan": plan_bytes.decode()}
-    if plan.get("model", {}).get("repo") == "Qwen/Qwen3.8-27B" and "lora" in plan:
+    if qwen38_lora:
         # The terminal one-step gate validates its signed checkpoint receipt
         # through this package after the GPU update and checkpoint flush.  The
         # trainer image intentionally contains SkyRL, not this repository, so
@@ -349,10 +350,14 @@ def job_request(plan: dict) -> dict:
         "env": {
             "CYBER_SFT_BUNDLE": base64.b64encode(compressed).decode(),
             **(
-                {"PYTHONPATH": str(Path(plan["output_root"]) / ".runtime")}
+                {
+                    "PYTHONPATH": str(Path(plan["output_root"]) / ".runtime")
+                    + (":/opt/skyrl" if qwen38_lora else "")
+                }
                 if "extra_files" in contents
                 else {}
             ),
+            **({"SKYRL_PYTHONPATH_EXPORT": "1"} if qwen38_lora else {}),
             "HF_HUB_OFFLINE": "1",
             "TRANSFORMERS_OFFLINE": "1",
             "TOKENIZERS_PARALLELISM": "false",
@@ -365,11 +370,7 @@ def job_request(plan: dict) -> dict:
             "WANDB_TAGS": ",".join(w.get("tags", [])),
             "WANDB_DISABLE_CODE": "true",
             "WANDB_CONSOLE": "off",
-            **(
-                {"FLA_TILELANG": "0"}
-                if plan.get("model", {}).get("repo") == "Qwen/Qwen3.8-27B" and "lora" in plan
-                else {}
-            ),
+            **({"FLA_TILELANG": "0"} if qwen38_lora else {}),
         },
     }
 

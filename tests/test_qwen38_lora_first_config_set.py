@@ -23,6 +23,8 @@ QUALIFIED_IMAGE = (
     "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:"
     "7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317"
 )
+GATE_TEMPLATE = RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v2.template.json"
+RETIRED_GATE_TEMPLATE = RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v1.template.json"
 
 
 def read(path: Path) -> dict:
@@ -30,7 +32,7 @@ def read(path: Path) -> dict:
 
 
 def test_first_qwen38_lora_sft_templates_freeze_supported_surface():
-    gate = read(RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v1.template.json")
+    gate = read(GATE_TEMPLATE)
     anchor = read(RUNS / "qwen38-27b-lora-sft-r64-a32-anchor-v1.template.json")
 
     allowed = {
@@ -69,8 +71,8 @@ def test_first_qwen38_lora_sft_templates_freeze_supported_surface():
         assert len(value["name"]) <= 31
 
     assert gate["pause_after_step"] == 1
-    assert gate["name"] == "chris-q38-lora-sft-c1-v1"
-    assert gate["output_root"] == "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v1"
+    assert gate["name"] == "chris-q38-lora-sft-c1-v2"
+    assert gate["output_root"] == "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v2"
     assert gate["recipe"]["batch_size"] == 1
     assert gate["recipe"]["max_length"] == 16384
     assert gate["data"] == {
@@ -90,10 +92,17 @@ def test_first_qwen38_lora_sft_templates_freeze_supported_surface():
     assert "broad-teacher-actions" in anchor["data"]["manifest"]
 
 
+def test_failed_v1_operational_identity_is_retired():
+    from training import sft
+
+    with pytest.raises(ValueError, match="exact digest-bound one-step"):
+        sft.compile_sft(read(RETIRED_GATE_TEMPLATE), relative_to=RUNS)
+
+
 def test_one_step_template_binds_independently_verified_leak_free_corpus():
     from training import sft, sft_runtime
 
-    value = read(RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v1.template.json")
+    value = read(GATE_TEMPLATE)
     manifest = read(FILTERED_MANIFEST)
 
     assert sft_runtime.QWEN38_MEGATRON_SKYRL_REVISION == QUALIFIED_SOURCE
@@ -137,7 +146,7 @@ def test_one_step_template_binds_independently_verified_leak_free_corpus():
 def test_one_step_runtime_accepts_only_digest_enrichment_of_the_exact_plan():
     from training import sft, sft_runtime
 
-    value = read(RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v1.template.json")
+    value = read(GATE_TEMPLATE)
     source_plan = sft.compile_sft(value, relative_to=RUNS)
     plan_sha256 = sft_runtime._unsigned_digest(source_plan)
     runtime_plan = {**source_plan, "plan_sha256": plan_sha256}
@@ -204,7 +213,7 @@ def test_corpus_qualification_receipt_binds_manifest_template_and_runtime():
     }
     assert receipt["request"]["selection_sha256"] == manifest["split_sha256"]
 
-    gate = read(RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v1.template.json")
+    gate = read(GATE_TEMPLATE)
     assert gate["data"] == {
         "manifest": "../data/" + manifest_path.name,
         "root": corpus["data_root"],
@@ -331,7 +340,7 @@ def test_image_qualification_receipt_binds_code_template_and_census():
         ).hexdigest()
     )
 
-    gate = read(RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v1.template.json")
+    gate = read(GATE_TEMPLATE)
     anchor = read(RUNS / "qwen38-27b-lora-sft-r64-a32-anchor-v1.template.json")
     assert embedded == expected
     assert receipt["status"] == "qualified_for_cpu_preflight"

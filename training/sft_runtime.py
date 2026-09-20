@@ -232,8 +232,8 @@ QWEN38_LORA_ONE_STEP_PLAN = {
         "wandb",
     ],
     "schema": DENSE_SCHEMA,
-    "run_name": "chris-q38-lora-sft-c1-v1",
-    "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v1",
+    "run_name": "chris-q38-lora-sft-c1-v2",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v2",
     "model": {
         "repo": "Qwen/Qwen3.8-27B",
         "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
@@ -282,8 +282,8 @@ QWEN38_LORA_ONE_STEP_PLAN = {
         "entity": "thefleet",
         "project": "cyber-post-train",
         "group": "qwen38-lora-sft-goal-v1",
-        "run_id": "chris-q38-lora-sft-c1-v1",
-        "name": "chris-q38-lora-sft-c1-v1",
+        "run_id": "chris-q38-lora-sft-c1-v2",
+        "name": "chris-q38-lora-sft-c1-v2",
         "tags": [
             "qwen38",
             "lora",
@@ -293,6 +293,7 @@ QWEN38_LORA_ONE_STEP_PLAN = {
             "exact-model-gate",
             "planned-pause-step1",
             "task-outcomes-only",
+            "runtime-path-repair",
         ],
     },
 }
@@ -1195,10 +1196,37 @@ def public_failure_details(error: BaseException) -> dict:
                 missing_key = match.group(1)
                 break
 
-    error_class = "KeyError" if missing_key else type(chain[-1]).__name__
+    missing_attribute = None
+    attribute_error = re.compile(
+        r"(?:'[^'\r\n]{1,128}' object|type object '[^'\r\n]{1,128}'|"
+        r"module '[A-Za-z_][A-Za-z0-9_.]{0,255}') has no attribute "
+        r"'([A-Za-z_][A-Za-z0-9_]{0,127})'"
+    )
+    for item in chain:
+        for line in str(item).splitlines():
+            if line.startswith("AttributeError: "):
+                line = line.removeprefix("AttributeError: ")
+            elif not isinstance(item, AttributeError):
+                continue
+            match = attribute_error.fullmatch(line)
+            if match:
+                missing_attribute = match.group(1)
+                break
+        if missing_attribute:
+            break
+
+    error_class = (
+        "KeyError"
+        if missing_key
+        else "AttributeError"
+        if missing_attribute
+        else type(chain[-1]).__name__
+    )
     details = {"error_class": error_class}
     if missing_key:
         details["missing_key"] = missing_key
+    elif missing_attribute:
+        details["missing_attribute"] = missing_attribute
     return details
 
 
@@ -2403,14 +2431,23 @@ def _run_setup_probe(plan: dict, *, with_tracker: bool = False) -> dict:
     trainer = trainer_class(cfg, skyrl_cfg, plan)
     try:
         trainer.setup()
+        snapshot_rank_count = None
+        if _is_qwen38_lora(plan):
+            snapshots = trainer.dispatch.collect_lora_qualification_snapshots("policy")
+            snapshot_rank_count = len(
+                _qwen38_rank_snapshots(snapshots, stage="setup probe pre-step")
+            )
         if "dev" not in plan["datasets"] and trainer.load_eval_dataset() is not None:
             raise ValueError("task-outcome training unexpectedly produced an eval dataset")
-        return {
+        result = {
             "optimizer_steps": 0,
             "plan_sha256": plan["plan_sha256"],
             "stage": trainer.public_runtime_stage,
             "status": "setup_validated",
         }
+        if snapshot_rank_count is not None:
+            result["snapshot_rank_count"] = snapshot_rank_count
+        return result
     except BaseException as exc:
         return {
             **public_failure_details(exc),
@@ -2424,6 +2461,42 @@ def _run_setup_probe(plan: dict, *, with_tracker: bool = False) -> dict:
             trainer.shutdown()
 
 
+def _setup_probe_plan(
+    plan: dict,
+    output_root: Path | None,
+    *,
+    jobs_root: Path = Path("/mnt/sfs/jobs"),
+) -> dict:
+    """Bind setup-only evidence to a new narrow output without changing the plan.
+
+    The immutable training plan is validated before this function is called. A
+    setup probe must not write into that plan's eventual training destination,
+    nor into a previous failed run. Keep the original plan digest in the copied
+    runtime value while redirecting setup-only caches and receipts to one
+    create-once sibling directory.
+    """
+    if output_root is None:
+        raise ValueError("setup probe requires an explicit output root")
+    root = Path(output_root)
+    if (
+        root.parent != jobs_root
+        or not re.fullmatch(r"chris-q38-lora-setup-probe-[a-z0-9-]{1,80}", root.name)
+        or str(root) == plan["output_root"]
+    ):
+        raise ValueError("setup probe output must be a new specific owned SFS directory")
+    if root.exists() or root.is_symlink():
+        raise ValueError("setup probe output already exists")
+    return {**plan, "output_root": str(root)}
+
+
+def _create_runtime_output(output: Path, *, setup_probe: bool) -> None:
+    """Create the runtime output, atomically refusing probe-path reuse."""
+    if setup_probe:
+        output.mkdir(mode=0o700)
+        return
+    output.mkdir(parents=True, exist_ok=True, mode=0o700)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--plan", type=Path, required=True)
@@ -2432,7 +2505,11 @@ def main():
     parser.add_argument("--preflight-tokenize", action="store_true")
     parser.add_argument("--setup-probe", action="store_true")
     parser.add_argument("--setup-probe-with-tracker", action="store_true")
+    parser.add_argument("--probe-output-root", type=Path)
     args = parser.parse_args()
+    setup_probe = args.setup_probe or args.setup_probe_with_tracker
+    if setup_probe != (args.probe_output_root is not None):
+        raise ValueError("probe output root and setup-probe mode must be selected together")
     _checked_file(args.plan, args.plan_sha256)
     plan = json.loads(args.plan.read_text())
     plan["plan_sha256"] = args.plan_sha256.removeprefix("sha256:")
@@ -2483,9 +2560,11 @@ def main():
             )
         )
         return
+    if setup_probe:
+        plan = _setup_probe_plan(plan, args.probe_output_root)
     output = Path(plan["output_root"])
-    output.mkdir(parents=True, exist_ok=True, mode=0o700)
-    if args.setup_probe or args.setup_probe_with_tracker:
+    _create_runtime_output(output, setup_probe=setup_probe)
+    if setup_probe:
         write_receipt(
             output / "SETUP_PROBE_STARTED.json",
             {"plan_sha256": plan["plan_sha256"], "started_at_unix": time.time()},

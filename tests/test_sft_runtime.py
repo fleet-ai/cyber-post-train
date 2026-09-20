@@ -16,8 +16,10 @@ from training.sft_runtime import (
     EvalAccumulator,
     PlannedPause,
     ProgressWatchdog,
+    _create_runtime_output,
     _make_trainer_class,
     _run_setup_probe,
+    _setup_probe_plan,
     _unsigned_digest,
     build_runtime_configs,
     dense_rows,
@@ -162,6 +164,183 @@ def test_setup_probe_exercises_train_only_eval_loader(tmp_path, monkeypatch):
 
     assert result["status"] == "setup_validated"
     assert events == ["eval_loader_checked", "shutdown"]
+
+
+def _qwen38_setup_probe_snapshots():
+    adapter = "model.layers.0.linear_qkv.adapter.linear_in"
+    trainable_rows = [{"name": adapter, "dtype": "BF16", "shape": [2, 4], "numel": 8}]
+    return [
+        {
+            "rank": {
+                "world_rank": rank,
+                "tp_rank": rank,
+                "tp_size": 8,
+                "pp_rank": 0,
+                "pp_size": 1,
+                "cp_rank": 0,
+                "cp_size": 1,
+                "dp_rank": 0,
+                "dp_size": 1,
+            },
+            "target_census": {"selector": "all-linear"},
+            "adapters": {
+                adapter: {
+                    "logical_target": "linear_qkv",
+                    "dtype": "BF16",
+                    "global_shape": [2, 32],
+                    "local_shape": [2, 4],
+                    "sharding": {"tensor_parallel": True, "partition_dim": 1},
+                    "sha256": f"{rank + 1:064x}",
+                }
+            },
+            "trainable": {
+                "parameter_count": 1,
+                "elements": 8,
+                "manifest_sha256": _unsigned_digest(trainable_rows),
+                "unexpected_parameters": [],
+                "nontrainable_adapter_parameters": [],
+            },
+            "frozen_base": {
+                "parameter_count": 2,
+                "elements": 16,
+                "bytes": 32,
+                "manifest_sha256": f"{rank + 100:064x}",
+            },
+            "successful_optimizer_updates": 0,
+            "last_gradient_norm": None,
+        }
+        for rank in range(8)
+    ]
+
+
+def _run_qwen38_setup_probe_with_snapshots(tmp_path, monkeypatch, snapshots):
+    events = []
+
+    class ProbeTrainer:
+        def __init__(self, cfg, skyrl_cfg, value):
+            self.plan = value
+            self.public_runtime_stage = "trainer_constructed"
+            self.dispatch = SimpleNamespace(
+                collect_lora_qualification_snapshots=self.collect_snapshots
+            )
+
+        def collect_snapshots(self, model):
+            events.append(("collect_lora_qualification_snapshots", model))
+            return snapshots
+
+        def setup(self):
+            events.append("setup")
+            self.public_runtime_stage = "device_ready"
+
+        def shutdown(self):
+            events.append("shutdown")
+
+    monkeypatch.setattr(
+        "training.sft_runtime.build_runtime_configs",
+        lambda value: (
+            SimpleNamespace(),
+            SimpleNamespace(trainer=SimpleNamespace(log_path=None)),
+        ),
+    )
+    monkeypatch.setattr("training.sft_runtime._make_trainer_class", lambda: ProbeTrainer)
+    value = plan(tmp_path)
+    value["lora"] = {}
+
+    return _run_setup_probe(value), events, value
+
+
+def test_qwen38_setup_probe_validates_complete_pre_step_snapshot(tmp_path, monkeypatch):
+    result, events, value = _run_qwen38_setup_probe_with_snapshots(
+        tmp_path, monkeypatch, _qwen38_setup_probe_snapshots()
+    )
+
+    assert result == {
+        "optimizer_steps": 0,
+        "plan_sha256": value["plan_sha256"],
+        "snapshot_rank_count": 8,
+        "stage": "device_ready",
+        "status": "setup_validated",
+    }
+    assert events == [
+        "setup",
+        ("collect_lora_qualification_snapshots", "policy"),
+        "shutdown",
+    ]
+
+
+@pytest.mark.parametrize("defect", ["incomplete", "malformed"])
+def test_qwen38_setup_probe_rejects_invalid_pre_step_snapshot(tmp_path, monkeypatch, defect):
+    snapshots = _qwen38_setup_probe_snapshots()
+    if defect == "incomplete":
+        snapshots.pop()
+    else:
+        snapshots[3]["rank"]["tp_size"] = 7
+
+    result, events, value = _run_qwen38_setup_probe_with_snapshots(tmp_path, monkeypatch, snapshots)
+
+    assert result == {
+        "error_class": "ValueError",
+        "optimizer_steps": 0,
+        "plan_sha256": value["plan_sha256"],
+        "stage": "device_ready",
+        "status": "setup_rejected",
+    }
+    assert events == [
+        "setup",
+        ("collect_lora_qualification_snapshots", "policy"),
+        "shutdown",
+    ]
+
+
+def test_setup_probe_plan_uses_new_create_once_owned_output(tmp_path):
+    jobs_root = tmp_path / "jobs"
+    jobs_root.mkdir()
+    value = plan(tmp_path)
+    value["plan_sha256"] = "f" * 64
+    destination = jobs_root / "chris-q38-lora-setup-probe-dev-v1"
+
+    probe = _setup_probe_plan(value, destination, jobs_root=jobs_root)
+
+    assert probe["output_root"] == str(destination)
+    assert probe["plan_sha256"] == value["plan_sha256"]
+    assert value["output_root"] == str(tmp_path)
+    assert not destination.exists()
+
+
+@pytest.mark.parametrize(
+    "name",
+    [
+        "unowned-probe-v1",
+        "chris-q38-lora-setup-probe-UPPER",
+        "chris-q38-lora-setup-probe-" + "x" * 81,
+    ],
+)
+def test_setup_probe_plan_rejects_unowned_or_noncanonical_output(tmp_path, name):
+    jobs_root = tmp_path / "jobs"
+    jobs_root.mkdir()
+
+    with pytest.raises(ValueError, match="new specific owned SFS directory"):
+        _setup_probe_plan(plan(tmp_path), jobs_root / name, jobs_root=jobs_root)
+
+
+def test_setup_probe_plan_rejects_existing_output(tmp_path):
+    jobs_root = tmp_path / "jobs"
+    jobs_root.mkdir()
+    destination = jobs_root / "chris-q38-lora-setup-probe-dev-v1"
+    destination.mkdir()
+
+    with pytest.raises(ValueError, match="already exists"):
+        _setup_probe_plan(plan(tmp_path), destination, jobs_root=jobs_root)
+
+
+def test_setup_probe_output_creation_is_atomic_and_create_once(tmp_path):
+    destination = tmp_path / "chris-q38-lora-setup-probe-dev-v1"
+
+    _create_runtime_output(destination, setup_probe=True)
+
+    assert destination.is_dir()
+    with pytest.raises(FileExistsError):
+        _create_runtime_output(destination, setup_probe=True)
 
 
 def test_train_only_wrapper_returns_no_eval_dataset(monkeypatch):
@@ -974,6 +1153,34 @@ def test_public_failure_details_never_emits_arbitrary_key_text():
     assert public_failure_details(KeyError("private value with spaces")) == {
         "error_class": "KeyError"
     }
+
+
+def test_public_failure_details_extracts_standard_missing_attribute():
+    wrapper = RuntimeError(
+        "private remote context\n"
+        "AttributeError: 'WorkerDispatch' object has no attribute "
+        "'collect_lora_qualification_snapshots'"
+    )
+    assert public_failure_details(wrapper) == {
+        "error_class": "AttributeError",
+        "missing_attribute": "collect_lora_qualification_snapshots",
+    }
+
+
+@pytest.mark.parametrize(
+    "private_message",
+    [
+        "private token and endpoint",
+        "private object has no attribute 'secret_token'",
+        "AttributeError: private object has no attribute 'secret_token'",
+    ],
+)
+def test_public_failure_details_never_emits_arbitrary_attribute_text(private_message):
+    details = public_failure_details(AttributeError(private_message))
+
+    assert details == {"error_class": "AttributeError"}
+    assert private_message not in json.dumps(details)
+    assert "secret_token" not in json.dumps(details)
 
 
 @pytest.mark.skipif(

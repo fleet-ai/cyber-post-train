@@ -361,7 +361,8 @@ def test_qwen38_megatron_lora_compiles_only_exact_one_step_gate(qwen38_lora_conf
         "training/sft_runtime.py",
     }
     assert contents["extra_files"]["training/sft_runtime.py"] == contents["runtime"]
-    assert request["env"]["PYTHONPATH"].endswith("/.runtime")
+    assert request["env"]["PYTHONPATH"] == plan["output_root"] + "/.runtime:/opt/skyrl"
+    assert request["env"]["SKYRL_PYTHONPATH_EXPORT"] == "1"
     assert options == {
         **options,
         "strategy": "megatron",
