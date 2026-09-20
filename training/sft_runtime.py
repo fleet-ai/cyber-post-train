@@ -233,8 +233,8 @@ QWEN38_LORA_ONE_STEP_PLAN = {
         "wandb",
     ],
     "schema": DENSE_SCHEMA,
-    "run_name": "chris-q38-lora-sft-c1-v4",
-    "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v4",
+    "run_name": "chris-q38-lora-sft-c1-v5",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v5",
     "model": {
         "repo": "Qwen/Qwen3.8-27B",
         "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
@@ -283,8 +283,8 @@ QWEN38_LORA_ONE_STEP_PLAN = {
         "entity": "thefleet",
         "project": "cyber-post-train",
         "group": "qwen38-lora-sft-goal-v1",
-        "run_id": "chris-q38-lora-sft-c1-v4",
-        "name": "chris-q38-lora-sft-c1-v4",
+        "run_id": "chris-q38-lora-sft-c1-v5",
+        "name": "chris-q38-lora-sft-c1-v5",
         "tags": [
             "qwen38",
             "lora",
@@ -297,6 +297,7 @@ QWEN38_LORA_ONE_STEP_PLAN = {
             "runtime-path-repair",
             "native-dataset-contract-repair",
             "all-rank-lr-evidence-repair",
+            "dev-init-contract-repair",
         ],
     },
 }
