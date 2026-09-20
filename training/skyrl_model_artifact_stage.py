@@ -83,7 +83,7 @@ def _expected_execution() -> dict:
         "models_subpath": "models",
         "models_mount": "/mnt/models",
         "source_alias": "qwen3.8-27b-1d4bf0f2",
-        "artifact_path": "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v2",
+        "artifact_path": "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v3",
         "runtime_uid": 1000,
         "runtime_gid": 100,
         "deadline_seconds": 1200,
@@ -138,7 +138,7 @@ def _validate(plan: dict) -> None:
     artifact = PurePosixPath(execution["artifact_path"])
     if (
         plan.get("schema") != PLAN_SCHEMA
-        or plan.get("name") != "chris-q38-modelstage-v2"
+        or plan.get("name") != "chris-q38-modelstage-v3"
         or plan.get("image") != IMAGE
         or plan.get("execution") != execution
         or plan.get("source_root")
@@ -393,7 +393,7 @@ def _relative_file(value: str) -> Path:
     return Path(*path.parts)
 
 
-def _verify_source(plan: dict) -> tuple[Path, list[tuple[dict, Path]]]:
+def _verify_source(plan: dict) -> tuple[Path, list[tuple[dict, Path, int]]]:
     root = Path(plan["source_root"])
     if root.is_symlink():
         raise StageGateError("source_root_symlink")
@@ -401,7 +401,7 @@ def _verify_source(plan: dict) -> tuple[Path, list[tuple[dict, Path]]]:
         resolved_root = root.resolve(strict=True)
     except FileNotFoundError as exc:
         raise StageGateError("source_root_missing") from exc
-    files: list[tuple[dict, Path]] = []
+    files: list[tuple[dict, Path, int]] = []
     for index, item in enumerate(plan["model"]["files"]):
         relative = _relative_file(item["path"])
         candidate = resolved_root / relative
@@ -415,13 +415,13 @@ def _verify_source(plan: dict) -> tuple[Path, list[tuple[dict, Path]]]:
             raise StageGateError(f"source_file_invalid_{index:02d}") from exc
         if not stat.S_ISREG(metadata.st_mode):
             raise StageGateError(f"source_file_not_regular_{index:02d}")
-        if metadata.st_size != item["size"]:
+        if "size" in item and metadata.st_size != item["size"]:
             raise StageGateError(f"source_file_size_mismatch_{index:02d}")
         with resolved.open("rb") as stream:
             actual = hashlib.file_digest(stream, "sha256").hexdigest()
         if actual != item["sha256"].removeprefix("sha256:"):
             raise StageGateError(f"source_file_digest_mismatch_{index:02d}")
-        files.append((item, resolved))
+        files.append((item, resolved, metadata.st_size))
     return resolved_root, files
 
 
@@ -483,7 +483,7 @@ def stage(plan: dict) -> dict:
     temp.mkdir(mode=0o700)
     try:
         total = 0
-        for index, (item, source) in enumerate(files):
+        for index, (item, source, size) in enumerate(files):
             relative = _relative_file(item["path"])
             destination = temp / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
@@ -493,7 +493,7 @@ def stage(plan: dict) -> dict:
                 raise StageGateError(f"hardlink_failed_{index:02d}") from exc
             if not os.path.samefile(source, destination):
                 raise StageGateError(f"hardlink_identity_mismatch_{index:02d}")
-            total += item["size"]
+            total += size
         receipt = _seal(
             {
                 "schema": RECEIPT_SCHEMA,

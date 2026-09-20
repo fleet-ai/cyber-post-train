@@ -21,13 +21,13 @@ def plan():
 
 def test_stage_plan_is_dev_only_zero_science_and_create_once(plan) -> None:
     assert plan["schema"] == stage.PLAN_SCHEMA
-    assert plan["name"] == "chris-q38-modelstage-v2"
+    assert plan["name"] == "chris-q38-modelstage-v3"
     assert plan["execution"] == stage._expected_execution()
     assert plan["execution"]["cluster_target"] == "dev"
     assert plan["execution"]["priority"] == "c1"
     assert plan["execution"]["deadline_seconds"] == 1200
     assert plan["execution"]["artifact_path"] == (
-        "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v2"
+        "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v3"
     )
     assert plan["model"]["repo"] == "Qwen/Qwen3.8-27B"
     assert plan["model"]["revision"] == (
@@ -40,7 +40,7 @@ def test_stage_plan_is_dev_only_zero_science_and_create_once(plan) -> None:
 def test_stage_job_is_zero_gpu_single_models_mount_and_explicit_user(plan) -> None:
     manifest = stage.job_manifest(plan)
     assert manifest["metadata"] == {
-        "name": "chris-q38-modelstage-v2",
+        "name": "chris-q38-modelstage-v3",
         "namespace": "fleet-train-jobs",
     }
     assert manifest["spec"]["activeDeadlineSeconds"] == 1200
@@ -157,7 +157,6 @@ def _small_plan(plan: dict, tmp_path: Path, monkeypatch) -> tuple[dict, Path, Pa
         "files": [
             {
                 "path": "tokenizer.json",
-                "size": len(payload),
                 "sha256": hashlib.sha256(payload).hexdigest(),
             }
         ],
@@ -208,7 +207,7 @@ def test_stage_rejects_digest_drift_before_creating_temp(
 ) -> None:
     value, source, artifact = _small_plan(plan, tmp_path, monkeypatch)
     (source / "tokenizer.json").write_text("changed")
-    with pytest.raises(stage.StageGateError, match="source_file_size_mismatch_00"):
+    with pytest.raises(stage.StageGateError, match="source_file_digest_mismatch_00"):
         stage.stage(value)
     assert not artifact.exists()
     assert set(artifact.parent.iterdir()) == set()
