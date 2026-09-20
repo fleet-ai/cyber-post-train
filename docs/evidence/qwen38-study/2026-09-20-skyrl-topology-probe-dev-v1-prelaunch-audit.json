@@ -2,7 +2,7 @@
   "schema": "cyber_skyrl_topology_probe_prelaunch_audit_v1",
   "status": "blocked_not_submitted",
   "classification": "operational_gate",
-  "observed_at": "2026-09-20T11:00:00Z",
+  "observed_at": "2026-09-20T11:02:00Z",
   "identity": {
     "name": "chris-q38-skyrl-probe-v1",
     "cluster": "dev",
@@ -16,14 +16,14 @@
   "inputs": {
     "config": "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json",
     "config_self_sha256": "sha256:7de1d71e00f693561332bab7d43e91681f9de44fcc6754e1c97c6dd6026b75c9",
-    "plan_sha256": "084532ed5a64f54e7fc2c922b8f29a5f3e8d8e34a8f043ace71619b795517aac",
-    "request_sha256": "c7eafb2579128c37713cc0689ed218e3d72e0cf0e5f6d2cfe4886c489a84e7e9",
-    "fleetjob_manifest_sha256": "88545e7286e1d06c7a101564e5383b322930bd34d8eccc9e31f076e958031962",
-    "fleetjob_packet_self_sha256": "sha256:b39c8ddca42a688434f59e1b0775d449d4ca050c7db42eeb319b3947750d231e",
-    "preflight_name": "chris-q38-skyrl-probe-preflight-v3",
-    "preflight_manifest_sha256": "fa1dfb9d34f5e2d62a8f6ed1cd04926c8336faf7257be15a981ae2524ee70d0e",
-    "preflight_packet_self_sha256": "sha256:75b51ae221d2ff2ce49f13bdb33bb765512a363e110582b0cebeb7c9a6bed127",
-    "runtime_sha256": "aecffc69cc9b2a67b35e2cd2e6cfe5c3863e29925e5efde5a2c0acb3c7ee0709",
+    "plan_sha256": "851a5f4ce9c3912cd08bca91f8b2813fcf728919bee9bdca870721997d43dfb0",
+    "request_sha256": "f4634e0ed3c4e483f56da1a220bec43779727398d03c44492f676b7d9ab12325",
+    "fleetjob_manifest_sha256": "2da2ef6b207a92ec24d441fb0061656ed190e37937adb17ca07014a0ca00f715",
+    "fleetjob_packet_self_sha256": "sha256:2fc58811027042d332ae2a74a59b1831ac31e667e429bbb80876eb5fb9209734",
+    "preflight_name": "chris-q38-skyrl-probe-preflight-v4",
+    "preflight_manifest_sha256": "3b28903f1c97946ec938aaaee275e8d41db9b63bf4776f1030623b7f8a276b7e",
+    "preflight_packet_self_sha256": "sha256:9df41ec3466690eda8b0989475417ebd6e328a4d2bc0f0c4ba4bd5dbd8aa17e5",
+    "runtime_sha256": "58ae1ed575ef3c6a6ab7ecf0cbaf3494ca53e7b89eae4fb3fd77e28e3339ae8d",
     "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
     "model": {
       "repository": "Qwen/Qwen3.8-27B",
@@ -34,8 +34,8 @@
   },
   "server_preview": {
     "status": "passed",
-    "self_sha256": "sha256:d6020070a2d9afc7424a3b8715725e16e2260a80f66e6adb40a7a6a15c2f735c",
-    "server_render_sha256": "9352ecafb79dd530c962b4c30d65f682c0917c405e0762d08bd724a2347fa9e1",
+    "self_sha256": "sha256:7d27129e4c631e7c5f42dc982b2f6fa857fc5272783c151a42ff0b9565370126",
+    "server_render_sha256": "1d36caad33aa1eaae52e0bc92faee4d24828b0537f9d34471a0cff3a7c5c7fa4",
     "controller_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/training-api@sha256:e9787177242159ed664d120d3e7496e7695b4a536aa14962b381e0d31ce5d9ac",
     "create_dry_run_only": true,
     "runtime_user": {
@@ -47,8 +47,8 @@
   },
   "cpu_preflight_server_preview": {
     "status": "passed",
-    "self_sha256": "sha256:2c20fc0166803357830083237abc4a211ad04d282ee3e5efb42fb4f7c3f43d9a",
-    "server_render_sha256": "2308db8fa38dbd5bbd6c3d4bf01e23b253e8d7a54183f9c85e9f64af4ed8b624",
+    "self_sha256": "sha256:2d581a1f14ab2f8a1ffe0601de25b5878e60ca44b11a9ee79090aac979c38315",
+    "server_render_sha256": "e4619291ba90bef9cdde6cbb937468fee0fabf693628b33fda9dcdbfebfedc9f",
     "create_dry_run_only": true,
     "runtime_user": {
       "uid": 1000,
@@ -81,6 +81,15 @@
     "gpus": 0,
     "released": true,
     "successor_change": "require the exact digest-bound .runtime bootstrap and reject every other destination entry"
+  },
+  "retired_cpu_preflight_v3": {
+    "name": "chris-q38-skyrl-probe-preflight-v3",
+    "status": "deleted_before_acceptance",
+    "job_uid": "2387fb25-c50d-4bd2-8646-7027aaa1df32",
+    "gpus": 0,
+    "released": true,
+    "reason": "operator detected that the observer had not finished arming before creation; the exact UID was deleted immediately and no evidence was accepted",
+    "successor_change": "create the evidence directory first, start only the observer process, and read its exact fresh ARMED receipt before creation"
   },
   "contract": {
     "cpu_head": true,
@@ -121,5 +130,5 @@
   ],
   "safe_to_create": false,
   "next_action": "Run the exact-image zero-GPU preflight with the exact model mount, bind an independent 30-minute UID-aware cleanup observer, regenerate and re-preview the packet, then make a separate reviewed launch decision.",
-  "sha256": "sha256:beb0fffa08b3d7425ffacd235b5b6791c02b906a2257487592f692b01aff0929"
+  "sha256": "sha256:34510f043f3c244621c5ab818a5175c68100e899d879534fa7cdb4a14699224d"
 }
