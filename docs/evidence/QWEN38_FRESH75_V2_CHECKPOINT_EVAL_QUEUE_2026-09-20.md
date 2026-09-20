@@ -12,13 +12,19 @@ runtime plan digest, and recipe. The validator is
 [`fresh75_v2_eval_queue.py`](../../evals/webexploitbench/tensorlake/fresh75_v2_eval_queue.py).
 
 The queue now also carries immutable terminal observations as individual arms
-finish. The one-epoch arm `b8-lr1e5-e1` succeeded at optimizer step 115. Its
-training-complete receipt, final checkpoint-saved receipt, 115-row metrics
-file, and exact resource release are digest-bound in the queue. This establishes
-training completion only. It does not establish a complete checkpoint payload,
-an exported model, a reloadable model, a serving route, or capability lift.
-The next fail-closed handoff is
-[`qwen38-fresh75-e1-step115-post-training-handoff-v1.json`](../../configs/qualification/qwen38-fresh75-e1-step115-post-training-handoff-v1.json).
+finish. Five arms are terminal and released: the one-epoch arm at step 115,
+batch 32 at step 58, batch 64 at step 30, and the two-epoch batch-8 reference
+and lower-learning-rate arms at step 230. Each training-complete receipt, final
+checkpoint-saved receipt, metrics file, and exact resource release is
+digest-bound in the queue. This establishes training completion only. It does
+not establish a complete checkpoint payload, an exported model, a reloadable
+model, a serving route, or capability lift. The fail-closed handoffs are:
+
+- [`qwen38-fresh75-e1-step115-post-training-handoff-v1.json`](../../configs/qualification/qwen38-fresh75-e1-step115-post-training-handoff-v1.json)
+- [`qwen38-fresh75-b32-step58-post-training-handoff-v1.json`](../../configs/qualification/qwen38-fresh75-b32-step58-post-training-handoff-v1.json)
+- [`qwen38-fresh75-b64-step30-post-training-handoff-v1.json`](../../configs/qualification/qwen38-fresh75-b64-step30-post-training-handoff-v1.json)
+- [`qwen38-fresh75-base-step230-post-training-handoff-v1.json`](../../configs/qualification/qwen38-fresh75-base-step230-post-training-handoff-v1.json)
+- [`qwen38-fresh75-lr3-step230-post-training-handoff-v1.json`](../../configs/qualification/qwen38-fresh75-lr3-step230-post-training-handoff-v1.json)
 
 ## What the queue does
 

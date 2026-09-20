@@ -374,6 +374,118 @@
         "allocated_gpus": 0
       },
       "observation_sha256": "sha256:afdab6e2f5ced11a9124cea974cd456a45b8633c1632d6baf4c1668b75f71b9e"
+    },
+    {
+      "arm_id": "b8-lr1e5-e2",
+      "observed_at": "2026-09-20T15:49:56Z",
+      "jobs_api_status": "SUCCEEDED",
+      "rayjob": {
+        "name": "chris-q38-f75-base-v2-68c57437",
+        "uid": "943f6be5-0f9e-465e-b50a-71df07e9b2ca",
+        "job_status": "SUCCEEDED",
+        "end_time": "2026-09-20T15:47:29Z"
+      },
+      "training_complete": {
+        "path": "/mnt/sfs/jobs/chris-q38-f75-base-v2/TRAINING_COMPLETE.json",
+        "file_sha256": "sha256:4dcdeae98de7c084f221d366674f84f750320d56a5570857361fd9799a78beb0",
+        "receipt_sha256": "sha256:7f382a4e75e564f220dd427f39afa42fdad72eb084f0844ab3e0e731d9ef4951",
+        "status": "training_complete",
+        "optimizer_step": 230,
+        "planned_optimizer_steps": 230,
+        "supervised_tokens": 2072122,
+        "checkpoint_path": "/mnt/sfs/jobs/chris-q38-f75-base-v2/checkpoints/global_step_230",
+        "export_status": "pending_separate_zero_step_export",
+        "plan_sha256": "9f8a00e1ebf1478fa44671cad4ab902eca089459f8b5720cd59a2453397dfb4a"
+      },
+      "metrics": {
+        "path": "/mnt/sfs/jobs/chris-q38-f75-base-v2/metrics.jsonl",
+        "file_sha256": "sha256:ec0a2718c0592892a855e11866baf8801d259ee25736d951fedce3ac5fda7c73",
+        "rows": 230,
+        "first_optimizer_step": 1,
+        "first_train_loss": 0.6419628859,
+        "last_optimizer_step": 230,
+        "last_train_loss": 0.2576795518
+      },
+      "checkpoint_receipt": {
+        "path": "/mnt/sfs/jobs/chris-q38-f75-base-v2/checkpoint_receipts/step-000230.json",
+        "file_sha256": "sha256:b3dc481ed81d513961f1e4717837aed14e0cbcc5c33269d34595de01ca3b62b0",
+        "receipt_sha256": "sha256:a9fe223effaac6670f2084a2c85751539d60368a41d4efb3a47ce45e00258811",
+        "optimizer_step": 230,
+        "checkpoint_path": "/mnt/sfs/jobs/chris-q38-f75-base-v2/checkpoints/global_step_230",
+        "plan_sha256": "9f8a00e1ebf1478fa44671cad4ab902eca089459f8b5720cd59a2453397dfb4a"
+      },
+      "retained_checkpoints": [
+        200,
+        220,
+        230
+      ],
+      "release": {
+        "observed_at": "2026-09-20T15:49:56Z",
+        "pod_uid": "54c39aa7-4b29-405b-bfa2-fada6e84f3f6",
+        "pod_count": 0,
+        "raycluster_name": "chris-q38-f75-base-v2-68c57437-jt5jn",
+        "raycluster_count": 0,
+        "workload_uid": "c6c618fb-23bb-4f28-9eff-0e4055412452",
+        "workload_count": 0,
+        "allocated_gpus": 0
+      },
+      "observation_sha256": "sha256:75ddf7c9d69b172ee1c26b09ce5cd633bf148d3267ff18d6e079fa3bc80bae2e"
+    },
+    {
+      "arm_id": "b8-lr3e6-e2",
+      "observed_at": "2026-09-20T15:49:56Z",
+      "jobs_api_status": "SUCCEEDED",
+      "rayjob": {
+        "name": "chris-q38-f75-lr3-v2-ec1a75e8",
+        "uid": "b8167ef5-086b-4126-aac4-aa26a1b231ed",
+        "job_status": "SUCCEEDED",
+        "end_time": "2026-09-20T15:46:05Z"
+      },
+      "training_complete": {
+        "path": "/mnt/sfs/jobs/chris-q38-f75-lr3-v2/TRAINING_COMPLETE.json",
+        "file_sha256": "sha256:7d3ed17c72f56c7801889bec7e7b73df8c442c7c921ad427befa5dc2f22e9c2f",
+        "receipt_sha256": "sha256:903cc6e54f310d695a75a88e103bdd8f8697445ff22a4292b4969f38af49de95",
+        "status": "training_complete",
+        "optimizer_step": 230,
+        "planned_optimizer_steps": 230,
+        "supervised_tokens": 2072122,
+        "checkpoint_path": "/mnt/sfs/jobs/chris-q38-f75-lr3-v2/checkpoints/global_step_230",
+        "export_status": "pending_separate_zero_step_export",
+        "plan_sha256": "9a887d9ae0056dd3e13d389f70b648f7eb8758b9c1e67d27e5910e832c140c35"
+      },
+      "metrics": {
+        "path": "/mnt/sfs/jobs/chris-q38-f75-lr3-v2/metrics.jsonl",
+        "file_sha256": "sha256:69b10d3a7529f68c2e887f985b86bc573299201c2abab0a5c21d2d64fc4aa15e",
+        "rows": 230,
+        "first_optimizer_step": 1,
+        "first_train_loss": 0.6419628859,
+        "last_optimizer_step": 230,
+        "last_train_loss": 0.2565174401
+      },
+      "checkpoint_receipt": {
+        "path": "/mnt/sfs/jobs/chris-q38-f75-lr3-v2/checkpoint_receipts/step-000230.json",
+        "file_sha256": "sha256:9f8a834d8ac97e0df0c20d2a8501bdc2c50895a58bbc34ff2de237fad0a795f5",
+        "receipt_sha256": "sha256:06369b3366b07332246ff4d7115a04ade4f01f795ad0c2a65a57da0c953c7146",
+        "optimizer_step": 230,
+        "checkpoint_path": "/mnt/sfs/jobs/chris-q38-f75-lr3-v2/checkpoints/global_step_230",
+        "plan_sha256": "9a887d9ae0056dd3e13d389f70b648f7eb8758b9c1e67d27e5910e832c140c35"
+      },
+      "retained_checkpoints": [
+        200,
+        220,
+        230
+      ],
+      "release": {
+        "observed_at": "2026-09-20T15:49:56Z",
+        "pod_uid": "bc219d6a-89f5-4ca4-872d-4838a597532d",
+        "pod_count": 0,
+        "raycluster_name": "chris-q38-f75-lr3-v2-ec1a75e8-bqn5h",
+        "raycluster_count": 0,
+        "workload_uid": "e23abc98-0164-47fc-a4d2-8e558a098c38",
+        "workload_count": 0,
+        "allocated_gpus": 0
+      },
+      "observation_sha256": "sha256:6d0e88aba1d681cea3d5bcc3931a1077767c249f4c3dda14ae294fac70136f17"
     }
   ],
   "activation_gates": [
@@ -393,5 +505,5 @@
     "fleet_development_eval_for_every_arm",
     "fleet_final_test_only_once_after_checkpoint_selection"
   ],
-  "queue_sha256": "sha256:36fce730e92490d99566ea916c27b0638b09ce8e5ad7e22a73ce0ebb50ada37e"
+  "queue_sha256": "sha256:d46eedb1d857043c0fb7089e0308e6ae8b73096a8ef4381eeb81664512f28c46"
 }
