@@ -2,6 +2,12 @@
 
 Status: **prepared, not submitted; external preview and submission are blocked.**
 
+The independent offline launch-readiness audit is
+[`2026-09-20-skyrl-launch-readiness-audit-v1.json`](evidence/qwen38-study/2026-09-20-skyrl-launch-readiness-audit-v1.json).
+It recompiles the exact V17 and prod4 plan/request identities without reading
+private payloads or contacting external services, and checks the five queued
+production configurations. It is a fail-closed audit, not launch authority.
+
 This is the current-main port of the scientifically valid one-node reward
 canary from runtime commit `8b5e8a00521b4fe412e3e7d0bce9b8ea6855b005`,
 with preflight provenance from
@@ -68,6 +74,19 @@ Jobs client. The blocked closure records five unresolved gates:
 4. an exact-image CPU preflight and Jobs API preview for `prod4`; and
 5. a final read-only duplicate/output/W&B absence check immediately before the
    one allowed create.
+
+The five full arms have additional unresolved gates. Their private manifests
+are not staged, their production validator and exact plan/request seals do not
+exist, and no independent UID-bound release observer is recorded. The shared
+RL watchdog has an eight-hour hard bound, while the legal episode ceilings are
+38,400 seconds for each ten-step arm and 163,200 seconds for the fifty-step arm,
+before startup and optimizer time. A reviewed plan-bound watchdog/release
+contract is therefore required before any full-arm preview or submission.
+
+The generic submit path checks the Jobs history for name/output reuse and uses
+an exclusive submission journal. It does not perform the required fresh
+Kubernetes, SFS, or W&B absence checks. Those checks remain explicit blockers;
+the historical clean observation in the queue receipt must not be reused.
 
 After those gates pass, the scientific run may be created once. Acceptance
 requires eight genuine rollouts, non-constant verifier rewards, one finite
