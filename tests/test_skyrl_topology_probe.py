@@ -29,16 +29,16 @@ def plan():
 
 def test_probe_is_distinct_dev_only_bounded_and_zero_update(plan) -> None:
     request = probe.request(plan)
-    assert digest(plan) == "51accb1d9857254fb4bee013001c361785698c5c5b7b825a7b328ee785b717cd"
-    assert digest(request) == "287f9a1a6cb58ae5b03a002be8f14109c53abcf9e097cb410e9d9fa1a3fa146b"
+    assert digest(plan) == "fbdd777447219623623fc9679aecc65f3b3c692aa20a9d49a4cc66ae29e43774"
+    assert digest(request) == "87e3a0971f1d700d57194cc87fb1ec3b1df0e16fc1dfca9d8f634bf0a4209e37"
     assert digest(probe.fleetjob_manifest(plan)) == (
-        "047485386a653f3c8e6cb7b16b853b0bd12accf027b862c9fab58f0fbf5e0b99"
+        "1fc00898bbe35739db9896a2765bad734ee616d72c0caa26f1f73434208ba223"
     )
     assert digest(probe.preflight_job_manifest(plan)) == (
-        "b36a70da18448291771bddbeee9f17c007249bddfe402c5b0aef0bc283d60ddb"
+        "92a39c456d53f57e8ccbcc8a56b3427d815ed1c70e2c40464e0e7b1d2444aa37"
     )
     assert digest(probe.receipt_verify_job_manifest(plan)) == (
-        "59c3c1f1fd22c523fd8860e4d61155ee884a1c1002dff7f23d57ffc893b33ee7"
+        "255ae49210d50c285bf9ad4c4a330cc3ccc95070bd0dca9e0d19cc81420a4668"
     )
     assert plan["schema"] == probe.SCHEMA
     assert plan["execution"]["cluster_target"] == "dev"
@@ -51,6 +51,7 @@ def test_probe_is_distinct_dev_only_bounded_and_zero_update(plan) -> None:
     assert plan["execution"]["max_workers"] == 1
     assert plan["execution"]["gpus_on_head"] == 8
     assert request["secrets"] == []
+    assert request["failureAlerts"] is False
     assert plan["deadlines"] == {
         "setup_seconds": 1200,
         "cleanup_seconds": 300,
@@ -89,6 +90,11 @@ def test_probe_fleetjob_is_one_eight_gpu_pod_with_zero_replica_group(plan) -> No
     assert manifest["metadata"] == {
         "name": "chris-q38-skyrl-probe-v17",
         "namespace": "fleet-train-jobs",
+        "annotations": {"fleet.ai/failure-alerts": "off"},
+    }
+    assert spec["job"]["metadata"]["annotations"] == {
+        "ray/kueue-admission-scope": "job",
+        "fleet.ai/failure-alerts": "off",
     }
     assert spec["fleet"] == {
         "projectName": "fleetjob-dev",
@@ -160,6 +166,7 @@ def test_probe_cpu_preflight_is_zero_gpu_exact_mount_and_explicit_user(plan) -> 
     assert manifest["metadata"] == {
         "name": probe.PREFLIGHT_NAME,
         "namespace": "fleet-train-jobs",
+        "annotations": {"fleet.ai/failure-alerts": "off"},
     }
     spec = manifest["spec"]
     assert spec["activeDeadlineSeconds"] == 1200
@@ -200,6 +207,7 @@ def test_probe_receipt_verifier_is_zero_gpu_read_only_and_explicit_user(plan) ->
     assert manifest["metadata"] == {
         "name": probe.RECEIPT_VERIFY_NAME,
         "namespace": "fleet-train-jobs",
+        "annotations": {"fleet.ai/failure-alerts": "off"},
     }
     pod = manifest["spec"]["template"]["spec"]
     container = pod["containers"][0]
@@ -289,6 +297,11 @@ def test_probe_preflight_preview_accepts_only_exact_server_defaults(plan) -> Non
     with pytest.raises(JobsError, match="changed"):
         probe.validate_preflight_job_preview(plan, manifest, changed)
 
+    changed = copy.deepcopy(rendered)
+    changed["metadata"]["annotations"].pop("fleet.ai/failure-alerts")
+    with pytest.raises(JobsError, match="changed"):
+        probe.validate_preflight_job_preview(plan, manifest, changed)
+
 
 def test_probe_receipt_verifier_preview_accepts_only_exact_server_defaults(plan) -> None:
     manifest = probe.receipt_verify_job_manifest(plan)
@@ -299,6 +312,11 @@ def test_probe_receipt_verifier_preview_accepts_only_exact_server_defaults(plan)
     assert proof["runtime_user"] == {"uid": 1000, "gid": 100}
     changed = copy.deepcopy(rendered)
     changed["spec"]["template"]["spec"]["containers"][0]["volumeMounts"][0]["readOnly"] = False
+    with pytest.raises(JobsError, match="changed"):
+        probe.validate_receipt_verify_job_preview(plan, manifest, changed)
+
+    changed = copy.deepcopy(rendered)
+    changed["metadata"]["annotations"].pop("fleet.ai/failure-alerts")
     with pytest.raises(JobsError, match="changed"):
         probe.validate_receipt_verify_job_preview(plan, manifest, changed)
 
@@ -363,6 +381,18 @@ def test_probe_fleetjob_preview_accepts_only_exact_server_mutation(plan) -> None
     changed["spec"]["job"]["spec"]["backoffLimit"] = 1
     with pytest.raises(JobsError, match="changed"):
         probe.validate_fleetjob_preview(plan, manifest, changed)
+
+    for path in (
+        ("metadata", "annotations"),
+        ("spec", "job", "metadata", "annotations"),
+    ):
+        changed = copy.deepcopy(rendered)
+        target = changed
+        for key in path:
+            target = target[key]
+        target.pop("fleet.ai/failure-alerts")
+        with pytest.raises(JobsError, match="changed"):
+            probe.validate_fleetjob_preview(plan, manifest, changed)
 
 
 def test_probe_runtime_bundle_imports_without_source_checkout(plan, tmp_path) -> None:
@@ -666,7 +696,10 @@ def _preview(request, *, identity=True):
                 "kueue.x-k8s.io/priority-class": "q1",
                 "fleet.ai/requeue-if-preempted": "false",
             },
-            "annotations": {"fleet.ai/run-dir": request["run_dir"]},
+            "annotations": {
+                "fleet.ai/run-dir": request["run_dir"],
+                "fleet.ai/failure-alerts": "off",
+            },
         },
         "spec": {
             "suspend": True,

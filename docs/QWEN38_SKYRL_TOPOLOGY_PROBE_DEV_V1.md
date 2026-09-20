@@ -13,8 +13,9 @@ container receipt before teardown, so it proves execution and release but does
 
 The create-once `v17` successor is prepared but has not been submitted. It keeps
 `VLLM_USE_FLASHINFER_SAMPLER=0` and adds a fixed 30-second grace period for the
-terminal receipt before cleanup. The failure budget remains 10/10, so no new
-cluster workload is authorized until an explicit reset is recorded.
+terminal receipt before cleanup. There is no failure-count gate. Creation is
+currently blocked because the development FleetJob admission interface rejects
+the mandatory failed-job-alert opt-out annotation; no object was created.
 
 It deliberately cannot read a training row, create an episode, call a verifier,
 take an optimizer step, or write a checkpoint. Passing it does not qualify RL.
@@ -75,9 +76,11 @@ uv run --locked cyber-post-train rl-topology-probe-preflight-preview \
   /absolute/new/probe-packet
 uv run --locked cyber-post-train rl-topology-probe-preview \
   /absolute/new/probe-packet
+uv run --locked cyber-post-train rl-topology-probe-receipt-preview \
+  /absolute/new/probe-packet
 ```
 
-The last two commands use `kubectl create --dry-run=server` against the context and
+The last three commands use `kubectl create --dry-run=server` against the context and
 namespace sealed into the plan. It fails if the server changes the image, model
 mount, topology, resources, priority, deadline, command, environment or security
 settings. It saves only a sanitized proof; the server response containing the

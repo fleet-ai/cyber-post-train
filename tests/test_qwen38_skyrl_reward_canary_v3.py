@@ -146,6 +146,12 @@ def test_source_package_is_exact_and_historical_preflight_is_non_gating() -> Non
     qualification = load(QUALIFICATION)
     assert_sealed(qualification)
     assert qualification["execution"]["cluster_target"] == "prod"
+    assert qualification["submission_gate"] == {
+        "preview_authorized": False,
+        "submission_authorized": False,
+        "blockers": canary.SUBMISSION_BLOCKERS,
+    }
+    assert all("failure_budget" not in item for item in canary.SUBMISSION_BLOCKERS)
     assert qualification["topology_successor"] == canary.TOPOLOGY_SUCCESSOR
     assert qualification["topology_successor"]["accepted"] is False
     assert qualification["topology_successor"]["terminal_receipt_grace_seconds"] == 30
@@ -189,8 +195,8 @@ def test_canonical_source_receipts_remain_byte_identical() -> None:
 def test_one_node_one_step_config_compiles_to_the_qualified_image(monkeypatch) -> None:
     plan, manifest = compile_canary(monkeypatch)
     request = skyrl_training.job_request(plan)
-    assert digest(plan) == "513e39ff78605f74ab08af22187cb7e2bb3ab2f9290da03a1402d7d282f03a65"
-    assert digest(request) == "07fc87fda635341352a1726cb061de874be5b4a1eabc82985e8b28ef85104473"
+    assert digest(plan) == "d6b36b07f1fcb9075e96f5d4918aecdf204c8ad2f3fa8d5d29527bfc9c777c9c"
+    assert digest(request) == "bb69d48afd9d6a1cafea678dbc408f803dda93e4e32bb42a23aac620da7c224c"
     arguments, overrides = plan["arguments"], plan["native_overrides"]
     assert plan["data"] == manifest
     assert request["image"] == canary.IMAGE
@@ -198,6 +204,7 @@ def test_one_node_one_step_config_compiles_to_the_qualified_image(monkeypatch) -
     assert request["workers"] == 1
     assert request["gpus_per_worker"] == 8
     assert request["priority_class"] == "c1"
+    assert request["failureAlerts"] is False
     assert request["resources"] == canary.RESOURCES
     assert request["requeueIfPreempted"] is False
     assert arguments["steps"] == overrides["trainer.max_training_steps"] == 1

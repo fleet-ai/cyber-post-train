@@ -50,30 +50,38 @@ check.
 
 The exact prepared topology packet is bound to:
 
-- plan SHA-256 `51accb1d9857254fb4bee013001c361785698c5c5b7b825a7b328ee785b717cd`;
-- request SHA-256 `287f9a1a6cb58ae5b03a002be8f14109c53abcf9e097cb410e9d9fa1a3fa146b`;
-- FleetJob manifest SHA-256 `047485386a653f3c8e6cb7b16b853b0bd12accf027b862c9fab58f0fbf5e0b99`;
-- CPU-preflight manifest SHA-256 `b36a70da18448291771bddbeee9f17c007249bddfe402c5b0aef0bc283d60ddb`;
-- receipt-verifier manifest SHA-256 `59c3c1f1fd22c523fd8860e4d61155ee884a1c1002dff7f23d57ffc893b33ee7`.
+- plan SHA-256 `fbdd777447219623623fc9679aecc65f3b3c692aa20a9d49a4cc66ae29e43774`;
+- request SHA-256 `87e3a0971f1d700d57194cc87fb1ec3b1df0e16fc1dfca9d8f634bf0a4209e37`;
+- FleetJob manifest SHA-256 `1fc00898bbe35739db9896a2765bad734ee616d72c0caa26f1f73434208ba223`;
+- CPU-preflight manifest SHA-256 `92a39c456d53f57e8ccbcc8a56b3427d815ed1c70e2c40464e0e7b1d2444aa37`;
+- receipt-verifier manifest SHA-256 `255ae49210d50c285bf9ad4c4a330cc3ccc95070bd0dca9e0d19cc81420a4668`.
 
 The locally compiled scientific packet is bound to plan SHA-256
-`513e39ff78605f74ab08af22187cb7e2bb3ab2f9290da03a1402d7d282f03a65`
+`d6b36b07f1fcb9075e96f5d4918aecdf204c8ad2f3fa8d5d29527bfc9c777c9c`
 and request SHA-256
-`07fc87fda635341352a1726cb061de874be5b4a1eabc82985e8b28ef85104473`.
+`bb69d48afd9d6a1cafea678dbc408f803dda93e4e32bb42a23aac620da7c224c`.
 Those digests do not authorize submission.
 
 ## Why submission is blocked
 
 The command surface refuses external preview and submission before creating a
-Jobs client. The blocked closure records five unresolved gates:
+Jobs client. There is no longer a failure-count gate. Four unresolved gates
+remain:
 
-1. an explicit failure-budget reset (the current count is 10/10);
-2. accepted `v17` topology receipt plus proof that its eight GPUs were released;
-3. create-once staging and digest verification of the exact one-train/one-dev
+1. accepted `v17` topology receipt plus proof that its eight GPUs were released;
+2. create-once staging and digest verification of the exact one-train/one-dev
    data manifest under the `prod4` data path;
-4. an exact-image CPU preflight and Jobs API preview for `prod4`; and
-5. execution of the encoded read-only Jobs/Kubernetes/SFS/W&B absence guard
+3. an exact-image CPU preflight and Jobs API preview for `prod4`; and
+4. execution of the encoded read-only Jobs/Kubernetes/SFS/W&B absence guard
    immediately before the one allowed create.
+
+The current development FleetJob admission webhook rejects the mandatory
+root `fleet.ai/failure-alerts: "off"` annotation on both the FleetJob and its
+embedded RayJob. The zero-GPU preflight and receipt-verifier server dry-runs
+pass with the annotation, but the GPU FleetJob cannot be created until the
+FleetJob interface can preserve that annotation on the generated RayJob or the
+probe moves to another alert-safe transport. The exact evidence is recorded in
+[`2026-09-20-skyrl-alert-optout-launch-repair-v1.md`](evidence/qwen38-study/2026-09-20-skyrl-alert-optout-launch-repair-v1.md).
 
 The offline defects for the five full arms are repaired. Each arm now has an
 exact sanitized staged-manifest candidate, a runnable UID/mode/file-set/digest

@@ -29,7 +29,15 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
-from cyber_post_train.jobs import API_URLS, JobsError, bundled_request, digest, quantity
+from cyber_post_train.jobs import (
+    API_URLS,
+    FAILURE_ALERT_ANNOTATION,
+    FAILURE_ALERT_OFF,
+    JobsError,
+    bundled_request,
+    digest,
+    quantity,
+)
 
 from . import skyrl
 
@@ -338,6 +346,7 @@ def request(
             "gpus_per_worker": 8,
             "resources": execution["resources"],
             "priority_class": "c1",
+            "failureAlerts": False,
             "requeueIfPreempted": False,
             "secrets": [],
             "env": {
@@ -408,7 +417,11 @@ def _fleetjob(
     return {
         "apiVersion": "fleet.ai/v1alpha1",
         "kind": "FleetJob",
-        "metadata": {"name": name, "namespace": execution["namespace"]},
+        "metadata": {
+            "name": name,
+            "namespace": execution["namespace"],
+            "annotations": {FAILURE_ALERT_ANNOTATION: FAILURE_ALERT_OFF},
+        },
         "spec": {
             "fleet": {
                 "projectName": execution["project_name"],
@@ -441,7 +454,12 @@ def _fleetjob(
             "job": {
                 "apiVersion": "ray.io/v1",
                 "kind": "RayJob",
-                "metadata": {"annotations": {"ray/kueue-admission-scope": "job"}},
+                "metadata": {
+                    "annotations": {
+                        "ray/kueue-admission-scope": "job",
+                        FAILURE_ALERT_ANNOTATION: FAILURE_ALERT_OFF,
+                    }
+                },
                 "spec": {
                     "entrypoint": command,
                     "activeDeadlineSeconds": active_deadline_seconds,
@@ -574,7 +592,11 @@ def preflight_job_manifest(plan: dict) -> dict:
     return {
         "apiVersion": "batch/v1",
         "kind": "Job",
-        "metadata": {"name": PREFLIGHT_NAME, "namespace": execution["namespace"]},
+        "metadata": {
+            "name": PREFLIGHT_NAME,
+            "namespace": execution["namespace"],
+            "annotations": {FAILURE_ALERT_ANNOTATION: FAILURE_ALERT_OFF},
+        },
         "spec": {
             "activeDeadlineSeconds": 1200,
             "backoffLimit": 0,
@@ -637,6 +659,7 @@ def receipt_verify_job_manifest(plan: dict) -> dict:
         "metadata": {
             "name": RECEIPT_VERIFY_NAME,
             "namespace": execution["namespace"],
+            "annotations": {FAILURE_ALERT_ANNOTATION: FAILURE_ALERT_OFF},
         },
         "spec": {
             "activeDeadlineSeconds": 600,
