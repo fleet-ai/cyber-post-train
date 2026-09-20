@@ -21,13 +21,13 @@ def plan():
 
 def test_stage_plan_is_dev_only_zero_science_and_create_once(plan) -> None:
     assert plan["schema"] == stage.PLAN_SCHEMA
-    assert plan["name"] == "chris-q38-modelstage-v1"
+    assert plan["name"] == "chris-q38-modelstage-v2"
     assert plan["execution"] == stage._expected_execution()
     assert plan["execution"]["cluster_target"] == "dev"
     assert plan["execution"]["priority"] == "c1"
     assert plan["execution"]["deadline_seconds"] == 1200
     assert plan["execution"]["artifact_path"] == (
-        "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v1"
+        "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v2"
     )
     assert plan["model"]["repo"] == "Qwen/Qwen3.8-27B"
     assert plan["model"]["revision"] == (
@@ -40,7 +40,7 @@ def test_stage_plan_is_dev_only_zero_science_and_create_once(plan) -> None:
 def test_stage_job_is_zero_gpu_single_models_mount_and_explicit_user(plan) -> None:
     manifest = stage.job_manifest(plan)
     assert manifest["metadata"] == {
-        "name": "chris-q38-modelstage-v1",
+        "name": "chris-q38-modelstage-v2",
         "namespace": "fleet-train-jobs",
     }
     assert manifest["spec"]["activeDeadlineSeconds"] == 1200

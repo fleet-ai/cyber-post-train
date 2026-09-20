@@ -24,9 +24,6 @@ from pathlib import Path, PurePosixPath
 
 from cyber_post_train.jobs import JobsError, bundled_request, digest
 
-from .models import bound_model
-from .sft import read_mapping
-
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = (
     ROOT / "configs/qualification/qwen38-skyrl-model-artifact-stage-dev-v1.json"
@@ -45,8 +42,6 @@ IMAGE = (
 )
 RUNTIME_FILES = (
     "training/skyrl_model_artifact_stage.py",
-    "training/models.py",
-    "training/sft.py",
     "cyber_post_train/jobs.py",
 )
 
@@ -71,6 +66,13 @@ def _runtime() -> dict[str, str]:
     return {name: (ROOT / name).read_text() for name in RUNTIME_FILES}
 
 
+def _read_mapping(path: Path) -> dict:
+    value = json.loads(path.read_text())
+    if not isinstance(value, dict):
+        raise ValueError("model artifact stage input must be a JSON mapping")
+    return value
+
+
 def _expected_execution() -> dict:
     return {
         "cluster_target": "dev",
@@ -81,7 +83,7 @@ def _expected_execution() -> dict:
         "models_subpath": "models",
         "models_mount": "/mnt/models",
         "source_alias": "qwen3.8-27b-1d4bf0f2",
-        "artifact_path": "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v1",
+        "artifact_path": "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v2",
         "runtime_uid": 1000,
         "runtime_gid": 100,
         "deadline_seconds": 1200,
@@ -91,7 +93,7 @@ def _expected_execution() -> dict:
 def _config(path: Path) -> dict:
     if path.resolve() != CONFIG_PATH.resolve() or path.is_symlink():
         raise ValueError("unknown SkyRL model artifact stage configuration")
-    value = read_mapping(path)
+    value = _read_mapping(path)
     _validate_seal(value, CONFIG_SCHEMA)
     if value["execution"] != _expected_execution():
         raise ValueError("SkyRL model artifact stage execution contract changed")
@@ -99,10 +101,14 @@ def _config(path: Path) -> dict:
 
 
 def compile_stage(path: Path) -> dict:
+    # Compiler-only dependency: the runtime consumes the already sealed model
+    # inventory and therefore does not carry the full training compiler graph.
+    from .models import bound_model
+
     value = _config(path)
     model = bound_model(
-        read_mapping(CONFIG_PATH.parent / value["model"]["lock"]),
-        read_mapping(CONFIG_PATH.parent / value["model"]["weights"]),
+        _read_mapping(CONFIG_PATH.parent / value["model"]["lock"]),
+        _read_mapping(CONFIG_PATH.parent / value["model"]["weights"]),
         "/mnt/models/" + value["execution"]["source_alias"],
     )
     execution = value["execution"]
@@ -132,7 +138,7 @@ def _validate(plan: dict) -> None:
     artifact = PurePosixPath(execution["artifact_path"])
     if (
         plan.get("schema") != PLAN_SCHEMA
-        or plan.get("name") != "chris-q38-modelstage-v1"
+        or plan.get("name") != "chris-q38-modelstage-v2"
         or plan.get("image") != IMAGE
         or plan.get("execution") != execution
         or plan.get("source_root")
