@@ -118,3 +118,38 @@ The bounded successor is pod `chris-q38-lora-export-c1-v3`, UID
 Pending without a node or GPU allocation behind the project-priority RL
 FleetJob. It must not be promoted unless it emits and independently passes the
 strict `cyber_qwen38_megatron_lora_merged_hf_export_v1` receipt.
+
+### v3 terminal and I/O-bounded v4 successor
+
+v3 later ran from `12:12:07Z` until the server-enforced 1,800-second deadline.
+Both native TP8 exports and both complete base-layout writes finished. The main
+process remained active in strict every-tensor reopen/equality validation when
+Kubernetes terminated the pod with `reason: DeadlineExceeded`; it had zero
+restarts and emitted no accepted export receipt. Exact UID
+`010dd15b-58a5-494a-825e-d233b9576aac` was deleted immediately. Its GPU
+allocation was absent before any successor was created.
+
+Commit `d0842449` removes only redundant full-layout I/O. It still reopens and
+compares both independent native merged exports to prove deterministic merged
+language values, but writes the deterministic frozen base completion once. It
+then independently reopens every published tensor once, compares the complete
+layout and values with the exact base, reloads the complete model/tokenizer,
+checks finite logits, and rehashes all immutable inputs. Forty-six focused tests
+pass. Exact-image CPU qualification pod UID
+`b9b34aa1-7bcd-4fc9-a633-527598470e32` accepted producer SHA-256
+`d65b34816ab9db2d57f50c454376dde28e19ba3e792fc98e65690dca322ee49c`
+with zero optimizer updates, then was deleted.
+
+The fresh v4 preflight accepted:
+
+- preflight pod UID `c5cd045b-929e-4428-b67f-c51e54a271f7` (deleted);
+- plan SHA-256
+  `52cb4b09f213b99c6422261ae145d6581f2e24610b654dea4beea43e5ea41f50`;
+- request SHA-256
+  `3c5c69b350d50b74cb011332c0f9d8eca2be378e98f77c9423286049a6b43625`;
+- fresh run root `/mnt/sfs/jobs/chris-q38-lora-export-c1-v4`.
+
+Pod `chris-q38-lora-export-c1-v4`, UID
+`2547746a-c422-46a9-97a7-d2285b27afb3`, was created c1/TP8 and was initially
+Pending without allocation. It remains fail-closed until an independently
+validated terminal export receipt exists.
