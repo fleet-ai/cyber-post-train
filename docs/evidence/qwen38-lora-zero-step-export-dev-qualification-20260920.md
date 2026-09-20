@@ -214,3 +214,33 @@ at `2026-09-20T13:25:29Z`, requests one eight-GPU B300 node at c1, has a fixed
 1,800-second deadline, and had zero restarts at admission. An exact-UID cleanup
 observer is armed. It remains fail-closed until its terminal export receipt is
 independently validated.
+
+### v5 accepted terminal
+
+v5 completed before the fixed development deadline with exit code zero and
+zero restarts. The exact-UID observer deleted the terminal Pod and verified its
+absence, so the development GPU allocation was released. Unlike v4, the fresh
+subprocess completed the full repaired-model and tokenizer reload while the
+driver retained the TP8 actors; the result was consumed before terminal
+publication, proving the ninth-Ray-lease deadlock was removed rather than
+hidden by a longer deadline.
+
+Independent exact-image CPU verifier pod
+`chris-q38-lora-export-c1-v5-verify`, UID
+`67b47961-64ef-4cae-b49d-8e83bad5233b`, then succeeded with zero restarts and
+was deleted. Its sanitized validation receipt SHA-256 is
+`e60eb3ecb06b0488b98f558f4a1e873a18a95cba4aa8f5ed8bfcbc3c734c67b2`.
+The accepted export identity is:
+
+- logical export receipt SHA-256
+  `1561a76907551bf829221af328921a626ddde8c5791cf29fa46ad0c99357c110`;
+- export receipt file SHA-256
+  `3da93b3304e284205ba8a8939d1dcb8cc4fe749b0f255bbbe35376af5e7c5ff2`;
+- source checkpoint receipt SHA-256
+  `7a5a8c0ed29c35ee4ddf5430fbcf235885c6a1405a800d0041d1931ba3a6abd6`.
+
+The verifier accepted all terminal gates: zero optimizer steps, deterministic
+merge, every output tensor reopened equal, finite logits, complete GPU model
+and tokenizer reload, unchanged source checkpoint, and unchanged base model.
+The merged artifact is therefore accepted for downstream immutable staging and
+matched evaluation; no capability claim follows from export acceptance alone.
