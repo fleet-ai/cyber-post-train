@@ -19,9 +19,12 @@ Read this file before acting. Then select only the skill matching the work and r
 Before creating any Kubernetes Job, RayJob, or persistent inference service on the
 Nebius training cluster, read
 [`docs/CLUSTER_ALERTS_AND_INFERENCE_SERVING.md`](docs/CLUSTER_ALERTS_AND_INFERENCE_SERVING.md).
-Normal experiment operation must not manufacture failed-Job pages or hold unconsumed
-GPUs. Do not evade or suppress a genuine platform alert; choose the supported resource
-lifecycle and make expected terminal states clean and explicit.
+Every project-owned Kubernetes `Job` and `RayJob` MUST carry the top-level annotation
+`fleet.ai/failure-alerts: "off"`. For generic Jobs API runs, the saved request must set
+`failureAlerts: false` and the returned preview must contain that exact annotation;
+otherwise do not submit. This supported opt-out disables failed-job Slack/Better Stack
+notifications only. It does not disable idle-GPU monitoring, justify hiding failures,
+or relax prompt resource release and truthful terminal evidence.
 
 For supported commands, start at `README.md`. For scientific controls, read
 `docs/SCIENTIFIC_PROTOCOL.md`. Use the exact experiment's latest sanitized receipt

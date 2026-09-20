@@ -147,7 +147,9 @@ counts. Train and dev are distinct immutable artifacts and task families.
    those require a bounded exact-model canary before a full run.
 3. Set the standard `FLEET_API_KEY` via your secret manager. Run
    `cyber-post-train preview output/my-run`. It checks the actual image, command,
-   resources, normal queue, derived priority, Secret references and release policy.
+   resources, normal queue, derived priority, Secret references, release policy,
+   and the root RayJob annotation `fleet.ai/failure-alerts: "off"`. A missing
+   annotation stops before submission even when the request asked for alerts off.
 4. Review ownership, access expiry, experiment-wide allocated resources and the
    canary evidence. Use a shared durable prepared directory with one submitter.
    `cyber-post-train submit output/my-run` checks preflight, exhaustively checks API
@@ -244,7 +246,8 @@ engine, tool behavior, throughput, or model quality.
 The runtime has fixed startup, no-progress and hard-runtime bounds. A confirmed
 stall preserves evidence and exits truthfully; the Jobs API releases the allocation.
 An independent monitor must confirm release and handle access failures explicitly.
-Do not suppress alerts or hold GPUs while debugging a failed allocation.
+The supported failed-job notification opt-out does not hide terminal failure state.
+Preserve that evidence and never hold GPUs while debugging a failed allocation.
 
 `TRAINING_COMPLETE.json` means optimization and checkpoint production completed;
 it does not mean the checkpoint is inference-ready or improves task success.

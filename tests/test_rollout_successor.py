@@ -87,6 +87,10 @@ def test_clone_replaces_full_and_short_identities_and_removes_runtime_fields() -
         job["metadata"]["annotations"][rollout_successor.ALERT_SAFE_POLICY_ANNOTATION]
         == rollout_successor.ALERT_SAFE_POLICY_VERSION
     )
+    assert (
+        job["metadata"]["annotations"][rollout_successor.FAILURE_ALERT_ANNOTATION]
+        == rollout_successor.FAILURE_ALERT_OFF
+    )
     assert "status" not in job
     assert "uid" not in job["metadata"]
     assert job["metadata"]["labels"][rollout_refiller.REFILL_LABEL] == "test-refiller"

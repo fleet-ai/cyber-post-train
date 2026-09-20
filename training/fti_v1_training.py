@@ -307,6 +307,7 @@ def job_request(plan: dict[str, Any], *, root: Path) -> dict[str, Any]:
         "priority_class": "c1",
         "topology_mode": "preferred",
         "requeueIfPreempted": False,
+        "failureAlerts": False,
         "resources": RESOURCES,
         "secrets": ["fleet-api", "wandb-api"],
         "image_pull_secrets": ["ecr-pull"],

@@ -19,6 +19,7 @@ Read [references/gates.md](references/gates.md) before submitting training, expo
 ## Operate through the supported rail
 
 - Use the generic Jobs API through the repository CLI. Run CPU preflight in the pinned image; preview the rendered request; explicitly submit once with a shared durable journal. Reconcile ambiguous POSTs instead of retrying.
+- Disable failed-job notifications on every project-owned Job and RayJob with the top-level annotation `fleet.ai/failure-alerts: "off"`. Generic Jobs API requests must set `failureAlerts: false`, and their exact preview must prove the annotation before submission. Do not patch a live object after creation. This does not disable idle-GPU alerts or change cleanup duties.
 - Use normal admission and meaningful owner-specific names. Request `c1` when authorized or `c2` for backfill; the current API derives queue priority. Recheck live policy. Never bypass admission, unsuspend manually, preempt, cancel, or modify another owner's workload.
 - Resolve images to immutable digests and record both the requested image and runtime `imageID`. A tag, Ready Pod, or catalog row alone is insufficient evidence.
 - For experiment-owned dedicated GPU serving, freeze consumer-liveness and lifecycle bounds before launch and follow [`docs/GPU_RESOURCE_LIFECYCLE.md`](../../docs/GPU_RESOURCE_LIFECYCLE.md). Drain and release idle owned capacity while diagnosing off-node; never apply that policy to shared or hosted endpoints.
