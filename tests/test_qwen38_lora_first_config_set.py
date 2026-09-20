@@ -30,7 +30,7 @@ QUALIFIED_IMAGE = (
 GATE_TEMPLATE = RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v10.template.json"
 PRODUCTION_CANARY = RUNS / "qwen38-27b-lora-sft-r64-a32-prod-canary-v1.json"
 PRODUCTION_ANCHOR = RUNS / "qwen38-27b-lora-sft-r64-a32-anchor-v1.json"
-RESUME_CANARY = RUNS / "qwen38-27b-lora-sft-r64-a32-lr1e5-resume-s42-v1.json"
+RESUME_CANARY = RUNS / "qwen38-27b-lora-sft-r64-a32-lr1e5-resume-s42-v2.json"
 BROAD_LR_VARIANTS = {
     RUNS / "qwen38-27b-lora-sft-r64-a32-lr1e5-v1.json": {
         "run_name": "chris-q38-lora-lr1-v1",
@@ -375,7 +375,7 @@ def test_qwen38_recovery_config_compiles_with_segmented_linux_safe_bundle():
     request = sft.job_request(plan)
     bundle_keys = sorted(key for key in request["env"] if key.startswith("CYBER_SFT_BUNDLE"))
 
-    assert plan["run_name"] == "chris-q38-lora-r1-s42-v1"
+    assert plan["run_name"] == "chris-q38-lora-r1-s42-v2"
     assert plan["recovery"]["checkpoint"]["optimizer_step"] == 40
     assert plan["pause_after_step"] == 42
     assert "CYBER_SFT_BUNDLE" not in request["env"]
