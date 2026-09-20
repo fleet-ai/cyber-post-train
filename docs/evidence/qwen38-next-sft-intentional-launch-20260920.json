@@ -1,0 +1,104 @@
+{
+  "schema": "cyber_qwen38_next_sft_intentional_launch_v1",
+  "observed_at": "2026-09-20T23:51:36Z",
+  "status": "v1_infrastructure_invalid_v2_cpu_preflight_running",
+  "shared_treatment": {
+    "model": "Qwen/Qwen3.8-27B",
+    "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "teacher_success_sessions": 2886,
+    "task_keys": 496,
+    "assistant_targets": 176654,
+    "unique_supervised_tokens": 57384881,
+    "epochs": 1,
+    "global_batch": 8,
+    "microbatch_per_gpu": 1,
+    "learning_rate": 0.000003,
+    "seed": 20260920,
+    "nodes_per_run": 1,
+    "gpus_per_node": 8,
+    "priority": "c1",
+    "split_sha256": "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
+    "heldout_task_families_excluded": 25,
+    "webexploitbench_excluded": true,
+    "validation_mode": "task_outcomes_only"
+  },
+  "incident": {
+    "classification": "infrastructure_invalid_before_optimizer_step",
+    "shared_error_class": "ModuleNotFoundError",
+    "root_cause": "The full-weight f5bc3b78 FSDP image consumes prepared list rows directly and does not contain the newer Megatron-LoRA-only skyrl.train.dataset.sft_dataset module.",
+    "source_proof": {
+      "repository": "https://github.com/NovaSky-AI/SkyRL",
+      "revision": "f5bc3b78dfddfb352870d5d7430cd226e5785838",
+      "sft_trainer_sha256": "a5ef8a2e22de785b6760abffdd9353f1246a5898983b4d27b4aadd8089a3579a"
+    },
+    "repair_commit": "47624df55038e703d1082329cabd0e99582a46c6",
+    "repair": "Route the staged dataset wrapper by frozen plan family and make the pinned-image CPU preflight invoke the exact staged train loader."
+  },
+  "repair_preflight": {
+    "pod": "chris-q38-t3k-context-repair-preflight-v1",
+    "pod_uid": "a50c27ce-9d99-4ac2-8d66-1198ad05eb02",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "bundle_sha256": "828716148a39bed985370c396dda75a628c7ce2ea09ce5b923c6d316bc239792",
+    "gpus": 0,
+    "priority": "c1",
+    "root_failure_alert_annotation": "off",
+    "status": "running"
+  },
+  "arms": [
+    {
+      "context_length": 65536,
+      "masked_history_tokens": 16384,
+      "motivation": "Test whether more preceding reconnaissance and tool state improves imitation of intermediate expert actions.",
+      "config": "configs/runs/qwen38-teacher3k-64k-full-b8-lr3e6-v2.json",
+      "corpus_manifest_sha256": "sha256:377720bd39a7dcb2f5c0dfd152fc9f955d4726f3f13c358dd57cac18bc84a2ae",
+      "train_parquet_sha256": "sha256:2ff865659cc0ed6a21efff3c6cf75999470a2d9bbbc86940425f45f728f73168",
+      "train_rows": 8953,
+      "planned_optimizer_steps": 1120,
+      "plan_sha256": "a6e7b1fe53493d92d0de75371d96ea02831a9681ffd6d2fe18aa0ac8c1aef927",
+      "request_sha256": "810ca332be7dc1b82312669fc20a9eb5af4a5d65dd737933aa46beb355d23a77",
+      "successor_status": "prepared_not_submitted",
+      "wandb": "https://wandb.ai/thefleet/cyber-post-train/runs/chris-q38-t3k64-b8-v2",
+      "retired_attempt": {
+        "run_name": "chris-q38-t3k64-b8-v1-4f81b385",
+        "run_id": "4f81b385-d705-4b26-bbde-c2b26ea1bf79",
+        "rayjob_uid": "0194357e-c8e9-41e9-a57f-1c5005a62d03",
+        "raycluster_name": "chris-q38-t3k64-b8-v1-4f81b385-rc8fs",
+        "pod_uid": "ce664b88-e8e0-44be-a91b-3f7082696686",
+        "ended_at": "2026-09-20T23:39:48Z",
+        "optimizer_step": 0,
+        "last_runtime_stage": "device_ready",
+        "failed_file_sha256": "c34384d53537b7df150c765f526e2dbb70f30e17a972db32fc8e1032c060321d",
+        "root_failure_alert_annotation": "off",
+        "resource_release": "raycluster_and_pod_absent_zero_gpu_held"
+      }
+    },
+    {
+      "context_length": 98304,
+      "masked_history_tokens": 24576,
+      "motivation": "Test whether the value of preceding trajectory state continues beyond 64K or saturates/reverses.",
+      "config": "configs/runs/qwen38-teacher3k-96k-full-b8-lr3e6-v2.json",
+      "corpus_manifest_sha256": "sha256:8297f035f4c5b0446578cfa46897733273286f76e55d486c9598452e5585a479",
+      "train_parquet_sha256": "sha256:d292e4cd9c7ec0e45a63274fa7b7bdb1be18509b1a512b09eb9180e050357824",
+      "train_rows": 6847,
+      "planned_optimizer_steps": 856,
+      "plan_sha256": "544eaa2f2cb7e4287a8b76fad14720aa3039882b2f793687d92aaac89e6f026b",
+      "request_sha256": "0b68db9196c79966897c774171e42fbc49b2eb36d3115c46b3e65863cddd3a1b",
+      "successor_status": "prepared_not_submitted",
+      "wandb": "https://wandb.ai/thefleet/cyber-post-train/runs/chris-q38-t3k96-b8-v2",
+      "retired_attempt": {
+        "run_name": "chris-q38-t3k96-b8-v1-f0811c4f",
+        "run_id": "f0811c4f-212c-4fa8-9f7b-976cf538e838",
+        "rayjob_uid": "c8c73329-3f61-458a-9bec-a7919bb5a312",
+        "raycluster_name": "chris-q38-t3k96-b8-v1-f0811c4f-mm2fv",
+        "pod_uid": "d5024e01-3d74-4cf4-9e1b-5eadbb0240b1",
+        "ended_at": "2026-09-20T23:41:59Z",
+        "optimizer_step": 0,
+        "last_runtime_stage": "device_ready",
+        "failed_file_sha256": "333843f1c8c45e3748add6a4745f2cb20bacf1870880c4fc2c94ab94fb9dcdf1",
+        "root_failure_alert_annotation": "off",
+        "resource_release": "raycluster_and_pod_absent_zero_gpu_held"
+      }
+    }
+  ],
+  "next_gate": "Require both exact-image zero-GPU preflights to pass, merge the repair, reprepare from main, then recheck duplicate-free outputs, total active nodes, root alert annotation, c1, and server dry-run before exactly one create per successor."
+}

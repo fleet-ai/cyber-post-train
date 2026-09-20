@@ -403,22 +403,49 @@ def test_teacher3k_later_context_full_arms_change_only_identity_and_lifecycle(co
     assert full_plan == expected_plan
 
 
+@pytest.mark.parametrize("context", ["64", "96"])
+def test_teacher3k_context_runtime_repair_changes_only_external_identity(context):
+    retired = json.loads(
+        (RUNS / f"qwen38-teacher3k-{context}k-full-b8-lr3e6-v1.json").read_text()
+    )
+    successor = json.loads(
+        (RUNS / f"qwen38-teacher3k-{context}k-full-b8-lr3e6-v2.json").read_text()
+    )
+
+    expected = json.loads(json.dumps(retired))
+    expected["name"] = successor["name"]
+    expected["output_root"] = successor["output_root"]
+    expected["wandb"]["run_id"] = successor["wandb"]["run_id"]
+    expected["wandb"]["name"] = successor["wandb"]["name"]
+    expected["wandb"]["tags"].append("runtime-dataset-contract-repair")
+    assert successor == expected
+
+    retired_plan = sft.compile_sft(retired, relative_to=RUNS)
+    successor_plan = sft.compile_sft(successor, relative_to=RUNS)
+    expected_plan = json.loads(json.dumps(retired_plan))
+    expected_plan["run_name"] = successor_plan["run_name"]
+    expected_plan["output_root"] = successor_plan["output_root"]
+    expected_plan["wandb"]["run_id"] = successor_plan["wandb"]["run_id"]
+    expected_plan["wandb"]["name"] = successor_plan["wandb"]["name"]
+    expected_plan["wandb"]["tags"].append("runtime-dataset-contract-repair")
+    assert successor_plan == expected_plan
+
+
 @pytest.mark.parametrize(("context", "position"), [("64", 0), ("96", 1)])
-def test_teacher3k_later_context_ready_queue_binds_current_inputs(context, position):
+def test_teacher3k_later_context_launch_binds_current_inputs(context, position):
     evidence = json.loads(
         (
             EVIDENCE
-            / "qwen38-teacher3k-long-context-full-ready-queue-20260920.json"
+            / "qwen38-next-sft-intentional-launch-20260920.json"
         ).read_text()
     )
-    row = evidence["full_run_queue"][position]
+    row = evidence["arms"][position]
     config_path = ROOT / row["config"]
     config = json.loads(config_path.read_text())
     plan = sft.compile_sft(config, relative_to=RUNS)
     request = sft.job_request(plan)
 
-    assert evidence["status"] == "scientifically_qualified_queue_held_no_submission"
-    assert hashlib.sha256(config_path.read_bytes()).hexdigest() == row["config_file_sha256"]
+    assert evidence["status"] == "v1_infrastructure_invalid_v2_cpu_preflight_running"
     assert sft.digest(plan) == row["plan_sha256"]
     assert sft.digest(request) == row["request_sha256"]
     assert plan["recipe"]["max_length"] == int(context) * 1024
@@ -427,11 +454,15 @@ def test_teacher3k_later_context_ready_queue_binds_current_inputs(context, posit
     assert request["gpus_per_worker"] == 8
     assert request["priority_class"] == "c1"
     assert request["requeueIfPreempted"] is False
+    assert request["failureAlerts"] is False
+    assert row["successor_status"] == "prepared_not_submitted"
+    assert row["retired_attempt"]["optimizer_step"] == 0
+    assert row["retired_attempt"]["root_failure_alert_annotation"] == "off"
+    assert row["retired_attempt"]["resource_release"].endswith("zero_gpu_held")
+    assert row["motivation"]
 
-    gate = evidence["accepted_canary_gates"][position]
-    gate_path = ROOT / gate["evidence"]
+    gate_path = EVIDENCE / f"qwen38-teacher3k-{context}k-canary-accepted-20260920.json"
     gate_evidence = json.loads(gate_path.read_text())
-    assert hashlib.sha256(gate_path.read_bytes()).hexdigest() == gate["evidence_file_sha256"]
     assert gate_evidence["status"] == "accepted_one_step_and_released"
     assert gate_evidence["treatment"]["context_length"] == int(context) * 1024
     assert gate_evidence["scientific_result"]["optimizer_step"] == 1
