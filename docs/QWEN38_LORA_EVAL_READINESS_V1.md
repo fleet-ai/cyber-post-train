@@ -68,7 +68,7 @@ successful verifier Pod UID was `3da2136a-e78c-4e6f-a285-c6821b5fce53`.
 An earlier verifier Pod, UID `5f40798b-db9f-47ac-bbe6-5b463f122173`, never
 started because `ghcr-pull` was omitted; it requested no GPU and produced no
 scientific output. UID-bound cleanup was confirmed for all three exact names,
-with zero GPUs remaining. The current one-step template and exact runtime gate
+with zero GPUs remaining. The current V3 one-step template and exact runtime gate
 now bind the V2 public manifest and staged root
 `/mnt/sfs/jobs/chris-q38-study-corpora-v1/fresh75-teacher-final-lock-free-v2/data`.
 The runtime gate also binds
@@ -80,9 +80,16 @@ corpus-manifest digest
 `sha256:5db5600ac9f403fd147b2ecbf6068b514d075d07ac683d97bc83319c6e89d149`
 and `max_steps=866`. This is the full-epoch ceiling for 866 rows at global
 batch 1; the qualification run remains configured to pause after optimizer step
-1. The CPU data/runtime preflight and real one-step acceptance are still
-pending. Corpus qualification and binding do not authorize training or an
-evaluation launch.
+1. The CPU data/runtime preflight and the exact TP8 setup probe passed. The V2
+   production attempt then reached `device_ready` but failed at optimizer step
+   zero because the immutable-parquet loader returned a plain list while the
+   pinned SkyRL trainer required its native dataset object's
+   `sequence_lengths` contract. It produced no checkpoint or model outcome and
+   released all eight GPUs. V3 wraps those rows in SkyRL's own `TextDataset`,
+   retires the V2 create-once identity, and extends the exact-image setup probe
+   through the native statistics boundary that exposed the defect. Real
+   one-step acceptance remains pending. Corpus qualification and binding do
+   not authorize an evaluation launch.
 
 ## Readiness matrix
 
@@ -93,7 +100,7 @@ evaluation launch.
 | WebExploitBench collection code | `evals/webexploitbench/tensorlake/collection_launcher.py`, `collection_pair.py`, `collection_supervisor.py` | locally tested; cannot seal a plan without a newly qualified snapshot, exact projects/images, and model identities |
 | WebExploitBench scoring code | `evals/webexploitbench/tensorlake/deferred_score.py` | locally tested; cannot seal a score plan before accepted rollout collections and judge qualification exist |
 | Fleet held-out launcher | `cyber-post-train eval`, implemented by `evals/fleet/evaluate.py` | locally tested; runnable config files still need exact live base/candidate routes, immutable worker images, verifier/prompt checks, and unique campaign storage |
-| candidate training artifact | `training/qwen38_lora_artifacts.py::validate_checkpoint_receipt` | validator, exact source/image producer, and leak-free V2 one-step corpus are qualified and bound; CPU preflight, the real one-step checkpoint and accepted receipt are still missing |
+| candidate training artifact | `training/qwen38_lora_artifacts.py::validate_checkpoint_receipt` | validator, exact source/image producer, leak-free V2 corpus, CPU preflight, and TP8 setup are qualified; production V2 failed before its first step on the now-repaired native dataset interface, so the V3 real one-step checkpoint and accepted receipt are still missing |
 | candidate merged model | `training/qwen38_lora_artifacts.py::validate_export_receipt` | validator present; separate zero-step reload/merge/export producer and accepted receipt still missing |
 | candidate serving | `evals/webexploitbench/tensorlake/collection_provenance.py` | blocked until registration and live-parity receipts bind the exact merged model and route |
 | matched evaluation launch | commands below | closed until every row above is accepted; no output root, database, sandbox, or scored attempt has been created by this work |

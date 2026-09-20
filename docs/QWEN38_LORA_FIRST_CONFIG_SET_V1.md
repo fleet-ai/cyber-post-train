@@ -27,7 +27,7 @@ remain pending. Corpus qualification and binding are not training acceptance.
 
 | Purpose | File | Frozen treatment |
 |---|---|---|
-| Exact-model one-step gate | `configs/runs/qwen38-27b-lora-sft-r64-a32-one-step-v2.template.json` | exact Qwen3.8 revision; BF16 Megatron LoRA rank 64 / alpha 32 over all linear layers; TP8 / PP1 / CP1 / DP1; learning rate `3e-5`; global batch 1; one 8-GPU node; 16,384-token final-test-family-free V2 Fresh75 corpus; 866 rows and payload-derived `max_steps=866`; planned pause after optimizer step 1; c1; W&B. The v1 operational identity is retired after its infrastructure-invalid run; v2 changes only the create-once run, output and W&B identities plus the runtime-path repair tag. |
+| Exact-model one-step gate | `configs/runs/qwen38-27b-lora-sft-r64-a32-one-step-v3.template.json` | exact Qwen3.8 revision; BF16 Megatron LoRA rank 64 / alpha 32 over all linear layers; TP8 / PP1 / CP1 / DP1; learning rate `3e-5`; global batch 1; one 8-GPU node; 16,384-token final-test-family-free V2 Fresh75 corpus; 866 rows and payload-derived `max_steps=866`; planned pause after optimizer step 1; c1; W&B. V1 and V2 operational identities are retired after infrastructure-invalid runs. V3 preserves the V2 runtime-path repair and additionally wraps the immutable-parquet rows in SkyRL's native dataset contract; the exact setup probe now exercises that contract before a paid run. |
 | First production anchor | `configs/runs/qwen38-27b-lora-sft-r64-a32-anchor-v1.template.json` | exact Qwen3.8 revision; BF16 LoRA rank 64 / alpha 32; learning rate `3e-5`; global batch 8; one 8-GPU node; one epoch; 32,768-token broad teacher-action corpus; c1; W&B |
 
 The one-step gate reuses every eligible row it safely can from the immutable

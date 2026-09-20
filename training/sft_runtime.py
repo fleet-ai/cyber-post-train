@@ -232,8 +232,8 @@ QWEN38_LORA_ONE_STEP_PLAN = {
         "wandb",
     ],
     "schema": DENSE_SCHEMA,
-    "run_name": "chris-q38-lora-sft-c1-v2",
-    "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v2",
+    "run_name": "chris-q38-lora-sft-c1-v3",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v3",
     "model": {
         "repo": "Qwen/Qwen3.8-27B",
         "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
@@ -282,8 +282,8 @@ QWEN38_LORA_ONE_STEP_PLAN = {
         "entity": "thefleet",
         "project": "cyber-post-train",
         "group": "qwen38-lora-sft-goal-v1",
-        "run_id": "chris-q38-lora-sft-c1-v2",
-        "name": "chris-q38-lora-sft-c1-v2",
+        "run_id": "chris-q38-lora-sft-c1-v3",
+        "name": "chris-q38-lora-sft-c1-v3",
         "tags": [
             "qwen38",
             "lora",
@@ -294,6 +294,7 @@ QWEN38_LORA_ONE_STEP_PLAN = {
             "planned-pause-step1",
             "task-outcomes-only",
             "runtime-path-repair",
+            "native-dataset-contract-repair",
         ],
     },
 }
@@ -2108,7 +2109,16 @@ def _make_trainer_class():
             )
 
         def load_dataset(self):
-            return self._load_split("train")
+            # The pinned SkyRL trainer requires every training source to expose
+            # ``sequence_lengths`` for its pre-dataloader statistics pass.  A
+            # bare list happens to satisfy torch's map-style loader contract,
+            # but it fails that newer native SFTDataset contract before the
+            # first forward pass.  Use SkyRL's own materialized wrapper so this
+            # custom immutable-parquet loader follows the same interface as its
+            # built-in tokenize-on-load path.
+            from skyrl.train.dataset.sft_dataset import TextDataset
+
+            return TextDataset(self._load_split("train"))
 
         def load_eval_dataset(self):
             if "dev" not in self.plan["datasets"]:
@@ -2432,11 +2442,28 @@ def _run_setup_probe(plan: dict, *, with_tracker: bool = False) -> dict:
     try:
         trainer.setup()
         snapshot_rank_count = None
+        qwen38_dataset_rows = None
         if _is_qwen38_lora(plan):
             snapshots = trainer.dispatch.collect_lora_qualification_snapshots("policy")
             snapshot_rank_count = len(
                 _qwen38_rank_snapshots(snapshots, stage="setup probe pre-step")
             )
+            # Exercise the exact pinned image's post-setup dataset interface.
+            # SkyRL reads ``sequence_lengths`` before it constructs the first
+            # dataloader; an earlier probe stopped just short of that boundary
+            # and therefore missed a list-vs-SFTDataset contract drift.
+            training_dataset = trainer.load_dataset()
+            trainer._log_dataset_stats(training_dataset)
+            lengths = [int(v) for v in training_dataset.sequence_lengths]
+            qwen38_dataset_rows = len(training_dataset)
+            if (
+                qwen38_dataset_rows != plan["datasets"]["train"]["rows"]
+                or len(lengths) != qwen38_dataset_rows
+                or not lengths
+                or min(lengths) <= 0
+                or max(lengths) > plan["recipe"]["max_length"]
+            ):
+                raise ValueError("Qwen3.8 native dataset contract does not match the plan")
         if "dev" not in plan["datasets"] and trainer.load_eval_dataset() is not None:
             raise ValueError("task-outcome training unexpectedly produced an eval dataset")
         result = {
@@ -2447,6 +2474,8 @@ def _run_setup_probe(plan: dict, *, with_tracker: bool = False) -> dict:
         }
         if snapshot_rank_count is not None:
             result["snapshot_rank_count"] = snapshot_rank_count
+        if qwen38_dataset_rows is not None:
+            result["dataset_contract_rows"] = qwen38_dataset_rows
         return result
     except BaseException as exc:
         return {

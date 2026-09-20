@@ -228,6 +228,20 @@ def _run_qwen38_setup_probe_with_snapshots(tmp_path, monkeypatch, snapshots):
             events.append(("collect_lora_qualification_snapshots", model))
             return snapshots
 
+        def load_dataset(self):
+            events.append("load_dataset")
+
+            class Dataset:
+                sequence_lengths = [8] * value["datasets"]["train"]["rows"]
+
+                def __len__(self):
+                    return len(self.sequence_lengths)
+
+            return Dataset()
+
+        def _log_dataset_stats(self, dataset):
+            events.append(("dataset_stats", len(dataset.sequence_lengths)))
+
         def setup(self):
             events.append("setup")
             self.public_runtime_stage = "device_ready"
@@ -255,6 +269,7 @@ def test_qwen38_setup_probe_validates_complete_pre_step_snapshot(tmp_path, monke
     )
 
     assert result == {
+        "dataset_contract_rows": value["datasets"]["train"]["rows"],
         "optimizer_steps": 0,
         "plan_sha256": value["plan_sha256"],
         "snapshot_rank_count": 8,
@@ -264,6 +279,8 @@ def test_qwen38_setup_probe_validates_complete_pre_step_snapshot(tmp_path, monke
     assert events == [
         "setup",
         ("collect_lora_qualification_snapshots", "policy"),
+        "load_dataset",
+        ("dataset_stats", value["datasets"]["train"]["rows"]),
         "shutdown",
     ]
 
@@ -363,6 +380,43 @@ def test_train_only_wrapper_returns_no_eval_dataset(monkeypatch):
     trainer.plan = {"datasets": {"train": {}}}
 
     assert trainer.load_eval_dataset() is None
+
+
+def test_custom_train_loader_uses_native_dataset_contract(monkeypatch):
+    """The pinned image reads ``sequence_lengths`` before building its loader."""
+
+    class TextDataset:
+        def __init__(self, rows):
+            self.rows = rows
+
+        @property
+        def sequence_lengths(self):
+            return [len(row["input_ids"]) for row in self.rows]
+
+    modules = {
+        "skyrl.backends.skyrl_train.training_batch": {"pad_training_input_batch": None},
+        "skyrl.train.dataset.sft_dataset": {"TextDataset": TextDataset},
+        "skyrl.train.sft_trainer": {
+            "SFTTrainer": object,
+            "tokenize_chat_example": None,
+        },
+        "skyrl.train.utils.callbacks": {"TrainingCallback": object},
+        "skyrl.train.utils.tracking": {"Tracking": object},
+        "skyrl.train.utils.utils": {"Timer": object},
+    }
+    for name, values in modules.items():
+        module = ModuleType(name)
+        module.__dict__.update(values)
+        monkeypatch.setitem(sys.modules, name, module)
+    trainer_class = _make_trainer_class()
+    trainer = trainer_class.__new__(trainer_class)
+    rows = [{"input_ids": [1, 2]}, {"input_ids": [3, 4, 5]}]
+    trainer._load_split = lambda split: rows if split == "train" else None
+
+    dataset = trainer.load_dataset()
+
+    assert dataset.rows is rows
+    assert dataset.sequence_lengths == [2, 3]
 
 
 def test_recipe_keeps_tail_batch_and_disables_inline_export(tmp_path):
