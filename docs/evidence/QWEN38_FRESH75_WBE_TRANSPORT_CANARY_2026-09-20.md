@@ -126,17 +126,16 @@ authorized until this canary accepts.
 
 ## Prepared expansion
 
-Four sealed V6 replicas contain 15 distinct benchmark tasks per arm. They are
-historical and cannot be launched against the changed runner digest. Together
-they represent 60 baseline and 60 candidate score-free attempts. The baseline
-60 must be rebuilt and resealed only after the V7 task-0 transport canary
-accepts. Candidate work
-also requires a newly Ready exact candidate route and fresh live-parity and
-duplicate checks. No expansion was launched when this note was written.
+Four sealed V7 replicas contain 15 distinct benchmark tasks per arm. Together
+they represent 60 baseline and 60 candidate score-free attempts. They all bind
+the bounded runner. The baseline 60 may start only after the V7 task-0
+transport canary accepts and a fresh duplicate census remains clean. Candidate
+work also requires a newly Ready exact candidate route and fresh live-parity
+and duplicate checks. No expansion was launched when this note was written.
 
 | Replica | Base plan | Candidate plan | Pair receipt |
 |---|---|---|---|
-| 0 | `sha256:8787b0a4ca1ca2789b9db3fa0d7be1d3e33db0408d8573871f02499e45be055f` | `sha256:acf32c2bb8b2cc897e10d988a3cbde5be867f26c7565f2286ededc4eed7cef9d` | `sha256:69b991e43f291126b49f51bfc5a889a847e0679d9e2389602de0079064b65832` |
-| 1 | `sha256:29f0eb7c376df66523599a4004ee8c2a8bf782b45c170a59f0bc171f2fda0ca0` | `sha256:247137ccef47f6f21682f9a8809ec4c2f1cf2f568b9971ebb1dfcff3d773ce50` | `sha256:cbb47c8d7534ef69a95cb433609006c08228cc577f579d08803dbda9f81a659b` |
-| 2 | `sha256:8c5de3aeba33560786e04d76a8f14948699890c018951750b2a863a8e4d29568` | `sha256:0548cb7881edd2dc55d9fa0b4f46868e09c68fbf4bfdeb7005105e7567196364` | `sha256:ea8338f1a9d72fee1480a3a3d22bb3a27b9351d6ab2713408e7c695cea09fbaf` |
-| 3 | `sha256:daba55960be71ac13a45499c63f830e17749482a7fb198b1cc14bc89d52a7275` | `sha256:e1405d1f43de910c300422469d8ab93d5e876f538ac7572abf3c5eb94297dba4` | `sha256:8b4457d1a459790d098a7dba7ae439c02bdfd1452fc44bec175a6338d4e79fc3` |
+| 0 | `sha256:888f10e160b3dd59235169f6ca81dfdf9e5196e848f3248674ea2cfa0d8b1258` | `sha256:8d44bf3aeab5f668acd75db54d7d1e1a054a915a4a9dc835b465ce8cdec66050` | `sha256:35550529bbf4240aa14b3efc8d0011f60bd57b1a3e7b8de5708927189b0ac6b6` |
+| 1 | `sha256:8d89242ec2e9a7cfbf5c8756c2ee491d405f0c485f07b092f43550b301974329` | `sha256:4aad348843755d337eb2bc949e0f6cdf87829b0af21a2f3c939c2437594db102` | `sha256:5c5c11df2ede02444217b447913d3ce03d069c5f885f3f4eaa5a11a21fc311ef` |
+| 2 | `sha256:9cea7b2d5a068ba40ff4b9167e6cf4b2a457b59b0173136534cbfa4c56c248c3` | `sha256:f50207816bcec4971e2110323bb04669d74b595bbcb9573155ceb63f014e25fc` | `sha256:accb20b4498d0aad391b80f274bc554b97d1131afb11aaad8a3248d3f7193448` |
+| 3 | `sha256:8df367a41275c8945119a57739560931ea15c59179da3f623e58493d487c8e64` | `sha256:9dd416b740a342fc010b125a47cab9ad899c5456624db935445d1448a7b21322` | `sha256:740ba340ab891c1fa4ef94e6dc15786621cb4d91492a49050480e55eb0cc7c4c` |
