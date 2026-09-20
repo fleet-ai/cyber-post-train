@@ -1,7 +1,8 @@
 {
   "schema_version": 1,
-  "observed_at": "2026-09-20T22:35:00Z",
+  "observed_at": "2026-09-20T23:06:21Z",
   "purpose": "Create-once checkpoint and evaluation ledger for the Qwen3.8-27B Fleet cyber lift study. A row is not a capability result until its exact matched evaluation is accepted.",
+  "serving_readiness_matrix": "configs/evaluation/qwen38-checkpoint-serving-readiness-v1.json",
   "comparison_contract": {
     "webexploitbench_harness": "opencode",
     "qwen_code_allowed": false,
@@ -46,24 +47,24 @@
       "artifact_id": "q38-fresh75-step230",
       "checkpoint_path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/checkpoints/global_step_230",
       "export_path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/hf-export-step230-v1",
-      "serving_status": "registered_paused_not_live_parity_qualified",
+      "serving_status": "live_target_available_not_live_parity_qualified",
       "priority": 1,
       "motivation": "Evaluate the strongest existing broad full-SFT artifact and determine whether its supervised training transfers to held-out exploitation capability.",
       "web_status": "needs_fresh_matched_pair",
       "web_evidence": "One valid standalone 15-of-15 OpenCode pass-at-1 run exists, but it lacks a newly matched base arm. A wider pass-at-8 effort is incomplete at 104 of 120 sessions.",
       "fleet_status": "not_started",
-      "next_action": "Qualify exact serving parity, then launch matched OpenCode WEB and representative exact-version Fleet holdout evaluations."
+      "next_action": "Use the exact live target in the serving-readiness matrix to qualify matched parity and duplicate identity, then launch matched OpenCode WEB and representative exact-version Fleet holdout evaluations."
     },
     {
       "artifact_id": "q38-teacher-dense-v5-step186",
       "checkpoint_path": "/mnt/sfs/jobs/chris-cyber-q38-teacher-dense-v5/checkpoints/global_step_186",
       "export_path": "/mnt/sfs/jobs/chris-cyber-q38-teacher-dense-v5/hf-export-v1",
-      "serving_status": "not_qualified",
+      "serving_status": "staged_registered_paused_not_live_parity_qualified",
       "priority": 2,
       "motivation": "Measure whether imitation of successful stronger-teacher trajectories transfers to unseen blackbox exploitation tasks.",
       "web_status": "no_accepted_result",
       "fleet_status": "not_started",
-      "next_action": "Qualify serving, then run the same matched WEB and Fleet protocols as the base control."
+      "next_action": "JIT-resume the exact paused registration only when a bounded evaluator is ready, qualify live parity, and then run the same matched WEB and Fleet protocols as the base control."
     },
     {
       "artifact_id": "q38-self-sft-step44",
@@ -74,7 +75,7 @@
       "motivation": "Separate the effect of self-imitation from stronger-teacher imitation under the same evaluation contract.",
       "web_status": "not_started",
       "fleet_status": "not_started",
-      "next_action": "Qualify serving, then run the same matched WEB and Fleet protocols as the base control."
+      "next_action": "Create-once stage and paused registration from the accepted export and GPU-check receipts, then JIT-resume for matched parity and evaluation."
     },
     {
       "artifact_id": "q38-available-a-lr30-step76",
@@ -85,7 +86,7 @@
       "motivation": "Test whether the aggressive learning-rate recipe produced useful capability change rather than merely lower imitation loss or destructive drift.",
       "web_status": "not_started",
       "fleet_status": "not_started",
-      "next_action": "Qualify serving, then run the same matched WEB and Fleet protocols as the base control."
+      "next_action": "First accept one bounded GPU load and finite forward from the exact HF export; then create-once stage, register paused, and JIT-resume for matched parity and evaluation."
     }
   ],
   "in_progress_candidates": [
