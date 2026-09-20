@@ -375,3 +375,36 @@ failure filesystem before releasing the exact sandbox:
 A fresh control-plane read reports that sandbox as `terminated`, with no
 active inventory match. No rollout bundle was accepted, so deferred scoring,
 candidate activation, and wider fanout remain closed.
+
+## V18 deterministic failure diagnosis and local repair
+
+One no-network, metadata-only restore of the preserved V18 failure snapshot
+classified the failure without reading benchmark text, model output, rollout
+content, or scores. The restore sandbox
+`ksxj5fwfreqmkh02l24jj` is terminated and a fresh inventory contains no row
+with its exact ID or name.
+
+The sanitized controller log was 3,738 bytes at
+`sha256:fc17662fa3d352ab8284fb4b5c9550948e1f48fa583cd94e6b0b8c5e29b4a6cd`.
+Its final exception was `OSError` with error number 30, meaning a write was
+attempted on a read-only filesystem. The exact rejected path was
+`/workspace/wbe-collection-qualification-wbe-fresh75-pair-v18/projects/.cage_runs`.
+
+This identifies one deterministic launcher defect. CAGE stores runs beside the
+benchmark module selected by the project. The project selected
+`../benchmark.py`, so its real run directory was the `projects/.cage_runs`
+path above. The launcher had instead installed the writable symlink under the
+CAGE source tree. CAGE therefore tried to create its real run directory in the
+read-only workspace before any rollout or scoring began.
+
+The launcher now derives this directory from every sealed project's benchmark
+module and rejects a mismatched plan before provider creation. A regression
+test proves the legacy path is rejected. The collection-launcher, runner,
+supervisor, rollout-bundle, and deferred-scoring test suites pass. V18 remains
+immutable and must not be replayed. The complete sanitized diagnosis is in
+[`qwen38-fresh75-wbe-v18-cage-runs-path-repair-20260920.json`](qwen38-fresh75-wbe-v18-cage-runs-path-repair-20260920.json).
+
+Because the launcher source changed, the next permitted action is a fresh
+qualification followed by exactly one newly named baseline task-0 score-free
+collection. Candidate work and wider fanout remain closed. Deferred scoring
+may run only after the new collection bundle is independently accepted.
