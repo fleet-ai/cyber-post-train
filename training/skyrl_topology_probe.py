@@ -38,7 +38,7 @@ PREFLIGHT_PACKET_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_packet_v1"
 PREFLIGHT_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_preview_v1"
 PREFLIGHT_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_cpu_preflight_rejection_v1"
 PROBE_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_failure_v1"
-PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v15"
+PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v16"
 PREFLIGHT_RECEIPT = "/dev/termination-log"
 MODULE = "training.skyrl_topology_probe"
 CONFIG_PATH = ROOT / "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json"
@@ -46,6 +46,7 @@ IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
     "89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
 )
+MODEL_BINDING_SHA256 = "47667a6a3220cdf8d0a7a50f29ed32d3ee56e3e7faa428d4c0518d6813a7f7bb"
 RUNTIME_FILES = (
     "training/skyrl_topology_probe.py",
     "training/skyrl.py",
@@ -88,7 +89,7 @@ def _expected_execution() -> dict:
         "namespace": "fleet-train-jobs",
         "project_name": "fleetjob-dev",
         "auth_secret": {"name": "fleet-api", "key": "FLEET_API_KEY"},
-        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v5",
+        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v6",
         "output_pvc": "sfs-shared",
         "output_registry_mount": "/mnt/cyber-output-registry",
         "output_registry_subpath": "models/fleetjob-dev",
@@ -217,14 +218,17 @@ def _validate(plan: dict) -> skyrl.SkyRLConfig:
     arguments = skyrl.SkyRLConfig(**plan["arguments"])
     overrides = skyrl.overrides(arguments)
     execution = plan["execution"]
-    expected_model = _bound_model(_config(CONFIG_PATH))
     if (
         plan.get("schema") != SCHEMA
         or plan.get("runtime_sha256") != digest(_runtime())
         or plan.get("run_name") != arguments.name
         or plan.get("output_root") != arguments.output_root
         or plan.get("native_overrides") != overrides
-        or plan.get("model") != expected_model
+        # Runtime bundles intentionally do not carry local config/model-lock
+        # files.  This exact digest binds the complete repository, revision,
+        # root and per-file size/SHA inventory compiled from those sealed
+        # sources, without creating a second mutable runtime authority.
+        or digest(plan.get("model")) != MODEL_BINDING_SHA256
         or plan.get("engine")
         != {"num_engines": 2, "tensor_parallel_size": 4, "context_tokens": 98304}
         or plan.get("deadlines")

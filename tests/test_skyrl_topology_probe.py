@@ -63,7 +63,7 @@ def test_probe_is_distinct_dev_only_bounded_and_zero_update(plan) -> None:
         "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
     )
     assert plan["model"]["root"] == (
-        "/mnt/sfs/jobs/chris-q38-skyrl-probe-v5/models/base"
+        "/mnt/sfs/jobs/chris-q38-skyrl-probe-v6/models/base"
     )
 
 
@@ -71,13 +71,13 @@ def test_probe_fleetjob_is_two_four_gpu_pods_with_explicit_user(plan) -> None:
     manifest = probe.fleetjob_manifest(plan)
     spec = manifest["spec"]
     assert manifest["metadata"] == {
-        "name": "chris-q38-skyrl-probe-v5",
+        "name": "chris-q38-skyrl-probe-v6",
         "namespace": "fleet-train-jobs",
     }
     assert spec["fleet"] == {
         "projectName": "fleetjob-dev",
         "auth": {"secretRef": {"name": "fleet-api", "key": "FLEET_API_KEY"}},
-        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v5",
+        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v6",
         "models": [
             {
                 "path": "Qwen/Qwen3.8-27B",
@@ -261,11 +261,18 @@ def test_probe_runtime_bundle_imports_without_source_checkout(plan, tmp_path) ->
         path.write_text(content)
     for directory in ("training", "cyber_post_train", "evals", "evals/fleet"):
         (bundle / directory / "__init__.py").write_text("")
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(json.dumps(plan))
     result = subprocess.run(
         [
             sys.executable,
             "-c",
-            "from training import skyrl_topology_probe as p; assert p.SCHEMA.endswith('_v1')",
+            (
+                "import json,pathlib; "
+                "from training import skyrl_topology_probe as p; "
+                "v=json.loads(pathlib.Path('plan.json').read_text()); "
+                "p.request(v,fleetjob_transport=True,cpu_preflight=True)"
+            ),
         ],
         cwd=tmp_path,
         env={**os.environ, "PYTHONPATH": str(bundle)},
