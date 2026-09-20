@@ -260,3 +260,100 @@ def test_hf_inspection_reopens_every_indexed_bf16_tensor(tmp_path: Path) -> None
     assert export.inspect_hf_export(tmp_path, allowed_files=accepted_surface) == first
     with pytest.raises(ValueError, match="flat"):
         export.inspect_hf_export(tmp_path)
+
+
+def test_completion_restores_only_frozen_visual_and_mtp_base_layout(tmp_path: Path) -> None:
+    torch = pytest.importorskip("torch")
+    save_file = pytest.importorskip("safetensors.torch").save_file
+    base = tmp_path / "base"
+    partial = tmp_path / "partial"
+    completed = tmp_path / "completed"
+    repeated = tmp_path / "repeated"
+    base.mkdir()
+    partial.mkdir()
+    shard = "model-00001-of-00001.safetensors"
+    base_tensors = {
+        "model.language.weight": torch.zeros((2, 2), dtype=torch.bfloat16),
+        "model.visual.proj.weight": torch.ones((2, 2), dtype=torch.bfloat16),
+        "mtp.norm.weight": torch.full((2,), 2, dtype=torch.bfloat16),
+    }
+    save_file(base_tensors, base / shard)
+    save_file(
+        {"model.language.weight": torch.full((2, 2), 3, dtype=torch.bfloat16)},
+        partial / shard,
+    )
+
+    def write_surface(root: Path, names: list[str]) -> None:
+        (root / "model.safetensors.index.json").write_text(
+            json.dumps({"metadata": {"total_size": 20}, "weight_map": {n: shard for n in names}})
+        )
+        for name in ("config.json", "tokenizer.json", "tokenizer_config.json"):
+            (root / name).write_text("{}\n")
+        (root / "chat_template.jinja").write_text("{{ messages }}\n")
+
+    write_surface(base, list(base_tensors))
+    write_surface(partial, ["model.language.weight"])
+    base_files = {path.name for path in base.iterdir() if path.is_file()}
+    result = export.complete_native_export_from_base(
+        partial,
+        base,
+        completed,
+        base_files=base_files,
+    )
+    repeated_result = export.complete_native_export_from_base(
+        partial,
+        base,
+        repeated,
+        base_files=base_files,
+    )
+    assert result == repeated_result == {
+        "base_tensor_count": 3,
+        "native_tensor_count": 1,
+        "restored_frozen_tensor_count": 2,
+        "restored_prefixes": ["model", "mtp"],
+    }
+    base_inspection = export.inspect_hf_export(base)
+    completed_inspection = export.inspect_hf_export(completed)
+    assert completed_inspection == export.inspect_hf_export(repeated)
+    assert completed_inspection["layout_sha256"] == base_inspection["layout_sha256"]
+    assert (
+        completed_inspection["tensors"]["model.language.weight"]["sha256"]
+        != base_inspection["tensors"]["model.language.weight"]["sha256"]
+    )
+    for name in ("model.visual.proj.weight", "mtp.norm.weight"):
+        assert (
+            completed_inspection["tensors"][name]["sha256"]
+            == base_inspection["tensors"][name]["sha256"]
+        )
+
+
+def test_completion_rejects_an_omitted_language_tensor(tmp_path: Path) -> None:
+    torch = pytest.importorskip("torch")
+    save_file = pytest.importorskip("safetensors.torch").save_file
+    base = tmp_path / "base"
+    partial = tmp_path / "partial"
+    base.mkdir()
+    partial.mkdir()
+    shard = "model-00001-of-00001.safetensors"
+    save_file(
+        {
+            "model.language.weight": torch.zeros((2, 2), dtype=torch.bfloat16),
+            "model.language.bias": torch.zeros(2, dtype=torch.bfloat16),
+        },
+        base / shard,
+    )
+    save_file({"model.language.weight": torch.ones((2, 2), dtype=torch.bfloat16)}, partial / shard)
+    for root, names in (
+        (base, ["model.language.weight", "model.language.bias"]),
+        (partial, ["model.language.weight"]),
+    ):
+        (root / "model.safetensors.index.json").write_text(
+            json.dumps({"weight_map": {name: shard for name in names}})
+        )
+    with pytest.raises(ValueError, match="non-frozen language tensor"):
+        export.complete_native_export_from_base(
+            partial,
+            base,
+            tmp_path / "completed",
+            base_files={path.name for path in base.iterdir()},
+        )

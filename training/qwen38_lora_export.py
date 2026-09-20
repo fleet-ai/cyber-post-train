@@ -23,6 +23,7 @@ import os
 import re
 import shutil
 import time
+from contextlib import ExitStack
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -441,6 +442,102 @@ def inspect_hf_export(root: Path, *, allowed_files: set[str] | None = None) -> d
     }
 
 
+def complete_native_export_from_base(
+    partial: Path,
+    base: Path,
+    destination: Path,
+    *,
+    base_files: set[str],
+) -> dict:
+    """Restore only the frozen visual/MTP tensors omitted by LM-only export."""
+    from safetensors import safe_open
+    from safetensors.torch import save_file
+
+    if destination.exists() or destination.is_symlink():
+        raise FileExistsError("completed export destination already exists")
+    if partial.is_symlink() or not partial.is_dir() or base.is_symlink() or not base.is_dir():
+        raise ValueError("native/base export roots must be direct directories")
+    if not base_files or any(
+        PurePosixPath(name).is_absolute()
+        or len(PurePosixPath(name).parts) != 1
+        or str(PurePosixPath(name)) != name
+        for name in base_files
+    ):
+        raise ValueError("accepted base inference surface contains an unsafe path")
+
+    def read_index(root: Path) -> dict[str, str]:
+        value = json.loads((root / "model.safetensors.index.json").read_text())
+        weight_map = value.get("weight_map")
+        if not isinstance(weight_map, dict) or not weight_map or any(
+            not isinstance(name, str)
+            or not isinstance(shard, str)
+            or not re.fullmatch(r"model-\d{5}-of-\d{5}\.safetensors", shard)
+            for name, shard in weight_map.items()
+        ):
+            raise ValueError("HF tensor index is incomplete or unsafe")
+        return weight_map
+
+    base_map = read_index(base)
+    partial_map = read_index(partial)
+    base_names = set(base_map)
+    partial_names = set(partial_map)
+    if not partial_names or not partial_names <= base_names:
+        raise ValueError("native LM export is not a strict subset of the exact base layout")
+    restored = base_names - partial_names
+    if any(not name.startswith(("model.visual.", "mtp.")) for name in restored):
+        raise ValueError("native export omitted a non-frozen language tensor")
+    base_shards = set(base_map.values())
+    partial_shards = set(partial_map.values())
+    if (
+        base_shards != {name for name in base_files if name.endswith(".safetensors")}
+        or partial_shards
+        != {path.name for path in partial.iterdir() if path.suffix == ".safetensors"}
+    ):
+        raise ValueError("native/base shard files differ from their exact tensor indexes")
+
+    destination.mkdir(mode=0o700)
+    with ExitStack() as stack:
+        partial_handles = {
+            shard: stack.enter_context(safe_open(partial / shard, framework="pt", device="cpu"))
+            for shard in sorted(partial_shards)
+        }
+        for shard in sorted(base_shards):
+            with safe_open(base / shard, framework="pt", device="cpu") as base_handle:
+                tensors = {}
+                for name in sorted(name for name, mapped in base_map.items() if mapped == shard):
+                    base_slice = base_handle.get_slice(name)
+                    if name in partial_map:
+                        partial_handle = partial_handles[partial_map[name]]
+                        partial_slice = partial_handle.get_slice(name)
+                        if (
+                            partial_slice.get_shape() != base_slice.get_shape()
+                            or partial_slice.get_dtype() != base_slice.get_dtype()
+                        ):
+                            raise ValueError(
+                                "native merged tensor metadata differs from exact base"
+                            )
+                        tensor = partial_handle.get_tensor(name)
+                    else:
+                        tensor = base_handle.get_tensor(name)
+                    if str(tensor.dtype) != "torch.bfloat16":
+                        raise ValueError("completed export tensor is not exact BF16")
+                    tensors[name] = tensor
+                save_file(tensors, destination / shard, metadata=base_handle.metadata())
+
+    for name in sorted(base_files - base_shards):
+        source = base / name
+        target = destination / name
+        if source.is_symlink() or not source.is_file() or source.stat().st_size <= 0:
+            raise ValueError("accepted base sidecar is missing or indirect")
+        shutil.copyfile(source, target)
+    return {
+        "base_tensor_count": len(base_names),
+        "native_tensor_count": len(partial_names),
+        "restored_frozen_tensor_count": len(restored),
+        "restored_prefixes": sorted({name.split(".", 1)[0] for name in restored}),
+    }
+
+
 def _distributed_export(plan: dict, receipt: dict, first: Path, second: Path) -> dict:
     """Use the exact native TP8 APIs; no training loop or optimizer call exists here."""
     import ray
@@ -551,8 +648,13 @@ def run(plan: dict) -> dict:
     run_root = Path(plan["run_dir"])
     final = Path(plan["output_root"])
     second = run_root / ".determinism-second"
+    partial_first = run_root / ".native-partial-first"
+    partial_second = run_root / ".native-partial-second"
     _stage("destination_check")
-    if final.exists() or final.is_symlink() or second.exists() or second.is_symlink():
+    if any(
+        path.exists() or path.is_symlink()
+        for path in (final, second, partial_first, partial_second)
+    ):
         raise FileExistsError("create-once export destination already exists")
     _stage("checkpoint_validation")
     checkpoint_path = Path(plan["checkpoint_receipt"]["path"])
@@ -574,8 +676,6 @@ def run(plan: dict) -> dict:
     checkpoint_before = _checkpoint_inventory(receipt)
     runtime_before = _runtime_source_inventory()
     checkpoint_receipt_before = _hash(checkpoint_path)
-    final.mkdir(mode=0o700)
-    second.mkdir(mode=0o700)
     _, cfg = build_runtime_configs_for_ray(receipt, plan)
     _stage("ray_initialization")
     initialize_ray(cfg)
@@ -584,9 +684,33 @@ def run(plan: dict) -> dict:
         # releases that actor ownership before the independent one-GPU reload.
         _stage("distributed_reload_and_dual_export")
         reload_evidence = ray.get(
-            ray.remote(num_cpus=1)(_distributed_export).remote(plan, receipt, final, second),
+            ray.remote(num_cpus=1)(_distributed_export).remote(
+                plan,
+                receipt,
+                partial_first,
+                partial_second,
+            ),
             timeout=DEADLINE_SECONDS,
         )
+        base_files = {row["path"] for row in receipt["source_plan"]["model"]["files"]}
+        _stage("first_full_layout_completion")
+        first_completion = complete_native_export_from_base(
+            partial_first,
+            base_root,
+            final,
+            base_files=base_files,
+        )
+        _stage("second_full_layout_completion")
+        second_completion = complete_native_export_from_base(
+            partial_second,
+            base_root,
+            second,
+            base_files=base_files,
+        )
+        if first_completion != second_completion:
+            raise ValueError("dual native exports completed a different frozen layout")
+        shutil.rmtree(partial_first)
+        shutil.rmtree(partial_second)
         _stage("first_export_reopen")
         first_inspection = inspect_hf_export(final)
         _stage("second_export_reopen")
@@ -605,7 +729,7 @@ def run(plan: dict) -> dict:
         _stage("base_export_reopen")
         base = inspect_hf_export(
             base_root,
-            allowed_files={row["path"] for row in receipt["source_plan"]["model"]["files"]},
+            allowed_files=base_files,
         )
         _stage("base_layout_compare")
         if base["layout_sha256"] != first_inspection["layout_sha256"]:
