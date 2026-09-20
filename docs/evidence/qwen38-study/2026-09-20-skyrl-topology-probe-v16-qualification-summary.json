@@ -51,6 +51,16 @@
     "one_by_eight_topology_gate_accepted": false,
     "reason": "The UID-bound observer saw the exact RayJob succeed and proved complete GPU release, but it did not capture the container receipt before teardown. The topology gate remains fail-closed until that create-once receipt is independently verified."
   },
+  "receipt_recovery": {
+    "expected_path": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v16/models/run/TOPOLOGY_PROBE.json",
+    "expected_schema": "cyber_skyrl_topology_probe_receipt_v1",
+    "existing_owned_prod_pod": "chris-q38-broad-preflight-parallel-v1",
+    "existing_owned_prod_pod_uid": "32455712-3bd5-4e41-92c4-acdc5cdbd8a9",
+    "exact_dev_output_root_visible_from_prod_sfs": false,
+    "existing_owned_dev_sfs_pod_available": false,
+    "private_logs_read": false,
+    "new_workload_created": false
+  },
   "failure_budget": {
     "prior_used": 8,
     "limit": 10,
@@ -61,5 +71,5 @@
     "external_cluster_post_stop": true
   },
   "next_action": "Make no additional cluster POST under the exhausted failure budget. Preserve the v16 output and prepare the scientific canary locally; require explicit budget reset plus independent receipt validation before any new workload.",
-  "sha256": "sha256:14ef44ad5b702ea4739374313fd6ca2772915dd4ee86c359e4cfb803f5380674"
+  "sha256": "sha256:d04839afddc373794c96b8f349cea42505e719db07637fb969aaca8f25f0cff7"
 }
