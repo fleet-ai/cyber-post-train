@@ -1,0 +1,120 @@
+# Qwen3.8 LoRA zero-step export development qualification — 2026-09-20
+
+## Scope and immutable inputs
+
+- Development Kubernetes context only:
+  `nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb`.
+- Priority/topology: `c1`, one pod, one eight-GPU B300 node, TP8, PP1,
+  CP1, DP1, zero optimizer updates, no external evaluation.
+- Exact image:
+  `ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317`.
+- Accepted input receipt only:
+  `/mnt/sfs/jobs/chris-q38-lora-sft-c1-v10/QWEN38_LORA_CHECKPOINT.json`.
+- Input receipt file SHA-256:
+  `2f914db630534a4cc2f036b646e40244565c68f67f810af5061dff1912e3f062`.
+- Input receipt self digest:
+  `7a5a8c0ed29c35ee4ddf5430fbcf235885c6a1405a800d0041d1931ba3a6abd6`.
+- Every GPU pod had `activeDeadlineSeconds: 1800`, `restartPolicy: Never`,
+  no service-account token, no secrets, offline Hugging Face/Transformers,
+  and disabled W&B.
+
+No production object or Jobs API request was submitted. No optimizer step,
+benchmark/evaluation, raw weight inspection/printing, private runtime log read,
+prompt, trace, flag, or credential access occurred.
+
+## Create-once preflight and first two fail-closed runs
+
+The exact-image CPU preflight accepted v1 with output-root absence and exact
+source/image identity:
+
+- preflight pod UID `67e6c49e-0fb2-4503-a29c-0a2e1a59e94f`;
+- plan SHA-256
+  `7b6f861ba502d29d47df796306edec2d9edf5a2e7537c694b1f74cf0d5c51fba`;
+- request SHA-256
+  `3b8dcd49988d9abfa89e7fbfc57f49d640454a302fd5630dc16fe9267a3fc61c`;
+- fresh run root `/mnt/sfs/jobs/chris-q38-lora-export-c1-v1`.
+
+GPU pod UID `5eb02b01-a3b7-4c16-99b2-a7ee781d1817` failed after
+1,325.880 seconds with a sanitized `ValueError` receipt and
+`optimizer_steps_executed: 0`. It had zero restarts. The exact UID was deleted
+immediately and node GPU requests returned to zero. The first failure contract
+did not identify a safe stage, so no private logs were read. Commit `56490a57`
+added a sanitized failure-stage code before a fresh attempt.
+
+The exact-image CPU preflight accepted v2:
+
+- preflight pod UID `400ae1ee-5f8d-4aae-92a5-b51b6753bae7`;
+- plan SHA-256
+  `cdb974f3a7b45ebc7e929f3b43b8864e02259122e57bac034af74fac47f6be60`;
+- request SHA-256
+  `be96df8d73a29118b62da05ac6ab65e7f229fee12b6904f4df389d7f559a0a81`;
+- fresh run root `/mnt/sfs/jobs/chris-q38-lora-export-c1-v2`.
+
+GPU pod UID `805afea3-599c-4060-9b56-35d027271df8` failed after
+1,316.606 seconds with zero restarts. The strict sanitized failure receipt was:
+
+```json
+{"elapsed_seconds":1316.606,"error_class":"ValueError","failure_stage":"base_layout_compare","optimizer_steps_executed":0,"plan_sha256":"cdb974f3a7b45ebc7e929f3b43b8864e02259122e57bac034af74fac47f6be60","status":"failed"}
+```
+
+The exact UID was deleted immediately and node GPU requests returned to zero.
+Neither run emitted a terminal export receipt and neither failed run was reused.
+
+## Exact native contract and repair
+
+Read-only exact-image source inspection established this pinned call chain:
+
+`WorkerDispatch.save_hf_model` → `MegatronWorker.save_hf_model` →
+`MegatronStrategy.save_hf_model` → `bridge.save_hf_weights(strict=False)`.
+
+The source comment makes `strict=False` load-bearing for `language_model_only`
+exports. A metadata-only comparison (no tensor values read) of the accepted base
+and v2 native output proved:
+
+- exact base: 1,199 indexed tensors;
+- native language-only export: 851 indexed tensors;
+- export-only tensors: zero;
+- common-key dtype/shape mismatches: zero;
+- base-only tensors: 348, all under `model.visual.*` or `mtp.*`.
+
+Metadata probe pod UID `a0a06d42-195b-46f5-aeb0-9cee38dd4c8a` succeeded
+with zero restarts and was deleted. This explains the strict layout failure:
+the native call correctly exports the trained language model but cannot alone
+emit the complete multimodal/MTP base layout.
+
+Commit `621d96c9` implements the smallest fail-closed completion path. For each
+of the two independent native exports it:
+
+1. requires the native key set to be a subset of the exact accepted base;
+2. rejects any omitted tensor outside `model.visual.*` and `mtp.*`;
+3. requires every common tensor to retain the base dtype and shape;
+4. writes the exact base shard/index layout using native merged values for the
+   851 language keys and accepted base values only for the 348 allowlisted
+   frozen keys;
+5. copies only exact accepted base sidecars;
+6. preserves the existing double-export equality, every-tensor BF16 reopen,
+   base-versus-merged value comparison, source/checkpoint immutability, full
+   model/tokenizer reload, and finite-logit gates.
+
+Forty-six focused local tests pass. Exact-image CPU qualification pod UID
+`8ed026d7-1550-41c9-8b89-0f6276122de3` accepted the synthetic strict
+layout/value-preservation contract with producer SHA-256
+`792b588c8b20e437af4226fbb63020f6d5075e410fb83a54bdb638f649dff89a`;
+it was then deleted.
+
+## Fresh repaired successor
+
+The exact-image v3 CPU preflight accepted:
+
+- preflight pod UID `e76b4540-dcec-4c57-b363-b752b21abc00`;
+- plan SHA-256
+  `cb6afe09ca5f21b1bd45d2b315b57f35179b6e0c40feaf59399ac091dbd73b55`;
+- request SHA-256
+  `9077bee67a8a56aea3a9615e559c4f8493b5ac91e9f91327ba529ebe41a1f7f0`;
+- fresh run root `/mnt/sfs/jobs/chris-q38-lora-export-c1-v3`.
+
+The bounded successor is pod `chris-q38-lora-export-c1-v3`, UID
+`010dd15b-58a5-494a-825e-d233b9576aac`. At this evidence checkpoint it is
+Pending without a node or GPU allocation behind the project-priority RL
+FleetJob. It must not be promoted unless it emits and independently passes the
+strict `cyber_qwen38_megatron_lora_merged_hf_export_v1` receipt.
