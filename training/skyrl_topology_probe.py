@@ -38,7 +38,7 @@ PREFLIGHT_PACKET_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_packet_v1"
 PREFLIGHT_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_preview_v1"
 PREFLIGHT_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_cpu_preflight_rejection_v1"
 PROBE_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_failure_v1"
-PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v10"
+PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v11"
 PREFLIGHT_RECEIPT = "/dev/termination-log"
 MODULE = "training.skyrl_topology_probe"
 CONFIG_PATH = ROOT / "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json"
@@ -98,6 +98,7 @@ def _expected_execution() -> dict:
             "read_only": True,
             "required": True,
         },
+        "preflight_model_pvc_subpath": "models/qwen3.8-27b-1d4bf0f2",
         "ray_version": "2.49.2",
         "priority": "c1",
         "queue_priority": "q1",
@@ -483,13 +484,9 @@ def preflight_job_manifest(plan: dict) -> dict:
             "volumeMounts": [
                 {
                     "name": "model",
-                    "mountPath": (
-                        execution["mount_root"]
-                        + "/models/"
-                        + execution["model_artifact"]["mount_path"]
-                    ),
+                    "mountPath": plan["model"]["root"],
                     "readOnly": True,
-                    "subPath": "models/" + execution["model_artifact"]["path"],
+                    "subPath": execution["preflight_model_pvc_subpath"],
                 },
                 {
                     "name": "output",

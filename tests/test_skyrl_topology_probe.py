@@ -129,9 +129,9 @@ def test_probe_cpu_preflight_is_zero_gpu_exact_mount_and_explicit_user(plan) -> 
     mounts = {row["name"]: row for row in container["volumeMounts"]}
     assert mounts["model"] == {
         "name": "model",
-        "mountPath": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v1/models/base",
+        "mountPath": plan["model"]["root"],
         "readOnly": True,
-        "subPath": "models/Qwen/Qwen3.8-27B",
+        "subPath": "models/qwen3.8-27b-1d4bf0f2",
     }
     assert mounts["output-registry"] == {
         "name": "output-registry",
@@ -273,6 +273,9 @@ def test_probe_rejects_model_mount_or_head_resource_substitution(plan) -> None:
     for mutation in (
         lambda value: value["execution"]["model_artifact"].update(path="other/model"),
         lambda value: value["execution"]["model_artifact"].update(mount_path="other"),
+        lambda value: value["execution"].update(
+            preflight_model_pvc_subpath="models/other"
+        ),
         lambda value: value["execution"]["head_resources"].update(cpu_request="2"),
         lambda value: value.update(output_root="/mnt/sfs/jobs/other/models/run"),
     ):

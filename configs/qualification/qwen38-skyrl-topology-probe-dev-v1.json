@@ -38,6 +38,7 @@
       "read_only": true,
       "required": true
     },
+    "preflight_model_pvc_subpath": "models/qwen3.8-27b-1d4bf0f2",
     "ray_version": "2.49.2",
     "priority": "c1",
     "queue_priority": "q1",
@@ -66,5 +67,5 @@
       "external_release_observer_not_yet_bound"
     ]
   },
-  "sha256": "sha256:abfeb28d0d1972af1661503e9dab464de8708e36b590021966e3b1557905cbe3"
+  "sha256": "sha256:d79b5c5960a14daaad432a2354bd4d4f4e806e992710f83301e674f39e7b47c4"
 }

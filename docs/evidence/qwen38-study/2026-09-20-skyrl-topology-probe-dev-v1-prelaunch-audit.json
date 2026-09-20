@@ -2,7 +2,7 @@
   "schema": "cyber_skyrl_topology_probe_prelaunch_audit_v1",
   "status": "blocked_not_submitted",
   "classification": "operational_gate",
-  "observed_at": "2026-09-20T11:26:33Z",
+  "observed_at": "2026-09-20T11:34:36Z",
   "identity": {
     "name": "chris-q38-skyrl-probe-v1",
     "cluster": "dev",
@@ -15,28 +15,29 @@
   },
   "inputs": {
     "config": "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json",
-    "config_self_sha256": "sha256:abfeb28d0d1972af1661503e9dab464de8708e36b590021966e3b1557905cbe3",
-    "plan_sha256": "1bab0ec4d2b2aee9cf9b72b967f00ce68b5f91f761cf27e52b2bb5f1f082ae0a",
-    "request_sha256": "8eb360d4b3e803be543c4b91cac861b696dbd28260bf92cf5e77a564bcc0f245",
-    "fleetjob_manifest_sha256": "b19e7bc1ac8026c020bd4c5d1dc4552c72a0c58852271848a66c60fef59f1dc5",
-    "fleetjob_packet_self_sha256": "sha256:35a9ccb73e1716866f2e3946906c1e3a27c63f050b031b758435ad41e6215f14",
-    "preflight_name": "chris-q38-skyrl-probe-preflight-v10",
-    "preflight_manifest_sha256": "614cf04b6080e0c1abdce7be942a0e1ca82173626d2221791d36a6a1707c3b7e",
-    "preflight_packet_self_sha256": "sha256:878402da288a23623b36e759c366c82c5374aa6630467053f2fbf585e9ad80bd",
-    "runtime_sha256": "ec5463634ce97cda8a6cd791b20a7b5d9cc2faa08282418ad88371b700c27bd9",
+    "config_self_sha256": "sha256:d79b5c5960a14daaad432a2354bd4d4f4e806e992710f83301e674f39e7b47c4",
+    "plan_sha256": "fd2d9ec7ca2e13bb51f42e067db979d129bebe1d2b07c73ecc0c934c282d0a12",
+    "request_sha256": "b477d8ecc97440d9de6e055c087d9cf94f2219ea9c346077e71d133bd7ec3a01",
+    "fleetjob_manifest_sha256": "961d5b843abaea9ba3e364b140b05121f0e4076a6bfa7ca803d4c509afd9071d",
+    "fleetjob_packet_self_sha256": "sha256:0826bdab15630d10683d7cb381360d6600bf2da669d5fa9ededf8648ede1d141",
+    "preflight_name": "chris-q38-skyrl-probe-preflight-v11",
+    "preflight_manifest_sha256": "81134de73532a72cb72d412b4839d0aeb9dc0727b2937823cb25a880357bcf8e",
+    "preflight_packet_self_sha256": "sha256:2caea03d0e6d473862acc14a98d3bb0b23ca6f52c8374841c7fc603a53150f06",
+    "runtime_sha256": "b3bb0efc25b0b93ea404f860bec502453bbce626849dacb6b1ee84c6ec4e639f",
     "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
     "model": {
       "repository": "Qwen/Qwen3.8-27B",
       "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
       "artifact_path": "Qwen/Qwen3.8-27B",
+      "preflight_pvc_subpath": "models/qwen3.8-27b-1d4bf0f2",
       "weight_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
       "mount_path": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v1/models/base/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
     }
   },
   "server_preview": {
     "status": "passed",
-    "self_sha256": "sha256:1f36d2136352fb12a18d6279d01b8dc25e33f294ebaba46fbace662074bfcc2f",
-    "server_render_sha256": "856751402968c85c83bc11bf7551f48696841976d43e5b6f11124c041b8e8979",
+    "self_sha256": "sha256:e6ac614d79019441bc36b616d0a97dd9a8e40f24a2f9f6aadf47064334c3bbf7",
+    "server_render_sha256": "2299a6d6801020f7c1c4c61e616ac106566f9e2629b11a27315626fcf478f04c",
     "controller_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/training-api@sha256:e9787177242159ed664d120d3e7496e7695b4a536aa14962b381e0d31ce5d9ac",
     "create_dry_run_only": true,
     "runtime_user": {
@@ -48,8 +49,8 @@
   },
   "cpu_preflight_server_preview": {
     "status": "passed",
-    "self_sha256": "sha256:23dfaa590cbf6f0111ba79e9fd0c0546e37eabff5a4b9efc7e32582cebfb6d10",
-    "server_render_sha256": "ef233a78ff52ea4dd2a7810f6d3dfade01f0a61e677ae722184d8479108afa97",
+    "self_sha256": "sha256:d596030f137b33510b78de67fef2d62c83575d6c9db81aa36dcc12af9ed6eb41",
+    "server_render_sha256": "33ebb4263d039a15d93e3ec0f65bcd18183a968c3042ec9fed1739f3c278d893",
     "create_dry_run_only": true,
     "runtime_user": {
       "uid": 1000,
@@ -184,6 +185,23 @@
     "reason": "the shortened model alias was not an admitted Fleet model artifact path; server preview denied the FleetJob and no object was created",
     "successor_change": "use the admitted Qwen/Qwen3.8-27B artifact and bind the immutable revision below its mounted base"
   },
+  "retired_cpu_preflight_v10": {
+    "name": "chris-q38-skyrl-probe-preflight-v10",
+    "status": "succeeded_with_sanitized_rejection",
+    "observer_result": "docs/evidence/qwen38-study/2026-09-20-skyrl-topology-probe-preflight-v10-result.json",
+    "observer_result_sha256": "sha256:adef7f95dfeebaa0a6d68e9f116de4da5179bbda515de6ce414c745a3a48f953",
+    "job_uid": "3a33c9bc-a75f-4734-9bc3-d480537adbd8",
+    "pod_uid": "79327744-dd9f-4421-b579-04a3c1465609",
+    "error_class": "ProbeGateError",
+    "error_code": "model_file_missing_00",
+    "phase": "model_inventory",
+    "terminal_status": "Succeeded",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "released": true,
+    "successor_change": "use the sealed accepted development staging alias only for the raw-PVC CPU preflight while retaining the controller-supported artifact key for the GPU FleetJob"
+  },
   "contract": {
     "cpu_head": true,
     "gpu_workers": 1,
@@ -223,5 +241,5 @@
   ],
   "safe_to_create": false,
   "next_action": "Run the exact-image zero-GPU preflight with the exact model mount, bind an independent 30-minute UID-aware cleanup observer, regenerate and re-preview the packet, then make a separate reviewed launch decision.",
-  "sha256": "sha256:d9eb76ff6602ee989f86e85a850658605c666e82ad9da3c86dade93d8272b845"
+  "sha256": "sha256:332905819153e7e08f18fd278f5f92fbbcb2f381d58454b785fbfc25b199e2ef"
 }

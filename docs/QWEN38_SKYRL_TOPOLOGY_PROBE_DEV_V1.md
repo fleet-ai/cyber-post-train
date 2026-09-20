@@ -28,6 +28,10 @@ until its own reward, optimizer, checkpoint and cleanup gates pass.
   every file is checked against the exact repository revision and SHA-256 inventory
   before engine startup. Standard Hugging Face symlinks are allowed only when they
   resolve to regular files whose bytes match those exact digests
+- zero-GPU preflight source: the accepted development staging alias
+  `models/qwen3.8-27b-1d4bf0f2` is mounted directly at that same immutable runtime
+  root. This PVC path is deliberately separate from the Fleet controller artifact
+  key and may not be substituted into the GPU FleetJob model declaration
 - output: the controller-created, run-owned `models/run` directory; only the sanitized probe receipt is
   accepted there
 - W&B: disabled; no task, benchmark or W&B credential is delivered
@@ -106,7 +110,7 @@ uv run --locked python -m training.dev_cleanup_observer \
   --context nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb \
   --namespace fleet-train-jobs \
   --kind job \
-  --name chris-q38-skyrl-probe-preflight-v10 \
+  --name chris-q38-skyrl-probe-preflight-v11 \
   --maximum-seconds 1200 \
   --expected-gpus 0 \
   --plan-sha256 sha256:<exact-plan-digest> \
