@@ -7,9 +7,7 @@ from pathlib import Path
 from training.model_stage import digest_json
 
 ROOT = Path(__file__).resolve().parents[1]
-MANIFEST = (
-    ROOT / "configs/evaluation/qwen38-fresh75-step230-base-runtime-clone-v1.json"
-)
+MANIFEST = ROOT / "configs/evaluation/qwen38-fresh75-step230-base-runtime-clone-v1.json"
 
 
 def _replace_flag(args: list[str], flag: str, value: str) -> None:
@@ -45,15 +43,13 @@ def test_fresh75_manifest_is_self_digesting_and_runtime_matched() -> None:
     assert candidate["registration_sha256"] == digest_json(
         {"id": candidate["id"], "spec": candidate["spec"]}
     )
-    assert comparison["base_normalized_spec_sha256"] == digest_json(
-        _fixed_control(base["spec"])
-    )
+    assert comparison["base_normalized_spec_sha256"] == digest_json(_fixed_control(base["spec"]))
     assert comparison["candidate_normalized_spec_sha256"] == digest_json(
         _fixed_control(candidate["spec"])
     )
-    assert comparison["base_normalized_spec_sha256"] == comparison[
-        "candidate_normalized_spec_sha256"
-    ]
+    assert (
+        comparison["base_normalized_spec_sha256"] == comparison["candidate_normalized_spec_sha256"]
+    )
     assert comparison["equal"] is True
 
 

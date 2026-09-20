@@ -133,21 +133,34 @@ def test_self_sft_plan_clones_current_base_runtime_and_starts_paused() -> None:
     assert desired_spec["runtime"]["image"] == source_spec["runtime"]["image"]
     assert desired_spec["runtime"]["command"] == source_spec["runtime"]["command"]
     assert "--dp-size" in desired_spec["runtime"]["args"]
-    assert desired_spec["runtime"]["args"][
-        desired_spec["runtime"]["args"].index("--dp-size") + 1
-    ] == "8"
-    assert desired_spec["runtime"]["args"][
-        desired_spec["runtime"]["args"].index("--context-length") + 1
-    ] == "262144"
-    assert desired_spec["runtime"]["args"][
-        desired_spec["runtime"]["args"].index("--kv-cache-dtype") + 1
-    ] == "fp8_e4m3"
-    assert desired_spec["runtime"]["args"][
-        desired_spec["runtime"]["args"].index("--reasoning-parser") + 1
-    ] == "qwen3"
-    assert desired_spec["runtime"]["args"][
-        desired_spec["runtime"]["args"].index("--tool-call-parser") + 1
-    ] == "qwen3_coder"
+    assert (
+        desired_spec["runtime"]["args"][desired_spec["runtime"]["args"].index("--dp-size") + 1]
+        == "8"
+    )
+    assert (
+        desired_spec["runtime"]["args"][
+            desired_spec["runtime"]["args"].index("--context-length") + 1
+        ]
+        == "262144"
+    )
+    assert (
+        desired_spec["runtime"]["args"][
+            desired_spec["runtime"]["args"].index("--kv-cache-dtype") + 1
+        ]
+        == "fp8_e4m3"
+    )
+    assert (
+        desired_spec["runtime"]["args"][
+            desired_spec["runtime"]["args"].index("--reasoning-parser") + 1
+        ]
+        == "qwen3"
+    )
+    assert (
+        desired_spec["runtime"]["args"][
+            desired_spec["runtime"]["args"].index("--tool-call-parser") + 1
+        ]
+        == "qwen3_coder"
+    )
 
 
 def test_self_sft_registration_rejects_current_base_runtime_drift() -> None:

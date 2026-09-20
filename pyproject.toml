@@ -60,5 +60,6 @@ exclude = [
   "training/post_sft_cast.py",
   "training/post_sft_staging.py",
   "training/register_post_sft.py",
+  "training/model_stage_current_base.py",
   "training/tokenizer_equivalence.py",
 ]
