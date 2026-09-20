@@ -340,3 +340,38 @@ and protocol digest is
 `sha256:8f25f0b176acae321fdd33ae08ed532affc5d3e9d3af49a3e9c9634ec47827f6`.
 It remains subject to a fresh duplicate census and base-route read immediately
 before its one create request.
+
+## V18 base task-0 terminal result
+
+The final preflight found no existing sandbox with the V18 campaign prefix or
+the exact create-once name. The duplicate-census receipt is
+`sha256:6dba0b50bc759a9bfd400e19c29136df7fadb341aa273ee6d20abb18a6759b46`.
+The exact baseline route remained Ready with two replicas, inference-model UID
+`d06c0531-7181-41ad-a3fd-cd8e3e774ab9`, and revision
+`1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0`.
+
+Exactly one score-free base collection sandbox was then created:
+
+- sandbox name: `q38-b-f75-c1-v18-t00`;
+- sandbox ID: `p771imq7s608hky8ar6pu`;
+- collection process ID: `1655`;
+- terminal supervisor plan:
+  `sha256:2a25258713e912d92bd3db06214b7e0dd759a07062beccdc2e53cf9c5f49c35e`.
+
+The process exited zero, but its sanitized collection lifecycle rejected the
+run at the `collection_run` gate. The supervisor preserved the complete
+failure filesystem before releasing the exact sandbox:
+
+- terminal failure receipt:
+  `sha256:d9fb0befa231cb9bc48b67f3f569f6b7b73ae9aa4d8c819979beba8404e33927`;
+- lifecycle file:
+  `sha256:25164d33e647725c3e3e928982d2fd2eeffb0f5a19f3fcbeb0c620c41c97ccbb`;
+- failure snapshot: `2czmj71q61klqao9kqudh`;
+- failure-snapshot acceptance:
+  `sha256:6dafa7a83afce493de67203cb258bbfa0bd4b65206d85b8da33aedc8245b8fc0`;
+- release receipt:
+  `sha256:7cb10e067eb5c29e6db443f255567ab0716b05c06ddfe7d8e21aee8d34cffe82`.
+
+A fresh control-plane read reports that sandbox as `terminated`, with no
+active inventory match. No rollout bundle was accepted, so deferred scoring,
+candidate activation, and wider fanout remain closed.
