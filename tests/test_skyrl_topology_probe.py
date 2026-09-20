@@ -61,7 +61,7 @@ def test_probe_is_distinct_dev_only_bounded_and_zero_update(plan) -> None:
     assert request["env"]["CYBER_EXPECTED_RUNTIME_GID"] == "100"
     assert plan["model"]["repo"] == "Qwen/Qwen3.8-27B"
     assert plan["model"]["revision"] == ("1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0")
-    assert plan["model"]["root"] == ("/mnt/sfs/jobs/chris-q38-skyrl-probe-v14/models/base")
+    assert plan["model"]["root"] == ("/mnt/sfs/jobs/chris-q38-skyrl-probe-v15/models/base")
     assert plan["execution"]["model_artifact"]["path"] == (
         "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4"
     )
@@ -75,13 +75,13 @@ def test_probe_fleetjob_is_one_eight_gpu_pod_with_zero_replica_group(plan) -> No
     manifest = probe.fleetjob_manifest(plan)
     spec = manifest["spec"]
     assert manifest["metadata"] == {
-        "name": "chris-q38-skyrl-probe-v14",
+        "name": "chris-q38-skyrl-probe-v15",
         "namespace": "fleet-train-jobs",
     }
     assert spec["fleet"] == {
         "projectName": "fleetjob-dev",
         "auth": {"secretRef": {"name": "fleet-api", "key": "FLEET_API_KEY"}},
-        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v14",
+        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v15",
         "models": [
             {
                 "path": "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4",
@@ -199,12 +199,16 @@ def test_probe_receipt_verifier_is_zero_gpu_read_only_and_explicit_user(plan) ->
             "mountPath": plan["output_root"],
             "readOnly": True,
             "subPath": "models/fleetjob-dev/" + plan["run_name"],
-        }
+        },
+        {"name": "runtime", "mountPath": probe.RECEIPT_VERIFY_RUN_DIR},
     ]
     assert pod["volumes"][0]["persistentVolumeClaim"] == {
         "claimName": "sfs-shared",
         "readOnly": True,
     }
+    assert pod["volumes"][1] == {"name": "runtime", "emptyDir": {}}
+    environment = {row["name"]: row["value"] for row in container["env"]}
+    assert environment["RUN_DIR"] == probe.RECEIPT_VERIFY_RUN_DIR
     expected = probe.request(plan, fleetjob_transport=True, receipt_verify=True)
     assert container["command"] == ["/bin/sh", "-lc", "exec " + expected["command"]]
 
@@ -279,6 +283,26 @@ def test_probe_receipt_verifier_preview_accepts_only_exact_server_defaults(plan)
     changed["spec"]["template"]["spec"]["containers"][0]["volumeMounts"][0]["readOnly"] = False
     with pytest.raises(JobsError, match="changed"):
         probe.validate_receipt_verify_job_preview(plan, manifest, changed)
+
+
+def test_probe_relay_error_code_uses_only_sanitized_stage_and_category() -> None:
+    class FleetVllmStartupError(Exception):
+        def __init__(self):
+            self.stage = "engine_core_start"
+            self.sanitized_cause = {
+                "schema": "fleet_vllm_startup_error_v1",
+                "exception_class": "CudaOutOfMemoryError",
+                "frame": None,
+            }
+
+    class RayTaskError(Exception):
+        def as_instanceof_cause(self):
+            return FleetVllmStartupError()
+
+    assert probe._setup_failure_code(RayTaskError("private details")) == (
+        "FleetVllmStartupError_engine_core_start_CudaOutOfMemoryError"
+    )
+    assert probe._setup_failure_code(RuntimeError("private details")) == "RuntimeError"
 
 
 def test_probe_fleetjob_preview_accepts_only_exact_server_mutation(plan) -> None:

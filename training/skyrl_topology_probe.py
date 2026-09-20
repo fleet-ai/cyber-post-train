@@ -47,8 +47,9 @@ RECEIPT_VERIFY_SCHEMA = "cyber_skyrl_topology_probe_receipt_verification_v1"
 RECEIPT_VERIFY_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_receipt_verification_rejection_v1"
 RECEIPT_VERIFY_PACKET_SCHEMA = "cyber_skyrl_topology_probe_receipt_verification_job_packet_v1"
 RECEIPT_VERIFY_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_receipt_verification_job_preview_v1"
-PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v26"
-RECEIPT_VERIFY_NAME = "chris-q38-skyrl-probe-receipt-v14"
+PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v27"
+RECEIPT_VERIFY_NAME = "chris-q38-skyrl-probe-receipt-v15"
+RECEIPT_VERIFY_RUN_DIR = "/tmp/chris-q38-skyrl-probe-receipt-v15"
 PREFLIGHT_RECEIPT = "/dev/termination-log"
 FAILURE_RECEIPT = "TOPOLOGY_PROBE_FAILED.json"
 MODULE = "training.skyrl_topology_probe"
@@ -57,7 +58,7 @@ IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
     "89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
 )
-MODEL_BINDING_SHA256 = "8f468f80e792eb589606dab0c0d57c87ada0b7dbb3a2f60e47c12f70af69eca2"
+MODEL_BINDING_SHA256 = "56b3e329068b66b467691c2b97568d86cabfb588b7ca28ba83c09971c77c1948"
 RUNTIME_FILES = (
     "training/skyrl_topology_probe.py",
     "training/skyrl.py",
@@ -100,7 +101,7 @@ def _expected_execution() -> dict:
         "namespace": "fleet-train-jobs",
         "project_name": "fleetjob-dev",
         "auth_secret": {"name": "fleet-api", "key": "FLEET_API_KEY"},
-        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v14",
+        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v15",
         "output_pvc": "sfs-shared",
         "output_registry_mount": "/mnt/cyber-output-registry",
         "output_registry_subpath": "models/fleetjob-dev",
@@ -606,7 +607,10 @@ def receipt_verify_job_manifest(plan: dict) -> dict:
     _validate(plan)
     execution = plan["execution"]
     bundled = request(plan, fleetjob_transport=True, receipt_verify=True)
-    environment = {**bundled["env"], "RUN_DIR": plan["output_root"]}
+    # The evidence mount is intentionally read-only.  The generic sealed-code
+    # bootstrap must therefore unpack into a separate writable emptyDir rather
+    # than trying to rewrite ``<output>/.runtime``.
+    environment = {**bundled["env"], "RUN_DIR": RECEIPT_VERIFY_RUN_DIR}
     container = _container(plan, environment, execution["head_resources"])
     container.update(
         {
@@ -619,7 +623,8 @@ def receipt_verify_job_manifest(plan: dict) -> dict:
                     "mountPath": plan["output_root"],
                     "readOnly": True,
                     "subPath": (execution["output_registry_subpath"] + "/" + plan["run_name"]),
-                }
+                },
+                {"name": "runtime", "mountPath": RECEIPT_VERIFY_RUN_DIR},
             ],
         }
     )
@@ -647,7 +652,8 @@ def receipt_verify_job_manifest(plan: dict) -> dict:
                                 "claimName": execution["output_pvc"],
                                 "readOnly": True,
                             },
-                        }
+                        },
+                        {"name": "runtime", "emptyDir": {}},
                     ],
                 },
             },
@@ -1072,6 +1078,32 @@ def _stop_setup(setup, ray) -> None:
         raise ExceptionGroup("one or more topology-probe resources failed to stop", errors)
 
 
+def _setup_failure_code(error: BaseException) -> str:
+    """Return only the image's explicitly sanitized vLLM startup category.
+
+    Ray wraps the image-owned ``FleetVllmStartupError`` in ``RayTaskError``.
+    The image deliberately stores a small stage and exception-class receipt on
+    that cause.  Do not stringify either exception: the original traceback may
+    contain private paths or values.
+    """
+    candidate = error
+    unwrap = getattr(error, "as_instanceof_cause", None)
+    if callable(unwrap):
+        with suppress(Exception):
+            candidate = unwrap()
+    candidate_classes = {candidate_type.__name__ for candidate_type in type(candidate).__mro__}
+    if "FleetVllmStartupError" not in candidate_classes:
+        return type(error).__name__
+    stage = getattr(candidate, "stage", None)
+    sanitized = getattr(candidate, "sanitized_cause", None)
+    category = sanitized.get("exception_class") if isinstance(sanitized, dict) else None
+    if not isinstance(stage, str) or not stage.replace("_", "").isalnum():
+        stage = "unknown"
+    if not isinstance(category, str) or not category.replace("_", "").isalnum():
+        category = "Other"
+    return f"FleetVllmStartupError_{stage}_{category}"
+
+
 def run(plan: dict) -> dict:
     """Start both TP4 engines and release them; no scientific path is imported."""
     arguments = _validate(plan)
@@ -1148,7 +1180,12 @@ def run(plan: dict) -> dict:
             if len(tuple(setup.server_groups)) != 2 or len(tuple(setup.server_urls)) != 2:
                 raise ValueError("probe did not start both TP4 engine groups")
     except BaseException as exc:
-        setup_error = ProbeGateError(f"{setup_phase}_{type(exc).__name__}")
+        category = (
+            _setup_failure_code(exc)
+            if setup_phase == "inference_engine_setup"
+            else type(exc).__name__
+        )
+        setup_error = ProbeGateError(f"{setup_phase}_{category}")
     try:
         with _Deadline(plan["deadlines"]["cleanup_seconds"], "engine cleanup"):
             _stop_setup(setup, ray)
