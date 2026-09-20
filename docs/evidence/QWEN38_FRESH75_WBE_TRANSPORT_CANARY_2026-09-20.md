@@ -271,3 +271,46 @@ valid terminal rollout artifact.
 | 1 | `sha256:0ad55f3b8eb49698acc07d06ea99ccd0a57c08158341072d62f95190949d5120` |
 | 2 | `sha256:6d17aedd63212072cd766eb07ceea2e779e3ff1f23bf61f45ad3fcd8af3e6075` |
 | 3 | `sha256:0dfa004885b53d11c2ef89cedc58c78e8f68cac04f59aabaa448db2440fa64d7` |
+
+## V18 deterministic qualification repair
+
+The private V17 execution directory was no longer present locally, so its
+qualification files could not be reopened by path. The accepted V17 filesystem
+snapshot remained available. Four uniquely named, no-internet metadata-only
+restores were used to recover its immutable qualification bundle. They made no
+model, benchmark, or judge request. Every restore was terminated after use and
+reconciled to zero active inventory matches:
+
+| Recovery sandbox | Provider ID | Release receipt |
+|---|---|---|
+| `wbe-recover-f75-pair-v17-meta-v1` | `j089d4afh720vbs305zyb` | `sha256:7d3722a21b15d5985a6f4d2fe8eb71b97bd76b52850fd586d368f1679f1980fb` |
+| `wbe-recover-f75-pair-v17-meta-v2` | `af0dibija9jjbwlf2tb0x` | `sha256:ec6fe7c774b717c3ffb019926e317757166b7d46456eed9878136dee60688d81` |
+| `wbe-recover-f75-pair-v17-meta-v3` | `eszdiulat9rip4hoduqpc` | `sha256:f0b3a2d74050dc094854f632a8c5a747053f151e3c0ee27d7b987bf912cc0965` |
+| `wbe-recover-f75-pair-v17-meta-v4` | `tbbk8z1q398212mofuu26` | `sha256:fc62ce6aab23da1f29d51da7ddecd46b8d61709fde7ebe3b4d6facebda734dd6` |
+
+The final restore used the repository's bounded small-receipt reader, including
+its captured-output fallback when TensorLake's direct file endpoint returned a
+server error. The recovered bundle self-digest is
+`sha256:185f247093f2f9a2f147179c38189161da0d2989364a734a22f6121852b4de3a`.
+It recovered the exact project template, base and candidate model registries,
+and these previously qualified runtime images:
+
+- evaluator: `cage/wbe-evaluator:matched-v3` at
+  `sha256:eb5f1948ee3f7d16f66a01c86c4c1cd8950f912c91060e0848ce92942568322a`;
+- OpenCode agent: `cage/opencode-webexploitbench:1.18.27-v12-4b39ba8f-d142a7ce`
+  at `sha256:7976411d3b5b8eacbb887b8e6148fc14680513b0d35f202fbd7a6205080a329c`;
+- network proxy: `cage/netproxy:v1.1` at
+  `sha256:0eae9d69a8c092e1b1fbe8a26bacfcce505892b99783f554c7a969adb2080c45`.
+
+Those exact inputs and the reviewed CAGE commit were resealed with the current
+qualification, launcher, and benchmark-source bytes as transaction
+`wbe-fresh75-pair-v18`. Its source snapshot remains the accepted V17 snapshot
+`mp3wre17q6fwxbndexd50`. The new local qualification plan self-digest is
+`sha256:bfa3ccd46a9208254c78cc39356f42d62c29c0856338e64b528e241722418df5`
+and its file SHA-256 is
+`sha256:ef408727275d4975f6df7125812ecbd69ad3c25112a05031f9624fee2e91977f`.
+Focused qualification, collection-launcher, supervisor, rollout-bundle, and
+deferred-scoring tests passed before execution. V18 qualification execution,
+one base-only score-free task-0 canary, and separate deferred scoring are the
+only authorized next actions. Candidate activation and wider fanout remain
+closed until the base canary is accepted.
