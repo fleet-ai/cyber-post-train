@@ -186,3 +186,31 @@ BF16 tensor, base-layout, source-immutability and zero-optimizer gate remains
 unchanged. Forty-four focused tests pass, three tensor tests skip locally only
 because this worktree's test environment does not include Torch, and Ruff
 passes.
+
+Commit `bb19de89` contains that repair and was pushed before execution. The
+development ConfigMap was independently byte-compared with the committed
+sources and made immutable. Exact-image CPU qualification pod
+`chris-q38-lora-export-cpu-qual-v5`, UID
+`b5b96b69-209f-4545-9f10-b5a71b0eed1e`, accepted producer SHA-256
+`7d6e5926eb528e7f7dc35c038689e2abcebdc15e85b2209bec9cf5711baeb81d`.
+Its sanitized receipt SHA-256 is
+`5ca089bac3e0523240789fe7e0f975b20301859da76d08ead4c6b9e66c7c928e`.
+The pod had zero restarts and was deleted after the exact UID was rechecked.
+
+The fresh v5 preflight then accepted:
+
+- preflight pod UID `4ef148fb-ae0b-4477-9ecf-c9a04420c81b` (deleted);
+- preflight receipt SHA-256
+  `4b1f0cc2ee8b1da485e773f8b4d427e33088b14d89a124e2bce2feb3dc1ad11c`;
+- plan SHA-256
+  `16a435a85aa87a2d0b5c99e9ae08c17cd8f06a76400c28d176128f763cbc6240`;
+- request SHA-256
+  `345cbe67748f5da4f0fb8cc1f82fc8a14c96fd9178be60a0f0f100e4e38bd3b5`;
+- fresh run root `/mnt/sfs/jobs/chris-q38-lora-export-c1-v5`.
+
+The bounded v5 GPU pod is `chris-q38-lora-export-c1-v5`, UID
+`7e7f7d36-fa85-4026-875f-29e880c86a02`. It started on the development cluster
+at `2026-09-20T13:25:29Z`, requests one eight-GPU B300 node at c1, has a fixed
+1,800-second deadline, and had zero restarts at admission. An exact-UID cleanup
+observer is armed. It remains fail-closed until its terminal export receipt is
+independently validated.
