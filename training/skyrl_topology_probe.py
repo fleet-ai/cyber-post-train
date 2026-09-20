@@ -38,7 +38,7 @@ PREFLIGHT_PACKET_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_packet_v1"
 PREFLIGHT_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_preview_v1"
 PREFLIGHT_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_cpu_preflight_rejection_v1"
 PROBE_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_failure_v1"
-PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v8"
+PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v10"
 PREFLIGHT_RECEIPT = "/dev/termination-log"
 MODULE = "training.skyrl_topology_probe"
 CONFIG_PATH = ROOT / "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json"
@@ -93,7 +93,7 @@ def _expected_execution() -> dict:
         "output_registry_mount": "/mnt/cyber-output-registry",
         "output_registry_subpath": "models/fleetjob-dev",
         "model_artifact": {
-            "path": "Qwen/Qwen3.8-27B/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+            "path": "Qwen/Qwen3.8-27B",
             "mount_path": "base",
             "read_only": True,
             "required": True,
@@ -221,6 +221,8 @@ def _validate(plan: dict) -> skyrl.SkyRLConfig:
         != execution.get("mount_root", "")
         + "/models/"
         + execution.get("model_artifact", {}).get("mount_path", "")
+        + "/"
+        + plan.get("model", {}).get("revision", "")
         or plan.get("qualification")
         != {
             "profile": "qwen38_skyrl_topology_probe_dev_v1",
@@ -481,7 +483,11 @@ def preflight_job_manifest(plan: dict) -> dict:
             "volumeMounts": [
                 {
                     "name": "model",
-                    "mountPath": plan["model"]["root"],
+                    "mountPath": (
+                        execution["mount_root"]
+                        + "/models/"
+                        + execution["model_artifact"]["mount_path"]
+                    ),
                     "readOnly": True,
                     "subPath": "models/" + execution["model_artifact"]["path"],
                 },

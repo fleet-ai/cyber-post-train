@@ -5,7 +5,7 @@
   "model": {
     "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
     "weights": "../models/qwen38-27b-1d4bf0f2.weights.json",
-    "root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v1/models/base"
+    "root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v1/models/base/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
   },
   "engine": {
     "num_engines": 2,
@@ -33,7 +33,7 @@
     "output_registry_mount": "/mnt/cyber-output-registry",
     "output_registry_subpath": "models/fleetjob-dev",
     "model_artifact": {
-      "path": "Qwen/Qwen3.8-27B/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "path": "Qwen/Qwen3.8-27B",
       "mount_path": "base",
       "read_only": true,
       "required": true
@@ -66,5 +66,5 @@
       "external_release_observer_not_yet_bound"
     ]
   },
-  "sha256": "sha256:271bca4ad07e8f319e65bf3d9ef8ac55176d242ec254d98cb11e2622781f24b6"
+  "sha256": "sha256:abfeb28d0d1972af1661503e9dab464de8708e36b590021966e3b1557905cbe3"
 }

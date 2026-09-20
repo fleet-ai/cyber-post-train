@@ -68,7 +68,7 @@ def test_probe_fleetjob_is_one_gpu_node_with_cpu_head_and_explicit_user(plan) ->
         "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v1",
         "models": [
             {
-                "path": "Qwen/Qwen3.8-27B/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+                "path": "Qwen/Qwen3.8-27B",
                 "mountPath": "base",
                 "readOnly": True,
                 "required": True,
@@ -129,9 +129,9 @@ def test_probe_cpu_preflight_is_zero_gpu_exact_mount_and_explicit_user(plan) -> 
     mounts = {row["name"]: row for row in container["volumeMounts"]}
     assert mounts["model"] == {
         "name": "model",
-        "mountPath": plan["model"]["root"],
+        "mountPath": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v1/models/base",
         "readOnly": True,
-        "subPath": "models/Qwen/Qwen3.8-27B/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "subPath": "models/Qwen/Qwen3.8-27B",
     }
     assert mounts["output-registry"] == {
         "name": "output-registry",
