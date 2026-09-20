@@ -212,3 +212,62 @@ qualification and new launch receipts are required first.
 | 1 | `sha256:8d89242ec2e9a7cfbf5c8756c2ee491d405f0c485f07b092f43550b301974329` | `sha256:4aad348843755d337eb2bc949e0f6cdf87829b0af21a2f3c939c2437594db102` | `sha256:5c5c11df2ede02444217b447913d3ce03d069c5f885f3f4eaa5a11a21fc311ef` |
 | 2 | `sha256:9cea7b2d5a068ba40ff4b9167e6cf4b2a457b59b0173136534cbfa4c56c248c3` | `sha256:f50207816bcec4971e2110323bb04669d74b595bbcb9573155ceb63f014e25fc` | `sha256:accb20b4498d0aad391b80f274bc554b97d1131afb11aaad8a3248d3f7193448` |
 | 3 | `sha256:8df367a41275c8945119a57739560931ea15c59179da3f623e58493d487c8e64` | `sha256:9dd416b740a342fc010b125a47cab9ad899c5456624db935445d1448a7b21322` | `sha256:740ba340ab891c1fa4ef94e6dc15786621cb4d91492a49050480e55eb0cc7c4c` |
+
+## V17 shared snapshot and the real-collection network gate
+
+The current shared snapshot qualification completed successfully and released
+its qualification sandbox. It made no model, benchmark, or judge request. Its
+purpose was only to prove that the exact source files, images, benchmark task
+order, one-task projects, and 15-task projects can be reopened and validated.
+
+- qualification transaction: `wbe-fresh75-pair-v17`
+- snapshot: `mp3wre17q6fwxbndexd50`
+- qualification plan:
+  `sha256:87bea7994e03a23dfbc6d8629cdc558510f4ca86cf4d9ef01304dd1e50369aba`
+- completion receipt:
+  `sha256:b7001d59237534d8fa581102be882c5e18455ee7fdd492036b3605633b1c3bc3`
+- one-task receipt:
+  `sha256:81995f671c586319334cdf80553980c116f925869c01e96e5f7e3ba92ad30480`
+- 15-task receipt:
+  `sha256:dcd5cf7df15f601ceb563346e207fb44ea885730d5c9fe60ce3794c5aca39e4d`
+- release receipt:
+  `sha256:b85197014906f63c4b47b39c45acf6c7e5176156a3127b1c0aade0abbee0bae3`
+
+The qualification sandbox correctly had no internet access because it never
+needed to contact a model. A real rollout sandbox does need to reach the frozen
+Fleet inference address. A later task-0 rollout read back a provider network
+policy with internet access disabled. Its bounded CAGE preflight then produced
+only DNS-resolution retries, before OpenCode, the benchmark, any model request,
+or scoring. That is a launcher/network-contract defect, not model or benchmark
+evidence.
+
+Commit `48044a92` fixes the boundary explicitly. Every real collection plan must
+request internet access; the provider must read back the same policy before the
+launcher writes a process claim or dispatches the collection. Snapshot
+qualification remains offline. Focused tests cover both a plan that omits this
+policy and a provider readback that does not match it.
+
+Exactly one corrected task-0 baseline plan is sealed but remains unlaunched
+until the known-invalid predecessor reaches its bounded terminal state and its
+exact sandbox is released:
+
+- corrected task-0 plan:
+  `sha256:6012b00c189d49ea2679c137f1aab1e2296427fd6d992bf743fa0b0640d4e416`
+- corrected protocol:
+  `sha256:3a83c9034c61c89e63de4a44a9531787632cc38e79efd43bd2ff07289093cd39`
+- corrected fixed-control view:
+  `sha256:cce74a1d66f407728ab0c1a6491fb585ce25f0bc71dbdf3549527356314e4555`
+
+Four new baseline expansion plans are also sealed against the accepted 15-task
+qualification. Each contains 15 distinct, one-attempt, score-free collections.
+They share fixed-control digest
+`sha256:dc03c1012abc1c36702fc470b0b149a9cb1e02a797bf7f66c905dc1bb963681c`.
+They must remain unlaunched until the corrected task-0 collection produces a
+valid terminal rollout artifact.
+
+| Replica | Prepared baseline plan |
+|---|---|
+| 0 | `sha256:47831532020ec76e0678e6b817823247e679642512576c4a8d8039df13f8bc8d` |
+| 1 | `sha256:0ad55f3b8eb49698acc07d06ea99ccd0a57c08158341072d62f95190949d5120` |
+| 2 | `sha256:6d17aedd63212072cd766eb07ceea2e779e3ff1f23bf61f45ad3fcd8af3e6075` |
+| 3 | `sha256:0dfa004885b53d11c2ef89cedc58c78e8f68cac04f59aabaa448db2440fa64d7` |
