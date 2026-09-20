@@ -27,6 +27,7 @@ QUALIFIED_IMAGE = (
     "7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317"
 )
 GATE_TEMPLATE = RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v10.template.json"
+PRODUCTION_CANARY = RUNS / "qwen38-27b-lora-sft-r64-a32-prod-canary-v1.json"
 RETIRED_GATE_TEMPLATES = [
     RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v1.template.json",
     RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v2.template.json",
@@ -193,6 +194,30 @@ def test_one_step_runtime_accepts_only_digest_enrichment_of_the_exact_plan():
     # prepared Jobs API request.
     with pytest.raises(ValueError, match="runtime-only evidence"):
         sft.job_request(runtime_plan)
+
+
+def test_production_canary_changes_only_create_once_and_wandb_identity():
+    from training import sft, sft_runtime
+
+    dev = sft.compile_sft(read(GATE_TEMPLATE), relative_to=RUNS)
+    production = sft.compile_sft(read(PRODUCTION_CANARY), relative_to=RUNS)
+    expected = sft_runtime.qwen38_lora_production_canary_plan_binding()
+
+    assert sft_runtime._qwen38_lora_one_step_identity(production) == expected
+    assert production["run_name"] == "chris-q38-lora-prod-can-v1"
+    assert production["output_root"] == "/mnt/sfs/jobs/chris-q38-lora-prod-can-v1"
+    assert production["wandb"]["run_id"] == production["run_name"]
+    for key in set(dev) - {"run_name", "output_root", "wandb", "runtime_sha256"}:
+        assert production[key] == dev[key]
+
+
+def test_production_canary_does_not_open_a_parameter_menu():
+    from training import sft
+
+    value = read(PRODUCTION_CANARY)
+    value["recipe"]["lr"] = 1e-5
+    with pytest.raises(ValueError, match="exact digest-bound one-step"):
+        sft.compile_sft(value, relative_to=RUNS)
 
 
 def test_corpus_qualification_receipt_binds_manifest_template_and_runtime():

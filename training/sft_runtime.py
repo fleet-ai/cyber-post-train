@@ -340,6 +340,35 @@ QWEN38_LORA_ONE_STEP_PLAN = {
     },
 }
 
+# The exact development gate above completed one finite optimizer update and
+# its separate zero-update merge/export/model-reload gate was independently
+# accepted.  Production admission still starts with a create-once one-step
+# canary.  Only launch identity and W&B identity change; every scientific,
+# data, model, runtime and resource field remains byte-for-byte identical.
+QWEN38_LORA_PRODUCTION_CANARY = {
+    "run_name": "chris-q38-lora-prod-can-v1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lora-prod-can-v1",
+    "wandb": {
+        "entity": "thefleet",
+        "project": "cyber-post-train",
+        "group": "qwen38-lora-sft-goal-v1",
+        "run_id": "chris-q38-lora-prod-can-v1",
+        "name": "chris-q38-lora-prod-can-v1",
+        "tags": [
+            "qwen38",
+            "lora",
+            "teacher-sft",
+            "rank64",
+            "alpha32",
+            "production-canary",
+            "planned-pause-step1",
+            "task-outcomes-only",
+            "dev-training-gate-accepted",
+            "dev-merge-reload-gate-accepted",
+        ],
+    },
+}
+
 
 def qwen38_megatron_binding() -> tuple[str, str, dict[str, str]]:
     """Return the one reviewed source/image pair, or fail closed.
@@ -433,6 +462,17 @@ def qwen38_lora_one_step_plan_binding() -> dict:
     ):
         raise ValueError("Qwen3.8 one-step leak-free corpus binding is unresolved")
     return QWEN38_LORA_ONE_STEP_PLAN
+
+
+def qwen38_lora_production_canary_plan_binding() -> dict:
+    """Return the one production canary admitted by the accepted dev gates."""
+    source = qwen38_lora_one_step_plan_binding()
+    return {
+        **source,
+        "run_name": QWEN38_LORA_PRODUCTION_CANARY["run_name"],
+        "output_root": QWEN38_LORA_PRODUCTION_CANARY["output_root"],
+        "wandb": QWEN38_LORA_PRODUCTION_CANARY["wandb"],
+    }
 
 
 def write_receipt(path: Path, value: dict, *, replace: bool = False) -> None:
@@ -626,7 +666,10 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
     model = plan["model"]
     if _is_qwen38_lora(plan):
         source_commit, image, source_files = qwen38_megatron_binding()
-        one_step_plan = qwen38_lora_one_step_plan_binding()
+        one_step_plans = (
+            qwen38_lora_one_step_plan_binding(),
+            qwen38_lora_production_canary_plan_binding(),
+        )
         runtime = plan.get("skyrl_runtime")
         expected_runtime = {
             "source_commit": source_commit,
@@ -637,7 +680,7 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
             or runtime != expected_runtime
             or plan.get("execution", {}).get("image") != image
             or plan.get("qualification_gate") != QWEN38_LORA_QUALIFICATION
-            or _qwen38_lora_one_step_identity(plan) != one_step_plan
+            or _qwen38_lora_one_step_identity(plan) not in one_step_plans
         ):
             raise ValueError(
                 "Qwen3.8 LoRA requires the exact digest-bound one-step Megatron qualification gate"

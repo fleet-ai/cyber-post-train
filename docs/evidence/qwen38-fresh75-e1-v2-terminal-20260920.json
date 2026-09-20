@@ -1,0 +1,34 @@
+{
+  "schema": "cyber_qwen38_sft_terminal_evidence_v1",
+  "observed_at": "2026-09-20T14:23:23Z",
+  "api": {
+    "name": "chris-q38-f75-e1-v2-9c8fd91c",
+    "run_id": "9c8fd91c-87a7-4b3a-92dd-63b97033e4e4",
+    "job_id": "chris-q38-f75-e1-v2-9c8fd91c-z8h25",
+    "status": "SUCCEEDED"
+  },
+  "kubernetes": {
+    "rayjob_uid": "fac778b3-ac20-41d7-89a0-7cd470f45428",
+    "workload_uid": "53eea815-332b-43d3-803f-b7075d994a15",
+    "pod_uid": "c186a25a-5399-4455-9e8f-1eb1ded50cb3",
+    "restart_count": 0,
+    "gpu_allocation_released": true
+  },
+  "training": {
+    "output_root": "/mnt/sfs/jobs/chris-q38-f75-e1-v2",
+    "runtime_plan_sha256": "sha256:12fea04c9080cf44443a239cbaa957233ac578842817c5b60dd4343271320702",
+    "runtime_sha256": "sha256:b1bc58cc8edd112bbbddf1e729c448d06d2c83c0ba0fa2390829791998c9b3a4",
+    "optimizer_steps": 115,
+    "checkpoint_steps_present": [80, 100, 115],
+    "training_complete_file_sha256": "00ce20cf0f96ea10bb30f06c7a2ab8fd534530270e2c89b0751a1a754378a881",
+    "training_complete_self_digest_valid": true,
+    "metrics_file_sha256": "c4ec7aa4dc872b3be37786aa9eeb41b522784d8140fbcb21fb7ee8c479822df6",
+    "metrics_rows": 115,
+    "first_train_loss": 0.6419628858566284,
+    "last_train_loss": 0.36764806509017944,
+    "total_supervised_tokens": 1036061,
+    "failed_receipt_present": false,
+    "paused_receipt_present": false
+  },
+  "acceptance_boundary": "Training completed with finite scalar progress. Checkpoint step 115 still requires sealing, export, independent model/tokenizer reload, serving parity and matched evaluation before any capability claim."
+}
