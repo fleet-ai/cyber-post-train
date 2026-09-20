@@ -79,6 +79,8 @@ def _current_request(plan: dict) -> dict:
         from training.miles_training import job_request
     elif schema == "cyber_skyrl_training_v1":
         from training.skyrl_training import job_request
+    elif schema == "cyber_skyrl_production_training_v1":
+        from training.skyrl_production_training import job_request
     elif schema == "cyber_skyrl_topology_probe_v1":
         from training.skyrl_topology_probe import request as job_request
     else:
@@ -259,12 +261,24 @@ def rl(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
         if value["backend"] == "miles":
             from training import miles_training as backend
         elif value["backend"] == "skyrl":
-            from training import skyrl_training as backend
+            qualification = Path(str(value.get("qualification", ""))).name
+            if qualification == "qwen38-skyrl-production-queue-v1.json":
+                from training import skyrl_production_training as backend
+            else:
+                from training import skyrl_training as backend
         else:
             raise ValueError("unsupported RL backend")
         plan = backend.compile_rl(value, relative_to=config.resolve().parent)
         request = backend.job_request(plan)
         _prepare(output, plan, request)
+        if plan.get("schema") == "cyber_skyrl_production_training_v1":
+            from training.skyrl_production import offline_preview, release_observer_contract
+
+            _write(
+                output / "RELEASE_OBSERVER_CONTRACT.json",
+                release_observer_contract(plan, request),
+            )
+            _write(output / "OFFLINE_PREVIEW.json", offline_preview(plan, request))
         _print(
             {
                 "prepared": str(output),
@@ -666,6 +680,8 @@ def preflight(directory: Path) -> None:
             from training.miles_training import preflight as check
         elif plan.get("schema") == "cyber_skyrl_training_v1":
             from training.skyrl_training import preflight as check
+        elif plan.get("schema") == "cyber_skyrl_production_training_v1":
+            from training.skyrl_production_training import preflight as check
         elif plan.get("schema") == "cyber_skyrl_topology_probe_v1":
             from training.skyrl_topology_probe import preflight as check
         else:
@@ -689,6 +705,12 @@ def preview(directory: Path) -> None:
             result = client.preview(request)
         if plan.get("schema") == "cyber_skyrl_training_v1":
             from training.skyrl_training import validate_preview as validate_skyrl_preview
+
+            validated = validate_skyrl_preview(plan, request, result)
+        elif plan.get("schema") == "cyber_skyrl_production_training_v1":
+            from training.skyrl_production_training import (
+                validate_preview as validate_skyrl_preview,
+            )
 
             validated = validate_skyrl_preview(plan, request, result)
         elif plan.get("schema") == "cyber_skyrl_topology_probe_v1":
@@ -721,6 +743,8 @@ def submit(directory: Path) -> None:
             if plan.get("schema") == "cyber_miles_training_v1"
             else "cyber_skyrl_training_cpu_preflight_v1"
             if plan.get("schema") == "cyber_skyrl_training_v1"
+            else "cyber_skyrl_production_cpu_preflight_v1"
+            if plan.get("schema") == "cyber_skyrl_production_training_v1"
             else "cyber_skyrl_topology_probe_cpu_preflight_v1"
             if plan.get("schema") == "cyber_skyrl_topology_probe_v1"
             else "cyber_sft_cpu_preflight_v1",
@@ -734,7 +758,20 @@ def submit(directory: Path) -> None:
         ):
             raise ValueError("missing or mismatched CPU preflight")
         with _client(plan) as client:
-            result = client.submit_once(request, directory / "SUBMISSION.jsonl")
+            if plan.get("schema") == "cyber_skyrl_production_training_v1":
+                from training.skyrl_launch_guard import submit_once
+
+                result = submit_once(plan, request, client, directory)
+            elif (
+                plan.get("schema") == "cyber_skyrl_training_v1"
+                and plan.get("qualification", {}).get("profile")
+                == "qwen38_skyrl_reward_canary_v4"
+            ):
+                from training.skyrl_launch_guard import submit_canary_once
+
+                result = submit_canary_once(plan, request, client, directory)
+            else:
+                result = client.submit_once(request, directory / "SUBMISSION.jsonl")
         _print(result)
     except Exception as exc:
         _fail(exc)

@@ -1,0 +1,35 @@
+{
+  "arm_before_jobs_post": true,
+  "arm_id": "seed43",
+  "bind_after_jobs_response": [
+    "jobs_run_name",
+    "jobs_run_id",
+    "rayjob_uid",
+    "raycluster_uid",
+    "workload_uid",
+    "pod_uids",
+    "runtime_image_ids"
+  ],
+  "expected_gpus": 8,
+  "kubernetes_context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+  "maximum_observation_seconds": 45300,
+  "namespace": "fleet-train-jobs",
+  "peer_workload_mutation_authorized": false,
+  "plan_sha256": "sha256:c02013930caf7e5a8939bca6b1a565204120ab18f3f1126973fce4a330bc923f",
+  "release_acceptance": {
+    "active_gpus": 0,
+    "all_bound_pod_uids_absent": true,
+    "bound_raycluster_uid_absent": true,
+    "bound_workload_uid_absent": true,
+    "controller_terminal_observed": true,
+    "shutdown_after_job_finishes_required_in_server_preview": true
+  },
+  "request_sha256": "sha256:a3d50d2d22336889f2c87332ac13cd9184208008f1bc0b48466c1aae5931dd0c",
+  "requested_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
+  "run_dir": "/mnt/sfs/jobs/chris-q38-skyrl10-seed43",
+  "run_name_prefix": "chris-q38-skyrl10-seed43",
+  "schema": "cyber_skyrl_release_observer_contract_v1",
+  "server_run_name_pattern": "^chris-q38-skyrl10-seed43-[a-f0-9]{8}$",
+  "sha256": "sha256:6ff32e600784fa7f273f9041686a724404958ef21764b7e2da3b0ea9192a23d1",
+  "status": "contract_only_not_armed"
+}

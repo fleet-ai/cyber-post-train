@@ -271,6 +271,11 @@ def inspect_private_package(
         "create_once_target": config["output"],
         "data_manifest_sha256": manifest["sha256"],
         "data_manifest_file_sha256": file_sha256(root / "manifest.json"),
+        # The SkyRL manifest contains only public model identity, limits, row
+        # counts, and payload digests.  Retaining it in the sanitized packet
+        # lets the offline compiler bind an exact candidate without copying a
+        # prompt or any other private row bytes into Git.
+        "sanitized_manifest": manifest,
         "binding_aggregate_sha256": {
             "train": _safe_binding_digest(train, "train"),
             "dev": _safe_binding_digest(dev, "dev"),

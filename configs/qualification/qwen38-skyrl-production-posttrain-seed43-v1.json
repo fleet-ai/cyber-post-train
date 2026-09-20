@@ -16,7 +16,7 @@
       "steps": 10
     },
     "run_config": {
-      "file_sha256": "sha256:4f90cf8225a77335e9e30cd05cdf143831cdcde3f6b43d72a4966c209f11a396",
+      "file_sha256": "sha256:a4fd57959b0c4ae06d379196657973b14f5c42c2e08c5c390d863e9172de8ea6",
       "path": "configs/runs/qwen38-skyrl-production-seed43-v1.json"
     },
     "treatment": "random_seed"
@@ -487,7 +487,7 @@
       "release_and_exact_UID_absence_required_on_success_or_failure": true
     }
   },
-  "sha256": "sha256:254d6354f1858e2c7c0fecd2f4c259eedd236e551be0aab74836a275a977a3fd",
+  "sha256": "sha256:1b63536ea650748386b5ba316a2740c75cc94f8c1e37f944aa75d7039feb1087",
   "state": "offline_blocked_waiting_training_acceptance",
   "training_acceptance": {
     "accepted": false,

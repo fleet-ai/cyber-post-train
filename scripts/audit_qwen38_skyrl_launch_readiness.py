@@ -20,7 +20,14 @@ from unittest import mock
 from cyber_post_train.jobs import digest
 from scripts import prepare_qwen38_skyrl_production_queue as queue
 from training import rl_reward_canary as canary
-from training import sft, skyrl, skyrl_topology_probe, skyrl_training
+from training import (
+    sft,
+    skyrl,
+    skyrl_production,
+    skyrl_production_training,
+    skyrl_topology_probe,
+    skyrl_training,
+)
 from training.sft_runtime import (
     WATCHDOG_DRAIN_SECONDS,
     WATCHDOG_HARD_SECONDS,
@@ -148,7 +155,13 @@ def compile_prod4(run: dict, metadata: dict) -> tuple[dict, dict]:
     return plan, skyrl_training.job_request(plan)
 
 
-def episode_ceiling(run: dict, *, dev_rows: int, episode_seconds: int) -> dict:
+def episode_ceiling(
+    run: dict,
+    *,
+    dev_rows: int,
+    episode_seconds: int,
+    watchdog: dict | None = None,
+) -> dict:
     recipe = run["recipe"]
     concurrency = recipe["groups"] * recipe["samples_per_prompt"]
     eval_steps = {0, recipe["steps"]} | set(
@@ -156,6 +169,17 @@ def episode_ceiling(run: dict, *, dev_rows: int, episode_seconds: int) -> dict:
     )
     dev_waves = math.ceil(dev_rows / concurrency)
     ceiling = (recipe["steps"] + len(eval_steps) * dev_waves) * episode_seconds
+    watchdog = watchdog or {
+        "poll_seconds": WATCHDOG_POLL_SECONDS,
+        "startup_seconds": WATCHDOG_STARTUP_SECONDS,
+        "idle_seconds": WATCHDOG_IDLE_SECONDS,
+        "hard_seconds": WATCHDOG_HARD_SECONDS,
+        "drain_seconds": WATCHDOG_DRAIN_SECONDS,
+        "episode_ceiling_seconds": ceiling,
+    }
+    if watchdog["episode_ceiling_seconds"] != ceiling:
+        raise ValueError("plan watchdog episode ceiling differs from the legal schedule")
+    minimum = ceiling + watchdog["startup_seconds"] + watchdog["drain_seconds"]
     return {
         "episode_seconds": episode_seconds,
         "train_steps": recipe["steps"],
@@ -164,8 +188,9 @@ def episode_ceiling(run: dict, *, dev_rows: int, episode_seconds: int) -> dict:
         "episode_concurrency": concurrency,
         "development_waves_per_evaluation": dev_waves,
         "legal_episode_ceiling_seconds_excluding_startup_and_optimization": ceiling,
-        "watchdog_hard_seconds": WATCHDOG_HARD_SECONDS,
-        "fits_watchdog_hard_bound": ceiling <= WATCHDOG_HARD_SECONDS,
+        "watchdog": watchdog,
+        "minimum_hard_seconds_without_shortening_episode": minimum,
+        "fits_watchdog_hard_bound": watchdog["hard_seconds"] >= minimum,
     }
 
 
@@ -351,9 +376,12 @@ def prod4_audit(next_gates: dict) -> dict:
             "Jobs_API_name_prefix_and_output_history": True,
             "CPU_preflight_output_absence": True,
             "runtime_new_checkpoint_and_episode_trees": True,
-            "fresh_Kubernetes_name_absence": False,
-            "fresh_SFS_output_absence_immediately_before_create": False,
-            "fresh_WandB_run_ID_absence_immediately_before_create": False,
+            "fresh_Kubernetes_name_absence_encoded": True,
+            "fresh_SFS_manifest_payload_and_output_absence_encoded": True,
+            "fresh_WandB_run_ID_absence_encoded": True,
+            "caller_guard_runs_after_preview_before_create": True,
+            "maximum_guard_seconds": 120,
+            "fresh_guard_executed": False,
         },
         "submission_gate": plan["qualification"]["submission_gate"],
         "ready": False,
@@ -376,7 +404,28 @@ def production_arms_audit() -> dict:
     for arm in queue.ARMS:
         run_path = queue.path_for("run", arm)
         data_path = queue.path_for("data", arm)
+        manifest_path = queue.path_for("manifest", arm)
+        plan_path = queue.path_for("plan", arm)
+        preview_path = queue.path_for("preview", arm)
+        observer_path = queue.path_for("observer", arm)
         run, data = load(run_path), load(data_path)
+        plan = expected[plan_path]
+        compiled, request = queue.compile_arm(expected, arm)
+        preview = expected[preview_path]
+        observer = expected[observer_path]
+        if (
+            plan != compiled
+            or preview != skyrl_production.offline_preview(plan, request)
+            or observer != skyrl_production.release_observer_contract(plan, request)
+            or plan["schema"] != skyrl_production_training.SCHEMA
+            or request["workers"] != 1
+            or request["gpus_per_worker"] != 8
+            or request["priority_class"] != "c1"
+            or request["image"] != skyrl_production.IMAGE
+            or plan["data"] != expected[manifest_path]
+            or plan["watchdog"] != skyrl_production.WATCHDOGS[arm["steps"]]
+        ):
+            raise ValueError(f"production arm {arm['id']} plan/request closure changed")
         args = skyrl.SkyRLConfig(
             name=run["name"],
             output_root=run["output_root"],
@@ -424,9 +473,13 @@ def production_arms_audit() -> dict:
                 "treatment": arm["treatment"],
                 "run_config": source(run_path),
                 "data_config": source(data_path),
-                "plan_sha256": None,
-                "request_sha256": None,
-                "plan_state": "not_compilable_until_exact_staged_manifest_and_validator_exist",
+                "sanitized_manifest": source(manifest_path),
+                "plan": source(plan_path),
+                "plan_sha256": "sha256:" + digest(plan),
+                "request_sha256": "sha256:" + digest(request),
+                "offline_preview": source(preview_path),
+                "server_preview_recorded": False,
+                "plan_state": "exact_offline_plan_compiled_not_live_preflighted",
                 "resource_shape": {
                     "priority": "c1",
                     "nodes": 1,
@@ -444,7 +497,8 @@ def production_arms_audit() -> dict:
                     "split_sha256": controls["split_sha256"],
                     "counts": controls["counts"],
                     "ordered_tools": controls["ordered_tools"],
-                    "staged": False,
+                    "sanitized_manifest_bound": True,
+                    "SFS_staged": False,
                 },
                 "reward": controls["reward"],
                 "wandb": {
@@ -456,7 +510,26 @@ def production_arms_audit() -> dict:
                     run,
                     dev_rows=20,
                     episode_seconds=data["limits"]["episode_seconds"],
+                    watchdog=plan["watchdog"],
                 ),
+                "fresh_absence_guard": {
+                    "encoded": True,
+                    "executed": False,
+                    "checks": [
+                        "Jobs_history_name_and_output",
+                        "Kubernetes_name_and_output",
+                        "SFS_staged_tree_and_output",
+                        "WandB_run_ID",
+                    ],
+                    "maximum_seconds": 120,
+                },
+                "release_observer": {
+                    "contract": source(observer_path),
+                    "arm_before_POST": observer["arm_before_jobs_post"],
+                    "UID_fields": observer["bind_after_jobs_response"],
+                    "armed": False,
+                    "release_receipt_recorded": False,
+                },
                 "ready": False,
             }
         )
@@ -466,7 +539,7 @@ def production_arms_audit() -> dict:
     ):
         raise ValueError("production create-once identities are not unique")
     return {
-        "state": "offline_configs_sealed_plans_not_prepared",
+        "state": "offline_plans_validators_previews_and_observer_contracts_complete",
         "qualification": source(queue.QUALIFICATION),
         "data_staging": source(queue.STAGING_PACKET),
         "task_set": source(queue.TASK_SET),
@@ -480,7 +553,7 @@ def production_arms_audit() -> dict:
             arm["resource_shape"] == {"priority": "c1", "nodes": 1, "gpus_per_node": 8, "gpus": 8}
             for arm in arms
         ),
-        "all_legal_episode_ceilings_fit_shared_watchdog": all(
+        "all_legal_episode_ceilings_fit_plan_watchdogs": all(
             arm["watchdog"]["fits_watchdog_hard_bound"] for arm in arms
         ),
         "submission_gate": qualification["submission_gate"],
@@ -506,16 +579,17 @@ def build() -> dict:
         "v17_CPU_preflight_preview_observer_execution_receipt_and_release_are_not_accepted",
         "prod4_private_data_is_not_create_once_staged_and_digest_verified",
         "prod4_exact_image_CPU_preflight_and_Jobs_API_preview_are_not_recorded",
-        "fresh_Jobs_Kubernetes_SFS_and_WandB_absence_checks_are_not_complete_or_encoded_at_submit",
+        "fresh_prod4_Jobs_Kubernetes_SFS_and_WandB_absence_guard_is_not_executed",
         "prod4_authoritative_reward_optimizer_checkpoint_and_UID_release_receipt_is_absent",
-        "full_arm_exact_staged_manifests_training_image_validator_plan_request_preflight_and_preview_are_absent",
-        "full_arm_legal_episode_ceilings_exceed_the_shared_eight_hour_watchdog_bound",
-        "full_arm_independent_UID_bound_release_observers_are_not_recorded",
+        "full_arm_prod4_prerequisite_is_not_accepted",
+        "full_arm_private_data_is_not_create_once_staged_and_verified_on_SFS",
+        "full_arm_exact_image_CPU_preflights_and_server_previews_are_not_recorded",
+        "full_arm_fresh_absence_guards_and_UID_bound_release_observers_are_not_executed",
     ]
     return seal(
         {
             "schema": "cyber_qwen38_skyrl_launch_readiness_audit_v1",
-            "status": "not_launch_ready_failure_budget_closed_and_gates_absent",
+            "status": "offline_repairs_complete_external_gates_pending_failure_budget_closed",
             "scope": (
                 "offline_no_submit_no_launch_no_cancel_no_private_logs_no_external_reads_or_writes"
             ),
@@ -536,6 +610,11 @@ def build() -> dict:
                 "CLI": source(ROOT / "cyber_post_train/cli.py"),
                 "RL_runtime": source(ROOT / "training/rl_runtime.py"),
                 "SkyRL_training": source(ROOT / "training/skyrl_training.py"),
+                "SkyRL_production_training": source(
+                    ROOT / "training/skyrl_production_training.py"
+                ),
+                "SkyRL_production_validator": source(ROOT / "training/skyrl_production.py"),
+                "SkyRL_caller_guard": source(ROOT / "training/skyrl_launch_guard.py"),
                 "watchdog": source(ROOT / "training/sft_runtime.py"),
             },
             "dry_run_commands": [
@@ -545,6 +624,11 @@ def build() -> dict:
                     "--output <new-temporary-directory>"
                 ),
                 "uv run --locked python scripts/prepare_qwen38_skyrl_production_queue.py --check",
+                (
+                    "uv run --locked cyber-post-train rl "
+                    "configs/runs/qwen38-skyrl-production-a1-v1.json "
+                    "--output <new-temporary-directory>"
+                ),
                 "uv run --locked python scripts/prepare_qwen38_skyrl_posttrain_packets.py --check",
                 ("uv run --locked python scripts/audit_qwen38_skyrl_launch_readiness.py --check"),
             ],

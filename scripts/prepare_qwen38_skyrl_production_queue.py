@@ -10,9 +10,14 @@ JSON artifacts after an intentional source change.
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 from pathlib import Path
+from unittest import mock
+
+from cyber_post_train.jobs import digest as request_digest
+from training import sft, skyrl_production, skyrl_production_training
 
 ROOT = Path(__file__).resolve().parents[1]
 ELIGIBLE = ROOT / "configs/data/qwen-blackbox-eligible-v1.json"
@@ -259,6 +264,7 @@ def run_config(arm: dict) -> dict:
         },
         "cluster": {
             "priority": "c1",
+            "target": "prod",
             "resources": {
                 "cpu_request": "64",
                 "cpu_limit": "64",
@@ -277,6 +283,8 @@ def run_config(arm: dict) -> dict:
 def path_for(kind: str, arm: dict) -> Path:
     if kind == "data":
         return ROOT / f"configs/qualification/qwen38-skyrl-production-data-{arm['id']}-v1.json"
+    if kind in {"manifest", "plan", "preview", "observer"}:
+        return ROOT / (f"configs/qualification/qwen38-skyrl-production-{kind}-{arm['id']}-v1.json")
     return ROOT / f"configs/runs/qwen38-skyrl-production-{arm['id']}-v1.json"
 
 
@@ -289,14 +297,34 @@ def build() -> dict[Path, dict]:
         != "sha256:" + digest({key: value for key, value in staging.items() if key != "sha256"})
         or staging.get("state") != "locally_built_not_staged"
         or staging.get("external_mutations") != 0
-        or [arm.get("name") for arm in staging.get("arms", [])]
-        != [arm["name"] for arm in ARMS]
+        or [arm.get("name") for arm in staging.get("arms", [])] != [arm["name"] for arm in ARMS]
+        or task_set["sha256"] != skyrl_production.TASK_SET_SHA256
+        or split["sha256"] != skyrl_production.SPLIT_SHA256
     ):
         raise ValueError("private data staging packet differs from the reviewed queue")
+    staged_by_name = {arm["name"]: arm for arm in staging["arms"]}
+    if any(
+        not isinstance(arm.get("sanitized_manifest"), dict)
+        or arm["sanitized_manifest"].get("sha256") != arm["data_manifest_sha256"]
+        for arm in staging["arms"]
+    ):
+        raise ValueError("private staging packet lacks its sanitized manifests")
     qualification = sealed(
         {
             "schema": "cyber_qwen38_skyrl_production_queue_v1",
-            "purpose": "No-submit queue behind the exact prod4 reward-acquisition canary.",
+            "profile": skyrl_production.PROFILE,
+            "purpose": (
+                "Exact offline-compiled queue behind the prod4 reward-acquisition canary; "
+                "all external preview and submission gates remain closed."
+            ),
+            "execution": {
+                "cluster_target": "prod",
+                "jobs_api_base_url": "https://api.ft.flt.build",
+                "kubernetes_context": skyrl_production.PROD_CONTEXT,
+                "namespace": skyrl_production.NAMESPACE,
+                "image": skyrl_production.IMAGE,
+                "environment": {"VLLM_USE_FLASHINFER_SAMPLER": "0"},
+            },
             "canary_prerequisite": {
                 "run_name": "chris-q38-rlreward-prod4",
                 "required": [
@@ -308,38 +336,58 @@ def build() -> dict[Path, dict]:
                     "all_owned_gpu_resources_released",
                 ],
             },
-            "fixed_controls": {
-                "model": "Qwen/Qwen3.8-27B@1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
-                "task_set_sha256": task_set["sha256"],
-                "split_sha256": split["sha256"],
-                "counts": {"train": 59, "dev": 20, "test_untouched": 10},
-                "harness": "Fleet native SkyRL exact-version task-tool runtime",
-                "ordered_tools": ["bash", "submit_report"],
-                "reward": "authoritative Fleet partial cyber score",
-                "context_tokens": 98304,
-                "response_tokens": 81920,
-                "max_tokens_per_turn": 4096,
-                "max_turns": 600,
-                "episode_seconds": 2400,
-                "groups": 1,
-                "samples_per_prompt": 8,
-                "kl_coefficient": 0.001,
-                "nodes": 1,
-                "gpus": 8,
-                "priority": "c1",
-            },
+            "fixed_controls": copy.deepcopy(skyrl_production.FIXED_CONTROLS),
             "submission_gate": {
                 "preview_authorized": False,
                 "submission_authorized": False,
                 "blockers": [
                     "prod4_terminal_acceptance_receipt_absent",
-                    "production_qualification_dispatch_intentionally_disabled_until_prod4_acceptance",
-                    "broad_get_only_data_manifests_built_locally_but_not_staged",
+                    "broad_get_only_data_manifests_not_yet_create_once_staged_on_SFS",
                     "exact_image_cpu_preflights_not_recorded",
-                    "jobs_api_previews_and_fresh_duplicate_output_checks_not_recorded",
+                    "jobs_api_server_previews_and_fresh_guard_receipts_not_recorded",
+                    "uid_bound_release_observers_not_yet_armed",
                     "global_cluster_failure_budget_is_10_of_10_until_user_resets_it",
                 ],
             },
+            "release_observer": {
+                "contract_schema": skyrl_production.RELEASE_CONTRACT_SCHEMA,
+                "armed_receipt_schema": "cyber_skyrl_release_observer_armed_v1",
+                "arm_before_jobs_post": True,
+                "bind_server_run_and_kubernetes_uids_after_post": True,
+                "release_requires_bound_descendants_absent_and_active_gpus_zero": True,
+                "peer_workload_mutation_authorized": False,
+            },
+            "production_arms": [
+                {
+                    "id": arm["id"],
+                    "dispatch_order": arm["priority"],
+                    "name": arm["name"],
+                    "recipe": {
+                        "nodes": 1,
+                        "steps": arm["steps"],
+                        "groups": 1,
+                        "samples_per_prompt": 8,
+                        "lr": arm["lr"],
+                        "eval_interval": 10,
+                        "checkpoint_interval": 10,
+                        "keep_checkpoints": 2,
+                        "seed": arm["seed"],
+                    },
+                    "manifest": copy.deepcopy(staged_by_name[arm["name"]]["sanitized_manifest"]),
+                    "watchdog": copy.deepcopy(skyrl_production.WATCHDOGS[arm["steps"]]),
+                    "staged_data": {
+                        "root": staged_by_name[arm["name"]]["create_once_target"],
+                        "candidate_manifest_path": str(path_for("manifest", arm).relative_to(ROOT)),
+                        "manifest_file_sha256": staged_by_name[arm["name"]][
+                            "data_manifest_file_sha256"
+                        ],
+                        "manifest_self_sha256": staged_by_name[arm["name"]]["data_manifest_sha256"],
+                        "files": copy.deepcopy(staged_by_name[arm["name"]]["files"]),
+                        "state": "local_private_candidate_not_SFS_staged",
+                    },
+                }
+                for arm in ARMS
+            ],
             "private_data": {
                 "staging_packet": source_file(STAGING_PACKET),
                 "state": staging["state"],
@@ -410,11 +458,43 @@ def build() -> dict[Path, dict]:
     for arm in ARMS:
         artifacts[path_for("data", arm)] = data_config(arm)
         artifacts[path_for("run", arm)] = run_config(arm)
+        artifacts[path_for("manifest", arm)] = copy.deepcopy(
+            staged_by_name[arm["name"]]["sanitized_manifest"]
+        )
+    skyrl_production.validate_qualification(qualification)
+    for arm in ARMS:
+        plan, request = compile_arm(artifacts, arm)
+        artifacts[path_for("plan", arm)] = plan
+        artifacts[path_for("preview", arm)] = skyrl_production.offline_preview(plan, request)
+        artifacts[path_for("observer", arm)] = skyrl_production.release_observer_contract(
+            plan, request
+        )
     return artifacts
 
 
 def raw(value: dict) -> bytes:
     return json.dumps(value, indent=2, sort_keys=True, allow_nan=False).encode() + b"\n"
+
+
+def compile_arm(artifacts: dict[Path, dict], arm: dict) -> tuple[dict, dict]:
+    """Compile one exact no-submit plan from its sanitized staged manifest."""
+    run_path = path_for("run", arm)
+    run = artifacts[run_path]
+    manifest_path = Path(run["data"]["manifest"])
+    original = sft.read_mapping
+
+    def read(path: Path) -> dict:
+        candidate = Path(path)
+        if candidate == manifest_path:
+            return copy.deepcopy(artifacts[path_for("manifest", arm)])
+        if candidate.resolve() == QUALIFICATION.resolve():
+            return copy.deepcopy(artifacts[QUALIFICATION])
+        return original(candidate)
+
+    with mock.patch.object(sft, "read_mapping", side_effect=read):
+        plan = skyrl_production_training.compile_rl(run, relative_to=run_path.parent)
+    request = skyrl_production_training.job_request(plan)
+    return plan, request
 
 
 def queue_evidence(artifacts: dict[Path, dict]) -> dict:
@@ -424,6 +504,13 @@ def queue_evidence(artifacts: dict[Path, dict]) -> dict:
     arms = []
     for arm in ARMS:
         data_path, run_path = path_for("data", arm), path_for("run", arm)
+        manifest_path = path_for("manifest", arm)
+        plan_path = path_for("plan", arm)
+        preview_path = path_for("preview", arm)
+        observer_path = path_for("observer", arm)
+        plan, request = compile_arm(artifacts, arm)
+        if plan != artifacts[plan_path]:
+            raise ValueError("offline SkyRL production plan is not reproducible")
         arms.append(
             {
                 **arm,
@@ -433,13 +520,35 @@ def queue_evidence(artifacts: dict[Path, dict]) -> dict:
                 "run_config": str(run_path.relative_to(ROOT)),
                 "run_config_file_sha256": "sha256:"
                 + hashlib.sha256(raw(artifacts[run_path])).hexdigest(),
-                "local_data_manifest_sha256": staged_by_name[arm["name"]][
-                    "data_manifest_sha256"
-                ],
+                "local_data_manifest_sha256": staged_by_name[arm["name"]]["data_manifest_sha256"],
                 "local_data_manifest_file_sha256": staged_by_name[arm["name"]][
                     "data_manifest_file_sha256"
                 ],
-                "plan_request_state": "not_prepared_until_exact_staged_manifest_exists",
+                "sanitized_manifest": {
+                    "path": str(manifest_path.relative_to(ROOT)),
+                    "self_sha256": artifacts[manifest_path]["sha256"],
+                    "file_sha256": "sha256:"
+                    + hashlib.sha256(raw(artifacts[manifest_path])).hexdigest(),
+                    "cluster_staged": False,
+                },
+                "plan": {
+                    "path": str(plan_path.relative_to(ROOT)),
+                    "sha256": "sha256:" + request_digest(plan),
+                    "file_sha256": "sha256:"
+                    + hashlib.sha256(raw(artifacts[plan_path])).hexdigest(),
+                },
+                "request_sha256": "sha256:" + request_digest(request),
+                "offline_preview": {
+                    "path": str(preview_path.relative_to(ROOT)),
+                    "self_sha256": artifacts[preview_path]["sha256"],
+                    "server_preview_requested": False,
+                },
+                "release_observer_contract": {
+                    "path": str(observer_path.relative_to(ROOT)),
+                    "self_sha256": artifacts[observer_path]["sha256"],
+                    "armed": False,
+                },
+                "plan_request_state": "exact_offline_plan_and_request_digest_compiled",
                 "submitted": False,
             }
         )
@@ -479,7 +588,15 @@ def queue_evidence(artifacts: dict[Path, dict]) -> dict:
             "common_release_gate": qualification["canary_prerequisite"],
             "blockers": qualification["submission_gate"]["blockers"],
             "duplicate_output_checks": {
-                "state": "clean_read_only_observation_but_must_repeat_before_preview_or_submit",
+                "state": "caller_guard_encoded_but_must_execute_fresh_before_submit",
+                "caller_guard": {
+                    "jobs_history": True,
+                    "kubernetes_name_and_output": True,
+                    "sfs_staged_tree_and_output": True,
+                    "wandb_run_id": True,
+                    "maximum_guard_seconds": 120,
+                    "runs_after_server_preview_immediately_before_create": True,
+                },
                 "observed_at": "2026-09-20T17:10:39Z",
                 "jobs_api": {
                     "method": "GET_only",
@@ -495,17 +612,17 @@ def queue_evidence(artifacts: dict[Path, dict]) -> dict:
                 "sfs": "not_observable_from_this_host",
                 "wandb": "not_observable_without_a_local_read_credential",
                 "reason": (
-                    "Fresh GET-only Jobs history, Kubernetes, SFS, and W&B checks are "
-                    "time-sensitive."
+                    "The encoded caller guard must recheck all four destinations; this "
+                    "historical observation is not reusable."
                 ),
             },
             "next_actions_after_gate": [
                 "Accept prod4 only after every common release-gate fact is independently verified.",
                 (
-                    "Stage and digest-verify each arm's manifest, train JSONL, dev JSONL, split, "
-                    "and task set."
+                    "Create-once stage and digest-verify each arm's manifest, train JSONL, dev "
+                    "JSONL, split, and task set against the committed sanitized manifest."
                 ),
-                "Prepare immutable plan/request seals, then run exact-image CPU preflight.",
+                "Recompile the immutable plan/request and run exact-image CPU preflight.",
                 (
                     "Recheck Jobs, Kubernetes, SFS, and W&B duplicates/absence and validate the "
                     "server preview."

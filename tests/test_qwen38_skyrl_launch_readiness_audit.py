@@ -106,14 +106,19 @@ def test_v17_and_prod4_recompile_to_the_frozen_digests_and_resource_shape() -> N
     assert prod4["wandb"]["run_id"] == "chris-q38-rlreward-prod4"
     assert prod4["wandb"]["resume"] == "never"
     assert prod4["wandb"]["fresh_run_ID_absence_checked_before_submit"] is False
+    encoded = prod4["encoded_absence_checks"]
+    assert encoded["fresh_Kubernetes_name_absence_encoded"] is True
+    assert encoded["fresh_SFS_manifest_payload_and_output_absence_encoded"] is True
+    assert encoded["fresh_WandB_run_ID_absence_encoded"] is True
+    assert encoded["fresh_guard_executed"] is False
     assert prod4["submission_gate"]["submission_authorized"] is False
 
 
-def test_full_arms_are_c1_but_have_no_launch_plans_and_exceed_the_shared_watchdog() -> None:
+def test_full_arms_have_exact_offline_plans_and_plan_bound_watchdogs() -> None:
     value = audit.build()
     queue = value["full_c1_arms"]
     assert queue["all_c1_one_node_eight_GPU"] is True
-    assert queue["all_legal_episode_ceilings_fit_shared_watchdog"] is False
+    assert queue["all_legal_episode_ceilings_fit_plan_watchdogs"] is True
     assert [arm["id"] for arm in queue["arms"]] == [
         "a1",
         "lr3e7",
@@ -122,12 +127,18 @@ def test_full_arms_are_c1_but_have_no_launch_plans_and_exceed_the_shared_watchdo
         "dose50",
     ]
     assert len({arm["wandb"]["run_id"] for arm in queue["arms"]}) == 5
+    assert all(arm["plan_sha256"].startswith("sha256:") for arm in queue["arms"])
+    assert all(arm["request_sha256"].startswith("sha256:") for arm in queue["arms"])
     assert all(
-        arm["plan_sha256"] is None and arm["request_sha256"] is None for arm in queue["arms"]
+        arm["plan_state"] == "exact_offline_plan_compiled_not_live_preflighted"
+        for arm in queue["arms"]
     )
     assert all(arm["resource_shape"]["priority"] == "c1" for arm in queue["arms"])
     assert all(arm["resource_shape"]["gpus"] == 8 for arm in queue["arms"])
-    assert all(not arm["watchdog"]["fits_watchdog_hard_bound"] for arm in queue["arms"])
+    assert all(arm["watchdog"]["fits_watchdog_hard_bound"] for arm in queue["arms"])
+    assert all(arm["fresh_absence_guard"]["encoded"] for arm in queue["arms"])
+    assert all(not arm["fresh_absence_guard"]["executed"] for arm in queue["arms"])
+    assert all(not arm["release_observer"]["armed"] for arm in queue["arms"])
     ceilings = {
         arm["id"]: arm["watchdog"][
             "legal_episode_ceiling_seconds_excluding_startup_and_optimization"
@@ -141,7 +152,17 @@ def test_full_arms_are_c1_but_have_no_launch_plans_and_exceed_the_shared_watchdo
         "seed43": 38400,
         "dose50": 163200,
     }
+    hard_bounds = {
+        arm["id"]: arm["watchdog"]["watchdog"]["hard_seconds"] for arm in queue["arms"]
+    }
+    assert hard_bounds == {
+        "a1": 43200,
+        "lr3e7": 43200,
+        "lr3e6": 43200,
+        "seed43": 43200,
+        "dose50": 172800,
+    }
     assert (
         "full_arm_legal_episode_ceilings_exceed_the_shared_eight_hour_watchdog_bound"
-        in value["blockers"]
+        not in value["blockers"]
     )

@@ -16,7 +16,7 @@
       "steps": 10
     },
     "run_config": {
-      "file_sha256": "sha256:78c9bc714440cb4494967602c360dc001ae772c23d60e7c7604d2401e061d17c",
+      "file_sha256": "sha256:593e90f38e930f94854e21747200b241145110ee6ef309e1eef210963aaceef4",
       "path": "configs/runs/qwen38-skyrl-production-a1-v1.json"
     },
     "treatment": "anchor"
@@ -487,7 +487,7 @@
       "release_and_exact_UID_absence_required_on_success_or_failure": true
     }
   },
-  "sha256": "sha256:df125c36868d16006793665bd66d81689cfb4bc568cdaf563a19e9722f6b325b",
+  "sha256": "sha256:fae4f6eac024dace52d8027b178f9aeffc9519b625f99e9ed56b3b0604464e79",
   "state": "offline_blocked_waiting_training_acceptance",
   "training_acceptance": {
     "accepted": false,

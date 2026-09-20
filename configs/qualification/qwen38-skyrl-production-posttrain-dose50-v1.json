@@ -18,7 +18,7 @@
       "steps": 50
     },
     "run_config": {
-      "file_sha256": "sha256:bc1691d540e8d4ebe13706d7f4132826eb8debe092deaf3dfe154cbc5e7b7cc9",
+      "file_sha256": "sha256:d8558b90a37163924aeeccf1a9320171eff8f7a1ac98bbaf32a6cda526dcd336",
       "path": "configs/runs/qwen38-skyrl-production-dose50-v1.json"
     },
     "treatment": "optimizer_update_dose"
@@ -494,7 +494,7 @@
       "release_and_exact_UID_absence_required_on_success_or_failure": true
     }
   },
-  "sha256": "sha256:11b9d1353775741783c26e41accc97b4dd5bbabfdb1ee00c5c932f3877eed015",
+  "sha256": "sha256:4b7e440337330a64cf0ca8f49640f41db282e8531707c6a58b5330f2c18c4e47",
   "state": "offline_blocked_waiting_training_acceptance",
   "training_acceptance": {
     "accepted": false,

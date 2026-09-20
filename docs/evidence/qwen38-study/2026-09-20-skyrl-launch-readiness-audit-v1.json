@@ -4,15 +4,17 @@
     "v17_CPU_preflight_preview_observer_execution_receipt_and_release_are_not_accepted",
     "prod4_private_data_is_not_create_once_staged_and_digest_verified",
     "prod4_exact_image_CPU_preflight_and_Jobs_API_preview_are_not_recorded",
-    "fresh_Jobs_Kubernetes_SFS_and_WandB_absence_checks_are_not_complete_or_encoded_at_submit",
+    "fresh_prod4_Jobs_Kubernetes_SFS_and_WandB_absence_guard_is_not_executed",
     "prod4_authoritative_reward_optimizer_checkpoint_and_UID_release_receipt_is_absent",
-    "full_arm_exact_staged_manifests_training_image_validator_plan_request_preflight_and_preview_are_absent",
-    "full_arm_legal_episode_ceilings_exceed_the_shared_eight_hour_watchdog_bound",
-    "full_arm_independent_UID_bound_release_observers_are_not_recorded"
+    "full_arm_prod4_prerequisite_is_not_accepted",
+    "full_arm_private_data_is_not_create_once_staged_and_verified_on_SFS",
+    "full_arm_exact_image_CPU_preflights_and_server_previews_are_not_recorded",
+    "full_arm_fresh_absence_guards_and_UID_bound_release_observers_are_not_executed"
   ],
   "dry_run_commands": [
     "uv run --locked cyber-post-train rl-topology-probe configs/qualification/qwen38-skyrl-topology-probe-dev-v2.json --output <new-temporary-directory>",
     "uv run --locked python scripts/prepare_qwen38_skyrl_production_queue.py --check",
+    "uv run --locked cyber-post-train rl configs/runs/qwen38-skyrl-production-a1-v1.json --output <new-temporary-directory>",
     "uv run --locked python scripts/prepare_qwen38_skyrl_posttrain_packets.py --check",
     "uv run --locked python scripts/audit_qwen38_skyrl_launch_readiness.py --check"
   ],
@@ -31,7 +33,7 @@
   },
   "full_c1_arms": {
     "all_c1_one_node_eight_GPU": true,
-    "all_legal_episode_ceilings_fit_shared_watchdog": false,
+    "all_legal_episode_ceilings_fit_plan_watchdogs": true,
     "arms": [
       {
         "data_config": {
@@ -39,6 +41,7 @@
           "path": "configs/qualification/qwen38-skyrl-production-data-a1-v1.json"
         },
         "dataset": {
+          "SFS_staged": false,
           "counts": {
             "dev": 20,
             "test_untouched": 10,
@@ -52,11 +55,22 @@
             "submit_report"
           ],
           "root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/chris-q38-skyrl10-a1-inputs-v1/data",
+          "sanitized_manifest_bound": true,
           "split_sha256": "sha256:1f0da5054df25a7d67476f591d8c9c8d42d44de65c0b9d4b542ba9e33b132472",
-          "staged": false,
           "task_set_sha256": "sha256:5de88eada94119fd21ac715bb1956a745376d775c13ce7d5584936e70b3a003a"
         },
         "dispatch_order": 1,
+        "fresh_absence_guard": {
+          "checks": [
+            "Jobs_history_name_and_output",
+            "Kubernetes_name_and_output",
+            "SFS_staged_tree_and_output",
+            "WandB_run_ID"
+          ],
+          "encoded": true,
+          "executed": false,
+          "maximum_seconds": 120
+        },
         "id": "a1",
         "model": {
           "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
@@ -64,8 +78,17 @@
           "weights": "../models/qwen38-27b-1d4bf0f2.weights.json"
         },
         "name": "chris-q38-skyrl10-a1",
-        "plan_sha256": null,
-        "plan_state": "not_compilable_until_exact_staged_manifest_and_validator_exist",
+        "offline_preview": {
+          "file_sha256": "sha256:9e2836162b98dec2d62a5feb7b680f26d5260c165667252a44686f58938ebbe6",
+          "path": "configs/qualification/qwen38-skyrl-production-preview-a1-v1.json",
+          "self_sha256": "sha256:8882d9a793de6fd6c182b6cd304b037483abbe134c9b6802948ad0872819be2c"
+        },
+        "plan": {
+          "file_sha256": "sha256:8c8dc764f816b366719102a37f69f8ac603457c56866b70dea938dc836f06950",
+          "path": "configs/qualification/qwen38-skyrl-production-plan-a1-v1.json"
+        },
+        "plan_sha256": "sha256:de1a62f49cf1cf5f01791fdfc60bc474dd6d9eca6a5d8d8267cbc4a4a2aa82db",
+        "plan_state": "exact_offline_plan_compiled_not_live_preflighted",
         "ready": false,
         "recipe": {
           "checkpoint_interval": 10,
@@ -78,7 +101,26 @@
           "seed": 42,
           "steps": 10
         },
-        "request_sha256": null,
+        "release_observer": {
+          "UID_fields": [
+            "jobs_run_name",
+            "jobs_run_id",
+            "rayjob_uid",
+            "raycluster_uid",
+            "workload_uid",
+            "pod_uids",
+            "runtime_image_ids"
+          ],
+          "arm_before_POST": true,
+          "armed": false,
+          "contract": {
+            "file_sha256": "sha256:bed6fdab7137bed7bdd2d16eee46cb3b0e0a0f21cec7e71bda1d874e0972995d",
+            "path": "configs/qualification/qwen38-skyrl-production-observer-a1-v1.json",
+            "self_sha256": "sha256:b5c31305ff61256847dba71e35bfe4840fb613e0a374786b33155da27275b859"
+          },
+          "release_receipt_recorded": false
+        },
+        "request_sha256": "sha256:e9bc4b1882fa25f0596210c826fa4c05edde3a06269c40306bd6d9e9aef4b94a",
         "resource_shape": {
           "gpus": 8,
           "gpus_per_node": 8,
@@ -87,9 +129,15 @@
         },
         "reward": "authoritative Fleet partial cyber score",
         "run_config": {
-          "file_sha256": "sha256:78c9bc714440cb4494967602c360dc001ae772c23d60e7c7604d2401e061d17c",
+          "file_sha256": "sha256:593e90f38e930f94854e21747200b241145110ee6ef309e1eef210963aaceef4",
           "path": "configs/runs/qwen38-skyrl-production-a1-v1.json"
         },
+        "sanitized_manifest": {
+          "file_sha256": "sha256:8595cf0a046da535c33098f01f1d1315e917cd1f9cc65d3ecff1dffb925bec76",
+          "path": "configs/qualification/qwen38-skyrl-production-manifest-a1-v1.json",
+          "self_sha256": "sha256:09eae3253cf1224b329e83c4512da3d877ef1755d17efb7934713bb7e5d322d5"
+        },
+        "server_preview_recorded": false,
         "treatment": "anchor",
         "wandb": {
           "entity": "thefleet",
@@ -104,10 +152,18 @@
           "episode_concurrency": 8,
           "episode_seconds": 2400,
           "evaluation_points": 2,
-          "fits_watchdog_hard_bound": false,
+          "fits_watchdog_hard_bound": true,
           "legal_episode_ceiling_seconds_excluding_startup_and_optimization": 38400,
+          "minimum_hard_seconds_without_shortening_episode": 40500,
           "train_steps": 10,
-          "watchdog_hard_seconds": 28800
+          "watchdog": {
+            "drain_seconds": 300,
+            "episode_ceiling_seconds": 38400,
+            "hard_seconds": 43200,
+            "idle_seconds": 1200,
+            "poll_seconds": 60,
+            "startup_seconds": 1800
+          }
         }
       },
       {
@@ -116,6 +172,7 @@
           "path": "configs/qualification/qwen38-skyrl-production-data-lr3e7-v1.json"
         },
         "dataset": {
+          "SFS_staged": false,
           "counts": {
             "dev": 20,
             "test_untouched": 10,
@@ -129,11 +186,22 @@
             "submit_report"
           ],
           "root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/chris-q38-skyrl10-lr3e7-inputs-v1/data",
+          "sanitized_manifest_bound": true,
           "split_sha256": "sha256:1f0da5054df25a7d67476f591d8c9c8d42d44de65c0b9d4b542ba9e33b132472",
-          "staged": false,
           "task_set_sha256": "sha256:5de88eada94119fd21ac715bb1956a745376d775c13ce7d5584936e70b3a003a"
         },
         "dispatch_order": 2,
+        "fresh_absence_guard": {
+          "checks": [
+            "Jobs_history_name_and_output",
+            "Kubernetes_name_and_output",
+            "SFS_staged_tree_and_output",
+            "WandB_run_ID"
+          ],
+          "encoded": true,
+          "executed": false,
+          "maximum_seconds": 120
+        },
         "id": "lr3e7",
         "model": {
           "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
@@ -141,8 +209,17 @@
           "weights": "../models/qwen38-27b-1d4bf0f2.weights.json"
         },
         "name": "chris-q38-skyrl10-lr3e7",
-        "plan_sha256": null,
-        "plan_state": "not_compilable_until_exact_staged_manifest_and_validator_exist",
+        "offline_preview": {
+          "file_sha256": "sha256:2d54f47c3ab49960ee8dd22bd4d05832f517aedf38c7bfe6f69750372dcc2a01",
+          "path": "configs/qualification/qwen38-skyrl-production-preview-lr3e7-v1.json",
+          "self_sha256": "sha256:83a8631e6e9acd61b6477cc9731327b23f262c4928c3fcb9876e6e1bf6bd9ea7"
+        },
+        "plan": {
+          "file_sha256": "sha256:b0ad5be4f43d9af9eca55fd34673c261dcc18043496658fd8fbec94b02b7f244",
+          "path": "configs/qualification/qwen38-skyrl-production-plan-lr3e7-v1.json"
+        },
+        "plan_sha256": "sha256:41c2e0ef30a6f8c3823d0100c2852f8e7da1a321f789b2c43721717b54d29bac",
+        "plan_state": "exact_offline_plan_compiled_not_live_preflighted",
         "ready": false,
         "recipe": {
           "checkpoint_interval": 10,
@@ -155,7 +232,26 @@
           "seed": 42,
           "steps": 10
         },
-        "request_sha256": null,
+        "release_observer": {
+          "UID_fields": [
+            "jobs_run_name",
+            "jobs_run_id",
+            "rayjob_uid",
+            "raycluster_uid",
+            "workload_uid",
+            "pod_uids",
+            "runtime_image_ids"
+          ],
+          "arm_before_POST": true,
+          "armed": false,
+          "contract": {
+            "file_sha256": "sha256:188d00e35d167b0352fd8d8eb911fb6873cc9a60d01272bca745c9f9fac29bfe",
+            "path": "configs/qualification/qwen38-skyrl-production-observer-lr3e7-v1.json",
+            "self_sha256": "sha256:0e21d30f9e090f0d491ae9f35b23d44b85bee595ea248acd2cf8dcd23447abf6"
+          },
+          "release_receipt_recorded": false
+        },
+        "request_sha256": "sha256:b338525a3557db22b9833093e18595adecff0f17f9be3cb538c5365cbe7ce06e",
         "resource_shape": {
           "gpus": 8,
           "gpus_per_node": 8,
@@ -164,9 +260,15 @@
         },
         "reward": "authoritative Fleet partial cyber score",
         "run_config": {
-          "file_sha256": "sha256:2d3eff4513ea96cdcaaa99246787bc0d1702569f747ebc0dcab72bacf5c0fa03",
+          "file_sha256": "sha256:0c4dd89e1e67a0d9f56738f6787fddeb4251c822f6aed960719bfbbac2905c6c",
           "path": "configs/runs/qwen38-skyrl-production-lr3e7-v1.json"
         },
+        "sanitized_manifest": {
+          "file_sha256": "sha256:109302ce1c18ff49c07728980a467b7be7f0abd693b30dc2377c822eec1f80f3",
+          "path": "configs/qualification/qwen38-skyrl-production-manifest-lr3e7-v1.json",
+          "self_sha256": "sha256:4f3772182bbc08ab43024208311d957d66ef67be1f55106184111687bc06b6f8"
+        },
+        "server_preview_recorded": false,
         "treatment": "learning_rate",
         "wandb": {
           "entity": "thefleet",
@@ -181,10 +283,18 @@
           "episode_concurrency": 8,
           "episode_seconds": 2400,
           "evaluation_points": 2,
-          "fits_watchdog_hard_bound": false,
+          "fits_watchdog_hard_bound": true,
           "legal_episode_ceiling_seconds_excluding_startup_and_optimization": 38400,
+          "minimum_hard_seconds_without_shortening_episode": 40500,
           "train_steps": 10,
-          "watchdog_hard_seconds": 28800
+          "watchdog": {
+            "drain_seconds": 300,
+            "episode_ceiling_seconds": 38400,
+            "hard_seconds": 43200,
+            "idle_seconds": 1200,
+            "poll_seconds": 60,
+            "startup_seconds": 1800
+          }
         }
       },
       {
@@ -193,6 +303,7 @@
           "path": "configs/qualification/qwen38-skyrl-production-data-lr3e6-v1.json"
         },
         "dataset": {
+          "SFS_staged": false,
           "counts": {
             "dev": 20,
             "test_untouched": 10,
@@ -206,11 +317,22 @@
             "submit_report"
           ],
           "root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/chris-q38-skyrl10-lr3e6-inputs-v1/data",
+          "sanitized_manifest_bound": true,
           "split_sha256": "sha256:1f0da5054df25a7d67476f591d8c9c8d42d44de65c0b9d4b542ba9e33b132472",
-          "staged": false,
           "task_set_sha256": "sha256:5de88eada94119fd21ac715bb1956a745376d775c13ce7d5584936e70b3a003a"
         },
         "dispatch_order": 3,
+        "fresh_absence_guard": {
+          "checks": [
+            "Jobs_history_name_and_output",
+            "Kubernetes_name_and_output",
+            "SFS_staged_tree_and_output",
+            "WandB_run_ID"
+          ],
+          "encoded": true,
+          "executed": false,
+          "maximum_seconds": 120
+        },
         "id": "lr3e6",
         "model": {
           "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
@@ -218,8 +340,17 @@
           "weights": "../models/qwen38-27b-1d4bf0f2.weights.json"
         },
         "name": "chris-q38-skyrl10-lr3e6",
-        "plan_sha256": null,
-        "plan_state": "not_compilable_until_exact_staged_manifest_and_validator_exist",
+        "offline_preview": {
+          "file_sha256": "sha256:677f018338948abc7e3f3bb266a1ac96e0f31fb5a9fb5bea30425fa191ad684d",
+          "path": "configs/qualification/qwen38-skyrl-production-preview-lr3e6-v1.json",
+          "self_sha256": "sha256:ff905278968270c70e0c4ae04239725231a49c87d8d810e8f68e4af99073a35b"
+        },
+        "plan": {
+          "file_sha256": "sha256:1227c1b600ae618721a40f32e3718c5e7d1b4ea471acb62eb2dd42f68851244d",
+          "path": "configs/qualification/qwen38-skyrl-production-plan-lr3e6-v1.json"
+        },
+        "plan_sha256": "sha256:6cf5099b9bd92ffd6efddb6b03c704ab41d370c51342dd3eeaee9858a848c71f",
+        "plan_state": "exact_offline_plan_compiled_not_live_preflighted",
         "ready": false,
         "recipe": {
           "checkpoint_interval": 10,
@@ -232,7 +363,26 @@
           "seed": 42,
           "steps": 10
         },
-        "request_sha256": null,
+        "release_observer": {
+          "UID_fields": [
+            "jobs_run_name",
+            "jobs_run_id",
+            "rayjob_uid",
+            "raycluster_uid",
+            "workload_uid",
+            "pod_uids",
+            "runtime_image_ids"
+          ],
+          "arm_before_POST": true,
+          "armed": false,
+          "contract": {
+            "file_sha256": "sha256:3634cb447dc0ecd070a5d58a68d2b5698331539bacc598f9901f24d179087703",
+            "path": "configs/qualification/qwen38-skyrl-production-observer-lr3e6-v1.json",
+            "self_sha256": "sha256:8d9b6dfde51e41d248240f11e849fb6c2c8a84914e98a7d53b22eafdb8b963e5"
+          },
+          "release_receipt_recorded": false
+        },
+        "request_sha256": "sha256:d63a3bba2e626693879c8acba721ca918b534b5fd4b766886e6e1f300cffbe71",
         "resource_shape": {
           "gpus": 8,
           "gpus_per_node": 8,
@@ -241,9 +391,15 @@
         },
         "reward": "authoritative Fleet partial cyber score",
         "run_config": {
-          "file_sha256": "sha256:5decea75448183e37181a371d934269637c73eb855bc73b0e32d3ceb73813415",
+          "file_sha256": "sha256:8d3bd4396353f11ca65e4535a099f67155133dacbb9b1eb2ace9432f09f1d138",
           "path": "configs/runs/qwen38-skyrl-production-lr3e6-v1.json"
         },
+        "sanitized_manifest": {
+          "file_sha256": "sha256:f7e973e132cdf9e2fe9c3fe6079d939cc0f010cfe46a7e030a675041b0aeb717",
+          "path": "configs/qualification/qwen38-skyrl-production-manifest-lr3e6-v1.json",
+          "self_sha256": "sha256:7fbbd04ef14e88518e6046e9a35d4ab8ca5a5a44face27e77c6d1fa97ff55c75"
+        },
+        "server_preview_recorded": false,
         "treatment": "learning_rate",
         "wandb": {
           "entity": "thefleet",
@@ -258,10 +414,18 @@
           "episode_concurrency": 8,
           "episode_seconds": 2400,
           "evaluation_points": 2,
-          "fits_watchdog_hard_bound": false,
+          "fits_watchdog_hard_bound": true,
           "legal_episode_ceiling_seconds_excluding_startup_and_optimization": 38400,
+          "minimum_hard_seconds_without_shortening_episode": 40500,
           "train_steps": 10,
-          "watchdog_hard_seconds": 28800
+          "watchdog": {
+            "drain_seconds": 300,
+            "episode_ceiling_seconds": 38400,
+            "hard_seconds": 43200,
+            "idle_seconds": 1200,
+            "poll_seconds": 60,
+            "startup_seconds": 1800
+          }
         }
       },
       {
@@ -270,6 +434,7 @@
           "path": "configs/qualification/qwen38-skyrl-production-data-seed43-v1.json"
         },
         "dataset": {
+          "SFS_staged": false,
           "counts": {
             "dev": 20,
             "test_untouched": 10,
@@ -283,11 +448,22 @@
             "submit_report"
           ],
           "root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/chris-q38-skyrl10-seed43-inputs-v1/data",
+          "sanitized_manifest_bound": true,
           "split_sha256": "sha256:1f0da5054df25a7d67476f591d8c9c8d42d44de65c0b9d4b542ba9e33b132472",
-          "staged": false,
           "task_set_sha256": "sha256:5de88eada94119fd21ac715bb1956a745376d775c13ce7d5584936e70b3a003a"
         },
         "dispatch_order": 4,
+        "fresh_absence_guard": {
+          "checks": [
+            "Jobs_history_name_and_output",
+            "Kubernetes_name_and_output",
+            "SFS_staged_tree_and_output",
+            "WandB_run_ID"
+          ],
+          "encoded": true,
+          "executed": false,
+          "maximum_seconds": 120
+        },
         "id": "seed43",
         "model": {
           "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
@@ -295,8 +471,17 @@
           "weights": "../models/qwen38-27b-1d4bf0f2.weights.json"
         },
         "name": "chris-q38-skyrl10-seed43",
-        "plan_sha256": null,
-        "plan_state": "not_compilable_until_exact_staged_manifest_and_validator_exist",
+        "offline_preview": {
+          "file_sha256": "sha256:fa17f4c0b5aa5b0d4209e43e4f5658cd69c0a66b10839eae809aae1f2d4df2db",
+          "path": "configs/qualification/qwen38-skyrl-production-preview-seed43-v1.json",
+          "self_sha256": "sha256:ec069c9eac5b9e24beef028af2e5de024cd1221f10b55d2e6165068250aa2280"
+        },
+        "plan": {
+          "file_sha256": "sha256:4225576eb51a3f6001a7333281658fc6c4e38bf038c288c7fcf5aa40d242663e",
+          "path": "configs/qualification/qwen38-skyrl-production-plan-seed43-v1.json"
+        },
+        "plan_sha256": "sha256:c02013930caf7e5a8939bca6b1a565204120ab18f3f1126973fce4a330bc923f",
+        "plan_state": "exact_offline_plan_compiled_not_live_preflighted",
         "ready": false,
         "recipe": {
           "checkpoint_interval": 10,
@@ -309,7 +494,26 @@
           "seed": 43,
           "steps": 10
         },
-        "request_sha256": null,
+        "release_observer": {
+          "UID_fields": [
+            "jobs_run_name",
+            "jobs_run_id",
+            "rayjob_uid",
+            "raycluster_uid",
+            "workload_uid",
+            "pod_uids",
+            "runtime_image_ids"
+          ],
+          "arm_before_POST": true,
+          "armed": false,
+          "contract": {
+            "file_sha256": "sha256:22cf60c86233cfce53a88a39e63743f9957e958a4f0ff4cca0181f9d887a44e5",
+            "path": "configs/qualification/qwen38-skyrl-production-observer-seed43-v1.json",
+            "self_sha256": "sha256:6ff32e600784fa7f273f9041686a724404958ef21764b7e2da3b0ea9192a23d1"
+          },
+          "release_receipt_recorded": false
+        },
+        "request_sha256": "sha256:a3d50d2d22336889f2c87332ac13cd9184208008f1bc0b48466c1aae5931dd0c",
         "resource_shape": {
           "gpus": 8,
           "gpus_per_node": 8,
@@ -318,9 +522,15 @@
         },
         "reward": "authoritative Fleet partial cyber score",
         "run_config": {
-          "file_sha256": "sha256:4f90cf8225a77335e9e30cd05cdf143831cdcde3f6b43d72a4966c209f11a396",
+          "file_sha256": "sha256:a4fd57959b0c4ae06d379196657973b14f5c42c2e08c5c390d863e9172de8ea6",
           "path": "configs/runs/qwen38-skyrl-production-seed43-v1.json"
         },
+        "sanitized_manifest": {
+          "file_sha256": "sha256:9601bcf7c6564cf46efcbf462c6967c8f4955090babe5e722f540caa524d209d",
+          "path": "configs/qualification/qwen38-skyrl-production-manifest-seed43-v1.json",
+          "self_sha256": "sha256:6db196e724999be81476ec15b5fe5ec46e87e05ae99b0d7ffbadaba3e5870e38"
+        },
+        "server_preview_recorded": false,
         "treatment": "random_seed",
         "wandb": {
           "entity": "thefleet",
@@ -335,10 +545,18 @@
           "episode_concurrency": 8,
           "episode_seconds": 2400,
           "evaluation_points": 2,
-          "fits_watchdog_hard_bound": false,
+          "fits_watchdog_hard_bound": true,
           "legal_episode_ceiling_seconds_excluding_startup_and_optimization": 38400,
+          "minimum_hard_seconds_without_shortening_episode": 40500,
           "train_steps": 10,
-          "watchdog_hard_seconds": 28800
+          "watchdog": {
+            "drain_seconds": 300,
+            "episode_ceiling_seconds": 38400,
+            "hard_seconds": 43200,
+            "idle_seconds": 1200,
+            "poll_seconds": 60,
+            "startup_seconds": 1800
+          }
         }
       },
       {
@@ -347,6 +565,7 @@
           "path": "configs/qualification/qwen38-skyrl-production-data-dose50-v1.json"
         },
         "dataset": {
+          "SFS_staged": false,
           "counts": {
             "dev": 20,
             "test_untouched": 10,
@@ -360,11 +579,22 @@
             "submit_report"
           ],
           "root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/chris-q38-skyrl50-a1-inputs-v1/data",
+          "sanitized_manifest_bound": true,
           "split_sha256": "sha256:1f0da5054df25a7d67476f591d8c9c8d42d44de65c0b9d4b542ba9e33b132472",
-          "staged": false,
           "task_set_sha256": "sha256:5de88eada94119fd21ac715bb1956a745376d775c13ce7d5584936e70b3a003a"
         },
         "dispatch_order": 5,
+        "fresh_absence_guard": {
+          "checks": [
+            "Jobs_history_name_and_output",
+            "Kubernetes_name_and_output",
+            "SFS_staged_tree_and_output",
+            "WandB_run_ID"
+          ],
+          "encoded": true,
+          "executed": false,
+          "maximum_seconds": 120
+        },
         "id": "dose50",
         "model": {
           "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
@@ -372,8 +602,17 @@
           "weights": "../models/qwen38-27b-1d4bf0f2.weights.json"
         },
         "name": "chris-q38-skyrl50-a1",
-        "plan_sha256": null,
-        "plan_state": "not_compilable_until_exact_staged_manifest_and_validator_exist",
+        "offline_preview": {
+          "file_sha256": "sha256:4bed028aedb73018594414ab46a975a6808d2f569e58aecc0060e111e5e8b664",
+          "path": "configs/qualification/qwen38-skyrl-production-preview-dose50-v1.json",
+          "self_sha256": "sha256:a383d5169cfa327e62cb3282e7c8ac6736cf3c5626687233965ae13cf0e32d7e"
+        },
+        "plan": {
+          "file_sha256": "sha256:c3ddcf776f91cd90983cb3f98d9f602af0f73f8717e4460eee050833ecb004f8",
+          "path": "configs/qualification/qwen38-skyrl-production-plan-dose50-v1.json"
+        },
+        "plan_sha256": "sha256:d43c1d3b0d0e9efa9ad5eee79862b97b87e6d826a325a9cfeae8eec80321d8a2",
+        "plan_state": "exact_offline_plan_compiled_not_live_preflighted",
         "ready": false,
         "recipe": {
           "checkpoint_interval": 10,
@@ -386,7 +625,26 @@
           "seed": 42,
           "steps": 50
         },
-        "request_sha256": null,
+        "release_observer": {
+          "UID_fields": [
+            "jobs_run_name",
+            "jobs_run_id",
+            "rayjob_uid",
+            "raycluster_uid",
+            "workload_uid",
+            "pod_uids",
+            "runtime_image_ids"
+          ],
+          "arm_before_POST": true,
+          "armed": false,
+          "contract": {
+            "file_sha256": "sha256:7cc4be9219eb69f2d35aa21bc60c76a9c8294418dd6f2c37b144d9d3fe28b09c",
+            "path": "configs/qualification/qwen38-skyrl-production-observer-dose50-v1.json",
+            "self_sha256": "sha256:a5b00a183a0fec3a47406e6f805aa03e685f1ff1ab93e9c97f92a4fd74be7ad7"
+          },
+          "release_receipt_recorded": false
+        },
+        "request_sha256": "sha256:724f12ab1f4618dbda0222e676ab19abf1e1310bb752b54e6037d066ec38c092",
         "resource_shape": {
           "gpus": 8,
           "gpus_per_node": 8,
@@ -395,9 +653,15 @@
         },
         "reward": "authoritative Fleet partial cyber score",
         "run_config": {
-          "file_sha256": "sha256:bc1691d540e8d4ebe13706d7f4132826eb8debe092deaf3dfe154cbc5e7b7cc9",
+          "file_sha256": "sha256:d8558b90a37163924aeeccf1a9320171eff8f7a1ac98bbaf32a6cda526dcd336",
           "path": "configs/runs/qwen38-skyrl-production-dose50-v1.json"
         },
+        "sanitized_manifest": {
+          "file_sha256": "sha256:afa74e8af511a72c9ffa5832c3db204b6defd9ae9ad027101dedb8b6b19158a5",
+          "path": "configs/qualification/qwen38-skyrl-production-manifest-dose50-v1.json",
+          "self_sha256": "sha256:03ca037492b7fd758f748f53d2659dbc3cbcac96de43be39f74efa04e1e34368"
+        },
+        "server_preview_recorded": false,
         "treatment": "optimizer_update_dose",
         "wandb": {
           "entity": "thefleet",
@@ -412,18 +676,26 @@
           "episode_concurrency": 8,
           "episode_seconds": 2400,
           "evaluation_points": 6,
-          "fits_watchdog_hard_bound": false,
+          "fits_watchdog_hard_bound": true,
           "legal_episode_ceiling_seconds_excluding_startup_and_optimization": 163200,
+          "minimum_hard_seconds_without_shortening_episode": 165300,
           "train_steps": 50,
-          "watchdog_hard_seconds": 28800
+          "watchdog": {
+            "drain_seconds": 300,
+            "episode_ceiling_seconds": 163200,
+            "hard_seconds": 172800,
+            "idle_seconds": 1200,
+            "poll_seconds": 60,
+            "startup_seconds": 1800
+          }
         }
       }
     ],
     "common_reward": "authoritative Fleet partial cyber score",
     "data_staging": {
-      "file_sha256": "sha256:d5b44b7c97d7dab1ead3f1f0d305150571ff71ba8522e2a3f3f2280735f988e8",
+      "file_sha256": "sha256:d8e2f095f2d6918cb905eb4943bf1f7e73ccabaa874def465c7b7ba4669e5039",
       "path": "configs/qualification/qwen38-skyrl-production-data-staging-v1.json",
-      "self_sha256": "sha256:2ec7ec25691cc0bffabe876bc6fd928079cdea1a5bef2b037a9a0326823000f0"
+      "self_sha256": "sha256:b5a620fbd9c54e59590e71060bb49612f000a0a70f6db3eca2894e0de7b5e56a"
     },
     "model_lock": {
       "file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
@@ -435,9 +707,9 @@
       "self_sha256": "06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
     },
     "qualification": {
-      "file_sha256": "sha256:1c777f0e284d52e32190f00634de8901865f1303754039c7eff9a1af2c9f74dd",
+      "file_sha256": "sha256:1bc77d896df1fdf706b84a64fcc563180e3b864fb4bce49c38fefd88aafad81c",
       "path": "configs/qualification/qwen38-skyrl-production-queue-v1.json",
-      "self_sha256": "sha256:ccba2a1c0bb5347ae1cc74dc163b6a37432a17e82af4dd567ad420b0e1c4077f"
+      "self_sha256": "sha256:4db2a95c9f6396ae80033a01b6c49e6e375987133d0334858d9500eef17459c4"
     },
     "ready": false,
     "split": {
@@ -445,14 +717,14 @@
       "path": "configs/data/qwen38-skyrl-production-split-v1.json",
       "self_sha256": "sha256:1f0da5054df25a7d67476f591d8c9c8d42d44de65c0b9d4b542ba9e33b132472"
     },
-    "state": "offline_configs_sealed_plans_not_prepared",
+    "state": "offline_plans_validators_previews_and_observer_contracts_complete",
     "submission_gate": {
       "blockers": [
         "prod4_terminal_acceptance_receipt_absent",
-        "production_qualification_dispatch_intentionally_disabled_until_prod4_acceptance",
-        "broad_get_only_data_manifests_built_locally_but_not_staged",
+        "broad_get_only_data_manifests_not_yet_create_once_staged_on_SFS",
         "exact_image_cpu_preflights_not_recorded",
-        "jobs_api_previews_and_fresh_duplicate_output_checks_not_recorded",
+        "jobs_api_server_previews_and_fresh_guard_receipts_not_recorded",
+        "uid_bound_release_observers_not_yet_armed",
         "global_cluster_failure_budget_is_10_of_10_until_user_resets_it"
       ],
       "preview_authorized": false,
@@ -524,9 +796,12 @@
     "encoded_absence_checks": {
       "CPU_preflight_output_absence": true,
       "Jobs_API_name_prefix_and_output_history": true,
-      "fresh_Kubernetes_name_absence": false,
-      "fresh_SFS_output_absence_immediately_before_create": false,
-      "fresh_WandB_run_ID_absence_immediately_before_create": false,
+      "caller_guard_runs_after_preview_before_create": true,
+      "fresh_Kubernetes_name_absence_encoded": true,
+      "fresh_SFS_manifest_payload_and_output_absence_encoded": true,
+      "fresh_WandB_run_ID_absence_encoded": true,
+      "fresh_guard_executed": false,
+      "maximum_guard_seconds": 120,
       "runtime_new_checkpoint_and_episode_trees": true,
       "submission_journal_create_once": true
     },
@@ -603,8 +878,16 @@
         "evaluation_points": 2,
         "fits_watchdog_hard_bound": true,
         "legal_episode_ceiling_seconds_excluding_startup_and_optimization": 7200,
+        "minimum_hard_seconds_without_shortening_episode": 9300,
         "train_steps": 1,
-        "watchdog_hard_seconds": 28800
+        "watchdog": {
+          "drain_seconds": 300,
+          "episode_ceiling_seconds": 7200,
+          "hard_seconds": 28800,
+          "idle_seconds": 1200,
+          "poll_seconds": 60,
+          "startup_seconds": 1800
+        }
       },
       "hard_seconds": 28800,
       "independent_UID_bound_release_observer_recorded": false,
@@ -614,16 +897,16 @@
   },
   "schema": "cyber_qwen38_skyrl_launch_readiness_audit_v1",
   "scope": "offline_no_submit_no_launch_no_cancel_no_private_logs_no_external_reads_or_writes",
-  "sha256": "sha256:185f7ae196b45a2668f6054f29b7d4c94de2a962897f8e4ebc4ddbda8a41eca0",
+  "sha256": "sha256:78848d4fa96bb9c62401e9237e7920dbb5ba0a25eda9dd018d175ed8d636ae3b",
   "source_queue": {
     "file_sha256": "sha256:549bca1a8409cab10aaa9e0f754e5200c4401895e1507eb9c483d53e06286bd3",
     "path": "docs/evidence/qwen38-study/2026-09-20-skyrl-next-gates-queue-v1.json",
     "self_sha256": "sha256:7f5db5a2b961e6482746116cef29ba1a0af5ddfa2c319f83269f18f985dc3e9f"
   },
-  "status": "not_launch_ready_failure_budget_closed_and_gates_absent",
+  "status": "offline_repairs_complete_external_gates_pending_failure_budget_closed",
   "tooling_bindings": {
     "CLI": {
-      "file_sha256": "sha256:ad4bb71cbee1eb529ffae9f4f8962a6811113c00391e963b0ae2c7d7eb688262",
+      "file_sha256": "sha256:3fb3e4101cd2513cba90a6c962fe8351d03793d74bb7b67ffd779fe6b4b4d758",
       "path": "cyber_post_train/cli.py"
     },
     "Jobs_client": {
@@ -633,6 +916,18 @@
     "RL_runtime": {
       "file_sha256": "sha256:7e748b623a0411866b4a76b76f3d907f4d84cbf0779fb6a07db85310913cc947",
       "path": "training/rl_runtime.py"
+    },
+    "SkyRL_caller_guard": {
+      "file_sha256": "sha256:f48b5d1e0b4d146ff41a1d55b4339aa8fba1dca6e40d6ecf80c95d2eec5440a0",
+      "path": "training/skyrl_launch_guard.py"
+    },
+    "SkyRL_production_training": {
+      "file_sha256": "sha256:d21c59948c5012e277cde58ffd5222fb66a37e6295e7bc8ea411d4acb3627852",
+      "path": "training/skyrl_production_training.py"
+    },
+    "SkyRL_production_validator": {
+      "file_sha256": "sha256:9a15e3bfd57f0a609e02ec1ba564fc1038b1717d1d629166fd53437493ad7f0c",
+      "path": "training/skyrl_production.py"
     },
     "SkyRL_training": {
       "file_sha256": "sha256:8bb451ed64514315ad4f7576693dda14c68cff13e77a06f97669aaa421064612",

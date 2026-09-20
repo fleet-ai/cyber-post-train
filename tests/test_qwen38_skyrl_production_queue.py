@@ -21,7 +21,7 @@ def read(path: Path) -> dict:
 
 def test_generated_queue_is_current_and_self_sealed() -> None:
     expected = queue.expected()
-    assert len(expected) == 14
+    assert len(expected) == 34
     for path, value in expected.items():
         assert path.read_bytes() == queue.raw(value)
         if "sha256" in value:
@@ -36,7 +36,7 @@ def test_generated_queue_is_current_and_self_sealed() -> None:
         text=True,
     )
     assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout) == {"checked": 14, "external_mutations": 0}
+    assert json.loads(result.stdout) == {"checked": 34, "external_mutations": 0}
 
 
 def test_broad_split_is_lineage_safe_and_final_test_never_enters_training() -> None:
@@ -69,6 +69,7 @@ def test_five_arms_change_only_the_declared_treatment() -> None:
         run = runs[arm["id"]]
         assert run["backend"] == "skyrl"
         assert run["cluster"]["priority"] == "c1"
+        assert run["cluster"]["target"] == "prod"
         assert run["recipe"]["nodes"] == 1
         assert run["recipe"]["groups"] == 1
         assert run["recipe"]["samples_per_prompt"] == 8
@@ -158,12 +159,10 @@ def test_queue_is_fail_closed_behind_canary_and_fresh_external_checks() -> None:
         "global_cluster_failure_budget_is_10_of_10_until_user_resets_it"
         in (qualification["submission_gate"]["blockers"])
     )
+    assert qualification["profile"] == "qwen38_skyrl_production_queue_v1"
+    assert qualification["execution"]["cluster_target"] == "prod"
     assert (
-        "production_qualification_dispatch_intentionally_disabled_until_prod4_acceptance"
-        in qualification["submission_gate"]["blockers"]
-    )
-    assert (
-        "broad_get_only_data_manifests_built_locally_but_not_staged"
+        "broad_get_only_data_manifests_not_yet_create_once_staged_on_SFS"
         in qualification["submission_gate"]["blockers"]
     )
     assert "broad_get_only_data_manifests_not_built_or_staged" not in qualification[
@@ -177,13 +176,16 @@ def test_queue_is_fail_closed_behind_canary_and_fresh_external_checks() -> None:
     assert len(evidence["arms"]) == 5
     assert all(arm["submitted"] is False for arm in evidence["arms"])
     assert all(
-        arm["plan_request_state"] == "not_prepared_until_exact_staged_manifest_exists"
+        arm["plan_request_state"] == "exact_offline_plan_and_request_digest_compiled"
         for arm in evidence["arms"]
     )
+    assert all(arm["plan"]["sha256"].startswith("sha256:") for arm in evidence["arms"])
+    assert all(arm["request_sha256"].startswith("sha256:") for arm in evidence["arms"])
+    assert all(not arm["offline_preview"]["server_preview_requested"] for arm in evidence["arms"])
+    assert all(not arm["release_observer_contract"]["armed"] for arm in evidence["arms"])
     duplicate = evidence["duplicate_output_checks"]
-    assert duplicate["state"] == (
-        "clean_read_only_observation_but_must_repeat_before_preview_or_submit"
-    )
+    assert duplicate["state"] == "caller_guard_encoded_but_must_execute_fresh_before_submit"
+    assert all(duplicate["caller_guard"].values())
     assert duplicate["jobs_api"] == {
         "method": "GET_only",
         "history_rows": 934,
