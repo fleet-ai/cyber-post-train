@@ -93,6 +93,45 @@ def test_teacher3k_96k_manifest_preserves_the_exact_32k_target_set():
     )
 
 
+def test_teacher3k_64k_manifest_preserves_the_exact_32k_target_set():
+    manifest = json.loads((DATA / "qwen38-teacher3k-64k-v1.manifest.json").read_text())
+    receipt = json.loads(
+        (EVIDENCE / "qwen38-teacher3k-64k-materialization-receipt-20260920.json").read_text()
+    )
+    verification = json.loads(
+        (
+            EVIDENCE
+            / "qwen38-teacher3k-64k-independent-verification-20260920.json"
+        ).read_text()
+    )
+
+    assert manifest["sha256"] == (
+        "sha256:377720bd39a7dcb2f5c0dfd152fc9f955d4726f3f13c358dd57cac18bc84a2ae"
+    )
+    assert manifest["sha256"] == "sha256:" + sft.digest(
+        {key: value for key, value in manifest.items() if key != "sha256"}
+    )
+    assert manifest["max_length"] == 65_536
+    assert manifest["context_tokens"] == 16_384
+    assert manifest["validation_mode"] == "task_outcomes_only"
+    assert manifest["files"]["train"] == {
+        **manifest["files"]["train"],
+        "sha256": "sha256:2ff865659cc0ed6a21efff3c6cf75999470a2d9bbbc86940425f45f728f73168",
+        "rows": 8_953,
+        "source_sessions": 2_886,
+        "assistant_responses": 176_654,
+        "supervised_tokens": 57_384_881,
+    }
+    assert receipt["manifest_sha256"] == verification["manifest_sha256"] == manifest["sha256"]
+    assert receipt["train_sha256"] == verification["train_sha256"] == (
+        manifest["files"]["train"]["sha256"]
+    )
+    assert receipt["supervised_tokens"] == verification["supervised_tokens"] == 57_384_881
+    assert verification["target_identity_set_sha256"] == (
+        "sha256:d510d970a57b6b62e6f05dd21203892ef3c0bd68e7c29f1a0cab3f1765371b85"
+    )
+
+
 @pytest.mark.parametrize(
     ("filename", "name", "steps", "lr", "batch", "interval", "pause"),
     [
