@@ -23,7 +23,7 @@ from .models import bound_model
 from .sft_runtime import (
     DENSE_FORMAT,
     DENSE_SCHEMA,
-    QWEN38_LORA_BROAD_FULL_PLAN,
+    QWEN38_LORA_BROAD_FULL_PLANS,
     QWEN38_LORA_PRODUCTION_QUALIFICATION,
     QWEN38_LORA_QUALIFICATION,
     qwen38_megatron_binding,
@@ -232,13 +232,13 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
             "source_commit": source_commit,
             "source_files_sha256": source_files,
         }
-        # Production qualification admits one exact create-once broad identity.
-        # Selecting it by that frozen run identity does not open a parameter
-        # menu: ``validate_plan`` still compares every scientific, data,
-        # resource, runtime and W&B field with the reviewed binding.
+        # Production qualification admits only the exact create-once broad
+        # identities reviewed in the runtime. Selecting one by its frozen run
+        # identity does not open a parameter menu: ``validate_plan`` still
+        # compares every scientific, data, resource, runtime and W&B field.
         qualification = (
             QWEN38_LORA_PRODUCTION_QUALIFICATION
-            if config["name"] == QWEN38_LORA_BROAD_FULL_PLAN["run_name"]
+            if config["name"] in QWEN38_LORA_BROAD_FULL_PLANS
             else QWEN38_LORA_QUALIFICATION
         )
         plan["qualification_gate"] = copy.deepcopy(qualification)

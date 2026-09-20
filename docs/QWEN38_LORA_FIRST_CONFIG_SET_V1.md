@@ -26,7 +26,12 @@ and its sanitized qualification record is
 The one-step template now points to that exact V2 manifest and staged root. The
 exact runtime gate binds its payload-derived dataset, split and corpus digests,
 866-row full-epoch ceiling, and planned pause after optimizer step 1. The
-one-step checkpoint stage is accepted; it is not yet a merged serving artifact.
+one-step checkpoint stage and its later zero-update merged export are accepted
+as operational production gates. The anchor and two learning-rate controls are
+locally immutable and render exact requests, but none has been submitted while
+the global cluster failure budget is exhausted. Their exact digests and
+remaining live gates are recorded in
+[`qwen38-lora-broad-lr-sweep-ready-queue-20260920.json`](evidence/qwen38-lora-broad-lr-sweep-ready-queue-20260920.json).
 
 ## Training templates
 
@@ -34,6 +39,8 @@ one-step checkpoint stage is accepted; it is not yet a merged serving artifact.
 |---|---|---|
 | Exact-model one-step gate | `configs/runs/qwen38-27b-lora-sft-r64-a32-one-step-v10.template.json` | exact Qwen3.8 revision; BF16 Megatron LoRA rank 64 / alpha 32 over all linear layers; TP8 / PP1 / CP1 / DP1; learning rate `3e-5`; global batch 1; one 8-GPU node; 16,384-token final-test-family-free V2 Fresh75 corpus; 866 rows and payload-derived `max_steps=866`; planned pause after optimizer step 1; c1; W&B. V1 through V9 are retired qualification identities. V10 retains the validated runtime, native dataset, all-rank learning-rate, dev init, sanitized step-boundary, float32 learning-rate, and receipt-boundary repairs. It binds receipt validation to the native Megatron-Bridge adapter filename coordinates observed in the finalized TP8 checkpoint: each `tpN` shard carries the matching `etpN` filename label even though expert-tensor parallel size remains one. |
 | First production anchor | `configs/runs/qwen38-27b-lora-sft-r64-a32-anchor-v1.json` | exact Qwen3.8 revision; BF16 LoRA rank 64 / alpha 32; learning rate `3e-5`; global batch 8; one 8-GPU node; one epoch; 57,384,881 supervised teacher tokens packed into 14,693 windows of at most 32,768 tokens; c1; W&B; prepared only, not submitted |
+| Lower-rate control | `configs/runs/qwen38-27b-lora-sft-r64-a32-lr1e5-v1.json` | the exact anchor with only learning rate and create-once run/W&B identity changed; learning rate `1e-5`; prepared only, not submitted |
+| Upper-rate exploration | `configs/runs/qwen38-27b-lora-sft-r64-a32-lr1e4-v1.json` | the exact anchor with only learning rate and create-once run/W&B identity changed; learning rate `1e-4`; prepared only, not submitted |
 
 The one-step gate reuses every eligible row it safely can from the immutable
 Fresh75 teacher corpus, after removing complete source sessions from every task

@@ -30,11 +30,28 @@ QUALIFIED_IMAGE = (
 GATE_TEMPLATE = RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v10.template.json"
 PRODUCTION_CANARY = RUNS / "qwen38-27b-lora-sft-r64-a32-prod-canary-v1.json"
 PRODUCTION_ANCHOR = RUNS / "qwen38-27b-lora-sft-r64-a32-anchor-v1.json"
+BROAD_LR_VARIANTS = {
+    RUNS / "qwen38-27b-lora-sft-r64-a32-lr1e5-v1.json": {
+        "run_name": "chris-q38-lora-lr1-v1",
+        "lr": 1e-5,
+        "rate_tag": "lr1e-5",
+        "purpose_tag": "lower-rate-control",
+    },
+    RUNS / "qwen38-27b-lora-sft-r64-a32-lr1e4-v1.json": {
+        "run_name": "chris-q38-lora-lr100-v1",
+        "lr": 1e-4,
+        "rate_tag": "lr1e-4",
+        "purpose_tag": "upper-rate-exploration",
+    },
+}
 EXPORT_ACCEPTANCE = (
     ROOT / "configs" / "qualification" / "qwen38-lora-prod-step1-export-acceptance-v1.json"
 )
 EXPORT_PLAN = (
     ROOT / "configs" / "qualification" / "qwen38-lora-prod-step1-zero-update-export-v1.json"
+)
+BROAD_LR_QUEUE_EVIDENCE = (
+    ROOT / "docs" / "evidence" / "qwen38-lora-broad-lr-sweep-ready-queue-20260920.json"
 )
 RETIRED_GATE_TEMPLATES = [
     RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v1.template.json",
@@ -295,6 +312,134 @@ def test_broad_lora_anchor_compiles_only_as_the_exact_production_qualified_plan(
     assert plan["wandb"]["project"] == "cyber-post-train"
 
 
+@pytest.mark.parametrize(("path", "expected"), BROAD_LR_VARIANTS.items())
+def test_broad_lora_lr_variants_are_exact_single_factor_controls(path, expected):
+    from training import sft, sft_runtime
+
+    anchor = sft.compile_sft(read(PRODUCTION_ANCHOR), relative_to=RUNS)
+    plan = sft.compile_sft(read(path), relative_to=RUNS)
+    request = sft.job_request(plan)
+
+    assert plan["run_name"] == expected["run_name"]
+    assert plan["recipe"]["lr"] == expected["lr"]
+    assert plan["recipe"]["max_steps"] == 1837
+    assert plan["qualification_gate"] == sft_runtime.QWEN38_LORA_PRODUCTION_QUALIFICATION
+    assert sft_runtime._qwen38_lora_one_step_identity(plan) == (
+        sft_runtime.qwen38_lora_broad_full_plan_binding(expected["run_name"])
+    )
+    assert expected["rate_tag"] in plan["wandb"]["tags"]
+    assert expected["purpose_tag"] in plan["wandb"]["tags"]
+    assert request["name"] == expected["run_name"]
+    assert request["priority_class"] == "c1"
+    assert request["workers"] == 1
+    assert request["gpus_per_worker"] == 8
+
+    for key in set(anchor) - {"run_name", "output_root", "recipe", "wandb", "runtime_sha256"}:
+        assert plan[key] == anchor[key]
+    assert {key for key in plan["recipe"] if plan["recipe"][key] != anchor["recipe"][key]} == {"lr"}
+
+
+@pytest.mark.parametrize("path", BROAD_LR_VARIANTS)
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("lr", 5e-5),
+        ("batch_size", 16),
+        ("max_length", 16384),
+        ("epochs", 2),
+    ],
+)
+def test_broad_lora_lr_variants_fail_closed_on_recipe_drift(path, field, replacement):
+    from training import sft
+
+    value = read(path)
+    value["recipe"][field] = replacement
+    with pytest.raises(ValueError, match="exact digest-bound one-step"):
+        sft.compile_sft(value, relative_to=RUNS)
+
+
+@pytest.mark.parametrize("path", BROAD_LR_VARIANTS)
+def test_broad_lora_lr_variants_fail_closed_on_identity_drift(path):
+    from training import sft
+
+    value = read(path)
+    value["wandb"]["tags"] = [*value["wandb"]["tags"], "unreviewed"]
+    with pytest.raises(ValueError, match="exact digest-bound one-step"):
+        sft.compile_sft(value, relative_to=RUNS)
+
+
+def test_broad_lora_lr_queue_evidence_recomputes_every_immutable_binding():
+    from cyber_post_train.jobs import digest
+    from training import sft
+
+    evidence = read(BROAD_LR_QUEUE_EVIDENCE)
+    embedded = evidence.pop("receipt_sha256")
+    assert (
+        embedded
+        == hashlib.sha256(
+            json.dumps(evidence, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        ).hexdigest()
+    )
+    assert evidence["status"] == "local_launch_artifacts_ready_external_gates_closed"
+    assert evidence["submission_blocker"] == "global_cluster_failure_budget_10_of_10"
+    assert evidence["local_validation"]["cluster_posts"] == 0
+    assert evidence["local_validation"]["kubernetes_objects_created"] == 0
+
+    control = evidence["scientific_control"]
+    anchor_path = ROOT / control["anchor_config_path"]
+    assert control["anchor_config_file_sha256"] == (
+        "sha256:" + hashlib.sha256(anchor_path.read_bytes()).hexdigest()
+    )
+    anchor_plan = sft.compile_sft(read(anchor_path), relative_to=RUNS)
+    anchor_request = sft.job_request(anchor_plan)
+    assert control["anchor_plan_sha256"] == "sha256:" + digest(anchor_plan)
+    assert control["anchor_request_sha256"] == "sha256:" + digest(anchor_request)
+    assert control["learning_rate"] == anchor_plan["recipe"]["lr"]
+
+    corpus = evidence["corpus"]
+    corpus_path = ROOT / corpus["manifest_path"]
+    assert corpus["manifest_file_sha256"] == (
+        "sha256:" + hashlib.sha256(corpus_path.read_bytes()).hexdigest()
+    )
+    manifest = read(corpus_path)
+    assert corpus["manifest_sha256"] == manifest["sha256"]
+    assert corpus["train_parquet_sha256"] == manifest["files"]["train"]["sha256"]
+    assert corpus["unique_supervised_tokens"] == 57_384_881
+    assert corpus["task_keys"] == len(manifest["files"]["train"]["task_keys"]) == 496
+
+    qualification = evidence["production_qualification"]
+    qualification_path = ROOT / qualification["acceptance_path"]
+    assert qualification["acceptance_file_sha256"] == (
+        "sha256:" + hashlib.sha256(qualification_path.read_bytes()).hexdigest()
+    )
+    acceptance = read(qualification_path)
+    assert qualification["acceptance_handoff_sha256"] == acceptance["handoff_sha256"]
+    assert (
+        qualification["export_receipt_file_sha256"] == (acceptance["export_receipt"]["file_sha256"])
+    )
+    assert (
+        qualification["export_receipt_sha256"] == (acceptance["export_receipt"]["receipt_sha256"])
+    )
+
+    for row in evidence["variants"]:
+        config_path = ROOT / row["config_path"]
+        assert row["config_file_sha256"] == (
+            "sha256:" + hashlib.sha256(config_path.read_bytes()).hexdigest()
+        )
+        plan = sft.compile_sft(read(config_path), relative_to=RUNS)
+        request = sft.job_request(plan)
+        assert row["plan_sha256"] == "sha256:" + digest(plan)
+        assert row["request_sha256"] == "sha256:" + digest(request)
+        assert row["request_bytes"] == len(
+            json.dumps(request, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        )
+        assert row["run_name"] == plan["run_name"] == request["name"]
+        assert row["output_root"] == plan["output_root"] == request["run_dir"]
+        assert row["learning_rate"] == plan["recipe"]["lr"]
+        assert row["max_steps"] == plan["recipe"]["max_steps"]
+        assert row["submitted"] is False
+
+
 @pytest.mark.parametrize(
     ("path", "replacement"),
     [
@@ -331,10 +476,11 @@ def test_broad_lora_anchor_fails_closed_on_any_reviewed_identity_drift(path, rep
         sft.compile_sft(value, relative_to=RUNS)
 
 
-def test_broad_runtime_reopens_production_receipt_before_source_setup(monkeypatch):
+@pytest.mark.parametrize("path", [PRODUCTION_ANCHOR, *BROAD_LR_VARIANTS])
+def test_broad_runtime_reopens_production_receipt_before_source_setup(path, monkeypatch):
     from training import sft, sft_runtime
 
-    plan = sft.compile_sft(read(PRODUCTION_ANCHOR), relative_to=RUNS)
+    plan = sft.compile_sft(read(path), relative_to=RUNS)
     runtime_plan = {**plan, "plan_sha256": sft_runtime._unsigned_digest(plan)}
     observed = []
     monkeypatch.setattr(
@@ -345,7 +491,7 @@ def test_broad_runtime_reopens_production_receipt_before_source_setup(monkeypatc
 
     sft_runtime._validate_entrypoint_sources(runtime_plan, verify_qwen_files=False)
 
-    assert observed == ["chris-q38-lora-sft-a1-v1"]
+    assert observed == [plan["run_name"]]
     assert sft_runtime._is_qwen38_lora_one_step_gate(runtime_plan) is False
 
 

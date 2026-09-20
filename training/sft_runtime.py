@@ -6,8 +6,9 @@ qualification producer is committed at exact SkyRL revision
 passed the bounded CPU image qualification recorded in
 configs/qualification/qwen38-lora-megatron-trainer-image-2026-09-20-v1.json.
 The accepted production one-step checkpoint and zero-update BF16 merge/export
-now admit one exact broad-data plan; every other broader treatment remains
-fail-closed. This module deliberately keeps the native training loop and
+now admit three exact broad-data plans: the anchor and two learning-rate
+controls. Every other broader treatment remains fail-closed. This module
+deliberately keeps the native training loop and
 optimizer. It adds
 metadata-preserving tokenization, one-pass task-macro validation, scalar
 telemetry, and checkpoint retention. HF export is a separate zero-step job:
@@ -502,6 +503,60 @@ QWEN38_LORA_BROAD_FULL_PLAN = {
 }
 
 
+def _reviewed_broad_lora_lr_plan(
+    *, run_name: str, learning_rate: float, rate_tag: str, purpose_tag: str
+) -> dict:
+    """Construct one reviewed LR-only broad treatment from the exact anchor."""
+    return {
+        **QWEN38_LORA_BROAD_FULL_PLAN,
+        "run_name": run_name,
+        "output_root": f"/mnt/sfs/jobs/{run_name}",
+        "recipe": {
+            **QWEN38_LORA_BROAD_FULL_PLAN["recipe"],
+            "lr": learning_rate,
+        },
+        "wandb": {
+            **QWEN38_LORA_BROAD_FULL_PLAN["wandb"],
+            "run_id": run_name,
+            "name": run_name,
+            "tags": [
+                "qwen38",
+                "lora",
+                "teacher-sft",
+                "rank64",
+                "alpha32",
+                "57m-unique-supervised-tokens",
+                "32k",
+                rate_tag,
+                purpose_tag,
+                "task-outcomes-only",
+            ],
+        },
+    }
+
+
+QWEN38_LORA_BROAD_LOWER_LR_PLAN = _reviewed_broad_lora_lr_plan(
+    run_name="chris-q38-lora-lr1-v1",
+    learning_rate=1e-5,
+    rate_tag="lr1e-5",
+    purpose_tag="lower-rate-control",
+)
+QWEN38_LORA_BROAD_UPPER_LR_PLAN = _reviewed_broad_lora_lr_plan(
+    run_name="chris-q38-lora-lr100-v1",
+    learning_rate=1e-4,
+    rate_tag="lr1e-4",
+    purpose_tag="upper-rate-exploration",
+)
+QWEN38_LORA_BROAD_FULL_PLANS = {
+    plan["run_name"]: plan
+    for plan in (
+        QWEN38_LORA_BROAD_FULL_PLAN,
+        QWEN38_LORA_BROAD_LOWER_LR_PLAN,
+        QWEN38_LORA_BROAD_UPPER_LR_PLAN,
+    )
+}
+
+
 def qwen38_megatron_binding() -> tuple[str, str, dict[str, str]]:
     """Return the one reviewed source/image pair, or fail closed.
 
@@ -607,8 +662,10 @@ def qwen38_lora_production_canary_plan_binding() -> dict:
     }
 
 
-def qwen38_lora_broad_full_plan_binding() -> dict:
-    """Return the one broad plan admitted by the production receipt chain."""
+def qwen38_lora_broad_full_plan_binding(
+    run_name: str = QWEN38_LORA_BROAD_FULL_PLAN["run_name"],
+) -> dict:
+    """Return one exact reviewed broad plan after the production receipt chain."""
     qualification = QWEN38_LORA_PRODUCTION_QUALIFICATION
     export = qualification["export_receipt"]
     if (
@@ -622,7 +679,10 @@ def qwen38_lora_broad_full_plan_binding() -> dict:
         or not re.fullmatch(r"[a-f0-9]{64}", export.get("receipt_sha256", ""))
     ):
         raise ValueError("Qwen3.8 broad LoRA production qualification is unresolved")
-    return QWEN38_LORA_BROAD_FULL_PLAN
+    try:
+        return QWEN38_LORA_BROAD_FULL_PLANS[run_name]
+    except KeyError as exc:
+        raise ValueError("Qwen3.8 broad LoRA plan is not reviewed") from exc
 
 
 def write_receipt(path: Path, value: dict, *, replace: bool = False) -> None:
@@ -717,7 +777,8 @@ def _validate_qwen38_production_export_receipt(
 def _verify_qwen38_production_qualification(plan: dict) -> None:
     """Reopen the exact accepted public receipt before broad model setup."""
     if (
-        _qwen38_lora_one_step_identity(plan) != qwen38_lora_broad_full_plan_binding()
+        _qwen38_lora_one_step_identity(plan)
+        != qwen38_lora_broad_full_plan_binding(plan.get("run_name", ""))
         or plan.get("qualification_gate") != QWEN38_LORA_PRODUCTION_QUALIFICATION
     ):
         raise ValueError("Qwen3.8 broad LoRA plan lost its production qualification binding")
@@ -892,9 +953,14 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
             qwen38_lora_production_canary_plan_binding(),
         )
         identity = _qwen38_lora_one_step_identity(plan)
+        broad_identity = (
+            qwen38_lora_broad_full_plan_binding(plan["run_name"])
+            if plan.get("run_name") in QWEN38_LORA_BROAD_FULL_PLANS
+            else None
+        )
         if identity in one_step_plans:
             expected_qualification = QWEN38_LORA_QUALIFICATION
-        elif identity == qwen38_lora_broad_full_plan_binding():
+        elif identity == broad_identity:
             expected_qualification = QWEN38_LORA_PRODUCTION_QUALIFICATION
         else:
             expected_qualification = None
