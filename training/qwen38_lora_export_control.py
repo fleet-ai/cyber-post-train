@@ -24,11 +24,28 @@ PREFLIGHT_SCHEMA = "cyber_qwen38_megatron_lora_zero_step_export_preflight_v1"
 VALIDATION_SCHEMA = "cyber_qwen38_megatron_lora_zero_step_export_validation_v1"
 
 
+def _claim_control_root(control: Path) -> None:
+    if control.is_symlink():
+        raise ValueError("control root must not be a symlink")
+    if not control.exists():
+        os.mkdir(control, 0o700)
+        return
+    stat = control.stat()
+    if (
+        not control.is_dir()
+        or stat.st_uid != os.getuid()
+        or stat.st_gid != os.getgid()
+        or stat.st_mode & 0o777 != 0o700
+        or any(control.iterdir())
+    ):
+        raise ValueError("pre-created control root must be empty and privately owned")
+
+
 def seal(args: argparse.Namespace) -> dict:
     control = Path(args.control_dir)
     run_dir = Path(args.run_dir)
-    if control.exists() or run_dir.exists():
-        raise ValueError("control and output roots must both be fresh")
+    if run_dir.exists():
+        raise ValueError("output root must be fresh")
     plan = seal_plan(
         Path(args.checkpoint_receipt),
         checkpoint_file_sha256=args.checkpoint_file_sha256,
@@ -37,7 +54,7 @@ def seal(args: argparse.Namespace) -> dict:
     )
     request = job_request(plan)
     sources = _runtime_source_inventory()
-    os.mkdir(control, 0o700)
+    _claim_control_root(control)
     _write_new(control / "plan.json", plan)
     _write_new(control / "request.json", request)
     result = {
