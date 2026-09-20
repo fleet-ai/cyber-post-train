@@ -32,29 +32,36 @@ accepted incidents by UID. Ownership comes from `fleet.ai/submitted-by`, then th
 `owner` label, then an explicitly mapped job-name prefix. A `chris-*` or
 `chrisisaverted-*` prefix maps to Chris when no stronger owner metadata exists.
 
-**Rechecked 2026-09-11 after repeated experiment failures:** the live monitor
-still selects `fleet/ftl:91212928` and the five-minute schedule. Its
-[`failed_jobs` selector](https://github.com/fleet-ai/theseus/blob/91212928e107ff949899f37a563d7cd0b9c9d123/services/ftl/src/ftl/report_status.py#L82)
-does not inspect GPU count, queue or priority and has no per-job quiet/opt-out
-annotation. `fleet-infra-quiet` is **not** a notification exemption; CPU-only
-Kubernetes Jobs also page on failure. Running the exact selector locally with
-synthetic failed CPU Jobs and a failed RayJob confirms this without sending
-anything. New immutable UIDs mean new incidents, not duplicate notifications.
+**Rechecked 2026-09-20:**
+[Theseus PR #33828](https://github.com/fleet-ai/theseus/pull/33828) is merged at
+`6e59547b0af150bdc2ae7025d9169a265d281aab`, and the live status monitor uses
+that revision. A `Job` or `RayJob` opts out of failed-job Slack and Better Stack
+notifications when its own top-level `metadata.annotations` contains
+`fleet.ai/failure-alerts: "off"`; `0`, `false`, and `no` are also understood by
+the monitor, but this repository always emits the single canonical value `off`.
+The annotation belongs on the Job/RayJob, not only its Pod template. Idle-GPU
+alerts are deliberately unaffected.
 
-Do not use a monitored production Job as the next debugging environment merely
-because unit tests passed. Exercise the packaged entrypoint, real runtime user,
-native dependencies and failure/cleanup paths locally first. Explicit, handled
-validation rejection is not training success; unexpected faults still fail.
-No preflight can guarantee a GPU/distributed run never fails. If zero team-channel
-noise is required for unqualified GPU work, obtain a platform-maintainer-approved
-development/owner-only reporting route first. The current deployment does not
-provide one. Do not create an exemption by changing resource kind, namespace,
-labels, deduplication state or exit status to evade the monitor.
+Every Job or RayJob created by this project must carry that annotation. Committed
+manifests are checked by a repository test. Generated rollout successors stamp it
+in code. Generic Jobs API requests set `failureAlerts: false`, and the shared
+submission boundary rejects a returned preview unless the rendered RayJob contains
+the exact annotation. Never create first and patch later: the monitor can observe
+the failure in between. As of this audit, the deployed generic Jobs API does not
+yet expose or render the request field, so those submissions remain fail-closed
+until the Fleet Train API adds support and its preview proves the deployed behavior.
 
-Do not hide a real failure by deleting it before the monitor observes it, relabeling it,
-moving it to an unrelated namespace, or forcing a false zero exit. Prevent avoidable
-alerts by previewing the exact entrypoint, making expected handled outcomes exit cleanly,
-using bounded canaries, and reserving terminal failure for a real defect.
+Do not use a production Job as the next debugging environment merely because unit
+tests passed. Exercise the packaged entrypoint, real runtime user, native
+dependencies and failure/cleanup paths locally first. Explicit, handled validation
+rejection is not training success; unexpected faults still fail. The annotation
+prevents a team notification; it does not turn a failed run into a success or remove
+the duty to diagnose it and release resources.
+
+Do not hide a real failure by deleting it, relabeling it, moving it to an unrelated
+namespace, or forcing a false zero exit. Preserve truthful state and evidence. Prevent
+avoidable failures by previewing the exact entrypoint, making expected handled outcomes
+exit cleanly, and using bounded canaries.
 
 ### Idle GPUs
 
@@ -124,6 +131,10 @@ typed model catalog. Matching Theseus schema:
   merely to run CPU data validation or copy files. Use an authorized CPU path.
 - Each POST creates a fresh run name; it is not an idempotency key. Preserve a
   durable pre-POST intent and exhaustively reconcile uncertain responses.
+- Set `failureAlerts: false` in every project request, then require the live preview's
+  top-level RayJob annotation `fleet.ai/failure-alerts: "off"`. A request field alone
+  is not evidence because an older server may ignore it. Do not submit when preview
+  lacks the annotation.
 - Inject credentials via existing Secret references, never literal request env
   values or command arguments. Do not print server failure bodies: they may embed
   private trainer logs.

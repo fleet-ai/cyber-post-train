@@ -180,6 +180,7 @@ def test_compiler_binds_planned_pause_without_shortening_recipe(config, tmp_path
     content = json.loads(gzip.decompress(base64.b64decode(request["env"]["CYBER_SFT_BUNDLE"])))
     assert json.loads(content["plan"])["pause_after_step"] == 1
     assert request["requeueIfPreempted"] is False
+    assert request["failureAlerts"] is False
 
 
 @pytest.fixture

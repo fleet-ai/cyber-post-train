@@ -349,6 +349,7 @@ def job_request(plan: dict) -> dict:
         "resources": execution["resources"],
         "priority_class": execution["priority"],
         "requeueIfPreempted": False,
+        "failureAlerts": False,
         "secrets": ["wandb-api"],
         **(
             {"image_pull_secrets": ["ghcr-pull"]}
