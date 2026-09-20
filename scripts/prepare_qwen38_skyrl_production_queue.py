@@ -24,6 +24,7 @@ DECISION_SPACE = ROOT / "docs/TRAINING_DECISION_SPACE.md"
 TASK_SET = ROOT / "configs/data/qwen38-skyrl-production-task-set-v1.json"
 SPLIT = ROOT / "configs/data/qwen38-skyrl-production-split-v1.json"
 QUALIFICATION = ROOT / "configs/qualification/qwen38-skyrl-production-queue-v1.json"
+STAGING_PACKET = ROOT / "configs/qualification/qwen38-skyrl-production-data-staging-v1.json"
 EVIDENCE = ROOT / "docs/evidence/qwen38-study/2026-09-20-skyrl-production-experiment-queue-v1.json"
 
 ARMS = (
@@ -281,6 +282,17 @@ def path_for(kind: str, arm: dict) -> Path:
 
 def build() -> dict[Path, dict]:
     task_set, split = build_task_inputs()
+    staging = load(STAGING_PACKET)
+    if (
+        staging.get("schema") != "cyber_qwen38_skyrl_production_data_staging_v1"
+        or staging.get("sha256")
+        != "sha256:" + digest({key: value for key, value in staging.items() if key != "sha256"})
+        or staging.get("state") != "locally_built_not_staged"
+        or staging.get("external_mutations") != 0
+        or [arm.get("name") for arm in staging.get("arms", [])]
+        != [arm["name"] for arm in ARMS]
+    ):
+        raise ValueError("private data staging packet differs from the reviewed queue")
     qualification = sealed(
         {
             "schema": "cyber_qwen38_skyrl_production_queue_v1",
@@ -322,10 +334,26 @@ def build() -> dict[Path, dict]:
                 "blockers": [
                     "prod4_terminal_acceptance_receipt_absent",
                     "production_qualification_dispatch_intentionally_disabled_until_prod4_acceptance",
-                    "broad_get_only_data_manifests_not_built_or_staged",
+                    "broad_get_only_data_manifests_built_locally_but_not_staged",
                     "exact_image_cpu_preflights_not_recorded",
                     "jobs_api_previews_and_fresh_duplicate_output_checks_not_recorded",
                     "global_cluster_failure_budget_is_10_of_10_until_user_resets_it",
+                ],
+            },
+            "private_data": {
+                "staging_packet": source_file(STAGING_PACKET),
+                "state": staging["state"],
+                "external_mutations": staging["external_mutations"],
+                "fleet_reads": staging["fleet_reads"],
+                "runtime_ownership": staging["runtime_ownership"],
+                "arms": [
+                    {
+                        "name": arm["name"],
+                        "data_manifest_sha256": arm["data_manifest_sha256"],
+                        "data_manifest_file_sha256": arm["data_manifest_file_sha256"],
+                        "rows": arm["rows"],
+                    }
+                    for arm in staging["arms"]
                 ],
             },
             "research_basis": [
@@ -391,6 +419,8 @@ def raw(value: dict) -> bytes:
 
 def queue_evidence(artifacts: dict[Path, dict]) -> dict:
     qualification = artifacts[QUALIFICATION]
+    staging = load(STAGING_PACKET)
+    staged_by_name = {arm["name"]: arm for arm in staging["arms"]}
     arms = []
     for arm in ARMS:
         data_path, run_path = path_for("data", arm), path_for("run", arm)
@@ -403,6 +433,12 @@ def queue_evidence(artifacts: dict[Path, dict]) -> dict:
                 "run_config": str(run_path.relative_to(ROOT)),
                 "run_config_file_sha256": "sha256:"
                 + hashlib.sha256(raw(artifacts[run_path])).hexdigest(),
+                "local_data_manifest_sha256": staged_by_name[arm["name"]][
+                    "data_manifest_sha256"
+                ],
+                "local_data_manifest_file_sha256": staged_by_name[arm["name"]][
+                    "data_manifest_file_sha256"
+                ],
                 "plan_request_state": "not_prepared_until_exact_staged_manifest_exists",
                 "submitted": False,
             }
@@ -410,7 +446,7 @@ def queue_evidence(artifacts: dict[Path, dict]) -> dict:
     return sealed(
         {
             "schema": "cyber_qwen38_skyrl_production_experiment_queue_evidence_v1",
-            "observed_at": "2026-09-20T00:00:00Z",
+            "observed_at": "2026-09-20T17:19:29Z",
             "git_branch": "codex/q38-skyrl-full-queue-v1",
             "scope": "offline_no_submit_no_stage_no_serve_no_cancel",
             "qualification": {
@@ -431,6 +467,13 @@ def queue_evidence(artifacts: dict[Path, dict]) -> dict:
                 },
                 "counts": {"train": 59, "dev": 20, "test_untouched": 10},
                 "private_task_text_committed": False,
+                "local_private_build": {
+                    "packet": source_file(STAGING_PACKET),
+                    "state": staging["state"],
+                    "fleet_reads": staging["fleet_reads"],
+                    "runtime_ownership": staging["runtime_ownership"],
+                    "repository_payload_bytes": staging["privacy"]["repository_payload_bytes"],
+                },
             },
             "arms": arms,
             "common_release_gate": qualification["canary_prerequisite"],
@@ -458,7 +501,6 @@ def queue_evidence(artifacts: dict[Path, dict]) -> dict:
             },
             "next_actions_after_gate": [
                 "Accept prod4 only after every common release-gate fact is independently verified.",
-                "Build each arm's exact private data create-once with authenticated GETs only.",
                 (
                     "Stage and digest-verify each arm's manifest, train JSONL, dev JSONL, split, "
                     "and task set."

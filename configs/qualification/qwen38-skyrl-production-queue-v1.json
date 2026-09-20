@@ -41,6 +41,87 @@
     "file_sha256": "sha256:f2a9698db7e5f4e3b9a05913f4ac4eff56b9b114dbc384ba9f1a2b0e3c3c23d3",
     "path": "docs/TRAINING_DECISION_SPACE.md"
   },
+  "private_data": {
+    "arms": [
+      {
+        "data_manifest_file_sha256": "sha256:10703876ec2fa75c454bbc791150cf223697dbceee828f1ce4adc5af41b207a0",
+        "data_manifest_sha256": "sha256:09eae3253cf1224b329e83c4512da3d877ef1755d17efb7934713bb7e5d322d5",
+        "name": "chris-q38-skyrl10-a1",
+        "rows": {
+          "dev": 20,
+          "final_test": 0,
+          "train": 59
+        }
+      },
+      {
+        "data_manifest_file_sha256": "sha256:31f63eae5cc1745787fa61f05f25eb0a2ae9e2585573783ffa199377c8e65391",
+        "data_manifest_sha256": "sha256:4f3772182bbc08ab43024208311d957d66ef67be1f55106184111687bc06b6f8",
+        "name": "chris-q38-skyrl10-lr3e7",
+        "rows": {
+          "dev": 20,
+          "final_test": 0,
+          "train": 59
+        }
+      },
+      {
+        "data_manifest_file_sha256": "sha256:23de3b5c2acd450071b51030c414328f853cfe27ec4a7a918687ec4cbe444e27",
+        "data_manifest_sha256": "sha256:7fbbd04ef14e88518e6046e9a35d4ab8ca5a5a44face27e77c6d1fa97ff55c75",
+        "name": "chris-q38-skyrl10-lr3e6",
+        "rows": {
+          "dev": 20,
+          "final_test": 0,
+          "train": 59
+        }
+      },
+      {
+        "data_manifest_file_sha256": "sha256:cbe5e8d6f5ec7a6ef6855348409da29b6d35e5eeff493df10fe60f1fc26b3e4c",
+        "data_manifest_sha256": "sha256:6db196e724999be81476ec15b5fe5ec46e87e05ae99b0d7ffbadaba3e5870e38",
+        "name": "chris-q38-skyrl10-seed43",
+        "rows": {
+          "dev": 20,
+          "final_test": 0,
+          "train": 59
+        }
+      },
+      {
+        "data_manifest_file_sha256": "sha256:472c3154671abc378185e2e2aa5f53178a6db8134f76534d1d2439c5c9894402",
+        "data_manifest_sha256": "sha256:03ca037492b7fd758f748f53d2659dbc3cbcac96de43be39f74efa04e1e34368",
+        "name": "chris-q38-skyrl50-a1",
+        "rows": {
+          "dev": 20,
+          "final_test": 0,
+          "train": 59
+        }
+      }
+    ],
+    "external_mutations": 0,
+    "fleet_reads": {
+      "account_gets": 1,
+      "methods": [
+        "GET"
+      ],
+      "mutating_requests": 0,
+      "unique_exact_version_task_gets": 79
+    },
+    "runtime_ownership": {
+      "directory_mode": "0700",
+      "file_mode": "0600",
+      "gid": 100,
+      "required_checks": [
+        "copy_to_a_new_absent_target_without_replace",
+        "set_owner_before_runtime_readback",
+        "rehash_every_destination_file_as_uid_1000_gid_100",
+        "reject_any_extra_or_missing_file"
+      ],
+      "uid": 1000
+    },
+    "staging_packet": {
+      "file_sha256": "sha256:d5b44b7c97d7dab1ead3f1f0d305150571ff71ba8522e2a3f3f2280735f988e8",
+      "path": "configs/qualification/qwen38-skyrl-production-data-staging-v1.json",
+      "self_sha256": "sha256:2ec7ec25691cc0bffabe876bc6fd928079cdea1a5bef2b037a9a0326823000f0"
+    },
+    "state": "locally_built_not_staged"
+  },
   "purpose": "No-submit queue behind the exact prod4 reward-acquisition canary.",
   "research_basis": [
     {
@@ -57,12 +138,12 @@
     }
   ],
   "schema": "cyber_qwen38_skyrl_production_queue_v1",
-  "sha256": "sha256:46a40baf1d702175009e3395dc8c7a33237927aa743972ed33fd5299784fb908",
+  "sha256": "sha256:ccba2a1c0bb5347ae1cc74dc163b6a37432a17e82af4dd567ad420b0e1c4077f",
   "submission_gate": {
     "blockers": [
       "prod4_terminal_acceptance_receipt_absent",
       "production_qualification_dispatch_intentionally_disabled_until_prod4_acceptance",
-      "broad_get_only_data_manifests_not_built_or_staged",
+      "broad_get_only_data_manifests_built_locally_but_not_staged",
       "exact_image_cpu_preflights_not_recorded",
       "jobs_api_previews_and_fresh_duplicate_output_checks_not_recorded",
       "global_cluster_failure_budget_is_10_of_10_until_user_resets_it"
