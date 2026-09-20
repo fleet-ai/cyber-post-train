@@ -1,6 +1,7 @@
 # SkyRL prod4 direct RayJob qualification
 
-Status at this revision: **transport qualified; scientific GPU canary not yet created**.
+Status at this revision: **transport qualified; scientific GPU canary created exactly
+once and admitted; scientific result pending**.
 
 This change provides one create-once Kubernetes `RayJob` transport for the already
 sealed `chris-q38-rlreward-prod4` scientific canary. It bypasses only the FleetJob
@@ -106,3 +107,33 @@ Before the sole GPU create, the operator must:
 Acceptance after creation still requires genuine reward variation, one finite optimizer
 step, a reloadable step-1 checkpoint, exact UID-bound resource release, and independent
 sanitized evidence validation. A Pod becoming Ready is not scientific acceptance.
+
+## Live create record
+
+The V4 zero-GPU scientific preflight passed at `2026-09-20T23:04:07Z`. Its
+UID-bound observer result has SHA-256
+`4b3ede99c046367efcab4860f61402ca1b0f94ff806b3fbe31606488a179c24f`; the
+inner scientific receipt has SHA-256
+`037dcf402310fbfcaa83227e2306bc3df142df30051bd792a6c69e033c9734f6`.
+The preflight Job and Pod were both absent after cleanup, and it allocated zero GPUs.
+
+After fresh duplicate and node-budget checks, the operator armed the exact cleanup
+observer, fsynced the create intent, and issued the one permitted create. The live
+identities are:
+
+- RayJob `chris-q38-rlreward-prod4`, UID
+  `21d311b0-136d-4831-a5de-341ff9d12c87`, created
+  `2026-09-20T23:09:38Z`;
+- Workload `rayjob-chris-q38-rlreward-prod4-77b49`, UID
+  `9e8b6058-acca-4a4f-9c79-bfe17dc85a34`, admitted at create;
+- RayCluster `chris-q38-rlreward-prod4-bpb2k`, UID
+  `5c1dea98-b6af-46de-9659-aed9b74628fe`;
+- head Pod `chris-q38-rlreward-prod4-bpb2k-head-dw6b5`, UID
+  `b36e390f-9da0-487c-a57d-4e0aaff6ded5`.
+
+The created-proof SHA-256 is
+`6b5634b5a0e99ceefd69482fc27dbb5278b77aeae51866260cca5d3e7ca548e6`.
+At the first post-create read, the Pod was scheduled on
+`computeinstance-e04az8ppqdsr7e9pah`, initializing with zero restarts, and the
+root RayJob still carried `fleet.ai/failure-alerts: "off"`. These facts prove
+launch identity and admission only; the scientific acceptance gates above remain open.
