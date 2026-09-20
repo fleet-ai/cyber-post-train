@@ -1,0 +1,99 @@
+{
+  "schema_version": "qwen38_lora_serving_preflight_plan_v1",
+  "status": "sealed_no_external_mutation",
+  "evaluation_packet": {
+    "path": "configs/evaluation/qwen38-lora-step1-eval-packet-v1.json",
+    "file_sha256": "sha256:f643ce1ee0419019c15b64ca5b956cb136175afa320b0b2d7f296ef27b10e266",
+    "packet_sha256": "sha256:6f59b3ba40c2030529816016122177dc242086967b91b03d793a89bac17986bd"
+  },
+  "export_observation": {
+    "sfs_receipt_path": "/jobs/chris-q38-lora-export-c1-v5/QWEN38_LORA_MERGED_HF_EXPORT.json",
+    "receipt_file_sha256": "sha256:3da93b3304e284205ba8a8939d1dcb8cc4fe749b0f255bbbe35376af5e7c5ff2",
+    "receipt_sha256": "sha256:1561a76907551bf829221af328921a626ddde8c5791cf29fa46ad0c99357c110",
+    "schema": "cyber_qwen38_megatron_lora_merged_hf_export_v1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lora-export-c1-v5/merged-hf",
+    "file_count": 28,
+    "total_bytes": 55586036499,
+    "files_manifest_sha256": "sha256:f08cdb03fa6ef79228028417bec978a509275bbb1ebe7d99d5db4a00ae9fad84",
+    "tensor_layout_sha256": "sha256:8533a0edfba093faf2a865391405408461613b92ef83e8d511436f2ed96bc14d",
+    "sidecars_manifest_sha256": "sha256:aa356dc4bc278ae21aaaa5f3527e545ff32f5db7bb599cf56476d55c8a891585",
+    "validation_receipt_sha256": "sha256:e60eb3ecb06b0488b98f558f4a1e873a18a95cba4aa8f5ed8bfcbc3c734c67b2",
+    "required_terminal_gates": [
+      "optimizer_steps_executed_zero",
+      "deterministic_merge",
+      "all_output_tensors_reopened_equal",
+      "gpu_reload_verified",
+      "merged_model_reload_verified",
+      "finite_logits",
+      "source_checkpoint_unchanged",
+      "source_base_unchanged"
+    ],
+    "observed_read_only": true
+  },
+  "staging": {
+    "model_id": "chris-q38-lora-step1-wbe-v1",
+    "source_sfs_root": "/jobs/chris-q38-lora-export-c1-v5/merged-hf",
+    "destination_path": "/models/chris-q38-lora-step1-wbe-v1",
+    "acceptance_path": "/models/chris-q38-lora-step1-wbe-v1/.fleet-acceptance.json",
+    "must_be_absent": true,
+    "atomic_transaction": "directory_rename_noreplace_v1",
+    "priority": "c1",
+    "gpus": 0,
+    "bounded_deadline_seconds": 5400
+  },
+  "clone_source": {
+    "model_id": "chris-q38-fresh75-step230-wbe-v1",
+    "inference_model_uid": "fa7dafb6-a700-4eb7-b955-e40255420617",
+    "phase": "paused",
+    "desired_state": "paused",
+    "min_replicas": 0,
+    "priority": "c1",
+    "spec_sha256": "sha256:cdad3122886c0670f841169d2b2f69eb67d35a03b0c781a7f13847c8557eac19",
+    "fresh_read_required_at_launch": true
+  },
+  "desired_route": {
+    "model_id": "chris-q38-lora-step1-wbe-v1",
+    "display_name": "Qwen3.8-27B LoRA SFT step 1 matched evaluation",
+    "source_path": "/models/chris-q38-lora-step1-wbe-v1",
+    "scratch_path": "/scratch/models/chris-q38-lora-step1-wbe-v1",
+    "model_revision": "sha256:1561a76907551bf829221af328921a626ddde8c5791cf29fa46ad0c99357c110",
+    "initial_state": "paused",
+    "min_replicas": 0,
+    "priority": "c1",
+    "gpus": 8,
+    "nodes": 1,
+    "create_once": true,
+    "new_uid_required": true
+  },
+  "live_parity": {
+    "base_model_id": "qwen3.8-27b",
+    "base_route_uid": "d06c0531-7181-41ad-a3fd-cd8e3e774ab9",
+    "candidate_model_id": "chris-q38-lora-step1-wbe-v1",
+    "candidate_uid_source": "create_once_registration_response",
+    "content_free_probes_only": true,
+    "fresh_after_ready_required": true,
+    "raw_outputs_persisted": false
+  },
+  "activation_gates": [
+    "fresh_export_receipt_and_full_payload_rehash",
+    "independent_export_validation_receipt_revalidated",
+    "staging_destination_absent",
+    "create_once_zero_gpu_atomic_staging",
+    "fresh_clone_source_spec_unchanged",
+    "candidate_route_name_absent",
+    "create_once_paused_route_new_uid",
+    "project_node_available_before_resume",
+    "ready_exact_uid_and_zero_restarts",
+    "fresh_content_free_base_candidate_live_parity",
+    "consumer_ready_before_resume",
+    "pause_and_prove_release_when_consumer_finishes_or_stalls"
+  ],
+  "current_blockers": [
+    "production_stage_runtime_does_not_yet_accept_the_lora_export_receipt_schema",
+    "create_once_stage_acceptance_receipt_is_absent",
+    "candidate_route_has_not_been_registered",
+    "fresh_live_parity_receipt_is_absent",
+    "production_project_node_cap_is_currently_full"
+  ],
+  "plan_sha256": "sha256:df0bc822ff3de204b38c09157be2b6e26bb76dcadc9943cb3cdba3ba11dd3e4a"
+}
