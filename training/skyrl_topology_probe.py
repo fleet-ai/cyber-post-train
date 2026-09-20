@@ -38,7 +38,7 @@ PREFLIGHT_PACKET_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_packet_v1"
 PREFLIGHT_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_preview_v1"
 PREFLIGHT_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_cpu_preflight_rejection_v1"
 PROBE_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_failure_v1"
-PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v13"
+PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v14"
 PREFLIGHT_RECEIPT = "/dev/termination-log"
 MODULE = "training.skyrl_topology_probe"
 CONFIG_PATH = ROOT / "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json"
@@ -88,7 +88,7 @@ def _expected_execution() -> dict:
         "namespace": "fleet-train-jobs",
         "project_name": "fleetjob-dev",
         "auth_secret": {"name": "fleet-api", "key": "FLEET_API_KEY"},
-        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v3",
+        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v4",
         "output_pvc": "sfs-shared",
         "output_registry_mount": "/mnt/cyber-output-registry",
         "output_registry_subpath": "models/fleetjob-dev",
@@ -102,8 +102,16 @@ def _expected_execution() -> dict:
         "ray_version": "2.49.2",
         "priority": "c1",
         "queue_priority": "q1",
+        # A mixed CPU-head/GPU-worker RayJob cannot be admitted by the dev
+        # ClusterQueue: once the controller adds a topology request for the GPU
+        # podset, Kueue requires every selected flavor in the Workload to be
+        # topology-aware, while the cpu-head flavor deliberately is not.  Split
+        # the eight GPUs 4+4 across the Ray head and one worker so both podsets
+        # select the B300 flavor.  Runtime evidence proves both pods land on the
+        # same physical node before either TP4 engine is accepted.
         "workers": 1,
-        "gpus_per_worker": 8,
+        "gpus_per_worker": 4,
+        "gpus_on_head": 4,
         "head_resources": {
             "cpu_request": "4",
             "cpu_limit": "8",
@@ -285,6 +293,10 @@ def request(
             "title": arguments.name + " zero-update topology probe",
             "run_dir": arguments.output_root,
             "image": IMAGE,
+            # bundled_request is the sealed code transport and its shared
+            # validator requires positive worker values.  It is never sent to
+            # the Jobs API for this FleetJob-only probe; fleetjob_manifest is
+            # the sole resource authority and binds all eight GPUs to the head.
             "workers": 1,
             "gpus_per_worker": 8,
             "resources": execution["resources"],
@@ -381,6 +393,7 @@ def _fleetjob(
                 "workerGroups": {
                     "gpu": {
                         "queuePriorityClass": execution["queue_priority"],
+                        "topology": {"mode": "unconstrained"},
                     }
                 },
             },
@@ -419,13 +432,21 @@ def fleetjob_manifest(plan: dict) -> dict:
         if not key.startswith("CYBER_RUNTIME_BUNDLE")
     }
     head = {
-        "rayStartParams": {"num-cpus": "0", "num-gpus": "0"},
+        "rayStartParams": {
+            "num-cpus": "0",
+            "num-gpus": str(execution["gpus_on_head"]),
+        },
         "template": {
             "metadata": {},
             "spec": {
                 "priorityClassName": execution["priority"],
                 "containers": [
-                    _container(plan, head_env, execution["head_resources"])
+                    _container(
+                        plan,
+                        head_env,
+                        execution["resources"],
+                        gpus=execution["gpus_on_head"],
+                    )
                 ],
             },
         },
@@ -442,7 +463,7 @@ def fleetjob_manifest(plan: dict) -> dict:
         "replicas": 1,
         "minReplicas": 1,
         "maxReplicas": 1,
-        "rayStartParams": {"num-gpus": "8"},
+        "rayStartParams": {"num-gpus": str(execution["gpus_per_worker"])},
         "template": {
             "metadata": {},
             "spec": {
@@ -926,7 +947,7 @@ def run(plan: dict) -> dict:
     setup = None
     started = time.time()
     setup_error = None
-    worker_runtime_user = None
+    gpu_node_runtime_users = None
     try:
         with _Deadline(plan["deadlines"]["setup_seconds"], "engine setup"):
             _verify_model(plan)
@@ -936,25 +957,42 @@ def run(plan: dict) -> dict:
                 for row in ray.nodes()
                 if row.get("Alive") and row.get("Resources", {}).get("GPU")
             ]
-            if len(nodes) != 1 or quantity(nodes[0]["Resources"]["GPU"]) != 8:
-                raise ValueError("probe requires exactly one live eight-GPU Ray node")
+            if len(nodes) != 2 or sorted(
+                quantity(row["Resources"]["GPU"]) for row in nodes
+            ) != [4, 4]:
+                raise ValueError("probe requires exactly two four-GPU Ray pods")
 
             @ray.remote(num_cpus=0)
             def runtime_user():
                 import os
 
-                return {"uid": os.geteuid(), "gid": os.getegid()}
+                return {
+                    "uid": os.geteuid(),
+                    "gid": os.getegid(),
+                    "physical_node": os.environ.get("FLEET_NODE_NAME", ""),
+                }
 
-            worker_runtime_user = ray.get(
-                runtime_user.options(
-                    scheduling_strategy=NodeAffinitySchedulingStrategy(
-                        nodes[0]["NodeID"], soft=False
-                    )
-                ).remote(),
+            gpu_node_runtime_users = ray.get(
+                [
+                    runtime_user.options(
+                        scheduling_strategy=NodeAffinitySchedulingStrategy(
+                            row["NodeID"], soft=False
+                        )
+                    ).remote()
+                    for row in sorted(nodes, key=lambda item: item["NodeID"])
+                ],
                 timeout=30,
             )
-            if worker_runtime_user != {"uid": 1000, "gid": 100}:
-                raise ValueError("probe GPU worker must use image user 1000:100")
+            if any(
+                row.get("uid") != 1000
+                or row.get("gid") != 100
+                or not row.get("physical_node")
+                for row in gpu_node_runtime_users
+            ):
+                raise ValueError("probe GPU pods must use image user 1000:100")
+            physical_nodes = {row["physical_node"] for row in gpu_node_runtime_users}
+            if len(physical_nodes) != 1 or os.environ.get("FLEET_NODE_NAME") not in physical_nodes:
+                raise ValueError("probe GPU pods are not on one physical node")
             setup = create_inference_servers(
                 cfg.generator.inference_engine,
                 build_vllm_cli_args(cfg),
@@ -985,8 +1023,12 @@ def run(plan: dict) -> dict:
             "engines_started": 2,
             "tensor_parallel_size": 4,
             "runtime_users": {
-                "driver": {"uid": 1000, "gid": 100},
-                "gpu_worker": worker_runtime_user,
+                "driver": {
+                    "uid": 1000,
+                    "gid": 100,
+                    "physical_node": os.environ["FLEET_NODE_NAME"],
+                },
+                "gpu_pods": gpu_node_runtime_users,
             },
             "ray_shutdown_called": True,
             "external_release_required": True,
@@ -1001,11 +1043,19 @@ def validate_release(plan: dict, receipt: dict, observation: dict) -> dict:
     if (
         receipt.get("status") != "setup_and_internal_cleanup_passed"
         or receipt.get("plan_sha256") != digest(plan)
-        or receipt.get("runtime_users")
-        != {
-            "driver": {"uid": 1000, "gid": 100},
-            "gpu_worker": {"uid": 1000, "gid": 100},
-        }
+        or not isinstance(receipt.get("runtime_users"), dict)
+        or receipt["runtime_users"].get("driver", {}).get("uid") != 1000
+        or receipt["runtime_users"].get("driver", {}).get("gid") != 100
+        or not receipt["runtime_users"].get("driver", {}).get("physical_node")
+        or not isinstance(receipt["runtime_users"].get("gpu_pods"), list)
+        or len(receipt["runtime_users"]["gpu_pods"]) != 2
+        or any(
+            row.get("uid") != 1000
+            or row.get("gid") != 100
+            or row.get("physical_node")
+            != receipt["runtime_users"]["driver"]["physical_node"]
+            for row in receipt["runtime_users"]["gpu_pods"]
+        )
         or any(receipt.get(key) != 0 for key in plan["scientific_work"])
         or receipt.get("engines_started") != 2
         or receipt.get("tensor_parallel_size") != 4

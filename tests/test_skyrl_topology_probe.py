@@ -33,6 +33,11 @@ def test_probe_is_distinct_dev_only_bounded_and_zero_update(plan) -> None:
     assert plan["execution"]["cluster_target"] == "dev"
     assert plan["execution"]["jobs_api_base_url"] == "https://api.ft.dev.flt.build"
     assert (request["workers"], request["gpus_per_worker"]) == (1, 8)
+    assert (plan["execution"]["workers"], plan["execution"]["gpus_per_worker"]) == (
+        1,
+        4,
+    )
+    assert plan["execution"]["gpus_on_head"] == 4
     assert request["secrets"] == []
     assert plan["deadlines"] == {
         "setup_seconds": 1200,
@@ -55,17 +60,17 @@ def test_probe_is_distinct_dev_only_bounded_and_zero_update(plan) -> None:
     assert request["env"]["CYBER_EXPECTED_RUNTIME_GID"] == "100"
 
 
-def test_probe_fleetjob_is_one_gpu_node_with_cpu_head_and_explicit_user(plan) -> None:
+def test_probe_fleetjob_is_two_four_gpu_pods_with_explicit_user(plan) -> None:
     manifest = probe.fleetjob_manifest(plan)
     spec = manifest["spec"]
     assert manifest["metadata"] == {
-        "name": "chris-q38-skyrl-probe-v3",
+        "name": "chris-q38-skyrl-probe-v4",
         "namespace": "fleet-train-jobs",
     }
     assert spec["fleet"] == {
         "projectName": "fleetjob-dev",
         "auth": {"secretRef": {"name": "fleet-api", "key": "FLEET_API_KEY"}},
-        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v3",
+        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v4",
         "models": [
             {
                 "path": "Qwen/Qwen3.8-27B",
@@ -83,6 +88,7 @@ def test_probe_fleetjob_is_one_gpu_node_with_cpu_head_and_explicit_user(plan) ->
         "workerGroups": {
             "gpu": {
                 "queuePriorityClass": "q1",
+                "topology": {"mode": "unconstrained"},
             }
         },
     }
@@ -92,10 +98,13 @@ def test_probe_fleetjob_is_one_gpu_node_with_cpu_head_and_explicit_user(plan) ->
     assert spec["job"]["spec"]["shutdownAfterJobFinishes"] is True
     head = cluster["headGroupSpec"]["template"]["spec"]["containers"][0]
     workers = cluster["workerGroupSpecs"]
-    assert "nvidia.com/gpu" not in head["resources"]["limits"]
+    assert head["resources"]["limits"]["nvidia.com/gpu"] == "4"
+    assert head["resources"]["requests"]["nvidia.com/gpu"] == "4"
+    assert cluster["headGroupSpec"]["rayStartParams"]["num-gpus"] == "4"
     assert len(workers) == 1 and workers[0]["replicas"] == 1
     gpu = workers[0]["template"]["spec"]["containers"][0]
-    assert gpu["resources"]["limits"]["nvidia.com/gpu"] == "8"
+    assert gpu["resources"]["limits"]["nvidia.com/gpu"] == "4"
+    assert gpu["resources"]["requests"]["nvidia.com/gpu"] == "4"
     expected_user = {
         "allowPrivilegeEscalation": False,
         "privileged": False,
@@ -269,7 +278,8 @@ def test_probe_runtime_bundle_imports_without_source_checkout(plan, tmp_path) ->
         ("priority", "c0"),
         ("queue_priority", "q0"),
         ("workers", 2),
-        ("gpus_per_worker", 4),
+        ("gpus_per_worker", 8),
+        ("gpus_on_head", 8),
     ],
 )
 def test_probe_rejects_topology_or_route_substitution(plan, field, value) -> None:
@@ -555,8 +565,15 @@ def test_release_receipt_requires_exact_terminal_absence_and_zero_gpus(plan) -> 
             "engines_started": 2,
             "tensor_parallel_size": 4,
             "runtime_users": {
-                "driver": {"uid": 1000, "gid": 100},
-                "gpu_worker": {"uid": 1000, "gid": 100},
+                "driver": {
+                    "uid": 1000,
+                    "gid": 100,
+                    "physical_node": "gpu-node-1",
+                },
+                "gpu_pods": [
+                    {"uid": 1000, "gid": 100, "physical_node": "gpu-node-1"},
+                    {"uid": 1000, "gid": 100, "physical_node": "gpu-node-1"},
+                ],
             },
             "ray_shutdown_called": True,
             "external_release_required": True,
