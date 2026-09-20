@@ -1,0 +1,65 @@
+{
+  "arm_id": "b8-lr1e6-e2",
+  "checkpoint_selection": {
+    "checkpoint_path": "/mnt/sfs/jobs/chris-q38-f75-lr1-v2/checkpoints/global_step_230",
+    "checkpoint_saved_receipt_file_sha256": "sha256:4945ae4f47ab9b8d7039de856c7dd0c301f57f9dcb54bfaccdc61448b1cbd8c7",
+    "checkpoint_saved_receipt_path": "/mnt/sfs/jobs/chris-q38-f75-lr1-v2/checkpoint_receipts/step-000230.json",
+    "checkpoint_saved_receipt_sha256": "sha256:5972ba9ce617f2f1c043e56c1a32b5a7f2b7fe186dfe3a3bf8abd7a8fd901f7a",
+    "optimizer_step": 230,
+    "payload_seal_status": "required_not_yet_accepted",
+    "retained_checkpoints": [
+      200,
+      220,
+      230
+    ],
+    "scientific_role": "final_training_checkpoint"
+  },
+  "handoff_sha256": "sha256:6575ef530d3aa5f7ace657fc80f6a6e6a194779ff8b69c4d7cc767644b197bc4",
+  "next_stage": {
+    "external_mutation_authorized": false,
+    "fleet_development_campaign_id": "q38-f75v2-b8-lr1e6-e2-fleet-dev17-p1",
+    "operation": "seal_export_reload_and_stage_checkpoint_230",
+    "priority": "c1",
+    "route_initial_state": "paused",
+    "serving_model_id": "chris-q38-f75v2-b8-lr1e6-e2-wbe",
+    "webexploitbench_canary_pair_id": "q38-f75v2-b8-lr1e6-e2-oc-wbe-c1"
+  },
+  "queue": {
+    "file_sha256": "sha256:447ea18cd9621254dcc81539d69b029c9b7d70f9fdaf0b5c4d1d017ab8d179d3",
+    "path": "configs/evaluation/qwen38-fresh75-v2-checkpoint-eval-queue-v1.json",
+    "queue_sha256": "sha256:02a991f07f79ae66cc3c94df099220b885d4b1cabe1107a31e4453f42b001bad"
+  },
+  "remaining_gates": [
+    "checkpoint_payload_manifest_and_full_rehash",
+    "zero_optimizer_step_bf16_export",
+    "zero_optimizer_step_reload_and_source_unchanged",
+    "create_once_inference_staging",
+    "create_once_paused_c1_route_with_new_uid",
+    "fresh_base_candidate_serving_parity",
+    "project_active_nodes_at_most_eight_after_route_admission",
+    "fresh_tensorlake_duplicate_census",
+    "paired_score_free_task0_canary_acceptance",
+    "full_collection_only_after_canary_acceptance",
+    "separate_scoring_from_immutable_rollout_bundles",
+    "fleet_development_eval"
+  ],
+  "resource_release": {
+    "allocated_gpus": 0,
+    "observed_at": "2026-09-20T16:19:49Z",
+    "pod_count": 0,
+    "raycluster_count": 0,
+    "workload_count": 0
+  },
+  "schema_version": "qwen38_fresh75_v2_post_training_handoff_v1",
+  "source_plan": {
+    "file_sha256": "sha256:9633c787ac5f4e58f094780181a0b5c73841516a115a875399cc2992e8761a01",
+    "path": "configs/qualification/qwen38-fresh75-lr1-step230-source-plan-v1.json",
+    "plan_sha256": "sha256:3d38ef8845c1f354802ba811b6f710b503989a68d6c8bf6d17602a8478db96d0",
+    "producer_config_path": "configs/runs/qwen38-fresh75-teacher-sft-sweep-canary-v3.json",
+    "producer_git_commit": "8599ef5a",
+    "reconstruction_status": "accepted_exact_sfs_runtime_copy",
+    "runtime_sha256": "sha256:b1bc58cc8edd112bbbddf1e729c448d06d2c83c0ba0fa2390829791998c9b3a4"
+  },
+  "status": "training_accepted_waiting_for_checkpoint_payload_seal",
+  "training_observation_sha256": "sha256:a298f532bd29f6a86632895278f92c3d5412e65be889eee417285a5b5ae1c1fe"
+}

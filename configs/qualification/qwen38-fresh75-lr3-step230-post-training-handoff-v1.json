@@ -3,8 +3,8 @@
   "status": "training_accepted_waiting_for_checkpoint_payload_seal",
   "queue": {
     "path": "configs/evaluation/qwen38-fresh75-v2-checkpoint-eval-queue-v1.json",
-    "file_sha256": "sha256:74cf96e6b029a61e64f897832ad538c08d8ec4a0f5884c76f58aa5f144877d44",
-    "queue_sha256": "sha256:d46eedb1d857043c0fb7089e0308e6ae8b73096a8ef4381eeb81664512f28c46"
+    "file_sha256": "sha256:447ea18cd9621254dcc81539d69b029c9b7d70f9fdaf0b5c4d1d017ab8d179d3",
+    "queue_sha256": "sha256:02a991f07f79ae66cc3c94df099220b885d4b1cabe1107a31e4453f42b001bad"
   },
   "arm_id": "b8-lr3e6-e2",
   "training_observation_sha256": "sha256:6d0e88aba1d681cea3d5bcc3931a1077767c249f4c3dda14ae294fac70136f17",
@@ -61,5 +61,5 @@
     "separate_scoring_from_immutable_rollout_bundles",
     "fleet_development_eval"
   ],
-  "handoff_sha256": "sha256:a52e7565d2f586607c14cd5fce7496a046ad629cbeae2dc1851154935893c5ec"
+  "handoff_sha256": "sha256:7fd6b00ca0df462d6f5bc8cd4b815ed4e126c3b7757c8026824171d7bcef309c"
 }
