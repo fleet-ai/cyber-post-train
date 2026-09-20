@@ -195,3 +195,45 @@ Prod5 frozen identities at preparation time:
 Prod5 remains scientifically unaccepted until it records genuine authoritative reward
 variation, one finite optimizer update, a reloadable step-1 checkpoint, matched
 before/after development results, and complete GPU release.
+
+## Prod5 live create record
+
+The create-once zero-GPU data stage and scientific preflight both passed and released
+before the GPU create:
+
+- data-stage Job UID `0f37455c-cead-4105-a251-b318ca62a878`, Pod UID
+  `fafe30d6-29fa-4375-8e85-82fec18d71f2`, stage receipt SHA-256
+  `790bca1cd3e89c56a9461cd8d58afce42cce13407ab26bd4d83fcd695dd8bcdc`,
+  release-observer result SHA-256
+  `a048c3096bfcd10ccae6f21544362bf6b0126ed45162c3720636e1a737385139`;
+- CPU-preflight Job UID `f1b61383-34ce-4655-8224-b5061989e40e`, Pod UID
+  `9343e80c-315b-4970-89a4-6d7b5f2d31e1`, scientific receipt SHA-256
+  `ef72b5b3052e94cb442c1f3bd6c7439fd7f604dd1504d24aa4b3140cd719baf5`,
+  release-observer result SHA-256
+  `939f62c849a991c06759533545b6d7e300accf65b895b1793f2eaf3a7fd3d514`.
+
+Both Jobs carried `fleet.ai/failure-alerts: "off"`, requested zero GPUs, terminated
+with exit zero and zero restarts, and were absent with their Pods after cleanup. The
+preflight revalidated both the native parser and ordered multi-tool parser, exact
+train/development counts, the one-step plan, create-once W&B binding, and output
+absence.
+
+After a fresh Kubernetes and Jobs-API duplicate census, a current owned-node census,
+and a live pre-armed cleanup observer, the operator issued the sole prod5 create at
+`2026-09-20T23:56:08Z`. Exact identities are:
+
+- RayJob `chris-q38-rlreward-prod5`, UID
+  `f9327842-014e-4f99-b271-74351dafd8a8`;
+- Workload `rayjob-chris-q38-rlreward-prod5-f0eb3`, UID
+  `0bbe0928-f0b9-40c7-aff6-0fe49bcf6c8a`, admitted at create;
+- RayCluster `chris-q38-rlreward-prod5-dnt6z`, UID
+  `5b05e68d-ab3b-46f2-828b-c4e83f9cb90e`;
+- head Pod `chris-q38-rlreward-prod5-dnt6z-head-lmj7l`, UID
+  `390b4d14-d3be-4fab-aabd-7eb3d0fb071c`, initially scheduled on
+  `computeinstance-e04q9rsq2y5mpj2ktm` with eight GPUs and zero restarts.
+
+The root RayJob carried `fleet.ai/failure-alerts: "off"` and c1/q1 priority before
+creation. The created-proof SHA-256 is
+`513aebcda9c56666dad65e0d91a17f887d17c53504c66c46ec17b132738cc91f`.
+These facts prove the exact create and admission only; they do not yet prove any
+episode, reward, optimizer update, checkpoint, or capability result.
