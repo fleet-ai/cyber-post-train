@@ -77,16 +77,15 @@ def _validated_receipt(message: object, *, kind: str) -> dict | None:
             "cyber_skyrl_topology_probe_cpu_preflight_rejection_v1",
             "cyber_skyrl_model_artifact_stage_receipt_v1",
             "cyber_skyrl_model_artifact_stage_rejection_v1",
+            "cyber_skyrl_topology_probe_receipt_verification_v1",
+            "cyber_skyrl_topology_probe_receipt_verification_rejection_v1",
         },
         "fleetjob": {
             "cyber_skyrl_topology_probe_receipt_v1",
             "cyber_skyrl_topology_probe_failure_v1",
         },
     }
-    if (
-        value.get("schema") not in schemas[kind]
-        or value.get("sha256") != "sha256:" + digest(body)
-    ):
+    if value.get("schema") not in schemas[kind] or value.get("sha256") != "sha256:" + digest(body):
         return None
     return value
 
@@ -291,9 +290,7 @@ class Observer:
                         self.snapshot.exit_codes.add(exit_code)
                     if isinstance(reason, str) and reason:
                         self.snapshot.termination_reasons.add(reason)
-                    receipt = _validated_receipt(
-                        terminated.get("message"), kind=self.kind
-                    )
+                    receipt = _validated_receipt(terminated.get("message"), kind=self.kind)
                     if receipt is not None:
                         self.snapshot.receipt = receipt
         self.snapshot.peak_gpus = max(self.snapshot.peak_gpus, current_gpus)
@@ -348,10 +345,7 @@ class Observer:
         ray_status = rayjob.get("status", {})
         cluster_name = ray_status.get("rayClusterName")
         if isinstance(cluster_name, str) and cluster_name:
-            if (
-                self.snapshot.raycluster_name
-                and self.snapshot.raycluster_name != cluster_name
-            ):
+            if self.snapshot.raycluster_name and self.snapshot.raycluster_name != cluster_name:
                 raise ObserverError("RayCluster identity changed")
             self.snapshot.raycluster_name = cluster_name
         terminal = TERMINAL_RAY_STATUSES.get(ray_status.get("jobStatus"))
@@ -375,9 +369,7 @@ class Observer:
             if self.snapshot.raycluster_uid and self.snapshot.raycluster_uid != uid:
                 raise ObserverError("RayCluster UID changed")
             self.snapshot.raycluster_uid = uid
-        pods = self._list(
-            "pod", "--selector", f"ray.io/cluster={self.snapshot.raycluster_name}"
-        )
+        pods = self._list("pod", "--selector", f"ray.io/cluster={self.snapshot.raycluster_name}")
         self._capture_pods(pods)
 
     def observe(self, resource: dict) -> None:
@@ -420,9 +412,7 @@ class Observer:
     def wait_for_release(self) -> dict:
         deadline = time.monotonic() + self.release_seconds
         while True:
-            target_present = self._present(
-                "job" if self.kind == "job" else "fleetjob", self.name
-            )
+            target_present = self._present("job" if self.kind == "job" else "fleetjob", self.name)
             live_pods = []
             for name in self.snapshot.pod_names:
                 pod = self._get("pod", name)
@@ -519,10 +509,7 @@ class Observer:
                         break
                 except ObserverError:
                     consecutive_observation_failures += 1
-                    if (
-                        consecutive_observation_failures
-                        >= MAX_CONSECUTIVE_OBSERVATION_FAILURES
-                    ):
+                    if consecutive_observation_failures >= MAX_CONSECUTIVE_OBSERVATION_FAILURES:
                         raise
                     # _bind runs before child discovery.  If the exact target
                     # UID was bound and a later read failed, continue through
@@ -541,18 +528,13 @@ class Observer:
                 try:
                     resource = self._same_target()
                     if resource is None:
-                        self.snapshot.terminal_status = (
-                            self.snapshot.terminal_status or "Deleted"
-                        )
+                        self.snapshot.terminal_status = self.snapshot.terminal_status or "Deleted"
                         break
                     self.observe(resource)
                     consecutive_observation_failures = 0
                 except ObserverError:
                     consecutive_observation_failures += 1
-                    if (
-                        consecutive_observation_failures
-                        >= MAX_CONSECUTIVE_OBSERVATION_FAILURES
-                    ):
+                    if consecutive_observation_failures >= MAX_CONSECUTIVE_OBSERVATION_FAILURES:
                         raise
                 if self.snapshot.terminal_status:
                     break
@@ -561,9 +543,7 @@ class Observer:
                         self.poll_seconds,
                         max(
                             0.1,
-                            self.maximum_seconds
-                            - DELETE_REQUEST_MARGIN_SECONDS
-                            - elapsed,
+                            self.maximum_seconds - DELETE_REQUEST_MARGIN_SECONDS - elapsed,
                         ),
                     )
                 )

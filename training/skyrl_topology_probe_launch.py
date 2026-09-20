@@ -42,6 +42,7 @@ def authorize(
     *,
     cpu_result: dict,
     cpu_preview: dict,
+    receipt_verify_preview: dict,
     fleetjob_preview: dict,
     fleetjob_observer: dict,
 ) -> dict:
@@ -71,8 +72,7 @@ def authorize(
         or cpu_result.get("context") != plan["execution"]["kubernetes_context"]
         or cpu_result.get("namespace") != plan["execution"]["namespace"]
         or cpu_result.get("plan_sha256") != "sha256:" + plan_sha256
-        or cpu_result.get("manifest_sha256")
-        != "sha256:" + cpu_manifest_sha256
+        or cpu_result.get("manifest_sha256") != "sha256:" + cpu_manifest_sha256
         or cpu_result.get("expected_gpus") != 0
         or cpu_result.get("peak_gpus") != 0
         or cpu_result.get("active_gpus") != 0
@@ -123,20 +123,32 @@ def authorize(
     ):
         raise ValueError("topology probe FleetJob preview was not accepted")
 
+    receipt_manifest_sha256 = digest(probe.receipt_verify_job_manifest(plan))
+    _validate_seal(receipt_verify_preview, probe.RECEIPT_VERIFY_PREVIEW_SCHEMA)
+    if (
+        receipt_verify_preview.get("status") != "passed"
+        or receipt_verify_preview.get("plan_sha256") != plan_sha256
+        or receipt_verify_preview.get("manifest_sha256") != receipt_manifest_sha256
+        or receipt_verify_preview.get("name") != probe.RECEIPT_VERIFY_NAME
+        or receipt_verify_preview.get("gpu_nodes") != 0
+        or receipt_verify_preview.get("gpus") != 0
+        or receipt_verify_preview.get("runtime_user") != {"uid": 1000, "gid": 100}
+        or receipt_verify_preview.get("submitted") is not False
+    ):
+        raise ValueError("topology probe receipt-verifier preview was not accepted")
+
     _validate_seal(fleetjob_observer, OBSERVER_ARMED_SCHEMA)
     observer_pid = fleetjob_observer.get("observer_pid")
     if (
         fleetjob_observer.get("status") != "armed"
-        or fleetjob_observer.get("context")
-        != plan["execution"]["kubernetes_context"]
+        or fleetjob_observer.get("context") != plan["execution"]["kubernetes_context"]
         or fleetjob_observer.get("namespace") != plan["execution"]["namespace"]
         or fleetjob_observer.get("kind") != "fleetjob"
         or fleetjob_observer.get("name") != plan["run_name"]
         or fleetjob_observer.get("maximum_seconds") != 1800
         or fleetjob_observer.get("expected_gpus") != 8
         or fleetjob_observer.get("plan_sha256") != "sha256:" + plan_sha256
-        or fleetjob_observer.get("manifest_sha256")
-        != "sha256:" + fleetjob_manifest_sha256
+        or fleetjob_observer.get("manifest_sha256") != "sha256:" + fleetjob_manifest_sha256
         or type(observer_pid) is not int
         or observer_pid < 1
     ):
@@ -151,6 +163,7 @@ def authorize(
             "fleetjob_manifest_sha256": fleetjob_manifest_sha256,
             "cpu_result": cpu_result,
             "cpu_preview": cpu_preview,
+            "receipt_verify_preview": receipt_verify_preview,
             "fleetjob_preview": fleetjob_preview,
             "fleetjob_observer": fleetjob_observer,
         }
@@ -163,6 +176,7 @@ def validate(plan: dict, value: dict) -> None:
         plan,
         cpu_result=value.get("cpu_result", {}),
         cpu_preview=value.get("cpu_preview", {}),
+        receipt_verify_preview=value.get("receipt_verify_preview", {}),
         fleetjob_preview=value.get("fleetjob_preview", {}),
         fleetjob_observer=value.get("fleetjob_observer", {}),
     ):

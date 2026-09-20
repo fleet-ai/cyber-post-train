@@ -1,10 +1,15 @@
-"""One-node SkyRL setup probe with no task, rollout, optimizer or checkpoint path.
+"""One-pod SkyRL setup probe with no task, rollout, optimizer or checkpoint path.
 
 The probe is deliberately a different schema, name, output directory and
 entrypoint from scientific training.  It may only target the development Jobs
 API.  Its 20 minute setup budget plus five minute cleanup budget is a hard
 25-minute process limit; Kubernetes release is accepted only by a separate
-post-terminal receipt bound to the exact API and Kubernetes identities.
+post-terminal receipt bound to the exact API and Kubernetes identities.  The
+Ray head owns all eight GPUs so this probe qualifies the same one-pod topology
+used by the scientific reward canary. FleetJob requires one GPU worker group,
+so the supported GPU-head pattern declares an autoscaling group at zero
+replicas. The probe never asks Ray to scale it, and the observer rejects any
+allocation above the head's exact eight GPUs.
 """
 
 from __future__ import annotations
@@ -38,7 +43,12 @@ PREFLIGHT_PACKET_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_packet_v1"
 PREFLIGHT_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_preview_v1"
 PREFLIGHT_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_cpu_preflight_rejection_v1"
 PROBE_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_failure_v1"
-PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v23"
+RECEIPT_VERIFY_SCHEMA = "cyber_skyrl_topology_probe_receipt_verification_v1"
+RECEIPT_VERIFY_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_receipt_verification_rejection_v1"
+RECEIPT_VERIFY_PACKET_SCHEMA = "cyber_skyrl_topology_probe_receipt_verification_job_packet_v1"
+RECEIPT_VERIFY_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_receipt_verification_job_preview_v1"
+PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v24"
+RECEIPT_VERIFY_NAME = "chris-q38-skyrl-probe-receipt-v13"
 PREFLIGHT_RECEIPT = "/dev/termination-log"
 FAILURE_RECEIPT = "TOPOLOGY_PROBE_FAILED.json"
 MODULE = "training.skyrl_topology_probe"
@@ -47,7 +57,7 @@ IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
     "89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
 )
-MODEL_BINDING_SHA256 = "597edadfbe0f8e6896edc3f18ebedd8be7a37f4fb91d232ba69695eb75858fee"
+MODEL_BINDING_SHA256 = "e71d00df4e29a312746e1c17b794f18b0163ddc456406b5c02c809fb189bd9be"
 RUNTIME_FILES = (
     "training/skyrl_topology_probe.py",
     "training/skyrl.py",
@@ -90,7 +100,7 @@ def _expected_execution() -> dict:
         "namespace": "fleet-train-jobs",
         "project_name": "fleetjob-dev",
         "auth_secret": {"name": "fleet-api", "key": "FLEET_API_KEY"},
-        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v12",
+        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v13",
         "output_pvc": "sfs-shared",
         "output_registry_mount": "/mnt/cyber-output-registry",
         "output_registry_subpath": "models/fleetjob-dev",
@@ -100,27 +110,29 @@ def _expected_execution() -> dict:
             "read_only": True,
             "required": True,
         },
-        "preflight_model_pvc_subpath": (
-            "models/fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4"
-        ),
+        "preflight_model_pvc_subpath": ("models/fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4"),
         "ray_version": "2.49.2",
         "priority": "c1",
         "queue_priority": "q1",
-        # A mixed CPU-head/GPU-worker RayJob cannot be admitted by the dev
-        # ClusterQueue: once the controller adds a topology request for the GPU
-        # podset, Kueue requires every selected flavor in the Workload to be
-        # topology-aware, while the cpu-head flavor deliberately is not.  Split
-        # the eight GPUs 4+4 across the Ray head and one worker so both podsets
-        # select the B300 flavor.  Runtime evidence proves both pods land on the
-        # same physical node before either TP4 engine is accepted.
-        "workers": 1,
-        "gpus_per_worker": 4,
-        "gpus_on_head": 4,
+        # The scientific canary is one eight-GPU Pod. Keep that exact initial
+        # GPU shape here. FleetJob rejects CPU-only worker groups and requires
+        # one GPU group, so use its documented GPU-head pattern: an elastic GPU
+        # group starts at zero and has no demand during this zero-work probe.
+        "workers": 0,
+        "max_workers": 1,
+        "gpus_per_worker": 1,
+        "gpus_on_head": 8,
         "head_resources": {
             "cpu_request": "4",
             "cpu_limit": "8",
             "memory_request": "16Gi",
             "memory_limit": "32Gi",
+        },
+        "worker_resources": {
+            "cpu_request": "2",
+            "cpu_limit": "4",
+            "memory_request": "4Gi",
+            "memory_limit": "8Gi",
         },
         "resources": {
             "cpu_request": "64",
@@ -144,10 +156,8 @@ def _config(path: Path) -> dict:
         # FleetJob artifact paths are SFS-relative below ``models/``.  The
         # zero-GPU PVC mount and GPU FleetJob must therefore name the same
         # source bytes, not merely expose them at the same destination.
-        or "models/" + expected["model_artifact"]["path"]
-        != expected["preflight_model_pvc_subpath"]
-        or value["engine"]
-        != {"num_engines": 2, "tensor_parallel_size": 4, "context_tokens": 98304}
+        or "models/" + expected["model_artifact"]["path"] != expected["preflight_model_pvc_subpath"]
+        or value["engine"] != {"num_engines": 2, "tensor_parallel_size": 4, "context_tokens": 98304}
         or value["deadlines"]
         != {"setup_seconds": 1200, "cleanup_seconds": 300, "total_seconds": 1500}
         or value["deadlines"]["setup_seconds"] + value["deadlines"]["cleanup_seconds"]
@@ -242,8 +252,7 @@ def _validate(plan: dict) -> skyrl.SkyRLConfig:
         or plan.get("deadlines")
         != {"setup_seconds": 1200, "cleanup_seconds": 300, "total_seconds": 1500}
         or execution != {"image": IMAGE, **_expected_execution()}
-        or plan.get("output_root")
-        != execution.get("mount_root", "") + "/models/run"
+        or plan.get("output_root") != execution.get("mount_root", "") + "/models/run"
         # The FleetJob controller mounts the resolved artifact contents at the
         # requested mountPath itself; it does not add the Hugging Face revision
         # as another directory.  Exact revision authority still comes from the
@@ -284,7 +293,10 @@ def request(
     *,
     fleetjob_transport: bool = False,
     cpu_preflight: bool = False,
+    receipt_verify: bool = False,
 ) -> dict:
+    if cpu_preflight and receipt_verify:
+        raise ValueError("topology probe CPU modes are mutually exclusive")
     arguments = _validate(plan)
     execution = plan["execution"]
     files = _runtime()
@@ -307,16 +319,18 @@ def request(
         argv.extend(["--receipt", PREFLIGHT_RECEIPT])
     if cpu_preflight:
         argv.append("--cpu-preflight")
+    if receipt_verify:
+        argv.append("--verify-durable-receipt")
     return bundled_request(
         {
             "name": arguments.name,
             "title": arguments.name + " zero-update topology probe",
             "run_dir": arguments.output_root,
             "image": IMAGE,
-            # bundled_request is the sealed code transport and its shared
-            # validator requires positive worker values.  It is never sent to
-            # the Jobs API for this FleetJob-only probe; fleetjob_manifest is
-            # the sole resource authority and binds all eight GPUs to the head.
+            # bundled_request is only the sealed code transport here. Its
+            # generic schema requires a positive GPU worker, but the FleetJob
+            # manifest below is the sole resource authority and binds all
+            # eight GPUs to the Ray head.
             "workers": 1,
             "gpus_per_worker": 8,
             "resources": execution["resources"],
@@ -409,7 +423,10 @@ def _fleetjob(
             "kueue": {
                 "queueName": "training-lq",
                 "queuePriorityClass": execution["queue_priority"],
-                "head": {"queuePriorityClass": execution["queue_priority"]},
+                "head": {
+                    "queuePriorityClass": execution["queue_priority"],
+                    "topology": {"mode": "unconstrained"},
+                },
                 "workerGroups": {
                     "gpu": {
                         "queuePriorityClass": execution["queue_priority"],
@@ -420,20 +437,18 @@ def _fleetjob(
             "job": {
                 "apiVersion": "ray.io/v1",
                 "kind": "RayJob",
-                "metadata": {
-                    "annotations": {"ray/kueue-admission-scope": "job"}
-                },
+                "metadata": {"annotations": {"ray/kueue-admission-scope": "job"}},
                 "spec": {
                     "entrypoint": command,
                     "activeDeadlineSeconds": active_deadline_seconds,
                     "backoffLimit": 0,
-                    # Keep terminal pods until the already-armed observer has
-                    # captured their sealed termination receipt. The observer
-                    # then deletes this exact UID under its 30-minute bound.
-                    "shutdownAfterJobFinishes": False,
+                    # Kueue-managed RayJobs must clean their clusters up after
+                    # the entrypoint returns. The success/failure receipt is
+                    # durable on SFS and is checked by a separate zero-GPU Job.
+                    "shutdownAfterJobFinishes": True,
                     "rayClusterSpec": {
                         "rayVersion": execution["ray_version"],
-                        "enableInTreeAutoscaling": False,
+                        "enableInTreeAutoscaling": True,
                         "headGroupSpec": head,
                         "workerGroupSpecs": workers,
                     },
@@ -450,9 +465,7 @@ def fleetjob_manifest(plan: dict) -> dict:
     bundled = request(plan, fleetjob_transport=True)
     head_env = {**bundled["env"], "RUN_DIR": plan["output_root"]}
     worker_env = {
-        key: value
-        for key, value in head_env.items()
-        if not key.startswith("CYBER_RUNTIME_BUNDLE")
+        key: value for key, value in head_env.items() if not key.startswith("CYBER_RUNTIME_BUNDLE")
     }
     head = {
         "rayStartParams": {
@@ -483,9 +496,9 @@ def fleetjob_manifest(plan: dict) -> dict:
     )
     worker = {
         "groupName": "gpu",
-        "replicas": 1,
-        "minReplicas": 1,
-        "maxReplicas": 1,
+        "replicas": execution["workers"],
+        "minReplicas": execution["workers"],
+        "maxReplicas": execution["max_workers"],
         "rayStartParams": {"num-gpus": str(execution["gpus_per_worker"])},
         "template": {
             "metadata": {},
@@ -495,7 +508,7 @@ def fleetjob_manifest(plan: dict) -> dict:
                     _container(
                         plan,
                         worker_env,
-                        execution["resources"],
+                        execution["worker_resources"],
                         gpus=execution["gpus_per_worker"],
                     )
                 ],
@@ -568,9 +581,7 @@ def preflight_job_manifest(plan: dict) -> dict:
                     "volumes": [
                         {
                             "name": "model",
-                            "persistentVolumeClaim": {
-                                "claimName": execution["output_pvc"]
-                            },
+                            "persistentVolumeClaim": {"claimName": execution["output_pvc"]},
                         },
                         {
                             "name": "output-registry",
@@ -580,6 +591,60 @@ def preflight_job_manifest(plan: dict) -> dict:
                             },
                         },
                         {"name": "output", "emptyDir": {}},
+                    ],
+                },
+            },
+        },
+    }
+
+
+def receipt_verify_job_manifest(plan: dict) -> dict:
+    """Render the zero-GPU, read-only durable-receipt verification Job."""
+    _validate(plan)
+    execution = plan["execution"]
+    bundled = request(plan, fleetjob_transport=True, receipt_verify=True)
+    environment = {**bundled["env"], "RUN_DIR": plan["output_root"]}
+    container = _container(plan, environment, execution["head_resources"])
+    container.update(
+        {
+            "command": ["/bin/sh", "-lc", "exec " + bundled["command"]],
+            "terminationMessagePath": PREFLIGHT_RECEIPT,
+            "terminationMessagePolicy": "File",
+            "volumeMounts": [
+                {
+                    "name": "output",
+                    "mountPath": plan["output_root"],
+                    "readOnly": True,
+                    "subPath": (execution["output_registry_subpath"] + "/" + plan["run_name"]),
+                }
+            ],
+        }
+    )
+    return {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": {
+            "name": RECEIPT_VERIFY_NAME,
+            "namespace": execution["namespace"],
+        },
+        "spec": {
+            "activeDeadlineSeconds": 600,
+            "backoffLimit": 0,
+            "template": {
+                "metadata": {},
+                "spec": {
+                    "automountServiceAccountToken": False,
+                    "containers": [container],
+                    "priorityClassName": execution["priority"],
+                    "restartPolicy": "Never",
+                    "volumes": [
+                        {
+                            "name": "output",
+                            "persistentVolumeClaim": {
+                                "claimName": execution["output_pvc"],
+                                "readOnly": True,
+                            },
+                        }
                     ],
                 },
             },
@@ -614,6 +679,22 @@ def preflight_job_packet(plan: dict) -> dict:
             "kubernetes_context": execution["kubernetes_context"],
             "namespace": execution["namespace"],
             "name": PREFLIGHT_NAME,
+            "submitted": False,
+        }
+    )
+
+
+def receipt_verify_job_packet(plan: dict) -> dict:
+    manifest = receipt_verify_job_manifest(plan)
+    execution = plan["execution"]
+    return _seal(
+        {
+            "schema": RECEIPT_VERIFY_PACKET_SCHEMA,
+            "plan_sha256": digest(plan),
+            "manifest_sha256": digest(manifest),
+            "kubernetes_context": execution["kubernetes_context"],
+            "namespace": execution["namespace"],
+            "name": RECEIPT_VERIFY_NAME,
             "submitted": False,
         }
     )
@@ -676,9 +757,7 @@ def _validate_preflight_job_render(expected: dict, rendered: dict) -> None:
         "terminationGracePeriodSeconds": pod.pop("terminationGracePeriodSeconds", None),
     }
     containers = pod.get("containers", [])
-    image_pull_policy = (
-        containers[0].pop("imagePullPolicy", None) if len(containers) == 1 else None
-    )
+    image_pull_policy = containers[0].pop("imagePullPolicy", None) if len(containers) == 1 else None
     if (
         status != {}
         or not isinstance(timestamp, str)
@@ -695,9 +774,7 @@ def _validate_preflight_job_render(expected: dict, rendered: dict) -> None:
             "manualSelector": False,
             "parallelism": 1,
             "podReplacementPolicy": "TerminatingOrFailed",
-            "selector": {
-                "matchLabels": {"batch.kubernetes.io/controller-uid": uid}
-            },
+            "selector": {"matchLabels": {"batch.kubernetes.io/controller-uid": uid}},
             "suspend": False,
         }
         or pod_defaults
@@ -737,9 +814,7 @@ def validate_fleetjob_preview(plan: dict, manifest: dict, rendered: dict) -> dic
     )
 
 
-def validate_preflight_job_preview(
-    plan: dict, manifest: dict, rendered: dict
-) -> dict:
+def validate_preflight_job_preview(plan: dict, manifest: dict, rendered: dict) -> dict:
     if manifest != preflight_job_manifest(plan):
         raise JobsError("topology probe preflight differs from its immutable plan")
     _validate_preflight_job_render(manifest, rendered)
@@ -754,6 +829,29 @@ def validate_preflight_job_preview(
             "kubernetes_context": execution["kubernetes_context"],
             "namespace": execution["namespace"],
             "name": PREFLIGHT_NAME,
+            "gpu_nodes": 0,
+            "gpus": 0,
+            "runtime_user": {"uid": 1000, "gid": 100},
+            "submitted": False,
+        }
+    )
+
+
+def validate_receipt_verify_job_preview(plan: dict, manifest: dict, rendered: dict) -> dict:
+    if manifest != receipt_verify_job_manifest(plan):
+        raise JobsError("topology probe receipt verifier differs from its plan")
+    _validate_preflight_job_render(manifest, rendered)
+    execution = plan["execution"]
+    return _seal(
+        {
+            "schema": RECEIPT_VERIFY_PREVIEW_SCHEMA,
+            "status": "passed",
+            "plan_sha256": digest(plan),
+            "manifest_sha256": digest(manifest),
+            "server_render_sha256": digest(rendered),
+            "kubernetes_context": execution["kubernetes_context"],
+            "namespace": execution["namespace"],
+            "name": RECEIPT_VERIFY_NAME,
             "gpu_nodes": 0,
             "gpus": 0,
             "runtime_user": {"uid": 1000, "gid": 100},
@@ -804,17 +902,7 @@ def preflight(plan: dict, progress: Callable[[str], None] | None = None) -> dict
 
 
 def validate_preview(plan: dict, req: dict, preview: dict) -> dict:
-    """Validate the legacy Jobs-API rendering without weakening its defaults.
-
-    Normal Jobs-API runs must ask KubeRay to tear their clusters down when the
-    entrypoint terminates.  This probe is the one deliberate exception: its
-    independently armed, UID-bound observer needs the failed head Pod to remain
-    long enough to capture the sealed termination receipt, and then deletes the
-    exact FleetJob under the plan's 30-minute limit.  Validate every ordinary
-    Jobs-API invariant by applying the generic validator to an in-memory copy
-    with its normal cleanup flag restored; the submitted/rendered object itself
-    must explicitly carry the probe-only ``False`` value.
-    """
+    """Validate the legacy Jobs-API rendering with normal cluster cleanup."""
     import yaml
 
     from .skyrl_training import validate_gpu_runtime_preview
@@ -823,21 +911,17 @@ def validate_preview(plan: dict, req: dict, preview: dict) -> dict:
         raise JobsError("topology probe request differs from its immutable plan")
     try:
         rendered = yaml.safe_load(preview["manifest_yaml"])
-        if rendered["spec"]["shutdownAfterJobFinishes"] is not False:
-            raise JobsError(
-                "topology probe preview must retain pods for its UID-bound observer"
-            )
-        generic_rendered = copy.deepcopy(rendered)
-        generic_rendered["spec"]["shutdownAfterJobFinishes"] = True
-        generic_preview = {**preview, "manifest_yaml": yaml.safe_dump(generic_rendered)}
+        if rendered["spec"]["shutdownAfterJobFinishes"] is not True:
+            raise JobsError("topology probe preview must release its Ray cluster")
     except (KeyError, TypeError, yaml.YAMLError) as exc:
         raise JobsError("malformed topology probe Jobs API preview") from exc
-    result = validate_gpu_runtime_preview(req, generic_preview)
+    result = validate_gpu_runtime_preview(req, preview)
     return {
         **result,
         "manifest_sha256": digest(rendered),
-        "shutdown_after_job_finishes": False,
-        "cleanup_authority": "uid_bound_observer",
+        "shutdown_after_job_finishes": True,
+        "cleanup_authority": "kuberay_plus_uid_bound_observer",
+        "receipt_authority": "durable_sfs_receipt_verifier",
     }
 
 
@@ -905,14 +989,9 @@ def _validate_destination(plan: dict) -> Path:
         "cyber_post_train/__init__.py": "",
         "plan.json": json.dumps(plan, sort_keys=True, separators=(",", ":")),
     }
-    files = {
-        str(path.relative_to(runtime)): path
-        for path in runtime.rglob("*")
-        if path.is_file()
-    }
+    files = {str(path.relative_to(runtime)): path for path in runtime.rglob("*") if path.is_file()}
     if set(files) != set(expected) or any(
-        path.is_symlink() or path.read_text() != expected[name]
-        for name, path in files.items()
+        path.is_symlink() or path.read_text() != expected[name] for name, path in files.items()
     ):
         raise ValueError("probe bootstrap differs from its digest-bound runtime")
     return root
@@ -1021,10 +1100,8 @@ def run(plan: dict) -> dict:
                 for row in ray.nodes()
                 if row.get("Alive") and row.get("Resources", {}).get("GPU")
             ]
-            if len(nodes) != 2 or sorted(
-                quantity(row["Resources"]["GPU"]) for row in nodes
-            ) != [4, 4]:
-                raise ValueError("probe requires exactly two four-GPU Ray pods")
+            if len(nodes) != 1 or quantity(nodes[0]["Resources"]["GPU"]) != 8:
+                raise ValueError("probe requires exactly one eight-GPU Ray pod")
 
             @ray.remote(num_cpus=0)
             def runtime_user():
@@ -1048,14 +1125,12 @@ def run(plan: dict) -> dict:
                 timeout=30,
             )
             if any(
-                row.get("uid") != 1000
-                or row.get("gid") != 100
-                or not row.get("physical_node")
+                row.get("uid") != 1000 or row.get("gid") != 100 or not row.get("physical_node")
                 for row in gpu_node_runtime_users
             ):
                 raise ValueError("probe GPU pods must use image user 1000:100")
             physical_nodes = {row["physical_node"] for row in gpu_node_runtime_users}
-            if len(physical_nodes) != 1 or os.environ.get("FLEET_NODE_NAME") not in physical_nodes:
+            if physical_nodes != {os.environ.get("FLEET_NODE_NAME")}:
                 raise ValueError("probe GPU pods are not on one physical node")
             setup = create_inference_servers(
                 cfg.generator.inference_engine,
@@ -1100,8 +1175,8 @@ def run(plan: dict) -> dict:
     )
 
 
-def validate_release(plan: dict, receipt: dict, observation: dict) -> dict:
-    """Seal a later read-only observation that the exact allocation disappeared."""
+def _validate_probe_receipt(plan: dict, receipt: dict) -> None:
+    """Validate the durable zero-science GPU receipt against its exact plan."""
     _validate(plan)
     _validate_seal(receipt, RECEIPT_SCHEMA)
     if (
@@ -1112,12 +1187,11 @@ def validate_release(plan: dict, receipt: dict, observation: dict) -> dict:
         or receipt["runtime_users"].get("driver", {}).get("gid") != 100
         or not receipt["runtime_users"].get("driver", {}).get("physical_node")
         or not isinstance(receipt["runtime_users"].get("gpu_pods"), list)
-        or len(receipt["runtime_users"]["gpu_pods"]) != 2
+        or len(receipt["runtime_users"]["gpu_pods"]) != 1
         or any(
             row.get("uid") != 1000
             or row.get("gid") != 100
-            or row.get("physical_node")
-            != receipt["runtime_users"]["driver"]["physical_node"]
+            or row.get("physical_node") != receipt["runtime_users"]["driver"]["physical_node"]
             for row in receipt["runtime_users"]["gpu_pods"]
         )
         or any(receipt.get(key) != 0 for key in plan["scientific_work"])
@@ -1127,6 +1201,51 @@ def validate_release(plan: dict, receipt: dict, observation: dict) -> dict:
         or receipt.get("external_release_required") is not True
     ):
         raise ValueError("probe receipt is not the exact accepted internal cleanup")
+
+
+def verify_durable_receipt(plan: dict) -> dict:
+    """Read the post-cleanup success receipt from a read-only SFS mount."""
+    if (os.geteuid(), os.getegid()) != (1000, 100):
+        raise ValueError("probe receipt verification requires image user 1000:100")
+    import torch
+
+    if torch.cuda.is_available():
+        raise ValueError("probe receipt verification is CPU-only")
+    root = Path(plan["output_root"])
+    if root.is_symlink() or not root.is_dir():
+        raise ProbeGateError("durable_output_absent")
+    success = root / "TOPOLOGY_PROBE.json"
+    failure = root / FAILURE_RECEIPT
+    if failure.exists() or failure.is_symlink():
+        raise ProbeGateError("durable_failure_receipt_present")
+    try:
+        receipt = json.loads(success.read_bytes())
+    except FileNotFoundError as exc:
+        raise ProbeGateError("durable_success_receipt_absent") from exc
+    except (OSError, ValueError) as exc:
+        raise ProbeGateError("durable_success_receipt_unreadable") from exc
+    if not isinstance(receipt, dict):
+        raise ProbeGateError("durable_success_receipt_invalid")
+    try:
+        _validate_probe_receipt(plan, receipt)
+    except ValueError as exc:
+        raise ProbeGateError("durable_success_receipt_invalid") from exc
+    return _seal(
+        {
+            "schema": RECEIPT_VERIFY_SCHEMA,
+            "status": "passed",
+            "gpus": 0,
+            "runtime_user": {"uid": 1000, "gid": 100},
+            "plan_sha256": digest(plan),
+            "receipt_sha256": receipt["sha256"],
+            **plan["scientific_work"],
+        }
+    )
+
+
+def validate_release(plan: dict, receipt: dict, observation: dict) -> dict:
+    """Seal a later read-only observation that the exact allocation disappeared."""
+    _validate_probe_receipt(plan, receipt)
     required = {
         "kubernetes_context",
         "namespace",
@@ -1173,20 +1292,17 @@ def validate_release(plan: dict, receipt: dict, observation: dict) -> dict:
         timestamps, uuid_values = [], []
     if (
         set(observation) != required
-        or observation.get("kubernetes_context")
-        != plan["execution"]["kubernetes_context"]
+        or observation.get("kubernetes_context") != plan["execution"]["kubernetes_context"]
         or observation.get("namespace") != plan["execution"]["namespace"]
         or observation.get("fleetjob_name") != plan["run_name"]
         or any(
             not isinstance(observation[key], str) or not observation[key]
-            for key in required
-            - presence
-            - {"active_gpus", "pod_uids"}
+            for key in required - presence - {"active_gpus", "pod_uids"}
         )
-        or len(uuid_values) != 7
+        or len(uuid_values) != 6
         or not isinstance(observation["pod_uids"], list)
-        or len(observation["pod_uids"]) != 2
-        or len(set(observation["pod_uids"])) != 2
+        or len(observation["pod_uids"]) != 1
+        or len(set(observation["pod_uids"])) != 1
         or any(not isinstance(value, str) or not value for value in observation["pod_uids"])
         or observation["terminal_status"] not in {"Succeeded", "Failed", "Deleted"}
         or any(observation[key] is not False for key in presence)
@@ -1213,6 +1329,7 @@ def main() -> None:
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--sha256", required=True)
     parser.add_argument("--cpu-preflight", action="store_true")
+    parser.add_argument("--verify-durable-receipt", action="store_true")
     parser.add_argument("--receipt", type=Path)
     args = parser.parse_args()
     phase = "plan_loading"
@@ -1229,10 +1346,20 @@ def main() -> None:
             raise ValueError("plan digest mismatch")
         phase = "request_validation"
         request(plan)
+        if args.cpu_preflight and args.verify_durable_receipt:
+            raise ValueError("topology probe CPU modes are mutually exclusive")
         if args.cpu_preflight:
             if args.receipt != Path(PREFLIGHT_RECEIPT):
                 raise ValueError("CPU preflight receipt binding mismatch")
             receipt = _seal(preflight(plan, mark))
+            _write_receipt(Path(PREFLIGHT_RECEIPT), receipt, exclusive=False)
+            print(json.dumps({"status": receipt["status"], "sha256": receipt["sha256"]}))
+            return
+        if args.verify_durable_receipt:
+            if args.receipt != Path(PREFLIGHT_RECEIPT):
+                raise ValueError("durable receipt verification binding mismatch")
+            phase = "durable_receipt_verification"
+            receipt = verify_durable_receipt(plan)
             _write_receipt(Path(PREFLIGHT_RECEIPT), receipt, exclusive=False)
             print(json.dumps({"status": receipt["status"], "sha256": receipt["sha256"]}))
             return
@@ -1248,9 +1375,15 @@ def main() -> None:
         failure = _seal(
             {
                 "schema": (
-                    PREFLIGHT_FAILURE_SCHEMA if args.cpu_preflight else PROBE_FAILURE_SCHEMA
+                    PREFLIGHT_FAILURE_SCHEMA
+                    if args.cpu_preflight
+                    else RECEIPT_VERIFY_FAILURE_SCHEMA
+                    if args.verify_durable_receipt
+                    else PROBE_FAILURE_SCHEMA
                 ),
-                "status": "rejected" if args.cpu_preflight else "failed",
+                "status": (
+                    "rejected" if args.cpu_preflight or args.verify_durable_receipt else "failed"
+                ),
                 "phase": phase,
                 "error_class": type(exc).__name__,
                 "error_code": getattr(exc, "code", "unclassified"),
@@ -1278,7 +1411,7 @@ def main() -> None:
                 }
             )
         )
-        if args.cpu_preflight:
+        if args.cpu_preflight or args.verify_durable_receipt:
             return
         raise SystemExit(1) from None
 

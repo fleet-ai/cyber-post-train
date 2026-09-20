@@ -47,9 +47,7 @@ class FakeJobCluster:
             if self.target_reads > 1 and not self.deleted:
                 value = {
                     "metadata": _metadata("preflight", 1),
-                    "status": {
-                        "conditions": [{"type": "Complete", "status": "True"}]
-                    },
+                    "status": {"conditions": [{"type": "Complete", "status": "True"}]},
                 }
             return NS(returncode=0, stdout=json.dumps(value) if value else "", stderr="")
         if args[:2] == ["get", "pod"] and "--selector" in args:
@@ -61,9 +59,7 @@ class FakeJobCluster:
                         {
                             "restartCount": 0,
                             "imageID": "registry/image@sha256:" + "a" * 64,
-                            "state": {
-                                "terminated": {"message": json.dumps(self.receipt)}
-                            },
+                            "state": {"terminated": {"message": json.dumps(self.receipt)}},
                         }
                     ]
                 },
@@ -169,34 +165,22 @@ class FakeFleetCluster:
         if args[:2] == ["get", "pod"] and "--selector" in args:
             items = []
             if not self.deleted:
-                for index, gpu in ((15, 0), (16, 8)):
-                    state = {}
-                    if not gpu:
-                        state = {"terminated": {"message": json.dumps(self.receipt)}}
-                    items.append(
-                        self._object(
-                            f"probe-pod-{index}",
-                            index,
-                            spec={
-                                "containers": [
-                                    {
-                                        "resources": {
-                                            "requests": {"nvidia.com/gpu": gpu}
-                                        }
-                                    }
-                                ]
-                            },
-                            status={
-                                "containerStatuses": [
-                                    {
-                                        "restartCount": 0,
-                                        "imageID": "registry/image@sha256:" + "b" * 64,
-                                        "state": state,
-                                    }
-                                ]
-                            },
-                        )
+                items.append(
+                    self._object(
+                        "probe-pod-15",
+                        15,
+                        spec={"containers": [{"resources": {"requests": {"nvidia.com/gpu": 8}}}]},
+                        status={
+                            "containerStatuses": [
+                                {
+                                    "restartCount": 0,
+                                    "imageID": "registry/image@sha256:" + "b" * 64,
+                                    "state": {"terminated": {"message": json.dumps(self.receipt)}},
+                                }
+                            ]
+                        },
                     )
+                )
             return NS(returncode=0, stdout=json.dumps({"items": items}), stderr="")
         if args[:2] == ["get", "pod"] and len(args) > 2:
             return NS(returncode=0, stdout="", stderr="")
@@ -218,7 +202,7 @@ def test_fleetjob_observer_binds_all_uids_and_exact_eight_gpus(tmp_path) -> None
     result = observer.run()
     assert result["status"] == "released"
     assert result["peak_gpus"] == 8
-    assert len(result["pod_uids"]) == 2
+    assert len(result["pod_uids"]) == 1
     assert result["rayjob_uid"].endswith("000000000012")
     assert result["workload_uid"].endswith("000000000013")
     assert result["raycluster_uid"].endswith("000000000014")
@@ -253,6 +237,19 @@ def test_observer_accepts_digest_valid_model_stage_receipt() -> None:
             "status": "published",
             "plan_sha256": "0" * 64,
             "files": 28,
+        }
+    )
+    assert cleanup._validated_receipt(json.dumps(receipt), kind="job") == receipt
+
+
+def test_observer_accepts_digest_valid_topology_receipt_verifier() -> None:
+    receipt = _seal(
+        {
+            "schema": "cyber_skyrl_topology_probe_receipt_verification_v1",
+            "status": "passed",
+            "plan_sha256": "0" * 64,
+            "receipt_sha256": "sha256:" + "1" * 64,
+            "gpus": 0,
         }
     )
     assert cleanup._validated_receipt(json.dumps(receipt), kind="job") == receipt
@@ -308,20 +305,13 @@ def test_observer_releases_after_bounded_consecutive_read_failures(tmp_path) -> 
     def unavailable(argv, **kwargs):
         nonlocal timeouts
         args = argv[5:]
-        if (
-            args[:2] == ["get", "pod"]
-            and "--selector" in args
-            and not cluster.deleted
-        ):
+        if args[:2] == ["get", "pod"] and "--selector" in args and not cluster.deleted:
             timeouts += 1
             raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
         return cluster(argv, **kwargs)
 
     result = _observer(tmp_path, unavailable).run()
-    assert timeouts == (
-        cleanup.KUBECTL_ATTEMPTS
-        * cleanup.MAX_CONSECUTIVE_OBSERVATION_FAILURES
-    )
+    assert timeouts == (cleanup.KUBECTL_ATTEMPTS * cleanup.MAX_CONSECUTIVE_OBSERVATION_FAILURES)
     assert cluster.deleted is True
     assert result["status"] == "released_without_accepted_execution"
     assert result["observer_error_class"] == "ObserverError"

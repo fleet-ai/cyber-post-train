@@ -93,6 +93,22 @@ def _evidence():
             "submitted": False,
         }
     )
+    receipt_verify_preview = probe._seal(
+        {
+            "schema": probe.RECEIPT_VERIFY_PREVIEW_SCHEMA,
+            "status": "passed",
+            "plan_sha256": plan_sha,
+            "manifest_sha256": digest(probe.receipt_verify_job_manifest(plan)),
+            "server_render_sha256": "3" * 64,
+            "kubernetes_context": plan["execution"]["kubernetes_context"],
+            "namespace": plan["execution"]["namespace"],
+            "name": probe.RECEIPT_VERIFY_NAME,
+            "gpu_nodes": 0,
+            "gpus": 0,
+            "runtime_user": {"uid": 1000, "gid": 100},
+            "submitted": False,
+        }
+    )
     observer = launch._seal(
         {
             "schema": launch.OBSERVER_ARMED_SCHEMA,
@@ -109,15 +125,23 @@ def _evidence():
             "observer_pid": 12345,
         }
     )
-    return plan, cpu_result, cpu_preview, fleetjob_preview, observer
+    return (
+        plan,
+        cpu_result,
+        cpu_preview,
+        receipt_verify_preview,
+        fleetjob_preview,
+        observer,
+    )
 
 
 def test_launch_authorization_binds_passed_cpu_release_previews_and_observer() -> None:
-    plan, cpu, cpu_preview, fleet_preview, observer = _evidence()
+    plan, cpu, cpu_preview, receipt_preview, fleet_preview, observer = _evidence()
     value = launch.authorize(
         plan,
         cpu_result=cpu,
         cpu_preview=cpu_preview,
+        receipt_verify_preview=receipt_preview,
         fleetjob_preview=fleet_preview,
         fleetjob_observer=observer,
     )
@@ -133,15 +157,17 @@ def test_launch_authorization_binds_passed_cpu_release_previews_and_observer() -
         (("cpu_result", "active_gpus"), 8),
         (("cpu_result", "receipt", "optimizer_steps"), 1),
         (("fleetjob_preview", "gpus"), 7),
+        (("receipt_verify_preview", "gpus"), 1),
         (("fleetjob_observer", "expected_gpus"), 0),
         (("fleetjob_observer", "name"), "other"),
     ],
 )
 def test_launch_authorization_rejects_substituted_evidence(path, replacement) -> None:
-    plan, cpu, cpu_preview, fleet_preview, observer = _evidence()
+    plan, cpu, cpu_preview, receipt_preview, fleet_preview, observer = _evidence()
     evidence = {
         "cpu_result": copy.deepcopy(cpu),
         "cpu_preview": copy.deepcopy(cpu_preview),
+        "receipt_verify_preview": copy.deepcopy(receipt_preview),
         "fleetjob_preview": copy.deepcopy(fleet_preview),
         "fleetjob_observer": copy.deepcopy(observer),
     }
@@ -150,7 +176,11 @@ def test_launch_authorization_rejects_substituted_evidence(path, replacement) ->
         target = target[key]
     target[path[-1]] = replacement
     target.pop("sha256", None)
-    if path[0] in {"cpu_result", "fleetjob_observer"}:
+    if path[0] in {
+        "cpu_result",
+        "receipt_verify_preview",
+        "fleetjob_observer",
+    }:
         evidence[path[0]] = launch._seal(evidence[path[0]])
     with pytest.raises(ValueError):
         launch.authorize(plan, **evidence)

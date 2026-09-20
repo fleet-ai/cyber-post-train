@@ -1,11 +1,11 @@
 {
   "schema": "cyber_skyrl_topology_probe_config_v1",
-  "name": "chris-q38-skyrl-probe-v12",
-  "output_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v12/models/run",
+  "name": "chris-q38-skyrl-probe-v13",
+  "output_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v13/models/run",
   "model": {
     "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
     "weights": "../models/qwen38-27b-1d4bf0f2.weights.json",
-    "root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v12/models/base"
+    "root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v13/models/base"
   },
   "engine": {
     "num_engines": 2,
@@ -28,7 +28,7 @@
       "name": "fleet-api",
       "key": "FLEET_API_KEY"
     },
-    "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v12",
+    "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v13",
     "output_pvc": "sfs-shared",
     "output_registry_mount": "/mnt/cyber-output-registry",
     "output_registry_subpath": "models/fleetjob-dev",
@@ -42,14 +42,21 @@
     "ray_version": "2.49.2",
     "priority": "c1",
     "queue_priority": "q1",
-    "workers": 1,
-    "gpus_per_worker": 4,
-    "gpus_on_head": 4,
+    "workers": 0,
+    "max_workers": 1,
+    "gpus_per_worker": 1,
+    "gpus_on_head": 8,
     "head_resources": {
       "cpu_request": "4",
       "cpu_limit": "8",
       "memory_request": "16Gi",
       "memory_limit": "32Gi"
+    },
+    "worker_resources": {
+      "cpu_request": "2",
+      "cpu_limit": "4",
+      "memory_request": "4Gi",
+      "memory_limit": "8Gi"
     },
     "resources": {
       "cpu_request": "64",
@@ -68,5 +75,5 @@
       "external_release_observer_not_yet_bound"
     ]
   },
-  "sha256": "sha256:641efa142f91907e8b7bf6af420240dc3ae7ea85c9ab9045526f4311ba2345d4"
+  "sha256": "sha256:e3b6c82e24585c0dd0db04bc7522984c4f31504325fea1ea6e4212a6899eb209"
 }

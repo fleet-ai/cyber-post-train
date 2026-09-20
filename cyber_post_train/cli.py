@@ -286,6 +286,8 @@ def rl_topology_probe(config: Path, output: Annotated[Path, typer.Option("--outp
         fleetjob_packet,
         preflight_job_manifest,
         preflight_job_packet,
+        receipt_verify_job_manifest,
+        receipt_verify_job_packet,
         request,
     )
 
@@ -300,6 +302,11 @@ def rl_topology_probe(config: Path, output: Annotated[Path, typer.Option("--outp
         _write(
             output / "PREFLIGHT_JOB_PREPARED.json",
             preflight_job_packet(plan),
+        )
+        _write(output / "receipt-verify-job.json", receipt_verify_job_manifest(plan))
+        _write(
+            output / "RECEIPT_VERIFY_JOB_PREPARED.json",
+            receipt_verify_job_packet(plan),
         )
         _print(
             {
@@ -339,10 +346,7 @@ def rl_topology_probe_preflight_preview(directory: Path) -> None:
         path = directory / "preflight-job.json"
         manifest = _read(path)
         packet = _read(directory / "PREFLIGHT_JOB_PREPARED.json")
-        if (
-            manifest != preflight_job_manifest(plan)
-            or packet != preflight_job_packet(plan)
-        ):
+        if manifest != preflight_job_manifest(plan) or packet != preflight_job_packet(plan):
             raise ValueError("topology probe preflight packet changed")
         proof_path = directory / "PREFLIGHT_JOB_PREVIEW.json"
         if proof_path.exists():
@@ -369,6 +373,61 @@ def rl_topology_probe_preflight_preview(directory: Path) -> None:
         if result.returncode:
             raise JobsError("CPU preflight server dry-run failed; nothing was created")
         proof = validate_preflight_job_preview(plan, manifest, json.loads(result.stdout))
+        _write(proof_path, proof)
+        _print(proof)
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-topology-probe-receipt-preview")
+def rl_topology_probe_receipt_preview(directory: Path) -> None:
+    """Server-dry-run the exact zero-GPU durable-receipt verifier."""
+    from training.skyrl_topology_probe import (
+        SCHEMA,
+        receipt_verify_job_manifest,
+        receipt_verify_job_packet,
+        validate_receipt_verify_job_preview,
+    )
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != SCHEMA:
+            raise ValueError("prepared directory is not a topology probe")
+        gate = plan.get("qualification", {}).get("submission_gate", {})
+        if gate.get("fleetjob_preview_authorized") is not True:
+            raise ValueError("topology probe receipt preview is not authorized")
+        path = directory / "receipt-verify-job.json"
+        manifest = _read(path)
+        packet = _read(directory / "RECEIPT_VERIFY_JOB_PREPARED.json")
+        if manifest != receipt_verify_job_manifest(plan) or packet != receipt_verify_job_packet(
+            plan
+        ):
+            raise ValueError("topology probe receipt-verifier packet changed")
+        proof_path = directory / "RECEIPT_VERIFY_JOB_PREVIEW.json"
+        if proof_path.exists():
+            raise ValueError("topology probe receipt preview already recorded")
+        execution = plan["execution"]
+        result = subprocess.run(
+            [
+                "kubectl",
+                "--context",
+                execution["kubernetes_context"],
+                "--namespace",
+                execution["namespace"],
+                "create",
+                "--dry-run=server",
+                "--filename",
+                str(path),
+                "--output",
+                "json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode:
+            raise JobsError("receipt verifier server dry-run failed; nothing was created")
+        proof = validate_receipt_verify_job_preview(plan, manifest, json.loads(result.stdout))
         _write(proof_path, proof)
         _print(proof)
     except Exception as exc:
@@ -445,6 +504,7 @@ def rl_topology_probe_authorize(
             plan,
             cpu_result=_read(cpu_result),
             cpu_preview=_read(directory / "PREFLIGHT_JOB_PREVIEW.json"),
+            receipt_verify_preview=_read(directory / "RECEIPT_VERIFY_JOB_PREVIEW.json"),
             fleetjob_preview=_read(directory / "FLEETJOB_PREVIEW.json"),
             fleetjob_observer=_read(observer_armed),
         )

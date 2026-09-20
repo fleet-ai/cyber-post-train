@@ -34,10 +34,11 @@ def test_probe_is_distinct_dev_only_bounded_and_zero_update(plan) -> None:
     assert plan["execution"]["jobs_api_base_url"] == "https://api.ft.dev.flt.build"
     assert (request["workers"], request["gpus_per_worker"]) == (1, 8)
     assert (plan["execution"]["workers"], plan["execution"]["gpus_per_worker"]) == (
+        0,
         1,
-        4,
     )
-    assert plan["execution"]["gpus_on_head"] == 4
+    assert plan["execution"]["max_workers"] == 1
+    assert plan["execution"]["gpus_on_head"] == 8
     assert request["secrets"] == []
     assert plan["deadlines"] == {
         "setup_seconds": 1200,
@@ -59,12 +60,8 @@ def test_probe_is_distinct_dev_only_bounded_and_zero_update(plan) -> None:
     assert request["env"]["CYBER_EXPECTED_RUNTIME_UID"] == "1000"
     assert request["env"]["CYBER_EXPECTED_RUNTIME_GID"] == "100"
     assert plan["model"]["repo"] == "Qwen/Qwen3.8-27B"
-    assert plan["model"]["revision"] == (
-        "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
-    )
-    assert plan["model"]["root"] == (
-        "/mnt/sfs/jobs/chris-q38-skyrl-probe-v12/models/base"
-    )
+    assert plan["model"]["revision"] == ("1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0")
+    assert plan["model"]["root"] == ("/mnt/sfs/jobs/chris-q38-skyrl-probe-v13/models/base")
     assert plan["execution"]["model_artifact"]["path"] == (
         "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4"
     )
@@ -74,17 +71,17 @@ def test_probe_is_distinct_dev_only_bounded_and_zero_update(plan) -> None:
     )
 
 
-def test_probe_fleetjob_is_two_four_gpu_pods_with_explicit_user(plan) -> None:
+def test_probe_fleetjob_is_one_eight_gpu_pod_with_zero_replica_group(plan) -> None:
     manifest = probe.fleetjob_manifest(plan)
     spec = manifest["spec"]
     assert manifest["metadata"] == {
-        "name": "chris-q38-skyrl-probe-v12",
+        "name": "chris-q38-skyrl-probe-v13",
         "namespace": "fleet-train-jobs",
     }
     assert spec["fleet"] == {
         "projectName": "fleetjob-dev",
         "auth": {"secretRef": {"name": "fleet-api", "key": "FLEET_API_KEY"}},
-        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v12",
+        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v13",
         "models": [
             {
                 "path": "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4",
@@ -98,7 +95,10 @@ def test_probe_fleetjob_is_two_four_gpu_pods_with_explicit_user(plan) -> None:
     assert spec["kueue"] == {
         "queueName": "training-lq",
         "queuePriorityClass": "q1",
-        "head": {"queuePriorityClass": "q1"},
+        "head": {
+            "queuePriorityClass": "q1",
+            "topology": {"mode": "unconstrained"},
+        },
         "workerGroups": {
             "gpu": {
                 "queuePriorityClass": "q1",
@@ -109,16 +109,22 @@ def test_probe_fleetjob_is_two_four_gpu_pods_with_explicit_user(plan) -> None:
     cluster = spec["job"]["spec"]["rayClusterSpec"]
     assert spec["job"]["spec"]["activeDeadlineSeconds"] == 1800
     assert spec["job"]["spec"]["backoffLimit"] == 0
-    assert spec["job"]["spec"]["shutdownAfterJobFinishes"] is False
+    assert spec["job"]["spec"]["shutdownAfterJobFinishes"] is True
+    assert cluster["enableInTreeAutoscaling"] is True
     head = cluster["headGroupSpec"]["template"]["spec"]["containers"][0]
     workers = cluster["workerGroupSpecs"]
-    assert head["resources"]["limits"]["nvidia.com/gpu"] == "4"
-    assert head["resources"]["requests"]["nvidia.com/gpu"] == "4"
-    assert cluster["headGroupSpec"]["rayStartParams"]["num-gpus"] == "4"
-    assert len(workers) == 1 and workers[0]["replicas"] == 1
+    assert head["resources"]["limits"]["nvidia.com/gpu"] == "8"
+    assert head["resources"]["requests"]["nvidia.com/gpu"] == "8"
+    assert cluster["headGroupSpec"]["rayStartParams"]["num-gpus"] == "8"
+    assert len(workers) == 1
+    assert (workers[0]["replicas"], workers[0]["minReplicas"], workers[0]["maxReplicas"]) == (
+        0,
+        0,
+        1,
+    )
     gpu = workers[0]["template"]["spec"]["containers"][0]
-    assert gpu["resources"]["limits"]["nvidia.com/gpu"] == "4"
-    assert gpu["resources"]["requests"]["nvidia.com/gpu"] == "4"
+    assert gpu["resources"]["limits"]["nvidia.com/gpu"] == "1"
+    assert gpu["resources"]["requests"]["nvidia.com/gpu"] == "1"
     expected_user = {
         "allowPrivilegeEscalation": False,
         "privileged": False,
@@ -130,9 +136,7 @@ def test_probe_fleetjob_is_two_four_gpu_pods_with_explicit_user(plan) -> None:
     head_env = {row["name"]: row["value"] for row in head["env"]}
     assert head_env["RUN_DIR"] == plan["output_root"]
     assert max(map(len, head_env.values())) <= 30000
-    assert not any(
-        row["name"].startswith("CYBER_RUNTIME_BUNDLE") for row in gpu["env"]
-    )
+    assert not any(row["name"].startswith("CYBER_RUNTIME_BUNDLE") for row in gpu["env"])
     assert head["terminationMessagePath"] == "/dev/termination-log"
 
 
@@ -177,6 +181,33 @@ def test_probe_cpu_preflight_is_zero_gpu_exact_mount_and_explicit_user(plan) -> 
     assert container["command"] == ["/bin/sh", "-lc", "exec " + expected["command"]]
 
 
+def test_probe_receipt_verifier_is_zero_gpu_read_only_and_explicit_user(plan) -> None:
+    manifest = probe.receipt_verify_job_manifest(plan)
+    assert manifest["metadata"] == {
+        "name": probe.RECEIPT_VERIFY_NAME,
+        "namespace": "fleet-train-jobs",
+    }
+    pod = manifest["spec"]["template"]["spec"]
+    container = pod["containers"][0]
+    assert "nvidia.com/gpu" not in container["resources"]["requests"]
+    assert container["securityContext"]["runAsUser"] == 1000
+    assert container["securityContext"]["runAsGroup"] == 100
+    assert container["volumeMounts"] == [
+        {
+            "name": "output",
+            "mountPath": plan["output_root"],
+            "readOnly": True,
+            "subPath": "models/fleetjob-dev/" + plan["run_name"],
+        }
+    ]
+    assert pod["volumes"][0]["persistentVolumeClaim"] == {
+        "claimName": "sfs-shared",
+        "readOnly": True,
+    }
+    expected = probe.request(plan, fleetjob_transport=True, receipt_verify=True)
+    assert container["command"] == ["/bin/sh", "-lc", "exec " + expected["command"]]
+
+
 def _render_preflight(manifest: dict) -> dict:
     rendered = copy.deepcopy(manifest)
     uid = "00000000-0000-0000-0000-000000000001"
@@ -203,9 +234,7 @@ def _render_preflight(manifest: dict) -> dict:
             "manualSelector": False,
             "parallelism": 1,
             "podReplacementPolicy": "TerminatingOrFailed",
-            "selector": {
-                "matchLabels": {"batch.kubernetes.io/controller-uid": uid}
-            },
+            "selector": {"matchLabels": {"batch.kubernetes.io/controller-uid": uid}},
             "suspend": False,
         }
     )
@@ -233,11 +262,22 @@ def test_probe_preflight_preview_accepts_only_exact_server_defaults(plan) -> Non
         {"uid": 1000, "gid": 100},
     )
     changed = copy.deepcopy(rendered)
-    changed["spec"]["template"]["spec"]["containers"][0]["securityContext"][
-        "runAsUser"
-    ] = 0
+    changed["spec"]["template"]["spec"]["containers"][0]["securityContext"]["runAsUser"] = 0
     with pytest.raises(JobsError, match="changed"):
         probe.validate_preflight_job_preview(plan, manifest, changed)
+
+
+def test_probe_receipt_verifier_preview_accepts_only_exact_server_defaults(plan) -> None:
+    manifest = probe.receipt_verify_job_manifest(plan)
+    rendered = _render_preflight(manifest)
+    proof = probe.validate_receipt_verify_job_preview(plan, manifest, rendered)
+    assert proof["schema"] == probe.RECEIPT_VERIFY_PREVIEW_SCHEMA
+    assert proof["gpus"] == 0
+    assert proof["runtime_user"] == {"uid": 1000, "gid": 100}
+    changed = copy.deepcopy(rendered)
+    changed["spec"]["template"]["spec"]["containers"][0]["volumeMounts"][0]["readOnly"] = False
+    with pytest.raises(JobsError, match="changed"):
+        probe.validate_receipt_verify_job_preview(plan, manifest, changed)
 
 
 def test_probe_fleetjob_preview_accepts_only_exact_server_mutation(plan) -> None:
@@ -299,8 +339,9 @@ def test_probe_runtime_bundle_imports_without_source_checkout(plan, tmp_path) ->
         ("priority", "c0"),
         ("queue_priority", "q0"),
         ("workers", 2),
+        ("max_workers", 2),
         ("gpus_per_worker", 8),
-        ("gpus_on_head", 8),
+        ("gpus_on_head", 4),
     ],
 )
 def test_probe_rejects_topology_or_route_substitution(plan, field, value) -> None:
@@ -313,9 +354,7 @@ def test_probe_rejects_model_mount_or_head_resource_substitution(plan) -> None:
     for mutation in (
         lambda value: value["execution"]["model_artifact"].update(path="other/model"),
         lambda value: value["execution"]["model_artifact"].update(mount_path="other"),
-        lambda value: value["execution"].update(
-            preflight_model_pvc_subpath="models/other"
-        ),
+        lambda value: value["execution"].update(preflight_model_pvc_subpath="models/other"),
         lambda value: value["execution"]["head_resources"].update(cpu_request="2"),
         lambda value: value.update(output_root="/mnt/sfs/jobs/other/models/run"),
     ):
@@ -382,9 +421,7 @@ def test_probe_accepts_only_resolving_digest_valid_model_symlink(tmp_path) -> No
     }
     probe._verify_model(plan)
     target.unlink()
-    with pytest.raises(
-        probe.ProbeGateError, match="model_file_broken_symlink_00"
-    ):
+    with pytest.raises(probe.ProbeGateError, match="model_file_broken_symlink_00"):
         probe._verify_model(plan)
 
 
@@ -525,11 +562,7 @@ def test_cpu_preflight_rejection_is_sealed_and_exits_cleanly(
 
 
 def _preview(request, *, identity=True):
-    context = (
-        {"runAsUser": 1000, "runAsGroup": 100, "runAsNonRoot": True}
-        if identity
-        else {}
-    )
+    context = {"runAsUser": 1000, "runAsGroup": 100, "runAsNonRoot": True} if identity else {}
     container = {
         "image": request["image"],
         "securityContext": {"privileged": False, **context},
@@ -570,7 +603,7 @@ def _preview(request, *, identity=True):
         },
         "spec": {
             "suspend": True,
-            "shutdownAfterJobFinishes": False,
+            "shutdownAfterJobFinishes": True,
             "entrypoint": request["command"],
             "rayClusterSpec": {
                 "headGroupSpec": {"template": template},
@@ -585,19 +618,20 @@ def test_probe_preview_requires_effective_uid_gid(plan) -> None:
     request = probe.request(plan)
     result = probe.validate_preview(plan, request, _preview(request))
     assert result["runtime_user"] == {"uid": 1000, "gid": 100}
-    assert result["shutdown_after_job_finishes"] is False
-    assert result["cleanup_authority"] == "uid_bound_observer"
+    assert result["shutdown_after_job_finishes"] is True
+    assert result["cleanup_authority"] == "kuberay_plus_uid_bound_observer"
+    assert result["receipt_authority"] == "durable_sfs_receipt_verifier"
     with pytest.raises(JobsError, match="does not prove runtime user"):
         probe.validate_preview(plan, request, _preview(request, identity=False))
 
 
-def test_probe_preview_requires_observer_owned_cleanup(plan) -> None:
+def test_probe_preview_requires_automatic_cluster_cleanup(plan) -> None:
     request = probe.request(plan)
     preview = _preview(request)
     rendered = yaml.safe_load(preview["manifest_yaml"])
-    rendered["spec"]["shutdownAfterJobFinishes"] = True
+    rendered["spec"]["shutdownAfterJobFinishes"] = False
     preview["manifest_yaml"] = yaml.safe_dump(rendered)
-    with pytest.raises(JobsError, match="UID-bound observer"):
+    with pytest.raises(JobsError, match="release its Ray cluster"):
         probe.validate_preview(plan, request, preview)
 
     rendered["spec"].pop("shutdownAfterJobFinishes")
@@ -629,6 +663,52 @@ def test_probe_failure_receipt_is_durable_and_create_once(plan, tmp_path) -> Non
         probe._persist_probe_failure(changed, failure)
 
 
+def test_probe_durable_receipt_verifier_is_cpu_only_and_plan_bound(
+    plan, tmp_path, monkeypatch
+) -> None:
+    changed = copy.deepcopy(plan)
+    changed["output_root"] = str(tmp_path)
+    accepted = probe._seal(
+        {
+            "schema": probe.RECEIPT_SCHEMA,
+            "status": "setup_and_internal_cleanup_passed",
+            "plan_sha256": digest(changed),
+            **changed["scientific_work"],
+            "engines_started": 2,
+            "tensor_parallel_size": 4,
+            "runtime_users": {
+                "driver": {
+                    "uid": 1000,
+                    "gid": 100,
+                    "physical_node": "gpu-node-1",
+                },
+                "gpu_pods": [{"uid": 1000, "gid": 100, "physical_node": "gpu-node-1"}],
+            },
+            "ray_shutdown_called": True,
+            "external_release_required": True,
+        }
+    )
+    (tmp_path / "TOPOLOGY_PROBE.json").write_text(json.dumps(accepted))
+    monkeypatch.setattr(probe.os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(probe.os, "getegid", lambda: 100)
+    torch = pytest.importorskip("torch")
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    monkeypatch.setattr(
+        probe,
+        "_validate_probe_receipt",
+        lambda value, receipt: None if value is changed and receipt == accepted else 1 / 0,
+    )
+    proof = probe.verify_durable_receipt(changed)
+    assert proof["schema"] == probe.RECEIPT_VERIFY_SCHEMA
+    assert proof["receipt_sha256"] == accepted["sha256"]
+    assert proof["runtime_user"] == {"uid": 1000, "gid": 100}
+    assert all(proof[key] == 0 for key in changed["scientific_work"])
+
+    (tmp_path / probe.FAILURE_RECEIPT).write_text("{}")
+    with pytest.raises(probe.ProbeGateError, match="durable_failure_receipt_present"):
+        probe.verify_durable_receipt(changed)
+
+
 def test_release_receipt_requires_exact_terminal_absence_and_zero_gpus(plan) -> None:
     receipt = probe._seal(
         {
@@ -645,7 +725,6 @@ def test_release_receipt_requires_exact_terminal_absence_and_zero_gpus(plan) -> 
                     "physical_node": "gpu-node-1",
                 },
                 "gpu_pods": [
-                    {"uid": 1000, "gid": 100, "physical_node": "gpu-node-1"},
                     {"uid": 1000, "gid": 100, "physical_node": "gpu-node-1"},
                 ],
             },
@@ -664,7 +743,6 @@ def test_release_receipt_requires_exact_terminal_absence_and_zero_gpus(plan) -> 
         "raycluster_uid": "00000000-0000-0000-0000-000000000005",
         "pod_uids": [
             "00000000-0000-0000-0000-000000000006",
-            "00000000-0000-0000-0000-000000000007",
         ],
         "terminal_status": "Succeeded",
         "fleetjob_present": False,
@@ -715,6 +793,8 @@ def test_probe_cli_prepares_but_external_gate_stays_closed(tmp_path) -> None:
     assert (output / "FLEETJOB_PREPARED.json").exists()
     assert (output / "preflight-job.json").exists()
     assert (output / "PREFLIGHT_JOB_PREPARED.json").exists()
+    assert (output / "receipt-verify-job.json").exists()
+    assert (output / "RECEIPT_VERIFY_JOB_PREPARED.json").exists()
     with pytest.raises(ValueError, match="preview blocked by qualification gate"):
         cli._external_action_gate(plan, "preview")
     with pytest.raises(ValueError, match="submit blocked by qualification gate"):
@@ -726,9 +806,12 @@ def test_probe_cli_server_preview_is_bound_to_exact_dev_context(tmp_path, monkey
 
     output = tmp_path / "prepared"
     runner = CliRunner()
-    assert runner.invoke(
-        cli.app, ["rl-topology-probe", str(CONFIG), "--output", str(output)]
-    ).exit_code == 0
+    assert (
+        runner.invoke(
+            cli.app, ["rl-topology-probe", str(CONFIG), "--output", str(output)]
+        ).exit_code
+        == 0
+    )
     plan, _ = cli._prepared(output)
     rendered = probe.fleetjob_manifest(plan)
     rendered["metadata"].update(
@@ -760,16 +843,17 @@ def test_probe_cli_server_preview_is_bound_to_exact_dev_context(tmp_path, monkey
     assert (output / "FLEETJOB_PREVIEW.json").exists()
 
 
-def test_probe_cli_preflight_preview_is_bound_to_exact_dev_context(
-    tmp_path, monkeypatch
-) -> None:
+def test_probe_cli_preflight_preview_is_bound_to_exact_dev_context(tmp_path, monkeypatch) -> None:
     from typer.testing import CliRunner
 
     output = tmp_path / "prepared"
     runner = CliRunner()
-    assert runner.invoke(
-        cli.app, ["rl-topology-probe", str(CONFIG), "--output", str(output)]
-    ).exit_code == 0
+    assert (
+        runner.invoke(
+            cli.app, ["rl-topology-probe", str(CONFIG), "--output", str(output)]
+        ).exit_code
+        == 0
+    )
     plan, _ = cli._prepared(output)
     rendered = _render_preflight(probe.preflight_job_manifest(plan))
     seen = []
@@ -779,9 +863,7 @@ def test_probe_cli_preflight_preview_is_bound_to_exact_dev_context(
         return NS(returncode=0, stdout=json.dumps(rendered), stderr="")
 
     monkeypatch.setattr(cli.subprocess, "run", dry_run)
-    response = runner.invoke(
-        cli.app, ["rl-topology-probe-preflight-preview", str(output)]
-    )
+    response = runner.invoke(cli.app, ["rl-topology-probe-preflight-preview", str(output)])
     assert response.exit_code == 0, response.output
     command, options = seen[0]
     assert command[:3] == [
@@ -792,3 +874,37 @@ def test_probe_cli_preflight_preview_is_bound_to_exact_dev_context(
     assert "--dry-run=server" in command and "create" in command
     assert options["timeout"] == 60
     assert (output / "PREFLIGHT_JOB_PREVIEW.json").exists()
+
+
+def test_probe_cli_receipt_preview_is_bound_to_exact_dev_context(tmp_path, monkeypatch) -> None:
+    from typer.testing import CliRunner
+
+    output = tmp_path / "prepared"
+    runner = CliRunner()
+    assert (
+        runner.invoke(
+            cli.app, ["rl-topology-probe", str(CONFIG), "--output", str(output)]
+        ).exit_code
+        == 0
+    )
+    plan, _ = cli._prepared(output)
+    rendered = _render_preflight(probe.receipt_verify_job_manifest(plan))
+    seen = []
+
+    def dry_run(argv, **kwargs):
+        seen.append((argv, kwargs))
+        return NS(returncode=0, stdout=json.dumps(rendered), stderr="")
+
+    monkeypatch.setattr(cli.subprocess, "run", dry_run)
+    response = runner.invoke(cli.app, ["rl-topology-probe-receipt-preview", str(output)])
+    assert response.exit_code == 0, response.output
+    command, options = seen[0]
+    assert command[:3] == [
+        "kubectl",
+        "--context",
+        "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+    ]
+    assert "--dry-run=server" in command and "create" in command
+    assert "prod" not in " ".join(command)
+    assert options["timeout"] == 60
+    assert (output / "RECEIPT_VERIFY_JOB_PREVIEW.json").exists()
