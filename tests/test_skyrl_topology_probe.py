@@ -19,7 +19,7 @@ from cyber_post_train.jobs import JobsError, digest
 from training import skyrl_topology_probe as probe
 
 ROOT = probe.ROOT
-CONFIG = ROOT / "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json"
+CONFIG = ROOT / probe.CONFIG_PATH
 
 
 @pytest.fixture
@@ -29,6 +29,17 @@ def plan():
 
 def test_probe_is_distinct_dev_only_bounded_and_zero_update(plan) -> None:
     request = probe.request(plan)
+    assert digest(plan) == "51accb1d9857254fb4bee013001c361785698c5c5b7b825a7b328ee785b717cd"
+    assert digest(request) == "287f9a1a6cb58ae5b03a002be8f14109c53abcf9e097cb410e9d9fa1a3fa146b"
+    assert digest(probe.fleetjob_manifest(plan)) == (
+        "047485386a653f3c8e6cb7b16b853b0bd12accf027b862c9fab58f0fbf5e0b99"
+    )
+    assert digest(probe.preflight_job_manifest(plan)) == (
+        "b36a70da18448291771bddbeee9f17c007249bddfe402c5b0aef0bc283d60ddb"
+    )
+    assert digest(probe.receipt_verify_job_manifest(plan)) == (
+        "59c3c1f1fd22c523fd8860e4d61155ee884a1c1002dff7f23d57ffc893b33ee7"
+    )
     assert plan["schema"] == probe.SCHEMA
     assert plan["execution"]["cluster_target"] == "dev"
     assert plan["execution"]["jobs_api_base_url"] == "https://api.ft.dev.flt.build"
@@ -62,7 +73,7 @@ def test_probe_is_distinct_dev_only_bounded_and_zero_update(plan) -> None:
     assert request["env"]["VLLM_USE_FLASHINFER_SAMPLER"] == "0"
     assert plan["model"]["repo"] == "Qwen/Qwen3.8-27B"
     assert plan["model"]["revision"] == ("1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0")
-    assert plan["model"]["root"] == ("/mnt/sfs/jobs/chris-q38-skyrl-probe-v16/models/base")
+    assert plan["model"]["root"] == ("/mnt/sfs/jobs/chris-q38-skyrl-probe-v17/models/base")
     assert plan["execution"]["model_artifact"]["path"] == (
         "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4"
     )
@@ -76,13 +87,13 @@ def test_probe_fleetjob_is_one_eight_gpu_pod_with_zero_replica_group(plan) -> No
     manifest = probe.fleetjob_manifest(plan)
     spec = manifest["spec"]
     assert manifest["metadata"] == {
-        "name": "chris-q38-skyrl-probe-v16",
+        "name": "chris-q38-skyrl-probe-v17",
         "namespace": "fleet-train-jobs",
     }
     assert spec["fleet"] == {
         "projectName": "fleetjob-dev",
         "auth": {"secretRef": {"name": "fleet-api", "key": "FLEET_API_KEY"}},
-        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v16",
+        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v17",
         "models": [
             {
                 "path": "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4",

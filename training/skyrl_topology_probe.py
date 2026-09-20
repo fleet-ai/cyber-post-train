@@ -48,18 +48,18 @@ RECEIPT_VERIFY_SCHEMA = "cyber_skyrl_topology_probe_receipt_verification_v1"
 RECEIPT_VERIFY_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_receipt_verification_rejection_v1"
 RECEIPT_VERIFY_PACKET_SCHEMA = "cyber_skyrl_topology_probe_receipt_verification_job_packet_v1"
 RECEIPT_VERIFY_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_receipt_verification_job_preview_v1"
-PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v28"
-RECEIPT_VERIFY_NAME = "chris-q38-skyrl-probe-receipt-v16"
-RECEIPT_VERIFY_RUN_DIR = "/tmp/chris-q38-skyrl-probe-receipt-v16"
+PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v29"
+RECEIPT_VERIFY_NAME = "chris-q38-skyrl-probe-receipt-v17"
+RECEIPT_VERIFY_RUN_DIR = "/tmp/chris-q38-skyrl-probe-receipt-v17"
 PREFLIGHT_RECEIPT = "/dev/termination-log"
 FAILURE_RECEIPT = "TOPOLOGY_PROBE_FAILED.json"
 MODULE = "training.skyrl_topology_probe"
-CONFIG_PATH = ROOT / "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json"
+CONFIG_PATH = ROOT / "configs/qualification/qwen38-skyrl-topology-probe-dev-v2.json"
 IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
     "89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
 )
-MODEL_BINDING_SHA256 = "4d143c4d7dbac54436e6ded1a43541be004039ee2eb61dcc8bedd8848d757264"
+MODEL_BINDING_SHA256 = "c2930a8dcd3a77075631971d521038e8edf4e2faa87dff1ea989e9b92e2739af"
 VLLM_SAMPLER_ENV = {"VLLM_USE_FLASHINFER_SAMPLER": "0"}
 RUNTIME_FILES = (
     "training/skyrl_topology_probe.py",
@@ -103,7 +103,7 @@ def _expected_execution() -> dict:
         "namespace": "fleet-train-jobs",
         "project_name": "fleetjob-dev",
         "auth_secret": {"name": "fleet-api", "key": "FLEET_API_KEY"},
-        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v16",
+        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v17",
         "output_pvc": "sfs-shared",
         "output_registry_mount": "/mnt/cyber-output-registry",
         "output_registry_subpath": "models/fleetjob-dev",

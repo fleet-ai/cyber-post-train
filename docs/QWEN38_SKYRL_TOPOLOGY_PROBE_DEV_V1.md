@@ -5,13 +5,16 @@ the exact SkyRL image load the pinned Qwen3.8-27B model and start two tensor-par
 inference engines on one eight-GPU development node, then stop them and release the
 allocation cleanly?
 
-The current `v16` execution reached `SUCCEEDED` with zero restarts and released
-all eight GPUs. Its cleanup observer did not capture the public container receipt
-before teardown, and no existing production Pod can see the development SFS path.
-The result therefore proves successful execution and release, but it does **not**
-yet pass this gate. The failure budget is 10/10, so no new cluster workload is
-authorized. The exact evidence and this distinction are sealed in
+The historical `v16` execution reached `SUCCEEDED` with zero restarts and
+released all eight GPUs. Its cleanup observer did not capture the public
+container receipt before teardown, so it proves execution and release but does
+**not** pass this gate. The exact evidence is sealed in
 `docs/evidence/qwen38-study/2026-09-20-skyrl-topology-probe-v16-qualification-summary.json`.
+
+The create-once `v17` successor is prepared but has not been submitted. It keeps
+`VLLM_USE_FLASHINFER_SAMPLER=0` and adds a fixed 30-second grace period for the
+terminal receipt before cleanup. The failure budget remains 10/10, so no new
+cluster workload is authorized until an explicit reset is recorded.
 
 It deliberately cannot read a training row, create an episode, call a verifier,
 take an optimizer step, or write a checkpoint. Passing it does not qualify RL.
@@ -20,7 +23,7 @@ until its own reward, optimizer, checkpoint and cleanup gates pass.
 
 ## Frozen shape
 
-- terminal FleetJob identity: `chris-q38-skyrl-probe-v16`
+- next FleetJob identity: `chris-q38-skyrl-probe-v17`
 - development context: `nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb`
 - namespace/project: `fleet-train-jobs` / `fleetjob-dev`
 - priority: Kubernetes `c1`, queue `q1`
@@ -66,7 +69,7 @@ Use a new directory. Preparation and server dry-run make no cluster object:
 
 ```sh
 uv run --locked cyber-post-train rl-topology-probe \
-  configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json \
+  configs/qualification/qwen38-skyrl-topology-probe-dev-v2.json \
   --output /absolute/new/probe-packet
 uv run --locked cyber-post-train rl-topology-probe-preflight-preview \
   /absolute/new/probe-packet
@@ -130,7 +133,7 @@ uv run --locked python -m training.dev_cleanup_observer \
   --context nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb \
   --namespace fleet-train-jobs \
   --kind job \
-  --name chris-q38-skyrl-probe-preflight-v28 \
+  --name chris-q38-skyrl-probe-preflight-v29 \
   --maximum-seconds 1200 \
   --expected-gpus 0 \
   --plan-sha256 sha256:<exact-plan-digest> \
@@ -207,7 +210,7 @@ The sanitized observation supplied to `validate_release` must contain exactly:
 {
   "kubernetes_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
   "namespace": "fleet-train-jobs",
-  "fleetjob_name": "chris-q38-skyrl-probe-v16",
+  "fleetjob_name": "chris-q38-skyrl-probe-v17",
   "job_id": "<Fleet job UUID>",
   "fleetjob_uid": "<FleetJob UID>",
   "rayjob_uid": "<RayJob UID>",
