@@ -64,8 +64,10 @@ four cells total. Do not widen until all four produce digest-valid accepted
 receipts. A rejected canary writes a sanitized terminal receipt and exits the
 CPU Job normally. New successors require the official renderer's alert-safe
 policy: a clean-exit controller, backoff limit 2147483647, and no active deadline
-or pod-failure policy. A restart or Job `Failed=True` still blocks creates and
-requires notification; this policy must never hide an actual infrastructure failure.
+or pod-failure policy, plus top-level `fleet.ai/failure-alerts: "off"`. A restart
+or Job `Failed=True` still blocks creates and requires evidence and review even
+though the supported annotation suppresses its Slack/Better Stack notification;
+this policy must never hide an actual infrastructure failure.
 Always server-dry-run and verify images, secret references, volumes, and endpoints.
 
 The persistent state root is

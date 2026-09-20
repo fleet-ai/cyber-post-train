@@ -86,6 +86,7 @@ def test_compiler_and_portable_job_have_native_identity(plan):
     assert request["env"]["WANDB_CONSOLE"] == "off"
     assert request["env"]["PYTHONPATH"] == "/root/Megatron-LM"
     assert request["priority_class"] == "c1" and request["requeueIfPreempted"] is False
+    assert request["failureAlerts"] is False
     assert plan["arguments"]["steps"] == 2
     assert "FLEET_API_KEY" not in request["env"]
     assert "WANDB_API_KEY" not in request["env"]

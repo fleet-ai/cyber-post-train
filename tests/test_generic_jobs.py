@@ -26,6 +26,7 @@ def config():
         "run_dir": "/mnt/sfs/jobs/researcher-sft-v1",
         "priority_class": "c1",
         "requeueIfPreempted": False,
+        "failureAlerts": False,
         "resources": {
             "cpu_request": "8",
             "cpu_limit": "16",
@@ -186,7 +187,10 @@ def manifest(request=None):
                 "kueue.x-k8s.io/priority-class": "q" + c["priority_class"][1:],
                 "fleet.ai/requeue-if-preempted": "false",
             },
-            "annotations": {"fleet.ai/run-dir": c["run_dir"]},
+            "annotations": {
+                "fleet.ai/run-dir": c["run_dir"],
+                "fleet.ai/failure-alerts": "off",
+            },
         },
         "spec": {
             "suspend": True,
@@ -229,6 +233,8 @@ def test_resource_preview(nodes, priority):
         ("queue_priority_class", "q1"),
         ("requeueIfPreempted", True),
         ("requeueIfPreempted", "false"),
+        ("failureAlerts", True),
+        ("failureAlerts", "false"),
         ("run_dir", "/mnt/sfs/jobs"),
         ("run_dir", "/mnt/sfs/jobs/a/../b"),
         ("run_dir", "/mnt/sfs/jobs/a/"),
@@ -246,6 +252,13 @@ def test_resource_preview(nodes, priority):
 def test_invalid_request_rejected_locally(field, value):
     with pytest.raises(JobsError):
         validate_request({**config(), field: value})
+
+
+def test_request_without_explicit_failure_alert_opt_out_is_rejected() -> None:
+    value = config()
+    value.pop("failureAlerts")
+    with pytest.raises(JobsError, match="failed-job alerts"):
+        validate_request(value)
 
 
 def test_privileged_partial_node_is_forbidden():
@@ -285,6 +298,7 @@ def test_malformed_preview_replicas_fail_before_submission(replicas):
         (("metadata", "labels", "kueue.x-k8s.io/priority-class"), "q0"),
         (("metadata", "labels", "fleet.ai/requeue-if-preempted"), "true"),
         (("metadata", "annotations", "fleet.ai/run-dir"), "/mnt/sfs/peer"),
+        (("metadata", "annotations", "fleet.ai/failure-alerts"), "on"),
         (("spec", "suspend"), False),
         (("spec", "shutdownAfterJobFinishes"), False),
         (("spec", "entrypoint"), "other-command"),
@@ -347,7 +361,14 @@ def test_pod_resource_and_runtime_drift(change):
 
 @pytest.mark.parametrize("worker", [False, True])
 @pytest.mark.parametrize(
-    "fault", ["duplicate-env", "optional-secret", "prefixed-secret", "duplicate-secret"]
+    "fault",
+    [
+        "duplicate-env",
+        "optional-secret",
+        "prefixed-secret",
+        "duplicate-secret",
+        "failure-alerts",
+    ],
 )
 def test_ambiguous_environment_blocks_the_actual_submit_boundary(tmp_path, worker, fault):
     request = {**config(), "workers": 2}
@@ -362,8 +383,10 @@ def test_ambiguous_environment_blocks_the_actual_submit_boundary(tmp_path, worke
         container["envFrom"][0]["secretRef"]["optional"] = True
     elif fault == "prefixed-secret":
         container["envFrom"][0]["prefix"] = "RENAMED_"
-    else:
+    elif fault == "duplicate-secret":
         container["envFrom"].append(deepcopy(container["envFrom"][0]))
+    else:
+        obj["metadata"]["annotations"].pop("fleet.ai/failure-alerts")
     calls = []
 
     def handler(req):
@@ -375,7 +398,7 @@ def test_ambiguous_environment_blocks_the_actual_submit_boundary(tmp_path, worke
         return httpx.Response(202, json={"name": "researcher-sft-1234abcd"})
 
     journal = tmp_path / "intent.jsonl"
-    with client(handler) as api, pytest.raises(JobsError, match="environment|Secret"):
+    with client(handler) as api, pytest.raises(JobsError, match="environment|Secret|failed-job"):
         api.submit_once(request, journal)
     assert calls == [("GET", "/v1/runs"), ("POST", "/v1/runs/preview")]
     assert not journal.exists()

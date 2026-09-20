@@ -41,6 +41,8 @@ kind: Job
 metadata:
   name: chris-cyber-qwen36-sft-bf16-cast-v2
   namespace: fleet-train-jobs
+  annotations:
+    fleet.ai/failure-alerts: "off"
   labels:
     kueue.x-k8s.io/queue-name: training-lq
     cyber-post-train.fleet.ai/owner: chris

@@ -139,6 +139,7 @@ def job_request(plan: dict) -> dict:
             "resources": plan["execution"]["resources"],
             "priority_class": plan["execution"]["priority"],
             "requeueIfPreempted": False,
+            "failureAlerts": False,
             "secrets": [],
             "env": {
                 "HF_HUB_OFFLINE": "1",
