@@ -1,0 +1,54 @@
+{
+  "schema": "cyber_qwen38_skyrl_reward_canary_port_v3",
+  "source": {
+    "runtime_commit": "8b5e8a00521b4fe412e3e7d0bce9b8ea6855b005",
+    "preflight_commit": "6c0bc541e136fc114a3f7a17ce6ba07e9178bb78",
+    "ported_onto_commit": "607b7b0bb30d798a3af1ba5f17e1ebc9f2366a77"
+  },
+  "execution": {
+    "cluster_target": "dev",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
+    "environment": {
+      "VLLM_USE_FLASHINFER_SAMPLER": "0"
+    }
+  },
+  "historical_evidence": {
+    "image_cpu_qualification": {
+      "path": "../../docs/evidence/qwen38-study/2026-09-12-skyrl-worker-rpc-relay-image-cpu-qualification-v1.json",
+      "file_sha256": "sha256:cb993198e84220a74ed77f471359b36149bb47eb7bf3380aea0e4edb98b55c19"
+    },
+    "engine_qualification": {
+      "path": "../../docs/evidence/qwen38-study/2026-09-14-skyrl-prod2-engine-qualification-v1.json",
+      "file_sha256": "sha256:072544d61e934045ab0fb8ee4192f094027a155fef5865cd2453793d23fce63d",
+      "scope": "two_by_four_engine_startup_and_release_only"
+    },
+    "tool_order_failure": {
+      "path": "../../docs/evidence/qwen38-study/2026-09-14-skyrl-reward-canary-dev1-tool-order-failure-v1.json",
+      "file_sha256": "sha256:3c93c0657ac6cc6adf6154b7de8b86a88879a138a2418e2bf949882caa84eaad"
+    },
+    "source_preflight": {
+      "path": "../../docs/evidence/qwen38-study/2026-09-14-skyrl-reward-canary-dev2-preflight-v1.json",
+      "file_sha256": "sha256:a113822787cc0b48272ab40c8639d4566ec04ba9226bf84b0a8fa7d1ed157699",
+      "classification": "historical_preflight_provenance",
+      "gating": false
+    }
+  },
+  "source_closure": {
+    "task_set": "../data/qwen38-rl-reward-canary-task-set-v3.json",
+    "split": "../data/qwen38-rl-reward-canary-split-v1.json",
+    "horizon": "../data/qwen38-rl-reward-canary-horizon-v1.json",
+    "tool_catalog": "../data/qwen38-rl-filtered-canary-tool-catalog-v1.json"
+  },
+  "submission_gate": {
+    "preview_authorized": false,
+    "submission_authorized": false,
+    "blockers": [
+      "fresh_main_based_cpu_preflight_and_preview_not_yet_recorded",
+      "fresh_jobs_sfs_wandb_identity_absence_not_yet_proven",
+      "dev_api_target_not_bound_by_current_main_jobs_client",
+      "preserved_2400_second_episode_conflicts_with_30_minute_dev_deadline_policy",
+      "one_by_eight_training_topology_not_qualified_by_two_by_four_engine_receipt"
+    ]
+  },
+  "sha256": "sha256:cbd2d9b29de72bf61654b8e1ba7d35d9c66a05642dd970bb86ee7384dbec9827"
+}

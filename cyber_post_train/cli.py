@@ -99,6 +99,32 @@ def _submission_gate(directory: Path, plan: dict, request: dict) -> None:
         )
 
 
+def _external_action_gate(plan: dict, action: str) -> None:
+    """Keep qualification-blocked profiles away from every external job endpoint."""
+    qualification = plan.get("qualification")
+    if not isinstance(qualification, dict):
+        return
+    gate = qualification.get("submission_gate")
+    field = {
+        "preview": "preview_authorized",
+        "submit": "submission_authorized",
+    }.get(action)
+    if field is None:
+        raise ValueError("unknown external action")
+    if not isinstance(gate, dict) or type(gate.get(field)) is not bool:
+        raise ValueError(f"{action} blocked by an incomplete qualification gate")
+    if gate[field] is True:
+        return
+    blockers = gate.get("blockers")
+    if (
+        not isinstance(blockers, list)
+        or not blockers
+        or any(not isinstance(item, str) or not item for item in blockers)
+    ):
+        raise ValueError(f"{action} blocked by an incomplete qualification gate")
+    raise ValueError(f"{action} blocked by qualification gate: {', '.join(blockers)}")
+
+
 def _client() -> Jobs:
     return Jobs(os.environ.get("FLEET_API_KEY", ""))
 
@@ -173,7 +199,7 @@ def rl_data(config: Path) -> None:
     """CPU-only Miles/SkyRL data from reviewed Fleet versions. GET only; no training."""
     import httpx
 
-    from training.rl_data import build
+    from training.rl_reward_canary import build
     from training.sft import read_mapping
 
     try:
@@ -268,7 +294,8 @@ def preflight(directory: Path) -> None:
 def preview(directory: Path) -> None:
     """Read the Jobs API's exact resource/queue render; does not create a run."""
     try:
-        _, request = _prepared(directory)
+        plan, request = _prepared(directory)
+        _external_action_gate(plan, "preview")
         with _client() as client:
             result = client.preview(request)
         _print({"submitted": False, **validate_preview(request, result)})
@@ -286,6 +313,7 @@ def submit(directory: Path) -> None:
     try:
         plan, request = _prepared(directory)
         _submission_gate(directory, plan, request)
+        _external_action_gate(plan, "submit")
         proof = _read(directory / "PREFLIGHT.json")
         expected = {
             "schema": "cyber_miles_conversion_cpu_preflight_v1"

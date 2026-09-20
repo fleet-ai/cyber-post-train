@@ -50,6 +50,7 @@ RUNTIME_FILES = (
     "training/skyrl_rollout.py",
     "training/skyrl_episode.py",
     "training/rl_episode.py",
+    "training/rl_reward_canary.py",
     "training/rl_runtime.py",
     "training/rl_data.py",
     "training/sft_runtime.py",
@@ -78,7 +79,17 @@ def compile_rl(config, *, relative_to):
 
     _known(
         config,
-        {"backend", "name", "output_root", "model", "data", "recipe", "wandb", "cluster"},
+        {
+            "backend",
+            "name",
+            "output_root",
+            "model",
+            "data",
+            "recipe",
+            "wandb",
+            "cluster",
+            "qualification",
+        },
         "RL",
     )
     if config["backend"] != "skyrl":
@@ -116,6 +127,16 @@ def compile_rl(config, *, relative_to):
     ):
         raise ValueError("exact native train/dev files required")
     root, limits = Path(_sfs_root(data["root"], "data root")), metadata["limits"]
+    qualification = None
+    if config.get("qualification") is not None:
+        from .rl_reward_canary import validate_run_config
+
+        qualification = validate_run_config(
+            config,
+            metadata,
+            bound,
+            relative_to=relative_to,
+        )
     args = skyrl.SkyRLConfig(
         name=config["name"],
         output_root=_sfs_root(config["output_root"], "output root"),
@@ -150,23 +171,32 @@ def compile_rl(config, *, relative_to):
         "native_sources": NATIVE,
         "runtime_sha256": digest(_runtime()),
         "execution": {
-            "image": IMAGE,
+            "image": qualification["image"] if qualification else IMAGE,
             "priority": cluster.get("priority", "c1"),
             "resources": {**RESOURCES, **cluster.get("resources", {})},
         },
     }
+    if qualification is not None:
+        plan["qualification"] = qualification
     job_request(plan)
     return plan
 
 
 def job_request(plan):
     args = skyrl.SkyRLConfig(**plan["arguments"])
+    qualification = plan.get("qualification")
+    image, extra_env = IMAGE, {}
+    if qualification is not None:
+        from .rl_reward_canary import validate_plan_binding
+
+        binding = validate_plan_binding(qualification, plan["data"], plan["arguments"])
+        image, extra_env = binding["image"], binding["environment"]
     if (
         plan["schema"] != SCHEMA
         or plan["runtime_sha256"] != digest(_runtime())
         or plan["native_sources"] != NATIVE
         or plan["native_overrides"] != skyrl.overrides(args)
-        or plan["execution"]["image"] != IMAGE
+        or plan["execution"]["image"] != image
         or plan["run_name"] != args.name
         or plan["output_root"] != args.output_root
     ):
@@ -186,7 +216,7 @@ def job_request(plan):
             "name": args.name,
             "title": args.name + " native SkyRL RL",
             "run_dir": args.output_root,
-            "image": IMAGE,
+            "image": image,
             "workers": args.nodes,
             "gpus_per_worker": 8,
             "resources": resources,
@@ -202,6 +232,7 @@ def job_request(plan):
                 "WANDB_DISABLE_CODE": "true",
                 "WANDB_CONSOLE": "off",
                 "PYTHONUNBUFFERED": "1",
+                **extra_env,
             },
         },
         files,
