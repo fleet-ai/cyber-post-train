@@ -24,7 +24,8 @@ until its own reward, optimizer, checkpoint and cleanup gates pass.
 - runtime identity on both Pods: UID 1000, GID 100
 - input model: read-only Fleet model mount `Qwen/Qwen3.8-27B` at `models/base`;
   every file is checked against the exact repository revision and SHA-256 inventory
-  before engine startup
+  before engine startup. Standard Hugging Face symlinks are allowed only when they
+  resolve to regular files whose bytes match those exact digests
 - output: the controller-created, run-owned `models/run` directory; only the sanitized probe receipt is
   accepted there
 - W&B: disabled; no task, benchmark or W&B credential is delivered
@@ -103,7 +104,7 @@ uv run --locked python -m training.dev_cleanup_observer \
   --context nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb \
   --namespace fleet-train-jobs \
   --kind job \
-  --name chris-q38-skyrl-probe-preflight-v5 \
+  --name chris-q38-skyrl-probe-preflight-v6 \
   --maximum-seconds 1200 \
   --expected-gpus 0 \
   --plan-sha256 sha256:<exact-plan-digest> \

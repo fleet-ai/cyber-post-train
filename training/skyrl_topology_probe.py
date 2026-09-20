@@ -38,7 +38,7 @@ PREFLIGHT_PACKET_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_packet_v1"
 PREFLIGHT_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_preview_v1"
 PREFLIGHT_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_cpu_preflight_rejection_v1"
 PROBE_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_failure_v1"
-PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v5"
+PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v6"
 PREFLIGHT_RECEIPT = "/dev/termination-log"
 MODULE = "training.skyrl_topology_probe"
 CONFIG_PATH = ROOT / "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json"
@@ -785,8 +785,8 @@ def _verify_model(plan: dict) -> None:
     root = Path(plan["model"]["root"])
     for item in plan["model"]["files"]:
         path = root / item["path"]
-        if path.is_symlink() or not path.is_file():
-            raise ProbeGateError("model_file_missing_or_symlink")
+        if not path.is_file():
+            raise ProbeGateError("model_file_missing_or_broken_symlink")
         if "size" in item and path.stat().st_size != item["size"]:
             raise ProbeGateError("model_file_size_mismatch")
         with path.open("rb") as stream:

@@ -305,6 +305,33 @@ def test_probe_verifies_every_exact_model_file(tmp_path) -> None:
         probe._verify_model(plan)
 
 
+def test_probe_accepts_only_resolving_digest_valid_model_symlink(tmp_path) -> None:
+    model = tmp_path / "model"
+    model.mkdir()
+    target = tmp_path / "blob"
+    payload = b"exact external read-only blob"
+    target.write_bytes(payload)
+    (model / "weight.safetensors").symlink_to(target)
+    plan = {
+        "model": {
+            "root": str(model),
+            "files": [
+                {
+                    "path": "weight.safetensors",
+                    "size": len(payload),
+                    "sha256": "sha256:" + hashlib.sha256(payload).hexdigest(),
+                }
+            ],
+        }
+    }
+    probe._verify_model(plan)
+    target.unlink()
+    with pytest.raises(
+        probe.ProbeGateError, match="model_file_missing_or_broken_symlink"
+    ):
+        probe._verify_model(plan)
+
+
 def test_probe_preflight_parses_engine_without_tasks_or_gpu(plan, monkeypatch) -> None:
     monkeypatch.setattr(probe.os, "geteuid", lambda: 1000)
     monkeypatch.setattr(probe.os, "getegid", lambda: 100)
