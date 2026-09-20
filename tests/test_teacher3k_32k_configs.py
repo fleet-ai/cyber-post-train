@@ -154,7 +154,6 @@ def test_teacher3k_fullweight_launch_receipt_is_bound_and_nonterminal():
     ]
     assert all(run["submission"]["submitted_once"] for run in receipt["runs"])
     assert all(
-        run["live_evidence"]["optimizer_step_at_observation"] >= 1
-        for run in receipt["runs"]
+        run["live_evidence"]["optimizer_step_at_observation"] >= 1 for run in receipt["runs"]
     )
     assert all(run["live_evidence"]["restarts"] == 0 for run in receipt["runs"])
