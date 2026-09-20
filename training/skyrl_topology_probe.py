@@ -38,7 +38,7 @@ PREFLIGHT_PACKET_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_packet_v1"
 PREFLIGHT_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_preview_v1"
 PREFLIGHT_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_cpu_preflight_rejection_v1"
 PROBE_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_failure_v1"
-PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v14"
+PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v15"
 PREFLIGHT_RECEIPT = "/dev/termination-log"
 MODULE = "training.skyrl_topology_probe"
 CONFIG_PATH = ROOT / "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json"
@@ -88,7 +88,7 @@ def _expected_execution() -> dict:
         "namespace": "fleet-train-jobs",
         "project_name": "fleetjob-dev",
         "auth_secret": {"name": "fleet-api", "key": "FLEET_API_KEY"},
-        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v4",
+        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v5",
         "output_pvc": "sfs-shared",
         "output_registry_mount": "/mnt/cyber-output-registry",
         "output_registry_subpath": "models/fleetjob-dev",
@@ -152,17 +152,21 @@ def _config(path: Path) -> dict:
     return value
 
 
-def compile_probe(path: Path) -> dict:
+def _bound_model(value: dict) -> dict:
     from .models import bound_model
     from .sft import read_mapping
 
-    value = _config(path)
     model = value["model"]
-    bound = bound_model(
-        read_mapping(path.parent / model["lock"]),
-        read_mapping(path.parent / model["weights"]),
+    return bound_model(
+        read_mapping(CONFIG_PATH.parent / model["lock"]),
+        read_mapping(CONFIG_PATH.parent / model["weights"]),
         model["root"],
     )
+
+
+def compile_probe(path: Path) -> dict:
+    value = _config(path)
+    bound = _bound_model(value)
     arguments = skyrl.SkyRLConfig(
         name=value["name"],
         output_root=value["output_root"],
@@ -213,12 +217,14 @@ def _validate(plan: dict) -> skyrl.SkyRLConfig:
     arguments = skyrl.SkyRLConfig(**plan["arguments"])
     overrides = skyrl.overrides(arguments)
     execution = plan["execution"]
+    expected_model = _bound_model(_config(CONFIG_PATH))
     if (
         plan.get("schema") != SCHEMA
         or plan.get("runtime_sha256") != digest(_runtime())
         or plan.get("run_name") != arguments.name
         or plan.get("output_root") != arguments.output_root
         or plan.get("native_overrides") != overrides
+        or plan.get("model") != expected_model
         or plan.get("engine")
         != {"num_engines": 2, "tensor_parallel_size": 4, "context_tokens": 98304}
         or plan.get("deadlines")
@@ -226,12 +232,14 @@ def _validate(plan: dict) -> skyrl.SkyRLConfig:
         or execution != {"image": IMAGE, **_expected_execution()}
         or plan.get("output_root")
         != execution.get("mount_root", "") + "/models/run"
+        # The FleetJob controller mounts the resolved artifact contents at the
+        # requested mountPath itself; it does not add the Hugging Face revision
+        # as another directory.  Exact revision authority still comes from the
+        # sealed lock and every file is size+digest checked before setup.
         or arguments.model_root
         != execution.get("mount_root", "")
         + "/models/"
         + execution.get("model_artifact", {}).get("mount_path", "")
-        + "/"
-        + plan.get("model", {}).get("revision", "")
         or plan.get("qualification")
         != {
             "profile": "qwen38_skyrl_topology_probe_dev_v1",

@@ -12,27 +12,28 @@ until its own reward, optimizer, checkpoint and cleanup gates pass.
 
 ## Frozen shape
 
-- FleetJob name: `chris-q38-skyrl-probe-v3`
+- FleetJob name: `chris-q38-skyrl-probe-v5`
 - development context: `nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb`
 - namespace/project: `fleet-train-jobs` / `fleetjob-dev`
 - priority: Kubernetes `c1`, queue `q1`
 - image: `fleet/skyrl-train` at the exact digest in the config
-- topology: one CPU-only Ray head plus one worker Pod requesting all eight GPUs on
-  one node
-- Kueue topology: the CPU head and `gpu` worker group are explicitly q1. The
-  worker group deliberately omits a topology mode: either preferred or
-  unconstrained mode activates topology-aware flavor matching, which cannot mix
-  this cluster's CPU-only and B300 flavors. One Pod still requests all eight GPUs,
-  so it binds one whole B300 node without an additional topology constraint
-- head resources: 4 CPU / 16 GiB requested, 8 CPU / 32 GiB limited
+- topology: one Ray head requesting four GPUs plus one worker Pod requesting four
+  GPUs. Both Pod sets use the B300 flavor and Kueue places both on the same physical
+  eight-GPU node
+- Kueue topology: the head and `gpu` worker group are explicitly q1. The worker
+  group requests unconstrained topology, and the runtime refuses acceptance unless
+  the two exact Ray Pods report the same physical node before either TP4 engine is
+  accepted
+- head resources: 4 CPU / 16 GiB requested, 8 CPU / 32 GiB limited, plus four GPUs
 - worker resources: 64 CPU / 512 GiB requested, 64 CPU / 768 GiB limited
 - runtime identity on both Pods: UID 1000, GID 100
-- input model: read-only Fleet artifact `Qwen/Qwen3.8-27B` at `models/base`;
-  the runtime reads only its immutable child
-  `models/base/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0`
-  every file is checked against the exact repository revision and SHA-256 inventory
-  before engine startup. Standard Hugging Face symlinks are allowed only when they
-  resolve to regular files whose bytes match those exact digests
+- input model: read-only Fleet artifact `Qwen/Qwen3.8-27B` mounted directly at
+  `models/base`. The controller resolves the artifact before mounting it; it does
+  not add a revision-named child directory. The compiled plan remains bound to
+  revision `1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0`, and every mounted file is
+  checked against that exact size and SHA-256 inventory before engine startup.
+  Standard Hugging Face symlinks are allowed only when they resolve to regular
+  files whose bytes match those exact digests
 - zero-GPU preflight source: the accepted development staging alias
   `models/qwen3.8-27b-1d4bf0f2` is mounted directly at that same immutable runtime
   root. This PVC path is deliberately separate from the Fleet controller artifact
@@ -46,8 +47,8 @@ until its own reward, optimizer, checkpoint and cleanup gates pass.
   no later than 30 minutes after the FleetJob was created
 - retries: none
 
-The CPU head does not count as a GPU node. The probe reserves exactly one GPU node
-and eight GPUs.
+The probe reserves exactly one physical GPU node and eight GPUs split 4+4 across
+the Ray head and worker Pods.
 
 ## Prepare and validate without creating a workload
 
@@ -118,7 +119,7 @@ uv run --locked python -m training.dev_cleanup_observer \
   --context nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb \
   --namespace fleet-train-jobs \
   --kind job \
-  --name chris-q38-skyrl-probe-preflight-v13 \
+  --name chris-q38-skyrl-probe-preflight-v15 \
   --maximum-seconds 1200 \
   --expected-gpus 0 \
   --plan-sha256 sha256:<exact-plan-digest> \
@@ -189,7 +190,7 @@ The sanitized observation supplied to `validate_release` must contain exactly:
 {
   "kubernetes_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
   "namespace": "fleet-train-jobs",
-  "fleetjob_name": "chris-q38-skyrl-probe-v3",
+  "fleetjob_name": "chris-q38-skyrl-probe-v5",
   "job_id": "<Fleet job UUID>",
   "fleetjob_uid": "<FleetJob UID>",
   "rayjob_uid": "<RayJob UID>",

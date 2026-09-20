@@ -58,19 +58,26 @@ def test_probe_is_distinct_dev_only_bounded_and_zero_update(plan) -> None:
     assert gate["submission_authorized"] is False
     assert request["env"]["CYBER_EXPECTED_RUNTIME_UID"] == "1000"
     assert request["env"]["CYBER_EXPECTED_RUNTIME_GID"] == "100"
+    assert plan["model"]["repo"] == "Qwen/Qwen3.8-27B"
+    assert plan["model"]["revision"] == (
+        "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+    )
+    assert plan["model"]["root"] == (
+        "/mnt/sfs/jobs/chris-q38-skyrl-probe-v5/models/base"
+    )
 
 
 def test_probe_fleetjob_is_two_four_gpu_pods_with_explicit_user(plan) -> None:
     manifest = probe.fleetjob_manifest(plan)
     spec = manifest["spec"]
     assert manifest["metadata"] == {
-        "name": "chris-q38-skyrl-probe-v4",
+        "name": "chris-q38-skyrl-probe-v5",
         "namespace": "fleet-train-jobs",
     }
     assert spec["fleet"] == {
         "projectName": "fleetjob-dev",
         "auth": {"secretRef": {"name": "fleet-api", "key": "FLEET_API_KEY"}},
-        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v4",
+        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v5",
         "models": [
             {
                 "path": "Qwen/Qwen3.8-27B",
@@ -302,6 +309,19 @@ def test_probe_rejects_model_mount_or_head_resource_substitution(plan) -> None:
         mutation(changed)
         with pytest.raises(ValueError, match="plan changed"):
             probe.fleetjob_manifest(changed)
+
+
+@pytest.mark.parametrize("field", ["repo", "revision", "weight_manifest_sha256"])
+def test_probe_rejects_sealed_model_binding_substitution(plan, field) -> None:
+    plan["model"][field] = "changed"
+    with pytest.raises(ValueError, match="plan changed"):
+        probe.request(plan)
+
+
+def test_probe_rejects_sealed_model_file_manifest_substitution(plan) -> None:
+    plan["model"]["files"][0]["sha256"] = "sha256:" + "0" * 64
+    with pytest.raises(ValueError, match="plan changed"):
+        probe.request(plan)
 
 
 def test_probe_verifies_every_exact_model_file(tmp_path) -> None:
