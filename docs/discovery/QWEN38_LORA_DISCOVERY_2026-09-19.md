@@ -394,6 +394,40 @@ select a winner. Training loss never selects a winner.
 BF16 LoRA is primary. A rank-64 NF4 QLoRA arm at `1e-4` is a resource control
 only after its logits and adapter reload match the BF16 path on a tiny fixture.
 
+### Next broad-data SFT queue
+
+The table below is a proposal, not a set of submitted jobs. It binds the
+current, independently counted teacher corpus: 14,693 windows, 2,886 successful
+sessions, 57,384,881 unique supervised tokens, and 496 task keys. All rows use
+the exact Qwen3.8 revision, assistant-action-only targets, one 32,768-token
+window cap, the same task-lineage split, c1 priority, W&B, and the matched Fleet
+development evaluation. A checkpoint is not selected from training loss.
+
+| Priority | Method | Learning rate | Global batch | Adapter | Epochs | Updates | Decision |
+|---:|---|---:|---:|---|---:|---:|---|
+| 1 | BF16 LoRA | `3e-5` | 8 | rank 64 / alpha 32, all linear layers | 1 | 1,837 | Main adapter anchor; run after the production checkpoint merge/reload gate passes. |
+| 2 | full-weight SFT | `3e-6` | 8 | none | 1 | 1,837 | Main full-weight anchor; run after the native resume check passes. |
+| 3 | BF16 LoRA | `1e-5` | 8 | rank 64 / alpha 32, all linear layers | 1 | 1,837 | Lower learning-rate edge; tests whether the anchor changes the model too aggressively. |
+| 4 | full-weight SFT | `1e-6` | 8 | none | 1 | 1,837 | Lower learning-rate edge matched to priority 2. |
+| 5 | BF16 LoRA | `1e-4` | 8 | rank 64 / alpha 32, all linear layers | 1 | 1,837 | Upper learning-rate edge; stop only for a declared non-finite or divergence rule, not a noisy loss point. |
+| 6 | full-weight SFT | `3e-6` | 16 | none | 1 | 919 | Batch interaction at nearly equal token exposure. |
+| 7 | BF16 LoRA | `3e-5` | 8 | rank 32 / alpha 32, all linear layers | 1 | 1,837 | Capacity control, launched only after rank 64 proves the adapter path end to end. |
+| 8 | best development candidate | inherited | inherited | inherited | 2 | 2× one-epoch updates | Duration test; conditional on the frozen Fleet development metric, never on WebExploitBench. |
+
+The numerical brackets come from three different kinds of evidence. CTF-Dojo
+observed `5e-6`, global batch 16, and two epochs for verified cyber trajectories;
+this is the closest task evidence, but it used different Qwen models and shorter
+sequences. Thinking Machines observed that all-layer LoRA can track full tuning
+when it has enough rank, that LoRA often prefers about ten times the full-weight
+learning rate, and that large batches can hurt LoRA more; this motivates the
+separate `3e-6` versus `3e-5` anchors and the small-batch default, but its tasks
+were not interactive cyber work. The official Qwen3.8 guide supplies an outer
+`2e-4` tutorial point at rank 16 and 2K context; it supports exploring above
+`3e-5`, but does not justify copying that tutorial setting into the production
+anchor. The exact Qwen model card makes the 262,144-token inference contract and
+thinking controls explicit, but does not publish an SFT recipe. These transfer
+limits are why task success, not imitation loss, decides which row advances.
+
 ### RL LoRA
 
 Start from the accepted SFT adapter selected by the predeclared Fleet-development
