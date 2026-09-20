@@ -380,8 +380,9 @@ def test_broad_lora_lr_queue_evidence_recomputes_every_immutable_binding():
             json.dumps(evidence, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
         ).hexdigest()
     )
-    assert evidence["status"] == "local_launch_artifacts_ready_external_gates_closed"
-    assert evidence["submission_blocker"] == "global_cluster_failure_budget_10_of_10"
+    assert evidence["status"] == "local_launch_artifacts_ready_external_gates_pending"
+    assert evidence["submission_blocker"] is None
+    assert evidence["failure_budget_policy"].startswith("removed_by_user_2026-09-20")
     assert evidence["local_validation"]["cluster_posts"] == 0
     assert evidence["local_validation"]["kubernetes_objects_created"] == 0
 

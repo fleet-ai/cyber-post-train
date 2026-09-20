@@ -28,8 +28,7 @@ exact runtime gate binds its payload-derived dataset, split and corpus digests,
 866-row full-epoch ceiling, and planned pause after optimizer step 1. The
 one-step checkpoint stage and its later zero-update merged export are accepted
 as operational production gates. The anchor and two learning-rate controls are
-locally immutable and render exact requests, but none has been submitted while
-the global cluster failure budget is exhausted. Their exact digests and
+locally immutable and render exact requests. Their exact digests and
 remaining live gates are recorded in
 [`qwen38-lora-broad-lr-sweep-ready-queue-20260920.json`](evidence/qwen38-lora-broad-lr-sweep-ready-queue-20260920.json).
 
@@ -328,10 +327,8 @@ No paid or mutating action is valid until all of these are exact:
 - Fleet live verifier/prompt preflight receipts for the already-frozen exact
   task/environment/data tuples;
 - final protocol digests;
-- a restored global cluster failure budget or an explicitly reviewed successor
-  policy; and
 - absent output roots, absent duplicate run names, live c1 policy, and available
-  goal-owned node/failure budget immediately before submission.
+  project node capacity immediately before submission.
 
 Template file hashes are intentionally not frozen while source, image, corpus,
 serving, and evaluation bindings remain unresolved. Compute all four hashes

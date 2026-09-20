@@ -405,11 +405,11 @@ development evaluation. A checkpoint is not selected from training loss.
 
 | Priority | Method | Learning rate | Global batch | Adapter | Epochs | Updates | Decision |
 |---:|---|---:|---:|---|---:|---:|---|
-| 1 | BF16 LoRA | `3e-5` | 8 | rank 64 / alpha 32, all linear layers | 1 | 1,837 | Main adapter anchor; exact config prepared after the production checkpoint merge/reload gate passed, but not submitted while the global failure budget is exhausted. |
+| 1 | BF16 LoRA | `3e-5` | 8 | rank 64 / alpha 32, all linear layers | 1 | 1,837 | Main adapter anchor; exact config prepared after the production checkpoint merge/reload gate passed. |
 | 2 | full-weight SFT | `3e-6` | 8 | none | 1 | 1,837 | Main full-weight anchor; run after the native resume check passes. |
-| 3 | BF16 LoRA | `1e-5` | 8 | rank 64 / alpha 32, all linear layers | 1 | 1,837 | Lower learning-rate edge; exact immutable config and request prepared, but not submitted while the global failure budget is exhausted. |
+| 3 | BF16 LoRA | `1e-5` | 8 | rank 64 / alpha 32, all linear layers | 1 | 1,837 | Lower learning-rate edge; exact immutable config and request prepared. |
 | 4 | full-weight SFT | `1e-6` | 8 | none | 1 | 1,837 | Lower learning-rate edge matched to priority 2. |
-| 5 | BF16 LoRA | `1e-4` | 8 | rank 64 / alpha 32, all linear layers | 1 | 1,837 | Upper learning-rate edge; exact immutable config and request prepared, but not submitted while the global failure budget is exhausted. Stop only for a declared non-finite or divergence rule, not a noisy loss point. |
+| 5 | BF16 LoRA | `1e-4` | 8 | rank 64 / alpha 32, all linear layers | 1 | 1,837 | Upper learning-rate edge; exact immutable config and request prepared. Stop only for a declared non-finite or divergence rule, not a noisy loss point. |
 | 6 | full-weight SFT | `3e-6` | 16 | none | 1 | 919 | Batch interaction at nearly equal token exposure. |
 | 7 | BF16 LoRA | `3e-5` | 8 | rank 32 / alpha 32, all linear layers | 1 | 1,837 | Capacity control, launched only after rank 64 proves the adapter path end to end. |
 | 8 | best development candidate | inherited | inherited | inherited | 2 | 2× one-epoch updates | Duration test; conditional on the frozen Fleet development metric, never on WebExploitBench. |
