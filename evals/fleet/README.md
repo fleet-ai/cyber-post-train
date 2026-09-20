@@ -43,7 +43,7 @@ The YAML fields are:
 |---|---|
 | `name` | Unique owner-specific experiment name |
 | `task_set` | Reviewed JSON/YAML file containing exact task/runtime tuples |
-| `models` | Alias → `repository`, immutable `revision`, Fleet `session_model` |
+| `models` | Alias → `repository`, immutable `revision`, Fleet `session_model`; `revision` is either an exact 40-character source commit or a `sha256:` checkpoint-payload manifest |
 | `routes` | Serving-block assignments and expected live model/server profiles |
 | `images` | `agent` and `proxy`: OCI digest references or exact local Docker image IDs |
 | `harness` | Explicit supported OpenCode version, tools, compaction and budgets |

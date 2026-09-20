@@ -127,6 +127,13 @@ def test_model_alias_accepts_version_dots(configuration, tmp_path):
     assert all(row["model_id"] == "qwen3.8-27b" for row in evaluation.plan_rows(plan))
 
 
+def test_model_revision_accepts_exact_checkpoint_payload_manifest(configuration, tmp_path):
+    revision = "sha256:" + "f" * 64
+    configuration["models"]["student"]["revision"] = revision
+    plan = evaluation.compile_eval(configuration, relative_to=tmp_path)
+    assert plan["models"]["student"]["revision"] == revision
+
+
 @pytest.mark.parametrize(
     "mutate",
     [

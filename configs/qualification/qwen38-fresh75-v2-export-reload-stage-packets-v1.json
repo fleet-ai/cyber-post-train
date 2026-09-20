@@ -33,7 +33,7 @@
     "destination_absence_then_atomic_create_once_zero_gpu_staging",
     "paused_route_registration_with_new_uid_and_live_base_candidate_parity"
   ],
-  "packet_set_sha256": "sha256:be1f062cc95357eff83e3ef47cd86ecb0542dbc09aa186a67080151bcdf050f6",
+  "packet_set_sha256": "sha256:da5330cb79bc1afca96dfb3ab57bea731ea317edf5434dbdba2c84fcb36f3401",
   "packets": [
     {
       "accepted_handoff": {
@@ -633,7 +633,7 @@
     "staging": "zero-GPU receipt-first stream copy with atomic no-replace destination"
   },
   "source_queue": {
-    "file_sha256": "sha256:d02471cb13e71b6a217e64792b1c963c618beef3536f24f65babb65b1090aeb6",
+    "file_sha256": "sha256:942a2a0e19df7d68b0066928b1c6bbeb5121d934a79825354015de272c6245f6",
     "path": "configs/evaluation/qwen38-fresh75-fleet-dev17-queue-v1.json"
   },
   "status": "no_submit_blocked_waiting_sfs_payload_seals",

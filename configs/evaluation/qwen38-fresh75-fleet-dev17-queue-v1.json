@@ -61,7 +61,7 @@
       "proxy": "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
     },
     "runtime_files": {
-      "evals/fleet/evaluate.py": "sha256:03dac1d8b5947d877bde4671522c9d45dff75e6a1c51d605c63b7f547032fcd6",
+      "evals/fleet/evaluate.py": "sha256:58800af21dbcf1698b5a53f0e0802c09d2c39e43dfc8ad1f3c6e29b2d4212f1f",
       "evals/fleet/rollout_worker.py": "sha256:d8db03245561baade77a4bfdb8fcbd853145fbe2a365245eb9b8ca53b186df2b",
       "evals/fleet/rollout_postgres.py": "sha256:e11706b384dd9caaae7895a8bd95e3300772a737b5493c9dca55ed15191b5873",
       "evals/fleet/rollout_ledger.py": "sha256:633914e92d6a0fde6f7040f1fddf9a056c43ed9a41301f0baab1ae856397518c",

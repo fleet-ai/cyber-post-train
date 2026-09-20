@@ -16,7 +16,15 @@ external mutation was performed. External evidence came only from GETs.
 ## Frozen evaluation identity
 
 - Queue: `configs/evaluation/qwen38-fresh75-fleet-dev17-queue-v1.json`
-  (`sha256:d02471cb13e71b6a217e64792b1c963c618beef3536f24f65babb65b1090aeb6`).
+  (`sha256:942a2a0e19df7d68b0066928b1c6bbeb5121d934a79825354015de272c6245f6`).
+- Standalone packet protocol:
+  `configs/evaluation/qwen38-fresh75-fleet-dev17-protocol-v1.json`
+  (`sha256:f72c34e3e5bd5ca76959717e4091c4fb0f10fa3a2639e4dbd2eb10f2d9718469`;
+  self-digest
+  `sha256:5db333575ac97cac30c8ccaeab1983e63937f774dda90ed9eda3b81c245ec21e`).
+  The checkpoint packet generator reopens this file and every file it names,
+  then rejects any changed task tuple, split, route profile, image, OpenCode
+  treatment, sampling value, retry rule or evaluator byte.
 - Task set: 17 exact development-heldout task/environment/data tuples in
   `configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json`
   (`sha256:79c834e739246da29aca9513965ecfc7032f8df7744eb2245ce0303aba1b97c5`).
@@ -50,6 +58,14 @@ external mutation was performed. External evidence came only from GETs.
 The final-test split is prohibited. Each arm has a distinct campaign ID and
 single-use output root below
 `/mnt/sfs/jobs/q38-f75v2-fleet-dev17-p1-v1/`.
+
+The protocol is scientifically complete before any checkpoint qualifies. A
+qualified packet renders 34 matched sessions: 17 upstream-base sessions and 17
+candidate sessions. Candidate payload revision and staged path come only from
+the accepted checkpoint qualification. The candidate route UID and its live
+runtime readback remain absent until create-once route registration; they must
+be supplied by that exact registration receipt and fresh readback and are never
+invented in the checked-in packet.
 
 ## Checkpoint readiness
 

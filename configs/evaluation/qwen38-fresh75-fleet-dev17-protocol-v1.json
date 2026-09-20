@@ -1,0 +1,169 @@
+{
+  "schema": "qwen38_fresh75_fleet_dev17_protocol_v1",
+  "status": "frozen_no_launch",
+  "role": "development_heldout",
+  "fleet_account": {
+    "team_name": "fleet",
+    "team_id": "a1025f0b-ad67-49fc-a023-51800ab43e84"
+  },
+  "task_set": {
+    "path": "configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json",
+    "file_sha256": "sha256:79c834e739246da29aca9513965ecfc7032f8df7744eb2245ce0303aba1b97c5",
+    "schema": "cyber_eval_task_selection_v2",
+    "selection_sha256": "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
+    "task_count": 17
+  },
+  "split": {
+    "path": "configs/data/fleet-blackbox-current-study-split-20260914-v2.json",
+    "file_sha256": "sha256:28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb",
+    "object_sha256": "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
+    "development_selection_sha256": "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
+    "final_test_selection_sha256": "sha256:9623149c4a021bc13ed2cf94ca26e107b30c18816cf3c02d76b5020cab5066f4",
+    "final_test_task_count": 8,
+    "final_test_access": "prohibited_until_one_checkpoint_is_selected_from_development_results"
+  },
+  "accepted_get_census": {
+    "path": "docs/evidence/qwen38-fresh75-fleet-dev17-get-census-20260920.json",
+    "file_sha256": "sha256:0f083c9dace34382f85aa68f7daecaf417be6eb895355b3b6aee948793fb2565",
+    "schema": "qwen38_fresh75_fleet_dev17_get_census_v1",
+    "task_binding_count": 17,
+    "external_methods_used": [
+      "GET"
+    ],
+    "external_mutation_performed": false
+  },
+  "base_model": {
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "session_model": "qwen/qwen3.8-27b",
+    "weight_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+    "tokenizer_manifest_sha256": "sha256:3938a9a8172f2738fed1be44efc11e2562059269d50d3721213f44802b53b4e1",
+    "chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "model_lock": {
+      "path": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+      "file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac"
+    }
+  },
+  "serving": {
+    "image": "lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+    "base_lock": {
+      "path": "evals/webexploitbench/serving/qwen38-27b-1d4bf0f2.lock.json",
+      "file_sha256": "sha256:17c75a53ddbf23d7e4272f95446d0c5128a070a3a0fde0d5f8791e97568d53dd",
+      "canonical_spec_sha256": "sha256:13d242a5014c5d6a3f2d25a17d0181a4c4668de72ef4fc93c362ad702cb9a8ee"
+    },
+    "base_route": {
+      "endpoint_origin": "https://inference.flt.build",
+      "served_id": "qwen3.8-27b",
+      "inference_model_uid": "d06c0531-7181-41ad-a3fd-cd8e3e774ab9",
+      "catalog": {
+        "engine": "sglang",
+        "precision": "bf16",
+        "tensor_parallel_size": 1
+      },
+      "model_info": {
+        "model_path": "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "model_type": "qwen3_5",
+        "architectures": [
+          "Qwen3_5ForConditionalGeneration"
+        ]
+      },
+      "server_info": {
+        "model_path": "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "context_length": 262144,
+        "tp_size": 1,
+        "dp_size": 8,
+        "load_balance_method": "total_tokens",
+        "quantization": null,
+        "kv_cache_dtype": "fp8_e4m3",
+        "reasoning_parser": "qwen3",
+        "tool_call_parser": "qwen3_coder"
+      }
+    },
+    "candidate_route_contract": {
+      "endpoint_origin": "https://inference.flt.build",
+      "served_id_source": "checkpoint_packet.serving.model_id",
+      "session_model_template": "self-hosted/{served_id}",
+      "model_revision_source": "accepted_checkpoint_qualification.export.payload_manifest_sha256",
+      "staged_model_path_source": "accepted_checkpoint_qualification.staging.model_path",
+      "scratch_model_path_template": "/scratch/models/{served_id}",
+      "inference_model_uid_source": "accepted_create_once_route_registration_receipt",
+      "catalog": {
+        "engine": "sglang",
+        "precision": "bf16",
+        "tensor_parallel_size": 1
+      },
+      "model_info": {
+        "model_type": "qwen3_5",
+        "architectures": [
+          "Qwen3_5ForConditionalGeneration"
+        ]
+      },
+      "server_info": {
+        "context_length": 262144,
+        "tp_size": 1,
+        "dp_size": 8,
+        "load_balance_method": "total_tokens",
+        "quantization": null,
+        "kv_cache_dtype": "fp8_e4m3",
+        "reasoning_parser": "qwen3",
+        "tool_call_parser": "qwen3_coder"
+      },
+      "required_live_parity": [
+        "repository_and_revision",
+        "tokenizer_and_chat_template",
+        "serving_image",
+        "catalog_profile",
+        "model_info",
+        "server_info",
+        "structured_bash_and_submit_report_tool_calls"
+      ]
+    }
+  },
+  "treatment": {
+    "harness": "opencode",
+    "harness_version": "1.18.27",
+    "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "provider_adapter": "@ai-sdk/openai-compatible",
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v2",
+    "context_window_size": 262144,
+    "compaction_headroom_tokens": 20000,
+    "max_output_tokens": 32768,
+    "max_model_requests": 600,
+    "timeout_seconds": 28800,
+    "tools": [
+      "bash",
+      "submit_report"
+    ],
+    "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+  },
+  "images": {
+    "agent": "sha256:45424cc2e304e114b26aca916486df6e80fdc57c4f5adddf2bb144d4773d510f",
+    "proxy": "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+  },
+  "sampling": {
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "seed": 42
+  },
+  "pass_k": 1,
+  "concurrency": 1,
+  "training_data_eligible": false,
+  "retry_policy": {
+    "automatic_retry": false,
+    "valid_scored_outcome": "never_retry",
+    "ambiguous_or_infrastructure_invalid": "hold_for_review",
+    "successor": "new_execution_identity_and_unused_output_root_after_review"
+  },
+  "runtime_files": {
+    "evals/webexploitbench/tensorlake/fresh75_v2_eval_queue.py": "sha256:60f452b02eb92093bddb2ea3425298978f2e7710c9bafa3dbf7d24c00e8cda1c",
+    "evals/fleet/evaluate.py": "sha256:58800af21dbcf1698b5a53f0e0802c09d2c39e43dfc8ad1f3c6e29b2d4212f1f",
+    "evals/fleet/rollout_worker.py": "sha256:d8db03245561baade77a4bfdb8fcbd853145fbe2a365245eb9b8ca53b186df2b",
+    "evals/fleet/rollout_postgres.py": "sha256:e11706b384dd9caaae7895a8bd95e3300772a737b5493c9dca55ed15191b5873",
+    "evals/fleet/rollout_ledger.py": "sha256:633914e92d6a0fde6f7040f1fddf9a056c43ed9a41301f0baab1ae856397518c",
+    "evals/fleet/opencode_self_hosted.py": "sha256:428e9f2e4d4c758c4f682cbed314cf96b866d051b34fa0eea8757a3aad97aa1d",
+    "evals/fleet/fixed_proxy.py": "sha256:a65270cb021cbc8e2fe9b00d901b4b70e9ddc98dd58d93e9f695b1768dfb984d",
+    "evals/fleet/exact_pass4_crypto.py": "sha256:477b0531fbc34103ed91ff03668616a56f05687ede8c2c9ebb4e9dd2106337d5",
+    "evals/fleet/Dockerfile.opencode": "sha256:2a44ad204aebbabda967d7a1cb419f428ed25b67d56554facd0f1cdc303c78eb"
+  },
+  "protocol_sha256": "sha256:5db333575ac97cac30c8ccaeab1983e63937f774dda90ed9eda3b81c245ec21e"
+}

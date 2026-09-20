@@ -10,11 +10,11 @@ external benchmark content or outcomes, make no API or cluster call, and perform
 SFS write.
 
 The packet-set digest is
-`sha256:be1f062cc95357eff83e3ef47cd86ecb0542dbc09aa186a67080151bcdf050f6`;
+`sha256:da5330cb79bc1afca96dfb3ab57bea731ea317edf5434dbdba2c84fcb36f3401`;
 the JSON file digest is
-`sha256:778cd8260b74aa077c786d36271409a0453de76b845006cf6d1f629a1c5d39c6`.
+`sha256:05c744a687fedd4d447ca60641480f1c942b3ec7c8d651569483ddbd14bfde00`.
 It binds the frozen heldout queue at
-`sha256:d02471cb13e71b6a217e64792b1c963c618beef3536f24f65babb65b1090aeb6`.
+`sha256:942a2a0e19df7d68b0066928b1c6bbeb5121d934a79825354015de272c6245f6`.
 
 This is preparation, not execution. The explicit `10/10` failure stop remains in force,
 so every packet is `launchable: false`, `submitted: false`, and

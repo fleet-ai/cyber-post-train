@@ -109,23 +109,43 @@ checkpoint receipt and its file SHA-256 must also be exactly the receipt
 already recorded in the queue's terminal training observation. A copied or
 freshly invented acceptance summary cannot open the paused-route gate.
 
-## Fleet development evaluation is frozen but not runnable yet
+## Fleet development evaluation protocol is complete
 
-The queue freezes the 17-task development selection by file and object digest,
-and every selected row names an exact `task_version_id`. That is enough to
-prevent the task selection from drifting, but it is not a complete Fleet
-evaluation plan. Before an arm can run, a separate reviewed task-set file must
-bind, for every selected task version, the exact `env_key`, `env_version`,
-`environment_version_id`, `data_key`, and `data_version`. The concrete eval
-plan must also bind the accepted candidate route UID and live catalog/model/
-server profiles, immutable agent and proxy image digests, OpenCode version and
-tool schema, sampling, budgets, timeout, retry policy, and pass count. Those
-values must come from read-only authoritative lookups; this queue intentionally
-does not guess them.
+The standalone protocol in
+[`qwen38-fresh75-fleet-dev17-protocol-v1.json`](../../configs/evaluation/qwen38-fresh75-fleet-dev17-protocol-v1.json)
+seals the complete checkpoint-independent Fleet evaluation identity. Its file
+SHA-256 is
+`f72c34e3e5bd5ca76959717e4091c4fb0f10fa3a2639e4dbd2eb10f2d9718469`
+and its self-digest is
+`sha256:5db333575ac97cac30c8ccaeab1983e63937f774dda90ed9eda3b81c245ec21e`.
+It binds all 17 exact task, environment and data version tuples and the accepted
+GET-only verifier census. It also binds the exact upstream-base model and live
+route identity, BF16 SGLang image and serving profile, OpenCode 1.18.27
+treatment, ordered tools, immutable agent and proxy images, sampling, budgets,
+pass count, retry policy, and evaluator-file digests.
 
-The eight-task final-test selection remains closed while those development
-plans are built. It may be rendered only once, after development evidence has
-selected one checkpoint.
+The packet validator reopens and hashes every referenced file. It rejects an
+incomplete task tuple, a task outside the development split, a changed runtime
+file, an unpinned image, a placeholder serving source, any treatment or sampling
+change, and any attempt to open the final-test set. A qualified packet compiles
+an exact 34-session plan: 17 upstream-base sessions and 17 candidate sessions
+under the same treatment.
+
+Only checkpoint-specific facts remain unavailable before qualification:
+
+1. the candidate payload-manifest digest used as its exact model revision;
+2. its create-once staged model path;
+3. the new serving-route UID returned by create-once registration; and
+4. a fresh readback proving that route still matches the sealed image, model,
+   server, tokenizer, chat-template and tool-call contract.
+
+The first two come from the accepted export/staging qualification chain. The
+last two cannot be guessed or checked in before the route exists, so the packet
+names their exact receipt/readback sources and fails closed until they are
+present. They are operational identity checks, not open scientific choices.
+
+The eight-task final-test selection remains closed. It may be rendered only
+once, after development evidence has selected one checkpoint.
 
 ## Resource and duplicate safety
 
