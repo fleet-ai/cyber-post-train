@@ -59,13 +59,13 @@ def test_probe_fleetjob_is_one_gpu_node_with_cpu_head_and_explicit_user(plan) ->
     manifest = probe.fleetjob_manifest(plan)
     spec = manifest["spec"]
     assert manifest["metadata"] == {
-        "name": "chris-q38-skyrl-probe-v1",
+        "name": "chris-q38-skyrl-probe-v2",
         "namespace": "fleet-train-jobs",
     }
     assert spec["fleet"] == {
         "projectName": "fleetjob-dev",
         "auth": {"secretRef": {"name": "fleet-api", "key": "FLEET_API_KEY"}},
-        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v1",
+        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v2",
         "models": [
             {
                 "path": "Qwen/Qwen3.8-27B",
@@ -76,7 +76,17 @@ def test_probe_fleetjob_is_one_gpu_node_with_cpu_head_and_explicit_user(plan) ->
         ],
         "wandb": {"mode": "disabled"},
     }
-    assert spec["kueue"] == {"queueName": "training-lq", "queuePriorityClass": "q1"}
+    assert spec["kueue"] == {
+        "queueName": "training-lq",
+        "queuePriorityClass": "q1",
+        "head": {"queuePriorityClass": "q1"},
+        "workerGroups": {
+            "gpu": {
+                "queuePriorityClass": "q1",
+                "topology": {"mode": "unconstrained"},
+            }
+        },
+    }
     cluster = spec["job"]["spec"]["rayClusterSpec"]
     assert spec["job"]["spec"]["activeDeadlineSeconds"] == 1800
     assert spec["job"]["spec"]["backoffLimit"] == 0

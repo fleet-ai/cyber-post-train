@@ -1,29 +1,29 @@
 {
   "schema": "cyber_skyrl_topology_probe_prelaunch_audit_v1",
-  "status": "cpu_gate_passed_not_submitted",
+  "status": "blocked_not_submitted",
   "classification": "operational_gate",
-  "observed_at": "2026-09-20T11:37:09Z",
+  "observed_at": "2026-09-20T11:43:00Z",
   "identity": {
-    "name": "chris-q38-skyrl-probe-v1",
+    "name": "chris-q38-skyrl-probe-v2",
     "cluster": "dev",
     "kubernetes_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
     "namespace": "fleet-train-jobs",
     "project": "fleetjob-dev",
-    "output_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v1/models/run",
+    "output_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v2/models/run",
     "priority_class": "c1",
     "queue_priority_class": "q1"
   },
   "inputs": {
     "config": "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json",
-    "config_self_sha256": "sha256:d79b5c5960a14daaad432a2354bd4d4f4e806e992710f83301e674f39e7b47c4",
-    "plan_sha256": "fd2d9ec7ca2e13bb51f42e067db979d129bebe1d2b07c73ecc0c934c282d0a12",
-    "request_sha256": "b477d8ecc97440d9de6e055c087d9cf94f2219ea9c346077e71d133bd7ec3a01",
-    "fleetjob_manifest_sha256": "961d5b843abaea9ba3e364b140b05121f0e4076a6bfa7ca803d4c509afd9071d",
-    "fleetjob_packet_self_sha256": "sha256:0826bdab15630d10683d7cb381360d6600bf2da669d5fa9ededf8648ede1d141",
-    "preflight_name": "chris-q38-skyrl-probe-preflight-v11",
-    "preflight_manifest_sha256": "81134de73532a72cb72d412b4839d0aeb9dc0727b2937823cb25a880357bcf8e",
-    "preflight_packet_self_sha256": "sha256:2caea03d0e6d473862acc14a98d3bb0b23ca6f52c8374841c7fc603a53150f06",
-    "runtime_sha256": "b3bb0efc25b0b93ea404f860bec502453bbce626849dacb6b1ee84c6ec4e639f",
+    "config_self_sha256": "sha256:4bfc2a6d57cedf16b7114218541cb2d321a705e40f36bb3ee6c98cc2ad71c6d2",
+    "plan_sha256": "720c433285dda2d9959060ce4280cf68d1c33bb27dc838e22181780ad734e8e6",
+    "request_sha256": "0bd231e9ed34ffb7b38e1d9fa9fe1a0d7b8ef25f073cc0669f0db12b9251ff4a",
+    "fleetjob_manifest_sha256": "3220d51d37a51420d2ae27a8ff5bd76dfc19c2849b6a1b089be55f309d484966",
+    "fleetjob_packet_self_sha256": "sha256:12311b4d403945659b213a8b7ceac4b1e1d1a0d453546b005eb1c4118ab5a887",
+    "preflight_name": "chris-q38-skyrl-probe-preflight-v12",
+    "preflight_manifest_sha256": "659fbe3a04dd1d6559b443869903919bf98fdc918c74795965077fbab1bfe248",
+    "preflight_packet_self_sha256": "sha256:bc0479396204878426e3342cfbb5ca3b107faffe27eb4daf6d767042492672d7",
+    "runtime_sha256": "bad51d15ac0b08b88995880f84d8dd5e3ad47a8f09f8734406a2724f7c863d69",
     "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
     "model": {
       "repository": "Qwen/Qwen3.8-27B",
@@ -31,13 +31,13 @@
       "artifact_path": "Qwen/Qwen3.8-27B",
       "preflight_pvc_subpath": "models/qwen3.8-27b-1d4bf0f2",
       "weight_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
-      "mount_path": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v1/models/base/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+      "mount_path": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v2/models/base/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
     }
   },
   "server_preview": {
     "status": "passed",
-    "self_sha256": "sha256:e6ac614d79019441bc36b616d0a97dd9a8e40f24a2f9f6aadf47064334c3bbf7",
-    "server_render_sha256": "2299a6d6801020f7c1c4c61e616ac106566f9e2629b11a27315626fcf478f04c",
+    "self_sha256": "sha256:fe115f374d7278ebc0af9d8975cf55e5826958c2008ba82a8cfc90fe153ef8f1",
+    "server_render_sha256": "81a21c386832f205e1208742d75ef16f287df7e506d56ae6962bc2639dff66df",
     "controller_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/training-api@sha256:e9787177242159ed664d120d3e7496e7695b4a536aa14962b381e0d31ce5d9ac",
     "create_dry_run_only": true,
     "runtime_user": {
@@ -49,8 +49,8 @@
   },
   "cpu_preflight_server_preview": {
     "status": "passed",
-    "self_sha256": "sha256:d596030f137b33510b78de67fef2d62c83575d6c9db81aa36dcc12af9ed6eb41",
-    "server_render_sha256": "33ebb4263d039a15d93e3ec0f65bcd18183a968c3042ec9fed1739f3c278d893",
+    "self_sha256": "sha256:8b1690191a8662a2a7b5a4d6848e84653638a1c2c7301f5348e6322ba0255ec5",
+    "server_render_sha256": "832bd42ee7895913db83dc643d95aa4b2b81ce034eef8b0ed54a4943e631e665",
     "create_dry_run_only": true,
     "runtime_user": {
       "uid": 1000,
@@ -217,10 +217,30 @@
     "create_once_output_absent": true,
     "released": true
   },
+  "retired_gpu_probe_v1": {
+    "name": "chris-q38-skyrl-probe-v1",
+    "status": "deleted_while_queued_with_sanitized_topology_rejection",
+    "observer_result": "docs/evidence/qwen38-study/2026-09-20-skyrl-topology-probe-v1-result.json",
+    "observer_result_sha256": "sha256:0ec81cd4fa9ae9317efe899fb21a8eeb4d8ba803d5ff0189d25bec838739230a",
+    "fleetjob_uid": "23cb80f5-dcff-41fa-ae33-6371e4282862",
+    "jobs_api_run_id": "b96ca848-9559-4518-ae57-4ef1e69b7946",
+    "rayjob_uid": "beb0745a-4953-4c88-ae33-0671c0e42392",
+    "workload_uid": "4151b6fb-0f51-445c-82cf-e4d6d403d436",
+    "raycluster_uid": "",
+    "pod_uids": [],
+    "restarts": 0,
+    "peak_gpus": 0,
+    "released": true,
+    "reason": "the controller defaulted the GPU worker to topology-aware preferred mode and Kueue tried the CPU-only resource flavor, which cannot satisfy topology-aware placement",
+    "successor_change": "declare q1 explicitly for the head and gpu worker group, and set the single eight-GPU worker topology mode to unconstrained"
+  },
   "contract": {
     "cpu_head": true,
     "gpu_workers": 1,
     "gpus_per_worker": 8,
+    "head_queue_priority": "q1",
+    "gpu_worker_queue_priority": "q1",
+    "gpu_worker_topology_mode": "unconstrained",
     "process_seconds": 1500,
     "rayjob_active_deadline_seconds": 1800,
     "release_deletion_deadline_seconds": 1800,
@@ -245,15 +265,16 @@
     "legacy_run_name_absent_in_prod": true,
     "exact_image_cached_locally": false,
     "local_ecr_pull_authorized": false,
-    "cpu_preflight_passed": true,
+    "cpu_preflight_passed": false,
     "external_release_observer_implemented_and_tested": true,
     "external_release_observer_bound": false,
     "external_objects_created_or_changed": false
   },
   "blockers": [
+    "cpu_preflight_not_yet_recorded",
     "external_release_observer_not_yet_bound"
   ],
   "safe_to_create": false,
-  "next_action": "Bind the independent 30-minute UID-aware GPU cleanup observer, seal the separate evidence authorization, repeat exact duplicate and server-preview checks, then create the one development topology probe.",
-  "sha256": "sha256:44c2b7812423e7fea8ab83388eab0cdcbedc5b811ef2cf3fd7780371b0f8e7e9"
+  "next_action": "Run the V12 zero-GPU preflight for the fresh V2 identity, bind the independent 30-minute UID-aware GPU cleanup observer, seal the separate evidence authorization, then create the corrected development topology probe.",
+  "sha256": "sha256:bcd149a6a449dec0bca483b5ea622f3e91bb98d44d6dcaaba81a37f9150eafa7"
 }

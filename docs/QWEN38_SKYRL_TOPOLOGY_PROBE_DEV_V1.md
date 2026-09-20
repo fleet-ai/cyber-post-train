@@ -12,13 +12,16 @@ until its own reward, optimizer, checkpoint and cleanup gates pass.
 
 ## Frozen shape
 
-- FleetJob name: `chris-q38-skyrl-probe-v1`
+- FleetJob name: `chris-q38-skyrl-probe-v2`
 - development context: `nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb`
 - namespace/project: `fleet-train-jobs` / `fleetjob-dev`
 - priority: Kubernetes `c1`, queue `q1`
 - image: `fleet/skyrl-train` at the exact digest in the config
 - topology: one CPU-only Ray head plus one worker Pod requesting all eight GPUs on
   one node
+- Kueue topology: the CPU head is explicitly q1; the `gpu` worker group is q1
+  with unconstrained topology. One Pod still requests all eight GPUs, so it binds
+  one whole B300 node without mixing CPU-only and topology-aware resource flavors
 - head resources: 4 CPU / 16 GiB requested, 8 CPU / 32 GiB limited
 - worker resources: 64 CPU / 512 GiB requested, 64 CPU / 768 GiB limited
 - runtime identity on both Pods: UID 1000, GID 100
@@ -113,7 +116,7 @@ uv run --locked python -m training.dev_cleanup_observer \
   --context nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb \
   --namespace fleet-train-jobs \
   --kind job \
-  --name chris-q38-skyrl-probe-preflight-v11 \
+  --name chris-q38-skyrl-probe-preflight-v12 \
   --maximum-seconds 1200 \
   --expected-gpus 0 \
   --plan-sha256 sha256:<exact-plan-digest> \
@@ -184,7 +187,7 @@ The sanitized observation supplied to `validate_release` must contain exactly:
 {
   "kubernetes_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
   "namespace": "fleet-train-jobs",
-  "fleetjob_name": "chris-q38-skyrl-probe-v1",
+  "fleetjob_name": "chris-q38-skyrl-probe-v2",
   "job_id": "<Fleet job UUID>",
   "fleetjob_uid": "<FleetJob UID>",
   "rayjob_uid": "<RayJob UID>",
