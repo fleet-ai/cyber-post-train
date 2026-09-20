@@ -13,10 +13,12 @@ import pytest
 import yaml
 
 from training import model_stage as stage
+from training import model_stage_current_base as current_stage
 
 ROOT = Path(__file__).resolve().parents[1]
 FAILED_V1 = ROOT / "configs/qualification/qwen38-fresh75-step230-inference-stage-v1.json"
 PRODUCTION = ROOT / "configs/qualification/qwen38-fresh75-step230-inference-stage-v2.json"
+SELF_SFT = ROOT / "configs/qualification/qwen38-self-sft-step44-inference-stage-v1.json"
 ACCEPTED_V2 = (
     ROOT / "docs/evidence/qwen38-fresh75-step230-inference-stage-v2-accepted-20260915.json"
 )
@@ -107,6 +109,72 @@ def test_production_plan_is_self_digesting_and_exact_registration_clone() -> Non
     assert desired["spec"]["scaling"]["minReplicas"] == 0
     assert desired["spec"]["placement"]["priorityClassName"] == "c1"
     assert desired["spec"]["model"]["revision"] == plan["source"]["payload"]["manifest_sha256"]
+
+
+def test_self_sft_plan_clones_current_base_runtime_and_starts_paused() -> None:
+    plan = current_stage.read_plan(SELF_SFT)
+    source = plan["registration_source"]
+    desired = plan["desired_registration"]
+    source_spec = copy.deepcopy(source["spec"])
+    desired_spec = desired["spec"]
+
+    assert source["id"] == "qwen3.8-27b"
+    assert source["spec_sha256"] == stage.digest_json(source_spec)
+    assert plan["execution"]["runtime_source_sha256"] == stage._digest_bytes(SOURCE.read_bytes())
+    assert plan["execution"]["runtime_wrapper_sha256"] == stage._digest_bytes(
+        Path(current_stage.__file__).read_bytes()
+    )
+    assert desired["id"] == plan["destination"]["model_id"]
+    assert desired_spec["desiredState"] == "paused"
+    assert desired_spec["scaling"] == {"minReplicas": 0}
+    assert desired_spec["placement"]["priorityClassName"] == "c1"
+    assert desired_spec["model"]["dataParallelSize"] == 8
+    assert desired_spec["model"]["tensorParallelSize"] == 1
+    assert desired_spec["runtime"]["image"] == source_spec["runtime"]["image"]
+    assert desired_spec["runtime"]["command"] == source_spec["runtime"]["command"]
+    assert "--dp-size" in desired_spec["runtime"]["args"]
+    assert desired_spec["runtime"]["args"][
+        desired_spec["runtime"]["args"].index("--dp-size") + 1
+    ] == "8"
+    assert desired_spec["runtime"]["args"][
+        desired_spec["runtime"]["args"].index("--context-length") + 1
+    ] == "262144"
+    assert desired_spec["runtime"]["args"][
+        desired_spec["runtime"]["args"].index("--kv-cache-dtype") + 1
+    ] == "fp8_e4m3"
+    assert desired_spec["runtime"]["args"][
+        desired_spec["runtime"]["args"].index("--reasoning-parser") + 1
+    ] == "qwen3"
+    assert desired_spec["runtime"]["args"][
+        desired_spec["runtime"]["args"].index("--tool-call-parser") + 1
+    ] == "qwen3_coder"
+
+
+def test_self_sft_registration_rejects_current_base_runtime_drift() -> None:
+    plan = copy.deepcopy(json.loads(SELF_SFT.read_text()))
+    plan["desired_registration"]["spec"]["runtime"]["args"].extend(
+        ["--unreviewed-runtime-option", "1"]
+    )
+    _rehash_plan(plan)
+    with pytest.raises(ValueError, match="outside the reviewed clone set"):
+        current_stage.validate_plan(plan)
+
+
+def test_self_sft_renderer_binds_both_runtime_sources() -> None:
+    plan = current_stage.read_plan(SELF_SFT)
+    wrapper = Path(current_stage.__file__)
+    rendered = current_stage.render_manifest(plan, SOURCE, wrapper, SELF_SFT)
+    config_map, pod = list(yaml.safe_load_all(rendered))
+    assert config_map["data"]["model_stage.py"] == SOURCE.read_text()
+    assert config_map["data"]["model_stage_current_base.py"] == wrapper.read_text()
+    container = pod["spec"]["containers"][0]
+    assert container["command"] == ["python3", "/bundle/model_stage_current_base.py"]
+    assert {
+        "name": "bundle",
+        "mountPath": "/bundle/model_stage_current_base.py",
+        "subPath": "model_stage_current_base.py",
+        "readOnly": True,
+    } in container["volumeMounts"]
 
 
 def test_production_plan_is_exact_successor_of_preserved_failed_v1() -> None:
