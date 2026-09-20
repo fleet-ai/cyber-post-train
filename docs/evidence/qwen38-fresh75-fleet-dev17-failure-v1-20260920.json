@@ -1,0 +1,26 @@
+{
+  "schema": "qwen38_fresh75_fleet_dev17_failure_v1",
+  "observed_at": "2026-09-20T23:29:51Z",
+  "execution": {
+    "job_name": "chris-q38-f75-dev17-p1-v1",
+    "job_uid": "338c0625-98b3-4682-bda4-92223c67389c",
+    "pod_name": "chris-q38-f75-dev17-p1-v1-hmpjx",
+    "pod_uid": "e5ac864f-8954-4402-8bfc-d5194a0edbdd",
+    "started_at": "2026-09-20T23:19:50Z",
+    "finished_at": "2026-09-20T23:20:30Z",
+    "exit_code": 1,
+    "restart_count": 0,
+    "gpu_count": 0,
+    "failure_alert_annotation": "off"
+  },
+  "classification": "infrastructure_invalid_before_session_initialization",
+  "sanitized_failure": "The local-image preflight treated an exact OCI index digest as if Docker had to report that parent digest as the selected linux/amd64 child's local image identity.",
+  "scientific_effect": {
+    "session_or_model_call_started": false,
+    "valid_sessions": 0,
+    "capability_result": false,
+    "final_test_access": "sealed"
+  },
+  "deterministic_repair": "Keep exact local content-addressed image IDs byte-equal. For an exact @sha256 OCI index, require a successful pull and inspect through that exact immutable reference, then require linux/amd64; Docker may report the selected child image ID rather than echoing the parent index digest.",
+  "successor_policy": "Use a new create-once output root and dedicated database. Do not replay or reinterpret this failed execution."
+}

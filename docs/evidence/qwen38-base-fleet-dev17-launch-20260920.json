@@ -1,0 +1,74 @@
+{
+  "schema": "qwen38_base_fleet_dev17_launch_v1",
+  "observed_at": "2026-09-20T23:40:12Z",
+  "purpose": "Freeze the exact held-out Fleet development control while Fresh75 is replaced with a base-runtime-matched serving route.",
+  "science": {
+    "config_path": "configs/evaluation/qwen38-base-fleet-dev17-opencode-pass1-v1.json",
+    "config_file_sha256": "sha256:d091d086802098fc2e0b7681eb26986f81bea3140bdf080ee2f802cf05c6677d",
+    "evaluation_plan_sha256": "sha256:c5a95bef1923b117a25b9098f37a4675ccc9c00979a15e04e404e33e479aec56",
+    "cell_ledger_plan_sha256": "sha256:dfa968993a60c5fe4898cdaf4d7ef42a5d2807026518879747cf9b2abb7010aa",
+    "task_set_file_sha256": "sha256:79c834e739246da29aca9513965ecfc7032f8df7744eb2245ce0303aba1b97c5",
+    "split_file_sha256": "sha256:28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb",
+    "selection_sha256": "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
+    "role": "development_heldout_base_control",
+    "final_test_access": "sealed",
+    "task_versions": 17,
+    "models": 1,
+    "total_sessions": 17,
+    "pass_k": 1,
+    "automatic_retry": false,
+    "harness": "opencode",
+    "harness_version": "1.18.27",
+    "context_window_size": 262144,
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v2",
+    "sampling": {"temperature": 0.6, "top_p": 0.95, "seed": 42}
+  },
+  "base_route": {
+    "served_id": "qwen3.8-27b",
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "session_model": "qwen/qwen3.8-27b",
+    "serving_profile": "bf16_tp1_dp8_262144"
+  },
+  "topology_qualification": {
+    "failed_diagnostic_job": "chris-q38-dev17-harness-diag-v1",
+    "successful_diagnostic_job": "chris-q38-dev17-harness-diag-v2",
+    "successful_diagnostic_job_uid": "939136f8-5bf5-476d-9c6e-ae13d670e6a6",
+    "successful_diagnostic_pod_uid": "11b92c6b-f93a-4239-8cf7-c9737daf30f0",
+    "result": "shared_bind_startup_passed"
+  },
+  "duplicate_preflight": {
+    "pod_name": "chris-q38-base-dev17-preflight-v1",
+    "pod_uid": "82b112c3-1fcf-4d74-8999-bb138fc1dbd6",
+    "output_root_absent": true,
+    "dedicated_database_absent": true
+  },
+  "execution": {
+    "job_name": "chris-q38-base-dev17-p1-v1",
+    "job_uid": "c37c4dff-e5fc-4132-8a44-8e93b66cd248",
+    "pod_name": "chris-q38-base-dev17-p1-v1-nkggs",
+    "pod_uid": "426032d5-5cb8-43db-b697-d967b9f529d1",
+    "created_at": "2026-09-20T23:37:30Z",
+    "namespace": "fleet-train-jobs",
+    "priority_class": "c1",
+    "failure_alert_annotation": "off",
+    "gpu_count": 0,
+    "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-base-p1-v1",
+    "dedicated_database": "q38_base_dev17_p1_v1",
+    "immutable_configmap_uid": "9567e7de-5087-4f8c-b9dd-0fdbcbdc8001",
+    "state_at_observation": "Running",
+    "restart_count": 0
+  },
+  "progress": {
+    "planned_sessions": 17,
+    "accepted_sessions": 0,
+    "first_real_model_calls_observed": true,
+    "evidence": "Eight live agent/model-proxy/MCP triplets had nonzero bidirectional network traffic after exact route/task/harness preflight."
+  },
+  "candidate_pairing": {
+    "artifact_id": "q38-fresh75-step230",
+    "status": "waiting_for_base_runtime_matched_serving_route",
+    "old_route_allowed": false
+  },
+  "result_status": "in_progress_no_accepted_result_yet"
+}

@@ -4,6 +4,8 @@ import hashlib
 import json
 from pathlib import Path
 
+import yaml
+
 from cyber_post_train.jobs import digest
 from evals.fleet import evaluate
 
@@ -11,6 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 SPLIT = ROOT / "configs/data/fleet-blackbox-current-study-split-20260914-v2.json"
 TASK_SET = ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json"
 CONFIG = ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-matched-pass1-v1.json"
+BASE_CONFIG = ROOT / "configs/evaluation/qwen38-base-fleet-dev17-opencode-pass1-v1.json"
+SUCCESSOR_JOB = ROOT / "evals/fleet/cluster/qwen38-base-dev17-opencode-pass1-v1-job.yaml"
+SUCCESSOR_SCRIPT = ROOT / "evals/fleet/scripts/run_qwen38_dev17_single_arm_v1.sh"
 
 
 def read(path: Path) -> dict:
@@ -42,10 +47,33 @@ def test_fresh75_matched_plan_covers_base_and_candidate_once():
     assert len(rows) == 34
     assert {row["model_id"] for row in rows} == {"qwen3.8-27b-base", "fresh75-step230"}
     assert all(sum(row["model_id"] == model for row in rows) == 17 for model in plan["models"])
-    assert plan["routes"]["base"]["task_versions"] == plan["routes"]["fresh75"][
-        "task_versions"
-    ]
+    assert plan["routes"]["base"]["task_versions"] == plan["routes"]["fresh75"]["task_versions"]
     assert plan["models"]["fresh75-step230"]["revision"] == (
         "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029"
     )
     assert plan["sha256"] == digest({key: value for key, value in plan.items() if key != "sha256"})
+
+
+def test_base_only_arm_preserves_exact_pairing_protocol():
+    paired = evaluate.compile_eval(read(CONFIG), relative_to=CONFIG.parent)
+    base = evaluate.compile_eval(read(BASE_CONFIG), relative_to=BASE_CONFIG.parent)
+    assert len(evaluate.plan_rows(base)) == 17
+    assert set(base["models"]) == {"qwen3.8-27b-base"}
+    assert base["models"]["qwen3.8-27b-base"] == paired["models"]["qwen3.8-27b-base"]
+    assert base["routes"]["base"] == paired["routes"]["base"]
+    for field in ("selection", "treatment", "images", "sampling", "pass_k"):
+        assert base[field] == paired[field]
+
+
+def test_successor_is_alert_silent_cpu_only_and_create_once():
+    job = yaml.safe_load(SUCCESSOR_JOB.read_text())
+    assert job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+    assert job["spec"]["backoffLimit"] == 0
+    assert job["spec"]["template"]["spec"]["priorityClassName"] == "c1"
+    assert all(
+        "nvidia.com/gpu" not in container.get("resources", {}).get("requests", {})
+        for container in job["spec"]["template"]["spec"]["containers"]
+    )
+    script = SUCCESSOR_SCRIPT.read_text()
+    assert '"${EVAL_OUTPUT:?EVAL_OUTPUT is required}"' in script
+    assert '"${EVAL_DATABASE:?EVAL_DATABASE is required}"' in script

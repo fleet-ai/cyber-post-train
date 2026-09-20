@@ -370,11 +370,13 @@ def check_images(plan: dict) -> None:
         if result.returncode:
             raise RuntimeError("immutable harness image is not staged on this worker")
         info = json.loads(result.stdout)
-        if (
-            image not in [info.get("Id"), *(info.get("RepoDigests") or [])]
-            or info.get("Os") != "linux"
-            or info.get("Architecture") != "amd64"
-        ):
+        # A content-addressed local image ID must match byte-for-byte.  An OCI
+        # index reference is different: Docker resolves the requested index to
+        # its linux/amd64 child, so the local image ID and RepoDigests need not
+        # echo the parent index digest.  Inspecting the exact @sha256 reference
+        # after the entrypoint's successful exact-digest pull is the binding.
+        local_id_matches = not image.startswith("sha256:") or info.get("Id") == image
+        if not local_id_matches or info.get("Os") != "linux" or info.get("Architecture") != "amd64":
             raise RuntimeError("harness image bytes or platform differ")
         if image == plan["images"]["agent"]:
             labels = info.get("Config", {}).get("Labels") or {}
@@ -385,7 +387,10 @@ def check_images(plan: dict) -> None:
                 raise RuntimeError("harness release identity differs")
     # Version alone never initializes OpenCode's data directories. Exercise the
     # same uid, HOME and private mount as a real agent, offline and before claims.
-    with tempfile.TemporaryDirectory(prefix="cpt-agent-preflight-") as home:
+    bind_root = os.environ.get("DOCKER_BIND_ROOT")
+    if bind_root is not None and not Path(bind_root).is_dir():
+        raise RuntimeError("shared Docker bind root is unavailable")
+    with tempfile.TemporaryDirectory(prefix="cpt-agent-preflight-", dir=bind_root) as home:
         if os.geteuid() == 0:
             os.chown(home, 1000, 1000)
         startup = subprocess.run(

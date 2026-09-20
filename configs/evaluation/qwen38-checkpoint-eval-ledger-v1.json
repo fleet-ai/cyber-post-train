@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "observed_at": "2026-09-20T23:41:00Z",
+  "observed_at": "2026-09-20T23:48:07Z",
   "purpose": "Create-once checkpoint and evaluation ledger for the Qwen3.8-27B Fleet cyber lift study. A row is not a capability result until its exact matched evaluation is accepted.",
   "serving_readiness_matrix": "configs/evaluation/qwen38-checkpoint-serving-readiness-v1.json",
   "comparison_contract": {
@@ -48,7 +48,7 @@
         "release_receipt_sha256": "sha256:302ac952ffbf6bb1fcce013899bb9299831971fc205ea2e8e9f7b4708f08f83c",
         "model_or_benchmark_attempts": 0
       },
-      "fleet_status": "base_dev17_v1_running_real_model_calls_zero_accepted_sessions",
+      "fleet_status": "base_dev17_v1_running_real_model_calls_one_authoritative_valid_session",
       "fleet_dev17_v1": {
         "job_name": "chris-q38-f75-dev17-p1-v1",
         "job_uid": "338c0625-98b3-4682-bda4-92223c67389c",
@@ -84,11 +84,11 @@
         "evaluation_plan_sha256": "sha256:c5a95bef1923b117a25b9098f37a4675ccc9c00979a15e04e404e33e479aec56",
         "cell_ledger_plan_sha256": "sha256:dfa968993a60c5fe4898cdaf4d7ef42a5d2807026518879747cf9b2abb7010aa",
         "planned_sessions": 17,
-        "accepted_sessions": 0,
+        "accepted_sessions": 1,
         "resource_status": "running_cpu_only_real_model_calls_in_progress",
         "motivation": "Lock the matched 17-task OpenCode base control while Fresh75 promotion is repaired, so the eventual comparison uses one frozen task split and protocol rather than waiting serially."
       },
-      "notes": "WEB V23 accepted the zero-model paired qualification and released its sandbox; no collection or scoring campaign exists yet. Fleet dev17 v1 failed setup-only before a database, session, or model call because the OCI index parent digest was compared with the resolved linux/amd64 child image ID. Fleet dev17 v2 also failed before a database, session, or model call because separate evaluator and Docker-daemon mount namespaces hid controller bind paths from nested containers; Docker created /home/node as root and pinned OpenCode then hit EACCES creating /home/node/.local. The base-only successor has begun real model calls but has no accepted session yet. None of these setup events is capability evidence."
+      "notes": "WEB V23 accepted the zero-model paired qualification and released its sandbox; no collection or scoring campaign exists yet. Fleet dev17 v1 failed setup-only before a database, session, or model call because the OCI index parent digest was compared with the resolved linux/amd64 child image ID. Fleet dev17 v2 also failed before a database, session, or model call because separate evaluator and Docker-daemon mount namespaces hid controller bind paths from nested containers; Docker created /home/node as root and pinned OpenCode then hit EACCES creating /home/node/.local. The base-only successor has one authoritative-valid session and additional real model calls in progress. None of the earlier setup failures is capability evidence."
     }
   ],
   "accepted_checkpoints": [
@@ -96,13 +96,13 @@
       "artifact_id": "q38-fresh75-step230",
       "checkpoint_path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/checkpoints/global_step_230",
       "export_path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/hf-export-step230-v1",
-      "serving_status": "live_target_available_not_live_parity_qualified",
+      "serving_status": "old_route_invalid_replacement_in_progress",
       "priority": 1,
       "motivation": "Evaluate the strongest existing broad full-SFT artifact and determine whether its supervised training transfers to held-out exploitation capability.",
       "web_status": "zero_model_qualification_v23_accepted_collection_not_started",
       "web_evidence": "One valid standalone 15-of-15 OpenCode pass-at-1 run exists, but it lacks a newly matched base arm. A wider pass-at-8 effort is incomplete at 104 of 120 sessions. V23 accepted the paired zero-model launch qualification and released its sandbox; it made zero benchmark, model, judge, or scoring attempts.",
-      "fleet_status": "dev17_v2_setup_failed_zero_valid_sessions_resources_released",
-      "next_action": "Run the live duplicate census, launch exactly one matched WEB task per arm from the accepted V23 qualification, then expand only after accepted collections. Diagnose the dev17 v2 setup failure from sanitized evidence, repair deterministically, and require the next create-once successor to produce one valid base and Fresh75 session before the remaining matched sessions proceed."
+      "fleet_status": "base_control_in_progress_candidate_waiting_for_base_runtime_matched_route",
+      "next_action": "After checkpoint promotion supplies an exact base-runtime-matched route, launch the candidate-only dev17 arm with the base control's exact task, OpenCode, sampling, budget, and no-retry protocol. Never score the old route."
     },
     {
       "artifact_id": "q38-teacher-dense-v5-step186",
