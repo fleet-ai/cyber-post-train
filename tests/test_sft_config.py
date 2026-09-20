@@ -138,18 +138,23 @@ def test_train_only_preflight_exercises_native_loader(monkeypatch, unexpected):
     calls = []
 
     class Trainer:
+        def load_dataset(self):
+            calls.append((self.plan, "train"))
+            return self._load_split("train")
+
         def load_eval_dataset(self):
-            calls.append(self.plan)
+            calls.append((self.plan, "eval"))
             return object() if unexpected else None
 
     monkeypatch.setattr(sft_runtime, "_make_trainer_class", lambda: Trainer)
     plan = {"datasets": {"train": {}}}
+    rows = [{"input_ids": [1, 2]}]
     if unexpected:
         with pytest.raises(ValueError, match="unexpectedly produced"):
-            sft._check_native_dataset_loader(plan)
+            sft._check_native_dataset_loader(plan, rows)
     else:
-        sft._check_native_dataset_loader(plan)
-    assert calls == [plan]
+        sft._check_native_dataset_loader(plan, rows)
+    assert calls == [(plan, "train"), (plan, "eval")]
 
 
 @pytest.mark.parametrize(

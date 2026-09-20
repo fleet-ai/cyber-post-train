@@ -2604,16 +2604,21 @@ def _make_trainer_class():
             )
 
         def load_dataset(self):
-            # The pinned SkyRL trainer requires every training source to expose
-            # ``sequence_lengths`` for its pre-dataloader statistics pass.  A
-            # bare list happens to satisfy torch's map-style loader contract,
-            # but it fails that newer native SFTDataset contract before the
-            # first forward pass.  Use SkyRL's own materialized wrapper so this
-            # custom immutable-parquet loader follows the same interface as its
-            # built-in tokenize-on-load path.
+            rows = self._load_split("train")
+            if not _is_qwen38_lora(self.plan):
+                # The exact FSDP image is SkyRL f5bc3b78.  Its native
+                # SFTTrainer consumes ``list[dict]`` directly and does not ship
+                # ``skyrl.train.dataset.sft_dataset``.  Importing the newer
+                # wrapper on this path fails before the first optimizer step.
+                return rows
+
+            # The separately pinned Qwen3.8 Megatron-LoRA image requires every
+            # training source to expose ``sequence_lengths`` for its
+            # pre-dataloader statistics pass.  Use that image's native wrapper
+            # only for the exact plan family whose source census proves it.
             from skyrl.train.dataset.sft_dataset import TextDataset
 
-            return TextDataset(self._load_split("train"))
+            return TextDataset(rows)
 
         def load_eval_dataset(self):
             if "dev" not in self.plan["datasets"]:

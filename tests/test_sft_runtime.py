@@ -482,7 +482,7 @@ def test_train_only_wrapper_returns_no_eval_dataset(monkeypatch):
 
 
 def test_custom_train_loader_uses_native_dataset_contract(monkeypatch):
-    """The pinned image reads ``sequence_lengths`` before building its loader."""
+    """The pinned Megatron-LoRA image reads lengths before building its loader."""
 
     class TextDataset:
         def __init__(self, rows):
@@ -509,6 +509,7 @@ def test_custom_train_loader_uses_native_dataset_contract(monkeypatch):
         monkeypatch.setitem(sys.modules, name, module)
     trainer_class = _make_trainer_class()
     trainer = trainer_class.__new__(trainer_class)
+    trainer.plan = {"lora": {}, "model": {"repo": "Qwen/Qwen3.8-27B"}}
     rows = [{"input_ids": [1, 2]}, {"input_ids": [3, 4, 5]}]
     trainer._load_split = lambda split: rows if split == "train" else None
 
@@ -516,6 +517,33 @@ def test_custom_train_loader_uses_native_dataset_contract(monkeypatch):
 
     assert dataset.rows is rows
     assert dataset.sequence_lengths == [2, 3]
+
+
+def test_full_weight_train_loader_uses_pinned_fsdp_list_contract(monkeypatch):
+    """The exact FSDP image has no newer ``sft_dataset`` module to import."""
+
+    modules = {
+        "skyrl.backends.skyrl_train.training_batch": {"pad_training_input_batch": None},
+        "skyrl.train.sft_trainer": {
+            "SFTTrainer": object,
+            "tokenize_chat_example": None,
+        },
+        "skyrl.train.utils.callbacks": {"TrainingCallback": object},
+        "skyrl.train.utils.tracking": {"Tracking": object},
+        "skyrl.train.utils.utils": {"Timer": object},
+    }
+    for name, values in modules.items():
+        module = ModuleType(name)
+        module.__dict__.update(values)
+        monkeypatch.setitem(sys.modules, name, module)
+    monkeypatch.delitem(sys.modules, "skyrl.train.dataset.sft_dataset", raising=False)
+    trainer_class = _make_trainer_class()
+    trainer = trainer_class.__new__(trainer_class)
+    trainer.plan = {"model": {"repo": "Qwen/Qwen3.8-27B"}}
+    rows = [{"input_ids": [1, 2]}, {"input_ids": [3, 4, 5]}]
+    trainer._load_split = lambda split: rows if split == "train" else None
+
+    assert trainer.load_dataset() is rows
 
 
 def test_recipe_keeps_tail_batch_and_disables_inline_export(tmp_path):

@@ -397,14 +397,28 @@ def job_request(plan: dict) -> dict:
     }
 
 
-def _check_native_dataset_loader(plan: dict) -> None:
-    if "dev" in plan["datasets"]:
-        return
+def _check_native_dataset_loader(plan: dict, train_rows: list[dict]) -> None:
+    """Exercise the exact staged loader against rows prepared by the CPU gate.
+
+    The full-weight FSDP and Qwen3.8 Megatron-LoRA images intentionally carry
+    different SkyRL dataset contracts.  Running the staged loader inside the
+    pinned image catches an import/interface mismatch before a GPU is claimed.
+    """
     from .sft_runtime import _make_trainer_class
 
     trainer_class = _make_trainer_class()
     trainer = trainer_class.__new__(trainer_class)
     trainer.plan = plan
+    trainer._load_split = lambda split: train_rows if split == "train" else None
+    dataset = trainer.load_dataset()
+    if len(dataset) != len(train_rows):
+        raise ValueError("native training loader changed the prepared row count")
+    if "lora" in plan and plan.get("model", {}).get("repo") == "Qwen/Qwen3.8-27B":
+        lengths = [int(value) for value in dataset.sequence_lengths]
+        if len(lengths) != len(train_rows) or any(value <= 0 for value in lengths):
+            raise ValueError("native Qwen3.8 LoRA dataset lengths are invalid")
+    elif dataset is not train_rows:
+        raise ValueError("native full-weight loader did not preserve the prepared rows")
     if trainer.load_eval_dataset() is not None:
         raise ValueError("task-outcome training unexpectedly produced an eval dataset")
 
@@ -431,7 +445,6 @@ def preflight(plan: dict) -> dict:
     validate_plan(plan)
     validate_runtime_sources(plan)
     build_runtime_configs(plan)
-    _check_native_dataset_loader(plan)
     AutoConfig.from_pretrained(
         plan["model"]["root"], local_files_only=True, trust_remote_code=False
     )
@@ -439,6 +452,7 @@ def preflight(plan: dict) -> dict:
         plan["model"]["root"], local_files_only=True, trust_remote_code=False
     )
     counts = {}
+    train_rows = None
     for split, spec in plan["datasets"].items():
         rows = prepare_rows(
             pq.read_table(spec["path"]).to_pylist(),
@@ -452,6 +466,11 @@ def preflight(plan: dict) -> dict:
             "tasks": len(spec["task_keys"]),
             "supervised_tokens": sum(sum(row["loss_mask"]) for row in rows),
         }
+        if split == "train":
+            train_rows = rows
+    if train_rows is None:
+        raise ValueError("CPU preflight did not materialize the training split")
+    _check_native_dataset_loader(plan, train_rows)
     return {
         "schema": "cyber_sft_cpu_preflight_v1",
         "request_sha256": digest(job_request(plan)),
