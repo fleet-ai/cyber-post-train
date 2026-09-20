@@ -24,6 +24,23 @@ from training import dev_cleanup_observer as cleanup
 from training import skyrl_reward_rayjob as direct
 
 
+def test_wandb_missing_run_contract_is_exact() -> None:
+    path = "thefleet/cyber-post-train/chris-q38-rlreward-prod4"
+
+    class Error(Exception):
+        pass
+
+    exact = Error()
+    exact.exc = ValueError(f"Could not find run <Run {path} (not found)>")
+    assert direct._wandb_run_absent(exact, path)
+    wrong_path = Error()
+    wrong_path.exc = ValueError("Could not find run <Run other/project/id (not found)>")
+    assert not direct._wandb_run_absent(wrong_path, path)
+    service_error = Error()
+    service_error.exc = ValueError("HTTP 500")
+    assert not direct._wandb_run_absent(service_error, path)
+
+
 @pytest.fixture(scope="module")
 def plan_request() -> tuple[dict, dict]:
     run = load(CANARY_RUN)

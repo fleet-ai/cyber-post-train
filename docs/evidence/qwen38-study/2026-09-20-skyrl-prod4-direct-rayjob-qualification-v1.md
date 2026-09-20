@@ -56,19 +56,19 @@ byte-for-byte with the intended object.
 
 | Cluster | Object | Proof SHA-256 |
 |---|---|---|
-| development | direct RayJob | `65ab1dfafa608c6ec135a6555f1bcff9133dcdad2e2f55fd81a2d109486ff81d` |
-| development | data stage | `bb6d2514e439ab4701de1d9a975a55604983f1c95c1a1d7e5c2eb7e3cb9f7194` |
-| development | CPU preflight | `339979dc34b7d2b7ca94be828a9fe7c9199bc844e712ec7f4ac2dce76076990d` |
-| production | direct RayJob | `f360235e960bd0925f096929a33c7c49552369d1419cd244d989642dca7c750a` |
-| production | data stage | `f21d3b05728d26d709c65f68d2fe61ad9f0beef04588a7d6efbac30b3833c8f4` |
-| production | CPU preflight | `ee1a2632534a85a7d8cc43864cf030b1f5e6db6c0406ee40bb89f9c5974254f9` |
+| development | direct RayJob | `8037ac77d42959ca5a02daafcfcdd2f03dcf37a939b8a53b3bef2223f2de6cae` |
+| development | data stage | `fcb49e2a31ab667f3cd78879e629229471370dedb99c788a90483e6fee27457a` |
+| development | CPU preflight | `b8c47c3705abb31197c93444da75cb7a611063d853c92ae45a224fef781d9ddc` |
+| production | direct RayJob | `ef377ebf7b7adfd8f73bdfcf1ab1d45a5ae6fbccad4432415c475acc98e59f7c` |
+| production | data stage | `39c1fec7fdca8a2f82ab943e6422dc032d9f9dd65f3c0b4feaf198676ca84c7c` |
+| production | CPU preflight | `95b528540cb24377298fae34205102912c7c593fecf6396c4ade7d22f090abc0` |
 
 No server dry-run allocated a Pod, node, CPU, or GPU.
 
 ## Regression results
 
 - `uvx ruff check` and `uvx ruff format --check`: passed.
-- focused direct-rail and cleanup-observer tests: **17 passed**.
+- focused direct-rail and cleanup-observer tests: **18 passed**.
 - the repository-wide suite completed with **15 pre-existing failures**. Those failures
   are in stale generated SkyRL queue/audit digests and older request builders that do
   not yet set the now-mandatory `failureAlerts: false`; none imports or exercises this
@@ -76,6 +76,16 @@ No server dry-run allocated a Pod, node, CPU, or GPU.
   launch-critical prod4 transport.
 
 ## Remaining live gates
+
+The first production CPU preflight (`chris-q38-prod4-preflight-v1`) exited before
+writing a receipt and released cleanly with zero GPUs and zero restarts. A bounded
+read-only reproduction identified the exact defect: W&B 0.21.1 represents an absent
+run as a `CommError` whose nested exception is the SDK's exact `ValueError` sentinel,
+not as a response carrying HTTP status 404. The original check therefore rejected the
+desired "run is absent" result. The create-once successor is
+`chris-q38-prod4-preflight-v2`; it accepts only that exact SDK sentinel or an explicit
+404 and still fails closed for authentication and service failures. No model, data,
+reward, optimizer, checkpoint, sampling, or GPU setting changed.
 
 Before the sole GPU create, the operator must:
 

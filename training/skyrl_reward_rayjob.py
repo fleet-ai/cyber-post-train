@@ -45,7 +45,7 @@ PROD_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 NAMESPACE = "fleet-train-jobs"
 RUN_NAME = "chris-q38-rlreward-prod4"
 STAGE_NAME = "chris-q38-prod4-data-v1"
-PREFLIGHT_NAME = "chris-q38-prod4-preflight-v1"
+PREFLIGHT_NAME = "chris-q38-prod4-preflight-v2"
 STAGE_RECEIPT = "/dev/termination-log"
 UPLOAD = Path("/tmp/autoresearch-upload.tar.gz")
 PACKET_SCHEMA = "cyber_skyrl_reward_direct_rayjob_packet_v1"
@@ -609,6 +609,14 @@ def preflight_job_manifest(plan: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def _wandb_run_absent(error: BaseException, path: str) -> bool:
+    response = getattr(error, "response", None)
+    nested = getattr(error, "exc", None)
+    return getattr(response, "status_code", None) == 404 or (
+        type(nested) is ValueError and str(nested) == f"Could not find run <Run {path} (not found)>"
+    )
+
+
 def preflight_runtime(plan: dict[str, Any]) -> dict[str, Any]:
     proof = skyrl_training.preflight(plan)
     if proof.get("status") != "passed" or proof.get("gpus") != 0:
@@ -626,8 +634,11 @@ def preflight_runtime(plan: dict[str, Any]) -> dict[str, Any]:
         try:
             wandb.Api(timeout=30).run(path)
         except CommError as exc:
-            response = getattr(exc, "response", None)
-            if getattr(response, "status_code", None) != 404:
+            # W&B 0.21.1 turns its own exact missing-run ValueError into a
+            # CommError with no response object.  Accept only that exact SDK
+            # sentinel (or an explicit HTTP 404); every service/auth error
+            # still fails closed.
+            if not _wandb_run_absent(exc, path):
                 raise
         else:
             raise FileExistsError("prod4 W&B run ID already exists")
