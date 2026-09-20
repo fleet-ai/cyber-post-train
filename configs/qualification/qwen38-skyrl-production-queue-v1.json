@@ -1,0 +1,85 @@
+{
+  "canary_prerequisite": {
+    "required": [
+      "eight_real_nontruncated_rollouts",
+      "one_authoritative_verifier_execution_id_per_rollout",
+      "reward_max_strictly_greater_than_reward_min",
+      "one_finite_nonzero_optimizer_update",
+      "reloadable_step_1_checkpoint",
+      "all_owned_gpu_resources_released"
+    ],
+    "run_name": "chris-q38-rlreward-prod4"
+  },
+  "fixed_controls": {
+    "context_tokens": 98304,
+    "counts": {
+      "dev": 20,
+      "test_untouched": 10,
+      "train": 59
+    },
+    "episode_seconds": 2400,
+    "gpus": 8,
+    "groups": 1,
+    "harness": "Fleet native SkyRL exact-version task-tool runtime",
+    "kl_coefficient": 0.001,
+    "max_tokens_per_turn": 4096,
+    "max_turns": 600,
+    "model": "Qwen/Qwen3.8-27B@1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "nodes": 1,
+    "ordered_tools": [
+      "bash",
+      "submit_report"
+    ],
+    "priority": "c1",
+    "response_tokens": 81920,
+    "reward": "authoritative Fleet partial cyber score",
+    "samples_per_prompt": 8,
+    "split_sha256": "sha256:1f0da5054df25a7d67476f591d8c9c8d42d44de65c0b9d4b542ba9e33b132472",
+    "task_set_sha256": "sha256:5de88eada94119fd21ac715bb1956a745376d775c13ce7d5584936e70b3a003a"
+  },
+  "local_design_basis": {
+    "file_sha256": "sha256:f2a9698db7e5f4e3b9a05913f4ac4eff56b9b114dbc384ba9f1a2b0e3c3c23d3",
+    "path": "docs/TRAINING_DECISION_SPACE.md"
+  },
+  "purpose": "No-submit queue behind the exact prod4 reward-acquisition canary.",
+  "research_basis": [
+    {
+      "inference": "Use 1e-6 as the anchor and bracket it geometrically at 3e-7 and 3e-6; retain one native update per fresh batch.",
+      "observed": "DeepSeekMath reports GRPO policy learning rate 1e-6, 64 samples per question, KL coefficient 0.04, and one update per exploration stage.",
+      "source": "https://arxiv.org/abs/2402.03300",
+      "transfer_warning": "The paper studies a 7B math model with 1,024-token answers, not a 27B tool-using cyber agent with long episodes."
+    },
+    {
+      "inference": "Screen the anchor and learning-rate boundaries for ten updates before spending fifty updates on the retained anchor treatment.",
+      "observed": "Hyperband allocates a small resource budget broadly and increases the budget only for candidates retained by successive halving.",
+      "source": "https://www.jmlr.org/papers/v18/16-558.html",
+      "transfer_warning": "This queue uses a predeclared staged design, not the complete Hyperband algorithm, and Fleet task success rather than training loss selects arms."
+    }
+  ],
+  "schema": "cyber_qwen38_skyrl_production_queue_v1",
+  "sha256": "sha256:46a40baf1d702175009e3395dc8c7a33237927aa743972ed33fd5299784fb908",
+  "submission_gate": {
+    "blockers": [
+      "prod4_terminal_acceptance_receipt_absent",
+      "production_qualification_dispatch_intentionally_disabled_until_prod4_acceptance",
+      "broad_get_only_data_manifests_not_built_or_staged",
+      "exact_image_cpu_preflights_not_recorded",
+      "jobs_api_previews_and_fresh_duplicate_output_checks_not_recorded",
+      "global_cluster_failure_budget_is_10_of_10_until_user_resets_it"
+    ],
+    "preview_authorized": false,
+    "submission_authorized": false
+  },
+  "successive_halving": {
+    "dose50_extra_gate": "a1 must have finite metrics, valid rewards, a reloadable step-10 checkpoint, and no development regression large enough to stop the arm",
+    "external_benchmark_selection_forbidden": true,
+    "medium_dose_steps": 50,
+    "selection_inputs": [
+      "Fleet development task outcomes",
+      "reward variation and invalid-attempt rate",
+      "finite loss, KL, entropy, and gradient/update telemetry",
+      "checkpoint reload evidence"
+    ],
+    "short_search_steps": 10
+  }
+}

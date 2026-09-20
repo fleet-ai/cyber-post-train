@@ -1,0 +1,164 @@
+{
+  "arms": [
+    {
+      "data_config": "configs/qualification/qwen38-skyrl-production-data-a1-v1.json",
+      "data_config_file_sha256": "sha256:64c614baa6791c161cd6b06466ebb2205b649f313429ece5f174c02bf7945321",
+      "id": "a1",
+      "lr": 1e-06,
+      "name": "chris-q38-skyrl10-a1",
+      "plan_request_state": "not_prepared_until_exact_staged_manifest_exists",
+      "priority": 1,
+      "rationale": "Ten-update anchor at the learning rate already used by the one-step canary.",
+      "run_config": "configs/runs/qwen38-skyrl-production-a1-v1.json",
+      "run_config_file_sha256": "sha256:78c9bc714440cb4494967602c360dc001ae772c23d60e7c7604d2401e061d17c",
+      "seed": 42,
+      "steps": 10,
+      "submitted": false,
+      "treatment": "anchor"
+    },
+    {
+      "data_config": "configs/qualification/qwen38-skyrl-production-data-lr3e7-v1.json",
+      "data_config_file_sha256": "sha256:4799b01dd4d8bca6b08d1a1df382723dd96596a59fa20c9a5962e51a2045ad82",
+      "id": "lr3e7",
+      "lr": 3e-07,
+      "name": "chris-q38-skyrl10-lr3e7",
+      "plan_request_state": "not_prepared_until_exact_staged_manifest_exists",
+      "priority": 2,
+      "rationale": "Lower geometric learning-rate boundary; every other scientific control matches a1.",
+      "run_config": "configs/runs/qwen38-skyrl-production-lr3e7-v1.json",
+      "run_config_file_sha256": "sha256:2d3eff4513ea96cdcaaa99246787bc0d1702569f747ebc0dcab72bacf5c0fa03",
+      "seed": 42,
+      "steps": 10,
+      "submitted": false,
+      "treatment": "learning_rate"
+    },
+    {
+      "data_config": "configs/qualification/qwen38-skyrl-production-data-lr3e6-v1.json",
+      "data_config_file_sha256": "sha256:39127d02d82c3338b9541eaf1410fc573db0ff3b9810cea737fe41686d5dac80",
+      "id": "lr3e6",
+      "lr": 3e-06,
+      "name": "chris-q38-skyrl10-lr3e6",
+      "plan_request_state": "not_prepared_until_exact_staged_manifest_exists",
+      "priority": 3,
+      "rationale": "Higher geometric learning-rate boundary; every other scientific control matches a1.",
+      "run_config": "configs/runs/qwen38-skyrl-production-lr3e6-v1.json",
+      "run_config_file_sha256": "sha256:5decea75448183e37181a371d934269637c73eb855bc73b0e32d3ceb73813415",
+      "seed": 42,
+      "steps": 10,
+      "submitted": false,
+      "treatment": "learning_rate"
+    },
+    {
+      "data_config": "configs/qualification/qwen38-skyrl-production-data-seed43-v1.json",
+      "data_config_file_sha256": "sha256:db42e1ed45bd2d85d06f411dfc44d477b8994d674f784c86c8cd22b79aee900e",
+      "id": "seed43",
+      "lr": 1e-06,
+      "name": "chris-q38-skyrl10-seed43",
+      "plan_request_state": "not_prepared_until_exact_staged_manifest_exists",
+      "priority": 4,
+      "rationale": "Independent anchor repeat to distinguish a stable effect from one stochastic run.",
+      "run_config": "configs/runs/qwen38-skyrl-production-seed43-v1.json",
+      "run_config_file_sha256": "sha256:4f90cf8225a77335e9e30cd05cdf143831cdcde3f6b43d72a4966c209f11a396",
+      "seed": 43,
+      "steps": 10,
+      "submitted": false,
+      "treatment": "random_seed"
+    },
+    {
+      "data_config": "configs/qualification/qwen38-skyrl-production-data-dose50-v1.json",
+      "data_config_file_sha256": "sha256:1cd4962b76063111d12f7ce3bdff1eb6feb5a19a3ab0c4105d3cf72650946242",
+      "id": "dose50",
+      "lr": 1e-06,
+      "name": "chris-q38-skyrl50-a1",
+      "plan_request_state": "not_prepared_until_exact_staged_manifest_exists",
+      "priority": 5,
+      "rationale": "Medium-dose continuation of a1; launch only after the ten-update anchor remains healthy.",
+      "run_config": "configs/runs/qwen38-skyrl-production-dose50-v1.json",
+      "run_config_file_sha256": "sha256:bc1691d540e8d4ebe13706d7f4132826eb8debe092deaf3dfe154cbc5e7b7cc9",
+      "seed": 42,
+      "steps": 50,
+      "submitted": false,
+      "treatment": "optimizer_update_dose"
+    }
+  ],
+  "blockers": [
+    "prod4_terminal_acceptance_receipt_absent",
+    "production_qualification_dispatch_intentionally_disabled_until_prod4_acceptance",
+    "broad_get_only_data_manifests_not_built_or_staged",
+    "exact_image_cpu_preflights_not_recorded",
+    "jobs_api_previews_and_fresh_duplicate_output_checks_not_recorded",
+    "global_cluster_failure_budget_is_10_of_10_until_user_resets_it"
+  ],
+  "common_release_gate": {
+    "required": [
+      "eight_real_nontruncated_rollouts",
+      "one_authoritative_verifier_execution_id_per_rollout",
+      "reward_max_strictly_greater_than_reward_min",
+      "one_finite_nonzero_optimizer_update",
+      "reloadable_step_1_checkpoint",
+      "all_owned_gpu_resources_released"
+    ],
+    "run_name": "chris-q38-rlreward-prod4"
+  },
+  "data": {
+    "counts": {
+      "dev": 20,
+      "test_untouched": 10,
+      "train": 59
+    },
+    "private_task_text_committed": false,
+    "split": {
+      "file_sha256": "sha256:69dc546fa1f3db706355554ac6213b555229b360f3a5235954c33daa08c59100",
+      "path": "configs/data/qwen38-skyrl-production-split-v1.json",
+      "self_sha256": "sha256:1f0da5054df25a7d67476f591d8c9c8d42d44de65c0b9d4b542ba9e33b132472"
+    },
+    "task_set": {
+      "file_sha256": "sha256:5786d9b1f4f505d89ef257718706e50b0c071f4c7c1fd80afd1ae1568fb61b9f",
+      "path": "configs/data/qwen38-skyrl-production-task-set-v1.json",
+      "self_sha256": "sha256:5de88eada94119fd21ac715bb1956a745376d775c13ce7d5584936e70b3a003a"
+    }
+  },
+  "duplicate_output_checks": {
+    "jobs_api": {
+      "history_rows": 934,
+      "matching_name_or_output_rows": 0,
+      "method": "GET_only"
+    },
+    "kubernetes": {
+      "context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+      "kinds": [
+        "RayJob",
+        "RayCluster",
+        "Job",
+        "Pod",
+        "Workload"
+      ],
+      "matching_objects": 0,
+      "namespace": "fleet-train-jobs"
+    },
+    "observed_at": "2026-09-20T17:10:39Z",
+    "reason": "Fresh GET-only Jobs history, Kubernetes, SFS, and W&B checks are time-sensitive.",
+    "sfs": "not_observable_from_this_host",
+    "state": "clean_read_only_observation_but_must_repeat_before_preview_or_submit",
+    "wandb": "not_observable_without_a_local_read_credential"
+  },
+  "external_mutations": 0,
+  "git_branch": "codex/q38-skyrl-full-queue-v1",
+  "next_actions_after_gate": [
+    "Accept prod4 only after every common release-gate fact is independently verified.",
+    "Build each arm's exact private data create-once with authenticated GETs only.",
+    "Stage and digest-verify each arm's manifest, train JSONL, dev JSONL, split, and task set.",
+    "Prepare immutable plan/request seals, then run exact-image CPU preflight.",
+    "Recheck Jobs, Kubernetes, SFS, and W&B duplicates/absence and validate the server preview.",
+    "Submit each eligible c1 arm at most once within the user-reset cluster failure budget."
+  ],
+  "observed_at": "2026-09-20T00:00:00Z",
+  "qualification": {
+    "file_sha256": "sha256:00d71c979cd9e0a7d7621628a62e0fda52dc0d20a307bdbbcdacbaae89bf346b",
+    "path": "configs/qualification/qwen38-skyrl-production-queue-v1.json",
+    "self_sha256": "sha256:46a40baf1d702175009e3395dc8c7a33237927aa743972ed33fd5299784fb908"
+  },
+  "schema": "cyber_qwen38_skyrl_production_experiment_queue_evidence_v1",
+  "scope": "offline_no_submit_no_stage_no_serve_no_cancel",
+  "sha256": "sha256:ddf170716db00f80f4e27f75049ad27e9e2c80f951964f0ebea13004ac85ec40"
+}
