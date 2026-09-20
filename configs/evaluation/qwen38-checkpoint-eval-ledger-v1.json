@@ -94,7 +94,7 @@
       "run_name": "chris-q38-lora-sft-a1-v1-2d8da9b3",
       "priority_when_accepted": 1,
       "motivation": "Primary broad-data LoRA anchor: test whether 57.4M supervised tokens across 496 task families produce transferable lift with a moderate adaptation rate.",
-      "status": "training"
+      "status": "failed_at_step_48_checkpoint_40_preserved_pending_diagnosis"
     },
     {
       "artifact_id": "q38-lora-broad-lr1e-5",
