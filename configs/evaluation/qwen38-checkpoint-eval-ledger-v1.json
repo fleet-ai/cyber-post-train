@@ -109,6 +109,13 @@
       "priority_when_accepted": 3,
       "motivation": "Upper learning-rate exploration: test whether the broad corpus is underfit at the anchor rate or whether faster adaptation destabilizes transfer.",
       "status": "training"
+    },
+    {
+      "artifact_id": "q38-full-weight-broad-b8-lr3e-6",
+      "run_name": "chris-q38-t3k32-b8-v1-0cb9fe51",
+      "priority_when_accepted": 1,
+      "motivation": "Primary broad-data full-weight reference: measure the higher-capacity alternative to LoRA on the same 57.4M-token, 32K-context corpus before isolating batch-size and learning-rate effects.",
+      "status": "initializing"
     }
   ],
   "excluded_artifacts": [
