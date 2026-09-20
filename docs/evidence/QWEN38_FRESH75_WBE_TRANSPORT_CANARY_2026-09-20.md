@@ -76,6 +76,22 @@ API and Kubernetes. The active score-free collection is:
 This note does not mark V6 accepted. Acceptance requires the content-free
 collection receipt, filesystem snapshot receipt, and confirmed sandbox release.
 
+The only sanitized phase indicator available while V6 is live still reports
+`bootstrap` / `initializing`, and the provider process remains active. Separate
+read-only existence probes found no CAGE-preflight, benchmark-validation, or
+collection-acceptance receipt, so no benchmark attempt or scoring stage is
+known to have started. A process-tree probe found the controller waiting on a
+Docker child. The runner used by V6 did not place a deadline around each CAGE
+preflight Docker call; therefore one stuck call could outlive the otherwise
+bounded DNS retry schedule.
+
+The successor runner now gives every CAGE preflight Docker call a strict
+five-minute deadline. A timed-out call is not treated as DNS and cannot be
+retried: it produces a terminal score-free collection failure for preservation
+and release. This hardening does not alter the active V6 sandbox or its sealed
+runner digest. Any successor must rebuild and reseal its plans against the new
+runner digest.
+
 ## Prepared expansion
 
 Four sealed V6 replicas contain 15 distinct benchmark tasks per arm. Together
