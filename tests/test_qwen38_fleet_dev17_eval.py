@@ -14,9 +14,7 @@ SPLIT = ROOT / "configs/data/fleet-blackbox-current-study-split-20260914-v2.json
 TASK_SET = ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json"
 CONFIG = ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-matched-pass1-v1.json"
 BASE_CONFIG = ROOT / "configs/evaluation/qwen38-base-fleet-dev17-opencode-pass1-v1.json"
-CANDIDATE_CONFIG = (
-    ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-opencode-pass1-v1.json"
-)
+CANDIDATE_CONFIG = ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-opencode-pass1-v1.json"
 BACKLOG = ROOT / "configs/evaluation/qwen38-fleet-dev17-backlog-v1.json"
 SUCCESSOR_JOB = ROOT / "evals/fleet/cluster/qwen38-base-dev17-opencode-pass1-v1-job.yaml"
 SUCCESSOR_SCRIPT = ROOT / "evals/fleet/scripts/run_qwen38_dev17_single_arm_v1.sh"
@@ -77,12 +75,11 @@ def test_candidate_only_arm_preserves_exact_pairing_protocol():
     assert candidate["models"]["fresh75-step230"]["revision"] == (
         "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029"
     )
-    assert candidate["routes"]["fresh75"]["served_id"] == (
-        "chris-q38-fresh75-step230-web-v2"
+    assert candidate["routes"]["fresh75"]["served_id"] == ("chris-q38-fresh75-step230-web-v2")
+    assert (
+        candidate["routes"]["fresh75"]["task_versions"]
+        == paired["routes"]["fresh75"]["task_versions"]
     )
-    assert candidate["routes"]["fresh75"]["task_versions"] == paired["routes"]["fresh75"][
-        "task_versions"
-    ]
     for field in ("selection", "treatment", "images", "sampling", "pass_k"):
         assert candidate[field] == paired[field]
 

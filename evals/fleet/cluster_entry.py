@@ -63,8 +63,7 @@ def stage_images(
         or receipt.get("tar_sha256") != _sha256(harness_tar)
         or receipt.get("image_id") != config["images"]["agent"]
         or receipt.get("platform") != "linux/amd64"
-        or receipt.get("release_asset_sha256")
-        != config["harness"]["release_asset_sha256"]
+        or receipt.get("release_asset_sha256") != config["harness"]["release_asset_sha256"]
     ):
         raise ValueError("harness image build evidence differs")
     subprocess.run(["docker", "load", "--input", str(harness_tar)], check=True, timeout=600)
