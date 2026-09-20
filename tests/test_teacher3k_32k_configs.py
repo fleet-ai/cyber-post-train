@@ -54,6 +54,45 @@ def test_teacher3k_32k_manifest_preserves_unique_targets_and_exclusions():
     )
 
 
+def test_teacher3k_96k_manifest_preserves_the_exact_32k_target_set():
+    manifest = json.loads((DATA / "qwen38-teacher3k-96k-v1.manifest.json").read_text())
+    receipt = json.loads(
+        (EVIDENCE / "qwen38-teacher3k-96k-materialization-receipt-20260920.json").read_text()
+    )
+    verification = json.loads(
+        (
+            EVIDENCE
+            / "qwen38-teacher3k-96k-independent-verification-20260920.json"
+        ).read_text()
+    )
+
+    assert manifest["sha256"] == (
+        "sha256:8297f035f4c5b0446578cfa46897733273286f76e55d486c9598452e5585a479"
+    )
+    assert manifest["sha256"] == "sha256:" + sft.digest(
+        {key: value for key, value in manifest.items() if key != "sha256"}
+    )
+    assert manifest["max_length"] == 98_304
+    assert manifest["context_tokens"] == 24_576
+    assert manifest["validation_mode"] == "task_outcomes_only"
+    assert manifest["files"]["train"] == {
+        **manifest["files"]["train"],
+        "sha256": "sha256:d292e4cd9c7ec0e45a63274fa7b7bdb1be18509b1a512b09eb9180e050357824",
+        "rows": 6_847,
+        "source_sessions": 2_886,
+        "assistant_responses": 176_654,
+        "supervised_tokens": 57_384_881,
+    }
+    assert receipt["manifest_sha256"] == verification["manifest_sha256"] == manifest["sha256"]
+    assert receipt["train_sha256"] == verification["train_sha256"] == (
+        manifest["files"]["train"]["sha256"]
+    )
+    assert receipt["supervised_tokens"] == verification["supervised_tokens"] == 57_384_881
+    assert verification["target_identity_set_sha256"] == (
+        "sha256:d510d970a57b6b62e6f05dd21203892ef3c0bd68e7c29f1a0cab3f1765371b85"
+    )
+
+
 @pytest.mark.parametrize(
     ("filename", "name", "steps", "lr", "batch", "interval", "pause"),
     [
@@ -123,7 +162,7 @@ def test_teacher3k_32k_runs_compile_to_one_node_c1_jobs(
 def test_teacher3k_32k_runs_have_unique_external_identities():
     paths = sorted(RUNS.glob("qwen38-teacher3k-32k-*-v1.json"))
     configs = [json.loads(path.read_text()) for path in paths]
-    assert len(configs) == 4
+    assert len(configs) == 5
     for field in ("name", "output_root"):
         values = [config[field] for config in configs]
         assert len(values) == len(set(values))
@@ -158,6 +197,30 @@ def test_teacher3k_fullweight_launch_receipt_is_bound_and_nonterminal():
         run["live_evidence"]["optimizer_step_at_observation"] >= 1 for run in receipt["runs"]
     )
     assert all(run["live_evidence"]["restarts"] == 0 for run in receipt["runs"])
+
+
+def test_teacher3k_native_resume_gate_changes_only_identity_and_lifecycle():
+    source = json.loads(
+        (RUNS / "qwen38-teacher3k-32k-canary-b8-lr3e6-v1.json").read_text()
+    )
+    resume = json.loads(
+        (
+            RUNS / "qwen38-teacher3k-32k-resume-canary-b8-lr3e6-v1.json"
+        ).read_text()
+    )
+
+    for key in ("model", "data", "recipe", "cluster"):
+        assert resume[key] == source[key]
+    assert resume["name"] != source["name"]
+    assert resume["output_root"] != source["output_root"]
+    assert resume["wandb"]["run_id"] != source["wandb"]["run_id"]
+    assert resume["recovery"] == {
+        "manifest": "/mnt/sfs/jobs/chris-q38-t3k32-can-v1/checkpoint-step-1-seal.json",
+        "sha256": "fce35242686027f1e4db7065fd1ec47142cb669930025a0fc8b287d7acc11d83",
+        "mode": "resume",
+    }
+    assert source["pause_after_step"] == 1
+    assert resume["pause_after_step"] == 2
 
 
 @pytest.mark.parametrize(
