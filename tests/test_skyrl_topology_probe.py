@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+from pathlib import Path
 from types import SimpleNamespace as NS
 
 import pytest
@@ -167,7 +168,7 @@ def test_probe_rejects_model_mount_or_head_resource_substitution(plan) -> None:
         lambda value: value["execution"]["model_artifact"].update(path="other/model"),
         lambda value: value["execution"]["model_artifact"].update(mount_path="other"),
         lambda value: value["execution"]["head_resources"].update(cpu_request="2"),
-        lambda value: value.update(output_root="/mnt/sfs/jobs/other/models/run"),
+        lambda value: value.update(output_root="/mnt/sfs/jobs/other/run"),
     ):
         changed = copy.deepcopy(plan)
         mutation(changed)
@@ -206,6 +207,7 @@ def test_probe_preflight_parses_engine_without_tasks_or_gpu(plan, monkeypatch) -
     cfg = NS(generator=NS(inference_engine=object()))
     monkeypatch.setattr(probe.skyrl, "diagnostic_native_config", lambda _: cfg)
     monkeypatch.setattr(probe, "_verify_model", lambda _: None)
+    monkeypatch.setattr(probe, "_validate_destination", lambda _: Path("/unused/run"))
     calls = []
     monkeypatch.setitem(
         sys.modules,
@@ -218,6 +220,17 @@ def test_probe_preflight_parses_engine_without_tasks_or_gpu(plan, monkeypatch) -
     assert calls == [cfg]
     assert receipt["task_rows_read"] == 0
     assert receipt["rollout_episodes"] == receipt["optimizer_steps"] == 0
+
+
+def test_probe_destination_must_be_absent_and_writable(plan, tmp_path) -> None:
+    parent = tmp_path / "owned"
+    parent.mkdir()
+    plan = copy.deepcopy(plan)
+    plan["output_root"] = str(parent / "run")
+    assert probe._validate_destination(plan) == parent / "run"
+    (parent / "run").mkdir()
+    with pytest.raises(FileExistsError, match="already exists"):
+        probe._validate_destination(plan)
 
 
 def _preview(request, *, identity=True):

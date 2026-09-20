@@ -25,7 +25,7 @@ until its own reward, optimizer, checkpoint and cleanup gates pass.
 - input model: read-only Fleet model mount `Qwen/Qwen3.8-27B` at `models/base`;
   every file is checked against the exact repository revision and SHA-256 inventory
   before engine startup
-- output: the run-owned `models/run` directory; only the sanitized probe receipt is
+- output: the create-once run-owned `run` directory; only the sanitized probe receipt is
   accepted there
 - W&B: disabled; no task, benchmark or W&B credential is delivered
 - process limit: 20 minutes for exact model verification and engine setup, then five

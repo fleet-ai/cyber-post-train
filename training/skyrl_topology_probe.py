@@ -198,8 +198,7 @@ def _validate(plan: dict) -> skyrl.SkyRLConfig:
         or plan.get("deadlines")
         != {"setup_seconds": 1200, "cleanup_seconds": 300, "total_seconds": 1500}
         or execution != {"image": IMAGE, **_expected_execution()}
-        or plan.get("output_root")
-        != execution.get("mount_root", "") + "/models/run"
+        or plan.get("output_root") != execution.get("mount_root", "") + "/run"
         or arguments.model_root
         != execution.get("mount_root", "")
         + "/models/"
@@ -481,6 +480,7 @@ def preflight(plan: dict) -> dict:
     if torch.cuda.is_available():
         raise ValueError("probe preflight is CPU-only")
     arguments = _validate(plan)
+    _validate_destination(plan)
     _verify_model(plan)
     cfg = skyrl.diagnostic_native_config(arguments)
     build_vllm_cli_args(cfg)
@@ -544,6 +544,17 @@ def _verify_model(plan: dict) -> None:
             raise ValueError("probe model artifact digest changed")
 
 
+def _validate_destination(plan: dict) -> Path:
+    """Require one absent, writable, run-owned receipt directory."""
+    root = Path(plan["output_root"])
+    parent = root.parent
+    if root.exists():
+        raise FileExistsError("probe output already exists")
+    if not parent.is_dir() or not os.access(parent, os.W_OK | os.X_OK):
+        raise PermissionError("probe output parent is not writable")
+    return root
+
+
 def _stop_setup(setup, ray) -> None:
     if setup is None:
         return
@@ -589,7 +600,8 @@ def run(plan: dict) -> dict:
         raise ValueError("Jobs API output binding mismatch")
     if (os.geteuid(), os.getegid()) != (1000, 100):
         raise ValueError("probe GPU runtime requires image user 1000:100")
-    root = Path(plan["output_root"])
+    root = _validate_destination(plan)
+    root.mkdir(mode=0o700, parents=False, exist_ok=False)
     forbidden = ("episodes", "checkpoints", "exports")
     if any((root / name).exists() for name in forbidden):
         raise FileExistsError("probe output contains a scientific artifact")

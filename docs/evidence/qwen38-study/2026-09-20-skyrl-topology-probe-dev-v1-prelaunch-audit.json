@@ -2,25 +2,25 @@
   "schema": "cyber_skyrl_topology_probe_prelaunch_audit_v1",
   "status": "blocked_not_submitted",
   "classification": "operational_gate",
-  "observed_at": "2026-09-20T10:25:26Z",
+  "observed_at": "2026-09-20T10:30:24Z",
   "identity": {
     "name": "chris-q38-skyrl-probe-v1",
     "cluster": "dev",
     "kubernetes_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
     "namespace": "fleet-train-jobs",
     "project": "fleetjob-dev",
-    "output_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v1/models/run",
+    "output_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v1/run",
     "priority_class": "c1",
     "queue_priority_class": "q1"
   },
   "inputs": {
     "config": "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json",
-    "config_self_sha256": "sha256:b80af76bec128d33d8791a821473ec8a2707a9aa7c066f96ff70cc5e009db68d",
-    "plan_sha256": "491882d0780b74f44112c3efece5f5ee29d92bf09b62952260546f75cccc9e83",
-    "request_sha256": "67919847427b7065a5094bc867237eb19166cef7334841c161e896ccfeedf1f2",
-    "fleetjob_manifest_sha256": "8e3d6fe28c35e50bac83553227e31f18471fcbaad026d36bb13410f119dd4de9",
-    "fleetjob_packet_self_sha256": "sha256:ff6ed83c66c71c2375d91217fc53d3183770f75e38a2f5d24ee3e02fff0eca41",
-    "runtime_sha256": "ca6275eb8f5ef0fe78b04cbf276a3620650e91be4ad64a9157abd5b0c5e48f25",
+    "config_self_sha256": "sha256:118e72853f6f9be87f4d0f8c6d790add3f71b1de23505d4f1e491b771b5e6e68",
+    "plan_sha256": "3e0c8c2fe733e64bdd62c47740e2a1641e302fdb4d6fcd19496a527046417ab9",
+    "request_sha256": "e2726c24e288584eda8ddc117c1ba50a08323ecb78ab8bc81fd882eb829e7485",
+    "fleetjob_manifest_sha256": "e4c155d93a38b14ef7665cdf58d5979a7ef770e6856b265097b3c9d2b8c55c67",
+    "fleetjob_packet_self_sha256": "sha256:f063982e8f89f1af233a7b7dbab735534dfc5f3302b36aff20dffea9ba42c71b",
+    "runtime_sha256": "c49d3dfd5a91d8a17b49de285f3c780631f0fbfd4215299a8ee9f549bab76be4",
     "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
     "model": {
       "repository": "Qwen/Qwen3.8-27B",
@@ -31,8 +31,8 @@
   },
   "server_preview": {
     "status": "passed",
-    "self_sha256": "sha256:d6ff9d1b0d4c995c8722f258dd57cc7336b628e1bdbe372ae0688f16b89c393a",
-    "server_render_sha256": "3ee6892cba01f60a826259dc2a9087821fa1c0a53e69f16882dcbfeed1d4bcd2",
+    "self_sha256": "sha256:ddfc469e4e493788e65c30daccc8879f292c7be146bf81d9f4a96738eca311c4",
+    "server_render_sha256": "9ff30be5ec1c2bde2e68df58ce610fa5987d02ce598111ccf3b5e308ba12a554",
     "controller_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/training-api@sha256:e9787177242159ed664d120d3e7496e7695b4a536aa14962b381e0d31ce5d9ac",
     "create_dry_run_only": true,
     "runtime_user": {
@@ -79,5 +79,5 @@
   ],
   "safe_to_create": false,
   "next_action": "Run the exact-image zero-GPU preflight with the exact model mount, bind an independent 30-minute UID-aware cleanup observer, regenerate and re-preview the packet, then make a separate reviewed launch decision.",
-  "sha256": "sha256:f43fa84a6cdb3cda5590ade97e62a69d0e8eeb3fb6999654c39bd76a9e3a16d8"
+  "sha256": "sha256:c2e3cf7046db6c9f34e385deaf68bc11218dde39d534c55ef6e377fec71e4111"
 }

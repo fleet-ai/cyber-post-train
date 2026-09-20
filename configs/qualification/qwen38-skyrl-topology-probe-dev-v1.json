@@ -1,7 +1,7 @@
 {
   "schema": "cyber_skyrl_topology_probe_config_v1",
   "name": "chris-q38-skyrl-probe-v1",
-  "output_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v1/models/run",
+  "output_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v1/run",
   "model": {
     "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
     "weights": "../models/qwen38-27b-1d4bf0f2.weights.json",
@@ -62,5 +62,5 @@
       "external_release_observer_not_yet_bound"
     ]
   },
-  "sha256": "sha256:b80af76bec128d33d8791a821473ec8a2707a9aa7c066f96ff70cc5e009db68d"
+  "sha256": "sha256:118e72853f6f9be87f4d0f8c6d790add3f71b1de23505d4f1e491b771b5e6e68"
 }
