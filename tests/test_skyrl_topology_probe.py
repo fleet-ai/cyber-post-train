@@ -327,7 +327,7 @@ def test_probe_accepts_only_resolving_digest_valid_model_symlink(tmp_path) -> No
     probe._verify_model(plan)
     target.unlink()
     with pytest.raises(
-        probe.ProbeGateError, match="model_file_missing_or_broken_symlink"
+        probe.ProbeGateError, match="model_file_broken_symlink_00"
     ):
         probe._verify_model(plan)
 

@@ -38,7 +38,7 @@ PREFLIGHT_PACKET_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_packet_v1"
 PREFLIGHT_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_preview_v1"
 PREFLIGHT_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_cpu_preflight_rejection_v1"
 PROBE_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_failure_v1"
-PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v6"
+PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v7"
 PREFLIGHT_RECEIPT = "/dev/termination-log"
 MODULE = "training.skyrl_topology_probe"
 CONFIG_PATH = ROOT / "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json"
@@ -783,16 +783,27 @@ class _Deadline:
 def _verify_model(plan: dict) -> None:
     """Prove that the FleetJob model mount matches the exact model lock."""
     root = Path(plan["model"]["root"])
-    for item in plan["model"]["files"]:
+    for index, item in enumerate(plan["model"]["files"]):
         path = root / item["path"]
+        is_link = path.is_symlink()
+        try:
+            metadata = path.stat()
+        except FileNotFoundError as exc:
+            category = "broken_symlink" if is_link else "missing"
+            raise ProbeGateError(f"model_file_{category}_{index:02d}") from exc
+        except PermissionError as exc:
+            raise ProbeGateError(f"model_file_inaccessible_{index:02d}") from exc
         if not path.is_file():
-            raise ProbeGateError("model_file_missing_or_broken_symlink")
-        if "size" in item and path.stat().st_size != item["size"]:
-            raise ProbeGateError("model_file_size_mismatch")
-        with path.open("rb") as stream:
-            actual = hashlib.file_digest(stream, "sha256").hexdigest()
+            raise ProbeGateError(f"model_file_not_regular_{index:02d}")
+        if "size" in item and metadata.st_size != item["size"]:
+            raise ProbeGateError(f"model_file_size_mismatch_{index:02d}")
+        try:
+            with path.open("rb") as stream:
+                actual = hashlib.file_digest(stream, "sha256").hexdigest()
+        except PermissionError as exc:
+            raise ProbeGateError(f"model_file_inaccessible_{index:02d}") from exc
         if actual != item["sha256"].removeprefix("sha256:"):
-            raise ProbeGateError("model_file_digest_mismatch")
+            raise ProbeGateError(f"model_file_digest_mismatch_{index:02d}")
 
 
 def _validate_destination(plan: dict) -> Path:
