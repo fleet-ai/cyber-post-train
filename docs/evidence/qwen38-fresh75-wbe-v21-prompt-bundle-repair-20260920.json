@@ -1,6 +1,6 @@
 {
   "schema_version": "qwen38_fresh75_wbe_prompt_bundle_repair_v1",
-  "status": "diagnosed_and_repaired_locally",
+  "status": "diagnosed_repaired_locally_qualified_once_and_validator_repaired",
   "campaign_id": "q38-base-f75p230-oc-wbe-c1-v21",
   "collection_sandbox": {
     "id": "torur2cqg0122danrv9fb",
@@ -38,7 +38,8 @@
   },
   "repair": {
     "benchmark_snapshot_source_sha256": "sha256:a0efab7d1789121e2bb6afa4d447e58aadd741ec352aad6d8707fc3b1308de0b",
-    "qualification_worker_source_sha256": "sha256:afb523945cabd3a6a68d7151b8389f52c65ee18e885d0632edac0c24c819a2e0",
+    "qualification_worker_source_sha256": "sha256:e4c16234de77ad0712001bd2838498bcb0ff114886ea1e42a702a0e4bb19a3d6",
+    "collection_launcher_source_sha256": "sha256:e6d67802ac1ab178d706241eed809ae7ce8527d9e65308c61f149e871e834d38",
     "behavior": "seal the exact four prompt-template files into the benchmark manifest, verify every path and digest, and materialize them beside benchmark.py before score-free qualification",
     "regression_gates": [
       "qualification materializes benchmark.py and all four required prompt siblings",
@@ -46,14 +47,34 @@
       "prompt runtime inputs never enter the rollout collection payload"
     ],
     "focused_test_count": 266,
-    "focused_test_status": "passed"
+    "focused_test_status": "passed",
+    "full_webexploitbench_test_count": 842,
+    "full_webexploitbench_test_status": "passed"
+  },
+  "first_repaired_qualification": {
+    "transaction_id": "wbe-fresh75-pair-v22",
+    "plan_sha256": "sha256:851604e5b1fcfa0eb9b227dd05c5b6befd1af4ca18119dfcce3ac6c8da5c184f",
+    "sandbox_id": "3h7kp8ofpe5dn9jkuj0tm",
+    "sandbox_name": "wbe-qual-fresh75-pair-v22",
+    "remote_worker_exit_code": 0,
+    "model_requests": 0,
+    "judge_requests": 0,
+    "score_records": 0,
+    "provider_state_after_release": "terminated",
+    "release_receipt_sha256": "sha256:7239e42ae55e39ca7ef4c0c813f334206ec154841d7f03f63af1f26408c1c754",
+    "operator_local_validation_status": "rejected",
+    "operator_local_validation_error": "invalid_benchmark_snapshot_manifest",
+    "classification": "local_validator_schema_drift_after_prompt_manifest_v5",
+    "explanation": "The isolated qualification worker completed and produced the prompt-complete version-5 snapshot. The operator then correctly rejected it before collection because its own exact manifest-field validator still allowed only the older field set. The validator is now bound to the ordered four-file prompt list and its source records, with a regression test that rejects prompt-record drift.",
+    "replay_forbidden": true
   },
   "diagnostic_recovery": {
     "sandbox_id": "p51ime5xjrqzxel0zy60k",
     "sandbox_name": "wbe-recover-f75-v21-export-meta-v1",
     "source_snapshot_id": "p17n6h809qs2ogvhzolld",
-    "provider_state_at_last_check": "running",
-    "release_pending": true
+    "provider_state_after_release": "terminated",
+    "active_inventory_matches_after_release": 0,
+    "release_receipt_sha256": "sha256:17c93e540804f553071e1cf344b6263d79d3d8d3f1697834e702e00569064c4c"
   },
   "disposition": {
     "v21_replay_forbidden": true,
