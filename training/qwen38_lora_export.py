@@ -66,6 +66,14 @@ CHECKPOINT_IDENTITY_FIELDS = {
     "adapter_parameter_inventory_sha256",
     "base_model_inventory_sha256",
 }
+_FAILURE_STAGE = "entry"
+
+
+def _stage(name: str) -> None:
+    global _FAILURE_STAGE
+    if not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", name):
+        raise ValueError("invalid sanitized export stage")
+    _FAILURE_STAGE = name
 
 
 def _hash(path: Path) -> str:
@@ -535,14 +543,18 @@ def run(plan: dict) -> dict:
     import ray
     from skyrl.train.utils.utils import initialize_ray
 
+    _stage("plan_validation")
     validate_plan(plan)
+    _stage("runtime_binding")
     if os.environ.get("RUN_DIR") != plan["run_dir"]:
         raise ValueError("Jobs API run-directory binding drift")
     run_root = Path(plan["run_dir"])
     final = Path(plan["output_root"])
     second = run_root / ".determinism-second"
+    _stage("destination_check")
     if final.exists() or final.is_symlink() or second.exists() or second.is_symlink():
         raise FileExistsError("create-once export destination already exists")
+    _stage("checkpoint_validation")
     checkpoint_path = Path(plan["checkpoint_receipt"]["path"])
     receipt, identity = _read_checkpoint(checkpoint_path, plan["checkpoint_receipt"]["file_sha256"])
     if identity["receipt_sha256"] != plan["checkpoint_receipt"]["receipt_sha256"] or any(
@@ -556,6 +568,7 @@ def run(plan: dict) -> dict:
         or source_root.is_relative_to(run_root)
     ):
         raise ValueError("export run and source training run overlap")
+    _stage("source_input_hashes")
     base_root = Path(receipt["source_plan"]["model"]["root"])
     base_before = _inventory_bound_files(base_root, receipt["source_plan"]["model"]["files"])
     checkpoint_before = _checkpoint_inventory(receipt)
@@ -564,37 +577,49 @@ def run(plan: dict) -> dict:
     final.mkdir(mode=0o700)
     second.mkdir(mode=0o700)
     _, cfg = build_runtime_configs_for_ray(receipt, plan)
+    _stage("ray_initialization")
     initialize_ray(cfg)
     try:
         # The coordinator task owns the eight TP actors. Returning from the task
         # releases that actor ownership before the independent one-GPU reload.
+        _stage("distributed_reload_and_dual_export")
         reload_evidence = ray.get(
             ray.remote(num_cpus=1)(_distributed_export).remote(plan, receipt, final, second),
             timeout=DEADLINE_SECONDS,
         )
+        _stage("first_export_reopen")
         first_inspection = inspect_hf_export(final)
+        _stage("second_export_reopen")
         second_inspection = inspect_hf_export(second)
+        _stage("deterministic_export_compare")
         if (
             first_inspection["tensors"] != second_inspection["tensors"]
             or first_inspection["sidecars"] != second_inspection["sidecars"]
         ):
             raise ValueError("two native merge/exports are not deterministic")
+        _stage("published_export_reopen")
         reopened = inspect_hf_export(final)
+        _stage("published_export_stability")
         if reopened != first_inspection:
             raise ValueError("published output changed during independent tensor reopen")
+        _stage("base_export_reopen")
         base = inspect_hf_export(
             base_root,
             allowed_files={row["path"] for row in receipt["source_plan"]["model"]["files"]},
         )
+        _stage("base_layout_compare")
         if base["layout_sha256"] != first_inspection["layout_sha256"]:
             raise ValueError("merged export tensor layout differs from the exact base")
         changed = sum(
             base["tensors"][name]["sha256"] != row["sha256"]
             for name, row in first_inspection["tensors"].items()
         )
+        _stage("adapter_change_check")
         if changed <= 0:
             raise ValueError("merged export contains no adapter-derived tensor changes")
+        _stage("second_export_cleanup")
         shutil.rmtree(second)
+        _stage("full_model_tokenizer_reload")
         reload_result = ray.get(
             ray.remote(num_cpus=4, num_gpus=1)(_reload_model).remote(str(final)),
             timeout=1800,
@@ -602,9 +627,11 @@ def run(plan: dict) -> dict:
     finally:
         if ray.is_initialized():
             ray.shutdown()
+    _stage("source_immutability_recheck")
     base_after = _inventory_bound_files(base_root, receipt["source_plan"]["model"]["files"])
     checkpoint_after = _checkpoint_inventory(receipt)
     runtime_after = _runtime_source_inventory()
+    _stage("source_immutability_compare")
     if (
         base_before != base_after
         or checkpoint_before != checkpoint_after
@@ -612,6 +639,7 @@ def run(plan: dict) -> dict:
         or checkpoint_receipt_before != _hash(checkpoint_path)
     ):
         raise ValueError("base, checkpoint, or exact-image source changed during export")
+    _stage("plan_revalidation")
     validate_plan(plan)
     value = {
         "schema": EXPORT_SCHEMA,
@@ -650,11 +678,13 @@ def run(plan: dict) -> dict:
         "gpu_reload_verified": True,
     }
     signed = {**value, "receipt_sha256": digest(value)}
+    _stage("receipt_validation")
     validate_export_receipt(
         signed,
         receipt,
         checkpoint_file_sha256=plan["checkpoint_receipt"]["file_sha256"],
     )
+    _stage("receipt_write")
     _write_new(run_root / RECEIPT_FILENAME, signed)
     return signed
 
@@ -690,6 +720,7 @@ def main() -> None:
                 {
                     "status": "failed",
                     "error_class": type(exc).__name__,
+                    "failure_stage": _FAILURE_STAGE,
                     "plan_sha256": digest(plan),
                     "optimizer_steps_executed": 0,
                     "elapsed_seconds": round(time.monotonic() - started, 3),
