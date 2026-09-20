@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace as NS
@@ -243,3 +244,46 @@ def test_observer_accepts_only_digest_valid_sanitized_failure_receipt() -> None:
     assert cleanup._validated_receipt(json.dumps(receipt), kind="job") == receipt
     receipt["phase"] = "changed"
     assert cleanup._validated_receipt(json.dumps(receipt), kind="job") is None
+
+
+def test_observer_retries_one_transient_kubectl_timeout(tmp_path) -> None:
+    cluster = FakeJobCluster()
+    calls = 0
+
+    def flaky(argv, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
+        return cluster(argv, **kwargs)
+
+    result = _observer(tmp_path, flaky).run()
+    assert calls > 1
+    assert result["status"] == "released"
+    assert result["observer_error_class"] == ""
+
+
+def test_observer_persists_cleanup_after_repeated_observation_timeout(tmp_path) -> None:
+    cluster = FakeJobCluster()
+    timeouts = 0
+
+    def flaky(argv, **kwargs):
+        nonlocal timeouts
+        args = argv[5:]
+        if (
+            args[:2] == ["get", "pod"]
+            and "--selector" in args
+            and not cluster.deleted
+            and timeouts < 3
+        ):
+            timeouts += 1
+            raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
+        return cluster(argv, **kwargs)
+
+    result = _observer(tmp_path, flaky).run()
+    assert timeouts == 3
+    assert cluster.deleted is True
+    assert result["status"] == "released_without_accepted_execution"
+    assert result["observer_error_class"] == "ObserverError"
+    assert result["target_present"] is result["pods_present"] is False
+    assert json.loads((tmp_path / "RESULT.json").read_text()) == result

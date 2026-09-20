@@ -12,7 +12,7 @@ until its own reward, optimizer, checkpoint and cleanup gates pass.
 
 ## Frozen shape
 
-- FleetJob name: `chris-q38-skyrl-probe-v6`
+- FleetJob name: `chris-q38-skyrl-probe-v7`
 - development context: `nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb`
 - namespace/project: `fleet-train-jobs` / `fleetjob-dev`
 - priority: Kubernetes `c1`, queue `q1`
@@ -119,7 +119,7 @@ uv run --locked python -m training.dev_cleanup_observer \
   --context nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb \
   --namespace fleet-train-jobs \
   --kind job \
-  --name chris-q38-skyrl-probe-preflight-v16 \
+  --name chris-q38-skyrl-probe-preflight-v17 \
   --maximum-seconds 1200 \
   --expected-gpus 0 \
   --plan-sha256 sha256:<exact-plan-digest> \
@@ -190,7 +190,7 @@ The sanitized observation supplied to `validate_release` must contain exactly:
 {
   "kubernetes_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
   "namespace": "fleet-train-jobs",
-  "fleetjob_name": "chris-q38-skyrl-probe-v6",
+  "fleetjob_name": "chris-q38-skyrl-probe-v7",
   "job_id": "<Fleet job UUID>",
   "fleetjob_uid": "<FleetJob UID>",
   "rayjob_uid": "<RayJob UID>",

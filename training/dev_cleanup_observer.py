@@ -156,19 +156,32 @@ class Observer:
         self.deletion_requested_at = ""
 
     def _kubectl(self, *arguments: str) -> str:
-        result = self._run(
-            [
-                "kubectl",
-                "--context",
-                self.context,
-                "--namespace",
-                self.namespace,
-                *arguments,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=45,
-        )
+        command = [
+            "kubectl",
+            "--context",
+            self.context,
+            "--namespace",
+            self.namespace,
+            *arguments,
+        ]
+        result = None
+        for attempt in range(3):
+            try:
+                result = self._run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    timeout=45,
+                )
+                break
+            except subprocess.TimeoutExpired:
+                if attempt == 2:
+                    raise ObserverError(
+                        "development-cluster observation timed out"
+                    ) from None
+                time.sleep(min(self.poll_seconds, 1.0))
+        if result is None:  # pragma: no cover - the loop either returns or raises
+            raise ObserverError("development-cluster observation failed")
         if result.returncode:
             raise ObserverError("development-cluster observation failed")
         return result.stdout
@@ -438,10 +451,11 @@ class Observer:
                 raise ObserverError("workload cleanup exceeded its release allowance")
             time.sleep(self.poll_seconds)
 
-    def result(self, release: dict) -> dict:
+    def result(self, release: dict, *, observer_error_class: str = "") -> dict:
         receipt = self.snapshot.receipt
         accepted = (
-            self.snapshot.terminal_status == "Succeeded"
+            not observer_error_class
+            and self.snapshot.terminal_status == "Succeeded"
             and receipt is not None
             and receipt.get("status") in {"passed", "setup_and_internal_cleanup_passed"}
             and self.snapshot.peak_gpus == self.expected_gpus
@@ -478,6 +492,7 @@ class Observer:
                 "restarts": self.snapshot.restarts,
                 "peak_gpus": self.snapshot.peak_gpus,
                 "receipt": receipt,
+                "observer_error_class": observer_error_class,
                 "deletion_requested_at": self.deletion_requested_at,
                 **release,
             }
@@ -486,6 +501,7 @@ class Observer:
     def run(self) -> dict:
         self.arm()
         creation_deadline = time.monotonic() + min(120, self.maximum_seconds)
+        observer_error: BaseException | None = None
         try:
             while not self.snapshot.uid:
                 resource = self._target()
@@ -506,11 +522,25 @@ class Observer:
                 if self.snapshot.terminal_status or elapsed >= self.maximum_seconds:
                     break
                 time.sleep(min(self.poll_seconds, max(0.1, self.maximum_seconds - elapsed)))
+        except BaseException as exc:
+            observer_error = exc
         finally:
             if self.snapshot.uid:
-                self.delete()
+                try:
+                    self.delete()
+                except BaseException as exc:
+                    observer_error = observer_error or exc
+        if not self.snapshot.uid:
+            if observer_error is not None:
+                raise observer_error
+            raise ObserverError("cleanup target identity was never bound")
         release = self.wait_for_release()
-        value = self.result(release)
+        value = self.result(
+            release,
+            observer_error_class=(
+                type(observer_error).__name__ if observer_error is not None else ""
+            ),
+        )
         _write_create_once(self.result_path, value)
         return value
 
