@@ -1,4 +1,4 @@
-# Qwen3.8 LoRA development qualification: V4–V7
+# Qwen3.8 LoRA development qualification: V4–V8
 
 Date: 2026-09-20  
 Scope: development cluster only; no production Jobs API submission occurred.
@@ -102,6 +102,36 @@ data, task text, trainer logs, traces, credentials, and W&B secrets.
   can then locate and repair the exact post-checkpoint contract without reading
   private trainer logs or weakening any acceptance check.
 - Cleanup: the exact GPU Pod and every CPU reader were deleted. The final dev
+  census showed zero active GPU requests.
+
+## V8: defect isolated to strict receipt construction
+
+- CPU preflight Pod UID: `7c9ccac9-f358-4727-957e-dd239cd6052c`
+- Training Pod: `chris-q38-lora-sft-c1-v8-dev-363e4b02`
+- Training Pod UID: `9d4cc598-08df-40cd-a163-23c9f3b8bb62`
+- Canonical plan SHA-256:
+  `f5702646d1d1dcc88088164f01c13cc1f7dd1e9a119a3760fc5e127f4da14363`
+- Result: exact-image CPU preflight again passed 866 rows, 35 task versions,
+  and 998,652 supervised tokens. The GPU run had zero restarts. The new public
+  stage receipt reached `qualification_receipt_preparation_started`. By the
+  immutable stage order, the finite optimizer update, asynchronous checkpoint
+  drain, and post-update all-rank adapter snapshot had therefore all completed.
+  The remaining `ValueError` is inside strict receipt preparation, before
+  terminal-result validation, W&B finalization, and final receipt publication.
+- Evidence: `QUALIFICATION_STAGE.json` file SHA-256
+  `e3e86d2a6f4db15e7ace86335e027e6f1079970533c3e36b367f4f5f53816947`;
+  `FAILURE_STAGE.json` file SHA-256
+  `3c8f42f7d7069996483f690b41e02d4d4b251135f982fa4df64bbb0ae30f01b9`;
+  `FAILED.json` file SHA-256
+  `292fb79756e9d479a126e6087777eca96004a8a6f51bb63a1b4a1e8679f0cabc`;
+  `metrics.jsonl` file SHA-256
+  `e534e41199b3d46990ce217794d25a884284e344c28e25b5f486c82b529323fd`.
+- Next repair: add one-step-only stage boundaries inside receipt preparation:
+  native checkpoint inventory, trainer-step evidence, adapter reconciliation,
+  source revalidation, immutability comparison, and source-plan validation. A
+  fresh identity can then identify the exact rejected invariant without private
+  trainer logs or relaxed checks.
+- Cleanup: the GPU Pod, CPU reader, and ConfigMap were deleted. The final dev
   census showed zero active GPU requests.
 
 ## Production status
