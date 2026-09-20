@@ -33,7 +33,7 @@
     "output_registry_mount": "/mnt/cyber-output-registry",
     "output_registry_subpath": "models/fleetjob-dev",
     "model_artifact": {
-      "path": "Qwen/Qwen3.8-27B",
+      "path": "Qwen/Qwen3.8-27B/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
       "mount_path": "base",
       "read_only": true,
       "required": true
@@ -66,5 +66,5 @@
       "external_release_observer_not_yet_bound"
     ]
   },
-  "sha256": "sha256:7de1d71e00f693561332bab7d43e91681f9de44fcc6754e1c97c6dd6026b75c9"
+  "sha256": "sha256:271bca4ad07e8f319e65bf3d9ef8ac55176d242ec254d98cb11e2622781f24b6"
 }

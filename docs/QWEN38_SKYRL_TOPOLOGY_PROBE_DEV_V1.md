@@ -22,7 +22,8 @@ until its own reward, optimizer, checkpoint and cleanup gates pass.
 - head resources: 4 CPU / 16 GiB requested, 8 CPU / 32 GiB limited
 - worker resources: 64 CPU / 512 GiB requested, 64 CPU / 768 GiB limited
 - runtime identity on both Pods: UID 1000, GID 100
-- input model: read-only Fleet model mount `Qwen/Qwen3.8-27B` at `models/base`;
+- input model: read-only Fleet model mount
+  `Qwen/Qwen3.8-27B/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0` at `models/base`;
   every file is checked against the exact repository revision and SHA-256 inventory
   before engine startup. Standard Hugging Face symlinks are allowed only when they
   resolve to regular files whose bytes match those exact digests
@@ -104,7 +105,7 @@ uv run --locked python -m training.dev_cleanup_observer \
   --context nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb \
   --namespace fleet-train-jobs \
   --kind job \
-  --name chris-q38-skyrl-probe-preflight-v7 \
+  --name chris-q38-skyrl-probe-preflight-v8 \
   --maximum-seconds 1200 \
   --expected-gpus 0 \
   --plan-sha256 sha256:<exact-plan-digest> \
