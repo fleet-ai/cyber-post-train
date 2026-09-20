@@ -13,6 +13,7 @@ EVIDENCE = ROOT / "docs" / "evidence"
 
 MANIFEST_SHA256 = "sha256:a8d08609991d7960cdcdab826bd07c3216bfcd3aa8f6fb33ab7a5fd29648d6f5"
 TRAIN_SHA256 = "sha256:bf245db073fcd5a39ff6f90f6fc322710a3694408845bc27bfb6d9eaa6c41e0c"
+SOURCE_MANIFEST_SHA256 = "sha256:d0641cc7baf082c0b1d9bd494112ad8562b9c332cb5be5a7696249d9101a96a8"
 
 
 def test_teacher3k_32k_manifest_preserves_unique_targets_and_exclusions():
@@ -157,3 +158,31 @@ def test_teacher3k_fullweight_launch_receipt_is_bound_and_nonterminal():
         run["live_evidence"]["optimizer_step_at_observation"] >= 1 for run in receipt["runs"]
     )
     assert all(run["live_evidence"]["restarts"] == 0 for run in receipt["runs"])
+
+
+@pytest.mark.parametrize(
+    ("filename", "max_length", "context_tokens"),
+    [
+        ("qwen38-teacher3k-64k-rechunk-v1.request.json", 65_536, 16_384),
+        ("qwen38-teacher3k-96k-rechunk-v1.request.json", 98_304, 24_576),
+    ],
+)
+def test_teacher3k_later_context_treatments_are_sealed_and_distinct(
+    filename, max_length, context_tokens
+):
+    request = json.loads((DATA / filename).read_text())
+
+    assert request["sha256"] == "sha256:" + sft.digest(
+        {key: value for key, value in request.items() if key != "sha256"}
+    )
+    assert request["source"]["manifest_sha256"] == SOURCE_MANIFEST_SHA256
+    assert request["source"]["train_parquet_sha256"] == (
+        "sha256:86452a28af5c77b48c1e53e13a6d8fd9d483eec350d22214cd7717127502a7b1"
+    )
+    assert request["minimum_supervised_tokens"] == 20_000_000
+    assert request["max_length"] == max_length
+    assert request["context_tokens"] == context_tokens
+    assert request["destination"]["create_once"] is True
+    assert request["destination"]["output_root"].endswith(
+        f"/teacher3k-{max_length // 1024}k-v1/data-v1"
+    )
