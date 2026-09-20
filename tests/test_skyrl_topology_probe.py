@@ -338,7 +338,7 @@ def test_probe_preflight_parses_engine_without_tasks_or_gpu(plan, monkeypatch) -
         "runtime_imports",
         "zero_gpu",
         "plan_validation",
-        "writable_empty_destination",
+        "sealed_bootstrap_destination",
         "create_once_destination_absence",
         "model_inventory",
         "native_engine_arguments",
@@ -346,14 +346,42 @@ def test_probe_preflight_parses_engine_without_tasks_or_gpu(plan, monkeypatch) -
     ]
 
 
-def test_probe_destination_must_be_empty_and_writable(plan, tmp_path) -> None:
+def _write_probe_runtime(root: Path, plan: dict) -> None:
+    files = {
+        **probe._runtime(),
+        "training/__init__.py": "",
+        "evals/__init__.py": "",
+        "evals/fleet/__init__.py": "",
+        "cyber_post_train/__init__.py": "",
+        "plan.json": json.dumps(plan, sort_keys=True, separators=(",", ":")),
+    }
+    runtime = root / ".runtime"
+    for name, content in files.items():
+        path = runtime / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(content)
+
+
+def test_probe_destination_requires_only_exact_sealed_bootstrap(plan, tmp_path) -> None:
     root = tmp_path / "owned"
     root.mkdir()
     plan = copy.deepcopy(plan)
     plan["output_root"] = str(root)
+    _write_probe_runtime(root, plan)
     assert probe._validate_destination(plan) == root
     (root / "occupied").write_text("evidence")
-    with pytest.raises(FileExistsError, match="create-once empty"):
+    with pytest.raises(FileExistsError, match="sealed bootstrap"):
+        probe._validate_destination(plan)
+
+
+def test_probe_destination_rejects_changed_bootstrap(plan, tmp_path) -> None:
+    root = tmp_path / "owned"
+    root.mkdir()
+    plan = copy.deepcopy(plan)
+    plan["output_root"] = str(root)
+    _write_probe_runtime(root, plan)
+    (root / ".runtime" / "plan.json").write_text("{}")
+    with pytest.raises(ValueError, match="digest-bound runtime"):
         probe._validate_destination(plan)
 
 

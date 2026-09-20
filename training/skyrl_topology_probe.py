@@ -38,7 +38,7 @@ PREFLIGHT_PACKET_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_packet_v1"
 PREFLIGHT_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_preview_v1"
 PREFLIGHT_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_cpu_preflight_failure_v1"
 PROBE_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_failure_v1"
-PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v2"
+PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v3"
 PREFLIGHT_RECEIPT = "/dev/termination-log"
 MODULE = "training.skyrl_topology_probe"
 CONFIG_PATH = ROOT / "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json"
@@ -717,7 +717,7 @@ def preflight(plan: dict, progress: Callable[[str], None] | None = None) -> dict
         raise ValueError("probe preflight is CPU-only")
     mark("plan_validation")
     arguments = _validate(plan)
-    mark("writable_empty_destination")
+    mark("sealed_bootstrap_destination")
     _validate_destination(plan)
     mark("create_once_destination_absence")
     _validate_create_once_absence(plan)
@@ -790,12 +790,31 @@ def _verify_model(plan: dict) -> None:
 
 
 def _validate_destination(plan: dict) -> Path:
-    """Require one empty, writable, run-owned receipt directory."""
+    """Allow only the digest-checked bootstrap that necessarily precedes us."""
     root = Path(plan["output_root"])
     if not root.is_dir() or not os.access(root, os.W_OK | os.X_OK):
         raise PermissionError("probe output is not a writable directory")
-    if any(root.iterdir()):
-        raise FileExistsError("probe output is not create-once empty")
+    runtime = root / ".runtime"
+    if runtime.is_symlink() or not runtime.is_dir() or set(root.iterdir()) != {runtime}:
+        raise FileExistsError("probe output contains more than its sealed bootstrap")
+    expected = {
+        **_runtime(),
+        "training/__init__.py": "",
+        "evals/__init__.py": "",
+        "evals/fleet/__init__.py": "",
+        "cyber_post_train/__init__.py": "",
+        "plan.json": json.dumps(plan, sort_keys=True, separators=(",", ":")),
+    }
+    files = {
+        str(path.relative_to(runtime)): path
+        for path in runtime.rglob("*")
+        if path.is_file()
+    }
+    if set(files) != set(expected) or any(
+        path.is_symlink() or path.read_text() != expected[name]
+        for name, path in files.items()
+    ):
+        raise ValueError("probe bootstrap differs from its digest-bound runtime")
     return root
 
 

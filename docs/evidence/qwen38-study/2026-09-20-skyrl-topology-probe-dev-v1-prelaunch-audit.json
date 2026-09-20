@@ -2,7 +2,7 @@
   "schema": "cyber_skyrl_topology_probe_prelaunch_audit_v1",
   "status": "blocked_not_submitted",
   "classification": "operational_gate",
-  "observed_at": "2026-09-20T10:55:00Z",
+  "observed_at": "2026-09-20T11:00:00Z",
   "identity": {
     "name": "chris-q38-skyrl-probe-v1",
     "cluster": "dev",
@@ -16,13 +16,14 @@
   "inputs": {
     "config": "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json",
     "config_self_sha256": "sha256:7de1d71e00f693561332bab7d43e91681f9de44fcc6754e1c97c6dd6026b75c9",
-    "plan_sha256": "a3a06f8dab3bdb486ce211fbfee9297376a25d7c1b94b2633bd0a628fa926bc5",
-    "request_sha256": "57be53ee4f73420b1a5c35210583301aff839d691c78956ced708fbfc0e75da3",
-    "fleetjob_manifest_sha256": "947716687f770196582b4b21c3051147dcd3593b05a36a74f59fe06ebfe4f448",
-    "fleetjob_packet_self_sha256": "sha256:fd2c9a01986a33df58c720991ed7de179ad591408ce81fffae956ea52097dee8",
-    "preflight_manifest_sha256": "83ba4b7943aa17acfe7d51d4ce761b738cae72f1370d32d2caf59bc51db92d64",
-    "preflight_packet_self_sha256": "sha256:0c746620bd37d37c54a81e6ad7a0baa6cb23010d48939979824e9f1ec3d2067e",
-    "runtime_sha256": "941bd67c83e255c0c79f3119e7f5ec973b7c0cab0c10288591d0d82b97fca3c5",
+    "plan_sha256": "084532ed5a64f54e7fc2c922b8f29a5f3e8d8e34a8f043ace71619b795517aac",
+    "request_sha256": "c7eafb2579128c37713cc0689ed218e3d72e0cf0e5f6d2cfe4886c489a84e7e9",
+    "fleetjob_manifest_sha256": "88545e7286e1d06c7a101564e5383b322930bd34d8eccc9e31f076e958031962",
+    "fleetjob_packet_self_sha256": "sha256:b39c8ddca42a688434f59e1b0775d449d4ca050c7db42eeb319b3947750d231e",
+    "preflight_name": "chris-q38-skyrl-probe-preflight-v3",
+    "preflight_manifest_sha256": "fa1dfb9d34f5e2d62a8f6ed1cd04926c8336faf7257be15a981ae2524ee70d0e",
+    "preflight_packet_self_sha256": "sha256:75b51ae221d2ff2ce49f13bdb33bb765512a363e110582b0cebeb7c9a6bed127",
+    "runtime_sha256": "aecffc69cc9b2a67b35e2cd2e6cfe5c3863e29925e5efde5a2c0acb3c7ee0709",
     "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
     "model": {
       "repository": "Qwen/Qwen3.8-27B",
@@ -33,8 +34,8 @@
   },
   "server_preview": {
     "status": "passed",
-    "self_sha256": "sha256:2bb54b47429758a66bdfcf7370e663ef09463c8a6a97788bf40a474a3ab49ad6",
-    "server_render_sha256": "ac448368e8970150975dd175a27118f3ddc8081bcfa092192dcabbe2ddffa37e",
+    "self_sha256": "sha256:d6020070a2d9afc7424a3b8715725e16e2260a80f66e6adb40a7a6a15c2f735c",
+    "server_render_sha256": "9352ecafb79dd530c962b4c30d65f682c0917c405e0762d08bd724a2347fa9e1",
     "controller_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/training-api@sha256:e9787177242159ed664d120d3e7496e7695b4a536aa14962b381e0d31ce5d9ac",
     "create_dry_run_only": true,
     "runtime_user": {
@@ -46,8 +47,8 @@
   },
   "cpu_preflight_server_preview": {
     "status": "passed",
-    "self_sha256": "sha256:7465c9f1b02e31dee235044de826c24926c2edb51d343af3f8ee3e00a8d33556",
-    "server_render_sha256": "f8d5b51f414b070b78c00fd9132af7e8f35d35ba5774133b9a731212abd7db4f",
+    "self_sha256": "sha256:2c20fc0166803357830083237abc4a211ad04d282ee3e5efb42fb4f7c3f43d9a",
+    "server_render_sha256": "2308db8fa38dbd5bbd6c3d4bf01e23b253e8d7a54183f9c85e9f64af4ed8b624",
     "create_dry_run_only": true,
     "runtime_user": {
       "uid": 1000,
@@ -66,6 +67,20 @@
     "gpus": 0,
     "released": true,
     "successor_change": "write a digest-valid sanitized phase and error-class receipt on every exit"
+  },
+  "retired_cpu_preflight_v2": {
+    "name": "chris-q38-skyrl-probe-preflight-v2",
+    "status": "failed_with_sanitized_diagnostic_receipt",
+    "observer_result": "docs/evidence/qwen38-study/2026-09-20-skyrl-topology-probe-preflight-v2-result.json",
+    "observer_result_sha256": "sha256:ae57b23d6464754c605cc2c6c818e4691ee9435160d0aedcc1c80bd2a0af9e8d",
+    "job_uid": "3d13f460-5f0e-4dbd-aa93-9049aeb970c5",
+    "pod_uid": "f83fa086-1a12-4183-839c-f72d243c0887",
+    "error_class": "FileExistsError",
+    "phase": "writable_empty_destination",
+    "restarts": 0,
+    "gpus": 0,
+    "released": true,
+    "successor_change": "require the exact digest-bound .runtime bootstrap and reject every other destination entry"
   },
   "contract": {
     "cpu_head": true,
@@ -106,5 +121,5 @@
   ],
   "safe_to_create": false,
   "next_action": "Run the exact-image zero-GPU preflight with the exact model mount, bind an independent 30-minute UID-aware cleanup observer, regenerate and re-preview the packet, then make a separate reviewed launch decision.",
-  "sha256": "sha256:d8cd3421e5c173d21b3a4b81e5f46f57b3f81f650e09a46e6f245c77994ec3ff"
+  "sha256": "sha256:beb0fffa08b3d7425ffacd235b5b6791c02b906a2257487592f692b01aff0929"
 }
