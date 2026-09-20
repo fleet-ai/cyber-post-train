@@ -1,0 +1,237 @@
+{
+  "schema_version": "qwen38_accepted_lora_eval_packet_v1",
+  "status": "sealed_waiting_for_serving_qualification",
+  "checkpoint": {
+    "checkpoint_id": "q38-lora-step1",
+    "lineage_kind": "lora_sft",
+    "run_name": "chris-q38-lora-sft-c1-v10",
+    "cluster": "development",
+    "optimizer_step": 1,
+    "checkpoint_path": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v10/checkpoints/global_step_1",
+    "source_qualification": {
+      "path": "configs/qualification/qwen38-lora-one-step-training-2026-09-20-v1.json",
+      "file_sha256": "sha256:1c1d78fe77711b708ddeaa5884252be426f6e6a095dcd3fb037cc42da54c7360",
+      "preflight_pod_uid": "d4d03591-69ec-4720-b1af-b08226180269",
+      "training_pod_uid": "4e555f21-b77b-4aff-b3fa-75ef360e4d22",
+      "validator_pod_uid": "9ec1618a-3112-46bd-a7a6-3deb70139198",
+      "image": "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317",
+      "plan_sha256": "sha256:89d9e6da47a83c4dd95075acafca05bf14a2b3a4f3f5a10a508b2bd8e0fb63b5",
+      "request_sha256": "sha256:791c49bebc52f7ed2423c0c62a33c3d7f6c786abc5a493fc2b65c6d97ada737e",
+      "restart_count": 0,
+      "exit_code": 0,
+      "gpu_released": true
+    },
+    "checkpoint_receipt": {
+      "path": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v10/QWEN38_LORA_CHECKPOINT.json",
+      "file_sha256": "sha256:2f914db630534a4cc2f036b646e40244565c68f67f810af5061dff1912e3f062",
+      "receipt_sha256": "sha256:7a5a8c0ed29c35ee4ddf5430fbcf235885c6a1405a800d0041d1931ba3a6abd6"
+    },
+    "merged_export": {
+      "root": "/mnt/sfs/jobs/chris-q38-lora-export-c1-v5/merged-hf",
+      "receipt_path": "/mnt/sfs/jobs/chris-q38-lora-export-c1-v5/QWEN38_LORA_MERGED_HF_EXPORT.json",
+      "receipt_file_sha256": "sha256:3da93b3304e284205ba8a8939d1dcb8cc4fe749b0f255bbbe35376af5e7c5ff2",
+      "receipt_sha256": "sha256:1561a76907551bf829221af328921a626ddde8c5791cf29fa46ad0c99357c110",
+      "files_manifest_sha256": "sha256:f08cdb03fa6ef79228028417bec978a509275bbb1ebe7d99d5db4a00ae9fad84",
+      "tensor_layout_sha256": "sha256:8533a0edfba093faf2a865391405408461613b92ef83e8d511436f2ed96bc14d",
+      "sidecars_manifest_sha256": "sha256:aa356dc4bc278ae21aaaa5f3527e545ff32f5db7bb599cf56476d55c8a891585",
+      "validation_receipt_sha256": "sha256:e60eb3ecb06b0488b98f558f4a1e873a18a95cba4aa8f5ed8bfcbc3c734c67b2",
+      "evidence_path": "docs/evidence/qwen38-lora-zero-step-export-dev-qualification-20260920.md",
+      "evidence_file_sha256": "sha256:eb6aff680259026f3056c3bf13baa9876430ed1b8acb3ed9da96653a8cdde600",
+      "dev_qualified": true,
+      "serving_qualified": false
+    }
+  },
+  "base_model": {
+    "model_id": "qwen3.8-27b",
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+    "canonical_manifest_sha256": "sha256:c4dab1bcd885ef426cc310853ef8f6fed451158cf83de17e8c625d703202940b",
+    "weight_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+    "tokenizer_sha256": "sha256:3938a9a8172f2738fed1be44efc11e2562059269d50d3721213f44802b53b4e1",
+    "chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "lock_path": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+    "lock_file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+    "sealed_route_uid": "d06c0531-7181-41ad-a3fd-cd8e3e774ab9"
+  },
+  "serving": {
+    "candidate_model_id": "chris-q38-lora-step1-wbe-v1",
+    "create_once": true,
+    "initial_state": "paused",
+    "priority": "c1",
+    "nodes": 1,
+    "gpus": 8,
+    "min_replicas": 0,
+    "requires_new_uid": true,
+    "existing_route_forbidden": true,
+    "fresh_live_parity_required": true
+  },
+  "webexploitbench": {
+    "protocol_source": {
+      "path": "configs/evaluation/qwen38-fresh75-step230-opencode-wbe-matched-v1.json",
+      "file_sha256": "sha256:0eef151dd9f1740005152c1aceb3cd664cb3033aac3bef1b2f45f9c81d3c7016"
+    },
+    "benchmark": {
+      "repository": "AgentCyberRange/WebExploitBench",
+      "revision": "7f97d87fa8ab728260c0ba9b09b9c8f00bb82ad5",
+      "cage_commit": "09a191c565230cebb8255899d622d23c7ddeff33",
+      "cage_patch_set_sha256": "sha256:baf629de2ea13a5648f9de792514efcd73c71667c1ffe375b8669cbc1ad72b51",
+      "target_count": 15,
+      "task_order_sha256": "sha256:1e9536e872e1ae602fea5034e08f059a712f056a7cf7bc8521cc88e8aab7357d",
+      "canary_task_index": 0
+    },
+    "shared_snapshot": {
+      "snapshot_id": "9ex8su1qpaf3o6f0r5wmz",
+      "task_count": 15,
+      "task_order_sha256": "sha256:1e9536e872e1ae602fea5034e08f059a712f056a7cf7bc8521cc88e8aab7357d",
+      "qualification_receipt_sha256": "sha256:bb060c786ea4213ded3673ff31a6a2b81278ac497092b89dc7c1bdc418cf89f3",
+      "full15_receipt_sha256": "sha256:dc9cb28d6e335cad93a5384d0d9eba084d9cab102dea6a7ce0f0b67de9c2f9a7",
+      "snapshot_runner_sha256": "sha256:0a4c783b46709825ea41f8a0802e7b209e6960253c3cb6d1fd0055834c276e43",
+      "collection_runner_sha256": "sha256:bd4aa3c1cf27f63ae151c818873e6070a0a23f55b34934457338c357aafb3742"
+    },
+    "harness": "opencode-1.18.27",
+    "collection": "score_free_immutable_rollout_bundles",
+    "scoring": "separate_resumable_stage",
+    "selection_use": "reporting_only",
+    "base_control": {
+      "model_id": "qwen3.8-27b",
+      "sealed_route_uid": "d06c0531-7181-41ad-a3fd-cd8e3e774ab9",
+      "policy": "reuse_exact_common_control_else_create_once",
+      "reuse_requires_exact_protocol_and_accepted_immutable_bundle": true,
+      "fresh_duplicate_census_required": true
+    },
+    "canary": {
+      "pair_id": "q38-lora1-wbe-c1-pair-v1",
+      "base_campaign_id": "q38-base-lora1-oc-wbe-c1-v1",
+      "candidate_campaign_id": "q38-lora1-oc-wbe-c1-v1",
+      "base_sandbox_prefix": "q38-b-lora1-c1-v1-",
+      "candidate_sandbox_prefix": "q38-c-lora1-c1-v1-",
+      "task_count": 1,
+      "pass_k": 1,
+      "attempts_per_arm": 1
+    },
+    "full": {
+      "logical_task_count": 15,
+      "logical_pass_k": 4,
+      "logical_attempts_per_arm": 60,
+      "physical_replicas": [
+        {
+          "replica_index": 0,
+          "pair_id": "q38-lora1-wbe-r0-pair-v1",
+          "base_campaign_id": "q38-base-lora1-oc-wbe-r0-v1",
+          "candidate_campaign_id": "q38-lora1-oc-wbe-r0-v1",
+          "base_sandbox_prefix": "q38-b-lora1-r0-v1-",
+          "candidate_sandbox_prefix": "q38-c-lora1-r0-v1-",
+          "task_count": 15,
+          "pass_k": 1,
+          "attempts_per_arm": 15
+        },
+        {
+          "replica_index": 1,
+          "pair_id": "q38-lora1-wbe-r1-pair-v1",
+          "base_campaign_id": "q38-base-lora1-oc-wbe-r1-v1",
+          "candidate_campaign_id": "q38-lora1-oc-wbe-r1-v1",
+          "base_sandbox_prefix": "q38-b-lora1-r1-v1-",
+          "candidate_sandbox_prefix": "q38-c-lora1-r1-v1-",
+          "task_count": 15,
+          "pass_k": 1,
+          "attempts_per_arm": 15
+        },
+        {
+          "replica_index": 2,
+          "pair_id": "q38-lora1-wbe-r2-pair-v1",
+          "base_campaign_id": "q38-base-lora1-oc-wbe-r2-v1",
+          "candidate_campaign_id": "q38-lora1-oc-wbe-r2-v1",
+          "base_sandbox_prefix": "q38-b-lora1-r2-v1-",
+          "candidate_sandbox_prefix": "q38-c-lora1-r2-v1-",
+          "task_count": 15,
+          "pass_k": 1,
+          "attempts_per_arm": 15
+        },
+        {
+          "replica_index": 3,
+          "pair_id": "q38-lora1-wbe-r3-pair-v1",
+          "base_campaign_id": "q38-base-lora1-oc-wbe-r3-v1",
+          "candidate_campaign_id": "q38-lora1-oc-wbe-r3-v1",
+          "base_sandbox_prefix": "q38-b-lora1-r3-v1-",
+          "candidate_sandbox_prefix": "q38-c-lora1-r3-v1-",
+          "task_count": 15,
+          "pass_k": 1,
+          "attempts_per_arm": 15
+        }
+      ]
+    }
+  },
+  "fleet_holdout": {
+    "split_manifest": {
+      "path": "configs/data/fleet-blackbox-current-study-split-20260914-v2.json",
+      "file_sha256": "sha256:28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb"
+    },
+    "split_sha256": "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
+    "development": {
+      "campaign_id": "q38-lora1-fleet-dev17-p1-v1",
+      "harness": "opencode-1.18.27",
+      "selection_sha256": "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
+      "task_version_ids": [
+        "2e363dca-e74d-4855-a002-6761dc7f9f0f",
+        "18079a9c-cb79-4013-aa08-54092c415165",
+        "d6c906fc-ef92-4ce6-ab9c-54a9b7eb9037",
+        "037704a7-fc03-4cf6-a8da-3f3e3933717e",
+        "139ff10d-8c00-4bd6-9437-e6fbcccf2f4d",
+        "f1ce26fc-39b6-442c-a03c-3c18f99e119f",
+        "78971e60-851b-4f6a-85d8-ecb3391d2af2",
+        "e13f62eb-170a-40c6-86bf-3c3f3829e3d8",
+        "1407dcf7-46ad-4b82-8aa1-f88307dd8264",
+        "05d09c55-ccdf-4d26-b06d-b851a2314a35",
+        "d4f5e664-d4fd-4492-a103-429260ad9e99",
+        "2cb87286-a35e-4ba0-a949-1d93dfbd229a",
+        "eefe304c-499d-4c9e-b09c-8aa0fab87213",
+        "fb68f600-9850-4cc2-86e7-a4f554e5f93f",
+        "b6efa2e4-7743-4b8b-a014-832d90cd5e39",
+        "51b23680-27fa-4bdd-a077-16669f3f0e18",
+        "383a2b61-e82b-4426-9a2b-d5372c92e346"
+      ],
+      "pass_k": 1
+    },
+    "final_test": {
+      "status": "forbidden_until_single_checkpoint_selected",
+      "selection_sha256": "sha256:9623149c4a021bc13ed2cf94ca26e107b30c18816cf3c02d76b5020cab5066f4",
+      "task_version_ids": [
+        "e33aaed0-491b-46e8-8891-55d99c80ef56",
+        "ba912601-1184-4dcd-9e9d-2fce22543e4b",
+        "9375a9b9-04e5-4f6f-ad47-286121278992",
+        "5287e180-64ea-487b-982a-d08a38c05fa2",
+        "8c0b249c-8946-4ec3-8609-d74631af547e",
+        "f8533754-39ad-4683-b9c1-d26bc24dfd14",
+        "8e5c7c45-7259-420d-ba12-0381465d864e",
+        "ee77cfbf-ceed-487f-a19d-3922aaaf4bad"
+      ],
+      "pass_k": 1,
+      "policy": "once_after_checkpoint_selection"
+    }
+  },
+  "resource_policy": {
+    "priority": "c1",
+    "project_node_cap": 8,
+    "candidate_route_nodes": 1,
+    "candidate_route_gpus": 8,
+    "admit_only_after_one_project_node_released": true,
+    "release_when_no_useful_rollout_consumer": true
+  },
+  "activation_gates": [
+    "checkpoint_receipt_materialized_and_full_payload_rehashed",
+    "merged_export_receipt_materialized_and_full_payload_rehashed",
+    "merged_export_validation_receipt_valid",
+    "candidate_route_name_absent",
+    "create_once_paused_c1_route_with_new_uid",
+    "project_active_nodes_at_most_eight_after_route_admission",
+    "fresh_base_candidate_serving_parity",
+    "fresh_tensorlake_duplicate_census",
+    "paired_score_free_task0_canary_acceptance",
+    "full_collection_only_after_canary_acceptance",
+    "scoring_only_from_immutable_rollout_bundles",
+    "fleet_development_eval_pass1",
+    "fleet_final_test_only_once_after_checkpoint_selection"
+  ],
+  "packet_sha256": "sha256:6f59b3ba40c2030529816016122177dc242086967b91b03d793a89bac17986bd"
+}
