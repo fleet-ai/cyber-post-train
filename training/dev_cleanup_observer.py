@@ -85,6 +85,7 @@ def _validated_receipt(message: object, *, kind: str) -> dict | None:
             "cyber_skyrl_topology_probe_receipt_verification_rejection_v1",
             "cyber_skyrl_reward_data_stage_receipt_v1",
             "cyber_skyrl_reward_cpu_preflight_v1",
+            "cyber_skyrl_reward_cpu_preflight_rejection_v1",
         },
         "fleetjob": {
             "cyber_skyrl_topology_probe_receipt_v1",

@@ -41,6 +41,14 @@ def test_wandb_missing_run_contract_is_exact() -> None:
     assert not direct._wandb_run_absent(service_error, path)
 
 
+def test_preflight_rejection_is_sanitized() -> None:
+    error = direct.PreflightGateError("scientific_preflight", ValueError("private detail"))
+    assert error.phase == "scientific_preflight"
+    assert error.error_class == "ValueError"
+    assert error.message_sha256 == hashlib.sha256(b"private detail").hexdigest()
+    assert "private detail" not in vars(error).values()
+
+
 @pytest.fixture(scope="module")
 def plan_request() -> tuple[dict, dict]:
     run = load(CANARY_RUN)

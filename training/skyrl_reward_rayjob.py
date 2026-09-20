@@ -45,7 +45,7 @@ PROD_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 NAMESPACE = "fleet-train-jobs"
 RUN_NAME = "chris-q38-rlreward-prod4"
 STAGE_NAME = "chris-q38-prod4-data-v1"
-PREFLIGHT_NAME = "chris-q38-prod4-preflight-v2"
+PREFLIGHT_NAME = "chris-q38-prod4-preflight-v3"
 STAGE_RECEIPT = "/dev/termination-log"
 UPLOAD = Path("/tmp/autoresearch-upload.tar.gz")
 PACKET_SCHEMA = "cyber_skyrl_reward_direct_rayjob_packet_v1"
@@ -53,6 +53,7 @@ PREVIEW_SCHEMA = "cyber_skyrl_reward_direct_rayjob_preview_v1"
 STAGE_SCHEMA = "cyber_skyrl_reward_data_stage_v1"
 STAGE_RECEIPT_SCHEMA = "cyber_skyrl_reward_data_stage_receipt_v1"
 PREFLIGHT_RECEIPT_SCHEMA = "cyber_skyrl_reward_cpu_preflight_v1"
+PREFLIGHT_REJECTION_SCHEMA = "cyber_skyrl_reward_cpu_preflight_rejection_v1"
 CPU_PREVIEW_SCHEMA = "cyber_skyrl_reward_cpu_job_preview_v1"
 AUTHORIZATION_SCHEMA = "cyber_skyrl_reward_direct_authorization_v1"
 CREATED_SCHEMA = "cyber_skyrl_reward_direct_created_v1"
@@ -617,35 +618,51 @@ def _wandb_run_absent(error: BaseException, path: str) -> bool:
     )
 
 
+class PreflightGateError(Exception):
+    def __init__(self, phase: str, error: BaseException) -> None:
+        super().__init__(phase)
+        self.phase = phase
+        self.error_class = type(error).__name__
+        self.message_sha256 = hashlib.sha256(str(error).encode()).hexdigest()
+
+
 def preflight_runtime(plan: dict[str, Any]) -> dict[str, Any]:
-    proof = skyrl_training.preflight(plan)
+    try:
+        proof = skyrl_training.preflight(plan)
+    except BaseException as exc:
+        raise PreflightGateError("scientific_preflight", exc) from None
     if proof.get("status") != "passed" or proof.get("gpus") != 0:
-        raise ValueError("prod4 scientific CPU preflight failed")
+        raise PreflightGateError(
+            "scientific_preflight_contract",
+            ValueError("prod4 scientific CPU preflight failed"),
+        )
     try:
         import wandb
         from wandb.errors import CommError
-
-        if not os.environ.get("WANDB_API_KEY"):
-            raise RuntimeError("prod4 W&B read credential is absent")
-        arguments = plan["arguments"]
-        path = "/".join(
-            (arguments["wandb_entity"], arguments["wandb_project"], arguments["wandb_run_id"])
-        )
-        try:
-            wandb.Api(timeout=30).run(path)
-        except CommError as exc:
-            # W&B 0.21.1 turns its own exact missing-run ValueError into a
-            # CommError with no response object.  Accept only that exact SDK
-            # sentinel (or an explicit HTTP 404); every service/auth error
-            # still fails closed.
-            if not _wandb_run_absent(exc, path):
-                raise
-        else:
-            raise FileExistsError("prod4 W&B run ID already exists")
-    except FileExistsError:
-        raise
     except BaseException as exc:
-        raise RuntimeError("prod4 W&B absence check failed") from exc
+        raise PreflightGateError("wandb_client_import", exc) from None
+
+    if not os.environ.get("WANDB_API_KEY"):
+        raise PreflightGateError(
+            "wandb_credential", RuntimeError("prod4 W&B read credential is absent")
+        )
+    arguments = plan["arguments"]
+    path = "/".join(
+        (arguments["wandb_entity"], arguments["wandb_project"], arguments["wandb_run_id"])
+    )
+    try:
+        wandb.Api(timeout=30).run(path)
+    except CommError as exc:
+        # W&B 0.21.1 turns its own exact missing-run ValueError into a
+        # CommError with no response object.  Accept only that exact SDK
+        # sentinel (or an explicit HTTP 404); every service/auth error
+        # still fails closed.
+        if not _wandb_run_absent(exc, path):
+            raise PreflightGateError("wandb_lookup", exc) from None
+    else:
+        raise PreflightGateError(
+            "wandb_run_exists", FileExistsError("prod4 W&B run ID already exists")
+        )
     return _seal(
         {
             "schema": PREFLIGHT_RECEIPT_SCHEMA,
@@ -1123,7 +1140,23 @@ def main() -> None:
         if args.stage is not None:
             result = stage_runtime(json.loads(args.stage.read_bytes()))
         else:
-            result = preflight_runtime(json.loads(args.preflight.read_bytes()))
+            plan = json.loads(args.preflight.read_bytes())
+            try:
+                result = preflight_runtime(plan)
+            except PreflightGateError as exc:
+                result = _seal(
+                    {
+                        "schema": PREFLIGHT_REJECTION_SCHEMA,
+                        "status": "rejected",
+                        "phase": exc.phase,
+                        "error_class": exc.error_class,
+                        "message_sha256": exc.message_sha256,
+                        "plan_sha256": digest(plan),
+                        "request_sha256": digest(skyrl_training.job_request(plan)),
+                        "gpus": 0,
+                        "checked_at": _stamp(),
+                    }
+                )
         _write_receipt(args.receipt, result)
         print(json.dumps({"status": result["status"], "sha256": result["sha256"]}))
     except BaseException as exc:
