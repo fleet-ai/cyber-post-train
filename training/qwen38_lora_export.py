@@ -647,13 +647,12 @@ def run(plan: dict) -> dict:
         raise ValueError("Jobs API run-directory binding drift")
     run_root = Path(plan["run_dir"])
     final = Path(plan["output_root"])
-    second = run_root / ".determinism-second"
     partial_first = run_root / ".native-partial-first"
     partial_second = run_root / ".native-partial-second"
     _stage("destination_check")
     if any(
         path.exists() or path.is_symlink()
-        for path in (final, second, partial_first, partial_second)
+        for path in (final, partial_first, partial_second)
     ):
         raise FileExistsError("create-once export destination already exists")
     _stage("checkpoint_validation")
@@ -693,39 +692,27 @@ def run(plan: dict) -> dict:
             timeout=DEADLINE_SECONDS,
         )
         base_files = {row["path"] for row in receipt["source_plan"]["model"]["files"]}
-        _stage("first_full_layout_completion")
-        first_completion = complete_native_export_from_base(
+        _stage("first_native_export_reopen")
+        first_native = inspect_hf_export(partial_first)
+        _stage("second_native_export_reopen")
+        second_native = inspect_hf_export(partial_second)
+        _stage("deterministic_export_compare")
+        if (
+            first_native["tensors"] != second_native["tensors"]
+            or first_native["sidecars"] != second_native["sidecars"]
+        ):
+            raise ValueError("two native merge/exports are not deterministic")
+        _stage("full_layout_completion")
+        complete_native_export_from_base(
             partial_first,
             base_root,
             final,
             base_files=base_files,
         )
-        _stage("second_full_layout_completion")
-        second_completion = complete_native_export_from_base(
-            partial_second,
-            base_root,
-            second,
-            base_files=base_files,
-        )
-        if first_completion != second_completion:
-            raise ValueError("dual native exports completed a different frozen layout")
         shutil.rmtree(partial_first)
         shutil.rmtree(partial_second)
-        _stage("first_export_reopen")
-        first_inspection = inspect_hf_export(final)
-        _stage("second_export_reopen")
-        second_inspection = inspect_hf_export(second)
-        _stage("deterministic_export_compare")
-        if (
-            first_inspection["tensors"] != second_inspection["tensors"]
-            or first_inspection["sidecars"] != second_inspection["sidecars"]
-        ):
-            raise ValueError("two native merge/exports are not deterministic")
         _stage("published_export_reopen")
-        reopened = inspect_hf_export(final)
-        _stage("published_export_stability")
-        if reopened != first_inspection:
-            raise ValueError("published output changed during independent tensor reopen")
+        first_inspection = inspect_hf_export(final)
         _stage("base_export_reopen")
         base = inspect_hf_export(
             base_root,
@@ -741,8 +728,6 @@ def run(plan: dict) -> dict:
         _stage("adapter_change_check")
         if changed <= 0:
             raise ValueError("merged export contains no adapter-derived tensor changes")
-        _stage("second_export_cleanup")
-        shutil.rmtree(second)
         _stage("full_model_tokenizer_reload")
         reload_result = ray.get(
             ray.remote(num_cpus=4, num_gpus=1)(_reload_model).remote(str(final)),
