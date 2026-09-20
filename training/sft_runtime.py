@@ -79,6 +79,15 @@ QWEN38_QUALIFICATION_STAGES = {
     "post_update_snapshot_started",
     "post_update_snapshot_complete",
     "qualification_receipt_preparation_started",
+    "checkpoint_inventory_validated",
+    "trainer_step_evidence_validated",
+    "adapter_reconciliation_started",
+    "adapter_reconciliation_complete",
+    "source_revalidation_started",
+    "source_revalidation_complete",
+    "runtime_revalidation_complete",
+    "source_immutability_validated",
+    "source_plan_validated",
     "qualification_receipt_prepared",
     "terminal_result_validated",
     "wandb_finish_started",
@@ -257,8 +266,8 @@ QWEN38_LORA_ONE_STEP_PLAN = {
         "wandb",
     ],
     "schema": DENSE_SCHEMA,
-    "run_name": "chris-q38-lora-sft-c1-v8",
-    "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v8",
+    "run_name": "chris-q38-lora-sft-c1-v9",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v9",
     "model": {
         "repo": "Qwen/Qwen3.8-27B",
         "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
@@ -307,8 +316,8 @@ QWEN38_LORA_ONE_STEP_PLAN = {
         "entity": "thefleet",
         "project": "cyber-post-train",
         "group": "qwen38-lora-sft-goal-v1",
-        "run_id": "chris-q38-lora-sft-c1-v8",
-        "name": "chris-q38-lora-sft-c1-v8",
+        "run_id": "chris-q38-lora-sft-c1-v9",
+        "name": "chris-q38-lora-sft-c1-v9",
         "tags": [
             "qwen38",
             "lora",
@@ -325,6 +334,7 @@ QWEN38_LORA_ONE_STEP_PLAN = {
             "step-boundary-evidence-repair",
             "float32-lr-consensus-repair",
             "post-checkpoint-boundary-evidence-repair",
+            "receipt-invariant-boundary-evidence-repair",
         ],
     },
 }
@@ -1850,12 +1860,15 @@ def _prepare_qwen38_checkpoint_receipt(
     if checkpoint != trainer.output / "checkpoints" / "global_step_1":
         raise ValueError("qualified checkpoint path differs from the one-step plan")
     files, roles = _qwen38_checkpoint_inventory(checkpoint)
+    trainer._record_qualification_stage("checkpoint_inventory_validated")
     step = getattr(trainer, "last_step_evidence", None)
     if not isinstance(step, dict) or set(step) != {
         "forward_loss",
         "lora_gradient_norm",
     }:
         raise ValueError("one-step trainer evidence is incomplete")
+    trainer._record_qualification_stage("trainer_step_evidence_validated")
+    trainer._record_qualification_stage("adapter_reconciliation_started")
     reconciled = _qwen38_reconcile_evidence(
         before_snapshots,
         after_snapshots,
@@ -1863,21 +1876,27 @@ def _prepare_qwen38_checkpoint_receipt(
         forward_loss=step["forward_loss"],
         trainer_gradient_norm=step["lora_gradient_norm"],
     )
+    trainer._record_qualification_stage("adapter_reconciliation_complete")
     # Re-hash every bound model/data source exactly once after the optimizer
     # step.  Structural validation is independent of file reads, and the
     # complete pre-step inventories were already collected immediately before
     # trainer setup.  This preserves before/after immutability evidence without
     # multiplying a 55.6 GB model read.
+    trainer._record_qualification_stage("source_revalidation_started")
     validate_plan(plan, check_files=False)
     source_inventory_after = _qwen38_source_inventory(plan)
+    trainer._record_qualification_stage("source_revalidation_complete")
     runtime_inventory_after = _qwen38_runtime_source_inventory(plan)
+    trainer._record_qualification_stage("runtime_revalidation_complete")
     if source_inventory_before != source_inventory_after:
         raise ValueError("staged model/data source inventory changed during training")
     if runtime_inventory_before != runtime_inventory_after:
         raise ValueError("installed SkyRL source inventory changed during training")
+    trainer._record_qualification_stage("source_immutability_validated")
     source_plan = {key: value for key, value in plan.items() if key != "plan_sha256"}
     if _unsigned_digest(source_plan) != plan["plan_sha256"]:
         raise ValueError("runtime source plan differs from the staged plan bytes")
+    trainer._record_qualification_stage("source_plan_validated")
     return {
         "schema": "cyber_qwen38_megatron_lora_checkpoint_manifest_v1",
         "source_plan_sha256": plan["plan_sha256"],
