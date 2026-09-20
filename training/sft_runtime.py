@@ -5,7 +5,8 @@ qualification producer is committed at exact SkyRL revision
 7e9356c8e02e7382e84b8484638baccdd1bbf680 and its immutable trainer image
 passed the bounded CPU image qualification recorded in
 configs/qualification/qwen38-lora-megatron-trainer-image-2026-09-20-v1.json.
-This qualifies only the exact one-step gate; broader training remains
+The accepted production one-step checkpoint and zero-update BF16 merge/export
+now admit one exact broad-data plan; every other broader treatment remains
 fail-closed. This module deliberately keeps the native training loop and
 optimizer. It adds
 metadata-preserving tokenization, one-pass task-macro validation, scalar
@@ -163,8 +164,9 @@ SOURCE_SHA256 = {
 # 7e9356c8e02e7382e84b8484638baccdd1bbf680. This census is complete enough to
 # build and verify the successor image. Dependency manifests and Dockerfile
 # remain load-bearing because the earlier image failed when its build omitted
-# the Megatron extra. The qualified pair above is still accepted only for the
-# exact one-step gate enforced by ``validate_plan``.
+# the Megatron extra. The qualified pair above is accepted only for the exact
+# one-step identities and production-qualified broad identity enforced by
+# ``validate_plan``.
 QWEN38_MEGATRON_SOURCE_SHA256: dict[str, str] = {
     "pyproject.toml": "ec1f6edaf83c3b5299d455c858409cdace4a7b3cc2948d208264ae0937077182",
     "uv.lock": "7843814ce42bdc1d34173138f00037108ea4181909e7fac5af14578c3c4551a6",
@@ -236,6 +238,48 @@ QWEN38_LORA_QUALIFICATION = {
     ],
     "training_success_is_acceptance": False,
     "accepted_for_production": False,
+}
+
+# This is the complete public handoff from the accepted production one-step
+# checkpoint to its zero-update BF16 merge/export.  The file digest binds all
+# receipt fields; the selected fields below keep the admission decision legible
+# and make the source checkpoint and source plan links independently explicit.
+# Broad training must reopen these exact bytes at runtime before model setup.
+QWEN38_LORA_PRODUCTION_QUALIFICATION = {
+    "schema": "qwen38_megatron_lora_production_gate_v1",
+    "acceptance_handoff_sha256": (
+        "8e1370ee28f8e366a3306446ab5a328b513e1d76fa0a317c9d70ca315fbbc1f2"
+    ),
+    "source_plan_sha256": ("33fc02619b07e9dd2bf21fc886ed4e41069151e32d70824e0a572223c86ce677"),
+    "source_checkpoint_receipt_sha256": (
+        "ab8d0e48566a4d4ddd4017fa14db8733122e5d8447cbcee535976c110c4354c2"
+    ),
+    "export_receipt": {
+        "path": ("/mnt/sfs/jobs/chris-q38-lora-prod-exp-v1/QWEN38_LORA_MERGED_HF_EXPORT.json"),
+        "file_sha256": ("bfeedcac2a82f25696e7d102de3b5f509ded9539a9a07d65c39a94a1c58bc7a2"),
+        "receipt_sha256": ("237d90b34377599284c2358cd2611dfe2487a812a7179fc7460ed6ff3541ca76"),
+        "schema": "cyber_qwen38_megatron_lora_merged_hf_export_v1",
+        "output_root": "/mnt/sfs/jobs/chris-q38-lora-prod-exp-v1/merged-hf",
+        "optimizer_step": 1,
+        "optimizer_steps_executed": 0,
+        "dtype": "BF16",
+        "merge_method": "megatron_bridge_lora_merge_v1",
+        "base_tensor_count": 1199,
+        "merged_tensor_count": 1199,
+        "tensor_bytes": 55_562_855_904,
+        "source_base_unchanged": True,
+        "source_checkpoint_unchanged": True,
+        "adapter_checkpoint_reload_verified": True,
+        "optimizer_resume_verified": True,
+        "all_output_tensors_reopened_equal": True,
+        "adapter_payloads_absent": True,
+        "deterministic_merge": True,
+        "merged_model_reload_verified": True,
+        "finite_logits": True,
+        "gpu_reload_verified": True,
+    },
+    "training_success_is_acceptance": False,
+    "accepted_for_production": True,
 }
 
 # This is deliberately the complete identity of the one reviewed GPU canary,
@@ -369,6 +413,94 @@ QWEN38_LORA_PRODUCTION_CANARY = {
     },
 }
 
+# The first broad-data BF16 LoRA run is a single immutable treatment, not a
+# newly opened parameter menu.  Its model and runtime match the accepted
+# production canary, while its already-reviewed anchor changes only the corpus,
+# context, batch, stopping rule, checkpoint cadence, and create-once identities
+# recorded here.  Compact digests bind the full model and 496-task data
+# inventories without copying either inventory into executable code.
+QWEN38_LORA_BROAD_FULL_PLAN = {
+    "plan_keys": [
+        "corpus_manifest_sha256",
+        "datasets",
+        "execution",
+        "lora",
+        "model",
+        "output_root",
+        "qualification_gate",
+        "recipe",
+        "run_name",
+        "runtime_sha256",
+        "schema",
+        "skyrl_runtime",
+        "split_manifest_sha256",
+        "validation_mode",
+        "wandb",
+    ],
+    "schema": DENSE_SCHEMA,
+    "run_name": "chris-q38-lora-sft-a1-v1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-a1-v1",
+    "model": {
+        "repo": "Qwen/Qwen3.8-27B",
+        "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+        "weight_manifest_sha256": (
+            "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
+        ),
+        "files_sha256": "c4dab1bcd885ef426cc310853ef8f6fed451158cf83de17e8c625d703202940b",
+    },
+    "datasets_sha256": "c8fa0d8e21500269afce7437241b4a9fd349d4714cbedeee6d39452dc0dd359e",
+    "split_manifest_sha256": (
+        "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c"
+    ),
+    "corpus_manifest_sha256": (
+        "sha256:a8d08609991d7960cdcdab826bd07c3216bfcd3aa8f6fb33ab7a5fd29648d6f5"
+    ),
+    "recipe": {
+        "epochs": 1,
+        "batch_size": 8,
+        "microbatch_per_gpu": 1,
+        "nodes": 1,
+        "gpus_per_node": 8,
+        "lr": 3e-5,
+        "max_length": 32768,
+        "eval_interval": 0,
+        "checkpoint_interval": 20,
+        "keep_checkpoints": 3,
+        "seed": 20260919,
+        "max_steps": 1837,
+    },
+    "pause_after_step": None,
+    "validation_mode": "task_outcomes_only",
+    "execution": {
+        "priority": "c1",
+        "resources": {
+            "cpu_request": "64",
+            "cpu_limit": "64",
+            "memory_request": "512Gi",
+            "memory_limit": "768Gi",
+        },
+    },
+    "wandb": {
+        "entity": "thefleet",
+        "project": "cyber-post-train",
+        "group": "qwen38-lora-sft-goal-v1",
+        "run_id": "chris-q38-lora-sft-a1-v1",
+        "name": "chris-q38-lora-sft-a1-v1",
+        "tags": [
+            "qwen38",
+            "lora",
+            "teacher-sft",
+            "rank64",
+            "alpha32",
+            "57m-unique-supervised-tokens",
+            "32k",
+            "anchor",
+            "task-outcomes-only",
+        ],
+    },
+}
+
 
 def qwen38_megatron_binding() -> tuple[str, str, dict[str, str]]:
     """Return the one reviewed source/image pair, or fail closed.
@@ -475,6 +607,24 @@ def qwen38_lora_production_canary_plan_binding() -> dict:
     }
 
 
+def qwen38_lora_broad_full_plan_binding() -> dict:
+    """Return the one broad plan admitted by the production receipt chain."""
+    qualification = QWEN38_LORA_PRODUCTION_QUALIFICATION
+    export = qualification["export_receipt"]
+    if (
+        qualification.get("accepted_for_production") is not True
+        or not re.fullmatch(r"[a-f0-9]{64}", qualification.get("source_plan_sha256", ""))
+        or not re.fullmatch(
+            r"[a-f0-9]{64}", qualification.get("source_checkpoint_receipt_sha256", "")
+        )
+        or not isinstance(export, dict)
+        or not re.fullmatch(r"[a-f0-9]{64}", export.get("file_sha256", ""))
+        or not re.fullmatch(r"[a-f0-9]{64}", export.get("receipt_sha256", ""))
+    ):
+        raise ValueError("Qwen3.8 broad LoRA production qualification is unresolved")
+    return QWEN38_LORA_BROAD_FULL_PLAN
+
+
 def write_receipt(path: Path, value: dict, *, replace: bool = False) -> None:
     payload = {**value, "receipt_sha256": _unsigned_digest(value)}
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -510,12 +660,83 @@ def _verified_file_observation(path: Path, expected: str) -> dict:
     return {"bytes": after.st_size, "sha256": observed}
 
 
+def _verified_json_file(path: Path, expected: str) -> dict:
+    """Parse the same stable bytes whose exact file digest was verified."""
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("immutable JSON file missing or digest mismatch")
+    before = path.stat()
+    payload = path.read_bytes()
+    after = path.stat()
+    stable_fields = (
+        "st_dev",
+        "st_ino",
+        "st_mode",
+        "st_size",
+        "st_mtime_ns",
+        "st_ctime_ns",
+    )
+    if hashlib.sha256(payload).hexdigest() != expected.removeprefix("sha256:") or any(
+        getattr(before, field) != getattr(after, field) for field in stable_fields
+    ):
+        raise ValueError("immutable JSON file missing or digest mismatch")
+    try:
+        value = json.loads(payload)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("immutable JSON file is invalid") from exc
+    if not isinstance(value, dict):
+        raise ValueError("immutable JSON file is invalid")
+    return value
+
+
+def _validate_qwen38_production_export_receipt(
+    receipt: dict,
+    qualification: dict = QWEN38_LORA_PRODUCTION_QUALIFICATION,
+) -> None:
+    """Validate the public receipt fields that authorize the exact broad plan."""
+    if not isinstance(receipt, dict) or not isinstance(qualification, dict):
+        raise ValueError("Qwen3.8 production export qualification is invalid")
+    export = qualification.get("export_receipt")
+    if not isinstance(export, dict):
+        raise ValueError("Qwen3.8 production export qualification is invalid")
+    expected = {key: value for key, value in export.items() if key not in {"path", "file_sha256"}}
+    expected.update(
+        {
+            "source_checkpoint_receipt_sha256": qualification.get(
+                "source_checkpoint_receipt_sha256"
+            ),
+            "source_plan_sha256": qualification.get("source_plan_sha256"),
+        }
+    )
+    unsigned = {key: value for key, value in receipt.items() if key != "receipt_sha256"}
+    if any(receipt.get(key) != value for key, value in expected.items()) or receipt.get(
+        "receipt_sha256"
+    ) != _unsigned_digest(unsigned):
+        raise ValueError("Qwen3.8 production export receipt differs from its accepted binding")
+
+
+def _verify_qwen38_production_qualification(plan: dict) -> None:
+    """Reopen the exact accepted public receipt before broad model setup."""
+    if (
+        _qwen38_lora_one_step_identity(plan) != qwen38_lora_broad_full_plan_binding()
+        or plan.get("qualification_gate") != QWEN38_LORA_PRODUCTION_QUALIFICATION
+    ):
+        raise ValueError("Qwen3.8 broad LoRA plan lost its production qualification binding")
+    reference = plan["qualification_gate"]["export_receipt"]
+    receipt = _verified_json_file(Path(reference["path"]), reference["file_sha256"])
+    _validate_qwen38_production_export_receipt(receipt)
+
+
 def _checked_file(path: Path, expected: str) -> None:
     _verified_file_observation(path, expected)
 
 
 def _is_qwen38_lora(plan: dict) -> bool:
     return "lora" in plan and plan.get("model", {}).get("repo") == "Qwen/Qwen3.8-27B"
+
+
+def _is_qwen38_lora_one_step_gate(plan: dict) -> bool:
+    """Distinguish the historical one-step evidence producer from full SFT."""
+    return _is_qwen38_lora(plan) and plan.get("qualification_gate") == QWEN38_LORA_QUALIFICATION
 
 
 def _reconcile_worker_learning_rates(values: list, *, expected_ranks: int) -> float:
@@ -670,6 +891,13 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
             qwen38_lora_one_step_plan_binding(),
             qwen38_lora_production_canary_plan_binding(),
         )
+        identity = _qwen38_lora_one_step_identity(plan)
+        if identity in one_step_plans:
+            expected_qualification = QWEN38_LORA_QUALIFICATION
+        elif identity == qwen38_lora_broad_full_plan_binding():
+            expected_qualification = QWEN38_LORA_PRODUCTION_QUALIFICATION
+        else:
+            expected_qualification = None
         runtime = plan.get("skyrl_runtime")
         expected_runtime = {
             "source_commit": source_commit,
@@ -679,11 +907,12 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
             plan["lora"] != QWEN38_LORA
             or runtime != expected_runtime
             or plan.get("execution", {}).get("image") != image
-            or plan.get("qualification_gate") != QWEN38_LORA_QUALIFICATION
-            or _qwen38_lora_one_step_identity(plan) not in one_step_plans
+            or expected_qualification is None
+            or plan.get("qualification_gate") != expected_qualification
         ):
             raise ValueError(
-                "Qwen3.8 LoRA requires the exact digest-bound one-step Megatron qualification gate"
+                "Qwen3.8 LoRA requires the exact digest-bound one-step or "
+                "production-qualified broad Megatron plan"
             )
     elif "lora" in plan:
         lora = plan["lora"]
@@ -742,6 +971,8 @@ def _validate_entrypoint_sources(plan: dict, *, verify_qwen_files: bool) -> None
     qwen38_lora = _is_qwen38_lora(plan)
     validate_plan(plan, check_files=not qwen38_lora)
     if qwen38_lora:
+        if plan.get("qualification_gate") == QWEN38_LORA_PRODUCTION_QUALIFICATION:
+            _verify_qwen38_production_qualification(plan)
         if verify_qwen_files:
             _qwen38_source_inventory(plan)
             _qwen38_runtime_source_inventory(plan)
@@ -2526,14 +2757,13 @@ def _run_training(plan: dict) -> dict:
     skyrl_cfg.trainer.log_path = str(Path(plan["output_root"]) / "private_logs")
     trainer = _make_trainer_class()(cfg, skyrl_cfg, plan)
     try:
-        qwen38_source_before = _qwen38_source_inventory(plan) if _is_qwen38_lora(plan) else None
-        qwen38_runtime_before = (
-            _qwen38_runtime_source_inventory(plan) if _is_qwen38_lora(plan) else None
-        )
+        one_step_gate = _is_qwen38_lora_one_step_gate(plan)
+        qwen38_source_before = _qwen38_source_inventory(plan) if one_step_gate else None
+        qwen38_runtime_before = _qwen38_runtime_source_inventory(plan) if one_step_gate else None
         trainer.setup()
         qwen38_lora_before = (
             trainer.dispatch.collect_lora_qualification_snapshots("policy")
-            if _is_qwen38_lora(plan)
+            if one_step_gate
             else None
         )
         if plan.get("recovery", {}).get("mode") == "validate":
@@ -2550,7 +2780,7 @@ def _run_training(plan: dict) -> dict:
             # postamble.  Explicitly drain the async dist-checkpoint writer
             # before reading any file, collecting post-update hashes, or
             # preparing a qualification receipt.
-            if _is_qwen38_lora(plan):
+            if one_step_gate:
                 trainer._record_qualification_stage("checkpoint_finalization_started")
                 qwen38_checkpoint_finalization = (
                     trainer.dispatch.finalize_lora_qualification_checkpoint("policy")
@@ -2559,7 +2789,7 @@ def _run_training(plan: dict) -> dict:
             else:
                 trainer.dispatch.finalize_pending_saves("policy")
         qwen38_receipt = None
-        if _is_qwen38_lora(plan):
+        if one_step_gate:
             if not paused or qwen38_lora_before is None:
                 raise ValueError("Qwen3.8 qualification did not stop at its one-step gate")
             if qwen38_source_before is None or qwen38_runtime_before is None:

@@ -8,6 +8,7 @@ data path alone, or recipe override is resolved after submission.
 from __future__ import annotations
 
 import base64
+import copy
 import hashlib
 import json
 import math
@@ -22,6 +23,8 @@ from .models import bound_model
 from .sft_runtime import (
     DENSE_FORMAT,
     DENSE_SCHEMA,
+    QWEN38_LORA_BROAD_FULL_PLAN,
+    QWEN38_LORA_PRODUCTION_QUALIFICATION,
     QWEN38_LORA_QUALIFICATION,
     qwen38_megatron_binding,
     validate_plan,
@@ -229,11 +232,16 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
             "source_commit": source_commit,
             "source_files_sha256": source_files,
         }
-        plan["qualification_gate"] = {
-            **QWEN38_LORA_QUALIFICATION,
-            "training_job_evidence": list(QWEN38_LORA_QUALIFICATION["training_job_evidence"]),
-            "later_zero_step_evidence": list(QWEN38_LORA_QUALIFICATION["later_zero_step_evidence"]),
-        }
+        # Production qualification admits one exact create-once broad identity.
+        # Selecting it by that frozen run identity does not open a parameter
+        # menu: ``validate_plan`` still compares every scientific, data,
+        # resource, runtime and W&B field with the reviewed binding.
+        qualification = (
+            QWEN38_LORA_PRODUCTION_QUALIFICATION
+            if config["name"] == QWEN38_LORA_BROAD_FULL_PLAN["run_name"]
+            else QWEN38_LORA_QUALIFICATION
+        )
+        plan["qualification_gate"] = copy.deepcopy(qualification)
     elif "lora" in config or lock["repo"] not in {
         "Qwen/Qwen3.8-27B",
         "Qwen/Qwen3.6-27B",

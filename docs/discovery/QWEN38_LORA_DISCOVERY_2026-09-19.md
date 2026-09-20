@@ -405,7 +405,7 @@ development evaluation. A checkpoint is not selected from training loss.
 
 | Priority | Method | Learning rate | Global batch | Adapter | Epochs | Updates | Decision |
 |---:|---|---:|---:|---|---:|---:|---|
-| 1 | BF16 LoRA | `3e-5` | 8 | rank 64 / alpha 32, all linear layers | 1 | 1,837 | Main adapter anchor; run after the production checkpoint merge/reload gate passes. |
+| 1 | BF16 LoRA | `3e-5` | 8 | rank 64 / alpha 32, all linear layers | 1 | 1,837 | Main adapter anchor; exact config prepared after the production checkpoint merge/reload gate passed, but not submitted while the global failure budget is exhausted. |
 | 2 | full-weight SFT | `3e-6` | 8 | none | 1 | 1,837 | Main full-weight anchor; run after the native resume check passes. |
 | 3 | BF16 LoRA | `1e-5` | 8 | rank 64 / alpha 32, all linear layers | 1 | 1,837 | Lower learning-rate edge; tests whether the anchor changes the model too aggressively. |
 | 4 | full-weight SFT | `1e-6` | 8 | none | 1 | 1,837 | Lower learning-rate edge matched to priority 2. |

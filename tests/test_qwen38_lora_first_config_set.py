@@ -1,3 +1,4 @@
+import copy
 import hashlib
 import json
 from pathlib import Path
@@ -28,6 +29,13 @@ QUALIFIED_IMAGE = (
 )
 GATE_TEMPLATE = RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v10.template.json"
 PRODUCTION_CANARY = RUNS / "qwen38-27b-lora-sft-r64-a32-prod-canary-v1.json"
+PRODUCTION_ANCHOR = RUNS / "qwen38-27b-lora-sft-r64-a32-anchor-v1.json"
+EXPORT_ACCEPTANCE = (
+    ROOT / "configs" / "qualification" / "qwen38-lora-prod-step1-export-acceptance-v1.json"
+)
+EXPORT_PLAN = (
+    ROOT / "configs" / "qualification" / "qwen38-lora-prod-step1-zero-update-export-v1.json"
+)
 RETIRED_GATE_TEMPLATES = [
     RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v1.template.json",
     RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v2.template.json",
@@ -226,6 +234,217 @@ def test_production_canary_does_not_open_a_parameter_menu():
     value["recipe"]["lr"] = 1e-5
     with pytest.raises(ValueError, match="exact digest-bound one-step"):
         sft.compile_sft(value, relative_to=RUNS)
+
+
+def test_production_qualification_binds_the_accepted_checkpoint_and_export():
+    from training import sft_runtime
+
+    handoff = read(EXPORT_ACCEPTANCE)
+    export_plan = read(EXPORT_PLAN)
+    qualification = sft_runtime.QWEN38_LORA_PRODUCTION_QUALIFICATION
+    export = qualification["export_receipt"]
+
+    assert qualification["accepted_for_production"] is True
+    assert qualification["acceptance_handoff_sha256"] == handoff["handoff_sha256"]
+    assert (
+        qualification["source_plan_sha256"]
+        == (export_plan["checkpoint_identity"]["source_plan_sha256"])
+    )
+    assert (
+        qualification["source_checkpoint_receipt_sha256"]
+        == (export_plan["checkpoint_receipt"]["receipt_sha256"])
+    )
+    for key, value in handoff["export_receipt"].items():
+        if key != "remote_revalidation_required_before_stage":
+            assert export[key] == value
+
+
+def test_broad_lora_anchor_compiles_only_as_the_exact_production_qualified_plan():
+    from training import sft, sft_runtime
+
+    value = read(PRODUCTION_ANCHOR)
+    plan = sft.compile_sft(value, relative_to=RUNS)
+    request = sft.job_request(plan)
+
+    assert sft_runtime._qwen38_lora_one_step_identity(plan) == (
+        sft_runtime.qwen38_lora_broad_full_plan_binding()
+    )
+    assert plan["qualification_gate"] == sft_runtime.QWEN38_LORA_PRODUCTION_QUALIFICATION
+    assert plan["datasets"]["train"]["supervised_tokens"] == 57_384_881
+    assert plan["datasets"]["train"]["rows"] == 14_693
+    assert len(plan["datasets"]["train"]["task_keys"]) == 496
+    assert plan["recipe"] == {
+        "epochs": 1,
+        "batch_size": 8,
+        "microbatch_per_gpu": 1,
+        "nodes": 1,
+        "gpus_per_node": 8,
+        "lr": 3e-5,
+        "max_length": 32768,
+        "eval_interval": 0,
+        "checkpoint_interval": 20,
+        "keep_checkpoints": 3,
+        "seed": 20260919,
+        "max_steps": 1837,
+    }
+    assert "pause_after_step" not in plan
+    assert request["priority_class"] == "c1"
+    assert request["workers"] == 1
+    assert request["gpus_per_worker"] == 8
+    assert plan["wandb"]["entity"] == "thefleet"
+    assert plan["wandb"]["project"] == "cyber-post-train"
+
+
+@pytest.mark.parametrize(
+    ("path", "replacement"),
+    [
+        (("name",), "chris-q38-lora-sft-a1-v2"),
+        (("recipe", "lr"), 1e-5),
+        (("recipe", "batch_size"), 16),
+        (("recipe", "epochs"), 2),
+        (("recipe", "max_length"), 16384),
+        (("lora", "rank"), 32),
+        (("lora", "alpha"), 64),
+        (("runtime", "skyrl_source_commit"), "0" * 40),
+        (("runtime", "image"), "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:" + "0" * 64),
+        (("cluster", "priority"), "c2"),
+        (("wandb", "group"), "other-group"),
+        (
+            ("data", "manifest"),
+            "../data/qwen38-fresh75-teacher-sft-final-lock-free-v2.manifest.json",
+        ),
+    ],
+)
+def test_broad_lora_anchor_fails_closed_on_any_reviewed_identity_drift(path, replacement):
+    from training import sft
+
+    value = read(PRODUCTION_ANCHOR)
+    target = value
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = replacement
+    if path == ("name",):
+        value["output_root"] = "/mnt/sfs/jobs/chris-q38-lora-sft-a1-v2"
+        value["wandb"]["run_id"] = replacement
+        value["wandb"]["name"] = replacement
+    with pytest.raises(ValueError):
+        sft.compile_sft(value, relative_to=RUNS)
+
+
+def test_broad_runtime_reopens_production_receipt_before_source_setup(monkeypatch):
+    from training import sft, sft_runtime
+
+    plan = sft.compile_sft(read(PRODUCTION_ANCHOR), relative_to=RUNS)
+    runtime_plan = {**plan, "plan_sha256": sft_runtime._unsigned_digest(plan)}
+    observed = []
+    monkeypatch.setattr(
+        sft_runtime,
+        "_verify_qwen38_production_qualification",
+        lambda value: observed.append(value["run_name"]),
+    )
+
+    sft_runtime._validate_entrypoint_sources(runtime_plan, verify_qwen_files=False)
+
+    assert observed == ["chris-q38-lora-sft-a1-v1"]
+    assert sft_runtime._is_qwen38_lora_one_step_gate(runtime_plan) is False
+
+
+def test_broad_runtime_completes_without_reentering_the_one_step_receipt_path(
+    tmp_path, monkeypatch
+):
+    import sys
+    from types import SimpleNamespace
+
+    from training import sft, sft_runtime
+
+    plan = sft.compile_sft(read(PRODUCTION_ANCHOR), relative_to=RUNS)
+    plan["plan_sha256"] = sft_runtime._unsigned_digest(plan)
+    step = plan["recipe"]["max_steps"]
+    checkpoints = tmp_path / "checkpoints"
+    checkpoints.mkdir()
+    (checkpoints / "latest_ckpt_global_step.txt").write_text(str(step))
+    sft_runtime.write_receipt(
+        tmp_path / "checkpoint_receipts" / f"step-{step:06d}.json",
+        {
+            "optimizer_step": step,
+            "plan_sha256": plan["plan_sha256"],
+            "checkpoint_path": sft_runtime.plan_checkpoint(plan, step),
+        },
+    )
+    calls = []
+    summary = {}
+    trainer = SimpleNamespace(
+        plan=plan,
+        output=tmp_path,
+        global_step=step,
+        target_tokens_seen=plan["datasets"]["train"]["supervised_tokens"],
+        best=None,
+        setup=lambda: calls.append("setup"),
+        train=lambda: calls.append("train"),
+        shutdown=lambda: calls.append("shutdown"),
+        _record_qualification_stage=lambda stage: calls.append(stage),
+    )
+    monkeypatch.setattr(sft_runtime, "_configure_wandb", lambda _: None)
+    monkeypatch.setattr(
+        sft_runtime,
+        "build_runtime_configs",
+        lambda _: (None, SimpleNamespace(trainer=SimpleNamespace())),
+    )
+    monkeypatch.setattr(sft_runtime, "_make_trainer_class", lambda: lambda *args: trainer)
+    monkeypatch.setattr(
+        sft_runtime,
+        "finalize_failed_run",
+        lambda *args: calls.append("failed") or [],
+    )
+    monkeypatch.setitem(sys.modules, "wandb", SimpleNamespace(run=SimpleNamespace(summary=summary)))
+
+    result = sft_runtime._run_training(plan)
+
+    assert result["status"] == "training_complete"
+    assert result["optimizer_step"] == 1837
+    assert calls == ["setup", "train", "terminal_result_validated", "shutdown"]
+    assert summary["status"] == "training_complete"
+
+
+def test_production_receipt_binding_rejects_self_resigned_source_drift():
+    from training import sft_runtime
+
+    qualification = copy.deepcopy(sft_runtime.QWEN38_LORA_PRODUCTION_QUALIFICATION)
+    export = qualification["export_receipt"]
+    receipt = {
+        key: value
+        for key, value in export.items()
+        if key not in {"path", "file_sha256", "receipt_sha256"}
+    }
+    receipt.update(
+        {
+            "source_checkpoint_receipt_sha256": qualification["source_checkpoint_receipt_sha256"],
+            "source_plan_sha256": qualification["source_plan_sha256"],
+        }
+    )
+    receipt["receipt_sha256"] = sft_runtime._unsigned_digest(receipt)
+    qualification["export_receipt"]["receipt_sha256"] = receipt["receipt_sha256"]
+    sft_runtime._validate_qwen38_production_export_receipt(receipt, qualification)
+
+    receipt["source_plan_sha256"] = "0" * 64
+    receipt["receipt_sha256"] = sft_runtime._unsigned_digest(
+        {key: value for key, value in receipt.items() if key != "receipt_sha256"}
+    )
+    with pytest.raises(ValueError, match="differs from its accepted binding"):
+        sft_runtime._validate_qwen38_production_export_receipt(receipt, qualification)
+
+
+def test_verified_json_file_hashes_the_same_bytes_it_parses(tmp_path):
+    from training import sft_runtime
+
+    path = tmp_path / "receipt.json"
+    path.write_text('{"status":"accepted"}\n')
+    expected = hashlib.sha256(path.read_bytes()).hexdigest()
+    assert sft_runtime._verified_json_file(path, expected) == {"status": "accepted"}
+
+    path.write_text('{"status":"drifted"}\n')
+    with pytest.raises(ValueError, match="digest mismatch"):
+        sft_runtime._verified_json_file(path, expected)
 
 
 def test_corpus_qualification_receipt_binds_manifest_template_and_runtime():

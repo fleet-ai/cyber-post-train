@@ -1,7 +1,8 @@
 # First Qwen3.8-27B LoRA configuration set
 
-Status: **one-step LoRA training gate accepted on the development cluster;
-separate zero-update reload/merge/export gate pending** (2026-09-20)
+Status: **production one-step LoRA and separate zero-update BF16
+reload/merge/export gates accepted; exact broad anchor prepared but not
+submitted** (2026-09-20)
 
 This set freezes the first exact-model SFT gate, the first literature-informed
 SFT anchor, and the two matched evaluation contracts. The exact one-step
@@ -10,10 +11,12 @@ template now binds the independently qualified source/image pair recorded in
 The V10 development run subsequently passed exact-image CPU preflight, one
 finite forward/backward/optimizer update, native TP8 adapter checkpoint save,
 strict adapter/frozen-base/source reconciliation, W&B finalization, planned
-pause, independent receipt validation, and GPU release. The production anchor
-and both evaluation contracts remain fail-closed until the separate zero-update
-checkpoint reload, deterministic merge/export, and full model/tokenizer reload
-gate also passes. The earlier Fresh75 corpus cannot be
+pause, independent receipt validation, and GPU release. The production canary
+and its separate zero-update checkpoint reload, deterministic merge/export,
+and full model/tokenizer reload gate have now passed. The exact broad anchor is
+admitted only by that immutable receipt chain and reopens its public receipt
+before runtime setup. Both evaluation contracts remain fail-closed on serving
+and protocol gates. The earlier Fresh75 corpus cannot be
 used for this study as-is: two of its 37 task families are in the later frozen
 ten-family final test set. A CPU-only, create-once filter has now published and
 independently verified the leak-free V2 successor. Its exact public manifest is
@@ -30,21 +33,19 @@ one-step checkpoint stage is accepted; it is not yet a merged serving artifact.
 | Purpose | File | Frozen treatment |
 |---|---|---|
 | Exact-model one-step gate | `configs/runs/qwen38-27b-lora-sft-r64-a32-one-step-v10.template.json` | exact Qwen3.8 revision; BF16 Megatron LoRA rank 64 / alpha 32 over all linear layers; TP8 / PP1 / CP1 / DP1; learning rate `3e-5`; global batch 1; one 8-GPU node; 16,384-token final-test-family-free V2 Fresh75 corpus; 866 rows and payload-derived `max_steps=866`; planned pause after optimizer step 1; c1; W&B. V1 through V9 are retired qualification identities. V10 retains the validated runtime, native dataset, all-rank learning-rate, dev init, sanitized step-boundary, float32 learning-rate, and receipt-boundary repairs. It binds receipt validation to the native Megatron-Bridge adapter filename coordinates observed in the finalized TP8 checkpoint: each `tpN` shard carries the matching `etpN` filename label even though expert-tensor parallel size remains one. |
-| First production anchor | `configs/runs/qwen38-27b-lora-sft-r64-a32-anchor-v1.template.json` | exact Qwen3.8 revision; BF16 LoRA rank 64 / alpha 32; learning rate `3e-5`; global batch 8; one 8-GPU node; one epoch; 57,384,881 supervised teacher tokens packed into 14,693 windows of at most 32,768 tokens; c1; W&B |
+| First production anchor | `configs/runs/qwen38-27b-lora-sft-r64-a32-anchor-v1.json` | exact Qwen3.8 revision; BF16 LoRA rank 64 / alpha 32; learning rate `3e-5`; global batch 8; one 8-GPU node; one epoch; 57,384,881 supervised teacher tokens packed into 14,693 windows of at most 32,768 tokens; c1; W&B; prepared only, not submitted |
 
 The one-step gate reuses every eligible row it safely can from the immutable
 Fresh75 teacher corpus, after removing complete source sessions from every task
 family represented in the frozen final test set. It tests exact-model forward,
 backward, optimizer, adapter save, and frozen-base behavior without pretending
 to be the broad-data experiment. A
-separate zero-optimizer-step job must reload that checkpoint, merge/export it,
-and reload the complete model and tokenizer. The anchor instead names a new
-create-once broad corpus that does
-not yet exist. That corpus must be built from the current 1,055-task inventory,
-after lineage splitting, using every usable verified-success teacher trajectory
-from the training lineages. Every eligible assistant action is a target once;
-copied context and tool results are masked. WebExploitBench and the Fleet final
-set are excluded before selecting sessions or windows.
+separate zero-optimizer-step job reloaded that checkpoint, merged/exported it,
+and reloaded the complete model and tokenizer. The anchor uses the verified
+create-once broad corpus derived from the current task inventory after lineage
+splitting. Every eligible assistant action is a target once; copied context and
+tool results are masked. WebExploitBench and the Fleet final set were excluded
+before selecting sessions or windows.
 
 ## Final-test-family exclusion before the canary
 
@@ -134,8 +135,8 @@ and `max_steps=866`. That is the full-epoch ceiling for 866 rows at global
 batch 1; the qualification run still intentionally pauses after optimizer step
 1. No training request was submitted by corpus qualification or binding.
 
-The compiler recognizes only the exact one-step Qwen3.8 Megatron-LoRA
-qualification shape. The image built from
+The compiler recognizes the exact historical one-step Qwen3.8 Megatron-LoRA
+shapes and one exact production-qualified broad anchor. The image built from
 `05b8e33062cff51a4c5e940d0021de3ce30481d3` omitted the Megatron dependency
 set. The later `bd97c1e431511d70bed9a9b7ccc9093342d5466f` /
 `sha256:89b8d99a...d6e29af7` pair proved those dependencies load, but it predates
@@ -146,9 +147,11 @@ launch binding. Exact evidence-capable source
 A separate zero-GPU dev Pod pulled that digest, reproduced the complete 14-file
 load-bearing census, imported the required runtime APIs, exited zero with no
 restart, and was deleted with zero GPU allocation. The compiler accepts only
-that pair, not a merely well-formed digest. The broad anchor remains blocked:
-the real one-step evidence and later zero-update reload/merge gate must first
-be independently accepted. A template is not a workaround for either gate.
+that pair, not a merely well-formed digest. The broad anchor became preparable
+only after the real production one-step evidence and later zero-update
+reload/merge gate were independently accepted. Runtime still reopens the exact
+public receipt and fails on any byte or embedded-link drift. Preparation is not
+submission authorization.
 
 ## Separate zero-step merge/export lane
 
@@ -205,10 +208,10 @@ emitted only for this Qwen3.8 LoRA GHCR path; existing ECR SFT requests remain
 unchanged. The separate development-cluster runtime check used that cluster's
 own `skyrl-ghcr-pull` secret and does not alter the production request.
 
-Only the one-step template binds this source/image pair. The production anchor
-intentionally keeps source and image `null`. Passing the one-step training gate
-does not qualify broad training: the separate zero-step checkpoint reload,
-merge, export, and complete model/tokenizer reload must also be accepted first.
+The unresolved anchor template intentionally keeps source and image `null`.
+The concrete production anchor binds the same exact source/image pair and the
+accepted production receipt chain; all other broad parameter combinations stay
+rejected.
 
 ## Exact-model gate acceptance
 
@@ -308,21 +311,18 @@ verifiers, sampling, budgets and retry rules must be byte-identical.
 
 No paid or mutating action is valid until all of these are exact:
 
-- accepted one-step target-census, optimizer, frozen-base, adapter-checkpoint,
-  and W&B evidence, plus separate zero-step checkpoint reload, deterministic
-  merge/export, and complete merged model/tokenizer reload evidence (compiler
-  support alone is not acceptance);
 - complete Qwen3.8 adapter-target census and strict checkpoint/merge receipts;
 - exact-image CPU data/runtime preflight, authenticated request preview,
-  duplicate/output-root checks and immutable compiled one-step request;
-- create-once 32K broad teacher-action corpus manifest and staged SFS root;
+  duplicate/output-root checks and immutable compiled broad request;
 - qualified immutable matched serving image and serving-engine commit;
 - matched base and merged-adapter serving registrations plus live-parity proof;
 - qualified immutable OpenCode images for WebExploitBench and Fleet;
 - WebExploitBench task/environment/verifier/prompt/tool manifest hashes;
 - Fleet live verifier/prompt preflight receipts for the already-frozen exact
   task/environment/data tuples;
-- final protocol digests; and
+- final protocol digests;
+- a restored global cluster failure budget or an explicitly reviewed successor
+  policy; and
 - absent output roots, absent duplicate run names, live c1 policy, and available
   goal-owned node/failure budget immediately before submission.
 
