@@ -1,11 +1,11 @@
 {
   "schema": "cyber_skyrl_topology_probe_config_v1",
-  "name": "chris-q38-skyrl-probe-v15",
-  "output_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v15/models/run",
+  "name": "chris-q38-skyrl-probe-v16",
+  "output_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v16/models/run",
   "model": {
     "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
     "weights": "../models/qwen38-27b-1d4bf0f2.weights.json",
-    "root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v15/models/base"
+    "root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v16/models/base"
   },
   "engine": {
     "num_engines": 2,
@@ -28,7 +28,7 @@
       "name": "fleet-api",
       "key": "FLEET_API_KEY"
     },
-    "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v15",
+    "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v16",
     "output_pvc": "sfs-shared",
     "output_registry_mount": "/mnt/cyber-output-registry",
     "output_registry_subpath": "models/fleetjob-dev",
@@ -75,5 +75,5 @@
       "external_release_observer_not_yet_bound"
     ]
   },
-  "sha256": "sha256:dbff36619babbcbcdfdae5a3bfc3896e21951827cacf4a71eda34af66f90d869"
+  "sha256": "sha256:52fe2ea9a464f09bc445a2afcc5e8a7f75ce92fe64c4f1431edaf351d4319c95"
 }

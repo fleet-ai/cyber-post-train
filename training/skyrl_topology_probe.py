@@ -17,6 +17,7 @@ from __future__ import annotations
 import argparse
 import copy
 import hashlib
+import importlib
 import json
 import os
 import signal
@@ -47,9 +48,9 @@ RECEIPT_VERIFY_SCHEMA = "cyber_skyrl_topology_probe_receipt_verification_v1"
 RECEIPT_VERIFY_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_receipt_verification_rejection_v1"
 RECEIPT_VERIFY_PACKET_SCHEMA = "cyber_skyrl_topology_probe_receipt_verification_job_packet_v1"
 RECEIPT_VERIFY_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_receipt_verification_job_preview_v1"
-PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v27"
-RECEIPT_VERIFY_NAME = "chris-q38-skyrl-probe-receipt-v15"
-RECEIPT_VERIFY_RUN_DIR = "/tmp/chris-q38-skyrl-probe-receipt-v15"
+PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v28"
+RECEIPT_VERIFY_NAME = "chris-q38-skyrl-probe-receipt-v16"
+RECEIPT_VERIFY_RUN_DIR = "/tmp/chris-q38-skyrl-probe-receipt-v16"
 PREFLIGHT_RECEIPT = "/dev/termination-log"
 FAILURE_RECEIPT = "TOPOLOGY_PROBE_FAILED.json"
 MODULE = "training.skyrl_topology_probe"
@@ -58,7 +59,8 @@ IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
     "89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
 )
-MODEL_BINDING_SHA256 = "56b3e329068b66b467691c2b97568d86cabfb588b7ca28ba83c09971c77c1948"
+MODEL_BINDING_SHA256 = "4d143c4d7dbac54436e6ded1a43541be004039ee2eb61dcc8bedd8848d757264"
+VLLM_SAMPLER_ENV = {"VLLM_USE_FLASHINFER_SAMPLER": "0"}
 RUNTIME_FILES = (
     "training/skyrl_topology_probe.py",
     "training/skyrl.py",
@@ -101,7 +103,7 @@ def _expected_execution() -> dict:
         "namespace": "fleet-train-jobs",
         "project_name": "fleetjob-dev",
         "auth_secret": {"name": "fleet-api", "key": "FLEET_API_KEY"},
-        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v15",
+        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v16",
         "output_pvc": "sfs-shared",
         "output_registry_mount": "/mnt/cyber-output-registry",
         "output_registry_subpath": "models/fleetjob-dev",
@@ -342,6 +344,7 @@ def request(
                 "HF_HUB_OFFLINE": "1",
                 "TRANSFORMERS_OFFLINE": "1",
                 "TOKENIZERS_PARALLELISM": "false",
+                **VLLM_SAMPLER_ENV,
                 "PYTHONDONTWRITEBYTECODE": "1",
                 "PYTHONUNBUFFERED": "1",
                 "CYBER_EXPECTED_RUNTIME_UID": "1000",
@@ -869,6 +872,38 @@ def validate_receipt_verify_job_preview(plan: dict, manifest: dict, rendered: di
     )
 
 
+def _validate_vllm_sampler_fallback_contract() -> None:
+    """Prove the pinned image selects vLLM's native sampler on Blackwell."""
+    if any(os.environ.get(key) != value for key, value in VLLM_SAMPLER_ENV.items()):
+        raise ValueError("vLLM sampler fallback environment is not exact")
+    vllm_envs = importlib.import_module("vllm.envs")
+    sampler = importlib.import_module("vllm.v1.sample.ops.topk_topp_sampler")
+    if vllm_envs.VLLM_USE_FLASHINFER_SAMPLER is not False:
+        raise ValueError("vLLM did not parse the FlashInfer sampler fallback")
+
+    class CudaPlatform:
+        @staticmethod
+        def is_cuda():
+            return True
+
+        @staticmethod
+        def is_cpu():
+            return False
+
+        @staticmethod
+        def is_xpu():
+            return False
+
+    original = sampler.current_platform
+    try:
+        sampler.current_platform = CudaPlatform()
+        instance = sampler.TopKTopPSampler()
+    finally:
+        sampler.current_platform = original
+    if instance.forward.__func__ is not instance.forward_native.__func__:
+        raise ValueError("vLLM did not select its PyTorch-native sampler fallback")
+
+
 def preflight(plan: dict, progress: Callable[[str], None] | None = None) -> dict:
     mark = progress or (lambda _: None)
     mark("runtime_identity")
@@ -881,6 +916,8 @@ def preflight(plan: dict, progress: Callable[[str], None] | None = None) -> dict
     mark("zero_gpu")
     if torch.cuda.is_available():
         raise ValueError("probe preflight is CPU-only")
+    mark("native_sampler_fallback")
+    _validate_vllm_sampler_fallback_contract()
     mark("plan_validation")
     arguments = _validate(plan)
     mark("sealed_bootstrap_destination")
@@ -907,6 +944,7 @@ def preflight(plan: dict, progress: Callable[[str], None] | None = None) -> dict
         "rollout_episodes": 0,
         "optimizer_steps": 0,
         "create_once_output_absent": True,
+        "vllm_sampler_environment": VLLM_SAMPLER_ENV,
     }
 
 
@@ -1111,6 +1149,7 @@ def run(plan: dict) -> dict:
         raise ValueError("Jobs API output binding mismatch")
     if (os.geteuid(), os.getegid()) != (1000, 100):
         raise ValueError("probe GPU runtime requires image user 1000:100")
+    _validate_vllm_sampler_fallback_contract()
     root = _validate_destination(plan)
     forbidden = ("episodes", "checkpoints", "exports")
     if any((root / name).exists() for name in forbidden):

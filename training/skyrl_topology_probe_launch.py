@@ -95,6 +95,7 @@ def authorize(
         or receipt.get("rollout_episodes") != 0
         or receipt.get("optimizer_steps") != 0
         or receipt.get("create_once_output_absent") is not True
+        or receipt.get("vllm_sampler_environment") != probe.VLLM_SAMPLER_ENV
     ):
         raise ValueError("topology probe CPU gate was not accepted and released")
 

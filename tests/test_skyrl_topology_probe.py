@@ -59,9 +59,10 @@ def test_probe_is_distinct_dev_only_bounded_and_zero_update(plan) -> None:
     assert gate["submission_authorized"] is False
     assert request["env"]["CYBER_EXPECTED_RUNTIME_UID"] == "1000"
     assert request["env"]["CYBER_EXPECTED_RUNTIME_GID"] == "100"
+    assert request["env"]["VLLM_USE_FLASHINFER_SAMPLER"] == "0"
     assert plan["model"]["repo"] == "Qwen/Qwen3.8-27B"
     assert plan["model"]["revision"] == ("1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0")
-    assert plan["model"]["root"] == ("/mnt/sfs/jobs/chris-q38-skyrl-probe-v15/models/base")
+    assert plan["model"]["root"] == ("/mnt/sfs/jobs/chris-q38-skyrl-probe-v16/models/base")
     assert plan["execution"]["model_artifact"]["path"] == (
         "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4"
     )
@@ -75,13 +76,13 @@ def test_probe_fleetjob_is_one_eight_gpu_pod_with_zero_replica_group(plan) -> No
     manifest = probe.fleetjob_manifest(plan)
     spec = manifest["spec"]
     assert manifest["metadata"] == {
-        "name": "chris-q38-skyrl-probe-v15",
+        "name": "chris-q38-skyrl-probe-v16",
         "namespace": "fleet-train-jobs",
     }
     assert spec["fleet"] == {
         "projectName": "fleetjob-dev",
         "auth": {"secretRef": {"name": "fleet-api", "key": "FLEET_API_KEY"}},
-        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v15",
+        "mountRoot": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v16",
         "models": [
             {
                 "path": "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4",
@@ -136,6 +137,7 @@ def test_probe_fleetjob_is_one_eight_gpu_pod_with_zero_replica_group(plan) -> No
     assert head["securityContext"] == gpu["securityContext"] == expected_user
     head_env = {row["name"]: row["value"] for row in head["env"]}
     assert head_env["RUN_DIR"] == plan["output_root"]
+    assert head_env["VLLM_USE_FLASHINFER_SAMPLER"] == "0"
     assert max(map(len, head_env.values())) <= 30000
     assert not any(row["name"].startswith("CYBER_RUNTIME_BUNDLE") for row in gpu["env"])
     assert head["terminationMessagePath"] == "/dev/termination-log"
@@ -266,6 +268,11 @@ def test_probe_preflight_preview_accepts_only_exact_server_defaults(plan) -> Non
         0,
         {"uid": 1000, "gid": 100},
     )
+    environment = {
+        row["name"]: row["value"]
+        for row in rendered["spec"]["template"]["spec"]["containers"][0]["env"]
+    }
+    assert environment["VLLM_USE_FLASHINFER_SAMPLER"] == "0"
     changed = copy.deepcopy(rendered)
     changed["spec"]["template"]["spec"]["containers"][0]["securityContext"]["runAsUser"] = 0
     with pytest.raises(JobsError, match="changed"):
@@ -303,6 +310,28 @@ def test_probe_relay_error_code_uses_only_sanitized_stage_and_category() -> None
         "FleetVllmStartupError_engine_core_start_CudaOutOfMemoryError"
     )
     assert probe._setup_failure_code(RuntimeError("private details")) == "RuntimeError"
+
+
+def test_probe_native_sampler_fallback_is_exact(monkeypatch) -> None:
+    class TopKTopPSampler:
+        def forward_native(self):
+            return None
+
+        forward = forward_native
+
+    sampler = NS(current_platform=object(), TopKTopPSampler=TopKTopPSampler)
+    modules = {
+        "vllm.envs": NS(VLLM_USE_FLASHINFER_SAMPLER=False),
+        "vllm.v1.sample.ops.topk_topp_sampler": sampler,
+    }
+    monkeypatch.setattr(probe.importlib, "import_module", modules.__getitem__)
+    monkeypatch.setenv("VLLM_USE_FLASHINFER_SAMPLER", "0")
+    probe._validate_vllm_sampler_fallback_contract()
+    assert type(sampler.current_platform) is object
+
+    monkeypatch.setenv("VLLM_USE_FLASHINFER_SAMPLER", "1")
+    with pytest.raises(ValueError, match="fallback environment"):
+        probe._validate_vllm_sampler_fallback_contract()
 
 
 def test_probe_fleetjob_preview_accepts_only_exact_server_mutation(plan) -> None:
@@ -458,6 +487,7 @@ def test_probe_preflight_parses_engine_without_tasks_or_gpu(plan, monkeypatch) -
     cfg = NS(generator=NS(inference_engine=object()))
     monkeypatch.setattr(probe.skyrl, "diagnostic_native_config", lambda _: cfg)
     monkeypatch.setattr(probe, "_verify_model", lambda _: None)
+    monkeypatch.setattr(probe, "_validate_vllm_sampler_fallback_contract", lambda: None)
     monkeypatch.setattr(probe, "_validate_destination", lambda _: Path("/unused/run"))
     monkeypatch.setattr(
         probe, "_validate_create_once_absence", lambda _: Path("/unused/registry/run")
@@ -482,6 +512,7 @@ def test_probe_preflight_parses_engine_without_tasks_or_gpu(plan, monkeypatch) -
         "runtime_identity",
         "runtime_imports",
         "zero_gpu",
+        "native_sampler_fallback",
         "plan_validation",
         "sealed_bootstrap_destination",
         "create_once_destination_absence",

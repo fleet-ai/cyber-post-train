@@ -32,6 +32,7 @@ def _evidence():
             "rollout_episodes": 0,
             "optimizer_steps": 0,
             "create_once_output_absent": True,
+            "vllm_sampler_environment": probe.VLLM_SAMPLER_ENV,
         }
     )
     cpu_result = launch._seal(
