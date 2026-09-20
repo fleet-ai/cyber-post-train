@@ -279,6 +279,91 @@ def test_fleetjob_observer_waits_bounded_time_for_terminal_receipt(tmp_path) -> 
     assert cluster.pod_list_reads >= 3
 
 
+class FakeDirectRayJobCluster:
+    def __init__(self) -> None:
+        self.target_reads = 0
+        self.deleted = False
+        self.receipt = _seal(
+            {
+                "schema": "cyber_skyrl_topology_probe_receipt_v1",
+                "status": "setup_and_internal_cleanup_passed",
+            }
+        )
+
+    @staticmethod
+    def _object(name: str, uid: int, **extra):
+        return {"metadata": _metadata(name, uid), **extra}
+
+    def __call__(self, argv, **_kwargs):
+        args = argv[5:]
+        if args[:2] == ["get", "rayjob"]:
+            self.target_reads += 1
+            value = None
+            if self.target_reads > 1 and not self.deleted:
+                value = self._object(
+                    "probe",
+                    20,
+                    status={"rayClusterName": "cluster-probe", "jobStatus": "SUCCEEDED"},
+                )
+            return NS(returncode=0, stdout=json.dumps(value) if value else "", stderr="")
+        if args[:3] == ["get", "workload", "--output"]:
+            items = []
+            if not self.deleted:
+                row = self._object("workload-probe", 21)
+                row["metadata"]["ownerReferences"] = [{"name": "probe"}]
+                items.append(row)
+            return NS(returncode=0, stdout=json.dumps({"items": items}), stderr="")
+        if args[:3] == ["get", "workload", "workload-probe"]:
+            return NS(returncode=0, stdout="", stderr="")
+        if args[:3] == ["get", "raycluster", "cluster-probe"]:
+            value = None if self.deleted else self._object("cluster-probe", 22)
+            return NS(returncode=0, stdout=json.dumps(value) if value else "", stderr="")
+        if args[:2] == ["get", "pod"] and "--selector" in args:
+            items = []
+            if not self.deleted:
+                items.append(
+                    self._object(
+                        "probe-pod-23",
+                        23,
+                        spec={"containers": [{"resources": {"requests": {"nvidia.com/gpu": 8}}}]},
+                        status={
+                            "containerStatuses": [
+                                {
+                                    "restartCount": 0,
+                                    "imageID": "registry/image@sha256:" + "c" * 64,
+                                    "state": {"terminated": {"message": json.dumps(self.receipt)}},
+                                }
+                            ]
+                        },
+                    )
+                )
+            return NS(returncode=0, stdout=json.dumps({"items": items}), stderr="")
+        if args[:2] == ["get", "pod"] and len(args) > 2:
+            return NS(returncode=0, stdout="", stderr="")
+        if args[:2] == ["delete", "rayjob"]:
+            self.deleted = True
+            return NS(returncode=0, stdout="rayjob.ray.io/probe\n", stderr="")
+        raise AssertionError(args)
+
+
+def test_direct_rayjob_observer_binds_children_receipt_and_releases(tmp_path) -> None:
+    observer = _observer(
+        tmp_path,
+        FakeDirectRayJobCluster(),
+        kind="rayjob",
+        name="probe",
+        maximum_seconds=1800,
+        expected_gpus=8,
+    )
+    result = observer.run()
+    assert result["status"] == "released"
+    assert result["uid"] == result["rayjob_uid"]
+    assert result["peak_gpus"] == 8
+    assert result["workload_uid"].endswith("000000000021")
+    assert result["raycluster_uid"].endswith("000000000022")
+    assert result["receipt"]["status"] == "setup_and_internal_cleanup_passed"
+
+
 def test_observer_rejects_prod_route_or_excess_deadline(tmp_path) -> None:
     with pytest.raises(cleanup.ObserverError, match="development cluster"):
         _observer(tmp_path, FakeJobCluster(), context="prod")

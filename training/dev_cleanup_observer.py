@@ -85,6 +85,10 @@ def _validated_receipt(message: object, *, kind: str) -> dict | None:
             "cyber_skyrl_topology_probe_receipt_v1",
             "cyber_skyrl_topology_probe_failure_v1",
         },
+        "rayjob": {
+            "cyber_skyrl_topology_probe_receipt_v1",
+            "cyber_skyrl_topology_probe_failure_v1",
+        },
     }
     if value.get("schema") not in schemas[kind] or value.get("sha256") != "sha256:" + digest(body):
         return None
@@ -133,7 +137,7 @@ class Observer:
     ) -> None:
         if context != DEV_CONTEXT or namespace != NAMESPACE:
             raise ObserverError("cleanup observer is bound to the development cluster")
-        if kind not in {"job", "fleetjob"}:
+        if kind not in {"job", "fleetjob", "rayjob"}:
             raise ObserverError("cleanup observer kind is invalid")
         if not name or maximum_seconds < 1 or maximum_seconds > 1800:
             raise ObserverError("cleanup observer deadline is invalid")
@@ -216,8 +220,11 @@ class Observer:
             raise ObserverError("development-cluster list had the wrong shape")
         return items
 
+    def _target_resource(self) -> str:
+        return self.kind
+
     def _target(self) -> dict | None:
-        return self._get("job" if self.kind == "job" else "fleetjob", self.name)
+        return self._get(self._target_resource(), self.name)
 
     def arm(self) -> dict:
         if self._target() is not None:
@@ -373,12 +380,51 @@ class Observer:
         pods = self._list("pod", "--selector", f"ray.io/cluster={self.snapshot.raycluster_name}")
         self._capture_pods(pods)
 
+    def _observe_rayjob(self, resource: dict) -> None:
+        """Observe a direct root RayJob without a FleetJob parent."""
+        uid, _ = self._metadata(resource)
+        if self.snapshot.rayjob_uid and self.snapshot.rayjob_uid != uid:
+            raise ObserverError("RayJob UID changed")
+        self.snapshot.rayjob_name = self.name
+        self.snapshot.rayjob_uid = uid
+        ray_status = resource.get("status", {})
+        cluster_name = ray_status.get("rayClusterName")
+        if isinstance(cluster_name, str) and cluster_name:
+            if self.snapshot.raycluster_name and self.snapshot.raycluster_name != cluster_name:
+                raise ObserverError("RayCluster identity changed")
+            self.snapshot.raycluster_name = cluster_name
+        terminal = TERMINAL_RAY_STATUSES.get(ray_status.get("jobStatus"))
+        if terminal:
+            self.snapshot.terminal_status = terminal
+        workload = self._find_workload(self.name)
+        if workload is not None:
+            name = workload.get("metadata", {}).get("name")
+            workload_uid, _ = self._metadata(workload)
+            if not isinstance(name, str) or not name:
+                raise ObserverError("Workload identity is invalid")
+            if self.snapshot.workload_uid and self.snapshot.workload_uid != workload_uid:
+                raise ObserverError("Workload UID changed")
+            self.snapshot.workload_name = name
+            self.snapshot.workload_uid = workload_uid
+        if not self.snapshot.raycluster_name:
+            return
+        cluster = self._get("raycluster", self.snapshot.raycluster_name)
+        if cluster is not None:
+            cluster_uid, _ = self._metadata(cluster)
+            if self.snapshot.raycluster_uid and self.snapshot.raycluster_uid != cluster_uid:
+                raise ObserverError("RayCluster UID changed")
+            self.snapshot.raycluster_uid = cluster_uid
+        pods = self._list("pod", "--selector", f"ray.io/cluster={self.snapshot.raycluster_name}")
+        self._capture_pods(pods)
+
     def observe(self, resource: dict) -> None:
         self._bind(resource)
         if self.kind == "job":
             self._observe_job(resource)
-        else:
+        elif self.kind == "fleetjob":
             self._observe_fleetjob(resource)
+        else:
+            self._observe_rayjob(resource)
         if self.snapshot.peak_gpus > self.expected_gpus:
             raise ObserverError("workload exceeded its plan-bound GPU count")
 
@@ -400,7 +446,7 @@ class Observer:
         self.deletion_requested_at = _stamp(_now())
         self._kubectl(
             "delete",
-            "job" if self.kind == "job" else "fleetjob",
+            self._target_resource(),
             self.name,
             "--cascade=foreground",
             "--wait=false",
@@ -413,7 +459,7 @@ class Observer:
     def wait_for_release(self) -> dict:
         deadline = time.monotonic() + self.release_seconds
         while True:
-            target_present = self._present("job" if self.kind == "job" else "fleetjob", self.name)
+            target_present = self._present(self._target_resource(), self.name)
             live_pods = []
             for name in self.snapshot.pod_names:
                 pod = self._get("pod", name)
@@ -547,13 +593,11 @@ class Observer:
                     # short, fixed grace period; the normal deadline and
                     # unconditional UID-bound delete remain authoritative.
                     now = time.monotonic()
-                    if self.kind == "fleetjob" and self.snapshot.receipt is None:
+                    if self.kind in {"fleetjob", "rayjob"} and self.snapshot.receipt is None:
                         if terminal_receipt_deadline is None:
                             remaining = max(
                                 0.0,
-                                self.maximum_seconds
-                                - DELETE_REQUEST_MARGIN_SECONDS
-                                - elapsed,
+                                self.maximum_seconds - DELETE_REQUEST_MARGIN_SECONDS - elapsed,
                             )
                             terminal_receipt_deadline = now + min(
                                 TERMINAL_RECEIPT_GRACE_SECONDS,
@@ -599,7 +643,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--context", required=True)
     parser.add_argument("--namespace", required=True)
-    parser.add_argument("--kind", choices=("job", "fleetjob"), required=True)
+    parser.add_argument("--kind", choices=("job", "fleetjob", "rayjob"), required=True)
     parser.add_argument("--name", required=True)
     parser.add_argument("--maximum-seconds", type=int, required=True)
     parser.add_argument("--expected-gpus", type=int, required=True)

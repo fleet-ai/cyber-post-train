@@ -13,9 +13,11 @@ container receipt before teardown, so it proves execution and release but does
 
 The create-once `v17` successor is prepared but has not been submitted. It keeps
 `VLLM_USE_FLASHINFER_SAMPLER=0` and adds a fixed 30-second grace period for the
-terminal receipt before cleanup. There is no failure-count gate. Creation is
-currently blocked because the development FleetJob admission interface rejects
-the mandatory failed-job-alert opt-out annotation; no object was created.
+terminal receipt before cleanup. There is no failure-count gate. The development
+FleetJob admission interface rejects the mandatory failed-job-alert opt-out
+annotation, so `v17` now has one maintained direct-RayJob qualification transport.
+That transport passed a non-creating development server dry-run on 2026-09-20.
+No RayJob, FleetJob, Job, Pod, Workload, RayCluster, or GPU allocation was created.
 
 It deliberately cannot read a training row, create an episode, call a verifier,
 take an optimizer step, or write a checkpoint. Passing it does not qualify RL.
@@ -24,14 +26,14 @@ until its own reward, optimizer, checkpoint and cleanup gates pass.
 
 ## Frozen shape
 
-- next FleetJob identity: `chris-q38-skyrl-probe-v17`
+- next direct RayJob identity: `chris-q38-skyrl-probe-v17`
 - development context: `nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb`
 - namespace/project: `fleet-train-jobs` / `fleetjob-dev`
 - priority: Kubernetes `c1`, queue `q1`
 - image: `fleet/skyrl-train` at the exact digest in the config
-- topology: one Ray head requesting all eight GPUs. The zero-replica worker group
-  remains only because the FleetJob controller requires that structural group; it
-  owns no Pod and no GPU
+- topology: one Ray head requesting all eight GPUs. The exact zero-replica worker
+  group from the accepted `v17` embedded RayJob remains present, owns no Pod and
+  owns no GPU
 - Kueue topology: the head and dormant `gpu` worker group are explicitly q1. The
   runtime refuses acceptance unless Ray sees exactly one live GPU node with exactly
   eight GPUs before either TP4 engine is accepted
@@ -50,16 +52,19 @@ until its own reward, optimizer, checkpoint and cleanup gates pass.
   `models/fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4` is mounted directly at that
   same immutable runtime root. This exact PVC subpath must equal `models/` plus
   the FleetJob artifact path
-- output: the controller-created, run-owned `models/run` directory; only the sanitized probe receipt is
-  accepted there
+- output: an init container in the same Ray head Pod creates the exact run-owned
+  `models/fleetjob-dev/chris-q38-skyrl-probe-v17/models/run` SFS directory with
+  `exist_ok=false`; only the sanitized probe receipt is accepted there. The main
+  container mounts that create-once directory at the plan's unchanged `models/run`
+  path
 - vLLM sampler: `VLLM_USE_FLASHINFER_SAMPLER=0`; the exact-image CPU gate proves
   vLLM parses this as false and selects its native sampler rather than the
   unavailable FlashInfer top-k/top-p kernel on B300
 - W&B: disabled; no task, benchmark or W&B credential is delivered
 - process limit: 20 minutes for exact model verification and engine setup, then five
   minutes for engine cleanup
-- RayJob limit: 30 minutes; an independent observer must still delete the FleetJob
-  no later than 30 minutes after the FleetJob was created
+- RayJob limit: 30 minutes; an independent observer must still delete the exact
+  root RayJob no later than 30 minutes after it was created
 - retries: none
 
 The probe reserves exactly one physical GPU node and all eight GPUs on its Ray head.
@@ -78,13 +83,23 @@ uv run --locked cyber-post-train rl-topology-probe-preview \
   /absolute/new/probe-packet
 uv run --locked cyber-post-train rl-topology-probe-receipt-preview \
   /absolute/new/probe-packet
+uv run --locked cyber-post-train rl-topology-probe-rayjob-preview \
+  /absolute/new/probe-packet
 ```
 
-The last three commands use `kubectl create --dry-run=server` against the context and
+The last four commands use `kubectl create --dry-run=server` against the context and
 namespace sealed into the plan. It fails if the server changes the image, model
 mount, topology, resources, priority, deadline, command, environment or security
 settings. It saves only a sanitized proof; the server response containing the
 runtime bundle is not retained in the packet.
+
+The direct renderer starts from the `v17` FleetJob's exact embedded RayJob, then
+adds only the platform bindings that the FleetJob controller would otherwise add:
+the existing read-only model artifact, the create-once output directory, Fleet
+authentication by Secret reference, normal GPU node selection, and normal Kueue
+admission. The root RayJob carries `fleet.ai/failure-alerts: "off"`, pod priority
+`c1`, and queue priority `q1`. It never uses `apply`, `patch`, manual unsuspension,
+or a retry loop.
 
 The legacy Jobs API is intentionally not an alternate route. Its preview cannot
 prove UID 1000/GID 100, so this profile rejects it. Moving the probe to production
@@ -92,28 +107,31 @@ or changing its topology requires a new config, plan and packet.
 
 ## Gates before the one allowed creation
 
-Do not create the FleetJob until every item is true:
+Do not create the root RayJob until every item is true:
 
 1. The source commit is clean, reviewed, pushed, and exactly matches the source
    used to prepare the packet.
-2. `PREPARED.json`, `FLEETJOB_PREPARED.json`, and `FLEETJOB_PREVIEW.json` all
-   validate and bind the same plan and manifest digests.
+2. `PREPARED.json`, `DIRECT_RAYJOB_PREPARED.json`, and
+   `DIRECT_RAYJOB_PREVIEW.json` all validate and bind the same plan, source
+   FleetJob, and direct RayJob digests.
 3. A CPU-only Kubernetes Job has run in the exact image as UID 1000/GID 100 with
    zero requested GPUs, the exact read-only model mount, and a separate read-only
-   view of the FleetJob output registry. It must verify the runtime imports,
+   view of the output registry. It must verify the runtime imports,
    native engine arguments, all model-file sizes and SHA-256 digests, prove the
-   future FleetJob output path is absent, and record zero visible GPUs. Its
+   future RayJob output path is absent, and record zero visible GPUs. Its
    sanitized result comes only from the Kubernetes termination message; logs are
    never an evidence source.
-4. The exact name is absent from both development and production FleetJobs and
-   from both legacy Jobs APIs. The output destination contains no previous probe
-   receipt, runtime directory, episode, checkpoint or export.
-5. The development server dry-run passes again immediately before creation.
+4. The exact name and output are absent from every development and production
+   RayJob, FleetJob, Job, and both Jobs API histories. The output destination
+   contains no previous probe receipt, runtime directory, episode, checkpoint or
+   export. The main Pod's init container repeats the create-once directory check.
+5. The direct development RayJob server dry-run passes again immediately before
+   creation.
 6. An independent observer is already running. It has the exact context,
-   namespace and name; after creation it records the FleetJob UID, Fleet job ID,
-   RayJob UID, Workload UID, RayCluster UID and head Pod UID. It is authorized to
-   delete only that exact FleetJob.
-7. The observer has a fixed deletion time no later than 30 minutes after FleetJob
+   namespace and name; after creation it records the RayJob UID, Workload UID,
+   RayCluster UID and head Pod UID. It is authorized to delete only that exact
+   RayJob.
+7. The observer has a fixed deletion time no later than 30 minutes after RayJob
    creation. After terminal status it waits at most 30 seconds for the public
    receipt, then deletes; it also deletes at the fixed deadline for a stalled setup.
 8. The operator has confirmed that adding eight development GPUs remains inside
@@ -121,9 +139,9 @@ Do not create the FleetJob until every item is true:
 
 The checked-in config always keeps `submission_authorized` false. Passing it does
 not authorize a create by editing the plan. Instead, the launch command requires a
-separate create-once authorization that embeds the released CPU result, both
-server-preview receipts and the already-armed GPU observer. Do not bypass that
-evidence gate with a manual `kubectl create`.
+separate create-once authorization that embeds the released CPU result, all
+three server-preview receipts and the already-armed GPU observer. Do not bypass
+that evidence gate with a manual `kubectl create`.
 
 Arm the independent observer before creating either Job. The foreground process
 writes `ARMED.json` only after proving the exact name is absent. It then binds the
@@ -145,22 +163,24 @@ uv run --locked python -m training.dev_cleanup_observer \
   --result /absolute/new/PREFLIGHT_OBSERVER_RESULT.json
 ```
 
-For the GPU probe use `--kind fleetjob`, the FleetJob name and manifest digest,
+For the GPU probe use `--kind rayjob`, the direct RayJob name and manifest digest,
 `--maximum-seconds 1800`, and `--expected-gpus 8`. Keep that process alive before
 the single create. Then authorize and create through the checked command surface:
 
 ```sh
-uv run --locked cyber-post-train rl-topology-probe-authorize \
+uv run --locked cyber-post-train rl-topology-probe-rayjob-authorize \
   /absolute/new/probe-packet \
   --cpu-result /absolute/PREFLIGHT_OBSERVER_RESULT.json \
   --observer-armed /absolute/GPU_OBSERVER_ARMED.json
-uv run --locked cyber-post-train rl-topology-probe-create \
+uv run --locked cyber-post-train rl-topology-probe-rayjob-create \
   /absolute/new/probe-packet
 ```
 
 The create command revalidates every nested digest, confirms the observer process
-is still alive, checks the exact name on development and production, repeats the
-development server dry-run and records the created UID. A missing or invalid
+is still alive, checks the exact name and output across both Kubernetes clusters
+and both Jobs API histories, repeats the development server dry-run, fsyncs a
+create-intent journal and its parent directory, then executes exactly one
+non-retried `kubectl create`. It records the created UID. A missing or invalid
 sanitized termination receipt makes the gate fail even when cleanup succeeds.
 When Ray becomes terminal, the observer gives Kubernetes at most 30 seconds to
 expose the declared public termination-message file before it performs the same
@@ -202,26 +222,37 @@ never permission to launch the scientific canary.
 ## Release proof
 
 At terminal status—or at the fixed deadline—the observer waits no more than 30
-seconds for the public termination receipt, then deletes the exact FleetJob by
-name only after confirming its recorded UID. It then waits until all of the
-following recorded objects are absent: FleetJob, RayJob, Workload, RayCluster and
-head Pod. It also verifies that the exact allocation uses zero GPUs.
+seconds for the public termination receipt, then deletes the exact RayJob by
+name only after confirming its recorded UID. It then waits until the RayJob,
+Workload, RayCluster and head Pod identities it recorded are all absent. It also
+verifies that the exact allocation uses zero GPUs.
 
 The sanitized observation supplied to `validate_release` must contain exactly:
 
 ```json
 {
-  "kubernetes_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+  "schema": "cyber_dev_cleanup_observer_result_v1",
+  "status": "released",
+  "context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
   "namespace": "fleet-train-jobs",
-  "fleetjob_name": "chris-q38-skyrl-probe-v17",
-  "job_id": "<Fleet job UUID>",
-  "fleetjob_uid": "<FleetJob UID>",
+  "kind": "rayjob",
+  "name": "chris-q38-skyrl-probe-v17",
+  "uid": "<RayJob UID>",
+  "rayjob_name": "chris-q38-skyrl-probe-v17",
   "rayjob_uid": "<RayJob UID>",
+  "workload_name": "<Workload name>",
   "workload_uid": "<Workload UID>",
+  "raycluster_name": "<RayCluster name>",
   "raycluster_uid": "<RayCluster UID>",
+  "pod_names": ["<head Pod name>"],
   "pod_uids": ["<head Pod UID>"],
+  "expected_gpus": 8,
+  "peak_gpus": 8,
+  "restarts": 0,
   "terminal_status": "Succeeded",
-  "fleetjob_present": false,
+  "receipt": {"status": "setup_and_internal_cleanup_passed"},
+  "observer_error_class": "",
+  "target_present": false,
   "rayjob_present": false,
   "workload_present": false,
   "raycluster_present": false,
@@ -233,9 +264,10 @@ The sanitized observation supplied to `validate_release` must contain exactly:
 }
 ```
 
-The validator rejects deletion later than 30 minutes after the recorded creation
-time, any non-UUID resource identity, a receipt from a different plan, or a
-resource that remains present. `Failed` or observer-classified `Deleted` is
-allowed only so cleanup can be proved; it does not make the probe accepted.
-Preserve the sanitized failure evidence, do not create an automatic successor,
-and diagnose off-cluster before proposing a new immutable identity.
+The validator accepts only `Succeeded`; it rejects deletion later than 30
+minutes after the recorded creation time, any non-UUID resource identity, a
+receipt from a different plan, any restart, failure to reach an eight-GPU peak,
+or any recorded resource that remains present. A failed or deleted run can still
+produce useful cleanup evidence, but it cannot pass the probe. Preserve that
+sanitized failure evidence, do not create an automatic successor, and diagnose
+off-cluster before proposing a new immutable identity.

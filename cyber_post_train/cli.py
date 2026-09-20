@@ -304,6 +304,8 @@ def rl_topology_probe(config: Path, output: Annotated[Path, typer.Option("--outp
         receipt_verify_job_packet,
         request,
     )
+    from training.skyrl_topology_rayjob import manifest as direct_rayjob_manifest
+    from training.skyrl_topology_rayjob import packet as direct_rayjob_packet
 
     try:
         plan = compile_probe(config)
@@ -322,11 +324,14 @@ def rl_topology_probe(config: Path, output: Annotated[Path, typer.Option("--outp
             output / "RECEIPT_VERIFY_JOB_PREPARED.json",
             receipt_verify_job_packet(plan),
         )
+        _write(output / "direct-rayjob.json", direct_rayjob_manifest(plan))
+        _write(output / "DIRECT_RAYJOB_PREPARED.json", direct_rayjob_packet(plan))
         _print(
             {
                 "prepared": str(output),
                 "cluster_target": "dev",
                 "submission_transport": "fleetjob",
+                "qualification_transport": "direct_rayjob",
                 "kubernetes_context": plan["execution"]["kubernetes_context"],
                 "gpus": 8,
                 "rollout_episodes": 0,
@@ -336,6 +341,121 @@ def rl_topology_probe(config: Path, output: Annotated[Path, typer.Option("--outp
                 "submitted": False,
             }
         )
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-topology-probe-rayjob-preview")
+def rl_topology_probe_rayjob_preview(directory: Path) -> None:
+    """Server-dry-run the alert-safe direct RayJob; create nothing."""
+    from training.skyrl_topology_probe import SCHEMA
+    from training.skyrl_topology_rayjob import manifest, packet, validate_preview
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != SCHEMA:
+            raise ValueError("prepared directory is not a topology probe")
+        expected = _read(directory / "direct-rayjob.json")
+        prepared = _read(directory / "DIRECT_RAYJOB_PREPARED.json")
+        if expected != manifest(plan) or prepared != packet(plan):
+            raise ValueError("direct RayJob packet changed")
+        proof_path = directory / "DIRECT_RAYJOB_PREVIEW.json"
+        if proof_path.exists() or proof_path.is_symlink():
+            raise ValueError("direct RayJob preview already recorded")
+        execution = plan["execution"]
+        result = subprocess.run(
+            [
+                "kubectl",
+                "--context",
+                execution["kubernetes_context"],
+                "--namespace",
+                execution["namespace"],
+                "create",
+                "--dry-run=server",
+                "--filename",
+                str(directory / "direct-rayjob.json"),
+                "--output=json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode:
+            raise JobsError("direct RayJob server dry-run failed; nothing was created")
+        proof = validate_preview(plan, expected, json.loads(result.stdout))
+        _write(proof_path, proof)
+        _print(proof)
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-topology-probe-rayjob-authorize")
+def rl_topology_probe_rayjob_authorize(
+    directory: Path,
+    cpu_result: Annotated[Path, typer.Option("--cpu-result")],
+    observer_armed: Annotated[Path, typer.Option("--observer-armed")],
+) -> None:
+    """Bind exact released CPU evidence and a live direct-RayJob observer."""
+    from training.skyrl_topology_probe import SCHEMA
+    from training.skyrl_topology_rayjob import authorize
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != SCHEMA:
+            raise ValueError("prepared directory is not a topology probe")
+        value = authorize(
+            plan,
+            cpu_result=_read(cpu_result),
+            cpu_preview=_read(directory / "PREFLIGHT_JOB_PREVIEW.json"),
+            receipt_preview=_read(directory / "RECEIPT_VERIFY_JOB_PREVIEW.json"),
+            rayjob_preview=_read(directory / "DIRECT_RAYJOB_PREVIEW.json"),
+            observer=_read(observer_armed),
+        )
+        os.kill(value["observer"]["observer_pid"], 0)
+        _write(directory / "DIRECT_RAYJOB_LAUNCH_AUTHORIZED.json", value)
+        _print(
+            {
+                "status": value["status"],
+                "name": plan["run_name"],
+                "plan_sha256": value["plan_sha256"],
+                "manifest_sha256": value["manifest_sha256"],
+                "authorization_sha256": value["sha256"],
+                "observer_pid": value["observer"]["observer_pid"],
+                "submitted": False,
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-topology-probe-rayjob-create")
+def rl_topology_probe_rayjob_create(directory: Path) -> None:
+    """Create one authorized direct RayJob; never apply, patch, or retry."""
+    from training.skyrl_topology_probe import SCHEMA
+    from training.skyrl_topology_rayjob import create_once, manifest, packet, write_once_fsynced
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != SCHEMA:
+            raise ValueError("prepared directory is not a topology probe")
+        expected = _read(directory / "direct-rayjob.json")
+        if expected != manifest(plan) or _read(directory / "DIRECT_RAYJOB_PREPARED.json") != packet(
+            plan
+        ):
+            raise ValueError("direct RayJob packet changed")
+        token = os.environ.get("FLEET_API_KEY", "")
+        if not token:
+            raise JobsError("FLEET_API_KEY is required for duplicate history checks")
+        result = create_once(
+            directory,
+            plan,
+            expected,
+            _read(directory / "DIRECT_RAYJOB_PREVIEW.json"),
+            _read(directory / "DIRECT_RAYJOB_LAUNCH_AUTHORIZED.json"),
+            token=token,
+        )
+        write_once_fsynced(directory / "DIRECT_RAYJOB_CREATED.json", result)
+        _print(result)
     except Exception as exc:
         _fail(exc)
 
@@ -764,8 +884,7 @@ def submit(directory: Path) -> None:
                 result = submit_once(plan, request, client, directory)
             elif (
                 plan.get("schema") == "cyber_skyrl_training_v1"
-                and plan.get("qualification", {}).get("profile")
-                == "qwen38_skyrl_reward_canary_v4"
+                and plan.get("qualification", {}).get("profile") == "qwen38_skyrl_reward_canary_v4"
             ):
                 from training.skyrl_launch_guard import submit_canary_once
 
