@@ -38,7 +38,7 @@ PREFLIGHT_PACKET_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_packet_v1"
 PREFLIGHT_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_preview_v1"
 PREFLIGHT_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_cpu_preflight_rejection_v1"
 PROBE_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_failure_v1"
-PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v18"
+PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v19"
 PREFLIGHT_RECEIPT = "/dev/termination-log"
 MODULE = "training.skyrl_topology_probe"
 CONFIG_PATH = ROOT / "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json"
@@ -46,7 +46,7 @@ IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
     "89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
 )
-MODEL_BINDING_SHA256 = "1e2e6b2eb03e2c6b737b09e500c827703ecb5a74b432b4f50a622765ffa96846"
+MODEL_BINDING_SHA256 = "7879fb8e67062612a30694400744e7e9d13a5c57078719b30fdef7e9d33a213b"
 RUNTIME_FILES = (
     "training/skyrl_topology_probe.py",
     "training/skyrl.py",
@@ -89,17 +89,23 @@ def _expected_execution() -> dict:
         "namespace": "fleet-train-jobs",
         "project_name": "fleetjob-dev",
         "auth_secret": {"name": "fleet-api", "key": "FLEET_API_KEY"},
-        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v8",
+        "mount_root": "/mnt/sfs/jobs/chris-q38-skyrl-probe-v9",
         "output_pvc": "sfs-shared",
         "output_registry_mount": "/mnt/cyber-output-registry",
         "output_registry_subpath": "models/fleetjob-dev",
         "model_artifact": {
-            "path": "qwen3.8-27b-1d4bf0f2",
+            "path": (
+                "Qwen/Qwen3.8-27B/"
+                "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+            ),
             "mount_path": "base",
             "read_only": True,
             "required": True,
         },
-        "preflight_model_pvc_subpath": "models/qwen3.8-27b-1d4bf0f2",
+        "preflight_model_pvc_subpath": (
+            "models/Qwen/Qwen3.8-27B/"
+            "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+        ),
         "ray_version": "2.49.2",
         "priority": "c1",
         "queue_priority": "q1",
