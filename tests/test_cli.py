@@ -172,6 +172,36 @@ def test_submit_uses_shared_boundary_and_journal(prepared, monkeypatch):
     assert json.loads(result.stdout)["status"] == "pending"
 
 
+def test_direct_sft_submit_reuses_preflight_and_has_a_separate_journal(prepared, monkeypatch):
+    from cyber_post_train import direct_submit
+
+    output, plan, request, _ = prepared
+    record_preflight(output, plan, request)
+    plan["schema"] = "cyber_sft_runtime_dense_v1"
+    monkeypatch.setattr(cli, "_prepared", lambda _: (plan, request))
+    monkeypatch.setattr(cli, "_submission_gate", lambda *args: None)
+    monkeypatch.setattr(cli, "_require_preflight", lambda *args: None)
+    monkeypatch.setattr(cli, "_client", lambda: nullcontext("jobs-client"))
+    calls = []
+
+    class SyntheticKubectl:
+        def __init__(self, context):
+            self.context = context
+
+    def submit(**kwargs):
+        calls.append(kwargs)
+        return {"name": "synthetic-12345678", "submitted": True}
+
+    monkeypatch.setattr(direct_submit, "Kubectl", SyntheticKubectl)
+    monkeypatch.setattr(direct_submit, "direct_submit_sft_once", submit)
+    result = RUNNER.invoke(cli.app, ["direct-submit-sft", str(output), "--context", "prod-context"])
+    assert result.exit_code == 0
+    assert calls[0]["plan"] == plan and calls[0]["request"] == request
+    assert calls[0]["jobs"] == "jobs-client"
+    assert calls[0]["kubectl"].context == "prod-context"
+    assert calls[0]["journal"] == output / "DIRECT_SUBMISSION.jsonl"
+
+
 def test_submit_rejects_pre_gate_preparation_before_network(prepared, monkeypatch):
     output, plan, request, _ = prepared
     record_preflight(output, plan, request)

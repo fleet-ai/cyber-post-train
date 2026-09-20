@@ -50,6 +50,13 @@ the exact annotation. Never create first and patch later: the monitor can observ
 the failure in between. As of this audit, the deployed generic Jobs API does not
 yet expose or render the request field, so those submissions remain fail-closed
 until the Fleet Train API adds support and its preview proves the deployed behavior.
+For SFT only, the repository also maintains the narrowly reviewed
+`direct-submit-sft` compatibility path described in `docs/TRAINING.md`. It
+consumes the live API preview, changes only its placeholder identity, removes
+the API-only Fleet credential Secret that the current source-bound SFT request
+proves it does not use, adds the root annotation before creation, server-dry-runs
+the result, journals the intent and executes one create. Do not reproduce that
+transformation by hand or extend it to RL/conversion without a separate review.
 
 Do not use a production Job as the next debugging environment merely because unit
 tests passed. Exercise the packaged entrypoint, real runtime user, native
