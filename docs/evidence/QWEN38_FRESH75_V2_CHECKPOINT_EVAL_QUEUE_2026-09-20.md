@@ -99,6 +99,34 @@ created paused at zero replicas with a new UID. Live base-versus-checkpoint
 serving checks and a fresh duplicate census remain required before rollout
 collection.
 
+Qualification schema v2 does not accept a list of unattached digest strings.
+The private qualification must point to the exact checkpoint-saved,
+checkpoint-manifest, export, GPU-reload, and staging receipts. The validator
+reopens each regular file, checks its full file SHA-256 and self-digest, and
+then checks the step, checkpoint path, source plan, zero-update export,
+reload, and create-once staging chain. For a final checkpoint, the saved
+checkpoint receipt and its file SHA-256 must also be exactly the receipt
+already recorded in the queue's terminal training observation. A copied or
+freshly invented acceptance summary cannot open the paused-route gate.
+
+## Fleet development evaluation is frozen but not runnable yet
+
+The queue freezes the 17-task development selection by file and object digest,
+and every selected row names an exact `task_version_id`. That is enough to
+prevent the task selection from drifting, but it is not a complete Fleet
+evaluation plan. Before an arm can run, a separate reviewed task-set file must
+bind, for every selected task version, the exact `env_key`, `env_version`,
+`environment_version_id`, `data_key`, and `data_version`. The concrete eval
+plan must also bind the accepted candidate route UID and live catalog/model/
+server profiles, immutable agent and proxy image digests, OpenCode version and
+tool schema, sampling, budgets, timeout, retry policy, and pass count. Those
+values must come from read-only authoritative lookups; this queue intentionally
+does not guess them.
+
+The eight-task final-test selection remains closed while those development
+plans are built. It may be rendered only once, after development evidence has
+selected one checkpoint.
+
 ## Resource and duplicate safety
 
 Each checkpoint route requires one whole eight-GPU node. The queue permits one
