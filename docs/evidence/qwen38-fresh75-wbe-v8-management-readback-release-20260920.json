@@ -1,0 +1,53 @@
+{
+  "schema_version": "qwen38_fresh75_wbe_transport_pre_dispatch_release_v1",
+  "status": "pre_dispatch_gate_failed_and_released",
+  "classification": "transient_sandbox_management_readback_unavailable",
+  "observed_at": "2026-09-20T14:49:12Z",
+  "campaign_id": "q38-base-f75p230-oc-wbe-c1-v4",
+  "pair_receipt_sha256": "sha256:ffde433782dc2c10807851a148b8a4c0bee3f9d4eab31bff565f91172cfdb20c",
+  "comparison_protocol_sha256": "sha256:ed41d38d3b0208aac681ebbc667e6c1dbaeb83f5f79b3180177e716ee2548187",
+  "launch_plan_sha256": "sha256:b4beffc343540283c3dc24c19eec0ba443fa288248321579385c34a57d19cd68",
+  "snapshot": {
+    "id": "6h8g0w2vxehen8imb33kr",
+    "qualification_complete_receipt_sha256": "sha256:3f2067f75915ce84a6ce789c823202afadec184a2bfbd2419b3ff4c8394f4cb5",
+    "task0_qualification_receipt_sha256": "sha256:8b0097926fadc475be1c66a60f10982ab0b670b04ba0dfa365b42fe97c958e64"
+  },
+  "duplicate_census": {
+    "receipt_sha256": "sha256:6014a5a8054dfd2443563e3c0b3355d5c1ae7ab8a3e932b129624240d02c3162",
+    "file_sha256": "sha256:a02b9cf0e77c7b3087e1838db63893e668914a0720b4f0daaf5fb608328b4123",
+    "planned_live_matches": 0,
+    "historical_q38_s10_suspended_untouched": 13
+  },
+  "sandbox": {
+    "id": "p7hs0a56ocmglguu4adcx",
+    "name": "q38-b-f75-c1-v8-t00",
+    "create_claim_file_sha256": "sha256:de3f2169ab880937d6033360eec23f1b88cfaa96fecd29879d0560e6cfe91259",
+    "created_receipt_file_sha256": "sha256:3f246cb286fe870e75081a65a14c4cfe2c282cc7ba92e03031424d0c37128d3c",
+    "provider_state_after_release": "terminated",
+    "active_inventory_matches_after_release": 0
+  },
+  "failure": {
+    "phase": "management_readback_preflight",
+    "sanitized_error": "sandbox_management_readback_unavailable",
+    "provider_error_class": "HTTPError",
+    "provider_http_status": 500,
+    "collection_process_claim_written": false,
+    "collection_process_started": false,
+    "model_call_started": false,
+    "private_output_read": false,
+    "accepted_rollout_bundles": 0,
+    "accepted_score_receipts": 0
+  },
+  "release": {
+    "release_claim_file_sha256": "sha256:fd79ba584999dbc6e1d82d790ee365abcd10a7a4e34e50cfc7a6fef9d0056efa",
+    "delete_attempts": 1,
+    "provider_state_verified": "terminated"
+  },
+  "repair": {
+    "cause": "the collection was dispatched immediately after create and the read-only sandbox file endpoint was still returning a transient 500",
+    "change": "retry the immutable management-file readback for at most 30 attempts at two-second intervals before failing closed",
+    "fanout_authorized": false,
+    "successor_requires_fresh_snapshot_and_reseal": true
+  },
+  "receipt_sha256": "sha256:236e53f47b899a59992f68fe9be812d9be81216080ada9db124fb74cf0b41a5b"
+}

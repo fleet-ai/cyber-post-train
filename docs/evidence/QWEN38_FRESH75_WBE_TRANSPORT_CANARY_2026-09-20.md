@@ -161,6 +161,37 @@ snapshot, freshly sealed launch and pair receipts, and a fresh duplicate
 census. The first successor remains one baseline task-0 canary; there is no
 fanout until its early lifecycle and terminal collection receipts are accepted.
 
+### V8 live result and bounded startup repair
+
+V8 used a freshly qualified shared snapshot and a fresh duplicate census. The
+base task-0 sandbox was created exactly once, but the first immutable-file
+readback immediately after creation returned HTTP 500. The launcher failed
+closed before writing a collection-process claim, so no model process, rollout,
+or score started. The exact owned sandbox was released once and the provider
+reported it terminated; a later inventory contained zero active rows with its
+ID or name.
+
+This was a startup-readiness defect in our launcher rather than benchmark or
+model evidence. The snapshot qualification already retries transient receipt
+reads, while the collection launcher had performed only one immediate read.
+The launcher now retries this read-only byte-equality check for at most 30
+attempts, two seconds apart. It still fails closed before dispatch if the file
+cannot be reopened or its bytes differ. Focused launcher tests cover both
+eventual success and bounded failure.
+
+- sandbox: `p7hs0a56ocmglguu4adcx`
+- name: `q38-b-f75-c1-v8-t00`
+- result: no collection and no model call; released and verified terminated
+- sanitized evidence:
+  [`qwen38-fresh75-wbe-v8-management-readback-release-20260920.json`](qwen38-fresh75-wbe-v8-management-readback-release-20260920.json)
+- evidence receipt:
+  `sha256:236e53f47b899a59992f68fe9be812d9be81216080ada9db124fb74cf0b41a5b`
+
+Because the repair changes source bytes bound by qualification, the V8 launch
+receipts are retired. A successor must use a newly qualified snapshot, newly
+sealed plans, and another exact duplicate census. Fanout remains closed until
+that successor's task-0 collection evidence is accepted.
+
 ## Prepared expansion
 
 Four sealed V7 replicas contain 15 distinct benchmark tasks per arm. Together
