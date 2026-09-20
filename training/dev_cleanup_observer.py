@@ -1,4 +1,4 @@
-"""Arm a local, UID-bound cleanup observer for one development workload.
+"""Arm a local, UID-bound cleanup observer for one exact workload.
 
 The observer starts before the workload is created.  It records only Kubernetes
 identity, lifecycle, resource and validated receipt metadata.  It never reads
@@ -23,9 +23,12 @@ from uuid import UUID
 from cyber_post_train.jobs import digest, quantity
 
 DEV_CONTEXT = "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb"
+PROD_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 NAMESPACE = "fleet-train-jobs"
 ARMED_SCHEMA = "cyber_dev_cleanup_observer_armed_v1"
 RESULT_SCHEMA = "cyber_dev_cleanup_observer_result_v1"
+DIRECT_ARMED_SCHEMA = "cyber_direct_cleanup_observer_armed_v1"
+DIRECT_RESULT_SCHEMA = "cyber_direct_cleanup_observer_result_v1"
 TERMINAL_RAY_STATUSES = {"SUCCEEDED": "Succeeded", "FAILED": "Failed"}
 KUBECTL_ATTEMPTS = 3
 KUBECTL_TIMEOUT_SECONDS = 20
@@ -80,6 +83,8 @@ def _validated_receipt(message: object, *, kind: str) -> dict | None:
             "cyber_skyrl_model_artifact_stage_rejection_v1",
             "cyber_skyrl_topology_probe_receipt_verification_v1",
             "cyber_skyrl_topology_probe_receipt_verification_rejection_v1",
+            "cyber_skyrl_reward_data_stage_receipt_v1",
+            "cyber_skyrl_reward_cpu_preflight_v1",
         },
         "fleetjob": {
             "cyber_skyrl_topology_probe_receipt_v1",
@@ -133,14 +138,39 @@ class Observer:
         result_path: Path,
         poll_seconds: float = 2.0,
         release_seconds: int = 300,
+        profile: str = "development",
         run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
     ) -> None:
-        if context != DEV_CONTEXT or namespace != NAMESPACE:
-            raise ObserverError("cleanup observer is bound to the development cluster")
+        profiles = {
+            "development": (DEV_CONTEXT, ARMED_SCHEMA, RESULT_SCHEMA, 1800),
+            "production-direct": (
+                PROD_CONTEXT,
+                DIRECT_ARMED_SCHEMA,
+                DIRECT_RESULT_SCHEMA,
+                12 * 60 * 60,
+            ),
+            "production-cpu": (
+                PROD_CONTEXT,
+                DIRECT_ARMED_SCHEMA,
+                DIRECT_RESULT_SCHEMA,
+                1800,
+            ),
+        }
+        if profile not in profiles:
+            raise ObserverError("cleanup observer profile is invalid")
+        expected_context, armed_schema, result_schema, maximum_bound = profiles[profile]
+        if context != expected_context or namespace != NAMESPACE:
+            if profile == "development":
+                raise ObserverError("cleanup observer is bound to the development cluster")
+            raise ObserverError("cleanup observer production binding is invalid")
         if kind not in {"job", "fleetjob", "rayjob"}:
             raise ObserverError("cleanup observer kind is invalid")
-        if not name or maximum_seconds < 1 or maximum_seconds > 1800:
+        if not name or maximum_seconds < 1 or maximum_seconds > maximum_bound:
             raise ObserverError("cleanup observer deadline is invalid")
+        if profile == "production-direct" and kind != "rayjob":
+            raise ObserverError("production direct observer requires a root RayJob")
+        if profile == "production-cpu" and kind != "job":
+            raise ObserverError("production CPU observer requires a root Job")
         if expected_gpus not in {0, 8} or (kind == "job") != (expected_gpus == 0):
             raise ObserverError("cleanup observer GPU contract is invalid")
         for value in (plan_sha256, manifest_sha256):
@@ -160,6 +190,9 @@ class Observer:
         self.result_path = result_path
         self.poll_seconds = poll_seconds
         self.release_seconds = release_seconds
+        self.profile = profile
+        self.armed_schema = armed_schema
+        self.result_schema = result_schema
         self._run = run
         self.snapshot = Snapshot()
         self.armed_at = ""
@@ -232,7 +265,7 @@ class Observer:
         self.armed_at = _stamp(_now())
         evidence = _seal(
             {
-                "schema": ARMED_SCHEMA,
+                "schema": self.armed_schema,
                 "status": "armed",
                 "context": self.context,
                 "namespace": self.namespace,
@@ -506,7 +539,7 @@ class Observer:
         status = "released" if accepted else "released_without_accepted_execution"
         return _seal(
             {
-                "schema": RESULT_SCHEMA,
+                "schema": self.result_schema,
                 "status": status,
                 "context": self.context,
                 "namespace": self.namespace,
@@ -651,6 +684,11 @@ def main() -> None:
     parser.add_argument("--manifest-sha256", required=True)
     parser.add_argument("--armed", type=Path, required=True)
     parser.add_argument("--result", type=Path, required=True)
+    parser.add_argument(
+        "--profile",
+        choices=("development", "production-direct", "production-cpu"),
+        default="development",
+    )
     args = parser.parse_args()
     try:
         observer = Observer(
@@ -664,10 +702,11 @@ def main() -> None:
             manifest_sha256=args.manifest_sha256,
             armed_path=args.armed,
             result_path=args.result,
+            profile=args.profile,
         )
         result = observer.run()
         print(json.dumps({"status": result["status"], "sha256": result["sha256"]}))
-        if result["status"] != "released":
+        if args.profile in {"development", "production-cpu"} and result["status"] != "released":
             raise SystemExit(1)
     except BaseException as exc:
         print(json.dumps({"status": "failed", "error_class": type(exc).__name__}))
