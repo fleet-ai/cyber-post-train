@@ -70,7 +70,7 @@ def _validated_receipt(message: object, *, kind: str) -> dict | None:
     schemas = {
         "job": {
             "cyber_skyrl_topology_probe_cpu_preflight_v1",
-            "cyber_skyrl_topology_probe_cpu_preflight_failure_v1",
+            "cyber_skyrl_topology_probe_cpu_preflight_rejection_v1",
         },
         "fleetjob": {
             "cyber_skyrl_topology_probe_receipt_v1",
@@ -443,7 +443,7 @@ class Observer:
         accepted = (
             self.snapshot.terminal_status == "Succeeded"
             and receipt is not None
-            and receipt.get("status") != "failed"
+            and receipt.get("status") in {"passed", "setup_and_internal_cleanup_passed"}
             and self.snapshot.peak_gpus == self.expected_gpus
         )
         status = "released" if accepted else "released_without_accepted_execution"

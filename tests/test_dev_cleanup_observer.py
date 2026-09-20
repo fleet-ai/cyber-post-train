@@ -234,8 +234,8 @@ def test_observer_rejects_prod_route_or_excess_deadline(tmp_path) -> None:
 def test_observer_accepts_only_digest_valid_sanitized_failure_receipt() -> None:
     receipt = _seal(
         {
-            "schema": "cyber_skyrl_topology_probe_cpu_preflight_failure_v1",
-            "status": "failed",
+            "schema": "cyber_skyrl_topology_probe_cpu_preflight_rejection_v1",
+            "status": "rejected",
             "phase": "model_inventory",
             "error_class": "ValueError",
         }

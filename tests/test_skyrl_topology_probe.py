@@ -301,7 +301,7 @@ def test_probe_verifies_every_exact_model_file(tmp_path) -> None:
     }
     probe._verify_model(plan)
     (model / "weight.safetensors").write_bytes(payload + b"changed")
-    with pytest.raises(ValueError, match="wrong size"):
+    with pytest.raises(probe.ProbeGateError, match="model_file_size_mismatch"):
         probe._verify_model(plan)
 
 
@@ -398,6 +398,47 @@ def test_probe_create_once_preflight_rejects_existing_sfs_output(
     target.mkdir(parents=True)
     with pytest.raises(FileExistsError, match="already exists"):
         probe._validate_create_once_absence(changed)
+
+
+def test_cpu_preflight_rejection_is_sealed_and_exits_cleanly(
+    plan, tmp_path, monkeypatch, capsys
+) -> None:
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(json.dumps(plan))
+    written = []
+    monkeypatch.setattr(
+        probe,
+        "preflight",
+        lambda *_: (_ for _ in ()).throw(probe.ProbeGateError("model_file_missing")),
+    )
+    monkeypatch.setattr(
+        probe,
+        "_write_receipt",
+        lambda path, receipt, *, exclusive: written.append((path, receipt, exclusive)),
+    )
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            probe.MODULE,
+            "--plan",
+            str(plan_path),
+            "--sha256",
+            digest(plan),
+            "--cpu-preflight",
+            "--receipt",
+            probe.PREFLIGHT_RECEIPT,
+        ],
+    )
+    probe.main()
+    assert len(written) == 1
+    path, receipt, exclusive = written[0]
+    assert path == Path(probe.PREFLIGHT_RECEIPT) and exclusive is False
+    assert receipt["schema"] == probe.PREFLIGHT_FAILURE_SCHEMA
+    assert receipt["status"] == "rejected"
+    assert receipt["error_code"] == "model_file_missing"
+    assert receipt == probe._seal(receipt)
+    assert json.loads(capsys.readouterr().out)["status"] == "rejected"
 
 
 def _preview(request, *, identity=True):

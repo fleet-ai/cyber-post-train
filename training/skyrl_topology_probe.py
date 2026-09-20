@@ -36,9 +36,9 @@ FLEETJOB_PACKET_SCHEMA = "cyber_skyrl_topology_probe_fleetjob_packet_v1"
 FLEETJOB_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_fleetjob_preview_v1"
 PREFLIGHT_PACKET_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_packet_v1"
 PREFLIGHT_PREVIEW_SCHEMA = "cyber_skyrl_topology_probe_preflight_job_preview_v1"
-PREFLIGHT_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_cpu_preflight_failure_v1"
+PREFLIGHT_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_cpu_preflight_rejection_v1"
 PROBE_FAILURE_SCHEMA = "cyber_skyrl_topology_probe_failure_v1"
-PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v4"
+PREFLIGHT_NAME = "chris-q38-skyrl-probe-preflight-v5"
 PREFLIGHT_RECEIPT = "/dev/termination-log"
 MODULE = "training.skyrl_topology_probe"
 CONFIG_PATH = ROOT / "configs/qualification/qwen38-skyrl-topology-probe-dev-v1.json"
@@ -57,6 +57,12 @@ RUNTIME_FILES = (
     "evals/fleet/opencode_self_hosted.py",
     "cyber_post_train/jobs.py",
 )
+
+
+class ProbeGateError(ValueError):
+    def __init__(self, code: str):
+        super().__init__(code)
+        self.code = code
 
 
 def _seal(value: dict) -> dict:
@@ -780,13 +786,13 @@ def _verify_model(plan: dict) -> None:
     for item in plan["model"]["files"]:
         path = root / item["path"]
         if path.is_symlink() or not path.is_file():
-            raise ValueError("probe model artifact is missing or mutable")
+            raise ProbeGateError("model_file_missing_or_symlink")
         if "size" in item and path.stat().st_size != item["size"]:
-            raise ValueError("probe model artifact has the wrong size")
+            raise ProbeGateError("model_file_size_mismatch")
         with path.open("rb") as stream:
             actual = hashlib.file_digest(stream, "sha256").hexdigest()
         if actual != item["sha256"].removeprefix("sha256:"):
-            raise ValueError("probe model artifact digest changed")
+            raise ProbeGateError("model_file_digest_mismatch")
 
 
 def _validate_destination(plan: dict) -> Path:
@@ -1110,9 +1116,10 @@ def main() -> None:
                 "schema": (
                     PREFLIGHT_FAILURE_SCHEMA if args.cpu_preflight else PROBE_FAILURE_SCHEMA
                 ),
-                "status": "failed",
+                "status": "rejected" if args.cpu_preflight else "failed",
                 "phase": phase,
                 "error_class": type(exc).__name__,
+                "error_code": getattr(exc, "code", "unclassified"),
                 "plan_sha256": args.sha256,
                 "task_rows_read": 0,
                 "rollout_episodes": 0,
@@ -1126,13 +1133,16 @@ def main() -> None:
         print(
             json.dumps(
                 {
-                    "status": "failed",
+                    "status": failure["status"],
                     "phase": phase,
                     "error_class": type(exc).__name__,
+                    "error_code": getattr(exc, "code", "unclassified"),
                     "sha256": failure["sha256"],
                 }
             )
         )
+        if args.cpu_preflight:
+            return
         raise SystemExit(1) from None
 
 
