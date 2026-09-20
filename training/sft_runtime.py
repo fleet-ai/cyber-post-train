@@ -1,7 +1,13 @@
 """Pinned SkyRL SFT with scalar W&B telemetry and recoverable saves.
 
-The trainer/worker methods used here were inspected at SkyRL f5bc3b78. This
-module deliberately keeps the native training loop and optimizer. It adds
+The FSDP path was inspected at SkyRL f5bc3b78. The Qwen3.8 Megatron-LoRA
+qualification producer is committed at exact SkyRL revision
+7e9356c8e02e7382e84b8484638baccdd1bbf680 and its immutable trainer image
+passed the bounded CPU image qualification recorded in
+configs/qualification/qwen38-lora-megatron-trainer-image-2026-09-20-v1.json.
+This qualifies only the exact one-step gate; broader training remains
+fail-closed. This module deliberately keeps the native training loop and
+optimizer. It adds
 metadata-preserving tokenization, one-pass task-macro validation, scalar
 telemetry, and checkpoint retention. HF export is a separate zero-step job:
 the old step-318 inline export could time out before the final checkpoint.
@@ -28,9 +34,23 @@ from collections import defaultdict
 from pathlib import Path
 
 SKYRL_REVISION = "f5bc3b78dfddfb352870d5d7430cd226e5785838"
+# The evidence API changes the load-bearing worker bytes. Bind only the exact
+# independently qualified source/image pair; the retired prior pair must not
+# launch a producer whose evidence API it does not contain.
+QWEN38_MEGATRON_SKYRL_REVISION: str | None = "7e9356c8e02e7382e84b8484638baccdd1bbf680"
+QWEN38_MEGATRON_IMAGE: str | None = (
+    "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:"
+    "7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317"
+)
+QWEN38_MEGATRON_IMAGE_RE = re.compile(
+    r"ghcr\.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:[a-f0-9]{64}"
+)
 DENSE_SCHEMA = "cyber_sft_runtime_dense_v1"
 DENSE_FORMAT = "pretokenized_assistant_segments_v1"
-DENSE_EXCLUSION_REASONS = {"overlength_assistant_target", "overlength_required_previous_round"}
+DENSE_EXCLUSION_REASONS = {
+    "overlength_assistant_target",
+    "overlength_required_previous_round",
+}
 PUBLIC_RUNTIME_STAGES = {
     "trainer_constructed",
     "tracker_initializing",
@@ -105,16 +125,271 @@ SOURCE_SHA256 = {
     ),
 }
 
+# Load-bearing bytes from exact committed revision
+# 7e9356c8e02e7382e84b8484638baccdd1bbf680. This census is complete enough to
+# build and verify the successor image. Dependency manifests and Dockerfile
+# remain load-bearing because the earlier image failed when its build omitted
+# the Megatron extra. The qualified pair above is still accepted only for the
+# exact one-step gate enforced by ``validate_plan``.
+QWEN38_MEGATRON_SOURCE_SHA256: dict[str, str] = {
+    "pyproject.toml": "ec1f6edaf83c3b5299d455c858409cdace4a7b3cc2948d208264ae0937077182",
+    "uv.lock": "7843814ce42bdc1d34173138f00037108ea4181909e7fac5af14578c3c4551a6",
+    "integrations/fleet_v2/rl1/Dockerfile": (
+        "69c490cde076f531b2d5cd566aa6e9ab58f65b74b8c1fb741af3290c2bf9881c"
+    ),
+    "skyrl/train/sft_trainer.py": (
+        "fbb12f4f0bd118848dc3c0eec43c37414f9b182204d578b6efe8d5d06e91eb26"
+    ),
+    "skyrl/train/config/sft_config.py": (
+        "d5972bc61b3ec90e342a2395137942a22f5ef23294f662def51f95bacd65dd97"
+    ),
+    "skyrl/train/config/config.py": (
+        "01ccf7c73f51dd168f06b94480b2c6938d8a5458e79ab4d044d6eecc3007e663"
+    ),
+    "skyrl/backends/skyrl_train/workers/worker_dispatch.py": (
+        "5461b909155f87b0564efb30cafb56b971fa0e812f73a50307789ae6537cfb33"
+    ),
+    "skyrl/backends/skyrl_train/distributed/megatron/megatron_strategy.py": (
+        "936580a50050f4a2dc82516e6d187909445cec79652a06ea8b10366280a69142"
+    ),
+    "skyrl/backends/skyrl_train/workers/megatron/adapter_store.py": (
+        "198367c682105a930e800ab7cd6c4157654428dbf649161b9f8c45e4cb5134de"
+    ),
+    "skyrl/backends/skyrl_train/workers/megatron/lora_targets.py": (
+        "fe3101241b16b37eb897675620b91e59f4c2b80b66e25d96040cd73b2565cdd7"
+    ),
+    "skyrl/backends/skyrl_train/workers/megatron/lora_evidence.py": (
+        "f3452dc57d13b5c062ba05f43f40a74788057700c6b53a8849ec0337d21e649e"
+    ),
+    "skyrl/backends/skyrl_train/workers/megatron/megatron_model_wrapper.py": (
+        "9cafe09ab2aa5755b7b707973e53df47b7bd51c335708468e701905f406e658a"
+    ),
+    "skyrl/backends/skyrl_train/workers/megatron/megatron_worker.py": (
+        "7e4a98279ba1b46db5ea3043f0b66486366656cbc61df7a3febbda5e2d83b174"
+    ),
+    "skyrl/backends/skyrl_train/workers/megatron/model_bridges.py": (
+        "fa96f2d5563094d719975d0ee68eea1df20da34ac7d479e80bffd632fe3e00b8"
+    ),
+}
+QWEN38_MEGATRON_SOURCE_CENSUS_SHA256 = (
+    "a88c512b3c330b4cf21ef16318b98bcdb90a2d850936d1858d7b79343df94989"
+)
+
+QWEN38_LORA = {
+    "type": "lora",
+    "target_modules": "all-linear",
+    "rank": 64,
+    "alpha": 32,
+    "init_method": "kaiming",
+    "dropout": 0.0,
+}
+QWEN38_LORA_QUALIFICATION = {
+    "schema": "qwen38_megatron_lora_one_step_gate_v1",
+    "training_job_evidence": [
+        "complete_target_census",
+        "finite_forward_loss",
+        "finite_nonzero_lora_gradients",
+        "one_optimizer_update",
+        "changed_adapter_tensors",
+        "unchanged_frozen_base_tensors",
+        "adapter_checkpoint",
+        "wandb_scalar_run",
+    ],
+    "later_zero_step_evidence": [
+        "adapter_checkpoint_reload",
+        "deterministic_merge_and_export",
+        "merged_model_and_tokenizer_reload",
+    ],
+    "training_success_is_acceptance": False,
+    "accepted_for_production": False,
+}
+
+# This is deliberately the complete identity of the one reviewed GPU canary,
+# not a menu of values which happens to include it.  The qualified SkyRL image
+# has not yet produced a checkpoint, so accepting a different dataset, model,
+# recipe, resource envelope, or telemetry destination would turn the first paid
+# run into an unreviewed experiment.  Compact canonical digests bind the large
+# model inventory and dataset/task inventory without copying those lists into
+# executable code; their human-readable roots and manifest identities remain
+# explicit here.
+QWEN38_LORA_ONE_STEP_PLAN = {
+    "plan_keys": [
+        "corpus_manifest_sha256",
+        "datasets",
+        "execution",
+        "lora",
+        "model",
+        "output_root",
+        "pause_after_step",
+        "qualification_gate",
+        "recipe",
+        "run_name",
+        "runtime_sha256",
+        "schema",
+        "skyrl_runtime",
+        "split_manifest_sha256",
+        "validation_mode",
+        "wandb",
+    ],
+    "schema": DENSE_SCHEMA,
+    "run_name": "chris-q38-lora-sft-c1-v1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-c1-v1",
+    "model": {
+        "repo": "Qwen/Qwen3.8-27B",
+        "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+        "weight_manifest_sha256": (
+            "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
+        ),
+        "files_sha256": ("c4dab1bcd885ef426cc310853ef8f6fed451158cf83de17e8c625d703202940b"),
+    },
+    # The predecessor corpus overlaps two final-test task families.  This binds
+    # the independently verified create-once V2 successor and its exact
+    # payload-derived dataset/corpus identities and step count.
+    "datasets_sha256": "219efad0257ff29b3057c91de88144542f8617a124079c5a20c79cf80b071f72",
+    "split_manifest_sha256": (
+        "sha256:b7b536940995a0d4b8674a4bdadd6240ef88dc1c07200a93f27b592ac8c046ea"
+    ),
+    "corpus_manifest_sha256": (
+        "sha256:5db5600ac9f403fd147b2ecbf6068b514d075d07ac683d97bc83319c6e89d149"
+    ),
+    "recipe": {
+        "epochs": 1,
+        "batch_size": 1,
+        "microbatch_per_gpu": 1,
+        "nodes": 1,
+        "gpus_per_node": 8,
+        "lr": 3e-5,
+        "max_length": 16384,
+        "eval_interval": 0,
+        "checkpoint_interval": 1,
+        "keep_checkpoints": 3,
+        "seed": 20260919,
+        "max_steps": 866,
+    },
+    "pause_after_step": 1,
+    "validation_mode": "task_outcomes_only",
+    "execution": {
+        "priority": "c1",
+        "resources": {
+            "cpu_request": "64",
+            "cpu_limit": "64",
+            "memory_request": "512Gi",
+            "memory_limit": "768Gi",
+        },
+    },
+    "wandb": {
+        "entity": "thefleet",
+        "project": "cyber-post-train",
+        "group": "qwen38-lora-sft-goal-v1",
+        "run_id": "chris-q38-lora-sft-c1-v1",
+        "name": "chris-q38-lora-sft-c1-v1",
+        "tags": [
+            "qwen38",
+            "lora",
+            "teacher-sft",
+            "rank64",
+            "alpha32",
+            "exact-model-gate",
+            "planned-pause-step1",
+            "task-outcomes-only",
+        ],
+    },
+}
+
+
+def qwen38_megatron_binding() -> tuple[str, str, dict[str, str]]:
+    """Return the one reviewed source/image pair, or fail closed.
+
+    A repository-qualified image name is not enough: submission must bind the
+    exact digest built from the same reviewed source commit and must retain a
+    non-empty census of load-bearing source bytes for in-image preflight.
+    """
+    if (
+        not isinstance(QWEN38_MEGATRON_SKYRL_REVISION, str)
+        or re.fullmatch(r"[a-f0-9]{40}", QWEN38_MEGATRON_SKYRL_REVISION) is None
+        or not isinstance(QWEN38_MEGATRON_IMAGE, str)
+        or QWEN38_MEGATRON_IMAGE_RE.fullmatch(QWEN38_MEGATRON_IMAGE) is None
+        or not QWEN38_MEGATRON_SOURCE_SHA256
+        or hashlib.sha256(
+            json.dumps(
+                QWEN38_MEGATRON_SOURCE_SHA256,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode()
+        ).hexdigest()
+        != QWEN38_MEGATRON_SOURCE_CENSUS_SHA256
+        or any(
+            not isinstance(path, str)
+            or not path
+            or re.fullmatch(r"[a-f0-9]{64}", source_digest) is None
+            for path, source_digest in QWEN38_MEGATRON_SOURCE_SHA256.items()
+        )
+    ):
+        raise ValueError("Qwen3.8 Megatron source/image qualification binding is unresolved")
+    return (
+        QWEN38_MEGATRON_SKYRL_REVISION,
+        QWEN38_MEGATRON_IMAGE,
+        dict(QWEN38_MEGATRON_SOURCE_SHA256),
+    )
+
 
 def digest(path: Path) -> str:
     with path.open("rb") as stream:
         return hashlib.file_digest(stream, "sha256").hexdigest()
 
 
-def _unsigned_digest(value: dict) -> str:
+def _unsigned_digest(value: object) -> str:
     return hashlib.sha256(
         json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
+
+
+def _qwen38_lora_one_step_identity(plan: dict) -> dict:
+    """Return every reviewed scientific/resource field of the paid canary."""
+    # The immutable plan file deliberately does not contain its own digest.
+    # The runtime verifies that file against ``--plan-sha256`` and then adds
+    # ``plan_sha256`` for receipts.  Keep that transport/evidence field out of
+    # the reviewed scientific identity so the same exact plan is accepted both
+    # immediately before and immediately after runtime enrichment.
+    source_plan = {key: value for key, value in plan.items() if key != "plan_sha256"}
+    model = source_plan.get("model", {})
+    execution = source_plan.get("execution", {})
+    return {
+        "plan_keys": sorted(source_plan),
+        "schema": source_plan.get("schema"),
+        "run_name": source_plan.get("run_name"),
+        "output_root": source_plan.get("output_root"),
+        "model": {
+            "repo": model.get("repo"),
+            "revision": model.get("revision"),
+            "root": model.get("root"),
+            "weight_manifest_sha256": model.get("weight_manifest_sha256"),
+            "files_sha256": _unsigned_digest(model.get("files", [])),
+        },
+        "datasets_sha256": _unsigned_digest(source_plan.get("datasets", {})),
+        "split_manifest_sha256": source_plan.get("split_manifest_sha256"),
+        "corpus_manifest_sha256": source_plan.get("corpus_manifest_sha256"),
+        "recipe": source_plan.get("recipe"),
+        "pause_after_step": source_plan.get("pause_after_step"),
+        "validation_mode": source_plan.get("validation_mode"),
+        "execution": {
+            "priority": execution.get("priority"),
+            "resources": execution.get("resources"),
+        },
+        "wandb": source_plan.get("wandb"),
+    }
+
+
+def qwen38_lora_one_step_plan_binding() -> dict:
+    """Return the exact canary identity only after its corpus is published."""
+    if (
+        QWEN38_LORA_ONE_STEP_PLAN["datasets_sha256"] is None
+        or QWEN38_LORA_ONE_STEP_PLAN["corpus_manifest_sha256"] is None
+        or QWEN38_LORA_ONE_STEP_PLAN["recipe"]["max_steps"] is None
+    ):
+        raise ValueError("Qwen3.8 one-step leak-free corpus binding is unresolved")
+    return QWEN38_LORA_ONE_STEP_PLAN
 
 
 def write_receipt(path: Path, value: dict, *, replace: bool = False) -> None:
@@ -130,9 +405,34 @@ def write_receipt(path: Path, value: dict, *, replace: bool = False) -> None:
         temporary.replace(path)
 
 
-def _checked_file(path: Path, expected: str) -> None:
-    if path.is_symlink() or not path.is_file() or digest(path) != expected.removeprefix("sha256:"):
+def _verified_file_observation(path: Path, expected: str) -> dict:
+    """Read one immutable file once and return its verified public metadata."""
+    if path.is_symlink() or not path.is_file():
         raise ValueError("immutable file missing or digest mismatch")
+    before = path.stat()
+    observed = digest(path)
+    after = path.stat()
+    stable_fields = (
+        "st_dev",
+        "st_ino",
+        "st_mode",
+        "st_size",
+        "st_mtime_ns",
+        "st_ctime_ns",
+    )
+    if observed != expected.removeprefix("sha256:") or any(
+        getattr(before, field) != getattr(after, field) for field in stable_fields
+    ):
+        raise ValueError("immutable file missing or digest mismatch")
+    return {"bytes": after.st_size, "sha256": observed}
+
+
+def _checked_file(path: Path, expected: str) -> None:
+    _verified_file_observation(path, expected)
+
+
+def _is_qwen38_lora(plan: dict) -> bool:
+    return "lora" in plan and plan.get("model", {}).get("repo") == "Qwen/Qwen3.8-27B"
 
 
 def validate_plan(plan: dict, *, check_files: bool = True) -> None:
@@ -162,9 +462,14 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         or not 0 < recipe["lr"] <= 1e-4
     ):
         raise ValueError("learning rate outside reviewed SFT range")
-    if recipe["batch_size"] % (
-        recipe["nodes"] * recipe["gpus_per_node"] * recipe["microbatch_per_gpu"]
-    ):
+    data_parallel_size = recipe["nodes"] * recipe["gpus_per_node"]
+    if _is_qwen38_lora(plan):
+        # The qualification topology is TP=8, so eight model-parallel ranks
+        # collectively consume one sample. They are not eight data replicas.
+        if data_parallel_size < 8 or data_parallel_size % 8:
+            raise ValueError("Qwen3.8 Megatron world size must be divisible by TP=8")
+        data_parallel_size //= 8
+    if recipe["batch_size"] % (data_parallel_size * recipe["microbatch_per_gpu"]):
         raise ValueError("global batch must divide evenly across GPU microbatches")
     if recipe["eval_interval"] and recipe["checkpoint_interval"] != recipe["eval_interval"]:
         raise ValueError("every periodic validation needs a corresponding saved checkpoint")
@@ -239,7 +544,25 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
     if recipe["max_steps"] != math.ceil(train["rows"] / recipe["batch_size"]) * recipe["epochs"]:
         raise ValueError("max_steps must equal complete epochs with the native kept tail batch")
     model = plan["model"]
-    if "lora" in plan:
+    if _is_qwen38_lora(plan):
+        source_commit, image, source_files = qwen38_megatron_binding()
+        one_step_plan = qwen38_lora_one_step_plan_binding()
+        runtime = plan.get("skyrl_runtime")
+        expected_runtime = {
+            "source_commit": source_commit,
+            "source_files_sha256": source_files,
+        }
+        if (
+            plan["lora"] != QWEN38_LORA
+            or runtime != expected_runtime
+            or plan.get("execution", {}).get("image") != image
+            or plan.get("qualification_gate") != QWEN38_LORA_QUALIFICATION
+            or _qwen38_lora_one_step_identity(plan) != one_step_plan
+        ):
+            raise ValueError(
+                "Qwen3.8 LoRA requires the exact digest-bound one-step Megatron qualification gate"
+            )
+    elif "lora" in plan:
         lora = plan["lora"]
         if (
             model["repo"] != "zai-org/GLM-5.3"
@@ -280,14 +603,27 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
             _checked_file(Path(plan["staged_receipt"]["path"]), plan["staged_receipt"]["sha256"])
 
 
-def validate_runtime_sources(root: Path | None = None) -> None:
+def validate_runtime_sources(plan: dict | None = None, root: Path | None = None) -> None:
     if root is None:
         spec = importlib.util.find_spec("skyrl")
         if spec is None or not spec.submodule_search_locations:
             raise ValueError("pinned SkyRL package is unavailable")
         root = Path(next(iter(spec.submodule_search_locations))).parent
-    for path, expected in SOURCE_SHA256.items():
+    sources = qwen38_megatron_binding()[2] if plan and _is_qwen38_lora(plan) else SOURCE_SHA256
+    for path, expected in sources.items():
         _checked_file(root / path, expected)
+
+
+def _validate_entrypoint_sources(plan: dict, *, verify_qwen_files: bool) -> None:
+    """Validate a staged plan without duplicating Qwen model hash passes."""
+    qwen38_lora = _is_qwen38_lora(plan)
+    validate_plan(plan, check_files=not qwen38_lora)
+    if qwen38_lora:
+        if verify_qwen_files:
+            _qwen38_source_inventory(plan)
+            _qwen38_runtime_source_inventory(plan)
+    else:
+        validate_runtime_sources(plan)
 
 
 def sft_overrides(plan: dict) -> dict:
@@ -340,9 +676,35 @@ def sft_overrides(plan: dict) -> dict:
         )
     if plan["schema"] == DENSE_SCHEMA:
         options.update(
-            {"fsdp_config.cpu_offload": False, "optimizer_config.offload_after_step": False}
+            {
+                "fsdp_config.cpu_offload": False,
+                "optimizer_config.offload_after_step": False,
+            }
         )
-    if "lora" in plan:
+    if _is_qwen38_lora(plan):
+        options.pop("model_config_kwargs.fleet_force_qwen35_torch_gdn")
+        lora = plan["lora"]
+        options.update(
+            {
+                "strategy": "megatron",
+                "language_model_only": True,
+                "megatron_config.tensor_model_parallel_size": 8,
+                "megatron_config.pipeline_model_parallel_size": 1,
+                "megatron_config.context_parallel_size": 1,
+                "megatron_config.lora_config.lora_type": lora["type"],
+                "megatron_config.lora_config.merge_lora": True,
+                "model.lora.rank": lora["rank"],
+                "model.lora.alpha": lora["alpha"],
+                "model.lora.dropout": lora["dropout"],
+                "model.lora.init_method": lora["init_method"],
+                "model.lora.target_modules": lora["target_modules"],
+                "optimizer_config.weight_decay": 0.01,
+                "optimizer_config.max_grad_norm": 1.0,
+                "remove_microbatch_padding": True,
+                "use_sequence_packing": False,
+            }
+        )
+    elif "lora" in plan:
         from training.glm_runtime import TARGETS
 
         options.pop("model_config_kwargs.fleet_force_qwen35_torch_gdn")
@@ -367,11 +729,11 @@ def build_runtime_configs(plan: dict):
 
     cfg = SFTConfig.from_cli_overrides(sft_overrides(plan))
     skyrl_cfg = build_skyrl_config_for_sft(cfg)
-    if "lora" in plan:
+    if "lora" in plan and not _is_qwen38_lora(plan):
         # SFTConfig has no flash_attn field; this is an explicit native bridge
         # setting, not an ignored CLI override. The GLM loader uses HF SDPA.
         skyrl_cfg.trainer.flash_attn = False
-    if plan["schema"] == DENSE_SCHEMA or "lora" in plan:
+    if plan["schema"] == DENSE_SCHEMA or ("lora" in plan and not _is_qwen38_lora(plan)):
         # The native bridge disables colocate_all but inherits the RL default
         # colocate_policy_ref=True. This arm has no reference/inference actor.
         skyrl_cfg.trainer.placement.colocate_policy_ref = False
@@ -451,7 +813,10 @@ def dense_rows(rows: list[dict], spec: dict, *, max_length: int, vocab_size: int
         sid, count = row["source_session_id"], row["source_assistant_count"]
         if not isinstance(sid, str) or not sid or type(count) is not int or count <= 0:
             raise ValueError("dense source identity or response count missing")
-        eligible, exclusions = row["eligible_assistant_indices"], row["excluded_assistant_targets"]
+        eligible, exclusions = (
+            row["eligible_assistant_indices"],
+            row["excluded_assistant_targets"],
+        )
         if (
             not isinstance(eligible, list)
             or not eligible
@@ -554,7 +919,10 @@ def dense_rows(rows: list[dict], spec: dict, *, max_length: int, vocab_size: int
     for source in sessions.values():
         if set(source["targets"]) != set(source["eligible"]):
             raise ValueError("eligible source assistant response coverage is incomplete")
-        provenance = {**source["targets"], **{i: v[0] for i, v in source["excluded"].items()}}
+        provenance = {
+            **source["targets"],
+            **{i: v[0] for i, v in source["excluded"].items()},
+        }
         messages = [provenance[i] for i in range(source["count"])]
         if messages != sorted(set(messages)):
             raise ValueError("source assistant order or uniqueness differs across segments")
@@ -567,7 +935,10 @@ def dense_rows(rows: list[dict], spec: dict, *, max_length: int, vocab_size: int
     if (
         sum(s["count"] for s in sessions.values()),
         sum(len(s["excluded"]) for s in sessions.values()),
-    ) != (spec["source_total_assistant_responses"], spec["excluded_assistant_responses"]):
+    ) != (
+        spec["source_total_assistant_responses"],
+        spec["excluded_assistant_responses"],
+    ):
         raise ValueError("dense original-source or excluded-response total mismatch")
     return result
 
@@ -585,7 +956,11 @@ class EvalAccumulator:
         self.tasks = defaultdict(lambda: [0.0, 0, 0])
 
     def add_batch(
-        self, metadata: list[dict], counts: list[int], outputs: list[dict], batch_loss: float
+        self,
+        metadata: list[dict],
+        counts: list[int],
+        outputs: list[dict],
+        batch_loss: float,
     ) -> None:
         if (
             len(metadata) != len(counts)
@@ -703,7 +1078,11 @@ def _utilization_snapshot() -> tuple[float | None, int | None]:
     gpu_mean = None
     try:
         result = subprocess.run(
-            ["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
+            [
+                "nvidia-smi",
+                "--query-gpu=utilization.gpu",
+                "--format=csv,noheader,nounits",
+            ],
             capture_output=True,
             text=True,
             check=True,
@@ -879,6 +1258,574 @@ class PlannedPause(Exception):
     """Exit the native loop only after the requested save, validation and log."""
 
 
+def _qwen38_rank_snapshots(snapshots: list[dict], *, stage: str) -> dict[int, dict]:
+    """Validate and index one complete TP8 snapshot without tensor values."""
+    if not isinstance(snapshots, list) or len(snapshots) != 8:
+        raise ValueError(f"{stage} LoRA evidence must contain exactly eight ranks")
+    indexed = {}
+    for snapshot in snapshots:
+        if not isinstance(snapshot, dict) or set(snapshot) != {
+            "rank",
+            "target_census",
+            "adapters",
+            "trainable",
+            "frozen_base",
+            "successful_optimizer_updates",
+            "last_gradient_norm",
+        }:
+            raise ValueError(f"{stage} LoRA rank evidence has unknown or missing fields")
+        rank = snapshot["rank"]
+        expected_rank_fields = {
+            "world_rank",
+            "tp_rank",
+            "tp_size",
+            "pp_rank",
+            "pp_size",
+            "cp_rank",
+            "cp_size",
+            "dp_rank",
+            "dp_size",
+        }
+        if not isinstance(rank, dict) or set(rank) != expected_rank_fields:
+            raise ValueError(f"{stage} LoRA rank topology is incomplete")
+        tp_rank = rank["tp_rank"]
+        if (
+            type(tp_rank) is not int
+            or any(type(value) is not int for value in rank.values())
+            or not 0 <= tp_rank < 8
+            or tp_rank in indexed
+            or rank
+            != {
+                "world_rank": tp_rank,
+                "tp_rank": tp_rank,
+                "tp_size": 8,
+                "pp_rank": 0,
+                "pp_size": 1,
+                "cp_rank": 0,
+                "cp_size": 1,
+                "dp_rank": 0,
+                "dp_size": 1,
+            }
+        ):
+            raise ValueError(f"{stage} LoRA evidence has duplicate or invalid TP ranks")
+        adapters = snapshot["adapters"]
+        trainable = snapshot["trainable"]
+        frozen = snapshot["frozen_base"]
+        if not isinstance(adapters, dict) or not adapters:
+            raise ValueError(f"{stage} LoRA rank has no adapter tensors")
+        for name, row in adapters.items():
+            if (
+                not isinstance(name, str)
+                or ".adapter" not in name.lower()
+                or not isinstance(row, dict)
+                or set(row)
+                != {
+                    "logical_target",
+                    "dtype",
+                    "global_shape",
+                    "local_shape",
+                    "sharding",
+                    "sha256",
+                }
+                or not isinstance(row["logical_target"], str)
+                or row["dtype"] != "BF16"
+                or any(
+                    not isinstance(shape, list)
+                    or not shape
+                    or any(type(size) is not int or size <= 0 for size in shape)
+                    for shape in (row["global_shape"], row["local_shape"])
+                )
+                or not isinstance(row["sharding"], dict)
+                or not isinstance(row["sha256"], str)
+                or re.fullmatch(r"[a-f0-9]{64}", row["sha256"]) is None
+            ):
+                raise ValueError(f"{stage} LoRA adapter tensor evidence is invalid")
+        if not isinstance(trainable, dict) or set(trainable) != {
+            "parameter_count",
+            "elements",
+            "manifest_sha256",
+            "unexpected_parameters",
+            "nontrainable_adapter_parameters",
+        }:
+            raise ValueError(f"{stage} trainable census is incomplete")
+        if not isinstance(frozen, dict) or set(frozen) != {
+            "parameter_count",
+            "elements",
+            "bytes",
+            "manifest_sha256",
+        }:
+            raise ValueError(f"{stage} frozen-base census is incomplete")
+        expected_trainable_rows = [
+            {
+                "name": name,
+                "dtype": row["dtype"],
+                "shape": row["local_shape"],
+                "numel": math.prod(row["local_shape"]),
+            }
+            for name, row in sorted(adapters.items())
+        ]
+        expected_trainable_elements = sum(row["numel"] for row in expected_trainable_rows)
+        if (
+            trainable["unexpected_parameters"] != []
+            or trainable["nontrainable_adapter_parameters"] != []
+            or trainable["parameter_count"] != len(adapters)
+            or trainable["elements"] != expected_trainable_elements
+            or trainable["manifest_sha256"] != _unsigned_digest(expected_trainable_rows)
+            or any(
+                type(trainable[field]) is not int or trainable[field] <= 0
+                for field in ("parameter_count", "elements")
+            )
+            or any(
+                type(frozen[field]) is not int or frozen[field] <= 0
+                for field in ("parameter_count", "elements", "bytes")
+            )
+            or any(
+                not isinstance(value["manifest_sha256"], str)
+                or re.fullmatch(r"[a-f0-9]{64}", value["manifest_sha256"]) is None
+                for value in (trainable, frozen)
+            )
+        ):
+            raise ValueError(f"{stage} LoRA rank violates adapter-only trainability")
+        indexed[tp_rank] = snapshot
+    if set(indexed) != set(range(8)):
+        raise ValueError(f"{stage} LoRA evidence is missing one or more TP ranks")
+    return indexed
+
+
+def _qwen38_checkpoint_inventory(checkpoint: Path) -> tuple[dict, dict]:
+    """Reopen one finalized checkpoint and return exact file and role inventories."""
+    if checkpoint.is_symlink() or not checkpoint.is_dir():
+        raise ValueError("qualified checkpoint root is missing or a symlink")
+    files = {}
+    roles = {"adapter": [], "optimizer_and_rng": [], "metadata": []}
+    adapter_pattern = re.compile(r"policy/adapter_tp([0-7])_pp0_cp0_dp0_ep0_etp0\.pt")
+    optimizer_pattern = re.compile(r"policy/__\d+_\d+\.distcp")
+    for path in sorted(checkpoint.rglob("*")):
+        if path.is_symlink():
+            raise ValueError("checkpoint inventory contains a symlink")
+        if path.is_dir():
+            continue
+        if not path.is_file():
+            raise ValueError("checkpoint inventory contains a non-file entry")
+        relative = path.relative_to(checkpoint).as_posix()
+        size = path.stat().st_size
+        if size <= 0:
+            raise ValueError("checkpoint inventory contains an empty file")
+        files[relative] = {"bytes": size, "sha256": digest(path)}
+        if adapter_pattern.fullmatch(relative):
+            roles["adapter"].append(relative)
+        elif relative == "policy/.metadata" or optimizer_pattern.fullmatch(relative):
+            roles["optimizer_and_rng"].append(relative)
+        else:
+            roles["metadata"].append(relative)
+    roles["adapter"].sort(key=lambda name: int(adapter_pattern.fullmatch(name).group(1)))
+    for name in ("optimizer_and_rng", "metadata"):
+        roles[name].sort()
+    expected_adapters = [f"policy/adapter_tp{rank}_pp0_cp0_dp0_ep0_etp0.pt" for rank in range(8)]
+    if (
+        roles["adapter"] != expected_adapters
+        or not roles["optimizer_and_rng"]
+        or not roles["metadata"]
+        or set(files) != {item for values in roles.values() for item in values}
+    ):
+        raise ValueError("finalized checkpoint file roles are incomplete")
+    return files, roles
+
+
+def _qwen38_checkpoint_finalization(acknowledgements: list[dict]) -> dict:
+    """Require an explicit successful async-writer drain from every TP rank."""
+    if not isinstance(acknowledgements, list) or len(acknowledgements) != 8:
+        raise ValueError("checkpoint finalization must acknowledge every TP8 rank")
+    ranks = set()
+    rows = []
+    for acknowledgement in acknowledgements:
+        if not isinstance(acknowledgement, dict) or set(acknowledgement) != {
+            "world_rank",
+            "tp_rank",
+            "finalized",
+        }:
+            raise ValueError("checkpoint finalization acknowledgement is malformed")
+        rank = acknowledgement["tp_rank"]
+        if (
+            type(rank) is not int
+            or acknowledgement["world_rank"] != rank
+            or rank in ranks
+            or not 0 <= rank < 8
+            or acknowledgement["finalized"] is not True
+        ):
+            raise ValueError("checkpoint finalization has duplicate or unsuccessful ranks")
+        ranks.add(rank)
+        rows.append(dict(acknowledgement))
+    if ranks != set(range(8)):
+        raise ValueError("checkpoint finalization is missing one or more TP ranks")
+    return {
+        "async_writes_finalized": True,
+        "rank_acknowledgements": sorted(rows, key=lambda row: row["tp_rank"]),
+    }
+
+
+def _tensor_sha256(tensor, *, chunk_bytes: int = 64 * 1024 * 1024) -> str:
+    """Independently hash exact dense tensor bytes with bounded host memory."""
+    import torch
+
+    if not isinstance(tensor, torch.Tensor) or tensor.layout != torch.strided:
+        raise TypeError("checkpoint evidence supports dense strided tensors only")
+    if tensor.numel() <= 0 or chunk_bytes <= 0:
+        raise ValueError("checkpoint evidence rejects empty tensors and invalid chunks")
+    value = tensor.detach().contiguous().reshape(-1)
+    elements = max(1, chunk_bytes // max(1, value.element_size()))
+    result = hashlib.sha256()
+    for start in range(0, value.numel(), elements):
+        host = value[start : start + elements].to(device="cpu", non_blocking=False)
+        result.update(host.view(torch.uint8).numpy().tobytes(order="C"))
+    return result.hexdigest()
+
+
+def _qwen38_reconcile_evidence(
+    before_snapshots: list[dict],
+    after_snapshots: list[dict],
+    checkpoint: Path,
+    *,
+    forward_loss: float,
+    trainer_gradient_norm: float,
+) -> dict:
+    """Reconcile live TP8 bytes with independently reopened adapter shards."""
+    import torch
+
+    before = _qwen38_rank_snapshots(before_snapshots, stage="before")
+    after = _qwen38_rank_snapshots(after_snapshots, stage="after")
+    census = before[0]["target_census"]
+    names = set(before[0]["adapters"])
+    if not names:
+        raise ValueError("LoRA adapter census is empty")
+    gradients = []
+    checkpoint_hashes = {}
+    for rank in range(8):
+        first, last = before[rank], after[rank]
+        if first["target_census"] != census or last["target_census"] != census:
+            raise ValueError("all-linear target census differs across rank or time")
+        if set(first["adapters"]) != names or set(last["adapters"]) != names:
+            raise ValueError("adapter keys differ across rank or time")
+        if (
+            type(first["successful_optimizer_updates"]) is not int
+            or type(last["successful_optimizer_updates"]) is not int
+            or first["successful_optimizer_updates"] != 0
+            or first["last_gradient_norm"] is not None
+            or last["successful_optimizer_updates"] != 1
+        ):
+            raise ValueError("every TP rank must report exactly one successful optimizer update")
+        gradient = last["last_gradient_norm"]
+        if type(gradient) not in {int, float} or not math.isfinite(gradient) or gradient <= 0:
+            raise ValueError("every TP rank must report one finite positive LoRA gradient norm")
+        gradients.append(float(gradient))
+        if (
+            first["trainable"]["parameter_count"] != last["trainable"]["parameter_count"]
+            or first["trainable"]["elements"] != last["trainable"]["elements"]
+            or first["trainable"]["manifest_sha256"] != last["trainable"]["manifest_sha256"]
+            or first["frozen_base"] != last["frozen_base"]
+        ):
+            raise ValueError("trainable metadata or frozen base bytes changed")
+        for name in names:
+            first_row, last_row = first["adapters"][name], last["adapters"][name]
+            metadata = {
+                "logical_target",
+                "dtype",
+                "global_shape",
+                "local_shape",
+                "sharding",
+            }
+            if (
+                set(first_row) != metadata | {"sha256"}
+                or set(last_row) != metadata | {"sha256"}
+                or any(first_row[key] != last_row[key] for key in metadata)
+                or first_row["dtype"] != "BF16"
+                or not first_row["local_shape"]
+                or any(type(size) is not int or size <= 0 for size in first_row["local_shape"])
+            ):
+                raise ValueError("adapter tensor metadata changed or is invalid")
+
+        adapter_path = checkpoint / f"policy/adapter_tp{rank}_pp0_cp0_dp0_ep0_etp0.pt"
+        payload = torch.load(adapter_path, map_location="cpu", weights_only=True)
+        if not isinstance(payload, dict) or set(payload) != {"model_state_dict"}:
+            raise ValueError("adapter checkpoint payload has unknown or missing fields")
+        state = payload["model_state_dict"]
+        if not isinstance(state, dict) or set(state) != names:
+            raise ValueError("adapter checkpoint keys differ from the live model")
+        checkpoint_hashes[rank] = {}
+        for name, tensor in state.items():
+            live = last["adapters"][name]
+            if (
+                not isinstance(tensor, torch.Tensor)
+                or tensor.layout != torch.strided
+                or tensor.numel() <= 0
+                or list(tensor.shape) != live["local_shape"]
+                or str(tensor.dtype).removeprefix("torch.").upper().replace("BFLOAT16", "BF16")
+                != live["dtype"]
+            ):
+                raise ValueError("adapter checkpoint tensor metadata differs from the live model")
+            saved_hash = _tensor_sha256(tensor)
+            if saved_hash != live["sha256"]:
+                raise ValueError(
+                    "adapter checkpoint tensor differs from the live post-update tensor"
+                )
+            checkpoint_hashes[rank][name] = saved_hash
+
+    if any(
+        not math.isclose(value, gradients[0], rel_tol=1e-6, abs_tol=1e-12) for value in gradients
+    ):
+        raise ValueError("gradient norm differs across TP ranks")
+    if (
+        type(trainer_gradient_norm) not in {int, float}
+        or not math.isfinite(trainer_gradient_norm)
+        or trainer_gradient_norm <= 0
+        or not math.isclose(trainer_gradient_norm, gradients[0], rel_tol=1e-6, abs_tol=1e-12)
+    ):
+        raise ValueError("driver and rank-local gradient evidence differ")
+    if (
+        type(forward_loss) not in {int, float}
+        or not math.isfinite(forward_loss)
+        or forward_loss < 0
+    ):
+        raise ValueError("forward loss evidence is invalid")
+
+    parameters = {}
+    changed = 0
+    for name in sorted(names):
+        reference = before[0]["adapters"][name]
+        shards = []
+        for rank in range(8):
+            first = before[rank]["adapters"][name]
+            last = after[rank]["adapters"][name]
+            if any(
+                first[key] != reference[key]
+                for key in ("logical_target", "dtype", "global_shape", "sharding")
+            ):
+                raise ValueError("adapter global metadata differs across TP ranks")
+            changed += first["sha256"] != last["sha256"]
+            shards.append(
+                {
+                    "tp_rank": rank,
+                    "shape": first["local_shape"],
+                    "before_sha256": first["sha256"],
+                    "after_sha256": last["sha256"],
+                    "checkpoint_sha256": checkpoint_hashes[rank][name],
+                }
+            )
+        parameters[name] = {
+            "logical_target": reference["logical_target"],
+            "dtype": reference["dtype"],
+            "global_shape": reference["global_shape"],
+            "sharding": reference["sharding"],
+            "rank_shards": shards,
+        }
+    if changed <= 0:
+        raise ValueError("one successful optimizer update changed no adapter tensor")
+    trainable_manifests = [
+        {
+            "tp_rank": rank,
+            "before_sha256": before[rank]["trainable"]["manifest_sha256"],
+            "after_sha256": after[rank]["trainable"]["manifest_sha256"],
+        }
+        for rank in range(8)
+    ]
+    frozen_manifests = [
+        {
+            "tp_rank": rank,
+            "before_sha256": before[rank]["frozen_base"]["manifest_sha256"],
+            "after_sha256": after[rank]["frozen_base"]["manifest_sha256"],
+        }
+        for rank in range(8)
+    ]
+    return {
+        "target_census": census,
+        "adapter_parameters": parameters,
+        "trainable_parameter_census": {
+            "parameter_count": len(parameters),
+            "elements": sum(math.prod(row["global_shape"]) for row in parameters.values()),
+            "rank_manifests": trainable_manifests,
+        },
+        "frozen_base": {
+            "parameter_count": sum(
+                before[rank]["frozen_base"]["parameter_count"] for rank in range(8)
+            ),
+            "elements": sum(before[rank]["frozen_base"]["elements"] for rank in range(8)),
+            "bytes": sum(before[rank]["frozen_base"]["bytes"] for rank in range(8)),
+            "rank_manifests": frozen_manifests,
+        },
+        "forward_loss": float(forward_loss),
+        "lora_gradient_norm": gradients[0],
+        "adapter_updated_tensor_count": changed,
+    }
+
+
+def _qwen38_wandb_evidence(trainer) -> dict:
+    metrics_path = trainer.output / "metrics.jsonl"
+    if metrics_path.is_symlink() or not metrics_path.is_file() or metrics_path.stat().st_size <= 0:
+        raise ValueError("local W&B scalar stream is missing")
+    records = [json.loads(line) for line in metrics_path.read_text().splitlines() if line.strip()]
+    step = [record for record in records if record.get("optimizer_step") == 1]
+    if len(step) != 1 or any(record.get("optimizer_step") != 1 for record in records):
+        raise ValueError("local scalar stream does not contain exactly one optimizer step")
+    record = step[0]
+    scalar_keys = sorted(key for key in record if key not in {"optimizer_step", "time"})
+    if not {"train/loss", "train/grad_norm", "train/lr"}.issubset(scalar_keys) or any(
+        type(record[key]) not in {int, float} or not math.isfinite(record[key])
+        for key in scalar_keys
+    ):
+        raise ValueError("local W&B scalar stream is incomplete or nonfinite")
+    return {
+        **trainer.wandb_binding,
+        "optimizer_step": 1,
+        "local_metrics_sha256": digest(metrics_path),
+        "scalar_keys": scalar_keys,
+        "finish_succeeded": True,
+    }
+
+
+def _qwen38_source_inventory(plan: dict) -> dict:
+    """Hash the exact staged model/data bytes without publishing their contents."""
+    rows = []
+    for item in plan["model"]["files"]:
+        path = Path(plan["model"]["root"]) / item["path"]
+        observation = _verified_file_observation(path, item["sha256"])
+        rows.append(
+            {
+                "kind": "model",
+                "name": item["path"],
+                **observation,
+            }
+        )
+    for split, spec in sorted(plan["datasets"].items()):
+        path = Path(spec["path"])
+        observation = _verified_file_observation(path, spec["sha256"])
+        rows.append(
+            {
+                "kind": "dataset",
+                "name": split,
+                **observation,
+            }
+        )
+    if not rows or any(row["bytes"] <= 0 for row in rows):
+        raise ValueError("staged model/data source inventory is empty")
+    return {
+        "file_count": len(rows),
+        "total_bytes": sum(row["bytes"] for row in rows),
+        "manifest_sha256": _unsigned_digest(rows),
+    }
+
+
+def _qwen38_runtime_source_inventory(plan: dict) -> dict:
+    """Hash every load-bearing installed SkyRL source named by the binding."""
+    spec = importlib.util.find_spec("skyrl")
+    if spec is None or not spec.submodule_search_locations:
+        raise ValueError("pinned SkyRL package is unavailable")
+    root = Path(next(iter(spec.submodule_search_locations))).parent
+    rows = []
+    for name, expected in sorted(qwen38_megatron_binding()[2].items()):
+        path = root / name
+        rows.append({"name": name, **_verified_file_observation(path, expected)})
+    if not rows or any(row["bytes"] <= 0 for row in rows):
+        raise ValueError("installed SkyRL source inventory is empty")
+    return {
+        "file_count": len(rows),
+        "total_bytes": sum(row["bytes"] for row in rows),
+        "manifest_sha256": _unsigned_digest(rows),
+    }
+
+
+def _prepare_qwen38_checkpoint_receipt(
+    trainer,
+    before_snapshots,
+    after_snapshots,
+    checkpoint_finalization,
+    source_inventory_before,
+    runtime_inventory_before,
+) -> dict:
+    """Prepare (but do not publish) the strict post-finalization receipt."""
+    plan = trainer.plan
+    checkpoint = Path(plan_checkpoint(plan, 1))
+    if checkpoint != trainer.output / "checkpoints" / "global_step_1":
+        raise ValueError("qualified checkpoint path differs from the one-step plan")
+    files, roles = _qwen38_checkpoint_inventory(checkpoint)
+    step = getattr(trainer, "last_step_evidence", None)
+    if not isinstance(step, dict) or set(step) != {
+        "forward_loss",
+        "lora_gradient_norm",
+    }:
+        raise ValueError("one-step trainer evidence is incomplete")
+    reconciled = _qwen38_reconcile_evidence(
+        before_snapshots,
+        after_snapshots,
+        checkpoint,
+        forward_loss=step["forward_loss"],
+        trainer_gradient_norm=step["lora_gradient_norm"],
+    )
+    # Re-hash every bound model/data source exactly once after the optimizer
+    # step.  Structural validation is independent of file reads, and the
+    # complete pre-step inventories were already collected immediately before
+    # trainer setup.  This preserves before/after immutability evidence without
+    # multiplying a 55.6 GB model read.
+    validate_plan(plan, check_files=False)
+    source_inventory_after = _qwen38_source_inventory(plan)
+    runtime_inventory_after = _qwen38_runtime_source_inventory(plan)
+    if source_inventory_before != source_inventory_after:
+        raise ValueError("staged model/data source inventory changed during training")
+    if runtime_inventory_before != runtime_inventory_after:
+        raise ValueError("installed SkyRL source inventory changed during training")
+    source_plan = {key: value for key, value in plan.items() if key != "plan_sha256"}
+    if _unsigned_digest(source_plan) != plan["plan_sha256"]:
+        raise ValueError("runtime source plan differs from the staged plan bytes")
+    return {
+        "schema": "cyber_qwen38_megatron_lora_checkpoint_manifest_v1",
+        "source_plan_sha256": plan["plan_sha256"],
+        "source_plan": source_plan,
+        "checkpoint_path": str(checkpoint),
+        "optimizer_step": 1,
+        "topology": {
+            "world_size": 8,
+            "tensor_parallel": 8,
+            "pipeline_parallel": 1,
+            "context_parallel": 1,
+            "data_parallel": 1,
+            "expert_parallel": 1,
+            "expert_tensor_parallel": 1,
+        },
+        "target_census": reconciled["target_census"],
+        "adapter_parameters": reconciled["adapter_parameters"],
+        "trainable_parameter_census": reconciled["trainable_parameter_census"],
+        "frozen_base": reconciled["frozen_base"],
+        "checkpoint_finalization": _qwen38_checkpoint_finalization(checkpoint_finalization),
+        "source_inventory": {
+            "model_and_data": {
+                "file_count": source_inventory_before["file_count"],
+                "total_bytes": source_inventory_before["total_bytes"],
+                "before_sha256": source_inventory_before["manifest_sha256"],
+                "after_sha256": source_inventory_after["manifest_sha256"],
+            },
+            "runtime": {
+                "file_count": runtime_inventory_before["file_count"],
+                "total_bytes": runtime_inventory_before["total_bytes"],
+                "before_sha256": runtime_inventory_before["manifest_sha256"],
+                "after_sha256": runtime_inventory_after["manifest_sha256"],
+            },
+        },
+        "files": files,
+        "file_roles": roles,
+        "total_bytes": sum(row["bytes"] for row in files.values()),
+        "evidence": {
+            "forward_loss": reconciled["forward_loss"],
+            "lora_gradient_norm": reconciled["lora_gradient_norm"],
+            "optimizer_updates": 1,
+            "adapter_tensors_changed": True,
+            "adapter_updated_tensor_count": reconciled["adapter_updated_tensor_count"],
+            "frozen_base_tensors_unchanged": True,
+            "unexpected_trainable_parameters": [],
+            "source_inventory_unchanged": True,
+            "wandb_run_id": plan["wandb"]["run_id"],
+        },
+    }
+
+
 def _make_trainer_class():
     from skyrl.backends.skyrl_train.training_batch import pad_training_input_batch
     from skyrl.train.sft_trainer import SFTTrainer, tokenize_chat_example
@@ -895,7 +1842,11 @@ def _make_trainer_class():
             with (trainer.output / "metrics.jsonl").open("a") as stream:
                 stream.write(
                     json.dumps(
-                        {"optimizer_step": event.global_step, "time": time.time(), **event.logs}
+                        {
+                            "optimizer_step": event.global_step,
+                            "time": time.time(),
+                            **event.logs,
+                        }
                     )
                     + "\n"
                 )
@@ -903,9 +1854,11 @@ def _make_trainer_class():
                 trainer.output / "PROGRESS.json",
                 {
                     "optimizer_step": event.global_step,
-                    "phase": "validation"
-                    if any(k.startswith("eval/") for k in event.logs)
-                    else "training",
+                    "phase": (
+                        "validation"
+                        if any(k.startswith("eval/") for k in event.logs)
+                        else "training"
+                    ),
                     "observed_at_unix": time.time(),
                 },
                 replace=True,
@@ -959,6 +1912,8 @@ def _make_trainer_class():
             self.best = None
             self.extra_train_metrics = {}
             self.target_tokens_seen = 0
+            self.last_step_evidence = None
+            self.wandb_binding = None
             self.public_runtime_stage = "trainer_constructed"
 
         def _record_runtime_stage(self, stage):
@@ -983,14 +1938,16 @@ def _make_trainer_class():
                 from training.recovery import use_worker
 
                 selection = use_worker(self.plan)
-            elif "lora" in self.plan:
+            elif "lora" in self.plan and not _is_qwen38_lora(self.plan):
                 from training.glm_runtime import use_worker
 
                 selection = use_worker(self.plan)
             with selection:
                 super()._init_workers()
             self._record_runtime_stage("native_worker_ready")
-            if self.plan["schema"] == DENSE_SCHEMA or "lora" in self.plan:
+            if self.plan["schema"] == DENSE_SCHEMA or (
+                "lora" in self.plan and not _is_qwen38_lora(self.plan)
+            ):
                 # Pinned FSDP2 initialization broadcasts non-persistent buffers
                 # (including RoPE inv_freq) back to CPU. Turning off colocation
                 # skips the dispatcher's usual initial backload as well as its
@@ -1036,8 +1993,20 @@ def _make_trainer_class():
                 or run.id != expected["run_id"]
                 or run.entity != expected["entity"]
                 or run.project != expected["project"]
+                or run.group != expected["group"]
+                or run.name != expected["name"]
+                or not isinstance(run.url, str)
+                or not run.url.startswith("https://")
             ):
                 raise ValueError("W&B run identity mismatch")
+            self.wandb_binding = {
+                "entity": run.entity,
+                "project": run.project,
+                "group": run.group,
+                "run_id": run.id,
+                "name": run.name,
+                "url": run.url,
+            }
             run.define_metric("train/global_step")
             run.define_metric("train/*", step_metric="train/global_step")
             run.define_metric("eval/*", step_metric="train/global_step")
@@ -1087,7 +2056,12 @@ def _make_trainer_class():
             )
             write_receipt(
                 self.output / "WANDB.json",
-                {"url": run.url, "run_id": run.id, "project": run.project, "entity": run.entity},
+                {
+                    "url": run.url,
+                    "run_id": run.id,
+                    "project": run.project,
+                    "entity": run.entity,
+                },
             )
             self._record_runtime_stage("tracker_ready")
 
@@ -1134,7 +2108,10 @@ def _make_trainer_class():
                     "policy", batch, loss_fn="cross_entropy", loss_fn_config=None
                 )
                 accumulator.add_batch(
-                    metadata, counts, output.loss_fn_outputs, float(output.metrics["loss"])
+                    metadata,
+                    counts,
+                    output.loss_fn_outputs,
+                    float(output.metrics["loss"]),
                 )
                 cursor += n
                 batches += 1
@@ -1150,7 +2127,10 @@ def _make_trainer_class():
                 )
             if cursor != len(self.dev_rows):
                 raise ValueError("validation did not consume the complete held-out dataset")
-            return accumulator.metrics(set(self.plan["datasets"]["dev"]["task_keys"])), batches
+            return (
+                accumulator.metrics(set(self.plan["datasets"]["dev"]["task_keys"])),
+                batches,
+            )
 
         def train_step(self, batch, step):
             # Exact upstream calls, preserving the LR scalar it otherwise drops.
@@ -1163,8 +2143,15 @@ def _make_trainer_class():
                 self.dispatch.profile_step("policy")
             loss = float(output.metrics.get("final_loss", output.metrics.get("loss", float("nan"))))
             lr = float(output.metrics["lr"])
-            if not all(math.isfinite(x) for x in (loss, lr, float(grad_norm))):
+            gradient = float(grad_norm)
+            if not all(math.isfinite(x) for x in (loss, lr, gradient)) or (
+                _is_qwen38_lora(self.plan) and gradient <= 0
+            ):
                 raise ValueError("nonfinite training metric")
+            self.last_step_evidence = {
+                "forward_loss": loss,
+                "lora_gradient_norm": gradient,
+            }
             targets = int((batch["loss_mask"] > 0).sum().item())
             self.target_tokens_seen += targets
             self.extra_train_metrics = {
@@ -1172,7 +2159,7 @@ def _make_trainer_class():
                 "train/supervised_tokens": targets,
                 "train/total_supervised_tokens": self.target_tokens_seen,
             }
-            return {"loss": loss, "grad_norm": grad_norm, "timings": timings}
+            return {"loss": loss, "grad_norm": gradient, "timings": timings}
 
         def save_checkpoint(self):
             import torch
@@ -1303,16 +2290,51 @@ def _run_training(plan: dict) -> dict:
     skyrl_cfg.trainer.log_path = str(Path(plan["output_root"]) / "private_logs")
     trainer = _make_trainer_class()(cfg, skyrl_cfg, plan)
     try:
+        qwen38_source_before = _qwen38_source_inventory(plan) if _is_qwen38_lora(plan) else None
+        qwen38_runtime_before = (
+            _qwen38_runtime_source_inventory(plan) if _is_qwen38_lora(plan) else None
+        )
         trainer.setup()
+        qwen38_lora_before = (
+            trainer.dispatch.collect_lora_qualification_snapshots("policy")
+            if _is_qwen38_lora(plan)
+            else None
+        )
         if plan.get("recovery", {}).get("mode") == "validate":
             from training.recovery import validate_only
 
             return validate_only(trainer)
         paused = False
+        qwen38_checkpoint_finalization = None
         try:
             trainer.train()
         except PlannedPause:
             paused = True
+            # PlannedPause is raised from on_log before the native loop's
+            # postamble.  Explicitly drain the async dist-checkpoint writer
+            # before reading any file, collecting post-update hashes, or
+            # preparing a qualification receipt.
+            if _is_qwen38_lora(plan):
+                qwen38_checkpoint_finalization = (
+                    trainer.dispatch.finalize_lora_qualification_checkpoint("policy")
+                )
+            else:
+                trainer.dispatch.finalize_pending_saves("policy")
+        qwen38_receipt = None
+        if _is_qwen38_lora(plan):
+            if not paused or qwen38_lora_before is None:
+                raise ValueError("Qwen3.8 qualification did not stop at its one-step gate")
+            if qwen38_source_before is None or qwen38_runtime_before is None:
+                raise ValueError("Qwen3.8 pre-step source inventory is missing")
+            qwen38_lora_after = trainer.dispatch.collect_lora_qualification_snapshots("policy")
+            qwen38_receipt = _prepare_qwen38_checkpoint_receipt(
+                trainer,
+                qwen38_lora_before,
+                qwen38_lora_after,
+                qwen38_checkpoint_finalization,
+                qwen38_source_before,
+                qwen38_runtime_before,
+            )
         result = training_result(trainer, paused=paused)
         import wandb
 
@@ -1325,7 +2347,34 @@ def _run_training(plan: dict) -> dict:
                 "export_status": result["export_status"],
             }
         )
+        if qwen38_receipt is not None:
+            # Qualification requires an observed successful flush, not the
+            # upstream best-effort Tracking.finish() wrapper.
+            wandb.finish(exit_code=0)
+            if wandb.run is not None:
+                raise ValueError("W&B run remained active after finish")
+            trainer.tracker = None
         trainer.shutdown()
+        if qwen38_receipt is not None:
+            from training.qwen38_lora_artifacts import validate_checkpoint_receipt
+
+            if wandb.run is not None:
+                raise ValueError("W&B run reappeared or remained active after trainer shutdown")
+            qwen38_receipt["wandb"] = _qwen38_wandb_evidence(trainer)
+            signed = {
+                **qwen38_receipt,
+                "receipt_sha256": _unsigned_digest(qwen38_receipt),
+            }
+            validate_checkpoint_receipt(signed)
+            receipt_path = trainer.output / "QWEN38_LORA_CHECKPOINT.json"
+            write_receipt(receipt_path, qwen38_receipt)
+            written = json.loads(receipt_path.read_text())
+            identity = validate_checkpoint_receipt(written)
+            result["qwen38_lora_checkpoint_receipt"] = {
+                "path": str(receipt_path),
+                "file_sha256": digest(receipt_path),
+                "receipt_sha256": identity["receipt_sha256"],
+            }
         return result
     except BaseException as exc:
         # Do not use native log_exception: it uploads raw traceback and finishes exit0.
@@ -1387,8 +2436,18 @@ def main():
     _checked_file(args.plan, args.plan_sha256)
     plan = json.loads(args.plan.read_text())
     plan["plan_sha256"] = args.plan_sha256.removeprefix("sha256:")
-    validate_plan(plan)
-    validate_runtime_sources()
+    # Qwen3.8 training records one complete source read immediately before
+    # trainer setup and one after the optimizer update.  Keep this entrypoint
+    # validation structural so it does not add another 55.6 GB hash pass.
+    _validate_entrypoint_sources(
+        plan,
+        verify_qwen_files=(
+            args.preflight_tokenize
+            or args.validate_only
+            or args.setup_probe
+            or args.setup_probe_with_tracker
+        ),
+    )
     if args.preflight_tokenize:
         import pyarrow.parquet as pq
         from skyrl.train.sft_trainer import tokenize_chat_example
@@ -1478,9 +2537,11 @@ def main():
         terminal = (
             "RELOAD_VALIDATED.json"
             if result["status"] == "reload_validated"
-            else "TRAINING_PAUSED.json"
-            if result["status"] == "training_paused"
-            else "TRAINING_COMPLETE.json"
+            else (
+                "TRAINING_PAUSED.json"
+                if result["status"] == "training_paused"
+                else "TRAINING_COMPLETE.json"
+            )
         )
         write_receipt(output / terminal, result)
         print(json.dumps({"status": result["status"], "optimizer_step": result["optimizer_step"]}))

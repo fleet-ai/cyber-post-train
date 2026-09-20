@@ -1,0 +1,102 @@
+{
+  "schema": "qwen38_lora_megatron_trainer_image_qualification_v1",
+  "observed_at": "2026-09-20T04:43:49Z",
+  "status": "qualified_for_cpu_preflight",
+  "paid_training_authorized": false,
+  "source": {
+    "repository": "https://github.com/fleet-ai/skyrl-fleet-v2",
+    "revision": "7e9356c8e02e7382e84b8484638baccdd1bbf680",
+    "source_file_count": 14,
+    "source_census_sha256": "sha256:a88c512b3c330b4cf21ef16318b98bcdb90a2d850936d1858d7b79343df94989",
+    "source_files_sha256": {
+      "integrations/fleet_v2/rl1/Dockerfile": "69c490cde076f531b2d5cd566aa6e9ab58f65b74b8c1fb741af3290c2bf9881c",
+      "pyproject.toml": "ec1f6edaf83c3b5299d455c858409cdace4a7b3cc2948d208264ae0937077182",
+      "skyrl/backends/skyrl_train/distributed/megatron/megatron_strategy.py": "936580a50050f4a2dc82516e6d187909445cec79652a06ea8b10366280a69142",
+      "skyrl/backends/skyrl_train/workers/megatron/adapter_store.py": "198367c682105a930e800ab7cd6c4157654428dbf649161b9f8c45e4cb5134de",
+      "skyrl/backends/skyrl_train/workers/megatron/lora_evidence.py": "f3452dc57d13b5c062ba05f43f40a74788057700c6b53a8849ec0337d21e649e",
+      "skyrl/backends/skyrl_train/workers/megatron/lora_targets.py": "fe3101241b16b37eb897675620b91e59f4c2b80b66e25d96040cd73b2565cdd7",
+      "skyrl/backends/skyrl_train/workers/megatron/megatron_model_wrapper.py": "9cafe09ab2aa5755b7b707973e53df47b7bd51c335708468e701905f406e658a",
+      "skyrl/backends/skyrl_train/workers/megatron/megatron_worker.py": "7e4a98279ba1b46db5ea3043f0b66486366656cbc61df7a3febbda5e2d83b174",
+      "skyrl/backends/skyrl_train/workers/megatron/model_bridges.py": "fa96f2d5563094d719975d0ee68eea1df20da34ac7d479e80bffd632fe3e00b8",
+      "skyrl/backends/skyrl_train/workers/worker_dispatch.py": "5461b909155f87b0564efb30cafb56b971fa0e812f73a50307789ae6537cfb33",
+      "skyrl/train/config/config.py": "01ccf7c73f51dd168f06b94480b2c6938d8a5458e79ab4d044d6eecc3007e663",
+      "skyrl/train/config/sft_config.py": "d5972bc61b3ec90e342a2395137942a22f5ef23294f662def51f95bacd65dd97",
+      "skyrl/train/sft_trainer.py": "fbb12f4f0bd118848dc3c0eec43c37414f9b182204d578b6efe8d5d06e91eb26",
+      "uv.lock": "7843814ce42bdc1d34173138f00037108ea4181909e7fac5af14578c3c4551a6"
+    }
+  },
+  "build_job": {
+    "authority": "kubernetes",
+    "cluster_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+    "kind": "Job",
+    "namespace": "buildkit",
+    "name": "image-build-skyrl-7e9356c8e02e",
+    "uid": "de33224e-f987-4129-b209-c007b1e5e11a",
+    "pod_name": "image-build-skyrl-7e9356c8e02e-g8vsn",
+    "pod_uid": "d93c3751-fe1e-4bd9-83b0-1c12aee22945",
+    "created_at": "2026-09-20T04:16:21Z",
+    "completed_at": "2026-09-20T04:31:02Z",
+    "terminal_condition": "Complete",
+    "all_container_exit_codes_zero": true,
+    "all_restarts_zero": true,
+    "gpu_requests": 0,
+    "priority_class": "c1",
+    "build_manifest_sha256": "sha256:f9dce47d15601fed4ea12586201b760a76d3bc64afff41006c51e569d4b5d3c8",
+    "object_deleted": true,
+    "pod_deleted": true,
+    "gpu_release_verified": true
+  },
+  "image": {
+    "requested_tag": "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer:7e9356c8e02e7382e84b8484638baccdd1bbf680",
+    "digest": "sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317",
+    "immutable_ref": "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317"
+  },
+  "verification": {
+    "cluster_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+    "manifest_sha256": "sha256:6eb7b4a533a08599c7c92795528d163fb737f4bc4d492e95c0c028cdb1803e13",
+    "pod": {
+      "namespace": "fleet-train-jobs",
+      "name": "chris-q38-lora-image-verify-7e9356",
+      "uid": "6470d267-a4ac-4b87-8a6c-3ba29b18b3fc",
+      "node": "computeinstance-e04z8h89sgpw7kq06z",
+      "created_at": "2026-09-20T04:32:08Z",
+      "container_started_at": "2026-09-20T04:41:58Z",
+      "finished_at": "2026-09-20T04:42:15Z",
+      "phase": "Succeeded",
+      "exit_code": 0,
+      "termination_reason": "Completed",
+      "restarts": 0,
+      "gpu_requests": 0,
+      "requested_image": "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317",
+      "runtime_image_id": "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317"
+    },
+    "source_build_association_verified": true,
+    "source_file_census_verified": true,
+    "source_file_count": 14,
+    "source_census_sha256": "sha256:a88c512b3c330b4cf21ef16318b98bcdb90a2d850936d1858d7b79343df94989",
+    "qualification_api": "present",
+    "versions": {
+      "ray": "2.56.0",
+      "torch": "2.11.0+cu128",
+      "transformers": "5.8.0"
+    },
+    "object_deleted": true,
+    "matching_pods_after_cleanup": 0,
+    "gpu_requests_after_cleanup": 0,
+    "resource_release_verified_at": "2026-09-20T04:43:49Z",
+    "training_submitted": false
+  },
+  "scope": {
+    "permits": [
+      "bind this exact source and image to the exact one-step Qwen3.8 Megatron-LoRA template",
+      "run the exact-image CPU preflight and authenticated Jobs API preview"
+    ],
+    "does_not_prove_or_authorize": [
+      "a forward pass, backward pass, optimizer update, adapter checkpoint, or W&B run",
+      "the broad production SFT anchor",
+      "checkpoint reload, deterministic merge, export, serving, or evaluation",
+      "any model capability or lift claim"
+    ]
+  },
+  "receipt_sha256": "sha256:03dfa59516895335405d811e9ec3763f31a789e4e61e1de424521f8eaa09804d"
+}

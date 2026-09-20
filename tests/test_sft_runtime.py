@@ -111,7 +111,10 @@ def test_setup_probe_selects_real_tracker_only_when_requested(tmp_path, monkeypa
 
     monkeypatch.setattr(
         "training.sft_runtime.build_runtime_configs",
-        lambda value: (SimpleNamespace(), SimpleNamespace(trainer=SimpleNamespace(log_path=None))),
+        lambda value: (
+            SimpleNamespace(),
+            SimpleNamespace(trainer=SimpleNamespace(log_path=None)),
+        ),
     )
     monkeypatch.setattr("training.sft_runtime._make_trainer_class", lambda: ProbeTrainer)
 
@@ -144,7 +147,10 @@ def test_setup_probe_exercises_train_only_eval_loader(tmp_path, monkeypatch):
 
     monkeypatch.setattr(
         "training.sft_runtime.build_runtime_configs",
-        lambda value: (SimpleNamespace(), SimpleNamespace(trainer=SimpleNamespace(log_path=None))),
+        lambda value: (
+            SimpleNamespace(),
+            SimpleNamespace(trainer=SimpleNamespace(log_path=None)),
+        ),
     )
     monkeypatch.setattr("training.sft_runtime._make_trainer_class", lambda: ProbeTrainer)
     value = plan(tmp_path)
@@ -161,7 +167,10 @@ def test_setup_probe_exercises_train_only_eval_loader(tmp_path, monkeypatch):
 def test_train_only_wrapper_returns_no_eval_dataset(monkeypatch):
     modules = {
         "skyrl.backends.skyrl_train.training_batch": {"pad_training_input_batch": None},
-        "skyrl.train.sft_trainer": {"SFTTrainer": object, "tokenize_chat_example": None},
+        "skyrl.train.sft_trainer": {
+            "SFTTrainer": object,
+            "tokenize_chat_example": None,
+        },
         "skyrl.train.utils.callbacks": {"TrainingCallback": object},
         "skyrl.train.utils.tracking": {"Tracking": object},
         "skyrl.train.utils.utils": {"Timer": object},
@@ -217,6 +226,78 @@ def test_task_outcome_mode_checks_only_the_present_train_file(tmp_path, monkeypa
 
     assert Path("/data/train.parquet") in checked
     assert all(path is not None for path in checked)
+
+
+def test_qwen38_source_inventory_reads_each_bound_file_once(tmp_path, monkeypatch):
+    from training import sft_runtime as runtime
+
+    model_root = tmp_path / "model"
+    model_root.mkdir()
+    model_files = []
+    for name, contents in (("config.json", b"config"), ("weights.bin", b"weights")):
+        path = model_root / name
+        path.write_bytes(contents)
+        model_files.append({"path": name, "sha256": runtime.digest(path)})
+    dataset = tmp_path / "train.parquet"
+    dataset.write_bytes(b"dataset")
+    value = {
+        "model": {"root": str(model_root), "files": model_files},
+        "datasets": {"train": {"path": str(dataset), "sha256": runtime.digest(dataset)}},
+    }
+    calls = []
+    original_digest = runtime.digest
+
+    def counted_digest(path):
+        calls.append(path)
+        return original_digest(path)
+
+    monkeypatch.setattr(runtime, "digest", counted_digest)
+    inventory = runtime._qwen38_source_inventory(value)
+
+    expected = [model_root / "config.json", model_root / "weights.bin", dataset]
+    assert calls == expected
+    assert inventory["file_count"] == 3
+    assert inventory["total_bytes"] == sum(path.stat().st_size for path in expected)
+
+
+def test_qwen38_training_entrypoint_defers_complete_reads_to_remote_worker(
+    monkeypatch,
+):
+    from training import sft_runtime as runtime
+
+    value = {"model": {"repo": "Qwen/Qwen3.8-27B"}, "lora": {}}
+    events = []
+    monkeypatch.setattr(
+        runtime,
+        "validate_plan",
+        lambda _plan, *, check_files: events.append(("plan", check_files)),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_qwen38_source_inventory",
+        lambda _plan: events.append(("model_and_data", True)),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "_qwen38_runtime_source_inventory",
+        lambda _plan: events.append(("runtime", True)),
+    )
+    monkeypatch.setattr(
+        runtime,
+        "validate_runtime_sources",
+        lambda _plan: events.append(("legacy_runtime_check", True)),
+    )
+
+    runtime._validate_entrypoint_sources(value, verify_qwen_files=False)
+    assert events == [("plan", False)]
+
+    events.clear()
+    runtime._validate_entrypoint_sources(value, verify_qwen_files=True)
+    assert events == [
+        ("plan", False),
+        ("model_and_data", True),
+        ("runtime", True),
+    ]
 
 
 @pytest.mark.parametrize("pause", [0, -1, True, 1.5, 6, 7, None])
@@ -320,7 +401,11 @@ def test_partial_result_requires_exact_evidence(tmp_path, defect):
     if defect == "missing":
         path.unlink()
     elif defect in {"digest", "step", "plan"}:
-        key = {"digest": "receipt_sha256", "step": "optimizer_step", "plan": "plan_sha256"}[defect]
+        key = {
+            "digest": "receipt_sha256",
+            "step": "optimizer_step",
+            "plan": "plan_sha256",
+        }[defect]
         proof[key] = "wrong"
         if defect != "digest":
             proof["receipt_sha256"] = _unsigned_digest(
@@ -422,6 +507,9 @@ def test_outer_runtime_only_accepts_valid_planned_pause(tmp_path, monkeypatch, o
         setup=lambda: calls.append("setup"),
         train=train,
         shutdown=lambda: calls.append("shutdown"),
+        dispatch=SimpleNamespace(
+            finalize_pending_saves=lambda _model: calls.append("finalize_pending_saves")
+        ),
     )
     monkeypatch.setattr(runtime, "_configure_wandb", lambda _: None)
     monkeypatch.setattr(
@@ -439,16 +527,32 @@ def test_outer_runtime_only_accepts_valid_planned_pause(tmp_path, monkeypatch, o
             == summary["status"]
             == ("training_paused" if outcome == "pause" else "training_complete")
         )
-        assert calls == ["setup", "shutdown"]
+        assert calls == (
+            ["setup", "finalize_pending_saves", "shutdown"]
+            if outcome == "pause"
+            else ["setup", "shutdown"]
+        )
     else:
         with pytest.raises(RuntimeError, match="SFT runtime failed"):
             runtime._run_training(value)
-        assert calls == ["setup", "failed"]
+        assert calls == (
+            ["setup", "finalize_pending_saves", "failed"]
+            if outcome == "bad_pause"
+            else ["setup", "failed"]
+        )
         assert summary == {}
 
 
 @pytest.mark.parametrize(
-    "defect", ["overlap", "wrong_steps", "duplicate_dev", "same_file", "fractional_steps", "resume"]
+    "defect",
+    [
+        "overlap",
+        "wrong_steps",
+        "duplicate_dev",
+        "same_file",
+        "fractional_steps",
+        "resume",
+    ],
 )
 def test_plan_rejects_leakage_and_wrong_step_semantics(tmp_path, defect):
     value = plan(tmp_path)
@@ -622,7 +726,10 @@ def test_dense_targets_once_and_context_holes_masked():
     actual = dense_rows(rows, spec, max_length=16, vocab_size=32)
     assert actual[0]["num_actions"] == 7  # suffix width, NOT four target tokens
     assert actual[0]["loss_mask"] == [1, 1, 0, 0, 1, 1, 0]
-    assert actual[1]["loss_mask"] == [1, 1]  # copied earlier responses are outside target suffix
+    assert actual[1]["loss_mask"] == [
+        1,
+        1,
+    ]  # copied earlier responses are outside target suffix
     assert sum(sum(x["loss_mask"]) for x in actual) == 6
 
 
@@ -800,7 +907,8 @@ def test_failure_finalize_is_independent_of_disk_and_summary(
                 raise RuntimeError("synthetic SDK failure")
 
     sdk = SimpleNamespace(
-        run=SimpleNamespace(summary=Summary()), finish=lambda exit_code: calls.append(exit_code)
+        run=SimpleNamespace(summary=Summary()),
+        finish=lambda exit_code: calls.append(exit_code),
     )
     monkeypatch.setitem(sys.modules, "wandb", sdk)
     original_open = Path.open
@@ -869,7 +977,8 @@ def test_public_failure_details_never_emits_arbitrary_key_text():
 
 
 @pytest.mark.skipif(
-    importlib.util.find_spec("skyrl") is None, reason="requires pinned training image; CPU-only"
+    importlib.util.find_spec("skyrl") is None,
+    reason="requires pinned training image; CPU-only",
 )
 def test_dense_resolved_config_and_dispatch_cannot_offload(tmp_path):
     from skyrl.backends.skyrl_train.workers.worker_dispatch import WorkerDispatch
@@ -896,7 +1005,8 @@ def test_dense_resolved_config_and_dispatch_cannot_offload(tmp_path):
 
 
 @pytest.mark.skipif(
-    importlib.util.find_spec("skyrl") is None, reason="requires pinned training image; CPU-only"
+    importlib.util.find_spec("skyrl") is None,
+    reason="requires pinned training image; CPU-only",
 )
 @pytest.mark.parametrize("dense", [False, True])
 def test_initial_backload_completes_dense_worker_setup_once(tmp_path, monkeypatch, dense):
@@ -914,7 +1024,8 @@ def test_initial_backload_completes_dense_worker_setup_once(tmp_path, monkeypatc
         return [None] * 8
 
     actor = SimpleNamespace(
-        backload_to_gpu=backload, offload_to_cpu=lambda **kwargs: calls.append(("offload", kwargs))
+        backload_to_gpu=backload,
+        offload_to_cpu=lambda **kwargs: calls.append(("offload", kwargs)),
     )
 
     def init(self):
@@ -942,7 +1053,8 @@ def test_initial_backload_completes_dense_worker_setup_once(tmp_path, monkeypatc
 
 
 @pytest.mark.skipif(
-    importlib.util.find_spec("skyrl") is None, reason="requires pinned training image; CPU-only"
+    importlib.util.find_spec("skyrl") is None,
+    reason="requires pinned training image; CPU-only",
 )
 @pytest.mark.parametrize("replies", [None, [None] * 7, ["unexpected"] * 8])
 def test_initial_backload_rejects_incomplete_acknowledgement(tmp_path, monkeypatch, replies):
@@ -964,9 +1076,12 @@ def test_initial_backload_rejects_incomplete_acknowledgement(tmp_path, monkeypat
 
 
 @pytest.mark.skipif(
-    importlib.util.find_spec("skyrl") is None, reason="requires pinned training image; CPU-only"
+    importlib.util.find_spec("skyrl") is None,
+    reason="requires pinned training image; CPU-only",
 )
-def test_native_backload_moves_nonpersistent_buffers_without_changing_values(monkeypatch):
+def test_native_backload_moves_nonpersistent_buffers_without_changing_values(
+    monkeypatch,
+):
     import torch
     from skyrl.backends.skyrl_train.distributed import fsdp_utils
     from skyrl.backends.skyrl_train.distributed.fsdp_strategy import FSDPStrategy
@@ -1008,7 +1123,8 @@ def test_native_backload_moves_nonpersistent_buffers_without_changing_values(mon
 
 
 @pytest.mark.skipif(
-    importlib.util.find_spec("skyrl") is None, reason="requires pinned training image; CPU-only"
+    importlib.util.find_spec("skyrl") is None,
+    reason="requires pinned training image; CPU-only",
 )
 def test_dense_wandb_config_has_only_bound_metadata(tmp_path, monkeypatch):
     import skyrl.train.utils.tracking as tracking
@@ -1066,7 +1182,8 @@ def test_dense_wandb_config_has_only_bound_metadata(tmp_path, monkeypatch):
 
 
 @pytest.mark.skipif(
-    importlib.util.find_spec("skyrl") is None, reason="requires pinned training image; CPU-only"
+    importlib.util.find_spec("skyrl") is None,
+    reason="requires pinned training image; CPU-only",
 )
 @pytest.mark.parametrize(
     "defect", [None, "missing", "empty", "partial", "cursor", "step", "symlink"]
@@ -1122,7 +1239,8 @@ def test_native_checkpoint_reopens_metadata_before_recording_success(tmp_path, m
 
 
 @pytest.mark.skipif(
-    importlib.util.find_spec("skyrl") is None, reason="requires pinned training image; CPU-only"
+    importlib.util.find_spec("skyrl") is None,
+    reason="requires pinned training image; CPU-only",
 )
 @pytest.mark.parametrize("interval", [2, 4])
 @pytest.mark.parametrize("dense", [False, True])
@@ -1142,7 +1260,10 @@ def test_exact_native_loop_eval_never_optimizes_and_saves_final(
         value["schema"] = DENSE_SCHEMA
         value["recipe"].update(epochs=1, max_steps=3)
         value["datasets"]["train"].update(
-            format=DENSE_FORMAT, supervised_tokens=51, assistant_responses=34, source_sessions=17
+            format=DENSE_FORMAT,
+            supervised_tokens=51,
+            assistant_responses=34,
+            source_sessions=17,
         )
     value["recipe"]["eval_interval"] = value["recipe"]["checkpoint_interval"] = interval
     if outcomes_only:
@@ -1267,7 +1388,8 @@ def test_exact_native_loop_eval_never_optimizes_and_saves_final(
 
 
 @pytest.mark.skipif(
-    importlib.util.find_spec("skyrl") is None, reason="requires pinned training image; CPU-only"
+    importlib.util.find_spec("skyrl") is None,
+    reason="requires pinned training image; CPU-only",
 )
 @pytest.mark.parametrize("dp_size", [1, 8])
 def test_native_sparse_ce_forward_backward_matches_causal_reference(monkeypatch, dp_size):
@@ -1341,7 +1463,9 @@ def test_native_sparse_ce_forward_backward_matches_causal_reference(monkeypatch,
     reference_logits = values.clone().requires_grad_(True)
     full_mask = torch.cat([torch.zeros(size, length - width), batch["loss_mask"]], dim=1)
     per_token = torch.nn.functional.cross_entropy(
-        reference_logits[:, :-1, :].transpose(1, 2), batch["sequences"][:, 1:], reduction="none"
+        reference_logits[:, :-1, :].transpose(1, 2),
+        batch["sequences"][:, 1:],
+        reduction="none",
     )
     expected = (per_token * full_mask[:, 1:]).sum()
     (expected * dp_size).backward()

@@ -1,3 +1,4 @@
+import copy
 import json
 import unittest
 
@@ -80,11 +81,50 @@ class IntegrityTests(unittest.TestCase):
                 "prompt_manifest_sha256": "sha256:" + "b" * 64,
             },
             "sampling": {"temperature": 0.6, "top_p": 0.95, "max_output_tokens": 32768},
+            "context": {
+                "management": "opencode_1.18.27_native_compaction_autocontinue_v2",
+                "max_context_tokens": 262144,
+                "max_input_tokens": 229376,
+                "automatic_compaction": True,
+                "automatic_continuation": True,
+                "compaction_reserved_tokens": 52768,
+                "compaction_headroom_tokens": 20000,
+                "renderer_source_sha256": "sha256:" + "c" * 64,
+            },
+            "retry": {
+                "model_request": {
+                    "policy": "single_request_no_retry_v1",
+                    "maximum_attempts": 1,
+                    "retryable_http_statuses": [],
+                    "retry_transport_errors": False,
+                    "backoff_seconds": [],
+                    "jitter_fraction": 0,
+                    "implementation_source_sha256": "sha256:" + "d" * 64,
+                },
+                "scientific_attempt": {"automatic_retry": False, "max_retries": 0},
+            },
             "budgets": {"max_agent_steps": 300, "max_duration_minutes": 120},
             "random_seeds": [17, 29, 43],
         }
         protocol["protocol_digest"] = digest_json(protocol)
         self.assertEqual(validate_eval_protocol(protocol), protocol["protocol_digest"])
+
+        context_drift = copy.deepcopy(protocol)
+        context_drift["context"]["compaction_reserved_tokens"] = 300000
+        context_drift["protocol_digest"] = digest_json(
+            {key: value for key, value in context_drift.items() if key != "protocol_digest"}
+        )
+        with self.assertRaisesRegex(ValueError, "context/compaction controls"):
+            validate_eval_protocol(context_drift)
+
+        retry_drift = copy.deepcopy(protocol)
+        retry_drift["retry"]["model_request"]["maximum_attempts"] = 2
+        retry_drift["protocol_digest"] = digest_json(
+            {key: value for key, value in retry_drift.items() if key != "protocol_digest"}
+        )
+        with self.assertRaisesRegex(ValueError, "model-request retry controls"):
+            validate_eval_protocol(retry_drift)
+
         protocol["harness"]["tool_schema_sha256"] = "sha256:" + "0" * 64
         with self.assertRaisesRegex(ValueError, "digest mismatch"):
             validate_eval_protocol(protocol)

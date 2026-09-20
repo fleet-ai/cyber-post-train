@@ -19,7 +19,13 @@ import yaml
 from cyber_post_train.jobs import canonical_gzip, digest, quantity, validate_request
 
 from .models import bound_model
-from .sft_runtime import DENSE_FORMAT, DENSE_SCHEMA, validate_plan
+from .sft_runtime import (
+    DENSE_FORMAT,
+    DENSE_SCHEMA,
+    QWEN38_LORA_QUALIFICATION,
+    qwen38_megatron_binding,
+    validate_plan,
+)
 
 IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
@@ -89,6 +95,7 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
             "wandb",
             "cluster",
             "lora",
+            "runtime",
             "recovery",
             "pause_after_step",
         },
@@ -149,9 +156,11 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
     _known(cluster, {"priority", "resources"}, "cluster")
     runtime = Path(__file__).with_name("sft_runtime.py").read_bytes()
     plan = {
-        "schema": DENSE_SCHEMA
-        if datasets["train"].get("format") == DENSE_FORMAT
-        else "cyber_sft_runtime_v2",
+        "schema": (
+            DENSE_SCHEMA
+            if datasets["train"].get("format") == DENSE_FORMAT
+            else "cyber_sft_runtime_v2"
+        ),
         "run_name": config["name"],
         "output_root": config["output_root"],
         "model": bound,
@@ -172,6 +181,8 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
     # Qwen architectures. Do not silently substitute the GLM Flash model or
     # claim the full GLM FP8 checkpoint uses this ordinary full-weight loader.
     if lock["repo"] == "zai-org/GLM-5.3":
+        if "runtime" in config:
+            raise ValueError("the explicit Megatron runtime binding is only valid for Qwen3.8 LoRA")
         # Rank zero materializes the full BF16 base before FSDP sharding. Never
         # inherit the much smaller Qwen CPU reservation for this ~1.5 TB load.
         if (
@@ -188,8 +199,48 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
         plan["glm_runtime_sha256"] = hashlib.sha256(
             Path(__file__).with_name("glm_runtime.py").read_bytes()
         ).hexdigest()
-    elif "lora" in config or lock["repo"] not in {"Qwen/Qwen3.8-27B", "Qwen/Qwen3.6-27B"}:
+    elif lock["repo"] == "Qwen/Qwen3.8-27B" and "lora" in config:
+        source_commit, image, source_files = qwen38_megatron_binding()
+        runtime_config = config.get("runtime")
+        _known(runtime_config, {"skyrl_source_commit", "image"}, "runtime")
+        if set(runtime_config) != {"skyrl_source_commit", "image"}:
+            raise ValueError("Qwen3.8 LoRA runtime needs exact source and image bindings")
+        if runtime_config["skyrl_source_commit"] != source_commit:
+            raise ValueError("Qwen3.8 LoRA SkyRL source commit differs from the reviewed revision")
+        if runtime_config["image"] != image:
+            raise ValueError("Qwen3.8 LoRA image differs from the reviewed immutable digest")
+        _known(
+            config["lora"],
+            {"type", "target_modules", "rank", "alpha", "init_method", "dropout"},
+            "Qwen3.8 LoRA",
+        )
+        if set(config["lora"]) != {
+            "type",
+            "target_modules",
+            "rank",
+            "alpha",
+            "init_method",
+            "dropout",
+        }:
+            raise ValueError("Qwen3.8 LoRA needs every exact adapter binding")
+        plan["lora"] = dict(config["lora"])
+        plan["execution"]["image"] = image
+        plan["skyrl_runtime"] = {
+            "source_commit": source_commit,
+            "source_files_sha256": source_files,
+        }
+        plan["qualification_gate"] = {
+            **QWEN38_LORA_QUALIFICATION,
+            "training_job_evidence": list(QWEN38_LORA_QUALIFICATION["training_job_evidence"]),
+            "later_zero_step_evidence": list(QWEN38_LORA_QUALIFICATION["later_zero_step_evidence"]),
+        }
+    elif "lora" in config or lock["repo"] not in {
+        "Qwen/Qwen3.8-27B",
+        "Qwen/Qwen3.6-27B",
+    }:
         raise ValueError("model needs a qualified SkyRL loader profile before GPU submission")
+    elif "runtime" in config:
+        raise ValueError("the explicit Megatron runtime binding requires Qwen3.8 LoRA")
     if "recovery" in config:
         from .recovery import bind
 
@@ -207,12 +258,38 @@ def job_request(plan: dict) -> dict:
     This avoids a separate GPU or cluster Job just to copy a Python script.
     The bundle is checked before unpacking into a create-once owned directory.
     """
+    # ``plan_sha256`` is attached only inside the runtime after the staged plan
+    # file has been verified.  A prepared/submitted plan containing that field
+    # would hash different bytes when the runtime attaches its real file digest.
+    if "plan_sha256" in plan:
+        raise ValueError("plan_sha256 is a runtime-only evidence field")
+    # Submission re-renders a prepared request through this function. Recheck
+    # the full plan so a hand-written or stale prepared directory cannot bypass
+    # the Qwen LoRA source/image/c1/evidence gates.
+    validate_plan(plan, check_files=False)
     runtime = Path(__file__).with_name("sft_runtime.py").read_bytes()
     if hashlib.sha256(runtime).hexdigest() != plan["runtime_sha256"]:
         raise ValueError("local runtime changed since this plan was compiled")
     plan_bytes = json.dumps(plan, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
     contents = {"runtime": runtime.decode(), "plan": plan_bytes.decode()}
-    if "lora" in plan:
+    if plan.get("model", {}).get("repo") == "Qwen/Qwen3.8-27B" and "lora" in plan:
+        # The terminal one-step gate validates its signed checkpoint receipt
+        # through this package after the GPU update and checkpoint flush.  The
+        # trainer image intentionally contains SkyRL, not this repository, so
+        # stage the complete import surface rather than discovering a missing
+        # helper only after consuming a node.
+        extras = contents.setdefault("extra_files", {})
+        extras.update(
+            {
+                "training/__init__.py": Path(__file__).with_name("__init__.py").read_text(),
+                "training/io.py": Path(__file__).with_name("io.py").read_text(),
+                "training/qwen38_lora_artifacts.py": Path(__file__)
+                .with_name("qwen38_lora_artifacts.py")
+                .read_text(),
+                "training/sft_runtime.py": runtime.decode(),
+            }
+        )
+    if plan.get("model", {}).get("repo") == "zai-org/GLM-5.3" and "lora" in plan:
         helper = Path(__file__).with_name("glm_runtime.py").read_bytes()
         if hashlib.sha256(helper).hexdigest() != plan["glm_runtime_sha256"]:
             raise ValueError("GLM runtime changed since this plan was compiled")
@@ -243,7 +320,7 @@ def job_request(plan: dict) -> dict:
         "b=base64.b64decode(os.environ.pop('CYBER_SFT_BUNDLE'),validate=True);"
         f"assert hashlib.sha256(b).hexdigest()=={bundle_sha!r};"
         "v=json.loads(gzip.decompress(b));"
-        "p=pathlib.Path(os.environ['RUN_DIR'])/'.runtime';p.mkdir(mode=0o700);"
+        "p=pathlib.Path(os.environ['RUN_DIR'])/'.runtime';p.mkdir(parents=True,mode=0o700);"
         "(p/'sft_runtime.py').write_text(v['runtime']);(p/'plan.json').write_text(v['plan']);"
         "[((p/n).parent.mkdir(parents=True,exist_ok=True),(p/n).write_text(t)) "
         "for n,t in v.get('extra_files',{}).items()];"
@@ -264,6 +341,11 @@ def job_request(plan: dict) -> dict:
         "priority_class": execution["priority"],
         "requeueIfPreempted": False,
         "secrets": ["wandb-api"],
+        **(
+            {"image_pull_secrets": ["ghcr-pull"]}
+            if plan.get("model", {}).get("repo") == "Qwen/Qwen3.8-27B" and "lora" in plan
+            else {}
+        ),
         "env": {
             "CYBER_SFT_BUNDLE": base64.b64encode(compressed).decode(),
             **(
@@ -283,6 +365,11 @@ def job_request(plan: dict) -> dict:
             "WANDB_TAGS": ",".join(w.get("tags", [])),
             "WANDB_DISABLE_CODE": "true",
             "WANDB_CONSOLE": "off",
+            **(
+                {"FLA_TILELANG": "0"}
+                if plan.get("model", {}).get("repo") == "Qwen/Qwen3.8-27B" and "lora" in plan
+                else {}
+            ),
         },
     }
 
@@ -310,12 +397,16 @@ def preflight(plan: dict) -> dict:
     from skyrl.train.sft_trainer import tokenize_chat_example
     from transformers import AutoConfig, AutoTokenizer
 
-    from .sft_runtime import build_runtime_configs, prepare_rows, validate_runtime_sources
+    from .sft_runtime import (
+        build_runtime_configs,
+        prepare_rows,
+        validate_runtime_sources,
+    )
 
     if torch.cuda.is_available():
         raise ValueError("run data/runtime preflight without GPU allocation")
     validate_plan(plan)
-    validate_runtime_sources()
+    validate_runtime_sources(plan)
     build_runtime_configs(plan)
     _check_native_dataset_loader(plan)
     AutoConfig.from_pretrained(

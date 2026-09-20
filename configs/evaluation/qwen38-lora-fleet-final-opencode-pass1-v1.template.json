@@ -1,0 +1,69 @@
+{
+  "schema": "cyber_prepost_eval_protocol_v1",
+  "model": {
+    "repo": "Qwen/Qwen3.8-27B",
+    "base_checkpoint_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "weights_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+    "tokenizer_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "tokenizer_manifest_sha256": "sha256:3938a9a8172f2738fed1be44efc11e2562059269d50d3721213f44802b53b4e1",
+    "chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
+  },
+  "serving": {
+    "image": "UNRESOLVED_MATCHED_SERVING_IMAGE_DIGEST",
+    "engine_revision": "UNRESOLVED_MATCHED_SERVING_ENGINE_COMMIT",
+    "precision": "bf16 weights with identical fp8_e4m3 KV cache for both arms",
+    "quantization_manifest_sha256": "UNRESOLVED_MATCHED_NUMERICAL_RECIPE_SHA256"
+  },
+  "harness": {
+    "image": "UNRESOLVED_FLEET_OPENCODE_IMAGE_DIGEST",
+    "source_revision": "4b7e19e315cca414121ba1d61523fef74bb3ae8b",
+    "tool_schema_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "system_prompt_sha256": "sha256:8512560b0706f8859774bfe8e93c2c86ecf6a6a4603fe59db004fd04fcc738d1"
+  },
+  "benchmark": {
+    "id": "qwen-blackbox-study-final-test-v1-task-family-held-out",
+    "source_revision": "607b7b0bb30d798a3af1ba5f17e1ebc9f2366a77",
+    "task_manifest_sha256": "sha256:dc625115be8c775de8ecf476bc0d8e06e71b6c7f4160ed50b25eb0308b30d8d7",
+    "environment_manifest_sha256": "sha256:4f9a7c1edc317030981029e80176fb4f1196a470d9d602b676cc49cbc63ab1e4",
+    "verifier_manifest_sha256": "UNRESOLVED_EXACT_VERIFIER_BINDINGS_SHA256",
+    "prompt_manifest_sha256": "UNRESOLVED_RENDERED_FLEET_PROMPT_MANIFEST_SHA256"
+  },
+  "sampling": {
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "max_output_tokens": 32768
+  },
+  "context": {
+    "management": "opencode_1.18.27_native_compaction_autocontinue_v2",
+    "max_context_tokens": 262144,
+    "max_input_tokens": 229376,
+    "automatic_compaction": true,
+    "automatic_continuation": true,
+    "compaction_reserved_tokens": 52768,
+    "compaction_headroom_tokens": 20000,
+    "renderer_source_sha256": "sha256:428e9f2e4d4c758c4f682cbed314cf96b866d051b34fa0eea8757a3aad97aa1d"
+  },
+  "retry": {
+    "model_request": {
+      "policy": "single_request_no_retry_v1",
+      "maximum_attempts": 1,
+      "retryable_http_statuses": [],
+      "retry_transport_errors": false,
+      "backoff_seconds": [],
+      "jitter_fraction": 0,
+      "implementation_source_sha256": "sha256:a65270cb021cbc8e2fe9b00d901b4b70e9ddc98dd58d93e9f695b1768dfb984d"
+    },
+    "scientific_attempt": {
+      "automatic_retry": false,
+      "max_retries": 0
+    }
+  },
+  "budgets": {
+    "max_agent_steps": 600,
+    "max_duration_minutes": 480
+  },
+  "random_seeds": [
+    42
+  ],
+  "protocol_digest": "UNRESOLVED_AFTER_ALL_FIELDS_ARE_FROZEN"
+}

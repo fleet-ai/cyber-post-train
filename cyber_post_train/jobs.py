@@ -94,7 +94,7 @@ def bundled_request(request: dict, files: dict[str, str], module: str, argv: lis
         f"b=base64.b64decode({expression},validate=True);"
         f"assert hashlib.sha256(b).hexdigest()=={hashlib.sha256(blob).hexdigest()!r};"
         "v=json.loads(gzip.decompress(b));"
-        "p=pathlib.Path(os.environ['RUN_DIR'])/'.runtime';p.mkdir(mode=0o700);"
+        "p=pathlib.Path(os.environ['RUN_DIR'])/'.runtime';p.mkdir(parents=True,mode=0o700);"
         "[((p/n).parent.mkdir(parents=True,exist_ok=True),(p/n).write_text(t)) "
         "for n,t in v['files'].items()];"
         "os.chdir(p);sys.path.insert(0,str(p));importlib.invalidate_caches();"
@@ -116,6 +116,8 @@ def validate_request(config: dict) -> None:
         raise JobsError("name must be a DNS label of at most 31 characters")
     if config["name"] == "ft-run":
         raise JobsError("ft-run is a reserved name")
+    if not isinstance(config.get("title"), str) or not config["title"].strip():
+        raise JobsError("a nonempty title is required for duplicate reconciliation")
     if not re.fullmatch(r"[^\s]+@sha256:[a-f0-9]{64}", config.get("image", "")):
         raise JobsError("image must be pinned by immutable digest")
     if not isinstance(config.get("command"), str) or not config["command"].strip():
@@ -346,15 +348,20 @@ class Jobs:
                 row.get("run_dir") == config["run_dir"]
                 or name == config["name"]
                 or name.startswith(config["name"] + "-")
+                or (config.get("title") is not None and row.get("title") == config["title"])
             ):
-                raise JobsError("a recorded run already owns this name/output; reconcile it")
+                raise JobsError("a recorded run already owns this name/title/output; reconcile it")
         proof = validate_preview(config, self.preview(config))
         journal.parent.mkdir(parents=True, exist_ok=True)
         fd = os.open(journal, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(fd, "w") as stream:
             stream.write(
                 json.dumps(
-                    {"state": "POST_INTENT_DO_NOT_RETRY", "request_sha256": digest(config), **proof}
+                    {
+                        "state": "POST_INTENT_DO_NOT_RETRY",
+                        "request_sha256": digest(config),
+                        **proof,
+                    }
                 )
                 + "\n"
             )
