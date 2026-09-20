@@ -1,0 +1,182 @@
+{
+  "schema_version": "webexploitbench_checkpoint_collection_study_v1",
+  "status": "sealed_blocked_prelaunch",
+  "study": {
+    "id": "q38-fresh75-step230-opencode-wbe-matched-v1",
+    "question": "Does the accepted Fresh75 step-230 checkpoint change WebExploitBench performance relative to its exact base model when every non-weight control is held constant?",
+    "harness": "opencode",
+    "intervention": "model_weights_only",
+    "selection_policy": "webexploitbench_reporting_only"
+  },
+  "benchmark": {
+    "name": "webexploitbench",
+    "repository": "AgentCyberRange/WebExploitBench",
+    "revision": "7f97d87fa8ab728260c0ba9b09b9c8f00bb82ad5",
+    "cage_repository": "https://github.com/AgentCyberRange/CAGE.git",
+    "cage_commit": "09a191c565230cebb8255899d622d23c7ddeff33",
+    "cage_patch_set_sha256": "sha256:baf629de2ea13a5648f9de792514efcd73c71667c1ffe375b8669cbc1ad72b51",
+    "target_count": 15,
+    "task_order_sha256": "sha256:1e9536e872e1ae602fea5034e08f059a712f056a7cf7bc8521cc88e8aab7357d",
+    "canary_task_index": 0
+  },
+  "models": {
+    "base": {
+      "model_id": "qwen3.8-27b",
+      "repository": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "inference_model_uid": "d06c0531-7181-41ad-a3fd-cd8e3e774ab9"
+    },
+    "candidate": {
+      "model_id": "chris-q38-fresh75-step230-v1",
+      "repository": "Qwen/Qwen3.8-27B",
+      "base_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "optimizer_step": 230,
+      "checkpoint_manifest_sha256": "sha256:bf92e29d9f19dd589201214f25fe8d0e3b0f65de14ec08fc573217f50580a486",
+      "checkpoint_receipt_sha256": "sha256:9542502631b47cd730ccecb5938650103ed999bf4a4a6cf7d16d9be09c317cab",
+      "export_receipt_sha256": "sha256:1bd81c78575c32fa52dc4ab9c7002d95db5028047fa52cc36297aa1954c3d2d3",
+      "payload_manifest_sha256": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
+      "staging_receipt_sha256": "sha256:b1f9073be0fb3dca15847d7240d7c62fcad1f1d77c05542b0d8234c8134f7af8",
+      "inference_model_uid": "d51cf7c4-3ab8-4912-8f73-dfe7153acdb4",
+      "current_serving_state": "paused",
+      "current_routing_state": "disabled"
+    }
+  },
+  "stages": {
+    "canary": {
+      "name": "canary",
+      "target_count": 1,
+      "pass_k": 1,
+      "attempts_per_arm": 1,
+      "total_attempts": 2,
+      "pair_id": "q38-f75p230-wbe-c1-pair-v1",
+      "base_campaign_id": "q38-base-f75p230-oc-wbe-c1-v1",
+      "candidate_campaign_id": "q38-f75p230-oc-wbe-c1-v1",
+      "base_sandbox_prefix": "q38-b-f75-c1-v1-",
+      "candidate_sandbox_prefix": "q38-c-f75-c1-v1-",
+      "launch_condition": "fresh_live_gate_and_no_equivalent_work"
+    },
+    "full": {
+      "name": "full",
+      "target_count": 15,
+      "pass_k": 4,
+      "attempts_per_arm": 60,
+      "total_attempts": 120,
+      "pair_id": "q38-f75p230-wbe-p4-pair-v1",
+      "base_campaign_id": "q38-base-f75p230-oc-wbe-p4-v1",
+      "candidate_campaign_id": "q38-f75p230-oc-wbe-p4-v1",
+      "base_sandbox_prefix": "q38-b-f75-p4-v1-",
+      "candidate_sandbox_prefix": "q38-c-f75-p4-v1-",
+      "launch_condition": "exact_canary_acceptance_and_fresh_live_gate_and_no_equivalent_work"
+    }
+  },
+  "execution": {
+    "collection": {
+      "launcher": "evals.webexploitbench.tensorlake.collection_launcher",
+      "pair_validator": "evals.webexploitbench.tensorlake.collection_pair",
+      "output": "immutable_score_free_rollout_bundle",
+      "judge_calls": 0,
+      "resumable": true
+    },
+    "scoring": {
+      "launcher": "evals.webexploitbench.tensorlake.deferred_score",
+      "input": "immutable_score_free_rollout_bundle",
+      "agent_calls": 0,
+      "resumable": true,
+      "recollection_required": false
+    }
+  },
+  "duplicate_safety": {
+    "live_inventory_required": true,
+    "inventory_max_age_seconds": 600,
+    "equivalent_active_campaigns_required": 0,
+    "reserved_campaign_ids": [
+      "q38-t3k262-step10-opencode-web-p4-v1",
+      "fresh75-step230-opencode-web-p1-gpt55-v1",
+      "fresh75-step230-opencode-web-p8-v3"
+    ],
+    "reserved_sandboxes": [
+      {
+        "name": "q38-s10-web-p4-v1-t01",
+        "id": "3a7yrkpnw2d6r8byt8kea"
+      },
+      {
+        "name": "q38-s10-web-p4-v1-t02",
+        "id": "pkwk3jkspy3zomubr005u"
+      },
+      {
+        "name": "q38-s10-web-p4-v1-t03",
+        "id": "ggjok0431dbj3ipub6kn9"
+      },
+      {
+        "name": "q38-s10-web-p4-v1-t04-download",
+        "id": "gjq1yhuws819eq92lrt4o"
+      },
+      {
+        "name": "q38-s10-web-p4-v1-t06",
+        "id": "4n16x7nwoyrog6p3jj1ud"
+      },
+      {
+        "name": "q38-s10-web-p4-v1-t07",
+        "id": "wekyhb7agrolkw9zf7496"
+      },
+      {
+        "name": "q38-s10-web-p4-v1-t08",
+        "id": "7d0ghwsorwxr2d3v1ftyu"
+      },
+      {
+        "name": "q38-s10-web-p4-v1-t09",
+        "id": "dvfcfpwgfq6uvp03nctaq"
+      },
+      {
+        "name": "q38-s10-web-p4-v1-t10",
+        "id": "cdsqufv814npb04ixdxwg"
+      },
+      {
+        "name": "q38-s10-web-p4-v1-t11",
+        "id": "mfpxgx7zdw7bzcilx7www"
+      },
+      {
+        "name": "q38-s10-web-p4-v1-t12",
+        "id": "1epyqfsktds1380z1z8x6"
+      },
+      {
+        "name": "q38-s10-web-p4-v1-t13",
+        "id": "1crsmy3as8t1lw20k5diu"
+      },
+      {
+        "name": "q38-s10-web-p4-v1-t14",
+        "id": "sliaj5f5eh2cyhugfnebf"
+      }
+    ]
+  },
+  "evidence": {
+    "capacity_audit": {
+      "path": "docs/evidence/qwen38-eval-capacity-audit-20260920.json",
+      "file_sha256": "sha256:b615e98f3fa0c1cbfa845be46ca8ac9e1da10a6f5a488bfae68a8cd1a1fdb0e5"
+    },
+    "q38_s10_reconciliation": {
+      "path": "docs/evidence/qwen38-q38-s10-lineage-reconciliation-20260920.json",
+      "file_sha256": "sha256:86c0dcacc8f81543f16d295ec4ca03758a7eb3ab099370a12341f1f73d82e830"
+    },
+    "base_lock": {
+      "path": "evals/webexploitbench/serving/qwen38-27b-1d4bf0f2.lock.json",
+      "file_sha256": "sha256:17c75a53ddbf23d7e4272f95446d0c5128a070a3a0fde0d5f8791e97568d53dd"
+    },
+    "candidate_reload": {
+      "path": "docs/evidence/qwen38-fresh75-step230-reload-accepted-20260915.json",
+      "file_sha256": "sha256:0ee0d79d047782598f58f4717a9e5f784ef407ff4825b01bc3616593d582691e"
+    },
+    "candidate_stage": {
+      "path": "docs/evidence/qwen38-fresh75-step230-inference-stage-v2-accepted-20260915.json",
+      "file_sha256": "sha256:5a785f03c3ebe42043f56bbbd501c5fddc2a9dc73be90e212683c463d47feba9"
+    }
+  },
+  "launch_blockers": [
+    "candidate_route_is_paused_and_disabled",
+    "current_base_and_candidate_live_routes_are_not_jointly_proven",
+    "fresh_base_vs_candidate_live_parity_receipt_is_absent",
+    "fresh_tensorlake_duplicate_reconciliation_is_required_at_launch",
+    "exact_stage_collection_pair_plans_are_not_yet_sealed"
+  ],
+  "plan_sha256": "sha256:3b37094868cc0dec65411cd552f67424eefbd9e01af1b5035b65bf54f535100d"
+}

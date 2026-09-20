@@ -1,0 +1,78 @@
+{
+  "schema": "qwen38_q38_s10_lineage_reconciliation_v1",
+  "observed_at": "2026-09-20T09:32:03Z",
+  "mode": "read_only",
+  "capacity_audit": {
+    "path": "docs/evidence/qwen38-eval-capacity-audit-20260920.json",
+    "file_sha256": "sha256:b615e98f3fa0c1cbfa845be46ca8ac9e1da10a6f5a488bfae68a8cd1a1fdb0e5"
+  },
+  "historical_local_state": {
+    "campaign_id": "q38-t3k262-step10-opencode-web-p4-v1",
+    "arm_id": "teacher3k-262k-step10",
+    "served_model": "chris-q38-t3k262-s10-web-v1",
+    "model_revision": "sha256:d6301dba2cc0e6bc05ea48d2793584d4ca725cba8863dc4ac6ef75bdbbfa668b",
+    "launch_plan_file_sha256": "sha256:d4e8c3871daa17f437cc109783098f9b66332d55b993d1518a0dd2198a319e9a",
+    "launch_plan_sha256": "sha256:31b101b58ba0f3639d3294cea85414bb5e56f5bb499c48155186cee20d02ebd1",
+    "target_count": 15,
+    "pass_k": 4
+  },
+  "classification": "historical_teacher3k_step10_campaign_not_fresh75",
+  "disposition": "reserved_do_not_resume_or_duplicate_without_fresh_live_reconciliation",
+  "fresh_launch_gate": "repeat_read_only_GET_sandboxes_and_prove_no_equivalent_active_or_accepted_campaign",
+  "sandboxes": [
+    {
+      "name": "q38-s10-web-p4-v1-t01",
+      "id": "3a7yrkpnw2d6r8byt8kea"
+    },
+    {
+      "name": "q38-s10-web-p4-v1-t02",
+      "id": "pkwk3jkspy3zomubr005u"
+    },
+    {
+      "name": "q38-s10-web-p4-v1-t03",
+      "id": "ggjok0431dbj3ipub6kn9"
+    },
+    {
+      "name": "q38-s10-web-p4-v1-t04-download",
+      "id": "gjq1yhuws819eq92lrt4o"
+    },
+    {
+      "name": "q38-s10-web-p4-v1-t06",
+      "id": "4n16x7nwoyrog6p3jj1ud"
+    },
+    {
+      "name": "q38-s10-web-p4-v1-t07",
+      "id": "wekyhb7agrolkw9zf7496"
+    },
+    {
+      "name": "q38-s10-web-p4-v1-t08",
+      "id": "7d0ghwsorwxr2d3v1ftyu"
+    },
+    {
+      "name": "q38-s10-web-p4-v1-t09",
+      "id": "dvfcfpwgfq6uvp03nctaq"
+    },
+    {
+      "name": "q38-s10-web-p4-v1-t10",
+      "id": "cdsqufv814npb04ixdxwg"
+    },
+    {
+      "name": "q38-s10-web-p4-v1-t11",
+      "id": "mfpxgx7zdw7bzcilx7www"
+    },
+    {
+      "name": "q38-s10-web-p4-v1-t12",
+      "id": "1epyqfsktds1380z1z8x6"
+    },
+    {
+      "name": "q38-s10-web-p4-v1-t13",
+      "id": "1crsmy3as8t1lw20k5diu"
+    },
+    {
+      "name": "q38-s10-web-p4-v1-t14",
+      "id": "sliaj5f5eh2cyhugfnebf"
+    }
+  ],
+  "mutation_statement": "No sandbox, model, collection, score, or provider state was changed.",
+  "receipt_sha256": "sha256:0ee64a7d6d258857cad2d06a3f816594cbbcfd7a30a0426999709bee919d238a"
+}
