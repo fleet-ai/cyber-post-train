@@ -1,0 +1,21 @@
+{
+  "schema": "cyber_dense_rechunk_shape_audit_v1",
+  "source_manifest_sha256": "sha256:d0641cc7baf082c0b1d9bd494112ad8562b9c332cb5be5a7696249d9101a96a8",
+  "source_train_parquet_sha256": "sha256:86452a28af5c77b48c1e53e13a6d8fd9d483eec350d22214cd7717127502a7b1",
+  "algorithm": "contiguous_target_groups_with_masked_history_v1",
+  "max_length": 32768,
+  "context_tokens": 8192,
+  "exact_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "pod_name": "chris-q38-teacher3k-32k-shape-v12",
+  "pod_uid": "25ef7b51-6b80-4c63-9423-f7ffb54a267e",
+  "pod_phase": "Succeeded",
+  "container_restarts": 0,
+  "gpu_count": 0,
+  "source_rows": 3679,
+  "source_visible_tokens": 513490381,
+  "rows": 14693,
+  "visible_tokens": 363745220,
+  "supervised_tokens": 57384881,
+  "batch8_one_epoch_optimizer_steps": 1837,
+  "pod_deleted_and_absence_verified": true
+}

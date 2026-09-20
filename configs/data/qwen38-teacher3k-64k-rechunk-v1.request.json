@@ -1,0 +1,18 @@
+{
+  "schema": "cyber_dense_sft_rechunk_request_v1",
+  "source": {
+    "manifest_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher3k-262k-v1/data-v5/manifest.json",
+    "manifest_file_sha256": "sha256:8e3d5f1afff1a10b2a04b424ebab16699506a4a0f5dd3f0c9ef909182b54ca95",
+    "manifest_sha256": "sha256:d0641cc7baf082c0b1d9bd494112ad8562b9c332cb5be5a7696249d9101a96a8",
+    "data_root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher3k-262k-v1/data-v5",
+    "train_parquet_sha256": "sha256:86452a28af5c77b48c1e53e13a6d8fd9d483eec350d22214cd7717127502a7b1"
+  },
+  "minimum_supervised_tokens": 20000000,
+  "destination": {
+    "output_root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher3k-64k-v1/data-v1",
+    "create_once": true
+  },
+  "max_length": 65536,
+  "context_tokens": 16384,
+  "sha256": "sha256:59abff0047faadcaae2ed0c7eb1213e4c79f06c7d3f47f54c295e66ec136cb7d"
+}

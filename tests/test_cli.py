@@ -14,6 +14,24 @@ from training import sft
 RUNNER = CliRunner()
 
 
+def test_data_rechunk_dispatches_cpu_only_builder(tmp_path, monkeypatch):
+    from training import dense_rechunk
+
+    config = tmp_path / "rechunk.json"
+    config.write_text("{}")
+    calls = []
+
+    def build(value, *, relative_to):
+        calls.append((value, relative_to))
+        return {"submitted": False, "supervised_tokens": 20_000_000}
+
+    monkeypatch.setattr(dense_rechunk, "build", build)
+    result = RUNNER.invoke(cli.app, ["data-rechunk", str(config)])
+    assert result.exit_code == 0
+    assert calls == [({}, config.parent.resolve())]
+    assert '"submitted": false' in result.stdout
+
+
 @pytest.fixture
 def prepared(tmp_path, monkeypatch):
     config = tmp_path / "config.yaml"

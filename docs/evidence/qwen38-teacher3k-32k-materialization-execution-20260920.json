@@ -1,0 +1,17 @@
+{
+  "schema": "cyber_dense_rechunk_materialization_execution_v1",
+  "status": "succeeded",
+  "pod_name": "chris-q38-teacher3k-32k-rechunk-v2",
+  "pod_uid": "feb12557-e7bf-4675-917e-c2167ecc7403",
+  "container_restarts": 0,
+  "gpus": 0,
+  "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "runtime_wheel_sha256": "sha256:64569109dc880d631b1591a0bf80243a6e84d215e0b1c1615bc27bfb1159f82b",
+  "request_sha256": "sha256:36c82ca32f29e9cbb0851b07cb03d2b059335022646e50a0220bec2f76094cd3",
+  "manifest_file_sha256": "sha256:ebcf6677e51adb22f73602c210281a3f4a847c257155da6ed48cd1c6cba9f3c8",
+  "manifest_sha256": "sha256:a8d08609991d7960cdcdab826bd07c3216bfcd3aa8f6fb33ab7a5fd29648d6f5",
+  "train_parquet_sha256": "sha256:bf245db073fcd5a39ff6f90f6fc322710a3694408845bc27bfb6d9eaa6c41e0c",
+  "rows": 14693,
+  "supervised_tokens": 57384881,
+  "pod_deleted_and_absence_verified": true
+}

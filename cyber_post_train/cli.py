@@ -161,6 +161,18 @@ def data_fleet_teachers(config: Path) -> None:
         _fail(exc)
 
 
+@app.command("data-rechunk")
+def data_rechunk(config: Path) -> None:
+    """Re-window a sealed dense SFT corpus at a smaller context. CPU only."""
+    from training.dense_rechunk import build
+    from training.sft import read_mapping
+
+    try:
+        _print(build(read_mapping(config), relative_to=config.resolve().parent))
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command("model-lock")
 def model_lock(repo: str, revision: str, output: Annotated[Path, typer.Option("--output")]) -> None:
     """Pin public HF model metadata. No weights, GPUs, remote code or compatibility claim."""
