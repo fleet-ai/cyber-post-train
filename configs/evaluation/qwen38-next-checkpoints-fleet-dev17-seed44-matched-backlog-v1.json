@@ -1,0 +1,198 @@
+{
+  "schema": "cyber_qwen38_fleet_dev17_seed44_matched_backlog_v1",
+  "protocol_id": "q38-dev17-seed44-base-fresh75-lora60-p1-v1",
+  "status": "prepared_not_launchable",
+  "launchable": false,
+  "prepared_from_main": "c56fab19877a610911d80d2406948098c4ed74c5",
+  "scientific_reason": "Fresh75 already occupies all 17 seed-43 scientific cells, so another seed-43 generation would duplicate or selectively replay that arm. This successor predeclares seed 44 for Base, Fresh75 and LoRA step60 together while holding every task, harness, serving contract, budget, retry rule and acceptance rule constant.",
+  "independence": {
+    "capability_scores_or_traces_accessed": false,
+    "score_blind_lifecycle_counts_accessed": true,
+    "seed43_cells_replayed": false,
+    "seed43_results_spliced": false,
+    "distinguishing_intervention": "new_predeclared_sampling_seed_44",
+    "final_eight_task_set_access": "sealed"
+  },
+  "predecessor_protocol": {
+    "path": "configs/evaluation/qwen38-fleet-dev17-seed43-matched-protocol-v1.json",
+    "file_sha256": "sha256:12ff102e82a848d760587ef0af4848e7b288ca4f5e0acfe248cd60dfe0dd17aa",
+    "sha256": "sha256:85334a48a36c126a1134ab2e0ba6211e2fce5de06c4fce6bbcef5304ab9b4f4a",
+    "sampling_seed": 43,
+    "frozen_and_not_a_retry_parent": true
+  },
+  "selection": {
+    "split_path": "configs/data/fleet-blackbox-current-study-split-20260914-v2.json",
+    "split_file_sha256": "sha256:28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb",
+    "task_set_path": "configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json",
+    "task_set_file_sha256": "sha256:79c834e739246da29aca9513965ecfc7032f8df7744eb2245ce0303aba1b97c5",
+    "selection_sha256": "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
+    "task_count": 17,
+    "final_eight_sealed": true
+  },
+  "treatment": {
+    "harness": "opencode",
+    "harness_version": "1.18.27",
+    "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "provider_adapter": "@ai-sdk/openai-compatible",
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v2",
+    "context_window_size": 262144,
+    "compaction_headroom_tokens": 20000,
+    "max_output_tokens": 32768,
+    "max_model_requests": 600,
+    "timeout_seconds": 28800,
+    "tools": [
+      "bash",
+      "submit_report"
+    ],
+    "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+  },
+  "images": {
+    "agent": "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92",
+    "proxy": "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+  },
+  "sampling": {
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "seed": 44
+  },
+  "pass_k": 1,
+  "concurrency_per_arm": 8,
+  "training_data_eligible": false,
+  "teacher_token_heldout_cross_entropy": false,
+  "arms": {
+    "base": {
+      "state": "scientific_config_prepared_no_resource_identity",
+      "config_path": "configs/evaluation/qwen38-base-fleet-dev17-opencode-seed44-pass1-v1.json",
+      "config_file_sha256": "sha256:1ee8ae83c056d22e4b0d2950c7d93e62470ebbd041ea768d18788daa16d7797b",
+      "evaluation_plan_sha256": "sha256:844d8ebdaed6e8588c02187c8520eaad942a142e0a83961c19b6df3a46cf0883",
+      "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "session_model": "qwen/qwen3.8-27b",
+      "served_id": "qwen3.8-27b"
+    },
+    "fresh75": {
+      "state": "scientific_config_prepared_route_paused_no_resource_identity",
+      "config_path": "configs/evaluation/qwen38-fresh75-fleet-dev17-opencode-seed44-pass1-v1.json",
+      "config_file_sha256": "sha256:6fef5c7faeec34d78dd5d2951698d5c4ca3485a95213f929d129ff4a10940390",
+      "evaluation_plan_sha256": "sha256:b3f00e2c233f0607acc901ed2f6eba9bc243baca08ae5f69e15c3f064dda972d",
+      "model_revision": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
+      "session_model": "qwen/chris-q38-fresh75-step230-web-v2",
+      "served_id": "chris-q38-fresh75-step230-web-v2",
+      "merged_provenance_config_path": "configs/evaluation/qwen38-fresh75-fleet-dev17-opencode-seed43-pass1-v3.json",
+      "merged_provenance_config_file_sha256": "sha256:30208082c3e79d7584272637d00d7fe488ecc5d1a6a64e82d705ec8d41073bb7",
+      "artifact_packet_path": "configs/evaluation/qwen38-fresh75-fleet-dev17-opencode-seed44-pass1-v1.artifact.json",
+      "artifact_packet_file_sha256": "sha256:3fc2d486589ff692449ef0fefafe140b5cafeb8c9d880b49c6c3a0b536a8eb9e",
+      "artifact_packet_sha256": "sha256:f57c76395f2c4ea887b7c6530e5206c54ca9eba1c4399c79c2808c111dd4fe79"
+    },
+    "lora60": {
+      "state": "blocked_before_scientific_config",
+      "preparation_path": "configs/evaluation/qwen38-lora-step60-fleet-dev17-seed44-preparation-v1.json",
+      "preparation_file_sha256": "sha256:21512027cb532b21dfb3eb5546223380aefbba0280629e4d51dd9e782a0b002d",
+      "preparation_sha256": "sha256:30fe34f73d6098d9653cb920db847ab260f532f0413b2515a471307a487e5d5d",
+      "model_revision": null,
+      "session_model": null,
+      "served_id": null,
+      "evaluation_config": null,
+      "evaluation_plan_sha256": null
+    }
+  },
+  "score_blind_live_reconciliation": {
+    "observed_at": "2026-09-21T14:32:35Z",
+    "fresh75_seed43_primary": {
+      "job": "chris-q38-dev17-s43-fresh75-p1-v1",
+      "job_uid": "d8fd2e3f-db6a-4ec5-89f3-fec695668486",
+      "active": 0,
+      "failed": 1,
+      "terminal_reason": "BackoffLimitExceeded",
+      "root_failure_alerts": "off",
+      "priority_class": "c1",
+      "gpu_requests": 0,
+      "database": "q38_dev17_s43_fresh75_p1_v1",
+      "database_plan_sha256": "sha256:8bd55b50ce60c5a7b860c35433aa8f56208e9de0b0e12a0f937432e27097a990",
+      "total": 17,
+      "accepted": 15,
+      "retry_review": 2,
+      "local_results": 15,
+      "claimed": 0,
+      "pending": 0,
+      "stale_active": 0,
+      "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s43-fresh75-p1-v1",
+      "output_root_exists": true,
+      "interpretation": "Seed 43 is occupied. These cells remain governed only by the frozen recovery contract and are not inputs to seed 44."
+    },
+    "fresh75_route": {
+      "uid": "e624a6f0-8748-433c-973e-aefc7f22ddf6",
+      "resource_version": "31317303",
+      "generation": 3,
+      "phase": "paused",
+      "active_pods": 0,
+      "ready_pods": 0,
+      "last_active_at": "2026-09-21T04:12:50Z",
+      "fresh_resume_and_live_parity_required": true
+    },
+    "lora60": {
+      "checkpoint_exists": true,
+      "checkpoint_manifest_exists": true,
+      "qualification_output_root_exists": false,
+      "merged_export_exists": false,
+      "accepted_route_exists": false,
+      "evaluation_job_or_database_or_output_identity_minted": false
+    },
+    "content_or_scores_accessed": false,
+    "external_mutations": 0
+  },
+  "retry_policy": {
+    "automatic_retry": false,
+    "max_reviewed_infrastructure_retries_per_cell": 1,
+    "review_requires_score_blind_reconciliation_digest_and_proof_of_no_valid_outcome": true,
+    "decision_rule_is_arm_blind": true,
+    "valid_outcome_including_valid_zero_is_final": true,
+    "cross_experiment_recovery_forbidden": true
+  },
+  "terminal_policy": {
+    "accepted_cells_required_per_arm": 17,
+    "comparison_requires_all_three_arms_complete": true,
+    "pending_claimed_retry_review_or_terminal_invalid_means_incomplete": true,
+    "incomplete_cells_are_not_capability_results": true,
+    "cross_arm_splicing_forbidden": true,
+    "selective_replay_forbidden": true
+  },
+  "future_resource_contract": {
+    "resource_identities_minted": false,
+    "job": null,
+    "config_map": null,
+    "database": null,
+    "output_root": null,
+    "root_job_api_version": "batch/v1",
+    "root_job_kind": "Job",
+    "root_failure_alert_annotation": "off",
+    "create_once_annotation": "true",
+    "priority_class": "c1",
+    "backoff_limit": 0,
+    "evaluator_gpu_request": 0,
+    "evaluator_cpu_request": "4",
+    "evaluator_memory_request": "32Gi",
+    "server_preview_required": true,
+    "job_configmap_workload_pod_output_database_absence_required": true,
+    "fresh_live_parity_required_for_each_served_checkpoint": true,
+    "uncertain_create_must_not_be_repeated": true,
+    "idle_route_or_worker_must_be_released": true
+  },
+  "gates_before_launch_packet": [
+    "LoRA step60 must have an accepted zero-update merged export and one-GPU finite reload receipt on current main.",
+    "LoRA step60 must have an exact base-runtime-matched route and fresh live-parity receipt.",
+    "Fresh75 must be resumed just in time and pass a fresh route identity and live-parity check.",
+    "All three exact evaluation configs and plans must be compiled and bound before any arm is created.",
+    "Fresh job, ConfigMap, database and output identities must be new and must not reuse the occupied seed-43 cells.",
+    "A fresh read-only API, database, Kubernetes and output census must prove every intended identity absent.",
+    "A Kubernetes server dry-run must prove the exact root annotations, c1 priority, CPU-only evaluator and backoffLimit zero."
+  ],
+  "operation": {
+    "jobs_submitted": 0,
+    "config_maps_created": 0,
+    "databases_created": 0,
+    "outputs_created": 0,
+    "routes_resumed_or_created": 0,
+    "evaluation_sessions_created": 0
+  },
+  "sha256": "fb26ffc5af3863a279014fdfcbbe08bd7e91df15a41f16b476aaeaecb1e1db20"
+}
