@@ -1,3 +1,16 @@
+# Historical Qwen3.8 canonical-link Job (non-launchable evidence)
+
+This Markdown file preserves the exact 2026-09-01 manifest bytes inside the
+fence below. It is evidence, not a Kubernetes manifest or reusable launch
+template. Do not pass this file or the fenced bytes to `kubectl`: the historical
+root `Job` omits the mandatory `fleet.ai/failure-alerts: "off"` annotation.
+Any successor must be newly rendered, independently reviewed, and proven to
+contain that exact root annotation before creation.
+
+The fenced bytes are bound by SHA-256 in
+[`failed-job-alert-opt-out-20260920.json`](../failed-job-alert-opt-out-20260920.json).
+
+```yaml
 apiVersion: batch/v1
 kind: Job
 metadata:
@@ -132,3 +145,4 @@ spec:
         - name: sfs
           persistentVolumeClaim:
             claimName: sfs-shared
+```
