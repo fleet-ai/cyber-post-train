@@ -19,6 +19,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import httpx
+import yaml
 
 from cyber_post_train.jobs import digest
 from evals.fleet import opencode_self_hosted as harness
@@ -26,7 +27,6 @@ from evals.fleet import rollout_ledger as ledger
 from evals.fleet import rollout_postgres as postgres
 from evals.fleet import rollout_worker as worker
 from evals.fleet.fixed_proxy import completion_overrides
-from training.sft import _known, read_mapping
 
 CATALOG_FIELDS = {"engine", "precision", "tensor_parallel_size"}
 MODEL_FIELDS = {"model_path", "model_type", "architectures"}
@@ -58,6 +58,22 @@ RUNTIME_FILES = (
     "fixed_proxy.py",
     "exact_pass4_crypto.py",
 )
+
+
+def read_mapping(path: Path) -> dict:
+    text = path.read_text()
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError:
+        value = yaml.safe_load(text)
+    if not isinstance(value, dict):
+        raise ValueError("configuration/manifest must be a mapping")
+    return value
+
+
+def _known(value: dict, names: set[str], label: str) -> None:
+    if not isinstance(value, dict) or value.keys() - names:
+        raise ValueError(f"unknown fields in {label}; check the documented configuration")
 
 
 def runtime_identity() -> dict:
@@ -163,12 +179,17 @@ def compile_eval(config: dict, *, relative_to: Path) -> dict:
     for name, model in models.items():
         if not isinstance(name, str) or not re.fullmatch(r"[a-z0-9][a-z0-9.-]{0,63}", name):
             raise ValueError("model aliases must be lowercase names; dots and hyphens are allowed")
+        revision = model.get("revision")
         if (
             set(model) != {"repository", "revision", "session_model"}
-            or not re.fullmatch(r"[a-f0-9]{40}", model["revision"])
+            or not isinstance(revision, str)
+            or re.fullmatch(r"(?:[a-f0-9]{40}|sha256:[a-f0-9]{64})", revision) is None
             or not all(isinstance(v, str) and v for v in model.values())
         ):
-            raise ValueError("model needs repository, exact revision and catalog session identity")
+            raise ValueError(
+                "model needs repository, exact source-or-payload revision "
+                "and catalog session identity"
+            )
     for block, route in routes.items():
         _name(block)
         if set(route) != {
@@ -349,11 +370,13 @@ def check_images(plan: dict) -> None:
         if result.returncode:
             raise RuntimeError("immutable harness image is not staged on this worker")
         info = json.loads(result.stdout)
-        if (
-            image not in [info.get("Id"), *(info.get("RepoDigests") or [])]
-            or info.get("Os") != "linux"
-            or info.get("Architecture") != "amd64"
-        ):
+        # A content-addressed local image ID must match byte-for-byte.  An OCI
+        # index reference is different: Docker resolves the requested index to
+        # its linux/amd64 child, so the local image ID and RepoDigests need not
+        # echo the parent index digest.  Inspecting the exact @sha256 reference
+        # after the entrypoint's successful exact-digest pull is the binding.
+        local_id_matches = not image.startswith("sha256:") or info.get("Id") == image
+        if not local_id_matches or info.get("Os") != "linux" or info.get("Architecture") != "amd64":
             raise RuntimeError("harness image bytes or platform differ")
         if image == plan["images"]["agent"]:
             labels = info.get("Config", {}).get("Labels") or {}
@@ -364,7 +387,10 @@ def check_images(plan: dict) -> None:
                 raise RuntimeError("harness release identity differs")
     # Version alone never initializes OpenCode's data directories. Exercise the
     # same uid, HOME and private mount as a real agent, offline and before claims.
-    with tempfile.TemporaryDirectory(prefix="cpt-agent-preflight-") as home:
+    bind_root = os.environ.get("DOCKER_BIND_ROOT")
+    if bind_root is not None and not Path(bind_root).is_dir():
+        raise RuntimeError("shared Docker bind root is unavailable")
+    with tempfile.TemporaryDirectory(prefix="cpt-agent-preflight-", dir=bind_root) as home:
         if os.geteuid() == 0:
             os.chown(home, 1000, 1000)
         startup = subprocess.run(

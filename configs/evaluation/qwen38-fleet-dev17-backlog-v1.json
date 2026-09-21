@@ -1,0 +1,104 @@
+{
+  "schema": "qwen38_fleet_dev17_backlog_v1",
+  "observed_at": "2026-09-20T23:56:44Z",
+  "purpose": "Launch each accepted Qwen3.8 checkpoint as a separate candidate arm against the already-running exact base control, without opening the sealed final set.",
+  "frozen_protocol": {
+    "task_set": "configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json",
+    "task_set_file_sha256": "sha256:79c834e739246da29aca9513965ecfc7032f8df7744eb2245ce0303aba1b97c5",
+    "selection_sha256": "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
+    "task_versions": 17,
+    "final_test_access": "sealed",
+    "harness": "opencode",
+    "harness_version": "1.18.27",
+    "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v2",
+    "context_window_size": 262144,
+    "compaction_headroom_tokens": 20000,
+    "max_output_tokens": 32768,
+    "max_model_requests": 600,
+    "timeout_seconds": 28800,
+    "pass_k": 1,
+    "concurrency": 8,
+    "automatic_retry": false,
+    "training_data_eligible": false,
+    "sampling": {"temperature": 0.6, "top_p": 0.95, "seed": 42},
+    "images": {
+      "agent": "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92",
+      "proxy": "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+    }
+  },
+  "required_live_route": {
+    "catalog": {"engine": "sglang", "precision": "bf16", "tensor_parallel_size": 1},
+    "model_info": {
+      "model_type": "qwen3_5",
+      "architectures": ["Qwen3_5ForConditionalGeneration"]
+    },
+    "server_info": {
+      "context_length": 262144,
+      "tp_size": 1,
+      "dp_size": 8,
+      "load_balance_method": "total_tokens",
+      "quantization": null,
+      "kv_cache_dtype": "fp8_e4m3",
+      "reasoning_parser": "qwen3",
+      "tool_call_parser": "qwen3_coder"
+    },
+    "runtime_parity": "The candidate must use the current base image, entrypoint, compatibility shim, arguments, and feature flags; only model weights/path, served identity, and their bound revision may differ."
+  },
+  "base_control": {
+    "status": "in_progress",
+    "job_name": "chris-q38-base-dev17-p1-v1",
+    "job_uid": "c37c4dff-e5fc-4132-8a44-8e93b66cd248",
+    "evaluation_plan_sha256": "sha256:c5a95bef1923b117a25b9098f37a4675ccc9c00979a15e04e404e33e479aec56",
+    "cell_ledger_plan_sha256": "sha256:dfa968993a60c5fe4898cdaf4d7ef42a5d2807026518879747cf9b2abb7010aa",
+    "accepted_sessions": 4
+  },
+  "candidates": [
+    {
+      "priority": 1,
+      "artifact_id": "q38-fresh75-step230",
+      "revision": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
+      "status": "running_real_model_calls_zero_authoritative_sessions_yet",
+      "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-fresh75-p1-v1",
+      "database": "q38_fresh75_dev17_p1_v1",
+      "job_name": "chris-q38-fresh75-dev17-p1-v1",
+      "job_uid": "162061f7-9185-44f8-babc-5ae17f4c5800",
+      "pod_uid": "29776b7e-e3e6-4b38-bb98-9e29b6883ac2",
+      "configmap_uid": "80b267ea-baba-42e6-b0f4-09f6b5548b03",
+      "live_parity_receipt_sha256": "sha256:609934e6f0d80618aa1640267f862e4398aa501d994138f1a520044caebe408e",
+      "evaluation_plan_sha256": "sha256:9d77927c6a0938d7f9a4b2785aabf29b81dc8563741a35f96ffc86eb670f53e5",
+      "cell_ledger_plan_sha256": "sha256:ea478285633b2ad523ba6e0d7ba5d4b44759bfc4cf06d82cc62e9f85aab5ccba",
+      "evidence": "docs/evidence/qwen38-fresh75-fleet-dev17-candidate-launch-20260920.json"
+    },
+    {
+      "priority": 2,
+      "artifact_id": "q38-teacher-dense-v5-step186",
+      "revision": "sha256:e6d59f5a58ce54b913d775cd71b81c64bd54637b53795df82baec0f71efefaf9",
+      "status": "staged_registered_paused_waiting_for_parity_route",
+      "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-teacher-v5-p1-v1",
+      "database": "q38_teacher_v5_dev17_p1_v1"
+    },
+    {
+      "priority": 3,
+      "artifact_id": "q38-self-sft-step44",
+      "accepted_export_receipt_sha256": "sha256:12f06f12a35f9c0509610f8bed8cb685fc23864490ec5de7739ee1e6aa48f606",
+      "status": "waiting_for_create_once_stage_registration_and_parity_route",
+      "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-self44-p1-v1",
+      "database": "q38_self44_dev17_p1_v1"
+    },
+    {
+      "priority": 4,
+      "artifact_id": "q38-available-a-lr30-step76",
+      "accepted_export_receipt_sha256": "sha256:983bf6daa2f8b7680560c834cbfb76fb8fe7fba5a273f116b9b3e80ef9f97538",
+      "status": "waiting_for_export_forward_stage_registration_and_parity_route",
+      "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-lr30-p1-v1",
+      "database": "q38_lr30_dev17_p1_v1"
+    }
+  ],
+  "launch_gate": [
+    "exact serving UID, revision, catalog, model_info, server_info, and runtime-parity receipt",
+    "candidate output root and dedicated database both absent",
+    "no existing accepted evaluation with the complete duplicate identity",
+    "server preview proves c1, zero GPU requests, and root fleet.ai/failure-alerts=off"
+  ]
+}
