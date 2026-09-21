@@ -1,6 +1,7 @@
 import base64
 import json
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 
@@ -17,6 +18,11 @@ from cyber_post_train.sfs_output_job import (
     collect_sfs_output_receipt,
     validate_sfs_output_job_node_fit,
     validate_sfs_output_job_response,
+)
+
+ROOT = Path(__file__).parents[1]
+LIVE_DRIFT_EVIDENCE = (
+    ROOT / "docs/evidence/qwen38-sft-sfs-observer-kueue-v1beta2-drift-20260921.json"
 )
 
 
@@ -60,6 +66,15 @@ def node_inventory(*, memory="65216572Ki"):
                 },
             }
         ],
+    }
+
+
+def service_account():
+    return {
+        "apiVersion": "v1",
+        "kind": "ServiceAccount",
+        "metadata": {"name": "default", "namespace": "fleet-train-jobs"},
+        "imagePullSecrets": [{"name": "ecr-pull"}],
     }
 
 
@@ -120,6 +135,9 @@ def completed_objects(package, receipt):
         },
     }
     pod["spec"]["nodeName"] = "shared-cpu-1"
+    pod["spec"]["serviceAccount"] = "default"
+    pod["spec"]["serviceAccountName"] = "default"
+    pod["spec"]["imagePullSecrets"] = [{"name": "ecr-pull"}]
     workload = {
         "apiVersion": "kueue.x-k8s.io/v1beta2",
         "kind": "Workload",
@@ -142,11 +160,19 @@ def completed_objects(package, receipt):
         "spec": {
             "queueName": "training-lq",
             "priority": 10000,
+            "priorityClassRef": {
+                "group": "kueue.x-k8s.io",
+                "kind": "WorkloadPriorityClass",
+                "name": "q1",
+            },
             "active": True,
             "podSets": [
                 {
                     "name": "main",
                     "count": 1,
+                    "topologyRequest": {
+                        "podIndexLabel": "batch.kubernetes.io/job-completion-index"
+                    },
                     "template": {
                         "metadata": {
                             "annotations": deepcopy(
@@ -396,10 +422,195 @@ def test_terminal_collection_binds_job_pod_image_logs_and_fresh_receipt():
     receipt = {**unsigned, "sha256": digest(unsigned)}
     job, workloads, pods, logs = completed_objects(package, receipt)
     job["spec"]["suspend"] = False
-    assert collect_sfs_output_receipt(package, job, workloads, pods, logs, now=1001) == receipt
+    assert (
+        collect_sfs_output_receipt(
+            package,
+            job,
+            workloads,
+            pods,
+            service_account(),
+            logs,
+            now=1001,
+        )
+        == receipt
+    )
     pods["items"][0]["status"]["containerStatuses"][0]["restartCount"] = 1
     with pytest.raises(ValueError, match="restarted"):
-        collect_sfs_output_receipt(package, job, workloads, pods, logs, now=1001)
+        collect_sfs_output_receipt(
+            package,
+            job,
+            workloads,
+            pods,
+            service_account(),
+            logs,
+            now=1001,
+        )
+
+
+def test_live_kueue_v1beta2_drift_evidence_is_sanitized_and_self_digesting():
+    evidence = json.loads(LIVE_DRIFT_EVIDENCE.read_text())
+    assert evidence["sha256"] == digest(
+        {key: value for key, value in evidence.items() if key != "sha256"}
+    )
+    assert evidence["collector_result"] == {
+        "accepted": False,
+        "reason": "unreviewed_kueue_v1beta2_workload_fields",
+        "log_read_attempted": False,
+        "output_absence_receipt_created": False,
+        "training_rayjob_created": False,
+    }
+    assert evidence["live_shape"] == {
+        "workload_spec_priority_class_ref": {
+            "group": "kueue.x-k8s.io",
+            "kind": "WorkloadPriorityClass",
+            "name": "q1",
+        },
+        "pod_set_topology_request": {"podIndexLabel": "batch.kubernetes.io/job-completion-index"},
+        "job_template_image_pull_secrets": [],
+        "workload_pod_set_image_pull_secrets": [],
+        "scheduled_pod_service_account": "default",
+        "default_service_account_image_pull_secrets": ["ecr-pull"],
+        "scheduled_pod_image_pull_secrets": ["ecr-pull"],
+        "crd_storage_version": "v1beta2",
+        "crd_priority_class_ref_required_fields": ["group", "kind", "name"],
+    }
+    assert evidence["privacy"] == {
+        "credentials_present": False,
+        "prompts_present": False,
+        "private_logs_present": False,
+        "scores_present": False,
+    }
+
+
+@pytest.mark.parametrize(
+    "pull_secrets",
+    [
+        [{"name": "other"}],
+        [{"name": "ecr-pull"}, {"name": "other"}],
+        [{"name": "ecr-pull", "unreviewed": True}],
+    ],
+)
+def test_terminal_pod_rejects_every_nonexact_service_account_pull_secret(pull_secrets):
+    package = build_sfs_output_job(plan(), request(), 1)
+    unsigned = {
+        "schema": "cyber_sft_output_absence_v1",
+        "status": "passed",
+        "checked_at_epoch": 1000,
+        "plan_sha256": digest(plan()),
+        "request_sha256": digest(request()),
+        "run_name": request()["name"],
+        "run_dir": request()["run_dir"],
+        "sfs_jobs_root": "/mnt/sfs/jobs",
+        "output_absent": True,
+    }
+    receipt = {**unsigned, "sha256": digest(unsigned)}
+    job, workloads, pods, logs = completed_objects(package, receipt)
+    job["spec"]["suspend"] = False
+    pods["items"][0]["spec"]["imagePullSecrets"] = pull_secrets
+    with pytest.raises(ValueError, match="imagePullSecrets drifted"):
+        collect_sfs_output_receipt(
+            package,
+            job,
+            workloads,
+            pods,
+            service_account(),
+            logs,
+            now=1001,
+        )
+
+
+@pytest.mark.parametrize("fault", ["secret-env", "secret-volume"])
+def test_terminal_pod_rejects_service_account_unrelated_secret_surfaces(fault):
+    package = build_sfs_output_job(plan(), request(), 1)
+    unsigned = {
+        "schema": "cyber_sft_output_absence_v1",
+        "status": "passed",
+        "checked_at_epoch": 1000,
+        "plan_sha256": digest(plan()),
+        "request_sha256": digest(request()),
+        "run_name": request()["name"],
+        "run_dir": request()["run_dir"],
+        "sfs_jobs_root": "/mnt/sfs/jobs",
+        "output_absent": True,
+    }
+    receipt = {**unsigned, "sha256": digest(unsigned)}
+    job, workloads, pods, logs = completed_objects(package, receipt)
+    job["spec"]["suspend"] = False
+    pod_spec = pods["items"][0]["spec"]
+    if fault == "secret-env":
+        pod_spec["containers"][0]["envFrom"] = [{"secretRef": {"name": "unreviewed-secret"}}]
+    else:
+        pod_spec["volumes"].append(
+            {"name": "unreviewed-secret", "secret": {"secretName": "unreviewed-secret"}}
+        )
+    with pytest.raises(ValueError):
+        collect_sfs_output_receipt(
+            package,
+            job,
+            workloads,
+            pods,
+            service_account(),
+            logs,
+            now=1001,
+        )
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "api-version",
+        "kind",
+        "name",
+        "namespace",
+        "missing-pull-secret",
+        "extra-pull-secret",
+        "legacy-secret",
+        "pod-service-account",
+    ],
+)
+def test_terminal_pod_requires_exact_fresh_default_service_account_binding(fault):
+    package = build_sfs_output_job(plan(), request(), 1)
+    unsigned = {
+        "schema": "cyber_sft_output_absence_v1",
+        "status": "passed",
+        "checked_at_epoch": 1000,
+        "plan_sha256": digest(plan()),
+        "request_sha256": digest(request()),
+        "run_name": request()["name"],
+        "run_dir": request()["run_dir"],
+        "sfs_jobs_root": "/mnt/sfs/jobs",
+        "output_absent": True,
+    }
+    receipt = {**unsigned, "sha256": digest(unsigned)}
+    job, workloads, pods, logs = completed_objects(package, receipt)
+    job["spec"]["suspend"] = False
+    account = service_account()
+    if fault == "api-version":
+        account["apiVersion"] = "v2"
+    elif fault == "kind":
+        account["kind"] = "Secret"
+    elif fault == "name":
+        account["metadata"]["name"] = "other"
+    elif fault == "namespace":
+        account["metadata"]["namespace"] = "other"
+    elif fault == "missing-pull-secret":
+        account["imagePullSecrets"] = []
+    elif fault == "extra-pull-secret":
+        account["imagePullSecrets"].append({"name": "other"})
+    elif fault == "legacy-secret":
+        account["secrets"] = [{"name": "token"}]
+    else:
+        pods["items"][0]["spec"]["serviceAccountName"] = "other"
+    with pytest.raises(ValueError, match="ServiceAccount"):
+        collect_sfs_output_receipt(
+            package,
+            job,
+            workloads,
+            pods,
+            account,
+            logs,
+            now=1001,
+        )
 
 
 @pytest.mark.parametrize(
@@ -414,6 +625,13 @@ def test_terminal_collection_binds_job_pod_image_logs_and_fresh_receipt():
         "wrong-cluster-queue",
         "wrong-class",
         "wrong-priority",
+        "missing-priority-ref",
+        "wrong-priority-ref-group",
+        "wrong-priority-ref-kind",
+        "wrong-priority-ref-name",
+        "missing-topology-request",
+        "wrong-topology-request",
+        "extra-topology-request-field",
         "wrong-podset-count",
         "gpu-resource",
         "missing-admission",
@@ -460,6 +678,22 @@ def test_terminal_collection_requires_exact_live_kueue_admission(fault):
         workload["spec"]["priorityClassName"] = "q0"
     elif fault == "wrong-priority":
         workload["spec"]["priority"] = 0
+    elif fault == "missing-priority-ref":
+        workload["spec"].pop("priorityClassRef")
+    elif fault == "wrong-priority-ref-group":
+        workload["spec"]["priorityClassRef"]["group"] = "wrong.example"
+    elif fault == "wrong-priority-ref-kind":
+        workload["spec"]["priorityClassRef"]["kind"] = "PriorityClass"
+    elif fault == "wrong-priority-ref-name":
+        workload["spec"]["priorityClassRef"]["name"] = "q0"
+    elif fault == "missing-topology-request":
+        workload["spec"]["podSets"][0].pop("topologyRequest")
+    elif fault == "wrong-topology-request":
+        workload["spec"]["podSets"][0]["topologyRequest"] = {
+            "podIndexLabel": "unreviewed.example/index"
+        }
+    elif fault == "extra-topology-request-field":
+        workload["spec"]["podSets"][0]["topologyRequest"]["unconstrained"] = True
     elif fault == "wrong-podset-count":
         workload["spec"]["podSets"][0]["count"] = 2
     elif fault == "gpu-resource":
@@ -477,7 +711,15 @@ def test_terminal_collection_requires_exact_live_kueue_admission(fault):
     else:
         workload["status"]["conditions"].append({"type": "Evicted", "status": "True"})
     with pytest.raises(ValueError):
-        collect_sfs_output_receipt(package, job, workloads, pods, logs, now=1001)
+        collect_sfs_output_receipt(
+            package,
+            job,
+            workloads,
+            pods,
+            service_account(),
+            logs,
+            now=1001,
+        )
 
 
 def test_collection_rejects_stale_receipt_even_after_successful_job():
@@ -497,7 +739,15 @@ def test_collection_rejects_stale_receipt_even_after_successful_job():
     job, workloads, pods, logs = completed_objects(package, receipt)
     job["spec"]["suspend"] = False
     with pytest.raises(ValueError, match="stale"):
-        collect_sfs_output_receipt(package, job, workloads, pods, logs, now=2000)
+        collect_sfs_output_receipt(
+            package,
+            job,
+            workloads,
+            pods,
+            service_account(),
+            logs,
+            now=2000,
+        )
 
 
 def test_package_reopens_tracked_driver_before_use(tmp_path, monkeypatch):

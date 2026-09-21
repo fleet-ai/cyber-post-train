@@ -1075,6 +1075,18 @@ class Kubectl:
             ]
         )
 
+    def get_output_check_service_account(self) -> dict:
+        return self._run(
+            [
+                "get",
+                "serviceaccount",
+                "default",
+                "--namespace",
+                NAMESPACE,
+                "--output=json",
+            ]
+        )
+
     def output_check_logs(self, pod: str) -> str:
         if re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,251}[a-z0-9])?", pod) is None:
             raise JobsError("invalid output-check Pod name")
@@ -1473,9 +1485,23 @@ def collect_sfs_output_check(*, plan: dict, request: dict, attempt: int, kubectl
             raise JobsError("output-check Job readback omitted its immutable UID")
         workloads = kubectl.list_output_check_workloads(job_uid)
         pods = kubectl.list_output_check_pods(name)
-        pod_name = validate_completed_sfs_output_job(package, job, workloads, pods)
+        service_account = kubectl.get_output_check_service_account()
+        pod_name = validate_completed_sfs_output_job(
+            package,
+            job,
+            workloads,
+            pods,
+            service_account,
+        )
         logs = kubectl.output_check_logs(pod_name)
-        return collect_sfs_output_receipt(package, job, workloads, pods, logs)
+        return collect_sfs_output_receipt(
+            package,
+            job,
+            workloads,
+            pods,
+            service_account,
+            logs,
+        )
     except (OSError, ValueError) as exc:
         raise JobsError(str(exc)) from None
 

@@ -804,6 +804,12 @@ def test_output_check_collection_requires_admitted_exact_job_pod_and_receipt(tmp
         },
     }
     pod["spec"]["nodeName"] = "shared-cpu-1"
+    pod["spec"]["serviceAccount"] = "default"
+    pod["spec"]["serviceAccountName"] = "default"
+    # Kubernetes only copies the default ServiceAccount pull secret when the
+    # submitted PodSpec has no explicit pull secrets. This fixture's request
+    # deliberately carries registry-pull, so the scheduled Pod must preserve
+    # that exact reviewed value rather than gain ecr-pull.
     workload = {
         "apiVersion": "kueue.x-k8s.io/v1beta2",
         "kind": "Workload",
@@ -826,11 +832,19 @@ def test_output_check_collection_requires_admitted_exact_job_pod_and_receipt(tmp
         "spec": {
             "queueName": "training-lq",
             "priority": 10000,
+            "priorityClassRef": {
+                "group": "kueue.x-k8s.io",
+                "kind": "WorkloadPriorityClass",
+                "name": "q1",
+            },
             "active": True,
             "podSets": [
                 {
                     "name": "main",
                     "count": 1,
+                    "topologyRequest": {
+                        "podIndexLabel": "batch.kubernetes.io/job-completion-index"
+                    },
                     "template": {
                         "metadata": {
                             "annotations": deepcopy(
@@ -883,6 +897,14 @@ def test_output_check_collection_requires_admitted_exact_job_pod_and_receipt(tmp
         def list_output_check_workloads(self, job_uid):
             assert job_uid == CREATED_UID
             return {"kind": "List", "items": [deepcopy(workload)]}
+
+        def get_output_check_service_account(self):
+            return {
+                "apiVersion": "v1",
+                "kind": "ServiceAccount",
+                "metadata": {"name": "default", "namespace": "fleet-train-jobs"},
+                "imagePullSecrets": [{"name": "ecr-pull"}],
+            }
 
         def output_check_logs(self, name):
             assert name == pod["metadata"]["name"]
@@ -1340,6 +1362,40 @@ def test_output_check_workload_read_is_scoped_to_exact_job_uid(monkeypatch):
     with pytest.raises(JobsError, match="invalid output-check Job UID"):
         kube.list_output_check_workloads("not-a-uid")
     assert len(calls) == 1
+
+
+def test_output_check_service_account_read_is_exact_and_read_only(monkeypatch):
+    calls = []
+    response = {
+        "apiVersion": "v1",
+        "kind": "ServiceAccount",
+        "metadata": {"name": "default", "namespace": "fleet-train-jobs"},
+        "imagePullSecrets": [{"name": "ecr-pull"}],
+    }
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs))
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(response),
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", run)
+    assert Kubectl("prod-context").get_output_check_service_account() == response
+    assert len(calls) == 1
+    command, kwargs = calls[0]
+    assert command[-6:] == [
+        "get",
+        "serviceaccount",
+        "default",
+        "--namespace",
+        "fleet-train-jobs",
+        "--output=json",
+    ]
+    assert kwargs.get("input") is None
+    assert not any(token in command for token in ("create", "apply", "patch", "delete"))
 
 
 def test_cpu_checkpoint_boundary_previews_and_creates_only_unpinned_zero_gpu_pod(monkeypatch):

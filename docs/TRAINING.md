@@ -240,12 +240,19 @@ collection requires the live admitted Job to be unsuspended, terminally
 successful, and bound by exact Job UID to one zero-restart Pod running the exact
 image at effective c1. It also requires exactly one Kueue Workload owned by that
 exact Job UID, still carrying nonempty admission, `Admitted=True`,
-`Finished=True`, `training-lq` and effective priority 10000. Fleet's live Kueue
-v1beta2 Workload leaves its optional priority-class name null, so q1 is proved
-by the exact persisted Job label while numeric 10000 is proved on the Workload;
-unsuspension by itself is not admission evidence. The Pod emits only one sanitized,
-plan/request-bound receipt line. Server dry-run and live readback reject added Secrets, sidecars,
-privilege, host pinning, affinity, runtime overhead, GPUs, or writable SFS.
+`Finished=True`, `training-lq` and effective priority 10000. Fleet's current
+Kueue v1beta2 Workload binds q1 through the exact `priorityClassRef` tuple and
+binds indexed Job topology through the exact completion-index label; the
+retired scalar priority-class fields must remain absent. Numeric 10000 is proved
+on the Workload, and unsuspension by itself is not admission evidence. The
+scheduled Pod may gain the namespace default ServiceAccount's sole `ecr-pull`
+image-pull reference only when the reviewed Job and Workload PodSet had no pull
+secret. Collection re-reads that exact `default` ServiceAccount in the exact
+namespace and rejects a missing, changed, or additional pull reference; it
+never permits a Secret-backed environment, volume, or sidecar. The Pod emits
+only one sanitized, plan/request-bound receipt line. Server dry-run and live
+readback reject added Secrets, sidecars, privilege, host pinning, affinity,
+runtime overhead, GPUs, or writable SFS.
 The observer requires the accepted native `PREFLIGHT.json` and proves only that
 the output path was absent at its timestamp; it does not validate the dataset,
 trainer, CUDA path, or model.
