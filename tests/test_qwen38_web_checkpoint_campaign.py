@@ -51,11 +51,17 @@ def _campaigns(plan: dict) -> dict[str, int]:
     return campaigns
 
 
-def test_plan_is_self_digesting_inert_and_bound_to_reviewed_source() -> None:
+def test_plan_is_self_digesting_inert_and_preserves_historical_source_bindings() -> None:
     plan = _load()
 
     assert plan["schema"] == "cyber_qwen38_web_checkpoint_campaign_preparation_v1"
     assert plan["sha256"] == _digest(plan)
+    assert plan["sha256"] == (
+        "sha256:13e219cd49781427c0a00237d8bea037e85603646fc9451dacc6876f44f716d5"
+    )
+    assert _sha256(PLAN_PATH) == (
+        "sha256:5f5070e32bd56d7e4bb4d9c0c5aa049ba9ad9e8b0c4155138a504a5422647506"
+    )
     assert plan["source"]["prepared_against_main_commit"] == (
         "c4725e7586d583821745391048c59a53f1eaadb8"
     )
@@ -63,10 +69,15 @@ def test_plan_is_self_digesting_inert_and_bound_to_reviewed_source() -> None:
         plan["execution"]["static_repository_census"]["prepared_against_commit"]
         == (plan["source"]["prepared_against_main_commit"])
     )
-    for binding in plan["source"].values():
-        if not isinstance(binding, dict) or "path" not in binding:
-            continue
-        assert _sha256(ROOT / binding["path"]) == binding["file_sha256"]
+    # This v1 plan and its preparation receipt are immutable historical
+    # evidence.  In particular, they intentionally preserve the launcher bytes
+    # reviewed at c4725e75 rather than pretending to bind a later launcher.
+    # The additive budget-repair receipt owns the current source bindings and
+    # tests/test_qwen38_web_checkpoint_budget_contract.py checks them against
+    # the live files.
+    assert plan["source"]["collection_launcher_source"]["file_sha256"] == (
+        "sha256:577fd2fad738bd4ac256ea032b7d4add6771b6c99b9a8c65e757df876978c551"
+    )
 
     status = plan["status"]
     assert status["state"] == "prepared_not_launchable"
