@@ -1,6 +1,6 @@
 {
   "schema": "cyber_qwen38_next_sft_intentional_launch_v1",
-  "observed_at": "2026-09-21T00:05:00Z",
+  "observed_at": "2026-09-21T00:16:00Z",
   "status": "v1_infrastructure_invalid_v2_current_main_exact_image_preflight_running",
   "shared_treatment": {
     "model": "Qwen/Qwen3.8-27B",
@@ -58,11 +58,22 @@
     "root_failure_alert_annotation": "off",
     "status": "cancelled_without_receipt_after_main_runtime_advanced"
   },
-  "repair_preflight": {
+  "superseded_ci_repair_preflight": {
     "pod": "chris-q38-t3k-context-repair-preflight-v3",
     "pod_uid": "582bc65f-1485-4fe4-b6ef-2c4cc014c9d2",
     "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
     "bundle_sha256": "dfcad98d867072295c54a8bf99e0d0c480c0b1372b21a544621767d3e9593f93",
+    "runtime_sha256": "3105f5211319cea56aa111cdea43eb7230d8b7e48bab958d44ed05506a019b08",
+    "gpus": 0,
+    "priority": "c1",
+    "root_failure_alert_annotation": "off",
+    "status": "cancelled_without_receipt_after_ci_exposed_reference_dev_preflight_gap"
+  },
+  "repair_preflight": {
+    "pod": "chris-q38-t3k-context-repair-preflight-v5",
+    "pod_uid": "fb924e8d-077f-4965-bcc0-ee0f1fa94e0f",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "bundle_sha256": "fe8c5f744390f5be671e38d24b00fc88e85257f7aa4dcd7ef23353fac746b433",
     "runtime_sha256": "3105f5211319cea56aa111cdea43eb7230d8b7e48bab958d44ed05506a019b08",
     "gpus": 0,
     "priority": "c1",
