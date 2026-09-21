@@ -34,6 +34,54 @@ ZERO_RUN_ID = "00000000-0000-0000-0000-000000000000"
 SFT_SCHEMAS = {"cyber_sft_runtime_v2", "cyber_sft_runtime_dense_v1"}
 SFT_SECRET = "wandb-api"
 DIRECT_JOURNAL = "DIRECT_SUBMISSION.jsonl"
+CPU_CHECKPOINT_OPERATION_ANNOTATION = "cyber-post-train.fleet.ai/cpu-checkpoint-operation"
+CPU_CHECKPOINT_OPERATIONS = {"seal", "verify"}
+CPU_NODE_SELECTOR = {
+    "kubernetes.io/arch": "amd64",
+    "workload": "fleetai-training-ng-cpu",
+}
+
+
+def validate_cpu_checkpoint_pod(manifest: dict) -> dict:
+    """Reject GPU use and host-specific placement for a CPU checkpoint operation."""
+    try:
+        metadata = manifest["metadata"]
+        spec = manifest["spec"]
+        annotations = metadata["annotations"]
+        containers = spec["containers"]
+    except (KeyError, TypeError) as exc:
+        raise JobsError("malformed CPU checkpoint Pod") from exc
+    if manifest.get("apiVersion") != "v1" or manifest.get("kind") != "Pod":
+        raise JobsError("CPU checkpoint operation must be one v1 Pod")
+    if metadata.get("namespace") != NAMESPACE or not isinstance(metadata.get("name"), str):
+        raise JobsError("CPU checkpoint Pod namespace/name drift")
+    if annotations.get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF:
+        raise JobsError("CPU checkpoint Pod must opt out of failed-job alerts before create")
+    if annotations.get(CPU_CHECKPOINT_OPERATION_ANNOTATION) not in CPU_CHECKPOINT_OPERATIONS:
+        raise JobsError("CPU checkpoint Pod must name a supported seal/verify operation")
+    if spec.get("priorityClassName") != "c1":
+        raise JobsError("CPU checkpoint Pod must use c1 priority")
+    if spec.get("nodeSelector") != CPU_NODE_SELECTOR:
+        raise JobsError("CPU checkpoint Pod must select only the shared CPU pool and architecture")
+    if spec.get("nodeName") is not None or spec.get("affinity") is not None:
+        raise JobsError("CPU checkpoint Pod must not pin one host or add placement affinity")
+    if spec.get("restartPolicy") != "Never":
+        raise JobsError("CPU checkpoint Pod must use restartPolicy Never")
+    if not isinstance(containers, list) or not containers:
+        raise JobsError("CPU checkpoint Pod has no containers")
+    for container in [*spec.get("initContainers", []), *containers]:
+        if not isinstance(container, dict):
+            raise JobsError("CPU checkpoint Pod contains a malformed container")
+        resources = container.get("resources", {})
+        if not isinstance(resources, dict):
+            raise JobsError("CPU checkpoint Pod resources are malformed")
+        for field in ("requests", "limits"):
+            values = resources.get(field, {})
+            if not isinstance(values, dict):
+                raise JobsError("CPU checkpoint Pod resource quantities are malformed")
+            if "nvidia.com/gpu" in values:
+                raise JobsError("CPU checkpoint Pod must not request or limit GPUs")
+    return manifest
 
 
 def _templates(obj: dict) -> list[tuple[str, dict]]:
@@ -354,6 +402,19 @@ class Kubectl:
         )
 
     def create_once(self, manifest: dict) -> dict:
+        return self._run(["create", "--filename=-", "--output=json"], manifest=manifest)
+
+    def dry_run_cpu_checkpoint_pod(self, manifest: dict) -> dict:
+        """Server-preview one CPU seal/verifier after the local placement gate."""
+        validate_cpu_checkpoint_pod(manifest)
+        return self._run(
+            ["create", "--dry-run=server", "--filename=-", "--output=json"],
+            manifest=manifest,
+        )
+
+    def create_cpu_checkpoint_pod_once(self, manifest: dict) -> dict:
+        """Create exactly one locally validated CPU seal/verifier Pod."""
+        validate_cpu_checkpoint_pod(manifest)
         return self._run(["create", "--filename=-", "--output=json"], manifest=manifest)
 
 

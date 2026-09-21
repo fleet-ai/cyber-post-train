@@ -6,6 +6,8 @@ import pytest
 import yaml
 
 from cyber_post_train.direct_submit import (
+    CPU_CHECKPOINT_OPERATION_ANNOTATION,
+    CPU_NODE_SELECTOR,
     Kubectl,
     direct_submit_sft_once,
     render_sft_rayjob,
@@ -151,6 +153,36 @@ def manifest(value=None):
                     }
                 ],
             },
+        },
+    }
+
+
+def cpu_checkpoint_pod():
+    return {
+        "apiVersion": "v1",
+        "kind": "Pod",
+        "metadata": {
+            "name": "researcher-checkpoint-seal-v1",
+            "namespace": "fleet-train-jobs",
+            "annotations": {
+                "fleet.ai/failure-alerts": "off",
+                CPU_CHECKPOINT_OPERATION_ANNOTATION: "seal",
+            },
+        },
+        "spec": {
+            "priorityClassName": "c1",
+            "restartPolicy": "Never",
+            "nodeSelector": deepcopy(CPU_NODE_SELECTOR),
+            "containers": [
+                {
+                    "name": "seal",
+                    "image": "registry/image@sha256:" + "a" * 64,
+                    "resources": {
+                        "requests": {"cpu": "4", "memory": "16Gi"},
+                        "limits": {"cpu": "4", "memory": "16Gi"},
+                    },
+                }
+            ],
         },
     }
 
@@ -412,6 +444,69 @@ def test_kubectl_boundary_uses_only_get_server_dry_run_and_one_create(monkeypatc
     assert (
         sum("create" in command and "--dry-run=server" not in command for command, _ in calls) == 1
     )
+
+
+def test_cpu_checkpoint_boundary_previews_and_creates_only_unpinned_zero_gpu_pod(monkeypatch):
+    calls = []
+    expected = cpu_checkpoint_pod()
+
+    def run(command, **kwargs):
+        calls.append((command, json.loads(kwargs["input"])))
+        return subprocess.CompletedProcess(command, 0, stdout=json.dumps(expected), stderr="")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    kube = Kubectl("prod-context")
+    kube.dry_run_cpu_checkpoint_pod(expected)
+    kube.create_cpu_checkpoint_pod_once(expected)
+    assert len(calls) == 2
+    assert "--dry-run=server" in calls[0][0]
+    assert "--dry-run=server" not in calls[1][0]
+    assert all(call[1]["spec"]["nodeSelector"] == CPU_NODE_SELECTOR for call in calls)
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "hostname-selector",
+        "node-name",
+        "affinity",
+        "gpu-request",
+        "wrong-pool",
+        "wrong-priority",
+        "missing-alert-opt-out",
+        "missing-operation",
+    ],
+)
+def test_cpu_checkpoint_create_boundary_rejects_unsafe_placement_before_kubectl(monkeypatch, fault):
+    calls = []
+    pod = cpu_checkpoint_pod()
+    spec = pod["spec"]
+    if fault == "hostname-selector":
+        spec["nodeSelector"]["kubernetes.io/hostname"] = "busy-host"
+    elif fault == "node-name":
+        spec["nodeName"] = "busy-host"
+    elif fault == "affinity":
+        spec["affinity"] = {"nodeAffinity": {}}
+    elif fault == "gpu-request":
+        spec["containers"][0]["resources"]["requests"]["nvidia.com/gpu"] = 1
+    elif fault == "wrong-pool":
+        spec["nodeSelector"]["workload"] = "fleetai-training-ng-gpu"
+    elif fault == "wrong-priority":
+        spec["priorityClassName"] = "c0"
+    elif fault == "missing-alert-opt-out":
+        pod["metadata"]["annotations"].pop("fleet.ai/failure-alerts")
+    else:
+        pod["metadata"]["annotations"].pop(CPU_CHECKPOINT_OPERATION_ANNOTATION)
+
+    def run(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise AssertionError("unsafe CPU checkpoint Pod reached kubectl")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    kube = Kubectl("prod-context")
+    with pytest.raises(JobsError, match="CPU checkpoint Pod"):
+        kube.create_cpu_checkpoint_pod_once(pod)
+    assert calls == []
 
 
 def test_invalid_uuid_or_context_fails_locally():
