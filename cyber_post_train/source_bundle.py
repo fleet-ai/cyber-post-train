@@ -32,14 +32,17 @@ def verify_source_commit_file(path: Path, expected_commit: str) -> dict:
 def verify_source_archive_commit(path: Path, expected_commit: str) -> dict:
     """Verify the exact SOURCE_COMMIT bytes inside a gzip/tar source bundle."""
     expected = canonical_source_commit_bytes(expected_commit)
-    with tarfile.open(path, "r:gz") as archive:
-        matches = [member for member in archive.getmembers() if member.name == "SOURCE_COMMIT"]
-        if len(matches) != 1 or not matches[0].isfile():
-            raise ValueError("source archive must contain one regular SOURCE_COMMIT file")
-        stream = archive.extractfile(matches[0])
-        if stream is None:
-            raise ValueError("source archive SOURCE_COMMIT is unreadable")
-        actual = stream.read()
+    try:
+        with tarfile.open(path, "r:gz") as archive:
+            matches = [member for member in archive.getmembers() if member.name == "SOURCE_COMMIT"]
+            if len(matches) != 1 or not matches[0].isfile():
+                raise ValueError("source archive must contain one regular SOURCE_COMMIT file")
+            stream = archive.extractfile(matches[0])
+            if stream is None:
+                raise ValueError("source archive SOURCE_COMMIT is unreadable")
+            actual = stream.read()
+    except (OSError, tarfile.TarError) as exc:
+        raise ValueError("source archive is unreadable") from exc
     if actual != expected:
         raise ValueError("source archive commit is not the exact canonical text")
     return {

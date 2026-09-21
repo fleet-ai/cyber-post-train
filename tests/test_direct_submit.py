@@ -1,17 +1,25 @@
+import importlib.util
+import io
 import json
 import subprocess
+import tarfile
 from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
 import yaml
 
+from cyber_post_train import lora_cpu_preflight_driver
 from cyber_post_train.direct_submit import (
     CPU_CHECKPOINT_OPERATION_ANNOTATION,
     CPU_NODE_SELECTOR,
+    CPU_PREFLIGHT_BUNDLE_SHA256_ANNOTATION,
     CPU_SFS_MEMORY_FLOOR_MIB_ANNOTATION,
     CPU_SFS_OUTPUT_ROOT_ANNOTATION,
     CPU_SFS_OWNED_ROOT_ANNOTATION,
+    CPU_SOURCE_ARCHIVE_SHA256_ANNOTATION,
+    CPU_SOURCE_COMMIT_ANNOTATION,
     LORA_TRAINER_IMAGE,
     Kubectl,
     direct_submit_lr30_qualification_once,
@@ -20,11 +28,20 @@ from cyber_post_train.direct_submit import (
     render_sft_rayjob,
 )
 from cyber_post_train.jobs import JobsError, digest
+from cyber_post_train.lora_cpu_preflight import build_lora_cpu_preflight_package
+from cyber_post_train.lora_cpu_preflight_driver import (
+    ENV_BUNDLE_SHA256,
+    ENV_SOURCE_ARCHIVE,
+    ENV_SOURCE_ARCHIVE_SHA256,
+    ENV_SOURCE_COMMIT,
+)
+from cyber_post_train.source_bundle import canonical_source_commit_bytes
 from training import qwen38_lr30_step76_gate as lr30
 from training import sft
 
 RUN_ID = "12345678-1234-4234-9234-123456789abc"
 CREATED_UID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+SOURCE_COMMIT = "a108edff2062558359cc72ebdfaf5d40cadeb333"
 
 
 @pytest.fixture(autouse=True)
@@ -199,7 +216,7 @@ def cpu_checkpoint_pod():
     }
 
 
-def cpu_sfs_control_pod():
+def cpu_sfs_control_pod(*, source_bound=True):
     pod = cpu_checkpoint_pod()
     owned = "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls"
     output = owned + "/.preflight-control-step60-a21cbe7c"
@@ -269,7 +286,33 @@ def cpu_sfs_control_pod():
             ],
         }
     )
+    if source_bound:
+        bundle_sha256 = "b" * 64
+        archive_sha256 = "c" * 64
+        pod["metadata"]["annotations"].update(
+            {
+                CPU_PREFLIGHT_BUNDLE_SHA256_ANNOTATION: bundle_sha256,
+                CPU_SOURCE_ARCHIVE_SHA256_ANNOTATION: archive_sha256,
+                CPU_SOURCE_COMMIT_ANNOTATION: SOURCE_COMMIT,
+            }
+        )
+        container["env"].extend(
+            [
+                {"name": ENV_BUNDLE_SHA256, "value": bundle_sha256},
+                {"name": ENV_SOURCE_ARCHIVE, "value": "/mnt/sfs/source.tgz"},
+                {"name": ENV_SOURCE_ARCHIVE_SHA256, "value": archive_sha256},
+                {"name": ENV_SOURCE_COMMIT, "value": SOURCE_COMMIT},
+            ]
+        )
     return pod
+
+
+def source_archive(path: Path, commit: str = SOURCE_COMMIT) -> None:
+    value = canonical_source_commit_bytes(commit)
+    with tarfile.open(path, "w:gz") as archive:
+        member = tarfile.TarInfo("SOURCE_COMMIT")
+        member.size = len(value)
+        archive.addfile(member, io.BytesIO(value))
 
 
 def cpu_node_inventory():
@@ -710,18 +753,147 @@ def test_cpu_checkpoint_create_boundary_rejects_unsafe_placement_before_kubectl(
     assert calls == []
 
 
-def test_cpu_sfs_control_boundary_accepts_only_owned_non_root_transaction(monkeypatch):
+def test_cpu_sfs_control_rejects_the_old_naked_pod_submission_path(monkeypatch):
     calls = []
-    pod = cpu_sfs_control_pod()
+
+    def run(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise AssertionError("unpackaged CPU preflight reached kubectl")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(JobsError, match="source and SFS annotations must be complete"):
+        Kubectl("prod-context").create_cpu_checkpoint_pod_once(
+            cpu_sfs_control_pod(source_bound=False)
+        )
+    with pytest.raises(JobsError, match="exact packaged submission path"):
+        Kubectl("prod-context").create_cpu_checkpoint_pod_once(cpu_sfs_control_pod())
+    assert calls == []
+
+
+def test_lora_cpu_preflight_package_binds_exact_driver_bytes_before_dry_run_and_create(
+    tmp_path, monkeypatch
+):
+    archive = tmp_path / "source.tgz"
+    source_archive(archive)
+    package = build_lora_cpu_preflight_package(
+        cpu_sfs_control_pod(source_bound=False),
+        source_archive=archive,
+        runtime_source_archive="/mnt/sfs/reviewed/source.tgz",
+        source_commit=SOURCE_COMMIT,
+    )
+    assert package.config_map["immutable"] is True
+    assert package.config_map["data"]["preflight_driver.py"] == (
+        Path(lora_cpu_preflight_driver.__file__).read_text()
+    )
+    calls = []
 
     def run(command, **kwargs):
-        calls.append((command, kwargs.get("input")))
-        output = cpu_node_inventory() if "get" in command else pod
+        payload = kwargs.get("input")
+        obj = json.loads(payload) if payload is not None else None
+        calls.append((command, obj))
+        output = cpu_node_inventory() if "get" in command else obj
         return subprocess.CompletedProcess(command, 0, stdout=json.dumps(output), stderr="")
 
     monkeypatch.setattr(subprocess, "run", run)
-    Kubectl("prod-context").create_cpu_checkpoint_pod_once(pod)
-    assert ["get" in command for command, _ in calls] == [True, False]
+    kube = Kubectl("prod-context")
+    preview = kube.dry_run_lora_cpu_preflight(package)
+    created = kube.create_lora_cpu_preflight_once(package)
+
+    assert preview["proof"] == created["proof"]
+    assert [obj and obj["kind"] for _, obj in calls] == [
+        None,
+        "ConfigMap",
+        "Pod",
+        None,
+        "ConfigMap",
+        "Pod",
+    ]
+    assert all(call[1]["data"] == package.config_map["data"] for call in (calls[1], calls[4]))
+    assert all(
+        payload["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+        for payload in (calls[2][1], calls[5][1])
+    )
+
+
+def test_lora_cpu_preflight_driver_invokes_p3_and_p4_guards_from_packaged_bytes(
+    tmp_path, monkeypatch
+):
+    archive = tmp_path / "source.tgz"
+    source_archive(archive)
+    package = build_lora_cpu_preflight_package(
+        cpu_sfs_control_pod(source_bound=False),
+        source_archive=archive,
+        runtime_source_archive="/mnt/sfs/reviewed/source.tgz",
+        source_commit=SOURCE_COMMIT,
+    )
+    bundle_root = tmp_path / "bundle"
+    bundle_root.mkdir()
+    for name, content in package.config_map["data"].items():
+        (bundle_root / name).write_text(content)
+    monkeypatch.syspath_prepend(str(bundle_root))
+    spec = importlib.util.spec_from_file_location(
+        "packaged_preflight_driver", bundle_root / "preflight_driver.py"
+    )
+    assert spec is not None and spec.loader is not None
+    packaged_driver = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(packaged_driver)
+    environment = {
+        entry["name"]: entry["value"] for entry in package.pod["spec"]["containers"][0]["env"]
+    }
+    calls = []
+
+    def verify_archive(path, commit):
+        calls.append(("source", str(path), commit))
+        return {
+            "source_commit": commit,
+            "source_commit_file_sha256": "d" * 64,
+            "source_archive_sha256": environment[ENV_SOURCE_ARCHIVE_SHA256],
+        }
+
+    def verify_output(owned, output, *, writable_mount):
+        calls.append(("output", str(owned), str(output), str(writable_mount)))
+        return {"owned_root": str(owned), "output_root": str(output), "uid": 1000, "gid": 100}
+
+    monkeypatch.setattr(packaged_driver, "verify_source_archive_commit", verify_archive)
+    monkeypatch.setattr(packaged_driver, "verify_owned_output_runtime", verify_output)
+    receipt = packaged_driver.run_preflight(environment, bundle_root=bundle_root)
+
+    assert [call[0] for call in calls] == ["source", "output"]
+    assert calls[0][1:] == ("/mnt/sfs/reviewed/source.tgz", SOURCE_COMMIT)
+    assert calls[1][1:] == (
+        "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls",
+        "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/.preflight-control-step60-a21cbe7c",
+        "/controls",
+    )
+    assert receipt["preflight_bundle_sha256"] == environment[ENV_BUNDLE_SHA256]
+
+
+@pytest.mark.parametrize("drift", ["driver", "archive"])
+def test_lora_cpu_preflight_package_drift_fails_before_kubectl(tmp_path, monkeypatch, drift):
+    archive = tmp_path / "source.tgz"
+    source_archive(archive)
+    package = build_lora_cpu_preflight_package(
+        cpu_sfs_control_pod(source_bound=False),
+        source_archive=archive,
+        runtime_source_archive="/mnt/sfs/reviewed/source.tgz",
+        source_commit=SOURCE_COMMIT,
+    )
+    if drift == "driver":
+        changed = deepcopy(package.config_map)
+        changed["data"]["preflight_driver.py"] += "\n# drift\n"
+        package = replace(package, config_map=changed)
+    else:
+        archive.write_bytes(b"not the reviewed archive")
+    calls = []
+
+    def run(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise AssertionError("drifted preflight package reached kubectl")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(JobsError):
+        Kubectl("prod-context").dry_run_lora_cpu_preflight(package)
+    assert calls == []
 
 
 @pytest.mark.parametrize(
