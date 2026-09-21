@@ -745,8 +745,8 @@
     "bindings": {
       "dataset": {
         "payload_file_sha256": {
-          "dev": "sha256:8b4ca5a1bbfb28b8a02ac4464324af202950b8b69f6ac5997203277c0465ff16",
-          "train": "sha256:5b4801c6da29205baa50bb5a5f723a29e904d9f66a96984cb2168a2016986b6e"
+          "dev": "sha256:3be06bfc5e5fdec412b74422b3173df0814006fa17dc0d7cbe7eaf0265c55fd0",
+          "train": "sha256:8e5f43d6ca302391eae0e73fef088635c75d01e88fce9250ca4b36dc95f2490a"
         },
         "rows": {
           "dev": 1,
@@ -788,9 +788,9 @@
       }
     },
     "compiled_digests": {
-      "plan_sha256": "sha256:d43600f5bb9d8e4c4948f2b1c185ce891c2e416384543ef4d14305e129a4f336",
-      "request_sha256": "sha256:dece471161351ebe22b3cd7794115c3b0d19b5b09a8344aead6ea6ed0bfc096f",
-      "sanitized_manifest_self_sha256": "sha256:7e5c2e293a69b4d3bad6402a9945520182853a1caae1ae8a8c74f8f8bbe99471",
+      "plan_sha256": "sha256:c80fb774fed97aa6367245991292f5bb76078f43b7f0182c08bb1b5482d4294d",
+      "request_sha256": "sha256:49511ecb81f6897a06e44c850a86e9ea4152a331f9353fbb2bea97a58fc54525",
+      "sanitized_manifest_self_sha256": "sha256:109be2f4fba07a6eabaffc3c94048640214170d95ef311b2db107ac0331ffc16",
       "staged_manifest_observed": false
     },
     "encoded_absence_checks": {
@@ -813,7 +813,7 @@
     },
     "inputs": {
       "data_config": {
-        "file_sha256": "sha256:d1afa1cce3a14d8828da90fb0631f00b45d416c91e529d6a7d02200c2c7153f9",
+        "file_sha256": "sha256:b261ff70fbd659f839378932b1c12e06b7cd59ad80c958cbacc7124030ccd9f9",
         "path": "configs/qualification/qwen38-rl-reward-canary-data-prod-v7.json"
       },
       "model_lock": {
@@ -831,7 +831,7 @@
         "self_sha256": "sha256:438bfa14fb9da40caadccd4d071c6a173f6bff5ca4fea1e850c4e19e3cf0b851"
       },
       "run_config": {
-        "file_sha256": "sha256:e13584ce56175b0c9aa7456a8898654b71f43a26684449ce371321d44c413b74",
+        "file_sha256": "sha256:d66d0dd037987c2827d9aaff97b87535c01c98a1e8c70435c342fe07419a4555",
         "path": "configs/qualification/qwen38-rl-reward-canary-prod-v7.json"
       }
     },
@@ -895,7 +895,7 @@
   },
   "schema": "cyber_qwen38_skyrl_launch_readiness_audit_v1",
   "scope": "offline_no_submit_no_launch_no_cancel_no_private_logs_no_external_reads_or_writes",
-  "sha256": "sha256:14a436178db723c7dd2bc8e4d26bc9553f352a1f3ae215b6645cf1499a83d055",
+  "sha256": "sha256:4ee0402c2948c0b17a3cfa0c0a079ebbed147f6244c193198503f2e02971e437",
   "source_queue": {
     "file_sha256": "sha256:549bca1a8409cab10aaa9e0f754e5200c4401895e1507eb9c483d53e06286bd3",
     "path": "docs/evidence/qwen38-study/2026-09-20-skyrl-next-gates-queue-v1.json",

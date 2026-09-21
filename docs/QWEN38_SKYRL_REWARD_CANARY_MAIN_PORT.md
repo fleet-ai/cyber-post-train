@@ -128,6 +128,29 @@ All-zero valid rewards are a truthful experiment outcome but do not establish a
 learning update. Missing or truncated reward evidence is an infrastructure
 failure, not a zero-reward model result.
 
+## A successor data package must change its embedded run identity
+
+The prod7 V2 data-stage Job completed correctly, but its exact-image CPU
+preflight rejected the package before any GPU allocation. The public manifest
+named prod7 while the private train and development rows still named prod6
+inside `cyber_config_json.run_id`. Changing only the manifest does not create a
+valid successor: the embedded episode identity is what the environment,
+recorder, and checkpoint lineage use during training.
+
+The V2 destination is immutable and retired. A replacement uses a new V3 data
+destination and `rebind_private_source_run_id`. That helper permits exactly two
+changes per row: the run ID and the row's checksum after that run-ID change. It
+canonicalizes the row again, recomputes the train/development payload hashes,
+and recomputes the manifest checksum. Any prompt, task, environment, reward,
+model, split, tool, or horizon change fails closed. The exact-image CPU
+preflight must then reopen the staged package and pass before a GPU RayJob may
+be authorized.
+
+Sanitized rejection and release evidence is
+[`2026-09-21-skyrl-prod7-stale-episode-run-id-preflight-rejection-v1.json`](evidence/qwen38-study/2026-09-21-skyrl-prod7-stale-episode-run-id-preflight-rejection-v1.json).
+It records zero collected episodes, zero rewards, zero optimizer updates, zero
+checkpoints, and complete release. It is not a capability result.
+
 ## Cleanup observers must prove a cleanup reason
 
 Prod6 established a separate operational failure class. The RL process was
