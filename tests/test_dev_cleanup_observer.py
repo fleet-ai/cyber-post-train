@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import subprocess
 from datetime import UTC, datetime
@@ -11,11 +12,49 @@ from types import SimpleNamespace as NS
 import pytest
 
 from cyber_post_train.jobs import digest
+from scripts import probe_qwen38_prod8_terminal as probe
 from training import dev_cleanup_observer as cleanup
 
 
 def _seal(value: dict) -> dict:
     return {**value, "sha256": "sha256:" + digest(value)}
+
+
+def _terminal_probe_receipt(**overrides) -> dict:
+    value = {
+        "schema": probe.RECEIPT_SCHEMA,
+        "status": "inspected",
+        "target": probe.TARGET,
+        "training_plan_sha256": probe.TRAINING_PLAN_SHA256,
+        "checked_at": "2026-09-21T12:00:00Z",
+        "gpus": 0,
+        "sfs_mount_read_only": True,
+        "private_payloads_read": False,
+        "root_exists": False,
+        "root_direct": False,
+        "scan": {"attempts": 1, "stable": True},
+        "terminal_classification": "root_missing",
+        "root_markers": [
+            {"name": name, "present": False, "accepted": False, "reason": "absent"}
+            for name in probe.ROOT_MARKERS
+        ],
+        "batch_inventory": probe._empty_batch_inventory(accepted=True),
+        "checkpoint_inventory": probe._empty_checkpoint_inventory(accepted=True),
+        "receipt_size_limit_bytes": 3500,
+        "receipt_size_bytes": 0,
+    }
+    value.update(overrides)
+    while True:
+        value.pop("sha256", None)
+        value = _seal(value)
+        size = len((json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode())
+        if value["receipt_size_bytes"] == size:
+            return value
+        value["receipt_size_bytes"] = size
+
+
+def _canonical_terminal_probe_receipt(value: dict) -> str:
+    return probe.canonical_receipt_bytes(value).decode("utf-8")
 
 
 def _metadata(name: str, uid: int) -> dict:
@@ -71,7 +110,7 @@ class FakeJobCluster:
             )
         if args[:3] == ["get", "pod", "preflight-pod"]:
             return NS(returncode=0, stdout="", stderr="")
-        if args[:2] == ["delete", "job"]:
+        if args[:2] == ["delete", "--raw"]:
             self.deleted = True
             self.delete_calls += 1
             return NS(returncode=0, stdout="job.batch/preflight\n", stderr="")
@@ -110,6 +149,414 @@ def test_job_observer_arms_before_creation_captures_receipt_and_releases(tmp_pat
     assert cluster.delete_calls == 1
     assert json.loads((tmp_path / "ARMED.json").read_text())["status"] == "armed"
     assert json.loads((tmp_path / "RESULT.json").read_text()) == result
+
+
+class Prod8TerminalProbeCluster:
+    def __init__(self) -> None:
+        self.target_reads = 0
+        self.deleted = False
+        self.delete_calls = 0
+        self.receipt = _terminal_probe_receipt()
+        self.mutate_job = lambda value: value
+        self.mutate_pod = lambda value: value
+        self.hide_pod_from_controller_selector = False
+
+    @property
+    def job_uid(self) -> str:
+        return _metadata(probe.NAME, 101)["uid"]
+
+    def _job(self) -> dict:
+        value = copy.deepcopy(probe.manifest())
+        value["metadata"].update(_metadata(probe.NAME, 101))
+        labels = {
+            "batch.kubernetes.io/controller-uid": self.job_uid,
+            "batch.kubernetes.io/job-name": probe.NAME,
+            "controller-uid": self.job_uid,
+            "job-name": probe.NAME,
+        }
+        value["spec"].update(
+            {
+                "completionMode": "NonIndexed",
+                "completions": 1,
+                "manualSelector": False,
+                "parallelism": 1,
+                "podReplacementPolicy": "TerminatingOrFailed",
+                "selector": {"matchLabels": {"batch.kubernetes.io/controller-uid": self.job_uid}},
+                "suspend": False,
+            }
+        )
+        value["spec"]["template"]["metadata"]["labels"] = labels
+        value["status"] = {"conditions": [{"type": "Complete", "status": "True"}]}
+        return self.mutate_job(value)
+
+    def _pod(self) -> dict:
+        owner = {
+            "apiVersion": "batch/v1",
+            "kind": "Job",
+            "name": probe.NAME,
+            "uid": self.job_uid,
+            "controller": True,
+            "blockOwnerDeletion": True,
+        }
+        pod_spec = copy.deepcopy(self._job()["spec"]["template"]["spec"])
+        return self.mutate_pod(
+            {
+                "metadata": {
+                    **_metadata("prod8-terminal-probe-pod", 102),
+                    "labels": {
+                        "batch.kubernetes.io/controller-uid": self.job_uid,
+                        "job-name": probe.NAME,
+                    },
+                    "ownerReferences": [owner],
+                },
+                "spec": pod_spec,
+                "status": {
+                    "containerStatuses": [
+                        {
+                            "name": "terminal-probe",
+                            "restartCount": 0,
+                            "imageID": "registry/image@" + probe.IMAGE.rsplit("@", 1)[1],
+                            "state": {
+                                "terminated": {
+                                    "exitCode": 0,
+                                    "reason": "Completed",
+                                    "message": _canonical_terminal_probe_receipt(self.receipt),
+                                }
+                            },
+                        }
+                    ]
+                },
+            }
+        )
+
+    def __call__(self, argv, **_kwargs):
+        args = argv[5:]
+        if args[:2] == ["get", "job"]:
+            self.target_reads += 1
+            value = self._job() if self.target_reads > 1 and not self.deleted else None
+            return NS(returncode=0, stdout=json.dumps(value) if value else "", stderr="")
+        if args[:2] == ["get", "pod"] and "--selector" in args:
+            return NS(
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "items": (
+                            []
+                            if self.deleted or self.hide_pod_from_controller_selector
+                            else [self._pod()]
+                        )
+                    }
+                ),
+                stderr="",
+            )
+        if args[:3] == ["get", "pod", "prod8-terminal-probe-pod"]:
+            return NS(returncode=0, stdout="", stderr="")
+        if args[:2] == ["delete", "--raw"]:
+            assert args[2] == (f"/apis/batch/v1/namespaces/{cleanup.NAMESPACE}/jobs/{probe.NAME}")
+            assert args[-2:] == ["-f", "-"]
+            assert json.loads(_kwargs["input"]) == {
+                "apiVersion": "v1",
+                "kind": "DeleteOptions",
+                "propagationPolicy": "Foreground",
+                "preconditions": {"uid": self.job_uid},
+            }
+            self.deleted = True
+            self.delete_calls += 1
+            return NS(returncode=0, stdout="job.batch/prod8\n", stderr="")
+        raise AssertionError(args)
+
+
+def _prod8_observer(
+    tmp_path: Path, runner: Prod8TerminalProbeCluster, **overrides: object
+) -> cleanup.Observer:
+    values: dict[str, object] = {
+        "context": cleanup.PROD_CONTEXT,
+        "name": probe.NAME,
+        "maximum_seconds": 1200,
+        "plan_sha256": "sha256:" + probe.TRAINING_PLAN_SHA256,
+        "manifest_sha256": probe.manifest_digest(),
+        "profile": "production-cpu",
+        "expected_uid": runner.job_uid,
+    }
+    values.update(overrides)
+    return _observer(tmp_path, runner, **values)
+
+
+def test_job_observer_binds_prod8_receipt_to_exact_job_pod_and_image(tmp_path) -> None:
+    cluster = Prod8TerminalProbeCluster()
+    result = _prod8_observer(tmp_path, cluster).run()
+    assert result["status"] == "released"
+    assert result["receipt"] == cluster.receipt
+    binding = result["prod8_live_binding"]
+    assert binding["job_uid"] == cluster.job_uid
+    assert binding["receipt_container_bound"] is True
+    assert binding["binding_error"] == ""
+    assert binding["containers"] == [
+        {
+            "pod_name": "prod8-terminal-probe-pod",
+            "pod_uid": _metadata("prod8-terminal-probe-pod", 102)["uid"],
+            "container_name": "terminal-probe",
+            "requested_image": probe.IMAGE,
+            "requested_image_digest": probe.IMAGE.rsplit("@", 1)[1],
+            "runtime_image_id": "registry/image@" + probe.IMAGE.rsplit("@", 1)[1],
+            "runtime_image_digest": probe.IMAGE.rsplit("@", 1)[1],
+            "exit_code": 0,
+            "termination_reason": "Completed",
+            "restart_count": 0,
+        }
+    ]
+    assert result["active_gpus"] == 0
+    assert cluster.delete_calls == 1
+    assert result["creation_bound_uid"] == cluster.job_uid
+    armed = json.loads((tmp_path / "ARMED.json").read_text())
+    assert armed["creation_bound_uid"] == cluster.job_uid
+
+
+def test_prod8_post_arm_same_name_collision_never_binds_or_deletes(tmp_path) -> None:
+    cluster = Prod8TerminalProbeCluster()
+    unrelated_uid = _metadata("unrelated", 999)["uid"]
+    with pytest.raises(cleanup.ObserverError, match="UID changed"):
+        _prod8_observer(tmp_path, cluster, expected_uid=unrelated_uid).run()
+    assert cluster.delete_calls == 0
+    assert cluster.deleted is False
+
+
+def test_prod8_hidden_controller_owned_pod_never_authorizes_delete(tmp_path) -> None:
+    cluster = Prod8TerminalProbeCluster()
+    # Model a completed Job whose actual Pod is still live but has had its
+    # mutable controller label removed, so the selector cannot prove its full
+    # owner/spec/status binding.
+    cluster.hide_pod_from_controller_selector = True
+    with pytest.raises(cleanup.ObserverError, match="no uniquely bound live Pod"):
+        _prod8_observer(tmp_path, cluster).run()
+    assert cluster.delete_calls == 0
+    assert cluster.deleted is False
+
+
+def test_prod8_delete_revalidates_live_pod_before_raw_delete(tmp_path) -> None:
+    cluster = Prod8TerminalProbeCluster()
+    observer = _prod8_observer(tmp_path, cluster)
+    observer.arm()
+    observer.observe(cluster._job())
+    cluster.hide_pod_from_controller_selector = True
+    with pytest.raises(cleanup.ObserverError, match="no uniquely bound live Pod"):
+        observer.delete()
+    assert cluster.delete_calls == 0
+    assert cluster.deleted is False
+
+
+def test_prod8_observer_rejects_mislabeled_training_plan_before_arming(tmp_path) -> None:
+    cluster = Prod8TerminalProbeCluster()
+    with pytest.raises(cleanup.ObserverError, match="training-plan binding"):
+        _prod8_observer(tmp_path, cluster, plan_sha256="sha256:" + "0" * 64)
+    assert not (tmp_path / "ARMED.json").exists()
+    assert cluster.delete_calls == 0
+
+
+class UidPreconditionRaceCluster(Prod8TerminalProbeCluster):
+    """The API atomically rejects a recreated same-name Job at DELETE time."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.raw_delete_bodies: list[dict] = []
+
+    def __call__(self, argv, **kwargs):
+        args = argv[5:]
+        if args[:2] == ["delete", "--raw"]:
+            self.raw_delete_bodies.append(json.loads(kwargs["input"]))
+            return NS(returncode=1, stdout="", stderr="Conflict")
+        return super().__call__(argv, **kwargs)
+
+
+def test_prod8_uid_precondition_prevents_delete_after_name_reuse_race(tmp_path) -> None:
+    cluster = UidPreconditionRaceCluster()
+    observer = _prod8_observer(tmp_path, cluster)
+    observer.arm()
+    observer.observe(cluster._job())
+    with pytest.raises(cleanup.ObserverError, match="observation failed"):
+        observer.delete()
+    assert cluster.deleted is False
+    assert len(cluster.raw_delete_bodies) == cleanup.KUBECTL_ATTEMPTS
+    assert all(
+        body["preconditions"] == {"uid": cluster.job_uid}
+        and body["propagationPolicy"] == "Foreground"
+        for body in cluster.raw_delete_bodies
+    )
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda job: job["metadata"]["annotations"].pop("fleet.ai/failure-alerts"),
+        lambda job: job["spec"].update({"backoffLimit": False}),
+        lambda job: job["spec"]["template"]["spec"].update({"priorityClassName": "c2"}),
+        lambda job: job["spec"]["template"]["spec"]["containers"][0]["resources"][
+            "requests"
+        ].update({"nvidia.com/gpu": "1"}),
+        lambda job: job["spec"]["template"]["spec"].update({"overhead": {"nvidia.com/gpu": "1"}}),
+        lambda job: job["spec"]["template"]["spec"]["containers"][0].update(
+            {"envFrom": [{"secretRef": {"name": "unreviewed"}}]}
+        ),
+        lambda job: job["spec"]["template"]["spec"].update(
+            {
+                "initContainers": [
+                    {
+                        "name": "injected",
+                        "resources": {
+                            "requests": {"nvidia.com/gpu": "1"},
+                            "limits": {"nvidia.com/gpu": "1"},
+                        },
+                    }
+                ]
+            }
+        ),
+    ],
+)
+def test_job_observer_rejects_manifest_binding_drift(tmp_path, mutate) -> None:
+    cluster = Prod8TerminalProbeCluster()
+
+    def mutate_job(value):
+        value = copy.deepcopy(value)
+        mutate(value)
+        return value
+
+    cluster.mutate_job = mutate_job
+    with pytest.raises(cleanup.ObserverError, match="manifest binding failed"):
+        _prod8_observer(tmp_path, cluster).run()
+    assert cluster.delete_calls == 0
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda pod: pod["metadata"].update({"uid": "not-a-uuid"}),
+        lambda pod: pod["metadata"].update({"creationTimestamp": "not-a-timestamp"}),
+        lambda pod: pod.update({"metadata": None}),
+        lambda pod: pod["metadata"]["ownerReferences"][0].update(
+            {"uid": _metadata("other", 103)["uid"]}
+        ),
+        lambda pod: pod["metadata"]["labels"].update(
+            {"batch.kubernetes.io/controller-uid": _metadata("other", 103)["uid"]}
+        ),
+        lambda pod: pod["spec"]["containers"][0].update(
+            {"image": "registry/example@sha256:" + "0" * 64}
+        ),
+        lambda pod: pod["spec"]["containers"][0].update(
+            {"command": ["sh", "-c", "echo unreviewed"]}
+        ),
+        lambda pod: pod["status"]["containerStatuses"][0].update(
+            {"imageID": "registry/example@sha256:" + "0" * 64}
+        ),
+        lambda pod: pod["status"]["containerStatuses"][0].update(
+            {"imageID": "unbound-runtime-image"}
+        ),
+        lambda pod: pod["spec"]["containers"][0]["resources"]["limits"].update(
+            {"nvidia.com/gpu": "1"}
+        ),
+        lambda pod: pod["spec"]["containers"][0]["resources"]["limits"].update(
+            {"nvidia.com/mig-1g.5gb": "1"}
+        ),
+        # Exact resource-map comparison also rejects unrecognized extended
+        # resource names; it is not limited to a hand-maintained GPU alias
+        # list.
+        lambda pod: pod["spec"]["containers"][0]["resources"]["limits"].update(
+            {"vendor.example/custom-device": "1"}
+        ),
+        lambda pod: pod["spec"].update({"overhead": {"nvidia.com/gpu": "1"}}),
+        lambda pod: pod["spec"].update(
+            {"initContainers": [{"name": "sidecar", "resources": {"requests": {}, "limits": {}}}]}
+        ),
+        lambda pod: pod["spec"]["containers"][0].update(
+            {"envFrom": [{"secretRef": {"name": "unreviewed"}}]}
+        ),
+        lambda pod: pod["spec"]["containers"][0].update(
+            {"lifecycle": {"postStart": {"exec": {"command": ["sh", "-c", "id"]}}}}
+        ),
+        lambda pod: pod["spec"].update({"resourceClaims": [{"name": "unreviewed"}]}),
+        lambda pod: pod["status"]["containerStatuses"].append(
+            {
+                "name": "sidecar",
+                "restartCount": 0,
+                "imageID": "registry/sidecar@sha256:" + "0" * 64,
+                "state": {
+                    "terminated": {
+                        "exitCode": 0,
+                        "message": _canonical_terminal_probe_receipt(_terminal_probe_receipt()),
+                    }
+                },
+            }
+        ),
+    ],
+)
+def test_job_observer_rejects_foreign_or_unsafe_prod8_pod(tmp_path, mutate) -> None:
+    cluster = Prod8TerminalProbeCluster()
+
+    def mutate_pod(value):
+        value = copy.deepcopy(value)
+        mutate(value)
+        return value
+
+    cluster.mutate_pod = mutate_pod
+    with pytest.raises(cleanup.ObserverError, match="Pod binding failed"):
+        _prod8_observer(tmp_path, cluster).run()
+    # A rejected live-Pod binding is not authorization to clean up the Job.
+    # In particular, an admission-mutated command or accelerator request must
+    # remain for an operator rather than be silently deleted by this probe.
+    assert cluster.delete_calls == 0
+    assert cluster.deleted is False
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda pod: pod["status"]["containerStatuses"][0].update({"restartCount": 1}),
+        lambda pod: pod["status"]["containerStatuses"][0]["state"]["terminated"].update(
+            {"exitCode": 1}
+        ),
+    ],
+)
+def test_job_observer_records_exact_nonaccepted_terminal_container_state(tmp_path, mutate) -> None:
+    cluster = Prod8TerminalProbeCluster()
+
+    def mutate_pod(value):
+        value = copy.deepcopy(value)
+        mutate(value)
+        return value
+
+    cluster.mutate_pod = mutate_pod
+    result = _prod8_observer(tmp_path, cluster).run()
+    assert result["status"] == "released_without_accepted_execution"
+    assert result["receipt"] is None
+    observed = result["prod8_live_binding"]["containers"]
+    assert len(observed) == 1
+    assert observed[0]["restart_count"] == 1 or observed[0]["exit_code"] == 1
+
+
+def test_job_observer_rejects_and_does_not_persist_closed_schema_drift(tmp_path) -> None:
+    cluster = Prod8TerminalProbeCluster()
+    receipt = _terminal_probe_receipt()
+    receipt["unexpected_private_payload"] = "must-not-persist"
+    cluster.receipt = _terminal_probe_receipt(**receipt)
+    with pytest.raises(cleanup.ObserverError, match="receipt was rejected"):
+        _prod8_observer(tmp_path, cluster).run()
+    assert cluster.delete_calls == 0
+    assert cluster.deleted is False
+
+
+def test_job_observer_rejects_padded_prod8_receipt_without_deleting(tmp_path) -> None:
+    cluster = Prod8TerminalProbeCluster()
+
+    def mutate_pod(value):
+        value = copy.deepcopy(value)
+        terminated = value["status"]["containerStatuses"][0]["state"]["terminated"]
+        terminated["message"] += " "
+        return value
+
+    cluster.mutate_pod = mutate_pod
+    with pytest.raises(cleanup.ObserverError, match="receipt was rejected"):
+        _prod8_observer(tmp_path, cluster).run()
+    assert cluster.delete_calls == 0
+    assert cluster.deleted is False
 
 
 class FakeFleetCluster:
@@ -184,7 +631,7 @@ class FakeFleetCluster:
             return NS(returncode=0, stdout=json.dumps({"items": items}), stderr="")
         if args[:2] == ["get", "pod"] and len(args) > 2:
             return NS(returncode=0, stdout="", stderr="")
-        if args[:2] == ["delete", "fleetjob"]:
+        if args[:2] == ["delete", "--raw"]:
             self.deleted = True
             return NS(returncode=0, stdout="fleetjob.fleet.ai/probe\n", stderr="")
         raise AssertionError(args)
@@ -340,7 +787,7 @@ class FakeDirectRayJobCluster:
             return NS(returncode=0, stdout=json.dumps({"items": items}), stderr="")
         if args[:2] == ["get", "pod"] and len(args) > 2:
             return NS(returncode=0, stdout="", stderr="")
-        if args[:2] == ["delete", "rayjob"]:
+        if args[:2] == ["delete", "--raw"]:
             self.deleted = True
             return NS(returncode=0, stdout="rayjob.ray.io/probe\n", stderr="")
         raise AssertionError(args)
@@ -427,6 +874,14 @@ def test_observer_accepts_only_digest_valid_sanitized_failure_receipt() -> None:
     assert cleanup._validated_receipt(json.dumps(receipt), kind="job") == receipt
     receipt["phase"] = "changed"
     assert cleanup._validated_receipt(json.dumps(receipt), kind="job") is None
+
+
+def test_observer_rejects_oversized_termination_message_before_utf8_copy() -> None:
+    class OversizedMessage(str):
+        def encode(self, *args, **kwargs):  # pragma: no cover - must not execute
+            raise AssertionError("oversized message was encoded")
+
+    assert cleanup._validated_receipt(OversizedMessage("x" * 16385), kind="job") is None
 
 
 def test_observer_accepts_digest_valid_model_stage_receipt() -> None:
@@ -564,7 +1019,7 @@ class FlakyActiveDirectRayJobCluster(FakeDirectRayJobCluster):
                     )
                 )
             return NS(returncode=0, stdout=json.dumps({"items": items}), stderr="")
-        if args[:2] == ["delete", "rayjob"]:
+        if args[:2] == ["delete", "--raw"]:
             self.delete_calls += 1
             self.deleted_while_running = not self.terminal
         return super().__call__(argv, **kwargs)

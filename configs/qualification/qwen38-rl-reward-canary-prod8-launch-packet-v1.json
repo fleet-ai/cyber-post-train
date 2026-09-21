@@ -76,14 +76,23 @@
     }
   },
   "launch_authorized": false,
+  "local_cpu_preflight_preview_binding": {
+    "current_manifest_sha256": "219f8f6d8b289b5363a791be1013771610e371d9f578c675522a59e84a3d7bd8",
+    "fresh_preview_required": true,
+    "matches_current_manifest": false,
+    "preview_manifest_sha256": {
+      "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb": "995a8c0eb5795920dc554fdcf9f332484a137e7f3d9ca2fa8b3efcdcdb820bd5",
+      "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6": "995a8c0eb5795920dc554fdcf9f332484a137e7f3d9ca2fa8b3efcdcdb820bd5"
+    }
+  },
   "local_cpu_preflight_shape": {
     "executed": false,
     "failure_alerts": "off",
     "gpus": 0,
-    "manifest_sha256": "995a8c0eb5795920dc554fdcf9f332484a137e7f3d9ca2fa8b3efcdcdb820bd5",
+    "manifest_sha256": "219f8f6d8b289b5363a791be1013771610e371d9f578c675522a59e84a3d7bd8",
     "name": "chris-q38-prod8-preflight-v1",
     "priority": "c1",
-    "server_previewed_in_dev_and_prod": true
+    "server_previewed_in_dev_and_prod": false
   },
   "open_gates_in_order": [
     "rehash the exact private source and prove the destination, stage Job, and archive are absent",
@@ -163,6 +172,6 @@
     "steps": 1,
     "tokens_per_turn": 32768
   },
-  "sha256": "sha256:1350ebbc547516f9291774ef6247687956ea231b46fadb832dfa23a39e3b3fb3",
+  "sha256": "sha256:461961c3f6b51bb4ec9beb52cffddcead010d16ec9f3f68cd19be11b5d6bd9ef",
   "status": "prepared_external_stage_and_preflight_pending"
 }

@@ -280,7 +280,6 @@ def _cpu_render(expected: dict) -> dict:
             "creationTimestamp": "2026-09-20T00:00:00Z",
             "generation": 1,
             "uid": uid,
-            "labels": labels,
         }
     )
     value["status"] = {}
@@ -428,6 +427,10 @@ def test_zero_gpu_jobs_and_server_previews_are_alert_safe(plan_request, tmp_path
         assert proof["gpus"] == 0 and proof["failure_alerts"] == "off"
         changed = _cpu_render(job)
         changed["metadata"]["annotations"].pop("fleet.ai/failure-alerts")
+        with pytest.raises(JobsError):
+            direct.validate_cpu_preview(job, changed, context=direct.PROD_CONTEXT, purpose=purpose)
+        changed = _cpu_render(job)
+        changed["metadata"]["labels"] = {"unreviewed": "true"}
         with pytest.raises(JobsError):
             direct.validate_cpu_preview(job, changed, context=direct.PROD_CONTEXT, purpose=purpose)
 

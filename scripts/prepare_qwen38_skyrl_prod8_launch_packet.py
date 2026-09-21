@@ -88,6 +88,27 @@ def _validate_preview_evidence(value: dict, plan: dict, request: dict) -> None:
             raise ValueError("prod8 CPU preflight server preview changed")
 
 
+def _current_cpu_preview_binding(value: dict, preflight: dict) -> dict:
+    """Describe whether stored dry-run evidence binds this exact local Job.
+
+    A code repair can change the submitted Job bytes without changing the
+    scientific plan.  Historical dry-run receipts remain useful evidence, but
+    must never be represented as approval for the new bytes.
+    """
+    current = digest(preflight)
+    observed = {
+        context: value["cpu_preflight_previews"][context]["manifest_sha256"]
+        for context in (direct.DEV_CONTEXT, direct.PROD_CONTEXT)
+    }
+    matches = all(item == current for item in observed.values())
+    return {
+        "current_manifest_sha256": current,
+        "preview_manifest_sha256": observed,
+        "matches_current_manifest": matches,
+        "fresh_preview_required": not matches,
+    }
+
+
 def build() -> dict:
     run = readiness.load(readiness.CANARY_RUN)
     manifest = readiness.prod8_metadata(run, {})
@@ -103,6 +124,7 @@ def build() -> dict:
     preview_evidence = _load(PREVIEW_EVIDENCE)
     _validate_preview_evidence(preview_evidence, plan, request)
     preflight = direct.preflight_job_manifest(plan)
+    preview_binding = _current_cpu_preview_binding(preview_evidence, preflight)
     pod = preflight["spec"]["template"]["spec"]
     if (
         preflight["metadata"]["annotations"].get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
@@ -192,9 +214,10 @@ def build() -> dict:
                 "gpus": 0,
                 "priority": "c1",
                 "failure_alerts": "off",
-                "server_previewed_in_dev_and_prod": True,
+                "server_previewed_in_dev_and_prod": preview_binding["matches_current_manifest"],
                 "executed": False,
             },
+            "local_cpu_preflight_preview_binding": preview_binding,
             "read_only_preview_observation": {
                 "observed_at": preview_evidence["observed_at"],
                 "source_commit": preview_evidence["source_commit"],
