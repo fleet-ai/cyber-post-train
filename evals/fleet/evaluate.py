@@ -517,19 +517,11 @@ def run(directory: Path, *, dsn: str, route: str, worker_id: str, limit: int) ->
     os.environ["FIXED_PROXY_IMAGE"] = plan["images"]["proxy"]
 
     def one(index_number):
-        try:
-            with httpx.Client(
-                headers={"Authorization": "Bearer " + os.environ["FLEET_API_KEY"]}, timeout=60
-            ) as client:
-                endpoint = plan["routes"][route]
-                check_route(endpoint, plan["models"][endpoint["model"]], client)
-        except Exception as exc:
-            return {
-                "claimed": False,
-                "accepted": False,
-                "serving_block": route,
-                "controller_failure_code": type(exc).__name__.lower(),
-            }
+        endpoint = plan["routes"][route]
+
+        def guard(client: httpx.Client) -> None:
+            check_route(endpoint, plan["models"][endpoint["model"]], client)
+
         return worker.run_one(
             database=dsn,
             ledger=postgres,
@@ -541,6 +533,7 @@ def run(directory: Path, *, dsn: str, route: str, worker_id: str, limit: int) ->
             output_root=directory,
             claim_root=directory / "claims",
             proxy_script=Path(__file__).with_name("fixed_proxy.py"),
+            pre_execution_guard=guard,
         )
 
     with ThreadPoolExecutor(max_workers=min(limit, plan["concurrency"])) as pool:

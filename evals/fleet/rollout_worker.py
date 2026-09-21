@@ -15,6 +15,7 @@ import os
 import threading
 import time
 import uuid
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import suppress
 from pathlib import Path
@@ -419,6 +420,7 @@ def run_one(
     output_root: Path,
     claim_root: Path,
     proxy_script: Path,
+    pre_execution_guard: Callable[[httpx.Client], None] | None = None,
 ) -> dict[str, Any]:
     cell: dict[str, Any] | None = None
     out_dir: Path | None = None
@@ -451,6 +453,8 @@ def run_one(
                 timeout=1800,
             ) as client,
         ):
+            if pre_execution_guard is not None:
+                pre_execution_guard(client)
             config = build_config(campaign, cell, scientific, selected, client)
             execution_name = config["execution"]["execution_id"].removeprefix("sha256:")
             claim = _claim_receipt(config, cell)
