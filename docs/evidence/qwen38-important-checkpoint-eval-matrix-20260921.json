@@ -1,0 +1,454 @@
+{
+  "schema": "cyber_qwen38_important_checkpoint_eval_matrix_v1",
+  "observed_at": "2026-09-21T05:48:02Z",
+  "source_main_commit": "91ab058ebbf744c0931dbb9692831bdbd7ecefaf",
+  "purpose": "One score-blind, point-in-time routing matrix for every worthwhile existing Qwen3.8-27B checkpoint and its matched base control. It prevents duplicate evaluation launches and records the next safe action without claiming capability lift.",
+  "scope": {
+    "artifact_ids": [
+      "qwen38-27b-base-matched-control",
+      "q38-fresh75-step230",
+      "q38-teacher-dense-v5-step186",
+      "q38-self-sft-step44",
+      "q38-available-a-lr30-step76",
+      "q38-lora-step60"
+    ],
+    "fleet_task_set": "frozen_dev17",
+    "fleet_dev_task_count": 17,
+    "fleet_final_test_task_count": 8,
+    "fleet_final_test_status": "sealed_not_accessed",
+    "web_harness": "opencode-1.18.27",
+    "web_task_count": 15,
+    "web_attempts_per_full_arm": 60,
+    "accepted_complete_fleet_dev17_capability_results": 0,
+    "accepted_matched_web_capability_results": 0,
+    "external_mutations_by_this_audit": 0
+  },
+  "protocol_bindings": {
+    "fleet_split": {
+      "path": "configs/data/fleet-blackbox-current-study-split-20260914-v2.json",
+      "file_sha256": "sha256:28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb",
+      "dev_selection_sha256": "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
+      "final_test_selection_sha256": "sha256:9623149c4a021bc13ed2cf94ca26e107b30c18816cf3c02d76b5020cab5066f4"
+    },
+    "fleet_seed43_protocol": {
+      "path": "configs/evaluation/qwen38-fleet-dev17-seed43-matched-protocol-v1.json",
+      "file_sha256": "sha256:12ff102e82a848d760587ef0af4848e7b288ca4f5e0acfe248cd60dfe0dd17aa",
+      "protocol_sha256": "sha256:85334a48a36c126a1134ab2e0ba6211e2fce5de06c4fce6bbcef5304ab9b4f4a",
+      "attempt_policy": "pass1_no_automatic_retry",
+      "seed": 43
+    },
+    "web_campaign": {
+      "path": "configs/evaluation/qwen38-important-checkpoints-opencode-wbe-campaign-v1.json",
+      "file_sha256": "sha256:5f5070e32bd56d7e4bb4d9c0c5aa049ba9ad9e8b0c4155138a504a5422647506",
+      "plan_sha256": "sha256:13e219cd49781427c0a00237d8bea037e85603646fc9451dacc6876f44f716d5",
+      "benchmark_task_order_sha256": "sha256:d491b66885c8a379a887ee792d96ade76ffdc34cbfa3e75f9bc61c6975a29610",
+      "rollout_and_scoring_separated": true,
+      "qwen_code_allowed": false
+    }
+  },
+  "web_global_gate": {
+    "status": "closed",
+    "reason": "The retired V23 campaign produced zero accepted rollouts: all 60 attempts ended in preserved and released collection failures. A new campaign must not start until the collection runtime repair is merged and a fresh model-free qualification proves the repaired filesystem boundary.",
+    "retired_v23": {
+      "accepted_rollouts": 0,
+      "failure_preserved_and_released": 60,
+      "collection_export_failures": 45,
+      "collection_run_failures": 15,
+      "capability_result": false
+    },
+    "causal_repair": {
+      "pull_request": "https://github.com/fleet-ai/cyber-post-train/pull/278",
+      "observed_state": "open_draft_not_merged",
+      "observed_head_commit": "c1501bc572836b4002307a14beaf1f8a63dc5753"
+    },
+    "required_before_any_paid_launch": [
+      "merge_the_deterministic_collection_runtime_repair_and_regressions",
+      "pass_a_fresh_executable_zero_model_qualification_on_the_repaired_boundary",
+      "prove_fresh_campaign_sandbox_and_output_root_duplicate_absence",
+      "prove_the_exact_candidate_route_is_live_and_matches_the_base_serving_contract",
+      "seal_fresh_matched_base_and_candidate_collection_plans"
+    ]
+  },
+  "rows": [
+    {
+      "priority": 0,
+      "artifact_id": "qwen38-27b-base-matched-control",
+      "artifact": {
+        "kind": "base_model_control",
+        "repository": "Qwen/Qwen3.8-27B",
+        "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "weights_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+        "tokenizer_manifest_sha256": "sha256:3938a9a8172f2738fed1be44efc11e2562059269d50d3721213f44802b53b4e1",
+        "chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
+      },
+      "serving": {
+        "served_id": "qwen3.8-27b",
+        "inference_model_uid": "d06c0531-7181-41ad-a3fd-cd8e3e774ab9",
+        "resource_version": "31379234",
+        "phase": "ready",
+        "active_pods": 2,
+        "pod_uids": [
+          "37b5d839-1e9d-44a6-a895-6ce35946dfec",
+          "fda83f19-0e49-4cea-80f0-ee4c3e964617"
+        ],
+        "pod_restarts": 0,
+        "exact_runtime_image_sha256": "sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9",
+        "parity_status": "base_reference_live"
+      },
+      "fleet_dev17": {
+        "status": "terminal_incomplete_infrastructure_state",
+        "job_name": "chris-q38-dev17-s43-base-p1-v1",
+        "job_uid": "6dc5320f-02f5-470d-ae83-a5dec0fe2a62",
+        "workload_uid": "43f91553-77ac-439d-b402-e9dafc805ff2",
+        "pod_uid": "ed4aff2f-d1e5-4273-9ba7-1e67ca88bf1e",
+        "pod_phase": "Failed",
+        "pod_exit_code": 1,
+        "pod_restarts": 0,
+        "accepted_cells": 7,
+        "retry_review_cells": 10,
+        "local_results": 17,
+        "stale_active_cells": 0,
+        "complete_capability_result": false
+      },
+      "web": {
+        "status": "no_accepted_matched_result_global_gate_closed",
+        "canary_campaign_id": "q38-base-oc-wbe-cp1-c1",
+        "full_campaign_ids": [
+          "q38-base-oc-wbe-cp1-r0",
+          "q38-base-oc-wbe-cp1-r1",
+          "q38-base-oc-wbe-cp1-r2",
+          "q38-base-oc-wbe-cp1-r3"
+        ],
+        "launched": false
+      },
+      "next_unblocked_action": "Reconcile the ten seed-43 Fleet retry-review cells under the frozen score-blind policy. For WEB, wait for the global repair and model-free qualification, then collect this shared base canary once and reuse the same frozen base protocol for each candidate pair."
+    },
+    {
+      "priority": 1,
+      "artifact_id": "q38-fresh75-step230",
+      "artifact": {
+        "kind": "full_weight_sft_checkpoint",
+        "checkpoint_path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/checkpoints/global_step_230",
+        "optimizer_step": 230,
+        "checkpoint_manifest_file_sha256": "sha256:bf92e29d9f19dd589201214f25fe8d0e3b0f65de14ec08fc573217f50580a486",
+        "checkpoint_receipt_sha256": "sha256:9542502631b47cd730ccecb5938650103ed999bf4a4a6cf7d16d9be09c317cab",
+        "export_path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/hf-export-step230-v1",
+        "export_payload_manifest_sha256": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
+        "stage_path": "/models/chris-q38-fresh75-step230-v1"
+      },
+      "serving": {
+        "served_id": "chris-q38-fresh75-step230-web-v2",
+        "inference_model_uid": "e624a6f0-8748-433c-973e-aefc7f22ddf6",
+        "resource_version": "31317303",
+        "phase": "paused",
+        "active_pods": 0,
+        "pod_restarts": 0,
+        "model_revision": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
+        "last_accepted_live_parity_receipt_sha256": "sha256:8ccabd95d993cbf73ce8be1ad80a4673c4c18d7fa1aa79c46cbda0ecf467a5d1",
+        "parity_status": "accepted_historical_route_identity_but_requires_fresh_parity_after_jit_resume"
+      },
+      "fleet_dev17": {
+        "status": "terminal_incomplete_infrastructure_state_route_released",
+        "job_name": "chris-q38-dev17-s43-fresh75-p1-v1",
+        "job_uid": "d8fd2e3f-db6a-4ec5-89f3-fec695668486",
+        "workload_uid": "b19b47bd-81a7-4ced-aac1-fdcbed2d6053",
+        "pod_uid": "9f3af19f-0896-47dc-a032-5372e42df8f4",
+        "pod_phase": "Failed",
+        "pod_exit_code": 1,
+        "pod_restarts": 0,
+        "accepted_cells": 14,
+        "retry_review_cells": 3,
+        "local_results": 15,
+        "stale_active_cells": 0,
+        "complete_capability_result": false
+      },
+      "web": {
+        "status": "prepared_not_launched_global_gate_closed",
+        "canary_campaign_id": "q38-f75s230-oc-wbe-cp1-c1",
+        "full_campaign_ids": [
+          "q38-f75s230-oc-wbe-cp1-r0",
+          "q38-f75s230-oc-wbe-cp1-r1",
+          "q38-f75s230-oc-wbe-cp1-r2",
+          "q38-f75s230-oc-wbe-cp1-r3"
+        ],
+        "launched": false
+      },
+      "next_unblocked_action": "Review the three seed-43 Fleet retry-review cells without regenerating accepted cells. After the WEB global gate opens, JIT-resume this exact route, accept fresh base-versus-candidate serving parity, then run the matched one-task canary before any full collection."
+    },
+    {
+      "priority": 2,
+      "artifact_id": "q38-teacher-dense-v5-step186",
+      "artifact": {
+        "kind": "full_weight_teacher_sft_checkpoint",
+        "checkpoint_path": "/mnt/sfs/jobs/chris-cyber-q38-teacher-dense-v5/checkpoints/global_step_186",
+        "optimizer_step": 186,
+        "checkpoint_manifest_file_sha256": "sha256:1b671c6ec4b39d1141e0d28c530243624f6a97a7922f9f222ffcbe20b8434d3e",
+        "checkpoint_receipt_sha256": "sha256:1d61918874d59421455577deca70c9784ce09f8f327a5031df9d39dfb5f3d7f2",
+        "export_path": "/mnt/sfs/jobs/chris-cyber-q38-teacher-dense-v5/hf-export-v1",
+        "export_payload_manifest_sha256": "sha256:e6d59f5a58ce54b913d775cd71b81c64bd54637b53795df82baec0f71efefaf9",
+        "stage_path": "/models/chris-q38-teacher-sft-v5-step186-v1"
+      },
+      "serving": {
+        "served_id": "chris-q38-teacher-v5-step186-web-v1",
+        "inference_model_uid": "10b1b0ce-7b02-429e-8361-084a3039f248",
+        "resource_version": "31379016",
+        "phase": "ready",
+        "active_pods": 1,
+        "pod_uid": "4be8c23d-2762-44cc-ab1c-11fa19f17763",
+        "pod_restarts": 0,
+        "model_revision": "sha256:e6d59f5a58ce54b913d775cd71b81c64bd54637b53795df82baec0f71efefaf9",
+        "live_parity_receipt_file_sha256": "sha256:81fe2608db2a6c13894040279db71b2346dd27c18ea791e907ff11727e8916d3",
+        "live_parity_receipt_sha256": "sha256:ad7ed9bea561e8548fb224948fd786a17ce3e9145f14bdacf959423e54ae4a83",
+        "parity_status": "passed_for_current_pod_and_active_fleet_consumer"
+      },
+      "fleet_dev17": {
+        "seed43": {
+          "status": "terminal_incomplete_infrastructure_state",
+          "job_name": "chris-q38-dev17-s43-teacher186-p1-v1",
+          "job_uid": "6303b84c-63f5-472b-b7aa-f785e3d56932",
+          "workload_uid": "7b3528eb-f7c5-4d99-a3a2-9440b3b0e838",
+          "pod_uid": "51394c0d-1dc3-4605-9865-6b7ea76c1060",
+          "pod_phase": "Failed",
+          "pod_exit_code": 1,
+          "pod_restarts": 0,
+          "accepted_cells": 12,
+          "retry_review_cells": 5,
+          "local_results": 14,
+          "complete_capability_result": false
+        },
+        "seed42_descriptive": {
+          "status": "running",
+          "job_name": "chris-q38-teacher-v5-dev17-p1-v3",
+          "job_uid": "a929fb5d-03f8-404f-9620-f36d3c25926f",
+          "workload_uid": "2da0cdc7-d742-4f30-b2f4-ffb0f2f2eba5",
+          "pod_uid": "7a676f12-40be-4d5d-9b07-192e57e389f4",
+          "pod_phase": "Running",
+          "pod_restarts": 0,
+          "accepted_cells": 10,
+          "claimed_cells": 1,
+          "retry_review_cells": 6,
+          "local_results": 15,
+          "complete_capability_result": false
+        },
+        "cross_seed_rule": "Never splice seed42 and seed43 cells into one matched result."
+      },
+      "web": {
+        "status": "prepared_not_launched_global_gate_closed",
+        "canary_campaign_id": "q38-tchr186-oc-wbe-cp1-c1",
+        "full_campaign_ids": [
+          "q38-tchr186-oc-wbe-cp1-r0",
+          "q38-tchr186-oc-wbe-cp1-r1",
+          "q38-tchr186-oc-wbe-cp1-r2",
+          "q38-tchr186-oc-wbe-cp1-r3"
+        ],
+        "launched": false
+      },
+      "next_unblocked_action": "Finish the live seed-42 descriptive arm and review its six held cells, while preserving the incomplete seed-43 arm separately. After the WEB global gate opens, recheck this exact live route and parity, run its matched canary, and pause the route after the consumer drains."
+    },
+    {
+      "priority": 3,
+      "artifact_id": "q38-self-sft-step44",
+      "artifact": {
+        "kind": "full_weight_self_sft_checkpoint",
+        "checkpoint_path": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/checkpoints/global_step_44",
+        "optimizer_step": 44,
+        "checkpoint_manifest_file_sha256": "sha256:0094cfeb62f120b55d9e2f7fdfd4217c4c0aab66f369e3c52c89fc5e7ccfff9b",
+        "checkpoint_receipt_sha256": "sha256:bf8237a5837dd75bf1163b5a5e134e1349417599c1a28f022b91281c2c7b7885",
+        "export_path": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/hf-export-v1",
+        "export_payload_manifest_sha256": "sha256:a0e55bebe9d78ac76c012446ae0147a421cd333e2a6bf2bb6f4fb3450fa776fe",
+        "stage_path": "/models/chris-q38-self-sft-step44-v1"
+      },
+      "serving": {
+        "served_id": "chris-q38-self-sft-step44-v1",
+        "inference_model_uid": "05057134-546f-484e-9672-3f9ca50cec77",
+        "resource_version": "31379342",
+        "phase": "ready",
+        "active_pods": 1,
+        "pod_uid": "c1271f58-ca3e-41e7-8a01-1a3603cb9619",
+        "pod_restarts": 0,
+        "model_revision": "sha256:a0e55bebe9d78ac76c012446ae0147a421cd333e2a6bf2bb6f4fb3450fa776fe",
+        "live_parity_receipt_file_sha256": "sha256:676a89af48d7802dd32eb0c3864e6d4ffe05029619f1c8c67f464949a33f93bc",
+        "live_parity_receipt_sha256": "sha256:66992f74ac736422e0b724681bd7e0cab126a7d90c19a99598e182c8677b3572",
+        "parity_status": "passed_for_current_pod_and_active_fleet_consumer"
+      },
+      "fleet_dev17": {
+        "status": "running",
+        "job_name": "chris-q38-dev17-s43-self44-p1-v1",
+        "job_uid": "3d514935-1bbf-4ee7-97c3-22a34656c659",
+        "workload_uid": "ad6c0173-aa2a-4820-ba21-9a0d6e5214de",
+        "pod_uid": "daccf181-2f11-4c2a-a3bc-cb58d0b0655d",
+        "pod_phase": "Running",
+        "pod_restarts": 0,
+        "accepted_cells": 8,
+        "claimed_cells": 5,
+        "pending_cells": 0,
+        "retry_review_cells": 4,
+        "local_results": 11,
+        "stale_active_cells": 0,
+        "complete_capability_result": false
+      },
+      "web": {
+        "status": "prepared_not_launched_global_gate_closed",
+        "canary_campaign_id": "q38-self44-oc-wbe-cp1-c1",
+        "full_campaign_ids": [
+          "q38-self44-oc-wbe-cp1-r0",
+          "q38-self44-oc-wbe-cp1-r1",
+          "q38-self44-oc-wbe-cp1-r2",
+          "q38-self44-oc-wbe-cp1-r3"
+        ],
+        "launched": false
+      },
+      "next_unblocked_action": "Let the exact running seed-43 evaluator drain, then review only the three held cells under the frozen recovery rule. After the WEB global gate opens, recheck this exact route and parity and run its matched canary before full collection."
+    },
+    {
+      "priority": 4,
+      "artifact_id": "q38-available-a-lr30-step76",
+      "artifact": {
+        "kind": "full_weight_sft_checkpoint",
+        "checkpoint_path": "/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/checkpoints/global_step_76",
+        "optimizer_step": 76,
+        "checkpoint_manifest_file_sha256": "sha256:cc4e2997e120a80bb1e209dc027f18e12ce1ebe12639594d28e23b08c459cf1a",
+        "checkpoint_receipt_sha256": "sha256:1252a1a9d5556fa118f03d1b2fe5687e0e9505ccf622e2f86743a26b77dffa64",
+        "export_path": "/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/hf-export-step76-v1",
+        "export_payload_manifest_sha256": "sha256:3bef11697759b11db150b705e1882fb2d31a3efbdadbebd948aa917dcacc03a8",
+        "stage_path": "/models/chris-q38-available-a-lr30-step76-v1"
+      },
+      "serving": {
+        "served_id": "chris-q38-lr30-step76-web-v1",
+        "inference_model_uid": "ad5f2c04-2112-49dc-b533-125cca207eb0",
+        "resource_version": "31379341",
+        "phase": "ready",
+        "active_pods": 1,
+        "pod_uid": "490f07b3-b32b-4ff9-b4de-477e18798cf8",
+        "pod_restarts": 0,
+        "model_revision": "sha256:3bef11697759b11db150b705e1882fb2d31a3efbdadbebd948aa917dcacc03a8",
+        "live_parity_receipt_file_sha256": "sha256:9c8eb97c1077b8cebaa572adee872ab0d2eaa0ebde123226389cf7b249ec80c3",
+        "live_parity_receipt_sha256": "sha256:a7c6a46383d27344c08d8ab1705b0de56dde6ed790c7820bb1d0737095e6d344",
+        "parity_status": "passed_for_current_pod_and_active_fleet_consumer"
+      },
+      "fleet_dev17": {
+        "status": "running_first_authoritative_model_readback_passed",
+        "job_name": "chris-q38-dev17-s43-lr30s76-p1-v1",
+        "job_uid": "78b2d32d-8324-4b51-98a4-0b14fbde8fbe",
+        "workload_uid": "4c65cd50-c2ae-47d2-a0a6-91c52b456527",
+        "pod_uid": "5dcdd828-7b62-42f2-81a7-3b01e996939a",
+        "pod_phase": "Running",
+        "pod_restarts": 0,
+        "accepted_cells": 3,
+        "claimed_cells": 8,
+        "pending_cells": 6,
+        "retry_review_cells": 0,
+        "local_results": 3,
+        "stale_active_cells": 0,
+        "complete_capability_result": false
+      },
+      "web": {
+        "status": "prepared_not_launched_global_gate_closed",
+        "canary_campaign_id": "q38-lr30s76-oc-wbe-cp1-c1",
+        "full_campaign_ids": [
+          "q38-lr30s76-oc-wbe-cp1-r0",
+          "q38-lr30s76-oc-wbe-cp1-r1",
+          "q38-lr30s76-oc-wbe-cp1-r2",
+          "q38-lr30s76-oc-wbe-cp1-r3"
+        ],
+        "launched": false
+      },
+      "next_unblocked_action": "Let the exact running seed-43 evaluator drain and apply the same reviewed recovery policy to any infrastructure-only held cells. After the WEB global gate opens, recheck this route and parity and run its matched canary before full collection."
+    },
+    {
+      "priority": 5,
+      "artifact_id": "q38-lora-step60",
+      "artifact": {
+        "kind": "megatron_lora_checkpoint",
+        "training_rayjob_name": "chris-q38-lora-r1-s60-v3-a4820ef7",
+        "training_rayjob_uid": "98204fe7-bf70-4e30-9932-1396dffefca4",
+        "training_run_id": "a4820ef7-8a03-463a-a522-a7cfce1b38ce",
+        "checkpoint_path": "/mnt/sfs/jobs/chris-q38-lora-r1-s60-v3/checkpoints/global_step_60",
+        "checkpoint_manifest_path": "/mnt/sfs/jobs/chris-q38-lora-r1-s60-v3/checkpoint_manifests/step-000060-megatron-v1.json",
+        "optimizer_step": 60,
+        "checkpoint_manifest_file_sha256": "sha256:cd53865f869eeb1975aa0e099aef143a736167c5c7b095c283f0da292ffecd78",
+        "checkpoint_receipt_sha256": "sha256:6bae9ef75e0a60f598eb32b63d31a64c0f42716611a43daf19a177d3c0ffebd2",
+        "gpu_reload_verified": false,
+        "export_path": null,
+        "stage_path": null
+      },
+      "promotion": {
+        "preparation_pull_request": "https://github.com/fleet-ai/cyber-post-train/pull/310",
+        "merge_commit": "5c255f3cfd3a832c89fdcd27d9a6ab47575f7064",
+        "plan_path": "configs/qualification/qwen38-lora-step60-zero-update-export-v1.json",
+        "plan_file_sha256": "sha256:c3fe7f50033ba4569ef6297991a22dcd6e580e2124a380ec9424e0318640f815",
+        "plan_sha256": "sha256:31c9548c7119e01e3941049bcdaa79f9ee7a787a0191ce02c53644959d2d4547",
+        "status": "prepared_not_launched"
+      },
+      "serving": {
+        "served_id": null,
+        "inference_model_uid": null,
+        "phase": "absent",
+        "parity_status": "not_available"
+      },
+      "fleet_dev17": {
+        "status": "not_started_checkpoint_not_yet_promoted_for_serving",
+        "complete_capability_result": false
+      },
+      "web": {
+        "status": "prepared_identity_only_not_launchable",
+        "canary_campaign_id": "q38-lora60-oc-wbe-cp1-c1",
+        "full_campaign_ids": [
+          "q38-lora60-oc-wbe-cp1-r0",
+          "q38-lora60-oc-wbe-cp1-r1",
+          "q38-lora60-oc-wbe-cp1-r2",
+          "q38-lora60-oc-wbe-cp1-r3"
+        ],
+        "launched": false
+      },
+      "next_unblocked_action": "When one project GPU node is available, run the merged zero-update GPU reload and export plan exactly once. Only after accepted reload, BF16 merged export, export reload, atomic stage, paused registration, and fresh serving parity should either Fleet dev17 or the WEB canary be launched."
+    }
+  ],
+  "evidence_sources": [
+    {
+      "path": "docs/evidence/qwen38-fleet-dev17-seed43-launch-20260921.json",
+      "file_sha256": "sha256:146bd5a80a35e62e729dbd2e15f586f7eaec90ff3dc087facbe00a456d7ea825"
+    },
+    {
+      "path": "docs/evidence/qwen38-lr30-step76-fleet-dev17-seed43-launch-20260921.json",
+      "file_sha256": "sha256:707b78174116a3b7e4dbed81860c3e980dcf1e6c9b9c5b16464d3bd5da0e509f"
+    },
+    {
+      "path": "docs/evidence/qwen38-teacher-v5-fleet-dev17-v3-launch-20260921.json",
+      "file_sha256": "sha256:0e45682c6fa7034c237c463e51a3db974a24bb556c5581495eabb1e831aaaf09"
+    },
+    {
+      "path": "docs/evidence/inference/2026-09-20-qwen38-checkpoint-serving-parity.md",
+      "file_sha256": "sha256:e39440e8b6c0f0529be203599533a92c7028b20e8198ac2867c0a0d05dbfa08d"
+    },
+    {
+      "path": "docs/evidence/qwen38-lora-step60-recovery-terminal-20260921.json",
+      "file_sha256": "sha256:09d848c8a0a50d9e479f01359d36705e633f48bd99e102aae5cfac6d41ba0d29"
+    },
+    {
+      "path": "docs/evidence/qwen38-lora-step60-promotion-preparation-20260921.json",
+      "file_sha256": "sha256:2ddf8def406b9eb25e8a989e57ceadd90475b1959910fd81b2e37cc481cc5cd9"
+    },
+    {
+      "path": "docs/evidence/qwen38-web-important-checkpoint-campaign-prepared-20260921.json",
+      "file_sha256": "sha256:4b9220cb6fbe5728e1c9618754357213d603eebe4b802db3782e5837b2c46038"
+    }
+  ],
+  "interpretation": {
+    "complete_fleet_result_exists": false,
+    "matched_web_result_exists": false,
+    "partial_accepted_fleet_cells_are_not_a_complete_arm": true,
+    "different_seeds_must_not_be_spliced": true,
+    "ready_or_prepared_serving_is_not_a_capability_result": true,
+    "checkpoint_selection_from_external_web_results": false
+  },
+  "privacy": {
+    "scores_included": false,
+    "session_identifiers_included": false,
+    "task_keys_or_versions_included": false,
+    "prompts_traces_flags_answers_or_benchmark_content_included": false,
+    "credentials_included": false,
+    "private_logs_included": false
+  },
+  "receipt_sha256": "sha256:0e1f32acc0bd84e045c8ef1ef1b7394cb427dfe6266d680fc51ba5479cd006f2"
+}
