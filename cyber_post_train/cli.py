@@ -470,6 +470,40 @@ def release(name: str) -> None:
         _fail(exc)
 
 
+@app.command("gpu-capacity")
+def gpu_capacity(
+    context: Annotated[str, typer.Option("--context")],
+    output: Annotated[Path, typer.Option("--output")],
+    owner_prefix: Annotated[str, typer.Option("--owner-prefix")] = "chris-q38-",
+    max_nodes: Annotated[int, typer.Option("--max-nodes")] = 8,
+    max_gpus: Annotated[int, typer.Option("--max-gpus")] = 64,
+    planned_nodes: Annotated[int, typer.Option("--planned-nodes")] = 0,
+    planned_gpus: Annotated[int, typer.Option("--planned-gpus")] = 0,
+) -> None:
+    """Count owned training and serving GPUs across every namespace; read only."""
+    from .gpu_capacity import live_capacity_census
+
+    try:
+        if output.exists() or output.is_symlink():
+            raise ValueError("capacity receipt output must be new")
+        receipt = live_capacity_census(
+            context,
+            owner_prefixes=(owner_prefix,),
+            max_nodes=max_nodes,
+            max_gpus=max_gpus,
+            planned_nodes=planned_nodes,
+            planned_gpus=planned_gpus,
+        )
+        _write(output, receipt)
+        _print(receipt)
+        if not receipt["qualified"]:
+            raise typer.Exit(2)
+    except typer.Exit:
+        raise
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command("checkpoint-seal")
 def checkpoint_seal(
     directory: Path, step: int, output: Annotated[Path, typer.Option("--output")]
