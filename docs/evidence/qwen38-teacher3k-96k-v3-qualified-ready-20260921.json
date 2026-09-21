@@ -7,7 +7,7 @@
   "scientific_disposition": "Model, corpus, split, optimizer, batch, epoch, seed, topology, checkpoint policy, and held-out outcome evaluations remain fixed. Only context length and the corresponding loss-masked history window differ.",
   "source": {
     "repository": "https://github.com/fleet-ai/cyber-post-train",
-    "head": "015172d9a269d1fee9a08865964874a58a07237e",
+    "head": "4a3c8b3375c1d8442cba0a0dd172353a08ea79df",
     "config": "configs/runs/qwen38-teacher3k-96k-full-b8-lr3e6-v3.json"
   },
   "identity": {
@@ -34,7 +34,7 @@
   },
   "qualification_reuse_proof": {
     "qualified_source_head": "5f60d11fc688b6547723abe0d2ad0a48df2504b5",
-    "current_source_head": "015172d9a269d1fee9a08865964874a58a07237e",
+    "current_source_head": "4a3c8b3375c1d8442cba0a0dd172353a08ea79df",
     "changed_paths_affecting_sft_runtime": [],
     "identical_git_blobs": {
       "training/sft.py": "7c932ebb35eee0eb3749519e2bcda1bf47e77996",
@@ -167,8 +167,8 @@
   },
   "live_preview": {
     "status": "accepted_without_create",
-    "source_head": "015172d9a269d1fee9a08865964874a58a07237e",
-    "refreshed_at": "2026-09-21T04:55:58Z",
+    "source_head": "4a3c8b3375c1d8442cba0a0dd172353a08ea79df",
+    "refreshed_at": "2026-09-21T05:03:32Z",
     "standard_jobs_api_preview": "failed_closed_because_root_alert_annotation_was_not_proven",
     "supported_fallback": "render_sft_rayjob_plus_kubectl_server_dry_run",
     "dry_run_id": "96000000-0000-4000-8000-000000000003",
