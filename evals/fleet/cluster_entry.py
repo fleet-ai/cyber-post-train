@@ -76,6 +76,21 @@ def stage_images(
     subprocess.run(["docker", "pull", config["images"]["proxy"]], check=True, timeout=600)
 
 
+def model_artifact_plan(config: dict, proof: dict) -> dict | None:
+    binding = config.get("model_artifact_binding")
+    if binding is None:
+        if proof:
+            raise ValueError("model artifact proof is not allowed without a config binding")
+        return None
+    plan = {
+        "schema": "fleet_eval_model_artifact_plan_v1",
+        "campaign_name": config.get("name"),
+        "binding": binding,
+        "proof": proof,
+    }
+    return {**plan, "sha256": digest(plan)}
+
+
 def execute(args: argparse.Namespace) -> dict:
     config_path, output = Path(args.config), Path(args.output)
     if output.exists():
@@ -86,20 +101,47 @@ def execute(args: argparse.Namespace) -> dict:
         if getattr(args, "model_artifact_binding", None)
         else None
     )
+    artifact_acceptance = (
+        Path(args.model_artifact_acceptance)
+        if getattr(args, "model_artifact_acceptance", None)
+        else None
+    )
     if artifact_packet is not None and artifact_packet.get("campaign_name") != config.get("name"):
         raise ValueError("model artifact packet belongs to a different evaluation campaign")
     # Reopen the complete local checkpoint/export/reload receipt chain before
     # pulling images, writing output, contacting Fleet, or creating a database.
-    artifact_proof = model_artifact.validate_live_models(config.get("models", {}), artifact_packet)
+    artifact_proof = model_artifact.validate_live_models(
+        config.get("models", {}),
+        artifact_packet,
+        config_binding=config.get("model_artifact_binding"),
+        packet_path=Path(args.model_artifact_binding)
+        if getattr(args, "model_artifact_binding", None)
+        else None,
+        acceptance_path=artifact_acceptance,
+    )
     stage_images(
         config=config,
         harness_tar=Path(args.harness_tar),
         harness_receipt=Path(args.harness_receipt),
         receipt_sha256=args.harness_receipt_sha256,
     )
-    prepared = evaluate.prepare(config, output, relative_to=config_path.parent)
+    scientific_config = dict(config)
+    scientific_config.pop("model_artifact_binding", None)
+    prepared = evaluate.prepare(scientific_config, output, relative_to=config_path.parent)
+    artifact_plan = model_artifact_plan(config, artifact_proof)
+    artifact_plan_path = output / "MODEL_ARTIFACT_PLAN.json"
+    if artifact_plan is not None:
+        rollout_worker._safe_write_once(artifact_plan_path, artifact_plan)  # noqa: SLF001
     preflight = evaluate.preflight(output)
-    if artifact_proof != model_artifact.validate_live_models(config["models"], artifact_packet):
+    if artifact_proof != model_artifact.validate_live_models(
+        config["models"],
+        artifact_packet,
+        config_binding=config.get("model_artifact_binding"),
+        packet_path=Path(args.model_artifact_binding)
+        if getattr(args, "model_artifact_binding", None)
+        else None,
+        acceptance_path=artifact_acceptance,
+    ):
         raise ValueError("model artifact receipts changed during preflight")
     admin_dsn = os.environ.get("ROLLOUT_DATABASE_URL")
     if not admin_dsn:
@@ -140,6 +182,13 @@ def execute(args: argparse.Namespace) -> dict:
         "routes": terminals,
         "summary": summary,
     }
+    if config.get("model_artifact_binding") is not None:
+        terminal["model_artifact_binding"] = config["model_artifact_binding"]
+        terminal["model_artifact_plan"] = {
+            "path": artifact_plan_path.name,
+            "file_sha256": _sha256(artifact_plan_path),
+            "sha256": artifact_plan["sha256"],
+        }
     terminal["sha256"] = digest(terminal)
     rollout_worker._safe_write_once(output / "EVAL_TERMINAL.json", terminal)  # noqa: SLF001
     if summary["by_state"].get("accepted") != summary["total"]:
@@ -156,6 +205,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--harness-receipt", required=True)
     parser.add_argument("--harness-receipt-sha256", required=True)
     parser.add_argument("--model-artifact-binding")
+    parser.add_argument("--model-artifact-acceptance")
     return parser.parse_args()
 
 

@@ -29,8 +29,12 @@ docker info >/dev/null
 
 cd "$root"
 artifact_args=()
-if [[ -e /bootstrap/model-artifact.json ]]; then
-  artifact_args=(--model-artifact-binding /bootstrap/model-artifact.json)
+if [[ -e /bootstrap/model-artifact.json || -e /bootstrap/model-artifact-acceptance.json ]]; then
+  [[ -f /bootstrap/model-artifact.json && -f /bootstrap/model-artifact-acceptance.json ]]
+  artifact_args=(
+    --model-artifact-binding /bootstrap/model-artifact.json
+    --model-artifact-acceptance /bootstrap/model-artifact-acceptance.json
+  )
 fi
 exec uv run --no-project \
   --with httpx==0.28.1 \
