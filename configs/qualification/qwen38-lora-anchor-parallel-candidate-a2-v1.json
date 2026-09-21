@@ -116,6 +116,15 @@
         "the rendered priority remains c1 and the request remains one worker with eight GPUs"
       ],
       "submit_command_if_all_gates_pass": "cyber-post-train submit <prepared-directory>"
+    },
+    "sft_only_fallback_when_normal_preview_omits_only_the_root_annotation": {
+      "command_with_local_sfs_mount": "cyber-post-train direct-submit-sft <prepared-directory> --context <exact-production-context>",
+      "command_without_local_sfs_mount": "cyber-post-train direct-submit-sft <prepared-directory> --output-absence-receipt <prepared-directory>/OUTPUT_ABSENT.json --context <exact-production-context>",
+      "allowed_only_if": [
+        "the fresh Jobs API preview differs from the reviewed SFT render only by omitting the root fleet.ai/failure-alerts annotation",
+        "the maintained fallback's Kubernetes server dry-run proves fleet.ai/failure-alerts: off on the root RayJob before its one create"
+      ],
+      "scope_limit": "Use only the maintained SFT fallback. Do not hand-render, patch, or extend it to RL or conversion work."
     }
   },
   "pre_create_checklist": [
@@ -123,6 +132,7 @@
     "From a clean checkout whose exact HEAD equals freshly fetched canonical main, create one tracked A2 CPU preflight and collect the same terminal attempt into a fresh PREFLIGHT.json.",
     "Before any GPU create, prove the A2 output absent with the maintained create-once output check; A1's output or preflight evidence cannot be reused.",
     "Run the generic Jobs API preview first and require the root RayJob annotation fleet.ai/failure-alerts: off.",
+    "If and only if that fresh preview omits the root annotation while every other reviewed field matches, use direct-submit-sft so its Kubernetes server dry-run adds and proves the root annotation before its one create.",
     "Immediately before create, repeat duplicate and output-absence checks. Create once only; any uncertain response requires read-only reconciliation."
   ],
   "hard_stop_conditions": [
@@ -132,5 +142,5 @@
     "a preview, dry-run, image, source, resource, or Secret-reference mismatch",
     "insufficient live c1 capacity"
   ],
-  "packet_sha256": "b740b956cf8895cee70c37032539c61ed2f4a428f8123f86e171a066ef3361db"
+  "packet_sha256": "88d4e5749e0f36f27b16718d81785f35ab7e98f9edb638e32bedbd7c663bdc1d"
 }
