@@ -280,9 +280,7 @@ def train(config: Path, output: Annotated[Path, typer.Option("--output")]) -> No
 
 
 @app.command("lr30-step76-prepare")
-def lr30_step76_prepare(
-    plan_file: Path, output: Annotated[Path, typer.Option("--output")]
-) -> None:
+def lr30_step76_prepare(plan_file: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
     """Prepare only the exact LR30 step-76 zero-update GPU qualification."""
     from training.qwen38_lr30_step76_gate import (
         job_request,

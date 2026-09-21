@@ -92,10 +92,7 @@ def template(value, container_name):
                         for name, item in {**generated, **value["env"]}.items()
                     ],
                     "envFrom": [
-                        *[
-                            {"secretRef": {"name": name}}
-                            for name in value.get("secrets", [])
-                        ],
+                        *[{"secretRef": {"name": name}} for name in value.get("secrets", [])],
                         {"secretRef": {"name": placeholder + "-fleet-key"}},
                     ],
                     "resources": {
@@ -257,10 +254,7 @@ def test_lr30_render_is_exact_one_gpu_root_annotated_and_secret_free():
     ]
     assert all(group["template"]["spec"]["containers"][0]["envFrom"] == [] for group in groups)
     assert all(
-        group["template"]["spec"]["containers"][0]["resources"]["requests"][
-            "nvidia.com/gpu"
-        ]
-        == 1
+        group["template"]["spec"]["containers"][0]["resources"]["requests"]["nvidia.com/gpu"] == 1
         for group in groups
     )
 
