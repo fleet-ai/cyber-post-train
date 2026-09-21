@@ -33,6 +33,11 @@ DATABASE_SELECTION_FAILURE_EVIDENCE = (
     / "docs/evidence"
     / "qwen38-lr30-step76-stored-session-reconciliation-v2-database-selection-failure-20260921.json"
 )
+V3_TERMINAL_EVIDENCE = (
+    ROOT
+    / "docs/evidence"
+    / "qwen38-lr30-step76-stored-session-reconciliation-v3-terminal-20260921.json"
+)
 
 
 def _intent(path: Path, plan_path: Path = PLAN) -> Path:
@@ -120,6 +125,39 @@ def test_database_selection_failure_evidence_is_sanitized_and_target_database_un
     }
     assert evidence["output_and_release"]["model_generation_performed"] is False
     assert evidence["output_and_release"]["scoring_call_performed"] is False
+    assert all(value is False for value in evidence["privacy"].values())
+
+
+def test_v3_terminal_evidence_is_sanitized_complete_and_self_digesting():
+    evidence = json.loads(V3_TERMINAL_EVIDENCE.read_text())
+    assert evidence["sha256"] == reconciliation._body_digest(  # noqa: SLF001
+        {key: value for key, value in evidence.items() if key != "sha256"}
+    )
+    assert evidence["reviewed_package"]["root_failure_alert_annotation"] == "off"
+    assert evidence["reviewed_package"]["priority_class"] == "c1"
+    assert evidence["reviewed_package"]["gpu_request"] == 0
+    assert evidence["created_objects"]["job"]["active"] == 0
+    assert evidence["created_objects"]["job"]["succeeded"] == 1
+    assert evidence["created_objects"]["pod"]["phase"] == "Succeeded"
+    assert evidence["created_objects"]["pod"]["exit_code"] == 0
+    assert evidence["created_objects"]["pod"]["restart_count"] == 0
+    assert evidence["created_objects"]["workload"]["finished"] is True
+    terminal = evidence["terminal"]
+    assert terminal["status"] == "accepted"
+    assert terminal["accepted_existing_completed_session_count"] == 11
+    assert terminal["database_after"] == {
+        "total": 17,
+        "accepted": 17,
+        "retry_review": 0,
+        "active": 0,
+        "local_results": 17,
+        "reconciled": 11,
+        "reconciliation_receipts": 1,
+        "stored_session_events": 11,
+    }
+    assert terminal["model_generation_performed"] is False
+    assert terminal["scoring_call_performed"] is False
+    assert terminal["rollout_regeneration_performed"] is False
     assert all(value is False for value in evidence["privacy"].values())
 
 
