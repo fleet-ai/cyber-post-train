@@ -1,0 +1,72 @@
+{
+  "schema": "qwen38_lr30_step76_fleet_dev17_seed43_preview_v1",
+  "observed_at": "2026-09-21T04:59:48Z",
+  "scope": "Score-blind compile, duplicate-absence, route-state, server-preview, and CPU-capacity evidence only. Nothing was created, resumed, scored, or read from the final-test set.",
+  "source": {
+    "base_main_commit": "9ac3e9b108acdd6c2064c7db584f0f1d9228db0b",
+    "addendum": "configs/evaluation/qwen38-fleet-dev17-seed43-lr30-step76-addendum-v1.json",
+    "addendum_sha256": "415eafabd2663dc8b97c0dfc5016d41522ccdc7c9a143b32a8fc0c33960899e6",
+    "config_sha256": "sha256:5d394e534d94200d4941984d3e45a8aaafc180cb5814fd3751bdaa1ad567cd26",
+    "evaluation_plan_sha256": "sha256:cddb3c2d03b24914e21101cdf66de720423d5332fcbe92ae04d69b4a98a2af0c",
+    "task_count": 17
+  },
+  "route": {
+    "model_id": "chris-q38-lr30-step76-web-v1",
+    "inference_model_uid": "ad5f2c04-2112-49dc-b533-125cca207eb0",
+    "resource_version": "31229287",
+    "generation": 1,
+    "revision": "sha256:3bef11697759b11db150b705e1882fb2d31a3efbdadbebd948aa917dcacc03a8",
+    "phase": "paused",
+    "active_pods": 0,
+    "matching_pods": 0,
+    "gpus_allocated": 0,
+    "live_serving_qualified": false,
+    "next_gate": "exact_if_match_jit_resume_then_fresh_live_parity"
+  },
+  "evaluation_packet": {
+    "job_name": "chris-q38-dev17-s43-lr30s76-p1-v1",
+    "config_map_name": "chris-q38-dev17-s43-lr30s76-code-v1",
+    "database": "q38_dev17_s43_lr30s76_p1_v1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s43-lr30s76-p1-v1",
+    "job_client_preview_sha256": "sha256:2bd922811ed973c9ff209e719024af0deb7cf76016fac89b24a802b38a711099",
+    "job_server_preview_sha256": "sha256:2f0899b0bc9bc720a89cfd8b212b5d47233e4fcdf0a2750709c6589573e83640",
+    "config_map_client_preview_sha256": "sha256:f97787faf3e9713be35eab9c3092fcfee55682edd932e29c4bf4c42312aae58f",
+    "config_map_server_preview_sha256": "sha256:f97787faf3e9713be35eab9c3092fcfee55682edd932e29c4bf4c42312aae58f",
+    "config_map_bytes": 372519,
+    "generic_and_named_config_bytes_equal": true,
+    "server_preview_root_failure_alerts": "off",
+    "server_preview_priority_class": "c1",
+    "server_preview_suspended_for_kueue": true,
+    "evaluator_gpu_request": 0,
+    "job_absent": true,
+    "config_map_absent": true,
+    "workload_absent": true,
+    "pod_absent": true,
+    "output_absent": true,
+    "database_absent": true
+  },
+  "capacity": {
+    "cpu_node_count": 5,
+    "job_total_requests_including_dind": {
+      "cpu": "6",
+      "memory": "34Gi"
+    },
+    "fit_witness": {
+      "node": "computeinstance-e04fw0f2anvp0de74v",
+      "allocatable_cpu": "15900m",
+      "allocatable_memory": "65216556Ki",
+      "currently_requested_cpu": "3705m",
+      "currently_requested_memory": "6325Mi"
+    },
+    "decision": "The unchanged reviewed 4 CPU / 32 Gi evaluator plus 2 CPU / 2 Gi Docker sidecar fits a currently observed CPU node. Recheck immediately before creation."
+  },
+  "interpretation": {
+    "root_review_required_before_create": true,
+    "route_resumed": false,
+    "server_objects_created": false,
+    "sessions_created": false,
+    "capability_claim_made": false,
+    "final_eight_task_set_accessed": false
+  },
+  "sha256": "e74644cd65ed11f0679cc225b73c7d8d1d803d4d576bc9c91867539306fd4034"
+}
