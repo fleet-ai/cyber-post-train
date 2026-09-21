@@ -22,6 +22,7 @@ SCHEMA = "cyber_fleet_eval_model_artifact_v1"
 PACKET_SCHEMA = "cyber_fleet_eval_model_artifact_packet_v1"
 RECEIPT_LIMIT = 4 * 1024 * 1024
 LOCAL_ROOT = "/mnt/sfs/jobs/"
+RETIRED_CAMPAIGNS = {"q38-dev17-s43-fresh75-p1-v2"}
 SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 UID = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
 
@@ -103,10 +104,7 @@ def _stable_identity(value: os.stat_result) -> tuple[int, ...]:
     )
 
 
-def _read_receipt(binding: Mapping[str, Any], label: str) -> dict[str, Any]:
-    path = _safe_path(binding.get("path"), f"{label} path")
-    expected_file = _sha(binding.get("file_sha256"), f"{label} file digest")
-    expected_receipt = _sha(binding.get("receipt_sha256"), f"{label} embedded digest")
+def _read_stable_bytes(path: Path, label: str) -> tuple[bytes, str]:
     descriptor = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     try:
         before = os.fstat(descriptor)
@@ -118,15 +116,26 @@ def _read_receipt(binding: Mapping[str, Any], label: str) -> dict[str, Any]:
         after = os.fstat(descriptor)
     finally:
         os.close(descriptor)
-    if (
-        not stat.S_ISREG(before.st_mode)
-        or _stable_identity(before) != _stable_identity(after)
-        or _digest(raw) != expected_file
-    ):
-        raise ValueError(f"{label} bytes differ from the accepted binding")
+    if not stat.S_ISREG(before.st_mode) or _stable_identity(before) != _stable_identity(after):
+        raise ValueError(f"{label} changed while it was read")
+    return bytes(raw), _digest(raw)
+
+
+def _read_stable_json(path: Path, label: str) -> tuple[dict[str, Any], str]:
+    raw, file_sha256 = _read_stable_bytes(path, label)
     value = json.loads(raw)
     if not isinstance(value, dict):
         raise ValueError(f"{label} must contain one JSON object")
+    return value, file_sha256
+
+
+def _read_receipt(binding: Mapping[str, Any], label: str) -> dict[str, Any]:
+    path = _safe_path(binding.get("path"), f"{label} path")
+    expected_file = _sha(binding.get("file_sha256"), f"{label} file digest")
+    expected_receipt = _sha(binding.get("receipt_sha256"), f"{label} embedded digest")
+    value, actual_file = _read_stable_json(path, label)
+    if actual_file != expected_file:
+        raise ValueError(f"{label} bytes differ from the accepted binding")
     actual = value.get("receipt_sha256")
     if (
         not isinstance(actual, str)
@@ -356,6 +365,8 @@ def validate_packet(models: Mapping[str, Any], packet: Mapping[str, Any] | None)
         raise ValueError("model artifact packet has unknown or missing fields")
     if value.get("schema") != PACKET_SCHEMA:
         raise ValueError("unsupported model artifact packet schema")
+    if value.get("campaign_name") in RETIRED_CAMPAIGNS:
+        raise ValueError("model artifact packet belongs to a retired evaluation campaign")
     actual = value.get("sha256")
     if (
         not isinstance(actual, str)
@@ -376,13 +387,148 @@ def validate_packet(models: Mapping[str, Any], packet: Mapping[str, Any] | None)
     return dict(value)
 
 
+def _read_runtime_documents(
+    config_binding: Any,
+    packet: Mapping[str, Any],
+    packet_path: Path | None,
+    acceptance_path: Path | None,
+) -> dict[str, Any]:
+    binding = _mapping(config_binding, "config model artifact binding")
+    if set(binding) != {
+        "validator_file_sha256",
+        "packet_path",
+        "packet_file_sha256",
+        "packet_sha256",
+        "acceptance_evidence_path",
+        "acceptance_evidence_file_sha256",
+        "acceptance_evidence_sha256",
+    }:
+        raise ValueError("config model artifact binding has unknown or missing fields")
+    if packet_path is None or acceptance_path is None:
+        raise ValueError("model artifact packet and acceptance evidence must both be staged")
+    _, validator_file_sha256 = _read_stable_bytes(Path(__file__), "model artifact validator")
+    if validator_file_sha256 != _sha(
+        binding["validator_file_sha256"], "model artifact validator file digest"
+    ):
+        raise ValueError("model artifact validator differs from the config-bound code")
+    staged_packet, packet_file_sha256 = _read_stable_json(packet_path, "model artifact packet")
+    if staged_packet != packet:
+        raise ValueError("parsed model artifact packet differs from its staged bytes")
+    if packet_file_sha256 != _sha(
+        binding["packet_file_sha256"], "packet file digest"
+    ) or "sha256:" + str(packet.get("sha256")) != _sha(
+        binding["packet_sha256"], "packet semantic digest"
+    ):
+        raise ValueError("model artifact packet differs from the config-bound packet")
+    evidence, evidence_file_sha256 = _read_stable_json(
+        acceptance_path, "model artifact acceptance evidence"
+    )
+    expected_file = _sha(
+        binding["acceptance_evidence_file_sha256"], "acceptance evidence file digest"
+    )
+    expected_self = _sha(binding["acceptance_evidence_sha256"], "acceptance evidence digest")
+    if evidence_file_sha256 != expected_file or evidence.get("sha256") != expected_self:
+        raise ValueError("acceptance evidence differs from the config-bound evidence")
+    if _digest(_canonical({key: item for key, item in evidence.items() if key != "sha256"})) != (
+        expected_self
+    ):
+        raise ValueError("acceptance evidence self-digest does not validate")
+    return evidence
+
+
+def _validate_acceptance_evidence(
+    evidence: Mapping[str, Any],
+    binding: Mapping[str, Any],
+    checkpoint: Mapping[str, Any],
+    export: Mapping[str, Any],
+    gpu: Mapping[str, Any],
+) -> None:
+    qualification = binding["qualification"]
+    checkpoint_binding = binding["checkpoint_manifest"]
+    export_binding = binding["export_receipt"]
+    gpu_binding = binding["gpu_reload_receipt"]
+    training = _mapping(evidence.get("training"), "acceptance training evidence")
+    exported = _mapping(evidence.get("export"), "acceptance export evidence")
+    cpu = _mapping(evidence.get("cpu_check"), "acceptance CPU evidence")
+    gpu_check = _mapping(evidence.get("gpu_check"), "acceptance GPU evidence")
+    release = _mapping(evidence.get("release"), "acceptance release evidence")
+    if (
+        evidence.get("schema") != "cyber_qwen38_fresh75_step230_reload_acceptance_v1"
+        or training.get("status") != "SUCCEEDED"
+        or training.get("checkpoint_path") != checkpoint.get("checkpoint_path")
+        or training.get("optimizer_steps_executed") != checkpoint.get("optimizer_step")
+        or training.get("checkpoint_manifest_file_sha256") != checkpoint_binding["file_sha256"]
+        or training.get("checkpoint_receipt_sha256") != checkpoint_binding["receipt_sha256"]
+    ):
+        raise ValueError("acceptance evidence does not bind the native checkpoint")
+    payload = binding["payload"]
+    if (
+        exported.get("receipt_path") != export_binding["path"]
+        or exported.get("receipt_file_sha256") != export_binding["file_sha256"]
+        or exported.get("receipt_sha256") != export_binding["receipt_sha256"]
+        or exported.get("source_plan_sha256") != "sha256:" + str(export.get("source_plan_sha256"))
+        or exported.get("payload_manifest_sha256") != payload["manifest_sha256"]
+        or exported.get("dtype") != "BF16"
+        or exported.get("tensor_count") != payload["tensor_count"]
+        or exported.get("tensor_bytes") != payload["tensor_bytes"]
+        or exported.get("payload_files") != payload["file_count"]
+        or exported.get("source_unchanged") is not True
+        or exported.get("all_output_tensors_reopened_equal") is not True
+        or exported.get("optimizer_steps_executed") != 0
+    ):
+        raise ValueError("acceptance evidence does not bind the complete BF16 export")
+    if (
+        cpu.get("status") != "passed"
+        or cpu.get("gpus") != 0
+        or cpu.get("gpu_reload_verified") is not False
+        or cpu.get("source_unchanged") is not True
+        or cpu.get("optimizer_steps_executed") != 0
+    ):
+        raise ValueError("acceptance evidence does not bind the CPU integrity reload")
+    if (
+        gpu_check.get("jobs_api_status") != "SUCCEEDED"
+        or gpu_check.get("jobs_api_output") != str(PurePosixPath(gpu_binding["path"]).parent)
+        or gpu_check.get("rayjob_uid") != qualification["gpu_reload_rayjob_uid"]
+        or gpu_check.get("pod_uid") != qualification["gpu_reload_pod_uid"]
+        or gpu_check.get("gpu_check_file_sha256") != gpu_binding["file_sha256"]
+        or gpu_check.get("gpu_check_receipt_sha256") != gpu_binding["receipt_sha256"]
+        or gpu_check.get("status") != "passed"
+        or gpu_check.get("gpus") != 1
+        or gpu_check.get("gpu_reload_verified") is not True
+        or gpu_check.get("finite_logits") is not True
+        or gpu_check.get("generated_tokens") != 2
+        or gpu_check.get("source_unchanged") is not True
+        or gpu_check.get("serving_qualified") is not False
+        or gpu_check.get("optimizer_steps_executed") != 0
+    ):
+        raise ValueError("acceptance evidence does not bind the finite zero-update GPU reload")
+    if (
+        release.get("raycluster_absent") is not True
+        or release.get("pod_absent") is not True
+        or release.get("workload_finished") is not True
+        or release.get("gpu_allocation_released") is not True
+        or qualification["gpu_allocation_released"] is not True
+    ):
+        raise ValueError("acceptance evidence does not prove UID-bound GPU release")
+
+
 def validate_live_models(
-    models: Mapping[str, Any], packet: Mapping[str, Any] | None
+    models: Mapping[str, Any],
+    packet: Mapping[str, Any] | None,
+    *,
+    config_binding: Mapping[str, Any] | None = None,
+    packet_path: Path | None = None,
+    acceptance_path: Path | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Reopen exact producer receipts for every local model before side effects."""
 
     value = validate_packet(models, packet)
+    if not value:
+        if config_binding is not None or packet_path is not None or acceptance_path is not None:
+            raise ValueError("model artifact runtime inputs are not allowed without a local model")
+        return {}
     bindings = value.get("models", {})
+    evidence = _read_runtime_documents(config_binding, value, packet_path, acceptance_path)
     proof: dict[str, dict[str, Any]] = {}
     for alias, raw in models.items():
         model = _mapping(raw, f"model {alias}")
@@ -393,6 +539,16 @@ def validate_live_models(
         checkpoint = _read_receipt(binding["checkpoint_manifest"], "checkpoint manifest")
         export = _read_receipt(binding["export_receipt"], "export receipt")
         gpu = _read_receipt(binding["gpu_reload_receipt"], "GPU reload receipt")
+        qualification = binding["qualification"]
+        if (
+            qualification["acceptance_evidence_path"] != config_binding["acceptance_evidence_path"]
+            or qualification["acceptance_evidence_file_sha256"]
+            != config_binding["acceptance_evidence_file_sha256"]
+            or qualification["acceptance_evidence_sha256"]
+            != config_binding["acceptance_evidence_sha256"]
+        ):
+            raise ValueError("packet qualification differs from the config-bound evidence")
+        _validate_acceptance_evidence(evidence, binding, checkpoint, export, gpu)
         payload = binding["payload"]
         if (
             export.get("source_checkpoint_receipt_sha256")
@@ -423,7 +579,11 @@ def validate_live_models(
             "payload_manifest_sha256": payload["manifest_sha256"],
             "gpu_reload_receipt_file_sha256": binding["gpu_reload_receipt"]["file_sha256"],
             "gpu_reload_receipt_sha256": binding["gpu_reload_receipt"]["receipt_sha256"],
-            "gpu_reload_rayjob_uid": binding["qualification"]["gpu_reload_rayjob_uid"],
+            "acceptance_evidence_path": qualification["acceptance_evidence_path"],
+            "acceptance_evidence_file_sha256": qualification["acceptance_evidence_file_sha256"],
+            "acceptance_evidence_sha256": qualification["acceptance_evidence_sha256"],
+            "gpu_reload_rayjob_uid": qualification["gpu_reload_rayjob_uid"],
+            "gpu_reload_pod_uid": qualification["gpu_reload_pod_uid"],
             "gpu_allocation_released": True,
         }
     return proof
