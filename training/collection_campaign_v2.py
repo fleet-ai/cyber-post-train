@@ -117,6 +117,14 @@ def _packet(
     return v1.sealed(value)
 
 
+def compile_local(selection: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
+    """Reproduce the exact v2 evaluator plan from metadata-only inputs."""
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        (root / "task-selection.json").write_bytes(v1.raw(selection))
+        return runtime.compile_eval(config, relative_to=root)
+
+
 def render(
     request: dict[str, Any],
     inventory: dict[str, Any],
@@ -134,10 +142,7 @@ def render(
         role_anchor=role_anchor,
     )
     config = _runtime_config(rendered["eval-config.json"])
-    with tempfile.TemporaryDirectory() as temporary:
-        root = Path(temporary)
-        (root / "task-selection.json").write_bytes(v1.raw(rendered["task-selection.json"]))
-        plan = runtime.compile_eval(config, relative_to=root)
+    plan = compile_local(rendered["task-selection.json"], config)
     authorization = runtime.build_operation_authorization(plan)
     packet = _packet(rendered["collection-packet.json"], config, plan, authorization)
     return {
