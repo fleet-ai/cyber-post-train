@@ -155,6 +155,13 @@ public Job plan, and the private mode-0600 intent to carry the same terminal
 receipt self-digest. A mismatch means the packet was assembled from different
 reviews and must fail before a ConfigMap, Secret, or Job is created.
 
+The bootstrap bundle is a separate closure gate. Materialize only the exact
+ConfigMap module set in an isolated import tree and import the reconciler there.
+Importing it from the full repository can hide a missing transitive module; the
+live v1 packet demonstrated this when `rollout_worker` imported an unbundled
+`rollout_campaign`. A successor needs a fresh ConfigMap, Secret, Job, and output
+identity after that failure.
+
 The incident receipt is
 [`qwen38-lr30-step76-fleet-dev17-seed43-terminal-census-20260921.json`](evidence/qwen38-lr30-step76-fleet-dev17-seed43-terminal-census-20260921.json).
 The guard is [`stored_session_reconciliation.py`](../evals/fleet/stored_session_reconciliation.py),

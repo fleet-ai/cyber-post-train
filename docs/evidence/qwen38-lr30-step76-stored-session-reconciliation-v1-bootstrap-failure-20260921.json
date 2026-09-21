@@ -1,0 +1,79 @@
+{
+  "schema": "qwen38_lr30_step76_stored_session_reconciliation_bootstrap_failure_v1",
+  "observed_at": "2026-09-21T11:31:00Z",
+  "source_commit": "cf040ea35602c881a3ac1c228c9c1aa6a7fdd602",
+  "reviewed_package": {
+    "plan_sha256": "4350c6be2f2455ac8fd383b55d88772a21e22e07bfae2f18f201c892d23f64b6",
+    "private_intent_sha256": "6b423ae138306fd56e5c5e0727ebe137cd24a42c3dcea2cf0cb211aea00396e8",
+    "package_sha256": "36952a9450265a77b034bf6dcbc35cb841b961e54308e5dbf004fb08d7c1a8dd",
+    "selected_cell_count": 11,
+    "model_generation_allowed": false,
+    "scoring_call_allowed": false
+  },
+  "created_objects": {
+    "config_map": {
+      "name": "chris-q38-lr30s76-reconcile-code-v1",
+      "uid": "fda30512-4c49-4466-96f7-84a47950a325",
+      "immutable": true
+    },
+    "secret": {
+      "name": "chris-q38-lr30s76-reconcile-intent-v1",
+      "uid": "bfeac879-b0ee-464b-9001-e7ea228811da",
+      "immutable": true
+    },
+    "job": {
+      "name": "chris-q38-lr30s76-reconcile-v1",
+      "uid": "b19dd1fc-0aad-4414-a87b-759887950e82",
+      "condition": "Failed",
+      "reason": "BackoffLimitExceeded",
+      "active": 0,
+      "failed": 1,
+      "root_failure_alert_annotation": "off",
+      "priority_class": "c1",
+      "backoff_limit": 0,
+      "gpu_request": 0
+    },
+    "pod": {
+      "name": "chris-q38-lr30s76-reconcile-v1-swjg8",
+      "uid": "66e3cc2c-c7f2-4e10-9695-73838d4e29d9",
+      "phase": "Failed",
+      "exit_code": 1,
+      "restart_count": 0,
+      "started_at": "2026-09-21T11:30:29Z",
+      "finished_at": "2026-09-21T11:30:31Z"
+    },
+    "workload_present_after_terminal_cleanup": false
+  },
+  "failure": {
+    "stage": "isolated_bootstrap_import",
+    "error_class": "ImportError",
+    "missing_module": "evals.fleet.rollout_campaign",
+    "cause": "The ConfigMap bundled rollout_worker.py but omitted its transitive rollout_campaign.py import.",
+    "raw_log_or_stack_persisted": false
+  },
+  "post_failure_state": {
+    "database_states": {
+      "accepted": 6,
+      "retry_review": 10,
+      "claimed": 1
+    },
+    "stored_session_reconciliation_receipt_count": 0,
+    "output_root_absent": true,
+    "model_generation_performed": false,
+    "scoring_call_performed": false,
+    "gpu_allocated": false,
+    "active_resource_held": false
+  },
+  "repair": {
+    "add_exact_transitive_module": "evals/fleet/rollout_campaign.py",
+    "isolated_config_map_import_required_before_create": true,
+    "successor_requires_fresh_object_and_output_identities": true
+  },
+  "privacy": {
+    "score_values_included": false,
+    "cell_task_session_or_trace_identifiers_included": false,
+    "prompts_responses_flags_rewards_or_trace_content_included": false,
+    "credentials_included": false
+  },
+  "sha256": "c905fe3e2b24b29bad717122c8d89733a2a4be65eb8f46af16ff26cec6a9181b"
+}

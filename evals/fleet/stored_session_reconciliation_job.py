@@ -22,6 +22,7 @@ CODE_FILES = {
     "opencode_self_hosted.py": "evals/fleet/opencode_self_hosted.py",
     "retry_review_policy.py": "evals/fleet/retry_review_policy.py",
     "rollout_ledger.py": "evals/fleet/rollout_ledger.py",
+    "rollout_campaign.py": "evals/fleet/rollout_campaign.py",
     "rollout_postgres.py": "evals/fleet/rollout_postgres.py",
     "rollout_worker.py": "evals/fleet/rollout_worker.py",
     "stored_session_reconciliation.py": "evals/fleet/stored_session_reconciliation.py",
