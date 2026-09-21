@@ -21,6 +21,7 @@ from pathlib import Path
 from uuid import UUID
 
 from cyber_post_train.jobs import digest, quantity
+from scripts import probe_qwen38_prod8_terminal as prod8
 
 DEV_CONTEXT = "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb"
 PROD_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
@@ -79,11 +80,16 @@ def _validated_receipt(message: object, *, kind: str) -> dict | None:
     if not isinstance(message, str) or not message or len(message) > 16384:
         return None
     try:
-        value = json.loads(message)
-    except (TypeError, ValueError):
+        value = prod8.parse_receipt_json(message)
+    except (TypeError, ValueError, RecursionError):
         return None
     if not isinstance(value, dict):
         return None
+    if value.get("schema") == prod8.RECEIPT_SCHEMA:
+        try:
+            return prod8.validate_receipt(value)
+        except ValueError:
+            return None
     body = {key: item for key, item in value.items() if key != "sha256"}
     schemas = {
         "job": {
@@ -96,7 +102,6 @@ def _validated_receipt(message: object, *, kind: str) -> dict | None:
             "cyber_skyrl_reward_data_stage_receipt_v1",
             "cyber_skyrl_reward_cpu_preflight_v1",
             "cyber_skyrl_reward_cpu_preflight_rejection_v1",
-            "cyber_qwen38_prod8_terminal_probe_receipt_v1",
         },
         "fleetjob": {
             "cyber_skyrl_topology_probe_receipt_v1",
@@ -115,46 +120,13 @@ def _validated_receipt(message: object, *, kind: str) -> dict | None:
 def _receipt_execution_accepted(value: dict | None) -> bool:
     if value is None:
         return False
-    if value.get("schema") != "cyber_qwen38_prod8_terminal_probe_receipt_v1":
+    if value.get("schema") != prod8.RECEIPT_SCHEMA:
         return value.get("status") in {
             "passed",
             "published",
             "setup_and_internal_cleanup_passed",
         }
-    if value.get("status") != "inspected":
-        return False
-    serialized_size = len(
-        (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
-    )
-    return bool(
-        value.get("target") == "/mnt/sfs/jobs/chris-q38-rlreward-prod8"
-        and value.get("training_plan_sha256")
-        == "09cabfc727e8b8448bd00a5ea3cee03914844e67cfc80b1f033bdbe2671212de"
-        and type(value.get("gpus")) is int
-        and value["gpus"] == 0
-        and value.get("sfs_mount_read_only") is True
-        and value.get("private_payloads_read") is False
-        and type(value.get("receipt_size_limit_bytes")) is int
-        and value["receipt_size_limit_bytes"] == 3500
-        and type(value.get("receipt_size_bytes")) is int
-        and value["receipt_size_bytes"] == serialized_size
-        and value["receipt_size_bytes"] <= 3500
-        and type(value.get("receipt_compaction_level")) is int
-        and value["receipt_compaction_level"] in {0, 1, 2, 3}
-        and value.get("terminal_classification")
-        in {
-            "failed",
-            "rejected",
-            "native_training_complete",
-            "unaccepted_failed_marker",
-            "unaccepted_rejected_marker",
-            "unaccepted_complete_marker",
-            "no_terminal_marker",
-        }
-        and isinstance(value.get("root_markers"), list)
-        and isinstance(value.get("batch_inventory"), dict)
-        and isinstance(value.get("checkpoint_inventory"), dict)
-    )
+    return prod8.receipt_execution_accepted(value)
 
 
 @dataclass
@@ -177,6 +149,10 @@ class Snapshot:
     restarts: int = 0
     peak_gpus: int = 0
     receipt: dict | None = None
+    prod8_normalized_manifest: dict | None = None
+    prod8_container_observations: dict[str, dict] = field(default_factory=dict)
+    prod8_receipt_bound: bool = False
+    prod8_binding_error: str = ""
 
 
 class Observer:
@@ -275,6 +251,9 @@ class Observer:
         self.observation_failures = 0
         self.max_consecutive_observation_failures = 0
         self.last_observation_error_code = ""
+
+    def _is_prod8_terminal_probe(self) -> bool:
+        return self.kind == "job" and self.name == prod8.NAME
 
     def _kubectl(self, *arguments: str) -> str:
         command = [
@@ -402,7 +381,71 @@ class Observer:
         self.snapshot.uid = uid
         self.snapshot.created_at = created
 
+    def _bind_prod8_manifest(self, resource: dict) -> None:
+        if self.manifest_sha256.removeprefix("sha256:") != prod8.manifest_digest():
+            self.snapshot.prod8_binding_error = "manifest_digest_mismatch"
+            return
+        try:
+            normalized = prod8.normalized_manifest(resource)
+        except ValueError:
+            self.snapshot.prod8_binding_error = "manifest_malformed"
+            return
+        if not prod8._exactly_equal(normalized, prod8.expected_normalized_manifest()):
+            self.snapshot.prod8_binding_error = "manifest_mismatch"
+            return
+        self.snapshot.prod8_normalized_manifest = normalized
+
+    def _capture_prod8_pods(self, pods: list[dict]) -> None:
+        expected_digest = prod8.IMAGE.rsplit("@", 1)[1]
+        for pod in pods:
+            uid, _ = self._metadata(pod)
+            metadata = pod.get("metadata", {})
+            name = metadata.get("name")
+            if not isinstance(name, str) or not name:
+                self.snapshot.prod8_binding_error = "pod_name_missing"
+                continue
+            if (
+                self.snapshot.prod8_container_observations
+                and uid not in self.snapshot.prod8_container_observations
+            ):
+                self.snapshot.prod8_binding_error = "multiple_pods"
+                continue
+            try:
+                observation = prod8.normalized_terminal_pod(pod, job_uid=self.snapshot.uid)
+            except ValueError:
+                self.snapshot.prod8_binding_error = "pod_binding_mismatch"
+                continue
+            message = observation.pop("termination_message")
+            self.snapshot.pod_names.add(name)
+            self.snapshot.pod_uids.add(uid)
+            self.snapshot.prod8_container_observations[uid] = observation
+            runtime_image = observation.get("runtime_image_id")
+            if isinstance(runtime_image, str):
+                self.snapshot.image_ids.add(runtime_image)
+            restart_count = observation["restart_count"]
+            self.snapshot.restarts = max(self.snapshot.restarts, restart_count)
+            exit_code = observation.get("exit_code")
+            if exit_code is not None:
+                self.snapshot.exit_codes.add(exit_code)
+            reason = observation.get("termination_reason")
+            if isinstance(reason, str) and reason:
+                self.snapshot.termination_reasons.add(reason)
+            if (
+                not self.snapshot.prod8_binding_error
+                and observation.get("runtime_image_digest") == expected_digest
+                and observation.get("exit_code") == 0
+                and restart_count == 0
+                and message is not None
+            ):
+                receipt = _validated_receipt(message, kind=self.kind)
+                if receipt is not None:
+                    self.snapshot.receipt = receipt
+                    self.snapshot.prod8_receipt_bound = True
+
     def _capture_pods(self, pods: list[dict]) -> None:
+        if self._is_prod8_terminal_probe():
+            self._capture_prod8_pods(pods)
+            return
         current_gpus = 0
         for pod in pods:
             uid, _ = self._metadata(pod)
@@ -437,7 +480,15 @@ class Observer:
         self.snapshot.peak_gpus = max(self.snapshot.peak_gpus, current_gpus)
 
     def _observe_job(self, resource: dict) -> None:
-        pods = self._list("pod", "--selector", f"job-name={self.name}")
+        if self._is_prod8_terminal_probe():
+            self._bind_prod8_manifest(resource)
+            pods = self._list(
+                "pod",
+                "--selector",
+                f"batch.kubernetes.io/controller-uid={self.snapshot.uid}",
+            )
+        else:
+            pods = self._list("pod", "--selector", f"job-name={self.name}")
         self._capture_pods(pods)
         conditions = resource.get("status", {}).get("conditions", [])
         for condition in conditions:
@@ -638,12 +689,24 @@ class Observer:
             time.sleep(self.poll_seconds)
 
     def result(self, release: dict, *, observer_error_class: str = "") -> dict:
-        receipt = self.snapshot.receipt
+        prod8_bound = not self._is_prod8_terminal_probe() or (
+            self.snapshot.prod8_normalized_manifest is not None
+            and self.snapshot.prod8_receipt_bound
+            and len(self.snapshot.prod8_container_observations) == 1
+            and not self.snapshot.prod8_binding_error
+        )
+        receipt = self.snapshot.receipt if prod8_bound else None
         accepted = (
             not observer_error_class
             and self.snapshot.terminal_status == "Succeeded"
             and _receipt_execution_accepted(receipt)
             and self.snapshot.peak_gpus == self.expected_gpus
+            and prod8_bound
+            and (
+                not isinstance(receipt, dict)
+                or receipt.get("schema") != prod8.RECEIPT_SCHEMA
+                or self._is_prod8_terminal_probe()
+            )
         )
         status = "released" if accepted else "released_without_accepted_execution"
         return _seal(
@@ -683,6 +746,27 @@ class Observer:
                 "last_observation_error_code": self.last_observation_error_code,
                 "deletion_reason": self.deletion_reason,
                 "deletion_requested_at": self.deletion_requested_at,
+                **(
+                    {
+                        "prod8_live_binding": {
+                            "job_uid": self.snapshot.uid,
+                            "normalized_manifest": self.snapshot.prod8_normalized_manifest,
+                            "normalized_manifest_sha256": (
+                                digest(self.snapshot.prod8_normalized_manifest)
+                                if self.snapshot.prod8_normalized_manifest is not None
+                                else ""
+                            ),
+                            "containers": [
+                                self.snapshot.prod8_container_observations[uid]
+                                for uid in sorted(self.snapshot.prod8_container_observations)
+                            ],
+                            "receipt_container_bound": self.snapshot.prod8_receipt_bound,
+                            "binding_error": self.snapshot.prod8_binding_error,
+                        }
+                    }
+                    if self._is_prod8_terminal_probe()
+                    else {}
+                ),
                 **(
                     {"recovered_existing_target_uid": self.expected_uid}
                     if self.expected_uid

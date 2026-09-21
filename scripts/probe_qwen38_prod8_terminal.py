@@ -4,11 +4,20 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
+import re
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from cyber_post_train.jobs import FAILURE_ALERT_ANNOTATION, FAILURE_ALERT_OFF, JobsError, digest
+from cyber_post_train.jobs import (
+    FAILURE_ALERT_ANNOTATION,
+    FAILURE_ALERT_OFF,
+    JobsError,
+    digest,
+    quantity,
+)
 from training import skyrl_reward_rayjob as direct
 
 NAME = "chris-q38-prod8-terminal-probe-v1"
@@ -18,8 +27,59 @@ IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@"
     "sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
 )
-RECEIPT_SCHEMA = "cyber_qwen38_prod8_terminal_probe_receipt_v1"
+RECEIPT_SCHEMA = "cyber_qwen38_prod8_terminal_probe_receipt_v2"
 PREVIEW_SCHEMA = "cyber_qwen38_prod8_terminal_probe_preview_v1"
+MAX_RECEIPT_BYTES = 3500
+MAX_SCAN_ATTEMPTS = 2
+MAX_COUNT = 2_147_483_647
+MAX_TOTAL_BYTES = 9_223_372_036_854_775_807
+ROOT_MARKERS = (
+    "STARTED.json",
+    "FAILED.json",
+    "NATIVE_FAILURE.json",
+    "NATIVE_REJECTED.json",
+    "REJECTED.json",
+    "NATIVE_TRAINING_COMPLETE.json",
+    "ACCEPTED.json",
+)
+BATCH_MARKERS = ("STARTED.json", "COLLECTED.json", "REJECTED.json", "FAILED.json")
+MARKER_REASONS = frozenset(
+    {
+        "absent",
+        "accepted",
+        "not_direct_regular_file",
+        "not_small_regular_file",
+        "changed_during_read",
+        "invalid_json",
+        "not_object",
+        "invalid_digest_input",
+        "digest_mismatch",
+        "schema_or_binding_mismatch",
+        "scan_mutated",
+    }
+)
+STABLE_REJECTED_MARKER_REASONS = MARKER_REASONS - {
+    "absent",
+    "accepted",
+    "changed_during_read",
+    "scan_mutated",
+}
+TERMINAL_CLASSIFICATIONS = frozenset(
+    {
+        "failed",
+        "rejected",
+        "native_training_complete",
+        "unaccepted_failed_marker",
+        "unaccepted_rejected_marker",
+        "unaccepted_complete_marker",
+        "no_terminal_marker",
+        "root_missing",
+        "unaccepted_root",
+        "unaccepted_scan_mutation",
+    }
+)
+_DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
+_RFC3339 = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z\Z")
 
 # This program runs in the exact immutable training image with the SFS mount
 # read-only. It opens only the public, sanitized root lifecycle markers written
@@ -35,6 +95,9 @@ SCHEMA=os.environ["PROBE_RECEIPT_SCHEMA"]
 RECEIPT=pathlib.Path(os.environ.get("PROBE_RECEIPT_PATH","/dev/termination-log"))
 MAX_MARKER_BYTES=131072
 MAX_RECEIPT_BYTES=3500
+MAX_SCAN_ATTEMPTS=2
+MAX_COUNT=2147483647
+MAX_TOTAL_BYTES=9223372036854775807
 ROOT_MARKERS=(
     "STARTED.json","FAILED.json","NATIVE_FAILURE.json","NATIVE_REJECTED.json",
     "REJECTED.json","NATIVE_TRAINING_COMPLETE.json","ACCEPTED.json",
@@ -43,6 +106,41 @@ BATCH_MARKERS=("STARTED.json","COLLECTED.json","REJECTED.json","FAILED.json")
 SAFE_WATCHDOGS=(None,"hard_runtime_bound","confirmed_no_progress_idle")
 SAFE_NAMES=re.compile(r"^[A-Za-z_][A-Za-z0-9_.<>-]{0,63}$")
 SAFE_FILES=re.compile(r"^[A-Za-z0-9_.-]{1,60}\.py$")
+
+class ScanMutation(Exception):
+    pass
+
+def stat_signature(value):
+    return (
+        value.st_mode,value.st_dev,value.st_ino,value.st_size,
+        value.st_mtime_ns,value.st_ctime_ns,
+    )
+
+def directory_snapshot(fd):
+    before=os.fstat(fd)
+    if not stat.S_ISDIR(before.st_mode):
+        raise ScanMutation()
+    try:
+        names=os.listdir(fd)
+    except OSError as exc:
+        raise ScanMutation() from exc
+    if len(names)>MAX_COUNT:
+        raise ScanMutation()
+    rows=[]
+    for name in sorted(names):
+        try:
+            current=os.stat(name,dir_fd=fd,follow_symlinks=False)
+        except (FileNotFoundError,OSError) as exc:
+            raise ScanMutation() from exc
+        rows.append((name,stat_signature(current)))
+    after=os.fstat(fd)
+    if stat_signature(before)!=stat_signature(after):
+        raise ScanMutation()
+    return stat_signature(before),tuple(rows)
+
+def assert_directory_unchanged(fd,before):
+    if directory_snapshot(fd)!=before:
+        raise ScanMutation()
 
 def canonical(value):
     return json.dumps(value,sort_keys=True,separators=(",",":"),allow_nan=False).encode()
@@ -163,7 +261,7 @@ def open_direct_directory_at(parent_fd,name):
 
 def directory_tree_stats(root_fd,visited=None,depth=0):
     if depth>32:
-        return None
+        raise ScanMutation()
     files=0
     total=0
     visited=set() if visited is None else visited
@@ -172,31 +270,33 @@ def directory_tree_stats(root_fd,visited=None,depth=0):
     if identity in visited:
         return files,total
     visited.add(identity)
-    try:
-        names=os.listdir(root_fd)
-    except OSError:
-        return None
-    for name in names:
+    before=directory_snapshot(root_fd)
+    for name,expected in before[1]:
         try:
             info=os.stat(name,dir_fd=root_fd,follow_symlinks=False)
-        except (FileNotFoundError,OSError):
-            return None
+        except (FileNotFoundError,OSError) as exc:
+            raise ScanMutation() from exc
+        if stat_signature(info)!=expected:
+            raise ScanMutation()
         if stat.S_ISREG(info.st_mode):
             files+=1
             total+=info.st_size
+            if files>MAX_COUNT or total>MAX_TOTAL_BYTES:
+                raise ScanMutation()
         elif stat.S_ISDIR(info.st_mode):
             child_fd,_=open_direct_directory_at(root_fd,name)
             if child_fd is None:
-                return None
+                raise ScanMutation()
             try:
                 child=directory_tree_stats(child_fd,visited,depth+1)
             finally:
                 os.close(child_fd)
-            if child is None:
-                return None
             child_files,child_total=child
             files+=child_files
             total+=child_total
+            if files>MAX_COUNT or total>MAX_TOTAL_BYTES:
+                raise ScanMutation()
+    assert_directory_unchanged(root_fd,before)
     return files,total
 
 def safe_frame(value):
@@ -236,22 +336,17 @@ def safe_cause(value):
 
 def sanitize_root(name, info):
     if info is None:
-        return {"name":name,"present":False}
+        return {"name":name,"present":False,"accepted":False,"reason":"absent"}
     base={"name":name,"present":True,"accepted":False}
     if not info.get("accepted"):
-        return {**base,"reason":info["reason"]}
+        return {**base,"reason":info.get("reason","schema_or_binding_mismatch")}
     if name=="ACCEPTED.json":
-        return {
-            **base,"accepted":True,"size_bytes":info["size_bytes"],
-            "mtime_ns":info["mtime_ns"],"selected":{"present":True},
-        }
+        return {**base,"accepted":True,"reason":"accepted"}
     value=info["value"]
-    common={**base,"size_bytes":info["size_bytes"],"mtime_ns":info["mtime_ns"],
-            "file_sha256":info["file_sha256"]}
-    selected=None
+    accepted=False
     if name=="STARTED.json" and set(value)=={"plan_sha256","started_at","sha256"}:
         if value.get("plan_sha256")==PLAN and type(value.get("started_at")) in (int,float):
-            selected={"plan_sha256":value["plan_sha256"],"started_at":value["started_at"]}
+            accepted=True
     elif name=="FAILED.json" and set(value)=={
         "status","plan_sha256","error_class","watchdog_reason","sha256"
     }:
@@ -259,9 +354,7 @@ def sanitize_root(name, info):
             and isinstance(value.get("error_class"),str)
             and SAFE_NAMES.fullmatch(value["error_class"])
             and value.get("watchdog_reason") in SAFE_WATCHDOGS):
-            selected={key:value[key] for key in (
-                "status","plan_sha256","error_class","watchdog_reason"
-            )}
+            accepted=True
     elif name=="NATIVE_FAILURE.json" and set(value)=={"plan_sha256","causes","sha256"}:
         causes=value.get("causes")
         safe=(
@@ -269,17 +362,14 @@ def sanitize_root(name, info):
             if isinstance(causes,list) and len(causes)<=8 else []
         )
         if value.get("plan_sha256")==PLAN and isinstance(causes,list) and safe and all(safe):
-            selected={
-                "plan_sha256":value["plan_sha256"],"causes":safe[:2],
-                "causes_total":len(safe),
-            }
+            accepted=True
     elif name in ("NATIVE_REJECTED.json","REJECTED.json") and set(value)=={
         "schema","status","reason","plan_sha256","sha256"
     }:
         if (value.get("schema")=="cyber_rl_native_rejection_v1" and value.get("status")=="rejected"
             and value.get("plan_sha256")==PLAN and isinstance(value.get("reason"),str)
             and SAFE_NAMES.fullmatch(value["reason"])):
-            selected={key:value[key] for key in ("schema","status","reason","plan_sha256")}
+            accepted=True
     elif name=="NATIVE_TRAINING_COMPLETE.json" and set(value)=={
         "status","plan_sha256","checkpoint_global_step","completed_batches","completed_at",
         "optimizer_update_independently_verified","checkpoint_reload_verified","sha256"
@@ -293,138 +383,125 @@ def sanitize_root(name, info):
             and 0<=value["completed_at"]<1e20
             and value.get("optimizer_update_independently_verified") is False
             and value.get("checkpoint_reload_verified") is False):
-            selected={key:value[key] for key in (
-                "status","plan_sha256","checkpoint_global_step","completed_batches",
-                "optimizer_update_independently_verified","checkpoint_reload_verified")}
-    if selected is None:
-        return {**common,"reason":"schema_or_binding_mismatch"}
-    return {**common,"accepted":True,"selected":selected}
+            accepted=True
+    if not accepted:
+        return {**base,"reason":"schema_or_binding_mismatch"}
+    return {**base,"accepted":True,"reason":"accepted"}
 
 def batch_inventory(root_fd):
+    empty={
+        "directory_present":False,"accepted":True,"batch_directories":0,
+        "markers":{
+            name:{"count":0,"direct_regular_count":0,"indirect_count":0}
+            for name in BATCH_MARKERS
+        },
+    }
     episodes_fd,reason=open_direct_directory_at(root_fd,"episodes")
     if episodes_fd is None:
         if reason!="missing":
-            return {"directory_present":True,"accepted":False,"reason":reason}
-        return {
-            "directory_present":False,"batch_directories":0,
-            "markers":{
-                name:{"count":0,"direct_regular_count":0,"indirect_count":0,"latest":None}
-                for name in BATCH_MARKERS
-            },
-        }
+            return {**empty,"directory_present":True,"accepted":False}
+        return empty
     try:
+        episodes_before=directory_snapshot(episodes_fd)
         parent_fd,reason=open_direct_directory_at(episodes_fd,"batches")
+        if parent_fd is None:
+            assert_directory_unchanged(episodes_fd,episodes_before)
+            if reason!="missing":
+                return {**empty,"directory_present":True,"accepted":False}
+            return empty
+        markers={
+            name:{"count":0,"direct_regular_count":0,"indirect_count":0}
+            for name in BATCH_MARKERS
+        }
+        count=0
+        try:
+            parent_before=directory_snapshot(parent_fd)
+            for entry_name,expected in parent_before[1]:
+                try:
+                    entry_info=os.stat(entry_name,dir_fd=parent_fd,follow_symlinks=False)
+                except (FileNotFoundError,OSError) as exc:
+                    raise ScanMutation() from exc
+                if stat_signature(entry_info)!=expected:
+                    raise ScanMutation()
+                if not stat.S_ISDIR(entry_info.st_mode):
+                    continue
+                entry_fd,_=open_direct_directory_at(parent_fd,entry_name)
+                if entry_fd is None:
+                    raise ScanMutation()
+                try:
+                    count+=1
+                    if count>MAX_COUNT:
+                        raise ScanMutation()
+                    entry_before=directory_snapshot(entry_fd)
+                    for name in BATCH_MARKERS:
+                        row=stat_info_at(entry_fd,name)
+                        if row is not None:
+                            summary=markers[name]
+                            summary["count"]+=1
+                            if summary["count"]>MAX_COUNT:
+                                raise ScanMutation()
+                            accepted=row.get("accepted") is True
+                            summary["direct_regular_count" if accepted else "indirect_count"]+=1
+                    assert_directory_unchanged(entry_fd,entry_before)
+                finally:
+                    os.close(entry_fd)
+            assert_directory_unchanged(parent_fd,parent_before)
+        finally:
+            os.close(parent_fd)
+        assert_directory_unchanged(episodes_fd,episodes_before)
+        return {
+            "directory_present":True,
+            "accepted":True,
+            "batch_directories":count,
+            "markers":markers,
+        }
     finally:
         os.close(episodes_fd)
-    if parent_fd is None:
-        if reason!="missing":
-            return {"directory_present":True,"accepted":False,"reason":reason}
-        return {
-            "directory_present":False,"batch_directories":0,
-            "markers":{
-                name:{"count":0,"direct_regular_count":0,"indirect_count":0,"latest":None}
-                for name in BATCH_MARKERS
-            },
-        }
-    markers={
-        name:{
-            "count":0,"direct_regular_count":0,"indirect_count":0,"latest":None,
-            "latest_mtime_ns":-1,
-        }
-        for name in BATCH_MARKERS
-    }
-    count=0
-    try:
-        try:
-            names=os.listdir(parent_fd)
-        except OSError:
-            return {
-                "directory_present":True,"accepted":False,
-                "reason":"batch_inventory_incomplete",
-            }
-        for entry_name in sorted(names):
-            try:
-                entry_info=os.stat(entry_name,dir_fd=parent_fd,follow_symlinks=False)
-            except (FileNotFoundError,OSError):
-                return {
-                    "directory_present":True,"accepted":False,
-                    "reason":"batch_inventory_incomplete",
-                }
-            if not stat.S_ISDIR(entry_info.st_mode):
-                continue
-            entry_fd,_=open_direct_directory_at(parent_fd,entry_name)
-            if entry_fd is None:
-                return {
-                    "directory_present":True,"accepted":False,
-                    "reason":"batch_inventory_incomplete",
-                }
-            try:
-                count+=1
-                for name in BATCH_MARKERS:
-                    row=stat_info_at(entry_fd,name)
-                    if row is not None:
-                        summary=markers[name]
-                        summary["count"]+=1
-                        accepted=row.get("accepted") is True
-                        summary["direct_regular_count" if accepted else "indirect_count"]+=1
-                        mtime=row.get("mtime_ns",-1)
-                        if accepted and mtime>=summary["latest_mtime_ns"]:
-                            summary["latest_mtime_ns"]=mtime
-                            summary["latest"]={"size_bytes":row["size_bytes"],"mtime_ns":mtime}
-            finally:
-                os.close(entry_fd)
-    finally:
-        os.close(parent_fd)
-    for summary in markers.values():
-        summary.pop("latest_mtime_ns")
-    return {"directory_present":True,"accepted":True,"batch_directories":count,"markers":markers}
 
 def checkpoint_inventory(root_fd):
+    empty={
+        "directory_present":False,"accepted":True,"global_step_count":0,
+        "minimum_step":None,"maximum_step":None,"boundary_steps":[],
+        "file_count":0,"total_bytes":0,"latest_pointer_step":None,
+    }
     parent_fd,reason=open_direct_directory_at(root_fd,"checkpoints")
     if parent_fd is None and reason=="missing":
-        return {
-            "directory_present":False,"global_step_count":0,"minimum_step":None,
-            "maximum_step":None,"boundary_steps":[],"file_count":0,"total_bytes":0,
-            "latest_pointer_step":None,
-        }
+        return empty
     if parent_fd is None:
-        return {"directory_present":True,"accepted":False,"reason":reason}
+        return {**empty,"directory_present":True,"accepted":False}
     try:
         pinned=os.fstat(parent_fd)
         if not stat.S_ISDIR(pinned.st_mode):
-            return {"directory_present":True,"accepted":False,"reason":"not_direct_directory"}
+            return {**empty,"directory_present":True,"accepted":False}
         steps=[]
         files=0
         total=0
-        try:
-            names=os.listdir(parent_fd)
-        except OSError:
-            return {
-                "directory_present":True,"accepted":False,
-                "reason":"checkpoint_inventory_incomplete",
-            }
-        for name in sorted(names):
+        parent_before=directory_snapshot(parent_fd)
+        for name,expected in parent_before[1]:
+            try:
+                current=os.stat(name,dir_fd=parent_fd,follow_symlinks=False)
+            except (FileNotFoundError,OSError) as exc:
+                raise ScanMutation() from exc
+            if stat_signature(current)!=expected:
+                raise ScanMutation()
             match=re.fullmatch(r"global_step_(\d+)",name)
             if match:
+                step=int(match.group(1))
+                if step>MAX_COUNT:
+                    raise ScanMutation()
                 child_fd,_=open_direct_directory_at(parent_fd,name)
                 if child_fd is None:
-                    return {
-                        "directory_present":True,"accepted":False,
-                        "reason":"checkpoint_inventory_incomplete",
-                    }
+                    raise ScanMutation()
                 try:
                     child=directory_tree_stats(child_fd)
                 finally:
                     os.close(child_fd)
-                if child is None:
-                    return {
-                        "directory_present":True,"accepted":False,
-                        "reason":"checkpoint_inventory_incomplete",
-                    }
                 child_files,child_total=child
-                steps.append(int(match.group(1)))
+                steps.append(step)
                 files+=child_files
                 total+=child_total
+                if len(steps)>MAX_COUNT or files>MAX_COUNT or total>MAX_TOTAL_BYTES:
+                    raise ScanMutation()
         steps=sorted(set(steps))
         boundary=steps[:2]+[step for step in steps[-2:] if step not in steps[:2]]
         latest=None
@@ -433,8 +510,11 @@ def checkpoint_inventory(root_fd):
             text=raw.decode().strip() if raw is not None else ""
             if text.isdecimal():
                 latest=int(text)
+                if latest>MAX_COUNT:
+                    latest=None
         except UnicodeDecodeError:
             pass
+        assert_directory_unchanged(parent_fd,parent_before)
     finally:
         os.close(parent_fd)
     return {
@@ -444,70 +524,109 @@ def checkpoint_inventory(root_fd):
         "latest_pointer_step":latest,
     }
 
-try:
-    root_fd=os.open(
-        ROOT,
-        os.O_RDONLY|getattr(os,"O_DIRECTORY",0)|getattr(os,"O_NOFOLLOW",0),
-    )
-except FileNotFoundError:
-    root_fd=None
-    root_exists=False
-    root_direct=False
-except OSError:
-    root_fd=None
-    root_exists=True
-    root_direct=False
-else:
-    root_exists=True
-    root_direct=stat.S_ISDIR(os.fstat(root_fd).st_mode)
-root_markers=(
-    [
-        sanitize_root(
-            name,
-            stat_info_at(root_fd,name) if name=="ACCEPTED.json" else file_info_at(root_fd,name),
-        )
+def marker_rows(reason):
+    return [
+        {"name":name,"present":False,"accepted":False,"reason":reason}
         for name in ROOT_MARKERS
     ]
-    if root_direct else []
-)
-present={row["name"]:row for row in root_markers if row.get("present")}
-if "FAILED.json" in present:
-    terminal="failed" if present["FAILED.json"].get("accepted") else "unaccepted_failed_marker"
-elif "REJECTED.json" in present:
-    terminal=(
-        "rejected"
-        if present["REJECTED.json"].get("accepted") else "unaccepted_rejected_marker"
-    )
-elif "NATIVE_TRAINING_COMPLETE.json" in present:
-    terminal=(
-        "native_training_complete"
-        if present["NATIVE_TRAINING_COMPLETE.json"].get("accepted")
-        else "unaccepted_complete_marker"
-    )
-else:
-    terminal="no_terminal_marker"
 
-def cause_summary(markers):
+def empty_batch(accepted):
+    return {
+        "directory_present":False,"accepted":accepted,"batch_directories":0,
+        "markers":{
+            name:{"count":0,"direct_regular_count":0,"indirect_count":0}
+            for name in BATCH_MARKERS
+        },
+    }
+
+def empty_checkpoint(accepted):
+    return {
+        "directory_present":False,"accepted":accepted,"global_step_count":0,
+        "minimum_step":None,"maximum_step":None,"boundary_steps":[],
+        "file_count":0,"total_bytes":0,"latest_pointer_step":None,
+    }
+
+def path_signature():
+    try:
+        return stat_signature(os.stat(ROOT,follow_symlinks=False))
+    except FileNotFoundError:
+        return None
+    except OSError:
+        return ("unavailable",)
+
+def classify(root_exists,root_direct,markers,stable):
+    if not stable:
+        return "unaccepted_scan_mutation"
+    if not root_exists:
+        return "root_missing"
+    if not root_direct:
+        return "unaccepted_root"
     by_name={row["name"]:row for row in markers}
-    result={}
-    outer=by_name.get("FAILED.json",{}).get("selected",{})
-    if outer:
-        result["outer_error_class"]=outer.get("error_class")
-        result["watchdog_reason"]=outer.get("watchdog_reason")
-    native=by_name.get("NATIVE_FAILURE.json",{}).get("selected",{})
-    causes=native.get("causes",[])
-    if causes:
-        first=causes[0]
-        result.update({
-            "native_causes_total":native.get("causes_total"),
-            "native_error_class":first.get("error_class"),
-            "native_actor_init_failed":first.get("actor_init_failed"),
-            "native_remote_error_classes":first.get("remote_error_classes",[])[:2],
-            "native_first_remote_frame":(
-                first.get("remote_frames",[])[0] if first.get("remote_frames") else None
-            ),
-        })
-    return result
+    for name,accepted,rejected in (
+        ("FAILED.json","failed","unaccepted_failed_marker"),
+        ("REJECTED.json","rejected","unaccepted_rejected_marker"),
+        ("NATIVE_TRAINING_COMPLETE.json","native_training_complete","unaccepted_complete_marker"),
+    ):
+        row=by_name[name]
+        if row["present"]:
+            return accepted if row["accepted"] else rejected
+    return "no_terminal_marker"
+
+def scan_once():
+    before_path=path_signature()
+    try:
+        root_fd=os.open(
+            ROOT,
+            os.O_RDONLY|getattr(os,"O_DIRECTORY",0)|getattr(os,"O_NOFOLLOW",0),
+        )
+    except FileNotFoundError:
+        if before_path!=path_signature():
+            raise ScanMutation()
+        return False,False,marker_rows("absent"),empty_batch(True),empty_checkpoint(True)
+    except OSError:
+        if before_path!=path_signature():
+            raise ScanMutation()
+        return True,False,marker_rows("absent"),empty_batch(True),empty_checkpoint(True)
+    try:
+        if not stat.S_ISDIR(os.fstat(root_fd).st_mode):
+            return True,False,marker_rows("absent"),empty_batch(True),empty_checkpoint(True)
+        root_before=directory_snapshot(root_fd)
+        markers=[
+            sanitize_root(
+                name,
+                stat_info_at(root_fd,name) if name=="ACCEPTED.json" else file_info_at(root_fd,name),
+            )
+            for name in ROOT_MARKERS
+        ]
+        if any(row["reason"]=="changed_during_read" for row in markers):
+            raise ScanMutation()
+        batches=batch_inventory(root_fd)
+        checkpoints=checkpoint_inventory(root_fd)
+        assert_directory_unchanged(root_fd,root_before)
+    finally:
+        os.close(root_fd)
+    if before_path!=path_signature():
+        raise ScanMutation()
+    return True,True,markers,batches,checkpoints
+
+scan_attempts=0
+scan_stable=False
+root_exists=False
+root_direct=False
+root_markers=marker_rows("scan_mutated")
+batches=empty_batch(False)
+checkpoints=empty_checkpoint(False)
+for scan_attempts in range(1,MAX_SCAN_ATTEMPTS+1):
+    try:
+        root_exists,root_direct,root_markers,batches,checkpoints=scan_once()
+    except ScanMutation:
+        continue
+    scan_stable=True
+    break
+if not scan_stable:
+    root_markers=marker_rows("scan_mutated")
+    batches=empty_batch(False)
+    checkpoints=empty_checkpoint(False)
 
 def finalize(value):
     value=dict(value)
@@ -521,62 +640,27 @@ def finalize(value):
             return value,payload
         value["receipt_size_bytes"]=size
 
-if root_direct:
-    try:
-        batches=batch_inventory(root_fd)
-        checkpoints=checkpoint_inventory(root_fd)
-    finally:
-        os.close(root_fd)
-else:
-    batches={"directory_present":False}
-    checkpoints={"directory_present":False}
-base={
-    "schema":SCHEMA,"status":"inspected","target":str(ROOT),"training_plan_sha256":PLAN,
+terminal=classify(root_exists,root_direct,root_markers,scan_stable)
+body,payload=finalize({
+    "schema":SCHEMA,
+    "status":"inspected" if scan_stable else "unaccepted",
+    "target":str(ROOT),
+    "training_plan_sha256":PLAN,
     "checked_at":datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-    "gpus":0,"sfs_mount_read_only":True,"private_payloads_read":False,
-    "root_exists":root_exists,"root_direct":root_direct,"terminal_classification":terminal,
+    "gpus":0,
+    "sfs_mount_read_only":True,
+    "private_payloads_read":False,
+    "root_exists":root_exists,
+    "root_direct":root_direct,
+    "scan":{"attempts":scan_attempts,"stable":scan_stable},
+    "terminal_classification":terminal,
+    "root_markers":root_markers,
+    "batch_inventory":batches,
+    "checkpoint_inventory":checkpoints,
     "receipt_size_limit_bytes":MAX_RECEIPT_BYTES,
-}
-marker_summary=[
-    {key:row[key] for key in ("name","present","accepted","reason") if key in row}
-    for row in root_markers
-]
-batch_counts={
-    name:item.get("count",0) for name,item in batches.get("markers",{}).items()
-}
-candidates=(
-    {**base,"receipt_compaction_level":0,"cause_summary":cause_summary(root_markers),
-     "root_markers":root_markers,"batch_inventory":batches,"checkpoint_inventory":checkpoints},
-    {**base,"receipt_compaction_level":1,"cause_summary":cause_summary(root_markers),
-     "root_markers":marker_summary,
-     "batch_inventory":batches,
-     "checkpoint_inventory":checkpoints},
-    {**base,"receipt_compaction_level":2,"cause_summary":cause_summary(root_markers),
-     "root_markers":[row["name"] for row in root_markers if row.get("present")],
-     "batch_inventory":{"batch_directories":batches.get("batch_directories",0),
-                        "marker_counts":batch_counts},
-     "checkpoint_inventory":{
-         key:checkpoints.get(key) for key in (
-             "directory_present","global_step_count","minimum_step","maximum_step",
-             "boundary_steps","file_count","total_bytes","latest_pointer_step"
-         )
-     }},
-    {**base,"receipt_compaction_level":3,"cause_summary":cause_summary(root_markers),
-     "root_markers":[row["name"] for row in root_markers if row.get("present")],
-     "batch_inventory":{"batch_directories":batches.get("batch_directories",0)},
-     "checkpoint_inventory":{
-         key:checkpoints.get(key) for key in (
-             "global_step_count","minimum_step","maximum_step","file_count","total_bytes",
-             "latest_pointer_step"
-         )
-     }},
-)
-for candidate in candidates:
-    body,payload=finalize(candidate)
-    if body["receipt_size_bytes"]<=MAX_RECEIPT_BYTES:
-        break
-else:
-    raise RuntimeError("fixed compact receipt exceeded termination-message bound")
+})
+if body["receipt_size_bytes"]>MAX_RECEIPT_BYTES:
+    raise RuntimeError("canonical receipt exceeded termination-message bound")
 RECEIPT.write_text(payload)
 print(json.dumps({"status":body["status"],"terminal_classification":terminal,
                   "sha256":body["sha256"]},sort_keys=True))
@@ -586,6 +670,28 @@ print(json.dumps({"status":body["status"],"terminal_classification":terminal,
 def _seal(value: dict[str, Any]) -> dict[str, Any]:
     body = {key: item for key, item in value.items() if key != "sha256"}
     return {**body, "sha256": "sha256:" + digest(body)}
+
+
+def _reject_duplicate_json_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    value: dict[str, Any] = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError("duplicate receipt key")
+        value[key] = item
+    return value
+
+
+def _reject_json_constant(_value: str) -> None:
+    raise ValueError("non-finite receipt number")
+
+
+def parse_receipt_json(value: str | bytes) -> object:
+    """Parse a receipt without duplicate keys or non-finite JSON numbers."""
+    return json.loads(
+        value,
+        object_pairs_hook=_reject_duplicate_json_keys,
+        parse_constant=_reject_json_constant,
+    )
 
 
 def manifest() -> dict[str, Any]:
@@ -654,27 +760,352 @@ def manifest() -> dict[str, Any]:
     }
 
 
+def _mapping(value: object, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise JobsError(f"prod8 terminal probe {label} is not an object")
+    return value
+
+
+def _image_digest(image: object, label: str) -> str:
+    if not isinstance(image, str) or "@" not in image:
+        raise JobsError(f"prod8 terminal probe {label} is not digest-pinned")
+    digest_value = image.rsplit("@", 1)[1]
+    if _DIGEST.fullmatch(digest_value) is None:
+        raise JobsError(f"prod8 terminal probe {label} digest changed")
+    return digest_value
+
+
+def _zero_gpu(resources: object, label: str) -> None:
+    if resources is None:
+        return
+    value = _mapping(resources, label)
+    for key in ("requests", "limits"):
+        selected = value.get(key, {})
+        if not isinstance(selected, dict):
+            raise JobsError(f"prod8 terminal probe {label} {key} changed")
+        if "nvidia.com/gpu" in selected:
+            try:
+                gpu = quantity(selected["nvidia.com/gpu"])
+            except JobsError as exc:
+                raise JobsError(f"prod8 terminal probe {label} GPU quantity changed") from exc
+            if gpu != 0:
+                raise JobsError(f"prod8 terminal probe {label} requests GPU")
+
+
+def _resource_shape(value: object, label: str) -> dict[str, dict[str, Any]]:
+    resources = _mapping(value, label)
+    if set(resources) != {"requests", "limits"}:
+        raise JobsError(f"prod8 terminal probe {label} fields changed")
+    _zero_gpu(resources, label)
+    result: dict[str, dict[str, Any]] = {}
+    for key in ("requests", "limits"):
+        selected = resources[key]
+        if not isinstance(selected, dict) or not all(isinstance(name, str) for name in selected):
+            raise JobsError(f"prod8 terminal probe {label} {key} shape changed")
+        result[key] = {name: selected[name] for name in sorted(selected)}
+    return result
+
+
+def _env_shape(value: object) -> list[dict[str, str]]:
+    if not isinstance(value, list):
+        raise JobsError("prod8 terminal probe environment is not a list")
+    result: list[dict[str, str]] = []
+    names: set[str] = set()
+    for row in value:
+        if not isinstance(row, dict) or set(row) != {"name", "value"}:
+            raise JobsError("prod8 terminal probe environment fields changed")
+        name, item = row.get("name"), row.get("value")
+        if not isinstance(name, str) or not name or not isinstance(item, str) or name in names:
+            raise JobsError("prod8 terminal probe environment value changed")
+        names.add(name)
+        result.append({"name": name, "value": item})
+    return sorted(result, key=lambda row: row["name"])
+
+
+def _list_of_mappings(value: object, label: str) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or not all(isinstance(row, dict) for row in value):
+        raise JobsError(f"prod8 terminal probe {label} shape changed")
+    return value
+
+
+def _exactly_equal(actual: object, expected: object) -> bool:
+    if type(actual) is not type(expected):
+        return False
+    if isinstance(expected, dict):
+        return set(actual) == set(expected) and all(
+            _exactly_equal(actual[key], expected[key]) for key in expected
+        )
+    if isinstance(expected, list):
+        return len(actual) == len(expected) and all(
+            _exactly_equal(item, expected_item)
+            for item, expected_item in zip(actual, expected, strict=True)
+        )
+    return actual == expected
+
+
+def _controller_labels(uid: str) -> dict[str, str]:
+    return {
+        "batch.kubernetes.io/controller-uid": uid,
+        "batch.kubernetes.io/job-name": NAME,
+        "controller-uid": uid,
+        "job-name": NAME,
+    }
+
+
+def _assert_manifest_matches_source(value: object) -> None:
+    """Strip only known API defaults, then require the source Job byte shape."""
+    actual = copy.deepcopy(_mapping(value, "Job"))
+    status = actual.pop("status", None)
+    if status is not None and not isinstance(status, dict):
+        raise JobsError("prod8 terminal probe Job status changed")
+    metadata = _mapping(actual.get("metadata"), "Job metadata")
+    uid = metadata.get("uid")
+    labels = metadata.pop("labels", None)
+    if uid is None:
+        if labels is not None:
+            raise JobsError("prod8 terminal probe Job labels changed")
+    elif not isinstance(uid, str) or not _exactly_equal(labels, _controller_labels(uid)):
+        raise JobsError("prod8 terminal probe Job controller labels changed")
+    generation = metadata.pop("generation", None)
+    if generation is not None and (type(generation) is not int or generation != 1):
+        raise JobsError("prod8 terminal probe Job generation changed")
+    for key in ("creationTimestamp", "managedFields", "resourceVersion", "uid"):
+        metadata.pop(key, None)
+
+    spec = _mapping(actual.get("spec"), "Job spec")
+    server_defaults: dict[str, Any] = {
+        "completionMode": "NonIndexed",
+        "completions": 1,
+        "manualSelector": False,
+        "parallelism": 1,
+        "podReplacementPolicy": "TerminatingOrFailed",
+        "suspend": False,
+    }
+    for key, expected in server_defaults.items():
+        observed = spec.pop(key, None)
+        if observed is not None and not _exactly_equal(observed, expected):
+            raise JobsError("prod8 terminal probe Job server default changed")
+    selector = spec.pop("selector", None)
+    expected_selector = {"matchLabels": {"batch.kubernetes.io/controller-uid": uid}}
+    if (uid is not None and not _exactly_equal(selector, expected_selector)) or (
+        uid is None and selector is not None
+    ):
+        raise JobsError("prod8 terminal probe Job selector changed")
+
+    template = _mapping(spec.get("template"), "Job template")
+    template_metadata = _mapping(template.get("metadata"), "Pod template metadata")
+    template_labels = template_metadata.pop("labels", None)
+    if uid is None:
+        if template_labels is not None:
+            raise JobsError("prod8 terminal probe Pod-template labels changed")
+    elif not _exactly_equal(template_labels, _controller_labels(uid)):
+        raise JobsError("prod8 terminal probe Pod-template controller labels changed")
+    template_created = template_metadata.pop("creationTimestamp", None)
+    if template_created is not None:
+        raise JobsError("prod8 terminal probe Pod-template timestamp changed")
+
+    pod = _mapping(template.get("spec"), "Pod spec")
+    pod_defaults: dict[str, Any] = {
+        "dnsPolicy": "ClusterFirst",
+        "schedulerName": "default-scheduler",
+        "terminationGracePeriodSeconds": 30,
+    }
+    for key, expected in pod_defaults.items():
+        observed = pod.pop(key, None)
+        if observed is not None and not _exactly_equal(observed, expected):
+            raise JobsError("prod8 terminal probe Pod server default changed")
+    containers = _list_of_mappings(pod.get("containers"), "containers")
+    for container in containers:
+        pull_policy = container.pop("imagePullPolicy", None)
+        if pull_policy is not None and not _exactly_equal(pull_policy, "IfNotPresent"):
+            raise JobsError("prod8 terminal probe image-pull policy changed")
+    if not _exactly_equal(actual, manifest()):
+        raise JobsError("prod8 terminal probe Job manifest changed")
+
+
+def normalized_manifest(value: object) -> dict[str, Any]:
+    """Return the safety-critical, server-stable Job projection or fail closed."""
+    _assert_manifest_matches_source(value)
+    job = _mapping(value, "Job")
+    metadata = _mapping(job.get("metadata"), "Job metadata")
+    spec = _mapping(job.get("spec"), "Job spec")
+    template = _mapping(spec.get("template"), "Job template")
+    pod = _mapping(template.get("spec"), "Pod spec")
+    annotations = _mapping(metadata.get("annotations"), "Job annotations")
+    containers = _list_of_mappings(pod.get("containers"), "containers")
+    if len(containers) != 1:
+        raise JobsError("prod8 terminal probe has not exactly one container")
+    container = containers[0]
+    command = container.get("command")
+    if not isinstance(command, list) or not all(isinstance(item, str) for item in command):
+        raise JobsError("prod8 terminal probe command changed")
+    security = _mapping(container.get("securityContext"), "container security context")
+    pod_security = _mapping(pod.get("securityContext"), "Pod security context")
+    mounts = _list_of_mappings(container.get("volumeMounts"), "volume mounts")
+    volumes = _list_of_mappings(pod.get("volumes"), "volumes")
+    init = pod.get("initContainers", [])
+    ephemeral = pod.get("ephemeralContainers", [])
+    if init not in ([], None) or ephemeral not in ([], None):
+        raise JobsError("prod8 terminal probe has an unexpected extra container")
+    overhead = pod.get("overhead", {})
+    if overhead not in ({}, None):
+        _zero_gpu(overhead, "Pod overhead")
+        raise JobsError("prod8 terminal probe has Pod overhead")
+    _zero_gpu({"requests": overhead or {}, "limits": overhead or {}}, "Pod overhead")
+    return {
+        "api_version": job.get("apiVersion"),
+        "kind": job.get("kind"),
+        "name": metadata.get("name"),
+        "namespace": metadata.get("namespace"),
+        "failure_alerts": annotations.get(FAILURE_ALERT_ANNOTATION),
+        "active_deadline_seconds": spec.get("activeDeadlineSeconds"),
+        "backoff_limit": spec.get("backoffLimit"),
+        "automount_service_account_token": pod.get("automountServiceAccountToken"),
+        "priority_class_name": pod.get("priorityClassName"),
+        "restart_policy": pod.get("restartPolicy"),
+        "pod_security_context": {
+            "supplemental_groups": pod_security.get("supplementalGroups"),
+        },
+        "volumes": sorted(volumes, key=lambda row: json.dumps(row, sort_keys=True)),
+        "container": {
+            "name": container.get("name"),
+            "image": container.get("image"),
+            "image_digest": _image_digest(container.get("image"), "requested image"),
+            "command_sha256": digest(command),
+            "environment": _env_shape(container.get("env")),
+            "resources": _resource_shape(container.get("resources"), "container resources"),
+            "security_context": {
+                "allow_privilege_escalation": security.get("allowPrivilegeEscalation"),
+                "privileged": security.get("privileged"),
+                "read_only_root_filesystem": security.get("readOnlyRootFilesystem"),
+                "run_as_group": security.get("runAsGroup"),
+                "run_as_non_root": security.get("runAsNonRoot"),
+                "run_as_user": security.get("runAsUser"),
+            },
+            "termination_message_path": container.get("terminationMessagePath"),
+            "termination_message_policy": container.get("terminationMessagePolicy"),
+            "volume_mounts": sorted(mounts, key=lambda row: json.dumps(row, sort_keys=True)),
+        },
+    }
+
+
+def manifest_digest() -> str:
+    return digest(manifest())
+
+
+def expected_normalized_manifest() -> dict[str, Any]:
+    return normalized_manifest(manifest())
+
+
+def _runtime_image_digest(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    match = re.search(r"@(?P<digest>sha256:[0-9a-f]{64})\Z", value)
+    return match.group("digest") if match else None
+
+
+def normalized_terminal_pod(value: object, *, job_uid: str) -> dict[str, Any]:
+    """Bind an observed Pod and its sole receipt container to the immutable Job."""
+    pod = _mapping(value, "Pod")
+    metadata = _mapping(pod.get("metadata"), "Pod metadata")
+    owner = {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "name": NAME,
+        "uid": job_uid,
+        "controller": True,
+        "blockOwnerDeletion": True,
+    }
+    if not _exactly_equal(metadata.get("ownerReferences"), [owner]):
+        raise JobsError("prod8 terminal probe Pod owner UID changed")
+    labels = _mapping(metadata.get("labels"), "Pod labels")
+    if (
+        labels.get("batch.kubernetes.io/controller-uid") != job_uid
+        or labels.get("job-name") != NAME
+    ):
+        raise JobsError("prod8 terminal probe Pod controller labels changed")
+    spec = _mapping(pod.get("spec"), "Pod spec")
+    if spec.get("priorityClassName") != "c1":
+        raise JobsError("prod8 terminal probe Pod priority changed")
+    init = spec.get("initContainers", [])
+    ephemeral = spec.get("ephemeralContainers", [])
+    if init not in ([], None) or ephemeral not in ([], None):
+        raise JobsError("prod8 terminal probe Pod has an extra container")
+    overhead = spec.get("overhead", {})
+    _zero_gpu({"requests": overhead or {}, "limits": overhead or {}}, "Pod overhead")
+    containers = _list_of_mappings(spec.get("containers"), "Pod containers")
+    if len(containers) != 1:
+        raise JobsError("prod8 terminal probe Pod does not have one container")
+    container = containers[0]
+    _zero_gpu(container.get("resources", {}), "Pod container resources")
+    if container.get("name") != "terminal-probe" or container.get("image") != IMAGE:
+        raise JobsError("prod8 terminal probe Pod requested image changed")
+    statuses = _list_of_mappings(
+        _mapping(pod.get("status", {}), "Pod status").get("containerStatuses", []),
+        "container statuses",
+    )
+    if not statuses:
+        return {
+            "pod_name": metadata.get("name"),
+            "pod_uid": metadata.get("uid"),
+            "container_name": "terminal-probe",
+            "requested_image": IMAGE,
+            "requested_image_digest": _image_digest(IMAGE, "expected image"),
+            "runtime_image_id": None,
+            "runtime_image_digest": None,
+            "exit_code": None,
+            "termination_reason": None,
+            "restart_count": 0,
+            "termination_message": None,
+        }
+    if len(statuses) != 1:
+        raise JobsError("prod8 terminal probe Pod status shape changed")
+    status = statuses[0]
+    if status.get("name") != "terminal-probe" or not _bounded_int(status.get("restartCount")):
+        raise JobsError("prod8 terminal probe container state changed")
+    runtime_image_id = status.get("imageID")
+    runtime_digest = _runtime_image_digest(runtime_image_id)
+    if runtime_image_id is not None and (
+        not isinstance(runtime_image_id, str) or runtime_digest is None
+    ):
+        raise JobsError("prod8 terminal probe runtime image is unbound")
+    if runtime_digest is not None and runtime_digest != _image_digest(IMAGE, "expected image"):
+        raise JobsError("prod8 terminal probe runtime image changed")
+    state = _mapping(status.get("state"), "container state")
+    terminated = state.get("terminated")
+    exit_code: int | None = None
+    reason: str | None = None
+    message: str | None = None
+    if terminated is not None:
+        terminal = _mapping(terminated, "container termination")
+        if not _bounded_int(terminal.get("exitCode"), upper=255):
+            raise JobsError("prod8 terminal probe exit code changed")
+        exit_code = terminal["exitCode"]
+        if terminal.get("reason") is not None and not isinstance(terminal.get("reason"), str):
+            raise JobsError("prod8 terminal probe termination reason changed")
+        if terminal.get("message") is not None and not isinstance(terminal.get("message"), str):
+            raise JobsError("prod8 terminal probe termination message changed")
+        reason = terminal.get("reason")
+        message = terminal.get("message")
+    return {
+        "pod_name": metadata.get("name"),
+        "pod_uid": metadata.get("uid"),
+        "container_name": "terminal-probe",
+        "requested_image": IMAGE,
+        "requested_image_digest": _image_digest(IMAGE, "expected image"),
+        "runtime_image_id": runtime_image_id,
+        "runtime_image_digest": runtime_digest,
+        "exit_code": exit_code,
+        "termination_reason": reason,
+        "restart_count": status["restartCount"],
+        "termination_message": message,
+    }
+
+
 def preview_evidence(rendered: dict[str, Any], context: str) -> dict[str, Any]:
     expected = manifest()
     direct.validate_cpu_preview(expected, rendered, context=context, purpose="data_stage")
-    pod = rendered["spec"]["template"]["spec"]
-    container = pod["containers"][0]
-    if (
-        rendered["metadata"]["annotations"].get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
-        or pod.get("priorityClassName") != "c1"
-        or rendered["spec"].get("activeDeadlineSeconds") != 300
-        or rendered["spec"].get("backoffLimit") != 0
-        or container.get("volumeMounts")
-        != [{"name": "sfs", "mountPath": "/mnt/sfs", "readOnly": True}]
-        or pod.get("volumes")
-        != [
-            {
-                "name": "sfs",
-                "persistentVolumeClaim": {"claimName": direct.PVC, "readOnly": True},
-            }
-        ]
-        or "nvidia.com/gpu" in json.dumps(rendered, sort_keys=True)
-    ):
+    if not _exactly_equal(normalized_manifest(rendered), expected_normalized_manifest()):
         raise JobsError("prod8 terminal probe preview changed")
     return _seal(
         {
@@ -682,7 +1113,8 @@ def preview_evidence(rendered: dict[str, Any], context: str) -> dict[str, Any]:
             "status": "passed",
             "context": context,
             "name": NAME,
-            "manifest_sha256": digest(expected),
+            "manifest_sha256": manifest_digest(),
+            "normalized_manifest_sha256": digest(expected_normalized_manifest()),
             "server_render_sha256": digest(rendered),
             "target": TARGET,
             "training_plan_sha256": TRAINING_PLAN_SHA256,
@@ -695,41 +1127,307 @@ def preview_evidence(rendered: dict[str, Any], context: str) -> dict[str, Any]:
     )
 
 
-def validate_receipt(value: dict[str, Any], *, target: str = TARGET) -> dict[str, Any]:
+def _bounded_int(value: object, *, upper: int = MAX_COUNT) -> bool:
+    return type(value) is int and 0 <= value <= upper
+
+
+def _rfc3339(value: object) -> bool:
+    if not isinstance(value, str) or _RFC3339.fullmatch(value) is None:
+        return False
+    try:
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC).tzinfo is UTC
+    except ValueError:
+        return False
+
+
+def _empty_batch_inventory(*, accepted: bool) -> dict[str, Any]:
+    return {
+        "directory_present": False,
+        "accepted": accepted,
+        "batch_directories": 0,
+        "markers": {
+            name: {"count": 0, "direct_regular_count": 0, "indirect_count": 0}
+            for name in BATCH_MARKERS
+        },
+    }
+
+
+def _empty_checkpoint_inventory(*, accepted: bool) -> dict[str, Any]:
+    return {
+        "directory_present": False,
+        "accepted": accepted,
+        "global_step_count": 0,
+        "minimum_step": None,
+        "maximum_step": None,
+        "boundary_steps": [],
+        "file_count": 0,
+        "total_bytes": 0,
+        "latest_pointer_step": None,
+    }
+
+
+def _scan_mutated_markers() -> list[dict[str, Any]]:
+    return [
+        {"name": name, "present": False, "accepted": False, "reason": "scan_mutated"}
+        for name in ROOT_MARKERS
+    ]
+
+
+def _validate_root_markers(value: object, *, stable: bool) -> list[dict[str, Any]]:
+    if not isinstance(value, list) or len(value) != len(ROOT_MARKERS):
+        raise JobsError("prod8 terminal probe root-marker schema changed")
+    rows: list[dict[str, Any]] = []
+    for name, row in zip(ROOT_MARKERS, value, strict=True):
+        if not isinstance(row, dict) or set(row) != {"name", "present", "accepted", "reason"}:
+            raise JobsError("prod8 terminal probe root-marker fields changed")
+        if row.get("name") != name or type(row.get("present")) is not bool:
+            raise JobsError("prod8 terminal probe root-marker identity changed")
+        if type(row.get("accepted")) is not bool or row.get("reason") not in MARKER_REASONS:
+            raise JobsError("prod8 terminal probe root-marker state changed")
+        present = row["present"]
+        accepted = row["accepted"]
+        reason = row["reason"]
+        if not stable:
+            if row != _scan_mutated_markers()[len(rows)]:
+                raise JobsError("prod8 terminal probe preserved unstable marker evidence")
+        elif not present:
+            if accepted or reason != "absent":
+                raise JobsError("prod8 terminal probe absent marker state changed")
+        elif accepted:
+            if reason != "accepted":
+                raise JobsError("prod8 terminal probe accepted marker state changed")
+        elif reason not in STABLE_REJECTED_MARKER_REASONS:
+            raise JobsError("prod8 terminal probe rejected marker reason changed")
+        rows.append(row)
+    return rows
+
+
+def _validate_batch_inventory(value: object, *, stable: bool) -> dict[str, Any]:
+    required = {"directory_present", "accepted", "batch_directories", "markers"}
+    if not isinstance(value, dict) or set(value) != required:
+        raise JobsError("prod8 terminal probe batch-inventory schema changed")
+    if not stable:
+        if value != _empty_batch_inventory(accepted=False):
+            raise JobsError("prod8 terminal probe preserved unstable batch evidence")
+        return value
+    directory_present = value.get("directory_present")
+    accepted = value.get("accepted")
+    count = value.get("batch_directories")
+    markers = value.get("markers")
+    if type(directory_present) is not bool or type(accepted) is not bool or not _bounded_int(count):
+        raise JobsError("prod8 terminal probe batch-inventory values changed")
+    if not isinstance(markers, dict) or set(markers) != set(BATCH_MARKERS):
+        raise JobsError("prod8 terminal probe batch-marker schema changed")
+    if not directory_present:
+        if value != _empty_batch_inventory(accepted=True):
+            raise JobsError("prod8 terminal probe absent batch-inventory changed")
+        return value
+    for name in BATCH_MARKERS:
+        row = markers[name]
+        if not isinstance(row, dict) or set(row) != {
+            "count",
+            "direct_regular_count",
+            "indirect_count",
+        }:
+            raise JobsError("prod8 terminal probe batch-marker fields changed")
+        if not all(_bounded_int(row[key]) for key in row):
+            raise JobsError("prod8 terminal probe batch-marker count changed")
+        if row["count"] != row["direct_regular_count"] + row["indirect_count"]:
+            raise JobsError("prod8 terminal probe batch-marker totals conflict")
+        if row["count"] > count:
+            raise JobsError("prod8 terminal probe batch-marker count exceeds directories")
+    if not accepted and (count or any(any(row.values()) for row in markers.values())):
+        raise JobsError("prod8 terminal probe rejected batch inventory retained evidence")
+    return value
+
+
+def _validate_checkpoint_inventory(value: object, *, stable: bool) -> dict[str, Any]:
+    required = {
+        "directory_present",
+        "accepted",
+        "global_step_count",
+        "minimum_step",
+        "maximum_step",
+        "boundary_steps",
+        "file_count",
+        "total_bytes",
+        "latest_pointer_step",
+    }
+    if not isinstance(value, dict) or set(value) != required:
+        raise JobsError("prod8 terminal probe checkpoint-inventory schema changed")
+    if not stable:
+        if value != _empty_checkpoint_inventory(accepted=False):
+            raise JobsError("prod8 terminal probe preserved unstable checkpoint evidence")
+        return value
+    directory_present = value.get("directory_present")
+    accepted = value.get("accepted")
+    if type(directory_present) is not bool or type(accepted) is not bool:
+        raise JobsError("prod8 terminal probe checkpoint-inventory state changed")
+    if not directory_present:
+        if value != _empty_checkpoint_inventory(accepted=True):
+            raise JobsError("prod8 terminal probe absent checkpoint-inventory changed")
+        return value
+    fields = ("global_step_count", "file_count")
+    if not all(_bounded_int(value.get(key)) for key in fields) or not _bounded_int(
+        value.get("total_bytes"), upper=MAX_TOTAL_BYTES
+    ):
+        raise JobsError("prod8 terminal probe checkpoint-inventory count changed")
+    minimum, maximum = value.get("minimum_step"), value.get("maximum_step")
+    steps = value.get("global_step_count")
+    if steps == 0:
+        if (
+            minimum is not None
+            or maximum is not None
+            or value.get("boundary_steps") != []
+            or value.get("latest_pointer_step") is not None
+        ):
+            raise JobsError("prod8 terminal probe empty checkpoint inventory conflicts")
+    else:
+        if not _bounded_int(minimum) or not _bounded_int(maximum) or minimum > maximum:
+            raise JobsError("prod8 terminal probe checkpoint bounds changed")
+        boundary = value.get("boundary_steps")
+        if (
+            not isinstance(boundary, list)
+            or not 1 <= len(boundary) <= 4
+            or not all(_bounded_int(item) for item in boundary)
+            or boundary != sorted(set(boundary))
+            or boundary[0] != minimum
+            or boundary[-1] != maximum
+        ):
+            raise JobsError("prod8 terminal probe checkpoint boundary evidence changed")
+    pointer = value.get("latest_pointer_step")
+    if pointer is not None and not _bounded_int(pointer):
+        raise JobsError("prod8 terminal probe checkpoint pointer changed")
+    if pointer is not None and steps and not minimum <= pointer <= maximum:
+        raise JobsError("prod8 terminal probe checkpoint pointer conflicts")
+    if not accepted and any(
+        value[key]
+        for key in (
+            "global_step_count",
+            "file_count",
+            "total_bytes",
+            "boundary_steps",
+            "latest_pointer_step",
+        )
+    ):
+        raise JobsError("prod8 terminal probe rejected checkpoint inventory retained evidence")
+    return value
+
+
+def _terminal_classification(
+    *, root_exists: bool, root_direct: bool, stable: bool, markers: list[dict[str, Any]]
+) -> str:
+    if not stable:
+        return "unaccepted_scan_mutation"
+    if not root_exists:
+        return "root_missing"
+    if not root_direct:
+        return "unaccepted_root"
+    by_name = {row["name"]: row for row in markers}
+    for name, accepted, rejected in (
+        ("FAILED.json", "failed", "unaccepted_failed_marker"),
+        ("REJECTED.json", "rejected", "unaccepted_rejected_marker"),
+        ("NATIVE_TRAINING_COMPLETE.json", "native_training_complete", "unaccepted_complete_marker"),
+    ):
+        row = by_name[name]
+        if row["present"]:
+            return accepted if row["accepted"] else rejected
+    return "no_terminal_marker"
+
+
+def validate_receipt(value: object, *, target: str = TARGET) -> dict[str, Any]:
+    required = {
+        "schema",
+        "status",
+        "target",
+        "training_plan_sha256",
+        "checked_at",
+        "gpus",
+        "sfs_mount_read_only",
+        "private_payloads_read",
+        "root_exists",
+        "root_direct",
+        "scan",
+        "terminal_classification",
+        "root_markers",
+        "batch_inventory",
+        "checkpoint_inventory",
+        "receipt_size_limit_bytes",
+        "receipt_size_bytes",
+        "sha256",
+    }
+    if not isinstance(value, dict) or set(value) != required:
+        raise JobsError("prod8 terminal probe receipt schema changed")
+    try:
+        sealed = _seal(value)
+    except (TypeError, ValueError, RecursionError):
+        raise JobsError("prod8 terminal probe receipt cannot be sealed") from None
+    if value != sealed:
+        raise JobsError("prod8 terminal probe receipt integrity changed")
     if (
-        value != _seal(value)
-        or value.get("schema") != RECEIPT_SCHEMA
-        or value.get("status") != "inspected"
+        value.get("schema") != RECEIPT_SCHEMA
         or value.get("target") != target
+        or not isinstance(value.get("target"), str)
         or value.get("training_plan_sha256") != TRAINING_PLAN_SHA256
+        or not _rfc3339(value.get("checked_at"))
+        or value.get("gpus") != 0
         or type(value.get("gpus")) is not int
-        or value["gpus"] != 0
         or value.get("sfs_mount_read_only") is not True
         or value.get("private_payloads_read") is not False
+        or value.get("receipt_size_limit_bytes") != MAX_RECEIPT_BYTES
         or type(value.get("receipt_size_limit_bytes")) is not int
-        or value["receipt_size_limit_bytes"] != 3500
-        or type(value.get("receipt_size_bytes")) is not int
-        or type(value.get("receipt_compaction_level")) is not int
-        or value.get("receipt_compaction_level") not in {0, 1, 2, 3}
-        or value["receipt_size_bytes"] > value["receipt_size_limit_bytes"]
+        or not _bounded_int(value.get("receipt_size_bytes"), upper=MAX_RECEIPT_BYTES)
         or value["receipt_size_bytes"]
         != len((json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode())
-        or value.get("terminal_classification")
-        not in {
-            "failed",
-            "rejected",
-            "native_training_complete",
-            "unaccepted_failed_marker",
-            "unaccepted_rejected_marker",
-            "unaccepted_complete_marker",
-            "no_terminal_marker",
-        }
-        or not isinstance(value.get("root_markers"), list)
-        or not isinstance(value.get("batch_inventory"), dict)
-        or not isinstance(value.get("checkpoint_inventory"), dict)
+        or not isinstance(value.get("sha256"), str)
+        or _DIGEST.fullmatch(value["sha256"]) is None
     ):
-        raise JobsError("prod8 terminal probe receipt was not accepted")
+        raise JobsError("prod8 terminal probe receipt fields changed")
+    scan = value.get("scan")
+    if not isinstance(scan, dict) or set(scan) != {"attempts", "stable"}:
+        raise JobsError("prod8 terminal probe scan schema changed")
+    attempts, stable = scan.get("attempts"), scan.get("stable")
+    if (
+        not _bounded_int(attempts, upper=MAX_SCAN_ATTEMPTS)
+        or attempts < 1
+        or type(stable) is not bool
+    ):
+        raise JobsError("prod8 terminal probe scan values changed")
+    if (stable and value.get("status") != "inspected") or (
+        not stable and (value.get("status") != "unaccepted" or attempts != MAX_SCAN_ATTEMPTS)
+    ):
+        raise JobsError("prod8 terminal probe scan status changed")
+    root_exists, root_direct = value.get("root_exists"), value.get("root_direct")
+    if (
+        type(root_exists) is not bool
+        or type(root_direct) is not bool
+        or (root_direct and not root_exists)
+    ):
+        raise JobsError("prod8 terminal probe root state changed")
+    markers = _validate_root_markers(value.get("root_markers"), stable=stable)
+    _validate_batch_inventory(value.get("batch_inventory"), stable=stable)
+    _validate_checkpoint_inventory(value.get("checkpoint_inventory"), stable=stable)
+    classification = _terminal_classification(
+        root_exists=root_exists,
+        root_direct=root_direct,
+        stable=stable,
+        markers=markers,
+    )
+    if value.get("terminal_classification") not in TERMINAL_CLASSIFICATIONS or (
+        value["terminal_classification"] != classification
+    ):
+        raise JobsError("prod8 terminal probe classification conflicts with evidence")
     return value
+
+
+def receipt_execution_accepted(value: object, *, target: str = TARGET) -> bool:
+    if not isinstance(value, dict):
+        return False
+    try:
+        validate_receipt(value, target=target)
+    except JobsError:
+        return False
+    return value["status"] == "inspected"
 
 
 def main() -> None:
@@ -751,7 +1449,7 @@ def main() -> None:
             parser.error("preview context is required")
         value = preview_evidence(json.loads(args.validate_preview.read_bytes()), args.context)
     else:
-        value = validate_receipt(json.loads(args.validate_receipt.read_bytes()))
+        value = validate_receipt(parse_receipt_json(args.validate_receipt.read_bytes()))
     print(json.dumps(value, sort_keys=True, separators=(",", ":")))
 
 

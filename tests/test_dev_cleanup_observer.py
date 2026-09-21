@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import subprocess
 from datetime import UTC, datetime
@@ -11,6 +12,7 @@ from types import SimpleNamespace as NS
 import pytest
 
 from cyber_post_train.jobs import digest
+from scripts import probe_qwen38_prod8_terminal as probe
 from training import dev_cleanup_observer as cleanup
 
 
@@ -20,22 +22,26 @@ def _seal(value: dict) -> dict:
 
 def _terminal_probe_receipt(**overrides) -> dict:
     value = {
-        "schema": "cyber_qwen38_prod8_terminal_probe_receipt_v1",
+        "schema": probe.RECEIPT_SCHEMA,
         "status": "inspected",
-        "target": "/mnt/sfs/jobs/chris-q38-rlreward-prod8",
-        "training_plan_sha256": (
-            "09cabfc727e8b8448bd00a5ea3cee03914844e67cfc80b1f033bdbe2671212de"
-        ),
+        "target": probe.TARGET,
+        "training_plan_sha256": probe.TRAINING_PLAN_SHA256,
+        "checked_at": "2026-09-21T12:00:00Z",
         "gpus": 0,
         "sfs_mount_read_only": True,
         "private_payloads_read": False,
+        "root_exists": False,
+        "root_direct": False,
+        "scan": {"attempts": 1, "stable": True},
+        "terminal_classification": "root_missing",
+        "root_markers": [
+            {"name": name, "present": False, "accepted": False, "reason": "absent"}
+            for name in probe.ROOT_MARKERS
+        ],
+        "batch_inventory": probe._empty_batch_inventory(accepted=True),
+        "checkpoint_inventory": probe._empty_checkpoint_inventory(accepted=True),
         "receipt_size_limit_bytes": 3500,
         "receipt_size_bytes": 0,
-        "receipt_compaction_level": 0,
-        "terminal_classification": "failed",
-        "root_markers": [],
-        "batch_inventory": {},
-        "checkpoint_inventory": {},
     }
     value.update(overrides)
     while True:
@@ -141,59 +147,287 @@ def test_job_observer_arms_before_creation_captures_receipt_and_releases(tmp_pat
     assert json.loads((tmp_path / "RESULT.json").read_text()) == result
 
 
-def test_job_observer_accepts_prod8_terminal_inspection_receipt(tmp_path) -> None:
-    cluster = FakeJobCluster()
-    cluster.receipt = _terminal_probe_receipt()
-    result = _observer(tmp_path, cluster).run()
+class Prod8TerminalProbeCluster:
+    def __init__(self) -> None:
+        self.target_reads = 0
+        self.deleted = False
+        self.delete_calls = 0
+        self.receipt = _terminal_probe_receipt()
+        self.mutate_job = lambda value: value
+        self.mutate_pod = lambda value: value
+
+    @property
+    def job_uid(self) -> str:
+        return _metadata(probe.NAME, 101)["uid"]
+
+    def _job(self) -> dict:
+        value = copy.deepcopy(probe.manifest())
+        value["metadata"].update(_metadata(probe.NAME, 101))
+        labels = {
+            "batch.kubernetes.io/controller-uid": self.job_uid,
+            "batch.kubernetes.io/job-name": probe.NAME,
+            "controller-uid": self.job_uid,
+            "job-name": probe.NAME,
+        }
+        value["metadata"]["labels"] = labels
+        value["spec"].update(
+            {
+                "completionMode": "NonIndexed",
+                "completions": 1,
+                "manualSelector": False,
+                "parallelism": 1,
+                "podReplacementPolicy": "TerminatingOrFailed",
+                "selector": {"matchLabels": {"batch.kubernetes.io/controller-uid": self.job_uid}},
+                "suspend": False,
+            }
+        )
+        value["spec"]["template"]["metadata"]["labels"] = labels
+        value["status"] = {"conditions": [{"type": "Complete", "status": "True"}]}
+        return self.mutate_job(value)
+
+    def _pod(self) -> dict:
+        owner = {
+            "apiVersion": "batch/v1",
+            "kind": "Job",
+            "name": probe.NAME,
+            "uid": self.job_uid,
+            "controller": True,
+            "blockOwnerDeletion": True,
+        }
+        return self.mutate_pod(
+            {
+                "metadata": {
+                    **_metadata("prod8-terminal-probe-pod", 102),
+                    "labels": {
+                        "batch.kubernetes.io/controller-uid": self.job_uid,
+                        "job-name": probe.NAME,
+                    },
+                    "ownerReferences": [owner],
+                },
+                "spec": {
+                    "priorityClassName": "c1",
+                    "containers": [
+                        {
+                            "name": "terminal-probe",
+                            "image": probe.IMAGE,
+                            "resources": {"requests": {}, "limits": {}},
+                        }
+                    ],
+                },
+                "status": {
+                    "containerStatuses": [
+                        {
+                            "name": "terminal-probe",
+                            "restartCount": 0,
+                            "imageID": "registry/image@" + probe.IMAGE.rsplit("@", 1)[1],
+                            "state": {
+                                "terminated": {
+                                    "exitCode": 0,
+                                    "reason": "Completed",
+                                    "message": json.dumps(self.receipt),
+                                }
+                            },
+                        }
+                    ]
+                },
+            }
+        )
+
+    def __call__(self, argv, **_kwargs):
+        args = argv[5:]
+        if args[:2] == ["get", "job"]:
+            self.target_reads += 1
+            value = self._job() if self.target_reads > 1 and not self.deleted else None
+            return NS(returncode=0, stdout=json.dumps(value) if value else "", stderr="")
+        if args[:2] == ["get", "pod"] and "--selector" in args:
+            return NS(
+                returncode=0,
+                stdout=json.dumps({"items": [] if self.deleted else [self._pod()]}),
+                stderr="",
+            )
+        if args[:3] == ["get", "pod", "prod8-terminal-probe-pod"]:
+            return NS(returncode=0, stdout="", stderr="")
+        if args[:2] == ["delete", "job"]:
+            self.deleted = True
+            self.delete_calls += 1
+            return NS(returncode=0, stdout="job.batch/prod8\n", stderr="")
+        raise AssertionError(args)
+
+
+def _prod8_observer(tmp_path: Path, runner: Prod8TerminalProbeCluster) -> cleanup.Observer:
+    return _observer(
+        tmp_path,
+        runner,
+        name=probe.NAME,
+        maximum_seconds=1200,
+        manifest_sha256=probe.manifest_digest(),
+    )
+
+
+def test_job_observer_binds_prod8_receipt_to_exact_job_pod_and_image(tmp_path) -> None:
+    cluster = Prod8TerminalProbeCluster()
+    result = _prod8_observer(tmp_path, cluster).run()
     assert result["status"] == "released"
     assert result["receipt"] == cluster.receipt
+    binding = result["prod8_live_binding"]
+    assert binding["job_uid"] == cluster.job_uid
+    assert binding["receipt_container_bound"] is True
+    assert binding["binding_error"] == ""
+    assert binding["containers"] == [
+        {
+            "pod_name": "prod8-terminal-probe-pod",
+            "pod_uid": _metadata("prod8-terminal-probe-pod", 102)["uid"],
+            "container_name": "terminal-probe",
+            "requested_image": probe.IMAGE,
+            "requested_image_digest": probe.IMAGE.rsplit("@", 1)[1],
+            "runtime_image_id": "registry/image@" + probe.IMAGE.rsplit("@", 1)[1],
+            "runtime_image_digest": probe.IMAGE.rsplit("@", 1)[1],
+            "exit_code": 0,
+            "termination_reason": "Completed",
+            "restart_count": 0,
+        }
+    ]
+    assert result["active_gpus"] == 0
+    assert cluster.delete_calls == 1
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda job: job["metadata"]["annotations"].pop("fleet.ai/failure-alerts"),
+        lambda job: job["spec"].update({"backoffLimit": False}),
+        lambda job: job["spec"]["template"]["spec"].update({"priorityClassName": "c2"}),
+        lambda job: job["spec"]["template"]["spec"]["containers"][0]["resources"][
+            "requests"
+        ].update({"nvidia.com/gpu": "1"}),
+        lambda job: job["spec"]["template"]["spec"].update({"overhead": {"nvidia.com/gpu": "1"}}),
+        lambda job: job["spec"]["template"]["spec"]["containers"][0].update(
+            {"envFrom": [{"secretRef": {"name": "unreviewed"}}]}
+        ),
+        lambda job: job["spec"]["template"]["spec"].update(
+            {
+                "initContainers": [
+                    {
+                        "name": "injected",
+                        "resources": {
+                            "requests": {"nvidia.com/gpu": "1"},
+                            "limits": {"nvidia.com/gpu": "1"},
+                        },
+                    }
+                ]
+            }
+        ),
+    ],
+)
+def test_job_observer_rejects_manifest_binding_drift(tmp_path, mutate) -> None:
+    cluster = Prod8TerminalProbeCluster()
+
+    def mutate_job(value):
+        value = copy.deepcopy(value)
+        mutate(value)
+        return value
+
+    cluster.mutate_job = mutate_job
+    result = _prod8_observer(tmp_path, cluster).run()
+    assert result["status"] == "released_without_accepted_execution"
+    assert result["receipt"] is None
+    assert result["prod8_live_binding"]["binding_error"] in {
+        "manifest_malformed",
+        "manifest_mismatch",
+    }
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda pod: pod["metadata"]["ownerReferences"][0].update(
+            {"uid": _metadata("other", 103)["uid"]}
+        ),
+        lambda pod: pod["metadata"]["labels"].update(
+            {"batch.kubernetes.io/controller-uid": _metadata("other", 103)["uid"]}
+        ),
+        lambda pod: pod["spec"]["containers"][0].update(
+            {"image": "registry/example@sha256:" + "0" * 64}
+        ),
+        lambda pod: pod["status"]["containerStatuses"][0].update(
+            {"imageID": "registry/example@sha256:" + "0" * 64}
+        ),
+        lambda pod: pod["status"]["containerStatuses"][0].update(
+            {"imageID": "unbound-runtime-image"}
+        ),
+        lambda pod: pod["spec"]["containers"][0]["resources"]["limits"].update(
+            {"nvidia.com/gpu": "1"}
+        ),
+        lambda pod: pod["spec"].update({"overhead": {"nvidia.com/gpu": "1"}}),
+        lambda pod: pod["spec"].update(
+            {"initContainers": [{"name": "sidecar", "resources": {"requests": {}, "limits": {}}}]}
+        ),
+        lambda pod: pod["status"]["containerStatuses"].append(
+            {
+                "name": "sidecar",
+                "restartCount": 0,
+                "imageID": "registry/sidecar@sha256:" + "0" * 64,
+                "state": {
+                    "terminated": {
+                        "exitCode": 0,
+                        "message": json.dumps(_terminal_probe_receipt()),
+                    }
+                },
+            }
+        ),
+    ],
+)
+def test_job_observer_rejects_foreign_or_unsafe_prod8_pod(tmp_path, mutate) -> None:
+    cluster = Prod8TerminalProbeCluster()
+
+    def mutate_pod(value):
+        value = copy.deepcopy(value)
+        mutate(value)
+        return value
+
+    cluster.mutate_pod = mutate_pod
+    result = _prod8_observer(tmp_path, cluster).run()
+    assert result["status"] == "released_without_accepted_execution"
+    assert result["receipt"] is None
+    assert result["prod8_live_binding"]["binding_error"]
     assert result["active_gpus"] == 0
 
 
 @pytest.mark.parametrize(
-    "changed",
+    "mutate",
     [
-        {"gpus": 999},
-        {"gpus": False},
-        {"private_payloads_read": True},
-        {"target": "/mnt/sfs/jobs/other"},
-        {"training_plan_sha256": "0" * 64},
-        {"receipt_size_limit_bytes": 3500.0},
-        {"receipt_compaction_level": True},
+        lambda pod: pod["status"]["containerStatuses"][0].update({"restartCount": 1}),
+        lambda pod: pod["status"]["containerStatuses"][0]["state"]["terminated"].update(
+            {"exitCode": 1}
+        ),
     ],
 )
-def test_job_observer_rejects_unsafe_prod8_inspection_receipt(tmp_path, changed) -> None:
-    cluster = FakeJobCluster()
-    cluster.receipt = _terminal_probe_receipt(**changed)
-    result = _observer(tmp_path, cluster).run()
+def test_job_observer_records_exact_nonaccepted_terminal_container_state(tmp_path, mutate) -> None:
+    cluster = Prod8TerminalProbeCluster()
+
+    def mutate_pod(value):
+        value = copy.deepcopy(value)
+        mutate(value)
+        return value
+
+    cluster.mutate_pod = mutate_pod
+    result = _prod8_observer(tmp_path, cluster).run()
     assert result["status"] == "released_without_accepted_execution"
-    assert result["receipt"] == cluster.receipt
-    assert result["active_gpus"] == 0
+    assert result["receipt"] is None
+    observed = result["prod8_live_binding"]["containers"]
+    assert len(observed) == 1
+    assert observed[0]["restart_count"] == 1 or observed[0]["exit_code"] == 1
 
 
-@pytest.mark.parametrize("status", ["passed", "published", "setup_and_internal_cleanup_passed"])
-def test_job_observer_rejects_generic_status_for_prod8_receipt(tmp_path, status) -> None:
-    cluster = FakeJobCluster()
-    cluster.receipt = _terminal_probe_receipt(status=status)
-    result = _observer(tmp_path, cluster).run()
+def test_job_observer_rejects_and_does_not_persist_closed_schema_drift(tmp_path) -> None:
+    cluster = Prod8TerminalProbeCluster()
+    receipt = _terminal_probe_receipt()
+    receipt["unexpected_private_payload"] = "must-not-persist"
+    cluster.receipt = _terminal_probe_receipt(**receipt)
+    result = _prod8_observer(tmp_path, cluster).run()
     assert result["status"] == "released_without_accepted_execution"
-    assert result["receipt"] == cluster.receipt
-    assert result["active_gpus"] == 0
-
-
-def test_job_observer_does_not_accept_inspected_for_another_receipt_schema(tmp_path) -> None:
-    cluster = FakeJobCluster()
-    cluster.receipt = _seal(
-        {
-            "schema": "cyber_skyrl_topology_probe_cpu_preflight_v1",
-            "status": "inspected",
-            "gpus": 0,
-        }
-    )
-    result = _observer(tmp_path, cluster).run()
-    assert result["status"] == "released_without_accepted_execution"
-    assert result["receipt"] == cluster.receipt
-    assert result["active_gpus"] == 0
+    assert result["receipt"] is None
+    assert result["prod8_live_binding"]["receipt_container_bound"] is False
 
 
 class FakeFleetCluster:
