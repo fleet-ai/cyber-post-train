@@ -1,0 +1,98 @@
+{
+  "schema": "qwen38_teacher_v5_fleet_dev17_v3_launch_v1",
+  "observed_at": "2026-09-21T01:32:05Z",
+  "scope": "Score-blind launch and lifecycle evidence only. No prompts, traces, task content, outcomes, or capability scores were read.",
+  "source": {
+    "current_main_commit": "4307667ac471295c6bdc3130a6e7a997715e694e",
+    "controller_slot_guard_merge": "6ba1042dfc0f8f8a64d0ad4d02a21adfd590d91e",
+    "launch_packet_commit": "a968264aa4f1474b7962bfe7ed9a71486faa9961",
+    "launch_packet_pull_request": 284
+  },
+  "protocol": {
+    "config": "configs/evaluation/qwen38-teacher-v5-fleet-dev17-opencode-pass1-v3.json",
+    "config_sha256": "sha256:43709b4c848045d7b8559ccecf64f3056c2930264fbb96c260c6ad2ebf9722ca",
+    "evaluation_plan_sha256": "sha256:2bf7ec0aea72af6d3beff87ad05c33169b81a9b55828ba3466a94b293c9c1291",
+    "cell_ledger_plan_sha256": "sha256:e9fd46bee21b2538fa4fcc70a63954a1cd505f881e13cb73047a6744d8f7a08c",
+    "planned_sessions": 17,
+    "automatic_retry": false,
+    "comparison_with_v2": "The scientific configuration is byte-identical to v2 after removing the create-once experiment name."
+  },
+  "preview": {
+    "client_list_sha256": "sha256:86f5bd66e445bc11118ab4cce2baa395cac180ba6289e5954e474f78032da8ce",
+    "server_preview_sha256": "sha256:3c1fbf26f4dcb477f5c1b711246346cf245e48e4c5590cb155a27d6bee208b62",
+    "root_failure_alert_annotation": "off",
+    "priority_class": "c1",
+    "cpu_only": true,
+    "backoff_limit": 0,
+    "server_rendered_suspend": true,
+    "generic_and_selected_config_bytes_equal": true
+  },
+  "capacity": {
+    "evaluator_requests": {
+      "cpu": "4",
+      "memory": "32Gi",
+      "ephemeral_storage": "10Gi"
+    },
+    "evaluator_limits": {
+      "cpu": "8",
+      "memory": "48Gi",
+      "ephemeral_storage": "40Gi"
+    },
+    "decision": "Preserve the same reviewed evaluator profile. Aggregate queue reservation or shortfall is not a per-Job request; the exact server-rendered Job spec is authoritative.",
+    "comparison_evidence": {
+      "fresh75_live_job_peak_memory_bytes": 536436736,
+      "self_sft_live_job_peak_memory_bytes": 544292864,
+      "base_historical_peak_memory_bytes": 554225664,
+      "base_provenance_note": "The historical Base Job is absent. Its requested resource profile remains in the committed Job manifest; the peak is a read-only historical telemetry observation, not a live spec readback."
+    },
+    "capacity_at_handoff": {
+      "available_cpu": 24,
+      "available_memory": "52Gi",
+      "fit": true
+    }
+  },
+  "serving": {
+    "served_id": "chris-q38-teacher-v5-step186-web-v1",
+    "inference_model_uid": "10b1b0ce-7b02-429e-8361-084a3039f248",
+    "ready_resource_version": "31157978",
+    "parity_resource_version": "31158770",
+    "serving_pod_uid": "4be8c23d-2762-44cc-ab1c-11fa19f17763",
+    "serving_pod_ready_at": "2026-09-21T01:27:51Z",
+    "serving_pod_restarts": 0,
+    "checkpoint_revision": "sha256:e6d59f5a58ce54b913d775cd71b81c64bd54637b53795df82baec0f71efefaf9",
+    "parity_receipt_file_sha256": "sha256:81fe2608db2a6c13894040279db71b2346dd27c18ea791e907ff11727e8916d3",
+    "parity_receipt_sha256": "sha256:ad7ed9bea561e8548fb224948fd786a17ce3e9145f14bdacf959423e54ae4a83",
+    "first_consumer_activity_at": "2026-09-21T01:30:49Z"
+  },
+  "consumer": {
+    "job_name": "chris-q38-teacher-v5-dev17-p1-v3",
+    "job_uid": "a929fb5d-03f8-404f-9620-f36d3c25926f",
+    "config_map_name": "chris-q38-teacher-v5-dev17-p1-code-v3",
+    "config_map_uid": "dac3cf4d-46bb-4ec3-9986-4a3398b70ef9",
+    "workload_name": "job-chris-q38-teacher-v5-dev17-p1-v3-42802",
+    "workload_uid": "2da0cdc7-d742-4f30-b2f4-ffb0f2f2eba5",
+    "workload_admitted": true,
+    "pod_name": "chris-q38-teacher-v5-dev17-p1-v3-77njx",
+    "pod_uid": "7a676f12-40be-4d5d-9b07-192e57e389f4",
+    "pod_phase": "Running",
+    "pod_ready": true,
+    "pod_restarts": 0,
+    "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-teacher-v5-p1-v3",
+    "database": "q38_teacher_v5_dev17_p1_v3",
+    "initial_score_blind_counts": {
+      "accepted": 0,
+      "claimed": 8,
+      "pending": 9,
+      "retry_review": 0,
+      "stale_active": 0
+    }
+  },
+  "interpretation": {
+    "route_consumed": true,
+    "campaign_terminal": false,
+    "authoritative_session_accepted": false,
+    "capability_claim_made": false,
+    "final_eight_task_set_accessed": false
+  },
+  "sha256": "8d9339e17b84530b1df0696d532f7d0c9ee66b5576a701264d7cdd80c2fe8fbd"
+}
