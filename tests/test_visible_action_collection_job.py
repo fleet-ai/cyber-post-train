@@ -106,8 +106,13 @@ class FakeCluster:
         assert namespace == job.NAMESPACE
         self.previews += 1
         value = copy.deepcopy(bundle)
+        rendered_job = next(row for row in value["items"] if row["kind"] == "Job")
+        pod = rendered_job["spec"]["template"]["spec"]
+        for container in pod["initContainers"] + pod["containers"]:
+            for environment in container.get("env", []):
+                if environment.get("value") == "":
+                    environment.pop("value")
         if self.preview_drift and self.previews == 2:
-            rendered_job = next(row for row in value["items"] if row["kind"] == "Job")
             rendered_job["metadata"]["annotations"]["admission.example/drift"] = "true"
         return value
 
@@ -222,6 +227,12 @@ def test_package_binds_exact_cpu_job_and_source(packet_path: Path) -> None:
     assert pod["priorityClassName"] == "c1"
     assert pod["restartPolicy"] == "Never"
     assert pod["nodeSelector"]["kubernetes.io/arch"] == "amd64"
+    assert next(
+        item for item in pod["initContainers"][1]["env"] if item["name"] == "DOCKER_TLS_CERTDIR"
+    ) == {"name": "DOCKER_TLS_CERTDIR"}
+    assert next(
+        item for item in pod["containers"][0]["env"] if item["name"] == "DOCKER_TLS_CERTDIR"
+    ) == {"name": "DOCKER_TLS_CERTDIR"}
     for container in pod["initContainers"] + pod["containers"]:
         assert "nvidia.com/gpu" not in container["resources"]["requests"]
         assert "nvidia.com/gpu" not in container["resources"]["limits"]

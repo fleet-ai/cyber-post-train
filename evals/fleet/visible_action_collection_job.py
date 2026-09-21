@@ -615,7 +615,10 @@ def load_packet(path: Path) -> LaunchPacket:
 
 
 def _env_literal(name: str, value: str) -> dict[str, str]:
-    return {"name": name, "value": value}
+    # Kubernetes drops an explicitly empty EnvVar.value from server-rendered
+    # objects.  Emit the canonical omitted form up front so the sealed manifest
+    # and both server previews compare byte-stably.
+    return {"name": name} if value == "" else {"name": name, "value": value}
 
 
 def _env_secret(name: str, secret: dict[str, Any]) -> dict[str, Any]:
