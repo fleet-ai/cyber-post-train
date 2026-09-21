@@ -5,13 +5,13 @@
       "max_prompt_tokens": 1256,
       "path": "dev.jsonl",
       "rows": 1,
-      "sha256": "sha256:8b4ca5a1bbfb28b8a02ac4464324af202950b8b69f6ac5997203277c0465ff16"
+      "sha256": "sha256:3be06bfc5e5fdec412b74422b3173df0814006fa17dc0d7cbe7eaf0265c55fd0"
     },
     "train": {
       "max_prompt_tokens": 1241,
       "path": "train.jsonl",
       "rows": 1,
-      "sha256": "sha256:5b4801c6da29205baa50bb5a5f723a29e904d9f66a96984cb2168a2016986b6e"
+      "sha256": "sha256:8e5f43d6ca302391eae0e73fef088635c75d01e88fce9250ca4b36dc95f2490a"
     }
   },
   "gpus": 0,
@@ -30,7 +30,7 @@
   "name": "chris-q38-rlreward-prod7",
   "schema": "cyber_skyrl_data_v1",
   "selection_sha256": "sha256:9b88bac1510720926ea041d942044804d6c54c083a0ea56d07cae5f448685909",
-  "sha256": "sha256:7e5c2e293a69b4d3bad6402a9945520182853a1caae1ae8a8c74f8f8bbe99471",
+  "sha256": "sha256:109be2f4fba07a6eabaffc3c94048640214170d95ef311b2db107ac0331ffc16",
   "split_sha256": "sha256:8279ea19808ad1accb00d3f3145c3ec087030677786e0188251cfc197f306adf",
   "template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
   "tokenizer": {

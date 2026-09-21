@@ -13,6 +13,7 @@ from types import SimpleNamespace as NS
 import pytest
 
 from cyber_post_train.jobs import JobsError, digest
+from evals.fleet import opencode_self_hosted as fleet
 from scripts.audit_qwen38_skyrl_launch_readiness import (
     compile_prod4,
     load,
@@ -32,6 +33,90 @@ def successor_metadata(run: dict) -> dict:
         {key: item for key, item in value.items() if key != "sha256"}
     )
     return value
+
+
+def test_private_successor_rebinds_only_run_identity(tmp_path: Path) -> None:
+    source, destination = tmp_path / "source", tmp_path / "successor"
+    source.mkdir(mode=0o700)
+    prior = "chris-q38-rlreward-prod6"
+    config = {
+        "run_id": prior,
+        "task": {"key": "safe-task", "version_id": "00000000-0000-0000-0000-000000000001"},
+        "environment": {"id": "safe-environment"},
+        "rl": {"context_tokens": 262144},
+    }
+    config["config_sha256"] = fleet.digest_without(config, "config_sha256")
+    files = {}
+    for split in ("train", "dev"):
+        row = {
+            "split": split,
+            "env_class": "safe-environment",
+            "prompt": [{"role": "user", "content": "private"}],
+            "cyber_config_json": fleet.canonical_json(config).decode(),
+        }
+        payload = fleet.canonical_json(row) + b"\n"
+        (source / f"{split}.jsonl").write_bytes(payload)
+        (source / f"{split}.jsonl").chmod(0o600)
+        files[split] = {
+            "path": f"{split}.jsonl",
+            "rows": 1,
+            "sha256": fleet.sha256(payload),
+            "max_prompt_tokens": 1,
+        }
+    for name in ("split.json", "task-set.json"):
+        (source / name).write_text("{}\n")
+        (source / name).chmod(0o600)
+    manifest = {
+        "schema": "cyber_skyrl_data_v1",
+        "name": prior,
+        "files": files,
+    }
+    manifest["sha256"] = "sha256:" + digest(manifest)
+    (source / "manifest.json").write_bytes(fleet.canonical_json(manifest) + b"\n")
+    (source / "manifest.json").chmod(0o600)
+
+    result = direct.rebind_private_source_run_id(
+        source,
+        destination,
+        prior_run_id=prior,
+    )
+
+    assert result["name"] == direct.RUN_NAME
+    assert result["sha256"] == "sha256:" + digest(
+        {key: value for key, value in result.items() if key != "sha256"}
+    )
+    for split in ("train", "dev"):
+        prior_row = json.loads((source / f"{split}.jsonl").read_text())
+        successor_row = json.loads((destination / f"{split}.jsonl").read_text())
+        prior_config = json.loads(prior_row["cyber_config_json"])
+        successor_config = json.loads(successor_row["cyber_config_json"])
+        assert successor_config["run_id"] == direct.RUN_NAME
+        assert successor_config["config_sha256"] == fleet.digest_without(
+            successor_config, "config_sha256"
+        )
+        assert {
+            key for key in successor_config if successor_config.get(key) != prior_config.get(key)
+        } == {"run_id", "config_sha256"}
+        assert {**successor_row, "cyber_config_json": ""} == {
+            **prior_row,
+            "cyber_config_json": "",
+        }
+        assert result["files"][split]["sha256"] == fleet.sha256(
+            (destination / f"{split}.jsonl").read_bytes()
+        )
+
+
+def test_private_successor_rejects_stale_manifest_digest(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    for name in ("manifest.json", "split.json", "task-set.json", "train.jsonl", "dev.jsonl"):
+        (source / name).write_text("{}\n")
+    with pytest.raises(JobsError, match="predecessor manifest"):
+        direct.rebind_private_source_run_id(
+            source,
+            tmp_path / "successor",
+            prior_run_id="chris-q38-rlreward-prod6",
+        )
 
 
 def test_preflight_rejection_is_sanitized() -> None:
