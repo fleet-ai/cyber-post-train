@@ -214,9 +214,7 @@ def build() -> dict:
                 "gpus": 0,
                 "priority": "c1",
                 "failure_alerts": "off",
-                "server_previewed_in_dev_and_prod": preview_binding[
-                    "matches_current_manifest"
-                ],
+                "server_previewed_in_dev_and_prod": preview_binding["matches_current_manifest"],
                 "executed": False,
             },
             "local_cpu_preflight_preview_binding": preview_binding,
