@@ -30,7 +30,7 @@ QUALIFIED_IMAGE = (
 GATE_TEMPLATE = RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v10.template.json"
 PRODUCTION_CANARY = RUNS / "qwen38-27b-lora-sft-r64-a32-prod-canary-v1.json"
 PRODUCTION_ANCHOR = RUNS / "qwen38-27b-lora-sft-r64-a32-anchor-v1.json"
-RESUME_CANARY = RUNS / "qwen38-27b-lora-sft-r64-a32-lr1e5-resume-s42-v1.json"
+RESUME_CANARY = RUNS / "qwen38-27b-lora-sft-r64-a32-lr1e5-resume-s42-v2.json"
 BROAD_LR_VARIANTS = {
     RUNS / "qwen38-27b-lora-sft-r64-a32-lr1e5-v1.json": {
         "run_name": "chris-q38-lora-lr1-v1",
@@ -375,7 +375,7 @@ def test_qwen38_recovery_config_compiles_with_segmented_linux_safe_bundle():
     request = sft.job_request(plan)
     bundle_keys = sorted(key for key in request["env"] if key.startswith("CYBER_SFT_BUNDLE"))
 
-    assert plan["run_name"] == "chris-q38-lora-r1-s42-v1"
+    assert plan["run_name"] == "chris-q38-lora-r1-s42-v2"
     assert plan["recovery"]["checkpoint"]["optimizer_step"] == 40
     assert plan["pause_after_step"] == 42
     assert "CYBER_SFT_BUNDLE" not in request["env"]
@@ -539,6 +539,32 @@ def test_broad_runtime_reopens_production_receipt_before_source_setup(path, monk
 
     assert observed == [plan["run_name"]]
     assert sft_runtime._is_qwen38_lora_one_step_gate(runtime_plan) is False
+
+
+def test_recovery_runtime_reopens_the_embedded_production_source(monkeypatch):
+    from training import sft, sft_runtime
+
+    plan = sft.compile_sft(read(RESUME_CANARY), relative_to=RUNS)
+    runtime_plan = {**plan, "plan_sha256": sft_runtime._unsigned_digest(plan)}
+    source = runtime_plan["recovery"]["checkpoint"]["source_plan"]
+    observed = []
+    receipt = {"receipt": "verified"}
+    monkeypatch.setattr(
+        sft_runtime,
+        "_verified_json_file",
+        lambda path, digest: observed.append((str(path), digest)) or receipt,
+    )
+    monkeypatch.setattr(
+        sft_runtime,
+        "_validate_qwen38_production_export_receipt",
+        lambda value: observed.append(value),
+    )
+
+    sft_runtime._verify_qwen38_production_qualification(runtime_plan)
+
+    reference = runtime_plan["qualification_gate"]["export_receipt"]
+    assert source["run_name"] != runtime_plan["run_name"]
+    assert observed == [(reference["path"], reference["file_sha256"]), receipt]
 
 
 def test_broad_runtime_completes_without_reentering_the_one_step_receipt_path(

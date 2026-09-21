@@ -776,9 +776,16 @@ def _validate_qwen38_production_export_receipt(
 
 def _verify_qwen38_production_qualification(plan: dict) -> None:
     """Reopen the exact accepted public receipt before broad model setup."""
+    # A recovery has a deliberately fresh run/output/W&B identity.  Its sealed
+    # checkpoint carries the immutable production-qualified source plan, and
+    # ``validate_plan`` has already proved that the successor preserves every
+    # scientific, data, model and topology field from that source.  Reopen the
+    # reviewed source identity here instead of trying to find the fresh
+    # successor name in the create-once broad-plan table.
+    source_plan = plan["recovery"]["checkpoint"]["source_plan"] if "recovery" in plan else plan
     if (
-        _qwen38_lora_one_step_identity(plan)
-        != qwen38_lora_broad_full_plan_binding(plan.get("run_name", ""))
+        _qwen38_lora_one_step_identity(source_plan)
+        != qwen38_lora_broad_full_plan_binding(source_plan.get("run_name", ""))
         or plan.get("qualification_gate") != QWEN38_LORA_PRODUCTION_QUALIFICATION
     ):
         raise ValueError("Qwen3.8 broad LoRA plan lost its production qualification binding")

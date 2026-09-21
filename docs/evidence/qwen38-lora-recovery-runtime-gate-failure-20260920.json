@@ -1,0 +1,39 @@
+{
+  "schema": "cyber_qwen38_lora_recovery_runtime_gate_failure_v1",
+  "status": "infrastructure_invalid",
+  "observed_at": "2026-09-20T23:50:30Z",
+  "run": {
+    "name": "chris-q38-lora-r1-s42-v1-ea7d43a6",
+    "run_id": "ea7d43a6-e247-4c22-96c7-6ec485146eda",
+    "rayjob_uid": "299e9a24-afba-41a5-8f4b-0a6212df7f74",
+    "workload_uid": "28c781bb-ca1c-4fa8-8cc5-988f0496dbd0",
+    "raycluster_uid": "e96fd14c-9b71-46ee-97dc-ceb80ad5e5b1",
+    "pod_uid": "435526e7-fe6c-4555-bcb3-98b9df66c4aa",
+    "plan_sha256": "5b7aa1923375b1d46d4b0d07ffb07c5ae8682990708d076c01a79853c5d65ef6",
+    "request_sha256": "72c7fe18af6d3a1154fa30140ff66847c04caf9ab5c8bcc9a08e03ebebe9399a",
+    "rendered_manifest_sha256": "816176c87a62bf89bddfd64203e25a119b0552342d0597c4db1750fb8ca9fa02",
+    "cpu_preflight_receipt_sha256": "7cce81bbabd9c0fd8f5081a77c3efce9a845fe29c90f16c373c77492e36fa1b9",
+    "priority": "c1",
+    "failure_alerts": "off"
+  },
+  "terminal": {
+    "ended_at": "2026-09-20T23:49:57Z",
+    "reason": "AppFailed",
+    "error_class": "ValueError",
+    "error": "packaged runtime validated the fresh recovery run name against the create-once broad source-plan table",
+    "optimizer_steps_executed": 0,
+    "model_load_started": false,
+    "checkpoint_written": false
+  },
+  "resource_release": {
+    "raycluster_absent": true,
+    "pod_absent": true,
+    "gpu_allocation": 0
+  },
+  "repair": {
+    "pull_request": "https://github.com/fleet-ai/cyber-post-train/pull/265",
+    "head_commit": "1ec542ab75b0c9b50ba9f70dcddc5ef83d1dc924",
+    "rule": "validate a fresh successor against the exact embedded sealed source plan while retaining the new successor identity"
+  },
+  "receipt_sha256": "7e736de27805d84dd5620f953fded34a23e2e198fda02f4bee5380c6812a4e87"
+}
