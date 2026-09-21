@@ -145,6 +145,10 @@ Do not add a boolean such as `include_thinking=true` to the existing action
 corpus.  That would blur two different data contracts.  Instead, create a new,
 frozen corpus type only after all gates below pass.
 
+The source-only implementation plan for that separate corpus is
+[the student-visible reasoning collection design](QWEN38_STUDENT_VISIBLE_REASONING_COLLECTION_DESIGN_V1.md).
+It deliberately does not authorize a collection or relax any action-only gate.
+
 ### Allowed sources
 
 The only acceptable written reasoning is reasoning that is both:
