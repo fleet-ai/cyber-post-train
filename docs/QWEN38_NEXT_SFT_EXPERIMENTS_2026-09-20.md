@@ -81,15 +81,25 @@ tokens with up to 24,576 masked history may preserve it. Comparing 96K with the
 matched 64K and 32K arms tells us whether the benefit continues, saturates, or
 reverses as sequences become longer and each step becomes more expensive.
 
-- Current config: `configs/runs/qwen38-teacher3k-96k-full-b8-lr3e6-v2.json`
+- Fresh successor config: `configs/runs/qwen38-teacher3k-96k-full-b8-lr3e6-v3.json`
 - Data: 6,847 windows; all 57,384,881 targets appear exactly once.
 - Planned work: 856 optimizer steps on one eight-GPU node.
 - W&B: group `qwen38-teacher3k-96k-v1`, create-once successor run
-  `chris-q38-t3k96-b8-v2`.
+  `chris-q38-t3k96-b8-v3`.
 - Principal contrast: 98,304-token windows and 24,576-token masked history.
   Every other scientific input is fixed.
 - Stop rule: the same operational stop rule as the 64K arm. A successful
   one-step canary is necessary but does not by itself prove full-epoch lift.
+
+The old `v2` name and output root are never reused.  The `v3` successor changes
+only create-once identities and recovery settings: it saves every 50 updates
+and keeps two checkpoints.  A full checkpoint is large, so this is deliberately
+less frequent than the 64K arm's 15-update cadence but much safer than the
+old 210-update interval.  It does not set a numerical recovery-time horizon:
+we have no accepted 96K step-rate measurement from which to honestly derive
+one.  The zero-GPU preflight must confirm the exact loader and checkpoint path;
+the launch watchdog must use observed progress rather than inventing a timing
+claim.
 
 ## Runtime incident and exact repair
 
