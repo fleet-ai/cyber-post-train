@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
+import sys
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
@@ -16,9 +18,14 @@ from evals.fleet import (
 )
 
 ROOT = Path(__file__).parents[1]
-PLAN = ROOT / "configs/evaluation/qwen38-lr30-step76-stored-session-reconciliation-v1.json"
+PLAN = ROOT / "configs/evaluation/qwen38-lr30-step76-stored-session-reconciliation-v2.json"
 EVIDENCE = (
     ROOT / "docs/evidence/qwen38-lr30-step76-fleet-dev17-seed43-terminal-census-20260921.json"
+)
+BOOTSTRAP_FAILURE_EVIDENCE = (
+    ROOT
+    / "docs/evidence"
+    / "qwen38-lr30-step76-stored-session-reconciliation-v1-bootstrap-failure-20260921.json"
 )
 
 
@@ -66,6 +73,22 @@ def test_terminal_census_is_score_blind_and_self_digesting():
     assert census["score_values_included"] is False
 
 
+def test_bootstrap_failure_evidence_is_sanitized_terminal_and_self_digesting():
+    evidence = json.loads(BOOTSTRAP_FAILURE_EVIDENCE.read_text())
+    assert evidence["sha256"] == reconciliation._body_digest(  # noqa: SLF001
+        {key: value for key, value in evidence.items() if key != "sha256"}
+    )
+    job_evidence = evidence["created_objects"]["job"]
+    assert job_evidence["root_failure_alert_annotation"] == "off"
+    assert job_evidence["active"] == 0
+    assert job_evidence["gpu_request"] == 0
+    assert evidence["post_failure_state"]["stored_session_reconciliation_receipt_count"] == 0
+    assert evidence["post_failure_state"]["output_root_absent"] is True
+    assert evidence["post_failure_state"]["model_generation_performed"] is False
+    assert evidence["post_failure_state"]["scoring_call_performed"] is False
+    assert all(value is False for value in evidence["privacy"].values())
+
+
 def test_package_is_cpu_only_create_once_alert_off_and_private(tmp_path):
     intent = _intent(tmp_path / "intent.json")
     package = job.render(repo_root=ROOT, plan_path=PLAN, intent_path=intent)
@@ -82,6 +105,40 @@ def test_package_is_cpu_only_create_once_alert_off_and_private(tmp_path):
     public = json.dumps(package.proof)
     private = reconciliation.load_intent(intent)
     assert all(cell_id not in public for cell_id in private.selected_cell_ids)
+
+
+def test_bootstrap_module_bundle_imports_in_an_isolated_tree(tmp_path):
+    intent = _intent(tmp_path / "intent.json")
+    package = job.render(repo_root=ROOT, plan_path=PLAN, intent_path=intent)
+    data = package.config_map["data"]
+    assert "rollout_campaign.py" in data
+    isolated = tmp_path / "isolated"
+    (isolated / "cyber_post_train").mkdir(parents=True)
+    (isolated / "evals/fleet").mkdir(parents=True)
+    for path in (
+        isolated / "cyber_post_train/__init__.py",
+        isolated / "evals/__init__.py",
+        isolated / "evals/fleet/__init__.py",
+    ):
+        path.write_text("", encoding="utf-8")
+    (isolated / "cyber_post_train/jobs.py").write_text(data["jobs.py"], encoding="utf-8")
+    for name, source in data.items():
+        if name not in {"jobs.py", "run.sh"}:
+            (isolated / "evals/fleet" / name).write_text(source, encoding="utf-8")
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            f"import sys;sys.path.insert(0,{str(isolated)!r});"
+            "import evals.fleet.stored_session_reconciliation",
+        ],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_intent_permissions_and_reviewed_code_bytes_fail_closed(tmp_path):
