@@ -236,6 +236,7 @@ def test_anchored_roster_can_render_only_train_tasks_for_collection(
             "timeout_seconds": 28800,
             "tools": ["bash", "submit_report"],
             "tool_catalog_sha256": _sha("d"),
+            "thinking_mode": campaign.THINKING_DISABLED,
         },
         "images": {"agent": _sha("e"), "proxy": _sha("f")},
         "sampling": {"temperature": 0.6, "top_p": 0.95, "seed": 42},
@@ -244,6 +245,9 @@ def test_anchored_roster_can_render_only_train_tasks_for_collection(
         "target_unique_visible_action_tokens": campaign.MINIMUM_VISIBLE_TARGET_TOKENS,
         "reasoning_policy": campaign.VISIBLE_ACTIONS_ONLY,
         "offline_compaction_policy": campaign.OPAQUE_COMPACTION_REJECT,
+        "execution_mode": campaign.LOCAL_CPU_EXECUTION,
+        "maximum_task_versions_per_family": 2,
+        "maximum_planned_cells": 100,
     }
     collection = campaign.render(
         request,

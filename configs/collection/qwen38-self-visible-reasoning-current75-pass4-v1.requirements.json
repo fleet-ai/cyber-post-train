@@ -1,0 +1,91 @@
+{
+  "admitted_roster": {
+    "family_role_anchor_sha256": "sha256:48350b8fc23143abe297db3b2364590c72d564553ebb4e9a349fa06ec246a26b",
+    "family_split_sha256": "sha256:8859da6ac391add1b405ee5c453924657dfd9a14b2826dfa2a681456556af4df",
+    "held_out_task_versions": 25,
+    "inventory_sha256": "sha256:d84b822611129059a4d60165a2ea7f2e0d44f084f2d74c45f904b445a83e0fbf",
+    "maximum_task_versions_per_family": 1,
+    "maximum_planned_cells": 200,
+    "protected_family_lock_sha256": "sha256:62ff0f7c1ade3c6ed6e0b5be025efac10f496617d99f369149a8aa1c8253339e",
+    "root_role_anchor_id": "fleet-blackbox-current-study-20260914-v2",
+    "runtime_bindings_sha256": "sha256:849542785db0cb71fdc9ecd29e1008c8af26e0bf25ad0dd74e22b6d6fb3cb694",
+    "train_task_versions": 50
+  },
+  "distinct_contract_schemas": {
+    "corpus": "cyber_qwen_opencode_visible_reasoning_sft_corpus_v1",
+    "packet": "cyber_qwen_opencode_student_visible_reasoning_packet_v1",
+    "record": "cyber_qwen_opencode_student_visible_reasoning_record_v1",
+    "selection": "cyber_qwen_opencode_student_visible_reasoning_selection_v1",
+    "source_profile": "cyber_qwen_opencode_student_visible_reasoning_source_profile_v1"
+  },
+  "known_base_identity": {
+    "chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "model_repository": "Qwen/Qwen3.8-27B",
+    "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "opencode_release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "profile_file_sha256": "sha256:b52db3194f8682bcf88fb96049a1f3cf14afa8b3b7ab18932b0209f394d90b7c",
+    "profile_path": "configs/evaluation/qwen38-base-fleet-dev17-opencode-seed43-pass1-v1.json",
+    "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+  },
+  "missing_launch_gates": [
+    "aggregate_reasoning_census_and_selection_receipt",
+    "authorized_reasoning_schema_allowlist_entry",
+    "continuation_and_reload_token_equivalence_receipt",
+    "exact_compaction_continuation_recording_contract",
+    "heldout_zero_admission_regression_receipt",
+    "pinned_immutable_reasoning_success_evidence_mapping",
+    "reasoning_specific_immutable_model_harness_profile_receipt",
+    "source_session_trajectory_and_window_dedupe_regression_receipt",
+    "student_visible_reasoning_source_authorization_receipt",
+    "template_serialization_token_round_trip_receipt"
+  ],
+  "purpose": "Prepare a separate Qwen self-rollout arm whose written reasoning is explicitly student-visible and trainable; do not mix it with visible-action-only data.",
+  "required_profile": {
+    "compaction_continuation_must_record_actual_post_summary_prompt": true,
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v2",
+    "context_window_size": 262144,
+    "enable_thinking": true,
+    "preserve_thinking_must_be_explicit": true,
+    "reasoning_visibility": "student_visible",
+    "template_and_tokenizer_bytes_immutable": true,
+    "tools": [
+      "bash",
+      "submit_report"
+    ]
+  },
+  "required_reasoning_admission_policy": {
+    "action_packet_reuse_allowed": false,
+    "deduplication_order": [
+      "source_session_identity",
+      "normalized_trajectory_digest",
+      "packed_window_payload_digest"
+    ],
+    "maximum_family_target_token_fraction": 0.25,
+    "minimum_unique_target_tokens": 20000000,
+    "reject": [
+      "private_or_unknown_reasoning",
+      "opaque_compaction",
+      "unknown_serialization",
+      "heldout_family"
+    ],
+    "training_data_eligible": true
+  },
+  "required_serialization_round_trip": {
+    "collection_training_and_serving_full_token_ids_per_case": true,
+    "prompt_add_generation_prompt": true,
+    "prompt_messages": "messages_without_target",
+    "prompt_token_ids_exact_prefix_of_every_full_serialization": true,
+    "prompt_token_ids_must_equal_local_apply_chat_template": true,
+    "prompt_token_ids_per_case": true
+  },
+  "schema": "cyber_student_visible_reasoning_collection_requirements_v1",
+  "separation_contract": {
+    "inferred_or_reconstructed_reasoning_allowed": false,
+    "mix_with_visible_action_corpus": false,
+    "new_collection_arm": true,
+    "new_corpus_schema_required": true,
+    "teacher_private_or_unknown_reasoning_allowed": false
+  },
+  "sha256": "sha256:0cfd3e1f9eaacfc7816a0a4a81143b5c1ee2276906c23f5847793c6a4421a830",
+  "status": "blocked_pending_visible_reasoning_qualification"
+}

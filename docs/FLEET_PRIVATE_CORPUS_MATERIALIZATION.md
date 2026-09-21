@@ -50,6 +50,18 @@ opaque external receipt.  A collection launcher must therefore verify that
 receipt against its source-of-truth registry before collection begins.  This is
 an intentional boundary: this command has no credentials or network access.
 
+The visible-action packet also carries one exact `execution_safety` object.
+Before opening any private normalized record, the materializer requires the
+local CPU-worker rail, exact planned/capped cell counts, a fresh (at most 600
+seconds) duplicate census over every authoritative collection ledger and Fleet
+session, no automatic replay of ambiguous cells, and
+`external_submission: false`.  Kubernetes wrapping remains unsupported; a
+future wrapper must prove two stable previews and the exact top-level
+`fleet.ai/failure-alerts: "off"` annotation on each root `Job` or `RayJob`.
+Unknown or weakened safety fields are rejected.  The packet's per-task and
+per-family session caps are also checked against the admitted private
+selection before record ingestion.
+
 ## What records are accepted
 
 Only the current `cyber_fleet_visible_action_record_v1` envelope is accepted.
