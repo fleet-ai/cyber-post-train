@@ -131,6 +131,7 @@ def _request() -> dict:
             "timeout_seconds": 28800,
             "tools": ["bash", "submit_report"],
             "tool_catalog_sha256": _sha("f"),
+            "thinking_mode": campaign.THINKING_DISABLED,
         },
         "images": {"agent": _sha("1"), "proxy": _sha("2")},
         "sampling": {"temperature": 0.6, "top_p": 0.95, "seed": 42},
@@ -139,6 +140,9 @@ def _request() -> dict:
         "target_unique_visible_action_tokens": campaign.MINIMUM_VISIBLE_TARGET_TOKENS,
         "reasoning_policy": campaign.VISIBLE_ACTIONS_ONLY,
         "offline_compaction_policy": campaign.OPAQUE_COMPACTION_REJECT,
+        "execution_mode": campaign.LOCAL_CPU_EXECUTION,
+        "maximum_task_versions_per_family": 1,
+        "maximum_planned_cells": 8,
     }
 
 
@@ -591,6 +595,24 @@ def test_rejects_weakened_packet_policy_and_unsealed_task_selection(
     config["collection_task_selection"] = _ref(state["paths"]["task-selection.json"])
     with pytest.raises(ValueError, match="invalid sealed"):
         corpus.build(config, relative_to=tmp_path)
+
+
+def test_rejects_weakened_packet_execution_safety(tmp_path: Path, monkeypatch) -> None:
+    config, state = _fixture(tmp_path, monkeypatch)
+    packet = json.loads(state["paths"]["packet.json"].read_text())
+    packet["execution_safety"]["external_submission"] = True
+    packet = campaign.sealed({key: value for key, value in packet.items() if key != "sha256"})
+    _rewrite(state["paths"]["packet.json"], packet)
+    config["collection_packet"] = _ref(state["paths"]["packet.json"])
+    monkeypatch.setattr(
+        corpus,
+        "iter_jsonl",
+        lambda *_args: pytest.fail("unsafe packet reached private record ingestion"),
+    )
+
+    with pytest.raises(ValueError, match="execution safety is insufficient"):
+        corpus.build(config, relative_to=tmp_path)
+    assert not Path(config["output"]).exists()
 
 
 def test_rejects_private_task_selection_before_compilation_or_record_read(

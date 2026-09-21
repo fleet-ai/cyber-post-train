@@ -143,6 +143,7 @@ def _request(*, source_kind: str = "self") -> dict:
             "timeout_seconds": 28800,
             "tools": ["bash", "submit_report"],
             "tool_catalog_sha256": _sha("d"),
+            "thinking_mode": campaign.THINKING_DISABLED,
         },
         "images": {"agent": _sha("e"), "proxy": _sha("f")},
         "sampling": {"temperature": 0.6, "top_p": 0.95, "seed": 42},
@@ -151,6 +152,9 @@ def _request(*, source_kind: str = "self") -> dict:
         "target_unique_visible_action_tokens": campaign.MINIMUM_VISIBLE_TARGET_TOKENS,
         "reasoning_policy": campaign.VISIBLE_ACTIONS_ONLY,
         "offline_compaction_policy": campaign.OPAQUE_COMPACTION_REJECT,
+        "execution_mode": campaign.LOCAL_CPU_EXECUTION,
+        "maximum_task_versions_per_family": 1,
+        "maximum_planned_cells": 24,
     }
     if source_kind == "teacher":
         request["source_model"] = {
@@ -176,6 +180,7 @@ def test_render_is_eval_compatible_and_contains_only_train_tasks(
     roles = {(row["task_key"], row["task_version_id"]): row["split"] for row in split["tasks"]}
     assert selection["schema"] == campaign.SELECTION_SCHEMA
     assert selection["root_role_anchor_id"] == task_family_split.TRUSTED_FLEET_COLLECTION_ROOT_ID
+    assert selection["family_role_anchor_sha256"] == anchor["sha256"]
     assert selection["family_leakage_check"] == {
         "exact_identity_overlap": 0,
         "reviewed_family_overlap": 0,
@@ -192,6 +197,7 @@ def test_render_is_eval_compatible_and_contains_only_train_tasks(
     # eval plans intentionally do not retain.
     assert packet["training_data_eligible"] is True
     assert packet["root_role_anchor_id"] == task_family_split.TRUSTED_FLEET_COLLECTION_ROOT_ID
+    assert packet["family_role_anchor_sha256"] == anchor["sha256"]
     assert packet["source"]["model_alias"] == "source"
     assert packet["source"]["template_sha256"] == _sha("8")
     assert packet["corpus_scope"] == {
@@ -211,6 +217,7 @@ def test_render_is_eval_compatible_and_contains_only_train_tasks(
     assert packet["admission_policy"]["maximum_submit_report_response_fraction"] == 0.5
     assert packet["admission_policy"]["maximum_submit_report_target_token_fraction"] == 0.5
     assert packet["admission_policy"]["maximum_family_target_token_fraction"] == 0.25
+    assert packet["admission_policy"]["maximum_admitted_sessions_per_family"] == 4
     assert packet["admission_policy"]["reasoning_policy"] == campaign.VISIBLE_ACTIONS_ONLY
     assert (
         packet["admission_policy"]["offline_compaction_policy"] == campaign.OPAQUE_COMPACTION_REJECT
@@ -220,6 +227,43 @@ def test_render_is_eval_compatible_and_contains_only_train_tasks(
         "eval_plan_sha256",
     ]
     assert packet["admission_policy"]["minimum_unique_visible_action_target_tokens"] == 20_000_000
+    assert rendered["eval-config.json"]["collection_runtime"] == {
+        "schema": "cyber_visible_action_collection_runtime_v1",
+        "source_template_sha256": _sha("8"),
+        "reasoning_generation": campaign.THINKING_DISABLED,
+        "reasoning_request_override": {"chat_template_kwargs": {"enable_thinking": False}},
+        "opencode_model_reasoning": False,
+        "opencode_cli_thinking_flag": False,
+        "maximum_planned_cells": 24,
+        "prelaunch_exact_cell_duplicate_census_required": True,
+        "duplicate_census_max_age_seconds": 600,
+        "duplicate_census_required_coverage": (
+            "all_authoritative_collection_ledgers_and_fleet_sessions_v1"
+        ),
+        "automatic_replay_of_ambiguous_cells": False,
+        "external_submission": False,
+        "execution_mode": campaign.LOCAL_CPU_EXECUTION,
+        "cluster_wrapper_supported": False,
+    }
+    assert packet["execution_safety"] == {
+        "execution_mode": campaign.LOCAL_CPU_EXECUTION,
+        "planned_cells": len(selection["tasks"]) * 4,
+        "maximum_planned_cells": 24,
+        "prelaunch_exact_cell_duplicate_census_required": True,
+        "duplicate_census_max_age_seconds": 600,
+        "duplicate_census_required_coverage": (
+            "all_authoritative_collection_ledgers_and_fleet_sessions_v1"
+        ),
+        "automatic_replay_of_ambiguous_cells": False,
+        "external_submission": False,
+        "cluster_wrapper_supported": False,
+        "cluster_wrapper_enablement_requires": {
+            "two_stable_server_previews": True,
+            "root_kinds": ["Job", "RayJob"],
+            "required_top_level_annotation": {"fleet.ai/failure-alerts": "off"},
+            "request_or_pod_template_annotation_is_insufficient": True,
+        },
+    }
 
 
 def test_requires_exact_runtime_bindings_and_split_protection(
@@ -299,6 +343,11 @@ def test_requires_qualified_262k_opencode_actions_only_harness(
     wrong_tools["harness"]["tools"] = ["bash"]
     with pytest.raises(ValueError, match="262K OpenCode"):
         campaign.render(wrong_tools, inventory, split, bindings, role_anchor=anchor)
+
+    thinking = _request()
+    thinking["harness"]["thinking_mode"] = "enabled"
+    with pytest.raises(ValueError, match="262K OpenCode"):
+        campaign.render(thinking, inventory, split, bindings, role_anchor=anchor)
 
 
 def test_write_and_check_are_create_once_and_no_submit(

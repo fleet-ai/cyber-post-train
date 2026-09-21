@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from cyber_post_train.jobs import digest
+from evals.fleet import visible_action_collection as collection_runtime
 
 from . import collection_campaign
 from . import fleet_collection_admission as admission
@@ -391,6 +392,7 @@ def _packet(
         "training_data_eligible",
         "corpus_scope",
         "admission_policy",
+        "execution_safety",
         "metrics_required",
         "sha256",
     }
@@ -456,14 +458,57 @@ def _packet(
         "minimum_unique_visible_action_target_tokens": policy.get(
             "minimum_unique_visible_action_target_tokens"
         ),
+        "maximum_admitted_sessions_per_task_version": policy.get(
+            "maximum_admitted_sessions_per_task_version"
+        ),
+        "maximum_admitted_sessions_per_family": policy.get("maximum_admitted_sessions_per_family"),
     }
     if (
         policy != expected_policy
         or type(policy["minimum_unique_visible_action_target_tokens"]) is not int
         or policy["minimum_unique_visible_action_target_tokens"]
         < collection_campaign.MINIMUM_VISIBLE_TARGET_TOKENS
+        or type(policy["maximum_admitted_sessions_per_task_version"]) is not int
+        or policy["maximum_admitted_sessions_per_task_version"] != eval_config.get("pass_k")
+        or type(policy["maximum_admitted_sessions_per_family"]) is not int
+        or policy["maximum_admitted_sessions_per_family"]
+        < policy["maximum_admitted_sessions_per_task_version"]
+        or policy["maximum_admitted_sessions_per_family"]
+        % policy["maximum_admitted_sessions_per_task_version"]
+        != 0
     ):
         raise ValueError("collection packet admission policy is insufficient")
+    runtime = _mapping(eval_config.get("collection_runtime"), "collection runtime")
+    pass_k = eval_config.get("pass_k")
+    if type(pass_k) is not int or pass_k < 1:
+        raise ValueError("collection eval config pass_k is invalid")
+    task_rows = task_selection.get("tasks")
+    if not isinstance(task_rows, list):
+        raise ValueError("collection task selection is malformed")
+    planned_cells = len(task_rows) * pass_k
+    expected_safety = {
+        "execution_mode": collection_campaign.LOCAL_CPU_EXECUTION,
+        "planned_cells": planned_cells,
+        "maximum_planned_cells": runtime.get("maximum_planned_cells"),
+        "prelaunch_exact_cell_duplicate_census_required": True,
+        "duplicate_census_max_age_seconds": (collection_runtime.DUPLICATE_CENSUS_MAX_AGE_SECONDS),
+        "duplicate_census_required_coverage": collection_runtime.DUPLICATE_CENSUS_COVERAGE,
+        "automatic_replay_of_ambiguous_cells": False,
+        "external_submission": False,
+        "cluster_wrapper_supported": False,
+        "cluster_wrapper_enablement_requires": {
+            "two_stable_server_previews": True,
+            "root_kinds": ["Job", "RayJob"],
+            "required_top_level_annotation": {collection_campaign.FAILURE_ALERT_ANNOTATION: "off"},
+            "request_or_pod_template_annotation_is_insufficient": True,
+        },
+    }
+    if (
+        value.get("execution_safety") != expected_safety
+        or type(runtime.get("maximum_planned_cells")) is not int
+        or planned_cells > runtime["maximum_planned_cells"]
+    ):
+        raise ValueError("collection packet execution safety is insufficient")
     if value.get("metrics_required") != _EXPECTED_PACKET_METRICS:
         raise ValueError("collection packet lacks required aggregate safety metrics")
     if eval_config.get("training_data_eligible") is not True:
@@ -586,6 +631,30 @@ def _task_boundary(
             or row["group_id"] in protected_set
         ):
             raise ValueError("admission selection contains a held-out family")
+    family_sessions: dict[str, int] = {}
+    for row in selection["selected"]:
+        family_sessions[row["group_id"]] = family_sessions.get(row["group_id"], 0) + 1
+    packet_policy = packet.get("admission_policy")
+    maximum_task_sessions = (
+        packet_policy.get("maximum_admitted_sessions_per_task_version")
+        if isinstance(packet_policy, dict)
+        else None
+    )
+    maximum_family_sessions = (
+        packet_policy.get("maximum_admitted_sessions_per_family")
+        if isinstance(packet_policy, dict)
+        else None
+    )
+    if (
+        type(maximum_task_sessions) is not int
+        or maximum_task_sessions < 1
+        or selection.get("max_sessions_per_task_version", maximum_task_sessions + 1)
+        > maximum_task_sessions
+        or type(maximum_family_sessions) is not int
+        or maximum_family_sessions < 1
+        or any(count > maximum_family_sessions for count in family_sessions.values())
+    ):
+        raise ValueError("admission selection exceeds the packet family-session cap")
     return bindings
 
 

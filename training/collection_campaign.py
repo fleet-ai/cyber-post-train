@@ -27,7 +27,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from evals.fleet import evaluate
+from evals.fleet import visible_action_collection as collection_runtime
 from training import task_family_split
 
 INVENTORY_SCHEMA = "cyber_collection_metadata_inventory_v1"
@@ -38,6 +38,10 @@ PACKET_SCHEMA = "cyber_trajectory_collection_packet_v1"
 VISIBLE_ACTIONS_ONLY = "visible_actions_only_v1"
 OPAQUE_COMPACTION_REJECT = "reject_opaque_context_compaction_v1"
 ONLINE_COMPACTION = "opencode_1.18.27_native_compaction_autocontinue_v2"
+THINKING_DISABLED = "disabled"
+LOCAL_CPU_EXECUTION = "authorized_cpu_worker_local_v1"
+FAILURE_ALERT_ANNOTATION = "fleet.ai/failure-alerts"
+MAXIMUM_FAMILY_TARGET_TOKEN_FRACTION = 0.25
 MINIMUM_VISIBLE_TARGET_TOKENS = 20_000_000
 EXACT_TASK_FIELDS = (
     "task_key",
@@ -236,6 +240,9 @@ def _request(value: dict[str, Any]) -> None:
         "target_unique_visible_action_tokens",
         "reasoning_policy",
         "offline_compaction_policy",
+        "execution_mode",
+        "maximum_task_versions_per_family",
+        "maximum_planned_cells",
     }
     required = allowed - {"teacher_strength_receipt_sha256"}
     if not required <= set(value) or set(value) - allowed or value.get("schema") != REQUEST_SCHEMA:
@@ -267,10 +274,19 @@ def _request(value: dict[str, Any]) -> None:
         raise ValueError("collection currently permits visible actions only")
     if value.get("offline_compaction_policy") != OPAQUE_COMPACTION_REJECT:
         raise ValueError("opaque compaction must be rejected for offline SFT")
+    if value.get("execution_mode") != LOCAL_CPU_EXECUTION:
+        raise ValueError("collection runs only on the qualified local CPU-worker rail")
     if value.get("attempts_per_task") != 4:
         raise ValueError("high-throughput collection uses exactly four predeclared attempts")
     if type(value.get("concurrency")) is not int or not 1 <= value["concurrency"] <= 32:
         raise ValueError("concurrency must be an integer from 1 through 32")
+    if (
+        type(value.get("maximum_task_versions_per_family")) is not int
+        or value["maximum_task_versions_per_family"] < 1
+    ):
+        raise ValueError("maximum_task_versions_per_family must be a positive integer")
+    if type(value.get("maximum_planned_cells")) is not int or value["maximum_planned_cells"] < 1:
+        raise ValueError("maximum_planned_cells must be a positive integer")
     if (
         type(value.get("target_unique_visible_action_tokens")) is not int
         or value["target_unique_visible_action_tokens"] < MINIMUM_VISIBLE_TARGET_TOKENS
@@ -367,6 +383,7 @@ def _config(request: dict[str, Any], selection: dict[str, Any]) -> dict[str, Any
         harness.get("context_management") != ONLINE_COMPACTION
         or harness.get("context_window_size") != 262144
         or harness.get("tools") != ["bash", "submit_report"]
+        or harness.get("thinking_mode") != THINKING_DISABLED
     ):
         raise ValueError("collection requires qualified 262K OpenCode actions-only treatment")
     config = {
@@ -381,6 +398,24 @@ def _config(request: dict[str, Any], selection: dict[str, Any]) -> dict[str, Any
         "max_reviewed_infrastructure_retries": 0,
         "training_data_eligible": True,
         "sampling": request["sampling"],
+        "collection_runtime": {
+            "schema": collection_runtime.RUNTIME_SCHEMA,
+            "source_template_sha256": request["template_sha256"],
+            "reasoning_generation": THINKING_DISABLED,
+            "reasoning_request_override": {"chat_template_kwargs": {"enable_thinking": False}},
+            "opencode_model_reasoning": False,
+            "opencode_cli_thinking_flag": False,
+            "maximum_planned_cells": request["maximum_planned_cells"],
+            "prelaunch_exact_cell_duplicate_census_required": True,
+            "duplicate_census_max_age_seconds": (
+                collection_runtime.DUPLICATE_CENSUS_MAX_AGE_SECONDS
+            ),
+            "duplicate_census_required_coverage": collection_runtime.DUPLICATE_CENSUS_COVERAGE,
+            "automatic_replay_of_ambiguous_cells": False,
+            "external_submission": False,
+            "execution_mode": request["execution_mode"],
+            "cluster_wrapper_supported": False,
+        },
     }
     return config
 
@@ -448,7 +483,11 @@ def _packet(
                 # Per-task caps alone cannot stop one unusually long family
                 # from consuming a broad campaign.  Keep a fixed family
                 # concentration ceiling in the immutable packet.
-                "maximum_family_target_token_fraction": 0.25,
+                "maximum_family_target_token_fraction": MAXIMUM_FAMILY_TARGET_TOKEN_FRACTION,
+                "maximum_admitted_sessions_per_task_version": request["attempts_per_task"],
+                "maximum_admitted_sessions_per_family": (
+                    request["attempts_per_task"] * request["maximum_task_versions_per_family"]
+                ),
                 "deduplication_order": [
                     "source_session_identity",
                     "normalized_trajectory_digest",
@@ -456,6 +495,27 @@ def _packet(
                 ],
                 "held_out_roles_excluded": ["dev", "final_test"],
                 "adapter_must_bind": ["collection_packet_sha256", "eval_plan_sha256"],
+            },
+            "execution_safety": {
+                "execution_mode": request["execution_mode"],
+                "planned_cells": len(selection["tasks"]) * request["attempts_per_task"],
+                "maximum_planned_cells": request["maximum_planned_cells"],
+                "prelaunch_exact_cell_duplicate_census_required": True,
+                "duplicate_census_max_age_seconds": (
+                    collection_runtime.DUPLICATE_CENSUS_MAX_AGE_SECONDS
+                ),
+                "duplicate_census_required_coverage": (
+                    collection_runtime.DUPLICATE_CENSUS_COVERAGE
+                ),
+                "automatic_replay_of_ambiguous_cells": False,
+                "external_submission": False,
+                "cluster_wrapper_supported": False,
+                "cluster_wrapper_enablement_requires": {
+                    "two_stable_server_previews": True,
+                    "root_kinds": ["Job", "RayJob"],
+                    "required_top_level_annotation": {FAILURE_ALERT_ANNOTATION: "off"},
+                    "request_or_pod_template_annotation_is_insufficient": True,
+                },
             },
             "metrics_required": [
                 "valid_success_count",
@@ -491,7 +551,18 @@ def render(
     # with a useful error rather than a Python signature error.
     if role_anchor is None:
         raise ValueError("broad collection requires an anchored split and trusted role anchor")
+    train_group_sizes: dict[str, int] = {}
+    for role in roles.values():
+        if role["split"] == "train":
+            train_group_sizes[role["group_id"]] = train_group_sizes.get(role["group_id"], 0) + 1
+    if any(
+        size > request["maximum_task_versions_per_family"] for size in train_group_sizes.values()
+    ):
+        raise ValueError("training family exceeds the predeclared task-version cap")
     selection = _selection(rows, bindings, roles, inventory, split, runtime_bindings, role_anchor)
+    planned_cells = len(selection["tasks"]) * request["attempts_per_task"]
+    if planned_cells > request["maximum_planned_cells"]:
+        raise ValueError("collection exceeds the predeclared cell budget")
     config = _config(request, selection)
     plan = _compile_local(selection, config)
     packet = _packet(request, selection, config, runtime_bindings, plan)
@@ -504,11 +575,11 @@ def render(
 
 
 def _compile_local(selection: dict[str, Any], config: dict[str, Any]) -> dict[str, Any]:
-    """Exercise the existing generic evaluator locally, without preflight or a request."""
+    """Exercise the isolated collection evaluator without preflight or a request."""
     with tempfile.TemporaryDirectory() as directory:
         root = Path(directory)
         (root / "task-selection.json").write_bytes(raw(selection))
-        plan = evaluate.compile_eval(config, relative_to=root)
+        plan = collection_runtime.compile_eval(config, relative_to=root)
     if plan["training_data_eligible"] is not True or plan["pass_k"] != 4:
         raise ValueError("rendered collection plan lost its data-eligibility contract")
     if plan["selection"] != {"source_job_id": None}:

@@ -1,0 +1,124 @@
+{
+  "batch_policy": {
+    "automatic_retry": false,
+    "initial_priority_candidates": 17,
+    "maximum_task_versions_per_family": 1,
+    "maximum_versions_per_batch": 64,
+    "next_unreviewed_backlog": 949,
+    "outcome_selected_promotion": false,
+    "quarantine_ambiguous_or_incomplete": true
+  },
+  "candidate_supply": {
+    "current_production_blackbox": 1093,
+    "current_with_exact_execution_receipt": 80,
+    "known_broken_without_exact_receipt_excluded": 47,
+    "qa_agent_failure_without_exact_receipt": 10,
+    "qa_clean_without_exact_receipt": 7,
+    "qa_not_analyzed_without_exact_receipt": 949,
+    "without_exact_execution_receipt": 1013
+  },
+  "collection_growth_policy": {
+    "attempts_per_admitted_train_task_version": 4,
+    "base_qwen_visible_action_packet_after_each_sealed_roster": true,
+    "campaign_cell_formula": "admitted_train_task_versions * attempts_per_admitted_train_task_version",
+    "exact_cell_count_declared_only_after_anchored_split": true,
+    "maximum_task_versions_per_family": 1,
+    "outcome_blind_before_collection": true,
+    "separate_approved_stronger_teacher_visible_action_packet_after_each_sealed_roster": true,
+    "student_visible_reasoning_requires_distinct_contract_and_gates": true,
+    "use_every_admitted_train_family": true
+  },
+  "expansion_wave_plan": {
+    "known_broken_without_exact_receipt_excluded": 47,
+    "nonbroken_unproven_candidate_upper_bound": 966,
+    "not_analyzed_waves": {
+      "candidate_versions": 949,
+      "final_batch_size": 53,
+      "full_batch_count": 14,
+      "full_batch_size": 64,
+      "maximum_batch_count": 15,
+      "maximum_versions_per_batch": 64
+    },
+    "priority_wave": {
+      "candidate_versions": 17,
+      "maximum_batch_count": 1,
+      "maximum_versions_per_batch": 64,
+      "qa_agent_failure_versions": 10,
+      "qa_clean_versions": 7
+    },
+    "receipt_proven_plus_candidate_upper_bound": 1041,
+    "upper_bounds_are_not_admission_or_training_authority": true
+  },
+  "final_family_policy": {
+    "family_role_anchor_sha256": "sha256:48350b8fc23143abe297db3b2364590c72d564553ebb4e9a349fa06ec246a26b",
+    "qualification_allowed": false,
+    "protected_final_family_count": 8,
+    "protected_final_group_ids_sha256": "sha256:17d10857cf08f444a8c265b0e62ff2552c8f87364b7e605fed595c152bacd110",
+    "root_role_anchor_id": "fleet-blackbox-current-study-20260914-v2",
+    "unknown_or_unreviewed_family_allowed": false
+  },
+  "inputs": {
+    "current_inventory": {
+      "file_sha256": "sha256:4f3d4c70efc44844b240c81463ac78ede5921f31ad2546b96f7135b897ff486",
+      "logical_sha256": "sha256:388f9724c671235d18817777857179d124b8a7f699a2546b96f7135b897ff486",
+      "path": "configs/data/fleet-blackbox-current-production-20260921-v1.json"
+    },
+    "protected_family_split": {
+      "file_sha256": "sha256:28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb",
+      "logical_sha256": "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
+      "path": "configs/data/fleet-blackbox-current-study-split-20260914-v2.json"
+    },
+    "receipt_coverage": {
+      "file_sha256": "sha256:3650b52debed6ecea6d14ea8d08ebd49ee79d8a8650df2a1c8a8bd35a1c25d0e",
+      "logical_sha256": "sha256:525c006972421624db618e26a42362f351a774eadb51b94d0d753c11448f67c0",
+      "path": "configs/data/fleet-blackbox-training-coverage-20260921-v1.json"
+    }
+  },
+  "missing_launch_gates": [
+    "aggregate_only_qualification_receipt_schema_and_regressions",
+    "exact_runtime_environment_data_verifier_and_starting_data_roster",
+    "qualification_execution_profile_and_bounded_budget_receipt",
+    "reviewed_application_and_task_family_for_every_selected_version",
+    "server_preview_or_local_controller_execution_receipt",
+    "zero_protected_final_family_intersection_receipt"
+  ],
+  "purpose": "Qualify currently unproven production blackbox tasks for later train/dev consideration by proving runtime and grading health; this wave creates no training examples.",
+  "public_evidence_policy": {
+    "aggregate_only": true,
+    "numeric_scores": false,
+    "prompts_traces_answers_flags_credentials": false,
+    "task_or_session_identifiers": false,
+    "training_data_eligible": false
+  },
+  "receipt_proven_supply": {
+    "admitted_exact_canonical_failure": 33,
+    "admitted_exact_success": 42,
+    "admitted_not_known_broken": 75,
+    "excluded_known_broken_exact_canonical_failure": 3,
+    "excluded_known_broken_exact_success": 2,
+    "protected_dev": 17,
+    "protected_final_test": 8,
+    "protected_train": 50,
+    "total_with_exact_execution_receipt": 80
+  },
+  "qualification_checks": [
+    "exact_environment_startup",
+    "exact_bash_and_submit_report_tool_reachability",
+    "verifier_process_completion",
+    "finite_authoritative_outcome_recording",
+    "session_ingestion_completion",
+    "environment_and_container_cleanup"
+  ],
+  "safety": {
+    "cluster_root_annotation": {
+      "fleet.ai/failure-alerts": "off"
+    },
+    "failure_or_success_both_can_prove_task_health": true,
+    "model_capability_claimed": false,
+    "promotion_to_training_automatic": false,
+    "request_or_pod_template_annotation_is_insufficient": true
+  },
+  "schema": "cyber_task_quality_qualification_wave_requirements_v1",
+  "sha256": "sha256:c8dbae8d1c7aeb7eb490c0e2227393a2fcf4a60644174fd0a7480f29b5d7abe7",
+  "status": "blocked_pending_reviewed_lineage_and_runtime_roster"
+}

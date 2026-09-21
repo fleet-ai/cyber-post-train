@@ -1,0 +1,98 @@
+{
+  "admitted_roster": {
+    "family_role_anchor_sha256": "sha256:48350b8fc23143abe297db3b2364590c72d564553ebb4e9a349fa06ec246a26b",
+    "family_split_sha256": "sha256:8859da6ac391add1b405ee5c453924657dfd9a14b2826dfa2a681456556af4df",
+    "held_out_task_versions": 25,
+    "inventory_sha256": "sha256:d84b822611129059a4d60165a2ea7f2e0d44f084f2d74c45f904b445a83e0fbf",
+    "maximum_task_versions_per_family": 1,
+    "planned_cells": 200,
+    "protected_family_lock_sha256": "sha256:62ff0f7c1ade3c6ed6e0b5be025efac10f496617d99f369149a8aa1c8253339e",
+    "root_role_anchor_id": "fleet-blackbox-current-study-20260914-v2",
+    "runtime_bindings_sha256": "sha256:849542785db0cb71fdc9ecd29e1008c8af26e0bf25ad0dd74e22b6d6fb3cb694",
+    "train_task_versions": 50
+  },
+  "allowed_source_names": [
+    "gpt-5.6-sol",
+    "grok-4.5"
+  ],
+  "historical_aggregate_visible_action_supply": {
+    "allowed_source_session_counts_observed": {
+      "gpt-5.6-sol": 645,
+      "grok-4.5": 273
+    },
+    "allowed_source_sessions_observed": 918,
+    "all_teacher_model_session_counts": {
+      "claude-opus-4-8": 45,
+      "claude-opus-4.8": 142,
+      "claude-opus-5": 216,
+      "claude-sonnet-5": 30,
+      "gemini-3.1-pro-preview": 172,
+      "gpt-5.6-sol": 645,
+      "gpt-5.6-terra": 45,
+      "grok-4.5": 273,
+      "grok-4.6": 1283,
+      "kimi-k3": 35
+    },
+    "assistant_responses": 176654,
+    "eligible_for_new_materializer_without_per_record_evidence": false,
+    "exact_task_versions": 1176,
+    "heldout_task_families_excluded": 25,
+    "manifest_file_sha256": "sha256:ebcf6677e51adb22f73602c210281a3f4a847c257155da6ed48cd1c6cba9f3c8",
+    "manifest_logical_sha256": "sha256:a8d08609991d7960cdcdab826bd07c3216bfcd3aa8f6fb33ab7a5fd29648d6f5",
+    "manifest_path": "configs/data/qwen38-teacher3k-32k-v1.manifest.json",
+    "manifest_target_mode": "visible_assistant_actions_only_private_reasoning_omitted",
+    "materialized_max_length": 32768,
+    "mixed_teacher_sources": true,
+    "raw_trace_read_for_this_requirements_packet": false,
+    "rechunked_windows": 14693,
+    "selected_task_keys": 496,
+    "source_max_length": 262144,
+    "supervised_target_tokens": 57384881,
+    "verified_success_source_sessions": 2886
+  },
+  "missing_required_issuer_fields": [
+    "source_authorization_receipt.issued_at",
+    "source_authorization_receipt.issuer",
+    "source_authorization_receipt.model_identity_sha256",
+    "source_authorization_receipt.visible_action_training_collection_allowed",
+    "source_model.immutable_repository_or_provider_identity",
+    "source_model.immutable_revision",
+    "source_model.session_model",
+    "teacher_strength_receipt.capability_basis",
+    "teacher_strength_receipt.comparison_population",
+    "teacher_strength_receipt.issued_at",
+    "teacher_strength_receipt.issuer",
+    "teacher_strength_receipt.model_identity_sha256",
+    "template.chat_template_sha256",
+    "template.enable_thinking_false",
+    "route.catalog",
+    "route.endpoint_origin",
+    "route.model_info",
+    "route.served_id",
+    "route.server_info"
+  ],
+  "prohibitions": {
+    "capability_claim_from_qwen_teacher_sft_checkpoint": false,
+    "hidden_or_private_reasoning_targets": false,
+    "infer_revision_from_model_label": false,
+    "launch_without_exact_profile": false,
+    "relabel_qwen_teacher_sft_checkpoint_as_teacher": false
+  },
+  "purpose": "Fail-closed requirements for a fresh stronger-teacher visible-action wave over the same protected family split.",
+  "required_collection_contract": {
+    "attempts_per_task": 4,
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v2",
+    "context_window_size": 262144,
+    "maximum_family_target_token_fraction": 0.25,
+    "reasoning_generation": "disabled",
+    "target_mode": "visible_actions_only",
+    "tools": [
+      "bash",
+      "submit_report"
+    ],
+    "training_data_eligible": true
+  },
+  "schema": "cyber_stronger_teacher_collection_requirements_v1",
+  "sha256": "sha256:32a3db49c64881ae5ee468974c4ca0458de682e29e4e9701c61b2aeb05ea0af1",
+  "status": "blocked_missing_approved_immutable_source_profile"
+}
