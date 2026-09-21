@@ -102,10 +102,9 @@ absent output root, and the exact W&B run ID. The checks must finish within 120
 seconds and are recorded in the durable no-retry POST intent. Historical clean
 observations remain non-reusable.
 
-External gates remain: prod4 acceptance, failure-budget reset, create-once SFS
-staging, exact-image CPU preflights, authenticated server previews, and live
-observer arming/release receipts. Nothing in the offline packet authorizes a
-launch.
+External gates remain: prod4 acceptance, create-once SFS staging, exact-image
+CPU preflights, authenticated server previews, and live observer arming/release
+receipts. Nothing in the offline packet authorizes a launch.
 
 Review the deterministic packet without external access:
 

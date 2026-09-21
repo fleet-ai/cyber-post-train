@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import pytest
 
 from cyber_post_train.jobs import digest, validate_request
+from scripts import prepare_qwen38_lora_step60_export_successor as successor_builder
 from training import qwen38_lora_export as export
 from training import qwen38_lora_export_control as control
 
@@ -137,15 +138,20 @@ def test_seal_continuation_plan_consumes_only_an_exact_native_manifest(
     assert request["priority_class"] == "c1"
 
 
-def test_committed_step60_plan_binds_current_producer_and_exact_source() -> None:
-    path = (
-        Path(__file__).resolve().parents[1]
-        / "configs/qualification/qwen38-lora-step60-zero-update-export-v1.json"
-    )
+def test_committed_step60_plan_remains_bound_to_its_historical_receipt() -> None:
+    root = Path(__file__).resolve().parents[1]
+    path = root / "configs/qualification/qwen38-lora-step60-zero-update-export-v1.json"
     plan = json.loads(path.read_text())
 
-    assert export.validate_plan(plan) == plan
-    assert digest(plan) == "5ca713cd281143d0ac6bfe349c0c22bf87ac99319425186bcded49d2c20d9f0b"
+    assert export.validate_plan(plan, check_code=False) == plan
+    assert digest(plan) == "31c9548c7119e01e3941049bcdaa79f9ee7a787a0191ce02c53644959d2d4547"
+    evidence = json.loads(
+        (root / "docs/evidence/qwen38-lora-step60-promotion-preparation-20260921.json").read_text()
+    )
+    binding = evidence["prepared_promotion"]
+    assert binding["plan_path"] == str(path.relative_to(root))
+    assert binding["plan_file_sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+    assert binding["plan_sha256"] == digest(plan)
     assert plan["checkpoint_manifest"] == {
         "path": (
             "/mnt/sfs/jobs/chris-q38-lora-r1-s60-v3/"
@@ -154,10 +160,33 @@ def test_committed_step60_plan_binds_current_producer_and_exact_source() -> None
         "file_sha256": "cd53865f869eeb1975aa0e099aef143a736167c5c7b095c283f0da292ffecd78",
         "receipt_sha256": "6bae9ef75e0a60f598eb32b63d31a64c0f42716611a43daf19a177d3c0ffebd2",
     }
+    assert plan["priority_class"] == "c1"
+    assert plan["resources"]["memory_request"] == "512Gi"
+
+
+def test_step60_successor_is_versioned_current_and_not_launched() -> None:
+    plan, evidence = successor_builder.build()
+    assert successor_builder.SUCCESSOR.read_bytes() == successor_builder.raw(plan)
+    assert successor_builder.EVIDENCE.read_bytes() == successor_builder.raw(evidence)
+    assert export.validate_plan(plan) == plan
+    assert plan["run_name"] == "chris-q38-lora-s60-exp-v2"
+    assert evidence["historical_plan"]["preserved_byte_identical"] is True
+    assert evidence["successor_plan"]["plan_sha256"] == digest(plan)
+    assert hashlib.sha256(successor_builder.SUCCESSOR.read_bytes()).hexdigest() == (
+        successor_builder.SUCCESSOR_FILE_SHA256
+    )
+    assert evidence["successor_plan"]["request_sha256"] == (
+        successor_builder.SUCCESSOR_REQUEST_SHA256
+    )
+    assert hashlib.sha256(successor_builder.EVIDENCE.read_bytes()).hexdigest() == (
+        successor_builder.EVIDENCE_FILE_SHA256
+    )
+    assert evidence["receipt_sha256"] == successor_builder.EVIDENCE_RECEIPT_SHA256
+    assert evidence["launch_authorized"] is False
+    assert evidence["external_activity"]["gpus_allocated"] == 0
     request = export.job_request(plan)
+    assert evidence["successor_plan"]["request_sha256"] == digest(request)
     assert request["failureAlerts"] is False
-    assert request["priority_class"] == "c1"
-    assert request["gpus_per_worker"] == 8
 
 
 def test_control_seals_continuation_without_treating_it_as_step_one(

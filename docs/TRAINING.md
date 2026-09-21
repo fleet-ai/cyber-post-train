@@ -72,6 +72,9 @@ checkpoints with fresh task outcomes instead of held-out teacher-token loss.
 backend: skyrl
 name: my-qwen-sft                 # unique DNS label, at most 31 characters
 output_root: /mnt/sfs/jobs/my-qwen-sft
+# New immutable full-run configs should bind the maximum acceptable wall time
+# before their first recoverable checkpoint.
+checkpoint_recovery_horizon_seconds: 28800
 model:
   lock: configs/models/qwen38-27b-1d4bf0f2.lock.json
   weights: configs/models/qwen38-27b-1d4bf0f2.weights.json
@@ -304,8 +307,17 @@ and `hf_device_map` representations are not parameter-identity evidence. This
 eager-attention smoke test does **not** qualify optimizer recovery, a serving
 engine, tool behavior, throughput, or model quality.
 
-The runtime has fixed startup, no-progress and hard-runtime bounds. A confirmed
-stall preserves evidence and exits truthfully; the Jobs API releases the allocation.
+The runtime has fixed startup and no-progress bounds. Its absolute run limit is
+derived from the immutable optimizer-step count, context length, topology and
+gradient accumulation; the SFT waiter fails closed if that plan is missing.
+For new immutable task-outcome full-run configs, prefer binding
+`checkpoint_recovery_horizon_seconds`; when present, it requires the next
+periodic or terminal checkpoint to fit inside an explicit recovery-loss budget.
+Teacher-cross-entropy plans are rejected because their pre-training development
+scan is not represented by this bound. Choose a new checkpoint interval and run
+identity when the bound does not fit; do not edit a historical config in place.
+A confirmed stall preserves evidence and exits truthfully; the Jobs API releases
+the allocation.
 An independent monitor must confirm release and handle access failures explicitly.
 The supported failed-job notification opt-out does not hide terminal failure state.
 Preserve that evidence and never hold GPUs while debugging a failed allocation.

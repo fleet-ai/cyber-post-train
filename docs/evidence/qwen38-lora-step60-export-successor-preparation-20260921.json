@@ -1,0 +1,30 @@
+{
+  "external_activity": {
+    "cluster_mutations": 0,
+    "gpus_allocated": 0,
+    "jobs_api_requests": 0,
+    "kubernetes_requests": 0
+  },
+  "historical_plan": {
+    "file_sha256": "c3fe7f50033ba4569ef6297991a22dcd6e580e2124a380ec9424e0318640f815",
+    "path": "configs/qualification/qwen38-lora-step60-zero-update-export-v1.json",
+    "plan_sha256": "31c9548c7119e01e3941049bcdaa79f9ee7a787a0191ce02c53644959d2d4547",
+    "preserved_byte_identical": true
+  },
+  "launch_authorized": false,
+  "next_gate": "Reopen the exact source, prove the fresh output absent, obtain a server preview with the root failure-alert annotation, and record separate launch authorization.",
+  "receipt_sha256": "2e9d596c4a01e78d0e7a482f41342b6b4a7fff1311da0115a6f3cd65c8ba4354",
+  "schema": "cyber_qwen38_lora_step60_export_successor_preparation_v1",
+  "status": "prepared_not_launched",
+  "successor_plan": {
+    "failure_alerts": false,
+    "file_sha256": "36ab4a0156b875f61d206d1be0f450a46a72e3364fa613b4eae7994f10071ba0",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lora-s60-exp-v2/merged-hf",
+    "path": "configs/qualification/qwen38-lora-step60-zero-update-export-v2.json",
+    "plan_sha256": "406a8108abb8f9f0c08bd80ca66f30edddb9eb1895ab933fab8781591029303b",
+    "priority": "c1",
+    "request_sha256": "31f4b1963c0460457f177fa63a62a958cdb6d30c5d259b2941f0fc1e52043dfc",
+    "run_dir": "/mnt/sfs/jobs/chris-q38-lora-s60-exp-v2",
+    "run_name": "chris-q38-lora-s60-exp-v2"
+  }
+}

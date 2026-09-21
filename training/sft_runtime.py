@@ -949,6 +949,20 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
         data_parallel_size //= 8
     if recipe["batch_size"] % (data_parallel_size * recipe["microbatch_per_gpu"]):
         raise ValueError("global batch must divide evenly across GPU microbatches")
+    checkpoint_horizon = plan.get("checkpoint_recovery_horizon_seconds")
+    if checkpoint_horizon is not None:
+        if type(checkpoint_horizon) is not int or checkpoint_horizon <= 0:
+            raise ValueError("checkpoint recovery horizon must be a positive integer")
+        if plan.get("validation_mode") != "task_outcomes_only":
+            raise ValueError(
+                "checkpoint recovery horizon is only qualified for task-outcome training"
+            )
+        checkpoint_seconds = sft_first_checkpoint_seconds(plan)
+        if checkpoint_seconds > checkpoint_horizon:
+            raise ValueError(
+                "first recoverable checkpoint exceeds the reviewed recovery horizon: "
+                f"{checkpoint_seconds} > {checkpoint_horizon} seconds"
+            )
     if recipe["eval_interval"] and recipe["checkpoint_interval"] != recipe["eval_interval"]:
         raise ValueError("every periodic validation needs a corresponding saved checkpoint")
     if plan.get("resume_from"):
@@ -1519,6 +1533,74 @@ def retention_steps(saved: set[int], best_step: int, keep_latest: int) -> set[in
     return set(sorted(saved)[-keep_latest:]) | ({best_step} if best_step in saved else set())
 
 
+def _sft_optimizer_step_budget_seconds(plan: dict) -> int:
+    """Return the conservative wall-clock budget for one optimizer step."""
+
+    recipe = plan["recipe"]
+    data_parallel_size = recipe["nodes"] * recipe["gpus_per_node"]
+    if _is_qwen38_lora(plan):
+        # The reviewed Megatron profile is TP=8.  Its eight ranks consume one
+        # sample together; treating them as eight data replicas would
+        # under-budget both the full run and time to the next checkpoint.
+        data_parallel_size //= 8
+    samples_per_microbatch = data_parallel_size * recipe["microbatch_per_gpu"]
+    accumulation_steps = math.ceil(recipe["batch_size"] / samples_per_microbatch)
+    seconds_per_microbatch = math.ceil(
+        recipe["max_length"] / WATCHDOG_MIN_TOKENS_PER_SECOND_PER_MICROBATCH
+    )
+    return accumulation_steps * seconds_per_microbatch
+
+
+def _sft_planned_new_optimizer_steps(plan: dict) -> int:
+    """Return optimizer work remaining in this exact immutable invocation."""
+
+    recipe = plan["recipe"]
+    recovery = plan.get("recovery", {})
+    if recovery.get("mode") == "validate":
+        return 0
+    start = recovery.get("checkpoint", {}).get("optimizer_step", 0)
+    terminal = plan.get("pause_after_step")
+    if terminal is None:
+        terminal = recipe["max_steps"]
+    if type(start) is not int or type(terminal) is not int or start < 0 or terminal <= start:
+        raise ValueError("SFT watchdog has invalid remaining optimizer-step bounds")
+    return terminal - start
+
+
+def sft_first_checkpoint_seconds(plan: dict) -> int:
+    """Budget startup through the next recoverable checkpoint.
+
+    A resumed run already owns a sealed source checkpoint.  Its recovery
+    horizon therefore covers only new optimizer work through the next periodic
+    or terminal checkpoint, whichever comes first.
+    """
+
+    recipe = plan["recipe"]
+    if plan.get("recovery", {}).get("mode") == "validate":
+        raise ValueError("validate-only recovery does not produce a new checkpoint")
+    start = plan.get("recovery", {}).get("checkpoint", {}).get("optimizer_step", 0)
+    pause = plan.get("pause_after_step")
+    terminal = recipe["max_steps"] if pause is None else pause
+    interval = recipe["checkpoint_interval"]
+    if (
+        type(start) is not int
+        or type(terminal) is not int
+        or type(interval) is not int
+        or start < 0
+        or interval <= 0
+    ):
+        raise ValueError("SFT checkpoint horizon has invalid step bounds")
+    next_periodic = ((start // interval) + 1) * interval
+    next_checkpoint = min(next_periodic, terminal)
+    if start >= next_checkpoint:
+        raise ValueError("SFT checkpoint horizon has no future recoverable checkpoint")
+    return (
+        WATCHDOG_STARTUP_SECONDS
+        + (next_checkpoint - start) * _sft_optimizer_step_budget_seconds(plan)
+        + WATCHDOG_DRAIN_SECONDS
+    )
+
+
 def sft_watchdog_hard_seconds(plan: dict) -> int:
     """Derive a bounded full-run ceiling from the immutable SFT recipe.
 
@@ -1528,14 +1610,9 @@ def sft_watchdog_hard_seconds(plan: dict) -> int:
     mechanism for a stalled process.
     """
 
-    recipe = plan["recipe"]
-    replicas = recipe["nodes"] * recipe["gpus_per_node"]
-    samples_per_microbatch = replicas * recipe["microbatch_per_gpu"]
-    accumulation_steps = math.ceil(recipe["batch_size"] / samples_per_microbatch)
-    seconds_per_microbatch = math.ceil(
-        recipe["max_length"] / WATCHDOG_MIN_TOKENS_PER_SECOND_PER_MICROBATCH
+    training_seconds = _sft_planned_new_optimizer_steps(plan) * _sft_optimizer_step_budget_seconds(
+        plan
     )
-    training_seconds = recipe["max_steps"] * accumulation_steps * seconds_per_microbatch
     return max(
         WATCHDOG_HARD_SECONDS,
         WATCHDOG_STARTUP_SECONDS + training_seconds + WATCHDOG_DRAIN_SECONDS,
@@ -1644,9 +1721,8 @@ def _utilization_snapshot() -> tuple[float | None, int | None]:
     return gpu_mean, io_bytes if observed else None
 
 
-def _wait_for_training(ray, task, output: Path, *, plan: dict | None = None) -> dict:
-    hard_seconds = sft_watchdog_hard_seconds(plan) if plan is not None else None
-    watchdog = ProgressWatchdog(time.monotonic(), hard_seconds=hard_seconds)
+def _wait_for_training(ray, task, output: Path, *, plan: dict) -> dict:
+    watchdog = ProgressWatchdog(time.monotonic(), hard_seconds=sft_watchdog_hard_seconds(plan))
     previous_checkpoint = None
     while True:
         ready, _ = ray.wait([task], timeout=WATCHDOG_POLL_SECONDS)

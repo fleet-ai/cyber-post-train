@@ -362,7 +362,7 @@
       "release_requires_bound_descendants_absent_and_active_gpus_zero": true
     },
     "schema": "cyber_qwen38_skyrl_production_plan_binding_v1",
-    "sha256": "sha256:c4abef13ebdd9dffccd194b3fddaea5dc79cd20f78db061d5902f6fb70fb9c9b",
+    "sha256": "sha256:5abeb53329a9556121e5bc8c525c9a1116d03610d50ac0817c7843c481c9f292",
     "staged_data": {
       "candidate_manifest_path": "configs/qualification/qwen38-skyrl-production-manifest-lr3e6-v1.json",
       "files": [
@@ -410,8 +410,7 @@
         "broad_get_only_data_manifests_not_yet_create_once_staged_on_SFS",
         "exact_image_cpu_preflights_not_recorded",
         "jobs_api_server_previews_and_fresh_guard_receipts_not_recorded",
-        "uid_bound_release_observers_not_yet_armed",
-        "global_cluster_failure_budget_is_10_of_10_until_user_resets_it"
+        "uid_bound_release_observers_not_yet_armed"
       ],
       "preview_authorized": false,
       "submission_authorized": false
@@ -426,7 +425,7 @@
     }
   },
   "run_name": "chris-q38-skyrl10-lr3e6",
-  "runtime_sha256": "f708fb09744ee64aa612410866f77d894e65ed1167e3e996ed1e105b0908507a",
+  "runtime_sha256": "2861582bc2128f3aead8640ec1395fd3b3c3e706affca407be70cd89f946aa45",
   "schema": "cyber_skyrl_production_training_v1",
   "watchdog": {
     "drain_seconds": 300,

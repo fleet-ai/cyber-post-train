@@ -155,9 +155,8 @@ def test_queue_is_fail_closed_behind_canary_and_fresh_external_checks() -> None:
         "https://www.jmlr.org/papers/v18/16-558.html",
     ]
     assert qualification["successive_halving"]["external_benchmark_selection_forbidden"] is True
-    assert (
-        "global_cluster_failure_budget_is_10_of_10_until_user_resets_it"
-        in (qualification["submission_gate"]["blockers"])
+    assert all(
+        "failure_budget" not in item for item in qualification["submission_gate"]["blockers"]
     )
     assert qualification["profile"] == "qwen38_skyrl_production_queue_v1"
     assert qualification["execution"]["cluster_target"] == "prod"
@@ -173,6 +172,9 @@ def test_queue_is_fail_closed_behind_canary_and_fresh_external_checks() -> None:
     assert qualification["private_data"]["fleet_reads"]["mutating_requests"] == 0
     assert len(qualification["private_data"]["arms"]) == 5
     assert evidence["scope"] == "offline_no_submit_no_stage_no_serve_no_cancel"
+    assert evidence["regenerated_at"].startswith("2026-09-21T")
+    assert evidence["source_base_commit"] == "5ecb0ce744c37462dd6f15c25879a69dc6333216"
+    assert evidence["historical_origin"]["current_plan_or_request_binding"] is False
     assert evidence["external_mutations"] == 0
     assert len(evidence["arms"]) == 5
     assert all(arm["submitted"] is False for arm in evidence["arms"])

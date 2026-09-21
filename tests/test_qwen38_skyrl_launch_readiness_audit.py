@@ -26,12 +26,13 @@ def test_audit_is_current_self_sealed_and_performs_no_external_action() -> None:
         "cluster_mutations": 0,
         "private_logs_read": False,
     }
-    assert value["failure_budget"] == {
-        "used": 10,
-        "limit": 10,
-        "reset_recorded": False,
-        "external_cluster_post_stop": True,
+    assert value["failure_policy"] == {
+        "numeric_failure_budget": None,
+        "historical_source_receipt_preserved": True,
+        "historical_source_receipt_is_not_a_current_submission_gate": True,
+        "failures_require_evidence_repair_and_resource_release": True,
     }
+    assert all("failure_budget" not in item for item in value["blockers"])
     assert value["launch_authorized"] is False
 
     result = subprocess.run(
@@ -87,9 +88,9 @@ def test_v17_and_prod4_recompile_to_the_frozen_digests_and_resource_shape() -> N
     assert topology["submission_gate"]["submission_authorized"] is False
 
     assert prod4["compiled_digests"] == {
-        "plan_sha256": ("sha256:90dca6a1c75e25b1c8ddfcc1cef32535248b7c67241a7f4f2af00c9976fbe999"),
+        "plan_sha256": ("sha256:07f2da387d2b296a788575739b35ca10acfcf8af604dec6b97e1aef5838a97da"),
         "request_sha256": (
-            "sha256:21ce9a768652ad4c4bb6cea18f4bd746f72fe6be98532660250e5a9e96a4d8b7"
+            "sha256:c873c40708fffa255da924b2593d67fbf93587f6370ccb28fb79b3dc1b6671a9"
         ),
         "sanitized_manifest_self_sha256": (
             "sha256:109be2f4fba07a6eabaffc3c94048640214170d95ef311b2db107ac0331ffc16"

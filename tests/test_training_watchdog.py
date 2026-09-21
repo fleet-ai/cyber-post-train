@@ -10,6 +10,17 @@ import pytest
 
 from training import sft_runtime as runtime
 
+WATCHDOG_PLAN = {
+    "recipe": {
+        "max_steps": 1,
+        "batch_size": 8,
+        "microbatch_per_gpu": 1,
+        "nodes": 1,
+        "gpus_per_node": 8,
+        "max_length": 16_384,
+    }
+}
+
 
 @pytest.mark.parametrize(
     "reply,expected",
@@ -102,9 +113,9 @@ def test_ready_result_does_not_poll_telemetry_or_cancel(tmp_path, monkeypatch, e
     monkeypatch.setattr(runtime, "_utilization_snapshot", probe)
     if error:
         with pytest.raises(RuntimeError, match="synthetic worker defect"):
-            runtime._wait_for_training(ray, task, tmp_path)
+            runtime._wait_for_training(ray, task, tmp_path, plan=WATCHDOG_PLAN)
     else:
-        assert runtime._wait_for_training(ray, task, tmp_path) == {"step": 1}
+        assert runtime._wait_for_training(ray, task, tmp_path, plan=WATCHDOG_PLAN) == {"step": 1}
     ray.wait.assert_called_once_with([task], timeout=runtime.WATCHDOG_POLL_SECONDS)
     ray.get.assert_called_once_with(task)
     ray.cancel.assert_not_called()
@@ -135,11 +146,11 @@ def test_waiter_cancels_only_confirmed_idle_and_preserves_a_receipt(
         cancel=Mock(),
     )
     if unavailable:
-        assert runtime._wait_for_training(ray, task, tmp_path) == {"step": 2}
+        assert runtime._wait_for_training(ray, task, tmp_path, plan=WATCHDOG_PLAN) == {"step": 2}
         ray.cancel.assert_not_called()
     else:
         with pytest.raises(RuntimeError, match="confirmed_no_progress_idle"):
-            runtime._wait_for_training(ray, task, tmp_path)
+            runtime._wait_for_training(ray, task, tmp_path, plan=WATCHDOG_PLAN)
         ray.cancel.assert_called_once_with(task, force=True, recursive=True)
         ray.get.assert_not_called()
     proof = json.loads((tmp_path / "WATCHDOG.json").read_text())
@@ -148,6 +159,13 @@ def test_waiter_cancels_only_confirmed_idle_and_preserves_a_receipt(
     assert proof["observed_at_unix"] == 1234.0
     assert proof["process_io_available"] == (unavailable != "io")
     assert "synthetic" not in json.dumps(proof)
+
+
+def test_sft_waiter_requires_the_immutable_plan_before_polling(tmp_path):
+    ray = SimpleNamespace(wait=Mock(), get=Mock(), cancel=Mock())
+    with pytest.raises(TypeError, match="plan"):
+        runtime._wait_for_training(ray, object(), tmp_path)
+    ray.wait.assert_not_called()
 
 
 def test_waiter_uses_the_full_sft_plan_horizon_instead_of_the_old_eight_hour_bound(
