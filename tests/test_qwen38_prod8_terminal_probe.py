@@ -4,6 +4,7 @@ import copy
 import hashlib
 import json
 import os
+import resource
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -75,7 +76,7 @@ def _write_unsealed(path: Path, value: dict) -> None:
     path.write_text(json.dumps(value, sort_keys=True, separators=(",", ":")))
 
 
-def _receipt(root: Path, receipt_path: Path) -> dict:
+def _receipt(root: Path, receipt_path: Path, *, nofile_limit: int | None = None) -> dict:
     env = {
         **os.environ,
         "PROBE_TARGET": str(root),
@@ -83,6 +84,14 @@ def _receipt(root: Path, receipt_path: Path) -> dict:
         "PROBE_TRAINING_PLAN_SHA256": probe.TRAINING_PLAN_SHA256,
         "PROBE_RECEIPT_PATH": str(receipt_path),
     }
+    preexec_fn = None
+    if nofile_limit is not None:
+
+        def set_nofile_limit() -> None:
+            _, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+            resource.setrlimit(resource.RLIMIT_NOFILE, (nofile_limit, hard))
+
+        preexec_fn = set_nofile_limit
     result = subprocess.run(
         [sys.executable, "-c", probe.RUNTIME],
         env=env,
@@ -90,6 +99,7 @@ def _receipt(root: Path, receipt_path: Path) -> dict:
         text=True,
         check=True,
         timeout=10,
+        preexec_fn=preexec_fn,
     )
     assert json.loads(result.stdout)["status"] == "inspected"
     return json.loads(receipt_path.read_bytes())
@@ -122,6 +132,16 @@ def test_preview_is_exactly_validated() -> None:
 
 
 def test_runtime_reads_only_sanitized_markers_and_inventory(tmp_path: Path) -> None:
+    checkpoint_runtime = probe.RUNTIME.split("def checkpoint_inventory(root_fd):", 1)[1].split(
+        "\ntry:\n    root_fd=os.open", 1
+    )[0]
+    assert ".iterdir(" not in checkpoint_runtime
+    assert "os.walk(" not in checkpoint_runtime
+    assert "os.listdir(parent_fd)" in checkpoint_runtime
+    assert "read_small_direct_at(parent_fd" in checkpoint_runtime
+    assert "batch_inventory(root_fd)" in probe.RUNTIME
+    assert "checkpoint_inventory(root_fd)" in probe.RUNTIME
+    assert "file_info_at(root_fd,name)" in probe.RUNTIME
     root = tmp_path / "run"
     root.mkdir()
     _write(
@@ -165,6 +185,7 @@ def test_runtime_reads_only_sanitized_markers_and_inventory(tmp_path: Path) -> N
             "prompt": "PRIVATE PROMPT MUST NEVER LEAK",
         },
     )
+    (root / "episodes/batches/batch-secret/STARTED.json").chmod(0)
     private = root / "private-skyrl.log"
     private.write_text("PRIVATE LOG MUST NEVER LEAK")
     (root / "episodes/batches/batch-secret/FAILED.json").symlink_to(private)
@@ -187,24 +208,24 @@ def test_runtime_reads_only_sanitized_markers_and_inventory(tmp_path: Path) -> N
     assert native["selected"]["causes"][0]["error_class"] == "ActorDiedError"
     assert receipt["batch_inventory"]["batch_directories"] == 1
     batch = receipt["batch_inventory"]["markers"]["STARTED.json"]
-    assert batch["count"] == batch["accepted_count"] == 1
-    assert batch["latest"]["selected"] == {
-        "schema": "cyber_skyrl_batch_v1",
-        "phase": "eval",
-        "global_step": 0,
-        "optimizer_step_verified": False,
-    }
+    assert batch["count"] == batch["direct_regular_count"] == 1
+    assert batch["indirect_count"] == 0
+    assert batch["latest"]["size_bytes"] > 0
+    assert type(batch["latest"]["mtime_ns"]) is int
     failed_batch = receipt["batch_inventory"]["markers"]["FAILED.json"]
     assert failed_batch == {
         "count": 1,
-        "accepted_count": 0,
-        "unaccepted_count": 1,
+        "direct_regular_count": 0,
+        "indirect_count": 1,
         "latest": None,
     }
     assert receipt["checkpoint_inventory"] == {
         "directory_present": True,
         "accepted": True,
-        "global_steps": [1],
+        "global_step_count": 1,
+        "minimum_step": 1,
+        "maximum_step": 1,
+        "boundary_steps": [1],
         "file_count": 2,
         "total_bytes": len(b"not-inspected-tensor-bytes") + len(b"sampler"),
         "latest_pointer_step": 1,
@@ -237,17 +258,19 @@ def test_runtime_receipt_stays_below_kubernetes_limit_at_maximum_evidence(
 ) -> None:
     root = tmp_path / "run"
     root.mkdir()
+    long_name = "E" + "x" * 63
+    long_function = "f" + "x" * 63
+    long_file = "x" * 60 + ".py"
     causes = []
     for cause in range(8):
         frames = [
-            {"file": f"source_{index}.py", "line": index + 1, "function": f"call_{index}"}
-            for index in range(20)
+            {"file": long_file, "line": 2_147_483_647, "function": long_function} for _ in range(20)
         ]
         causes.append(
             {
-                "error_class": f"ErrorClass{cause}",
+                "error_class": long_name,
                 "actor_init_failed": cause == 0,
-                "remote_error_classes": [f"RemoteError{index}" for index in range(32)],
+                "remote_error_classes": [long_name for _ in range(32)],
                 "remote_frames": frames,
                 "local_frames": frames,
             }
@@ -278,6 +301,11 @@ def test_runtime_receipt_stays_below_kubernetes_limit_at_maximum_evidence(
         _write(batch / "COLLECTED.json", common)
         _write_unsealed(batch / "REJECTED.json", {"reason": "episode_seconds"})
         _write_unsealed(batch / "FAILED.json", {"error_type": "InvalidEpisode"})
+    for index in range(1000):
+        (root / f"checkpoints/global_step_{index}").mkdir(parents=True)
+    private_pointer = root / "private-pointer.txt"
+    private_pointer.write_text("999\n")
+    (root / "checkpoints/latest_ckpt_global_step.txt").symlink_to(private_pointer)
 
     receipt_path = tmp_path / "receipt.json"
     receipt = _receipt(root, receipt_path)
@@ -285,16 +313,144 @@ def test_runtime_receipt_stays_below_kubernetes_limit_at_maximum_evidence(
     assert receipt["receipt_size_bytes"] == len(receipt_path.read_bytes())
     assert receipt["receipt_size_bytes"] <= 3500
     assert probe.validate_receipt(receipt, target=str(root)) == receipt
-    native = next(item for item in receipt["root_markers"] if item["name"] == "NATIVE_FAILURE.json")
-    assert native["selected"]["causes_total"] == 8
-    assert len(native["selected"]["causes"]) == 2
-    assert len(native["selected"]["causes"][0]["remote_error_classes"]) == 4
-    assert len(native["selected"]["causes"][0]["remote_frames"]) == 2
+    assert receipt["receipt_compaction_level"] in {0, 1, 2, 3}
+    assert receipt["cause_summary"]["native_causes_total"] == 8
+    assert receipt["cause_summary"]["native_error_class"] == long_name
+    assert receipt["cause_summary"]["native_first_remote_frame"]["line"] == 2_147_483_647
     for name in ("STARTED.json", "COLLECTED.json", "REJECTED.json", "FAILED.json"):
         summary = receipt["batch_inventory"]["markers"][name]
-        assert summary["count"] == summary["accepted_count"] == 100
-        assert summary["unaccepted_count"] == 0
+        assert summary["count"] == summary["direct_regular_count"] == 100
+        assert summary["indirect_count"] == 0
         assert summary["latest"] is not None
+    checkpoint = receipt["checkpoint_inventory"]
+    assert checkpoint["global_step_count"] == 1000
+    assert checkpoint["boundary_steps"] == [0, 1, 998, 999]
+    assert checkpoint["latest_pointer_step"] is None
+
+
+def test_runtime_compacts_invalid_oversized_cause_without_losing_receipt(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "run"
+    root.mkdir()
+    _write(
+        root / "NATIVE_FAILURE.json",
+        {
+            "plan_sha256": probe.TRAINING_PLAN_SHA256,
+            "causes": [
+                {
+                    "error_class": "ActorDiedError",
+                    "actor_init_failed": False,
+                    "remote_error_classes": [],
+                    "remote_frames": [
+                        {"file": "x" * 4000 + ".py", "line": 1, "function": "generate"}
+                    ],
+                    "local_frames": [],
+                }
+            ],
+        },
+    )
+    receipt_path = tmp_path / "receipt.json"
+    receipt = _receipt(root, receipt_path)
+    assert receipt["receipt_size_bytes"] <= 3500
+    assert probe.validate_receipt(receipt, target=str(root)) == receipt
+    native = next(item for item in receipt["root_markers"] if item["name"] == "NATIVE_FAILURE.json")
+    assert native["accepted"] is False
+    assert native["reason"] == "schema_or_binding_mismatch"
+
+
+def test_runtime_rejects_unbounded_frame_line_without_losing_receipt(tmp_path: Path) -> None:
+    root = tmp_path / "run"
+    root.mkdir()
+    _write(
+        root / "NATIVE_FAILURE.json",
+        {
+            "plan_sha256": probe.TRAINING_PLAN_SHA256,
+            "causes": [
+                {
+                    "error_class": "ActorDiedError",
+                    "actor_init_failed": False,
+                    "remote_error_classes": [],
+                    "remote_frames": [
+                        {"file": "episode.py", "line": 10**3400, "function": "generate"}
+                    ],
+                    "local_frames": [],
+                }
+            ],
+        },
+    )
+    receipt_path = tmp_path / "receipt.json"
+    receipt = _receipt(root, receipt_path)
+    assert receipt["receipt_size_bytes"] <= 3500
+    assert probe.validate_receipt(receipt, target=str(root)) == receipt
+    native = next(item for item in receipt["root_markers"] if item["name"] == "NATIVE_FAILURE.json")
+    assert native["accepted"] is False
+    assert native["reason"] == "schema_or_binding_mismatch"
+
+
+def test_runtime_rejects_invalid_training_complete_without_losing_receipt(tmp_path: Path) -> None:
+    root = tmp_path / "run"
+    root.mkdir()
+    _write(
+        root / "NATIVE_TRAINING_COMPLETE.json",
+        {
+            "status": "native_loop_returned",
+            "plan_sha256": probe.TRAINING_PLAN_SHA256,
+            "checkpoint_global_step": -1,
+            "completed_batches": -99,
+            "completed_at": {},
+            "optimizer_update_independently_verified": True,
+            "checkpoint_reload_verified": False,
+        },
+    )
+    receipt = _receipt(root, tmp_path / "receipt.json")
+    assert probe.validate_receipt(receipt, target=str(root)) == receipt
+    marker = next(
+        item for item in receipt["root_markers"] if item["name"] == "NATIVE_TRAINING_COMPLETE.json"
+    )
+    assert marker["accepted"] is False
+    assert marker["reason"] == "schema_or_binding_mismatch"
+    assert receipt["terminal_classification"] == "unaccepted_complete_marker"
+
+
+def test_runtime_rejects_recursive_json_without_losing_receipt(tmp_path: Path) -> None:
+    root = tmp_path / "run"
+    root.mkdir()
+    marker = root / "NATIVE_FAILURE.json"
+    marker.write_text("[" * 20_000 + "0" + "]" * 20_000)
+    receipt = _receipt(root, tmp_path / "receipt.json")
+    assert probe.validate_receipt(receipt, target=str(root)) == receipt
+    native = next(item for item in receipt["root_markers"] if item["name"] == "NATIVE_FAILURE.json")
+    assert native["accepted"] is False
+    assert native["reason"] == "invalid_json"
+
+
+def test_runtime_does_not_block_on_fifo_markers_or_pointer(tmp_path: Path) -> None:
+    root = tmp_path / "run"
+    (root / "checkpoints").mkdir(parents=True)
+    os.mkfifo(root / "FAILED.json")
+    os.mkfifo(root / "checkpoints/latest_ckpt_global_step.txt")
+    receipt = _receipt(root, tmp_path / "receipt.json")
+    assert probe.validate_receipt(receipt, target=str(root)) == receipt
+    failed = next(item for item in receipt["root_markers"] if item["name"] == "FAILED.json")
+    assert failed["accepted"] is False
+    assert failed["reason"] == "not_small_regular_file"
+    assert receipt["checkpoint_inventory"]["latest_pointer_step"] is None
+
+
+def test_checkpoint_inventory_is_complete_under_low_fd_limit(tmp_path: Path) -> None:
+    root = tmp_path / "run"
+    step = root / "checkpoints/global_step_1"
+    for index in range(100):
+        directory = step / f"shard-{index:03d}"
+        directory.mkdir(parents=True)
+        (directory / "state.bin").write_bytes(b"x")
+    receipt = _receipt(root, tmp_path / "receipt.json", nofile_limit=32)
+    assert probe.validate_receipt(receipt, target=str(root)) == receipt
+    checkpoint = receipt["checkpoint_inventory"]
+    assert checkpoint["accepted"] is True
+    assert checkpoint["global_step_count"] == 1
+    assert checkpoint["file_count"] == checkpoint["total_bytes"] == 100
 
 
 def test_receipt_and_observer_reject_drift() -> None:
@@ -310,6 +466,7 @@ def test_receipt_and_observer_reject_drift() -> None:
         "root_exists": True,
         "root_direct": True,
         "terminal_classification": "failed",
+        "receipt_compaction_level": 0,
         "root_markers": [],
         "batch_inventory": {},
         "checkpoint_inventory": {},
@@ -327,17 +484,25 @@ def test_receipt_and_observer_reject_drift() -> None:
     assert cleanup._validated_receipt(json.dumps(receipt), kind="job") == receipt
     for key, replacement in (
         ("gpus", 1),
+        ("gpus", False),
         ("private_payloads_read", True),
         ("target", "/mnt/sfs/jobs/other"),
+        ("receipt_size_limit_bytes", 3500.0),
+        ("receipt_compaction_level", True),
     ):
         changed = copy.deepcopy(receipt)
         changed[key] = replacement
-        body = {name: item for name, item in changed.items() if name != "sha256"}
-        changed["sha256"] = (
-            "sha256:"
-            + hashlib.sha256(
-                json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
-            ).hexdigest()
-        )
+        while True:
+            body = {name: item for name, item in changed.items() if name != "sha256"}
+            changed["sha256"] = (
+                "sha256:"
+                + hashlib.sha256(
+                    json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+                ).hexdigest()
+            )
+            size = len((json.dumps(changed, sort_keys=True, separators=(",", ":")) + "\n").encode())
+            if changed["receipt_size_bytes"] == size:
+                break
+            changed["receipt_size_bytes"] = size
         with pytest.raises(JobsError):
             probe.validate_receipt(changed)

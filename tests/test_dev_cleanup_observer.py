@@ -18,6 +18,35 @@ def _seal(value: dict) -> dict:
     return {**value, "sha256": "sha256:" + digest(value)}
 
 
+def _terminal_probe_receipt(**overrides) -> dict:
+    value = {
+        "schema": "cyber_qwen38_prod8_terminal_probe_receipt_v1",
+        "status": "inspected",
+        "target": "/mnt/sfs/jobs/chris-q38-rlreward-prod8",
+        "training_plan_sha256": (
+            "09cabfc727e8b8448bd00a5ea3cee03914844e67cfc80b1f033bdbe2671212de"
+        ),
+        "gpus": 0,
+        "sfs_mount_read_only": True,
+        "private_payloads_read": False,
+        "receipt_size_limit_bytes": 3500,
+        "receipt_size_bytes": 0,
+        "receipt_compaction_level": 0,
+        "terminal_classification": "failed",
+        "root_markers": [],
+        "batch_inventory": {},
+        "checkpoint_inventory": {},
+    }
+    value.update(overrides)
+    while True:
+        value.pop("sha256", None)
+        value = _seal(value)
+        size = len((json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode())
+        if value["receipt_size_bytes"] == size:
+            return value
+        value["receipt_size_bytes"] = size
+
+
 def _metadata(name: str, uid: int) -> dict:
     return {
         "name": name,
@@ -110,6 +139,61 @@ def test_job_observer_arms_before_creation_captures_receipt_and_releases(tmp_pat
     assert cluster.delete_calls == 1
     assert json.loads((tmp_path / "ARMED.json").read_text())["status"] == "armed"
     assert json.loads((tmp_path / "RESULT.json").read_text()) == result
+
+
+def test_job_observer_accepts_prod8_terminal_inspection_receipt(tmp_path) -> None:
+    cluster = FakeJobCluster()
+    cluster.receipt = _terminal_probe_receipt()
+    result = _observer(tmp_path, cluster).run()
+    assert result["status"] == "released"
+    assert result["receipt"] == cluster.receipt
+    assert result["active_gpus"] == 0
+
+
+@pytest.mark.parametrize(
+    "changed",
+    [
+        {"gpus": 999},
+        {"gpus": False},
+        {"private_payloads_read": True},
+        {"target": "/mnt/sfs/jobs/other"},
+        {"training_plan_sha256": "0" * 64},
+        {"receipt_size_limit_bytes": 3500.0},
+        {"receipt_compaction_level": True},
+    ],
+)
+def test_job_observer_rejects_unsafe_prod8_inspection_receipt(tmp_path, changed) -> None:
+    cluster = FakeJobCluster()
+    cluster.receipt = _terminal_probe_receipt(**changed)
+    result = _observer(tmp_path, cluster).run()
+    assert result["status"] == "released_without_accepted_execution"
+    assert result["receipt"] == cluster.receipt
+    assert result["active_gpus"] == 0
+
+
+@pytest.mark.parametrize("status", ["passed", "published", "setup_and_internal_cleanup_passed"])
+def test_job_observer_rejects_generic_status_for_prod8_receipt(tmp_path, status) -> None:
+    cluster = FakeJobCluster()
+    cluster.receipt = _terminal_probe_receipt(status=status)
+    result = _observer(tmp_path, cluster).run()
+    assert result["status"] == "released_without_accepted_execution"
+    assert result["receipt"] == cluster.receipt
+    assert result["active_gpus"] == 0
+
+
+def test_job_observer_does_not_accept_inspected_for_another_receipt_schema(tmp_path) -> None:
+    cluster = FakeJobCluster()
+    cluster.receipt = _seal(
+        {
+            "schema": "cyber_skyrl_topology_probe_cpu_preflight_v1",
+            "status": "inspected",
+            "gpus": 0,
+        }
+    )
+    result = _observer(tmp_path, cluster).run()
+    assert result["status"] == "released_without_accepted_execution"
+    assert result["receipt"] == cluster.receipt
+    assert result["active_gpus"] == 0
 
 
 class FakeFleetCluster:

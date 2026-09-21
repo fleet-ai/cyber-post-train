@@ -112,6 +112,51 @@ def _validated_receipt(message: object, *, kind: str) -> dict | None:
     return value
 
 
+def _receipt_execution_accepted(value: dict | None) -> bool:
+    if value is None:
+        return False
+    if value.get("schema") != "cyber_qwen38_prod8_terminal_probe_receipt_v1":
+        return value.get("status") in {
+            "passed",
+            "published",
+            "setup_and_internal_cleanup_passed",
+        }
+    if value.get("status") != "inspected":
+        return False
+    serialized_size = len(
+        (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    )
+    return bool(
+        value.get("target") == "/mnt/sfs/jobs/chris-q38-rlreward-prod8"
+        and value.get("training_plan_sha256")
+        == "09cabfc727e8b8448bd00a5ea3cee03914844e67cfc80b1f033bdbe2671212de"
+        and type(value.get("gpus")) is int
+        and value["gpus"] == 0
+        and value.get("sfs_mount_read_only") is True
+        and value.get("private_payloads_read") is False
+        and type(value.get("receipt_size_limit_bytes")) is int
+        and value["receipt_size_limit_bytes"] == 3500
+        and type(value.get("receipt_size_bytes")) is int
+        and value["receipt_size_bytes"] == serialized_size
+        and value["receipt_size_bytes"] <= 3500
+        and type(value.get("receipt_compaction_level")) is int
+        and value["receipt_compaction_level"] in {0, 1, 2, 3}
+        and value.get("terminal_classification")
+        in {
+            "failed",
+            "rejected",
+            "native_training_complete",
+            "unaccepted_failed_marker",
+            "unaccepted_rejected_marker",
+            "unaccepted_complete_marker",
+            "no_terminal_marker",
+        }
+        and isinstance(value.get("root_markers"), list)
+        and isinstance(value.get("batch_inventory"), dict)
+        and isinstance(value.get("checkpoint_inventory"), dict)
+    )
+
+
 @dataclass
 class Snapshot:
     uid: str = ""
@@ -597,9 +642,7 @@ class Observer:
         accepted = (
             not observer_error_class
             and self.snapshot.terminal_status == "Succeeded"
-            and receipt is not None
-            and receipt.get("status")
-            in {"passed", "published", "setup_and_internal_cleanup_passed"}
+            and _receipt_execution_accepted(receipt)
             and self.snapshot.peak_gpus == self.expected_gpus
         )
         status = "released" if accepted else "released_without_accepted_execution"
