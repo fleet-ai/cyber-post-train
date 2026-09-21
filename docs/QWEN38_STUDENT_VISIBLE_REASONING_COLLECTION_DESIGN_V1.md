@@ -118,6 +118,12 @@ More exactly:
 - The reasoning and action spans are ordered, non-overlapping, and together
   account for every supervised token in the turn. Their source-token digests
   are retained privately for verification.
+- The private source uses the explicit `student_visible_reasoning` field. The
+  materializer maps only that authorized field to the pinned Qwen template's
+  reasoning slot, independently re-renders an action-free copy of the same
+  structured assistant turn, and derives the reasoning/action token boundary
+  from those two renders. Caller-supplied labels and offsets are evidence to
+  compare, never boundary authority.
 - Every selected target span appears once across all packed windows. Copied
   context is always zero-masked. No target may be cut, padded into a different
   template, or silently truncated to fit a window.

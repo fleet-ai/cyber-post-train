@@ -85,6 +85,13 @@ class _Tokenizer:
         if len(messages) == 2:
             return [1, 2]
         if len(messages) == 3:
+            assistant = messages[-1]
+            if (
+                assistant.get("reasoning_content") == "synthetic visible reasoning"
+                and assistant.get("content") == ""
+                and not assistant.get("tool_calls")
+            ):
+                return [1, 2, 3, 5]
             return [1, 2, 3, 4, 5]
         if len(messages) == 4:
             return [10, 11]
@@ -197,7 +204,8 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
                     {"role": "user", "content": "synthetic task"},
                     {
                         "role": "assistant",
-                        "content": "synthetic visible reasoning",
+                        "student_visible_reasoning": "synthetic visible reasoning",
+                        "content": "",
                         "tool_calls": [
                             {
                                 "id": "bash-1",
@@ -507,7 +515,8 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         {"role": "user", "content": "synthetic task"},
         {
             "role": "assistant",
-            "content": "synthetic visible reasoning",
+            "student_visible_reasoning": "synthetic visible reasoning",
+            "content": "",
             "tool_calls": [
                 {
                     "id": "bash-1",
@@ -829,6 +838,14 @@ def test_rejects_duplicate_source_target_repacked_as_another_window(
         (
             lambda record: record["messages"][2].update({"thinking": "private"}),
             "private or unknown reasoning fields",
+        ),
+        (
+            lambda record: record["messages"][2].update({"reasoning_content": "provider-private"}),
+            "private or unknown reasoning fields",
+        ),
+        (
+            lambda record: record["messages"][2].pop("student_visible_reasoning"),
+            "assistant tool actions require explicit student-visible reasoning",
         ),
         (
             lambda record: record.update({"reasoning_visibility": "private_or_unknown"}),
@@ -1246,4 +1263,40 @@ def test_rejects_local_tokenizer_boundary_drift(tmp_path: Path, monkeypatch) -> 
     _reseal_record(record)
     checked = corpus._record(record, state["profile"])
     with pytest.raises(ValueError, match="template serialization differs"):
+        corpus._rendered_window(_Tokenizer(), checked, checked["windows"][0])
+
+
+@pytest.mark.parametrize("adversary", ["swapped_labels", "resegmented_boundary"])
+def test_rejects_self_consistent_caller_span_adversary(
+    tmp_path: Path, monkeypatch, adversary: str
+) -> None:
+    """The pinned template, not caller labels, owns the component boundary."""
+
+    _config, state = _fixture(tmp_path, monkeypatch)
+    record = copy.deepcopy(state["record"])
+    window = record["windows"][0]
+    if adversary == "swapped_labels":
+        window["target_spans"][0]["kind"] = "visible_action"
+        window["target_spans"][1]["kind"] = "student_visible_reasoning"
+    else:
+        window["target_spans"][0]["token_end"] = 4
+        window["target_spans"][0]["token_ids_sha256"] = digest_json(window["input_ids"][2:4])
+        window["target_spans"][1]["token_start"] = 4
+        window["target_spans"][1]["token_ids_sha256"] = digest_json(window["input_ids"][4:5])
+    window["window_payload_sha256"] = digest_json(
+        {
+            "sequence_index": window["sequence_index"],
+            "message_indices": window["message_indices"],
+            "target_message_index": window["target_message_index"],
+            "input_ids": window["input_ids"],
+            "prompt_token_count": window["prompt_token_count"],
+            "target_spans": window["target_spans"],
+        }
+    )
+    _reseal_record(record)
+
+    # The adversarial record is internally self-consistent. It must still fail
+    # once the exact Qwen template independently derives the two components.
+    checked = corpus._record(record, state["profile"])
+    with pytest.raises(ValueError, match="template-derived reasoning/action components"):
         corpus._rendered_window(_Tokenizer(), checked, checked["windows"][0])

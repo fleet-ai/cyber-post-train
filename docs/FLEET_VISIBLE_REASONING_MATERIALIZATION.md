@@ -39,6 +39,16 @@ sealed profile proves all of the following:
   token IDs, assistant start boundary, and labelled target spans equal the
   collected evidence.
 
+Private records keep authorized reasoning in the distinct
+`student_visible_reasoning` field. Raw provider fields such as
+`reasoning_content`, `thinking`, or `analysis` are still rejected. Only after
+that check does the builder map the authorized field into Qwen's pinned
+`reasoning_content` template slot. It then independently renders the same
+assistant turn without its visible action text or tool calls. The full and
+action-free renders must yield one unambiguous token boundary; the caller's two
+span labels, offsets, and token digests must equal that template-derived result.
+Swapped labels or a self-consistent resegmentation are rejected.
+
 `qwen_self` is the **only** v1 source. The implementation rejects a generic
 teacher source rather than guessing whether teacher text was public reasoning
 or provider-private state. A later teacher-visible-rationale arm needs its own

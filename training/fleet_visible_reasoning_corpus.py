@@ -406,9 +406,20 @@ def _source_authorization(value: Mapping[str, Any], profile: dict[str, Any]) -> 
 
 def _template_ids(tokenizer: Any, messages: list[dict[str, Any]], *, generation: bool) -> list[int]:
     """Render only through the pinned local Qwen chat template."""
+
+    normalized = []
+    for message in messages:
+        rendered_message = dense._normalized_for_template(message)
+        # Raw provider fields named ``reasoning_content`` remain forbidden by
+        # ``_message``.  Only the separately authorized, model-visible field
+        # below may enter Qwen's exact reasoning slot, and it is translated
+        # locally only after the private record has passed that schema gate.
+        if "student_visible_reasoning" in message:
+            rendered_message["reasoning_content"] = message["student_visible_reasoning"]
+        normalized.append(rendered_message)
     try:
         rendered = tokenizer.apply_chat_template(
-            [dense._normalized_for_template(message) for message in messages],
+            normalized,
             tokenize=True,
             add_generation_prompt=generation,
             tools=[],
@@ -1233,8 +1244,18 @@ def _message(value: object) -> dict[str, Any]:
         if set(message) != {"role", "content"}:
             raise ValueError("system and user messages have an unsupported field")
     elif role == "assistant":
-        if set(message) not in ({"role", "content"}, {"role", "content", "tool_calls"}):
+        allowed = {"role", "content"}
+        if "student_visible_reasoning" in message:
+            allowed.add("student_visible_reasoning")
+        if "tool_calls" in message:
+            allowed.add("tool_calls")
+        if set(message) != allowed:
             raise ValueError("assistant message has an unsupported field")
+        reasoning = message.get("student_visible_reasoning")
+        if reasoning is not None and (not isinstance(reasoning, str) or not reasoning.strip()):
+            raise ValueError("student-visible reasoning must be explicit nonempty text")
+        if "tool_calls" in message and reasoning is None:
+            raise ValueError("assistant tool actions require explicit student-visible reasoning")
         calls = message.get("tool_calls")
         if calls is not None and not isinstance(calls, list):
             raise ValueError("assistant tool calls must be a list")
@@ -1727,6 +1748,67 @@ def _rendered_window(
     target_index = window["target_message_index"]
     if any(span["source_message_index"] != target_index for span in window["target_spans"]):
         raise ValueError("a supervised target span is not bound to this assistant turn")
+
+    target_message = selected[-1]
+    reasoning = target_message.get("student_visible_reasoning")
+    if not isinstance(reasoning, str) or not reasoning.strip():
+        raise ValueError("target assistant turn lacks explicit student-visible reasoning")
+    if not target_message.get("content", "").strip() and not target_message.get("tool_calls"):
+        raise ValueError("target assistant turn lacks a visible action")
+
+    # Derive the component boundary from the pinned Qwen template itself.  The
+    # counterfactual keeps the exact authorized reasoning but removes both
+    # structured action channels.  For the pinned template it must equal a
+    # prefix of the full rendering followed by the exact terminal suffix.  A
+    # caller-provided span label or boundary is never used to derive this split.
+    reasoning_only_message = {
+        "role": "assistant",
+        "content": "",
+        "student_visible_reasoning": reasoning,
+    }
+    reasoning_only = _template_ids(
+        tokenizer,
+        [*selected[:-1], reasoning_only_message],
+        generation=False,
+    )
+    common_prefix = 0
+    for actual, counterfactual in zip(rendered, reasoning_only, strict=False):
+        if actual != counterfactual:
+            break
+        common_prefix += 1
+    common_suffix = 0
+    for actual, counterfactual in zip(reversed(rendered), reversed(reasoning_only), strict=False):
+        if actual != counterfactual:
+            break
+        common_suffix += 1
+    if (
+        common_prefix <= len(prompt)
+        or common_prefix >= len(rendered)
+        or common_suffix == 0
+        or common_prefix + common_suffix != len(reasoning_only)
+        or common_prefix + common_suffix > len(rendered)
+    ):
+        raise ValueError("Qwen template cannot derive an unambiguous reasoning/action boundary")
+    expected_spans = [
+        {
+            "kind": "student_visible_reasoning",
+            "source_message_index": target_index,
+            "token_start": len(prompt),
+            "token_end": common_prefix,
+            "token_ids_sha256": digest_json(rendered[len(prompt) : common_prefix]),
+        },
+        {
+            "kind": "visible_action",
+            "source_message_index": target_index,
+            "token_start": common_prefix,
+            "token_end": len(rendered),
+            "token_ids_sha256": digest_json(rendered[common_prefix:]),
+        },
+    ]
+    if window["target_spans"] != expected_spans:
+        raise ValueError(
+            "caller target spans differ from template-derived reasoning/action components"
+        )
     covered = []
     for span in window["target_spans"]:
         covered.extend(range(span["token_start"], span["token_end"]))
