@@ -1,0 +1,25 @@
+{
+  "schema": "qwen38_web_source_snapshot_refresh_acceptance_v1",
+  "date": "2026-09-21",
+  "classification": {
+    "status": "accepted_and_released",
+    "role": "source_preparation_only",
+    "fresh_zero_model_snapshot_qualification_required": true,
+    "rollout_collection_accepted": false,
+    "scoring_accepted": false,
+    "capability_claimed": false
+  },
+  "source_snapshot": {
+    "snapshot_id": "ppjk4at6m8t0z5v4f4r7q",
+    "complete_receipt_sha256": "sha256:c114eb761de76bb5eb3ab31b82bdd24319d7e791c811d37e28eebdd5c69998c5",
+    "snapshot_acceptance_receipt_sha256": "sha256:34dfe3e4865f752702d4b7f04a495cb951821c110e2d9ed208759af880d92378"
+  },
+  "next_gate": "Seal and complete one fresh paired, zero-model snapshot qualification against this exact source snapshot before any OpenCode rollout collection.",
+  "sanitization": {
+    "credentials_included": false,
+    "private_provider_identifiers_included": false,
+    "prompts_traces_flags_answers_or_scores_included": false,
+    "raw_logs_included": false
+  },
+  "receipt_sha256": "sha256:ab1929a4a80b62fabfe7e732c2eedafdcfb49704f340eec1c102535246db4ea0"
+}
