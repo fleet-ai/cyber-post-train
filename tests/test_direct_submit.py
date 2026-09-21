@@ -21,12 +21,16 @@ from cyber_post_train.direct_submit import (
     CPU_SFS_OWNED_ROOT_ANNOTATION,
     CPU_SOURCE_ARCHIVE_SHA256_ANNOTATION,
     CPU_SOURCE_COMMIT_ANNOTATION,
+    DIRECT_RECONCILIATION,
     LORA_TRAINER_IMAGE,
+    ZERO_RUN_ID,
+    DirectSubmitReadOnlyKubectl,
     Kubectl,
     collect_sfs_output_check,
     create_sfs_output_check_once,
     direct_submit_lr30_qualification_once,
     direct_submit_sft_once,
+    reconcile_direct_sft_submission,
     render_lr30_qualification_rayjob,
     render_sft_rayjob,
 )
@@ -664,6 +668,225 @@ class FakeOutputCheckKubectl(FakeKubectl):
     def _cpu_node_inventory(self):
         self.calls.append(("list", "nodes"))
         return cpu_node_inventory()
+
+
+class FakeReadOnlyRayJob:
+    context = "production-context"
+
+    def __init__(self, obj):
+        self.obj = obj
+        self.calls = []
+
+    def get_exact_rayjob(self, name):
+        self.calls.append(name)
+        return deepcopy(self.obj)
+
+
+def direct_created_rayjob():
+    rendered, _ = render_sft_rayjob(plan(), request(), preview(), run_id=RUN_ID)
+    rendered["metadata"].update(
+        {
+            "uid": CREATED_UID,
+            "resourceVersion": "7",
+            "creationTimestamp": "2026-09-21T00:00:00Z",
+        }
+    )
+    rendered["spec"]["suspend"] = False
+    rendered["status"] = {"jobStatus": "RUNNING", "jobDeploymentStatus": "Running"}
+    return rendered
+
+
+def test_direct_reconciliation_reads_one_exact_rayjob_and_writes_sanitized_receipt(tmp_path):
+    reader = FakeReadOnlyRayJob(direct_created_rayjob())
+    observation = tmp_path / DIRECT_RECONCILIATION
+    receipt = reconcile_direct_sft_submission(
+        plan=plan(),
+        request=request(),
+        reader=reader,
+        name="researcher-sft-12345678",
+        run_id=RUN_ID,
+        uid=CREATED_UID,
+        observation=observation,
+    )
+    assert reader.calls == ["researcher-sft-12345678"]
+    assert receipt["schema"] == "cyber_direct_sft_reconciliation_v1"
+    assert receipt["status"] == "observed_existing_rayjob_no_retry"
+    assert receipt["submitted"] is False
+    assert receipt["read_only"] is True
+    assert receipt["external_mutations"] == 0
+    assert receipt["failure_alerts"] == "off"
+    assert receipt["rayjob_status"] == "RUNNING"
+    assert receipt["rayjob_deployment_status"] == "Running"
+    assert receipt["sha256"] == digest(
+        {key: value for key, value in receipt.items() if key != "sha256"}
+    )
+    assert observation.stat().st_mode & 0o777 == 0o600
+    assert "image" not in receipt and "env" not in receipt and "annotations" not in receipt
+    assert not (tmp_path / "DIRECT_SUBMISSION.jsonl").exists()
+
+
+def test_direct_reconciliation_accepts_only_documented_server_defaults(tmp_path):
+    obj = direct_created_rayjob()
+    obj["spec"].update({"backoffLimit": 0, "ttlSecondsAfterFinished": 0})
+    groups = [
+        obj["spec"]["rayClusterSpec"]["headGroupSpec"],
+        *obj["spec"]["rayClusterSpec"]["workerGroupSpecs"],
+    ]
+    for index, group in enumerate(groups):
+        if index:
+            group["numOfHosts"] = 1
+        pod = group["template"]["spec"]
+        pod.update(
+            {
+                "dnsPolicy": "ClusterFirst",
+                "enableServiceLinks": True,
+                "preemptionPolicy": "PreemptLowerPriority",
+                "schedulerName": "default-scheduler",
+                "serviceAccount": "default",
+                "serviceAccountName": "default",
+                "terminationGracePeriodSeconds": 30,
+            }
+        )
+        for container in pod["containers"]:
+            container.update(
+                {
+                    "terminationMessagePath": "/dev/termination-log",
+                    "terminationMessagePolicy": "File",
+                }
+            )
+    receipt = reconcile_direct_sft_submission(
+        plan=plan(),
+        request=request(),
+        reader=FakeReadOnlyRayJob(obj),
+        name="researcher-sft-12345678",
+        run_id=RUN_ID,
+        uid=CREATED_UID,
+        observation=tmp_path / DIRECT_RECONCILIATION,
+    )
+    assert receipt["status"] == "observed_existing_rayjob_no_retry"
+
+
+@pytest.mark.parametrize(
+    ("name", "run_id", "uid"),
+    [
+        ("researcher-sft-12345678", "not-a-uuid", CREATED_UID),
+        ("other-sft-12345678", RUN_ID, CREATED_UID),
+        ("researcher-sft-12345678", RUN_ID, "not-a-kubernetes-uid"),
+    ],
+)
+def test_direct_reconciliation_rejects_bad_exact_inputs_before_read(tmp_path, name, run_id, uid):
+    reader = FakeReadOnlyRayJob(direct_created_rayjob())
+    with pytest.raises(JobsError):
+        reconcile_direct_sft_submission(
+            plan=plan(),
+            request=request(),
+            reader=reader,
+            name=name,
+            run_id=run_id,
+            uid=uid,
+            observation=tmp_path / DIRECT_RECONCILIATION,
+        )
+    assert reader.calls == []
+    assert not (tmp_path / DIRECT_RECONCILIATION).exists()
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "alert",
+        "uid",
+        "pod-run-id",
+        "runtime-run-name",
+        "extra-container",
+        "unknown-status",
+    ],
+)
+def test_direct_reconciliation_rejects_runtime_or_identity_drift(tmp_path, fault):
+    obj = direct_created_rayjob()
+    head = obj["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]
+    container = head["spec"]["containers"][0]
+    if fault == "alert":
+        obj["metadata"]["annotations"]["fleet.ai/failure-alerts"] = "on"
+    elif fault == "uid":
+        obj["metadata"]["uid"] = "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff"
+    elif fault == "pod-run-id":
+        head["metadata"]["labels"]["fleet.ai/run-id"] = ZERO_RUN_ID
+    elif fault == "runtime-run-name":
+        next(item for item in container["env"] if item["name"] == "FLEET_RUN_NAME")["value"] = (
+            "other"
+        )
+    elif fault == "extra-container":
+        head["spec"]["containers"].append(deepcopy(container))
+    else:
+        obj["status"]["jobStatus"] = "MYSTERY"
+    reader = FakeReadOnlyRayJob(obj)
+    with pytest.raises(JobsError):
+        reconcile_direct_sft_submission(
+            plan=plan(),
+            request=request(),
+            reader=reader,
+            name="researcher-sft-12345678",
+            run_id=RUN_ID,
+            uid=CREATED_UID,
+            observation=tmp_path / DIRECT_RECONCILIATION,
+        )
+    assert reader.calls == ["researcher-sft-12345678"]
+    assert not (tmp_path / DIRECT_RECONCILIATION).exists()
+
+
+def test_direct_reconciliation_never_overwrites_existing_local_state(tmp_path):
+    observation = tmp_path / DIRECT_RECONCILIATION
+    observation.write_text("existing\n")
+    reader = FakeReadOnlyRayJob(direct_created_rayjob())
+    with pytest.raises(JobsError, match="already exists"):
+        reconcile_direct_sft_submission(
+            plan=plan(),
+            request=request(),
+            reader=reader,
+            name="researcher-sft-12345678",
+            run_id=RUN_ID,
+            uid=CREATED_UID,
+            observation=observation,
+        )
+    assert reader.calls == []
+    assert observation.read_text() == "existing\n"
+
+
+def test_read_only_reconciliation_adapter_has_only_exact_get(monkeypatch):
+    from cyber_post_train import direct_submit
+
+    commands = []
+
+    def run(command, **kwargs):
+        commands.append((command, kwargs))
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps({"apiVersion": "ray.io/v1", "kind": "RayJob"}),
+            stderr="",
+        )
+
+    monkeypatch.setattr(direct_submit.subprocess, "run", run)
+    result = DirectSubmitReadOnlyKubectl("production-context").get_exact_rayjob(
+        "researcher-sft-12345678"
+    )
+    assert result["kind"] == "RayJob"
+    assert len(commands) == 1
+    command, kwargs = commands[0]
+    assert command == [
+        "kubectl",
+        "--context",
+        "production-context",
+        "--request-timeout=60s",
+        "get",
+        "rayjob",
+        "researcher-sft-12345678",
+        "--namespace",
+        "fleet-train-jobs",
+        "--output=json",
+    ]
+    assert kwargs.get("input") is None
+    assert not {"create", "patch", "apply", "delete", "replace", "edit"}.intersection(command)
 
 
 def test_direct_submit_checks_twice_journals_then_creates_exactly_once(tmp_path, sfs_jobs_root):

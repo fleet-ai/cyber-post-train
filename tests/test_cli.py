@@ -275,6 +275,52 @@ def test_direct_sft_submit_reuses_preflight_and_has_a_separate_journal(prepared,
     assert calls[0]["output_absence_receipt"] is None
 
 
+def test_direct_sft_reconciliation_uses_no_jobs_api_or_submission_gate(prepared, monkeypatch):
+    from cyber_post_train import direct_submit
+
+    output, plan, request, _ = prepared
+    plan["schema"] = "cyber_sft_runtime_dense_v1"
+    monkeypatch.setattr(cli, "_prepared", lambda _: (plan, request))
+    monkeypatch.setattr(cli, "_client", lambda *_: pytest.fail("reconciliation used Jobs API"))
+    monkeypatch.setattr(
+        cli,
+        "_submission_gate",
+        lambda *args: pytest.fail("reconciliation rerendered/submission-gated source"),
+    )
+    calls = []
+
+    class SyntheticReadOnlyKubectl:
+        def __init__(self, context):
+            self.context = context
+
+    def reconcile(**kwargs):
+        calls.append(kwargs)
+        return {"read_only": True, "submitted": False}
+
+    monkeypatch.setattr(direct_submit, "DirectSubmitReadOnlyKubectl", SyntheticReadOnlyKubectl)
+    monkeypatch.setattr(direct_submit, "reconcile_direct_sft_submission", reconcile)
+    result = RUNNER.invoke(
+        cli.app,
+        [
+            "direct-submit-reconcile",
+            str(output),
+            "--context",
+            "prod-context",
+            "--name",
+            "synthetic-12345678",
+            "--run-id",
+            "12345678-1234-4234-9234-123456789abc",
+            "--uid",
+            "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+        ],
+    )
+    assert result.exit_code == 0
+    assert calls[0]["plan"] == plan and calls[0]["request"] == request
+    assert calls[0]["reader"].context == "prod-context"
+    assert calls[0]["name"] == "synthetic-12345678"
+    assert calls[0]["observation"] == output / "DIRECT_RECONCILIATION.json"
+
+
 def test_sfs_output_receipt_is_create_once_and_bound_to_the_prepared_run(prepared, monkeypatch):
     output, plan, request, _ = prepared
     record_preflight(output, plan, request)

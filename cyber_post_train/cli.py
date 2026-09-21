@@ -1173,6 +1173,43 @@ def direct_submit_sft(
         _fail(exc)
 
 
+@app.command("direct-submit-reconcile")
+def direct_submit_reconcile(
+    directory: Path,
+    context: Annotated[str, typer.Option("--context")],
+    name: Annotated[str, typer.Option("--name")],
+    run_id: Annotated[str, typer.Option("--run-id")],
+    uid: Annotated[str, typer.Option("--uid")],
+) -> None:
+    """Read one exact direct-created SFT RayJob after a missing local journal.
+
+    This is a recovery observation, not a submit command: it performs only one
+    exact-name Kubernetes GET and writes a local create-once receipt.  It never
+    calls the Jobs API or creates, retries, patches, applies, or deletes a
+    workload.
+    """
+    from .direct_submit import (
+        DIRECT_RECONCILIATION,
+        DirectSubmitReadOnlyKubectl,
+        reconcile_direct_sft_submission,
+    )
+
+    try:
+        plan, request = _prepared(directory)
+        result = reconcile_direct_sft_submission(
+            plan=plan,
+            request=request,
+            reader=DirectSubmitReadOnlyKubectl(context),
+            name=name,
+            run_id=run_id,
+            uid=uid,
+            observation=directory / DIRECT_RECONCILIATION,
+        )
+        _print(result)
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command("direct-submit-lr30-step76")
 def direct_submit_lr30_step76(
     directory: Path,

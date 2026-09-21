@@ -14,6 +14,7 @@ import json
 import os
 import re
 import subprocess
+import time
 import uuid
 from collections.abc import Callable
 from copy import deepcopy
@@ -78,6 +79,8 @@ ZERO_RUN_ID = "00000000-0000-0000-0000-000000000000"
 SFT_SCHEMAS = {"cyber_sft_runtime_v2", "cyber_sft_runtime_dense_v1"}
 SFT_SECRET = "wandb-api"
 DIRECT_JOURNAL = "DIRECT_SUBMISSION.jsonl"
+DIRECT_RECONCILIATION = "DIRECT_RECONCILIATION.json"
+DIRECT_RECONCILIATION_SCHEMA = "cyber_direct_sft_reconciliation_v1"
 CPU_CHECKPOINT_OPERATION_ANNOTATION = "cyber-post-train.fleet.ai/cpu-checkpoint-operation"
 CPU_CHECKPOINT_OPERATIONS = {"seal", "verify"}
 LORA_TRAINER_IMAGE = (
@@ -90,6 +93,14 @@ CPU_NODE_SELECTOR = {
 }
 KUBERNETES_UID_PATTERN = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
+)
+_DIRECT_RUN_ID_PATTERN = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
+)
+_KUBERNETES_OBJECT_NAME_PATTERN = re.compile(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?")
+_RAYJOB_STATUS_VALUES = frozenset({"NEW", "PENDING", "RUNNING", "SUCCEEDED", "FAILED", "STOPPED"})
+_RAYJOB_DEPLOYMENT_STATUS_VALUES = frozenset(
+    {"Initializing", "Running", "Complete", "Failed", "Suspended"}
 )
 
 
@@ -1197,6 +1208,60 @@ class Kubectl:
         return {"config_map": config_map, "pod": pod, "proof": proof}
 
 
+class DirectSubmitReadOnlyKubectl:
+    """Narrow read-only boundary for one exact direct-created SFT RayJob.
+
+    This is deliberately not a ``Kubectl`` subclass.  Its only public operation
+    is one exact-name ``kubectl get``; it has no generic verb or manifest input
+    through which reconciliation could create, patch, apply, retry, or delete a
+    workload.
+    """
+
+    def __init__(self, context: str, *, binary: str = "kubectl"):
+        valid_context = (
+            isinstance(context, str)
+            and context
+            and not context.startswith("-")
+            and re.fullmatch(r"[-A-Za-z0-9_.:@/]+", context)
+        )
+        if not valid_context:
+            raise JobsError("an explicit valid Kubernetes context is required")
+        if not isinstance(binary, str) or not binary or binary.startswith("-"):
+            raise JobsError("invalid kubectl binary")
+        self.context = context
+        self.binary = binary
+
+    def get_exact_rayjob(self, name: str) -> dict:
+        """Read exactly one named RayJob and suppress private server errors."""
+        if _KUBERNETES_OBJECT_NAME_PATTERN.fullmatch(name) is None:
+            raise JobsError("invalid exact RayJob name")
+        command = [
+            self.binary,
+            "--context",
+            self.context,
+            "--request-timeout=60s",
+            "get",
+            "rayjob",
+            name,
+            "--namespace",
+            NAMESPACE,
+            "--output=json",
+        ]
+        try:
+            result = subprocess.run(
+                command,
+                text=True,
+                capture_output=True,
+                timeout=75,
+                check=False,
+            )
+        except (OSError, subprocess.SubprocessError):
+            raise JobsError("kubectl transport failed; do not infer cluster state") from None
+        if result.returncode:
+            raise JobsError("kubectl exact RayJob read failed; private server output suppressed")
+        return _json_object(result.stdout, "get")
+
+
 def _is_direct_run_name(name: str, request_name: str) -> bool:
     """Match only the exact name shape emitted by the direct renderer."""
     return re.fullmatch(re.escape(request_name) + r"-[a-f0-9]{8}", name) is not None
@@ -1405,6 +1470,274 @@ def _assert_exact_rayjob_runtime_surface(actual: dict, expected: dict) -> None:
             raise JobsError("malformed Kubernetes Ray Pod template") from exc
     if normalized != expected:
         raise JobsError("Kubernetes response changed the exact RayJob runtime surface")
+
+
+def _read_direct_rayjob_status(obj: dict) -> dict[str, str]:
+    """Return only stable, non-secret lifecycle labels from one RayJob read."""
+    status = obj.get("status")
+    if status is None:
+        return {
+            "rayjob_status": "UNREPORTED",
+            "rayjob_deployment_status": "UNREPORTED",
+        }
+    if not isinstance(status, dict):
+        raise JobsError("existing RayJob status is malformed")
+    job_status = status.get("jobStatus")
+    deployment_status = status.get("jobDeploymentStatus")
+    if job_status is not None and (
+        not isinstance(job_status, str) or job_status not in _RAYJOB_STATUS_VALUES
+    ):
+        raise JobsError("existing RayJob has an unsupported lifecycle status")
+    if deployment_status is not None and (
+        not isinstance(deployment_status, str)
+        or deployment_status not in _RAYJOB_DEPLOYMENT_STATUS_VALUES
+    ):
+        raise JobsError("existing RayJob has an unsupported deployment status")
+    return {
+        "rayjob_status": job_status or "UNREPORTED",
+        "rayjob_deployment_status": deployment_status or "UNREPORTED",
+    }
+
+
+def _validate_direct_reconciliation_input(
+    request: dict,
+    *,
+    name: str,
+    run_id: str,
+    uid: str,
+) -> None:
+    """Reject ambiguous caller-supplied identity before any cluster read."""
+    if _DIRECT_RUN_ID_PATTERN.fullmatch(run_id) is None:
+        raise JobsError("direct reconciliation requires a lowercase UUIDv4 run ID")
+    if KUBERNETES_UID_PATTERN.fullmatch(uid) is None:
+        raise JobsError("direct reconciliation requires one exact Kubernetes UID")
+    expected_name = request["name"] + "-" + run_id[:8]
+    if name != expected_name or _KUBERNETES_OBJECT_NAME_PATTERN.fullmatch(name) is None:
+        raise JobsError("direct reconciliation name does not match the prepared request/run ID")
+
+
+def _assert_direct_reconciliation_identity(
+    obj: dict,
+    request: dict,
+    *,
+    name: str,
+    run_id: str,
+    uid: str,
+) -> dict[str, str]:
+    """Bind a recovery observation to one exact direct-create identity."""
+    _validate_direct_reconciliation_input(request, name=name, run_id=run_id, uid=uid)
+    try:
+        metadata = obj["metadata"]
+        labels = metadata["labels"]
+        annotations = metadata["annotations"]
+    except (KeyError, TypeError) as exc:
+        raise JobsError("existing RayJob is missing immutable identity metadata") from exc
+    if (
+        obj.get("apiVersion") != "ray.io/v1"
+        or obj.get("kind") != "RayJob"
+        or metadata.get("name") != name
+        or metadata.get("namespace") != NAMESPACE
+        or metadata.get("uid") != uid
+        or not isinstance(labels, dict)
+        or not isinstance(annotations, dict)
+    ):
+        raise JobsError("existing RayJob identity differs from the exact reconciliation input")
+    if (
+        labels.get("fleet.ai/run-id") != run_id
+        or labels.get("fleet.ai/run-name") != request["name"]
+        or annotations.get("fleet.ai/run-id") != run_id
+        or annotations.get("fleet.ai/job-image") != request["image"]
+        or annotations.get("fleet.ai/run-dir") != request["run_dir"]
+        or annotations.get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
+    ):
+        raise JobsError("existing RayJob immutable direct-submit binding or alert opt-out drifted")
+    return _read_direct_rayjob_status(obj)
+
+
+def _restore_direct_sft_source(
+    actual: dict,
+    request: dict,
+    *,
+    name: str,
+    run_id: str,
+) -> tuple[dict, bool]:
+    """Invert only direct-create identity changes to recover the reviewed preview.
+
+    The returned object remains subject to the original strict preview renderer.
+    Any server field beyond documented defaults, lifecycle suspension, status,
+    or root identity is therefore a failure rather than an opportunity to
+    silently accept a changed runtime.
+    """
+    source = deepcopy(actual)
+    source.pop("status", None)
+    try:
+        metadata = source["metadata"]
+        labels = metadata["labels"]
+        annotations = metadata["annotations"]
+        spec = source["spec"]
+    except (KeyError, TypeError) as exc:
+        raise JobsError("existing RayJob is malformed") from exc
+    for field in _RAY_SERVER_METADATA_FIELDS:
+        metadata.pop(field, None)
+    if not isinstance(spec.get("suspend"), bool):
+        raise JobsError("existing RayJob suspension state is malformed")
+    observed_suspend = spec["suspend"]
+    spec["suspend"] = True
+    source["spec"] = _strip_exact_server_defaults(spec, {}, _RAYJOB_SPEC_SERVER_DEFAULTS)
+    spec = source["spec"]
+    try:
+        metadata["name"] = request["name"] + "-00000000"
+        labels["fleet.ai/run-id"] = ZERO_RUN_ID
+        annotations["fleet.ai/run-id"] = ZERO_RUN_ID
+        annotations.pop(FAILURE_ALERT_ANNOTATION)
+        cluster = spec["rayClusterSpec"]
+        groups = [cluster["headGroupSpec"], *cluster.get("workerGroupSpecs", [])]
+    except (KeyError, TypeError) as exc:
+        raise JobsError("existing RayJob cannot be restored to a source preview") from exc
+
+    expected_generated_secret = request["name"] + "-00000000-fleet-key"
+    for index, group in enumerate(groups):
+        if not isinstance(group, dict):
+            raise JobsError("existing RayJob has a malformed worker group")
+        if index:
+            group = _strip_exact_server_defaults(group, {}, _RAY_WORKER_GROUP_SERVER_DEFAULTS)
+            cluster["workerGroupSpecs"][index - 1] = group
+        try:
+            template = group["template"]
+            template_labels = template["metadata"]["labels"]
+            pod = template["spec"]
+            containers = pod["containers"]
+        except (KeyError, TypeError) as exc:
+            raise JobsError("existing RayJob has a malformed Pod template") from exc
+        if (
+            not isinstance(template_labels, dict)
+            or template_labels.get("fleet.ai/run-id") != run_id
+            or template_labels.get("fleet.ai/run-name") != request["name"]
+            or not isinstance(containers, list)
+            or len(containers) != 1
+            or not isinstance(containers[0], dict)
+        ):
+            raise JobsError("existing RayJob Pod identity differs from direct-create binding")
+        container = containers[0]
+        environment = _env(container)
+        if (
+            environment.get("FLEET_RUN_ID") != run_id
+            or environment.get("FLEET_RUN_NAME") != name
+            or environment.get("RUN_DIR") != request["run_dir"]
+            or container.get("image") != request["image"]
+            or _secret_names(container) != [SFT_SECRET]
+        ):
+            raise JobsError("existing RayJob runtime binding differs from direct SFT create")
+        template_labels["fleet.ai/run-id"] = ZERO_RUN_ID
+        for entry in container["env"]:
+            if entry["name"] == "FLEET_RUN_ID":
+                entry["value"] = ZERO_RUN_ID
+            elif entry["name"] == "FLEET_RUN_NAME":
+                entry["value"] = request["name"] + "-00000000"
+        container["envFrom"].append({"secretRef": {"name": expected_generated_secret}})
+        pod = _strip_exact_server_defaults(pod, {}, _RAY_POD_SERVER_DEFAULTS)
+        pod_containers = pod.get("containers")
+        if not isinstance(pod_containers, list):
+            raise JobsError("existing RayJob app container surface is malformed")
+        pod["containers"] = [
+            _strip_exact_server_defaults(item, {}, _RAY_CONTAINER_SERVER_DEFAULTS)
+            for item in pod_containers
+        ]
+        template["spec"] = pod
+    return source, observed_suspend
+
+
+def _write_reconciliation_observation(path: Path, value: dict) -> dict:
+    """Write one local, create-once, self-digesting recovery observation."""
+    if path.exists() or path.is_symlink():
+        raise JobsError("direct reconciliation observation already exists; do not repeat it")
+    receipt = {**value, "sha256": digest(value)}
+    _write_intent(path, receipt)
+    return receipt
+
+
+def reconcile_direct_sft_submission(
+    *,
+    plan: dict,
+    request: dict,
+    reader: Any,
+    name: str,
+    run_id: str,
+    uid: str,
+    observation: Path,
+) -> dict:
+    """Read and bind one possibly-created direct SFT RayJob without mutation.
+
+    This recovery path intentionally has no Jobs API client, inventory scan,
+    server preview, or generic kubectl operation.  It cannot create, patch,
+    retry, apply, or delete a workload; it only records a local observation of
+    one caller-supplied exact RayJob after restoring and validating its original
+    immutable direct-create runtime surface.
+    """
+    _assert_sft_contract(plan, request)
+    _validate_direct_reconciliation_input(request, name=name, run_id=run_id, uid=uid)
+    if (
+        observation.parent.joinpath(DIRECT_JOURNAL).exists()
+        or observation.parent.joinpath(DIRECT_JOURNAL).is_symlink()
+    ):
+        raise JobsError(
+            "direct-create journal exists; inspect it instead of this missing-journal repair"
+        )
+    if observation.exists() or observation.is_symlink():
+        raise JobsError("direct reconciliation observation already exists; do not repeat it")
+    context = getattr(reader, "context", None)
+    if not isinstance(context, str) or not context:
+        raise JobsError("read-only reconciliation reader has no explicit Kubernetes context")
+    actual = reader.get_exact_rayjob(name)
+    if not isinstance(actual, dict):
+        raise JobsError("read-only reconciliation returned a non-object")
+    lifecycle = _assert_direct_reconciliation_identity(
+        actual,
+        request,
+        name=name,
+        run_id=run_id,
+        uid=uid,
+    )
+    restored_source, observed_suspend = _restore_direct_sft_source(
+        actual,
+        request,
+        name=name,
+        run_id=run_id,
+    )
+    expected, _ = render_sft_rayjob(
+        plan,
+        request,
+        {
+            "manifest_yaml": yaml.safe_dump(restored_source, sort_keys=False),
+            "warnings": [],
+            "errors": [],
+        },
+        run_id=run_id,
+    )
+    expected["spec"]["suspend"] = observed_suspend
+    _assert_exact_rayjob_runtime_surface(actual, expected)
+    return _write_reconciliation_observation(
+        observation,
+        {
+            "schema": DIRECT_RECONCILIATION_SCHEMA,
+            "status": "observed_existing_rayjob_no_retry",
+            "submitted": False,
+            "existing_rayjob_observed": True,
+            "read_only": True,
+            "external_mutations": 0,
+            "kubernetes_context": context,
+            "namespace": NAMESPACE,
+            "name": name,
+            "run_id": run_id,
+            "uid": uid,
+            "plan_sha256": digest(plan),
+            "request_sha256": digest(request),
+            "manifest_sha256": digest(expected),
+            "failure_alerts": FAILURE_ALERT_OFF,
+            **lifecycle,
+            "observed_at_epoch": int(time.time()),
+        },
+    )
 
 
 def _write_intent(path: Path, value: dict) -> None:

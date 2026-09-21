@@ -303,6 +303,31 @@ delete the journal or invoke the command again. Because direct-created runs are
 not Jobs API records, monitor them by their Kubernetes UID and durable training
 receipts rather than `cyber-post-train status`.
 
+If Kubernetes created the exact RayJob but the local machine failed before it
+wrote `DIRECT_SUBMISSION.jsonl`, use the separate read-only recovery command
+once. This is only for that missing-journal case. Obtain the exact generated
+name, direct run UUID, and Kubernetes UID from trustworthy creation evidence;
+do not search by a prefix or guess an object. It reads one exact named RayJob,
+compares its saved plan/request binding, image, output location, runtime shape,
+root failed-job-alert opt-out, and lifecycle state, then writes a local
+`DIRECT_RECONCILIATION.json` receipt.
+
+```sh
+uv run cyber-post-train direct-submit-reconcile /shared/prepared-run \
+  --context <explicit-production-or-development-context> \
+  --name <prepared-run-name>-<first-eight-hex-of-run-id> \
+  --run-id <exact-lowercase-uuidv4> \
+  --uid <exact-kubernetes-uid>
+```
+
+The recovery command makes exactly one `kubectl get rayjob <exact-name>` call.
+It does not call the Jobs API and has no code path to create, retry, patch,
+apply, delete, or otherwise alter a workload. It does not prove training or
+model success; it only records that one existing object matched the prepared
+direct-create contract. If it rejects the object or cannot read it, preserve the
+local state and creation evidence and escalate. Never resubmit the run or
+delete the failed/missing journal to work around a rejection.
+
 This path refuses RL, conversion, requests with Fleet credential Secrets,
 non-c1 priority, an already-qualified API preview, or any unreviewed placeholder
 or generated field. It is a compatibility bridge, not permission to bypass
