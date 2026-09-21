@@ -85,6 +85,7 @@ def _request(*, source_kind: str = "self") -> dict:
             "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
             "session_model": "qwen/qwen3.8-27b",
         },
+        "template_sha256": _sha("8"),
         "source_authorization_receipt_sha256": _sha("b"),
         "route": {
             "name": "source",
@@ -170,6 +171,8 @@ def test_render_is_eval_compatible_and_contains_only_train_tasks() -> None:
     # request; the sealed packet keeps the source/admission facts that generic
     # eval plans intentionally do not retain.
     assert packet["training_data_eligible"] is True
+    assert packet["source"]["model_alias"] == "source"
+    assert packet["source"]["template_sha256"] == _sha("8")
     assert packet["corpus_scope"] == {
         "current": "verified_success_visible_actions_only_v1",
         "visible_reasoning_included": False,
@@ -186,6 +189,7 @@ def test_render_is_eval_compatible_and_contains_only_train_tasks() -> None:
     assert packet["admission_policy"]["minimum_completed_non_submit_tool_rounds"] == 1
     assert packet["admission_policy"]["maximum_submit_report_response_fraction"] == 0.5
     assert packet["admission_policy"]["maximum_submit_report_target_token_fraction"] == 0.5
+    assert packet["admission_policy"]["maximum_family_target_token_fraction"] == 0.25
     assert packet["admission_policy"]["reasoning_policy"] == campaign.VISIBLE_ACTIONS_ONLY
     assert (
         packet["admission_policy"]["offline_compaction_policy"] == campaign.OPAQUE_COMPACTION_REJECT

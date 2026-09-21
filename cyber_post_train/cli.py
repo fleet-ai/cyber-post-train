@@ -284,6 +284,18 @@ def data_fleet_admit(config: Path) -> None:
         _fail(exc)
 
 
+@app.command("data-fleet-materialize")
+def data_fleet_materialize(config: Path) -> None:
+    """Build private action-SFT data from sealed Fleet collection evidence only."""
+    from training.fleet_collection_corpus import build
+    from training.sft import read_mapping
+
+    try:
+        _print(build(read_mapping(config), relative_to=config.resolve().parent))
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command("data-rechunk")
 def data_rechunk(config: Path) -> None:
     """Re-window a sealed dense SFT corpus at a smaller context. CPU only."""
