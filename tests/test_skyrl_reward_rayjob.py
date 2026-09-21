@@ -14,81 +14,25 @@ import pytest
 
 from cyber_post_train.jobs import JobsError, digest
 from scripts.audit_qwen38_skyrl_launch_readiness import (
-    NEXT_GATES,
     compile_prod4,
     load,
 )
 from training import dev_cleanup_observer as cleanup
-from training import rl_reward_canary as canary
 from training import skyrl_reward_rayjob as direct
 
 ROOT = Path(__file__).resolve().parents[1]
-CANARY_RUN = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod-v5.json"
+CANARY_RUN = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod-v6.json"
+CANARY_MANIFEST = (
+    ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v6.json"
+)
 
 
-def successor_metadata(run: dict, next_gates: dict) -> dict:
-    local = next_gates["local_data_preparation"]
-    value = {
-        "schema": "cyber_skyrl_data_v1",
-        "name": run["name"],
-        "selection_sha256": canary.TASK_SET_SELF_SHA256,
-        "split_sha256": canary.SPLIT_SELF_SHA256,
-        "tokenizer": {
-            "backend_sha256": "ffb7a28b27dabcc333662fd3e0b0005d9e79a1c22e31453ab5a3017fbd5f25c0",
-            "chat_template_sha256": (
-                "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
-            ),
-            "files": [
-                {
-                    "path": "tokenizer.json",
-                    "sha256": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
-                },
-                {
-                    "path": "tokenizer_config.json",
-                    "sha256": "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27",
-                },
-                {
-                    "path": "chat_template.jinja",
-                    "sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
-                },
-                {
-                    "path": "merges.txt",
-                    "sha256": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d",
-                },
-                {
-                    "path": "vocab.json",
-                    "sha256": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003",
-                },
-            ],
-            "repo": "Qwen/Qwen3.8-27B",
-            "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
-        },
-        "template_sha256": (
-            "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
-        ),
-        "tool_catalog_sha256": canary.TOOL_CATALOG_SHA256,
-        "limits": {
-            "context_tokens": 98304,
-            "response_tokens": 81920,
-            "max_tokens_per_turn": 4096,
-            "max_turns": 600,
-            "episode_seconds": 2400,
-            "tool_seconds": 330,
-            "tool_result_chars": 50000,
-        },
-        "files": {
-            split: {
-                "path": split + ".jsonl",
-                "sha256": local[split]["sha256"],
-                "rows": local[split]["rows"],
-                "max_prompt_tokens": local[split]["max_prompt_tokens"],
-            }
-            for split in ("train", "dev")
-        },
-        "gpus": 0,
-        "environment_creates": 0,
-    }
-    value["sha256"] = "sha256:" + digest(value)
+def successor_metadata(run: dict) -> dict:
+    value = load(CANARY_MANIFEST)
+    assert value["name"] == run["name"]
+    assert value["sha256"] == "sha256:" + digest(
+        {key: item for key, item in value.items() if key != "sha256"}
+    )
     return value
 
 
@@ -103,7 +47,7 @@ def test_preflight_rejection_is_sanitized() -> None:
 @pytest.fixture(scope="module")
 def plan_request() -> tuple[dict, dict]:
     run = load(CANARY_RUN)
-    return compile_prod4(run, successor_metadata(run, load(NEXT_GATES)))
+    return compile_prod4(run, successor_metadata(run))
 
 
 def _source_preview(plan: dict, request: dict) -> dict:
@@ -487,6 +431,10 @@ def _launch_evidence(plan: dict, request: dict, preview: dict, staged: dict) -> 
             "planned_steps": 1,
             "native_parser_checked": True,
             "ordered_multi_tool_parser_checked": True,
+            "chunk_continuation_checked": True,
+            "compaction_checked": True,
+            "stepwise_prompt_checked": True,
+            "ordered_multi_tool_execution_checked": True,
             "output_absent": True,
             "wandb_create_once": {
                 "entity": "thefleet",

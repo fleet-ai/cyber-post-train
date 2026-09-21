@@ -151,7 +151,7 @@ class Observer:
                 PROD_CONTEXT,
                 DIRECT_ARMED_SCHEMA,
                 DIRECT_RESULT_SCHEMA,
-                12 * 60 * 60,
+                16 * 60 * 60,
             ),
             "production-cpu": (
                 PROD_CONTEXT,
@@ -163,7 +163,7 @@ class Observer:
                 PROD_CONTEXT,
                 RECOVERY_ARMED_SCHEMA,
                 RECOVERY_RESULT_SCHEMA,
-                12 * 60 * 60,
+                16 * 60 * 60,
             ),
         }
         if profile not in profiles:

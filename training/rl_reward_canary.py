@@ -15,7 +15,7 @@ from cyber_post_train.jobs import digest
 from evals.fleet import opencode_self_hosted as fleet
 
 ROOT = Path(__file__).resolve().parents[1]
-PROFILE = "qwen38_skyrl_reward_canary_v5"
+PROFILE = "qwen38_skyrl_reward_canary_v6"
 IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
     "89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
@@ -23,10 +23,10 @@ IMAGE = (
 TASK_SET_PATH = "configs/data/qwen38-rl-reward-canary-task-set-v3.json"
 SPLIT_PATH = "configs/data/qwen38-rl-reward-canary-split-v1.json"
 EVIDENCE_PATH = "configs/data/qwen38-rl-reward-canary-exact-version-evidence-v3.json"
-RUNTIME_EVIDENCE_PATH = "configs/data/qwen38-rl-reward-canary-exact-version-evidence-v4.json"
-HORIZON_PATH = "configs/data/qwen38-rl-reward-canary-horizon-v1.json"
+RUNTIME_EVIDENCE_PATH = "configs/data/qwen38-rl-reward-canary-exact-version-evidence-v5.json"
+HORIZON_PATH = "configs/data/qwen38-rl-reward-canary-horizon-v2.json"
 TOOL_CATALOG_PATH = "configs/data/qwen38-rl-filtered-canary-tool-catalog-v1.json"
-QUALIFICATION_PATH = "configs/qualification/qwen38-rl-reward-canary-port-v5.json"
+QUALIFICATION_PATH = "configs/qualification/qwen38-rl-reward-canary-port-v6.json"
 
 TASK_SET_FILE_SHA256 = "sha256:c3ee0a239dcb836b1951e65eda5a9813360a0378747716df8d8ca3753e741517"
 TASK_SET_SELF_SHA256 = "sha256:9b88bac1510720926ea041d942044804d6c54c083a0ea56d07cae5f448685909"
@@ -35,28 +35,31 @@ SPLIT_SELF_SHA256 = "sha256:8279ea19808ad1accb00d3f3145c3ec087030677786e0188251c
 EVIDENCE_FILE_SHA256 = "sha256:73be894762968970c8cf0454281fe13d46615e40039b61b8f8a97c8cc883f365"
 EVIDENCE_SELF_SHA256 = "sha256:50491796b829388164faefc5fb9a9ad09fac89a8d94648a1791240f91826a285"
 RUNTIME_EVIDENCE_FILE_SHA256 = (
-    "sha256:27dc04429a26048a136d2994ad3021b5eee7d38c619fd8a392da0fa4de5f178b"
+    "sha256:2bf7ee22fd90d7d62e3a18821803704370eb891a2f0338b66d62f63abc9dc23a"
 )
 RUNTIME_EVIDENCE_SELF_SHA256 = (
-    "sha256:b8f62326425816d6fa04e78eabd9dd130c9bae1997e69e1da09f46413eb80191"
+    "sha256:8f99e9584598e31cd3915bb02b20a6ea41318a3dee682c040aa04586333b369b"
 )
-HORIZON_FILE_SHA256 = "sha256:435866421cc4cdcc4a5598c92112fadfc5c01634c076334df57d6d46b2fe7b85"
-HORIZON_SELF_SHA256 = "sha256:a4e861dedcf0538633e15e1762bca9f37156dfc392dda70a8fc50df06020076e"
+HORIZON_FILE_SHA256 = "sha256:d80cd804406ed1f181ba9cc6891cd11785d7fc3a63b84aa2f97a7238c3d435b3"
+HORIZON_SELF_SHA256 = "sha256:a2a13e123b51041b314c81772134dd63e89dd99c4f8a68822fa817968ca69182"
 TOOL_CATALOG_FILE_SHA256 = "sha256:e4a3c4fb5b5c34cdaf64ec568eb31fcc0d55a63cc0a134808db348c65d7b6858"
 TOOL_CATALOG_SHA256 = "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
 QUALIFICATION_FILE_SHA256 = (
-    "sha256:dc83c51b9d1ec8ec965a87d5a7868d299e72acdfccc5cbe8f333cf1f6294804c"
+    "sha256:52cee597df0ade619c4c62d9f37bf75e70890b8154e84e020d5c31ef33551afc"
 )
 QUALIFICATION_SELF_SHA256 = (
-    "sha256:68511e2527189d385900d920d9ddd8bd57240cab9bbf5c31577ae1375c4a982d"
+    "sha256:f7bbda433d0ffed88b4e524cef203877929a252c1a1729e8e63b79c7a32705ed"
 )
 
 LIMITS = {
-    "context_tokens": 98304,
-    "response_tokens": 81920,
-    "max_tokens_per_turn": 4096,
-    "max_turns": 600,
-    "episode_seconds": 2400,
+    "context_tokens": 262144,
+    "response_tokens": 4194304,
+    "max_tokens_per_turn": 32768,
+    "generation_chunk_tokens": 4096,
+    "compaction_trigger_tokens": 163840,
+    "compaction_summary_tokens": 8192,
+    "max_turns": 1200,
+    "episode_seconds": 14400,
     "tool_seconds": 330,
     "tool_result_chars": 50000,
 }
@@ -111,25 +114,31 @@ TASKS = (
 )
 RUNTIME_SOURCES = {
     "training/rl_data.py": (
-        "sha256:f0c327d2ecc464610a5fd86e11b112870d28feb43d9155d7507d8fedbd87632b"
+        "sha256:90233bd8e49ad9e38e18d49234f3132730ceb399a224e44fd393966e091ccccf"
     ),
     "training/rl_episode.py": (
-        "sha256:6d55701203ad3b4327e4fd6eb8a6ba9508a09ca6331dd097872607dcfac25464"
+        "sha256:37c78049c0ffa430fde78228e101bf045378882da8157dc97de682e1e6060742"
+    ),
+    "training/skyrl_episode.py": (
+        "sha256:c3f1600f65445b535f6519ee64348a79d28c456e2f3795cf0bf99fe9d39383bf"
     ),
     "evals/fleet/opencode_self_hosted.py": (
         "sha256:428e9f2e4d4c758c4f682cbed314cf96b866d051b34fa0eea8757a3aad97aa1d"
     ),
 }
 PORT_COMMITS = {
+    "runtime_commit": "2661e4fbff3582b809bd5b65b967fe4fbb986ce9",
+    "preflight_commit": "2661e4fbff3582b809bd5b65b967fe4fbb986ce9",
+    "ported_onto_commit": "9ad730e2bed5b19f02ad78cc76dd1f6d02f0d43c",
+}
+HISTORICAL_PORT_COMMITS = {
     "runtime_commit": "8b5e8a00521b4fe412e3e7d0bce9b8ea6855b005",
     "preflight_commit": "6c0bc541e136fc114a3f7a17ce6ba07e9178bb78",
-    "ported_onto_commit": "077b2546ab218ca53b17be215a30192ff74b1415",
 }
 SUBMISSION_BLOCKERS = [
-    "v17_topology_receipt_and_release_not_yet_accepted",
-    "prod5_data_not_yet_staged_and_digest_verified",
-    "prod5_cpu_preflight_and_jobs_preview_not_yet_recorded",
-    "prod5_jobs_kubernetes_sfs_wandb_absence_not_yet_rechecked",
+    "prod6_data_not_yet_staged_and_digest_verified",
+    "prod6_long_horizon_cpu_preflight_not_yet_recorded",
+    "prod6_jobs_kubernetes_sfs_wandb_absence_not_yet_rechecked",
 ]
 TOPOLOGY_SUCCESSOR = {
     "config_path": "qwen38-skyrl-topology-probe-dev-v2.json",
@@ -340,8 +349,8 @@ def validate_source_package(
         != "c99340e2-3801-5c3c-a50c-3b96cee4572f"
         or evidence["port_provenance"]
         != {
-            "runtime_commit": PORT_COMMITS["runtime_commit"],
-            "preflight_commit": PORT_COMMITS["preflight_commit"],
+            "runtime_commit": HISTORICAL_PORT_COMMITS["runtime_commit"],
+            "preflight_commit": HISTORICAL_PORT_COMMITS["preflight_commit"],
             "historical_preflight_is_gating": False,
         }
     ):
@@ -374,7 +383,12 @@ def validate_source_package(
         ):
             raise ValueError("reward canary task runtime or verifier identity changed")
 
-    immutable_runtime_keys = set(evidence) - {"purpose", "tool_surface_authority", "sha256"}
+    immutable_runtime_keys = set(evidence) - {
+        "purpose",
+        "tool_surface_authority",
+        "episode_horizon",
+        "sha256",
+    }
     if any(runtime_evidence[key] != evidence[key] for key in immutable_runtime_keys):
         raise ValueError("reward canary runtime evidence changed task or horizon authority")
     authority = runtime_evidence["tool_surface_authority"]
@@ -382,6 +396,7 @@ def validate_source_package(
     for name, path in (
         ("data_preparation", "training/rl_data.py"),
         ("episode_runtime", "training/rl_episode.py"),
+        ("skyrl_episode_runtime", "training/skyrl_episode.py"),
         ("fleet_binding", "evals/fleet/opencode_self_hosted.py"),
     ):
         if (
@@ -399,8 +414,8 @@ def validate_source_package(
 
     horizon_binding = runtime_evidence["episode_horizon"]
     if horizon_binding != {
-        "max_turns": 600,
-        "contract_path": "qwen38-rl-reward-canary-horizon-v1.json",
+        "max_turns": 1200,
+        "contract_path": "qwen38-rl-reward-canary-horizon-v2.json",
         "contract_file_sha256": HORIZON_FILE_SHA256,
         "contract_self_sha256": HORIZON_SELF_SHA256,
         "aggregate_evidence_path": "../../docs/FLEET_NATIVE_HARNESS_PARITY.md",
@@ -475,7 +490,7 @@ def _validate_qualification(path: Path) -> dict:
     if path.resolve() != (ROOT / QUALIFICATION_PATH).resolve():
         raise ValueError("unknown reward-canary qualification closure")
     value = _bound_json(path, QUALIFICATION_FILE_SHA256)
-    _sealed(value, "cyber_qwen38_skyrl_reward_canary_port_v5")
+    _sealed(value, "cyber_qwen38_skyrl_reward_canary_port_v6")
     if (
         value["sha256"] != QUALIFICATION_SELF_SHA256
         or value["source"] != PORT_COMMITS
@@ -491,7 +506,7 @@ def _validate_qualification(path: Path) -> dict:
         != {
             "task_set": "../data/qwen38-rl-reward-canary-task-set-v3.json",
             "split": "../data/qwen38-rl-reward-canary-split-v1.json",
-            "horizon": "../data/qwen38-rl-reward-canary-horizon-v1.json",
+            "horizon": "../data/qwen38-rl-reward-canary-horizon-v2.json",
             "tool_catalog": "../data/qwen38-rl-filtered-canary-tool-catalog-v1.json",
         }
         or value["submission_gate"]
@@ -534,7 +549,7 @@ def _validate_qualification(path: Path) -> dict:
     if (
         historical["source_preflight"]["classification"] != "historical_preflight_provenance"
         or historical["source_preflight"]["gating"] is not False
-        or preflight["source"]["git_commit"] != PORT_COMMITS["runtime_commit"]
+        or preflight["source"]["git_commit"] != HISTORICAL_PORT_COMMITS["runtime_commit"]
         or preflight["submission"]["submitted"] is not False
         or preflight["submission"]["gpu_allocation"] != 0
         or image["requested_image"] != IMAGE
@@ -590,7 +605,7 @@ def validate_run_config(
     ):
         raise ValueError("reward-canary model, data, recipe, resource, or identity drift")
     result = {
-        "schema": "cyber_qwen38_skyrl_reward_canary_plan_binding_v5",
+        "schema": "cyber_qwen38_skyrl_reward_canary_plan_binding_v6",
         "profile": PROFILE,
         "source_proof": proof,
         "qualification_file_sha256": QUALIFICATION_FILE_SHA256,
@@ -611,7 +626,7 @@ def validate_plan_binding(binding: object, metadata: dict, arguments: dict) -> d
         raise ValueError("reward-canary plan lacks its source binding")
     body = {key: item for key, item in binding.items() if key != "sha256"}
     if (
-        binding.get("schema") != "cyber_qwen38_skyrl_reward_canary_plan_binding_v5"
+        binding.get("schema") != "cyber_qwen38_skyrl_reward_canary_plan_binding_v6"
         or binding.get("sha256") != "sha256:" + digest(body)
         or binding.get("profile") != PROFILE
         or binding.get("source_proof") != source_proof()

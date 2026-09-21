@@ -1,4 +1,4 @@
-"""Create-once direct root-RayJob rail for the sealed prod5 reward canary.
+"""Create-once direct root-RayJob rail for the sealed prod6 reward canary.
 
 The Jobs API preview remains the topology source of truth.  This module removes
 only API-controller bindings that do not exist for a direct root RayJob, adds
@@ -43,9 +43,9 @@ from . import skyrl_training
 DEV_CONTEXT = "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb"
 PROD_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 NAMESPACE = "fleet-train-jobs"
-RUN_NAME = "chris-q38-rlreward-prod5"
-STAGE_NAME = "chris-q38-prod5-data-v1"
-PREFLIGHT_NAME = "chris-q38-prod5-preflight-v1"
+RUN_NAME = "chris-q38-rlreward-prod6"
+STAGE_NAME = "chris-q38-prod6-data-v1"
+PREFLIGHT_NAME = "chris-q38-prod6-preflight-v1"
 STAGE_RECEIPT = "/dev/termination-log"
 UPLOAD = Path("/tmp/autoresearch-upload.tar.gz")
 PACKET_SCHEMA = "cyber_skyrl_reward_direct_rayjob_packet_v1"
@@ -57,7 +57,11 @@ PREFLIGHT_REJECTION_SCHEMA = "cyber_skyrl_reward_cpu_preflight_rejection_v1"
 CPU_PREVIEW_SCHEMA = "cyber_skyrl_reward_cpu_job_preview_v1"
 AUTHORIZATION_SCHEMA = "cyber_skyrl_reward_direct_authorization_v1"
 CREATED_SCHEMA = "cyber_skyrl_reward_direct_created_v1"
-MAXIMUM_SECONDS = 8 * 60 * 60 + 5 * 60 + 30 * 60
+# One before-training dev episode, one concurrent eight-sample training group,
+# and one after-update dev episode may each use the full four-hour episode
+# contract. The remaining two hours cover model startup, checkpointing and
+# orderly drain; the idle observer still releases a genuinely stalled run.
+MAXIMUM_SECONDS = 14 * 60 * 60
 RUNTIME_UID = 1000
 RUNTIME_GID = 100
 PVC = "sfs-shared"
@@ -70,19 +74,19 @@ def _seal(value: dict[str, Any]) -> dict[str, Any]:
 
 def _validate_seal(value: object, schema: str) -> dict[str, Any]:
     if not isinstance(value, dict) or value.get("schema") != schema or value != _seal(value):
-        raise JobsError("prod5 direct evidence digest changed")
+        raise JobsError("prod6 direct evidence digest changed")
     return value
 
 
 def _timestamp(value: object) -> datetime:
     if not isinstance(value, str):
-        raise JobsError("prod5 evidence timestamp is missing")
+        raise JobsError("prod6 evidence timestamp is missing")
     try:
         parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as exc:
-        raise JobsError("prod5 evidence timestamp is invalid") from exc
+        raise JobsError("prod6 evidence timestamp is invalid") from exc
     if parsed.tzinfo is None:
-        raise JobsError("prod5 evidence timestamp has no timezone")
+        raise JobsError("prod6 evidence timestamp has no timezone")
     return parsed.astimezone(UTC)
 
 
@@ -96,13 +100,13 @@ def _run_id(plan: dict[str, Any]) -> str:
 
 def _source(preview: dict[str, Any]) -> dict[str, Any]:
     if preview.get("warnings") or set(preview) != {"name", "warnings", "manifest_yaml"}:
-        raise JobsError("prod5 Jobs preview reported warnings or changed shape")
+        raise JobsError("prod6 Jobs preview reported warnings or changed shape")
     try:
         value = yaml.safe_load(preview["manifest_yaml"])
     except (KeyError, TypeError, yaml.YAMLError) as exc:
-        raise JobsError("prod5 Jobs preview is malformed") from exc
+        raise JobsError("prod6 Jobs preview is malformed") from exc
     if not isinstance(value, dict):
-        raise JobsError("prod5 Jobs preview is not an object")
+        raise JobsError("prod6 Jobs preview is not an object")
     return value
 
 
@@ -110,7 +114,7 @@ def _replace_env(container: dict[str, Any], name: str, value: str) -> None:
     entries = container.get("env", [])
     matches = [entry for entry in entries if entry.get("name") == name]
     if len(matches) != 1 or set(matches[0]) != {"name", "value"}:
-        raise JobsError("prod5 Jobs preview environment changed")
+        raise JobsError("prod6 Jobs preview environment changed")
     matches[0]["value"] = value
 
 
@@ -119,7 +123,7 @@ def manifest(
 ) -> dict[str, Any]:
     """Project the accepted Jobs preview into one exact root RayJob."""
     if plan.get("run_name") != RUN_NAME or skyrl_training.job_request(plan) != request:
-        raise JobsError("prod5 plan/request identity changed")
+        raise JobsError("prod6 plan/request identity changed")
     source = _source(preview)
     expected_placeholder = RUN_NAME + "-00000000"
     metadata = source.get("metadata", {})
@@ -139,7 +143,7 @@ def manifest(
         or annotations.get("fleet.ai/job-image") != request["image"]
         or FAILURE_ALERT_ANNOTATION in annotations
     ):
-        raise JobsError("prod5 Jobs preview identity or admission changed")
+        raise JobsError("prod6 Jobs preview identity or admission changed")
     result = copy.deepcopy(source)
     direct_id = _run_id(plan)
     result["metadata"]["name"] = RUN_NAME
@@ -153,23 +157,23 @@ def manifest(
         or spec.get("shutdownAfterJobFinishes") is not True
         or spec.get("submissionMode") != "HTTPMode"
     ):
-        raise JobsError("prod5 Jobs preview execution changed")
+        raise JobsError("prod6 Jobs preview execution changed")
     spec["backoffLimit"] = 0
     spec["activeDeadlineSeconds"] = MAXIMUM_SECONDS
     cluster = spec.get("rayClusterSpec", {})
     if cluster.get("workerGroupSpecs") not in (None, []):
-        raise JobsError("prod5 must remain one physical GPU node")
+        raise JobsError("prod6 must remain one physical GPU node")
     head = cluster.get("headGroupSpec", {}).get("template", {}).get("spec", {})
     containers = head.get("containers", [])
     if len(containers) != 1:
-        raise JobsError("prod5 preview must contain one head container")
+        raise JobsError("prod6 preview must contain one head container")
     container = containers[0]
     _replace_env(container, "FLEET_RUN_ID", direct_id)
     _replace_env(container, "FLEET_RUN_NAME", RUN_NAME)
     secret_names = [row.get("secretRef", {}).get("name") for row in container.get("envFrom", [])]
     generated_secret = expected_placeholder + "-fleet-key"
     if secret_names != ["fleet-api", "wandb-api", generated_secret]:
-        raise JobsError("prod5 Jobs preview Secret bindings changed")
+        raise JobsError("prod6 Jobs preview Secret bindings changed")
     container["envFrom"] = [
         row
         for row in container["envFrom"]
@@ -189,7 +193,7 @@ def manifest(
         "-c",
         f"mkdir -p {plan['output_root']} && chown 1000:100 {plan['output_root']}",
     ]:
-        raise JobsError("prod5 output initialization changed")
+        raise JobsError("prod6 output initialization changed")
     sfs[0]["command"] = [
         "sh",
         "-ec",
@@ -229,22 +233,22 @@ def _strip_server_defaults(expected: dict[str, Any], rendered: dict[str, Any]) -
         UUID(metadata.pop("uid"))
         _timestamp(metadata.pop("creationTimestamp"))
     except (KeyError, TypeError, ValueError) as exc:
-        raise JobsError("prod5 server dry-run lacks identity defaults") from exc
+        raise JobsError("prod6 server dry-run lacks identity defaults") from exc
     if metadata.pop("generation", None) != 1 or "resourceVersion" in metadata:
-        raise JobsError("prod5 server dry-run metadata defaults changed")
+        raise JobsError("prod6 server dry-run metadata defaults changed")
     if actual.pop("status", None) not in (None, {}):
-        raise JobsError("prod5 server dry-run added status")
+        raise JobsError("prod6 server dry-run added status")
     spec = actual.get("spec", {})
     if spec.pop("ttlSecondsAfterFinished", None) not in (None, 0):
-        raise JobsError("prod5 RayJob TTL default changed")
+        raise JobsError("prod6 RayJob TTL default changed")
     cluster = spec.get("rayClusterSpec", {})
     if cluster.pop("headServiceAnnotations", None) not in (None, {}):
-        raise JobsError("prod5 head-service defaults changed")
+        raise JobsError("prod6 head-service defaults changed")
     head = cluster.get("headGroupSpec", {})
     if head.pop("numOfHosts", None) not in (None, 1):
-        raise JobsError("prod5 head host default changed")
+        raise JobsError("prod6 head host default changed")
     if head.pop("scaleStrategy", None) not in (None, {}):
-        raise JobsError("prod5 head scale default changed")
+        raise JobsError("prod6 head scale default changed")
     return actual
 
 
@@ -258,12 +262,12 @@ def validate_preview(
     context: str,
 ) -> dict[str, Any]:
     if expected != manifest(plan, request, source_preview):
-        raise JobsError("prod5 direct packet changed")
+        raise JobsError("prod6 direct packet changed")
     if (
         context not in {DEV_CONTEXT, PROD_CONTEXT}
         or _strip_server_defaults(expected, rendered) != expected
     ):
-        raise JobsError("prod5 server dry-run changed the direct RayJob")
+        raise JobsError("prod6 server dry-run changed the direct RayJob")
     return _seal(
         {
             "schema": PREVIEW_SCHEMA,
@@ -289,11 +293,11 @@ def build_stage_archive(source: Path, archive: Path) -> dict[str, Any]:
     expected = {"manifest.json", "split.json", "task-set.json", "train.jsonl", "dev.jsonl"}
     found = {path.name: path for path in source.iterdir() if path.is_file()}
     if set(found) != expected or archive.exists() or archive.is_symlink():
-        raise JobsError("prod5 private stage archive inputs changed")
+        raise JobsError("prod6 private stage archive inputs changed")
     archive.parent.mkdir(parents=True, exist_ok=True)
     temp = archive.with_name("." + archive.name + ".partial")
     if temp.exists() or temp.is_symlink():
-        raise JobsError("prod5 private stage archive temporary path exists")
+        raise JobsError("prod6 private stage archive temporary path exists")
     try:
         with (
             temp.open("xb") as raw,
@@ -329,7 +333,7 @@ def stage_plan(plan: dict[str, Any], source: Path, archive: Path) -> dict[str, A
     expected = {"manifest.json", "split.json", "task-set.json", "train.jsonl", "dev.jsonl"}
     found = {path.name: path for path in source.iterdir() if path.is_file()}
     if set(found) != expected:
-        raise JobsError("prod5 private stage inventory changed")
+        raise JobsError("prod6 private stage inventory changed")
     files = []
     for name, path in sorted(found.items()):
         files.append(
@@ -341,14 +345,14 @@ def stage_plan(plan: dict[str, Any], source: Path, archive: Path) -> dict[str, A
         )
     metadata = json.loads(found["manifest.json"].read_bytes())
     if metadata != plan["data"]:
-        raise JobsError("prod5 private manifest differs from the plan")
+        raise JobsError("prod6 private manifest differs from the plan")
     by_name = {item["path"]: item for item in files}
     if any(
         by_name[plan["data"]["files"][split]["path"]]["sha256"]
         != plan["data"]["files"][split]["sha256"].removeprefix("sha256:")
         for split in ("train", "dev")
     ):
-        raise JobsError("prod5 private train/dev payload differs from the plan")
+        raise JobsError("prod6 private train/dev payload differs from the plan")
     for name, expected_sha in (
         ("task-set.json", plan["data"]["selection_sha256"]),
         ("split.json", plan["data"]["split_sha256"]),
@@ -356,7 +360,7 @@ def stage_plan(plan: dict[str, Any], source: Path, archive: Path) -> dict[str, A
         value = json.loads(found[name].read_bytes())
         body = {key: item for key, item in value.items() if key != "sha256"}
         if value.get("sha256") != expected_sha or value["sha256"] != "sha256:" + digest(body):
-            raise JobsError("prod5 private task-set/split evidence differs from the plan")
+            raise JobsError("prod6 private task-set/split evidence differs from the plan")
     archive_binding = build_stage_archive(source, archive)
     value = {
         "schema": STAGE_SCHEMA,
@@ -387,17 +391,17 @@ def _safe_member(member: tarfile.TarInfo, expected: set[str]) -> None:
         or member.issym()
         or member.islnk()
     ):
-        raise ValueError("prod5 upload archive is unsafe")
+        raise ValueError("prod6 upload archive is unsafe")
 
 
 def stage_runtime(value: dict[str, Any]) -> dict[str, Any]:
     plan = _validate_seal(value, STAGE_SCHEMA)
     if (os.geteuid(), os.getegid()) != (RUNTIME_UID, RUNTIME_GID):
-        raise ValueError("prod5 stage runtime user changed")
+        raise ValueError("prod6 stage runtime user changed")
     deadline = time.monotonic() + 600
     while not UPLOAD.exists():
         if time.monotonic() >= deadline:
-            raise TimeoutError("prod5 upload did not arrive")
+            raise TimeoutError("prod6 upload did not arrive")
         time.sleep(1)
     upload_info = UPLOAD.stat()
     upload_sha256 = hashlib.sha256(UPLOAD.read_bytes()).hexdigest()
@@ -405,27 +409,27 @@ def stage_runtime(value: dict[str, Any]) -> dict[str, Any]:
         upload_info.st_size != plan["archive"]["bytes"]
         or upload_sha256 != plan["archive"]["sha256"]
     ):
-        raise ValueError("prod5 uploaded archive digest changed")
+        raise ValueError("prod6 uploaded archive digest changed")
     destination = Path(plan["destination"])
     if destination.exists() or destination.is_symlink():
-        raise FileExistsError("prod5 data destination already exists")
+        raise FileExistsError("prod6 data destination already exists")
     parent = destination.parent
     parent.mkdir(parents=True, exist_ok=True)
     temp = parent / ("." + destination.name + ".tmp-" + digest(plan)[:12])
     if temp.exists() or temp.is_symlink():
-        raise FileExistsError("prod5 stage temporary path already exists")
+        raise FileExistsError("prod6 stage temporary path already exists")
     temp.mkdir(mode=0o700)
     expected = {item["path"] for item in plan["files"]}
     try:
         with tarfile.open(UPLOAD, "r:gz") as archive:
             members = archive.getmembers()
             if {member.name for member in members} != expected:
-                raise ValueError("prod5 upload inventory changed")
+                raise ValueError("prod6 upload inventory changed")
             for member in members:
                 _safe_member(member, expected)
                 stream = archive.extractfile(member)
                 if stream is None:
-                    raise ValueError("prod5 upload member cannot be read")
+                    raise ValueError("prod6 upload member cannot be read")
                 path = temp / member.name
                 with path.open("xb") as output:
                     shutil.copyfileobj(stream, output, 1024 * 1024)
@@ -439,7 +443,7 @@ def stage_runtime(value: dict[str, Any]) -> dict[str, Any]:
             info = path.stat()
             actual = hashlib.sha256(path.read_bytes()).hexdigest()
             if info.st_size != item["bytes"] or actual != item["sha256"]:
-                raise ValueError("prod5 staged file digest changed")
+                raise ValueError("prod6 staged file digest changed")
             observed.append({"path": path.name, "bytes": info.st_size, "sha256": actual})
         os.rename(temp, destination)
         parent_fd = os.open(parent, os.O_RDONLY)
@@ -626,7 +630,7 @@ def preflight_runtime(plan: dict[str, Any]) -> dict[str, Any]:
     if proof.get("status") != "passed" or proof.get("gpus") != 0:
         raise PreflightGateError(
             "scientific_preflight_contract",
-            ValueError("prod5 scientific CPU preflight failed"),
+            ValueError("prod6 scientific CPU preflight failed"),
         )
     # W&B run creation is deliberately create-once at the training boundary:
     # ScalarTracking calls wandb.init(..., resume="never") with the immutable
@@ -639,7 +643,7 @@ def preflight_runtime(plan: dict[str, Any]) -> dict[str, Any]:
     # rollout/optimizer work.
     if not os.environ.get("WANDB_API_KEY"):
         raise PreflightGateError(
-            "wandb_credential", RuntimeError("prod5 W&B read credential is absent")
+            "wandb_credential", RuntimeError("prod6 W&B read credential is absent")
         )
     arguments = plan["arguments"]
     wandb_binding = {
@@ -655,7 +659,7 @@ def preflight_runtime(plan: dict[str, Any]) -> dict[str, Any]:
         "resume": "never",
     }:
         raise PreflightGateError(
-            "wandb_binding", ValueError("prod5 W&B create-once binding changed")
+            "wandb_binding", ValueError("prod6 W&B create-once binding changed")
         )
     return _seal(
         {
@@ -724,11 +728,11 @@ def server_dry_run(
         timeout=60,
     )
     if result.returncode:
-        raise JobsError("prod5 Kubernetes server dry-run failed")
+        raise JobsError("prod6 Kubernetes server dry-run failed")
     try:
         rendered = json.loads(result.stdout)
     except ValueError as exc:
-        raise JobsError("prod5 Kubernetes server dry-run returned invalid JSON") from exc
+        raise JobsError("prod6 Kubernetes server dry-run returned invalid JSON") from exc
     return rendered
 
 
@@ -737,7 +741,7 @@ def validate_cpu_preview(
 ) -> dict[str, Any]:
     """Accept only normal deterministic Kubernetes defaults on a zero-GPU Job."""
     if context not in {DEV_CONTEXT, PROD_CONTEXT} or purpose not in {"data_stage", "preflight"}:
-        raise JobsError("prod5 CPU preview binding is invalid")
+        raise JobsError("prod6 CPU preview binding is invalid")
     actual = copy.deepcopy(rendered)
     status = actual.pop("status", None)
     metadata = actual.get("metadata", {})
@@ -777,7 +781,7 @@ def validate_cpu_preview(
     try:
         UUID(uid)
     except (TypeError, ValueError) as exc:
-        raise JobsError("prod5 CPU server dry-run lacks a UID") from exc
+        raise JobsError("prod6 CPU server dry-run lacks a UID") from exc
     if (
         status != {}
         or not isinstance(timestamp, str)
@@ -806,7 +810,7 @@ def validate_cpu_preview(
         or expected["metadata"]["annotations"].get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
         or expected["spec"]["template"]["spec"].get("priorityClassName") != "c1"
     ):
-        raise JobsError("prod5 CPU server dry-run changed the exact Job")
+        raise JobsError("prod6 CPU server dry-run changed the exact Job")
     return _seal(
         {
             "schema": CPU_PREVIEW_SCHEMA,
@@ -837,12 +841,12 @@ def duplicate_checks(
         for resource in ("rayjob", "raycluster", "job", "workload", "pod"):
             result = _kubectl(runner, context, "get", resource, "--output=json")
             if result.returncode:
-                raise JobsError("prod5 Kubernetes duplicate inventory failed")
+                raise JobsError("prod6 Kubernetes duplicate inventory failed")
             kube += 1
             try:
                 items = json.loads(result.stdout).get("items", [])
             except (AttributeError, ValueError) as exc:
-                raise JobsError("prod5 Kubernetes duplicate inventory is invalid") from exc
+                raise JobsError("prod6 Kubernetes duplicate inventory is invalid") from exc
             for item in items:
                 metadata = item.get("metadata", {})
                 values = [
@@ -856,7 +860,7 @@ def duplicate_checks(
                     or output in values
                     or output in serialized
                 ):
-                    raise JobsError("prod5 Kubernetes identity/output already exists")
+                    raise JobsError("prod6 Kubernetes identity/output already exists")
     api_rows = 0
     for target in ("dev", "prod"):
         with jobs_factory(token, base_url=API_URLS[target]) as client:
@@ -868,7 +872,7 @@ def duplicate_checks(
             or str(row.get("name", "")).startswith(name + "-")
             for row in rows
         ):
-            raise JobsError("prod5 Jobs API history already owns this identity/output")
+            raise JobsError("prod6 Jobs API history already owns this identity/output")
     return {"kubernetes_inventories_checked": kube, "jobs_api_rows_checked": api_rows}
 
 
@@ -895,7 +899,7 @@ def authorize(
             or proof.get("failure_alerts") != "off"
             or proof.get("submitted") is not False
         ):
-            raise JobsError("prod5 direct server preview was not accepted")
+            raise JobsError("prod6 direct server preview was not accepted")
     _validate_seal(stage_receipt, STAGE_RECEIPT_SCHEMA)
     staged = _validate_seal(stage_receipt.get("stage_plan"), STAGE_SCHEMA)
     staged_files = staged.get("files")
@@ -947,7 +951,7 @@ def authorize(
             for key in ("task_rows_read", "rollout_episodes", "optimizer_steps", "checkpoints")
         )
     ):
-        raise JobsError("prod5 data stage was not accepted")
+        raise JobsError("prod6 data stage was not accepted")
     expected_cpu = {
         (context, purpose, digest(job))
         for context in (DEV_CONTEXT, PROD_CONTEXT)
@@ -966,10 +970,10 @@ def authorize(
             or proof.get("failure_alerts") != "off"
             or proof.get("submitted") is not False
         ):
-            raise JobsError("prod5 CPU server preview was not accepted")
+            raise JobsError("prod6 CPU server preview was not accepted")
         observed_cpu.add((proof.get("context"), proof.get("purpose"), proof.get("manifest_sha256")))
     if observed_cpu != expected_cpu or len(cpu_previews) != 4:
-        raise JobsError("prod5 CPU server preview set is incomplete")
+        raise JobsError("prod6 CPU server preview set is incomplete")
     _validate_seal(preflight_receipt, PREFLIGHT_RECEIPT_SCHEMA)
     checked = _timestamp(preflight_receipt.get("checked_at"))
     if (
@@ -997,7 +1001,7 @@ def authorize(
         or preflight_receipt.get("ordered_multi_tool_execution_checked") is not True
         or (datetime.now(UTC) - checked).total_seconds() > 300
     ):
-        raise JobsError("prod5 CPU preflight is stale or incomplete")
+        raise JobsError("prod6 CPU preflight is stale or incomplete")
     _validate_seal(observer, "cyber_direct_cleanup_observer_armed_v1")
     pid = observer.get("observer_pid")
     if (
@@ -1013,7 +1017,7 @@ def authorize(
         or type(pid) is not int
         or pid < 1
     ):
-        raise JobsError("prod5 cleanup observer is not exactly armed")
+        raise JobsError("prod6 cleanup observer is not exactly armed")
     _timestamp(observer.get("armed_at"))
     return _seal(
         {
@@ -1059,7 +1063,7 @@ def create_once(
     jobs_factory: Callable[..., Jobs] = Jobs,
 ) -> dict[str, Any]:
     if expected != manifest(plan, request, source_preview):
-        raise JobsError("prod5 direct manifest changed")
+        raise JobsError("prod6 direct manifest changed")
     _validate_seal(authorization, AUTHORIZATION_SCHEMA)
     if authorization != authorize(
         plan,
@@ -1073,11 +1077,11 @@ def create_once(
         preflight_receipt=authorization["preflight_receipt"],
         observer=authorization["observer"],
     ):
-        raise JobsError("prod5 direct authorization changed")
+        raise JobsError("prod6 direct authorization changed")
     try:
         os.kill(authorization["observer"]["observer_pid"], 0)
     except (KeyError, OSError, TypeError) as exc:
-        raise JobsError("prod5 cleanup observer is not running") from exc
+        raise JobsError("prod6 cleanup observer is not running") from exc
     duplicate = duplicate_checks(plan, token=token, runner=runner, jobs_factory=jobs_factory)
     final_render = server_dry_run(expected, context=PROD_CONTEXT, runner=runner)
     validate_preview(plan, request, source_preview, expected, final_render, context=PROD_CONTEXT)
@@ -1087,10 +1091,10 @@ def create_once(
     try:
         os.kill(authorization["observer"]["observer_pid"], 0)
     except (KeyError, OSError, TypeError) as exc:
-        raise JobsError("prod5 cleanup observer exited before create") from exc
+        raise JobsError("prod6 cleanup observer exited before create") from exc
     journal = directory / "DIRECT_RAYJOB_CREATE.jsonl"
     if journal.exists() or journal.is_symlink():
-        raise JobsError("prod5 create intent exists; reconcile, never retry")
+        raise JobsError("prod6 create intent exists; reconcile, never retry")
     intent = {
         "state": "CREATE_INTENT_DO_NOT_RETRY",
         "recorded_at": _stamp(),
@@ -1121,14 +1125,14 @@ def create_once(
         timeout=60,
     )
     if result.returncode:
-        raise JobsError("prod5 create returned failure; reconcile intent, never retry")
+        raise JobsError("prod6 create returned failure; reconcile intent, never retry")
     try:
         created = json.loads(result.stdout)
         uid = str(UUID(created["metadata"]["uid"]))
     except (KeyError, TypeError, ValueError) as exc:
-        raise JobsError("prod5 create response is ambiguous; reconcile, never retry") from exc
+        raise JobsError("prod6 create response is ambiguous; reconcile, never retry") from exc
     if created.get("metadata", {}).get("name") != RUN_NAME:
-        raise JobsError("prod5 create returned another identity; reconcile, never retry")
+        raise JobsError("prod6 create returned another identity; reconcile, never retry")
     proof = _seal(
         {
             "schema": CREATED_SCHEMA,
@@ -1157,7 +1161,7 @@ def main() -> None:
     args = parser.parse_args()
     try:
         if (args.stage is None) == (args.preflight is None) or args.receipt != Path(STAGE_RECEIPT):
-            raise ValueError("prod5 CPU mode binding changed")
+            raise ValueError("prod6 CPU mode binding changed")
         if args.stage is not None:
             result = stage_runtime(json.loads(args.stage.read_bytes()))
         else:

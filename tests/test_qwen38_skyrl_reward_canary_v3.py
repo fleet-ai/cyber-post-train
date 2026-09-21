@@ -15,8 +15,9 @@ from training import rl_reward_canary as canary
 from training import sft, skyrl_training
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA = ROOT / "configs/qualification/qwen38-rl-reward-canary-data-prod-v4.json"
-RUN = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod-v4.json"
+DATA = ROOT / "configs/qualification/qwen38-rl-reward-canary-data-prod-v6.json"
+RUN = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod-v6.json"
+MANIFEST = ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v6.json"
 QUALIFICATION = ROOT / canary.QUALIFICATION_PATH
 QUEUE_EVIDENCE = (
     ROOT
@@ -34,80 +35,9 @@ def assert_sealed(value: dict) -> None:
 
 
 def metadata(run: dict) -> dict:
-    value = {
-        "schema": "cyber_skyrl_data_v1",
-        "name": run["name"],
-        "selection_sha256": canary.TASK_SET_SELF_SHA256,
-        "split_sha256": canary.SPLIT_SELF_SHA256,
-        "tokenizer": {
-            "backend_sha256": (
-                "ffb7a28b27dabcc333662fd3e0b0005d9e79a1c22e31453ab5a3017fbd5f25c0"
-            ),
-            "chat_template_sha256": (
-                "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
-            ),
-            "files": [
-                {
-                    "path": "tokenizer.json",
-                    "sha256": (
-                        "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3"
-                    ),
-                },
-                {
-                    "path": "tokenizer_config.json",
-                    "sha256": (
-                        "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27"
-                    ),
-                },
-                {
-                    "path": "chat_template.jinja",
-                    "sha256": (
-                        "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
-                    ),
-                },
-                {
-                    "path": "merges.txt",
-                    "sha256": (
-                        "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d"
-                    ),
-                },
-                {
-                    "path": "vocab.json",
-                    "sha256": (
-                        "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
-                    ),
-                },
-            ],
-            "repo": canary.MODEL["repo"],
-            "revision": canary.MODEL["revision"],
-        },
-        "template_sha256": (
-            "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
-        ),
-        "tool_catalog_sha256": canary.TOOL_CATALOG_SHA256,
-        "limits": copy.deepcopy(canary.LIMITS),
-        "files": {
-            "train": {
-                "path": "train.jsonl",
-                "sha256": (
-                    "sha256:47f351e97c4b3047965ebe9356663f81302efa96a874b61a4747a9564cbd04c4"
-                ),
-                "rows": 1,
-                "max_prompt_tokens": 1241,
-            },
-            "dev": {
-                "path": "dev.jsonl",
-                "sha256": (
-                    "sha256:dde3cafa3db8bf33538516f276c5891d53a06a92326575ae315de240f5474a19"
-                ),
-                "rows": 1,
-                "max_prompt_tokens": 1256,
-            },
-        },
-        "gpus": 0,
-        "environment_creates": 0,
-    }
-    value["sha256"] = "sha256:" + digest(value)
+    value = load(MANIFEST)
+    assert value["name"] == run["name"]
+    assert_sealed(value)
     return value
 
 
@@ -159,7 +89,7 @@ def test_source_package_is_exact_and_historical_preflight_is_non_gating() -> Non
     assert historical["classification"] == "historical_preflight_provenance"
     assert historical["gating"] is False
     receipt = load(QUALIFICATION.parent / historical["path"])
-    assert receipt["source"]["git_commit"] == canary.PORT_COMMITS["runtime_commit"]
+    assert receipt["source"]["git_commit"] == canary.HISTORICAL_PORT_COMMITS["runtime_commit"]
     assert receipt["submission"] == {
         "submitted": False,
         "gpu_allocation": 0,
@@ -195,8 +125,8 @@ def test_canonical_source_receipts_remain_byte_identical() -> None:
 def test_one_node_one_step_config_compiles_to_the_qualified_image(monkeypatch) -> None:
     plan, manifest = compile_canary(monkeypatch)
     request = skyrl_training.job_request(plan)
-    assert digest(plan) == "25d0abf30da462a6ba67c6ac8a3fc95f3f89a9a08e3ea295b21e8a22481630b3"
-    assert digest(request) == "98a83dbbab61f360a12ec6389adb55de637ded64dcceaa1debf0d791e754cef4"
+    assert digest(plan) == "8be2d4eccefe17a3970581798960726a99d241b2260c220d53382013c8438f5c"
+    assert digest(request) == "b7c912437cd861dd7813125ad677780476d716cfec5b7dbaf58739cfab2d0a1a"
     arguments, overrides = plan["arguments"], plan["native_overrides"]
     assert plan["data"] == manifest
     assert request["image"] == canary.IMAGE
@@ -216,9 +146,13 @@ def test_one_node_one_step_config_compiles_to_the_qualified_image(monkeypatch) -
     assert overrides["trainer.eval_interval"] == 1
     assert overrides["trainer.ckpt_interval"] == 1
     assert overrides["trainer.max_ckpts_to_keep"] == 2
-    assert overrides["generator.max_turns"] == 600
-    assert overrides["generator.max_input_length"] == 98304
-    assert overrides["generator.sampling_params"]["max_generate_length"] == 4096
+    assert overrides["generator.max_turns"] == canary.LIMITS["max_turns"]
+    assert overrides["generator.max_input_length"] == canary.LIMITS["context_tokens"]
+    assert overrides["generator.sampling_params"]["max_generate_length"] == (
+        canary.LIMITS["generation_chunk_tokens"]
+    )
+    assert overrides["generator.step_wise_trajectories"] is True
+    assert overrides["generator.merge_stepwise_output"] is False
     assert plan["qualification"]["submission_gate"]["submission_authorized"] is False
 
 
