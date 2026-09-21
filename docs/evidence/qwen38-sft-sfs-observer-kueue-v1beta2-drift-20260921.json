@@ -1,0 +1,95 @@
+{
+  "schema": "cyber_sft_sfs_observer_kueue_v1beta2_drift_v1",
+  "observed_at": "2026-09-21T12:40:41Z",
+  "canonical_main_sha": "d2f15b914e10001105b04b06b2c1f86fa8f28365",
+  "prepared_run": {
+    "name": "chris-q38-t3k32-b8-v3",
+    "plan_sha256": "8488f03a65e3d158a46697eefda2751736681e3a503c26ee9c39c63fb130679c",
+    "request_sha256": "fab27e52d445ddb7ebafeb591c7b33a65222f67e88c7c6fc63d578bac2d104e3"
+  },
+  "observer": {
+    "attempt": 1,
+    "job": {
+      "name": "chris-q38-t3k32-b8-v3-sfs-a01",
+      "uid": "d8547e34-836e-40e7-acaf-951a0b363696",
+      "terminal": "succeeded",
+      "failure_alerts": "off"
+    },
+    "workload": {
+      "name": "job-chris-q38-t3k32-b8-v3-sfs-a01-2d3f5",
+      "uid": "a4dbbffb-782c-4db9-aea4-e2053b9b6aa6",
+      "api_version": "kueue.x-k8s.io/v1beta2",
+      "queue": "training-lq",
+      "cluster_queue": "training-cq",
+      "priority": 10000,
+      "admitted": true,
+      "finished": true
+    },
+    "pod": {
+      "name": "chris-q38-t3k32-b8-v3-sfs-a01-598rt",
+      "uid": "7c3dcc88-a609-4a54-8452-2a9a06df144d",
+      "terminal": "succeeded",
+      "restarts": 0,
+      "priority_class": "c1",
+      "priority": 10000,
+      "service_account": "default",
+      "image_pull_secrets": [
+        "ecr-pull"
+      ],
+      "gpus": 0
+    }
+  },
+  "collector_result": {
+    "accepted": false,
+    "reason": "unreviewed_kueue_v1beta2_workload_fields",
+    "log_read_attempted": false,
+    "output_absence_receipt_created": false,
+    "training_rayjob_created": false
+  },
+  "live_shape": {
+    "workload_spec_priority_class_ref": {
+      "group": "kueue.x-k8s.io",
+      "kind": "WorkloadPriorityClass",
+      "name": "q1"
+    },
+    "pod_set_topology_request": {
+      "podIndexLabel": "batch.kubernetes.io/job-completion-index"
+    },
+    "job_template_image_pull_secrets": [],
+    "workload_pod_set_image_pull_secrets": [],
+    "scheduled_pod_service_account": "default",
+    "default_service_account_image_pull_secrets": [
+      "ecr-pull"
+    ],
+    "scheduled_pod_image_pull_secrets": [
+      "ecr-pull"
+    ],
+    "crd_storage_version": "v1beta2",
+    "crd_priority_class_ref_required_fields": [
+      "group",
+      "kind",
+      "name"
+    ]
+  },
+  "disposition": {
+    "attempt_one_retired": true,
+    "reuse_for_training_forbidden": true,
+    "repair": "Bind the two exact current Kueue fields and the sole scheduled-Pod ECR pull reference from the exact default ServiceAccount; reject missing, changed, or expanded values.",
+    "successor_requirement": "After reviewed code reaches canonical main, use a fresh observer attempt, UID, and receipt no more than five minutes old."
+  },
+  "repair_validation": {
+    "observed_at": "2026-09-21T12:55:41Z",
+    "exact_terminal_objects_accepted": true,
+    "job_workload_pod_service_account_bound": true,
+    "log_read_attempted": false,
+    "output_absence_receipt_created": false,
+    "training_rayjob_created": false
+  },
+  "privacy": {
+    "credentials_present": false,
+    "prompts_present": false,
+    "private_logs_present": false,
+    "scores_present": false
+  },
+  "sha256": "31fbf61dc27e2840a17a4b9193ca6b252d47139b91b0e02e70e4a553aadefb15"
+}

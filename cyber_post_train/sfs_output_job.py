@@ -44,6 +44,14 @@ QUEUE_PRIORITY_LABEL = "kueue.x-k8s.io/priority-class"
 QUEUE = "training-lq"
 QUEUE_PRIORITY = "q1"
 EFFECTIVE_C1_PRIORITY = 10_000
+WORKLOAD_PRIORITY_CLASS_REF = {
+    "group": "kueue.x-k8s.io",
+    "kind": "WorkloadPriorityClass",
+    "name": QUEUE_PRIORITY,
+}
+WORKLOAD_TOPOLOGY_REQUEST = {
+    "podIndexLabel": "batch.kubernetes.io/job-completion-index",
+}
 SFT_SCHEMAS = {"cyber_sft_runtime_v2", "cyber_sft_runtime_dense_v1"}
 _DRIVER_PATH = Path(__file__).with_name("sfs_output_driver.py")
 _SERVER_METADATA_KEYS = {
@@ -108,6 +116,7 @@ _DEFAULT_LIVE_TOLERATIONS = (
         "tolerationSeconds": 300,
     },
 )
+_DEFAULT_SCHEDULED_POD_PULL_SECRETS = [{"name": "ecr-pull"}]
 _KUBERNETES_UID = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
 )
@@ -488,12 +497,47 @@ def _normalize_pod_serialization(actual: Any, expected: dict) -> Any:
     return normalized
 
 
-def _validate_pod_spec(actual: Any, expected: dict, *, scheduled: bool) -> None:
+def _validate_default_service_account(actual: Any) -> None:
+    if not isinstance(actual, dict):
+        raise ValueError("output-check ServiceAccount readback is malformed")
+    metadata = actual.get("metadata")
+    if (
+        actual.get("apiVersion") != "v1"
+        or actual.get("kind") != "ServiceAccount"
+        or not isinstance(metadata, dict)
+        or metadata.get("name") != "default"
+        or metadata.get("namespace") != NAMESPACE
+        or actual.get("imagePullSecrets") != _DEFAULT_SCHEDULED_POD_PULL_SECRETS
+        or actual.get("secrets") not in (None, [])
+    ):
+        raise ValueError("output-check default ServiceAccount pull-secret binding drifted")
+
+
+def _validate_pod_spec(
+    actual: Any,
+    expected: dict,
+    *,
+    scheduled: bool,
+    service_account: dict | None = None,
+) -> None:
     actual = _normalize_pod_serialization(actual, expected)
     allowed = {*expected, *_SERVER_POD_DEFAULTS}
     if scheduled:
         allowed.add("nodeName")
     pod_spec = _only_keys(actual, allowed, "Pod spec")
+    if scheduled:
+        _validate_default_service_account(service_account)
+        if pod_spec.get("serviceAccountName") != "default":
+            raise ValueError("output-check scheduled Pod ServiceAccount drifted")
+    elif service_account is not None:
+        raise ValueError("pre-admission output-check validation received a ServiceAccount")
+    if scheduled and expected.get("imagePullSecrets") == []:
+        if pod_spec.get("imagePullSecrets") != _DEFAULT_SCHEDULED_POD_PULL_SECRETS:
+            raise ValueError("server output-check Pod imagePullSecrets drifted")
+        # The production namespace's default ServiceAccount injects exactly
+        # this ECR pull reference into the scheduled Pod, not the Job template
+        # or Kueue PodSet. It is never accepted as an env/volume Secret.
+        pod_spec["imagePullSecrets"] = []
     for key, value in _SERVER_POD_DEFAULTS.items():
         if key in pod_spec and pod_spec[key] != value:
             raise ValueError(f"server output-check Pod default {key} drifted")
@@ -713,7 +757,13 @@ def _validate_workload_podset(
         or assignment.get("count") != 1
     ):
         raise ValueError("output-check Workload main PodSet identity or count drifted")
-    _only_keys(podset, {"name", "count", "template"}, "Workload PodSet")
+    _only_keys(
+        podset,
+        {"name", "count", "template", "topologyRequest"},
+        "Workload PodSet",
+    )
+    if podset.get("topologyRequest") != WORKLOAD_TOPOLOGY_REQUEST:
+        raise ValueError("output-check Workload topology request drifted")
     _only_keys(
         assignment,
         {"name", "count", "flavors", "resourceUsage"},
@@ -820,6 +870,7 @@ def _validate_admitted_workload(
             "active",
             "podSets",
             "priority",
+            "priorityClassRef",
             "priorityClassName",
             "priorityClassSource",
             "queueName",
@@ -829,12 +880,13 @@ def _validate_admitted_workload(
     if (
         spec.get("queueName") != QUEUE
         or spec.get("priority") != EFFECTIVE_C1_PRIORITY
+        or spec.get("priorityClassRef") != WORKLOAD_PRIORITY_CLASS_REF
         or spec.get("active", True) is not True
     ):
         raise ValueError("output-check Workload queue or effective priority drifted")
-    # Live Fleet Kueue v1beta2 Workloads leave these two optional fields null.
-    # The exact persisted Job label proves q1; the Workload's numeric priority
-    # proves the effective policy that Kueue admitted.
+    # Current Fleet Kueue v1beta2 Workloads bind q1 through priorityClassRef.
+    # The retired scalar class/source fields must remain absent, while numeric
+    # priority proves the effective policy that Kueue admitted.
     if spec.get("priorityClassName") is not None or spec.get("priorityClassSource") is not None:
         raise ValueError("output-check Workload priority shape differs from live policy")
     status = workload.get("status")
@@ -881,6 +933,7 @@ def validate_completed_sfs_output_job(
     job: dict,
     workloads: dict,
     pods: dict,
+    service_account: dict,
 ) -> str:
     """Bind one successful Pod to the exact created Job before reading its logs."""
     admitted_workload = _validate_admitted_workload(package, job, workloads)
@@ -926,6 +979,7 @@ def validate_completed_sfs_output_job(
         pod.get("spec", {}),
         package.job["spec"]["template"]["spec"],
         scheduled=True,
+        service_account=service_account,
     )
     live_template_metadata = job["spec"]["template"]["metadata"]
     if metadata.get("annotations") != live_template_metadata["annotations"]:
@@ -961,11 +1015,12 @@ def collect_sfs_output_receipt(
     job: dict,
     workloads: dict,
     pods: dict,
+    service_account: dict,
     logs: str,
     *,
     now: float | None = None,
 ) -> dict:
-    validate_completed_sfs_output_job(package, job, workloads, pods)
+    validate_completed_sfs_output_job(package, job, workloads, pods, service_account)
     lines = logs.splitlines()
     if len(lines) != 1 or not lines[0].startswith(LOG_PREFIX):
         raise ValueError("output-check logs do not contain one sanitized receipt")
