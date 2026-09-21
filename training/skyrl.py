@@ -43,6 +43,10 @@ class SkyRLConfig:
     context_tokens: int = 98304
     response_tokens: int = 81920
     tokens_per_turn: int = 4096
+    generation_chunk_tokens: int = 4096
+    compaction_trigger_tokens: int = 32768
+    compaction_summary_tokens: int = 4096
+    compaction_enabled: bool = False
     max_turns: int = 64
 
     def validate(self):
@@ -83,12 +87,17 @@ class SkyRLConfig:
             "context_tokens",
             "response_tokens",
             "tokens_per_turn",
+            "generation_chunk_tokens",
+            "compaction_trigger_tokens",
+            "compaction_summary_tokens",
             "max_turns",
         ):
             if type(getattr(self, key)) is not int or getattr(self, key) < 1:
                 raise ValueError("SkyRL counts must be positive integers")
         if self.nodes not in (1, 2) or self.samples_per_prompt < 2 or self.max_turns < 2:
             raise ValueError("profile requires 1–2 whole nodes and grouped GRPO samples")
+        if type(self.compaction_enabled) is not bool:
+            raise ValueError("compaction mode must be explicit")
         if self.train_rows % self.groups or self.groups * self.samples_per_prompt % (
             8 * self.nodes
         ):
@@ -99,7 +108,16 @@ class SkyRLConfig:
             raise ValueError("seed must be a nonnegative integer")
         if type(self.lr) not in (int, float) or not math.isfinite(self.lr) or self.lr <= 0:
             raise ValueError("learning rate must be finite and positive")
-        if not self.tokens_per_turn <= self.response_tokens < self.context_tokens <= 98304:
+        if not (
+            self.generation_chunk_tokens <= self.tokens_per_turn <= self.response_tokens
+            and self.compaction_summary_tokens <= self.tokens_per_turn
+            and (
+                not self.compaction_enabled or self.compaction_trigger_tokens > self.tokens_per_turn
+            )
+            and self.compaction_trigger_tokens + self.tokens_per_turn < self.context_tokens
+            and self.context_tokens <= 262144
+            and (self.compaction_enabled or self.response_tokens < self.context_tokens)
+        ):
             raise ValueError("generation budgets exceed the reviewed Qwen context envelope")
 
 
@@ -113,13 +131,15 @@ def overrides(config: SkyRLConfig) -> dict:
     config.validate()
     output = config.output_root
     sampling = {
-        "max_generate_length": config.tokens_per_turn,
+        "max_generate_length": (
+            config.generation_chunk_tokens if config.compaction_enabled else config.tokens_per_turn
+        ),
         "temperature": 1.0,
         "top_p": 1.0,
         "top_k": -1,
         "logprobs": 0,
     }
-    return {
+    values = {
         "data.train_data": [config.train_data],
         "data.val_data": [config.dev_data],
         "data.dataloader.num_workers": 0,
@@ -154,7 +174,11 @@ def overrides(config: SkyRLConfig) -> dict:
         "trainer.eval_batch_size": config.dev_rows,
         "trainer.eval_before_train": True,
         "trainer.eval_interval": config.eval_interval,
-        "trainer.max_prompt_length": config.context_tokens - config.response_tokens,
+        "trainer.max_prompt_length": (
+            config.compaction_trigger_tokens
+            if config.compaction_enabled
+            else config.context_tokens - config.response_tokens
+        ),
         "trainer.ckpt_path": output + "/checkpoints",
         "trainer.ckpt_interval": config.checkpoint_interval,
         "trainer.max_ckpts_to_keep": config.keep_checkpoints,
@@ -184,7 +208,7 @@ def overrides(config: SkyRLConfig) -> dict:
         "generator.max_input_length": config.context_tokens,
         "generator.sampling_params": sampling,
         "generator.eval_sampling_params": {**sampling, "temperature": 0.0},
-        "generator.step_wise_trajectories": False,
+        "generator.step_wise_trajectories": config.compaction_enabled,
         "generator.zero_reward_on_non_stop": False,
         "generator.apply_overlong_filtering": False,
         "generator.inference_engine.num_engines": config.nodes * 2,
@@ -195,6 +219,9 @@ def overrides(config: SkyRLConfig) -> dict:
         "generator.inference_engine.max_num_seqs": config.groups * config.samples_per_prompt,
         "generator.inference_engine.engine_init_kwargs.max_model_len": config.context_tokens,
     }
+    if config.compaction_enabled:
+        values["generator.merge_stepwise_output"] = False
+    return values
 
 
 def native_config(config: SkyRLConfig):
@@ -205,4 +232,23 @@ def native_config(config: SkyRLConfig):
     modules = {name: _module(name, sha) for name, sha in NATIVE_SOURCES.items()}
     cfg = modules["skyrl.train.config.config"].SkyRLTrainConfig.from_cli_overrides(values)
     modules["skyrl.train.utils.utils"].validate_cfg(cfg)
+    return cfg
+
+
+def diagnostic_native_config(config: SkyRLConfig):
+    """Parse only the engine topology while disabling training telemetry."""
+    from .skyrl_episode import _module
+
+    values = overrides(config)
+    values.update(
+        {
+            "trainer.logger": "console",
+            "trainer.enable_ray_gpu_monitor": False,
+        }
+    )
+    modules = {name: _module(name, sha) for name, sha in NATIVE_SOURCES.items()}
+    cfg = modules["skyrl.train.config.config"].SkyRLTrainConfig.from_cli_overrides(values)
+    modules["skyrl.train.utils.utils"].validate_cfg(cfg)
+    if cfg.trainer.logger != "console" or cfg.trainer.enable_ray_gpu_monitor is not False:
+        raise ValueError("native diagnostic telemetry controls changed")
     return cfg

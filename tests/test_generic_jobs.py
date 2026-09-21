@@ -6,13 +6,37 @@ import pytest
 import yaml
 
 from cyber_post_train.jobs import (
+    API_URLS,
     Jobs,
     JobsError,
+    plan_api_target,
     quantity,
     safe_status,
     validate_preview,
     validate_request,
 )
+
+
+def test_plan_api_target_is_immutable_and_closed() -> None:
+    assert plan_api_target(None) == ("prod", API_URLS["prod"])
+    assert plan_api_target({}) == ("prod", API_URLS["prod"])
+    for target in ("dev", "prod"):
+        plan = {
+            "execution": {
+                "cluster_target": target,
+                "jobs_api_base_url": API_URLS[target],
+            }
+        }
+        assert plan_api_target(plan) == (target, API_URLS[target])
+    for execution in (
+        {"cluster_target": "dev"},
+        {"jobs_api_base_url": API_URLS["dev"]},
+        {"cluster_target": "dev", "jobs_api_base_url": API_URLS["prod"]},
+        {"cluster_target": "prod", "jobs_api_base_url": API_URLS["dev"]},
+        {"cluster_target": "staging", "jobs_api_base_url": "https://example.invalid"},
+    ):
+        with pytest.raises(JobsError, match="incomplete or mismatched"):
+            plan_api_target({"execution": execution})
 
 
 def config():
@@ -114,6 +138,39 @@ def test_large_runtime_bundle_is_chunked_and_digest_checked(tmp_path):
     value["env"]["CYBER_RUNTIME_BUNDLE_0"] = "unreviewed"
     with pytest.raises(JobsError, match="reserved"):
         bundled_request(value, {"run.py": "pass"}, "run", [])
+
+
+def test_runtime_bundle_can_obey_stricter_fleetjob_env_limit() -> None:
+    import random
+
+    from cyber_post_train.jobs import bundled_request
+
+    payload = random.Random(43).randbytes(60000).hex()
+    request = bundled_request(
+        config(),
+        {"run.py": "pass", "payload.txt": payload},
+        "run",
+        [],
+        transport_split_threshold=30000,
+        transport_chunk_size=30000,
+    )
+    chunks = {
+        key: value
+        for key, value in request["env"].items()
+        if key.startswith("CYBER_RUNTIME_BUNDLE")
+    }
+    assert len(chunks) > 1
+    assert max(map(len, chunks.values())) <= 30000
+    for threshold, size in ((0, 1), (30000, 30001), (120001, 30000)):
+        with pytest.raises(JobsError, match="transport limits"):
+            bundled_request(
+                config(),
+                {"run.py": "pass"},
+                "run",
+                [],
+                transport_split_threshold=threshold,
+                transport_chunk_size=size,
+            )
 
 
 def test_environment_size_limit_counts_utf8_bytes_and_name():
