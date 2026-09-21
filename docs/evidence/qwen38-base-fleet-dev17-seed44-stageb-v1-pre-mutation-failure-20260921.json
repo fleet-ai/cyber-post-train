@@ -1,0 +1,135 @@
+{
+  "schema": "qwen38_fleet_dev17_seed44_stageb_pre_mutation_failure_v1",
+  "observed_at": "2026-09-21T23:52:00Z",
+  "live_evidence_binding": {
+    "kubernetes_context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+    "namespace": "fleet-train-jobs",
+    "context_asserted_before_every_live_read": true
+  },
+  "predecessor": {
+    "job": {
+      "name": "chris-q38-s44-base-reroll-v1",
+      "uid": "fe2d6df2-9a04-4247-a246-8331d0a5571f",
+      "condition": "Failed",
+      "reason": "BackoffLimitExceeded",
+      "root_failure_alert_annotation": "off"
+    },
+    "pod": {
+      "name": "chris-q38-s44-base-reroll-v1-l25q4",
+      "uid": "14ef0116-67b5-4c41-bb86-2ad0f9948d12",
+      "phase": "Failed",
+      "restart_count": 0,
+      "exit_code": 1
+    },
+    "config_map": {
+      "name": "chris-q38-s44-base-reroll-code-v1",
+      "uid": "2bc4cb18-80aa-44df-98a8-7dd5b512f7dc"
+    },
+    "secret": {
+      "name": "chris-q38-s44-base-reroll-intent-v1",
+      "uid": "7728d27b-2994-4626-8b80-cde8a266edaf"
+    },
+    "controller_terminal": {
+      "schema_version": "fleet-reviewed-recovery-controller-terminal-v2",
+      "accepted": false,
+      "controller_failure_code": "reviewed_recovery_v2_startup_failed",
+      "canonical_json_line_sha256": "sha256:d431aa44b73234e8cc173a1ff063bbd011b1d69a883bbca43c5ca0fbf4580ec4",
+      "scores_included": false,
+      "prompts_or_traces_included": false,
+      "private_cell_task_session_or_trace_identifiers_included": false
+    }
+  },
+  "startup_diagnostic": {
+    "pod_name": "chris-q38-s44-base-reroll-diagnostic-v1",
+    "pod_uid": "74403a9a-2b84-49d1-93e3-8b331ffb3cb6",
+    "config_map_name": "chris-q38-s44-base-reroll-diagnostic-code-v1",
+    "config_map_uid": "0beab499-bccf-4a05-9c94-9f4f3e3fa759",
+    "phase": "Succeeded",
+    "restart_count": 0,
+    "exit_code": 0,
+    "passed_stages": [
+      "load_intent",
+      "database_and_evaluation_preflight",
+      "harness_archive_digest",
+      "docker_load_harness",
+      "docker_inspect_harness",
+      "docker_pull_proxy",
+      "evaluate_check_images",
+      "fleet_team_and_route",
+      "eligibility_observation_one",
+      "eligibility_observation_two"
+    ],
+    "terminal_canonical_json_line_sha256": "sha256:98c87631437ae625556c6a6fa0835aa19c4632a3f80e8a4b310fde19890a5c68",
+    "ledger_mutations": 0,
+    "model_calls": 0,
+    "scoring_calls": 0,
+    "private_content_included": false,
+    "objects_released_after_terminal_evidence": true
+  },
+  "successor_preflight": {
+    "pod_name": "chris-q38-s44-base-reroll-v2-preflight-v1",
+    "pod_uid": "8bc8d450-2303-4a8d-b782-a6d62c5b5327",
+    "config_map_name": "chris-q38-s44-base-reroll-v2-preflight-code-v1",
+    "config_map_uid": "e6a49c92-c6bc-4f3f-bb99-7fbebd5b25db",
+    "source_sha256": "sha256:788edd01747d3f0eb908de6dbdaa64709b95e7d3ab55e5c2744ba0e722e2b461",
+    "phase": "Succeeded",
+    "restart_count": 0,
+    "exit_code": 0,
+    "receipt_sha256": "sha256:e012b8fe162f378c85bbf4976629f20344cc056c4c121be51bc05e1da842aed7",
+    "evaluation_plan_sha256": "sha256:844d8ebdaed6e8588c02187c8520eaad942a142e0a83961c19b6df3a46cf0883",
+    "ledger_plan_sha256": "sha256:04dc90eb59e133cdc40e375b09aa0a3d7cc9c325f7dddc438fd10450661dbae6",
+    "reviewed_intent_sha256": "sha256:b94bfc3a5e84eda07d612f4397cc37bb51abdd94f8f0fc2d27a3ce817b3eb1a9",
+    "route_profile_sha256": "sha256:f5098febc350183b75de6c285e7ed224e950c4f74269c538f6f4fdcc9dd94f8f",
+    "route_ready": true,
+    "ledger_census": {
+      "total": 17,
+      "accepted": 15,
+      "retry_review": 2,
+      "local_results": 15,
+      "active": 0,
+      "stale_active": 0
+    },
+    "selected_roster": {
+      "count": 2,
+      "retry_review": 2,
+      "retry_count_zero": 2,
+      "reconciliation_digest_null": 2,
+      "session_id_null": 2,
+      "receipt_digest_null": 2,
+      "local_result_count": 0,
+      "matching_recovery_apply_receipt_count": 0,
+      "exact_authoritative_session_count": 0,
+      "model_execution_artifact_count": 0,
+      "scoring_artifact_count": 0
+    },
+    "predecessor_output_root": "/mnt/sfs/jobs/chris-q38-s44-base-reroll-v1",
+    "successor_output_root": "/mnt/sfs/jobs/chris-q38-s44-base-reroll-v2",
+    "predecessor_output_absent": true,
+    "successor_output_absent": true,
+    "two_identical_eligibility_observations": true,
+    "ledger_mutations": 0,
+    "model_generation_calls": 0,
+    "scoring_calls": 0,
+    "accepted_cell_replays": 0,
+    "scores_included": false,
+    "prompts_responses_flags_rewards_or_traces_included": false,
+    "cell_task_session_or_trace_identifiers_included": false,
+    "objects_released_after_terminal_evidence": true
+  },
+  "classification": {
+    "failure_stage": "before_predecessor_output_root_creation",
+    "predecessor_apply_intent_executed": false,
+    "predecessor_model_generation_started": false,
+    "predecessor_scoring_started": false,
+    "persistent_source_or_identity_defect_observed": false,
+    "unique_successor_allowed": true,
+    "same_name_replay_allowed": false,
+    "third_successor_on_unchanged_signature_allowed": false
+  },
+  "privacy": {
+    "scores_included": false,
+    "prompts_responses_flags_rewards_or_traces_included": false,
+    "cell_task_session_or_trace_identifiers_included": false
+  },
+  "receipt_sha256": "sha256:0be0d611e086ad1c3874aad7d8e5ac2b60c01a6b50b77da7f4b89d3e916cdf26"
+}

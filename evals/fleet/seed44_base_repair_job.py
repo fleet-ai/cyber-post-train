@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import hashlib
 import json
 import os
+import re
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -14,6 +17,7 @@ from evals.fleet import reviewed_recovery_v2
 from evals.fleet import stored_session_reconciliation_v2 as stored_v2
 
 SCHEMA = "qwen38-fleet-dev17-seed44-base-narrow-repair-v1"
+SUCCESSOR_SCHEMA = "qwen38-fleet-dev17-seed44-base-stageb-successor-v1"
 FAILURE_ALERT_ANNOTATION = "fleet.ai/failure-alerts"
 NAMESPACE = "fleet-train-jobs"
 EXPECTED_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
@@ -119,7 +123,7 @@ exec uv run --no-project --with httpx==0.28.1 --with pyyaml==6.0.3 \
 """
 
 
-def _rollout_script() -> str:
+def _rollout_script(worker_id: str = "q38_s44_base_repair") -> str:
     modules = " ".join(name for name in ROLLOUT_CODE_FILES if name != "jobs.py")
     return f"""#!/usr/bin/env bash
 set -euo pipefail
@@ -158,7 +162,7 @@ exec uv run --no-project --with httpx==0.28.1 --with pyyaml==6.0.3 \
   --harness-receipt "$HARNESS_RECEIPT" \
   --harness-receipt-sha256 "$HARNESS_RECEIPT_SHA256" \
   --reviewed-recovery-intent /intent/intent.json \
-  --worker-id q38_s44_base_repair
+  --worker-id {worker_id}
 """
 
 
@@ -251,6 +255,221 @@ def _terminal_semantics(value: dict[str, Any], source: dict[str, Any]) -> None:
         )
     ):
         raise PackageError("source terminal evidence semantics differ from narrow repair")
+
+
+def _successor_plan(repo_root: Path, value: dict[str, Any]) -> dict[str, Any]:
+    """Materialize the sole reviewed Stage B successor over the immutable v1 plan."""
+
+    if set(value) != {
+        "schema",
+        "status",
+        "launchable",
+        "base_repair_plan",
+        "predecessor_evidence",
+        "stage_overrides",
+        "contract",
+        "live_evidence_binding",
+        "operation",
+        "sha256",
+    } or value.get("sha256") != _canonical_digest(
+        {key: item for key, item in value.items() if key != "sha256"}
+    ):
+        raise PackageError("Stage B successor plan identity differs")
+    if (
+        value.get("status") != "source_prepared_not_launchable"
+        or value.get("launchable") is not False
+    ):
+        raise PackageError("Stage B successor plan must remain launch inert")
+    if value.get("live_evidence_binding") != {
+        "kubernetes_context": EXPECTED_CONTEXT,
+        "namespace": NAMESPACE,
+        "assert_before_every_live_read": True,
+        "object_absence_valid_only_after_exact_binding_assertion": True,
+    }:
+        raise PackageError("Stage B successor live evidence binding differs")
+    if set(value.get("operation", {}).values()) != {0}:
+        raise PackageError("Stage B successor source claims a live operation")
+
+    base_reference = value.get("base_repair_plan")
+    if not isinstance(base_reference, dict) or set(base_reference) != {
+        "path",
+        "file_sha256",
+        "sha256",
+    }:
+        raise PackageError("Stage B successor base plan reference is invalid")
+    base_path = _safe_repo_path(repo_root, base_reference["path"], "base repair plan")
+    base = _load(base_path, "base repair plan")
+    if any(
+        (
+            base.get("schema") != SCHEMA,
+            base.get("sha256") != base_reference["sha256"],
+            "sha256:" + _sha256(base_path.read_bytes()) != base_reference["file_sha256"],
+            base.get("sha256")
+            != _canonical_digest({key: item for key, item in base.items() if key != "sha256"}),
+        )
+    ):
+        raise PackageError("Stage B successor base plan differs")
+
+    evidence_reference = value.get("predecessor_evidence")
+    if not isinstance(evidence_reference, dict) or set(evidence_reference) != {
+        "path",
+        "file_sha256",
+        "receipt_sha256",
+    }:
+        raise PackageError("Stage B predecessor evidence reference is invalid")
+    evidence_path = _safe_repo_path(
+        repo_root, evidence_reference["path"], "Stage B predecessor evidence"
+    )
+    evidence = _load(evidence_path, "Stage B predecessor evidence")
+    if any(
+        (
+            "sha256:" + _sha256(evidence_path.read_bytes()) != evidence_reference["file_sha256"],
+            evidence.get("receipt_sha256") != evidence_reference["receipt_sha256"],
+            evidence.get("receipt_sha256")
+            != _canonical_digest(
+                {key: item for key, item in evidence.items() if key != "receipt_sha256"}
+            ),
+        )
+    ):
+        raise PackageError("Stage B predecessor evidence digest differs")
+
+    predecessor = evidence.get("predecessor", {})
+    diagnostic = evidence.get("startup_diagnostic", {})
+    preflight = evidence.get("successor_preflight", {})
+    selected = preflight.get("selected_roster", {})
+    classification = evidence.get("classification", {})
+    contract = value.get("contract", {})
+    expected_stages = [
+        "load_intent",
+        "database_and_evaluation_preflight",
+        "harness_archive_digest",
+        "docker_load_harness",
+        "docker_inspect_harness",
+        "docker_pull_proxy",
+        "evaluate_check_images",
+        "fleet_team_and_route",
+        "eligibility_observation_one",
+        "eligibility_observation_two",
+    ]
+    try:
+        predecessor_uid = str(uuid.UUID(predecessor["job"]["uid"]))
+        diagnostic_uid = str(uuid.UUID(diagnostic["pod_uid"]))
+        preflight_uid = str(uuid.UUID(preflight["pod_uid"]))
+    except (KeyError, TypeError, ValueError) as exc:
+        raise PackageError("Stage B predecessor evidence UID is invalid") from exc
+    if any(
+        (
+            predecessor_uid != predecessor["job"]["uid"],
+            diagnostic_uid != diagnostic["pod_uid"],
+            preflight_uid != preflight["pod_uid"],
+            predecessor["job"].get("name") != base["stages"]["single_rollout_repair"]["job_name"],
+            predecessor["job"].get("condition") != "Failed",
+            predecessor["job"].get("reason") != "BackoffLimitExceeded",
+            predecessor["job"].get("root_failure_alert_annotation") != "off",
+            predecessor.get("controller_terminal", {}).get("accepted") is not False,
+            predecessor.get("controller_terminal", {}).get("controller_failure_code")
+            != "reviewed_recovery_v2_startup_failed",
+            diagnostic.get("phase") != "Succeeded",
+            diagnostic.get("exit_code") != 0,
+            diagnostic.get("passed_stages") != expected_stages,
+            diagnostic.get("ledger_mutations") != 0,
+            diagnostic.get("model_calls") != 0,
+            diagnostic.get("scoring_calls") != 0,
+            diagnostic.get("objects_released_after_terminal_evidence") is not True,
+            preflight.get("phase") != "Succeeded",
+            preflight.get("exit_code") != 0,
+            preflight.get("receipt_sha256")
+            != "sha256:e012b8fe162f378c85bbf4976629f20344cc056c4c121be51bc05e1da842aed7",
+            preflight.get("ledger_census")
+            != {
+                "total": 17,
+                "accepted": 15,
+                "retry_review": 2,
+                "local_results": 15,
+                "active": 0,
+                "stale_active": 0,
+            },
+            selected.get("count") != 2,
+            selected.get("retry_review") != 2,
+            selected.get("retry_count_zero") != 2,
+            selected.get("reconciliation_digest_null") != 2,
+            selected.get("session_id_null") != 2,
+            selected.get("receipt_digest_null") != 2,
+            selected.get("local_result_count") != 0,
+            selected.get("matching_recovery_apply_receipt_count") != 0,
+            selected.get("exact_authoritative_session_count") != 0,
+            selected.get("model_execution_artifact_count") != 0,
+            selected.get("scoring_artifact_count") != 0,
+            preflight.get("predecessor_output_absent") is not True,
+            preflight.get("successor_output_absent") is not True,
+            preflight.get("two_identical_eligibility_observations") is not True,
+            preflight.get("ledger_mutations") != 0,
+            preflight.get("model_generation_calls") != 0,
+            preflight.get("scoring_calls") != 0,
+            preflight.get("accepted_cell_replays") != 0,
+            preflight.get("objects_released_after_terminal_evidence") is not True,
+            classification.get("failure_stage") != "before_predecessor_output_root_creation",
+            classification.get("predecessor_apply_intent_executed") is not False,
+            classification.get("predecessor_model_generation_started") is not False,
+            classification.get("predecessor_scoring_started") is not False,
+            classification.get("persistent_source_or_identity_defect_observed") is not False,
+            classification.get("unique_successor_allowed") is not True,
+            classification.get("same_name_replay_allowed") is not False,
+            classification.get("third_successor_on_unchanged_signature_allowed") is not False,
+            contract
+            != {
+                "selected_cell_count": 2,
+                "execution_generation": 2,
+                "accepted_cell_replay_count": 0,
+                "stored_session_rescore_count": 0,
+                "stored_session_regeneration_count": 0,
+                "final_eight_task_set_accessed": False,
+                "identical_private_intent_required": True,
+                "third_successor_on_unchanged_signature_allowed": False,
+            },
+        )
+    ):
+        raise PackageError("Stage B predecessor evidence semantics differ")
+
+    overrides = value.get("stage_overrides")
+    if not isinstance(overrides, dict) or set(overrides) != {
+        "job_name",
+        "config_map_name",
+        "secret_name",
+        "output_root",
+        "worker_id",
+        "run_script_sha256",
+    }:
+        raise PackageError("Stage B successor overrides are invalid")
+    old = base["stages"]["single_rollout_repair"]
+    for field in ("job_name", "config_map_name", "secret_name"):
+        if (
+            not isinstance(overrides[field], str)
+            or re.fullmatch(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?", overrides[field]) is None
+            or overrides[field] == old[field]
+        ):
+            raise PackageError("Stage B successor Kubernetes identity is invalid")
+    if (
+        not isinstance(overrides["output_root"], str)
+        or not overrides["output_root"].startswith("/mnt/sfs/jobs/")
+        or overrides["output_root"] == old["output_root"]
+        or ".." in Path(overrides["output_root"]).parts
+        or overrides["output_root"] != preflight.get("successor_output_root")
+        or old["output_root"] != preflight.get("predecessor_output_root")
+    ):
+        raise PackageError("Stage B successor output identity is invalid")
+    if not isinstance(overrides["worker_id"], str) or not overrides["worker_id"].isidentifier():
+        raise PackageError("Stage B successor worker identity is invalid")
+
+    effective = copy.deepcopy(base)
+    effective["stages"]["single_rollout_repair"].update(overrides)
+    effective["_successor_binding"] = {
+        "successor_plan_sha256": value["sha256"],
+        "predecessor_evidence_receipt_sha256": evidence["receipt_sha256"],
+        "predecessor_job_uid": predecessor["job"]["uid"],
+        "successor_preflight_receipt_sha256": preflight["receipt_sha256"],
+    }
+    return effective
 
 
 def _base_job(
@@ -435,7 +654,10 @@ def _stage(
     elif stage == "single_rollout_repair":
         intent = reviewed_recovery_v2.load_intent(intent_path)
         files = ROLLOUT_CODE_FILES
-        run_script = _rollout_script()
+        worker_id = execution.get("worker_id", "q38_s44_base_repair")
+        if not isinstance(worker_id, str) or not worker_id.isidentifier():
+            raise PackageError("rollout repair worker identity is invalid")
+        run_script = _rollout_script(worker_id)
         expected_count = 2
         dind = True
         if execution.get("execution_generation") != 2:
@@ -523,6 +745,8 @@ def _stage(
         "private_intent_content_included": False,
         "image_staging": execution.get("image_staging"),
     }
+    if successor := plan.get("_successor_binding"):
+        proof_body["successor_binding"] = successor
     proof = {**proof_body, "sha256": _canonical_digest(proof_body)}
     package = StagePackage(
         stage=stage,
@@ -542,13 +766,18 @@ def render(
     stored_intent_path: Path,
     recovery_intent_path: Path,
 ) -> dict[str, StagePackage]:
-    plan = _load(plan_path, "narrow repair plan")
-    if plan.get("schema") != SCHEMA:
-        raise PackageError("narrow repair plan schema is unsupported")
-    if plan.get("sha256") != _canonical_digest(
-        {key: item for key, item in plan.items() if key != "sha256"}
-    ):
-        raise PackageError("narrow repair plan self digest differs")
+    source_plan = _load(plan_path, "narrow repair plan")
+    is_successor = source_plan.get("schema") == SUCCESSOR_SCHEMA
+    if is_successor:
+        plan = _successor_plan(repo_root, source_plan)
+    else:
+        plan = source_plan
+        if plan.get("schema") != SCHEMA:
+            raise PackageError("narrow repair plan schema is unsupported")
+        if plan.get("sha256") != _canonical_digest(
+            {key: item for key, item in plan.items() if key != "sha256"}
+        ):
+            raise PackageError("narrow repair plan self digest differs")
     if plan.get("live_evidence_binding") != {
         "kubernetes_context": EXPECTED_CONTEXT,
         "namespace": NAMESPACE,
@@ -570,26 +799,27 @@ def render(
     ).removeprefix("sha256:"):
         raise PackageError("source terminal evidence digest differs")
     _terminal_semantics(evidence, source)
-    stored = _stage(
-        repo_root=repo_root,
-        stage="accept_existing_scored_session",
-        plan=plan,
-        intent_path=stored_intent_path,
-    )
+    stored_intent = stored_v2.load_intent(stored_intent_path)
+    stored = None
+    if not is_successor:
+        stored = _stage(
+            repo_root=repo_root,
+            stage="accept_existing_scored_session",
+            plan=plan,
+            intent_path=stored_intent_path,
+        )
     recovery = _stage(
         repo_root=repo_root,
         stage="single_rollout_repair",
         plan=plan,
         intent_path=recovery_intent_path,
     )
-    stored_intent = stored_v2.load_intent(stored_intent_path)
     recovery_intent = reviewed_recovery_v2.load_intent(recovery_intent_path)
     if recovery_intent.prior_stored_session_intent_sha256 != stored_intent.sha256:
         raise PackageError("rollout repair is not chained to stored-session acceptance")
-    return {
-        "accept_existing_scored_session": stored,
-        "single_rollout_repair": recovery,
-    }
+    if is_successor:
+        return {"single_rollout_repair": recovery}
+    return {"accept_existing_scored_session": stored, "single_rollout_repair": recovery}
 
 
 def validate(package: StagePackage) -> None:

@@ -1,0 +1,50 @@
+{
+  "schema": "qwen38-fleet-dev17-seed44-base-stageb-successor-v1",
+  "status": "source_prepared_not_launchable",
+  "launchable": false,
+  "base_repair_plan": {
+    "path": "configs/evaluation/qwen38-base-fleet-dev17-seed44-narrow-repair-v1.json",
+    "file_sha256": "sha256:85adb60f9aae28c62a23a35bf1ae9bd34054e27b4aaa43eea943aebb81e15179",
+    "sha256": "sha256:f296385d2d3ef7f8ce95d44a01c4d27760946ed1a7c03a28a6403cbaa2736281"
+  },
+  "predecessor_evidence": {
+    "path": "docs/evidence/qwen38-base-fleet-dev17-seed44-stageb-v1-pre-mutation-failure-20260921.json",
+    "file_sha256": "sha256:b20e1037d67fc793e38de04e9c44219c3b2c2d9fa2512138aaf7a4e26ddb7523",
+    "receipt_sha256": "sha256:0be0d611e086ad1c3874aad7d8e5ac2b60c01a6b50b77da7f4b89d3e916cdf26"
+  },
+  "stage_overrides": {
+    "job_name": "chris-q38-s44-base-reroll-v2",
+    "config_map_name": "chris-q38-s44-base-reroll-code-v2",
+    "secret_name": "chris-q38-s44-base-reroll-intent-v2",
+    "output_root": "/mnt/sfs/jobs/chris-q38-s44-base-reroll-v2",
+    "worker_id": "q38_s44_base_repair_v2",
+    "run_script_sha256": "96480e9c5ffcc6585556eee173d073b3619901755e5733a9e6380c479fa779a1"
+  },
+  "contract": {
+    "selected_cell_count": 2,
+    "execution_generation": 2,
+    "accepted_cell_replay_count": 0,
+    "stored_session_rescore_count": 0,
+    "stored_session_regeneration_count": 0,
+    "final_eight_task_set_accessed": false,
+    "identical_private_intent_required": true,
+    "third_successor_on_unchanged_signature_allowed": false
+  },
+  "live_evidence_binding": {
+    "kubernetes_context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+    "namespace": "fleet-train-jobs",
+    "assert_before_every_live_read": true,
+    "object_absence_valid_only_after_exact_binding_assertion": true
+  },
+  "operation": {
+    "jobs_created": 0,
+    "config_maps_created": 0,
+    "secrets_created": 0,
+    "database_cells_changed": 0,
+    "outputs_created": 0,
+    "model_generation_calls": 0,
+    "scoring_calls": 0,
+    "accepted_cell_replays": 0
+  },
+  "sha256": "sha256:b6fdbb9d86cb7c54e283d530ba9ad6806431469ca8644bd0016711325005f71b"
+}
