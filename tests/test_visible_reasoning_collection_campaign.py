@@ -70,6 +70,34 @@ def test_campaign_uses_all_train_families_and_zero_heldout_cells(rendered) -> No
     assert plan["collection"]["maximum_family_target_token_fraction"] == 0.25
 
 
+def test_source_route_is_bound_to_the_exact_train_family_selection() -> None:
+    spec = _load(SPEC)
+    assert "source_profile" not in spec["inputs"]
+    selection = _load(ROOT / spec["inputs"]["task_selection"]["path"])
+    versions = [
+        row["task_version_id"]
+        for row in sorted(
+            selection["tasks"], key=lambda row: (row["task_key"], row["task_version_id"])
+        )
+    ]
+    route = spec["source"]["route"]
+    assert route["task_selection_sha256"] == selection["sha256"]
+    assert route["task_version_count"] == 50
+    assert route["task_versions_sha256"] == collection_campaign.canonical_digest(versions)
+    assert route["server_info"]["context_length"] == 262_144
+    assert spec["source"]["opencode"]["context_management"] == (
+        "opencode_1.18.27_native_compaction_autocontinue_v2"
+    )
+
+
+def test_source_route_cannot_be_rebound_to_a_different_task_set() -> None:
+    spec = copy.deepcopy(_load(SPEC))
+    spec["source"]["route"]["task_selection_sha256"] = "sha256:" + "0" * 64
+    _reseal(spec)
+    with pytest.raises(ValueError, match="exact 50 train task versions"):
+        campaign.render(spec, root=ROOT)
+
+
 def test_wave_plan_is_balanced_create_once_and_target_driven(rendered) -> None:
     plan = rendered["campaign-plan.json"]
     wave_plan = rendered["wave-plan.json"]

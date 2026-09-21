@@ -42,6 +42,7 @@ SELECTION_SCHEMA = "cyber_qwen_opencode_student_visible_reasoning_selection_v1"
 REQUEST_SCHEMA = "cyber_qwen_opencode_visible_reasoning_materialization_request_v1"
 RECORD_SCHEMA = "cyber_qwen_opencode_student_visible_reasoning_record_v1"
 CORPUS_SCHEMA = "cyber_qwen_opencode_visible_reasoning_sft_corpus_v1"
+ARM_MANIFEST_SCHEMA = "cyber_qwen_opencode_visible_reasoning_sft_arm_manifest_v1"
 COVERAGE_SCHEMA = "cyber_qwen_opencode_visible_reasoning_coverage_v1"
 RECEIPT_SCHEMA = "cyber_qwen_opencode_visible_reasoning_materialization_receipt_v1"
 ROUNDTRIP_SCHEMA = "cyber_qwen_opencode_template_roundtrip_v1"
@@ -49,6 +50,11 @@ SUCCESS_EVIDENCE_SCHEMA = "cyber_qwen_opencode_student_visible_reasoning_success
 SOURCE_AUTHORIZATION_SCHEMA = (
     "cyber_qwen_opencode_student_visible_reasoning_source_authorization_v1"
 )
+OPERATION_AUTHORIZATION_SCHEMA = (
+    "cyber_qwen_opencode_student_visible_reasoning_operation_authorization_v1"
+)
+CAMPAIGN_PLAN_SCHEMA = "cyber_qwen_opencode_visible_reasoning_campaign_plan_v1"
+WAVE_PLAN_SCHEMA = "cyber_qwen_opencode_visible_reasoning_wave_plan_v1"
 
 QWEN_REPOSITORY = "Qwen/Qwen3.8-27B"
 OPENCODE_HARNESS = "opencode"
@@ -57,6 +63,12 @@ ONLINE_COMPACTION = "opencode_1.18.27_native_compaction_autocontinue_v2"
 EXACT_COMPACTION = "student_generated_exact_continuation_v1"
 MINIMUM_SUPERVISED_TOKENS = 20_000_000
 MAXIMUM_FAMILY_TOKEN_FRACTION = 0.25
+MINIMUM_SUCCESSFUL_FAMILIES = 20
+CAMPAIGN_ATTEMPTS_PER_TASK = 400
+CAMPAIGN_ATTEMPTS_PER_WAVE = 10
+CAMPAIGN_WAVES = CAMPAIGN_ATTEMPTS_PER_TASK // CAMPAIGN_ATTEMPTS_PER_WAVE
+CAMPAIGN_BASE_SEED = 43
+CELL_ID_PREFIX = "qvrc-"
 
 _SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 _OPAQUE_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,255}")
@@ -537,6 +549,14 @@ def _packet(value: Mapping[str, Any], profile: dict[str, Any]) -> dict[str, Any]
             "schema",
             "source_profile_sha256",
             "source_authorization_sha256",
+            "campaign_name",
+            "campaign_plan_sha256",
+            "wave_plan_sha256",
+            "cell_identity_universe_sha256",
+            "operation_authorization_sha256",
+            "task_selection_sha256",
+            "attempts_per_task_version",
+            "base_seed",
             "catalog_inventory_sha256",
             "family_split_sha256",
             "root_role_anchor_id",
@@ -546,7 +566,9 @@ def _packet(value: Mapping[str, Any], profile: dict[str, Any]) -> dict[str, Any]
             "training_data_eligible",
             "objective",
             "minimum_unique_supervised_tokens",
+            "minimum_successful_families",
             "maximum_family_target_token_fraction",
+            "matched_action_only_required",
             "deduplication_order",
             "rejection_policy",
             "sha256",
@@ -556,6 +578,11 @@ def _packet(value: Mapping[str, Any], profile: dict[str, Any]) -> dict[str, Any]
     for name in (
         "source_profile_sha256",
         "source_authorization_sha256",
+        "campaign_plan_sha256",
+        "wave_plan_sha256",
+        "cell_identity_universe_sha256",
+        "operation_authorization_sha256",
+        "task_selection_sha256",
         "catalog_inventory_sha256",
         "family_split_sha256",
         "family_role_anchor_sha256",
@@ -566,11 +593,17 @@ def _packet(value: Mapping[str, Any], profile: dict[str, Any]) -> dict[str, Any]
     if (
         packet["source_profile_sha256"] != profile["sha256"]
         or packet["source_authorization_sha256"] != profile["source"]["authorization_sha256"]
+        or not isinstance(packet["campaign_name"], str)
+        or not packet["campaign_name"]
+        or packet["attempts_per_task_version"] != CAMPAIGN_ATTEMPTS_PER_TASK
+        or packet["base_seed"] != CAMPAIGN_BASE_SEED
         or packet["root_role_anchor_id"] != TRUSTED_FLEET_COLLECTION_ROOT_ID
         or packet["training_data_eligible"] is not True
         or packet["objective"] != "student_visible_reasoning_plus_visible_actions"
         or packet["minimum_unique_supervised_tokens"] < MINIMUM_SUPERVISED_TOKENS
+        or packet["minimum_successful_families"] != MINIMUM_SUCCESSFUL_FAMILIES
         or packet["maximum_family_target_token_fraction"] != MAXIMUM_FAMILY_TOKEN_FRACTION
+        or packet["matched_action_only_required"] is not True
         or packet["deduplication_order"]
         != [
             "source_session_identity",
@@ -589,16 +622,288 @@ def _packet(value: Mapping[str, Any], profile: dict[str, Any]) -> dict[str, Any]
     return packet
 
 
+def _planned_cell_id(packet: Mapping[str, Any], row: Mapping[str, Any]) -> str:
+    attempt = _count(row.get("attempt"), "campaign attempt", positive=True)
+    seed = _count(row.get("seed"), "campaign seed")
+    wave = _count(row.get("wave"), "campaign wave", positive=True)
+    if (
+        attempt > packet["attempts_per_task_version"]
+        or seed != packet["base_seed"] + attempt - 1
+        or wave != (attempt - 1) // CAMPAIGN_ATTEMPTS_PER_WAVE + 1
+        or wave > CAMPAIGN_WAVES
+    ):
+        raise ValueError("record is outside the frozen campaign attempt and seed universe")
+    payload = {
+        "campaign_name": packet["campaign_name"],
+        "task_key": _string(row.get("task_key"), "campaign task key"),
+        "task_version_id": _string(row.get("task_version_id"), "campaign task version"),
+        "group_id": _string(row.get("group_id"), "campaign task family"),
+        "attempt": attempt,
+        "seed": seed,
+    }
+    return CELL_ID_PREFIX + digest_json(payload).removeprefix("sha256:")[:24]
+
+
+def _operation_authorization(
+    value: Mapping[str, Any], packet: Mapping[str, Any]
+) -> dict[str, Any]:
+    authorization = _sealed(
+        value,
+        OPERATION_AUTHORIZATION_SCHEMA,
+        "visible-reasoning operation authorization",
+    )
+    _exact(
+        authorization,
+        {
+            "schema",
+            "authority",
+            "registry_payload_sha256",
+            "campaign_name",
+            "campaign_plan_sha256",
+            "wave_plan_sha256",
+            "cell_identity_universe_sha256",
+            "task_selection_sha256",
+            "operation_root_name",
+            "dedicated_ledger_id",
+            "policy",
+            "sha256",
+        },
+        "visible-reasoning operation authorization",
+    )
+    authority = _immutable_authority(
+        authorization["authority"], "operation-authorization immutable authority"
+    )
+    payload_sha256 = _sha(
+        authorization["registry_payload_sha256"], "operation-authorization Registry payload"
+    )
+    if (
+        payload_sha256 != _registry_payload_sha256(authorization)
+        or authority["content_sha256"] != payload_sha256
+        or packet["operation_authorization_sha256"] != authorization["sha256"]
+    ):
+        raise ValueError("operation authorization is not the packet-bound immutable artifact")
+    for name in (
+        "campaign_plan_sha256",
+        "wave_plan_sha256",
+        "cell_identity_universe_sha256",
+        "task_selection_sha256",
+    ):
+        if authorization[name] != packet[name]:
+            raise ValueError("operation authorization changes the frozen campaign identity")
+    if authorization["campaign_name"] != packet["campaign_name"]:
+        raise ValueError("operation authorization changes the campaign name")
+    _string(authorization["operation_root_name"], "operation root")
+    _sha(authorization["dedicated_ledger_id"], "dedicated ledger identity")
+    if authorization["policy"] != {
+        "canonical_private_operation_root_required": True,
+        "dedicated_empty_ledger_required": True,
+        "exclusive_pre_mutation_intent_required": True,
+        "ambiguous_external_mutation_replay_allowed": False,
+        "same_cell_retry_allowed": False,
+    }:
+        raise ValueError("operation authorization weakens create-once collection")
+    return authorization
+
+
+def _campaign_artifacts(
+    plan_value: Mapping[str, Any],
+    wave_value: Mapping[str, Any],
+    packet: Mapping[str, Any],
+    task_selection: Mapping[str, Any],
+    split: Mapping[str, Any],
+    profile: Mapping[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    plan = _sealed(plan_value, CAMPAIGN_PLAN_SCHEMA, "visible-reasoning campaign plan")
+    wave = _sealed(wave_value, WAVE_PLAN_SCHEMA, "visible-reasoning wave plan")
+    identity = _mapping(plan.get("identity"), "campaign cell identity")
+    collection = _mapping(plan.get("collection"), "campaign collection gate")
+    boundary = _mapping(plan.get("task_boundary"), "campaign task boundary")
+    source = _mapping(plan.get("source_treatment"), "campaign source treatment")
+    if (
+        packet["campaign_plan_sha256"] != plan["sha256"]
+        or packet["wave_plan_sha256"] != wave["sha256"]
+        or wave.get("campaign_plan_sha256") != plan["sha256"]
+        or plan.get("campaign_name") != packet["campaign_name"]
+        or identity.get("cell_identity_universe_sha256")
+        != packet["cell_identity_universe_sha256"]
+        or boundary.get("task_selection_sha256") != packet["task_selection_sha256"]
+        or collection.get("attempts_per_task_version")
+        != packet["attempts_per_task_version"]
+        or collection.get("minimum_unique_supervised_tokens")
+        != packet["minimum_unique_supervised_tokens"]
+        or collection.get("minimum_successful_families")
+        != packet["minimum_successful_families"]
+        or collection.get("maximum_family_target_token_fraction")
+        != packet["maximum_family_target_token_fraction"]
+    ):
+        raise ValueError("collection packet changes the frozen campaign or cell universe")
+    campaign_tokenizer = _mapping(source.get("tokenizer"), "campaign tokenizer identity")
+    campaign_opencode = _mapping(source.get("opencode"), "campaign OpenCode treatment")
+    campaign_thinking = _mapping(source.get("thinking"), "campaign thinking treatment")
+    profile_opencode = _mapping(profile.get("opencode"), "source-profile OpenCode treatment")
+    if (
+        source.get("kind") != profile["source"]["kind"]
+        or source.get("model") != profile["source"]["model"]
+        or campaign_tokenizer
+        != {
+            "manifest_sha256": profile["qwen_target"]["tokenizer_sha256"],
+            "backend_sha256": profile["qwen_target"]["tokenizer_backend_sha256"],
+            "chat_template_sha256": profile["qwen_target"]["chat_template_sha256"],
+        }
+        or any(
+            campaign_opencode.get(name) != profile_opencode.get(name)
+            for name in (
+                "harness",
+                "harness_version",
+                "release_asset_sha256",
+                "tool_catalog_sha256",
+                "context_management",
+                "context_window_tokens",
+                "context_headroom_tokens",
+                "tools",
+            )
+        )
+        or campaign_thinking
+        != {
+            **profile["thinking"],
+            "reasoning_visibility": "student_visible",
+        }
+    ):
+        raise ValueError("campaign plan changes the authorized Qwen/OpenCode source treatment")
+    role_by_identity = {
+        (row.get("task_key"), row.get("task_version_id")): row
+        for row in split.get("tasks", [])
+        if isinstance(row, Mapping)
+    }
+    selected_rows = task_selection.get("tasks")
+    if not isinstance(selected_rows, list) or not selected_rows:
+        raise ValueError("campaign task selection is empty")
+    tasks: list[dict[str, str]] = []
+    for row in selected_rows:
+        checked = _mapping(row, "campaign task selection row")
+        key = (
+            _string(checked.get("task_key"), "campaign task key"),
+            _string(checked.get("task_version_id"), "campaign task version"),
+        )
+        role = role_by_identity.get(key)
+        if role is None or role.get("split") != "train":
+            raise ValueError("campaign cell universe includes a non-training task")
+        tasks.append(
+            {
+                "task_key": key[0],
+                "task_version_id": key[1],
+                "group_id": _string(role.get("group_id"), "campaign task family"),
+            }
+        )
+    tasks.sort(key=lambda row: (row["task_key"], row["task_version_id"]))
+    expected_opencode = {
+        **profile_opencode,
+        "provider_adapter": "@ai-sdk/openai-compatible",
+        "max_output_tokens": 32_768,
+        "max_model_requests": 600,
+        "timeout_seconds": 28_800,
+    }
+    expected_route = {
+        "model": "qwen3.8-27b-base",
+        "served_id": "qwen3.8-27b",
+        "task_selection_sha256": packet["task_selection_sha256"],
+        "runtime_bindings_sha256": packet["runtime_bindings_sha256"],
+        "task_versions_sha256": digest_json([row["task_version_id"] for row in tasks]),
+        "task_version_count": len(tasks),
+        "catalog": {
+            "engine": "sglang",
+            "precision": "bf16",
+            "tensor_parallel_size": 1,
+        },
+        "model_info": {
+            "model_path": f"/scratch/models/qwen3.8-27b/{profile['qwen_target']['revision']}",
+            "model_type": "qwen3_5",
+            "architectures": ["Qwen3_5ForConditionalGeneration"],
+        },
+        "server_info": {
+            "model_path": f"/scratch/models/qwen3.8-27b/{profile['qwen_target']['revision']}",
+            "context_length": 262_144,
+            "tp_size": 1,
+            "dp_size": 8,
+            "load_balance_method": "total_tokens",
+            "quantization": None,
+            "kv_cache_dtype": "fp8_e4m3",
+            "reasoning_parser": "qwen3",
+            "tool_call_parser": "qwen3_coder",
+        },
+        "endpoint_origin": "https://inference.flt.build",
+    }
+    if (
+        campaign_opencode != expected_opencode
+        or source.get("route") != expected_route
+        or source.get("images")
+        != {
+            "agent": "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92",
+            "proxy": (
+                "ghcr.io/astral-sh/uv:python3.12-bookworm@"
+                "sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+            ),
+        }
+        or source.get("sampling")
+        != {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "base_seed": packet["base_seed"],
+            "seed_rule": "base_seed_plus_attempt_minus_one",
+        }
+    ):
+        raise ValueError("campaign source is not the exact train-family Qwen/OpenCode route")
+    universe: list[dict[str, Any]] = []
+    expected_waves: list[dict[str, Any]] = []
+    for wave_index in range(CAMPAIGN_WAVES):
+        first = wave_index * CAMPAIGN_ATTEMPTS_PER_WAVE + 1
+        last = first + CAMPAIGN_ATTEMPTS_PER_WAVE - 1
+        cells: list[dict[str, Any]] = []
+        for task in tasks:
+            for attempt in range(first, last + 1):
+                cell = {
+                    "campaign_name": packet["campaign_name"],
+                    **task,
+                    "attempt": attempt,
+                    "seed": packet["base_seed"] + attempt - 1,
+                }
+                cell["cell_id"] = CELL_ID_PREFIX + digest_json(cell).removeprefix("sha256:")[:24]
+                cells.append(cell)
+        universe.extend(cells)
+        expected_waves.append(
+            {
+                "wave": wave_index + 1,
+                "attempt_first": first,
+                "attempt_last": last,
+                "seed_first": packet["base_seed"] + first - 1,
+                "seed_last": packet["base_seed"] + last - 1,
+                "task_versions": len(tasks),
+                "planned_cells": len(cells),
+                "cell_intents_sha256": digest_json(cells),
+            }
+        )
+    if (
+        wave.get("waves") != expected_waves
+        or identity.get("planned_unique_cell_ids") != len(universe)
+        or identity.get("cell_identity_universe_sha256") != digest_json(universe)
+        or len({row["cell_id"] for row in universe}) != len(universe)
+    ):
+        raise ValueError("wave plan does not cover the exact campaign cell universe")
+    return plan, wave
+
+
 def _task_boundary(
     inventory: dict[str, Any],
     split: dict[str, Any],
     role_anchor: dict[str, Any],
     lock: dict[str, Any],
     runtime: dict[str, Any],
+    task_selection: dict[str, Any],
     packet: dict[str, Any],
 ) -> dict[tuple[str, str], dict[str, Any]]:
     rows = collection_campaign._inventory_rows(inventory)
     bindings = collection_campaign._runtime_bindings(runtime, inventory, rows)
+    collection_campaign._sealed(task_selection, collection_campaign.SELECTION_SCHEMA)  # noqa: SLF001
     if split.get("schema") != ANCHORED_SCHEMA or split.get("inventory_sha256") != inventory.get(
         "sha256"
     ):
@@ -611,6 +916,7 @@ def _task_boundary(
         or packet["family_role_anchor_sha256"] != role_anchor["sha256"]
         or packet["protected_family_lock_sha256"] != lock["sha256"]
         or packet["runtime_bindings_sha256"] != runtime["sha256"]
+        or packet["task_selection_sha256"] != task_selection["sha256"]
     ):
         raise ValueError("collection packet does not bind the reviewed task boundary")
     protected = _sealed(lock, admission.PROTECTED_FAMILY_LOCK_SCHEMA, "protected-family lock")
@@ -623,6 +929,20 @@ def _task_boundary(
     expected_heldout = {row["group_id"] for row in role_rows.values() if row["split"] != "train"}
     if set(protected_groups) != expected_heldout:
         raise ValueError("protected-family lock must cover every held-out family")
+    selected_rows = task_selection.get("tasks")
+    if not isinstance(selected_rows, list) or not selected_rows:
+        raise ValueError("campaign task selection is empty")
+    selected = {(row.get("task_key"), row.get("task_version_id")) for row in selected_rows}
+    expected_train = {identity for identity, row in role_rows.items() if row["split"] == "train"}
+    selected_groups = {
+        role_rows[identity]["group_id"] for identity in selected if identity in role_rows
+    }
+    if (
+        len(selected) != len(selected_rows)
+        or selected != expected_train
+        or len(selected_groups) != len(selected)
+    ):
+        raise ValueError("campaign task selection is not the exact train-family roster")
     return bindings
 
 
@@ -651,6 +971,11 @@ def _success_evidence(
             "source_profile_sha256",
             "source_authorization_sha256",
             "collection_packet_sha256",
+            "campaign_plan_sha256",
+            "wave_plan_sha256",
+            "cell_identity_universe_sha256",
+            "operation_authorization_sha256",
+            "task_selection_sha256",
             "catalog_inventory_sha256",
             "family_split_sha256",
             "root_role_anchor_id",
@@ -670,6 +995,11 @@ def _success_evidence(
         raise ValueError("success evidence does not bind its immutable Registry payload")
     expected = {
         "collection_packet_sha256": packet["sha256"],
+        "campaign_plan_sha256": packet["campaign_plan_sha256"],
+        "wave_plan_sha256": packet["wave_plan_sha256"],
+        "cell_identity_universe_sha256": packet["cell_identity_universe_sha256"],
+        "operation_authorization_sha256": packet["operation_authorization_sha256"],
+        "task_selection_sha256": packet["task_selection_sha256"],
         "catalog_inventory_sha256": packet["catalog_inventory_sha256"],
         "family_split_sha256": split["sha256"],
         "root_role_anchor_id": TRUSTED_FLEET_COLLECTION_ROOT_ID,
@@ -692,6 +1022,10 @@ def _success_evidence(
         raise ValueError("success evidence requires at least one immutable record mapping")
     fields = {
         "record_id",
+        "cell_id",
+        "wave",
+        "attempt",
+        "seed",
         "source_session_identity_sha256",
         "normalized_record_sha256",
         "normalized_trajectory_sha256",
@@ -704,6 +1038,7 @@ def _success_evidence(
     }
     result: dict[str, dict[str, Any]] = {}
     sessions: set[str] = set()
+    cells: set[str] = set()
     for row in rows:
         if not isinstance(row, dict) or set(row) != fields:
             raise ValueError("success evidence record has an unsupported contract")
@@ -725,6 +1060,11 @@ def _success_evidence(
             raise ValueError("visible-reasoning evidence must be an authoritative success")
         for name in ("task_key", "task_version_id", "group_id"):
             _string(row[name], f"success evidence {name}")
+        if row["cell_id"] != _planned_cell_id(packet, row):
+            raise ValueError("success evidence is outside the exact campaign cell universe")
+        if row["cell_id"] in cells:
+            raise ValueError("success evidence duplicates a create-once campaign cell")
+        cells.add(row["cell_id"])
         result[record_id] = row
     return evidence, result
 
@@ -744,6 +1084,11 @@ def _selection(
             "schema",
             "collection_packet_sha256",
             "verified_success_evidence_sha256",
+            "campaign_plan_sha256",
+            "wave_plan_sha256",
+            "cell_identity_universe_sha256",
+            "operation_authorization_sha256",
+            "task_selection_sha256",
             "catalog_inventory_sha256",
             "family_split_sha256",
             "root_role_anchor_id",
@@ -758,6 +1103,11 @@ def _selection(
     for name in (
         "collection_packet_sha256",
         "verified_success_evidence_sha256",
+        "campaign_plan_sha256",
+        "wave_plan_sha256",
+        "cell_identity_universe_sha256",
+        "operation_authorization_sha256",
+        "task_selection_sha256",
         "catalog_inventory_sha256",
         "family_split_sha256",
         "family_role_anchor_sha256",
@@ -766,6 +1116,13 @@ def _selection(
         _sha(selection[name], f"selection {name}")
     if (
         selection["collection_packet_sha256"] != packet["sha256"]
+        or selection["campaign_plan_sha256"] != packet["campaign_plan_sha256"]
+        or selection["wave_plan_sha256"] != packet["wave_plan_sha256"]
+        or selection["cell_identity_universe_sha256"]
+        != packet["cell_identity_universe_sha256"]
+        or selection["operation_authorization_sha256"]
+        != packet["operation_authorization_sha256"]
+        or selection["task_selection_sha256"] != packet["task_selection_sha256"]
         or selection["catalog_inventory_sha256"] != packet["catalog_inventory_sha256"]
         or selection["family_split_sha256"] != split["sha256"]
         or selection["root_role_anchor_id"] != TRUSTED_FLEET_COLLECTION_ROOT_ID
@@ -779,6 +1136,8 @@ def _selection(
     roles = {(row["task_key"], row["task_version_id"]): row for row in split["tasks"]}
     fields = {
         "record_id",
+        "cell_id",
+        "wave",
         "source_session_identity_sha256",
         "normalized_record_sha256",
         "normalized_trajectory_sha256",
@@ -787,6 +1146,7 @@ def _selection(
         "task_version_id",
         "group_id",
         "attempt",
+        "seed",
         "reasoning_visibility",
         "compaction_kind",
     }
@@ -796,6 +1156,7 @@ def _selection(
     result: dict[str, dict[str, Any]] = {}
     sessions: set[str] = set()
     trajectories: set[str] = set()
+    cells: set[str] = set()
     per_task: dict[tuple[str, str], int] = {}
     for row in rows:
         if not isinstance(row, dict) or set(row) != fields:
@@ -831,6 +1192,11 @@ def _selection(
             raise ValueError("held-out or unbound family reached visible-reasoning selection")
         if type(row["attempt"]) is not int or row["attempt"] < 1:
             raise ValueError("selected attempt is invalid")
+        if row["cell_id"] != _planned_cell_id(packet, row):
+            raise ValueError("selected record is outside the exact campaign cell universe")
+        if row["cell_id"] in cells:
+            raise ValueError("private selection duplicates a create-once campaign cell")
+        cells.add(row["cell_id"])
         if row["reasoning_visibility"] != "student_visible":
             raise ValueError("private or unknown reasoning cannot enter selection")
         if row["compaction_kind"] not in {"none", EXACT_COMPACTION}:
@@ -839,6 +1205,10 @@ def _selection(
         if evidence is None or any(
             row[name] != evidence[name]
             for name in (
+                "cell_id",
+                "wave",
+                "attempt",
+                "seed",
                 "source_session_identity_sha256",
                 "normalized_record_sha256",
                 "normalized_trajectory_sha256",
@@ -1172,6 +1542,10 @@ def _record(value: Mapping[str, Any], profile: dict[str, Any]) -> dict[str, Any]
         {
             "schema",
             "record_id",
+            "cell_id",
+            "wave",
+            "attempt",
+            "seed",
             "source_profile_sha256",
             "lineage",
             "original_task_digest",
@@ -1193,6 +1567,10 @@ def _record(value: Mapping[str, Any], profile: dict[str, Any]) -> dict[str, Any]
     if record["source_profile_sha256"] != profile["sha256"]:
         raise ValueError("private record changes the authorized source profile")
     _string(record["record_id"], "private record identity")
+    _string(record["cell_id"], "private record campaign cell identity")
+    _count(record["wave"], "private record campaign wave", positive=True)
+    _count(record["attempt"], "private record campaign attempt", positive=True)
+    _count(record["seed"], "private record campaign seed")
     lineage = _exact(
         record["lineage"], {"task_key", "task_version_id", "group_id"}, "record lineage"
     )
@@ -1328,6 +1706,16 @@ def _loss_mask(window: dict[str, Any]) -> list[int]:
     return mask
 
 
+def _action_only_loss_mask(window: dict[str, Any]) -> list[int]:
+    mask = [0] * len(window["input_ids"])
+    for span in window["target_spans"]:
+        if span["kind"] == "visible_action":
+            mask[span["token_start"] : span["token_end"]] = [1] * (
+                span["token_end"] - span["token_start"]
+            )
+    return mask
+
+
 def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
     """Build a private, token-only Qwen visible-reasoning corpus.
 
@@ -1343,6 +1731,9 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
             "schema",
             "source_profile",
             "source_authorization",
+            "campaign_plan",
+            "wave_plan",
+            "operation_authorization",
             "collection_packet",
             "selection",
             "success_evidence",
@@ -1352,6 +1743,7 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
             "role_anchor",
             "protected_family_lock",
             "runtime_bindings",
+            "task_selection",
             "roundtrip_fixture",
             "model_lock",
             "tokenizer_root",
@@ -1368,6 +1760,9 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
     public_names = (
         "source_profile",
         "source_authorization",
+        "campaign_plan",
+        "wave_plan",
+        "operation_authorization",
         "collection_packet",
         "selection",
         "success_evidence",
@@ -1377,6 +1772,7 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
         "role_anchor",
         "protected_family_lock",
         "runtime_bindings",
+        "task_selection",
         "roundtrip_fixture",
         "model_lock",
     )
@@ -1402,12 +1798,26 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
         tokenizer_identity,
     )
     packet = _packet(_json(paths["collection_packet"], "collection packet"), profile)
+    _operation_authorization(
+        _json(paths["operation_authorization"], "operation authorization"), packet
+    )
     inventory = _json(paths["inventory"], "catalog inventory")
     split = _json(paths["family_split"], "family split")
     role_anchor = _json(paths["role_anchor"], "family role anchor")
     lock = _json(paths["protected_family_lock"], "protected-family lock")
     runtime = _json(paths["runtime_bindings"], "runtime bindings")
-    bindings = _task_boundary(inventory, split, role_anchor, lock, runtime, packet)
+    task_selection = _json(paths["task_selection"], "campaign task selection")
+    _campaign_artifacts(
+        _json(paths["campaign_plan"], "campaign plan"),
+        _json(paths["wave_plan"], "wave plan"),
+        packet,
+        task_selection,
+        split,
+        profile,
+    )
+    bindings = _task_boundary(
+        inventory, split, role_anchor, lock, runtime, task_selection, packet
+    )
     selection = _json(paths["selection"], "private selection")
     success_evidence_document, success_evidence = _success_evidence(
         _json(paths["success_evidence"], "success evidence"),
@@ -1447,6 +1857,7 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
         raise ValueError("private records do not cover the exact sealed selection")
 
     rows: list[dict[str, Any]] = []
+    action_only_rows: list[dict[str, Any]] = []
     selection_rows: list[dict[str, Any]] = []
     window_digests: set[str] = set()
     target_occurrences: set[str] = set()
@@ -1456,7 +1867,11 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
     for record_id, selected_row in sorted(selected.items()):
         record = records[record_id]
         if (
-            record["lineage"]
+            record["cell_id"] != selected_row["cell_id"]
+            or record["wave"] != selected_row["wave"]
+            or record["attempt"] != selected_row["attempt"]
+            or record["seed"] != selected_row["seed"]
+            or record["lineage"]
             != {
                 "task_key": selected_row["task_key"],
                 "task_version_id": selected_row["task_version_id"],
@@ -1506,16 +1921,26 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
                 else:
                     action_tokens += width
                     record_action += width
-            rows.append(
+            paired_window_sha256 = digest_json(
                 {
-                    "input_ids": window["input_ids"],
-                    "loss_mask": mask,
                     "source_record_sha256": selected_row["normalized_record_sha256"],
                     "source_task_version_id": selected_row["task_version_id"],
                     "source_window_sha256": payload,
-                    "source_profile_sha256": profile["sha256"],
-                    "collection_packet_sha256": packet["sha256"],
+                    "input_ids_sha256": digest_json(window["input_ids"]),
                 }
+            )
+            common = {
+                "input_ids": window["input_ids"],
+                "source_record_sha256": selected_row["normalized_record_sha256"],
+                "source_task_version_id": selected_row["task_version_id"],
+                "source_window_sha256": payload,
+                "source_profile_sha256": profile["sha256"],
+                "collection_packet_sha256": packet["sha256"],
+                "paired_window_sha256": paired_window_sha256,
+            }
+            rows.append({**common, "loss_mask": mask})
+            action_only_rows.append(
+                {**common, "loss_mask": _action_only_loss_mask(window)}
             )
         if not record_reasoning or not record_action:
             raise ValueError("selected record lacks paired visible reasoning and action coverage")
@@ -1536,11 +1961,23 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
         )
     if not rows:
         raise ValueError("visible-reasoning materialization produced no train windows")
+    if len(action_only_rows) != len(rows) or any(
+        reasoning_row["paired_window_sha256"] != action_row["paired_window_sha256"]
+        or reasoning_row["input_ids"] != action_row["input_ids"]
+        for reasoning_row, action_row in zip(rows, action_only_rows, strict=True)
+    ):
+        raise ValueError("matched action-only arm differs from the reasoning-arm source windows")
     total_tokens = reasoning_tokens + action_tokens
     family_total = sum(family_tokens.values())
     family_fraction = max(family_tokens.values()) / family_total
-    target_goal_reached = total_tokens >= packet["minimum_unique_supervised_tokens"]
-    if target_goal_reached and family_fraction > packet["maximum_family_target_token_fraction"]:
+    token_goal_reached = total_tokens >= packet["minimum_unique_supervised_tokens"]
+    family_goal_reached = len(family_tokens) >= packet["minimum_successful_families"]
+    target_goal_reached = (
+        token_goal_reached
+        and family_goal_reached
+        and family_fraction <= packet["maximum_family_target_token_fraction"]
+    )
+    if token_goal_reached and family_fraction > packet["maximum_family_target_token_fraction"]:
         raise ValueError("target-ready corpus exceeds immutable family concentration limit")
     coverage = {
         "schema": COVERAGE_SCHEMA,
@@ -1556,6 +1993,9 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
         "visible_action_target_tokens": action_tokens,
         "unique_supervised_tokens": total_tokens,
         "minimum_unique_supervised_tokens": packet["minimum_unique_supervised_tokens"],
+        "token_goal_reached": token_goal_reached,
+        "minimum_successful_families": packet["minimum_successful_families"],
+        "successful_family_goal_reached": family_goal_reached,
         "target_goal_reached": target_goal_reached,
         "family_token_concentration": {
             "families_with_targets": len(family_tokens),
@@ -1586,14 +2026,43 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
         "family_role_anchor_sha256": packet["family_role_anchor_sha256"],
         "protected_family_lock_sha256": packet["protected_family_lock_sha256"],
         "runtime_bindings_sha256": packet["runtime_bindings_sha256"],
-        "files": {"train": {"path": "train.parquet", "sha256": None, "rows": len(rows)}},
+        "files": {
+            "reasoning_plus_action": {
+                "path": "train-reasoning-plus-action.parquet",
+                "sha256": None,
+                "rows": len(rows),
+            },
+            "matched_action_only": {
+                "path": "train-matched-action-only.parquet",
+                "sha256": None,
+                "rows": len(action_only_rows),
+            },
+        },
         "counts": {
             "source_records": len(selection_rows),
             "windows": len(rows),
             "student_visible_reasoning_target_tokens": reasoning_tokens,
             "visible_action_target_tokens": action_tokens,
             "supervised_tokens": total_tokens,
+            "matched_action_only_supervised_tokens": action_tokens,
         },
+        "campaign_identity": {
+            "campaign_plan_sha256": packet["campaign_plan_sha256"],
+            "wave_plan_sha256": packet["wave_plan_sha256"],
+            "cell_identity_universe_sha256": packet["cell_identity_universe_sha256"],
+            "operation_authorization_sha256": packet["operation_authorization_sha256"],
+            "task_selection_sha256": packet["task_selection_sha256"],
+        },
+        "matched_ablation": {
+            "paired_window_identity_sha256": digest_json(
+                [row["paired_window_sha256"] for row in rows]
+            ),
+            "same_selected_windows": True,
+            "same_input_ids": True,
+            "only_reasoning_loss_mask_differs": True,
+            "cross_arm_sha256": None,
+        },
+        "arm_manifests": {},
         "validation_mode": "pending_reasoning_selection",
         "coverage_sha256": coverage["sha256"],
         "limitations": [
@@ -1612,12 +2081,66 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
     except FileExistsError as error:
         raise FileExistsError("create-once visible-reasoning corpus destination exists") from error
     try:
-        train_path = output / "train.parquet"
-        pq.write_table(pa.Table.from_pylist(rows), train_path, compression="zstd")
-        os.chmod(train_path, 0o600)
-        if pq.read_table(train_path).to_pylist() != rows:
+        reasoning_path = output / "train-reasoning-plus-action.parquet"
+        action_path = output / "train-matched-action-only.parquet"
+        pq.write_table(pa.Table.from_pylist(rows), reasoning_path, compression="zstd")
+        pq.write_table(pa.Table.from_pylist(action_only_rows), action_path, compression="zstd")
+        os.chmod(reasoning_path, 0o600)
+        os.chmod(action_path, 0o600)
+        if pq.read_table(reasoning_path).to_pylist() != rows:
             raise ValueError("private visible-reasoning Parquet readback differs")
-        manifest["files"]["train"]["sha256"] = file_sha256(train_path)
+        if pq.read_table(action_path).to_pylist() != action_only_rows:
+            raise ValueError("private matched action-only Parquet readback differs")
+        manifest["files"]["reasoning_plus_action"]["sha256"] = file_sha256(reasoning_path)
+        manifest["files"]["matched_action_only"]["sha256"] = file_sha256(action_path)
+        paired_identity = manifest["matched_ablation"]["paired_window_identity_sha256"]
+        arm_values = {
+            "reasoning_plus_action": {
+                "path": reasoning_path.name,
+                "sha256": manifest["files"]["reasoning_plus_action"]["sha256"],
+                "rows": len(rows),
+                "target_mode": "student_visible_reasoning_plus_visible_actions",
+                "supervised_tokens": total_tokens,
+            },
+            "matched_action_only": {
+                "path": action_path.name,
+                "sha256": manifest["files"]["matched_action_only"]["sha256"],
+                "rows": len(action_only_rows),
+                "target_mode": "visible_actions_only",
+                "supervised_tokens": action_tokens,
+            },
+        }
+        arm_manifests: dict[str, dict[str, Any]] = {}
+        for arm_name, arm_file in arm_values.items():
+            arm_manifest = {
+                "schema": ARM_MANIFEST_SCHEMA,
+                "arm": arm_name,
+                "parquet": arm_file,
+                "source_profile_sha256": profile["sha256"],
+                "collection_packet_sha256": packet["sha256"],
+                "selection_sha256": selection["sha256"],
+                "paired_window_identity_sha256": paired_identity,
+            }
+            arm_manifest["sha256"] = digest_json(arm_manifest)
+            arm_manifests[arm_name] = arm_manifest
+        cross_arm = {
+            "reasoning_plus_action_manifest_sha256": arm_manifests["reasoning_plus_action"][
+                "sha256"
+            ],
+            "matched_action_only_manifest_sha256": arm_manifests["matched_action_only"][
+                "sha256"
+            ],
+            "paired_window_identity_sha256": paired_identity,
+        }
+        manifest["matched_ablation"]["cross_arm_sha256"] = digest_json(cross_arm)
+        for arm_name, arm_manifest in arm_manifests.items():
+            arm_path = output / f"{arm_name.replace('_', '-')}.manifest.json"
+            atomic_write_json(arm_path, arm_manifest, private=True)
+            manifest["arm_manifests"][arm_name] = {
+                "path": arm_path.name,
+                "file_sha256": file_sha256(arm_path),
+                "logical_sha256": arm_manifest["sha256"],
+            }
         manifest["sha256"] = digest_json(manifest)
         atomic_write_jsonl(output / "source-selection.private.jsonl", selection_rows, private=True)
         atomic_write_json(output / "coverage.private.json", coverage, private=True)
@@ -1644,5 +2167,6 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
         "source_records": len(selection_rows),
         "student_visible_reasoning_target_tokens": reasoning_tokens,
         "visible_action_target_tokens": action_tokens,
+        "matched_action_only_target_tokens": action_tokens,
         "sft_ready": False,
     }

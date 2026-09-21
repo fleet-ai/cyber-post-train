@@ -22,7 +22,9 @@ The first campaign uses every currently receipt-proven training family:
 - 8 final-test families that receive zero collection cells.
 
 It binds the same immutable family-role anchor and protected-family lock as the
-current action-only campaign. WebExploitBench and every other external
+current action-only campaign. The source route itself is bound to the digest of
+the ordered 50-version training selection; it does not reuse a development-set
+evaluation profile. WebExploitBench and every other external
 benchmark receive zero collection cells and remain evaluation-only. Results on
 development, final-test, or external tasks cannot change which training tasks
 the campaign samples.
@@ -81,9 +83,11 @@ must contain both:
 2. a visible action or tool call.
 
 Source sessions, normalized trajectories, and packed windows are deduplicated
-in that order. The same selected turns later produce a matched action-only arm
-by masking reasoning tokens while leaving action targets unchanged. The two
-corpora remain separate. This makes it possible to test whether visible
+in that order. The offline materializer produces a matched action-only arm from
+the same selected turns by masking reasoning tokens while leaving action targets
+unchanged. It writes a separate manifest for each arm and a cross-arm digest
+that proves the record, window, and token inputs are paired. The two corpora
+remain separate. This makes it possible to test whether visible
 reasoning supervision helps rather than confounding reasoning with different
 tasks or successes.
 

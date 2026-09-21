@@ -26,6 +26,7 @@ OBJECTIVE = "qwen_opencode_student_visible_reasoning_plus_actions"
 VISIBILITY = ("student_visible", "private_or_unknown", "absent")
 COMPACTION = ("none", "exact_student_generated", "opaque_rejected")
 MINIMUM_SUPERVISED_TOKENS = 20_000_000
+MINIMUM_SUCCESSFUL_FAMILIES = 20
 MAXIMUM_FAMILY_TARGET_FRACTION = 0.25
 
 
@@ -166,7 +167,10 @@ def _manifest(value: Mapping[str, Any]) -> dict[str, Any]:
             "protected_family_lock_sha256",
             "runtime_bindings_sha256",
             "files",
+            "arm_manifests",
             "counts",
+            "campaign_identity",
+            "matched_ablation",
             "validation_mode",
             "coverage_sha256",
             "limitations",
@@ -194,11 +198,45 @@ def _manifest(value: Mapping[str, Any]) -> dict[str, Any]:
         "coverage_sha256",
     ):
         _sha(manifest[name], f"visible-reasoning manifest {name}")
-    files = _exact(manifest["files"], {"train"}, "visible-reasoning corpus files")
-    train = _exact(files["train"], {"path", "sha256", "rows"}, "visible-reasoning train file")
-    if train["path"] != "train.parquet" or _count(train["rows"], "train rows", positive=True) < 1:
-        raise ValueError("visible-reasoning corpus train file is malformed")
-    _sha(train["sha256"], "visible-reasoning train file")
+    files = _exact(
+        manifest["files"],
+        {"reasoning_plus_action", "matched_action_only"},
+        "visible-reasoning corpus files",
+    )
+    expected_paths = {
+        "reasoning_plus_action": "train-reasoning-plus-action.parquet",
+        "matched_action_only": "train-matched-action-only.parquet",
+    }
+    checked_files: dict[str, dict[str, Any]] = {}
+    for arm, expected_path in expected_paths.items():
+        checked = _exact(files[arm], {"path", "sha256", "rows"}, f"{arm} train file")
+        if (
+            checked["path"] != expected_path
+            or _count(checked["rows"], f"{arm} rows", positive=True) < 1
+        ):
+            raise ValueError("visible-reasoning corpus train file is malformed")
+        _sha(checked["sha256"], f"{arm} train file")
+        checked_files[arm] = checked
+    if checked_files["reasoning_plus_action"]["rows"] != checked_files[
+        "matched_action_only"
+    ]["rows"]:
+        raise ValueError("matched visible-reasoning arms do not have the same windows")
+    arm_manifests = _exact(
+        manifest["arm_manifests"], set(expected_paths), "visible-reasoning arm manifests"
+    )
+    checked_arm_manifests: dict[str, dict[str, Any]] = {}
+    for arm in expected_paths:
+        checked = _exact(
+            arm_manifests[arm],
+            {"path", "file_sha256", "logical_sha256"},
+            f"{arm} manifest reference",
+        )
+        expected_manifest_path = f"{arm.replace('_', '-')}.manifest.json"
+        if checked["path"] != expected_manifest_path:
+            raise ValueError("visible-reasoning arm manifest path drift")
+        _sha(checked["file_sha256"], f"{arm} manifest file")
+        _sha(checked["logical_sha256"], f"{arm} manifest identity")
+        checked_arm_manifests[arm] = checked
     counts = _exact(
         manifest["counts"],
         {
@@ -207,6 +245,7 @@ def _manifest(value: Mapping[str, Any]) -> dict[str, Any]:
             "student_visible_reasoning_target_tokens",
             "visible_action_target_tokens",
             "supervised_tokens",
+            "matched_action_only_supervised_tokens",
         },
         "visible-reasoning manifest counts",
     )
@@ -214,10 +253,57 @@ def _manifest(value: Mapping[str, Any]) -> dict[str, Any]:
         _count(counts[name], f"manifest {name}", positive=True)
     if counts["supervised_tokens"] != (
         counts["student_visible_reasoning_target_tokens"] + counts["visible_action_target_tokens"]
-    ):
+    ) or counts["matched_action_only_supervised_tokens"] != counts[
+        "visible_action_target_tokens"
+    ]:
         raise ValueError("visible-reasoning manifest target totals are inconsistent")
-    if train["rows"] != counts["windows"]:
+    if checked_files["reasoning_plus_action"]["rows"] != counts["windows"]:
         raise ValueError("visible-reasoning train rows differ from manifest windows")
+    campaign_identity = _exact(
+        manifest["campaign_identity"],
+        {
+            "campaign_plan_sha256",
+            "wave_plan_sha256",
+            "cell_identity_universe_sha256",
+            "operation_authorization_sha256",
+            "task_selection_sha256",
+        },
+        "visible-reasoning campaign identity",
+    )
+    for name, digest in campaign_identity.items():
+        _sha(digest, f"campaign identity {name}")
+    matched = _exact(
+        manifest["matched_ablation"],
+        {
+            "paired_window_identity_sha256",
+            "same_selected_windows",
+            "same_input_ids",
+            "only_reasoning_loss_mask_differs",
+            "cross_arm_sha256",
+        },
+        "matched visible-reasoning ablation",
+    )
+    paired_identity = _sha(
+        matched["paired_window_identity_sha256"], "paired-window identity"
+    )
+    if (
+        matched["same_selected_windows"] is not True
+        or matched["same_input_ids"] is not True
+        or matched["only_reasoning_loss_mask_differs"] is not True
+        or matched["cross_arm_sha256"]
+        != digest_json(
+            {
+                "reasoning_plus_action_manifest_sha256": checked_arm_manifests[
+                    "reasoning_plus_action"
+                ]["logical_sha256"],
+                "matched_action_only_manifest_sha256": checked_arm_manifests[
+                    "matched_action_only"
+                ]["logical_sha256"],
+                "paired_window_identity_sha256": paired_identity,
+            }
+        )
+    ):
+        raise ValueError("matched visible-reasoning arm binding is invalid")
     return manifest
 
 
@@ -243,6 +329,9 @@ def _coverage(value: Mapping[str, Any]) -> dict[str, Any]:
             "visible_action_target_tokens",
             "unique_supervised_tokens",
             "minimum_unique_supervised_tokens",
+            "token_goal_reached",
+            "minimum_successful_families",
+            "successful_family_goal_reached",
             "target_goal_reached",
             "family_token_concentration",
             "compaction",
@@ -272,7 +361,14 @@ def _coverage(value: Mapping[str, Any]) -> dict[str, Any]:
         "minimum_unique_supervised_tokens",
     ):
         _count(coverage[name], f"visible-reasoning coverage {name}", positive=True)
-    if type(coverage["target_goal_reached"]) is not bool:
+    if any(
+        type(coverage[name]) is not bool
+        for name in (
+            "token_goal_reached",
+            "successful_family_goal_reached",
+            "target_goal_reached",
+        )
+    ):
         raise ValueError("visible-reasoning coverage target status is invalid")
     minimum = _count(
         coverage["minimum_unique_supervised_tokens"],
@@ -284,10 +380,19 @@ def _coverage(value: Mapping[str, Any]) -> dict[str, Any]:
         "visible-reasoning coverage unique supervised tokens",
         positive=True,
     )
-    if minimum < MINIMUM_SUPERVISED_TOKENS or coverage["target_goal_reached"] is not (
-        unique >= minimum
+    token_goal = unique >= minimum
+    if (
+        minimum < MINIMUM_SUPERVISED_TOKENS
+        or coverage["token_goal_reached"] is not token_goal
     ):
         raise ValueError("visible-reasoning coverage target gate is not mathematically bound")
+    minimum_families = _count(
+        coverage["minimum_successful_families"],
+        "minimum successful families",
+        positive=True,
+    )
+    if minimum_families < MINIMUM_SUCCESSFUL_FAMILIES:
+        raise ValueError("visible-reasoning coverage weakens the successful-family gate")
     family = _exact(
         coverage["family_token_concentration"],
         {
@@ -307,6 +412,13 @@ def _coverage(value: Mapping[str, Any]) -> dict[str, Any]:
         or family["within_limit"] is not True
     ):
         raise ValueError("visible-reasoning coverage exceeds the family concentration limit")
+    family_goal = family["families_with_targets"] >= minimum_families
+    if (
+        coverage["successful_family_goal_reached"] is not family_goal
+        or coverage["target_goal_reached"]
+        is not (token_goal and family_goal and family["within_limit"])
+    ):
+        raise ValueError("visible-reasoning coverage family gate is not mathematically bound")
     compaction = _exact(
         coverage["compaction"],
         {
@@ -391,6 +503,9 @@ def select(
         "source_authorization_sha256": manifest["source_authorization_sha256"],
         "collection_packet_sha256": manifest["collection_packet_sha256"],
         "success_evidence_sha256": manifest["success_evidence_sha256"],
+        "campaign_identity": copy.deepcopy(manifest["campaign_identity"]),
+        "arm_manifests": copy.deepcopy(manifest["arm_manifests"]),
+        "matched_ablation": copy.deepcopy(manifest["matched_ablation"]),
         "selected": {
             "source_records": counts["source_records"],
             "windows": counts["windows"],
@@ -399,6 +514,12 @@ def select(
             ],
             "visible_action_target_tokens": counts["visible_action_target_tokens"],
             "supervised_tokens": counts["supervised_tokens"],
+            "matched_action_only_supervised_tokens": counts[
+                "matched_action_only_supervised_tokens"
+            ],
+            "successful_families": checked_coverage["family_token_concentration"][
+                "families_with_targets"
+            ],
         },
         "status": "source_only_qualified",
     }

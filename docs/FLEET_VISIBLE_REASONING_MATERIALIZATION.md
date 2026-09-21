@@ -47,11 +47,16 @@ must prove that the exact text was visible to the Qwen student and licensed for
 training; an ordinary `thinking`, `reasoning`, `reasoning_content`, `analysis`,
 or unknown field can never satisfy that proof.
 
-Before the builder opens private records, it verifies the sealed packet,
-catalog, anchored family split, source-derived September root anchor,
-protected-heldout lock, runtime bindings, and success selection. A generic
-re-split, replacement root, held-out family, missing grading evidence, or
-per-task cap violation stops before source content is read.
+Before the builder opens private records, it verifies the sealed campaign plan,
+wave plan, immutable operation authorization, collection packet, exact train
+task selection, catalog, anchored family split, source-derived September root
+anchor, protected-heldout lock, runtime bindings, verifier-success evidence,
+and private selection. Every success and private record must name the exact
+campaign cell, wave, attempt, and seed. The builder independently reconstructs
+all 20,000 planned cell identities from the exact 50 training task versions and
+rejects any different wave or cell universe. A generic re-split, replacement
+root, held-out family, missing grading evidence, or replayed cell stops before
+source content is read.
 
 The builder is intentionally offline. It verifies that each locally materialized
 authorization and success-evidence document is self-digesting and agrees with
@@ -80,13 +85,19 @@ prompt used for the next target. Teacher-visible-rationale records cannot use
 this exception in v1.
 
 The token-only result has schema
-`cyber_qwen_opencode_visible_reasoning_sft_corpus_v1`. Materialization itself
+`cyber_qwen_opencode_visible_reasoning_sft_corpus_v1`. It contains two paired
+Parquet corpora: one supervises student-visible reasoning plus visible actions;
+the other uses the exact same source records, packed windows, and token IDs but
+masks the reasoning targets. Each arm has its own digest-sealed manifest, and a
+cross-arm digest binds both manifests to the same ordered window identities.
+Materialization itself
 is **never** a training permit: its receipt records `sft_ready: false` even at
 the target. The separate `data-fleet-visible-reasoning-authorize` command checks
 the aggregate source census, corpus manifest, and coverage receipt together.
 It writes `source_only_qualified`, not a collection or training approval, after
-at least 20M unique supervised tokens and the 25% maximum task-family share are
-met. No current SFT launcher accepts that qualification, so this remains a
+at least 20M unique supervised tokens, verified successes from at least 20
+training families, and the 25% maximum task-family share are met. No current
+SFT launcher accepts that qualification, so this remains a
 source-only admission boundary rather than authorization to train.
 
 ## Collection handoff schemas
@@ -95,18 +106,21 @@ Future Qwen-self collection code must emit distinct immutable artifacts, not
 modify an action packet:
 
 - `cyber_qwen_opencode_student_visible_reasoning_source_profile_v1`
+- `cyber_qwen_opencode_student_visible_reasoning_source_authorization_v1`
+- `cyber_qwen_opencode_student_visible_reasoning_operation_authorization_v1`
 - `cyber_qwen_opencode_student_visible_reasoning_packet_v1`
 - `cyber_qwen_opencode_student_visible_reasoning_success_evidence_v1`
 - `cyber_qwen_opencode_student_visible_reasoning_census_v1`
 - `cyber_qwen_opencode_student_visible_reasoning_selection_v1`
 - `cyber_qwen_opencode_student_visible_reasoning_record_v1`
+- `cyber_qwen_opencode_visible_reasoning_sft_arm_manifest_v1`
 - `cyber_qwen_opencode_visible_reasoning_training_selection_v1`
 
 The packet must carry `root_role_anchor_id`
 `fleet-blackbox-current-study-20260914-v2` and a non-null
 `family_role_anchor_sha256`. This keeps a reasoning arm scientifically distinct
-while allowing a later action-only paired arm to use the same selected turns
-with only reasoning loss masked.
+and requires the materializer to emit the matched action-only arm from the same
+selected turns with only reasoning loss masked.
 
 The action-only schemas and materializer remain unchanged. A record with no
 explicit Qwen-visible reasoning belongs in that action-only lane, not here.

@@ -277,10 +277,209 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         },
     }
     profile["sha256"] = digest_json(profile)
+    train_identities = {
+        (row["task_key"], row["task_version_id"])
+        for row in split["tasks"]
+        if row["split"] == "train"
+    }
+    task_selection = campaign.sealed(
+        {
+            "schema": campaign.SELECTION_SCHEMA,
+            "inventory_sha256": inventory["sha256"],
+            "family_split_sha256": split["sha256"],
+            "root_role_anchor_id": task_family_split.TRUSTED_FLEET_COLLECTION_ROOT_ID,
+            "family_role_anchor_sha256": role_anchor["sha256"],
+            "runtime_bindings_sha256": runtime["sha256"],
+            "task_validity_receipt_sha256": inventory["task_validity_receipt_sha256"],
+            "tasks": [
+                row
+                for row in runtime["task_versions"]
+                if (row["task_key"], row["task_version_id"]) in train_identities
+            ],
+            "held_out_task_version_count": len(split["tasks"]) - len(train_identities),
+            "family_leakage_check": {
+                "exact_identity_overlap": 0,
+                "reviewed_family_overlap": 0,
+                "held_out_roles": ["dev", "final_test"],
+            },
+        }
+    )
+    campaign_name = "synthetic-visible-reasoning-v1"
+    selected_tasks = sorted(
+        (
+            {
+                "task_key": row["task_key"],
+                "task_version_id": row["task_version_id"],
+                "group_id": roles[(row["task_key"], row["task_version_id"])]["group_id"],
+            }
+            for row in task_selection["tasks"]
+        ),
+        key=lambda row: (row["task_key"], row["task_version_id"]),
+    )
+    waves = []
+    universe = []
+    for wave_index in range(corpus.CAMPAIGN_WAVES):
+        first = wave_index * corpus.CAMPAIGN_ATTEMPTS_PER_WAVE + 1
+        last = first + corpus.CAMPAIGN_ATTEMPTS_PER_WAVE - 1
+        cells = []
+        for task in selected_tasks:
+            for attempt in range(first, last + 1):
+                cell = {
+                    "campaign_name": campaign_name,
+                    **task,
+                    "attempt": attempt,
+                    "seed": corpus.CAMPAIGN_BASE_SEED + attempt - 1,
+                }
+                cell["cell_id"] = (
+                    corpus.CELL_ID_PREFIX + digest_json(cell).removeprefix("sha256:")[:24]
+                )
+                cells.append(cell)
+        universe.extend(cells)
+        waves.append(
+            {
+                "wave": wave_index + 1,
+                "attempt_first": first,
+                "attempt_last": last,
+                "seed_first": corpus.CAMPAIGN_BASE_SEED + first - 1,
+                "seed_last": corpus.CAMPAIGN_BASE_SEED + last - 1,
+                "task_versions": len(selected_tasks),
+                "planned_cells": len(cells),
+                "cell_intents_sha256": digest_json(cells),
+            }
+        )
+    cell_universe_sha256 = digest_json(universe)
+    planned_cells = len(universe)
+    source_treatment = {
+        "kind": "qwen_self",
+        "model": profile["source"]["model"],
+        "tokenizer": {
+            "manifest_sha256": profile["qwen_target"]["tokenizer_sha256"],
+            "backend_sha256": profile["qwen_target"]["tokenizer_backend_sha256"],
+            "chat_template_sha256": profile["qwen_target"]["chat_template_sha256"],
+        },
+        "opencode": {
+            **profile["opencode"],
+            "provider_adapter": "@ai-sdk/openai-compatible",
+            "max_output_tokens": 32_768,
+            "max_model_requests": 600,
+            "timeout_seconds": 28_800,
+        },
+        "thinking": {**profile["thinking"], "reasoning_visibility": "student_visible"},
+        "sampling": {
+            "temperature": 0.6,
+            "top_p": 0.95,
+            "base_seed": corpus.CAMPAIGN_BASE_SEED,
+            "seed_rule": "base_seed_plus_attempt_minus_one",
+        },
+        "images": {
+            "agent": "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92",
+            "proxy": (
+                "ghcr.io/astral-sh/uv:python3.12-bookworm@"
+                "sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+            ),
+        },
+        "route": {
+            "model": "qwen3.8-27b-base",
+            "served_id": "qwen3.8-27b",
+            "task_selection_sha256": task_selection["sha256"],
+            "runtime_bindings_sha256": runtime["sha256"],
+            "task_versions_sha256": digest_json(
+                [row["task_version_id"] for row in selected_tasks]
+            ),
+            "task_version_count": len(selected_tasks),
+            "catalog": {
+                "engine": "sglang",
+                "precision": "bf16",
+                "tensor_parallel_size": 1,
+            },
+            "model_info": {
+                "model_path": f"/scratch/models/qwen3.8-27b/{revision}",
+                "model_type": "qwen3_5",
+                "architectures": ["Qwen3_5ForConditionalGeneration"],
+            },
+            "server_info": {
+                "model_path": f"/scratch/models/qwen3.8-27b/{revision}",
+                "context_length": 262_144,
+                "tp_size": 1,
+                "dp_size": 8,
+                "load_balance_method": "total_tokens",
+                "quantization": None,
+                "kv_cache_dtype": "fp8_e4m3",
+                "reasoning_parser": "qwen3",
+                "tool_call_parser": "qwen3_coder",
+            },
+            "endpoint_origin": "https://inference.flt.build",
+        },
+    }
+    campaign_plan = campaign.sealed(
+        {
+            "schema": corpus.CAMPAIGN_PLAN_SCHEMA,
+            "campaign_name": campaign_name,
+            "task_boundary": {"task_selection_sha256": task_selection["sha256"]},
+            "collection": {
+                "attempts_per_task_version": corpus.CAMPAIGN_ATTEMPTS_PER_TASK,
+                "minimum_unique_supervised_tokens": corpus.MINIMUM_SUPERVISED_TOKENS,
+                "minimum_successful_families": corpus.MINIMUM_SUCCESSFUL_FAMILIES,
+                "maximum_family_target_token_fraction": (
+                    corpus.MAXIMUM_FAMILY_TOKEN_FRACTION
+                ),
+            },
+            "source_treatment": source_treatment,
+            "identity": {
+                "cell_identity_universe_sha256": cell_universe_sha256,
+                "planned_unique_cell_ids": planned_cells,
+            },
+        }
+    )
+    wave_plan = campaign.sealed(
+        {
+            "schema": corpus.WAVE_PLAN_SCHEMA,
+            "campaign_plan_sha256": campaign_plan["sha256"],
+            "waves": waves,
+        }
+    )
+    operation_authorization = {
+        "schema": corpus.OPERATION_AUTHORIZATION_SCHEMA,
+        "authority": {
+            "kind": "fleet_artifact_registry_immutable_v1",
+            "artifact_key": "cyber/runs/synthetic/visible-reasoning/operation",
+            "version_index": 1,
+            "content_sha256": _sha("0"),
+        },
+        "campaign_name": campaign_name,
+        "campaign_plan_sha256": campaign_plan["sha256"],
+        "wave_plan_sha256": wave_plan["sha256"],
+        "cell_identity_universe_sha256": cell_universe_sha256,
+        "task_selection_sha256": task_selection["sha256"],
+        "operation_root_name": "synthetic-visible-reasoning-v1",
+        "dedicated_ledger_id": _sha("3"),
+        "policy": {
+            "canonical_private_operation_root_required": True,
+            "dedicated_empty_ledger_required": True,
+            "exclusive_pre_mutation_intent_required": True,
+            "ambiguous_external_mutation_replay_allowed": False,
+            "same_cell_retry_allowed": False,
+        },
+    }
+    operation_authorization["registry_payload_sha256"] = corpus._registry_payload_sha256(
+        operation_authorization
+    )
+    operation_authorization["authority"]["content_sha256"] = operation_authorization[
+        "registry_payload_sha256"
+    ]
+    operation_authorization["sha256"] = digest_json(operation_authorization)
     packet = {
         "schema": corpus.PACKET_SCHEMA,
         "source_profile_sha256": profile["sha256"],
         "source_authorization_sha256": authorization["sha256"],
+        "campaign_name": campaign_name,
+        "campaign_plan_sha256": campaign_plan["sha256"],
+        "wave_plan_sha256": wave_plan["sha256"],
+        "cell_identity_universe_sha256": cell_universe_sha256,
+        "operation_authorization_sha256": operation_authorization["sha256"],
+        "task_selection_sha256": task_selection["sha256"],
+        "attempts_per_task_version": corpus.CAMPAIGN_ATTEMPTS_PER_TASK,
+        "base_seed": corpus.CAMPAIGN_BASE_SEED,
         "catalog_inventory_sha256": inventory["sha256"],
         "family_split_sha256": split["sha256"],
         "root_role_anchor_id": task_family_split.TRUSTED_FLEET_COLLECTION_ROOT_ID,
@@ -290,7 +489,9 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         "training_data_eligible": True,
         "objective": "student_visible_reasoning_plus_visible_actions",
         "minimum_unique_supervised_tokens": corpus.MINIMUM_SUPERVISED_TOKENS,
+        "minimum_successful_families": corpus.MINIMUM_SUCCESSFUL_FAMILIES,
         "maximum_family_target_token_fraction": corpus.MAXIMUM_FAMILY_TOKEN_FRACTION,
+        "matched_action_only_required": True,
         "deduplication_order": [
             "source_session_identity",
             "normalized_trajectory_digest",
@@ -323,6 +524,9 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
     record = {
         "schema": corpus.RECORD_SCHEMA,
         "record_id": "record-a",
+        "wave": 1,
+        "attempt": 1,
+        "seed": corpus.CAMPAIGN_BASE_SEED,
         "source_profile_sha256": profile["sha256"],
         "lineage": {
             "task_key": candidate["task_key"],
@@ -340,6 +544,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         "windows": [_window()],
         "compaction": {"kind": "none"},
     }
+    record["cell_id"] = corpus._planned_cell_id(packet, {**record["lineage"], **record})
     record["content_digest"] = digest_json(record)
     selected = {
         "record_id": record["record_id"],
@@ -350,10 +555,13 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         "task_key": candidate["task_key"],
         "task_version_id": candidate["task_version_id"],
         "group_id": candidate["group_id"],
-        "attempt": 1,
+        "wave": record["wave"],
+        "attempt": record["attempt"],
+        "seed": record["seed"],
         "reasoning_visibility": "student_visible",
         "compaction_kind": "none",
     }
+    selected["cell_id"] = record["cell_id"]
     evidence = {
         "schema": corpus.SUCCESS_EVIDENCE_SCHEMA,
         "authority": {
@@ -365,6 +573,11 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         "source_profile_sha256": profile["sha256"],
         "source_authorization_sha256": authorization["sha256"],
         "collection_packet_sha256": packet["sha256"],
+        "campaign_plan_sha256": campaign_plan["sha256"],
+        "wave_plan_sha256": wave_plan["sha256"],
+        "cell_identity_universe_sha256": cell_universe_sha256,
+        "operation_authorization_sha256": operation_authorization["sha256"],
+        "task_selection_sha256": task_selection["sha256"],
         "catalog_inventory_sha256": inventory["sha256"],
         "family_split_sha256": split["sha256"],
         "root_role_anchor_id": task_family_split.TRUSTED_FLEET_COLLECTION_ROOT_ID,
@@ -376,6 +589,10 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
                     name: selected[name]
                     for name in (
                         "record_id",
+                        "cell_id",
+                        "wave",
+                        "attempt",
+                        "seed",
                         "source_session_identity_sha256",
                         "normalized_record_sha256",
                         "normalized_trajectory_sha256",
@@ -397,6 +614,11 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         "schema": corpus.SELECTION_SCHEMA,
         "collection_packet_sha256": packet["sha256"],
         "verified_success_evidence_sha256": evidence["sha256"],
+        "campaign_plan_sha256": campaign_plan["sha256"],
+        "wave_plan_sha256": wave_plan["sha256"],
+        "cell_identity_universe_sha256": cell_universe_sha256,
+        "operation_authorization_sha256": operation_authorization["sha256"],
+        "task_selection_sha256": task_selection["sha256"],
         "catalog_inventory_sha256": inventory["sha256"],
         "family_split_sha256": split["sha256"],
         "root_role_anchor_id": task_family_split.TRUSTED_FLEET_COLLECTION_ROOT_ID,
@@ -440,6 +662,9 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
     values = {
         "profile.json": profile,
         "source-authorization.json": authorization,
+        "campaign-plan.json": campaign_plan,
+        "wave-plan.json": wave_plan,
+        "operation-authorization.json": operation_authorization,
         "packet.json": packet,
         "selection.json": selection,
         "success-evidence.json": evidence,
@@ -449,6 +674,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         "role-anchor.json": role_anchor,
         "lock.json": lock,
         "runtime.json": runtime,
+        "task-selection.json": task_selection,
         "roundtrip.json": roundtrip,
         "model-lock.json": model_lock,
     }
@@ -464,6 +690,9 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         "schema": corpus.REQUEST_SCHEMA,
         "source_profile": _ref(paths["profile.json"]),
         "source_authorization": _ref(paths["source-authorization.json"]),
+        "campaign_plan": _ref(paths["campaign-plan.json"]),
+        "wave_plan": _ref(paths["wave-plan.json"]),
+        "operation_authorization": _ref(paths["operation-authorization.json"]),
         "collection_packet": _ref(paths["packet.json"]),
         "selection": _ref(paths["selection.json"]),
         "success_evidence": _ref(paths["success-evidence.json"]),
@@ -473,6 +702,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         "role_anchor": _ref(paths["role-anchor.json"]),
         "protected_family_lock": _ref(paths["lock.json"]),
         "runtime_bindings": _ref(paths["runtime.json"]),
+        "task_selection": _ref(paths["task-selection.json"]),
         "roundtrip_fixture": _ref(paths["roundtrip.json"]),
         "model_lock": _ref(paths["model-lock.json"]),
         "tokenizer_root": str(tmp_path / "tokenizer"),
@@ -484,6 +714,9 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         "profile": profile,
         "packet": packet,
         "selection": selection,
+        "operation_authorization": operation_authorization,
+        "campaign_plan": campaign_plan,
+        "wave_plan": wave_plan,
         "record": record,
         "split": split,
         "candidate": candidate,
@@ -516,12 +749,33 @@ def test_materializes_token_only_visible_reasoning_corpus(tmp_path: Path, monkey
     assert manifest["schema"] == corpus.CORPUS_SCHEMA
     assert manifest["validation_mode"] == "pending_reasoning_selection"
     assert "synthetic visible reasoning" not in json.dumps(manifest)
-    rows = pq.read_table(tmp_path / "corpus" / "train.parquet").to_pylist()
+    rows = pq.read_table(
+        tmp_path / "corpus" / "train-reasoning-plus-action.parquet"
+    ).to_pylist()
+    action_rows = pq.read_table(
+        tmp_path / "corpus" / "train-matched-action-only.parquet"
+    ).to_pylist()
     assert rows[0]["input_ids"] == [1, 2, 3, 4, 5]
     assert rows[0]["loss_mask"] == [0, 0, 1, 1, 1]
+    assert action_rows[0]["input_ids"] == rows[0]["input_ids"]
+    assert action_rows[0]["paired_window_sha256"] == rows[0]["paired_window_sha256"]
+    assert action_rows[0]["loss_mask"] == [0, 0, 0, 1, 1]
+    assert manifest["matched_ablation"]["same_selected_windows"] is True
+    assert manifest["matched_ablation"]["cross_arm_sha256"].startswith("sha256:")
+    for arm_name in ("reasoning_plus_action", "matched_action_only"):
+        arm_ref = manifest["arm_manifests"][arm_name]
+        arm_manifest = json.loads((tmp_path / "corpus" / arm_ref["path"]).read_text())
+        assert file_sha256(tmp_path / "corpus" / arm_ref["path"]) == arm_ref["file_sha256"]
+        assert arm_manifest["sha256"] == arm_ref["logical_sha256"]
+        assert arm_manifest["paired_window_identity_sha256"] == manifest[
+            "matched_ablation"
+        ]["paired_window_identity_sha256"]
     assert (tmp_path / "corpus").stat().st_mode & 0o777 == 0o700
     for name in (
-        "train.parquet",
+        "train-reasoning-plus-action.parquet",
+        "train-matched-action-only.parquet",
+        "reasoning-plus-action.manifest.json",
+        "matched-action-only.manifest.json",
         "source-selection.private.jsonl",
         "coverage.private.json",
         "manifest.json",
@@ -664,6 +918,44 @@ def test_rejects_unbound_source_authorization_before_reading_private_records(
     config["source_authorization"] = _ref(state["paths"]["source-authorization.json"])
     monkeypatch.setattr(corpus, "iter_jsonl", lambda _path: (_ for _ in ()).throw(AssertionError()))
     with pytest.raises(ValueError, match="source authorization does not bind"):
+        corpus.build(config, relative_to=tmp_path)
+    assert not Path(config["output"]).exists()
+
+
+def test_rejects_operation_authorization_campaign_drift_before_private_records(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config, state = _fixture(tmp_path, monkeypatch)
+    authorization = copy.deepcopy(state["operation_authorization"])
+    authorization["campaign_plan_sha256"] = _sha("9")
+    authorization["registry_payload_sha256"] = corpus._registry_payload_sha256(authorization)
+    authorization["authority"]["content_sha256"] = authorization[
+        "registry_payload_sha256"
+    ]
+    authorization["sha256"] = digest_json(
+        {key: value for key, value in authorization.items() if key != "sha256"}
+    )
+    _rewrite(state["paths"]["operation-authorization.json"], authorization)
+    config["operation_authorization"] = _ref(state["paths"]["operation-authorization.json"])
+    monkeypatch.setattr(corpus, "iter_jsonl", lambda _path: (_ for _ in ()).throw(AssertionError()))
+    with pytest.raises(ValueError, match="packet-bound immutable artifact"):
+        corpus.build(config, relative_to=tmp_path)
+    assert not Path(config["output"]).exists()
+
+
+def test_rejects_selection_with_a_cell_from_the_wrong_wave_before_private_records(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config, state = _fixture(tmp_path, monkeypatch)
+    selection = copy.deepcopy(state["selection"])
+    selection["selected"][0]["wave"] = 2
+    selection["sha256"] = digest_json(
+        {key: value for key, value in selection.items() if key != "sha256"}
+    )
+    _rewrite(state["paths"]["selection.json"], selection)
+    config["selection"] = _ref(state["paths"]["selection.json"])
+    monkeypatch.setattr(corpus, "iter_jsonl", lambda _path: (_ for _ in ()).throw(AssertionError()))
+    with pytest.raises(ValueError, match="campaign attempt and seed universe"):
         corpus.build(config, relative_to=tmp_path)
     assert not Path(config["output"]).exists()
 

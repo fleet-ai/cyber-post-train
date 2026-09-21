@@ -93,7 +93,6 @@ def _validate_spec(spec: dict[str, Any]) -> None:
         raise ValueError("visible-reasoning campaign must remain source-only pending review")
     if set(spec["inputs"]) != {
         "model_lock",
-        "source_profile",
         "inventory",
         "family_split",
         "role_anchor",
@@ -179,7 +178,11 @@ def _validate_spec(spec: dict[str, Any]) -> None:
 
 
 def _model_and_harness(
-    spec: dict[str, Any], model_lock: dict[str, Any], profile: dict[str, Any]
+    spec: dict[str, Any],
+    model_lock: dict[str, Any],
+    tasks: list[dict[str, Any]],
+    task_selection: dict[str, Any],
+    runtime_bindings: dict[str, Any],
 ) -> None:
     source = spec["source"]
     if source.get("kind") != "qwen_self" or source.get("model") != {
@@ -201,20 +204,61 @@ def _model_and_harness(
         ),
     }:
         raise ValueError("visible-reasoning tokenizer identity drift")
-    model = profile.get("models", {}).get("qwen3.8-27b-base")
-    route = profile.get("routes", {}).get("base")
-    harness = profile.get("harness")
-    if (
-        model != source["model"]
-        or not isinstance(route, dict)
-        or route.get("model") != ("qwen3.8-27b-base")
-    ):
-        raise ValueError("source profile changes the exact Qwen route")
+    route = source.get("route")
+    expected_versions = [row["task_version_id"] for row in tasks]
+    if route != {
+        "model": "qwen3.8-27b-base",
+        "served_id": "qwen3.8-27b",
+        "task_selection_sha256": task_selection.get("sha256"),
+        "runtime_bindings_sha256": runtime_bindings.get("sha256"),
+        "task_versions_sha256": _digest(expected_versions),
+        "task_version_count": TRAIN_TASKS,
+        "catalog": {
+            "engine": "sglang",
+            "precision": "bf16",
+            "tensor_parallel_size": 1,
+        },
+        "model_info": {
+            "model_path": (
+                "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+            ),
+            "model_type": "qwen3_5",
+            "architectures": ["Qwen3_5ForConditionalGeneration"],
+        },
+        "server_info": {
+            "model_path": (
+                "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+            ),
+            "context_length": 262_144,
+            "tp_size": 1,
+            "dp_size": 8,
+            "load_balance_method": "total_tokens",
+            "quantization": None,
+            "kv_cache_dtype": "fp8_e4m3",
+            "reasoning_parser": "qwen3",
+            "tool_call_parser": "qwen3_coder",
+        },
+        "endpoint_origin": "https://inference.flt.build",
+    }:
+        raise ValueError("source route is not bound to the exact 50 train task versions")
+    if source.get("images") != {
+        "agent": "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92",
+        "proxy": (
+            "ghcr.io/astral-sh/uv:python3.12-bookworm@"
+            "sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+        ),
+    }:
+        raise ValueError("visible-reasoning source image identity drift")
     expected_harness = {
         "harness": corpus.OPENCODE_HARNESS,
         "harness_version": corpus.OPENCODE_VERSION,
-        "release_asset_sha256": harness.get("release_asset_sha256"),
-        "tool_catalog_sha256": harness.get("tool_catalog_sha256"),
+        "release_asset_sha256": (
+            "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702"
+        ),
+        "provider_adapter": "@ai-sdk/openai-compatible",
+        "tool_catalog_sha256": (
+            "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+        ),
         "tools": ["bash", "submit_report"],
         "context_management": corpus.ONLINE_COMPACTION,
         "context_window_tokens": 262_144,
@@ -342,8 +386,14 @@ def render(spec: dict[str, Any], *, root: Path) -> dict[str, dict[str, Any]]:
     loaded: dict[str, dict[str, Any]] = {}
     for name, reference in spec["inputs"].items():
         _path, loaded[name] = _reference(root, reference, name.replace("_", " "))
-    _model_and_harness(spec, loaded["model_lock"], loaded["source_profile"])
     tasks = _task_boundary(loaded)
+    _model_and_harness(
+        spec,
+        loaded["model_lock"],
+        tasks,
+        loaded["task_selection"],
+        loaded["runtime_bindings"],
+    )
     historical = loaded["historical_token_basis"]
     if (
         historical.get("files", {}).get("train", {}).get("source_sessions") != 2_886
@@ -398,12 +448,14 @@ def render(spec: dict[str, Any], *, root: Path) -> dict[str, dict[str, Any]]:
             "future_artifact_schemas": {
                 "source_profile": corpus.SOURCE_PROFILE_SCHEMA,
                 "source_authorization": corpus.SOURCE_AUTHORIZATION_SCHEMA,
+                "operation_authorization": corpus.OPERATION_AUTHORIZATION_SCHEMA,
                 "collection_packet": corpus.PACKET_SCHEMA,
                 "success_evidence": corpus.SUCCESS_EVIDENCE_SCHEMA,
                 "private_selection": corpus.SELECTION_SCHEMA,
                 "record": corpus.RECORD_SCHEMA,
                 "source_census": "cyber_qwen_opencode_student_visible_reasoning_census_v1",
                 "corpus": corpus.CORPUS_SCHEMA,
+                "paired_arm_manifest": corpus.ARM_MANIFEST_SCHEMA,
                 "training_selection": (
                     "cyber_qwen_opencode_visible_reasoning_training_selection_v1"
                 ),

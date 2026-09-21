@@ -21,6 +21,19 @@ def _seal(value: dict) -> dict:
 
 
 def _manifest() -> dict:
+    arm_manifests = {
+        "reasoning_plus_action": {
+            "path": "reasoning-plus-action.manifest.json",
+            "file_sha256": _sha("9"),
+            "logical_sha256": _sha("a"),
+        },
+        "matched_action_only": {
+            "path": "matched-action-only.manifest.json",
+            "file_sha256": _sha("0"),
+            "logical_sha256": _sha("b"),
+        },
+    }
+    paired = _sha("c")
     return _seal(
         {
             "schema": "cyber_qwen_opencode_visible_reasoning_sft_corpus_v1",
@@ -36,13 +49,50 @@ def _manifest() -> dict:
             "family_role_anchor_sha256": _sha("3"),
             "protected_family_lock_sha256": _sha("4"),
             "runtime_bindings_sha256": _sha("5"),
-            "files": {"train": {"path": "train.parquet", "sha256": _sha("6"), "rows": 3}},
+            "files": {
+                "reasoning_plus_action": {
+                    "path": "train-reasoning-plus-action.parquet",
+                    "sha256": _sha("6"),
+                    "rows": 20,
+                },
+                "matched_action_only": {
+                    "path": "train-matched-action-only.parquet",
+                    "sha256": _sha("7"),
+                    "rows": 20,
+                },
+            },
+            "arm_manifests": arm_manifests,
             "counts": {
-                "source_records": 2,
-                "windows": 3,
+                "source_records": 20,
+                "windows": 20,
                 "student_visible_reasoning_target_tokens": 8_000_000,
                 "visible_action_target_tokens": 12_000_000,
                 "supervised_tokens": 20_000_000,
+                "matched_action_only_supervised_tokens": 12_000_000,
+            },
+            "campaign_identity": {
+                "campaign_plan_sha256": _sha("1"),
+                "wave_plan_sha256": _sha("2"),
+                "cell_identity_universe_sha256": _sha("3"),
+                "operation_authorization_sha256": _sha("4"),
+                "task_selection_sha256": _sha("5"),
+            },
+            "matched_ablation": {
+                "paired_window_identity_sha256": paired,
+                "same_selected_windows": True,
+                "same_input_ids": True,
+                "only_reasoning_loss_mask_differs": True,
+                "cross_arm_sha256": digest_json(
+                    {
+                        "reasoning_plus_action_manifest_sha256": arm_manifests[
+                            "reasoning_plus_action"
+                        ]["logical_sha256"],
+                        "matched_action_only_manifest_sha256": arm_manifests[
+                            "matched_action_only"
+                        ]["logical_sha256"],
+                        "paired_window_identity_sha256": paired,
+                    }
+                ),
             },
             "validation_mode": "pending_reasoning_selection",
             "coverage_sha256": _sha("7"),
@@ -61,13 +111,13 @@ def _source_census(manifest: dict) -> dict:
             "collection_packet_sha256": manifest["collection_packet_sha256"],
             "private_selection_sha256": manifest["selection_sha256"],
             "success_evidence_sha256": manifest["success_evidence_sha256"],
-            "sessions": {"candidates": 4, "verified_successes": 3, "selected": 2},
-            "visibility": {"student_visible": 2, "private_or_unknown": 1, "absent": 1},
+            "sessions": {"candidates": 22, "verified_successes": 21, "selected": 20},
+            "visibility": {"student_visible": 20, "private_or_unknown": 1, "absent": 1},
             "target_tokens": {
                 "student_visible_reasoning": 8_000_000,
                 "visible_action": 12_000_000,
             },
-            "compaction": {"none": 3, "exact_student_generated": 1, "opaque_rejected": 0},
+            "compaction": {"none": 21, "exact_student_generated": 1, "opaque_rejected": 0},
         }
     )
 
@@ -82,21 +132,24 @@ def _coverage(manifest: dict, source: dict) -> dict:
             "collection_packet_sha256": manifest["collection_packet_sha256"],
             "source_profile_sha256": manifest["source_profile_sha256"],
             "source_authorization_sha256": manifest["source_authorization_sha256"],
-            "selected_source_records": 2,
-            "visible_reasoning_windows": 3,
+            "selected_source_records": 20,
+            "visible_reasoning_windows": 20,
             "student_visible_reasoning_target_tokens": 8_000_000,
             "visible_action_target_tokens": 12_000_000,
             "unique_supervised_tokens": 20_000_000,
             "minimum_unique_supervised_tokens": 20_000_000,
+            "token_goal_reached": True,
+            "minimum_successful_families": 20,
+            "successful_family_goal_reached": True,
             "target_goal_reached": True,
             "family_token_concentration": {
-                "families_with_targets": 2,
-                "largest_family_target_token_fraction": 0.25,
+                "families_with_targets": 20,
+                "largest_family_target_token_fraction": 0.05,
                 "maximum_allowed_fraction": 0.25,
                 "within_limit": True,
             },
             "compaction": {
-                "uncompacted_windows": 3,
+                "uncompacted_windows": 20,
                 "exact_student_generated_continuation_windows": 0,
                 "opaque_compaction_windows": 0,
             },
@@ -180,7 +233,22 @@ def test_separate_visible_reasoning_selection_binds_all_aggregates() -> None:
         ),
         (
             lambda source, manifest, coverage: coverage.update({"target_goal_reached": False}),
-            "target gate",
+            "family gate",
+        ),
+        (
+            lambda source, manifest, coverage: coverage.update(
+                {
+                    "minimum_successful_families": 19,
+                    "successful_family_goal_reached": True,
+                }
+            ),
+            "weakens the successful-family gate",
+        ),
+        (
+            lambda source, manifest, coverage: manifest["matched_ablation"].update(
+                {"cross_arm_sha256": _sha("9")}
+            ),
+            "matched visible-reasoning arm binding",
         ),
     ],
 )
