@@ -197,8 +197,9 @@ the cause and use a fresh reviewed attempt number. This Job proves the CPU data,
 loader, and signature gates only. It does not qualify CUDA, distributed startup,
 training, or checkpoint reload.
 
-For the reviewed Qwen3.8 rank-64 LoRA anchor, use the named LoRA route instead
-of the generic command pair:
+For either exact reviewed Qwen3.8 rank-64 LoRA runtime (the terminal A2 family
+or the matched 32K successor), use the named LoRA route instead of the generic
+command pair:
 
 ```sh
 uv run cyber-post-train qwen38-lora-sft-cpu-preflight-job-create /shared/prepared-run \
@@ -209,8 +210,9 @@ uv run cyber-post-train qwen38-lora-sft-cpu-preflight-job-collect /shared/prepar
 
 It reuses the exact same source-bound, zero-GPU Job and output-absence check,
 but writes a receipt bound to Qwen3.8, the LoRA settings, the one-node/eight-GPU
-training shape, and the versioned runtime. The generic command pair rejects a
-reviewed Qwen3.8 rank-64 anchor prepared directory, so a generic SFT receipt
+training shape, and one of those two exact versioned runtimes. The generic
+command pair rejects either reviewed Qwen3.8 rank-64 prepared directory, and an
+unknown LoRA runtime is accepted by neither route, so a generic SFT receipt
 cannot be relabeled as this LoRA gate.
 
 When an operator must transfer a prepared archive from a local machine into an
@@ -266,7 +268,20 @@ The fallback is deliberately narrow. It fetches a fresh API preview, proves the
 saved request is the current SFT render and needs only the `wandb-api` Secret,
 then rejects warnings or drift in identity, c1/q1 priority, normal suspension,
 release-on-exit, image, command, resources, environment, Secret references, or
-node count. It replaces the API's zero UUID/name placeholders with one fresh
+node count. For SFT only, the fallback accepts exactly the generic production
+GPU selector `workload: fleetai-training-ng-gpu` (with optional
+`kubernetes.io/os: linux`) from the source preview, and only under Kubernetes
+context `nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6` adds the reviewed
+pool binding
+`topology.nebius.com/gpu-cluster-id: computegpucluster-e04x263hvn91b321fq`
+to every head and worker template. A development/unknown context, a missing or
+different generic selector, or a pre-bound cluster selector fails before server
+dry-run, journaling, or creation. The API-server dry-run and the persisted
+post-create readback must retain the exact rendered selector and complete
+runtime surface. This narrow repair does not apply to the LR30 exception and
+must be removed when the Jobs API owns the complete rendering contract. Always
+use a fresh create-once run identity; never patch an already-created RayJob. It
+replaces the API's zero UUID/name placeholders with one fresh
 UUID/name, removes only the preview-generated run-scoped `*-fleet-key` Secret
 reference that SFT does not consume, and adds the alert annotation to the root
 RayJob. Every other preview field is preserved.

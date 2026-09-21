@@ -22,6 +22,8 @@ from cyber_post_train.direct_submit import (
     CPU_SOURCE_ARCHIVE_SHA256_ANNOTATION,
     CPU_SOURCE_COMMIT_ANNOTATION,
     LORA_TRAINER_IMAGE,
+    SFT_PRODUCTION_CONTEXT,
+    TRAINING_GPU_CLUSTER_SELECTOR,
     Kubectl,
     collect_sfs_output_check,
     create_sfs_output_check_once,
@@ -436,7 +438,13 @@ def lr30_plan(*, launchable=False):
 
 def test_render_changes_only_reviewed_identity_secret_and_root_annotation():
     source = manifest()
-    rendered, proof = render_sft_rayjob(plan(), request(), preview(source), run_id=RUN_ID)
+    rendered, proof = render_sft_rayjob(
+        plan(),
+        request(),
+        preview(source),
+        kubernetes_context=SFT_PRODUCTION_CONTEXT,
+        run_id=RUN_ID,
+    )
     assert proof["name"] == "researcher-sft-12345678"
     assert proof["run_id"] == RUN_ID
     assert proof["removed_api_fleet_secrets"] == 2
@@ -444,14 +452,30 @@ def test_render_changes_only_reviewed_identity_secret_and_root_annotation():
     assert rendered["metadata"]["labels"]["fleet.ai/run-id"] == RUN_ID
     assert rendered["metadata"]["annotations"]["fleet.ai/run-id"] == RUN_ID
     assert source["metadata"]["annotations"].get("fleet.ai/failure-alerts") is None
+    assert proof["kubernetes_context"] == SFT_PRODUCTION_CONTEXT
+    assert proof["gpu_cluster_selector"] == TRAINING_GPU_CLUSTER_SELECTOR
+    assert proof["bound_gpu_cluster_templates"] == 2
 
-    for group in [
+    source_groups = [
+        source["spec"]["rayClusterSpec"]["headGroupSpec"],
+        *source["spec"]["rayClusterSpec"]["workerGroupSpecs"],
+    ]
+    rendered_groups = [
         rendered["spec"]["rayClusterSpec"]["headGroupSpec"],
         *rendered["spec"]["rayClusterSpec"]["workerGroupSpecs"],
-    ]:
+    ]
+    assert all(
+        group["template"]["spec"]["nodeSelector"] == {"workload": "fleetai-training-ng-gpu"}
+        for group in source_groups
+    )
+    for group in rendered_groups:
         pod = group["template"]
         container = pod["spec"]["containers"][0]
         env = {item["name"]: item["value"] for item in container["env"]}
+        assert pod["spec"]["nodeSelector"] == {
+            **TRAINING_GPU_CLUSTER_SELECTOR,
+            "workload": "fleetai-training-ng-gpu",
+        }
         assert pod["metadata"]["labels"]["fleet.ai/run-id"] == RUN_ID
         assert pod["spec"]["priority"] == 10_000
         assert env["FLEET_RUN_ID"] == RUN_ID
@@ -475,6 +499,10 @@ def test_lr30_render_is_exact_one_gpu_root_annotated_and_secret_free():
     assert all(group["template"]["spec"]["containers"][0]["envFrom"] == [] for group in groups)
     assert all(
         group["template"]["spec"]["containers"][0]["resources"]["requests"]["nvidia.com/gpu"] == 1
+        for group in groups
+    )
+    assert all(
+        group["template"]["spec"]["nodeSelector"] == {"workload": "fleetai-training-ng-gpu"}
         for group in groups
     )
 
@@ -506,6 +534,10 @@ def test_lr30_render_is_exact_one_gpu_root_annotated_and_secret_free():
         "extra-pull-secret",
         "missing-storage-bundle",
         "missing-ray-start-params",
+        "missing-generic-gpu-selector",
+        "wrong-generic-gpu-selector",
+        "unexpected-prebound-gpu-cluster-selector",
+        "wrong-gpu-cluster-selector",
         "token-submitter",
         "newline-submitter",
         "oversize-submitter",
@@ -583,6 +615,16 @@ def test_render_fails_closed_on_preview_drift(fault):
         container.pop("volumeMounts")
     elif fault == "missing-ray-start-params":
         obj["spec"]["rayClusterSpec"]["headGroupSpec"].pop("rayStartParams")
+    elif fault == "missing-generic-gpu-selector":
+        head["spec"]["nodeSelector"].pop("workload")
+    elif fault == "wrong-generic-gpu-selector":
+        head["spec"]["nodeSelector"]["workload"] = "fleetai-training-ng-cpu"
+    elif fault == "unexpected-prebound-gpu-cluster-selector":
+        head["spec"]["nodeSelector"].update(TRAINING_GPU_CLUSTER_SELECTOR)
+    elif fault == "wrong-gpu-cluster-selector":
+        head["spec"]["nodeSelector"]["topology.nebius.com/gpu-cluster-id"] = (
+            "computegpucluster-wrong"
+        )
     elif fault == "token-submitter":
         obj["metadata"]["annotations"]["fleet.ai/submitted-by"] = "Bearer unreviewed-token"
     elif fault == "newline-submitter":
@@ -599,7 +641,13 @@ def test_render_fails_closed_on_preview_drift(fault):
         response["warnings"] = ["server changed"]
     response["manifest_yaml"] = yaml.safe_dump(obj)
     with pytest.raises(JobsError):
-        render_sft_rayjob(plan(), request(), response, run_id=RUN_ID)
+        render_sft_rayjob(
+            plan(),
+            request(),
+            response,
+            kubernetes_context=SFT_PRODUCTION_CONTEXT,
+            run_id=RUN_ID,
+        )
 
 
 @pytest.mark.parametrize(
@@ -614,7 +662,42 @@ def test_render_fails_closed_on_preview_drift(fault):
 def test_direct_fallback_is_sft_only_and_proves_no_fleet_secret(plan_value, request_change):
     value = {**request(), **request_change}
     with pytest.raises(JobsError):
-        render_sft_rayjob(plan_value, value, preview(manifest(value)), run_id=RUN_ID)
+        render_sft_rayjob(
+            plan_value,
+            value,
+            preview(manifest(value)),
+            kubernetes_context=SFT_PRODUCTION_CONTEXT,
+            run_id=RUN_ID,
+        )
+
+
+@pytest.mark.parametrize(
+    "context",
+    [
+        "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+        "production-context",
+    ],
+)
+def test_sft_gpu_cluster_binding_rejects_unknown_or_development_context_before_network(
+    tmp_path, sfs_jobs_root, context
+):
+    jobs, kube = FakeJobs(), FakeKubectl()
+    kube.context = context
+    journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
+
+    with pytest.raises(JobsError, match="exact production context"):
+        direct_submit_sft_once(
+            plan=plan(),
+            request=request(),
+            jobs=jobs,
+            kubectl=kube,
+            journal=journal,
+            run_id=RUN_ID,
+            jobs_root=sfs_jobs_root,
+        )
+
+    assert jobs.calls == [] and kube.calls == []
+    assert not journal.exists()
 
 
 class FakeJobs:
@@ -633,7 +716,7 @@ class FakeJobs:
 
 
 class FakeKubectl:
-    context = "production-context"
+    context = SFT_PRODUCTION_CONTEXT
 
     def __init__(self, *, inventories=None, fail_create=False):
         self.inventories = inventories or {
@@ -642,6 +725,7 @@ class FakeKubectl:
         }
         self.fail_create = fail_create
         self.calls = []
+        self.created = None
 
     def list(self, resource):
         self.calls.append(("list", resource))
@@ -657,7 +741,13 @@ class FakeKubectl:
             raise JobsError("synthetic create uncertainty")
         result = deepcopy(obj)
         result["metadata"]["uid"] = CREATED_UID
+        self.created = deepcopy(result)
         return result
+
+    def get_rayjob(self, name):
+        self.calls.append(("get", name))
+        assert self.created is not None and self.created["metadata"]["name"] == name
+        return deepcopy(self.created)
 
 
 class FakeOutputCheckKubectl(FakeKubectl):
@@ -683,13 +773,64 @@ def test_direct_submit_checks_twice_journals_then_creates_exactly_once(tmp_path,
     assert [call[0] for call in kube.calls].count("list") == 4
     assert [call[0] for call in kube.calls].count("dry-run") == 1
     assert [call[0] for call in kube.calls].count("create") == 1
+    assert [call[0] for call in kube.calls].count("get") == 1
     records = [json.loads(line) for line in journal.read_text().splitlines()]
     assert [record["state"] for record in records] == [
         "KUBECTL_CREATE_INTENT_DO_NOT_RETRY",
         "KUBECTL_CREATE_RESPONSE",
     ]
     assert len(records[0]["output_absence_receipt_sha256"]) == 64
+    assert records[0]["kubernetes_context"] == SFT_PRODUCTION_CONTEXT
+    assert records[0]["gpu_cluster_selector"] == TRAINING_GPU_CLUSTER_SELECTOR
+    assert records[0]["bound_gpu_cluster_templates"] == 2
     assert journal.stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.parametrize(
+    ("target", "fault"),
+    [
+        ("head", "missing-generic"),
+        ("head", "wrong-generic"),
+        ("worker", "prebound-exact-cluster"),
+        ("worker", "prebound-wrong-cluster"),
+    ],
+)
+def test_invalid_source_gpu_selector_stops_before_intent_or_create(
+    tmp_path, sfs_jobs_root, target, fault
+):
+    source = manifest()
+    ray_cluster = source["spec"]["rayClusterSpec"]
+    template_value = (
+        ray_cluster["headGroupSpec"]["template"]
+        if target == "head"
+        else ray_cluster["workerGroupSpecs"][0]["template"]
+    )
+    selector = template_value["spec"]["nodeSelector"]
+    if fault == "missing-generic":
+        selector.pop("workload")
+    elif fault == "wrong-generic":
+        selector["workload"] = "fleetai-training-ng-cpu"
+    elif fault == "prebound-exact-cluster":
+        selector.update(TRAINING_GPU_CLUSTER_SELECTOR)
+    else:
+        selector["topology.nebius.com/gpu-cluster-id"] = "computegpucluster-wrong"
+    jobs = FakeJobs(preview_value=preview(source))
+    kube = FakeKubectl()
+    journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
+
+    with pytest.raises(JobsError, match="node selector drift"):
+        direct_submit_sft_once(
+            plan=plan(),
+            request=request(),
+            jobs=jobs,
+            kubectl=kube,
+            journal=journal,
+            run_id=RUN_ID,
+            jobs_root=sfs_jobs_root,
+        )
+
+    assert not journal.exists()
+    assert not any(call[0] in {"dry-run", "create"} for call in kube.calls)
 
 
 def test_output_check_create_is_suspended_queued_journaled_and_create_once(tmp_path):
@@ -1171,6 +1312,8 @@ def test_uninspectable_output_stops_before_network_intent_or_create(
         "numeric-priority-missing",
         "numeric-priority-zero",
         "worker-numeric-priority-missing",
+        "gpu-cluster-selector",
+        "worker-gpu-cluster-selector",
     ],
 )
 def test_server_dry_run_runtime_drift_stops_before_intent_or_create(tmp_path, sfs_jobs_root, fault):
@@ -1228,6 +1371,14 @@ def test_server_dry_run_runtime_drift_stops_before_intent_or_create(tmp_path, sf
                 result["spec"]["rayClusterSpec"]["workerGroupSpecs"][0]["template"]["spec"].pop(
                     "priority"
                 )
+            elif fault == "gpu-cluster-selector":
+                pod_spec["nodeSelector"]["topology.nebius.com/gpu-cluster-id"] = (
+                    "computegpucluster-wrong"
+                )
+            elif fault == "worker-gpu-cluster-selector":
+                result["spec"]["rayClusterSpec"]["workerGroupSpecs"][0]["template"]["spec"][
+                    "nodeSelector"
+                ]["topology.nebius.com/gpu-cluster-id"] = "computegpucluster-wrong"
             else:
                 result["spec"]["rayClusterSpec"]["workerGroupSpecs"][0]["maxReplicas"] = 8
             return result
@@ -1319,6 +1470,35 @@ def test_server_create_runtime_drift_is_not_accepted_as_success(tmp_path, sfs_jo
     assert [call[0] for call in kube.calls].count("create") == 1
 
 
+def test_persisted_readback_gpu_cluster_drift_is_not_accepted_as_success(tmp_path, sfs_jobs_root):
+    class ReadbackDriftKubectl(FakeKubectl):
+        def get_rayjob(self, name):
+            result = super().get_rayjob(name)
+            selector = result["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"][
+                "nodeSelector"
+            ]
+            selector["topology.nebius.com/gpu-cluster-id"] = "computegpucluster-wrong"
+            return result
+
+    jobs, kube = FakeJobs(), ReadbackDriftKubectl()
+    journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
+    with pytest.raises(JobsError, match="runtime surface"):
+        direct_submit_sft_once(
+            plan=plan(),
+            request=request(),
+            jobs=jobs,
+            kubectl=kube,
+            journal=journal,
+            run_id=RUN_ID,
+            jobs_root=sfs_jobs_root,
+        )
+
+    records = [json.loads(line) for line in journal.read_text().splitlines()]
+    assert [row["state"] for row in records] == ["KUBECTL_CREATE_INTENT_DO_NOT_RETRY"]
+    assert [call[0] for call in kube.calls].count("create") == 1
+    assert [call[0] for call in kube.calls].count("get") == 1
+
+
 def test_kubectl_boundary_uses_only_get_server_dry_run_and_one_create(monkeypatch):
     calls = []
     rendered = manifest()
@@ -1333,6 +1513,7 @@ def test_kubectl_boundary_uses_only_get_server_dry_run_and_one_create(monkeypatc
     kube.list("rayjobs.ray.io")
     kube.dry_run(rendered)
     kube.create_once(rendered)
+    kube.get_rayjob("researcher-sft-12345678")
     tokens = [token for command, _ in calls for token in command]
     assert "apply" not in tokens and "patch" not in tokens and "delete" not in tokens
     assert sum(command.count("create") for command, _ in calls) == 2
@@ -1340,6 +1521,7 @@ def test_kubectl_boundary_uses_only_get_server_dry_run_and_one_create(monkeypatc
     assert (
         sum("create" in command and "--dry-run=server" not in command for command, _ in calls) == 1
     )
+    assert sum("get" in command for command, _ in calls) == 2
 
 
 def test_output_check_workload_read_is_scoped_to_exact_job_uid(monkeypatch):
@@ -1711,7 +1893,13 @@ def test_cpu_sfs_control_drift_fails_before_kubectl(monkeypatch, fault):
 
 def test_invalid_uuid_or_context_fails_locally():
     with pytest.raises(JobsError, match="UUIDv4"):
-        render_sft_rayjob(plan(), request(), preview(), run_id="not-a-uuid")
+        render_sft_rayjob(
+            plan(),
+            request(),
+            preview(),
+            kubernetes_context=SFT_PRODUCTION_CONTEXT,
+            run_id="not-a-uuid",
+        )
     for value in ("", "--current", "spaces are unsafe"):
         with pytest.raises(JobsError):
             Kubectl(value)
