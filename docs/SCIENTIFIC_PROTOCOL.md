@@ -12,6 +12,15 @@ cross-entropy. Self-SFT uses verified-success student actions under the same
 quality gates. RL obtains fresh isolated episodes and authoritative verifier
 rewards. Do not confuse declining imitation loss with improved task success.
 
+When comparing full-weight tuning with an adapter, record the adaptation
+method and target layers, trainer/runtime image, parallelism, effective global
+batch, optimizer and schedule, seed, corpus/split/template digest, and the
+checkpoint/export route for every arm. If any of those differ, call the result
+a **method-and-runtime comparison**, not a one-variable parameterization
+ablation. Choose between methods from the protected task outcome and
+reliability protocol fixed in advance; loss is a health check, not the choice
+rule.
+
 ## Data
 
 Split before windowing. Every version and session of a task family belongs to
@@ -33,6 +42,13 @@ never hide overlength examples by silent truncation. Keep validation data and
 tokenization fixed across measurements; report token-weighted and task-macro
 loss separately.
 
+A corpus claimed to be large must add coverage, not repeat packed windows to
+reach a token target. Its sealed manifest must report unique supervised target
+tokens, source and task-family counts, distribution/concentration, and explicit
+per-source and per-family token caps applied before packing. A 20M-token
+minimum is an admission floor, not permission to duplicate the same successful
+trajectory.
+
 ### Reasoning fields
 
 The current SFT objective is visible assistant actions, not teacher private
@@ -44,6 +60,12 @@ authorization rather than the content of any reasoning. At present no
 reasoning-field schema is authorized, so every reasoning objective fails closed
 until a reviewed change adds its schema, renderer, masking contract, and tests
 together.
+
+That future contract must also prove that the reasoning is student-visible at
+collection, training, and serving time under the same chat-template and
+thinking-mode settings. The first such arm is a separately declared
+action-only-versus-visible-reasoning comparison on the same eligible task
+families; it cannot be retrofitted into an action-only corpus.
 
 ## Matched evaluation
 
