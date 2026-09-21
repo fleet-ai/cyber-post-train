@@ -31,6 +31,7 @@ from training.sft_runtime import (
     finalize_failed_run,
     public_failure_details,
     retention_steps,
+    sft_first_checkpoint_seconds,
     sft_overrides,
     sft_watchdog_hard_seconds,
     tokenize_rows,
@@ -1310,6 +1311,66 @@ def test_sft_watchdog_horizon_covers_the_complete_broad_recipe(
     watchdog = ProgressWatchdog(0, hard_seconds=hard_seconds)
     assert watchdog.observe(8 * 60 * 60, "training", 80, 100) is None
     assert watchdog.observe(hard_seconds, "training", 80, 100) == "hard_runtime_bound"
+
+
+def test_checkpoint_horizon_counts_only_work_until_the_next_recoverable_save():
+    plan = {
+        "recipe": {
+            "max_steps": 1_837,
+            "batch_size": 8,
+            "microbatch_per_gpu": 1,
+            "nodes": 1,
+            "gpus_per_node": 8,
+            "max_length": 32_768,
+            "checkpoint_interval": 50,
+        }
+    }
+    assert sft_first_checkpoint_seconds(plan) == 1_800 + 50 * 512 + 300
+
+    plan["recovery"] = {"mode": "resume", "checkpoint": {"optimizer_step": 50}}
+    plan["pause_after_step"] = 55
+    assert sft_first_checkpoint_seconds(plan) == 1_800 + 5 * 512 + 300
+
+
+def test_qwen_megatron_checkpoint_and_full_run_budgets_use_data_parallel_size():
+    plan = {
+        "model": {"repo": "Qwen/Qwen3.8-27B"},
+        "lora": {},
+        "recipe": {
+            "max_steps": 60,
+            "batch_size": 8,
+            "microbatch_per_gpu": 1,
+            "nodes": 1,
+            "gpus_per_node": 8,
+            "max_length": 32_768,
+            "checkpoint_interval": 20,
+        },
+    }
+    per_step = 8 * 512
+    assert sft_first_checkpoint_seconds(plan) == 1_800 + 20 * per_step + 300
+    assert sft_watchdog_hard_seconds(plan) == 1_800 + 60 * per_step + 300
+
+
+def test_qwen_megatron_watchdog_budgets_only_new_work_for_pause_and_recovery():
+    plan = {
+        "model": {"repo": "Qwen/Qwen3.8-27B"},
+        "lora": {},
+        "recipe": {
+            "max_steps": 866,
+            "batch_size": 8,
+            "microbatch_per_gpu": 1,
+            "nodes": 1,
+            "gpus_per_node": 8,
+            "max_length": 32_768,
+            "checkpoint_interval": 20,
+        },
+        "pause_after_step": 1,
+    }
+    assert sft_watchdog_hard_seconds(plan) == 8 * 60 * 60
+
+    plan["recovery"] = {"mode": "resume", "checkpoint": {"optimizer_step": 42}}
+    plan["pause_after_step"] = 60
+    assert sft_watchdog_hard_seconds(plan) == 1_800 + 18 * (8 * 512) + 300
 
 
 @pytest.mark.parametrize(

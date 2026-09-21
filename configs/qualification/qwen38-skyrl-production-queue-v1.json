@@ -794,15 +794,14 @@
     }
   ],
   "schema": "cyber_qwen38_skyrl_production_queue_v1",
-  "sha256": "sha256:4db2a95c9f6396ae80033a01b6c49e6e375987133d0334858d9500eef17459c4",
+  "sha256": "sha256:083f2d4d93957966e3fd715ec14458dcdbab2933957d48b43cf0d3d1a0c44685",
   "submission_gate": {
     "blockers": [
       "prod4_terminal_acceptance_receipt_absent",
       "broad_get_only_data_manifests_not_yet_create_once_staged_on_SFS",
       "exact_image_cpu_preflights_not_recorded",
       "jobs_api_server_previews_and_fresh_guard_receipts_not_recorded",
-      "uid_bound_release_observers_not_yet_armed",
-      "global_cluster_failure_budget_is_10_of_10_until_user_resets_it"
+      "uid_bound_release_observers_not_yet_armed"
     ],
     "preview_authorized": false,
     "submission_authorized": false

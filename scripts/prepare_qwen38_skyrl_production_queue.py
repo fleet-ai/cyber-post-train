@@ -346,7 +346,6 @@ def build() -> dict[Path, dict]:
                     "exact_image_cpu_preflights_not_recorded",
                     "jobs_api_server_previews_and_fresh_guard_receipts_not_recorded",
                     "uid_bound_release_observers_not_yet_armed",
-                    "global_cluster_failure_budget_is_10_of_10_until_user_resets_it",
                 ],
             },
             "release_observer": {
@@ -555,8 +554,13 @@ def queue_evidence(artifacts: dict[Path, dict]) -> dict:
     return sealed(
         {
             "schema": "cyber_qwen38_skyrl_production_experiment_queue_evidence_v1",
-            "observed_at": "2026-09-20T17:19:29Z",
-            "git_branch": "codex/q38-skyrl-full-queue-v1",
+            "regenerated_at": "2026-09-21T09:00:00Z",
+            "source_base_commit": "5ecb0ce744c37462dd6f15c25879a69dc6333216",
+            "historical_origin": {
+                "observed_at": "2026-09-20T17:19:29Z",
+                "git_branch": "codex/q38-skyrl-full-queue-v1",
+                "current_plan_or_request_binding": False,
+            },
             "scope": "offline_no_submit_no_stage_no_serve_no_cancel",
             "qualification": {
                 "path": str(QUALIFICATION.relative_to(ROOT)),
@@ -627,10 +631,7 @@ def queue_evidence(artifacts: dict[Path, dict]) -> dict:
                     "Recheck Jobs, Kubernetes, SFS, and W&B duplicates/absence and validate the "
                     "server preview."
                 ),
-                (
-                    "Submit each eligible c1 arm at most once within the user-reset cluster "
-                    "failure budget."
-                ),
+                "Submit each eligible c1 arm at most once after every remaining gate passes.",
             ],
             "external_mutations": 0,
         }

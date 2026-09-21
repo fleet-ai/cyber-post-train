@@ -19,7 +19,7 @@
     "qwen38_lora_artifacts.py": "a9fa4ba187cb91dbf181a67b4b29f725480ae0bc795c5a2320265b8f37f6919f",
     "qwen38_lora_export.py": "9c4ff866aa17ec878d99c32e4199fe2ce833cfbe19bc2d7151516d82f532c31d",
     "recovery.py": "0765eb0f09378566c68e47861f6cc3d04c245aa438353befdb1c176d8726e84a",
-    "sft_runtime.py": "7f5c945b28f6d3fd8c84eaedd0b0322ffbaf09ce2f6ffbbf5620f69c72d4131e"
+    "sft_runtime.py": "8cb671f377d089e1303248e237f386c256b212b15e41dadc07ac49cf2695ee17"
   },
   "create_once": true,
   "deadline_seconds": 1800,
@@ -33,7 +33,7 @@
     "tokenizer_reload": "transformers.AutoTokenizer.from_pretrained"
   },
   "optimizer_steps_executed": 0,
-  "output_root": "/mnt/sfs/jobs/chris-q38-lora-s60-exp-v1/merged-hf",
+  "output_root": "/mnt/sfs/jobs/chris-q38-lora-s60-exp-v2/merged-hf",
   "priority_class": "c1",
   "resources": {
     "cpu_limit": "64",
@@ -41,8 +41,8 @@
     "memory_limit": "768Gi",
     "memory_request": "512Gi"
   },
-  "run_dir": "/mnt/sfs/jobs/chris-q38-lora-s60-exp-v1",
-  "run_name": "chris-q38-lora-s60-exp-v1",
+  "run_dir": "/mnt/sfs/jobs/chris-q38-lora-s60-exp-v2",
+  "run_name": "chris-q38-lora-s60-exp-v2",
   "schema": "cyber_qwen38_megatron_lora_continuation_export_plan_v1",
   "source_files_sha256": {
     "integrations/fleet_v2/rl1/Dockerfile": "69c490cde076f531b2d5cd566aa6e9ab58f65b74b8c1fb741af3290c2bf9881c",

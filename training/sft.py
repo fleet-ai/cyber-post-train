@@ -101,6 +101,7 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
             "runtime",
             "recovery",
             "pause_after_step",
+            "checkpoint_recovery_horizon_seconds",
         },
         "SFT",
     )
@@ -180,6 +181,8 @@ def compile_sft(config: dict, *, relative_to: Path) -> dict:
             "resources": {**RESOURCES, **cluster.get("resources", {})},
         },
     }
+    if "checkpoint_recovery_horizon_seconds" in config:
+        plan["checkpoint_recovery_horizon_seconds"] = config["checkpoint_recovery_horizon_seconds"]
     # The native GDN compatibility hook is currently qualified only for these
     # Qwen architectures. Do not silently substitute the GLM Flash model or
     # claim the full GLM FP8 checkpoint uses this ordinary full-weight loader.

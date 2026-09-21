@@ -44,4 +44,4 @@ Use this checklist at the transition named in the request. Do not execute later 
 - Give the student enough trajectory and turn budget to reach report submission.
 - Retain exact authoritative verifier execution IDs per episode.
 - Require real rollouts, at least one optimizer step, and a durable checkpoint.
-- Interpret all-zero valid rewards as a canary result; interpret truncation or evidence failure as a harness/configuration defect.
+- Interpret all-zero valid rewards as a canary result. A response that exactly fills its reviewed per-response ceiling is gradeable only when its complete sampled IDs are preserved, no partial tool is executed, the native length reason is retained, and Fleet supplies the authoritative score. Treat every other truncation or evidence failure as a harness/configuration defect. Do not launch from this design rule alone; require its reviewed runtime guard, regression, and sanitized evidence.

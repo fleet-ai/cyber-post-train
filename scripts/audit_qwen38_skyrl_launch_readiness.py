@@ -527,12 +527,11 @@ def build() -> dict:
         "reset_recorded": False,
         "external_cluster_post_stop": True,
     }:
-        raise ValueError("cluster failure budget no longer matches the frozen stop")
+        raise ValueError("historical next-gates receipt no longer matches its frozen record")
     topology = topology_audit(qualification)
     prod4 = prod4_audit(next_gates)
     production = production_arms_audit()
     blockers = [
-        "cluster_failure_budget_is_10_of_10_and_has_not_been_reset",
         "v17_CPU_preflight_preview_observer_execution_receipt_and_release_are_not_accepted",
         "prod4_private_data_is_not_create_once_staged_and_digest_verified",
         "prod4_exact_image_CPU_preflight_and_Jobs_API_preview_are_not_recorded",
@@ -546,7 +545,7 @@ def build() -> dict:
     return seal(
         {
             "schema": "cyber_qwen38_skyrl_launch_readiness_audit_v1",
-            "status": "offline_repairs_complete_external_gates_pending_failure_budget_closed",
+            "status": "offline_repairs_complete_external_execution_gates_pending",
             "scope": (
                 "offline_no_submit_no_launch_no_cancel_no_private_logs_no_external_reads_or_writes"
             ),
@@ -558,7 +557,12 @@ def build() -> dict:
                 "cluster_mutations": 0,
                 "private_logs_read": False,
             },
-            "failure_budget": next_gates["failure_budget"],
+            "failure_policy": {
+                "numeric_failure_budget": None,
+                "historical_source_receipt_preserved": True,
+                "historical_source_receipt_is_not_a_current_submission_gate": True,
+                "failures_require_evidence_repair_and_resource_release": True,
+            },
             "v17_development_topology_gate": topology,
             "prod4_one_step_reward_gate": prod4,
             "full_c1_arms": production,

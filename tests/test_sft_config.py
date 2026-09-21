@@ -117,6 +117,37 @@ def test_compile_uses_exact_model_manifest_and_complete_epochs(config, tmp_path)
     assert hashlib.sha256(content["runtime"].encode()).hexdigest() == plan["runtime_sha256"]
 
 
+def test_compile_binds_and_enforces_first_checkpoint_recovery_horizon(config, tmp_path):
+    source, manifest, save = config
+    manifest["validation_mode"] = "task_outcomes_only"
+    manifest["files"] = {"train": manifest["files"]["train"]}
+    manifest["files"]["train"]["rows"] = 800
+    save(manifest)
+    source["recipe"] = {
+        "batch_size": 8,
+        "max_length": 32_768,
+        "eval_interval": 0,
+        "checkpoint_interval": 50,
+    }
+    expected = 1_800 + 50 * 512 + 300
+    source["checkpoint_recovery_horizon_seconds"] = expected
+
+    plan = sft.compile_sft(source, relative_to=tmp_path)
+    assert plan["checkpoint_recovery_horizon_seconds"] == expected
+    assert sft_runtime.sft_first_checkpoint_seconds(plan) == expected
+
+    source["checkpoint_recovery_horizon_seconds"] = expected - 1
+    with pytest.raises(ValueError, match="first recoverable checkpoint exceeds"):
+        sft.compile_sft(source, relative_to=tmp_path)
+
+
+def test_checkpoint_recovery_horizon_rejects_unbudgeted_teacher_ce(config, tmp_path):
+    source, _, _ = config
+    source["checkpoint_recovery_horizon_seconds"] = 100_000
+    with pytest.raises(ValueError, match="only qualified for task-outcome training"):
+        sft.compile_sft(source, relative_to=tmp_path)
+
+
 def test_compile_training_loss_only_plan_has_no_reference_dev_dataset(config, tmp_path):
     source, manifest, save = config
     manifest["validation_mode"] = "task_outcomes_only"
