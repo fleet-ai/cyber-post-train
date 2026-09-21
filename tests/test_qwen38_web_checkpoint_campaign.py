@@ -23,6 +23,9 @@ PLAN_PATH = ROOT / PLAN_RELATIVE
 EVIDENCE_PATH = (
     ROOT / "docs/evidence/qwen38-web-important-checkpoint-campaign-prepared-20260921.json"
 )
+MATRIX_RELATIVE = Path("docs/evidence/qwen38-important-checkpoint-eval-matrix-20260921.json")
+MATRIX_PATH = ROOT / MATRIX_RELATIVE
+TEXT_SUFFIXES = {".json", ".md", ".py", ".yaml", ".yml"}
 
 
 def _load() -> dict:
@@ -49,6 +52,57 @@ def _campaigns(plan: dict) -> dict[str, int]:
         campaigns[candidate["campaigns"]["canary"]] = 1
         campaigns.update({campaign: 15 for campaign in candidate["campaigns"]["full_replicas"]})
     return campaigns
+
+
+def _tracked_text() -> dict[str, str]:
+    tracked = subprocess.check_output(["git", "ls-files"], cwd=ROOT, text=True).splitlines()
+    return {
+        relative: path.read_text(encoding="utf-8", errors="ignore")
+        for relative in tracked
+        if (path := ROOT / relative).is_file() and path.suffix in TEXT_SUFFIXES
+    }
+
+
+def _campaign_id_hits(campaign_ids: set[str], documents: dict[str, str]) -> dict[str, list[str]]:
+    hits: dict[str, list[str]] = {}
+    for relative, text in documents.items():
+        for campaign_id in campaign_ids:
+            if campaign_id in text:
+                hits.setdefault(campaign_id, []).append(relative)
+    return {campaign_id: sorted(paths) for campaign_id, paths in hits.items()}
+
+
+def _bound_campaign_reference_paths(plan: dict) -> set[str]:
+    """Admit only the plan itself and its exact later, inert evidence matrix."""
+    matrix = json.loads(MATRIX_PATH.read_bytes())
+    binding = matrix["protocol_bindings"]["web_campaign"]
+    preparation = json.loads(EVIDENCE_PATH.read_bytes())
+
+    assert binding == {
+        "path": str(PLAN_RELATIVE),
+        "file_sha256": _sha256(PLAN_PATH),
+        "plan_sha256": plan["sha256"],
+        "benchmark_task_order_sha256": plan["protocol"]["benchmark"]["task_order_sha256"],
+        "rollout_and_scoring_separated": True,
+        "qwen_code_allowed": False,
+    }
+    assert preparation["plan"]["file_sha256"] == binding["file_sha256"]
+    assert preparation["plan"]["plan_sha256"] == binding["plan_sha256"]
+    assert {source["path"]: source["file_sha256"] for source in matrix["evidence_sources"]}[
+        str(EVIDENCE_PATH.relative_to(ROOT))
+    ] == _sha256(EVIDENCE_PATH)
+    assert matrix["scope"]["external_mutations_by_this_audit"] == 0
+    assert matrix["scope"]["accepted_matched_web_capability_results"] == 0
+    assert matrix["web_global_gate"]["status"] == "closed"
+    assert matrix["source_main_commit"] != plan["source"]["prepared_against_main_commit"]
+    assert all(row["web"]["launched"] is False for row in matrix["rows"])
+
+    matrix_campaigns: set[str] = set()
+    for row in matrix["rows"]:
+        matrix_campaigns.add(row["web"]["canary_campaign_id"])
+        matrix_campaigns.update(row["web"]["full_campaign_ids"])
+    assert matrix_campaigns == set(_campaigns(plan))
+    return {str(PLAN_RELATIVE), str(MATRIX_RELATIVE)}
 
 
 def test_plan_is_self_digesting_inert_and_bound_to_reviewed_source() -> None:
@@ -335,23 +389,49 @@ def test_failed_v23_is_permanently_excluded_and_relaunch_fails_closed() -> None:
     )
 
 
-def test_proposed_campaign_ids_were_absent_from_the_tracked_base() -> None:
+def test_campaign_id_provenance_distinguishes_base_census_from_later_evidence() -> None:
     plan = _load()
     proposed = set(_campaigns(plan))
-    excluded = {str(PLAN_RELATIVE), str(Path(__file__).relative_to(ROOT))}
-    tracked = subprocess.check_output(["git", "ls-files"], cwd=ROOT, text=True).splitlines()
-    hits: dict[str, list[str]] = {}
-    for relative in tracked:
-        if relative in excluded:
-            continue
-        path = ROOT / relative
-        if not path.is_file() or path.suffix not in {".json", ".md", ".py", ".yaml", ".yml"}:
-            continue
-        text = path.read_text(encoding="utf-8", errors="ignore")
-        for campaign in proposed:
-            if campaign in text:
-                hits.setdefault(campaign, []).append(relative)
-    assert hits == {}
+    preparation = json.loads(EVIDENCE_PATH.read_bytes())
+    census_commit = plan["execution"]["static_repository_census"]["prepared_against_commit"]
+
+    assert census_commit == plan["source"]["prepared_against_main_commit"]
+    assert census_commit == preparation["source"]["main_commit"]
+    assert census_commit == preparation["static_duplicate_census"]["repository_commit"]
+    assert (
+        plan["execution"]["static_repository_census"]["proposed_campaign_id_hits_before_this_plan"]
+        == 0
+    )
+    assert (
+        preparation["static_duplicate_census"]["proposed_campaign_id_hits_before_plan_creation"]
+        == 0
+    )
+
+    # The historical zero-hit claim is immutable. In today's tree the only
+    # appearances must be the defining plan and its exact, later evidence.
+    allowed_paths = _bound_campaign_reference_paths(plan)
+    hits = _campaign_id_hits(proposed, _tracked_text())
+    assert set(hits) == proposed
+    assert all(set(paths) == allowed_paths for paths in hits.values())
+
+
+def test_campaign_id_provenance_still_rejects_a_real_unbound_duplicate() -> None:
+    plan = _load()
+    proposed = set(_campaigns(plan))
+    duplicate_id = sorted(proposed)[0]
+    documents = _tracked_text()
+    duplicate_path = "configs/evaluation/preexisting-duplicate.json"
+    documents[duplicate_path] = json.dumps({"campaign_id": duplicate_id})
+
+    allowed_paths = _bound_campaign_reference_paths(plan)
+    hits = _campaign_id_hits(proposed, documents)
+    unexpected = {
+        campaign_id: sorted(set(paths) - allowed_paths)
+        for campaign_id, paths in hits.items()
+        if set(paths) - allowed_paths
+    }
+
+    assert unexpected == {duplicate_id: [duplicate_path]}
 
 
 def test_plan_contains_no_secret_or_private_result_payload() -> None:
