@@ -235,6 +235,45 @@ def test_review_preserves_nonrepeatable_outcome_from_each_active_state(pg_dsn, o
     assert json.loads(event[3]) == {"failure_code": "output_limit"}
 
 
+def test_retry_review_can_be_approved_once_but_never_silently_repeated(pg_dsn, owned_cell):
+    rollout_postgres.request_retry_review(pg_dsn, **owned_cell, failure_code="output_limit")
+    approved = rollout_postgres.approve_retry(
+        pg_dsn, cell_id=owned_cell["cell_id"], reconciliation_digest="a" * 64
+    )
+    assert approved["state"] == "pending" and approved["retry_count"] == 1
+    retried = rollout_postgres.claim(pg_dsn, worker_id="retry", serving_block="route")
+    owner = {key: retried[key] for key in ("cell_id", "worker_id", "claim_id")}
+    rollout_postgres.request_retry_review(pg_dsn, **owner, failure_code="output_limit")
+    with pytest.raises(rollout_ledger.LedgerError, match="exhausted"):
+        rollout_postgres.approve_retry(
+            pg_dsn, cell_id=owned_cell["cell_id"], reconciliation_digest="b" * 64
+        )
+
+
+def test_reviewed_outcome_can_be_accepted_without_replaying_it(pg_dsn, owned_cell):
+    rollout_postgres.start(pg_dsn, **owned_cell, session_id="authoritative-session")
+    rollout_postgres.request_retry_review(pg_dsn, **owned_cell, failure_code="catalog_lag")
+    accepted = rollout_postgres.accept_reviewed(
+        pg_dsn,
+        cell_id=owned_cell["cell_id"],
+        session_id="authoritative-session",
+        receipt_digest="c" * 64,
+        reconciliation_digest="d" * 64,
+    )
+    assert accepted["state"] == "accepted" and accepted["result_class"] == "valid"
+    assert accepted["failure_code"] is None and accepted["lease_expires_at"] is None
+    assert _events(pg_dsn)[-1][0] == "reviewed_outcome_accepted"
+
+
+def test_reviewed_outcome_can_be_terminally_closed(pg_dsn, owned_cell):
+    rollout_postgres.request_retry_review(pg_dsn, **owned_cell, failure_code="invalid")
+    terminal = rollout_postgres.mark_terminal(
+        pg_dsn, cell_id=owned_cell["cell_id"], reconciliation_digest="e" * 64
+    )
+    assert terminal["state"] == "terminal" and terminal["failure_code"] == "invalid"
+    assert _events(pg_dsn)[-1][0] == "terminally_closed"
+
+
 @pytest.mark.parametrize("field", ["cell_id", "worker_id", "claim_id"])
 def test_wrong_owner_or_missing_cell_cannot_write(pg_dsn, owned_cell, field):
     before = _events(pg_dsn)

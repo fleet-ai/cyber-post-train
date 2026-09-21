@@ -1,0 +1,81 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-q38-dev17-harness-diag-v2
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: chris-q38-dev17-harness-diag-v2
+    cyber-post-train.fleet.ai/owner: chris
+    kueue.x-k8s.io/queue-name: training-lq
+  annotations:
+    fleet.ai/failure-alerts: "off"
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 900
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: chris-q38-dev17-harness-diag-v2
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      priorityClassName: c1
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: fleetai-training-ng-cpu
+      tolerations:
+        - {key: workload, operator: Equal, value: fleetai-training-ng-cpu, effect: NoSchedule}
+      initContainers:
+        - name: dind
+          image: docker.io/library/docker@sha256:f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5
+          restartPolicy: Always
+          args: [--host=unix:///var/run/docker.sock, --tls=false]
+          securityContext: {privileged: true}
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {cpu: "2", memory: 2Gi}
+          volumeMounts:
+            - {name: docker-socket, mountPath: /var/run}
+            - {name: docker-data, mountPath: /var/lib/docker}
+            - {name: docker-bind, mountPath: /docker-bind}
+            - {name: sfs, mountPath: /mnt/sfs}
+      containers:
+        - name: diagnostic
+          image: docker.io/library/docker@sha256:f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5
+          command: [/bin/sh, -ceu, --]
+          args:
+            - |
+              for _ in $(seq 1 120); do
+                docker info >/dev/null 2>&1 && break
+                sleep 1
+              done
+              docker info >/dev/null
+              docker load --input /mnt/sfs/jobs/chris-q38-fleet-dev17-harness-build-v1/opencode-1.18.27-linux-amd64.tar >/dev/null
+              mkdir /docker-bind/agent-home
+              chown 1000:1000 /docker-bind/agent-home
+              output=$(docker run --rm --platform linux/amd64 --network none --pull never \
+                -e HOME=/home/node -v /docker-bind/agent-home:/home/node \
+                sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92 \
+                bash -lc 'opencode --version && opencode db path')
+              test "$output" = '1.18.27
+              /home/node/.local/share/opencode/opencode.db'
+              printf 'shared_bind_startup_passed\n'
+          env:
+            - {name: DOCKER_HOST, value: "unix:///var/run/docker.sock"}
+            - {name: DOCKER_TLS_CERTDIR, value: ""}
+          resources:
+            requests: {cpu: "1", memory: 1Gi}
+            limits: {cpu: "2", memory: 2Gi}
+          volumeMounts:
+            - {name: docker-socket, mountPath: /var/run}
+            - {name: docker-bind, mountPath: /docker-bind}
+            - {name: sfs, mountPath: /mnt/sfs, readOnly: true}
+      volumes:
+        - name: docker-data
+          emptyDir: {sizeLimit: 20Gi}
+        - name: docker-socket
+          emptyDir: {}
+        - name: docker-bind
+          emptyDir: {sizeLimit: 2Gi}
+        - name: sfs
+          persistentVolumeClaim: {claimName: sfs-shared}

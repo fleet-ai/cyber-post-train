@@ -1,0 +1,220 @@
+{
+  "schema": "qwen38_fresh75_fleet_dev17_get_census_v1",
+  "observed_at": "2026-09-20T16:40:37Z",
+  "external_methods_used": [
+    "GET"
+  ],
+  "external_mutation_performed": false,
+  "fleet_account": {
+    "team_name": "fleet",
+    "team_id": "a1025f0b-ad67-49fc-a023-51800ab43e84"
+  },
+  "task_set": {
+    "path": "configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json",
+    "file_sha256": "sha256:79c834e739246da29aca9513965ecfc7032f8df7744eb2245ce0303aba1b97c5",
+    "task_count": 17,
+    "all_exact_bindings_resolved": true,
+    "all_verifier_contracts": "3.0.0"
+  },
+  "task_bindings": [
+    {
+      "task_version_id": "2e363dca-e74d-4855-a002-6761dc7f9f0f",
+      "binding_sha256": "sha256:1acaa79d2299b3014eef559baf8eb5438ad86ae5fb2667a2e8dfa2d0021ddeee",
+      "runtime_seed_content_sha256": "1feacdf9d76b44e0f9a7cab5b1c6b5d1021a94012458902794af7ead5fe1bcc9",
+      "verifier_version_id": "35e0232c-0dd5-4726-9f9a-9ff1f892788a"
+    },
+    {
+      "task_version_id": "18079a9c-cb79-4013-aa08-54092c415165",
+      "binding_sha256": "sha256:fa00bfdfd71379941c0270fb57007f4efcc7776fd9b7fb88f7729f06ed2317dd",
+      "runtime_seed_content_sha256": "f11a84fb88c2b858bf96e441630bb8ccdb2f71222b723ea9365ae94f47869fc5",
+      "verifier_version_id": "85238493-0d71-4058-8e70-dbc1e16393dc"
+    },
+    {
+      "task_version_id": "d6c906fc-ef92-4ce6-ab9c-54a9b7eb9037",
+      "binding_sha256": "sha256:b4a6db7b3adef764aa93293ef8cd6255b280d000c925f8d32c6b67f0be749778",
+      "runtime_seed_content_sha256": "91b610a5e3d5e34c5a948f4afdffbee1fc1380da9651d00fdcc8498768ecbefb",
+      "verifier_version_id": "cd4f9311-141a-413f-b0f9-fe57e27470e4"
+    },
+    {
+      "task_version_id": "037704a7-fc03-4cf6-a8da-3f3e3933717e",
+      "binding_sha256": "sha256:a87f090d8c2006e87471f9fafea96b56565307b2c44301871ab7934de7316030",
+      "runtime_seed_content_sha256": "959183fd70d35543fed225f8a2b107a513f7db445124844c3d8a7c542ad623a3",
+      "verifier_version_id": "b15ccef8-03db-413c-a4b2-e18fc5a7e51d"
+    },
+    {
+      "task_version_id": "139ff10d-8c00-4bd6-9437-e6fbcccf2f4d",
+      "binding_sha256": "sha256:6f046cdedcee05f069f680306e9875e8ecd5b5132e1b80db3aeca7f7de3ee2ba",
+      "runtime_seed_content_sha256": "99c9cdb47d8a18163f23cbfc4a97e98eb2868e3953c5803674ea04cd489116b2",
+      "verifier_version_id": "07cd955e-acce-4807-84c3-b1eb5ee1a0c8"
+    },
+    {
+      "task_version_id": "f1ce26fc-39b6-442c-a03c-3c18f99e119f",
+      "binding_sha256": "sha256:dea0b16e5e63c913be5829efae7b820869ff438d7425406db50d48ac372da3db",
+      "runtime_seed_content_sha256": "f509bb876930c5bd5e5a09d61372a72ba9afeab2174f2d87d3cfcf81121a1766",
+      "verifier_version_id": "0622ecef-bace-43bc-a832-433ddbb0bbdf"
+    },
+    {
+      "task_version_id": "78971e60-851b-4f6a-85d8-ecb3391d2af2",
+      "binding_sha256": "sha256:6a476535163b269ebb0bc431e7cf10eceb8cd6308b7a478fc3360bf34cadd10f",
+      "runtime_seed_content_sha256": "49c0bcdc1c22f5aaaaf9a2ce627c0c6a82268e263f95ca56a59304c731efadb9",
+      "verifier_version_id": "d2ee82db-d3ca-43e8-965e-396e94b63de6"
+    },
+    {
+      "task_version_id": "e13f62eb-170a-40c6-86bf-3c3f3829e3d8",
+      "binding_sha256": "sha256:2b9f7a541b991898de9ef5276050b271fb6fa3fa297d25d9dfd175858e26a007",
+      "runtime_seed_content_sha256": "570f5e55ba890f46cdc1e7fa1287469427e82f93fa3647f76b282b0d01c8a062",
+      "verifier_version_id": "0c51f20b-1c7e-4f02-b06a-7e84bc6b2b59"
+    },
+    {
+      "task_version_id": "1407dcf7-46ad-4b82-8aa1-f88307dd8264",
+      "binding_sha256": "sha256:470d8340ced70c8e9b5e9a471c60df6ac708f18cfb3ddf1bbbf815dfeb12684a",
+      "runtime_seed_content_sha256": "0bb85012055db5dbe82ccd000a97eeccd4096a24fb20f4f93681cdaa2a9e3ce4",
+      "verifier_version_id": "67e0bb97-9aa8-43af-a8d6-141b3b35bcdb"
+    },
+    {
+      "task_version_id": "05d09c55-ccdf-4d26-b06d-b851a2314a35",
+      "binding_sha256": "sha256:c785d5eeda936aad9bcc61e1f303e2da3233bd0d88e615a552798388567c2b02",
+      "runtime_seed_content_sha256": "588ad7513a70fcb7b9a6297b2f334a4a811c70e009b8c780726572c38fd0a50c",
+      "verifier_version_id": "c0e9bac9-3c14-400f-bc0c-9173a4c7abaa"
+    },
+    {
+      "task_version_id": "d4f5e664-d4fd-4492-a103-429260ad9e99",
+      "binding_sha256": "sha256:787159b03e54b1c613f2a4e6042256404e78f596093163b5fa2587b44d9f34fb",
+      "runtime_seed_content_sha256": "cf9e273abe39e9d06c0d9e4ea4134b39cabae404fb114a0b8b31d8ebdb5e02b5",
+      "verifier_version_id": "19e772d7-8039-40eb-95d9-69b1d0eb88ea"
+    },
+    {
+      "task_version_id": "2cb87286-a35e-4ba0-a949-1d93dfbd229a",
+      "binding_sha256": "sha256:ba2c8e982c3ec187d7046ba2a79ca03edab38d334553ff55ca37104562e10c19",
+      "runtime_seed_content_sha256": "3342354074486ef37ffab8bffc5c0568209e4a7814609a6364ba1a55625db3c6",
+      "verifier_version_id": "a4595e13-a325-4e54-84b2-b06886c170a9"
+    },
+    {
+      "task_version_id": "eefe304c-499d-4c9e-b09c-8aa0fab87213",
+      "binding_sha256": "sha256:322abbc1f0ac6b3969764c2eafe353151f7579d5d725fc5f7f928822ecd8ab4f",
+      "runtime_seed_content_sha256": "056582d4a0cec32de1406b0d8b42821b47ee0a7448e30dce56392155e1fa449d",
+      "verifier_version_id": "dde2818d-a999-4665-ada5-82a23a476c6d"
+    },
+    {
+      "task_version_id": "fb68f600-9850-4cc2-86e7-a4f554e5f93f",
+      "binding_sha256": "sha256:d76be1e4b5e1b3429bd104ab973183840126b36922439e9174cd76d623535e73",
+      "runtime_seed_content_sha256": "dd66c26b341db43c57d1bfc4f6e35aeb3adb8f076fd6c9b51d5d8251a74c5672",
+      "verifier_version_id": "54b005d8-787b-4210-bd47-a149a93f82f8"
+    },
+    {
+      "task_version_id": "b6efa2e4-7743-4b8b-a014-832d90cd5e39",
+      "binding_sha256": "sha256:1482f01a7865768f6a3e479eb017ce47459dac76f78ec30ba7b6f5511e9529ac",
+      "runtime_seed_content_sha256": "c9a741562ebfd6fade744222f9dba4e0c617374ffdbe7a801436a46536cdce1f",
+      "verifier_version_id": "a1f768bc-f9eb-4fa1-834e-67a9fdd86a87"
+    },
+    {
+      "task_version_id": "51b23680-27fa-4bdd-a077-16669f3f0e18",
+      "binding_sha256": "sha256:bde456d2ec154667df3761b193be51860d4f6ea8af9ac79a06ad64a71ff8ecf4",
+      "runtime_seed_content_sha256": "0e429669e329ac1267f322038b01e5d0acb546f53c8fa55fed0e9055e497de1c",
+      "verifier_version_id": "a6d22d82-48df-4631-a37b-a6046e6da8df"
+    },
+    {
+      "task_version_id": "383a2b61-e82b-4426-9a2b-d5372c92e346",
+      "binding_sha256": "sha256:0742892d596e51c98f43c379cb20c653bac344aef216d53afcaa83ec2a185c18",
+      "runtime_seed_content_sha256": "12927a1806dea8bc3535eda3c6810f121829005849a2be81e991b4ac04b567c6",
+      "verifier_version_id": "17cce977-3fa0-4676-8ca6-c7abbde2dc67"
+    }
+  ],
+  "serving": {
+    "base": {
+      "served_id": "qwen3.8-27b",
+      "catalog_match_count": 1,
+      "repository": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "routed": true,
+      "status": "ready",
+      "ready_replicas": 2,
+      "catalog": {
+        "engine": "sglang",
+        "precision": "bf16",
+        "tensor_parallel_size": 1,
+        "data_parallel_size": 8,
+        "data_parallel_attention": false
+      },
+      "model_info": {
+        "model_path": "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "model_type": "qwen3_5",
+        "architectures": [
+          "Qwen3_5ForConditionalGeneration"
+        ]
+      },
+      "server_info": {
+        "model_path": "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "context_length": 262144,
+        "tp_size": 1,
+        "dp_size": 8,
+        "load_balance_method": "total_tokens",
+        "quantization": null,
+        "kv_cache_dtype": "fp8_e4m3",
+        "reasoning_parser": "qwen3",
+        "tool_call_parser": "qwen3_coder"
+      }
+    },
+    "candidate_routes": [
+      {
+        "served_id": "chris-q38-f75v2-b8-lr1e5-e2-wbe",
+        "catalog_match_count": 0
+      },
+      {
+        "served_id": "chris-q38-f75v2-b8-lr3e6-e2-wbe",
+        "catalog_match_count": 0
+      },
+      {
+        "served_id": "chris-q38-f75v2-b32-lr1e5-e2-wbe",
+        "catalog_match_count": 0
+      },
+      {
+        "served_id": "chris-q38-f75v2-b64-lr1e5-e2-wbe",
+        "catalog_match_count": 0
+      },
+      {
+        "served_id": "chris-q38-f75v2-b8-lr1e5-e1-wbe",
+        "catalog_match_count": 0
+      },
+      {
+        "served_id": "chris-q38-f75v2-b16-lr1e5-e2-wbe",
+        "catalog_match_count": 0
+      },
+      {
+        "served_id": "chris-q38-f75v2-b8-lr1e6-e2-wbe",
+        "catalog_match_count": 0
+      }
+    ]
+  },
+  "session_inventory": {
+    "listed_sessions_across_task_keys": 455,
+    "planned_candidate_session_model_matches": 0,
+    "base_session_model": "qwen3.8-27b",
+    "base_session_model_matches": 61,
+    "base_matches_by_task_version": {
+      "037704a7-fc03-4cf6-a8da-3f3e3933717e": 3,
+      "05d09c55-ccdf-4d26-b06d-b851a2314a35": 5,
+      "139ff10d-8c00-4bd6-9437-e6fbcccf2f4d": 5,
+      "1407dcf7-46ad-4b82-8aa1-f88307dd8264": 4,
+      "18079a9c-cb79-4013-aa08-54092c415165": 3,
+      "2cb87286-a35e-4ba0-a949-1d93dfbd229a": 0,
+      "2e363dca-e74d-4855-a002-6761dc7f9f0f": 4,
+      "383a2b61-e82b-4426-9a2b-d5372c92e346": 5,
+      "51b23680-27fa-4bdd-a077-16669f3f0e18": 5,
+      "78971e60-851b-4f6a-85d8-ecb3391d2af2": 4,
+      "b6efa2e4-7743-4b8b-a014-832d90cd5e39": 5,
+      "d4f5e664-d4fd-4492-a103-429260ad9e99": 0,
+      "d6c906fc-ef92-4ce6-ab9c-54a9b7eb9037": 4,
+      "e13f62eb-170a-40c6-86bf-3c3f3829e3d8": 1,
+      "eefe304c-499d-4c9e-b09c-8aa0fab87213": 4,
+      "f1ce26fc-39b6-442c-a03c-3c18f99e119f": 4,
+      "fb68f600-9850-4cc2-86e7-a4f554e5f93f": 5
+    },
+    "interpretation": "The session-list projection omits campaign, harness, cell and execution identities. Candidate model absence is observable because every planned candidate served ID is new. The 61 historical base-named rows are not reusable and do not prove or disprove an exact campaign duplicate; a fresh output-root/database absence check plus exact accepted-receipt census is still required before base execution."
+  },
+  "output_root_absence": {
+    "status": "not_observed_from_this_host",
+    "reason": "The GET-only audit host is not the authoritative shared-storage execution host.",
+    "required_next_check": "On the authorized CPU execution host, fail closed unless every frozen output root and its dedicated PostgreSQL experiment identity are absent."
+  }
+}

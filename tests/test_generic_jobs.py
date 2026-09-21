@@ -83,10 +83,11 @@ def test_runtime_bundle_executes_exact_bytes_once(tmp_path):
     assert request == bundled_request(
         config(), files, "synthetic.run", ["literal $not-a-shell-command"]
     )
-    env = {**os.environ, **request["env"], "RUN_DIR": str(tmp_path)}
+    run_dir = tmp_path / "missing" / "run"
+    env = {**os.environ, **request["env"], "RUN_DIR": str(run_dir)}
     command = [sys.executable, *shlex.split(request["command"])[1:]]
     assert subprocess.run(command, env=env, capture_output=True).returncode == 0
-    assert (tmp_path / ".runtime/result").read_text() == "literal $not-a-shell-command"
+    assert (run_dir / ".runtime/result").read_text() == "literal $not-a-shell-command"
     assert subprocess.run(command, env=env, capture_output=True).returncode != 0
     broken = {**env, "CYBER_RUNTIME_BUNDLE": "YQ=="}
     assert subprocess.run(command, env=broken, capture_output=True).returncode != 0
@@ -279,6 +280,7 @@ def test_resource_preview(nodes, priority):
     [
         ("name", "a" * 32),
         ("name", "ft-run"),
+        ("title", ""),
         ("image", "image:latest"),
         ("command", ""),
         ("workers", True),
@@ -471,7 +473,12 @@ def test_required_secret_can_explicitly_remain_nonoptional_without_renaming():
 
 @pytest.mark.parametrize(
     "payload",
-    [{}, {"manifest_yaml": "bad"}, {"manifest_yaml": "["}, {**preview(), "warnings": ["review"]}],
+    [
+        {},
+        {"manifest_yaml": "bad"},
+        {"manifest_yaml": "["},
+        {**preview(), "warnings": ["review"]},
+    ],
 )
 def test_missing_or_warned_preview_fails_closed(payload):
     with pytest.raises(JobsError):
@@ -489,7 +496,9 @@ def test_equal_kubernetes_quantities_are_not_false_drift():
 
 def client(handler):
     return Jobs(
-        "synthetic-token", base_url="https://jobs.invalid", transport=httpx.MockTransport(handler)
+        "synthetic-token",
+        base_url="https://jobs.invalid",
+        transport=httpx.MockTransport(handler),
     )
 
 
@@ -510,16 +519,25 @@ def test_exhaustive_pagination():
 
 @pytest.mark.parametrize(
     "payload",
-    [[], {"items": []}, {"items": [], "has_more": True}, {"items": [{}], "has_more": False}],
+    [
+        [],
+        {"items": []},
+        {"items": [], "has_more": True},
+        {"items": [{}], "has_more": False},
+    ],
 )
 def test_incomplete_history_blocks_submission(payload, tmp_path):
-    with client(lambda req: httpx.Response(200, json=payload)) as api, pytest.raises(JobsError):
+    with (
+        client(lambda req: httpx.Response(200, json=payload)) as api,
+        pytest.raises(JobsError),
+    ):
         api.submit_once(config(), tmp_path / "intent.jsonl")
     assert not (tmp_path / "intent.jsonl").exists()
 
 
 @pytest.mark.parametrize(
-    "outcome", ["ok", "timeout", "http-error", "invalid-json", "ambiguous", "wrong-root"]
+    "outcome",
+    ["ok", "timeout", "http-error", "invalid-json", "ambiguous", "wrong-root"],
 )
 def test_one_post_with_durable_intent_even_after_uncertain_failure(tmp_path, outcome):
     seen = []
@@ -589,7 +607,12 @@ def test_unrelated_history_does_not_block_a_new_create_once_run(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "record", [{"name": "old", "run_dir": config()["run_dir"]}, {"name": "researcher-sft-1234abcd"}]
+    "record",
+    [
+        {"name": "old", "run_dir": config()["run_dir"]},
+        {"name": "researcher-sft-1234abcd"},
+        {"name": "other", "title": config()["title"]},
+    ],
 )
 def test_history_duplicate_is_never_resubmitted(record, tmp_path):
     def handler(req):
@@ -610,3 +633,39 @@ def test_status_is_allowlisted_and_name_cannot_inject_route():
         assert api.status("safe")["status"] == "SUCCEEDED"
         with pytest.raises(JobsError):
             api.status("../runs")
+
+
+def test_delete_accepts_exact_empty_204_and_never_parses_json():
+    seen = []
+
+    def handler(req):
+        seen.append((req.method, req.url.path))
+        return httpx.Response(204)
+
+    with client(handler) as api:
+        assert api.delete("owned-run-1234abcd") == {
+            "name": "owned-run-1234abcd",
+            "deleted": True,
+            "http_status": 204,
+        }
+    assert seen == [("DELETE", "/v1/runs/owned-run-1234abcd")]
+
+
+@pytest.mark.parametrize(
+    "response",
+    [httpx.Response(200, json={}), httpx.Response(202), httpx.Response(204, content=b"unexpected")],
+)
+def test_delete_rejects_every_noncanonical_success_response(response):
+    with (
+        client(lambda req: response) as api,
+        pytest.raises(JobsError, match="reconcile|unexpected"),
+    ):
+        api.delete("owned-run-1234abcd")
+
+
+def test_delete_rejects_invalid_name_before_network():
+    with (
+        client(lambda req: pytest.fail("network must not be called")) as api,
+        pytest.raises(JobsError, match="invalid run name"),
+    ):
+        api.delete("../runs")

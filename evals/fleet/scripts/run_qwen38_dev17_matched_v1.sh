@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+umask 077
+
+: "${FLEET_API_KEY:?FLEET_API_KEY is required}"
+: "${ROLLOUT_DATABASE_URL:?ROLLOUT_DATABASE_URL is required}"
+
+root=/workspace/cyber-post-train
+mkdir -p "$root/cyber_post_train" "$root/evals/fleet" "$root/configs/evaluation"
+touch "$root/cyber_post_train/__init__.py" "$root/evals/__init__.py" "$root/evals/fleet/__init__.py"
+
+install -m 0644 /bootstrap/jobs.py "$root/cyber_post_train/jobs.py"
+for name in \
+  cluster_entry.py evaluate.py exact_pass4_crypto.py exact_pass4_universe.py \
+  fixed_proxy.py opencode_self_hosted.py rollout_campaign.py rollout_ledger.py \
+  rollout_postgres.py rollout_worker.py; do
+  install -m 0644 "/bootstrap/$name" "$root/evals/fleet/$name"
+done
+install -m 0644 /bootstrap/config.json \
+  "$root/configs/evaluation/qwen38-fresh75-fleet-dev17-matched-pass1-v1.json"
+install -m 0644 /bootstrap/task-set.json \
+  "$root/configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json"
+
+for _ in $(seq 1 120); do
+  docker info >/dev/null 2>&1 && break
+  sleep 1
+done
+docker info >/dev/null
+
+cd "$root"
+exec uv run --no-project \
+  --with httpx==0.28.1 \
+  --with pyyaml==6.0.3 \
+  --with 'psycopg[binary]==3.3.5' \
+  python -m evals.fleet.cluster_entry \
+  --config configs/evaluation/qwen38-fresh75-fleet-dev17-matched-pass1-v1.json \
+  --output /mnt/sfs/jobs/chris-q38-fleet-dev17-p1-v1 \
+  --database q38_f75_dev17_p1_v1 \
+  --harness-tar \
+    /mnt/sfs/jobs/chris-q38-fleet-dev17-harness-build-v1/opencode-1.18.27-linux-amd64.tar \
+  --harness-receipt /mnt/sfs/jobs/chris-q38-fleet-dev17-harness-build-v1/BUILD.json \
+  --harness-receipt-sha256 \
+    sha256:4781514a8431d6d87c671c49120639062f5a8e3afb016a04360752c896181745

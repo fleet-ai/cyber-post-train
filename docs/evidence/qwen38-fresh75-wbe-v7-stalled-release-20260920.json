@@ -1,0 +1,49 @@
+{
+  "schema_version": "qwen38_fresh75_wbe_transport_stall_release_v1",
+  "status": "stalled_and_released",
+  "classification": "pre_lifecycle_bootstrap_or_management_origin_stall",
+  "campaign_id": "q38-base-f75p230-oc-wbe-c1-v3",
+  "launch_plan_sha256": "sha256:46f8ae5480f4aaf1fb331d41ed0d0349509b67ba56ae6c0aef081b1ff8e86522",
+  "launch_plan_file_sha256": "sha256:73502476726c7f11da0963b3a2373cd489c40ce7af7b34a0233bc8b66bee67cf",
+  "terminal_plan_file_sha256": "sha256:5555b00e7321a684f2c6f033f04637c063652a56bd44b64db49acc773bff0710",
+  "sandbox": {
+    "id": "udrfx303h58nqrl6ipil7",
+    "name": "q38-b-f75-c1-v7-t00",
+    "process_pid": 1684,
+    "provider_state_before_release": "running",
+    "process_state_before_release": "running",
+    "process_exit_code_before_release": null,
+    "process_signal_before_release": null,
+    "elapsed_seconds_at_least": 2200,
+    "fixed_no_receipt_watchdog_seconds": 1200
+  },
+  "sanitized_receipts_before_release": {
+    "lifecycle_present": false,
+    "benchmark_validated_present": false,
+    "collection_accepted_present": false
+  },
+  "runtime": {
+    "agent_image": "cage/opencode-webexploitbench:1.18.27-v12-4b39ba8f-d142a7ce",
+    "agent_image_id": "sha256:7976411d3b5b8eacbb887b8e6148fc14680513b0d35f202fbd7a6205080a329c",
+    "private_output_read": false,
+    "accepted_model_call_receipts": 0,
+    "accepted_rollout_bundles": 0,
+    "accepted_score_receipts": 0
+  },
+  "release": {
+    "pre_release_receipt_file_sha256": "sha256:eeb537257c7088dd667e71ba32d288b3346b21fdfe690eba04d3fe6830f8704a",
+    "pre_release_receipt_sha256": "sha256:b3cbe97c6097cac6f612a028877fe2af71892052af67d91a5008a6e01fbd5307",
+    "release_claim_file_sha256": "sha256:6683bdcaa610bd28b042238c87d25fc8e83e2d2975710865e189a279c74f2ecc",
+    "release_claim_sha256": "sha256:bb9ff93c2584289bef4cf540efae31478aa419d58ed7b34ce945751bd0235807",
+    "release_receipt_file_sha256": "sha256:5aab660258242c02793044b826683489e54e8aeaef4fc97e45abe68760fc0856",
+    "release_receipt_sha256": "sha256:776f210fd8e41a2b1c7aed8a6369c57e646ff22aba5a0548665c7d0af6e2b6fb",
+    "provider_state_after_release": "terminated",
+    "active_inventory_matches_after_release": 0
+  },
+  "disposition": {
+    "fanout_authorized": false,
+    "duplicate_successor_authorized": false,
+    "required_repair": "prove management file readback and an early lifecycle receipt before another rollout canary"
+  },
+  "receipt_sha256": "sha256:e74457b7a8ce8603c64f284ebab029236d0d572ff4b1f2b8fca21331e29edc22"
+}

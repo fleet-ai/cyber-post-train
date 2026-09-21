@@ -1,0 +1,51 @@
+{
+  "schema": "cyber_sft_resume_gate_submission_v1",
+  "status": "running",
+  "purpose": "restore every rank plus the sampler from step 1, execute one finite continuation update, and save step 2",
+  "optimizer_step_before": 1,
+  "planned_pause_after_step": 2,
+  "source_checkpoint_manifest": "/mnt/sfs/jobs/chris-q38-t3k32-can-v1/checkpoint-step-1-seal.json",
+  "source_checkpoint_manifest_file_sha256": "fce35242686027f1e4db7065fd1ec47142cb669930025a0fc8b287d7acc11d83",
+  "plan_sha256": "602ea04044efb7d1bd1c5514c3efb94496c49b41b0bf8c1282b1817842174e64",
+  "request_sha256": "eff59f589047ff28494bf3dedb760dcd9570143c720f17c737fa652b60e69ffe",
+  "preflight_file_sha256": "f00a9af641b6d715f8eb7d869c6213ea4cda6bc9deffb1fc65ea6bc272635ce2",
+  "preview_manifest_sha256": "24355043b84c477219d023a71abb6d42a22a5199a0c1b9f84b2edd7e5a885e73",
+  "preflight_counts": {
+    "rows": 14693,
+    "tasks": 496,
+    "supervised_tokens": 57384881
+  },
+  "duplicate_census_history_rows": 930,
+  "duplicate_matches": 0,
+  "api_name": "chris-q38-t3k32-resume-v1-f64fbf0b",
+  "api_run_id": "f64fbf0b-fcce-48ac-b957-39c577d0ee76",
+  "rayjob_uid": "239cf369-b9e6-495d-9152-bf194324814f",
+  "workload_uid": "fe615211-41bf-4038-b493-73ca92cf68b1",
+  "raycluster_uid": "5dccbfb6-2f54-4415-b519-7383b9e0f765",
+  "pod_uid": "9ef66136-25e5-486d-958c-a0e24b644088",
+  "namespace": "fleet-train-jobs",
+  "output_root": "/mnt/sfs/jobs/chris-q38-t3k32-resume-v1",
+  "priority": "c1",
+  "queue_priority": "q1",
+  "nodes": 1,
+  "gpus": 8,
+  "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+  "created_at": "2026-09-20T14:53:20Z",
+  "container_started_at": "2026-09-20T14:53:26Z",
+  "container_restarts_at_start": 0,
+  "cpu_gate_pod": {
+    "name": "chris-q38-t3k32-resume-gate-v1",
+    "uid": "5da43248-aa48-4f89-96d6-603b55729127",
+    "exit_code": 0,
+    "gpus": 0,
+    "deleted_and_absence_verified": true
+  },
+  "submit_helper_pod": {
+    "name": "chris-q38-t3k32-resume-submit-v1",
+    "uid": "aaab9272-2d6b-47fa-b0cc-d959c8bb8ea2",
+    "exit_code": 0,
+    "gpus": 0,
+    "deleted_and_absence_verified": true
+  },
+  "full_run_gate": "closed until RECOVERED.json, one finite step-2 update, checkpoint-step-2 receipt, and GPU release are independently verified"
+}

@@ -127,6 +127,27 @@ def test_model_alias_accepts_version_dots(configuration, tmp_path):
     assert all(row["model_id"] == "qwen3.8-27b" for row in evaluation.plan_rows(plan))
 
 
+def test_model_revision_accepts_exact_checkpoint_payload_manifest(configuration, tmp_path):
+    configuration["models"]["student"]["revision"] = "sha256:" + "f" * 64
+    plan = evaluation.compile_eval(configuration, relative_to=tmp_path)
+    assert plan["models"]["student"]["revision"] == "sha256:" + "f" * 64
+
+
+def test_qwen_route_requires_exact_authoritative_session_identity(configuration, tmp_path):
+    configuration["routes"]["shared"]["model_info"]["model_type"] = "qwen3_5"
+    configuration["models"]["student"]["session_model"] = "self-hosted/synthetic-student"
+    with pytest.raises(ValueError, match="exact Fleet qwen provider and served ID"):
+        evaluation.compile_eval(configuration, relative_to=tmp_path)
+
+    configuration["models"]["student"]["session_model"] = "qwen/synthetic-student"
+    assert (
+        evaluation.compile_eval(configuration, relative_to=tmp_path)["models"]["student"][
+            "session_model"
+        ]
+        == "qwen/synthetic-student"
+    )
+
+
 @pytest.mark.parametrize(
     "mutate",
     [
@@ -362,6 +383,70 @@ def test_native_image_initializes_home_offline_as_actual_controller_user():
             },
         }
     )
+
+
+def test_image_check_accepts_exact_oci_index_resolved_to_amd64_child(monkeypatch, tmp_path):
+    agent = "sha256:" + "d" * 64
+    proxy = "registry/proxy@sha256:" + "e" * 64
+    release = "sha256:" + "b" * 64
+
+    def run(command, **_kwargs):
+        if command[:3] == ["docker", "image", "inspect"]:
+            image = command[3]
+            info = {
+                "Id": agent if image == agent else "sha256:" + "f" * 64,
+                "RepoDigests": [] if image == agent else ["registry/proxy@sha256:" + "a" * 64],
+                "Os": "linux",
+                "Architecture": "amd64",
+                "Config": {"Labels": {"cyber.opencode.release-sha256": release}},
+            }
+            return SimpleNamespace(returncode=0, stdout=json.dumps(info))
+        assert command[:3] == ["docker", "run", "--rm"]
+        mount = command[command.index("-v") + 1]
+        assert mount.startswith(str(tmp_path) + "/cpt-agent-preflight-")
+        return SimpleNamespace(
+            returncode=0,
+            stdout="1.18.27\n/home/node/.local/share/opencode/opencode.db\n",
+        )
+
+    monkeypatch.setattr(evaluation.subprocess, "run", run)
+    monkeypatch.setenv("DOCKER_BIND_ROOT", str(tmp_path))
+    evaluation.check_images(
+        {
+            "images": {"agent": agent, "proxy": proxy},
+            "treatment": {"harness_version": "1.18.27", "release_asset_sha256": release},
+        }
+    )
+
+
+def test_image_check_rejects_wrong_local_content_address(monkeypatch):
+    agent = "sha256:" + "d" * 64
+    monkeypatch.setattr(
+        evaluation.subprocess,
+        "run",
+        lambda *_args, **_kwargs: SimpleNamespace(
+            returncode=0,
+            stdout=json.dumps(
+                {
+                    "Id": "sha256:" + "f" * 64,
+                    "RepoDigests": [],
+                    "Os": "linux",
+                    "Architecture": "amd64",
+                    "Config": {"Labels": {}},
+                }
+            ),
+        ),
+    )
+    with pytest.raises(RuntimeError, match="bytes or platform"):
+        evaluation.check_images(
+            {
+                "images": {"agent": agent},
+                "treatment": {
+                    "harness_version": "1.18.27",
+                    "release_asset_sha256": "sha256:" + "b" * 64,
+                },
+            }
+        )
 
 
 def test_bounded_worker_does_not_initialize_or_repeat(prepared, monkeypatch):

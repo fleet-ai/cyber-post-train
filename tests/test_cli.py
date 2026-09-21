@@ -14,6 +14,24 @@ from training import sft
 RUNNER = CliRunner()
 
 
+def test_data_rechunk_dispatches_cpu_only_builder(tmp_path, monkeypatch):
+    from training import dense_rechunk
+
+    config = tmp_path / "rechunk.json"
+    config.write_text("{}")
+    calls = []
+
+    def build(value, *, relative_to):
+        calls.append((value, relative_to))
+        return {"submitted": False, "supervised_tokens": 20_000_000}
+
+    monkeypatch.setattr(dense_rechunk, "build", build)
+    result = RUNNER.invoke(cli.app, ["data-rechunk", str(config)])
+    assert result.exit_code == 0
+    assert calls == [({}, config.parent.resolve())]
+    assert '"submitted": false' in result.stdout
+
+
 @pytest.fixture
 def prepared(tmp_path, monkeypatch):
     config = tmp_path / "config.yaml"
@@ -22,6 +40,7 @@ def prepared(tmp_path, monkeypatch):
     plan = {"model": {"repo": "synthetic"}, "recipe": {"max_steps": 2}}
     request = {
         "name": "synthetic",
+        "title": "Synthetic fixture",
         "run_dir": "/mnt/sfs/jobs/synthetic",
         "image": "registry/image@sha256:" + "a" * 64,
         "command": "python run.py",
@@ -39,6 +58,9 @@ def prepared(tmp_path, monkeypatch):
     }
     monkeypatch.setattr(sft, "compile_sft", lambda value, relative_to: plan)
     monkeypatch.setattr(sft, "job_request", lambda value: request)
+    # Most unit tests do not mount SFS. Dedicated tests below exercise the real
+    # absence checker; workflow tests replace only that external mount boundary.
+    monkeypatch.setattr(cli, "_require_output_absent", lambda _: None)
     assert RUNNER.invoke(cli.app, ["train", str(config), "--output", str(output)]).exit_code == 0
     return output, plan, request, config
 
@@ -92,6 +114,52 @@ def test_preflight_records_actual_checker_result_once(prepared, monkeypatch):
     assert RUNNER.invoke(cli.app, ["preflight", str(output)]).exit_code == 0
     assert RUNNER.invoke(cli.app, ["preflight", str(output)]).exit_code == 2
     assert calls == [plan]
+
+
+def test_output_absence_check_fails_closed_without_mount_or_with_existing_output(
+    tmp_path,
+):
+    mount = tmp_path / "jobs"
+    request = {"run_dir": str(mount / "new-run")}
+    with pytest.raises(ValueError, match="mount is unavailable"):
+        cli._require_output_absent(request, jobs_root=mount)
+    mount.mkdir()
+    cli._require_output_absent(request, jobs_root=mount)
+    (mount / "new-run").mkdir()
+    with pytest.raises(ValueError, match="output already exists"):
+        cli._require_output_absent(request, jobs_root=mount)
+
+
+def test_preflight_and_submit_repeat_output_absence_check(prepared, monkeypatch):
+    output, plan, request, _ = prepared
+    checks = []
+    monkeypatch.setattr(cli, "_require_output_absent", lambda value: checks.append(value))
+    monkeypatch.setattr(
+        sft,
+        "preflight",
+        lambda value: {
+            "schema": "cyber_sft_cpu_preflight_v1",
+            "request_sha256": digest(request),
+            "plan_sha256": digest(plan),
+            "gpus": 0,
+            "status": "passed",
+        },
+    )
+    assert RUNNER.invoke(cli.app, ["preflight", str(output)]).exit_code == 0
+    monkeypatch.setattr(
+        cli,
+        "_client",
+        lambda: nullcontext(
+            SimpleNamespace(
+                submit_once=lambda *args: {
+                    "name": "synthetic-12345678",
+                    "status": "queued",
+                }
+            )
+        ),
+    )
+    assert RUNNER.invoke(cli.app, ["submit", str(output)]).exit_code == 0
+    assert checks == [request, request]
 
 
 @pytest.mark.parametrize("backend", ["miles", "skyrl"])
@@ -174,6 +242,36 @@ def test_submit_uses_shared_boundary_and_journal(prepared, monkeypatch):
     assert json.loads(result.stdout)["status"] == "pending"
 
 
+def test_direct_sft_submit_reuses_preflight_and_has_a_separate_journal(prepared, monkeypatch):
+    from cyber_post_train import direct_submit
+
+    output, plan, request, _ = prepared
+    record_preflight(output, plan, request)
+    plan["schema"] = "cyber_sft_runtime_dense_v1"
+    monkeypatch.setattr(cli, "_prepared", lambda _: (plan, request))
+    monkeypatch.setattr(cli, "_submission_gate", lambda *args: None)
+    monkeypatch.setattr(cli, "_require_preflight", lambda *args: None)
+    monkeypatch.setattr(cli, "_client", lambda: nullcontext("jobs-client"))
+    calls = []
+
+    class SyntheticKubectl:
+        def __init__(self, context):
+            self.context = context
+
+    def submit(**kwargs):
+        calls.append(kwargs)
+        return {"name": "synthetic-12345678", "submitted": True}
+
+    monkeypatch.setattr(direct_submit, "Kubectl", SyntheticKubectl)
+    monkeypatch.setattr(direct_submit, "direct_submit_sft_once", submit)
+    result = RUNNER.invoke(cli.app, ["direct-submit-sft", str(output), "--context", "prod-context"])
+    assert result.exit_code == 0
+    assert calls[0]["plan"] == plan and calls[0]["request"] == request
+    assert calls[0]["jobs"] == "jobs-client"
+    assert calls[0]["kubectl"].context == "prod-context"
+    assert calls[0]["journal"] == output / "DIRECT_SUBMISSION.jsonl"
+
+
 def test_submit_rejects_pre_gate_preparation_before_network(prepared, monkeypatch):
     output, plan, request, _ = prepared
     record_preflight(output, plan, request)
@@ -212,7 +310,10 @@ def test_preview_and_status_are_read_only(prepared, monkeypatch):
     )
     result = RUNNER.invoke(cli.app, ["preview", str(output)])
     assert result.exit_code == 0
-    assert json.loads(result.stdout) == {"submitted": False, "nodes": request["workers"]}
+    assert json.loads(result.stdout) == {
+        "submitted": False,
+        "nodes": request["workers"],
+    }
     assert not (output / "SUBMISSION.jsonl").exists()
     result = RUNNER.invoke(cli.app, ["status", "synthetic-12345678"])
     assert result.exit_code == 0
@@ -440,7 +541,12 @@ def test_eval_commands_dispatch_without_exposing_private_errors(tmp_path, monkey
             (
                 "run",
                 (tmp_path,),
-                {"dsn": dsn, "route": "synthetic-route", "worker_id": "worker-001", "limit": 2},
+                {
+                    "dsn": dsn,
+                    "route": "synthetic-route",
+                    "worker_id": "worker-001",
+                    "limit": 2,
+                },
             ),
             ("summary", (dsn,), {}),
         ]

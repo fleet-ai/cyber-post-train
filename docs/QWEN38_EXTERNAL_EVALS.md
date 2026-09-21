@@ -1,5 +1,14 @@
 # Qwen3.8-27B external-evaluation track
 
+> **Historical protocol notice (2026-09-20):** the Qwen Code launch material
+> below is retained only as incident history. New capability comparisons use
+> OpenCode exclusively and must not reuse these Qwen Code protocols. The
+> create-once checkpoint/evaluation queue, scientific motivation, coverage, and
+> duplicate identity are recorded in
+> [`configs/evaluation/qwen38-checkpoint-eval-ledger-v1.json`](../configs/evaluation/qwen38-checkpoint-eval-ledger-v1.json).
+> A checkpoint is not considered evaluated until that ledger points to an
+> accepted matched result.
+
 ## State
 
 **Current operational classification:** v2 is proven infrastructure-interrupted

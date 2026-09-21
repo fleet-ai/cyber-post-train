@@ -1,0 +1,88 @@
+{
+  "schema_version": "qwen38_fresh75_wbe_prompt_bundle_repair_v1",
+  "status": "diagnosed_repaired_locally_qualified_once_and_validator_repaired",
+  "campaign_id": "q38-base-f75p230-oc-wbe-c1-v21",
+  "collection_sandbox": {
+    "id": "torur2cqg0122danrv9fb",
+    "name": "q38-b-f75-c1-v21-t00",
+    "provider_state_after_release": "terminated"
+  },
+  "terminal_evidence": {
+    "failed_gate": "collection_export",
+    "failure_receipt_sha256": "sha256:52da2b0ad02b2e6ed69a6014f8194c976db5db147504b51f7ef9b9d26f243cc7",
+    "failure_snapshot_id": "p17n6h809qs2ogvhzolld",
+    "failure_snapshot_acceptance_receipt_sha256": "sha256:79a37ae8d03f8fd1439c50e213d0553797410f612e84d85b73c8b22773c021a0",
+    "release_receipt_sha256": "sha256:2b50da2717b44ee23d5aefad2fee34595f44ff8a8c300005f91db88771550264",
+    "lifecycle_file_sha256": "sha256:1996922ea644205d6511c16d276dc644157461623e6f8f33bbd0535b7ba5f022"
+  },
+  "sanitized_diagnosis": {
+    "primary_failure_phase": "building_prompt",
+    "primary_error_class": "PromptContractError",
+    "trial_status": "failed",
+    "trial_status_reason": "benchmark_error",
+    "trial_scoring_status": "not_scored",
+    "model_requests": 0,
+    "judge_requests": 0,
+    "score_records": 0,
+    "final_evidence_records": 0,
+    "secondary_export_error": "trial_already_scored",
+    "secondary_export_error_was_primary_cause": false,
+    "private_trace_content_read": false,
+    "prompt_content_read": false,
+    "score_content_read": false
+  },
+  "defect": {
+    "classification": "incomplete_qualified_benchmark_runtime_bundle",
+    "benchmark_module_sha256": "sha256:746f15315bb0981bbde9756a39581a6067967a62795f29a2908806f68b6b48e3",
+    "explanation": "Snapshot qualification copied the exact benchmark.py into the qualified projects directory but did not copy its four required prompt-template siblings. CAGE therefore stopped while building the first prompt, before any model or judge request. The later exporter saw the failed trial and emitted a misleading secondary error; there was no scored rollout to export."
+  },
+  "repair": {
+    "benchmark_snapshot_source_sha256": "sha256:a0efab7d1789121e2bb6afa4d447e58aadd741ec352aad6d8707fc3b1308de0b",
+    "qualification_worker_source_sha256": "sha256:e4c16234de77ad0712001bd2838498bcb0ff114886ea1e42a702a0e4bb19a3d6",
+    "collection_launcher_source_sha256": "sha256:e6d67802ac1ab178d706241eed809ae7ce8527d9e65308c61f149e871e834d38",
+    "behavior": "seal the exact four prompt-template files into the benchmark manifest, verify every path and digest, and materialize them beside benchmark.py before score-free qualification",
+    "regression_gates": [
+      "qualification materializes benchmark.py and all four required prompt siblings",
+      "a complete unscored run produced by that qualified runtime remains exportable",
+      "prompt runtime inputs never enter the rollout collection payload"
+    ],
+    "focused_test_count": 266,
+    "focused_test_status": "passed",
+    "full_webexploitbench_test_count": 842,
+    "full_webexploitbench_test_status": "passed"
+  },
+  "first_repaired_qualification": {
+    "transaction_id": "wbe-fresh75-pair-v22",
+    "plan_sha256": "sha256:851604e5b1fcfa0eb9b227dd05c5b6befd1af4ca18119dfcce3ac6c8da5c184f",
+    "sandbox_id": "3h7kp8ofpe5dn9jkuj0tm",
+    "sandbox_name": "wbe-qual-fresh75-pair-v22",
+    "remote_worker_exit_code": 0,
+    "model_requests": 0,
+    "judge_requests": 0,
+    "score_records": 0,
+    "provider_state_after_release": "terminated",
+    "release_receipt_sha256": "sha256:7239e42ae55e39ca7ef4c0c813f334206ec154841d7f03f63af1f26408c1c754",
+    "operator_local_validation_status": "rejected",
+    "operator_local_validation_error": "invalid_benchmark_snapshot_manifest",
+    "classification": "local_validator_schema_drift_after_prompt_manifest_v5",
+    "explanation": "The isolated qualification worker completed and produced the prompt-complete version-5 snapshot. The operator then correctly rejected it before collection because its own exact manifest-field validator still allowed only the older field set. The validator is now bound to the ordered four-file prompt list and its source records, with a regression test that rejects prompt-record drift.",
+    "replay_forbidden": true
+  },
+  "diagnostic_recovery": {
+    "sandbox_id": "p51ime5xjrqzxel0zy60k",
+    "sandbox_name": "wbe-recover-f75-v21-export-meta-v1",
+    "source_snapshot_id": "p17n6h809qs2ogvhzolld",
+    "provider_state_after_release": "terminated",
+    "active_inventory_matches_after_release": 0,
+    "release_receipt_sha256": "sha256:17c93e540804f553071e1cf344b6263d79d3d8d3f1697834e702e00569064c4c"
+  },
+  "disposition": {
+    "v21_replay_forbidden": true,
+    "v21_has_accepted_collection": false,
+    "v21_has_accepted_score": false,
+    "fresh_qualification_required": true,
+    "one_fresh_base_task0_v22_canary_authorized_after_duplicate_checks": true,
+    "fanout_authorized": false,
+    "deferred_scoring_authorized_only_after_accepted_v22_collection": true
+  }
+}

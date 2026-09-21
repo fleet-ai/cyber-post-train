@@ -1,0 +1,108 @@
+{
+  "schema": "cyber_dense_sft_corpus_final_lock_filter_request_v1",
+  "name": "qwen38-fresh75-teacher-sft-final-lock-free-v2",
+  "source": {
+    "manifest_path": "configs/data/qwen38-fresh75-teacher-sft-train-v1.manifest.json",
+    "manifest_file_sha256": "sha256:f71b0b7549a73a2ca3e33d1dc4cb1d8477d271fe3538dbde14afcb03f812cad1",
+    "manifest_sha256": "sha256:453d40b6d7aa0de53aefd6291946fb889befa9ec07990269cbc3bbdbc145746b",
+    "data_root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/fresh75-teacher-max-v1/data",
+    "train_parquet_path": "train.parquet",
+    "train_parquet_sha256": "sha256:8870d056a93ab1be1d029f152438210bcccd084135cdc7fb69fa30c9d8bfc34e",
+    "source_selection_sha256": "sha256:af2ef61a1b6c9b396e677601fa980119e3bd2b868b7b8520252a0eeb715bf2e8",
+    "source_split_sha256": "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
+    "rows": 916,
+    "source_sessions": 115,
+    "task_versions": 37,
+    "supervised_tokens": 1036061
+  },
+  "protection": {
+    "final_test_lock_path": "configs/data/qwen-blackbox-study-final-test-v1.json",
+    "final_test_lock_file_sha256": "sha256:29ee37dcd34b07874fa0598c8b41dd5cc2875ab355a36be508d592a7f32d75a5",
+    "final_test_lock_sha256": "sha256:dc625115be8c775de8ecf476bc0d8e06e71b6c7f4160ed50b25eb0308b30d8d7",
+    "inventory_path": "configs/data/qwen-blackbox-study-inventory-v1.json",
+    "inventory_file_sha256": "sha256:4d2e40e54f6220244f80225b921f404160dd0fe7899260ced1ce31d941231f10",
+    "inventory_sha256": "sha256:2b099f359bd5e3c1c42804c3f9a277c534f9bdbbadfae79e1ef928d4d2f700a9",
+    "split_unit": [
+      "application",
+      "task_family"
+    ],
+    "join_identity": [
+      "task_key",
+      "task_version_id"
+    ],
+    "unknown_or_ambiguous_identity": "reject"
+  },
+  "selection": {
+    "schema": "cyber_task_family_exclusion_selection_v1",
+    "source_split_sha256": "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
+    "protected_final_test_sha256": "sha256:dc625115be8c775de8ecf476bc0d8e06e71b6c7f4160ed50b25eb0308b30d8d7",
+    "mapping_inventory_sha256": "sha256:2b099f359bd5e3c1c42804c3f9a277c534f9bdbbadfae79e1ef928d4d2f700a9",
+    "source_task_versions": 37,
+    "protected_task_families": 10,
+    "excluded_source_task_versions": [
+      {
+        "application": "fakelook",
+        "task_family": "cyber/atoms/fakelook/ambient-identity-header-trust@0",
+        "task_key": "cysec1-2-fakelook-gen_blackbox-9063fa10a36b73f9044c608f__blackbox_ctf_v1",
+        "task_version_id": "dcf2aefc-e34d-4a4a-8aa9-b18a3b754d5a"
+      },
+      {
+        "application": "fentry",
+        "task_family": "cyber/atoms/fentry/session-revocation-not-enforced@3",
+        "task_key": "cysec1-2-fentry-gen_blackbox-8b7c28d59cbc439114db9a56__blackbox_ctf_v1",
+        "task_version_id": "fd07b96f-7aa4-4041-862b-5aa7411eff4b"
+      }
+    ],
+    "excluded_source_task_version_count": 2,
+    "retained_source_task_versions": 35,
+    "sha256": "sha256:b7b536940995a0d4b8674a4bdadd6240ef88dc1c07200a93f27b592ac8c046ea"
+  },
+  "destination": {
+    "data_root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/fresh75-teacher-final-lock-free-v2/data",
+    "train_parquet_path": "train.parquet",
+    "private_selection_path": "source-selection.private.jsonl",
+    "manifest_path": "manifest.json",
+    "receipt_path": "RECEIPT.json",
+    "public_manifest_path": "configs/data/qwen38-fresh75-teacher-sft-final-lock-free-v2.manifest.json",
+    "create_once": true,
+    "publication": "atomic_no_replace"
+  },
+  "materialization": {
+    "row_identity": [
+      "task_key",
+      "source_task_version_id"
+    ],
+    "algorithm": "join every source row and final-lock task to the exact inventory identity; exclude the complete source session whenever its reviewed application/task_family unit is protected",
+    "partial_source_session_removal": "reject",
+    "unknown_or_ambiguous_source_row": "reject",
+    "preserve_source_evidence_fields": true,
+    "source_digest_before_after_must_match": true,
+    "derive_counts_from_filtered_payload": true,
+    "predicted_rows_sessions_tokens_or_file_sha256": false,
+    "required_successor_bindings": [
+      "filter_request_sha256",
+      "selection_sha256",
+      "source_manifest_file_sha256",
+      "source_manifest_sha256",
+      "source_train_parquet_sha256",
+      "source_selection_sha256",
+      "final_test_lock_file_sha256",
+      "final_test_lock_sha256",
+      "inventory_file_sha256",
+      "inventory_sha256",
+      "train_parquet_sha256",
+      "rows",
+      "source_sessions",
+      "task_versions",
+      "supervised_tokens",
+      "task_keys"
+    ],
+    "acceptance": {
+      "final_test_exact_identity_overlap": 0,
+      "final_test_task_family_overlap": 0,
+      "retained_task_versions": 35,
+      "all_output_task_identities_known_to_inventory": true
+    }
+  },
+  "sha256": "sha256:af74f0440529f417fb09d11b9466d690696a253e2b9f0527a4018122a01a78a8"
+}

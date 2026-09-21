@@ -1,0 +1,153 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: chris-q38-dev17-harness-build-v1
+  namespace: fleet-train-jobs
+data:
+  Dockerfile.opencode: |
+    FROM docker.io/library/node@sha256:4d676821dff059fd00d277ee4261ef34ea712317fed0737c03941481b5760c96
+
+    ARG OPENCODE_VERSION=1.18.27
+    ARG OPENCODE_SHA256=4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702
+    LABEL cyber.opencode.release-sha256="sha256:${OPENCODE_SHA256}"
+
+    USER root
+    RUN apt-get update \
+        && apt-get install -y --no-install-recommends ca-certificates curl \
+        && rm -rf /var/lib/apt/lists/* \
+        && curl --fail --location --silent --show-error \
+           "https://github.com/anomalyco/opencode/releases/download/v${OPENCODE_VERSION}/opencode-linux-x64.tar.gz" \
+           --output /tmp/opencode.tar.gz \
+        && echo "${OPENCODE_SHA256}  /tmp/opencode.tar.gz" | sha256sum --check --strict \
+        && tar --extract --gzip --file /tmp/opencode.tar.gz --directory /usr/local/bin opencode \
+        && rm /tmp/opencode.tar.gz \
+        && test "$(opencode --version)" = "${OPENCODE_VERSION}"
+
+    RUN mkdir -p /workspace /home/node/.config/opencode /home/node/.local/share/opencode \
+        && chown -R node:node /workspace /home/node
+
+    USER node
+    WORKDIR /workspace
+    ENTRYPOINT []
+    CMD ["opencode", "--version"]
+  run.sh: |
+    #!/bin/sh
+    set -eu
+    umask 077
+    output=/mnt/sfs/jobs/chris-q38-fleet-dev17-harness-build-v1
+    if [ -e "$output" ]; then
+      echo "create-once output already exists" >&2
+      exit 20
+    fi
+    mkdir "$output"
+    for attempt in $(seq 1 120); do
+      docker info >/dev/null 2>&1 && break
+      sleep 1
+    done
+    docker info >/dev/null
+    docker build --platform linux/amd64 \
+      --tag chris/opencode:1.18.27-fleet-dev17-v1 \
+      --file /bootstrap/Dockerfile.opencode /bootstrap
+    image_id=$(docker image inspect chris/opencode:1.18.27-fleet-dev17-v1 --format '{{.Id}}')
+    platform=$(docker image inspect chris/opencode:1.18.27-fleet-dev17-v1 --format '{{.Os}}/{{.Architecture}}')
+    label=$(docker image inspect chris/opencode:1.18.27-fleet-dev17-v1 --format '{{index .Config.Labels "cyber.opencode.release-sha256"}}')
+    test "$platform" = linux/amd64
+    test "$label" = sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702
+    test "$(docker run --rm --platform linux/amd64 chris/opencode:1.18.27-fleet-dev17-v1 opencode --version)" = 1.18.27
+    docker save --output "$output/opencode-1.18.27-linux-amd64.tar" chris/opencode:1.18.27-fleet-dev17-v1
+    tar_sha256=$(sha256sum "$output/opencode-1.18.27-linux-amd64.tar" | awk '{print $1}')
+    printf '{"schema":"fleet_harness_build_v1","image_id":"%s","platform":"%s","release_asset_sha256":"%s","tar_sha256":"sha256:%s"}\n' \
+      "$image_id" "$platform" "$label" "$tar_sha256" > "$output/BUILD.json"
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: chris-q38-dev17-harness-build-v1
+  namespace: fleet-train-jobs
+  labels:
+    cyber-post-train.fleet.ai/experiment: chris-q38-dev17-harness-build-v1
+    cyber-post-train.fleet.ai/owner: chris
+    kueue.x-k8s.io/queue-name: training-lq
+  annotations:
+    fleet.ai/failure-alerts: "off"
+    cyber-post-train.fleet.ai/create-once: "true"
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 3600
+  template:
+    metadata:
+      labels:
+        cyber-post-train.fleet.ai/experiment: chris-q38-dev17-harness-build-v1
+        cyber-post-train.fleet.ai/owner: chris
+    spec:
+      priorityClassName: c1
+      restartPolicy: Never
+      nodeSelector:
+        kubernetes.io/arch: amd64
+        workload: fleetai-training-ng-cpu
+      tolerations:
+        - key: workload
+          operator: Equal
+          value: fleetai-training-ng-cpu
+          effect: NoSchedule
+      initContainers:
+        - name: dind
+          image: docker.io/library/docker@sha256:f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5
+          restartPolicy: Always
+          args:
+            - --host=unix:///var/run/docker.sock
+            - --tls=false
+          securityContext:
+            privileged: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+              ephemeral-storage: 5Gi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+              ephemeral-storage: 20Gi
+          volumeMounts:
+            - name: docker-socket
+              mountPath: /var/run
+            - name: docker-data
+              mountPath: /var/lib/docker
+      containers:
+        - name: builder
+          image: docker.io/library/docker@sha256:f649ef046008ca7f926a2571c32b0ac22e5c59eb61b959617f9acc2a4c638cf5
+          command: [/bin/sh, /bootstrap/run.sh]
+          env:
+            - name: DOCKER_HOST
+              value: unix:///var/run/docker.sock
+            - name: DOCKER_TLS_CERTDIR
+              value: ""
+          resources:
+            requests:
+              cpu: "2"
+              memory: 2Gi
+              ephemeral-storage: 5Gi
+            limits:
+              cpu: "4"
+              memory: 4Gi
+              ephemeral-storage: 20Gi
+          volumeMounts:
+            - name: docker-socket
+              mountPath: /var/run
+            - name: bootstrap
+              mountPath: /bootstrap
+              readOnly: true
+            - name: sfs
+              mountPath: /mnt/sfs
+      volumes:
+        - name: bootstrap
+          configMap:
+            name: chris-q38-dev17-harness-build-v1
+        - name: docker-data
+          emptyDir:
+            sizeLimit: 40Gi
+        - name: docker-socket
+          emptyDir: {}
+        - name: sfs
+          persistentVolumeClaim:
+            claimName: sfs-shared

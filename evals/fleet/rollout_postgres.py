@@ -512,6 +512,143 @@ def request_retry_review(
     )
 
 
+def approve_retry(dsn: str, *, cell_id: str, reconciliation_digest: str) -> dict[str, Any]:
+    digest = rollout_ledger._require_digest(reconciliation_digest, "reconciliation_digest")  # noqa: SLF001
+    with _transaction(dsn) as connection:
+        row = connection.execute(
+            "SELECT * FROM rollout_cells WHERE cell_id = %s FOR UPDATE", (cell_id,)
+        ).fetchone()
+        if row is None:
+            raise rollout_ledger.LedgerError("rollout cell does not exist")
+        if row["state"] != "retry_review":
+            raise rollout_ledger.LedgerError("only a retry_review cell may return to pending")
+        if row["retry_count"] >= row["max_retries"]:
+            raise rollout_ledger.LedgerError("rollout cell has exhausted its retry allowance")
+        updated = connection.execute(
+            """
+            UPDATE rollout_cells
+            SET state = 'pending', worker_id = NULL, claim_id = NULL,
+                session_id = NULL, started_at = NULL, heartbeat_at = NULL,
+                lease_expires_at = NULL, completed_at = NULL,
+                retry_count = retry_count + 1, result_class = NULL,
+                receipt_digest = NULL, reconciliation_digest = %s,
+                updated_at = CURRENT_TIMESTAMP
+            WHERE cell_id = %s
+            RETURNING *
+            """,
+            (digest, cell_id),
+        ).fetchone()
+        _event(
+            connection,
+            cell_id=cell_id,
+            name="retry_approved",
+            from_state="retry_review",
+            to_state="pending",
+            detail={
+                "reconciliation_digest": digest,
+                "prior_session_id": row["session_id"],
+                "failure_code": row["failure_code"],
+            },
+        )
+        return updated
+
+
+def accept_reviewed(
+    dsn: str,
+    *,
+    cell_id: str,
+    session_id: str,
+    receipt_digest: str,
+    reconciliation_digest: str,
+) -> dict[str, Any]:
+    session = rollout_ledger._require_text(session_id, "session_id")  # noqa: SLF001
+    receipt = rollout_ledger._require_digest(receipt_digest, "receipt_digest")  # noqa: SLF001
+    reconciliation = rollout_ledger._require_digest(  # noqa: SLF001
+        reconciliation_digest, "reconciliation_digest"
+    )
+    with _transaction(dsn) as connection:
+        row = connection.execute(
+            "SELECT * FROM rollout_cells WHERE cell_id = %s FOR UPDATE", (cell_id,)
+        ).fetchone()
+        if row is None:
+            raise rollout_ledger.LedgerError("rollout cell does not exist")
+        if row["state"] != "retry_review":
+            raise rollout_ledger.LedgerError(
+                "only a retry_review cell may be accepted by reconciliation"
+            )
+        if row["session_id"] not in (None, session):
+            raise rollout_ledger.LedgerError("reviewed session identity conflicts with held cell")
+        updated = connection.execute(
+            """
+            UPDATE rollout_cells
+            SET state = 'accepted', session_id = %s, completed_at = CURRENT_TIMESTAMP,
+                heartbeat_at = CURRENT_TIMESTAMP, lease_expires_at = NULL,
+                result_class = 'valid', receipt_digest = %s, failure_code = NULL,
+                reconciliation_digest = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE cell_id = %s
+            RETURNING *
+            """,
+            (session, receipt, reconciliation, cell_id),
+        ).fetchone()
+        _event(
+            connection,
+            cell_id=cell_id,
+            name="reviewed_outcome_accepted",
+            from_state="retry_review",
+            to_state="accepted",
+            worker_id=row["worker_id"],
+            claim_id=row["claim_id"],
+            detail={
+                "session_id": session,
+                "receipt_digest": receipt,
+                "reconciliation_digest": reconciliation,
+                "prior_failure_code": row["failure_code"],
+            },
+        )
+        return updated
+
+
+def mark_terminal(
+    dsn: str,
+    *,
+    cell_id: str,
+    reconciliation_digest: str,
+    failure_code: str | None = None,
+) -> dict[str, Any]:
+    digest = rollout_ledger._require_digest(reconciliation_digest, "reconciliation_digest")  # noqa: SLF001
+    with _transaction(dsn) as connection:
+        row = connection.execute(
+            "SELECT * FROM rollout_cells WHERE cell_id = %s FOR UPDATE", (cell_id,)
+        ).fetchone()
+        if row is None:
+            raise rollout_ledger.LedgerError("rollout cell does not exist")
+        if row["state"] != "retry_review":
+            raise rollout_ledger.LedgerError("only a retry_review cell may be terminally closed")
+        code = rollout_ledger._require_failure_code(  # noqa: SLF001
+            failure_code or row["failure_code"]
+        )
+        updated = connection.execute(
+            """
+            UPDATE rollout_cells
+            SET state = 'terminal', completed_at = CURRENT_TIMESTAMP,
+                lease_expires_at = NULL, failure_code = %s,
+                reconciliation_digest = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE cell_id = %s
+            RETURNING *
+            """,
+            (code, digest, cell_id),
+        ).fetchone()
+        _event(
+            connection,
+            cell_id=cell_id,
+            name="terminally_closed",
+            from_state="retry_review",
+            to_state="terminal",
+            detail={"reconciliation_digest": digest, "failure_code": code},
+        )
+        return updated
+
+
 def record_local_result(
     dsn: str,
     *,

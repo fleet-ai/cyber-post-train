@@ -38,6 +38,11 @@ uv run cyber-post-train status <returned-run-name>
 Preparation and preflight do not request GPUs. Submission is explicit and
 create-once; never erase a submission journal to retry a timeout. Check current
 authorization and the total experiment-owned resource budget before submitting.
+If the live Jobs API preview omits only the required failed-job alert annotation,
+the reviewed SFT-only fallback is `direct-submit-sft`; follow the exact gate in
+the [training guide](docs/TRAINING.md). It still consumes the live API render,
+requires an explicit Kubernetes context, performs a server dry-run and issues
+one `kubectl create`. It is not an RL or generic manifest launcher.
 
 Current consolidation status: the Qwen SFT runtime comes from a successful
 full-model run; its new wrapper has completed a real one-step run with held-out
@@ -121,6 +126,7 @@ to start a new experiment. Shared and dedicated serving remain explicit blocks.
 
 See [AGENTS.md](AGENTS.md), [CONTRIBUTING.md](CONTRIBUTING.md),
 [scientific controls](docs/SCIENTIFIC_PROTOCOL.md),
-[cluster policy and alerts](docs/CLUSTER_ALERTS_AND_INFERENCE_SERVING.md), and
+[cluster policy and alerts](docs/CLUSTER_ALERTS_AND_INFERENCE_SERVING.md),
+[operational lessons](docs/OPERATIONAL_LESSONS.md), and
 [consolidation status](docs/CONSOLIDATION.md). Dated evidence is historical, not
 live state. Raw outputs, datasets, checkpoints and secrets belong outside Git.

@@ -22,9 +22,11 @@ Nebius training cluster, read
 Every project-owned Kubernetes `Job` and `RayJob` MUST carry the top-level annotation
 `fleet.ai/failure-alerts: "off"`. For generic Jobs API runs, the saved request must set
 `failureAlerts: false` and the returned preview must contain that exact annotation;
-otherwise do not submit. This supported opt-out disables failed-job Slack/Better Stack
-notifications only. It does not disable idle-GPU monitoring, justify hiding failures,
-or relax prompt resource release and truthful terminal evidence.
+otherwise do not submit through the generic API. The maintained SFT-only direct-create
+fallback in `docs/TRAINING.md` may transform a live preview under its stricter gate;
+do not hand-edit or extend that exception. This supported opt-out disables failed-job
+Slack/Better Stack notifications only. It does not disable idle-GPU monitoring,
+justify hiding failures, or relax prompt resource release and truthful terminal evidence.
 
 For supported commands, start at `README.md`. For scientific controls, read
 `docs/SCIENTIFIC_PROTOCOL.md`. Use the exact experiment's latest sanitized receipt
@@ -107,6 +109,15 @@ Do not interpret all-zero reward as model incapability when trajectories truncat
 ## Learning loop
 
 For every material failure, ask whether a durable correction belongs in code, a regression test, `AGENTS.md`, a focused skill, a receipt/config, or narrative docs. Prefer deterministic enforcement in code. Add skill guidance only for stable decisions that recur across runs; never hardcode current job IDs, secrets, mutable state, or benchmark content into a skill.
+
+When a failure class recurs, do not scale or repeat it from chat memory alone.
+Before the next scaled successor, it MUST leave all four durable layers: a
+sanitized immutable receipt or config, a deterministic code guard at the
+narrowest owned boundary, a regression test for that guard, and a concise entry
+in [`docs/OPERATIONAL_LESSONS.md`](docs/OPERATIONAL_LESSONS.md) or its focused
+runbook. If an external service owns the failing boundary, local code must fail
+closed at preview or preflight and link the exact upstream repair. Prose is not
+a substitute for an enforceable guard.
 
 ## Handoff standard
 
