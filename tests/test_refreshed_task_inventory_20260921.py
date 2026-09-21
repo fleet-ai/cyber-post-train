@@ -4,7 +4,6 @@ import hashlib
 import json
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 DATA = ROOT / "configs" / "data"
 EVIDENCE = ROOT / "docs" / "evidence" / "fleet-task-inventory-20260921"
@@ -25,9 +24,7 @@ def _self_digest(value: dict) -> str:
 
 
 def _digest(value: object) -> str:
-    encoded = json.dumps(
-        value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
-    ).encode()
+    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
     return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
@@ -87,8 +84,12 @@ def test_current_blackbox_supply_grew_without_rewriting_the_accepted_set() -> No
     # The census binds the selected rows; each dated file self-digests its
     # enclosing receipt.  Both identities are useful, but they are not the
     # same JSON object and must not be compared as if they were.
-    assert census["refreshed_selections"]["conservative_current_receipt_proven_sha256"] == _digest(_rows(filtered))
-    assert census["refreshed_selections"]["new_qa_cleared_pending_receipts_sha256"] == _digest(_rows(pending))
+    assert census["refreshed_selections"]["conservative_current_receipt_proven_sha256"] == _digest(
+        _rows(filtered)
+    )
+    assert census["refreshed_selections"]["new_qa_cleared_pending_receipts_sha256"] == _digest(
+        _rows(pending)
+    )
 
 
 def test_receipt_coverage_partitions_current_supply_without_scores_or_sessions() -> None:
