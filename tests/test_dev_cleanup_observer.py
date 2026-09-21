@@ -362,6 +362,7 @@ def test_direct_rayjob_observer_binds_children_receipt_and_releases(tmp_path) ->
     assert result["workload_uid"].endswith("000000000021")
     assert result["raycluster_uid"].endswith("000000000022")
     assert result["receipt"]["status"] == "setup_and_internal_cleanup_passed"
+    assert result["deletion_reason"] == "terminal_status"
 
 
 def test_production_recovery_observer_adopts_only_the_exact_live_uid(tmp_path) -> None:
@@ -496,21 +497,109 @@ def test_observer_recovers_after_one_exhausted_kubectl_read(tmp_path) -> None:
     assert json.loads((tmp_path / "RESULT.json").read_text()) == result
 
 
-def test_observer_releases_after_bounded_consecutive_read_failures(tmp_path) -> None:
-    cluster = FakeJobCluster()
-    timeouts = 0
+class FlakyActiveDirectRayJobCluster(FakeDirectRayJobCluster):
+    """An active 8-GPU run survives five fully exhausted Pod-list reads."""
 
-    def unavailable(argv, **kwargs):
-        nonlocal timeouts
+    def __init__(self) -> None:
+        super().__init__()
+        self.pod_list_reads = 0
+        self.timeouts = 0
+        self.recovered_active_reads = 0
+        self.terminal = False
+        self.delete_calls = 0
+        self.deleted_while_running = False
+
+    def __call__(self, argv, **kwargs):
         args = argv[5:]
-        if args[:2] == ["get", "pod"] and "--selector" in args and not cluster.deleted:
-            timeouts += 1
-            raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
-        return cluster(argv, **kwargs)
+        if args[:2] == ["get", "rayjob"]:
+            self.target_reads += 1
+            value = None
+            if self.target_reads > 1 and not self.deleted:
+                self.terminal = (
+                    self.timeouts
+                    >= cleanup.KUBECTL_ATTEMPTS
+                    * cleanup.MAX_CONSECUTIVE_OBSERVATION_FAILURES
+                    and self.recovered_active_reads >= 1
+                )
+                value = self._object(
+                    "probe",
+                    20,
+                    status={
+                        "rayClusterName": "cluster-probe",
+                        "jobStatus": "SUCCEEDED" if self.terminal else "RUNNING",
+                    },
+                )
+            return NS(returncode=0, stdout=json.dumps(value) if value else "", stderr="")
+        if args[:2] == ["get", "pod"] and "--selector" in args:
+            self.pod_list_reads += 1
+            if (
+                self.pod_list_reads > 1
+                and self.timeouts
+                < cleanup.KUBECTL_ATTEMPTS
+                * cleanup.MAX_CONSECUTIVE_OBSERVATION_FAILURES
+            ):
+                self.timeouts += 1
+                raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
+            if self.timeouts:
+                self.recovered_active_reads += int(not self.terminal)
+            items = []
+            if not self.deleted:
+                state = (
+                    {"terminated": {"message": json.dumps(self.receipt)}}
+                    if self.terminal
+                    else {"running": {}}
+                )
+                items.append(
+                    self._object(
+                        "probe-pod-23",
+                        23,
+                        spec={
+                            "containers": [
+                                {"resources": {"requests": {"nvidia.com/gpu": 8}}}
+                            ]
+                        },
+                        status={
+                            "containerStatuses": [
+                                {
+                                    "restartCount": 0,
+                                    "imageID": "registry/image@sha256:" + "c" * 64,
+                                    "state": state,
+                                }
+                            ]
+                        },
+                    )
+                )
+            return NS(returncode=0, stdout=json.dumps({"items": items}), stderr="")
+        if args[:2] == ["delete", "rayjob"]:
+            self.delete_calls += 1
+            self.deleted_while_running = not self.terminal
+        return super().__call__(argv, **kwargs)
 
-    result = _observer(tmp_path, unavailable).run()
-    assert timeouts == (cleanup.KUBECTL_ATTEMPTS * cleanup.MAX_CONSECUTIVE_OBSERVATION_FAILURES)
-    assert cluster.deleted is True
-    assert result["status"] == "released_without_accepted_execution"
-    assert result["observer_error_class"] == "ObserverError"
-    assert result["target_present"] is result["pods_present"] is False
+
+def test_observer_read_failures_cannot_delete_an_active_gpu_run(tmp_path) -> None:
+    cluster = FlakyActiveDirectRayJobCluster()
+    result = _observer(
+        tmp_path,
+        cluster,
+        kind="rayjob",
+        name="probe",
+        maximum_seconds=1800,
+        expected_gpus=8,
+    ).run()
+    assert cluster.timeouts == (
+        cleanup.KUBECTL_ATTEMPTS * cleanup.MAX_CONSECUTIVE_OBSERVATION_FAILURES
+    )
+    assert cluster.recovered_active_reads >= 1
+    assert cluster.deleted_while_running is False
+    assert cluster.delete_calls == 1
+    assert result["status"] == "released"
+    assert result["terminal_status"] == "Succeeded"
+    assert result["peak_gpus"] == 8
+    assert result["observation_failures"] >= cleanup.MAX_CONSECUTIVE_OBSERVATION_FAILURES
+    assert (
+        result["max_consecutive_observation_failures"]
+        >= cleanup.MAX_CONSECUTIVE_OBSERVATION_FAILURES
+    )
+    assert result["last_observation_error_code"] == "kubectl_timeout"
+    assert result["deletion_reason"] == "terminal_status"
+    assert result["observer_error_class"] == ""

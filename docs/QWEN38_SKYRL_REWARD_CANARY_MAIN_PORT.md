@@ -127,3 +127,38 @@ optimizer update, a reloadable step-1 checkpoint, and complete resource release.
 All-zero valid rewards are a truthful experiment outcome but do not establish a
 learning update. Missing or truncated reward evidence is an infrastructure
 failure, not a zero-reward model result.
+
+## Cleanup observers must prove a cleanup reason
+
+Prod6 established a separate operational failure class. The RL process was
+still generating its pre-update development episode, the Pod was Ready with
+zero restarts, and GPUs were actively computing. The local cleanup observer
+then suffered five consecutive observation errors and its old `finally` block
+deleted the exact RayJob. SFS contained only the run and batch `STARTED`
+markers: no collection, reward, update, checkpoint, runtime failure, rejection,
+or completion marker existed. This was an observer-induced infrastructure
+failure, not a model result.
+
+An observer exists to release a workload after there is evidence that cleanup
+is required. Failure of the observer's own Kubernetes read is not that
+evidence. The observer may now delete only when at least one positive condition
+is true:
+
+1. the exact bound workload reports a terminal state;
+2. the exact bound workload violates its reviewed GPU-resource contract; or
+3. the plan-bound maximum runtime is reached.
+
+Transient or repeated read failures are recorded using a short sanitized code
+and the observer keeps watching. They never authorize deletion of a
+nonterminal run. The result receipt records the total and maximum consecutive
+observation failures, the last sanitized failure code, and the positive reason
+that eventually authorized cleanup. The regression deliberately exhausts the
+old five-cycle threshold while an eight-GPU run remains active, proves no
+delete occurs, then proves normal exact-UID cleanup after a genuine terminal
+status.
+
+Sanitized incident and release evidence is recorded in
+[`2026-09-21-skyrl-prod6-observer-induced-release-v1.json`](evidence/qwen38-study/2026-09-21-skyrl-prod6-observer-induced-release-v1.json).
+It records zero collected training batches, zero optimizer updates, zero
+checkpoints, and complete release of the eight GPUs. It makes no capability
+claim.

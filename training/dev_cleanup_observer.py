@@ -42,6 +42,14 @@ TERMINAL_RECEIPT_GRACE_SECONDS = 30
 class ObserverError(RuntimeError):
     """A sanitized cleanup-observer failure."""
 
+    def __init__(self, message: str, *, code: str = "observer_error") -> None:
+        super().__init__(message)
+        self.code = code
+
+
+class CleanupAuthorizedError(ObserverError):
+    """Positive contract evidence that authorizes exact-target cleanup."""
+
 
 def _seal(value: dict) -> dict:
     body = {key: item for key, item in value.items() if key != "sha256"}
@@ -217,6 +225,10 @@ class Observer:
         self.snapshot = Snapshot()
         self.armed_at = ""
         self.deletion_requested_at = ""
+        self.deletion_reason = ""
+        self.observation_failures = 0
+        self.max_consecutive_observation_failures = 0
+        self.last_observation_error_code = ""
 
     def _kubectl(self, *arguments: str) -> str:
         command = [
@@ -243,9 +255,15 @@ class Observer:
             if attempt + 1 < KUBECTL_ATTEMPTS:
                 time.sleep(min(self.poll_seconds, 1.0))
         if result is None:  # pragma: no cover - the loop either returns or raises
-            raise ObserverError("development-cluster observation timed out")
+            raise ObserverError(
+                "development-cluster observation timed out",
+                code="kubectl_timeout",
+            )
         if result.returncode:
-            raise ObserverError("development-cluster observation failed")
+            raise ObserverError(
+                "development-cluster observation failed",
+                code="kubectl_failed",
+            )
         return result.stdout
 
     def _get(self, resource: str, name: str) -> dict | None:
@@ -495,7 +513,20 @@ class Observer:
         else:
             self._observe_rayjob(resource)
         if self.snapshot.peak_gpus > self.expected_gpus:
-            raise ObserverError("workload exceeded its plan-bound GPU count")
+            raise CleanupAuthorizedError(
+                "workload exceeded its plan-bound GPU count",
+                code="gpu_contract_exceeded",
+            )
+
+    def _record_observation_failure(
+        self, error: ObserverError, consecutive_failures: int
+    ) -> None:
+        self.observation_failures += 1
+        self.max_consecutive_observation_failures = max(
+            self.max_consecutive_observation_failures,
+            consecutive_failures,
+        )
+        self.last_observation_error_code = error.code
 
     def _same_target(self) -> dict | None:
         resource = self._target()
@@ -605,6 +636,12 @@ class Observer:
                 "peak_gpus": self.snapshot.peak_gpus,
                 "receipt": receipt,
                 "observer_error_class": observer_error_class,
+                "observation_failures": self.observation_failures,
+                "max_consecutive_observation_failures": (
+                    self.max_consecutive_observation_failures
+                ),
+                "last_observation_error_code": self.last_observation_error_code,
+                "deletion_reason": self.deletion_reason,
                 "deletion_requested_at": self.deletion_requested_at,
                 **(
                     {"recovered_existing_target_uid": self.expected_uid}
@@ -620,6 +657,7 @@ class Observer:
         creation_allowance = 300 if self.profile == "production-direct" else 120
         creation_deadline = time.monotonic() + min(creation_allowance, self.maximum_seconds)
         observer_error: BaseException | None = None
+        deletion_authorized = False
         try:
             consecutive_observation_failures = 0
             while not self.snapshot.uid:
@@ -629,10 +667,11 @@ class Observer:
                         self.observe(resource)
                         consecutive_observation_failures = 0
                         break
-                except ObserverError:
+                except ObserverError as exc:
                     consecutive_observation_failures += 1
-                    if consecutive_observation_failures >= MAX_CONSECUTIVE_OBSERVATION_FAILURES:
-                        raise
+                    self._record_observation_failure(
+                        exc, consecutive_observation_failures
+                    )
                     # _bind runs before child discovery.  If the exact target
                     # UID was bound and a later read failed, continue through
                     # the normal observation loop instead of treating that
@@ -647,18 +686,43 @@ class Observer:
             while True:
                 elapsed = (_now() - created).total_seconds()
                 if elapsed >= self.maximum_seconds - DELETE_REQUEST_MARGIN_SECONDS:
+                    deletion_authorized = True
+                    self.deletion_reason = "plan_deadline"
                     break
                 try:
                     resource = self._same_target()
                     if resource is None:
                         self.snapshot.terminal_status = self.snapshot.terminal_status or "Deleted"
+                        self.deletion_reason = "target_absent"
                         break
                     self.observe(resource)
                     consecutive_observation_failures = 0
-                except ObserverError:
+                except CleanupAuthorizedError as exc:
                     consecutive_observation_failures += 1
-                    if consecutive_observation_failures >= MAX_CONSECUTIVE_OBSERVATION_FAILURES:
-                        raise
+                    self._record_observation_failure(
+                        exc, consecutive_observation_failures
+                    )
+                    observer_error = exc
+                    deletion_authorized = True
+                    self.deletion_reason = exc.code
+                    break
+                except ObserverError as exc:
+                    consecutive_observation_failures += 1
+                    self._record_observation_failure(
+                        exc, consecutive_observation_failures
+                    )
+                    # An observation failure is not evidence that a healthy
+                    # workload is terminal, broken, or stalled.  In
+                    # particular, repeated Kubernetes read timeouts must not
+                    # turn the cleanup observer into a job killer.  Keep
+                    # watching until a positive terminal/resource signal or
+                    # the plan-bound deadline authorizes exact-UID cleanup.
+                    if (
+                        consecutive_observation_failures
+                        >= MAX_CONSECUTIVE_OBSERVATION_FAILURES
+                    ):
+                        time.sleep(min(max(self.poll_seconds, 1.0), 30.0))
+                    continue
                 if self.snapshot.terminal_status:
                     # A RayJob can report terminal before its long-running Ray
                     # container terminates.  Kubernetes exposes the declared
@@ -681,6 +745,8 @@ class Observer:
                         if now < terminal_receipt_deadline:
                             time.sleep(min(self.poll_seconds, terminal_receipt_deadline - now))
                             continue
+                    deletion_authorized = True
+                    self.deletion_reason = "terminal_status"
                     break
                 time.sleep(
                     min(
@@ -694,7 +760,7 @@ class Observer:
         except BaseException as exc:
             observer_error = exc
         finally:
-            if self.snapshot.uid:
+            if self.snapshot.uid and deletion_authorized:
                 try:
                     self.delete()
                 except BaseException as exc:
