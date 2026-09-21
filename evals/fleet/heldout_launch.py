@@ -974,10 +974,18 @@ def _response_object(
 def _contains(actual: Any, expected: Any) -> bool:
     if isinstance(expected, dict):
         return isinstance(actual, dict) and all(
-            key in actual and _contains(actual[key], value) for key, value in expected.items()
+            (key in actual and _contains(actual[key], value)) or (key not in actual and value == "")
+            for key, value in expected.items()
         )
     if isinstance(expected, list):
-        return isinstance(actual, list) and actual == expected
+        return (
+            isinstance(actual, list)
+            and len(actual) == len(expected)
+            and all(
+                _contains(actual_item, expected_item)
+                for actual_item, expected_item in zip(actual, expected, strict=True)
+            )
+        )
     return actual == expected
 
 
@@ -1454,10 +1462,23 @@ class KubectlCluster:
         if result.returncode:
             raise HeldoutLaunchError("kubectl operation failed; private server output suppressed")
         try:
-            value = json.loads(result.stdout)
+            decoder = json.JSONDecoder()
+            values: list[dict[str, Any]] = []
+            position = 0
+            while position < len(result.stdout):
+                while position < len(result.stdout) and result.stdout[position].isspace():
+                    position += 1
+                if position == len(result.stdout):
+                    break
+                value, position = decoder.raw_decode(result.stdout, position)
+                values.append(_require_mapping(value, "kubectl response"))
         except json.JSONDecodeError as exc:
             raise HeldoutLaunchError("kubectl returned invalid JSON") from exc
-        return _require_mapping(value, "kubectl response")
+        if not values:
+            raise HeldoutLaunchError("kubectl returned invalid JSON")
+        if len(values) == 1:
+            return values[0]
+        return {"apiVersion": "v1", "kind": "List", "items": values}
 
     def list(
         self,
