@@ -164,10 +164,11 @@
       },
       "prod9_hardening": {
         "path": "../../training/skyrl_prod9_hardening.py",
-        "file_sha256": "sha256:af316adc2e1e98b02deda135a7554a786d32cd4654e6b09daf6ff1333d092dac",
+        "file_sha256": "sha256:de5b18194a0018878288ae601ba000f9365af97db685afe2d04de3659cffb443",
         "symbols": [
           "Recorder",
           "validate_episode_limits",
+          "validate_exact_episode_limits",
           "capacity_gate",
           "accept_terminal"
         ]
@@ -198,7 +199,7 @@
       },
       "prod9_direct_rail": {
         "path": "../../training/skyrl_prod9_direct.py",
-        "file_sha256": "sha256:81bd26f76dccfc0b4e1eae7a1da5bf499ef8d91048d6571b2217a4e65bd3e854",
+        "file_sha256": "sha256:3cde90e435235ed79cc2e5e9589ca912005b79e1c8b0df1aec80614694422451",
         "symbols": [
           "manifest",
           "stage_job_manifest",
@@ -217,7 +218,7 @@
       },
       "prod9_reload_rail": {
         "path": "../../training/skyrl_prod9_reload.py",
-        "file_sha256": "sha256:65e30c845ca85745b139fd7804488dcc43ddb4ce3df6387b544e0aeb97b18115",
+        "file_sha256": "sha256:63659630c459b343f567d0f8c55c85dac28e858235386258f1ee7c90e02325f4",
         "symbols": [
           "build_spec",
           "job_request",
@@ -243,7 +244,7 @@
       },
       "prod9_cleanup_observer": {
         "path": "../../training/dev_cleanup_observer.py",
-        "file_sha256": "sha256:1e8ddf8ed011154f4a299c9f6c20950673a35ce559c4597a74a60a2afe206105",
+        "file_sha256": "sha256:1c4e6389313a4e1ae98c9355d62007a30f853e55088971f511ebfde8d662a76e",
         "symbols": [
           "_validated_receipt",
           "Observer"
@@ -321,5 +322,5 @@
       "incident_evidence_self_sha256": "sha256:c45f12a8fa799900053a1bd7b1e33ff26e89d517ae552188bda0e66cf675ca2d"
     }
   },
-  "sha256": "sha256:809e8ceaaa5f1a6159565ff2f9c378cf489ba32a078fca4ce9714448a35a7e3a"
+  "sha256": "sha256:389670a0ef577d0436958b97f3e8355d1dcb3127f5205dc4027a7bc8decec45f"
 }

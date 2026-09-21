@@ -865,6 +865,8 @@ def test_prod9_config_compiles_through_the_real_qualification_gate() -> None:
         key: plan["arguments"][key]
         for key in (
             "context_tokens",
+            "response_tokens",
+            "tokens_per_turn",
             "generation_chunk_tokens",
             "compaction_trigger_tokens",
             "compaction_summary_tokens",
@@ -872,6 +874,8 @@ def test_prod9_config_compiles_through_the_real_qualification_gate() -> None:
         )
     } == {
         "context_tokens": 262144,
+        "response_tokens": 4194304,
+        "tokens_per_turn": 32768,
         "generation_chunk_tokens": 4096,
         "compaction_trigger_tokens": 163840,
         "compaction_summary_tokens": 8192,
@@ -897,6 +901,7 @@ def test_prod9_offline_preparation_requires_a_fresh_rebound_manifest(tmp_path: P
     hardening = receipt["inputs"]["prod9_hardening"]
     assert hardening["schema"] == prod9.SOURCE_CLOSURE_SCHEMA
     assert hardening["context_tokens"] == 262144
+    assert hardening["response_tokens"] == 4194304
     assert hardening["max_turns"] == 1200
     assert hardening["tool_result_token_safe"] is True
     source = ROOT / "training/skyrl_prod9_hardening.py"

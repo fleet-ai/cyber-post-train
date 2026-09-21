@@ -28,6 +28,7 @@ from .sft_runtime import _checked_file, write_receipt
 CAPACITY_GATE_SCHEMA = "cyber_skyrl_prod9_direct_capacity_gate_v1"
 ACCEPTANCE_SCHEMA = "cyber_skyrl_prod9_terminal_acceptance_v1"
 RELOAD_OBSERVER_SCHEMA = "cyber_skyrl_prod9_reload_observer_result_v1"
+TRAINING_OBSERVER_SCHEMA = "cyber_direct_cleanup_observer_result_v1"
 PROJECT_OWNER_PREFIXES = ("chris-q38-",)
 PROJECT_MAX_NODES = 8
 PROJECT_MAX_GPUS = 64
@@ -35,6 +36,25 @@ CAPACITY_MAX_AGE_SECONDS = 120
 PROD_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 NAMESPACE = "fleet-train-jobs"
 SOURCE_CLOSURE_SCHEMA = "cyber_skyrl_prod9_source_closure_check_v1"
+CREATE_ONCE_ROOT = Path("/mnt/sfs/jobs/.cyber-post-train-prod9-create-once-v1")
+CREATOR_BINDING_FILES = {
+    "stage": "STAGE_OBSERVER_ARMED.json.created.json",
+    "preflight": "PREFLIGHT_OBSERVER_ARMED.json.created.json",
+    "training": "TRAINING_OBSERVER_ARMED.json.created.json",
+    "reload": "RELOAD_OBSERVER_ARMED.json.created.json",
+}
+EXACT_PROD9_LIMITS = {
+    "context_tokens": 262144,
+    "response_tokens": 4194304,
+    "max_tokens_per_turn": 32768,
+    "generation_chunk_tokens": 4096,
+    "compaction_trigger_tokens": 163840,
+    "compaction_summary_tokens": 8192,
+    "max_turns": 1200,
+    "episode_seconds": 14400,
+    "tool_seconds": 330,
+    "tool_result_chars": 50000,
+}
 
 
 def validate_episode_limits(limits: object) -> None:
@@ -65,6 +85,52 @@ def validate_episode_limits(limits: object) -> None:
         < limits["context_tokens"]
     ):
         raise InvalidEpisode("invalid_compaction_limits")
+
+
+def validate_exact_episode_limits(limits: object) -> None:
+    """Require every exact prod9 horizon limit, including response tokens."""
+    validate_episode_limits(limits)
+    if limits != EXACT_PROD9_LIMITS:
+        raise InvalidEpisode("skyrl_exact_horizon_contract_drift")
+
+
+def _canonical_operation_root(scope: str, identity: dict[str, Any]) -> Path:
+    """Derive one global journal root from immutable public identity bytes."""
+    if scope not in {"stage", "training", "reload"} or not isinstance(identity, dict):
+        raise ValueError("prod9 operation identity is invalid")
+    return CREATE_ONCE_ROOT / f"{scope}-{digest({'scope': scope, 'identity': identity})}"
+
+
+def stage_operation_root(stage: dict[str, Any]) -> Path:
+    body = {key: item for key, item in stage.items() if key != "sha256"}
+    if stage.get("schema") != "cyber_skyrl_prod9_rebind_stage_v1" or stage.get(
+        "sha256"
+    ) != "sha256:" + digest(body):
+        raise ValueError("prod9 stage identity is not sealed")
+    return _canonical_operation_root("stage", stage)
+
+
+def training_operation_root(plan: dict[str, Any]) -> Path:
+    if plan.get("schema") != "cyber_skyrl_prod9_training_v1":
+        raise ValueError("prod9 training operation requires the fresh plan")
+    return _canonical_operation_root("training", plan)
+
+
+def reload_operation_root(spec: dict[str, Any]) -> Path:
+    body = {key: item for key, item in spec.items() if key != "sha256"}
+    if spec.get("schema") != "cyber_skyrl_prod9_reload_spec_v1" or spec.get(
+        "sha256"
+    ) != "sha256:" + digest(body):
+        raise ValueError("prod9 reload identity is not sealed")
+    return _canonical_operation_root("reload", spec)
+
+
+def creator_binding_path(root: Path, purpose: str) -> Path:
+    try:
+        name = CREATOR_BINDING_FILES[purpose]
+    except KeyError as exc:
+        raise ValueError("prod9 creator-binding purpose is invalid") from exc
+    return root / name
 
 
 def verify_source_closure(path: Path) -> dict[str, Any]:
@@ -104,6 +170,7 @@ def verify_source_closure(path: Path) -> dict[str, Any]:
             {
                 "Recorder",
                 "validate_episode_limits",
+                "validate_exact_episode_limits",
                 "capacity_gate",
                 "accept_terminal",
             },
@@ -217,6 +284,7 @@ def verify_source_closure(path: Path) -> dict[str, Any]:
         key: (horizon.get("max_turns") if key == "max_turns" else fixed.get(key))
         for key in {
             "context_tokens",
+            "response_tokens",
             "max_tokens_per_turn",
             "generation_chunk_tokens",
             "compaction_trigger_tokens",
@@ -227,15 +295,14 @@ def verify_source_closure(path: Path) -> dict[str, Any]:
             "tool_result_chars",
         }
     }
-    validate_episode_limits(limits)
-    if limits["context_tokens"] != 262144 or limits["max_turns"] != 1200:
-        raise ValueError("prod9 source closure long-context contract changed")
+    validate_exact_episode_limits(limits)
     return {
         "schema": SOURCE_CLOSURE_SCHEMA,
         "evidence_file_sha256": "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest(),
         "evidence_self_sha256": value["sha256"],
         "sources": checked,
         "context_tokens": limits["context_tokens"],
+        "response_tokens": limits["response_tokens"],
         "max_turns": limits["max_turns"],
         "tool_result_token_safe": True,
     }
@@ -440,9 +507,12 @@ def terminal_paths(plan: dict) -> dict[str, Path]:
     args = legacy_posttrain._validate_plan(plan)
     root = Path(plan["output_root"])
     reload_root = root.with_name(root.name + f"-p{args.steps}-reload-v1")
+    operation_root = training_operation_root(plan)
     return {
         "checkpoint_manifest": root / "checkpoint-seals-v1" / f"step-{args.steps}.json",
         "export": root / f"hf-export-step{args.steps}-v1" / "EXPORT.json",
+        "training_observer": root / "TRAINING_OBSERVER_RESULT.json",
+        "training_creator_binding": creator_binding_path(operation_root, "training"),
         "gpu_check": reload_root / "GPU_CHECK.json",
         "reload_observer": reload_root / "OBSERVER_RESULT.json",
         "accepted": root / "ACCEPTED.json",
@@ -547,11 +617,124 @@ def _reload_observer(path: Path, *, plan: dict, expected_name: str) -> tuple[dic
     return value, _hash(path)
 
 
+def _training_creator_binding(path: Path, *, plan: dict) -> tuple[dict, str]:
+    from . import skyrl_posttrain as legacy_posttrain
+    from . import skyrl_reward_rayjob as legacy_direct
+
+    value = legacy_posttrain._json(path)
+    body = {key: item for key, item in value.items() if key != "sha256"}
+    try:
+        uid = str(UUID(value.get("uid")))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("training creator binding lacks an exact UID") from exc
+    if (
+        value.get("schema") != "cyber_direct_cleanup_creator_binding_v1"
+        or value.get("sha256") != "sha256:" + digest(body)
+        or value.get("status") != "created_once"
+        or value.get("context") != legacy_direct.PROD_CONTEXT
+        or value.get("namespace") != legacy_direct.NAMESPACE
+        or value.get("kind") != "rayjob"
+        or value.get("name") != plan["run_name"]
+        or value.get("plan_sha256") != "sha256:" + digest(plan)
+        or re.fullmatch(r"sha256:[0-9a-f]{64}", str(value.get("manifest_sha256"))) is None
+        or value.get("uid") != uid
+    ):
+        raise ValueError("training creator binding differs from the exact prod9 run")
+    return value, _hash(path)
+
+
+def _training_observer(
+    path: Path,
+    *,
+    plan: dict,
+    manifest: dict,
+    creator: dict,
+) -> tuple[dict, str]:
+    from . import skyrl_posttrain as legacy_posttrain
+    from . import skyrl_reward_rayjob as legacy_direct
+
+    args = legacy_posttrain._validate_plan(plan)
+    value = legacy_posttrain._json(path)
+    body = {key: item for key, item in value.items() if key != "sha256"}
+    receipt = value.get("receipt")
+    receipt_body = (
+        {key: item for key, item in receipt.items() if key != "sha256"}
+        if isinstance(receipt, dict)
+        else {}
+    )
+    absent = {
+        "target_present",
+        "pods_present",
+        "rayjob_present",
+        "workload_present",
+        "raycluster_present",
+    }
+    try:
+        UUID(value["uid"])
+        UUID(value["rayjob_uid"])
+        UUID(value["workload_uid"])
+        UUID(value["raycluster_uid"])
+        pod_uids, pod_names = value["pod_uids"], value["pod_names"]
+        if (
+            not isinstance(pod_uids, list)
+            or not isinstance(pod_names, list)
+            or len(pod_uids) != 1
+            or len(pod_names) != 1
+            or not isinstance(pod_names[0], str)
+            or not pod_names[0]
+            or not all(
+                isinstance(value.get(key), str) and value[key]
+                for key in ("workload_name", "raycluster_name")
+            )
+        ):
+            raise ValueError
+        UUID(pod_uids[0])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("training observer lacks exact workload identities") from exc
+    if (
+        value.get("schema") != TRAINING_OBSERVER_SCHEMA
+        or value.get("sha256") != "sha256:" + digest(body)
+        or value.get("status") != "released"
+        or value.get("context") != legacy_direct.PROD_CONTEXT
+        or value.get("namespace") != legacy_direct.NAMESPACE
+        or value.get("kind") != "rayjob"
+        or value.get("name") != plan["run_name"]
+        or value.get("rayjob_name") != plan["run_name"]
+        or value.get("uid") != value.get("rayjob_uid")
+        or value.get("uid") != creator["uid"]
+        or value.get("plan_sha256") != "sha256:" + digest(plan)
+        or value.get("manifest_sha256") != creator["manifest_sha256"]
+        or value.get("maximum_seconds") != legacy_direct.MAXIMUM_SECONDS
+        or value.get("expected_gpus") != 8
+        or value.get("peak_gpus") != 8
+        or value.get("active_gpus") != 0
+        or value.get("terminal_status") != "Succeeded"
+        or value.get("restarts") != 0
+        or value.get("observer_error_class") != ""
+        or value.get("exit_codes") != [0]
+        or not isinstance(value.get("release_observed_at"), str)
+        or any(value.get(key) is not False for key in absent)
+        or not isinstance(receipt, dict)
+        or receipt.get("sha256") != digest(receipt_body)
+        or receipt.get("status") != "native_loop_returned"
+        or receipt.get("plan_sha256") != digest(plan)
+        or receipt.get("checkpoint_global_step") != manifest["optimizer_step"]
+        or receipt.get("completed_batches") != len(legacy_posttrain._expected_batches(args))
+        or receipt.get("optimizer_update_independently_verified") is not False
+        or receipt.get("checkpoint_reload_verified") is not False
+        or manifest.get("terminal_receipt_sha256") != receipt["sha256"]
+    ):
+        raise ValueError("training observer does not prove exact eight-GPU release")
+    return value, _hash(path)
+
+
 def accept_terminal(
     plan: dict,
     *,
     checkpoint_manifest: Path,
     export: Path,
+    training_observer: Path,
+    training_creator_binding: Path,
     gpu_check: Path,
     reload_observer: Path,
     output: Path,
@@ -565,6 +748,8 @@ def accept_terminal(
     supplied = {
         "checkpoint_manifest": checkpoint_manifest,
         "export": export,
+        "training_observer": training_observer,
+        "training_creator_binding": training_creator_binding,
         "gpu_check": gpu_check,
         "reload_observer": reload_observer,
         "accepted": output,
@@ -594,6 +779,16 @@ def accept_terminal(
         or export_receipt.get("output_root") != str(export.parent)
     ):
         raise ValueError("BF16 export differs from the exact terminal checkpoint")
+    creator, creator_file_sha256 = _training_creator_binding(
+        training_creator_binding,
+        plan=plan,
+    )
+    training_release, training_observer_file_sha256 = _training_observer(
+        training_observer,
+        plan=plan,
+        manifest=manifest,
+        creator=creator,
+    )
     gpu, gpu_file_sha256 = _receipt_file(gpu_check)
     if (
         gpu.get("schema") != "cyber_hf_export_check_v1"
@@ -630,6 +825,19 @@ def accept_terminal(
         "checkpoint_manifest_receipt_sha256": manifest["receipt_sha256"],
         "export_file_sha256": export_file_sha256,
         "export_receipt_sha256": export_receipt["receipt_sha256"],
+        "training_creator_binding_file_sha256": creator_file_sha256,
+        "training_creator_binding_receipt_sha256": creator["sha256"],
+        "training_observer_file_sha256": training_observer_file_sha256,
+        "training_observer_receipt_sha256": training_release["sha256"],
+        "training_manifest_sha256": training_release["manifest_sha256"],
+        "training_rayjob_name": training_release["rayjob_name"],
+        "training_rayjob_uid": training_release["rayjob_uid"],
+        "training_workload_name": training_release["workload_name"],
+        "training_workload_uid": training_release["workload_uid"],
+        "training_raycluster_name": training_release["raycluster_name"],
+        "training_raycluster_uid": training_release["raycluster_uid"],
+        "training_pod_names": training_release["pod_names"],
+        "training_pod_uids": training_release["pod_uids"],
         "gpu_check_file_sha256": gpu_file_sha256,
         "gpu_check_receipt_sha256": gpu["receipt_sha256"],
         "reload_checker_file_sha256": gpu["checker_sha256"],

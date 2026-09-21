@@ -17,6 +17,7 @@ import yaml
 from cyber_post_train.gpu_capacity import build_capacity_census
 from cyber_post_train.jobs import digest
 from training import skyrl_prod9_direct as direct
+from training import skyrl_prod9_hardening as hardening
 from training import skyrl_prod9_reload as reload
 
 
@@ -203,7 +204,7 @@ def _observer(tmp_path: Path, spec: dict, manifest: dict) -> dict:
             "manifest_sha256": "sha256:" + digest(manifest),
             "armed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "observer_pid": 12345,
-            "creator_binding_path": str(tmp_path / "OBSERVER_ARMED.json.created.json"),
+            "creator_binding_path": str(hardening.creator_binding_path(tmp_path, "reload")),
         }
     )
 
@@ -245,7 +246,12 @@ def _prepared(tmp_path: Path, monkeypatch):
     prod = reload.validate_preview(
         spec, request, source, expected, rendered, context=reload.PROD_CONTEXT
     )
-    observer = _observer(tmp_path, spec, expected)
+    global_root = tmp_path / "global-create-once"
+    global_root.mkdir()
+    monkeypatch.setattr(hardening, "CREATE_ONCE_ROOT", global_root)
+    operation_root = hardening.reload_operation_root(spec)
+    operation_root.mkdir()
+    observer = _observer(operation_root, spec, expected)
     monkeypatch.setattr(direct.os, "kill", lambda *_: None)
     auth = reload.authorize(
         spec,
@@ -333,6 +339,7 @@ def test_full_reload_authorization_is_no_mutation_and_wrong_root_stops_before_io
 
 def test_reload_create_is_exactly_once_and_publishes_creator_uid(tmp_path, monkeypatch) -> None:
     spec, request, source, expected, auth = _prepared(tmp_path, monkeypatch)
+    operation_root = Path(auth["operation_root"])
     creates = []
 
     class FakeJobs:
@@ -369,7 +376,7 @@ def test_reload_create_is_exactly_once_and_publishes_creator_uid(tmp_path, monke
         return subprocess.CompletedProcess(command, 0, stdout=json.dumps(created), stderr="")
 
     proof = reload.create_once(
-        tmp_path,
+        operation_root,
         spec,
         request,
         source,
@@ -383,14 +390,14 @@ def test_reload_create_is_exactly_once_and_publishes_creator_uid(tmp_path, monke
     assert proof["status"] == "created_once"
     assert proof["rayjob_uid"] == "00000000-0000-0000-0000-000000000020"
     assert len(creates) == 1
-    binding = json.loads((tmp_path / "OBSERVER_ARMED.json.created.json").read_text())
+    binding = json.loads(hardening.creator_binding_path(operation_root, "reload").read_text())
     assert binding["uid"] == proof["rayjob_uid"]
     assert binding["name"] == spec["name"]
 
     before = len(creates)
     with pytest.raises(ValueError, match="never retry"):
         reload.create_once(
-            tmp_path,
+            operation_root,
             spec,
             request,
             source,
@@ -400,6 +407,21 @@ def test_reload_create_is_exactly_once_and_publishes_creator_uid(tmp_path, monke
             runner=runner,
             jobs_factory=FakeJobs,
             capacity_reader=_capacity,
+        )
+    assert len(creates) == before
+
+    alternate = tmp_path / "fresh-alternate-operation"
+    alternate.mkdir()
+    changed = _observer(alternate, spec, expected)
+    with pytest.raises(ValueError, match="canonical durable directory"):
+        reload.authorize(
+            spec,
+            request,
+            source,
+            expected,
+            dev_preview=auth["dev_preview"],
+            prod_preview=auth["prod_preview"],
+            observer=changed,
         )
     assert len(creates) == before
 

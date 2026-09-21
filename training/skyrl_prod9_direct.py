@@ -136,14 +136,21 @@ def _observer_pid(
     return value
 
 
-def _operation_root(observer: dict[str, Any]) -> Path:
+def _operation_root(observer: dict[str, Any], *, expected_root: Path, purpose: str) -> Path:
+    """Require the observer handoff inside the identity-derived global root."""
     binding = observer.get("creator_binding_path")
     if not isinstance(binding, str):
         raise JobsError("prod9 cleanup observer lacks its create handoff path")
     path = Path(binding)
     parent = path.parent
+    expected_binding = hardening.creator_binding_path(expected_root, purpose)
     if (
         not path.is_absolute()
+        or path != expected_binding
+        or expected_root.parent != hardening.CREATE_ONCE_ROOT
+        or hardening.CREATE_ONCE_ROOT.is_symlink()
+        or not hardening.CREATE_ONCE_ROOT.is_dir()
+        or hardening.CREATE_ONCE_ROOT.resolve() != hardening.CREATE_ONCE_ROOT
         or parent.is_symlink()
         or not parent.is_dir()
         or parent.resolve() != parent
@@ -280,6 +287,8 @@ def manifest(
         if row.get("secretRef", {}).get("name") != generated_secret
     ]
     container["securityContext"] = _runtime_context()
+    container["terminationMessagePath"] = plan["output_root"] + "/NATIVE_TRAINING_COMPLETE.json"
+    container["terminationMessagePolicy"] = "File"
     init = head.get("initContainers", [])
     sfs = [item for item in init if item.get("name") == "sfs-init"]
     if len(sfs) != 1 or sfs[0].get("command") != [
@@ -885,6 +894,8 @@ def _stage_authorization(
             or armed.get("maximum_seconds") != CPU_MAXIMUM_SECONDS
         ):
             raise JobsError("prod9 stage observer binding changed")
+    operation_root = hardening.stage_operation_root(checked)
+    _operation_root(armed, expected_root=operation_root, purpose="stage")
     return _seal(
         {
             "schema": STAGE_AUTHORIZATION_SCHEMA,
@@ -894,7 +905,7 @@ def _stage_authorization(
             "dev_preview": previews[0],
             "prod_preview": previews[1],
             "observer": armed,
-            "operation_root": str(_operation_root(armed)),
+            "operation_root": str(operation_root),
         }
     )
 
@@ -1007,8 +1018,8 @@ def _preflight_authorization(
             or armed.get("maximum_seconds") != CPU_MAXIMUM_SECONDS
         ):
             raise JobsError("prod9 CPU preflight observer binding changed")
-    if _operation_root(stage_auth["observer"]) != _operation_root(armed):
-        raise JobsError("prod9 stage and preflight operation roots differ")
+    operation_root = hardening.training_operation_root(plan)
+    _operation_root(armed, expected_root=operation_root, purpose="preflight")
     return _seal(
         {
             "schema": PREFLIGHT_AUTHORIZATION_SCHEMA,
@@ -1023,7 +1034,7 @@ def _preflight_authorization(
             "dev_preview": previews[0],
             "prod_preview": previews[1],
             "observer": armed,
-            "operation_root": str(_operation_root(armed)),
+            "operation_root": str(operation_root),
         }
     )
 
@@ -1283,7 +1294,8 @@ def create_stage_once(
 ) -> dict[str, Any]:
     """Create the one permitted zero-GPU prod9 SFS rebind Job."""
     auth = _validate_seal(authorization, STAGE_AUTHORIZATION_SCHEMA)
-    if directory.resolve() != Path(auth.get("operation_root", "")):
+    canonical = hardening.stage_operation_root(stage)
+    if directory.resolve() != canonical or Path(auth.get("operation_root", "")) != canonical:
         raise JobsError("prod9 CPU create directory differs from its sealed operation root")
     if auth != authorize_stage(
         stage,
@@ -1318,7 +1330,8 @@ def create_preflight_once(
 ) -> dict[str, Any]:
     """Create the one permitted zero-GPU exact-image prod9 preflight Job."""
     auth = _validate_seal(authorization, PREFLIGHT_AUTHORIZATION_SCHEMA)
-    if directory.resolve() != Path(auth.get("operation_root", "")):
+    canonical = hardening.training_operation_root(plan)
+    if directory.resolve() != canonical or Path(auth.get("operation_root", "")) != canonical:
         raise JobsError("prod9 CPU create directory differs from its sealed operation root")
     expected = preflight_job_manifest(plan, identity=identity)
     if auth != _preflight_authorization(
@@ -1606,13 +1619,11 @@ def _direct_authorization(
             or armed.get("maximum_seconds") != MAXIMUM_SECONDS
         ):
             raise JobsError("prod9 direct observer binding changed")
-    roots = {
-        _operation_root(stage_auth["observer"]),
-        _operation_root(preflight_auth["observer"]),
-        _operation_root(armed),
-    }
-    if len(roots) != 1:
-        raise JobsError("prod9 stage, preflight, and GPU operation roots differ")
+    stage_root = hardening.stage_operation_root(checked_stage)
+    operation_root = hardening.training_operation_root(plan)
+    _operation_root(stage_auth["observer"], expected_root=stage_root, purpose="stage")
+    _operation_root(preflight_auth["observer"], expected_root=operation_root, purpose="preflight")
+    _operation_root(armed, expected_root=operation_root, purpose="training")
     return _seal(
         {
             "schema": AUTHORIZATION_SCHEMA,
@@ -1632,7 +1643,7 @@ def _direct_authorization(
             "dev_preview": previews[0],
             "prod_preview": previews[1],
             "observer": armed,
-            "operation_root": str(_operation_root(armed)),
+            "operation_root": str(operation_root),
             "output_absence_enforcement": "fresh_cpu_preflight_plus_non_idempotent_gpu_init",
         }
     )
@@ -1703,14 +1714,16 @@ def create_once(
     must reconcile the exact identity instead of replaying the request.
     """
     bound = _identity(plan, identity)
-    journal = directory / "PROD9_DIRECT_RAYJOB_CREATE.jsonl"
+    canonical = hardening.training_operation_root(plan)
+    journal = canonical / "PROD9_DIRECT_RAYJOB_CREATE.jsonl"
     if journal.exists() or journal.is_symlink():
         raise JobsError("prod9 create intent exists; reconcile, never retry")
     auth = _validate_seal(authorization, AUTHORIZATION_SCHEMA)
     if (
         directory.is_symlink()
         or not directory.is_dir()
-        or directory.resolve() != Path(auth.get("operation_root", ""))
+        or directory.resolve() != canonical
+        or Path(auth.get("operation_root", "")) != canonical
     ):
         raise JobsError("prod9 create directory differs from its sealed operation root")
     stage = auth.get("stage")

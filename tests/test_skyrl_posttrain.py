@@ -268,7 +268,7 @@ def completed_rl(prepared, monkeypatch):  # noqa: F811
 
 
 @pytest.fixture
-def completed_prod9_rl(completed_rl):
+def completed_prod9_rl(completed_rl, monkeypatch):
     state = completed_rl
     state.plan.update(
         schema=skyrl_prod9_training.SCHEMA,
@@ -282,6 +282,9 @@ def completed_prod9_rl(completed_rl):
         terminal_path,
         sealed({key: value for key, value in terminal.items() if key != "sha256"}, prefix=False),
     )
+    create_once_root = state.root.parent / "prod9-create-once"
+    create_once_root.mkdir()
+    monkeypatch.setattr(prod9, "CREATE_ONCE_ROOT", create_once_root)
     state.manifest = state.root.parent / "prod9-seal.json"
     return state
 
@@ -383,6 +386,44 @@ def _terminal_inputs(state):
         file_digest(paths["checkpoint_manifest"]),
         paths["export"].parent,
     )
+    training_receipt = json.loads((state.root / "NATIVE_TRAINING_COMPLETE.json").read_text())
+    training_manifest_sha256 = "sha256:" + "b" * 64
+    training_cluster = FakeDirectRayJobCluster(
+        name=state.plan["run_name"],
+        gpus=8,
+        receipt=training_receipt,
+    )
+    training_observer = cleanup_observer.Observer(
+        context=cleanup_observer.PROD_CONTEXT,
+        namespace=cleanup_observer.NAMESPACE,
+        kind="rayjob",
+        name=state.plan["run_name"],
+        maximum_seconds=skyrl_prod9_direct.MAXIMUM_SECONDS,
+        expected_gpus=8,
+        plan_sha256="sha256:" + digest(state.plan),
+        manifest_sha256=training_manifest_sha256,
+        armed_path=paths["training_creator_binding"].parent / "TRAINING_OBSERVER_ARMED.json",
+        result_path=paths["training_observer"],
+        poll_seconds=0.001,
+        profile="production-direct",
+        run=training_cluster,
+    )
+    original_training_arm = training_observer.arm
+
+    def arm_and_bind_training():
+        armed = original_training_arm()
+        skyrl_prod9_direct._publish_creator_binding(
+            armed,
+            kind="rayjob",
+            name=state.plan["run_name"],
+            plan_sha256="sha256:" + digest(state.plan),
+            manifest_sha256=training_manifest_sha256,
+            uid="00000000-0000-0000-0000-000000000020",
+        )
+        return armed
+
+    training_observer.arm = arm_and_bind_training
+    training_observer.run()
     write_receipt(
         paths["gpu_check"],
         {
@@ -453,6 +494,8 @@ def test_rl_terminal_acceptance_requires_exact_seal_export_reload_and_release(
         state.plan,
         checkpoint_manifest=paths["checkpoint_manifest"],
         export=paths["export"],
+        training_observer=paths["training_observer"],
+        training_creator_binding=paths["training_creator_binding"],
         gpu_check=paths["gpu_check"],
         reload_observer=paths["reload_observer"],
         output=paths["accepted"],
@@ -461,6 +504,8 @@ def test_rl_terminal_acceptance_requires_exact_seal_export_reload_and_release(
     assert accepted["schema"] == prod9.ACCEPTANCE_SCHEMA
     assert accepted["checkpoint_manifest_receipt_sha256"] == manifest["receipt_sha256"]
     assert accepted["export_receipt_sha256"] == exported["receipt_sha256"]
+    assert accepted["training_rayjob_name"] == state.plan["run_name"]
+    assert accepted["training_pod_names"] == [state.plan["run_name"] + "-pod-23"]
     assert accepted["complete_bf16_reload_verified"] is True
     assert accepted["gpu_resources_released"] is True
     with pytest.raises(FileExistsError):
@@ -468,6 +513,8 @@ def test_rl_terminal_acceptance_requires_exact_seal_export_reload_and_release(
             state.plan,
             checkpoint_manifest=paths["checkpoint_manifest"],
             export=paths["export"],
+            training_observer=paths["training_observer"],
+            training_creator_binding=paths["training_creator_binding"],
             gpu_check=paths["gpu_check"],
             reload_observer=paths["reload_observer"],
             output=paths["accepted"],
@@ -475,7 +522,18 @@ def test_rl_terminal_acceptance_requires_exact_seal_export_reload_and_release(
 
 
 @pytest.mark.parametrize(
-    "fault", ["gpu", "checker", "release", "terminal", "observer_manifest", "wrong_path"]
+    "fault",
+    [
+        "gpu",
+        "checker",
+        "release",
+        "terminal",
+        "observer_manifest",
+        "training_release",
+        "training_uid",
+        "training_receipt",
+        "wrong_path",
+    ],
 )
 def test_rl_terminal_acceptance_rejects_incomplete_reload_or_release(completed_prod9_rl, fault):
     state = completed_prod9_rl
@@ -517,6 +575,27 @@ def test_rl_terminal_acceptance_rejects_incomplete_reload_or_release(completed_p
             paths["reload_observer"],
             sealed({key: item for key, item in value.items() if key != "sha256"}),
         )
+    elif fault == "training_release":
+        value = json.loads(paths["training_observer"].read_text())
+        value["active_gpus"] = 8
+        write(
+            paths["training_observer"],
+            sealed({key: item for key, item in value.items() if key != "sha256"}),
+        )
+    elif fault == "training_uid":
+        value = json.loads(paths["training_observer"].read_text())
+        value["uid"] = value["rayjob_uid"] = "00000000-0000-0000-0000-000000000099"
+        write(
+            paths["training_observer"],
+            sealed({key: item for key, item in value.items() if key != "sha256"}),
+        )
+    elif fault == "training_receipt":
+        value = json.loads(paths["training_observer"].read_text())
+        value["receipt"]["checkpoint_global_step"] += 1
+        write(
+            paths["training_observer"],
+            sealed({key: item for key, item in value.items() if key != "sha256"}),
+        )
     else:
         paths["export"] = paths["export"].with_name("other.json")
     with pytest.raises(ValueError):
@@ -524,6 +603,8 @@ def test_rl_terminal_acceptance_rejects_incomplete_reload_or_release(completed_p
             state.plan,
             checkpoint_manifest=paths["checkpoint_manifest"],
             export=paths["export"],
+            training_observer=paths["training_observer"],
+            training_creator_binding=paths["training_creator_binding"],
             gpu_check=paths["gpu_check"],
             reload_observer=paths["reload_observer"],
             output=paths["accepted"],

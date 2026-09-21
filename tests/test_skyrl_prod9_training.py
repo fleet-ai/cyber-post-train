@@ -449,9 +449,15 @@ def test_prod9_limits_accept_manifest_and_recorder_surfaces() -> None:
     )
     limits = config["limits"]
     hardening.validate_episode_limits(limits)
+    hardening.validate_exact_episode_limits(limits)
     hardening.validate_episode_limits(
         {key: value for key, value in limits.items() if key != "response_tokens"}
     )
+    with pytest.raises(rollout.rl_episode.InvalidEpisode, match="exact_horizon"):
+        hardening.validate_exact_episode_limits(
+            {key: value for key, value in limits.items() if key != "response_tokens"}
+        )
+    assert hardening.verify_source_closure(SOURCE_CLOSURE)["response_tokens"] == 4194304
 
 
 def test_prod9_fresh_direct_renderer_and_cpu_preflight_are_alert_safe() -> None:
@@ -650,10 +656,17 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
 ) -> None:
     """Exercise the entire rail synthetically; no Kubernetes client is used."""
     plan, request, identity = _prod9_plan()
+    global_root = tmp_path / "global-create-once"
+    global_root.mkdir()
+    monkeypatch.setattr(hardening, "CREATE_ONCE_ROOT", global_root)
+    training_root = hardening.training_operation_root(plan)
+    training_root.mkdir()
     predecessor = json.loads(
         (ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json").read_text()
     )
     stage = prod9_training.stage_spec(identity, predecessor)
+    stage_root = hardening.stage_operation_root(stage)
+    stage_root.mkdir()
     stage_job = prod9_direct.stage_job_manifest(stage, identity=identity)
     stage_dev = prod9_direct.validate_cpu_preview(
         stage_job, _cpu_render(stage_job), context=prod9_direct.DEV_CONTEXT, purpose="stage"
@@ -668,7 +681,7 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
         "sha256:" + digest(stage_job),
         0,
         prod9_direct.CPU_MAXIMUM_SECONDS,
-        tmp_path / "stage-created.json",
+        hardening.creator_binding_path(stage_root, "stage"),
     )
     stage_auth = prod9_direct.authorize_stage(
         stage,
@@ -678,6 +691,25 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
         observer=stage_observer,
         identity=identity,
     )
+    alternate_stage = tmp_path / "alternate-stage"
+    alternate_stage.mkdir()
+    with pytest.raises(JobsError, match="canonical durable directory"):
+        prod9_direct.authorize_stage(
+            stage,
+            stage_job,
+            dev_preview=stage_dev,
+            prod_preview=stage_prod,
+            observer=_observer(
+                "job",
+                identity.stage_name,
+                stage["sha256"],
+                "sha256:" + digest(stage_job),
+                0,
+                prod9_direct.CPU_MAXIMUM_SECONDS,
+                alternate_stage / "STAGE_OBSERVER_ARMED.json.created.json",
+            ),
+            identity=identity,
+        )
 
     created_uid = "00000000-0000-0000-0000-000000000003"
 
@@ -704,7 +736,7 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
         pytest.fail(f"unexpected CPU command: {command}")
 
     stage_created = prod9_direct.create_stage_once(
-        tmp_path, stage, stage_job, stage_auth, identity=identity, runner=cpu_runner
+        stage_root, stage, stage_job, stage_auth, identity=identity, runner=cpu_runner
     )
     staged = _stage_receipt(stage, plan, identity)
     stage_release = _release(
@@ -735,7 +767,7 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
         "sha256:" + digest(preflight_job),
         0,
         prod9_direct.CPU_MAXIMUM_SECONDS,
-        tmp_path / "preflight-created.json",
+        hardening.creator_binding_path(training_root, "preflight"),
     )
     preflight_auth = prod9_direct.authorize_preflight(
         plan,
@@ -751,8 +783,33 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
         observer=preflight_observer,
         identity=identity,
     )
+    alternate_preflight = tmp_path / "alternate-preflight"
+    alternate_preflight.mkdir()
+    with pytest.raises(JobsError, match="canonical durable directory"):
+        prod9_direct.authorize_preflight(
+            plan,
+            request,
+            stage,
+            stage_auth,
+            stage_created,
+            staged,
+            stage_release,
+            preflight_job,
+            dev_preview=preflight_dev,
+            prod_preview=preflight_prod,
+            observer=_observer(
+                "job",
+                identity.preflight_name,
+                "sha256:" + digest(plan),
+                "sha256:" + digest(preflight_job),
+                0,
+                prod9_direct.CPU_MAXIMUM_SECONDS,
+                alternate_preflight / "PREFLIGHT_OBSERVER_ARMED.json.created.json",
+            ),
+            identity=identity,
+        )
     preflight_created = prod9_direct.create_preflight_once(
-        tmp_path,
+        training_root,
         plan,
         request,
         stage,
@@ -796,7 +853,7 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
         "sha256:" + digest(rayjob),
         8,
         prod9_direct.MAXIMUM_SECONDS,
-        tmp_path / "rayjob-created.json",
+        hardening.creator_binding_path(training_root, "training"),
     )
     fresh_checks = []
     original_fresh_at = prod9_direct._fresh_at
@@ -831,7 +888,36 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
         direct_prod["checked_at"],
         direct_observer["armed_at"],
     ]
-
+    alternate_training = tmp_path / "alternate-training"
+    alternate_training.mkdir()
+    with pytest.raises(JobsError, match="canonical durable directory"):
+        prod9_direct.authorize(
+            plan,
+            request,
+            source_preview,
+            rayjob,
+            stage,
+            stage_auth,
+            stage_created,
+            staged,
+            stage_release,
+            preflight_auth,
+            preflight_created,
+            preflight,
+            preflight_release,
+            dev_preview=direct_dev,
+            prod_preview=direct_prod,
+            observer=_observer(
+                "rayjob",
+                identity.run_name,
+                "sha256:" + digest(plan),
+                "sha256:" + digest(rayjob),
+                8,
+                prod9_direct.MAXIMUM_SECONDS,
+                alternate_training / "TRAINING_OBSERVER_ARMED.json.created.json",
+            ),
+            identity=identity,
+        )
     created_rayjob_uid = "00000000-0000-0000-0000-000000000004"
     mutations = []
     live_order = []
@@ -887,7 +973,7 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
         pytest.fail(f"unexpected direct command: {command}")
 
     created = prod9_direct.create_once(
-        tmp_path,
+        training_root,
         plan,
         request,
         source_preview,
@@ -906,13 +992,13 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
     assert live_order[-2:] == ["capacity", "create"]
     journal = [
         json.loads(line)
-        for line in (tmp_path / "PROD9_DIRECT_RAYJOB_CREATE.jsonl").read_text().splitlines()
+        for line in (training_root / "PROD9_DIRECT_RAYJOB_CREATE.jsonl").read_text().splitlines()
     ]
     assert journal[0]["state"] == "CREATE_INTENT_DO_NOT_RETRY"
     assert journal[1]["status"] == "created_once"
     with pytest.raises(JobsError, match="create intent exists"):
         prod9_direct.create_once(
-            tmp_path,
+            training_root,
             plan,
             request,
             source_preview,
@@ -925,9 +1011,11 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
             wandb_exists=lambda *_args: False,
             capacity_reader=lambda _context, **_kwargs: census,
         )
-    alternate = tmp_path / "alternate"
+    alternate = tmp_path / "alternate-create"
     alternate.mkdir()
-    with pytest.raises(JobsError, match="sealed operation root"):
+    # The canonical journal wins even when a caller supplies a fresh alternate
+    # directory: once intent exists, no alternate path can reach create.
+    with pytest.raises(JobsError, match="create intent exists"):
         prod9_direct.create_once(
             alternate,
             plan,

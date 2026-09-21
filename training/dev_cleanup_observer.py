@@ -1132,6 +1132,20 @@ def _validated_receipt(message: object, *, kind: str) -> dict | None:
     if kind == "rayjob" and value.get("schema") == "cyber_hf_export_check_v1":
         body = {key: item for key, item in value.items() if key != "receipt_sha256"}
         return value if value.get("receipt_sha256") == digest(body) else None
+    if kind == "rayjob" and value.get("status") == "native_loop_returned":
+        body = {key: item for key, item in value.items() if key != "sha256"}
+        if set(value) == {
+            "status",
+            "plan_sha256",
+            "checkpoint_global_step",
+            "completed_batches",
+            "completed_at",
+            "optimizer_update_independently_verified",
+            "checkpoint_reload_verified",
+            "sha256",
+        } and value.get("sha256") == digest(body):
+            return value
+        return None
     body = {key: item for key, item in value.items() if key != "sha256"}
     schemas = {
         "job": {
@@ -1167,6 +1181,7 @@ def _receipt_execution_accepted(value: dict | None) -> bool:
             "passed",
             "published",
             "setup_and_internal_cleanup_passed",
+            "native_loop_returned",
         }
     return prod8.receipt_execution_accepted(value)
 

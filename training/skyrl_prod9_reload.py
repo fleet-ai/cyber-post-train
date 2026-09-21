@@ -686,6 +686,7 @@ def _authorization(
     from cyber_post_train.jobs import digest
 
     from . import skyrl_prod9_direct as direct
+    from . import skyrl_prod9_hardening as hardening
 
     value = _spec_identity(spec)
     if expected != manifest(value, request, source_preview):
@@ -717,6 +718,8 @@ def _authorization(
             or armed.get("maximum_seconds") != MAXIMUM_SECONDS
         ):
             raise ValueError("prod9 reload observer binding changed")
+    operation_root = hardening.reload_operation_root(value)
+    direct._operation_root(armed, expected_root=operation_root, purpose="reload")
     return _seal(
         {
             "schema": AUTHORIZATION_SCHEMA,
@@ -728,7 +731,7 @@ def _authorization(
             "dev_preview": previews[0],
             "prod_preview": previews[1],
             "observer": armed,
-            "operation_root": str(direct._operation_root(armed)),
+            "operation_root": str(operation_root),
         }
     )
 
@@ -853,17 +856,20 @@ def create_once(
     from cyber_post_train.jobs import Jobs, digest
 
     from . import skyrl_prod9_direct as direct
+    from . import skyrl_prod9_hardening as hardening
 
     value = _spec_identity(spec)
     jobs_factory = Jobs if jobs_factory is None else jobs_factory
-    journal = directory / "PROD9_RELOAD_RAYJOB_CREATE.jsonl"
+    canonical = hardening.reload_operation_root(value)
+    journal = canonical / "PROD9_RELOAD_RAYJOB_CREATE.jsonl"
     if journal.exists() or journal.is_symlink():
         raise ValueError("prod9 reload create intent exists; reconcile, never retry")
     auth = _validated_seal(authorization, AUTHORIZATION_SCHEMA)
     if (
         directory.is_symlink()
         or not directory.is_dir()
-        or directory.resolve() != Path(auth.get("operation_root", ""))
+        or directory.resolve() != canonical
+        or Path(auth.get("operation_root", "")) != canonical
     ):
         raise ValueError("prod9 reload create directory differs from its operation root")
     if auth != _authorization(

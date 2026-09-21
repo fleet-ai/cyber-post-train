@@ -45,7 +45,8 @@ It recompiles the real SkyRL plan and writes a sealed preparation receipt with
 the current runtime, plan, request, zero-GPU rebind, and CPU-preflight digests. It also
 verifies the fresh prod9 source closure for the token-safe recorder, direct
 capacity gate, and terminal checkpoint/reload acceptance gate. It checks the
-fresh identity, one-node shape, 262,144-token compaction settings, and
+fresh identity, one-node shape, the exact 262,144-token context and
+4,194,304-response-token episode limits, and
 zero-GPU preflight's root alert opt-out. Those digests are fresh prod9 evidence;
 they are never inherited from historical prod8. The command never reads task
 rows, contacts external services, stages data, or authorizes a launch.
@@ -131,6 +132,16 @@ blocked until this source is reviewed and all evidence below is fresh.
    recheck identities and W&B absence, record a no-retry create intent, and
    create exactly once. The observer may release only a terminal run, a
    resource-contract breach, or the maximum runtime.
+7. Before `ACCEPTED.json` can be written, require the original eight-GPU
+   observer's exact UID-bound creator handoff and release result, then require
+   the separate one-GPU, zero-update reload and its release result. The
+   acceptance receipt binds both sets of workload identities and receipt
+   digests.
+
+The create journals are not stored in a caller-selected working directory.
+Stage, training, and reload roots are computed from their sealed immutable
+identity below `/mnt/sfs/jobs/.cyber-post-train-prod9-create-once-v1`; a fresh
+alternate directory cannot authorize or replay a create.
 
 The preparation code does not create a workload. A separate authorized
 operator must perform these live gates and one create-only call.
