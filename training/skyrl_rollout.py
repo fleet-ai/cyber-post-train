@@ -218,8 +218,7 @@ class Generator:
                 (
                     "length"
                     if last
-                    and sample.metadata.get("done_reason")
-                    == "turn_response_budget_exhausted"
+                    and sample.metadata.get("done_reason") == "turn_response_budget_exhausted"
                     else "stop"
                 )
                 for samples in trajectories

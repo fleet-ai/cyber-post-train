@@ -521,10 +521,13 @@ async def test_output_limit_uses_authoritative_grade_and_never_executes_partial_
     assert (tmp_path / "episode/ACCEPTED.json").exists()
     assert not (tmp_path / "episode/failure.json").exists()
     assert sum(m == "POST" and p.endswith("/instances") for m, p in state.calls) == 1
-    assert sum(
-        m == "POST" and "/rollout-rewards/" in p and not p.endswith("/instances")
-        for m, p in state.calls
-    ) == 1
+    assert (
+        sum(
+            m == "POST" and "/rollout-rewards/" in p and not p.endswith("/instances")
+            for m, p in state.calls
+        )
+        == 1
+    )
 
 
 @dataclass
