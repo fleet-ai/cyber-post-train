@@ -4,7 +4,6 @@ import hashlib
 import json
 from pathlib import Path
 
-
 ROOT = Path(__file__).parents[1]
 READINESS_V1 = ROOT / "configs/evaluation/qwen38-checkpoint-serving-readiness-v1.json"
 READINESS_V2 = ROOT / "configs/evaluation/qwen38-checkpoint-serving-readiness-v2.json"
@@ -23,9 +22,12 @@ def _sha256(path: Path) -> str:
 def _self_digest(value: dict) -> str:
     unsigned = dict(value)
     unsigned.pop("sha256")
-    return "sha256:" + hashlib.sha256(
-        json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
+    return (
+        "sha256:"
+        + hashlib.sha256(
+            json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+    )
 
 
 def test_v2_versions_instead_of_mutating_the_historical_readiness_snapshot() -> None:
@@ -104,9 +106,7 @@ def test_lr30_v2_binds_later_reload_stage_and_paused_route_evidence() -> None:
     )
     assert lr30["live_target"]["status"] == "paused_registered_requires_jit_resume_and_fresh_parity"
 
-    v1_artifacts = {
-        row["artifact_id"]: row for row in _load(READINESS_V1)["artifacts"]
-    }
+    v1_artifacts = {row["artifact_id"]: row for row in _load(READINESS_V1)["artifacts"]}
     assert {
         artifact_id: row
         for artifact_id, row in artifacts.items()
@@ -171,9 +171,7 @@ def test_v2_ledger_labels_completed_unpaired_work_without_a_capability_claim() -
     # This correction is intentionally narrow: all earlier controls remain
     # exactly as recorded in the frozen v1 ledger.
     assert ledger["controls"] == _load(LEDGER_V1)["controls"]
-    v1_rows = {
-        row["artifact_id"]: row for row in _load(LEDGER_V1)["accepted_checkpoints"]
-    }
+    v1_rows = {row["artifact_id"]: row for row in _load(LEDGER_V1)["accepted_checkpoints"]}
     assert {
         artifact_id: row
         for artifact_id, row in rows.items()
