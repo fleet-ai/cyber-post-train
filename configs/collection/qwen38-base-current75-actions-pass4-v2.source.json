@@ -1,0 +1,78 @@
+{
+  "authorization": {
+    "external_launch_by_this_artifact": false,
+    "private_or_unknown_reasoning_as_target": false,
+    "source_visible_action_collection": true,
+    "student_visible_reasoning": false
+  },
+  "campaign_name": "q38-base-train50-actions-p4-v1",
+  "collection": {
+    "attempts_per_task": 4,
+    "concurrency": 8,
+    "maximum_planned_cells": 200,
+    "target_unique_visible_action_tokens": 20000000
+  },
+  "inputs": {
+    "family_split": {
+      "file_sha256": "sha256:28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb",
+      "logical_sha256": "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
+      "path": "configs/data/fleet-blackbox-current-study-split-20260914-v2.json"
+    },
+    "inventory": {
+      "file_sha256": "sha256:6c211259a29376de195411e5cc182bb6f26c5b8027ab86fec855b44f064b0fd0",
+      "logical_sha256": "sha256:23cfc25af183ff474e914443682e4707162110ddc2aa16103a13d984fe05b83c",
+      "path": "configs/data/fleet-blackbox-current-high-quality-20260914-v1.json"
+    },
+    "runtime_catalog": {
+      "file_sha256": "sha256:5786d9b1f4f505d89ef257718706e50b0c071f4c7c1fd80afd1ae1568fb61b9f",
+      "logical_sha256": "sha256:5de88eada94119fd21ac715bb1956a745376d775c13ce7d5584936e70b3a003a",
+      "path": "configs/data/qwen38-skyrl-production-task-set-v1.json"
+    },
+    "runtime_catalog_expected_task_versions": 89,
+    "source_profile": {
+      "file_sha256": "sha256:b52db3194f8682bcf88fb96049a1f3cf14afa8b3b7ab18932b0209f394d90b7c",
+      "logical_sha256": "sha256:92db2e4a238f0a7d921d61a68fc12f57a3d5afb258a51d8213639c9d61ed2bc4",
+      "path": "configs/evaluation/qwen38-base-fleet-dev17-opencode-seed43-pass1-v1.json"
+    }
+  },
+  "purpose": "Freeze the exact v2 successor of the broad receipt-proven train-family base-Qwen visible-action collection wave with a canonical create-once operation authorization.",
+  "safety": {
+    "alternate_path_retry_allowed": false,
+    "ambiguous_external_mutation_replay_allowed": false,
+    "canonical_private_operation_root_required": true,
+    "cluster_wrapper_requires_two_stable_server_previews": true,
+    "cluster_wrapper_supported": true,
+    "dedicated_empty_ledger_required": true,
+    "exclusive_pre_mutation_intent_required": true,
+    "fleet_api_calls": 0,
+    "model_calls": 0,
+    "required_root_annotation": {
+      "fleet.ai/failure-alerts": "off"
+    },
+    "same_path_retry_allowed": false,
+    "source_only_materialization": true,
+    "trace_or_score_reads": 0
+  },
+  "schema": "cyber_collection_campaign_source_spec_v2",
+  "selection": {
+    "expected_counts": {
+      "dev": 17,
+      "final_test": 8,
+      "train": 50
+    },
+    "family_role_anchor_sha256": "sha256:48350b8fc23143abe297db3b2364590c72d564553ebb4e9a349fa06ec246a26b",
+    "maximum_task_versions_per_family": 1,
+    "roles": [
+      "train"
+    ],
+    "root_role_anchor_id": "fleet-blackbox-current-study-20260914-v2"
+  },
+  "sha256": "sha256:bd02996b6ce29b8139e6a0dbc9cc3a822520f3211f7907ef2d133133ec75316b",
+  "source": {
+    "kind": "self",
+    "model_alias": "qwen3.8-27b-base",
+    "route_name": "base",
+    "status": "authorized_action_source",
+    "template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
+  }
+}

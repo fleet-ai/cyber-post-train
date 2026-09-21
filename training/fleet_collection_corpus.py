@@ -23,8 +23,9 @@ from typing import Any
 
 from cyber_post_train.jobs import digest
 from evals.fleet import visible_action_collection as collection_runtime
+from evals.fleet import visible_action_collection_v2 as collection_runtime_v2
 
-from . import collection_campaign
+from . import collection_campaign, collection_campaign_v2
 from . import fleet_collection_admission as admission
 from .corpus import local_tokenizer
 from .dense import Excluded, compatible_messages, encode_record, native_helper, segment_record
@@ -39,9 +40,11 @@ from .task_family_split import (
 from .task_family_split import validate as validate_split
 
 SCHEMA = "cyber_fleet_private_corpus_materialization_request_v1"
+SCHEMA_V2 = "cyber_fleet_private_corpus_materialization_request_v2"
 RECORD_SCHEMA = "cyber_fleet_visible_action_record_v1"
 COVERAGE_SCHEMA = "cyber_fleet_collection_coverage_v1"
 RECEIPT_SCHEMA = "cyber_fleet_collection_materialization_receipt_v1"
+RECEIPT_SCHEMA_V2 = "cyber_fleet_collection_materialization_receipt_v2"
 
 _SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 _PRIVATE_REASONING_MARKER = re.compile(r"<\s*/?\s*think\b", re.IGNORECASE)
@@ -132,7 +135,8 @@ def _json(path: Path, label: str) -> dict[str, Any]:
 
 
 def _selection(value: dict[str, Any]) -> dict[str, dict[str, Any]]:
-    _sealed(value, admission.SELECTION_SCHEMA)
+    v2 = value.get("schema") == admission.SELECTION_SCHEMA_V2
+    _sealed(value, admission.SELECTION_SCHEMA_V2 if v2 else admission.SELECTION_SCHEMA)
     required = {
         "schema",
         "artifact_kind",
@@ -156,6 +160,12 @@ def _selection(value: dict[str, Any]) -> dict[str, dict[str, Any]]:
         "selected",
         "sha256",
     }
+    if v2:
+        required |= {
+            "collection_packet_sha256",
+            "operation_authorization_sha256",
+            "identity_map_sha256",
+        }
     if set(value) != required or value["artifact_kind"] != admission.HANDOFF_KIND:
         raise ValueError("admission selection has an unexpected contract")
     metadata_only = ("trainable_corpus_created", "parquet_created", "source_text_read")
@@ -173,6 +183,15 @@ def _selection(value: dict[str, Any]) -> dict[str, dict[str, Any]]:
         "harness_treatment_sha256",
         "tool_catalog_sha256",
         "template_sha256",
+        *(
+            (
+                "collection_packet_sha256",
+                "operation_authorization_sha256",
+                "identity_map_sha256",
+            )
+            if v2
+            else ()
+        ),
     ):
         _sha(value.get(field), f"admission selection {field}")
     if value.get("root_role_anchor_id") != TRUSTED_FLEET_COLLECTION_ROOT_ID:
@@ -213,6 +232,13 @@ def _selection(value: dict[str, Any]) -> dict[str, dict[str, Any]]:
         "normalized_trajectory_sha256",
         "transcript_sha256",
     }
+    if v2:
+        fields |= {
+            "operation_authorization_sha256",
+            "ledger_cell_id",
+            "scientific_cell_id",
+            "execution_id",
+        }
     for row in rows:
         if not isinstance(row, dict) or set(row) != fields:
             raise ValueError("admission selection row is malformed")
@@ -237,8 +263,20 @@ def _selection(value: dict[str, Any]) -> dict[str, dict[str, Any]]:
             "normalized_record_sha256",
             "normalized_trajectory_sha256",
             "transcript_sha256",
+            *(
+                ("operation_authorization_sha256", "scientific_cell_id", "execution_id")
+                if v2
+                else ()
+            ),
         ):
             _sha(row.get(field), f"selected {field}")
+        if v2:
+            _string(row.get("ledger_cell_id"), "selected ledger cell")
+            if (
+                row["operation_authorization_sha256"] != value["operation_authorization_sha256"]
+                or row["cell_sha256"] != row["scientific_cell_id"]
+            ):
+                raise ValueError("v2 selection row changes operation or cell identity")
         if row["normalized_trajectory_sha256"] in seen_trajectories:
             raise ValueError("admission selection contains a duplicate trajectory")
         seen_trajectories.add(row["normalized_trajectory_sha256"])
@@ -250,7 +288,9 @@ def _selection(value: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 
 def _admission_receipt(value: dict[str, Any], selection: dict[str, Any]) -> None:
-    _sealed(value, admission.RECEIPT_SCHEMA)
+    v2 = selection.get("schema") == admission.SELECTION_SCHEMA_V2
+    expected_schema = admission.RECEIPT_SCHEMA_V2 if v2 else admission.RECEIPT_SCHEMA
+    _sealed(value, expected_schema)
     required = {
         "schema",
         "artifact_kind",
@@ -278,6 +318,12 @@ def _admission_receipt(value: dict[str, Any], selection: dict[str, Any]) -> None
         "selection_sha256",
         "sha256",
     }
+    if v2:
+        required |= {
+            "collection_packet_sha256",
+            "operation_authorization_sha256",
+            "identity_map_sha256",
+        }
     if set(value) != required or value.get("selection_sha256") != selection["sha256"]:
         raise ValueError("admission receipt does not bind the private selection")
     if (
@@ -317,6 +363,15 @@ def _admission_receipt(value: dict[str, Any], selection: dict[str, Any]) -> None
         or value.get("max_sessions_per_task_version") != selection["max_sessions_per_task_version"]
     ):
         raise ValueError("admission receipt source binding differs from selection")
+    if v2 and any(
+        value.get(field) != selection.get(field)
+        for field in (
+            "collection_packet_sha256",
+            "operation_authorization_sha256",
+            "identity_map_sha256",
+        )
+    ):
+        raise ValueError("v2 admission receipt operation binding differs from selection")
     input_files = _mapping(value.get("input_file_sha256"), "admission receipt input files")
     if set(input_files) != {
         "campaign",
@@ -325,7 +380,7 @@ def _admission_receipt(value: dict[str, Any], selection: dict[str, Any]) -> None
         "role_anchor",
         "protected_family_lock",
         "attempts",
-    }:
+    } | ({"collection_packet", "operation_authorization"} if v2 else set()):
         raise ValueError("admission receipt input-file bindings are incomplete")
     for name, value_sha in input_files.items():
         _sha(value_sha, f"admission receipt input file {name}")
@@ -377,8 +432,13 @@ def _packet(
     selection: dict[str, Any],
     task_selection: dict[str, Any],
     eval_config: dict[str, Any],
+    operation: dict[str, Any] | None = None,
 ) -> None:
-    _sealed(value, collection_campaign.PACKET_SCHEMA)
+    v2 = value.get("schema") == collection_campaign_v2.PACKET_SCHEMA
+    _sealed(
+        value,
+        collection_campaign_v2.PACKET_SCHEMA if v2 else collection_campaign.PACKET_SCHEMA,
+    )
     expected = {
         "schema",
         "source",
@@ -396,6 +456,8 @@ def _packet(
         "metrics_required",
         "sha256",
     }
+    if v2:
+        expected.add("operation_authorization_sha256")
     if set(value) != expected or value.get("training_data_eligible") is not True:
         raise ValueError("collection packet has an unexpected contract")
     source = _mapping(value.get("source"), "collection packet source")
@@ -436,7 +498,11 @@ def _packet(
     # configuration.  Re-render it through the same offline compiler so a
     # changed task assignment, runtime contract, or evaluator identity cannot
     # be relabeled as the admitted campaign.
-    compiled = collection_campaign._compile_local(task_selection, eval_config)
+    compiled = (
+        collection_campaign_v2.compile_local(task_selection, eval_config)
+        if v2
+        else collection_campaign._compile_local(task_selection, eval_config)
+    )
     if value["eval_plan_sha256"] != "sha256:" + compiled["sha256"]:
         raise ValueError("collection packet evaluation-plan digest is not reproducible")
     if value.get("generic_plan_source_job_id") is not None:
@@ -463,6 +529,12 @@ def _packet(
         ),
         "maximum_admitted_sessions_per_family": policy.get("maximum_admitted_sessions_per_family"),
     }
+    if v2:
+        expected_policy["adapter_must_bind"] = [
+            "collection_packet_sha256",
+            "eval_plan_sha256",
+            "operation_authorization_sha256",
+        ]
     if (
         policy != expected_policy
         or type(policy["minimum_unique_visible_action_target_tokens"]) is not int
@@ -486,23 +558,63 @@ def _packet(
     if not isinstance(task_rows, list):
         raise ValueError("collection task selection is malformed")
     planned_cells = len(task_rows) * pass_k
-    expected_safety = {
-        "execution_mode": collection_campaign.LOCAL_CPU_EXECUTION,
-        "planned_cells": planned_cells,
-        "maximum_planned_cells": runtime.get("maximum_planned_cells"),
-        "prelaunch_exact_cell_duplicate_census_required": True,
-        "duplicate_census_max_age_seconds": (collection_runtime.DUPLICATE_CENSUS_MAX_AGE_SECONDS),
-        "duplicate_census_required_coverage": collection_runtime.DUPLICATE_CENSUS_COVERAGE,
-        "automatic_replay_of_ambiguous_cells": False,
-        "external_submission": False,
-        "cluster_wrapper_supported": False,
-        "cluster_wrapper_enablement_requires": {
-            "two_stable_server_previews": True,
-            "root_kinds": ["Job", "RayJob"],
-            "required_top_level_annotation": {collection_campaign.FAILURE_ALERT_ANNOTATION: "off"},
-            "request_or_pod_template_annotation_is_insufficient": True,
-        },
-    }
+    if v2:
+        if operation is None:
+            raise ValueError("v2 packet requires its exact operation authorization")
+        collection_runtime_v2.validate_operation_authorization(operation, compiled)
+        if (
+            selection.get("schema") != admission.SELECTION_SCHEMA_V2
+            or selection.get("collection_packet_sha256") != value["sha256"]
+            or selection.get("operation_authorization_sha256") != operation["sha256"]
+            or selection.get("identity_map_sha256") != operation["identity_map_sha256"]
+            or value.get("operation_authorization_sha256") != operation["sha256"]
+        ):
+            raise ValueError("v2 packet, admission, and operation versions or bindings differ")
+        expected_safety = {
+            "execution_mode": collection_runtime_v2.EXECUTION_MODE,
+            "planned_cells": planned_cells,
+            "maximum_planned_cells": runtime.get("maximum_planned_cells"),
+            "operation_authorization_required": True,
+            "operation_authorization_sha256": operation["sha256"],
+            "canonical_private_operation_root_required": True,
+            "operation_root_name": operation["operation_root_name"],
+            "exclusive_pre_mutation_intent_required": True,
+            "dedicated_empty_ledger_required": True,
+            "dedicated_ledger_id": operation["dedicated_ledger_id"],
+            "identity_map_sha256": operation["identity_map_sha256"],
+            "automatic_replay_of_ambiguous_cells": False,
+            "same_path_retry_allowed": False,
+            "alternate_path_retry_allowed": False,
+            "external_submission": False,
+            "cluster_wrapper_supported": True,
+            "cluster_job_execution_requirements": (
+                collection_campaign_v2.JOB_EXECUTION_REQUIREMENTS
+            ),
+        }
+    else:
+        if selection.get("schema") != admission.SELECTION_SCHEMA or operation is not None:
+            raise ValueError("v1 packet cannot consume v2 admission or operation evidence")
+        expected_safety = {
+            "execution_mode": collection_campaign.LOCAL_CPU_EXECUTION,
+            "planned_cells": planned_cells,
+            "maximum_planned_cells": runtime.get("maximum_planned_cells"),
+            "prelaunch_exact_cell_duplicate_census_required": True,
+            "duplicate_census_max_age_seconds": (
+                collection_runtime.DUPLICATE_CENSUS_MAX_AGE_SECONDS
+            ),
+            "duplicate_census_required_coverage": collection_runtime.DUPLICATE_CENSUS_COVERAGE,
+            "automatic_replay_of_ambiguous_cells": False,
+            "external_submission": False,
+            "cluster_wrapper_supported": False,
+            "cluster_wrapper_enablement_requires": {
+                "two_stable_server_previews": True,
+                "root_kinds": ["Job", "RayJob"],
+                "required_top_level_annotation": {
+                    collection_campaign.FAILURE_ALERT_ANNOTATION: "off"
+                },
+                "request_or_pod_template_annotation_is_insufficient": True,
+            },
+        }
     if (
         value.get("execution_safety") != expected_safety
         or type(runtime.get("maximum_planned_cells")) is not int
@@ -825,31 +937,35 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
     import pyarrow as pa
     import pyarrow.parquet as pq
 
+    v2 = config.get("schema") == SCHEMA_V2
+    request_fields = {
+        "schema",
+        "admission_selection",
+        "admission_receipt",
+        "collection_packet",
+        "collection_task_selection",
+        "collection_eval_config",
+        "inventory",
+        "family_split",
+        "role_anchor",
+        "protected_family_lock",
+        "runtime_bindings",
+        "records",
+        "model_lock",
+        "tokenizer_root",
+        "native_helper",
+        "max_length",
+        "context_tokens",
+        "output",
+    }
+    if v2:
+        request_fields.add("operation_authorization")
     _known(
         config,
-        {
-            "schema",
-            "admission_selection",
-            "admission_receipt",
-            "collection_packet",
-            "collection_task_selection",
-            "collection_eval_config",
-            "inventory",
-            "family_split",
-            "role_anchor",
-            "protected_family_lock",
-            "runtime_bindings",
-            "records",
-            "model_lock",
-            "tokenizer_root",
-            "native_helper",
-            "max_length",
-            "context_tokens",
-            "output",
-        },
+        request_fields,
         "Fleet collection corpus materialization",
     )
-    if config.get("schema") != SCHEMA:
+    if config.get("schema") not in {SCHEMA, SCHEMA_V2}:
         raise ValueError("unsupported Fleet collection corpus materialization request")
     output = _path(relative_to, config.get("output"), "output")
     if output.exists() or output.is_symlink():
@@ -867,7 +983,7 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
         "records",
         "model_lock",
         "native_helper",
-    )
+    ) + (("operation_authorization",) if v2 else ())
     sources = {name: _input(relative_to, config.get(name), name) for name in names}
     paths = {name: item[0] for name, item in sources.items()}
     expected_files = {name: item[1] for name, item in sources.items()}
@@ -876,6 +992,7 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
     receipt = _json(paths["admission_receipt"], "admission receipt")
     _admission_receipt(receipt, selection)
     packet = _json(paths["collection_packet"], "collection packet")
+    operation = _json(paths["operation_authorization"], "operation authorization") if v2 else None
     task_selection = _json(paths["collection_task_selection"], "collection task selection")
     eval_config = _json(paths["collection_eval_config"], "collection eval config")
     inventory = _json(paths["inventory"], "inventory")
@@ -893,7 +1010,7 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
     # metadata-only boundary even for a malformed input that carries a payload
     # under an unexpected field.
     _task_boundary(inventory, split, role_anchor, lock, runtime, task_selection, packet, selection)
-    _packet(packet, selection, task_selection, eval_config)
+    _packet(packet, selection, task_selection, eval_config, operation)
     tokenizer_root = _path(relative_to, config.get("tokenizer_root"), "tokenizer root")
     tokenizer, tokenizer_identity = local_tokenizer(
         read_mapping(paths["model_lock"]), tokenizer_root
@@ -1046,6 +1163,9 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
         "family_role_anchor_sha256": role_anchor["sha256"],
         "heldout_families_materialized": 0,
         "target_coverage": "every fitting visible assistant target appears exactly once",
+        **(
+            {"operation_authorization_sha256": operation["sha256"]} if operation is not None else {}
+        ),
     }
     coverage["sha256"] = "sha256:" + digest(coverage)
     manifest = {
@@ -1076,6 +1196,14 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
             "runtime_bindings_sha256": runtime["sha256"],
             "coverage_sha256": coverage["sha256"],
             "sft_ready": target_ready,
+            **(
+                {
+                    "operation_authorization_sha256": operation["sha256"],
+                    "identity_map_sha256": operation["identity_map_sha256"],
+                }
+                if operation is not None
+                else {}
+            ),
         },
         "catalog_provenance": {
             "selected_task_versions": len({row["task_version_id"] for row in selections}),
@@ -1115,13 +1243,18 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
         atomic_write_json(output / "coverage.private.json", coverage, private=True)
         atomic_write_json(output / "manifest.json", manifest, private=True)
         receipt_out = {
-            "schema": RECEIPT_SCHEMA,
+            "schema": RECEIPT_SCHEMA_V2 if v2 else RECEIPT_SCHEMA,
             "manifest_file_sha256": file_sha256(output / "manifest.json"),
             "manifest_sha256": manifest["sha256"],
             "coverage_file_sha256": file_sha256(output / "coverage.private.json"),
             "coverage_sha256": coverage["sha256"],
             "source_selection_file_sha256": file_sha256(output / "source-selection.private.jsonl"),
             "sft_ready": target_ready,
+            **(
+                {"operation_authorization_sha256": operation["sha256"]}
+                if operation is not None
+                else {}
+            ),
         }
         receipt_out["sha256"] = "sha256:" + digest(receipt_out)
         atomic_write_json(output / "MATERIALIZATION.json", receipt_out, private=True)

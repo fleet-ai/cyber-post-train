@@ -2,9 +2,13 @@
 
 ## Outcome
 
-The source-only base-Qwen action campaign is frozen and reproducible.  No Fleet
-job, environment, model request, trace, or score was created or read while
-preparing it.
+The source-only base-Qwen action campaign is frozen and reproducible.  Its v1
+packet is preserved as historical evidence but is not launchable because no
+maintained authority can issue the global duplicate-census receipt it requires.
+The immutable v2 successor preserves the same tasks, model, OpenCode treatment,
+sampling, split, and 200 scientific cells while replacing only that unavailable
+gate with a canonical create-once operation.  No Fleet job, environment, model
+request, trace, or score was created or read while preparing either packet.
 
 The production inputs are:
 
@@ -12,12 +16,16 @@ The production inputs are:
   `configs/collection/qwen38-base-current75-actions-pass4-v1.source.json`;
 - materialized campaign:
   `configs/collection/qwen38-base-current75-actions-pass4-v1/`;
+- create-once execution-safety successor:
+  `configs/collection/qwen38-base-current75-actions-pass4-v2.source.json` and
+  `configs/collection/qwen38-base-current75-actions-pass4-v2/`;
 - stronger-teacher gate:
   `configs/collection/stronger-teacher-current75-actions-pass4-v1.requirements.json`;
 - separate student-visible-reasoning gate:
   `configs/collection/qwen38-self-visible-reasoning-current75-pass4-v1.requirements.json`.
 
-The materializer is `training.current_collection_campaigns`.  It adapts the
+The v1 materializer is `training.current_collection_campaigns`; the v2
+successor is `training.current_collection_campaigns_v2`.  They adapt the
 existing sealed current-inventory and representative-split formats into the
 generic collection renderer without changing a role, family, or exact task
 version.  Its split is rooted at
@@ -91,24 +99,41 @@ treatment; it does not make an opaque compacted trajectory valid offline.
 
 Admission is capped at four sessions per exact task version/family and a 25%
 maximum family target-token share.  Deduplication is ordered by exact source
-session, normalized trajectory, then packed-window payload.  A prelaunch exact
-cell census is mandatory, must cover all authoritative collection ledgers and
-Fleet sessions, and must be no more than 600 seconds old at preflight and
-initialization.  An ambiguous cell is never replayed automatically.
+session, normalized trajectory, then packed-window payload.
 
-The supported controller runs directly on an authorized CPU worker.  A
-Kubernetes wrapper is **not** qualified.  If one is later built, it must obtain
-two stable server previews and prove the exact top-level annotation
-`fleet.ai/failure-alerts: "off"` on every root `Job` or `RayJob`; a request flag
-or Pod-template annotation is insufficient.
+The v1 packet required a fresh census over every authoritative collection
+ledger and Fleet session.  No maintained issuer can currently produce that
+receipt from the public Fleet session interface, so v1 remains non-launchable.
+It must not be weakened, relabeled, or reused as launch authority.
 
-The runtime is isolated in `evals.fleet.visible_action_collection` with a
-standalone `collection_fixed_proxy.py`.  It compiles
-`cyber_fleet_visible_action_collection_eval_v1` plans while importing the
-unchanged historical evaluator for task, route, ledger, and lifecycle checks.
-Both the historical runtime hashes and the two successor-file hashes are sealed
-in each plan.  This avoids changing the source bytes pinned by prior evaluation
-receipts.
+The v2 packet authorizes one new experiment with deterministic identities.  It
+binds all 200 ordered cells three ways: the PostgreSQL ledger UUID, the
+scientific cell SHA-256, and the execution SHA-256.  It also binds one canonical
+private operation-directory name and one dedicated empty database identity.
+Before initializing that database, the runtime writes an exclusive,
+fsync-backed intent file.  If initialization returns an uncertain result, the
+intent stays in place and neither the same path nor an alternate path may retry.
+Historical sessions have different cell identities and remain separate
+experiments; v2 never adopts or replays them.
+
+The qualified v2 wrapper is exactly one amd64 Kubernetes `Job` at priority
+class `c1`, with no GPU request or limit in any regular or init container.  The
+root Job—not merely its Pod template—must carry
+`fleet.ai/failure-alerts: "off"`.  It uses `completions: 1`, `parallelism: 1`,
+`backoffLimit: 0`, `restartPolicy: Never`, and
+`activeDeadlineSeconds: 768600`.  That deadline covers 25 waves of eight-way
+concurrency at the eight-hour per-cell ceiling, bounded cleanup per wave, and
+staging/preflight.  Before its only create call, the launcher must obtain two
+identical normalized server previews and durably record a separate cluster
+create intent.  An uncertain create is never repeated.  Terminal handling must
+observe the exact Job name and UID, clean up that exact UID in the foreground,
+and prove no owned child or idle allocation remains.
+
+The historical runtime is `evals.fleet.visible_action_collection`; the v2
+successor is `evals.fleet.visible_action_collection_v2`.  Both use the
+standalone `collection_fixed_proxy.py` and import the unchanged historical
+evaluator for task, route, ledger, and lifecycle checks.  Runtime file hashes
+are sealed in every plan, avoiding changes to bytes pinned by earlier receipts.
 
 ## Stronger-teacher action wave
 
@@ -234,6 +259,12 @@ uv run --locked python -m training.current_collection_campaigns \
   --root . \
   --output configs/collection/qwen38-base-current75-actions-pass4-v1 \
   --check
+
+uv run --locked python -m training.current_collection_campaigns_v2 \
+  --spec configs/collection/qwen38-base-current75-actions-pass4-v2.source.json \
+  --root . \
+  --output configs/collection/qwen38-base-current75-actions-pass4-v2 \
+  --check
 ```
 
 After qualification produces a sealed supply/qualified/root-anchor request,
@@ -247,38 +278,42 @@ That command is metadata-only.  The new child split must include at least one
 new qualified family, pass strict representative coverage, and preserve the
 same trusted root ID/digest before it can feed another campaign packet.
 
-Prepare a private evaluator directory locally (still no Fleet call):
+The v1 preparation below is retained only for historical reproduction.  It
+cannot advance without an issuer that does not currently exist.  Do not use it
+for a new launch.
+
+Prepare the v2 canonical private evaluator directory locally (still no Fleet
+call and no database mutation):
 
 ```sh
-uv run --locked python -m evals.fleet.visible_action_collection prepare \
-  configs/collection/qwen38-base-current75-actions-pass4-v1/eval-config.json \
-  --output <new-private-create-once-wave-root>
+uv run --locked python -m evals.fleet.visible_action_collection_v2 prepare \
+  configs/collection/qwen38-base-current75-actions-pass4-v2/eval-config.json \
+  configs/collection/qwen38-base-current75-actions-pass4-v2/operation-authorization.json \
+  --private-root <approved-private-parent>
 ```
 
-Before preflight, an authorized private census process must write a create-once
-`COLLECTION_DUPLICATE_CENSUS.json` under the wave root.  The runtime validates
-that it binds the exact plan and 200-cell universe, claims coverage of all
-authoritative collection ledgers and Fleet sessions, carries an issuer and
-authority-snapshot digest, is at most 600 seconds old at preflight and init, and
-reports exactly zero duplicates and zero ambiguous cells.  This repository
-does not have access to that private authority and does not mint the receipt.
-
-Do not run the following until an authorized operator has reviewed the exact
-packet and supplied that receipt.  `preflight` performs read-only Fleet metadata
-and local-image checks but makes zero model calls; `init` creates a dedicated
-database; `run` creates environments and model traffic:
+The command exclusively creates the operation-root name already recorded in the
+authorization.  A pre-existing path is a hard stop.  `preflight` performs
+read-only Fleet metadata and image checks with zero model calls.  For the direct
+CLI, `init` requires `ROLLOUT_DATABASE_URL` to name the already-provisioned,
+dedicated empty database; it writes the no-retry intent first and initializes
+the bound ledger there.  The qualified Job entrypoint instead writes that same
+intent, creates its exact dedicated database, and initializes the ledger as one
+ordered operation.  `run` creates environments and model traffic.  The Job
+launcher is a separate one-way create operation and must satisfy the complete
+checked-in packet before running these commands:
 
 ```sh
-uv run --locked python -m evals.fleet.visible_action_collection preflight <wave-root>
-uv run --locked python -m evals.fleet.visible_action_collection init <wave-root>
-uv run --locked python -m evals.fleet.visible_action_collection run \
+uv run --locked python -m evals.fleet.visible_action_collection_v2 preflight <wave-root>
+uv run --locked python -m evals.fleet.visible_action_collection_v2 init <wave-root>
+uv run --locked python -m evals.fleet.visible_action_collection_v2 run \
   <wave-root> base <unique-worker-id> --limit <bounded-count>
 ```
 
 Actual base execution is blocked on fresh Fleet-team account/task/runtime,
 serving-profile, image, OpenCode-startup, and non-thinking-template preflight;
-the externally issued exact duplicate-census receipt; a new create-once
-ledger/output root; and explicit operator launch authority.  Teacher and
+a new canonical operation root and dedicated empty ledger; the reviewed
+create-once Job launcher; and explicit operator launch authority.  Teacher and
 student-visible-reasoning execution have the additional source/gate blockers
 above.  Task-quality qualification is blocked on the reviewed lineage/runtime
 roster and aggregate receipt rail just described; it must never borrow the

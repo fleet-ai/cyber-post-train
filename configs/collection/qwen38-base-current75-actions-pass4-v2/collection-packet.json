@@ -1,0 +1,122 @@
+{
+  "admission_policy": {
+    "adapter_must_bind": [
+      "collection_packet_sha256",
+      "eval_plan_sha256",
+      "operation_authorization_sha256"
+    ],
+    "deduplication_order": [
+      "source_session_identity",
+      "normalized_trajectory_digest",
+      "packed_window_payload_digest"
+    ],
+    "eligible_terminal_outcome": "verified_success_v1",
+    "held_out_roles_excluded": [
+      "dev",
+      "final_test"
+    ],
+    "maximum_admitted_sessions_per_family": 4,
+    "maximum_admitted_sessions_per_task_version": 4,
+    "maximum_family_target_token_fraction": 0.25,
+    "maximum_submit_report_response_fraction": 0.5,
+    "maximum_submit_report_target_token_fraction": 0.5,
+    "minimum_completed_non_submit_tool_rounds": 1,
+    "minimum_non_submit_tool_responses": 1,
+    "minimum_unique_visible_action_target_tokens": 20000000,
+    "offline_compaction_policy": "reject_opaque_context_compaction_v1",
+    "reasoning_policy": "visible_actions_only_v1"
+  },
+  "corpus_scope": {
+    "current": "verified_success_visible_actions_only_v1",
+    "future_visible_reasoning_requires": [
+      "separate_immutable_campaign_packet",
+      "student_visible_source_evidence",
+      "explicit_authorization_and_safety_evidence"
+    ],
+    "visible_reasoning_included": false
+  },
+  "eval_config_sha256": "sha256:bb9e2c5bd6a7c9924f16cb86474012e9dd19b24ec2c571be7082c7eef7addf9c",
+  "eval_plan_sha256": "sha256:fb0d54ecca6bb5a8942016dbf339e7b51c902ec39458eb610b4d1eae2585154f",
+  "execution_safety": {
+    "alternate_path_retry_allowed": false,
+    "automatic_replay_of_ambiguous_cells": false,
+    "canonical_private_operation_root_required": true,
+    "cluster_job_execution_requirements": {
+      "active_deadline_seconds": 768600,
+      "ambiguous_cluster_create_retry_allowed": false,
+      "architecture": "amd64",
+      "backoff_limit": 0,
+      "cluster_create_attempts": 1,
+      "completions": 1,
+      "exact_launcher_bindings_required": [
+        "operation_authorization_sha256",
+        "operation_root_name",
+        "dedicated_ledger_id",
+        "source_git_commit",
+        "source_git_tree",
+        "agent_image_digest",
+        "proxy_image_digest",
+        "controller_image_digest",
+        "database_identity",
+        "sfs_pvc_identity",
+        "kube_context",
+        "namespace",
+        "queue_name"
+      ],
+      "exact_uid_foreground_cleanup_required": true,
+      "exclusive_local_cluster_create_intent_required": true,
+      "identical_normalized_server_preview_digests_required": true,
+      "owned_child_absence_and_no_idle_proof_required": true,
+      "parallelism": 1,
+      "priority_class_name": "c1",
+      "required_top_level_annotation": {
+        "fleet.ai/failure-alerts": "off"
+      },
+      "restart_policy": "Never",
+      "root_kind": "Job",
+      "server_preview_count": 2,
+      "terminal_exact_name_and_uid_observation_required": true,
+      "zero_gpu_requests_and_limits_across_regular_and_init_containers": true
+    },
+    "cluster_wrapper_supported": true,
+    "dedicated_empty_ledger_required": true,
+    "dedicated_ledger_id": "sha256:3d7a8ceb5970ee74e2b9ef5a68636ea01452dca6303aa46ccabf575b086cd307",
+    "exclusive_pre_mutation_intent_required": true,
+    "execution_mode": "authorized_amd64_cpu_job_v1",
+    "external_submission": false,
+    "identity_map_sha256": "sha256:475e4cfdefa89431982a2df9be473669ee754c9a7193cc53197a70e80034caee",
+    "maximum_planned_cells": 200,
+    "operation_authorization_required": true,
+    "operation_authorization_sha256": "sha256:1597d141b236a9f8fea16e92bf0b4a4f9b16045677931bf72bb5ca26618e4684",
+    "operation_root_name": "q38-base-train50-actions-p4-v1-fb0d54ecca6b",
+    "planned_cells": 200,
+    "same_path_retry_allowed": false
+  },
+  "family_role_anchor_sha256": "sha256:48350b8fc23143abe297db3b2364590c72d564553ebb4e9a349fa06ec246a26b",
+  "generic_plan_source_job_id": null,
+  "metrics_required": [
+    "valid_success_count",
+    "opaque_compaction_rejection_count",
+    "private_or_unknown_reasoning_rejection_count",
+    "distinct_visible_action_target_tokens",
+    "family_token_concentration"
+  ],
+  "operation_authorization_sha256": "sha256:1597d141b236a9f8fea16e92bf0b4a4f9b16045677931bf72bb5ca26618e4684",
+  "root_role_anchor_id": "fleet-blackbox-current-study-20260914-v2",
+  "runtime_bindings_sha256": "sha256:849542785db0cb71fdc9ecd29e1008c8af26e0bf25ad0dd74e22b6d6fb3cb694",
+  "schema": "cyber_trajectory_collection_packet_v2",
+  "sha256": "sha256:d164781e9d704611c35637a23a61976bab0372906cfd65ee2ccd014a9d1caeba",
+  "source": {
+    "kind": "self",
+    "model": {
+      "repository": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "session_model": "qwen/qwen3.8-27b"
+    },
+    "model_alias": "source",
+    "source_authorization_receipt_sha256": "sha256:bd02996b6ce29b8139e6a0dbc9cc3a822520f3211f7907ef2d133133ec75316b",
+    "template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
+  },
+  "task_selection_sha256": "sha256:93e264d7cc5a7c90101f4c510a37a2d02fd4c87e94845a4012db7fa0d486d923",
+  "training_data_eligible": true
+}

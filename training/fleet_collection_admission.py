@@ -23,7 +23,9 @@ from pathlib import Path
 from typing import Any
 
 from cyber_post_train.jobs import digest
+from evals.fleet import visible_action_collection_v2 as collection_runtime_v2
 
+from . import collection_campaign_v2
 from .io import atomic_write_json, file_sha256, iter_jsonl
 from .sft import _known
 from .task_family_split import (
@@ -37,8 +39,13 @@ REQUEST_SCHEMA = "cyber_fleet_collection_admission_request_v1"
 ATTEMPT_SCHEMA = "cyber_fleet_collection_attempt_metadata_v1"
 SELECTION_SCHEMA = "cyber_fleet_collection_selection_v1"
 RECEIPT_SCHEMA = "cyber_fleet_collection_admission_receipt_v1"
+REQUEST_SCHEMA_V2 = "cyber_fleet_collection_admission_request_v2"
+ATTEMPT_SCHEMA_V2 = "cyber_fleet_collection_attempt_metadata_v2"
+SELECTION_SCHEMA_V2 = "cyber_fleet_collection_selection_v2"
+RECEIPT_SCHEMA_V2 = "cyber_fleet_collection_admission_receipt_v2"
 PROTECTED_FAMILY_LOCK_SCHEMA = "cyber_protected_task_family_lock_v1"
 CAMPAIGN_SCHEMA = "cyber_fleet_eval_v1"
+CAMPAIGN_SCHEMA_V2 = collection_runtime_v2.PLAN_SCHEMA
 HANDOFF_KIND = "metadata_evidence_handoff_only"
 
 _SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
@@ -165,7 +172,7 @@ def _campaign_cells(
     dict[str, Any],
 ]:
     """Return exact cells for one model without trusting a mutable job roster."""
-    if plan.get("schema") != CAMPAIGN_SCHEMA:
+    if plan.get("schema") not in {CAMPAIGN_SCHEMA, CAMPAIGN_SCHEMA_V2}:
         raise ValueError("unsupported Fleet campaign plan schema")
     campaign_sha = _campaign_sha(plan)
     if plan.get("training_data_eligible") is not True:
@@ -288,6 +295,17 @@ def _protected_groups(value: dict[str, Any]) -> set[str]:
 def _attempt(value: Mapping[str, Any]) -> dict[str, Any]:
     """Validate one metadata record and reject any hidden trace payload field."""
     row = dict(value)
+    v2 = row.get("schema") == ATTEMPT_SCHEMA_V2
+    identity_fields = (
+        {
+            "operation_authorization_sha256",
+            "ledger_cell_id",
+            "scientific_cell_id",
+            "execution_id",
+        }
+        if v2
+        else set()
+    )
     _known(
         row,
         {
@@ -306,15 +324,23 @@ def _attempt(value: Mapping[str, Any]) -> dict[str, Any]:
             "ingestion",
             "content_policy",
             "sha256",
-        },
+        }
+        | identity_fields,
         "collection attempt metadata",
     )
-    if row.get("schema") != ATTEMPT_SCHEMA or not _sealed(row):
+    if row.get("schema") not in {ATTEMPT_SCHEMA, ATTEMPT_SCHEMA_V2} or not _sealed(row):
         raise ValueError("collection attempt metadata digest/schema mismatch")
     for field in ("session_id", "task_key", "task_version_id", "model_alias"):
         _string(row.get(field), f"attempt {field}")
     _sha(row.get("campaign_plan_sha256"), "attempt campaign plan")
     _sha(row.get("cell_sha256"), "attempt cell")
+    if v2:
+        _sha(row.get("operation_authorization_sha256"), "attempt operation authorization")
+        _string(row.get("ledger_cell_id"), "attempt ledger cell")
+        _sha(row.get("scientific_cell_id"), "attempt scientific cell")
+        _sha(row.get("execution_id"), "attempt execution")
+        if row["cell_sha256"] != row["scientific_cell_id"]:
+            raise ValueError("v2 attempt cell must be the exact scientific cell identity")
     if type(row.get("attempt")) is not int or row["attempt"] < 1:
         raise ValueError("attempt number must be a positive integer")
     model = _mapping(row.get("model"), "attempt model")
@@ -376,6 +402,7 @@ def _reason_for_candidate(
     treatment: dict[str, Any],
     campaign_sha256: str,
     template_sha256: str,
+    validate_legacy_cell: bool = True,
 ) -> str | None:
     if row["campaign_plan_sha256"] != campaign_sha256:
         return "wrong_campaign_binding"
@@ -387,7 +414,7 @@ def _reason_for_candidate(
         model_revision=model["revision"],
         attempt=row["attempt"],
     )
-    if row["cell_sha256"] != expected_cell:
+    if validate_legacy_cell and row["cell_sha256"] != expected_cell:
         return "wrong_campaign_binding"
     if row["model"] != model:
         return "wrong_model_binding"
@@ -460,23 +487,28 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
     The command is CPU-only and offline.  It consumes only sealed metadata and
     does not create a rollout, train, score, or read raw session content.
     """
+    version = config.get("schema")
+    v2 = version == REQUEST_SCHEMA_V2
+    request_fields = {
+        "schema",
+        "campaign",
+        "inventory",
+        "family_split",
+        "role_anchor",
+        "protected_family_lock",
+        "attempts",
+        "source",
+        "max_sessions_per_task_version",
+        "output",
+    }
+    if v2:
+        request_fields |= {"collection_packet", "operation_authorization"}
     _known(
         config,
-        {
-            "schema",
-            "campaign",
-            "inventory",
-            "family_split",
-            "role_anchor",
-            "protected_family_lock",
-            "attempts",
-            "source",
-            "max_sessions_per_task_version",
-            "output",
-        },
+        request_fields,
         "collection admission request",
     )
-    if config.get("schema") != REQUEST_SCHEMA:
+    if version not in {REQUEST_SCHEMA, REQUEST_SCHEMA_V2}:
         raise ValueError("unsupported collection admission request")
     source = _mapping(config.get("source"), "collection source")
     _known(source, {"kind", "model_alias", "template_sha256"}, "collection source")
@@ -510,6 +542,44 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
     split = _read_json(split_path, "family split")
     role_anchor = _read_json(role_anchor_path, "family role anchor")
     lock = _read_json(lock_path, "protected-family lock")
+    operation: dict[str, Any] | None = None
+    packet: dict[str, Any] | None = None
+    operation_path: Path | None = None
+    packet_path: Path | None = None
+    operation_file_sha: str | None = None
+    packet_file_sha: str | None = None
+    identities: dict[tuple[str, str, str, int], dict[str, Any]] = {}
+    if v2:
+        operation_path, operation_file_sha = _input_path(
+            relative_to,
+            config.get("operation_authorization"),
+            "operation authorization",
+        )
+        packet_path, packet_file_sha = _input_path(
+            relative_to, config.get("collection_packet"), "collection packet"
+        )
+        operation = _read_json(operation_path, "operation authorization")
+        packet = _read_json(packet_path, "collection packet")
+        collection_runtime_v2.validate_operation_authorization(operation, plan)
+        if (
+            packet.get("schema") != collection_campaign_v2.PACKET_SCHEMA
+            or not _sealed(packet)
+            or packet.get("eval_plan_sha256") != _campaign_sha(plan)
+            or packet.get("operation_authorization_sha256") != operation["sha256"]
+            or packet.get("execution_safety", {}).get("operation_authorization_sha256")
+            != operation["sha256"]
+            or packet.get("execution_safety", {}).get("cluster_job_execution_requirements")
+            != collection_campaign_v2.JOB_EXECUTION_REQUIREMENTS
+        ):
+            raise ValueError("v2 collection packet is not bound to the exact operation")
+        identities = {
+            (row["task_key"], row["task_version_id"], row["model_id"], row["attempt"]): row
+            for row in collection_runtime_v2.identity_map(plan)
+        }
+        if len(identities) != operation["planned_cells"]:
+            raise ValueError("v2 operation identity map is ambiguous")
+    elif plan.get("schema") != CAMPAIGN_SCHEMA:
+        raise ValueError("v1 admission cannot consume a versioned v2 campaign")
     expected, model, treatment = _campaign_cells(plan, model_alias)
     campaign_sha256 = _campaign_sha(plan)
     assignments = _split_assignments(split, inventory, role_anchor=role_anchor)
@@ -530,6 +600,9 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
             raise ValueError("family split assigns an immutable held-out family to training")
 
     attempts = [_attempt(row) for row in iter_jsonl(attempts_path)]
+    expected_attempt_schema = ATTEMPT_SCHEMA_V2 if v2 else ATTEMPT_SCHEMA
+    if any(row["schema"] != expected_attempt_schema for row in attempts):
+        raise ValueError("collection request and attempt metadata versions differ")
     rejections = collections.Counter({reason: 0 for reason in _REJECTION_REASONS})
     by_cell: dict[tuple[str, str, str, int], list[dict[str, Any]]] = collections.defaultdict(list)
     for row in attempts:
@@ -560,12 +633,27 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
 
     candidates: list[dict[str, Any]] = []
     for row in uniquely_sourced:
+        if v2:
+            assert operation is not None
+            identity = identities.get(
+                (row["task_key"], row["task_version_id"], row["model_alias"], row["attempt"])
+            )
+            if (
+                identity is None
+                or row["operation_authorization_sha256"] != operation["sha256"]
+                or row["ledger_cell_id"] != identity["ledger_cell_id"]
+                or row["scientific_cell_id"] != identity["scientific_cell_id"]
+                or row["execution_id"] != identity["execution_id"]
+            ):
+                rejections["wrong_campaign_binding"] += 1
+                continue
         reason = _reason_for_candidate(
             row,
             model=model,
             treatment=treatment,
             campaign_sha256=campaign_sha256,
             template_sha256=template_sha256,
+            validate_legacy_cell=not v2,
         )
         if reason is not None:
             rejections[reason] += 1
@@ -619,11 +707,21 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
             "normalized_record_sha256": row["ingestion"]["normalized_record_sha256"],
             "normalized_trajectory_sha256": row["ingestion"]["normalized_trajectory_sha256"],
             "transcript_sha256": row["ingestion"]["transcript_sha256"],
+            **(
+                {
+                    "operation_authorization_sha256": row["operation_authorization_sha256"],
+                    "ledger_cell_id": row["ledger_cell_id"],
+                    "scientific_cell_id": row["scientific_cell_id"],
+                    "execution_id": row["execution_id"],
+                }
+                if v2
+                else {}
+            ),
         }
         for row in selected
     ]
     selection = {
-        "schema": SELECTION_SCHEMA,
+        "schema": SELECTION_SCHEMA_V2 if v2 else SELECTION_SCHEMA,
         "artifact_kind": HANDOFF_KIND,
         "trainable_corpus_created": False,
         "parquet_created": False,
@@ -642,11 +740,20 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
         "tool_catalog_sha256": treatment["tool_catalog_sha256"],
         "template_sha256": template_sha256,
         "max_sessions_per_task_version": cap,
+        **(
+            {
+                "collection_packet_sha256": packet["sha256"],
+                "operation_authorization_sha256": operation["sha256"],
+                "identity_map_sha256": operation["identity_map_sha256"],
+            }
+            if v2 and packet is not None and operation is not None
+            else {}
+        ),
         "selected": selected_rows,
     }
     selection["sha256"] = "sha256:" + digest(selection)
     receipt = {
-        "schema": RECEIPT_SCHEMA,
+        "schema": RECEIPT_SCHEMA_V2 if v2 else RECEIPT_SCHEMA,
         "artifact_kind": HANDOFF_KIND,
         "trainable_corpus_created": False,
         "parquet_created": False,
@@ -660,6 +767,14 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
             "role_anchor": role_anchor_file_sha,
             "protected_family_lock": lock_file_sha,
             "attempts": attempts_file_sha,
+            **(
+                {
+                    "collection_packet": packet_file_sha,
+                    "operation_authorization": operation_file_sha,
+                }
+                if v2
+                else {}
+            ),
         },
         "catalog_inventory_sha256": inventory["sha256"],
         "family_split_sha256": split["sha256"],
@@ -674,6 +789,15 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
         "template_sha256": template_sha256,
         "tool_catalog_sha256": treatment["tool_catalog_sha256"],
         "max_sessions_per_task_version": cap,
+        **(
+            {
+                "collection_packet_sha256": packet["sha256"],
+                "operation_authorization_sha256": operation["sha256"],
+                "identity_map_sha256": operation["identity_map_sha256"],
+            }
+            if v2 and packet is not None and operation is not None
+            else {}
+        ),
         "counts": {
             "attempt_metadata_records": len(attempts),
             "planned_cells_for_source_model": len(expected),
@@ -713,8 +837,10 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
         (role_anchor_path, role_anchor_file_sha, "family role anchor"),
         (lock_path, lock_file_sha, "protected-family lock"),
         (attempts_path, attempts_file_sha, "attempts"),
+        (packet_path, packet_file_sha, "collection packet"),
+        (operation_path, operation_file_sha, "operation authorization"),
     ):
-        if path is not None and file_sha256(path) != expected_sha:
+        if path is not None and expected_sha is not None and file_sha256(path) != expected_sha:
             raise ValueError(f"{label} changed during collection admission")
     _write_output(output, selection, receipt)
     return {

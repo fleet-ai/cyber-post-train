@@ -1,0 +1,145 @@
+{
+  "collection_runtime": {
+    "automatic_replay_of_ambiguous_cells": false,
+    "canonical_private_operation_root_required": true,
+    "cluster_wrapper_supported": true,
+    "dedicated_empty_ledger_required": true,
+    "exclusive_pre_mutation_intent_required": true,
+    "execution_mode": "authorized_amd64_cpu_job_v1",
+    "external_submission": false,
+    "maximum_planned_cells": 200,
+    "opencode_cli_thinking_flag": false,
+    "opencode_model_reasoning": false,
+    "operation_authorization_required": true,
+    "reasoning_generation": "disabled",
+    "reasoning_request_override": {
+      "chat_template_kwargs": {
+        "enable_thinking": false
+      }
+    },
+    "schema": "cyber_visible_action_collection_runtime_v2",
+    "source_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
+  },
+  "concurrency": 8,
+  "harness": {
+    "compaction_headroom_tokens": 20000,
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v2",
+    "context_window_size": 262144,
+    "harness": "opencode",
+    "harness_version": "1.18.27",
+    "max_model_requests": 600,
+    "max_output_tokens": 32768,
+    "provider_adapter": "@ai-sdk/openai-compatible",
+    "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "thinking_mode": "disabled",
+    "timeout_seconds": 28800,
+    "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "tools": [
+      "bash",
+      "submit_report"
+    ]
+  },
+  "images": {
+    "agent": "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92",
+    "proxy": "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+  },
+  "max_reviewed_infrastructure_retries": 0,
+  "models": {
+    "source": {
+      "repository": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "session_model": "qwen/qwen3.8-27b"
+    }
+  },
+  "name": "q38-base-train50-actions-p4-v1",
+  "pass_k": 4,
+  "routes": {
+    "base": {
+      "catalog": {
+        "engine": "sglang",
+        "precision": "bf16",
+        "tensor_parallel_size": 1
+      },
+      "endpoint_origin": "https://inference.flt.build",
+      "model": "source",
+      "model_info": {
+        "architectures": [
+          "Qwen3_5ForConditionalGeneration"
+        ],
+        "model_path": "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "model_type": "qwen3_5"
+      },
+      "served_id": "qwen3.8-27b",
+      "server_info": {
+        "context_length": 262144,
+        "dp_size": 8,
+        "kv_cache_dtype": "fp8_e4m3",
+        "load_balance_method": "total_tokens",
+        "model_path": "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "quantization": null,
+        "reasoning_parser": "qwen3",
+        "tool_call_parser": "qwen3_coder",
+        "tp_size": 1
+      },
+      "task_versions": [
+        "54425601-6fd2-43d8-8cb9-e565b767676a",
+        "1fdbcb5b-4582-47dc-a794-29e7a40682da",
+        "65c8cc68-6ada-421f-ad0a-eb1d81fc9141",
+        "ac6a6cfa-ea44-4c11-bb2e-c2bb2d142c8e",
+        "09a3fea6-f691-4841-9218-d04459041a1f",
+        "d73098dc-4f03-4761-8a81-cc9ec914286c",
+        "386dff0d-6a22-4654-ba05-5262f61483b9",
+        "daa5bbbb-0f63-481f-be8e-1d217c12740e",
+        "02dd4e3f-d85d-4bf8-9976-eae2f102384d",
+        "dd8dd22e-75c0-4b93-8f8e-ea8a292d92bb",
+        "2f2681bf-c1f7-4056-b6e4-cb2e5058f027",
+        "f31ebe83-0ff1-4660-bcba-59ffa4b82d5a",
+        "63e6ea95-1b08-44ec-aea7-244d9c6253af",
+        "e4068901-ba6e-4faf-b30c-7535aa11f0fc",
+        "3981d848-0689-47da-8f44-9f7e2132c3ce",
+        "5144890e-3515-497e-aaff-044d062eb664",
+        "53d2f089-6502-4208-9795-d6ba7277fa9a",
+        "8d84b316-d741-44f8-aaa5-7a0f0d7b8d3a",
+        "6324fee5-2e3f-4538-a9e2-026d82ebb8a3",
+        "2fdc9511-f5fe-4386-a4a5-a5a16a30f359",
+        "96977ecb-4d8c-4c4f-a5e0-02d925bdc724",
+        "dcf2aefc-e34d-4a4a-8aa9-b18a3b754d5a",
+        "47483c98-ec42-4543-89f3-555a33e8f820",
+        "50ab8f20-7fc5-4e9f-afad-9fb03fae9b4d",
+        "d6634975-2918-4037-9cd2-467f365e39b0",
+        "a0e4a473-b544-4006-b4fa-8e6b6bfb0a50",
+        "fb8f2178-7dd8-429a-8d3c-f14b21a51e02",
+        "6a3023fd-4022-47a4-9ae5-6d15a892bd9b",
+        "fd07b96f-7aa4-4041-862b-5aa7411eff4b",
+        "2df3b04b-87bd-4012-b5aa-e16d50698288",
+        "8ad6a73f-7ec8-4435-b868-a84327ed4c85",
+        "3aafc5a8-2144-4bc3-919f-fcbbebd9f0d7",
+        "b164ad89-7b40-4baf-a9e8-2eb880c61730",
+        "4b134baa-bbd7-4448-894d-2444e89a46e7",
+        "2c62b98d-61e8-4216-bc84-c61bc4cd5ccb",
+        "ab2fd90d-1ee5-4451-a866-260ddf5c336d",
+        "43dc2c52-f283-4454-8987-69c6cbbd4160",
+        "493bc3d8-7806-4e38-9bc3-e964a5c26f5b",
+        "36dd3619-68f1-464a-859a-9eccd7c70994",
+        "c3fbe2bd-b9e6-41b1-a47f-5342fdc28053",
+        "60f864ae-49bc-43ee-ae54-4ff8a8e71226",
+        "b51782f9-cb9f-4603-be81-a16eab4b8a36",
+        "4b48f9cf-a5c4-4e86-814d-ebe86957e725",
+        "0920e798-c7e7-4da6-9d5e-ebeba45ec05a",
+        "bf88b387-f5b5-4452-b539-4ad48f0c177e",
+        "484625a1-a0ee-4e12-b566-40eccc26802e",
+        "5f0c9b28-fe2f-41e0-b73f-0e7749f64195",
+        "b66062df-4c6a-419f-8568-82e152e9df73",
+        "e32f1402-ec95-4df3-9c04-8e5e0400242c",
+        "47180c40-447d-4b8c-9387-ca8bae891e46"
+      ]
+    }
+  },
+  "sampling": {
+    "seed": 43,
+    "temperature": 0.6,
+    "top_p": 0.95
+  },
+  "task_set": "task-selection.json",
+  "training_data_eligible": true
+}
