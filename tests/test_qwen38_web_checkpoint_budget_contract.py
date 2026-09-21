@@ -10,6 +10,9 @@ AUDIT_PATH = ROOT / "docs/evidence/qwen38-web-important-checkpoint-budget-audit-
 REPAIR_AUDIT_PATH = (
     ROOT / "docs/evidence/qwen38-web-important-checkpoint-budget-repair-20260921.json"
 )
+CURRENT_REPAIR_AUDIT_PATH = (
+    ROOT / "docs/evidence/qwen38-web-important-checkpoint-budget-repair-atomic-swap-20260921.json"
+)
 
 
 def _canonical(value: object) -> bytes:
@@ -79,8 +82,20 @@ def test_historical_web_campaign_budget_audit_preserves_the_old_mismatch() -> No
     }
 
 
-def test_repaired_web_campaign_budget_binds_runner_supervisor_and_sandbox() -> None:
+def test_historical_repaired_budget_receipt_remains_byte_bound_to_its_runner() -> None:
     audit = json.loads(REPAIR_AUDIT_PATH.read_bytes())
+    unsigned = dict(audit)
+    unsigned.pop("receipt_sha256")
+    assert audit["receipt_sha256"] == ("sha256:" + hashlib.sha256(_canonical(unsigned)).hexdigest())
+    assert audit["source"]["collection_runner_file_sha256"] == (
+        "sha256:b1462f13a3be437d42e818c5ab943b11c71e01a8c8d0a602d4f7ff67dbdbe65c"
+    )
+    assert audit["classification"] == "runtime_budget_repaired_campaign_still_gated"
+    assert audit["checks"]["model_free_runtime_qualification_still_required"] is True
+
+
+def test_current_repaired_web_campaign_budget_binds_runner_supervisor_and_sandbox() -> None:
+    audit = json.loads(CURRENT_REPAIR_AUDIT_PATH.read_bytes())
     unsigned = dict(audit)
     unsigned.pop("receipt_sha256")
     assert audit["receipt_sha256"] == ("sha256:" + hashlib.sha256(_canonical(unsigned)).hexdigest())
@@ -93,6 +108,7 @@ def test_repaired_web_campaign_budget_binds_runner_supervisor_and_sandbox() -> N
             "collection_runner",
             "collection_launcher",
             "collection_supervisor",
+            "qualification_worker",
         )
     }
     for name, path in paths.items():
@@ -170,7 +186,11 @@ def test_repaired_web_campaign_budget_binds_runner_supervisor_and_sandbox() -> N
     assert runner_envelope + 1800 <= observed["supervisor_poll_horizon"]
     assert observed["supervisor_poll_horizon"] <= observed["sandbox_lifetime"]
     assert plan["execution"]["launchable_now"] is False
-    assert audit["classification"] == "runtime_budget_repaired_campaign_still_gated"
+    assert audit["classification"] == (
+        "runtime_budget_repaired_noreplace_swap_campaign_still_gated"
+    )
+    assert audit["checks"]["noreplace_swap_runner_bound_to_current_source"] is True
+    assert audit["checks"]["fresh_model_free_runtime_qualification_still_required"] is True
     assert audit["operation"] == {
         "provider_requests": 0,
         "model_requests": 0,
@@ -181,7 +201,8 @@ def test_repaired_web_campaign_budget_binds_runner_supervisor_and_sandbox() -> N
 
 def test_web_campaign_budget_audit_contains_no_credentials_or_results() -> None:
     text = "\n".join(
-        path.read_text(encoding="utf-8").lower() for path in (AUDIT_PATH, REPAIR_AUDIT_PATH)
+        path.read_text(encoding="utf-8").lower()
+        for path in (AUDIT_PATH, REPAIR_AUDIT_PATH, CURRENT_REPAIR_AUDIT_PATH)
     )
     assert "api_key" not in text
     assert "tensorlake-api-key" not in text
