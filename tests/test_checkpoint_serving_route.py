@@ -10,7 +10,9 @@ from training.checkpoint_serving_route import (
     _digest,
     _normalized_contract,
     build_paused_spec,
+    lifecycle,
     reconcile_create,
+    wait_phase,
 )
 
 
@@ -130,3 +132,73 @@ def test_reconcile_create_never_posts(tmp_path) -> None:
     assert client.methods == ["GET"]
     assert result["reconciled_after_create"] is True
     assert json.loads(result_path.read_text())["post_attempts"] == 1
+
+
+def test_lifecycle_pause_uses_fresh_resource_version_once() -> None:
+    class FakeClient:
+        calls: list[tuple] = []
+
+        def request(self, method, url, body=None, **kwargs):
+            self.calls.append((method, url, body, kwargs))
+            if method == "GET":
+                return 200, {"resource_version": "123", "status": {"phase": "ready"}}
+            assert method == "POST"
+            return 202, {"resource_version": "124", "status": {"phase": "ready"}}
+
+    client = FakeClient()
+    result = lifecycle(client, "chris-q38-test-v1", "pause")
+
+    assert client.calls == [
+        (
+            "GET",
+            "https://inference.flt.build/fleet/v1/models/chris-q38-test-v1",
+            None,
+            {},
+        ),
+        (
+            "POST",
+            "https://inference.flt.build/fleet/v1/models/chris-q38-test-v1/pause",
+            {},
+            {"if_match": "123"},
+        ),
+    ]
+    assert result == {
+        "model_id": "chris-q38-test-v1",
+        "action": "pause",
+        "before_phase": "ready",
+        "before_resource_version": "123",
+        "accepted_phase": "ready",
+        "accepted_resource_version": "124",
+    }
+
+
+def test_lifecycle_pause_rejects_non_ready_route_without_post() -> None:
+    class FakeClient:
+        methods: list[str] = []
+
+        def request(self, method, url, body=None, **kwargs):
+            self.methods.append(method)
+            return 200, {"resource_version": "123", "status": {"phase": "paused"}}
+
+    client = FakeClient()
+    with pytest.raises(RouteError, match="route_not_ready"):
+        lifecycle(client, "chris-q38-test-v1", "pause")
+    assert client.methods == ["GET"]
+
+
+def test_wait_phase_requires_exact_terminal_pause_state() -> None:
+    class FakeClient:
+        def request(self, method, url):
+            assert method == "GET"
+            return 200, {
+                "resource_version": "125",
+                "status": {"phase": "paused", "ready_replicas": 0, "active_pods": 0},
+            }
+
+    assert wait_phase(FakeClient(), "chris-q38-test-v1", "paused", 1) == {
+        "model_id": "chris-q38-test-v1",
+        "phase": "paused",
+        "resource_version": "125",
+        "ready_replicas": 0,
+        "active_pods": 0,
+    }
