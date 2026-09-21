@@ -1,0 +1,75 @@
+{
+  "schema": "qwen38_checkpoint_route_release_v1",
+  "observed_at": "2026-09-21T04:38:06Z",
+  "source_commit": "5f60d11fc688b6547723abe0d2ad0a48df2504b5",
+  "route": {
+    "model_id": "chris-q38-fresh75-step230-web-v2",
+    "inference_model_uid": "e624a6f0-8748-433c-973e-aefc7f22ddf6",
+    "checkpoint_revision": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
+    "last_use_before_pause": "2026-09-21T04:12:50Z",
+    "serving_pod_uid_before_pause": "f2c45829-7e9e-4850-abb8-6f669804a9a9",
+    "serving_pod_gpu_request_before_pause": 8
+  },
+  "consumer_gate": {
+    "seed42": {
+      "job": "chris-q38-fresh75-dev17-p1-v2",
+      "job_uid": "963775c8-cae4-4aee-a7a6-9ee13e4e4d12",
+      "pod_uid": "cb19081b-670b-4c29-85b6-e5c3a4570ec9",
+      "terminal_state": "Complete",
+      "accepted": 17,
+      "claimed": 0,
+      "pending": 0,
+      "retry_review": 0,
+      "stale_active": 0
+    },
+    "seed43": {
+      "job": "chris-q38-dev17-s43-fresh75-p1-v1",
+      "job_uid": "d8fd2e3f-db6a-4ec5-89f3-fec695668486",
+      "pod_uid": "9f3af19f-0896-47dc-a032-5372e42df8f4",
+      "terminal_state": "Failed_infrastructure_incomplete",
+      "accepted": 14,
+      "claimed": 0,
+      "pending": 0,
+      "retry_review": 3,
+      "stale_active": 0
+    },
+    "active_or_queued_owned_consumers": 0,
+    "imminent_web_consumer": false
+  },
+  "pause": {
+    "supported_control_plane_action": "pause",
+    "post_attempts": 1,
+    "if_match_resource_version": "31296340",
+    "accepted_resource_version": "31316574",
+    "terminal_api_phase": "paused",
+    "terminal_api_resource_version": "31317195",
+    "terminal_kubernetes_resource_version": "31317303",
+    "terminal_active_pods": 0,
+    "terminal_ready_replicas": 0,
+    "exact_serving_pod_absent": true,
+    "deployment_uid": "3ec10ad1-4bd1-447a-afe3-e56e25f1974e",
+    "deployment_replicas": 0,
+    "matching_gpu_pods": 0,
+    "matching_gpu_allocation": 0
+  },
+  "lifecycle_guard": {
+    "implementation": "training/checkpoint_serving_route.py",
+    "implementation_file_sha256": "sha256:c718e862d8c048ab5839ce6a58dde7a520c324087b92e4adc9c3c2af582d5b4a",
+    "regression": "tests/test_checkpoint_serving_route.py",
+    "regression_file_sha256": "sha256:3171d26037b0b06743d5929fec4ad32d6fad469d4dcaea5ae8d7096e1b4cab12"
+  },
+  "scope": {
+    "fresh75_route_only": true,
+    "self_route_mutated": false,
+    "teacher_route_mutated": false,
+    "evaluation_cells_mutated": false,
+    "jobs_created_or_deleted": 0
+  },
+  "privacy": {
+    "score_values_included": false,
+    "prompts_responses_flags_rewards_or_traces_included": false,
+    "credentials_or_private_logs_included": false,
+    "final_eight_task_set_accessed": false
+  },
+  "sha256": "02909510e84bbd7be0910fc23f75f5dc15f02102416868793c13e09422501c41"
+}
