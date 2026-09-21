@@ -18,12 +18,15 @@ from pathlib import Path
 from typing import Any
 
 from .io import digest_json
+from .task_family_split import TRUSTED_FLEET_COLLECTION_ROOT_ID
 
 SOURCE_CENSUS_SCHEMA = "cyber_qwen_opencode_student_visible_reasoning_census_v1"
 SELECTION_SCHEMA = "cyber_qwen_opencode_visible_reasoning_training_selection_v1"
 OBJECTIVE = "qwen_opencode_student_visible_reasoning_plus_actions"
 VISIBILITY = ("student_visible", "private_or_unknown", "absent")
 COMPACTION = ("none", "exact_student_generated", "opaque_rejected")
+MINIMUM_SUPERVISED_TOKENS = 20_000_000
+MAXIMUM_FAMILY_TARGET_FRACTION = 0.25
 
 
 def _mapping(value: object, label: str) -> dict[str, Any]:
@@ -66,6 +69,7 @@ def validate_source_census(
     value: Mapping[str, Any],
     *,
     source_profile_sha256: str,
+    source_authorization_sha256: str,
     collection_packet_sha256: str,
     private_selection_sha256: str,
     success_evidence_sha256: str,
@@ -79,6 +83,7 @@ def validate_source_census(
         {
             "schema",
             "source_profile_sha256",
+            "source_authorization_sha256",
             "collection_packet_sha256",
             "private_selection_sha256",
             "success_evidence_sha256",
@@ -92,6 +97,7 @@ def validate_source_census(
     )
     expected = {
         "source_profile_sha256": source_profile_sha256,
+        "source_authorization_sha256": source_authorization_sha256,
         "collection_packet_sha256": collection_packet_sha256,
         "private_selection_sha256": private_selection_sha256,
         "success_evidence_sha256": success_evidence_sha256,
@@ -111,7 +117,8 @@ def validate_source_census(
         not candidates
         or not verified
         or selected != selected_sessions
-        or selected > verified > candidates
+        or selected > verified
+        or verified > candidates
     ):
         raise ValueError("visible-reasoning census session totals are inconsistent")
     visibility = _exact(
@@ -147,6 +154,7 @@ def _manifest(value: Mapping[str, Any]) -> dict[str, Any]:
         {
             "schema",
             "source_profile_sha256",
+            "source_authorization_sha256",
             "collection_packet_sha256",
             "selection_sha256",
             "success_evidence_sha256",
@@ -169,6 +177,28 @@ def _manifest(value: Mapping[str, Any]) -> dict[str, Any]:
     )
     if manifest["validation_mode"] != "pending_reasoning_selection":
         raise ValueError("visible-reasoning corpus has already bypassed final selection")
+    if manifest["root_role_anchor_id"] != TRUSTED_FLEET_COLLECTION_ROOT_ID:
+        raise ValueError("visible-reasoning corpus is not rooted in the trusted family split")
+    for name in (
+        "source_profile_sha256",
+        "source_authorization_sha256",
+        "collection_packet_sha256",
+        "selection_sha256",
+        "success_evidence_sha256",
+        "source_census_sha256",
+        "catalog_inventory_sha256",
+        "family_split_sha256",
+        "family_role_anchor_sha256",
+        "protected_family_lock_sha256",
+        "runtime_bindings_sha256",
+        "coverage_sha256",
+    ):
+        _sha(manifest[name], f"visible-reasoning manifest {name}")
+    files = _exact(manifest["files"], {"train"}, "visible-reasoning corpus files")
+    train = _exact(files["train"], {"path", "sha256", "rows"}, "visible-reasoning train file")
+    if train["path"] != "train.parquet" or _count(train["rows"], "train rows", positive=True) < 1:
+        raise ValueError("visible-reasoning corpus train file is malformed")
+    _sha(train["sha256"], "visible-reasoning train file")
     counts = _exact(
         manifest["counts"],
         {
@@ -186,6 +216,8 @@ def _manifest(value: Mapping[str, Any]) -> dict[str, Any]:
         counts["student_visible_reasoning_target_tokens"] + counts["visible_action_target_tokens"]
     ):
         raise ValueError("visible-reasoning manifest target totals are inconsistent")
+    if train["rows"] != counts["windows"]:
+        raise ValueError("visible-reasoning train rows differ from manifest windows")
     return manifest
 
 
@@ -204,6 +236,7 @@ def _coverage(value: Mapping[str, Any]) -> dict[str, Any]:
             "source_census_sha256",
             "collection_packet_sha256",
             "source_profile_sha256",
+            "source_authorization_sha256",
             "selected_source_records",
             "visible_reasoning_windows",
             "student_visible_reasoning_target_tokens",
@@ -221,19 +254,91 @@ def _coverage(value: Mapping[str, Any]) -> dict[str, Any]:
     )
     if coverage["heldout_families_materialized"] != 0 or coverage["raw_text_written"] is not False:
         raise ValueError("visible-reasoning coverage violates the private family boundary")
+    for name in (
+        "selection_sha256",
+        "success_evidence_sha256",
+        "source_census_sha256",
+        "collection_packet_sha256",
+        "source_profile_sha256",
+        "source_authorization_sha256",
+    ):
+        _sha(coverage[name], f"visible-reasoning coverage {name}")
+    for name in (
+        "selected_source_records",
+        "visible_reasoning_windows",
+        "student_visible_reasoning_target_tokens",
+        "visible_action_target_tokens",
+        "unique_supervised_tokens",
+        "minimum_unique_supervised_tokens",
+    ):
+        _count(coverage[name], f"visible-reasoning coverage {name}", positive=True)
+    if type(coverage["target_goal_reached"]) is not bool:
+        raise ValueError("visible-reasoning coverage target status is invalid")
+    minimum = _count(
+        coverage["minimum_unique_supervised_tokens"],
+        "visible-reasoning coverage minimum supervised tokens",
+        positive=True,
+    )
+    unique = _count(
+        coverage["unique_supervised_tokens"],
+        "visible-reasoning coverage unique supervised tokens",
+        positive=True,
+    )
+    if minimum < MINIMUM_SUPERVISED_TOKENS or coverage["target_goal_reached"] is not (
+        unique >= minimum
+    ):
+        raise ValueError("visible-reasoning coverage target gate is not mathematically bound")
+    family = _exact(
+        coverage["family_token_concentration"],
+        {
+            "families_with_targets",
+            "largest_family_target_token_fraction",
+            "maximum_allowed_fraction",
+            "within_limit",
+        },
+        "family concentration",
+    )
+    if (
+        _count(family["families_with_targets"], "families with targets", positive=True) < 1
+        or type(family["largest_family_target_token_fraction"]) not in {int, float}
+        or type(family["maximum_allowed_fraction"]) not in {int, float}
+        or family["maximum_allowed_fraction"] != MAXIMUM_FAMILY_TARGET_FRACTION
+        or not 0 < family["largest_family_target_token_fraction"] <= MAXIMUM_FAMILY_TARGET_FRACTION
+        or family["within_limit"] is not True
+    ):
+        raise ValueError("visible-reasoning coverage exceeds the family concentration limit")
+    compaction = _exact(
+        coverage["compaction"],
+        {
+            "uncompacted_windows",
+            "exact_student_generated_continuation_windows",
+            "opaque_compaction_windows",
+        },
+        "visible-reasoning corpus compaction",
+    )
+    values = {
+        name: _count(compaction[name], f"visible-reasoning compaction {name}")
+        for name in compaction
+    }
+    if (
+        values["opaque_compaction_windows"]
+        or sum(values.values()) != coverage["visible_reasoning_windows"]
+    ):
+        raise ValueError("visible-reasoning coverage includes opaque or unbound compaction")
     return coverage
 
 
 def select(
     census: Mapping[str, Any], corpus_manifest: Mapping[str, Any], coverage: Mapping[str, Any]
 ) -> dict[str, Any]:
-    """Create the explicit post-materialization permit for the new corpus arm."""
+    """Create a source-only qualification, never collection or training authority."""
 
     manifest = _manifest(corpus_manifest)
     checked_coverage = _coverage(coverage)
     checked_census = validate_source_census(
         census,
         source_profile_sha256=manifest["source_profile_sha256"],
+        source_authorization_sha256=manifest["source_authorization_sha256"],
         collection_packet_sha256=manifest["collection_packet_sha256"],
         private_selection_sha256=manifest["selection_sha256"],
         success_evidence_sha256=manifest["success_evidence_sha256"],
@@ -245,6 +350,7 @@ def select(
         "source_census_sha256",
         "collection_packet_sha256",
         "source_profile_sha256",
+        "source_authorization_sha256",
     ):
         manifest_name = name
         if name == "source_census_sha256":
@@ -282,6 +388,7 @@ def select(
         "corpus_manifest_sha256": manifest["sha256"],
         "coverage_sha256": checked_coverage["sha256"],
         "source_profile_sha256": manifest["source_profile_sha256"],
+        "source_authorization_sha256": manifest["source_authorization_sha256"],
         "collection_packet_sha256": manifest["collection_packet_sha256"],
         "success_evidence_sha256": manifest["success_evidence_sha256"],
         "selected": {
@@ -293,7 +400,7 @@ def select(
             "visible_action_target_tokens": counts["visible_action_target_tokens"],
             "supervised_tokens": counts["supervised_tokens"],
         },
-        "status": "approved",
+        "status": "source_only_qualified",
     }
     selection["sha256"] = digest_json(selection)
     return selection
@@ -331,6 +438,25 @@ def _write_once(path: Path, value: Mapping[str, Any]) -> None:
         os.fsync(stream.fileno())
 
 
+def authorize_paths(
+    census_path: Path, corpus_manifest_path: Path, coverage_path: Path, output_path: Path
+) -> dict[str, Any]:
+    """Write an aggregate-only qualification once; never open corpus rows.
+
+    This is deliberately separate from materialization.  A caller receives a
+    digest-bound qualification only after checking the aggregate source census
+    against the token-only corpus manifest and coverage receipt. It does not
+    authenticate a live Registry artifact, authorize collection, or make an
+    SFT launcher eligible to consume the corpus.
+    """
+
+    if output_path.exists() or output_path.is_symlink():
+        raise FileExistsError("visible-reasoning selection destination already exists")
+    selection = select(_read(census_path), _read(corpus_manifest_path), _read(coverage_path))
+    _write_once(output_path, selection)
+    return selection
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--census", type=Path, required=True)
@@ -339,10 +465,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args(argv)
     try:
-        if args.output.exists():
-            raise FileExistsError("visible-reasoning selection destination already exists")
-        selection = select(_read(args.census), _read(args.corpus_manifest), _read(args.coverage))
-        _write_once(args.output, selection)
+        selection = authorize_paths(args.census, args.corpus_manifest, args.coverage, args.output)
     except (OSError, ValueError) as exc:
         print(f"error: {type(exc).__name__}", file=os.sys.stderr)
         return 2

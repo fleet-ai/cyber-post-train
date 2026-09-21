@@ -136,7 +136,7 @@ The private corpus materializer will retain a smaller result as evidence but
 will not mark it ready for SFT until the 20M target and family-concentration
 checks pass.
 
-## Two deliberately separate data lanes
+## Three deliberately separate data lanes
 
 ### Teacher visible-action lane
 
@@ -169,6 +169,22 @@ It still cannot collect or train by itself: an authorized source profile,
 sealed selection, exact serializer proof, and no opaque compaction are all
 required before it can materialize any private records.
 
+### Future teacher-visible-rationale lane
+
+This is a third treatment, not a switch on the teacher action packet and not a
+way to recover a teacher's hidden thoughts. It would require a new source
+profile, authorization artifact, success-evidence mapping, selection, record
+schema, corpus identity, and training permit. Its source must show that the
+teacher's rationale was delivered as ordinary visible conversation text under a
+known interface and that this exact text is allowed in Qwen training.
+
+The later builder must render that text through the pinned Qwen template, bind
+every supervised rationale/action boundary, and keep the same anchored family
+roles as the paired teacher/action-only corpus. It must reject every generic
+`thinking`, `reasoning`, `reasoning_content`, `analysis`, private field, or
+unreconstructable compaction boundary. Until that code and its source authority
+exist, teacher collection expands only the action-only lane.
+
 ## Practical next sequence
 
 1. Produce sealed metadata-only qualification records for a large, diverse
@@ -177,9 +193,11 @@ required before it can materialize any private records.
 2. Build the qualified broad roster, anchored split, runtime bindings, and
    protected-family lock offline.  Review the aggregate family and taxonomy
    coverage.
-3. Render independent teacher-action and Qwen-self collection packets.  Verify
+3. Render independent teacher-action and Qwen-self collection packets. Verify
    source authorization before a launch; do not use an opaque receipt digest as
-   evidence that the issuer was checked.
+   evidence that the issuer was checked. Keep teacher-visible rationale as a
+   separately designed packet only after its own source and text-visibility
+   proof exists.
 4. Collect the predeclared campaigns.  Export only sealed attempt metadata to
    admission; keep raw records private.
 5. Admit successes, materialize action-only data, and use aggregate coverage to

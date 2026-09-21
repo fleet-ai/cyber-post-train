@@ -78,7 +78,7 @@ class _Tokenizer:
     def apply_chat_template(self, messages, **kwargs):
         assert kwargs == {
             "tokenize": True,
-            "add_generation_prompt": len(messages) == 2,
+            "add_generation_prompt": len(messages) in {2, 4},
             "tools": [],
             "enable_thinking": True,
         }
@@ -86,6 +86,10 @@ class _Tokenizer:
             return [1, 2]
         if len(messages) == 3:
             return [1, 2, 3, 4, 5]
+        if len(messages) == 4:
+            return [10, 11]
+        if len(messages) == 5:
+            return [10, 11, 44, 45]
         raise ValueError("unexpected synthetic conversation")
 
 
@@ -204,6 +208,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
                     },
                 ],
                 "target_message_index": 2,
+                "prompt_token_ids": [1, 2],
                 "collection_token_ids": [1, 2, 3, 4, 5],
                 "training_token_ids": [1, 2, 3, 4, 5],
                 "serving_token_ids": [1, 2, 3, 4, 5],
@@ -213,31 +218,51 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
     roundtrip["sha256"] = digest_json(roundtrip)
     roundtrip_path = tmp_path / "roundtrip.json"
     _write(roundtrip_path, roundtrip)
+    source = {
+        "kind": "qwen_self",
+        "model_alias": "source",
+        "model": {
+            "repository": corpus.QWEN_REPOSITORY,
+            "revision": revision,
+            "session_model": "qwen-source",
+        },
+    }
+    opencode = {
+        "harness": corpus.OPENCODE_HARNESS,
+        "harness_version": corpus.OPENCODE_VERSION,
+        "release_asset_sha256": _sha("1"),
+        "tool_catalog_sha256": _sha("2"),
+        "context_management": corpus.ONLINE_COMPACTION,
+        "context_window_tokens": 262144,
+        "context_headroom_tokens": 20000,
+        "tools": ["bash", "submit_report"],
+    }
+    thinking = {"enable_thinking": True, "preserve_thinking": True}
+    authorization = {
+        "schema": corpus.SOURCE_AUTHORIZATION_SCHEMA,
+        "authority": {
+            "kind": "fleet_artifact_registry_immutable_v1",
+            "artifact_key": "cyber/runs/synthetic/visible-reasoning/authorization",
+            "version_index": 1,
+            "content_sha256": _sha("0"),
+        },
+        "source": source,
+        "qwen_target": qwen_target,
+        "opencode": opencode,
+        "thinking": thinking,
+        "reasoning_visibility": "student_visible",
+        "private_or_unknown_reasoning": "reject",
+        "purpose": "student_visible_reasoning_plus_visible_actions",
+    }
+    authorization["registry_payload_sha256"] = corpus._registry_payload_sha256(authorization)
+    authorization["authority"]["content_sha256"] = authorization["registry_payload_sha256"]
+    authorization["sha256"] = digest_json(authorization)
     profile = {
         "schema": corpus.SOURCE_PROFILE_SCHEMA,
-        "source": {
-            "kind": "qwen_self",
-            "model_alias": "source",
-            "model": {
-                "repository": corpus.QWEN_REPOSITORY,
-                "revision": revision,
-                "session_model": "qwen-source",
-            },
-            "source_authorization_receipt_sha256": _sha("b"),
-            "student_visible_reasoning_authorization_receipt_sha256": _sha("c"),
-        },
+        "source": {**source, "authorization_sha256": authorization["sha256"]},
         "qwen_target": qwen_target,
-        "opencode": {
-            "harness": corpus.OPENCODE_HARNESS,
-            "harness_version": corpus.OPENCODE_VERSION,
-            "release_asset_sha256": _sha("1"),
-            "tool_catalog_sha256": _sha("2"),
-            "context_management": corpus.ONLINE_COMPACTION,
-            "context_window_tokens": 262144,
-            "context_headroom_tokens": 20000,
-            "tools": ["bash", "submit_report"],
-        },
-        "thinking": {"enable_thinking": True, "preserve_thinking": True},
+        "opencode": opencode,
+        "thinking": thinking,
         "serialization": {
             "schema": "cyber_qwen_opencode_template_roundtrip_v1",
             "roundtrip_fixture_sha256": file_sha256(roundtrip_path),
@@ -255,6 +280,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
     packet = {
         "schema": corpus.PACKET_SCHEMA,
         "source_profile_sha256": profile["sha256"],
+        "source_authorization_sha256": authorization["sha256"],
         "catalog_inventory_sha256": inventory["sha256"],
         "family_split_sha256": split["sha256"],
         "root_role_anchor_id": task_family_split.TRUSTED_FLEET_COLLECTION_ROOT_ID,
@@ -337,6 +363,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
             "content_sha256": _sha("6"),
         },
         "source_profile_sha256": profile["sha256"],
+        "source_authorization_sha256": authorization["sha256"],
         "collection_packet_sha256": packet["sha256"],
         "catalog_inventory_sha256": inventory["sha256"],
         "family_split_sha256": split["sha256"],
@@ -363,6 +390,8 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
             }
         ],
     }
+    evidence["registry_payload_sha256"] = corpus._registry_payload_sha256(evidence)
+    evidence["authority"]["content_sha256"] = evidence["registry_payload_sha256"]
     evidence["sha256"] = digest_json(evidence)
     selection = {
         "schema": corpus.SELECTION_SCHEMA,
@@ -380,6 +409,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
     source_census = {
         "schema": "cyber_qwen_opencode_student_visible_reasoning_census_v1",
         "source_profile_sha256": profile["sha256"],
+        "source_authorization_sha256": authorization["sha256"],
         "collection_packet_sha256": packet["sha256"],
         "private_selection_sha256": selection["sha256"],
         "success_evidence_sha256": evidence["sha256"],
@@ -409,6 +439,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
     )
     values = {
         "profile.json": profile,
+        "source-authorization.json": authorization,
         "packet.json": packet,
         "selection.json": selection,
         "success-evidence.json": evidence,
@@ -432,6 +463,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
     config = {
         "schema": corpus.REQUEST_SCHEMA,
         "source_profile": _ref(paths["profile.json"]),
+        "source_authorization": _ref(paths["source-authorization.json"]),
         "collection_packet": _ref(paths["packet.json"]),
         "selection": _ref(paths["selection.json"]),
         "success_evidence": _ref(paths["success-evidence.json"]),
@@ -529,6 +561,113 @@ def test_rejects_private_unknown_and_opaque_reasoning(
     assert not Path(config["output"]).exists()
 
 
+def test_rejects_private_reasoning_nested_in_a_tool_argument(tmp_path: Path, monkeypatch) -> None:
+    config, state = _fixture(tmp_path, monkeypatch)
+    record = copy.deepcopy(state["record"])
+    record["messages"][2]["tool_calls"][0]["function"]["arguments"]["analysis"] = "private"
+    _reseal_record(record)
+    _rewrite(state["paths"]["records"], record)
+    config["records"] = _ref(state["paths"]["records"])
+    with pytest.raises(ValueError, match="tool arguments"):
+        corpus.build(config, relative_to=tmp_path)
+    assert not Path(config["output"]).exists()
+
+
+def test_rejects_orphaned_opencode_tool_result(tmp_path: Path, monkeypatch) -> None:
+    config, state = _fixture(tmp_path, monkeypatch)
+    record = copy.deepcopy(state["record"])
+    record["messages"][3]["tool_call_id"] = "unknown-call"
+    _reseal_record(record)
+    _rewrite(state["paths"]["records"], record)
+    config["records"] = _ref(state["paths"]["records"])
+    with pytest.raises(ValueError, match="orphaned or duplicated"):
+        corpus.build(config, relative_to=tmp_path)
+    assert not Path(config["output"]).exists()
+
+
+def test_rejects_teacher_source_profile() -> None:
+    profile = {
+        "schema": corpus.SOURCE_PROFILE_SCHEMA,
+        "source": {
+            "kind": "teacher_visible",
+            "model_alias": "teacher",
+            "model": {
+                "repository": corpus.QWEN_REPOSITORY,
+                "revision": "f" * 40,
+                "session_model": "teacher",
+            },
+            "authorization_sha256": _sha("a"),
+        },
+        "qwen_target": {
+            "repository": corpus.QWEN_REPOSITORY,
+            "revision": "f" * 40,
+            "tokenizer_sha256": _sha("b"),
+            "tokenizer_backend_sha256": _sha("c"),
+            "chat_template_sha256": _sha("d"),
+        },
+        "opencode": {
+            "harness": corpus.OPENCODE_HARNESS,
+            "harness_version": corpus.OPENCODE_VERSION,
+            "release_asset_sha256": _sha("e"),
+            "tool_catalog_sha256": _sha("f"),
+            "context_management": corpus.ONLINE_COMPACTION,
+            "context_window_tokens": 262_144,
+            "context_headroom_tokens": 20_000,
+            "tools": ["bash", "submit_report"],
+        },
+        "thinking": {"enable_thinking": True, "preserve_thinking": True},
+        "serialization": {
+            "schema": corpus.ROUNDTRIP_SCHEMA,
+            "roundtrip_fixture_sha256": _sha("1"),
+            "collection_template_sha256": _sha("d"),
+            "training_template_sha256": _sha("d"),
+            "serving_template_sha256": _sha("d"),
+            "round_trip_verified": True,
+        },
+        "compaction": {
+            "accepted_kind": corpus.EXACT_COMPACTION,
+            "opaque_compaction_rejected": True,
+        },
+    }
+    profile["sha256"] = digest_json(profile)
+    with pytest.raises(ValueError, match="only the explicit Qwen-self"):
+        corpus._profile(profile)
+
+
+def test_rejects_unbound_registry_payload_before_reading_private_records(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config, state = _fixture(tmp_path, monkeypatch)
+    evidence = json.loads(state["paths"]["success-evidence.json"].read_text())
+    evidence["authority"]["content_sha256"] = _sha("9")
+    evidence["sha256"] = digest_json(
+        {key: value for key, value in evidence.items() if key != "sha256"}
+    )
+    _rewrite(state["paths"]["success-evidence.json"], evidence)
+    config["success_evidence"] = _ref(state["paths"]["success-evidence.json"])
+    monkeypatch.setattr(corpus, "iter_jsonl", lambda _path: (_ for _ in ()).throw(AssertionError()))
+    with pytest.raises(ValueError, match="immutable Registry payload"):
+        corpus.build(config, relative_to=tmp_path)
+    assert not Path(config["output"]).exists()
+
+
+def test_rejects_unbound_source_authorization_before_reading_private_records(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config, state = _fixture(tmp_path, monkeypatch)
+    authorization = json.loads(state["paths"]["source-authorization.json"].read_text())
+    authorization["authority"]["content_sha256"] = _sha("9")
+    authorization["sha256"] = digest_json(
+        {key: value for key, value in authorization.items() if key != "sha256"}
+    )
+    _rewrite(state["paths"]["source-authorization.json"], authorization)
+    config["source_authorization"] = _ref(state["paths"]["source-authorization.json"])
+    monkeypatch.setattr(corpus, "iter_jsonl", lambda _path: (_ for _ in ()).throw(AssertionError()))
+    with pytest.raises(ValueError, match="source authorization does not bind"):
+        corpus.build(config, relative_to=tmp_path)
+    assert not Path(config["output"]).exists()
+
+
 @pytest.mark.parametrize(
     ("message", "match"),
     [
@@ -561,6 +700,39 @@ def test_rejects_template_roundtrip_drift_before_records(tmp_path: Path, monkeyp
     _rewrite(state["paths"]["profile.json"], profile)
     config["source_profile"] = _ref(state["paths"]["profile.json"])
     with pytest.raises(ValueError, match="template round-trip"):
+        corpus.build(config, relative_to=tmp_path)
+    assert not Path(config["output"]).exists()
+
+
+def test_rejects_roundtrip_continuation_boundary_before_records(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config, state = _fixture(tmp_path, monkeypatch)
+    fixture = json.loads(state["paths"]["roundtrip.json"].read_text())
+    fixture["cases"][0]["prompt_token_ids"] = [99]
+    fixture["sha256"] = digest_json(
+        {key: value for key, value in fixture.items() if key != "sha256"}
+    )
+    _rewrite(state["paths"]["roundtrip.json"], fixture)
+    config["roundtrip_fixture"] = _ref(state["paths"]["roundtrip.json"])
+    profile = copy.deepcopy(state["profile"])
+    profile["serialization"]["roundtrip_fixture_sha256"] = config["roundtrip_fixture"]["sha256"]
+    profile["sha256"] = digest_json(
+        {key: value for key, value in profile.items() if key != "sha256"}
+    )
+    _rewrite(state["paths"]["profile.json"], profile)
+    config["source_profile"] = _ref(state["paths"]["profile.json"])
+    monkeypatch.setattr(corpus, "iter_jsonl", lambda _path: (_ for _ in ()).throw(AssertionError()))
+    with pytest.raises(ValueError, match="round-trip fixture does not prove"):
+        corpus.build(config, relative_to=tmp_path)
+    assert not Path(config["output"]).exists()
+
+
+def test_rejects_a_caller_supplied_renderer_before_records(tmp_path: Path, monkeypatch) -> None:
+    config, _state = _fixture(tmp_path, monkeypatch)
+    config["renderer_adapter"] = {"path": "untrusted.py", "sha256": _sha("a")}
+    monkeypatch.setattr(corpus, "iter_jsonl", lambda _path: (_ for _ in ()).throw(AssertionError()))
+    with pytest.raises(ValueError, match="unknown fields"):
         corpus.build(config, relative_to=tmp_path)
     assert not Path(config["output"]).exists()
 
@@ -657,6 +829,8 @@ def test_exact_compaction_requires_the_real_next_prompt_and_zero_masked_summary(
         "continuation_token_sha256": digest_json(continuation),
         "continuation_token_ids": continuation,
         "continuation_tokens": len(continuation),
+        "summary_generation_prompt_token_sha256": digest_json([10, 11]),
+        "summary_generation_prompt_tokens": 2,
         "pre_compaction_prompt_token_sha256": first["prompt_token_sha256"],
         "pre_compaction_prompt_tokens": first["prompt_token_count"],
         "post_compaction_prompt_token_sha256": second["prompt_token_sha256"],
@@ -679,6 +853,19 @@ def test_exact_compaction_requires_the_real_next_prompt_and_zero_masked_summary(
         )
         == accepted
     )
+    record = {
+        "messages": messages,
+        "compaction": accepted,
+    }
+    corpus._rendered_compaction(_Tokenizer(), record)
+    wrong_summary = copy.deepcopy(accepted)
+    wrong_summary["boundaries"][0]["continuation_token_ids"] = [99]
+    wrong_summary["boundaries"][0]["continuation_tokens"] = 1
+    wrong_summary["boundaries"][0]["continuation_token_sha256"] = digest_json([99])
+    with pytest.raises(ValueError, match="exact summary message"):
+        corpus._rendered_compaction(
+            _Tokenizer(), {"messages": messages, "compaction": wrong_summary}
+        )
     wrong_prompt = copy.deepcopy(accepted)
     wrong_prompt["boundaries"][0]["next_target_prompt_token_sha256"] = _sha("d")
     with pytest.raises(ValueError, match="true next target prompt"):
@@ -697,6 +884,17 @@ def test_exact_compaction_requires_the_real_next_prompt_and_zero_masked_summary(
             source_kind="teacher_visible",
             original_task_digest=_sha("a"),
         )
+
+
+def test_compaction_coverage_counts_only_targets_after_a_boundary() -> None:
+    record = {
+        "compaction": {
+            "kind": corpus.EXACT_COMPACTION,
+            "boundaries": [{"next_target_window_id": "after"}],
+        },
+        "windows": [{"window_id": "before"}, {"window_id": "after"}],
+    }
+    assert corpus._compacted_target_window_ids(record) == {"after"}
 
 
 def test_rejects_local_tokenizer_boundary_drift(tmp_path: Path, monkeypatch) -> None:
