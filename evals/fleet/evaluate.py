@@ -7,6 +7,7 @@ database. Workers claim pending rows and never retry ambiguous or valid outcomes
 
 from __future__ import annotations
 
+import copy
 import csv
 import hashlib
 import json
@@ -98,6 +99,42 @@ TREATMENT_FIELDS = {
     "tool_catalog_sha256",
 }
 
+SERVER_PREVIEW_METADATA_FIELDS = {
+    "creationTimestamp",
+    "generation",
+    "managedFields",
+    "resourceVersion",
+    "uid",
+}
+SERVER_PREVIEW_CONTROLLER_LABELS = {
+    "batch.kubernetes.io/controller-uid",
+    "controller-uid",
+}
+
+
+def stable_job_preview(value: dict) -> dict:
+    """Remove only server-generated Job UID projections before evidence hashing."""
+    if value.get("apiVersion") != "batch/v1" or value.get("kind") != "Job":
+        raise ValueError("expected a server-rendered batch/v1 Job")
+    result = copy.deepcopy(value)
+    result.pop("status", None)
+    metadata = result.get("metadata")
+    spec = result.get("spec")
+    template_metadata = (
+        spec.get("template", {}).get("metadata", {}) if isinstance(spec, dict) else {}
+    )
+    if not isinstance(metadata, dict) or not isinstance(spec, dict):
+        raise ValueError("server-rendered Job metadata/spec is missing")
+    for field in SERVER_PREVIEW_METADATA_FIELDS:
+        metadata.pop(field, None)
+    spec.pop("selector", None)
+    labels = template_metadata.get("labels", {})
+    if not isinstance(labels, dict):
+        raise ValueError("server-rendered Job template labels are invalid")
+    for field in SERVER_PREVIEW_CONTROLLER_LABELS:
+        labels.pop(field, None)
+    return result
+
 
 def _sha(value: str) -> None:
     if not isinstance(value, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", value):
@@ -121,6 +158,7 @@ def compile_eval(config: dict, *, relative_to: Path) -> dict:
             "images",
             "pass_k",
             "concurrency",
+            "max_reviewed_infrastructure_retries",
             "training_data_eligible",
             "sampling",
         },
@@ -243,6 +281,9 @@ def compile_eval(config: dict, *, relative_to: Path) -> dict:
     eligible = config.get("training_data_eligible", False)
     if type(eligible) is not bool:
         raise ValueError("training eligibility must be explicit boolean")
+    retry_limit = config.get("max_reviewed_infrastructure_retries", 0)
+    if type(retry_limit) is not int or not 0 <= retry_limit <= 1:
+        raise ValueError("reviewed infrastructure retry limit must be zero or one")
     plan = {
         "schema": "cyber_fleet_eval_v1",
         "campaign_id": config["name"],
@@ -257,6 +298,7 @@ def compile_eval(config: dict, *, relative_to: Path) -> dict:
         "concurrency": config.get("concurrency", 1),
         "training_data_eligible": eligible,
         "automatic_retry": False,
+        "max_reviewed_infrastructure_retries": retry_limit,
         "runtime_files": runtime_identity(),
         "sampling": config["sampling"],
         "interpretation": "serving-block descriptive evaluation",
@@ -277,7 +319,7 @@ def plan_rows(plan: dict) -> list[dict]:
             "endpoint_model_id": route["served_id"],
             "harness_id": "protocol-" + plan["sha256"],
             "attempt": attempt,
-            "max_retries": 0,
+            "max_retries": plan["max_reviewed_infrastructure_retries"],
         }
         for block, route in sorted(plan["routes"].items())
         for version in sorted(route["task_versions"])
