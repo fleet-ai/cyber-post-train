@@ -52,6 +52,16 @@ def test_public_task_report_points_to_the_latest_exact_inventory() -> None:
     assert 'funnel: [["Current production blackbox tasks",1055]' in data
 
 
+def test_fleet_evaluation_page_does_not_turn_incomplete_attempts_into_scores() -> None:
+    html = (ROOT / "site" / "index.html").read_text()
+    data = (ROOT / "site" / "report-data.js").read_text()
+
+    assert 'data-tab-page="fleet-evaluations"' in html
+    assert "We have not established either an improvement or a decline." in html
+    assert '"Fair trained-versus-original comparisons", "0"' in data
+    assert '"17 of 17 completed, but not a fair comparison"' in data
+
+
 def test_experiment_plan_has_two_large_ranked_run_tables() -> None:
     html = (ROOT / "site" / "index.html").read_text()
     data = json.loads((ROOT / "site" / "training-decision-space.json").read_text())
