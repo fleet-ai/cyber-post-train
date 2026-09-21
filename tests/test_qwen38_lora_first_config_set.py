@@ -72,6 +72,37 @@ def read(path: Path) -> dict:
     return json.loads(path.read_text())
 
 
+def chained_recovery_config(tmp_path: Path) -> tuple[dict, dict, Path]:
+    """Build the same broad -> step-42 -> step-60 lineage as the live gate."""
+    from training import sft, sft_runtime
+
+    source_plan = sft.compile_sft(read(RESUME_CANARY), relative_to=RUNS)
+    manifest = read(
+        ROOT / "configs" / "qualification" / "qwen38-lora-lr1-step40-megatron-checkpoint-v1.json"
+    )
+    manifest.update(
+        {
+            "source_plan": source_plan,
+            "source_plan_sha256": sft_runtime._unsigned_digest(source_plan),
+            "checkpoint_path": source_plan["output_root"] + "/checkpoints/global_step_42",
+            "optimizer_step": 42,
+            "sampler_batches_in_epoch": 42,
+        }
+    )
+    manifest["receipt_sha256"] = sft_runtime._unsigned_digest(
+        {key: value for key, value in manifest.items() if key != "receipt_sha256"}
+    )
+    path = tmp_path / "step-000042-megatron-v1.json"
+    path.write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n")
+    config = read(RESUME_STABILITY_GATE)
+    config["recovery"] = {
+        "manifest": str(path),
+        "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+        "mode": "resume",
+    }
+    return config, source_plan, path
+
+
 def test_one_step_training_qualification_is_digest_bound_and_not_production_acceptance():
     value = read(TRAINING_QUALIFICATION)
     expected = value.pop("receipt_sha256")
@@ -356,7 +387,11 @@ def test_qwen38_recovery_gets_a_fresh_identity_only_from_exact_broad_source(monk
     )
     resumed["recovery"] = {
         "mode": "resume",
-        "checkpoint": {"source_plan": source, "optimizer_step": 40},
+        "checkpoint": {
+            "source_plan": source,
+            "source_plan_sha256": sft_runtime._unsigned_digest(source),
+            "optimizer_step": 40,
+        },
     }
     resumed["pause_after_step"] = 42
     monkeypatch.setattr(recovery, "validate", lambda plan, check_files: None)
@@ -365,7 +400,10 @@ def test_qwen38_recovery_gets_a_fresh_identity_only_from_exact_broad_source(monk
 
     resumed["recovery"]["checkpoint"]["source_plan"] = copy.deepcopy(source)
     resumed["recovery"]["checkpoint"]["source_plan"]["recipe"]["lr"] = 5e-5
-    with pytest.raises(ValueError, match="production-qualified broad"):
+    resumed["recovery"]["checkpoint"]["source_plan_sha256"] = sft_runtime._unsigned_digest(
+        resumed["recovery"]["checkpoint"]["source_plan"]
+    )
+    with pytest.raises(ValueError, match="reviewed broad"):
         sft_runtime.validate_plan(resumed, check_files=False)
 
 
@@ -591,6 +629,48 @@ def test_recovery_runtime_reopens_the_embedded_production_source(monkeypatch):
     reference = runtime_plan["qualification_gate"]["export_receipt"]
     assert source["run_name"] != runtime_plan["run_name"]
     assert observed == [(reference["path"], reference["file_sha256"]), receipt]
+
+
+def test_chained_recovery_reopens_the_reviewed_broad_root(tmp_path):
+    from training import sft, sft_runtime
+
+    config, intermediate, _ = chained_recovery_config(tmp_path)
+    plan = sft.compile_sft(config, relative_to=RUNS)
+    request = sft.job_request(plan)
+    source = sft_runtime._qwen38_lora_production_source_plan(plan)
+
+    assert intermediate["run_name"] == "chris-q38-lora-r1-s42-v2"
+    assert source["run_name"] == "chris-q38-lora-lr1-v1"
+    assert plan["recovery"]["checkpoint"]["optimizer_step"] == 42
+    assert plan["pause_after_step"] == 60
+    assert request["name"] == "chris-q38-lora-r1-s60-v3"
+
+
+def test_chained_recovery_rejects_a_self_resigned_source_digest(tmp_path):
+    from training import sft, sft_runtime
+
+    config, _, path = chained_recovery_config(tmp_path)
+    manifest = read(path)
+    manifest["source_plan_sha256"] = "0" * 64
+    manifest["receipt_sha256"] = sft_runtime._unsigned_digest(
+        {key: value for key, value in manifest.items() if key != "receipt_sha256"}
+    )
+    path.write_text(json.dumps(manifest, sort_keys=True, indent=2) + "\n")
+    config["recovery"]["sha256"] = hashlib.sha256(path.read_bytes()).hexdigest()
+
+    with pytest.raises(ValueError, match="source-plan lineage|manifest bindings"):
+        sft.compile_sft(config, relative_to=RUNS)
+
+
+def test_chained_recovery_source_resolver_rejects_a_cycle():
+    from training import sft_runtime
+
+    plan = {"run_name": "cycle", "recovery": {"checkpoint": {}}}
+    plan["recovery"]["checkpoint"]["source_plan"] = plan
+    plan["recovery"]["checkpoint"]["source_plan_sha256"] = "0" * 64
+
+    with pytest.raises(ValueError, match="cyclic"):
+        sft_runtime._qwen38_lora_production_source_plan(plan)
 
 
 def test_broad_runtime_completes_without_reentering_the_one_step_receipt_path(
