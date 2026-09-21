@@ -68,6 +68,12 @@ record; an instance POST cannot recover it. Preflight fails before any rollout.
 Preserve the held attempt and review a new exact selection, never borrow a
 mutable current version or silently replace the task.
 
+For a new Qwen held-out campaign, read
+[`docs/FLEET_HELDOUT_EVALUATION_PRECREATE_GATE.md`](../../docs/FLEET_HELDOUT_EVALUATION_PRECREATE_GATE.md)
+before creating anything.  Historical Job YAML and prepared configs are not
+launch permission: a fresh duplicate census and a server-rendered root
+`fleet.ai/failure-alerts: "off"` proof are both required.
+
 Each route requires `model` (one alias above), `served_id`, `task_versions`,
 `endpoint_origin: https://inference.flt.build`, and these expected projections:
 
