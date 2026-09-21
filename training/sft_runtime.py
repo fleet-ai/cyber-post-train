@@ -511,6 +511,29 @@ QWEN38_LORA_BROAD_FULL_PLAN = {
 }
 
 
+def _qwen38_lora_identity_successor(source: dict, run_name: str) -> dict:
+    """Mint only the create-once identity of an already reviewed broad plan."""
+    return {
+        **source,
+        "run_name": run_name,
+        "output_root": f"/mnt/sfs/jobs/{run_name}",
+        "wandb": {
+            **source["wandb"],
+            "run_id": run_name,
+            "name": run_name,
+        },
+    }
+
+
+# A1's CPU-only preflight proved that its output root was already occupied
+# before any GPU allocation.  A2 intentionally changes no scientific field:
+# only the create-once run/output/W&B identity is fresh.
+QWEN38_LORA_BROAD_FULL_A2_PLAN = _qwen38_lora_identity_successor(
+    QWEN38_LORA_BROAD_FULL_PLAN,
+    "chris-q38-lora-sft-a2-v1",
+)
+
+
 def _reviewed_broad_lora_lr_plan(
     *, run_name: str, learning_rate: float, rate_tag: str, purpose_tag: str
 ) -> dict:
@@ -559,6 +582,7 @@ QWEN38_LORA_BROAD_FULL_PLANS = {
     plan["run_name"]: plan
     for plan in (
         QWEN38_LORA_BROAD_FULL_PLAN,
+        QWEN38_LORA_BROAD_FULL_A2_PLAN,
         QWEN38_LORA_BROAD_LOWER_LR_PLAN,
         QWEN38_LORA_BROAD_UPPER_LR_PLAN,
     )
