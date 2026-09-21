@@ -2,7 +2,7 @@
   "schema": "cyber_qwen38_lora_step60_promotion_preparation_v1",
   "status": "prepare_only_zero_update_reload_export_not_launched",
   "source": {
-    "repository_base_commit": "c4725e7586d583821745391048c59a53f1eaadb8",
+    "repository_base_commit": "a062029e616c5013855f04f9541d81b4dedb5b84",
     "checkpoint_manifest_path": "/mnt/sfs/jobs/chris-q38-lora-r1-s60-v3/checkpoint_manifests/step-000060-megatron-v1.json",
     "checkpoint_manifest_file_sha256": "cd53865f869eeb1975aa0e099aef143a736167c5c7b095c283f0da292ffecd78",
     "checkpoint_manifest_receipt_sha256": "6bae9ef75e0a60f598eb32b63d31a64c0f42716611a43daf19a177d3c0ffebd2",
@@ -78,5 +78,5 @@
     "evaluation_launched": false,
     "next_gate": "After explicit capacity authorization, obtain a live rendered preview that proves the root failure-alert annotation, repeat duplicate and output-absence checks, then run this exact zero-update plan."
   },
-  "receipt_sha256": "6bd07582ddf78885379ed788c2a0e68a1be1f45597d868f378bd0dfffa2709b3"
+  "receipt_sha256": "d9ab12f82b8b80342f4794e402514026237b69dae866bcb1506977700ab44bd1"
 }
