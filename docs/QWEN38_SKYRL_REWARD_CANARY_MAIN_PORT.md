@@ -1,7 +1,17 @@
 # Qwen3.8 SkyRL reward canary
 
-Status: **prod8 was created once on 2026-09-21 and is running on one eight-GPU
-node. It is not accepted yet.**
+Status: **prod8 was created once on 2026-09-21, but its terminal result and
+GPU release are now unknown. It is not accepted and must never be resumed.**
+
+The historical launch record says prod8 was created, but it contains neither a
+terminal receipt nor verified GPU release. The current Jobs API and both
+Kubernetes clusters no longer contain the RayJob, which cannot prove whether it
+finished, failed, or released its GPUs. The authoritative current conclusion is
+the sanitized [prod8 reconciliation receipt](evidence/qwen38-study/2026-09-21-skyrl-prod8-reconciliation-v1.json):
+`unknown`. Do not use any later statement in this historical prod8 document as
+proof that it is running, terminal, released, or reusable. A fresh-from-base
+successor is prepared separately in
+[`QWEN38_SKYRL_REWARD_CANARY_PROD9.md`](QWEN38_SKYRL_REWARD_CANARY_PROD9.md).
 
 The exact, non-authorizing packet is
 [`qwen38-rl-reward-canary-prod8-launch-packet-v1.json`](../configs/qualification/qwen38-rl-reward-canary-prod8-launch-packet-v1.json).
@@ -68,9 +78,11 @@ The old `v17` topology packet remains historical evidence. It is not a prod8
 gate. Prod6 and prod7 already exercised the one-node topology live, and prod8's
 direct authorization path validates its own exact object shape.
 
-## Launch gates completed; acceptance still pending
+## Historical launch record; not acceptance evidence
 
-The operator completed these steps in order on 2026-09-21:
+The launch record reports that the operator completed these steps in order on
+2026-09-21. That record is useful historical context only; the reconciliation
+above supersedes its former live-status claim:
 
 1. Rehash the exact private one-train/one-development package and prove its new
    SFS destination, staging Job name, and upload archive are absent.
