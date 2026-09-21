@@ -78,7 +78,9 @@ server-rendered root `fleet.ai/failure-alerts: "off"` annotation before its
 single create request. After the Job is terminal, use
 `cyber-post-train eval heldout-terminal-collect` to record a score-blind
 reconciliation; neither command reads rollout traces or interprets a capability
-result.
+result. The census uses only exact server-side name or Job-label selectors; its
+terminal Workload read uses the created Job UID. It never lists the shared
+namespace wholesale.
 
 The packet also seals the full representative split and the selected split role.
 The evaluator route must contain exactly the selected task versions. Its shared

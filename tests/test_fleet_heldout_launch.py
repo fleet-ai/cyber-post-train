@@ -56,14 +56,39 @@ class FakeCluster:
         }
         self.preview_calls = 0
         self.create_calls = 0
+        self.list_calls: list[tuple[str, str | None, str | None]] = []
         self.missing_root_alert = False
         self.raise_on_create = False
         self.add_job_after_second_preview = False
         self.created: dict[str, Any] | None = None
 
-    def list(self, resource: str, namespace: str) -> dict[str, Any]:
+    def list(
+        self,
+        resource: str,
+        namespace: str,
+        *,
+        field_selector: str | None = None,
+        label_selector: str | None = None,
+    ) -> dict[str, Any]:
         assert namespace == NAMESPACE
-        return copy.deepcopy(self.inventories[resource])
+        assert (field_selector is None) != (label_selector is None)
+        self.list_calls.append((resource, field_selector, label_selector))
+        inventory = copy.deepcopy(self.inventories[resource])
+        if field_selector is not None:
+            assert field_selector.startswith("metadata.name=")
+            name = field_selector.removeprefix("metadata.name=")
+            inventory["items"] = [
+                item for item in inventory["items"] if item.get("metadata", {}).get("name") == name
+            ]
+        else:
+            assert label_selector is not None
+            key, value = label_selector.split("=", 1)
+            inventory["items"] = [
+                item
+                for item in inventory["items"]
+                if item.get("metadata", {}).get("labels", {}).get(key) == value
+            ]
+        return inventory
 
     def get(self, resource: str, namespace: str, name: str) -> dict[str, Any]:
         assert namespace == NAMESPACE
@@ -314,6 +339,25 @@ def test_existing_job_stops_before_server_preview_or_create(tmp_path):
         _launch(packet, cluster, database, tmp_path / "intent.jsonl")
     assert cluster.preview_calls == 0
     assert cluster.create_calls == 0
+    assert cluster.list_calls == [("jobs.batch", f"metadata.name={JOB_NAME}", None)]
+
+
+def test_duplicate_census_uses_only_bounded_exact_identity_queries(tmp_path):
+    packet = _packet(tmp_path)
+    cluster, database = FakeCluster(), FakeDatabase()
+    package = launch.build_package(packet)
+
+    census = launch.duplicate_census(
+        package, cluster=cluster, database=database, output_exists=lambda _: False
+    )
+
+    assert census == {"jobs": 0, "config_maps": 0, "pods": 0}
+    assert cluster.list_calls == [
+        ("jobs.batch", f"metadata.name={JOB_NAME}", None),
+        ("configmaps", f"metadata.name={CONFIG_MAP_NAME}", None),
+        ("pods", None, f"job-name={JOB_NAME}"),
+        ("pods", None, f"batch.kubernetes.io/job-name={JOB_NAME}"),
+    ]
 
 
 def test_matching_complete_identity_in_ledger_stops_before_server_preview_or_create(tmp_path):
@@ -414,6 +458,55 @@ def test_kubectl_adapter_rejects_an_unsafe_context_before_any_operation():
         launch.KubectlCluster("--other-context")
     with pytest.raises(launch.HeldoutLaunchError, match="explicit Kubernetes context"):
         launch.KubectlCluster("fleet;unexpected")
+
+
+def test_kubectl_adapter_rejects_unbounded_lists_and_sends_only_server_side_selectors(
+    monkeypatch,
+):
+    calls: list[list[str]] = []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        return launch.subprocess.CompletedProcess(
+            command, 0, stdout=json.dumps({"kind": "List", "items": []}), stderr=""
+        )
+
+    monkeypatch.setattr(launch.subprocess, "run", run)
+    cluster = launch.KubectlCluster("fleet-context")
+    with pytest.raises(launch.HeldoutLaunchError, match="exactly one scoped selector"):
+        cluster.list("pods", NAMESPACE)
+    cluster.list("jobs.batch", NAMESPACE, field_selector=f"metadata.name={JOB_NAME}")
+    cluster.list("pods", NAMESPACE, label_selector=f"job-name={JOB_NAME}")
+    cluster.list(
+        "workloads.kueue.x-k8s.io",
+        NAMESPACE,
+        label_selector=f"kueue.x-k8s.io/job-uid={JOB_UID}",
+    )
+    assert len(calls) == 3
+    assert f"--field-selector=metadata.name={JOB_NAME}" in calls[0]
+    assert f"--selector=job-name={JOB_NAME}" in calls[1]
+    assert f"--selector=kueue.x-k8s.io/job-uid={JOB_UID}" in calls[2]
+    assert all("--output=json" in call for call in calls)
+
+
+def test_workload_binding_requires_the_created_job_uid_not_only_a_matching_name():
+    workload = {
+        "metadata": {
+            "labels": {"kueue.x-k8s.io/job-uid": JOB_UID},
+            "ownerReferences": [
+                {
+                    "apiVersion": "batch/v1",
+                    "kind": "Job",
+                    "name": JOB_NAME,
+                    "uid": JOB_UID,
+                    "controller": True,
+                }
+            ],
+        }
+    }
+    assert launch._workload_binds_created_job(workload, JOB_NAME, JOB_UID)  # noqa: SLF001
+    workload["metadata"]["ownerReferences"][0]["uid"] = CONFIG_MAP_UID
+    assert not launch._workload_binds_created_job(workload, JOB_NAME, JOB_UID)  # noqa: SLF001
 
 
 def test_current_fresh75_selection_contract_remains_compatible():
@@ -525,7 +618,16 @@ def test_terminal_collection_is_score_blind_and_never_retries_or_scores(tmp_path
             "metadata": {
                 "name": "job-" + JOB_NAME,
                 "uid": WORKLOAD_UID,
-                "ownerReferences": [{"kind": "Job", "name": JOB_NAME}],
+                "labels": {"kueue.x-k8s.io/job-uid": JOB_UID},
+                "ownerReferences": [
+                    {
+                        "apiVersion": "batch/v1",
+                        "kind": "Job",
+                        "name": JOB_NAME,
+                        "uid": JOB_UID,
+                        "controller": True,
+                    }
+                ],
             },
             "spec": {"podSets": []},
             "status": {"phase": "Finished"},
@@ -555,3 +657,8 @@ def test_terminal_collection_is_score_blind_and_never_retries_or_scores(tmp_path
         "score_read_or_generated": False,
     }
     assert receipt["privacy"]["score_values_included"] is False
+    assert (
+        "workloads.kueue.x-k8s.io",
+        None,
+        f"kueue.x-k8s.io/job-uid={JOB_UID}",
+    ) in cluster.list_calls
