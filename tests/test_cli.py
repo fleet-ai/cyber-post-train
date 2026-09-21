@@ -208,6 +208,75 @@ def test_data_fleet_teacher_visible_rationale_admit_is_metadata_only(tmp_path, m
     assert '"sft_ready": false' in result.stdout
 
 
+def test_data_fleet_teacher_visible_rationale_broad_review_is_offline(tmp_path, monkeypatch):
+    from training import teacher_visible_rationale_broad_campaign as broad
+
+    spec = tmp_path / "configs/collection/broad.json"
+    spec.parent.mkdir(parents=True)
+    spec.write_text("{}")
+    calls = []
+
+    def review(value, *, root):
+        calls.append((value, root))
+        return {
+            "submitted": False,
+            "planned_cells": 3_200,
+            "fleet_api_calls": 0,
+            "model_calls": 0,
+            "external_submission_authorized": False,
+        }
+
+    monkeypatch.setattr(broad, "review", review)
+    result = RUNNER.invoke(
+        cli.app, ["data-fleet-teacher-visible-rationale-broad-review", str(spec)]
+    )
+    assert result.exit_code == 0
+    assert calls == [({}, tmp_path)]
+    assert '"planned_cells": 3200' in result.stdout
+    assert '"external_submission_authorized": false' in result.stdout
+
+
+def test_data_fleet_teacher_visible_rationale_broad_render_is_source_only(tmp_path, monkeypatch):
+    from training import teacher_visible_rationale_broad_campaign as broad
+
+    spec = tmp_path / "configs/collection/broad.json"
+    spec.parent.mkdir(parents=True)
+    authorization = tmp_path / "authorization.json"
+    output = tmp_path / "bundle"
+    spec.write_text("{}")
+    authorization.write_text("{}")
+    calls = []
+    rendered = {
+        "broad-review.json": {"planned_cells": 3_200},
+        "operation-authorization.json": {"sha256": "sha256:" + "a" * 64},
+        "matched-materialization-plan.json": {"sha256": "sha256:" + "b" * 64},
+    }
+
+    def render(value, authority, *, root):
+        calls.append((value, authority, root))
+        return rendered
+
+    def write(path, value):
+        calls.append((path, value))
+
+    monkeypatch.setattr(broad, "render", render)
+    monkeypatch.setattr(broad, "write", write)
+    result = RUNNER.invoke(
+        cli.app,
+        [
+            "data-fleet-teacher-visible-rationale-broad-render",
+            str(spec),
+            str(authorization),
+            str(output),
+        ],
+    )
+    assert result.exit_code == 0
+    assert calls == [({}, {}, tmp_path), (output, rendered)]
+    assert '"submitted": false' in result.stdout
+    assert '"planned_cells": 3200' in result.stdout
+    assert '"training_authorized": false' in result.stdout
+
+
 def test_data_fleet_roster_dispatches_metadata_only_builder(tmp_path, monkeypatch):
     from training import fleet_collection_roster
 

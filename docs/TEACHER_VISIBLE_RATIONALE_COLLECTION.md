@@ -46,6 +46,13 @@ and ordinary visible-output surface. The current repository does not contain
 that issuer-owned artifact, so no collection is launchable from the committed
 files alone.
 
+The first scaled, paired source plan is documented in
+[Broad stronger-teacher visible-rationale campaign v1](STRONGER_TEACHER_VISIBLE_RATIONALE_BROAD_V1.md).
+It expands the frozen 50-family wave to 64 predeclared attempts per family,
+adds exact create-once operation identities, and pairs rationale supervision
+with an action-only loss-mask control. It remains source-only and does not
+authorize an external call.
+
 Admission consumes sealed metadata only. Its private selection carries opaque
 record and task identities needed by the next local step. It also retains the
 exact input-file digests, the complete sanitized success/verifier binding, the

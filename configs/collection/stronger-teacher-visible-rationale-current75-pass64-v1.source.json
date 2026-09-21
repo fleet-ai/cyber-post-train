@@ -1,0 +1,81 @@
+{
+  "schema": "cyber_teacher_visible_rationale_broad_source_spec_v1",
+  "campaign_name": "stronger-teacher-visible-rationale-current75-pass64-v1",
+  "status": "source_only_waiting_for_independent_review_and_teacher_authorization",
+  "requirements": {
+    "path": "configs/collection/stronger-teacher-visible-rationale-current75-pass64-v1.requirements.json",
+    "file_sha256": "sha256:efd762eafcaa5984b2015e7965ba3a13db23bfc76f4be65ea3d3b2f1879d6788",
+    "logical_sha256": "sha256:9c2bbff65d77082c97e7ea36c116db1c9ad85fc7aab9ddd4250bf8da2c2256df"
+  },
+  "historical_scale_reference": {
+    "path": "configs/data/qwen38-teacher3k-32k-v1.manifest.json",
+    "file_sha256": "sha256:ebcf6677e51adb22f73602c210281a3f4a847c257155da6ed48cd1c6cba9f3c8",
+    "logical_sha256": "sha256:a8d08609991d7960cdcdab826bd07c3216bfcd3aa8f6fb33ab7a5fd29648d6f5"
+  },
+  "scale": {
+    "minimum_unique_supervised_tokens_per_arm": 20000000,
+    "attempts_per_task": 64,
+    "maximum_sessions_per_task_version": 64,
+    "concurrency": 50,
+    "maximum_daily_fleet_rollouts": 500,
+    "historical_action_target_tokens": 57384881,
+    "historical_successful_sessions": 2886,
+    "historical_reference_is_mixed_teacher_corpus": true,
+    "historical_mean_is_planning_only": true,
+    "final_private_materializer_must_measure_exact_unique_tokens": true
+  },
+  "operation_identity": {
+    "scientific_cell_identity": "sha256-requirements-task-runtime-attempt-v1",
+    "authorized_execution_identity": "sha256-packet-scientific-cell-v1",
+    "canonical_operation_root_required": true,
+    "dedicated_empty_ledger_required": true,
+    "exclusive_pre_mutation_intent_required": true,
+    "same_path_retry_allowed": false,
+    "alternate_path_retry_allowed": false,
+    "ambiguous_create_replay_allowed": false
+  },
+  "matched_comparison": {
+    "single_collection": true,
+    "same_selected_successes": true,
+    "same_actions": true,
+    "same_context_and_compaction": true,
+    "same_packing_and_window_selection": true,
+    "second_model_collection": false,
+    "loss_arms": {
+      "visible_rationale_plus_actions": {
+        "ordinary_visible_rationale": 1,
+        "visible_tool_actions": 1,
+        "visible_compaction_summary": 0
+      },
+      "matched_actions_only": {
+        "ordinary_visible_rationale": 0,
+        "visible_tool_actions": 1,
+        "visible_compaction_summary": 0
+      }
+    },
+    "minimum_unique_supervised_tokens_per_arm": 20000000
+  },
+  "exclusions": {
+    "split_roles": [
+      "dev",
+      "final_test"
+    ],
+    "external_benchmarks": [
+      "WebExploitBench"
+    ],
+    "benchmark_prompts_traces_outputs_metadata_solutions_or_hints": false,
+    "provider_private_or_hidden_reasoning": false,
+    "inferred_or_reconstructed_rationale": false
+  },
+  "safety": {
+    "source_only": true,
+    "independent_review_required_before_external_calls": true,
+    "fleet_api_calls": 0,
+    "model_calls": 0,
+    "raw_private_trace_reads": 0,
+    "external_submission_authorized": false,
+    "training_authorized": false
+  },
+  "submitted": false,
+  "sha256": "sha256:2b0bd135691e254d6dce9497b436644d64e068c2cb8674304fd39008bd5ef176"
+}

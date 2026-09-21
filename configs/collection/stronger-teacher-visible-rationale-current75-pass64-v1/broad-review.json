@@ -1,0 +1,69 @@
+{
+  "aggregate_context_window_capacity_tokens": 838860800,
+  "attempts_per_task": 64,
+  "campaign_name": "stronger-teacher-visible-rationale-current75-pass64-v1",
+  "cost_estimate_is_not_a_success_or_budget_guarantee": true,
+  "estimated_required_success_fraction": {
+    "denominator": 3200,
+    "numerator": 1006
+  },
+  "estimated_successes_needed_for_action_only_20m": 1006,
+  "excluded_external_benchmarks": [
+    "WebExploitBench"
+  ],
+  "excluded_split_roles": [
+    "dev",
+    "final_test"
+  ],
+  "external_submission_authorized": false,
+  "fleet_api_calls": 0,
+  "historical_action_target_tokens": 57384881,
+  "historical_mean_action_tokens_fraction": {
+    "denominator": 2886,
+    "numerator": 57384881
+  },
+  "historical_reference_is_mixed_teacher_corpus": true,
+  "historical_successful_sessions": 2886,
+  "independent_review_required": true,
+  "matched_loss_arms": {
+    "matched_actions_only": {
+      "ordinary_visible_rationale": 0,
+      "visible_compaction_summary": 0,
+      "visible_tool_actions": 1
+    },
+    "visible_rationale_plus_actions": {
+      "ordinary_visible_rationale": 1,
+      "visible_compaction_summary": 0,
+      "visible_tool_actions": 1
+    }
+  },
+  "maximum_daily_fleet_rollouts": 500,
+  "minimum_calendar_days_at_daily_cap": 7,
+  "minimum_selected_families": 40,
+  "minimum_selected_family_fraction": 0.8,
+  "minimum_unique_supervised_tokens_per_arm": 20000000,
+  "model_calls": 0,
+  "planned_cells": 3200,
+  "provider_cost_estimate": {
+    "aggregate_context_capacity_is_not_billed_token_forecast": true,
+    "aggregate_context_capacity_tokens": 838860800,
+    "currency": "USD",
+    "dollar_estimate_available": false,
+    "exact_dollar_formula": "billed_input_tokens * input_usd_per_token + billed_output_tokens * output_usd_per_token",
+    "missing_inputs": [
+      "authorized route billed input-token count and unit price",
+      "authorized route billed output-token count and unit price"
+    ],
+    "planned_paid_teacher_rollouts": 3200
+  },
+  "raw_private_trace_reads": 0,
+  "requirements_sha256": "sha256:9c2bbff65d77082c97e7ea36c116db1c9ad85fc7aab9ddd4250bf8da2c2256df",
+  "schema": "cyber_teacher_visible_rationale_broad_review_v1",
+  "scientific_cell_universe_sha256": "sha256:76821cb68741793f3a5128fcabbc71e47ffb7ab48800216207c422e23772bf2e",
+  "sha256": "sha256:c66fd9ec47e52de67645c19b69b749e81cf43059cc33d2adc7feebe01873ee6f",
+  "status": "source_only_waiting_for_independent_review_and_teacher_authorization",
+  "submitted": false,
+  "train_families": 50,
+  "train_task_versions": 50,
+  "training_authorized": false
+}

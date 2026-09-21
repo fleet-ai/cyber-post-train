@@ -373,6 +373,53 @@ def data_fleet_teacher_visible_rationale_admit(config: Path) -> None:
         _fail(exc)
 
 
+@app.command("data-fleet-teacher-visible-rationale-broad-review")
+def data_fleet_teacher_visible_rationale_broad_review(source_spec: Path) -> None:
+    """Review the broad source plan locally; never call Fleet or a model."""
+    from training.sft import read_mapping
+    from training.teacher_visible_rationale_broad_campaign import review
+
+    try:
+        _print(review(read_mapping(source_spec), root=source_spec.resolve().parents[2]))
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("data-fleet-teacher-visible-rationale-broad-render")
+def data_fleet_teacher_visible_rationale_broad_render(
+    source_spec: Path,
+    source_authorization: Path,
+    output: Path,
+) -> None:
+    """Render the reviewed broad source bundle locally; never submit it."""
+    from training.sft import read_mapping
+    from training.teacher_visible_rationale_broad_campaign import render, write
+
+    try:
+        rendered = render(
+            read_mapping(source_spec),
+            read_mapping(source_authorization),
+            root=source_spec.resolve().parents[2],
+        )
+        write(output, rendered)
+        _print(
+            {
+                "submitted": False,
+                "planned_cells": rendered["broad-review.json"]["planned_cells"],
+                "operation_authorization_sha256": rendered["operation-authorization.json"][
+                    "sha256"
+                ],
+                "matched_materialization_plan_sha256": rendered[
+                    "matched-materialization-plan.json"
+                ]["sha256"],
+                "external_submission_authorized": False,
+                "training_authorized": False,
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command("data-fleet-roster")
 def data_fleet_roster(config: Path) -> None:
     """Build a family-safe Fleet collection roster from sealed metadata only."""
