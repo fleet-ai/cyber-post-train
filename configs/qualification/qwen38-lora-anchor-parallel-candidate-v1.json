@@ -99,9 +99,15 @@
       "forbidden": "The prepared directory must not be the training output root, and a missing local /mnt/sfs mount must not be worked around by making a fake SFS directory."
     },
     "remote_preparation_boundary": {
-      "status": "no_complete_remote_preparation_cli_rail_in_this_source",
-      "reason": "pod-publish-file only atomically copies one file into an already-running CPU Pod. It neither creates a LoRA CPU preflight Pod nor produces the required PREFLIGHT.json.",
-      "required_response": "Do not hand-write a Pod, fabricate PREFLIGHT.json, or treat a transferred archive as a preflight. Use an authorized SFS-mounted preflight host, or land a separately reviewed remote-preflight feature before attempting this launch."
+      "status": "supported_sft_only_zero_gpu_preflight_job",
+      "create_command": "cyber-post-train sft-cpu-preflight-job-create <prepared-directory> --context <exact-production-or-development-context> --attempt 1",
+      "collect_command": "cyber-post-train sft-cpu-preflight-job-collect <prepared-directory> --context <exact-production-or-development-context> --attempt 1",
+      "what_it_proves": [
+        "one source-bound zero-GPU c1/q1 Job with the exact root and Pod-template fleet.ai/failure-alerts: off annotations verified by Kubernetes server dry-run before create",
+        "the exact digest-pinned image, read-only SFS inputs, native SFT loader/configuration/tokenization, and target accounting",
+        "one exact Job, Workload, and Pod receipt bound to the prepared image with zero GPUs and zero restarts before it writes PREFLIGHT.json"
+      ],
+      "scope_limit": "This is the maintained dense-SFT-only remote preflight rail. It does not qualify CUDA, distributed startup, training, or checkpoint reload. Do not hand-write a Pod, fabricate PREFLIGHT.json, or substitute pod-publish-file for this rail."
     },
     "normal_path": {
       "command": "cyber-post-train preview <prepared-directory>",
@@ -127,7 +133,7 @@
   },
   "pre_create_checklist": [
     "Render this exact config into a new local writable prepared directory that is different from the training output root: cyber-post-train train configs/runs/qwen38-27b-lora-sft-r64-a32-anchor-v1.json --output <prepared-directory>.",
-    "Run the pinned-image CPU-only preflight against the staged model and corpus. It must write a fresh PREFLIGHT.json for this prepared directory.",
+    "From a clean checkout whose exact HEAD equals freshly fetched canonical main, create one tracked preflight with sft-cpu-preflight-job-create, then collect the same terminal attempt with sft-cpu-preflight-job-collect. It must write a fresh PREFLIGHT.json for this prepared directory.",
     "Check the live capacity census and confirm that adding one eight-GPU c1 node remains within the project limit.",
     "Run the generic Jobs API preview first. Do not rely on failureAlerts: false in the request without proof from the root RayJob render.",
     "If normal preview proves the root annotation, use normal submit; otherwise use only the SFT-only direct fallback above after its server dry-run proof.",
@@ -141,5 +147,5 @@
     "a preview, dry-run, image, source, resource, or Secret-reference mismatch",
     "insufficient live c1 capacity"
   ],
-  "packet_sha256": "a2cabcc60597e3d5c28aff3e73da9e89419ccca868731e14a114e277312032c3"
+  "packet_sha256": "da32ed5224712be188e7a04dd651257499c8976f1d67fbfcc02dd13a5463894e"
 }

@@ -60,12 +60,12 @@ def test_lora_anchor_parallel_candidate_requires_a_proven_root_alert_annotation_
 
     assert "preview" in normal["command"]
     assert "does not need an SFS mount" in rail["preparation_location"]["supported"]
-    assert rail["remote_preparation_boundary"]["status"] == (
-        "no_complete_remote_preparation_cli_rail_in_this_source"
-    )
-    assert (
-        "neither creates a LoRA CPU preflight Pod" in rail["remote_preparation_boundary"]["reason"]
-    )
+    remote = rail["remote_preparation_boundary"]
+    assert remote["status"] == "supported_sft_only_zero_gpu_preflight_job"
+    assert "sft-cpu-preflight-job-create" in remote["create_command"]
+    assert "sft-cpu-preflight-job-collect" in remote["collect_command"]
+    assert any("root and Pod-template" in proof for proof in remote["what_it_proves"])
+    assert "Do not hand-write a Pod" in remote["scope_limit"]
     assert any("root RayJob" in gate for gate in normal["allowed_only_if"])
     assert "direct-submit-sft" in fallback["command_with_local_sfs_mount"]
     assert "direct-submit-sft" in fallback["command_without_local_sfs_mount"]
