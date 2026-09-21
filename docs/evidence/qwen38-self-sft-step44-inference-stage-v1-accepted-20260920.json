@@ -1,0 +1,90 @@
+{
+  "schema": "cyber_inference_model_stream_stage_registration_acceptance_v1",
+  "date": "2026-09-20",
+  "classification": "exact_payload_staged_and_paused_registration_reconciled_serving_not_yet_qualified",
+  "staging": {
+    "plan_path": "configs/qualification/qwen38-self-sft-step44-inference-stage-v1.json",
+    "plan_file_sha256": "sha256:139d2807b231174402bbcf519b2c609b84d04e75566d07fade6f02108e0d9e16",
+    "plan_sha256": "sha256:a2137a616be4f445675514ccd22ee4e28acafd2ef02db1116e50b46b2bd2bafe",
+    "runtime_source_sha256": "sha256:ab43d324d46e35712534f3ed8418807a924a7505feb30416538fc36b38fc01b6",
+    "runtime_wrapper_sha256": "sha256:385d393aea2521a4c173be23259665c699d3fbbad482cf5fa86ee6563d147633",
+    "namespace": "inference",
+    "image": "lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+    "priority_class": "c1",
+    "gpus": 0,
+    "active_deadline_seconds": 5400,
+    "config_map": {
+      "name": "chris-q38-self-s44-stage-v1",
+      "uid": "0f1b14fc-c13f-4112-b983-992c8e6b6027",
+      "resource_version": "31067671"
+    },
+    "pod": {
+      "name": "chris-q38-self-s44-stage-v1",
+      "uid": "34ad96a7-b30d-4e11-b50e-cb30f6ce942b",
+      "created_at": "2026-09-20T23:41:40Z",
+      "status": "Succeeded",
+      "terminal_at": "2026-09-20T23:56:30Z",
+      "exit_code": 0,
+      "restart_count": 0
+    },
+    "receipt_path": "/models/chris-q38-self-sft-step44-v1/.fleet-acceptance.json",
+    "receipt_sha256": "sha256:20460ed56f955b7054d60d944aa9e0e1a95a4eef53907df3a0dc2b345c3e87a8",
+    "payload": {
+      "manifest_sha256": "sha256:a0e55bebe9d78ac76c012446ae0147a421cd333e2a6bf2bb6f4fb3450fa776fe",
+      "file_count": 29,
+      "total_bytes": 55586032099,
+      "exact_size_and_sha256_verified": true,
+      "create_once_atomic_promotion_verified": true,
+      "post_promotion_readback_verified": true
+    }
+  },
+  "cleanup": {
+    "pod_deleted": true,
+    "pod_uid_absent": true,
+    "pod_name_absent": true,
+    "config_map_deleted": true,
+    "config_map_uid_absent": true,
+    "config_map_name_absent": true,
+    "gpus_held_after_cleanup": 0
+  },
+  "registration": {
+    "model_id": "chris-q38-self-sft-step44-v1",
+    "inference_model_uid": "05057134-546f-484e-9672-3f9ca50cec77",
+    "resource_version": "31081490",
+    "idempotency_key": "self-s44-20460ed56f955b70",
+    "post_count": 1,
+    "second_post_performed": false,
+    "post_response_contained_full_spec": true,
+    "desired_registration_sha256": "sha256:a60ccf66588ee0fb28e0ebcb8f3d54fc2f5b2d2d57688baba9270c21f05bcb6a",
+    "api_spec_sha256": "sha256:22fc158feeb107e55d051ccd594855a88d985c37d8e6059ee18ea2b5a70c6a43",
+    "acceptance_source": "exact_authenticated_get_and_kubernetes_reconciliation",
+    "server_normalization": {
+      "only_added_field": "spec.scaling.replicas",
+      "value": 1,
+      "normalized_full_spec_exact": true,
+      "note": "The API materializes its default desired replica count even while the route is paused. Paused state and minReplicas=0 kept active pods and allocated GPUs at zero."
+    },
+    "get_readback": {
+      "phase": "paused",
+      "desired_state": "paused",
+      "minimum_replicas": 0,
+      "desired_replicas": 1,
+      "active_pods": 0,
+      "priority_class": "c1",
+      "model_revision": "sha256:a0e55bebe9d78ac76c012446ae0147a421cd333e2a6bf2bb6f4fb3450fa776fe",
+      "gpus_allocated": 0
+    },
+    "serving_qualified": false
+  },
+  "next_gate": {
+    "state": "temporary_serving_qualification_and_fresh_parity_pending",
+    "external_evaluation_launchable": false,
+    "reason": "The exact model payload is staged and its paused registration is reconciled, but the model has not yet passed live serving qualification or fresh base-versus-candidate parity."
+  },
+  "sanitization": {
+    "credentials_included": false,
+    "prompts_traces_flags_answers_or_scores_included": false,
+    "raw_logs_included": false
+  },
+  "sha256": "sha256:67a833d0b3ecb971846964c010d6c1f868f4b11ba2186d397796405312e29add"
+}

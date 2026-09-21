@@ -206,18 +206,33 @@
         "resources_released": true
       },
       "stage": {
-        "status": "absent",
-        "proposed_path": "/models/chris-q38-self-sft-step44-v1"
+        "status": "accepted",
+        "path": "/models/chris-q38-self-sft-step44-v1",
+        "plan_sha256": "sha256:a2137a616be4f445675514ccd22ee4e28acafd2ef02db1116e50b46b2bd2bafe",
+        "receipt_sha256": "sha256:20460ed56f955b7054d60d944aa9e0e1a95a4eef53907df3a0dc2b345c3e87a8",
+        "payload_manifest_sha256": "sha256:a0e55bebe9d78ac76c012446ae0147a421cd333e2a6bf2bb6f4fb3450fa776fe",
+        "file_count": 29,
+        "total_bytes": 55586032099,
+        "pod_uid": "34ad96a7-b30d-4e11-b50e-cb30f6ce942b",
+        "resources_released": true
       },
       "registration": {
-        "status": "absent"
+        "status": "accepted_paused_zero_active_replicas",
+        "model_id": "chris-q38-self-sft-step44-v1",
+        "inference_model_uid": "05057134-546f-484e-9672-3f9ca50cec77",
+        "resource_version": "31081490",
+        "phase": "paused",
+        "priority_class": "c1",
+        "active_pods": 0,
+        "gpus_allocated": 0,
+        "serving_qualified": false
       },
       "live_target": {
-        "status": "absent"
+        "status": "paused_not_live"
       },
-      "web_readiness": "blocked_on_create_once_stage_and_paused_registration",
-      "fleet_readiness": "blocked_on_create_once_stage_and_paused_registration",
-      "next_gate": "Use the accepted export and one-GPU receipt as immutable inputs to a create-once stage, register it paused, then JIT-resume and accept live parity when an evaluator is ready."
+      "web_readiness": "blocked_on_temporary_live_serving_qualification_and_matched_parity",
+      "fleet_readiness": "blocked_on_temporary_live_serving_qualification_and_matched_parity",
+      "next_gate": "JIT-resume the exact paused registration only when a bounded evaluator is ready, then accept live serving and matched base-versus-candidate parity before evaluation."
     },
     {
       "artifact_id": "q38-available-a-lr30-step76",
@@ -315,5 +330,5 @@
     "raw_logs_included": false,
     "tensor_values_read": false
   },
-  "sha256": "sha256:ec396f9a049531ac8c09cbb387f191b8838b8a81c4dd4733165a8529997cc84e"
+  "sha256": "sha256:b663c42cfa30f8579de2ede6e5ce4d3ef6a362287673d5f7837c9fca6385292c"
 }

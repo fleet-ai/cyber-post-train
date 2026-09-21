@@ -42,7 +42,12 @@ def test_readiness_matrix_is_self_digesting_and_complete() -> None:
 
     self_sft = artifacts["q38-self-sft-step44"]
     assert self_sft["reload"]["status"] == "accepted_one_gpu_forward"
-    assert self_sft["stage"]["status"] == "absent"
+    assert self_sft["stage"]["status"] == "accepted"
+    assert self_sft["stage"]["resources_released"] is True
+    assert self_sft["registration"]["status"] == "accepted_paused_zero_active_replicas"
+    assert self_sft["registration"]["phase"] == "paused"
+    assert self_sft["registration"]["active_pods"] == 0
+    assert self_sft["registration"]["gpus_allocated"] == 0
 
     lr30 = artifacts["q38-available-a-lr30-step76"]
     assert lr30["checkpoint_reload"]["status"] == "accepted_zero_update_all_rank_reload"

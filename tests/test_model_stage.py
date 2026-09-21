@@ -13,12 +13,17 @@ import pytest
 import yaml
 
 from training import model_stage as stage
+from training import model_stage_current_base as current_stage
 
 ROOT = Path(__file__).resolve().parents[1]
 FAILED_V1 = ROOT / "configs/qualification/qwen38-fresh75-step230-inference-stage-v1.json"
 PRODUCTION = ROOT / "configs/qualification/qwen38-fresh75-step230-inference-stage-v2.json"
+SELF_SFT = ROOT / "configs/qualification/qwen38-self-sft-step44-inference-stage-v1.json"
 ACCEPTED_V2 = (
     ROOT / "docs/evidence/qwen38-fresh75-step230-inference-stage-v2-accepted-20260915.json"
+)
+ACCEPTED_SELF_SFT = (
+    ROOT / "docs/evidence/qwen38-self-sft-step44-inference-stage-v1-accepted-20260920.json"
 )
 SOURCE = ROOT / "training/model_stage.py"
 
@@ -109,6 +114,85 @@ def test_production_plan_is_self_digesting_and_exact_registration_clone() -> Non
     assert desired["spec"]["model"]["revision"] == plan["source"]["payload"]["manifest_sha256"]
 
 
+def test_self_sft_plan_clones_current_base_runtime_and_starts_paused() -> None:
+    plan = current_stage.read_plan(SELF_SFT)
+    source = plan["registration_source"]
+    desired = plan["desired_registration"]
+    source_spec = copy.deepcopy(source["spec"])
+    desired_spec = desired["spec"]
+
+    assert source["id"] == "qwen3.8-27b"
+    assert source["spec_sha256"] == stage.digest_json(source_spec)
+    assert plan["execution"]["runtime_source_sha256"] == stage._digest_bytes(SOURCE.read_bytes())
+    assert plan["execution"]["runtime_wrapper_sha256"] == stage._digest_bytes(
+        Path(current_stage.__file__).read_bytes()
+    )
+    assert desired["id"] == plan["destination"]["model_id"]
+    assert desired_spec["desiredState"] == "paused"
+    assert desired_spec["scaling"] == {"minReplicas": 0}
+    assert desired_spec["placement"]["priorityClassName"] == "c1"
+    assert desired_spec["model"]["dataParallelSize"] == 8
+    assert desired_spec["model"]["tensorParallelSize"] == 1
+    assert desired_spec["runtime"]["image"] == source_spec["runtime"]["image"]
+    assert desired_spec["runtime"]["command"] == source_spec["runtime"]["command"]
+    assert "--dp-size" in desired_spec["runtime"]["args"]
+    assert (
+        desired_spec["runtime"]["args"][desired_spec["runtime"]["args"].index("--dp-size") + 1]
+        == "8"
+    )
+    assert (
+        desired_spec["runtime"]["args"][
+            desired_spec["runtime"]["args"].index("--context-length") + 1
+        ]
+        == "262144"
+    )
+    assert (
+        desired_spec["runtime"]["args"][
+            desired_spec["runtime"]["args"].index("--kv-cache-dtype") + 1
+        ]
+        == "fp8_e4m3"
+    )
+    assert (
+        desired_spec["runtime"]["args"][
+            desired_spec["runtime"]["args"].index("--reasoning-parser") + 1
+        ]
+        == "qwen3"
+    )
+    assert (
+        desired_spec["runtime"]["args"][
+            desired_spec["runtime"]["args"].index("--tool-call-parser") + 1
+        ]
+        == "qwen3_coder"
+    )
+
+
+def test_self_sft_registration_rejects_current_base_runtime_drift() -> None:
+    plan = copy.deepcopy(json.loads(SELF_SFT.read_text()))
+    plan["desired_registration"]["spec"]["runtime"]["args"].extend(
+        ["--unreviewed-runtime-option", "1"]
+    )
+    _rehash_plan(plan)
+    with pytest.raises(ValueError, match="outside the reviewed clone set"):
+        current_stage.validate_plan(plan)
+
+
+def test_self_sft_renderer_binds_both_runtime_sources() -> None:
+    plan = current_stage.read_plan(SELF_SFT)
+    wrapper = Path(current_stage.__file__)
+    rendered = current_stage.render_manifest(plan, SOURCE, wrapper, SELF_SFT)
+    config_map, pod = list(yaml.safe_load_all(rendered))
+    assert config_map["data"]["model_stage.py"] == SOURCE.read_text()
+    assert config_map["data"]["model_stage_current_base.py"] == wrapper.read_text()
+    container = pod["spec"]["containers"][0]
+    assert container["command"] == ["python3", "/bundle/model_stage_current_base.py"]
+    assert {
+        "name": "bundle",
+        "mountPath": "/bundle/model_stage_current_base.py",
+        "subPath": "model_stage_current_base.py",
+        "readOnly": True,
+    } in container["volumeMounts"]
+
+
 def test_production_plan_is_exact_successor_of_preserved_failed_v1() -> None:
     failed_v1 = stage.read_plan(FAILED_V1)
     production = stage.read_plan(PRODUCTION)
@@ -161,6 +245,47 @@ def test_v2_acceptance_evidence_is_self_digesting_and_records_one_post_then_get(
         ),
         "gpus_allocated": 0,
     }
+    assert evidence["cleanup"]["gpus_held_after_cleanup"] == 0
+    assert registration["serving_qualified"] is False
+
+
+def test_self_sft_acceptance_records_exact_stage_and_one_paused_registration() -> None:
+    evidence = json.loads(ACCEPTED_SELF_SFT.read_text())
+    plan = current_stage.read_plan(SELF_SFT)
+    assert evidence["sha256"] == stage.digest_json(stage._unsigned(evidence, "sha256"))
+    assert evidence["staging"]["plan_file_sha256"] == stage._digest_bytes(SELF_SFT.read_bytes())
+    assert evidence["staging"]["plan_sha256"] == plan["plan_sha256"]
+    assert evidence["staging"]["receipt_sha256"] == (
+        "sha256:20460ed56f955b7054d60d944aa9e0e1a95a4eef53907df3a0dc2b345c3e87a8"
+    )
+    assert evidence["staging"]["payload"] == {
+        "manifest_sha256": (
+            "sha256:a0e55bebe9d78ac76c012446ae0147a421cd333e2a6bf2bb6f4fb3450fa776fe"
+        ),
+        "file_count": 29,
+        "total_bytes": 55_586_032_099,
+        "exact_size_and_sha256_verified": True,
+        "create_once_atomic_promotion_verified": True,
+        "post_promotion_readback_verified": True,
+    }
+    registration = evidence["registration"]
+    assert registration["post_count"] == 1
+    assert registration["second_post_performed"] is False
+    assert registration["desired_registration_sha256"] == stage.digest_json(
+        plan["desired_registration"]
+    )
+    assert registration["server_normalization"] == {
+        "only_added_field": "spec.scaling.replicas",
+        "value": 1,
+        "normalized_full_spec_exact": True,
+        "note": (
+            "The API materializes its default desired replica count even while the route is "
+            "paused. Paused state and minReplicas=0 kept active pods and allocated GPUs at zero."
+        ),
+    }
+    assert registration["get_readback"]["phase"] == "paused"
+    assert registration["get_readback"]["active_pods"] == 0
+    assert registration["get_readback"]["gpus_allocated"] == 0
     assert evidence["cleanup"]["gpus_held_after_cleanup"] == 0
     assert registration["serving_qualified"] is False
 
