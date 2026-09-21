@@ -237,7 +237,10 @@ def dedicated_dsn(admin_dsn: str, database: str) -> str:
     if parsed.scheme not in {"postgres", "postgresql"} or not parsed.hostname or parsed.fragment:
         raise rollout_ledger.LedgerError("PostgreSQL administrator DSN is invalid")
     authority_overrides = {"dbname", "database", "host", "hostaddr", "port", "service"}
-    if any(key.lower() in authority_overrides for key, _value in parse_qsl(parsed.query)):
+    if any(
+        key.lower() in authority_overrides
+        for key, _value in parse_qsl(parsed.query, keep_blank_values=True)
+    ):
         raise rollout_ledger.LedgerError("PostgreSQL administrator DSN overrides authority")
     return urlunsplit((parsed.scheme, parsed.netloc, "/" + database, parsed.query, ""))
 

@@ -197,6 +197,10 @@ def test_dedicated_database_replaces_shared_default_and_preserves_connection_ide
         ("postgresql:///rollout", "valid_db"),
         ("postgresql://postgres.internal/rollout", "invalid-database"),
         ("postgresql://postgres.internal/rollout?dbname=other", "valid_db"),
+        ("postgresql://postgres.internal/rollout?dbname=", "valid_db"),
+        ("postgresql://postgres.internal/rollout?dbname", "valid_db"),
+        ("postgresql://postgres.internal/rollout?host=", "valid_db"),
+        ("postgresql://postgres.internal/rollout?host", "valid_db"),
     ],
 )
 def test_dedicated_database_rejects_ambiguous_or_unsealed_identity(admin, database):
