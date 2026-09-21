@@ -139,7 +139,7 @@ def test_five_arms_change_only_the_declared_treatment() -> None:
 def test_queue_is_fail_closed_behind_canary_and_fresh_external_checks() -> None:
     qualification, evidence = read(queue.QUALIFICATION), read(queue.EVIDENCE)
     required = qualification["canary_prerequisite"]["required"]
-    assert qualification["canary_prerequisite"]["run_name"] == "chris-q38-rlreward-prod4"
+    assert qualification["canary_prerequisite"]["run_name"] == "chris-q38-rlreward-prod8"
     assert required == [
         "eight_real_nontruncated_rollouts",
         "one_authoritative_verifier_execution_id_per_rollout",
@@ -162,6 +162,14 @@ def test_queue_is_fail_closed_behind_canary_and_fresh_external_checks() -> None:
     assert qualification["execution"]["cluster_target"] == "prod"
     assert (
         "broad_get_only_data_manifests_not_yet_create_once_staged_on_SFS"
+        in qualification["submission_gate"]["blockers"]
+    )
+    assert (
+        "prod8_step1_to_step2_native_resume_not_yet_qualified"
+        in qualification["submission_gate"]["blockers"]
+    )
+    assert (
+        "broad_horizon_not_yet_ported_to_prod8_long_context_contract"
         in qualification["submission_gate"]["blockers"]
     )
     assert (

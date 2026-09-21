@@ -1,0 +1,168 @@
+{
+  "broad_followup": {
+    "blockers": [
+      "prod8 has not completed and been accepted",
+      "native step1-to-step2 resume is not qualified",
+      "the arm still uses the retired 98,304-token non-compacting horizon",
+      "the arm must inherit the prod8 output-limit reward contract"
+    ],
+    "first_arm": "configs/runs/qwen38-skyrl-production-a1-v1.json",
+    "launch_safe": false
+  },
+  "checkpoint_policy": {
+    "checkpoint_interval_optimizer_steps": 1,
+    "current_resume_mode": "none",
+    "expected_native_state": [
+      "data.pt sampler cursor",
+      "trainer_state.pt global step",
+      "policy/fsdp_config.json",
+      "eight model shards",
+      "eight optimizer shards",
+      "eight extra-state shards containing rank-local continuation state",
+      "policy/huggingface/config.json and tokenizer sidecars"
+    ],
+    "expected_step1_path": "/mnt/sfs/jobs/chris-q38-rlreward-prod8/checkpoints/global_step_1",
+    "keep_latest": 2,
+    "observed_checkpoint_bytes": null,
+    "observed_checkpoint_write_seconds": null,
+    "resume_qualified": false
+  },
+  "digests": {
+    "manifest_sha256": "sha256:5561f1a349abbe1a580dd5763368c1e6c1524861c39d744f7dad4f25d9950dd3",
+    "plan_sha256": "09cabfc727e8b8448bd00a5ea3cee03914844e67cfc80b1f033bdbe2671212de",
+    "request_sha256": "7c2df31feceb5c741cb16463b554b91d00b11c6bf50ec85b3203706823c2fb44",
+    "runtime_sha256": "acb1d1a1ff5aec9d8c153dfc57e52a13bb0b081fc666a4a0d0db139e8cb6831b"
+  },
+  "external_mutations_by_builder": 0,
+  "identity": {
+    "cluster_target": "prod",
+    "name": "chris-q38-rlreward-prod8",
+    "namespace": "fleet-train-jobs",
+    "output_root": "/mnt/sfs/jobs/chris-q38-rlreward-prod8",
+    "wandb_run_id": "chris-q38-rlreward-prod8"
+  },
+  "inputs": {
+    "data_config": {
+      "file_sha256": "sha256:15d9c0f7513541331692749a0341e1134a3c68517356f0611c1b977f5e8ac706",
+      "path": "configs/qualification/qwen38-rl-reward-canary-data-prod-v8.json"
+    },
+    "model_lock": {
+      "file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+      "path": "configs/models/qwen38-27b-1d4bf0f2.lock.json"
+    },
+    "model_weights": {
+      "file_sha256": "sha256:80a5e9de066e068abb012a0e9bd144676813a31042bb578226472803f8e0e84f",
+      "path": "configs/models/qwen38-27b-1d4bf0f2.weights.json",
+      "self_sha256": "06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
+    },
+    "qualification": {
+      "file_sha256": "sha256:b38215513561f75e61b8c2e0c3eb57c2f2942bb6401fd6867e372721e25622e8",
+      "path": "configs/qualification/qwen38-rl-reward-canary-port-v8.json",
+      "self_sha256": "sha256:a12f3d3486be567fc615b73a2e8663884ceb96218a6e331d9bfe916dfb0f2257"
+    },
+    "read_only_preview_evidence": {
+      "file_sha256": "sha256:94926d12a1505c5a24a37d6cd4aedffdea3eef0bc0756afe8ba7148c03680e0d",
+      "path": "docs/evidence/qwen38-study/2026-09-21-skyrl-prod8-read-only-previews-v1.json",
+      "self_sha256": "sha256:9a2cb2a2ae5c0b4d3810b88cdb4e4481b6d898c2cf76a649d9ce496d13896037"
+    },
+    "run_config": {
+      "file_sha256": "sha256:b81a3e9dff118b66e6f715f1b00afd2cd640f17efcfe6fa84bcdabe5ecc865c8",
+      "path": "configs/qualification/qwen38-rl-reward-canary-prod-v8.json"
+    },
+    "sanitized_manifest": {
+      "file_sha256": "sha256:5fbad6508d1bfcc807c0a5582a9a4906e70c3b55a47c3191dc98fe95462ce839",
+      "path": "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json",
+      "self_sha256": "sha256:5561f1a349abbe1a580dd5763368c1e6c1524861c39d744f7dad4f25d9950dd3"
+    }
+  },
+  "launch_authorized": false,
+  "local_cpu_preflight_shape": {
+    "executed": false,
+    "failure_alerts": "off",
+    "gpus": 0,
+    "manifest_sha256": "995a8c0eb5795920dc554fdcf9f332484a137e7f3d9ca2fa8b3efcdcdb820bd5",
+    "name": "chris-q38-prod8-preflight-v1",
+    "priority": "c1",
+    "server_previewed_in_dev_and_prod": true
+  },
+  "open_gates_in_order": [
+    "rehash the exact private source and prove the destination, stage Job, and archive are absent",
+    "server-preview the zero-GPU create-once stage Job in dev and prod",
+    "create the stage Job once with root failure-alert opt-out and monitor terminal release",
+    "independently validate the staged receipt, ownership, inventory, and every digest",
+    "freshly server-preview and create the exact-image zero-GPU CPU preflight once",
+    "accept only a fresh preflight receipt with both output-limit proofs literally true",
+    "repeat Jobs, Kubernetes, SFS, W&B, and output absence checks",
+    "repeat direct RayJob server previews and arm the exact UID-bound cleanup observer",
+    "authorize exactly one GPU RayJob create; never retry an ambiguous create"
+  ],
+  "private_data_stage": {
+    "candidate_source_is_ephemeral_and_must_be_rehashed": true,
+    "create_once": true,
+    "destination": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-prod8-v1/data",
+    "operator_candidate_source": "/private/tmp/q38-prod8-data.PxTZax/prod8",
+    "staged": false
+  },
+  "read_only_preview_observation": {
+    "authorization_reusable": false,
+    "dev_direct_preview_sha256": "sha256:dc7d7f4a5c8e7834cebf46b18f125b4cb140de73c3fb803c14babfe2aa65b516",
+    "direct_manifest_sha256": "9631db3d22584dd00ecd7c294336f4a55ce7c86953895138d701eeb06d6b007d",
+    "observed_at": "2026-09-21T10:21:10Z",
+    "prod_direct_preview_sha256": "sha256:cba14821ca6569337363b1dc920e0ba54d37d7247132286f688a5ddc1cd1e4f6",
+    "source_commit": "fae995dcda2c1ac16e8afb05dfe659e937f650a7"
+  },
+  "resources": {
+    "failure_alerts": false,
+    "gpus_per_node": 8,
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
+    "nodes": 1,
+    "priority": "c1",
+    "queue_priority": "q1",
+    "requeue_if_preempted": false,
+    "total_gpus": 8
+  },
+  "resume_qualification_after_step1": {
+    "acceptance": [
+      "source checkpoint inventory and digests remain unchanged",
+      "trainer resumes at global step 1 and executes exactly one new group of eight",
+      "authoritative rewards vary and exactly one finite nonzero update reaches step 2",
+      "a complete step-2 checkpoint is sealed",
+      "an independent zero-update GPU reload proves model, optimizer, scheduler, RNG, sampler, and finite inference",
+      "all eight GPUs and owned descendants are released"
+    ],
+    "must_not_replay": [
+      "step-1 rollout episodes",
+      "step-1 verifier execution IDs",
+      "step-1 optimizer update"
+    ],
+    "must_restore": [
+      "all-rank model shards",
+      "all-rank optimizer and scheduler state",
+      "all-rank RNG/extra state",
+      "trainer global step",
+      "sampler cursor"
+    ],
+    "qualified": false,
+    "required_implementation": "add a separately sealed native resume mode; current code hard-codes none",
+    "source_checkpoint": "/mnt/sfs/jobs/chris-q38-rlreward-prod8/checkpoints/global_step_1",
+    "successor_identity": "chris-q38-rlreward-resume-step2-v1"
+  },
+  "schema": "cyber_qwen38_skyrl_prod8_launch_packet_v1",
+  "science": {
+    "compaction_summary_tokens": 8192,
+    "compaction_trigger_tokens": 163840,
+    "context_tokens": 262144,
+    "eval_interval": 1,
+    "generation_chunk_tokens": 4096,
+    "groups": 1,
+    "lr": 1e-06,
+    "max_turns": 1200,
+    "response_tokens": 4194304,
+    "samples_per_prompt": 8,
+    "seed": 42,
+    "steps": 1,
+    "tokens_per_turn": 32768
+  },
+  "sha256": "sha256:1350ebbc547516f9291774ef6247687956ea231b46fadb832dfa23a39e3b3fb3",
+  "status": "prepared_external_stage_and_preflight_pending"
+}

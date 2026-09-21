@@ -1,131 +1,142 @@
-# Qwen3.8 SkyRL reward-canary main port
+# Qwen3.8 SkyRL reward canary
 
-Status: **prepared, not submitted; external preview and submission are blocked.**
+Status: **prod8 was created once on 2026-09-21 and is running on one eight-GPU
+node. It is not accepted yet.**
 
-The independent offline launch-readiness audit is
+The exact, non-authorizing packet is
+[`qwen38-rl-reward-canary-prod8-launch-packet-v1.json`](../configs/qualification/qwen38-rl-reward-canary-prod8-launch-packet-v1.json).
+It recompiles the plan from committed, sanitized inputs and records every gate
+that still must pass. The independent broader audit is
 [`2026-09-20-skyrl-launch-readiness-audit-v1.json`](evidence/qwen38-study/2026-09-20-skyrl-launch-readiness-audit-v1.json).
-It recompiles the exact V17 and prod4 plan/request identities without reading
-private payloads or contacting external services, and checks the five queued
-production configurations. It is a fail-closed audit, not launch authority.
+Neither file creates or authorizes a workload. The separate, sanitized live
+launch record is
+[`2026-09-21-skyrl-prod8-launch-v1.json`](evidence/qwen38-study/2026-09-21-skyrl-prod8-launch-v1.json).
 
-This is the current-main port of the scientifically valid one-node reward
-canary from runtime commit `8b5e8a00521b4fe412e3e7d0bce9b8ea6855b005`,
-with preflight provenance from
-`6c0bc541e136fc114a3f7a17ce6ba07e9178bb78`. The prior preflight is
-historical evidence only. It certifies neither these rebased runtime bytes nor
-the new create-once identities.
+## Exact prod8 run
 
-The next immutable inputs are:
+The immutable inputs are:
 
-- topology config:
-  [`qwen38-skyrl-topology-probe-dev-v2.json`](../configs/qualification/qwen38-skyrl-topology-probe-dev-v2.json);
 - data config:
-  [`qwen38-rl-reward-canary-data-prod-v4.json`](../configs/qualification/qwen38-rl-reward-canary-data-prod-v4.json);
+  [`qwen38-rl-reward-canary-data-prod-v8.json`](../configs/qualification/qwen38-rl-reward-canary-data-prod-v8.json);
 - run config:
-  [`qwen38-rl-reward-canary-prod-v4.json`](../configs/qualification/qwen38-rl-reward-canary-prod-v4.json);
-- source and submission closure:
-  [`qwen38-rl-reward-canary-port-v4.json`](../configs/qualification/qwen38-rl-reward-canary-port-v4.json).
+  [`qwen38-rl-reward-canary-prod-v8.json`](../configs/qualification/qwen38-rl-reward-canary-prod-v8.json);
+- sanitized data manifest:
+  [`qwen38-rl-reward-canary-manifest-prod-v8.json`](../configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json);
+- source and submission contract:
+  [`qwen38-rl-reward-canary-port-v8.json`](../configs/qualification/qwen38-rl-reward-canary-port-v8.json).
 
-The port preserves the exact train and dev task versions, ordered
-`bash`/`submit_report` surface, fractional partial reward contract,
-98,304/81,920-token context and response limits, 600-turn ceiling,
-2,400-second episode limit, 330-second tool limit, one node, eight GPUs, two
-TP4 engines, eight samples, one optimizer step, learning rate `1e-6`,
-pre/post evaluation, step-1 checkpoint, and seed 42. The only runtime repair is
-canonical ordering of the already digest-verified live tool schema before Qwen
-prompt rendering.
+The sealed identities are:
 
-The v4 configuration selects immutable image
-`sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f`
-and sets `VLLM_USE_FLASHINFER_SAMPLER=0`. Its retained engine receipt proves
-two-by-four engine startup and release only; it is not one-node training
-qualification. The `v17` topology successor must independently produce and
-validate `TOPOLOGY_PROBE.json` after its fixed 30-second terminal-receipt grace.
+- plan SHA-256 `09cabfc727e8b8448bd00a5ea3cee03914844e67cfc80b1f033bdbe2671212de`;
+- request SHA-256 `7c2df31feceb5c741cb16463b554b91d00b11c6bf50ec85b3203706823c2fb44`;
+- runtime SHA-256 `acb1d1a1ff5aec9d8c153dfc57e52a13bb0b081fc666a4a0d0db139e8cb6831b`;
+- sanitized data-manifest SHA-256
+  `5561f1a349abbe1a580dd5763368c1e6c1524861c39d744f7dad4f25d9950dd3`.
 
-The scientific canary is production-routed because the reviewed experiment has
-a 2,400-second episode limit. The development cluster's 30-minute workload
-limit cannot contain that episode plus model startup and cleanup. The
-development cluster remains the bounded place for the zero-update topology
-check.
+Prod8 uses one B300 node with eight GPUs at `c1`/`q1`. It asks the exact
+Qwen3.8-27B revision to attempt one train task eight times, then make exactly
+one optimizer update at learning rate `1e-6`. It evaluates once before the
+update and once after it. The horizon is 262,144 context tokens, up to 32,768
+tokens in one assistant turn, 4,096-token generation chunks, context
+compaction at 163,840 tokens with an 8,192-token policy summary, up to 1,200
+turns, and up to four hours per episode. The total episode generation allowance
+is 4,194,304 tokens so long tasks can continue across many turns and
+compactions.
 
-The exact prepared topology packet is bound to:
+The ordered tools are `bash` and `submit_report`. Only Fleet's authoritative
+grader may produce reward. A response that merely reaches its 32,768-token
+turn limit is still graded, but an unfinished tool call is never executed.
+Other context, timeout, transport, parser, or infrastructure failures remain
+hard failures rather than invented zero rewards.
 
-- plan SHA-256 `b398e73ba3124c4f22e53aceb9ac7924916ba2a3027a3f780261d184505ae678`;
-- request SHA-256 `def61728802c80a304a5f2ffdc0c1c22dae785737f2f23c03e9455b1712bda83`;
-- FleetJob manifest SHA-256 `0f8c7f3f5a6772fd4aaef706d8d2a638e6e7b24cb87edc6c3b0937d95bd6f389`;
-- CPU-preflight manifest SHA-256 `64f06f9a9ed4db4de4cd2ce3afa2b84b25b8f7d4be471c32dd96e3842004ef14`;
-- receipt-verifier manifest SHA-256 `1409b89a9c113ff6ca2b7cb1afcfdc8428c0bd475b123d0820f185c684e8edfe`.
+## Checks already completed
 
-The locally compiled scientific packet is bound to plan SHA-256
-`25d0abf30da462a6ba67c6ac8a3fc95f3f89a9a08e3ea295b21e8a22481630b3`
-and request SHA-256
-`98a83dbbab61f360a12ec6389adb55de637ded64dcceaa1debf0d791e754cef4`.
-Those digests do not authorize submission.
+On 2026-09-21, read-only Jobs preview and Kubernetes server dry-run checks
+passed in both the development and production clusters. They proved the final
+root RayJob shape is one node/eight GPUs at `c1`/`q1`, and that the final root
+RayJob carries `fleet.ai/failure-alerts: "off"`. They also proved the exact
+CPU-preflight Job requests zero GPUs, uses `c1`, and carries the same root
+annotation. No workload was created and no private task payload was read.
 
-## Why submission is blocked
+The sanitized receipts are
+[`2026-09-21-skyrl-prod8-read-only-previews-v1.json`](evidence/qwen38-study/2026-09-21-skyrl-prod8-read-only-previews-v1.json).
+They are useful evidence about the current object shape, but they are not
+launch authority. Server previews and absence checks must be repeated
+immediately before the sole GPU create.
 
-The command surface refuses external preview and submission before creating a
-Jobs client. There is no longer a failure-count gate. Four unresolved gates
-remain:
+The old `v17` topology packet remains historical evidence. It is not a prod8
+gate. Prod6 and prod7 already exercised the one-node topology live, and prod8's
+direct authorization path validates its own exact object shape.
 
-1. accepted `v17` topology receipt plus proof that its eight GPUs were released;
-2. create-once staging and digest verification of the exact one-train/one-dev
-   data manifest under the `prod4` data path;
-3. an exact-image CPU preflight and Jobs API preview for `prod4`; and
-4. execution of the encoded read-only Jobs/Kubernetes/SFS/W&B absence guard
-   immediately before the one allowed create.
+## Launch gates completed; acceptance still pending
 
-The outer FleetJob is not a Kubernetes Job or RayJob and therefore carries no
-alert annotation. The mandatory root `fleet.ai/failure-alerts: "off"`
-annotation remains on its embedded RayJob and on both zero-GPU Jobs. Exact
-server-preview evidence is recorded in
-[`2026-09-20-skyrl-alert-optout-launch-repair-v1.md`](evidence/qwen38-study/2026-09-20-skyrl-alert-optout-launch-repair-v1.md).
+The operator completed these steps in order on 2026-09-21:
 
-The offline defects for the five full arms are repaired. Each arm now has an
-exact sanitized staged-manifest candidate, a runnable UID/mode/file-set/digest
-validator, a full immutable plan, an exact request digest, a local no-submit
-preview, and a two-phase UID-bound release-observer contract. These artifacts
-contain counts and digests but no task prompts. They do not claim that the
-private bytes have been copied to SFS or that a server preview has run.
+1. Rehash the exact private one-train/one-development package and prove its new
+   SFS destination, staging Job name, and upload archive are absent.
+2. Server-preview the zero-GPU staging Job in development and production.
+3. Create that CPU-only stage once. Its root Job must carry the alert opt-out;
+   the operator must monitor it to terminal release and independently verify
+   ownership, inventory, and every digest at the destination.
+4. Server-preview and create the exact-image, zero-GPU CPU preflight once. It
+   must reopen the staged data and return literal `true` for both the
+   gradeable-output-limit and partial-tool-blocked checks.
+5. Immediately before a GPU create, repeat the Jobs history, Kubernetes, SFS,
+   W&B ID, and output-path absence checks; repeat both direct RayJob server
+   previews; and arm the exact cleanup observer.
+6. Authorize one RayJob create. An ambiguous create response is reconciled and
+   never retried.
 
-The production-only runtime leaves the 2,400-second scientific episode limit
-unchanged. Its plan-bound hard watchdog is 43,200 seconds for the four ten-step
-arms and 172,800 seconds for the fifty-step arm. Those bounds exceed the legal
-38,400/163,200-second episode schedules plus startup and drain allowance; the
-shared one-step-canary runtime and its frozen request are unchanged.
+The exact RayJob was created once at 2026-09-21T10:44:48Z. Its UIDs, launch
+receipt, capacity check, staged-data receipt, CPU-preflight receipt, and cleanup
+observer receipt are recorded in the live launch record linked above. Do not
+repeat the create.
 
-The production submit path no longer relies on the generic duplicate check.
-After the server preview and immediately before its create-once POST, it
-requires a freshly armed release observer and rechecks the complete Jobs
-history, the exact production Kubernetes namespace, the SFS staged tree and
-absent output root, and the exact W&B run ID. The checks must finish within 120
-seconds and are recorded in the durable no-retry POST intent. Historical clean
-observations remain non-reusable.
-
-External gates remain: prod4 acceptance, create-once SFS staging, exact-image
-CPU preflights, authenticated server previews, and live observer arming/release
-receipts. Nothing in the offline packet authorizes a launch.
+Acceptance still requires eight genuine rollouts, one
+authoritative verifier execution ID per rollout, non-constant rewards, one
+finite nonzero optimizer update, a sealed step-1 checkpoint, and complete
+release of the eight GPUs. All-zero genuine rewards are a valid experiment
+result but do not prove a learning update. Missing or truncated evidence is an
+infrastructure failure, not a model score.
 
 Review the deterministic packet without external access:
 
 ```sh
+uv run --locked python scripts/prepare_qwen38_skyrl_prod8_launch_packet.py --check
 uv run --locked python scripts/prepare_qwen38_skyrl_production_queue.py --check
 uv run --locked python scripts/audit_qwen38_skyrl_launch_readiness.py --check
 ```
 
-After separately authorized SFS staging, preparing an arm through
-`cyber-post-train rl` reopens that exact manifest and writes
-`RELEASE_OBSERVER_CONTRACT.json` plus `OFFLINE_PREVIEW.json` beside the plan and
-request. Running `cyber-post-train preflight` in the pinned CPU image invokes
-the staged-data validator. `preview` and `submit` remain blocked by the sealed
-qualification until the external gates above are replaced by accepted evidence.
+## Checkpoint and resume truth
 
-After those gates pass, the scientific run may be created once. Acceptance
-requires eight genuine rollouts, non-constant verifier rewards, one finite
-optimizer update, a reloadable step-1 checkpoint, and complete resource release.
-All-zero valid rewards are a truthful experiment outcome but do not establish a
-learning update. Missing or truncated reward evidence is an infrastructure
-failure, not a zero-reward model result.
+Prod8 saves every optimizer step and keeps the latest two checkpoints. Because
+it contains only one step, the expected checkpoint is
+`/mnt/sfs/jobs/chris-q38-rlreward-prod8/checkpoints/global_step_1`. A complete
+native checkpoint must contain trainer state, the data-sampler cursor, the FSDP
+configuration, eight model shards, eight optimizer shards, eight rank-local
+extra-state shards, and Hugging Face configuration/tokenizer files. The
+checkpoint sealer rejects missing, empty, extra, or linked files and checks
+that parameters really changed.
+
+That is not yet the same as proven recovery. The current configuration sets
+`trainer.resume_mode` to `none`; therefore no existing receipt can truthfully
+claim that a stopped job will continue from this checkpoint. Checkpoint size
+and write duration are also still unobserved.
+
+The smallest resume qualification is a separate create-once successor named
+`chris-q38-rlreward-resume-step2-v1`. It must reopen the sealed step-1
+checkpoint without changing it; restore all model, optimizer, scheduler,
+rank-local random, trainer-step, and sampler state; resume at step 1; collect
+one new group of eight without replaying step-1 episodes or verifier IDs; make
+one finite update to step 2; seal the complete step-2 checkpoint; then pass an
+independent zero-update GPU reload and finite inference check. Only that result
+can qualify native resume for a broader run.
+
+The first intended broad arm remains
+[`qwen38-skyrl-production-a1-v1.json`](../configs/runs/qwen38-skyrl-production-a1-v1.json),
+but it is not launch-safe yet. Its old 98,304-token non-compacting horizon must
+be replaced by the prod8 long-context and output-limit contract, and it remains
+blocked behind prod8 acceptance plus the step-1-to-step-2 resume gate.
 
 ## A successor data package must change its embedded run identity
 

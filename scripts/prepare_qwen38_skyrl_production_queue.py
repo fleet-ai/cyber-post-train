@@ -272,9 +272,9 @@ def run_config(arm: dict) -> dict:
                 "memory_limit": "768Gi",
             },
         },
-        # The current compiler recognizes only the prod4 canary qualification.
+        # The current compiler recognizes only the broad-queue qualification.
         # Carrying this path makes an accidental early compile fail closed.  A
-        # post-prod4 release change must add and test the production validator;
+        # post-prod8 release change must add and test the production validator;
         # it may not silently drop this binding.
         "qualification": "../qualification/qwen38-skyrl-production-queue-v1.json",
     }
@@ -314,7 +314,7 @@ def build() -> dict[Path, dict]:
             "schema": "cyber_qwen38_skyrl_production_queue_v1",
             "profile": skyrl_production.PROFILE,
             "purpose": (
-                "Exact offline-compiled queue behind the prod4 reward-acquisition canary; "
+                "Exact offline-compiled queue behind the prod8 reward-acquisition canary; "
                 "all external preview and submission gates remain closed."
             ),
             "execution": {
@@ -326,7 +326,7 @@ def build() -> dict[Path, dict]:
                 "environment": {"VLLM_USE_FLASHINFER_SAMPLER": "0"},
             },
             "canary_prerequisite": {
-                "run_name": "chris-q38-rlreward-prod4",
+                "run_name": "chris-q38-rlreward-prod8",
                 "required": [
                     "eight_real_nontruncated_rollouts",
                     "one_authoritative_verifier_execution_id_per_rollout",
@@ -341,7 +341,9 @@ def build() -> dict[Path, dict]:
                 "preview_authorized": False,
                 "submission_authorized": False,
                 "blockers": [
-                    "prod4_terminal_acceptance_receipt_absent",
+                    "prod8_terminal_acceptance_receipt_absent",
+                    "prod8_step1_to_step2_native_resume_not_yet_qualified",
+                    "broad_horizon_not_yet_ported_to_prod8_long_context_contract",
                     "broad_get_only_data_manifests_not_yet_create_once_staged_on_SFS",
                     "exact_image_cpu_preflights_not_recorded",
                     "jobs_api_server_previews_and_fresh_guard_receipts_not_recorded",
@@ -621,7 +623,11 @@ def queue_evidence(artifacts: dict[Path, dict]) -> dict:
                 ),
             },
             "next_actions_after_gate": [
-                "Accept prod4 only after every common release-gate fact is independently verified.",
+                "Accept prod8 only after every common release-gate fact is independently verified.",
+                (
+                    "Qualify native step-1 to step-2 continuation and port the broad queue to the "
+                    "prod8 262,144-token compaction and output-limit contract before launch."
+                ),
                 (
                     "Create-once stage and digest-verify each arm's manifest, train JSONL, dev "
                     "JSONL, split, and task set against the committed sanitized manifest."
