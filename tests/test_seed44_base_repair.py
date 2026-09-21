@@ -297,6 +297,7 @@ def test_rollout_repair_uses_fresh_generation_two_execution_identity(tmp_path: P
 
 ROOT = Path(__file__).resolve().parents[1]
 REPAIR_PLAN = ROOT / "configs/evaluation/qwen38-base-fleet-dev17-seed44-narrow-repair-v1.json"
+SUCCESSOR_PLAN = ROOT / "configs/evaluation/qwen38-base-fleet-dev17-seed44-stageb-successor-v2.json"
 
 
 def _packet_intents(tmp_path: Path) -> tuple[Path, Path]:
@@ -413,6 +414,37 @@ def test_seed44_base_repair_package_is_two_stage_alert_off_and_cpu_only(tmp_path
     assert '--harness-tar-sha256 "$HARNESS_TAR_SHA256"' in run_script
     assert '--harness-receipt "$HARNESS_RECEIPT"' in run_script
     assert '--harness-receipt-sha256 "$HARNESS_RECEIPT_SHA256"' in run_script
+
+
+def test_seed44_stageb_successor_is_unique_alert_off_and_cannot_replay_stage_a(tmp_path: Path):
+    stored_intent, recovery_intent = _packet_intents(tmp_path)
+    packages = seed44_base_repair_job.render(
+        repo_root=ROOT,
+        plan_path=SUCCESSOR_PLAN,
+        stored_intent_path=stored_intent,
+        recovery_intent_path=recovery_intent,
+    )
+    assert list(packages) == ["single_rollout_repair"]
+    recovery = packages["single_rollout_repair"]
+    assert recovery.job["metadata"]["name"] == "chris-q38-s44-base-reroll-v2"
+    assert recovery.config_map["metadata"]["name"] == "chris-q38-s44-base-reroll-code-v2"
+    assert recovery.secret["metadata"]["name"] == "chris-q38-s44-base-reroll-intent-v2"
+    assert recovery.job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+    assert recovery.job["spec"]["template"]["spec"]["priorityClassName"] == "c1"
+    assert "nvidia.com/gpu" not in json.dumps(recovery.job)
+    assert "--worker-id q38_s44_base_repair_v2" in recovery.config_map["data"]["run.sh"]
+    assert recovery.proof["successor_binding"] == {
+        "successor_plan_sha256": (
+            "sha256:b6fdbb9d86cb7c54e283d530ba9ad6806431469ca8644bd0016711325005f71b"
+        ),
+        "predecessor_evidence_receipt_sha256": (
+            "sha256:0be0d611e086ad1c3874aad7d8e5ac2b60c01a6b50b77da7f4b89d3e916cdf26"
+        ),
+        "predecessor_job_uid": "fe2d6df2-9a04-4247-a246-8331d0a5571f",
+        "successor_preflight_receipt_sha256": (
+            "sha256:e012b8fe162f378c85bbf4976629f20344cc056c4c121be51bc05e1da842aed7"
+        ),
+    }
 
 
 def test_recovery_stages_exact_harness_before_fresh_dind_image_check(
@@ -573,3 +605,22 @@ def test_seed44_base_repair_plan_is_launch_inert_and_final8_sealed():
         "sha256:04dc90eb59e133cdc40e375b09aa0a3d7cc9c325f7dddc438fd10450661dbae6"
     )
     assert plan["source"]["evaluation_plan_sha256"] != plan["source"]["ledger_plan_sha256"]
+
+
+def test_seed44_stageb_successor_plan_is_inert_narrow_and_final8_sealed():
+    plan = json.loads(SUCCESSOR_PLAN.read_text())
+    assert plan["sha256"] == seed44_base_repair_job._canonical_digest(  # noqa: SLF001
+        {key: value for key, value in plan.items() if key != "sha256"}
+    )
+    assert plan["launchable"] is False
+    assert plan["contract"] == {
+        "selected_cell_count": 2,
+        "execution_generation": 2,
+        "accepted_cell_replay_count": 0,
+        "stored_session_rescore_count": 0,
+        "stored_session_regeneration_count": 0,
+        "final_eight_task_set_accessed": False,
+        "identical_private_intent_required": True,
+        "third_successor_on_unchanged_signature_allowed": False,
+    }
+    assert set(plan["operation"].values()) == {0}
