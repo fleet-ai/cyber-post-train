@@ -6,7 +6,7 @@
   "tool_catalog": "../data/qwen38-rl-filtered-canary-tool-catalog-v1.json",
   "model_lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
   "model_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
-  "output": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-prod6/data",
+  "output": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-prod6-v2/data",
   "limits": {
     "context_tokens": 262144,
     "response_tokens": 4194304,

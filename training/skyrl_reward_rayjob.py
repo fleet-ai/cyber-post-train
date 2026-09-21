@@ -44,8 +44,8 @@ DEV_CONTEXT = "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb"
 PROD_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 NAMESPACE = "fleet-train-jobs"
 RUN_NAME = "chris-q38-rlreward-prod6"
-STAGE_NAME = "chris-q38-prod6-data-v1"
-PREFLIGHT_NAME = "chris-q38-prod6-preflight-v1"
+STAGE_NAME = "chris-q38-prod6-data-v2"
+PREFLIGHT_NAME = "chris-q38-prod6-preflight-v2"
 STAGE_RECEIPT = "/dev/termination-log"
 UPLOAD = Path("/tmp/autoresearch-upload.tar.gz")
 PACKET_SCHEMA = "cyber_skyrl_reward_direct_rayjob_packet_v1"
@@ -550,6 +550,7 @@ def stage_job_manifest(value: dict[str, Any]) -> dict[str, Any]:
     bundled = bundled_request(
         {
             "name": STAGE_NAME,
+            "title": STAGE_NAME + " zero-GPU immutable data stage",
             "run_dir": "/mnt/sfs/jobs/" + STAGE_NAME,
             "image": plan["image"],
             "workers": 1,
@@ -585,6 +586,7 @@ def preflight_job_manifest(plan: dict[str, Any]) -> dict[str, Any]:
     bundled = bundled_request(
         {
             "name": PREFLIGHT_NAME,
+            "title": PREFLIGHT_NAME + " zero-GPU exact-image preflight",
             "run_dir": "/mnt/sfs/jobs/" + PREFLIGHT_NAME,
             "image": request["image"],
             "workers": 1,

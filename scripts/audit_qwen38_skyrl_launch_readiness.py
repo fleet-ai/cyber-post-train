@@ -122,7 +122,10 @@ def prod4_metadata(run: dict, next_gates: dict) -> dict:
             "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
         ),
         "tool_catalog_sha256": canary.TOOL_CATALOG_SHA256,
-        "limits": copy.deepcopy(canary.LIMITS),
+        # Prod4 is historical evidence. Keep its exact 98K/no-compaction data
+        # contract rather than silently inheriting the long-horizon prod6
+        # constants from the current canary module.
+        "limits": copy.deepcopy(load(CANARY_DATA)["limits"]),
         "files": {
             split: {
                 "path": split + ".jsonl",

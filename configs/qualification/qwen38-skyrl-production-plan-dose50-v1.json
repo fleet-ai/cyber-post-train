@@ -334,6 +334,7 @@
     "skyrl.train.config.config": "a3b36099c5308fc9bc658394f10cfff0da3f0cadcc067aa2b44e95870a609c90",
     "skyrl.train.dataset.dataset": "ff041e24a24e7d99c9c20052ae643b137acb0f1777016ddba79260a42226466c",
     "skyrl.train.entrypoints.main_base": "aee8976aa5d18a0c19be93e0b99fc1d1868688af0fe26b08b8a863c0aed027d7",
+    "skyrl.train.generators.utils": "55c15b660067749febda00d4fb1c2110ff436717bbd4b73bf66055a73d0b87d5",
     "skyrl.train.trainer": "0e3e2e4d1bbe28f8920ddd3c73999fae27308f949b60c8ea8062d41527dc3b21",
     "skyrl.train.utils.utils": "abf91c865735dfc052ffddcc0a1ff06afe32814855b5328b08d3a3f7ca8f418c"
   },
@@ -425,7 +426,7 @@
     }
   },
   "run_name": "chris-q38-skyrl50-a1",
-  "runtime_sha256": "0a52323a3abd09991f0c7e8f712ac96639f4ddc6a7e1d8deaadb9b12713829af",
+  "runtime_sha256": "0408d5b5680510af90dba6f0f07f65ea9729639d9c5885e40f8598a5129fe865",
   "schema": "cyber_skyrl_production_training_v1",
   "watchdog": {
     "drain_seconds": 300,

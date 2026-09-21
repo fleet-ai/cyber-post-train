@@ -15,7 +15,7 @@
   "maximum_observation_seconds": 45300,
   "namespace": "fleet-train-jobs",
   "peer_workload_mutation_authorized": false,
-  "plan_sha256": "sha256:41c2e0ef30a6f8c3823d0100c2852f8e7da1a321f789b2c43721717b54d29bac",
+  "plan_sha256": "sha256:e7d0d2f84ef062c2159c461b55fa26ef2fb7afcc83baf032f935f3f82047affc",
   "release_acceptance": {
     "active_gpus": 0,
     "all_bound_pod_uids_absent": true,
@@ -24,12 +24,12 @@
     "controller_terminal_observed": true,
     "shutdown_after_job_finishes_required_in_server_preview": true
   },
-  "request_sha256": "sha256:b338525a3557db22b9833093e18595adecff0f17f9be3cb538c5365cbe7ce06e",
+  "request_sha256": "sha256:c290c383acfdb3c5db3b339fc74cb4d62a753c6e5aa7d605befd0749b84ca582",
   "requested_image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
   "run_dir": "/mnt/sfs/jobs/chris-q38-skyrl10-lr3e7",
   "run_name_prefix": "chris-q38-skyrl10-lr3e7",
   "schema": "cyber_skyrl_release_observer_contract_v1",
   "server_run_name_pattern": "^chris-q38-skyrl10-lr3e7-[a-f0-9]{8}$",
-  "sha256": "sha256:0e21d30f9e090f0d491ae9f35b23d44b85bee595ea248acd2cf8dcd23447abf6",
+  "sha256": "sha256:cf73cf7bbd408a511111ed43c9203e63e99e0ea9c08872bf7dd01ce281ced940",
   "status": "contract_only_not_armed"
 }

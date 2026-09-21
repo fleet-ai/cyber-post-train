@@ -10,13 +10,13 @@
       "name": "chris-q38-skyrl10-a1",
       "offline_preview": {
         "path": "configs/qualification/qwen38-skyrl-production-preview-a1-v1.json",
-        "self_sha256": "sha256:8882d9a793de6fd6c182b6cd304b037483abbe134c9b6802948ad0872819be2c",
+        "self_sha256": "sha256:ae5453d8bd46c80eec5e90e19f09f5ee1a620d77ce407d12ae18201bb0f41b36",
         "server_preview_requested": false
       },
       "plan": {
-        "file_sha256": "sha256:8c8dc764f816b366719102a37f69f8ac603457c56866b70dea938dc836f06950",
+        "file_sha256": "sha256:1bf05d7f85edc04777c06510abb1c955e9f5bd18d1d4586b20d8a9132b7634a6",
         "path": "configs/qualification/qwen38-skyrl-production-plan-a1-v1.json",
-        "sha256": "sha256:de1a62f49cf1cf5f01791fdfc60bc474dd6d9eca6a5d8d8267cbc4a4a2aa82db"
+        "sha256": "sha256:aa446a3f1db3a951089c6a67a09e7df4d95326e802e3e0cf7d716e38abd63a9c"
       },
       "plan_request_state": "exact_offline_plan_and_request_digest_compiled",
       "priority": 1,
@@ -24,9 +24,9 @@
       "release_observer_contract": {
         "armed": false,
         "path": "configs/qualification/qwen38-skyrl-production-observer-a1-v1.json",
-        "self_sha256": "sha256:b5c31305ff61256847dba71e35bfe4840fb613e0a374786b33155da27275b859"
+        "self_sha256": "sha256:570d7829310db53db2d72c686cffbab0a68fdb45bbb8a14a92b55f93500c238c"
       },
-      "request_sha256": "sha256:e9bc4b1882fa25f0596210c826fa4c05edde3a06269c40306bd6d9e9aef4b94a",
+      "request_sha256": "sha256:0cf52debdd48fdf5fb6c99d572e4cf6a64e1c74c2bd208e9220e85e66ee2e02c",
       "run_config": "configs/runs/qwen38-skyrl-production-a1-v1.json",
       "run_config_file_sha256": "sha256:593e90f38e930f94854e21747200b241145110ee6ef309e1eef210963aaceef4",
       "sanitized_manifest": {
@@ -50,13 +50,13 @@
       "name": "chris-q38-skyrl10-lr3e7",
       "offline_preview": {
         "path": "configs/qualification/qwen38-skyrl-production-preview-lr3e7-v1.json",
-        "self_sha256": "sha256:83a8631e6e9acd61b6477cc9731327b23f262c4928c3fcb9876e6e1bf6bd9ea7",
+        "self_sha256": "sha256:c3f6bbc1476762d58571691b998a785dd911547f3ebeb3d65e6399c1fa5e6678",
         "server_preview_requested": false
       },
       "plan": {
-        "file_sha256": "sha256:b0ad5be4f43d9af9eca55fd34673c261dcc18043496658fd8fbec94b02b7f244",
+        "file_sha256": "sha256:9ab71b227b79fd90f62ff7744733f451cd44ce4382630bf5355c4332c3c2981f",
         "path": "configs/qualification/qwen38-skyrl-production-plan-lr3e7-v1.json",
-        "sha256": "sha256:41c2e0ef30a6f8c3823d0100c2852f8e7da1a321f789b2c43721717b54d29bac"
+        "sha256": "sha256:e7d0d2f84ef062c2159c461b55fa26ef2fb7afcc83baf032f935f3f82047affc"
       },
       "plan_request_state": "exact_offline_plan_and_request_digest_compiled",
       "priority": 2,
@@ -64,9 +64,9 @@
       "release_observer_contract": {
         "armed": false,
         "path": "configs/qualification/qwen38-skyrl-production-observer-lr3e7-v1.json",
-        "self_sha256": "sha256:0e21d30f9e090f0d491ae9f35b23d44b85bee595ea248acd2cf8dcd23447abf6"
+        "self_sha256": "sha256:cf73cf7bbd408a511111ed43c9203e63e99e0ea9c08872bf7dd01ce281ced940"
       },
-      "request_sha256": "sha256:b338525a3557db22b9833093e18595adecff0f17f9be3cb538c5365cbe7ce06e",
+      "request_sha256": "sha256:c290c383acfdb3c5db3b339fc74cb4d62a753c6e5aa7d605befd0749b84ca582",
       "run_config": "configs/runs/qwen38-skyrl-production-lr3e7-v1.json",
       "run_config_file_sha256": "sha256:0c4dd89e1e67a0d9f56738f6787fddeb4251c822f6aed960719bfbbac2905c6c",
       "sanitized_manifest": {
@@ -90,13 +90,13 @@
       "name": "chris-q38-skyrl10-lr3e6",
       "offline_preview": {
         "path": "configs/qualification/qwen38-skyrl-production-preview-lr3e6-v1.json",
-        "self_sha256": "sha256:ff905278968270c70e0c4ae04239725231a49c87d8d810e8f68e4af99073a35b",
+        "self_sha256": "sha256:5ec3fe20b5acd7ce42fe591ed45f3fd6ce725154af8c457ac02b8250a999e325",
         "server_preview_requested": false
       },
       "plan": {
-        "file_sha256": "sha256:1227c1b600ae618721a40f32e3718c5e7d1b4ea471acb62eb2dd42f68851244d",
+        "file_sha256": "sha256:4fd83c87182b2dfb6857dd0938aed08f94427014f27998274c45d510170808b0",
         "path": "configs/qualification/qwen38-skyrl-production-plan-lr3e6-v1.json",
-        "sha256": "sha256:6cf5099b9bd92ffd6efddb6b03c704ab41d370c51342dd3eeaee9858a848c71f"
+        "sha256": "sha256:ddf407d67467f70e6ddfd934572f0fc16b507e77456af8856e8f037ee4e02c13"
       },
       "plan_request_state": "exact_offline_plan_and_request_digest_compiled",
       "priority": 3,
@@ -104,9 +104,9 @@
       "release_observer_contract": {
         "armed": false,
         "path": "configs/qualification/qwen38-skyrl-production-observer-lr3e6-v1.json",
-        "self_sha256": "sha256:8d9b6dfde51e41d248240f11e849fb6c2c8a84914e98a7d53b22eafdb8b963e5"
+        "self_sha256": "sha256:8cf0c5035f880b0b2fcd49257e8f2795a232ce2c2ce4ecb51dea97d72d69995b"
       },
-      "request_sha256": "sha256:d63a3bba2e626693879c8acba721ca918b534b5fd4b766886e6e1f300cffbe71",
+      "request_sha256": "sha256:0b8d0883558a040d279f9d5920237e9fc72595432aad4e5c065c7916da648a31",
       "run_config": "configs/runs/qwen38-skyrl-production-lr3e6-v1.json",
       "run_config_file_sha256": "sha256:8d3bd4396353f11ca65e4535a099f67155133dacbb9b1eb2ace9432f09f1d138",
       "sanitized_manifest": {
@@ -130,13 +130,13 @@
       "name": "chris-q38-skyrl10-seed43",
       "offline_preview": {
         "path": "configs/qualification/qwen38-skyrl-production-preview-seed43-v1.json",
-        "self_sha256": "sha256:ec069c9eac5b9e24beef028af2e5de024cd1221f10b55d2e6165068250aa2280",
+        "self_sha256": "sha256:94281c367cb3356b89e14d4a52f5f31b17ec176fa9bbb87e6286fa19bc31824c",
         "server_preview_requested": false
       },
       "plan": {
-        "file_sha256": "sha256:4225576eb51a3f6001a7333281658fc6c4e38bf038c288c7fcf5aa40d242663e",
+        "file_sha256": "sha256:95b251be7055ba81474b6642370d074f1e24ec9afd881ecb77b755ac4d10cb59",
         "path": "configs/qualification/qwen38-skyrl-production-plan-seed43-v1.json",
-        "sha256": "sha256:c02013930caf7e5a8939bca6b1a565204120ab18f3f1126973fce4a330bc923f"
+        "sha256": "sha256:f118a6bd5a39c1fabf228a904b14cc5e5643b4040ecb0fd448325ec0155d2ccf"
       },
       "plan_request_state": "exact_offline_plan_and_request_digest_compiled",
       "priority": 4,
@@ -144,9 +144,9 @@
       "release_observer_contract": {
         "armed": false,
         "path": "configs/qualification/qwen38-skyrl-production-observer-seed43-v1.json",
-        "self_sha256": "sha256:6ff32e600784fa7f273f9041686a724404958ef21764b7e2da3b0ea9192a23d1"
+        "self_sha256": "sha256:1169ee5962b41d586b367b2379044145e5a6a9f5f3ad83003a6016302d4b4338"
       },
-      "request_sha256": "sha256:a3d50d2d22336889f2c87332ac13cd9184208008f1bc0b48466c1aae5931dd0c",
+      "request_sha256": "sha256:19305439d34fb9287da2160c07960294ef4020bc5a873ca21479bb6d03298cc4",
       "run_config": "configs/runs/qwen38-skyrl-production-seed43-v1.json",
       "run_config_file_sha256": "sha256:a4fd57959b0c4ae06d379196657973b14f5c42c2e08c5c390d863e9172de8ea6",
       "sanitized_manifest": {
@@ -170,13 +170,13 @@
       "name": "chris-q38-skyrl50-a1",
       "offline_preview": {
         "path": "configs/qualification/qwen38-skyrl-production-preview-dose50-v1.json",
-        "self_sha256": "sha256:a383d5169cfa327e62cb3282e7c8ac6736cf3c5626687233965ae13cf0e32d7e",
+        "self_sha256": "sha256:a866fdc20b297585d8420d5bf11463b9e4231083c5b6c506b015e4c73473821b",
         "server_preview_requested": false
       },
       "plan": {
-        "file_sha256": "sha256:c3ddcf776f91cd90983cb3f98d9f602af0f73f8717e4460eee050833ecb004f8",
+        "file_sha256": "sha256:1df1e0b27de2ce12d7c265179523fdb02cf4f7e84658e7d5ce5222f5357b5dfa",
         "path": "configs/qualification/qwen38-skyrl-production-plan-dose50-v1.json",
-        "sha256": "sha256:d43c1d3b0d0e9efa9ad5eee79862b97b87e6d826a325a9cfeae8eec80321d8a2"
+        "sha256": "sha256:8a23b0d10cc0e2614a550f0968417d5f21e98139f835dd8263f667ebffb5ba87"
       },
       "plan_request_state": "exact_offline_plan_and_request_digest_compiled",
       "priority": 5,
@@ -184,9 +184,9 @@
       "release_observer_contract": {
         "armed": false,
         "path": "configs/qualification/qwen38-skyrl-production-observer-dose50-v1.json",
-        "self_sha256": "sha256:a5b00a183a0fec3a47406e6f805aa03e685f1ff1ab93e9c97f92a4fd74be7ad7"
+        "self_sha256": "sha256:7d4290f2dd5457946149bf5ae8a9f01a12b14bd4c2962d8f3c40f9eac665cc49"
       },
-      "request_sha256": "sha256:724f12ab1f4618dbda0222e676ab19abf1e1310bb752b54e6037d066ec38c092",
+      "request_sha256": "sha256:78e3fa4615b83cd52c4dc71c9d534d8f179d1f0ee189bcc1c13f0c558bc5e353",
       "run_config": "configs/runs/qwen38-skyrl-production-dose50-v1.json",
       "run_config_file_sha256": "sha256:d8558b90a37163924aeeccf1a9320171eff8f7a1ac98bbaf32a6cda526dcd336",
       "sanitized_manifest": {
@@ -316,5 +316,5 @@
   },
   "schema": "cyber_qwen38_skyrl_production_experiment_queue_evidence_v1",
   "scope": "offline_no_submit_no_stage_no_serve_no_cancel",
-  "sha256": "sha256:4df5d406b216e56dd049e61bdf493c6cc7471dfa5b91434110e0bb09310458ec"
+  "sha256": "sha256:99e36774593146aba7fe236e58a591b5a1aecc2debe11050a29c8b3c90240278"
 }

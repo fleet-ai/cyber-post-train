@@ -201,6 +201,7 @@ def job_request(plan: dict) -> dict:
             "resources": resources,
             "priority_class": "c1",
             "requeueIfPreempted": False,
+            "failureAlerts": False,
             "secrets": ["fleet-api", "wandb-api"],
             "env": {
                 "HF_HUB_OFFLINE": "1",
