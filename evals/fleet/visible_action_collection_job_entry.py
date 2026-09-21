@@ -26,10 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from cyber_post_train.jobs import digest
-from evals.fleet import cluster_entry
-from evals.fleet import evaluate
-from evals.fleet import rollout_postgres
-from evals.fleet import rollout_worker
+from evals.fleet import cluster_entry, evaluate, rollout_postgres, rollout_worker
 from evals.fleet import visible_action_collection_v2 as collection
 
 TERMINAL_SCHEMA = "cyber_fleet_visible_action_collection_job_terminal_v1"
@@ -87,9 +84,7 @@ def _safe_summary(value: object, *, planned_cells: int, plan_sha256: str) -> dic
         "total": planned_cells,
         "local_results": value["local_results"],
         "by_state": dict(sorted(by_state.items())),
-        "by_serving_block": sorted(
-            by_block, key=lambda row: (row["serving_block"], row["state"])
-        ),
+        "by_serving_block": sorted(by_block, key=lambda row: (row["serving_block"], row["state"])),
         "stale_active": value["stale_active"],
         "plan_sha256": plan_sha256,
     }

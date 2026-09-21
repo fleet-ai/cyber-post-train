@@ -19,7 +19,6 @@ import hashlib
 import json
 import os
 import re
-import stat
 import subprocess
 import time
 from collections.abc import Callable
@@ -29,8 +28,8 @@ from typing import Any, Protocol
 from urllib.parse import quote
 
 from cyber_post_train.jobs import digest
-from evals.fleet.evaluate import stable_job_preview
 from evals.fleet import visible_action_collection_v2 as collection
+from evals.fleet.evaluate import stable_job_preview
 
 PACKET_SCHEMA = "cyber_fleet_visible_action_collection_job_packet_v1"
 CREATE_INTENT_SCHEMA = "cyber_fleet_visible_action_collection_job_create_intent_v1"
@@ -44,9 +43,7 @@ SFS_PVC = "sfs-shared"
 PRIVATE_ROOT = "/mnt/sfs/jobs"
 FAILURE_ALERT_ANNOTATION = "fleet.ai/failure-alerts"
 CREATE_ONCE_ANNOTATION = "cyber-post-train.fleet.ai/create-once"
-OPERATION_AUTHORIZATION_ANNOTATION = (
-    "cyber-post-train.fleet.ai/operation-authorization-sha256"
-)
+OPERATION_AUTHORIZATION_ANNOTATION = "cyber-post-train.fleet.ai/operation-authorization-sha256"
 COLLECTION_PACKET_ANNOTATION = "cyber-post-train.fleet.ai/collection-packet-sha256"
 CONTROLLER_IMAGE = (
     "ghcr.io/astral-sh/uv:python3.12-bookworm@"
@@ -59,14 +56,11 @@ DIND_IMAGE = (
 PROXY_IMAGE = CONTROLLER_IMAGE
 AGENT_IMAGE_ID = "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92"
 HARNESS_TAR = (
-    "/mnt/sfs/jobs/chris-q38-fleet-dev17-harness-build-v1/"
-    "opencode-1.18.27-linux-amd64.tar"
+    "/mnt/sfs/jobs/chris-q38-fleet-dev17-harness-build-v1/opencode-1.18.27-linux-amd64.tar"
 )
 HARNESS_TAR_SHA256 = "sha256:b14bdf558990087504a95e209ff0c0e84039633f6d28b2cdbc483cd845c0c410"
 HARNESS_RECEIPT = "/mnt/sfs/jobs/chris-q38-fleet-dev17-harness-build-v1/BUILD.json"
-HARNESS_RECEIPT_SHA256 = (
-    "sha256:4781514a8431d6d87c671c49120639062f5a8e3afb016a04360752c896181745"
-)
+HARNESS_RECEIPT_SHA256 = "sha256:4781514a8431d6d87c671c49120639062f5a8e3afb016a04360752c896181745"
 FLEET_SECRET = "chris-cyber-opencode-evals-v2"
 FLEET_SECRET_KEY = "FLEET_API_KEY"
 POSTGRES_SECRET = "chris-cyber-rollout-postgres-v1"
@@ -75,9 +69,7 @@ ACTIVE_DEADLINE_SECONDS = 768600
 EXPECTED_CELLS = 200
 EXPECTED_CONCURRENCY = 8
 KUBERNETES_NAME = re.compile(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?")
-KUBERNETES_UID = re.compile(
-    r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
-)
+KUBERNETES_UID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 DATABASE_NAME = re.compile(r"[a-z][a-z0-9_]{0,62}")
 SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 GIT_ID = re.compile(r"[0-9a-f]{40}")
@@ -148,7 +140,8 @@ exec uv run --no-project \
   --authorization configs/collection/operation-authorization.json \
   --private-root "$COLLECTION_PRIVATE_ROOT" \
   --database "$COLLECTION_DATABASE" \
-  --harness-tar /mnt/sfs/jobs/chris-q38-fleet-dev17-harness-build-v1/opencode-1.18.27-linux-amd64.tar \
+  --harness-tar \
+    /mnt/sfs/jobs/chris-q38-fleet-dev17-harness-build-v1/opencode-1.18.27-linux-amd64.tar \
   --harness-tar-sha256 sha256:b14bdf558990087504a95e209ff0c0e84039633f6d28b2cdbc483cd845c0c410 \
   --harness-receipt /mnt/sfs/jobs/chris-q38-fleet-dev17-harness-build-v1/BUILD.json \
   --harness-receipt-sha256 sha256:4781514a8431d6d87c671c49120639062f5a8e3afb016a04360752c896181745 \
@@ -174,17 +167,13 @@ class Cluster(Protocol):
 
     def get(self, resource: str, namespace: str, name: str) -> dict[str, Any]: ...
 
-    def get_optional(
-        self, resource: str, namespace: str, name: str
-    ) -> dict[str, Any] | None: ...
+    def get_optional(self, resource: str, namespace: str, name: str) -> dict[str, Any] | None: ...
 
     def server_dry_run(self, namespace: str, bundle: dict[str, Any]) -> dict[str, Any]: ...
 
     def create_once(self, namespace: str, bundle: dict[str, Any]) -> dict[str, Any]: ...
 
-    def delete_uid(
-        self, resource: str, namespace: str, name: str, uid: str
-    ) -> dict[str, Any]: ...
+    def delete_uid(self, resource: str, namespace: str, name: str, uid: str) -> dict[str, Any]: ...
 
 
 @dataclass(frozen=True)
@@ -365,9 +354,7 @@ def prepare_packet(
 
     inputs = {
         "eval_config": _copy_input(config_path, input_dir / "eval-config.json"),
-        "task_selection": _copy_input(
-            task_selection_path, input_dir / "task-selection.json"
-        ),
+        "task_selection": _copy_input(task_selection_path, input_dir / "task-selection.json"),
         "operation_authorization": _copy_input(
             authorization_path, input_dir / "operation-authorization.json"
         ),
@@ -383,7 +370,10 @@ def prepare_packet(
     admitted_packet = _json(input_dir / "collection-packet.json", "collection packet v2")
     plan = collection.compile_eval(config, relative_to=input_dir)
     authorization = collection.validate_operation_authorization(authorization_input, plan)
-    if plan.get("planned_cells") != EXPECTED_CELLS or plan.get("concurrency") != EXPECTED_CONCURRENCY:
+    if (
+        plan.get("planned_cells") != EXPECTED_CELLS
+        or plan.get("concurrency") != EXPECTED_CONCURRENCY
+    ):
         raise CollectionJobError("launcher accepts only the exact 200-cell concurrency-8 wave")
     if config.get("images") != {"agent": AGENT_IMAGE_ID, "proxy": PROXY_IMAGE}:
         raise CollectionJobError("collection image identity differs from the qualified Job rail")
@@ -425,9 +415,7 @@ def prepare_packet(
         "operation": {
             "campaign_id": authorization["campaign_id"],
             "plan_sha256": authorization["plan_sha256"],
-            "planned_cell_universe_sha256": authorization[
-                "planned_cell_universe_sha256"
-            ],
+            "planned_cell_universe_sha256": authorization["planned_cell_universe_sha256"],
             "operation_authorization_sha256": authorization["sha256"],
             "collection_packet_sha256": admitted_packet["sha256"],
             "planned_cells": EXPECTED_CELLS,
@@ -489,9 +477,7 @@ def prepare_packet(
     }
 
 
-def _binding_file(
-    root: Path, value: object, label: str, expected_name: str | None = None
-) -> Path:
+def _binding_file(root: Path, value: object, label: str, expected_name: str | None = None) -> Path:
     entry = _mapping(value, label)
     if set(entry) != {"path", "sha256"} or SHA256.fullmatch(str(entry.get("sha256"))) is None:
         raise CollectionJobError(f"{label} binding is invalid")
@@ -508,21 +494,25 @@ def load_packet(path: Path) -> LaunchPacket:
         raise CollectionJobError("launch packet must be a regular file")
     packet_path = path.resolve()
     value = _json(packet_path, "launch packet")
-    if set(value) != {
-        "schema",
-        "context",
-        "namespace",
-        "job_name",
-        "config_map_name",
-        "source",
-        "inputs",
-        "operation",
-        "images",
-        "storage",
-        "secrets",
-        "execution",
-        "sha256",
-    } or value.get("schema") != PACKET_SCHEMA:
+    if (
+        set(value)
+        != {
+            "schema",
+            "context",
+            "namespace",
+            "job_name",
+            "config_map_name",
+            "source",
+            "inputs",
+            "operation",
+            "images",
+            "storage",
+            "secrets",
+            "execution",
+            "sha256",
+        }
+        or value.get("schema") != PACKET_SCHEMA
+    ):
         raise CollectionJobError("launch packet schema is unsupported")
     unsigned = {key: item for key, item in value.items() if key != "sha256"}
     if value.get("sha256") != "sha256:" + digest(unsigned):
@@ -536,7 +526,9 @@ def load_packet(path: Path) -> LaunchPacket:
     source = _mapping(value.get("source"), "source identity")
     if set(source) != {"git_commit", "git_tree", "launcher_sha256", "files"}:
         raise CollectionJobError("source identity has unknown or missing fields")
-    if any(GIT_ID.fullmatch(str(source.get(field))) is None for field in ("git_commit", "git_tree")):
+    if any(
+        GIT_ID.fullmatch(str(source.get(field))) is None for field in ("git_commit", "git_tree")
+    ):
         raise CollectionJobError("source git identity is invalid")
     if source.get("launcher_sha256") != _file_sha256(Path(__file__)):
         raise CollectionJobError("launcher source changed after packet preparation")
@@ -585,9 +577,9 @@ def _build_config_map(packet: LaunchPacket) -> dict[str, Any]:
         {
             "eval-config.json": packet.files["eval_config"].read_text(encoding="utf-8"),
             "task-selection.json": packet.files["task_selection"].read_text(encoding="utf-8"),
-            "operation-authorization.json": packet.files[
-                "operation_authorization"
-            ].read_text(encoding="utf-8"),
+            "operation-authorization.json": packet.files["operation_authorization"].read_text(
+                encoding="utf-8"
+            ),
         }
     )
     return {
@@ -604,9 +596,7 @@ def _build_config_map(packet: LaunchPacket) -> dict[str, Any]:
                 OPERATION_AUTHORIZATION_ANNOTATION: value["operation"][
                     "operation_authorization_sha256"
                 ],
-                COLLECTION_PACKET_ANNOTATION: value["operation"][
-                    "collection_packet_sha256"
-                ],
+                COLLECTION_PACKET_ANNOTATION: value["operation"]["collection_packet_sha256"],
             },
         },
         "immutable": True,
@@ -621,9 +611,7 @@ def _build_job(packet: LaunchPacket) -> dict[str, Any]:
     annotations = {
         FAILURE_ALERT_ANNOTATION: "off",
         CREATE_ONCE_ANNOTATION: "true",
-        OPERATION_AUTHORIZATION_ANNOTATION: operation[
-            "operation_authorization_sha256"
-        ],
+        OPERATION_AUTHORIZATION_ANNOTATION: operation["operation_authorization_sha256"],
         COLLECTION_PACKET_ANNOTATION: operation["collection_packet_sha256"],
     }
     labels = {
@@ -689,15 +677,14 @@ def _build_job(packet: LaunchPacket) -> dict[str, Any]:
                                 "/bin/sh",
                                 "-ceu",
                                 "--",
-                                "cp /usr/local/bin/docker /docker-cli/docker; chmod 0555 /docker-cli/docker",
+                                "cp /usr/local/bin/docker /docker-cli/docker; "
+                                "chmod 0555 /docker-cli/docker",
                             ],
                             "resources": {
                                 "requests": {"cpu": "100m", "memory": "64Mi"},
                                 "limits": {"cpu": "1", "memory": "256Mi"},
                             },
-                            "volumeMounts": [
-                                {"name": "docker-cli", "mountPath": "/docker-cli"}
-                            ],
+                            "volumeMounts": [{"name": "docker-cli", "mountPath": "/docker-cli"}],
                         },
                         {
                             "name": "dind",
@@ -736,18 +723,12 @@ def _build_job(packet: LaunchPacket) -> dict[str, Any]:
                                 _env_literal("DOCKER_TLS_CERTDIR", ""),
                                 _env_literal("DOCKER_BIND_ROOT", "/docker-bind"),
                                 _env_literal("COLLECTION_DATABASE", operation["database"]),
-                                _env_literal(
-                                    "COLLECTION_PRIVATE_ROOT", operation["private_root"]
-                                ),
+                                _env_literal("COLLECTION_PRIVATE_ROOT", operation["private_root"]),
                                 _env_literal("COLLECTION_ROUTE", operation["route"]),
                                 _env_literal("COLLECTION_WORKER_ID", operation["worker_id"]),
-                                _env_literal(
-                                    "COLLECTION_LIMIT", str(operation["planned_cells"])
-                                ),
+                                _env_literal("COLLECTION_LIMIT", str(operation["planned_cells"])),
                                 _env_secret("FLEET_API_KEY", secrets["fleet"]),
-                                _env_secret(
-                                    "ROLLOUT_DATABASE_URL", secrets["postgres"]
-                                ),
+                                _env_secret("ROLLOUT_DATABASE_URL", secrets["postgres"]),
                             ],
                             "resources": {
                                 "requests": {
@@ -763,7 +744,11 @@ def _build_job(packet: LaunchPacket) -> dict[str, Any]:
                             },
                             "volumeMounts": [
                                 {"name": "bootstrap", "mountPath": "/bootstrap", "readOnly": True},
-                                {"name": "docker-cli", "mountPath": "/docker-cli", "readOnly": True},
+                                {
+                                    "name": "docker-cli",
+                                    "mountPath": "/docker-cli",
+                                    "readOnly": True,
+                                },
                                 *[
                                     mount
                                     for mount in shared_mounts
@@ -819,9 +804,7 @@ def build_package(packet_path: Path) -> Package:
     packet = load_packet(packet_path)
     value = packet.value
     config = _json(packet.files["eval_config"], "collection eval config")
-    authorization_input = _json(
-        packet.files["operation_authorization"], "operation authorization"
-    )
+    authorization_input = _json(packet.files["operation_authorization"], "operation authorization")
     admitted_packet = _json(packet.files["collection_packet"], "collection packet")
     plan = collection.compile_eval(config, relative_to=packet.files["eval_config"].parent)
     authorization = collection.validate_operation_authorization(authorization_input, plan)
@@ -853,18 +836,24 @@ def build_package(packet_path: Path) -> Package:
         "route": "base",
         "worker_id": "base-v2",
     }
-    if operation != expected_operation or DATABASE_NAME.fullmatch(str(operation["database"])) is None:
+    if (
+        operation != expected_operation
+        or DATABASE_NAME.fullmatch(str(operation["database"])) is None
+    ):
         raise CollectionJobError("operation identity differs from the exact authorized wave")
     if (
         admitted_packet.get("schema") != "cyber_trajectory_collection_packet_v2"
         or admitted_packet.get("operation_authorization_sha256") != authorization["sha256"]
         or admitted_packet.get("eval_plan_sha256") != authorization["plan_sha256"]
-        or admitted_packet.get("sha256") != "sha256:" + digest(
-            {key: item for key, item in admitted_packet.items() if key != "sha256"}
-        )
+        or admitted_packet.get("sha256")
+        != "sha256:"
+        + digest({key: item for key, item in admitted_packet.items() if key != "sha256"})
     ):
         raise CollectionJobError("collection packet v2 differs from the authorized operation")
-    if plan.get("planned_cells") != EXPECTED_CELLS or plan.get("concurrency") != EXPECTED_CONCURRENCY:
+    if (
+        plan.get("planned_cells") != EXPECTED_CELLS
+        or plan.get("concurrency") != EXPECTED_CONCURRENCY
+    ):
         raise CollectionJobError("collection Job accepts only the exact 200-cell wave")
     if value.get("images") != {
         "controller": CONTROLLER_IMAGE,
@@ -967,8 +956,10 @@ def _contains(actual: Any, expected: Any) -> bool:
             key in actual and _contains(actual[key], value) for key, value in expected.items()
         )
     if isinstance(expected, list):
-        return isinstance(actual, list) and len(actual) == len(expected) and all(
-            _contains(left, right) for left, right in zip(actual, expected, strict=True)
+        return (
+            isinstance(actual, list)
+            and len(actual) == len(expected)
+            and all(_contains(left, right) for left, right in zip(actual, expected, strict=True))
         )
     return actual == expected
 
@@ -990,9 +981,7 @@ def validate_server_preview(value: dict[str, Any], package: Package) -> str:
         name=package.packet.value["config_map_name"],
         label="server preview",
     )
-    if _metadata(job, "server Job").get("annotations", {}).get(
-        FAILURE_ALERT_ANNOTATION
-    ) != "off":
+    if _metadata(job, "server Job").get("annotations", {}).get(FAILURE_ALERT_ANNOTATION) != "off":
         raise CollectionJobError("server-rendered root Job lacks failure-alerts off")
     try:
         stable_job = stable_job_preview(job)
@@ -1101,9 +1090,7 @@ def launch_once(packet_path: Path, *, cluster: Cluster, journal: Path) -> dict[s
         "operation_authorization_sha256": package.packet.value["operation"][
             "operation_authorization_sha256"
         ],
-        "collection_packet_sha256": package.packet.value["operation"][
-            "collection_packet_sha256"
-        ],
+        "collection_packet_sha256": package.packet.value["operation"]["collection_packet_sha256"],
         "context": CONTEXT,
         "namespace": NAMESPACE,
         "job_name": package.packet.value["job_name"],
@@ -1162,9 +1149,7 @@ def launch_once(packet_path: Path, *, cluster: Cluster, journal: Path) -> dict[s
         "operation_authorization_sha256": package.packet.value["operation"][
             "operation_authorization_sha256"
         ],
-        "collection_packet_sha256": package.packet.value["operation"][
-            "collection_packet_sha256"
-        ],
+        "collection_packet_sha256": package.packet.value["operation"]["collection_packet_sha256"],
         "server_preview_sha256": first_preview,
     }
     _append_json(journal, {"state": "KUBERNETES_CREATE_RESPONSE", **result})
@@ -1178,8 +1163,7 @@ def _journal_binding(path: Path, package: Package) -> dict[str, Any]:
         raise CollectionJobError("create journal is unreadable") from error
     responses = [row for row in rows if row.get("state") == "KUBERNETES_CREATE_RESPONSE"]
     uncertain = any(
-        row.get("state") == "KUBERNETES_CREATE_RESPONSE_UNCERTAIN_DO_NOT_RETRY"
-        for row in rows
+        row.get("state") == "KUBERNETES_CREATE_RESPONSE_UNCERTAIN_DO_NOT_RETRY" for row in rows
     )
     if uncertain or len(responses) != 1:
         raise CollectionJobError("create journal has no unambiguous exact-UID binding")
@@ -1264,9 +1248,7 @@ def cleanup_once(
         "owned Pods",
     )
     for pod in pods:
-        if not _owned_by(
-            pod, kind="Job", name=binding["job_name"], uid=binding["job_uid"]
-        ):
+        if not _owned_by(pod, kind="Job", name=binding["job_name"], uid=binding["job_uid"]):
             raise CollectionJobError("terminal Pod owner binding differs")
         phase = pod.get("status", {}).get("phase")
         if phase in {"Pending", "Running", "Unknown"}:
@@ -1280,9 +1262,7 @@ def cleanup_once(
         "owned Workloads",
     )
     for workload in workloads:
-        if not _owned_by(
-            workload, kind="Job", name=binding["job_name"], uid=binding["job_uid"]
-        ):
+        if not _owned_by(workload, kind="Job", name=binding["job_name"], uid=binding["job_uid"]):
             raise CollectionJobError("terminal Workload owner binding differs")
 
     intent_path = receipt_path.with_name(receipt_path.name + ".intent")
@@ -1301,21 +1281,15 @@ def cleanup_once(
     intent = {**intent_body, "sha256": _canonical_digest(intent_body)}
     _write_json_once(intent_path, intent)
     try:
-        cluster.delete_uid(
-            "jobs.batch", NAMESPACE, binding["job_name"], binding["job_uid"]
-        )
+        cluster.delete_uid("jobs.batch", NAMESPACE, binding["job_name"], binding["job_uid"])
         deadline = monotonic() + timeout_seconds
         while True:
-            remaining_job = cluster.get_optional(
-                "jobs.batch", NAMESPACE, binding["job_name"]
-            )
+            remaining_job = cluster.get_optional("jobs.batch", NAMESPACE, binding["job_name"])
             remaining_pods = _items(
                 cluster.list(
                     "pods",
                     NAMESPACE,
-                    label_selector=(
-                        f"batch.kubernetes.io/controller-uid={binding['job_uid']}"
-                    ),
+                    label_selector=(f"batch.kubernetes.io/controller-uid={binding['job_uid']}"),
                 ),
                 "remaining Pods",
             )
@@ -1455,9 +1429,7 @@ class KubectlCluster:
         assert result is not None
         return result
 
-    def get_optional(
-        self, resource: str, namespace: str, name: str
-    ) -> dict[str, Any] | None:
+    def get_optional(self, resource: str, namespace: str, name: str) -> dict[str, Any] | None:
         if resource not in {"jobs.batch", "configmaps"} or KUBERNETES_NAME.fullmatch(name) is None:
             raise CollectionJobError("Kubernetes get is not narrowly scoped")
         return self._run(
@@ -1480,9 +1452,7 @@ class KubectlCluster:
         assert result is not None
         return result
 
-    def delete_uid(
-        self, resource: str, namespace: str, name: str, uid: str
-    ) -> dict[str, Any]:
+    def delete_uid(self, resource: str, namespace: str, name: str, uid: str) -> dict[str, Any]:
         prefixes = {
             "jobs.batch": "/apis/batch/v1",
             "configmaps": "/api/v1",
