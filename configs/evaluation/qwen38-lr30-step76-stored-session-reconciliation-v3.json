@@ -55,7 +55,7 @@
     "evals/fleet/rollout_ledger.py": "633914e92d6a0fde6f7040f1fddf9a056c43ed9a41301f0baab1ae856397518c",
     "evals/fleet/rollout_postgres.py": "74b946005267efa6611861135f135558ac32e10383e7c0619d278af8d8b1ccd9",
     "evals/fleet/rollout_worker.py": "6782d014143a430c2c5523a2161f453a804e7203a07ee9e24792d705be0c224e",
-    "evals/fleet/stored_session_reconciliation.py": "ddb261fbcb9fe6c84614da24f6dc9225042871d2eb27426fb12a5e131ec2659f"
+    "evals/fleet/stored_session_reconciliation.py": "27a6a0661bc6524ba6c5a94324866cd59228a848ce7e0729d5481de150021735"
   },
   "safety": {
     "two_identical_authoritative_observations_required": true,

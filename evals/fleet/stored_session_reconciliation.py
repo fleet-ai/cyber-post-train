@@ -38,7 +38,7 @@ from evals.fleet import (
     opencode_self_hosted as self_hosted,
 )
 
-INTENT_SCHEMA = "fleet-stored-session-reconciliation-intent-v1"
+INTENT_SCHEMA = "fleet-stored-session-reconciliation-intent-v2"
 RECEIPT_SCHEMA = "fleet-stored-session-reconciliation-v1"
 TERMINAL_OWNER_FAILURE_CODE = "stored_session.owner_terminal"
 RUNTIME_FILES = (
