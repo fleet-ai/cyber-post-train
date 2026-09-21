@@ -1,0 +1,53 @@
+{
+  "schema_version": "qwen38_web_v23_supervisor_liveness_gap_v1",
+  "observed_at": "2026-09-21T02:10:29Z",
+  "scope": {
+    "campaign": "Qwen3.8 base OpenCode WebExploitBench v23 full collection",
+    "inspection": "local sealed plans, local supervisor state, owner locks, launch receipt, process table, and credential-name presence only",
+    "benchmark_content_inspected": false,
+    "rollout_content_inspected": false,
+    "scores_inspected": false,
+    "task_or_sandbox_ids_recorded": false
+  },
+  "source_bindings": {
+    "repository_base_commit": "40077bb2902268519e2e07ac086737130b6df077",
+    "prior_local_audit_receipt_sha256": "sha256:a625675f6cd841300338a51c03c4366bf1ba2d8d90bb2abbe064a09a92d0484c",
+    "launch_receipt_sha256": "sha256:1889b6ff0e80e7709841d23447f44fb9a87b587e4b6b7cd3f5e36b619d44db09"
+  },
+  "census": {
+    "sealed_terminal_plans": 60,
+    "launched_rows": 60,
+    "plans_and_launch_rows_are_one_to_one": true,
+    "free_owner_locks": 60,
+    "active_supervisor_processes": 0,
+    "failure_complete_snapshot_released": 44,
+    "failure_gate_counts": {
+      "collection_export": 44
+    },
+    "released_provider_state_counts": {
+      "terminated": 44
+    },
+    "accepted_complete_snapshot_released": 0,
+    "exact_plan_only_states": 16,
+    "ambiguous_states": 0
+  },
+  "incident": {
+    "classification": "local_supervisor_liveness_gap",
+    "finding": "The local parent process disappeared after all terminal plans were sealed. Sixteen terminal supervisors had written only their exact bound plan and unlocked owner file, so no process remained to preserve and release those existing sandboxes.",
+    "not_a_collection_relaunch": true,
+    "not_a_scientific_result": true
+  },
+  "external_state": {
+    "tensorlake_credential_present_in_auditing_process": false,
+    "remote_status": "unknown_not_queried",
+    "provider_mutation_performed": false
+  },
+  "repair": {
+    "selector": "evals/webexploitbench/tensorlake/collection_supervisor_recovery.py",
+    "behavior": "Validate the launch receipt and every sealed plan, use the owner lock as the liveness check, select only an unlocked state with exactly owner.lock plus its byte-identical plan.json, and reject every partial or contradictory free state.",
+    "attach_boundary": "Load the already sealed plan and existing state, then run only the terminal preservation supervisor. Plan sealing, sandbox creation or resume, collection-process start, and scoring are unavailable.",
+    "tests": "evals/webexploitbench/tests/test_tensorlake_collection_supervisor_recovery.py",
+    "runbook": "evals/webexploitbench/tensorlake/README.md"
+  },
+  "receipt_sha256": "sha256:9305f9647e087ed714e1ca0c6e07baf2e3dd23a8185e63aa12022f56b93ca013"
+}
