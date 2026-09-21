@@ -57,6 +57,9 @@ def compile_canary(monkeypatch) -> tuple[dict, dict]:
 
 def test_prod6_external_identity_remains_frozen_historical_evidence() -> None:
     evidence = load(PROD6_TERMINAL_EVIDENCE)
+    assert evidence["sha256"] == digest(
+        {key: value for key, value in evidence.items() if key != "sha256"}
+    )
     assert evidence["run"] == {
         "name": "chris-q38-rlreward-prod6",
         "rayjob_uid": "6c06625d-8730-4879-9144-a4cd00a58d8a",
