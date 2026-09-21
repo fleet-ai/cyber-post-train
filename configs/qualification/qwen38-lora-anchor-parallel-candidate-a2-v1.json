@@ -77,6 +77,7 @@
   },
   "data_and_context_contract": {
     "supervision": "A2 trains only on visible assistant actions and tool calls. Private or unknown thinking/reasoning fields are excluded before tokenization and rejected again by the training runtime.",
+    "current_training_decision": "Action-only SFT is correct for this corpus because visible actions are the only authorized student-visible training signal. This does not claim written reasoning could not help; an authorized student-visible reasoning corpus would require a separate matched experiment. Private teacher reasoning is never eligible for either arm.",
     "paired_comparison": "A2 and its full-weight comparator use the same frozen 32K teacher corpus, task-family exclusions, base model, and task/tool contract. The method and its qualified learning rate are the intentional differences.",
     "offline_context": "Training uses static 32K packed windows, not live context shortening. Each accepted assistant target is supervised once; copied history has no loss. Sessions with opaque context shortening are excluded because their later prompt cannot be reconstructed faithfully.",
     "future_student_visible_reasoning": "Written reasoning is not part of A2. A later study needs a fresh, explicitly authorized student-visible source; an aggregate-only field census; an exact template and loss-mask contract; exact records for any context-shortening boundary; and the reviewed tests listed in docs/QWEN38_REASONING_AND_COMPACTION_POLICY.md."
@@ -131,5 +132,5 @@
     "a preview, dry-run, image, source, resource, or Secret-reference mismatch",
     "insufficient live c1 capacity"
   ],
-  "packet_sha256": "29fc2def98818e0d005f5e0f128a56e1b6a169f2d5341a6a8c9a82b44f92e5f3"
+  "packet_sha256": "b740b956cf8895cee70c37032539c61ed2f4a428f8123f86e171a066ef3361db"
 }

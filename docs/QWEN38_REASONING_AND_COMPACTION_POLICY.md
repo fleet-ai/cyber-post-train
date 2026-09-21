@@ -57,6 +57,15 @@ dataset.  It cannot establish that either model learned hidden chain of thought
 or learned to shorten its own context.  The packet records this explicitly so a
 later training or evaluation report cannot silently widen the claim.
 
+**Decision for the current paired runs.** Action-only SFT is the correct
+training treatment for this corpus because it is the only part of each teacher
+session that is both authorized for training and visible to the student.  This
+is a data-contract decision, not a claim that written reasoning could never
+help.  If a separately authorized, student-visible reasoning corpus becomes
+available, it must be evaluated as a new matched experiment against this
+action-only baseline.  Private teacher reasoning must never be added to either
+arm.
+
 ## Current context treatment
 
 ### Offline SFT

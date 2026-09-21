@@ -235,6 +235,10 @@ def test_a1_output_collision_is_sanitized_and_a2_packet_preserves_its_lesson():
     assert packet["candidate"]["runtime"]["variant"] == a2_runtime.RUNTIME_VARIANT
     contract = packet["data_and_context_contract"]
     assert "visible assistant actions" in contract["supervision"]
+    assert (
+        "only authorized student-visible training signal" in contract["current_training_decision"]
+    )
+    assert "Private teacher reasoning is never eligible" in contract["current_training_decision"]
     assert "same frozen 32K teacher corpus" in contract["paired_comparison"]
     assert "static 32K packed windows" in contract["offline_context"]
     assert "not part of A2" in contract["future_student_visible_reasoning"]
