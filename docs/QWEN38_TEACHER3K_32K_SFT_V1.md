@@ -52,15 +52,26 @@ evidence that exact 262K full-weight training fits on one or two nodes.
 
 ## Bounded checkpoint retention
 
-An observed Qwen3.8 full-weight training checkpoint occupies 303 GB. Retaining
-100 native checkpoints from one run would consume about 30 TB and mostly
-compare adjacent points on one trajectory. The batch-8 arms instead checkpoint
-every 450 steps and keep five checkpoints. At 1,837 total steps this preserves
-steps 450, 900, 1,350, 1,800, and the forced final step 1,837: four roughly
-quarter-epoch intermediates plus the final model, bounded near 1.5 TB. The
-batch-16 arm uses interval 225 for the same fractional spacing. This retention
-choice does not change optimization; it exists so later Fleet and
-WebExploitBench evaluations can compare useful, scientifically spaced models.
+An observed Qwen3.8 full-weight training checkpoint occupies about 303 GiB.
+The current batch-8 successors save every 100 optimizer steps and the batch-16
+successor saves every 50 steps. Each keeps the latest two checkpoints. Over the
+complete epoch this produces 19 saves per 32K treatment, including the forced
+final save, while bounding steady live storage near 606 GiB. A third checkpoint
+can coexist briefly before pruning, so the safe transient allowance is at least
+about 909 GiB.
+
+Historical step rates project a first save after roughly three hours. The much
+larger 53,300-second `checkpoint_recovery_horizon_seconds` value is a
+conservative watchdog ceiling, not the target save cadence. It prevents a slow
+but still progressing run from being killed before its next save; the separate
+20-minute no-progress check remains unchanged.
+
+The 64K context control saves every 15 steps, keeps the latest two, and has a
+17,460-second recovery ceiling. Its higher save frequency is intentional because
+each 64K optimizer step takes materially longer. Exact SFT and RL cadence,
+storage cost, telemetry boundaries, and the distinction between a saved
+checkpoint and a proven restart are recorded in
+[`CHECKPOINT_POLICY.md`](CHECKPOINT_POLICY.md).
 
 The project-level goal of at least 100 checkpoint/evaluation pairs should be
 met across distinct data, learning-rate, batch, and method treatments rather

@@ -313,6 +313,10 @@ gradient accumulation; the SFT waiter fails closed if that plan is missing.
 For new immutable task-outcome full-run configs, prefer binding
 `checkpoint_recovery_horizon_seconds`; when present, it requires the next
 periodic or terminal checkpoint to fit inside an explicit recovery-loss budget.
+This is a conservative watchdog ceiling, not the expected checkpoint cadence;
+the expected cadence is `recipe.checkpoint_interval` multiplied by the observed
+step time. See [`CHECKPOINT_POLICY.md`](CHECKPOINT_POLICY.md) for the current
+Qwen3.8 SFT and RL values and their recovery-qualification boundaries.
 Teacher-cross-entropy plans are rejected because their pre-training development
 scan is not represented by this bound. Choose a new checkpoint interval and run
 identity when the bound does not fit; do not edit a historical config in place.
