@@ -10,8 +10,12 @@ AUDIT_PATH = ROOT / "docs/evidence/qwen38-web-important-checkpoint-budget-audit-
 REPAIR_AUDIT_PATH = (
     ROOT / "docs/evidence/qwen38-web-important-checkpoint-budget-repair-20260921.json"
 )
-CURRENT_REPAIR_AUDIT_PATH = (
+SPLIT_PROBE_REPAIR_AUDIT_PATH = (
     ROOT / "docs/evidence/qwen38-web-important-checkpoint-budget-repair-split-probe-20260921.json"
+)
+CURRENT_REPAIR_AUDIT_PATH = (
+    ROOT
+    / "docs/evidence/qwen38-web-important-checkpoint-budget-repair-netproxy-contract-20260921.json"
 )
 
 
@@ -94,6 +98,23 @@ def test_historical_repaired_budget_receipt_remains_byte_bound_to_its_runner() -
     assert audit["checks"]["model_free_runtime_qualification_still_required"] is True
 
 
+def test_historical_split_probe_receipt_remains_byte_bound_to_its_runner() -> None:
+    audit = json.loads(SPLIT_PROBE_REPAIR_AUDIT_PATH.read_bytes())
+    unsigned = dict(audit)
+    unsigned.pop("receipt_sha256")
+    assert audit["receipt_sha256"] == ("sha256:" + hashlib.sha256(_canonical(unsigned)).hexdigest())
+    assert _sha256(SPLIT_PROBE_REPAIR_AUDIT_PATH) == (
+        "sha256:1a94875b9802556be9e2a048fcd0073ecfc75fdcf03ba3d12981b042e3a49782"
+    )
+    assert audit["source"]["collection_runner_file_sha256"] == (
+        "sha256:bb6a2d586e53eec9e8908e57d73aa8af74ca8ca2506036b194aa87b47e0a396e"
+    )
+    assert audit["classification"] == (
+        "runtime_budget_repaired_split_identity_probe_campaign_still_gated"
+    )
+    assert audit["checks"]["fresh_model_free_runtime_qualification_still_required"] is True
+
+
 def test_current_repaired_web_campaign_budget_binds_runner_supervisor_and_sandbox() -> None:
     audit = json.loads(CURRENT_REPAIR_AUDIT_PATH.read_bytes())
     unsigned = dict(audit)
@@ -113,6 +134,14 @@ def test_current_repaired_web_campaign_budget_binds_runner_supervisor_and_sandbo
     }
     for name, path in paths.items():
         assert _sha256(path) == source[f"{name}_file_sha256"]
+    assert (
+        _sha256(ROOT / source["historical_split_probe_audit_path"])
+        == source["historical_split_probe_audit_file_sha256"]
+    )
+    assert (
+        _sha256(ROOT / source["runtime_failure_evidence_path"])
+        == source["runtime_failure_evidence_file_sha256"]
+    )
 
     plan = json.loads(paths["campaign_plan"].read_bytes())
     plan_unsigned = dict(plan)
@@ -186,13 +215,18 @@ def test_current_repaired_web_campaign_budget_binds_runner_supervisor_and_sandbo
     assert runner_envelope + 1800 <= observed["supervisor_poll_horizon"]
     assert observed["supervisor_poll_horizon"] <= observed["sandbox_lifetime"]
     assert plan["execution"]["launchable_now"] is False
-    assert audit["classification"] == (
-        "runtime_budget_repaired_split_identity_probe_campaign_still_gated"
+    assert (
+        audit["classification"] == "runtime_budget_repaired_netproxy_contract_campaign_still_gated"
     )
     assert audit["checks"]["noreplace_swap_runner_bound_to_current_source"] is True
     assert audit["checks"]["production_user_identity_probe_bound_to_current_source"] is True
     assert audit["checks"]["isolated_nonroot_write_probe_bound_to_current_source"] is True
     assert audit["checks"]["nested_to_worker_acknowledgement_bound_to_current_source"] is True
+    assert audit["checks"]["one_task_owner_claim_bound_to_current_source"] is True
+    assert audit["checks"]["cage_netproxy_runtime_contract_bound_to_current_source"] is True
+    assert audit["checks"]["qualification_netproxy_parity_bound_to_current_source"] is True
+    assert audit["checks"]["cleanup_exact_once_hold_bound_to_current_source"] is True
+    assert audit["checks"]["historical_split_probe_receipt_preserved"] is True
     assert audit["checks"]["fresh_model_free_runtime_qualification_still_required"] is True
     assert audit["operation"] == {
         "provider_requests": 0,
@@ -205,7 +239,12 @@ def test_current_repaired_web_campaign_budget_binds_runner_supervisor_and_sandbo
 def test_web_campaign_budget_audit_contains_no_credentials_or_results() -> None:
     text = "\n".join(
         path.read_text(encoding="utf-8").lower()
-        for path in (AUDIT_PATH, REPAIR_AUDIT_PATH, CURRENT_REPAIR_AUDIT_PATH)
+        for path in (
+            AUDIT_PATH,
+            REPAIR_AUDIT_PATH,
+            SPLIT_PROBE_REPAIR_AUDIT_PATH,
+            CURRENT_REPAIR_AUDIT_PATH,
+        )
     )
     assert "api_key" not in text
     assert "tensorlake-api-key" not in text
