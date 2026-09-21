@@ -95,6 +95,14 @@ explicit flush path so its metrics cannot be lost merely because no later
 training log event occurs. Filesystem observation must remain non-fatal, and
 tests must cover both ordinary periodic saves and the final-only save.
 
+The opt-in implementation is the separately digest-bound
+`training/sft_runtime_checkpoint_telemetry_v1.py` runtime variant named
+`native_save_return_v1`, selected only through the isolated
+`training/sft_checkpoint_telemetry_v1.py` compiler/request path. Both
+`training/sft.py` and `training/sft_runtime.py` remain byte-identical, so
+existing SFT and RL runtime digests do not change. No prepared broad plan
+selects the telemetry successor.
+
 Landing the successor requires new run/plan identities, fresh runtime and
 request digests, CPU preflight, and a bounded checkpoint/reload qualification.
 It must not rewrite any historical sealed plan. Fully durable size and
