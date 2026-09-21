@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import pytest
 
+import training.checkpoint_serving_parity as serving_parity
 from training.checkpoint_serving_parity import (
+    capture_base_route,
     catalog_projection,
     model_projection,
     probe_projection,
@@ -161,3 +163,46 @@ def test_probe_projection_rejects_unstable_token_identity() -> None:
     }
     with pytest.raises(RouteError, match="fixed_logit_token_identity_not_deterministic"):
         probe_projection(tool, first, second, "candidate")
+
+
+def test_capture_base_route_is_a_standalone_content_free_proof(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed = {
+        "served_model": "qwen3.8-27b",
+        "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "source_path": "/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "probes": {"tool_call_passed": True},
+    }
+    calls: list[dict[str, object]] = []
+
+    def fake_capture_route(**kwargs: object) -> dict[str, object]:
+        calls.append(dict(kwargs))
+        return observed
+
+    monkeypatch.setattr(serving_parity, "_capture_route", fake_capture_route)
+    receipt = capture_base_route(
+        "test-key",
+        "test-context",
+        "qwen3.8-27b",
+        observed["model_revision"],
+        observed["source_path"],
+    )
+
+    assert receipt["schema"] == "cyber_base_serving_live_route_proof_v1"
+    assert receipt["status"] == "passed"
+    assert receipt["route"] == observed
+    assert receipt["benchmark_content_included"] is False
+    assert receipt["response_content_recorded"] is False
+    assert receipt["scores_observed"] is False
+    assert receipt["task_content_included"] is False
+    assert receipt["external_mutations_performed"] == 0
+    assert isinstance(receipt["receipt_sha256"], str)
+    assert len(calls) == 1
+    assert calls[0]["key"] == "test-key"
+    assert calls[0]["context"] == "test-context"
+    assert calls[0]["label"] == "base"
+    assert calls[0]["model"] == "qwen3.8-27b"
+    assert calls[0]["expected_revision"] == observed["model_revision"]
+    assert calls[0]["expected_source_path"] == observed["source_path"]
+    assert calls[0]["expected_replicas"] is None
