@@ -1,0 +1,38 @@
+{
+  "schema": "fleet_reviewed_recovery_digest_guard_evidence_v1",
+  "recorded_at": "2026-09-21",
+  "finding": {
+    "boundary": "reviewed rollout recovery pre-claim binding",
+    "observed_gap": "A dedicated recovery wrapper relied on an operator's immediate database readback and apply receipt, but did not itself compare the database reconciliation digest with the frozen reviewed intent before claiming work.",
+    "historical_interpretation": "The observed launch retained independent score-blind readback and apply evidence. This record does not revise that launch or make a capability claim; it closes the reusable worker-side gap for future recoveries.",
+    "risk": "A later database or wrapper mismatch could otherwise let a recovery worker claim work outside the exact state approved by review."
+  },
+  "durable_response": {
+    "claim_guard": "evals/fleet/reviewed_recovery.py",
+    "worker_entrypoint": "evals/fleet/reviewed_recovery_worker.py",
+    "regression_tests": [
+      "tests/test_reviewed_recovery.py",
+      "tests/test_rollout_postgres.py"
+    ],
+    "runbook": "docs/FLEET_RETRY_REVIEW_RECOVERY.md",
+    "roster_anchor": "The reviewed intent self digest commits the frozen evaluation plan, recovery runtime files, route, and complete private cell roster; that same digest is stored on every selected database row.",
+    "queue_isolation": "Application accepts only allowlisted pre-outcome transport failures with no database session, receipt, or local result; it leaves selected rows in retry_review, outside the ordinary pending queue. A guarded claim moves one row directly from retry_review to claimed and consumes its one retry allowance.",
+    "atomic_invariant": "The complete private reviewed roster is locked with bounded timeouts and every database reconciliation_digest is compared with the self-digesting intent before one roster member can become claimed.",
+    "persistent_runtime_evidence": "Score-blind apply and pre-claim receipts are inserted into ledger_reconciliations in the same transactions as their corresponding database changes.",
+    "frozen_evaluator_runtime_changed": false
+  },
+  "privacy": {
+    "score_values_read_or_recorded": false,
+    "capability_outcomes_read_or_recorded": false,
+    "live_cell_task_session_or_trace_identifiers_recorded": false,
+    "prompt_response_flag_reward_or_trace_content_recorded": false,
+    "credentials_recorded": false,
+    "final_eight_task_set_accessed": false
+  },
+  "operations": {
+    "jobs_created_cancelled_or_modified": 0,
+    "database_rows_mutated": 0,
+    "model_or_scoring_calls_made": 0
+  },
+  "sha256": "2faa71cda4d82b22f1d7e66f311eda639c73bc4b499d5891e74d2d2019648b62"
+}

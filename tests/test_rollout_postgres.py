@@ -14,6 +14,7 @@ import pytest
 from psycopg import sql
 
 from evals.fleet import (
+    reviewed_recovery,
     rollout_ledger,
     rollout_postgres,
     rollout_postgres_migrate,
@@ -257,6 +258,85 @@ def test_retry_review_can_be_approved_once_but_never_silently_repeated(pg_dsn, o
         rollout_postgres.approve_retry(
             pg_dsn, cell_id=owned_cell["cell_id"], reconciliation_digest="b" * 64
         )
+
+
+def test_reviewed_recovery_claim_checks_full_roster_digest_atomically(tmp_path, pg_dsn):
+    rollout_postgres.initialize(pg_dsn, _plan(tmp_path / "plan.csv", count=2))
+    owners = [
+        rollout_postgres.claim(pg_dsn, worker_id=f"review-{index}", serving_block="route")
+        for index in range(2)
+    ]
+    cell_ids = [owner["cell_id"] for owner in owners]
+    for owner in owners:
+        rollout_postgres.request_retry_review(
+            pg_dsn,
+            cell_id=owner["cell_id"],
+            worker_id=owner["worker_id"],
+            claim_id=owner["claim_id"],
+            failure_code="post_claim.connecterror",
+        )
+    intent_body = {
+        "schema_version": reviewed_recovery.INTENT_SCHEMA,
+        "evaluation_plan_sha256": "a" * 64,
+        "runtime_files_sha256": reviewed_recovery.runtime_identity(),
+        "serving_block": "route",
+        "selected_cell_ids": cell_ids,
+    }
+    intent = reviewed_recovery.ReviewedRecoveryIntent(
+        evaluation_plan_sha256=intent_body["evaluation_plan_sha256"],
+        runtime_files_sha256=intent_body["runtime_files_sha256"],
+        serving_block="route",
+        selected_cell_ids=tuple(cell_ids),
+        sha256=reviewed_recovery._body_digest(intent_body),  # noqa: SLF001
+    )
+    apply_receipt = reviewed_recovery.apply_intent(pg_dsn, intent=intent)
+    assert apply_receipt["reviewed_intent_sha256"] == intent.sha256
+    summary = rollout_postgres.summary(pg_dsn)["by_state"]
+    assert summary["retry_review"] == 2 and summary["pending"] == 0
+    assert rollout_postgres.claim(pg_dsn, worker_id="ordinary", serving_block="route") is None
+
+    subset_body = {**intent_body, "selected_cell_ids": cell_ids[:1]}
+    subset = reviewed_recovery.ReviewedRecoveryIntent(
+        evaluation_plan_sha256=subset_body["evaluation_plan_sha256"],
+        runtime_files_sha256=subset_body["runtime_files_sha256"],
+        serving_block="route",
+        selected_cell_ids=tuple(cell_ids[:1]),
+        sha256=reviewed_recovery._body_digest(subset_body),  # noqa: SLF001
+    )
+    with pytest.raises(rollout_ledger.LedgerError, match="reconciliation digest differs"):
+        reviewed_recovery.claim(pg_dsn, intent=subset, worker_id="subset", serving_block="route")
+
+    with psycopg.connect(pg_dsn) as connection:
+        connection.execute(
+            "UPDATE rollout_cells SET reconciliation_digest = %s WHERE cell_id = %s",
+            ("c" * 64, cell_ids[0]),
+        )
+    with pytest.raises(rollout_ledger.LedgerError, match="reconciliation digest differs"):
+        reviewed_recovery.claim(pg_dsn, intent=intent, worker_id="guarded", serving_block="route")
+    assert rollout_postgres.summary(pg_dsn)["by_state"]["retry_review"] == 2
+
+    with psycopg.connect(pg_dsn) as connection:
+        connection.execute(
+            "UPDATE rollout_cells SET reconciliation_digest = %s WHERE cell_id = %s",
+            (intent.sha256, cell_ids[0]),
+        )
+    claimed = reviewed_recovery.claim(
+        pg_dsn, intent=intent, worker_id="guarded", serving_block="route"
+    )
+    assert claimed["cell_id"] in cell_ids and claimed["retry_count"] == 1
+    with psycopg.connect(pg_dsn) as connection:
+        receipts = connection.execute(
+            "SELECT kind, receipt_json FROM ledger_reconciliations"
+        ).fetchall()
+    assert {row[0] for row in receipts} == {
+        reviewed_recovery.APPLY_SCHEMA,
+        reviewed_recovery.PRECLAIM_SCHEMA,
+    }
+    for _, raw in receipts:
+        receipt = json.loads(raw)
+        assert receipt["selected_cell_count"] == 2
+        serialized = json.dumps(receipt).lower()
+        assert not any(word in serialized for word in ("cell_id", "task_version", "session_id"))
 
 
 def test_reviewed_outcome_can_be_accepted_without_replaying_it(pg_dsn, owned_cell):

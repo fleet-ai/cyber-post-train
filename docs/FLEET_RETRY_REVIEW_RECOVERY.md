@@ -75,6 +75,53 @@ Create each object once. If the create response is uncertain, reobserve the
 exact identities; do not submit again. A failure or missing receipt remains
 truthful evidence and must not be hidden by moving the cell back to pending.
 
+## Worker-side digest fence
+
+Applying a reviewed action and checking it from the operator terminal is not
+enough. The recovery worker must independently prove, inside the same database
+transaction that makes its claim, that it is consuming exactly the approved
+work.
+
+For a rollout recovery, create one private reviewed intent after classification
+finishes. Use schema `fleet-reviewed-recovery-intent-v1`; bind the frozen
+evaluation-plan digest, all recovery-runtime file digests, the exact route,
+and the complete selected cell roster, then add the intent's own SHA-256
+digest. That self digest is the database `reconciliation_digest`; changing,
+reordering, adding, or removing a cell changes the authority. Keep this file
+mode `0600` and outside Git because it contains private cell identities.
+
+Run the recovery through `python -m evals.fleet.reviewed_recovery_worker`, not
+the ordinary rollout worker. The worker first applies the complete intent in
+one bounded database transaction. Application writes that digest on every
+selected row but deliberately leaves every row in `retry_review`; ordinary
+route-wide workers therefore cannot claim or race the reviewed cells. A
+score-blind apply receipt is stored in `ledger_reconciliations`.
+
+Before every recovery claim the worker:
+
+1. locks the complete reviewed roster;
+2. requires every row to exist on the frozen route and remain bound to the
+   exact self-digesting intent;
+3. requires every row's database `reconciliation_digest` to equal the frozen
+   intent digest;
+4. selects only an eligible `retry_review` row from that exact roster, moving
+   it directly to `claimed` while consuming its one retry allowance; and
+5. records a score-blind pre-claim receipt in `ledger_reconciliations` in the
+   same transaction as the claim.
+
+The receipt contains only digests, counts, and explicit statements that no
+score, task, cell, session, prompt, response, flag, reward, or trace content is
+present. Both apply and claim use bounded statement and lock timeouts, and the
+claim lease starts from the wall clock after the lock succeeds. A missing row,
+route difference, digest difference, exhausted allowance, runtime difference,
+or changed intent fails before a claim or model call. Never move these rows to
+ordinary `pending`, and never fall back to route-wide
+`rollout_postgres.claim` after this failure.
+
+This fence does not approve a retry, authorize a launch, or replace the private
+review and apply receipts. It prevents a reviewed worker from silently acting
+on database state that no longer matches those frozen receipts.
+
 The comparison is usable only when each complete arm independently reaches
 17 accepted cells. Never splice cells from an older campaign or a different
 arm. The final eight tasks remain sealed.
