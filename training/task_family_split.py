@@ -1024,18 +1024,27 @@ def _build_anchored_from_parts(
         dimensions=dimensions,
         locked=locked,
     )
-    assignment = _repair_representable_labels(
-        groups,
-        assignment,
-        seed=seed,
-        targets=targets,
-        dimensions=dimensions,
-        locked_group_ids=frozenset(locked),
-    )
+    # A current catalog can be exactly the historic rooted study: every
+    # present family is immutable and there is no legal swap.  Re-running a
+    # representativeness allocator over that frozen fact would either move a
+    # protected family or reject an otherwise valid historical split.  Record
+    # that exceptional *lack of choice* explicitly.  Once even one novel
+    # family is present, the normal repair/coverage gate remains mandatory.
+    all_current_groups_immutable = len(locked) == len(groups)
+    if not all_current_groups_immutable:
+        assignment = _repair_representable_labels(
+            groups,
+            assignment,
+            seed=seed,
+            targets=targets,
+            dimensions=dimensions,
+            locked_group_ids=frozenset(locked),
+        )
     if any(assignment[group_id] != split for group_id, split in locked.items()):
         raise ValueError("representative repair changed an immutable anchored role")
     representation = _representation(groups, assignment, targets=targets, dimensions=dimensions)
-    _require_representable_labels(representation, splits=tuple(ratios))
+    if not all_current_groups_immutable:
+        _require_representable_labels(representation, splits=tuple(ratios))
     concentration = _concentration(groups, assignment, targets)
     _require_split_concentration(
         concentration,
@@ -1064,7 +1073,10 @@ def _build_anchored_from_parts(
             "algorithm": (
                 "deterministic rarity-first assignment of new groups with immutable inherited roles"
             ),
-            "require_representable_labels": True,
+            "require_representable_labels": not all_current_groups_immutable,
+            "representative_coverage_exception": (
+                "all_current_groups_inherited" if all_current_groups_immutable else "none"
+            ),
             "max_group_task_version_fraction": max_group_task_version_fraction,
             "inherited_roles_immutable": True,
         },
@@ -1097,6 +1109,7 @@ def _build_anchored_from_parts(
                 split != "train" for split in inherited_roles.values()
             ),
             "historical_task_key_group_drift": 0,
+            "all_current_groups_immutable": all_current_groups_immutable,
         },
     }
     value["sha256"] = canonical_digest(value)
@@ -1179,6 +1192,7 @@ def _validate_anchored(
         "balanced_dimensions",
         "algorithm",
         "require_representable_labels",
+        "representative_coverage_exception",
         "max_group_task_version_fraction",
         "inherited_roles_immutable",
     }:
@@ -1186,7 +1200,6 @@ def _validate_anchored(
     if (
         policy.get("algorithm")
         != "deterministic rarity-first assignment of new groups with immutable inherited roles"
-        or policy.get("require_representable_labels") is not True
         or policy.get("inherited_roles_immutable") is not True
     ):
         raise ValueError("anchored split policy drift")

@@ -230,6 +230,35 @@ def test_real_locked_study_v2_converts_without_reassigning_roles() -> None:
     } == {"train": 50, "dev": 17, "final_test": 8}
 
 
+def test_fully_locked_study_reproduces_roles_without_fake_representativeness() -> None:
+    """The anchored root itself has no movable family to repair.
+
+    A fresh allocation would reject a rare label in one historic role.  That
+    must not turn into a permission to move a holdout family; the split stays
+    usable with an explicit audit exception until genuinely new families make
+    a representative extension possible.
+    """
+
+    split_path = ROOT / "configs/data/fleet-blackbox-current-study-split-20260914-v2.json"
+    legacy = json.loads(split_path.read_text())
+    inventory_path = Path(legacy["inventory"]["path"])
+    rows = json.loads(inventory_path.read_text())["task_versions"]
+    anchor = splits.freeze_study_v2_role_anchor(legacy, legacy_inventory_path=inventory_path)
+    value = splits.build_anchored(
+        rows,
+        inventory_sha256=legacy["inventory"]["logical_sha256"],
+        role_anchor=anchor,
+        seed="locked-study-root-v1",
+        ratios={"train": 50 / 75, "dev": 17 / 75, "final_test": 8 / 75},
+        max_group_task_version_fraction=0.25,
+    )
+    assert _assignment(value) == _assignment(legacy)
+    assert value["policy"]["require_representable_labels"] is False
+    assert value["policy"]["representative_coverage_exception"] == "all_current_groups_inherited"
+    assert value["anchor_audit"]["all_current_groups_immutable"] is True
+    splits.validate(value, rows, role_anchor=anchor)
+
+
 def test_broad_collection_root_is_derived_from_the_reviewed_locked_study() -> None:
     """The broad boundary has a source-reviewed root, not a caller checksum."""
 

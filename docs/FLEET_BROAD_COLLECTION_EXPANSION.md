@@ -74,6 +74,15 @@ The roster uses an anchored task-family split:
 5. Derive a new protected-family lock from the resulting split.  Every later
    admission and materialization step checks that lock.
 
+There is one narrow historical exception.  When the current inventory is
+exactly the already-locked study, every family role is immutable and there is
+no legal family available for a balancing swap.  The splitter reproduces those
+roles exactly and records `all_current_groups_inherited` as an explicit
+representativeness exception.  It does not claim a newly balanced split, and
+it does not relax representativeness once a new family is present.  As soon as
+the catalog contains a movable new family, normal representative-label repair
+and its failure gate apply again.
+
 The parent role anchor travels with every anchored split as a separate sealed
 file.  The collection renderer, admission adapter, and private materializer
 all require that exact file, verify its digest against the child split, and
