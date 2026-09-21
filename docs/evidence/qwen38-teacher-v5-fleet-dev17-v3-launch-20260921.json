@@ -1,6 +1,6 @@
 {
   "schema": "qwen38_teacher_v5_fleet_dev17_v3_launch_v1",
-  "observed_at": "2026-09-21T01:32:05Z",
+  "observed_at": "2026-09-21T01:37:15Z",
   "scope": "Score-blind launch and lifecycle evidence only. No prompts, traces, task content, outcomes, or capability scores were read.",
   "source": {
     "current_main_commit": "4307667ac471295c6bdc3130a6e7a997715e694e",
@@ -85,14 +85,28 @@
       "pending": 9,
       "retry_review": 0,
       "stale_active": 0
+    },
+    "current_score_blind_counts": {
+      "accepted": 3,
+      "claimed": 8,
+      "pending": 5,
+      "retry_review": 1,
+      "local_results": 4,
+      "stale_active": 0
+    },
+    "first_authoritative_session": {
+      "session_id": "793d0162-5922-47c9-9e2e-94b47ac96eb8",
+      "accepted_receipt_sha256": "sha256:75bcf327a699d5c21c12abf6b85a799cb9879552493e11d958dca42c3634f0fe",
+      "model_identity": "qwen/chris-q38-teacher-v5-step186-web-v1",
+      "acceptance_basis": "The score-blind accepted-receipt guard requires a completed authoritative session whose persisted model identity, task version, verifier identity, and provenance match the immutable plan."
     }
   },
   "interpretation": {
     "route_consumed": true,
     "campaign_terminal": false,
-    "authoritative_session_accepted": false,
+    "authoritative_session_accepted": true,
     "capability_claim_made": false,
     "final_eight_task_set_accessed": false
   },
-  "sha256": "8d9339e17b84530b1df0696d532f7d0c9ee66b5576a701264d7cdd80c2fe8fbd"
+  "sha256": "d163a260003615b37ff74151f357bd4a54c9b95f3325d07465872a41ed7c6edc"
 }

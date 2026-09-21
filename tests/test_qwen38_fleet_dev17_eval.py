@@ -16,14 +16,10 @@ CONFIG = ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-matched-pass1-v2.
 BASE_CONFIG = ROOT / "configs/evaluation/qwen38-base-fleet-dev17-opencode-pass1-v1.json"
 CANDIDATE_CONFIG = ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-opencode-pass1-v2.json"
 TEACHER_CONFIG = ROOT / "configs/evaluation/qwen38-teacher-v5-fleet-dev17-opencode-pass1-v2.json"
-TEACHER_V3_CONFIG = (
-    ROOT / "configs/evaluation/qwen38-teacher-v5-fleet-dev17-opencode-pass1-v3.json"
-)
+TEACHER_V3_CONFIG = ROOT / "configs/evaluation/qwen38-teacher-v5-fleet-dev17-opencode-pass1-v3.json"
 BACKLOG = ROOT / "configs/evaluation/qwen38-fleet-dev17-backlog-v1.json"
 SUCCESSOR_JOB = ROOT / "evals/fleet/cluster/qwen38-base-dev17-opencode-pass1-v1-job.yaml"
-TEACHER_V3_JOB = (
-    ROOT / "evals/fleet/cluster/qwen38-teacher-v5-dev17-opencode-pass1-v3-job.yaml"
-)
+TEACHER_V3_JOB = ROOT / "evals/fleet/cluster/qwen38-teacher-v5-dev17-opencode-pass1-v3-job.yaml"
 SUCCESSOR_SCRIPT = ROOT / "evals/fleet/scripts/run_qwen38_dev17_single_arm_v1.sh"
 
 
