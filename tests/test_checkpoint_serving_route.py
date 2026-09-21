@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+from pathlib import Path
 
 import pytest
 
@@ -9,11 +10,15 @@ from training.checkpoint_serving_route import (
     RouteError,
     _digest,
     _normalized_contract,
+    _validate_plan,
     build_paused_spec,
     lifecycle,
     reconcile_create,
     wait_phase,
 )
+
+ROOT = Path(__file__).resolve().parents[1]
+LR30_ROUTE = ROOT / "configs/evaluation/qwen38-lr30-step76-serving-route-plan-v1.json"
 
 
 def _base() -> dict:
@@ -73,6 +78,28 @@ def test_contract_detects_runtime_drift() -> None:
     drifted = copy.deepcopy(candidate)
     drifted["runtime"]["args"].append("--different-runtime")
     assert _normalized_contract(drifted) != _normalized_contract(base)
+
+
+def test_lr30_step76_route_plan_is_offline_paused_exact_base_clone() -> None:
+    plan = json.loads(LR30_ROUTE.read_text())
+    _validate_plan(plan)
+    registration = plan["registration"]
+    spec = registration["spec"]
+
+    assert plan["source_model_id"] == "chris-q38-available-a-lr30-step76-v1"
+    assert plan["base_model_id"] == "qwen3.8-27b"
+    assert plan["mutation_count"] == 0
+    assert registration["id"] == "chris-q38-lr30-step76-web-v1"
+    assert spec["desiredState"] == "paused"
+    assert spec["scaling"] == {"minReplicas": 0, "replicas": 1}
+    assert spec["placement"]["priorityClassName"] == "c1"
+    assert spec["model"]["sourcePath"] == "/models/chris-q38-available-a-lr30-step76-v1"
+    assert spec["model"]["revision"] == (
+        "sha256:3bef11697759b11db150b705e1882fb2d31a3efbdadbebd948aa917dcacc03a8"
+    )
+    assert plan["normalized_contract_sha256"] == (
+        "sha256:d82d78721f4ec8d4b0d6228242df4838b38086a48108e57fc6fe4e7be1fa3662"
+    )
 
 
 def test_rejects_non_sha_revision() -> None:

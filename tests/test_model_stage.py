@@ -19,11 +19,15 @@ ROOT = Path(__file__).resolve().parents[1]
 FAILED_V1 = ROOT / "configs/qualification/qwen38-fresh75-step230-inference-stage-v1.json"
 PRODUCTION = ROOT / "configs/qualification/qwen38-fresh75-step230-inference-stage-v2.json"
 SELF_SFT = ROOT / "configs/qualification/qwen38-self-sft-step44-inference-stage-v1.json"
+LR30_STEP76 = ROOT / "configs/qualification/qwen38-lr30-step76-inference-stage-v1.json"
 ACCEPTED_V2 = (
     ROOT / "docs/evidence/qwen38-fresh75-step230-inference-stage-v2-accepted-20260915.json"
 )
 ACCEPTED_SELF_SFT = (
     ROOT / "docs/evidence/qwen38-self-sft-step44-inference-stage-v1-accepted-20260920.json"
+)
+ACCEPTED_LR30_STEP76 = (
+    ROOT / "docs/evidence/qwen38-lr30-step76-inference-stage-v1-accepted-20260921.json"
 )
 SOURCE = ROOT / "training/model_stage.py"
 
@@ -164,6 +168,59 @@ def test_self_sft_plan_clones_current_base_runtime_and_starts_paused() -> None:
         ]
         == "qwen3_coder"
     )
+
+
+def test_lr30_step76_plan_clones_current_base_and_binds_accepted_forward() -> None:
+    plan = current_stage.read_plan(LR30_STEP76)
+    source = plan["source"]
+    desired = plan["desired_registration"]
+    desired_spec = desired["spec"]
+
+    assert plan["registration_source"]["id"] == "qwen3.8-27b"
+    assert plan["execution"]["gpus"] == 0
+    assert plan["execution"]["priority_class"] == "c1"
+    assert plan["destination"]["path"] == "/models/chris-q38-available-a-lr30-step76-v1"
+    assert source["export_receipt"]["receipt_sha256"] == (
+        "sha256:983bf6daa2f8b7680560c834cbfb76fb8fe7fba5a273f116b9b3e80ef9f97538"
+    )
+    assert source["gpu_check_receipt"]["receipt_sha256"] == (
+        "sha256:8cb7cbab5df338b2066825aad93ba52aed10a339464e2524fa1bb0ac2fec192a"
+    )
+    assert source["gpu_check_receipt"]["required_fields"]["finite_logits"] is True
+    assert source["gpu_check_receipt"]["required_fields"]["optimizer_steps_executed"] == 0
+    assert desired["id"] == "chris-q38-available-a-lr30-step76-v1"
+    assert desired_spec["desiredState"] == "paused"
+    assert desired_spec["scaling"] == {"minReplicas": 0}
+    assert desired_spec["placement"]["priorityClassName"] == "c1"
+    assert desired_spec["model"]["dataParallelSize"] == 8
+    assert desired_spec["model"]["tensorParallelSize"] == 1
+    assert desired_spec["model"]["revision"] == source["payload"]["manifest_sha256"]
+
+
+def test_lr30_step76_acceptance_binds_forward_stage_cleanup_and_paused_registration() -> None:
+    evidence = json.loads(ACCEPTED_LR30_STEP76.read_text())
+    plan = current_stage.read_plan(LR30_STEP76)
+
+    assert evidence["sha256"] == stage.digest_json(stage._unsigned(evidence, "sha256"))
+    assert evidence["one_gpu_inference_forward"]["status"] == "SUCCEEDED"
+    assert evidence["one_gpu_inference_forward"]["result"]["finite_logits"] is True
+    assert evidence["one_gpu_inference_forward"]["result"]["source_unchanged"] is True
+    assert evidence["one_gpu_inference_forward"]["result"]["optimizer_steps_executed"] == 0
+    assert evidence["staging"]["plan_sha256"] == plan["plan_sha256"]
+    assert evidence["staging"]["receipt_sha256"] == (
+        "sha256:eed9a359eec69e1ba9a4a51169323fab1ff46ad0b138a7bb261d98707e1aee49"
+    )
+    assert evidence["cleanup"]["stage_pod_uid_absent"] is True
+    assert evidence["cleanup"]["stage_config_map_uid_absent"] is True
+    assert evidence["registration"]["post_count"] == 1
+    assert evidence["registration"]["second_post_performed"] is False
+    assert evidence["registration"]["registration_sha256"] == stage.digest_json(
+        plan["desired_registration"]
+    )
+    assert evidence["registration"]["get_readback"]["phase"] == "paused"
+    assert evidence["registration"]["get_readback"]["active_pods"] == 0
+    assert evidence["registration"]["get_readback"]["gpus_allocated"] == 0
+    assert evidence["registration"]["serving_qualified"] is False
 
 
 def test_self_sft_registration_rejects_current_base_runtime_drift() -> None:
