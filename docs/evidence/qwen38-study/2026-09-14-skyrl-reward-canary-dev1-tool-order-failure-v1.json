@@ -1,0 +1,68 @@
+{
+  "schema": "cyber_skyrl_reward_canary_failure_evidence_v1",
+  "observed_at": "2026-09-14T05:14:34Z",
+  "run": {
+    "api_name": "chris-q38-rlreward-dev1-ae5b410b",
+    "ray_job_id": "chris-q38-rlreward-dev1-ae5b410b-hn8vn",
+    "rayjob_uid": "c32644b1-08ee-46b3-b4b8-ff8996f7e463",
+    "workload_uid": "2ebfcfd2-21b2-4f62-83c2-03ac3c6834b0",
+    "raycluster_uid": "4decdc88-fbba-40a2-b6ac-f2a6c3e5fa4a",
+    "pod_uid": "5f9bb806-33f7-4c49-9a08-f839d3e4b248",
+    "priority": "c1",
+    "gpu_nodes": 1,
+    "gpus": 8,
+    "status": "failed",
+    "gpu_release_confirmed": true,
+    "wandb_url": "https://wandb.ai/thefleet/cyber-post-train/runs/chris-q38-rlreward-dev1"
+  },
+  "terminal_evidence": {
+    "plan_sha256": "e6471301be2ee39985606c9ee4da72c4f1d7d481f70242068473e64427243e74",
+    "started_file_sha256": "sha256:6f6ce6dca68a9468d30de70f621c0175b31d2642f460a16d98f64a411c5c981f",
+    "native_failure_file_sha256": "sha256:02a52478b1ba3d84075091b377d94b3ace169078fbbf00293b6d1828544ae9ce",
+    "native_failure_sha256": "259f116a9016bdb5154c056ae48c70d911124f5742db6963bdde4d41be5ad18c",
+    "failed_file_sha256": "sha256:1bc7532e642fe634be77df43dd70a8af7c059907dd751b697b9cf2f5bb241931",
+    "failed_sha256": "ff26e321beff2279647fc05d2502c9467abb9f65814304ca6501fea8d1b3e721",
+    "safe_failure_class": "InvalidEpisode",
+    "safe_failure_location": "training/skyrl_episode.py:156:begin_segment",
+    "grader_execution_created": false,
+    "reward_observed": false,
+    "optimizer_updates": 0,
+    "checkpoint_created": false
+  },
+  "live_cpu_diagnostic": {
+    "request_id": "99b23668-e378-5c4d-87d8-87a0f326410b",
+    "instance_id": "mhlvs56cmcyn-n",
+    "instance_created_at": "2026-09-14T05:12:22.589241Z",
+    "instance_terminated_at": "2026-09-14T05:12:40.101103Z",
+    "instance_release_confirmed": true,
+    "fleet_team_exact": true,
+    "task_prompt_hash_matches": true,
+    "chat_template_hash_matches": true,
+    "tokenizer_class": "Qwen2Tokenizer",
+    "tokenizer_is_fast": true,
+    "live_catalog_count": 2,
+    "live_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "live_catalog_matches_frozen_semantics": true,
+    "expected_token_count": 1256,
+    "expected_token_sha256": "sha256:81eaad179a8e1e7de67e6495115dbadc43e9560014693a379cc50161f086c8d4",
+    "unnormalized_live_token_count": 1260,
+    "unnormalized_live_token_sha256": "sha256:d87356973b219800423f9b93cfb40b8cddac6ef3b7cd191c6e47e36d1c17ecc2",
+    "canonicalized_live_token_count": 1256,
+    "canonicalized_live_token_sha256": "sha256:81eaad179a8e1e7de67e6495115dbadc43e9560014693a379cc50161f086c8d4",
+    "plain_nonnegative_integer_tokens": true,
+    "context_budget_passed": true
+  },
+  "finding": {
+    "classification": "runtime_adapter_representation_defect",
+    "cause": "The live MCP catalog had the exact reviewed canonical digest, but Pydantic retained a different dictionary insertion order. The Qwen chat template serialized that order and produced four extra prompt tokens.",
+    "deterministic_fix": "Canonical JSON round-trip the already digest-verified live tool catalog before constructing Qwen chat-template tools, matching the canonical frozen representation used by offline data preparation.",
+    "task_or_scientific_recipe_changed": false
+  },
+  "privacy": {
+    "prompts_included": false,
+    "traces_included": false,
+    "raw_scores_included": false,
+    "credentials_included": false
+  },
+  "sha256": "b57a91145b4919fa75d9f6ce9e74afc40a404a767fe408a888658afeccbcbc78"
+}

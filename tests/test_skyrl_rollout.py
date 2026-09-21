@@ -71,6 +71,7 @@ def setup(tmp_path, monkeypatch, request):
                 loss_mask=[1, 0],
                 rollout_log_probs=[-0.25, 0.0],
                 reward=0.0,
+                metadata={"step_kind": "action"},
                 status=NS(name="COMPLETED"),
             )
         ]
@@ -125,7 +126,11 @@ async def test_native_shapes_keep_tokens_zero_rewards_ids_and_source(setup, phas
     assert output["loss_masks"] == [[1, 0]] * n
     assert output["rollout_logprobs"] == [[-0.25, 0.0]] * n
     assert output["rewards"] == [0.0] * n
-    assert output["trajectory_ids"] is source["trajectory_ids"]
+    assert output["trajectory_ids"] == source["trajectory_ids"]
+    assert all(
+        actual is expected
+        for actual, expected in zip(output["trajectory_ids"], source["trajectory_ids"], strict=True)
+    )
     assert output["is_last_step"] == [True] * n
     assert output["stop_reasons"] == ["stop"] * n
     assert len(set(c["run_id"] for c, _ in setup.calls)) == n
@@ -313,7 +318,7 @@ async def test_caller_cancellation_and_reentry(setup, monkeypatch):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("mode", ["empty", "multiple", "reward", "tokens"])
+@pytest.mark.parametrize("mode", ["empty", "intermediate_reward", "reward", "tokens"])
 async def test_invalid_results_never_become_training_data(setup, monkeypatch, mode):
     original = batch.rl_episode.collect
 
@@ -321,8 +326,9 @@ async def test_invalid_results_never_become_training_data(setup, monkeypatch, mo
         samples = await original(*args, **kwargs)
         if mode == "empty":
             return []
-        if mode == "multiple":
-            return samples * 2
+        if mode == "intermediate_reward":
+            samples[0].reward = 1.0
+            return samples + [copy.deepcopy(samples[0])]
         if mode == "reward":
             samples[0].reward = float("nan")
         if mode == "tokens":
@@ -332,6 +338,46 @@ async def test_invalid_results_never_become_training_data(setup, monkeypatch, mo
     monkeypatch.setattr(batch.rl_episode, "collect", collect)
     with pytest.raises(batch.rl_episode.InvalidEpisode):
         await generator(setup).generate(input_batch(setup))
+
+
+@pytest.mark.asyncio
+async def test_stepwise_trajectory_preserves_distinct_prompts_and_last_reward(setup, monkeypatch):
+    async def collect(config, directory, *args, **kwargs):
+        setup.calls.append((config, directory))
+        return [
+            NS(
+                tokens=[1, 2, 31, 9],
+                response_length=2,
+                loss_mask=[1, 1],
+                rollout_log_probs=[-0.2, -0.1],
+                reward=0.0,
+                metadata={"step_kind": "compaction"},
+                status=NS(name="COMPLETED"),
+            ),
+            NS(
+                tokens=[7, 8, 77, 9],
+                response_length=2,
+                loss_mask=[1, 1],
+                rollout_log_probs=[-0.3, -0.2],
+                reward=1.0,
+                metadata={"step_kind": "action"},
+                status=NS(name="COMPLETED"),
+            ),
+        ]
+
+    monkeypatch.setattr(batch.rl_episode, "collect", collect)
+    source = input_batch(setup, phase="eval")
+    output = await generator(setup).generate(source)
+    assert output["prompt_token_ids"] == [[1, 2], [7, 8]]
+    assert output["response_ids"] == [[31, 9], [77, 9]]
+    assert output["rewards"] == [0.0, 1.0]
+    assert output["trajectory_ids"] == [source["trajectory_ids"][0]] * 2
+    assert output["is_last_step"] == [False, True]
+    assert output["rollout_metrics"] == {
+        "cyber/episodes": 1,
+        "cyber/steps": 2,
+        "cyber/compactions": 1,
+    }
 
 
 @pytest.mark.asyncio
@@ -355,5 +401,4 @@ async def test_real_native_output_validator(setup):
     source["trajectory_ids"] = [types.TrajectoryID("0", i) for i in range(2)]
     source["batch_metadata"] = types.BatchMetadata(global_step=1, training_phase="train")
     result = await generator(setup).generate(source)
-    native.validate_generator_output(2, result, step_wise=False)
     native.validate_generator_output(2, result, step_wise=True)

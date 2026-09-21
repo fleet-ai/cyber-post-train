@@ -1,0 +1,63 @@
+{
+  "active_gpus": 0,
+  "armed_at": "2026-09-20T14:57:38Z",
+  "context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+  "created_at": "2026-09-20T14:57:53Z",
+  "deletion_requested_at": "2026-09-20T14:58:06Z",
+  "exit_codes": [
+    0
+  ],
+  "expected_gpus": 0,
+  "image_ids": [
+    "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
+  ],
+  "job_id": "",
+  "kind": "job",
+  "manifest_sha256": "sha256:96495a7048e3b9d43fc4a6a3bd2008889c5b2bbd2875b212fc4284ed3dfd1ef2",
+  "maximum_seconds": 600,
+  "name": "chris-q38-skyrl-probe-receipt-v14b",
+  "namespace": "fleet-train-jobs",
+  "observer_error_class": "",
+  "peak_gpus": 0,
+  "plan_sha256": "sha256:713272d7ae416cff87e1d67e9cfd83d9ae4732a6c4998396985a1c252d5e6b91",
+  "pod_names": [
+    "chris-q38-skyrl-probe-receipt-v14b-t4p8k"
+  ],
+  "pod_uids": [
+    "820ffbb6-6354-4f72-9de5-680a5c5a5e1c"
+  ],
+  "pods_present": false,
+  "raycluster_name": "",
+  "raycluster_present": false,
+  "raycluster_uid": "",
+  "rayjob_name": "",
+  "rayjob_present": false,
+  "rayjob_uid": "",
+  "receipt": {
+    "checkpoints": 0,
+    "error_class": "ProbeGateError",
+    "error_code": "durable_failure_receipt_present",
+    "optimizer_steps": 0,
+    "phase": "durable_receipt_verification",
+    "plan_sha256": "713272d7ae416cff87e1d67e9cfd83d9ae4732a6c4998396985a1c252d5e6b91",
+    "rollout_episodes": 0,
+    "schema": "cyber_skyrl_topology_probe_receipt_verification_rejection_v1",
+    "sha256": "sha256:45303cc236bbf2bb02cd6bd76d67bc544353f5a8d13048bdfab7a602b9129967",
+    "status": "rejected",
+    "task_rows_read": 0
+  },
+  "release_observed_at": "2026-09-20T14:58:11Z",
+  "restarts": 0,
+  "schema": "cyber_dev_cleanup_observer_result_v1",
+  "sha256": "sha256:f85be083fb842d50276ad5a9e5b022a6d65dc7d2f312aa3efc75a45d2edc1ec2",
+  "status": "released_without_accepted_execution",
+  "target_present": false,
+  "terminal_status": "Succeeded",
+  "termination_reasons": [
+    "Completed"
+  ],
+  "uid": "994e07e8-fa90-4290-808a-6ee3eac780a4",
+  "workload_name": "",
+  "workload_present": false,
+  "workload_uid": ""
+}

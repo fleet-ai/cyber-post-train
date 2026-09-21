@@ -178,17 +178,22 @@ class Generator:
                             client=client,
                         )
                         rl_episode.validate_samples(samples)
-                        if len(samples) != 1 or (
-                            type(samples[0].reward) not in (float, int)
-                            or not math.isfinite(samples[0].reward)
-                            or not 0 <= samples[0].reward <= 1
+                        if (
+                            not samples
+                            or any(
+                                type(sample.reward) not in (float, int)
+                                or not math.isfinite(sample.reward)
+                                or not 0 <= sample.reward <= 1
+                                for sample in samples
+                            )
+                            or any(sample.reward != 0 for sample in samples[:-1])
                         ):
                             raise rl_episode.InvalidEpisode("skyrl_episode_result_invalid")
-                        return samples[0], time.monotonic() - started
+                        return samples, time.monotonic() - started
 
                 async with asyncio.TaskGroup() as group:
                     tasks = [group.create_task(episode(i, c)) for i, c in enumerate(configs)]
-            values, durations = zip(*(task.result() for task in tasks), strict=True)
+            trajectories, durations = zip(*(task.result() for task in tasks), strict=True)
             fleet.write_json_once(
                 directory / "COLLECTED.json",
                 {
@@ -196,17 +201,43 @@ class Generator:
                     "sha256": fleet.sha256(fleet.canonical_json(intent)),
                 },
             )
+            steps = [sample for samples in trajectories for sample in samples]
+            trajectory_ids = [
+                identity
+                for identity, samples in zip(
+                    input_batch["trajectory_ids"], trajectories, strict=True
+                )
+                for _ in samples
+            ]
+            is_last_step = [
+                index == len(samples) - 1
+                for samples in trajectories
+                for index in range(len(samples))
+            ]
+            generation_times = [
+                duration
+                for duration, samples in zip(durations, trajectories, strict=True)
+                for _ in samples
+            ]
             return {
-                "prompt_token_ids": [s.tokens[: -s.response_length] for s in values],
-                "response_ids": [s.tokens[-s.response_length :] for s in values],
-                "rewards": [s.reward for s in values],
-                "loss_masks": [s.loss_mask for s in values],
-                "rollout_logprobs": [s.rollout_log_probs for s in values],
-                "stop_reasons": ["stop"] * len(values),
-                "trajectory_ids": input_batch["trajectory_ids"],
-                "trajectory_generation_times": list(durations),
-                "is_last_step": [True] * len(values),
-                "rollout_metrics": {"cyber/episodes": len(values)},
+                "prompt_token_ids": [step.tokens[: -step.response_length] for step in steps],
+                "response_ids": [step.tokens[-step.response_length :] for step in steps],
+                "rewards": [step.reward for step in steps],
+                "loss_masks": [step.loss_mask for step in steps],
+                "rollout_logprobs": [step.rollout_log_probs for step in steps],
+                "stop_reasons": ["stop"] * len(steps),
+                "trajectory_ids": trajectory_ids,
+                "trajectory_generation_times": generation_times,
+                "is_last_step": is_last_step,
+                "rollout_metrics": {
+                    "cyber/episodes": len(trajectories),
+                    "cyber/steps": len(steps),
+                    "cyber/compactions": sum(
+                        int(sample.metadata.get("step_kind") == "compaction")
+                        for samples in trajectories
+                        for sample in samples
+                    ),
+                },
                 "rollout_expert_indices": None,
                 "env_metrics": None,
                 "pixel_values": None,

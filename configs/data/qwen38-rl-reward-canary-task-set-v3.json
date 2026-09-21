@@ -1,0 +1,47 @@
+{
+  "schema": "cyber_rl_task_set_v1",
+  "purpose": "Qwen3.8 SkyRL dev reward-acquisition canary using one authoritative exact source version with trainer-owned tools and a separately frozen dev task",
+  "source_manifest_sha256": "sha256:c45c9cc420a3dbf1aa6b635b84ed1ca3c404254f046ffdac234e053929a1bf12",
+  "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+  "training_data_eligible": true,
+  "reward_signal_provenance": {
+    "kind": "eligible_authoritative_source_direct",
+    "evidence_path": "configs/runs/qwen36-27b-native-rl-reward-acquisition-canary.pre-submit.json",
+    "evidence_file_sha256": "sha256:f922595c70ce9044280217fd4389a098d64b640fd8577c93edf991b32f7066d0",
+    "source_rule": "Eligibility is derived from the authoritative exact-version GET matching the reviewed source runtime and verifier pins. Task metadata.tools is not a runtime authority: data preparation injects the reviewed catalog and each episode independently requires the live MCP catalog to match before model interaction. Historical reward remains only a task-selection prior.",
+    "exact_version_evidence": {
+      "path": "../data/qwen38-rl-reward-canary-exact-version-evidence-v3.json",
+      "file_sha256": "sha256:73be894762968970c8cf0454281fe13d46615e40039b61b8f8a97c8cc883f365",
+      "self_sha256": "sha256:50491796b829388164faefc5fb9a9ad09fac89a8d94648a1791240f91826a285"
+    }
+  },
+  "tasks": [
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-0708aea62e0d8ccf09331568__blackbox_ctf_v1",
+      "task_version_id": "54425601-6fd2-43d8-8cb9-e565b767676a",
+      "env_key": "cysec1-2-current-gen",
+      "env_version": "v0.0.3",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "data_key": "commercial",
+      "data_version": "v0.0.9",
+      "lineage": {
+        "application": "current",
+        "task_family": "cyber/atoms/current/checkout-original-uri-desync@0"
+      }
+    },
+    {
+      "task_key": "cysec1-2-fakelook-gen_blackbox-7317189e8fefb9033c5be097__blackbox_ctf_v1",
+      "task_version_id": "2fdc9511-f5fe-4386-a4a5-a5a16a30f359",
+      "env_key": "cysec1-2-fakelook-gen",
+      "env_version": "v0.0.3",
+      "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+      "data_key": "fakelook-cyber-gen",
+      "data_version": "v0.0.2",
+      "lineage": {
+        "application": "fakelook",
+        "task_family": "cyber/atoms/fakelook/user-signature-read-owner-check-dropped@0"
+      }
+    }
+  ],
+  "sha256": "sha256:9b88bac1510720926ea041d942044804d6c54c083a0ea56d07cae5f448685909"
+}

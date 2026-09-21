@@ -89,6 +89,34 @@ def reassemble(parts: list, shape: list[int]):
 
 
 def export(manifest_path: Path, expected_sha256: str, output: Path, *, progress=None) -> dict:
+    """Export an SFT-native manifest after its SFT-specific verification."""
+    return _export_verified(
+        manifest_path,
+        expected_sha256,
+        output,
+        verify_manifest=verify,
+        receipt_schema="cyber_native_checkpoint_hf_export_v1",
+        code_files=(),
+        progress=progress,
+    )
+
+
+def _export_verified(
+    manifest_path: Path,
+    expected_sha256: str,
+    output: Path,
+    *,
+    verify_manifest,
+    receipt_schema: str,
+    code_files: tuple[str, ...],
+    progress=None,
+) -> dict:
+    """Shared tensor writer after a backend-specific manifest validator.
+
+    The caller must authenticate the scientific plan schema.  This helper owns
+    only the already-common native FSDP tensor reconstruction, BF16 output and
+    create-once source-immutability checks; it never broadens SFT plan parsing.
+    """
     import torch
     from safetensors.torch import save_file
 
@@ -110,7 +138,7 @@ def export(manifest_path: Path, expected_sha256: str, output: Path, *, progress=
             raise ValueError("export must not write inside source checkpoint/base")
     if progress:
         progress("verify_source", 0, 0)
-    verify(manifest)
+    verify_manifest(manifest)
     files = checkpoint_files(source, manifest["world_size"])
     for entry in plan["model"]["files"]:
         path = base / entry["path"]
@@ -190,7 +218,7 @@ def export(manifest_path: Path, expected_sha256: str, output: Path, *, progress=
         _fsync_file(path)
         payload[path.name] = {"bytes": path.stat().st_size, "sha256": digest(path)}
     result = {
-        "schema": "cyber_native_checkpoint_hf_export_v1",
+        "schema": receipt_schema,
         "source_checkpoint_receipt_sha256": manifest["receipt_sha256"],
         "source_manifest_file_sha256": digest(manifest_path),
         "source_plan_sha256": manifest["source_plan_sha256"],
@@ -204,6 +232,7 @@ def export(manifest_path: Path, expected_sha256: str, output: Path, *, progress=
                 "post_sft_artifacts.py",
                 "post_sft_base_surface.py",
                 "io.py",
+                *code_files,
             )
         },
         "model_repo": plan["model"]["repo"],
