@@ -46,6 +46,10 @@ shape, 262,144-token compaction settings, and zero-GPU preflight's root alert
 opt-out. It never reads task rows, contacts external services, stages data, or
 authorizes a launch.
 
+The exact local rebind, read-only absence, and server-preview sequence is in
+[`QWEN38_SKYRL_PROD9_NONSUBMITTING_GATES.md`](QWEN38_SKYRL_PROD9_NONSUBMITTING_GATES.md).
+It creates no Kubernetes object and deliberately omits every live create.
+
 ## Why this does not add a separate setup-module digest gate
 
 This direct training rail does not use the separate engine-setup module from
