@@ -14,11 +14,13 @@ import hashlib
 import json
 import math
 import os
+import re
 import stat
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 import httpx
 
@@ -49,6 +51,7 @@ INTENT_FIELDS = {
     "runtime_files_sha256",
     "serving_block",
     "source_output_root",
+    "source_database",
     "source_job_uid",
     "source_job_terminal_receipt_sha256",
     "selected_cell_ids",
@@ -131,6 +134,7 @@ class StoredSessionIntent:
     runtime_files_sha256: dict[str, str]
     serving_block: str
     source_output_root: str
+    source_database: str
     source_job_uid: str
     source_job_terminal_receipt_sha256: str
     selected_cell_ids: tuple[str, ...]
@@ -151,6 +155,7 @@ class StoredSessionIntent:
             or ".." in output.parts
         ):
             raise rollout_ledger.LedgerError("source output root is not an exact SFS job path")
+        database = _database_name(self.source_database)
         source_job_uid = str(uuid.UUID(self.source_job_uid))
         terminal_receipt = rollout_ledger._require_digest(  # noqa: SLF001
             self.source_job_terminal_receipt_sha256,
@@ -166,6 +171,7 @@ class StoredSessionIntent:
                 "runtime_files_sha256": runtime,
                 "serving_block": route,
                 "source_output_root": str(output),
+                "source_database": database,
                 "source_job_uid": source_job_uid,
                 "source_job_terminal_receipt_sha256": terminal_receipt,
                 "selected_cell_ids": list(cells),
@@ -178,6 +184,7 @@ class StoredSessionIntent:
         object.__setattr__(self, "runtime_files_sha256", runtime)
         object.__setattr__(self, "serving_block", route)
         object.__setattr__(self, "source_output_root", str(output))
+        object.__setattr__(self, "source_database", database)
         object.__setattr__(self, "source_job_uid", source_job_uid)
         object.__setattr__(self, "source_job_terminal_receipt_sha256", terminal_receipt)
         object.__setattr__(self, "selected_cell_ids", cells)
@@ -205,11 +212,31 @@ def load_intent(path: Path) -> StoredSessionIntent:
         runtime_files_sha256=value["runtime_files_sha256"],
         serving_block=value["serving_block"],
         source_output_root=value["source_output_root"],
+        source_database=value["source_database"],
         source_job_uid=value["source_job_uid"],
         source_job_terminal_receipt_sha256=value["source_job_terminal_receipt_sha256"],
         selected_cell_ids=tuple(value["selected_cell_ids"]),
         sha256=value["sha256"],
     )
+
+
+def _database_name(value: Any) -> str:
+    if not isinstance(value, str) or re.fullmatch(r"[a-z][a-z0-9_]{0,62}", value) is None:
+        raise rollout_ledger.LedgerError("stored-session database name is invalid")
+    return value
+
+
+def dedicated_dsn(admin_dsn: str, database: str) -> str:
+    """Select the exact sealed evaluation database from the cluster administrator DSN."""
+
+    database = _database_name(database)
+    try:
+        parsed = urlsplit(admin_dsn)
+    except ValueError as exc:
+        raise rollout_ledger.LedgerError("PostgreSQL administrator DSN is invalid") from exc
+    if parsed.scheme not in {"postgres", "postgresql"} or not parsed.hostname or parsed.fragment:
+        raise rollout_ledger.LedgerError("PostgreSQL administrator DSN is invalid")
+    return urlunsplit((parsed.scheme, parsed.netloc, "/" + database, parsed.query, ""))
 
 
 def _rows(connection: Any, intent: StoredSessionIntent, *, lock: bool) -> list[dict[str, Any]]:
@@ -704,12 +731,17 @@ def run(
     *,
     evaluation_directory: Path,
     output_root: Path,
-    dsn: str,
+    admin_dsn: str,
+    database: str,
     intent_path: Path,
 ) -> dict[str, Any]:
     if output_root.exists():
         raise FileExistsError("create-once stored-session output already exists")
     intent = load_intent(intent_path)
+    database = _database_name(database)
+    if database != intent.source_database:
+        raise rollout_ledger.LedgerError("runtime database differs from stored-session intent")
+    dsn = dedicated_dsn(admin_dsn, database)
     output_root.mkdir(parents=True, mode=0o700)
     key = os.environ.get("FLEET_API_KEY")
     if not key:
@@ -761,17 +793,19 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--evaluation-directory", type=Path, required=True)
     parser.add_argument("--output-root", type=Path, required=True)
-    parser.add_argument("--postgres-dsn-env", required=True)
+    parser.add_argument("--postgres-admin-dsn-env", required=True)
+    parser.add_argument("--postgres-database", required=True)
     parser.add_argument("--intent", type=Path, required=True)
     args = parser.parse_args()
-    dsn = os.environ.get(args.postgres_dsn_env, "")
-    if not dsn:
-        parser.error(f"{args.postgres_dsn_env} is required")
+    admin_dsn = os.environ.get(args.postgres_admin_dsn_env, "")
+    if not admin_dsn:
+        parser.error(f"{args.postgres_admin_dsn_env} is required")
     try:
         result = run(
             evaluation_directory=args.evaluation_directory,
             output_root=args.output_root,
-            dsn=dsn,
+            admin_dsn=admin_dsn,
+            database=args.postgres_database,
             intent_path=args.intent,
         )
     except BaseException as exc:  # noqa: BLE001

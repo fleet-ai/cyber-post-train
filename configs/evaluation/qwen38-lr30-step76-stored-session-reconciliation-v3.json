@@ -1,0 +1,70 @@
+{
+  "schema": "fleet-stored-session-reconciliation-job-v1",
+  "source": {
+    "evaluation_plan_sha256": "sha256:cddb3c2d03b24914e21101cdf66de720423d5332fcbe92ae04d69b4a98a2af0c",
+    "evaluation_directory": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s43-lr30s76-p1-v1",
+    "database": "q38_dev17_s43_lr30s76_p1_v1",
+    "job_name": "chris-q38-dev17-s43-lr30s76-p1-v1",
+    "job_uid": "78b2d32d-8324-4b51-98a4-0b14fbde8fbe",
+    "terminal_receipt_path": "docs/evidence/qwen38-lr30-step76-fleet-dev17-seed43-terminal-census-20260921.json",
+    "terminal_receipt_sha256": "sha256:048272509446b482cc3ff1d0f9f8cc15a4fb07210c52320a8e8789bbb3d94abf",
+    "selected_cell_count": 11,
+    "selection": "exact private roster: ten retry_review cells plus one expired active claim, each with one completed stored session and one immutable local result"
+  },
+  "runtime": {
+    "image": "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7",
+    "run_script_sha256": "d296d158711f4c4003fe9bf2e29e4c4234277edf64e67c826b9270a10be023bb",
+    "active_deadline_seconds": 3600,
+    "resources": {
+      "requests": {
+        "cpu": "1",
+        "memory": "2Gi",
+        "ephemeral-storage": "2Gi"
+      },
+      "limits": {
+        "cpu": "2",
+        "memory": "4Gi",
+        "ephemeral-storage": "8Gi"
+      }
+    },
+    "model_route_required": false,
+    "model_generation_allowed": false,
+    "scoring_call_allowed": false
+  },
+  "execution": {
+    "namespace": "fleet-train-jobs",
+    "config_map_name": "chris-q38-lr30s76-reconcile-code-v3",
+    "secret_name": "chris-q38-lr30s76-reconcile-intent-v3",
+    "job_name": "chris-q38-lr30s76-reconcile-v3",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lr30s76-stored-reconcile-v3",
+    "priority_class": "c1",
+    "root_failure_alert_annotation": "off",
+    "backoff_limit": 0,
+    "gpu_request": 0,
+    "create_once": true
+  },
+  "code_sha256": {
+    "cyber_post_train/jobs.py": "bc0d08a7a27b48ff5a21a5d824356d6e92e4856b17cc7296a976aa18a2baa40d",
+    "evals/fleet/evaluate.py": "33b88cf783bffdfa7fc194e8107afbd6721e762cb5d7020da9057c8d797e761e",
+    "evals/fleet/exact_pass4_crypto.py": "477b0531fbc34103ed91ff03668616a56f05687ede8c2c9ebb4e9dd2106337d5",
+    "evals/fleet/exact_pass4_universe.py": "dca624ddae39ecfc1236a9ae1f44dcb48b1301606004bf295db2ff6f2071c250",
+    "evals/fleet/fixed_proxy.py": "a65270cb021cbc8e2fe9b00d901b4b70e9ddc98dd58d93e9f695b1768dfb984d",
+    "evals/fleet/opencode_self_hosted.py": "428e9f2e4d4c758c4f682cbed314cf96b866d051b34fa0eea8757a3aad97aa1d",
+    "evals/fleet/retry_review_policy.py": "159466f341b81ca84716398f1107cbaa389b0354d78b98916b1ca182ae9a03e9",
+    "evals/fleet/rollout_campaign.py": "c88e20359fd0929c16530f4cce967e556d23d45faa7474f520caaab982407206",
+    "evals/fleet/rollout_ledger.py": "633914e92d6a0fde6f7040f1fddf9a056c43ed9a41301f0baab1ae856397518c",
+    "evals/fleet/rollout_postgres.py": "74b946005267efa6611861135f135558ac32e10383e7c0619d278af8d8b1ccd9",
+    "evals/fleet/rollout_worker.py": "6782d014143a430c2c5523a2161f453a804e7203a07ee9e24792d705be0c224e",
+    "evals/fleet/stored_session_reconciliation.py": "ddb261fbcb9fe6c84614da24f6dc9225042871d2eb27426fb12a5e131ec2659f"
+  },
+  "safety": {
+    "two_identical_authoritative_observations_required": true,
+    "complete_roster_accepted_in_one_database_transaction": true,
+    "never_return_cell_to_pending": true,
+    "never_regenerate_rollout": true,
+    "never_repeat_scoring": true,
+    "final_eight_task_set_accessed": false,
+    "public_score_values_included": false,
+    "public_private_identifiers_included": false
+  }
+}
