@@ -1,11 +1,14 @@
-"""Fail-closed, create-once fallbacks when the Jobs API omits one annotation.
+"""Fail-closed, create-once fallbacks for narrowly reviewed Jobs API gaps.
 
 The Jobs API remains the rendering authority.  This module accepts its live
 preview, changes only the run identity, removes the API-only Fleet credential
 Secret that SFT does not consume, and adds the project-required root alert
-annotation.  It never calls the Jobs API create endpoint and never applies or
-patches a Kubernetes object.  The non-SFT exception is restricted to one exact
-LR30 step-76 HF inference-forward qualification schema.
+annotation.  The SFT rail additionally binds the exact reviewed production GPU
+cluster only when the source preview contains the generic GPU selector and the
+caller names the one reviewed production context.  It never calls the Jobs API
+create endpoint and never applies or patches a Kubernetes object.  The non-SFT
+exception is restricted to one exact LR30 step-76 HF inference-forward
+qualification schema and does not receive the SFT placement transform.
 """
 
 from __future__ import annotations
@@ -88,6 +91,10 @@ CPU_NODE_SELECTOR = {
     "kubernetes.io/arch": "amd64",
     "workload": "fleetai-training-ng-cpu",
 }
+TRAINING_GPU_CLUSTER_SELECTOR = {
+    "topology.nebius.com/gpu-cluster-id": "computegpucluster-e04x263hvn91b321fq",
+}
+SFT_PRODUCTION_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 KUBERNETES_UID_PATTERN = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
 )
@@ -780,11 +787,35 @@ def _parse_preview(preview: dict) -> dict:
     return obj
 
 
+def _bind_sft_gpu_cluster(obj: dict) -> int:
+    """Add the one reviewed production cluster to already-validated GPU Pods."""
+    bound = 0
+    for group_name, template in _templates(obj):
+        try:
+            selector = template["spec"]["nodeSelector"]
+        except (KeyError, TypeError) as exc:  # defensive after source-surface validation
+            raise JobsError(f"malformed {group_name} SFT node selector") from exc
+        if not isinstance(selector, dict) or any(
+            key in selector for key in TRAINING_GPU_CLUSTER_SELECTOR
+        ):
+            raise JobsError(f"preview {group_name} GPU cluster selector drift")
+        selector.update(TRAINING_GPU_CLUSTER_SELECTOR)
+        if not all(
+            selector.get(key) == value for key, value in TRAINING_GPU_CLUSTER_SELECTOR.items()
+        ):
+            raise JobsError(f"rendered {group_name} GPU cluster selector drift")
+        bound += 1
+    if bound == 0:
+        raise JobsError("SFT preview contained no GPU Pod templates")
+    return bound
+
+
 def _render_rayjob(
     request: dict,
     preview: dict,
     *,
     expected_secrets: list[str],
+    bind_sft_gpu_cluster: bool = False,
     run_id: str | None = None,
 ) -> tuple[dict, dict]:
     """Return one reviewed RayJob and a sanitized proof; create nothing."""
@@ -838,6 +869,7 @@ def _render_rayjob(
         raise JobsError("malformed Jobs API preview identity") from exc
 
     _assert_source_preview_surface(obj, request)
+    bound_gpu_cluster_templates = _bind_sft_gpu_cluster(obj) if bind_sft_gpu_cluster else 0
     template_records = _templates(obj)
     expected_env = {
         **request.get("env", {}),
@@ -956,15 +988,34 @@ def _render_rayjob(
         "run_id": selected_run_id,
         "name": run_name,
         "removed_api_fleet_secrets": removed,
+        "bound_gpu_cluster_templates": bound_gpu_cluster_templates,
     }
 
 
 def render_sft_rayjob(
-    plan: dict, request: dict, preview: dict, *, run_id: str | None = None
+    plan: dict,
+    request: dict,
+    preview: dict,
+    *,
+    kubernetes_context: str,
+    run_id: str | None = None,
 ) -> tuple[dict, dict]:
     """Render the maintained SFT-only direct-create fallback."""
     _assert_sft_contract(plan, request)
-    return _render_rayjob(request, preview, expected_secrets=[SFT_SECRET], run_id=run_id)
+    if kubernetes_context != SFT_PRODUCTION_CONTEXT:
+        raise JobsError("SFT GPU-cluster binding is restricted to the exact production context")
+    manifest, proof = _render_rayjob(
+        request,
+        preview,
+        expected_secrets=[SFT_SECRET],
+        bind_sft_gpu_cluster=True,
+        run_id=run_id,
+    )
+    return manifest, {
+        **proof,
+        "kubernetes_context": kubernetes_context,
+        "gpu_cluster_selector": deepcopy(TRAINING_GPU_CLUSTER_SELECTOR),
+    }
 
 
 def render_lr30_qualification_rayjob(
@@ -1030,6 +1081,11 @@ class Kubectl:
         if resource not in {"rayjobs.ray.io", "jobs.batch"}:
             raise JobsError("unsupported duplicate-check resource")
         return self._run(["get", resource, "--namespace", NAMESPACE, "--output=json"])
+
+    def get_rayjob(self, name: str) -> dict:
+        if re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", name) is None:
+            raise JobsError("invalid RayJob readback name")
+        return self._run(["get", "rayjobs.ray.io", name, "--namespace", NAMESPACE, "--output=json"])
 
     def dry_run(self, manifest: dict) -> dict:
         return self._run(
@@ -1645,6 +1701,7 @@ def _direct_submit_once(
     renderer: Any,
     run_id: str | None = None,
     output_absence_gate: Callable[[], dict] | None = None,
+    require_readback: bool = False,
 ) -> dict:
     """Preview, prove, journal and issue exactly one direct Kubernetes create."""
     if journal.exists() or journal.is_symlink():
@@ -1687,6 +1744,14 @@ def _direct_submit_once(
             "namespace": NAMESPACE,
             "kubernetes_context": kubectl.context,
             **(
+                {
+                    "gpu_cluster_selector": proof["gpu_cluster_selector"],
+                    "bound_gpu_cluster_templates": proof["bound_gpu_cluster_templates"],
+                }
+                if "gpu_cluster_selector" in proof
+                else {}
+            ),
+            **(
                 {"output_absence_receipt_sha256": output_absence_proof["sha256"]}
                 if output_absence_proof is not None
                 else {}
@@ -1704,6 +1769,18 @@ def _direct_submit_once(
         manifest,
         require_uid=True,
     )
+    if require_readback:
+        readback = kubectl.get_rayjob(proof["name"])
+        _assert_created_identity(
+            readback,
+            proof,
+            request,
+            manifest,
+            require_uid=True,
+        )
+        if readback["metadata"]["uid"] != created["metadata"]["uid"]:
+            raise JobsError("persisted RayJob UID differs from the create response")
+        created = readback
     result = {
         "name": proof["name"],
         "run_id": proof["run_id"],
@@ -1730,6 +1807,8 @@ def direct_submit_sft_once(
 ) -> dict:
     """Create one source-bound SFT RayJob through the maintained fallback."""
     _assert_sft_contract(plan, request)
+    if kubectl.context != SFT_PRODUCTION_CONTEXT:
+        raise JobsError("direct SFT submission is restricted to the exact production context")
     from training.sft_dispatch import compiler_for_plan
 
     if compiler_for_plan(plan).job_request(plan) != request:
@@ -1746,15 +1825,31 @@ def direct_submit_sft_once(
         except ValueError as exc:
             raise JobsError(str(exc)) from None
 
+    def render_for_production(
+        selected_plan: dict,
+        selected_request: dict,
+        selected_preview: dict,
+        *,
+        run_id: str | None = None,
+    ) -> tuple[dict, dict]:
+        return render_sft_rayjob(
+            selected_plan,
+            selected_request,
+            selected_preview,
+            kubernetes_context=kubectl.context,
+            run_id=run_id,
+        )
+
     return _direct_submit_once(
         plan=plan,
         request=request,
         jobs=jobs,
         kubectl=kubectl,
         journal=journal,
-        renderer=render_sft_rayjob,
+        renderer=render_for_production,
         run_id=run_id,
         output_absence_gate=output_absence_gate,
+        require_readback=True,
     )
 
 

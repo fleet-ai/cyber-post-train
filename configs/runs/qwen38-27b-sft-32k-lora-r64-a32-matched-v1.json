@@ -1,0 +1,83 @@
+{
+  "backend": "skyrl",
+  "runtime_variant": "qwen38_sft_32k_matched_v1",
+  "name": "chris-q38-sft32-lora-m1-v1",
+  "output_root": "/mnt/sfs/jobs/chris-q38-sft32-lora-m1-v1",
+  "model": {
+    "lock": "../models/qwen38-27b-1d4bf0f2.lock.json",
+    "weights": "../models/qwen38-27b-1d4bf0f2.weights.json",
+    "root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2"
+  },
+  "data": {
+    "manifest": "../data/qwen38-teacher3k-32k-v1.manifest.json",
+    "root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/teacher3k-32k-v1/data-v1"
+  },
+  "recipe": {
+    "epochs": 1,
+    "batch_size": 8,
+    "microbatch_per_gpu": 1,
+    "nodes": 1,
+    "gpus_per_node": 8,
+    "lr": 0.00003,
+    "max_length": 32768,
+    "eval_interval": 0,
+    "checkpoint_interval": 20,
+    "keep_checkpoints": 3,
+    "seed": 20260921
+  },
+  "optimizer": {
+    "adam_betas": [
+      0.9,
+      0.999
+    ],
+    "weight_decay": 0.01,
+    "max_grad_norm": 1.0,
+    "scheduler": "constant_with_warmup",
+    "num_warmup_steps": 0,
+    "offload_after_step": false
+  },
+  "lora": {
+    "type": "lora",
+    "target_modules": "all-linear",
+    "rank": 64,
+    "alpha": 32,
+    "init_method": "kaiming",
+    "dropout": 0.0
+  },
+  "runtime": {
+    "skyrl_source_commit": "7e9356c8e02e7382e84b8484638baccdd1bbf680",
+    "image": "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317"
+  },
+  "wandb": {
+    "entity": "thefleet",
+    "project": "cyber-post-train",
+    "group": "qwen38-sft-32k-dense-lora-matched-v1",
+    "run_id": "chris-q38-sft32-lora-m1-v1",
+    "name": "chris-q38-sft32-lora-m1-v1",
+    "tags": [
+      "qwen38",
+      "lora",
+      "teacher-sft",
+      "rank64",
+      "alpha32",
+      "57m-unique-supervised-tokens",
+      "32k",
+      "batch8",
+      "lr3e-5",
+      "one-epoch",
+      "task-outcomes-only",
+      "matched-dense-lora-v1",
+      "seed20260921",
+      "explicit-optimizer"
+    ]
+  },
+  "cluster": {
+    "priority": "c1",
+    "resources": {
+      "cpu_request": "64",
+      "cpu_limit": "64",
+      "memory_request": "512Gi",
+      "memory_limit": "768Gi"
+    }
+  }
+}

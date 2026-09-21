@@ -19,6 +19,8 @@ SCHEMA = "cyber_qwen38_lora_sft_cpu_preflight_v1"
 NATIVE_SCHEMA = "cyber_sft_cpu_preflight_v1"
 MODEL_REPO = "Qwen/Qwen3.8-27B"
 RUNTIME_VARIANT = "qwen38_lora_anchor_a2_v1"
+MATCHED_RUNTIME_VARIANT = "qwen38_sft_32k_matched_v1"
+RUNTIME_VARIANTS = frozenset({RUNTIME_VARIANT, MATCHED_RUNTIME_VARIANT})
 LORA_ANCHOR = {
     "type": "lora",
     "target_modules": "all-linear",
@@ -31,7 +33,7 @@ _REVISION = re.compile(r"[0-9a-f]{40}")
 
 
 def is_qwen38_lora_plan(plan: Mapping[str, Any]) -> bool:
-    """Recognize only the reviewed Qwen3.8 rank-64 LoRA anchor family."""
+    """Recognize only the two reviewed Qwen3.8 rank-64 LoRA runtimes."""
 
     model = plan.get("model")
     runtime = plan.get("runtime_variant")
@@ -40,7 +42,7 @@ def is_qwen38_lora_plan(plan: Mapping[str, Any]) -> bool:
         and model.get("repo") == MODEL_REPO
         and plan.get("lora") == LORA_ANCHOR
         and isinstance(runtime, Mapping)
-        and runtime.get("name") == RUNTIME_VARIANT
+        and runtime.get("name") in RUNTIME_VARIANTS
     )
 
 
@@ -55,7 +57,7 @@ def _qwen38_lora_identity(plan: Mapping[str, Any], request: Mapping[str, Any]) -
     """Return only public plan fields that distinguish this receipt family."""
 
     if not is_qwen38_lora_plan(plan):
-        raise ValueError("Qwen3.8 LoRA CPU preflight requires the reviewed rank-64 anchor plan")
+        raise ValueError("Qwen3.8 LoRA CPU preflight requires a reviewed rank-64 runtime")
     model = plan["model"]
     lora = plan["lora"]
     runtime = plan.get("runtime_variant")

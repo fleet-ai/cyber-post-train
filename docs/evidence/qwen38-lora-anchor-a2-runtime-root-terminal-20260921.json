@@ -1,0 +1,99 @@
+{
+  "schema": "cyber_qwen38_lora_anchor_a2_runtime_root_terminal_v1",
+  "status": "infrastructure_invalid_terminal_reconciled",
+  "observed_at": "2026-09-21T21:01:47Z",
+  "run": {
+    "name": "chris-q38-lora-sft-a2-v1-a237beb8",
+    "fleet_api_run_id": "a237beb8-e93f-4423-8737-21d1ecb0af55",
+    "rayjob_uid": "9055944a-542c-420d-8543-8a81b17f7754",
+    "workload_uid": "c7895748-c0a5-44ae-bbe1-7e5c1d644fec",
+    "priority": "c1/q1",
+    "requested_nodes": 1,
+    "requested_gpus": 8,
+    "gpu_type": "B300",
+    "failure_alerts": "off"
+  },
+  "admission": {
+    "admitted_at": "2026-09-21T20:54:39Z",
+    "node_count": 1,
+    "source_preview_selector": {
+      "workload": "fleetai-training-ng-gpu"
+    },
+    "admitted_selector": {
+      "topology.nebius.com/gpu-cluster-id": "computegpucluster-e04x263hvn91b321fq",
+      "workload": "fleetai-training-ng-gpu"
+    },
+    "interpretation": "Admission supplied the exact production GPU-cluster selector. The selector was not the terminal failure cause."
+  },
+  "terminal": {
+    "finished_at": "2026-09-21T21:01:47Z",
+    "reason": "runtime_validation_failed_before_training",
+    "error_class": "ValueError",
+    "error": "Qwen3.8 LoRA recovery root differs from its reviewed broad plan",
+    "source_symbol": "training.sft_runtime._qwen38_lora_production_source_plan",
+    "optimizer_steps_executed": 0,
+    "checkpoint_written": false,
+    "scientific_result_valid": false
+  },
+  "resource_release": {
+    "workload_finished": true,
+    "raycluster_name_suffix": "-qqhft",
+    "raycluster_absent": true,
+    "pod_count": 0,
+    "allocated_gpus": 0
+  },
+  "cleanup": {
+    "authority": "Jobs API",
+    "attempts": 1,
+    "request": {
+      "method": "DELETE",
+      "path": "/v1/runs/chris-q38-lora-sft-a2-v1-a237beb8"
+    },
+    "response": {
+      "http_status": 204,
+      "deleted": true
+    },
+    "recorded_at": "2026-09-21T21:13:04Z",
+    "reconciliation": {
+      "rayjob": {
+        "uid": "9055944a-542c-420d-8543-8a81b17f7754",
+        "absent": true
+      },
+      "workload": {
+        "uid": "c7895748-c0a5-44ae-bbe1-7e5c1d644fec",
+        "absent": true
+      },
+      "raycluster": {
+        "name_suffix": "-qqhft",
+        "absent": true
+      }
+    },
+    "owned_pod_count": 0,
+    "private_output_included": false
+  },
+  "root_cause": {
+    "classification": "versioned_wrapper_identity_was_passed_to_the_historical_production_root_validator",
+    "mechanism": "A2 validation delegated an exact base plan, but its wrapper main later passed the original wrapper-enriched plan to the inherited production qualification helper. The runtime_variant plan key and wrapper runtime digest changed the broad-plan identity seen by that internal check.",
+    "delegated_identity_reconciliation": {
+      "equal": true,
+      "diff": {}
+    },
+    "not_the_cause": "GPU-cluster placement: the Workload was admitted and carried the exact e04 selector."
+  },
+  "repair": {
+    "pull_request": "https://github.com/fleet-ai/cyber-post-train/pull/404",
+    "successor_dense_run": "chris-q38-sft32-dense-m1-v1",
+    "successor_lora_run": "chris-q38-sft32-lora-m1-v1",
+    "rule": "Validate the wrapper identity first, then reopen the inherited LoRA production qualification against an exact delegated base plan with wrapper-only fields removed and the historical runtime digest restored.",
+    "regression_test": "test_lora_entrypoint_reopens_qualification_against_delegated_base_plan"
+  },
+  "retirement": {
+    "exact_failed_objects_deleted_via_jobs_api": true,
+    "basis": "The exact RayJob and Workload UIDs are durably recorded, the Workload is Finished, the RayCluster is absent, and the current pod/GPU counts are zero.",
+    "deletion_performed_by_this_source_change": false,
+    "never_reuse_or_patch_identity": true
+  },
+  "authorization_reusable": false,
+  "private_payloads_read": false,
+  "receipt_sha256": "92911231923c38ca5d45bfcdfc4dff16d37398640d7f1bc6b0c2d3d818ebe075"
+}

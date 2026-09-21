@@ -28,6 +28,10 @@ def compiler_for_config(config: dict):
         from . import sft_lora_anchor_a2_v1
 
         return sft_lora_anchor_a2_v1
+    if variant == "qwen38_sft_32k_matched_v1":
+        from . import sft_32k_matched_v1
+
+        return sft_32k_matched_v1
     raise ValueError("SFT runtime variant is not supported by this launch rail")
 
 
