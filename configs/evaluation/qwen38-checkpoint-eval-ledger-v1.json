@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "observed_at": "2026-09-20T23:56:44Z",
+  "observed_at": "2026-09-21T00:06:40Z",
   "purpose": "Create-once checkpoint and evaluation ledger for the Qwen3.8-27B Fleet cyber lift study. A row is not a capability result until its exact matched evaluation is accepted.",
   "serving_readiness_matrix": "configs/evaluation/qwen38-checkpoint-serving-readiness-v1.json",
   "comparison_contract": {
@@ -214,11 +214,43 @@
       }
     },
     {
+      "artifact_id": "q38-lora-recovery-step40-to-step42",
+      "run_name": "chris-q38-lora-r1-s42-v2-61fb1f11",
+      "priority_when_accepted": 1,
+      "motivation": "Bounded native TP8 Megatron recovery from the sealed step-40 checkpoint to a planned pause at step 42, proving that the per-token-output retention repair keeps memory stable before any broad LoRA successor is attempted.",
+      "status": "admitted_starting_zero_restarts_no_optimizer_update_claimed",
+      "run_identity": {
+        "rayjob_name": "chris-q38-lora-r1-s42-v2-61fb1f11",
+        "rayjob_uid": "476bca55-6921-402f-b2cd-85c4952d2da3",
+        "workload_name": "rayjob-chris-q38-lora-r1-s42-v2-61fb1f11-825d5",
+        "workload_uid": "ef2c76cc-2689-4365-aa3a-94304ac6d102",
+        "raycluster_name": "chris-q38-lora-r1-s42-v2-61fb1f11-hqttl",
+        "raycluster_uid": "4dba8834-8637-4ef2-abb3-109239efefb8",
+        "pod_name": "chris-q38-lora-r1-s42-v2-61fb1f11-hqttl-head-z8jl7",
+        "pod_uid": "d13c73b3-d199-4d76-8b3b-76659a4022c0",
+        "output_root": "/mnt/sfs/jobs/chris-q38-lora-r1-s42-v2",
+        "plan_sha256": "sha256:ca4acd3b9c06c8569460b45a1b7a9166f82a5a400852e94d41907815f46d5d7c",
+        "request_sha256": "sha256:41e44b3b5b95aab4fb3dc2d6e29561706830683d39eb6da45815078e91b44337",
+        "rendered_manifest_sha256": "sha256:ea8a957f8aac47c15303935801fb6ff012aa6679d8acca37b79ef41b91db7fc9",
+        "image": "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317"
+      },
+      "resume_source": {
+        "optimizer_step": 40,
+        "receipt_sha256": "sha256:c183b77f94d4a4286cb0cf4b62c455cca4d9bceccf3db1f7c21057ab1f155376"
+      },
+      "predecessor_failure": {
+        "run_name": "chris-q38-lora-r1-s42-v1-ea7d43a6",
+        "rayjob_uid": "299e9a24-afba-41a5-8f4b-0a6212df7f74",
+        "status": "failed_preload_zero_updates_source_identity_validation_defect_resources_released",
+        "evidence": "docs/evidence/qwen38-lora-recovery-runtime-gate-failure-20260920.json"
+      }
+    },
+    {
       "artifact_id": "q38-full-weight-broad-b8-lr3e-6",
       "run_name": "chris-q38-t3k32-b8-v1-0cb9fe51",
       "priority_when_accepted": 1,
       "motivation": "Primary broad-data full-weight reference: measure the higher-capacity alternative to LoRA on the same 57.4M-token, 32K-context corpus before isolating batch-size and learning-rate effects.",
-      "status": "training_finite_step_28_zero_restarts_checkpoint_due_step_450",
+      "status": "training_finite_step_43_zero_restarts_checkpoint_due_step_450",
       "run_identity": {
         "api_run_id": "0cb9fe51-ac56-4e99-8b91-6bfbc6cc7db0",
         "rayjob_name": "chris-q38-t3k32-b8-v1-0cb9fe51",
@@ -239,7 +271,7 @@
       "run_name": "chris-q38-t3k32-b16-v1-46ca50db",
       "priority_when_accepted": 2,
       "motivation": "Batch-size control on the primary broad-data full-weight recipe: test whether doubling global batch from 8 to 16 improves optimization stability and throughput while holding model, corpus, context length, learning rate, seed, and one-epoch token exposure fixed.",
-      "status": "training_finite_step_7_zero_restarts_checkpoint_due_step_225",
+      "status": "training_finite_step_14_zero_restarts_checkpoint_due_step_225",
       "run_identity": {
         "api_run_id": "46ca50db-8aa6-49ae-a2a7-b216ee0c7c01",
         "rayjob_name": "chris-q38-t3k32-b16-v1-46ca50db",
@@ -260,7 +292,7 @@
       "run_name": "chris-q38-t3k32-lr1-v1-4291c635",
       "priority_when_accepted": 3,
       "motivation": "Learning-rate control on the primary broad-data full-weight recipe: test whether reducing LR from 3e-6 to 1e-6 better preserves base capability while learning the same 57.4M-token corpus, holding model, data, batch size, context, seed, topology, and one-epoch exposure fixed.",
-      "status": "training_finite_step_12_zero_restarts_checkpoint_due_step_450",
+      "status": "training_finite_step_28_zero_restarts_checkpoint_due_step_450",
       "run_identity": {
         "api_run_id": "4291c635-872a-42c3-a66f-92d5cedab3bf",
         "rayjob_name": "chris-q38-t3k32-lr1-v1-4291c635",
@@ -307,7 +339,7 @@
         "optimizer_steps": 0
       },
       "successor_repair": {
-        "status": "prod5_compiled_cpu_data_stage_starting_no_gpu_submitted",
+        "status": "prod5_gpu_admitted_ready_startup_zero_restarts_no_collection_or_update_yet",
         "repair_commit": "f285ed72",
         "tests": "222_passed_2_skipped",
         "plan_sha256": "sha256:e61591e0a95d33990296e2786abddf0f67d87b01f8c6bd5f54a6a217bcbaea31",
@@ -319,6 +351,16 @@
         "cpu_data_stage_job": "chris-q38-prod5-data-v1",
         "cpu_data_stage_job_uid": "0f37455c-cead-4105-a251-b318ca62a878",
         "cpu_data_stage_pod_uid": "fafe30d6-29fa-4375-8e85-82fec18d71f2",
+        "cpu_data_stage_receipt_sha256": "sha256:790bca1cd3e89c56a9461cd8d58afce42cce13407ab26bd4d83fcd695dd8bcdc",
+        "cpu_preflight_job_uid": "f1b61383-34ce-4655-8224-b5061989e40e",
+        "cpu_preflight_pod_uid": "9343e80c-315b-4970-89a4-6d7b5f2d31e1",
+        "cpu_preflight_receipt_sha256": "sha256:ef72b5b3052e94cb442c1f3bd6c7439fd7f604dd1504d24aa4b3140cd719baf5",
+        "gpu_rayjob_name": "chris-q38-rlreward-prod5",
+        "gpu_rayjob_uid": "f9327842-014e-4f99-b271-74351dafd8a8",
+        "gpu_workload_uid": "0bbe0928-f0b9-40c7-aff6-0fe49bcf6c8a",
+        "gpu_raycluster_uid": "5b05e68d-ab3b-46f2-828b-c4e83f9cb90e",
+        "gpu_pod_uid": "390b4d14-d3be-4fab-aabd-7eb3d0fb071c",
+        "gpu_create_receipt_sha256": "sha256:513aebcda9c56666dad65e0d91a17f887d17c53504c66c46ec17b132738cc91f",
         "motivation": "Repeat the exact serious one-update RL gate after teaching the adapter to validate and execute ordered multi-tool turns instead of rejecting valid episodes before collection."
       }
     }
