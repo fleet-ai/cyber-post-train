@@ -57,12 +57,34 @@ transaction and never initializes a schema:
 ```sh
 uv run --locked python -m evals.fleet.rollout_postgres_status summary
 uv run --locked python -m evals.fleet.rollout_postgres_status active
+uv run --locked python -m evals.fleet.rollout_postgres_status retry-review
 ```
 
 Prefer a least-privilege diagnostic role. Neither command grants access or replaces
 the official campaign observer. Missing schema/access fails closed; driver errors
 are sanitized. Never run `SELECT *`, dump tables, read Pod logs, or open private
 result/trace files to answer a status question.
+
+`retry-review` groups quarantined cells by a short failure code and a small,
+allowlisted set of lifecycle facts from the latest local result: whether one
+exists, whether it has a session, how the agent process ended, its exit code,
+and whether session metadata ingestion completed. It never returns a task,
+session or cell identity, score, trace path, reward, or artifact payload. A
+generic failure code such as `authoritative_scoring_started.runtimeerror` names
+only the boundary where an exception surfaced; it does **not** say whether the
+underlying event was an output limit, process failure, session-ingest failure,
+or a missing local result. Use the grouped lifecycle view and a separate,
+authorized model/session-identity readback to classify that boundary. Preserve
+the cells in `retry_review`; this observation never authorizes an automatic
+retry or a capability conclusion.
+
+Keep read-only observer logic in `rollout_postgres_status.py`. Files named by
+`evaluate.RUNTIME_FILES` are part of every sealed evaluation-plan identity, so
+even a harmless diagnostic helper placed in one of those files changes the
+compiled plan digest. Never “fix” that mismatch by rewriting a frozen campaign's
+recorded digest. Move the observer outside the execution runtime, then rerun the
+exact protocol-binding regression and confirm every historical plan identity is
+unchanged.
 
 ## Refill and priority protocol
 

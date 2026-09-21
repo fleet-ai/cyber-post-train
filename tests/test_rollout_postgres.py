@@ -13,7 +13,12 @@ import psycopg
 import pytest
 from psycopg import sql
 
-from evals.fleet import rollout_ledger, rollout_postgres, rollout_postgres_migrate
+from evals.fleet import (
+    rollout_ledger,
+    rollout_postgres,
+    rollout_postgres_migrate,
+    rollout_postgres_status,
+)
 
 
 def _isolated_dsn(dsn: str, schema: str) -> str:
@@ -119,7 +124,11 @@ def test_lossless_migration_and_concurrent_claims(tmp_path: Path, pg_dsn: str) -
 
 
 def test_observations_do_not_create_schema(pg_dsn: str) -> None:
-    for operation in (rollout_postgres.summary, rollout_postgres.active_claims):
+    for operation in (
+        rollout_postgres.summary,
+        rollout_postgres.active_claims,
+        rollout_postgres_status.retry_review_summary,
+    ):
         with pytest.raises(psycopg.errors.UndefinedTable):
             operation(pg_dsn)
     with psycopg.connect(pg_dsn) as connection:
@@ -384,6 +393,100 @@ def _local_record():
         "agent_termination": "completed",
         "elapsed_seconds": 12.5,
     }
+
+
+def test_retry_review_summary_is_grouped_score_blind_and_read_only(tmp_path, pg_dsn):
+    rollout_postgres.initialize(pg_dsn, _plan(tmp_path / "plan.csv", count=3))
+
+    first = rollout_postgres.claim(pg_dsn, worker_id="worker-1", serving_block="route")
+    first_owner = {key: first[key] for key in ("cell_id", "worker_id", "claim_id")}
+    rollout_postgres.record_local_result(pg_dsn, **first_owner, record=_local_record())
+    rollout_postgres.request_retry_review(
+        pg_dsn,
+        **first_owner,
+        failure_code="authoritative_scoring_started.runtimeerror",
+    )
+
+    second = rollout_postgres.claim(pg_dsn, worker_id="worker-2", serving_block="route")
+    second_owner = {key: second[key] for key in ("cell_id", "worker_id", "claim_id")}
+    rollout_postgres.request_retry_review(
+        pg_dsn,
+        **second_owner,
+        failure_code="post_claim.connecterror",
+    )
+
+    third = rollout_postgres.claim(pg_dsn, worker_id="worker-3", serving_block="route")
+    third_owner = {key: third[key] for key in ("cell_id", "worker_id", "claim_id")}
+    rollout_postgres.record_local_result(
+        pg_dsn,
+        **third_owner,
+        record={
+            **_local_record(),
+            "execution_id": "sha256:" + "4" * 64,
+            "session_id": "private-session-value",
+            "agent_termination": "private-termination-value",
+            "session_ingest_status": "private-ingest-value",
+        },
+    )
+    rollout_postgres.request_retry_review(
+        pg_dsn,
+        **third_owner,
+        failure_code="authoritative_scoring_started.runtimeerror",
+    )
+
+    before = _events(pg_dsn)
+    observed = rollout_postgres_status.retry_review_summary(pg_dsn)
+    assert observed == {
+        "retry_review": 3,
+        "with_local_result": 2,
+        "groups": [
+            {
+                "failure_code": "authoritative_scoring_started.runtimeerror",
+                "result_class": "infrastructure_invalid",
+                "agent_termination": "completed",
+                "agent_exit_code": 0,
+                "session_ingest_status": "completed",
+                "has_local_result": True,
+                "has_session": True,
+                "count": 1,
+            },
+            {
+                "failure_code": "authoritative_scoring_started.runtimeerror",
+                "result_class": "infrastructure_invalid",
+                "agent_termination": "other",
+                "agent_exit_code": 0,
+                "session_ingest_status": "other",
+                "has_local_result": True,
+                "has_session": True,
+                "count": 1,
+            },
+            {
+                "failure_code": "post_claim.connecterror",
+                "result_class": "infrastructure_invalid",
+                "agent_termination": "missing",
+                "agent_exit_code": None,
+                "session_ingest_status": "missing",
+                "has_local_result": False,
+                "has_session": False,
+                "count": 1,
+            },
+        ],
+    }
+    serialized = json.dumps(observed, sort_keys=True)
+    for private_value in (
+        first["cell_id"],
+        second["cell_id"],
+        third["cell_id"],
+        "synthetic-session",
+        "synthetic-verifier",
+        "private-session-value",
+        "private-termination-value",
+        "private-ingest-value",
+        '"score"',
+        "trace_path",
+    ):
+        assert private_value not in serialized
+    assert _events(pg_dsn) == before
 
 
 def test_local_result_is_private_idempotent_fenced_and_collision_safe(pg_dsn, owned_cell):
