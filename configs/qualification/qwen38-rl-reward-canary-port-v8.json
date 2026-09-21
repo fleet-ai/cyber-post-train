@@ -1,0 +1,80 @@
+{
+  "schema": "cyber_qwen38_skyrl_reward_canary_port_v8",
+  "source": {
+    "runtime_commit": "07ec89e0f75a0043446b95d36b7d8f462c0d10a4",
+    "preflight_commit": "07ec89e0f75a0043446b95d36b7d8f462c0d10a4",
+    "ported_onto_commit": "91ab058ebbf744c0931dbb9692831bdbd7ecefaf"
+  },
+  "execution": {
+    "cluster_target": "prod",
+    "jobs_api_base_url": "https://api.ft.flt.build",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
+    "environment": {
+      "VLLM_USE_FLASHINFER_SAMPLER": "0"
+    }
+  },
+  "historical_evidence": {
+    "image_cpu_qualification": {
+      "path": "../../docs/evidence/qwen38-study/2026-09-12-skyrl-worker-rpc-relay-image-cpu-qualification-v1.json",
+      "file_sha256": "sha256:cb993198e84220a74ed77f471359b36149bb47eb7bf3380aea0e4edb98b55c19"
+    },
+    "engine_qualification": {
+      "path": "../../docs/evidence/qwen38-study/2026-09-14-skyrl-prod2-engine-qualification-v1.json",
+      "file_sha256": "sha256:072544d61e934045ab0fb8ee4192f094027a155fef5865cd2453793d23fce63d",
+      "scope": "two_by_four_engine_startup_and_release_only"
+    },
+    "tool_order_failure": {
+      "path": "../../docs/evidence/qwen38-study/2026-09-14-skyrl-reward-canary-dev1-tool-order-failure-v1.json",
+      "file_sha256": "sha256:3c93c0657ac6cc6adf6154b7de8b86a88879a138a2418e2bf949882caa84eaad"
+    },
+    "source_preflight": {
+      "path": "../../docs/evidence/qwen38-study/2026-09-14-skyrl-reward-canary-dev2-preflight-v1.json",
+      "file_sha256": "sha256:a113822787cc0b48272ab40c8639d4566ec04ba9226bf84b0a8fa7d1ed157699",
+      "classification": "historical_preflight_provenance",
+      "gating": false
+    },
+    "topology_v16": {
+      "path": "../../docs/evidence/qwen38-study/2026-09-20-skyrl-topology-probe-v16-qualification-summary.json",
+      "file_sha256": "sha256:3dc1fcaf939987f573c3bef7ae0170d568ffbf25888169585df83611a087b514",
+      "classification": "execution_and_release_only",
+      "gating": false
+    },
+    "prod7_output_limit_rejection": {
+      "path": "../../docs/evidence/qwen38-study/2026-09-21-skyrl-prod7-output-limit-rejection-v1.json",
+      "file_sha256": "sha256:a12d17487ecae14d355ef3090edbf3572778d24c70a1a64b927dc730f61442d8",
+      "self_sha256": "sha256:c45f12a8fa799900053a1bd7b1e33ff26e89d517ae552188bda0e66cf675ca2d",
+      "classification": "clean_model_output_limit_rejection_before_collection",
+      "gating": true
+    }
+  },
+  "topology_successor": {
+    "config_path": "qwen38-skyrl-topology-probe-dev-v2.json",
+    "config_file_sha256": "sha256:ceb413e27765dbbd88865c9f22ad186ee4f39387de93874111714f7861f9d529",
+    "config_self_sha256": "sha256:f7d53ee426ee4f23e1c608bc17583f5f105ac30b6a8c19b04f966b908cc47d52",
+    "name": "chris-q38-skyrl-probe-v17",
+    "plan_sha256": "sha256:b4122e3b07b0df82ed5a037c47cf268fb74ef20ec1e78f0f5d8c61d3f1712a53",
+    "request_sha256": "sha256:72c08c60b5e8f299e49977a1caa037c6b6f0524eba56806c2718c464fe6cb3a3",
+    "fleetjob_manifest_sha256": "sha256:de9ed0b8eed9a13d8c1fc180d7e3d09ff67c39e587f7bd7665f62f71dbe85803",
+    "preflight_manifest_sha256": "sha256:5eb59f63df0a436f88859e7586442507789304a08426374c255be4a353144a76",
+    "receipt_verifier_manifest_sha256": "sha256:e1d17fa2a3f941eb529b69a3f1eb0ca2a1f740e275ea48bb8d2f5308cad0b736",
+    "required_terminal_receipt": "TOPOLOGY_PROBE.json",
+    "terminal_receipt_grace_seconds": 30,
+    "accepted": false
+  },
+  "source_closure": {
+    "task_set": "../data/qwen38-rl-reward-canary-task-set-v3.json",
+    "split": "../data/qwen38-rl-reward-canary-split-v1.json",
+    "horizon": "../data/qwen38-rl-reward-canary-horizon-v2.json",
+    "tool_catalog": "../data/qwen38-rl-filtered-canary-tool-catalog-v1.json"
+  },
+  "submission_gate": {
+    "preview_authorized": false,
+    "submission_authorized": false,
+    "blockers": [
+      "prod8_data_not_yet_staged_and_digest_verified",
+      "prod8_output_limit_cpu_preflight_not_yet_recorded",
+      "prod8_jobs_kubernetes_sfs_wandb_absence_not_yet_rechecked"
+    ]
+  },
+  "sha256": "sha256:4c95940d714b71f97831ddc17735f517e8cf39b2340de9ac65ad40895843812e"
+}
