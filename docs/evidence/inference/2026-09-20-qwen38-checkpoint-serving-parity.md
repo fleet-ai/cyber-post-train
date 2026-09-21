@@ -81,3 +81,35 @@ used.
 The full prompt-free receipt was captured locally at:
 
 `/private/tmp/cpt-checkpoint-promotion-live-v1/.private/teacher-v1/live-parity.json`
+
+## Self-SFT step 44
+
+The staged, create-once route `chris-q38-self-sft-step44-v1` was resumed only
+after its exact consumer slots were available:
+
+- InferenceModel UID: `05057134-546f-484e-9672-3f9ca50cec77`
+- accepted API resource version: `31092393`
+- accepted Kubernetes resource version: `31092820`
+- staged model root: `/models/chris-q38-self-sft-step44-v1`
+- serving model root: `/scratch/models/chris-q38-self-sft-step44-v1`
+- payload revision: `sha256:a0e55bebe9d78ac76c012446ae0147a421cd333e2a6bf2bb6f4fb3450fa776fe`
+- exact runtime image: `sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9`
+- normalized base/candidate execution contract: `sha256:d82d78721f4ec8d4b0d6228242df4838b38086a48108e57fc6fe4e7be1fa3662`
+- model-info projection: `sha256:27ddee5a2cc8fe14b426d93ec8a64ebc52aba812a954fb665851e0c3a1dfa5b4`
+- server-info projection: `sha256:1a083cc36a5272b16128c0c80976346856bfe7f6bb2d1a82f528624aef818086`
+- accepted staging receipt: `sha256:20460ed56f955b7054d60d944aa9e0e1a95a4eef53907df3a0dc2b345c3e87a8`
+- live parity receipt: `sha256:66992f74ac736422e0b724681bd7e0cab126a7d90c19a99598e182c8677b3572`
+- live parity receipt file SHA-256: `676a89af48d7802dd32eb0c3864e6d4ffe05029619f1c8c67f464949a33f93bc`
+
+The serving Pod UID is `c1271f58-ca3e-41e7-8a01-1a3603cb9619`. It was Ready
+with zero restarts and the exact image at capture. The route matches the same
+BF16, unquantized, 262,144-token current-base serving profile as Fresh75 and
+teacher-v5. Catalog routing, model and server metadata, the structured-tool
+probe, and two finite greedy-logit observations all passed. The candidate and
+base produced different stable token identities on the fixed content-free
+probe, confirming that the self-SFT checkpoint rather than base weights served
+the request.
+
+The full prompt-free receipt was captured locally at:
+
+`/private/tmp/cpt-checkpoint-promotion-live-v1/.private/self-v1/live-parity.json`
