@@ -19,6 +19,8 @@ score.
 | `output_limit` or `process_error` without a completed stored session | Manual terminal review; never regenerate. |
 | `post_claim.connecterror` with no generation artifact anywhere | One rollout retry after exact absence proof. |
 | `post_claim.operationalerror` with no generation artifact anywhere | One rollout retry after exact absence proof. |
+| `post_claim.fleetrequesterror` with an exact source-bound provisioning `POST`/`504`, the complete pre-model file set, and no local or authoritative session | One private-roster rollout retry after two identical observations; this does not make the failure-code class generally retryable. |
+| `post_claim.fleetrequesterror` without that exact proof | Manual terminal review; never regenerate. |
 | Any evidence conflict, unknown failure, or exhausted limit | Manual terminal review; do not create work. |
 
 ## Two separate recovery paths
@@ -38,6 +40,15 @@ score.
 An output limit or agent-process error never authorizes another rollout. Use the
 stored session path if its immutable session exists; otherwise leave the cell
 in manual terminal review.
+
+The failure-code prefix is not authoritative evidence of how far execution
+progressed. In particular, a row recorded as
+`authoritative_scoring_started.runtimeerror` can still have a completed
+authoritative score when the controller failed after ingest. Classify it from
+the exact local lifecycle artifacts and authoritative session metadata. If
+those prove one complete already-scored session, use
+`accept_existing_scored_session`: do not invoke the scorer and do not regenerate
+the trajectory.
 
 ## Review order
 
@@ -189,3 +200,39 @@ The machine-readable review-only contract is
 Its classifier is `evals/fleet/retry_review_policy.py`. The classifier rejects
 unknown fields, including a score value, and fails closed on contradictory
 evidence.
+
+## Seed-44 Base narrow repair
+
+The seed-44 Base controller left one partial but scientifically usable arm: ten
+accepted cells, five `output_limit` cells with completed stored and
+authoritatively scored sessions, and two cells whose exact source attempt ended
+at the provisioning `POST` with HTTP 504 before any session, trace, or scoring
+artifact existed. Preserve the ten accepted cells. Atomically accept the five
+existing scored sessions without a scorer or model call, then create a fresh
+generation-2 execution identity only for the exact private two-cell roster.
+Each of those cells may consume its frozen campaign's single retry once.
+
+The public, score-blind source census is
+[`qwen38-base-fleet-dev17-seed44-terminal-census-20260921.json`](evidence/qwen38-base-fleet-dev17-seed44-terminal-census-20260921.json).
+The inert two-stage plan is
+[`qwen38-base-fleet-dev17-seed44-narrow-repair-v1.json`](../configs/evaluation/qwen38-base-fleet-dev17-seed44-narrow-repair-v1.json).
+Private intents are prepared by
+[`seed44_base_repair_intents.py`](../evals/fleet/seed44_base_repair_intents.py),
+the CPU-only packages are rendered by
+[`seed44_base_repair_job.py`](../evals/fleet/seed44_base_repair_job.py), and
+focused guards live in
+[`test_seed44_base_repair.py`](../tests/test_seed44_base_repair.py).
+
+Run the two stages in order. Stage one requires no model route. Before stage
+two, prove fresh exact Base serving parity and repeat the duplicate census and
+server preview. Both rendered root Jobs must show
+`fleet.ai/failure-alerts: "off"` before create. Stage two uses a fresh
+Docker-in-Docker data directory, so it must verify the
+exact harness archive and build-receipt digests, load that archive, and pull the
+immutable proxy image before running the normal image preflight or claiming a
+cell. A node-level Docker cache cannot satisfy this gate.
+The comparison becomes complete
+only after the immutable lineage receipt proves exactly 17 accepted cells:
+original ten, reconciled five, and generation-2 rerolls for the two proven
+pre-session failures. Never infer object absence until the live command has
+asserted the expected Kubernetes context and namespace.

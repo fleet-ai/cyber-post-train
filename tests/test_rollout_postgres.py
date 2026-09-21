@@ -15,6 +15,7 @@ from psycopg import sql
 
 from evals.fleet import (
     reviewed_recovery,
+    reviewed_recovery_v2,
     rollout_ledger,
     rollout_postgres,
     rollout_postgres_migrate,
@@ -338,6 +339,105 @@ def test_reviewed_recovery_claim_checks_full_roster_digest_atomically(tmp_path, 
         assert receipt["selected_cell_count"] == 2
         serialized = json.dumps(receipt).lower()
         assert not any(word in serialized for word in ("cell_id", "task_version", "session_id"))
+
+
+def test_provisioning_timeout_recovery_requires_prior_five_and_claims_only_exact_two(
+    tmp_path, pg_dsn
+):
+    rollout_postgres.initialize(pg_dsn, _plan(tmp_path / "plan.csv", count=7))
+    with psycopg.connect(pg_dsn) as connection:
+        rows = connection.execute("SELECT cell_id FROM rollout_cells ORDER BY cell_id").fetchall()
+        prior_digest = "c" * 64
+        connection.execute(
+            """
+            UPDATE rollout_cells
+            SET state = 'accepted', result_class = 'valid', reconciliation_digest = %s
+            WHERE cell_id = ANY(%s::text[])
+            """,
+            (prior_digest, [row[0] for row in rows[:5]]),
+        )
+        connection.execute(
+            """
+            UPDATE rollout_cells
+            SET state = 'retry_review', result_class = 'infrastructure_invalid',
+                failure_code = %s
+            WHERE cell_id = ANY(%s::text[])
+            """,
+            (reviewed_recovery_v2.SOURCE_FAILURE_CODE, [row[0] for row in rows[5:]]),
+        )
+        connection.execute(
+            """
+            INSERT INTO ledger_reconciliations (
+                receipt_sha256, kind, receipt_json, created_at
+            ) VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+            """,
+            (
+                "d" * 64,
+                "fleet-stored-session-reconciliation-v2",
+                json.dumps({"reviewed_intent_sha256": prior_digest}),
+            ),
+        )
+    selected = tuple(
+        reviewed_recovery_v2.SelectedCell(
+            cell_id=row[0],
+            claim_file_sha256="1" * 64,
+            binding_file_sha256="2" * 64,
+            prompt_file_sha256="3" * 64,
+            failure_file_sha256="4" * 64,
+            cleanup_file_sha256="5" * 64,
+        )
+        for row in rows[5:]
+    )
+    body = {
+        "schema_version": reviewed_recovery_v2.INTENT_SCHEMA,
+        "evaluation_plan_sha256": "a" * 64,
+        "runtime_files_sha256": reviewed_recovery_v2.runtime_identity(),
+        "serving_block": "route",
+        "source_output_root": "/mnt/sfs/jobs/source-eval",
+        "source_database": "source_eval",
+        "source_job_uid": str(uuid.uuid4()),
+        "source_job_terminal_receipt_sha256": "b" * 64,
+        "prior_stored_session_intent_sha256": prior_digest,
+        "selected_cells": [cell.as_dict() for cell in selected],
+    }
+    intent = reviewed_recovery_v2.ProvisioningTimeoutIntent(
+        evaluation_plan_sha256=body["evaluation_plan_sha256"],
+        runtime_files_sha256=body["runtime_files_sha256"],
+        serving_block=body["serving_block"],
+        source_output_root=body["source_output_root"],
+        source_database=body["source_database"],
+        source_job_uid=body["source_job_uid"],
+        source_job_terminal_receipt_sha256=body["source_job_terminal_receipt_sha256"],
+        prior_stored_session_intent_sha256=prior_digest,
+        selected_cells=selected,
+        sha256=reviewed_recovery_v2._body_digest(body),  # noqa: SLF001
+    )
+    observations = []
+    for cell in selected:
+        observation = {
+            "schema_version": reviewed_recovery_v2.OBSERVATION_SCHEMA,
+            **cell.as_dict(),
+            "source_file_set_exact": True,
+            "local_result_absent": True,
+            "authoritative_exact_execution_session_absent": True,
+            "model_execution_artifacts_absent": True,
+            "scoring_artifacts_absent": True,
+            "provisioning_method": "POST",
+            "provisioning_http_status": 504,
+        }
+        observation["receipt_sha256"] = reviewed_recovery_v2.crypto.digest_without(
+            observation, "receipt_sha256"
+        )
+        observations.append(observation)
+    receipt = reviewed_recovery_v2.apply_intent(pg_dsn, intent=intent, observations=observations)
+    assert receipt["selected_cell_count"] == 2
+    assert rollout_postgres.claim(pg_dsn, worker_id="ordinary", serving_block="route") is None
+    claimed = reviewed_recovery_v2.claim(
+        pg_dsn, intent=intent, worker_id="repair", serving_block="route"
+    )
+    assert claimed["cell_id"] in intent.selected_cell_ids
+    assert claimed["retry_count"] == 1
+    assert claimed["reconciliation_digest"] == intent.sha256
 
 
 def test_reviewed_outcome_can_be_accepted_without_replaying_it(pg_dsn, owned_cell):

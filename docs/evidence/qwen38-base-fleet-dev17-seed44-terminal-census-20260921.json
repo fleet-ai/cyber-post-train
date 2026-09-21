@@ -1,0 +1,121 @@
+{
+  "schema": "qwen38_base_fleet_dev17_seed44_terminal_census_v1",
+  "observed_at": "2026-09-21T22:14:17Z",
+  "scope": "Sanitized UID-bound controller, terminal artifact, score-blind ledger, and metadata-only recovery classification. No score value, prompt, response, flag, reward, trace content, or private cell, task, or session identity is included.",
+  "live_evidence_binding": {
+    "kubernetes_context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+    "namespace": "fleet-train-jobs",
+    "exact_context_and_namespace_asserted_before_reads": true
+  },
+  "frozen_evaluation": {
+    "config_path": "configs/evaluation/qwen38-base-fleet-dev17-opencode-seed44-pass1-v1.json",
+    "config_file_sha256": "sha256:1ee8ae83c056d22e4b0d2950c7d93e62470ebbd041ea768d18788daa16d7797b",
+    "evaluation_plan_sha256": "sha256:04dc90eb59e133cdc40e375b09aa0a3d7cc9c325f7dddc438fd10450661dbae6",
+    "database": "q38_dev17_s44_base_p1_v1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s44-base-p1-v1",
+    "serving_block": "base",
+    "task_count": 17,
+    "pass_k": 1,
+    "sampling_seed": 44,
+    "harness": "opencode",
+    "harness_version": "1.18.27",
+    "final_eight_task_set_accessed": false
+  },
+  "source_controller": {
+    "job": {
+      "name": "chris-q38-dev17-s44-base-p1-v1",
+      "uid": "eab3025c-00bf-4b3c-bca2-a8d35426a8b6",
+      "resource_version": "32176596",
+      "condition": "Failed",
+      "reason": "BackoffLimitExceeded",
+      "terminal_at": "2026-09-21T21:43:49Z",
+      "active": 0,
+      "failed": 1,
+      "root_failure_alert_annotation": "off",
+      "backoff_limit": 0
+    },
+    "pod": {
+      "name": "chris-q38-dev17-s44-base-p1-v1-g77wj",
+      "uid": "6dc4a87e-e1ee-41fb-b8d4-bb54edeedc20",
+      "resource_version": "32176595",
+      "phase": "Failed",
+      "evaluator_exit_code": 1,
+      "evaluator_restart_count": 0,
+      "finished_at": "2026-09-21T21:43:43Z"
+    },
+    "workload": {
+      "name": "job-chris-q38-dev17-s44-base-p1-v1-f8d24",
+      "uid": "56cc24f6-5aa8-4730-a250-a46827bbf5af",
+      "resource_version": "32176600",
+      "finished": true,
+      "reason": "Failed",
+      "finished_at": "2026-09-21T21:43:49Z"
+    }
+  },
+  "terminal_artifact": {
+    "path": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s44-base-p1-v1/EVAL_TERMINAL.json",
+    "file_sha256": "sha256:e9813a966e02e1f3be8311ab688ae8bb878ddc85448aff71ba118993c66e19db",
+    "terminal_receipt_sha256": "sha256:236131a33c15374edf91e02fb65609d6c36eff9c31d687f785a55a97228e9f24"
+  },
+  "score_blind_ledger_census": {
+    "total_cells": 17,
+    "accepted": 10,
+    "retry_review": 7,
+    "active": 0,
+    "pending": 0,
+    "stale_active": 0,
+    "local_results": 15,
+    "reconciliation_receipts": 0,
+    "recorded_controller_failure_groups": {
+      "authoritative_scoring_started.runtimeerror": 5,
+      "post_claim.fleetrequesterror": 2
+    },
+    "recorded_failure_code_is_not_authoritative_scoring_status": true,
+    "score_values_read_for_branching": false,
+    "score_values_included": false
+  },
+  "metadata_only_classification": {
+    "accept_existing_scored_session": {
+      "count": 5,
+      "source_agent_termination": "output_limit",
+      "source_agent_exit_code": 0,
+      "completed_session_ingest_count": 5,
+      "one_exact_completed_authoritative_session_count": 5,
+      "exact_model_task_version_and_verifier_match_count": 5,
+      "finite_authoritative_score_presence_count": 5,
+      "complete_immutable_attempt_evidence_count": 5,
+      "model_generation_allowed": false,
+      "scoring_call_allowed": false
+    },
+    "single_rollout_repair": {
+      "count": 2,
+      "source_agent_session_count": 0,
+      "local_result_count": 0,
+      "authoritative_exact_execution_session_count": 0,
+      "trace_manifest_count": 0,
+      "scoring_intent_count": 0,
+      "producer_failure": {
+        "method": "POST",
+        "route_class": "exact_authoritative_provisioning_route",
+        "http_status": 504,
+        "count": 2
+      },
+      "maximum_new_rollouts_each": 1
+    }
+  },
+  "decision": {
+    "capability_result_status": "partial_collection_pending_narrow_repair",
+    "preserve_original_accepted_cells": 10,
+    "accept_existing_scored_sessions_without_rescoring_or_regeneration": 5,
+    "collect_new_rollouts_only_for_proven_no_session_cells": 2,
+    "final_acceptance_requires_one_immutable_17_cell_lineage_receipt": true,
+    "broad_automatic_retry_allowed": false
+  },
+  "privacy": {
+    "score_values_included": false,
+    "prompts_responses_flags_rewards_or_trace_content_included": false,
+    "private_cell_task_session_or_trace_identifiers_included": false,
+    "credentials_or_private_logs_included": false
+  },
+  "sha256": "ded667b0ddfb005c64f13a30474612679f40c67fa2c592c2f621b923540e7006"
+}
