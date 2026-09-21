@@ -1,0 +1,38 @@
+{
+  "schema": "cyber_qwen38_miles96_mechanics_canary_v1",
+  "launchable": false,
+  "purpose": "A short operational Miles/FTI proof: fresh V1 rows, varying real verifier rewards, one update, HF export, then a one-GPU reload. This template deliberately has no reusable identity, task binding, model tree, or output path.",
+  "trainer": {
+    "model": "Qwen/Qwen3.8-27B",
+    "recipe": "qwen3.8-27b",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:ee273bee346ad8e1cea63d18026b2bc5703bbd2e14d3c65efbbd74f19854874a",
+    "theseus_commit": "f2b0cb5db7c0a9dcc2210943f2ee1df31f9b50fc",
+    "miles_commit": "9e178ca16839b0600155f3927f57ce0670b8f453",
+    "fti_version": "0.10.10",
+    "run_fleet_sha256": "6f396d9fce6344ac7a8d6a3b5884c2258d50b2760c343d2d37eded2c5c25d582"
+  },
+  "fixed_contract": {
+    "nodes": 1,
+    "gpus_per_node": 8,
+    "priority": "c1",
+    "context_tokens": 98304,
+    "compaction": false,
+    "prompt_groups": 1,
+    "samples_per_prompt": 8,
+    "optimizer_steps": 1,
+    "learning_rate": 1e-06,
+    "checkpoint_interval": 1,
+    "reward_filter": "fti.trainers.miles.filters.check_no_aborted_and_nonzero_std",
+    "save_hf": "<fresh-run-dir>/hf/step-{rollout_id}",
+    "reload": "one GPU, zero optimizer steps"
+  },
+  "required_fresh_bindings": [
+    "new training and reload names, W&B run ID, and SFS output directories",
+    "a currently checked prepared-model root and binding digest",
+    "a current authoritative task/version receipt and matching task/tool-catalog digests",
+    "a new V1 train.jsonl written only by this run",
+    "Jobs API server previews proving the root fleet.ai/failure-alerts annotation is off",
+    "absence/duplicate checks and an exact cleanup observer"
+  ],
+  "limits": "This is an operational mechanics canary only. It has a 96K hard context limit and no compaction, so it cannot support the long-horizon cyber science claim made by the separate 262K SkyRL rail."
+}
