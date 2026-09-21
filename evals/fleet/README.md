@@ -54,6 +54,7 @@ The YAML fields are:
 | `sampling` | `temperature`, `top_p`, `seed`, enforced by the fixed proxy |
 | `pass_k` | Attempts per model/task |
 | `concurrency` | Simultaneous sessions **per worker**, not a global reservation |
+| `max_reviewed_infrastructure_retries` | Zero or one; defaults to zero. A retry still requires a separate, score-blind human or agent review. |
 | `training_data_eligible` | False by default; training collection must explicitly opt in |
 
 The task set's `tasks` rows require `task_key`, `task_version_id`, `env_key`,
@@ -106,6 +107,7 @@ harness:
 sampling: {temperature: 0.6, top_p: 0.95, seed: 42}
 pass_k: 4
 concurrency: 1
+max_reviewed_infrastructure_retries: 0
 training_data_eligible: false
 ```
 
@@ -115,6 +117,21 @@ credentials remain outside its network boundary. The model proxy enforces
 sampling/model/output limits. Attempt N uses base seed + N − 1 (modulo 2³¹), so
 pass@k does not deliberately repeat the same seed. A seed does not guarantee deterministic
 GPU execution.
+
+The retry limit is not an automatic retry switch. An infrastructure-invalid
+cell remains in `retry_review` until a reviewer proves that no valid outcome
+exists and records a reconciliation digest. A valid unsuccessful solution is a
+real result and must never be retried. For matched comparisons, freeze the same
+limit and the same arm-blind decision rule before launch. Do not splice accepted
+cells from one experiment into a successor experiment.
+
+When recording a Kubernetes server dry-run digest, use `stable_job_preview`.
+The API generates a fresh Job UID and repeats it in the selector and two Pod
+labels on every dry run; hashing the raw response therefore produces a false
+change. The helper removes only those UID-derived fields and ordinary runtime
+metadata. Stable admission changes such as the root failure-alert annotation,
+priority, suspension, resources, command, environment, and image remain bound
+by the digest. Run the preview twice and require the normalized hashes to match.
 
 The v2 compaction policy reserves one full response of growth **plus** the declared
 headroom before the native post-response overflow check. Its trigger is
