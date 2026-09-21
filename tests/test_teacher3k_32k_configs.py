@@ -401,6 +401,96 @@ def test_teacher3k_64k_forward_adapter_repair_changes_only_external_identity():
     assert successor == expected
 
 
+def test_teacher3k_64k_v3_qualification_is_bound_and_prepare_only():
+    evidence = json.loads(
+        (EVIDENCE / "qwen38-teacher3k-64k-v3-qualified-ready-20260921.json").read_text()
+    )
+    config = json.loads((ROOT / evidence["source"]["config"]).read_text())
+    plan = sft.compile_sft(config, relative_to=RUNS)
+    request = sft.job_request(plan)
+
+    assert evidence["status"] == "qualified_not_submitted"
+    assert evidence["source"]["head"] == "aecb8d9deab66014eccaeeda0a86cbc9c1a98fac"
+    bindings = evidence["immutable_bindings"]
+    assert sft.digest(plan) == bindings["plan_sha256"]
+    assert sft.digest(request) == bindings["request_sha256"]
+    assert plan["runtime_sha256"] == bindings["runtime_sha256"]
+    assert plan["corpus_manifest_sha256"] == bindings["corpus_manifest_sha256"]
+    assert plan["split_manifest_sha256"] == bindings["split_manifest_sha256"]
+    assert plan["datasets"]["train"]["sha256"] == bindings["train_parquet_sha256"]
+
+    reuse = evidence["qualification_reuse_proof"]
+    assert reuse["previous_source_head"] == "40077bb2902268519e2e07ac086737130b6df077"
+    assert reuse["current_source_head"] == evidence["source"]["head"]
+    assert reuse["changed_paths_affecting_sft_runtime_or_config"] == []
+    assert reuse["regenerated_packet_matches_qualified_packet"] == {
+        **evidence["prepared_packet"],
+        "runtime_sha256": bindings["runtime_sha256"],
+        "plan_sha256": bindings["plan_sha256"],
+        "request_sha256": bindings["request_sha256"],
+    }
+    assert reuse["live_preview_reuse_proof"] == {
+        "preview_source_head": "ddba5eacc6a460c7c0b98f085e5a50dfcee2bea3",
+        "current_source_head": evidence["source"]["head"],
+        "cyber_post_train/direct_submit.py": "f1247dfbab718a9819d21c6880c42928627d2e72",
+    }
+
+    treatment = evidence["treatment"]
+    assert plan["recipe"] == {
+        "epochs": treatment["epochs"],
+        "batch_size": treatment["global_batch"],
+        "microbatch_per_gpu": treatment["microbatch_per_gpu"],
+        "lr": treatment["learning_rate"],
+        "max_length": treatment["max_length"],
+        "max_steps": treatment["planned_optimizer_steps"],
+        "checkpoint_interval": treatment["checkpoint_interval"],
+        "keep_checkpoints": treatment["keep_checkpoints"],
+        "eval_interval": 0,
+        "seed": treatment["seed"],
+        "nodes": treatment["nodes"],
+        "gpus_per_node": treatment["gpus_per_node"],
+    }
+    assert plan["datasets"]["train"]["rows"] == treatment["train_rows"]
+    assert plan["datasets"]["train"]["supervised_tokens"] == treatment["unique_supervised_tokens"]
+    assert plan["validation_mode"] == "task_outcomes_only"
+    assert plan["wandb"]["entity"] == evidence["wandb"]["entity"]
+    assert plan["wandb"]["project"] == evidence["wandb"]["project"]
+    assert plan["wandb"]["group"] == evidence["wandb"]["group"]
+    assert plan["wandb"]["run_id"] == evidence["wandb"]["run_id"]
+    assert plan["wandb"]["name"] == evidence["wandb"]["name"]
+    assert plan["wandb"]["tags"] == evidence["wandb"]["tags"]
+
+    cpu = evidence["exact_image_cpu_qualification"]
+    assert cpu["status"] == "passed_and_released"
+    assert cpu["gpus"] == 0
+    assert cpu["priority"] == "c1"
+    assert cpu["root_failure_alert_annotation"] == "off"
+    assert cpu["restarts"] == 0
+    assert cpu["pod_absent_after_release"] is True
+    assert "native_forward_backward_signature" in cpu["checks"]
+    assert "native_train_only_loader" in cpu["checks"]
+
+    preview = evidence["live_preview"]
+    assert preview["status"] == "accepted_without_create"
+    assert preview["root_failure_alert_annotation"] == "off"
+    assert preview["pod_template_priority"] == "c1"
+    assert preview["secret_names"] == ["wandb-api"]
+    assert preview["api_duplicate_absent"] is True
+    assert preview["kubernetes_duplicate_absent"] is True
+    assert preview["output_absent"] is True
+    assert preview["server_dry_run_passed"] is True
+    assert preview["created"] is False
+    assert request["failureAlerts"] is False
+    assert request["priority_class"] == "c1"
+    assert request["secrets"] == ["wandb-api"]
+    assert evidence["submission"] == {
+        "gpu_post_performed": False,
+        "job_or_rayjob_created": False,
+        "training_status": "not_submitted",
+        "96k_arm_submitted": False,
+    }
+
+
 @pytest.mark.parametrize(("context", "position"), [("64", 0), ("96", 1)])
 def test_teacher3k_later_context_launch_binds_current_inputs(context, position):
     evidence = json.loads(
@@ -412,10 +502,7 @@ def test_teacher3k_later_context_launch_binds_current_inputs(context, position):
     plan = sft.compile_sft(config, relative_to=RUNS)
     request = sft.job_request(plan)
 
-    assert (
-        evidence["status"]
-        == "v2_64k_runtime_contract_failed_before_proven_update_96k_not_submitted"
-    )
+    assert evidence["status"] == "v2_64k_failed_v3_64k_qualified_not_submitted_96k_not_submitted"
     assert sft.digest(plan) == row["plan_sha256"]
     assert sft.digest(request) == row["request_sha256"]
     assert plan["runtime_sha256"] == row["runtime_sha256"]
@@ -428,6 +515,12 @@ def test_teacher3k_later_context_launch_binds_current_inputs(context, position):
     assert request["failureAlerts"] is False
     if context == "64":
         assert row["successor_status"].endswith("not_submitted")
+        qualification = evidence["64k_successor_qualification"]
+        assert qualification["source_head"] == "aecb8d9deab66014eccaeeda0a86cbc9c1a98fac"
+        assert qualification["status"].endswith("not_submitted")
+        assert qualification["gpu_post_performed"] is False
+        assert qualification["root_failure_alert_annotation"] == "off"
+        assert qualification["priority"] == "c1"
         retired = row["retired_runtime_contract_attempt"]
         assert retired["run_id"] == "2f111132-a6d5-407c-aa3f-6ceed1033b8e"
         assert retired["root_failure_alert_annotation"] == "off"
