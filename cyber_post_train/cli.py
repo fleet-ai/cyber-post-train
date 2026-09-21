@@ -296,6 +296,42 @@ def data_fleet_materialize(config: Path) -> None:
         _fail(exc)
 
 
+@app.command("data-fleet-visible-reasoning-materialize")
+def data_fleet_visible_reasoning_materialize(config: Path) -> None:
+    """Build private Qwen visible-reasoning SFT tokens from sealed evidence only."""
+    from training.fleet_visible_reasoning_corpus import build
+    from training.sft import read_mapping
+
+    try:
+        _print(build(read_mapping(config), relative_to=config.resolve().parent))
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("data-fleet-visible-reasoning-authorize")
+def data_fleet_visible_reasoning_authorize(
+    census: Path,
+    corpus_manifest: Path,
+    coverage: Path,
+    output: Path,
+) -> None:
+    """Create only the aggregate permit for a distinct visible-reasoning corpus."""
+    from training.visible_reasoning_census import authorize_paths
+
+    try:
+        selection = authorize_paths(census, corpus_manifest, coverage, output)
+        _print(
+            {
+                "submitted": False,
+                "schema": selection["schema"],
+                "sha256": selection["sha256"],
+                "status": selection["status"],
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command("data-fleet-roster")
 def data_fleet_roster(config: Path) -> None:
     """Build a family-safe Fleet collection roster from sealed metadata only."""

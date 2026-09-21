@@ -84,6 +84,66 @@ def test_data_fleet_materialize_dispatches_private_builder(tmp_path, monkeypatch
     assert "train.parquet" not in result.stdout
 
 
+def test_data_fleet_visible_reasoning_materialize_dispatches_private_builder(tmp_path, monkeypatch):
+    from training import fleet_visible_reasoning_corpus
+
+    config = tmp_path / "visible-reasoning-materialize.json"
+    config.write_text("{}")
+    calls = []
+
+    def build(value, *, relative_to):
+        calls.append((value, relative_to))
+        return {
+            "submitted": False,
+            "source_records": 3,
+            "student_visible_reasoning_target_tokens": 12,
+            "visible_action_target_tokens": 9,
+            "sft_ready": False,
+        }
+
+    monkeypatch.setattr(fleet_visible_reasoning_corpus, "build", build)
+    result = RUNNER.invoke(cli.app, ["data-fleet-visible-reasoning-materialize", str(config)])
+    assert result.exit_code == 0
+    assert calls == [({}, config.parent.resolve())]
+    assert '"student_visible_reasoning_target_tokens": 12' in result.stdout
+    assert "train.parquet" not in result.stdout
+
+
+def test_data_fleet_visible_reasoning_authorize_emits_aggregate_permit(tmp_path, monkeypatch):
+    from training import visible_reasoning_census
+
+    paths = [
+        tmp_path / name for name in ("census.json", "manifest.json", "coverage.json", "permit.json")
+    ]
+    for path in paths[:3]:
+        path.write_text("{}")
+    calls = []
+
+    def authorize(census, manifest, coverage, output):
+        calls.append((census, manifest, coverage, output))
+        return {
+            "schema": "cyber_qwen_opencode_visible_reasoning_training_selection_v1",
+            "sha256": "sha256:" + "a" * 64,
+            "status": "source_only_qualified",
+        }
+
+    monkeypatch.setattr(visible_reasoning_census, "authorize_paths", authorize)
+    result = RUNNER.invoke(
+        cli.app,
+        [
+            "data-fleet-visible-reasoning-authorize",
+            str(paths[0]),
+            str(paths[1]),
+            str(paths[2]),
+            str(paths[3]),
+        ],
+    )
+    assert result.exit_code == 0
+    assert calls == [tuple(paths)]
+    assert '"status": "source_only_qualified"' in result.stdout
+    assert "train.parquet" not in result.stdout
+
+
 def test_data_fleet_roster_dispatches_metadata_only_builder(tmp_path, monkeypatch):
     from training import fleet_collection_roster
 

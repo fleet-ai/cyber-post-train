@@ -2,9 +2,13 @@
 
 ## Status and boundary
 
-This is a source-only design for a possible future Qwen3.8 training-data lane.
-It creates no rollout, evaluation, training job, cluster object, model endpoint,
-or corpus. It must not be treated as approval to collect reasoning data.
+This is a source-only design and private-materialization contract for a
+possible future Qwen3.8 training-data lane. The checked-in
+`data-fleet-visible-reasoning-materialize` command can validate sealed inputs
+and construct a private token-and-mask corpus locally. It creates no rollout,
+evaluation, training job, cluster object, or model endpoint, and it does not
+authorize collection. A corpus request without the required authorization and
+evidence files fails before private records are read.
 
 The current lane remains **action-only**. It admits verified task successes from
 training task families and trains visible assistant actions and tool calls. It
@@ -37,12 +41,12 @@ be read for a corpus, a sealed, aggregate-only source inventory must bind all
 of the following:
 
 1. Exact Qwen repository and immutable revision, tokenizer file inventory,
-   tokenizer-backend digest, chat-template bytes digest, and template-renderer
-   helper digest.
-2. One explicit request treatment: `enable_thinking` is a JSON boolean, and
-   `preserve_thinking` is either an explicit JSON boolean or explicitly
-   unsupported by the pinned server. A parser name alone is not proof of the
-   treatment.
+   tokenizer-backend digest, and chat-template bytes digest. The offline
+   builder loads those local tokenizer bytes itself; it does not trust a
+   caller-supplied rendering helper.
+2. One explicit request treatment: `enable_thinking: true` and
+   `preserve_thinking: true`. A parser name, endpoint label, or model name
+   alone is not proof of that treatment.
 3. The request format, exact `bash` / `submit_report` tool schema digest,
    tool-call parser, harness version, context size, context reserve, and
    sampling treatment.
@@ -63,9 +67,10 @@ The source inventory uses one of three visibility values for every candidate:
 hint to infer, summarize, rewrite, or expose hidden reasoning.
 
 The existing aggregate census command intentionally authorizes no reasoning
-schema today. A future implementation must add the new schema, renderer,
-masking contract, and tests together; changing the census allowlist by itself
-is invalid.
+data by itself. The separate schema, local-tokenizer boundary, masking
+contract, and tests now live with the private materializer; future collection
+code must emit those exact sealed artifacts. Changing a census allowlist by
+itself remains invalid.
 
 ## Broad family-safe data split
 
@@ -121,8 +126,8 @@ More exactly:
   spans stay exactly the same. This makes the intervention legible.
 
 The materializer must fail closed if the template digest, explicit thinking
-setting, rendered token IDs, or target boundaries differ between collection,
-corpus construction, and serving.
+setting, locally rendered token IDs, or target boundaries differ between
+collection, corpus construction, and serving.
 
 ## Native online compaction and exact continuation
 
@@ -195,14 +200,60 @@ set; external benchmarks remain evaluation-only and cannot feed this corpus.
 
 ## Implementation sequence and stop conditions
 
-1. Add a new reasoning-only metadata schema and renderer without altering the
-   current action-only admission command.
-2. Add synthetic tests for template/thinking proof, source authorization,
+1. The Qwen-self reasoning-only schemas, local-tokenizer boundary, aggregate
+   final-selection gate, and private materializer are implemented without
+   altering the current action-only admission command; see [the materialization
+   contract](FLEET_VISIBLE_REASONING_MATERIALIZATION.md). Materialization still
+   emits `sft_ready: false`; no current SFT launcher accepts the resulting
+   aggregate `source_only_qualified` handoff.
+2. Synthetic tests cover template/thinking proof, source authorization,
    masking, exact continuation, split isolation, and private-teacher rejection.
-3. Run only the aggregate census. If no authorized student-visible source is
+3. Produce only the aggregate census and sealed handoff. If no authorized
+   student-visible source is
    available, stop; action-only data collection remains the correct lane.
 4. Review the schema and tests. Only a separately authorized operator may then
    create a collection campaign.
 
 The design stops rather than falling back to hidden teacher reasoning, opaque
 compaction, a mixed family split, or an unproven Qwen thinking template.
+
+## Teacher-visible rationale is a separate future arm
+
+This v1 implementation deliberately accepts **only Qwen self traces**. That is
+not a judgment that teacher-visible reasoning cannot be useful; it is a refusal
+to mistake a provider's hidden reasoning field for user-visible text.
+
+Before a teacher-visible-rationale arm can be built, it needs all of the following as a
+new, separately reviewed contract:
+
+1. An immutable source artifact that identifies the teacher output version and
+   proves the reasoning was delivered as ordinary visible conversation text to
+   the Qwen student, rather than exposed through a private provider field.
+2. An explicit authorization that permits that exact visible text to be used
+   for training.
+3. A distinct source-profile and collection-packet schema bound to the teacher
+   artifact, Qwen target/template, task-family split, and success evidence.
+4. The same local Qwen template round trip, span labels, family isolation,
+   source/session/window deduplication, and compaction lineage required above.
+5. A separate corpus identity and matched action-only comparison. It must not
+   be mixed into the Qwen-self corpus or relabel existing teacher action traces.
+
+Its schema names must also be distinct, for example:
+
+- `cyber_teacher_visible_rationale_source_profile_v1`
+- `cyber_teacher_visible_rationale_source_authorization_v1`
+- `cyber_teacher_visible_rationale_packet_v1`
+- `cyber_teacher_visible_rationale_success_evidence_v1`
+- `cyber_teacher_visible_rationale_selection_v1`
+- `cyber_teacher_visible_rationale_record_v1`
+- `cyber_teacher_visible_rationale_sft_corpus_v1`
+
+Those names are a contract reservation, not an implemented input format. A
+future implementation must require exact source fields and reject every
+unlisted field. In particular, it cannot map a provider's `thinking`,
+`reasoning`, `reasoning_content`, or `analysis` property into the ordinary
+visible-text field.
+
+Until those conditions are implemented and reviewed, teacher runs can add only
+visible actions to the established action-only lane. They cannot add written
+reasoning to this one.

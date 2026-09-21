@@ -15,6 +15,21 @@ future written-reasoning dataset.
 It is a data and training-policy document.  It does not authorize a new data
 collection, training run, or evaluation.
 
+## The three data tracks
+
+Keep these tracks separate even when they use the same task-family split:
+
+| Track | Supervised material | Status |
+| --- | --- | --- |
+| Teacher action-only | Verified successful assistant actions and tool calls | Implemented current path |
+| Qwen self visible reasoning | Qwen-written reasoning that was explicitly shown to the Qwen user, plus actions | Separate source-only materializer; not connected to a training launcher |
+| Teacher visible rationale | Teacher text independently proved to have been shown to the Qwen user and authorized for training | Future, separately reviewed contract |
+
+The third row never means a provider's internal reasoning. A field named
+`thinking`, `reasoning`, `reasoning_content`, or `analysis` is private or
+unknown unless a future teacher-specific contract proves otherwise; it cannot
+be re-labelled or reconstructed as visible text.
+
 ## What the current SFT corpus contains
 
 The current broad teacher corpus is **visible-action SFT**, not chain-of-thought
@@ -145,9 +160,10 @@ Do not add a boolean such as `include_thinking=true` to the existing action
 corpus.  That would blur two different data contracts.  Instead, create a new,
 frozen corpus type only after all gates below pass.
 
-The source-only implementation plan for that separate corpus is
-[the student-visible reasoning collection design](QWEN38_STUDENT_VISIBLE_REASONING_COLLECTION_DESIGN_V1.md).
-It deliberately does not authorize a collection or relax any action-only gate.
+The separate private builder and its source-only collection contract are
+[documented here](FLEET_VISIBLE_REASONING_MATERIALIZATION.md), with the full
+[student-visible reasoning design](QWEN38_STUDENT_VISIBLE_REASONING_COLLECTION_DESIGN_V1.md).
+Neither authorizes a collection or relaxes any action-only gate.
 
 ### Allowed sources
 
@@ -156,12 +172,13 @@ The only acceptable written reasoning is reasoning that is both:
 1. **authorized for training**, and
 2. **visible to the student under the same inference contract**.
 
-The clearest initial source is a fresh Qwen rollout collected with an explicit
-student-visible thinking template.  An external teacher is acceptable only when
-its contract explicitly says the reasoning is student-visible and trainable.
-Generic provider `thinking`, `reasoning`, or `reasoning_content` fields are
-private/unknown by default and must be excluded.  Never infer, rewrite,
-summarize, or reconstruct hidden thought.
+The implemented initial source is a fresh Qwen rollout collected with an
+explicit student-visible thinking template. The v1 builder rejects every
+teacher source. A future teacher-visible corpus needs a distinct contract that
+proves the exact teacher text was ordinary student-visible conversation text
+and was authorized for training. Generic provider `thinking`, `reasoning`, or
+`reasoning_content` fields are private/unknown by default and must be excluded.
+Never infer, rewrite, summarize, or reconstruct hidden thought.
 
 ### Required aggregate-only inventory
 
@@ -182,8 +199,8 @@ an exclusion, not a guess.
 
 ### New corpus contract
 
-The new corpus needs a distinct schema and manifest, for example
-`cyber_student_visible_reasoning_sft_corpus_v1`, with:
+The new corpus has a distinct schema and manifest,
+`cyber_qwen_opencode_visible_reasoning_sft_corpus_v1`, with:
 
 - a source-authorization receipt;
 - the exact template and thinking-mode digest used both to generate and train;
@@ -199,6 +216,12 @@ student-visible-reasoning treatment with the same task-family split, action
 targets, model, template, optimizer, and evaluation protocol.  It answers
 whether written, student-visible reasoning helps; it must not be mixed into the
 current action-only result after the fact.
+
+Materialization produces private token IDs and masks plus aggregate receipts;
+it always reports `sft_ready: false`. A separate aggregate-only final selection
+can approve a corpus only after its token target and family concentration gates
+pass. No current SFT launcher consumes that selection, so neither step alone
+authorizes a training job.
 
 ### Required tests before any launch
 

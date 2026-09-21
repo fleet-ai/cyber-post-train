@@ -136,7 +136,7 @@ The private corpus materializer will retain a smaller result as evidence but
 will not mark it ready for SFT until the 20M target and family-concentration
 checks pass.
 
-## Two deliberately separate data lanes
+## Three deliberately separate data lanes
 
 ### Teacher visible-action lane
 
@@ -160,11 +160,30 @@ private, unknown, hidden-thinking, or opaque-compaction fields remain
 forbidden.  Its exporter must prove which exact messages are student-visible,
 how continuations were represented, and how those targets were masked.
 
-The current materializer deliberately rejects this lane rather than treating
-visible reasoning as if it were ordinary tool output.  That prevents an
-accidental mixture of teacher action imitation and a different self-reasoning
-objective.  A separate schema, tests, and acceptance receipt are required
-before self visible reasoning can be admitted to SFT.
+The action-only materializer deliberately rejects this lane rather than
+treating visible reasoning as if it were ordinary tool output. A separate
+private builder now owns the reasoning arm, with its own schemas, tests, and
+acceptance receipt; see
+[the visible-reasoning materialization contract](FLEET_VISIBLE_REASONING_MATERIALIZATION.md).
+It still cannot collect or train by itself: an authorized source profile,
+sealed selection, exact serializer proof, and no opaque compaction are all
+required before it can materialize any private records.
+
+### Future teacher-visible-rationale lane
+
+This is a third treatment, not a switch on the teacher action packet and not a
+way to recover a teacher's hidden thoughts. It would require a new source
+profile, authorization artifact, success-evidence mapping, selection, record
+schema, corpus identity, and training permit. Its source must show that the
+teacher's rationale was delivered as ordinary visible conversation text under a
+known interface and that this exact text is allowed in Qwen training.
+
+The later builder must render that text through the pinned Qwen template, bind
+every supervised rationale/action boundary, and keep the same anchored family
+roles as the paired teacher/action-only corpus. It must reject every generic
+`thinking`, `reasoning`, `reasoning_content`, `analysis`, private field, or
+unreconstructable compaction boundary. Until that code and its source authority
+exist, teacher collection expands only the action-only lane.
 
 ## Practical next sequence
 
@@ -174,9 +193,11 @@ before self visible reasoning can be admitted to SFT.
 2. Build the qualified broad roster, anchored split, runtime bindings, and
    protected-family lock offline.  Review the aggregate family and taxonomy
    coverage.
-3. Render independent teacher-action and Qwen-self collection packets.  Verify
+3. Render independent teacher-action and Qwen-self collection packets. Verify
    source authorization before a launch; do not use an opaque receipt digest as
-   evidence that the issuer was checked.
+   evidence that the issuer was checked. Keep teacher-visible rationale as a
+   separately designed packet only after its own source and text-visibility
+   proof exists.
 4. Collect the predeclared campaigns.  Export only sealed attempt metadata to
    admission; keep raw records private.
 5. Admit successes, materialize action-only data, and use aggregate coverage to
