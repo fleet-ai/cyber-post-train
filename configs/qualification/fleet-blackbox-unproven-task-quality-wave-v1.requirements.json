@@ -94,7 +94,8 @@
     "require_clean_origin_main_ancestor": true,
     "resumable_exact_instance_cleanup": true,
     "session_mode": "metadata_only_runtime_evidence_v1",
-    "session_must_be_new": true
+    "session_must_be_new": true,
+    "submit_report_negative_control": "verdict_no_flag_with_nonempty_explanation_v1"
   },
   "missing_launch_gates": [
     "controller_source_commit_merged",
@@ -139,6 +140,6 @@
     "request_or_pod_template_annotation_is_insufficient": true
   },
   "schema": "cyber_task_quality_qualification_wave_requirements_v1",
-  "sha256": "sha256:f2c7eadea587da1c24339399f0fac9e67d5e28953e8c5efa874b8352abfb621c",
+  "sha256": "sha256:1af4ca79b0614615559120cd8ddfdf3870991a72dd3d5df1b8e08d8ee710cf6a",
   "status": "source_ready_pending_merge_and_live_execution"
 }

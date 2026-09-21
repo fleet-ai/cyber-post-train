@@ -649,6 +649,157 @@ def _mcp_result(value: dict[str, Any], request_id: int, label: str) -> None:
         raise QualificationError(f"{label} MCP call reported an error")
 
 
+def _probe_arguments() -> dict[str, dict[str, Any]]:
+    return {
+        "bash": {"script": "printf task-quality-runtime-ok"},
+        "submit_report": {
+            "verdict": "no_flag",
+            "explanation": (
+                "Automated task-runtime qualification probe; exploitability was not tested."
+            ),
+        },
+    }
+
+
+def _schema_admits(schema: object, value: object) -> bool:  # noqa: C901, PLR0911
+    """Conservatively evaluate the JSON-Schema subset used by Fleet MCP tools."""
+    if isinstance(schema, bool):
+        return schema
+    if not isinstance(schema, dict):
+        return False
+    annotations = {
+        "$comment",
+        "$id",
+        "$schema",
+        "default",
+        "deprecated",
+        "description",
+        "examples",
+        "readOnly",
+        "title",
+        "writeOnly",
+    }
+    supported = annotations | {
+        "additionalProperties",
+        "allOf",
+        "anyOf",
+        "const",
+        "enum",
+        "items",
+        "maxItems",
+        "maxLength",
+        "maxProperties",
+        "minItems",
+        "minLength",
+        "minProperties",
+        "oneOf",
+        "properties",
+        "required",
+        "type",
+        "uniqueItems",
+    }
+    if set(schema) - supported:
+        return False
+    if "const" in schema and value != schema["const"]:
+        return False
+    if "enum" in schema and (not isinstance(schema["enum"], list) or value not in schema["enum"]):
+        return False
+    for keyword, predicate in (
+        ("allOf", all),
+        ("anyOf", any),
+    ):
+        branches = schema.get(keyword)
+        if branches is not None:
+            if not isinstance(branches, list) or not branches:
+                return False
+            admitted = [_schema_admits(branch, value) for branch in branches]
+            if not predicate(admitted):
+                return False
+    branches = schema.get("oneOf")
+    if branches is not None and (
+        not isinstance(branches, list)
+        or sum(_schema_admits(branch, value) for branch in branches) != 1
+    ):
+        return False
+    declared_type = schema.get("type")
+    allowed_types = [declared_type] if isinstance(declared_type, str) else declared_type
+    if allowed_types is not None:
+        if not isinstance(allowed_types, list) or not all(
+            isinstance(item, str) for item in allowed_types
+        ):
+            return False
+        observed_type = (
+            "null"
+            if value is None
+            else "boolean"
+            if isinstance(value, bool)
+            else "object"
+            if isinstance(value, dict)
+            else "array"
+            if isinstance(value, list)
+            else "string"
+            if isinstance(value, str)
+            else "integer"
+            if isinstance(value, int)
+            else "number"
+            if isinstance(value, float)
+            else "unsupported"
+        )
+        if observed_type not in allowed_types and not (
+            observed_type == "integer" and "number" in allowed_types
+        ):
+            return False
+    if isinstance(value, dict):
+        required = schema.get("required", [])
+        properties = schema.get("properties", {})
+        additional = schema.get("additionalProperties", True)
+        if (
+            not isinstance(required, list)
+            or any(not isinstance(name, str) for name in required)
+            or not isinstance(properties, dict)
+            or not isinstance(additional, (bool, dict))
+            or any(name not in value for name in required)
+        ):
+            return False
+        for name, item in value.items():
+            item_schema = properties.get(name, additional)
+            if not _schema_admits(item_schema, item):
+                return False
+        for keyword, default, compare in (
+            ("minProperties", 0, lambda size, bound: size >= bound),
+            ("maxProperties", None, lambda size, bound: size <= bound),
+        ):
+            bound = schema.get(keyword, default)
+            if bound is not None and (type(bound) is not int or not compare(len(value), bound)):
+                return False
+    if isinstance(value, list):
+        items = schema.get("items", True)
+        if not isinstance(items, (bool, dict)) or any(
+            not _schema_admits(items, item) for item in value
+        ):
+            return False
+        if schema.get("uniqueItems", False) is True and len(
+            {canonical_bytes(item) for item in value}
+        ) != len(value):
+            return False
+        for keyword, default, compare in (
+            ("minItems", 0, lambda size, bound: size >= bound),
+            ("maxItems", None, lambda size, bound: size <= bound),
+        ):
+            bound = schema.get(keyword, default)
+            if bound is not None and (type(bound) is not int or not compare(len(value), bound)):
+                return False
+    if isinstance(value, str):
+        for keyword, default, compare in (
+            ("minLength", 0, lambda size, bound: size >= bound),
+            ("maxLength", None, lambda size, bound: size <= bound),
+        ):
+            bound = schema.get(keyword, default)
+            if bound is not None and (type(bound) is not int or not compare(len(value), bound)):
+                return False
+    return True
+
+
 def probe_tools(root_url: str, runner_header: str, runner_token: str) -> dict[str, Any]:
     """Exercise bash and submit_report while retaining no tool response content."""
     headers = {
@@ -657,75 +808,81 @@ def probe_tools(root_url: str, runner_header: str, runner_token: str) -> dict[st
         "Content-Type": "application/json",
     }
     endpoint = root_url.rstrip("/") + "/mcp"
+    tools: list[dict[str, Any]] = []
+    names: list[str] = []
     with httpx.Client(timeout=120) as client:
-        init_response = client.post(
-            endpoint,
-            headers=headers,
-            json={
-                "jsonrpc": "2.0",
-                "id": 1,
-                "method": "initialize",
-                "params": {
-                    "protocolVersion": "2025-03-26",
-                    "capabilities": {},
-                    "clientInfo": {"name": "task-quality-qualification", "version": "1"},
-                },
-            },
-        )
-        init_response.raise_for_status()
-        _mcp_result(self_hosted._mcp_json(init_response), 1, "initialize")  # noqa: SLF001
-        session_id = init_response.headers.get("mcp-session-id")
-        if session_id:
-            headers["Mcp-Session-Id"] = session_id
-        ready = client.post(
-            endpoint,
-            headers=headers,
-            json={"jsonrpc": "2.0", "method": "notifications/initialized"},
-        )
-        ready.raise_for_status()
-        listed_response = client.post(
-            endpoint,
-            headers=headers,
-            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
-        )
-        listed_response.raise_for_status()
-        listed = self_hosted._mcp_json(listed_response)  # noqa: SLF001
-        _mcp_result(listed, 2, "tools/list")
-        tools = listed["result"].get("tools")
-        if not isinstance(tools, list):
-            raise QualificationError("MCP tool catalog is invalid")
-        names = sorted(
-            row.get("name") for row in tools if isinstance(row, dict) and row.get("name")
-        )
-        if names != REQUIRED_TOOLS:
-            raise QualificationError("MCP tool catalog differs from bash/submit_report")
-        for request_id, name, arguments in (
-            (3, "bash", {"script": "printf task-quality-runtime-ok"}),
-            (
-                4,
-                "submit_report",
-                {
-                    "verdict": "no_flag",
-                    "explanation": (
-                        "Automated task-runtime qualification probe; exploitability was not tested."
-                    ),
-                },
-            ),
-        ):
-            response = client.post(
+        session_id = None
+        try:
+            init_response = client.post(
                 endpoint,
                 headers=headers,
                 json={
                     "jsonrpc": "2.0",
-                    "id": request_id,
-                    "method": "tools/call",
-                    "params": {"name": name, "arguments": arguments},
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2025-03-26",
+                        "capabilities": {},
+                        "clientInfo": {"name": "task-quality-qualification", "version": "1"},
+                    },
                 },
             )
-            response.raise_for_status()
-            _mcp_result(self_hosted._mcp_json(response), request_id, name)  # noqa: SLF001
-        if session_id:
-            client.delete(endpoint, headers=headers)
+            init_response.raise_for_status()
+            _mcp_result(  # noqa: SLF001
+                self_hosted._mcp_json(init_response), 1, "initialize"
+            )
+            session_id = init_response.headers.get("mcp-session-id")
+            if session_id:
+                headers["Mcp-Session-Id"] = session_id
+            ready = client.post(
+                endpoint,
+                headers=headers,
+                json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+            )
+            ready.raise_for_status()
+            listed_response = client.post(
+                endpoint,
+                headers=headers,
+                json={"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
+            )
+            listed_response.raise_for_status()
+            listed = self_hosted._mcp_json(listed_response)  # noqa: SLF001
+            _mcp_result(listed, 2, "tools/list")
+            raw_tools = listed["result"].get("tools")
+            if not isinstance(raw_tools, list) or any(
+                not isinstance(row, dict) for row in raw_tools
+            ):
+                raise QualificationError("MCP tool catalog is invalid")
+            tools = raw_tools
+            by_name = {row.get("name"): row for row in tools if isinstance(row.get("name"), str)}
+            names = sorted(by_name)
+            if names != REQUIRED_TOOLS or len(by_name) != len(tools):
+                raise QualificationError("MCP tool catalog differs from bash/submit_report")
+            probes = _probe_arguments()
+            if any(
+                not _schema_admits(by_name[name].get("inputSchema"), probes[name])
+                for name in REQUIRED_TOOLS
+            ):
+                raise QualificationError("MCP tool schema does not admit the exact negative probe")
+            for request_id, name in enumerate(REQUIRED_TOOLS, start=3):
+                response = client.post(
+                    endpoint,
+                    headers=headers,
+                    json={
+                        "jsonrpc": "2.0",
+                        "id": request_id,
+                        "method": "tools/call",
+                        "params": {"name": name, "arguments": probes[name]},
+                    },
+                )
+                response.raise_for_status()
+                _mcp_result(  # noqa: SLF001
+                    self_hosted._mcp_json(response), request_id, name
+                )
+        finally:
+            if session_id:
+                closed = client.delete(endpoint, headers=headers)
+                closed.raise_for_status()
     return {
         "tool_names": names,
         "tool_catalog_sha256": self_hosted.sha256(self_hosted.canonical_json(tools)),

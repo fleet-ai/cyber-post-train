@@ -248,6 +248,24 @@ def test_plan_excludes_protected_heldout_atom_and_duplicate_family(monkeypatch):
 
 def test_probe_tools_calls_both_without_returning_content(monkeypatch):
     calls = []
+    arguments = {}
+    schemas = {
+        "bash": {
+            "type": "object",
+            "properties": {"script": {"type": "string"}},
+            "required": ["script"],
+            "additionalProperties": False,
+        },
+        "submit_report": {
+            "type": "object",
+            "properties": {
+                "verdict": {"type": "string", "enum": ["no_flag"]},
+                "explanation": {"type": "string", "minLength": 1},
+            },
+            "required": ["verdict", "explanation"],
+            "additionalProperties": False,
+        },
+    }
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.method == "DELETE":
@@ -261,8 +279,14 @@ def test_probe_tools_calls_both_without_returning_content(monkeypatch):
         if method == "initialize":
             result = {"protocolVersion": "2025-03-26"}
         elif method == "tools/list":
-            result = {"tools": [{"name": "bash"}, {"name": "submit_report"}]}
+            result = {
+                "tools": [
+                    {"name": name, "inputSchema": schemas[name]}
+                    for name in ("bash", "submit_report")
+                ]
+            }
         else:
+            arguments[body["params"]["name"]] = body["params"]["arguments"]
             result = {"content": [{"type": "text", "text": "FLAG{must-not-persist}"}]}
         return httpx.Response(
             200,
@@ -280,6 +304,15 @@ def test_probe_tools_calls_both_without_returning_content(monkeypatch):
     receipt = qualification.probe_tools("https://fixture.invalid", "x-token", "secret")
     assert receipt["bash_reachable"] is True
     assert receipt["submit_report_reachable"] is True
+    assert arguments == {
+        "bash": {"script": "printf task-quality-runtime-ok"},
+        "submit_report": {
+            "verdict": "no_flag",
+            "explanation": (
+                "Automated task-runtime qualification probe; exploitability was not tested."
+            ),
+        },
+    }
     assert "FLAG" not in json.dumps(receipt)
     assert calls == [
         "initialize",
@@ -289,6 +322,67 @@ def test_probe_tools_calls_both_without_returning_content(monkeypatch):
         "submit_report",
         "DELETE",
     ]
+
+
+def test_probe_tools_rejects_schema_that_does_not_admit_negative_control(monkeypatch):
+    calls = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "DELETE":
+            calls.append("DELETE")
+            return httpx.Response(204, request=request)
+        body = json.loads(request.content)
+        method = body["method"]
+        calls.append(method)
+        if method == "notifications/initialized":
+            return httpx.Response(202, request=request)
+        if method == "initialize":
+            result = {"protocolVersion": "2025-03-26"}
+        elif method == "tools/list":
+            result = {
+                "tools": [
+                    {
+                        "name": "bash",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {"script": {"type": "string"}},
+                            "required": ["script"],
+                            "additionalProperties": False,
+                        },
+                    },
+                    {
+                        "name": "submit_report",
+                        "inputSchema": {
+                            "type": "object",
+                            "properties": {
+                                "flags": {"type": "array", "items": {"type": "string"}},
+                                "explanation": {"type": "string"},
+                            },
+                            "required": ["flags", "explanation"],
+                            "additionalProperties": False,
+                        },
+                    },
+                ]
+            }
+        else:
+            raise AssertionError("probe called a tool before validating the catalog schema")
+        return httpx.Response(
+            200,
+            headers={"mcp-session-id": "fixture"},
+            json={"jsonrpc": "2.0", "id": body.get("id"), "result": result},
+            request=request,
+        )
+
+    real_client = httpx.Client
+    monkeypatch.setattr(
+        qualification.httpx,
+        "Client",
+        lambda **_kwargs: real_client(transport=httpx.MockTransport(handler)),
+    )
+    with pytest.raises(qualification.QualificationError, match="does not admit"):
+        qualification.probe_tools("https://fixture.invalid", "x-token", "secret")
+    assert "tools/call" not in calls
+    assert calls[-1] == "DELETE"
 
 
 @pytest.mark.parametrize(

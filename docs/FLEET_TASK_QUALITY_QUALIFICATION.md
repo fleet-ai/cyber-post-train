@@ -24,8 +24,9 @@ For every selected exact task/version, the controller:
 3. proves the durable create-request claim GET/DELETE routes are deployed,
    exclusively records a cell intent, provisions through the exact
    task-version authority once, and verifies the live environment binding;
-4. initializes MCP and calls `bash` plus `submit_report` with a fixed no-flag
-   runtime probe;
+4. initializes MCP, proves each advertised input schema admits the exact probe,
+   then calls `bash` and `submit_report` with the runtime's `no_flag` verdict
+   plus a nonempty qualification explanation;
 5. invokes the v3 direct verifier authority and creates a new zero-message,
    trace-free evidence session (an already-existing session fails closed); and
 6. terminates the exact environment and requires termination evidence.
