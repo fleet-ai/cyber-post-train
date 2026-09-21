@@ -35,6 +35,7 @@ PACKET_SCHEMA = "cyber_fleet_visible_action_collection_job_packet_v1"
 CREATE_INTENT_SCHEMA = "cyber_fleet_visible_action_collection_job_create_intent_v1"
 CLEANUP_INTENT_SCHEMA = "cyber_fleet_visible_action_collection_job_cleanup_intent_v1"
 CLEANUP_RECEIPT_SCHEMA = "cyber_fleet_visible_action_collection_job_cleanup_receipt_v1"
+STATUS_SCHEMA = "cyber_fleet_visible_action_collection_job_status_v1"
 CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 NAMESPACE = "fleet-train-jobs"
 QUEUE_NAME = "training-lq"
@@ -1266,34 +1267,16 @@ def _terminal_condition(job: dict[str, Any]) -> str:
     return terminal.pop()
 
 
-def cleanup_once(
-    packet_path: Path,
-    *,
-    cluster: Cluster,
-    journal: Path,
-    receipt_path: Path,
-    timeout_seconds: float = 600,
-    monotonic: Callable[[], float] = time.monotonic,
-    sleep: Callable[[float], None] = time.sleep,
-) -> dict[str, Any]:
-    if receipt_path.exists() or receipt_path.is_symlink():
-        raise CollectionJobError("cleanup receipt exists; never overwrite")
-    if timeout_seconds <= 0:
-        raise CollectionJobError("cleanup timeout must be positive")
-    package = build_package(packet_path)
-    binding = _journal_binding(journal, package)
-    job = cluster.get("jobs.batch", NAMESPACE, binding["job_name"])
-    config_map = cluster.get("configmaps", NAMESPACE, binding["config_map_name"])
-    job_metadata = _metadata(job, "created Job")
-    config_metadata = _metadata(config_map, "created ConfigMap")
-    if (
-        job_metadata.get("uid") != binding["job_uid"]
-        or config_metadata.get("uid") != binding["config_map_uid"]
-        or job_metadata.get("annotations", {}).get(FAILURE_ALERT_ANNOTATION) != "off"
-    ):
-        raise CollectionJobError("terminal Kubernetes identity differs from create response")
-    condition = _terminal_condition(job)
-    _assert_zero_gpu(job["spec"]["template"]["spec"])
+def _bound_resource(value: dict[str, Any], *, label: str, name: str, uid: str) -> dict[str, Any]:
+    metadata = _metadata(value, label)
+    if metadata.get("name") != name or metadata.get("uid") != uid:
+        raise CollectionJobError(f"{label} exact name or UID changed")
+    return metadata
+
+
+def _owned_inventory(
+    cluster: Cluster, binding: dict[str, Any]
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     pods = _items(
         cluster.list(
             "pods",
@@ -1305,9 +1288,6 @@ def cleanup_once(
     for pod in pods:
         if not _owned_by(pod, kind="Job", name=binding["job_name"], uid=binding["job_uid"]):
             raise CollectionJobError("terminal Pod owner binding differs")
-        phase = pod.get("status", {}).get("phase")
-        if phase in {"Pending", "Running", "Unknown"}:
-            raise CollectionJobError("terminal collection still has an active or unknown Pod")
     workloads = _items(
         cluster.list(
             "workloads.kueue.x-k8s.io",
@@ -1319,11 +1299,179 @@ def cleanup_once(
     for workload in workloads:
         if not _owned_by(workload, kind="Job", name=binding["job_name"], uid=binding["job_uid"]):
             raise CollectionJobError("terminal Workload owner binding differs")
+    return pods, workloads
 
+
+def observe_status(packet_path: Path, *, cluster: Cluster, journal: Path) -> dict[str, Any]:
+    """Read only the exact bound Kubernetes identities; never read logs or data."""
+    package = build_package(packet_path)
+    binding = _journal_binding(journal, package)
+    root = cluster.get_optional("jobs.batch", NAMESPACE, binding["job_name"])
+    config_map = cluster.get_optional("configmaps", NAMESPACE, binding["config_map_name"])
+    if root is not None:
+        metadata = _bound_resource(
+            root,
+            label="created Job",
+            name=binding["job_name"],
+            uid=binding["job_uid"],
+        )
+        if metadata.get("annotations", {}).get(FAILURE_ALERT_ANNOTATION) != "off":
+            raise CollectionJobError("created root Job lost failure-alerts off")
+        _assert_zero_gpu(root["spec"]["template"]["spec"])
+    if config_map is not None:
+        _bound_resource(
+            config_map,
+            label="created ConfigMap",
+            name=binding["config_map_name"],
+            uid=binding["config_map_uid"],
+        )
+    pods, workloads = _owned_inventory(cluster, binding)
+    phases: dict[str, int] = {}
+    for pod in pods:
+        phase = pod.get("status", {}).get("phase")
+        name = phase if isinstance(phase, str) and phase else "Missing"
+        phases[name] = phases.get(name, 0) + 1
+    terminal = ""
+    active = 0
+    if root is not None:
+        status = root.get("status", {})
+        if not isinstance(status, dict) or type(status.get("active", 0)) is not int:
+            raise CollectionJobError("created Job status is invalid")
+        active = status.get("active", 0)
+        conditions = status.get("conditions", [])
+        if not isinstance(conditions, list):
+            raise CollectionJobError("created Job conditions are invalid")
+        observed = {
+            row.get("type")
+            for row in conditions
+            if isinstance(row, dict)
+            and row.get("status") == "True"
+            and row.get("type") in {"Complete", "Failed"}
+        }
+        if len(observed) > 1:
+            raise CollectionJobError("created Job has contradictory terminal conditions")
+        terminal = next(iter(observed), "")
+    active_phases = sum(phases.get(phase, 0) for phase in ("Pending", "Running", "Unknown"))
+    if root is None and config_map is None and not pods and not workloads:
+        state = "release_confirmed"
+    elif terminal and active == 0 and active_phases == 0:
+        state = "terminal_ready_for_cleanup"
+    elif root is None:
+        state = "cleanup_in_progress"
+    else:
+        state = "running_or_queued"
+    return {
+        "schema": STATUS_SCHEMA,
+        "state": state,
+        "operation_authorization_sha256": binding["operation_authorization_sha256"],
+        "job": {
+            "name": binding["job_name"],
+            "uid": binding["job_uid"],
+            "present": root is not None,
+            "terminal_condition": terminal or None,
+            "active": active,
+        },
+        "config_map": {
+            "name": binding["config_map_name"],
+            "uid": binding["config_map_uid"],
+            "present": config_map is not None,
+        },
+        "owned_pod_phases": dict(sorted(phases.items())),
+        "owned_workloads": len(workloads),
+        "gpus": 0,
+        "logs_traces_scores_or_credentials_read": False,
+    }
+
+
+def _load_cleanup_intent(path: Path, expected_body: dict[str, Any]) -> dict[str, Any] | None:
+    if not path.exists() and not path.is_symlink():
+        return None
+    if path.is_symlink() or not path.is_file():
+        raise CollectionJobError("cleanup intent path is not a regular file")
+    value = _json(path, "cleanup intent")
+    if value != {
+        **expected_body,
+        "sha256": _canonical_digest(expected_body),
+    }:
+        raise CollectionJobError("cleanup intent differs from the exact UID binding")
+    return value
+
+
+def _existing_cleanup_receipt(path: Path, binding: dict[str, Any]) -> dict[str, Any] | None:
+    if not path.exists() and not path.is_symlink():
+        return None
+    if path.is_symlink() or not path.is_file():
+        raise CollectionJobError("cleanup receipt path is not a regular file")
+    value = _json(path, "cleanup receipt")
+    unsigned = {key: item for key, item in value.items() if key != "sha256"}
+    if (
+        value.get("schema") != CLEANUP_RECEIPT_SCHEMA
+        or value.get("sha256") != _canonical_digest(unsigned)
+        or value.get("operation_authorization_sha256") != binding["operation_authorization_sha256"]
+        or value.get("job") != {"name": binding["job_name"], "uid": binding["job_uid"]}
+        or value.get("config_map")
+        != {"name": binding["config_map_name"], "uid": binding["config_map_uid"]}
+        or value.get("release_confirmed") is not True
+    ):
+        raise CollectionJobError("cleanup receipt is invalid")
+    return value
+
+
+def cleanup_once(
+    packet_path: Path,
+    *,
+    cluster: Cluster,
+    journal: Path,
+    receipt_path: Path,
+    timeout_seconds: float = 600,
+    monotonic: Callable[[], float] = time.monotonic,
+    sleep: Callable[[float], None] = time.sleep,
+) -> dict[str, Any]:
+    if timeout_seconds <= 0:
+        raise CollectionJobError("cleanup timeout must be positive")
+    package = build_package(packet_path)
+    binding = _journal_binding(journal, package)
     intent_path = receipt_path.with_name(receipt_path.name + ".intent")
+    completed = _existing_cleanup_receipt(receipt_path, binding)
+    if completed is not None:
+        return completed
+    root = cluster.get_optional("jobs.batch", NAMESPACE, binding["job_name"])
+    config_map = cluster.get_optional("configmaps", NAMESPACE, binding["config_map_name"])
+    if root is not None:
+        root_metadata = _bound_resource(
+            root,
+            label="created Job",
+            name=binding["job_name"],
+            uid=binding["job_uid"],
+        )
+        if root_metadata.get("annotations", {}).get(FAILURE_ALERT_ANNOTATION) != "off":
+            raise CollectionJobError("terminal root Job lost failure-alerts off")
+        condition = _terminal_condition(root)
+        _assert_zero_gpu(root["spec"]["template"]["spec"])
+    else:
+        if not intent_path.exists() or intent_path.is_symlink():
+            raise CollectionJobError(
+                "exact terminal Job must be observed before the first cleanup intent"
+            )
+        raw_intent = _json(intent_path, "cleanup intent")
+        condition = raw_intent.get("terminal_condition")
+        if condition not in {"Complete", "Failed"}:
+            raise CollectionJobError("cleanup intent has no exact terminal observation")
+    if config_map is not None:
+        _bound_resource(
+            config_map,
+            label="created ConfigMap",
+            name=binding["config_map_name"],
+            uid=binding["config_map_uid"],
+        )
+    pods, workloads = _owned_inventory(cluster, binding)
+    for pod in pods:
+        if pod.get("status", {}).get("phase") in {"Pending", "Running", "Unknown"}:
+            raise CollectionJobError("terminal collection still has an active or unknown Pod")
+
     intent_body = {
         "schema": CLEANUP_INTENT_SCHEMA,
-        "state": "EXACT_UID_FOREGROUND_DELETE_INTENT_DO_NOT_RETRY",
+        "state": "EXACT_UID_FOREGROUND_DELETE_INTENT_RESUMABLE_V1",
         "packet_file_sha256": package.packet.packet_sha256,
         "operation_authorization_sha256": binding["operation_authorization_sha256"],
         "job": {"name": binding["job_name"], "uid": binding["job_uid"]},
@@ -1333,43 +1481,74 @@ def cleanup_once(
         },
         "terminal_condition": condition,
     }
-    intent = {**intent_body, "sha256": _canonical_digest(intent_body)}
-    _write_json_once(intent_path, intent)
-    try:
-        cluster.delete_uid("jobs.batch", NAMESPACE, binding["job_name"], binding["job_uid"])
-        deadline = monotonic() + timeout_seconds
-        while True:
-            remaining_job = cluster.get_optional("jobs.batch", NAMESPACE, binding["job_name"])
-            remaining_pods = _items(
-                cluster.list(
-                    "pods",
-                    NAMESPACE,
-                    label_selector=(f"batch.kubernetes.io/controller-uid={binding['job_uid']}"),
-                ),
-                "remaining Pods",
+    intent = _load_cleanup_intent(intent_path, intent_body)
+    if intent is None:
+        intent = {**intent_body, "sha256": _canonical_digest(intent_body)}
+        _write_json_once(intent_path, intent)
+    if root is not None:
+        try:
+            cluster.delete_uid("jobs.batch", NAMESPACE, binding["job_name"], binding["job_uid"])
+        except Exception:
+            observed = cluster.get_optional("jobs.batch", NAMESPACE, binding["job_name"])
+            if observed is not None:
+                _bound_resource(
+                    observed,
+                    label="created Job",
+                    name=binding["job_name"],
+                    uid=binding["job_uid"],
+                )
+                raise CollectionJobError(
+                    "exact-UID Job cleanup is incomplete; resume the sealed cleanup intent"
+                ) from None
+    deadline = monotonic() + timeout_seconds
+    while True:
+        remaining_root = cluster.get_optional("jobs.batch", NAMESPACE, binding["job_name"])
+        if remaining_root is not None:
+            _bound_resource(
+                remaining_root,
+                label="created Job",
+                name=binding["job_name"],
+                uid=binding["job_uid"],
             )
-            remaining_workloads = _items(
-                cluster.list(
-                    "workloads.kueue.x-k8s.io",
-                    NAMESPACE,
-                    label_selector=f"kueue.x-k8s.io/job-uid={binding['job_uid']}",
-                ),
-                "remaining Workloads",
+        remaining_pods, remaining_workloads = _owned_inventory(cluster, binding)
+        if remaining_root is None and not remaining_pods and not remaining_workloads:
+            break
+        if monotonic() >= deadline:
+            raise CollectionJobError(
+                "exact-UID Job cleanup is incomplete; resume the sealed cleanup intent"
             )
-            if remaining_job is None and not remaining_pods and not remaining_workloads:
-                break
-            if monotonic() >= deadline:
-                raise CollectionJobError("exact-UID Job cleanup did not release owned resources")
-            sleep(min(5.0, max(0.0, deadline - monotonic())))
-        cluster.delete_uid(
-            "configmaps", NAMESPACE, binding["config_map_name"], binding["config_map_uid"]
+        sleep(min(5.0, max(0.0, deadline - monotonic())))
+    current_config = cluster.get_optional("configmaps", NAMESPACE, binding["config_map_name"])
+    if current_config is not None:
+        _bound_resource(
+            current_config,
+            label="created ConfigMap",
+            name=binding["config_map_name"],
+            uid=binding["config_map_uid"],
         )
-        if cluster.get_optional("configmaps", NAMESPACE, binding["config_map_name"]) is not None:
-            raise CollectionJobError("exact-UID ConfigMap cleanup is not confirmed")
-    except Exception as error:
-        if isinstance(error, CollectionJobError):
-            raise
-        raise CollectionJobError("exact-UID cleanup response is uncertain; never retry") from None
+        try:
+            cluster.delete_uid(
+                "configmaps",
+                NAMESPACE,
+                binding["config_map_name"],
+                binding["config_map_uid"],
+            )
+        except Exception:
+            observed = cluster.get_optional("configmaps", NAMESPACE, binding["config_map_name"])
+            if observed is not None:
+                _bound_resource(
+                    observed,
+                    label="created ConfigMap",
+                    name=binding["config_map_name"],
+                    uid=binding["config_map_uid"],
+                )
+                raise CollectionJobError(
+                    "exact-UID ConfigMap cleanup is incomplete; resume the sealed cleanup intent"
+                ) from None
+    if cluster.get_optional("configmaps", NAMESPACE, binding["config_map_name"]) is not None:
+        raise CollectionJobError(
+            "exact-UID ConfigMap cleanup is incomplete; resume the sealed cleanup intent"
+        )
     body = {
         "schema": CLEANUP_RECEIPT_SCHEMA,
         "operation_authorization_sha256": binding["operation_authorization_sha256"],
@@ -1551,6 +1730,10 @@ def main() -> None:
     launch.add_argument("packet", type=Path)
     launch.add_argument("--context", required=True)
     launch.add_argument("--journal", type=Path, required=True)
+    status = commands.add_parser("status")
+    status.add_argument("packet", type=Path)
+    status.add_argument("--context", required=True)
+    status.add_argument("--journal", type=Path, required=True)
     cleanup = commands.add_parser("cleanup")
     cleanup.add_argument("packet", type=Path)
     cleanup.add_argument("--context", required=True)
@@ -1578,6 +1761,12 @@ def main() -> None:
         }
     elif args.command == "launch":
         result = launch_once(
+            args.packet,
+            cluster=KubectlCluster(args.context),
+            journal=args.journal,
+        )
+    elif args.command == "status":
+        result = observe_status(
             args.packet,
             cluster=KubectlCluster(args.context),
             journal=args.journal,

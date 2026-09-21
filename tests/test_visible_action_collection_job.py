@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
+import subprocess
+from argparse import Namespace
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from evals.fleet import visible_action_collection_job as job
+from evals.fleet import visible_action_collection_job_entry as entry
 
 ROOT = Path(__file__).resolve().parents[1]
 CAMPAIGN = ROOT / "configs/collection/qwen38-base-current75-actions-pass4-v2"
@@ -296,6 +300,16 @@ def test_terminal_cleanup_uses_exact_uids_and_proves_release(
     assert cluster.config_map is None
     assert not cluster.pods
     assert not cluster.workloads
+    assert (
+        job.cleanup_once(
+            packet_path,
+            cluster=cluster,
+            journal=journal,
+            receipt_path=receipt_path,
+        )
+        == receipt
+    )
+    assert len(cluster.deletes) == 2
 
 
 def test_cleanup_refuses_active_owned_pod_without_delete(packet_path: Path, tmp_path: Path) -> None:
@@ -313,6 +327,73 @@ def test_cleanup_refuses_active_owned_pod_without_delete(packet_path: Path, tmp_
     assert cluster.deletes == []
 
 
+def test_status_is_exact_uid_bound_and_content_free(packet_path: Path, tmp_path: Path) -> None:
+    cluster = FakeCluster()
+    journal = tmp_path / "create.jsonl"
+    job.launch_once(packet_path, cluster=cluster, journal=journal)
+    running = job.observe_status(packet_path, cluster=cluster, journal=journal)
+    assert running["state"] == "running_or_queued"
+    assert running["logs_traces_scores_or_credentials_read"] is False
+    cluster.make_terminal()
+    terminal = job.observe_status(packet_path, cluster=cluster, journal=journal)
+    assert terminal["state"] == "terminal_ready_for_cleanup"
+    assert terminal["job"]["uid"] == JOB_UID
+    assert terminal["owned_pod_phases"] == {"Succeeded": 1}
+    job.cleanup_once(
+        packet_path,
+        cluster=cluster,
+        journal=journal,
+        receipt_path=tmp_path / "cleanup.json",
+    )
+    released = job.observe_status(packet_path, cluster=cluster, journal=journal)
+    assert released["state"] == "release_confirmed"
+
+
+def test_cleanup_resumes_same_uid_after_lost_delete_response(
+    packet_path: Path, tmp_path: Path
+) -> None:
+    class LostResponseCluster(FakeCluster):
+        lose_once = True
+
+        def delete_uid(self, resource: str, namespace: str, name: str, uid: str) -> dict[str, Any]:
+            if resource == "jobs.batch" and self.lose_once:
+                self.lose_once = False
+                self.deletes.append((resource, name, uid))
+                raise RuntimeError("transport lost before server mutation")
+            return super().delete_uid(resource, namespace, name, uid)
+
+    cluster = LostResponseCluster()
+    journal = tmp_path / "create.jsonl"
+    job.launch_once(packet_path, cluster=cluster, journal=journal)
+    cluster.make_terminal()
+    receipt = tmp_path / "cleanup.json"
+    with pytest.raises(job.CollectionJobError, match="resume the sealed cleanup intent"):
+        job.cleanup_once(
+            packet_path,
+            cluster=cluster,
+            journal=journal,
+            receipt_path=receipt,
+        )
+    assert receipt.with_name(receipt.name + ".intent").is_file()
+    assert not receipt.exists()
+    result = job.cleanup_once(
+        packet_path,
+        cluster=cluster,
+        journal=journal,
+        receipt_path=receipt,
+    )
+    assert result["release_confirmed"] is True
+    assert cluster.deletes == [
+        ("jobs.batch", "chris-q38-base-train50-p4-v2-fb0d54ec", JOB_UID),
+        ("jobs.batch", "chris-q38-base-train50-p4-v2-fb0d54ec", JOB_UID),
+        (
+            "configmaps",
+            "chris-q38-base-train50-p4-v2-fb0d54ec-code",
+            CONFIG_MAP_UID,
+        ),
+    ]
+
+
 def test_packet_source_mutation_is_rejected(packet_path: Path) -> None:
     packet = json.loads(packet_path.read_text())
     source = packet_path.parent / packet["source"]["files"]["evaluate.py"]["path"]
@@ -323,3 +404,173 @@ def test_packet_source_mutation_is_rejected(packet_path: Path) -> None:
             job.build_package(packet_path)
     finally:
         source.write_bytes(original)
+
+
+def test_job_entry_orders_preflight_before_create_and_emits_only_aggregate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    harness = tmp_path / "harness.tar"
+    harness.write_bytes(b"qualified-harness")
+    harness_sha = "sha256:" + hashlib.sha256(harness.read_bytes()).hexdigest()
+    operation_root = tmp_path / "operation"
+    operation_root.mkdir()
+    events: list[str] = []
+    written: dict[str, Any] = {}
+
+    monkeypatch.setenv("ROLLOUT_DATABASE_URL", "postgresql://db.example/admin")
+    monkeypatch.setattr(
+        entry.cluster_entry,
+        "stage_images",
+        lambda **_kwargs: events.append("stage_images"),
+    )
+    monkeypatch.setattr(
+        entry.collection,
+        "prepare",
+        lambda *_args, **_kwargs: events.append("prepare") or {"prepared": str(operation_root)},
+    )
+    monkeypatch.setattr(
+        entry.collection,
+        "preflight",
+        lambda *_args, **_kwargs: events.append("preflight") or {"receipt_sha256": "f" * 64},
+    )
+    monkeypatch.setattr(
+        entry.cluster_entry,
+        "dedicated_dsn",
+        lambda *_args, **_kwargs: (
+            events.append("dedicated_dsn") or "postgresql://db.example/dedicated"
+        ),
+    )
+    monkeypatch.setattr(
+        entry.cluster_entry,
+        "create_database_once",
+        lambda *_args, **_kwargs: (
+            events.append("create_database") or "postgresql://db.example/dedicated"
+        ),
+    )
+    monkeypatch.setattr(
+        entry.collection,
+        "_initialize_authorized_ledger",
+        lambda *_args, **_kwargs: (
+            events.append("initialize_ledger") or {"cells": 200, "plan_sha256": "ledger-plan"}
+        ),
+    )
+
+    def initialize_once(_directory, *, dsn, initializer):
+        events.append("initialize_once")
+        authorization = json.loads((CAMPAIGN / "operation-authorization.json").read_text())
+        created = initializer(dsn, operation_root / "plan.csv", authorization)
+        assert created == {"cells": 200, "plan_sha256": "ledger-plan"}
+        return {
+            "ledger_plan_sha256": "ledger-plan",
+            "sha256": "sha256:" + "e" * 64,
+        }
+
+    monkeypatch.setattr(entry.collection, "initialize_once", initialize_once)
+    monkeypatch.setattr(
+        entry.collection,
+        "run",
+        lambda *_args, **_kwargs: events.append("run") or {"accepted": 197},
+    )
+    monkeypatch.setattr(
+        entry.rollout_postgres,
+        "summary",
+        lambda *_args, **_kwargs: (
+            events.append("summary")
+            or {
+                "total": 200,
+                "local_results": 197,
+                "by_state": {
+                    "pending": 0,
+                    "claimed": 0,
+                    "running": 0,
+                    "grading": 0,
+                    "accepted": 197,
+                    "retry_review": 3,
+                    "terminal": 0,
+                },
+                "by_serving_block": [
+                    {"serving_block": "base", "state": "accepted", "count": 197},
+                    {"serving_block": "base", "state": "retry_review", "count": 3},
+                ],
+                "stale_active": 0,
+                "plan_sha256": "ledger-plan",
+            }
+        ),
+    )
+
+    def write_receipt(path: Path, value: dict[str, Any]) -> None:
+        events.append("write_receipt")
+        written["path"] = path
+        written["value"] = value
+
+    monkeypatch.setattr(entry.rollout_worker, "_safe_write_once", write_receipt)
+    args = Namespace(
+        config=str(CAMPAIGN / "eval-config.json"),
+        authorization=str(CAMPAIGN / "operation-authorization.json"),
+        private_root=str(tmp_path),
+        database="q38_base_train50_actions_p4_v2_fb0d54ec",
+        harness_tar=str(harness),
+        harness_tar_sha256=harness_sha,
+        harness_receipt=str(tmp_path / "BUILD.json"),
+        harness_receipt_sha256="sha256:" + "d" * 64,
+        route="base",
+        worker_id="base-v2",
+        limit=200,
+    )
+    receipt = entry.execute(args)
+    assert events == [
+        "stage_images",
+        "prepare",
+        "preflight",
+        "dedicated_dsn",
+        "initialize_once",
+        "create_database",
+        "initialize_ledger",
+        "run",
+        "summary",
+        "write_receipt",
+    ]
+    assert receipt["accepted_cells"] == 197
+    assert receipt["unresolved_cells"] == 0
+    assert receipt["private_content_included"] is False
+    assert receipt["score_read_or_generated"] is False
+    assert "results" not in receipt
+    assert written["path"] == operation_root / entry.TERMINAL_FILE
+
+
+def test_kubectl_cleanup_uses_raw_uid_precondition(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[list[str], str | None]] = []
+
+    def run(arguments, *, input, **_kwargs):
+        calls.append((arguments, input))
+        return subprocess.CompletedProcess(
+            arguments,
+            0,
+            stdout=json.dumps({"apiVersion": "v1", "kind": "Status", "status": "Success"}),
+            stderr="",
+        )
+
+    monkeypatch.setattr(job.subprocess, "run", run)
+    cluster = job.KubectlCluster(job.CONTEXT)
+    cluster.delete_uid(
+        "jobs.batch",
+        job.NAMESPACE,
+        "chris-q38-base-train50-p4-v2-fb0d54ec",
+        JOB_UID,
+    )
+    arguments, body = calls[0]
+    assert arguments[-5:] == [
+        "delete",
+        "--raw",
+        ("/apis/batch/v1/namespaces/fleet-train-jobs/jobs/chris-q38-base-train50-p4-v2-fb0d54ec"),
+        "-f",
+        "-",
+    ]
+    assert json.loads(body or "null") == {
+        "apiVersion": "v1",
+        "kind": "DeleteOptions",
+        "propagationPolicy": "Foreground",
+        "preconditions": {"uid": JOB_UID},
+    }
