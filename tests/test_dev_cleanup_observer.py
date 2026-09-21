@@ -896,6 +896,19 @@ def test_observer_accepts_digest_valid_model_stage_receipt() -> None:
     assert cleanup._validated_receipt(json.dumps(receipt), kind="job") == receipt
 
 
+def test_observer_accepts_only_digest_valid_prod9_cpu_receipt() -> None:
+    body = {
+        "schema": "cyber_skyrl_prod9_training_cpu_preflight_v1",
+        "status": "passed",
+        "gpus": 0,
+        "runtime_user": {"uid": 1000, "gid": 100},
+    }
+    receipt = {**body, "receipt_sha256": digest(body)}
+    assert cleanup._validated_receipt(json.dumps(receipt), kind="job") == receipt
+    receipt["status"] = "changed"
+    assert cleanup._validated_receipt(json.dumps(receipt), kind="job") is None
+
+
 def test_observer_accepts_digest_valid_topology_receipt_verifier() -> None:
     receipt = _seal(
         {

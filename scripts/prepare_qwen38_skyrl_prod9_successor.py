@@ -151,6 +151,13 @@ def build(manifest_path: Path) -> dict:
             "runtime_sha256": "sha256:" + plan["runtime_sha256"],
             "plan_sha256": "sha256:" + digest(plan),
             "request_sha256": "sha256:" + digest(request),
+            "fresh_rebind_stage": {
+                "module": "training.skyrl_prod9_training",
+                "function": "stage_rebind",
+                "schema": "cyber_skyrl_prod9_rebind_stage_receipt_v1",
+                "root_alert_annotation_required": FAILURE_ALERT_OFF,
+                "bundle_module": skyrl_prod9_training.MODULE,
+            },
             "fresh_cpu_preflight": {
                 "module": "training.skyrl_prod9_direct",
                 "function": "preflight_job_manifest",
@@ -161,12 +168,13 @@ def build(manifest_path: Path) -> dict:
             },
             "historical_direct_rail": historical_rail,
             "next_live_gates": [
-                "fresh absence checks for the prod9 names and destinations",
-                "a fresh root-annotated zero-GPU preflight wrapper for the prod9 module",
-                "create-once data stage and accepted zero-GPU release evidence",
-                "exact-image CPU preflight and accepted zero-GPU release evidence",
-                "fresh direct-RayJob server previews in dev and prod",
-                "a separately reviewed create-once rail before any GPU create",
+                "fresh dev and prod server previews proving the root alert opt-out",
+                "one root-annotated zero-GPU SFS rebind create, receipt, and exact-UID release",
+                "one root-annotated zero-GPU exact-image preflight create, "
+                "receipt, and exact-UID release",
+                "fresh Jobs-API, Kubernetes, output-root, and W&B identity absence checks",
+                "fresh one-node/eight-GPU direct RayJob previews plus all-namespace capacity proof",
+                "one reviewed no-retry GPU create with the pre-armed exact-UID observer",
             ],
         }
     )

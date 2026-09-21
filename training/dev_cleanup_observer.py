@@ -1116,6 +1116,17 @@ def _validated_receipt(message: object, *, kind: str) -> dict | None:
             return prod8.validate_canonical_receipt_bytes(raw)
         except ValueError:
             return None
+    # Fresh prod9 CPU gates write their fixed-path receipt with a
+    # ``receipt_sha256`` field because Kubernetes' termination file is not a
+    # create-once artifact.  The prod9 direct rail validates every semantic
+    # field before accepting either receipt; this observer only needs to bind
+    # the sealed object to the exact terminal Pod without parsing private data.
+    if kind == "job" and value.get("schema") in {
+        "cyber_skyrl_prod9_rebind_stage_receipt_v1",
+        "cyber_skyrl_prod9_training_cpu_preflight_v1",
+    }:
+        body = {key: item for key, item in value.items() if key != "receipt_sha256"}
+        return value if value.get("receipt_sha256") == digest(body) else None
     body = {key: item for key, item in value.items() if key != "sha256"}
     schemas = {
         "job": {

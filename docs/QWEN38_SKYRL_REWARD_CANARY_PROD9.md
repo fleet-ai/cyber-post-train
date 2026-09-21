@@ -4,8 +4,8 @@ Prod9 is a **new one-node, eight-GPU, one-update canary**, not a retry or
 resume of prod8. It keeps the reviewed Qwen3.8-27B image, task/version and
 reward contract, 262,144-token context window, compaction, eight sampled
 episodes, one optimizer update, and step-one checkpoint policy. Its new
-identities and fresh prod9 source bindings for token-safe compaction and
-non-submitting job rendering are the only allowed changes.
+identities and fresh prod9 source bindings for token-safe compaction, the
+zero-GPU gates, and the bounded one-create rail are the only allowed changes.
 
 The prior run's terminal result and GPU release cannot be proved: its launch
 record contains neither a terminal receipt nor a verified release, while the
@@ -42,7 +42,7 @@ uv run --locked python scripts/prepare_qwen38_skyrl_prod9_successor.py \
 ```
 
 It recompiles the real SkyRL plan and writes a sealed preparation receipt with
-the current runtime, plan, request, and zero-GPU preflight digests. It also
+the current runtime, plan, request, zero-GPU rebind, and CPU-preflight digests. It also
 verifies the fresh prod9 source closure for the token-safe recorder, direct
 capacity gate, and terminal checkpoint/reload acceptance gate. It checks the
 fresh identity, one-node shape, 262,144-token compaction settings, and
@@ -50,7 +50,7 @@ zero-GPU preflight's root alert opt-out. Those digests are fresh prod9 evidence;
 they are never inherited from historical prod8. The command never reads task
 rows, contacts external services, stages data, or authorizes a launch.
 
-The exact local rebind, read-only absence, and server-preview sequence is in
+The exact staged rebind, absence, server-preview, and one-create sequence is in
 [`QWEN38_SKYRL_PROD9_NONSUBMITTING_GATES.md`](QWEN38_SKYRL_PROD9_NONSUBMITTING_GATES.md).
 It creates no Kubernetes object and deliberately omits every live create.
 
@@ -80,12 +80,13 @@ lessons, not scientific evidence for this task set.
 
 The fresh training closure is `training.skyrl_prod9_training`, including its
 explicitly bound historical helper modules. `training.skyrl_prod9_direct`
-renders—but cannot create—the matching CPU-preflight Job and GPU RayJob. The
-fresh source hashes and renderer, not the historical direct rail, are therefore
-the relevant current gate. The immutable image digest remains fixed by the
-qualification file. The collector diagnostic has a separate setup-module hash
-because it starts an engine through a different diagnostic path; adding that
-unrelated check here would not prove anything about prod9.
+renders the matching zero-GPU rebind/CPU-preflight Jobs and GPU RayJob, and
+contains the only no-retry create functions permitted for prod9. No source
+change invokes those functions: live server previews, absence checks, a
+pre-armed observer, receipts, and the capacity proof must still be fresh when
+an authorized operator reaches each gate. The fresh source hashes and this
+rail—not the historical direct rail—are therefore the relevant current gate.
+The immutable image digest remains fixed by the qualification file.
 
 ## Exact private-data staging requirement
 
@@ -95,19 +96,20 @@ output:
 `/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-prod8-v1/data`
 
 The operator machine cannot mount this SFS path, so a local rebind/archive is
-not a valid prod9 gate. A **new, separately reviewed zero-GPU SFS rebind/data
-stage Job** must use `rebind_private_source_for_identity` with the sealed prod9
-identity. It may change only each private row's embedded run ID and that row's
-checksum, then rehash the private files and manifest before publishing the new
-destination. It must have the root failure-alert opt-out, a server preview,
-create-once identity, and an exact-UID release observer. That Job is not yet
-implemented or authorized. Do not commit or print private rows, prompts, task
-data, or an archive.
+not a valid prod9 gate. The fresh zero-GPU SFS rebind/data-stage source uses
+`rebind_private_source_for_identity` with the sealed prod9 identity. It may
+change only each private row's embedded run ID and checksum, then rehash the
+five-file package before publishing the new destination. Its root Job has the
+failure-alert opt-out before preview; its one-create function requires dev and
+prod previews, a pre-armed UID-bound observer, and a release receipt. This PR
+does not invoke it. Do not commit or print private rows, prompts, task data, or
+an archive.
 
-## Required future sequence after the fresh rebind and create-once rails exist
+## Required live sequence after review
 
-The current source can only render the CPU-preflight and GPU manifests for
-review. It cannot stage data, run a Job, or create a GPU workload.
+The source now contains the exact stage, preflight, and one-create functions,
+but no Job or RayJob has been created by this change. A real operation remains
+blocked until this source is reviewed and all evidence below is fresh.
 
 1. Confirm the prod9 name, output root, data destination, stage/preflight Job
    names and W&B ID are all absent. This must inspect the Jobs API and both
@@ -115,8 +117,8 @@ review. It cannot stage data, run a Job, or create a GPU workload.
 2. Server-preview the new rebind/data-stage and exact-image CPU-preflight Jobs
    in the required contexts. Each rendered root Job must have
    `fleet.ai/failure-alerts: "off"`.
-3. Stage the data once through the new rail; independently verify its digests
-   and zero-GPU release.
+3. Stage the data once through the fresh zero-GPU rail; independently verify
+   its sanitized package digests and exact-UID zero-GPU release.
 4. Run the exact-image CPU preflight once through the fresh renderer. It must
    prove compaction and both output-limit conditions and bind W&B to the new ID
    with `resume="never"`.
@@ -124,7 +126,10 @@ review. It cannot stage data, run a Job, or create a GPU workload.
    renderer, server-preview it, and verify its root annotation is exactly
    `fleet.ai/failure-alerts: "off"` before any create.
 6. Arm the existing UID-bound cleanup observer for exactly the new RayJob,
-   plan and rendered-manifest digests. It may release only a terminal run, a
+   plan and rendered-manifest digests. Immediately before the sole GPU create,
+   prove all-namespace project capacity including the planned eight GPUs,
+   recheck identities and W&B absence, record a no-retry create intent, and
+   create exactly once. The observer may release only a terminal run, a
    resource-contract breach, or the maximum runtime.
 
 The preparation code does not create a workload. A separate authorized

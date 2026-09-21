@@ -1,6 +1,6 @@
 {
   "schema": "cyber_rl_exact_version_evidence_v1",
-  "purpose": "Prod9-only source closure for exact Qwen3.8 reward-canary eligibility, token-safe tool-result compaction, direct GPU-capacity proof, terminal checkpoint sealing, one-GPU reload evidence, and authoritative grading",
+  "purpose": "Prod9-only source closure for exact Qwen3.8 reward-canary eligibility, token-safe tool-result compaction, fresh zero-GPU rebind and CPU preflight gates, a one-create GPU-capacity proof, terminal checkpoint sealing, one-GPU reload evidence, and authoritative grading",
   "port_provenance": {
     "runtime_commit": "8b5e8a00521b4fe412e3e7d0bce9b8ea6855b005",
     "preflight_commit": "6c0bc541e136fc114a3f7a17ce6ba07e9178bb78",
@@ -91,7 +91,7 @@
       },
     "prod9_hardening": {
       "path": "../../training/skyrl_prod9_hardening.py",
-      "file_sha256": "sha256:67f62a80a2ac85fa7fca479e2d440ca06dbf7b67b69c09578274ff4abf914f45",
+      "file_sha256": "sha256:22cdfff59589b35437c21bee3713b370eab33501b2ef4ec427827ebbfae8fb01",
         "symbols": [
           "Recorder",
           "validate_episode_limits",
@@ -110,23 +110,35 @@
       },
     "prod9_training_runtime": {
       "path": "../../training/skyrl_prod9_training.py",
-      "file_sha256": "sha256:d2a45e52edfec009409c33b2b58712682782e2531d4c2a9dc5870e449418be59",
+      "file_sha256": "sha256:e2499e7cd38bfa0d72b87f364349e39ab0ea6cf30816f4482714933c0025af94",
       "symbols": [
         "compile_rl",
         "job_request",
         "preflight_request",
         "preflight",
+        "stage_spec",
+        "stage_request",
+        "stage_rebind",
         "reject_historical_direct_rail",
         "_native"
       ]
     },
     "prod9_direct_rail": {
       "path": "../../training/skyrl_prod9_direct.py",
-      "file_sha256": "sha256:0fe319fe40aeeaac0c85f6b467e271e79018758d3d95c8d8c5e4402e436d8559",
+      "file_sha256": "sha256:8c9195a8fba02eb7cd17ee8025eb971e4cb98d73f4a19074a7e0746472780ad6",
       "symbols": [
         "manifest",
+        "stage_job_manifest",
         "preflight_job_manifest",
+        "server_dry_run",
+        "validate_cpu_preview",
         "validate_preview",
+        "authorize_stage",
+        "authorize_preflight",
+        "authorize",
+        "create_stage_once",
+        "create_preflight_once",
+        "create_once",
         "live_create_is_available"
       ]
     },
@@ -134,12 +146,21 @@
         "path": "../../training/skyrl_reward_rayjob.py",
         "file_sha256": "sha256:f99b7b47a1bdae0900a2224626fd1ef02bcdbe063e09aff07e6d0cf0a8a72411",
         "symbols": [
-          "manifest",
-          "authorize",
-          "duplicate_checks",
-          "validate_preview"
-        ]
-      },
+        "manifest",
+        "authorize",
+        "duplicate_checks",
+        "validate_preview",
+        "rebind_private_source_for_identity"
+      ]
+    },
+    "prod9_cleanup_observer": {
+      "path": "../../training/dev_cleanup_observer.py",
+      "file_sha256": "sha256:0a07a80469464ebdac47d4b0e5fee985a95155e7939c364d2de7138428c831a3",
+      "symbols": [
+        "_validated_receipt",
+        "Observer"
+      ]
+    },
       "checkpoint_sealer": {
         "path": "../../training/skyrl_posttrain.py",
         "file_sha256": "sha256:310b12303a5538a5e2aa923975b9756cba110b33ac2380f134fed6ec12bd6acd",
@@ -204,5 +225,5 @@
       "incident_evidence_self_sha256": "sha256:c45f12a8fa799900053a1bd7b1e33ff26e89d517ae552188bda0e66cf675ca2d"
     }
   },
-  "sha256": "sha256:163296fe1aeedecc8b6bb9d9610b0e4eae82554acc7ecde4e0dc55430b78a390"
+  "sha256": "sha256:d314a08f5a6f2e7f86ba034aba48ecfe18e35dc67b61810d91f54db2c398cda8"
 }

@@ -914,13 +914,20 @@ def test_prod9_offline_preparation_requires_a_fresh_rebound_manifest(tmp_path: P
         "status": "rejected",
         "reason": "historical_direct_rail_cannot_render_fresh_prod9_runtime",
     }
+    assert receipt["fresh_rebind_stage"] == {
+        "module": "training.skyrl_prod9_training",
+        "function": "stage_rebind",
+        "schema": "cyber_skyrl_prod9_rebind_stage_receipt_v1",
+        "root_alert_annotation_required": "off",
+        "bundle_module": "training.skyrl_prod9_training",
+    }
     assert receipt["fresh_cpu_preflight"] == {
         "module": "training.skyrl_prod9_direct",
         "function": "preflight_job_manifest",
         "schema": "cyber_skyrl_prod9_training_cpu_preflight_v1",
         "root_alert_annotation_required": "off",
         "bundle_module": "training.skyrl_prod9_training",
-        "live_create_available": False,
+        "live_create_available": True,
     }
 
     predecessor = successor_metadata(load(CANARY_RUN))

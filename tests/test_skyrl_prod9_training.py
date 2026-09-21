@@ -6,6 +6,7 @@ import base64
 import copy
 import gzip
 import json
+import os
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -167,6 +168,177 @@ def _direct_render(value: dict) -> dict:
     return rendered
 
 
+def _cpu_render(value: dict) -> dict:
+    """Normal server-side defaults for a synthetic zero-GPU Job preview."""
+    rendered = copy.deepcopy(value)
+    uid = "00000000-0000-0000-0000-000000000002"
+    name = value["metadata"]["name"]
+    rendered["metadata"].update(
+        {
+            "creationTimestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "generation": 1,
+            "uid": uid,
+        }
+    )
+    rendered["status"] = {}
+    rendered["spec"].update(
+        {
+            "completionMode": "NonIndexed",
+            "completions": 1,
+            "manualSelector": False,
+            "parallelism": 1,
+            "podReplacementPolicy": "TerminatingOrFailed",
+            "selector": {"matchLabels": {"batch.kubernetes.io/controller-uid": uid}},
+            "suspend": False,
+        }
+    )
+    rendered["spec"]["template"]["metadata"]["labels"] = {
+        "batch.kubernetes.io/controller-uid": uid,
+        "batch.kubernetes.io/job-name": name,
+        "controller-uid": uid,
+        "job-name": name,
+    }
+    rendered["spec"]["template"]["spec"].update(
+        {
+            "dnsPolicy": "ClusterFirst",
+            "schedulerName": "default-scheduler",
+            "terminationGracePeriodSeconds": 30,
+        }
+    )
+    rendered["spec"]["template"]["spec"]["containers"][0]["imagePullPolicy"] = "IfNotPresent"
+    return rendered
+
+
+def _observer(
+    kind: str,
+    name: str,
+    plan_sha256: str,
+    manifest_sha256: str,
+    gpus: int,
+    seconds: int,
+):
+    return prod9_direct._seal(
+        {
+            "schema": "cyber_direct_cleanup_observer_armed_v1",
+            "status": "armed",
+            "context": prod9_direct.PROD_CONTEXT,
+            "namespace": prod9_direct.NAMESPACE,
+            "kind": kind,
+            "name": name,
+            "maximum_seconds": seconds,
+            "expected_gpus": gpus,
+            "plan_sha256": plan_sha256,
+            "manifest_sha256": manifest_sha256,
+            "armed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "observer_pid": os.getpid(),
+        }
+    )
+
+
+def _release(
+    *,
+    name: str,
+    plan_sha256: str,
+    manifest_sha256: str,
+    receipt: dict,
+    uid: str,
+) -> dict:
+    return prod9_direct._seal(
+        {
+            "schema": "cyber_direct_cleanup_observer_result_v1",
+            "status": "released",
+            "context": prod9_direct.PROD_CONTEXT,
+            "namespace": prod9_direct.NAMESPACE,
+            "kind": "job",
+            "name": name,
+            "plan_sha256": plan_sha256,
+            "manifest_sha256": manifest_sha256,
+            "expected_gpus": 0,
+            "peak_gpus": 0,
+            "active_gpus": 0,
+            "terminal_status": "Succeeded",
+            "restarts": 0,
+            "observer_error_class": "",
+            "exit_codes": [0],
+            "receipt": receipt,
+            "uid": uid,
+            "target_present": False,
+            "pods_present": False,
+            "rayjob_present": False,
+            "workload_present": False,
+            "raycluster_present": False,
+            "release_observed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+
+
+def _stage_receipt(stage: dict, plan: dict, identity: historical_direct.RailIdentity) -> dict:
+    files = [
+        {"path": name, "bytes": 1, "sha256": "sha256:" + name.encode().hex().ljust(64, "0")}
+        for name in ("manifest.json", "split.json", "task-set.json")
+    ]
+    files.extend(
+        {
+            "path": plan["data"]["files"][split]["path"],
+            "bytes": 1,
+            "sha256": plan["data"]["files"][split]["sha256"],
+        }
+        for split in ("train", "dev")
+    )
+    body = {
+        "schema": prod9_training.STAGE_RECEIPT_SCHEMA,
+        "status": "published",
+        "stage_spec_sha256": stage["sha256"],
+        "identity_sha256": identity.sealed_mapping()["sha256"],
+        "source": identity.predecessor_data_root,
+        "destination": identity.data_root,
+        "predecessor_manifest_sha256": stage["predecessor_manifest_sha256"],
+        "successor_manifest": plan["data"],
+        "successor_manifest_sha256": plan["data"]["sha256"],
+        "files": files,
+        "gpus": 0,
+        "runtime_user": {"uid": 1000, "gid": 100},
+        "task_rows_read": 0,
+        "rollout_episodes": 0,
+        "optimizer_steps": 0,
+        "checkpoints": 0,
+    }
+    return {**body, "receipt_sha256": digest(body)}
+
+
+def _preflight_receipt(plan: dict, request: dict, identity: historical_direct.RailIdentity) -> dict:
+    body = {
+        "schema": "cyber_skyrl_prod9_training_cpu_preflight_v1",
+        "status": "passed",
+        "gpus": 0,
+        "runtime_user": {"uid": 1000, "gid": 100},
+        "plan_sha256": digest(plan),
+        "request_sha256": digest(request),
+        "prod9_runtime": prod9_training._binding(),
+        "native_parser_checked": True,
+        "ordered_multi_tool_parser_checked": True,
+        "chunk_continuation_checked": True,
+        "compaction_checked": True,
+        "stepwise_prompt_checked": True,
+        "ordered_multi_tool_execution_checked": True,
+        "output_limit_gradeable_checked": True,
+        "output_limit_partial_tool_blocked_checked": True,
+        "fresh_recorder_checked": True,
+        "tool_result_token_safe": True,
+        "recorder_implementation": "training.skyrl_prod9_hardening.Recorder",
+        "counts": {"train": 1, "dev": 1},
+        "planned_steps": plan["arguments"]["steps"],
+        "output_absent": True,
+        "wandb_create_once": {
+            "entity": "thefleet",
+            "project": "cyber-post-train",
+            "run_id": identity.wandb_run_id,
+            "resume": "never",
+        },
+    }
+    return {**body, "receipt_sha256": digest(body)}
+
+
 def test_prod9_request_bundles_fresh_entrypoint_and_historical_rail_rejects(prepared):
     plan = prod9_training.compile_rl(prepared.config, relative_to=prepared.state.tmp)
     request = prod9_training.job_request(plan)
@@ -226,7 +398,7 @@ def test_prod9_fresh_direct_renderer_and_cpu_preflight_are_alert_safe() -> None:
         "--receipt",
         "/dev/termination-log",
     ]
-    assert prod9_direct.live_create_is_available() is False
+    assert prod9_direct.live_create_is_available() is True
     assert not hasattr(hardening, "create_once")
 
     census = build_capacity_census(
@@ -291,6 +463,283 @@ def test_prod9_preflight_replaces_the_preexisting_termination_file(
     }
     with pytest.raises(ValueError, match="receipt path"):
         prod9_training._write_preflight_receipt(tmp_path / "other", value)
+
+
+def test_prod9_one_create_rail_rejects_a_historical_plan_before_any_live_check(
+    tmp_path: Path,
+) -> None:
+    plan, request, identity = _prod9_plan()
+    plan["schema"] = "cyber_skyrl_training_v1"
+    with pytest.raises(JobsError, match="fresh runtime schema"):
+        prod9_direct.create_once(
+            tmp_path,
+            plan,
+            request,
+            {},
+            {},
+            {},
+            token="synthetic",
+            identity=identity,
+        )
+
+
+def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """Exercise the entire rail synthetically; no Kubernetes client is used."""
+    plan, request, identity = _prod9_plan()
+    predecessor = json.loads(
+        (ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json").read_text()
+    )
+    stage = prod9_training.stage_spec(identity, predecessor)
+    stage_job = prod9_direct.stage_job_manifest(stage, identity=identity)
+    stage_dev = prod9_direct.validate_cpu_preview(
+        stage_job, _cpu_render(stage_job), context=prod9_direct.DEV_CONTEXT, purpose="stage"
+    )
+    stage_prod = prod9_direct.validate_cpu_preview(
+        stage_job, _cpu_render(stage_job), context=prod9_direct.PROD_CONTEXT, purpose="stage"
+    )
+    stage_observer = _observer(
+        "job",
+        identity.stage_name,
+        stage["sha256"],
+        "sha256:" + digest(stage_job),
+        0,
+        prod9_direct.CPU_MAXIMUM_SECONDS,
+    )
+    stage_auth = prod9_direct.authorize_stage(
+        stage,
+        stage_job,
+        dev_preview=stage_dev,
+        prod_preview=stage_prod,
+        observer=stage_observer,
+        identity=identity,
+    )
+
+    created_uid = "00000000-0000-0000-0000-000000000003"
+
+    def cpu_runner(command, **kwargs):
+        if "--dry-run=server" in command:
+            expected = json.loads(kwargs["input"])
+            return NS(returncode=0, stdout=json.dumps(_cpu_render(expected)))
+        if "get" in command:
+            return NS(returncode=0, stdout=json.dumps({"items": []}))
+        if "create" in command:
+            expected = json.loads(kwargs["input"])
+            return NS(
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "metadata": {
+                            "name": expected["metadata"]["name"],
+                            "uid": created_uid,
+                            "creationTimestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        }
+                    }
+                ),
+            )
+        pytest.fail(f"unexpected CPU command: {command}")
+
+    stage_created = prod9_direct.create_stage_once(
+        tmp_path, stage, stage_job, stage_auth, identity=identity, runner=cpu_runner
+    )
+    staged = _stage_receipt(stage, plan, identity)
+    stage_release = _release(
+        name=identity.stage_name,
+        plan_sha256=stage["sha256"],
+        manifest_sha256="sha256:" + digest(stage_job),
+        receipt=staged,
+        uid=created_uid,
+    )
+
+    preflight_job = prod9_direct.preflight_job_manifest(plan, identity=identity)
+    preflight_dev = prod9_direct.validate_cpu_preview(
+        preflight_job,
+        _cpu_render(preflight_job),
+        context=prod9_direct.DEV_CONTEXT,
+        purpose="preflight",
+    )
+    preflight_prod = prod9_direct.validate_cpu_preview(
+        preflight_job,
+        _cpu_render(preflight_job),
+        context=prod9_direct.PROD_CONTEXT,
+        purpose="preflight",
+    )
+    preflight_observer = _observer(
+        "job",
+        identity.preflight_name,
+        "sha256:" + digest(plan),
+        "sha256:" + digest(preflight_job),
+        0,
+        prod9_direct.CPU_MAXIMUM_SECONDS,
+    )
+    preflight_auth = prod9_direct.authorize_preflight(
+        plan,
+        request,
+        stage,
+        stage_auth,
+        stage_created,
+        staged,
+        stage_release,
+        preflight_job,
+        dev_preview=preflight_dev,
+        prod_preview=preflight_prod,
+        observer=preflight_observer,
+        identity=identity,
+    )
+    preflight_created = prod9_direct.create_preflight_once(
+        tmp_path,
+        plan,
+        request,
+        stage,
+        preflight_auth,
+        identity=identity,
+        runner=cpu_runner,
+    )
+    preflight = _preflight_receipt(plan, request, identity)
+    preflight_release = _release(
+        name=identity.preflight_name,
+        plan_sha256="sha256:" + digest(plan),
+        manifest_sha256="sha256:" + digest(preflight_job),
+        receipt=preflight,
+        uid=created_uid,
+    )
+
+    source_preview = _source_preview(plan, request)
+    rayjob = prod9_direct.manifest(plan, request, source_preview, identity=identity)
+    direct_dev = prod9_direct.validate_preview(
+        plan,
+        request,
+        source_preview,
+        rayjob,
+        _direct_render(rayjob),
+        context=prod9_direct.DEV_CONTEXT,
+        identity=identity,
+    )
+    direct_prod = prod9_direct.validate_preview(
+        plan,
+        request,
+        source_preview,
+        rayjob,
+        _direct_render(rayjob),
+        context=prod9_direct.PROD_CONTEXT,
+        identity=identity,
+    )
+    direct_observer = _observer(
+        "rayjob",
+        identity.run_name,
+        "sha256:" + digest(plan),
+        "sha256:" + digest(rayjob),
+        8,
+        prod9_direct.MAXIMUM_SECONDS,
+    )
+    authorization = prod9_direct.authorize(
+        plan,
+        request,
+        source_preview,
+        rayjob,
+        stage,
+        stage_auth,
+        stage_created,
+        staged,
+        stage_release,
+        preflight_auth,
+        preflight_created,
+        preflight,
+        preflight_release,
+        dev_preview=direct_dev,
+        prod_preview=direct_prod,
+        observer=direct_observer,
+        identity=identity,
+    )
+
+    created_rayjob_uid = "00000000-0000-0000-0000-000000000004"
+    mutations = []
+
+    class JobsClient:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def all_runs(self):
+            return []
+
+    census = build_capacity_census(
+        {"items": []},
+        {"items": []},
+        owner_prefixes=hardening.PROJECT_OWNER_PREFIXES,
+        max_nodes=hardening.PROJECT_MAX_NODES,
+        max_gpus=hardening.PROJECT_MAX_GPUS,
+        planned_nodes=1,
+        planned_gpus=8,
+        observed_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    )
+
+    def direct_runner(command, **kwargs):
+        if "--dry-run=server" in command:
+            return NS(returncode=0, stdout=json.dumps(_direct_render(json.loads(kwargs["input"]))))
+        if "get" in command:
+            return NS(returncode=0, stdout=json.dumps({"items": []}))
+        if "create" in command:
+            mutations.append(command)
+            expected = json.loads(kwargs["input"])
+            return NS(
+                returncode=0,
+                stdout=json.dumps(
+                    {
+                        "metadata": {
+                            "name": expected["metadata"]["name"],
+                            "uid": created_rayjob_uid,
+                            "creationTimestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                        }
+                    }
+                ),
+            )
+        pytest.fail(f"unexpected direct command: {command}")
+
+    created = prod9_direct.create_once(
+        tmp_path,
+        plan,
+        request,
+        source_preview,
+        rayjob,
+        authorization,
+        token="synthetic",
+        identity=identity,
+        runner=direct_runner,
+        jobs_factory=JobsClient,
+        wandb_exists=lambda *_args: False,
+        capacity_reader=lambda _context, **_kwargs: census,
+    )
+
+    assert created["rayjob_uid"] == created_rayjob_uid
+    assert len(mutations) == 1
+    journal = [
+        json.loads(line)
+        for line in (tmp_path / "PROD9_DIRECT_RAYJOB_CREATE.jsonl").read_text().splitlines()
+    ]
+    assert journal[0]["state"] == "CREATE_INTENT_DO_NOT_RETRY"
+    assert journal[1]["status"] == "created_once"
+    with pytest.raises(JobsError, match="create intent exists"):
+        prod9_direct.create_once(
+            tmp_path,
+            plan,
+            request,
+            source_preview,
+            rayjob,
+            authorization,
+            token="synthetic",
+            identity=identity,
+            runner=direct_runner,
+            jobs_factory=JobsClient,
+            wandb_exists=lambda *_args: False,
+            capacity_reader=lambda _context, **_kwargs: census,
+        )
 
 
 @pytest.mark.asyncio
