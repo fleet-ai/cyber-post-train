@@ -30,6 +30,7 @@ from .jobs import (
     validate_preview,
     validate_request,
 )
+from .sfs_write_identity import TRAINER_GID, TRAINER_UID, validate_owned_output_binding
 
 NAMESPACE = "fleet-train-jobs"
 ZERO_RUN_ID = "00000000-0000-0000-0000-000000000000"
@@ -38,6 +39,13 @@ SFT_SECRET = "wandb-api"
 DIRECT_JOURNAL = "DIRECT_SUBMISSION.jsonl"
 CPU_CHECKPOINT_OPERATION_ANNOTATION = "cyber-post-train.fleet.ai/cpu-checkpoint-operation"
 CPU_CHECKPOINT_OPERATIONS = {"seal", "verify"}
+CPU_SFS_OWNED_ROOT_ANNOTATION = "cyber-post-train.fleet.ai/sfs-owned-root"
+CPU_SFS_OUTPUT_ROOT_ANNOTATION = "cyber-post-train.fleet.ai/sfs-output-root"
+CPU_SFS_MEMORY_FLOOR_MIB_ANNOTATION = "cyber-post-train.fleet.ai/memory-floor-mib"
+LORA_TRAINER_IMAGE = (
+    "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@"
+    "sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317"
+)
 CPU_NODE_SELECTOR = {
     "kubernetes.io/arch": "amd64",
     "workload": "fleetai-training-ng-cpu",
@@ -184,7 +192,115 @@ def validate_cpu_checkpoint_pod(manifest: dict) -> dict:
                 raise JobsError("CPU checkpoint Pod resource quantities are malformed")
             if "nvidia.com/gpu" in values:
                 raise JobsError("CPU checkpoint Pod must not request or limit GPUs")
+    sfs_fields = {
+        field: annotations.get(field)
+        for field in (
+            CPU_SFS_OWNED_ROOT_ANNOTATION,
+            CPU_SFS_OUTPUT_ROOT_ANNOTATION,
+            CPU_SFS_MEMORY_FLOOR_MIB_ANNOTATION,
+        )
+    }
+    if any(value is not None for value in sfs_fields.values()):
+        if not all(isinstance(value, str) and value for value in sfs_fields.values()):
+            raise JobsError("CPU SFS control annotations must be complete")
+        _validate_cpu_sfs_control(manifest, sfs_fields)
     return manifest
+
+
+def _validate_cpu_sfs_control(manifest: dict, fields: dict[str, str]) -> None:
+    """Bind one non-root control transaction below an already-owned SFS run tree."""
+
+    spec = manifest["spec"]
+    containers = spec["containers"]
+    if len(containers) != 1 or spec.get("initContainers") not in (None, []):
+        raise JobsError("CPU SFS control must use one non-root container and no initializer")
+    if spec.get("automountServiceAccountToken") is not False:
+        raise JobsError("CPU SFS control must not mount a service account token")
+    if not isinstance(spec.get("activeDeadlineSeconds"), int) or not (
+        1 <= spec["activeDeadlineSeconds"] <= 3600
+    ):
+        raise JobsError("CPU SFS control must have a fixed deadline of at most one hour")
+    if any(spec.get(field) not in (None, False) for field in ("hostNetwork", "hostPID", "hostIPC")):
+        raise JobsError("CPU SFS control must not join host namespaces")
+    if spec.get("securityContext") != {
+        "runAsNonRoot": True,
+        "runAsUser": TRAINER_UID,
+        "runAsGroup": TRAINER_GID,
+        "fsGroup": TRAINER_GID,
+    }:
+        raise JobsError("CPU SFS control must use the proven trainer and SFS group identity")
+    if spec.get("imagePullSecrets") != [{"name": "ghcr-pull"}]:
+        raise JobsError("CPU SFS control may use only the reviewed image pull Secret")
+    container = containers[0]
+    if container.get("image") != LORA_TRAINER_IMAGE:
+        raise JobsError("CPU SFS control must use the exact reviewed LoRA trainer image")
+    if container.get("command") != ["python", "/bundle/preflight_driver.py"]:
+        raise JobsError("CPU SFS control must run only the reviewed preflight driver")
+    if container.get("securityContext") != {
+        "allowPrivilegeEscalation": False,
+        "capabilities": {"drop": ["ALL"]},
+    }:
+        raise JobsError("CPU SFS control must drop capabilities and privilege escalation")
+    if container.get("envFrom") not in (None, []):
+        raise JobsError("CPU SFS control must not import Secret-backed environment")
+    environment = {}
+    for entry in container.get("env", []):
+        if (
+            not isinstance(entry, dict)
+            or set(entry) != {"name", "value"}
+            or not isinstance(entry.get("name"), str)
+            or not isinstance(entry.get("value"), str)
+            or entry["name"] in environment
+        ):
+            raise JobsError("CPU SFS control environment must contain literal unique values")
+        environment[entry["name"]] = entry["value"]
+    owned_root = fields[CPU_SFS_OWNED_ROOT_ANNOTATION]
+    output_root = fields[CPU_SFS_OUTPUT_ROOT_ANNOTATION]
+    if (
+        environment.get("CYBER_SFS_OWNED_ROOT") != owned_root
+        or environment.get("CYBER_SFS_OUTPUT_ROOT") != output_root
+    ):
+        raise JobsError("CPU SFS control path annotations and environment differ")
+    if environment.get("CYBER_SFS_CONTROL_MOUNT") != "/controls":
+        raise JobsError("CPU SFS control must bind the reviewed writable subpath mount")
+    try:
+        validate_owned_output_binding(owned_root, output_root)
+    except ValueError as exc:
+        raise JobsError(str(exc)) from None
+    try:
+        floor_mib = int(fields[CPU_SFS_MEMORY_FLOOR_MIB_ANNOTATION])
+    except ValueError:
+        raise JobsError("CPU SFS control memory floor is invalid") from None
+    if floor_mib <= 0:
+        raise JobsError("CPU SFS control memory floor is invalid")
+    requests = container.get("resources", {}).get("requests", {})
+    limits = container.get("resources", {}).get("limits", {})
+    request_memory = _memory_bytes(requests.get("memory"))
+    limit_memory = _memory_bytes(limits.get("memory"))
+    if request_memory < floor_mib * 1024**2 or limit_memory < request_memory:
+        raise JobsError("CPU SFS control memory does not cover its observed contract")
+    mounts = container.get("volumeMounts", [])
+    if mounts != [
+        {"name": "bundle", "mountPath": "/bundle", "readOnly": True},
+        {"name": "sfs-readonly", "mountPath": "/mnt/sfs", "readOnly": True},
+        {
+            "name": "sfs-control",
+            "mountPath": "/controls",
+            "subPath": "jobs/chris-q38-study-corpora-v1/launch-controls",
+        },
+    ]:
+        raise JobsError("CPU SFS control must expose only read-only SFS plus its control subpath")
+    volumes = spec.get("volumes", [])
+    expected_bundle = {
+        "name": "bundle",
+        "configMap": {"name": manifest["metadata"]["name"] + "-source", "defaultMode": 292},
+    }
+    if volumes != [
+        expected_bundle,
+        {"name": "sfs-readonly", "persistentVolumeClaim": {"claimName": "sfs-shared"}},
+        {"name": "sfs-control", "persistentVolumeClaim": {"claimName": "sfs-shared"}},
+    ]:
+        raise JobsError("CPU SFS control must use only its immutable bundle and shared SFS")
 
 
 def _templates(obj: dict) -> list[tuple[str, dict]]:

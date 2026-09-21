@@ -9,6 +9,10 @@ import yaml
 from cyber_post_train.direct_submit import (
     CPU_CHECKPOINT_OPERATION_ANNOTATION,
     CPU_NODE_SELECTOR,
+    CPU_SFS_MEMORY_FLOOR_MIB_ANNOTATION,
+    CPU_SFS_OUTPUT_ROOT_ANNOTATION,
+    CPU_SFS_OWNED_ROOT_ANNOTATION,
+    LORA_TRAINER_IMAGE,
     Kubectl,
     direct_submit_lr30_qualification_once,
     direct_submit_sft_once,
@@ -193,6 +197,79 @@ def cpu_checkpoint_pod():
             ],
         },
     }
+
+
+def cpu_sfs_control_pod():
+    pod = cpu_checkpoint_pod()
+    owned = "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls"
+    output = owned + "/.preflight-control-step60-a21cbe7c"
+    pod["metadata"]["annotations"].update(
+        {
+            CPU_SFS_OWNED_ROOT_ANNOTATION: owned,
+            CPU_SFS_OUTPUT_ROOT_ANNOTATION: output,
+            CPU_SFS_MEMORY_FLOOR_MIB_ANNOTATION: "26207",
+        }
+    )
+    pod["spec"].update(
+        {
+            "activeDeadlineSeconds": 3600,
+            "automountServiceAccountToken": False,
+            "imagePullSecrets": [{"name": "ghcr-pull"}],
+            "securityContext": {
+                "runAsNonRoot": True,
+                "runAsUser": 1000,
+                "runAsGroup": 100,
+                "fsGroup": 100,
+            },
+            "volumes": [
+                {
+                    "name": "bundle",
+                    "configMap": {
+                        "name": "researcher-checkpoint-seal-v1-source",
+                        "defaultMode": 292,
+                    },
+                },
+                {
+                    "name": "sfs-readonly",
+                    "persistentVolumeClaim": {"claimName": "sfs-shared"},
+                },
+                {
+                    "name": "sfs-control",
+                    "persistentVolumeClaim": {"claimName": "sfs-shared"},
+                },
+            ],
+        }
+    )
+    container = pod["spec"]["containers"][0]
+    container.update(
+        {
+            "image": LORA_TRAINER_IMAGE,
+            "command": ["python", "/bundle/preflight_driver.py"],
+            "env": [
+                {"name": "CYBER_SFS_OWNED_ROOT", "value": owned},
+                {"name": "CYBER_SFS_OUTPUT_ROOT", "value": output},
+                {"name": "CYBER_SFS_CONTROL_MOUNT", "value": "/controls"},
+            ],
+            "resources": {
+                "requests": {"cpu": "4", "memory": "32Gi"},
+                "limits": {"cpu": "8", "memory": "48Gi"},
+            },
+            "securityContext": {
+                "allowPrivilegeEscalation": False,
+                "capabilities": {"drop": ["ALL"]},
+            },
+            "volumeMounts": [
+                {"name": "bundle", "mountPath": "/bundle", "readOnly": True},
+                {"name": "sfs-readonly", "mountPath": "/mnt/sfs", "readOnly": True},
+                {
+                    "name": "sfs-control",
+                    "mountPath": "/controls",
+                    "subPath": "jobs/chris-q38-study-corpora-v1/launch-controls",
+                },
+            ],
+        }
+    )
+    return pod
 
 
 def cpu_node_inventory():
@@ -630,6 +707,94 @@ def test_cpu_checkpoint_create_boundary_rejects_unsafe_placement_before_kubectl(
     kube = Kubectl("prod-context")
     with pytest.raises(JobsError, match="CPU checkpoint Pod"):
         kube.create_cpu_checkpoint_pod_once(pod)
+    assert calls == []
+
+
+def test_cpu_sfs_control_boundary_accepts_only_owned_non_root_transaction(monkeypatch):
+    calls = []
+    pod = cpu_sfs_control_pod()
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs.get("input")))
+        output = cpu_node_inventory() if "get" in command else pod
+        return subprocess.CompletedProcess(command, 0, stdout=json.dumps(output), stderr="")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    Kubectl("prod-context").create_cpu_checkpoint_pod_once(pod)
+    assert ["get" in command for command, _ in calls] == [True, False]
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "top-level-output",
+        "different-parent",
+        "root-user",
+        "wrong-fsgroup",
+        "initializer",
+        "low-memory",
+        "wrong-memory-floor",
+        "secret-env",
+        "secret-volume",
+        "wrong-pvc",
+        "writable-global-sfs",
+        "wrong-control-subpath",
+        "extra-image-pull-secret",
+        "capability",
+        "wrong-image",
+        "extra-volume",
+    ],
+)
+def test_cpu_sfs_control_drift_fails_before_kubectl(monkeypatch, fault):
+    calls = []
+    pod = cpu_sfs_control_pod()
+    spec = pod["spec"]
+    container = spec["containers"][0]
+    annotations = pod["metadata"]["annotations"]
+    if fault == "top-level-output":
+        value = "/mnt/sfs/jobs/.preflight-control-step60-a21cbe7c"
+        annotations[CPU_SFS_OUTPUT_ROOT_ANNOTATION] = value
+        container["env"][1]["value"] = value
+    elif fault == "different-parent":
+        value = "/mnt/sfs/jobs/chris-other-run/.preflight-control-step60-a21cbe7c"
+        annotations[CPU_SFS_OUTPUT_ROOT_ANNOTATION] = value
+        container["env"][1]["value"] = value
+    elif fault == "root-user":
+        spec["securityContext"]["runAsUser"] = 0
+    elif fault == "wrong-fsgroup":
+        spec["securityContext"]["fsGroup"] = 200
+    elif fault == "initializer":
+        spec["initContainers"] = [deepcopy(container)]
+    elif fault == "low-memory":
+        container["resources"]["requests"]["memory"] = "16Gi"
+    elif fault == "wrong-memory-floor":
+        annotations[CPU_SFS_MEMORY_FLOOR_MIB_ANNOTATION] = "not-a-number"
+    elif fault == "secret-env":
+        container["envFrom"] = [{"secretRef": {"name": "credential"}}]
+    elif fault == "secret-volume":
+        spec["volumes"].append({"name": "credential", "secret": {"secretName": "key"}})
+    elif fault == "wrong-pvc":
+        spec["volumes"][1]["persistentVolumeClaim"]["claimName"] = "other"
+    elif fault == "writable-global-sfs":
+        container["volumeMounts"][1]["readOnly"] = False
+    elif fault == "wrong-control-subpath":
+        container["volumeMounts"][2]["subPath"] = "jobs/chris-q38-study-corpora-v1"
+    elif fault == "extra-image-pull-secret":
+        spec["imagePullSecrets"].append({"name": "other"})
+    elif fault == "wrong-image":
+        container["image"] = LORA_TRAINER_IMAGE.replace("7da4", "8da4", 1)
+    elif fault == "extra-volume":
+        spec["volumes"].append({"name": "host", "hostPath": {"path": "/tmp"}})
+    else:
+        container["securityContext"]["capabilities"] = {"drop": ["ALL"], "add": ["CHOWN"]}
+
+    def run(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise AssertionError("unsafe CPU SFS control reached kubectl")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(JobsError):
+        Kubectl("prod-context").create_cpu_checkpoint_pod_once(pod)
     assert calls == []
 
 
