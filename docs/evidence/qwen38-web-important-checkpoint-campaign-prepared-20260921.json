@@ -1,15 +1,15 @@
 {
   "schema": "cyber_qwen38_web_checkpoint_campaign_preparation_receipt_v1",
-  "prepared_at": "2026-09-21T05:18:17Z",
+  "prepared_at": "2026-09-21T05:30:17Z",
   "source": {
     "repository": "fleet-ai/cyber-post-train",
-    "main_commit": "276231a5e202cab0b2be2e06d5f5c0b99cb6e509"
+    "main_commit": "c4725e7586d583821745391048c59a53f1eaadb8"
   },
   "scope": "Sanitized, score-blind preparation evidence only. No benchmark task content, prompt, trace, model answer, flag, capability score, tensor value, raw private log, or credential was read or retained.",
   "plan": {
     "path": "configs/evaluation/qwen38-important-checkpoints-opencode-wbe-campaign-v1.json",
-    "file_sha256": "sha256:b8b009dd25b75997f91925a279e2a711bcb42de87f748c4dfbcb7ef059931f03",
-    "plan_sha256": "sha256:8769c17681bc1d42219afe2ed69ff3c1fdadcc3f2233558092d8160aa6abccde",
+    "file_sha256": "sha256:5f5070e32bd56d7e4bb4d9c0c5aa049ba9ad9e8b0c4155138a504a5422647506",
+    "plan_sha256": "sha256:13e219cd49781427c0a00237d8bea037e85603646fc9451dacc6876f44f716d5",
     "harness": "opencode",
     "shared_base_controls": 1,
     "candidate_checkpoints": 5,
@@ -20,7 +20,7 @@
     "rollout_collection_and_scoring_are_separate": true
   },
   "static_duplicate_census": {
-    "repository_commit": "276231a5e202cab0b2be2e06d5f5c0b99cb6e509",
+    "repository_commit": "c4725e7586d583821745391048c59a53f1eaadb8",
     "proposed_campaign_ids": 30,
     "proposed_campaign_id_hits_before_plan_creation": 0,
     "old_v23_campaign_ids_reused": 0,
@@ -51,8 +51,12 @@
     },
     "bookkeeping_repair": {
       "pull_request": "https://github.com/fleet-ai/cyber-post-train/pull/313",
-      "head_commit": "8cfcee0c060c31d380d7dbab47a82c179b29f1be",
+      "head_commit": "a17752d5f3e4a10b18e5914687dc3c885704c142",
+      "merge_commit": "c4725e7586d583821745391048c59a53f1eaadb8",
+      "merged_at": "2026-09-21T05:28:04Z",
+      "state": "merged_into_main",
       "evidence_path_after_merge": "docs/evidence/qwen38-web-v23-attach-terminal-reconciliation-20260921.json",
+      "evidence_file_sha256": "sha256:2ffb023e85d37aecd4027fed6deb0253789bad9a13ac2cca4c434a01350a0cf1",
       "evidence_receipt_sha256": "sha256:f20c4160546db49f2d262c21263f1e20c3692e9610caec933a32254141d141c8",
       "sufficient_for_relaunch": false
     },
@@ -67,7 +71,6 @@
   "readiness": {
     "state": "prepared_not_launchable",
     "global_blockers": [
-      "merge_the_terminal_bookkeeping_repair",
       "obtain_sanitized_filesystem_diagnosis_for_both_failure_classes",
       "merge_a_deterministic_causal_collection_guard_and_regression",
       "accept_a_fresh_model_free_qualification_of_the_repaired_boundary",
@@ -91,5 +94,5 @@
     "raw_logs_included": false,
     "tensor_values_read": false
   },
-  "receipt_sha256": "sha256:43bcffce110c61d84d5541c1a1b087e33f9cada27ce283baeb7cb49efb13188c"
+  "receipt_sha256": "sha256:eb07f02d8745730092fdc7641376227618d4ee8dde13fcf6480497d9c3a13c97"
 }

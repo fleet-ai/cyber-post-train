@@ -2,7 +2,7 @@
   "schema": "cyber_qwen38_web_checkpoint_campaign_preparation_v1",
   "source": {
     "repository": "fleet-ai/cyber-post-train",
-    "prepared_against_main_commit": "276231a5e202cab0b2be2e06d5f5c0b99cb6e509",
+    "prepared_against_main_commit": "c4725e7586d583821745391048c59a53f1eaadb8",
     "base_model_lock": {
       "path": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
       "file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac"
@@ -96,7 +96,9 @@
     "budget": {
       "max_agent_steps": 600,
       "task_max_duration_minutes": 480,
-      "sandbox_timeout_seconds": 28800
+      "snapshot_restore_and_readiness_allowance_seconds": 600,
+      "collection_and_preservation_allowance_seconds": 7200,
+      "sandbox_timeout_seconds": 43200
     },
     "transient_model_request_retries": {
       "maximum_attempts": 5,
@@ -208,11 +210,14 @@
     "attach_client_repair": {
       "branch": "codex/web-attach-post-release-origin-v1",
       "pull_request": "https://github.com/fleet-ai/cyber-post-train/pull/313",
-      "head_commit": "8cfcee0c060c31d380d7dbab47a82c179b29f1be",
-      "state": "reviewed_pending_merge_into_main",
+      "head_commit": "a17752d5f3e4a10b18e5914687dc3c885704c142",
+      "merge_commit": "c4725e7586d583821745391048c59a53f1eaadb8",
+      "merged_at": "2026-09-21T05:28:04Z",
+      "state": "merged_into_main",
       "scope": "terminal receipt bookkeeping only",
       "sufficient_for_relaunch": false,
       "evidence_path_after_merge": "docs/evidence/qwen38-web-v23-attach-terminal-reconciliation-20260921.json",
+      "evidence_file_sha256": "sha256:2ffb023e85d37aecd4027fed6deb0253789bad9a13ac2cca4c434a01350a0cf1",
       "evidence_receipt_sha256": "sha256:f20c4160546db49f2d262c21263f1e20c3692e9610caec933a32254141d141c8"
     },
     "causal_collection_repair": {
@@ -222,11 +227,13 @@
       "model_free_restore_required": true,
       "model_free_restore_performed_by_this_preparation": false
     },
+    "completed_launch_gates": [
+      "attach_client_terminal_bookkeeping_repair_merged"
+    ],
     "fresh_launch_gates": [
       "durable_sanitized_snapshot_diagnosis_for_collection_run_failures",
       "durable_sanitized_snapshot_diagnosis_for_collection_export_failures",
       "deterministic_causal_collection_guard_and_regression_merged",
-      "attach_client_terminal_bookkeeping_repair_merged",
       "fresh_model_free_qualification_exercises_and_accepts_the_repaired_boundary",
       "fresh_static_and_live_duplicate_campaign_sandbox_and_output_root_census_is_empty"
     ]
@@ -546,7 +553,7 @@
     "fresh_duplicate_census_max_age_seconds": 600,
     "live_provider_inventory_required": true,
     "static_repository_census": {
-      "prepared_against_commit": "276231a5e202cab0b2be2e06d5f5c0b99cb6e509",
+      "prepared_against_commit": "c4725e7586d583821745391048c59a53f1eaadb8",
       "proposed_campaign_id_hits_before_this_plan": 0
     },
     "candidate_route_policy": "Resume exactly one candidate route only when its accepted canary or full collections are ready to consume it. Pause it immediately after its terminal collection receipt is preserved. Never mutate a peer or shared endpoint.",
@@ -561,6 +568,7 @@
       "pause_each_candidate_route_after_collection",
       "score_only_accepted_immutable_rollout_bundles_in_a_separate_model_agnostic_stage"
     ],
+    "aggregate_tensorlake_sandbox_limit": 100,
     "fastest_capacity_schedule": [
       {
         "wave": 1,
@@ -596,5 +604,5 @@
     "raw_logs_included": false,
     "tensor_values_read": false
   },
-  "sha256": "sha256:8769c17681bc1d42219afe2ed69ff3c1fdadcc3f2233558092d8160aa6abccde"
+  "sha256": "sha256:13e219cd49781427c0a00237d8bea037e85603646fc9451dacc6876f44f716d5"
 }

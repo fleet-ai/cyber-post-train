@@ -9,6 +9,11 @@ from evals.webexploitbench.cage import cage_patch_set_sha256
 from evals.webexploitbench.tensorlake.benchmark_snapshot import (
     REVIEWED_TASK_ORDER_SHA256,
 )
+from evals.webexploitbench.tensorlake.collection_launcher import (
+    MAX_SANDBOX_TIMEOUT_SECONDS,
+    MIN_COLLECTION_AND_PRESERVATION_SECONDS,
+    SNAPSHOT_READINESS_TIMEOUT_SECONDS,
+)
 
 ROOT = Path(__file__).parents[1]
 PLAN_RELATIVE = Path(
@@ -52,7 +57,11 @@ def test_plan_is_self_digesting_inert_and_bound_to_reviewed_source() -> None:
     assert plan["schema"] == "cyber_qwen38_web_checkpoint_campaign_preparation_v1"
     assert plan["sha256"] == _digest(plan)
     assert plan["source"]["prepared_against_main_commit"] == (
-        "276231a5e202cab0b2be2e06d5f5c0b99cb6e509"
+        "c4725e7586d583821745391048c59a53f1eaadb8"
+    )
+    assert (
+        plan["execution"]["static_repository_census"]["prepared_against_commit"]
+        == (plan["source"]["prepared_against_main_commit"])
     )
     for binding in plan["source"].values():
         if not isinstance(binding, dict) or "path" not in binding:
@@ -76,6 +85,15 @@ def test_preparation_receipt_is_self_digesting_and_binds_the_exact_plan() -> Non
     assert receipt["receipt_sha256"] == "sha256:" + hashlib.sha256(raw).hexdigest()
     assert receipt["plan"]["file_sha256"] == _sha256(PLAN_PATH)
     assert receipt["plan"]["plan_sha256"] == _load()["sha256"]
+    assert receipt["source"]["main_commit"] == _load()["source"]["prepared_against_main_commit"]
+    assert (
+        receipt["static_duplicate_census"]["repository_commit"] == receipt["source"]["main_commit"]
+    )
+    repair = receipt["recovery_review"]["bookkeeping_repair"]
+    assert repair["head_commit"] == "a17752d5f3e4a10b18e5914687dc3c885704c142"
+    assert repair["merge_commit"] == receipt["source"]["main_commit"]
+    assert repair["state"] == "merged_into_main"
+    assert "merge_the_terminal_bookkeeping_repair" not in receipt["readiness"]["global_blockers"]
     assert receipt["readiness"]["state"] == "prepared_not_launchable"
     assert receipt["operation"] == {
         "provider_api_calls": 0,
@@ -164,11 +182,27 @@ def test_protocol_is_current_opencode_only_and_score_free_during_collection() ->
     assert protocol["context"]["automatic_compaction"] is True
     assert protocol["context"]["automatic_continuation"] is True
     assert protocol["context"]["compaction_reserved_tokens"] == 20000
-    assert protocol["budget"] == {
+    budget = protocol["budget"]
+    assert budget == {
         "max_agent_steps": 600,
         "task_max_duration_minutes": 480,
-        "sandbox_timeout_seconds": 28800,
+        "snapshot_restore_and_readiness_allowance_seconds": 600,
+        "collection_and_preservation_allowance_seconds": 7200,
+        "sandbox_timeout_seconds": 43200,
     }
+    assert budget["snapshot_restore_and_readiness_allowance_seconds"] == (
+        SNAPSHOT_READINESS_TIMEOUT_SECONDS
+    )
+    assert budget["collection_and_preservation_allowance_seconds"] == (
+        MIN_COLLECTION_AND_PRESERVATION_SECONDS
+    )
+    minimum_sandbox_lifetime = (
+        budget["task_max_duration_minutes"] * 60
+        + budget["snapshot_restore_and_readiness_allowance_seconds"]
+        + budget["collection_and_preservation_allowance_seconds"]
+    )
+    assert budget["sandbox_timeout_seconds"] >= minimum_sandbox_lifetime
+    assert budget["sandbox_timeout_seconds"] <= MAX_SANDBOX_TIMEOUT_SECONDS
 
     split = protocol["collection_and_scoring"]
     assert split["collection_output"] == "immutable_score_free_rollout_bundle"
@@ -269,8 +303,21 @@ def test_failed_v23_is_permanently_excluded_and_relaunch_fails_closed() -> None:
     assert recovery["exact16_review"]["accepted_collections"] == 0
     assert recovery["exact16_review"]["failure_preserved_and_released"] == 16
     assert recovery["exact16_review"]["provider_release_replay_allowed"] is False
-    assert recovery["attach_client_repair"]["sufficient_for_relaunch"] is False
-    assert len(recovery["fresh_launch_gates"]) == 6
+    repair = recovery["attach_client_repair"]
+    assert repair["head_commit"] == "a17752d5f3e4a10b18e5914687dc3c885704c142"
+    assert repair["merge_commit"] == "c4725e7586d583821745391048c59a53f1eaadb8"
+    assert repair["state"] == "merged_into_main"
+    repair_evidence = ROOT / repair["evidence_path_after_merge"]
+    assert _sha256(repair_evidence) == repair["evidence_file_sha256"]
+    assert (
+        json.loads(repair_evidence.read_bytes())["receipt_sha256"]
+        == (repair["evidence_receipt_sha256"])
+    )
+    assert repair["sufficient_for_relaunch"] is False
+    assert recovery["completed_launch_gates"] == [
+        "attach_client_terminal_bookkeeping_repair_merged"
+    ]
+    assert len(recovery["fresh_launch_gates"]) == 5
 
     proposed = set(_campaigns(plan))
     forbidden = set(old["permanently_excluded_campaign_ids"])
@@ -280,6 +327,12 @@ def test_failed_v23_is_permanently_excluded_and_relaunch_fails_closed() -> None:
     )
     assert plan["execution"]["live_provider_inventory_required"] is True
     assert plan["execution"]["fresh_duplicate_census_max_age_seconds"] == 600
+    assert plan["execution"]["aggregate_tensorlake_sandbox_limit"] == 100
+    assert all(
+        wave["maximum_concurrent_tensorlake_sandboxes"]
+        <= plan["execution"]["aggregate_tensorlake_sandbox_limit"]
+        for wave in plan["execution"]["fastest_capacity_schedule"]
+    )
 
 
 def test_proposed_campaign_ids_were_absent_from_the_tracked_base() -> None:
