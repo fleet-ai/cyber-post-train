@@ -1,7 +1,7 @@
 {
   "schema": "cyber_qwen38_next_sft_intentional_launch_v1",
-  "observed_at": "2026-09-21T00:57:41Z",
-  "status": "v2_64k_runtime_contract_failed_before_proven_update_96k_not_submitted",
+  "observed_at": "2026-09-21T03:25:07Z",
+  "status": "v2_64k_failed_v3_64k_qualified_not_submitted_96k_not_submitted",
   "shared_treatment": {
     "model": "Qwen/Qwen3.8-27B",
     "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
@@ -47,6 +47,19 @@
     "checkpoint_receipt_present": false,
     "resources_released": true,
     "repair": "Route optional forward/backward arguments by pinned trainer family and make the exact-image CPU preflight reject any selected keyword that its imported method signature does not accept."
+  },
+  "64k_successor_qualification": {
+    "source_head": "aecb8d9deab66014eccaeeda0a86cbc9c1a98fac",
+    "status": "exact_image_cpu_preflight_and_live_preview_accepted_not_submitted",
+    "evidence": "docs/evidence/qwen38-teacher3k-64k-v3-qualified-ready-20260921.json",
+    "preflight_pod_uid": "e5f7dc49-20a1-4e60-a260-58ebc76f5cf6",
+    "preflight_receipt_file_sha256": "5bd3b56e0684d52b1a3c33092d9348119166c56dc90d2ebe76bdc7fd05c7e85f",
+    "preflight_receipt_sha256": "d426fc748c13e474e753744b76d191d2cb8149b70f1f1208bd9695e109536c59",
+    "preview_manifest_sha256": "99917f5af8ae4928117b9f69128da99c09a8ce11b37e519518c9e69d67d74140",
+    "rendered_manifest_sha256": "09459fe7de1eb0445f280f054239454a5a9f958bb0924307a7d7ed2047bda6e9",
+    "gpu_post_performed": false,
+    "root_failure_alert_annotation": "off",
+    "priority": "c1"
   },
   "superseded_preflight": {
     "pod": "chris-q38-t3k-context-repair-preflight-v1",
@@ -136,7 +149,7 @@
       "runtime_sha256": "7f5c945b28f6d3fd8c84eaedd0b0322ffbaf09ce2f6ffbbf5620f69c72d4131e",
       "plan_sha256": "7891533965a69b7dff6dc2dfc72e323d440ddff645cbd646a36cbc4a0dc22dd5",
       "request_sha256": "3d27e97337cb6d41c68dc840f57269998d613c2fb6e2c767b9ea15ef85faca7f",
-      "successor_status": "repair_in_review_requires_fresh_cpu_preflight_not_submitted",
+      "successor_status": "source_bound_cpu_preflight_and_live_preview_accepted_not_submitted",
       "wandb": "https://wandb.ai/thefleet/cyber-post-train/runs/chris-q38-t3k64-b8-v3",
       "retired_runtime_contract_attempt": {
         "source_head": "1336e85772b417b54d252d2c0f318caf9f24e663",
@@ -209,7 +222,7 @@
       "runtime_sha256": "7f5c945b28f6d3fd8c84eaedd0b0322ffbaf09ce2f6ffbbf5620f69c72d4131e",
       "plan_sha256": "dbe188c32274c16d4d4822ebb8c110659203a55d1bc207561400efb5370d20c2",
       "request_sha256": "b92ba0f7d782c5eb736cd22c49f1d14e014eaa89c1f6d514b30071bba61dec67",
-      "successor_status": "repair_in_review_requires_fresh_cpu_preflight_not_submitted",
+      "successor_status": "repaired_config_prepared_not_freshly_qualified_not_submitted",
       "wandb": "https://wandb.ai/thefleet/cyber-post-train/runs/chris-q38-t3k96-b8-v2",
       "retired_attempt": {
         "run_name": "chris-q38-t3k96-b8-v1-f0811c4f",
@@ -226,5 +239,5 @@
       }
     }
   ],
-  "next_gate": "Land the plan-family forward/backward adapter, exact-image signature preflight, regression test and operational lesson. Then require a fresh exact-image CPU preflight before any separately authorized successor. Keep 96K unsubmitted."
+  "next_gate": "Keep 96K unsubmitted. A separately authorized create-once 64K submission must rerun current-source, duplicate, output, capacity, c1, and root alert-off checks immediately before POST and use a new API identity rather than the dry-run UUID."
 }
