@@ -19,6 +19,7 @@ from evals.fleet import (
     rollout_postgres,
     rollout_postgres_migrate,
     rollout_postgres_status,
+    stored_session_reconciliation,
 )
 
 
@@ -361,6 +362,188 @@ def test_reviewed_outcome_can_be_terminally_closed(pg_dsn, owned_cell):
     )
     assert terminal["state"] == "terminal" and terminal["failure_code"] == "invalid"
     assert _events(pg_dsn)[-1][0] == "terminally_closed"
+
+
+def _stored_session_intent(cell_ids):
+    body = {
+        "schema_version": stored_session_reconciliation.INTENT_SCHEMA,
+        "evaluation_plan_sha256": "a" * 64,
+        "runtime_files_sha256": stored_session_reconciliation.runtime_identity(),
+        "serving_block": "route",
+        "source_output_root": "/mnt/sfs/jobs/source-eval",
+        "source_job_uid": str(uuid.uuid4()),
+        "source_job_terminal_receipt_sha256": "b" * 64,
+        "selected_cell_ids": list(cell_ids),
+    }
+    return stored_session_reconciliation.StoredSessionIntent(
+        evaluation_plan_sha256=body["evaluation_plan_sha256"],
+        runtime_files_sha256=body["runtime_files_sha256"],
+        serving_block=body["serving_block"],
+        source_output_root=body["source_output_root"],
+        source_job_uid=body["source_job_uid"],
+        source_job_terminal_receipt_sha256=body["source_job_terminal_receipt_sha256"],
+        selected_cell_ids=tuple(body["selected_cell_ids"]),
+        sha256=stored_session_reconciliation._body_digest(body),  # noqa: SLF001
+    )
+
+
+def _stored_session_observation(
+    cell_id, session_id, record_sha256, *, task_version_id, model, verifier_execution_id
+):
+    body = {
+        "schema_version": "fleet-stored-session-cell-observation-v1",
+        "identity_binding_sha256": stored_session_reconciliation._body_digest(  # noqa: SLF001
+            {
+                "cell_id": cell_id,
+                "session_id": session_id,
+                "task_version_id": task_version_id,
+                "model": model,
+                "verifier_execution_id": verifier_execution_id,
+            }
+        ),
+        "config_sha256": "2" * 64,
+        "local_record_sha256": record_sha256,
+        "artifact_binding_sha256": "d" * 64,
+        "authoritative_session_metadata_sha256": "e" * 64,
+        "authoritative_score_finite_and_equal_to_private_local_result": True,
+        "authoritative_pinned_task_version_metadata_only": True,
+        "reference_trace_content_returned": False,
+        "model_generation_performed": False,
+        "scoring_call_performed": False,
+        "score_values_included": False,
+        "prompt_response_flag_reward_or_trace_content_included": False,
+        "cell_task_session_or_trace_identifiers_included": False,
+    }
+    return {
+        "cell_id": cell_id,
+        "session_id": session_id,
+        "local_record_sha256": record_sha256,
+        "receipt": {
+            **body,
+            "receipt_sha256": reviewed_recovery.crypto.digest_without(body, "receipt_sha256"),
+        },
+    }
+
+
+def test_stored_sessions_are_accepted_atomically_without_retry_or_scoring(tmp_path, pg_dsn):
+    rollout_postgres.initialize(pg_dsn, _plan(tmp_path / "plan.csv", count=2))
+    owners = [
+        rollout_postgres.claim(pg_dsn, worker_id=f"stored-{index}", serving_block="route")
+        for index in range(2)
+    ]
+    observations = []
+    for index, owner in enumerate(owners):
+        record = {
+            **_local_record(),
+            "execution_id": "sha256:" + str(index + 1) * 64,
+            "run_id": f"stored-run-{index}",
+            "session_id": f"stored-session-{index}",
+            "verifier_execution_id": f"stored-verifier-{index}",
+            "agent_exit_code": 1,
+            "agent_termination": "process_error",
+        }
+        created = rollout_postgres.record_local_result(
+            pg_dsn,
+            cell_id=owner["cell_id"],
+            worker_id=owner["worker_id"],
+            claim_id=owner["claim_id"],
+            record=record,
+        )
+        observations.append(
+            _stored_session_observation(
+                owner["cell_id"],
+                record["session_id"],
+                created["record_sha256"],
+                task_version_id=f"version-{index}",
+                model="endpoint",
+                verifier_execution_id=record["verifier_execution_id"],
+            )
+        )
+    rollout_postgres.request_retry_review(
+        pg_dsn,
+        cell_id=owners[0]["cell_id"],
+        worker_id=owners[0]["worker_id"],
+        claim_id=owners[0]["claim_id"],
+        failure_code="authoritative_scoring_started.runtimeerror",
+    )
+    with psycopg.connect(pg_dsn) as connection:
+        connection.execute(
+            "UPDATE rollout_cells SET lease_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 minute' "
+            "WHERE cell_id = %s",
+            (owners[1]["cell_id"],),
+        )
+    intent = _stored_session_intent([owner["cell_id"] for owner in owners])
+    swapped = [
+        {**observations[0], "receipt": observations[1]["receipt"]},
+        {**observations[1], "receipt": observations[0]["receipt"]},
+    ]
+    with pytest.raises(rollout_ledger.LedgerError, match="receipt is invalid"):
+        stored_session_reconciliation.accept_roster(pg_dsn, intent=intent, observations=swapped)
+    assert rollout_postgres.summary(pg_dsn)["by_state"].get("accepted", 0) == 0
+    receipt = stored_session_reconciliation.accept_roster(
+        pg_dsn, intent=intent, observations=observations
+    )
+    assert receipt["prior_retry_review_count"] == 1
+    assert receipt["prior_stale_active_count"] == 1
+    assert receipt["accepted_existing_completed_session_count"] == 2
+    assert receipt["model_generation_performed"] is False
+    assert receipt["scoring_call_performed"] is False
+    summary = rollout_postgres.summary(pg_dsn)
+    assert summary["by_state"]["accepted"] == 2
+    assert summary["stale_active"] == 0
+    with psycopg.connect(pg_dsn) as connection:
+        persisted = dict(
+            connection.execute(
+                "SELECT cell_id, receipt_digest FROM rollout_cells ORDER BY cell_id"
+            ).fetchall()
+        )
+    expected_digests = {
+        observation["cell_id"]: observation["receipt"]["receipt_sha256"]
+        for observation in observations
+    }
+    assert persisted == expected_digests
+    assert len(set(persisted.values())) == 2
+    serialized = json.dumps(receipt)
+    assert all(owner["cell_id"] not in serialized for owner in owners)
+    assert all(f"stored-session-{index}" not in serialized for index in range(2))
+    assert (
+        stored_session_reconciliation.accept_roster(
+            pg_dsn, intent=intent, observations=observations
+        )
+        == receipt
+    )
+
+
+def test_stored_session_roster_rejects_a_live_owner_atomically(tmp_path, pg_dsn):
+    rollout_postgres.initialize(pg_dsn, _plan(tmp_path / "plan.csv", count=1))
+    owner = rollout_postgres.claim(pg_dsn, worker_id="live", serving_block="route")
+    record = {
+        **_local_record(),
+        "session_id": "stored-session",
+        "agent_exit_code": 1,
+        "agent_termination": "process_error",
+    }
+    created = rollout_postgres.record_local_result(
+        pg_dsn,
+        cell_id=owner["cell_id"],
+        worker_id=owner["worker_id"],
+        claim_id=owner["claim_id"],
+        record=record,
+    )
+    intent = _stored_session_intent([owner["cell_id"]])
+    observation = _stored_session_observation(
+        owner["cell_id"],
+        record["session_id"],
+        created["record_sha256"],
+        task_version_id="version-0",
+        model="endpoint",
+        verifier_execution_id=record["verifier_execution_id"],
+    )
+    with pytest.raises(rollout_ledger.LedgerError, match="not review-held or stale"):
+        stored_session_reconciliation.accept_roster(
+            pg_dsn, intent=intent, observations=[observation]
+        )
+    assert rollout_postgres.summary(pg_dsn)["by_state"]["claimed"] == 1
 
 
 @pytest.mark.parametrize("field", ["cell_id", "worker_id", "claim_id"])

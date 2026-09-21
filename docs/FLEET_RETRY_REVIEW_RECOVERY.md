@@ -126,6 +126,44 @@ The comparison is usable only when each complete arm independently reaches
 17 accepted cells. Never splice cells from an older campaign or a different
 arm. The final eight tasks remain sealed.
 
+## When the controller dies after the session was stored
+
+A failed controller does not mean its completed Fleet sessions are lost. The
+LR30 seed-43 controller ended after all 17 local results had been written: six
+cells were already accepted, ten were held for review, and one expired owner
+still held its cell. Every unresolved cell had exactly one completed Fleet
+session with the frozen task version, model, and verifier identity. The normal
+session listing exposes the parent task UUID, not the pinned task-version UUID.
+The reconciler therefore uses the session reference-trace metadata surface only
+when it returns the exact pinned version and an explicitly empty trace payload
+(`reference_trace_count=0`, `reference_traces=[]`). A non-empty payload or an
+unknown response field fails closed; task or session content is never accepted
+or copied into evidence.
+
+Do not restart the model and do not score those sessions again. Use the
+stored-session reconciler instead. It reads the private cell roster from a
+mode-0600 intent, validates every local artifact digest, observes the exact
+Fleet session metadata twice, compares the authoritative score with the local
+result only in memory, and accepts the complete roster in one database
+transaction. A still-live owner fails closed; an expired owner is admissible
+only when the intent also binds the terminal source Job receipt. Public output
+contains counts and digests, never score values or private cell, task, session,
+prompt, response, flag, reward, or trace data.
+
+Before rendering the recovery Job, require the sanitized terminal receipt, the
+public Job plan, and the private mode-0600 intent to carry the same terminal
+receipt self-digest. A mismatch means the packet was assembled from different
+reviews and must fail before a ConfigMap, Secret, or Job is created.
+
+The incident receipt is
+[`qwen38-lr30-step76-fleet-dev17-seed43-terminal-census-20260921.json`](evidence/qwen38-lr30-step76-fleet-dev17-seed43-terminal-census-20260921.json).
+The guard is [`stored_session_reconciliation.py`](../evals/fleet/stored_session_reconciliation.py),
+the CPU-only create-once package is
+[`stored_session_reconciliation_job.py`](../evals/fleet/stored_session_reconciliation_job.py),
+and focused regressions live in
+[`test_stored_session_reconciliation_job.py`](../tests/test_stored_session_reconciliation_job.py)
+and [`test_rollout_postgres.py`](../tests/test_rollout_postgres.py).
+
 The machine-readable review-only contract is
 `configs/evaluation/qwen38-fleet-dev17-seed43-reviewed-recovery-v1.json`.
 Its classifier is `evals/fleet/retry_review_policy.py`. The classifier rejects
