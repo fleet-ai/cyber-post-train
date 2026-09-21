@@ -113,3 +113,28 @@ the request.
 The full prompt-free receipt was captured locally at:
 
 `/private/tmp/cpt-checkpoint-promotion-live-v1/.private/self-v1/live-parity.json`
+
+## Released stale teacher3k step-10 route
+
+The capacity census also found an older project-owned route,
+`chris-q38-t3k262-s10-web-v1`, still serving without an active consumer:
+
+- InferenceModel UID: `33c6ede6-1646-4f3a-a2c5-da6a34009ffc`
+- last serving Pod UID: `420e82c9-d0df-4f14-b5fd-915c6b1f61a1`
+- model revision: `sha256:d6301dba2cc0e6bc05ea48d2793584d4ca725cba8863dc4ac6ef75bdbbfa668b`
+- checkpoint identity: teacher3k SFT step 10
+- API resource version before pause: `31040514`
+- last recorded useful request time: `2026-09-18T14:13:05Z`
+
+A score-blind WebExploitBench census proved that no active or planned campaign
+consumed this route. The full V23 campaign is base-only and the checkpoint
+backlog contains Fresh75, teacher-v5, and self-SFT only. Historical step-10
+campaign evidence remains preserved and was not changed.
+
+Exactly one supported pause request used the immediately preceding resource
+version. The API accepted resource version `31104916`; the same route UID then
+reached `paused` at resource version `31105742` with routing disabled, zero
+desired replicas, zero ready replicas, and zero active Pods. Kubernetes
+readback proved the exact former Pod UID absent and found no remaining Pod for
+the model label. This released its eight GPUs without deleting historical
+route or evaluation evidence.
