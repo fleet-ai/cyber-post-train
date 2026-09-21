@@ -145,7 +145,7 @@ def test_committed_step60_plan_binds_current_producer_and_exact_source() -> None
     plan = json.loads(path.read_text())
 
     assert export.validate_plan(plan) == plan
-    assert digest(plan) == "80ae4262f1d4a6ce5b61ec79fd21c08e3a594e6a8e428b7cfff14eec62da8804"
+    assert digest(plan) == "31c9548c7119e01e3941049bcdaa79f9ee7a787a0191ce02c53644959d2d4547"
     assert plan["checkpoint_manifest"] == {
         "path": (
             "/mnt/sfs/jobs/chris-q38-lora-r1-s60-v3/"
@@ -327,6 +327,15 @@ def test_continuation_reload_reconciles_exact_tp8_checkpoint_tensors(
             after,
             ranks,
             [1e-5] * 8,
+        )
+
+    with pytest.raises(ValueError, match="optimizer/scheduler reload"):
+        export.verify_continuation_reloaded_snapshots(
+            {"checkpoint_path": str(tmp_path / "checkpoint"), "optimizer_step": 60},
+            before,
+            {rank: row(rank, after=True) for rank in range(8)},
+            ranks,
+            [1e-5] * 7 + [2e-5],
         )
 
 

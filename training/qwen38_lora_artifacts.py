@@ -759,6 +759,7 @@ def validate_continuation_checkpoint_receipt(
         or any(
             type(rate) not in {int, float} or not math.isfinite(rate) or rate <= 0 for rate in rates
         )
+        or any(rate != rates[0] for rate in rates[1:])
     ):
         raise ValueError("continuation optimizer/scheduler reload evidence is incomplete")
     seen = set()

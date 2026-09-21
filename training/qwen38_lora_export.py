@@ -869,6 +869,7 @@ def verify_continuation_reloaded_snapshots(
             type(value) not in {int, float} or not math.isfinite(value) or value <= 0
             for value in learning_rates
         )
+        or any(value != learning_rates[0] for value in learning_rates[1:])
     ):
         raise ValueError("continuation optimizer/scheduler reload lacks exact TP8 evidence")
     return {

@@ -538,6 +538,10 @@ def test_exact_continuation_reload_and_export_are_accepted(tmp_path: Path, monke
             "optimizer/scheduler rank",
         ),
         (
+            lambda value: value["optimizer_reload"]["learning_rates"].__setitem__(0, 2e-5),
+            "optimizer/scheduler reload evidence",
+        ),
+        (
             lambda value: value["frozen_base"]["rank_manifests"][0].__setitem__(
                 "after_sha256", "f" * 64
             ),
