@@ -59,6 +59,9 @@ WAVE_PLAN_SCHEMA = "cyber_qwen_opencode_visible_reasoning_wave_plan_v1"
 QWEN_REPOSITORY = "Qwen/Qwen3.8-27B"
 OPENCODE_HARNESS = "opencode"
 OPENCODE_VERSION = "1.18.27"
+OPENCODE_MCP_SERVER = "fleet"
+OPENCODE_MCP_TOOLS = ["bash", "submit_report"]
+OPENCODE_TEMPLATE_TOOL_NAMES = ["fleet_bash", "fleet_submit_report"]
 ONLINE_COMPACTION = "opencode_1.18.27_native_compaction_autocontinue_v2"
 EXACT_COMPACTION = "student_generated_exact_continuation_v1"
 MINIMUM_SUPERVISED_TOKENS = 20_000_000
@@ -162,6 +165,71 @@ def _json(path: Path, label: str) -> dict[str, Any]:
     except (OSError, json.JSONDecodeError) as error:
         raise ValueError(f"invalid {label} JSON") from error
     return _mapping(value, label)
+
+
+def _json_value(path: Path, label: str) -> object:
+    try:
+        return json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError(f"invalid {label} JSON") from error
+
+
+def _derive_opencode_template_tools(value: object) -> list[dict[str, Any]]:
+    """Reproduce the exact OpenCode 1.18.27 MCP-to-wire transformation."""
+
+    if not isinstance(value, list) or len(value) != len(OPENCODE_MCP_TOOLS):
+        raise ValueError("OpenCode MCP tool catalog must contain the exact reviewed tools")
+    result: list[dict[str, Any]] = []
+    raw_names: list[str] = []
+    for raw in value:
+        tool = _exact(raw, {"name", "description", "inputSchema"}, "OpenCode MCP tool")
+        name = _string(tool["name"], "OpenCode MCP tool name")
+        description = tool["description"]
+        if not isinstance(description, str):
+            raise ValueError("OpenCode MCP tool description must be text")
+        schema = _mapping(tool["inputSchema"], "OpenCode MCP input schema")
+        if schema.get("type") != "object" or not isinstance(schema.get("properties"), Mapping):
+            raise ValueError("OpenCode MCP tool requires an object input schema")
+        parameters = {
+            **schema,
+            "type": "object",
+            "properties": dict(schema["properties"]),
+            "additionalProperties": False,
+        }
+        model_name = (
+            re.sub(r"[^a-zA-Z0-9_-]", "_", OPENCODE_MCP_SERVER)
+            + "_"
+            + re.sub(r"[^a-zA-Z0-9_-]", "_", name)
+        )
+        raw_names.append(name)
+        result.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": model_name,
+                    "description": description,
+                    "parameters": parameters,
+                },
+            }
+        )
+    if raw_names != OPENCODE_MCP_TOOLS:
+        raise ValueError("OpenCode MCP tool catalog order or names drifted")
+    result.sort(key=lambda item: item["function"]["name"])
+    if [item["function"]["name"] for item in result] != OPENCODE_TEMPLATE_TOOL_NAMES:
+        raise ValueError("OpenCode model-facing tool names drifted")
+    return result
+
+
+def _opencode_template_tools(value: object, profile: Mapping[str, Any]) -> list[dict[str, Any]]:
+    opencode = _mapping(profile.get("opencode"), "OpenCode treatment")
+    if collection_campaign.canonical_digest(value) != opencode.get("tool_catalog_sha256"):
+        raise ValueError("OpenCode MCP tool catalog differs from the source profile")
+    tools = _derive_opencode_template_tools(value)
+    if collection_campaign.canonical_digest(tools) != opencode.get("template_tools_sha256"):
+        raise ValueError(
+            "OpenCode ordered template tool definitions differ from the source profile"
+        )
+    return tools
 
 
 def _model(value: object, label: str) -> dict[str, str]:
@@ -275,6 +343,9 @@ def _profile(value: Mapping[str, Any]) -> dict[str, Any]:
             "harness_version",
             "release_asset_sha256",
             "tool_catalog_sha256",
+            "template_tools_sha256",
+            "mcp_server",
+            "mcp_tools",
             "context_management",
             "context_window_tokens",
             "context_headroom_tokens",
@@ -288,10 +359,12 @@ def _profile(value: Mapping[str, Any]) -> dict[str, Any]:
         or opencode["context_management"] != ONLINE_COMPACTION
         or opencode["context_window_tokens"] != 262_144
         or opencode["context_headroom_tokens"] != 20_000
-        or opencode["tools"] != ["bash", "submit_report"]
+        or opencode["mcp_server"] != OPENCODE_MCP_SERVER
+        or opencode["mcp_tools"] != OPENCODE_MCP_TOOLS
+        or opencode["tools"] != OPENCODE_TEMPLATE_TOOL_NAMES
     ):
         raise ValueError("source must use the qualified Qwen/OpenCode treatment")
-    for name in ("release_asset_sha256", "tool_catalog_sha256"):
+    for name in ("release_asset_sha256", "tool_catalog_sha256", "template_tools_sha256"):
         _sha(opencode[name], f"OpenCode {name}")
 
     thinking = _exact(profile["thinking"], {"enable_thinking", "preserve_thinking"}, "thinking")
@@ -404,12 +477,21 @@ def _source_authorization(value: Mapping[str, Any], profile: dict[str, Any]) -> 
     return authorization
 
 
-def _template_ids(tokenizer: Any, messages: list[dict[str, Any]], *, generation: bool) -> list[int]:
+def _template_ids(
+    tokenizer: Any,
+    messages: list[dict[str, Any]],
+    *,
+    tools: list[dict[str, Any]],
+    generation: bool,
+) -> list[int]:
     """Render only through the pinned local Qwen chat template."""
 
     normalized = []
     for message in messages:
-        rendered_message = dense._normalized_for_template(message)
+        if isinstance(message.get("content"), list):
+            rendered_message = {"role": message.get("role"), "content": message["content"]}
+        else:
+            rendered_message = dense._normalized_for_template(message)
         # Raw provider fields named ``reasoning_content`` remain forbidden by
         # ``_message``.  Only the separately authorized, model-visible field
         # below may enter Qwen's exact reasoning slot, and it is translated
@@ -422,7 +504,7 @@ def _template_ids(tokenizer: Any, messages: list[dict[str, Any]], *, generation:
             normalized,
             tokenize=True,
             add_generation_prompt=generation,
-            tools=[],
+            tools=tools,
             enable_thinking=True,
         )
     except Exception as error:
@@ -439,6 +521,7 @@ def _roundtrip(
     profile: dict[str, Any],
     tokenizer: Any,
     tokenizer_identity: dict[str, Any],
+    template_tools: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Re-render non-task fixtures through the exact local Qwen template."""
     fixture = _sealed(value, ROUNDTRIP_SCHEMA, "Qwen/OpenCode round-trip fixture")
@@ -506,8 +589,10 @@ def _roundtrip(
         collection = _token_ids(case["collection_token_ids"], "round-trip collection token IDs")
         training = _token_ids(case["training_token_ids"], "round-trip training token IDs")
         serving = _token_ids(case["serving_token_ids"], "round-trip serving token IDs")
-        actual_prompt = _template_ids(tokenizer, messages[:-1], generation=True)
-        actual = _template_ids(tokenizer, messages, generation=False)
+        actual_prompt = _template_ids(
+            tokenizer, messages[:-1], tools=template_tools, generation=True
+        )
+        actual = _template_ids(tokenizer, messages, tools=template_tools, generation=False)
         if (
             prompt != actual_prompt
             or actual[: len(prompt)] != prompt
@@ -1266,7 +1351,7 @@ def _message(value: object) -> dict[str, Any]:
             if call["type"] != "function":
                 raise ValueError("tool call type is invalid")
             function = _exact(call["function"], {"name", "arguments"}, "tool function")
-            if function["name"] not in {"bash", "submit_report"}:
+            if function["name"] not in set(OPENCODE_TEMPLATE_TOOL_NAMES):
                 raise ValueError("visible-reasoning tool surface is not approved")
             _tool_arguments(function["name"], function["arguments"])
     else:
@@ -1300,7 +1385,7 @@ def _tool_arguments(name: str, value: object) -> None:
         raise ValueError("OpenCode tool arguments must be an object")
     arguments = dict(value)
     _reject_private_argument_fields(arguments)
-    if name == "bash":
+    if name == "fleet_bash":
         if (
             set(arguments) - {"script", "timeoutMs"}
             or not isinstance(arguments.get("script"), str)
@@ -1315,7 +1400,7 @@ def _tool_arguments(name: str, value: object) -> None:
         ):
             raise ValueError("OpenCode bash arguments are outside the reviewed grammar")
         return
-    if (
+    if name != "fleet_submit_report" or (
         set(arguments) - {"flag", "flags", "explanation"}
         or arguments.get("explanation") != ""
         or not (
@@ -1516,6 +1601,33 @@ def _source_target_identity(record: Mapping[str, Any], window: Mapping[str, Any]
     }
 
 
+def _summary_request(value: object) -> dict[str, Any]:
+    """Validate the exact model-visible request used by native compaction."""
+
+    request = _exact(
+        value,
+        {"messages", "system", "tools", "payload_sha256"},
+        "OpenCode compaction summary request",
+    )
+    if request["system"] != [] or request["tools"] != {}:
+        raise ValueError("OpenCode 1.18.27 compaction request must use system=[] and tools={}")
+    messages = request["messages"]
+    if not isinstance(messages, list) or len(messages) != 1:
+        raise ValueError("OpenCode compaction request must contain one synthetic user message")
+    message = _exact(messages[0], {"role", "content"}, "OpenCode compaction request message")
+    content = message["content"]
+    if message["role"] != "user" or not isinstance(content, list) or len(content) != 1:
+        raise ValueError("OpenCode compaction request must contain one visible text part")
+    part = _exact(content[0], {"type", "text"}, "OpenCode compaction request text part")
+    if part["type"] != "text" or not isinstance(part["text"], str) or not part["text"].strip():
+        raise ValueError("OpenCode compaction request text must be explicit and nonempty")
+    if request["payload_sha256"] != digest_json(
+        {name: request[name] for name in ("messages", "system", "tools")}
+    ):
+        raise ValueError("OpenCode compaction request payload digest mismatch")
+    return request
+
+
 def _compaction(
     value: object,
     windows: dict[str, dict[str, Any]],
@@ -1544,6 +1656,8 @@ def _compaction(
         "continuation_token_sha256",
         "continuation_token_ids",
         "continuation_tokens",
+        "summary_request",
+        "summary_request_prompt_token_ids",
         "summary_generation_prompt_token_sha256",
         "summary_generation_prompt_tokens",
         "pre_compaction_prompt_token_sha256",
@@ -1556,6 +1670,7 @@ def _compaction(
     }
     seen: set[str] = set()
     next_targets: set[str] = set()
+    checked_boundaries: list[dict[str, Any]] = []
     for boundary in boundaries:
         boundary = _exact(boundary, fields, "compaction boundary")
         boundary_id = _string(boundary["boundary_id"], "compaction boundary identity")
@@ -1567,6 +1682,8 @@ def _compaction(
             "parent_window_id",
             "continuation_token_ids",
             "continuation_tokens",
+            "summary_request",
+            "summary_request_prompt_token_ids",
             "summary_generation_prompt_tokens",
             "pre_compaction_prompt_tokens",
             "post_compaction_prompt_tokens",
@@ -1577,16 +1694,23 @@ def _compaction(
             _sha(boundary[name], f"compaction {name}")
         for name in (
             "continuation_tokens",
+            "summary_generation_prompt_tokens",
             "pre_compaction_prompt_tokens",
             "post_compaction_prompt_tokens",
         ):
             _count(boundary[name], f"compaction {name}", positive=True)
         continuation = _token_ids(boundary["continuation_token_ids"], "compaction continuation")
+        _summary_request(boundary["summary_request"])
+        summary_prompt = _token_ids(
+            boundary["summary_request_prompt_token_ids"], "compaction summary request prompt"
+        )
         if (
             len(continuation) != boundary["continuation_tokens"]
             or digest_json(continuation) != boundary["continuation_token_sha256"]
+            or len(summary_prompt) != boundary["summary_generation_prompt_tokens"]
+            or digest_json(summary_prompt) != boundary["summary_generation_prompt_token_sha256"]
         ):
-            raise ValueError("compaction continuation tokens do not match their exact proof")
+            raise ValueError("compaction request or continuation tokens do not match their proof")
         parent = windows.get(boundary["parent_window_id"])
         target = windows.get(boundary["next_target_window_id"])
         summary_index = _count(boundary["summary_message_index"], "compaction summary message")
@@ -1599,6 +1723,8 @@ def _compaction(
             or post_indices != target["message_indices"][:-1]
             or summary_index not in post_indices
             or parent["sequence_index"] >= target["sequence_index"]
+            or parent["target_message_index"] >= summary_index
+            or target["target_message_index"] <= summary_index
             or boundary["next_target_window_id"] in next_targets
         ):
             raise ValueError("compaction lineage is not bound to the exact private record")
@@ -1622,6 +1748,41 @@ def _compaction(
             or boundary["post_compaction_prompt_tokens"] != target["prompt_token_count"]
         ):
             raise ValueError("compaction continuation does not bind the true next target prompt")
+        checked_boundaries.append(boundary)
+
+    ordered_windows = sorted(windows.values(), key=lambda window: window["sequence_index"])
+    position = {window["window_id"]: index for index, window in enumerate(ordered_windows)}
+    ordered_boundaries = sorted(
+        checked_boundaries,
+        key=lambda boundary: position[boundary["next_target_window_id"]],
+    )
+    if checked_boundaries != ordered_boundaries:
+        raise ValueError("compaction boundaries are not in exact continuation order")
+    for boundary_index, boundary in enumerate(checked_boundaries):
+        parent_position = position[boundary["parent_window_id"]]
+        target_position = position[boundary["next_target_window_id"]]
+        if target_position != parent_position + 1:
+            raise ValueError("compaction boundary skips an intervening training window")
+        stop = (
+            position[checked_boundaries[boundary_index + 1]["next_target_window_id"]]
+            if boundary_index + 1 < len(checked_boundaries)
+            else len(ordered_windows)
+        )
+        root = boundary["post_compaction_message_indices"]
+        first_target = windows[boundary["next_target_window_id"]]["target_message_index"]
+        for window in ordered_windows[target_position:stop]:
+            prompt_indices = window["message_indices"][:-1]
+            expected_prompt = [
+                *root,
+                *range(first_target, window["target_message_index"]),
+            ]
+            if (
+                prompt_indices != expected_prompt
+                or window["target_message_index"] <= boundary["summary_message_index"]
+            ):
+                raise ValueError(
+                    "post-compaction training window does not descend from its boundary"
+                )
     return compaction
 
 
@@ -1726,6 +1887,7 @@ def _rendered_window(
     tokenizer: Any,
     record: dict[str, Any],
     window: dict[str, Any],
+    template_tools: list[dict[str, Any]],
 ) -> None:
     """Re-render one source window; no caller-controlled adapter is trusted."""
     indices = window["message_indices"]
@@ -1735,8 +1897,8 @@ def _rendered_window(
     selected = [messages[index] for index in indices]
     if selected[-1]["role"] != "assistant":
         raise ValueError("window target message is not an assistant turn")
-    prompt = _template_ids(tokenizer, selected[:-1], generation=True)
-    rendered = _template_ids(tokenizer, selected, generation=False)
+    prompt = _template_ids(tokenizer, selected[:-1], tools=template_tools, generation=True)
+    rendered = _template_ids(tokenizer, selected, tools=template_tools, generation=False)
     if (
         rendered != window["input_ids"]
         or prompt != window["input_ids"][: window["prompt_token_count"]]
@@ -1769,6 +1931,7 @@ def _rendered_window(
     reasoning_only = _template_ids(
         tokenizer,
         [*selected[:-1], reasoning_only_message],
+        tools=template_tools,
         generation=False,
     )
     common_prefix = 0
@@ -1818,13 +1981,12 @@ def _rendered_window(
 
 
 def _rendered_compaction(tokenizer: Any, record: dict[str, Any]) -> None:
-    """Prove every exact continuation serializes the declared summary message.
+    """Prove the captured native summary request produced the summary message.
 
-    A digest of caller-provided token IDs is not enough: this re-renders the
-    Qwen assistant turn which generated the summary and requires that its
-    continuation exactly equals the recorded continuation bytes.  The summary
-    remains zero-loss context; this only proves the later prompt did not hide
-    opaque or private text behind a self-consistent digest.
+    OpenCode 1.18.27 does not summarize the ordinary session prefix. It sends a
+    distinct synthetic user message with ``system=[]`` and ``tools={}``. The
+    private record must capture that exact model-visible payload and token IDs;
+    this function never reconstructs it from prior trajectory messages.
     """
 
     compaction = record["compaction"]
@@ -1833,11 +1995,27 @@ def _rendered_compaction(tokenizer: Any, record: dict[str, Any]) -> None:
     messages = record["messages"]
     for boundary in compaction["boundaries"]:
         summary_index = boundary["summary_message_index"]
-        prompt = _template_ids(tokenizer, messages[:summary_index], generation=True)
-        rendered = _template_ids(tokenizer, messages[: summary_index + 1], generation=False)
+        request = boundary["summary_request"]
+        request_messages = request["messages"]
+        # The exact processor payload is an empty named-tool map. The AI SDK
+        # emits no wire tools, which the Qwen template represents as [].
+        request_tools: list[dict[str, Any]] = []
+        prompt = _template_ids(
+            tokenizer,
+            request_messages,
+            tools=request_tools,
+            generation=True,
+        )
+        rendered = _template_ids(
+            tokenizer,
+            [*request_messages, messages[summary_index]],
+            tools=request_tools,
+            generation=False,
+        )
         continuation = boundary["continuation_token_ids"]
         if (
-            prompt != rendered[: len(prompt)]
+            prompt != boundary["summary_request_prompt_token_ids"]
+            or prompt != rendered[: len(prompt)]
             or len(prompt) != boundary["summary_generation_prompt_tokens"]
             or digest_json(prompt) != boundary["summary_generation_prompt_token_sha256"]
             or continuation != rendered[len(prompt) :]
@@ -1848,7 +2026,7 @@ def _rendered_compaction(tokenizer: Any, record: dict[str, Any]) -> None:
 
 
 def _compacted_target_window_ids(record: Mapping[str, Any]) -> set[str]:
-    """Return only targets that actually follow a proven compaction boundary."""
+    """Return every target descended from a proven compaction boundary."""
 
     compaction = _mapping(record.get("compaction"), "record compaction")
     if compaction.get("kind") == "none":
@@ -1856,12 +2034,25 @@ def _compacted_target_window_ids(record: Mapping[str, Any]) -> set[str]:
     boundaries = compaction.get("boundaries")
     if not isinstance(boundaries, list):  # Validated by ``_record`` before production use.
         raise ValueError("exact compaction has no boundaries")
-    return {
-        _string(
-            _mapping(boundary, "compaction boundary").get("next_target_window_id"), "next target"
+    windows = record.get("windows")
+    if not isinstance(windows, list):
+        raise ValueError("record has no exact training windows")
+    sequence_by_id = {
+        _string(_mapping(window, "training window").get("window_id"), "window identity"): _count(
+            _mapping(window, "training window").get("sequence_index"), "window sequence"
         )
-        for boundary in boundaries
+        for window in windows
     }
+    first = min(
+        sequence_by_id[
+            _string(
+                _mapping(boundary, "compaction boundary").get("next_target_window_id"),
+                "next target",
+            )
+        ]
+        for boundary in boundaries
+    )
+    return {window_id for window_id, sequence in sequence_by_id.items() if sequence >= first}
 
 
 def _loss_mask(window: dict[str, Any]) -> list[int]:
@@ -1912,6 +2103,7 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
             "runtime_bindings",
             "task_selection",
             "roundtrip_fixture",
+            "opencode_tool_catalog",
             "model_lock",
             "tokenizer_root",
             "records",
@@ -1941,6 +2133,7 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
         "runtime_bindings",
         "task_selection",
         "roundtrip_fixture",
+        "opencode_tool_catalog",
         "model_lock",
     )
     sources = {name: _input(relative_to, config.get(name), name) for name in public_names}
@@ -1949,6 +2142,9 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
     paths = {name: item[0] for name, item in sources.items()}
     expected_files = {name: item[1] for name, item in sources.items()}
     profile = _profile(_json(paths["source_profile"], "source profile"))
+    template_tools = _opencode_template_tools(
+        _json_value(paths["opencode_tool_catalog"], "OpenCode MCP tool catalog"), profile
+    )
     source_authorization = _source_authorization(
         _json(paths["source_authorization"], "source authorization"), profile
     )
@@ -1963,6 +2159,7 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
         profile,
         tokenizer,
         tokenizer_identity,
+        template_tools,
     )
     packet = _packet(_json(paths["collection_packet"], "collection packet"), profile)
     _operation_authorization(
@@ -2056,7 +2253,7 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
             raise ValueError("private record differs from its sealed success selection")
         record_reasoning = record_action = 0
         for window in record["windows"]:
-            _rendered_window(tokenizer, record, window)
+            _rendered_window(tokenizer, record, window, template_tools)
             identity = _source_target_identity(record, window)
             source_turn = identity["source_turn_sha256"]
             source_target = identity["source_target_sha256"]

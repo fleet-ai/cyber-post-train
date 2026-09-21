@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 from training import collection_campaign
+from training import fleet_visible_reasoning_corpus as corpus
 from training import visible_reasoning_collection_campaign as campaign
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -135,7 +136,11 @@ def test_campaign_only_accepts_explicit_student_visible_qwen_reasoning(rendered)
     }
     assert source["opencode"]["context_window_tokens"] == 262_144
     assert source["opencode"]["context_headroom_tokens"] == 20_000
-    assert source["opencode"]["tools"] == ["bash", "submit_report"]
+    assert source["opencode"]["mcp_tools"] == ["bash", "submit_report"]
+    assert source["opencode"]["tools"] == ["fleet_bash", "fleet_submit_report"]
+    assert source["opencode"]["template_tools_sha256"] == (
+        "sha256:585574ec1a459141a2e79f4945d140864876224ebef1260be65f06c6d237610f"
+    )
     assert plan["admission"]["deduplication_order"] == [
         "source_session_identity",
         "normalized_trajectory_digest",
@@ -157,12 +162,39 @@ def test_campaign_only_accepts_explicit_student_visible_qwen_reasoning(rendered)
     }
 
 
+def test_campaign_binds_exact_ordered_opencode_wire_tool_schemas() -> None:
+    spec = _load(SPEC)
+    reference = spec["inputs"]["opencode_tool_catalog"]
+    catalog = json.loads((ROOT / reference["path"]).read_text())
+    tools = corpus._derive_opencode_template_tools(catalog)
+    assert [tool["function"]["name"] for tool in tools] == [
+        "fleet_bash",
+        "fleet_submit_report",
+    ]
+    assert all(tool["function"]["parameters"]["additionalProperties"] is False for tool in tools)
+    assert (
+        collection_campaign.canonical_digest(tools)
+        == (spec["source"]["opencode"]["template_tools_sha256"])
+    )
+
+    tampered = copy.deepcopy(spec)
+    tampered["inputs"]["opencode_tool_catalog"]["logical_sha256"] = "sha256:" + "0" * 64
+    _reseal(tampered)
+    with pytest.raises(ValueError, match="tool catalog logical digest mismatch"):
+        campaign.render(tampered, root=ROOT)
+
+
 def test_compaction_requires_exact_visible_summary_lineage(rendered) -> None:
     compaction = rendered["campaign-plan.json"]["compaction"]
     assert compaction == {
         "online": "opencode_1.18.27_native_compaction_autocontinue_v2",
         "accepted_offline_kind": "student_generated_exact_continuation_v1",
+        "exact_synthetic_summary_request_payload_required": True,
+        "summary_request_system": [],
+        "summary_request_tools": {},
+        "summary_request_rendered_token_ids_required": True,
         "actual_post_summary_prompt_required": True,
+        "every_later_training_window_must_descend_from_boundary": True,
         "compaction_summary_loss_mask": 0,
         "opaque_or_unreconstructable_continuation": "reject_target_and_later_continuation",
     }

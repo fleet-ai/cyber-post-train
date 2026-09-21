@@ -39,8 +39,13 @@
     "accepted_offline_kind": "student_generated_exact_continuation_v1",
     "actual_post_summary_prompt_required": true,
     "compaction_summary_loss_mask": 0,
+    "every_later_training_window_must_descend_from_boundary": true,
+    "exact_synthetic_summary_request_payload_required": true,
     "online": "opencode_1.18.27_native_compaction_autocontinue_v2",
-    "opaque_or_unreconstructable_continuation": "reject_target_and_later_continuation"
+    "opaque_or_unreconstructable_continuation": "reject_target_and_later_continuation",
+    "summary_request_rendered_token_ids_required": true,
+    "summary_request_system": [],
+    "summary_request_tools": {}
   },
   "fleet_api_calls": 0,
   "future_artifact_schemas": {
@@ -92,8 +97,8 @@
     "review_completed": false
   },
   "schema": "cyber_qwen_opencode_visible_reasoning_campaign_plan_v1",
-  "sha256": "sha256:5c2d0be1472c25d6e4a9a68c3b2e429dcf64cdd6d4b9f66e87133a1bc93500c0",
-  "source_spec_sha256": "sha256:4689985c60cb99e3c9b90d0bb8df76feb7d04c32d3941437bcff373164005992",
+  "sha256": "sha256:8af33f037989c33ed289f46349130c0333142d2543d318105522302f84c1d342",
+  "source_spec_sha256": "sha256:ed00368a8739a1b7c8a20b288d766803311e1f85f6054abac8474adec48e7362",
   "source_treatment": {
     "images": {
       "agent": "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92",
@@ -113,13 +118,19 @@
       "harness_version": "1.18.27",
       "max_model_requests": 600,
       "max_output_tokens": 32768,
+      "mcp_server": "fleet",
+      "mcp_tools": [
+        "bash",
+        "submit_report"
+      ],
       "provider_adapter": "@ai-sdk/openai-compatible",
       "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+      "template_tools_sha256": "sha256:585574ec1a459141a2e79f4945d140864876224ebef1260be65f06c6d237610f",
       "timeout_seconds": 28800,
       "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
       "tools": [
-        "bash",
-        "submit_report"
+        "fleet_bash",
+        "fleet_submit_report"
       ]
     },
     "route": {

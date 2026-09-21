@@ -72,16 +72,55 @@ def _runtime(inventory: dict) -> dict:
     )
 
 
+_TOOL_CATALOG = [
+    {
+        "name": "bash",
+        "description": "Run a synthetic bash script.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"script": {"type": "string"}},
+            "required": ["script"],
+        },
+    },
+    {
+        "name": "submit_report",
+        "description": "Submit a synthetic report.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "flag": {"type": "string"},
+                "explanation": {"type": "string"},
+            },
+            "required": ["explanation"],
+        },
+    },
+]
+_TEMPLATE_TOOLS = corpus._derive_opencode_template_tools(_TOOL_CATALOG)
+
+
 class _Tokenizer:
     """A synthetic local tokenizer that rejects any unpinned render treatment."""
 
     def apply_chat_template(self, messages, **kwargs):
+        tools = kwargs.pop("tools")
         assert kwargs == {
             "tokenize": True,
-            "add_generation_prompt": len(messages) in {2, 4},
-            "tools": [],
+            "add_generation_prompt": messages[-1]["role"] != "assistant",
             "enable_thinking": True,
         }
+        if tools == []:
+            assert messages[0] == {
+                "role": "user",
+                "content": [{"type": "text", "text": "synthetic summary request"}],
+            }
+            if len(messages) == 1:
+                return [10, 11]
+            assert len(messages) == 2 and messages[1] == {
+                "role": "assistant",
+                "content": "synthetic summary",
+            }
+            return [10, 11, 44, 45]
+        assert tools == _TEMPLATE_TOOLS
         if len(messages) == 2:
             return [1, 2]
         if len(messages) == 3:
@@ -93,10 +132,6 @@ class _Tokenizer:
             ):
                 return [1, 2, 3, 5]
             return [1, 2, 3, 4, 5]
-        if len(messages) == 4:
-            return [10, 11]
-        if len(messages) == 5:
-            return [10, 11, 44, 45]
         raise ValueError("unexpected synthetic conversation")
 
 
@@ -210,7 +245,10 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
                             {
                                 "id": "bash-1",
                                 "type": "function",
-                                "function": {"name": "bash", "arguments": {"script": "true"}},
+                                "function": {
+                                    "name": "fleet_bash",
+                                    "arguments": {"script": "true"},
+                                },
                             }
                         ],
                     },
@@ -239,11 +277,14 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         "harness": corpus.OPENCODE_HARNESS,
         "harness_version": corpus.OPENCODE_VERSION,
         "release_asset_sha256": _sha("1"),
-        "tool_catalog_sha256": _sha("2"),
+        "tool_catalog_sha256": campaign.canonical_digest(_TOOL_CATALOG),
+        "template_tools_sha256": campaign.canonical_digest(_TEMPLATE_TOOLS),
+        "mcp_server": corpus.OPENCODE_MCP_SERVER,
+        "mcp_tools": corpus.OPENCODE_MCP_TOOLS,
         "context_management": corpus.ONLINE_COMPACTION,
         "context_window_tokens": 262144,
         "context_headroom_tokens": 20000,
-        "tools": ["bash", "submit_report"],
+        "tools": corpus.OPENCODE_TEMPLATE_TOOL_NAMES,
     }
     thinking = {"enable_thinking": True, "preserve_thinking": True}
     authorization = {
@@ -521,7 +562,10 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
                 {
                     "id": "bash-1",
                     "type": "function",
-                    "function": {"name": "bash", "arguments": {"script": "true"}},
+                    "function": {
+                        "name": "fleet_bash",
+                        "arguments": {"script": "true"},
+                    },
                 }
             ],
         },
@@ -682,6 +726,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         "runtime.json": runtime,
         "task-selection.json": task_selection,
         "roundtrip.json": roundtrip,
+        "tool-catalog.json": _TOOL_CATALOG,
         "model-lock.json": model_lock,
     }
     paths = {}
@@ -710,6 +755,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         "runtime_bindings": _ref(paths["runtime.json"]),
         "task_selection": _ref(paths["task-selection.json"]),
         "roundtrip_fixture": _ref(paths["roundtrip.json"]),
+        "opencode_tool_catalog": _ref(paths["tool-catalog.json"]),
         "model_lock": _ref(paths["model-lock.json"]),
         "tokenizer_root": str(tmp_path / "tokenizer"),
         "records": _ref(records),
@@ -920,10 +966,13 @@ def test_rejects_teacher_source_profile() -> None:
             "harness_version": corpus.OPENCODE_VERSION,
             "release_asset_sha256": _sha("e"),
             "tool_catalog_sha256": _sha("f"),
+            "template_tools_sha256": _sha("0"),
+            "mcp_server": corpus.OPENCODE_MCP_SERVER,
+            "mcp_tools": corpus.OPENCODE_MCP_TOOLS,
             "context_management": corpus.ONLINE_COMPACTION,
             "context_window_tokens": 262_144,
             "context_headroom_tokens": 20_000,
-            "tools": ["bash", "submit_report"],
+            "tools": corpus.OPENCODE_TEMPLATE_TOOL_NAMES,
         },
         "thinking": {"enable_thinking": True, "preserve_thinking": True},
         "serialization": {
@@ -1074,6 +1123,26 @@ def test_rejects_roundtrip_continuation_boundary_before_records(
     assert not Path(config["output"]).exists()
 
 
+@pytest.mark.parametrize("adversary", ["missing", "schema", "order"])
+def test_rejects_missing_different_or_reordered_opencode_tools_before_records(
+    tmp_path: Path, monkeypatch, adversary: str
+) -> None:
+    config, state = _fixture(tmp_path, monkeypatch)
+    catalog = copy.deepcopy(_TOOL_CATALOG)
+    if adversary == "missing":
+        catalog.pop()
+    elif adversary == "schema":
+        catalog[0]["inputSchema"]["properties"]["script"]["type"] = "integer"
+    else:
+        catalog.reverse()
+    _write(state["paths"]["tool-catalog.json"], catalog)
+    config["opencode_tool_catalog"] = _ref(state["paths"]["tool-catalog.json"])
+    monkeypatch.setattr(corpus, "iter_jsonl", lambda _path: (_ for _ in ()).throw(AssertionError()))
+    with pytest.raises(ValueError, match="tool catalog differs from the source profile"):
+        corpus.build(config, relative_to=tmp_path)
+    assert not Path(config["output"]).exists()
+
+
 def test_rejects_a_caller_supplied_renderer_before_records(tmp_path: Path, monkeypatch) -> None:
     config, _state = _fixture(tmp_path, monkeypatch)
     config["renderer_adapter"] = {"path": "untrusted.py", "sha256": _sha("a")}
@@ -1165,6 +1234,17 @@ def test_exact_compaction_requires_the_real_next_prompt_and_zero_masked_summary(
         {"role": "assistant", "content": "second target"},
     ]
     continuation = [44, 45]
+    summary_request = {
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "synthetic summary request"}],
+            }
+        ],
+        "system": [],
+        "tools": {},
+    }
+    summary_request["payload_sha256"] = digest_json(summary_request)
     boundary = {
         "boundary_id": "boundary-1",
         "parent_window_id": "before",
@@ -1175,6 +1255,8 @@ def test_exact_compaction_requires_the_real_next_prompt_and_zero_masked_summary(
         "continuation_token_sha256": digest_json(continuation),
         "continuation_token_ids": continuation,
         "continuation_tokens": len(continuation),
+        "summary_request": summary_request,
+        "summary_request_prompt_token_ids": [10, 11],
         "summary_generation_prompt_token_sha256": digest_json([10, 11]),
         "summary_generation_prompt_tokens": 2,
         "pre_compaction_prompt_token_sha256": first["prompt_token_sha256"],
@@ -1222,6 +1304,22 @@ def test_exact_compaction_requires_the_real_next_prompt_and_zero_masked_summary(
             source_kind="qwen_self",
             original_task_digest=_sha("a"),
         )
+    wrong_request = copy.deepcopy(accepted)
+    wrong_request["boundaries"][0]["summary_request"]["tools"] = _TEMPLATE_TOOLS
+    wrong_request["boundaries"][0]["summary_request"]["payload_sha256"] = digest_json(
+        {
+            name: wrong_request["boundaries"][0]["summary_request"][name]
+            for name in ("messages", "system", "tools")
+        }
+    )
+    with pytest.raises(ValueError, match=r"system=\[\] and tools=\{\}"):
+        corpus._compaction(
+            wrong_request,
+            {"before": first, "after": second},
+            messages,
+            source_kind="qwen_self",
+            original_task_digest=_sha("a"),
+        )
     with pytest.raises(ValueError, match="opaque or unapproved compaction"):
         corpus._compaction(
             accepted,
@@ -1232,15 +1330,102 @@ def test_exact_compaction_requires_the_real_next_prompt_and_zero_masked_summary(
         )
 
 
-def test_compaction_coverage_counts_only_targets_after_a_boundary() -> None:
+def test_compaction_rejects_preboundary_parent_and_unrelated_later_window() -> None:
+    first = _window("before")
+    second = _window("after", ids=[1, 2, 6, 7, 8], sequence_index=1, message_indices=[4, 5])
+    later = _window("later", ids=[1, 2, 9, 10, 11], sequence_index=2, message_indices=[4, 5, 6, 7])
+    messages = [
+        {"role": "system", "content": "synthetic system"},
+        {"role": "user", "content": "synthetic task"},
+        {"role": "assistant", "content": "first target"},
+        {"role": "tool", "content": "first result", "tool_call_id": "bash-1"},
+        {"role": "assistant", "content": "synthetic summary"},
+        {"role": "assistant", "content": "second target"},
+        {"role": "user", "content": "later request"},
+        {"role": "assistant", "content": "later target"},
+    ]
+    request = {
+        "messages": [
+            {
+                "role": "user",
+                "content": [{"type": "text", "text": "synthetic summary request"}],
+            }
+        ],
+        "system": [],
+        "tools": {},
+    }
+    request["payload_sha256"] = digest_json(request)
+    boundary = {
+        "boundary_id": "boundary-1",
+        "parent_window_id": "before",
+        "original_task_digest": _sha("a"),
+        "prior_history_digest": digest_json(messages[:4]),
+        "summary_message_index": 4,
+        "summary_message_digest": digest_json(messages[4]),
+        "continuation_token_sha256": digest_json([44, 45]),
+        "continuation_token_ids": [44, 45],
+        "continuation_tokens": 2,
+        "summary_request": request,
+        "summary_request_prompt_token_ids": [10, 11],
+        "summary_generation_prompt_token_sha256": digest_json([10, 11]),
+        "summary_generation_prompt_tokens": 2,
+        "pre_compaction_prompt_token_sha256": first["prompt_token_sha256"],
+        "pre_compaction_prompt_tokens": first["prompt_token_count"],
+        "post_compaction_prompt_token_sha256": second["prompt_token_sha256"],
+        "post_compaction_prompt_tokens": second["prompt_token_count"],
+        "post_compaction_message_indices": [4],
+        "next_target_window_id": "after",
+        "next_target_prompt_token_sha256": second["prompt_token_sha256"],
+    }
+    accepted = {"kind": corpus.EXACT_COMPACTION, "boundaries": [boundary]}
+    assert (
+        corpus._compaction(
+            accepted,
+            {"before": first, "after": second, "later": later},
+            messages,
+            source_kind="qwen_self",
+            original_task_digest=_sha("a"),
+        )
+        == accepted
+    )
+
+    unrelated = copy.deepcopy(later)
+    unrelated["message_indices"] = [0, 1, 6, 7]
+    with pytest.raises(ValueError, match="does not descend"):
+        corpus._compaction(
+            accepted,
+            {"before": first, "after": second, "later": unrelated},
+            messages,
+            source_kind="qwen_self",
+            original_task_digest=_sha("a"),
+        )
+
+    post_boundary_parent = copy.deepcopy(first)
+    post_boundary_parent["message_indices"] = [0, 1, 5]
+    post_boundary_parent["target_message_index"] = 5
+    with pytest.raises(ValueError, match="lineage is not bound"):
+        corpus._compaction(
+            accepted,
+            {"before": post_boundary_parent, "after": second, "later": later},
+            messages,
+            source_kind="qwen_self",
+            original_task_digest=_sha("a"),
+        )
+
+
+def test_compaction_coverage_counts_all_targets_after_a_boundary() -> None:
     record = {
         "compaction": {
             "kind": corpus.EXACT_COMPACTION,
             "boundaries": [{"next_target_window_id": "after"}],
         },
-        "windows": [{"window_id": "before"}, {"window_id": "after"}],
+        "windows": [
+            {"window_id": "before", "sequence_index": 0},
+            {"window_id": "after", "sequence_index": 1},
+            {"window_id": "later", "sequence_index": 2},
+        ],
     }
-    assert corpus._compacted_target_window_ids(record) == {"after"}
+    assert corpus._compacted_target_window_ids(record) == {"after", "later"}
 
 
 def test_rejects_local_tokenizer_boundary_drift(tmp_path: Path, monkeypatch) -> None:
@@ -1263,7 +1448,7 @@ def test_rejects_local_tokenizer_boundary_drift(tmp_path: Path, monkeypatch) -> 
     _reseal_record(record)
     checked = corpus._record(record, state["profile"])
     with pytest.raises(ValueError, match="template serialization differs"):
-        corpus._rendered_window(_Tokenizer(), checked, checked["windows"][0])
+        corpus._rendered_window(_Tokenizer(), checked, checked["windows"][0], _TEMPLATE_TOOLS)
 
 
 @pytest.mark.parametrize("adversary", ["swapped_labels", "resegmented_boundary"])
@@ -1299,4 +1484,4 @@ def test_rejects_self_consistent_caller_span_adversary(
     # once the exact Qwen template independently derives the two components.
     checked = corpus._record(record, state["profile"])
     with pytest.raises(ValueError, match="template-derived reasoning/action components"):
-        corpus._rendered_window(_Tokenizer(), checked, checked["windows"][0])
+        corpus._rendered_window(_Tokenizer(), checked, checked["windows"][0], _TEMPLATE_TOOLS)

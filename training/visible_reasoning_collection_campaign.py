@@ -72,6 +72,18 @@ def _reference(root: Path, value: object, label: str) -> tuple[Path, dict[str, A
     return path, loaded
 
 
+def _catalog_reference(root: Path, value: object) -> tuple[Path, list[dict[str, Any]]]:
+    if not isinstance(value, dict) or set(value) != {"path", "file_sha256", "logical_sha256"}:
+        raise ValueError("OpenCode tool catalog needs an exact file and logical reference")
+    path = root / value["path"]
+    if path.is_symlink() or not path.is_file() or _file_sha256(path) != value["file_sha256"]:
+        raise ValueError("OpenCode tool catalog file digest mismatch")
+    loaded = json.loads(path.read_bytes())
+    if not isinstance(loaded, list) or _digest(loaded) != value["logical_sha256"]:
+        raise ValueError("OpenCode tool catalog logical digest mismatch")
+    return path, loaded
+
+
 def _validate_spec(spec: dict[str, Any]) -> None:
     _sealed(spec, SPEC_SCHEMA, "visible-reasoning campaign spec")
     if set(spec) != {
@@ -100,6 +112,7 @@ def _validate_spec(spec: dict[str, Any]) -> None:
         "runtime_bindings",
         "task_selection",
         "historical_token_basis",
+        "opencode_tool_catalog",
     }:
         raise ValueError("visible-reasoning campaign input set drift")
     if spec["selection"] != {
@@ -184,6 +197,7 @@ def _model_and_harness(
     tasks: list[dict[str, Any]],
     task_selection: dict[str, Any],
     runtime_bindings: dict[str, Any],
+    tool_catalog: list[dict[str, Any]],
 ) -> None:
     source = spec["source"]
     if source.get("kind") != "qwen_self" or source.get("model") != {
@@ -246,6 +260,7 @@ def _model_and_harness(
         ),
     }:
         raise ValueError("visible-reasoning source image identity drift")
+    template_tools = corpus._derive_opencode_template_tools(tool_catalog)  # noqa: SLF001
     expected_harness = {
         "harness": corpus.OPENCODE_HARNESS,
         "harness_version": corpus.OPENCODE_VERSION,
@@ -256,7 +271,10 @@ def _model_and_harness(
         "tool_catalog_sha256": (
             "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
         ),
-        "tools": ["bash", "submit_report"],
+        "template_tools_sha256": _digest(template_tools),
+        "mcp_server": corpus.OPENCODE_MCP_SERVER,
+        "mcp_tools": corpus.OPENCODE_MCP_TOOLS,
+        "tools": corpus.OPENCODE_TEMPLATE_TOOL_NAMES,
         "context_management": corpus.ONLINE_COMPACTION,
         "context_window_tokens": 262_144,
         "context_headroom_tokens": 20_000,
@@ -266,6 +284,8 @@ def _model_and_harness(
     }
     if source.get("opencode") != expected_harness:
         raise ValueError("visible-reasoning OpenCode treatment drift")
+    if _digest(tool_catalog) != expected_harness["tool_catalog_sha256"]:
+        raise ValueError("visible-reasoning OpenCode tool catalog drift")
     if source.get("thinking") != {
         "enable_thinking": True,
         "preserve_thinking": True,
@@ -380,9 +400,12 @@ def _waves(campaign_name: str, tasks: list[dict[str, Any]]) -> tuple[list[dict[s
 def render(spec: dict[str, Any], *, root: Path) -> dict[str, dict[str, Any]]:
     """Render a deterministic review packet without external calls or trace access."""
     _validate_spec(spec)
-    loaded: dict[str, dict[str, Any]] = {}
+    loaded: dict[str, Any] = {}
     for name, reference in spec["inputs"].items():
-        _path, loaded[name] = _reference(root, reference, name.replace("_", " "))
+        if name == "opencode_tool_catalog":
+            _path, loaded[name] = _catalog_reference(root, reference)
+        else:
+            _path, loaded[name] = _reference(root, reference, name.replace("_", " "))
     tasks = _task_boundary(loaded)
     _model_and_harness(
         spec,
@@ -390,6 +413,7 @@ def render(spec: dict[str, Any], *, root: Path) -> dict[str, dict[str, Any]]:
         tasks,
         loaded["task_selection"],
         loaded["runtime_bindings"],
+        loaded["opencode_tool_catalog"],
     )
     historical = loaded["historical_token_basis"]
     if (
@@ -460,7 +484,12 @@ def render(spec: dict[str, Any], *, root: Path) -> dict[str, dict[str, Any]]:
             "compaction": {
                 "online": corpus.ONLINE_COMPACTION,
                 "accepted_offline_kind": corpus.EXACT_COMPACTION,
+                "exact_synthetic_summary_request_payload_required": True,
+                "summary_request_system": [],
+                "summary_request_tools": {},
+                "summary_request_rendered_token_ids_required": True,
                 "actual_post_summary_prompt_required": True,
+                "every_later_training_window_must_descend_from_boundary": True,
                 "compaction_summary_loss_mask": 0,
                 "opaque_or_unreconstructable_continuation": "reject_target_and_later_continuation",
             },

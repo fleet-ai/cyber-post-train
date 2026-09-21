@@ -30,14 +30,17 @@ materializer has no `include_thinking` switch. It accepts a source only when a
 sealed profile proves all of the following:
 
 - exact `Qwen/Qwen3.8-27B` target revision, tokenizer, and chat-template;
-- OpenCode 1.18.27, the approved `bash`/`submit_report` tool surface, 262K
-  context, and 20K headroom;
+- OpenCode 1.18.27, the approved `bash`/`submit_report` MCP surface rendered as
+  the exact ordered `fleet_bash`/`fleet_submit_report` OpenCode wire schemas,
+  262K context, and 20K headroom;
 - `enable_thinking: true` and `preserve_thinking: true` for a Qwen self source;
 - an independently materialized immutable authorization artifact that binds the
   reasoning treatment and calls it student-visible; and
 - the exact local, digest-pinned Qwen tokenizer and template whose re-rendered
-  token IDs, assistant start boundary, and labelled target spans equal the
-  collected evidence.
+token IDs, assistant start boundary, and labelled target spans equal the
+collected evidence. Every ordinary Qwen render receives those digest-bound
+tool definitions; a missing, reordered, or schema-different catalog is rejected
+before private records are opened.
 
 Private records keep authorized reasoning in the distinct
 `student_visible_reasoning` field. Raw provider fields such as
@@ -94,9 +97,15 @@ history, actual continuation token IDs/digest/length, the exact prompt used to
 generate its assistant summary, summary-message digest, pre/post prompt digests
 and lengths, and the next true target prompt. The builder re-renders the
 summary boundary with the pinned Qwen template; a self-consistent hash of
-caller-provided continuation IDs is not enough. The post prompt must equal the
-prompt used for the next target. Teacher-visible-rationale records cannot use
-this exception in v1.
+caller-provided continuation IDs is not enough. OpenCode 1.18.27 generates that
+summary from a separate synthetic user request, not from the ordinary session
+prefix, so each boundary captures the exact request `messages`, `system=[]`,
+`tools={}`, payload digest, and rendered prompt token IDs. The post prompt must
+equal the prompt used for the next target, and every later training window must
+retain an unbroken ancestry through the declared post-compaction root until a
+new declared boundary replaces it. Pre-boundary parents and unrelated later
+windows are rejected. Teacher-visible-rationale records cannot use this
+exception in v1.
 
 The token-only result has schema
 `cyber_qwen_opencode_visible_reasoning_sft_corpus_v1`. It contains two paired

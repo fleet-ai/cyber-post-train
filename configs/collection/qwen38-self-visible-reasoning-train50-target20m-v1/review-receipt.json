@@ -6,6 +6,7 @@
     "historical_token_basis": "sha256:ebcf6677e51adb22f73602c210281a3f4a847c257155da6ed48cd1c6cba9f3c8",
     "inventory": "sha256:32432fe02c1f2253f77a4190c8730bc9348e9053aa2ff39420cb40d6f525c767",
     "model_lock": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+    "opencode_tool_catalog": "sha256:e4a3c4fb5b5c34cdaf64ec568eb31fcc0d55a63cc0a134808db348c65d7b6858",
     "protected_family_lock": "sha256:4fb335cbbafb55bf7f1ec39aa40b4849b091ef1f0362fd11c9d5ac0906a6e093",
     "role_anchor": "sha256:0d384c154f7cf1f7284d5c3ae97549a22ffc61fafd1518bf1a5fbe565adfe386",
     "runtime_bindings": "sha256:4f2f6eef5e0a4bb757a15bcb7d028bb8be8558929ca4783d8be0bc90678656fc",
@@ -13,8 +14,8 @@
   },
   "minimum_unique_supervised_tokens": 20000000,
   "output_sha256": {
-    "campaign-plan.json": "sha256:5c2d0be1472c25d6e4a9a68c3b2e429dcf64cdd6d4b9f66e87133a1bc93500c0",
-    "wave-plan.json": "sha256:c85130c307d4148b840d7debb0bcecf455db6d0e9bb36569c50921429c455e03"
+    "campaign-plan.json": "sha256:8af33f037989c33ed289f46349130c0333142d2543d318105522302f84c1d342",
+    "wave-plan.json": "sha256:fbfa7655472465a1bcd191fb856913b629800ffe16ffd6407fa38eb069caf61e"
   },
   "planned_cells": 20000,
   "private_or_hidden_reasoning_allowed": false,
@@ -28,8 +29,8 @@
   ],
   "review_completed": false,
   "schema": "cyber_qwen_opencode_visible_reasoning_campaign_review_v1",
-  "sha256": "sha256:a67cd35b5885673d704095e96847207ecb26716b271f70b5d7a84eb9fdf041fe",
-  "source_spec_sha256": "sha256:4689985c60cb99e3c9b90d0bb8df76feb7d04c32d3941437bcff373164005992",
+  "sha256": "sha256:fd6658d4969ea4e5001fa8e4ebd51fc55df664089a78ecbb0e533f4bd62a25e6",
+  "source_spec_sha256": "sha256:ed00368a8739a1b7c8a20b288d766803311e1f85f6054abac8474adec48e7362",
   "status": "source_only_review_required",
   "train_task_versions": 50
 }
