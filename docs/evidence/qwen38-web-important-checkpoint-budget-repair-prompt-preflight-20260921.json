@@ -1,10 +1,10 @@
 {
   "schema_version": "qwen38_web_important_checkpoint_budget_audit_v6",
   "status": "runtime_budget_repaired_prompt_preflight_parity_campaign_still_gated",
-  "observed_at": "2026-09-21T17:34:47Z",
+  "observed_at": "2026-09-21T18:47:05Z",
   "source": {
-    "repair_source_commit": "44945a14d1102c929dee01a8f4871cf053e142d7",
-    "repair_base_commit": "92d1609e160f69a7365570bc2163a763a1be9835",
+    "repair_source_commit": "7773f2bb6819ad9d981bb4487b2e60de0b44d083",
+    "repair_base_commit": "2eed9e8c7eb5f2f9791381d416d2bed227780cfe",
     "historical_netproxy_audit_path": "docs/evidence/qwen38-web-important-checkpoint-budget-repair-netproxy-contract-20260921.json",
     "historical_netproxy_audit_file_sha256": "sha256:9cb3ffc3170098d2bd0e966cd0b12c9f8a8a8142bd0750d23d1db4eb15b714dc",
     "runtime_failure_evidence_path": "docs/evidence/webexploitbench/2026-09-21-prompt-preflight-order-and-runtime-dependencies.md",
@@ -15,13 +15,13 @@
     "collection_runner_path": "evals/webexploitbench/tensorlake/bootstrap/run_collection_partition.sh",
     "collection_runner_file_sha256": "sha256:5d46366a4c9353b66e5975093f44aedf188e1bc814e6d1e0e1d7b06a6d1898dc",
     "collection_launcher_path": "evals/webexploitbench/tensorlake/collection_launcher.py",
-    "collection_launcher_file_sha256": "sha256:11650b97b04934c62acc1ce7984d55ba4f7bb1b0cfc255d4d863c985c8eed289",
+    "collection_launcher_file_sha256": "sha256:52ba379a37957b63f9766bbf6ef861393c983e263a34ee920e0fae91f8fbaf08",
     "collection_supervisor_path": "evals/webexploitbench/tensorlake/collection_supervisor.py",
     "collection_supervisor_file_sha256": "sha256:59bd6d77247fc6855297efaa6508b4da87edf8a9cf619cdb45b93fd9ecbf1586",
     "qualification_worker_path": "evals/webexploitbench/tensorlake/collection_snapshot_qualification_worker.py",
-    "qualification_worker_file_sha256": "sha256:06d313d386bc4d2912a488abea6616699fa25889920c0f918b0ce8706139aff9",
+    "qualification_worker_file_sha256": "sha256:9f972bb2abdbca7c01a753dba6b125a9fe8b8ca326435b11c96deb0fa81c894a",
     "qualification_execution_packet_path": "evals/webexploitbench/tensorlake/qualification_execution_packet.py",
-    "qualification_execution_packet_file_sha256": "sha256:52219e451c35b041c8ebf84ca3df3f8ff65f4ce2cef8f07c8c3730ee233df7a8"
+    "qualification_execution_packet_file_sha256": "sha256:92497195b2e92af5d0187669b7b811906e7a4668b57a9f6cdf1579513d15ce9e"
   },
   "observed_budget_seconds": {
     "declared_task_max": 28800,
@@ -52,7 +52,7 @@
     "fresh_model_free_runtime_qualification_still_required": true
   },
   "classification": "runtime_budget_repaired_prompt_preflight_parity_campaign_still_gated",
-  "reusable_rule": "Keep model-free qualification in the same order as production. Prove the prompt runtime dependencies and all prompt and memory checks before changing host-wide containment state; then bind and remove only the qualification-owned proxy and network and restore the complete prior inventory. Preserve earlier immutable audits and keep collection closed until a fresh unique qualification accepts and releases.",
+  "reusable_rule": "Keep model-free qualification in the same order as production. Prove the exact prompt runtime dependencies and all prompt and memory checks before changing host-wide containment state; then bind and remove only the qualification-owned proxy and network and restore the complete prior inventory. An added offline `--no-deps` wheel must have a sealed dependency closure; do not require a docs-only CLI package in the evaluator runtime. Preserve earlier immutable audits and keep collection closed until a fresh unique qualification accepts and releases.",
   "scope": "Static, score-blind repository audit only. It performed no provider request, model request, scoring, collection, or external mutation and makes no model-capability claim. The exact V3 child error remains underdetermined because private stderr was not inspected.",
   "operation": {
     "provider_requests": 0,
@@ -60,5 +60,5 @@
     "scoring_requests": 0,
     "external_mutations": 0
   },
-  "receipt_sha256": "sha256:eeacc4b02c8c5cd2ea124c7efbd3303dbe061b87430de2e9185e8da2d1797e4d"
+  "receipt_sha256": "sha256:7496186828c2e322021ee0a644aae1355263a2fbf9de5e8e716adea98d241029"
 }
