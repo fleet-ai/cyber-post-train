@@ -164,6 +164,14 @@ def _external_action_gate(plan: dict, action: str) -> None:
 
 def _require_preflight(directory: Path, plan: dict, request: dict) -> None:
     proof = _read(directory / "PREFLIGHT.json")
+    from .qwen38_lora_sft_preflight import is_qwen38_lora_plan, validate_receipt
+
+    # The reviewed Qwen3.8 LoRA anchor uses the same zero-GPU Job as ordinary
+    # SFT, but its persisted receipt is typed so a generic dense receipt cannot
+    # be misrepresented as the LoRA gate.
+    if is_qwen38_lora_plan(plan):
+        validate_receipt(proof, plan, request)
+        return
     schema = plan.get("schema")
     schemas = {
         "cyber_miles_conversion_v1": "cyber_miles_conversion_cpu_preflight_v1",
@@ -1034,15 +1042,18 @@ def sft_cpu_preflight_job_create(
     context: Annotated[str, typer.Option("--context")],
     attempt: Annotated[int, typer.Option("--attempt", min=1, max=MAX_ATTEMPT)] = 1,
 ) -> None:
-    """Create one tracked zero-GPU dense-SFT native preflight Job."""
+    """Create one tracked zero-GPU generic-SFT native preflight Job."""
     from .direct_submit import Kubectl, create_sft_cpu_preflight_once
+    from .qwen38_lora_sft_preflight import is_qwen38_lora_plan
 
     try:
         plan, request = _prepared(directory)
         _submission_gate(directory, plan, request)
         _external_action_gate(plan, "submit")
+        if is_qwen38_lora_plan(plan):
+            raise ValueError("Qwen3.8 LoRA requires qwen38-lora-sft-cpu-preflight-job-create")
         if (directory / "PREFLIGHT.json").exists():
-            raise ValueError("dense-SFT CPU preflight is already recorded")
+            raise ValueError("generic-SFT CPU preflight is already recorded")
         source_commit = _clean_source_commit()
         result = create_sft_cpu_preflight_once(
             directory=directory,
@@ -1062,21 +1073,85 @@ def sft_cpu_preflight_job_collect(
     context: Annotated[str, typer.Option("--context")],
     attempt: Annotated[int, typer.Option("--attempt", min=1, max=MAX_ATTEMPT)] = 1,
 ) -> None:
-    """Collect one exact terminal dense-SFT CPU-preflight receipt."""
+    """Collect one exact terminal generic-SFT CPU-preflight receipt."""
     from .direct_submit import Kubectl, collect_sft_cpu_preflight
+    from .qwen38_lora_sft_preflight import is_qwen38_lora_plan
 
     try:
         plan, request = _prepared(directory)
         _submission_gate(directory, plan, request)
         _external_action_gate(plan, "submit")
+        if is_qwen38_lora_plan(plan):
+            raise ValueError("Qwen3.8 LoRA requires qwen38-lora-sft-cpu-preflight-job-collect")
         if (directory / "PREFLIGHT.json").exists():
-            raise ValueError("dense-SFT CPU preflight is already recorded")
+            raise ValueError("generic-SFT CPU preflight is already recorded")
         receipt = collect_sft_cpu_preflight(
             directory=directory,
             source_commit=_clean_source_commit(),
             attempt=attempt,
             kubectl=Kubectl(context),
         )
+        _write(directory / "PREFLIGHT.json", receipt)
+        _print(receipt)
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("qwen38-lora-sft-cpu-preflight-job-create")
+def qwen38_lora_sft_cpu_preflight_job_create(
+    directory: Path,
+    context: Annotated[str, typer.Option("--context")],
+    attempt: Annotated[int, typer.Option("--attempt", min=1, max=MAX_ATTEMPT)] = 1,
+) -> None:
+    """Create the named zero-GPU native preflight for reviewed Qwen3.8 LoRA."""
+    from .direct_submit import Kubectl, create_sft_cpu_preflight_once
+    from .qwen38_lora_sft_preflight import validate_plan_request
+
+    try:
+        plan, request = _prepared(directory)
+        _submission_gate(directory, plan, request)
+        _external_action_gate(plan, "submit")
+        validate_plan_request(plan, request)
+        if (directory / "PREFLIGHT.json").exists():
+            raise ValueError("Qwen3.8 LoRA CPU preflight is already recorded")
+        result = create_sft_cpu_preflight_once(
+            directory=directory,
+            source_commit=_clean_source_commit(),
+            attempt=attempt,
+            kubectl=Kubectl(context),
+            # Deliberately share the generic Job's create-once journal name:
+            # another route must never replay the same rendered Job identity.
+            journal=directory / f"SFT_CPU_PREFLIGHT_A{attempt:02d}.jsonl",
+        )
+        _print(result)
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("qwen38-lora-sft-cpu-preflight-job-collect")
+def qwen38_lora_sft_cpu_preflight_job_collect(
+    directory: Path,
+    context: Annotated[str, typer.Option("--context")],
+    attempt: Annotated[int, typer.Option("--attempt", min=1, max=MAX_ATTEMPT)] = 1,
+) -> None:
+    """Collect a typed Qwen3.8 LoRA receipt from the exact native CPU Job."""
+    from .direct_submit import Kubectl, collect_sft_cpu_preflight
+    from .qwen38_lora_sft_preflight import build_receipt, validate_plan_request
+
+    try:
+        plan, request = _prepared(directory)
+        _submission_gate(directory, plan, request)
+        _external_action_gate(plan, "submit")
+        validate_plan_request(plan, request)
+        if (directory / "PREFLIGHT.json").exists():
+            raise ValueError("Qwen3.8 LoRA CPU preflight is already recorded")
+        native_receipt = collect_sft_cpu_preflight(
+            directory=directory,
+            source_commit=_clean_source_commit(),
+            attempt=attempt,
+            kubectl=Kubectl(context),
+        )
+        receipt = build_receipt(plan, request, native_receipt)
         _write(directory / "PREFLIGHT.json", receipt)
         _print(receipt)
     except Exception as exc:

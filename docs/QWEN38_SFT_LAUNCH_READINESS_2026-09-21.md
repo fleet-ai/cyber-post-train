@@ -45,6 +45,13 @@ the current generic API preview omits **only** the root alert annotation,
 creation, and requires a Kubernetes server dry-run.  It is not a manual patch
 or an alternate generic launcher.
 
+The A2 anchor now has a named CPU-preflight command pair in `docs/TRAINING.md`.
+It reuses the maintained generic zero-GPU Job rather than a separate LoRA Pod,
+then wraps its native receipt with the exact Qwen revision, adapter settings,
+runtime binding, and one-node/eight-GPU training shape. Generic CPU-preflight
+commands reject this A2 LoRA plan, and every later submit path requires the
+typed receipt.
+
 ## What the live checks must prove
 
 Local intent is not enough for the final RayJob.  Immediately before each

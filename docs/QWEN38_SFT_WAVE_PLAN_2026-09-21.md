@@ -83,6 +83,30 @@ its predecessor has lower training loss.
   The resume must use the same schedule semantics as the completed arm; it is
   not an early slice of a different long cosine schedule.
 
+### Comparison record required for every arm
+
+The 32K, 64K, and 96K rows are **history treatments**: they hold each visible
+target token fixed once while changing how much real, loss-masked prior task
+history is supplied. They are not a pure “context length only” ablation because
+row count, optimizer-update count, masked-token compute, and wall time differ.
+Every result must therefore retain this compact comparison record rather than
+reduce the treatment to a context-length label.
+
+| Record | Required fields |
+|---|---|
+| Data and history | Corpus and split digests; source/task-family counts; unique target tokens; explicit source/family caps; history cap and packing rule |
+| Adaptation and runtime | Full-weight or LoRA; adapter targets/rank/alpha when relevant; trainer/runtime image; nodes, parallelism, and accumulation |
+| Optimization | Effective global batch, learning-rate schedule, duration, checkpoint policy, and seed |
+| Usable artifact | Exact checkpoint, export/reload receipt, and matching serving template |
+| Choice rule | Protected Fleet development task outcome, invalid-run count, and the predeclared tie-break—not training loss or teacher-token loss |
+
+The dense and LoRA rows are deliberately a **method-and-runtime** comparison:
+the current dense FSDP and LoRA Megatron paths do not share every runtime
+detail. A task-outcome result may still be useful, but it must not be described
+as isolating only the adapter. The winning method is the one that improves the
+protected task protocol without a material reliability regression; the final
+Fleet split and WebExploitBench confirm that frozen choice.
+
 ## Data scale and source plan (parallel, but not a shortcut)
 
 The existing teacher corpus already clears 20M unique supervised target tokens.
@@ -103,6 +127,9 @@ Its implications for this experiment plan are deliberately small:
    equal per-family target-token budgets.  An all-qualified corpus and a
    separately declared family-balanced corpus are useful practical treatments,
    but neither may silently reweight or leak a held-out family.
+4. Every corpus beyond the 20M-token floor must publish source and task-family
+   coverage, concentration, and explicit source/family caps in its manifest.
+   Repeating old packed windows never counts as new scale.
 
 That is a data-admission deliverable before it becomes a sixth training row.
 

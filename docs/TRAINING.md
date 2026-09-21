@@ -197,6 +197,22 @@ the cause and use a fresh reviewed attempt number. This Job proves the CPU data,
 loader, and signature gates only. It does not qualify CUDA, distributed startup,
 training, or checkpoint reload.
 
+For the reviewed Qwen3.8 rank-64 LoRA anchor, use the named LoRA route instead
+of the generic command pair:
+
+```sh
+uv run cyber-post-train qwen38-lora-sft-cpu-preflight-job-create /shared/prepared-run \
+  --context <explicit-production-or-development-context> --attempt 1
+uv run cyber-post-train qwen38-lora-sft-cpu-preflight-job-collect /shared/prepared-run \
+  --context <explicit-production-or-development-context> --attempt 1
+```
+
+It reuses the exact same source-bound, zero-GPU Job and output-absence check,
+but writes a receipt bound to Qwen3.8, the LoRA settings, the one-node/eight-GPU
+training shape, and the versioned runtime. The generic command pair rejects a
+reviewed Qwen3.8 rank-64 anchor prepared directory, so a generic SFT receipt
+cannot be relabeled as this LoRA gate.
+
 When an operator must transfer a prepared archive from a local machine into an
 already-running CPU preflight Pod, never copy directly to the filename that the
 worker watches. A direct copy makes the final name visible before all bytes have
