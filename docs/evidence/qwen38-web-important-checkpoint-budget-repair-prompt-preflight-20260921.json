@@ -21,7 +21,7 @@
     "qualification_worker_path": "evals/webexploitbench/tensorlake/collection_snapshot_qualification_worker.py",
     "qualification_worker_file_sha256": "sha256:9f972bb2abdbca7c01a753dba6b125a9fe8b8ca326435b11c96deb0fa81c894a",
     "qualification_execution_packet_path": "evals/webexploitbench/tensorlake/qualification_execution_packet.py",
-    "qualification_execution_packet_file_sha256": "sha256:92497195b2e92af5d0187669b7b811906e7a4668b57a9f6cdf1579513d15ce9e"
+    "qualification_execution_packet_file_sha256": "sha256:c941ff447859e2c2ddf7b5fbbf4f6e42e67ee76f3a8350c2b118888f84d3f9f0"
   },
   "observed_budget_seconds": {
     "declared_task_max": 28800,
@@ -60,5 +60,5 @@
     "scoring_requests": 0,
     "external_mutations": 0
   },
-  "receipt_sha256": "sha256:7496186828c2e322021ee0a644aae1355263a2fbf9de5e8e716adea98d241029"
+  "receipt_sha256": "sha256:5764f7c4acb4bc8048deab7bbb6c7df40b4f4e6341eaf27cbe45459b53504653"
 }
