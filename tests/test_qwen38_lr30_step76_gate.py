@@ -36,6 +36,20 @@ def accepted_gpu_receipt():
     }
 
 
+def submission_plan(*, launchable=False):
+    from cyber_post_train.jobs import digest
+
+    value = json.loads(PLAN.read_text())
+    if launchable:
+        value["launchable"] = True
+        value["status"] = "approved_for_exact_create"
+        value["blockers"] = []
+        value["sha256"] = "sha256:" + digest(
+            {key: item for key, item in value.items() if key != "sha256"}
+        )
+    return value
+
+
 def test_validate_source_is_exact(monkeypatch):
     checked = []
     monkeypatch.setattr(gate, "_checked_file", lambda *args: checked.append(args))
@@ -147,6 +161,32 @@ def test_request_is_one_gpu_c1_alert_off_and_immutable():
     assert plan["request"]["request_sha256"] == "sha256:" + digest(first)
 
 
+def test_submission_contract_is_exact_and_requires_separate_launch_approval():
+    from cyber_post_train.jobs import digest
+
+    request = gate.job_request()
+    gate.validate_submission_contract(submission_plan(), request, require_launchable=False)
+    with pytest.raises(ValueError, match="not explicitly approved"):
+        gate.validate_submission_contract(submission_plan(), request, require_launchable=True)
+    gate.validate_submission_contract(
+        submission_plan(launchable=True), request, require_launchable=True
+    )
+
+    for mutation in (
+        lambda plan: plan.update(schema="other"),
+        lambda plan: plan["request"].update(workers=2),
+        lambda plan: plan["duplicate_gates"].update(jobs_api_history_matches=1),
+        lambda plan: plan["execution_record"].update(resources_created=1),
+    ):
+        plan = submission_plan()
+        mutation(plan)
+        plan["sha256"] = "sha256:" + digest(
+            {key: item for key, item in plan.items() if key != "sha256"}
+        )
+        with pytest.raises(ValueError):
+            gate.validate_submission_contract(plan, request, require_launchable=False)
+
+
 def test_prepared_plan_is_self_bound_and_fail_closed():
     from training.sft_runtime import _unsigned_digest, digest
 
@@ -159,7 +199,10 @@ def test_prepared_plan_is_self_bound_and_fail_closed():
         "resources_created": 0,
         "gpus_allocated": 0,
     }
-    assert plan["live_preview"]["root_failure_alert_annotation"] is None
+    assert plan["live_preview"]["root_failure_alert_annotation"] == "off"
+    assert plan["live_preview"]["direct_path_qualified"] is True
+    assert plan["live_preview"]["resources_created"] == 0
+    assert plan["live_preview"]["qualified_for_create"] is False
     assert plan["duplicate_gates"]["jobs_api_history_matches"] == 0
     assert plan["duplicate_gates"]["kubernetes_rayjob_matches"] == 0
     for name, expected in plan["runtime"]["files"].items():

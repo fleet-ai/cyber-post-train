@@ -1,6 +1,7 @@
 import json
 import subprocess
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 import yaml
@@ -9,10 +10,13 @@ from cyber_post_train.direct_submit import (
     CPU_CHECKPOINT_OPERATION_ANNOTATION,
     CPU_NODE_SELECTOR,
     Kubectl,
+    direct_submit_lr30_qualification_once,
     direct_submit_sft_once,
+    render_lr30_qualification_rayjob,
     render_sft_rayjob,
 )
 from cyber_post_train.jobs import JobsError, digest
+from training import qwen38_lr30_step76_gate as lr30
 from training import sft
 
 RUN_ID = "12345678-1234-4234-9234-123456789abc"
@@ -56,14 +60,14 @@ def template(value, container_name):
     placeholder = value["name"] + "-00000000"
     generated = {
         "FLEET_EXTERNAL_RAY": "1",
-        "FLEET_GPUS_PER_WORKER": "8",
+        "FLEET_GPUS_PER_WORKER": str(value["gpus_per_worker"]),
         "FLEET_RUN_ID": "00000000-0000-0000-0000-000000000000",
         "FLEET_RUN_NAME": placeholder,
         "FLEET_TRACE_ROOT": "/mnt/fleet/trajectory-spool",
         "RAY_memory_usage_threshold": "0.98",
         "RUN_DIR": value["run_dir"],
-        "SKYPILOT_NUM_GPUS_PER_NODE": "8",
-        "WORKERS": "2",
+        "SKYPILOT_NUM_GPUS_PER_NODE": str(value["gpus_per_worker"]),
+        "WORKERS": str(value["workers"]),
     }
     return {
         "metadata": {
@@ -77,7 +81,7 @@ def template(value, container_name):
         },
         "spec": {
             "priorityClassName": "c1",
-            "imagePullSecrets": [{"name": "registry-pull"}],
+            "imagePullSecrets": [{"name": name} for name in value.get("image_pull_secrets", [])],
             "nodeSelector": {"workload": "fleetai-training-ng-gpu"},
             "containers": [
                 {
@@ -88,19 +92,22 @@ def template(value, container_name):
                         for name, item in {**generated, **value["env"]}.items()
                     ],
                     "envFrom": [
-                        {"secretRef": {"name": "wandb-api"}},
+                        *[
+                            {"secretRef": {"name": name}}
+                            for name in value.get("secrets", [])
+                        ],
                         {"secretRef": {"name": placeholder + "-fleet-key"}},
                     ],
                     "resources": {
                         "requests": {
-                            "cpu": "8",
-                            "memory": "64Gi",
-                            "nvidia.com/gpu": 8,
+                            "cpu": value["resources"]["cpu_request"],
+                            "memory": value["resources"]["memory_request"],
+                            "nvidia.com/gpu": value["gpus_per_worker"],
                         },
                         "limits": {
-                            "cpu": "16",
-                            "memory": "128Gi",
-                            "nvidia.com/gpu": 8,
+                            "cpu": value["resources"]["cpu_limit"],
+                            "memory": value["resources"]["memory_limit"],
+                            "nvidia.com/gpu": value["gpus_per_worker"],
                         },
                     },
                     "securityContext": {"privileged": False},
@@ -143,15 +150,19 @@ def manifest(value=None):
             "rayClusterSpec": {
                 "enableInTreeAutoscaling": False,
                 "headGroupSpec": {"template": template(value, "ray-head")},
-                "workerGroupSpecs": [
-                    {
-                        "groupName": "gpu",
-                        "replicas": 1,
-                        "minReplicas": 1,
-                        "maxReplicas": 1,
-                        "template": template(value, "ray-worker"),
-                    }
-                ],
+                "workerGroupSpecs": (
+                    [
+                        {
+                            "groupName": "gpu",
+                            "replicas": value["workers"] - 1,
+                            "minReplicas": value["workers"] - 1,
+                            "maxReplicas": value["workers"] - 1,
+                            "template": template(value, "ray-worker"),
+                        }
+                    ]
+                    if value["workers"] > 1
+                    else []
+                ),
             },
         },
     }
@@ -191,6 +202,22 @@ def preview(obj=None):
     return {"manifest_yaml": yaml.safe_dump(obj or manifest()), "warnings": []}
 
 
+def lr30_plan(*, launchable=False):
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "configs/qualification/qwen38-lr30-step76-gpu-reload-v1.json"
+    )
+    value = json.loads(path.read_text())
+    if launchable:
+        value["launchable"] = True
+        value["status"] = "approved_for_exact_create"
+        value["blockers"] = []
+        value["sha256"] = "sha256:" + digest(
+            {key: item for key, item in value.items() if key != "sha256"}
+        )
+    return value
+
+
 def test_render_changes_only_reviewed_identity_secret_and_root_annotation():
     source = manifest()
     rendered, proof = render_sft_rayjob(plan(), request(), preview(source), run_id=RUN_ID)
@@ -215,6 +242,27 @@ def test_render_changes_only_reviewed_identity_secret_and_root_annotation():
         assert container["envFrom"] == [{"secretRef": {"name": "wandb-api"}}]
     assert proof["preview_manifest_sha256"] == digest(source)
     assert proof["manifest_sha256"] == digest(rendered)
+
+
+def test_lr30_render_is_exact_one_gpu_root_annotated_and_secret_free():
+    request_value = lr30.job_request()
+    rendered, proof = render_lr30_qualification_rayjob(
+        lr30_plan(), request_value, preview(manifest(request_value)), run_id=RUN_ID
+    )
+    assert proof["name"] == "chris-q38-lr30-s76-gpu-v1-12345678"
+    assert rendered["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+    groups = [
+        rendered["spec"]["rayClusterSpec"]["headGroupSpec"],
+        *rendered["spec"]["rayClusterSpec"]["workerGroupSpecs"],
+    ]
+    assert all(group["template"]["spec"]["containers"][0]["envFrom"] == [] for group in groups)
+    assert all(
+        group["template"]["spec"]["containers"][0]["resources"]["requests"][
+            "nvidia.com/gpu"
+        ]
+        == 1
+        for group in groups
+    )
 
 
 @pytest.mark.parametrize(
@@ -348,6 +396,37 @@ def test_direct_submit_checks_twice_journals_then_creates_exactly_once(tmp_path)
         "KUBECTL_CREATE_RESPONSE",
     ]
     assert journal.stat().st_mode & 0o777 == 0o600
+
+
+def test_lr30_direct_submit_requires_explicit_launchable_plan_and_creates_once(tmp_path):
+    request_value = lr30.job_request()
+    jobs = FakeJobs(preview_value=preview(manifest(request_value)))
+    kube = FakeKubectl()
+    journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
+    with pytest.raises(JobsError, match="not explicitly approved"):
+        direct_submit_lr30_qualification_once(
+            plan=lr30_plan(),
+            request=request_value,
+            jobs=jobs,
+            kubectl=kube,
+            journal=journal,
+            run_id=RUN_ID,
+        )
+    assert not journal.exists() and jobs.calls == [] and kube.calls == []
+
+    result = direct_submit_lr30_qualification_once(
+        plan=lr30_plan(launchable=True),
+        request=request_value,
+        jobs=jobs,
+        kubectl=kube,
+        journal=journal,
+        run_id=RUN_ID,
+    )
+    assert result["uid"] == CREATED_UID
+    assert [call[0] for call in kube.calls].count("create") == 1
+    assert json.loads(journal.read_text().splitlines()[0])["state"] == (
+        "KUBECTL_CREATE_INTENT_DO_NOT_RETRY"
+    )
 
 
 def test_ambiguous_create_leaves_intent_and_never_retries(tmp_path):

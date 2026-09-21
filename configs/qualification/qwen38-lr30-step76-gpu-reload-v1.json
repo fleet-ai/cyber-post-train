@@ -1,6 +1,6 @@
 {
   "schema": "cyber_qwen38_lr30_step76_gpu_reload_plan_v1",
-  "status": "blocked_on_jobs_api_root_annotation_and_capacity",
+  "status": "direct_path_server_dry_run_passed_pending_merge_fresh_preflight_and_root_create_approval",
   "launchable": false,
   "purpose": "Load the exact accepted LR30 step-76 BF16 export on one GPU, run one fixed finite synthetic forward, execute zero optimizer updates, and release the allocation before any serving stage.",
   "source": {
@@ -33,20 +33,20 @@
     "fixed_synthetic_input": true,
     "private_loader_log": "private-synthetic-loader.log",
     "files": {
-      "training/qwen38_lr30_step76_gate.py": "sha256:32ee0c6b151431f2f0703c8f48767a78a7e6c1946a1800f4d923d523d1592516",
+      "training/qwen38_lr30_step76_gate.py": "sha256:f216cb1042c1f6eb2a707ded9d3a0529d36c7d66504d58121344912038a35df8",
       "training/checkpoints.py": "sha256:34ff4bcf9cb44a45d467a182146d0a99d672fd393fa7f435437405f008a21136",
       "training/export_check.py": "sha256:a04811409178eedc6969e34766ca70c82d84c27b718944ecab93407609c4dfe7",
       "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
       "training/post_sft_artifacts.py": "sha256:c09555c61cb25ad5867cce80ed8bef0684734231b5708b1be892e75b9dd980eb",
       "training/sft_runtime.py": "sha256:ccffa863d28101c6f138fd47cc870a684e4fdd80c2be39e879bd45e10a5a5c0a"
     },
-    "focused_tests_passed": 12
+    "focused_tests_passed": 97
   },
   "request": {
     "name": "chris-q38-lr30-s76-gpu-v1",
     "title": "Qwen3.8 LR30 step76 exact BF16 one-GPU zero-update reload v1",
     "run_dir": "/mnt/sfs/jobs/chris-q38-lr30-step76-hfcheck-v1",
-    "request_sha256": "sha256:f354203dbcd7e54a063cf1aa2bcef8932e5ceb06f1bd7f1a54876f23e9577553",
+    "request_sha256": "sha256:0396e5f54d038024cee7b6fd9d4dd7d9d1ad5c5f01dcb6d23b494eb7babefab9",
     "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
     "workers": 1,
     "gpus_per_worker": 1,
@@ -67,11 +67,15 @@
     "warnings": [],
     "kind": "RayJob",
     "namespace": "fleet-train-jobs",
-    "manifest_sha256": "sha256:9ffbe0a4bbbf82ac5c4ab9bd100a85c7a4493f5afa7826ce49fa7e06b37b0954",
+    "manifest_sha256": "sha256:92c115ebdf5195b215b857a93ded9f175c150504549c6855de4ca4ef3ccb2ef6",
+    "direct_rendered_manifest_sha256": "sha256:7408819bbc6ff009525172bef1a17a4cf98d5233a70a0e1e2d7aec81b3ca5aee",
+    "server_dry_run_manifest_sha256": "sha256:66c7785e8b3382269c3d0344faa1d0ba99ec1dc82f0a44d36e8e07e01aad2d91",
     "suspended_for_queue": true,
     "queue_priority_class": "q1",
     "run_dir_matches": true,
-    "root_failure_alert_annotation": null,
+    "root_failure_alert_annotation": "off",
+    "direct_path_qualified": true,
+    "resources_created": 0,
     "qualified_for_create": false
   },
   "duplicate_gates": {
@@ -81,14 +85,14 @@
   },
   "blockers": [
     {
-      "gate": "root_failed_job_alert_opt_out",
-      "reason": "The live Jobs API preview omits the required top-level metadata annotation fleet.ai/failure-alerts=off. A request-only failureAlerts=false field is insufficient.",
-      "unblock": "Use a supported create path whose server dry-run proves that exact root annotation before creation. Do not patch after creation and do not use the SFT-only fallback for this qualification job."
+      "gate": "current_main_merge_and_fresh_source_output_preflight",
+      "reason": "The exact one-off path passed a live server dry-run with root fleet.ai/failure-alerts=off, c1/q1, one GPU and no resources created, but the implementation is not yet merged and the source/output preflight must be repeated within 30 minutes of create.",
+      "unblock": "Merge this exact reviewed implementation, regenerate the prepared directory from current main, and pass the exact-image zero-GPU source/output preflight."
     },
     {
-      "gate": "project_gpu_capacity",
-      "reason": "The coordinator reported seven project-owned GPU nodes live and reserved the final allowed slot for another lane.",
-      "unblock": "Recount exact live project allocations and proceed only when the coordinator assigns one free node without exceeding eight active nodes."
+      "gate": "root_create_approval_after_capacity_reconciliation",
+      "reason": "The coordinator assigned a temporary slot to this one-GPU gate but has not given the final create confirmation while 64K SFT and repaired RL timing are reconciled.",
+      "unblock": "Obtain the coordinator's explicit final confirmation after a fresh exact live GPU-node census; the create path remains fail-closed until then."
     }
   ],
   "acceptance": {
@@ -125,5 +129,5 @@
     "resources_created": 0,
     "gpus_allocated": 0
   },
-  "sha256": "sha256:841425ab2f818991ffd021666e5d5cff994f79803a43321f1e087d47d6f4a8c8"
+  "sha256": "sha256:db13eaf2740e41633d4d6900ad21c91aad6365484086604c920c8eb50c38e8ae"
 }
