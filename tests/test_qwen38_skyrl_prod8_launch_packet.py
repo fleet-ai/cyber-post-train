@@ -60,10 +60,16 @@ def test_packet_binds_prod8_science_resources_and_alert_opt_out() -> None:
         "executed": False,
     }
     assert value["local_cpu_preflight_preview_binding"] == {
-        "current_manifest_sha256": "219f8f6d8b289b5363a791be1013771610e371d9f578c675522a59e84a3d7bd8",
+        "current_manifest_sha256": (
+            "219f8f6d8b289b5363a791be1013771610e371d9f578c675522a59e84a3d7bd8"
+        ),
         "preview_manifest_sha256": {
-            packet.direct.DEV_CONTEXT: "995a8c0eb5795920dc554fdcf9f332484a137e7f3d9ca2fa8b3efcdcdb820bd5",
-            packet.direct.PROD_CONTEXT: "995a8c0eb5795920dc554fdcf9f332484a137e7f3d9ca2fa8b3efcdcdb820bd5",
+            packet.direct.DEV_CONTEXT: (
+                "995a8c0eb5795920dc554fdcf9f332484a137e7f3d9ca2fa8b3efcdcdb820bd5"
+            ),
+            packet.direct.PROD_CONTEXT: (
+                "995a8c0eb5795920dc554fdcf9f332484a137e7f3d9ca2fa8b3efcdcdb820bd5"
+            ),
         },
         "matches_current_manifest": False,
         "fresh_preview_required": True,
