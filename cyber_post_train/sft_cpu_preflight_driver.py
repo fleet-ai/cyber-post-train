@@ -191,10 +191,11 @@ def run_preflight() -> dict:
                 contextlib.redirect_stderr(private_output),
             ):
                 from cyber_post_train.cli import _prepared
-                from training.sft import job_request, preflight
+                from training.sft_dispatch import compiler_for_plan
 
                 plan, request = _prepared(root / "prepared")
-                if job_request(plan) != request:
+                compiler = compiler_for_plan(plan)
+                if compiler.job_request(plan) != request:
                     raise ValueError("staged request differs from the source-bound renderer")
                 if (
                     digest(plan) != manifest.get("plan_sha256")
@@ -205,7 +206,7 @@ def run_preflight() -> dict:
                     or request.get("priority_class") != "c1"
                 ):
                     raise ValueError("staged plan/request identity drifted")
-                native = preflight(plan)
+                native = compiler.preflight(plan)
         finally:
             sys.path.remove(str(root / "src"))
     if (

@@ -54,11 +54,11 @@ tokens, with up to 16,384 preceding tokens copied as loss-masked context, should
 make intermediate actions more interpretable without approaching the model's
 262K context ceiling.
 
-- Current config: `configs/runs/qwen38-teacher3k-64k-full-b8-lr3e6-v2.json`
+- Current config: `configs/runs/qwen38-teacher3k-64k-full-b8-lr3e6-v5.json`
 - Data: 8,953 windows; all 57,384,881 targets appear exactly once.
 - Planned work: 1,120 optimizer steps on one eight-GPU node.
 - W&B: group `qwen38-teacher3k-64k-v1`, create-once successor run
-  `chris-q38-t3k64-b8-v2`.
+  `chris-q38-t3k64-b8-v5`.
 - Principal contrast: 65,536-token windows and 16,384-token masked history
   instead of 32,768/8,192. Model, targets, split, batch, learning rate, epoch,
   seed, and topology are fixed.
@@ -66,6 +66,13 @@ make intermediate actions more interpretable without approaching the model's
   mismatch, or confirmed lack of progress under the operator idle bound.
   Otherwise finish the predeclared single epoch. Do not stop or select from a
   favorable training-loss fluctuation.
+
+The active `v5` identity replaces the earlier prepared identities only to make
+checkpoint recovery practical: it saves every 15 steps, retains the latest two
+checkpoints, and carries a bounded first-checkpoint horizon.  Its model, data,
+context treatment, optimizer, batch, seed, epoch count, and topology remain the
+same scientific comparison.  The checkpoint policy is recorded separately in
+[`qwen38-broad-sft-checkpoint-retention-policy-20260921.json`](evidence/qwen38-broad-sft-checkpoint-retention-policy-20260921.json).
 
 ### 2. 96K history treatment — deterministic successor qualification
 

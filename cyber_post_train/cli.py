@@ -115,8 +115,9 @@ def _current_request(plan: dict) -> dict:
 
         return job_request()
     else:
-        from training.sft import job_request
+        from training.sft_dispatch import compiler_for_plan
 
+        return compiler_for_plan(plan).job_request(plan)
     return job_request(plan)
 
 
@@ -329,11 +330,14 @@ def rl_data(config: Path) -> None:
 @app.command()
 def train(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
     """Prepare an immutable SkyRL SFT launch from editable YAML. No network/GPU."""
-    from training.sft import compile_sft, job_request, read_mapping
+    from training.sft import read_mapping
+    from training.sft_dispatch import compiler_for_config
 
     try:
-        plan = compile_sft(read_mapping(config), relative_to=config.resolve().parent)
-        request = job_request(plan)
+        source = read_mapping(config)
+        compiler = compiler_for_config(source)
+        plan = compiler.compile_sft(source, relative_to=config.resolve().parent)
+        request = compiler.job_request(plan)
         _prepare(output, plan, request)
         _print(
             {
@@ -923,7 +927,9 @@ def preflight(directory: Path) -> None:
         elif plan.get("schema") == "cyber_qwen38_lr30_step76_gpu_reload_plan_v1":
             from training.qwen38_lr30_step76_gate import preflight as check
         else:
-            from training.sft import preflight as check
+            from training.sft_dispatch import compiler_for_plan
+
+            check = compiler_for_plan(plan).preflight
         if (directory / "PREFLIGHT.json").exists():
             raise ValueError("preflight already recorded")
         receipt = (
