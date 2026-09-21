@@ -209,35 +209,6 @@ def test_teacher3k_32k_runs_have_unique_external_identities():
     assert len(run_ids) == len(set(run_ids))
 
 
-def test_teacher3k_fullweight_launch_receipt_is_bound_and_nonterminal():
-    receipt = json.loads(
-        (EVIDENCE / "qwen38-teacher3k-fullweight-sweep-launch-20260920.json").read_text()
-    )
-    claimed = receipt.pop("receipt_sha256")
-    observed = hashlib.sha256(
-        json.dumps(receipt, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
-    ).hexdigest()
-
-    assert claimed == observed
-    assert receipt["scientific_disposition"] == "nonterminal_training_evidence_no_capability_claim"
-    assert receipt["interpretation"] == {
-        **receipt["interpretation"],
-        "finite_update_gate_passed": True,
-        "checkpoint_gate_passed": False,
-        "capability_claim": False,
-    }
-    assert [run["arm"] for run in receipt["runs"]] == [
-        "batch8_lr3e-6_reference",
-        "batch16_lr3e-6_batch_control",
-        "batch8_lr1e-6_learning_rate_control",
-    ]
-    assert all(run["submission"]["submitted_once"] for run in receipt["runs"])
-    assert all(
-        run["live_evidence"]["optimizer_step_at_observation"] >= 1 for run in receipt["runs"]
-    )
-    assert all(run["live_evidence"]["restarts"] == 0 for run in receipt["runs"])
-
-
 def test_teacher3k_native_resume_gate_changes_only_identity_and_lifecycle():
     source = json.loads(
         (RUNS / "qwen38-teacher3k-32k-canary-b8-lr3e6-v1.json").read_text()
@@ -445,7 +416,10 @@ def test_teacher3k_later_context_launch_binds_current_inputs(context, position):
     plan = sft.compile_sft(config, relative_to=RUNS)
     request = sft.job_request(plan)
 
-    assert evidence["status"] == "v1_infrastructure_invalid_v2_cpu_preflight_running"
+    assert (
+        evidence["status"]
+        == "v1_infrastructure_invalid_v2_merged_exact_image_preflight_running"
+    )
     assert sft.digest(plan) == row["plan_sha256"]
     assert sft.digest(request) == row["request_sha256"]
     assert plan["recipe"]["max_length"] == int(context) * 1024
@@ -468,3 +442,32 @@ def test_teacher3k_later_context_launch_binds_current_inputs(context, position):
     assert gate_evidence["scientific_result"]["optimizer_step"] == 1
     assert gate_evidence["scientific_result"]["finite_metrics"] is True
     assert gate_evidence["resource_release"]["active_gpus"] == 0
+
+
+def test_teacher3k_fullweight_launch_receipt_is_bound_and_nonterminal():
+    receipt = json.loads(
+        (EVIDENCE / "qwen38-teacher3k-fullweight-sweep-launch-20260920.json").read_text()
+    )
+    claimed = receipt.pop("receipt_sha256")
+    observed = hashlib.sha256(
+        json.dumps(receipt, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
+
+    assert claimed == observed
+    assert receipt["scientific_disposition"] == "nonterminal_training_evidence_no_capability_claim"
+    assert receipt["interpretation"] == {
+        **receipt["interpretation"],
+        "finite_update_gate_passed": True,
+        "checkpoint_gate_passed": False,
+        "capability_claim": False,
+    }
+    assert [run["arm"] for run in receipt["runs"]] == [
+        "batch8_lr3e-6_reference",
+        "batch16_lr3e-6_batch_control",
+        "batch8_lr1e-6_learning_rate_control",
+    ]
+    assert all(run["submission"]["submitted_once"] for run in receipt["runs"])
+    assert all(
+        run["live_evidence"]["optimizer_step_at_observation"] >= 1 for run in receipt["runs"]
+    )
+    assert all(run["live_evidence"]["restarts"] == 0 for run in receipt["runs"])
