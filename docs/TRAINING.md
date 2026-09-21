@@ -255,13 +255,18 @@ UUID/name, removes only the preview-generated run-scoped `*-fleet-key` Secret
 reference that SFT does not consume, and adds the alert annotation to the root
 RayJob. Every other preview field is preserved.
 
-Before creation it checks the complete Jobs API history and Kubernetes Job and
-RayJob inventories for the name, output directory and run identity, performs a
-Kubernetes server dry-run, and repeats the duplicate checks. It also proves the
-create-once SFS output absent before preview and again immediately before the
-durable create intent. A submitter without the SFS mount must consume the exact
-plan/request-bound receipt above; the receipt expires after five minutes and is
-revalidated after the server dry-run. That remote receipt is a recent SFS
+Before creation it checks the complete Jobs API history, then queries Kubernetes
+only by the exact run name, fresh run UUID, and exact prospective object name.
+The direct SFT rail requires the canonical output path
+`/mnt/sfs/jobs/<run-name>`, so its required root run-name label is also the
+server-side output-owner query. It never downloads the unrelated shared
+namespace inventory. Every scoped response must be readable and empty; any
+error, malformed response, or owner stops before durable intent. It then
+performs a Kubernetes server dry-run and repeats the same checks. It also
+proves the create-once SFS output absent before preview and again immediately
+before the durable create intent. A submitter without the SFS mount must consume
+the exact plan/request-bound receipt above; the receipt expires after five
+minutes and is revalidated after the server dry-run. That remote receipt is a recent SFS
 observation, not a live post-dry-run filesystem read; the runtime's exclusive
 `.runtime` creation remains the final output create-once guard. The supported
 local check accepts the SFS root only when `lstat` proves it is an actual
@@ -293,9 +298,9 @@ the output path was absent at its timestamp; it does not validate the dataset,
 trainer, CUDA path, or model.
 
 A completed CPU preflight Job whose name ends in `-pre-v1` is not a training
-duplicate; only the exact rendered
-`<run-name>-<8 lowercase hex>` shape, run labels, run UUID, or output annotation
-claims the training identity. The command then writes and fsyncs
+duplicate; only the exact rendered `<run-name>-<8 lowercase hex>` object name,
+the required root run labels, or the canonical output owner claims the training
+identity. The command then writes and fsyncs
 `DIRECT_SUBMISSION.jsonl` before exactly one `kubectl create`. It never uses
 `apply`, `patch`, automatic retry, or `POST /v1/runs`. A transport error after
 that intent is ambiguous: reconcile the exact recorded name and UUID; never

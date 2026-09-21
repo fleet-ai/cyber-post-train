@@ -128,8 +128,10 @@ for context in (direct.DEV_CONTEXT, direct.PROD_CONTEXT):
         ),
     }
 
-# Checks every relevant resource kind in both clusters and both Jobs API
-# histories. It fails if the prod9 run name or output root is already owned.
+# Checks every relevant resource kind in both clusters only through the exact
+# run-name label, direct run UUID label, and exact root object-name selectors,
+# plus both Jobs API histories. It never downloads an unrelated namespace
+# inventory. Any query error, malformed answer, or existing owner fails closed.
 absence = direct.duplicate_checks(
     plan, token=os.environ["FLEET_API_KEY"], identity=identity
 )
@@ -178,7 +180,9 @@ verifies the one-node/eight-GPU shape, `c1`/`q1`, fixed image, and the exact
 262K compaction contract.
 
 The duplicate check covers both Kubernetes clusters and both Jobs API histories
-for the fresh prod9 run/output identity; the command also checks the two fresh
+for the fresh prod9 run/output identity. Kubernetes queries are bounded to the
+required run-name label, fresh run UUID label, and exact prospective object
+name; they do not list unrelated objects. The command also checks the two fresh
 CPU Job names directly in both clusters. It cannot prove an SFS directory is
 absent without mounting SFS; that proof is supplied only by the controlled
 zero-GPU stage/preflight sequence below. It also deliberately does not use a

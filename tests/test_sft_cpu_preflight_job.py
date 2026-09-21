@@ -273,8 +273,9 @@ def test_create_once_server_previews_journals_then_creates(prepared, tmp_path):
         def _cpu_node_inventory(self):
             return node_inventory()
 
-        def list(self, resource):
+        def list_exact_name(self, resource, name):
             assert resource == "jobs.batch"
+            assert name.endswith("-pre-a01")
             return {"kind": "List", "items": []}
 
         def dry_run(self, manifest):

@@ -31,6 +31,13 @@ from .jobs import (
     validate_preview,
     validate_request,
 )
+from .kubernetes_identity import (
+    IdentityQuery,
+    exact_name_query,
+    identity_queries,
+    require_canonical_output_root,
+    require_empty_identity_list,
+)
 from .lora_cpu_preflight import (
     CPU_PREFLIGHT_BINDING_ANNOTATIONS,
     CPU_PREFLIGHT_BUNDLE_SHA256_ANNOTATION,
@@ -729,6 +736,7 @@ def _assert_sft_contract(plan: dict, request: dict) -> None:
         raise JobsError("SFT request unexpectedly requires a Fleet credential Secret")
     if request.get("priority_class") != "c1":
         raise JobsError("direct fallback is restricted to current c1/q1 policy")
+    require_canonical_output_root(request["name"], request["run_dir"])
 
 
 def _assert_lr30_contract(plan: dict, request: dict, *, require_launchable: bool) -> None:
@@ -1026,10 +1034,15 @@ class Kubectl:
             raise JobsError("kubectl operation failed; private server output suppressed")
         return result.stdout
 
-    def list(self, resource: str) -> dict:
+    def list_identity(self, resource: str, query: IdentityQuery) -> dict:
         if resource not in {"rayjobs.ray.io", "jobs.batch"}:
             raise JobsError("unsupported duplicate-check resource")
-        return self._run(["get", resource, "--namespace", NAMESPACE, "--output=json"])
+        return self._run(
+            ["get", resource, "--namespace", NAMESPACE, *query.kubectl_args(), "--output=json"]
+        )
+
+    def list_exact_name(self, resource: str, name: str) -> dict:
+        return self.list_identity(resource, exact_name_query(name))
 
     def dry_run(self, manifest: dict) -> dict:
         return self._run(
@@ -1217,35 +1230,22 @@ def _assert_api_unique(rows: list[dict], request: dict) -> None:
             raise JobsError("a Jobs API run already owns this name/title/output")
 
 
-def _assert_kubernetes_unique(inventories: list[dict], request: dict, proof: dict) -> None:
-    for inventory in inventories:
-        items = inventory.get("items")
-        kind = inventory.get("kind")
-        if not isinstance(kind, str) or not kind.endswith("List") or not isinstance(items, list):
-            raise JobsError("Kubernetes duplicate inventory is incomplete")
-        for item in items:
-            if not isinstance(item, dict) or not isinstance(item.get("metadata"), dict):
-                raise JobsError("Kubernetes duplicate inventory contains an invalid object")
-            meta = item["metadata"]
-            name = meta.get("name", "")
-            labels = meta.get("labels") or {}
-            annotations = meta.get("annotations") or {}
-            if (
-                not isinstance(name, str)
-                or not isinstance(labels, dict)
-                or not isinstance(annotations, dict)
-            ):
-                raise JobsError("Kubernetes duplicate inventory contains invalid metadata")
-            if (
-                name == proof["name"]
-                or name == request["name"]
-                or _is_direct_run_name(name, request["name"])
-                or labels.get("fleet.ai/run-name") == request["name"]
-                or labels.get("fleet.ai/run-id") == proof["run_id"]
-                or annotations.get("fleet.ai/run-id") == proof["run_id"]
-                or annotations.get("fleet.ai/run-dir") == request["run_dir"]
-            ):
-                raise JobsError("a Kubernetes object already owns this name/output/run identity")
+def _assert_kubernetes_unique(kubectl: Kubectl, request: dict, proof: dict) -> int:
+    """Require all server-side exact identity selectors to be empty.
+
+    Every supported direct root renders the same run-name/run-id labels and
+    exact object name. Jobs API history remains the generic-run authority. SFT
+    additionally binds the canonical ``/mnt/sfs/jobs/<run-name>`` output root
+    and twice checks SFS absence. Together these gates cover supported owners
+    without downloading an unrelated shared namespace.
+    """
+
+    queries = identity_queries(request["name"], proof["run_id"], proof["name"])
+    checked = 0
+    for resource in ("rayjobs.ray.io", "jobs.batch"):
+        for query in queries:
+            checked += require_empty_identity_list(kubectl.list_identity(resource, query), query)
+    return checked
 
 
 def _assert_created_identity(
@@ -1460,13 +1460,17 @@ def create_sfs_output_check_once(
         validate_sfs_output_job_node_fit(package, kubectl._cpu_node_inventory())
     except (OSError, ValueError) as exc:
         raise JobsError(str(exc)) from None
-    _assert_output_check_job_absent(kubectl.list("jobs.batch"), proof["name"])
+    _assert_output_check_job_absent(
+        kubectl.list_exact_name("jobs.batch", proof["name"]), proof["name"]
+    )
     server_object = kubectl.dry_run(package.job)
     try:
         validate_sfs_output_job_response(server_object, package, require_uid=False)
     except ValueError as exc:
         raise JobsError(str(exc)) from None
-    _assert_output_check_job_absent(kubectl.list("jobs.batch"), proof["name"])
+    _assert_output_check_job_absent(
+        kubectl.list_exact_name("jobs.batch", proof["name"]), proof["name"]
+    )
     _write_intent(
         journal,
         {
@@ -1548,13 +1552,17 @@ def create_sft_cpu_preflight_once(
         validate_sft_cpu_preflight_job_node_fit(package, kubectl._cpu_node_inventory())
     except (OSError, ValueError) as exc:
         raise JobsError(str(exc)) from None
-    _assert_output_check_job_absent(kubectl.list("jobs.batch"), proof["name"])
+    _assert_output_check_job_absent(
+        kubectl.list_exact_name("jobs.batch", proof["name"]), proof["name"]
+    )
     server_object = kubectl.dry_run(package.job)
     try:
         validate_sft_cpu_preflight_job_response(server_object, package, require_uid=False)
     except ValueError as exc:
         raise JobsError(str(exc)) from None
-    _assert_output_check_job_absent(kubectl.list("jobs.batch"), proof["name"])
+    _assert_output_check_job_absent(
+        kubectl.list_exact_name("jobs.batch", proof["name"]), proof["name"]
+    )
     _write_intent(
         journal,
         {
@@ -1655,9 +1663,7 @@ def _direct_submit_once(
     _assert_api_unique(jobs.all_runs(), request)
     preview = jobs.raw_preview(request)
     manifest, proof = renderer(plan, request, preview, run_id=run_id)
-    _assert_kubernetes_unique(
-        [kubectl.list("rayjobs.ray.io"), kubectl.list("jobs.batch")], request, proof
-    )
+    _assert_kubernetes_unique(kubectl, request, proof)
     server_object = kubectl.dry_run(manifest)
     _assert_created_identity(
         server_object,
@@ -1670,9 +1676,7 @@ def _direct_submit_once(
     # Close the read/dry-run race as far as the two authorities permit.  The
     # exact-name Kubernetes create remains the final atomic create-once gate.
     _assert_api_unique(jobs.all_runs(), request)
-    _assert_kubernetes_unique(
-        [kubectl.list("rayjobs.ray.io"), kubectl.list("jobs.batch")], request, proof
-    )
+    _assert_kubernetes_unique(kubectl, request, proof)
     output_absence_proof = output_absence_gate() if output_absence_gate is not None else None
     _write_intent(
         journal,

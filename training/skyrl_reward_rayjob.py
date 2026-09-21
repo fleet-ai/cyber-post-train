@@ -38,6 +38,11 @@ from cyber_post_train.jobs import (
     bundled_request,
     digest,
 )
+from cyber_post_train.kubernetes_identity import (
+    identity_queries,
+    require_canonical_output_root,
+    require_empty_identity_list,
+)
 
 from . import skyrl_training
 
@@ -98,13 +103,13 @@ class RailIdentity:
             or self.predecessor_run_name == self.run_name
             or self.predecessor_data_root == self.data_root
             or any(not value.startswith("/mnt/sfs/jobs/") for value in roots)
-            or not self.output_root.endswith("/" + self.run_name)
             or not self.data_root.endswith("/data")
             or self.output_root == self.data_root
             or self.output_root.startswith(self.data_root + "/")
             or self.data_root.startswith(self.output_root + "/")
         ):
             raise JobsError("direct SkyRL identity is not a fresh create-once layout")
+        require_canonical_output_root(self.run_name, self.output_root)
 
     def sealed_mapping(self) -> dict[str, Any]:
         value = {
@@ -1136,31 +1141,29 @@ def duplicate_checks(
 ) -> dict[str, int]:
     bound = _identity_for_plan(plan, identity)
     name, output = bound.run_name, bound.output_root
-    kube = 0
+    queries = identity_queries(name, _run_id(plan, bound), name)
+    scoped_queries = 0
     for context in (DEV_CONTEXT, PROD_CONTEXT):
         for resource in ("rayjob", "raycluster", "job", "workload", "pod"):
-            result = _kubectl(runner, context, "get", resource, "--output=json")
-            if result.returncode:
-                raise JobsError("prod8 Kubernetes duplicate inventory failed")
-            kube += 1
-            try:
-                items = json.loads(result.stdout).get("items", [])
-            except (AttributeError, ValueError) as exc:
-                raise JobsError("prod8 Kubernetes duplicate inventory is invalid") from exc
-            for item in items:
-                metadata = item.get("metadata", {})
-                values = [
-                    metadata.get("name", ""),
-                    *metadata.get("labels", {}).values(),
-                    *metadata.get("annotations", {}).values(),
-                ]
-                serialized = json.dumps(item.get("spec", {}), sort_keys=True)
-                if (
-                    any(value == name or str(value).startswith(name + "-") for value in values)
-                    or output in values
-                    or output in serialized
-                ):
-                    raise JobsError("prod8 Kubernetes identity/output already exists")
+            for query in queries:
+                result = _kubectl(
+                    runner,
+                    context,
+                    "get",
+                    resource,
+                    *query.kubectl_args(),
+                    "--output=json",
+                )
+                if result.returncode:
+                    raise JobsError("prod8 Kubernetes scoped duplicate query failed")
+                try:
+                    payload = json.loads(result.stdout)
+                except (TypeError, ValueError) as exc:
+                    raise JobsError(
+                        "prod8 Kubernetes scoped duplicate response is invalid"
+                    ) from exc
+                require_empty_identity_list(payload, query)
+                scoped_queries += 1
     api_rows = 0
     for target in ("dev", "prod"):
         with jobs_factory(token, base_url=API_URLS[target]) as client:
@@ -1173,7 +1176,10 @@ def duplicate_checks(
             for row in rows
         ):
             raise JobsError("prod8 Jobs API history already owns this identity/output")
-    return {"kubernetes_inventories_checked": kube, "jobs_api_rows_checked": api_rows}
+    return {
+        "kubernetes_scoped_queries_checked": scoped_queries,
+        "jobs_api_rows_checked": api_rows,
+    }
 
 
 def authorize(

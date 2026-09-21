@@ -31,6 +31,7 @@ from cyber_post_train.direct_submit import (
     render_sft_rayjob,
 )
 from cyber_post_train.jobs import JobsError, digest
+from cyber_post_train.kubernetes_identity import identity_queries
 from cyber_post_train.lora_cpu_preflight import build_lora_cpu_preflight_package
 from cyber_post_train.lora_cpu_preflight_driver import (
     ENV_BUNDLE_SHA256,
@@ -73,7 +74,7 @@ def request():
         "command": "python train.py",
         "workers": 2,
         "gpus_per_worker": 8,
-        "run_dir": "/mnt/sfs/jobs/researcher-sft-v1",
+        "run_dir": "/mnt/sfs/jobs/researcher-sft",
         "priority_class": "c1",
         "requeueIfPreempted": False,
         "failureAlerts": False,
@@ -647,6 +648,29 @@ class FakeKubectl:
         self.calls.append(("list", resource))
         return deepcopy(self.inventories[resource])
 
+    def list_identity(self, resource, query):
+        self.calls.append(("identity-list", resource, query.flag, query.value))
+        source = deepcopy(self.inventories[resource])
+        items = source["items"]
+        if query.flag == "--selector":
+            key, value = query.value.split("=", 1)
+            items = [
+                item
+                for item in items
+                if item.get("metadata", {}).get("labels", {}).get(key) == value
+            ]
+        elif query.flag == "--field-selector":
+            assert query.value.startswith("metadata.name=")
+            value = query.value.removeprefix("metadata.name=")
+            items = [item for item in items if item.get("metadata", {}).get("name") == value]
+        else:
+            raise AssertionError(query)
+        source["items"] = items
+        return source
+
+    def list_exact_name(self, resource, name):
+        return self.list_identity(resource, identity_queries("researcher-sft", RUN_ID, name)[2])
+
     def dry_run(self, obj):
         self.calls.append(("dry-run", digest(obj)))
         return deepcopy(obj)
@@ -680,7 +704,9 @@ def test_direct_submit_checks_twice_journals_then_creates_exactly_once(tmp_path,
     )
     assert result["uid"] == CREATED_UID and result["name"] == "researcher-sft-12345678"
     assert jobs.calls == ["history", ("preview", request()), "history"]
-    assert [call[0] for call in kube.calls].count("list") == 4
+    identity_lists = [call for call in kube.calls if call[0] == "identity-list"]
+    assert len(identity_lists) == 12
+    assert {call[2] for call in identity_lists} == {"--selector", "--field-selector"}
     assert [call[0] for call in kube.calls].count("dry-run") == 1
     assert [call[0] for call in kube.calls].count("create") == 1
     records = [json.loads(line) for line in journal.read_text().splitlines()]
@@ -709,7 +735,10 @@ def test_output_check_create_is_suspended_queued_journaled_and_create_once(tmp_p
         "uid": CREATED_UID,
         "attempt": 1,
     }
-    assert [call[0] for call in kube.calls].count("list") == 3
+    # Node inventory is intentionally broad because CPU placement needs it;
+    # create-once identity checks must remain exact-name reads.
+    assert [call[0] for call in kube.calls].count("list") == 1
+    assert [call[0] for call in kube.calls].count("identity-list") == 2
     assert [call[0] for call in kube.calls].count("dry-run") == 1
     assert [call[0] for call in kube.calls].count("create") == 1
     records = [json.loads(line) for line in journal.read_text().splitlines()]
@@ -992,6 +1021,22 @@ def test_saved_request_must_match_current_source_before_network(tmp_path, sfs_jo
     assert jobs.calls == [] and kube.calls == []
 
 
+def test_sft_direct_submit_requires_canonical_output_before_network(tmp_path, sfs_jobs_root):
+    jobs, kube = FakeJobs(), FakeKubectl()
+    changed = {**request(), "run_dir": "/mnt/sfs/jobs/not-the-run-name"}
+    with pytest.raises(JobsError, match="canonical run-name path"):
+        direct_submit_sft_once(
+            plan=plan(),
+            request=changed,
+            jobs=jobs,
+            kubectl=kube,
+            journal=tmp_path / "DIRECT_SUBMISSION.jsonl",
+            run_id=RUN_ID,
+            jobs_root=sfs_jobs_root,
+        )
+    assert jobs.calls == [] and kube.calls == []
+
+
 @pytest.mark.parametrize(
     "authority", ["api-name", "api-title", "api-output", "kube-name", "kube-output"]
 )
@@ -1016,8 +1061,13 @@ def test_duplicates_stop_before_intent_or_create(tmp_path, authority, sfs_jobs_r
     else:
         metadata = {"name": "other", "labels": {}, "annotations": {}}
         if authority == "kube-name":
-            metadata["name"] = "researcher-sft-deadbeef"
+            # The exact prospective name is a server-side field selector.  A
+            # different random suffix is not an identity collision; a
+            # supported direct object with the same output has the mandatory
+            # run-name label tested in the other branch below.
+            metadata["name"] = "researcher-sft-12345678"
         else:
+            metadata["labels"]["fleet.ai/run-name"] = request()["name"]
             metadata["annotations"]["fleet.ai/run-dir"] = request()["run_dir"]
         inventories["rayjobs.ray.io"]["items"].append({"metadata": metadata})
     jobs, kube = FakeJobs(rows=rows), FakeKubectl(inventories=inventories)
@@ -1034,6 +1084,67 @@ def test_duplicates_stop_before_intent_or_create(tmp_path, authority, sfs_jobs_r
         )
     assert not journal.exists()
     assert not any(call[0] == "create" for call in kube.calls)
+
+
+def test_matching_live_identity_without_local_journal_never_retries_create(tmp_path, sfs_jobs_root):
+    """Reconcile an ambiguous prior client timeout through the API, not a retry.
+
+    This represents a lost/no-local-journal client after a server-side create
+    may have happened.  A current root carrying the required run-name label
+    owns the canonical SFT output, so a new create must not reach intent.
+    """
+
+    inventories = {
+        "rayjobs.ray.io": {
+            "kind": "RayJobList",
+            "items": [
+                {
+                    "metadata": {
+                        "name": "previous-attempt",
+                        "labels": {"fleet.ai/run-name": request()["name"]},
+                    }
+                }
+            ],
+        },
+        "jobs.batch": {"kind": "JobList", "items": []},
+    }
+    jobs, kube = FakeJobs(), FakeKubectl(inventories=inventories)
+    journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
+
+    with pytest.raises(JobsError, match="already owns"):
+        direct_submit_sft_once(
+            plan=plan(),
+            request=request(),
+            jobs=jobs,
+            kubectl=kube,
+            journal=journal,
+            run_id=RUN_ID,
+            jobs_root=sfs_jobs_root,
+        )
+
+    assert not journal.exists()
+    assert not any(call[0] in {"dry-run", "create"} for call in kube.calls)
+
+
+def test_scoped_duplicate_read_error_fails_closed_before_intent(tmp_path, sfs_jobs_root):
+    class UnreadableScopedKubectl(FakeKubectl):
+        def list_identity(self, resource, query):
+            raise JobsError("synthetic scoped read failure")
+
+    jobs, kube = FakeJobs(), UnreadableScopedKubectl()
+    journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
+    with pytest.raises(JobsError, match="scoped read failure"):
+        direct_submit_sft_once(
+            plan=plan(),
+            request=request(),
+            jobs=jobs,
+            kubectl=kube,
+            journal=journal,
+            run_id=RUN_ID,
+            jobs_root=sfs_jobs_root,
+        )
+    assert not journal.exists()
+    assert not any(call[0] in {"dry-run", "create"} for call in kube.calls)
 
 
 def test_completed_cpu_preflight_name_does_not_collide_with_training_identity(
@@ -1103,7 +1214,7 @@ def test_output_appearing_after_server_dry_run_stops_before_intent_or_create(
     class OutputAppearsKubectl(FakeKubectl):
         def dry_run(self, obj):
             result = super().dry_run(obj)
-            (sfs_jobs_root / "researcher-sft-v1").mkdir()
+            (sfs_jobs_root / "researcher-sft").mkdir()
             return result
 
     jobs, kube = FakeJobs(), OutputAppearsKubectl()
@@ -1127,7 +1238,7 @@ def test_uninspectable_output_stops_before_network_intent_or_create(
     tmp_path, sfs_jobs_root, monkeypatch, failure
 ):
     jobs, kube = FakeJobs(), FakeKubectl()
-    target = sfs_jobs_root / "researcher-sft-v1"
+    target = sfs_jobs_root / "researcher-sft"
     original_lstat = Path.lstat
 
     def fail_target_lstat(path):
@@ -1330,7 +1441,8 @@ def test_kubectl_boundary_uses_only_get_server_dry_run_and_one_create(monkeypatc
 
     monkeypatch.setattr(subprocess, "run", run)
     kube = Kubectl("prod-context")
-    kube.list("rayjobs.ray.io")
+    query = identity_queries("researcher-sft", RUN_ID, "researcher-sft-12345678")[0]
+    kube.list_identity("rayjobs.ray.io", query)
     kube.dry_run(rendered)
     kube.create_once(rendered)
     tokens = [token for command, _ in calls for token in command]
@@ -1339,6 +1451,11 @@ def test_kubectl_boundary_uses_only_get_server_dry_run_and_one_create(monkeypatc
     assert sum("--dry-run=server" in command for command, _ in calls) == 1
     assert (
         sum("create" in command and "--dry-run=server" not in command for command, _ in calls) == 1
+    )
+    assert any("--selector" in command for command, _ in calls)
+    assert not any(
+        command[-4:] == ["get", "rayjobs.ray.io", "--namespace", "fleet-train-jobs"]
+        for command, _ in calls
     )
 
 

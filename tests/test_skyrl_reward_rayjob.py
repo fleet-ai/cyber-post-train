@@ -705,7 +705,7 @@ def test_create_is_journaled_once_and_never_retried(plan_request, tmp_path, monk
         calls.append(argv)
         arguments = argv[5:]
         if arguments[:1] == ["get"]:
-            return NS(returncode=0, stdout=json.dumps({"items": []}), stderr="")
+            return NS(returncode=0, stdout=json.dumps({"kind": "List", "items": []}), stderr="")
         if arguments[:2] == ["create", "--dry-run=server"]:
             return NS(
                 returncode=0,
@@ -754,6 +754,77 @@ def test_create_is_journaled_once_and_never_retried(plan_request, tmp_path, monk
         len([call for call in calls if call[5:6] == ["create"] and "--dry-run=server" not in call])
         == 1
     )
+
+
+def test_duplicate_checks_use_only_bounded_identity_selectors(plan_request) -> None:
+    plan, _ = plan_request
+    calls: list[list[str]] = []
+
+    def runner(argv, **_kwargs):
+        calls.append(argv)
+        return NS(returncode=0, stdout=json.dumps({"kind": "List", "items": []}), stderr="")
+
+    result = direct.duplicate_checks(
+        plan,
+        token="test-token",
+        runner=runner,
+        jobs_factory=EmptyJobs,
+    )
+
+    assert result == {"kubernetes_scoped_queries_checked": 30, "jobs_api_rows_checked": 0}
+    assert len(calls) == 30
+    for call in calls:
+        arguments = call[5:]
+        assert arguments[0] == "get"
+        assert arguments[1] in {"rayjob", "raycluster", "job", "workload", "pod"}
+        assert "--output=json" in arguments
+        assert "--selector" in arguments or "--field-selector" in arguments
+
+
+def test_duplicate_checks_reject_matching_scoped_owner_before_api_history(plan_request) -> None:
+    plan, _ = plan_request
+    calls: list[list[str]] = []
+
+    def runner(argv, **_kwargs):
+        calls.append(argv)
+        arguments = argv[5:]
+        if "--selector" in arguments and arguments[arguments.index("--selector") + 1] == (
+            "fleet.ai/run-name=" + plan["run_name"]
+        ):
+            return NS(
+                returncode=0,
+                stdout=json.dumps(
+                    {"kind": "RayJobList", "items": [{"metadata": {"name": "existing"}}]}
+                ),
+                stderr="",
+            )
+        return NS(returncode=0, stdout=json.dumps({"kind": "List", "items": []}), stderr="")
+
+    with pytest.raises(JobsError, match="already owns"):
+        direct.duplicate_checks(
+            plan,
+            token="test-token",
+            runner=runner,
+            jobs_factory=lambda *_args, **_kwargs: pytest.fail(
+                "duplicate reached Jobs API history"
+            ),
+        )
+    assert len(calls) == 1
+
+
+def test_duplicate_checks_fail_closed_on_unreadable_scoped_query(plan_request) -> None:
+    plan, _ = plan_request
+
+    def runner(_argv, **_kwargs):
+        return NS(returncode=1, stdout="", stderr="private transport detail")
+
+    with pytest.raises(JobsError, match="scoped duplicate query failed"):
+        direct.duplicate_checks(
+            plan,
+            token="test-token",
+            runner=runner,
+            jobs_factory=lambda *_args, **_kwargs: pytest.fail("unreadable query reached Jobs API"),
+        )
 
 
 def _prod9_plan(plan: dict, identity: direct.RailIdentity) -> tuple[dict, dict]:
