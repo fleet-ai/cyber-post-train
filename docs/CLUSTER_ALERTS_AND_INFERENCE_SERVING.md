@@ -50,13 +50,13 @@ the exact annotation. Never create first and patch later: the monitor can observ
 the failure in between. As of this audit, the deployed generic Jobs API does not
 yet expose or render the request field, so those submissions remain fail-closed
 until the Fleet Train API adds support and its preview proves the deployed behavior.
-For SFT only, the repository also maintains the narrowly reviewed
-`direct-submit-sft` compatibility path described in `docs/TRAINING.md`. It
-consumes the live API preview, changes only its placeholder identity, removes
-the API-only Fleet credential Secret that the current source-bound SFT request
-proves it does not use, adds the root annotation before creation, server-dry-runs
-the result, journals the intent and executes one create. Do not reproduce that
-transformation by hand or extend it to RL/conversion without a separate review.
+The repository maintains narrowly reviewed, source-bound direct-create paths
+described in `docs/TRAINING.md`. Each accepts only its exact schema or immutable
+plan, consumes a fresh live API preview, changes only reviewed placeholder and
+credential-reference fields, adds the root annotation before creation,
+server-dry-runs the result, journals the intent and executes one create. Do not
+reproduce that transformation by hand or generalize one exception to another
+training, RL, conversion, or checkpoint operation without a separate review.
 
 Manifests prepared before this invariant are not grandfathered launch inputs.
 The two Qwen3.8 staging plans that lacked the annotation were removed from

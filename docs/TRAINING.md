@@ -214,6 +214,53 @@ non-c1 priority, an already-qualified API preview, or any unreviewed placeholder
 or generated field. It is a compatibility bridge, not permission to bypass
 normal admission or scientific gates.
 
+The step-60 Qwen3.8 Megatron-LoRA promotion has a separate, exact one-off
+fallback. It is not a generic conversion exception. First prepare the single
+merged plan:
+
+```sh
+uv run cyber-post-train lora-step60-export-prepare \
+  configs/qualification/qwen38-lora-step60-zero-update-export-v1.json \
+  --output /shared/lora-step60-export
+```
+
+Before each qualification or create attempt, a CPU-only, c1/q1, root-alert-off
+Job on an SFS-capable node must reopen the exact step-60 manifest, prove the
+fresh output directory is absent, terminate successfully, and be deleted with
+its Pod and Workload. Its sanitized, self-digesting receipt is valid for at
+most five minutes. Then run the direct command without `--execute`:
+
+```sh
+uv run cyber-post-train direct-submit-lora-step60 \
+  /shared/lora-step60-export \
+  --context <explicit-production-context> \
+  --preflight <fresh-released-cpu-preflight.json>
+```
+
+Preview-only is the default. The command requires the exact merged plan and
+source-rendered request, a fresh Jobs API preview, clean API/Kubernetes
+duplicate censuses, one server dry-run, and two fresh all-namespace GPU capacity
+censuses that include the planned one-node/eight-GPU allocation. It changes
+only the zero run identity/name, removes the API-generated Fleet credential
+Secret that this source-bound request does not consume, and adds the root
+failure-alert annotation. `--execute` is permitted only after independent
+review of that exact preview and when the projected capacity is at most eight
+nodes/64 GPUs. Copy the preview's `run_id` into the explicit create so the
+reviewed object identity cannot be silently regenerated:
+
+```sh
+uv run cyber-post-train direct-submit-lora-step60 \
+  /shared/lora-step60-export \
+  --context <explicit-production-context> \
+  --preflight <fresh-released-cpu-preflight.json> \
+  --run-id <reviewed-preview-run-id> \
+  --execute
+```
+
+Execution without that exact run ID fails before any network call. The command
+writes a durable create intent, issues one `kubectl create`, and never retries,
+applies, or patches.
+
 The API injects W&B from the existing `wandb-api` Secret. Never put its value in
 YAML or argv. Track scalars, configuration identities and checkpoint metadata;
 do not upload task text, traces or source code. Reuse neither a W&B run ID nor a

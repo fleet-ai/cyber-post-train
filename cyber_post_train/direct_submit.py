@@ -2,10 +2,11 @@
 
 The Jobs API remains the rendering authority.  This module accepts its live
 preview, changes only the run identity, removes the API-only Fleet credential
-Secret that SFT does not consume, and adds the project-required root alert
-annotation.  It never calls the Jobs API create endpoint and never applies or
-patches a Kubernetes object.  The non-SFT exception is restricted to one exact
-LR30 step-76 HF inference-forward qualification schema.
+Secret that the source-bound request does not consume, and adds the
+project-required root alert annotation.  It never calls the Jobs API create
+endpoint and never applies or patches a Kubernetes object.  Non-SFT exceptions
+are restricted to the exact LR30 step-76 forward gate and the exact step-60
+LoRA zero-update promotion plan named below.
 """
 
 from __future__ import annotations
@@ -14,6 +15,7 @@ import json
 import os
 import re
 import subprocess
+import time
 import uuid
 from copy import deepcopy
 from decimal import Decimal, InvalidOperation
@@ -65,6 +67,15 @@ CPU_CHECKPOINT_OPERATIONS = {"seal", "verify"}
 LORA_TRAINER_IMAGE = (
     "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@"
     "sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317"
+)
+LORA_STEP60_PLAN_SCHEMA = "cyber_qwen38_megatron_lora_continuation_export_plan_v1"
+LORA_STEP60_PLAN_SHA256 = "31c9548c7119e01e3941049bcdaa79f9ee7a787a0191ce02c53644959d2d4547"
+LORA_STEP60_REQUEST_SHA256 = "9330eaa230d2478354e8ea233283d13c7e41c5d120503c454e5d1eb8f2573aa2"
+LORA_STEP60_PREFLIGHT_SCHEMA = "cyber_qwen38_lora_step60_export_cpu_preflight_v1"
+LORA_STEP60_PREFLIGHT_MAX_AGE_SECONDS = 300
+LORA_STEP60_PLAN_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "configs/qualification/qwen38-lora-step60-zero-update-export-v1.json"
 )
 CPU_NODE_SELECTOR = {
     "kubernetes.io/arch": "amd64",
@@ -439,6 +450,162 @@ def _assert_lr30_contract(plan: dict, request: dict, *, require_launchable: bool
         raise JobsError(str(exc)) from None
 
 
+def _assert_lora_step60_contract(plan: dict, request: dict) -> None:
+    """Accept only the merged step-60 zero-update promotion plan and renderer."""
+
+    from training.qwen38_lora_export import job_request, validate_plan
+
+    try:
+        validate_plan(plan)
+        canonical = json.loads(LORA_STEP60_PLAN_PATH.read_text())
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise JobsError("step-60 LoRA promotion plan is unavailable or invalid") from exc
+    validate_request(request)
+    if (
+        plan.get("schema") != LORA_STEP60_PLAN_SCHEMA
+        or digest(plan) != LORA_STEP60_PLAN_SHA256
+        or plan != canonical
+        or digest(request) != LORA_STEP60_REQUEST_SHA256
+        or request != job_request(plan)
+    ):
+        raise JobsError("step-60 LoRA promotion differs from its exact merged plan/request")
+    if (
+        request.get("workers") != 1
+        or request.get("gpus_per_worker") != 8
+        or request.get("priority_class") != "c1"
+        or request.get("failureAlerts") is not False
+        or request.get("secrets") != []
+        or request.get("image_pull_secrets") != ["ghcr-pull"]
+        or request.get("run_dir") != plan.get("run_dir")
+        or request.get("image") != plan.get("image")
+    ):
+        raise JobsError("step-60 LoRA promotion resource or credential contract drift")
+
+
+def validate_lora_step60_preflight(
+    receipt: dict,
+    plan: dict,
+    request: dict,
+    *,
+    now: float | None = None,
+) -> dict:
+    """Require a fresh, sanitized, zero-GPU SFS source/output receipt."""
+
+    _assert_lora_step60_contract(plan, request)
+    if not isinstance(receipt, dict):
+        raise JobsError("step-60 LoRA CPU preflight receipt is not an object")
+    unsigned = {key: value for key, value in receipt.items() if key != "sha256"}
+    if set(receipt) != {
+        "schema",
+        "status",
+        "checked_at_epoch",
+        "gpus",
+        "plan_sha256",
+        "request_sha256",
+        "source",
+        "output",
+        "producer",
+        "sha256",
+    } or receipt.get("sha256") != digest(unsigned):
+        raise JobsError("step-60 LoRA CPU preflight receipt is incomplete or changed")
+    checked_at = receipt.get("checked_at_epoch")
+    current = time.time() if now is None else now
+    if (
+        receipt.get("schema") != LORA_STEP60_PREFLIGHT_SCHEMA
+        or receipt.get("status") != "passed"
+        or receipt.get("gpus") != 0
+        or receipt.get("plan_sha256") != digest(plan)
+        or receipt.get("request_sha256") != digest(request)
+        or not isinstance(checked_at, (int, float))
+        or isinstance(checked_at, bool)
+        or not 0 <= current - checked_at <= LORA_STEP60_PREFLIGHT_MAX_AGE_SECONDS
+    ):
+        raise JobsError("step-60 LoRA CPU preflight is stale or bound to different inputs")
+    if receipt.get("source") != {
+        "manifest_path": plan["checkpoint_manifest"]["path"],
+        "manifest_file_sha256": plan["checkpoint_manifest"]["file_sha256"],
+        "manifest_receipt_sha256": plan["checkpoint_manifest"]["receipt_sha256"],
+        "optimizer_step": 60,
+        "reopened": True,
+    } or receipt.get("output") != {
+        "run_dir": plan["run_dir"],
+        "output_root": plan["output_root"],
+        "run_dir_absent": True,
+        "output_root_absent": True,
+    }:
+        raise JobsError("step-60 LoRA CPU preflight source/output binding drift")
+    producer = receipt.get("producer")
+    if not isinstance(producer, dict) or set(producer) != {
+        "kind",
+        "job_name",
+        "job_uid",
+        "pod_name",
+        "pod_uid",
+        "priority_class",
+        "queue_priority_class",
+        "failure_alert_annotation",
+        "exit_code",
+        "restarts",
+        "job_absent_after_cleanup",
+        "pod_absent_after_cleanup",
+        "workload_absent_after_cleanup",
+    }:
+        raise JobsError("step-60 LoRA CPU preflight producer evidence is incomplete")
+    uid = r"[a-f0-9]{8}-[a-f0-9]{4}-[1-5][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}"
+    if (
+        producer.get("kind") != "Job"
+        or not isinstance(producer.get("job_name"), str)
+        or not producer["job_name"].startswith("chris-q38-lora-s60-preflight-")
+        or not isinstance(producer.get("pod_name"), str)
+        or not producer["pod_name"].startswith(producer["job_name"] + "-")
+        or re.fullmatch(uid, producer.get("job_uid", "")) is None
+        or re.fullmatch(uid, producer.get("pod_uid", "")) is None
+        or producer.get("priority_class") != "c1"
+        or producer.get("queue_priority_class") != "q1"
+        or producer.get("failure_alert_annotation") != FAILURE_ALERT_OFF
+        or producer.get("exit_code") != 0
+        or producer.get("restarts") != 0
+        or any(
+            producer.get(field) is not True
+            for field in (
+                "job_absent_after_cleanup",
+                "pod_absent_after_cleanup",
+                "workload_absent_after_cleanup",
+            )
+        )
+    ):
+        raise JobsError("step-60 LoRA CPU preflight producer did not pass or release cleanly")
+    return receipt
+
+
+def validate_lora_step60_capacity(receipt: dict) -> dict:
+    """Require a fresh all-namespace census with this one 8-GPU node included."""
+
+    if not isinstance(receipt, dict):
+        raise JobsError("step-60 LoRA capacity receipt is not an object")
+    unsigned = {key: value for key, value in receipt.items() if key != "sha256"}
+    try:
+        projected = receipt["projected"]
+        current = receipt["current"]
+    except (KeyError, TypeError) as exc:
+        raise JobsError("step-60 LoRA capacity receipt is incomplete") from exc
+    if (
+        receipt.get("schema") != "cyber_project_gpu_capacity_census_v1"
+        or receipt.get("sha256") != digest(unsigned)
+        or receipt.get("qualified") is not True
+        or receipt.get("limits") != {"nodes": 8, "gpus": 64}
+        or receipt.get("planned") != {"nodes": 1, "gpus": 8}
+        or receipt.get("problems") != []
+        or type(current.get("nodes")) is not int
+        or type(current.get("gpus")) is not int
+        or projected != {"nodes": current["nodes"] + 1, "gpus": current["gpus"] + 8}
+        or projected["nodes"] > 8
+        or projected["gpus"] > 64
+    ):
+        raise JobsError("step-60 LoRA would exceed or cannot prove the project GPU budget")
+    return receipt
+
+
 def _expected_generated_env(request: dict, placeholder_name: str) -> dict[str, str]:
     return {
         "FLEET_EXTERNAL_RAY": "1",
@@ -650,6 +817,51 @@ def render_lr30_qualification_rayjob(
     """Render only the exact LR30 step-76 HF inference-forward qualification."""
     _assert_lr30_contract(plan, request, require_launchable=False)
     return _render_rayjob(request, preview, expected_secrets=[], run_id=run_id)
+
+
+def render_lora_step60_export_rayjob(
+    plan: dict, request: dict, preview: dict, *, run_id: str | None = None
+) -> tuple[dict, dict]:
+    """Render only the exact merged step-60 zero-update LoRA export."""
+
+    _assert_lora_step60_contract(plan, request)
+    return _render_rayjob(request, preview, expected_secrets=[], run_id=run_id)
+
+
+def validate_lora_step60_server_object(
+    request: dict, intended: dict, actual: dict, proof: dict
+) -> dict:
+    """Reject every server mutation except exact, observed dry-run bookkeeping."""
+
+    _assert_created_identity(actual, proof, require_uid=False)
+    normalized = deepcopy(actual)
+    try:
+        metadata = normalized["metadata"]
+        spec = normalized["spec"]
+        creation_timestamp = metadata.pop("creationTimestamp")
+        generation = metadata.pop("generation")
+        uid = metadata.pop("uid")
+        backoff_limit = spec.pop("backoffLimit")
+        ttl_seconds = spec.pop("ttlSecondsAfterFinished")
+    except (KeyError, TypeError) as exc:
+        raise JobsError("step-60 LoRA server dry-run bookkeeping differs from review") from exc
+    if (
+        not isinstance(creation_timestamp, str)
+        or not creation_timestamp
+        or generation != 1
+        or re.fullmatch(r"[a-f0-9-]{36}", uid) is None
+        or backoff_limit != 0
+        or ttl_seconds != 0
+        or normalized != intended
+    ):
+        raise JobsError("step-60 LoRA server dry-run changed the reviewed RayJob")
+    # The exact equality above covers the entrypoint, image, init containers,
+    # resources, scheduling, environment, Secrets, priority and root alert-off.
+    validate_preview(
+        request,
+        {"manifest_yaml": yaml.safe_dump(intended), "warnings": [], "errors": []},
+    )
+    return actual
 
 
 def _json_object(payload: str, operation: str) -> dict:
@@ -895,11 +1107,15 @@ def _direct_submit_once(
     journal: Path,
     renderer: Any,
     run_id: str | None = None,
+    pre_create_gate: Any | None = None,
+    server_validator: Any | None = None,
+    execute: bool = True,
 ) -> dict:
-    """Preview, prove, journal and issue exactly one direct Kubernetes create."""
+    """Preview, prove, optionally journal and issue one Kubernetes create."""
     if journal.exists() or journal.is_symlink():
         raise JobsError("direct-create journal already exists; reconcile, never retry")
 
+    first_external_proof = pre_create_gate() if pre_create_gate is not None else {}
     _assert_api_unique(jobs.all_runs(), request)
     preview = jobs.raw_preview(request)
     manifest, proof = renderer(plan, request, preview, run_id=run_id)
@@ -908,6 +1124,12 @@ def _direct_submit_once(
     )
     server_object = kubectl.dry_run(manifest)
     _assert_created_identity(server_object, proof, require_uid=False)
+    if server_validator is not None:
+        server_validator(request, manifest, server_object, proof)
+    validate_preview(
+        request,
+        {"manifest_yaml": yaml.safe_dump(server_object), "warnings": [], "errors": []},
+    )
 
     # Close the read/dry-run race as far as the two authorities permit.  The
     # exact-name Kubernetes create remains the final atomic create-once gate.
@@ -915,6 +1137,20 @@ def _direct_submit_once(
     _assert_kubernetes_unique(
         [kubectl.list("rayjobs.ray.io"), kubectl.list("jobs.batch")], request, proof
     )
+    final_external_proof = pre_create_gate() if pre_create_gate is not None else {}
+    qualified = {
+        "name": proof["name"],
+        "run_id": proof["run_id"],
+        "namespace": NAMESPACE,
+        "manifest_sha256": proof["manifest_sha256"],
+        "server_preview_sha256": digest(server_object),
+        "first_external_proof": first_external_proof,
+        "final_external_proof": final_external_proof,
+        "submitted": False,
+        "transport": "direct-kubectl-create",
+    }
+    if not execute:
+        return qualified
     _write_intent(
         journal,
         {
@@ -927,6 +1163,9 @@ def _direct_submit_once(
             "name": proof["name"],
             "namespace": NAMESPACE,
             "kubernetes_context": kubectl.context,
+            "server_preview_sha256": digest(server_object),
+            "first_external_proof": first_external_proof,
+            "final_external_proof": final_external_proof,
         },
     )
 
@@ -996,4 +1235,70 @@ def direct_submit_lr30_qualification_once(
         journal=journal,
         renderer=render_lr30_qualification_rayjob,
         run_id=run_id,
+    )
+
+
+def direct_submit_lora_step60_export_once(
+    *,
+    plan: dict,
+    request: dict,
+    preflight_receipt: dict,
+    jobs: Any,
+    kubectl: Kubectl,
+    journal: Path,
+    run_id: str | None = None,
+    execute: bool = False,
+    capacity_reader: Any | None = None,
+) -> dict:
+    """Qualify or create the exact step-60 zero-update LoRA promotion RayJob.
+
+    Preview-only is the default.  Execution still requires one explicit caller
+    choice, a fresh released CPU SFS receipt, and two all-namespace capacity
+    censuses that include the planned one-node/eight-GPU allocation.
+    """
+
+    _assert_lora_step60_contract(plan, request)
+    from training.qwen38_lora_export import job_request
+
+    if job_request(plan) != request:
+        raise JobsError("saved step-60 LoRA request differs from the current renderer")
+    if execute and run_id is None:
+        raise JobsError("step-60 LoRA execution requires the independently reviewed preview run ID")
+
+    if capacity_reader is None:
+        from .gpu_capacity import live_capacity_census
+
+        def capacity_reader() -> dict:
+            return live_capacity_census(
+                kubectl.context,
+                owner_prefixes=("chris-q38-",),
+                max_nodes=8,
+                max_gpus=64,
+                planned_nodes=1,
+                planned_gpus=8,
+            )
+
+    def gate() -> dict:
+        preflight = validate_lora_step60_preflight(preflight_receipt, plan, request)
+        capacity = validate_lora_step60_capacity(capacity_reader())
+        return {
+            "cpu_preflight_sha256": preflight["sha256"],
+            "capacity_sha256": capacity["sha256"],
+            "current_nodes": capacity["current"]["nodes"],
+            "current_gpus": capacity["current"]["gpus"],
+            "projected_nodes": capacity["projected"]["nodes"],
+            "projected_gpus": capacity["projected"]["gpus"],
+        }
+
+    return _direct_submit_once(
+        plan=plan,
+        request=request,
+        jobs=jobs,
+        kubectl=kubectl,
+        journal=journal,
+        renderer=render_lora_step60_export_rayjob,
+        run_id=run_id,
+        pre_create_gate=gate,
+        server_validator=validate_lora_step60_server_object,
+        execute=execute,
     )

@@ -339,6 +339,66 @@ def test_lr30_one_off_prepare_preflight_and_direct_submit_are_exact(tmp_path, mo
     assert direct_calls[0]["journal"] == output / "DIRECT_SUBMISSION.jsonl"
 
 
+def test_lora_step60_prepare_and_direct_path_default_preview_only(tmp_path, monkeypatch):
+    from cyber_post_train import direct_submit
+    from training import qwen38_lora_export as export
+
+    plan_file = (
+        Path(__file__).resolve().parents[1]
+        / "configs/qualification/qwen38-lora-step60-zero-update-export-v1.json"
+    )
+    output = tmp_path / "lora-step60"
+    result = RUNNER.invoke(
+        cli.app,
+        ["lora-step60-export-prepare", str(plan_file), "--output", str(output)],
+    )
+    assert result.exit_code == 0
+    plan, request = cli._prepared(output)
+    assert request == export.job_request(plan)
+    assert cli._current_request(plan) == request
+
+    preflight = tmp_path / "preflight.json"
+    preflight.write_text("{}")
+    monkeypatch.setattr(cli, "_client_for_plan", lambda _: nullcontext("jobs-client"))
+    calls = []
+
+    class SyntheticKubectl:
+        def __init__(self, context):
+            self.context = context
+
+    def submit(**kwargs):
+        calls.append(kwargs)
+        return {"name": "chris-q38-lora-s60-exp-v1-12345678", "submitted": kwargs["execute"]}
+
+    monkeypatch.setattr(direct_submit, "Kubectl", SyntheticKubectl)
+    monkeypatch.setattr(direct_submit, "direct_submit_lora_step60_export_once", submit)
+    command = [
+        "direct-submit-lora-step60",
+        str(output),
+        "--context",
+        "prod-context",
+        "--preflight",
+        str(preflight),
+    ]
+    result = RUNNER.invoke(cli.app, command)
+    assert result.exit_code == 0
+    assert calls[-1]["execute"] is False
+    assert calls[-1]["plan"] == plan and calls[-1]["request"] == request
+    assert calls[-1]["preflight_receipt"] == {}
+    assert calls[-1]["jobs"] == "jobs-client"
+    assert calls[-1]["kubectl"].context == "prod-context"
+    assert calls[-1]["journal"] == output / "DIRECT_SUBMISSION.jsonl"
+    assert calls[-1]["run_id"] is None
+
+    result = RUNNER.invoke(
+        cli.app,
+        [*command, "--run-id", "12345678-1234-4234-8234-123456789abc", "--execute"],
+    )
+    assert result.exit_code == 0
+    assert calls[-1]["execute"] is True
+    assert calls[-1]["run_id"] == "12345678-1234-4234-8234-123456789abc"
+
+
 def test_lr30_preflight_expires_before_any_network(tmp_path, monkeypatch):
     from training import qwen38_lr30_step76_gate as gate
 

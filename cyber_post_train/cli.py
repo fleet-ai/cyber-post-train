@@ -89,6 +89,8 @@ def _current_request(plan: dict) -> dict:
         from training.qwen38_lr30_step76_gate import job_request
 
         return job_request()
+    elif schema == "cyber_qwen38_megatron_lora_continuation_export_plan_v1":
+        from training.qwen38_lora_export import job_request
     else:
         from training.sft import job_request
 
@@ -346,6 +348,31 @@ def lr30_step76_prepare(plan_file: Path, output: Annotated[Path, typer.Option("-
         validate_submission_contract(plan, request, require_launchable=False)
         _prepare(output, plan, request)
         _print({"prepared": str(output), "gpus": 1, "optimizer_steps": 0, "submitted": False})
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("lora-step60-export-prepare")
+def lora_step60_export_prepare(
+    plan_file: Path, output: Annotated[Path, typer.Option("--output")]
+) -> None:
+    """Prepare only the exact step-60 zero-update LoRA reload/export promotion."""
+    from cyber_post_train.direct_submit import _assert_lora_step60_contract
+    from training.qwen38_lora_export import job_request
+
+    try:
+        plan = _read(plan_file)
+        request = job_request(plan)
+        _assert_lora_step60_contract(plan, request)
+        _prepare(output, plan, request)
+        _print(
+            {
+                "prepared": str(output),
+                "gpus": 8,
+                "optimizer_steps": 0,
+                "submitted": False,
+            }
+        )
     except Exception as exc:
         _fail(exc)
 
@@ -1039,6 +1066,41 @@ def direct_submit_lr30_step76(
                 jobs=client,
                 kubectl=Kubectl(context),
                 journal=directory / DIRECT_JOURNAL,
+            )
+        _print(result)
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("direct-submit-lora-step60")
+def direct_submit_lora_step60(
+    directory: Path,
+    context: Annotated[str, typer.Option("--context")],
+    preflight: Annotated[Path, typer.Option("--preflight")],
+    run_id: Annotated[str | None, typer.Option("--run-id")] = None,
+    execute: Annotated[bool, typer.Option("--execute")] = False,
+) -> None:
+    """Preview, or explicitly create, the exact step-60 zero-update LoRA export."""
+    from .direct_submit import (
+        DIRECT_JOURNAL,
+        Kubectl,
+        direct_submit_lora_step60_export_once,
+    )
+
+    try:
+        plan, request = _prepared(directory)
+        _submission_gate(directory, plan, request)
+        preflight_receipt = _read(preflight)
+        with _client_for_plan(plan) as client:
+            result = direct_submit_lora_step60_export_once(
+                plan=plan,
+                request=request,
+                preflight_receipt=preflight_receipt,
+                jobs=client,
+                kubectl=Kubectl(context),
+                journal=directory / DIRECT_JOURNAL,
+                run_id=run_id,
+                execute=execute,
             )
         _print(result)
     except Exception as exc:

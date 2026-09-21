@@ -1,0 +1,83 @@
+{
+  "schema": "cyber_qwen38_lora_step60_direct_submit_preparation_v1",
+  "status": "prepare_only_preview_proved_generic_api_not_qualified",
+  "observed_at_utc_date": "2026-09-21",
+  "repository_base_commit": "5c255f3cfd3a832c89fdcd27d9a6ab47575f7064",
+  "repair_base_commit": "f83917fe01824138c2677d2648d640ac0cb04758",
+  "exact_inputs": {
+    "plan_path": "configs/qualification/qwen38-lora-step60-zero-update-export-v1.json",
+    "plan_sha256": "31c9548c7119e01e3941049bcdaa79f9ee7a787a0191ce02c53644959d2d4547",
+    "request_sha256": "9330eaa230d2478354e8ea233283d13c7e41c5d120503c454e5d1eb8f2573aa2",
+    "run_name": "chris-q38-lora-s60-exp-v1",
+    "run_dir": "/mnt/sfs/jobs/chris-q38-lora-s60-exp-v1",
+    "optimizer_step": 60,
+    "optimizer_steps_executed": 0,
+    "workers": 1,
+    "gpus_per_worker": 8,
+    "priority_class": "c1",
+    "expected_queue_priority_class": "q1",
+    "failure_alerts_request": false
+  },
+  "live_jobs_api_preview": {
+    "errors_present": false,
+    "warnings": [],
+    "kind": "RayJob",
+    "namespace": "fleet-train-jobs",
+    "manifest_sha256": "a99b84b32bedf66d0edb71780d605639d484bbfddc4320e6497a044aa7cbca9b",
+    "queue": "training-lq",
+    "queue_priority_class": "q1",
+    "suspend": true,
+    "shutdown_after_job_finishes": true,
+    "root_failure_alert_annotation": null,
+    "generic_api_submission_qualified": false
+  },
+  "direct_server_dry_run": {
+    "status": "accepted",
+    "dry_run_only_name": "chris-q38-lora-s60-exp-v1-12345678",
+    "rendered_manifest_sha256": "c343f4de8ebb42a244c2d4cee5d17223b51f090bdb38a05dc09c816ad99d3c57",
+    "server_preview_sha256": "8a1266c5cd1e61b30fdea9f69bcbb0cc39a33107563d83e43206f2060f9d7390",
+    "root_failure_alert_annotation": "off",
+    "priority_class": "c1",
+    "queue_priority_class": "q1",
+    "workers": 1,
+    "gpus_per_worker": 8,
+    "server_mutations": {
+      "metadata_creation_timestamp": "added",
+      "metadata_generation": 1,
+      "metadata_uid": "added",
+      "backoff_limit": 0,
+      "ttl_seconds_after_finished": 0
+    },
+    "every_other_field_equal": true,
+    "resources_created": 0
+  },
+  "deterministic_repair": {
+    "scope": "one exact merged step-60 zero-update LoRA plan and source-rendered request",
+    "permitted_render_changes": [
+      "replace the preview zero UUID and placeholder run name with one fresh UUID/name",
+      "remove only the preview-generated run-scoped Fleet-key Secret reference",
+      "add fleet.ai/failure-alerts=off to the root RayJob"
+    ],
+    "required_live_gates": [
+      "fresh released zero-GPU CPU SFS receipt proving exact source reopened and output absent",
+      "fresh Jobs API preview with no errors or warnings",
+      "two API and Kubernetes duplicate censuses",
+      "Kubernetes server dry-run of the final root-annotated RayJob",
+      "two all-namespace capacity censuses including the planned one node and eight GPUs",
+      "projected project capacity no greater than eight nodes and 64 GPUs",
+      "explicit reuse of the independently reviewed preview run ID",
+      "durable create-intent journal before one non-retried kubectl create"
+    ],
+    "default_action": "preview_only",
+    "automatic_retry": false
+  },
+  "execution_record": {
+    "cpu_preflight_job_created_by_this_repair": false,
+    "gpu_rayjob_created": false,
+    "gpus_allocated": 0,
+    "merged_export_created": false,
+    "serving_route_created": false,
+    "evaluation_created": false
+  },
+  "receipt_sha256": "8b4b152b1077e0d5768b876820c2386cade36a7d058ddcff7abd6edb8b4c1b9d"
+}

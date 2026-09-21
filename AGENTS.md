@@ -22,9 +22,9 @@ Nebius training cluster, read
 Every project-owned Kubernetes `Job` and `RayJob` MUST carry the top-level annotation
 `fleet.ai/failure-alerts: "off"`. For generic Jobs API runs, the saved request must set
 `failureAlerts: false` and the returned preview must contain that exact annotation;
-otherwise do not submit through the generic API. The maintained SFT-only direct-create
-fallback in `docs/TRAINING.md` may transform a live preview under its stricter gate;
-do not hand-edit or extend that exception. This supported opt-out disables failed-job
+otherwise do not submit through the generic API. The maintained direct-create fallbacks in
+`docs/TRAINING.md` may transform a live preview only for their exact source-bound schemas and
+plans; do not hand-edit or generalize those reviewed exceptions. This supported opt-out disables failed-job
 Slack/Better Stack notifications only. It does not disable idle-GPU monitoring,
 justify hiding failures, or relax prompt resource release and truthful terminal evidence.
 
