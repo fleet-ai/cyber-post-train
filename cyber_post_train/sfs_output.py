@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import stat
 import time
 from pathlib import Path
 
@@ -12,9 +13,22 @@ OUTPUT_ABSENCE_SCHEMA = "cyber_sft_output_absence_v1"
 OUTPUT_ABSENCE_MAX_AGE_SECONDS = 300
 
 
+def _is_real_directory(path: Path) -> bool:
+    """Return true only for a present directory entry, never a followed symlink."""
+    try:
+        mode = path.lstat().st_mode
+    except (FileNotFoundError, NotADirectoryError):
+        return False
+    except OSError as exc:
+        raise ValueError(
+            "the shared /mnt/sfs/jobs mount cannot be inspected for output checks"
+        ) from exc
+    return stat.S_ISDIR(mode) and not stat.S_ISLNK(mode)
+
+
 def require_output_absent(request: dict, *, jobs_root: Path = SFS_JOBS_ROOT) -> None:
     """Prove the create-once output is absent from a host that can see SFS."""
-    if not jobs_root.is_dir():
+    if not _is_real_directory(jobs_root):
         raise ValueError("the shared /mnt/sfs/jobs mount is unavailable for output checks")
     output = Path(request["run_dir"])
     try:
@@ -25,8 +39,15 @@ def require_output_absent(request: dict, *, jobs_root: Path = SFS_JOBS_ROOT) -> 
         except ValueError:
             raise ValueError("training output is outside the shared /mnt/sfs/jobs mount") from None
     observed_output = jobs_root / relative_output
-    if observed_output.exists() or observed_output.is_symlink():
-        raise ValueError("training output already exists; use a new reviewed run identity")
+    try:
+        observed_output.lstat()
+    except FileNotFoundError:
+        return
+    except OSError as exc:
+        raise ValueError(
+            "training output cannot be inspected; do not infer that it is absent"
+        ) from exc
+    raise ValueError("training output already exists; use a new reviewed run identity")
 
 
 def build_output_absence_receipt(
@@ -100,7 +121,7 @@ def prove_output_absent(
     now: float | None = None,
 ) -> dict:
     """Use the live mount when available, otherwise require a fresh receipt."""
-    if jobs_root.is_dir():
+    if _is_real_directory(jobs_root):
         return build_output_absence_receipt(plan, request, jobs_root=jobs_root, now=now)
     if receipt is None:
         raise ValueError(

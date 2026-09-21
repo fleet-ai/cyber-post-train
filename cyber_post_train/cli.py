@@ -18,6 +18,7 @@ from .sfs_output import (
     build_output_absence_receipt,
     require_output_absent,
 )
+from .sfs_output_job import MAX_ATTEMPT
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
 PREPARATION_GATE_VERSION = 2
@@ -930,6 +931,59 @@ def sfs_output_receipt(
         if plan.get("schema") not in {"cyber_sft_runtime_v2", "cyber_sft_runtime_dense_v1"}:
             raise ValueError("SFS output-absence receipts are restricted to SFT")
         receipt = build_output_absence_receipt(plan, request)
+        _write(output, receipt)
+        _print(receipt)
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("sfs-output-job-create")
+def sfs_output_job_create(
+    directory: Path,
+    context: Annotated[str, typer.Option("--context")],
+    attempt: Annotated[int, typer.Option("--attempt", min=1, max=MAX_ATTEMPT)] = 1,
+) -> None:
+    """Create one bounded zero-GPU SFS observer when this host cannot mount SFS."""
+    from .direct_submit import Kubectl, create_sfs_output_check_once
+
+    try:
+        plan, request = _prepared(directory)
+        _submission_gate(directory, plan, request)
+        _external_action_gate(plan, "submit")
+        _require_preflight(directory, plan, request)
+        result = create_sfs_output_check_once(
+            plan=plan,
+            request=request,
+            attempt=attempt,
+            kubectl=Kubectl(context),
+            journal=directory / f"SFS_OUTPUT_CHECK_A{attempt:02d}.jsonl",
+        )
+        _print(result)
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("sfs-output-job-collect")
+def sfs_output_job_collect(
+    directory: Path,
+    context: Annotated[str, typer.Option("--context")],
+    output: Annotated[Path, typer.Option("--output")],
+    attempt: Annotated[int, typer.Option("--attempt", min=1, max=MAX_ATTEMPT)] = 1,
+) -> None:
+    """Collect one fresh receipt from an exact successful zero-GPU observer."""
+    from .direct_submit import Kubectl, collect_sfs_output_check
+
+    try:
+        plan, request = _prepared(directory)
+        _submission_gate(directory, plan, request)
+        _external_action_gate(plan, "submit")
+        _require_preflight(directory, plan, request)
+        receipt = collect_sfs_output_check(
+            plan=plan,
+            request=request,
+            attempt=attempt,
+            kubectl=Kubectl(context),
+        )
         _write(output, receipt)
         _print(receipt)
     except Exception as exc:

@@ -324,6 +324,73 @@ def test_sfs_output_receipt_is_create_once_and_bound_to_the_prepared_run(prepare
     )
 
 
+def test_sfs_output_job_commands_use_exact_prepared_binding(prepared, monkeypatch):
+    from cyber_post_train import direct_submit
+
+    output, plan, request, _ = prepared
+    current_plan = {**plan, "schema": "cyber_sft_runtime_dense_v1"}
+    record_preflight(output, current_plan, request)
+    monkeypatch.setattr(cli, "_prepared", lambda _: (current_plan, request))
+    monkeypatch.setattr(cli, "_submission_gate", lambda *args: None)
+    monkeypatch.setattr(cli, "_external_action_gate", lambda *args: None)
+    monkeypatch.setattr(cli, "_require_preflight", lambda *args: None)
+
+    class SyntheticKubectl:
+        def __init__(self, context):
+            self.context = context
+
+    calls = []
+    receipt = {"schema": "cyber_sft_output_absence_v1", "status": "passed"}
+
+    def create(**kwargs):
+        calls.append(("create", kwargs))
+        return {"submitted": True, "name": "synthetic-sfs-a02", "gpus": 0}
+
+    def collect(**kwargs):
+        calls.append(("collect", kwargs))
+        return receipt
+
+    monkeypatch.setattr(direct_submit, "Kubectl", SyntheticKubectl)
+    monkeypatch.setattr(direct_submit, "create_sfs_output_check_once", create)
+    monkeypatch.setattr(direct_submit, "collect_sfs_output_check", collect)
+    result = RUNNER.invoke(
+        cli.app,
+        ["sfs-output-job-create", str(output), "--context", "prod", "--attempt", "2"],
+    )
+    assert result.exit_code == 0
+    assert calls[0][0] == "create"
+    assert calls[0][1] == {
+        "plan": current_plan,
+        "request": request,
+        "attempt": 2,
+        "kubectl": calls[0][1]["kubectl"],
+        "journal": output / "SFS_OUTPUT_CHECK_A02.jsonl",
+    }
+    assert calls[0][1]["kubectl"].context == "prod"
+
+    receipt_path = output / "OUTPUT_ABSENT.json"
+    result = RUNNER.invoke(
+        cli.app,
+        [
+            "sfs-output-job-collect",
+            str(output),
+            "--context",
+            "prod",
+            "--attempt",
+            "2",
+            "--output",
+            str(receipt_path),
+        ],
+    )
+    assert result.exit_code == 0
+    assert calls[1][0] == "collect"
+    assert calls[1][1]["plan"] == current_plan
+    assert calls[1][1]["request"] == request
+    assert calls[1][1]["attempt"] == 2
+    assert calls[1][1]["kubectl"].context == "prod"
+    assert cli._read(receipt_path) == receipt
+
+
 def test_lr30_one_off_prepare_preflight_and_direct_submit_are_exact(tmp_path, monkeypatch):
     from cyber_post_train import direct_submit
     from training import qwen38_lr30_step76_gate as gate

@@ -193,6 +193,18 @@ SFT run after the same CPU preflight and source-freshness gates:
 uv run cyber-post-train sfs-output-receipt /shared/prepared-run \
   --output /shared/prepared-run/OUTPUT_ABSENT.json
 
+# Or, when the submitter cannot mount SFS, create one reviewed CPU-only observer.
+# It requires the already-accepted native PREFLIGHT.json; it does not replace preflight.
+uv run cyber-post-train sfs-output-job-create /shared/prepared-run \
+  --context <explicit-production-or-development-context> \
+  --attempt 1
+
+# After that exact Job succeeds, collect its still-fresh receipt immediately.
+uv run cyber-post-train sfs-output-job-collect /shared/prepared-run \
+  --context <explicit-production-or-development-context> \
+  --attempt 1 \
+  --output /shared/prepared-run/OUTPUT_ABSENT.json
+
 # On the submitter host. Omit the receipt option only when this host sees SFS itself:
 uv run cyber-post-train direct-submit-sft /shared/prepared-run \
   --output-absence-receipt /shared/prepared-run/OUTPUT_ABSENT.json \
@@ -216,8 +228,30 @@ durable create intent. A submitter without the SFS mount must consume the exact
 plan/request-bound receipt above; the receipt expires after five minutes and is
 revalidated after the server dry-run. That remote receipt is a recent SFS
 observation, not a live post-dry-run filesystem read; the runtime's exclusive
-`.runtime` creation remains the final output create-once guard. A completed CPU preflight Job whose name
-ends in `-pre-v1` is not a training duplicate; only the exact rendered
+`.runtime` creation remains the final output create-once guard. The supported
+local check accepts the SFS root only when `lstat` proves it is an actual
+directory entry; a symlink to a directory is treated as an unavailable mount.
+The supported
+remote observer is itself create-once: it uses the prepared request's exact
+digest-pinned image and pull-secret names, root alert opt-out, c1/q1 priority,
+normal `training-lq` admission, one CPU, 1 GiB memory, zero GPUs, a read-only SFS
+mount and a five-minute deadline. Its submitted Job starts with `suspend: true`;
+collection requires the live admitted Job to be unsuspended, terminally
+successful, and bound by exact Job UID to one zero-restart Pod running the exact
+image at effective c1. It also requires exactly one Kueue Workload owned by that
+exact Job UID, still carrying nonempty admission, `Admitted=True`,
+`Finished=True`, `training-lq` and effective priority 10000. Fleet's live Kueue
+v1beta2 Workload leaves its optional priority-class name null, so q1 is proved
+by the exact persisted Job label while numeric 10000 is proved on the Workload;
+unsuspension by itself is not admission evidence. The Pod emits only one sanitized,
+plan/request-bound receipt line. Server dry-run and live readback reject added Secrets, sidecars,
+privilege, host pinning, affinity, runtime overhead, GPUs, or writable SFS.
+The observer requires the accepted native `PREFLIGHT.json` and proves only that
+the output path was absent at its timestamp; it does not validate the dataset,
+trainer, CUDA path, or model.
+
+A completed CPU preflight Job whose name ends in `-pre-v1` is not a training
+duplicate; only the exact rendered
 `<run-name>-<8 lowercase hex>` shape, run labels, run UUID, or output annotation
 claims the training identity. The command then writes and fsyncs
 `DIRECT_SUBMISSION.jsonl` before exactly one `kubectl create`. It never uses

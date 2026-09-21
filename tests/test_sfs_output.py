@@ -1,4 +1,5 @@
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 
@@ -43,6 +44,36 @@ def test_live_sfs_check_rejects_symlink_output(tmp_path):
     jobs_root.mkdir()
     (jobs_root / "researcher-sft-v1").symlink_to(tmp_path / "missing-target")
     with pytest.raises(ValueError, match="output already exists"):
+        build_output_absence_receipt(plan(), request(), jobs_root=jobs_root, now=1000)
+
+
+def test_live_sfs_check_rejects_symlinked_jobs_root(tmp_path):
+    real_root = tmp_path / "real-jobs"
+    real_root.mkdir()
+    jobs_root = tmp_path / "jobs"
+    jobs_root.symlink_to(real_root, target_is_directory=True)
+    with pytest.raises(ValueError, match="mount is unavailable"):
+        build_output_absence_receipt(plan(), request(), jobs_root=jobs_root, now=1000)
+    with pytest.raises(ValueError, match="provide a fresh"):
+        prove_output_absent(plan(), request(), jobs_root=jobs_root, now=1000)
+
+
+@pytest.mark.parametrize("failure", [PermissionError("denied"), OSError("stale mount")])
+def test_live_sfs_check_fails_closed_when_target_cannot_be_inspected(
+    tmp_path, monkeypatch, failure
+):
+    jobs_root = tmp_path / "jobs"
+    jobs_root.mkdir()
+    target = jobs_root / "researcher-sft-v1"
+    original_lstat = Path.lstat
+
+    def fail_target_lstat(path):
+        if path == target:
+            raise failure
+        return original_lstat(path)
+
+    monkeypatch.setattr(Path, "lstat", fail_target_lstat)
+    with pytest.raises(ValueError, match="cannot be inspected"):
         build_output_absence_receipt(plan(), request(), jobs_root=jobs_root, now=1000)
 
 

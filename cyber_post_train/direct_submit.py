@@ -54,6 +54,14 @@ from .lora_cpu_preflight_driver import (
     ENV_SOURCE_COMMIT,
 )
 from .sfs_output import SFS_JOBS_ROOT, prove_output_absent
+from .sfs_output_job import (
+    build_sfs_output_job,
+    collect_sfs_output_receipt,
+    validate_completed_sfs_output_job,
+    validate_sfs_output_job_node_fit,
+    validate_sfs_output_job_package,
+    validate_sfs_output_job_response,
+)
 from .sfs_write_identity import TRAINER_GID, TRAINER_UID, validate_owned_output_binding
 from .source_bundle import canonical_source_commit_bytes
 
@@ -72,6 +80,9 @@ CPU_NODE_SELECTOR = {
     "kubernetes.io/arch": "amd64",
     "workload": "fleetai-training-ng-cpu",
 }
+KUBERNETES_UID_PATTERN = re.compile(
+    r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
+)
 
 
 def _cpu_millicores(value: object) -> int:
@@ -420,6 +431,286 @@ def _secret_names(container: dict) -> list[str]:
     return result
 
 
+def _require_preview_keys(
+    value: object,
+    *,
+    required: set[str],
+    optional: set[str] = frozenset(),
+    context: str,
+) -> dict:
+    if not isinstance(value, dict):
+        raise JobsError(f"preview {context} is not an object")
+    keys = set(value)
+    if not required.issubset(keys) or not keys.issubset(required | optional):
+        raise JobsError(f"preview {context} contains an unreviewed field")
+    return value
+
+
+def _standard_training_storage(request: dict) -> tuple[list[dict], list[dict], list[dict]]:
+    mounts = [
+        {"name": "sfs", "mountPath": "/mnt/sfs"},
+        {"name": "shm", "mountPath": "/dev/shm"},
+        {
+            "name": "trajectory-spool",
+            "mountPath": "/mnt/fleet/trajectory-spool",
+        },
+    ]
+    volumes = [
+        {
+            "name": "sfs",
+            "persistentVolumeClaim": {"claimName": "sfs-shared"},
+        },
+        {
+            "name": "shm",
+            "emptyDir": {"medium": "Memory", "sizeLimit": "64Gi"},
+        },
+        {
+            "name": "trajectory-spool",
+            "hostPath": {
+                "path": "/scratch/trajectories",
+                "type": "DirectoryOrCreate",
+            },
+        },
+    ]
+    init_containers = [
+        {
+            "name": "sfs-init",
+            "image": "busybox:1.36",
+            "command": [
+                "sh",
+                "-c",
+                f"mkdir -p {request['run_dir']} && chown 1000:100 {request['run_dir']}",
+            ],
+            "securityContext": {"runAsUser": 0},
+            "volumeMounts": [{"name": "sfs", "mountPath": "/mnt/sfs"}],
+        },
+        {
+            "name": "prepare-trajectory-spool",
+            "image": "public.ecr.aws/docker/library/busybox:1.37.0",
+            "command": ["sh", "-ec"],
+            "args": ["chgrp 2000 /trajectory-spool; chmod 2770 /trajectory-spool"],
+            "securityContext": {
+                "allowPrivilegeEscalation": False,
+                "capabilities": {"add": ["CHOWN", "FOWNER"], "drop": ["ALL"]},
+                "readOnlyRootFilesystem": True,
+                "runAsNonRoot": False,
+                "runAsUser": 0,
+            },
+            "volumeMounts": [{"name": "trajectory-spool", "mountPath": "/trajectory-spool"}],
+        },
+    ]
+    return mounts, volumes, init_containers
+
+
+def _assert_source_preview_pod(
+    template: object,
+    request: dict,
+    *,
+    group_name: str,
+    container_name: str,
+) -> None:
+    template = _require_preview_keys(
+        template,
+        required={"metadata", "spec"},
+        context=f"{group_name} template",
+    )
+    metadata = _require_preview_keys(
+        template["metadata"],
+        required={"labels", "annotations"},
+        context=f"{group_name} template metadata",
+    )
+    if metadata["labels"] != {
+        "fleet.ai/run-id": ZERO_RUN_ID,
+        "fleet.ai/run-name": request["name"],
+    } or metadata["annotations"] != {
+        "kueue.x-k8s.io/podset-preferred-topology": "topology.nebius.com/tier-1"
+    }:
+        raise JobsError(f"preview {group_name} template metadata drift")
+    pod = _require_preview_keys(
+        template["spec"],
+        required={
+            "containers",
+            "initContainers",
+            "nodeSelector",
+            "priorityClassName",
+            "securityContext",
+            "tolerations",
+            "volumes",
+        },
+        optional={
+            "imagePullSecrets",
+            "priority",
+        },
+        context=f"{group_name} PodSpec",
+    )
+    if pod["priorityClassName"] != "c1" or pod.get("priority") not in (None, 10_000):
+        raise JobsError(f"preview {group_name} priority drift")
+    selector = pod["nodeSelector"]
+    if selector not in (
+        {"workload": "fleetai-training-ng-gpu"},
+        {
+            "kubernetes.io/os": "linux",
+            "workload": "fleetai-training-ng-gpu",
+        },
+    ):
+        raise JobsError(f"preview {group_name} node selector drift")
+    expected_pulls = [{"name": name} for name in request.get("image_pull_secrets", [])]
+    if pod.get("imagePullSecrets", []) != expected_pulls:
+        raise JobsError(f"preview {group_name} image-pull Secret drift")
+    containers = pod["containers"]
+    if not isinstance(containers, list) or len(containers) != 1:
+        raise JobsError(f"preview {group_name} must contain one app container")
+    container = _require_preview_keys(
+        containers[0],
+        required={
+            "name",
+            "image",
+            "env",
+            "envFrom",
+            "resources",
+            "volumeMounts",
+        },
+        optional={"securityContext"},
+        context=f"{group_name} app container",
+    )
+    if container["name"] != container_name or container["image"] != request["image"]:
+        raise JobsError(f"preview {group_name} app container identity drift")
+    resources = _require_preview_keys(
+        container["resources"],
+        required={"requests", "limits"},
+        context=f"{group_name} resources",
+    )
+    for resource_kind in ("requests", "limits"):
+        values = _require_preview_keys(
+            resources[resource_kind],
+            required={"cpu", "memory", "nvidia.com/gpu"},
+            context=f"{group_name} {resource_kind}",
+        )
+        if len(values) != 3:
+            raise JobsError(f"preview {group_name} {resource_kind} resource drift")
+    if container.get("securityContext") not in (None, {"privileged": False}):
+        raise JobsError(f"preview {group_name} app security context drift")
+
+    standard_mounts, standard_volumes, standard_init = _standard_training_storage(request)
+    if (
+        container.get("volumeMounts") != standard_mounts
+        or pod.get("volumes") != standard_volumes
+        or pod.get("initContainers") != standard_init
+        or pod.get("securityContext") != {"supplementalGroups": [2000]}
+        or pod.get("tolerations")
+        != [
+            {
+                "effect": "NoSchedule",
+                "key": "workload",
+                "operator": "Equal",
+                "value": "fleetai-training-ng-gpu",
+            }
+        ]
+    ):
+        raise JobsError(f"preview {group_name} storage or init surface drift")
+
+
+def _assert_source_preview_surface(obj: dict, request: dict) -> None:
+    """Allow only the reviewed Jobs API preview shape before it becomes intent."""
+    _require_preview_keys(
+        obj,
+        required={"apiVersion", "kind", "metadata", "spec"},
+        context="RayJob",
+    )
+    metadata = _require_preview_keys(
+        obj["metadata"],
+        required={"name", "namespace", "labels", "annotations"},
+        context="RayJob metadata",
+    )
+    expected_labels = {
+        "app": "fleet-rl-job",
+        "fleet.ai/requeue-if-preempted": "false",
+        "fleet.ai/run-id": ZERO_RUN_ID,
+        "fleet.ai/run-name": request["name"],
+        "kueue.x-k8s.io/priority-class": "q1",
+        "kueue.x-k8s.io/queue-name": "training-lq",
+    }
+    if metadata["labels"] != expected_labels or set(metadata["annotations"]) != {
+        "fleet.ai/job-image",
+        "fleet.ai/run-dir",
+        "fleet.ai/run-id",
+        "fleet.ai/submitted-by",
+        "fleet.ai/submitted-by-profile",
+    }:
+        raise JobsError("preview root scheduling or annotation surface drift")
+    spec = _require_preview_keys(
+        obj["spec"],
+        required={
+            "entrypoint",
+            "rayClusterSpec",
+            "shutdownAfterJobFinishes",
+            "submissionMode",
+            "suspend",
+        },
+        context="RayJob spec",
+    )
+    if (
+        spec["entrypoint"] != request["command"]
+        or spec["submissionMode"] != "HTTPMode"
+        or spec["suspend"] is not True
+        or spec["shutdownAfterJobFinishes"] is not True
+    ):
+        raise JobsError("preview RayJob execution policy drift")
+    cluster = _require_preview_keys(
+        spec["rayClusterSpec"],
+        required={"enableInTreeAutoscaling", "headGroupSpec"},
+        optional={"workerGroupSpecs"},
+        context="RayCluster spec",
+    )
+    if cluster["enableInTreeAutoscaling"] is not False:
+        raise JobsError("preview RayCluster autoscaling drift")
+    head = _require_preview_keys(
+        cluster["headGroupSpec"],
+        required={"rayStartParams", "template"},
+        context="head group",
+    )
+    if head["rayStartParams"] != {"dashboard-host": "0.0.0.0"}:
+        raise JobsError("preview head Ray start parameters drift")
+    _assert_source_preview_pod(
+        head["template"],
+        request,
+        group_name="head",
+        container_name="ray-head",
+    )
+    workers = cluster.get("workerGroupSpecs", [])
+    expected_worker_groups = 0 if request["workers"] == 1 else 1
+    if not isinstance(workers, list) or len(workers) != expected_worker_groups:
+        raise JobsError("preview worker group count drift")
+    if workers:
+        worker = _require_preview_keys(
+            workers[0],
+            required={
+                "groupName",
+                "replicas",
+                "minReplicas",
+                "maxReplicas",
+                "rayStartParams",
+                "template",
+            },
+            context="worker group",
+        )
+        replicas = request["workers"] - 1
+        if (
+            worker["groupName"] != "gpu"
+            or worker["replicas"] != replicas
+            or worker["minReplicas"] != replicas
+            or worker["maxReplicas"] != replicas
+            or worker["rayStartParams"] != {}
+        ):
+            raise JobsError("preview fixed worker group drift")
+        _assert_source_preview_pod(
+            worker["template"],
+            request,
+            group_name="worker[0]",
+            container_name="ray-worker",
+        )
+
+
 def _assert_sft_contract(plan: dict, request: dict) -> None:
     validate_request(request)
     if plan.get("schema") not in SFT_SCHEMAS:
@@ -516,13 +807,29 @@ def _render_rayjob(
             raise JobsError("preview root image annotation drift")
         if annotations.get("fleet.ai/run-dir") != request["run_dir"]:
             raise JobsError("preview root output annotation drift")
-        if not annotations.get("fleet.ai/submitted-by") or not re.fullmatch(
-            r"[a-f0-9-]{36}", annotations.get("fleet.ai/submitted-by-profile", "")
+        submitted_by = annotations.get("fleet.ai/submitted-by")
+        submitted_by_profile = annotations.get("fleet.ai/submitted-by-profile")
+        if (
+            not isinstance(submitted_by, str)
+            or len(submitted_by) > 254
+            or re.fullmatch(
+                r"[A-Za-z0-9][A-Za-z0-9._%+\-]{0,63}@[A-Za-z0-9]"
+                r"(?:[A-Za-z0-9.\-]{0,251}[A-Za-z0-9])?",
+                submitted_by,
+            )
+            is None
         ):
             raise JobsError("preview submitter identity is missing")
+        try:
+            canonical_profile = str(uuid.UUID(submitted_by_profile))
+        except (AttributeError, TypeError, ValueError):
+            raise JobsError("preview submitter profile is not a canonical UUID") from None
+        if canonical_profile != submitted_by_profile:
+            raise JobsError("preview submitter profile is not a canonical UUID")
     except (KeyError, TypeError) as exc:
         raise JobsError("malformed Jobs API preview identity") from exc
 
+    _assert_source_preview_surface(obj, request)
     template_records = _templates(obj)
     expected_env = {
         **request.get("env", {}),
@@ -537,7 +844,13 @@ def _render_rayjob(
                 raise JobsError(f"{group_name} template run ID drift")
             if pod_labels.get("fleet.ai/run-name") != request["name"]:
                 raise JobsError(f"{group_name} template run-name drift")
-            containers = template["spec"]["containers"]
+            pod_spec = template["spec"]
+            if pod_spec.get("priority") not in (None, 10_000):
+                raise JobsError(f"{group_name} numeric priority drift")
+            # Bind effective c1 numerically in the object itself. Fleet's live
+            # RayJob API server preserves this field but does not default it.
+            pod_spec["priority"] = 10_000
+            containers = pod_spec["containers"]
             if not isinstance(containers, list) or len(containers) != 1:
                 raise JobsError(f"{group_name} must contain exactly one workload container")
             container = containers[0]
@@ -682,6 +995,9 @@ class Kubectl:
         self.binary = binary
 
     def _run(self, args: list[str], *, manifest: dict | None = None) -> dict:
+        return _json_object(self._run_text(args, manifest=manifest), args[0])
+
+    def _run_text(self, args: list[str], *, manifest: dict | None = None) -> str:
         command = [self.binary, "--context", self.context, "--request-timeout=60s", *args]
         try:
             result = subprocess.run(
@@ -700,7 +1016,7 @@ class Kubectl:
             raise JobsError("kubectl transport failed; do not infer cluster state") from None
         if result.returncode:
             raise JobsError("kubectl operation failed; private server output suppressed")
-        return _json_object(result.stdout, args[0])
+        return result.stdout
 
     def list(self, resource: str) -> dict:
         if resource not in {"rayjobs.ray.io", "jobs.batch"}:
@@ -723,6 +1039,52 @@ class Kubectl:
                 "nodes",
                 "--selector=kubernetes.io/arch=amd64,workload=fleetai-training-ng-cpu",
                 "--output=json",
+            ]
+        )
+
+    def get_output_check_job(self, name: str) -> dict:
+        if re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", name) is None:
+            raise JobsError("invalid output-check Job name")
+        return self._run(["get", "job", name, "--namespace", NAMESPACE, "--output=json"])
+
+    def list_output_check_pods(self, name: str) -> dict:
+        if re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", name) is None:
+            raise JobsError("invalid output-check Job name")
+        return self._run(
+            [
+                "get",
+                "pods",
+                "--namespace",
+                NAMESPACE,
+                "--selector=job-name=" + name,
+                "--output=json",
+            ]
+        )
+
+    def list_output_check_workloads(self, job_uid: str) -> dict:
+        if KUBERNETES_UID_PATTERN.fullmatch(job_uid) is None:
+            raise JobsError("invalid output-check Job UID")
+        return self._run(
+            [
+                "get",
+                "workloads.kueue.x-k8s.io",
+                "--namespace",
+                NAMESPACE,
+                "--selector=kueue.x-k8s.io/job-uid=" + job_uid,
+                "--output=json",
+            ]
+        )
+
+    def output_check_logs(self, pod: str) -> str:
+        if re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,251}[a-z0-9])?", pod) is None:
+            raise JobsError("invalid output-check Pod name")
+        return self._run_text(
+            [
+                "logs",
+                pod,
+                "--namespace",
+                NAMESPACE,
+                "--container=output-check",
             ]
         )
 
@@ -817,8 +1179,9 @@ def _assert_api_unique(rows: list[dict], request: dict) -> None:
             row.get("run_dir") == request["run_dir"]
             or row["name"] == request["name"]
             or _is_direct_run_name(row["name"], request["name"])
+            or (request.get("title") is not None and row.get("title") == request["title"])
         ):
-            raise JobsError("a Jobs API run already owns this name/output")
+            raise JobsError("a Jobs API run already owns this name/title/output")
 
 
 def _assert_kubernetes_unique(inventories: list[dict], request: dict, proof: dict) -> None:
@@ -852,7 +1215,14 @@ def _assert_kubernetes_unique(inventories: list[dict], request: dict, proof: dic
                 raise JobsError("a Kubernetes object already owns this name/output/run identity")
 
 
-def _assert_created_identity(obj: dict, proof: dict, *, require_uid: bool) -> None:
+def _assert_created_identity(
+    obj: dict,
+    proof: dict,
+    request: dict,
+    expected_manifest: dict,
+    *,
+    require_uid: bool,
+) -> None:
     try:
         meta = obj["metadata"]
         if (
@@ -869,6 +1239,139 @@ def _assert_created_identity(obj: dict, proof: dict, *, require_uid: bool) -> No
             raise JobsError("created RayJob response omitted its immutable UID")
     except (KeyError, TypeError) as exc:
         raise JobsError("malformed Kubernetes create response") from exc
+    # The API server may default fields, but it must not change the effective
+    # queue, priority, release, resource, image, environment, or Secret
+    # contract between the reviewed local render and the persisted object.
+    validate_preview(
+        request,
+        {
+            "manifest_yaml": yaml.safe_dump(obj, sort_keys=False),
+            "warnings": [],
+            "errors": [],
+        },
+    )
+    _assert_exact_rayjob_runtime_surface(obj, expected_manifest)
+
+
+_RAY_POD_SERVER_DEFAULTS = {
+    "dnsPolicy": "ClusterFirst",
+    "enableServiceLinks": True,
+    "preemptionPolicy": "PreemptLowerPriority",
+    "schedulerName": "default-scheduler",
+    "serviceAccount": "default",
+    "serviceAccountName": "default",
+    "terminationGracePeriodSeconds": 30,
+}
+_RAY_CONTAINER_SERVER_DEFAULTS = {
+    "terminationMessagePath": "/dev/termination-log",
+    "terminationMessagePolicy": "File",
+}
+_RAYJOB_SPEC_SERVER_DEFAULTS = {
+    "backoffLimit": 0,
+    "ttlSecondsAfterFinished": 0,
+}
+_RAY_WORKER_GROUP_SERVER_DEFAULTS = {"numOfHosts": 1}
+_RAY_SERVER_METADATA_FIELDS = {
+    "creationTimestamp",
+    "generation",
+    "managedFields",
+    "resourceVersion",
+    "uid",
+}
+
+
+def _strip_exact_server_defaults(actual: dict, expected: dict, defaults: dict) -> dict:
+    if not isinstance(actual, dict) or not isinstance(expected, dict):
+        raise JobsError("Kubernetes response contains a malformed runtime surface")
+    normalized = deepcopy(actual)
+    for field, value in defaults.items():
+        if field not in expected and field in normalized:
+            if normalized[field] != value:
+                raise JobsError("Kubernetes response changed an effective runtime default")
+            normalized.pop(field)
+    return normalized
+
+
+def _normalize_ray_pod_spec(actual: dict, expected: dict) -> dict:
+    if actual.get("priority") != 10_000:
+        raise JobsError("Kubernetes response did not prove effective c1 priority 10000")
+    normalized = _strip_exact_server_defaults(actual, expected, _RAY_POD_SERVER_DEFAULTS)
+    actual_containers = normalized.get("containers")
+    expected_containers = expected.get("containers")
+    if (
+        not isinstance(actual_containers, list)
+        or not isinstance(expected_containers, list)
+        or len(actual_containers) != len(expected_containers)
+    ):
+        raise JobsError("Kubernetes response changed the exact Ray app containers")
+    normalized["containers"] = [
+        _strip_exact_server_defaults(
+            actual_container,
+            expected_container,
+            _RAY_CONTAINER_SERVER_DEFAULTS,
+        )
+        for actual_container, expected_container in zip(
+            actual_containers, expected_containers, strict=True
+        )
+    ]
+    return normalized
+
+
+def _assert_exact_rayjob_runtime_surface(actual: dict, expected: dict) -> None:
+    """Strictly compare the full RayJob behavior after harmless API defaults."""
+    if not isinstance(actual, dict) or not isinstance(expected, dict):
+        raise JobsError("malformed Kubernetes RayJob runtime surface")
+    normalized = deepcopy(actual)
+    metadata = normalized.get("metadata")
+    expected_metadata = expected.get("metadata")
+    if not isinstance(metadata, dict) or not isinstance(expected_metadata, dict):
+        raise JobsError("malformed Kubernetes RayJob metadata")
+    for field in _RAY_SERVER_METADATA_FIELDS:
+        if field not in expected_metadata:
+            metadata.pop(field, None)
+    status = normalized.pop("status", None)
+    if status is not None and not isinstance(status, dict):
+        raise JobsError("malformed Kubernetes RayJob status")
+    try:
+        expected_spec = expected["spec"]
+        normalized["spec"] = _strip_exact_server_defaults(
+            normalized["spec"],
+            expected_spec,
+            _RAYJOB_SPEC_SERVER_DEFAULTS,
+        )
+        actual_cluster = normalized["spec"]["rayClusterSpec"]
+        expected_cluster = expected_spec["rayClusterSpec"]
+        actual_groups = [
+            actual_cluster["headGroupSpec"],
+            *actual_cluster.get("workerGroupSpecs", []),
+        ]
+        expected_groups = [
+            expected_cluster["headGroupSpec"],
+            *expected_cluster.get("workerGroupSpecs", []),
+        ]
+    except (KeyError, TypeError) as exc:
+        raise JobsError("malformed Kubernetes RayJob runtime surface") from exc
+    if len(actual_groups) != len(expected_groups):
+        raise JobsError("Kubernetes response changed the exact Ray worker groups")
+    for index, (actual_group, expected_group) in enumerate(
+        zip(actual_groups, expected_groups, strict=True)
+    ):
+        if index:
+            normalized_group = _strip_exact_server_defaults(
+                actual_group,
+                expected_group,
+                _RAY_WORKER_GROUP_SERVER_DEFAULTS,
+            )
+            actual_cluster["workerGroupSpecs"][index - 1] = normalized_group
+            actual_group = normalized_group
+        try:
+            actual_spec = actual_group["template"]["spec"]
+            expected_spec = expected_group["template"]["spec"]
+            actual_group["template"]["spec"] = _normalize_ray_pod_spec(actual_spec, expected_spec)
+        except (KeyError, TypeError) as exc:
+            raise JobsError("malformed Kubernetes Ray Pod template") from exc
+    if normalized != expected:
+        raise JobsError("Kubernetes response changed the exact RayJob runtime surface")
 
 
 def _write_intent(path: Path, value: dict) -> None:
@@ -891,6 +1394,90 @@ def _append_journal(path: Path, value: dict) -> None:
         stream.write(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n")
         stream.flush()
         os.fsync(stream.fileno())
+
+
+def _assert_output_check_job_absent(inventory: dict, name: str) -> None:
+    if inventory.get("kind") not in {"List", "JobList"} or not isinstance(
+        inventory.get("items"), list
+    ):
+        raise JobsError("Kubernetes Job inventory is incomplete")
+    for item in inventory["items"]:
+        try:
+            existing = item["metadata"]["name"]
+        except (KeyError, TypeError):
+            raise JobsError("Kubernetes Job inventory contains invalid metadata") from None
+        if existing == name:
+            raise JobsError("the exact output-check Job already exists; reconcile, never replay")
+
+
+def create_sfs_output_check_once(
+    *,
+    plan: dict,
+    request: dict,
+    attempt: int,
+    kubectl: Kubectl,
+    journal: Path,
+) -> dict:
+    """Create one bounded zero-GPU read-only SFS observer; never retry create."""
+    if journal.exists() or journal.is_symlink():
+        raise JobsError("output-check journal already exists; reconcile, never retry")
+    try:
+        package = build_sfs_output_job(plan, request, attempt)
+        proof = validate_sfs_output_job_package(package)
+        validate_sfs_output_job_node_fit(package, kubectl._cpu_node_inventory())
+    except (OSError, ValueError) as exc:
+        raise JobsError(str(exc)) from None
+    _assert_output_check_job_absent(kubectl.list("jobs.batch"), proof["name"])
+    server_object = kubectl.dry_run(package.job)
+    try:
+        validate_sfs_output_job_response(server_object, package, require_uid=False)
+    except ValueError as exc:
+        raise JobsError(str(exc)) from None
+    _assert_output_check_job_absent(kubectl.list("jobs.batch"), proof["name"])
+    _write_intent(
+        journal,
+        {
+            "state": "KUBECTL_CREATE_INTENT_DO_NOT_RETRY",
+            "operation": "sfs_output_check",
+            "attempt": attempt,
+            "name": proof["name"],
+            "namespace": NAMESPACE,
+            "kubernetes_context": kubectl.context,
+            **{key: proof[key] for key in ("plan_sha256", "request_sha256", "manifest_sha256")},
+        },
+    )
+    created = kubectl.create_once(package.job)
+    try:
+        validate_sfs_output_job_response(created, package, require_uid=True)
+    except ValueError as exc:
+        raise JobsError(str(exc)) from None
+    result = {
+        "submitted": True,
+        "gpus": 0,
+        "name": proof["name"],
+        "uid": created["metadata"]["uid"],
+        "attempt": attempt,
+    }
+    _append_journal(journal, {"state": "KUBECTL_CREATE_RESPONSE", **result})
+    return result
+
+
+def collect_sfs_output_check(*, plan: dict, request: dict, attempt: int, kubectl: Kubectl) -> dict:
+    """Read one successful exact Job and return its still-fresh sanitized receipt."""
+    try:
+        package = build_sfs_output_job(plan, request, attempt)
+        name = package.job["metadata"]["name"]
+        job = kubectl.get_output_check_job(name)
+        job_uid = job.get("metadata", {}).get("uid", "")
+        if KUBERNETES_UID_PATTERN.fullmatch(job_uid) is None:
+            raise JobsError("output-check Job readback omitted its immutable UID")
+        workloads = kubectl.list_output_check_workloads(job_uid)
+        pods = kubectl.list_output_check_pods(name)
+        pod_name = validate_completed_sfs_output_job(package, job, workloads, pods)
+        logs = kubectl.output_check_logs(pod_name)
+        return collect_sfs_output_receipt(package, job, workloads, pods, logs)
+    except (OSError, ValueError) as exc:
+        raise JobsError(str(exc)) from None
 
 
 def _direct_submit_once(
@@ -917,7 +1504,13 @@ def _direct_submit_once(
         [kubectl.list("rayjobs.ray.io"), kubectl.list("jobs.batch")], request, proof
     )
     server_object = kubectl.dry_run(manifest)
-    _assert_created_identity(server_object, proof, require_uid=False)
+    _assert_created_identity(
+        server_object,
+        proof,
+        request,
+        manifest,
+        require_uid=False,
+    )
 
     # Close the read/dry-run race as far as the two authorities permit.  The
     # exact-name Kubernetes create remains the final atomic create-once gate.
@@ -949,7 +1542,13 @@ def _direct_submit_once(
     # Never wrap this call in retry logic.  Any error after the durable intent
     # is ambiguous until the exact name/run ID is reconciled read-only.
     created = kubectl.create_once(manifest)
-    _assert_created_identity(created, proof, require_uid=True)
+    _assert_created_identity(
+        created,
+        proof,
+        request,
+        manifest,
+        require_uid=True,
+    )
     result = {
         "name": proof["name"],
         "run_id": proof["run_id"],

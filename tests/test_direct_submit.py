@@ -23,6 +23,8 @@ from cyber_post_train.direct_submit import (
     CPU_SOURCE_COMMIT_ANNOTATION,
     LORA_TRAINER_IMAGE,
     Kubectl,
+    collect_sfs_output_check,
+    create_sfs_output_check_once,
     direct_submit_lr30_qualification_once,
     direct_submit_sft_once,
     render_lr30_qualification_rayjob,
@@ -37,6 +39,7 @@ from cyber_post_train.lora_cpu_preflight_driver import (
     ENV_SOURCE_COMMIT,
 )
 from cyber_post_train.sfs_output import build_output_absence_receipt
+from cyber_post_train.sfs_output_job import build_sfs_output_job
 from cyber_post_train.source_bundle import canonical_source_commit_bytes
 from training import qwen38_lr30_step76_gate as lr30
 from training import sft
@@ -113,6 +116,61 @@ def template(value, container_name):
             "priorityClassName": "c1",
             "imagePullSecrets": [{"name": name} for name in value.get("image_pull_secrets", [])],
             "nodeSelector": {"workload": "fleetai-training-ng-gpu"},
+            "securityContext": {"supplementalGroups": [2000]},
+            "tolerations": [
+                {
+                    "effect": "NoSchedule",
+                    "key": "workload",
+                    "operator": "Equal",
+                    "value": "fleetai-training-ng-gpu",
+                }
+            ],
+            "volumes": [
+                {
+                    "name": "sfs",
+                    "persistentVolumeClaim": {"claimName": "sfs-shared"},
+                },
+                {
+                    "name": "shm",
+                    "emptyDir": {"medium": "Memory", "sizeLimit": "64Gi"},
+                },
+                {
+                    "name": "trajectory-spool",
+                    "hostPath": {
+                        "path": "/scratch/trajectories",
+                        "type": "DirectoryOrCreate",
+                    },
+                },
+            ],
+            "initContainers": [
+                {
+                    "name": "sfs-init",
+                    "image": "busybox:1.36",
+                    "command": [
+                        "sh",
+                        "-c",
+                        f"mkdir -p {value['run_dir']} && chown 1000:100 {value['run_dir']}",
+                    ],
+                    "securityContext": {"runAsUser": 0},
+                    "volumeMounts": [{"name": "sfs", "mountPath": "/mnt/sfs"}],
+                },
+                {
+                    "name": "prepare-trajectory-spool",
+                    "image": "public.ecr.aws/docker/library/busybox:1.37.0",
+                    "command": ["sh", "-ec"],
+                    "args": ["chgrp 2000 /trajectory-spool; chmod 2770 /trajectory-spool"],
+                    "securityContext": {
+                        "allowPrivilegeEscalation": False,
+                        "capabilities": {"add": ["CHOWN", "FOWNER"], "drop": ["ALL"]},
+                        "readOnlyRootFilesystem": True,
+                        "runAsNonRoot": False,
+                        "runAsUser": 0,
+                    },
+                    "volumeMounts": [
+                        {"name": "trajectory-spool", "mountPath": "/trajectory-spool"}
+                    ],
+                },
+            ],
             "containers": [
                 {
                     "name": container_name,
@@ -138,6 +196,14 @@ def template(value, container_name):
                         },
                     },
                     "securityContext": {"privileged": False},
+                    "volumeMounts": [
+                        {"name": "sfs", "mountPath": "/mnt/sfs"},
+                        {"name": "shm", "mountPath": "/dev/shm"},
+                        {
+                            "name": "trajectory-spool",
+                            "mountPath": "/mnt/fleet/trajectory-spool",
+                        },
+                    ],
                 }
             ],
         },
@@ -176,7 +242,10 @@ def manifest(value=None):
             "shutdownAfterJobFinishes": True,
             "rayClusterSpec": {
                 "enableInTreeAutoscaling": False,
-                "headGroupSpec": {"template": template(value, "ray-head")},
+                "headGroupSpec": {
+                    "rayStartParams": {"dashboard-host": "0.0.0.0"},
+                    "template": template(value, "ray-head"),
+                },
                 "workerGroupSpecs": (
                     [
                         {
@@ -184,6 +253,7 @@ def manifest(value=None):
                             "replicas": value["workers"] - 1,
                             "minReplicas": value["workers"] - 1,
                             "maxReplicas": value["workers"] - 1,
+                            "rayStartParams": {},
                             "template": template(value, "ray-worker"),
                         }
                     ]
@@ -383,6 +453,7 @@ def test_render_changes_only_reviewed_identity_secret_and_root_annotation():
         container = pod["spec"]["containers"][0]
         env = {item["name"]: item["value"] for item in container["env"]}
         assert pod["metadata"]["labels"]["fleet.ai/run-id"] == RUN_ID
+        assert pod["spec"]["priority"] == 10_000
         assert env["FLEET_RUN_ID"] == RUN_ID
         assert env["FLEET_RUN_NAME"] == proof["name"]
         assert container["envFrom"] == [{"secretRef": {"name": "wandb-api"}}]
@@ -413,6 +484,7 @@ def test_lr30_render_is_exact_one_gpu_root_annotated_and_secret_free():
     [
         "already-annotated",
         "wrong-priority",
+        "wrong-numeric-priority",
         "not-suspended",
         "wrong-image",
         "wrong-resource",
@@ -422,6 +494,23 @@ def test_lr30_render_is_exact_one_gpu_root_annotated_and_secret_free():
         "unknown-zero-id",
         "unknown-placeholder-name",
         "duplicate-container",
+        "privileged-main-container",
+        "privileged-secret-init-container",
+        "secret-volume",
+        "node-name",
+        "affinity",
+        "runtime-class",
+        "scheduling-gate",
+        "pod-security-context",
+        "autoscaling",
+        "extra-pull-secret",
+        "missing-storage-bundle",
+        "missing-ray-start-params",
+        "token-submitter",
+        "newline-submitter",
+        "oversize-submitter",
+        "invalid-profile",
+        "noncanonical-profile",
         "warning",
     ],
 )
@@ -434,6 +523,8 @@ def test_render_fails_closed_on_preview_drift(fault):
         obj["metadata"]["annotations"]["fleet.ai/failure-alerts"] = "off"
     elif fault == "wrong-priority":
         head["spec"]["priorityClassName"] = "c0"
+    elif fault == "wrong-numeric-priority":
+        head["spec"]["priority"] = 0
     elif fault == "not-suspended":
         obj["spec"]["suspend"] = False
     elif fault == "wrong-image":
@@ -452,6 +543,58 @@ def test_render_fails_closed_on_preview_drift(fault):
         obj["metadata"]["annotations"]["other"] = "researcher-sft-00000000"
     elif fault == "duplicate-container":
         head["spec"]["containers"].append(deepcopy(container))
+    elif fault == "privileged-main-container":
+        container["securityContext"] = {"privileged": True}
+    elif fault == "privileged-secret-init-container":
+        head["spec"]["initContainers"] = [
+            {
+                "name": "unreviewed",
+                "image": request()["image"],
+                "envFrom": [{"secretRef": {"name": "unreviewed-secret"}}],
+                "resources": {
+                    "requests": {"cpu": "1", "memory": "1Gi"},
+                    "limits": {"cpu": "1", "memory": "1Gi"},
+                },
+                "securityContext": {"privileged": True},
+            }
+        ]
+    elif fault == "secret-volume":
+        head["spec"]["volumes"] = [
+            {"name": "secret", "secret": {"secretName": "unreviewed-secret"}}
+        ]
+        container["volumeMounts"] = [{"name": "secret", "mountPath": "/secret"}]
+    elif fault == "node-name":
+        head["spec"]["nodeName"] = "chosen-node"
+    elif fault == "affinity":
+        head["spec"]["affinity"] = {"nodeAffinity": {}}
+    elif fault == "runtime-class":
+        head["spec"]["runtimeClassName"] = "unreviewed"
+    elif fault == "scheduling-gate":
+        head["spec"]["schedulingGates"] = [{"name": "unreviewed"}]
+    elif fault == "pod-security-context":
+        head["spec"]["securityContext"] = {"runAsUser": 0, "runAsNonRoot": False}
+    elif fault == "autoscaling":
+        obj["spec"]["rayClusterSpec"]["enableInTreeAutoscaling"] = True
+    elif fault == "extra-pull-secret":
+        head["spec"]["imagePullSecrets"].append({"name": "unreviewed-secret"})
+    elif fault == "missing-storage-bundle":
+        for field in ("initContainers", "securityContext", "tolerations", "volumes"):
+            head["spec"].pop(field)
+        container.pop("volumeMounts")
+    elif fault == "missing-ray-start-params":
+        obj["spec"]["rayClusterSpec"]["headGroupSpec"].pop("rayStartParams")
+    elif fault == "token-submitter":
+        obj["metadata"]["annotations"]["fleet.ai/submitted-by"] = "Bearer unreviewed-token"
+    elif fault == "newline-submitter":
+        obj["metadata"]["annotations"]["fleet.ai/submitted-by"] = "a@b.co\nsecret"
+    elif fault == "oversize-submitter":
+        obj["metadata"]["annotations"]["fleet.ai/submitted-by"] = "a" * 250 + "@b.co"
+    elif fault == "invalid-profile":
+        obj["metadata"]["annotations"]["fleet.ai/submitted-by-profile"] = "-" * 36
+    elif fault == "noncanonical-profile":
+        obj["metadata"]["annotations"]["fleet.ai/submitted-by-profile"] = (
+            "9909B292-D23E-4E2E-8587-E4CD0D5C47BF"
+        )
     else:
         response["warnings"] = ["server changed"]
     response["manifest_yaml"] = yaml.safe_dump(obj)
@@ -517,6 +660,12 @@ class FakeKubectl:
         return result
 
 
+class FakeOutputCheckKubectl(FakeKubectl):
+    def _cpu_node_inventory(self):
+        self.calls.append(("list", "nodes"))
+        return cpu_node_inventory()
+
+
 def test_direct_submit_checks_twice_journals_then_creates_exactly_once(tmp_path, sfs_jobs_root):
     jobs, kube = FakeJobs(), FakeKubectl()
     journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
@@ -541,6 +690,210 @@ def test_direct_submit_checks_twice_journals_then_creates_exactly_once(tmp_path,
     ]
     assert len(records[0]["output_absence_receipt_sha256"]) == 64
     assert journal.stat().st_mode & 0o777 == 0o600
+
+
+def test_output_check_create_is_suspended_queued_journaled_and_create_once(tmp_path):
+    kube = FakeOutputCheckKubectl()
+    journal = tmp_path / "SFS_OUTPUT_CHECK_A01.jsonl"
+    result = create_sfs_output_check_once(
+        plan=plan(),
+        request=request(),
+        attempt=1,
+        kubectl=kube,
+        journal=journal,
+    )
+    assert result == {
+        "submitted": True,
+        "gpus": 0,
+        "name": "researcher-sft-sfs-a01",
+        "uid": CREATED_UID,
+        "attempt": 1,
+    }
+    assert [call[0] for call in kube.calls].count("list") == 3
+    assert [call[0] for call in kube.calls].count("dry-run") == 1
+    assert [call[0] for call in kube.calls].count("create") == 1
+    records = [json.loads(line) for line in journal.read_text().splitlines()]
+    assert [row["state"] for row in records] == [
+        "KUBECTL_CREATE_INTENT_DO_NOT_RETRY",
+        "KUBECTL_CREATE_RESPONSE",
+    ]
+    with pytest.raises(JobsError, match="journal already exists"):
+        create_sfs_output_check_once(
+            plan=plan(),
+            request=request(),
+            attempt=1,
+            kubectl=kube,
+            journal=journal,
+        )
+    assert [call[0] for call in kube.calls].count("create") == 1
+
+
+def test_output_check_exact_duplicate_stops_before_dry_run_or_intent(tmp_path):
+    package = build_sfs_output_job(plan(), request(), 1)
+    kube = FakeOutputCheckKubectl(
+        inventories={
+            "rayjobs.ray.io": {"kind": "List", "items": []},
+            "jobs.batch": {"kind": "JobList", "items": [deepcopy(package.job)]},
+        }
+    )
+    journal = tmp_path / "SFS_OUTPUT_CHECK_A01.jsonl"
+    with pytest.raises(JobsError, match="already exists"):
+        create_sfs_output_check_once(
+            plan=plan(),
+            request=request(),
+            attempt=1,
+            kubectl=kube,
+            journal=journal,
+        )
+    assert not journal.exists()
+    assert not any(call[0] in {"dry-run", "create"} for call in kube.calls)
+
+
+def test_output_check_collection_requires_admitted_exact_job_pod_and_receipt(tmp_path):
+    package = build_sfs_output_job(plan(), request(), 1)
+    job = deepcopy(package.job)
+    job["metadata"]["uid"] = CREATED_UID
+    job["spec"]["suspend"] = False
+    workload_name = "job-researcher-sft-sfs-a01-abcde"
+    batch_labels = {
+        "batch.kubernetes.io/controller-uid": CREATED_UID,
+        "batch.kubernetes.io/job-name": package.job["metadata"]["name"],
+        "controller-uid": CREATED_UID,
+        "job-name": package.job["metadata"]["name"],
+    }
+    kueue_labels = {
+        "kueue.x-k8s.io/cluster-queue-name": "training-cq",
+        "kueue.x-k8s.io/local-queue-name": "training-lq",
+        "kueue.x-k8s.io/podset": "main",
+    }
+    job["spec"]["selector"] = {"matchLabels": {"batch.kubernetes.io/controller-uid": CREATED_UID}}
+    live_template = job["spec"]["template"]
+    live_template["metadata"]["annotations"]["kueue.x-k8s.io/workload"] = workload_name
+    live_template["metadata"]["labels"].update({**batch_labels, **kueue_labels})
+    job["status"] = {"conditions": [{"type": "Complete", "status": "True"}]}
+    pod = {
+        "metadata": {
+            "name": "researcher-sft-sfs-a01-abcde",
+            "uid": "11111111-2222-4333-8444-555555555555",
+            "annotations": deepcopy(live_template["metadata"]["annotations"]),
+            "labels": {
+                **deepcopy(live_template["metadata"]["labels"]),
+                "topology.kubernetes.io/region": "eu-north1",
+            },
+            "ownerReferences": [
+                {
+                    "apiVersion": "batch/v1",
+                    "kind": "Job",
+                    "name": package.job["metadata"]["name"],
+                    "uid": CREATED_UID,
+                    "controller": True,
+                    "blockOwnerDeletion": True,
+                }
+            ],
+        },
+        "spec": deepcopy(live_template["spec"]),
+        "status": {
+            "phase": "Succeeded",
+            "containerStatuses": [
+                {
+                    "restartCount": 0,
+                    "imageID": "docker-pullable://registry/image@sha256:" + "a" * 64,
+                    "state": {"terminated": {"exitCode": 0}},
+                }
+            ],
+        },
+    }
+    pod["spec"]["nodeName"] = "shared-cpu-1"
+    workload = {
+        "apiVersion": "kueue.x-k8s.io/v1beta2",
+        "kind": "Workload",
+        "metadata": {
+            "name": workload_name,
+            "namespace": "fleet-train-jobs",
+            "uid": "99999999-2222-4333-8444-555555555555",
+            "labels": {"kueue.x-k8s.io/job-uid": CREATED_UID},
+            "ownerReferences": [
+                {
+                    "apiVersion": "batch/v1",
+                    "kind": "Job",
+                    "name": package.job["metadata"]["name"],
+                    "uid": CREATED_UID,
+                    "controller": True,
+                    "blockOwnerDeletion": True,
+                }
+            ],
+        },
+        "spec": {
+            "queueName": "training-lq",
+            "priority": 10000,
+            "active": True,
+            "podSets": [
+                {
+                    "name": "main",
+                    "count": 1,
+                    "template": {
+                        "metadata": {
+                            "annotations": deepcopy(
+                                package.job["spec"]["template"]["metadata"]["annotations"]
+                            ),
+                            "labels": {
+                                **deepcopy(package.job["spec"]["template"]["metadata"]["labels"]),
+                                "batch.kubernetes.io/job-name": package.job["metadata"]["name"],
+                            },
+                        },
+                        "spec": {
+                            **deepcopy(package.job["spec"]["template"]["spec"]),
+                            "priority": None,
+                        },
+                    },
+                }
+            ],
+        },
+        "status": {
+            "admission": {
+                "clusterQueue": "training-cq",
+                "podSetAssignments": [
+                    {
+                        "name": "main",
+                        "count": 1,
+                        "flavors": {"cpu": "cpu", "memory": "cpu"},
+                        "resourceUsage": {"cpu": "1", "memory": "1Gi"},
+                    }
+                ],
+            },
+            "conditions": [
+                {"type": "Admitted", "status": "True"},
+                {"type": "Finished", "status": "True", "reason": "Succeeded"},
+            ],
+        },
+    }
+    jobs_root = tmp_path / "jobs"
+    jobs_root.mkdir()
+    receipt = build_output_absence_receipt(plan(), request(), jobs_root=jobs_root, now=time.time())
+
+    class Collector(FakeOutputCheckKubectl):
+        def get_output_check_job(self, name):
+            assert name == package.job["metadata"]["name"]
+            return deepcopy(job)
+
+        def list_output_check_pods(self, name):
+            assert name == package.job["metadata"]["name"]
+            return {"kind": "List", "items": [deepcopy(pod)]}
+
+        def list_output_check_workloads(self, job_uid):
+            assert job_uid == CREATED_UID
+            return {"kind": "List", "items": [deepcopy(workload)]}
+
+        def output_check_logs(self, name):
+            assert name == pod["metadata"]["name"]
+            return "CYBER_SFT_OUTPUT_ABSENCE=" + json.dumps(
+                receipt, sort_keys=True, separators=(",", ":")
+            )
+
+    assert (
+        collect_sfs_output_check(plan=plan(), request=request(), attempt=1, kubectl=Collector())
+        == receipt
+    )
 
 
 def test_lr30_direct_submit_requires_explicit_launchable_plan_and_creates_once(tmp_path):
@@ -617,7 +970,9 @@ def test_saved_request_must_match_current_source_before_network(tmp_path, sfs_jo
     assert jobs.calls == [] and kube.calls == []
 
 
-@pytest.mark.parametrize("authority", ["api-name", "api-output", "kube-name", "kube-output"])
+@pytest.mark.parametrize(
+    "authority", ["api-name", "api-title", "api-output", "kube-name", "kube-output"]
+)
 def test_duplicates_stop_before_intent_or_create(tmp_path, authority, sfs_jobs_root):
     rows = []
     inventories = {
@@ -626,6 +981,14 @@ def test_duplicates_stop_before_intent_or_create(tmp_path, authority, sfs_jobs_r
     }
     if authority == "api-name":
         rows = [{"name": "researcher-sft-deadbeef", "run_dir": "/mnt/sfs/jobs/other"}]
+    elif authority == "api-title":
+        rows = [
+            {
+                "name": "other",
+                "title": request()["title"],
+                "run_dir": "/mnt/sfs/jobs/other",
+            }
+        ]
     elif authority == "api-output":
         rows = [{"name": "other", "run_dir": request()["run_dir"]}]
     else:
@@ -737,6 +1100,203 @@ def test_output_appearing_after_server_dry_run_stops_before_intent_or_create(
     assert not any(call[0] == "create" for call in kube.calls)
 
 
+@pytest.mark.parametrize("failure", [PermissionError("denied"), OSError("stale mount")])
+def test_uninspectable_output_stops_before_network_intent_or_create(
+    tmp_path, sfs_jobs_root, monkeypatch, failure
+):
+    jobs, kube = FakeJobs(), FakeKubectl()
+    target = sfs_jobs_root / "researcher-sft-v1"
+    original_lstat = Path.lstat
+
+    def fail_target_lstat(path):
+        if path == target:
+            raise failure
+        return original_lstat(path)
+
+    monkeypatch.setattr(Path, "lstat", fail_target_lstat)
+    journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
+    with pytest.raises(JobsError, match="cannot be inspected"):
+        direct_submit_sft_once(
+            plan=plan(),
+            request=request(),
+            jobs=jobs,
+            kubectl=kube,
+            journal=journal,
+            run_id=RUN_ID,
+            jobs_root=sfs_jobs_root,
+        )
+    assert not journal.exists()
+    assert jobs.calls == []
+    assert kube.calls == []
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "priority",
+        "secret-env",
+        "image-pull-secret",
+        "secret-sidecar",
+        "pod-security-context",
+        "topology-spread",
+        "scheduling-gate",
+        "autoscaling",
+        "worker-max-replicas",
+        "backoff-limit",
+        "ttl-seconds",
+        "worker-num-hosts",
+        "head-num-hosts",
+        "numeric-priority-missing",
+        "numeric-priority-zero",
+        "worker-numeric-priority-missing",
+    ],
+)
+def test_server_dry_run_runtime_drift_stops_before_intent_or_create(tmp_path, sfs_jobs_root, fault):
+    class RuntimeDriftKubectl(FakeKubectl):
+        def dry_run(self, obj):
+            result = super().dry_run(obj)
+            pod_spec = result["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]
+            container = pod_spec["containers"][0]
+            if fault == "priority":
+                pod_spec["priorityClassName"] = "c0"
+            elif fault == "secret-env":
+                container["envFrom"].append({"secretRef": {"name": "unreviewed"}})
+            elif fault == "image-pull-secret":
+                pod_spec["imagePullSecrets"].append({"name": "unreviewed"})
+            elif fault == "secret-sidecar":
+                sidecar = deepcopy(container)
+                sidecar["name"] = "unreviewed-sidecar"
+                sidecar["envFrom"] = [{"secretRef": {"name": "unreviewed"}}]
+                sidecar["resources"] = {
+                    "requests": {"cpu": "1", "memory": "1Gi"},
+                    "limits": {"cpu": "1", "memory": "1Gi"},
+                }
+                pod_spec["containers"].append(sidecar)
+            elif fault == "pod-security-context":
+                pod_spec["securityContext"] = {
+                    "runAsNonRoot": False,
+                    "runAsUser": 0,
+                }
+            elif fault == "topology-spread":
+                pod_spec["topologySpreadConstraints"] = [
+                    {
+                        "maxSkew": 1,
+                        "topologyKey": "kubernetes.io/hostname",
+                        "whenUnsatisfiable": "DoNotSchedule",
+                        "labelSelector": {},
+                    }
+                ]
+            elif fault == "scheduling-gate":
+                pod_spec["schedulingGates"] = [{"name": "unreviewed"}]
+            elif fault == "autoscaling":
+                result["spec"]["rayClusterSpec"]["enableInTreeAutoscaling"] = True
+            elif fault == "backoff-limit":
+                result["spec"]["backoffLimit"] = 1
+            elif fault == "ttl-seconds":
+                result["spec"]["ttlSecondsAfterFinished"] = 1
+            elif fault == "worker-num-hosts":
+                result["spec"]["rayClusterSpec"]["workerGroupSpecs"][0]["numOfHosts"] = 2
+            elif fault == "head-num-hosts":
+                result["spec"]["rayClusterSpec"]["headGroupSpec"]["numOfHosts"] = 1
+            elif fault == "numeric-priority-missing":
+                pod_spec.pop("priority")
+            elif fault == "numeric-priority-zero":
+                pod_spec["priority"] = 0
+            elif fault == "worker-numeric-priority-missing":
+                result["spec"]["rayClusterSpec"]["workerGroupSpecs"][0]["template"]["spec"].pop(
+                    "priority"
+                )
+            else:
+                result["spec"]["rayClusterSpec"]["workerGroupSpecs"][0]["maxReplicas"] = 8
+            return result
+
+    jobs, kube = FakeJobs(), RuntimeDriftKubectl()
+    journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
+    with pytest.raises(JobsError):
+        direct_submit_sft_once(
+            plan=plan(),
+            request=request(),
+            jobs=jobs,
+            kubectl=kube,
+            journal=journal,
+            run_id=RUN_ID,
+            jobs_root=sfs_jobs_root,
+        )
+    assert not journal.exists()
+    assert not any(call[0] == "create" for call in kube.calls)
+
+
+def test_server_harmless_api_defaults_are_normalized_exactly(tmp_path, sfs_jobs_root):
+    class DefaultingKubectl(FakeKubectl):
+        def dry_run(self, obj):
+            result = super().dry_run(obj)
+            result["spec"].update(
+                {
+                    "backoffLimit": 0,
+                    "ttlSecondsAfterFinished": 0,
+                }
+            )
+            for worker_group in result["spec"]["rayClusterSpec"]["workerGroupSpecs"]:
+                worker_group["numOfHosts"] = 1
+            pod_spec = result["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]
+            pod_spec.update(
+                {
+                    "dnsPolicy": "ClusterFirst",
+                    "enableServiceLinks": True,
+                    "preemptionPolicy": "PreemptLowerPriority",
+                    "priority": 10000,
+                    "schedulerName": "default-scheduler",
+                    "serviceAccount": "default",
+                    "serviceAccountName": "default",
+                    "terminationGracePeriodSeconds": 30,
+                }
+            )
+            pod_spec["containers"][0].update(
+                {
+                    "terminationMessagePath": "/dev/termination-log",
+                    "terminationMessagePolicy": "File",
+                }
+            )
+            result["metadata"]["creationTimestamp"] = None
+            return result
+
+    result = direct_submit_sft_once(
+        plan=plan(),
+        request=request(),
+        jobs=FakeJobs(),
+        kubectl=DefaultingKubectl(),
+        journal=tmp_path / "DIRECT_SUBMISSION.jsonl",
+        run_id=RUN_ID,
+        jobs_root=sfs_jobs_root,
+    )
+    assert result["submitted"] is True
+
+
+def test_server_create_runtime_drift_is_not_accepted_as_success(tmp_path, sfs_jobs_root):
+    class CreateDriftKubectl(FakeKubectl):
+        def create_once(self, obj):
+            result = super().create_once(obj)
+            pod_spec = result["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]
+            pod_spec["imagePullSecrets"].append({"name": "unreviewed"})
+            return result
+
+    jobs, kube = FakeJobs(), CreateDriftKubectl()
+    journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
+    with pytest.raises(JobsError, match="runtime surface"):
+        direct_submit_sft_once(
+            plan=plan(),
+            request=request(),
+            jobs=jobs,
+            kubectl=kube,
+            journal=journal,
+            run_id=RUN_ID,
+            jobs_root=sfs_jobs_root,
+        )
+    records = [json.loads(line) for line in journal.read_text().splitlines()]
+    assert [row["state"] for row in records] == ["KUBECTL_CREATE_INTENT_DO_NOT_RETRY"]
+    assert [call[0] for call in kube.calls].count("create") == 1
+
+
 def test_kubectl_boundary_uses_only_get_server_dry_run_and_one_create(monkeypatch):
     calls = []
     rendered = manifest()
@@ -758,6 +1318,28 @@ def test_kubectl_boundary_uses_only_get_server_dry_run_and_one_create(monkeypatc
     assert (
         sum("create" in command and "--dry-run=server" not in command for command, _ in calls) == 1
     )
+
+
+def test_output_check_workload_read_is_scoped_to_exact_job_uid(monkeypatch):
+    calls = []
+
+    def run(command, **kwargs):
+        calls.append(command)
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps({"kind": "List", "items": []}),
+            stderr="",
+        )
+
+    monkeypatch.setattr(subprocess, "run", run)
+    kube = Kubectl("prod-context")
+    kube.list_output_check_workloads(CREATED_UID)
+    assert len(calls) == 1
+    assert "--selector=kueue.x-k8s.io/job-uid=" + CREATED_UID in calls[0]
+    with pytest.raises(JobsError, match="invalid output-check Job UID"):
+        kube.list_output_check_workloads("not-a-uid")
+    assert len(calls) == 1
 
 
 def test_cpu_checkpoint_boundary_previews_and_creates_only_unpinned_zero_gpu_pod(monkeypatch):
