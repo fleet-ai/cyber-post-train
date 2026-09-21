@@ -164,6 +164,21 @@ def test_safe_binding_rejects_conflicting_tool_declaration():
         qualification.safe_task_binding(task, _selected())
 
 
+@pytest.mark.parametrize(
+    "source_locator",
+    [
+        "cyber/task-graphs/fixture-graph:task_graph_source",
+        "cyber/task-graphs/unrelated@999:task_graph_source",
+        "cyber/task-graphs/fixture-graph@2:atom_source",
+    ],
+)
+def test_safe_binding_rejects_mutable_or_unrelated_task_graph_source(source_locator):
+    task = _task()
+    task["metadata"]["cyber_subject"]["source_locator"] = source_locator
+    with pytest.raises(qualification.QualificationError, match="task graph source"):
+        qualification.safe_task_binding(task, _selected())
+
+
 def test_plan_excludes_protected_heldout_atom_and_duplicate_family(monkeypatch):
     heldout_rows = [
         {
@@ -269,7 +284,13 @@ def test_probe_tools_calls_both_without_returning_content(monkeypatch):
     ]
 
 
-def test_qualify_one_records_no_score_or_tool_content(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    ("created_new_session", "expected_status"),
+    [(True, "qualified"), (False, "infrastructure_invalid")],
+)
+def test_qualify_one_requires_new_session_and_records_no_content(
+    tmp_path, monkeypatch, created_new_session, expected_status
+):
     binding = _binding()
 
     class Client:
@@ -281,6 +302,11 @@ def test_qualify_one_records_no_score_or_tool_content(tmp_path, monkeypatch):
     monkeypatch.setattr(qualification, "_fetch_binding", lambda *_args, **_kwargs: binding)
     monkeypatch.setattr(
         self_hosted, "assert_authoritative_routes_deployed", lambda *_args: {"mode": "fixture"}
+    )
+    monkeypatch.setattr(
+        qualification,
+        "_assert_create_claim_routes_deployed",
+        lambda *_args: {"mode": "openapi"},
     )
 
     def request(_client, method, path, **_kwargs):
@@ -332,12 +358,20 @@ def test_qualify_one_records_no_score_or_tool_content(tmp_path, monkeypatch):
     monkeypatch.setattr(
         self_hosted,
         "ingest_metadata_only_session",
-        lambda *_args, **_kwargs: {"session_id": SESSION_ID},
+        lambda *_args, **_kwargs: {
+            "session_id": SESSION_ID,
+            "created_new_session": created_new_session,
+        },
     )
     receipt = qualification.qualify_one(
         binding, wave_id="fixture-wave", directory=tmp_path / "cell", api_key="secret"
     )
-    assert receipt["qualification_status"] == "qualified"
+    assert receipt["qualification_status"] == expected_status
+    if created_new_session:
+        assert receipt["checks"]["metadata_only_session_ingested"] is True
+    else:
+        assert receipt["checks"]["metadata_only_session_ingested"] is False
+        assert receipt["failure"]["phase"] == "session_ingest"
     rendered = "\n".join(path.read_text() for path in (tmp_path / "cell").iterdir())
     assert '"reward"' not in rendered
     assert "score response" not in rendered
@@ -357,6 +391,11 @@ def test_qualify_one_quarantines_ambiguous_provision_without_retry(tmp_path, mon
     monkeypatch.setattr(
         self_hosted, "assert_authoritative_routes_deployed", lambda *_args: {"mode": "fixture"}
     )
+    monkeypatch.setattr(
+        qualification,
+        "_assert_create_claim_routes_deployed",
+        lambda *_args: {"mode": "openapi"},
+    )
     calls = 0
 
     def request(_client, method, path, **_kwargs):
@@ -374,6 +413,41 @@ def test_qualify_one_quarantines_ambiguous_provision_without_retry(tmp_path, mon
     assert receipt["qualification_status"] == "quarantined_ambiguous"
     assert receipt["ambiguous_external_mutation"] is True
     assert receipt["automatic_retry_performed"] is False
+
+
+def test_qualify_one_fails_before_provision_when_create_claim_routes_are_missing(
+    tmp_path, monkeypatch
+):
+    binding = _binding()
+
+    class Client:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(qualification, "_client", lambda _key: Client())
+    monkeypatch.setattr(qualification, "_account", lambda _client: None)
+    monkeypatch.setattr(qualification, "_fetch_binding", lambda *_args, **_kwargs: binding)
+    monkeypatch.setattr(
+        self_hosted, "assert_authoritative_routes_deployed", lambda *_args: {"mode": "fixture"}
+    )
+    post_calls = 0
+
+    def request(_client, method, path, **_kwargs):
+        nonlocal post_calls
+        if method == "GET" and path == "/openapi.json":
+            return {"paths": {}}
+        if method == "POST":
+            post_calls += 1
+        raise AssertionError((method, path))
+
+    monkeypatch.setattr(self_hosted, "_request", request)
+    receipt = qualification.qualify_one(
+        binding, wave_id="fixture-wave", directory=tmp_path / "cell", api_key="secret"
+    )
+    assert post_calls == 0
+    assert receipt["qualification_status"] == "infrastructure_invalid"
+    assert receipt["failure"]["phase"] == "preflight"
+    assert receipt["checks"]["durable_create_claim_routes_deployed"] is False
 
 
 def test_cleanup_resumes_only_the_exact_instance_after_transport_loss(tmp_path, monkeypatch):
@@ -465,6 +539,25 @@ def test_not_analyzed_wave_requires_cumulative_attempted_catalog():
         )
 
 
+def test_not_analyzed_wave_rejects_qualified_only_catalog():
+    with pytest.raises(qualification.QualificationError, match="cumulative attempted"):
+        qualification.build_plan(
+            inventory={"task_count": 0, "tasks": []},
+            coverage={},
+            split={},
+            inventory_sha256="sha256:" + "1" * 64,
+            coverage_sha256="sha256:" + "2" * 64,
+            split_sha256="sha256:" + "3" * 64,
+            client=object(),
+            wave_id="wave-1",
+            qa_statuses={"not_analyzed"},
+            limit=1,
+            concurrency=1,
+            source={"fixture": True},
+            excluded_catalog={"schema": qualification.PRIVATE_CATALOG_SCHEMA},
+        )
+
+
 def test_execute_plan_writes_roster_inputs_and_aggregate_only(tmp_path, monkeypatch):
     binding = _binding()
     plan = _plan([binding])
@@ -485,7 +578,9 @@ def test_execute_plan_writes_roster_inputs_and_aggregate_only(tmp_path, monkeypa
     monkeypatch.setattr(qualification, "_account", lambda _client: None)
 
     def qualified(_binding, *, wave_id, directory, api_key):
-        directory.mkdir(parents=True)
+        assert directory.parent == tmp_path / "cells"
+        assert directory.parent.is_dir()
+        directory.mkdir()
         receipt = qualification.sealed(
             {
                 "schema": qualification.CELL_TERMINAL_SCHEMA,
@@ -496,6 +591,7 @@ def test_execute_plan_writes_roster_inputs_and_aggregate_only(tmp_path, monkeypa
                     name: True
                     for name in (
                         "exact_task_binding",
+                        "durable_create_claim_routes_deployed",
                         "environment_started",
                         "bash_reachable",
                         "submit_report_reachable",

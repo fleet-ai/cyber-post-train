@@ -2,7 +2,7 @@
 
 The controller has two deliberately separate phases. ``prepare`` reads only
 metadata, freezes an exact roster, and excludes any task sharing an atom family
-with the protected final split. ``run`` creates each exact environment once,
+with the protected dev or final split. ``run`` creates each exact environment once,
 probes the two public task tools, records one genuine verifier outcome through
 the task-version authority, ingests a zero-message evidence session, and
 terminates the environment.  No prompt, tool output, flag, trace, or numeric
@@ -46,6 +46,7 @@ INVENTORY_SCHEMA = "fleet_current_production_blackbox_inventory_v1"
 COVERAGE_SCHEMA = "fleet_current_blackbox_training_coverage_v1"
 SPLIT_SCHEMA = "cyber_representative_study_split_v2"
 EXPECTED_TEAM_ID = "a1025f0b-ad67-49fc-a023-51800ab43e84"
+CREATE_CLAIM_ROUTE_TEMPLATE = "/v1/env/instances/create-requests/{request_id}"
 SESSION_MODEL = "fleet/task-quality-runtime-probe-v1"
 REQUIRED_TOOLS = ["bash", "submit_report"]
 REQUIRED_CONTRACT = {
@@ -202,10 +203,39 @@ def _account(client: httpx.Client) -> None:
         raise QualificationError("FLEET_API_KEY is not scoped to the Fleet team")
 
 
-def _source_locator(value: object, label: str) -> str:
+def _assert_create_claim_routes_deployed(client: httpx.Client) -> dict[str, Any]:
+    """Prove exact cleanup reconciliation exists before provisioning can mutate."""
+    openapi = self_hosted._request(client, "GET", "/openapi.json")  # noqa: SLF001
+    paths = openapi.get("paths") if isinstance(openapi, dict) else None
+    route = paths.get(CREATE_CLAIM_ROUTE_TEMPLATE) if isinstance(paths, dict) else None
+    required_methods = ("get", "delete")
+    if not isinstance(route, dict) or any(
+        not isinstance(route.get(method), dict) for method in required_methods
+    ):
+        raise QualificationError("durable create-request claim GET/DELETE routes are not deployed")
+    return {
+        "mode": "openapi",
+        "route": CREATE_CLAIM_ROUTE_TEMPLATE,
+        "methods": [method.upper() for method in required_methods],
+    }
+
+
+def _source_locator(value: object, label: str, *, bundle_kind: str) -> str:
     if not isinstance(value, str) or not value.startswith("cyber/") or ":" not in value:
         raise QualificationError(f"{label} is not an immutable Registry locator")
-    return value.rsplit(":", 1)[0]
+    locator, observed_bundle_kind = value.rsplit(":", 1)
+    try:
+        artifact_key, version_index = locator.rsplit("@", 1)
+    except ValueError as error:
+        raise QualificationError(f"{label} is not an immutable Registry locator") from error
+    if (
+        not artifact_key.startswith("cyber/")
+        or not artifact_key.removeprefix("cyber/")
+        or not version_index.isdigit()
+        or observed_bundle_kind != bundle_kind
+    ):
+        raise QualificationError(f"{label} is not an immutable Registry locator")
+    return locator
 
 
 def safe_task_binding(
@@ -305,7 +335,7 @@ def safe_task_binding(
             raise QualificationError("task atom-source lineage is invalid")
         artifact_key = source.get("artifact_key")
         atom_id = source.get("atom_id")
-        locator = _source_locator(source.get("locator"), "atom source")
+        locator = _source_locator(source.get("locator"), "atom source", bundle_kind="atom_source")
         version_index = source.get("version_index")
         if (
             not isinstance(artifact_key, str)
@@ -327,10 +357,16 @@ def safe_task_binding(
         )
     if len({row["artifact_key"] for row in atoms}) != len(atoms):
         raise QualificationError("task atom-source lineage contains duplicates")
-    source_locator = _source_locator(subject.get("source_locator"), "task graph source")
+    source_locator = _source_locator(
+        subject.get("source_locator"),
+        "task graph source",
+        bundle_kind="task_graph_source",
+    )
     task_graph_id = subject.get("task_graph_id")
     if not isinstance(task_graph_id, str) or not task_graph_id:
         raise QualificationError("task graph identity is missing")
+    if source_locator.rsplit("@", 1)[0] != f"cyber/task-graphs/{task_graph_id}":
+        raise QualificationError("task graph source is not bound to the task graph identity")
     applications = sorted({row["atom_id"].split("/", 1)[0] for row in atoms})
     family = atoms[0]["artifact_key"] if len(atoms) == 1 else source_locator.rsplit("@", 1)[0]
     difficulty = metadata.get("task_graph_band") or metadata.get("expected_difficulty")
@@ -416,8 +452,10 @@ def build_plan(
         raise QualificationError("wave limit/concurrency must be within 1..64")
     if not qa_statuses or not qa_statuses <= {"clean", "agent_failure", "not_analyzed"}:
         raise QualificationError("wave QA statuses are unsupported")
-    if "not_analyzed" in qa_statuses and excluded_catalog is None:
-        raise QualificationError("not_analyzed waves require a cumulative attempted catalog")
+    if "not_analyzed" in qa_statuses and (
+        excluded_catalog is None or excluded_catalog.get("schema") != ATTEMPTED_CATALOG_SCHEMA
+    ):
+        raise QualificationError("not_analyzed waves require the cumulative attempted catalog")
     inventory_rows = inventory.get("tasks")
     if not isinstance(inventory_rows, list) or inventory.get("task_count") != len(inventory_rows):
         raise QualificationError("inventory task census is invalid")
@@ -750,8 +788,12 @@ def qualify_one(
         if observed != binding:
             raise QualificationError("live task binding changed after qualification planning")
         authority_gate = self_hosted.assert_authoritative_routes_deployed(client, config)
+        create_claim_gate = _assert_create_claim_routes_deployed(client)
         evidence["exact_task_binding"] = True
         evidence["authority_gate"] = authority_gate.get("mode")
+        evidence["durable_create_claim_routes_deployed"] = (
+            create_claim_gate.get("mode") == "openapi"
+        )
 
         phase = "provisioning"
         _write_once(
@@ -891,6 +933,8 @@ def qualify_one(
             verifier_execution_id=verifier_execution_id,
         )
         unbound_mutation = False
+        if ingest.get("created_new_session") is not True:
+            raise QualificationError("metadata-only evidence session was not created exactly once")
         _write_once(
             directory / "SESSION_INGEST_RECEIPT.json",
             sealed(
@@ -902,6 +946,7 @@ def qualify_one(
                     "message_count": 0,
                     "trace_persisted": False,
                     "metadata_only": True,
+                    "created_new_session": True,
                     "authoritative_session_outcome_persisted": True,
                     "numeric_score_in_controller_receipt": False,
                 }
@@ -969,6 +1014,9 @@ def qualify_one(
         "qualification_status": status,
         "checks": {
             "exact_task_binding": evidence.get("exact_task_binding", False),
+            "durable_create_claim_routes_deployed": evidence.get(
+                "durable_create_claim_routes_deployed", False
+            ),
             "environment_started": evidence.get("environment_started", False),
             "bash_reachable": evidence.get("bash_reachable", False),
             "submit_report_reachable": evidence.get("submit_report_reachable", False),
@@ -1007,6 +1055,8 @@ def execute_plan(plan: dict[str, Any], root: Path, *, api_key: str) -> dict[str,
         }
     )
     _write_once(root / "RUN_INTENT.json", intent)
+    cells_root = root / "cells"
+    cells_root.mkdir(mode=0o700)
     with _client(api_key) as client:
         _account(client)
     terminals: list[tuple[dict[str, Any], dict[str, Any]]] = []
@@ -1016,7 +1066,7 @@ def execute_plan(plan: dict[str, Any], root: Path, *, api_key: str) -> dict[str,
                 qualify_one,
                 binding,
                 wave_id=plan["wave_id"],
-                directory=root / "cells" / f"cell-{index:03d}",
+                directory=cells_root / f"cell-{index:03d}",
                 api_key=api_key,
             ): binding
             for index, binding in enumerate(plan["tasks"])
@@ -1031,6 +1081,7 @@ def execute_plan(plan: dict[str, Any], root: Path, *, api_key: str) -> dict[str,
         name: 0
         for name in (
             "exact_task_binding",
+            "durable_create_claim_routes_deployed",
             "environment_started",
             "bash_reachable",
             "submit_report_reachable",

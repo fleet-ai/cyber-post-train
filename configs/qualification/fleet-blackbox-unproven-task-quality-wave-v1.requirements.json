@@ -84,6 +84,7 @@
     "aggregate_receipt_schema": "cyber_task_quality_qualification_aggregate_receipt_v1",
     "automatic_retry": false,
     "controller": "evals.fleet.task_quality_qualification",
+    "create_claim_route_live_preflight": true,
     "create_request_claim_reconciliation": true,
     "execution_mode": "local_exactly_once_v1",
     "maximum_concurrency": 64,
@@ -92,12 +93,13 @@
     "public_evidence": "aggregate_only",
     "require_clean_origin_main_ancestor": true,
     "resumable_exact_instance_cleanup": true,
-    "session_mode": "metadata_only_runtime_evidence_v1"
+    "session_mode": "metadata_only_runtime_evidence_v1",
+    "session_must_be_new": true
   },
   "missing_launch_gates": [
     "controller_source_commit_merged",
     "fresh_private_plan_prepared_from_merged_source",
-    "fleet_team_and_authoritative_route_live_preflight",
+    "fleet_team_authoritative_and_create_claim_route_live_preflight",
     "exclusive_pre_mutation_run_intent"
   ],
   "purpose": "Qualify currently unproven production blackbox tasks for later train/dev consideration by proving runtime and grading health; this wave creates no training examples.",
@@ -124,7 +126,7 @@
     "exact_bash_and_submit_report_tool_reachability",
     "verifier_process_completion",
     "finite_authoritative_outcome_recording",
-    "session_ingestion_completion",
+    "new_metadata_only_session_ingestion_completion",
     "environment_and_container_cleanup"
   ],
   "safety": {
@@ -137,6 +139,6 @@
     "request_or_pod_template_annotation_is_insufficient": true
   },
   "schema": "cyber_task_quality_qualification_wave_requirements_v1",
-  "sha256": "sha256:945793dfb0f386dd44fea7f006f091e617c065a63ecd64242771352953ab89a2",
+  "sha256": "sha256:f2c7eadea587da1c24339399f0fac9e67d5e28953e8c5efa874b8352abfb621c",
   "status": "source_ready_pending_merge_and_live_execution"
 }

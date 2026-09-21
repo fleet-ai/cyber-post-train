@@ -21,12 +21,13 @@ For every selected exact task/version, the controller:
    grouping family is the version-independent Registry artifact key;
 2. rejects any candidate sharing an atom artifact key with the immutable
    17-task dev or eight-task final held-out split;
-3. exclusively records a cell intent, provisions through the exact
+3. proves the durable create-request claim GET/DELETE routes are deployed,
+   exclusively records a cell intent, provisions through the exact
    task-version authority once, and verifies the live environment binding;
 4. initializes MCP and calls `bash` plus `submit_report` with a fixed no-flag
    runtime probe;
-5. invokes the v3 direct verifier authority and ingests a zero-message,
-   trace-free evidence session; and
+5. invokes the v3 direct verifier authority and creates a new zero-message,
+   trace-free evidence session (an already-existing session fails closed); and
 6. terminates the exact environment and requires termination evidence.
 
 A finite authoritative verifier failure is valid task-health evidence. The
@@ -91,7 +92,8 @@ only that delete. The wave is not resource-terminal until
 
 For each later `not_analyzed` wave, pass the preceding private
 `ATTEMPTED_CATALOG.private.json` with `--exclude-catalog`, use a new immutable
-wave ID, and cap the selected versions at 64. That catalog is cumulative and
+wave ID, and cap the selected versions at 64. No qualified-only catalog schema
+is accepted for these waves. The attempted catalog is cumulative and
 excludes qualified, infrastructure-invalid, and ambiguous cells from automatic
 replay. Merge the qualified catalogs only through a digest-checked private
 adapter; never infer validity from inventory metadata or copy a task because a
