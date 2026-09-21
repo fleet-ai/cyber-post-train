@@ -80,7 +80,7 @@
     "executed": false,
     "failure_alerts": "off",
     "gpus": 0,
-    "manifest_sha256": "995a8c0eb5795920dc554fdcf9f332484a137e7f3d9ca2fa8b3efcdcdb820bd5",
+    "manifest_sha256": "219f8f6d8b289b5363a791be1013771610e371d9f578c675522a59e84a3d7bd8",
     "name": "chris-q38-prod8-preflight-v1",
     "priority": "c1",
     "server_previewed_in_dev_and_prod": true
@@ -163,6 +163,6 @@
     "steps": 1,
     "tokens_per_turn": 32768
   },
-  "sha256": "sha256:1350ebbc547516f9291774ef6247687956ea231b46fadb832dfa23a39e3b3fb3",
+  "sha256": "sha256:fd587773ea75b5b4bb71822af6fab835152997f40ed2367093f024abbf4af5dc",
   "status": "prepared_external_stage_and_preflight_pending"
 }
