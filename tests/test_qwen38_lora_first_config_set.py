@@ -31,6 +31,7 @@ GATE_TEMPLATE = RUNS / "qwen38-27b-lora-sft-r64-a32-one-step-v10.template.json"
 PRODUCTION_CANARY = RUNS / "qwen38-27b-lora-sft-r64-a32-prod-canary-v1.json"
 PRODUCTION_ANCHOR = RUNS / "qwen38-27b-lora-sft-r64-a32-anchor-v1.json"
 RESUME_CANARY = RUNS / "qwen38-27b-lora-sft-r64-a32-lr1e5-resume-s42-v2.json"
+RESUME_STABILITY_GATE = RUNS / "qwen38-27b-lora-sft-r64-a32-lr1e5-resume-s60-v3.json"
 BROAD_LR_VARIANTS = {
     RUNS / "qwen38-27b-lora-sft-r64-a32-lr1e5-v1.json": {
         "run_name": "chris-q38-lora-lr1-v1",
@@ -382,6 +383,31 @@ def test_qwen38_recovery_config_compiles_with_segmented_linux_safe_bundle():
     assert bundle_keys == [f"CYBER_SFT_BUNDLE_{index}" for index in range(len(bundle_keys))]
     assert len(bundle_keys) > 1
     assert all(len(request["env"][key]) <= 48000 for key in bundle_keys)
+
+
+def test_step60_recovery_gate_changes_only_checkpoint_identity_and_stop_boundary():
+    source = read(RESUME_CANARY)
+    successor = read(RESUME_STABILITY_GATE)
+
+    for key in ("model", "data", "recipe", "lora", "runtime", "cluster"):
+        assert successor[key] == source[key]
+    assert successor["name"] == successor["wandb"]["name"] == successor["wandb"]["run_id"]
+    assert successor["name"] == "chris-q38-lora-r1-s60-v3"
+    assert successor["output_root"] == "/mnt/sfs/jobs/chris-q38-lora-r1-s60-v3"
+    assert successor["pause_after_step"] == 60
+    assert successor["recovery"] == {
+        "manifest": (
+            "/mnt/sfs/jobs/chris-q38-lora-r1-s42-v2/"
+            "checkpoint_manifests/step-000042-megatron-v1.json"
+        ),
+        "sha256": "fe311aad65920de7a2a3476f01b584d921d90017c23bf74bfc7f572b74efd72c",
+        "mode": "resume",
+    }
+    assert {
+        "memory-repair-resume-gate",
+        "step42-to-step60",
+        "crosses-prior-step49-oom-boundary",
+    } <= set(successor["wandb"]["tags"])
 
 
 @pytest.mark.parametrize("path", BROAD_LR_VARIANTS)
