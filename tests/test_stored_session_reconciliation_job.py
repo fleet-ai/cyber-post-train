@@ -196,10 +196,13 @@ def test_dedicated_database_replaces_shared_default_and_preserves_connection_ide
         ("https://postgres.internal/rollout", "valid_db"),
         ("postgresql:///rollout", "valid_db"),
         ("postgresql://postgres.internal/rollout", "invalid-database"),
+        ("postgresql://postgres.internal/rollout?dbname=other", "valid_db"),
     ],
 )
 def test_dedicated_database_rejects_ambiguous_or_unsealed_identity(admin, database):
-    with pytest.raises(Exception, match="DSN is invalid|database name is invalid"):
+    with pytest.raises(
+        Exception, match="DSN is invalid|database name is invalid|overrides authority"
+    ):
         reconciliation.dedicated_dsn(admin, database)
 
 
