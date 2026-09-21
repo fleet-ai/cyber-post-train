@@ -1,0 +1,101 @@
+{
+  "schema": "qwen38_fleet_dev17_seed43_base_fresh_recovery_audit_v1",
+  "observed_at": "2026-09-21T06:03:47.157985Z",
+  "source": {
+    "base_commit": "91ab058ebbf744c0931dbb9692831bdbd7ecefaf",
+    "protocol_file": "configs/evaluation/qwen38-fleet-dev17-seed43-matched-protocol-v1.json",
+    "protocol_file_sha256": "sha256:12ff102e82a848d760587ef0af4848e7b288ca4f5e0acfe248cd60dfe0dd17aa",
+    "protocol_sha256": "85334a48a36c126a1134ab2e0ba6211e2fce5de06c4fce6bbcef5304ab9b4f4a",
+    "recovery_contract_file": "configs/evaluation/qwen38-fleet-dev17-seed43-reviewed-recovery-v1.json",
+    "recovery_contract_sha256": "404e31cb51ee504e222ab8b00dcff4ffbaa37e5594b645605a614fc25cb0b47d"
+  },
+  "private_manifest": {
+    "location_recorded": false,
+    "sha256": "0ea3897ec4afb08d0760d6fe43b45e88c8118b720ffac469f9da37b540ea1a07",
+    "status": "partial_observation_do_not_apply",
+    "self_digest_verified": true,
+    "contains_private_cell_and_session_identifiers": true,
+    "score_values_recorded": false,
+    "prompt_response_flag_reward_or_trace_content_recorded": false
+  },
+  "arms": {
+    "base": {
+      "primary_job": "chris-q38-dev17-s43-base-p1-v1",
+      "job_uid": "6dc5320f-02f5-470d-ae83-a5dec0fe2a62",
+      "job_state": "terminal_infrastructure_incomplete",
+      "counts": {
+        "accepted": 7,
+        "retry_review": 10,
+        "local_results": 17
+      },
+      "retry_review_groups": {
+        "output_limit_with_completed_stored_session": 9,
+        "process_error_with_completed_stored_session": 1
+      },
+      "reviewed_actions": {
+        "accept_existing_scored_session": 10,
+        "scoring_only_recovery": 0,
+        "rollout_retry": 0,
+        "manual_terminal_review": 0
+      }
+    },
+    "fresh75": {
+      "primary_job": "chris-q38-dev17-s43-fresh75-p1-v1",
+      "job_uid": "d8fd2e3f-db6a-4ec5-89f3-fec695668486",
+      "job_state": "terminal_infrastructure_incomplete",
+      "counts": {
+        "accepted": 14,
+        "retry_review": 3,
+        "local_results": 15
+      },
+      "retry_review_groups": {
+        "output_limit_with_completed_stored_session": 1,
+        "post_claim_connecterror_without_local_or_session": 1,
+        "post_claim_operationalerror_without_local_or_session": 1
+      },
+      "reviewed_actions": {
+        "accept_existing_scored_session": 1,
+        "scoring_only_recovery": 0,
+        "rollout_retry_pending_full_absence_proof": 2,
+        "manual_terminal_review": 0
+      }
+    }
+  },
+  "authoritative_review": {
+    "stored_sessions_checked": 11,
+    "one_exact_completed_session": 11,
+    "exact_persisted_model_identity": 11,
+    "exact_task_and_version_ingest_binding": 11,
+    "exact_verifier_execution_identity": 11,
+    "finite_authoritative_score_presence": 11,
+    "immutable_local_receipt_bytes_matched": 11,
+    "score_values_read_or_recorded": false,
+    "capability_outcomes_read_or_recorded": false
+  },
+  "launch_gate": {
+    "open": false,
+    "reason": "The frozen contract requires all four seed-43 primary jobs to be terminal. Self44 remains active. No stored-session cell needs a scoring-only job.",
+    "scoring_jobs_created": 0,
+    "rollout_jobs_created": 0,
+    "cells_replayed_or_mutated": 0,
+    "fresh75_route_resume_requested": false,
+    "remaining": [
+      "all four primary jobs terminal",
+      "full four-arm private self-digesting manifest",
+      "authoritative absence proof for the two Fresh75 transport cells",
+      "current duplicate and capacity gates before any rollout retry"
+    ]
+  },
+  "privacy": {
+    "cell_session_task_or_trace_identifiers_recorded_in_this_receipt": false,
+    "prompt_response_flag_reward_or_trace_content_recorded": false,
+    "final_eight_task_set_accessed": false
+  },
+  "interpretation": {
+    "capability_claim_made": false,
+    "base_complete_arm_claim_allowed": false,
+    "fresh75_complete_arm_claim_allowed": false,
+    "infrastructure_recovery_apply_started": false
+  },
+  "sha256": "59d45e261d1bd4424bcaa33a6d84d65bd59ee5f6d96bacc431662a6b2efe017b"
+}
