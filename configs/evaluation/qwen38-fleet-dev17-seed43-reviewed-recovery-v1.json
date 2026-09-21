@@ -1,0 +1,138 @@
+{
+  "schema": "qwen38_fleet_dev17_seed43_reviewed_recovery_v1",
+  "status": "review_only_do_not_apply",
+  "protocol": {
+    "path": "configs/evaluation/qwen38-fleet-dev17-seed43-matched-protocol-v1.json",
+    "file_sha256": "sha256:12ff102e82a848d760587ef0af4848e7b288ca4f5e0acfe248cd60dfe0dd17aa",
+    "sha256": "85334a48a36c126a1134ab2e0ba6211e2fce5de06c4fce6bbcef5304ab9b4f4a",
+    "sampling_seed": 43,
+    "accepted_cells_required_per_arm": 17,
+    "final_eight_task_set_access": "sealed"
+  },
+  "arm_blindness": {
+    "same_rules_for_every_arm": true,
+    "score_values_are_not_inputs": true,
+    "capability_outcomes_are_not_inputs": true,
+    "accepted_cells_are_final_and_never_replayed": true,
+    "cross_arm_splicing_forbidden": true,
+    "classification_must_finish_before_any_apply": true
+  },
+  "classification": {
+    "existing_exact_scored_session": {
+      "action": "accept_existing_scored_session",
+      "model_generation_allowed": false,
+      "requirements": [
+        "one exact authoritative session",
+        "completed session status",
+        "exact model task-version and verifier identities",
+        "finite authoritative score presence without reading or recording its value",
+        "complete immutable attempt evidence"
+      ]
+    },
+    "existing_unscored_session": {
+      "action": "scoring_only_recovery",
+      "model_generation_allowed": false,
+      "maximum_attempts": 1,
+      "requirements": [
+        "one completed immutable session",
+        "exact model and task-version identities",
+        "complete immutable attempt evidence",
+        "no prior scoring-only recovery"
+      ]
+    },
+    "no_outcome_transport_failure": {
+      "action": "rollout_retry",
+      "model_generation_allowed": true,
+      "maximum_attempts": 1,
+      "allowed_failure_codes": [
+        "post_claim.connecterror",
+        "post_claim.operationalerror"
+      ],
+      "requirements": [
+        "termination class is post_claim_transport",
+        "no local result",
+        "no local or authoritative session",
+        "no trace manifest",
+        "no scoring intent",
+        "authoritative absence proven",
+        "complete immutable claim and absence evidence",
+        "cell retry_count below one"
+      ]
+    },
+    "output_limit_or_process_error": {
+      "model_generation_allowed": false,
+      "rule": "Use an exact existing scored session or scoring-only recovery; never repeat generation."
+    },
+    "no_rule_matches": {
+      "action": "manual_terminal_review",
+      "model_generation_allowed": false
+    }
+  },
+  "execution": {
+    "wait_for_all_four_primary_jobs_terminal": true,
+    "apply_requires_a_private_cell_manifest_self_digest": true,
+    "apply_requires_current_readback_of_every_selected_cell": true,
+    "scoring_only_actions_before_any_rollout_retry": true,
+    "root_failure_alert_annotation": {
+      "fleet.ai/failure-alerts": "off"
+    },
+    "priority_class": "c1",
+    "gpu_request": 0,
+    "cpu_request": "4",
+    "memory_request": "32Gi",
+    "server_dry_run_required": true,
+    "job_config_map_pod_workload_output_duplicate_absence_required": true,
+    "uncertain_create_must_not_be_replayed": true
+  },
+  "arms": {
+    "base": {
+      "config_sha256": "sha256:b52db3194f8682bcf88fb96049a1f3cf14afa8b3b7ab18932b0209f394d90b7c",
+      "primary_job": "chris-q38-dev17-s43-base-p1-v1",
+      "database": "q38_dev17_s43_base_p1_v1",
+      "served_id": "qwen3.8-27b",
+      "scoring_job": "chris-q38-dev17-s43-base-score-r1-v1",
+      "scoring_config_map": "chris-q38-dev17-s43-base-score-r1-code-v1",
+      "scoring_output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s43-base-score-r1-v1",
+      "rollout_job": "chris-q38-dev17-s43-base-rollout-r1-v1",
+      "rollout_config_map": "chris-q38-dev17-s43-base-rollout-r1-code-v1",
+      "rollout_output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s43-base-rollout-r1-v1"
+    },
+    "fresh75": {
+      "config_sha256": "sha256:90c0b6b942deecb0571e85e81419b4411d53e5c11fd0aa280afd2628ef79be80",
+      "primary_job": "chris-q38-dev17-s43-fresh75-p1-v1",
+      "database": "q38_dev17_s43_fresh75_p1_v1",
+      "served_id": "chris-q38-fresh75-step230-web-v2",
+      "scoring_job": "chris-q38-dev17-s43-fresh75-score-r1-v1",
+      "scoring_config_map": "chris-q38-dev17-s43-fresh75-score-r1-code-v1",
+      "scoring_output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s43-fresh75-score-r1-v1",
+      "rollout_job": "chris-q38-dev17-s43-fresh75-rollout-r1-v1",
+      "rollout_config_map": "chris-q38-dev17-s43-fresh75-rollout-r1-code-v1",
+      "rollout_output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s43-fresh75-rollout-r1-v1"
+    },
+    "self44": {
+      "config_sha256": "sha256:c8c71394eeadee25801b771e25060445581c25215e0592f07e1b5884799664ce",
+      "primary_job": "chris-q38-dev17-s43-self44-p1-v1",
+      "database": "q38_dev17_s43_self44_p1_v1",
+      "served_id": "chris-q38-self-sft-step44-v1",
+      "scoring_job": "chris-q38-dev17-s43-self44-score-r1-v1",
+      "scoring_config_map": "chris-q38-dev17-s43-self44-score-r1-code-v1",
+      "scoring_output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s43-self44-score-r1-v1",
+      "rollout_job": "chris-q38-dev17-s43-self44-rollout-r1-v1",
+      "rollout_config_map": "chris-q38-dev17-s43-self44-rollout-r1-code-v1",
+      "rollout_output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s43-self44-rollout-r1-v1"
+    },
+    "teacher186": {
+      "config_sha256": "sha256:9af42e2fbd84c51c219228fe75a515c448d694c6df0e69e70dfb3e1e9ed02ee5",
+      "primary_job": "chris-q38-dev17-s43-teacher186-p1-v1",
+      "database": "q38_dev17_s43_teacher186_p1_v1",
+      "served_id": "chris-q38-teacher-v5-step186-web-v1",
+      "scoring_job": "chris-q38-dev17-s43-teacher186-score-r1-v1",
+      "scoring_config_map": "chris-q38-dev17-s43-teacher186-score-r1-code-v1",
+      "scoring_output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s43-teacher186-score-r1-v1",
+      "rollout_job": "chris-q38-dev17-s43-teacher186-rollout-r1-v1",
+      "rollout_config_map": "chris-q38-dev17-s43-teacher186-rollout-r1-code-v1",
+      "rollout_output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s43-teacher186-rollout-r1-v1"
+    }
+  },
+  "sha256": "404e31cb51ee504e222ab8b00dcff4ffbaa37e5594b645605a614fc25cb0b47d"
+}
