@@ -74,6 +74,14 @@ The roster uses an anchored task-family split:
 5. Derive a new protected-family lock from the resulting split.  Every later
    admission and materialization step checks that lock.
 
+The parent role anchor travels with every anchored split as a separate sealed
+file.  The collection renderer, admission adapter, and private materializer
+all require that exact file, verify its digest against the child split, and
+compare every inherited role and task-family mapping to it.  They never trust
+the child split's self-reported historical roles by themselves.  This means a
+rewritten and re-digested child cannot quietly move an original development or
+final-test family into training.
+
 This makes a broad roster reproducible and family-safe even as the catalog
 grows from dozens toward thousands of versions.
 

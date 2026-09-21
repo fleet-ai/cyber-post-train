@@ -26,7 +26,7 @@ from cyber_post_train.jobs import digest
 
 from .io import atomic_write_json, file_sha256, iter_jsonl
 from .sft import _known
-from .task_family_split import is_supported_schema
+from .task_family_split import is_supported_schema, requires_role_anchor
 from .task_family_split import validate as validate_split
 
 REQUEST_SCHEMA = "cyber_fleet_collection_admission_request_v1"
@@ -236,7 +236,7 @@ def _campaign_cells(
 
 
 def _split_assignments(
-    split: dict[str, Any], inventory: dict[str, Any]
+    split: dict[str, Any], inventory: dict[str, Any], *, role_anchor: dict[str, Any] | None
 ) -> dict[tuple[str, str], dict[str, str]]:
     if not is_supported_schema(split):
         raise ValueError("collection admission requires a supported family split")
@@ -247,7 +247,7 @@ def _split_assignments(
         raise ValueError("sanitized split inventory digest mismatch")
     if split.get("inventory_sha256") != inventory["sha256"]:
         raise ValueError("family split is not bound to the current sanitized task catalog")
-    validate_split(split, rows)
+    validate_split(split, rows, role_anchor=role_anchor)
     if set(split.get("counts", {})) != {"train", "dev", "final_test"}:
         raise ValueError("collection admission requires immutable train/dev/final_test roles")
     result: dict[tuple[str, str], dict[str, str]] = {}
@@ -460,6 +460,7 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
             "campaign",
             "inventory",
             "family_split",
+            "role_anchor",
             "protected_family_lock",
             "attempts",
             "source",
@@ -490,6 +491,12 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
     split_path, split_file_sha = _input_path(
         relative_to, config.get("family_split"), "family split"
     )
+    role_anchor_path = None
+    role_anchor_file_sha = None
+    if "role_anchor" in config:
+        role_anchor_path, role_anchor_file_sha = _input_path(
+            relative_to, config.get("role_anchor"), "family role anchor"
+        )
     lock_path, lock_file_sha = _input_path(
         relative_to, config.get("protected_family_lock"), "protected-family lock"
     )
@@ -497,10 +504,17 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
     plan = _read_json(campaign_path, "campaign")
     inventory = _read_json(inventory_path, "inventory")
     split = _read_json(split_path, "family split")
+    role_anchor = (
+        None if role_anchor_path is None else _read_json(role_anchor_path, "family role anchor")
+    )
+    if requires_role_anchor(split) and role_anchor is None:
+        raise ValueError("anchored family split requires its role_anchor input")
+    if not requires_role_anchor(split) and role_anchor is not None:
+        raise ValueError("parameterized family split must not carry a role_anchor input")
     lock = _read_json(lock_path, "protected-family lock")
     expected, model, treatment = _campaign_cells(plan, model_alias)
     campaign_sha256 = _campaign_sha(plan)
-    assignments = _split_assignments(split, inventory)
+    assignments = _split_assignments(split, inventory, role_anchor=role_anchor)
     protected_groups = _protected_groups(lock)
     if lock["source_split_sha256"] != split["sha256"]:
         raise ValueError("protected-family lock is not bound to the current family split")
@@ -620,6 +634,7 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
         "campaign_plan_sha256": campaign_sha256,
         "catalog_inventory_sha256": inventory["sha256"],
         "family_split_sha256": split["sha256"],
+        "family_role_anchor_sha256": None if role_anchor is None else role_anchor["sha256"],
         "protected_family_lock_sha256": lock["sha256"],
         "source_kind": source["kind"],
         "source_model_alias": model_alias,
@@ -643,11 +658,13 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
             "campaign": campaign_file_sha,
             "inventory": inventory_file_sha,
             "family_split": split_file_sha,
+            "role_anchor": role_anchor_file_sha,
             "protected_family_lock": lock_file_sha,
             "attempts": attempts_file_sha,
         },
         "catalog_inventory_sha256": inventory["sha256"],
         "family_split_sha256": split["sha256"],
+        "family_role_anchor_sha256": None if role_anchor is None else role_anchor["sha256"],
         "protected_family_lock_sha256": lock["sha256"],
         "protected_family_count": len(protected_groups),
         "source_kind": source["kind"],
@@ -693,10 +710,11 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
         (campaign_path, campaign_file_sha, "campaign"),
         (inventory_path, inventory_file_sha, "inventory"),
         (split_path, split_file_sha, "family split"),
+        (role_anchor_path, role_anchor_file_sha, "family role anchor"),
         (lock_path, lock_file_sha, "protected-family lock"),
         (attempts_path, attempts_file_sha, "attempts"),
     ):
-        if file_sha256(path) != expected_sha:
+        if path is not None and file_sha256(path) != expected_sha:
             raise ValueError(f"{label} changed during collection admission")
     _write_output(output, selection, receipt)
     return {

@@ -283,7 +283,7 @@ def render(config: dict[str, Any], *, relative_to: Path) -> dict[str, dict[str, 
         ratios=_mapping(config.get("ratios"), "roster ratios"),
         max_group_task_version_fraction=config.get("max_group_task_version_fraction"),
     )
-    task_family_split.validate(split, metadata)
+    task_family_split.validate(split, metadata, role_anchor=anchor)
     protected = collection_campaign.sealed(
         {
             "schema": admission.PROTECTED_FAMILY_LOCK_SCHEMA,
@@ -313,6 +313,7 @@ def render(config: dict[str, Any], *, relative_to: Path) -> dict[str, dict[str, 
     return {
         "metadata-inventory.json": inventory,
         "runtime-bindings.json": runtime_bindings,
+        "role-anchor.json": anchor,
         "family-split.json": split,
         "protected-family-lock.json": protected,
         "ROSTER.json": receipt,

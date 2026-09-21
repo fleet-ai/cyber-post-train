@@ -289,9 +289,15 @@ def _request(value: dict[str, Any]) -> None:
 
 
 def _split_roles(
-    split: dict[str, Any], rows: list[dict[str, Any]]
+    split: dict[str, Any],
+    rows: list[dict[str, Any]],
+    *,
+    inventory_sha256: str,
+    role_anchor: dict[str, Any] | None,
 ) -> dict[tuple[str, str], dict[str, Any]]:
-    task_family_split.validate(split, rows)
+    if split.get("inventory_sha256") != inventory_sha256:
+        raise ValueError("family split is not bound to the exact collection inventory")
+    task_family_split.validate(split, rows, role_anchor=role_anchor)
     roles = {row["split"] for row in split["tasks"]}
     if roles != {"train", "dev", "final_test"}:
         raise ValueError("scale-up collection requires train, dev and final_test roles")
@@ -312,6 +318,7 @@ def _selection(
     inventory: dict[str, Any],
     split: dict[str, Any],
     runtime_bindings: dict[str, Any],
+    role_anchor: dict[str, Any] | None,
 ) -> dict[str, Any]:
     train = [
         {
@@ -328,6 +335,7 @@ def _selection(
             "schema": SELECTION_SCHEMA,
             "inventory_sha256": inventory["sha256"],
             "family_split_sha256": split["sha256"],
+            "family_role_anchor_sha256": None if role_anchor is None else role_anchor["sha256"],
             "runtime_bindings_sha256": runtime_bindings["sha256"],
             "task_validity_receipt_sha256": inventory["task_validity_receipt_sha256"],
             "tasks": train,
@@ -394,6 +402,7 @@ def _packet(
             "schema": PACKET_SCHEMA,
             "source": source,
             "task_selection_sha256": selection["sha256"],
+            "family_role_anchor_sha256": selection["family_role_anchor_sha256"],
             "runtime_bindings_sha256": runtime_bindings["sha256"],
             "eval_config_sha256": canonical_digest(config),
             "eval_plan_sha256": "sha256:" + plan["sha256"],
@@ -456,13 +465,20 @@ def render(
     inventory: dict[str, Any],
     split: dict[str, Any],
     runtime_bindings: dict[str, Any],
+    *,
+    role_anchor: dict[str, Any] | None = None,
 ) -> dict[str, dict[str, Any]]:
     """Render only local campaign inputs; this function performs no I/O or network calls."""
     _request(request)
     rows = _inventory_rows(inventory)
     bindings = _runtime_bindings(runtime_bindings, inventory, rows)
-    roles = _split_roles(split, rows)
-    selection = _selection(rows, bindings, roles, inventory, split, runtime_bindings)
+    roles = _split_roles(
+        split,
+        rows,
+        inventory_sha256=inventory["sha256"],
+        role_anchor=role_anchor,
+    )
+    selection = _selection(rows, bindings, roles, inventory, split, runtime_bindings, role_anchor)
     config = _config(request, selection)
     plan = _compile_local(selection, config)
     packet = _packet(request, selection, config, runtime_bindings, plan)
@@ -515,6 +531,7 @@ def main() -> None:
     parser.add_argument("--inventory", type=Path, required=True)
     parser.add_argument("--family-split", type=Path, required=True)
     parser.add_argument("--runtime-bindings", type=Path, required=True)
+    parser.add_argument("--role-anchor", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--write", action="store_true")
@@ -525,6 +542,7 @@ def main() -> None:
         _load(args.inventory),
         _load(args.family_split),
         _load(args.runtime_bindings),
+        role_anchor=None if args.role_anchor is None else _load(args.role_anchor),
     )
     if args.write:
         write_once(args.output, rendered)

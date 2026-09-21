@@ -118,6 +118,7 @@ def test_render_preserves_old_roles_and_emits_generic_collection_inputs(tmp_path
     assert receipt["family_split_sha256"] == split["sha256"]
     assert receipt["catalog_snapshot_sha256"] == _sha("c")
     assert lock["source_split_sha256"] == split["sha256"]
+    assert rendered["role-anchor.json"]["sha256"] == receipt["role_anchor_sha256"]
 
     previous = {row["group_id"]: row["split"] for row in base_split["tasks"]}
     current = {row["group_id"]: row["split"] for row in split["tasks"]}
@@ -231,9 +232,18 @@ def test_anchored_roster_can_render_only_train_tasks_for_collection(tmp_path: Pa
         "reasoning_policy": campaign.VISIBLE_ACTIONS_ONLY,
         "offline_compaction_policy": campaign.OPAQUE_COMPACTION_REJECT,
     }
-    collection = campaign.render(request, inventory, split, bindings)
+    collection = campaign.render(
+        request,
+        inventory,
+        split,
+        bindings,
+        role_anchor=rendered["role-anchor.json"],
+    )
     roles = {(row["task_key"], row["task_version_id"]): row["split"] for row in split["tasks"]}
     assert all(
         roles[(row["task_key"], row["task_version_id"])] == "train"
         for row in collection["task-selection.json"]["tasks"]
     )
+
+    with pytest.raises(ValueError, match="requires its independently sealed role anchor"):
+        campaign.render(request, inventory, split, bindings)

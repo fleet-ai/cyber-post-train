@@ -59,6 +59,11 @@ def is_supported_schema(value: object) -> bool:
     return isinstance(value, dict) and value.get("schema") in SUPPORTED_SCHEMAS
 
 
+def requires_role_anchor(value: object) -> bool:
+    """Return whether validation needs the independently sealed parent anchor."""
+    return isinstance(value, dict) and value.get("schema") == ANCHORED_SCHEMA
+
+
 def _sha256(value: object, label: str) -> str:
     if (
         not isinstance(value, str)
@@ -762,7 +767,9 @@ def _task_maps_from_split(
     return assigned, task_key_groups
 
 
-def freeze_role_anchor(value: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any]:
+def freeze_role_anchor(
+    value: dict[str, Any], rows: list[dict[str, Any]], *, role_anchor: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Freeze a validated parameterized split for a later catalog expansion.
 
     The output intentionally records all roles, including current training
@@ -771,7 +778,7 @@ def freeze_role_anchor(value: dict[str, Any], rows: list[dict[str, Any]]) -> dic
     """
     if not is_supported_schema(value):
         raise ValueError("only supported parameterized family splits can be frozen")
-    validate(value, rows)
+    validate(value, rows, role_anchor=role_anchor)
     policy = value["policy"]
     roles, task_key_groups = _task_maps_from_split(
         value, rows, tuple(policy["balanced_dimensions"])
@@ -1066,7 +1073,9 @@ def build_anchored(
     )
 
 
-def _validate_anchored(value: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any]:
+def _validate_anchored(
+    value: dict[str, Any], rows: list[dict[str, Any]], *, role_anchor: dict[str, Any] | None
+) -> dict[str, Any]:
     required = {
         "schema",
         "inventory_sha256",
@@ -1094,10 +1103,17 @@ def _validate_anchored(value: dict[str, Any], rows: list[dict[str, Any]]) -> dic
         raise ValueError("invalid anchored task-family split")
     if value.get("split_unit") != SPLIT_UNIT:
         raise ValueError("anchored split unit drift")
+    if role_anchor is None:
+        raise ValueError("anchored split requires its independently sealed role anchor")
+    anchored_roles, anchored_task_key_groups = _role_anchor(role_anchor)
+    if value.get("parent_role_anchor_sha256") != role_anchor.get("sha256"):
+        raise ValueError("anchored split parent role anchor digest mismatch")
     inherited_roles = _role_entries(value.get("inherited_roles"), "anchored inherited")
     inherited_task_key_groups = _task_key_group_entries(
         value.get("inherited_task_key_groups"), "anchored inherited task-key"
     )
+    if inherited_roles != anchored_roles or inherited_task_key_groups != anchored_task_key_groups:
+        raise ValueError("anchored split does not exactly inherit its sealed role anchor")
     for group_id in inherited_task_key_groups.values():
         if group_id not in inherited_roles:
             raise ValueError("anchored inherited task_key names an unknown role")
@@ -1138,14 +1154,18 @@ def _validate_anchored(value: dict[str, Any], rows: list[dict[str, Any]]) -> dic
     return value
 
 
-def validate(value: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any]:
+def validate(
+    value: dict[str, Any], rows: list[dict[str, Any]], *, role_anchor: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Validate either the original split or an additive anchored extension."""
     if not isinstance(value, dict):
         raise ValueError("invalid parameterized task-family split")
     if value.get("schema") == SCHEMA:
+        if role_anchor is not None:
+            raise ValueError("parameterized split must not carry an unrelated role anchor")
         return _validate_v1(value, rows)
     if value.get("schema") == ANCHORED_SCHEMA:
-        return _validate_anchored(value, rows)
+        return _validate_anchored(value, rows, role_anchor=role_anchor)
     raise ValueError("unsupported parameterized task-family split schema")
 
 

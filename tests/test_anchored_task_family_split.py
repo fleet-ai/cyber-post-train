@@ -104,7 +104,7 @@ def test_anchored_split_preserves_roles_and_assigns_only_new_families() -> None:
     assert value["anchor_audit"]["inherited_role_count"] == 12
     assert value["anchor_audit"]["new_group_count"] == 12
     assert value["leakage_checks"]["immutable_inherited_role_drift"] == 0
-    splits.validate(value, rows)
+    splits.validate(value, rows, role_anchor=anchor)
 
 
 def test_anchor_rejects_historical_task_key_family_drift() -> None:
@@ -152,7 +152,7 @@ def test_freezing_an_anchored_split_retains_absent_heldout_roles() -> None:
         ratios={"train": 0.5, "dev": 0.25, "final_test": 0.25},
         max_group_task_version_fraction=0.6,
     )
-    next_anchor = splits.freeze_role_anchor(first, rows)
+    next_anchor = splits.freeze_role_anchor(first, rows, role_anchor=anchor)
     dev_task = next(row for row in first["tasks"] if row["split"] == "dev")
     dev_group = dev_task["group_id"]
     without_family = [row for row in rows if row["task_key"] != dev_task["task_key"]]
@@ -171,7 +171,7 @@ def test_freezing_an_anchored_split_retains_absent_heldout_roles() -> None:
         ratios={role: count / remaining_total for role, count in remaining_roles.items()},
         max_group_task_version_fraction=0.6,
     )
-    final_anchor = splits.freeze_role_anchor(middle, without_family)
+    final_anchor = splits.freeze_role_anchor(middle, without_family, role_anchor=next_anchor)
     restored = splits.build_anchored(
         rows,
         inventory_sha256="sha256:" + "7" * 64,
@@ -184,6 +184,34 @@ def test_freezing_an_anchored_split_retains_absent_heldout_roles() -> None:
         row["split"] for row in restored["tasks"] if row["task_key"] == dev_task["task_key"]
     )
     assert restored_role == "dev"
+
+
+def test_anchored_split_rejects_resealed_self_reported_role_rewrite() -> None:
+    """The parent anchor, not the child split, remains role authority.
+
+    A caller able to rewrite and re-digest the child must still not move an
+    inherited held-out family into train.  This is deliberately a direct
+    contract test because every downstream consumer delegates to ``validate``.
+    """
+    base, base_split, anchor = _base_and_anchor()
+    rows = _expanded_rows(base, base_split)
+    value = splits.build_anchored(
+        rows,
+        inventory_sha256="sha256:" + "8" * 64,
+        role_anchor=anchor,
+        seed="anchored-extension-v1",
+        ratios={"train": 0.5, "dev": 0.25, "final_test": 0.25},
+        max_group_task_version_fraction=0.6,
+    )
+    changed = copy.deepcopy(value)
+    heldout = next(row for row in changed["inherited_roles"] if row["split"] != "train")
+    heldout["split"] = "train"
+    changed["sha256"] = splits.canonical_digest(
+        {key: item for key, item in changed.items() if key != "sha256"}
+    )
+
+    with pytest.raises(ValueError, match="exactly inherit its sealed role anchor"):
+        splits.validate(changed, rows, role_anchor=anchor)
 
 
 def test_real_locked_study_v2_converts_without_reassigning_roles() -> None:

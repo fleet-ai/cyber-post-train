@@ -71,6 +71,15 @@ def _fixture(
         ratios={"train": 0.6, "dev": 0.2, "final_test": 0.2},
         max_group_task_version_fraction=0.7,
     )
+    role_anchor = splits.freeze_role_anchor(split, rows)
+    split = splits.build_anchored(
+        rows,
+        inventory_sha256=inventory["sha256"],
+        role_anchor=role_anchor,
+        seed="admission-fixture-v1",
+        ratios={"train": 0.6, "dev": 0.2, "final_test": 0.2},
+        max_group_task_version_fraction=0.7,
+    )
     by_role: dict[str, list[dict[str, str]]] = {"train": [], "dev": [], "final_test": []}
     for row in split["tasks"]:
         by_role[row["split"]].append(row)
@@ -116,12 +125,14 @@ def _fixture(
         "campaign": _write_json(tmp_path / "campaign.json", campaign),
         "inventory": _write_json(tmp_path / "inventory.json", inventory),
         "family_split": _write_json(tmp_path / "split.json", split),
+        "role_anchor": _write_json(tmp_path / "role-anchor.json", role_anchor),
         "protected_family_lock": _write_json(tmp_path / "protected-lock.json", lock),
     }
     return {
         "campaign": campaign,
         "inventory": inventory,
         "split": split,
+        "role_anchor": role_anchor,
         "lock": lock,
         "model": model,
         "treatment": treatment,
@@ -409,6 +420,24 @@ def test_protected_family_lock_cannot_drop_a_heldout_family(tmp_path: Path) -> N
     )
 
     with pytest.raises(ValueError, match="exactly every immutable nontraining family"):
+        admission.build(request, relative_to=tmp_path)
+    assert not (tmp_path / request["output"]).exists()
+
+
+def test_anchored_admission_rejects_a_resealed_different_parent_anchor(tmp_path: Path) -> None:
+    fixture = _fixture(tmp_path, train_count=1, dev_count=0)
+    changed = copy.deepcopy(fixture["role_anchor"])
+    changed["source"]["split_sha256"] = _sha("different-parent")
+    changed["sha256"] = splits.canonical_digest(
+        {key: value for key, value in changed.items() if key != "sha256"}
+    )
+    fixture["refs"]["role_anchor"] = _write_json(tmp_path / "role-anchor.json", changed)
+    request = _request(
+        fixture,
+        [_attempt(fixture, fixture["by_role"]["train"][0], session_id="wrong-anchor")],
+    )
+
+    with pytest.raises(ValueError, match="parent role anchor digest mismatch"):
         admission.build(request, relative_to=tmp_path)
     assert not (tmp_path / request["output"]).exists()
 

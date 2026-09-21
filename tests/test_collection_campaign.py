@@ -214,6 +214,14 @@ def test_requires_exact_runtime_bindings_and_split_protection() -> None:
     with pytest.raises(ValueError, match="different metadata inventory"):
         campaign.render(_request(), inventory, split, wrong_bindings)
 
+    wrong_inventory_split = copy.deepcopy(split)
+    wrong_inventory_split["inventory_sha256"] = _sha("0")
+    wrong_inventory_split["sha256"] = task_family_split.canonical_digest(
+        {key: value for key, value in wrong_inventory_split.items() if key != "sha256"}
+    )
+    with pytest.raises(ValueError, match="exact collection inventory"):
+        campaign.render(_request(), inventory, wrong_inventory_split, bindings)
+
     mutated_split = copy.deepcopy(split)
     mutated_split["tasks"][0]["split"] = "train"
     mutated_split = task_family_split.canonical_digest(
