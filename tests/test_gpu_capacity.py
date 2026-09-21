@@ -23,6 +23,7 @@ def pod(
     labels: dict[str, str],
     gpus: int = 8,
     phase: str = "Running",
+    init_containers: list[dict] | None = None,
 ) -> dict:
     return {
         "metadata": {
@@ -34,6 +35,7 @@ def pod(
         },
         "spec": {
             "nodeName": node,
+            "initContainers": init_containers or [],
             "containers": [
                 {
                     "resources": {
@@ -45,6 +47,19 @@ def pod(
         },
         "status": {"phase": phase, "containerStatuses": [{"restartCount": 0}]},
     }
+
+
+def gpu_container(name: str, gpus: int, *, restartable: bool = False) -> dict:
+    value = {
+        "name": name,
+        "resources": {
+            "requests": {"nvidia.com/gpu": str(gpus)},
+            "limits": {"nvidia.com/gpu": str(gpus)},
+        },
+    }
+    if restartable:
+        value["restartPolicy"] = "Always"
+    return value
 
 
 def model(name: str, *, active: int, phase: str = "ready") -> dict:
@@ -146,6 +161,57 @@ def test_projected_create_fails_closed_above_eight_nodes() -> None:
     assert receipt["qualified"] is False
     assert "projected GPU nodes 9 exceed limit 8" in receipt["problems"]
     assert "projected GPUs 72 exceed limit 64" in receipt["problems"]
+
+
+def test_regular_init_gpu_is_peak_not_added_to_app_gpu() -> None:
+    receipt = build_capacity_census(
+        {
+            "items": [
+                pod(
+                    "chris-q38-train-head",
+                    namespace="fleet-train-jobs",
+                    uid="train",
+                    node="node-a",
+                    labels={"fleet.ai/run-name": "chris-q38-train"},
+                    gpus=8,
+                    init_containers=[
+                        gpu_container("first-setup", 8),
+                        gpu_container("second-setup", 8),
+                    ],
+                )
+            ]
+        },
+        {"items": []},
+        observed_at="2026-09-21T00:00:00Z",
+    )
+    assert receipt["qualified"] is True
+    assert receipt["current"]["gpus"] == 8
+
+
+def test_restartable_init_sidecar_is_added_to_app_and_later_init_peak() -> None:
+    receipt = build_capacity_census(
+        {
+            "items": [
+                pod(
+                    "chris-q38-train-head",
+                    namespace="fleet-train-jobs",
+                    uid="train",
+                    node="node-a",
+                    labels={"fleet.ai/run-name": "chris-q38-train"},
+                    gpus=7,
+                    init_containers=[
+                        gpu_container("gpu-sidecar", 1, restartable=True),
+                        gpu_container("later-setup", 8),
+                    ],
+                )
+            ]
+        },
+        {"items": []},
+        max_gpus=9,
+        observed_at="2026-09-21T00:00:00Z",
+    )
+    assert receipt["qualified"] is True
+    assert receipt["current"]["gpus"] == 9
 
 
 def test_unlabelled_owned_gpu_pod_is_counted_and_rejected() -> None:

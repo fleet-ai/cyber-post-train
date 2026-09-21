@@ -52,14 +52,40 @@ def _gpu_quantity(value: Any) -> int:
     return result
 
 
+def _container_quantity(container: dict, field: str) -> int:
+    resources = container.get("resources") or {}
+    return _gpu_quantity((resources.get(field) or {}).get(GPU_RESOURCE))
+
+
+def _effective_pod_quantity(spec: dict, field: str) -> int:
+    """Return Kubernetes' effective Pod quantity for one resource field.
+
+    Ordinary init containers run one at a time, so they contribute their peak,
+    not their sum.  An init container with ``restartPolicy: Always`` is a
+    restartable sidecar: it remains alive for later init containers and the app,
+    so its quantity is cumulative.  This is the scheduler formula for the Pod
+    shapes used by Fleet; Pod overhead is additive when declared.
+    """
+    app_total = sum(
+        _container_quantity(container, field) for container in spec.get("containers") or []
+    )
+    running_sidecars = 0
+    init_peak = 0
+    for container in spec.get("initContainers") or []:
+        quantity = _container_quantity(container, field)
+        if container.get("restartPolicy") == "Always":
+            running_sidecars += quantity
+            init_peak = max(init_peak, running_sidecars)
+        else:
+            init_peak = max(init_peak, running_sidecars + quantity)
+    overhead = _gpu_quantity((spec.get("overhead") or {}).get(GPU_RESOURCE))
+    return max(app_total + running_sidecars, init_peak) + overhead
+
+
 def _gpu_request(pod: dict) -> tuple[int, list[str]]:
     spec = pod.get("spec") or {}
-    containers = [*(spec.get("initContainers") or []), *(spec.get("containers") or [])]
-    requested = limited = 0
-    for container in containers:
-        resources = container.get("resources") or {}
-        requested += _gpu_quantity((resources.get("requests") or {}).get(GPU_RESOURCE))
-        limited += _gpu_quantity((resources.get("limits") or {}).get(GPU_RESOURCE))
+    requested = _effective_pod_quantity(spec, "requests")
+    limited = _effective_pod_quantity(spec, "limits")
     problems = []
     if requested != limited:
         problems.append("GPU requests and limits differ")

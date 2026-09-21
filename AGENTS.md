@@ -78,7 +78,10 @@ Mutable names, tags, catalog `current` pointers, a Ready Pod, or a dashboard lab
   cross-namespace GPU census with the planned allocation included. It must count both
   training Pods and Fleet inference Pods, reconcile every project InferenceModel, and
   fail closed on an owned but unclassified GPU Pod. Never derive capacity from one
-  namespace, a hand-maintained experiment list, or training Jobs alone.
+  namespace, a hand-maintained experiment list, or training Jobs alone. Count the
+  Kubernetes effective Pod quantity rather than naively adding every container:
+  regular app containers add, ordinary init containers contribute their peak, and
+  restartable init sidecars remain additive.
 - Do not mutate an immutable failed Job to retry it. Preserve it and create a reviewed successor only when authorized.
 - The Nebius development cluster is for bounded qualification and debugging only.
   Give every new dev workload a fixed deadline no later than 30 minutes after
