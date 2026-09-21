@@ -51,7 +51,7 @@ OPERATION_AUTHORIZATION_FILE = "COLLECTION_OPERATION_AUTHORIZATION.json"
 CREATE_INTENT_FILE = "COLLECTION_CREATE_INTENT.json"
 LEDGER_RECEIPT_FILE = "COLLECTION_LEDGER_CREATED.json"
 THINKING_DISABLED = v1.THINKING_DISABLED
-EXECUTION_MODE = v1.EXECUTION_MODE
+EXECUTION_MODE = "authorized_amd64_cpu_job_v1"
 PROXY_FILE = v1.PROXY_FILE
 ADAPTER_FILES = (
     "visible_action_collection.py",
@@ -133,7 +133,7 @@ def _runtime_contract(value: object) -> dict[str, Any]:
         "automatic_replay_of_ambiguous_cells": False,
         "external_submission": False,
         "execution_mode": EXECUTION_MODE,
-        "cluster_wrapper_supported": False,
+        "cluster_wrapper_supported": True,
     }
     if value != expected:
         raise ValueError("collection v2 runtime is not the qualified exactly-once rail")

@@ -35,7 +35,7 @@ def _config() -> dict:
         "automatic_replay_of_ambiguous_cells": False,
         "external_submission": False,
         "execution_mode": runtime.EXECUTION_MODE,
-        "cluster_wrapper_supported": False,
+        "cluster_wrapper_supported": True,
     }
     return value
 
