@@ -193,23 +193,34 @@ def _scheduled_pod_request(pod: dict) -> tuple[int, int]:
         app_cpu += _cpu_millicores(cpu_value) if cpu_value not in {None, "", "0"} else 0
         app_memory += _memory_bytes(memory_value) if memory_value not in {None, "", "0"} else 0
 
-    init_cpu = 0
-    init_memory = 0
+    running_sidecar_cpu = 0
+    running_sidecar_memory = 0
+    init_peak_cpu = 0
+    init_peak_memory = 0
     for container in spec.get("initContainers", []):
         requests = container.get("resources", {}).get("requests", {})
         cpu_value = requests.get("cpu")
         memory_value = requests.get("memory")
         value_cpu = _cpu_millicores(cpu_value) if cpu_value not in {None, "", "0"} else 0
         value_memory = _memory_bytes(memory_value) if memory_value not in {None, "", "0"} else 0
-        init_cpu = max(init_cpu, value_cpu)
-        init_memory = max(init_memory, value_memory)
+        if container.get("restartPolicy") == "Always":
+            running_sidecar_cpu += value_cpu
+            running_sidecar_memory += value_memory
+            init_peak_cpu = max(init_peak_cpu, running_sidecar_cpu)
+            init_peak_memory = max(init_peak_memory, running_sidecar_memory)
+        else:
+            init_peak_cpu = max(init_peak_cpu, running_sidecar_cpu + value_cpu)
+            init_peak_memory = max(init_peak_memory, running_sidecar_memory + value_memory)
 
     overhead = spec.get("overhead", {})
     if not isinstance(overhead, dict):
         raise JobsError("CPU Pod inventory contains malformed scheduling overhead")
     overhead_cpu = _cpu_millicores(overhead["cpu"]) if overhead.get("cpu") else 0
     overhead_memory = _memory_bytes(overhead["memory"]) if overhead.get("memory") else 0
-    return max(app_cpu, init_cpu) + overhead_cpu, max(app_memory, init_memory) + overhead_memory
+    return (
+        max(app_cpu + running_sidecar_cpu, init_peak_cpu) + overhead_cpu,
+        max(app_memory + running_sidecar_memory, init_peak_memory) + overhead_memory,
+    )
 
 
 def validate_cpu_pod_live_fit(manifest: dict, nodes: dict, pods: dict) -> dict:

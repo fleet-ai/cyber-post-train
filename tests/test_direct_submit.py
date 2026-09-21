@@ -738,6 +738,30 @@ def test_cpu_checkpoint_live_fit_rejects_request_that_only_fits_an_empty_node():
     assert proof["max_free_memory_bytes"] == 57966391296
 
 
+def test_cpu_checkpoint_live_fit_counts_restartable_init_sidecars():
+    pod = cpu_checkpoint_pod()
+    pod["spec"]["containers"][0]["resources"]["requests"] = {
+        "cpu": "4",
+        "memory": "4Gi",
+    }
+    occupied = cpu_pod_inventory(requested_cpu="2", requested_memory="2Gi")
+    occupied_spec = occupied["items"][0]["spec"]
+    occupied_spec["initContainers"] = [
+        {
+            "name": "sidecar",
+            "restartPolicy": "Always",
+            "resources": {"requests": {"cpu": "4", "memory": "4Gi"}},
+        },
+        {
+            "name": "ordinary-init",
+            "resources": {"requests": {"cpu": "8", "memory": "8Gi"}},
+        },
+    ]
+
+    with pytest.raises(JobsError, match="cannot fit current requested capacity"):
+        validate_cpu_pod_live_fit(pod, cpu_node_inventory(), occupied)
+
+
 @pytest.mark.parametrize(
     ("resource", "quantity"),
     [("cpu", "16"), ("memory", "128Gi")],
