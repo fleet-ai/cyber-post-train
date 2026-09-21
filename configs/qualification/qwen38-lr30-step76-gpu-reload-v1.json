@@ -38,7 +38,7 @@
       "training/export_check.py": "sha256:a04811409178eedc6969e34766ca70c82d84c27b718944ecab93407609c4dfe7",
       "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
       "training/post_sft_artifacts.py": "sha256:c09555c61cb25ad5867cce80ed8bef0684734231b5708b1be892e75b9dd980eb",
-      "training/sft_runtime.py": "sha256:3105f5211319cea56aa111cdea43eb7230d8b7e48bab958d44ed05506a019b08"
+      "training/sft_runtime.py": "sha256:d40e13e7e89969ccbf2eb641357a0e0b43d6e4841d8d0d587e1371a2252c6bb5"
     },
     "focused_tests_passed": 97
   },
@@ -46,7 +46,7 @@
     "name": "chris-q38-lr30-s76-gpu-v1",
     "title": "Qwen3.8 LR30 step76 accepted BF16 HF one-GPU inference-forward v1",
     "run_dir": "/mnt/sfs/jobs/chris-q38-lr30-step76-hfcheck-v1",
-    "request_sha256": "sha256:de1cb92e90c56f416b5b775ab6fe9b8e3679426cdcb27c8bdf09b85ebf871e51",
+    "request_sha256": "sha256:737f60a645e9a01bf73bed939c24e812b9f402e9c70b0947c79669a47105e3af",
     "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
     "workers": 1,
     "gpus_per_worker": 1,
@@ -131,5 +131,5 @@
     "resources_created": 0,
     "gpus_allocated": 0
   },
-  "sha256": "sha256:26e48936e10c49c412d7ca10aea373b0e137128addda3e841d793f5e34b84654"
+  "sha256": "sha256:6001688a2aca55e69706cb94b199b94a7d49cbb1f4abd095a6dd7b5a611fc121"
 }

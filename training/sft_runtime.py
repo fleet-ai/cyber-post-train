@@ -24,6 +24,7 @@ import argparse
 import contextlib
 import hashlib
 import importlib.util
+import inspect
 import json
 import math
 import numbers
@@ -844,14 +845,39 @@ def _qwen38_policy_learning_rate(dispatch, plan: dict) -> float:
     return _reconcile_worker_learning_rates(ray.get(refs), expected_ranks=expected)
 
 
-def _scalar_sft_forward_backward(dispatch, batch):
-    """Run SFT without constructing unused per-token worker outputs."""
-    return dispatch.forward_backward(
-        "policy",
-        batch,
-        loss_fn="cross_entropy",
-        return_per_token_outputs=False,
+def _sft_forward_backward_kwargs(plan: dict) -> dict:
+    """Select only arguments implemented by the plan's pinned SkyRL image."""
+    kwargs = {"loss_fn": "cross_entropy"}
+    if _is_qwen38_lora(plan):
+        # The separately pinned Megatron-LoRA image owns this optimization.
+        # Full-weight f5bc3b78 has no such parameter and must use its native
+        # signature even though it returns per-token values we do not consume.
+        kwargs["return_per_token_outputs"] = False
+    return kwargs
+
+
+def _validate_sft_forward_backward_adapter(plan: dict, dispatch_type=None) -> None:
+    """Prove the selected call shape against the exact in-image dispatcher."""
+    if dispatch_type is None:
+        from skyrl.backends.skyrl_train.workers.worker_dispatch import WorkerDispatch
+
+        dispatch_type = WorkerDispatch
+    signature = inspect.signature(dispatch_type.forward_backward)
+    accepts_kwargs = any(
+        parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
     )
+    unsupported = set(_sft_forward_backward_kwargs(plan)) - set(signature.parameters)
+    if unsupported and not accepts_kwargs:
+        names = ", ".join(sorted(unsupported))
+        raise ValueError(
+            f"selected SFT forward/backward arguments are unsupported by the image: {names}"
+        )
+
+
+def _scalar_sft_forward_backward(dispatch, batch, plan):
+    """Run one SFT forward/backward using the pinned image's exact call shape."""
+    return dispatch.forward_backward("policy", batch, **_sft_forward_backward_kwargs(plan))
 
 
 def validate_plan(plan: dict, *, check_files: bool = True) -> None:
@@ -2682,11 +2708,10 @@ def _make_trainer_class():
             if _is_qwen38_lora(self.plan):
                 self._record_qualification_stage("forward_backward_started")
             with Timer("forward_backward", timings):
-                # SFT consumes scalar metrics only.  The pinned SkyRL trainer
-                # explicitly disables its per-token outputs here; keep the
-                # audited override identical so 32K batches do not construct
-                # and transport unused logprob/loss arrays every step.
-                output = _scalar_sft_forward_backward(self.dispatch, batch)
+                # The pinned Megatron-LoRA image can suppress unused per-token
+                # outputs. The full-weight f5bc3b78 image has no such optional
+                # argument, so the adapter preserves its exact native call.
+                output = _scalar_sft_forward_backward(self.dispatch, batch, self.plan)
             if _is_qwen38_lora(self.plan):
                 self._record_qualification_stage("forward_backward_complete")
             loss = float(output.metrics.get("final_loss", output.metrics.get("loss", float("nan"))))
@@ -3118,6 +3143,7 @@ def main():
             or args.setup_probe_with_tracker
         ),
     )
+    _validate_sft_forward_backward_adapter(plan)
     if args.preflight_tokenize:
         import pyarrow.parquet as pq
         from skyrl.train.sft_trainer import tokenize_chat_example
