@@ -168,7 +168,9 @@ def prepare(
     evaluation_plan, proof = evaluate.checked_preflight(evaluation_directory)
     if evaluation_plan["sha256"] != source["evaluation_plan_sha256"].removeprefix("sha256:"):
         raise ValueError("prepared evaluation plan differs from repair plan")
-    rollout_postgres.verify_plan(dsn, evaluation_directory / "plan.csv")
+    ledger_proof = rollout_postgres.verify_plan(dsn, evaluation_directory / "plan.csv")
+    if ledger_proof["plan_sha256"] != source["ledger_plan_sha256"].removeprefix("sha256:"):
+        raise ValueError("prepared ledger plan differs from repair plan")
     stored_rows = _rows(dsn, "authoritative_scoring_started.runtimeerror", with_local_result=True)
     recovery_rows = _rows(dsn, reviewed_recovery_v2.SOURCE_FAILURE_CODE, with_local_result=False)
     if len(stored_rows) != 5 or len(recovery_rows) != 2:

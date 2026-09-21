@@ -212,6 +212,7 @@ def _terminal_semantics(value: dict[str, Any], source: dict[str, Any]) -> None:
                 ).encode()
             ),
             frozen.get("evaluation_plan_sha256") != source.get("evaluation_plan_sha256"),
+            frozen.get("ledger_plan_sha256") != source.get("ledger_plan_sha256"),
             frozen.get("database") != source.get("database"),
             frozen.get("output_root") != source.get("evaluation_directory"),
             frozen.get("task_count") != 17,

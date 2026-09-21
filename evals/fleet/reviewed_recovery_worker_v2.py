@@ -118,7 +118,7 @@ def run(
     route_limit = len(plan["routes"][intent.serving_block]["task_versions"]) * plan["pass_k"]
     if limit > route_limit:
         raise ValueError("reviewed recovery v2 roster exceeds the frozen route")
-    rollout_postgres.verify_plan(dsn, evaluation_directory / "plan.csv")
+    ledger_proof = rollout_postgres.verify_plan(dsn, evaluation_directory / "plan.csv")
     _stage_and_check_images(
         plan=plan,
         harness_tar=harness_tar,
@@ -198,7 +198,15 @@ def run(
     with ThreadPoolExecutor(max_workers=limit) as pool:
         results = list(pool.map(one, range(limit)))
     accepted = len(results) == limit and all(row.get("accepted") is True for row in results)
-    lineage = repair_lineage.finalize(dsn, intent=intent) if accepted else None
+    lineage = (
+        repair_lineage.finalize(
+            dsn,
+            intent=intent,
+            ledger_plan_sha256=ledger_proof["plan_sha256"],
+        )
+        if accepted
+        else None
+    )
     if lineage is not None:
         self_hosted.write_json_once(output_root / "LINEAGE.json", lineage)
     body = {

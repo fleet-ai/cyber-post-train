@@ -20,9 +20,13 @@ def finalize(
     dsn: str,
     *,
     intent: reviewed_recovery_v2.ProvisioningTimeoutIntent,
+    ledger_plan_sha256: str,
 ) -> dict[str, Any]:
     """Require the original 10 + reconciled 5 + rerolled 2, then seal once."""
 
+    ledger_plan_sha256 = rollout_ledger._require_digest(  # noqa: SLF001
+        ledger_plan_sha256, "ledger plan sha256"
+    )
     with rollout_postgres._transaction(dsn) as connection:  # noqa: SLF001
         connection.execute("SET LOCAL statement_timeout = '30s'")
         connection.execute("SET LOCAL lock_timeout = '5s'")
@@ -93,7 +97,7 @@ def finalize(
         ]
         if any(
             (
-                metadata is None or metadata["value"] != intent.evaluation_plan_sha256,
+                metadata is None or metadata["value"] != ledger_plan_sha256,
                 counts["total"] != 17,
                 counts["accepted"] != 17,
                 states != {"accepted": 17},
@@ -112,6 +116,7 @@ def finalize(
             "schema_version": LINEAGE_SCHEMA,
             "status": "accepted",
             "evaluation_plan_sha256": intent.evaluation_plan_sha256,
+            "ledger_plan_sha256": ledger_plan_sha256,
             "source_job_uid_sha256": _job_uid_sha256(intent.source_job_uid),
             "source_job_terminal_receipt_sha256": (intent.source_job_terminal_receipt_sha256),
             "source_terminal_counts": {

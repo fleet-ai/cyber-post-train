@@ -10,7 +10,8 @@
   "frozen_evaluation": {
     "config_path": "configs/evaluation/qwen38-base-fleet-dev17-opencode-seed44-pass1-v1.json",
     "config_file_sha256": "sha256:1ee8ae83c056d22e4b0d2950c7d93e62470ebbd041ea768d18788daa16d7797b",
-    "evaluation_plan_sha256": "sha256:04dc90eb59e133cdc40e375b09aa0a3d7cc9c325f7dddc438fd10450661dbae6",
+    "evaluation_plan_sha256": "sha256:844d8ebdaed6e8588c02187c8520eaad942a142e0a83961c19b6df3a46cf0883",
+    "ledger_plan_sha256": "sha256:04dc90eb59e133cdc40e375b09aa0a3d7cc9c325f7dddc438fd10450661dbae6",
     "database": "q38_dev17_s44_base_p1_v1",
     "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s44-base-p1-v1",
     "serving_block": "base",
@@ -117,5 +118,5 @@
     "private_cell_task_session_or_trace_identifiers_included": false,
     "credentials_or_private_logs_included": false
   },
-  "sha256": "ded667b0ddfb005c64f13a30474612679f40c67fa2c592c2f621b923540e7006"
+  "sha256": "ff672d4860626ea2f26e0ca3decc2e6bc30ba9a209576bb6b13b4c24e08c78a0"
 }
