@@ -3,9 +3,9 @@
 Prod9 is a **new one-node, eight-GPU, one-update canary**, not a retry or
 resume of prod8. It keeps the reviewed Qwen3.8-27B image, task/version and
 reward contract, 262,144-token context window, compaction, eight sampled
-episodes, one optimizer update, and step-one checkpoint policy. The only
-allowed changes are its new run, output, data-stage, CPU-preflight and W&B
-identities.
+episodes, one optimizer update, and step-one checkpoint policy. Its new
+identities and fresh prod9 source bindings for token-safe compaction and
+non-submitting job rendering are the only allowed changes.
 
 The prior run's terminal result and GPU release cannot be proved: its launch
 record contains neither a terminal receipt nor a verified release, while the
@@ -41,26 +41,51 @@ uv run --locked python scripts/prepare_qwen38_skyrl_prod9_successor.py \
   --manifest <restricted-local-prod9-manifest.json>
 ```
 
-It recompiles the real SkyRL plan and checks the fresh identity, one-node
-shape, 262,144-token compaction settings, and zero-GPU preflight's root alert
-opt-out. It never reads task rows, contacts external services, stages data, or
-authorizes a launch.
+It recompiles the real SkyRL plan and writes a sealed preparation receipt with
+the current runtime, plan, request, and zero-GPU preflight digests. It also
+verifies the fresh prod9 source closure for the token-safe recorder, direct
+capacity gate, and terminal checkpoint/reload acceptance gate. It checks the
+fresh identity, one-node shape, 262,144-token compaction settings, and
+zero-GPU preflight's root alert opt-out. Those digests are fresh prod9 evidence;
+they are never inherited from historical prod8. The command never reads task
+rows, contacts external services, stages data, or authorizes a launch.
 
 The exact local rebind, read-only absence, and server-preview sequence is in
 [`QWEN38_SKYRL_PROD9_NONSUBMITTING_GATES.md`](QWEN38_SKYRL_PROD9_NONSUBMITTING_GATES.md).
 It creates no Kubernetes object and deliberately omits every live create.
 
+## Relationship to existing Qwen RL recipes
+
+Prod9 is not a new trainer invented from scratch. It keeps the small, strict
+one-update shape used to qualify Fleet's existing Qwen RL routes: one grouped
+set of eight attempts, a real task grader, learning rate `1e-6`, a checkpoint
+after the first update, and an independent reload before any scale-up. The
+full comparison and source references are in
+[`QWEN38_RL_RECIPE_ARCHAEOLOGY_2026-09-21.md`](QWEN38_RL_RECIPE_ARCHAEOLOGY_2026-09-21.md).
+
+The narrow reason for using SkyRL here is long-horizon correctness, not a claim
+that it is more mature than Fleet's maintained Miles route:
+
+| Route | What prod9 reuses | What deliberately differs |
+| --- | --- | --- |
+| Maintained FTI/Miles 256K | Exact Qwen tool/template qualification, real grader IDs, grouped GRPO, `1e-6` first-update learning rate, and checkpoint/reload gates. | The supported 256K Miles shape needs four eight-GPU nodes and ends a full context without summarizing earlier turns. Prod9 instead uses one eight-GPU node and records a token-safe student-generated summary before it would overflow. |
+| Neeraj Dataminer v003 sync Miles | Synchronous rollout → reward → update → weight-sync mechanics; reject malformed groups rather than inventing zero reward; qualify the tool template; and save/reload a checkpoint. | Its practical 96K route used truncation-with-reward and its token-native estimator could not train compacted histories. Prod9 keeps the native Qwen 262,144-token limit and records each compacted model turn separately. |
+| Prod9 SkyRL | The safeguards above, plus a direct root-RayJob capacity proof and root failure-alert annotation proof. | It remains only a one-update Fleet-cyber canary until it produces mixed real rewards, a finite non-zero update, a sealed checkpoint, an exact BF16 reload, and verified release. |
+
+Neither prior route's task mix, reward distribution, transfer claim, or terminal
+artifacts may be copied into this Fleet-cyber canary. They are implementation
+lessons, not scientific evidence for this task set.
+
 ## Why this does not add a separate setup-module digest gate
 
-This direct training rail does not use the separate engine-setup module from
-the collector diagnostic. Its relevant native modules are already pinned in
-`training/skyrl_training.py`'s `NATIVE` map, checked by the exact-image CPU
-preflight, and used again when the final RayJob is rendered and server-previewed.
-The immutable image digest is also fixed by the qualification file. The
-collector diagnostic has its own setup-module hash because it starts an engine
-through that separate diagnostic path. Adding that unrelated check here would
-not prove anything about this training path and would create a new, artificial
-compatibility requirement.
+The fresh training closure is `training.skyrl_prod9_training`, including its
+explicitly bound historical helper modules. `training.skyrl_prod9_direct`
+renders—but cannot create—the matching CPU-preflight Job and GPU RayJob. The
+fresh source hashes and renderer, not the historical direct rail, are therefore
+the relevant current gate. The immutable image digest remains fixed by the
+qualification file. The collector diagnostic has a separate setup-module hash
+because it starts an engine through a different diagnostic path; adding that
+unrelated check here would not prove anything about prod9.
 
 ## Exact private-data staging requirement
 
@@ -69,26 +94,34 @@ output:
 
 `/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-prod8-v1/data`
 
-In a restricted local working directory, use
-`rebind_private_source_for_identity` with the sealed prod9 identity. It may
-change only each private row's embedded run ID and that row's checksum. It must
-then rehash the resulting private files and manifest, archive them, and publish
-them create-once to the prod9 destination using the existing zero-GPU stage
-Job. Do not commit or print the private rows, prompts, task data or archive.
+The operator machine cannot mount this SFS path, so a local rebind/archive is
+not a valid prod9 gate. A **new, separately reviewed zero-GPU SFS rebind/data
+stage Job** must use `rebind_private_source_for_identity` with the sealed prod9
+identity. It may change only each private row's embedded run ID and that row's
+checksum, then rehash the private files and manifest before publishing the new
+destination. It must have the root failure-alert opt-out, a server preview,
+create-once identity, and an exact-UID release observer. That Job is not yet
+implemented or authorized. Do not commit or print private rows, prompts, task
+data, or an archive.
 
-## Before the one GPU create
+## Required future sequence after the fresh rebind and create-once rails exist
+
+The current source can only render the CPU-preflight and GPU manifests for
+review. It cannot stage data, run a Job, or create a GPU workload.
 
 1. Confirm the prod9 name, output root, data destination, stage/preflight Job
    names and W&B ID are all absent. This must inspect the Jobs API and both
    clusters immediately before creation.
-2. Server-preview the stage and exact-image CPU-preflight Jobs in the required
-   contexts. Each rendered root Job must have
+2. Server-preview the new rebind/data-stage and exact-image CPU-preflight Jobs
+   in the required contexts. Each rendered root Job must have
    `fleet.ai/failure-alerts: "off"`.
-3. Stage the data once; independently verify its digests and zero-GPU release.
-4. Run the exact-image CPU preflight once. It must prove compaction and both
-   output-limit conditions and bind W&B to the new ID with `resume="never"`.
-5. Construct the direct root RayJob from a fresh Jobs preview, server-preview
-   it, and verify its root annotation is exactly
+3. Stage the data once through the new rail; independently verify its digests
+   and zero-GPU release.
+4. Run the exact-image CPU preflight once through the fresh renderer. It must
+   prove compaction and both output-limit conditions and bind W&B to the new ID
+   with `resume="never"`.
+5. Construct the direct root RayJob from a fresh Jobs preview with the fresh
+   renderer, server-preview it, and verify its root annotation is exactly
    `fleet.ai/failure-alerts: "off"` before any create.
 6. Arm the existing UID-bound cleanup observer for exactly the new RayJob,
    plan and rendered-manifest digests. It may release only a terminal run, a

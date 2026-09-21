@@ -15,8 +15,8 @@ import json
 from pathlib import Path
 from unittest import mock
 
-from cyber_post_train.jobs import FAILURE_ALERT_ANNOTATION, FAILURE_ALERT_OFF, digest
-from training import sft, skyrl_training
+from cyber_post_train.jobs import FAILURE_ALERT_OFF, digest
+from training import sft, skyrl_prod9_direct, skyrl_prod9_hardening, skyrl_prod9_training
 from training import skyrl_reward_rayjob as direct
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -25,6 +25,7 @@ DATA = ROOT / "configs/qualification/qwen38-rl-reward-canary-data-prod-v9.json"
 IDENTITY = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod9-identity-v1.json"
 PREDECESSOR_MANIFEST = ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json"
 RECONCILIATION = ROOT / "docs/evidence/qwen38-study/2026-09-21-skyrl-prod8-reconciliation-v1.json"
+RUNTIME_EVIDENCE = ROOT / "configs/data/qwen38-rl-reward-canary-exact-version-evidence-v8.json"
 
 
 def _load(path: Path) -> dict:
@@ -59,8 +60,8 @@ def _compile(run: dict, manifest: dict) -> tuple[dict, dict]:
         return original(path)
 
     with mock.patch.object(sft, "read_mapping", side_effect=read):
-        plan = skyrl_training.compile_rl(run, relative_to=RUN.parent)
-    return plan, skyrl_training.job_request(plan)
+        plan = skyrl_prod9_training.compile_rl(run, relative_to=RUN.parent)
+    return plan, skyrl_prod9_training.job_request(plan)
 
 
 def build(manifest_path: Path) -> dict:
@@ -96,12 +97,15 @@ def build(manifest_path: Path) -> dict:
     ):
         raise ValueError("prod9 identity, reconciliation, or public data contract changed")
 
+    hardening = skyrl_prod9_hardening.verify_source_closure(RUNTIME_EVIDENCE)
     plan, request = _compile(run, manifest)
     direct._identity_for_plan(plan, identity)
-    preflight = direct.preflight_job_manifest(plan, identity=identity)
+    historical_rail = skyrl_prod9_training.reject_historical_direct_rail(plan)
     arguments = plan["arguments"]
     if (
-        request.get("workers") != 1
+        plan.get("schema") != skyrl_prod9_training.SCHEMA
+        or plan.get("prod9_runtime") != skyrl_prod9_training._binding()
+        or request.get("workers") != 1
         or request.get("gpus_per_worker") != 8
         or request.get("priority_class") != "c1"
         or request.get("failureAlerts") is not False
@@ -123,10 +127,8 @@ def build(manifest_path: Path) -> dict:
             "compaction_summary_tokens": 8192,
             "max_turns": 1200,
         }
-        or preflight["metadata"]["name"] != identity.preflight_name
-        or preflight["metadata"]["annotations"].get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
     ):
-        raise ValueError("prod9 one-node, compact, or failure-alert contract changed")
+        raise ValueError("prod9 one-node, compact, or fresh-runtime contract changed")
     return _seal(
         {
             "schema": "cyber_qwen38_skyrl_prod9_offline_preparation_v1",
@@ -144,16 +146,27 @@ def build(manifest_path: Path) -> dict:
                     "path": str(manifest_path),
                     "sha256": manifest["sha256"],
                 },
+                "prod9_hardening": hardening,
             },
+            "runtime_sha256": "sha256:" + plan["runtime_sha256"],
             "plan_sha256": "sha256:" + digest(plan),
             "request_sha256": "sha256:" + digest(request),
-            "preflight_manifest_sha256": "sha256:" + digest(preflight),
+            "fresh_cpu_preflight": {
+                "module": "training.skyrl_prod9_direct",
+                "function": "preflight_job_manifest",
+                "schema": "cyber_skyrl_prod9_training_cpu_preflight_v1",
+                "root_alert_annotation_required": FAILURE_ALERT_OFF,
+                "bundle_module": skyrl_prod9_training.MODULE,
+                "live_create_available": skyrl_prod9_direct.live_create_is_available(),
+            },
+            "historical_direct_rail": historical_rail,
             "next_live_gates": [
                 "fresh absence checks for the prod9 names and destinations",
-                "root-annotation server previews for stage, preflight, and RayJob",
+                "a fresh root-annotated zero-GPU preflight wrapper for the prod9 module",
                 "create-once data stage and accepted zero-GPU release evidence",
                 "exact-image CPU preflight and accepted zero-GPU release evidence",
-                "arm the exact UID-bound cleanup observer before one GPU create",
+                "fresh direct-RayJob server previews in dev and prod",
+                "a separately reviewed create-once rail before any GPU create",
             ],
         }
     )

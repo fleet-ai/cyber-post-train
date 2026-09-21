@@ -22,6 +22,7 @@ from scripts.audit_qwen38_skyrl_launch_readiness import (
 )
 from training import dev_cleanup_observer as cleanup
 from training import sft, skyrl_training
+from training import skyrl_prod9_hardening as prod9
 from training import skyrl_reward_rayjob as direct
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -893,6 +894,34 @@ def test_prod9_offline_preparation_requires_a_fresh_rebound_manifest(tmp_path: P
     assert receipt["external_mutations"] == 0
     assert receipt["private_rows_read"] is False
     assert receipt["identity"] == identity.sealed_mapping()
+    hardening = receipt["inputs"]["prod9_hardening"]
+    assert hardening["schema"] == prod9.SOURCE_CLOSURE_SCHEMA
+    assert hardening["context_tokens"] == 262144
+    assert hardening["max_turns"] == 1200
+    assert hardening["tool_result_token_safe"] is True
+    source = ROOT / "training/skyrl_prod9_hardening.py"
+    assert hardening["sources"]["prod9_hardening"] == (
+        "sha256:" + hashlib.sha256(source.read_bytes()).hexdigest()
+    )
+    plan, request = prod9_prepare._compile(
+        json.loads(PROD9_RUN.read_text()),
+        manifest,
+    )
+    assert receipt["runtime_sha256"] == "sha256:" + plan["runtime_sha256"]
+    assert receipt["plan_sha256"] == "sha256:" + digest(plan)
+    assert receipt["request_sha256"] == "sha256:" + digest(request)
+    assert receipt["historical_direct_rail"] == {
+        "status": "rejected",
+        "reason": "historical_direct_rail_cannot_render_fresh_prod9_runtime",
+    }
+    assert receipt["fresh_cpu_preflight"] == {
+        "module": "training.skyrl_prod9_direct",
+        "function": "preflight_job_manifest",
+        "schema": "cyber_skyrl_prod9_training_cpu_preflight_v1",
+        "root_alert_annotation_required": "off",
+        "bundle_module": "training.skyrl_prod9_training",
+        "live_create_available": False,
+    }
 
     predecessor = successor_metadata(load(CANARY_RUN))
     path.write_text(json.dumps(predecessor))

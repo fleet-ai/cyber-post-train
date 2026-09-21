@@ -16,6 +16,7 @@ from test_rl_episode import seal
 from evals.fleet import opencode_self_hosted as fleet
 from training import rl_episode
 from training import skyrl_episode as sky
+from training import skyrl_prod9_hardening as prod9
 
 
 class Tokenizer:
@@ -252,6 +253,71 @@ async def test_length_chunk_continues_then_executes_ordered_tools_and_report(set
     sample = value.finalize(1.0, {"verifier_execution_id": "fixture"}, 0)[0]
     assert sample.tokens == [1, 2, 31, 32, 33, 34, 77, 9]
     assert sample.response_length == 6 and sample.reward == 1.0
+
+
+@pytest.mark.asyncio
+async def test_tool_result_budget_uses_exact_tokens_not_character_count(setup):
+    """A short tool result must not bypass context safety by token expansion."""
+
+    class AdversarialTokenizer(Tokenizer):
+        def apply_chat_template(self, messages, **kwargs):
+            assert kwargs == dict(
+                tools=[], tokenize=True, return_dict=False, add_generation_prompt=True
+            )
+            if messages[-1].get("content") == sky.COMPACTION_PROMPT:
+                # The exact future compaction prompt cannot fit either.
+                return list(range(37))
+            if any(message.get("role") == "tool" for message in messages):
+                # Four characters below expand beyond the next action context.
+                return list(range(35))
+            return [1, 2]
+
+        def encode(self, text, **kwargs):
+            assert kwargs == {"add_special_tokens": False}
+            return list(range(101)) if text == "tiny" else [10]
+
+    setup.tokenizer = AdversarialTokenizer()
+    setup.config["model"]["runtime_chat_template_sha256"] = fleet.sha256(
+        setup.tokenizer.chat_template.encode()
+    )
+    setup.engine.reply = {
+        "responses": ['<tool_call>{"name":"bash","arguments":{}}</tool_call>'],
+        "response_ids": [[77, 9]],
+        "response_logprobs": [[-0.3, -0.2]],
+        "stop_reasons": ["stop"],
+    }
+
+    class Session:
+        def __init__(self):
+            self.calls = []
+
+        async def call_tool(self, name, arguments):
+            self.calls.append((name, arguments))
+            return NS(content=[NS(type="text", text="tiny")], is_error=False)
+
+    value, session = (
+        prod9.Recorder(
+            setup.config,
+            setup.tokenizer,
+            setup.engine,
+            setup.sampling,
+            setup.response_tokens,
+            setup.helper,
+        ),
+        Session(),
+    )
+    with pytest.raises(rl_episode.EpisodeBudgetExceeded, match="context_full") as caught:
+        await rl_episode._agent(
+            value,
+            session,
+            [{"role": "user", "content": "task"}],
+            [],
+            setup.config["rl"],
+            sky.parse,
+        )
+    assert caught.value.reason == "generation_incomplete_context_full"
+    assert session.calls == [("bash", {})]
+    assert len(setup.engine.requests) == 1
 
 
 @pytest.mark.asyncio
