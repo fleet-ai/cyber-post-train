@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import subprocess
 import time
 from pathlib import Path
@@ -22,6 +23,25 @@ from .sfs_output_job import MAX_ATTEMPT
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
 PREPARATION_GATE_VERSION = 2
+
+
+def _clean_source_commit() -> str:
+    root = Path(__file__).resolve().parents[1]
+    head = subprocess.run(
+        ["git", "-C", str(root), "rev-parse", "HEAD"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout.strip()
+    dirty = subprocess.run(
+        ["git", "-C", str(root), "status", "--porcelain", "--untracked-files=all"],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    if re.fullmatch(r"[0-9a-f]{40}", head) is None or dirty:
+        raise ValueError("dense-SFT CPU preflight requires one clean exact Git commit")
+    return head
 
 
 def _print(value: object) -> None:
@@ -985,6 +1005,61 @@ def sfs_output_job_collect(
             kubectl=Kubectl(context),
         )
         _write(output, receipt)
+        _print(receipt)
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("sft-cpu-preflight-job-create")
+def sft_cpu_preflight_job_create(
+    directory: Path,
+    context: Annotated[str, typer.Option("--context")],
+    attempt: Annotated[int, typer.Option("--attempt", min=1, max=MAX_ATTEMPT)] = 1,
+) -> None:
+    """Create one tracked zero-GPU dense-SFT native preflight Job."""
+    from .direct_submit import Kubectl, create_sft_cpu_preflight_once
+
+    try:
+        plan, request = _prepared(directory)
+        _submission_gate(directory, plan, request)
+        _external_action_gate(plan, "submit")
+        if (directory / "PREFLIGHT.json").exists():
+            raise ValueError("dense-SFT CPU preflight is already recorded")
+        source_commit = _clean_source_commit()
+        result = create_sft_cpu_preflight_once(
+            directory=directory,
+            source_commit=source_commit,
+            attempt=attempt,
+            kubectl=Kubectl(context),
+            journal=directory / f"SFT_CPU_PREFLIGHT_A{attempt:02d}.jsonl",
+        )
+        _print(result)
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("sft-cpu-preflight-job-collect")
+def sft_cpu_preflight_job_collect(
+    directory: Path,
+    context: Annotated[str, typer.Option("--context")],
+    attempt: Annotated[int, typer.Option("--attempt", min=1, max=MAX_ATTEMPT)] = 1,
+) -> None:
+    """Collect one exact terminal dense-SFT CPU-preflight receipt."""
+    from .direct_submit import Kubectl, collect_sft_cpu_preflight
+
+    try:
+        plan, request = _prepared(directory)
+        _submission_gate(directory, plan, request)
+        _external_action_gate(plan, "submit")
+        if (directory / "PREFLIGHT.json").exists():
+            raise ValueError("dense-SFT CPU preflight is already recorded")
+        receipt = collect_sft_cpu_preflight(
+            directory=directory,
+            source_commit=_clean_source_commit(),
+            attempt=attempt,
+            kubectl=Kubectl(context),
+        )
+        _write(directory / "PREFLIGHT.json", receipt)
         _print(receipt)
     except Exception as exc:
         _fail(exc)

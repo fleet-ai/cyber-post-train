@@ -63,6 +63,14 @@ from .sfs_output_job import (
     validate_sfs_output_job_response,
 )
 from .sfs_write_identity import TRAINER_GID, TRAINER_UID, validate_owned_output_binding
+from .sft_cpu_preflight_job import (
+    build_sft_cpu_preflight_job,
+    collect_sft_cpu_preflight_receipt,
+    validate_completed_sft_cpu_preflight_job,
+    validate_sft_cpu_preflight_job_node_fit,
+    validate_sft_cpu_preflight_job_package,
+    validate_sft_cpu_preflight_job_response,
+)
 from .source_bundle import canonical_source_commit_bytes
 
 NAMESPACE = "fleet-train-jobs"
@@ -1100,6 +1108,19 @@ class Kubectl:
             ]
         )
 
+    def sft_cpu_preflight_logs(self, pod: str) -> str:
+        if re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,251}[a-z0-9])?", pod) is None:
+            raise JobsError("invalid dense-SFT CPU-preflight Pod name")
+        return self._run_text(
+            [
+                "logs",
+                pod,
+                "--namespace",
+                NAMESPACE,
+                "--container=preflight",
+            ]
+        )
+
     @staticmethod
     def _require_generic_cpu_checkpoint(manifest: dict) -> None:
         validate_cpu_checkpoint_pod(manifest)
@@ -1495,6 +1516,114 @@ def collect_sfs_output_check(*, plan: dict, request: dict, attempt: int, kubectl
         )
         logs = kubectl.output_check_logs(pod_name)
         return collect_sfs_output_receipt(
+            package,
+            job,
+            workloads,
+            pods,
+            service_account,
+            logs,
+        )
+    except (OSError, ValueError) as exc:
+        raise JobsError(str(exc)) from None
+
+
+def create_sft_cpu_preflight_once(
+    *,
+    directory: Path,
+    source_commit: str,
+    attempt: int,
+    kubectl: Kubectl,
+    journal: Path,
+) -> dict:
+    """Create one tracked dense-SFT zero-GPU CPU preflight; never retry create."""
+    if journal.exists() or journal.is_symlink():
+        raise JobsError("CPU-preflight journal already exists; reconcile, never retry")
+    try:
+        package = build_sft_cpu_preflight_job(
+            directory,
+            source_commit=source_commit,
+            attempt=attempt,
+        )
+        proof = validate_sft_cpu_preflight_job_package(package)
+        validate_sft_cpu_preflight_job_node_fit(package, kubectl._cpu_node_inventory())
+    except (OSError, ValueError) as exc:
+        raise JobsError(str(exc)) from None
+    _assert_output_check_job_absent(kubectl.list("jobs.batch"), proof["name"])
+    server_object = kubectl.dry_run(package.job)
+    try:
+        validate_sft_cpu_preflight_job_response(server_object, package, require_uid=False)
+    except ValueError as exc:
+        raise JobsError(str(exc)) from None
+    _assert_output_check_job_absent(kubectl.list("jobs.batch"), proof["name"])
+    _write_intent(
+        journal,
+        {
+            "state": "KUBECTL_CREATE_INTENT_DO_NOT_RETRY",
+            "operation": "sft_cpu_preflight",
+            "attempt": attempt,
+            "name": proof["name"],
+            "namespace": NAMESPACE,
+            "kubernetes_context": kubectl.context,
+            **{
+                key: proof[key]
+                for key in (
+                    "plan_sha256",
+                    "request_sha256",
+                    "manifest_sha256",
+                    "bundle_sha256",
+                    "driver_sha256",
+                    "source_commit",
+                )
+            },
+        },
+    )
+    created = kubectl.create_once(package.job)
+    try:
+        validate_sft_cpu_preflight_job_response(created, package, require_uid=True)
+    except ValueError as exc:
+        raise JobsError(str(exc)) from None
+    result = {
+        "submitted": True,
+        "gpus": 0,
+        "name": proof["name"],
+        "uid": created["metadata"]["uid"],
+        "attempt": attempt,
+    }
+    _append_journal(journal, {"state": "KUBECTL_CREATE_RESPONSE", **result})
+    return result
+
+
+def collect_sft_cpu_preflight(
+    *,
+    directory: Path,
+    source_commit: str,
+    attempt: int,
+    kubectl: Kubectl,
+) -> dict:
+    """Collect one exact admitted, successful dense-SFT CPU-preflight receipt."""
+    try:
+        package = build_sft_cpu_preflight_job(
+            directory,
+            source_commit=source_commit,
+            attempt=attempt,
+        )
+        name = package.job["metadata"]["name"]
+        job = kubectl.get_output_check_job(name)
+        job_uid = job.get("metadata", {}).get("uid", "")
+        if KUBERNETES_UID_PATTERN.fullmatch(job_uid) is None:
+            raise JobsError("CPU-preflight Job readback omitted its immutable UID")
+        workloads = kubectl.list_output_check_workloads(job_uid)
+        pods = kubectl.list_output_check_pods(name)
+        service_account = kubectl.get_output_check_service_account()
+        pod_name, _ = validate_completed_sft_cpu_preflight_job(
+            package,
+            job,
+            workloads,
+            pods,
+            service_account,
+        )
+        logs = kubectl.sft_cpu_preflight_logs(pod_name)
+        return collect_sft_cpu_preflight_receipt(
             package,
             job,
             workloads,

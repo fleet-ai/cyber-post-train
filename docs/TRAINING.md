@@ -162,6 +162,41 @@ counts. Train and dev are distinct immutable artifacts and task families.
 5. `cyber-post-train status <returned-name>` reads sanitized state. Monitor the
    exact API/Kubernetes UIDs, progress receipts, utilization and checkpoints too.
 
+When the submitter does not already run inside the pinned image with the shared
+SFS mount, dense SFT has one tracked zero-GPU preflight Job. Start from a clean
+checkout whose exact `HEAD` equals freshly fetched canonical `main`, then run:
+
+```sh
+uv run cyber-post-train sft-cpu-preflight-job-create /shared/prepared-run \
+  --context <explicit-production-or-development-context> \
+  --attempt 1
+
+# Only after that exact Job is terminally successful:
+uv run cyber-post-train sft-cpu-preflight-job-collect /shared/prepared-run \
+  --context <explicit-production-or-development-context> \
+  --attempt 1
+```
+
+The create command packages the exact prepared plan/request/receipt and the
+tracked `cyber_post_train` and `training` Python sources, binds every byte to the
+clean commit, and embeds the bundle in the exact digest-pinned trainer image. It
+server-previews and journals one create; a transport error after the intent is
+ambiguous and must be reconciled rather than replayed. The root Job and Pod
+template both opt out of failed-job notifications, the Job enters normal
+`training-lq` admission at c1/q1, and its Pod requests no GPU, mounts SFS read
+only, disables W&B, and receives no request Secret. The worker runs the native
+preflight with private output suppressed and emits one sanitized receipt line.
+
+Collection accepts only the exact source-bound Job, one UID-owned Kueue
+Workload at effective priority 10000, one zero-restart zero-GPU Pod using the
+prepared image digest, exact admitted CPU/memory/storage resources, and the
+namespace's reviewed default ServiceAccount pull-secret behavior. It then
+writes the ordinary `PREFLIGHT.json` create-once. A failed or ambiguous attempt
+is evidence, not permission to delete its journal or reuse its identity; repair
+the cause and use a fresh reviewed attempt number. This Job proves the CPU data,
+loader, and signature gates only. It does not qualify CUDA, distributed startup,
+training, or checkpoint reload.
+
 When an operator must transfer a prepared archive from a local machine into an
 already-running CPU preflight Pod, never copy directly to the filename that the
 worker watches. A direct copy makes the final name visible before all bytes have
@@ -289,6 +324,21 @@ sampler/trainer files and checks their counters—SkyRL can catch a sampler-writ
 error after creating a partial file. Both paused and completed runs require
 digest-valid final checkpoint and validation receipts bound to the same plan and
 step. Full payload hashing and GPU reload remain separate handoff checks.
+
+The current broad Qwen teacher-SFT successor policy keeps the latest two full
+resumable checkpoints and also saves the final step. Its immutable cadences are
+100 optimizer steps for 32K batch 8, 50 optimizer steps for 32K batch 16 (two
+accumulation steps, so this matches the intended token/time cadence), and 15
+optimizer steps for 64K batch 8. Do not normalize those three numbers to one
+step count or change an active recipe. Each native checkpoint must contain model
+shards, optimizer state, scheduler/random state, sampler cursor, and trainer
+progress; sealing and an independent reload remain required before resume or
+promotion. The active 32K batch-8 run's step-100 save is the first live
+measurement of write duration, bytes, two-checkpoint retention and post-save
+training recovery. Use that evidence to recommend a later cadence change; never
+edit the running plan in place. The exact policy and prepared-only boundary are
+recorded in
+[`qwen38-broad-sft-checkpoint-retention-policy-20260921.json`](evidence/qwen38-broad-sft-checkpoint-retention-policy-20260921.json).
 
 For a planned interruption/recovery check, add top-level `pause_after_step: 1`
 to a plan whose full recipe has more than one step. This does not shorten the

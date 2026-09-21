@@ -1,0 +1,81 @@
+{
+  "schema": "cyber_dense_sft_cpu_preflight_boundary_audit_v1",
+  "observed_at": "2026-09-21T14:26:15Z",
+  "status": "repair_in_review_no_external_job_created",
+  "failure_boundary": {
+    "class": "untracked_one_off_dense_sft_cpu_preflight",
+    "problem": "Prepared dense-SFT successors had no maintained create-once CPU Job that could run the native preflight in the exact pinned image and return a source-bound receipt.",
+    "unsafe_action_rejected": "Do not replay or hand-edit the historical one-off CPU Job manifest."
+  },
+  "repair": {
+    "prepared_inputs": [
+      "plan.json",
+      "request.json",
+      "PREPARED.json"
+    ],
+    "source_inputs": [
+      "cyber_post_train/*.py",
+      "training/*.py"
+    ],
+    "source_checkout": "one clean exact Git commit; tracked or untracked worktree changes reject",
+    "create_semantics": "server dry-run, exact duplicate check, fsynced do-not-retry intent, exactly one kubectl create",
+    "job_contract": {
+      "kind": "batch/v1 Job",
+      "failed_job_alerts": "off at Job root and Pod template before create",
+      "queue": "training-lq",
+      "queue_priority": "q1",
+      "pod_priority_class": "c1",
+      "effective_priority": 10000,
+      "submitted_suspended": true,
+      "gpus": 0,
+      "sfs": "read_only",
+      "wandb": "disabled",
+      "request_secrets_injected": false,
+      "active_deadline_seconds": 1800
+    },
+    "terminal_collection": "Require the exact Job UID, one admitted Kueue v1beta2 Workload at priority 10000 with exact CPU/memory/storage resource usage, one zero-restart zero-GPU Pod, exact runtime image digest, reviewed default-ServiceAccount pull-secret behavior, and exactly one sanitized native receipt line.",
+    "private_output": "The worker suppresses native stdout/stderr and exposes only receipt scalars, digests, counts and status."
+  },
+  "checkpoint_policy_preserved": {
+    "full_resume_state": [
+      "model shards",
+      "optimizer state",
+      "scheduler and random state",
+      "sampler cursor",
+      "trainer progress"
+    ],
+    "retention": "latest two plus final checkpoint",
+    "cadence": {
+      "32k_batch8_optimizer_steps": 100,
+      "32k_batch16_optimizer_steps": 50,
+      "64k_batch8_optimizer_steps": 15
+    },
+    "qualification": "Seal every accepted checkpoint and independently prove reload before resume or promotion.",
+    "active_recipe_mutated": false
+  },
+  "verification": {
+    "focused_tests": "23 passed",
+    "cli_command_tests": "passed",
+    "adversarial_cases": [
+      "root or template alert drift",
+      "wrong effective priority",
+      "GPU request",
+      "Secret environment or volume",
+      "extra image pull Secret",
+      "privilege escalation",
+      "sidecar or init container",
+      "node pinning or affinity",
+      "runtime class or overhead",
+      "writable SFS",
+      "admitted resource drift",
+      "symlinked or uninspectable output"
+    ],
+    "final_exact_head_live_server_dry_run": "pending",
+    "hosted_ci": "pending",
+    "independent_exact_head_review": "pending"
+  },
+  "external_mutations": [],
+  "cpu_preflight_job_created": false,
+  "gpu_training_successor_created": false,
+  "sha256": "6dcbdcf7a9cf6b706fa85711647126d20ff9941383f6249b52aaf789a5363226"
+}
