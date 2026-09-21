@@ -342,6 +342,7 @@ def safe_task_binding(
             or not artifact_key.startswith("cyber/atoms/")
             or not isinstance(atom_id, str)
             or "/" not in atom_id
+            or artifact_key != f"cyber/atoms/{atom_id}"
             or type(version_index) is not int
             or version_index < 0
             or locator != f"{artifact_key}@{version_index}"

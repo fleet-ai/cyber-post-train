@@ -164,6 +164,13 @@ def test_safe_binding_rejects_conflicting_tool_declaration():
         qualification.safe_task_binding(task, _selected())
 
 
+def test_safe_binding_rejects_atom_id_artifact_key_mismatch():
+    task = _task()
+    task["metadata"]["cyber_subject"]["atom_sources"][0]["atom_id"] = "current/other"
+    with pytest.raises(qualification.QualificationError, match="atom-source binding"):
+        qualification.safe_task_binding(task, _selected())
+
+
 @pytest.mark.parametrize(
     "source_locator",
     [
