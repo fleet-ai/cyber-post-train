@@ -1367,6 +1367,7 @@ _RAY_SERVER_METADATA_FIELDS = {
     "resourceVersion",
     "uid",
 }
+_RAYJOB_CONTROLLER_FINALIZERS = ["ray.io/rayjob-finalizer"]
 
 
 def _strip_exact_server_defaults(actual: dict, expected: dict, defaults: dict) -> dict:
@@ -1394,15 +1395,44 @@ def _normalize_ray_pod_spec(actual: dict, expected: dict) -> dict:
     ):
         raise JobsError("Kubernetes response changed the exact Ray app containers")
     normalized["containers"] = [
-        _strip_exact_server_defaults(
-            actual_container,
-            expected_container,
-            _RAY_CONTAINER_SERVER_DEFAULTS,
-        )
+        _normalize_ray_app_container(actual_container, expected_container)
         for actual_container, expected_container in zip(
             actual_containers, expected_containers, strict=True
         )
     ]
+    actual_init = normalized.get("initContainers", [])
+    expected_init = expected.get("initContainers", [])
+    if (
+        not isinstance(actual_init, list)
+        or not isinstance(expected_init, list)
+        or len(actual_init) != len(expected_init)
+    ):
+        raise JobsError("Kubernetes response changed the exact Ray init containers")
+    for actual_container, expected_container in zip(actual_init, expected_init, strict=True):
+        if "resources" not in expected_container and actual_container.get("resources") == {}:
+            actual_container.pop("resources")
+    return normalized
+
+
+def _normalize_ray_app_container(actual: dict, expected: dict) -> dict:
+    """Normalize only exact API serialization defaults on the app container."""
+    normalized = _strip_exact_server_defaults(
+        actual,
+        expected,
+        _RAY_CONTAINER_SERVER_DEFAULTS,
+    )
+    try:
+        for boundary in ("requests", "limits"):
+            actual_quantity = normalized["resources"][boundary]["nvidia.com/gpu"]
+            expected_quantity = expected["resources"][boundary]["nvidia.com/gpu"]
+            if (
+                type(expected_quantity) is int
+                and isinstance(actual_quantity, str)
+                and actual_quantity == str(expected_quantity)
+            ):
+                normalized["resources"][boundary]["nvidia.com/gpu"] = expected_quantity
+    except (KeyError, TypeError) as exc:
+        raise JobsError("Kubernetes response changed the exact Ray app resources") from exc
     return normalized
 
 
@@ -1418,6 +1448,11 @@ def _assert_exact_rayjob_runtime_surface(actual: dict, expected: dict) -> None:
     for field in _RAY_SERVER_METADATA_FIELDS:
         if field not in expected_metadata:
             metadata.pop(field, None)
+    if (
+        "finalizers" not in expected_metadata
+        and metadata.get("finalizers") == _RAYJOB_CONTROLLER_FINALIZERS
+    ):
+        metadata.pop("finalizers")
     status = normalized.pop("status", None)
     if status is not None and not isinstance(status, dict):
         raise JobsError("malformed Kubernetes RayJob status")

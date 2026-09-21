@@ -1433,6 +1433,18 @@ def test_server_harmless_api_defaults_are_normalized_exactly(tmp_path, sfs_jobs_
             result["metadata"]["creationTimestamp"] = None
             return result
 
+        def create_once(self, obj):
+            result = super().create_once(obj)
+            result["metadata"]["finalizers"] = ["ray.io/rayjob-finalizer"]
+            pod_spec = result["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]
+            resources = pod_spec["containers"][0]["resources"]
+            resources["requests"]["nvidia.com/gpu"] = "8"
+            resources["limits"]["nvidia.com/gpu"] = "8"
+            for init_container in pod_spec["initContainers"]:
+                init_container["resources"] = {}
+            self.created = deepcopy(result)
+            return result
+
     result = direct_submit_sft_once(
         plan=plan(),
         request=request(),
@@ -1443,6 +1455,48 @@ def test_server_harmless_api_defaults_are_normalized_exactly(tmp_path, sfs_jobs_
         jobs_root=sfs_jobs_root,
     )
     assert result["submitted"] is True
+
+
+@pytest.mark.parametrize(
+    ("fault", "value"),
+    [
+        ("finalizers", ["ray.io/rayjob-finalizer", "unreviewed"]),
+        ("gpu-request", "8.0"),
+        ("gpu-limit", "7"),
+        ("init-resources", {"requests": {"cpu": "1m"}}),
+    ],
+)
+def test_nearby_create_defaults_remain_strict(tmp_path, sfs_jobs_root, fault, value):
+    class DefaultDriftKubectl(FakeKubectl):
+        def create_once(self, obj):
+            result = super().create_once(obj)
+            pod_spec = result["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]
+            if fault == "finalizers":
+                result["metadata"]["finalizers"] = value
+            elif fault == "gpu-request":
+                result["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]["containers"][
+                    0
+                ]["resources"]["requests"]["nvidia.com/gpu"] = value
+            elif fault == "gpu-limit":
+                pod_spec["containers"][0]["resources"]["limits"]["nvidia.com/gpu"] = value
+            else:
+                pod_spec["initContainers"][0]["resources"] = value
+            self.created = deepcopy(result)
+            return result
+
+    journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
+    with pytest.raises(JobsError):
+        direct_submit_sft_once(
+            plan=plan(),
+            request=request(),
+            jobs=FakeJobs(),
+            kubectl=DefaultDriftKubectl(),
+            journal=journal,
+            run_id=RUN_ID,
+            jobs_root=sfs_jobs_root,
+        )
+    records = [json.loads(line) for line in journal.read_text().splitlines()]
+    assert [row["state"] for row in records] == ["KUBECTL_CREATE_INTENT_DO_NOT_RETRY"]
 
 
 def test_server_create_runtime_drift_is_not_accepted_as_success(tmp_path, sfs_jobs_root):
