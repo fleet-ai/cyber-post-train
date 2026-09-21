@@ -201,6 +201,66 @@ def test_module_entrypoint_exposes_public_help(monkeypatch, capsys):
     assert "checkpoint-seal" in capsys.readouterr().out
 
 
+def test_heldout_create_cli_reaches_only_the_guarded_create_boundary(tmp_path, monkeypatch):
+    from evals.fleet import heldout_launch
+
+    packet = tmp_path / "packet.json"
+    journal = tmp_path / "CREATE_INTENT.jsonl"
+    packet.write_text("{}")
+    calls = []
+
+    def create(value, *, cluster, database, journal):
+        calls.append((value, cluster.context, database.dsn_env, journal))
+        return {"submitted": True, "gpus": 0}
+
+    monkeypatch.setattr(heldout_launch, "launch_once", create)
+    result = RUNNER.invoke(
+        cli.app,
+        [
+            "eval",
+            "heldout-create",
+            str(packet),
+            "--context",
+            "fleet-dev",
+            "--journal",
+            str(journal),
+        ],
+    )
+    assert result.exit_code == 0
+    assert calls == [(packet, "fleet-dev", "ROLLOUT_DATABASE_URL", journal)]
+    assert '"submitted": true' in result.stdout
+
+
+def test_heldout_terminal_collect_cli_reaches_only_the_read_only_boundary(tmp_path, monkeypatch):
+    from evals.fleet import heldout_launch
+
+    packet = tmp_path / "packet.json"
+    receipt = tmp_path / "TERMINAL_OBSERVATION.json"
+    packet.write_text("{}")
+    calls = []
+
+    def collect(value, *, cluster, database, receipt_path):
+        calls.append((value, cluster.context, database.dsn_env, receipt_path))
+        return {"score_read_or_generated": False}
+
+    monkeypatch.setattr(heldout_launch, "collect_terminal", collect)
+    result = RUNNER.invoke(
+        cli.app,
+        [
+            "eval",
+            "heldout-terminal-collect",
+            str(packet),
+            "--context",
+            "fleet-prod",
+            "--receipt",
+            str(receipt),
+        ],
+    )
+    assert result.exit_code == 0
+    assert calls == [(packet, "fleet-prod", "ROLLOUT_DATABASE_URL", receipt)]
+    assert '"score_read_or_generated": false' in result.stdout
+
+
 def test_package_entrypoint_exposes_the_same_public_help(monkeypatch, capsys):
     import runpy
     import sys
