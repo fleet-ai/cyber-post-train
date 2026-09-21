@@ -923,6 +923,11 @@ def test_cpu_preflight_checks_files_and_actual_target_accounting(
     monkeypatch.setattr(torch.cuda, "is_available", lambda: defect == "gpu")
     monkeypatch.setattr(sft_runtime, "validate_runtime_sources", native)
     monkeypatch.setattr(sft_runtime, "build_runtime_configs", lambda p: calls.append("config"))
+    monkeypatch.setattr(
+        sft_runtime,
+        "_validate_sft_forward_backward_adapter",
+        lambda p: calls.append("forward_backward_signature"),
+    )
 
     class Trainer:
         def load_dataset(self):
@@ -949,7 +954,13 @@ def test_cpu_preflight_checks_files_and_actual_target_accounting(
             assert calls == []
     else:
         receipt = sft.preflight(plan)
-        assert calls == ["native", "config", "local_model", "local_model"]
+        assert calls == [
+            "native",
+            "config",
+            "forward_backward_signature",
+            "local_model",
+            "local_model",
+        ]
         assert receipt["plan_sha256"] == digest(plan)
         assert receipt["request_sha256"] == digest(sft.job_request(plan))
         assert receipt["counts"] == {
@@ -957,3 +968,4 @@ def test_cpu_preflight_checks_files_and_actual_target_accounting(
             "dev": {"rows": 2, "tasks": 2, "supervised_tokens": 4},
         }
         assert receipt["status"] == "passed" and receipt["gpus"] == 0
+        assert "native_forward_backward_signature" in receipt["checked"]

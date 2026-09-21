@@ -388,6 +388,19 @@ def test_teacher3k_context_runtime_repair_changes_only_external_identity(context
     assert successor_plan == expected_plan
 
 
+def test_teacher3k_64k_forward_adapter_repair_changes_only_external_identity():
+    retired = json.loads((RUNS / "qwen38-teacher3k-64k-full-b8-lr3e6-v2.json").read_text())
+    successor = json.loads((RUNS / "qwen38-teacher3k-64k-full-b8-lr3e6-v3.json").read_text())
+
+    expected = json.loads(json.dumps(retired))
+    expected["name"] = successor["name"]
+    expected["output_root"] = successor["output_root"]
+    expected["wandb"]["run_id"] = successor["wandb"]["run_id"]
+    expected["wandb"]["name"] = successor["wandb"]["name"]
+    expected["wandb"]["tags"][-1] = "runtime-forward-adapter-repair"
+    assert successor == expected
+
+
 @pytest.mark.parametrize(("context", "position"), [("64", 0), ("96", 1)])
 def test_teacher3k_later_context_launch_binds_current_inputs(context, position):
     evidence = json.loads(
@@ -401,10 +414,11 @@ def test_teacher3k_later_context_launch_binds_current_inputs(context, position):
 
     assert (
         evidence["status"]
-        == "v1_infrastructure_invalid_v2_preflights_passed_64k_running_96k_not_submitted"
+        == "v2_64k_runtime_contract_failed_before_proven_update_96k_not_submitted"
     )
     assert sft.digest(plan) == row["plan_sha256"]
     assert sft.digest(request) == row["request_sha256"]
+    assert plan["runtime_sha256"] == row["runtime_sha256"]
     assert plan["recipe"]["max_length"] == int(context) * 1024
     assert plan["recipe"]["max_steps"] == row["planned_optimizer_steps"]
     assert request["workers"] == 1
@@ -413,15 +427,23 @@ def test_teacher3k_later_context_launch_binds_current_inputs(context, position):
     assert request["requeueIfPreempted"] is False
     assert request["failureAlerts"] is False
     if context == "64":
-        assert row["successor_status"] == "running_inside_startup_allowance"
-        assert row["launch"]["run_id"] == "2f111132-a6d5-407c-aa3f-6ceed1033b8e"
-        assert row["launch"]["root_failure_alert_annotation"] == "off"
-        assert row["launch"]["priority"] == "c1"
-        assert row["launch"]["restarts"] == 0
-        assert row["launch"]["optimizer_step"] == 0
+        assert row["successor_status"].endswith("not_submitted")
+        retired = row["retired_runtime_contract_attempt"]
+        assert retired["run_id"] == "2f111132-a6d5-407c-aa3f-6ceed1033b8e"
+        assert retired["root_failure_alert_annotation"] == "off"
+        assert retired["priority"] == "c1"
+        assert retired["restarts"] == 0
+        terminal = retired["terminal"]
+        assert terminal["reported_loop_step"] == 1
+        assert terminal["proven_optimizer_updates"] == 0
+        assert terminal["metrics_receipt_present"] is False
+        assert terminal["checkpoint_receipt_present"] is False
+        assert terminal["raycluster_absent"] is True
+        assert terminal["pod_absent"] is True
+        assert terminal["active_gpus"] == 0
     else:
-        assert row["successor_status"] == "cpu_preflight_passed_not_submitted"
-        assert "launch" not in row
+        assert row["successor_status"].endswith("not_submitted")
+        assert "retired_runtime_contract_attempt" not in row
     assert row["retired_attempt"]["optimizer_step"] == 0
     assert row["retired_attempt"]["root_failure_alert_annotation"] == "off"
     assert row["retired_attempt"]["resource_release"].endswith("zero_gpu_held")
