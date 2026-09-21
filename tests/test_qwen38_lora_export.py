@@ -8,7 +8,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from cyber_post_train.jobs import validate_request
+from cyber_post_train.jobs import digest, validate_request
 from training import qwen38_lora_export as export
 from training import qwen38_lora_export_control as control
 
@@ -135,6 +135,29 @@ def test_seal_continuation_plan_consumes_only_an_exact_native_manifest(
     request = export.job_request(plan)
     assert request["failureAlerts"] is False
     assert request["priority_class"] == "c1"
+
+
+def test_committed_step60_plan_binds_current_producer_and_exact_source() -> None:
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "configs/qualification/qwen38-lora-step60-zero-update-export-v1.json"
+    )
+    plan = json.loads(path.read_text())
+
+    assert export.validate_plan(plan) == plan
+    assert digest(plan) == "80ae4262f1d4a6ce5b61ec79fd21c08e3a594e6a8e428b7cfff14eec62da8804"
+    assert plan["checkpoint_manifest"] == {
+        "path": (
+            "/mnt/sfs/jobs/chris-q38-lora-r1-s60-v3/"
+            "checkpoint_manifests/step-000060-megatron-v1.json"
+        ),
+        "file_sha256": "cd53865f869eeb1975aa0e099aef143a736167c5c7b095c283f0da292ffecd78",
+        "receipt_sha256": "6bae9ef75e0a60f598eb32b63d31a64c0f42716611a43daf19a177d3c0ffebd2",
+    }
+    request = export.job_request(plan)
+    assert request["failureAlerts"] is False
+    assert request["priority_class"] == "c1"
+    assert request["gpus_per_worker"] == 8
 
 
 def test_control_seals_continuation_without_treating_it_as_step_one(
