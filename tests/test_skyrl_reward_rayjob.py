@@ -9,21 +9,26 @@ import os
 from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace as NS
+from unittest import mock
 
 import pytest
 
 from cyber_post_train.jobs import JobsError, digest
 from evals.fleet import opencode_self_hosted as fleet
+from scripts import prepare_qwen38_skyrl_prod9_successor as prod9_prepare
 from scripts.audit_qwen38_skyrl_launch_readiness import (
     compile_prod8,
     load,
 )
 from training import dev_cleanup_observer as cleanup
+from training import sft, skyrl_training
 from training import skyrl_reward_rayjob as direct
 
 ROOT = Path(__file__).resolve().parents[1]
 CANARY_RUN = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod-v8.json"
 CANARY_MANIFEST = ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json"
+PROD9_RUN = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod-v9.json"
+PROD9_IDENTITY = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod9-identity-v1.json"
 
 
 def successor_metadata(run: dict) -> dict:
@@ -162,7 +167,8 @@ def plan_request() -> tuple[dict, dict]:
 
 
 def _source_preview(plan: dict, request: dict) -> dict:
-    placeholder = direct.RUN_NAME + "-00000000"
+    run_name = request["name"]
+    placeholder = run_name + "-00000000"
     resources = request["resources"]
     output_init = f"mkdir -p {plan['output_root']} && chown 1000:100 {plan['output_root']}"
     environment = [
@@ -186,7 +192,7 @@ def _source_preview(plan: dict, request: dict) -> dict:
                 "app": "fleet-rl-job",
                 "fleet.ai/requeue-if-preempted": "false",
                 "fleet.ai/run-id": "00000000-0000-0000-0000-000000000000",
-                "fleet.ai/run-name": direct.RUN_NAME,
+                "fleet.ai/run-name": run_name,
                 "kueue.x-k8s.io/queue-name": "training-lq",
                 "kueue.x-k8s.io/priority-class": "q1",
             },
@@ -252,8 +258,14 @@ def _source_preview(plan: dict, request: dict) -> dict:
     return {"name": placeholder, "warnings": [], "manifest_yaml": yaml.safe_dump(value)}
 
 
-def _direct_render(plan: dict, request: dict, preview: dict) -> dict:
-    value = copy.deepcopy(direct.manifest(plan, request, preview))
+def _direct_render(
+    plan: dict,
+    request: dict,
+    preview: dict,
+    *,
+    identity: direct.RailIdentity | None = None,
+) -> dict:
+    value = copy.deepcopy(direct.manifest(plan, request, preview, identity=identity))
     value["metadata"].update(
         {
             "creationTimestamp": "2026-09-20T00:00:00Z",
@@ -742,3 +754,147 @@ def test_create_is_journaled_once_and_never_retried(plan_request, tmp_path, monk
         len([call for call in calls if call[5:6] == ["create"] and "--dry-run=server" not in call])
         == 1
     )
+
+
+def _prod9_plan(plan: dict, identity: direct.RailIdentity) -> tuple[dict, dict]:
+    result = copy.deepcopy(plan)
+    result["run_name"] = identity.run_name
+    result["output_root"] = identity.output_root
+    result["data"]["name"] = identity.run_name
+    arguments = result["arguments"]
+    arguments.update(
+        {
+            "name": identity.run_name,
+            "output_root": identity.output_root,
+            "train_data": identity.data_root + "/train.jsonl",
+            "dev_data": identity.data_root + "/dev.jsonl",
+            "data_manifest": identity.data_root + "/manifest.json",
+            "wandb_run_id": identity.wandb_run_id,
+        }
+    )
+    result["native_overrides"] = direct.skyrl_training.skyrl.overrides(
+        direct.skyrl_training.skyrl.SkyRLConfig(**arguments)
+    )
+    return result, direct.skyrl_training.job_request(result)
+
+
+def test_prod9_identity_is_fresh_and_binds_every_create_once_name(plan_request) -> None:
+    identity = direct.load_identity(PROD9_IDENTITY)
+    run = json.loads(PROD9_RUN.read_text())
+    assert identity.sealed_mapping() == json.loads(PROD9_IDENTITY.read_text())
+    assert {
+        "name": run["name"],
+        "output_root": run["output_root"],
+        "data_root": run["data"]["root"],
+        "wandb_run_id": run["wandb"]["run_id"],
+    } == {
+        "name": identity.run_name,
+        "output_root": identity.output_root,
+        "data_root": identity.data_root,
+        "wandb_run_id": identity.wandb_run_id,
+    }
+    assert identity.run_name != identity.predecessor_run_name
+    assert identity.data_root != identity.predecessor_data_root
+
+    plan, _ = plan_request
+    fresh, request = _prod9_plan(plan, identity)
+    preview = _source_preview(fresh, request)
+    expected = direct.manifest(fresh, request, preview, identity=identity)
+    proof = direct.validate_preview(
+        fresh,
+        request,
+        preview,
+        expected,
+        _direct_render(fresh, request, preview, identity=identity),
+        context=direct.PROD_CONTEXT,
+        identity=identity,
+    )
+    preflight = direct.preflight_job_manifest(fresh, identity=identity)
+    assert expected["metadata"]["name"] == identity.run_name
+    assert expected["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+    assert proof["name"] == identity.run_name
+    assert proof["failure_alerts"] == "off"
+    assert preflight["metadata"]["name"] == identity.preflight_name
+    assert preflight["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+
+
+def test_prod9_identity_rejects_a_prod8_plan_or_tampered_identity(plan_request) -> None:
+    identity = direct.load_identity(PROD9_IDENTITY)
+    plan, request = plan_request
+    with pytest.raises(JobsError, match="explicit identity"):
+        direct.manifest(plan, request, _source_preview(plan, request), identity=identity)
+
+    tampered = identity.sealed_mapping()
+    tampered["stage_name"] = "chris-q38-prod9-data-v2"
+    with pytest.raises(JobsError, match="digest"):
+        direct.identity_from_mapping(tampered)
+
+    reused_data_root = identity.sealed_mapping()
+    reused_data_root["data_root"] = reused_data_root["predecessor_data_root"]
+    body = {key: value for key, value in reused_data_root.items() if key != "sha256"}
+    reused_data_root["sha256"] = "sha256:" + digest(body)
+    with pytest.raises(JobsError, match="fresh create-once"):
+        direct.identity_from_mapping(reused_data_root)
+
+
+def test_prod9_config_compiles_through_the_real_qualification_gate() -> None:
+    """A fresh identity must not bypass the v8 science/route validator."""
+    run = json.loads(PROD9_RUN.read_text())
+    metadata = successor_metadata(load(CANARY_RUN))
+    metadata["name"] = run["name"]
+    metadata["sha256"] = "sha256:" + digest(
+        {key: value for key, value in metadata.items() if key != "sha256"}
+    )
+    original = sft.read_mapping
+
+    def read(path: Path) -> dict:
+        if Path(path) == Path(run["data"]["manifest"]):
+            return copy.deepcopy(metadata)
+        return original(path)
+
+    with mock.patch.object(sft, "read_mapping", side_effect=read):
+        plan = skyrl_training.compile_rl(run, relative_to=PROD9_RUN.parent)
+    request = skyrl_training.job_request(plan)
+    identity = direct.load_identity(PROD9_IDENTITY)
+    assert plan["run_name"] == identity.run_name
+    assert request["workers"] == 1
+    assert request["gpus_per_worker"] == 8
+    assert request["failureAlerts"] is False
+    assert {
+        key: plan["arguments"][key]
+        for key in (
+            "context_tokens",
+            "generation_chunk_tokens",
+            "compaction_trigger_tokens",
+            "compaction_summary_tokens",
+            "max_turns",
+        )
+    } == {
+        "context_tokens": 262144,
+        "generation_chunk_tokens": 4096,
+        "compaction_trigger_tokens": 163840,
+        "compaction_summary_tokens": 8192,
+        "max_turns": 1200,
+    }
+
+
+def test_prod9_offline_preparation_requires_a_fresh_rebound_manifest(tmp_path: Path) -> None:
+    identity = direct.load_identity(PROD9_IDENTITY)
+    manifest = successor_metadata(load(CANARY_RUN))
+    manifest["name"] = identity.run_name
+    manifest["sha256"] = "sha256:" + digest(
+        {key: value for key, value in manifest.items() if key != "sha256"}
+    )
+    path = tmp_path / "manifest.json"
+    path.write_text(json.dumps(manifest))
+    receipt = prod9_prepare.build(path)
+    assert receipt == prod9_prepare._seal(receipt)
+    assert receipt["launch_authorized"] is False
+    assert receipt["external_mutations"] == 0
+    assert receipt["private_rows_read"] is False
+    assert receipt["identity"] == identity.sealed_mapping()
+
+    predecessor = successor_metadata(load(CANARY_RUN))
+    path.write_text(json.dumps(predecessor))
+    with pytest.raises(ValueError, match="public data contract"):
+        prod9_prepare.build(path)

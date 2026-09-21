@@ -1,4 +1,4 @@
-"""Create-once direct root-RayJob rail for the sealed prod8 reward canary.
+"""Create-once direct root-RayJob rail for sealed SkyRL reward canaries.
 
 The Jobs API preview remains the topology source of truth.  This module removes
 only API-controller bindings that do not exist for a direct root RayJob, adds
@@ -21,6 +21,7 @@ import subprocess
 import tarfile
 import time
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -43,9 +44,6 @@ from . import skyrl_training
 DEV_CONTEXT = "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb"
 PROD_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 NAMESPACE = "fleet-train-jobs"
-RUN_NAME = "chris-q38-rlreward-prod8"
-STAGE_NAME = "chris-q38-prod8-data-v1"
-PREFLIGHT_NAME = "chris-q38-prod8-preflight-v1"
 STAGE_RECEIPT = "/dev/termination-log"
 UPLOAD = Path("/tmp/autoresearch-upload.tar.gz")
 PACKET_SCHEMA = "cyber_skyrl_reward_direct_rayjob_packet_v1"
@@ -65,6 +63,141 @@ MAXIMUM_SECONDS = 14 * 60 * 60
 RUNTIME_UID = 1000
 RUNTIME_GID = 100
 PVC = "sfs-shared"
+IDENTITY_SCHEMA = "cyber_skyrl_reward_direct_identity_v1"
+_DNS_LABEL = re.compile(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?\Z")
+
+
+@dataclass(frozen=True)
+class RailIdentity:
+    """The only mutable part of an otherwise frozen direct SkyRL canary.
+
+    A successor gets fresh Kubernetes, SFS and W&B identities.  The science is
+    deliberately *not* represented here: it stays in the immutable plan and
+    its source closure.
+    """
+
+    run_name: str
+    stage_name: str
+    preflight_name: str
+    output_root: str
+    data_root: str
+    wandb_run_id: str
+    predecessor_run_name: str
+    predecessor_data_root: str
+
+    def __post_init__(self) -> None:
+        names = (self.run_name, self.stage_name, self.preflight_name, self.predecessor_run_name)
+        roots = (self.output_root, self.data_root, self.predecessor_data_root)
+        if any(not isinstance(value, str) for value in (*names, *roots, self.wandb_run_id)) or any(
+            len(value) > 63 or _DNS_LABEL.fullmatch(value) is None for value in names
+        ):
+            raise JobsError("direct SkyRL identity contains an invalid Kubernetes name")
+        if (
+            self.wandb_run_id != self.run_name
+            or len({self.run_name, self.stage_name, self.preflight_name}) != 3
+            or self.predecessor_run_name == self.run_name
+            or self.predecessor_data_root == self.data_root
+            or any(not value.startswith("/mnt/sfs/jobs/") for value in roots)
+            or not self.output_root.endswith("/" + self.run_name)
+            or not self.data_root.endswith("/data")
+            or self.output_root == self.data_root
+            or self.output_root.startswith(self.data_root + "/")
+            or self.data_root.startswith(self.output_root + "/")
+        ):
+            raise JobsError("direct SkyRL identity is not a fresh create-once layout")
+
+    def sealed_mapping(self) -> dict[str, Any]:
+        value = {
+            "schema": IDENTITY_SCHEMA,
+            "run_name": self.run_name,
+            "stage_name": self.stage_name,
+            "preflight_name": self.preflight_name,
+            "output_root": self.output_root,
+            "data_root": self.data_root,
+            "wandb_run_id": self.wandb_run_id,
+            "predecessor_run_name": self.predecessor_run_name,
+            "predecessor_data_root": self.predecessor_data_root,
+        }
+        return {**value, "sha256": "sha256:" + digest(value)}
+
+
+def identity_from_mapping(value: object) -> RailIdentity:
+    """Read one sealed identity without treating a plan as an identity source."""
+    required = {
+        "schema",
+        "run_name",
+        "stage_name",
+        "preflight_name",
+        "output_root",
+        "data_root",
+        "wandb_run_id",
+        "predecessor_run_name",
+        "predecessor_data_root",
+        "sha256",
+    }
+    if not isinstance(value, dict) or set(value) != required:
+        raise JobsError("direct SkyRL identity shape changed")
+    body = {key: item for key, item in value.items() if key != "sha256"}
+    if value.get("schema") != IDENTITY_SCHEMA or value.get("sha256") != "sha256:" + digest(body):
+        raise JobsError("direct SkyRL identity digest changed")
+    try:
+        return RailIdentity(
+            **{key: value[key] for key in required - {"schema", "sha256"}},
+        )
+    except TypeError as exc:
+        raise JobsError("direct SkyRL identity values changed") from exc
+
+
+def load_identity(path: Path) -> RailIdentity:
+    try:
+        value = json.loads(path.read_bytes())
+    except (OSError, ValueError) as exc:
+        raise JobsError("direct SkyRL identity is unreadable") from exc
+    return identity_from_mapping(value)
+
+
+PROD8_IDENTITY = RailIdentity(
+    run_name="chris-q38-rlreward-prod8",
+    stage_name="chris-q38-prod8-data-v1",
+    preflight_name="chris-q38-prod8-preflight-v1",
+    output_root="/mnt/sfs/jobs/chris-q38-rlreward-prod8",
+    data_root="/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-prod8-v1/data",
+    wandb_run_id="chris-q38-rlreward-prod8",
+    predecessor_run_name="chris-q38-rlreward-prod7",
+    predecessor_data_root="/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-prod7-v2/data",
+)
+# Public aliases preserve the existing prod8-only callers while all new callers
+# must pass a reviewed RailIdentity explicitly.
+RUN_NAME = PROD8_IDENTITY.run_name
+STAGE_NAME = PROD8_IDENTITY.stage_name
+PREFLIGHT_NAME = PROD8_IDENTITY.preflight_name
+
+
+def _identity_for_plan(plan: dict[str, Any], identity: RailIdentity | None) -> RailIdentity:
+    result = PROD8_IDENTITY if identity is None else identity
+    arguments = plan.get("arguments")
+    data = plan.get("data")
+    common_drift = (
+        not isinstance(arguments, dict)
+        or not isinstance(data, dict)
+        or (
+            plan.get("run_name") != result.run_name
+            or plan.get("output_root") != result.output_root
+            or arguments.get("wandb_run_id") != result.wandb_run_id
+            or data.get("name") != result.run_name
+        )
+    )
+    # Preserve the historic prod8 test/packet rail byte-for-byte.  A fresh
+    # identity must bind its private data paths explicitly; prod8's original
+    # helpers intentionally supported local synthetic staging paths in tests.
+    explicit_data_drift = identity is not None and (
+        arguments.get("data_manifest") != result.data_root + "/manifest.json"
+        or arguments.get("train_data") != result.data_root + "/train.jsonl"
+        or arguments.get("dev_data") != result.data_root + "/dev.jsonl"
+    )
+    if common_drift or explicit_data_drift:
+        raise JobsError("direct SkyRL plan does not bind its explicit identity")
+    return result
 
 
 def _seal(value: dict[str, Any]) -> dict[str, Any]:
@@ -94,8 +227,9 @@ def _stamp() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _run_id(plan: dict[str, Any]) -> str:
-    return str(uuid5(NAMESPACE_URL, f"fleet-direct-rayjob:{RUN_NAME}:{digest(plan)}"))
+def _run_id(plan: dict[str, Any], identity: RailIdentity | None = None) -> str:
+    bound = _identity_for_plan(plan, identity)
+    return str(uuid5(NAMESPACE_URL, f"fleet-direct-rayjob:{bound.run_name}:{digest(plan)}"))
 
 
 def _source(preview: dict[str, Any]) -> dict[str, Any]:
@@ -119,13 +253,18 @@ def _replace_env(container: dict[str, Any], name: str, value: str) -> None:
 
 
 def manifest(
-    plan: dict[str, Any], request: dict[str, Any], preview: dict[str, Any]
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    preview: dict[str, Any],
+    *,
+    identity: RailIdentity | None = None,
 ) -> dict[str, Any]:
     """Project the accepted Jobs preview into one exact root RayJob."""
-    if plan.get("run_name") != RUN_NAME or skyrl_training.job_request(plan) != request:
+    bound = _identity_for_plan(plan, identity)
+    if skyrl_training.job_request(plan) != request:
         raise JobsError("prod8 plan/request identity changed")
     source = _source(preview)
-    expected_placeholder = RUN_NAME + "-00000000"
+    expected_placeholder = bound.run_name + "-00000000"
     metadata = source.get("metadata", {})
     labels, annotations = metadata.get("labels", {}), metadata.get("annotations", {})
     if (
@@ -135,7 +274,7 @@ def manifest(
         or metadata.get("name") != expected_placeholder
         or metadata.get("namespace") != NAMESPACE
         or labels.get("fleet.ai/run-id") != "00000000-0000-0000-0000-000000000000"
-        or labels.get("fleet.ai/run-name") != RUN_NAME
+        or labels.get("fleet.ai/run-name") != bound.run_name
         or labels.get("kueue.x-k8s.io/queue-name") != "training-lq"
         or labels.get("kueue.x-k8s.io/priority-class") != "q1"
         or annotations.get("fleet.ai/run-id") != "00000000-0000-0000-0000-000000000000"
@@ -145,8 +284,8 @@ def manifest(
     ):
         raise JobsError("prod8 Jobs preview identity or admission changed")
     result = copy.deepcopy(source)
-    direct_id = _run_id(plan)
-    result["metadata"]["name"] = RUN_NAME
+    direct_id = _run_id(plan, bound)
+    result["metadata"]["name"] = bound.run_name
     result["metadata"]["labels"]["fleet.ai/run-id"] = direct_id
     result["metadata"]["annotations"]["fleet.ai/run-id"] = direct_id
     result["metadata"]["annotations"][FAILURE_ALERT_ANNOTATION] = FAILURE_ALERT_OFF
@@ -169,7 +308,7 @@ def manifest(
         raise JobsError("prod8 preview must contain one head container")
     container = containers[0]
     _replace_env(container, "FLEET_RUN_ID", direct_id)
-    _replace_env(container, "FLEET_RUN_NAME", RUN_NAME)
+    _replace_env(container, "FLEET_RUN_NAME", bound.run_name)
     secret_names = [row.get("secretRef", {}).get("name") for row in container.get("envFrom", [])]
     generated_secret = expected_placeholder + "-fleet-key"
     if secret_names != ["fleet-api", "wandb-api", generated_secret]:
@@ -208,9 +347,14 @@ def manifest(
 
 
 def packet(
-    plan: dict[str, Any], request: dict[str, Any], preview: dict[str, Any]
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    preview: dict[str, Any],
+    *,
+    identity: RailIdentity | None = None,
 ) -> dict[str, Any]:
-    value = manifest(plan, request, preview)
+    bound = _identity_for_plan(plan, identity)
+    value = manifest(plan, request, preview, identity=identity)
     return _seal(
         {
             "schema": PACKET_SCHEMA,
@@ -218,8 +362,8 @@ def packet(
             "request_sha256": digest(request),
             "jobs_preview_sha256": digest(preview),
             "manifest_sha256": digest(value),
-            "direct_run_id": _run_id(plan),
-            "name": RUN_NAME,
+            "direct_run_id": _run_id(plan, identity),
+            "name": bound.run_name,
             "namespace": NAMESPACE,
             "submitted": False,
         }
@@ -260,8 +404,10 @@ def validate_preview(
     rendered: dict[str, Any],
     *,
     context: str,
+    identity: RailIdentity | None = None,
 ) -> dict[str, Any]:
-    if expected != manifest(plan, request, source_preview):
+    bound = _identity_for_plan(plan, identity)
+    if expected != manifest(plan, request, source_preview, identity=identity):
         raise JobsError("prod8 direct packet changed")
     if (
         context not in {DEV_CONTEXT, PROD_CONTEXT}
@@ -277,7 +423,7 @@ def validate_preview(
             "request_sha256": digest(request),
             "manifest_sha256": digest(expected),
             "server_render_sha256": digest(rendered),
-            "name": RUN_NAME,
+            "name": bound.run_name,
             "nodes": 1,
             "gpus": 8,
             "priority": "c1",
@@ -438,7 +584,26 @@ def rebind_private_source_run_id(
         raise
 
 
-def stage_plan(plan: dict[str, Any], source: Path, archive: Path) -> dict[str, Any]:
+def rebind_private_source_for_identity(
+    source: Path, destination: Path, identity: RailIdentity
+) -> dict[str, Any]:
+    """Make a fresh private package without allowing a stale episode run ID."""
+    return rebind_private_source_run_id(
+        source,
+        destination,
+        prior_run_id=identity.predecessor_run_name,
+        new_run_id=identity.run_name,
+    )
+
+
+def stage_plan(
+    plan: dict[str, Any],
+    source: Path,
+    archive: Path,
+    *,
+    identity: RailIdentity | None = None,
+) -> dict[str, Any]:
+    bound = _identity_for_plan(plan, identity)
     expected = {"manifest.json", "split.json", "task-set.json", "train.jsonl", "dev.jsonl"}
     found = {path.name: path for path in source.iterdir() if path.is_file()}
     if set(found) != expected:
@@ -473,7 +638,7 @@ def stage_plan(plan: dict[str, Any], source: Path, archive: Path) -> dict[str, A
     archive_binding = build_stage_archive(source, archive)
     value = {
         "schema": STAGE_SCHEMA,
-        "name": STAGE_NAME,
+        "name": bound.stage_name,
         "destination": plan["arguments"]["data_manifest"].removesuffix("/manifest.json"),
         "files": files,
         "archive": archive_binding,
@@ -645,8 +810,13 @@ def _cpu_job(
     }
 
 
-def stage_job_manifest(value: dict[str, Any]) -> dict[str, Any]:
+def stage_job_manifest(
+    value: dict[str, Any], *, identity: RailIdentity | None = None
+) -> dict[str, Any]:
     plan = _validate_seal(value, STAGE_SCHEMA)
+    bound = PROD8_IDENTITY if identity is None else identity
+    if plan.get("name") != bound.stage_name:
+        raise JobsError("direct SkyRL stage plan does not bind its explicit identity")
     files = skyrl_training._runtime()
     files.update(
         {
@@ -658,9 +828,9 @@ def stage_job_manifest(value: dict[str, Any]) -> dict[str, Any]:
     files["stage.json"] = json.dumps(plan, sort_keys=True, separators=(",", ":"))
     bundled = bundled_request(
         {
-            "name": STAGE_NAME,
-            "title": STAGE_NAME + " zero-GPU immutable data stage",
-            "run_dir": "/mnt/sfs/jobs/" + STAGE_NAME,
+            "name": bound.stage_name,
+            "title": bound.stage_name + " zero-GPU immutable data stage",
+            "run_dir": "/mnt/sfs/jobs/" + bound.stage_name,
             "image": plan["image"],
             "workers": 1,
             "gpus_per_worker": 1,
@@ -681,7 +851,7 @@ def stage_job_manifest(value: dict[str, Any]) -> dict[str, Any]:
         ["--stage", "stage.json", "--receipt", STAGE_RECEIPT],
     )
     return _cpu_job(
-        STAGE_NAME,
+        bound.stage_name,
         plan["image"],
         bundled["command"],
         {**bundled["env"], "RUN_DIR": "/tmp"},
@@ -689,14 +859,24 @@ def stage_job_manifest(value: dict[str, Any]) -> dict[str, Any]:
     )
 
 
-def preflight_job_manifest(plan: dict[str, Any]) -> dict[str, Any]:
+def preflight_job_manifest(
+    plan: dict[str, Any], *, identity: RailIdentity | None = None
+) -> dict[str, Any]:
+    bound = _identity_for_plan(plan, identity)
     request = skyrl_training.job_request(plan)
     files = _runtime_files(plan, include_self=True)
+    command_args = ["--preflight", "plan.json"]
+    if identity is not None:
+        files["identity.json"] = json.dumps(
+            bound.sealed_mapping(), sort_keys=True, separators=(",", ":")
+        )
+        command_args += ["--identity", "identity.json"]
+    command_args += ["--receipt", STAGE_RECEIPT]
     bundled = bundled_request(
         {
-            "name": PREFLIGHT_NAME,
-            "title": PREFLIGHT_NAME + " zero-GPU exact-image preflight",
-            "run_dir": "/mnt/sfs/jobs/" + PREFLIGHT_NAME,
+            "name": bound.preflight_name,
+            "title": bound.preflight_name + " zero-GPU exact-image preflight",
+            "run_dir": "/mnt/sfs/jobs/" + bound.preflight_name,
             "image": request["image"],
             "workers": 1,
             "gpus_per_worker": 1,
@@ -714,10 +894,10 @@ def preflight_job_manifest(plan: dict[str, Any]) -> dict[str, Any]:
         },
         files,
         "training.skyrl_reward_rayjob",
-        ["--preflight", "plan.json", "--receipt", STAGE_RECEIPT],
+        command_args,
     )
     return _cpu_job(
-        PREFLIGHT_NAME,
+        bound.preflight_name,
         request["image"],
         bundled["command"],
         {**bundled["env"], "RUN_DIR": "/tmp"},
@@ -733,7 +913,10 @@ class PreflightGateError(Exception):
         self.message_sha256 = hashlib.sha256(str(error).encode()).hexdigest()
 
 
-def preflight_runtime(plan: dict[str, Any]) -> dict[str, Any]:
+def preflight_runtime(
+    plan: dict[str, Any], *, identity: RailIdentity | None = None
+) -> dict[str, Any]:
+    bound = _identity_for_plan(plan, identity)
     try:
         proof = skyrl_training.preflight(plan)
     except BaseException as exc:
@@ -766,7 +949,7 @@ def preflight_runtime(plan: dict[str, Any]) -> dict[str, Any]:
     if wandb_binding != {
         "entity": "thefleet",
         "project": "cyber-post-train",
-        "run_id": RUN_NAME,
+        "run_id": bound.wandb_run_id,
         "resume": "never",
     }:
         raise PreflightGateError(
@@ -947,10 +1130,12 @@ def duplicate_checks(
     plan: dict[str, Any],
     *,
     token: str,
+    identity: RailIdentity | None = None,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     jobs_factory: Callable[..., Jobs] = Jobs,
 ) -> dict[str, int]:
-    name, output = plan["run_name"], plan["output_root"]
+    bound = _identity_for_plan(plan, identity)
+    name, output = bound.run_name, bound.output_root
     kube = 0
     for context in (DEV_CONTEXT, PROD_CONTEXT):
         for resource in ("rayjob", "raycluster", "job", "workload", "pod"):
@@ -1003,8 +1188,10 @@ def authorize(
     stage_receipt: dict[str, Any],
     preflight_receipt: dict[str, Any],
     observer: dict[str, Any],
+    identity: RailIdentity | None = None,
 ) -> dict[str, Any]:
-    direct_sha = digest(manifest(plan, request, source_preview))
+    bound = _identity_for_plan(plan, identity)
+    direct_sha = digest(manifest(plan, request, source_preview, identity=identity))
     for proof, context in ((dev_preview, DEV_CONTEXT), (prod_preview, PROD_CONTEXT)):
         _validate_seal(proof, PREVIEW_SCHEMA)
         if (
@@ -1032,7 +1219,7 @@ def authorize(
         stage_receipt.get("status") != "published"
         or stage_receipt.get("stage_plan_sha256") != digest(staged)
         or staged.get("plan_sha256") != digest(plan)
-        or staged.get("name") != STAGE_NAME
+        or staged.get("name") != bound.stage_name
         or staged.get("image") != plan["execution"]["image"]
         or staged.get("destination")
         != plan["arguments"]["data_manifest"].removesuffix("/manifest.json")
@@ -1071,8 +1258,8 @@ def authorize(
         (context, purpose, digest(job))
         for context in (DEV_CONTEXT, PROD_CONTEXT)
         for purpose, job in (
-            ("data_stage", stage_job_manifest(stage_receipt["stage_plan"])),
-            ("preflight", preflight_job_manifest(plan)),
+            ("data_stage", stage_job_manifest(stage_receipt["stage_plan"], identity=identity)),
+            ("preflight", preflight_job_manifest(plan, identity=identity)),
         )
     }
     observed_cpu = set()
@@ -1102,7 +1289,7 @@ def authorize(
         != {
             "entity": "thefleet",
             "project": "cyber-post-train",
-            "run_id": RUN_NAME,
+            "run_id": bound.wandb_run_id,
             "resume": "never",
         }
         or preflight_receipt.get("wandb_remote_lookup") != "deferred_to_runtime_start"
@@ -1126,7 +1313,7 @@ def authorize(
         or observer.get("context") != PROD_CONTEXT
         or observer.get("namespace") != NAMESPACE
         or observer.get("kind") != "rayjob"
-        or observer.get("name") != RUN_NAME
+        or observer.get("name") != bound.run_name
         or observer.get("maximum_seconds") != MAXIMUM_SECONDS
         or observer.get("expected_gpus") != 8
         or observer.get("plan_sha256") != "sha256:" + digest(plan)
@@ -1176,10 +1363,12 @@ def create_once(
     authorization: dict[str, Any],
     *,
     token: str,
+    identity: RailIdentity | None = None,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     jobs_factory: Callable[..., Jobs] = Jobs,
 ) -> dict[str, Any]:
-    if expected != manifest(plan, request, source_preview):
+    bound = _identity_for_plan(plan, identity)
+    if expected != manifest(plan, request, source_preview, identity=identity):
         raise JobsError("prod8 direct manifest changed")
     _validate_seal(authorization, AUTHORIZATION_SCHEMA)
     if authorization != authorize(
@@ -1193,15 +1382,26 @@ def create_once(
         stage_receipt=authorization["stage_receipt"],
         preflight_receipt=authorization["preflight_receipt"],
         observer=authorization["observer"],
+        identity=identity,
     ):
         raise JobsError("prod8 direct authorization changed")
     try:
         os.kill(authorization["observer"]["observer_pid"], 0)
     except (KeyError, OSError, TypeError) as exc:
         raise JobsError("prod8 cleanup observer is not running") from exc
-    duplicate = duplicate_checks(plan, token=token, runner=runner, jobs_factory=jobs_factory)
+    duplicate = duplicate_checks(
+        plan, token=token, identity=identity, runner=runner, jobs_factory=jobs_factory
+    )
     final_render = server_dry_run(expected, context=PROD_CONTEXT, runner=runner)
-    validate_preview(plan, request, source_preview, expected, final_render, context=PROD_CONTEXT)
+    validate_preview(
+        plan,
+        request,
+        source_preview,
+        expected,
+        final_render,
+        context=PROD_CONTEXT,
+        identity=identity,
+    )
     # Duplicate reconciliation and API inventory can be slow.  Recheck the
     # observer immediately before recording create intent so an observer that
     # exited during those reads can never authorize an unwatched workload.
@@ -1248,7 +1448,7 @@ def create_once(
         uid = str(UUID(created["metadata"]["uid"]))
     except (KeyError, TypeError, ValueError) as exc:
         raise JobsError("prod8 create response is ambiguous; reconcile, never retry") from exc
-    if created.get("metadata", {}).get("name") != RUN_NAME:
+    if created.get("metadata", {}).get("name") != bound.run_name:
         raise JobsError("prod8 create returned another identity; reconcile, never retry")
     proof = _seal(
         {
@@ -1256,7 +1456,7 @@ def create_once(
             "status": "created_once",
             "plan_sha256": digest(plan),
             "manifest_sha256": digest(expected),
-            "rayjob_name": RUN_NAME,
+            "rayjob_name": bound.run_name,
             "rayjob_uid": uid,
             "created_at": created["metadata"].get("creationTimestamp"),
         }
@@ -1274,17 +1474,21 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--stage", type=Path)
     parser.add_argument("--preflight", type=Path)
+    parser.add_argument("--identity", type=Path)
     parser.add_argument("--receipt", type=Path, required=True)
     args = parser.parse_args()
     try:
         if (args.stage is None) == (args.preflight is None) or args.receipt != Path(STAGE_RECEIPT):
             raise ValueError("prod8 CPU mode binding changed")
+        if args.stage is not None and args.identity is not None:
+            raise ValueError("data stage must not accept an unrelated identity file")
         if args.stage is not None:
             result = stage_runtime(json.loads(args.stage.read_bytes()))
         else:
             plan = json.loads(args.preflight.read_bytes())
+            identity = PROD8_IDENTITY if args.identity is None else load_identity(args.identity)
             try:
-                result = preflight_runtime(plan)
+                result = preflight_runtime(plan, identity=identity)
             except PreflightGateError as exc:
                 result = _seal(
                     {
