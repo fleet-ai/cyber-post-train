@@ -77,7 +77,7 @@
   },
   "launch_authorized": false,
   "local_cpu_preflight_preview_binding": {
-    "current_manifest_sha256": "67c9db1d254bfe1dbf31f7e853515e82e6e533ee23e71dd7b2b4b7eabd44c6dc",
+    "current_manifest_sha256": "5fc7577b058bff91a7c19c8f50fdd5e45fafcdab0923735fa6957e1854d3ea62",
     "fresh_preview_required": true,
     "matches_current_manifest": false,
     "preview_manifest_sha256": {
@@ -89,7 +89,7 @@
     "executed": false,
     "failure_alerts": "off",
     "gpus": 0,
-    "manifest_sha256": "67c9db1d254bfe1dbf31f7e853515e82e6e533ee23e71dd7b2b4b7eabd44c6dc",
+    "manifest_sha256": "5fc7577b058bff91a7c19c8f50fdd5e45fafcdab0923735fa6957e1854d3ea62",
     "name": "chris-q38-prod8-preflight-v1",
     "priority": "c1",
     "server_previewed_in_dev_and_prod": false
@@ -172,6 +172,6 @@
     "steps": 1,
     "tokens_per_turn": 32768
   },
-  "sha256": "sha256:8fb8f59f02274953ce6aceec655ae5aea9f6455eeeaa8a902334da2912be0bd6",
+  "sha256": "sha256:0156446a85a689f9fc3945de4735dc544c7450e402564f19233eff3d9f5618a9",
   "status": "prepared_external_stage_and_preflight_pending"
 }
