@@ -16,7 +16,7 @@ import psycopg
 from psycopg import sql
 
 from cyber_post_train.jobs import digest
-from evals.fleet import evaluate, rollout_postgres, rollout_worker
+from evals.fleet import evaluate, model_artifact, rollout_postgres, rollout_worker
 
 
 def _sha256(path: Path) -> str:
@@ -81,6 +81,16 @@ def execute(args: argparse.Namespace) -> dict:
     if output.exists():
         raise FileExistsError("create-once evaluation output already exists")
     config = evaluate.read_mapping(config_path)
+    artifact_packet = (
+        evaluate.read_mapping(Path(args.model_artifact_binding))
+        if getattr(args, "model_artifact_binding", None)
+        else None
+    )
+    if artifact_packet is not None and artifact_packet.get("campaign_name") != config.get("name"):
+        raise ValueError("model artifact packet belongs to a different evaluation campaign")
+    # Reopen the complete local checkpoint/export/reload receipt chain before
+    # pulling images, writing output, contacting Fleet, or creating a database.
+    artifact_proof = model_artifact.validate_live_models(config.get("models", {}), artifact_packet)
     stage_images(
         config=config,
         harness_tar=Path(args.harness_tar),
@@ -89,6 +99,8 @@ def execute(args: argparse.Namespace) -> dict:
     )
     prepared = evaluate.prepare(config, output, relative_to=config_path.parent)
     preflight = evaluate.preflight(output)
+    if artifact_proof != model_artifact.validate_live_models(config["models"], artifact_packet):
+        raise ValueError("model artifact receipts changed during preflight")
     admin_dsn = os.environ.get("ROLLOUT_DATABASE_URL")
     if not admin_dsn:
         raise ValueError("ROLLOUT_DATABASE_URL is required")
@@ -124,6 +136,7 @@ def execute(args: argparse.Namespace) -> dict:
         "plan_sha256": plan["sha256"],
         "prepared": prepared,
         "preflight": preflight,
+        "model_artifacts": artifact_proof,
         "routes": terminals,
         "summary": summary,
     }
@@ -142,6 +155,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--harness-tar", required=True)
     parser.add_argument("--harness-receipt", required=True)
     parser.add_argument("--harness-receipt-sha256", required=True)
+    parser.add_argument("--model-artifact-binding")
     return parser.parse_args()
 
 
