@@ -98,8 +98,11 @@ def test_preview_and_receipt_are_exactly_validated() -> None:
         changed = copy.deepcopy(receipt)
         changed[key] = replacement
         body = {name: item for name, item in changed.items() if name != "sha256"}
-        changed["sha256"] = "sha256:" + hashlib.sha256(
-            json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
-        ).hexdigest()
+        changed["sha256"] = (
+            "sha256:"
+            + hashlib.sha256(
+                json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+        )
         with pytest.raises(JobsError):
             probe.validate_receipt(changed)

@@ -20,7 +20,7 @@ IMAGE = (
 )
 RECEIPT_SCHEMA = "cyber_qwen38_prod8_sfs_absence_receipt_v1"
 PREVIEW_SCHEMA = "cyber_qwen38_prod8_sfs_absence_preview_v1"
-RUNTIME = r'''import datetime,hashlib,json,os,pathlib,sys
+RUNTIME = r"""import datetime,hashlib,json,os,pathlib,sys
 
 def digest(value):
     payload=json.dumps(
@@ -48,7 +48,7 @@ payload=json.dumps(body,sort_keys=True,separators=(",",":"))+"\n"
 pathlib.Path("/dev/termination-log").write_text(payload)
 print(json.dumps({"status":body["status"],"sha256":body["sha256"]},sort_keys=True))
 sys.exit(0 if absent else 1)
-'''
+"""
 
 
 def _seal(value: dict[str, Any]) -> dict[str, Any]:
@@ -130,8 +130,7 @@ def preview_evidence(rendered: dict[str, Any], context: str) -> dict[str, Any]:
     pod = rendered["spec"]["template"]["spec"]
     container = pod["containers"][0]
     if (
-        rendered["metadata"]["annotations"].get(FAILURE_ALERT_ANNOTATION)
-        != FAILURE_ALERT_OFF
+        rendered["metadata"]["annotations"].get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
         or pod.get("priorityClassName") != "c1"
         or container.get("volumeMounts")
         != [{"name": "sfs", "mountPath": "/mnt/sfs", "readOnly": True}]
