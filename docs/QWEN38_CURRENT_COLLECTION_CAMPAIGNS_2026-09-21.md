@@ -20,7 +20,9 @@ The production inputs are:
 - stronger-teacher gate:
   `configs/collection/stronger-teacher-current75-actions-pass4-v1.requirements.json`;
 - separate student-visible-reasoning gate:
-  `configs/collection/qwen38-self-visible-reasoning-current75-pass4-v1.requirements.json`.
+  `configs/collection/qwen38-self-visible-reasoning-current75-pass4-v1.requirements.json`;
+- separate teacher-visible-rationale gate:
+  `configs/collection/stronger-teacher-visible-rationale-current75-v1.requirements.json`.
 
 The v1 materializer is `training.current_collection_campaigns`; the v2
 successor is `training.current_collection_campaigns_v2`.  They adapt the
@@ -38,8 +40,9 @@ runtime bindings, child split, and protected-family lock while every historic
 role stays fixed.  The current 75-task wave is the first frozen campaign, not a
 ceiling and not permission to infer eligibility for the rest of the catalog.
 The operational order is base-Qwen visible actions first, then the same sealed
-train roster under an approved stronger-teacher action profile, then the
-separately qualified Qwen student-visible-reasoning arm.  Every new sealed
+train roster under an approved stronger-teacher action profile, followed by
+separately qualified Qwen-self reasoning and teacher-visible-rationale arms.
+The latter two are different sources and may never share an identity.  Every new sealed
 roster regenerates its own exact packet and cell budget; it never enlarges an
 already frozen packet in place.
 
@@ -204,6 +207,31 @@ this is the explicit continuation boundary, not an inferred text boundary.
 
 Private or unknown teacher chain of thought is never eligible, and no missing
 reasoning may be inferred, summarized, or reconstructed.
+
+## Separate teacher-visible-rationale wave
+
+The teacher-visible-rationale arm now has a source-only renderer and a
+metadata-only admission checker. It is still not a launcher or a training
+input. The exact contract is
+`configs/collection/stronger-teacher-visible-rationale-current75-v1.requirements.json`
+and is explained in
+[`TEACHER_VISIBLE_RATIONALE_COLLECTION.md`](TEACHER_VISIBLE_RATIONALE_COLLECTION.md).
+
+This arm asks an exactly authorized stronger teacher for one to four concise,
+ordinary visible sentences before each tool call. It rejects provider-private
+thinking fields and never reconstructs missing reasoning. It binds OpenCode
+1.18.27, the pinned Qwen3.8 tokenizer and chat template, visible ordinary
+assistant content with exact OpenCode tool calls, `enable_thinking=false`, and
+262K native online compaction. A compacted success is eligible only when each
+visible summary and the actual next prompt are bound reproducibly.
+
+The initial packet keeps the same 50-train / 17-dev / 8-final anchored roles
+and 200-cell ceiling, while the eventual private corpus must contain at least
+20M unique supervised tokens, cover at least 40 and 80% of selected families,
+and respect the 25% per-family token ceiling. The source authorization, actual
+collector, private token materializer, final unique-token receipt, and training
+permit remain separate required gates. This identity cannot be mixed with the
+action-only teacher arm or the Qwen-self visible-reasoning arm.
 
 ## Parallel task-quality qualification wave
 

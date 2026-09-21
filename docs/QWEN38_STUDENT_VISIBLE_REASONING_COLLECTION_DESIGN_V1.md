@@ -217,14 +217,15 @@ set; external benchmarks remain evaluation-only and cannot feed this corpus.
 The design stops rather than falling back to hidden teacher reasoning, opaque
 compaction, a mixed family split, or an unproven Qwen thinking template.
 
-## Teacher-visible rationale is a separate future arm
+## Teacher-visible rationale is a separate arm
 
 This v1 implementation deliberately accepts **only Qwen self traces**. That is
 not a judgment that teacher-visible reasoning cannot be useful; it is a refusal
 to mistake a provider's hidden reasoning field for user-visible text.
 
-Before a teacher-visible-rationale arm can be built, it needs all of the following as a
-new, separately reviewed contract:
+The repository now has a source-only renderer and metadata-only admission
+boundary for this arm.  They enforce the following as a new, separately
+reviewed contract:
 
 1. An immutable source artifact that identifies the teacher output version and
    proves the reasoning was delivered as ordinary visible conversation text to
@@ -238,22 +239,27 @@ new, separately reviewed contract:
 5. A separate corpus identity and matched action-only comparison. It must not
    be mixed into the Qwen-self corpus or relabel existing teacher action traces.
 
-Its schema names must also be distinct, for example:
+Its implemented schema names are distinct:
 
 - `cyber_teacher_visible_rationale_source_profile_v1`
 - `cyber_teacher_visible_rationale_source_authorization_v1`
 - `cyber_teacher_visible_rationale_packet_v1`
-- `cyber_teacher_visible_rationale_success_evidence_v1`
+- `cyber_teacher_visible_rationale_attempt_metadata_v1`
+- `cyber_teacher_visible_rationale_admission_request_v1`
 - `cyber_teacher_visible_rationale_selection_v1`
-- `cyber_teacher_visible_rationale_record_v1`
-- `cyber_teacher_visible_rationale_sft_corpus_v1`
+- `cyber_teacher_visible_rationale_admission_receipt_v1`
 
-Those names are a contract reservation, not an implemented input format. A
-future implementation must require exact source fields and reject every
-unlisted field. In particular, it cannot map a provider's `thinking`,
-`reasoning`, `reasoning_content`, or `analysis` property into the ordinary
-visible-text field.
+The private token-level record and corpus names remain reserved for a future
+materializer.  The implemented metadata boundary requires exact source fields
+and rejects every unlisted field.  In particular, it cannot map a provider's
+`thinking`, `reasoning`, `reasoning_content`, or `analysis` property into the
+ordinary visible-text field.  See
+[the teacher-visible rationale collection contract](TEACHER_VISIBLE_RATIONALE_COLLECTION.md)
+for the exact requirements, commands, and remaining gates.
 
-Until those conditions are implemented and reviewed, teacher runs can add only
-visible actions to the established action-only lane. They cannot add written
-reasoning to this one.
+The source-only renderer and admission checker do not authorize an external
+collection or create trainable data.  Until an issuer supplies the exact
+teacher authorization, an approved collector writes sealed metadata, a private
+Qwen token materializer reaches the 20M unique-token gate, and a separate
+training permit is accepted, teacher runs can add only visible actions to the
+established action-only lane.
