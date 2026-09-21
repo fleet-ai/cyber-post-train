@@ -1,8 +1,12 @@
 {
   "schema": "cyber_qwen38_checkpoint_serving_readiness_v1",
-  "observed_at": "2026-09-20T23:06:21Z",
-  "source_commit": "c2d9abbeacdb762697598274157dbff794e401f7",
+  "observed_at": "2026-09-21T13:21:25Z",
+  "source_commit": "1c1406c997127f6c5ae369d7dd50af3fb3b595ee",
   "purpose": "Bind each worthwhile Qwen3.8-27B checkpoint to its exact export, reload, staging, registration, and live-route evidence before an evaluator consumes it.",
+  "current_reconciliation": {
+    "path": "docs/evidence/qwen38-checkpoint-eval-ledger-reconciliation-20260921.json",
+    "receipt_sha256": "sha256:5faeaab1c18d448ffd1a02549f4f7309f6b3741c1d230f9acc26594c9952e00c"
+  },
   "scientific_boundary": {
     "capability_claimed": false,
     "evaluation_launched_by_this_audit": false,
@@ -82,41 +86,33 @@
         "acceptance_receipt_sha256": "sha256:c36201add360a49c6c359c5435fe8875f25b2541484d05d3dc8f163ab7659e41"
       },
       "live_target": {
-        "status": "ready_requires_fresh_parity",
-        "model_id": "chris-q38-fresh75-step230-web-v1",
-        "inference_model_uid": "d048104e-ade6-49d2-b088-d3819e606061",
-        "resource_version": "30602900",
+        "status": "paused_zero_active_pods",
+        "model_id": "chris-q38-fresh75-step230-web-v2",
+        "inference_model_uid": "e624a6f0-8748-433c-973e-aefc7f22ddf6",
+        "resource_version": "31317303",
         "source_path": "/models/chris-q38-fresh75-step230-v1",
         "model_revision": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
-        "precision": "bf16",
-        "tensor_parallel_size": 1,
-        "data_parallel_size": 8,
-        "image": "lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
-        "context_tokens": 262144,
-        "openai_model_field": "chris-q38-fresh75-step230-web-v1",
-        "openai_route_header": {
-          "name": "x-ai-eg-model",
-          "value": "chris-q38-fresh75-step230-web-v1"
-        },
-        "native_route_header": {
-          "name": "X-Fleet-Model",
-          "value": "chris-q38-fresh75-step230-web-v1"
-        },
-        "deployment_uid": "7b54a666-86b0-4a96-b8df-cb4c1a5476de",
-        "pod_uid": "f92d1374-7f19-4ba3-ae0b-9fc7053f51fe",
-        "service_uid": "b8201e4c-fe00-46e3-a69f-1b9e7fb20cee",
-        "endpoint_slice_uid": "5a5d7742-cbc8-4b84-8c16-99a4d5314ec2",
-        "pod_ready": true,
-        "pod_restarts": 0,
-        "route_accepted": true,
-        "endpoint_ready": true,
-        "authenticated_model_info_probe_passed": true,
-        "idempotency_key": "fresh75-web-e2feeae669e3236d460608af",
-        "request_fingerprint": "e2feeae669e3236d460608af6c3b8e3b5da51b6f339ffaff103ae0dc7d4ad93f"
+        "deployment_uid": "3ec10ad1-4bd1-447a-afe3-e56e25f1974e",
+        "active_pods": 0,
+        "ready_replicas": 0,
+        "gpus_allocated": 0,
+        "route_release_receipt_sha256": "sha256:02909510e84bbd7be0910fc23f75f5dc15f02102416868793c13e09422501c41"
       },
-      "web_readiness": "live_target_available_requires_fresh_matched_parity_and_duplicate_check",
-      "fleet_readiness": "live_target_available_requires_fresh_matched_parity_and_duplicate_check",
-      "next_gate": "The eval owner must bind this exact route into the frozen base-versus-candidate protocol and accept a fresh live parity receipt before scored collection."
+      "path_binding": {
+        "frozen_config_path": "configs/evaluation/qwen38-fresh75-fleet-dev17-opencode-seed43-pass1-v1.json",
+        "frozen_config_repository": "/mnt/sfs/jobs/chris-q38-fresh75-e1-v2/hf-export-v1",
+        "known_mismatched_frozen_configs": [
+          "configs/evaluation/qwen38-fresh75-fleet-dev17-opencode-seed43-pass1-v1.json",
+          "configs/evaluation/qwen38-fresh75-fleet-dev17-opencode-pass1-v2.json",
+          "configs/evaluation/qwen38-fresh75-fleet-dev17-matched-pass1-v2.json"
+        ],
+        "accepted_export_path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/hf-export-step230-v1",
+        "exact_path_match": false,
+        "launchable": false
+      },
+      "web_readiness": "blocked_on_v4_runtime_qualification_and_jit_route_resume",
+      "fleet_readiness": "blocked_on_frozen_config_export_path_repair_and_jit_route_resume",
+      "next_gate": "Repair the exact frozen config path binding, accept the generic live-execution guard, then JIT-resume the route only for a bounded matched consumer."
     },
     {
       "artifact_id": "q38-teacher-dense-v5-step186",
@@ -168,7 +164,15 @@
         "gpus_held": 0
       },
       "live_target": {
-        "status": "absent_paused_registration_only"
+        "status": "paused_zero_active_pods",
+        "model_id": "chris-q38-teacher-v5-step186-web-v1",
+        "inference_model_uid": "10b1b0ce-7b02-429e-8361-084a3039f248",
+        "resource_version": "31592342",
+        "model_revision": "sha256:e6d59f5a58ce54b913d775cd71b81c64bd54637b53795df82baec0f71efefaf9",
+        "active_pods": 0,
+        "ready_replicas": 0,
+        "gpus_allocated": 0,
+        "route_release_receipt_sha256": "sha256:573ef75ada2fa94674619e413300a945ac7d834b4eb2c9c92547cef92c11b1d8"
       },
       "web_readiness": "staged_registered_paused_requires_jit_resume_and_fresh_parity",
       "fleet_readiness": "staged_registered_paused_requires_jit_resume_and_fresh_parity",
@@ -228,7 +232,15 @@
         "serving_qualified": false
       },
       "live_target": {
-        "status": "paused_not_live"
+        "status": "paused_zero_active_pods",
+        "model_id": "chris-q38-self-sft-step44-v1",
+        "inference_model_uid": "05057134-546f-484e-9672-3f9ca50cec77",
+        "resource_version": "31592445",
+        "model_revision": "sha256:a0e55bebe9d78ac76c012446ae0147a421cd333e2a6bf2bb6f4fb3450fa776fe",
+        "active_pods": 0,
+        "ready_replicas": 0,
+        "gpus_allocated": 0,
+        "route_release_receipt_sha256": "sha256:573ef75ada2fa94674619e413300a945ac7d834b4eb2c9c92547cef92c11b1d8"
       },
       "web_readiness": "blocked_on_temporary_live_serving_qualification_and_matched_parity",
       "fleet_readiness": "blocked_on_temporary_live_serving_qualification_and_matched_parity",
@@ -265,30 +277,51 @@
         "source_unchanged": true
       },
       "export_reload": {
-        "status": "missing_one_gpu_inference_forward_receipt",
-        "audit_scope": "All cyber-post-train git history through source_commit was searched for the exact export path and no bound GPU_CHECK receipt was found."
+        "status": "accepted_one_gpu_finite_forward",
+        "run_id": "451ea417-9d19-42df-92c0-6530f8121dab",
+        "rayjob_uid": "e5da1477-9678-4f59-960c-97067ea7e9b9",
+        "gpu_check_receipt_sha256": "sha256:8cb7cbab5df338b2066825aad93ba52aed10a339464e2524fa1bb0ac2fec192a",
+        "finite_logits": true,
+        "generated_tokens": 2,
+        "optimizer_steps_executed": 0,
+        "source_unchanged": true,
+        "resources_released": true
       },
       "stage": {
-        "status": "absent",
-        "proposed_path": "/models/chris-q38-available-a-lr30-step76-v1"
+        "status": "accepted",
+        "path": "/models/chris-q38-available-a-lr30-step76-v1",
+        "receipt_sha256": "sha256:eed9a359eec69e1ba9a4a51169323fab1ff46ad0b138a7bb261d98707e1aee49",
+        "payload_manifest_sha256": "sha256:3bef11697759b11db150b705e1882fb2d31a3efbdadbebd948aa917dcacc03a8",
+        "file_count": 29,
+        "total_bytes": 55586032099,
+        "create_once_atomic_promotion_verified": true
       },
       "registration": {
-        "status": "absent"
+        "status": "accepted_paused_zero_active_replicas",
+        "model_id": "chris-q38-lr30-step76-web-v1",
+        "inference_model_uid": "ad5f2c04-2112-49dc-b533-125cca207eb0",
+        "plan_sha256": "sha256:a96597c8d469fc2f47b6eccedae6ab2463d35700a6123d885793b3fafc82b0c5",
+        "registration_sha256": "sha256:3b272f536784e1033be630d892daa42996cd8f074f532fb6f0ea09e502a21891",
+        "model_revision": "sha256:3bef11697759b11db150b705e1882fb2d31a3efbdadbebd948aa917dcacc03a8",
+        "phase": "paused",
+        "active_pods": 0,
+        "gpus_allocated": 0,
+        "acceptance_receipt_sha256": "sha256:aff60c62dad8168b21dbfcba167b73387168dca759c40a821870689e38d15551"
       },
       "live_target": {
-        "status": "absent"
+        "status": "paused_zero_active_pods"
       },
-      "web_readiness": "blocked_on_export_gpu_reload_then_stage_and_registration",
-      "fleet_readiness": "blocked_on_export_gpu_reload_then_stage_and_registration",
-      "next_gate": "Run one bounded zero-update GPU load and finite synthetic forward against the exact HF export; after source-stability and release checks, stage and register it paused."
+      "web_readiness": "blocked_on_v4_runtime_qualification_and_jit_route_resume",
+      "fleet_readiness": "terminal_incomplete_reconciliation_v2_failed_target_database_unchanged",
+      "next_gate": "Repair the dedicated-database reconciliation binding under fresh identities; do not resume the route until a bounded consumer is ready."
     }
   ],
-  "in_progress_candidates": [
+  "superseded_candidate_observations": [
     {
       "artifact_id": "q38-full-weight-broad-b8-lr3e-6",
       "run_name": "chris-q38-t3k32-b8-v1-0cb9fe51",
       "rayjob_uid": "6f311376-1c42-4faa-b82a-57b51bfbed85",
-      "observed_status": "RUNNING",
+      "observed_status": "SUPERSEDED_TERMINAL_NO_CHECKPOINT_RESOURCES_RELEASED",
       "readiness": "not_ready_no_accepted_terminal_checkpoint_export_reload_or_stage",
       "motivation": "Primary broad-data full-weight reference, to be promoted only after its exact final artifact passes every acceptance gate."
     },
@@ -296,7 +329,7 @@
       "artifact_id": "q38-lora-broad-lr1e-5",
       "run_name": "chris-q38-lora-lr1-v1-0ae26be3",
       "rayjob_uid": "1554dba5-dad2-4ac8-a7ec-63b9d3a59bb0",
-      "observed_status": "RUNNING",
+      "observed_status": "SUPERSEDED_TERMINAL_RESOURCES_RELEASED",
       "readiness": "not_ready_no_accepted_terminal_adapter_or_merged_export",
       "motivation": "Conservative LoRA arm, to be evaluated only after exact adapter and merged-export promotion evidence exists."
     },
@@ -317,12 +350,15 @@
     }
   ],
   "evidence_sources": [
+    "docs/evidence/qwen38-checkpoint-eval-ledger-reconciliation-20260921.json",
     "docs/evidence/qwen38-fresh75-step230-reload-accepted-20260915.json",
     "docs/evidence/qwen38-fresh75-step230-inference-stage-v2-accepted-20260915.json",
-    "git:e76bb622:docs/evidence/qwen38-study/2026-09-13-sft-checkpoint-seals-v1.json",
-    "git:0d0c97e1:docs/evidence/qwen38-study/2026-09-13-sft-export-gpu-acceptance-v1.json",
-    "git:278a2507:docs/evidence/qwen38-study/2026-09-15-lr30-prod76-reload-submission-v1.json",
-    "read-only Kubernetes and authenticated inference route observations at observed_at"
+    "docs/evidence/qwen38-study/2026-09-13-sft-checkpoint-seals-v1.json",
+    "docs/evidence/qwen38-study/2026-09-13-sft-export-gpu-acceptance-v1.json",
+    "docs/evidence/qwen38-study/2026-09-15-lr30-prod76-reload-submission-v1.json",
+    "docs/evidence/qwen38-lr30-step76-inference-stage-v1-accepted-20260921.json",
+    "docs/evidence/qwen38-lr30-step76-matched-serving-registration-20260921.json",
+    "docs/evidence/qwen38-self-teacher-idle-route-release-20260921.json"
   ],
   "privacy": {
     "credentials_included": false,
@@ -330,5 +366,5 @@
     "raw_logs_included": false,
     "tensor_values_read": false
   },
-  "sha256": "sha256:b663c42cfa30f8579de2ede6e5ce4d3ef6a362287673d5f7837c9fca6385292c"
+  "sha256": "sha256:7dd6390e3844a119332bee38ce8964c922c16e9c5ee49675bf0666208d36adc9"
 }

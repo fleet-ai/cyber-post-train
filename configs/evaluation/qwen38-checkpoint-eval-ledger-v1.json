@@ -1,7 +1,12 @@
 {
   "schema_version": 1,
-  "observed_at": "2026-09-21T04:07:44Z",
+  "observed_at": "2026-09-21T13:21:25Z",
   "purpose": "Create-once checkpoint and evaluation ledger for the Qwen3.8-27B Fleet cyber lift study. A row is not a capability result until its exact matched evaluation is accepted.",
+  "current_reconciliation": {
+    "path": "docs/evidence/qwen38-checkpoint-eval-ledger-reconciliation-20260921.json",
+    "receipt_sha256": "sha256:5faeaab1c18d448ffd1a02549f4f7309f6b3741c1d230f9acc26594c9952e00c",
+    "status_precedence": "This score-blind receipt supersedes older point-in-time status text below without changing the exact four-member accepted checkpoint roster."
+  },
   "serving_readiness_matrix": "configs/evaluation/qwen38-checkpoint-serving-readiness-v1.json",
   "comparison_contract": {
     "webexploitbench_harness": "opencode",
@@ -37,7 +42,7 @@
       "kind": "base_model_control",
       "priority": 1,
       "motivation": "Establish the matched OpenCode baseline required to attribute any WEB or Fleet difference to post-training rather than to serving, harness, task, or scoring drift.",
-      "web_status": "full_collection_v23_running_39_supervised_21_export_failures_preserved_and_released_no_scoring",
+      "web_status": "v23_terminal_zero_of_60_accepted_45_export_failures_15_run_failures_all_released_no_scoring_v4_preflight_failed_no_replacement_snapshot",
       "web_qualification": {
         "transaction": "wbe-fresh75-pair-v23",
         "plan_sha256": "sha256:84866ab09e0239d36841a6cb710abdc1bd6e24000c991c218248a2eb2ae96248",
@@ -57,13 +62,15 @@
         ],
         "planned_collections": 60,
         "accepted_collections": 0,
-        "supervised_collections": 39,
-        "failure_preserved_and_released": 21,
+        "supervised_collections": 0,
+        "failure_preserved_and_released": 60,
+        "collection_export_failures": 45,
+        "collection_run_failures": 15,
         "scoring_campaign_created": false,
         "capability_result": false,
         "launch_receipt_sha256": "sha256:1889b6ff0e80e7709841d23447f44fb9a87b587e4b6b7cd3f5e36b619d44db09"
       },
-      "fleet_status": "base_dev17_v1_terminal_ten_authoritative_valid_sessions_resources_released_no_capability_summary_yet",
+      "fleet_status": "seed43_terminal_infrastructure_incomplete_7_accepted_10_retry_review_no_complete_capability_result",
       "fleet_dev17_v1": {
         "job_name": "chris-q38-f75-dev17-p1-v1",
         "job_uid": "338c0625-98b3-4682-bda4-92223c67389c",
@@ -88,7 +95,7 @@
         "failure_class": "controller_and_nested_docker_mount_namespaces_did_not_share_bind_paths_opencode_eacces_home_node_local",
         "resource_status": "terminal_released"
       },
-      "fleet_base_dev17_v1": {
+      "historical_fleet_base_dev17_v1": {
         "job_name": "chris-q38-base-dev17-p1-v1",
         "job_uid": "c37c4dff-e5fc-4132-8a44-8e93b66cd248",
         "pod_name": "chris-q38-base-dev17-p1-v1-nkggs",
@@ -120,7 +127,7 @@
         "controller_slot_guard_merge": "6ba1042dfc0f8f8a64d0ad4d02a21adfd590d91e",
         "motivation": "Lock the matched 17-task OpenCode base control while Fresh75 promotion is repaired, so the eventual comparison uses one frozen task split and protocol rather than waiting serially."
       },
-      "notes": "WEB V23 accepted the zero-model paired qualification and released its sandbox. The full 60-cell collection-only campaign is live; twenty-one collection-export failures were preserved and released, 39 remain supervised, and no scoring result exists. Fleet dev17 v1 failed setup-only before a database, session, or model call because the OCI index parent digest was compared with the resolved linux/amd64 child image ID. Fleet dev17 v2 also failed before a database, session, or model call because separate evaluator and Docker-daemon mount namespaces hid controller bind paths from nested containers. The base-only successor terminated with ten authoritative-valid sessions; six cells remain score-blind retry-review and one was untouched. Resources were released and the output/database were retained. None of the setup or export failures is capability evidence."
+      "notes": "WEB V23 is terminal with zero accepted collections: 45 collection-export failures and 15 collection-run failures were preserved and released, with no scoring campaign. The latest V4 model-free qualification failed prompt-runtime dependency preflight, performed zero model, judge, scoring, or benchmark-run calls, released its sandbox, and produced no replacement snapshot. Fleet seed43 base is terminal with 7 accepted and 10 retry-review cells. These are infrastructure states, not capability evidence."
     }
   ],
   "accepted_checkpoints": [
@@ -128,13 +135,13 @@
       "artifact_id": "q38-fresh75-step230",
       "checkpoint_path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/checkpoints/global_step_230",
       "export_path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/hf-export-step230-v1",
-      "serving_status": "live_base_runtime_matched_route_accepted",
+      "serving_status": "paused_zero_active_pods_requires_path_binding_repair_and_jit_resume",
       "priority": 1,
       "motivation": "Evaluate the strongest existing broad full-SFT artifact and determine whether its supervised training transfers to held-out exploitation capability.",
-      "web_status": "candidate_v24_zero_model_qualification_accepted_collection_not_started",
-      "web_evidence": "One valid standalone 15-of-15 OpenCode pass-at-1 run exists, but it lacks a newly matched base arm. A wider pass-at-8 effort is incomplete at 104 of 120 sessions. V23 accepted the paired zero-model launch qualification and released its sandbox; it made zero benchmark, model, judge, or scoring attempts.",
-      "fleet_status": "candidate_dev17_v1_invalid_released_candidate_dev17_v2_running_with_authoritative_identity",
-      "fleet_candidate_dev17_v1": {
+      "web_status": "v4_prompt_runtime_dependency_preflight_failed_zero_calls_released_no_replacement_snapshot_collection_not_started",
+      "web_evidence": "No accepted matched result exists. V23 ended with zero of 60 collections accepted; V4 failed infrastructure-only prompt-runtime dependency preflight, made zero model or scoring calls, released its sandbox, and produced no replacement snapshot.",
+      "fleet_status": "seed43_terminal_infrastructure_incomplete_14_accepted_3_retry_review_route_released_config_path_binding_mismatch_fail_closed",
+      "historical_fleet_candidate_dev17_v1": {
         "job_name": "chris-q38-fresh75-dev17-p1-v1",
         "job_uid": "162061f7-9185-44f8-babc-5ae17f4c5800",
         "pod_name": "chris-q38-fresh75-dev17-p1-v1-t8ng7",
@@ -150,7 +157,7 @@
         "real_model_calls_observed": true,
         "resource_status": "terminal_released_scientifically_invalid_null_authoritative_model"
       },
-      "fleet_candidate_dev17_v2": {
+      "historical_fleet_candidate_seed42_v2": {
         "job_name": "chris-q38-fresh75-dev17-p1-v2",
         "job_uid": "963775c8-cae4-4aee-a7a6-9ee13e4e4d12",
         "workload_uid": "7be22024-9a62-407d-8adb-522da48331cd",
@@ -162,10 +169,10 @@
         "first_accepted_receipt_sha256": "sha256:19d12574f678c6f23f240df794b7257da68101b793b3a7e1ea05b03fc7d5b2db",
         "authoritative_model": "chris-q38-fresh75-step230-web-v2",
         "durable_live_proof": "docs/evidence/qwen38-fleet-dev17-corrected-identity-live-proof-20260921.json",
-        "resource_status": "running_cpu_only_ready_zero_restarts",
+        "resource_status": "terminal_released_historical_seed42_observation",
         "capability_result": false
       },
-      "next_action": "Drain the exact corrected candidate and base arms, preserve a score-blind terminal receipt, then compare only after both matched arms complete. Keep the final eight-task set sealed."
+      "next_action": "Repair and independently qualify the frozen evaluator export-path binding against the accepted max/full-v4 export, then resume only under the exact seed43 matched protocol. Keep seed42 descriptive-only and the final eight-task set sealed."
     },
     {
       "artifact_id": "q38-teacher-dense-v5-step186",
@@ -174,9 +181,9 @@
       "serving_status": "live_parity_qualified_then_paused_after_no_admitted_consumer",
       "priority": 2,
       "motivation": "Measure whether imitation of successful stronger-teacher trajectories transfers to unseen blackbox exploitation tasks.",
-      "web_status": "candidate_v25_zero_model_qualification_accepted_collection_not_started",
-      "fleet_status": "corrected_dev17_v2_queued_without_allocation_then_released_before_any_session",
-      "fleet_candidate_dev17_v2": {
+      "web_status": "v4_prompt_runtime_dependency_preflight_failed_zero_calls_released_no_replacement_snapshot_collection_not_started",
+      "fleet_status": "seed43_terminal_infrastructure_incomplete_12_accepted_5_retry_review_route_released_no_complete_capability_result",
+      "historical_fleet_candidate_dev17_v2": {
         "job_name": "chris-q38-teacher-v5-dev17-p1-v2",
         "job_uid": "1f472774-8d01-4913-8856-475ce8f2e69b",
         "workload_uid": "e086f317-34b5-41f7-ada4-0bc661fda131",
@@ -188,22 +195,22 @@
       "serving_release": {
         "route_name": "chris-q38-teacher-v5-step186-web-v1",
         "route_uid": "10b1b0ce-7b02-429e-8361-084a3039f248",
-        "terminal_resource_version": "31122596",
-        "former_pod_uid": "2ef5ab8c-d460-4c41-852d-222118556e0d",
+        "terminal_resource_version": "31592342",
+        "former_pod_uid": "4be8c23d-2762-44cc-ab1c-11fa19f17763",
         "status": "paused_zero_active_pods_eight_gpus_released"
       },
-      "next_action": "Create a fresh CPU evaluator only when capacity can admit it, then resume the already-qualified serving route just in time and pause it again after the consumer drains."
+      "next_action": "Do not splice the separate seed42 observations. Resume the paused route only for an exact bounded seed43 recovery or a newly qualified matched WEB consumer."
     },
     {
       "artifact_id": "q38-self-sft-step44",
       "checkpoint_path": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/checkpoints/global_step_44",
       "export_path": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/hf-export-v1",
-      "serving_status": "live_base_runtime_matched_route_accepted",
+      "serving_status": "paused_zero_active_pods_requires_jit_resume",
       "priority": 3,
       "motivation": "Separate the effect of self-imitation from stronger-teacher imitation under the same evaluation contract.",
-      "web_status": "not_started",
-      "fleet_status": "candidate_dev17_v1_invalid_released_candidate_dev17_v2_running_with_authoritative_identity",
-      "fleet_candidate_dev17_v2": {
+      "web_status": "v4_prompt_runtime_dependency_preflight_failed_zero_calls_released_no_replacement_snapshot_collection_not_started",
+      "fleet_status": "seed43_terminal_route_released_last_safe_observation_8_accepted_5_claimed_4_retry_review_no_durable_terminal_census",
+      "historical_fleet_candidate_dev17_v2": {
         "job_name": "chris-q38-self44-dev17-p1-v2",
         "job_uid": "e16e1730-4061-4b16-bc0b-606d3412229f",
         "workload_uid": "8ab8be76-4002-461d-b75d-e1c125403203",
@@ -215,24 +222,24 @@
         "first_accepted_receipt_sha256": "sha256:784666b84a885fe5e33727bbc7e110467ab5953307f81fdfcb69238d41687a06",
         "authoritative_model": "chris-q38-self-sft-step44-v1",
         "durable_live_proof": "docs/evidence/qwen38-fleet-dev17-corrected-identity-live-proof-20260921.json",
-        "resource_status": "running_cpu_only_ready_zero_restarts",
+        "resource_status": "terminal_released_historical_observation",
         "capability_result": false
       },
-      "next_action": "Drain the corrected Fleet arm and launch matched WEB collection only after its collection/provenance gate is qualified; do not use the invalid v1 cells."
+      "next_action": "Require a sanitized terminal ledger census before any arm-completion claim. Resume the paused route only after the WEB runtime qualification or a bounded seed43 recovery is independently accepted."
     },
     {
       "artifact_id": "q38-available-a-lr30-step76",
       "checkpoint_path": "/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/checkpoints/global_step_76",
       "export_path": "/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/hf-export-step76-v1",
-      "serving_status": "not_qualified",
+      "serving_status": "export_reload_stage_and_paused_matched_registration_accepted_route_currently_released",
       "priority": 4,
       "motivation": "Test whether the aggressive learning-rate recipe produced useful capability change rather than merely lower imitation loss or destructive drift.",
-      "web_status": "not_started",
-      "fleet_status": "not_started",
-      "next_action": "First accept one bounded GPU load and finite forward from the exact HF export; then create-once stage, register paused, and JIT-resume for matched parity and evaluation."
+      "web_status": "v4_prompt_runtime_dependency_preflight_failed_zero_calls_released_no_replacement_snapshot_collection_not_started",
+      "fleet_status": "seed43_terminal_6_accepted_10_retry_review_1_claimed_stale_reconciliation_v2_failed_before_database_mutation",
+      "next_action": "Repair the dedicated-database binding under a fresh reconciliation identity. The V2 target database remained unchanged and no matched capability result exists."
     }
   ],
-  "in_progress_candidates": [
+  "superseded_candidate_observations": [
     {
       "artifact_id": "q38-lora-broad-lr3e-5",
       "run_name": "chris-q38-lora-sft-a1-v1-2d8da9b3",
@@ -358,7 +365,7 @@
       "run_name": "chris-q38-t3k32-b8-v1-0cb9fe51",
       "priority_when_accepted": 1,
       "motivation": "Primary broad-data full-weight reference: measure the higher-capacity alternative to LoRA on the same 57.4M-token, 32K-context corpus before isolating batch-size and learning-rate effects.",
-      "status": "training_finite_step_81_zero_restarts_no_checkpoint_checkpoint_due_step_450",
+      "status": "superseded_terminal_step_275_no_checkpoint_resources_released",
       "run_identity": {
         "api_run_id": "0cb9fe51-ac56-4e99-8b91-6bfbc6cc7db0",
         "rayjob_name": "chris-q38-t3k32-b8-v1-0cb9fe51",
@@ -381,7 +388,7 @@
       "run_name": "chris-q38-t3k32-b16-v1-46ca50db",
       "priority_when_accepted": 2,
       "motivation": "Batch-size control on the primary broad-data full-weight recipe: test whether doubling global batch from 8 to 16 improves optimization stability and throughput while holding model, corpus, context length, learning rate, seed, and one-epoch token exposure fixed.",
-      "status": "training_finite_step_33_zero_restarts_no_checkpoint_checkpoint_due_step_225",
+      "status": "superseded_terminal_step_137_no_checkpoint_resources_released",
       "run_identity": {
         "api_run_id": "46ca50db-8aa6-49ae-a2a7-b216ee0c7c01",
         "rayjob_name": "chris-q38-t3k32-b16-v1-46ca50db",
@@ -404,7 +411,7 @@
       "run_name": "chris-q38-t3k32-lr1-v1-4291c635",
       "priority_when_accepted": 3,
       "motivation": "Learning-rate control on the primary broad-data full-weight recipe: test whether reducing LR from 3e-6 to 1e-6 better preserves base capability while learning the same 57.4M-token corpus, holding model, data, batch size, context, seed, topology, and one-epoch exposure fixed.",
-      "status": "training_finite_step_66_zero_restarts_no_checkpoint_checkpoint_due_step_450",
+      "status": "superseded_terminal_step_271_no_checkpoint_resources_released",
       "run_identity": {
         "api_run_id": "4291c635-872a-42c3-a66f-92d5cedab3bf",
         "rayjob_name": "chris-q38-t3k32-lr1-v1-4291c635",
@@ -427,7 +434,7 @@
       "run_name": "chris-q38-t3k64-b8-v3-fc6b1fbe",
       "priority_when_accepted": 2,
       "motivation": "Test whether increasing the supervised context ceiling from 32K to 64K improves learning from long successful teacher trajectories while holding the 57.4M-token corpus, global batch 8, one-epoch exposure, and full-weight method fixed.",
-      "status": "successor_v3_running_first_finite_optimizer_update_step_1_zero_restarts_checkpoint_due_step_275",
+      "status": "superseded_terminal_step_37_no_checkpoint_terminal_marker_absent_resources_released",
       "run_identity": {
         "api_run_id": "fc6b1fbe-3827-4a9d-a793-e206d793f6f5",
         "rayjob_name": "chris-q38-t3k64-b8-v3-fc6b1fbe",
@@ -592,5 +599,6 @@
       "artifact_id": "q38-lora-step1-qualification",
       "reason": "One-step engineering qualification artifact, not a capability candidate."
     }
-  ]
+  ],
+  "sha256": "sha256:1eca6061516496b49e919f961f3c3e210c2e8075462920d5f97496e6702d8025"
 }

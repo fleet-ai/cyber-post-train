@@ -1,0 +1,87 @@
+{
+  "schema": "cyber_qwen38_sft_checkpoint_candidates_v1",
+  "observed_at": "2026-09-13T03:28:18Z",
+  "classification": "two_terminal_sft_runs_have_digest_valid_final_receipts_and_complete_checkpoint_layouts_cpu_seal_gpu_reload_export_and_eval_pending",
+  "runs": {
+    "self_trace": {
+      "api_name": "chris-q38-self-lr1-v2-d736712b",
+      "api_run_id": "d736712b-d33c-418f-a405-3a1f8d8c01c7",
+      "rayjob_uid": "d5d1d6ab-1605-4b10-b101-136fcb96ffbc",
+      "output_root": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2",
+      "terminal_state": "Succeeded",
+      "resources_released": true,
+      "failed_receipt_present": false,
+      "training_complete": {
+        "digest_valid": true,
+        "file_sha256": "dbf56559c1a7a8434b47a1a312245ea3d84878df250eda5ef4b1c15ca5c92aa2",
+        "optimizer_step": 44,
+        "plan_sha256": "4d97bb2e67f39aedd3bd49f85a49fa9f2c6c147c01628a612b24c3a5132678ed",
+        "export_status": "pending_separate_zero_step_export"
+      },
+      "final_checkpoint": {
+        "path": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/checkpoints/global_step_44",
+        "receipt_digest_valid": true,
+        "receipt_file_sha256": "81c8932635f9af3f943bba6e74bb74491c2a3b9191cb6185e93eae7041bc4ad0",
+        "files": 33,
+        "bytes": 324627486795
+      }
+    },
+    "strong_teacher": {
+      "api_name": "chris-q38-teacher-dense-v5-bd9faa32",
+      "api_run_id": "bd9faa32-e600-4c98-851f-c9041c60c314",
+      "rayjob_uid": "d01023f1-eb1d-4cca-92aa-9137348583ce",
+      "output_root": "/mnt/sfs/jobs/chris-cyber-q38-teacher-dense-v5",
+      "terminal_state": "Succeeded",
+      "resources_released": true,
+      "failed_receipt_present": false,
+      "training_complete": {
+        "digest_valid": true,
+        "file_sha256": "758fd8afc64d4e90d3332e7468926d7edf38679797282cb3eba44363d7eb6558",
+        "optimizer_step": 186,
+        "supervised_tokens": 1622545,
+        "plan_sha256": "b4543b9173e799bbe155ab416923db57c9796b8734186b834e5109c5be6330fc",
+        "export_status": "pending_separate_zero_step_export"
+      },
+      "final_checkpoint": {
+        "path": "/mnt/sfs/jobs/chris-cyber-q38-teacher-dense-v5/checkpoints/global_step_186",
+        "receipt_digest_valid": true,
+        "receipt_file_sha256": "e0c1df3571132fdd016f43d205e7445d339b1c4a53a45e3fdfb57c4ddd75dd7e",
+        "files": 33,
+        "bytes": 324627486923
+      }
+    }
+  },
+  "audit_helper": {
+    "cluster": "production",
+    "namespace": "fleet-train-jobs",
+    "kind": "Pod",
+    "name": "chris-q38-sft-sfs-audit-v1",
+    "uid": "037842e7-58cc-46b9-a4e4-cd95070be640",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "gpus": 0,
+    "restart_count": 0,
+    "exit_code": 0,
+    "sfs_read_only": true,
+    "service_account_token_mounted": false,
+    "pod_deleted": true,
+    "configmap_deleted": true,
+    "absence_verified": true
+  },
+  "acceptance": {
+    "terminal_training_receipts_accepted": true,
+    "checkpoint_layout_candidates_accepted": true,
+    "full_checkpoint_payload_hashes_complete": false,
+    "gpu_zero_update_reload_accepted": false,
+    "bf16_export_accepted": false,
+    "serving_parity_accepted": false,
+    "evaluation_ready": false,
+    "capability_claimed": false
+  },
+  "next_gate": "Create one CPU-only immutable payload seal for each final checkpoint, then qualify zero-update all-rank reload and deterministic BF16 export before serving or evaluation.",
+  "privacy": {
+    "prompts_traces_flags_answers_credentials_scores_read": false,
+    "private_logs_read": false,
+    "tensor_values_read": false
+  },
+  "sha256": "sha256:e58c3805b1f0804502541f63f068a97f6f2d0028ed208e9681ce9a3c40e69d96"
+}
