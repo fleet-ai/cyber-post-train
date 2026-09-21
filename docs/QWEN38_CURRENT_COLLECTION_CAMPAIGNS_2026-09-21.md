@@ -2,13 +2,11 @@
 
 ## Outcome
 
-The source-only base-Qwen action campaign is frozen and reproducible.  Its v1
-packet is preserved as historical evidence but is not launchable because no
-maintained authority can issue the global duplicate-census receipt it requires.
-The immutable v2 successor preserves the same tasks, model, OpenCode treatment,
-sampling, split, and 200 scientific cells while replacing only that unavailable
-gate with a canonical create-once operation.  No Fleet job, environment, model
-request, trace, or score was created or read while preparing either packet.
+The base-Qwen action campaign now has a frozen, launchable v2 successor.  Its
+scientific identity is the same 50-train-family pass@4 wave as v1, while its
+execution identity is a new exactly-once operation and an exact amd64 CPU Job.
+No Fleet job, environment, model request, trace, or score was created or read
+while preparing either source packet.
 
 The production inputs are:
 
@@ -16,9 +14,9 @@ The production inputs are:
   `configs/collection/qwen38-base-current75-actions-pass4-v1.source.json`;
 - materialized campaign:
   `configs/collection/qwen38-base-current75-actions-pass4-v1/`;
-- create-once execution-safety successor:
-  `configs/collection/qwen38-base-current75-actions-pass4-v2.source.json` and
-  `configs/collection/qwen38-base-current75-actions-pass4-v2/`;
+- launchable exactly-once successor:
+  `configs/collection/qwen38-base-current75-actions-pass4-v2/` and
+  `configs/collection/qwen38-base-current75-actions-pass4-v2.source.json`;
 - stronger-teacher gate:
   `configs/collection/stronger-teacher-current75-actions-pass4-v1.requirements.json`;
 - separate student-visible-reasoning gate:
@@ -101,33 +99,35 @@ Admission is capped at four sessions per exact task version/family and a 25%
 maximum family target-token share.  Deduplication is ordered by exact source
 session, normalized trajectory, then packed-window payload.
 
-The v1 packet required a fresh census over every authoritative collection
-ledger and Fleet session.  No maintained issuer can currently produce that
-receipt from the public Fleet session interface, so v1 remains non-launchable.
-It must not be weakened, relabeled, or reused as launch authority.
+The immutable v1 artifact retains its unavailable global-history census
+requirement and remains non-launchable historical evidence.  It was not
+rewritten.  V2 instead proves the first uniquely named campaign at the boundary
+we control: one authorization binds the ordered 200-cell ledger/scientific/
+execution identity map, canonical operation root, dedicated empty ledger, and
+no same-path, alternate-path, or ambiguous replay.  The exact authorization is
+`sha256:1597d141b236a9f8fea16e92bf0b4a4f9b16045677931bf72bb5ca26618e4684`;
+the v2 plan is
+`sha256:fb0d54ecca6bb5a8942016dbf339e7b51c902ec39458eb610b4d1eae2585154f`.
 
-The v2 packet authorizes one new experiment with deterministic identities.  It
-binds all 200 ordered cells three ways: the PostgreSQL ledger UUID, the
-scientific cell SHA-256, and the execution SHA-256.  It also binds one canonical
-private operation-directory name and one dedicated empty database identity.
-Before initializing that database, the runtime writes an exclusive,
-fsync-backed intent file.  If initialization returns an uncertain result, the
-intent stays in place and neither the same path nor an alternate path may retry.
-Historical sessions have different cell identities and remain separate
-experiments; v2 never adopts or replays them.
+The supported v2 controller is
+`evals.fleet.visible_action_collection_job`.  It packages the exact clean
+merged source and inputs into an immutable ConfigMap and renders one root
+`Job`: amd64 CPU, priority class `c1`, zero GPU requests and limits,
+`backoffLimit: 0`, `restartPolicy: Never`, and a derived 768,600-second active
+deadline for 25 concurrency-8 waves.  The root Job itself carries
+`fleet.ai/failure-alerts: "off"`.  The launcher requires two byte-stable server
+previews, writes an exclusive local intent, sends one create request, and never
+retries an ambiguous response.  Terminal cleanup reopens the returned exact
+Job and ConfigMap UIDs, performs UID-preconditioned foreground deletion, and
+proves owned Pod and Workload absence without reading logs, traces, or scores.
 
-The qualified v2 wrapper is exactly one amd64 Kubernetes `Job` at priority
-class `c1`, with no GPU request or limit in any regular or init container.  The
-root Job—not merely its Pod template—must carry
-`fleet.ai/failure-alerts: "off"`.  It uses `completions: 1`, `parallelism: 1`,
-`backoffLimit: 0`, `restartPolicy: Never`, and
-`activeDeadlineSeconds: 768600`.  That deadline covers 25 waves of eight-way
-concurrency at the eight-hour per-cell ceiling, bounded cleanup per wave, and
-staging/preflight.  Before its only create call, the launcher must obtain two
-identical normalized server previews and durably record a separate cluster
-create intent.  An uncertain create is never repeated.  Terminal handling must
-observe the exact Job name and UID, clean up that exact UID in the foreground,
-and prove no owned child or idle allocation remains.
+Inside that Job, `evals.fleet.visible_action_collection_job_entry` verifies the
+exact agent archive/build receipt and proxy image, exclusively creates the
+authorized SFS root, performs the Fleet-team/route/task preflight, writes the
+scientific create intent, then creates the dedicated database and bound ledger.
+Only after all those checks does it execute the 200 cells.  V2 remains
+non-thinking visible-action collection; it does not widen the separate
+student-visible-reasoning schema.
 
 The historical runtime is `evals.fleet.visible_action_collection`; the v2
 successor is `evals.fleet.visible_action_collection_v2`.  Both use the
@@ -278,43 +278,70 @@ That command is metadata-only.  The new child split must include at least one
 new qualified family, pass strict representative coverage, and preserve the
 same trusted root ID/digest before it can feed another campaign packet.
 
-The v1 preparation below is retained only for historical reproduction.  It
-cannot advance without an issuer that does not currently exist.  Do not use it
-for a new launch.
+The v1 preparation path is retained only for historical reproduction.  It
+cannot advance without an issuer that does not currently exist and must not be
+used for a new launch.
 
-Prepare the v2 canonical private evaluator directory locally (still no Fleet
-call and no database mutation):
-
-```sh
-uv run --locked python -m evals.fleet.visible_action_collection_v2 prepare \
-  configs/collection/qwen38-base-current75-actions-pass4-v2/eval-config.json \
-  configs/collection/qwen38-base-current75-actions-pass4-v2/operation-authorization.json \
-  --private-root <approved-private-parent>
-```
-
-The command exclusively creates the operation-root name already recorded in the
-authorization.  A pre-existing path is a hard stop.  `preflight` performs
-read-only Fleet metadata and image checks with zero model calls.  For the direct
-CLI, `init` requires `ROLLOUT_DATABASE_URL` to name the already-provisioned,
-dedicated empty database; it writes the no-retry intent first and initializes
-the bound ledger there.  The qualified Job entrypoint instead writes that same
-intent, creates its exact dedicated database, and initializes the ledger as one
-ordered operation.  `run` creates environments and model traffic.  The Job
-launcher is a separate one-way create operation and must satisfy the complete
-checked-in packet before running these commands:
+After the v2 launcher PR is merged, use a fresh clean checkout of that exact
+main commit.  Package the merged source and frozen inputs into a new private
+directory (still no Fleet or Kubernetes call):
 
 ```sh
-uv run --locked python -m evals.fleet.visible_action_collection_v2 preflight <wave-root>
-uv run --locked python -m evals.fleet.visible_action_collection_v2 init <wave-root>
-uv run --locked python -m evals.fleet.visible_action_collection_v2 run \
-  <wave-root> base <unique-worker-id> --limit <bounded-count>
+uv run --locked python -m evals.fleet.visible_action_collection_job prepare \
+  --repo-root . \
+  --config configs/collection/qwen38-base-current75-actions-pass4-v2/eval-config.json \
+  --task-selection \
+    configs/collection/qwen38-base-current75-actions-pass4-v2/task-selection.json \
+  --authorization \
+    configs/collection/qwen38-base-current75-actions-pass4-v2/operation-authorization.json \
+  --collection-packet \
+    configs/collection/qwen38-base-current75-actions-pass4-v2/collection-packet.json \
+  --output <new-private-launch-packet-directory> \
+  --expected-source-commit <exact-merged-main-sha>
 ```
 
-Actual base execution is blocked on fresh Fleet-team account/task/runtime,
-serving-profile, image, OpenCode-startup, and non-thinking-template preflight;
-a new canonical operation root and dedicated empty ledger; the reviewed
-create-once Job launcher; and explicit operator launch authority.  Teacher and
-student-visible-reasoning execution have the additional source/gate blockers
-above.  Task-quality qualification is blocked on the reviewed lineage/runtime
-roster and aggregate receipt rail just described; it must never borrow the
-training campaign's eligibility bit.
+Validate locally, then launch once.  `launch` performs the two server previews
+and exact-name absence checks before its single mutation.  The Job's internal
+preflight is Fleet metadata-only and makes zero model calls; database/output
+creation and model traffic occur only afterward:
+
+```sh
+uv run --locked python -m evals.fleet.visible_action_collection_job validate \
+  <new-private-launch-packet-directory>/launch-packet.json
+
+uv run --locked python -m evals.fleet.visible_action_collection_job launch \
+  <new-private-launch-packet-directory>/launch-packet.json \
+  --context nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6 \
+  --journal <new-private-launch-packet-directory>/KUBERNETES_CREATE.jsonl
+```
+
+The returned Job and ConfigMap UIDs are the only cleanup authority.  After an
+exact terminal observation, inspect only aggregate Kubernetes state with:
+
+```sh
+uv run --locked python -m evals.fleet.visible_action_collection_job status \
+  <new-private-launch-packet-directory>/launch-packet.json \
+  --context nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6 \
+  --journal <new-private-launch-packet-directory>/KUBERNETES_CREATE.jsonl
+```
+
+That command reads no logs, traces, scores, or credentials.  Once it reports
+`terminal_ready_for_cleanup`, release the exact bound resources with:
+
+```sh
+uv run --locked python -m evals.fleet.visible_action_collection_job cleanup \
+  <new-private-launch-packet-directory>/launch-packet.json \
+  --context nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6 \
+  --journal <new-private-launch-packet-directory>/KUBERNETES_CREATE.jsonl \
+  --receipt <new-private-launch-packet-directory>/KUBERNETES_CLEANUP.json
+```
+
+The Kubernetes create journal can never authorize a second create.  Cleanup
+uses a separate sealed intent and is intentionally resumable only for the same
+returned UIDs: after a lost delete response it re-reads the exact name/UID and
+may reissue the UID-preconditioned foreground delete, while a reused name with
+a different UID hard-fails.  An uncertain create response remains a
+reconciliation event, never permission to submit again.  Teacher and
+student-visible-reasoning execution retain their separate source/gate blockers.
+Task-quality qualification still requires reviewed lineage/runtime evidence and
+must never borrow the training campaign's eligibility bit.

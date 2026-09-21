@@ -185,13 +185,18 @@ The PostgreSQL ledger already provides the needed duplicate protection:
   the same cell;
 - expired or ambiguous work moves to review and is never automatically replayed;
   and
-- a successor wave is created only after a duplicate census proves its planned
-  cells do not already exist.
+- each live successor wave has a new sealed operation authorization, canonical
+  private root, ordered identity-map digest, exclusive pre-mutation intent, and
+  dedicated empty ledger; a same-path, alternate-path, or ambiguous create is
+  never replayed.
 
-Do not use a GPU-only Jobs API just to run this controller.  The existing
-collection command runs on an authorized CPU worker with Docker and durable
-private storage.  Any cluster wrapper is a separately qualified deployment
-problem, not a reason to fork the collector.
+Do not use a GPU-only Jobs API just to run this controller.  The qualified v2
+rail is one exact amd64 CPU Kubernetes Job with Docker and durable private SFS
+storage.  It binds the source, images, database, operation root, namespace,
+queue, and PVC; proves two stable server previews and the top-level
+`fleet.ai/failure-alerts: "off"` annotation; performs one create request; and
+cleans up only the exact returned UIDs.  This narrow wrapper does not authorize
+another campaign or a general-purpose cluster submitter.
 
 ## Source rules and scale-up sequence
 
