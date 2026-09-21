@@ -3,7 +3,8 @@
   "status": "source_prepared_not_launchable",
   "launchable": false,
   "source": {
-    "evaluation_plan_sha256": "sha256:04dc90eb59e133cdc40e375b09aa0a3d7cc9c325f7dddc438fd10450661dbae6",
+    "evaluation_plan_sha256": "sha256:844d8ebdaed6e8588c02187c8520eaad942a142e0a83961c19b6df3a46cf0883",
+    "ledger_plan_sha256": "sha256:04dc90eb59e133cdc40e375b09aa0a3d7cc9c325f7dddc438fd10450661dbae6",
     "evaluation_config_path": "configs/evaluation/qwen38-base-fleet-dev17-opencode-seed44-pass1-v1.json",
     "evaluation_config_file_sha256": "sha256:1ee8ae83c056d22e4b0d2950c7d93e62470ebbd041ea768d18788daa16d7797b",
     "evaluation_directory": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s44-base-p1-v1",
@@ -11,8 +12,8 @@
     "job_name": "chris-q38-dev17-s44-base-p1-v1",
     "job_uid": "eab3025c-00bf-4b3c-bca2-a8d35426a8b6",
     "terminal_evidence_path": "docs/evidence/qwen38-base-fleet-dev17-seed44-terminal-census-20260921.json",
-    "terminal_evidence_file_sha256": "sha256:bc3baaf367047625dcf27932d6ec0dd1c587beb696f90ddf7ac0da71afcaf4f6",
-    "terminal_evidence_sha256": "sha256:ded667b0ddfb005c64f13a30474612679f40c67fa2c592c2f621b923540e7006",
+    "terminal_evidence_file_sha256": "sha256:aa42d8797b523353084baf877920e20d9f2c50bd3182b96cee291c606d7619e9",
+    "terminal_evidence_sha256": "sha256:ff672d4860626ea2f26e0ca3decc2e6bc30ba9a209576bb6b13b4c24e08c78a0",
     "terminal_counts": {
       "accepted": 10,
       "retry_review": 7,
@@ -121,9 +122,9 @@
       "evals/fleet/rollout_postgres.py": "74b946005267efa6611861135f135558ac32e10383e7c0619d278af8d8b1ccd9",
       "evals/fleet/rollout_worker.py": "6782d014143a430c2c5523a2161f453a804e7203a07ee9e24792d705be0c224e",
       "evals/fleet/stored_session_reconciliation.py": "96b5de82bb1992db8ff15efde5350580e2d0fe76607e77bed205c09a82d11227",
-      "evals/fleet/repair_lineage.py": "87a219128f57f15a2fa0b1bfe1f89d8ba18a62880d866a5d8f3287d18828a1ba",
+      "evals/fleet/repair_lineage.py": "7c29cbab380494ba611f82dac2b585b18da646b4e973231e3321d53b66033d08",
       "evals/fleet/reviewed_recovery_v2.py": "3acd3322ecddf8523547eb86dcdeb60c14358ad6aaa209e3e18f867f7822e529",
-      "evals/fleet/reviewed_recovery_worker_v2.py": "a05f1957a44e6e4b1aca5a4c9c659f4eeef8f8b7379f63ea453249055aa563c4"
+      "evals/fleet/reviewed_recovery_worker_v2.py": "908dd498146e12f8da18da10c6490417ee0268649d396fe192a96f1e1a7310c3"
     }
   },
   "live_evidence_binding": {
@@ -161,5 +162,5 @@
     "database_cells_changed": 0,
     "outputs_created": 0
   },
-  "sha256": "sha256:39b5f18945962c2ad58b5d85e3b69852c7f4fb2fd5a597c11630dc765e4cc4e4"
+  "sha256": "sha256:f296385d2d3ef7f8ce95d44a01c4d27760946ed1a7c03a28a6403cbaa2736281"
 }

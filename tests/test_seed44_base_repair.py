@@ -566,3 +566,10 @@ def test_seed44_base_repair_plan_is_launch_inert_and_final8_sealed():
     assert plan["stages"]["single_rollout_repair"]["execution_generation"] == 2
     assert plan["repair_contract"]["final_eight_task_set_accessed"] is False
     assert set(plan["operation"].values()) == {0}
+    assert plan["source"]["evaluation_plan_sha256"] == (
+        "sha256:844d8ebdaed6e8588c02187c8520eaad942a142e0a83961c19b6df3a46cf0883"
+    )
+    assert plan["source"]["ledger_plan_sha256"] == (
+        "sha256:04dc90eb59e133cdc40e375b09aa0a3d7cc9c325f7dddc438fd10450661dbae6"
+    )
+    assert plan["source"]["evaluation_plan_sha256"] != plan["source"]["ledger_plan_sha256"]
