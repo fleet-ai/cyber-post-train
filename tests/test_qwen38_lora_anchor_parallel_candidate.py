@@ -25,9 +25,10 @@ def test_lora_anchor_parallel_candidate_is_sealed_to_the_qualified_broad_config(
     candidate = packet["candidate"]
     config_path = ROOT / candidate["config_path"]
     config = json.loads(config_path.read_text())
-    assert candidate["config_file_sha256"] == "sha256:" + hashlib.sha256(
-        config_path.read_bytes()
-    ).hexdigest()
+    assert (
+        candidate["config_file_sha256"]
+        == "sha256:" + hashlib.sha256(config_path.read_bytes()).hexdigest()
+    )
 
     plan = sft.compile_sft(config, relative_to=RUNS)
     request = sft.job_request(plan)
@@ -62,9 +63,9 @@ def test_lora_anchor_parallel_candidate_requires_a_proven_root_alert_annotation_
     assert rail["remote_preparation_boundary"]["status"] == (
         "no_complete_remote_preparation_cli_rail_in_this_source"
     )
-    assert "neither creates a LoRA CPU preflight Pod" in rail["remote_preparation_boundary"][
-        "reason"
-    ]
+    assert (
+        "neither creates a LoRA CPU preflight Pod" in rail["remote_preparation_boundary"]["reason"]
+    )
     assert any("root RayJob" in gate for gate in normal["allowed_only_if"])
     assert "direct-submit-sft" in fallback["command_with_local_sfs_mount"]
     assert "direct-submit-sft" in fallback["command_without_local_sfs_mount"]
