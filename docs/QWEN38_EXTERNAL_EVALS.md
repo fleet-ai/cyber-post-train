@@ -5,7 +5,10 @@
 > OpenCode exclusively and must not reuse these Qwen Code protocols. The
 > create-once checkpoint/evaluation queue, scientific motivation, coverage, and
 > duplicate identity are recorded in
-> [`configs/evaluation/qwen38-checkpoint-eval-ledger-v1.json`](../configs/evaluation/qwen38-checkpoint-eval-ledger-v1.json).
+> [`configs/evaluation/qwen38-checkpoint-eval-ledger-v2.json`](../configs/evaluation/qwen38-checkpoint-eval-ledger-v2.json).
+> Version 1 remains a preserved historical snapshot; version 2 is the current
+> sanitized index and still requires a fresh matched evaluation before any
+> capability claim.
 > A checkpoint is not considered evaluated until that ledger points to an
 > accepted matched result.
 
