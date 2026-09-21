@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 from concurrent.futures import ThreadPoolExecutor
@@ -13,6 +14,7 @@ import httpx
 
 from cyber_post_train.jobs import digest
 from evals.fleet import (
+    cluster_entry,
     evaluate,
     repair_lineage,
     reviewed_recovery_v2,
@@ -56,12 +58,45 @@ def _sanitized_result(value: dict[str, Any]) -> dict[str, Any]:
     return {key: value[key] for key in sorted(allowed & value.keys())}
 
 
+def _file_sha256(path: Path) -> str:
+    value = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            value.update(chunk)
+    return "sha256:" + value.hexdigest()
+
+
+def _stage_and_check_images(
+    *,
+    plan: dict[str, Any],
+    harness_tar: Path,
+    harness_tar_sha256: str,
+    harness_receipt: Path,
+    harness_receipt_sha256: str,
+) -> None:
+    """Populate a fresh DinD daemon, then run the normal image preflight."""
+
+    if _file_sha256(harness_tar) != harness_tar_sha256:
+        raise ValueError("harness image archive digest differs")
+    cluster_entry.stage_images(
+        config={"images": plan["images"], "harness": plan["treatment"]},
+        harness_tar=harness_tar,
+        harness_receipt=harness_receipt,
+        receipt_sha256=harness_receipt_sha256,
+    )
+    evaluate.check_images(plan)
+
+
 def run(
     *,
     evaluation_directory: Path,
     output_root: Path,
     admin_dsn: str,
     database: str,
+    harness_tar: Path,
+    harness_tar_sha256: str,
+    harness_receipt: Path,
+    harness_receipt_sha256: str,
     intent_path: Path,
     worker_id: str,
 ) -> dict[str, Any]:
@@ -84,7 +119,13 @@ def run(
     if limit > route_limit:
         raise ValueError("reviewed recovery v2 roster exceeds the frozen route")
     rollout_postgres.verify_plan(dsn, evaluation_directory / "plan.csv")
-    evaluate.check_images(plan)
+    _stage_and_check_images(
+        plan=plan,
+        harness_tar=harness_tar,
+        harness_tar_sha256=harness_tar_sha256,
+        harness_receipt=harness_receipt,
+        harness_receipt_sha256=harness_receipt_sha256,
+    )
     plan["task_bindings"] = proof["task_bindings"]
     endpoint = plan["routes"][intent.serving_block]
     api_key = os.environ.get("FLEET_API_KEY")
@@ -199,6 +240,10 @@ def main() -> int:
     parser.add_argument("--output-root", type=Path, required=True)
     parser.add_argument("--postgres-admin-dsn-env", required=True)
     parser.add_argument("--postgres-database", required=True)
+    parser.add_argument("--harness-tar", type=Path, required=True)
+    parser.add_argument("--harness-tar-sha256", required=True)
+    parser.add_argument("--harness-receipt", type=Path, required=True)
+    parser.add_argument("--harness-receipt-sha256", required=True)
     parser.add_argument("--reviewed-recovery-intent", type=Path, required=True)
     parser.add_argument("--worker-id", required=True)
     args = parser.parse_args()
@@ -211,6 +256,10 @@ def main() -> int:
             output_root=args.output_root,
             admin_dsn=admin_dsn,
             database=args.postgres_database,
+            harness_tar=args.harness_tar,
+            harness_tar_sha256=args.harness_tar_sha256,
+            harness_receipt=args.harness_receipt,
+            harness_receipt_sha256=args.harness_receipt_sha256,
             intent_path=args.reviewed_recovery_intent,
             worker_id=args.worker_id,
         )

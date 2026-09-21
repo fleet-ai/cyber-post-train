@@ -226,7 +226,12 @@ focused guards live in
 Run the two stages in order. Stage one requires no model route. Before stage
 two, prove fresh exact Base serving parity and repeat the duplicate census and
 server preview. Both rendered root Jobs must show
-`fleet.ai/failure-alerts: "off"` before create. The comparison becomes complete
+`fleet.ai/failure-alerts: "off"` before create. Stage two uses a fresh
+Docker-in-Docker data directory, so it must verify the
+exact harness archive and build-receipt digests, load that archive, and pull the
+immutable proxy image before running the normal image preflight or claiming a
+cell. A node-level Docker cache cannot satisfy this gate.
+The comparison becomes complete
 only after the immutable lineage receipt proves exactly 17 accepted cells:
 original ten, reconciled five, and generation-2 rerolls for the two proven
 pre-session failures. Never infer object absence until the live command has

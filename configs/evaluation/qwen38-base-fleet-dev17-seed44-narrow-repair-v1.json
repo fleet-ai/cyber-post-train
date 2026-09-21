@@ -64,7 +64,7 @@
       "secret_name": "chris-q38-s44-base-reroll-intent-v1",
       "output_root": "/mnt/sfs/jobs/chris-q38-s44-base-reroll-v1",
       "active_deadline_seconds": 36000,
-      "run_script_sha256": "23ab040971cfcd354fc740e7eb596d6bf88fac4e4f8813e8adf28ad1704ba90a",
+      "run_script_sha256": "394515559cffefb8cc4e33b7764db85af0a469afb17c267ff6d2239903e0b692",
       "resources": {
         "requests": {
           "cpu": "4",
@@ -81,6 +81,12 @@
       "model_generation_allowed": true,
       "maximum_new_rollouts": 2,
       "execution_generation": 2,
+      "image_staging": {
+        "harness_tar": "/mnt/sfs/jobs/chris-q38-fleet-dev17-harness-build-v1/opencode-1.18.27-linux-amd64.tar",
+        "harness_tar_sha256": "sha256:b14bdf558990087504a95e209ff0c0e84039633f6d28b2cdbc483cd845c0c410",
+        "harness_receipt": "/mnt/sfs/jobs/chris-q38-fleet-dev17-harness-build-v1/BUILD.json",
+        "harness_receipt_sha256": "sha256:4781514a8431d6d87c671c49120639062f5a8e3afb016a04360752c896181745"
+      },
       "scoring_follows_only_new_rollouts": true
     }
   },
@@ -102,10 +108,12 @@
     },
     "single_rollout_repair": {
       "cyber_post_train/jobs.py": "bc0d08a7a27b48ff5a21a5d824356d6e92e4856b17cc7296a976aa18a2baa40d",
+      "evals/fleet/cluster_entry.py": "58cb9c4f6d604812a8dcf4f0c6c668f0698a1e36420d19dbfbbda66418bf6329",
       "evals/fleet/evaluate.py": "33b88cf783bffdfa7fc194e8107afbd6721e762cb5d7020da9057c8d797e761e",
       "evals/fleet/exact_pass4_crypto.py": "477b0531fbc34103ed91ff03668616a56f05687ede8c2c9ebb4e9dd2106337d5",
       "evals/fleet/exact_pass4_universe.py": "dca624ddae39ecfc1236a9ae1f44dcb48b1301606004bf295db2ff6f2071c250",
       "evals/fleet/fixed_proxy.py": "a65270cb021cbc8e2fe9b00d901b4b70e9ddc98dd58d93e9f695b1768dfb984d",
+      "evals/fleet/model_artifact.py": "f6dea5379697b4b95b8cdcd4bb2b01d8cd0a0e31029235720b8962d68c3ec851",
       "evals/fleet/opencode_self_hosted.py": "428e9f2e4d4c758c4f682cbed314cf96b866d051b34fa0eea8757a3aad97aa1d",
       "evals/fleet/retry_review_policy.py": "159466f341b81ca84716398f1107cbaa389b0354d78b98916b1ca182ae9a03e9",
       "evals/fleet/rollout_campaign.py": "c88e20359fd0929c16530f4cce967e556d23d45faa7474f520caaab982407206",
@@ -115,7 +123,7 @@
       "evals/fleet/stored_session_reconciliation.py": "96b5de82bb1992db8ff15efde5350580e2d0fe76607e77bed205c09a82d11227",
       "evals/fleet/repair_lineage.py": "87a219128f57f15a2fa0b1bfe1f89d8ba18a62880d866a5d8f3287d18828a1ba",
       "evals/fleet/reviewed_recovery_v2.py": "3acd3322ecddf8523547eb86dcdeb60c14358ad6aaa209e3e18f867f7822e529",
-      "evals/fleet/reviewed_recovery_worker_v2.py": "e3b19a1240403e039e4b4d8967aab58d46f922b59fc98fe7c83e17493b06a869"
+      "evals/fleet/reviewed_recovery_worker_v2.py": "a05f1957a44e6e4b1aca5a4c9c659f4eeef8f8b7379f63ea453249055aa563c4"
     }
   },
   "live_evidence_binding": {
@@ -153,5 +161,5 @@
     "database_cells_changed": 0,
     "outputs_created": 0
   },
-  "sha256": "sha256:b775170bd9fb33a0f3216a0cf289afb301f8d9f83dbc0dc59cd89d53348e2620"
+  "sha256": "sha256:39b5f18945962c2ad58b5d85e3b69852c7f4fb2fd5a597c11630dc765e4cc4e4"
 }

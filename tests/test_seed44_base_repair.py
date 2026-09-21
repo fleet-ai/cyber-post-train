@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
+import subprocess
+import sys
 import uuid
 from pathlib import Path
 
@@ -392,6 +395,131 @@ def test_seed44_base_repair_package_is_two_stage_alert_off_and_cpu_only(tmp_path
         == "dind"
     )
     assert packages["single_rollout_repair"].proof["execution_generation"] == 2
+    plan = json.loads(REPAIR_PLAN.read_text())
+    recovery = packages["single_rollout_repair"]
+    staging = plan["stages"]["single_rollout_repair"]["image_staging"]
+    assert recovery.proof["image_staging"] == staging
+    assert {"cluster_entry.py", "model_artifact.py"} <= set(recovery.config_map["data"])
+    environment = {
+        row["name"]: row.get("value")
+        for row in recovery.job["spec"]["template"]["spec"]["containers"][0]["env"]
+    }
+    assert environment["HARNESS_TAR"] == staging["harness_tar"]
+    assert environment["HARNESS_TAR_SHA256"] == staging["harness_tar_sha256"]
+    assert environment["HARNESS_RECEIPT"] == staging["harness_receipt"]
+    assert environment["HARNESS_RECEIPT_SHA256"] == staging["harness_receipt_sha256"]
+    run_script = recovery.config_map["data"]["run.sh"]
+    assert '--harness-tar "$HARNESS_TAR"' in run_script
+    assert '--harness-tar-sha256 "$HARNESS_TAR_SHA256"' in run_script
+    assert '--harness-receipt "$HARNESS_RECEIPT"' in run_script
+    assert '--harness-receipt-sha256 "$HARNESS_RECEIPT_SHA256"' in run_script
+
+
+def test_recovery_stages_exact_harness_before_fresh_dind_image_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
+    harness = tmp_path / "harness.tar"
+    harness.write_bytes(b"exact reviewed harness archive")
+    harness_sha256 = "sha256:" + hashlib.sha256(harness.read_bytes()).hexdigest()
+    plan = {
+        "images": {"agent": _sha("a"), "proxy": "proxy.example/image@" + _sha("b")},
+        "treatment": {"release_asset_sha256": _sha("c")},
+    }
+    receipt = tmp_path / "BUILD.json"
+    receipt.write_text(
+        json.dumps(
+            {
+                "schema": "fleet_harness_build_v1",
+                "tar_sha256": harness_sha256,
+                "image_id": plan["images"]["agent"],
+                "platform": "linux/amd64",
+                "release_asset_sha256": plan["treatment"]["release_asset_sha256"],
+            }
+        ),
+        encoding="utf-8",
+    )
+    receipt_sha256 = "sha256:" + hashlib.sha256(receipt.read_bytes()).hexdigest()
+    images: set[str] = set()
+    events: list[str] = []
+
+    def docker_run(command, **_kwargs):
+        if command[:2] == ["docker", "load"]:
+            assert images == set()
+            images.add(plan["images"]["agent"])
+            events.append("load_agent")
+        elif command[:3] == ["docker", "image", "inspect"]:
+            assert command[3] in images
+            events.append("inspect_agent")
+        elif command[:2] == ["docker", "pull"]:
+            assert images == {plan["images"]["agent"]}
+            images.add(plan["images"]["proxy"])
+            events.append("pull_proxy")
+        else:  # pragma: no cover - protects the exact staging command surface
+            raise AssertionError(command)
+        return subprocess.CompletedProcess(command, 0)
+
+    def check_images(value):
+        assert value is plan
+        assert images == {plan["images"]["agent"], plan["images"]["proxy"]}
+        events.append("check_images")
+
+    monkeypatch.setattr(reviewed_recovery_worker_v2.cluster_entry.subprocess, "run", docker_run)
+    monkeypatch.setattr(reviewed_recovery_worker_v2.evaluate, "check_images", check_images)
+    reviewed_recovery_worker_v2._stage_and_check_images(  # noqa: SLF001
+        plan=plan,
+        harness_tar=harness,
+        harness_tar_sha256=harness_sha256,
+        harness_receipt=receipt,
+        harness_receipt_sha256=receipt_sha256,
+    )
+    assert events == ["load_agent", "inspect_agent", "pull_proxy", "check_images"]
+    with pytest.raises(ValueError, match="archive digest differs"):
+        reviewed_recovery_worker_v2._stage_and_check_images(  # noqa: SLF001
+            plan=plan,
+            harness_tar=harness,
+            harness_tar_sha256=_sha("e"),
+            harness_receipt=receipt,
+            harness_receipt_sha256=receipt_sha256,
+        )
+    assert events == ["load_agent", "inspect_agent", "pull_proxy", "check_images"]
+
+
+def test_seed44_recovery_bootstrap_imports_from_only_the_rendered_closure(tmp_path: Path):
+    stored_intent, recovery_intent = _packet_intents(tmp_path)
+    recovery = seed44_base_repair_job.render(
+        repo_root=ROOT,
+        plan_path=REPAIR_PLAN,
+        stored_intent_path=stored_intent,
+        recovery_intent_path=recovery_intent,
+    )["single_rollout_repair"]
+    data = recovery.config_map["data"]
+    isolated = tmp_path / "isolated"
+    (isolated / "cyber_post_train").mkdir(parents=True)
+    (isolated / "evals/fleet").mkdir(parents=True)
+    for path in (
+        isolated / "cyber_post_train/__init__.py",
+        isolated / "evals/__init__.py",
+        isolated / "evals/fleet/__init__.py",
+    ):
+        path.write_text("", encoding="utf-8")
+    (isolated / "cyber_post_train/jobs.py").write_text(data["jobs.py"], encoding="utf-8")
+    for name, source in data.items():
+        if name not in {"jobs.py", "run.sh"}:
+            (isolated / "evals/fleet" / name).write_text(source, encoding="utf-8")
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            f"import sys;sys.path.insert(0,{str(isolated)!r});"
+            "import evals.fleet.reviewed_recovery_worker_v2",
+        ],
+        cwd=tmp_path,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_seed44_private_packages_are_create_once_and_not_printed(tmp_path: Path):

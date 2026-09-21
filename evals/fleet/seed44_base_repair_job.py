@@ -45,6 +45,8 @@ STORED_CODE_FILES = {
 }
 ROLLOUT_CODE_FILES = {
     **COMMON_CODE_FILES,
+    "cluster_entry.py": "evals/fleet/cluster_entry.py",
+    "model_artifact.py": "evals/fleet/model_artifact.py",
     "repair_lineage.py": "evals/fleet/repair_lineage.py",
     "reviewed_recovery_v2.py": "evals/fleet/reviewed_recovery_v2.py",
     "reviewed_recovery_worker_v2.py": "evals/fleet/reviewed_recovery_worker_v2.py",
@@ -127,6 +129,10 @@ umask 077
 : "${{DOCKER_BIND_ROOT:?DOCKER_BIND_ROOT is required}}"
 : "${{EVALUATION_DATABASE:?EVALUATION_DATABASE is required}}"
 : "${{EVALUATION_DIRECTORY:?EVALUATION_DIRECTORY is required}}"
+: "${{HARNESS_RECEIPT:?HARNESS_RECEIPT is required}}"
+: "${{HARNESS_RECEIPT_SHA256:?HARNESS_RECEIPT_SHA256 is required}}"
+: "${{HARNESS_TAR:?HARNESS_TAR is required}}"
+: "${{HARNESS_TAR_SHA256:?HARNESS_TAR_SHA256 is required}}"
 : "${{REPAIR_OUTPUT:?REPAIR_OUTPUT is required}}"
 root=/workspace/cyber-post-train
 mkdir -p "$root/cyber_post_train" "$root/evals/fleet"
@@ -147,6 +153,10 @@ exec uv run --no-project --with httpx==0.28.1 --with pyyaml==6.0.3 \
   --output-root "$REPAIR_OUTPUT" \
   --postgres-admin-dsn-env ROLLOUT_DATABASE_URL \
   --postgres-database "$EVALUATION_DATABASE" \
+  --harness-tar "$HARNESS_TAR" \
+  --harness-tar-sha256 "$HARNESS_TAR_SHA256" \
+  --harness-receipt "$HARNESS_RECEIPT" \
+  --harness-receipt-sha256 "$HARNESS_RECEIPT_SHA256" \
   --reviewed-recovery-intent /intent/intent.json \
   --worker-id q38_s44_base_repair
 """
@@ -327,10 +337,18 @@ def _base_job(
         "volumes": volumes,
     }
     if dind:
+        staging = execution["image_staging"]
         env[:0] = [
             {"name": "DOCKER_HOST", "value": "unix:///var/run/docker.sock"},
             {"name": "DOCKER_TLS_CERTDIR", "value": ""},
             {"name": "DOCKER_BIND_ROOT", "value": "/docker-bind"},
+            {"name": "HARNESS_TAR", "value": staging["harness_tar"]},
+            {"name": "HARNESS_TAR_SHA256", "value": staging["harness_tar_sha256"]},
+            {"name": "HARNESS_RECEIPT", "value": staging["harness_receipt"]},
+            {
+                "name": "HARNESS_RECEIPT_SHA256",
+                "value": staging["harness_receipt_sha256"],
+            },
         ]
         volumes[2:2] = [
             {"name": "docker-data", "emptyDir": {"sizeLimit": "80Gi"}},
@@ -421,6 +439,27 @@ def _stage(
         dind = True
         if execution.get("execution_generation") != 2:
             raise PackageError("rollout repair must use fresh execution generation two")
+        staging = execution.get("image_staging")
+        if not isinstance(staging, dict) or set(staging) != {
+            "harness_tar",
+            "harness_tar_sha256",
+            "harness_receipt",
+            "harness_receipt_sha256",
+        }:
+            raise PackageError("rollout repair image staging binding is invalid")
+        if any(
+            not isinstance(staging[key], str)
+            or not staging[key].startswith("/mnt/sfs/jobs/")
+            or ".." in Path(staging[key]).parts
+            for key in ("harness_tar", "harness_receipt")
+        ) or any(
+            not isinstance(staging[key], str)
+            or len(staging[key]) != 71
+            or not staging[key].startswith("sha256:")
+            or any(character not in "0123456789abcdef" for character in staging[key][7:])
+            for key in ("harness_tar_sha256", "harness_receipt_sha256")
+        ):
+            raise PackageError("rollout repair image staging binding is invalid")
     else:
         raise PackageError("unknown narrow repair stage")
     code, code_sha256 = _code(repo_root, files)
@@ -481,6 +520,7 @@ def _stage(
         "priority_class": "c1",
         "gpu_request": 0,
         "private_intent_content_included": False,
+        "image_staging": execution.get("image_staging"),
     }
     proof = {**proof_body, "sha256": _canonical_digest(proof_body)}
     package = StagePackage(
