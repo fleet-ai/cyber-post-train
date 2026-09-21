@@ -132,6 +132,16 @@ one finite update to step 2; seal the complete step-2 checkpoint; then pass an
 independent zero-update GPU reload and finite inference check. Only that result
 can qualify native resume for a broader run.
 
+The non-authorizing offline packet for that chain is
+[`qwen38-rl-reward-prod8-resume-qualification-v1.json`](../configs/qualification/qwen38-rl-reward-prod8-resume-qualification-v1.json).
+It fixes the three create-once identities, resources, and acceptance checks for
+the step-1 reload, step-1-to-step-2 continuation, and step-2 reload. Its live
+step-1 receipt and checkpoint-manifest digests are deliberately `null`, and its
+implementation and launch gates are deliberately false. Do not edit those
+fields in place: after prod8 acceptance, generate a new immutable successor
+that binds the accepted source evidence and the separately reviewed native
+resume runtime.
+
 The first intended broad arm remains
 [`qwen38-skyrl-production-a1-v1.json`](../configs/runs/qwen38-skyrl-production-a1-v1.json),
 but it is not launch-safe yet. Its old 98,304-token non-compacting horizon must
