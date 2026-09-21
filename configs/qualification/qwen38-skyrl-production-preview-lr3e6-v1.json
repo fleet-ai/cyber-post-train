@@ -1,0 +1,39 @@
+{
+  "cluster_target": "prod",
+  "external_mutations": 0,
+  "external_reads": 0,
+  "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
+  "name": "chris-q38-skyrl10-lr3e6",
+  "plan_sha256": "sha256:9108192561ea430c816d096fde1bd372d62a0325fd106c64536bb6403f2782ec",
+  "request_sha256": "sha256:2db5b7a3807a99421a2873e67c84404459bc4640d5ff72b2620614184a1461b5",
+  "resources": {
+    "cpu_limit": "64",
+    "cpu_request": "64",
+    "gpus": 8,
+    "gpus_per_node": 8,
+    "memory_limit": "768Gi",
+    "memory_request": "512Gi",
+    "nodes": 1,
+    "priority": "c1"
+  },
+  "run_dir": "/mnt/sfs/jobs/chris-q38-skyrl10-lr3e6",
+  "schema": "cyber_skyrl_offline_request_preview_v1",
+  "server_preview_requested": false,
+  "sha256": "sha256:bcf92990a29aa32d49c893dfa4f566a3bd247402a05b8382c56fda7f38669142",
+  "status": "locally_rendered_not_server_previewed",
+  "submitted": false,
+  "wandb": {
+    "entity": "thefleet",
+    "project": "cyber-post-train",
+    "resume": "never",
+    "run_id": "chris-q38-skyrl10-lr3e6"
+  },
+  "watchdog": {
+    "drain_seconds": 300,
+    "episode_ceiling_seconds": 38400,
+    "hard_seconds": 43200,
+    "idle_seconds": 1200,
+    "poll_seconds": 60,
+    "startup_seconds": 1800
+  }
+}

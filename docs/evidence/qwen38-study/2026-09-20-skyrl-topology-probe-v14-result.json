@@ -1,0 +1,47 @@
+{
+  "active_gpus": 0,
+  "armed_at": "2026-09-20T14:48:02Z",
+  "context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+  "created_at": "2026-09-20T14:48:29Z",
+  "deletion_requested_at": "2026-09-20T14:53:31Z",
+  "exit_codes": [],
+  "expected_gpus": 8,
+  "image_ids": [
+    "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:5777c8069eddefc049394c7783abb75ec36c1254a88a32f3dd1d8abe596036fc"
+  ],
+  "job_id": "cba04937-f37f-4486-a47e-f90804bb96ad",
+  "kind": "fleetjob",
+  "manifest_sha256": "sha256:11ae61b38c6164c1630a703b4be33f852cfb9237c97626798153a615fde9f56e",
+  "maximum_seconds": 1800,
+  "name": "chris-q38-skyrl-probe-v14",
+  "namespace": "fleet-train-jobs",
+  "observer_error_class": "",
+  "peak_gpus": 8,
+  "plan_sha256": "sha256:713272d7ae416cff87e1d67e9cfd83d9ae4732a6c4998396985a1c252d5e6b91",
+  "pod_names": [
+    "fj-cba04937f37f4486a47ef90804bb96ad-t4hgv-head-6nch4"
+  ],
+  "pod_uids": [
+    "6fd3b9ab-6a28-4fb8-a5c4-afd0cf1e3693"
+  ],
+  "pods_present": false,
+  "raycluster_name": "fj-cba04937f37f4486a47ef90804bb96ad-t4hgv",
+  "raycluster_present": false,
+  "raycluster_uid": "655917d6-4cef-4342-9c09-39104d4d3ba1",
+  "rayjob_name": "fj-cba04937f37f4486a47ef90804bb96ad",
+  "rayjob_present": false,
+  "rayjob_uid": "da7c2226-012f-4d6f-8d9f-00935c52d066",
+  "receipt": null,
+  "release_observed_at": "2026-09-20T14:54:35Z",
+  "restarts": 0,
+  "schema": "cyber_dev_cleanup_observer_result_v1",
+  "sha256": "sha256:cdbed37b9039c31e14bae2978365252625cda587426a436cad7dacdb439ce357",
+  "status": "released_without_accepted_execution",
+  "target_present": false,
+  "terminal_status": "Failed",
+  "termination_reasons": [],
+  "uid": "094dc06e-0ebc-4075-bae2-bfbb3130a4fb",
+  "workload_name": "rayjob-fj-cba04937f37f4486a47ef90804bb96ad-0d855",
+  "workload_present": false,
+  "workload_uid": "3f471933-0b67-43fd-8bc8-cce7e14f15b9"
+}

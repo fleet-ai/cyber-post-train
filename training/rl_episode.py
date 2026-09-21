@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import importlib.metadata
+import json
 import math
 import os
 import re
@@ -41,6 +42,7 @@ class EpisodeBudgetExceeded(InvalidEpisode):
 BUDGET_STOPS = {
     "generation_incomplete_length",
     "generation_incomplete_context_full",
+    "turn_response_budget_exhausted",
     "turn_budget_exhausted",
     "response_budget_exhausted",
 }
@@ -94,6 +96,7 @@ def _failure(error, *, run_id, elapsed_seconds, phase):
                 "tool_result_exceeds_budget",
                 "bash_timeout_maximum_unresolved",
                 "tool_timeout_below_advertised_budget",
+                "turn_response_budget_exhausted",
                 "turn_budget_exhausted",
                 "response_budget_exhausted",
                 "instance_release_unconfirmed",
@@ -232,19 +235,38 @@ def _validate(config):
     if not re.fullmatch(r"sha256:[a-f0-9]{64}", tool_sha):
         raise InvalidEpisode("unpinned_tool_catalog")
     limits = config["rl"]
-    if set(limits) != {
+    base_limits = {
         "max_turns",
         "episode_seconds",
         "tool_seconds",
         "tool_result_chars",
         "max_tokens_per_turn",
         "context_tokens",
+    }
+    compacted_limits = {
+        "generation_chunk_tokens",
+        "compaction_trigger_tokens",
+        "compaction_summary_tokens",
+    }
+    if frozenset(limits) not in {
+        frozenset(base_limits),
+        frozenset(base_limits | compacted_limits),
     }:
         raise InvalidEpisode("incomplete_episode_limits")
     if any(type(v) is not int or v <= 0 for v in limits.values()):
         raise InvalidEpisode("invalid_episode_limits")
     if limits["max_tokens_per_turn"] >= limits["context_tokens"]:
         raise InvalidEpisode("generation_budget_exceeds_context")
+    if compacted_limits <= limits.keys() and not (
+        limits["generation_chunk_tokens"] <= limits["max_tokens_per_turn"]
+        and limits["compaction_summary_tokens"] <= limits["max_tokens_per_turn"]
+        and limits["compaction_trigger_tokens"]
+        + limits["max_tokens_per_turn"]
+        + limits["tool_result_chars"]
+        + limits["compaction_summary_tokens"]
+        < limits["context_tokens"]
+    ):
+        raise InvalidEpisode("invalid_compaction_limits")
     ttl = config["environment"]["ttl_seconds"]
     if type(ttl) is not int or not limits["episode_seconds"] + 240 < ttl <= 32400:
         raise InvalidEpisode("invalid_instance_ttl")
@@ -306,39 +328,57 @@ async def _agent(recorder, session, messages, tools, limits, parse):
             if turn.finish == "length" and not isinstance(turn.text, str):
                 reason = "generation_incomplete_nontext"
             raise (EpisodeBudgetExceeded if reason in BUDGET_STOPS else InvalidEpisode)(reason)
-        call = parse(turn.text)
-        if call is not None and (
+        parsed = parse(turn.text)
+        calls = parsed if isinstance(parsed, list) else ([] if parsed is None else [parsed])
+        if any(
             not isinstance(call, dict)
             or not isinstance(call.get("name"), str)
             or not isinstance(call.get("arguments"), dict)
+            for call in calls
         ):
             raise InvalidEpisode("tool_parser_contract_invalid")
-        messages.append(recorder.append_assistant(turn.text, call, index))
-        if call is None:
+        messages.append(recorder.append_assistant(turn.text, parsed, index))
+        if not calls:
             return messages, "model_stop", env_time
-        start = time.monotonic()
-        if call["name"] not in {"bash", "submit_report"}:
-            text, error = "Tool unavailable: only bash and submit_report are permitted.", True
+        observations, submitted = [], False
+        for offset, call in enumerate(calls):
+            start = time.monotonic()
+            if call["name"] not in {"bash", "submit_report"}:
+                text, error = "Tool unavailable: only bash and submit_report are permitted.", True
+            else:
+                async with asyncio.timeout(limits["tool_seconds"]):
+                    result = await session.call_tool(call["name"], arguments=call["arguments"])
+                if any(block.type != "text" for block in result.content):
+                    raise InvalidEpisode("non_text_tool_result")
+                text = "\n".join(block.text for block in result.content)
+                error = getattr(result, "is_error", getattr(result, "isError", None))
+                if type(error) is not bool:
+                    raise InvalidEpisode("tool_error_status_missing")
+            env_time += time.monotonic() - start
+            if len(text) > limits["tool_result_chars"]:
+                raise InvalidEpisode("tool_result_exceeds_budget")
+            tool_call_id = (
+                f"call_{index:06d}" if len(calls) == 1 else f"call_{index:06d}_{offset:03d}"
+            )
+            observations.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tool_call_id,
+                    "name": call["name"],
+                    "content": text,
+                }
+            )
+            if call["name"] == "submit_report" and not error:
+                submitted = True
+                break
+        if len(observations) == 1:
+            messages.append(recorder.append_observation(observations[0], []))
         else:
-            async with asyncio.timeout(limits["tool_seconds"]):
-                result = await session.call_tool(call["name"], arguments=call["arguments"])
-            if any(block.type != "text" for block in result.content):
-                raise InvalidEpisode("non_text_tool_result")
-            text = "\n".join(block.text for block in result.content)
-            error = getattr(result, "is_error", getattr(result, "isError", None))
-            if type(error) is not bool:
-                raise InvalidEpisode("tool_error_status_missing")
-        env_time += time.monotonic() - start
-        if len(text) > limits["tool_result_chars"]:
-            raise InvalidEpisode("tool_result_exceeds_budget")
-        message = {
-            "role": "tool",
-            "tool_call_id": f"call_{index:06d}",
-            "name": call["name"],
-            "content": text,
-        }
-        messages.append(recorder.append_observation(message, []))
-        if call["name"] == "submit_report" and not error:
+            append_group = getattr(recorder, "append_observations", None)
+            if not callable(append_group):
+                raise InvalidEpisode("recorder_parallel_tools_unsupported")
+            messages.extend(append_group(observations, []))
+        if submitted:
             return messages, "report_submitted", env_time
     raise EpisodeBudgetExceeded("turn_budget_exhausted")
 
@@ -413,6 +453,11 @@ async def collect(config, directory: Path, recorder, parse, *, client):
                     fleet.sha256(fleet.canonical_json(raw)),
                 )
                 validate_tool_budget(raw, config["rl"]["tool_seconds"])
+                # Pydantic preserves model field insertion order, while Qwen's
+                # template renders dictionaries in the order it receives them.
+                # Canonicalize only after the exact live-catalog digest passes
+                # so online rendering matches the offline prepared prompt.
+                raw = json.loads(fleet.canonical_json(raw))
                 by_name = {t["name"]: t for t in raw}
                 tools = [
                     {

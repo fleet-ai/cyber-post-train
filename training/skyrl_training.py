@@ -7,6 +7,7 @@ The initial profile starts from the pinned base; it never auto-resumes a run.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import dataclasses
 import hashlib
 import json
@@ -19,7 +20,7 @@ import time
 from contextlib import suppress
 from pathlib import Path
 
-from cyber_post_train.jobs import bundled_request, digest, quantity
+from cyber_post_train.jobs import API_URLS, JobsError, bundled_request, digest, quantity
 
 from . import skyrl
 from .miles_conversion import _hash, check_inputs
@@ -34,6 +35,9 @@ IMAGE = (
 )
 NATIVE = {
     **skyrl.NATIVE_SOURCES,
+    "skyrl.train.generators.utils": (
+        "55c15b660067749febda00d4fb1c2110ff436717bbd4b73bf66055a73d0b87d5"
+    ),
     "skyrl.train.entrypoints.main_base": (
         "aee8976aa5d18a0c19be93e0b99fc1d1868688af0fe26b08b8a863c0aed027d7"
     ),
@@ -50,6 +54,7 @@ RUNTIME_FILES = (
     "training/skyrl_rollout.py",
     "training/skyrl_episode.py",
     "training/rl_episode.py",
+    "training/rl_reward_canary.py",
     "training/rl_runtime.py",
     "training/rl_data.py",
     "training/sft_runtime.py",
@@ -78,7 +83,17 @@ def compile_rl(config, *, relative_to):
 
     _known(
         config,
-        {"backend", "name", "output_root", "model", "data", "recipe", "wandb", "cluster"},
+        {
+            "backend",
+            "name",
+            "output_root",
+            "model",
+            "data",
+            "recipe",
+            "wandb",
+            "cluster",
+            "qualification",
+        },
         "RL",
     )
     if config["backend"] != "skyrl":
@@ -88,7 +103,7 @@ def compile_rl(config, *, relative_to):
     _known(model, {"lock", "weights", "root"}, "model")
     _known(data, {"manifest", "root"}, "data")
     _known(w, {"entity", "project", "run_id"}, "W&B")
-    _known(cluster, {"priority", "resources"}, "cluster")
+    _known(cluster, {"priority", "resources", "target"}, "cluster")
     _known(
         recipe,
         {
@@ -116,6 +131,21 @@ def compile_rl(config, *, relative_to):
     ):
         raise ValueError("exact native train/dev files required")
     root, limits = Path(_sfs_root(data["root"], "data root")), metadata["limits"]
+    compaction_enabled = {
+        "generation_chunk_tokens",
+        "compaction_trigger_tokens",
+        "compaction_summary_tokens",
+    } <= limits.keys()
+    qualification = None
+    if config.get("qualification") is not None:
+        from .rl_reward_canary import validate_run_config
+
+        qualification = validate_run_config(
+            config,
+            metadata,
+            bound,
+            relative_to=relative_to,
+        )
     args = skyrl.SkyRLConfig(
         name=config["name"],
         output_root=_sfs_root(config["output_root"], "output root"),
@@ -132,6 +162,16 @@ def compile_rl(config, *, relative_to):
         context_tokens=limits["context_tokens"],
         response_tokens=limits["response_tokens"],
         tokens_per_turn=limits["max_tokens_per_turn"],
+        generation_chunk_tokens=limits.get(
+            "generation_chunk_tokens", limits["max_tokens_per_turn"]
+        ),
+        compaction_trigger_tokens=limits.get(
+            "compaction_trigger_tokens", limits["context_tokens"] // 3
+        ),
+        compaction_summary_tokens=limits.get(
+            "compaction_summary_tokens", limits["max_tokens_per_turn"]
+        ),
+        compaction_enabled=compaction_enabled,
         max_turns=limits["max_turns"],
         **recipe,
     )
@@ -139,6 +179,11 @@ def compile_rl(config, *, relative_to):
         metadata["tokenizer"][k] != bound[k] for k in ("repo", "revision")
     ):
         raise ValueError("run/model/data identity mismatch")
+    cluster_target = (
+        qualification["cluster_target"] if qualification else cluster.get("target", "prod")
+    )
+    if cluster_target not in API_URLS:
+        raise ValueError("cluster target must be dev or prod")
     plan = {
         "schema": SCHEMA,
         "run_name": args.name,
@@ -150,25 +195,49 @@ def compile_rl(config, *, relative_to):
         "native_sources": NATIVE,
         "runtime_sha256": digest(_runtime()),
         "execution": {
-            "image": IMAGE,
+            "image": qualification["image"] if qualification else IMAGE,
             "priority": cluster.get("priority", "c1"),
             "resources": {**RESOURCES, **cluster.get("resources", {})},
+            "cluster_target": cluster_target,
+            "jobs_api_base_url": API_URLS[cluster_target],
         },
     }
+    if qualification is not None:
+        plan["qualification"] = qualification
     job_request(plan)
     return plan
 
 
 def job_request(plan):
     args = skyrl.SkyRLConfig(**plan["arguments"])
+    qualification = plan.get("qualification")
+    image, extra_env = IMAGE, {}
+    bound_route = None
+    if qualification is not None:
+        from .rl_reward_canary import validate_plan_binding
+
+        binding = validate_plan_binding(qualification, plan["data"], plan["arguments"])
+        image, extra_env = binding["image"], binding["environment"]
+        bound_route = (binding["cluster_target"], binding["jobs_api_base_url"])
     if (
         plan["schema"] != SCHEMA
         or plan["runtime_sha256"] != digest(_runtime())
         or plan["native_sources"] != NATIVE
         or plan["native_overrides"] != skyrl.overrides(args)
-        or plan["execution"]["image"] != IMAGE
+        or plan["execution"]["image"] != image
         or plan["run_name"] != args.name
         or plan["output_root"] != args.output_root
+        or plan["execution"].get("cluster_target") not in API_URLS
+        or plan["execution"].get("jobs_api_base_url")
+        != API_URLS[plan["execution"]["cluster_target"]]
+        or (
+            bound_route is not None
+            and (
+                plan["execution"]["cluster_target"],
+                plan["execution"]["jobs_api_base_url"],
+            )
+            != bound_route
+        )
     ):
         raise ValueError("SkyRL plan/runtime drift")
     resources = plan["execution"]["resources"]
@@ -186,7 +255,7 @@ def job_request(plan):
             "name": args.name,
             "title": args.name + " native SkyRL RL",
             "run_dir": args.output_root,
-            "image": IMAGE,
+            "image": image,
             "workers": args.nodes,
             "gpus_per_worker": 8,
             "resources": resources,
@@ -203,12 +272,82 @@ def job_request(plan):
                 "WANDB_DISABLE_CODE": "true",
                 "WANDB_CONSOLE": "off",
                 "PYTHONUNBUFFERED": "1",
+                "CYBER_EXPECTED_RUNTIME_UID": "1000",
+                "CYBER_EXPECTED_RUNTIME_GID": "100",
+                **extra_env,
             },
         },
         files,
         MODULE,
         ["--plan", "plan.json", "--sha256", digest(plan)],
     )
+
+
+def validate_gpu_runtime_user() -> None:
+    """Fail before model loading if the GPU process is not the reviewed user."""
+    expected = (
+        os.environ.get("CYBER_EXPECTED_RUNTIME_UID"),
+        os.environ.get("CYBER_EXPECTED_RUNTIME_GID"),
+    )
+    if expected != ("1000", "100") or (os.geteuid(), os.getegid()) != (1000, 100):
+        raise ValueError("SkyRL GPU runtime must use the pinned image user 1000:100")
+
+
+def validate_preview(plan: dict, request: dict, preview: dict) -> dict:
+    """Require the rendered GPU containers to run as UID 1000/GID 100.
+
+    Generic preview validation covers resources, queueing, image, secrets and
+    command identity.  This profile gate additionally checks the effective pod
+    and container security contexts.  Missing identity is not inferred from an
+    image Dockerfile; the preview must prove it.
+    """
+    if job_request(plan) != request:
+        raise JobsError("SkyRL preview request differs from its immutable plan")
+    return validate_gpu_runtime_preview(request, preview)
+
+
+def validate_gpu_runtime_preview(request: dict, preview: dict) -> dict:
+    """Validate the common pinned-image runtime identity for SkyRL GPU jobs."""
+    import yaml
+
+    from cyber_post_train.jobs import validate_preview as validate_generic_preview
+
+    result = validate_generic_preview(request, preview)
+    try:
+        obj = yaml.safe_load(preview["manifest_yaml"])
+        cluster = obj["spec"]["rayClusterSpec"]
+        templates = [cluster["headGroupSpec"]["template"]] + [
+            group["template"]
+            for group in cluster.get("workerGroupSpecs", [])
+            if group.get("replicas", 0)
+        ]
+        checked = 0
+        for template in templates:
+            pod = template["spec"]
+            pod_context = pod.get("securityContext", {})
+            containers = [
+                container
+                for container in pod["containers"]
+                if quantity(
+                    container.get("resources", {}).get("limits", {}).get("nvidia.com/gpu", 0)
+                )
+                > 0
+            ]
+            if len(containers) != 1:
+                raise JobsError("SkyRL preview must contain one GPU container per pod")
+            context = {**pod_context, **containers[0].get("securityContext", {})}
+            if (
+                context.get("runAsUser") != 1000
+                or context.get("runAsGroup") != 100
+                or context.get("runAsNonRoot") is not True
+            ):
+                raise JobsError("SkyRL preview does not prove runtime user 1000:100")
+            checked += 1
+    except (KeyError, TypeError, yaml.YAMLError) as exc:
+        raise JobsError("malformed SkyRL Jobs API preview") from exc
+    if checked != request["workers"]:
+        raise JobsError("SkyRL preview runtime-user worker count drift")
+    return {**result, "runtime_user": {"uid": 1000, "gid": 100}, "workers_checked": checked}
 
 
 def check_artifacts(plan):
@@ -304,7 +443,7 @@ def preflight(plan):
     if Path(plan["output_root"]).exists():
         raise FileExistsError("RL output already exists")
     rows = check_artifacts(plan)
-    native_source()
+    native = native_source()
     skyrl.native_config(skyrl.SkyRLConfig(**plan["arguments"]))
     tokenizer = AutoTokenizer.from_pretrained(
         plan["model"]["root"], trust_remote_code=False, local_files_only=True
@@ -313,6 +452,26 @@ def preflight(plan):
         raise ValueError("native template changed")
     for split in rows:
         dataset(plan, tokenizer, split, rows[split])
+    from .skyrl_episode import parse as parse_qwen_tools
+
+    multi_tool_probe = parse_qwen_tools(
+        '<tool_call>{"name":"bash","arguments":{"script":"true"}}</tool_call>'
+        '<tool_call>{"name":"submit_report","arguments":{"flags":[],"explanation":""}}</tool_call>'
+    )
+    if multi_tool_probe != [
+        {"name": "bash", "arguments": {"script": "true"}},
+        {"name": "submit_report", "arguments": {"flags": [], "explanation": ""}},
+    ]:
+        raise ValueError("native ordered multi-tool parser changed")
+    from .skyrl_episode import offline_long_horizon_probe
+
+    horizon = asyncio.run(
+        offline_long_horizon_probe(
+            plan["model"],
+            tokenizer,
+            Path(native["skyrl.train.generators.utils"].__file__),
+        )
+    )
     return {
         "schema": "cyber_skyrl_training_cpu_preflight_v1",
         "status": "passed",
@@ -321,6 +480,8 @@ def preflight(plan):
         "plan_sha256": digest(plan),
         "request_sha256": digest(request),
         "native_parser_checked": True,
+        "ordered_multi_tool_parser_checked": True,
+        **horizon,
         "counts": {k: len(v) for k, v in rows.items()},
         "planned_steps": plan["arguments"]["steps"],
         "rl_qualified": False,
@@ -518,6 +679,7 @@ def main():
         if digest(plan) != args.sha256:
             raise ValueError("plan digest mismatch")
         job_request(plan)
+        validate_gpu_runtime_user()
         if args.native:
             try:
                 _native(plan)

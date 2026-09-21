@@ -1,0 +1,130 @@
+{
+  "schema": "cyber_qwen38_skyrl_next_gates_queue_v1",
+  "status": "prepared_not_submitted_failure_budget_closed",
+  "prepared_at": "2026-09-20T16:29:53Z",
+  "source": {
+    "branch": "codex/skyrl-reward-canary-main-port-v2",
+    "base_commit": "077b2546ab218ca53b17be215a30192ff74b1415",
+    "cluster_posts_created": 0,
+    "private_logs_read": false
+  },
+  "failure_budget": {
+    "used": 10,
+    "limit": 10,
+    "reset_recorded": false,
+    "external_cluster_post_stop": true
+  },
+  "topology_successor": {
+    "name": "chris-q38-skyrl-probe-v17",
+    "preflight_name": "chris-q38-skyrl-probe-preflight-v29",
+    "receipt_verifier_name": "chris-q38-skyrl-probe-receipt-v17",
+    "config": "configs/qualification/qwen38-skyrl-topology-probe-dev-v2.json",
+    "config_file_sha256": "sha256:ceb413e27765dbbd88865c9f22ad186ee4f39387de93874111714f7861f9d529",
+    "config_self_sha256": "sha256:f7d53ee426ee4f23e1c608bc17583f5f105ac30b6a8c19b04f966b908cc47d52",
+    "plan_sha256": "sha256:51accb1d9857254fb4bee013001c361785698c5c5b7b825a7b328ee785b717cd",
+    "request_sha256": "sha256:287f9a1a6cb58ae5b03a002be8f14109c53abcf9e097cb410e9d9fa1a3fa146b",
+    "fleetjob_manifest_sha256": "sha256:047485386a653f3c8e6cb7b16b853b0bd12accf027b862c9fab58f0fbf5e0b99",
+    "preflight_manifest_sha256": "sha256:b36a70da18448291771bddbeee9f17c007249bddfe402c5b0aef0bc283d60ddb",
+    "receipt_verifier_manifest_sha256": "sha256:59c3c1f1fd22c523fd8860e4d61155ee884a1c1002dff7f23d57ffc893b33ee7",
+    "environment": {
+      "VLLM_USE_FLASHINFER_SAMPLER": "0"
+    },
+    "terminal_receipt": "TOPOLOGY_PROBE.json",
+    "terminal_receipt_grace_seconds": 30,
+    "accepted": false,
+    "submitted": false
+  },
+  "scientific_canary": {
+    "name": "chris-q38-rlreward-prod4",
+    "route": "prod",
+    "data_config": "configs/qualification/qwen38-rl-reward-canary-data-prod-v4.json",
+    "data_config_file_sha256": "sha256:3da3d28ec995742dad3602e7761a3ec5b8ebc541a4697eeb8ecfc65caa72f08a",
+    "run_config": "configs/qualification/qwen38-rl-reward-canary-prod-v4.json",
+    "run_config_file_sha256": "sha256:85f5c1be29f887d3c94f3d7c965761657edd142c469aee3869730f8579f982cb",
+    "qualification": "configs/qualification/qwen38-rl-reward-canary-port-v4.json",
+    "qualification_file_sha256": "sha256:320a6f4033728ca5db957584a81595d500b2c7a06161612f78722caf0941c30d",
+    "qualification_self_sha256": "sha256:05097e64676b0aa44f1c8b426321fc9f11ec04c26af831b6e745e6aadc6aa3d3",
+    "plan_sha256": "sha256:513e39ff78605f74ab08af22187cb7e2bb3ab2f9290da03a1402d7d282f03a65",
+    "request_sha256": "sha256:07fc87fda635341352a1726cb061de874be5b4a1eabc82985e8b28ef85104473",
+    "recipe": {
+      "nodes": 1,
+      "gpus": 8,
+      "groups": 1,
+      "samples_per_prompt": 8,
+      "optimizer_steps": 1,
+      "learning_rate": 0.000001,
+      "checkpoint_interval": 1,
+      "seed": 42,
+      "context_tokens": 98304,
+      "episode_seconds": 2400
+    },
+    "wandb": {
+      "entity": "thefleet",
+      "project": "cyber-post-train",
+      "run_id": "chris-q38-rlreward-prod4"
+    },
+    "accepted": false,
+    "submitted": false
+  },
+  "local_data_preparation": {
+    "classification": "local_private_candidate_not_cluster_staged",
+    "manifest_file_sha256": "sha256:0b50591ca422ba77069f258d2c4b9009231fd7c7b5d7d4a269db0e3fe5198d13",
+    "manifest_self_sha256": "sha256:b03825787255a72b5dd5bc79fde43c3d0a59e3b75561ca8b7d8d3bef683cb326",
+    "selection_sha256": "sha256:9b88bac1510720926ea041d942044804d6c54c083a0ea56d07cae5f448685909",
+    "split_sha256": "sha256:8279ea19808ad1accb00d3f3145c3ec087030677786e0188251cfc197f306adf",
+    "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "train": {
+      "rows": 1,
+      "max_prompt_tokens": 1241,
+      "sha256": "sha256:47f351e97c4b3047965ebe9356663f81302efa96a874b61a4747a9564cbd04c4"
+    },
+    "dev": {
+      "rows": 1,
+      "max_prompt_tokens": 1256,
+      "sha256": "sha256:dde3cafa3db8bf33538516f276c5891d53a06a92326575ae315de240f5474a19"
+    },
+    "prompts_committed": false,
+    "cluster_staged": false
+  },
+  "read_only_absence_check": {
+    "observed_from": "2026-09-20T16:28:30Z",
+    "observed_through": "2026-09-20T16:29:53Z",
+    "names": [
+      "chris-q38-skyrl-probe-v17",
+      "chris-q38-skyrl-probe-preflight-v29",
+      "chris-q38-skyrl-probe-receipt-v17",
+      "chris-q38-rlreward-prod4"
+    ],
+    "jobs_api": {
+      "dev_runs_scanned": 159,
+      "prod_runs_scanned": 934,
+      "matches": []
+    },
+    "kubernetes": {
+      "dev_matches": [],
+      "prod_matches": []
+    },
+    "sfs": {
+      "prod_scientific_output_absent": true,
+      "prod_data_output_absent": true,
+      "dev_topology_output": "not_visible_without_a_development_sfs_pod"
+    },
+    "wandb": "not_checked_no_local_wandb_credential",
+    "must_repeat_immediately_before_create": true
+  },
+  "local_verification": {
+    "command": "uv run --locked pytest -q tests/test_skyrl_topology_probe.py tests/test_skyrl_topology_probe_launch.py tests/test_qwen38_skyrl_reward_canary_v3.py tests/test_skyrl_training.py",
+    "status": "passed_with_one_unrelated_skipped_test",
+    "network_posts": 0
+  },
+  "ordered_external_gates": [
+    "Record an explicit failure-budget reset; no cluster POST is allowed before it.",
+    "Repeat the v17 CPU preflight and server previews, arm the exact-UID observer, and create v17 once.",
+    "Independently validate the sealed topology receipt and prove complete GPU release.",
+    "Stage the exact prod4 data manifest and two JSONL files create-once, then verify every digest.",
+    "Run the prod4 exact-image CPU preflight and Jobs API preview without creating a GPU workload.",
+    "Repeat Jobs, Kubernetes, SFS, and W&B duplicate/output absence checks immediately before create.",
+    "Create prod4 once and accept only eight real rollouts, reward variation, one finite optimizer update, a reloadable step-1 checkpoint, and complete resource release."
+  ],
+  "sha256": "sha256:7f5db5a2b961e6482746116cef29ba1a0af5ddfa2c319f83269f18f985dc3e9f"
+}

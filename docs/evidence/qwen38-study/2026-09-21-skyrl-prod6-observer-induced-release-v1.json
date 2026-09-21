@@ -1,0 +1,119 @@
+{
+  "schema": "cyber_skyrl_prod6_observer_induced_release_v1",
+  "classification": "observer_induced_infrastructure_failure_before_collection",
+  "recorded_at": "2026-09-21T02:53:47Z",
+  "run": {
+    "name": "chris-q38-rlreward-prod6",
+    "rayjob_uid": "6c06625d-8730-4879-9144-a4cd00a58d8a",
+    "workload_uid": "76b18017-e4c8-4f55-b62d-901df4f7978f",
+    "raycluster_uid": "b706e216-b1b7-41db-aff6-4c4f057f2f47",
+    "pod_uid": "d56ba2f6-9464-4bd7-8984-b86d035549f1",
+    "plan_sha256": "44b17a6ad291c8ef4c2453e1bc28eaf911b358b361fd06f976e52dd8f2d7e31b",
+    "request_sha256": "1ae655ae262af197e58a2c3f4ebe4cecc4488d682f99a4dd94f13118588e40b3"
+  },
+  "last_proven_live_state": {
+    "observed_at": "2026-09-21T02:42:18Z",
+    "rayjob_status": "RUNNING",
+    "pod_ready": true,
+    "pod_restarts": 0,
+    "gpu_memory_mib": [
+      228681,
+      228873,
+      228873,
+      228553,
+      228947,
+      229011,
+      229011,
+      228051
+    ],
+    "gpu_utilization_percent": [
+      0,
+      0,
+      0,
+      0,
+      97,
+      97,
+      97,
+      20
+    ],
+    "active_batch_id": "ee41f7061684d427f1516706",
+    "active_batch_started_at": "2026-09-21T01:40:57Z"
+  },
+  "observer": {
+    "armed_file_sha256": "b9c56acbb7753876b9444c953c419396b42670e4d8c7c59252ab2021b6899259",
+    "armed_self_sha256": "fc5b4412904d6d4b5e34cdf849f7df0cf76c86dccdc40b7a305cd3543914d4a3",
+    "result_file_sha256": "0b9abb513618be8b0ad035312f116d7f1108c4d3eb3c35d342846815fcbd7192",
+    "result_self_sha256": "a9d4af628b4254bee06f6f9f1c50960f45433ba3780212934b7672f4834452fc",
+    "result_status": "released_without_accepted_execution",
+    "observer_error_class": "ObserverError",
+    "deletion_requested_at": "2026-09-21T02:52:53Z",
+    "release_observed_at": "2026-09-21T02:53:47Z",
+    "terminal_status": "Deleted",
+    "peak_gpus": 8,
+    "active_gpus_after_release": 0
+  },
+  "kubernetes_event": {
+    "pod_uid": "d56ba2f6-9464-4bd7-8984-b86d035549f1",
+    "type": "Normal",
+    "reason": "Killing",
+    "message": "Stopping container ray-head",
+    "first_timestamp": "2026-09-21T02:52:55Z",
+    "count": 1
+  },
+  "safe_sfs_readback": {
+    "reader_pod_name": "chris-q38-prod6-terminal-reader-v1",
+    "reader_pod_uid": "b5effb0c-8be3-4b73-8e86-0850f2fb2c6e",
+    "priority": "c1",
+    "failure_alerts": "off",
+    "gpus": 0,
+    "phase": "Succeeded",
+    "restarts": 0,
+    "released_and_not_found": true,
+    "markers": [
+      {
+        "path": "STARTED.json",
+        "sha256": "f288b4551b5eeb69b9b756ccae7c5a871d6a241d88d41dea36b13b82c379d19c",
+        "size": 195
+      },
+      {
+        "path": "episodes/batches/ee41f7061684d427f1516706/STARTED.json",
+        "sha256": "c5e65cd5a30264257e7ecda0a2d513ca8f8fc75391ea4022aa15adf274bbde78",
+        "size": 212
+      }
+    ],
+    "absent_marker_families": [
+      "COLLECTED",
+      "metrics",
+      "checkpoint",
+      "FAILED",
+      "NATIVE_FAILURE",
+      "REJECTED",
+      "NATIVE_REJECTED",
+      "NATIVE_TRAINING_COMPLETE",
+      "COMPLETE"
+    ]
+  },
+  "result": {
+    "collected_batches": 0,
+    "authoritative_reward_variation": false,
+    "optimizer_updates": 0,
+    "checkpoints": 0,
+    "capability_claim": false,
+    "all_owned_gpu_resources_released": true
+  },
+  "root_cause": {
+    "proven_control_path": "The old cleanup observer converted five consecutive ObserverError observation cycles into an exception, then its unconditional finally block deleted the exact live RayJob even though no terminal, broken, or stalled signal existed.",
+    "lower_level_read_failure": "The roughly 300-second failure window matches five observation cycles, each exhausting three 20-second kubectl attempts. The old evidence schema retained only ObserverError, so the exact kubectl subcommand cannot be recovered and is not asserted here.",
+    "model_or_training_failure": false
+  },
+  "repair": {
+    "guard": "Observation failures are recorded with a sanitized code and never authorize cleanup. Exact-target deletion now requires a positive terminal status, a positive resource-contract violation, or the plan-bound deadline.",
+    "regressions": [
+      "test_observer_read_failures_cannot_delete_an_active_gpu_run",
+      "test_direct_rayjob_observer_binds_children_receipt_and_releases"
+    ],
+    "focused_runbook": "docs/QWEN38_SKYRL_REWARD_CANARY_MAIN_PORT.md",
+    "status": "repair_in_review"
+  },
+  "sha256": "91cfba4921113a67bbdc1c81a3609bfc5e54523951e89f60b67b26f08b128810"
+}

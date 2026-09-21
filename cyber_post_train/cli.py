@@ -5,13 +5,14 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import subprocess
 import time
 from pathlib import Path
 from typing import Annotated
 
 import typer
 
-from .jobs import Jobs, JobsError, digest, validate_preview, validate_request
+from .jobs import Jobs, JobsError, digest, plan_api_target, validate_preview, validate_request
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
 PREPARATION_GATE_VERSION = 2
@@ -80,6 +81,10 @@ def _current_request(plan: dict) -> dict:
         from training.miles_training import job_request
     elif schema == "cyber_skyrl_training_v1":
         from training.skyrl_training import job_request
+    elif schema == "cyber_skyrl_production_training_v1":
+        from training.skyrl_production_training import job_request
+    elif schema == "cyber_skyrl_topology_probe_v1":
+        from training.skyrl_topology_probe import request as job_request
     elif schema == "cyber_qwen38_lr30_step76_gpu_reload_plan_v1":
         from training.qwen38_lr30_step76_gate import job_request
 
@@ -105,19 +110,48 @@ def _submission_gate(directory: Path, plan: dict, request: dict) -> None:
         )
 
 
+def _external_action_gate(plan: dict, action: str) -> None:
+    """Keep qualification-blocked profiles away from every external job endpoint."""
+    qualification = plan.get("qualification")
+    if not isinstance(qualification, dict):
+        return
+    gate = qualification.get("submission_gate")
+    field = {
+        "preview": "preview_authorized",
+        "submit": "submission_authorized",
+    }.get(action)
+    if field is None:
+        raise ValueError("unknown external action")
+    if not isinstance(gate, dict) or type(gate.get(field)) is not bool:
+        raise ValueError(f"{action} blocked by an incomplete qualification gate")
+    if gate[field] is True:
+        return
+    blockers = gate.get("blockers")
+    if (
+        not isinstance(blockers, list)
+        or not blockers
+        or any(not isinstance(item, str) or not item for item in blockers)
+    ):
+        raise ValueError(f"{action} blocked by an incomplete qualification gate")
+    raise ValueError(f"{action} blocked by qualification gate: {', '.join(blockers)}")
+
+
 def _require_preflight(directory: Path, plan: dict, request: dict) -> None:
     proof = _read(directory / "PREFLIGHT.json")
     schema = plan.get("schema")
+    schemas = {
+        "cyber_miles_conversion_v1": "cyber_miles_conversion_cpu_preflight_v1",
+        "cyber_miles_training_v1": "cyber_miles_training_cpu_preflight_v1",
+        "cyber_miles_training_v2": "cyber_miles_training_cpu_preflight_v1",
+        "cyber_skyrl_training_v1": "cyber_skyrl_training_cpu_preflight_v1",
+        "cyber_skyrl_production_training_v1": "cyber_skyrl_production_cpu_preflight_v1",
+        "cyber_skyrl_topology_probe_v1": "cyber_skyrl_topology_probe_cpu_preflight_v1",
+        "cyber_qwen38_lr30_step76_gpu_reload_plan_v1": (
+            "cyber_qwen38_lr30_step76_cpu_preflight_v1"
+        ),
+    }
     expected = {
-        "schema": "cyber_miles_conversion_cpu_preflight_v1"
-        if schema == "cyber_miles_conversion_v1"
-        else "cyber_miles_training_cpu_preflight_v1"
-        if schema == "cyber_miles_training_v1"
-        else "cyber_skyrl_training_cpu_preflight_v1"
-        if schema == "cyber_skyrl_training_v1"
-        else "cyber_qwen38_lr30_step76_cpu_preflight_v1"
-        if schema == "cyber_qwen38_lr30_step76_gpu_reload_plan_v1"
-        else "cyber_sft_cpu_preflight_v1",
+        "schema": schemas.get(schema, "cyber_sft_cpu_preflight_v1"),
         "status": "passed",
         "gpus": 0,
         "plan_sha256": digest(plan),
@@ -133,8 +167,27 @@ def _require_preflight(directory: Path, plan: dict, request: dict) -> None:
             raise ValueError("LR30 source/output preflight is stale or incomplete")
 
 
-def _client() -> Jobs:
-    return Jobs(os.environ.get("FLEET_API_KEY", ""))
+def _client(plan: dict | None = None) -> Jobs:
+    """Create the client for the Jobs API route sealed into ``plan``.
+
+    Moving a launch to a different cluster requires a newly prepared plan and
+    therefore new plan, request and preflight digests. There is intentionally
+    no environment or command-line override.
+    """
+    _, base_url = plan_api_target(plan)
+    return Jobs(os.environ.get("FLEET_API_KEY", ""), base_url=base_url)
+
+
+def _client_for_plan(plan: dict | None) -> Jobs:
+    """Use the legacy no-argument boundary unless a plan seals an explicit route."""
+    if plan is None:
+        return _client()
+    execution = plan.get("execution", {})
+    if isinstance(execution, dict) and (
+        "cluster_target" in execution or "jobs_api_base_url" in execution
+    ):
+        return _client(plan)
+    return _client()
 
 
 def _require_output_absent(request: dict, *, jobs_root: Path = SFS_JOBS_ROOT) -> None:
@@ -233,7 +286,7 @@ def rl_data(config: Path) -> None:
     """CPU-only Miles/SkyRL data from reviewed Fleet versions. GET only; no training."""
     import httpx
 
-    from training.rl_data import build
+    from training.rl_reward_canary import build
     from training.sft import read_mapping
 
     try:
@@ -307,12 +360,24 @@ def rl(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
         if value["backend"] == "miles":
             from training import miles_training as backend
         elif value["backend"] == "skyrl":
-            from training import skyrl_training as backend
+            qualification = Path(str(value.get("qualification", ""))).name
+            if qualification == "qwen38-skyrl-production-queue-v1.json":
+                from training import skyrl_production_training as backend
+            else:
+                from training import skyrl_training as backend
         else:
             raise ValueError("unsupported RL backend")
         plan = backend.compile_rl(value, relative_to=config.resolve().parent)
         request = backend.job_request(plan)
         _prepare(output, plan, request)
+        if plan.get("schema") == "cyber_skyrl_production_training_v1":
+            from training.skyrl_production import offline_preview, release_observer_contract
+
+            _write(
+                output / "RELEASE_OBSERVER_CONTRACT.json",
+                release_observer_contract(plan, request),
+            )
+            _write(output / "OFFLINE_PREVIEW.json", offline_preview(plan, request))
         _print(
             {
                 "prepared": str(output),
@@ -321,6 +386,503 @@ def rl(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
                 "submitted": False,
             }
         )
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-topology-probe")
+def rl_topology_probe(config: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
+    """Prepare the sealed zero-update one-node development setup probe."""
+    from training.skyrl_topology_probe import (
+        compile_probe,
+        fleetjob_manifest,
+        fleetjob_packet,
+        preflight_job_manifest,
+        preflight_job_packet,
+        receipt_verify_job_manifest,
+        receipt_verify_job_packet,
+        request,
+    )
+    from training.skyrl_topology_rayjob import manifest as direct_rayjob_manifest
+    from training.skyrl_topology_rayjob import packet as direct_rayjob_packet
+
+    try:
+        plan = compile_probe(config)
+        prepared_request = request(plan)
+        _prepare(output, plan, prepared_request)
+        manifest = fleetjob_manifest(plan)
+        _write(output / "fleetjob.json", manifest)
+        _write(output / "FLEETJOB_PREPARED.json", fleetjob_packet(plan))
+        _write(output / "preflight-job.json", preflight_job_manifest(plan))
+        _write(
+            output / "PREFLIGHT_JOB_PREPARED.json",
+            preflight_job_packet(plan),
+        )
+        _write(output / "receipt-verify-job.json", receipt_verify_job_manifest(plan))
+        _write(
+            output / "RECEIPT_VERIFY_JOB_PREPARED.json",
+            receipt_verify_job_packet(plan),
+        )
+        _write(output / "direct-rayjob.json", direct_rayjob_manifest(plan))
+        _write(output / "DIRECT_RAYJOB_PREPARED.json", direct_rayjob_packet(plan))
+        _print(
+            {
+                "prepared": str(output),
+                "cluster_target": "dev",
+                "submission_transport": "fleetjob",
+                "qualification_transport": "direct_rayjob",
+                "kubernetes_context": plan["execution"]["kubernetes_context"],
+                "gpus": 8,
+                "rollout_episodes": 0,
+                "optimizer_steps": 0,
+                "maximum_seconds": 1500,
+                "submission_authorized": False,
+                "submitted": False,
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-topology-probe-rayjob-preview")
+def rl_topology_probe_rayjob_preview(directory: Path) -> None:
+    """Server-dry-run the alert-safe direct RayJob; create nothing."""
+    from training.skyrl_topology_probe import SCHEMA
+    from training.skyrl_topology_rayjob import manifest, packet, validate_preview
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != SCHEMA:
+            raise ValueError("prepared directory is not a topology probe")
+        expected = _read(directory / "direct-rayjob.json")
+        prepared = _read(directory / "DIRECT_RAYJOB_PREPARED.json")
+        if expected != manifest(plan) or prepared != packet(plan):
+            raise ValueError("direct RayJob packet changed")
+        proof_path = directory / "DIRECT_RAYJOB_PREVIEW.json"
+        if proof_path.exists() or proof_path.is_symlink():
+            raise ValueError("direct RayJob preview already recorded")
+        execution = plan["execution"]
+        result = subprocess.run(
+            [
+                "kubectl",
+                "--context",
+                execution["kubernetes_context"],
+                "--namespace",
+                execution["namespace"],
+                "create",
+                "--dry-run=server",
+                "--filename",
+                str(directory / "direct-rayjob.json"),
+                "--output=json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode:
+            raise JobsError("direct RayJob server dry-run failed; nothing was created")
+        proof = validate_preview(plan, expected, json.loads(result.stdout))
+        _write(proof_path, proof)
+        _print(proof)
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-topology-probe-rayjob-authorize")
+def rl_topology_probe_rayjob_authorize(
+    directory: Path,
+    cpu_result: Annotated[Path, typer.Option("--cpu-result")],
+    observer_armed: Annotated[Path, typer.Option("--observer-armed")],
+) -> None:
+    """Bind exact released CPU evidence and a live direct-RayJob observer."""
+    from training.skyrl_topology_probe import SCHEMA
+    from training.skyrl_topology_rayjob import authorize
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != SCHEMA:
+            raise ValueError("prepared directory is not a topology probe")
+        value = authorize(
+            plan,
+            cpu_result=_read(cpu_result),
+            cpu_preview=_read(directory / "PREFLIGHT_JOB_PREVIEW.json"),
+            receipt_preview=_read(directory / "RECEIPT_VERIFY_JOB_PREVIEW.json"),
+            rayjob_preview=_read(directory / "DIRECT_RAYJOB_PREVIEW.json"),
+            observer=_read(observer_armed),
+        )
+        os.kill(value["observer"]["observer_pid"], 0)
+        _write(directory / "DIRECT_RAYJOB_LAUNCH_AUTHORIZED.json", value)
+        _print(
+            {
+                "status": value["status"],
+                "name": plan["run_name"],
+                "plan_sha256": value["plan_sha256"],
+                "manifest_sha256": value["manifest_sha256"],
+                "authorization_sha256": value["sha256"],
+                "observer_pid": value["observer"]["observer_pid"],
+                "submitted": False,
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-topology-probe-rayjob-create")
+def rl_topology_probe_rayjob_create(directory: Path) -> None:
+    """Create one authorized direct RayJob; never apply, patch, or retry."""
+    from training.skyrl_topology_probe import SCHEMA
+    from training.skyrl_topology_rayjob import create_once, manifest, packet, write_once_fsynced
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != SCHEMA:
+            raise ValueError("prepared directory is not a topology probe")
+        expected = _read(directory / "direct-rayjob.json")
+        if expected != manifest(plan) or _read(directory / "DIRECT_RAYJOB_PREPARED.json") != packet(
+            plan
+        ):
+            raise ValueError("direct RayJob packet changed")
+        token = os.environ.get("FLEET_API_KEY", "")
+        if not token:
+            raise JobsError("FLEET_API_KEY is required for duplicate history checks")
+        result = create_once(
+            directory,
+            plan,
+            expected,
+            _read(directory / "DIRECT_RAYJOB_PREVIEW.json"),
+            _read(directory / "DIRECT_RAYJOB_LAUNCH_AUTHORIZED.json"),
+            token=token,
+        )
+        write_once_fsynced(directory / "DIRECT_RAYJOB_CREATED.json", result)
+        _print(result)
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-topology-probe-preflight-preview")
+def rl_topology_probe_preflight_preview(directory: Path) -> None:
+    """Server-dry-run the exact zero-GPU dev preflight; create nothing."""
+    from training.skyrl_topology_probe import (
+        SCHEMA,
+        preflight_job_manifest,
+        preflight_job_packet,
+        validate_preflight_job_preview,
+    )
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != SCHEMA:
+            raise ValueError("prepared directory is not a topology probe")
+        gate = plan.get("qualification", {}).get("submission_gate", {})
+        if gate.get("cpu_preflight_authorized") is not True:
+            raise ValueError("topology probe CPU preflight is not authorized")
+        path = directory / "preflight-job.json"
+        manifest = _read(path)
+        packet = _read(directory / "PREFLIGHT_JOB_PREPARED.json")
+        if manifest != preflight_job_manifest(plan) or packet != preflight_job_packet(plan):
+            raise ValueError("topology probe preflight packet changed")
+        proof_path = directory / "PREFLIGHT_JOB_PREVIEW.json"
+        if proof_path.exists():
+            raise ValueError("topology probe preflight preview already recorded")
+        execution = plan["execution"]
+        result = subprocess.run(
+            [
+                "kubectl",
+                "--context",
+                execution["kubernetes_context"],
+                "--namespace",
+                execution["namespace"],
+                "create",
+                "--dry-run=server",
+                "--filename",
+                str(path),
+                "--output",
+                "json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode:
+            raise JobsError("CPU preflight server dry-run failed; nothing was created")
+        proof = validate_preflight_job_preview(plan, manifest, json.loads(result.stdout))
+        _write(proof_path, proof)
+        _print(proof)
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-topology-probe-receipt-preview")
+def rl_topology_probe_receipt_preview(directory: Path) -> None:
+    """Server-dry-run the exact zero-GPU durable-receipt verifier."""
+    from training.skyrl_topology_probe import (
+        SCHEMA,
+        receipt_verify_job_manifest,
+        receipt_verify_job_packet,
+        validate_receipt_verify_job_preview,
+    )
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != SCHEMA:
+            raise ValueError("prepared directory is not a topology probe")
+        gate = plan.get("qualification", {}).get("submission_gate", {})
+        if gate.get("fleetjob_preview_authorized") is not True:
+            raise ValueError("topology probe receipt preview is not authorized")
+        path = directory / "receipt-verify-job.json"
+        manifest = _read(path)
+        packet = _read(directory / "RECEIPT_VERIFY_JOB_PREPARED.json")
+        if manifest != receipt_verify_job_manifest(plan) or packet != receipt_verify_job_packet(
+            plan
+        ):
+            raise ValueError("topology probe receipt-verifier packet changed")
+        proof_path = directory / "RECEIPT_VERIFY_JOB_PREVIEW.json"
+        if proof_path.exists():
+            raise ValueError("topology probe receipt preview already recorded")
+        execution = plan["execution"]
+        result = subprocess.run(
+            [
+                "kubectl",
+                "--context",
+                execution["kubernetes_context"],
+                "--namespace",
+                execution["namespace"],
+                "create",
+                "--dry-run=server",
+                "--filename",
+                str(path),
+                "--output",
+                "json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode:
+            raise JobsError("receipt verifier server dry-run failed; nothing was created")
+        proof = validate_receipt_verify_job_preview(plan, manifest, json.loads(result.stdout))
+        _write(proof_path, proof)
+        _print(proof)
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-topology-probe-preview")
+def rl_topology_probe_preview(directory: Path) -> None:
+    """Server-dry-run the exact dev FleetJob; no workload is created."""
+    from training.skyrl_topology_probe import (
+        SCHEMA,
+        fleetjob_manifest,
+        fleetjob_packet,
+        validate_fleetjob_preview,
+    )
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != SCHEMA:
+            raise ValueError("prepared directory is not a topology probe")
+        gate = plan.get("qualification", {}).get("submission_gate", {})
+        if gate.get("fleetjob_preview_authorized") is not True:
+            raise ValueError("FleetJob server dry-run is not authorized")
+        manifest = _read(directory / "fleetjob.json")
+        packet = _read(directory / "FLEETJOB_PREPARED.json")
+        if manifest != fleetjob_manifest(plan) or packet != fleetjob_packet(plan):
+            raise ValueError("topology probe FleetJob packet changed")
+        if (directory / "FLEETJOB_PREVIEW.json").exists():
+            raise ValueError("FleetJob preview already recorded")
+        execution = plan["execution"]
+        result = subprocess.run(
+            [
+                "kubectl",
+                "--context",
+                execution["kubernetes_context"],
+                "--namespace",
+                execution["namespace"],
+                "create",
+                "--dry-run=server",
+                "--filename",
+                str(directory / "fleetjob.json"),
+                "--output",
+                "json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode:
+            raise JobsError("FleetJob server dry-run failed; no workload was created")
+        rendered = json.loads(result.stdout)
+        proof = validate_fleetjob_preview(plan, manifest, rendered)
+        _write(directory / "FLEETJOB_PREVIEW.json", proof)
+        _print(proof)
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-topology-probe-authorize")
+def rl_topology_probe_authorize(
+    directory: Path,
+    cpu_result: Annotated[Path, typer.Option("--cpu-result")],
+    observer_armed: Annotated[Path, typer.Option("--observer-armed")],
+) -> None:
+    """Bind a passed CPU gate and a live cleanup observer to one GPU create."""
+    from training.skyrl_topology_probe import SCHEMA
+    from training.skyrl_topology_probe_launch import authorize
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != SCHEMA:
+            raise ValueError("prepared directory is not a topology probe")
+        value = authorize(
+            plan,
+            cpu_result=_read(cpu_result),
+            cpu_preview=_read(directory / "PREFLIGHT_JOB_PREVIEW.json"),
+            receipt_verify_preview=_read(directory / "RECEIPT_VERIFY_JOB_PREVIEW.json"),
+            fleetjob_preview=_read(directory / "FLEETJOB_PREVIEW.json"),
+            fleetjob_observer=_read(observer_armed),
+        )
+        pid = value["fleetjob_observer"]["observer_pid"]
+        os.kill(pid, 0)
+        _write(directory / "LAUNCH_AUTHORIZED.json", value)
+        _print(
+            {
+                "status": value["status"],
+                "name": plan["run_name"],
+                "plan_sha256": value["plan_sha256"],
+                "manifest_sha256": value["fleetjob_manifest_sha256"],
+                "authorization_sha256": value["sha256"],
+                "observer_pid": pid,
+                "submitted": False,
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-topology-probe-create")
+def rl_topology_probe_create(directory: Path) -> None:
+    """Create the one evidence-authorized development FleetJob."""
+    from uuid import UUID
+
+    from training.skyrl_topology_probe import (
+        SCHEMA,
+        fleetjob_manifest,
+        fleetjob_packet,
+        validate_fleetjob_preview,
+    )
+    from training.skyrl_topology_probe_launch import _seal, validate
+
+    try:
+        plan, _ = _prepared(directory)
+        if plan.get("schema") != SCHEMA:
+            raise ValueError("prepared directory is not a topology probe")
+        manifest = _read(directory / "fleetjob.json")
+        packet = _read(directory / "FLEETJOB_PREPARED.json")
+        if manifest != fleetjob_manifest(plan) or packet != fleetjob_packet(plan):
+            raise ValueError("topology probe FleetJob packet changed")
+        authorization = _read(directory / "LAUNCH_AUTHORIZED.json")
+        validate(plan, authorization)
+        observer_pid = authorization["fleetjob_observer"]["observer_pid"]
+        os.kill(observer_pid, 0)
+        if (directory / "FLEETJOB_CREATED.json").exists():
+            raise ValueError("topology probe creation is already recorded")
+
+        execution = plan["execution"]
+        contexts = (
+            execution["kubernetes_context"],
+            "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+        )
+        for context in contexts:
+            lookup = subprocess.run(
+                [
+                    "kubectl",
+                    "--context",
+                    context,
+                    "--namespace",
+                    execution["namespace"],
+                    "get",
+                    "fleetjob",
+                    plan["run_name"],
+                    "--ignore-not-found",
+                    "--output=name",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=45,
+            )
+            if lookup.returncode:
+                raise JobsError("topology probe duplicate check failed")
+            if lookup.stdout.strip():
+                raise JobsError("topology probe name already exists")
+
+        preview = subprocess.run(
+            [
+                "kubectl",
+                "--context",
+                execution["kubernetes_context"],
+                "--namespace",
+                execution["namespace"],
+                "create",
+                "--dry-run=server",
+                "--filename",
+                str(directory / "fleetjob.json"),
+                "--output=json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if preview.returncode:
+            raise JobsError("topology probe final server preview failed")
+        validate_fleetjob_preview(plan, manifest, json.loads(preview.stdout))
+
+        result = subprocess.run(
+            [
+                "kubectl",
+                "--context",
+                execution["kubernetes_context"],
+                "--namespace",
+                execution["namespace"],
+                "create",
+                "--filename",
+                str(directory / "fleetjob.json"),
+                "--output=json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode:
+            raise JobsError("topology probe create failed")
+        resource = json.loads(result.stdout)
+        metadata = resource.get("metadata", {})
+        uid = metadata.get("uid")
+        created_at = metadata.get("creationTimestamp")
+        UUID(uid)
+        if (
+            resource.get("apiVersion") != manifest["apiVersion"]
+            or resource.get("kind") != manifest["kind"]
+            or metadata.get("name") != plan["run_name"]
+            or metadata.get("namespace") != execution["namespace"]
+            or resource.get("spec") != manifest["spec"]
+            or not isinstance(created_at, str)
+            or not created_at
+        ):
+            raise JobsError("created topology probe differs from its authorization")
+        receipt = _seal(
+            {
+                "schema": "cyber_skyrl_topology_probe_created_v1",
+                "status": "created",
+                "name": plan["run_name"],
+                "uid": uid,
+                "created_at": created_at,
+                "plan_sha256": authorization["plan_sha256"],
+                "manifest_sha256": authorization["fleetjob_manifest_sha256"],
+                "authorization_sha256": authorization["sha256"],
+            }
+        )
+        _write(directory / "FLEETJOB_CREATED.json", receipt)
+        _print(receipt)
     except Exception as exc:
         _fail(exc)
 
@@ -338,6 +900,10 @@ def preflight(directory: Path) -> None:
             from training.miles_training import preflight as check
         elif plan.get("schema") == "cyber_skyrl_training_v1":
             from training.skyrl_training import preflight as check
+        elif plan.get("schema") == "cyber_skyrl_production_training_v1":
+            from training.skyrl_production_training import preflight as check
+        elif plan.get("schema") == "cyber_skyrl_topology_probe_v1":
+            from training.skyrl_topology_probe import preflight as check
         elif plan.get("schema") == "cyber_qwen38_lr30_step76_gpu_reload_plan_v1":
             from training.qwen38_lr30_step76_gate import preflight as check
         else:
@@ -359,10 +925,27 @@ def preflight(directory: Path) -> None:
 def preview(directory: Path) -> None:
     """Read the Jobs API's exact resource/queue render; does not create a run."""
     try:
-        _, request = _prepared(directory)
-        with _client() as client:
+        plan, request = _prepared(directory)
+        _external_action_gate(plan, "preview")
+        with _client_for_plan(plan) as client:
             result = client.preview(request)
-        _print({"submitted": False, **validate_preview(request, result)})
+        if plan.get("schema") == "cyber_skyrl_training_v1":
+            from training.skyrl_training import validate_preview as validate_skyrl_preview
+
+            validated = validate_skyrl_preview(plan, request, result)
+        elif plan.get("schema") == "cyber_skyrl_production_training_v1":
+            from training.skyrl_production_training import (
+                validate_preview as validate_skyrl_preview,
+            )
+
+            validated = validate_skyrl_preview(plan, request, result)
+        elif plan.get("schema") == "cyber_skyrl_topology_probe_v1":
+            from training.skyrl_topology_probe import validate_preview as validate_probe_preview
+
+            validated = validate_probe_preview(plan, request, result)
+        else:
+            validated = validate_preview(request, result)
+        _print({"submitted": False, **validated})
     except Exception as exc:
         _fail(exc)
 
@@ -377,12 +960,25 @@ def submit(directory: Path) -> None:
     try:
         plan, request = _prepared(directory)
         _submission_gate(directory, plan, request)
+        _external_action_gate(plan, "submit")
         _require_preflight(directory, plan, request)
         # Repeat the SFS check immediately before the API census/preview/POST.
         # A preflight receipt is immutable evidence, not a filesystem lock.
         _require_output_absent(request)
-        with _client() as client:
-            result = client.submit_once(request, directory / "SUBMISSION.jsonl")
+        with _client_for_plan(plan) as client:
+            if plan.get("schema") == "cyber_skyrl_production_training_v1":
+                from training.skyrl_launch_guard import submit_once
+
+                result = submit_once(plan, request, client, directory)
+            elif (
+                plan.get("schema") == "cyber_skyrl_training_v1"
+                and plan.get("qualification", {}).get("profile") == "qwen38_skyrl_reward_canary_v4"
+            ):
+                from training.skyrl_launch_guard import submit_canary_once
+
+                result = submit_canary_once(plan, request, client, directory)
+            else:
+                result = client.submit_once(request, directory / "SUBMISSION.jsonl")
         _print(result)
     except Exception as exc:
         _fail(exc)
@@ -516,10 +1112,18 @@ def miles_seal(directory: Path, output: Annotated[Path, typer.Option("--output")
 
 
 @app.command()
-def status(name: str) -> None:
-    """Read sanitized Jobs API state. Does not return private trainer logs."""
+def status(
+    name: str,
+    prepared: Annotated[Path | None, typer.Option("--prepared")] = None,
+) -> None:
+    """Read sanitized state; a development run requires its prepared plan."""
     try:
-        with _client() as client:
+        plan = None
+        if prepared is not None:
+            plan, _ = _prepared(prepared)
+            if plan.get("run_name") != name:
+                raise ValueError("status name differs from the prepared plan")
+        with _client_for_plan(plan) as client:
             _print(client.status(name))
     except Exception as exc:
         _fail(exc)
@@ -584,6 +1188,29 @@ def checkpoint_seal(
         _fail(exc)
 
 
+@app.command("rl-checkpoint-seal")
+def rl_checkpoint_seal(directory: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
+    """CPU-only: accept and seal one terminal native SkyRL RL checkpoint."""
+    from training.skyrl_posttrain import seal_checkpoint
+
+    try:
+        plan, _ = _prepared(directory)
+        result = seal_checkpoint(plan, output)
+        _print(
+            {
+                k: result[k]
+                for k in (
+                    "optimizer_step",
+                    "total_bytes",
+                    "receipt_sha256",
+                    "optimizer_update_verified",
+                )
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command()
 def doctor() -> None:
     """Check installed modules only; NOT model, cluster or scientific readiness."""
@@ -614,6 +1241,33 @@ def checkpoint_export(
 
     try:
         result = export(manifest, sha256, output)
+        _print(
+            {
+                k: result[k]
+                for k in (
+                    "output_root",
+                    "optimizer_step",
+                    "tensor_bytes",
+                    "receipt_sha256",
+                    "gpu_reload_verified",
+                )
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("rl-checkpoint-export")
+def rl_checkpoint_export(
+    manifest: Path,
+    sha256: Annotated[str, typer.Option("--sha256")],
+    output: Annotated[Path, typer.Option("--output")],
+) -> None:
+    """CPU-only: zero-update BF16 export from a sealed native SkyRL RL checkpoint."""
+    from training.skyrl_posttrain import export_checkpoint
+
+    try:
+        result = export_checkpoint(manifest, sha256, output)
         _print(
             {
                 k: result[k]
