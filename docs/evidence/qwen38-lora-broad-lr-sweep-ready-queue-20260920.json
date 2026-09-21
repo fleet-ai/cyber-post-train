@@ -5,8 +5,8 @@
   "scientific_control": {
     "anchor_config_path": "configs/runs/qwen38-27b-lora-sft-r64-a32-anchor-v1.json",
     "anchor_config_file_sha256": "sha256:afb5e10f6a703ef033ceb4031785b5353773c2777e3d5fc1109bb4fbabfd83af",
-    "anchor_plan_sha256": "sha256:2b0d45143e44b64641feb5ebabf65c4a53026aabbf2ac3ad503999f6c53dcb62",
-    "anchor_request_sha256": "sha256:1c1ed7f9f053804c0e68b3cd713e69ae810af10664d06d2e2d94a751250abec7",
+    "anchor_plan_sha256": "sha256:6f86b54d4fc21a6648174e8fe87783b93eedbd4472a7794d0b4b5d32fa7d75c2",
+    "anchor_request_sha256": "sha256:56f3b609f95b2b3dd5e3b947f4e5f17d51943e644a044017c2f949b3bf20043e",
     "learning_rate": 0.00003,
     "adapter": {
       "type": "lora",
@@ -58,9 +58,9 @@
       "output_root": "/mnt/sfs/jobs/chris-q38-lora-lr1-v1",
       "learning_rate": 0.00001,
       "max_steps": 1837,
-      "plan_sha256": "sha256:a9b6929a35b900f34a8e4036fe6604662cd73555188d7118863f9fc8ab778be6",
-      "request_sha256": "sha256:68f90f80713c218d0e2482e570324e23cad9b2a656c9f7b65cda74adfe49e47d",
-      "request_bytes": 121920,
+      "plan_sha256": "sha256:810a511cd1900af655c9f46b6306f67b14a6351b47303204aef903a0d91c2e55",
+      "request_sha256": "sha256:ca0333d2e617da4bd14eef60d3e41ce2a986d0245f163bb22e12c9c8977dc066",
+      "request_bytes": 122649,
       "priority_class": "c1",
       "workers": 1,
       "gpus_per_worker": 8,
@@ -77,9 +77,9 @@
       "output_root": "/mnt/sfs/jobs/chris-q38-lora-lr100-v1",
       "learning_rate": 0.0001,
       "max_steps": 1837,
-      "plan_sha256": "sha256:930eefad1a499464f74bbe75039449ab8e0e93e9b4fd309ea84fbe195f402c45",
-      "request_sha256": "sha256:e2a9c0560c2ce01dd0aa8d304d07207dde9d18414b54755fb47d5736a1f897ca",
-      "request_bytes": 121944,
+      "plan_sha256": "sha256:bb63ebbbe9371a46c317cbb1b85ab8d0c2b7c83a4879ef87c297ff5cebab0a97",
+      "request_sha256": "sha256:16de76fb6de1c2e125297a561f89d89905cf385dbaa16624b31938477ea4e623",
+      "request_bytes": 122669,
       "priority_class": "c1",
       "workers": 1,
       "gpus_per_worker": 8,
@@ -105,5 +105,5 @@
   ],
   "submission_blocker": null,
   "failure_budget_policy": "removed_by_user_2026-09-20; failures remain evidence and trigger cleanup/repair, not a submission stop",
-  "receipt_sha256": "219103b4b432cf1470320c3522a960f354dea32ea600ebb6701efc30a89d39d2"
+  "receipt_sha256": "74babe2d5d09915b508f18a047198c24fb12e7198c4b3838baf2a9b29a92d1d9"
 }
