@@ -161,6 +161,15 @@ def test_teacher3k_64k_manifest_preserves_the_exact_32k_target_set():
             None,
         ),
         (
+            "qwen38-teacher3k-32k-full-b8-lr6e6-v1.json",
+            "chris-q38-t3k32-lr6-v1",
+            1_837,
+            6e-6,
+            8,
+            450,
+            None,
+        ),
+        (
             "qwen38-teacher3k-32k-full-b16-lr3e6-v1.json",
             "chris-q38-t3k32-b16-v1",
             919,
@@ -485,3 +494,31 @@ def test_teacher3k_fullweight_launch_receipt_is_bound_and_nonterminal():
         run["live_evidence"]["optimizer_step_at_observation"] >= 1 for run in receipt["runs"]
     )
     assert all(run["live_evidence"]["restarts"] == 0 for run in receipt["runs"])
+
+
+def test_lr6_upper_bracket_is_prepared_but_not_submitted():
+    evidence = json.loads(
+        (EVIDENCE / "qwen38-teacher3k-32k-lr6-upper-bracket-prepared-20260920.json").read_text()
+    )
+    claimed = evidence.pop("sha256")
+    observed = hashlib.sha256(
+        json.dumps(evidence, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+    ).hexdigest()
+
+    assert claimed == "sha256:" + observed
+    assert evidence["only_scientific_change_from_reference"] == "learning_rate_3e-6_to_6e-6"
+    assert evidence["candidate"]["recipe"] == {
+        **evidence["candidate"]["recipe"],
+        "learning_rate": 6e-6,
+        "global_batch": 8,
+        "max_sequence_tokens": 32_768,
+        "epochs": 1,
+        "max_steps": 1_837,
+    }
+    assert evidence["cpu_preflight"]["status"] == "passed"
+    assert evidence["cpu_preflight"]["gpus"] == 0
+    assert evidence["cpu_preflight"]["restarts"] == 0
+    assert evidence["cpu_preflight"]["pod_uid_absent"] is True
+    assert evidence["live_preview"]["root_failure_alert_annotation"] is None
+    assert evidence["launch_gate"]["submitted"] is False
+    assert evidence["launch_gate"]["resources_created"] == 0

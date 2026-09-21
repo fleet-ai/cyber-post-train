@@ -1,0 +1,128 @@
+{
+  "schema": "cyber_qwen38_teacher3k_32k_lr6_upper_bracket_prepared_v1",
+  "recorded_at_utc": "2026-09-21T00:25:43Z",
+  "status": "prepared_and_cpu_preflight_passed_not_submitted",
+  "scientific_disposition": "intentional_upper_learning_rate_bracket_no_capability_claim",
+  "motivation": "Test whether doubling the primary reference learning rate from 3e-6 to 6e-6 produces faster useful adaptation without unstable loss or gradients. Model, corpus, seed, global batch, topology, context length, and one-epoch exposure remain identical, so this is one interpretable upper learning-rate bracket rather than an unrelated extra run.",
+  "only_scientific_change_from_reference": "learning_rate_3e-6_to_6e-6",
+  "reference_arm": {
+    "config": "configs/runs/qwen38-teacher3k-32k-full-b8-lr3e6-v1.json",
+    "run_name": "chris-q38-t3k32-b8-v1",
+    "live_finite_update_gate_passed": true
+  },
+  "candidate": {
+    "config": "configs/runs/qwen38-teacher3k-32k-full-b8-lr6e6-v1.json",
+    "config_file_sha256": "sha256:81edf6c62ed1842295ee38444b88bb85945973b804a507668d496e43936d2830",
+    "run_name": "chris-q38-t3k32-lr6-v1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-t3k32-lr6-v1",
+    "wandb_run_id": "chris-q38-t3k32-lr6-v1",
+    "recipe": {
+      "method": "full_weight_sft",
+      "learning_rate": 0.000006,
+      "global_batch": 8,
+      "microbatch_per_gpu": 1,
+      "gradient_accumulation_steps": 1,
+      "nodes": 1,
+      "gpus_per_node": 8,
+      "max_sequence_tokens": 32768,
+      "epochs": 1,
+      "max_steps": 1837,
+      "checkpoint_interval": 450,
+      "keep_checkpoints": 5,
+      "seed": 20260920
+    }
+  },
+  "common_binding": {
+    "model_repo": "Qwen/Qwen3.8-27B",
+    "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "corpus_manifest_sha256": "sha256:a8d08609991d7960cdcdab826bd07c3216bfcd3aa8f6fb33ab7a5fd29648d6f5",
+    "split_manifest_sha256": "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
+    "train_parquet_sha256": "sha256:bf245db073fcd5a39ff6f90f6fc322710a3694408845bc27bfb6d9eaa6c41e0c",
+    "rows": 14693,
+    "successful_source_sessions": 2886,
+    "task_keys": 496,
+    "unique_supervised_tokens": 57384881,
+    "validation": "task_outcomes_only_no_teacher_token_cross_entropy"
+  },
+  "prepared": {
+    "plan_file_sha256": "sha256:42ee30133068b40f8ad15c537af8e68436843ebc891ff1eb026f8c9ebd84880f",
+    "plan_sha256": "sha256:a43ba6e76f776a5b0ac418fca7650130040dd95cc29b071d5394fefc66169743",
+    "request_file_sha256": "sha256:6e0488569a84fbeafe416475e526b308f413965c1af9d014274ec8b61d001aed",
+    "request_sha256": "sha256:879d16a1e4c7923fcb8cdb05d03fde34db758d20e4902abcf021ba0acd58b142",
+    "prepared_file_sha256": "sha256:dc83277e312587404a4c8db61c1a7f1c9e86a4dad42d6c5c18fabe5e8b4602a2",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "priority_class": "c1",
+    "queue_priority_class": "q1",
+    "failure_alert_request": false,
+    "requeue_if_preempted": false
+  },
+  "cpu_preflight": {
+    "pod_name": "chris-q38-t3k32-lr6-preflight-v1",
+    "pod_uid": "ec063ef0-83d6-4cdb-88d8-24b7e3109075",
+    "started_at": "2026-09-21T00:20:17Z",
+    "finished_at": "2026-09-21T00:25:43Z",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "status": "passed",
+    "receipt_schema": "cyber_sft_cpu_preflight_v1",
+    "receipt_sha256": "sha256:edf55432f1051a12f3302800720c15c7839b7db5abb57d348f8bcc7de8291943",
+    "receipt_file_sha256": "sha256:510a2fb4c7d51d26271dbd4c74e13dbd29b25fa32c642483958f645bc2817ed7",
+    "checked": [
+      "native_sources",
+      "model_files",
+      "dataset_files",
+      "native_config",
+      "native_train_only_loader",
+      "tokenization",
+      "target_accounting"
+    ],
+    "receipt_reconstruction_note": "The create-once preflight file was written before the CLI emitted the same public receipt fields. The completed Pod cannot be exec-copied, so the exact compact file bytes and embedded digest were deterministically reconstructed from that sanitized terminal output and the committed CLI serializer.",
+    "pod_deleted": true,
+    "pod_uid_absent": true
+  },
+  "live_preview": {
+    "errors": null,
+    "warnings": [],
+    "manifest_sha256": "sha256:f469de7cb0f0ca9c952add3efdfb42f4a902e062a47b7adbb8345255512d08f1",
+    "suspended_for_queue": true,
+    "queue_priority_class": "q1",
+    "root_failure_alert_annotation": null,
+    "normal_jobs_api_submission_qualified": false,
+    "note": "The maintained direct-SFT renderer is the only permitted fallback if a later launch is authorized; it must consume a fresh preview, add only the required root alert-off annotation and identity transformation, pass Kubernetes server dry-run, and repeat duplicate and output-absence gates immediately before one create."
+  },
+  "duplicate_and_output_gates": {
+    "jobs_api_history_rows": 934,
+    "jobs_api_matches": 0,
+    "kubernetes_rayjob_matches": 0,
+    "output_root_absent_during_preflight": true
+  },
+  "launch_gate": {
+    "submitted": false,
+    "resources_created": 0,
+    "gpus_allocated": 0,
+    "capacity_state": "coordinator_reserved_the_remaining_project_node_slot",
+    "required_before_launch": [
+      "all live comparison arms still show finite loss and gradients with no divergence signal",
+      "project-owned active GPU nodes remain at or below eight after this one-node allocation",
+      "fresh Jobs API and Kubernetes duplicate census is empty",
+      "output root is absent",
+      "fresh preview plus maintained direct-SFT renderer proves top-level fleet.ai/failure-alerts=off in Kubernetes server dry-run",
+      "exact W&B run identity remains unused"
+    ]
+  },
+  "next_gates_if_launched": [
+    "finite first optimizer step with finite loss and gradient norm",
+    "no restarts or idle-GPU defect",
+    "accepted native checkpoint at step 450",
+    "terminal checkpoint/export/reload acceptance",
+    "matched frozen Fleet holdout and OpenCode WebExploitBench evaluation without using external outcomes for checkpoint selection"
+  ],
+  "sanitization": {
+    "private_logs_included": false,
+    "prompts_traces_flags_answers_or_scores_included": false,
+    "credentials_included": false,
+    "model_tensors_included": false
+  },
+  "sha256": "sha256:ad37457a55eda1f1e3cc461a07775db6e33a446449d8c49911a8c0d1d254e34d"
+}
