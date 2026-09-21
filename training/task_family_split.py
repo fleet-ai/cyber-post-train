@@ -13,6 +13,7 @@ import argparse
 import hashlib
 import json
 import math
+import os
 from collections import Counter
 from pathlib import Path
 from typing import Any
@@ -106,6 +107,10 @@ def _group_rows(rows: list[dict[str, Any]], dimensions: tuple[str, ...]) -> list
     if not rows:
         raise ValueError("reviewed inventory must not be empty")
     seen: set[tuple[str, str]] = set()
+    # A task key denotes one logical task across exact versions.  Letting it
+    # silently change application or family would make the held-out boundary
+    # ambiguous, so reject that inventory rather than guessing a grouping.
+    task_key_lineages: dict[str, tuple[str, str]] = {}
     grouped: dict[str, dict[str, Any]] = {}
     for raw in rows:
         if not isinstance(raw, dict):
@@ -114,9 +119,18 @@ def _group_rows(rows: list[dict[str, Any]], dimensions: tuple[str, ...]) -> list
         if identity in seen:
             raise ValueError("reviewed inventory duplicates a task/version identity")
         seen.add(identity)
-        lineage = raw["lineage"]
+        lineage = raw.get("lineage")
+        if not isinstance(lineage, dict):
+            raise ValueError("reviewed lineage metadata is required")
         application = _string(lineage.get("application"), "application")
         task_family = _string(lineage.get("task_family"), "task_family")
+        task_key_lineage = (application, task_family)
+        prior_lineage = task_key_lineages.setdefault(identity[0], task_key_lineage)
+        if prior_lineage != task_key_lineage:
+            raise ValueError(
+                "one task_key has inconsistent reviewed application/task_family "
+                "lineage across versions"
+            )
         group_id = _group_id(application, task_family)
         features = _metadata(raw, dimensions)
         group = grouped.setdefault(
@@ -438,6 +452,24 @@ def _concentration(
     }
 
 
+def _require_split_concentration(
+    concentration: dict[str, Any], *, max_group_task_version_fraction: float
+) -> None:
+    """Reject any partition dominated by one reviewed task family.
+
+    A global ratio can look safe while a smaller development or final-test
+    partition is mostly one family.  The declared limit therefore applies to
+    every split independently, which is the only ratio a later evaluator will
+    actually observe.
+    """
+    for split, value in concentration["per_split"].items():
+        if value["largest_family_task_version_fraction"] > max_group_task_version_fraction:
+            raise ValueError(
+                "one reviewed task family exceeds the explicit per-split concentration "
+                f"limit in {split}"
+            )
+
+
 def build(
     rows: list[dict[str, Any]],
     *,
@@ -446,7 +478,6 @@ def build(
     ratios: dict[str, float],
     dimensions: tuple[str, ...] = DEFAULT_DIMENSIONS,
     max_group_task_version_fraction: float,
-    require_representable_labels: bool = True,
 ) -> dict[str, Any]:
     """Return a sealed split from reviewed metadata, or fail before a launch.
 
@@ -467,26 +498,24 @@ def build(
         or not 0 < max_group_task_version_fraction <= 1
     ):
         raise ValueError("an explicit 0 < maximum family fraction <= 1 is required")
-    if type(require_representable_labels) is not bool:
-        raise ValueError("representable-strata policy must be explicit")
     ratios = _normalise_ratios(ratios)
     groups = _group_rows(rows, dimensions)
     targets = _target_group_counts(len(groups), ratios)
     assignment = _assign(groups, seed=seed, targets=targets, dimensions=dimensions)
-    if require_representable_labels:
-        assignment = _repair_representable_labels(
-            groups,
-            assignment,
-            seed=seed,
-            targets=targets,
-            dimensions=dimensions,
-        )
+    assignment = _repair_representable_labels(
+        groups,
+        assignment,
+        seed=seed,
+        targets=targets,
+        dimensions=dimensions,
+    )
     representation = _representation(groups, assignment, targets=targets, dimensions=dimensions)
-    if require_representable_labels:
-        _require_representable_labels(representation, splits=tuple(ratios))
+    _require_representable_labels(representation, splits=tuple(ratios))
     concentration = _concentration(groups, assignment, targets)
-    if concentration["largest_family_task_version_fraction"] > max_group_task_version_fraction:
-        raise ValueError("one reviewed task family exceeds the explicit concentration limit")
+    _require_split_concentration(
+        concentration,
+        max_group_task_version_fraction=max_group_task_version_fraction,
+    )
     tasks = []
     for group in groups:
         split = assignment[group["group_id"]]
@@ -503,7 +532,7 @@ def build(
             "target_group_counts": targets,
             "balanced_dimensions": list(dimensions),
             "algorithm": "deterministic rarity-first grouped assignment",
-            "require_representable_labels": require_representable_labels,
+            "require_representable_labels": True,
             "max_group_task_version_fraction": max_group_task_version_fraction,
         },
         "tasks": sorted(tasks, key=lambda row: (row["task_key"], row["task_version_id"])),
@@ -537,6 +566,8 @@ def validate(value: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any
     policy = value.get("policy")
     if not isinstance(policy, dict):
         raise ValueError("split policy is missing")
+    if policy.get("require_representable_labels") is not True:
+        raise ValueError("representable-strata coverage is mandatory")
     rebuilt = build(
         rows,
         inventory_sha256=value.get("inventory_sha256"),
@@ -544,7 +575,6 @@ def validate(value: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any
         ratios=policy.get("ratios"),
         dimensions=tuple(policy.get("balanced_dimensions") or ()),
         max_group_task_version_fraction=policy.get("max_group_task_version_fraction"),
-        require_representable_labels=policy.get("require_representable_labels"),
     )
     if rebuilt != value:
         raise ValueError("parameterized task-family split drift")
@@ -564,6 +594,20 @@ def _read_inventory(path: Path) -> tuple[list[dict[str, Any]], str]:
     return rows, value["sha256"]
 
 
+def write_once(path: Path, value: dict[str, Any]) -> None:
+    """Write the sealed public split exactly once; never replace prior evidence."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    encoded = json.dumps(value, indent=2, sort_keys=True) + "\n"
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError as error:
+        raise FileExistsError("create-once split output already exists") from error
+    with os.fdopen(fd, "w", encoding="utf-8") as stream:
+        stream.write(encoded)
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--inventory", type=Path, required=True)
@@ -575,7 +619,6 @@ def main() -> None:
         help='e.g. {"train":0.8,"dev":0.1,"test":0.1}',
     )
     parser.add_argument("--max-group-task-version-fraction", type=float, required=True)
-    parser.add_argument("--allow-unrepresented-strata", action="store_true")
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     rows, inventory_sha256 = _read_inventory(args.inventory)
@@ -591,10 +634,8 @@ def main() -> None:
         seed=args.seed,
         ratios=ratios,
         max_group_task_version_fraction=args.max_group_task_version_fraction,
-        require_representable_labels=not args.allow_unrepresented_strata,
     )
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+    write_once(args.output, value)
 
 
 if __name__ == "__main__":
