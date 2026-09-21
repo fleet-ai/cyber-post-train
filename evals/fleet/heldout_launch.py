@@ -88,7 +88,14 @@ class HeldoutLaunchError(ValueError):
 class Cluster(Protocol):
     """The only Kubernetes operations this narrow mechanism needs."""
 
-    def list(self, resource: str, namespace: str) -> dict[str, Any]: ...
+    def list(
+        self,
+        resource: str,
+        namespace: str,
+        *,
+        field_selector: str | None = None,
+        label_selector: str | None = None,
+    ) -> dict[str, Any]: ...
 
     def get(self, resource: str, namespace: str, name: str) -> dict[str, Any]: ...
 
@@ -754,6 +761,93 @@ def _workload_matches(item: dict[str, Any], job_name: str) -> bool:
     return False
 
 
+def _workload_binds_created_job(item: dict[str, Any], job_name: str, job_uid: str) -> bool:
+    """Require both immutable Kueue UID label and exact Kubernetes Job ownership."""
+    metadata = _metadata(item, "Workload")
+    labels = metadata.get("labels")
+    owners = metadata.get("ownerReferences")
+    if not isinstance(labels, dict) or not isinstance(owners, list):
+        raise HeldoutLaunchError("Workload ownership metadata is invalid")
+    if labels.get("kueue.x-k8s.io/job-uid") != job_uid:
+        return False
+    for owner in owners:
+        if not isinstance(owner, dict):
+            raise HeldoutLaunchError("Workload owner reference is invalid")
+        if (
+            owner.get("apiVersion") == "batch/v1"
+            and owner.get("kind") == "Job"
+            and owner.get("name") == job_name
+            and owner.get("uid") == job_uid
+            and owner.get("controller") is True
+        ):
+            return True
+    return False
+
+
+def _scoped_items(
+    cluster: Cluster,
+    resource: str,
+    namespace: str,
+    *,
+    label: str,
+    field_selector: str | None = None,
+    label_selector: str | None = None,
+) -> list[dict[str, Any]]:
+    """Read one bounded server-side Kubernetes selection, never a namespace census."""
+    if (field_selector is None) == (label_selector is None):
+        raise HeldoutLaunchError("Kubernetes list must have exactly one scoped selector")
+    return _list_items(
+        cluster.list(
+            resource,
+            namespace,
+            field_selector=field_selector,
+            label_selector=label_selector,
+        ),
+        label,
+    )
+
+
+def _merge_scoped_items(lists: list[list[dict[str, Any]]], *, label: str) -> list[dict[str, Any]]:
+    """Union multiple exact label selections without silently accepting drift."""
+    merged: dict[str, dict[str, Any]] = {}
+    for items in lists:
+        for item in items:
+            name = _object_name(item, label)
+            existing = merged.get(name)
+            if existing is not None and existing != item:
+                raise HeldoutLaunchError(
+                    f"{label} changed between scoped Kubernetes reads; reconcile before launch"
+                )
+            merged[name] = item
+    return [merged[name] for name in sorted(merged)]
+
+
+def _owned_pods(cluster: Cluster, packet: LaunchPacket) -> list[dict[str, Any]]:
+    """Read the two Kubernetes Job-label spellings used by supported clusters."""
+    pods = _merge_scoped_items(
+        [
+            _scoped_items(
+                cluster,
+                "pods",
+                packet.namespace,
+                label="Pod",
+                label_selector=f"job-name={packet.job_name}",
+            ),
+            _scoped_items(
+                cluster,
+                "pods",
+                packet.namespace,
+                label="Pod",
+                label_selector=f"batch.kubernetes.io/job-name={packet.job_name}",
+            ),
+        ],
+        label="Pod",
+    )
+    if any(not _owner_matches(item, packet.job_name) for item in pods):
+        raise HeldoutLaunchError("scoped Pod read returned an object not owned by the Job")
+    return pods
+
+
 def _output_exists(path: str) -> bool:
     target = Path(path)
     root = Path("/mnt/sfs/jobs")
@@ -794,28 +888,29 @@ def duplicate_census(
 ) -> dict[str, int]:
     """Fail closed if any create-once or complete-identity duplicate exists."""
     packet = package.packet
-    inventories = {
-        "Job": cluster.list("jobs.batch", packet.namespace),
-        "ConfigMap": cluster.list("configmaps", packet.namespace),
-        "Workload": cluster.list("workloads.kueue.x-k8s.io", packet.namespace),
-        "Pod": cluster.list("pods", packet.namespace),
-    }
-    jobs = _list_items(inventories["Job"], "Job")
-    config_maps = _list_items(inventories["ConfigMap"], "ConfigMap")
-    workloads = _list_items(inventories["Workload"], "Workload")
-    pods = _list_items(inventories["Pod"], "Pod")
+    jobs = _scoped_items(
+        cluster,
+        "jobs.batch",
+        packet.namespace,
+        label="Job",
+        field_selector=f"metadata.name={packet.job_name}",
+    )
     if any(_object_name(item, "Job") == packet.job_name for item in jobs):
         raise HeldoutLaunchError(
             "exact held-out evaluator Job already exists; reconcile, never replay"
         )
+    config_maps = _scoped_items(
+        cluster,
+        "configmaps",
+        packet.namespace,
+        label="ConfigMap",
+        field_selector=f"metadata.name={packet.config_map_name}",
+    )
     if any(_object_name(item, "ConfigMap") == packet.config_map_name for item in config_maps):
         raise HeldoutLaunchError(
             "exact held-out evaluator ConfigMap already exists; reconcile, never replay"
         )
-    if any(_workload_matches(item, packet.job_name) for item in workloads):
-        raise HeldoutLaunchError(
-            "owned held-out evaluator Workload already exists; reconcile, never replay"
-        )
+    pods = _owned_pods(cluster, packet)
     if any(_owner_matches(item, packet.job_name) for item in pods):
         raise HeldoutLaunchError(
             "owned held-out evaluator Pod already exists; reconcile, never replay"
@@ -844,7 +939,6 @@ def duplicate_census(
     return {
         "jobs": len(jobs),
         "config_maps": len(config_maps),
-        "workloads": len(workloads),
         "pods": len(pods),
     }
 
@@ -989,7 +1083,13 @@ def _created_name_observation(cluster: Cluster, packet: LaunchPacket) -> dict[st
         ("config_map", "configmaps", packet.config_map_name),
     ):
         try:
-            items = _list_items(cluster.list(resource, packet.namespace), resource)
+            items = _scoped_items(
+                cluster,
+                resource,
+                packet.namespace,
+                label=resource,
+                field_selector=f"metadata.name={name}",
+            )
             observed[label] = any(_object_name(item, resource) == name for item in items)
         except Exception:
             observed[label] = False
@@ -1245,18 +1345,20 @@ def collect_terminal(
     ):
         raise HeldoutLaunchError("terminal resource identity or root alert annotation is invalid")
     terminal = _terminal_condition(job)
-    workloads = [
-        item
-        for item in _list_items(
-            cluster.list("workloads.kueue.x-k8s.io", packet.namespace), "Workload"
-        )
-        if _workload_matches(item, packet.job_name)
-    ]
-    pods = [
-        item
-        for item in _list_items(cluster.list("pods", packet.namespace), "Pod")
-        if _owner_matches(item, packet.job_name)
-    ]
+    workloads = _scoped_items(
+        cluster,
+        "workloads.kueue.x-k8s.io",
+        packet.namespace,
+        label="Workload",
+        label_selector=f"kueue.x-k8s.io/job-uid={job_uid}",
+    )
+    if any(
+        not _workload_matches(item, packet.job_name)
+        or not _workload_binds_created_job(item, packet.job_name, job_uid)
+        for item in workloads
+    ):
+        raise HeldoutLaunchError("scoped Workload read differs from the created Job")
+    pods = _owned_pods(cluster, packet)
     try:
         summary = _score_blind_summary(database.summary(packet.database))
         destination_exists = output_exists(packet.output_root)
@@ -1357,10 +1459,41 @@ class KubectlCluster:
             raise HeldoutLaunchError("kubectl returned invalid JSON") from exc
         return _require_mapping(value, "kubectl response")
 
-    def list(self, resource: str, namespace: str) -> dict[str, Any]:
+    def list(
+        self,
+        resource: str,
+        namespace: str,
+        *,
+        field_selector: str | None = None,
+        label_selector: str | None = None,
+    ) -> dict[str, Any]:
         if resource not in {"jobs.batch", "configmaps", "workloads.kueue.x-k8s.io", "pods"}:
             raise HeldoutLaunchError("unsupported held-out duplicate-check resource")
-        return self._run(namespace, ["get", resource, "--output=json"])
+        if (field_selector is None) == (label_selector is None):
+            raise HeldoutLaunchError("Kubernetes list must have exactly one scoped selector")
+        if field_selector is not None:
+            match = re.fullmatch(
+                r"metadata\.name=([a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?)", field_selector
+            )
+            if match is None:
+                raise HeldoutLaunchError("Kubernetes field selector is invalid")
+            return self._run(
+                namespace,
+                ["get", resource, f"--field-selector={field_selector}", "--output=json"],
+            )
+        assert label_selector is not None
+        match = re.fullmatch(
+            r"(?:job-name|batch\.kubernetes\.io/job-name)=([a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?)"
+            r"|kueue\.x-k8s\.io/job-uid="
+            r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})",
+            label_selector,
+        )
+        if match is None:
+            raise HeldoutLaunchError("Kubernetes label selector is invalid")
+        return self._run(
+            namespace,
+            ["get", resource, f"--selector={label_selector}", "--output=json"],
+        )
 
     def get(self, resource: str, namespace: str, name: str) -> dict[str, Any]:
         if resource not in {"jobs.batch", "configmaps"}:

@@ -85,11 +85,20 @@ existing evaluator and later score-blind reconciliation.
 Immediately before its one `kubectl create`, the command does these live safety
 checks:
 
-1. **Fresh duplicate check.** Read the exact new Job, ConfigMap, Kueue
-   Workload, Pod, output directory, database, and evaluation ledger. Stop if
-   any exists, or if the ledger already contains the same complete evaluation
-   identity. This protects both against name reuse and against an accidental
-   scientific duplicate.
+1. **Fresh duplicate check.** Read the exact new Job and ConfigMap by name,
+   and Pods only through the two standard Job-name labels. Read the output
+   directory, database, and evaluation ledger. Stop if any exists, or if the
+   ledger already contains the same complete evaluation identity. Every
+   Kubernetes read has a server-side selector; the command never lists a busy
+   shared namespace.
+
+   Kueue creates a Workload only *after* a Job has a server-assigned UID, so it
+   cannot be identified exactly before this new Job exists. A surviving
+   Workload from a deleted Job is a cluster-cleanup concern, not evidence that
+   this new Job or its sealed experiment identity has already run. After
+   creation, terminal collection reads Workloads only by the created Job UID
+   and verifies their Job binding. The exact Job, ConfigMap, output, database,
+   and complete-identity ledger checks remain the create-once gates.
 2. **Server-rendered alert proof.** Send the exact Job to Kubernetes with a
    server dry-run, then inspect the returned root `batch/v1 Job`. Require:
 
@@ -130,6 +139,9 @@ results.
 ## Required regression tests for this command
 
 - reject an existing object or matching evaluation ledger;
+- prove that every duplicate or terminal Kubernetes list uses one exact
+  server-side name, Job-label, or created-Job-UID selector, never a full
+  namespace list;
 - reject a server-rendered Job missing the root annotation even when its Pod
   template has it; and
 - reject a task selection or evaluator route that does not exactly match its
