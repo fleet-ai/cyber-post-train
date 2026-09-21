@@ -60,10 +60,7 @@ def test_teacher3k_96k_manifest_preserves_the_exact_32k_target_set():
         (EVIDENCE / "qwen38-teacher3k-96k-materialization-receipt-20260920.json").read_text()
     )
     verification = json.loads(
-        (
-            EVIDENCE
-            / "qwen38-teacher3k-96k-independent-verification-20260920.json"
-        ).read_text()
+        (EVIDENCE / "qwen38-teacher3k-96k-independent-verification-20260920.json").read_text()
     )
 
     assert manifest["sha256"] == (
@@ -84,8 +81,10 @@ def test_teacher3k_96k_manifest_preserves_the_exact_32k_target_set():
         "supervised_tokens": 57_384_881,
     }
     assert receipt["manifest_sha256"] == verification["manifest_sha256"] == manifest["sha256"]
-    assert receipt["train_sha256"] == verification["train_sha256"] == (
-        manifest["files"]["train"]["sha256"]
+    assert (
+        receipt["train_sha256"]
+        == verification["train_sha256"]
+        == (manifest["files"]["train"]["sha256"])
     )
     assert receipt["supervised_tokens"] == verification["supervised_tokens"] == 57_384_881
     assert verification["target_identity_set_sha256"] == (
@@ -99,10 +98,7 @@ def test_teacher3k_64k_manifest_preserves_the_exact_32k_target_set():
         (EVIDENCE / "qwen38-teacher3k-64k-materialization-receipt-20260920.json").read_text()
     )
     verification = json.loads(
-        (
-            EVIDENCE
-            / "qwen38-teacher3k-64k-independent-verification-20260920.json"
-        ).read_text()
+        (EVIDENCE / "qwen38-teacher3k-64k-independent-verification-20260920.json").read_text()
     )
 
     assert manifest["sha256"] == (
@@ -123,8 +119,10 @@ def test_teacher3k_64k_manifest_preserves_the_exact_32k_target_set():
         "supervised_tokens": 57_384_881,
     }
     assert receipt["manifest_sha256"] == verification["manifest_sha256"] == manifest["sha256"]
-    assert receipt["train_sha256"] == verification["train_sha256"] == (
-        manifest["files"]["train"]["sha256"]
+    assert (
+        receipt["train_sha256"]
+        == verification["train_sha256"]
+        == (manifest["files"]["train"]["sha256"])
     )
     assert receipt["supervised_tokens"] == verification["supervised_tokens"] == 57_384_881
     assert verification["target_identity_set_sha256"] == (
@@ -210,14 +208,8 @@ def test_teacher3k_32k_runs_have_unique_external_identities():
 
 
 def test_teacher3k_native_resume_gate_changes_only_identity_and_lifecycle():
-    source = json.loads(
-        (RUNS / "qwen38-teacher3k-32k-canary-b8-lr3e6-v1.json").read_text()
-    )
-    resume = json.loads(
-        (
-            RUNS / "qwen38-teacher3k-32k-resume-canary-b8-lr3e6-v1.json"
-        ).read_text()
-    )
+    source = json.loads((RUNS / "qwen38-teacher3k-32k-canary-b8-lr3e6-v1.json").read_text())
+    resume = json.loads((RUNS / "qwen38-teacher3k-32k-resume-canary-b8-lr3e6-v1.json").read_text())
 
     for key in ("model", "data", "recipe", "cluster"):
         assert resume[key] == source[key]
@@ -344,12 +336,8 @@ def test_teacher3k_later_context_runs_compile_as_one_node_canary_first_arms(
 
 @pytest.mark.parametrize("context", ["64", "96"])
 def test_teacher3k_later_context_full_arms_change_only_identity_and_lifecycle(context):
-    canary = json.loads(
-        (RUNS / f"qwen38-teacher3k-{context}k-canary-b8-lr3e6-v1.json").read_text()
-    )
-    full = json.loads(
-        (RUNS / f"qwen38-teacher3k-{context}k-full-b8-lr3e6-v1.json").read_text()
-    )
+    canary = json.loads((RUNS / f"qwen38-teacher3k-{context}k-canary-b8-lr3e6-v1.json").read_text())
+    full = json.loads((RUNS / f"qwen38-teacher3k-{context}k-full-b8-lr3e6-v1.json").read_text())
 
     expected = json.loads(json.dumps(canary))
     expected["name"] = full["name"]
@@ -376,9 +364,7 @@ def test_teacher3k_later_context_full_arms_change_only_identity_and_lifecycle(co
 
 @pytest.mark.parametrize("context", ["64", "96"])
 def test_teacher3k_context_runtime_repair_changes_only_external_identity(context):
-    retired = json.loads(
-        (RUNS / f"qwen38-teacher3k-{context}k-full-b8-lr3e6-v1.json").read_text()
-    )
+    retired = json.loads((RUNS / f"qwen38-teacher3k-{context}k-full-b8-lr3e6-v1.json").read_text())
     successor = json.loads(
         (RUNS / f"qwen38-teacher3k-{context}k-full-b8-lr3e6-v2.json").read_text()
     )
@@ -405,10 +391,7 @@ def test_teacher3k_context_runtime_repair_changes_only_external_identity(context
 @pytest.mark.parametrize(("context", "position"), [("64", 0), ("96", 1)])
 def test_teacher3k_later_context_launch_binds_current_inputs(context, position):
     evidence = json.loads(
-        (
-            EVIDENCE
-            / "qwen38-next-sft-intentional-launch-20260920.json"
-        ).read_text()
+        (EVIDENCE / "qwen38-next-sft-intentional-launch-20260920.json").read_text()
     )
     row = evidence["arms"][position]
     config_path = ROOT / row["config"]
@@ -418,7 +401,7 @@ def test_teacher3k_later_context_launch_binds_current_inputs(context, position):
 
     assert (
         evidence["status"]
-        == "v1_infrastructure_invalid_v2_merged_exact_image_preflight_running"
+        == "v1_infrastructure_invalid_v2_current_main_exact_image_preflight_running"
     )
     assert sft.digest(plan) == row["plan_sha256"]
     assert sft.digest(request) == row["request_sha256"]
