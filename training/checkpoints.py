@@ -36,6 +36,74 @@ def receipt(path: Path) -> dict:
     return value
 
 
+def verify_recovery_terminal(plan: dict, step: int) -> dict | None:
+    """Verify a resumed run's terminal step from canonical plan bytes.
+
+    Prepared plan files deliberately do not embed their own digest.  The
+    terminal receipt binds to the canonical digest of those bytes instead.
+    Keeping this check in the checkpoint sealer prevents ad-hoc operators from
+    accidentally treating a missing ``plan_sha256`` field as a run defect.
+    """
+    recovery = plan.get("recovery")
+    if not isinstance(recovery, dict) or recovery.get("mode") != "resume":
+        return None
+    source = recovery.get("checkpoint")
+    if not isinstance(source, dict) or type(source.get("optimizer_step")) is not int:
+        raise ValueError("recovery source step is missing")
+    source_step = source["optimizer_step"]
+    if plan.get("pause_after_step") != step or step <= source_step:
+        raise ValueError("recovery seal must target the exact planned pause")
+
+    run = Path(plan["output_root"])
+    terminal_path = run / "TRAINING_PAUSED.json"
+    terminal = receipt(terminal_path)
+    expected = {
+        "status": "training_paused",
+        "plan_sha256": _unsigned_digest(plan),
+        "optimizer_step": step,
+        "planned_optimizer_steps": plan["recipe"]["max_steps"],
+        "optimizer_steps_executed": step - source_step,
+        "checkpoint_path": str(run / "checkpoints" / f"global_step_{step}"),
+    }
+    if any(terminal.get(key) != value for key, value in expected.items()):
+        raise ValueError("recovery terminal receipt differs from the canonical plan")
+
+    metrics_path = run / "metrics.jsonl"
+    if metrics_path.is_symlink() or not metrics_path.is_file():
+        raise ValueError("recovery metrics are missing")
+    try:
+        metrics = [json.loads(line) for line in metrics_path.read_text().splitlines() if line]
+    except json.JSONDecodeError as exc:
+        raise ValueError("recovery metrics are malformed") from exc
+    expected_steps = list(range(source_step + 1, step + 1))
+    if [row.get("train/global_step") for row in metrics] != expected_steps:
+        raise ValueError("recovery metrics do not cover every resumed optimizer step")
+    for row in metrics:
+        loss = row.get("train/loss")
+        gradient = row.get("train/grad_norm")
+        learning_rate = row.get("train/lr")
+        if (
+            type(loss) not in (int, float)
+            or type(gradient) not in (int, float)
+            or type(learning_rate) not in (int, float)
+            or not math.isfinite(loss)
+            or not math.isfinite(gradient)
+            or not math.isfinite(learning_rate)
+            or gradient <= 0
+            or learning_rate <= 0
+            or not math.isclose(learning_rate, plan["recipe"]["lr"], rel_tol=1e-12)
+        ):
+            raise ValueError("recovery metrics contain an invalid optimizer step")
+    return {
+        "source_optimizer_step": source_step,
+        "optimizer_step": step,
+        "optimizer_steps_executed": step - source_step,
+        "terminal_receipt_sha256": terminal["receipt_sha256"],
+        "terminal_file_sha256": digest(terminal_path),
+        "metrics_file_sha256": digest(metrics_path),
+    }
+
+
 def checkpoint_files(root: Path, world_size: int, *, adapter: bool = False) -> dict[str, Path]:
     if root.is_symlink() or not root.is_dir():
         raise ValueError("checkpoint root must be a real directory")
@@ -230,6 +298,7 @@ def seal(plan: dict, step: int, output: Path, *, progress=None) -> dict:
         raise ValueError("never write into the source checkpoint")
     if output.exists() or output.is_symlink():
         raise FileExistsError("checkpoint manifest already exists")
+    verify_recovery_terminal(plan, step)
     if _is_qwen38_lora(plan):
         return _seal_qwen38_megatron(plan, step, output, progress=progress)
     saved = receipt(run / "checkpoint_receipts" / f"step-{step:06d}.json")
