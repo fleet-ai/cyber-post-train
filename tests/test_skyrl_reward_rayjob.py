@@ -127,6 +127,34 @@ def test_preflight_rejection_is_sanitized() -> None:
     assert "private detail" not in vars(error).values()
 
 
+def test_preflight_receipt_propagates_output_limit_proofs(plan_request, monkeypatch) -> None:
+    plan, _ = plan_request
+    monkeypatch.setenv("WANDB_API_KEY", "present")
+    monkeypatch.setattr(
+        direct.skyrl_training,
+        "preflight",
+        lambda _plan: {
+            "status": "passed",
+            "gpus": 0,
+            "runtime_user": {"uid": 1000, "gid": 100},
+            "counts": {"train": 1, "dev": 1},
+            "planned_steps": 1,
+            "native_parser_checked": True,
+            "ordered_multi_tool_parser_checked": True,
+            "chunk_continuation_checked": True,
+            "compaction_checked": True,
+            "stepwise_prompt_checked": True,
+            "ordered_multi_tool_execution_checked": True,
+            "output_limit_gradeable_checked": True,
+            "output_limit_partial_tool_blocked_checked": True,
+        },
+    )
+    receipt = direct.preflight_runtime(plan)
+    assert receipt == direct._seal(receipt)
+    assert receipt["output_limit_gradeable_checked"] is True
+    assert receipt["output_limit_partial_tool_blocked_checked"] is True
+
+
 @pytest.fixture(scope="module")
 def plan_request() -> tuple[dict, dict]:
     run = load(CANARY_RUN)
@@ -518,6 +546,8 @@ def _launch_evidence(plan: dict, request: dict, preview: dict, staged: dict) -> 
             "compaction_checked": True,
             "stepwise_prompt_checked": True,
             "ordered_multi_tool_execution_checked": True,
+            "output_limit_gradeable_checked": True,
+            "output_limit_partial_tool_blocked_checked": True,
             "output_absent": True,
             "wandb_create_once": {
                 "entity": "thefleet",
@@ -560,18 +590,20 @@ def _launch_evidence(plan: dict, request: dict, preview: dict, staged: dict) -> 
     return expected, authorization
 
 
-def test_create_is_journaled_once_and_never_retried(plan_request, tmp_path, monkeypatch) -> None:
-    plan, request = plan_request
-    preview = _source_preview(plan, request)
+def _sealed_stage_for_plan(plan: dict) -> dict:
     train = plan["data"]["files"]["train"]
     dev = plan["data"]["files"]["dev"]
-    staged = direct._seal(
+    return direct._seal(
         {
             "schema": direct.STAGE_SCHEMA,
             "name": direct.STAGE_NAME,
             "destination": plan["arguments"]["data_manifest"].removesuffix("/manifest.json"),
             "files": [
-                {"path": "dev.jsonl", "bytes": 1, "sha256": dev["sha256"].removeprefix("sha256:")},
+                {
+                    "path": "dev.jsonl",
+                    "bytes": 1,
+                    "sha256": dev["sha256"].removeprefix("sha256:"),
+                },
                 {"path": "manifest.json", "bytes": 1, "sha256": "1" * 64},
                 {"path": "split.json", "bytes": 1, "sha256": "2" * 64},
                 {"path": "task-set.json", "bytes": 1, "sha256": "3" * 64},
@@ -593,6 +625,64 @@ def test_create_is_journaled_once_and_never_retried(plan_request, tmp_path, monk
             },
         }
     )
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["output_limit_gradeable_checked", "output_limit_partial_tool_blocked_checked"],
+)
+@pytest.mark.parametrize("value", [None, False], ids=["missing", "false"])
+def test_output_limit_preflight_proofs_are_required_before_authorize_or_create(
+    plan_request, tmp_path, monkeypatch, field: str, value: bool | None
+) -> None:
+    plan, request = plan_request
+    preview = _source_preview(plan, request)
+    staged = _sealed_stage_for_plan(plan)
+    expected, authorization = _launch_evidence(plan, request, preview, staged)
+    preflight = copy.deepcopy(authorization["preflight_receipt"])
+    if value is None:
+        preflight.pop(field)
+    else:
+        preflight[field] = value
+    preflight = direct._seal(preflight)
+    arguments = {
+        "dev_preview": authorization["dev_preview"],
+        "prod_preview": authorization["prod_preview"],
+        "cpu_previews": authorization["cpu_previews"],
+        "stage_receipt": authorization["stage_receipt"],
+        "preflight_receipt": preflight,
+        "observer": authorization["observer"],
+    }
+    with pytest.raises(JobsError, match="CPU preflight is stale or incomplete"):
+        direct.authorize(plan, request, preview, expected, **arguments)
+
+    changed_authorization = direct._seal(
+        {
+            **authorization,
+            "preflight_receipt": preflight,
+        }
+    )
+    monkeypatch.setattr(
+        direct,
+        "duplicate_checks",
+        lambda *_args, **_kwargs: pytest.fail("invalid proof reached duplicate checks"),
+    )
+    with pytest.raises(JobsError, match="CPU preflight is stale or incomplete"):
+        direct.create_once(
+            tmp_path / "create",
+            plan,
+            request,
+            preview,
+            expected,
+            changed_authorization,
+            token="test-token",
+        )
+
+
+def test_create_is_journaled_once_and_never_retried(plan_request, tmp_path, monkeypatch) -> None:
+    plan, request = plan_request
+    preview = _source_preview(plan, request)
+    staged = _sealed_stage_for_plan(plan)
     expected, authorization = _launch_evidence(plan, request, preview, staged)
     calls: list[list[str]] = []
 

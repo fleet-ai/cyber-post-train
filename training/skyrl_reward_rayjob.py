@@ -788,6 +788,10 @@ def preflight_runtime(plan: dict[str, Any]) -> dict[str, Any]:
             "compaction_checked": proof["compaction_checked"],
             "stepwise_prompt_checked": proof["stepwise_prompt_checked"],
             "ordered_multi_tool_execution_checked": proof["ordered_multi_tool_execution_checked"],
+            "output_limit_gradeable_checked": proof["output_limit_gradeable_checked"],
+            "output_limit_partial_tool_blocked_checked": proof[
+                "output_limit_partial_tool_blocked_checked"
+            ],
             "output_absent": True,
             "wandb_create_once": wandb_binding,
             "wandb_remote_lookup": "deferred_to_runtime_start",
@@ -1108,6 +1112,8 @@ def authorize(
         or preflight_receipt.get("compaction_checked") is not True
         or preflight_receipt.get("stepwise_prompt_checked") is not True
         or preflight_receipt.get("ordered_multi_tool_execution_checked") is not True
+        or preflight_receipt.get("output_limit_gradeable_checked") is not True
+        or preflight_receipt.get("output_limit_partial_tool_blocked_checked") is not True
         or (datetime.now(UTC) - checked).total_seconds() > 300
     ):
         raise JobsError("prod8 CPU preflight is stale or incomplete")

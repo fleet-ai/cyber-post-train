@@ -8,6 +8,7 @@ submission gate into the prepared plan.
 
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path, PurePosixPath
 
@@ -35,10 +36,10 @@ SPLIT_SELF_SHA256 = "sha256:8279ea19808ad1accb00d3f3145c3ec087030677786e0188251c
 EVIDENCE_FILE_SHA256 = "sha256:73be894762968970c8cf0454281fe13d46615e40039b61b8f8a97c8cc883f365"
 EVIDENCE_SELF_SHA256 = "sha256:50491796b829388164faefc5fb9a9ad09fac89a8d94648a1791240f91826a285"
 RUNTIME_EVIDENCE_FILE_SHA256 = (
-    "sha256:149b06156e4db384e02098e86d9f0c71adb91e6d9e4c4940a0ed0080cefa46d0"
+    "sha256:56906c39c3407585de5abe202268cef5fa4e609e065d008fe49259474f398667"
 )
 RUNTIME_EVIDENCE_SELF_SHA256 = (
-    "sha256:750915b1a79b6c8a2e65db01a79e05d97c8693d1804812a08976479e329e8b04"
+    "sha256:670566a752a6df8acc2f646740d09fb8ed171509b7e9fe9989416d9199aa5c5f"
 )
 HORIZON_FILE_SHA256 = "sha256:d80cd804406ed1f181ba9cc6891cd11785d7fc3a63b84aa2f97a7238c3d435b3"
 HORIZON_SELF_SHA256 = "sha256:a2a13e123b51041b314c81772134dd63e89dd99c4f8a68822fa817968ca69182"
@@ -396,16 +397,38 @@ def validate_source_package(
         raise ValueError("reward canary runtime evidence changed task or horizon authority")
     authority = runtime_evidence["tool_surface_authority"]
     local_code = authority["local_code"]
-    for name, path in (
-        ("data_preparation", "training/rl_data.py"),
-        ("episode_runtime", "training/rl_episode.py"),
-        ("skyrl_episode_runtime", "training/skyrl_episode.py"),
-        ("skyrl_rollout_runtime", "training/skyrl_rollout.py"),
-        ("fleet_binding", "evals/fleet/opencode_self_hosted.py"),
+    for name, path, symbols in (
+        ("data_preparation", "training/rl_data.py", ["build"]),
+        ("episode_runtime", "training/rl_episode.py", ["collect", "_agent"]),
+        (
+            "skyrl_episode_runtime",
+            "training/skyrl_episode.py",
+            ["Recorder", "offline_long_horizon_probe"],
+        ),
+        ("skyrl_rollout_runtime", "training/skyrl_rollout.py", ["Generator"]),
+        (
+            "fleet_binding",
+            "evals/fleet/opencode_self_hosted.py",
+            ["bind_task", "verify_task", "assert_required_task_tools"],
+        ),
     ):
+        source_path = ROOT / path
+        declared = local_code.get(name, {})
+        try:
+            parsed = ast.parse(source_path.read_bytes(), filename=path)
+        except (OSError, SyntaxError) as error:
+            raise ValueError("reward canary tool enforcement source is unreadable") from error
+        top_level_symbols = {
+            node.name
+            for node in parsed.body
+            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+        }
         if (
-            local_code[name]["file_sha256"] != RUNTIME_SOURCES[path]
-            or fleet.sha256((ROOT / path).read_bytes()) != RUNTIME_SOURCES[path]
+            declared.get("path") != "../../" + path
+            or declared.get("symbols") != symbols
+            or declared.get("file_sha256") != RUNTIME_SOURCES[path]
+            or fleet.sha256(source_path.read_bytes()) != RUNTIME_SOURCES[path]
+            or not set(symbols) <= top_level_symbols
         ):
             raise ValueError("reward canary tool enforcement source changed")
     if (

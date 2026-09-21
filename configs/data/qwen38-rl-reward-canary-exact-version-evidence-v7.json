@@ -93,7 +93,7 @@
         "path": "../../training/skyrl_rollout.py",
         "file_sha256": "sha256:a9ba203eb93d0622fda161636fb8499b46b30c1bbb349df4eda484f5fd407c52",
         "symbols": [
-          "configure"
+          "Generator"
         ]
       },
       "fleet_binding": {
@@ -144,5 +144,5 @@
       "incident_evidence_self_sha256": "sha256:c45f12a8fa799900053a1bd7b1e33ff26e89d517ae552188bda0e66cf675ca2d"
     }
   },
-  "sha256": "sha256:750915b1a79b6c8a2e65db01a79e05d97c8693d1804812a08976479e329e8b04"
+  "sha256": "sha256:670566a752a6df8acc2f646740d09fb8ed171509b7e9fe9989416d9199aa5c5f"
 }
