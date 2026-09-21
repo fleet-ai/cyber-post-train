@@ -247,12 +247,12 @@ def _kubectl_json(context: str, *arguments: str) -> dict:
         "kubectl",
         "--context",
         context,
-        "--request-timeout=30s",
+        "--request-timeout=60s",
         *arguments,
         "-o",
         "json",
     ]
-    result = subprocess.run(command, check=False, capture_output=True, text=True, timeout=45)
+    result = subprocess.run(command, check=False, capture_output=True, text=True, timeout=75)
     if result.returncode:
         raise CapacityError("Kubernetes capacity read failed")
     try:
