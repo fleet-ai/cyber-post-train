@@ -305,6 +305,7 @@ set -euo pipefail
 umask 077
 : "${{FLEET_API_KEY:?FLEET_API_KEY is required}}"
 : "${{ROLLOUT_DATABASE_URL:?ROLLOUT_DATABASE_URL is required}}"
+: "${{EVALUATION_DATABASE:?EVALUATION_DATABASE is required}}"
 : "${{EVALUATION_DIRECTORY:?EVALUATION_DIRECTORY is required}}"
 : "${{RECONCILIATION_OUTPUT:?RECONCILIATION_OUTPUT is required}}"
 root=/workspace/cyber-post-train
@@ -321,7 +322,8 @@ exec uv run --no-project --with httpx==0.28.1 --with pyyaml==6.0.3 \
   --with 'psycopg[binary]==3.3.5' python -m evals.fleet.stored_session_reconciliation \
   --evaluation-directory "$EVALUATION_DIRECTORY" \
   --output-root "$RECONCILIATION_OUTPUT" \
-  --postgres-dsn-env ROLLOUT_DATABASE_URL \
+  --postgres-admin-dsn-env ROLLOUT_DATABASE_URL \
+  --postgres-database "$EVALUATION_DATABASE" \
   --intent /intent/intent.json
 """
 
@@ -374,6 +376,7 @@ def render(*, repo_root: Path, plan_path: Path, intent_path: Path) -> Package:
             intent.evaluation_plan_sha256
             != str(source.get("evaluation_plan_sha256", "")).removeprefix("sha256:"),
             intent.source_output_root != source.get("evaluation_directory"),
+            intent.source_database != source.get("database"),
             intent.source_job_uid != source.get("job_uid"),
             intent.source_job_terminal_receipt_sha256
             != str(source.get("terminal_receipt_sha256", "")).removeprefix("sha256:"),
@@ -471,6 +474,10 @@ def render(*, repo_root: Path, plan_path: Path, intent_path: Path) -> Package:
                                     "value": execution["output_root"],
                                 },
                                 {
+                                    "name": "EVALUATION_DATABASE",
+                                    "value": intent.source_database,
+                                },
+                                {
                                     "name": "FLEET_API_KEY",
                                     "valueFrom": {
                                         "secretKeyRef": {
@@ -524,6 +531,7 @@ def render(*, repo_root: Path, plan_path: Path, intent_path: Path) -> Package:
         "config_map_name": config_map_name,
         "secret_name": secret_name,
         "job_name": job_name,
+        "source_database": intent.source_database,
         "root_failure_alert_annotation": job["metadata"]["annotations"][FAILURE_ALERT_ANNOTATION],
         "priority_class": "c1",
         "gpu_request": 0,
@@ -546,6 +554,11 @@ def validate(package: Package, *, plan: dict[str, Any]) -> None:
     metadata = job.get("metadata") or {}
     pod = ((job.get("spec") or {}).get("template") or {}).get("spec") or {}
     containers = pod.get("containers") or []
+    environment = {
+        item.get("name"): item
+        for item in (containers[0].get("env") if len(containers) == 1 else []) or []
+        if isinstance(item, dict)
+    }
     if any(
         (
             metadata.get("annotations", {}).get(FAILURE_ALERT_ANNOTATION) != "off",
@@ -556,6 +569,8 @@ def validate(package: Package, *, plan: dict[str, Any]) -> None:
             package.config_map.get("immutable") is not True,
             package.secret.get("immutable") is not True,
             package.secret.get("metadata", {}).get("name") != plan["execution"]["secret_name"],
+            environment.get("EVALUATION_DATABASE", {}).get("value") != plan["source"]["database"],
+            package.proof.get("source_database") != plan["source"]["database"],
         )
     ):
         raise PackageError("stored-session package violates the reviewed execution contract")

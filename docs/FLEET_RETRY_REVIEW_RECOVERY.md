@@ -162,6 +162,17 @@ live v1 packet demonstrated this when `rollout_worker` imported an unbundled
 `rollout_campaign`. A successor needs a fresh ConfigMap, Secret, Job, and output
 identity after that failure.
 
+The PostgreSQL secret contains an administrator connection URL, not the
+dedicated evaluation database identity. Bind the exact database name in both
+the public recovery plan and private intent, replace only the URL database path
+with that reviewed name, and then verify the frozen plan against that database
+before any row mutation. Passing the secret URL through unchanged can select an
+unrelated, internally valid ledger: the LR30 v2 reconciler compared its 17-cell
+plan with an 800-cell database and correctly failed the plan-digest check. The
+materialized v2 output path is permanently retired. A successor must use fresh
+ConfigMap, Secret, Job, and output identities; it must never make the unrelated
+database fit by weakening plan verification.
+
 The incident receipt is
 [`qwen38-lr30-step76-fleet-dev17-seed43-terminal-census-20260921.json`](evidence/qwen38-lr30-step76-fleet-dev17-seed43-terminal-census-20260921.json).
 The guard is [`stored_session_reconciliation.py`](../evals/fleet/stored_session_reconciliation.py),
@@ -170,6 +181,8 @@ the CPU-only create-once package is
 and focused regressions live in
 [`test_stored_session_reconciliation_job.py`](../tests/test_stored_session_reconciliation_job.py)
 and [`test_rollout_postgres.py`](../tests/test_rollout_postgres.py).
+The sanitized database-selection incident is
+[`qwen38-lr30-step76-stored-session-reconciliation-v2-database-selection-failure-20260921.json`](evidence/qwen38-lr30-step76-stored-session-reconciliation-v2-database-selection-failure-20260921.json).
 
 The machine-readable review-only contract is
 `configs/evaluation/qwen38-fleet-dev17-seed43-reviewed-recovery-v1.json`.

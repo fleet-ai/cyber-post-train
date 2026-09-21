@@ -18,7 +18,8 @@ from evals.fleet import (
 )
 
 ROOT = Path(__file__).parents[1]
-PLAN = ROOT / "configs/evaluation/qwen38-lr30-step76-stored-session-reconciliation-v2.json"
+PLAN = ROOT / "configs/evaluation/qwen38-lr30-step76-stored-session-reconciliation-v3.json"
+V2_PLAN = ROOT / "configs/evaluation/qwen38-lr30-step76-stored-session-reconciliation-v2.json"
 EVIDENCE = (
     ROOT / "docs/evidence/qwen38-lr30-step76-fleet-dev17-seed43-terminal-census-20260921.json"
 )
@@ -26,6 +27,11 @@ BOOTSTRAP_FAILURE_EVIDENCE = (
     ROOT
     / "docs/evidence"
     / "qwen38-lr30-step76-stored-session-reconciliation-v1-bootstrap-failure-20260921.json"
+)
+DATABASE_SELECTION_FAILURE_EVIDENCE = (
+    ROOT
+    / "docs/evidence"
+    / "qwen38-lr30-step76-stored-session-reconciliation-v2-database-selection-failure-20260921.json"
 )
 
 
@@ -38,6 +44,7 @@ def _intent(path: Path, plan_path: Path = PLAN) -> Path:
         "runtime_files_sha256": reconciliation.runtime_identity(),
         "serving_block": "lr30",
         "source_output_root": source["evaluation_directory"],
+        "source_database": source["database"],
         "source_job_uid": source["job_uid"],
         "source_job_terminal_receipt_sha256": source["terminal_receipt_sha256"].removeprefix(
             "sha256:"
@@ -89,8 +96,63 @@ def test_bootstrap_failure_evidence_is_sanitized_terminal_and_self_digesting():
     assert all(value is False for value in evidence["privacy"].values())
 
 
+def test_database_selection_failure_evidence_is_sanitized_and_target_database_unchanged():
+    evidence = json.loads(DATABASE_SELECTION_FAILURE_EVIDENCE.read_text())
+    assert evidence["sha256"] == reconciliation._body_digest(  # noqa: SLF001
+        {key: value for key, value in evidence.items() if key != "sha256"}
+    )
+    failure = evidence["failure"]
+    assert failure["stage"] == "dedicated_database_plan_verification"
+    assert failure["reason"] == "postgresql_ledger_plan_digest_differs"
+    assert failure["target_row_count"] == 17
+    assert failure["secret_selected_database_row_count"] == 800
+    assert failure["target_row_plan_sha256"] != failure["secret_selected_database_row_plan_sha256"]
+    post = evidence["target_database_pre_and_post_state"]
+    assert post == {
+        "total_cells": 17,
+        "accepted": 6,
+        "retry_review": 10,
+        "claimed": 1,
+        "stale_active": 1,
+        "local_results": 17,
+        "stored_session_reconciliation_receipt_count": 0,
+        "database_changed_by_v2": False,
+    }
+    assert evidence["output_and_release"]["model_generation_performed"] is False
+    assert evidence["output_and_release"]["scoring_call_performed"] is False
+    assert all(value is False for value in evidence["privacy"].values())
+
+
+def test_v3_successor_changes_only_repair_bytes_and_fresh_create_once_identities():
+    v2 = json.loads(V2_PLAN.read_text())
+    v3 = json.loads(PLAN.read_text())
+    assert v3["source"] == v2["source"]
+    assert v3["safety"] == v2["safety"]
+    assert {key: value for key, value in v3["runtime"].items() if key != "run_script_sha256"} == {
+        key: value for key, value in v2["runtime"].items() if key != "run_script_sha256"
+    }
+    assert {
+        key: value
+        for key, value in v3["code_sha256"].items()
+        if key != "evals/fleet/stored_session_reconciliation.py"
+    } == {
+        key: value
+        for key, value in v2["code_sha256"].items()
+        if key != "evals/fleet/stored_session_reconciliation.py"
+    }
+    changed_execution = {
+        key for key in v3["execution"] if v3["execution"][key] != v2["execution"][key]
+    }
+    assert changed_execution == {"config_map_name", "secret_name", "job_name", "output_root"}
+    assert all(
+        v3["execution"][key].endswith("v3")
+        for key in ("config_map_name", "secret_name", "job_name", "output_root")
+    )
+
+
 def test_package_is_cpu_only_create_once_alert_off_and_private(tmp_path):
     intent = _intent(tmp_path / "intent.json")
+    plan = json.loads(PLAN.read_text())
     package = job.render(repo_root=ROOT, plan_path=PLAN, intent_path=intent)
     assert package.job["metadata"]["annotations"][job.FAILURE_ALERT_ANNOTATION] == "off"
     assert package.job["spec"]["backoffLimit"] == 0
@@ -100,11 +162,126 @@ def test_package_is_cpu_only_create_once_alert_off_and_private(tmp_path):
     assert package.config_map["immutable"] is True
     assert package.secret["immutable"] is True
     assert package.proof["gpu_request"] == 0
+    assert package.proof["source_database"] == plan["source"]["database"]
     assert package.proof["model_generation_performed"] is False
     assert package.proof["scoring_call_performed"] is False
     public = json.dumps(package.proof)
     private = reconciliation.load_intent(intent)
     assert all(cell_id not in public for cell_id in private.selected_cell_ids)
+    environment = {
+        item["name"]: item
+        for item in package.job["spec"]["template"]["spec"]["containers"][0]["env"]
+    }
+    assert environment["EVALUATION_DATABASE"] == {
+        "name": "EVALUATION_DATABASE",
+        "value": plan["source"]["database"],
+    }
+    assert '--postgres-database "$EVALUATION_DATABASE"' in package.config_map["data"]["run.sh"]
+
+
+def test_dedicated_database_replaces_shared_default_and_preserves_connection_identity():
+    admin = "postgresql://worker:private@postgres.internal:5432/rollout?sslmode=require"
+    selected = reconciliation.dedicated_dsn(admin, "q38_dev17_s43_lr30s76_p1_v1")
+    assert selected == (
+        "postgresql://worker:private@postgres.internal:5432/"
+        "q38_dev17_s43_lr30s76_p1_v1?sslmode=require"
+    )
+    assert selected != admin
+
+
+@pytest.mark.parametrize(
+    ("admin", "database"),
+    [
+        ("postgresql://worker:private@postgres.internal:5432/rollout#fragment", "valid_db"),
+        ("https://postgres.internal/rollout", "valid_db"),
+        ("postgresql:///rollout", "valid_db"),
+        ("postgresql://postgres.internal/rollout", "invalid-database"),
+        ("postgresql://postgres.internal/rollout?dbname=other", "valid_db"),
+        ("postgresql://postgres.internal/rollout?dbname=", "valid_db"),
+        ("postgresql://postgres.internal/rollout?dbname", "valid_db"),
+        ("postgresql://postgres.internal/rollout?host=", "valid_db"),
+        ("postgresql://postgres.internal/rollout?host", "valid_db"),
+    ],
+)
+def test_dedicated_database_rejects_ambiguous_or_unsealed_identity(admin, database):
+    with pytest.raises(
+        Exception, match="DSN is invalid|database name is invalid|overrides authority"
+    ):
+        reconciliation.dedicated_dsn(admin, database)
+
+
+def test_runtime_database_must_equal_private_intent_before_output_or_database_access(
+    tmp_path, monkeypatch
+):
+    intent = _intent(tmp_path / "intent.json")
+    output = tmp_path / "output"
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("no external observation or database access is allowed")
+
+    monkeypatch.setattr(reconciliation, "observe", forbidden)
+    with pytest.raises(Exception, match="runtime database differs"):
+        reconciliation.run(
+            evaluation_directory=tmp_path,
+            output_root=output,
+            admin_dsn="postgresql://worker:private@postgres.internal:5432/rollout",
+            database="shared_default_800_cell_ledger",
+            intent_path=intent,
+        )
+    assert not output.exists()
+
+
+def test_shared_default_800_cell_database_is_replaced_before_17_cell_plan_verification(
+    tmp_path, monkeypatch
+):
+    intent_path = _intent(tmp_path / "intent.json")
+    intent = reconciliation.load_intent(intent_path)
+    observed_database_paths = []
+
+    class Client:
+        def __init__(self, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    def observe(dsn, **_kwargs):
+        from urllib.parse import urlsplit
+
+        observed_database_paths.append(urlsplit(dsn).path)
+        return []
+
+    monkeypatch.setenv("FLEET_API_KEY", "private-test-key")
+    monkeypatch.setattr(reconciliation.httpx, "Client", Client)
+    monkeypatch.setattr(
+        reconciliation.self_hosted,
+        "_request",
+        lambda *_args, **_kwargs: {
+            "team_name": "fleet",
+            "team_id": reconciliation.self_hosted.FLEET_TEAM_ID,
+        },
+    )
+    monkeypatch.setattr(reconciliation, "observe", observe)
+    monkeypatch.setattr(
+        reconciliation,
+        "accept_roster",
+        lambda *_args, **_kwargs: {"receipt_sha256": "a" * 64},
+    )
+    result = reconciliation.run(
+        evaluation_directory=tmp_path,
+        output_root=tmp_path / "output",
+        admin_dsn=(
+            "postgresql://worker:private@postgres.internal:5432/shared_default_800_cell_ledger"
+        ),
+        database=intent.source_database,
+        intent_path=intent_path,
+    )
+    assert result["status"] == "accepted"
+    assert observed_database_paths == [f"/{intent.source_database}"] * 2
+    assert "/shared_default_800_cell_ledger" not in observed_database_paths
 
 
 def test_bootstrap_module_bundle_imports_in_an_isolated_tree(tmp_path):
@@ -162,6 +339,17 @@ def test_public_plan_private_intent_and_terminal_receipt_share_one_digest(tmp_pa
     drifted = tmp_path / "plan.json"
     drifted.write_text(json.dumps(plan), encoding="utf-8")
     with pytest.raises(job.PackageError, match="terminal receipt digest differs"):
+        job.render(repo_root=ROOT, plan_path=drifted, intent_path=intent)
+
+
+def test_public_plan_and_private_intent_bind_the_same_dedicated_database(tmp_path, monkeypatch):
+    intent = _intent(tmp_path / "intent.json")
+    plan = json.loads(PLAN.read_text())
+    plan["source"]["database"] = "shared_default_800_cell_ledger"
+    drifted = tmp_path / "plan.json"
+    drifted.write_text(json.dumps(plan), encoding="utf-8")
+    monkeypatch.setattr(job, "_terminal_receipt_semantics", lambda *_args, **_kwargs: None)
+    with pytest.raises(job.PackageError, match="private intent differs"):
         job.render(repo_root=ROOT, plan_path=drifted, intent_path=intent)
 
 
