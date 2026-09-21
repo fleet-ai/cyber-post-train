@@ -94,6 +94,15 @@
     ]
   },
   "launch_rail": {
+    "preparation_location": {
+      "supported": "cyber-post-train train may write the immutable prepared directory to any new local writable directory. It does not need an SFS mount.",
+      "forbidden": "The prepared directory must not be the training output root, and a missing local /mnt/sfs mount must not be worked around by making a fake SFS directory."
+    },
+    "remote_preparation_boundary": {
+      "status": "no_complete_remote_preparation_cli_rail_in_this_source",
+      "reason": "pod-publish-file only atomically copies one file into an already-running CPU Pod. It neither creates a LoRA CPU preflight Pod nor produces the required PREFLIGHT.json.",
+      "required_response": "Do not hand-write a Pod, fabricate PREFLIGHT.json, or treat a transferred archive as a preflight. Use an authorized SFS-mounted preflight host, or land a separately reviewed remote-preflight feature before attempting this launch."
+    },
     "normal_path": {
       "command": "cyber-post-train preview <prepared-directory>",
       "allowed_only_if": [
@@ -117,7 +126,7 @@
     }
   },
   "pre_create_checklist": [
-    "Render this exact config into a new prepared directory that is different from the training output root: cyber-post-train train configs/runs/qwen38-27b-lora-sft-r64-a32-anchor-v1.json --output <prepared-directory>.",
+    "Render this exact config into a new local writable prepared directory that is different from the training output root: cyber-post-train train configs/runs/qwen38-27b-lora-sft-r64-a32-anchor-v1.json --output <prepared-directory>.",
     "Run the pinned-image CPU-only preflight against the staged model and corpus. It must write a fresh PREFLIGHT.json for this prepared directory.",
     "Check the live capacity census and confirm that adding one eight-GPU c1 node remains within the project limit.",
     "Run the generic Jobs API preview first. Do not rely on failureAlerts: false in the request without proof from the root RayJob render.",
@@ -132,5 +141,5 @@
     "a preview, dry-run, image, source, resource, or Secret-reference mismatch",
     "insufficient live c1 capacity"
   ],
-  "packet_sha256": "99d4571ccafe10ad282f7b03d2d71db89c173561d200cef96870ab64a3e08c7e"
+  "packet_sha256": "a2cabcc60597e3d5c28aff3e73da9e89419ccca868731e14a114e277312032c3"
 }
