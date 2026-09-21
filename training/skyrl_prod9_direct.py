@@ -109,6 +109,7 @@ def _observer_pid(
     """Accept only a live, exact-name production observer before one create."""
     value = _validate_seal(observer, "cyber_direct_cleanup_observer_armed_v1")
     pid = value.get("observer_pid")
+    creator_binding = value.get("creator_binding_path")
     if (
         value.get("status") != "armed"
         or value.get("context") != PROD_CONTEXT
@@ -121,6 +122,10 @@ def _observer_pid(
         or value.get("manifest_sha256") != manifest_sha256
         or type(pid) is not int
         or pid < 1
+        or not isinstance(creator_binding, str)
+        or not Path(creator_binding).is_absolute()
+        or Path(creator_binding).exists()
+        or Path(creator_binding).is_symlink()
     ):
         raise JobsError("prod9 exact cleanup observer binding changed")
     _fresh_at(value.get("armed_at"))
@@ -128,6 +133,48 @@ def _observer_pid(
         os.kill(pid, 0)
     except OSError as exc:
         raise JobsError("prod9 cleanup observer is not running") from exc
+    return value
+
+
+def _operation_root(observer: dict[str, Any]) -> Path:
+    binding = observer.get("creator_binding_path")
+    if not isinstance(binding, str):
+        raise JobsError("prod9 cleanup observer lacks its create handoff path")
+    path = Path(binding)
+    parent = path.parent
+    if (
+        not path.is_absolute()
+        or parent.is_symlink()
+        or not parent.is_dir()
+        or parent.resolve() != parent
+    ):
+        raise JobsError("prod9 operation root is not one canonical durable directory")
+    return parent
+
+
+def _publish_creator_binding(
+    observer: dict[str, Any],
+    *,
+    kind: str,
+    name: str,
+    plan_sha256: str,
+    manifest_sha256: str,
+    uid: str,
+) -> dict[str, Any]:
+    value = _seal(
+        {
+            "schema": "cyber_direct_cleanup_creator_binding_v1",
+            "status": "created_once",
+            "context": PROD_CONTEXT,
+            "namespace": NAMESPACE,
+            "kind": kind,
+            "name": name,
+            "plan_sha256": plan_sha256,
+            "manifest_sha256": manifest_sha256,
+            "uid": uid,
+        }
+    )
+    _write_once_fsynced(Path(observer["creator_binding_path"]), value)
     return value
 
 
@@ -600,7 +647,11 @@ def validate_cpu_preview(
 
 
 def _cpu_previews(
-    expected: dict[str, Any], proofs: list[dict[str, Any]], *, purpose: str
+    expected: dict[str, Any],
+    proofs: list[dict[str, Any]],
+    *,
+    purpose: str,
+    fresh: bool,
 ) -> list[dict[str, Any]]:
     observed = []
     for proof in proofs:
@@ -617,7 +668,8 @@ def _cpu_previews(
             or value.get("submitted") is not False
         ):
             raise JobsError("prod9 CPU server preview was not accepted")
-        _fresh_at(value.get("checked_at"))
+        if fresh:
+            _fresh_at(value.get("checked_at"))
         observed.append(value["context"])
     if sorted(observed) != sorted({DEV_CONTEXT, PROD_CONTEXT}) or len(proofs) != 2:
         raise JobsError("prod9 CPU server preview set is incomplete")
@@ -798,11 +850,17 @@ def _stage_authorization(
     observer: dict[str, Any],
     identity: historical.RailIdentity,
     require_live_observer: bool,
+    fresh_previews: bool,
 ) -> dict[str, Any]:
     checked, bound = training._stage_identity(stage)
     if bound != identity or expected != stage_job_manifest(checked, identity=bound):
         raise JobsError("prod9 stage manifest changed")
-    previews = _cpu_previews(expected, [dev_preview, prod_preview], purpose="stage")
+    previews = _cpu_previews(
+        expected,
+        [dev_preview, prod_preview],
+        purpose="stage",
+        fresh=fresh_previews,
+    )
     plan_sha256, manifest_sha256 = checked["sha256"], "sha256:" + digest(expected)
     if require_live_observer:
         armed = _observer_pid(
@@ -836,6 +894,7 @@ def _stage_authorization(
             "dev_preview": previews[0],
             "prod_preview": previews[1],
             "observer": armed,
+            "operation_root": str(_operation_root(armed)),
         }
     )
 
@@ -858,6 +917,7 @@ def authorize_stage(
         observer=observer,
         identity=identity,
         require_live_observer=True,
+        fresh_previews=True,
     )
 
 
@@ -876,6 +936,8 @@ def _preflight_authorization(
     observer: dict[str, Any],
     identity: historical.RailIdentity,
     require_live_observer: bool,
+    fresh_stage_release: bool,
+    fresh_previews: bool,
 ) -> dict[str, Any]:
     bound = _identity(plan, identity)
     checked_stage, _ = training._stage_identity(stage)
@@ -889,6 +951,7 @@ def _preflight_authorization(
         observer=stage_auth["observer"],
         identity=bound,
         require_live_observer=False,
+        fresh_previews=False,
     ):
         raise JobsError("prod9 stage authorization changed")
     stage_created_value = _cpu_created(
@@ -908,13 +971,18 @@ def _preflight_authorization(
         name=bound.stage_name,
         plan_sha256=checked_stage["sha256"],
         manifest_sha256="sha256:" + digest(stage_expected),
-        fresh=True,
+        fresh=fresh_stage_release,
     )
     if stage_observer.get("uid") != stage_created_value["job_uid"]:
         raise JobsError("prod9 stage release UID differs from its one create")
     if expected != preflight_job_manifest(plan, identity=bound):
         raise JobsError("prod9 CPU preflight manifest changed")
-    previews = _cpu_previews(expected, [dev_preview, prod_preview], purpose="preflight")
+    previews = _cpu_previews(
+        expected,
+        [dev_preview, prod_preview],
+        purpose="preflight",
+        fresh=fresh_previews,
+    )
     plan_sha256, manifest_sha256 = "sha256:" + digest(plan), "sha256:" + digest(expected)
     if require_live_observer:
         armed = _observer_pid(
@@ -939,6 +1007,8 @@ def _preflight_authorization(
             or armed.get("maximum_seconds") != CPU_MAXIMUM_SECONDS
         ):
             raise JobsError("prod9 CPU preflight observer binding changed")
+    if _operation_root(stage_auth["observer"]) != _operation_root(armed):
+        raise JobsError("prod9 stage and preflight operation roots differ")
     return _seal(
         {
             "schema": PREFLIGHT_AUTHORIZATION_SCHEMA,
@@ -953,6 +1023,7 @@ def _preflight_authorization(
             "dev_preview": previews[0],
             "prod_preview": previews[1],
             "observer": armed,
+            "operation_root": str(_operation_root(armed)),
         }
     )
 
@@ -987,6 +1058,8 @@ def authorize_preflight(
         observer=observer,
         identity=identity,
         require_live_observer=True,
+        fresh_stage_release=True,
+        fresh_previews=True,
     )
 
 
@@ -1014,7 +1087,6 @@ def _cpu_created(
         or result.get("authorization_sha256") != authorization_sha256
     ):
         raise JobsError("prod9 CPU create receipt changed")
-    _fresh_at(result.get("created_at"))
     return result
 
 
@@ -1079,11 +1151,23 @@ def _create_cpu_once(
     plan_sha256: str,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
 ) -> dict[str, Any]:
+    journal_name = (
+        "PROD9_STAGE_CREATE.jsonl" if purpose == "stage" else "PROD9_PREFLIGHT_CREATE.jsonl"
+    )
+    journal = directory / journal_name
+    if journal.exists() or journal.is_symlink():
+        raise JobsError("prod9 CPU create intent exists; reconcile, never retry")
     manifest_sha256 = "sha256:" + digest(expected)
     auth = _validate_seal(
         authorization,
         STAGE_AUTHORIZATION_SCHEMA if purpose == "stage" else PREFLIGHT_AUTHORIZATION_SCHEMA,
     )
+    if (
+        directory.is_symlink()
+        or not directory.is_dir()
+        or directory.resolve() != Path(auth.get("operation_root", ""))
+    ):
+        raise JobsError("prod9 CPU create directory differs from its sealed operation root")
     if (
         auth.get("status") != "authorized_for_one_create"
         or auth.get("manifest_sha256") != manifest_sha256
@@ -1112,12 +1196,10 @@ def _create_cpu_once(
         gpus=0,
         maximum_seconds=CPU_MAXIMUM_SECONDS,
     )
-    journal_name = (
-        "PROD9_STAGE_CREATE.jsonl" if purpose == "stage" else "PROD9_PREFLIGHT_CREATE.jsonl"
-    )
-    journal = directory / journal_name
-    if journal.exists() or journal.is_symlink():
-        raise JobsError("prod9 CPU create intent exists; reconcile, never retry")
+    for preview in (auth["dev_preview"], auth["prod_preview"]):
+        _fresh_at(preview.get("checked_at"))
+    if purpose == "preflight":
+        _fresh_at(auth["stage_release"].get("release_observed_at"))
     _write_once_fsynced(
         journal,
         {
@@ -1162,6 +1244,14 @@ def _create_cpu_once(
         ) from exc
     if created.get("metadata", {}).get("name") != name:
         raise JobsError("prod9 CPU create returned another identity; reconcile intent, never retry")
+    _publish_creator_binding(
+        observer,
+        kind="job",
+        name=name,
+        plan_sha256=plan_sha256,
+        manifest_sha256=manifest_sha256,
+        uid=uid,
+    )
     proof = _seal(
         {
             "schema": CPU_CREATED_SCHEMA,
@@ -1193,6 +1283,8 @@ def create_stage_once(
 ) -> dict[str, Any]:
     """Create the one permitted zero-GPU prod9 SFS rebind Job."""
     auth = _validate_seal(authorization, STAGE_AUTHORIZATION_SCHEMA)
+    if directory.resolve() != Path(auth.get("operation_root", "")):
+        raise JobsError("prod9 CPU create directory differs from its sealed operation root")
     if auth != authorize_stage(
         stage,
         expected,
@@ -1226,6 +1318,8 @@ def create_preflight_once(
 ) -> dict[str, Any]:
     """Create the one permitted zero-GPU exact-image prod9 preflight Job."""
     auth = _validate_seal(authorization, PREFLIGHT_AUTHORIZATION_SCHEMA)
+    if directory.resolve() != Path(auth.get("operation_root", "")):
+        raise JobsError("prod9 CPU create directory differs from its sealed operation root")
     expected = preflight_job_manifest(plan, identity=identity)
     if auth != _preflight_authorization(
         plan,
@@ -1241,6 +1335,8 @@ def create_preflight_once(
         observer=auth["observer"],
         identity=identity,
         require_live_observer=True,
+        fresh_stage_release=True,
+        fresh_previews=True,
     ):
         raise JobsError("prod9 CPU preflight authorization changed")
     return _create_cpu_once(
@@ -1417,6 +1513,7 @@ def _direct_authorization(
         observer=stage_auth["observer"],
         identity=bound,
         require_live_observer=False,
+        fresh_previews=False,
     ):
         raise JobsError("prod9 stage authorization changed")
     stage_created_value = _cpu_created(
@@ -1436,7 +1533,7 @@ def _direct_authorization(
         name=bound.stage_name,
         plan_sha256=checked_stage["sha256"],
         manifest_sha256="sha256:" + digest(stage_expected),
-        fresh=True,
+        fresh=False,
     )
     if stage_release_value.get("uid") != stage_created_value["job_uid"]:
         raise JobsError("prod9 stage release UID differs from its one create")
@@ -1457,6 +1554,8 @@ def _direct_authorization(
         observer=preflight_auth["observer"],
         identity=bound,
         require_live_observer=False,
+        fresh_stage_release=False,
+        fresh_previews=False,
     ):
         raise JobsError("prod9 CPU preflight authorization changed")
     preflight_created_value = _cpu_created(
@@ -1507,6 +1606,13 @@ def _direct_authorization(
             or armed.get("maximum_seconds") != MAXIMUM_SECONDS
         ):
             raise JobsError("prod9 direct observer binding changed")
+    roots = {
+        _operation_root(stage_auth["observer"]),
+        _operation_root(preflight_auth["observer"]),
+        _operation_root(armed),
+    }
+    if len(roots) != 1:
+        raise JobsError("prod9 stage, preflight, and GPU operation roots differ")
     return _seal(
         {
             "schema": AUTHORIZATION_SCHEMA,
@@ -1526,6 +1632,7 @@ def _direct_authorization(
             "dev_preview": previews[0],
             "prod_preview": previews[1],
             "observer": armed,
+            "operation_root": str(_operation_root(armed)),
             "output_absence_enforcement": "fresh_cpu_preflight_plus_non_idempotent_gpu_init",
         }
     )
@@ -1587,7 +1694,7 @@ def create_once(
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     jobs_factory: Callable[..., Jobs] = Jobs,
     wandb_exists: Callable[[str, str, str], bool] = _wandb_exists_default,
-    capacity_reader: Callable[..., dict[str, Any]] = hardening.live_capacity_census,
+    capacity_reader: Callable[..., dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Perform the single prod9 GPU create after re-checking every live gate.
 
@@ -1596,7 +1703,16 @@ def create_once(
     must reconcile the exact identity instead of replaying the request.
     """
     bound = _identity(plan, identity)
+    journal = directory / "PROD9_DIRECT_RAYJOB_CREATE.jsonl"
+    if journal.exists() or journal.is_symlink():
+        raise JobsError("prod9 create intent exists; reconcile, never retry")
     auth = _validate_seal(authorization, AUTHORIZATION_SCHEMA)
+    if (
+        directory.is_symlink()
+        or not directory.is_dir()
+        or directory.resolve() != Path(auth.get("operation_root", ""))
+    ):
+        raise JobsError("prod9 create directory differs from its sealed operation root")
     stage = auth.get("stage")
     if not isinstance(stage, dict):
         raise JobsError("prod9 direct authorization lacks its sealed stage specification")
@@ -1623,11 +1739,6 @@ def create_once(
         raise JobsError("prod9 direct authorization changed")
     if stage.get("sha256") != auth["stage_authorization"].get("stage_spec_sha256"):
         raise JobsError("prod9 direct stage specification digest changed")
-    # Fresh capacity and destination checks must happen immediately before the
-    # final production server render and the sole create.
-    capacity = hardening.capacity_gate(
-        plan, request, expected, identity=bound, reader=capacity_reader
-    )
     duplicate = _direct_duplicate_checks(
         bound, token=token, runner=runner, jobs_factory=jobs_factory
     )
@@ -1648,6 +1759,11 @@ def create_once(
         context=PROD_CONTEXT,
         identity=bound,
     )
+    # Capacity is the final external-state read.  Everything after it is a
+    # local liveness/freshness check, durable intent, and the sole create.
+    capacity = hardening.capacity_gate(
+        plan, request, expected, identity=bound, reader=capacity_reader
+    )
     _observer_pid(
         auth["observer"],
         kind="rayjob",
@@ -1657,9 +1773,10 @@ def create_once(
         gpus=8,
         maximum_seconds=MAXIMUM_SECONDS,
     )
-    journal = directory / "PROD9_DIRECT_RAYJOB_CREATE.jsonl"
-    if journal.exists() or journal.is_symlink():
-        raise JobsError("prod9 create intent exists; reconcile, never retry")
+    _fresh_at(capacity.get("observed_at"), maximum_age=hardening.CAPACITY_MAX_AGE_SECONDS)
+    _fresh_at(auth["preflight_release"].get("release_observed_at"))
+    for preview in (auth["dev_preview"], auth["prod_preview"]):
+        _fresh_at(preview.get("checked_at"))
     _write_once_fsynced(
         journal,
         {
@@ -1705,6 +1822,14 @@ def create_once(
         ) from exc
     if created.get("metadata", {}).get("name") != bound.run_name:
         raise JobsError("prod9 create returned another identity; reconcile intent, never retry")
+    _publish_creator_binding(
+        auth["observer"],
+        kind="rayjob",
+        name=bound.run_name,
+        plan_sha256="sha256:" + digest(plan),
+        manifest_sha256="sha256:" + digest(expected),
+        uid=uid,
+    )
     proof = _seal(
         {
             "schema": CREATED_SCHEMA,

@@ -18,15 +18,10 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from cyber_post_train.gpu_capacity import ROLE_LABELS, CapacityError, live_capacity_census
 from cyber_post_train.jobs import JobsError, digest
 
 from . import skyrl_episode as legacy_episode
-from . import skyrl_posttrain as legacy_posttrain
-from . import skyrl_reward_rayjob as legacy_direct
-from .checkpoints import receipt
 from .miles_conversion import _hash
-from .post_sft_artifacts import QWEN36_EXACT_MTP_OMISSION_KEYS, _safetensor_layout
 from .rl_episode import EpisodeBudgetExceeded, InvalidEpisode
 from .sft_runtime import _checked_file, write_receipt
 
@@ -37,8 +32,8 @@ PROJECT_OWNER_PREFIXES = ("chris-q38-",)
 PROJECT_MAX_NODES = 8
 PROJECT_MAX_GPUS = 64
 CAPACITY_MAX_AGE_SECONDS = 120
-PROD_CONTEXT = legacy_direct.PROD_CONTEXT
-NAMESPACE = legacy_direct.NAMESPACE
+PROD_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
+NAMESPACE = "fleet-train-jobs"
 SOURCE_CLOSURE_SCHEMA = "cyber_skyrl_prod9_source_closure_check_v1"
 
 
@@ -57,8 +52,8 @@ def validate_episode_limits(limits: object) -> None:
     }
     if (
         not isinstance(limits, dict)
-        or set(limits) != required
-        or any(type(limits[key]) is not int or limits[key] <= 0 for key in required)
+        or set(limits) not in (required, required | {"response_tokens"})
+        or any(type(limits[key]) is not int or limits[key] <= 0 for key in limits)
     ):
         raise InvalidEpisode("skyrl_compaction_contract_drift")
     if not (
@@ -149,6 +144,20 @@ def verify_source_closure(path: Path) -> dict[str, Any]:
                 "live_create_is_available",
             },
         ),
+        "prod9_reload_rail": (
+            "training/skyrl_prod9_reload.py",
+            {
+                "build_spec",
+                "job_request",
+                "manifest",
+                "validate_preview",
+                "capacity_gate",
+                "authorize",
+                "create_once",
+                "validate_source",
+                "run_check",
+            },
+        ),
         "direct_rail": (
             "training/skyrl_reward_rayjob.py",
             {
@@ -162,6 +171,10 @@ def verify_source_closure(path: Path) -> dict[str, Any]:
         "prod9_cleanup_observer": (
             "training/dev_cleanup_observer.py",
             {"_validated_receipt", "Observer"},
+        ),
+        "gpu_capacity_census": (
+            "cyber_post_train/gpu_capacity.py",
+            {"build_capacity_census", "live_capacity_census"},
         ),
         "checkpoint_sealer": (
             "training/skyrl_posttrain.py",
@@ -303,10 +316,15 @@ def capacity_gate(
     request: dict[str, Any],
     expected: dict[str, Any],
     *,
-    identity: legacy_direct.RailIdentity | None = None,
-    reader: Callable[..., dict[str, Any]] = live_capacity_census,
+    identity: Any | None = None,
+    reader: Callable[..., dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Read and seal a fresh all-namespace proof before one direct create."""
+    from cyber_post_train.gpu_capacity import ROLE_LABELS, CapacityError, live_capacity_census
+
+    from . import skyrl_reward_rayjob as legacy_direct
+
+    reader = live_capacity_census if reader is None else reader
     bound = legacy_direct._identity_for_plan(plan, identity)
     _require_root_alert_annotation(expected)
     try:
@@ -415,6 +433,10 @@ def _receipt_file(path: Path) -> tuple[dict, str]:
 
 
 def terminal_paths(plan: dict) -> dict[str, Path]:
+    from . import skyrl_posttrain as legacy_posttrain
+
+    if plan.get("schema") != "cyber_skyrl_prod9_training_v1":
+        raise ValueError("terminal acceptance requires the fresh prod9 plan")
     args = legacy_posttrain._validate_plan(plan)
     root = Path(plan["output_root"])
     reload_root = root.with_name(root.name + f"-p{args.steps}-reload-v1")
@@ -428,6 +450,10 @@ def terminal_paths(plan: dict) -> dict[str, Path]:
 
 
 def _inspect_export(path: Path, sha256: str) -> tuple[dict, dict]:
+    from . import skyrl_posttrain as legacy_posttrain
+    from .checkpoints import receipt
+    from .post_sft_artifacts import QWEN36_EXACT_MTP_OMISSION_KEYS, _safetensor_layout
+
     _checked_file(path, sha256)
     proof = receipt(path)
     root = path.parent
@@ -460,6 +486,9 @@ def _inspect_export(path: Path, sha256: str) -> tuple[dict, dict]:
 
 
 def _reload_observer(path: Path, *, plan: dict, expected_name: str) -> tuple[dict, str]:
+    from . import skyrl_posttrain as legacy_posttrain
+    from . import skyrl_reward_rayjob as legacy_direct
+
     value = legacy_posttrain._json(path)
     body = {key: item for key, item in value.items() if key != "sha256"}
     if value.get("sha256") != "sha256:" + digest(body):
@@ -528,6 +557,9 @@ def accept_terminal(
     output: Path,
 ) -> dict:
     """Create the sole prod9 completion marker after seal, reload, and release."""
+    from . import skyrl_posttrain as legacy_posttrain
+    from . import skyrl_prod9_reload
+
     args = legacy_posttrain._validate_plan(plan)
     paths = terminal_paths(plan)
     supplied = {
@@ -568,6 +600,12 @@ def accept_terminal(
         or gpu.get("status") != "passed"
         or gpu.get("export_sha256") != export_file_sha256
         or gpu.get("export_receipt_sha256") != export_receipt["receipt_sha256"]
+        or gpu.get("checkpoint_manifest_file_sha256") != manifest_file_sha256
+        or gpu.get("checkpoint_receipt_sha256") != manifest["receipt_sha256"]
+        or gpu.get("source_plan_sha256") != digest(plan)
+        or gpu.get("model_repo") != plan["model"]["repo"]
+        or gpu.get("model_revision") != plan["model"]["revision"]
+        or gpu.get("checker_sha256") != _hash(Path(skyrl_prod9_reload.__file__))
         or gpu.get("optimizer_steps_executed") != 0
         or gpu.get("gpus") != 1
         or gpu.get("gpu_reload_verified") is not True
@@ -582,6 +620,8 @@ def accept_terminal(
         plan=plan,
         expected_name=plan["run_name"] + f"-p{args.steps}-reload-v1",
     )
+    if observer.get("receipt") != gpu:
+        raise ValueError("reload observer is not bound to the exact GPU check receipt")
     result = {
         "schema": ACCEPTANCE_SCHEMA,
         "status": "accepted",
@@ -592,6 +632,7 @@ def accept_terminal(
         "export_receipt_sha256": export_receipt["receipt_sha256"],
         "gpu_check_file_sha256": gpu_file_sha256,
         "gpu_check_receipt_sha256": gpu["receipt_sha256"],
+        "reload_checker_file_sha256": gpu["checker_sha256"],
         "reload_observer_file_sha256": observer_file_sha256,
         "reload_observer_receipt_sha256": observer["sha256"],
         "reload_rayjob_uid": observer["rayjob_uid"],

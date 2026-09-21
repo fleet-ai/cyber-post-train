@@ -11,6 +11,7 @@ from types import SimpleNamespace
 import pytest
 import torch
 from safetensors.torch import save_file
+from test_dev_cleanup_observer import FakeDirectRayJobCluster
 from test_export import distributed
 from test_rl_data import setup  # noqa: F401
 from test_skyrl_data import skyrl as data_setup  # noqa: F401
@@ -19,8 +20,9 @@ from torch.distributed.tensor import Shard
 
 from cyber_post_train.jobs import digest
 from evals.fleet import opencode_self_hosted as fleet
+from training import dev_cleanup_observer as cleanup_observer
 from training import export as native_export
-from training import skyrl
+from training import skyrl, skyrl_prod9_direct, skyrl_prod9_reload, skyrl_prod9_training
 from training import skyrl_posttrain as post
 from training import skyrl_prod9_hardening as prod9
 from training.sft_runtime import digest as file_digest
@@ -265,6 +267,25 @@ def completed_rl(prepared, monkeypatch):  # noqa: F811
     return SimpleNamespace(plan=plan, root=output, data=data, base=base, manifest=tmp / "seal.json")
 
 
+@pytest.fixture
+def completed_prod9_rl(completed_rl):
+    state = completed_rl
+    state.plan.update(
+        schema=skyrl_prod9_training.SCHEMA,
+        runtime_sha256=digest(skyrl_prod9_training._runtime()),
+        prod9_runtime=skyrl_prod9_training._binding(),
+    )
+    terminal_path = state.root / "NATIVE_TRAINING_COMPLETE.json"
+    terminal = json.loads(terminal_path.read_text())
+    terminal["plan_sha256"] = digest(state.plan)
+    write(
+        terminal_path,
+        sealed({key: value for key, value in terminal.items() if key != "sha256"}, prefix=False),
+    )
+    state.manifest = state.root.parent / "prod9-seal.json"
+    return state
+
+
 def test_rl_checkpoint_seal_and_zero_update_bf16_export(completed_rl, monkeypatch):
     state = completed_rl
     before = {path: path.read_bytes() for path in state.root.rglob("*") if path.is_file()}
@@ -286,6 +307,74 @@ def test_rl_checkpoint_seal_and_zero_update_bf16_export(completed_rl, monkeypatc
         post.export_checkpoint(state.manifest, file_digest(state.manifest), output)
 
 
+def test_prod9_plan_seals_and_verifies_without_historical_plan_rewrite(
+    completed_prod9_rl,
+) -> None:
+    state = completed_prod9_rl
+    manifest = post.seal_checkpoint(state.plan, state.manifest)
+    post.verify_manifest(manifest)
+    assert manifest["source_plan"] == state.plan
+    assert manifest["source_plan_sha256"] == digest(state.plan)
+
+    broken = copy.deepcopy(state.plan)
+    broken.pop("prod9_runtime")
+    with pytest.raises(ValueError, match="runtime binding"):
+        post._validate_plan(broken)
+
+
+def test_prod9_reload_spec_binds_exact_checkpoint_export_and_model(
+    completed_prod9_rl, monkeypatch
+) -> None:
+    state = completed_prod9_rl
+    monkeypatch.setattr(
+        skyrl_prod9_reload,
+        "_reload_run_dir",
+        lambda plan, step: f"/mnt/sfs/jobs/{plan['run_name']}-p{step}-reload-v1",
+    )
+    paths = prod9.terminal_paths(state.plan)
+    manifest = post.seal_checkpoint(state.plan, paths["checkpoint_manifest"])
+    exported = post.export_checkpoint(
+        paths["checkpoint_manifest"],
+        file_digest(paths["checkpoint_manifest"]),
+        paths["export"].parent,
+    )
+    spec = skyrl_prod9_reload.build_spec(
+        state.plan,
+        manifest,
+        exported,
+        checkpoint_manifest_file_sha256=file_digest(paths["checkpoint_manifest"]),
+        export_file_sha256=file_digest(paths["export"]),
+    )
+
+    observed_export, layout = skyrl_prod9_reload.validate_source(spec)
+    assert spec["name"] == state.plan["run_name"] + "-p2-reload-v1"
+    assert spec["resources"] == {
+        "nodes": 1,
+        "gpus": 1,
+        "priority_class": "c1",
+        "queue_priority_class": "q1",
+        "maximum_seconds": 1800,
+    }
+    assert spec["model"]["repo"] == "Qwen/Qwen3.8-27B"
+    assert spec["model"]["revision"] == state.plan["model"]["revision"]
+    assert observed_export == exported
+    assert layout
+
+    wrong = copy.deepcopy(exported)
+    wrong["source_checkpoint_receipt_sha256"] = "0" * 64
+    wrong["receipt_sha256"] = digest(
+        {key: item for key, item in wrong.items() if key != "receipt_sha256"}
+    )
+    with pytest.raises(ValueError, match="checkpoint/export identity"):
+        skyrl_prod9_reload.build_spec(
+            state.plan,
+            manifest,
+            wrong,
+            checkpoint_manifest_file_sha256=file_digest(paths["checkpoint_manifest"]),
+            export_file_sha256=file_digest(paths["export"]),
+        )
+
+
 def _terminal_inputs(state):
     paths = prod9.terminal_paths(state.plan)
     manifest = post.seal_checkpoint(state.plan, paths["checkpoint_manifest"])
@@ -301,6 +390,12 @@ def _terminal_inputs(state):
             "status": "passed",
             "export_sha256": file_digest(paths["export"]),
             "export_receipt_sha256": exported["receipt_sha256"],
+            "checkpoint_manifest_file_sha256": file_digest(paths["checkpoint_manifest"]),
+            "checkpoint_receipt_sha256": manifest["receipt_sha256"],
+            "source_plan_sha256": digest(state.plan),
+            "model_repo": state.plan["model"]["repo"],
+            "model_revision": state.plan["model"]["revision"],
+            "checker_sha256": file_digest(Path(skyrl_prod9_reload.__file__)),
             "optimizer_steps_executed": 0,
             "gpus": 1,
             "gpu_reload_verified": True,
@@ -311,46 +406,47 @@ def _terminal_inputs(state):
         },
     )
     reload_name = state.plan["run_name"] + "-p2-reload-v1"
-    observer = {
-        "schema": prod9.RELOAD_OBSERVER_SCHEMA,
-        "status": "released",
-        "context": prod9.PROD_CONTEXT,
-        "namespace": prod9.NAMESPACE,
-        "kind": "rayjob",
-        "name": reload_name,
-        "plan_sha256": "sha256:" + digest(state.plan),
-        "manifest_sha256": "sha256:" + "a" * 64,
-        "expected_gpus": 1,
-        "uid": "10000000-0000-4000-8000-000000000001",
-        "rayjob_name": reload_name,
-        "rayjob_uid": "10000000-0000-4000-8000-000000000001",
-        "workload_name": "reload-workload",
-        "workload_uid": "10000000-0000-4000-8000-000000000002",
-        "raycluster_name": "reload-cluster",
-        "raycluster_uid": "10000000-0000-4000-8000-000000000003",
-        "pod_names": ["reload-pod"],
-        "pod_uids": ["10000000-0000-4000-8000-000000000004"],
-        "image_ids": ["sha256:" + "b" * 64],
-        "exit_codes": [0],
-        "termination_reasons": ["Completed"],
-        "terminal_status": "Succeeded",
-        "restarts": 0,
-        "observer_error_class": "",
-        "target_present": False,
-        "pods_present": False,
-        "rayjob_present": False,
-        "workload_present": False,
-        "raycluster_present": False,
-        "active_gpus": 0,
-        "peak_gpus": 1,
-        "release_observed_at": "2026-09-21T00:00:00Z",
-    }
-    write(paths["reload_observer"], sealed(observer))
+    gpu_receipt = json.loads(paths["gpu_check"].read_text())
+    manifest_sha256 = "sha256:" + "a" * 64
+    cluster = FakeDirectRayJobCluster(name=reload_name, gpus=1, receipt=gpu_receipt)
+    observer = cleanup_observer.Observer(
+        context=cleanup_observer.PROD_CONTEXT,
+        namespace=cleanup_observer.NAMESPACE,
+        kind="rayjob",
+        name=reload_name,
+        maximum_seconds=1800,
+        expected_gpus=1,
+        plan_sha256="sha256:" + digest(state.plan),
+        manifest_sha256=manifest_sha256,
+        armed_path=paths["reload_observer"].with_name("OBSERVER_ARMED.json"),
+        result_path=paths["reload_observer"],
+        poll_seconds=0.001,
+        profile="production-reload",
+        run=cluster,
+    )
+    original_arm = observer.arm
+
+    def arm_and_bind():
+        armed = original_arm()
+        skyrl_prod9_direct._publish_creator_binding(
+            armed,
+            kind="rayjob",
+            name=reload_name,
+            plan_sha256="sha256:" + digest(state.plan),
+            manifest_sha256=manifest_sha256,
+            uid="00000000-0000-0000-0000-000000000020",
+        )
+        return armed
+
+    observer.arm = arm_and_bind
+    observer.run()
     return paths, manifest, exported
 
 
-def test_rl_terminal_acceptance_requires_exact_seal_export_reload_and_release(completed_rl):
-    state = completed_rl
+def test_rl_terminal_acceptance_requires_exact_seal_export_reload_and_release(
+    completed_prod9_rl,
+):
+    state = completed_prod9_rl
     paths, manifest, exported = _terminal_inputs(state)
 
     accepted = prod9.accept_terminal(
@@ -378,13 +474,23 @@ def test_rl_terminal_acceptance_requires_exact_seal_export_reload_and_release(co
         )
 
 
-@pytest.mark.parametrize("fault", ["gpu", "release", "terminal", "observer_manifest", "wrong_path"])
-def test_rl_terminal_acceptance_rejects_incomplete_reload_or_release(completed_rl, fault):
-    state = completed_rl
+@pytest.mark.parametrize(
+    "fault", ["gpu", "checker", "release", "terminal", "observer_manifest", "wrong_path"]
+)
+def test_rl_terminal_acceptance_rejects_incomplete_reload_or_release(completed_prod9_rl, fault):
+    state = completed_prod9_rl
     paths, _, _ = _terminal_inputs(state)
     if fault == "gpu":
         value = json.loads(paths["gpu_check"].read_text())
         value["gpu_reload_verified"] = False
+        write_receipt(
+            paths["gpu_check"],
+            {key: item for key, item in value.items() if key != "receipt_sha256"},
+            replace=True,
+        )
+    elif fault == "checker":
+        value = json.loads(paths["gpu_check"].read_text())
+        value["checker_sha256"] = "0" * 64
         write_receipt(
             paths["gpu_check"],
             {key: item for key, item in value.items() if key != "receipt_sha256"},

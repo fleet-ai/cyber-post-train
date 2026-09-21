@@ -5,8 +5,11 @@ from __future__ import annotations
 import base64
 import copy
 import gzip
+import hashlib
 import json
 import os
+import subprocess
+import sys
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
@@ -26,6 +29,43 @@ from training import skyrl_reward_rayjob as historical_direct
 
 pytest_plugins = ("test_skyrl_training",)
 ROOT = Path(__file__).resolve().parents[1]
+SOURCE_CLOSURE = ROOT / "configs/data/qwen38-rl-reward-canary-exact-version-evidence-v8.json"
+
+
+def test_prod9_reuses_only_the_proven_miles_shape_and_qwen38_reload_gate() -> None:
+    comparison = json.loads(SOURCE_CLOSURE.read_text())["proven_recipe_comparison"]
+    prod9 = comparison["prod9_one_update_recipe"]
+    miles = comparison["miles_rank_safe_precedent"]
+    reload_gate = comparison["qwen38_lr30_reload_precedent"]
+    for binding in (
+        prod9["source"],
+        miles["evidence"],
+        reload_gate["source"],
+        reload_gate["qualification"],
+    ):
+        source = (SOURCE_CLOSURE.parent / binding["path"]).resolve()
+        assert binding["file_sha256"] == "sha256:" + hashlib.sha256(source.read_bytes()).hexdigest()
+    lr30 = json.loads((SOURCE_CLOSURE.parent / reload_gate["qualification"]["path"]).read_text())
+    assert reload_gate["qualification"]["self_sha256"] == lr30["sha256"]
+    controls = (
+        "nodes",
+        "gpus_per_node",
+        "groups",
+        "samples_per_prompt",
+        "global_batch_size",
+        "optimizer_updates",
+        "learning_rate",
+        "checkpoint_interval",
+    )
+    assert {key: prod9[key] for key in controls} == {key: miles[key] for key in controls}
+    assert prod9["model"] == "Qwen/Qwen3.8-27B" and prod9["backend"] == "skyrl"
+    assert miles["model"] == "Qwen/Qwen3.6-27B" and miles["backend"] == "miles"
+    assert miles["reward_variation_observed"] is False
+    assert miles["finite_nonzero_parameter_update_observed"] is False
+    assert reload_gate["nodes"] == reload_gate["gpus"] == 1
+    assert reload_gate["generated_tokens"] == 2
+    assert reload_gate["optimizer_updates"] == 0
+    assert hardening.verify_source_closure(SOURCE_CLOSURE)["tool_result_token_safe"] is True
 
 
 def _bundle(request: dict) -> dict:
@@ -40,6 +80,32 @@ def _bundle(request: dict) -> dict:
             value for _, value in sorted(parts, key=lambda item: int(item[0].rsplit("_", 1)[1]))
         )
     return json.loads(gzip.decompress(base64.b64decode(encoded, validate=True)))
+
+
+def _assert_hermetic_bundle_imports(request: dict, root: Path) -> None:
+    """Import only from the transported closure, never from this checkout."""
+    bundle = _bundle(request)
+    for relative, source in bundle["files"].items():
+        path = root / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(source)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            (
+                "import importlib,sys;"
+                f"sys.path.insert(0,{str(root)!r});"
+                f"importlib.import_module({bundle['module']!r})"
+            ),
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def _prod9_plan() -> tuple[dict, dict, historical_direct.RailIdentity]:
@@ -216,6 +282,7 @@ def _observer(
     manifest_sha256: str,
     gpus: int,
     seconds: int,
+    creator_binding_path: Path,
 ):
     return prod9_direct._seal(
         {
@@ -231,6 +298,7 @@ def _observer(
             "manifest_sha256": manifest_sha256,
             "armed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "observer_pid": os.getpid(),
+            "creator_binding_path": str(creator_binding_path),
         }
     )
 
@@ -339,7 +407,9 @@ def _preflight_receipt(plan: dict, request: dict, identity: historical_direct.Ra
     return {**body, "receipt_sha256": digest(body)}
 
 
-def test_prod9_request_bundles_fresh_entrypoint_and_historical_rail_rejects(prepared):
+def test_prod9_request_bundles_fresh_entrypoint_and_historical_rail_rejects(
+    prepared, tmp_path: Path
+):
     plan = prod9_training.compile_rl(prepared.config, relative_to=prepared.state.tmp)
     request = prod9_training.job_request(plan)
     bundle = _bundle(request)
@@ -353,6 +423,8 @@ def test_prod9_request_bundles_fresh_entrypoint_and_historical_rail_rejects(prep
     )
     assert bundle["files"]["training/skyrl_prod9_rollout.py"] == Path(rollout.__file__).read_text()
     assert "hardening.Recorder(" in bundle["files"]["training/skyrl_prod9_rollout.py"]
+    _assert_hermetic_bundle_imports(request, tmp_path / "gpu")
+    _assert_hermetic_bundle_imports(prod9_training.preflight_request(plan), tmp_path / "preflight")
 
     # The old direct rail starts through its historical compiler.  It must be
     # explicitly unavailable instead of rendering a fresh plan as prod8.
@@ -360,6 +432,26 @@ def test_prod9_request_bundles_fresh_entrypoint_and_historical_rail_rejects(prep
         "status": "rejected",
         "reason": "historical_direct_rail_cannot_render_fresh_prod9_runtime",
     }
+
+
+def test_prod9_stage_bundle_imports_hermetically(tmp_path: Path) -> None:
+    _plan, _request, identity = _prod9_plan()
+    predecessor = json.loads(
+        (ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json").read_text()
+    )
+    stage = prod9_training.stage_spec(identity, predecessor)
+    _assert_hermetic_bundle_imports(prod9_training.stage_request(stage), tmp_path / "stage")
+
+
+def test_prod9_limits_accept_manifest_and_recorder_surfaces() -> None:
+    config = json.loads(
+        (ROOT / "configs/qualification/qwen38-rl-reward-canary-data-prod-v9.json").read_text()
+    )
+    limits = config["limits"]
+    hardening.validate_episode_limits(limits)
+    hardening.validate_episode_limits(
+        {key: value for key, value in limits.items() if key != "response_tokens"}
+    )
 
 
 def test_prod9_fresh_direct_renderer_and_cpu_preflight_are_alert_safe() -> None:
@@ -483,6 +575,76 @@ def test_prod9_one_create_rail_rejects_a_historical_plan_before_any_live_check(
         )
 
 
+def test_prod9_prior_stage_evidence_is_uid_bound_without_global_freshness() -> None:
+    plan, _request, identity = _prod9_plan()
+    predecessor = json.loads(
+        (ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json").read_text()
+    )
+    stage = prod9_training.stage_spec(identity, predecessor)
+    stage_job = prod9_direct.stage_job_manifest(stage, identity=identity)
+    authorization_sha256 = "sha256:" + "a" * 64
+    uid = "00000000-0000-0000-0000-000000000099"
+    created = prod9_direct._seal(
+        {
+            "schema": prod9_direct.CPU_CREATED_SCHEMA,
+            "status": "created_once",
+            "purpose": "stage",
+            "name": identity.stage_name,
+            "plan_sha256": stage["sha256"],
+            "manifest_sha256": "sha256:" + digest(stage_job),
+            "authorization_sha256": authorization_sha256,
+            "job_uid": uid,
+            "created_at": "2026-09-21T00:00:00Z",
+        }
+    )
+    assert (
+        prod9_direct._cpu_created(
+            created,
+            purpose="stage",
+            name=identity.stage_name,
+            plan_sha256=stage["sha256"],
+            manifest_sha256="sha256:" + digest(stage_job),
+            authorization_sha256=authorization_sha256,
+        )["job_uid"]
+        == uid
+    )
+
+    receipt = {"immutable": True}
+    release = _release(
+        name=identity.stage_name,
+        plan_sha256=stage["sha256"],
+        manifest_sha256="sha256:" + digest(stage_job),
+        receipt=receipt,
+        uid=uid,
+    )
+    release = prod9_direct._seal(
+        {
+            **{key: value for key, value in release.items() if key != "sha256"},
+            "release_observed_at": "2026-09-21T00:00:00Z",
+        }
+    )
+    assert (
+        prod9_direct._cpu_release(
+            release,
+            receipt,
+            name=identity.stage_name,
+            plan_sha256=stage["sha256"],
+            manifest_sha256="sha256:" + digest(stage_job),
+            fresh=False,
+        )["uid"]
+        == uid
+    )
+    with pytest.raises(JobsError, match="stale"):
+        prod9_direct._cpu_release(
+            release,
+            receipt,
+            name=identity.stage_name,
+            plan_sha256=stage["sha256"],
+            manifest_sha256="sha256:" + digest(stage_job),
+            fresh=True,
+        )
+
+
 def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -506,6 +668,7 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
         "sha256:" + digest(stage_job),
         0,
         prod9_direct.CPU_MAXIMUM_SECONDS,
+        tmp_path / "stage-created.json",
     )
     stage_auth = prod9_direct.authorize_stage(
         stage,
@@ -572,6 +735,7 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
         "sha256:" + digest(preflight_job),
         0,
         prod9_direct.CPU_MAXIMUM_SECONDS,
+        tmp_path / "preflight-created.json",
     )
     preflight_auth = prod9_direct.authorize_preflight(
         plan,
@@ -632,7 +796,16 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
         "sha256:" + digest(rayjob),
         8,
         prod9_direct.MAXIMUM_SECONDS,
+        tmp_path / "rayjob-created.json",
     )
+    fresh_checks = []
+    original_fresh_at = prod9_direct._fresh_at
+
+    def record_fresh(value, **kwargs):
+        fresh_checks.append(value)
+        return original_fresh_at(value, **kwargs)
+
+    monkeypatch.setattr(prod9_direct, "_fresh_at", record_fresh)
     authorization = prod9_direct.authorize(
         plan,
         request,
@@ -652,9 +825,16 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
         observer=direct_observer,
         identity=identity,
     )
+    assert fresh_checks == [
+        preflight_release["release_observed_at"],
+        direct_dev["checked_at"],
+        direct_prod["checked_at"],
+        direct_observer["armed_at"],
+    ]
 
     created_rayjob_uid = "00000000-0000-0000-0000-000000000004"
     mutations = []
+    live_order = []
 
     class JobsClient:
         def __init__(self, *_args, **_kwargs):
@@ -667,6 +847,7 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
             return False
 
         def all_runs(self):
+            live_order.append("jobs")
             return []
 
     census = build_capacity_census(
@@ -682,10 +863,13 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
 
     def direct_runner(command, **kwargs):
         if "--dry-run=server" in command:
+            live_order.append("dry-run")
             return NS(returncode=0, stdout=json.dumps(_direct_render(json.loads(kwargs["input"]))))
         if "get" in command:
+            live_order.append("inventory")
             return NS(returncode=0, stdout=json.dumps({"items": []}))
         if "create" in command:
+            live_order.append("create")
             mutations.append(command)
             expected = json.loads(kwargs["input"])
             return NS(
@@ -713,12 +897,13 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
         identity=identity,
         runner=direct_runner,
         jobs_factory=JobsClient,
-        wandb_exists=lambda *_args: False,
-        capacity_reader=lambda _context, **_kwargs: census,
+        wandb_exists=lambda *_args: live_order.append("wandb") or False,
+        capacity_reader=lambda _context, **_kwargs: live_order.append("capacity") or census,
     )
 
     assert created["rayjob_uid"] == created_rayjob_uid
     assert len(mutations) == 1
+    assert live_order[-2:] == ["capacity", "create"]
     journal = [
         json.loads(line)
         for line in (tmp_path / "PROD9_DIRECT_RAYJOB_CREATE.jsonl").read_text().splitlines()
@@ -740,6 +925,24 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
             wandb_exists=lambda *_args: False,
             capacity_reader=lambda _context, **_kwargs: census,
         )
+    alternate = tmp_path / "alternate"
+    alternate.mkdir()
+    with pytest.raises(JobsError, match="sealed operation root"):
+        prod9_direct.create_once(
+            alternate,
+            plan,
+            request,
+            source_preview,
+            rayjob,
+            authorization,
+            token="synthetic",
+            identity=identity,
+            runner=direct_runner,
+            jobs_factory=JobsClient,
+            wandb_exists=lambda *_args: False,
+            capacity_reader=lambda _context, **_kwargs: census,
+        )
+    assert len(mutations) == 1
 
 
 @pytest.mark.asyncio

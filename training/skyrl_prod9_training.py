@@ -39,6 +39,7 @@ STAGE_RECEIPT_SCHEMA = "cyber_skyrl_prod9_rebind_stage_receipt_v1"
 TERMINATION_MESSAGE_MAX_BYTES = 16384
 RUNTIME_FILES = (
     *historical.RUNTIME_FILES,
+    "training/skyrl_reward_rayjob.py",
     "training/skyrl_prod9_hardening.py",
     "training/skyrl_prod9_rollout.py",
     "training/skyrl_prod9_training.py",
@@ -249,10 +250,6 @@ def stage_request(stage: dict) -> dict:
     """
     checked, identity = _stage_identity(stage)
     files = _runtime()
-    root = Path(__file__).resolve().parents[1]
-    files["training/skyrl_reward_rayjob.py"] = (
-        root / "training/skyrl_reward_rayjob.py"
-    ).read_text()
     files.update(
         {
             path + "/__init__.py": ""

@@ -80,6 +80,49 @@ def model(name: str, *, active: int, phase: str = "ready") -> dict:
     }
 
 
+def rayjob(name: str, *, uid: str = "rayjob-uid", gpus: int = 8) -> dict:
+    return {
+        "metadata": {
+            "name": name,
+            "namespace": "fleet-train-jobs",
+            "uid": uid,
+            "resourceVersion": "30",
+            "labels": {"fleet.ai/run-name": name},
+        },
+        "spec": {
+            "suspend": True,
+            "rayClusterSpec": {
+                "headGroupSpec": {
+                    "template": {"spec": {"containers": [gpu_container("head", gpus)]}}
+                },
+                "workerGroupSpecs": [],
+            },
+        },
+        "status": {},
+    }
+
+
+def workload(name: str, *, owner: str, owner_uid: str = "rayjob-uid", gpus: int = 8) -> dict:
+    return {
+        "metadata": {
+            "name": name,
+            "namespace": "fleet-train-jobs",
+            "uid": "workload-uid",
+            "resourceVersion": "40",
+            "ownerReferences": [{"kind": "RayJob", "name": owner, "uid": owner_uid}],
+        },
+        "spec": {
+            "podSets": [
+                {
+                    "count": 1,
+                    "template": {"spec": {"containers": [gpu_container("head", gpus)]}},
+                }
+            ]
+        },
+        "status": {},
+    }
+
+
 def test_cross_namespace_census_counts_training_and_every_serving_route() -> None:
     pods = {
         "items": [
@@ -161,6 +204,82 @@ def test_projected_create_fails_closed_above_eight_nodes() -> None:
     assert receipt["qualified"] is False
     assert "projected GPU nodes 9 exceed limit 8" in receipt["problems"]
     assert "projected GPUs 72 exceed limit 64" in receipt["problems"]
+
+
+def test_pending_unscheduled_pod_occupies_capacity_before_a_new_create() -> None:
+    pods = {
+        "items": [
+            *[
+                pod(
+                    f"chris-q38-running-{index}",
+                    namespace="fleet-train-jobs",
+                    uid=f"running-{index}",
+                    node=f"node-{index}",
+                    labels={"fleet.ai/run-name": f"chris-q38-running-{index}"},
+                )
+                for index in range(7)
+            ],
+            pod(
+                "chris-q38-queued",
+                namespace="fleet-train-jobs",
+                uid="queued",
+                node=None,
+                labels={"fleet.ai/run-name": "chris-q38-queued"},
+                phase="Pending",
+            ),
+        ]
+    }
+    receipt = build_capacity_census(
+        pods,
+        {"items": []},
+        planned_nodes=1,
+        planned_gpus=8,
+        observed_at="2026-09-21T00:00:00Z",
+    )
+    assert receipt["current"]["nodes"] == 8
+    assert receipt["current"]["gpus"] == 64
+    assert receipt["projected"] == {"nodes": 9, "gpus": 72}
+    assert receipt["qualified"] is False
+
+
+def test_suspended_rayjob_workload_without_a_pod_occupies_capacity() -> None:
+    name = "chris-q38-queued"
+    receipt = build_capacity_census(
+        {
+            "items": [
+                pod(
+                    f"chris-q38-running-{index}",
+                    namespace="fleet-train-jobs",
+                    uid=f"running-{index}",
+                    node=f"node-{index}",
+                    labels={"fleet.ai/run-name": f"chris-q38-running-{index}"},
+                )
+                for index in range(7)
+            ]
+        },
+        {"items": []},
+        {"items": [rayjob(name)]},
+        {"items": [workload("queued-workload", owner=name)]},
+        planned_nodes=1,
+        planned_gpus=8,
+        observed_at="2026-09-21T00:00:00Z",
+    )
+    assert receipt["current"]["queued_claims"][0]["identity"] == name
+    assert receipt["current"]["nodes"] == 8
+    assert receipt["current"]["gpus"] == 64
+    assert receipt["qualified"] is False
+
+
+def test_uncorrelated_owned_workload_fails_closed() -> None:
+    receipt = build_capacity_census(
+        {"items": []},
+        {"items": []},
+        {"items": []},
+        {"items": [workload("orphan", owner="chris-q38-missing")]},
+        observed_at="2026-09-21T00:00:00Z",
+    )
+    assert receipt["qualified"] is False
+    assert any("no exact RayJob owner" in problem for problem in receipt["problems"])
 
 
 def test_regular_init_gpu_is_peak_not_added_to_app_gpu() -> None:
@@ -247,9 +366,9 @@ def test_inference_model_and_pod_count_must_reconcile() -> None:
     assert "activePods=1" in receipt["problems"][0]
 
 
-def test_live_census_reads_pods_and_inference_models_across_all_namespaces(monkeypatch) -> None:
+def test_live_census_reads_pods_and_queued_claims_across_all_namespaces(monkeypatch) -> None:
     calls: list[list[str]] = []
-    responses = iter(({"items": []}, {"items": []}))
+    responses = iter(({"items": []}, {"items": []}, {"items": []}, {"items": []}))
 
     def run(command, **kwargs):
         calls.append(command)
@@ -261,7 +380,7 @@ def test_live_census_reads_pods_and_inference_models_across_all_namespaces(monke
         observed_at="2026-09-21T00:00:00Z",
     )
     assert receipt["qualified"] is True
-    assert len(calls) == 2
+    assert len(calls) == 4
     assert calls[0][-4:] == ["get", "pods", "--all-namespaces", "-o", "json"][-4:]
     assert calls[1][-4:] == [
         "inferencemodels.inference.fleet.ai",
@@ -269,6 +388,8 @@ def test_live_census_reads_pods_and_inference_models_across_all_namespaces(monke
         "-o",
         "json",
     ]
+    assert "rayjobs.ray.io" in calls[2]
+    assert "workloads.kueue.x-k8s.io" in calls[3]
     assert all("--context" in command and "prod-context" in command for command in calls)
 
 

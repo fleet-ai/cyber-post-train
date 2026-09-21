@@ -32,6 +32,8 @@ ARMED_SCHEMA = "cyber_dev_cleanup_observer_armed_v1"
 RESULT_SCHEMA = "cyber_dev_cleanup_observer_result_v1"
 DIRECT_ARMED_SCHEMA = "cyber_direct_cleanup_observer_armed_v1"
 DIRECT_RESULT_SCHEMA = "cyber_direct_cleanup_observer_result_v1"
+CREATOR_BINDING_SCHEMA = "cyber_direct_cleanup_creator_binding_v1"
+PROD9_RELOAD_RESULT_SCHEMA = "cyber_skyrl_prod9_reload_observer_result_v1"
 RECOVERY_ARMED_SCHEMA = "cyber_direct_cleanup_recovery_observer_armed_v1"
 RECOVERY_RESULT_SCHEMA = "cyber_direct_cleanup_recovery_observer_result_v1"
 JOBS_API_PREFIX_GUARD_SCHEMA = "cyber_jobs_api_prefix_guard_armed_v1"
@@ -1127,6 +1129,9 @@ def _validated_receipt(message: object, *, kind: str) -> dict | None:
     }:
         body = {key: item for key, item in value.items() if key != "receipt_sha256"}
         return value if value.get("receipt_sha256") == digest(body) else None
+    if kind == "rayjob" and value.get("schema") == "cyber_hf_export_check_v1":
+        body = {key: item for key, item in value.items() if key != "receipt_sha256"}
+        return value if value.get("receipt_sha256") == digest(body) else None
     body = {key: item for key, item in value.items() if key != "sha256"}
     schemas = {
         "job": {
@@ -1230,6 +1235,12 @@ class Observer:
                 DIRECT_RESULT_SCHEMA,
                 1800,
             ),
+            "production-reload": (
+                PROD_CONTEXT,
+                DIRECT_ARMED_SCHEMA,
+                PROD9_RELOAD_RESULT_SCHEMA,
+                1800,
+            ),
             "production-recovery": (
                 PROD_CONTEXT,
                 RECOVERY_ARMED_SCHEMA,
@@ -1254,6 +1265,8 @@ class Observer:
             raise ObserverError("production recovery observer requires a root RayJob")
         if profile == "production-cpu" and kind != "job":
             raise ObserverError("production CPU observer requires a root Job")
+        if profile == "production-reload" and kind != "rayjob":
+            raise ObserverError("production reload observer requires a root RayJob")
         is_prod8_terminal_probe = kind == "job" and name == prod8.NAME
         if profile == "production-recovery":
             try:
@@ -1271,7 +1284,7 @@ class Observer:
                 ) from exc
         elif expected_uid:
             raise ObserverError("only a recovery observer may bind an existing UID")
-        if expected_gpus not in {0, 8} or (kind == "job") != (expected_gpus == 0):
+        if expected_gpus not in {0, 1, 8} or (kind == "job") != (expected_gpus == 0):
             raise ObserverError("cleanup observer GPU contract is invalid")
         for value in (plan_sha256, manifest_sha256):
             if len(value.removeprefix("sha256:")) != 64:
@@ -1299,6 +1312,16 @@ class Observer:
         self.armed_schema = armed_schema
         self.result_schema = result_schema
         self.expected_uid = expected_uid
+        self.creator_binding_path = armed_path.with_name(armed_path.name + ".created.json")
+        self.requires_creator_binding = profile in {
+            "production-direct",
+            "production-cpu",
+            "production-reload",
+        } and not (is_prod8_terminal_probe or expected_uid)
+        if self.requires_creator_binding and (
+            self.creator_binding_path.exists() or self.creator_binding_path.is_symlink()
+        ):
+            raise ObserverError("cleanup observer creator binding already exists")
         self._run = run
         self.snapshot = Snapshot()
         self.armed_at = ""
@@ -1431,6 +1454,11 @@ class Observer:
                 "manifest_sha256": self.manifest_sha256,
                 "armed_at": self.armed_at,
                 "observer_pid": os.getpid(),
+                **(
+                    {"creator_binding_path": str(self.creator_binding_path)}
+                    if self.requires_creator_binding
+                    else {}
+                ),
                 **recovery,
             }
         )
@@ -1467,6 +1495,40 @@ class Observer:
             raise ObserverError("cleanup target predates the armed observer")
         self.snapshot.uid = uid
         self.snapshot.created_at = created
+
+    def _creator_uid(self) -> str | None:
+        """Load the create response handoff before adopting a production name."""
+        if not self.requires_creator_binding:
+            return self.expected_uid or None
+        path = self.creator_binding_path
+        if not path.exists():
+            return None
+        if path.is_symlink() or not path.is_file():
+            raise ObserverError("cleanup observer creator binding is indirect")
+        try:
+            value = json.loads(path.read_bytes())
+        except (OSError, ValueError) as exc:
+            raise ObserverError("cleanup observer creator binding is invalid") from exc
+        body = {key: item for key, item in value.items() if key != "sha256"}
+        try:
+            uid = str(UUID(value.get("uid")))
+        except (TypeError, ValueError) as exc:
+            raise ObserverError("cleanup observer creator binding UID is invalid") from exc
+        if (
+            value.get("schema") != CREATOR_BINDING_SCHEMA
+            or value.get("sha256") != "sha256:" + digest(body)
+            or value.get("status") != "created_once"
+            or value.get("context") != self.context
+            or value.get("namespace") != self.namespace
+            or value.get("kind") != self.kind
+            or value.get("name") != self.name
+            or value.get("plan_sha256") != self.plan_sha256
+            or value.get("manifest_sha256") != self.manifest_sha256
+        ):
+            raise ObserverError("cleanup observer creator binding changed")
+        self.expected_uid = uid
+        self.requires_creator_binding = False
+        return uid
 
     def _bind_prod8_manifest(self, resource: dict) -> None:
         if self.manifest_sha256.removeprefix("sha256:") != prod8.manifest_digest():
@@ -1995,6 +2057,11 @@ class Observer:
         try:
             consecutive_observation_failures = 0
             while not self.snapshot.uid:
+                if self._creator_uid() is None and self.requires_creator_binding:
+                    if time.monotonic() >= creation_deadline:
+                        raise ObserverError("cleanup target was not creation-bound after arming")
+                    time.sleep(self.poll_seconds)
+                    continue
                 try:
                     resource = self._target()
                     if resource is not None:
@@ -2138,6 +2205,7 @@ def main() -> None:
             "development",
             "production-direct",
             "production-cpu",
+            "production-reload",
             "production-recovery",
         ),
         default="development",
@@ -2160,7 +2228,15 @@ def main() -> None:
         )
         result = observer.run()
         print(json.dumps({"status": result["status"], "sha256": result["sha256"]}))
-        if args.profile in {"development", "production-cpu"} and result["status"] != "released":
+        if (
+            args.profile
+            in {
+                "development",
+                "production-cpu",
+                "production-reload",
+            }
+            and result["status"] != "released"
+        ):
             raise SystemExit(1)
     except BaseException as exc:
         print(json.dumps({"status": "failed", "error_class": type(exc).__name__}))
