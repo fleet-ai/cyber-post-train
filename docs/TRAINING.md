@@ -189,7 +189,13 @@ omits only that annotation, a maintained fallback is available for a prepared
 SFT run after the same CPU preflight and source-freshness gates:
 
 ```sh
+# On a host that sees the shared SFS mount, no more than five minutes before create:
+uv run cyber-post-train sfs-output-receipt /shared/prepared-run \
+  --output /shared/prepared-run/OUTPUT_ABSENT.json
+
+# On the submitter host. Omit the receipt option only when this host sees SFS itself:
 uv run cyber-post-train direct-submit-sft /shared/prepared-run \
+  --output-absence-receipt /shared/prepared-run/OUTPUT_ABSENT.json \
   --context <explicit-production-or-development-context>
 ```
 
@@ -204,13 +210,22 @@ RayJob. Every other preview field is preserved.
 
 Before creation it checks the complete Jobs API history and Kubernetes Job and
 RayJob inventories for the name, output directory and run identity, performs a
-Kubernetes server dry-run, and repeats the duplicate checks. It then writes and
-fsyncs `DIRECT_SUBMISSION.jsonl` before exactly one `kubectl create`. It never
-uses `apply`, `patch`, automatic retry, or `POST /v1/runs`. A transport error
-after that intent is ambiguous: reconcile the exact recorded name and UUID;
-never delete the journal or invoke the command again. Because direct-created
-runs are not Jobs API records, monitor them by their Kubernetes UID and durable
-training receipts rather than `cyber-post-train status`.
+Kubernetes server dry-run, and repeats the duplicate checks. It also proves the
+create-once SFS output absent before preview and again immediately before the
+durable create intent. A submitter without the SFS mount must consume the exact
+plan/request-bound receipt above; the receipt expires after five minutes and is
+revalidated after the server dry-run. That remote receipt is a recent SFS
+observation, not a live post-dry-run filesystem read; the runtime's exclusive
+`.runtime` creation remains the final output create-once guard. A completed CPU preflight Job whose name
+ends in `-pre-v1` is not a training duplicate; only the exact rendered
+`<run-name>-<8 lowercase hex>` shape, run labels, run UUID, or output annotation
+claims the training identity. The command then writes and fsyncs
+`DIRECT_SUBMISSION.jsonl` before exactly one `kubectl create`. It never uses
+`apply`, `patch`, automatic retry, or `POST /v1/runs`. A transport error after
+that intent is ambiguous: reconcile the exact recorded name and UUID; never
+delete the journal or invoke the command again. Because direct-created runs are
+not Jobs API records, monitor them by their Kubernetes UID and durable training
+receipts rather than `cyber-post-train status`.
 
 This path refuses RL, conversion, requests with Fleet credential Secrets,
 non-c1 priority, an already-qualified API preview, or any unreviewed placeholder

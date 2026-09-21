@@ -3,6 +3,7 @@ import io
 import json
 import subprocess
 import tarfile
+import time
 from copy import deepcopy
 from dataclasses import replace
 from pathlib import Path
@@ -35,6 +36,7 @@ from cyber_post_train.lora_cpu_preflight_driver import (
     ENV_SOURCE_ARCHIVE_SHA256,
     ENV_SOURCE_COMMIT,
 )
+from cyber_post_train.sfs_output import build_output_absence_receipt
 from cyber_post_train.source_bundle import canonical_source_commit_bytes
 from training import qwen38_lr30_step76_gate as lr30
 from training import sft
@@ -47,6 +49,13 @@ SOURCE_COMMIT = "a108edff2062558359cc72ebdfaf5d40cadeb333"
 @pytest.fixture(autouse=True)
 def current_sft_renderer(monkeypatch):
     monkeypatch.setattr(sft, "job_request", lambda _: request())
+
+
+@pytest.fixture
+def sfs_jobs_root(tmp_path):
+    root = tmp_path / "jobs"
+    root.mkdir()
+    return root
 
 
 def plan():
@@ -508,7 +517,7 @@ class FakeKubectl:
         return result
 
 
-def test_direct_submit_checks_twice_journals_then_creates_exactly_once(tmp_path):
+def test_direct_submit_checks_twice_journals_then_creates_exactly_once(tmp_path, sfs_jobs_root):
     jobs, kube = FakeJobs(), FakeKubectl()
     journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
     result = direct_submit_sft_once(
@@ -518,6 +527,7 @@ def test_direct_submit_checks_twice_journals_then_creates_exactly_once(tmp_path)
         kubectl=kube,
         journal=journal,
         run_id=RUN_ID,
+        jobs_root=sfs_jobs_root,
     )
     assert result["uid"] == CREATED_UID and result["name"] == "researcher-sft-12345678"
     assert jobs.calls == ["history", ("preview", request()), "history"]
@@ -529,6 +539,7 @@ def test_direct_submit_checks_twice_journals_then_creates_exactly_once(tmp_path)
         "KUBECTL_CREATE_INTENT_DO_NOT_RETRY",
         "KUBECTL_CREATE_RESPONSE",
     ]
+    assert len(records[0]["output_absence_receipt_sha256"]) == 64
     assert journal.stat().st_mode & 0o777 == 0o600
 
 
@@ -563,7 +574,7 @@ def test_lr30_direct_submit_requires_explicit_launchable_plan_and_creates_once(t
     )
 
 
-def test_ambiguous_create_leaves_intent_and_never_retries(tmp_path):
+def test_ambiguous_create_leaves_intent_and_never_retries(tmp_path, sfs_jobs_root):
     jobs, kube = FakeJobs(), FakeKubectl(fail_create=True)
     journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
     with pytest.raises(JobsError):
@@ -574,6 +585,7 @@ def test_ambiguous_create_leaves_intent_and_never_retries(tmp_path):
             kubectl=kube,
             journal=journal,
             run_id=RUN_ID,
+            jobs_root=sfs_jobs_root,
         )
     assert json.loads(journal.read_text())["state"] == "KUBECTL_CREATE_INTENT_DO_NOT_RETRY"
     with pytest.raises(JobsError, match="journal already exists"):
@@ -584,11 +596,12 @@ def test_ambiguous_create_leaves_intent_and_never_retries(tmp_path):
             kubectl=kube,
             journal=journal,
             run_id=RUN_ID,
+            jobs_root=sfs_jobs_root,
         )
     assert [call[0] for call in kube.calls].count("create") == 1
 
 
-def test_saved_request_must_match_current_source_before_network(tmp_path):
+def test_saved_request_must_match_current_source_before_network(tmp_path, sfs_jobs_root):
     jobs, kube = FakeJobs(), FakeKubectl()
     changed = {**request(), "title": "stale saved request"}
     with pytest.raises(JobsError, match="source-bound"):
@@ -599,12 +612,13 @@ def test_saved_request_must_match_current_source_before_network(tmp_path):
             kubectl=kube,
             journal=tmp_path / "DIRECT_SUBMISSION.jsonl",
             run_id=RUN_ID,
+            jobs_root=sfs_jobs_root,
         )
     assert jobs.calls == [] and kube.calls == []
 
 
 @pytest.mark.parametrize("authority", ["api-name", "api-output", "kube-name", "kube-output"])
-def test_duplicates_stop_before_intent_or_create(tmp_path, authority):
+def test_duplicates_stop_before_intent_or_create(tmp_path, authority, sfs_jobs_root):
     rows = []
     inventories = {
         "rayjobs.ray.io": {"kind": "List", "items": []},
@@ -631,6 +645,93 @@ def test_duplicates_stop_before_intent_or_create(tmp_path, authority):
             kubectl=kube,
             journal=journal,
             run_id=RUN_ID,
+            jobs_root=sfs_jobs_root,
+        )
+    assert not journal.exists()
+    assert not any(call[0] == "create" for call in kube.calls)
+
+
+def test_completed_cpu_preflight_name_does_not_collide_with_training_identity(
+    tmp_path, sfs_jobs_root
+):
+    inventories = {
+        "rayjobs.ray.io": {"kind": "RayJobList", "items": []},
+        "jobs.batch": {
+            "kind": "JobList",
+            "items": [
+                {
+                    "metadata": {
+                        "name": "researcher-sft-pre-v1",
+                        "labels": {},
+                        "annotations": {},
+                    },
+                    "status": {"conditions": [{"type": "Complete", "status": "True"}]},
+                }
+            ],
+        },
+    }
+    jobs, kube = FakeJobs(), FakeKubectl(inventories=inventories)
+    result = direct_submit_sft_once(
+        plan=plan(),
+        request=request(),
+        jobs=jobs,
+        kubectl=kube,
+        journal=tmp_path / "DIRECT_SUBMISSION.jsonl",
+        run_id=RUN_ID,
+        jobs_root=sfs_jobs_root,
+    )
+    assert result["name"] == "researcher-sft-12345678"
+    assert [call[0] for call in kube.calls].count("create") == 1
+
+
+def test_remote_submitter_requires_and_revalidates_source_bound_sfs_receipt(tmp_path):
+    mounted = tmp_path / "mounted-jobs"
+    mounted.mkdir()
+    receipt = build_output_absence_receipt(plan(), request(), jobs_root=mounted, now=time.time())
+    unavailable = tmp_path / "no-sfs"
+    with pytest.raises(JobsError, match="provide a fresh source-bound"):
+        direct_submit_sft_once(
+            plan=plan(),
+            request=request(),
+            jobs=FakeJobs(),
+            kubectl=FakeKubectl(),
+            journal=tmp_path / "missing-receipt.jsonl",
+            run_id=RUN_ID,
+            jobs_root=unavailable,
+        )
+    result = direct_submit_sft_once(
+        plan=plan(),
+        request=request(),
+        jobs=FakeJobs(),
+        kubectl=FakeKubectl(),
+        journal=tmp_path / "with-receipt.jsonl",
+        run_id=RUN_ID,
+        jobs_root=unavailable,
+        output_absence_receipt=receipt,
+    )
+    assert result["submitted"] is True
+
+
+def test_output_appearing_after_server_dry_run_stops_before_intent_or_create(
+    tmp_path, sfs_jobs_root
+):
+    class OutputAppearsKubectl(FakeKubectl):
+        def dry_run(self, obj):
+            result = super().dry_run(obj)
+            (sfs_jobs_root / "researcher-sft-v1").mkdir()
+            return result
+
+    jobs, kube = FakeJobs(), OutputAppearsKubectl()
+    journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
+    with pytest.raises(JobsError, match="output already exists"):
+        direct_submit_sft_once(
+            plan=plan(),
+            request=request(),
+            jobs=jobs,
+            kubectl=kube,
+            journal=journal,
+            run_id=RUN_ID,
+            jobs_root=sfs_jobs_root,
         )
     assert not journal.exists()
     assert not any(call[0] == "create" for call in kube.calls)

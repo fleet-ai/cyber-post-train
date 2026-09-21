@@ -13,10 +13,14 @@ from typing import Annotated
 import typer
 
 from .jobs import Jobs, JobsError, digest, plan_api_target, validate_preview, validate_request
+from .sfs_output import (
+    SFS_JOBS_ROOT,
+    build_output_absence_receipt,
+    require_output_absent,
+)
 
 app = typer.Typer(no_args_is_help=True, pretty_exceptions_enable=False)
 PREPARATION_GATE_VERSION = 2
-SFS_JOBS_ROOT = Path("/mnt/sfs/jobs")
 
 
 def _print(value: object) -> None:
@@ -191,17 +195,8 @@ def _client_for_plan(plan: dict | None) -> Jobs:
 
 
 def _require_output_absent(request: dict, *, jobs_root: Path = SFS_JOBS_ROOT) -> None:
-    """Prove the create-once output is absent from a host that can see SFS.
-
-    Treat an unavailable SFS mount as unknown, never as evidence of absence.
-    The Jobs API duplicate census remains a separate check because an old API
-    record and an existing filesystem output are independent failure modes.
-    """
-    if not jobs_root.is_dir():
-        raise ValueError("the shared /mnt/sfs/jobs mount is unavailable for output checks")
-    output = Path(request["run_dir"])
-    if output.exists() or output.is_symlink():
-        raise ValueError("training output already exists; use a new reviewed run identity")
+    """Compatibility boundary for the shared create-once SFS check."""
+    require_output_absent(request, jobs_root=jobs_root)
 
 
 def _fail(exc: Exception) -> None:
@@ -921,6 +916,26 @@ def preflight(directory: Path) -> None:
         _fail(exc)
 
 
+@app.command("sfs-output-receipt")
+def sfs_output_receipt(
+    directory: Path,
+    output: Annotated[Path, typer.Option("--output")],
+) -> None:
+    """Record a fresh SFS output-absence proof for a remote direct submitter."""
+    try:
+        plan, request = _prepared(directory)
+        _submission_gate(directory, plan, request)
+        _external_action_gate(plan, "submit")
+        _require_preflight(directory, plan, request)
+        if plan.get("schema") not in {"cyber_sft_runtime_v2", "cyber_sft_runtime_dense_v1"}:
+            raise ValueError("SFS output-absence receipts are restricted to SFT")
+        receipt = build_output_absence_receipt(plan, request)
+        _write(output, receipt)
+        _print(receipt)
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command()
 def preview(directory: Path) -> None:
     """Read the Jobs API's exact resource/queue render; does not create a run."""
@@ -988,6 +1003,16 @@ def submit(directory: Path) -> None:
 def direct_submit_sft(
     directory: Path,
     context: Annotated[str, typer.Option("--context")],
+    output_absence_receipt: Annotated[
+        Path | None,
+        typer.Option(
+            "--output-absence-receipt",
+            help=(
+                "Fresh receipt from `sfs-output-receipt`; required only when this host "
+                "cannot see /mnt/sfs/jobs."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """Create one SFT RayJob when API preview omits only the alert annotation.
 
@@ -1002,14 +1027,17 @@ def direct_submit_sft(
     try:
         plan, request = _prepared(directory)
         _submission_gate(directory, plan, request)
+        _external_action_gate(plan, "submit")
         _require_preflight(directory, plan, request)
-        with _client() as client:
+        output_receipt = _read(output_absence_receipt) if output_absence_receipt else None
+        with _client_for_plan(plan) as client:
             result = direct_submit_sft_once(
                 plan=plan,
                 request=request,
                 jobs=client,
                 kubectl=Kubectl(context),
                 journal=directory / DIRECT_JOURNAL,
+                output_absence_receipt=output_receipt,
             )
         _print(result)
     except Exception as exc:

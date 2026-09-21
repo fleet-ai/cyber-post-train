@@ -1,0 +1,80 @@
+{
+  "schema": "cyber_sft_direct_submit_gate_audit_v1",
+  "observed_at": "2026-09-21T10:09:50Z",
+  "status": "repair_required_before_create",
+  "prepared_run": {
+    "name": "chris-q38-t3k32-b8-v3",
+    "output": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3",
+    "plan_sha256": "8488f03a65e3d158a46697eefda2751736681e3a503c26ee9c39c63fb130679c",
+    "request_sha256": "fab27e52d445ddb7ebafeb591c7b33a65222f67e88c7c6fc63d578bac2d104e3",
+    "preflight_receipt_sha256": "3cce7a227927478a40cc6a8c8de31d7aa2d270faf7ecdabf8e1e782a3f189b79",
+    "direct_submission_journal_present": false,
+    "requested_priority": "c1",
+    "requested_failure_alerts": false
+  },
+  "reproduced_blocker": {
+    "class": "cpu_preflight_name_false_positive",
+    "message": "the old duplicate guard treated every request-name prefix as a training identity",
+    "cpu_preflight_job": {
+      "name": "chris-q38-t3k32-b8-v3-pre-v1",
+      "uid": "291ba406-168b-4a5a-81ce-e5069b2b7758",
+      "created_at": "2026-09-21T09:34:42Z",
+      "complete": true,
+      "failure_alerts": "off",
+      "run_name_label": null,
+      "run_id_label": null,
+      "run_dir_annotation": null
+    },
+    "actual_training_duplicate_found": false
+  },
+  "read_only_live_checks": {
+    "normal_jobs_api_submit_gate": {
+      "observed_at": "2026-09-21T10:08:00Z",
+      "status": "blocked",
+      "message": "preview does not disable failed-job alerts"
+    },
+    "jobs_api_duplicate_absent": true,
+    "kubernetes_training_duplicate_absent": true,
+    "jobs_api_preview_errors": [],
+    "jobs_api_preview_warnings": [],
+    "server_dry_run": "passed",
+    "rendered_test_identity": "chris-q38-t3k32-b8-v3-12345678",
+    "rendered_manifest_sha256": "fa7411603e7eaa1c9913f2c94f0f3a7feb3bb5cd55187cd88a35443ad42b1012",
+    "rendered_root_failure_alerts": "off",
+    "rendered_pod_priority": "c1",
+    "rendered_queue_priority": "q1",
+    "rendered_queue": "training-lq"
+  },
+  "capacity": {
+    "receipt_sha256": "60ef1a0273eec2a1abebfef522baebc146fae97c5db513c76f953730146b3b43",
+    "current": {
+      "nodes": 1,
+      "gpus": 8,
+      "training_pods": 0,
+      "serving_pods": 1
+    },
+    "planned": {
+      "nodes": 1,
+      "gpus": 8
+    },
+    "projected": {
+      "nodes": 2,
+      "gpus": 16
+    },
+    "limits": {
+      "nodes": 8,
+      "gpus": 64
+    },
+    "qualified": true
+  },
+  "repair": {
+    "duplicate_rule": "recognize only the exact request-name plus eight lowercase hexadecimal characters, or explicit run/output metadata",
+    "sfs_rule": "use a live SFS check twice when mounted; otherwise require an exact plan/request-bound observation no more than five minutes old and revalidate its binding and age after server dry-run",
+    "remote_receipt_is_live_post_dry_run_check": false,
+    "runtime_output_guard": "the SFT bootstrap creates the .runtime directory exclusively"
+  },
+  "remaining_gate": "merge the reviewed repair, then create a fresh SFS output-absence receipt immediately before the one-time command",
+  "external_mutations": [],
+  "submitted": false,
+  "sha256": "ce94044eb82c4c84d8c57793627b4abdc8ad386985efd1272d6f80a1a4328aa5"
+}

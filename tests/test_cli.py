@@ -272,6 +272,56 @@ def test_direct_sft_submit_reuses_preflight_and_has_a_separate_journal(prepared,
     assert calls[0]["jobs"] == "jobs-client"
     assert calls[0]["kubectl"].context == "prod-context"
     assert calls[0]["journal"] == output / "DIRECT_SUBMISSION.jsonl"
+    assert calls[0]["output_absence_receipt"] is None
+
+
+def test_sfs_output_receipt_is_create_once_and_bound_to_the_prepared_run(prepared, monkeypatch):
+    output, plan, request, _ = prepared
+    record_preflight(output, plan, request)
+    receipt_path = output / "OUTPUT_ABSENT.json"
+    proof = {
+        "schema": "cyber_sft_output_absence_v1",
+        "status": "passed",
+        "checked_at_epoch": 123,
+        "plan_sha256": digest(plan),
+        "request_sha256": digest(request),
+        "run_name": request["name"],
+        "run_dir": request["run_dir"],
+        "sfs_jobs_root": "/mnt/sfs/jobs",
+        "output_absent": True,
+    }
+    receipt = {**proof, "sha256": digest(proof)}
+    calls = []
+
+    def build(plan_value, request_value):
+        calls.append((plan_value, request_value))
+        return receipt
+
+    monkeypatch.setattr(cli, "_submission_gate", lambda *args: None)
+    monkeypatch.setattr(cli, "_external_action_gate", lambda *args: None)
+    monkeypatch.setattr(cli, "_require_preflight", lambda *args: None)
+    monkeypatch.setattr(cli, "build_output_absence_receipt", build)
+    monkeypatch.setattr(
+        cli, "_prepared", lambda _: ({**plan, "schema": "cyber_sft_runtime_dense_v1"}, request)
+    )
+    current_plan = {**plan, "schema": "cyber_sft_runtime_dense_v1"}
+    receipt["plan_sha256"] = digest(current_plan)
+    receipt["sha256"] = digest({key: value for key, value in receipt.items() if key != "sha256"})
+
+    result = RUNNER.invoke(
+        cli.app,
+        ["sfs-output-receipt", str(output), "--output", str(receipt_path)],
+    )
+    assert result.exit_code == 0
+    assert calls == [(current_plan, request)]
+    assert cli._read(receipt_path) == receipt
+    assert (
+        RUNNER.invoke(
+            cli.app,
+            ["sfs-output-receipt", str(output), "--output", str(receipt_path)],
+        ).exit_code
+        == 2
+    )
 
 
 def test_lr30_one_off_prepare_preflight_and_direct_submit_are_exact(tmp_path, monkeypatch):

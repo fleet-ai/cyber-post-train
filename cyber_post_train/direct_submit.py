@@ -15,6 +15,7 @@ import os
 import re
 import subprocess
 import uuid
+from collections.abc import Callable
 from copy import deepcopy
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -52,6 +53,7 @@ from .lora_cpu_preflight_driver import (
     ENV_SOURCE_ARCHIVE_SHA256,
     ENV_SOURCE_COMMIT,
 )
+from .sfs_output import SFS_JOBS_ROOT, prove_output_absent
 from .sfs_write_identity import TRAINER_GID, TRAINER_UID, validate_owned_output_binding
 from .source_bundle import canonical_source_commit_bytes
 
@@ -800,6 +802,11 @@ class Kubectl:
         return {"config_map": config_map, "pod": pod, "proof": proof}
 
 
+def _is_direct_run_name(name: str, request_name: str) -> bool:
+    """Match only the exact name shape emitted by the direct renderer."""
+    return re.fullmatch(re.escape(request_name) + r"-[a-f0-9]{8}", name) is not None
+
+
 def _assert_api_unique(rows: list[dict], request: dict) -> None:
     if not isinstance(rows, list):
         raise JobsError("Jobs API history is incomplete")
@@ -809,7 +816,7 @@ def _assert_api_unique(rows: list[dict], request: dict) -> None:
         if (
             row.get("run_dir") == request["run_dir"]
             or row["name"] == request["name"]
-            or row["name"].startswith(request["name"] + "-")
+            or _is_direct_run_name(row["name"], request["name"])
         ):
             raise JobsError("a Jobs API run already owns this name/output")
 
@@ -836,7 +843,7 @@ def _assert_kubernetes_unique(inventories: list[dict], request: dict, proof: dic
             if (
                 name == proof["name"]
                 or name == request["name"]
-                or name.startswith(request["name"] + "-")
+                or _is_direct_run_name(name, request["name"])
                 or labels.get("fleet.ai/run-name") == request["name"]
                 or labels.get("fleet.ai/run-id") == proof["run_id"]
                 or annotations.get("fleet.ai/run-id") == proof["run_id"]
@@ -895,11 +902,14 @@ def _direct_submit_once(
     journal: Path,
     renderer: Any,
     run_id: str | None = None,
+    output_absence_gate: Callable[[], dict] | None = None,
 ) -> dict:
     """Preview, prove, journal and issue exactly one direct Kubernetes create."""
     if journal.exists() or journal.is_symlink():
         raise JobsError("direct-create journal already exists; reconcile, never retry")
 
+    if output_absence_gate is not None:
+        output_absence_gate()
     _assert_api_unique(jobs.all_runs(), request)
     preview = jobs.raw_preview(request)
     manifest, proof = renderer(plan, request, preview, run_id=run_id)
@@ -915,6 +925,7 @@ def _direct_submit_once(
     _assert_kubernetes_unique(
         [kubectl.list("rayjobs.ray.io"), kubectl.list("jobs.batch")], request, proof
     )
+    output_absence_proof = output_absence_gate() if output_absence_gate is not None else None
     _write_intent(
         journal,
         {
@@ -927,6 +938,11 @@ def _direct_submit_once(
             "name": proof["name"],
             "namespace": NAMESPACE,
             "kubernetes_context": kubectl.context,
+            **(
+                {"output_absence_receipt_sha256": output_absence_proof["sha256"]}
+                if output_absence_proof is not None
+                else {}
+            ),
         },
     )
 
@@ -955,6 +971,8 @@ def direct_submit_sft_once(
     kubectl: Kubectl,
     journal: Path,
     run_id: str | None = None,
+    jobs_root: Path = SFS_JOBS_ROOT,
+    output_absence_receipt: dict | None = None,
 ) -> dict:
     """Create one source-bound SFT RayJob through the maintained fallback."""
     _assert_sft_contract(plan, request)
@@ -962,6 +980,18 @@ def direct_submit_sft_once(
 
     if job_request(plan) != request:
         raise JobsError("saved SFT request differs from the current source-bound renderer")
+
+    def output_absence_gate() -> dict:
+        try:
+            return prove_output_absent(
+                plan,
+                request,
+                jobs_root=jobs_root,
+                receipt=output_absence_receipt,
+            )
+        except ValueError as exc:
+            raise JobsError(str(exc)) from None
+
     return _direct_submit_once(
         plan=plan,
         request=request,
@@ -970,6 +1000,7 @@ def direct_submit_sft_once(
         journal=journal,
         renderer=render_sft_rayjob,
         run_id=run_id,
+        output_absence_gate=output_absence_gate,
     )
 
 
