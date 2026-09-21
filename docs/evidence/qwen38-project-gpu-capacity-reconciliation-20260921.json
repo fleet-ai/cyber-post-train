@@ -1,0 +1,275 @@
+{
+  "incident": {
+    "cause": "The prior handoff counted the known training and serving lanes instead of enumerating project-owned GPU Pods across every Kubernetes namespace and role.",
+    "classification": "capacity_census_defect",
+    "effect": "An older project-owned teacher3k step-10 InferenceModel and its eight-GPU Pod were omitted from the reported capacity total.",
+    "omitted_inference_model": {
+      "former_pod_uid": "420e82c9-d0df-4f14-b5fd-915c6b1f61a1",
+      "name": "chris-q38-t3k262-s10-web-v1",
+      "revision": "sha256:d6301dba2cc0e6bc05ea48d2793584d4ca725cba8863dc4ac6ef75bdbbfa668b",
+      "uid": "33c6ede6-1646-4f3a-a2c5-da6a34009ffc"
+    }
+  },
+  "interpretation": {
+    "allocated_gpus": 48,
+    "allocated_nodes": 6,
+    "capability_result": false,
+    "serving_pods": 3,
+    "training_pods": 3,
+    "unclassified_pods": 0,
+    "within_eight_node_limit": true
+  },
+  "observed_at": "2026-09-21T00:34:36Z",
+  "post_release_cross_namespace_census": {
+    "current": {
+      "allocated_pods": [
+        {
+          "gpus": 8,
+          "identity": "chris-q38-fresh75-step230-web-v2",
+          "name": "inference-chris-q38-fresh75-step230-web-v2-7cc7b468bc-ffzhn",
+          "namespace": "inference",
+          "node": "computeinstance-e04w12y5c34kmga58g",
+          "phase": "Running",
+          "resource_version": "31073001",
+          "restarts": 0,
+          "role": "serving",
+          "terminating": false,
+          "uid": "f2c45829-7e9e-4850-abb8-6f669804a9a9"
+        },
+        {
+          "gpus": 8,
+          "identity": "chris-q38-self-sft-step44-v1",
+          "name": "inference-chris-q38-self-sft-step44-v1-95dcd4b6c-cnxt2",
+          "namespace": "inference",
+          "node": "computeinstance-e04az8ppqdsr7e9pah",
+          "phase": "Running",
+          "resource_version": "31092297",
+          "restarts": 0,
+          "role": "serving",
+          "terminating": false,
+          "uid": "c1271f58-ca3e-41e7-8a01-1a3603cb9619"
+        },
+        {
+          "gpus": 8,
+          "identity": "chris-q38-teacher-v5-step186-web-v1",
+          "name": "inference-chris-q38-teacher-v5-step186-web-v1-668c869d96-qjjw8",
+          "namespace": "inference",
+          "node": "computeinstance-e04qf7jbxq471v9taj",
+          "phase": "Running",
+          "resource_version": "31079186",
+          "restarts": 0,
+          "role": "serving",
+          "terminating": false,
+          "uid": "2ef5ab8c-d460-4c41-852d-222118556e0d"
+        },
+        {
+          "gpus": 8,
+          "identity": "chris-q38-t3k32-b16-v1",
+          "name": "chris-q38-t3k32-b16-v1-46ca50db-99mq7-head-psw2m",
+          "namespace": "fleet-train-jobs",
+          "node": "computeinstance-e04bx9ssr814z509nn",
+          "phase": "Running",
+          "resource_version": "31036062",
+          "restarts": 0,
+          "role": "training",
+          "terminating": false,
+          "uid": "d1c9fa07-402b-4978-a8bd-5a730555cca3"
+        },
+        {
+          "gpus": 8,
+          "identity": "chris-q38-t3k32-b8-v1",
+          "name": "chris-q38-t3k32-b8-v1-0cb9fe51-5dwwd-head-5v8nq",
+          "namespace": "fleet-train-jobs",
+          "node": "computeinstance-e04vjdcdbaz285nnj7",
+          "phase": "Running",
+          "resource_version": "31015990",
+          "restarts": 0,
+          "role": "training",
+          "terminating": false,
+          "uid": "826b5de3-85df-4d66-a785-6085b7ad93a3"
+        },
+        {
+          "gpus": 8,
+          "identity": "chris-q38-t3k32-lr1-v1",
+          "name": "chris-q38-t3k32-lr1-v1-4291c635-gr745-head-tmhsh",
+          "namespace": "fleet-train-jobs",
+          "node": "computeinstance-e04f324s4mayq2tapm",
+          "phase": "Running",
+          "resource_version": "31038162",
+          "restarts": 0,
+          "role": "training",
+          "terminating": false,
+          "uid": "9b2b48d4-476a-44b6-8974-c8d6cd8162cb"
+        }
+      ],
+      "gpus": 48,
+      "inference_models": [
+        {
+          "active_pods": 0,
+          "desired_state": "paused",
+          "name": "chris-q38-fresh75-step20-v1",
+          "namespace": "inference",
+          "observed_generation": 2,
+          "observed_gpu_pods": 0,
+          "phase": "paused",
+          "ready_replicas": 0,
+          "resource_version": "31040501",
+          "uid": "e6342575-a8ec-42fd-adff-dbeeef4cc930"
+        },
+        {
+          "active_pods": 0,
+          "desired_state": "paused",
+          "name": "chris-q38-fresh75-step230-v1",
+          "namespace": "inference",
+          "observed_generation": 7,
+          "observed_gpu_pods": 0,
+          "phase": "paused",
+          "ready_replicas": 0,
+          "resource_version": "31040503",
+          "uid": "d51cf7c4-3ab8-4912-8f73-dfe7153acdb4"
+        },
+        {
+          "active_pods": 0,
+          "desired_state": "paused",
+          "name": "chris-q38-fresh75-step230-wbe-v1",
+          "namespace": "inference",
+          "observed_generation": 7,
+          "observed_gpu_pods": 0,
+          "phase": "paused",
+          "ready_replicas": 0,
+          "resource_version": "31040509",
+          "uid": "fa7dafb6-a700-4eb7-b955-e40255420617"
+        },
+        {
+          "active_pods": 0,
+          "desired_state": "paused",
+          "name": "chris-q38-fresh75-step230-web-v1",
+          "namespace": "inference",
+          "observed_generation": 5,
+          "observed_gpu_pods": 0,
+          "phase": "paused",
+          "ready_replicas": 0,
+          "resource_version": "31064276",
+          "uid": "d048104e-ade6-49d2-b088-d3819e606061"
+        },
+        {
+          "active_pods": 1,
+          "desired_state": "serving",
+          "name": "chris-q38-fresh75-step230-web-v2",
+          "namespace": "inference",
+          "observed_generation": 2,
+          "observed_gpu_pods": 1,
+          "phase": "ready",
+          "ready_replicas": 1,
+          "resource_version": "31113000",
+          "uid": "e624a6f0-8748-433c-973e-aefc7f22ddf6"
+        },
+        {
+          "active_pods": 1,
+          "desired_state": "serving",
+          "name": "chris-q38-self-sft-step44-v1",
+          "namespace": "inference",
+          "observed_generation": 2,
+          "observed_gpu_pods": 1,
+          "phase": "ready",
+          "ready_replicas": 1,
+          "resource_version": "31113002",
+          "uid": "05057134-546f-484e-9672-3f9ca50cec77"
+        },
+        {
+          "active_pods": 0,
+          "desired_state": "paused",
+          "name": "chris-q38-t3k262-s10-web-v1",
+          "namespace": "inference",
+          "observed_generation": 3,
+          "observed_gpu_pods": 0,
+          "phase": "paused",
+          "ready_replicas": 0,
+          "resource_version": "31105742",
+          "uid": "33c6ede6-1646-4f3a-a2c5-da6a34009ffc"
+        },
+        {
+          "active_pods": 0,
+          "desired_state": "paused",
+          "name": "chris-q38-teacher-sft-v5-step186-v1",
+          "namespace": "inference",
+          "observed_generation": 2,
+          "observed_gpu_pods": 0,
+          "phase": "paused",
+          "ready_replicas": 0,
+          "resource_version": "31040515",
+          "uid": "4dad4da7-0fc0-4eb2-a41e-43538800b795"
+        },
+        {
+          "active_pods": 1,
+          "desired_state": "serving",
+          "name": "chris-q38-teacher-v5-step186-web-v1",
+          "namespace": "inference",
+          "observed_generation": 2,
+          "observed_gpu_pods": 1,
+          "phase": "ready",
+          "ready_replicas": 1,
+          "resource_version": "31103148",
+          "uid": "10b1b0ce-7b02-429e-8361-084a3039f248"
+        }
+      ],
+      "node_names": [
+        "computeinstance-e04az8ppqdsr7e9pah",
+        "computeinstance-e04bx9ssr814z509nn",
+        "computeinstance-e04f324s4mayq2tapm",
+        "computeinstance-e04qf7jbxq471v9taj",
+        "computeinstance-e04vjdcdbaz285nnj7",
+        "computeinstance-e04w12y5c34kmga58g"
+      ],
+      "nodes": 6,
+      "queued_pods": [],
+      "role_pod_counts": {
+        "serving": 3,
+        "training": 3,
+        "unclassified": 0
+      }
+    },
+    "limits": {
+      "gpus": 64,
+      "nodes": 8
+    },
+    "observed_at": "2026-09-21T00:34:36Z",
+    "planned": {
+      "gpus": 0,
+      "nodes": 0
+    },
+    "problems": [],
+    "projected": {
+      "gpus": 48,
+      "nodes": 6
+    },
+    "qualified": true,
+    "schema": "cyber_project_gpu_capacity_census_v1",
+    "scope": {
+      "kubernetes_namespaces": "all",
+      "owner_prefixes": [
+        "chris-q38-"
+      ],
+      "ownership_labels": {
+        "serving": "inference.fleet.ai/model",
+        "training": "fleet.ai/run-name"
+      }
+    },
+    "sha256": "95c8bbb89d60229557bea8dce8316960ca0ad66de4c5d1371cdecdec8ad31d7d"
+  },
+  "private_content_persisted": false,
+  "release": {
+    "active_pods": 0,
+    "desired_state": "paused",
+    "durable_evidence": "docs/evidence/inference/2026-09-20-qwen38-checkpoint-serving-parity.md",
+    "durable_evidence_main_commit": "3165af38da301e718acee65d240eee5e9f873b9e",
+    "former_pod_uid_absent": true,
+    "phase": "paused",
+    "ready_replicas": 0,
+    "routing_enabled": false,
+    "supported_action": "one control-plane pause with exact prior API resource version 31040514",
+    "terminal_resource_version": "31105742"
+  },
+  "schema": "qwen38_project_gpu_capacity_reconciliation_v1",
+  "sha256": "a9449c9a7cdbd77f7ac773eaeac29ec56f5d3a9c9bff65cedb47fed23cf0b4a0"
+}
