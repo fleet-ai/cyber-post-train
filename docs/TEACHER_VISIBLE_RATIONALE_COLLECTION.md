@@ -47,7 +47,11 @@ that issuer-owned artifact, so no collection is launchable from the committed
 files alone.
 
 Admission consumes sealed metadata only. Its private selection carries opaque
-record and task identities needed by the next local step. Its public receipt
+record and task identities needed by the next local step. It also retains the
+exact input-file digests, the complete sanitized success/verifier binding, the
+Qwen round-trip evidence, the visible-rationale coverage counts, and any
+compaction-boundary chain. This lets the private materializer audit the same
+decision without reopening or guessing at admission inputs. Its public receipt
 contains counts and digests only. It always says `sft_ready: false`; the next
 gate is a private Qwen tokenizer/template round trip, exact target-window
 deduplication, and final token coverage verification.
@@ -93,13 +97,26 @@ that binds:
   Qwen3.8-27B target; and
 - proof that provider-private reasoning was not ingested.
 
-An admitted record must bind one predeclared campaign cell, the exact source
-profile and packet, an authoritative verifier execution and receipt, and a
-positive completed score. It must also bind an exact local-Qwen serialization
-round-trip receipt. Admission recomputes the profile and packet from the exact
-requirements and immutable source authorization rather than trusting their
-self-declared digests alone. A success label without the verifier identities, or a
-transcript with no ordinary visible rationale, is excluded.
+An admitted record must carry one immutable success-evidence object. That
+object binds the verifier receipt to one predeclared task and attempt, the
+task's exact runtime binding, the exact teacher source, the pinned Qwen model
+and chat template, the local round-trip receipt, the compaction chain, and the
+visible-rationale evidence. Admission recomputes every expected binding from
+the reviewed packet and rejects even a valid verifier receipt if it belongs to
+another task, attempt, runtime, model, or template. Both success evidence and
+the underlying verifier and round-trip receipts must use their dedicated
+immutable Registry namespaces. Admission also recomputes the profile and
+packet from the exact requirements and source authorization rather than
+trusting their self-declared digests alone.
+
+For each tool call, the private exporter must report exactly one preceding
+ordinary visible-rationale segment. Every segment must contain one to four
+sentences. The metadata includes the tool-call count, covered-tool-call count,
+segment count, minimum and maximum sentence count, and a zero-count census for
+every forbidden private-reasoning field. A missing explanation, an explanation
+longer than four sentences, any unknown reasoning field, or any occurrence of
+a forbidden private field excludes the record. The private materializer must
+repeat these checks against the actual message stream before producing tokens.
 
 The serialization contract uses ordinary Qwen assistant content plus the exact
 OpenCode `bash` and `submit_report` tool-call representation. It pins
@@ -122,7 +139,10 @@ tokens of reserved headroom, and native compaction/automatic continuation.
 That lets a long cyber attempt continue, but it does not make an opaque summary
 valid training context.
 
-For every selected compacted trajectory, metadata must bind each boundary:
+For every selected compacted trajectory, metadata must bind each boundary in
+one ordered, digest-linked chain. Each boundary is tied to the exact source
+session, normalized trajectory, transcript, and target-occurrence manifest,
+and records:
 
 - the prompt before compaction;
 - the prompt used to generate the summary;
@@ -130,6 +150,9 @@ For every selected compacted trajectory, metadata must bind each boundary:
 - the summary re-rendered through the pinned Qwen tokenizer/template;
 - the prompt after compaction; and
 - the exact prompt used for the next supervised target.
+
+It also binds the exact next target occurrence. Boundary indices must be
+contiguous, and each boundary names the digest of the preceding boundary.
 
 The last two prompt digests must be equal. The visible summary is retained as
 zero-loss context; rationale and actions after it are trained from the prompt
@@ -146,7 +169,11 @@ provider reasoning are rejected.
    annotation before creation.
 3. A private exporter must emit the metadata schema and keep raw text private.
 4. The teacher-specific Qwen token materializer must re-render ordinary visible
-   text locally, prove all compaction boundaries, deduplicate target windows,
-   and confirm the final 20M-token and family-concentration gates.
+   text locally, verify per-tool rationale coverage and the one-to-four-sentence
+   limit against the private messages, prove all compaction boundaries,
+   deduplicate target windows, and confirm the final **20 million unique**
+   supervised-token and family-concentration gates. Candidate token occurrences
+   reported by metadata are not permission to train and are never described as
+   unique tokens.
 5. A separate reviewed training permit must bind that corpus. Neither rendering
    nor admission is permission to train.

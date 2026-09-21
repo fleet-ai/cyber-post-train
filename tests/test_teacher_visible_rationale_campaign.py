@@ -65,7 +65,7 @@ def _authorization() -> dict:
     payload = digest_json(value)
     value["authority"] = {
         "kind": "fleet_artifact_registry_immutable_v1",
-        "artifact_key": "cyber/runs/qwen38/teacher-visible-rationale/authorization-v1",
+        "artifact_key": "cyber/runs/qwen38/teacher-visible-rationale/authorization/v1",
         "version_index": 1,
         "content_sha256": payload,
     }
@@ -88,6 +88,85 @@ def _rendered(tmp_path: Path) -> tuple[dict, dict, dict]:
 
 
 def _attempt(profile: dict, packet: dict, *, task: dict, compaction: dict | None = None) -> dict:
+    rationale = {
+        "surface": "ordinary_assistant_content_before_tool_call",
+        "ordinary_content_only": True,
+        "visible_to_student": True,
+        "provider_private_reasoning_present": False,
+        "unknown_reasoning_fields_present": False,
+        "forbidden_private_field_occurrences": {name: 0 for name in teacher._PRIVATE_FIELD_NAMES},
+        "tool_calls": 2,
+        "tool_calls_with_visible_rationale": 2,
+        "rationale_segments": 2,
+        "minimum_sentences_per_rationale": 1,
+        "maximum_sentences_per_rationale": 3,
+        "rationale_target_tokens": 120,
+        "visible_action_target_tokens": 80,
+        "target_occurrence_manifest_sha256": _digest("3"),
+    }
+    serialization = {
+        "schema": teacher.ROUNDTRIP_SCHEMA,
+        "qwen_target_sha256": digest_json(profile["qwen_target"]),
+        "qwen_chat_template_sha256": profile["qwen_target"]["chat_template_sha256"],
+        "roundtrip_receipt_sha256": _digest("4"),
+        "roundtrip_receipt_authority": {
+            "kind": "fleet_artifact_registry_immutable_v1",
+            "artifact_key": "cyber/runs/qwen38/teacher-visible-rationale/roundtrip/fixture-1",
+            "version_index": 1,
+            "content_sha256": _digest("4"),
+        },
+        "message_surface": teacher.MESSAGE_SURFACE,
+        "chat_template_kwargs": {"enable_thinking": False},
+        "prompt_token_ids_equal_local_template": True,
+        "prompt_token_ids_exact_prefix": True,
+        "collection_training_serving_token_ids_match": True,
+        "round_trip_verified": True,
+    }
+    compaction = compaction or {"kind": "none", "boundaries": []}
+    binding = {
+        "campaign_packet_sha256": packet["sha256"],
+        "source_profile_sha256": profile["sha256"],
+        "record_id": "teacher-visible-record-1",
+        "source_session_identity_sha256": _digest("c"),
+        "normalized_record_sha256": _digest("d"),
+        "normalized_trajectory_sha256": _digest("e"),
+        "transcript_sha256": _digest("f"),
+        "task_key": task["task_key"],
+        "task_version_id": task["task_version_id"],
+        "attempt": 1,
+        "runtime_binding_sha256": digest_json(task),
+        "teacher_source_sha256": digest_json(profile["source"]),
+        "qwen_target_sha256": digest_json(profile["qwen_target"]),
+        "qwen_chat_template_sha256": profile["qwen_target"]["chat_template_sha256"],
+        "serialization_contract_sha256": digest_json(profile["serialization"]),
+        "serialization_evidence_sha256": digest_json(serialization),
+        "roundtrip_receipt_sha256": serialization["roundtrip_receipt_sha256"],
+        "compaction_sha256": digest_json(compaction),
+        "visible_rationale_evidence_sha256": digest_json(rationale),
+        "target_occurrence_manifest_sha256": rationale["target_occurrence_manifest_sha256"],
+    }
+    outcome = {
+        "status": "completed",
+        "verifier_process_success": True,
+        "score_at_least_one": True,
+        "verifier_execution_identity_sha256": _digest("1"),
+        "verifier_receipt_sha256": _digest("2"),
+        "verifier_authority": {
+            "kind": "fleet_artifact_registry_immutable_v1",
+            "artifact_key": "cyber/runs/qwen38/teacher-visible-rationale/verifier/fixture-1",
+            "version_index": 1,
+            "content_sha256": _digest("2"),
+        },
+        "attempt_binding": binding,
+    }
+    payload = digest_json(outcome)
+    outcome["authority"] = {
+        "kind": "fleet_artifact_registry_immutable_v1",
+        "artifact_key": "cyber/runs/qwen38/teacher-visible-rationale/success/fixture-1",
+        "version_index": 1,
+        "content_sha256": payload,
+    }
+    outcome["registry_payload_sha256"] = payload
     value = {
         "schema": teacher.ATTEMPT_SCHEMA,
         "record_id": "teacher-visible-record-1",
@@ -100,43 +179,21 @@ def _attempt(profile: dict, packet: dict, *, task: dict, compaction: dict | None
         "normalized_record_sha256": _digest("d"),
         "normalized_trajectory_sha256": _digest("e"),
         "transcript_sha256": _digest("f"),
-        "outcome": {
-            "status": "completed",
-            "verifier_process_success": True,
-            "score_at_least_one": True,
-            "verifier_execution_identity_sha256": _digest("1"),
-            "verifier_receipt_sha256": _digest("2"),
-            "verifier_authority": {
-                "kind": "fleet_artifact_registry_immutable_v1",
-                "artifact_key": "cyber/runs/qwen38/teacher-visible-rationale/verifier-1",
-                "version_index": 1,
-                "content_sha256": _digest("2"),
-            },
-        },
-        "visible_rationale": {
-            "surface": "ordinary_assistant_content_before_tool_call",
-            "ordinary_content_only": True,
-            "visible_to_student": True,
-            "provider_private_reasoning_present": False,
-            "rationale_target_tokens": 120,
-            "visible_action_target_tokens": 80,
-            "target_occurrence_manifest_sha256": _digest("3"),
-        },
-        "serialization": {
-            "schema": teacher.ROUNDTRIP_SCHEMA,
-            "qwen_target_sha256": digest_json(profile["qwen_target"]),
-            "qwen_chat_template_sha256": profile["qwen_target"]["chat_template_sha256"],
-            "roundtrip_receipt_sha256": _digest("4"),
-            "message_surface": teacher.MESSAGE_SURFACE,
-            "chat_template_kwargs": {"enable_thinking": False},
-            "prompt_token_ids_equal_local_template": True,
-            "prompt_token_ids_exact_prefix": True,
-            "collection_training_serving_token_ids_match": True,
-            "round_trip_verified": True,
-        },
-        "compaction": compaction or {"kind": "none", "boundaries": []},
+        "outcome": outcome,
+        "visible_rationale": rationale,
+        "serialization": serialization,
+        "compaction": compaction,
     }
     return _seal(value)
+
+
+def _reseal_success_envelope(value: dict) -> dict:
+    result = copy.deepcopy(value)
+    outcome = result["outcome"]
+    payload = teacher._registry_payload_sha256(outcome)
+    outcome["registry_payload_sha256"] = payload
+    outcome["authority"]["content_sha256"] = payload
+    return _seal(result)
 
 
 def _admission_request(tmp_path: Path, attempts: Path) -> dict:
@@ -249,6 +306,7 @@ def test_admits_only_verifier_success_and_emits_no_training_permit(tmp_path: Pat
         "selection_sha256": result["selection_sha256"],
     }
     receipt = _load(tmp_path / "admitted/ADMISSION.json")
+    selection = _load(tmp_path / "admitted/selection.private.json")
     assert receipt["heldout_families_admitted"] == 0
     assert receipt["source_text_read"] is False
     assert receipt["token_ids_read"] is False
@@ -258,6 +316,20 @@ def test_admits_only_verifier_success_and_emits_no_training_permit(tmp_path: Pat
     )
     assert "record_id" not in json.dumps(receipt)
     assert "task_key" not in json.dumps(receipt)
+    assert selection["request_files_sha256"]["attempts"] == file_sha256(attempts)
+    assert (
+        selection["admission_input_manifest_sha256"] == receipt["admission_input_manifest_sha256"]
+    )
+    selected = selection["records"][0]
+    assert selected["attempt_metadata_sha256"] == _attempt(profile, packet, task=task)["sha256"]
+    assert selected["runtime_binding_sha256"] == digest_json(task)
+    assert selected["outcome"]["attempt_binding"]["task_key"] == task["task_key"]
+    assert (
+        selected["serialization"]["roundtrip_receipt_authority"]["content_sha256"]
+        == selected["serialization"]["roundtrip_receipt_sha256"]
+    )
+    assert selected["visible_rationale"]["tool_calls_with_visible_rationale"] == 2
+    assert selected["compaction"] == {"kind": "none", "boundaries": []}
 
 
 def test_provider_private_reasoning_and_failed_verifier_are_not_admitted(tmp_path: Path) -> None:
@@ -272,21 +344,104 @@ def test_provider_private_reasoning_and_failed_verifier_are_not_admitted(tmp_pat
     failed["source_session_identity_sha256"] = _digest("5")
     failed["normalized_trajectory_sha256"] = _digest("6")
     failed["outcome"]["score_at_least_one"] = False
-    failed = _seal(failed)
+    failed = _reseal_success_envelope(failed)
     attempts = tmp_path / "attempts.jsonl"
     attempts.write_text(json.dumps(private) + "\n" + json.dumps(failed) + "\n")
     result = teacher.admit(_admission_request(tmp_path, attempts), relative_to=tmp_path)
     assert result["selected_records"] == 0
     receipt = _load(tmp_path / "admitted/ADMISSION.json")
-    assert receipt["rejections"]["missing_visible_rationale"] == 1
+    assert receipt["rejections"]["private_or_unknown_reasoning"] == 1
     assert receipt["rejections"]["invalid_authoritative_success"] == 1
+
+
+def test_verifier_receipt_requires_the_exact_campaign_namespace() -> None:
+    requirements = _load(REQUIREMENTS)
+    rendered = teacher.render(requirements, _authorization(), root=ROOT)
+    profile = rendered["source-profile.json"]
+    packet = rendered["collection-packet.json"]
+    task = _load(ROSTER / "task-selection.json")["tasks"][0]
+    attempt = _attempt(profile, packet, task=task)
+    attempt["outcome"]["verifier_authority"]["artifact_key"] = (
+        "cyber/runs/unrelated-project/verifier/fixture-1"
+    )
+    attempt = _reseal_success_envelope(attempt)
+    with pytest.raises(ValueError, match="wrong immutable Registry namespace"):
+        teacher._attempt(attempt)
+
+
+@pytest.mark.parametrize(
+    ("field", "wrong_value"),
+    [
+        ("attempt", 2),
+        ("task_key", "unrelated-task"),
+        ("runtime_binding_sha256", _digest("7")),
+        ("qwen_target_sha256", _digest("8")),
+        ("qwen_chat_template_sha256", _digest("9")),
+    ],
+)
+def test_immutable_success_receipt_must_bind_exact_attempt_task_model_and_template(
+    tmp_path: Path, field: str, wrong_value: object
+) -> None:
+    _requirements, profile, packet = _rendered(tmp_path)
+    task = _load(ROSTER / "task-selection.json")["tasks"][0]
+    attempt = _attempt(profile, packet, task=task)
+    attempt["outcome"]["attempt_binding"][field] = wrong_value
+    attempt = _reseal_success_envelope(attempt)
+    attempts = tmp_path / "attempts.jsonl"
+    attempts.write_text(json.dumps(attempt) + "\n")
+    result = teacher.admit(_admission_request(tmp_path, attempts), relative_to=tmp_path)
+    assert result["selected_records"] == 0
+    receipt = _load(tmp_path / "admitted/ADMISSION.json")
+    assert receipt["rejections"]["success_evidence_binding_mismatch"] == 1
+
+
+@pytest.mark.parametrize(
+    ("field", "wrong_value", "reason"),
+    [
+        ("unknown_reasoning_fields_present", True, "private_or_unknown_reasoning"),
+        ("tool_calls_with_visible_rationale", 1, "invalid_rationale_coverage"),
+        ("maximum_sentences_per_rationale", 5, "invalid_rationale_coverage"),
+    ],
+)
+def test_unknown_reasoning_missing_tool_rationale_and_long_rationale_are_rejected(
+    tmp_path: Path, field: str, wrong_value: object, reason: str
+) -> None:
+    _requirements, profile, packet = _rendered(tmp_path)
+    task = _load(ROSTER / "task-selection.json")["tasks"][0]
+    attempt = _attempt(profile, packet, task=task)
+    attempt["visible_rationale"][field] = wrong_value
+    attempt = _seal(attempt)
+    attempts = tmp_path / "attempts.jsonl"
+    attempts.write_text(json.dumps(attempt) + "\n")
+    result = teacher.admit(_admission_request(tmp_path, attempts), relative_to=tmp_path)
+    assert result["selected_records"] == 0
+    receipt = _load(tmp_path / "admitted/ADMISSION.json")
+    assert receipt["rejections"][reason] == 1
+
+
+def test_any_forbidden_private_field_occurrence_is_rejected(tmp_path: Path) -> None:
+    _requirements, profile, packet = _rendered(tmp_path)
+    task = _load(ROSTER / "task-selection.json")["tasks"][0]
+    attempt = _attempt(profile, packet, task=task)
+    attempt["visible_rationale"]["forbidden_private_field_occurrences"]["thinking"] = 1
+    attempt = _seal(attempt)
+    attempts = tmp_path / "attempts.jsonl"
+    attempts.write_text(json.dumps(attempt) + "\n")
+    teacher.admit(_admission_request(tmp_path, attempts), relative_to=tmp_path)
+    receipt = _load(tmp_path / "admitted/ADMISSION.json")
+    assert receipt["rejections"]["private_or_unknown_reasoning"] == 1
 
 
 def test_exact_visible_compaction_summary_binds_true_next_prompt(tmp_path: Path) -> None:
     _requirements, profile, packet = _rendered(tmp_path)
     task = _load(ROSTER / "task-selection.json")["tasks"][0]
     boundary = {
-        "boundary_id": _digest("7"),
+        "boundary_index": 0,
+        "previous_boundary_id": None,
+        "source_session_identity_sha256": _digest("c"),
+        "normalized_trajectory_sha256": _digest("e"),
+        "transcript_sha256": _digest("f"),
+        "target_occurrence_manifest_sha256": _digest("3"),
         "pre_compaction_prompt_sha256": _digest("8"),
         "summary_generation_prompt_sha256": _digest("9"),
         "visible_summary_message_sha256": _digest("a"),
@@ -294,11 +449,13 @@ def test_exact_visible_compaction_summary_binds_true_next_prompt(tmp_path: Path)
         "visible_summary_qwen_tokens": 42,
         "post_compaction_prompt_sha256": _digest("c"),
         "next_target_prompt_sha256": _digest("c"),
+        "next_target_occurrence_sha256": _digest("d"),
         "summary_visible_to_student": True,
         "summary_surface": "ordinary_assistant_content",
         "provider_private_reasoning_present": False,
         "summary_loss": "context_only_zero_loss",
     }
+    boundary["boundary_id"] = digest_json(boundary)
     attempt = _attempt(
         profile,
         packet,
@@ -314,9 +471,44 @@ def test_exact_visible_compaction_summary_binds_true_next_prompt(tmp_path: Path)
 
     invalid = copy.deepcopy(attempt)
     invalid["compaction"]["boundaries"][0]["next_target_prompt_sha256"] = _digest("d")
+    invalid["compaction"]["boundaries"][0]["boundary_id"] = digest_json(
+        {
+            key: item
+            for key, item in invalid["compaction"]["boundaries"][0].items()
+            if key != "boundary_id"
+        }
+    )
     invalid = _seal(invalid)
     with pytest.raises(ValueError, match="true visible next prompt"):
         teacher._attempt(invalid)
+
+    wrong_chain = copy.deepcopy(attempt)
+    wrong_chain["compaction"]["boundaries"][0]["previous_boundary_id"] = _digest("0")
+    wrong_chain["compaction"]["boundaries"][0]["boundary_id"] = digest_json(
+        {
+            key: item
+            for key, item in wrong_chain["compaction"]["boundaries"][0].items()
+            if key != "boundary_id"
+        }
+    )
+    wrong_chain = _seal(wrong_chain)
+    with pytest.raises(ValueError, match="not one ordered chain"):
+        teacher._attempt(wrong_chain)
+
+    wrong_manifest = copy.deepcopy(attempt)
+    wrong_manifest["compaction"]["boundaries"][0]["target_occurrence_manifest_sha256"] = _digest(
+        "0"
+    )
+    wrong_manifest["compaction"]["boundaries"][0]["boundary_id"] = digest_json(
+        {
+            key: item
+            for key, item in wrong_manifest["compaction"]["boundaries"][0].items()
+            if key != "boundary_id"
+        }
+    )
+    wrong_manifest = _seal(wrong_manifest)
+    with pytest.raises(ValueError, match="true visible next prompt"):
+        teacher._attempt(wrong_manifest)
 
 
 def test_admission_recomputes_authorized_profile_and_rejects_serialization_drift(

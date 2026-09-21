@@ -62,6 +62,10 @@ _PRIVATE_FIELD_NAMES = (
     "reasoning_content",
     "thinking",
 )
+_SOURCE_AUTHORITY_PREFIX = "cyber/runs/qwen38/teacher-visible-rationale/authorization/"
+_SUCCESS_EVIDENCE_AUTHORITY_PREFIX = "cyber/runs/qwen38/teacher-visible-rationale/success/"
+_VERIFIER_AUTHORITY_PREFIX = "cyber/runs/qwen38/teacher-visible-rationale/verifier/"
+_ROUNDTRIP_AUTHORITY_PREFIX = "cyber/runs/qwen38/teacher-visible-rationale/roundtrip/"
 _REJECTIONS = (
     "ambiguous_campaign_cell",
     "duplicate_record",
@@ -69,10 +73,13 @@ _REJECTIONS = (
     "duplicate_trajectory",
     "heldout_or_nontrain",
     "invalid_authoritative_success",
+    "invalid_rationale_coverage",
     "missing_visible_rationale",
     "opaque_or_invalid_compaction",
     "per_task_cap",
+    "private_or_unknown_reasoning",
     "serialization_mismatch",
+    "success_evidence_binding_mismatch",
     "unplanned_campaign_cell",
     "wrong_source_binding",
 )
@@ -148,6 +155,31 @@ def _input(root: Path, value: object, label: str) -> tuple[Path, str]:
     return path, expected
 
 
+def _require_unchanged(inputs: Mapping[str, tuple[Path, str]], label: str) -> None:
+    for name, (path, expected) in inputs.items():
+        if path.is_symlink() or not path.is_file() or file_sha256(path) != expected:
+            raise ValueError(f"{label} {name} changed during processing")
+
+
+def _requirements_local_inputs(
+    requirements: Mapping[str, Any], *, root: Path
+) -> dict[str, tuple[Path, str]]:
+    return {
+        "qwen_model_lock": (
+            _path(root, requirements["qwen_target"]["model_lock_path"], "model lock"),
+            requirements["qwen_target"]["model_lock_file_sha256"],
+        ),
+        "visible_rationale_instruction": (
+            _path(
+                root,
+                requirements["visible_rationale"]["instruction_path"],
+                "rationale instruction",
+            ),
+            requirements["visible_rationale"]["instruction_file_sha256"],
+        ),
+    }
+
+
 def _json(path: Path, label: str) -> dict[str, Any]:
     try:
         return _mapping(json.loads(path.read_text()), label)
@@ -170,6 +202,13 @@ def _immutable_authority(value: object, label: str) -> dict[str, Any]:
     ):
         raise ValueError(f"{label} lacks an immutable Fleet artifact binding")
     _sha(result["content_sha256"], f"{label} content")
+    return result
+
+
+def _namespaced_authority(value: object, label: str, prefix: str) -> dict[str, Any]:
+    result = _immutable_authority(value, label)
+    if not result["artifact_key"].startswith(prefix):
+        raise ValueError(f"{label} uses the wrong immutable Registry namespace")
     return result
 
 
@@ -297,7 +336,9 @@ def _requirements(value: Mapping[str, Any], *, root: Path) -> dict[str, Any]:
             "instruction_path",
             "instruction_file_sha256",
             "surface",
+            "minimum_sentences_before_tool",
             "maximum_sentences_before_tool",
+            "every_tool_call_requires_visible_rationale",
             "private_fields_rejected",
             "inference_or_reconstruction_allowed",
         },
@@ -309,7 +350,9 @@ def _requirements(value: Mapping[str, Any], *, root: Path) -> dict[str, Any]:
         or not instruction.is_file()
         or file_sha256(instruction) != rationale["instruction_file_sha256"]
         or rationale["surface"] != "ordinary_assistant_content_before_tool_call"
+        or rationale["minimum_sentences_before_tool"] != 1
         or rationale["maximum_sentences_before_tool"] != 4
+        or rationale["every_tool_call_requires_visible_rationale"] is not True
         or rationale["private_fields_rejected"] != list(_PRIVATE_FIELD_NAMES)
         or rationale["inference_or_reconstruction_allowed"] is not False
     ):
@@ -403,6 +446,8 @@ def _requirements(value: Mapping[str, Any], *, root: Path) -> dict[str, Any]:
             "heldout_roles_excluded",
             "opaque_compaction_rejected",
             "private_or_unknown_reasoning_rejected",
+            "immutable_success_evidence_required",
+            "durable_evidence_handoff_required",
             "final_unique_token_gate_requires_private_materializer",
         },
         "teacher rationale admission policy",
@@ -420,6 +465,8 @@ def _requirements(value: Mapping[str, Any], *, root: Path) -> dict[str, Any]:
         "heldout_roles_excluded": ["dev", "final_test"],
         "opaque_compaction_rejected": True,
         "private_or_unknown_reasoning_rejected": True,
+        "immutable_success_evidence_required": True,
+        "durable_evidence_handoff_required": True,
         "final_unique_token_gate_requires_private_materializer": True,
     }:
         raise ValueError("teacher rationale admission policy drift")
@@ -454,9 +501,11 @@ def _authorization(value: Mapping[str, Any], requirements: dict[str, Any]) -> di
         },
         "teacher source authorization",
     )
-    authority = _immutable_authority(auth["authority"], "teacher authorization authority")
-    if not authority["artifact_key"].startswith("cyber/runs/qwen38/teacher-visible-rationale/"):
-        raise ValueError("teacher authorization uses the wrong immutable Registry namespace")
+    authority = _namespaced_authority(
+        auth["authority"],
+        "teacher authorization authority",
+        _SOURCE_AUTHORITY_PREFIX,
+    )
     payload = _sha(auth["registry_payload_sha256"], "teacher authorization payload")
     if payload != _registry_payload_sha256(auth) or authority["content_sha256"] != payload:
         raise ValueError("teacher authorization is not bound to its immutable payload")
@@ -532,10 +581,12 @@ def _roster(requirements: dict[str, Any], *, root: Path) -> dict[str, Any]:
     )
     loaded: dict[str, dict[str, Any]] = {}
     files: dict[str, str] = {}
+    paths: dict[str, Path] = {}
     for name, reference in refs.items():
         path, expected = _input(root, reference, name.replace("_", " "))
         loaded[name] = _json(path, name.replace("_", " "))
         files[name] = expected
+        paths[name] = path
     inventory = _sealed(
         loaded["inventory"],
         "cyber_collection_metadata_inventory_v1",
@@ -612,10 +663,12 @@ def _roster(requirements: dict[str, Any], *, root: Path) -> dict[str, Any]:
         identities[identity] = assignment
     return {
         "files": files,
+        "paths": paths,
         "loaded": loaded,
         "roles": roles,
         "protected": set(protected),
         "selected": identities,
+        "selected_runtime_bindings": {identity: runtime_rows[identity] for identity in identities},
     }
 
 
@@ -625,6 +678,7 @@ def render(
     """Render the immutable source profile and packet without external calls."""
 
     req = _requirements(requirements, root=root)
+    requirements_local_inputs = _requirements_local_inputs(req, root=root)
     auth = _authorization(authorization, req)
     roster = _roster(req, root=root)
     if len(roster["selected"]) < req["collection"]["minimum_selected_families"]:
@@ -667,6 +721,11 @@ def render(
         "external_submission_authorized": False,
     }
     packet["sha256"] = digest_json(packet)
+    _require_unchanged(requirements_local_inputs, "teacher rationale contract input")
+    _require_unchanged(
+        {name: (roster["paths"][name], expected) for name, expected in roster["files"].items()},
+        "teacher rationale roster input",
+    )
     return {"source-profile.json": profile, "collection-packet.json": packet}
 
 
@@ -780,7 +839,14 @@ def _packet(value: Mapping[str, Any], profile: dict[str, Any]) -> dict[str, Any]
     return packet
 
 
-def _compaction(value: object) -> dict[str, Any]:
+def _compaction(
+    value: object,
+    *,
+    source_session_identity_sha256: str | None = None,
+    normalized_trajectory_sha256: str | None = None,
+    transcript_sha256: str | None = None,
+    target_occurrence_manifest_sha256: str | None = None,
+) -> dict[str, Any]:
     result = _mapping(value, "teacher rationale compaction evidence")
     kind = result.get("kind")
     if kind == "none" and result == {"kind": "none", "boundaries": []}:
@@ -793,6 +859,12 @@ def _compaction(value: object) -> dict[str, Any]:
     seen: set[str] = set()
     fields = {
         "boundary_id",
+        "boundary_index",
+        "previous_boundary_id",
+        "source_session_identity_sha256",
+        "normalized_trajectory_sha256",
+        "transcript_sha256",
+        "target_occurrence_manifest_sha256",
         "pre_compaction_prompt_sha256",
         "summary_generation_prompt_sha256",
         "visible_summary_message_sha256",
@@ -800,20 +872,34 @@ def _compaction(value: object) -> dict[str, Any]:
         "visible_summary_qwen_tokens",
         "post_compaction_prompt_sha256",
         "next_target_prompt_sha256",
+        "next_target_occurrence_sha256",
         "summary_visible_to_student",
         "summary_surface",
         "provider_private_reasoning_present",
         "summary_loss",
     }
-    for raw in boundaries:
+    previous_boundary_id: str | None = None
+    for index, raw in enumerate(boundaries):
         boundary = _exact(raw, fields, "teacher visible-summary boundary")
         boundary_id = _sha(boundary["boundary_id"], "compaction boundary")
         if boundary_id in seen:
             raise ValueError("teacher visible-summary boundary is duplicated")
         seen.add(boundary_id)
+        _count(boundary["boundary_index"], "compaction boundary index")
+        if boundary["previous_boundary_id"] is not None:
+            _sha(boundary["previous_boundary_id"], "previous compaction boundary")
+        if boundary["boundary_index"] != index or boundary["previous_boundary_id"] != (
+            previous_boundary_id
+        ):
+            raise ValueError("teacher visible-summary boundaries are not one ordered chain")
         for name in fields:
             if name.endswith("sha256"):
                 _sha(boundary[name], f"compaction {name}")
+        expected_boundary_id = digest_json(
+            {name: item for name, item in boundary.items() if name != "boundary_id"}
+        )
+        if boundary_id != expected_boundary_id:
+            raise ValueError("teacher visible-summary boundary digest mismatch")
         _count(boundary["visible_summary_qwen_tokens"], "visible summary tokens", positive=True)
         if (
             boundary["summary_visible_to_student"] is not True
@@ -821,8 +907,25 @@ def _compaction(value: object) -> dict[str, Any]:
             or boundary["provider_private_reasoning_present"] is not False
             or boundary["summary_loss"] != "context_only_zero_loss"
             or boundary["post_compaction_prompt_sha256"] != boundary["next_target_prompt_sha256"]
+            or (
+                source_session_identity_sha256 is not None
+                and boundary["source_session_identity_sha256"] != source_session_identity_sha256
+            )
+            or (
+                normalized_trajectory_sha256 is not None
+                and boundary["normalized_trajectory_sha256"] != normalized_trajectory_sha256
+            )
+            or (
+                transcript_sha256 is not None and boundary["transcript_sha256"] != transcript_sha256
+            )
+            or (
+                target_occurrence_manifest_sha256 is not None
+                and boundary["target_occurrence_manifest_sha256"]
+                != target_occurrence_manifest_sha256
+            )
         ):
             raise ValueError("teacher compaction does not preserve the true visible next prompt")
+        previous_boundary_id = boundary_id
     return result
 
 
@@ -863,25 +966,6 @@ def _attempt(value: Mapping[str, Any]) -> dict[str, Any]:
         "transcript_sha256",
     ):
         _sha(row[name], name)
-    outcome = _exact(
-        row["outcome"],
-        {
-            "status",
-            "verifier_process_success",
-            "score_at_least_one",
-            "verifier_execution_identity_sha256",
-            "verifier_receipt_sha256",
-            "verifier_authority",
-        },
-        "teacher rationale outcome",
-    )
-    for name in ("verifier_execution_identity_sha256", "verifier_receipt_sha256"):
-        _sha(outcome[name], name)
-    verifier_authority = _immutable_authority(
-        outcome["verifier_authority"], "teacher rationale verifier authority"
-    )
-    if verifier_authority["content_sha256"] != outcome["verifier_receipt_sha256"]:
-        raise ValueError("teacher rationale verifier authority does not bind its receipt")
     rationale = _exact(
         row["visible_rationale"],
         {
@@ -889,14 +973,36 @@ def _attempt(value: Mapping[str, Any]) -> dict[str, Any]:
             "ordinary_content_only",
             "visible_to_student",
             "provider_private_reasoning_present",
+            "unknown_reasoning_fields_present",
+            "forbidden_private_field_occurrences",
+            "tool_calls",
+            "tool_calls_with_visible_rationale",
+            "rationale_segments",
+            "minimum_sentences_per_rationale",
+            "maximum_sentences_per_rationale",
             "rationale_target_tokens",
             "visible_action_target_tokens",
             "target_occurrence_manifest_sha256",
         },
         "teacher visible rationale evidence",
     )
-    _count(rationale["rationale_target_tokens"], "rationale target tokens", positive=True)
-    _count(rationale["visible_action_target_tokens"], "action target tokens", positive=True)
+    for name in (
+        "tool_calls",
+        "tool_calls_with_visible_rationale",
+        "rationale_segments",
+        "minimum_sentences_per_rationale",
+        "maximum_sentences_per_rationale",
+        "rationale_target_tokens",
+        "visible_action_target_tokens",
+    ):
+        _count(rationale[name], name.replace("_", " "), positive=True)
+    private_occurrences = _exact(
+        rationale["forbidden_private_field_occurrences"],
+        set(_PRIVATE_FIELD_NAMES),
+        "teacher private-field occurrence census",
+    )
+    for name, count in private_occurrences.items():
+        _count(count, f"private field {name} occurrences")
     _sha(rationale["target_occurrence_manifest_sha256"], "target occurrence manifest")
     serialization = _exact(
         row["serialization"],
@@ -905,6 +1011,7 @@ def _attempt(value: Mapping[str, Any]) -> dict[str, Any]:
             "qwen_target_sha256",
             "qwen_chat_template_sha256",
             "roundtrip_receipt_sha256",
+            "roundtrip_receipt_authority",
             "message_surface",
             "chat_template_kwargs",
             "prompt_token_ids_equal_local_template",
@@ -917,9 +1024,93 @@ def _attempt(value: Mapping[str, Any]) -> dict[str, Any]:
     for name in serialization:
         if name.endswith("sha256"):
             _sha(serialization[name], name)
+    roundtrip_authority = _namespaced_authority(
+        serialization["roundtrip_receipt_authority"],
+        "teacher rationale round-trip authority",
+        _ROUNDTRIP_AUTHORITY_PREFIX,
+    )
+    if roundtrip_authority["content_sha256"] != serialization["roundtrip_receipt_sha256"]:
+        raise ValueError("teacher rationale round-trip authority does not bind its receipt")
     if type(serialization["round_trip_verified"]) is not bool:
         raise ValueError("teacher rationale round-trip status must be boolean")
-    _compaction(row["compaction"])
+    _compaction(
+        row["compaction"],
+        source_session_identity_sha256=row["source_session_identity_sha256"],
+        normalized_trajectory_sha256=row["normalized_trajectory_sha256"],
+        transcript_sha256=row["transcript_sha256"],
+        target_occurrence_manifest_sha256=rationale["target_occurrence_manifest_sha256"],
+    )
+    outcome = _exact(
+        row["outcome"],
+        {
+            "authority",
+            "registry_payload_sha256",
+            "status",
+            "verifier_process_success",
+            "score_at_least_one",
+            "verifier_execution_identity_sha256",
+            "verifier_receipt_sha256",
+            "verifier_authority",
+            "attempt_binding",
+        },
+        "teacher rationale outcome",
+    )
+    for name in (
+        "registry_payload_sha256",
+        "verifier_execution_identity_sha256",
+        "verifier_receipt_sha256",
+    ):
+        _sha(outcome[name], name)
+    verifier_authority = _namespaced_authority(
+        outcome["verifier_authority"],
+        "teacher rationale verifier authority",
+        _VERIFIER_AUTHORITY_PREFIX,
+    )
+    if verifier_authority["content_sha256"] != outcome["verifier_receipt_sha256"]:
+        raise ValueError("teacher rationale verifier authority does not bind its receipt")
+    success_authority = _namespaced_authority(
+        outcome["authority"],
+        "teacher rationale success-evidence authority",
+        _SUCCESS_EVIDENCE_AUTHORITY_PREFIX,
+    )
+    if (
+        outcome["registry_payload_sha256"] != _registry_payload_sha256(outcome)
+        or success_authority["content_sha256"] != outcome["registry_payload_sha256"]
+    ):
+        raise ValueError("teacher rationale success evidence is not immutably bound")
+    binding = _exact(
+        outcome["attempt_binding"],
+        {
+            "campaign_packet_sha256",
+            "source_profile_sha256",
+            "record_id",
+            "source_session_identity_sha256",
+            "normalized_record_sha256",
+            "normalized_trajectory_sha256",
+            "transcript_sha256",
+            "task_key",
+            "task_version_id",
+            "attempt",
+            "runtime_binding_sha256",
+            "teacher_source_sha256",
+            "qwen_target_sha256",
+            "qwen_chat_template_sha256",
+            "serialization_contract_sha256",
+            "serialization_evidence_sha256",
+            "roundtrip_receipt_sha256",
+            "compaction_sha256",
+            "visible_rationale_evidence_sha256",
+            "target_occurrence_manifest_sha256",
+        },
+        "teacher rationale success-evidence attempt binding",
+    )
+    for name, item in binding.items():
+        if name.endswith("sha256"):
+            _sha(item, f"success-evidence {name}")
+    _text(binding["record_id"], "success-evidence record identity")
+    _text(binding["task_key"], "success-evidence task key")
+    _text(binding["task_version_id"], "success-evidence task version")
+    _count(binding["attempt"], "success-evidence attempt", positive=True)
     return row
 
 
@@ -929,6 +1120,7 @@ def _admission_reason(
     packet: dict[str, Any],
     profile: dict[str, Any],
     selected_tasks: Mapping[tuple[str, str], Mapping[str, Any]],
+    selected_runtime_bindings: Mapping[tuple[str, str], Mapping[str, Any]],
 ) -> str | None:
     if (
         row["campaign_packet_sha256"] != packet["sha256"]
@@ -938,24 +1130,35 @@ def _admission_reason(
     identity = (row["task_key"], row["task_version_id"])
     if identity not in selected_tasks or row["attempt"] > packet["attempts_per_task"]:
         return "unplanned_campaign_cell"
-    if row["outcome"] != {
-        "status": "completed",
-        "verifier_process_success": True,
-        "score_at_least_one": True,
-        "verifier_execution_identity_sha256": row["outcome"]["verifier_execution_identity_sha256"],
-        "verifier_receipt_sha256": row["outcome"]["verifier_receipt_sha256"],
-        "verifier_authority": row["outcome"]["verifier_authority"],
-    }:
+    outcome = row["outcome"]
+    if (
+        outcome["status"] != "completed"
+        or outcome["verifier_process_success"] is not True
+        or outcome["score_at_least_one"] is not True
+    ):
         return "invalid_authoritative_success"
     rationale = row["visible_rationale"]
-    if rationale != {
-        **rationale,
-        "surface": "ordinary_assistant_content_before_tool_call",
-        "ordinary_content_only": True,
-        "visible_to_student": True,
-        "provider_private_reasoning_present": False,
-    }:
+    if (
+        rationale["surface"] != "ordinary_assistant_content_before_tool_call"
+        or rationale["ordinary_content_only"] is not True
+        or rationale["visible_to_student"] is not True
+    ):
         return "missing_visible_rationale"
+    if (
+        rationale["provider_private_reasoning_present"] is not False
+        or rationale["unknown_reasoning_fields_present"] is not False
+        or any(rationale["forbidden_private_field_occurrences"].values())
+    ):
+        return "private_or_unknown_reasoning"
+    if (
+        rationale["tool_calls_with_visible_rationale"] != rationale["tool_calls"]
+        or rationale["rationale_segments"] != rationale["tool_calls"]
+        or rationale["minimum_sentences_per_rationale"] < 1
+        or rationale["maximum_sentences_per_rationale"] > 4
+        or rationale["minimum_sentences_per_rationale"]
+        > rationale["maximum_sentences_per_rationale"]
+    ):
+        return "invalid_rationale_coverage"
     target = profile["qwen_target"]
     contract = profile["serialization"]
     if (
@@ -971,9 +1174,39 @@ def _admission_reason(
     ):
         return "serialization_mismatch"
     try:
-        _compaction(row["compaction"])
+        _compaction(
+            row["compaction"],
+            source_session_identity_sha256=row["source_session_identity_sha256"],
+            normalized_trajectory_sha256=row["normalized_trajectory_sha256"],
+            transcript_sha256=row["transcript_sha256"],
+            target_occurrence_manifest_sha256=rationale["target_occurrence_manifest_sha256"],
+        )
     except ValueError:
         return "opaque_or_invalid_compaction"
+    expected_binding = {
+        "campaign_packet_sha256": packet["sha256"],
+        "source_profile_sha256": profile["sha256"],
+        "record_id": row["record_id"],
+        "source_session_identity_sha256": row["source_session_identity_sha256"],
+        "normalized_record_sha256": row["normalized_record_sha256"],
+        "normalized_trajectory_sha256": row["normalized_trajectory_sha256"],
+        "transcript_sha256": row["transcript_sha256"],
+        "task_key": row["task_key"],
+        "task_version_id": row["task_version_id"],
+        "attempt": row["attempt"],
+        "runtime_binding_sha256": digest_json(selected_runtime_bindings[identity]),
+        "teacher_source_sha256": digest_json(profile["source"]),
+        "qwen_target_sha256": digest_json(target),
+        "qwen_chat_template_sha256": target["chat_template_sha256"],
+        "serialization_contract_sha256": digest_json(contract),
+        "serialization_evidence_sha256": digest_json(row["serialization"]),
+        "roundtrip_receipt_sha256": row["serialization"]["roundtrip_receipt_sha256"],
+        "compaction_sha256": digest_json(row["compaction"]),
+        "visible_rationale_evidence_sha256": digest_json(rationale),
+        "target_occurrence_manifest_sha256": rationale["target_occurrence_manifest_sha256"],
+    }
+    if outcome["attempt_binding"] != expected_binding:
+        return "success_evidence_binding_mismatch"
     return None
 
 
@@ -1016,10 +1249,12 @@ def admit(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
     )
     sources = {name: _input(relative_to, request[name], name) for name in names}
     paths = {name: pair[0] for name, pair in sources.items()}
+    input_files_sha256 = {name: expected for name, (_, expected) in sources.items()}
     requirements = _requirements(
         _json(paths["requirements"], "teacher rationale requirements"),
         root=REPOSITORY_ROOT,
     )
+    requirements_local_inputs = _requirements_local_inputs(requirements, root=REPOSITORY_ROOT)
     authorization = _authorization(
         _json(paths["source_authorization"], "teacher source authorization"),
         requirements,
@@ -1034,6 +1269,7 @@ def admit(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
     anchor = roster["loaded"]["role_anchor"]
     lock = roster["loaded"]["protected_family_lock"]
     selected_tasks = roster["selected"]
+    selected_runtime_bindings = roster["selected_runtime_bindings"]
     if len(selected_tasks) != packet["train_task_versions"]:
         raise ValueError("teacher rationale packet train-task count drift")
 
@@ -1043,7 +1279,11 @@ def admit(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
     by_cell: dict[tuple[str, str, int], list[dict[str, Any]]] = collections.defaultdict(list)
     for row in rows:
         reason = _admission_reason(
-            row, packet=packet, profile=profile, selected_tasks=selected_tasks
+            row,
+            packet=packet,
+            profile=profile,
+            selected_tasks=selected_tasks,
+            selected_runtime_bindings=selected_runtime_bindings,
         )
         if reason is not None:
             rejected[reason] += 1
@@ -1101,9 +1341,18 @@ def admit(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
                 "normalized_record_sha256": row["normalized_record_sha256"],
                 "normalized_trajectory_sha256": row["normalized_trajectory_sha256"],
                 "transcript_sha256": row["transcript_sha256"],
+                "attempt": row["attempt"],
+                "attempt_metadata_sha256": row["sha256"],
+                "runtime_binding_sha256": digest_json(
+                    selected_runtime_bindings[(row["task_key"], row["task_version_id"])]
+                ),
                 "target_occurrence_manifest_sha256": rationale["target_occurrence_manifest_sha256"],
                 "rationale_target_tokens": rationale["rationale_target_tokens"],
                 "visible_action_target_tokens": rationale["visible_action_target_tokens"],
+                "outcome": row["outcome"],
+                "visible_rationale": rationale,
+                "serialization": row["serialization"],
+                "compaction": row["compaction"],
             }
         )
     candidate_tokens = rationale_tokens + action_tokens
@@ -1119,8 +1368,22 @@ def admit(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
         and len(family_tokens) >= packet["minimum_selected_families"]
         and selected_family_fraction >= packet["minimum_selected_family_fraction"]
     )
+    roster_files_sha256 = dict(sorted(roster["files"].items()))
+    admission_input_manifest = {
+        "request_files_sha256": dict(sorted(input_files_sha256.items())),
+        "contract_files_sha256": {
+            name: expected for name, (_, expected) in sorted(requirements_local_inputs.items())
+        },
+        "roster_files_sha256": roster_files_sha256,
+    }
     selection = {
         "schema": SELECTION_SCHEMA,
+        "request_files_sha256": admission_input_manifest["request_files_sha256"],
+        "contract_files_sha256": admission_input_manifest["contract_files_sha256"],
+        "roster_files_sha256": roster_files_sha256,
+        "admission_input_manifest_sha256": digest_json(admission_input_manifest),
+        "source_authorization_sha256": authorization["sha256"],
+        "source_authorization_authority": authorization["authority"],
         "source_profile_sha256": profile["sha256"],
         "collection_packet_sha256": packet["sha256"],
         "family_split_sha256": split["sha256"],
@@ -1159,12 +1422,18 @@ def admit(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
         "sft_ready": False,
         "next_gate": "private_qwen_token_roundtrip_window_dedupe_and_exact_20m_coverage",
         "selection_sha256": selection["sha256"],
+        "admission_input_manifest_sha256": selection["admission_input_manifest_sha256"],
     }
     _public_only(receipt)
     receipt["sha256"] = digest_json(receipt)
     for name, (path, expected) in sources.items():
         if file_sha256(path) != expected:
             raise ValueError(f"{name} changed during teacher rationale admission")
+    _require_unchanged(requirements_local_inputs, "teacher rationale contract input")
+    _require_unchanged(
+        {name: (roster["paths"][name], expected) for name, expected in roster["files"].items()},
+        "teacher rationale roster input",
+    )
     _write_admission(output, selection, receipt)
     return {
         "submitted": False,

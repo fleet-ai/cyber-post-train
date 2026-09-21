@@ -35,7 +35,9 @@
     "instruction_path": "configs/collection/stronger-teacher-visible-rationale-current75-v1/visible-rationale-instruction.txt",
     "instruction_file_sha256": "sha256:bb04942b46ecf08d0af6c7d57e952ef794ed6b8a820457a4254e6605e6c73786",
     "surface": "ordinary_assistant_content_before_tool_call",
+    "minimum_sentences_before_tool": 1,
     "maximum_sentences_before_tool": 4,
+    "every_tool_call_requires_visible_rationale": true,
     "private_fields_rejected": [
       "analysis",
       "hidden_reasoning",
@@ -126,6 +128,8 @@
     ],
     "opaque_compaction_rejected": true,
     "private_or_unknown_reasoning_rejected": true,
+    "immutable_success_evidence_required": true,
+    "durable_evidence_handoff_required": true,
     "final_unique_token_gate_requires_private_materializer": true
   },
   "separation": {
@@ -136,5 +140,5 @@
     "teacher_hidden_reasoning_allowed": false
   },
   "submitted": false,
-  "sha256": "sha256:d325fa663daa1dd2b37e806dc8d51100419782f4aef83f4e7f464042a60d992e"
+  "sha256": "sha256:73191b9da7af1b93343710a0f8d94c7a263ba1cf54b4528791f86f9227e1d72e"
 }
