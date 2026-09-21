@@ -9,6 +9,11 @@ import pytest
 from typer.testing import CliRunner
 
 from cyber_post_train import cli
+from cyber_post_train.jobs import FAILURE_ALERT_ANNOTATION, FAILURE_ALERT_OFF
+from cyber_post_train.sft_cpu_preflight_job import (
+    build_sft_cpu_preflight_job,
+    validate_sft_cpu_preflight_job_package,
+)
 from training import sft, sft_dispatch, sft_runtime
 from training import sft_lora_anchor_a2_v1 as a2_compiler
 from training import sft_runtime_lora_anchor_a2_v1 as a2_runtime
@@ -159,6 +164,29 @@ def test_a2_prepare_uses_the_versioned_compiler_without_an_sfs_mount(tmp_path):
     assert plan["runtime_variant"]["name"] == a2_runtime.RUNTIME_VARIANT
     assert request == a2_compiler.job_request(plan)
     assert request["failureAlerts"] is False
+
+
+def test_a2_cpu_preflight_package_keeps_the_root_alert_and_zero_gpu_contract(tmp_path):
+    prepared = tmp_path / "prepared"
+    result = RUNNER.invoke(cli.app, ["train", str(A2_CONFIG), "--output", str(prepared)])
+    assert result.exit_code == 0, result.output
+
+    package = build_sft_cpu_preflight_job(
+        prepared,
+        source_commit="a" * 40,
+        attempt=1,
+    )
+    proof = validate_sft_cpu_preflight_job_package(package)
+    job = package.job
+    pod = job["spec"]["template"]["spec"]
+
+    assert proof["gpus"] == 0
+    assert job["metadata"]["annotations"][FAILURE_ALERT_ANNOTATION] == FAILURE_ALERT_OFF
+    assert pod["containers"][0]["resources"] == {
+        "requests": {"cpu": "4", "memory": "32Gi", "ephemeral-storage": "2Gi"},
+        "limits": {"cpu": "8", "memory": "48Gi", "ephemeral-storage": "4Gi"},
+    }
+    assert pod["volumes"][0]["persistentVolumeClaim"]["readOnly"] is True
 
 
 def test_a1_output_collision_is_sanitized_and_a2_packet_preserves_its_lesson():
