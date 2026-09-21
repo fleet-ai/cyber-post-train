@@ -1,0 +1,100 @@
+{
+  "schema": "cyber_qwen38_lora_recovery_step42_seal_terminal_v1",
+  "status": "sealed_and_independently_verified",
+  "source": {
+    "git_commit": "4328b5a62b5a47d90444cfefa344c84ed1b789f8",
+    "source_archive_sha256": "c0a355360eecc75a749cdfa1aec3835a2ccf1eae7b25ddd797dfa90db519e414",
+    "image": "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317",
+    "plan_sha256": "ca4acd3b9c06c8569460b45a1b7a9166f82a5a400852e94d41907815f46d5d7c",
+    "prepared_configmap_uid": "4ab58dc1-6dcf-4138-a5aa-05e110869a8f",
+    "source_configmap_uid": "ae757ac4-9616-47b0-bb36-009cd3d5e27d"
+  },
+  "merged_repair": {
+    "pull_request": "https://github.com/fleet-ai/cyber-post-train/pull/274",
+    "head_commit": "2336ef082d5850b0d62243239764d56a0afda904",
+    "merge_commit": "4328b5a62b5a47d90444cfefa344c84ed1b789f8",
+    "github_ci": "passed"
+  },
+  "output_absence_preflight": {
+    "name": "chris-q38-lora-r1-s42-v2-seal-guard-p3",
+    "pod_uid": "5a6efd76-7975-42b3-b7d3-c29585cb7566",
+    "manifest_sha256": "506fe6be15d88bdbd002a7215e412998ac4f202fd606c84ae361b1ce831e940d",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "seal_output_absent": true,
+    "released": true
+  },
+  "unscheduled_p2": {
+    "name": "chris-q38-lora-r1-s42-v2-seal-p2",
+    "pod_uid": "32fbb65a-e38a-4915-96ce-b2a9e41c5ff5",
+    "manifest_sha256": "362360b70b8ae30e3841367746b7b23acffbbc9628509adc18432a491c96c244",
+    "pending_receipt_sha256": "089729f3c917c5a4143b70dd1c98011136f2df05532f9f2be86da2ff757835ca",
+    "phase": "Pending",
+    "scheduled": false,
+    "started": false,
+    "restarts": 0,
+    "gpus": 0,
+    "output_written": false,
+    "cause": "The Pod was pinned to one CPU hostname whose remaining memory was reserved by an unrelated long-running evaluation, although other eligible CPU nodes were available.",
+    "released": true,
+    "not_found_after_release": true
+  },
+  "seal": {
+    "name": "chris-q38-lora-r1-s42-v2-seal-p3",
+    "pod_uid": "1832005b-3f2a-4d8e-bc0c-96232c80410f",
+    "manifest_sha256": "67cc1fcb2bd0f957361f659a26af6aa016802194fb16d4e7da538b6dd54e9505",
+    "created_at": "2026-09-21T00:59:07Z",
+    "started_at": "2026-09-21T00:59:08Z",
+    "finished_at": "2026-09-21T00:59:15Z",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "priority_class": "fleet-train-high",
+    "failure_alert_annotation": "off",
+    "checkpoint_manifest": {
+      "path": "/mnt/sfs/jobs/chris-q38-lora-r1-s42-v2/checkpoint_manifests/step-000042-megatron-v1.json",
+      "file_sha256": "fe311aad65920de7a2a3476f01b584d921d90017c23bf74bfc7f572b74efd72c",
+      "receipt_sha256": "74045f65bf49610976a206a4ad16f4b2bfbf7bacb11573ea1d1db4de06c72b93",
+      "schema": "cyber_qwen38_megatron_checkpoint_manifest_v1",
+      "optimizer_step": 42,
+      "world_size": 8,
+      "tensor_parallel_size": 8,
+      "sampler_batches_in_epoch": 42,
+      "files": 27,
+      "total_bytes": 5477467060,
+      "gpu_reload_verified": false
+    },
+    "released": true,
+    "not_found_after_release": true
+  },
+  "independent_readback": {
+    "name": "chris-q38-lora-r1-s42-v2-seal-verify-p3",
+    "pod_uid": "1a34d7cc-0fa9-4719-b95c-dfbf48907501",
+    "manifest_sha256": "f283c8360a1283c1183df7db89675e4dc1034b695b2ce1156b4d2a5b4bac9bd7",
+    "started_at": "2026-09-21T00:59:49Z",
+    "finished_at": "2026-09-21T00:59:58Z",
+    "phase": "Succeeded",
+    "exit_code": 0,
+    "restarts": 0,
+    "gpus": 0,
+    "verified_files": 27,
+    "verified_total_bytes": 5477467060,
+    "source_optimizer_step": 40,
+    "source_receipt_sha256": "c183b77f94d4a4286cb0cf4b62c455cca4d9bceccf3db1f7c21057ab1f155376",
+    "source_unchanged": true,
+    "released": true,
+    "not_found_after_release": true
+  },
+  "acceptance_boundary": {
+    "checkpoint_sealed": true,
+    "all_rank_layout_verified": true,
+    "payload_hashes_verified": true,
+    "source_checkpoint_unchanged": true,
+    "gpu_reload_verified": false,
+    "next_gate": "A separately authorized native GPU resume from the sealed step-42 checkpoint; this CPU receipt does not claim a GPU reload or further training progress."
+  },
+  "receipt_sha256": "4dfb8c053ed7afd66c1bbb663b99a30fd5a6f8f8f30ef44a0680c9d22080be07"
+}
