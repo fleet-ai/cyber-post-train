@@ -1,0 +1,628 @@
+{
+  "schema_version": 2,
+  "observed_at": "2026-09-21T16:30:00Z",
+  "purpose": "Versioned create-once checkpoint and evaluation ledger for the Qwen3.8-27B Fleet cyber lift study. This is a sanitized evidence index, not a capability result; a row becomes a capability result only after its exact matched evaluation is accepted.",
+  "serving_readiness_matrix": "configs/evaluation/qwen38-checkpoint-serving-readiness-v2.json",
+  "comparison_contract": {
+    "webexploitbench_harness": "opencode",
+    "qwen_code_allowed": false,
+    "web_rollout_and_scoring_separated": true,
+    "fleet_holdout_binding": {
+      "split_file": "configs/data/fleet-blackbox-current-study-split-20260914-v2.json",
+      "split_file_sha256": "sha256:28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb",
+      "dev_selection_sha256": "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
+      "dev_exact_task_versions": 17,
+      "final_test_selection_sha256": "sha256:9623149c4a021bc13ed2cf94ca26e107b30c18816cf3c02d76b5020cab5066f4",
+      "final_test_exact_task_versions": 8,
+      "selection_rule": "Submit the exact task_version_id values in the frozen split. Use dev for experiment iteration and keep final_test sealed until a checkpoint-selection rule is frozen."
+    },
+    "matched_control_required": true,
+    "duplicate_identity_fields": [
+      "artifact_id",
+      "benchmark",
+      "task_set_digest",
+      "harness_identity",
+      "serving_identity",
+      "sampling_identity",
+      "budget_identity",
+      "pass_k",
+      "seed",
+      "retry_policy",
+      "scoring_protocol"
+    ]
+  },
+  "controls": [
+    {
+      "artifact_id": "qwen38-27b-base-matched-control",
+      "kind": "base_model_control",
+      "priority": 1,
+      "motivation": "Establish the matched OpenCode baseline required to attribute any WEB or Fleet difference to post-training rather than to serving, harness, task, or scoring drift.",
+      "web_status": "full_collection_v23_running_39_supervised_21_export_failures_preserved_and_released_no_scoring",
+      "web_qualification": {
+        "transaction": "wbe-fresh75-pair-v23",
+        "plan_sha256": "sha256:84866ab09e0239d36841a6cb710abdc1bd6e24000c991c218248a2eb2ae96248",
+        "sandbox_id": "rkh5en6icbvn36saw04tp",
+        "snapshot_id": "0i1wjuz507886crtxobeh",
+        "acceptance_receipt_sha256": "sha256:5618a722ac6f57a721d9f4b827465fddb248dccc65d28b9f12350789ec75cd5f",
+        "complete_receipt_sha256": "sha256:4f6eb574c54ebd86851745e3a22e6867bb33c752f7caf0cb9582fb7501582bf1",
+        "release_receipt_sha256": "sha256:302ac952ffbf6bb1fcce013899bb9299831971fc205ea2e8e9f7b4708f08f83c",
+        "model_or_benchmark_attempts": 0
+      },
+      "web_collection_v23": {
+        "campaigns": [
+          "q38-base-f75p230-oc-wbe-full-v23-r0",
+          "q38-base-f75p230-oc-wbe-full-v23-r1",
+          "q38-base-f75p230-oc-wbe-full-v23-r2",
+          "q38-base-f75p230-oc-wbe-full-v23-r3"
+        ],
+        "planned_collections": 60,
+        "accepted_collections": 0,
+        "supervised_collections": 39,
+        "failure_preserved_and_released": 21,
+        "scoring_campaign_created": false,
+        "capability_result": false,
+        "launch_receipt_sha256": "sha256:1889b6ff0e80e7709841d23447f44fb9a87b587e4b6b7cd3f5e36b619d44db09"
+      },
+      "fleet_status": "base_dev17_v1_terminal_ten_authoritative_valid_sessions_resources_released_no_capability_summary_yet",
+      "fleet_dev17_v1": {
+        "job_name": "chris-q38-f75-dev17-p1-v1",
+        "job_uid": "338c0625-98b3-4682-bda4-92223c67389c",
+        "pod_name": "chris-q38-f75-dev17-p1-v1-hmpjx",
+        "pod_uid": "e5ac864f-8954-4402-8bfc-d5194a0edbdd",
+        "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-p1-v1",
+        "database": "q38_f75_dev17_p1_v1",
+        "valid_sessions": 0,
+        "failure_class": "setup_only_image_identity_comparison",
+        "resource_status": "released"
+      },
+      "fleet_dev17_v2": {
+        "job_name": "chris-q38-f75-dev17-p1-v2",
+        "job_uid": "a8a32c87-7e92-40e9-9fd7-e1fdf6fb7cf1",
+        "pod_name": "chris-q38-f75-dev17-p1-v2-nqvjf",
+        "pod_uid": "6bf320b2-5f47-4d1a-9d62-98d5ab608dd6",
+        "configmap_uid": "04e3a6e3-3e2b-4ec0-96c2-c5960a2e3de1",
+        "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-p1-v2",
+        "database": "q38_f75_dev17_p1_v2",
+        "planned_sessions": 34,
+        "valid_sessions": 0,
+        "failure_class": "controller_and_nested_docker_mount_namespaces_did_not_share_bind_paths_opencode_eacces_home_node_local",
+        "resource_status": "terminal_released"
+      },
+      "fleet_base_dev17_v1": {
+        "job_name": "chris-q38-base-dev17-p1-v1",
+        "job_uid": "c37c4dff-e5fc-4132-8a44-8e93b66cd248",
+        "pod_name": "chris-q38-base-dev17-p1-v1-nkggs",
+        "pod_uid": "426032d5-5cb8-43db-b697-d967b9f529d1",
+        "configmap_uid": "9567e7de-5087-4f8c-b9dd-0fdbcbdc8001",
+        "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-base-p1-v1",
+        "database": "q38_base_dev17_p1_v1",
+        "evaluation_plan_sha256": "sha256:c5a95bef1923b117a25b9098f37a4675ccc9c00979a15e04e404e33e479aec56",
+        "cell_ledger_plan_sha256": "sha256:dfa968993a60c5fe4898cdaf4d7ef42a5d2807026518879747cf9b2abb7010aa",
+        "planned_sessions": 17,
+        "accepted_sessions": 10,
+        "final_counts": {
+          "accepted": 10,
+          "pending": 1,
+          "retry_review": 6,
+          "stale": 0
+        },
+        "terminal": {
+          "ended_at": "2026-09-21T00:58:18Z",
+          "job_status": "Failed",
+          "restarts": 0,
+          "eval_terminal_file_sha256": "sha256:e5b7b097986a51a00497e49dcce4490ada98c96724a5e88204c0c6c0e23804c5",
+          "eval_terminal_receipt_sha256": "sha256:2e4f75e3778a4879c50664c15437ac79999b6ce26ed6fdd27c12a2afb7c45d67",
+          "resource_status": "job_workload_pod_and_configmap_absent_output_and_database_retained"
+        },
+        "resource_status": "terminal_released",
+        "controller_slot_defect_evidence": "docs/evidence/qwen38-fleet-dev17-base-controller-slot-defect-20260921.json",
+        "controller_slot_defect_evidence_sha256": "sha256:51c99806606f3c14f16bfa9c049531f9bff67e5c018d40fac6ce3ac1911800b8",
+        "controller_slot_guard_merge": "6ba1042dfc0f8f8a64d0ad4d02a21adfd590d91e",
+        "motivation": "Lock the matched 17-task OpenCode base control while Fresh75 promotion is repaired, so the eventual comparison uses one frozen task split and protocol rather than waiting serially."
+      },
+      "notes": "WEB V23 accepted the zero-model paired qualification and released its sandbox. The full 60-cell collection-only campaign is live; twenty-one collection-export failures were preserved and released, 39 remain supervised, and no scoring result exists. Fleet dev17 v1 failed setup-only before a database, session, or model call because the OCI index parent digest was compared with the resolved linux/amd64 child image ID. Fleet dev17 v2 also failed before a database, session, or model call because separate evaluator and Docker-daemon mount namespaces hid controller bind paths from nested containers. The base-only successor terminated with ten authoritative-valid sessions; six cells remain score-blind retry-review and one was untouched. Resources were released and the output/database were retained. None of the setup or export failures is capability evidence."
+    }
+  ],
+  "accepted_checkpoints": [
+    {
+      "artifact_id": "q38-fresh75-step230",
+      "checkpoint_path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/checkpoints/global_step_230",
+      "export_path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/hf-export-step230-v1",
+      "serving_status": "live_base_runtime_matched_route_accepted",
+      "priority": 1,
+      "motivation": "Evaluate the strongest existing broad full-SFT artifact and determine whether its supervised training transfers to held-out exploitation capability.",
+      "web_status": "candidate_v24_zero_model_qualification_accepted_collection_not_started",
+      "web_evidence": "One valid standalone 15-of-15 OpenCode pass-at-1 run exists, but it lacks a newly matched base arm. A wider pass-at-8 effort is incomplete at 104 of 120 sessions. V23 accepted the paired zero-model launch qualification and released its sandbox; it made zero benchmark, model, judge, or scoring attempts.",
+      "fleet_status": "candidate_dev17_v1_invalid_released_candidate_dev17_v2_running_with_authoritative_identity",
+      "fleet_candidate_dev17_v1": {
+        "job_name": "chris-q38-fresh75-dev17-p1-v1",
+        "job_uid": "162061f7-9185-44f8-babc-5ae17f4c5800",
+        "pod_name": "chris-q38-fresh75-dev17-p1-v1-t8ng7",
+        "pod_uid": "29776b7e-e3e6-4b38-bb98-9e29b6883ac2",
+        "configmap_uid": "80b267ea-baba-42e6-b0f4-09f6b5548b03",
+        "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-fresh75-p1-v1",
+        "database": "q38_fresh75_dev17_p1_v1",
+        "evaluation_plan_sha256": "sha256:9d77927c6a0938d7f9a4b2785aabf29b81dc8563741a35f96ffc86eb670f53e5",
+        "cell_ledger_plan_sha256": "sha256:ea478285633b2ad523ba6e0d7ba5d4b44759bfc4cf06d82cc62e9f85aab5ccba",
+        "live_parity_receipt_sha256": "sha256:609934e6f0d80618aa1640267f862e4398aa501d994138f1a520044caebe408e",
+        "planned_sessions": 17,
+        "accepted_sessions": 0,
+        "real_model_calls_observed": true,
+        "resource_status": "terminal_released_scientifically_invalid_null_authoritative_model"
+      },
+      "fleet_candidate_dev17_v2": {
+        "job_name": "chris-q38-fresh75-dev17-p1-v2",
+        "job_uid": "963775c8-cae4-4aee-a7a6-9ee13e4e4d12",
+        "workload_uid": "7be22024-9a62-407d-8adb-522da48331cd",
+        "pod_uid": "cb19081b-670b-4c29-85b6-e5c3a4570ec9",
+        "configmap_uid": "946ee29b-6d88-4379-89a8-2586439d660c",
+        "cell_ledger_plan_sha256": "sha256:f5cf6570f3f505dac260cd13c5e61a9fac72ab85c56a013ce747cc8a2f4950f5",
+        "accepted_sessions_at_latest_score_blind_readback": 16,
+        "first_authoritative_session_id": "67d65280-3a2f-44ee-a9a4-367066d8befc",
+        "first_accepted_receipt_sha256": "sha256:19d12574f678c6f23f240df794b7257da68101b793b3a7e1ea05b03fc7d5b2db",
+        "authoritative_model": "chris-q38-fresh75-step230-web-v2",
+        "durable_live_proof": "docs/evidence/qwen38-fleet-dev17-corrected-identity-live-proof-20260921.json",
+        "resource_status": "running_cpu_only_ready_zero_restarts",
+        "capability_result": false
+      },
+      "next_action": "Drain the exact corrected candidate and base arms, preserve a score-blind terminal receipt, then compare only after both matched arms complete. Keep the final eight-task set sealed."
+    },
+    {
+      "artifact_id": "q38-teacher-dense-v5-step186",
+      "checkpoint_path": "/mnt/sfs/jobs/chris-cyber-q38-teacher-dense-v5/checkpoints/global_step_186",
+      "export_path": "/mnt/sfs/jobs/chris-cyber-q38-teacher-dense-v5/hf-export-v1",
+      "serving_status": "live_parity_qualified_then_paused_after_no_admitted_consumer",
+      "priority": 2,
+      "motivation": "Measure whether imitation of successful stronger-teacher trajectories transfers to unseen blackbox exploitation tasks.",
+      "web_status": "candidate_v25_zero_model_qualification_accepted_collection_not_started",
+      "fleet_status": "corrected_dev17_v2_queued_without_allocation_then_released_before_any_session",
+      "fleet_candidate_dev17_v2": {
+        "job_name": "chris-q38-teacher-v5-dev17-p1-v2",
+        "job_uid": "1f472774-8d01-4913-8856-475ce8f2e69b",
+        "workload_uid": "e086f317-34b5-41f7-ada4-0bc661fda131",
+        "configmap_uid": "053b45d8-caa8-411b-9dc2-3bfca42d8399",
+        "offline_plan_sha256": "sha256:65e6dd00631a32b95e13c11e771305affdac0a99cd8bbcd06434169413de309b",
+        "authoritative_sessions": 0,
+        "resource_status": "released_no_pod_no_database_no_model_call"
+      },
+      "serving_release": {
+        "route_name": "chris-q38-teacher-v5-step186-web-v1",
+        "route_uid": "10b1b0ce-7b02-429e-8361-084a3039f248",
+        "terminal_resource_version": "31122596",
+        "former_pod_uid": "2ef5ab8c-d460-4c41-852d-222118556e0d",
+        "status": "paused_zero_active_pods_eight_gpus_released"
+      },
+      "next_action": "Create a fresh CPU evaluator only when capacity can admit it, then resume the already-qualified serving route just in time and pause it again after the consumer drains."
+    },
+    {
+      "artifact_id": "q38-self-sft-step44",
+      "checkpoint_path": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/checkpoints/global_step_44",
+      "export_path": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/hf-export-v1",
+      "serving_status": "live_base_runtime_matched_route_accepted",
+      "priority": 3,
+      "motivation": "Separate the effect of self-imitation from stronger-teacher imitation under the same evaluation contract.",
+      "web_status": "not_started",
+      "fleet_status": "candidate_dev17_v1_invalid_released_candidate_dev17_v2_running_with_authoritative_identity",
+      "fleet_candidate_dev17_v2": {
+        "job_name": "chris-q38-self44-dev17-p1-v2",
+        "job_uid": "e16e1730-4061-4b16-bc0b-606d3412229f",
+        "workload_uid": "8ab8be76-4002-461d-b75d-e1c125403203",
+        "pod_uid": "68419c52-f14a-4e53-a20f-c1d27cc0784f",
+        "configmap_uid": "c24a7880-eaa4-4ff5-b3af-19cbb5445721",
+        "cell_ledger_plan_sha256": "sha256:3266fc3666e0a19087413394f266ff1207dd470e4a75a187723d58afc0fba4c7",
+        "accepted_sessions_at_latest_score_blind_readback": 3,
+        "first_authoritative_session_id": "c72c94cb-7b6d-4e57-ab04-d0dab385f4de",
+        "first_accepted_receipt_sha256": "sha256:784666b84a885fe5e33727bbc7e110467ab5953307f81fdfcb69238d41687a06",
+        "authoritative_model": "chris-q38-self-sft-step44-v1",
+        "durable_live_proof": "docs/evidence/qwen38-fleet-dev17-corrected-identity-live-proof-20260921.json",
+        "resource_status": "running_cpu_only_ready_zero_restarts",
+        "capability_result": false
+      },
+      "next_action": "Drain the corrected Fleet arm and launch matched WEB collection only after its collection/provenance gate is qualified; do not use the invalid v1 cells."
+    },
+    {
+      "artifact_id": "q38-available-a-lr30-step76",
+      "checkpoint_path": "/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/checkpoints/global_step_76",
+      "export_path": "/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/hf-export-step76-v1",
+      "serving_status": "accepted_stage_and_paused_matched_runtime_registration_historical_fleet_parity_passed_new_evaluations_require_jit_resume_and_fresh_parity",
+      "priority": 4,
+      "motivation": "Test whether the aggressive learning-rate recipe produced useful capability change rather than merely lower imitation loss or destructive drift.",
+      "web_status": "not_started_requires_fresh_matched_opencode_packet_and_gates",
+      "fleet_status": "seed43_dev17_complete_17_accepted_descriptive_unpaired_not_a_matched_lift_result",
+      "duplicate_guard": {
+        "historical_seed43_sessions_must_not_be_replayed": true,
+        "fresh_identity_required_for_any_future_matched_fleet_comparison": true,
+        "fresh_duplicate_census_required_before_any_future_web_or_fleet_launch": true,
+        "launch_authorized_by_this_ledger": false
+      },
+      "next_action": "Do not replay the completed seed-43 Fleet sessions. For any new matched Fleet comparison use a fresh predeclared seed and fresh identities. For WEB, JIT-resume the paused matched-runtime route only with a ready evaluator, prove fresh live parity and duplicate absence, then run the matched canary before full collection.",
+      "fleet_seed43_descriptive": {
+        "accepted_sessions": 17,
+        "status": "complete_stored_session_reconciliation_descriptive_unpaired",
+        "live_route_parity": {
+          "status": "passed_for_historical_seed43_launch_only",
+          "launch_evidence": "docs/evidence/qwen38-lr30-step76-fleet-dev17-seed43-launch-20260921.json",
+          "launch_receipt_sha256": "sha256:b6e0f971f3d0497f564fcaef3ac31e2762f4acc7ce8fab5f609d284b195022b2",
+          "fresh_parity_required_for_any_new_evaluation": true
+        },
+        "terminal_evidence": "docs/evidence/qwen38-lr30-step76-stored-session-reconciliation-v3-terminal-20260921.json",
+        "terminal_receipt_sha256": "sha256:2cff332a1a37d898a591e62ebf41475f9a08fe882058756c1b9717d617afaaf6",
+        "model_generation_or_scoring_by_reconciler": false,
+        "final_eight_task_set_accessed": false,
+        "interpretation": "The launch proved live route parity for the historical dev17 evaluation, and the reconciler later accepted already completed exact sessions without rerunning a model or scorer. Together they form a complete descriptive dev17 record, not a new paired lift result."
+      },
+      "evaluation_disposition": {
+        "fleet_holdout": "complete_descriptive_dev17_unpaired_not_a_matched_result",
+        "webexploitbench": "not_started_requires_fresh_matched_opencode_packet_and_gates"
+      }
+    }
+  ],
+  "in_progress_candidates": [
+    {
+      "artifact_id": "q38-lora-broad-lr3e-5",
+      "run_name": "chris-q38-lora-sft-a1-v1-2d8da9b3",
+      "priority_when_accepted": 1,
+      "motivation": "Primary broad-data LoRA anchor: test whether 57.4M supervised tokens across 496 task families produce transferable lift with a moderate adaptation rate.",
+      "status": "failed_cuda_oom_during_step_49_after_step_48_checkpoint_40_preserved_resources_released",
+      "run_identity": {
+        "rayjob_name": "chris-q38-lora-sft-a1-v1-2d8da9b3",
+        "rayjob_uid": "bb29544f-0bed-41ed-bf9e-57b0ad8a6e75",
+        "workload_name": "rayjob-chris-q38-lora-sft-a1-v1-2d8da9b3-699ab",
+        "workload_uid": "849881fd-a561-4eb6-996f-c0238b6afb52",
+        "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-a1-v1"
+      },
+      "checkpoint": {
+        "optimizer_step": 40,
+        "path": "/mnt/sfs/jobs/chris-q38-lora-sft-a1-v1/checkpoints/global_step_40",
+        "receipt_sha256": "sha256:8aaca6c5a8eb42a8a08e643f62232111b8b74a87573d8c873ce1906c42eb4864"
+      },
+      "failure_receipt_sha256": "sha256:dc287b17bc01ea0d6f77304a012b9e705988f829eb3d8641ec80765eabd2128c"
+    },
+    {
+      "artifact_id": "q38-lora-broad-lr1e-5",
+      "run_name": "chris-q38-lora-lr1-v1-0ae26be3",
+      "priority_when_accepted": 2,
+      "motivation": "Conservative learning-rate control: test whether slower adaptation better preserves base capability while learning the broad corpus.",
+      "status": "operator_stopped_after_checkpoint_40_last_completed_step_43_to_prevent_known_memory_growth_resources_released",
+      "run_identity": {
+        "api_run_id": "0ae26be3-39a6-4851-9cfd-2ef501a94ff6",
+        "rayjob_name": "chris-q38-lora-lr1-v1-0ae26be3",
+        "rayjob_uid": "1554dba5-dad2-4ac8-a7ec-63b9d3a59bb0",
+        "workload_name": "rayjob-chris-q38-lora-lr1-v1-0ae26be3-73e53",
+        "workload_uid": "3e574411-f551-4572-a03c-5cb12aa8e5b0",
+        "pod_name": "chris-q38-lora-lr1-v1-0ae26be3-spgks-head-v4kd9",
+        "pod_uid": "3cf4044f-28bf-4ed3-be01-ccf68744e55d",
+        "output_root": "/mnt/sfs/jobs/chris-q38-lora-lr1-v1"
+      },
+      "checkpoint": {
+        "optimizer_step": 40,
+        "path": "/mnt/sfs/jobs/chris-q38-lora-lr1-v1/checkpoints/global_step_40",
+        "receipt_sha256": "sha256:86a5294fc5bd2e46e170685d1ba4041fa29dc9090e1b9fcadada09bb9453a855"
+      }
+    },
+    {
+      "artifact_id": "q38-lora-broad-lr1e-4",
+      "run_name": "chris-q38-lora-lr100-v1-7200fd5f",
+      "priority_when_accepted": 3,
+      "motivation": "Upper learning-rate exploration: test whether the broad corpus is underfit at the anchor rate or whether faster adaptation destabilizes transfer.",
+      "status": "operator_stopped_after_checkpoint_40_last_completed_step_41_to_prevent_known_memory_growth_resources_released",
+      "run_identity": {
+        "rayjob_name": "chris-q38-lora-lr100-v1-7200fd5f",
+        "output_root": "/mnt/sfs/jobs/chris-q38-lora-lr100-v1"
+      },
+      "checkpoint": {
+        "optimizer_step": 40,
+        "path": "/mnt/sfs/jobs/chris-q38-lora-lr100-v1/checkpoints/global_step_40",
+        "receipt_sha256": "sha256:39bbbae115ddd029a23557cff1c7cd772e2e9761d20922dda42de8d0082a4497"
+      }
+    },
+    {
+      "artifact_id": "q38-lora-recovery-step40-to-step42",
+      "run_name": "chris-q38-lora-r1-s42-v2-61fb1f11",
+      "priority_when_accepted": 1,
+      "motivation": "Bounded native TP8 Megatron recovery from the sealed step-40 checkpoint to a planned pause at step 42, proving that the per-token-output retention repair keeps memory stable before any broad LoRA successor is attempted.",
+      "status": "gpu_recovery_succeeded_steps_40_to_42_step42_checkpoint_sealed_and_readback_valid_gpu_reload_pending_resources_released",
+      "run_identity": {
+        "rayjob_name": "chris-q38-lora-r1-s42-v2-61fb1f11",
+        "rayjob_uid": "476bca55-6921-402f-b2cd-85c4952d2da3",
+        "workload_name": "rayjob-chris-q38-lora-r1-s42-v2-61fb1f11-825d5",
+        "workload_uid": "ef2c76cc-2689-4365-aa3a-94304ac6d102",
+        "raycluster_name": "chris-q38-lora-r1-s42-v2-61fb1f11-hqttl",
+        "raycluster_uid": "4dba8834-8637-4ef2-abb3-109239efefb8",
+        "pod_name": "chris-q38-lora-r1-s42-v2-61fb1f11-hqttl-head-z8jl7",
+        "pod_uid": "d13c73b3-d199-4d76-8b3b-76659a4022c0",
+        "output_root": "/mnt/sfs/jobs/chris-q38-lora-r1-s42-v2",
+        "plan_sha256": "sha256:ca4acd3b9c06c8569460b45a1b7a9166f82a5a400852e94d41907815f46d5d7c",
+        "request_sha256": "sha256:41e44b3b5b95aab4fb3dc2d6e29561706830683d39eb6da45815078e91b44337",
+        "rendered_manifest_sha256": "sha256:ea8a957f8aac47c15303935801fb6ff012aa6679d8acca37b79ef41b91db7fc9",
+        "image": "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317"
+      },
+      "resume_source": {
+        "optimizer_step": 40,
+        "receipt_sha256": "sha256:c183b77f94d4a4286cb0cf4b62c455cca4d9bceccf3db1f7c21057ab1f155376"
+      },
+      "terminal": {
+        "rayjob_status": "SUCCEEDED",
+        "terminal_at": "2026-09-21T00:26:52Z",
+        "recovered_file_sha256": "sha256:78daf91edcd333588b924b2504064f1725a14e9d7cbee9a0b7ef56ec07b04790",
+        "resources_released": true,
+        "optimizer_step_41_finite": true,
+        "pause_step_42_observed": true,
+        "checkpoint_step_42_accepted": false
+      },
+      "seal_status": {
+        "p1": "cpu_only_failed_before_manifest_due_missing_embedded_plan_sha_key_resources_released",
+        "p1_pod_uid": "21f4ad65-4807-4c05-b2b7-cfacb6787943",
+        "repair_evidence": "docs/evidence/qwen38-lora-recovery-step42-seal-guard-20260921.json",
+        "repair_evidence_receipt_sha256": "sha256:54af1c695a00063757698af0ee1dea83f39b23298426fdb994fdb03aee9e88a2",
+        "p2": "cpu_only_deleted_never_scheduled_or_started_zero_output_zero_gpu",
+        "p2_pod_uid": "32fbb65a-e38a-4915-96ce-b2a9e41c5ff5",
+        "p2_pending_receipt_sha256": "sha256:089729f3c917c5a4143b70dd1c98011136f2df05532f9f2be86da2ff757835ca",
+        "p3": "cpu_only_seal_and_independent_verifier_succeeded_resources_released",
+        "p3_seal_pod_uid": "1832005b-3f2a-4d8e-bc0c-96232c80410f",
+        "p3_verifier_pod_uid": "1a34d7cc-0fa9-4719-b95c-dfbf48907501",
+        "p3_receipt_sha256": "sha256:74045f65bf49610976a206a4ad16f4b2bfbf7bacb11573ea1d1db4de06c72b93",
+        "step42_manifest_file_sha256": "sha256:fe311aad65920de7a2a3476f01b584d921d90017c23bf74bfc7f572b74efd72c",
+        "step42_manifest_files": 27,
+        "step42_manifest_bytes": 5477467060,
+        "step42_world_size": 8,
+        "step42_tensor_parallel_size": 8,
+        "checkpoint_sealed_and_readback_valid": true,
+        "gpu_reload_verified": false,
+        "resources_released": true
+      },
+      "predecessor_failure": {
+        "run_name": "chris-q38-lora-r1-s42-v1-ea7d43a6",
+        "rayjob_uid": "299e9a24-afba-41a5-8f4b-0a6212df7f74",
+        "status": "failed_preload_zero_updates_source_identity_validation_defect_resources_released",
+        "evidence": "docs/evidence/qwen38-lora-recovery-runtime-gate-failure-20260920.json"
+      }
+    },
+    {
+      "artifact_id": "q38-full-weight-broad-b8-lr3e-6",
+      "run_name": "chris-q38-t3k32-b8-v1-0cb9fe51",
+      "priority_when_accepted": 1,
+      "motivation": "Primary broad-data full-weight reference: measure the higher-capacity alternative to LoRA on the same 57.4M-token, 32K-context corpus before isolating batch-size and learning-rate effects.",
+      "status": "training_finite_step_81_zero_restarts_no_checkpoint_checkpoint_due_step_450",
+      "run_identity": {
+        "api_run_id": "0cb9fe51-ac56-4e99-8b91-6bfbc6cc7db0",
+        "rayjob_name": "chris-q38-t3k32-b8-v1-0cb9fe51",
+        "rayjob_uid": "6f311376-1c42-4faa-b82a-57b51bfbed85",
+        "workload_name": "rayjob-chris-q38-t3k32-b8-v1-0cb9fe51-ec0f0",
+        "workload_uid": "2d5c1c8a-3e0c-4170-9a32-1e9bddb73183",
+        "raycluster_name": "chris-q38-t3k32-b8-v1-0cb9fe51-5dwwd",
+        "raycluster_uid": "5a974057-6ea8-4f2d-8c0d-80b9c8cc9f44",
+        "pod_name": "chris-q38-t3k32-b8-v1-0cb9fe51-5dwwd-head-5v8nq",
+        "pod_uid": "826b5de3-85df-4d66-a785-6085b7ad93a3",
+        "output_root": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v1",
+        "plan_sha256": "sha256:43aeb254df849992e12fbb1c3021bde3e793e7d3d04e06f2ea711e35c761b8cd",
+        "progress_file_sha256": "sha256:e9373a1d8391902cc4031e1e842e9ebd3470247192d2356a853f0b2d2eee2bf9",
+        "progress_receipt_sha256": "sha256:69ef69fba2f7f7ea15b3e3a1589c2061846abb97157cdfd5945705b6f71c085f",
+        "wandb_url": "https://wandb.ai/thefleet/cyber-post-train/runs/chris-q38-t3k32-b8-v1"
+      }
+    },
+    {
+      "artifact_id": "q38-full-weight-broad-b16-lr3e-6",
+      "run_name": "chris-q38-t3k32-b16-v1-46ca50db",
+      "priority_when_accepted": 2,
+      "motivation": "Batch-size control on the primary broad-data full-weight recipe: test whether doubling global batch from 8 to 16 improves optimization stability and throughput while holding model, corpus, context length, learning rate, seed, and one-epoch token exposure fixed.",
+      "status": "training_finite_step_33_zero_restarts_no_checkpoint_checkpoint_due_step_225",
+      "run_identity": {
+        "api_run_id": "46ca50db-8aa6-49ae-a2a7-b216ee0c7c01",
+        "rayjob_name": "chris-q38-t3k32-b16-v1-46ca50db",
+        "rayjob_uid": "7a57b843-f45d-4a24-93ed-8a817e03387e",
+        "workload_name": "rayjob-chris-q38-t3k32-b16-v1-46ca50db-4d276",
+        "workload_uid": "e7101200-d826-4644-89cb-5e3379c496be",
+        "raycluster_name": "chris-q38-t3k32-b16-v1-46ca50db-99mq7",
+        "raycluster_uid": "305621bf-fdce-47ef-bfba-05f55e63d2b7",
+        "pod_name": "chris-q38-t3k32-b16-v1-46ca50db-99mq7-head-psw2m",
+        "pod_uid": "d1c9fa07-402b-4978-a8bd-5a730555cca3",
+        "output_root": "/mnt/sfs/jobs/chris-q38-t3k32-b16-v1",
+        "plan_sha256": "sha256:70a8a1e813f9e0d9effb677da49c7326d8d4a5091113f937dc2539c9a0b7ea3a",
+        "progress_file_sha256": "sha256:1ac258bd19a838f8a313510c51632d1f3f5b4ad5a0e41245425f4cf01238571a",
+        "progress_receipt_sha256": "sha256:837aa02853961144817092abecca93148658d7e8d8af75d28d0c6a1a5dec95ed",
+        "wandb_url": "https://wandb.ai/thefleet/cyber-post-train/runs/chris-q38-t3k32-b16-v1"
+      }
+    },
+    {
+      "artifact_id": "q38-full-weight-broad-b8-lr1e-6",
+      "run_name": "chris-q38-t3k32-lr1-v1-4291c635",
+      "priority_when_accepted": 3,
+      "motivation": "Learning-rate control on the primary broad-data full-weight recipe: test whether reducing LR from 3e-6 to 1e-6 better preserves base capability while learning the same 57.4M-token corpus, holding model, data, batch size, context, seed, topology, and one-epoch exposure fixed.",
+      "status": "training_finite_step_66_zero_restarts_no_checkpoint_checkpoint_due_step_450",
+      "run_identity": {
+        "api_run_id": "4291c635-872a-42c3-a66f-92d5cedab3bf",
+        "rayjob_name": "chris-q38-t3k32-lr1-v1-4291c635",
+        "rayjob_uid": "8847f01f-2366-4a88-88de-2d900ed676d8",
+        "workload_name": "rayjob-chris-q38-t3k32-lr1-v1-4291c635-a0e80",
+        "workload_uid": "0ad6a382-24e6-4a1d-a07c-48d50ecbb0f5",
+        "raycluster_name": "chris-q38-t3k32-lr1-v1-4291c635-gr745",
+        "raycluster_uid": "ff05735f-bd99-497b-8539-d28f3f31759b",
+        "pod_name": "chris-q38-t3k32-lr1-v1-4291c635-gr745-head-tmhsh",
+        "pod_uid": "9b2b48d4-476a-44b6-8974-c8d6cd8162cb",
+        "output_root": "/mnt/sfs/jobs/chris-q38-t3k32-lr1-v1",
+        "plan_sha256": "sha256:e3d88ecb5cb7ad35f4b971831583e6d4900345e88b45d0bf7af0b8c242b5d27e",
+        "progress_file_sha256": "sha256:134fd5e59b952dd4220c66db20fea56f9c5d368b29fef2cb0613548b8c8a0372",
+        "progress_receipt_sha256": "sha256:e2c1698d6b4627bf8f0fbc57256d7f59b34c140b93ccc8dc51814b10a6fcd9fa",
+        "wandb_url": "https://wandb.ai/thefleet/cyber-post-train/runs/chris-q38-t3k32-lr1-v1"
+      }
+    },
+    {
+      "artifact_id": "q38-full-weight-broad-64k-b8-lr3e-6",
+      "run_name": "chris-q38-t3k64-b8-v3-fc6b1fbe",
+      "priority_when_accepted": 2,
+      "motivation": "Test whether increasing the supervised context ceiling from 32K to 64K improves learning from long successful teacher trajectories while holding the 57.4M-token corpus, global batch 8, one-epoch exposure, and full-weight method fixed.",
+      "status": "successor_v3_running_first_finite_optimizer_update_step_1_zero_restarts_checkpoint_due_step_275",
+      "run_identity": {
+        "api_run_id": "fc6b1fbe-3827-4a9d-a793-e206d793f6f5",
+        "rayjob_name": "chris-q38-t3k64-b8-v3-fc6b1fbe",
+        "rayjob_uid": "545bd9db-479f-4064-b61b-40c8c4a491fe",
+        "workload_name": "rayjob-chris-q38-t3k64-b8-v3-fc6b1fbe-2b3eb",
+        "workload_uid": "34d14951-9b04-4f50-9c4f-086d70fa7aa6",
+        "raycluster_name": "chris-q38-t3k64-b8-v3-fc6b1fbe-g2g55",
+        "raycluster_uid": "a6fcf9e7-6ac4-40fc-aae2-b174360c40f7",
+        "pod_name": "chris-q38-t3k64-b8-v3-fc6b1fbe-g2g55-head-9ww4r",
+        "pod_uid": "c9f226a7-ea0f-45eb-b8ea-d81bf2c6bb76",
+        "output_root": "/mnt/sfs/jobs/chris-q38-t3k64-b8-v3",
+        "plan_sha256": "sha256:7891533965a69b7dff6dc2dfc72e323d440ddff645cbd646a36cbc4a0dc22dd5",
+        "request_sha256": "sha256:3d27e97337cb6d41c68dc840f57269998d613c2fb6e2c767b9ea15ef85faca7f",
+        "rendered_manifest_sha256": "sha256:99b820e0be9f876eb25bdca38f71ea7c41dbfcac637f2f34b65066d6ca8d4bfb",
+        "image_sha256": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+        "admitted_at": "2026-09-21T03:49:36Z",
+        "ready_at": "2026-09-21T03:49:54Z",
+        "failure_alerts": "off",
+        "priority_class": "c1",
+        "wandb_url": "https://wandb.ai/thefleet/cyber-post-train/runs/chris-q38-t3k64-b8-v3"
+      },
+      "first_finite_update": {
+        "optimizer_step": 1,
+        "loss": 0.45314645767211914,
+        "grad_norm": 2.2634124755859375,
+        "learning_rate": 3.000000106112566e-06,
+        "tokens_per_second": 1136.5356692204825,
+        "all_numeric_metrics_finite": true,
+        "progress_file_sha256": "sha256:55949815a51c91dea1eff65f4be591e56ef8777c7be15b79c7c0d80ac3257cba",
+        "progress_receipt_sha256": "sha256:e639fe89181de0f54d3e934fbe183943486fa03322e4f91f0e1122363b9af101",
+        "metrics_file_sha256": "sha256:77bc79ed96e95a109339300e81c08d2740020eac8a69f9201c68945c479d4637",
+        "evidence": "docs/evidence/qwen38-teacher3k-64k-v3-first-update-20260921.json"
+      },
+      "checkpoint_and_evaluation_route": {
+        "checkpoint_interval": 275,
+        "planned_final_step": 1120,
+        "status": "waiting_for_first_reloadable_checkpoint",
+        "fleet_holdout": {
+          "task_set": "frozen_dev17",
+          "harness": "opencode",
+          "status": "not_launched_waiting_for_checkpoint"
+        },
+        "webexploitbench": {
+          "harness": "opencode",
+          "rollout_and_scoring_separated": true,
+          "matched_base_control_required": true,
+          "status": "not_launched_waiting_for_checkpoint"
+        }
+      },
+      "predecessor_run_identity": {
+        "api_run_id": "2f111132-a6d5-407c-aa3f-6ceed1033b8e",
+        "rayjob_name": "chris-q38-t3k64-b8-v2-2f111132",
+        "rayjob_uid": "d40e5a78-1d95-4353-a2aa-9c3c0fe314c6",
+        "workload_uid": "13cfb071-1a1e-4cd1-8c70-51f0a21d2412",
+        "raycluster_uid": "fb7c5fe7-a206-472e-bfe5-3bb2df860adb",
+        "pod_uid": "d69713b0-aabc-4bee-b740-3215a36bd5c0",
+        "output_root": "/mnt/sfs/jobs/chris-q38-t3k64-b8-v2",
+        "plan_sha256": "sha256:9d0a9e236ff22a5afcfc0354cff6153627fb2538b7ad30325c357687d6d9d236",
+        "request_sha256": "sha256:f491393e4eb51152874c0d7dd30f828df9fe4bc4b780ac3a36d9d06b54770763",
+        "rendered_manifest_sha256": "sha256:39e784c9d26500311d47a03a7902f77e6bf0ebe17d0b772e45acfb9813fe5a53",
+        "image_sha256": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+        "admitted_at": "2026-09-21T00:47:54Z",
+        "ready_at": "2026-09-21T00:48:11Z",
+        "failure_alerts": "off",
+        "priority_class": "c1"
+      },
+      "predecessor_terminal": {
+        "end_at": "2026-09-21T00:57:41Z",
+        "failed_file_sha256": "sha256:30d0492fb551ca5da15c94afe2d3954ca5aa7d46449ec91ba27d967b194f64e6",
+        "failed_receipt_sha256": "sha256:eadc420c31facc867da571d2e409862ae73b8531b5db1ec0dc5eaed136f81818",
+        "sanitized_error_class": "TypeError",
+        "wandb_summary_optimizer_step": 1,
+        "wandb_step_interpretation": "loop_counter_only_zero_proven_optimizer_updates",
+        "deterministic_root_cause": "pinned_full_weight_f5bc3b78_WorkerDispatch_forward_backward_does_not_accept_Megatron_only_return_per_token_outputs_keyword",
+        "failed_before_first_forward_backward": true,
+        "metrics_progress_or_checkpoint_present": false,
+        "raycluster_and_pod_absent": true,
+        "workload_finished_failed": true,
+        "resources_released": true,
+        "deterministic_diagnosis_complete": true,
+        "successor_prohibited_until_four_layer_repair": true,
+        "capability_result": false
+      }
+    },
+    {
+      "artifact_id": "q38-skyrl-reward-prod4-step1",
+      "run_name": "chris-q38-rlreward-prod4",
+      "priority_when_accepted": 1,
+      "motivation": "First serious Qwen3.8 SkyRL learning gate rather than a topology smoke test: use one exact train task and one exact dev task to collect eight genuine Fleet episodes, require reward variation, perform one finite optimizer update at LR 1e-6, compare pre/post dev performance, and save a reloadable step-1 checkpoint before scaling RL.",
+      "status": "failed_before_collection_multiple_tool_calls_not_qualified_zero_updates_resources_released",
+      "run_identity": {
+        "api_run_id": "4f6c20f0-d210-52d9-a9c7-4c484f98ca7a",
+        "rayjob_name": "chris-q38-rlreward-prod4",
+        "rayjob_uid": "21d311b0-136d-4831-a5de-341ff9d12c87",
+        "workload_name": "rayjob-chris-q38-rlreward-prod4-77b49",
+        "workload_uid": "9e8b6058-acca-4a4f-9c79-bfe17dc85a34",
+        "raycluster_name": "chris-q38-rlreward-prod4-bpb2k",
+        "raycluster_uid": "5c1dea98-b6af-46de-9659-aed9b74628fe",
+        "pod_name": "chris-q38-rlreward-prod4-bpb2k-head-dw6b5",
+        "pod_uid": "b36e390f-9da0-487c-a57d-4e0aaff6ded5",
+        "output_root": "/mnt/sfs/jobs/chris-q38-rlreward-prod4",
+        "plan_sha256": "sha256:25d0abf30da462a6ba67c6ac8a3fc95f3f89a9a08e3ea295b21e8a22481630b3",
+        "request_sha256": "sha256:98a83dbbab61f360a12ec6389adb55de637ded64dcceaa1debf0d791e754cef4",
+        "wandb_url": "https://wandb.ai/thefleet/cyber-post-train/runs/chris-q38-rlreward-prod4"
+      },
+      "failure": {
+        "phase": "agent_interaction",
+        "error_class": "InvalidEpisode",
+        "reason": "multiple_calls_not_qualified",
+        "native_failure_receipt_sha256": "sha256:cbc41545f426f42cad31fe9e0bc9fa124548309424db8f80bff0a106bccd0635",
+        "failed_receipt_sha256": "sha256:df796d5f21e35438dab5845d3b24b86dfaf738b809b4b253697b7349ae2559bd",
+        "collected_batches": 0,
+        "optimizer_steps": 0
+      },
+      "successor_repair": {
+        "status": "prod5_clean_model_contract_rejection_generation_incomplete_length_zero_collection_zero_updates_zero_checkpoints_resources_released",
+        "repair_commit": "f285ed72",
+        "tests": "222_passed_2_skipped",
+        "plan_sha256": "sha256:e61591e0a95d33990296e2786abddf0f67d87b01f8c6bd5f54a6a217bcbaea31",
+        "request_sha256": "sha256:0ecb6155d986362556a9758274eb439b3b8912a85c178bdcfdf3becc7a3231e6",
+        "direct_manifest_sha256": "sha256:59d20f929f23b569d1207d991762d5d151d38a0c3185dd5f1186708a8d4a6b8c",
+        "runtime_sha256": "sha256:7db4616ab57dea0609424753e23d315de4b9fc430eb3864b99e1f5fd9dc02270",
+        "stage_manifest_sha256": "sha256:447791b5152784b07e756c667694f87d81ab08d0ee059c2a22d4502dda2460fd",
+        "archive_sha256": "sha256:a5a7ee8334ec384365e7629376ec4fb150399aab14517b37b813153fb38d3719",
+        "cpu_data_stage_job": "chris-q38-prod5-data-v1",
+        "cpu_data_stage_job_uid": "0f37455c-cead-4105-a251-b318ca62a878",
+        "cpu_data_stage_pod_uid": "fafe30d6-29fa-4375-8e85-82fec18d71f2",
+        "cpu_data_stage_receipt_sha256": "sha256:790bca1cd3e89c56a9461cd8d58afce42cce13407ab26bd4d83fcd695dd8bcdc",
+        "cpu_preflight_job_uid": "f1b61383-34ce-4655-8224-b5061989e40e",
+        "cpu_preflight_pod_uid": "9343e80c-315b-4970-89a4-6d7b5f2d31e1",
+        "cpu_preflight_receipt_sha256": "sha256:ef72b5b3052e94cb442c1f3bd6c7439fd7f604dd1504d24aa4b3140cd719baf5",
+        "gpu_rayjob_name": "chris-q38-rlreward-prod5",
+        "gpu_rayjob_uid": "f9327842-014e-4f99-b271-74351dafd8a8",
+        "gpu_workload_uid": "0bbe0928-f0b9-40c7-aff6-0fe49bcf6c8a",
+        "gpu_raycluster_uid": "5b05e68d-ab3b-46f2-828b-c4e83f9cb90e",
+        "gpu_pod_uid": "390b4d14-d3be-4fab-aabd-7eb3d0fb071c",
+        "gpu_create_receipt_sha256": "sha256:513aebcda9c56666dad65e0d91a17f887d17c53504c66c46ec17b132738cc91f",
+        "rejection_receipt_sha256": "sha256:aa6730f98679af67b9dbcac3206e64de9ab468e3e84661e815e46760cb77baf6",
+        "release_observer_sha256": "sha256:641852608dca0be4b7af7eafb77a614c7af0776d643a1a77fe3e70a6180fda4e",
+        "train_episodes_collected": 0,
+        "authoritative_rewards": 0,
+        "optimizer_updates": 0,
+        "checkpoints": 0,
+        "motivation": "Repeat the exact serious one-update RL gate after teaching the adapter to validate and execute ordered multi-tool turns instead of rejecting valid episodes before collection."
+      }
+    }
+  ],
+  "excluded_artifacts": [
+    {
+      "artifact_id": "q38-available-a-lr100-step21",
+      "reason": "Operational-only canary without an accepted export."
+    },
+    {
+      "artifact_id": "q38-available-a-lr1-step76",
+      "reason": "Unverified checkpoint without an accepted export."
+    },
+    {
+      "artifact_id": "q38-sep7-step300",
+      "reason": "Failed or partial run whose exact durable checkpoint root was not retained."
+    },
+    {
+      "artifact_id": "q38-lora-step1-qualification",
+      "reason": "One-step engineering qualification artifact, not a capability candidate."
+    }
+  ],
+  "supersedes": {
+    "path": "configs/evaluation/qwen38-checkpoint-eval-ledger-v1.json",
+    "file_sha256": "sha256:50b87faaa70eea417ff7081168ba6402144262ce5e1988fc9d76591b18bb5af0",
+    "reason": "v1_is_preserved_as_a_historical_snapshot; v2 reconciles later sanitized LR30 serving and Fleet-session evidence and finalizes the historical WEB V23 disposition."
+  },
+  "serving_readiness_matrix_file_sha256": "sha256:703a2865bf82c47b9bc37460b0fd2f134396e0276d7b8d8824d2f82746c77616",
+  "static_scope": "Repository evidence through origin/main commit a70e888212dd3d13f7360c7c7f508680cbaa6694. A fresh live census is required before any mutation or launch. This ledger neither creates nor authorizes a WEB or Fleet evaluation packet."
+}
