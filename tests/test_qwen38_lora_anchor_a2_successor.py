@@ -25,6 +25,7 @@ A1_COLLISION = (
     / "qwen38-lora-anchor-a1-cpu-preflight-output-collision-20260921.json"
 )
 RUNNER = CliRunner()
+HISTORICAL_SFT_RUNTIME_SHA256 = "8cb671f377d089e1303248e237f386c256b212b15e41dadc07ac49cf2695ee17"
 
 
 def _read(path: Path) -> dict:
@@ -84,7 +85,14 @@ def test_a2_is_an_identity_only_successor_of_the_broad_lora_anchor():
     request = a2_compiler.job_request(plan)
     base_plan = sft.compile_sft(a1, relative_to=RUNS)
     assert _without_execution_wrapper(plan) == _without_execution_wrapper(base_plan)
-    assert plan["runtime_variant"] == a2_runtime.runtime_binding(ROOT / "training/sft_runtime.py")
+    assert hashlib.sha256((ROOT / "training/sft_runtime.py").read_bytes()).hexdigest() == (
+        HISTORICAL_SFT_RUNTIME_SHA256
+    )
+    assert plan["runtime_variant"] == {
+        "schema": a2_runtime.RUNTIME_BINDING_SCHEMA,
+        "name": a2_runtime.RUNTIME_VARIANT,
+        "base_runtime_sha256": HISTORICAL_SFT_RUNTIME_SHA256,
+    }
     assert (
         plan["runtime_sha256"]
         == hashlib.sha256(
