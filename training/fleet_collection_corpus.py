@@ -30,7 +30,7 @@ from .dense import Excluded, compatible_messages, encode_record, native_helper, 
 from .io import atomic_write_json, atomic_write_jsonl, digest_json, file_sha256, iter_jsonl
 from .sft import _known, read_mapping
 from .sft_runtime import DENSE_FORMAT, dense_rows
-from .task_family_split import SCHEMA as SPLIT_SCHEMA
+from .task_family_split import is_supported_schema
 from .task_family_split import validate as validate_split
 
 SCHEMA = "cyber_fleet_private_corpus_materialization_request_v1"
@@ -458,9 +458,7 @@ def _task_boundary(
 ) -> dict[tuple[str, str], dict[str, Any]]:
     rows = collection_campaign._inventory_rows(inventory)
     bindings = collection_campaign._runtime_bindings(runtime, inventory, rows)
-    if split.get("schema") != SPLIT_SCHEMA or split.get("inventory_sha256") != inventory.get(
-        "sha256"
-    ):
+    if not is_supported_schema(split) or split.get("inventory_sha256") != inventory.get("sha256"):
         raise ValueError("family split is not bound to the reviewed catalog")
     validate_split(split, rows)
     if lock.get("schema") != admission.PROTECTED_FAMILY_LOCK_SCHEMA:

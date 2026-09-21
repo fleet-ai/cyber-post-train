@@ -44,7 +44,7 @@ cannot be mistaken for the reviewed admission result.
 | --- | --- | --- |
 | Fleet campaign plan | A self-digested `cyber_fleet_eval_v1` plan, selected source model, task/version bindings, action-tool treatment, and planned attempts | Prevents a session from another campaign, model route, or tool contract being silently mixed in.  The plan must set `training_data_eligible: true`. |
 | Sanitized task catalog inventory | A self-digested inventory of reviewed task-version and lineage metadata | Supplies the complete task universe used to make the split.  It contains no session text. |
-| Parameterized family split | A sealed `cyber_parameterized_task_family_split_v1` split for that exact inventory | Keeps every version of a reviewed application/task family in one role: `train`, `dev`, or `final_test`.  The split validates against the catalog rather than a mutable task list. |
+| Family-safe split | A sealed supported family split for that exact inventory | Keeps every version of a reviewed application/task family in one role: `train`, `dev`, or `final_test`.  A growing catalog uses an anchored split so the original held-out roles cannot change. |
 | Protected-family lock | A self-digested list of held-out family digests tied to the exact split digest | Adds an independent fail-closed check: a family named as protected cannot appear on the training side. |
 | Private attempt-metadata JSONL | One sealed metadata record per observed attempt | Provides outcome, provenance, ingestion, and content-policy evidence without exposing a transcript. |
 
@@ -64,9 +64,11 @@ it never silently treats an incomplete collection as complete.
 ### Family-safe split and catalog binding
 
 The inventory file has its own self-digest, the request records the inventory
-file digest, and the parameterized split is validated against that exact
+file digest, and the family-safe split is validated against that exact
 inventory.  This prevents a catalog refresh from changing which task versions
-or families a previously reviewed split represents.
+or families a previously reviewed split represents.  When the catalog grows,
+the split inherits every historical role and allocates only genuinely new
+families.  See [broad collection expansion](FLEET_BROAD_COLLECTION_EXPANSION.md).
 
 Only `train` assignments can be selected.  `dev` and `final_test` are never
 training candidates, even when a rollout there succeeded.  The protected-family
@@ -170,7 +172,7 @@ must:
 
 The existing `training/fleet_teacher_corpus.py` remains the frozen 75-task
 teacher-corpus path and must not be misrepresented as a generic consumer of
-this parameterized split.  The generic materializer writes an immutable corpus
+this family-safe split.  The generic materializer writes an immutable corpus
 manifest, but it still cannot feed SFT until it reaches its packet's 20M unique
 visible-action-token gate; below that threshold its manifest deliberately fails
 the existing SFT compiler.  Admission therefore remains auditable selection

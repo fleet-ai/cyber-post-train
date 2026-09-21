@@ -287,11 +287,27 @@ def build(inventory_path: Path) -> dict[str, Any]:
     return validate(value, inventory_path=inventory_path)
 
 
-def validate(value: dict[str, Any], *, inventory_path: Path) -> dict[str, Any]:
+def validate(
+    value: dict[str, Any],
+    *,
+    inventory_path: Path,
+    inventory_display_path: Path | None = None,
+) -> dict[str, Any]:
+    """Validate a v2 split against bytes at ``inventory_path``.
+
+    ``inventory_display_path`` is needed only by source-only tools that stage
+    the frozen inventory outside the repository.  The historic split binds the
+    original reviewed path string as well as the file bytes, so callers must
+    supply that exact declared path explicitly rather than silently rewriting
+    historical provenance.
+    """
+    inventory_display_path = (
+        inventory_path if inventory_display_path is None else inventory_display_path
+    )
     if value.get("schema") != SCHEMA or value.get("seed") != SEED:
         raise ValueError("unsupported representative split plan")
     if value["inventory"] != {
-        "path": inventory_path.as_posix(),
+        "path": inventory_display_path.as_posix(),
         "file_sha256": file_sha256(inventory_path),
         "logical_sha256": json.loads(inventory_path.read_text())["sha256"],
         "task_versions": 75,

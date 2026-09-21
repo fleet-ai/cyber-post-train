@@ -296,6 +296,30 @@ def data_fleet_materialize(config: Path) -> None:
         _fail(exc)
 
 
+@app.command("data-fleet-roster")
+def data_fleet_roster(config: Path) -> None:
+    """Build a family-safe Fleet collection roster from sealed metadata only."""
+    from training.fleet_collection_roster import build
+    from training.sft import read_mapping
+
+    try:
+        _print(build(read_mapping(config), relative_to=config.resolve().parent))
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("data-fleet-freeze-role-anchor")
+def data_fleet_freeze_role_anchor(config: Path) -> None:
+    """Freeze historic Fleet family roles for a growing roster; CPU only."""
+    from training.fleet_collection_anchor import build
+    from training.sft import read_mapping
+
+    try:
+        _print(build(read_mapping(config), relative_to=config.resolve().parent))
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command("data-rechunk")
 def data_rechunk(config: Path) -> None:
     """Re-window a sealed dense SFT corpus at a smaller context. CPU only."""

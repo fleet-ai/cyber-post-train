@@ -26,7 +26,7 @@ from cyber_post_train.jobs import digest
 
 from .io import atomic_write_json, file_sha256, iter_jsonl
 from .sft import _known
-from .task_family_split import SCHEMA as SPLIT_SCHEMA
+from .task_family_split import is_supported_schema
 from .task_family_split import validate as validate_split
 
 REQUEST_SCHEMA = "cyber_fleet_collection_admission_request_v1"
@@ -238,8 +238,8 @@ def _campaign_cells(
 def _split_assignments(
     split: dict[str, Any], inventory: dict[str, Any]
 ) -> dict[tuple[str, str], dict[str, str]]:
-    if split.get("schema") != SPLIT_SCHEMA:
-        raise ValueError("collection admission requires a parameterized family split")
+    if not is_supported_schema(split):
+        raise ValueError("collection admission requires a supported family split")
     rows = inventory.get("task_versions")
     if not isinstance(rows, list):
         raise ValueError("sanitized split inventory is missing task_versions")
