@@ -1,0 +1,308 @@
+{
+  "schema": "cyber_qwen38_opencode_web_servable_backlog_v2",
+  "observed_at": "2026-09-21T16:30:00Z",
+  "purpose": "A score-free, create-once backlog of accepted Qwen3.8-27B artifacts that are eligible for a future matched OpenCode WebExploitBench collection. This is not a launch packet and cannot authorize provider, serving, model, benchmark, or scoring work.",
+  "source": {
+    "repository": "fleet-ai/cyber-post-train",
+    "commit": "5cc021dc5dff5552a0d07983de34d5b540886080",
+    "checkpoint_evaluation_ledger": {
+      "path": "configs/evaluation/qwen38-checkpoint-eval-ledger-v1.json",
+      "file_sha256": "sha256:50b87faaa70eea417ff7081168ba6402144262ce5e1988fc9d76591b18bb5af0"
+    },
+    "serving_readiness_matrix": {
+      "path": "configs/evaluation/qwen38-checkpoint-serving-readiness-v1.json",
+      "file_sha256": "sha256:618c35185d3756881df64669dca8df085e88bd20a13ae283a2ca1c31060f5c8e",
+      "matrix_sha256": "sha256:b663c42cfa30f8579de2ede6e5ce4d3ef6a362287673d5f7837c9fca6385292c"
+    },
+    "historical_preparation": {
+      "path": "configs/evaluation/qwen38-important-checkpoints-opencode-wbe-campaign-v1.json",
+      "file_sha256": "sha256:5f5070e32bd56d7e4bb4d9c0c5aa049ba9ad9e8b0c4155138a504a5422647506",
+      "plan_sha256": "sha256:13e219cd49781427c0a00237d8bea037e85603646fc9451dacc6876f44f716d5",
+      "role": "historical_preparation_only_not_a_reusable_launch_identity"
+    }
+  },
+  "scientific_boundary": {
+    "question": "For each accepted post-training artifact, how does its OpenCode WebExploitBench behavior differ from an exact matched Qwen3.8-27B base control when all non-weight inputs are held constant?",
+    "evaluation_only": true,
+    "benchmark_content_read_by_this_backlog": false,
+    "benchmark_results_read_by_this_backlog": false,
+    "capability_claimed": false,
+    "qwen_code_allowed": false,
+    "intervention": "model_weights_only",
+    "collection_and_scoring_separate": true,
+    "collection_output": "immutable_score_free_rollout_bundle",
+    "scoring_input": "accepted_immutable_score_free_rollout_bundle",
+    "judge_calls_during_collection": 0,
+    "agent_calls_during_scoring": 0,
+    "scoring_failure_does_not_require_recollection": true
+  },
+  "frozen_protocol_template": {
+    "benchmark": {
+      "name": "WebExploitBench",
+      "revision": "7f97d87fa8ab728260c0ba9b09b9c8f00bb82ad5",
+      "task_count": 15,
+      "task_order_sha256": "sha256:d491b66885c8a379a887ee792d96ade76ffdc34cbfa3e75f9bc61c6975a29610"
+    },
+    "cage": {
+      "commit": "09a191c565230cebb8255899d622d23c7ddeff33",
+      "patch_set_sha256": "sha256:baf629de2ea13a5648f9de792514efcd73c71667c1ffe375b8669cbc1ad72b51"
+    },
+    "harness": {
+      "name": "opencode",
+      "version": "1.18.27",
+      "tool_surface": [
+        "web_bash",
+        "web_submit_findings"
+      ]
+    },
+    "base_model": {
+      "repository": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "weights_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+      "tokenizer_manifest_sha256": "sha256:3938a9a8172f2738fed1be44efc11e2562059269d50d3721213f44802b53b4e1",
+      "chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
+    },
+    "sampling": {
+      "temperature": 0.6,
+      "top_p": 0.95,
+      "max_output_tokens": 32768,
+      "scientific_attempt_retries": 0
+    },
+    "context": {
+      "max_context_tokens": 262144,
+      "max_input_tokens": 229376,
+      "automatic_compaction": true,
+      "automatic_continuation": true,
+      "compaction_reserved_tokens": 20000,
+      "renderer_file": "evals/webexploitbench/opencode_adapter/render_config.mjs",
+      "renderer_file_sha256": "sha256:949236e1031728f42db6c0ef0ebb89ceb0ef380e89459499c8c8e82552eb8520"
+    },
+    "budget": {
+      "max_agent_steps": 600,
+      "task_max_duration_minutes": 480,
+      "snapshot_restore_and_readiness_allowance_seconds": 600,
+      "collection_and_preservation_allowance_seconds": 7200,
+      "sandbox_timeout_seconds": 43200
+    },
+    "serving": {
+      "precision": "bf16",
+      "weight_quantization": null,
+      "tensor_parallel_size": 1,
+      "data_parallel_size": 8,
+      "context_tokens": 262144,
+      "kv_cache_dtype": "fp8_e4m3",
+      "reasoning_parser": "qwen3",
+      "tool_call_parser": "qwen3_coder"
+    },
+    "execution_seal_requirement": "A future private execution packet must freshly bind the exact current runner, adapter, evaluator image, snapshot, task materialization, base route, candidate route, and scoring policy. This public backlog does not bind executable source bytes."
+  },
+  "matched_comparison": {
+    "shared_base_required": true,
+    "base_control": {
+      "artifact_id": "qwen38-27b-base-matched-control",
+      "served_model": "qwen3.8-27b",
+      "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "model_artifact_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+      "serving_lock": {
+        "path": "evals/webexploitbench/serving/qwen38-27b-1d4bf0f2.lock.json",
+        "file_sha256": "sha256:17c75a53ddbf23d7e4272f95446d0c5128a070a3a0fde0d5f8791e97568d53dd"
+      }
+    },
+    "held_constant_fields": [
+      "benchmark_snapshot",
+      "task_order",
+      "cage_commit_and_patches",
+      "opencode_harness_and_tool_surface",
+      "system_prompt",
+      "tokenizer_and_chat_template",
+      "serving_image_and_arguments",
+      "precision_and_quantization",
+      "sampling",
+      "context_policy",
+      "budgets",
+      "timeout",
+      "retry_policy",
+      "collection_and_scoring_policy",
+      "scoring_policy"
+    ],
+    "allowed_difference": "accepted_model_weight_manifest_and_its_freshly_proven_route_binding",
+    "reuse_rule": "A base collection can be shared only after each pair receipt proves the same accepted snapshot, benchmark, fixed-control digest, and collection policy. No candidate may substitute, mutate, or recollect a base arm."
+  },
+  "collection_shape": {
+    "canary": {
+      "task_count": 1,
+      "pass_k": 1,
+      "collections_per_arm": 1
+    },
+    "full": {
+      "independent_pass1_replicas": 4,
+      "task_count_per_replica": 15,
+      "pass_k_per_replica": 1,
+      "collections_per_arm": 60,
+      "interpretation": "Four independent pass-1 replicas form pass@4; this is not one pass_k=4 campaign."
+    }
+  },
+  "deferred_scoring": {
+    "state": "not_sealed_no_accepted_collection_bundle",
+    "model_agnostic": true,
+    "agent_calls": 0,
+    "recollection_on_scoring_failure": false,
+    "requires": [
+      "an_accepted_immutable_score_free_rollout_bundle",
+      "a_fresh_scoring_only_packet_that_binds_the_collection_bundle_digest_and_exact_scoring_policy",
+      "a_scoring_receipt_that_never_changes_or_reexecutes_the_collection"
+    ]
+  },
+  "selected_candidates": [
+    {
+      "priority": 1,
+      "artifact_id": "q38-fresh75-step230",
+      "motivation": "Highest-priority broad full-SFT artifact: it has an accepted checkpoint, accepted BF16 export, accepted finite reload, accepted staging, and a recorded live route that still needs a fresh matched parity receipt.",
+      "checkpoint_step": 230,
+      "checkpoint_manifest_sha256": "sha256:bf92e29d9f19dd589201214f25fe8d0e3b0f65de14ec08fc573217f50580a486",
+      "export_identity": {
+        "kind": "payload_manifest_sha256",
+        "value": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029"
+      },
+      "serving_precondition": "fresh_exact_live_readback_and_matched_parity_required",
+      "campaign_prefix": "q38-f75s230-oc-wbe-v27",
+      "candidate_campaigns": {
+        "canary": "q38-f75s230-oc-wbe-v27-c1",
+        "full_replicas": [
+          "q38-f75s230-oc-wbe-v27-r0",
+          "q38-f75s230-oc-wbe-v27-r1",
+          "q38-f75s230-oc-wbe-v27-r2",
+          "q38-f75s230-oc-wbe-v27-r3"
+        ]
+      }
+    },
+    {
+      "priority": 2,
+      "artifact_id": "q38-teacher-dense-v5-step186",
+      "motivation": "Accepted stronger-teacher SFT artifact: it has an accepted checkpoint, accepted BF16 export, accepted finite reload, accepted staging, and a paused registration. Resume it only immediately before a bounded matched collection.",
+      "checkpoint_step": 186,
+      "checkpoint_manifest_sha256": "sha256:1b671c6ec4b39d1141e0d28c530243624f6a97a7922f9f222ffcbe20b8434d3e",
+      "export_identity": {
+        "kind": "export_receipt_sha256",
+        "value": "sha256:e6d59f5a58ce54b913d775cd71b81c64bd54637b53795df82baec0f71efefaf9"
+      },
+      "serving_precondition": "jit_resume_fresh_exact_live_readback_and_matched_parity_required",
+      "campaign_prefix": "q38-tchr186-oc-wbe-v27",
+      "candidate_campaigns": {
+        "canary": "q38-tchr186-oc-wbe-v27-c1",
+        "full_replicas": [
+          "q38-tchr186-oc-wbe-v27-r0",
+          "q38-tchr186-oc-wbe-v27-r1",
+          "q38-tchr186-oc-wbe-v27-r2",
+          "q38-tchr186-oc-wbe-v27-r3"
+        ]
+      }
+    },
+    {
+      "priority": 3,
+      "artifact_id": "q38-self-sft-step44",
+      "motivation": "Accepted self-SFT artifact: it has an accepted checkpoint, accepted BF16 export, accepted finite reload, accepted stage, and paused registration. Resume it only immediately before a bounded matched collection.",
+      "checkpoint_step": 44,
+      "checkpoint_manifest_sha256": "sha256:0094cfeb62f120b55d9e2f7fdfd4217c4c0aab66f369e3c52c89fc5e7ccfff9b",
+      "export_identity": {
+        "kind": "stage_payload_manifest_sha256",
+        "value": "sha256:a0e55bebe9d78ac76c012446ae0147a421cd333e2a6bf2bb6f4fb3450fa776fe"
+      },
+      "serving_precondition": "jit_resume_fresh_exact_live_readback_and_matched_parity_required",
+      "campaign_prefix": "q38-self44-oc-wbe-v27",
+      "candidate_campaigns": {
+        "canary": "q38-self44-oc-wbe-v27-c1",
+        "full_replicas": [
+          "q38-self44-oc-wbe-v27-r0",
+          "q38-self44-oc-wbe-v27-r1",
+          "q38-self44-oc-wbe-v27-r2",
+          "q38-self44-oc-wbe-v27-r3"
+        ]
+      }
+    }
+  ],
+  "deferred_artifacts": [
+    {
+      "artifact_id": "q38-available-a-lr30-step76",
+      "reason": "Its checkpoint and BF16 export are accepted, but it lacks the required exact export GPU forward, stage, paused registration, and live matched-parity evidence. It is not servable for this backlog."
+    },
+    {
+      "artifact_id": "q38-lora-recovery-step40-to-step42",
+      "reason": "The recovery checkpoint is not an accepted evaluation artifact; its GPU reload, merged export, stage, registration, and parity gates remain incomplete."
+    },
+    {
+      "artifact_id": "q38-full-weight-broad-running-arms",
+      "reason": "Current broad SFT arms have not yet produced accepted terminal checkpoint, export, reload, and serving evidence."
+    },
+    {
+      "artifact_id": "q38-skyrl-reward-prod4-step1",
+      "reason": "The RL canary failed before collection and performed zero optimizer updates, so it yields no evaluation artifact."
+    }
+  ],
+  "deduplication": {
+    "historical_campaigns_never_reusable": [
+      "q38-base-f75p230-oc-wbe-full-v23-r0",
+      "q38-base-f75p230-oc-wbe-full-v23-r1",
+      "q38-base-f75p230-oc-wbe-full-v23-r2",
+      "q38-base-f75p230-oc-wbe-full-v23-r3"
+    ],
+    "historical_result_rule": "The recorded V23 and exact16 attempts have zero accepted collections and zero scoring campaigns. They are infrastructure-invalid, not base or candidate results, and must never be resumed, scored, or reused.",
+    "historical_preparation_identity_source": {
+      "path": "configs/evaluation/qwen38-important-checkpoints-opencode-wbe-campaign-v1.json",
+      "plan_sha256": "sha256:13e219cd49781427c0a00237d8bea037e85603646fc9451dacc6876f44f716d5",
+      "rule": "Every campaign identity in the historical preparation is non-reusable, even if no provider work was started."
+    },
+    "static_repository_census": {
+      "at_source_commit": "5cc021dc5dff5552a0d07983de34d5b540886080",
+      "proposed_campaign_identity_hits": 0
+    },
+    "live_provider_census_required_immediately_before_create": true,
+    "live_provider_census_max_age_seconds": 600,
+    "same_checkpoint_duplicate_identity_fields": [
+      "artifact_id",
+      "export_manifest_sha256",
+      "benchmark_revision",
+      "task_order_sha256",
+      "harness_identity",
+      "serving_identity",
+      "sampling_identity",
+      "budget_identity",
+      "pass_k",
+      "seed",
+      "retry_policy",
+      "scoring_policy"
+    ],
+    "unknown_live_state_rule": "This local score-free build did not contact a provider. A fresh live census is mandatory; absence from this file is never proof that an external campaign is absent."
+  },
+  "launch_gates": [
+    "accept_the_current_source_snapshot_refresh_repair_and_create_a_new_qualified_source_snapshot",
+    "accept_a_fresh_zero_model_snapshot_qualification_of_the_repaired_boundary",
+    "seal_a_fresh_private_execution_packet_from_the_current_commit",
+    "prove_base_and_exact_candidate_serving_readback_and_matched_pair_parity",
+    "perform_a_fresh_duplicate_census_and_claim_absent_campaign_identities",
+    "run_only_the_matched_base_candidate_canary_before_that_candidate_full_collection",
+    "preserve_only_accepted_score_free_rollout_bundles_for_later_separate_scoring"
+  ],
+  "execution": {
+    "state": "prepared_not_launchable",
+    "launch_authority": false,
+    "provider_api_calls_by_this_preparation": 0,
+    "model_requests_by_this_preparation": 0,
+    "judge_requests_by_this_preparation": 0,
+    "benchmark_attempts_by_this_preparation": 0,
+    "scoring_attempts_by_this_preparation": 0,
+    "recommended_order": [
+      "q38-fresh75-step230",
+      "q38-teacher-dense-v5-step186",
+      "q38-self-sft-step44"
+    ],
+    "route_lifecycle_rule": "Keep paused routes paused until their matched evaluator is ready. Resume exactly one candidate route only for its accepted collection, then pause it after the terminal collection receipt is preserved."
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_answers_or_scores_included": false,
+    "raw_logs_included": false,
+    "tensor_values_read": false
+  },
+  "sha256": "sha256:5bc8729c1fb6e05698e6e59be3803f7ad47200953aa02d01a56bfe512f18b81d"
+}
