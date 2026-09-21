@@ -1,0 +1,345 @@
+{
+  "desired_registration": {
+    "id": "chris-q38-available-a-lr30-step76-v1",
+    "spec": {
+      "cache": {
+        "enabled": true,
+        "workers": 16
+      },
+      "capabilities": [
+        "chat_completions",
+        "reasoning",
+        "streaming",
+        "tool_calling"
+      ],
+      "desiredState": "paused",
+      "displayName": "Qwen3.8-27B available-A LR30 step 76",
+      "model": {
+        "dataParallelAttention": false,
+        "dataParallelSize": 8,
+        "path": "/scratch/models/chris-q38-available-a-lr30-step76-v1",
+        "precision": "bf16",
+        "revision": "sha256:3bef11697759b11db150b705e1882fb2d31a3efbdadbebd948aa917dcacc03a8",
+        "sourcePath": "/models/chris-q38-available-a-lr30-step76-v1",
+        "tensorParallelSize": 1
+      },
+      "placement": {
+        "nodeGroup": "fleetai-training-ng-gpu",
+        "priorityClassName": "c1"
+      },
+      "resources": {
+        "limits": {
+          "cpu": "192",
+          "memory": "2Ti",
+          "nvidia.com/gpu": 8
+        },
+        "requests": {
+          "cpu": "96",
+          "memory": "1Ti",
+          "nvidia.com/gpu": 8
+        }
+      },
+      "routing": {
+        "enabled": true
+      },
+      "runtime": {
+        "args": [
+          "--model-path",
+          "/scratch/models/chris-q38-available-a-lr30-step76-v1",
+          "--served-model-name",
+          "chris-q38-available-a-lr30-step76-v1",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "8000",
+          "--trust-remote-code",
+          "--tp-size",
+          "1",
+          "--context-length",
+          "262144",
+          "--kv-cache-dtype",
+          "fp8_e4m3",
+          "--mem-fraction-static",
+          "0.85",
+          "--attention-backend",
+          "trtllm_mha",
+          "--chunked-prefill-size",
+          "32768",
+          "--max-prefill-tokens",
+          "32768",
+          "--mamba-full-memory-ratio",
+          "4.58",
+          "--reasoning-parser",
+          "qwen3",
+          "--tool-call-parser",
+          "qwen3_coder",
+          "--enable-metrics",
+          "--enable-mfu-metrics",
+          "--enable-metrics-for-all-schedulers",
+          "--dp-size",
+          "8",
+          "--load-balance-method",
+          "total_tokens",
+          "--speculative-algorithm",
+          "NEXTN",
+          "--speculative-num-steps",
+          "3",
+          "--speculative-eagle-topk",
+          "1",
+          "--speculative-num-draft-tokens",
+          "4",
+          "--enable-cache-report",
+          "--tokenizer-worker-num",
+          "4",
+          "--detokenizer-worker-num",
+          "4",
+          "--disable-fast-image-processor"
+        ],
+        "command": [
+          "python3",
+          "-c",
+          "\"\"\"Normalize Qwen's top-level thinking alias before starting pinned SGLang.\n\nPatch the request schema before imports/spawn so all tokenizer workers use it.\nThe immutable runtime image and exact anchors bound this compatibility patch;\nremove it once the upstream request schema accepts the alias itself.\n\"\"\"\n\nimport importlib.util\nimport runpy\nfrom pathlib import Path\n\nFIELD = \"    chat_template_kwargs: Optional[Dict] = None\\n\"\nNORMALIZER = \"    def normalize_reasoning_inputs(cls, values: Dict):\\n\"\nALIAS_FIELD = \"    enable_thinking: Optional[StrictBool] = None\\n\"\nNORMALIZE_ALIAS = '''        # Fleet Qwen compatibility: explicit template kwargs take precedence.\n        alias = values.get(\"enable_thinking\")\n        if alias is not None:\n            if type(alias) is not bool:\n                raise ValueError(\"enable_thinking must be a JSON boolean or null\")\n            existing = values.get(\"chat_template_kwargs\")\n            if existing is not None and not isinstance(existing, dict):\n                raise ValueError(\"chat_template_kwargs must be a JSON object or null\")\n            values = dict(values)\n            kwargs = dict(existing or {})\n            kwargs.setdefault(\"enable_thinking\", alias)\n            values[\"chat_template_kwargs\"] = kwargs\n'''\n\n\ndef patch_source(source):\n    # Limit changes to the chat request class, not Responses or completions.\n    start = source.index(\"class ChatCompletionRequest(BaseModel):\\n\")\n    end = source.index(\"\\nclass \", start + 1)\n    before, chat, after = source[:start], source[start:end], source[end:]\n    if ALIAS_FIELD in chat:\n        if NORMALIZER + NORMALIZE_ALIAS in chat:\n            return source\n        raise RuntimeError(\"Upstream enable_thinking changed; review the compatibility shim\")\n    if chat.count(FIELD) != 1 or chat.count(NORMALIZER) != 1:\n        raise RuntimeError(\"SGLang chat request schema changed; review the compatibility shim\")\n    chat = chat.replace(FIELD, ALIAS_FIELD + FIELD)\n    chat = chat.replace(NORMALIZER, NORMALIZER + NORMALIZE_ALIAS)\n    return before + chat + after\n\n\ndef main():\n    root = Path(importlib.util.find_spec(\"sglang\").origin).parent\n    protocol = root / \"srt/entrypoints/openai/protocol.py\"\n    source = protocol.read_text()\n    patched = patch_source(source)\n    if patched != source:\n        protocol.write_text(patched)\n    runpy.run_module(\"sglang.launch_server\", run_name=\"__main__\", alter_sys=True)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+        ],
+        "engine": "sglang",
+        "env": [
+          {
+            "name": "HF_HUB_OFFLINE",
+            "value": "1"
+          },
+          {
+            "name": "TRANSFORMERS_OFFLINE",
+            "value": "1"
+          }
+        ],
+        "healthPath": "/health",
+        "image": {
+          "digest": "sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9",
+          "repository": "lmsysorg/sglang"
+        },
+        "lockMemory": false,
+        "port": 8000
+      },
+      "scaling": {
+        "minReplicas": 0
+      }
+    }
+  },
+  "destination": {
+    "acceptance_path": "/models/chris-q38-available-a-lr30-step76-v1/.fleet-acceptance.json",
+    "atomic_transaction": "directory_rename_noreplace_v1",
+    "model_id": "chris-q38-available-a-lr30-step76-v1",
+    "must_be_absent": true,
+    "path": "/models/chris-q38-available-a-lr30-step76-v1"
+  },
+  "execution": {
+    "active_deadline_seconds": 5400,
+    "config_map_name": "chris-q38-lr30-s76-stage-v1",
+    "gpus": 0,
+    "image": "lmsysorg/sglang@sha256:febfb971c7352570fc445c466ebd6ffc9d896024958e544a60f2137fd85856b1",
+    "namespace": "inference",
+    "pod_name": "chris-q38-lr30-s76-stage-v1",
+    "priority_class": "c1",
+    "resource_shape": {
+      "cpu_limit": "8",
+      "cpu_request": "4",
+      "ephemeral_storage_limit": "2Gi",
+      "ephemeral_storage_request": "1Gi",
+      "memory_limit": "16Gi",
+      "memory_request": "8Gi"
+    },
+    "restart_policy": "Never",
+    "runtime_source_sha256": "sha256:ab43d324d46e35712534f3ed8418807a924a7505feb30416538fc36b38fc01b6",
+    "runtime_wrapper_sha256": "sha256:385d393aea2521a4c173be23259665c699d3fbbad482cf5fa86ee6563d147633",
+    "teardown": "Delete the exact Pod and ConfigMap after terminal receipt validation and verify both UIDs absent."
+  },
+  "plan_sha256": "sha256:c52fe2853e2eac716034646e013d2dc5d925a772a8356e15eed0a97947ee26e6",
+  "purpose": "Stream the exact accepted LR30 step-76 BF16 export into the inference PVC without deserializing or duplicating the weights, then bind a paused registration cloned from the current Qwen3.8 base runtime.",
+  "registration_source": {
+    "id": "qwen3.8-27b",
+    "observed_phase": "ready",
+    "observed_resource_version": "31180381",
+    "spec": {
+      "cache": {
+        "enabled": true,
+        "workers": 16
+      },
+      "capabilities": [
+        "chat_completions",
+        "reasoning",
+        "streaming",
+        "tool_calling"
+      ],
+      "desiredState": "serving",
+      "displayName": "Qwen3.8 27B",
+      "model": {
+        "dataParallelAttention": false,
+        "dataParallelSize": 8,
+        "path": "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "precision": "bf16",
+        "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "sourcePath": "/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "tensorParallelSize": 1
+      },
+      "placement": {
+        "nodeGroup": "fleetai-training-ng-gpu",
+        "priorityClassName": "c0"
+      },
+      "resources": {
+        "limits": {
+          "cpu": "192",
+          "memory": "2Ti",
+          "nvidia.com/gpu": 8
+        },
+        "requests": {
+          "cpu": "96",
+          "memory": "1Ti",
+          "nvidia.com/gpu": 8
+        }
+      },
+      "routing": {
+        "enabled": true
+      },
+      "runtime": {
+        "args": [
+          "--model-path",
+          "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+          "--served-model-name",
+          "qwen3.8-27b",
+          "--host",
+          "0.0.0.0",
+          "--port",
+          "8000",
+          "--trust-remote-code",
+          "--tp-size",
+          "1",
+          "--context-length",
+          "262144",
+          "--kv-cache-dtype",
+          "fp8_e4m3",
+          "--mem-fraction-static",
+          "0.85",
+          "--attention-backend",
+          "trtllm_mha",
+          "--chunked-prefill-size",
+          "32768",
+          "--max-prefill-tokens",
+          "32768",
+          "--mamba-full-memory-ratio",
+          "4.58",
+          "--reasoning-parser",
+          "qwen3",
+          "--tool-call-parser",
+          "qwen3_coder",
+          "--enable-metrics",
+          "--enable-mfu-metrics",
+          "--enable-metrics-for-all-schedulers",
+          "--dp-size",
+          "8",
+          "--load-balance-method",
+          "total_tokens",
+          "--speculative-algorithm",
+          "NEXTN",
+          "--speculative-num-steps",
+          "3",
+          "--speculative-eagle-topk",
+          "1",
+          "--speculative-num-draft-tokens",
+          "4",
+          "--enable-cache-report",
+          "--tokenizer-worker-num",
+          "4",
+          "--detokenizer-worker-num",
+          "4",
+          "--disable-fast-image-processor"
+        ],
+        "command": [
+          "python3",
+          "-c",
+          "\"\"\"Normalize Qwen's top-level thinking alias before starting pinned SGLang.\n\nPatch the request schema before imports/spawn so all tokenizer workers use it.\nThe immutable runtime image and exact anchors bound this compatibility patch;\nremove it once the upstream request schema accepts the alias itself.\n\"\"\"\n\nimport importlib.util\nimport runpy\nfrom pathlib import Path\n\nFIELD = \"    chat_template_kwargs: Optional[Dict] = None\\n\"\nNORMALIZER = \"    def normalize_reasoning_inputs(cls, values: Dict):\\n\"\nALIAS_FIELD = \"    enable_thinking: Optional[StrictBool] = None\\n\"\nNORMALIZE_ALIAS = '''        # Fleet Qwen compatibility: explicit template kwargs take precedence.\n        alias = values.get(\"enable_thinking\")\n        if alias is not None:\n            if type(alias) is not bool:\n                raise ValueError(\"enable_thinking must be a JSON boolean or null\")\n            existing = values.get(\"chat_template_kwargs\")\n            if existing is not None and not isinstance(existing, dict):\n                raise ValueError(\"chat_template_kwargs must be a JSON object or null\")\n            values = dict(values)\n            kwargs = dict(existing or {})\n            kwargs.setdefault(\"enable_thinking\", alias)\n            values[\"chat_template_kwargs\"] = kwargs\n'''\n\n\ndef patch_source(source):\n    # Limit changes to the chat request class, not Responses or completions.\n    start = source.index(\"class ChatCompletionRequest(BaseModel):\\n\")\n    end = source.index(\"\\nclass \", start + 1)\n    before, chat, after = source[:start], source[start:end], source[end:]\n    if ALIAS_FIELD in chat:\n        if NORMALIZER + NORMALIZE_ALIAS in chat:\n            return source\n        raise RuntimeError(\"Upstream enable_thinking changed; review the compatibility shim\")\n    if chat.count(FIELD) != 1 or chat.count(NORMALIZER) != 1:\n        raise RuntimeError(\"SGLang chat request schema changed; review the compatibility shim\")\n    chat = chat.replace(FIELD, ALIAS_FIELD + FIELD)\n    chat = chat.replace(NORMALIZER, NORMALIZER + NORMALIZE_ALIAS)\n    return before + chat + after\n\n\ndef main():\n    root = Path(importlib.util.find_spec(\"sglang\").origin).parent\n    protocol = root / \"srt/entrypoints/openai/protocol.py\"\n    source = protocol.read_text()\n    patched = patch_source(source)\n    if patched != source:\n        protocol.write_text(patched)\n    runpy.run_module(\"sglang.launch_server\", run_name=\"__main__\", alter_sys=True)\n\n\nif __name__ == \"__main__\":\n    main()\n"
+        ],
+        "engine": "sglang",
+        "env": [
+          {
+            "name": "HF_HUB_OFFLINE",
+            "value": "1"
+          },
+          {
+            "name": "TRANSFORMERS_OFFLINE",
+            "value": "1"
+          }
+        ],
+        "healthPath": "/health",
+        "image": {
+          "digest": "sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9",
+          "repository": "lmsysorg/sglang"
+        },
+        "lockMemory": false,
+        "port": 8000
+      },
+      "scaling": {
+        "minReplicas": 1,
+        "replicas": 2
+      }
+    },
+    "spec_sha256": "sha256:935294640178869a97ecacb2ac7aa7853a6a7d742f493acc918e0ae589652f0d"
+  },
+  "schema": "cyber_inference_model_stream_stage_plan_v1",
+  "scientific_boundary": {
+    "external_benchmark_content_or_outcomes_used": false,
+    "optimizer_updates": 0,
+    "registration_or_resume_performed_by_this_plan": false,
+    "serving_qualified_by_staging": false
+  },
+  "source": {
+    "export_receipt": {
+      "file_sha256": "sha256:39cedfb644aa955b450e42eb98494276c1bdce85a9760b2b038b67823ff7b9e5",
+      "receipt_sha256": "sha256:983bf6daa2f8b7680560c834cbfb76fb8fe7fba5a273f116b9b3e80ef9f97538",
+      "required_fields": {
+        "all_output_tensors_reopened_equal": true,
+        "dtype": "BF16",
+        "gpu_reload_verified": false,
+        "model_repo": "Qwen/Qwen3.8-27B",
+        "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "optimizer_step": 76,
+        "optimizer_steps_executed": 0,
+        "output_root": "/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/hf-export-step76-v1",
+        "schema": "cyber_native_checkpoint_hf_export_v1",
+        "source_checkpoint_receipt_sha256": "1252a1a9d5556fa118f03d1b2fe5687e0e9505ccf622e2f86743a26b77dffa64",
+        "source_inventory_sizes_mtimes_unchanged": true,
+        "source_manifest_file_sha256": "cc4e2997e120a80bb1e209dc027f18e12ce1ebe12639594d28e23b08c459cf1a",
+        "source_plan_sha256": "7efcbbff380107220fb6a1d6680b0bbe8d0a303eff748e948a137dbd6d8524d3",
+        "tensor_bytes": 55562855904,
+        "tensor_values": 27781427952,
+        "trained_tensors": 1184
+      },
+      "sfs_path": "/jobs/chris-q38-lr30-resume76-prod-v1/hf-export-step76-v1/EXPORT.json"
+    },
+    "gpu_check_receipt": {
+      "file_sha256": "sha256:8c6b4bc568fff6728dca2f7d4f7200d5c45b07a9b4b2c1ca9525c4cd16d97b2b",
+      "receipt_sha256": "sha256:8cb7cbab5df338b2066825aad93ba52aed10a339464e2524fa1bb0ac2fec192a",
+      "required_fields": {
+        "attention_implementation": "eager",
+        "export_receipt_sha256": "983bf6daa2f8b7680560c834cbfb76fb8fe7fba5a273f116b9b3e80ef9f97538",
+        "export_sha256": "39cedfb644aa955b450e42eb98494276c1bdce85a9760b2b038b67823ff7b9e5",
+        "finite_logits": true,
+        "generated_tokens": 2,
+        "gpu_reload_verified": true,
+        "gpus": 1,
+        "optimizer_steps_executed": 0,
+        "schema": "cyber_hf_export_check_v1",
+        "serving_qualified": false,
+        "source_unchanged": true,
+        "status": "passed",
+        "synthetic_only": true
+      },
+      "sfs_path": "/jobs/chris-q38-lr30-step76-hfcheck-v1/GPU_CHECK.json"
+    },
+    "payload": {
+      "file_count": 29,
+      "manifest_sha256": "sha256:3bef11697759b11db150b705e1882fb2d31a3efbdadbebd948aa917dcacc03a8",
+      "mapping": "exact EXPORT.files object with bare per-file SHA-256 values",
+      "maximum_file_bytes": 4294967296,
+      "maximum_total_bytes": 68719476736
+    }
+  }
+}
