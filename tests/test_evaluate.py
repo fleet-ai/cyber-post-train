@@ -133,6 +133,21 @@ def test_model_revision_accepts_exact_checkpoint_payload_manifest(configuration,
     assert plan["models"]["student"]["revision"] == "sha256:" + "f" * 64
 
 
+def test_qwen_route_requires_exact_authoritative_session_identity(configuration, tmp_path):
+    configuration["routes"]["shared"]["model_info"]["model_type"] = "qwen3_5"
+    configuration["models"]["student"]["session_model"] = "self-hosted/synthetic-student"
+    with pytest.raises(ValueError, match="exact Fleet qwen provider and served ID"):
+        evaluation.compile_eval(configuration, relative_to=tmp_path)
+
+    configuration["models"]["student"]["session_model"] = "qwen/synthetic-student"
+    assert (
+        evaluation.compile_eval(configuration, relative_to=tmp_path)["models"]["student"][
+            "session_model"
+        ]
+        == "qwen/synthetic-student"
+    )
+
+
 @pytest.mark.parametrize(
     "mutate",
     [

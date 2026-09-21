@@ -1,0 +1,37 @@
+{
+  "schema": "qwen38_fleet_dev17_bootstrap_config_rejection_v1",
+  "observed_at": "2026-09-21T00:18:00Z",
+  "classification": "setup_binding_mismatch",
+  "scientific_result_accepted": false,
+  "job": {
+    "name": "chris-q38-self44-dev17-p1-v1",
+    "uid": "2102a45d-7efc-4f4a-a047-d26976ef6c39",
+    "pod_uid": "394ce83d-191a-4a78-b1a4-8e25a3d7d2c5",
+    "configmap_uid": "0b3d0275-0319-4e35-be64-c1db4b1efdb9",
+    "database": "q38_self44_dev17_p1_v1",
+    "output": "/mnt/sfs/jobs/chris-q38-fleet-dev17-self44-p1-v1",
+    "priority": "c1",
+    "failed_job_alerts": "off",
+    "gpu_requests": 0
+  },
+  "cause": {
+    "selected_filename": "qwen38-self-sft-step44-fleet-dev17-opencode-pass1-v1.json",
+    "bootstrap_source_filename": "config.json",
+    "observed_cell_plan_sha256": "sha256:b259e48c88774d63c9fef99bccd74e71a5763096133d54c7d9950481cab19253",
+    "expected_self_plan_sha256": "sha256:7e72e4421040306a95928d7d6f631500d4cd7cacc9a906d57f45626ea424c005",
+    "reason": "The immutable ConfigMap's named self-SFT config was correct, but its generic config.json still contained the teacher configuration. The bootstrap copied config.json into the selected filename, so the job did not run the intended arm."
+  },
+  "repair": {
+    "rule": "The generic config.json and the selected EVAL_CONFIG_NAME entry must be byte-identical before cluster_entry starts.",
+    "guard": "evals/fleet/scripts/run_qwen38_dev17_single_arm_v1.sh",
+    "regression": "tests/test_qwen38_fleet_dev17_eval.py::test_successor_is_alert_silent_cpu_only_and_create_once",
+    "successor": "Use a new create-once v2 Job, ConfigMap, output, database, and campaign identity."
+  },
+  "privacy": {
+    "scores_included": false,
+    "prompts_or_traces_included": false,
+    "credentials_included": false,
+    "task_version_ids_included": false,
+    "session_ids_included": false
+  }
+}
