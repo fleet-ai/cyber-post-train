@@ -31,9 +31,15 @@ cd "$root"
 artifact_args=()
 if [[ -e /bootstrap/model-artifact.json || -e /bootstrap/model-artifact-acceptance.json ]]; then
   [[ -f /bootstrap/model-artifact.json && -f /bootstrap/model-artifact-acceptance.json ]]
+  artifact_packet="$root/configs/evaluation/model-artifact.json"
+  artifact_acceptance="$root/configs/evaluation/model-artifact-acceptance.json"
+  # ConfigMap volume keys are symlinks. Copy the two immutable documents into
+  # the private workspace so model_artifact can retain its O_NOFOLLOW gate.
+  install -m 0600 /bootstrap/model-artifact.json "$artifact_packet"
+  install -m 0600 /bootstrap/model-artifact-acceptance.json "$artifact_acceptance"
   artifact_args=(
-    --model-artifact-binding /bootstrap/model-artifact.json
-    --model-artifact-acceptance /bootstrap/model-artifact-acceptance.json
+    --model-artifact-binding "$artifact_packet"
+    --model-artifact-acceptance "$artifact_acceptance"
   )
 fi
 exec uv run --no-project \

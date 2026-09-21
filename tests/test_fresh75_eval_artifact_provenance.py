@@ -606,8 +606,12 @@ def test_cluster_wrappers_require_packet_and_acceptance_evidence_together(script
     assert "/bootstrap/model-artifact.json || -e /bootstrap/model-artifact-acceptance.json" in text
     assert "-f /bootstrap/model-artifact.json" in text
     assert "-f /bootstrap/model-artifact-acceptance.json" in text
-    assert "--model-artifact-binding /bootstrap/model-artifact.json" in text
-    assert "--model-artifact-acceptance /bootstrap/model-artifact-acceptance.json" in text
+    assert 'install -m 0600 /bootstrap/model-artifact.json "$artifact_packet"' in text
+    assert (
+        'install -m 0600 /bootstrap/model-artifact-acceptance.json "$artifact_acceptance"' in text
+    )
+    assert '--model-artifact-binding "$artifact_packet"' in text
+    assert '--model-artifact-acceptance "$artifact_acceptance"' in text
 
 
 def test_cluster_entry_rejects_historical_config_before_image_staging(

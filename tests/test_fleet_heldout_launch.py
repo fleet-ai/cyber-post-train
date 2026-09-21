@@ -489,6 +489,58 @@ def test_kubectl_adapter_rejects_unbounded_lists_and_sends_only_server_side_sele
     assert all("--output=json" in call for call in calls)
 
 
+def test_kubectl_adapter_decodes_concatenated_multi_object_json(monkeypatch):
+    objects = [
+        {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": CONFIG_MAP_NAME}},
+        {"apiVersion": "batch/v1", "kind": "Job", "metadata": {"name": JOB_NAME}},
+    ]
+
+    def run(command, **kwargs):
+        return launch.subprocess.CompletedProcess(
+            command,
+            0,
+            stdout="\n".join(json.dumps(value) for value in objects) + "\n",
+            stderr="",
+        )
+
+    monkeypatch.setattr(launch.subprocess, "run", run)
+    cluster = launch.KubectlCluster("fleet-context")
+    assert cluster.server_dry_run(NAMESPACE, {"apiVersion": "v1", "kind": "List"}) == {
+        "apiVersion": "v1",
+        "kind": "List",
+        "items": objects,
+    }
+
+
+def test_kubectl_adapter_rejects_trailing_non_json(monkeypatch):
+    def run(command, **kwargs):
+        return launch.subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps({"kind": "List", "items": []}) + "\nprivate noise",
+            stderr="",
+        )
+
+    monkeypatch.setattr(launch.subprocess, "run", run)
+    cluster = launch.KubectlCluster("fleet-context")
+    with pytest.raises(launch.HeldoutLaunchError, match="invalid JSON"):
+        cluster.list("jobs.batch", NAMESPACE, field_selector=f"metadata.name={JOB_NAME}")
+
+
+def test_preview_containment_accepts_only_server_defaults_inside_fixed_lists():
+    expected = [{"name": "evaluator", "env": [{"name": "EMPTY", "value": ""}]}]
+    actual = [
+        {
+            "name": "evaluator",
+            "imagePullPolicy": "IfNotPresent",
+            "env": [{"name": "EMPTY"}],
+        }
+    ]
+    assert launch._contains(actual, expected)  # noqa: SLF001
+    assert not launch._contains(actual + [{"name": "unexpected"}], expected)  # noqa: SLF001
+    assert not launch._contains([{"name": "other", "env": [{"name": "EMPTY"}]}], expected)  # noqa: SLF001
+
+
 def test_workload_binding_requires_the_created_job_uid_not_only_a_matching_name():
     workload = {
         "metadata": {
