@@ -30,7 +30,30 @@ from .jobs import (
     validate_preview,
     validate_request,
 )
+from .lora_cpu_preflight import (
+    CPU_PREFLIGHT_BINDING_ANNOTATIONS,
+    CPU_PREFLIGHT_BUNDLE_SHA256_ANNOTATION,
+    CPU_PREFLIGHT_ENV,
+    CPU_SFS_MEMORY_FLOOR_MIB_ANNOTATION,
+    CPU_SFS_OUTPUT_ROOT_ANNOTATION,
+    CPU_SFS_OWNED_ROOT_ANNOTATION,
+    CPU_SOURCE_ARCHIVE_SHA256_ANNOTATION,
+    CPU_SOURCE_COMMIT_ANNOTATION,
+    LoraCpuPreflightPackage,
+    validate_lora_cpu_preflight_config_map_response,
+    validate_lora_cpu_preflight_package,
+)
+from .lora_cpu_preflight_driver import (
+    ENV_BUNDLE_SHA256,
+    ENV_SFS_CONTROL_MOUNT,
+    ENV_SFS_OUTPUT_ROOT,
+    ENV_SFS_OWNED_ROOT,
+    ENV_SOURCE_ARCHIVE,
+    ENV_SOURCE_ARCHIVE_SHA256,
+    ENV_SOURCE_COMMIT,
+)
 from .sfs_write_identity import TRAINER_GID, TRAINER_UID, validate_owned_output_binding
+from .source_bundle import canonical_source_commit_bytes
 
 NAMESPACE = "fleet-train-jobs"
 ZERO_RUN_ID = "00000000-0000-0000-0000-000000000000"
@@ -39,9 +62,6 @@ SFT_SECRET = "wandb-api"
 DIRECT_JOURNAL = "DIRECT_SUBMISSION.jsonl"
 CPU_CHECKPOINT_OPERATION_ANNOTATION = "cyber-post-train.fleet.ai/cpu-checkpoint-operation"
 CPU_CHECKPOINT_OPERATIONS = {"seal", "verify"}
-CPU_SFS_OWNED_ROOT_ANNOTATION = "cyber-post-train.fleet.ai/sfs-owned-root"
-CPU_SFS_OUTPUT_ROOT_ANNOTATION = "cyber-post-train.fleet.ai/sfs-output-root"
-CPU_SFS_MEMORY_FLOOR_MIB_ANNOTATION = "cyber-post-train.fleet.ai/memory-floor-mib"
 LORA_TRAINER_IMAGE = (
     "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@"
     "sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317"
@@ -153,6 +173,34 @@ def validate_cpu_checkpoint_node_fit(manifest: dict, inventory: dict) -> dict:
     }
 
 
+def _has_lora_cpu_preflight_surface(manifest: dict) -> bool:
+    """Detect a partially stripped package instead of silently taking the generic path."""
+
+    metadata = manifest.get("metadata")
+    spec = manifest.get("spec")
+    if not isinstance(metadata, dict) or not isinstance(spec, dict):
+        return False
+    annotations = metadata.get("annotations")
+    if isinstance(annotations, dict) and any(
+        name in annotations for name in CPU_PREFLIGHT_BINDING_ANNOTATIONS
+    ):
+        return True
+    containers = spec.get("containers")
+    if not isinstance(containers, list):
+        return False
+    for container in containers:
+        if not isinstance(container, dict):
+            continue
+        if container.get("command") == ["python", "/bundle/preflight_driver.py"]:
+            return True
+        entries = container.get("env")
+        if isinstance(entries, list) and any(
+            isinstance(entry, dict) and entry.get("name") in CPU_PREFLIGHT_ENV for entry in entries
+        ):
+            return True
+    return False
+
+
 def validate_cpu_checkpoint_pod(manifest: dict) -> dict:
     """Reject GPU use and host-specific placement for a CPU checkpoint operation."""
     try:
@@ -192,17 +240,10 @@ def validate_cpu_checkpoint_pod(manifest: dict) -> dict:
                 raise JobsError("CPU checkpoint Pod resource quantities are malformed")
             if "nvidia.com/gpu" in values:
                 raise JobsError("CPU checkpoint Pod must not request or limit GPUs")
-    sfs_fields = {
-        field: annotations.get(field)
-        for field in (
-            CPU_SFS_OWNED_ROOT_ANNOTATION,
-            CPU_SFS_OUTPUT_ROOT_ANNOTATION,
-            CPU_SFS_MEMORY_FLOOR_MIB_ANNOTATION,
-        )
-    }
-    if any(value is not None for value in sfs_fields.values()):
+    sfs_fields = {field: annotations.get(field) for field in CPU_PREFLIGHT_BINDING_ANNOTATIONS}
+    if _has_lora_cpu_preflight_surface(manifest):
         if not all(isinstance(value, str) and value for value in sfs_fields.values()):
-            raise JobsError("CPU SFS control annotations must be complete")
+            raise JobsError("CPU preflight source and SFS annotations must be complete")
         _validate_cpu_sfs_control(manifest, sfs_fields)
     return manifest
 
@@ -256,13 +297,35 @@ def _validate_cpu_sfs_control(manifest: dict, fields: dict[str, str]) -> None:
         environment[entry["name"]] = entry["value"]
     owned_root = fields[CPU_SFS_OWNED_ROOT_ANNOTATION]
     output_root = fields[CPU_SFS_OUTPUT_ROOT_ANNOTATION]
+    if set(environment) != set(CPU_PREFLIGHT_ENV):
+        raise JobsError("CPU SFS control environment differs from the packaged driver contract")
     if (
-        environment.get("CYBER_SFS_OWNED_ROOT") != owned_root
-        or environment.get("CYBER_SFS_OUTPUT_ROOT") != output_root
+        environment.get(ENV_SFS_OWNED_ROOT) != owned_root
+        or environment.get(ENV_SFS_OUTPUT_ROOT) != output_root
     ):
         raise JobsError("CPU SFS control path annotations and environment differ")
-    if environment.get("CYBER_SFS_CONTROL_MOUNT") != "/controls":
+    if environment.get(ENV_SFS_CONTROL_MOUNT) != "/controls":
         raise JobsError("CPU SFS control must bind the reviewed writable subpath mount")
+    if (
+        environment.get(ENV_BUNDLE_SHA256) != fields[CPU_PREFLIGHT_BUNDLE_SHA256_ANNOTATION]
+        or environment.get(ENV_SOURCE_ARCHIVE_SHA256)
+        != fields[CPU_SOURCE_ARCHIVE_SHA256_ANNOTATION]
+        or environment.get(ENV_SOURCE_COMMIT) != fields[CPU_SOURCE_COMMIT_ANNOTATION]
+    ):
+        raise JobsError("CPU preflight source annotations and environment differ")
+    for annotation in (
+        CPU_PREFLIGHT_BUNDLE_SHA256_ANNOTATION,
+        CPU_SOURCE_ARCHIVE_SHA256_ANNOTATION,
+    ):
+        if re.fullmatch(r"[0-9a-f]{64}", fields[annotation]) is None:
+            raise JobsError("CPU preflight package digest is invalid")
+    try:
+        canonical_source_commit_bytes(fields[CPU_SOURCE_COMMIT_ANNOTATION])
+    except ValueError as exc:
+        raise JobsError(str(exc)) from None
+    runtime_archive = environment.get(ENV_SOURCE_ARCHIVE, "")
+    if not runtime_archive.startswith("/mnt/sfs/") or "/../" in runtime_archive:
+        raise JobsError("CPU preflight source archive must use the read-only SFS mount")
     try:
         validate_owned_output_binding(owned_root, output_root)
     except ValueError as exc:
@@ -600,7 +663,7 @@ def _json_object(payload: str, operation: str) -> dict:
 
 
 class Kubectl:
-    """Small no-shell Kubernetes boundary; mutation is exactly one create."""
+    """Small no-shell Kubernetes boundary; mutation is create-only and never retried."""
 
     def __init__(self, context: str, *, binary: str = "kubectl"):
         valid_context = (
@@ -651,10 +714,8 @@ class Kubectl:
     def create_once(self, manifest: dict) -> dict:
         return self._run(["create", "--filename=-", "--output=json"], manifest=manifest)
 
-    def dry_run_cpu_checkpoint_pod(self, manifest: dict) -> dict:
-        """Server-preview one CPU seal/verifier after the local placement gate."""
-        validate_cpu_checkpoint_pod(manifest)
-        inventory = self._run(
+    def _cpu_node_inventory(self) -> dict:
+        return self._run(
             [
                 "get",
                 "nodes",
@@ -662,25 +723,81 @@ class Kubectl:
                 "--output=json",
             ]
         )
+
+    @staticmethod
+    def _require_generic_cpu_checkpoint(manifest: dict) -> None:
+        validate_cpu_checkpoint_pod(manifest)
+        if _has_lora_cpu_preflight_surface(manifest):
+            raise JobsError("LoRA CPU preflight must use the exact packaged submission path")
+
+    @staticmethod
+    def _require_lora_cpu_preflight_package(package: LoraCpuPreflightPackage) -> dict:
+        try:
+            proof = validate_lora_cpu_preflight_package(package)
+        except (OSError, ValueError) as exc:
+            raise JobsError(str(exc)) from None
+        validate_cpu_checkpoint_pod(package.pod)
+        return proof
+
+    @staticmethod
+    def _require_config_map_response(response: dict, package: LoraCpuPreflightPackage) -> None:
+        try:
+            validate_lora_cpu_preflight_config_map_response(response, package)
+        except ValueError as exc:
+            raise JobsError(str(exc)) from None
+
+    def dry_run_cpu_checkpoint_pod(self, manifest: dict) -> dict:
+        """Server-preview one CPU seal/verifier after the local placement gate."""
+        self._require_generic_cpu_checkpoint(manifest)
+        inventory = self._cpu_node_inventory()
         validate_cpu_checkpoint_node_fit(manifest, inventory)
-        return self._run(
+        response = self._run(
             ["create", "--dry-run=server", "--filename=-", "--output=json"],
             manifest=manifest,
         )
+        validate_cpu_checkpoint_pod(response)
+        return response
 
     def create_cpu_checkpoint_pod_once(self, manifest: dict) -> dict:
         """Create exactly one locally validated CPU seal/verifier Pod."""
-        validate_cpu_checkpoint_pod(manifest)
-        inventory = self._run(
-            [
-                "get",
-                "nodes",
-                "--selector=kubernetes.io/arch=amd64,workload=fleetai-training-ng-cpu",
-                "--output=json",
-            ]
-        )
+        self._require_generic_cpu_checkpoint(manifest)
+        inventory = self._cpu_node_inventory()
         validate_cpu_checkpoint_node_fit(manifest, inventory)
-        return self._run(["create", "--filename=-", "--output=json"], manifest=manifest)
+        response = self._run(["create", "--filename=-", "--output=json"], manifest=manifest)
+        validate_cpu_checkpoint_pod(response)
+        return response
+
+    def dry_run_lora_cpu_preflight(self, package: LoraCpuPreflightPackage) -> dict:
+        """Server-preview the exact immutable code package and its non-root Pod."""
+
+        proof = self._require_lora_cpu_preflight_package(package)
+        inventory = self._cpu_node_inventory()
+        validate_cpu_checkpoint_node_fit(package.pod, inventory)
+        config_map = self._run(
+            ["create", "--dry-run=server", "--filename=-", "--output=json"],
+            manifest=package.config_map,
+        )
+        self._require_config_map_response(config_map, package)
+        pod = self._run(
+            ["create", "--dry-run=server", "--filename=-", "--output=json"],
+            manifest=package.pod,
+        )
+        validate_cpu_checkpoint_pod(pod)
+        return {"config_map": config_map, "pod": pod, "proof": proof}
+
+    def create_lora_cpu_preflight_once(self, package: LoraCpuPreflightPackage) -> dict:
+        """Create one immutable bundle and one exact Pod; never retry either call."""
+
+        proof = self._require_lora_cpu_preflight_package(package)
+        inventory = self._cpu_node_inventory()
+        validate_cpu_checkpoint_node_fit(package.pod, inventory)
+        config_map = self._run(
+            ["create", "--filename=-", "--output=json"], manifest=package.config_map
+        )
+        self._require_config_map_response(config_map, package)
+        pod = self._run(["create", "--filename=-", "--output=json"], manifest=package.pod)
+        validate_cpu_checkpoint_pod(pod)
+        return {"config_map": config_map, "pod": pod, "proof": proof}
 
 
 def _assert_api_unique(rows: list[dict], request: dict) -> None:

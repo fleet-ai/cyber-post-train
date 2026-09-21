@@ -1,0 +1,371 @@
+"""Synthetic native-SkyRL checkpoint evidence; no cluster, Fleet, or private logs."""
+
+from __future__ import annotations
+
+import copy
+import json
+import uuid
+from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+import torch
+from safetensors.torch import save_file
+from test_export import distributed
+from test_rl_data import setup  # noqa: F401
+from test_skyrl_data import skyrl as data_setup  # noqa: F401
+from test_skyrl_training import prepared  # noqa: F401
+from torch.distributed.tensor import Shard
+
+from cyber_post_train.jobs import digest
+from evals.fleet import opencode_self_hosted as fleet
+from training import export as native_export
+from training import skyrl
+from training import skyrl_posttrain as post
+from training.sft_runtime import digest as file_digest
+
+
+def write(path: Path, value: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, sort_keys=True))
+
+
+def sealed(value: dict, field: str = "sha256", prefix: bool = True) -> dict:
+    result = copy.deepcopy(value)
+    value_digest = digest(result)
+    result[field] = ("sha256:" if prefix else "") + value_digest
+    return result
+
+
+def model_base(root: Path) -> dict:
+    root.mkdir()
+    tensors = {
+        key: torch.tensor([float(index)], dtype=torch.bfloat16)
+        for index, key in enumerate(native_export.FROZEN_MTP_KEYS)
+    }
+    tensors["weight"] = torch.zeros(8, dtype=torch.bfloat16)
+    save_file(tensors, root / "model-00001-of-00001.safetensors")
+    write(
+        root / "model.safetensors.index.json",
+        {"weight_map": {key: "model-00001-of-00001.safetensors" for key in tensors}},
+    )
+    for name in native_export.SIDECARS:
+        write(root / name, {"synthetic": name})
+    return tensors
+
+
+def checkpoint(root: Path, step: int, *, changed: bool) -> None:
+    policy = root / f"checkpoints/global_step_{step}/policy"
+    (policy / "huggingface").mkdir(parents=True)
+    write(policy / "huggingface/config.json", {})
+    write(policy / "fsdp_config.json", {"fsdp_strategy": "fsdp", "world_size": 8})
+    torch.save({"global_step": step}, policy.parent / "trainer_state.pt")
+    torch.save({"_num_yielded": 1}, policy.parent / "data.pt")
+    for rank in range(8):
+        local = torch.tensor([float(rank + 1 if changed else 0)], dtype=torch.float32)
+        state = {"weight": distributed(local, [8], Shard(0), tuple(range(8)))}
+        torch.save(state, policy / f"model_world_size_8_rank_{rank}.pt")
+        torch.save({"state": torch.ones(1)}, policy / f"optim_world_size_8_rank_{rank}.pt")
+        torch.save({"rng": torch.ones(1)}, policy / f"extra_state_world_size_8_rank_{rank}.pt")
+
+
+def episode(
+    plan: dict, batch_dir: Path, batch: dict, index: int, source: dict, reward: float
+) -> None:
+    directory = batch_dir / f"episode-{index}"
+    directory.mkdir()
+    binding = copy.deepcopy(source)
+    binding.update(
+        run_id=f"{plan['run_name']}-{batch_dir.name}-{index}",
+        native_batch={
+            "phase": batch["phase"],
+            "global_step": batch["global_step"],
+            "trajectory_ids": batch["trajectory_ids"],
+        },
+        sampling={},
+    )
+    binding["config_sha256"] = fleet.digest_without(binding, "config_sha256")
+    instance = f"synthetic-instance-{batch_dir.name}-{index}"
+    execution = str(uuid.uuid5(uuid.NAMESPACE_DNS, instance))
+    values = {
+        "binding.json": binding,
+        "instance.json": {"instance_id": instance, "evidence_run_id": instance + "-evidence"},
+        "conversation.json": {"messages": [{"role": "assistant", "content": "private"}]},
+        "reward.json": {
+            "task_key": binding["task"]["key"],
+            "task_version_id": binding["task"]["version_id"],
+            "instance_id": instance,
+            "reward": reward,
+            "verifier_execution_id": execution,
+            "direct_authority_attestation": {
+                "schema_version": fleet.DIRECT_AUTHORITY_ATTESTATION_SCHEMA,
+                "context": {
+                    "task_key": binding["task"]["key"],
+                    "task_version_id": binding["task"]["version_id"],
+                    "instance_id": instance,
+                    "evidence_run_id": instance + "-evidence",
+                    "verifier_version_id": binding["verifier"]["version_id"],
+                    "scoring_payload_mode": fleet.RUNTIME_EVIDENCE_ONLY_V3,
+                },
+                "activity": {
+                    "result_schema_version": "cyber_verification_result_v3",
+                    "reward": reward,
+                    "task_version_id": binding["task"]["version_id"],
+                    "verifier_execution_id": execution,
+                },
+                "shadow": {
+                    "mode": "authoritative",
+                    "status": "authoritative",
+                    "match": True,
+                    "production_execution_id": execution,
+                    "direct_verifier": {
+                        "status": "authoritative",
+                        "match": True,
+                        "execution_id": execution,
+                        "verifier_contract_version": binding["authority"][
+                            "required_cyber_contract"
+                        ]["verifier_contract"],
+                        "context_schema_version": "cyber_verification_context_v1",
+                    },
+                },
+                "data_minimization": {
+                    "components_included": False,
+                    "diagnostics_included": False,
+                    "evidence_payloads_included": False,
+                    "prompts_included": False,
+                    "traces_included": False,
+                    "flags_included": False,
+                },
+            },
+        },
+        "cleanup.json": {
+            "create_attempted": True,
+            "instance_created": True,
+            "instance_id": instance,
+            "instance_closed": True,
+            "possible_instance_leak": False,
+        },
+        "recording.json": {"samples": [{"tokens": [1], "response_length": 1}]},
+    }
+    for name, value in values.items():
+        write(directory / name, value)
+    accepted = {
+        "task_version_id": binding["task"]["version_id"],
+        "instance_id": instance,
+        "verifier_execution_id": execution,
+        "done_reason": "report_submitted",
+        "config_sha256": binding["config_sha256"],
+        "sample_count": 1,
+        "files": {name: fleet.sha256((directory / name).read_bytes()) for name in values},
+    }
+    write(
+        directory / "ACCEPTED.json",
+        {**accepted, "sha256": fleet.digest_without(accepted, "sha256")},
+    )
+
+
+def batch(plan: dict, phase: str, step: int, rows: list[dict], reward_offset: int) -> None:
+    args = plan["arguments"]
+    repetitions = args["samples_per_prompt"] if phase == "train" else 1
+    count = args["groups"] if phase == "train" else args["dev_rows"]
+    trajectories = [[str(uid), rep] for uid in range(count) for rep in range(repetitions)]
+    value = {
+        "schema": "cyber_skyrl_batch_v1",
+        "phase": phase,
+        "global_step": step,
+        "trajectory_ids": trajectories,
+        "data_sha256": plan["data"]["sha256"],
+        "optimizer_step_verified": False,
+    }
+    identifier = fleet.sha256(
+        fleet.canonical_json({k: value[k] for k in ("phase", "global_step", "trajectory_ids")})
+    ).removeprefix("sha256:")[:24]
+    directory = Path(plan["output_root"]) / "episodes/batches" / identifier
+    directory.mkdir(parents=True)
+    for index, (uid, _) in enumerate(trajectories):
+        source = json.loads(rows[int(uid)]["cyber_config_json"])
+        episode(plan, directory, value, index, source, float((index + reward_offset) % 2))
+    write(directory / "COLLECTED.json", sealed(value))
+
+
+@pytest.fixture
+def completed_rl(prepared, monkeypatch):  # noqa: F811
+    plan, tmp = copy.deepcopy(prepared.plan), prepared.state.tmp
+    # Unit fixtures use a temporary root rather than shared SFS. The production
+    # path policy is tested by SkyRL's own configuration suite.
+    monkeypatch.setattr(skyrl.SkyRLConfig, "validate", lambda self: None)
+    data = tmp / "out"
+    plan["arguments"].update(
+        data_manifest=str(data / "manifest.json"),
+        train_data=str(data / "train.jsonl"),
+        dev_data=str(data / "dev.jsonl"),
+        train_rows=1,
+        dev_rows=1,
+    )
+    plan["data"] = json.loads((data / "manifest.json").read_text())
+    output = tmp / "result"
+    plan["output_root"] = plan["arguments"]["output_root"] = str(output)
+    base = tmp / "base"
+    model_base(base)
+    plan["model"]["root"] = plan["arguments"]["model_root"] = str(base)
+    plan["model"]["files"] = [
+        {"path": path.name, "sha256": file_digest(path)} for path in sorted(base.iterdir())
+    ]
+    for split in ("train", "dev"):
+        path = data / f"{split}.jsonl"
+        row = json.loads(path.read_text())
+        config = json.loads(row["cyber_config_json"])
+        config["model"]["root"] = str(base)
+        config["config_sha256"] = fleet.digest_without(config, "config_sha256")
+        row["cyber_config_json"] = fleet.canonical_json(config).decode()
+        payload = fleet.canonical_json(row) + b"\n"
+        path.write_bytes(payload)
+        plan["data"]["files"][split]["sha256"] = fleet.sha256(payload)
+    plan["data"]["sha256"] = "sha256:" + digest(
+        {key: value for key, value in plan["data"].items() if key != "sha256"}
+    )
+    write(data / "manifest.json", plan["data"])
+    plan["native_overrides"] = skyrl.overrides(skyrl.SkyRLConfig(**plan["arguments"]))
+    checkpoint(output, 1, changed=True)
+    checkpoint(output, 2, changed=True)
+    (output / "checkpoints/latest_ckpt_global_step.txt").write_text("2")
+    source_rows = {
+        split: [json.loads(line) for line in (data / f"{split}.jsonl").read_text().splitlines()]
+        for split in ("train", "dev")
+    }
+    for phase, step in (("eval", 0), ("train", 1), ("eval", 1), ("train", 2), ("eval", 2)):
+        batch(plan, phase, step, source_rows["dev" if phase == "eval" else "train"], step)
+    with (output / "metrics.jsonl").open("w") as stream:
+        for step in (1, 2):
+            stream.write(
+                json.dumps(
+                    {
+                        "optimizer_step": step,
+                        "time": float(step),
+                        "policy/loss": 0.5,
+                        "policy/approx_kl": 0.01,
+                        "policy/entropy": 0.2,
+                        "policy/grad_norm": 1.0,
+                    }
+                )
+                + "\n"
+            )
+    terminal = {
+        "status": "native_loop_returned",
+        "plan_sha256": digest(plan),
+        "checkpoint_global_step": 2,
+        "completed_batches": 5,
+        "completed_at": 1.0,
+        "optimizer_update_independently_verified": False,
+        "checkpoint_reload_verified": False,
+    }
+    write(output / "NATIVE_TRAINING_COMPLETE.json", sealed(terminal, prefix=False))
+    return SimpleNamespace(plan=plan, root=output, data=data, base=base, manifest=tmp / "seal.json")
+
+
+def test_rl_checkpoint_seal_and_zero_update_bf16_export(completed_rl, monkeypatch):
+    state = completed_rl
+    before = {path: path.read_bytes() for path in state.root.rglob("*") if path.is_file()}
+    manifest = post.seal_checkpoint(state.plan, state.manifest)
+    post.verify_manifest(manifest)
+    assert manifest["rollout_evidence"]["train_rollouts"] == 16
+    assert manifest["rollout_evidence"]["reward_min"] == 0
+    assert manifest["rollout_evidence"]["reward_max"] == 1
+    assert manifest["update_evidence"]["changed_parameter_tensors"] == 1
+    assert manifest["optimizer_update_verified"] is True
+    assert before == {path: path.read_bytes() for path in before}
+    output = state.root / "hf-export-v1"
+    result = post.export_checkpoint(state.manifest, file_digest(state.manifest), output)
+    assert result["schema"] == post.EXPORT_SCHEMA
+    assert result["optimizer_steps_executed"] == 0
+    assert result["dtype"] == "BF16" and result["trained_tensors"] == 1
+    assert before == {path: path.read_bytes() for path in before}
+    with pytest.raises(FileExistsError):
+        post.export_checkpoint(state.manifest, file_digest(state.manifest), output)
+
+
+def test_rl_seal_rejects_source_drift_during_full_rehash(completed_rl):
+    state = completed_rl
+
+    def mutate(*_):
+        (state.base / "config.json").write_text('{"changed":true}')
+
+    with pytest.raises(ValueError, match="changed during"):
+        post.seal_checkpoint(state.plan, state.manifest, progress=mutate)
+    assert not state.manifest.exists()
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "missing_file",
+        "corrupt_file",
+        "wrong_step",
+        "wrong_plan",
+        "partial_payload",
+        "source_drift",
+        "reward_constant",
+        "metric_missing",
+    ],
+)
+def test_rl_seal_rejects_broken_evidence(completed_rl, fault):
+    state = completed_rl
+    checkpoint_file = (
+        state.root / "checkpoints/global_step_2/policy/extra_state_world_size_8_rank_7.pt"
+    )
+    if fault == "missing_file":
+        checkpoint_file.unlink()
+    elif fault == "corrupt_file":
+        checkpoint_file.write_bytes(b"corrupt")
+    elif fault == "wrong_step":
+        torch.save({"global_step": 1}, state.root / "checkpoints/global_step_2/trainer_state.pt")
+    elif fault == "wrong_plan":
+        state.plan["arguments"]["lr"] = 3e-6
+    elif fault == "partial_payload":
+        accepted = next(state.root.glob("episodes/batches/*/episode-0/ACCEPTED.json"))
+        value = json.loads(accepted.read_text())
+        value["files"].pop("recording.json")
+        write(accepted, sealed({k: v for k, v in value.items() if k != "sha256"}))
+    elif fault == "source_drift":
+        (state.data / "train.jsonl").write_text("changed")
+    elif fault == "reward_constant":
+        for path in state.root.glob("episodes/batches/*/episode-*/reward.json"):
+            value = json.loads(path.read_text())
+            value["reward"] = 0.0
+            write(path, value)
+            accepted_path = path.parent / "ACCEPTED.json"
+            accepted = json.loads(accepted_path.read_text())
+            accepted["files"]["reward.json"] = fleet.sha256(path.read_bytes())
+            write(accepted_path, sealed({k: v for k, v in accepted.items() if k != "sha256"}))
+    else:
+        rows = [
+            json.loads(line) for line in (state.root / "metrics.jsonl").read_text().splitlines()
+        ]
+        for row in rows:
+            row.pop("policy/entropy")
+        (state.root / "metrics.jsonl").write_text("\n".join(json.dumps(row) for row in rows) + "\n")
+    with pytest.raises((ValueError, KeyError, json.JSONDecodeError)):
+        post.seal_checkpoint(state.plan, state.manifest)
+    assert not state.manifest.exists()
+
+
+@pytest.mark.parametrize("fault", ["wrong_plan", "wrong_step", "partial", "source"])
+def test_rl_manifest_reverification_rejects_drift(completed_rl, fault):
+    state = completed_rl
+    value = copy.deepcopy(post.seal_checkpoint(state.plan, state.manifest))
+    if fault == "wrong_plan":
+        value["source_plan_sha256"] = "0" * 64
+    elif fault == "wrong_step":
+        value["optimizer_step"] = 1
+    elif fault == "partial":
+        value["total_bytes"] -= value["files"].pop("policy/extra_state_world_size_8_rank_7.pt")[
+            "bytes"
+        ]
+    else:
+        (state.base / "config.json").write_text("{}")
+    if fault != "source":
+        value["receipt_sha256"] = digest(
+            {key: item for key, item in value.items() if key != "receipt_sha256"}
+        )
+    with pytest.raises(ValueError):
+        post.verify_manifest(value, check_files=fault == "source")

@@ -1,0 +1,74 @@
+{
+  "schema": "cyber_qwen38_skyrl_reward_canary_port_v4",
+  "source": {
+    "runtime_commit": "8b5e8a00521b4fe412e3e7d0bce9b8ea6855b005",
+    "preflight_commit": "6c0bc541e136fc114a3f7a17ce6ba07e9178bb78",
+    "ported_onto_commit": "077b2546ab218ca53b17be215a30192ff74b1415"
+  },
+  "execution": {
+    "cluster_target": "prod",
+    "jobs_api_base_url": "https://api.ft.flt.build",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
+    "environment": {
+      "VLLM_USE_FLASHINFER_SAMPLER": "0"
+    }
+  },
+  "historical_evidence": {
+    "image_cpu_qualification": {
+      "path": "../../docs/evidence/qwen38-study/2026-09-12-skyrl-worker-rpc-relay-image-cpu-qualification-v1.json",
+      "file_sha256": "sha256:cb993198e84220a74ed77f471359b36149bb47eb7bf3380aea0e4edb98b55c19"
+    },
+    "engine_qualification": {
+      "path": "../../docs/evidence/qwen38-study/2026-09-14-skyrl-prod2-engine-qualification-v1.json",
+      "file_sha256": "sha256:072544d61e934045ab0fb8ee4192f094027a155fef5865cd2453793d23fce63d",
+      "scope": "two_by_four_engine_startup_and_release_only"
+    },
+    "tool_order_failure": {
+      "path": "../../docs/evidence/qwen38-study/2026-09-14-skyrl-reward-canary-dev1-tool-order-failure-v1.json",
+      "file_sha256": "sha256:3c93c0657ac6cc6adf6154b7de8b86a88879a138a2418e2bf949882caa84eaad"
+    },
+    "source_preflight": {
+      "path": "../../docs/evidence/qwen38-study/2026-09-14-skyrl-reward-canary-dev2-preflight-v1.json",
+      "file_sha256": "sha256:a113822787cc0b48272ab40c8639d4566ec04ba9226bf84b0a8fa7d1ed157699",
+      "classification": "historical_preflight_provenance",
+      "gating": false
+    },
+    "topology_v16": {
+      "path": "../../docs/evidence/qwen38-study/2026-09-20-skyrl-topology-probe-v16-qualification-summary.json",
+      "file_sha256": "sha256:3dc1fcaf939987f573c3bef7ae0170d568ffbf25888169585df83611a087b514",
+      "classification": "execution_and_release_only",
+      "gating": false
+    }
+  },
+  "topology_successor": {
+    "config_path": "qwen38-skyrl-topology-probe-dev-v2.json",
+    "config_file_sha256": "sha256:ceb413e27765dbbd88865c9f22ad186ee4f39387de93874111714f7861f9d529",
+    "config_self_sha256": "sha256:f7d53ee426ee4f23e1c608bc17583f5f105ac30b6a8c19b04f966b908cc47d52",
+    "name": "chris-q38-skyrl-probe-v17",
+    "plan_sha256": "sha256:b398e73ba3124c4f22e53aceb9ac7924916ba2a3027a3f780261d184505ae678",
+    "request_sha256": "sha256:def61728802c80a304a5f2ffdc0c1c22dae785737f2f23c03e9455b1712bda83",
+    "fleetjob_manifest_sha256": "sha256:0f8c7f3f5a6772fd4aaef706d8d2a638e6e7b24cb87edc6c3b0937d95bd6f389",
+    "preflight_manifest_sha256": "sha256:64f06f9a9ed4db4de4cd2ce3afa2b84b25b8f7d4be471c32dd96e3842004ef14",
+    "receipt_verifier_manifest_sha256": "sha256:1409b89a9c113ff6ca2b7cb1afcfdc8428c0bd475b123d0820f185c684e8edfe",
+    "required_terminal_receipt": "TOPOLOGY_PROBE.json",
+    "terminal_receipt_grace_seconds": 30,
+    "accepted": false
+  },
+  "source_closure": {
+    "task_set": "../data/qwen38-rl-reward-canary-task-set-v3.json",
+    "split": "../data/qwen38-rl-reward-canary-split-v1.json",
+    "horizon": "../data/qwen38-rl-reward-canary-horizon-v1.json",
+    "tool_catalog": "../data/qwen38-rl-filtered-canary-tool-catalog-v1.json"
+  },
+  "submission_gate": {
+    "preview_authorized": false,
+    "submission_authorized": false,
+    "blockers": [
+      "v17_topology_receipt_and_release_not_yet_accepted",
+      "prod4_data_not_yet_staged_and_digest_verified",
+      "prod4_cpu_preflight_and_jobs_preview_not_yet_recorded",
+      "prod4_jobs_kubernetes_sfs_wandb_absence_not_yet_rechecked"
+    ]
+  },
+  "sha256": "sha256:bab0bd6e8924289f9f01d8ae379a9fc30f726b7723468d7d012d949e41555a80"
+}

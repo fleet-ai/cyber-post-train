@@ -60,6 +60,33 @@ base checkpoint; SkyRL loads the pinned HF base directly. Preparation does not t
 the [qualification status](docs/CONSOLIDATION.md) distinguishes tested plumbing
 from real reward/optimizer evidence.
 
+SkyRL has a separate development-only topology probe for checking the exact
+one-node, two-TP4-engine setup before any scientific canary is considered:
+
+```sh
+uv run --locked cyber-post-train rl-topology-probe \
+  configs/qualification/qwen38-skyrl-topology-probe-dev-v2.json \
+  --output /shared/new-probe-plan
+```
+
+The sealed probe has a 25-minute process bound and a 30-minute RayJob deadline.
+It receives only Fleet authentication through a named Kubernetes Secret, disables
+W&B, reads no task rows, performs no rollout or optimizer step, and cannot write a
+checkpoint. Its qualification transport is the exact embedded RayJob projected
+to one root RayJob: one eight-GPU head and its unchanged dormant zero-replica
+worker group. The prepared plan is permanently bound to the development
+Kubernetes context, namespace, project, queue, model mount, image and runtime
+user. Server-validate the exact create-once object without creating it:
+
+```sh
+uv run --locked cyber-post-train rl-topology-probe-rayjob-preview \
+  /shared/new-probe-plan
+```
+
+Submission remains blocked until the exact-image CPU preflight and an independent
+30-minute cleanup/release observer are recorded. See the
+[probe runbook](docs/QWEN38_SKYRL_TOPOLOGY_PROBE_DEV_V1.md).
+
 ## Evaluation
 
 ```sh

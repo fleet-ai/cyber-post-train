@@ -565,6 +565,35 @@ masked tool observations. A group with identical valid rewards is a valid
 zero-signal group, not proof of useful learning. Require real reward acquisition,
 an optimizer update and a recoverable checkpoint before scaling either backend.
 
+Native SkyRL has its own post-training evidence adapter in
+`training/skyrl_posttrain.py`; it never sends a SkyRL plan through the SFT plan
+validator. `seal_checkpoint` is a CPU-only, create-once gate over the exact
+terminal run receipt, every planned train/development batch, every accepted
+Fleet episode, authoritative reward and verifier IDs, confirmed environment
+cleanup, finite per-update loss/KL/entropy/gradient scalars, a nonzero parameter
+change, checkpoint cadence, sampler cursor, and the complete FSDP payload. It
+hashes the checkpoint, staged base model, private train/dev package, and evidence
+files twice and rejects any replacement or drift. The public manifest contains
+only counts, digests, and immutable identities; it never copies prompts, traces,
+flags, answers, or private trainer logs.
+
+`export_checkpoint` accepts only the resulting
+`cyber_native_skyrl_rl_checkpoint_manifest_v1` receipt. It reuses the qualified
+one-tensor-at-a-time native FSDP reconstruction writer, creates a complete BF16
+Hugging Face destination exactly once, executes zero optimizer updates, reopens
+every output tensor, restores only the exact frozen MTP allowlist from the bound
+base, and proves the checkpoint/base/data inputs stayed unchanged. Its
+`cyber_native_skyrl_rl_hf_export_v1` receipt is still not a GPU reload or serving
+certificate. A separate zero-update reload, paused new-UID registration, and
+live parity check remain mandatory before evaluation traffic.
+
+After the exact run has terminally succeeded and released its GPUs, invoke the
+same gates through `cyber-post-train rl-checkpoint-seal <prepared-dir> --output
+<new-manifest.json>` and then `cyber-post-train rl-checkpoint-export
+<manifest.json> --sha256 <manifest-file-sha256> --output <new-export-root>`.
+Both destinations are create-once. Do not run either command against a live,
+failed, rejected, partial, or unbound run.
+
 ### Adapter boundaries for maintainers
 
 Both adapters preserve sampled token IDs/log probabilities, mask tool/template

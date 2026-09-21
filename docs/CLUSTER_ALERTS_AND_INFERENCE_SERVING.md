@@ -58,6 +58,15 @@ proves it does not use, adds the root annotation before creation, server-dry-run
 the result, journals the intent and executes one create. Do not reproduce that
 transformation by hand or extend it to RL/conversion without a separate review.
 
+Manifests prepared before this invariant are not grandfathered launch inputs.
+The two Qwen3.8 staging plans that lacked the annotation were removed from
+`cluster/jobs` and retained only as fenced, digest-bound Markdown evidence; the
+[sanitized receipt](evidence/failed-job-alert-opt-out-20260920.json) records both
+their exact historical hashes and the fail-closed preview that motivated this
+boundary. Never extract and submit those bytes. If their work is needed again,
+render a newly named successor and prove the canonical root annotation on that
+exact render before creation.
+
 Do not use a production Job as the next debugging environment merely because unit
 tests passed. Exercise the packaged entrypoint, real runtime user, native
 dependencies and failure/cleanup paths locally first. Explicit, handled validation
