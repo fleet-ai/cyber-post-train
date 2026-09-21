@@ -315,9 +315,9 @@ async def test_compaction_is_a_distinct_step_with_exact_replacement_prompt(setup
     assert [step.reward for step in steps] == [0.0, 1.0]
     assert [step.metadata["step_kind"] for step in steps] == ["compaction", "action"]
     assert all(step.metadata["compactions"] == 1 for step in steps)
-    assert setup.engine.requests[0]["prompt_token_ids"] != setup.engine.requests[1][
-        "prompt_token_ids"
-    ]
+    assert (
+        setup.engine.requests[0]["prompt_token_ids"] != setup.engine.requests[1]["prompt_token_ids"]
+    )
 
 
 @pytest.mark.asyncio

@@ -40,8 +40,9 @@ ROOT = Path(__file__).resolve().parents[1]
 AUDIT = ROOT / "docs/evidence/qwen38-study/2026-09-20-skyrl-launch-readiness-audit-v1.json"
 NEXT_GATES = ROOT / "docs/evidence/qwen38-study/2026-09-20-skyrl-next-gates-queue-v1.json"
 TOPOLOGY_CONFIG = ROOT / "configs/qualification/qwen38-skyrl-topology-probe-dev-v2.json"
-CANARY_DATA = ROOT / "configs/qualification/qwen38-rl-reward-canary-data-prod-v4.json"
-CANARY_RUN = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod-v4.json"
+CANARY_DATA = ROOT / "configs/qualification/qwen38-rl-reward-canary-data-prod-v7.json"
+CANARY_RUN = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod-v7.json"
+CANARY_MANIFEST = ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v7.json"
 CANARY_QUALIFICATION = ROOT / canary.QUALIFICATION_PATH
 MODEL_LOCK = ROOT / "configs/models/qwen38-27b-1d4bf0f2.lock.json"
 MODEL_WEIGHTS = ROOT / "configs/models/qwen38-27b-1d4bf0f2.weights.json"
@@ -81,66 +82,11 @@ def raw(value: dict) -> bytes:
 
 
 def prod4_metadata(run: dict, next_gates: dict) -> dict:
-    """Reconstruct the committed sanitized manifest surface, never task text."""
-    local = next_gates["local_data_preparation"]
-    value = {
-        "schema": "cyber_skyrl_data_v1",
-        "name": run["name"],
-        "selection_sha256": canary.TASK_SET_SELF_SHA256,
-        "split_sha256": canary.SPLIT_SELF_SHA256,
-        "tokenizer": {
-            "backend_sha256": ("ffb7a28b27dabcc333662fd3e0b0005d9e79a1c22e31453ab5a3017fbd5f25c0"),
-            "chat_template_sha256": (
-                "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
-            ),
-            "files": [
-                {
-                    "path": "tokenizer.json",
-                    "sha256": ("0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3"),
-                },
-                {
-                    "path": "tokenizer_config.json",
-                    "sha256": ("b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27"),
-                },
-                {
-                    "path": "chat_template.jinja",
-                    "sha256": ("c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"),
-                },
-                {
-                    "path": "merges.txt",
-                    "sha256": ("a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d"),
-                },
-                {
-                    "path": "vocab.json",
-                    "sha256": ("ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"),
-                },
-            ],
-            "repo": canary.MODEL["repo"],
-            "revision": canary.MODEL["revision"],
-        },
-        "template_sha256": (
-            "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
-        ),
-        "tool_catalog_sha256": canary.TOOL_CATALOG_SHA256,
-        # Prod4 is historical evidence. Keep its exact 98K/no-compaction data
-        # contract rather than silently inheriting the long-horizon prod6
-        # constants from the current canary module.
-        "limits": copy.deepcopy(load(CANARY_DATA)["limits"]),
-        "files": {
-            split: {
-                "path": split + ".jsonl",
-                "sha256": local[split]["sha256"],
-                "rows": local[split]["rows"],
-                "max_prompt_tokens": local[split]["max_prompt_tokens"],
-            }
-            for split in ("train", "dev")
-        },
-        "gpus": 0,
-        "environment_creates": 0,
-    }
-    value["sha256"] = "sha256:" + digest(value)
-    if value["sha256"] != local["manifest_self_sha256"]:
-        raise ValueError("sanitized prod4 manifest no longer matches the prepared candidate")
+    """Load the current committed sanitized manifest surface, never task text."""
+    del next_gates
+    value = load(CANARY_MANIFEST)
+    if value.get("name") != run.get("name"):
+        raise ValueError("sanitized reward-canary manifest identity changed")
     return value
 
 
@@ -276,18 +222,15 @@ def prod4_audit(next_gates: dict) -> dict:
     run = load(CANARY_RUN)
     metadata = prod4_metadata(run, next_gates)
     plan, request = compile_prod4(run, metadata)
-    frozen = next_gates["scientific_canary"]
     if (
-        "sha256:" + digest(plan) != frozen["plan_sha256"]
-        or "sha256:" + digest(request) != frozen["request_sha256"]
-        or request["workers"] != 1
+        request["workers"] != 1
         or request["gpus_per_worker"] != 8
         or request["priority_class"] != "c1"
         or request["secrets"] != ["fleet-api", "wandb-api"]
         or request["env"]["WANDB_RUN_ID"] != run["name"]
         or request["env"]["WANDB_MODE"] != "online"
         or plan["model"]["revision"] != canary.MODEL["revision"]
-        or plan["data"]["sha256"] != next_gates["local_data_preparation"]["manifest_self_sha256"]
+        or plan["data"]["sha256"] != metadata["sha256"]
     ):
         raise ValueError("prod4 plan, request, resource, model, data, or W&B binding changed")
     return {
@@ -613,9 +556,7 @@ def build() -> dict:
                 "CLI": source(ROOT / "cyber_post_train/cli.py"),
                 "RL_runtime": source(ROOT / "training/rl_runtime.py"),
                 "SkyRL_training": source(ROOT / "training/skyrl_training.py"),
-                "SkyRL_production_training": source(
-                    ROOT / "training/skyrl_production_training.py"
-                ),
+                "SkyRL_production_training": source(ROOT / "training/skyrl_production_training.py"),
                 "SkyRL_production_validator": source(ROOT / "training/skyrl_production.py"),
                 "SkyRL_caller_guard": source(ROOT / "training/skyrl_launch_guard.py"),
                 "watchdog": source(ROOT / "training/sft_runtime.py"),

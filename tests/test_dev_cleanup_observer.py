@@ -517,8 +517,7 @@ class FlakyActiveDirectRayJobCluster(FakeDirectRayJobCluster):
             if self.target_reads > 1 and not self.deleted:
                 self.terminal = (
                     self.timeouts
-                    >= cleanup.KUBECTL_ATTEMPTS
-                    * cleanup.MAX_CONSECUTIVE_OBSERVATION_FAILURES
+                    >= cleanup.KUBECTL_ATTEMPTS * cleanup.MAX_CONSECUTIVE_OBSERVATION_FAILURES
                     and self.recovered_active_reads >= 1
                 )
                 value = self._object(
@@ -535,8 +534,7 @@ class FlakyActiveDirectRayJobCluster(FakeDirectRayJobCluster):
             if (
                 self.pod_list_reads > 1
                 and self.timeouts
-                < cleanup.KUBECTL_ATTEMPTS
-                * cleanup.MAX_CONSECUTIVE_OBSERVATION_FAILURES
+                < cleanup.KUBECTL_ATTEMPTS * cleanup.MAX_CONSECUTIVE_OBSERVATION_FAILURES
             ):
                 self.timeouts += 1
                 raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
@@ -553,11 +551,7 @@ class FlakyActiveDirectRayJobCluster(FakeDirectRayJobCluster):
                     self._object(
                         "probe-pod-23",
                         23,
-                        spec={
-                            "containers": [
-                                {"resources": {"requests": {"nvidia.com/gpu": 8}}}
-                            ]
-                        },
+                        spec={"containers": [{"resources": {"requests": {"nvidia.com/gpu": 8}}}]},
                         status={
                             "containerStatuses": [
                                 {

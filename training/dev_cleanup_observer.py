@@ -518,9 +518,7 @@ class Observer:
                 code="gpu_contract_exceeded",
             )
 
-    def _record_observation_failure(
-        self, error: ObserverError, consecutive_failures: int
-    ) -> None:
+    def _record_observation_failure(self, error: ObserverError, consecutive_failures: int) -> None:
         self.observation_failures += 1
         self.max_consecutive_observation_failures = max(
             self.max_consecutive_observation_failures,
@@ -637,9 +635,7 @@ class Observer:
                 "receipt": receipt,
                 "observer_error_class": observer_error_class,
                 "observation_failures": self.observation_failures,
-                "max_consecutive_observation_failures": (
-                    self.max_consecutive_observation_failures
-                ),
+                "max_consecutive_observation_failures": (self.max_consecutive_observation_failures),
                 "last_observation_error_code": self.last_observation_error_code,
                 "deletion_reason": self.deletion_reason,
                 "deletion_requested_at": self.deletion_requested_at,
@@ -669,9 +665,7 @@ class Observer:
                         break
                 except ObserverError as exc:
                     consecutive_observation_failures += 1
-                    self._record_observation_failure(
-                        exc, consecutive_observation_failures
-                    )
+                    self._record_observation_failure(exc, consecutive_observation_failures)
                     # _bind runs before child discovery.  If the exact target
                     # UID was bound and a later read failed, continue through
                     # the normal observation loop instead of treating that
@@ -699,28 +693,21 @@ class Observer:
                     consecutive_observation_failures = 0
                 except CleanupAuthorizedError as exc:
                     consecutive_observation_failures += 1
-                    self._record_observation_failure(
-                        exc, consecutive_observation_failures
-                    )
+                    self._record_observation_failure(exc, consecutive_observation_failures)
                     observer_error = exc
                     deletion_authorized = True
                     self.deletion_reason = exc.code
                     break
                 except ObserverError as exc:
                     consecutive_observation_failures += 1
-                    self._record_observation_failure(
-                        exc, consecutive_observation_failures
-                    )
+                    self._record_observation_failure(exc, consecutive_observation_failures)
                     # An observation failure is not evidence that a healthy
                     # workload is terminal, broken, or stalled.  In
                     # particular, repeated Kubernetes read timeouts must not
                     # turn the cleanup observer into a job killer.  Keep
                     # watching until a positive terminal/resource signal or
                     # the plan-bound deadline authorizes exact-UID cleanup.
-                    if (
-                        consecutive_observation_failures
-                        >= MAX_CONSECUTIVE_OBSERVATION_FAILURES
-                    ):
+                    if consecutive_observation_failures >= MAX_CONSECUTIVE_OBSERVATION_FAILURES:
                         time.sleep(min(max(self.poll_seconds, 1.0), 30.0))
                     continue
                 if self.snapshot.terminal_status:

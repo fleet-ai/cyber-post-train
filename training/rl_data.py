@@ -211,10 +211,7 @@ def build(config: dict, *, relative_to: Path, client) -> dict:
                 and limits["generation_chunk_tokens"] <= limits["max_tokens_per_turn"]
                 and limits["compaction_summary_tokens"] <= limits["max_tokens_per_turn"]
             )
-            or (
-                not compacted
-                and response_tokens < limits["context_tokens"] <= 98304
-            )
+            or (not compacted and response_tokens < limits["context_tokens"] <= 98304)
         )
     ):
         raise ValueError("response/context budget outside native Qwen profile")

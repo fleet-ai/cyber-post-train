@@ -26,13 +26,9 @@ def test_stage_plan_is_dev_only_zero_science_and_create_once(plan) -> None:
     assert plan["execution"]["cluster_target"] == "dev"
     assert plan["execution"]["priority"] == "c1"
     assert plan["execution"]["deadline_seconds"] == 1200
-    assert plan["execution"]["artifact_path"] == (
-        "fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4"
-    )
+    assert plan["execution"]["artifact_path"] == ("fleetjob-dev/qwen38-27b-1d4bf0f2-skyrl-v4")
     assert plan["model"]["repo"] == "Qwen/Qwen3.8-27B"
-    assert plan["model"]["revision"] == (
-        "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
-    )
+    assert plan["model"]["revision"] == ("1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0")
     assert len(plan["model"]["files"]) == 28
     assert set(plan["scientific_work"].values()) == {0}
 
@@ -42,6 +38,7 @@ def test_stage_job_is_zero_gpu_single_models_mount_and_explicit_user(plan) -> No
     assert manifest["metadata"] == {
         "name": "chris-q38-modelstage-v4",
         "namespace": "fleet-train-jobs",
+        "annotations": {"fleet.ai/failure-alerts": "off"},
     }
     assert manifest["spec"]["activeDeadlineSeconds"] == 1200
     assert manifest["spec"]["backoffLimit"] == 0
@@ -124,9 +121,7 @@ def test_stage_server_preview_accepts_only_exact_defaults(plan) -> None:
     assert proof["gpus"] == 0
     assert proof["runtime_user"] == {"uid": 1000, "gid": 100}
     changed = _server_render(manifest)
-    changed["spec"]["template"]["spec"]["containers"][0]["securityContext"][
-        "runAsUser"
-    ] = 0
+    changed["spec"]["template"]["spec"]["containers"][0]["securityContext"]["runAsUser"] = 0
     with pytest.raises(JobsError, match="server dry-run changed"):
         stage.validate_preview(plan, manifest, changed)
 
@@ -185,9 +180,7 @@ def test_stage_publishes_copied_exact_inventory_atomically(
     assert receipt["optimizer_steps"] == receipt["rollout_episodes"] == 0
     assert artifact.is_dir() and not artifact.is_symlink()
     assert not os.path.samefile(source / "tokenizer.json", artifact / "tokenizer.json")
-    assert (source / "tokenizer.json").read_bytes() == (
-        artifact / "tokenizer.json"
-    ).read_bytes()
+    assert (source / "tokenizer.json").read_bytes() == (artifact / "tokenizer.json").read_bytes()
     saved = json.loads((artifact / ".CYBER_ARTIFACT.json").read_text())
     assert saved == receipt
     assert not any(path.name.startswith(".artifact.tmp-") for path in artifact.parent.iterdir())
@@ -205,9 +198,7 @@ def test_stage_rejects_existing_destination_without_changing_it(
     assert sentinel.read_text() == "peer"
 
 
-def test_stage_rejects_digest_drift_before_creating_temp(
-    plan, tmp_path: Path, monkeypatch
-) -> None:
+def test_stage_rejects_digest_drift_before_creating_temp(plan, tmp_path: Path, monkeypatch) -> None:
     value, source, artifact = _small_plan(plan, tmp_path, monkeypatch)
     (source / "tokenizer.json").write_text("changed")
     with pytest.raises(stage.StageGateError, match="source_file_digest_mismatch_00"):

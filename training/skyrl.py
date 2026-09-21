@@ -112,8 +112,7 @@ class SkyRLConfig:
             self.generation_chunk_tokens <= self.tokens_per_turn <= self.response_tokens
             and self.compaction_summary_tokens <= self.tokens_per_turn
             and (
-                not self.compaction_enabled
-                or self.compaction_trigger_tokens > self.tokens_per_turn
+                not self.compaction_enabled or self.compaction_trigger_tokens > self.tokens_per_turn
             )
             and self.compaction_trigger_tokens + self.tokens_per_turn < self.context_tokens
             and self.context_tokens <= 262144

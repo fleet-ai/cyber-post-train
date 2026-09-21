@@ -465,9 +465,8 @@ async def offline_long_horizon_probe(model, tokenizer, helper: Path):
         '{"flags":[],"explanation":""}}</tool_call>'
     )
     action_ids = list(tokenizer.encode(complete, add_special_tokens=False))
-    if (
-        not 8 < len(action_ids) < limits["max_tokens_per_turn"]
-        or any(type(token) is not int or token < 0 for token in action_ids)
+    if not 8 < len(action_ids) < limits["max_tokens_per_turn"] or any(
+        type(token) is not int or token < 0 for token in action_ids
     ):
         raise InvalidEpisode("skyrl_offline_probe_response_invalid")
 
@@ -530,9 +529,7 @@ async def offline_long_horizon_probe(model, tokenizer, helper: Path):
         1024,
         helper,
     )
-    _, reason, _ = await rl_episode._agent(
-        recorder, session, messages, tools, limits, parse
-    )
+    _, reason, _ = await rl_episode._agent(recorder, session, messages, tools, limits, parse)
     samples = recorder.finalize(1.0, {"verifier_execution_id": "offline-probe"}, 0.0)
     action_requests = engine.requests[1:]
     if (
@@ -540,8 +537,7 @@ async def offline_long_horizon_probe(model, tokenizer, helper: Path):
         or session.calls
         != [("bash", {"script": "true"}), ("submit_report", {"flags": [], "explanation": ""})]
         or len(action_requests) < 2
-        or [sample.metadata["step_kind"] for sample in samples]
-        != ["compaction", "action"]
+        or [sample.metadata["step_kind"] for sample in samples] != ["compaction", "action"]
         or [sample.reward for sample in samples] != [0.0, 1.0]
         or samples[0].tokens[: -samples[0].response_length]
         == samples[1].tokens[: -samples[1].response_length]

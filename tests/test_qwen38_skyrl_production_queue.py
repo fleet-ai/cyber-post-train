@@ -165,9 +165,10 @@ def test_queue_is_fail_closed_behind_canary_and_fresh_external_checks() -> None:
         "broad_get_only_data_manifests_not_yet_create_once_staged_on_SFS"
         in qualification["submission_gate"]["blockers"]
     )
-    assert "broad_get_only_data_manifests_not_built_or_staged" not in qualification[
-        "submission_gate"
-    ]["blockers"]
+    assert (
+        "broad_get_only_data_manifests_not_built_or_staged"
+        not in qualification["submission_gate"]["blockers"]
+    )
     assert qualification["private_data"]["state"] == "locally_built_not_staged"
     assert qualification["private_data"]["fleet_reads"]["mutating_requests"] == 0
     assert len(qualification["private_data"]["arms"]) == 5

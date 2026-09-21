@@ -119,9 +119,7 @@ def bundled_request(
         key.startswith("CYBER_RUNTIME_BUNDLE") for key in request.get("env", {})
     ):
         raise JobsError("runtime bundle is too large or overrides reserved transport fields")
-    if not (
-        1 <= transport_chunk_size <= transport_split_threshold <= 120000
-    ):
+    if not (1 <= transport_chunk_size <= transport_split_threshold <= 120000):
         raise JobsError("runtime bundle transport limits are invalid")
     transport = {"CYBER_RUNTIME_BUNDLE": encoded}
     expression = "os.environ.pop('CYBER_RUNTIME_BUNDLE')"

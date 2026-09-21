@@ -25,9 +25,7 @@ from pathlib import Path, PurePosixPath
 from cyber_post_train.jobs import JobsError, bundled_request, digest
 
 ROOT = Path(__file__).resolve().parents[1]
-CONFIG_PATH = (
-    ROOT / "configs/qualification/qwen38-skyrl-model-artifact-stage-dev-v1.json"
-)
+CONFIG_PATH = ROOT / "configs/qualification/qwen38-skyrl-model-artifact-stage-dev-v1.json"
 CONFIG_SCHEMA = "cyber_skyrl_model_artifact_stage_config_v1"
 PLAN_SCHEMA = "cyber_skyrl_model_artifact_stage_plan_v1"
 RECEIPT_SCHEMA = "cyber_skyrl_model_artifact_stage_receipt_v1"
@@ -142,10 +140,8 @@ def _validate(plan: dict) -> None:
         or plan.get("name") != "chris-q38-modelstage-v4"
         or plan.get("image") != IMAGE
         or plan.get("execution") != execution
-        or plan.get("source_root")
-        != execution["models_mount"] + "/" + execution["source_alias"]
-        or plan.get("artifact_root")
-        != execution["models_mount"] + "/" + execution["artifact_path"]
+        or plan.get("source_root") != execution["models_mount"] + "/" + execution["source_alias"]
+        or plan.get("artifact_root") != execution["models_mount"] + "/" + execution["artifact_path"]
         or artifact.parts[:1] != ("fleetjob-dev",)
         or len(artifact.parts) != 2
         or plan.get("runtime_sha256") != digest(_runtime())
@@ -193,6 +189,7 @@ def request(plan: dict) -> dict:
             },
             "priority_class": "c1",
             "requeueIfPreempted": False,
+            "failureAlerts": False,
             "secrets": [],
             "env": {
                 "HF_HUB_OFFLINE": "1",
@@ -218,7 +215,11 @@ def job_manifest(plan: dict) -> dict:
     return {
         "apiVersion": "batch/v1",
         "kind": "Job",
-        "metadata": {"name": plan["name"], "namespace": execution["namespace"]},
+        "metadata": {
+            "name": plan["name"],
+            "namespace": execution["namespace"],
+            "annotations": {"fleet.ai/failure-alerts": "off"},
+        },
         "spec": {
             "activeDeadlineSeconds": execution["deadline_seconds"],
             "backoffLimit": 0,
@@ -232,8 +233,7 @@ def job_manifest(plan: dict) -> dict:
                             "image": IMAGE,
                             "command": ["/bin/sh", "-lc", "exec " + bundled["command"]],
                             "env": [
-                                {"name": key, "value": item}
-                                for key, item in sorted(env.items())
+                                {"name": key, "value": item} for key, item in sorted(env.items())
                             ],
                             "securityContext": {
                                 "allowPrivilegeEscalation": False,

@@ -21,10 +21,8 @@ from training import dev_cleanup_observer as cleanup
 from training import skyrl_reward_rayjob as direct
 
 ROOT = Path(__file__).resolve().parents[1]
-CANARY_RUN = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod-v6.json"
-CANARY_MANIFEST = (
-    ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v6.json"
-)
+CANARY_RUN = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod-v7.json"
+CANARY_MANIFEST = ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v7.json"
 
 
 def successor_metadata(run: dict) -> dict:

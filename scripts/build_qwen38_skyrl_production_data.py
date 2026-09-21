@@ -185,9 +185,8 @@ def inspect_private_package(
     manifest = read_mapping(root / "manifest.json")
     if (
         manifest.get("schema") != "cyber_skyrl_data_v1"
-        or manifest.get("sha256") != "sha256:" + digest(
-            {key: value for key, value in manifest.items() if key != "sha256"}
-        )
+        or manifest.get("sha256")
+        != "sha256:" + digest({key: value for key, value in manifest.items() if key != "sha256"})
         or manifest.get("selection_sha256") != task_set["sha256"]
         or manifest.get("split_sha256") != split["sha256"]
         or manifest.get("name") != config["name"]
@@ -222,9 +221,7 @@ def inspect_private_package(
         for row in split["tasks"]
         if row["split"] in {"train", "dev"}
     }
-    exact_runtime = {
-        (row["task_key"], row["task_version_id"]): row for row in task_set["tasks"]
-    }
+    exact_runtime = {(row["task_key"], row["task_version_id"]): row for row in task_set["tasks"]}
     payload_tasks = set()
     for row in train + dev:
         config_json = json.loads(row["cyber_config_json"])
@@ -285,9 +282,7 @@ def inspect_private_package(
     }
 
 
-def staging_packet(
-    arms: list[dict], task_set: dict, split: dict, upstream_gets: list[str]
-) -> dict:
+def staging_packet(arms: list[dict], task_set: dict, split: dict, upstream_gets: list[str]) -> dict:
     account_gets = sum(path == "/v1/account" for path in upstream_gets)
     task_gets = sum(path.startswith("/v1/tasks/") for path in upstream_gets)
     if account_gets != 1 or task_gets != 79 or len(upstream_gets) != 80:
@@ -348,11 +343,9 @@ def _write_packet(path: Path, packet: dict) -> None:
 
 def verify_existing(private_root: Path, packet_path: Path) -> dict:
     packet = read_mapping(packet_path)
-    if (
-        packet.get("schema") != "cyber_qwen38_skyrl_production_data_staging_v1"
-        or packet.get("sha256")
-        != "sha256:" + digest({key: value for key, value in packet.items() if key != "sha256"})
-    ):
+    if packet.get("schema") != "cyber_qwen38_skyrl_production_data_staging_v1" or packet.get(
+        "sha256"
+    ) != "sha256:" + digest({key: value for key, value in packet.items() if key != "sha256"}):
         raise ValueError("staging packet digest differs")
     configs = [(path, read_mapping(path)) for path in CONFIGS]
     task_set = read_mapping(configs[0][0].parent / configs[0][1]["task_set"])
@@ -395,9 +388,10 @@ def main() -> None:
     task_set = read_mapping(configs[0][0].parent / configs[0][1]["task_set"])
     split = read_mapping(configs[0][0].parent / configs[0][1]["split"])
     selected = rl_data.selection(task_set, split)
-    if sum(row["split"] == "train" for row in selected) != 59 or sum(
-        row["split"] == "dev" for row in selected
-    ) != 20:
+    if (
+        sum(row["split"] == "train" for row in selected) != 59
+        or sum(row["split"] == "dev" for row in selected) != 20
+    ):
         raise ValueError("production queue no longer selects Split B's 59/20 rows")
     lock = read_mapping(configs[0][0].parent / configs[0][1]["model_lock"])
     validate_native_inputs(args.skyrl_source.resolve(), args.tokenizer_root.resolve(), lock)

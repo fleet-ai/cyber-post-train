@@ -129,9 +129,7 @@ async def test_native_shapes_keep_tokens_zero_rewards_ids_and_source(setup, phas
     assert output["trajectory_ids"] == source["trajectory_ids"]
     assert all(
         actual is expected
-        for actual, expected in zip(
-            output["trajectory_ids"], source["trajectory_ids"], strict=True
-        )
+        for actual, expected in zip(output["trajectory_ids"], source["trajectory_ids"], strict=True)
     )
     assert output["is_last_step"] == [True] * n
     assert output["stop_reasons"] == ["stop"] * n

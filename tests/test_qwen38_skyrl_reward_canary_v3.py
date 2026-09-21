@@ -15,14 +15,14 @@ from training import rl_reward_canary as canary
 from training import sft, skyrl_training
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA = ROOT / "configs/qualification/qwen38-rl-reward-canary-data-prod-v6.json"
-RUN = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod-v6.json"
-MANIFEST = ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v6.json"
-QUALIFICATION = ROOT / canary.QUALIFICATION_PATH
-QUEUE_EVIDENCE = (
-    ROOT
-    / "docs/evidence/qwen38-study/2026-09-20-skyrl-next-gates-queue-v1.json"
+DATA = ROOT / "configs/qualification/qwen38-rl-reward-canary-data-prod-v7.json"
+RUN = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod-v7.json"
+MANIFEST = ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v7.json"
+PROD6_TERMINAL_EVIDENCE = (
+    ROOT / "docs/evidence/qwen38-study/2026-09-21-skyrl-prod6-observer-induced-release-v1.json"
 )
+QUALIFICATION = ROOT / canary.QUALIFICATION_PATH
+QUEUE_EVIDENCE = ROOT / "docs/evidence/qwen38-study/2026-09-20-skyrl-next-gates-queue-v1.json"
 
 
 def load(path: Path) -> dict:
@@ -53,6 +53,22 @@ def compile_canary(monkeypatch) -> tuple[dict, dict]:
 
     monkeypatch.setattr(sft, "read_mapping", read)
     return skyrl_training.compile_rl(run, relative_to=RUN.parent), manifest
+
+
+def test_prod6_external_identity_remains_frozen_historical_evidence() -> None:
+    evidence = load(PROD6_TERMINAL_EVIDENCE)
+    assert evidence["run"] == {
+        "name": "chris-q38-rlreward-prod6",
+        "rayjob_uid": "6c06625d-8730-4879-9144-a4cd00a58d8a",
+        "workload_uid": "76b18017-e4c8-4f55-b62d-901df4f7978f",
+        "raycluster_uid": "b706e216-b1b7-41db-aff6-4c4f057f2f47",
+        "pod_uid": "d56ba2f6-9464-4bd7-8984-b86d035549f1",
+        "plan_sha256": "44b17a6ad291c8ef4c2453e1bc28eaf911b358b361fd06f976e52dd8f2d7e31b",
+        "request_sha256": "1ae655ae262af197e58a2c3f4ebe4cecc4488d682f99a4dd94f13118588e40b3",
+    }
+    assert evidence["result"]["optimizer_updates"] == 0
+    assert evidence["result"]["checkpoints"] == 0
+    assert evidence["result"]["all_owned_gpu_resources_released"] is True
 
 
 def test_source_package_is_exact_and_historical_preflight_is_non_gating() -> None:
@@ -125,8 +141,8 @@ def test_canonical_source_receipts_remain_byte_identical() -> None:
 def test_one_node_one_step_config_compiles_to_the_qualified_image(monkeypatch) -> None:
     plan, manifest = compile_canary(monkeypatch)
     request = skyrl_training.job_request(plan)
-    assert digest(plan) == "44b17a6ad291c8ef4c2453e1bc28eaf911b358b361fd06f976e52dd8f2d7e31b"
-    assert digest(request) == "1ae655ae262af197e58a2c3f4ebe4cecc4488d682f99a4dd94f13118588e40b3"
+    assert digest(plan) == "d43600f5bb9d8e4c4948f2b1c185ce891c2e416384543ef4d14305e129a4f336"
+    assert digest(request) == "dece471161351ebe22b3cd7794115c3b0d19b5b09a8344aead6ea6ed0bfc096f"
     arguments, overrides = plan["arguments"], plan["native_overrides"]
     assert plan["data"] == manifest
     assert request["image"] == canary.IMAGE
@@ -148,8 +164,9 @@ def test_one_node_one_step_config_compiles_to_the_qualified_image(monkeypatch) -
     assert overrides["trainer.max_ckpts_to_keep"] == 2
     assert overrides["generator.max_turns"] == canary.LIMITS["max_turns"]
     assert overrides["generator.max_input_length"] == canary.LIMITS["context_tokens"]
-    assert overrides["generator.sampling_params"]["max_generate_length"] == (
-        canary.LIMITS["generation_chunk_tokens"]
+    assert (
+        overrides["generator.sampling_params"]["max_generate_length"]
+        == (canary.LIMITS["generation_chunk_tokens"])
     )
     assert overrides["generator.step_wise_trajectories"] is True
     assert overrides["generator.merge_stepwise_output"] is False
