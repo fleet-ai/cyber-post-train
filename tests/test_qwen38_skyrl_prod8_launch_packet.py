@@ -52,7 +52,7 @@ def test_packet_binds_prod8_science_resources_and_alert_opt_out() -> None:
     }
     assert value["local_cpu_preflight_shape"] == {
         "name": "chris-q38-prod8-preflight-v1",
-        "manifest_sha256": "5fc7577b058bff91a7c19c8f50fdd5e45fafcdab0923735fa6957e1854d3ea62",
+        "manifest_sha256": "67c9db1d254bfe1dbf31f7e853515e82e6e533ee23e71dd7b2b4b7eabd44c6dc",
         "gpus": 0,
         "priority": "c1",
         "failure_alerts": "off",
@@ -61,7 +61,7 @@ def test_packet_binds_prod8_science_resources_and_alert_opt_out() -> None:
     }
     assert value["local_cpu_preflight_preview_binding"] == {
         "current_manifest_sha256": (
-            "5fc7577b058bff91a7c19c8f50fdd5e45fafcdab0923735fa6957e1854d3ea62"
+            "67c9db1d254bfe1dbf31f7e853515e82e6e533ee23e71dd7b2b4b7eabd44c6dc"
         ),
         "preview_manifest_sha256": {
             packet.direct.DEV_CONTEXT: (
