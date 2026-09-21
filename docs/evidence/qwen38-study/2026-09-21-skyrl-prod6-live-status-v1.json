@@ -1,0 +1,112 @@
+{
+  "schema": "cyber_skyrl_prod6_live_status_v1",
+  "status": "running_pre_update",
+  "recorded_at": "2026-09-21T01:56:28Z",
+  "motivation": "Prove one genuine Fleet-reward RL update for Qwen3.8-27B with long-horizon continuation and policy compaction, then produce a reloadable step-1 checkpoint for matched Fleet and OpenCode WebExploitBench evaluation.",
+  "source": {
+    "branch": "codex/q38-skyrl-full-queue-v1",
+    "commit": "09a64a7e100de04eee49f0023dfcf6d68217b1c0",
+    "generation_continuation_repair_commit": "2661e4fbff3582b809bd5b65b967fe4fbb986ce9"
+  },
+  "immutable_bindings": {
+    "plan_sha256": "44b17a6ad291c8ef4c2453e1bc28eaf911b358b361fd06f976e52dd8f2d7e31b",
+    "request_sha256": "1ae655ae262af197e58a2c3f4ebe4cecc4488d682f99a4dd94f13118588e40b3",
+    "runtime_sha256": "7b7fc261f2dd6b9242e66c9bd5728f95066093fb4a828d4a56d8f56fa183efe6",
+    "direct_rayjob_manifest_sha256": "028cc663842e4240c4500e658317436e41e90b5a568d472d27ac19b50faade38",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
+    "output_root": "/mnt/sfs/jobs/chris-q38-rlreward-prod6"
+  },
+  "science": {
+    "model": "Qwen/Qwen3.8-27B",
+    "genuine_fleet_train_episodes": 8,
+    "dev_episodes": 2,
+    "planned_optimizer_steps": 1,
+    "learning_rate": 0.000001,
+    "context_tokens": 262144,
+    "generation_chunk_tokens": 4096,
+    "tokens_per_turn": 32768,
+    "compaction_trigger_tokens": 163840,
+    "compaction_summary_tokens": 8192,
+    "max_turns": 1200,
+    "episode_timeout_seconds": 14400,
+    "checkpoint_interval": 1,
+    "required_outcome": "authoritative reward variation, one finite optimizer update, a reloadable step-1 checkpoint, and before/after dev evidence"
+  },
+  "qualification": {
+    "data_stage": {
+      "job": "chris-q38-prod6-data-v2",
+      "job_uid": "5268f42b-f63f-4681-94d2-b09e962a11fb",
+      "pod_uid": "5a0e0938-a324-41be-80f3-419a82cc943c",
+      "receipt_sha256": "d066d1533cca5a6a1ddeef861d20b20b22ee36b441e45f4fee9f659b7ca2b81c",
+      "gpus": 0,
+      "released": true
+    },
+    "cpu_preflight": {
+      "job": "chris-q38-prod6-preflight-v2",
+      "job_uid": "6fe5c9ff-6eb5-49ce-bbd1-abb0e73e782c",
+      "pod_uid": "b5212920-1cda-4c8f-9719-533de97858b3",
+      "receipt_sha256": "222837dec2bf799667e2921d79f4c8b6849411c3bf0db1c9e6481c81de2acfae",
+      "verified_guards": [
+        "native parser",
+        "ordered multi-tool parser",
+        "ordered multi-tool execution",
+        "generation-chunk continuation",
+        "policy compaction",
+        "stepwise prompt and log-probability binding"
+      ],
+      "gpus": 0,
+      "released": true
+    },
+    "cleanup_observer": {
+      "armed_receipt_sha256": "fc5b4412904d6d4b5e34cdf849f7df0cf76c86dccdc40b7a305cd3543914d4a3",
+      "expected_gpus": 8,
+      "maximum_seconds": 50400
+    },
+    "authorization_receipt_sha256": "9b06585d5400f021d930dd411234f234e37d33754208fcfbe735891efc8cd0ca",
+    "create_receipt_sha256": "1fcf82ed07aef68deaefda61c117891a02dbe6e65350c08717da2a977d5033f2",
+    "capacity": {
+      "observed_at": "2026-09-21T01:26:56Z",
+      "receipt_sha256": "00e16b34d1a469a291721f12ca01692b033dc59f8afdd4b0916b6c91d5437fc5",
+      "current_nodes": 6,
+      "current_gpus": 48,
+      "projected_nodes": 7,
+      "projected_gpus": 56,
+      "limits": {
+        "nodes": 8,
+        "gpus": 64
+      }
+    }
+  },
+  "live_identity": {
+    "run_name": "chris-q38-rlreward-prod6",
+    "direct_run_id": "c7a3a3a4-500e-569c-abda-c1a014450d34",
+    "rayjob_uid": "6c06625d-8730-4879-9144-a4cd00a58d8a",
+    "workload_name": "rayjob-chris-q38-rlreward-prod6-faaaa",
+    "workload_uid": "76b18017-e4c8-4f55-b62d-901df4f7978f",
+    "raycluster_name": "chris-q38-rlreward-prod6-pmvnq",
+    "raycluster_uid": "b706e216-b1b7-41db-aff6-4c4f057f2f47",
+    "pod_name": "chris-q38-rlreward-prod6-pmvnq-head-k2rjg",
+    "pod_uid": "d56ba2f6-9464-4bd7-8984-b86d035549f1",
+    "node": "computeinstance-e04q9rsq2y5mpj2ktm",
+    "created_at": "2026-09-21T01:28:19Z",
+    "pods_ready_at": "2026-09-21T01:28:36Z",
+    "priority_class": "c1",
+    "queue_priority": "q1",
+    "failure_alerts": "off",
+    "gpus": 8,
+    "restarts": 0
+  },
+  "observed_progress": {
+    "started_marker_sha256": "f288b4551b5eeb69b9b756ccae7c5a871d6a241d88d41dea36b13b82c379d19c",
+    "active_batch_id": "ee41f7061684d427f1516706",
+    "active_batch_started_at": "2026-09-21T01:40:57Z",
+    "gpu_memory_gib_per_device": "about 228-229",
+    "active_generation_observed": true,
+    "collected_batches": 0,
+    "authoritative_reward_variation": false,
+    "optimizer_updates": 0,
+    "checkpoints": 0,
+    "terminal_marker": null
+  },
+  "acceptance_gate": "This live status proves only healthy rollout work. It is not a training-success or capability claim. Acceptance requires a sanitized collection receipt with real reward variation, finite optimizer telemetry, a complete step-1 checkpoint, independent reload verification, and matched evaluation."
+}
