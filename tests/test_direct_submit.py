@@ -195,6 +195,26 @@ def cpu_checkpoint_pod():
     }
 
 
+def cpu_node_inventory():
+    return {
+        "apiVersion": "v1",
+        "kind": "List",
+        "items": [
+            {
+                "metadata": {
+                    "name": "shared-cpu-1",
+                    "labels": deepcopy(CPU_NODE_SELECTOR),
+                },
+                "spec": {},
+                "status": {
+                    "allocatable": {"cpu": "15900m", "memory": "65216572Ki"},
+                    "conditions": [{"type": "Ready", "status": "True"}],
+                },
+            }
+        ],
+    }
+
+
 def preview(obj=None):
     return {"manifest_yaml": yaml.safe_dump(obj or manifest()), "warnings": []}
 
@@ -524,17 +544,48 @@ def test_cpu_checkpoint_boundary_previews_and_creates_only_unpinned_zero_gpu_pod
     expected = cpu_checkpoint_pod()
 
     def run(command, **kwargs):
-        calls.append((command, json.loads(kwargs["input"])))
-        return subprocess.CompletedProcess(command, 0, stdout=json.dumps(expected), stderr="")
+        payload = kwargs.get("input")
+        calls.append((command, json.loads(payload) if payload is not None else None))
+        output = cpu_node_inventory() if "get" in command else expected
+        return subprocess.CompletedProcess(command, 0, stdout=json.dumps(output), stderr="")
 
     monkeypatch.setattr(subprocess, "run", run)
     kube = Kubectl("prod-context")
     kube.dry_run_cpu_checkpoint_pod(expected)
     kube.create_cpu_checkpoint_pod_once(expected)
-    assert len(calls) == 2
-    assert "--dry-run=server" in calls[0][0]
-    assert "--dry-run=server" not in calls[1][0]
-    assert all(call[1]["spec"]["nodeSelector"] == CPU_NODE_SELECTOR for call in calls)
+    assert len(calls) == 4
+    assert "get" in calls[0][0]
+    assert "--dry-run=server" in calls[1][0]
+    assert "get" in calls[2][0]
+    assert "--dry-run=server" not in calls[3][0]
+    manifests = [payload for _, payload in calls if payload is not None]
+    assert all(payload["spec"]["nodeSelector"] == CPU_NODE_SELECTOR for payload in manifests)
+
+
+@pytest.mark.parametrize(
+    ("resource", "quantity"),
+    [("cpu", "16"), ("memory", "128Gi")],
+)
+def test_cpu_checkpoint_create_rejects_request_that_cannot_fit_observed_node(
+    monkeypatch, resource, quantity
+):
+    calls = []
+    pod = cpu_checkpoint_pod()
+    pod["spec"]["containers"][0]["resources"]["requests"][resource] = quantity
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs.get("input")))
+        if "get" not in command:
+            raise AssertionError("an unschedulable CPU checkpoint Pod reached create")
+        return subprocess.CompletedProcess(
+            command, 0, stdout=json.dumps(cpu_node_inventory()), stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(JobsError, match="cannot fit any observed eligible node"):
+        Kubectl("prod-context").create_cpu_checkpoint_pod_once(pod)
+    assert len(calls) == 1
+    assert "get" in calls[0][0]
 
 
 @pytest.mark.parametrize(
