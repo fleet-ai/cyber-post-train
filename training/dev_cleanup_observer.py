@@ -12,12 +12,13 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
-from pathlib import Path
+from datetime import UTC, datetime, timedelta
+from pathlib import Path, PurePosixPath
 from urllib.parse import quote
 from uuid import UUID
 
@@ -33,12 +34,17 @@ DIRECT_ARMED_SCHEMA = "cyber_direct_cleanup_observer_armed_v1"
 DIRECT_RESULT_SCHEMA = "cyber_direct_cleanup_observer_result_v1"
 RECOVERY_ARMED_SCHEMA = "cyber_direct_cleanup_recovery_observer_armed_v1"
 RECOVERY_RESULT_SCHEMA = "cyber_direct_cleanup_recovery_observer_result_v1"
+JOBS_API_PREFIX_GUARD_SCHEMA = "cyber_jobs_api_prefix_guard_armed_v1"
+JOBS_API_EXACT_BINDING_SCHEMA = "cyber_jobs_api_exact_rayjob_binding_v1"
+JOBS_API_RELEASE_CONTRACT_SCHEMA = "cyber_jobs_api_exact_uid_release_contract_v1"
+JOBS_API_EXACT_OBSERVER_SCHEMA = "cyber_jobs_api_exact_uid_observer_result_v1"
 TERMINAL_RAY_STATUSES = {"SUCCEEDED": "Succeeded", "FAILED": "Failed"}
 KUBECTL_ATTEMPTS = 3
 KUBECTL_TIMEOUT_SECONDS = 20
 MAX_CONSECUTIVE_OBSERVATION_FAILURES = 5
 DELETE_REQUEST_MARGIN_SECONDS = 60
 TERMINAL_RECEIPT_GRACE_SECONDS = 30
+_RUN_NAME_PREFIX = re.compile(r"[a-z0-9](?:[-a-z0-9]{0,29}[a-z0-9])?")
 
 
 class ObserverError(RuntimeError):
@@ -75,6 +81,902 @@ def _write_create_once(path: Path, value: dict) -> None:
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(fd, "w") as stream:
         stream.write(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n")
+
+
+def _canonical_jobs_run_dir(value: object) -> str:
+    """Validate the public, per-run SFS path used by the generic Jobs API."""
+    if not isinstance(value, str):
+        raise ObserverError("Jobs API run directory is invalid")
+    root = PurePosixPath(value)
+    if (
+        root.parts[:4] != ("/", "mnt", "sfs", "jobs")
+        or len(root.parts) < 5
+        or ".." in root.parts
+        or str(root) != value
+    ):
+        raise ObserverError("Jobs API run directory is invalid")
+    return value
+
+
+def _digest_binding(value: object) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"sha256:[a-f0-9]{64}", value):
+        raise ObserverError("cleanup observer digest binding is invalid")
+    return value
+
+
+class JobsApiPrefixGuard:
+    """Non-destructive pre-POST guard for generated generic-Jobs RayJob names.
+
+    The generic Jobs API assigns a suffix after POST, so an observer cannot know
+    the exact Kubernetes name while it checks for a pre-existing collision.  This
+    class deliberately stops at that safety check.  A later ``bind_exact`` call
+    receives the creator-returned *exact* API identity and looks up only that
+    name.  Prefix matching is never ownership evidence and this class never
+    deletes, waits on, or releases a workload.
+    """
+
+    def __init__(
+        self,
+        *,
+        context: str,
+        namespace: str,
+        run_name_prefix: str,
+        run_dir: str,
+        image: str,
+        plan_sha256: str,
+        manifest_sha256: str,
+        maximum_seconds: int,
+        expected_gpus: int,
+        armed_path: Path,
+        binding_path: Path,
+        bind_wait_seconds: float = 120.0,
+        run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+        sleep: Callable[[float], None] = time.sleep,
+        monotonic: Callable[[], float] = time.monotonic,
+    ) -> None:
+        if context != DEV_CONTEXT or namespace != NAMESPACE:
+            raise ObserverError("Jobs API prefix guard is bound to the development cluster")
+        if _RUN_NAME_PREFIX.fullmatch(run_name_prefix) is None:
+            raise ObserverError("Jobs API run-name prefix is invalid")
+        if not re.fullmatch(r"[^\s]+@sha256:[a-f0-9]{64}", image):
+            raise ObserverError("Jobs API image binding is invalid")
+        if (
+            maximum_seconds < 1
+            or maximum_seconds > 1800
+            or expected_gpus != 8
+            or not 0 <= bind_wait_seconds <= 300
+        ):
+            raise ObserverError("Jobs API guard resource or deadline binding is invalid")
+        # A separate post-POST process may need to bind the durable pre-POST
+        # guard.  It may reuse the armed path only after ``bind_exact``
+        # validates its sealed contents against these immutable constructor
+        # bindings.  A binding receipt, in contrast, is single-use.
+        if binding_path.exists():
+            raise ObserverError("Jobs API exact binding evidence path already exists")
+        self.context = context
+        self.namespace = namespace
+        self.run_name_prefix = run_name_prefix
+        self.run_dir = _canonical_jobs_run_dir(run_dir)
+        self.image = image
+        self.plan_sha256 = _digest_binding(plan_sha256)
+        self.manifest_sha256 = _digest_binding(manifest_sha256)
+        self.maximum_seconds = maximum_seconds
+        self.expected_gpus = expected_gpus
+        self.armed_path = armed_path
+        self.binding_path = binding_path
+        self.bind_wait_seconds = bind_wait_seconds
+        self._run = run
+        self._sleep = sleep
+        self._monotonic = monotonic
+        self.armed_at = ""
+
+    @property
+    def generated_name_pattern(self) -> str:
+        return "^" + re.escape(self.run_name_prefix) + r"-[a-f0-9]{8}$"
+
+    def _kubectl(self, *arguments: str) -> str:
+        command = [
+            "kubectl",
+            "--context",
+            self.context,
+            "--namespace",
+            self.namespace,
+            *arguments,
+        ]
+        result = None
+        for attempt in range(KUBECTL_ATTEMPTS):
+            try:
+                result = self._run(
+                    command,
+                    capture_output=True,
+                    text=True,
+                    timeout=KUBECTL_TIMEOUT_SECONDS,
+                )
+                if result.returncode == 0:
+                    return result.stdout
+            except subprocess.TimeoutExpired:
+                result = None
+            if attempt + 1 < KUBECTL_ATTEMPTS:
+                time.sleep(1)
+        if result is None:
+            raise ObserverError("Jobs API guard observation timed out", code="kubectl_timeout")
+        raise ObserverError("Jobs API guard observation failed", code="kubectl_failed")
+
+    def _list_rayjobs(self) -> list[dict]:
+        output = self._kubectl("get", "rayjob", "--output", "json")
+        try:
+            value = json.loads(output)
+        except ValueError as exc:
+            raise ObserverError("Jobs API guard response was not JSON") from exc
+        rows = value.get("items") if isinstance(value, dict) else None
+        if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+            raise ObserverError("Jobs API guard response had the wrong shape")
+        return rows
+
+    def _get_exact_rayjob(self, name: str) -> dict | None:
+        output = self._kubectl(
+            "get", "rayjob", name, "--ignore-not-found", "--output", "json"
+        ).strip()
+        if not output:
+            return None
+        try:
+            value = json.loads(output)
+        except ValueError as exc:
+            raise ObserverError("Jobs API exact RayJob response was not JSON") from exc
+        if not isinstance(value, dict):
+            raise ObserverError("Jobs API exact RayJob response had the wrong shape")
+        return value
+
+    def _prefix_collisions(self, rows: list[dict]) -> int:
+        prefix = self.run_name_prefix + "-"
+        count = 0
+        for row in rows:
+            metadata = row.get("metadata")
+            name = metadata.get("name") if isinstance(metadata, dict) else None
+            if isinstance(name, str) and (name == self.run_name_prefix or name.startswith(prefix)):
+                count += 1
+        return count
+
+    def _validate_armed(self, value: object) -> dict:
+        if not isinstance(value, dict):
+            raise ObserverError("Jobs API prefix guard receipt is invalid")
+        fields = {
+            "schema",
+            "status",
+            "context",
+            "namespace",
+            "run_name_prefix",
+            "generated_name_pattern",
+            "run_dir",
+            "image",
+            "plan_sha256",
+            "manifest_sha256",
+            "maximum_seconds",
+            "expected_gpus",
+            "armed_at",
+            "observer_pid",
+            "prefix_collision_count_before_post",
+            "sha256",
+        }
+        body = {key: item for key, item in value.items() if key != "sha256"}
+        if (
+            set(value) != fields
+            or value.get("schema") != JOBS_API_PREFIX_GUARD_SCHEMA
+            or value.get("status") != "armed_non_destructive_prefix_guard"
+            or value.get("sha256") != "sha256:" + digest(body)
+            or value.get("context") != self.context
+            or value.get("namespace") != self.namespace
+            or value.get("run_name_prefix") != self.run_name_prefix
+            or value.get("generated_name_pattern") != self.generated_name_pattern
+            or value.get("run_dir") != self.run_dir
+            or value.get("image") != self.image
+            or value.get("plan_sha256") != self.plan_sha256
+            or value.get("manifest_sha256") != self.manifest_sha256
+            or value.get("maximum_seconds") != self.maximum_seconds
+            or value.get("expected_gpus") != self.expected_gpus
+            or value.get("prefix_collision_count_before_post") != 0
+        ):
+            raise ObserverError("Jobs API prefix guard receipt is invalid")
+        try:
+            _parse_stamp(value["armed_at"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ObserverError("Jobs API prefix guard receipt is invalid") from exc
+        if type(value.get("observer_pid")) is not int or value["observer_pid"] < 1:
+            raise ObserverError("Jobs API prefix guard receipt is invalid")
+        return value
+
+    def arm(self) -> dict:
+        if self.armed_at or self.armed_path.exists() or self.binding_path.exists():
+            raise ObserverError("Jobs API prefix guard was already armed")
+        collisions = self._prefix_collisions(self._list_rayjobs())
+        if collisions:
+            raise ObserverError("Jobs API generated-name prefix is already in use")
+        self.armed_at = _stamp(_now())
+        value = _seal(
+            {
+                "schema": JOBS_API_PREFIX_GUARD_SCHEMA,
+                "status": "armed_non_destructive_prefix_guard",
+                "context": self.context,
+                "namespace": self.namespace,
+                "run_name_prefix": self.run_name_prefix,
+                "generated_name_pattern": self.generated_name_pattern,
+                "run_dir": self.run_dir,
+                "image": self.image,
+                "plan_sha256": self.plan_sha256,
+                "manifest_sha256": self.manifest_sha256,
+                "maximum_seconds": self.maximum_seconds,
+                "expected_gpus": self.expected_gpus,
+                "armed_at": self.armed_at,
+                "observer_pid": os.getpid(),
+                "prefix_collision_count_before_post": 0,
+            }
+        )
+        _write_create_once(self.armed_path, value)
+        return value
+
+    def _creator_identity(self, value: Mapping[str, object]) -> tuple[str, str]:
+        expected = {"jobs_api_run_name", "jobs_api_run_id", "run_dir"}
+        if set(value) != expected:
+            raise ObserverError("Jobs API creator identity has an unexpected shape")
+        name, run_id, run_dir = (
+            value.get("jobs_api_run_name"),
+            value.get("jobs_api_run_id"),
+            value.get("run_dir"),
+        )
+        if (
+            not isinstance(name, str)
+            or re.fullmatch(self.generated_name_pattern, name) is None
+            or not isinstance(run_id, str)
+            or run_dir != self.run_dir
+        ):
+            raise ObserverError("Jobs API creator identity is invalid")
+        try:
+            UUID(run_id)
+        except ValueError as exc:
+            raise ObserverError("Jobs API creator identity is invalid") from exc
+        return name, run_id
+
+    def _validate_exact_rayjob(self, resource: dict, *, name: str) -> tuple[str, str]:
+        metadata = resource.get("metadata")
+        spec = resource.get("spec")
+        if (
+            resource.get("kind") != "RayJob"
+            or not isinstance(metadata, dict)
+            or not isinstance(spec, dict)
+        ):
+            raise ObserverError("Jobs API exact RayJob is malformed")
+        uid, created = Observer._metadata(resource)
+        annotations = metadata.get("annotations")
+        labels = metadata.get("labels")
+        if (
+            metadata.get("namespace") != self.namespace
+            or metadata.get("name") != name
+            or not isinstance(annotations, dict)
+            or annotations.get("fleet.ai/run-dir") != self.run_dir
+            or annotations.get("fleet.ai/failure-alerts") != "off"
+            or not isinstance(labels, dict)
+            or labels.get("kueue.x-k8s.io/queue-name") != "training-lq"
+            or labels.get("kueue.x-k8s.io/priority-class") != "q1"
+            or labels.get("fleet.ai/requeue-if-preempted") != "false"
+            or spec.get("shutdownAfterJobFinishes") is not True
+            or spec.get("backoffLimit") != 0
+        ):
+            raise ObserverError("Jobs API exact RayJob does not match the armed guard")
+        if _parse_stamp(created) < _parse_stamp(self.armed_at):
+            raise ObserverError("Jobs API exact RayJob predates the armed guard")
+        try:
+            cluster = spec["rayClusterSpec"]
+            head = cluster["headGroupSpec"]
+            head_pod = head["template"]["spec"]
+            workers = cluster.get("workerGroupSpecs", [])
+            if (
+                not isinstance(head_pod, dict)
+                or not isinstance(workers, list)
+                or any(
+                    not isinstance(group, dict)
+                    or type(group.get("replicas")) is not int
+                    or group["replicas"] < 0
+                    for group in workers
+                )
+            ):
+                raise TypeError
+            if 1 + sum(group["replicas"] for group in workers) != 1:
+                raise ValueError
+            if head_pod.get("priorityClassName") != "c1":
+                raise ValueError
+            containers = head_pod["containers"]
+            if not isinstance(containers, list):
+                raise TypeError
+            gpu_containers = []
+            for container in containers:
+                if not isinstance(container, dict):
+                    raise TypeError
+                resources = container.get("resources", {})
+                requested = quantity(resources.get("requests", {}).get("nvidia.com/gpu", 0))
+                limited = quantity(resources.get("limits", {}).get("nvidia.com/gpu", 0))
+                if requested != limited:
+                    raise ValueError
+                if limited:
+                    gpu_containers.append((container, limited))
+            if (
+                len(gpu_containers) != 1
+                or gpu_containers[0][0].get("image") != self.image
+                or gpu_containers[0][1] != self.expected_gpus
+            ):
+                raise ValueError
+            init_containers = head_pod.get("initContainers", [])
+            if not isinstance(init_containers, list):
+                raise TypeError
+            for container in init_containers:
+                if not isinstance(container, dict):
+                    raise TypeError
+                resources = container.get("resources", {})
+                if quantity(resources.get("requests", {}).get("nvidia.com/gpu", 0)) or quantity(
+                    resources.get("limits", {}).get("nvidia.com/gpu", 0)
+                ):
+                    raise ValueError
+        except (KeyError, TypeError, ValueError):
+            raise ObserverError("Jobs API exact RayJob resource binding changed") from None
+        return uid, created
+
+    def bind_exact(self, creator_identity: Mapping[str, object]) -> dict:
+        """Bind one exact API-returned name; this method never performs cleanup.
+
+        ``creator_identity`` must be a narrow, caller-normalized copy of the
+        authenticated API response.  In particular, prefix discovery after POST
+        is intentionally prohibited: only ``jobs_api_run_name`` is queried.
+        """
+        if not self.armed_at:
+            try:
+                stored = json.loads(self.armed_path.read_text())
+            except (OSError, ValueError) as exc:
+                raise ObserverError("Jobs API prefix guard has not been armed") from exc
+            self.armed_at = self._validate_armed(stored)["armed_at"]
+        else:
+            try:
+                stored = json.loads(self.armed_path.read_text())
+            except (OSError, ValueError) as exc:
+                raise ObserverError("Jobs API prefix guard receipt is unavailable") from exc
+            self._validate_armed(stored)
+        if self.binding_path.exists():
+            raise ObserverError("Jobs API exact binding already exists")
+        name, run_id = self._creator_identity(creator_identity)
+        deadline = self._monotonic() + self.bind_wait_seconds
+        while True:
+            resource = self._get_exact_rayjob(name)
+            if resource is not None:
+                break
+            remaining = deadline - self._monotonic()
+            if remaining <= 0:
+                raise ObserverError("Jobs API exact RayJob is absent after bounded bind wait")
+            self._sleep(min(1.0, remaining))
+        uid, created = self._validate_exact_rayjob(resource, name=name)
+        value = _seal(
+            {
+                "schema": JOBS_API_EXACT_BINDING_SCHEMA,
+                "status": "bound_exact_uid_cleanup_not_started",
+                "prefix_guard_sha256": stored["sha256"],
+                "context": self.context,
+                "namespace": self.namespace,
+                "jobs_api_run_name": name,
+                "jobs_api_run_id": run_id,
+                "run_dir": self.run_dir,
+                "rayjob_name": name,
+                "rayjob_uid": uid,
+                "rayjob_created_at": created,
+                "bound_at": _stamp(_now()),
+                "failure_alerts": "off",
+                "maximum_seconds": self.maximum_seconds,
+                "expected_gpus": self.expected_gpus,
+                "cleanup_started": False,
+            }
+        )
+        _write_create_once(self.binding_path, value)
+        return value
+
+
+class JobsApiExactUidObserver:
+    """Bounded, exact-UID observer for one generic-Jobs-created RayJob.
+
+    This is deliberately not a generic cleanup framework.  It consumes the
+    sealed post-POST binding from :class:`JobsApiPrefixGuard`, reads only that
+    RayJob and children whose owner UID proves the relationship, and never
+    selects resources by prefix.  It does not create workloads or read logs.
+
+    A terminal RayJob normally removes itself because the rendered object has
+    ``shutdownAfterJobFinishes``.  The only destructive fallback is an exact
+    Kubernetes raw DELETE of that one bound RayJob, with a UID precondition,
+    and it is unavailable unless a separately sealed creator/observer contract
+    authorizes it.  There is intentionally no generic-Jobs run-name deletion:
+    a mutable API name is not deletion authority.
+    """
+
+    def __init__(
+        self,
+        *,
+        binding_path: Path,
+        result_path: Path,
+        release_contract_path: Path | None = None,
+        poll_seconds: float = 2.0,
+        run: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    ) -> None:
+        if result_path.exists():
+            raise ObserverError("Jobs API exact observer evidence path already exists")
+        if poll_seconds <= 0:
+            raise ObserverError("Jobs API exact observer poll interval is invalid")
+        try:
+            binding = json.loads(binding_path.read_text())
+        except (OSError, ValueError) as exc:
+            raise ObserverError("Jobs API exact binding evidence is unavailable") from exc
+        self.binding = self._validate_binding(binding)
+        self.binding_path = binding_path
+        self.result_path = result_path
+        self.poll_seconds = poll_seconds
+        self._run = run
+        self.context = self.binding["context"]
+        self.namespace = self.binding["namespace"]
+        self.root_name = self.binding["rayjob_name"]
+        self.root_uid = self.binding["rayjob_uid"]
+        self.created_at = self.binding["rayjob_created_at"]
+        self.maximum_seconds = self.binding["maximum_seconds"]
+        self.deadline_at = _parse_stamp(self.created_at) + timedelta(seconds=self.maximum_seconds)
+        self.release_contract = self._load_release_contract(release_contract_path)
+        self.root_seen = False
+        self.terminal_status = ""
+        self.inventory_seen = False
+        self.raycluster_identity_observed = False
+        self.cleanup_requested = False
+        self.cleanup_status = (
+            "authorized_not_requested" if self.release_contract is not None else "not_authorized"
+        )
+        self.peak_gpus = 0
+        self.known: dict[str, dict[str, str]] = {
+            "workload": {},
+            "raycluster": {},
+            "pod": {},
+        }
+
+    def _validate_binding(self, value: object) -> dict:
+        fields = {
+            "schema",
+            "status",
+            "prefix_guard_sha256",
+            "context",
+            "namespace",
+            "jobs_api_run_name",
+            "jobs_api_run_id",
+            "run_dir",
+            "rayjob_name",
+            "rayjob_uid",
+            "rayjob_created_at",
+            "bound_at",
+            "failure_alerts",
+            "maximum_seconds",
+            "expected_gpus",
+            "cleanup_started",
+            "sha256",
+        }
+        if not isinstance(value, dict):
+            raise ObserverError("Jobs API exact binding evidence is invalid")
+        body = {key: item for key, item in value.items() if key != "sha256"}
+        if (
+            set(value) != fields
+            or value.get("schema") != JOBS_API_EXACT_BINDING_SCHEMA
+            or value.get("status") != "bound_exact_uid_cleanup_not_started"
+            or value.get("sha256") != "sha256:" + digest(body)
+            or value.get("context") != DEV_CONTEXT
+            or value.get("namespace") != NAMESPACE
+            or value.get("failure_alerts") != "off"
+            or value.get("expected_gpus") != 8
+            or value.get("cleanup_started") is not False
+            or value.get("rayjob_name") != value.get("jobs_api_run_name")
+        ):
+            raise ObserverError("Jobs API exact binding evidence is invalid")
+        try:
+            UUID(value["jobs_api_run_id"])
+            UUID(value["rayjob_uid"])
+            _parse_stamp(value["rayjob_created_at"])
+            _parse_stamp(value["bound_at"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ObserverError("Jobs API exact binding evidence is invalid") from exc
+        if (
+            not isinstance(value.get("rayjob_name"), str)
+            or _RUN_NAME_PREFIX.fullmatch(value["rayjob_name"]) is None
+            or _canonical_jobs_run_dir(value.get("run_dir")) != value["run_dir"]
+            or not 1 <= value.get("maximum_seconds", 0) <= 1800
+            or not isinstance(value.get("prefix_guard_sha256"), str)
+            or not re.fullmatch(r"sha256:[a-f0-9]{64}", value["prefix_guard_sha256"])
+        ):
+            raise ObserverError("Jobs API exact binding evidence is invalid")
+        return value
+
+    def _load_release_contract(self, path: Path | None) -> dict | None:
+        if path is None:
+            return None
+        try:
+            value = json.loads(path.read_text())
+        except (OSError, ValueError) as exc:
+            raise ObserverError("Jobs API release contract is unavailable") from exc
+        fields = {
+            "schema",
+            "status",
+            "binding_sha256",
+            "context",
+            "namespace",
+            "jobs_api_run_name",
+            "jobs_api_run_id",
+            "rayjob_name",
+            "rayjob_uid",
+            "authorized_at",
+            "release_route",
+            "sha256",
+        }
+        if not isinstance(value, dict):
+            raise ObserverError("Jobs API release contract is invalid")
+        body = {key: item for key, item in value.items() if key != "sha256"}
+        if (
+            set(value) != fields
+            or value.get("schema") != JOBS_API_RELEASE_CONTRACT_SCHEMA
+            or value.get("status") != "creator_authorized_exact_uid_release"
+            or value.get("sha256") != "sha256:" + digest(body)
+            or value.get("binding_sha256") != self.binding["sha256"]
+            or value.get("context") != self.context
+            or value.get("namespace") != self.namespace
+            or value.get("jobs_api_run_name") != self.binding["jobs_api_run_name"]
+            or value.get("jobs_api_run_id") != self.binding["jobs_api_run_id"]
+            or value.get("rayjob_name") != self.root_name
+            or value.get("rayjob_uid") != self.root_uid
+            or value.get("release_route") != "raw_rayjob_uid_precondition_v1"
+        ):
+            raise ObserverError("Jobs API release contract is invalid")
+        try:
+            authorized = _parse_stamp(value["authorized_at"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ObserverError("Jobs API release contract is invalid") from exc
+        if authorized > self.deadline_at:
+            raise ObserverError("Jobs API release contract is outside the bound deadline")
+        return value
+
+    def _kubectl(self, *arguments: str, input_text: str | None = None) -> str:
+        command = [
+            "kubectl",
+            "--context",
+            self.context,
+            "--namespace",
+            self.namespace,
+            *arguments,
+        ]
+        result = None
+        for attempt in range(KUBECTL_ATTEMPTS):
+            try:
+                result = self._run(
+                    command,
+                    input=input_text,
+                    capture_output=True,
+                    text=True,
+                    timeout=KUBECTL_TIMEOUT_SECONDS,
+                )
+                if result.returncode == 0:
+                    return result.stdout
+            except subprocess.TimeoutExpired:
+                result = None
+            if attempt + 1 < KUBECTL_ATTEMPTS:
+                time.sleep(min(self.poll_seconds, 1.0))
+        if result is None:
+            raise ObserverError("Jobs API exact observer timed out", code="kubectl_timeout")
+        raise ObserverError("Jobs API exact observer failed", code="kubectl_failed")
+
+    def _get(self, resource: str, name: str) -> dict | None:
+        output = self._kubectl(
+            "get", resource, name, "--ignore-not-found", "--output", "json"
+        ).strip()
+        if not output:
+            return None
+        try:
+            value = json.loads(output)
+        except ValueError as exc:
+            raise ObserverError("Jobs API exact observer response was not JSON") from exc
+        if not isinstance(value, dict):
+            raise ObserverError("Jobs API exact observer response had the wrong shape")
+        return value
+
+    def _list_owned(self, resource: str, selector: str) -> list[dict]:
+        output = self._kubectl("get", resource, "--selector", selector, "--output", "json")
+        try:
+            value = json.loads(output)
+        except ValueError as exc:
+            raise ObserverError("Jobs API exact observer response was not JSON") from exc
+        items = value.get("items") if isinstance(value, dict) else None
+        if not isinstance(items, list) or not all(isinstance(item, dict) for item in items):
+            raise ObserverError("Jobs API exact observer response had the wrong shape")
+        return items
+
+    @staticmethod
+    def _metadata(resource: dict, *, expected_kind: str) -> tuple[str, str, str]:
+        metadata = resource.get("metadata")
+        if resource.get("kind") != expected_kind or not isinstance(metadata, dict):
+            raise ObserverError("Jobs API exact observer resource is malformed")
+        name, uid, created = (
+            metadata.get("name"),
+            metadata.get("uid"),
+            metadata.get("creationTimestamp"),
+        )
+        try:
+            UUID(uid)
+            _parse_stamp(created)
+        except (TypeError, ValueError) as exc:
+            raise ObserverError("Jobs API exact observer resource identity is invalid") from exc
+        if not isinstance(name, str) or not name:
+            raise ObserverError("Jobs API exact observer resource identity is invalid")
+        return name, uid, created
+
+    @staticmethod
+    def _owned_by(resource: dict, *, kind: str, name: str, uid: str) -> bool:
+        metadata = resource.get("metadata")
+        owners = metadata.get("ownerReferences") if isinstance(metadata, dict) else None
+        return isinstance(owners, list) and any(
+            isinstance(owner, dict)
+            and owner.get("kind") == kind
+            and owner.get("name") == name
+            and owner.get("uid") == uid
+            and owner.get("controller") is True
+            for owner in owners
+        )
+
+    def _record_known(self, resource: str, *, name: str, uid: str) -> None:
+        existing = self.known[resource].get(name)
+        if existing is not None and existing != uid:
+            raise ObserverError("Jobs API exact observer detected UID name reuse")
+        self.known[resource][name] = uid
+
+    @staticmethod
+    def _pod_gpus(pod: dict) -> int:
+        spec = pod.get("spec")
+        if not isinstance(spec, dict):
+            raise ObserverError("Jobs API exact observer Pod is malformed")
+
+        def gpu(container: object) -> int:
+            if not isinstance(container, dict):
+                raise ObserverError("Jobs API exact observer Pod is malformed")
+            resources = container.get("resources", {})
+            if not isinstance(resources, dict):
+                raise ObserverError("Jobs API exact observer Pod is malformed")
+            requests = resources.get("requests", {})
+            limits = resources.get("limits", {})
+            if not isinstance(requests, dict) or not isinstance(limits, dict):
+                raise ObserverError("Jobs API exact observer Pod is malformed")
+            requested = quantity(requests.get("nvidia.com/gpu", 0))
+            limited = quantity(limits.get("nvidia.com/gpu", 0))
+            if requested != limited or requested != int(requested):
+                raise ObserverError("Jobs API exact observer Pod GPU contract changed")
+            return int(requested)
+
+        containers = spec.get("containers")
+        init_containers = spec.get("initContainers", [])
+        if not isinstance(containers, list) or not isinstance(init_containers, list):
+            raise ObserverError("Jobs API exact observer Pod is malformed")
+        regular = sum(gpu(container) for container in containers)
+        restartable = sum(
+            gpu(container)
+            for container in init_containers
+            if isinstance(container, dict) and container.get("restartPolicy") == "Always"
+        )
+        ordinary = [
+            gpu(container)
+            for container in init_containers
+            if not isinstance(container, dict) or container.get("restartPolicy") != "Always"
+        ]
+        return regular + restartable + max(ordinary, default=0)
+
+    def _validate_root(self, resource: dict) -> str:
+        name, uid, created = self._metadata(resource, expected_kind="RayJob")
+        metadata = resource["metadata"]
+        annotations = metadata.get("annotations")
+        if (
+            name != self.root_name
+            or uid != self.root_uid
+            or created != self.created_at
+            or metadata.get("namespace") != self.namespace
+            or not isinstance(annotations, dict)
+            or annotations.get("fleet.ai/run-dir") != self.binding["run_dir"]
+            or annotations.get("fleet.ai/failure-alerts") != "off"
+        ):
+            raise ObserverError("Jobs API exact observer root binding changed")
+        status = resource.get("status", {})
+        if not isinstance(status, dict):
+            raise ObserverError("Jobs API exact observer root is malformed")
+        terminal = TERMINAL_RAY_STATUSES.get(status.get("jobStatus"), "")
+        if terminal:
+            self.terminal_status = terminal
+        cluster_name = status.get("rayClusterName", "")
+        if cluster_name and (
+            not isinstance(cluster_name, str) or _RUN_NAME_PREFIX.fullmatch(cluster_name) is None
+        ):
+            raise ObserverError("Jobs API exact observer RayCluster name is invalid")
+        return cluster_name
+
+    def _observe_owned_children(self, cluster_name: str) -> None:
+        workloads = self._list_owned("workload", f"kueue.x-k8s.io/job-uid={self.root_uid}")
+        if len(workloads) > 1:
+            raise ObserverError("Jobs API exact observer found multiple owned Workloads")
+        for workload in workloads:
+            name, uid, _ = self._metadata(workload, expected_kind="Workload")
+            if not self._owned_by(workload, kind="RayJob", name=self.root_name, uid=self.root_uid):
+                raise ObserverError("Jobs API exact observer Workload owner binding changed")
+            self._record_known("workload", name=name, uid=uid)
+        # An empty or already-gone RayCluster name cannot prove that all GPU
+        # children were observed.  Keep polling while the root exists, but
+        # never turn that gap into a release confirmation after the root goes
+        # away.  The safe terminal result in that case is ``release_uncertain``.
+        if not cluster_name:
+            return
+        cluster = self._get("raycluster", cluster_name)
+        if cluster is None:
+            return
+        name, uid, _ = self._metadata(cluster, expected_kind="RayCluster")
+        if not self._owned_by(cluster, kind="RayJob", name=self.root_name, uid=self.root_uid):
+            raise ObserverError("Jobs API exact observer RayCluster owner binding changed")
+        self._record_known("raycluster", name=name, uid=uid)
+        pods = self._list_owned("pod", f"ray.io/cluster={name}")
+        for pod in pods:
+            pod_name, pod_uid, _ = self._metadata(pod, expected_kind="Pod")
+            if not self._owned_by(pod, kind="RayCluster", name=name, uid=uid):
+                raise ObserverError("Jobs API exact observer Pod owner binding changed")
+            self._record_known("pod", name=pod_name, uid=pod_uid)
+            self.peak_gpus = max(self.peak_gpus, self._pod_gpus(pod))
+            if self.peak_gpus > self.binding["expected_gpus"]:
+                raise ObserverError("Jobs API exact observer GPU contract exceeded")
+        self.raycluster_identity_observed = True
+        self.inventory_seen = True
+
+    def _known_children_absent(self) -> bool:
+        kinds = {"workload": "Workload", "raycluster": "RayCluster", "pod": "Pod"}
+        for resource, identities in self.known.items():
+            expected_kind = kinds[resource]
+            for name, uid in identities.items():
+                value = self._get(resource, name)
+                if value is None:
+                    continue
+                _, observed_uid, _ = self._metadata(value, expected_kind=expected_kind)
+                if observed_uid != uid:
+                    raise ObserverError("Jobs API exact observer detected UID name reuse")
+                return False
+        return True
+
+    def _request_exact_uid_cleanup(self) -> None:
+        if self.release_contract is None or self.cleanup_requested:
+            return
+        # Re-read only the bound root immediately before the destructive call.
+        root = self._get("rayjob", self.root_name)
+        if root is None:
+            self.cleanup_status = "not_requested_root_already_absent"
+            return
+        self._validate_root(root)
+        body = json.dumps(
+            {
+                "apiVersion": "v1",
+                "kind": "DeleteOptions",
+                "propagationPolicy": "Foreground",
+                "preconditions": {"uid": self.root_uid},
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        self._kubectl(
+            "delete",
+            "--raw",
+            f"/apis/ray.io/v1/namespaces/{quote(self.namespace, safe='')}/"
+            f"rayjobs/{quote(self.root_name, safe='')}",
+            "-f",
+            "-",
+            input_text=body,
+        )
+        self.cleanup_requested = True
+        self.cleanup_status = "requested_exact_uid_precondition"
+
+    def _result(self, *, status: str, reason: str, release_confirmed: bool) -> dict:
+        value = _seal(
+            {
+                "schema": JOBS_API_EXACT_OBSERVER_SCHEMA,
+                "status": status,
+                "reason": reason,
+                "release_confirmed": release_confirmed,
+                "context": self.context,
+                "namespace": self.namespace,
+                "binding_sha256": self.binding["sha256"],
+                "jobs_api_run_name": self.binding["jobs_api_run_name"],
+                "jobs_api_run_id": self.binding["jobs_api_run_id"],
+                "rayjob_name": self.root_name,
+                "rayjob_uid": self.root_uid,
+                "created_at": self.created_at,
+                "deadline_at": _stamp(self.deadline_at),
+                "maximum_seconds": self.maximum_seconds,
+                "terminal_status": self.terminal_status,
+                "owned_inventory_observed": self.inventory_seen,
+                "raycluster_identity_observed": self.raycluster_identity_observed,
+                "workloads": [
+                    {"name": name, "uid": uid}
+                    for name, uid in sorted(self.known["workload"].items())
+                ],
+                "rayclusters": [
+                    {"name": name, "uid": uid}
+                    for name, uid in sorted(self.known["raycluster"].items())
+                ],
+                "pods": [
+                    {"name": name, "uid": uid} for name, uid in sorted(self.known["pod"].items())
+                ],
+                "peak_gpus": self.peak_gpus,
+                "cleanup_status": self.cleanup_status,
+                "cleanup_requested": self.cleanup_requested,
+                "private_logs_read": False,
+            }
+        )
+        _write_create_once(self.result_path, value)
+        return value
+
+    def run(self) -> dict:
+        """Observe to terminal/release or the creation-bound 30-minute deadline."""
+        while True:
+            try:
+                root = self._get("rayjob", self.root_name)
+                if root is None:
+                    if not self.root_seen:
+                        return self._result(
+                            status="release_uncertain",
+                            reason="bound_root_absent_before_observation",
+                            release_confirmed=False,
+                        )
+                    if (
+                        not self.terminal_status
+                        or not self.inventory_seen
+                        or not self.raycluster_identity_observed
+                    ):
+                        return self._result(
+                            status="release_uncertain",
+                            reason="bound_root_absent_without_terminal_inventory",
+                            release_confirmed=False,
+                        )
+                    if self._known_children_absent():
+                        return self._result(
+                            status="released_after_terminal",
+                            reason="exact_root_and_observed_children_absent",
+                            release_confirmed=True,
+                        )
+                    if _now() >= self.deadline_at:
+                        return self._result(
+                            status="release_uncertain",
+                            reason="owned_child_still_present_at_deadline",
+                            release_confirmed=False,
+                        )
+                    time.sleep(self.poll_seconds)
+                    continue
+
+                self.root_seen = True
+                cluster_name = self._validate_root(root)
+                self._observe_owned_children(cluster_name)
+                deadline_reached = _now() >= self.deadline_at
+                if self.terminal_status and not self.cleanup_requested:
+                    self._request_exact_uid_cleanup()
+                    continue
+                if deadline_reached:
+                    if not self.cleanup_requested:
+                        self._request_exact_uid_cleanup()
+                        if self.cleanup_requested:
+                            continue
+                    return self._result(
+                        status="release_uncertain",
+                        reason="creation_bound_deadline_elapsed",
+                        release_confirmed=False,
+                    )
+                time.sleep(
+                    min(self.poll_seconds, max(0.01, (self.deadline_at - _now()).total_seconds()))
+                )
+            except ObserverError as exc:
+                return self._result(
+                    status="release_uncertain",
+                    reason=exc.code,
+                    release_confirmed=False,
+                )
 
 
 def _validated_receipt(message: object, *, kind: str) -> dict | None:
