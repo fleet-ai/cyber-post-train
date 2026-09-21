@@ -2,9 +2,13 @@
 
 ## Status and boundary
 
-This is a source-only design for a possible future Qwen3.8 training-data lane.
-It creates no rollout, evaluation, training job, cluster object, model endpoint,
-or corpus. It must not be treated as approval to collect reasoning data.
+This is a source-only design and private-materialization contract for a
+possible future Qwen3.8 training-data lane. The checked-in
+`data-fleet-visible-reasoning-materialize` command can validate sealed inputs
+and construct a private token-and-mask corpus locally. It creates no rollout,
+evaluation, training job, cluster object, or model endpoint, and it does not
+authorize collection. A corpus request without the required authorization and
+evidence files fails before private records are read.
 
 The current lane remains **action-only**. It admits verified task successes from
 training task families and trains visible assistant actions and tool calls. It
@@ -63,9 +67,10 @@ The source inventory uses one of three visibility values for every candidate:
 hint to infer, summarize, rewrite, or expose hidden reasoning.
 
 The existing aggregate census command intentionally authorizes no reasoning
-schema today. A future implementation must add the new schema, renderer,
-masking contract, and tests together; changing the census allowlist by itself
-is invalid.
+data by itself. The separate schema, renderer boundary, masking contract, and
+tests now live with the private materializer; future collection code must emit
+those exact sealed artifacts. Changing a census allowlist by itself remains
+invalid.
 
 ## Broad family-safe data split
 
@@ -195,11 +200,13 @@ set; external benchmarks remain evaluation-only and cannot feed this corpus.
 
 ## Implementation sequence and stop conditions
 
-1. Add a new reasoning-only metadata schema and renderer without altering the
-   current action-only admission command.
-2. Add synthetic tests for template/thinking proof, source authorization,
+1. The reasoning-only schemas, renderer boundary, and private materializer are
+   implemented without altering the current action-only admission command; see
+   [the materialization contract](FLEET_VISIBLE_REASONING_MATERIALIZATION.md).
+2. Synthetic tests cover template/thinking proof, source authorization,
    masking, exact continuation, split isolation, and private-teacher rejection.
-3. Run only the aggregate census. If no authorized student-visible source is
+3. Produce only the aggregate census and sealed handoff. If no authorized
+   student-visible source is
    available, stop; action-only data collection remains the correct lane.
 4. Review the schema and tests. Only a separately authorized operator may then
    create a collection campaign.

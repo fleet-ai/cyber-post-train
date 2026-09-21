@@ -160,11 +160,14 @@ private, unknown, hidden-thinking, or opaque-compaction fields remain
 forbidden.  Its exporter must prove which exact messages are student-visible,
 how continuations were represented, and how those targets were masked.
 
-The current materializer deliberately rejects this lane rather than treating
-visible reasoning as if it were ordinary tool output.  That prevents an
-accidental mixture of teacher action imitation and a different self-reasoning
-objective.  A separate schema, tests, and acceptance receipt are required
-before self visible reasoning can be admitted to SFT.
+The action-only materializer deliberately rejects this lane rather than
+treating visible reasoning as if it were ordinary tool output. A separate
+private builder now owns the reasoning arm, with its own schemas, tests, and
+acceptance receipt; see
+[the visible-reasoning materialization contract](FLEET_VISIBLE_REASONING_MATERIALIZATION.md).
+It still cannot collect or train by itself: an authorized source profile,
+sealed selection, exact serializer proof, and no opaque compaction are all
+required before it can materialize any private records.
 
 ## Practical next sequence
 
