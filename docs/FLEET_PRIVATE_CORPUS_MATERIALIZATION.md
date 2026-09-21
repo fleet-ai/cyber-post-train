@@ -23,15 +23,19 @@ training launch, or permission to launch any of those.
 
 ## Inputs and exact bindings
 
-The request schema is `cyber_fleet_private_corpus_materialization_request_v1`.
-Every file input is a regular-file reference with its exact SHA-256.  The
-materializer checks each file before reading it and again immediately before
-writing the result.
+The historical request schema is
+`cyber_fleet_private_corpus_materialization_request_v1`.  The exactly-once
+successor uses `cyber_fleet_private_corpus_materialization_request_v2` and adds
+the exact operation-authorization file.  Every file input is a regular-file
+reference with its exact SHA-256.  The materializer checks each file before
+reading it and again immediately before writing the result.  It dispatches by
+exact version: v1 selections/receipts/packets cannot be mixed with v2, and v2
+cannot proceed without one matching packet and operation authorization.
 
 | Input | What it proves |
 | --- | --- |
 | Private selection and aggregate admission receipt | Exact successful sessions, source model, template, tool treatment, campaign, and metadata-only admission policy from `data-fleet-admit`. |
-| Collection packet, task selection, and evaluation configuration | The approved source type, target of at least 20 million unique visible-action tokens, **digest of the source-authorization receipt**, OpenCode tool surface, and complete train roster. |
+| Collection packet, task selection, evaluation configuration, and (for v2) operation authorization | The approved source type, target of at least 20 million unique visible-action tokens, **digest of the source-authorization receipt**, OpenCode tool surface, complete train roster, exact 200-cell identity map, canonical operation root, and dedicated ledger identity. |
 | Catalog inventory, family split, reviewed root role anchor, protected-family lock, and runtime bindings | The complete current task universe, one immutable role per task family, every held-out family, and the exact runnable task/environment/data binding. The materializer requires the source-derived September-study root anchor, compares the child split's inherited roles and task-family mapping to it, and rejects generic re-splits or a caller-sealed replacement root. |
 | Private normalized records | The admitted records only.  Their self-digests, session identities, campaign cells, source settings, lineage, and trajectory digests must match the selection exactly. |
 | Model lock, local tokenizer, and native masking helper | Exact local tokenizer bytes and the approved dense-window implementation. |
@@ -51,16 +55,19 @@ receipt against its source-of-truth registry before collection begins.  This is
 an intentional boundary: this command has no credentials or network access.
 
 The visible-action packet also carries one exact `execution_safety` object.
-Before opening any private normalized record, the materializer requires the
-local CPU-worker rail, exact planned/capped cell counts, a fresh (at most 600
-seconds) duplicate census over every authoritative collection ledger and Fleet
-session, no automatic replay of ambiguous cells, and
-`external_submission: false`.  Kubernetes wrapping remains unsupported; a
-future wrapper must prove two stable previews and the exact top-level
-`fleet.ai/failure-alerts: "off"` annotation on each root `Job` or `RayJob`.
-Unknown or weakened safety fields are rejected.  The packet's per-task and
-per-family session caps are also checked against the admitted private
-selection before record ingestion.
+The v1 materializer preserves its local-worker and global-census requirement,
+but that packet is historical and non-launchable because the required census
+has no maintained issuer.  The v2 materializer instead requires the exact
+create-once operation authorization, all three per-cell identities, canonical
+private root, dedicated ledger, and no same-path, alternate-path, or ambiguous
+replay.  It also verifies the fixed amd64 CPU Job contract: priority `c1`, zero
+GPU resources, top-level `fleet.ai/failure-alerts: "off"`, two stable server
+previews, one create attempt, fixed 768,600-second deadline, no Job or container
+restart, exact-name-and-UID terminal observation, foreground cleanup, and proof
+that no owned child or idle allocation remains.  Unknown, cross-version, or
+weakened fields are rejected before any private record is opened.  The packet's
+per-task and per-family session caps are also checked against the admitted
+private selection before record ingestion.
 
 ## What records are accepted
 
