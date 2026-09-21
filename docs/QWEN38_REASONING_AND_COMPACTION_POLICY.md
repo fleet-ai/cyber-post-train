@@ -23,12 +23,18 @@ Keep these tracks separate even when they use the same task-family split:
 | --- | --- | --- |
 | Teacher action-only | Verified successful assistant actions and tool calls | Implemented current path |
 | Qwen self visible reasoning | Qwen-written reasoning that was explicitly shown to the Qwen user, plus actions | Separate source-only materializer; not connected to a training launcher |
-| Teacher visible rationale | Teacher text independently proved to have been shown to the Qwen user and authorized for training | Future, separately reviewed contract |
+| Teacher visible rationale | Teacher text independently proved to have been shown to the Qwen user and authorized for training | Separate source-only renderer and metadata admission implemented; collection, token materialization, and training remain unapproved |
 
 The third row never means a provider's internal reasoning. A field named
 `thinking`, `reasoning`, `reasoning_content`, or `analysis` is private or
-unknown unless a future teacher-specific contract proves otherwise; it cannot
+unknown unless the teacher-specific contract proves otherwise; it cannot
 be re-labelled or reconstructed as visible text.
+
+The source-only teacher contract is
+[documented here](TEACHER_VISIBLE_RATIONALE_COLLECTION.md). It accepts only a
+brief ordinary explanation written before a tool call, after exact source
+authorization and verifier success. It does not expose provider-private
+reasoning or authorize a collection or training run.
 
 ## What the current SFT corpus contains
 
@@ -173,11 +179,13 @@ The only acceptable written reasoning is reasoning that is both:
 2. **visible to the student under the same inference contract**.
 
 The implemented initial source is a fresh Qwen rollout collected with an
-explicit student-visible thinking template. The v1 builder rejects every
-teacher source. A future teacher-visible corpus needs a distinct contract that
-proves the exact teacher text was ordinary student-visible conversation text
-and was authorized for training. Generic provider `thinking`, `reasoning`, or
-`reasoning_content` fields are private/unknown by default and must be excluded.
+explicit student-visible thinking template. The v1 Qwen-self builder still
+rejects every teacher source. Teacher-visible rationale has a separate
+source-profile/packet renderer and metadata admission boundary which proves
+that the exact teacher text was ordinary student-visible conversation text and
+was authorized for training. It does not yet have a private token materializer
+or training permit. Generic provider `thinking`, `reasoning`, or
+`reasoning_content` fields are private/unknown by default and remain excluded.
 Never infer, rewrite, summarize, or reconstruct hidden thought.
 
 ### Required aggregate-only inventory

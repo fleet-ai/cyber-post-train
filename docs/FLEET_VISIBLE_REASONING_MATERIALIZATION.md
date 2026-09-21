@@ -16,7 +16,7 @@ authorized collection and sealed successful-session selection.
 | --- | --- | --- | --- |
 | Teacher/action-only | Successful teacher actions and tool calls | Existing action-only builder | Teacher hidden reasoning, unknown prose, opaque compaction |
 | Qwen self/visible reasoning | Qwen reasoning explicitly shown to the Qwen user, plus the same visible actions | The builder in this document, source-only and not yet connected to a training launcher | Any generic teacher reasoning field, private/unknown reasoning, opaque compaction |
-| Teacher/visible rationale | Teacher rationale supplied as ordinary, explicitly authorized text that a Qwen user could see | Design only; no code path accepts it yet | Provider-private thinking, inferred/reconstructed rationale, and all records until this separate contract is reviewed |
+| Teacher/visible rationale | Teacher rationale supplied as ordinary, explicitly authorized text that a Qwen user could see | Separate source-profile/packet renderer and metadata-only admission contract; no collection or training launcher | Provider-private thinking, inferred/reconstructed rationale, and any record without exact source, verifier, Qwen-serialization, family, and compaction evidence |
 
 These are different scientific treatments. They use the same family-safe task
 roles when they are compared, but their records, source proof, corpus identity,
@@ -111,7 +111,9 @@ with only reasoning loss masked.
 The action-only schemas and materializer remain unchanged. A record with no
 explicit Qwen-visible reasoning belongs in that action-only lane, not here.
 
-The planned teacher-visible-rationale arm will use a different set of schema
-names, ending in `teacher_visible_rationale_*`. It cannot reuse any schema
-listed above or rename a teacher `thinking` field. Its separate gate is defined
-in [the collection design](QWEN38_STUDENT_VISIBLE_REASONING_COLLECTION_DESIGN_V1.md#teacher-visible-rationale-is-a-separate-future-arm).
+The teacher-visible-rationale arm uses a different set of schema names ending
+in `teacher_visible_rationale_*`. It cannot reuse any schema listed above or
+rename a teacher `thinking` field. Its source-only renderer and metadata
+admission boundary are documented in
+[the teacher-visible-rationale collection contract](TEACHER_VISIBLE_RATIONALE_COLLECTION.md).
+It still has no private token materializer or training permit.

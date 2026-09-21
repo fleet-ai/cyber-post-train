@@ -332,6 +332,47 @@ def data_fleet_visible_reasoning_authorize(
         _fail(exc)
 
 
+@app.command("data-fleet-teacher-visible-rationale-render")
+def data_fleet_teacher_visible_rationale_render(
+    requirements: Path,
+    source_authorization: Path,
+    output: Path,
+) -> None:
+    """Render a source-only teacher-visible-rationale packet; never collect."""
+    from training.sft import read_mapping
+    from training.teacher_visible_rationale_campaign import render, write_contract
+
+    try:
+        rendered = render(
+            read_mapping(requirements),
+            read_mapping(source_authorization),
+            root=requirements.resolve().parents[2],
+        )
+        write_contract(output, rendered)
+        _print(
+            {
+                "submitted": False,
+                "source_profile_sha256": rendered["source-profile.json"]["sha256"],
+                "collection_packet_sha256": rendered["collection-packet.json"]["sha256"],
+                "external_submission_authorized": False,
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("data-fleet-teacher-visible-rationale-admit")
+def data_fleet_teacher_visible_rationale_admit(config: Path) -> None:
+    """Admit only metadata-backed teacher rationale successes; never read text."""
+    from training.sft import read_mapping
+    from training.teacher_visible_rationale_campaign import admit
+
+    try:
+        _print(admit(read_mapping(config), relative_to=config.resolve().parent))
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command("data-fleet-roster")
 def data_fleet_roster(config: Path) -> None:
     """Build a family-safe Fleet collection roster from sealed metadata only."""

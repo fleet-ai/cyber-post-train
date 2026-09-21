@@ -144,6 +144,70 @@ def test_data_fleet_visible_reasoning_authorize_emits_aggregate_permit(tmp_path,
     assert "train.parquet" not in result.stdout
 
 
+def test_data_fleet_teacher_visible_rationale_render_is_source_only(tmp_path, monkeypatch):
+    from training import teacher_visible_rationale_campaign as teacher
+
+    requirements = tmp_path / "configs/collection/requirements.json"
+    requirements.parent.mkdir(parents=True)
+    authorization = tmp_path / "authorization.json"
+    output = tmp_path / "packet"
+    requirements.write_text("{}")
+    authorization.write_text("{}")
+    calls = []
+
+    def render(req, auth, *, root):
+        calls.append((req, auth, root))
+        return {
+            "source-profile.json": {"sha256": "sha256:" + "a" * 64},
+            "collection-packet.json": {"sha256": "sha256:" + "b" * 64},
+        }
+
+    def write_contract(path, rendered):
+        calls.append((path, rendered))
+
+    monkeypatch.setattr(teacher, "render", render)
+    monkeypatch.setattr(teacher, "write_contract", write_contract)
+    result = RUNNER.invoke(
+        cli.app,
+        [
+            "data-fleet-teacher-visible-rationale-render",
+            str(requirements),
+            str(authorization),
+            str(output),
+        ],
+    )
+    assert result.exit_code == 0
+    assert calls[0] == ({}, {}, tmp_path)
+    assert calls[1][0] == output
+    assert '"submitted": false' in result.stdout
+    assert '"external_submission_authorized": false' in result.stdout
+
+
+def test_data_fleet_teacher_visible_rationale_admit_is_metadata_only(tmp_path, monkeypatch):
+    from training import teacher_visible_rationale_campaign as teacher
+
+    config = tmp_path / "admit.json"
+    config.write_text("{}")
+    calls = []
+
+    def admit(value, *, relative_to):
+        calls.append((value, relative_to))
+        return {
+            "submitted": False,
+            "selected_records": 2,
+            "candidate_supervised_token_occurrences": 10,
+            "candidate_occurrence_floor_reached": False,
+            "sft_ready": False,
+        }
+
+    monkeypatch.setattr(teacher, "admit", admit)
+    result = RUNNER.invoke(cli.app, ["data-fleet-teacher-visible-rationale-admit", str(config)])
+    assert result.exit_code == 0
+    assert calls == [({}, config.parent.resolve())]
+    assert '"selected_records": 2' in result.stdout
+    assert '"sft_ready": false' in result.stdout
+
+
 def test_data_fleet_roster_dispatches_metadata_only_builder(tmp_path, monkeypatch):
     from training import fleet_collection_roster
 
