@@ -151,10 +151,26 @@ def test_train_only_preflight_exercises_native_loader(monkeypatch, unexpected):
     rows = [{"input_ids": [1, 2]}]
     if unexpected:
         with pytest.raises(ValueError, match="unexpectedly produced"):
-            sft._check_native_dataset_loader(plan, rows)
+            sft._check_native_dataset_loader(plan, {"train": rows})
     else:
-        sft._check_native_dataset_loader(plan, rows)
+        sft._check_native_dataset_loader(plan, {"train": rows})
     assert calls == [(plan, "train"), (plan, "eval")]
+
+
+def test_reference_dev_preflight_exercises_native_train_and_eval_loaders(monkeypatch):
+    from training import sft_runtime
+
+    class Trainer:
+        def load_dataset(self):
+            return self._load_split("train")
+
+        def load_eval_dataset(self):
+            return self._load_split("dev")
+
+    monkeypatch.setattr(sft_runtime, "_make_trainer_class", lambda: Trainer)
+    plan = {"datasets": {"train": {}, "dev": {}}}
+    rows = {"train": [{"input_ids": [1]}], "dev": [{"input_ids": [2]}]}
+    sft._check_native_dataset_loader(plan, rows)
 
 
 @pytest.mark.parametrize(
@@ -907,6 +923,15 @@ def test_cpu_preflight_checks_files_and_actual_target_accounting(
     monkeypatch.setattr(torch.cuda, "is_available", lambda: defect == "gpu")
     monkeypatch.setattr(sft_runtime, "validate_runtime_sources", native)
     monkeypatch.setattr(sft_runtime, "build_runtime_configs", lambda p: calls.append("config"))
+
+    class Trainer:
+        def load_dataset(self):
+            return self._load_split("train")
+
+        def load_eval_dataset(self):
+            return self._load_split("dev")
+
+    monkeypatch.setattr(sft_runtime, "_make_trainer_class", lambda: Trainer)
 
     def local_loader(path, **kwargs):
         assert path == str(root)
