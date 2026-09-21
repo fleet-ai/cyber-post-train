@@ -42,6 +42,7 @@ PRIVATE_EPISODE_SCHEMA = "cyber_qwen38_miles96_private_episode_v1"
 COMPLETE_MODEL_SCHEMA = "cyber_qwen38_miles96_complete_model_v1"
 CHECKPOINT_MANIFEST_SCHEMA = "cyber_qwen38_miles96_checkpoint_manifest_v1"
 PREPARED_MODEL_SCHEMA = "cyber_qwen38_miles96_prepared_model_inventory_v1"
+TASK_SIGNAL_EVIDENCE_SCHEMA = "cyber_qwen38_miles96_task_signal_evidence_v1"
 IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:"
     "ee273bee346ad8e1cea63d18026b2bc5703bbd2e14d3c65efbbd74f19854874a"
@@ -60,6 +61,7 @@ MILES_HTTP_UTILS_SHA256 = "da630d6594c86d76e89a262d1060c7f81238da9659899dea91798
 MILES_MEGATRON_ACTOR_SHA256 = "eecd72a4387511916add2c97d9e2dad6716db9097fd6ec471468c1f7edc074b9"
 MILES_HF_EXPORT_SHA256 = "4986684bb62acf2ccd0e18a5ab7cf6bd50391f42d42be35ad3a377b36bbd4a34"
 MILES_WANDB_UTILS_SHA256 = "d2a2bb4463b0a2158b2cd31e72e6e209a7f0092e182bf358ac07aea7cc68d5fe"
+DATAMINER_V004_COMMIT = "10afa8d064bb3dd1c11c50768590e432dfa69097"
 RECIPE = "qwen3.8-27b"
 MODEL = "Qwen/Qwen3.8-27B"
 CONTEXT_TOKENS = 98_304
@@ -174,11 +176,14 @@ def build_plan(
     model_root: str,
     model_binding_sha256: str,
     task_binding: dict[str, str],
+    task_signal_evidence: dict[str, Any],
 ) -> dict[str, Any]:
     """Make one fresh plan from independently observed inputs.
 
     ``task_binding`` must come from an immediately preceding read-only
-    authoritative task/version check.  This function intentionally cannot
+    authoritative task/version check.  ``task_signal_evidence`` must be a
+    sanitized prior receipt for the same exact task/verifier binding and fit
+    inside this canary's bounded episode.  This function intentionally cannot
     infer a task, reuse a predecessor, or stage a private row from history.
     """
     plan = {
@@ -216,6 +221,20 @@ def build_plan(
             "binding_sha256": model_binding_sha256,
         },
         "task_binding": task_binding,
+        "task_signal_evidence": task_signal_evidence,
+        "provenance": {
+            "mechanics_reference": {
+                "repository": "fleet-ai/dataminer_v2",
+                "commit": DATAMINER_V004_COMMIT,
+                "recipe": "v004",
+                "proven_scope": "one_node_tp4_cp2_96k_shape_only",
+            },
+            "maintained_recipe": {
+                "max_tokens_per_gpu": 49_152,
+                "optimizer_cpu_offload": False,
+                "qualification_status": "first_qualification_not_v004_proven",
+            },
+        },
         "episode": {
             "max_turns": 32,
             "max_tokens_per_turn": 8192,
@@ -275,6 +294,8 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "execution",
         "prepared_model",
         "task_binding",
+        "task_signal_evidence",
+        "provenance",
         "episode",
         "optimization",
         "wandb",
@@ -354,6 +375,61 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     }
     if task["authority_receipt_sha256"] != "sha256:" + digest(authority):
         raise ValueError("task authority receipt digest is not self-consistent")
+
+    signal = value["task_signal_evidence"]
+    signal_fields = {
+        "schema",
+        "task_key",
+        "task_version_id",
+        "verifier_version_id",
+        "task_set_sha256",
+        "tool_catalog_sha256",
+        "max_turns",
+        "max_tokens_per_turn",
+        "episode_timeout_s",
+        "completed_episode_count",
+        "finite_rewards",
+        "reward_variation",
+        "all_instances_released",
+        "source_receipt_sha256",
+        "sha256",
+    }
+    if not isinstance(signal, dict) or set(signal) != signal_fields:
+        raise ValueError("task signal evidence fields changed")
+    signal_body = {key: item for key, item in signal.items() if key != "sha256"}
+    if (
+        signal.get("schema") != TASK_SIGNAL_EVIDENCE_SCHEMA
+        or signal.get("sha256") != "sha256:" + digest(signal_body)
+        or any(signal.get(field) != task[field] for field in authority)
+        or type(signal.get("max_turns")) is not int
+        or not 1 <= signal["max_turns"] <= 32
+        or type(signal.get("max_tokens_per_turn")) is not int
+        or not 1 <= signal["max_tokens_per_turn"] <= 8192
+        or type(signal.get("episode_timeout_s")) is not int
+        or not 1 <= signal["episode_timeout_s"] <= 2400
+        or type(signal.get("completed_episode_count")) is not int
+        or signal["completed_episode_count"] < 2
+        or signal.get("finite_rewards") is not True
+        or signal.get("reward_variation") is not True
+        or signal.get("all_instances_released") is not True
+    ):
+        raise ValueError("task lacks exact bounded mixed-signal evidence")
+    _sha256(signal["source_receipt_sha256"], "task signal source receipt")
+
+    if value["provenance"] != {
+        "mechanics_reference": {
+            "repository": "fleet-ai/dataminer_v2",
+            "commit": DATAMINER_V004_COMMIT,
+            "recipe": "v004",
+            "proven_scope": "one_node_tp4_cp2_96k_shape_only",
+        },
+        "maintained_recipe": {
+            "max_tokens_per_gpu": 49_152,
+            "optimizer_cpu_offload": False,
+            "qualification_status": "first_qualification_not_v004_proven",
+        },
+    }:
+        raise ValueError("mechanics provenance drift")
 
     expected_episode = {
         "max_turns": 32,
@@ -723,6 +799,9 @@ def _runtime_recipe_binding() -> None:
         or "--tensor-model-parallel-size 4" not in shape
         or ("--context-parallel-size 2" not in shape)
         or recipe.extra_sglang_args != "--sglang-attention-backend triton "
+        or "--offload-train-target cpu" not in recipe.extra_train_args
+        or "--optimizer-cpu-offload" in recipe.extra_train_args
+        or "--optimizer-cpu-offload" in shape
     ):
         raise ValueError("maintained one-node TP4/CP2 shape drift")
 

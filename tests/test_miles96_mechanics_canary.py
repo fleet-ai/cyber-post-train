@@ -17,6 +17,7 @@ from types import SimpleNamespace as NS
 import pytest
 import yaml
 
+from cyber_post_train.gpu_capacity import build_capacity_census
 from cyber_post_train.jobs import JobsError, validate_preview, validate_request
 from cyber_post_train.jobs import digest as jobs_digest
 from cyber_post_train.sfs_output import build_output_absence_receipt
@@ -38,14 +39,30 @@ def _plan() -> dict:
         "task_set_sha256": _sha("b"),
         "tool_catalog_sha256": _sha("c"),
     }
+    signal_body = {
+        "schema": mechanics.TASK_SIGNAL_EVIDENCE_SCHEMA,
+        **authority,
+        "max_turns": 32,
+        "max_tokens_per_turn": 8192,
+        "episode_timeout_s": 2400,
+        "completed_episode_count": 8,
+        "finite_rewards": True,
+        "reward_variation": True,
+        "all_instances_released": True,
+        "source_receipt_sha256": _sha("7"),
+    }
     return mechanics.build_plan(
-        name="q38-m96-canary-a1",
-        reload_name="q38-m96-reload-a1",
+        name="chris-q38-m96-canary-a1",
+        reload_name="chris-q38-m96-reload-a1",
         model_root="/mnt/sfs/jobs/q38-prepared-model-v1",
         model_binding_sha256=_sha("a"),
         task_binding={
             **authority,
             "authority_receipt_sha256": "sha256:" + mechanics.digest(authority),
+        },
+        task_signal_evidence={
+            **signal_body,
+            "sha256": "sha256:" + mechanics.digest(signal_body),
         },
     )
 
@@ -171,6 +188,20 @@ def test_one_node_current_recipe_request_and_fresh_v1_row() -> None:
     assert request["requeueIfPreempted"] is False
     assert request["env"]["WANDB_RESUME"] == "never"
     assert request["env"]["WANDB_RUN_ID"] == plan["wandb"]["run_id"]
+    assert plan["provenance"] == {
+        "mechanics_reference": {
+            "repository": "fleet-ai/dataminer_v2",
+            "commit": "10afa8d064bb3dd1c11c50768590e432dfa69097",
+            "recipe": "v004",
+            "proven_scope": "one_node_tp4_cp2_96k_shape_only",
+        },
+        "maintained_recipe": {
+            "max_tokens_per_gpu": 49152,
+            "optimizer_cpu_offload": False,
+            "qualification_status": "first_qualification_not_v004_proven",
+        },
+    }
+    assert plan["task_signal_evidence"]["reward_variation"] is True
     assert plan["task_binding"]["task_key"] not in request["command"]
 
     row = json.loads(mechanics.task_rows(plan))
@@ -190,11 +221,11 @@ def test_one_node_current_recipe_request_and_fresh_v1_row() -> None:
         "--num-rollout 1",
         "--over-sampling-batch-size 1",
         "--save-interval 1",
-        "--save-hf /mnt/sfs/jobs/q38-m96-canary-a1/hf/step-{rollout_id}",
+        "--save-hf /mnt/sfs/jobs/chris-q38-m96-canary-a1/hf/step-{rollout_id}",
         mechanics.REWARD_FILTER,
         "training.miles96_mechanics_canary.record_selected_reward_group",
         "training.miles96_mechanics_canary.post_save_hook",
-        "--wandb-run-id q38-m96-canary-a1",
+        "--wandb-run-id chris-q38-m96-canary-a1",
     ):
         assert expected in extra
 
@@ -259,32 +290,32 @@ def test_pinned_miles_wandb_patch_binds_primary_and_live_secondaries(
             module.__path__ = []
         monkeypatch.setitem(sys.modules, name, module)
     monkeypatch.setenv("WANDB_API_KEY", "redacted-test-key")
-    monkeypatch.setenv("WANDB_RUN_ID", "q38-m96-canary-a1")
+    monkeypatch.setenv("WANDB_RUN_ID", "chris-q38-m96-canary-a1")
     monkeypatch.setenv("WANDB_RESUME", "never")
 
     mechanics.install_safe_wandb()
-    primary = NS(wandb_run_id="q38-m96-canary-a1")
+    primary = NS(wandb_run_id="chris-q38-m96-canary-a1")
     with pytest.raises(RuntimeError, match="not the live primary"):
         wandb_utils.init_wandb_secondary(NS(wandb_run_id=primary.wandb_run_id))
     # A historical run at the exact planned ID is never resumed by primary.
-    FakeWandb.existing.add("q38-m96-canary-a1")
+    FakeWandb.existing.add("chris-q38-m96-canary-a1")
     with pytest.raises(RuntimeError, match="historical run exists"):
         wandb_utils.init_wandb_primary(primary)
     FakeWandb.existing.clear()
     wandb_utils.init_wandb_primary(primary)
-    assert primary.wandb_run_id == "q38-m96-canary-a1"
+    assert primary.wandb_run_id == "chris-q38-m96-canary-a1"
     assert calls == [
         {
             "entity": "thefleet",
             "project": "cyber-post",
-            "id": "q38-m96-canary-a1",
+            "id": "chris-q38-m96-canary-a1",
             "resume": "never",
         }
     ]
 
     wandb_utils.init_wandb_secondary(NS(wandb_run_id=primary.wandb_run_id))
     assert calls[1] == {
-        "id": "q38-m96-canary-a1",
+        "id": "chris-q38-m96-canary-a1",
         "resume": "allow",
         "reinit": True,
     }
@@ -296,7 +327,7 @@ def test_pinned_miles_wandb_patch_binds_primary_and_live_secondaries(
 
     monkeypatch.delenv("WANDB_API_KEY")
     with pytest.raises(RuntimeError, match="credential is absent"):
-        wandb_utils.init_wandb_primary(NS(wandb_run_id="q38-m96-canary-a1"))
+        wandb_utils.init_wandb_primary(NS(wandb_run_id="chris-q38-m96-canary-a1"))
 
 
 def test_runtime_bundle_executes_in_an_isolated_interpreter(tmp_path: Path) -> None:
@@ -337,7 +368,18 @@ def test_server_preview_proves_root_alert_annotation_and_no_retry() -> None:
 
 
 @pytest.mark.parametrize(
-    "fault", ["same_name", "old_image", "context", "filter", "priority", "reuse", "authority"]
+    "fault",
+    [
+        "same_name",
+        "old_image",
+        "context",
+        "filter",
+        "priority",
+        "reuse",
+        "authority",
+        "signal",
+        "provenance",
+    ],
 )
 def test_contract_drift_fails_before_any_request(fault: str) -> None:
     plan = _plan()
@@ -353,8 +395,12 @@ def test_contract_drift_fails_before_any_request(fault: str) -> None:
         plan["cluster"]["priority"] = "c0"
     elif fault == "reuse":
         plan["prepared_model"]["root"] = plan["identity"]["run_dir"] + "/old-model"
-    else:
+    elif fault == "authority":
         plan["task_binding"]["tool_catalog_sha256"] = _sha("9")
+    elif fault == "signal":
+        plan["task_signal_evidence"]["reward_variation"] = False
+    else:
+        plan["provenance"]["maintained_recipe"]["optimizer_cpu_offload"] = True
     with pytest.raises(ValueError):
         mechanics.validate_plan(plan)
 
@@ -645,6 +691,17 @@ def test_live_preview_absence_and_exactly_one_post_are_durably_journaled(
         assert argv[:2] == ["kubectl", "--context"]
         return NS(returncode=0, stdout='{"items":[]}', stderr="")
 
+    capacity_calls = []
+
+    def capacity_reader(context: str, **kwargs) -> dict:
+        capacity_calls.append((context, kwargs))
+        return build_capacity_census(
+            {"items": []},
+            {"items": []},
+            observed_at=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            **kwargs,
+        )
+
     result = launch.submit_once(
         plan,
         request,
@@ -653,6 +710,7 @@ def test_live_preview_absence_and_exactly_one_post_are_durably_journaled(
         runner=runner,
         jobs_root=jobs_root,
         wandb_exists=lambda *_args: False,
+        capacity_reader=capacity_reader,
         now=time.time,
         start_observer=start_observer,
     )
@@ -670,6 +728,81 @@ def test_live_preview_absence_and_exactly_one_post_are_durably_journaled(
     assert rows[0]["fresh_absence"]["sfs_output_absent"] is True
     assert len(rows[0]["fresh_absence"]["sfs_output_absence_receipt_sha256"]) == 64
     assert len(rows[0]["final_sfs_output_absence_receipt_sha256"]) == 64
+    assert rows[0]["capacity_gate"]["planned"] == {"nodes": 1, "gpus": 8}
+    assert rows[0]["capacity_gate"]["capacity_census"]["qualified"] is True
+    assert capacity_calls == [
+        (
+            plan["execution"]["kubernetes_context"],
+            {
+                "owner_prefixes": launch.PROJECT_OWNER_PREFIXES,
+                "max_nodes": launch.PROJECT_MAX_NODES,
+                "max_gpus": launch.PROJECT_MAX_GPUS,
+                "planned_nodes": 1,
+                "planned_gpus": 8,
+            },
+        )
+    ]
+
+
+def test_capacity_gate_counts_train_and_reload_and_fails_closed() -> None:
+    plan = _plan()
+    observed_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    planned = []
+
+    def reader(_context: str, **kwargs) -> dict:
+        planned.append((kwargs["planned_nodes"], kwargs["planned_gpus"]))
+        return build_capacity_census(
+            {"items": []}, {"items": []}, observed_at=observed_at, **kwargs
+        )
+
+    train = launch.capacity_gate(plan, mechanics.job_request(plan), reader=reader)
+    reload = launch.capacity_gate(
+        plan, mechanics.reload_request(plan, _receipt(plan)), reader=reader
+    )
+    assert train["planned"] == {"nodes": 1, "gpus": 8}
+    assert reload["planned"] == {"nodes": 1, "gpus": 1}
+    assert planned == [(1, 8), (1, 1)]
+
+    def uncertain(_context: str, **kwargs) -> dict:
+        return build_capacity_census(
+            {
+                "items": [
+                    {
+                        "metadata": {
+                            "namespace": "fleet-train-jobs",
+                            "name": "chris-q38-unclassified",
+                            "uid": "44444444-4444-4444-8444-444444444444",
+                            "resourceVersion": "1",
+                            "labels": {},
+                        },
+                        "spec": {
+                            "nodeName": "gpu-node",
+                            "containers": [
+                                {
+                                    "resources": {
+                                        "requests": {"nvidia.com/gpu": 1},
+                                        "limits": {"nvidia.com/gpu": 1},
+                                    }
+                                }
+                            ],
+                        },
+                        "status": {"phase": "Running", "containerStatuses": []},
+                    }
+                ]
+            },
+            {"items": []},
+            observed_at=observed_at,
+            **kwargs,
+        )
+
+    with pytest.raises(JobsError, match="stale or incomplete"):
+        launch.capacity_gate(plan, mechanics.job_request(plan), reader=uncertain)
+
+    def unavailable(_context: str, **_kwargs) -> dict:
+        raise TimeoutError
+
+    with pytest.raises(JobsError, match="census failed"):
+        launch.capacity_gate(plan, mechanics.job_request(plan), reader=unavailable)
 
 
 def test_off_node_submit_requires_a_fresh_exact_sfs_receipt(tmp_path: Path) -> None:

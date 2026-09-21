@@ -21,6 +21,7 @@ from typing import Any
 
 import yaml
 
+from cyber_post_train.gpu_capacity import ROLE_LABELS, live_capacity_census
 from cyber_post_train.jobs import (
     Jobs,
     JobsError,
@@ -36,7 +37,12 @@ from training import miles96_mechanics_canary as mechanics
 KUBERNETES_RESOURCES = "rayjobs.ray.io,rayclusters.ray.io,jobs.batch,pods,workloads.kueue.x-k8s.io"
 MAXIMUM_GUARD_SECONDS = 120
 MAXIMUM_ARM_AGE_SECONDS = 300
+CAPACITY_MAX_AGE_SECONDS = 120
+PROJECT_OWNER_PREFIXES = ("chris-q38-",)
+PROJECT_MAX_NODES = 8
+PROJECT_MAX_GPUS = 64
 COORDINATOR_RESULT_SCHEMA = "cyber_miles96_cleanup_coordinator_v1"
+CAPACITY_GATE_SCHEMA = "cyber_miles96_capacity_gate_v1"
 _SFS_OBSERVER_ROLE = "sfs-output-check"
 _SFS_OBSERVER_NAME = re.compile(
     r"(?P<job>[a-z0-9](?:[-a-z0-9]*[a-z0-9])?-sfs-a[0-9]{2})(?:-[a-z0-9]+)?"
@@ -486,6 +492,85 @@ def _live_preview_proof(request: dict[str, Any], preview: dict[str, Any]) -> dic
     return proof
 
 
+def capacity_gate(
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    *,
+    reader: Callable[..., dict[str, Any]] = live_capacity_census,
+    now: Callable[[], float] = time.time,
+) -> dict[str, Any]:
+    """Read and seal one fresh cross-namespace census immediately before create."""
+    planned_gpus = request.get("workers", 0) * request.get("gpus_per_worker", 0)
+    if (
+        request.get("name") not in {plan["identity"]["name"], plan["identity"]["reload_name"]}
+        or not request["name"].startswith(PROJECT_OWNER_PREFIXES)
+        or request.get("workers") != 1
+        or planned_gpus not in {1, 8}
+        or request.get("priority_class") != "c1"
+        or request.get("failureAlerts") is not False
+    ):
+        raise JobsError("Miles96 GPU capacity binding changed")
+    try:
+        census = reader(
+            plan["execution"]["kubernetes_context"],
+            owner_prefixes=PROJECT_OWNER_PREFIXES,
+            max_nodes=PROJECT_MAX_NODES,
+            max_gpus=PROJECT_MAX_GPUS,
+            planned_nodes=1,
+            planned_gpus=planned_gpus,
+        )
+    except Exception as exc:
+        raise JobsError("Miles96 cross-namespace GPU capacity census failed") from exc
+    if not isinstance(census, dict):
+        raise JobsError("Miles96 cross-namespace GPU capacity census is invalid")
+    try:
+        observed_at = _timestamp(census.get("observed_at"))
+    except JobsError as exc:
+        raise JobsError("Miles96 GPU capacity observation is invalid") from exc
+    unsigned = {key: value for key, value in census.items() if key != "sha256"}
+    current = census.get("current")
+    projected = census.get("projected")
+    scope = census.get("scope")
+    role_counts = current.get("role_pod_counts") if isinstance(current, dict) else None
+    age = now() - observed_at
+    if (
+        census.get("sha256") != digest(unsigned)
+        or census.get("schema") != "cyber_project_gpu_capacity_census_v1"
+        or scope
+        != {
+            "kubernetes_namespaces": "all",
+            "owner_prefixes": list(PROJECT_OWNER_PREFIXES),
+            "ownership_labels": ROLE_LABELS,
+        }
+        or census.get("limits") != {"nodes": PROJECT_MAX_NODES, "gpus": PROJECT_MAX_GPUS}
+        or census.get("planned") != {"nodes": 1, "gpus": planned_gpus}
+        or census.get("qualified") is not True
+        or census.get("problems") != []
+        or not isinstance(current, dict)
+        or not isinstance(projected, dict)
+        or not isinstance(role_counts, dict)
+        or role_counts.get("unclassified") != 0
+        or type(current.get("nodes")) is not int
+        or type(current.get("gpus")) is not int
+        or projected != {"nodes": current["nodes"] + 1, "gpus": current["gpus"] + planned_gpus}
+        or projected["nodes"] > PROJECT_MAX_NODES
+        or projected["gpus"] > PROJECT_MAX_GPUS
+        or not 0 <= age <= CAPACITY_MAX_AGE_SECONDS
+    ):
+        raise JobsError("Miles96 GPU capacity proof is stale or incomplete")
+    return _seal(
+        {
+            "schema": CAPACITY_GATE_SCHEMA,
+            "status": "passed",
+            "plan_sha256": "sha256:" + mechanics.digest(plan),
+            "request_sha256": "sha256:" + digest(request),
+            "planned": {"nodes": 1, "gpus": planned_gpus},
+            "observed_at": census["observed_at"],
+            "capacity_census": census,
+        }
+    )
+
+
 def submit_once(
     plan: dict[str, Any],
     request: dict[str, Any],
@@ -497,6 +582,7 @@ def submit_once(
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     jobs_root: Path = SFS_JOBS_ROOT,
     wandb_exists: Callable[[str, str, str], bool] = _wandb_exists_default,
+    capacity_reader: Callable[..., dict[str, Any]] = live_capacity_census,
     now: Callable[[], float] = time.time,
     start_observer: Callable[[Path], subprocess.Popen[bytes]] = _start_observer,
 ) -> dict[str, Any]:
@@ -553,6 +639,7 @@ def submit_once(
             receipt=output_absence_receipt,
             observed_at=now(),
         )
+        capacity = capacity_gate(plan, request, reader=capacity_reader, now=now)
     except Exception:
         observer.terminate()
         raise
@@ -566,6 +653,7 @@ def submit_once(
                     "preview": preview_receipt,
                     "fresh_absence": guard,
                     "final_sfs_output_absence_receipt_sha256": final_sfs_proof["sha256"],
+                    "capacity_gate": capacity,
                 },
                 sort_keys=True,
                 separators=(",", ":"),

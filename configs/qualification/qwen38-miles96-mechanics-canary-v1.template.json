@@ -18,6 +18,10 @@
     "miles_hf_export_sha256": "4986684bb62acf2ccd0e18a5ab7cf6bd50391f42d42be35ad3a377b36bbd4a34",
     "miles_wandb_utils_sha256": "d2a2bb4463b0a2158b2cd31e72e6e209a7f0092e182bf358ac07aea7cc68d5fe"
   },
+  "provenance": {
+    "mechanics_reference": "fleet-ai/dataminer_v2@10afa8d064bb3dd1c11c50768590e432dfa69097 v004; one-node TP4/CP2 96K shape only",
+    "maintained_recipe_qualification": "first qualification: 49152 train tokens/GPU, whole-trainer phase offload, no optimizer CPU offload"
+  },
   "fixed_contract": {
     "nodes": 1,
     "gpus_per_node": 8,
@@ -37,12 +41,15 @@
     "reload": "one GPU, zero optimizer steps"
   },
   "required_fresh_bindings": [
-    "new training and reload names, W&B run ID, and SFS output directories",
+    "new chris-q38- training and reload names, W&B run ID, and SFS output directories",
     "a currently checked prepared-model root and binding digest",
     "a current authoritative task/version/verifier receipt and matching task/tool-catalog digests",
+    "a digest-sealed prior receipt proving finite mixed verifier rewards for that exact binding within 32 turns and 2400 seconds",
     "a new V1 train.jsonl written only by this run",
     "Jobs API server previews proving the root fleet.ai/failure-alerts annotation is off",
     "fresh Jobs, Kubernetes, SFS, and W&B absence checks immediately before creation",
+    "a fresh cross-namespace capacity census including the planned eight-GPU train or one-GPU reload allocation",
+    "terminal evidence binding the owned GPU Pod imageID to the requested image digest",
     "a durable do-not-retry submission journal and an exact-UID cleanup observer armed before POST"
   ],
   "limits": "This is an operational mechanics canary only. It has a 96K hard context limit and no compaction, so it cannot support the long-horizon cyber science claim made by the separate 262K SkyRL rail."

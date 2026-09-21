@@ -462,6 +462,7 @@ class JobsApiPrefixGuard:
                 "jobs_api_run_name": name,
                 "jobs_api_run_id": run_id,
                 "run_dir": self.run_dir,
+                "image": self.image,
                 "rayjob_name": name,
                 "rayjob_uid": uid,
                 "rayjob_created_at": created,
@@ -540,6 +541,8 @@ class JobsApiExactUidObserver:
             "authorized_not_requested" if self.release_contract is not None else "not_authorized"
         )
         self.peak_gpus = 0
+        self.gpu_pods: dict[str, dict[str, object]] = {}
+        self.runtime_images: dict[str, dict[str, str]] = {}
         self.known: dict[str, dict[str, str]] = {
             "workload": {},
             "raycluster": {},
@@ -556,6 +559,7 @@ class JobsApiExactUidObserver:
             "jobs_api_run_name",
             "jobs_api_run_id",
             "run_dir",
+            "image",
             "rayjob_name",
             "rayjob_uid",
             "rayjob_created_at",
@@ -593,6 +597,8 @@ class JobsApiExactUidObserver:
             not isinstance(value.get("rayjob_name"), str)
             or _KUBERNETES_DNS_LABEL.fullmatch(value["rayjob_name"]) is None
             or _canonical_jobs_run_dir(value.get("run_dir")) != value["run_dir"]
+            or not isinstance(value.get("image"), str)
+            or re.fullmatch(r"[^\s]+@sha256:[a-f0-9]{64}", value["image"]) is None
             or not 1
             <= value.get("maximum_seconds", 0)
             <= (1800 if value.get("context") == DEV_CONTEXT else 16 * 60 * 60)
@@ -780,6 +786,63 @@ class JobsApiExactUidObserver:
         ]
         return regular + restartable + max(ordinary, default=0)
 
+    def _observe_runtime_image(self, pod: dict, *, name: str, uid: str, gpus: int) -> None:
+        """Bind the GPU container's actual imageID to the requested digest."""
+        if gpus == 0:
+            return
+        spec = pod.get("spec")
+        status = pod.get("status", {})
+        if not isinstance(spec, dict) or not isinstance(status, dict):
+            raise ObserverError("Jobs API exact observer Pod is malformed")
+        gpu_containers = []
+        for container in spec.get("containers", []):
+            if not isinstance(container, dict):
+                raise ObserverError("Jobs API exact observer Pod is malformed")
+            resources = container.get("resources", {})
+            requests = resources.get("requests", {}) if isinstance(resources, dict) else {}
+            limits = resources.get("limits", {}) if isinstance(resources, dict) else {}
+            requested = quantity(requests.get("nvidia.com/gpu", 0))
+            limited = quantity(limits.get("nvidia.com/gpu", 0))
+            if requested or limited:
+                gpu_containers.append(container)
+        if (
+            len(gpu_containers) != 1
+            or gpu_containers[0].get("image") != self.binding["image"]
+            or not isinstance(gpu_containers[0].get("name"), str)
+            or not gpu_containers[0]["name"]
+        ):
+            raise ObserverError("Jobs API exact observer Pod image binding changed")
+        self.gpu_pods[name] = {"uid": uid, "gpus": gpus}
+        statuses = status.get("containerStatuses", [])
+        if not isinstance(statuses, list) or any(not isinstance(item, dict) for item in statuses):
+            raise ObserverError("Jobs API exact observer Pod status is malformed")
+        matches = [item for item in statuses if item.get("name") == gpu_containers[0]["name"]]
+        if not matches:
+            return
+        if len(matches) != 1:
+            raise ObserverError("Jobs API exact observer Pod status is ambiguous")
+        image_id = matches[0].get("imageID")
+        if image_id in (None, ""):
+            return
+        if not isinstance(image_id, str):
+            raise ObserverError("Jobs API exact observer runtime imageID is invalid")
+        match = re.search(r"(sha256:[a-f0-9]{64})$", image_id)
+        expected = self.binding["image"].rsplit("@", 1)[1]
+        if match is None or match.group(1) != expected:
+            raise ObserverError("Jobs API exact observer runtime image digest changed")
+        observed = {"image_id": image_id, "digest": match.group(1)}
+        if name in self.runtime_images and self.runtime_images[name] != observed:
+            raise ObserverError("Jobs API exact observer runtime image identity changed")
+        self.runtime_images[name] = observed
+
+    def _runtime_image_identity_complete(self) -> bool:
+        return (
+            len(self.gpu_pods) == 1
+            and sum(int(value["gpus"]) for value in self.gpu_pods.values())
+            == self.binding["expected_gpus"]
+            and set(self.runtime_images) == set(self.gpu_pods)
+        )
+
     def _validate_root(self, resource: dict) -> str:
         name, uid, created = self._metadata(resource, expected_kind="RayJob")
         metadata = resource["metadata"]
@@ -837,6 +900,7 @@ class JobsApiExactUidObserver:
                 raise ObserverError("Jobs API exact observer Pod owner binding changed")
             self._record_known("pod", name=pod_name, uid=pod_uid)
             pod_gpus = self._pod_gpus(pod)
+            self._observe_runtime_image(pod, name=pod_name, uid=pod_uid, gpus=pod_gpus)
             self.peak_gpus = max(self.peak_gpus, pod_gpus)
             if self.peak_gpus > self.binding["expected_gpus"]:
                 raise ObserverError("Jobs API exact observer GPU contract exceeded")
@@ -907,6 +971,7 @@ class JobsApiExactUidObserver:
                 "jobs_api_run_id": self.binding["jobs_api_run_id"],
                 "rayjob_name": self.root_name,
                 "rayjob_uid": self.root_uid,
+                "requested_image": self.binding["image"],
                 "created_at": self.created_at,
                 "allocated_at": _stamp(self.allocated_at) if self.allocated_at else "",
                 "deadline_at": _stamp(self.deadline_at) if self.deadline_at else "",
@@ -923,8 +988,16 @@ class JobsApiExactUidObserver:
                     for name, uid in sorted(self.known["raycluster"].items())
                 ],
                 "pods": [
-                    {"name": name, "uid": uid} for name, uid in sorted(self.known["pod"].items())
+                    {
+                        "name": name,
+                        "uid": uid,
+                        "gpus": int(self.gpu_pods.get(name, {}).get("gpus", 0)),
+                        "runtime_image_id": self.runtime_images.get(name, {}).get("image_id", ""),
+                        "runtime_image_digest": self.runtime_images.get(name, {}).get("digest", ""),
+                    }
+                    for name, uid in sorted(self.known["pod"].items())
                 ],
+                "runtime_image_identity_complete": self._runtime_image_identity_complete(),
                 "peak_gpus": self.peak_gpus,
                 "cleanup_status": self.cleanup_status,
                 "cleanup_requested": self.cleanup_requested,
@@ -957,6 +1030,12 @@ class JobsApiExactUidObserver:
                             release_confirmed=False,
                         )
                     if self._known_children_absent():
+                        if not self._runtime_image_identity_complete():
+                            return self._result(
+                                status="release_uncertain",
+                                reason="runtime_image_identity_not_observed",
+                                release_confirmed=False,
+                            )
                         return self._result(
                             status="released_after_terminal",
                             reason="exact_root_and_observed_children_absent",
@@ -975,7 +1054,11 @@ class JobsApiExactUidObserver:
                 cluster_name = self._validate_root(root)
                 self._observe_owned_children(cluster_name)
                 deadline_reached = self.deadline_at is not None and _now() >= self.deadline_at
-                if self.terminal_status and not self.cleanup_requested:
+                if (
+                    self.terminal_status
+                    and self._runtime_image_identity_complete()
+                    and not self.cleanup_requested
+                ):
                     self._request_exact_uid_cleanup()
                     continue
                 if deadline_reached:

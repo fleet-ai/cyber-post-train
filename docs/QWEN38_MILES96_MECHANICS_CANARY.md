@@ -22,6 +22,7 @@ Miles adapter:
 | FTI version | `0.10.9` |
 | Miles source | `9e178ca16839b0600155f3927f57ce0670b8f453` |
 | Recipe | `qwen3.8-27b`: one node, eight GPUs, TP4/CP2, 96K context |
+| Historical mechanics reference | `fleet-ai/dataminer_v2@10afa8d064bb3dd1c11c50768590e432dfa69097`, recipe `v004` |
 
 The image above is the built 0.10.9 image.  Theseus 0.10.10 exists as source,
 but its own changelog says no image was built for that version, so this canary
@@ -33,6 +34,13 @@ checkpoint/export source files plus the maintained recipe shape.  It calls
 `python -m fti.trainers.miles.run_fleet` directly.  It does not call the older
 `/opt/fleet/run.sh` route, which would otherwise select an old shared model
 directory when running outside a FleetJob mount.
+
+The historical `v004` result proves only the broad one-node TP4/CP2 96K
+mechanics shape.  This maintained recipe uses 49,152 train tokens per GPU,
+offloads the whole trainer between phases, and deliberately does **not** enable
+optimizer CPU offload.  The pinned Theseus source describes that exact stack as
+unrun, so this canary is its first qualification; it must not be described as a
+configuration already proven by `v004`.
 
 The pinned Miles W&B helper is also bound by source hash.  Its primary helper
 normally discards the parsed run ID and lets W&B choose another one.  The
@@ -88,7 +96,9 @@ is intentionally not launchable.  A restricted operator must make a new plan
 with `training.miles96_mechanics_canary.build_plan` after all of these are
 freshly checked:
 
-1. New training and reload names, new W&B run ID, and new SFS output paths.
+1. New `chris-q38-` training and reload names, new W&B run ID, and new SFS
+   output paths.  The canonical project prefix lets the cross-namespace census
+   classify both jobs while they hold or queue GPU capacity.
 2. An exact prepared-model SFS root.  It must contain both
    `Qwen3.8-27B/config.json` and
    `qwen3.8-27B_torch_dist/latest_checkpointed_iteration.txt` with the value
@@ -104,9 +114,18 @@ freshly checked:
    wrapper checks those exact identities again when every episode opens.  This
    is only an authority check; no prompt or stored trajectory belongs in the
    plan.
-4. Immediate duplicate/absence checks for both names and all four output
+4. A sanitized, digest-sealed prior receipt for that exact task version,
+   verifier version, task-set digest, and tool-catalog digest.  It must show at
+   least two finite completed episodes, actual reward variation, and released
+   instances under no more than 32 turns, 8,192 tokens per turn, and 2,400
+   seconds.  Reward values, prompts, answers, and traces do not enter the plan.
+5. Immediate duplicate/absence checks for both names and all four output
    destinations: train output, reload output, fresh row directory, and HF
    export.
+6. A fresh all-namespace GPU capacity census with the planned one-node request
+   included: eight GPUs for training or one GPU for reload.  It must reconcile
+   project inference models, contain no unclassified project GPU Pod, and stay
+   within the project limit.
 
 The model root and task binding are deliberately arguments to `build_plan`.
 That prevents a future operator from accidentally reviving a stale path or a
@@ -140,7 +159,11 @@ exist.  When the submitter cannot see `/mnt/sfs/jobs`, it requires an exact
 plan/request-bound SFS absence receipt no more than five minutes old.  The
 receipt comes from the tracked zero-GPU, root-alert-off, create-once observer
 below; it is validated after server preview and again immediately before the
-create intent.  It then writes `POST_INTENT_DO_NOT_RETRY` durably, issues
+create intent.  Immediately after that final SFS check, it runs the repository
+cross-namespace census with the planned allocation included and seals the full
+qualified receipt into the create intent.  Any unreadable, stale, over-limit,
+unclassified, or otherwise uncertain census fails closed.  It then writes
+`POST_INTENT_DO_NOT_RETRY` durably, issues
 exactly one POST, and journals the returned API name and run ID.  The
 coordinator binds that creator-returned name to the exact RayJob UID and may
 release only that UID after terminal failure or a contract-defined stall.  An
@@ -211,7 +234,13 @@ verifier reward, observed a tool call, and cleaned up its task instance.  Public
 receipts deliberately omit reward values, task text, answers, traces, and the
 exact verifier execution IDs.
 
-Neeraj's maintained `v004` run is useful prior evidence for this mechanical
+Each exact-UID terminal observer also records the requested digest-pinned image
+and the owned GPU Pod's actual `status.containerStatuses[].imageID`.  It accepts
+release evidence only when the resolved digest equals the requested digest;
+missing or mismatched runtime identity leaves release uncertain for both the
+eight-GPU trainer and the one-GPU reload.
+
+Neeraj's pinned `dataminer_v2` `v004` run is useful prior evidence for this mechanical
 shape: one node, 96K context, 80 recorded optimizer steps with finite sampled
 reward metrics, a resume from 75 through 79, checkpoint/HF output, and
 evaluation.  Its records do not independently prove every update tensor was
