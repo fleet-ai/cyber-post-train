@@ -33,6 +33,18 @@ never hide overlength examples by silent truncation. Keep validation data and
 tokenization fixed across measurements; report token-weighted and task-macro
 loss separately.
 
+### Reasoning fields
+
+The current SFT objective is visible assistant actions, not teacher private
+reasoning. Before a corpus can claim any student-visible reasoning supervision,
+bind an aggregate-only field census to its sealed corpus manifest with
+`python -m training.reasoning_census`. The census records counts and digests,
+not transcripts or session identifiers, so it proves availability and schema
+authorization rather than the content of any reasoning. At present no
+reasoning-field schema is authorized, so every reasoning objective fails closed
+until a reviewed change adds its schema, renderer, masking contract, and tests
+together.
+
 ## Matched evaluation
 
 Bind weights, tokenizer/chat template, numerical precision, quantization,
