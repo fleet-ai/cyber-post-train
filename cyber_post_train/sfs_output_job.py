@@ -55,7 +55,7 @@ WORKLOAD_TOPOLOGY_REQUEST = {
 OUTPUT_CHECK_PLAN_SCHEMAS = {
     "cyber_sft_runtime_v2",
     "cyber_sft_runtime_dense_v1",
-    "cyber_qwen38_miles96_launch_v1",
+    "cyber_qwen38_miles96_mechanics_canary_v1",
 }
 _DRIVER_PATH = Path(__file__).with_name("sfs_output_driver.py")
 _SERVER_METADATA_KEYS = {

@@ -41,6 +41,7 @@ REWARD_GATE_SCHEMA = "cyber_qwen38_miles96_selected_reward_group_v1"
 PRIVATE_EPISODE_SCHEMA = "cyber_qwen38_miles96_private_episode_v1"
 COMPLETE_MODEL_SCHEMA = "cyber_qwen38_miles96_complete_model_v1"
 CHECKPOINT_MANIFEST_SCHEMA = "cyber_qwen38_miles96_checkpoint_manifest_v1"
+PREPARED_MODEL_SCHEMA = "cyber_qwen38_miles96_prepared_model_inventory_v1"
 IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:"
     "ee273bee346ad8e1cea63d18026b2bc5703bbd2e14d3c65efbbd74f19854874a"
@@ -58,6 +59,7 @@ MILES_INFERENCE_ROLLOUT_SHA256 = "96e3cba12ae033527e823ed3dd8cb43c31d244775756ec
 MILES_HTTP_UTILS_SHA256 = "da630d6594c86d76e89a262d1060c7f81238da9659899dea917987c5f39fab86"
 MILES_MEGATRON_ACTOR_SHA256 = "eecd72a4387511916add2c97d9e2dad6716db9097fd6ec471468c1f7edc074b9"
 MILES_HF_EXPORT_SHA256 = "4986684bb62acf2ccd0e18a5ab7cf6bd50391f42d42be35ad3a377b36bbd4a34"
+MILES_WANDB_UTILS_SHA256 = "d2a2bb4463b0a2158b2cd31e72e6e209a7f0092e182bf358ac07aea7cc68d5fe"
 RECIPE = "qwen3.8-27b"
 MODEL = "Qwen/Qwen3.8-27B"
 CONTEXT_TOKENS = 98_304
@@ -201,6 +203,7 @@ def build_plan(
             "miles_http_utils_sha256": MILES_HTTP_UTILS_SHA256,
             "miles_megatron_actor_sha256": MILES_MEGATRON_ACTOR_SHA256,
             "miles_hf_export_sha256": MILES_HF_EXPORT_SHA256,
+            "miles_wandb_utils_sha256": MILES_WANDB_UTILS_SHA256,
         },
         "execution": {
             "cluster_target": "prod",
@@ -305,6 +308,7 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "miles_http_utils_sha256": MILES_HTTP_UTILS_SHA256,
         "miles_megatron_actor_sha256": MILES_MEGATRON_ACTOR_SHA256,
         "miles_hf_export_sha256": MILES_HF_EXPORT_SHA256,
+        "miles_wandb_utils_sha256": MILES_WANDB_UTILS_SHA256,
     }
     if value["trainer"] != expected_trainer:
         raise ValueError("maintained 96K Miles trainer binding drift")
@@ -439,12 +443,100 @@ def _wandb_args(plan: dict[str, Any]) -> str:
 
 
 def install_safe_wandb() -> None:
-    """Patch the maintained helper before it serializes WANDB_API_KEY into argv."""
+    """Bind the exact fresh W&B ID without placing its credential in argv.
+
+    The pinned Miles primary helper does not pass its parsed ``wandb_run_id``
+    to ``wandb.init``; it lets W&B choose an ID and then overwrites the parsed
+    value.  Intercept that single init call so the primary creates precisely
+    the ID whose absence was proved before POST and refuses historical resume.
+    Secondary ranks retain Miles's ``resume='allow'`` only to attach to that
+    same live distributed run, and must carry the exact primary ID.
+    """
     import miles.utils.external_utils.command_utils as command_utils
+    import miles.utils.tracking_utils.wandb_utils as wandb_utils
 
     command_utils.get_default_wandb_args = lambda *_args, **_kwargs: (
         "--use-wandb --disable-wandb-random-suffix" if os.environ.get("WANDB_API_KEY") else ""
     )
+    if getattr(wandb_utils, "_cyber_exact_run_id_patch", False):
+        return
+
+    original_primary = wandb_utils.init_wandb_primary
+    original_secondary = wandb_utils.init_wandb_secondary
+
+    def exact_run_id() -> str:
+        # The reviewed root RayJob injects the required Secret into its sole
+        # GPU Pod.  Refuse a half-configured inner Ray driver/actor rather
+        # than silently disabling or creating an unauthenticated W&B run.
+        if not os.environ.get("WANDB_API_KEY"):
+            raise RuntimeError("W&B credential is absent from the live Ray process")
+        value = os.environ.get("WANDB_RUN_ID", "")
+        if not re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,126}[a-z0-9])?", value):
+            raise RuntimeError("WANDB_RUN_ID is absent or invalid")
+        if os.environ.get("WANDB_RESUME") != "never":
+            raise RuntimeError("historical W&B resume is not forbidden")
+        return value
+
+    def init_primary(args: Any) -> None:
+        planned = exact_run_id()
+        if getattr(args, "wandb_run_id", None) != planned:
+            raise RuntimeError("Miles primary W&B ID drift")
+        original_init = wandb_utils.wandb.init
+        calls = 0
+
+        def exact_init(*init_args: Any, **init_kwargs: Any) -> Any:
+            nonlocal calls
+            calls += 1
+            if calls != 1:
+                raise RuntimeError("Miles primary initialized W&B more than once")
+            supplied = init_kwargs.get("id")
+            if supplied not in (None, planned):
+                raise RuntimeError("Miles primary supplied a different W&B ID")
+            init_kwargs["id"] = planned
+            init_kwargs["resume"] = "never"
+            return original_init(*init_args, **init_kwargs)
+
+        wandb_utils.wandb.init = exact_init
+        try:
+            original_primary(args)
+        finally:
+            wandb_utils.wandb.init = original_init
+        actual = getattr(getattr(wandb_utils.wandb, "run", None), "id", None)
+        if calls != 1 or actual != planned or getattr(args, "wandb_run_id", None) != planned:
+            raise RuntimeError("Miles primary did not create the planned fresh W&B run")
+
+    def init_secondary(args: Any, router_addr: str | None = None) -> None:
+        planned = exact_run_id()
+        if getattr(args, "wandb_run_id", None) != planned:
+            raise RuntimeError("Miles secondary is not attaching to the live primary W&B run")
+        original_init = wandb_utils.wandb.init
+        calls = 0
+
+        def exact_init(*init_args: Any, **init_kwargs: Any) -> Any:
+            nonlocal calls
+            calls += 1
+            if calls != 1:
+                raise RuntimeError("Miles secondary initialized W&B more than once")
+            if (
+                init_kwargs.get("id") != planned
+                or init_kwargs.get("resume") != "allow"
+                or init_kwargs.get("reinit") is not True
+            ):
+                raise RuntimeError("Miles secondary W&B attachment contract drift")
+            return original_init(*init_args, **init_kwargs)
+
+        wandb_utils.wandb.init = exact_init
+        try:
+            original_secondary(args, router_addr=router_addr)
+        finally:
+            wandb_utils.wandb.init = original_init
+        actual = getattr(getattr(wandb_utils.wandb, "run", None), "id", None)
+        if calls != 1 or actual != planned:
+            raise RuntimeError("Miles secondary did not attach to the planned live W&B run")
+
+    wandb_utils.init_wandb_primary = init_primary
+    wandb_utils.init_wandb_secondary = init_secondary
+    wandb_utils._cyber_exact_run_id_patch = True
 
 
 SITECUSTOMIZE = (
@@ -484,6 +576,11 @@ def native_arguments(plan: dict[str, Any]) -> list[str]:
             "PYTHONPATH": run_dir + "/.runtime",
             "CYBER_RUNTIME_DIR": run_dir + "/.runtime",
             "CYBER_PLAN_SHA256": digest(plan),
+            # Only this explicit Ray runtime environment is guaranteed to
+            # reach the inner Miles driver and train actors.  Bind the
+            # non-secret W&B identity there as well as on the outer Job.
+            "WANDB_RUN_ID": plan["wandb"]["run_id"],
+            "WANDB_RESUME": "never",
         },
         separators=(",", ":"),
     )
@@ -561,6 +658,7 @@ def job_request(plan: dict[str, Any]) -> dict[str, Any]:
             "MILES_SCRIPT_EXTERNAL_RAY": "1",
             "WANDB_ENTITY": plan["wandb"]["entity"],
             "WANDB_MODE": "online",
+            "WANDB_RUN_ID": plan["wandb"]["run_id"],
             "WANDB_RESUME": "never",
             "WANDB_DISABLE_CODE": "true",
             "WANDB_CONSOLE": "off",
@@ -606,6 +704,8 @@ def _runtime_recipe_binding() -> None:
         raise ValueError("maintained Miles checkpoint/export source drift")
     if file_sha256(miles_root / "backends/megatron_utils/hf_export.py") != MILES_HF_EXPORT_SHA256:
         raise ValueError("maintained Miles HF-export source drift")
+    if file_sha256(miles_root / "utils/tracking_utils/wandb_utils.py") != MILES_WANDB_UTILS_SHA256:
+        raise ValueError("maintained Miles W&B source drift")
     recipe = run_fleet._RECIPES.get(RECIPE)
     expected = {
         "max_context_len": CONTEXT_TOKENS,
@@ -627,13 +727,40 @@ def _runtime_recipe_binding() -> None:
         raise ValueError("maintained one-node TP4/CP2 shape drift")
 
 
+def prepared_model_inventory(root: Path) -> dict[str, Any]:
+    """Hash every HF and Megatron input byte used by the maintained recipe."""
+    if root.is_symlink() or not root.is_dir():
+        raise ValueError("prepared model root is absent or unsafe")
+    hf = root / "Qwen3.8-27B"
+    megatron = root / "qwen3.8-27B_torch_dist"
+    if hf.is_symlink() or megatron.is_symlink() or not hf.is_dir() or not megatron.is_dir():
+        raise ValueError("prepared HF or Megatron model is absent or unsafe")
+    if not (hf / "config.json").is_file():
+        raise ValueError("prepared HF model is absent")
+    _hf_index(hf)
+    tracker = megatron / "latest_checkpointed_iteration.txt"
+    if tracker.is_symlink() or not tracker.is_file() or tracker.read_text().strip() != "release":
+        raise ValueError("prepared Megatron reference is absent or incomplete")
+    hf_files = _all_file_records(hf, exclude_complete_model_markers=False)
+    megatron_files = _all_file_records(megatron, exclude_complete_model_markers=False)
+    if not hf_files or len(megatron_files) < 2:
+        raise ValueError("prepared model inventory is incomplete")
+    body = {
+        "schema": PREPARED_MODEL_SCHEMA,
+        "hf_directory": "Qwen3.8-27B",
+        "megatron_directory": "qwen3.8-27B_torch_dist",
+        "megatron_iteration": "release",
+        "hf_files": hf_files,
+        "megatron_files": megatron_files,
+    }
+    return {**body, "sha256": "sha256:" + digest(body)}
+
+
 def _prepared_model_exists(plan: dict[str, Any]) -> None:
     root = Path(plan["prepared_model"]["root"])
-    if not (root / "Qwen3.8-27B" / "config.json").is_file():
-        raise ValueError("prepared HF model is absent")
-    tracker = root / "qwen3.8-27B_torch_dist" / "latest_checkpointed_iteration.txt"
-    if not tracker.is_file() or tracker.read_text().strip() != "release":
-        raise ValueError("prepared Megatron reference is absent or incomplete")
+    observed = prepared_model_inventory(root)
+    if observed["sha256"] != plan["prepared_model"]["binding_sha256"]:
+        raise ValueError("prepared model bytes differ from the immutable binding")
 
 
 def _runtime_paths(plan: dict[str, Any]) -> tuple[Path, Path, Path]:
@@ -1070,6 +1197,11 @@ def compose_complete_model(plan: dict[str, Any], raw_hf: Path) -> dict[str, Any]
     import torch
 
     plan = validate_plan(plan)
+    # The prepared model is a shared read-only input, not a copied launch
+    # bundle.  Re-hash it after the optimizer/save phase so the final artifact
+    # cannot silently combine trained tensors with base bytes that changed
+    # after the startup check.
+    _prepared_model_exists(plan)
     run_dir = Path(plan["identity"]["run_dir"])
     base = Path(plan["prepared_model"]["root"]) / "Qwen3.8-27B"
     final = run_dir / COMPLETE_HF_STEP
@@ -1269,6 +1401,17 @@ def _checkpoint_manifest(plan: dict[str, Any], checkpoint: Path) -> dict[str, An
     return manifest
 
 
+def _live_wandb_run_id(plan: dict[str, Any]) -> str:
+    """Return only the actual live distributed run ID bound by the runtime patch."""
+    import wandb
+
+    planned = plan["wandb"]["run_id"]
+    actual = getattr(getattr(wandb, "run", None), "id", None)
+    if actual != planned:
+        raise ValueError("post-save hook is not attached to the planned live W&B run")
+    return actual
+
+
 def _train_receipt(
     plan: dict[str, Any], *, rollout_id: int, checkpoint_dir: str, hf_dir: str
 ) -> dict[str, Any]:
@@ -1343,8 +1486,9 @@ def _train_receipt(
         + hashlib.sha256(str(run_dir / COMPLETE_HF_STEP).encode()).hexdigest(),
         "changed_trained_tensor_count": complete["changed_trained_tensor_count"],
         "all_trained_tensors_finite": complete["all_trained_tensors_finite"],
-        "wandb_run_id": plan["wandb"]["run_id"],
-        "wandb_resume": "never",
+        "wandb_run_id": _live_wandb_run_id(plan),
+        "wandb_primary_resume": "never",
+        "wandb_secondary_resume": "allow_same_live_id",
         "hf_export_complete": True,
         "save_hook_after_checkpoint": True,
     }
@@ -1383,7 +1527,8 @@ def validate_train_receipt(plan: dict[str, Any], receipt: dict[str, Any]) -> dic
         "optimizer_updates": 1,
         "reward_filter": REWARD_FILTER,
         "wandb_run_id": plan["wandb"]["run_id"],
-        "wandb_resume": "never",
+        "wandb_primary_resume": "never",
+        "wandb_secondary_resume": "allow_same_live_id",
         "hf_export_complete": True,
         "save_hook_after_checkpoint": True,
     }
@@ -1442,6 +1587,7 @@ def reload_request(plan: dict[str, Any], receipt: dict[str, Any]) -> dict[str, A
         "image_pull_secrets": ["ecr-pull"],
         "env": {
             "PYTHONPATH": identity["reload_run_dir"] + "/.runtime",
+            "CYBER_RUNTIME_DIR": identity["reload_run_dir"] + "/.runtime",
             "CYBER_PLAN_SHA256": digest(plan),
             "CYBER_EVIDENCE_RUN_DIR": identity["reload_run_dir"],
             "TOKENIZERS_PARALLELISM": "false",

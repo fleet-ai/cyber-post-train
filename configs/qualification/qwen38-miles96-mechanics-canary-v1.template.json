@@ -15,7 +15,8 @@
     "miles_inference_rollout_sha256": "96e3cba12ae033527e823ed3dd8cb43c31d244775756ecf0bab4ad81eb4f06a4",
     "miles_http_utils_sha256": "da630d6594c86d76e89a262d1060c7f81238da9659899dea917987c5f39fab86",
     "miles_megatron_actor_sha256": "eecd72a4387511916add2c97d9e2dad6716db9097fd6ec471468c1f7edc074b9",
-    "miles_hf_export_sha256": "4986684bb62acf2ccd0e18a5ab7cf6bd50391f42d42be35ad3a377b36bbd4a34"
+    "miles_hf_export_sha256": "4986684bb62acf2ccd0e18a5ab7cf6bd50391f42d42be35ad3a377b36bbd4a34",
+    "miles_wandb_utils_sha256": "d2a2bb4463b0a2158b2cd31e72e6e209a7f0092e182bf358ac07aea7cc68d5fe"
   },
   "fixed_contract": {
     "nodes": 1,

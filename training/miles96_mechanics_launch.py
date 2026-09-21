@@ -37,6 +37,10 @@ KUBERNETES_RESOURCES = "rayjobs.ray.io,rayclusters.ray.io,jobs.batch,pods,worklo
 MAXIMUM_GUARD_SECONDS = 120
 MAXIMUM_ARM_AGE_SECONDS = 300
 COORDINATOR_RESULT_SCHEMA = "cyber_miles96_cleanup_coordinator_v1"
+_SFS_OBSERVER_ROLE = "sfs-output-check"
+_SFS_OBSERVER_NAME = re.compile(
+    r"(?P<job>[a-z0-9](?:[-a-z0-9]*[a-z0-9])?-sfs-a[0-9]{2})(?:-[a-z0-9]+)?"
+)
 
 
 def _seal(value: dict[str, Any]) -> dict[str, Any]:
@@ -266,14 +270,81 @@ def _kubernetes_absent(
         values = list((metadata.get("labels") or {}).values()) + list(
             (metadata.get("annotations") or {}).values()
         )
-        if (
+        collision = (
             name == request["name"]
             or name.startswith(request["name"] + "-")
             or request["name"] in values
             or request["run_dir"] in values
-        ):
+        )
+        if collision and _is_terminal_sfs_observer(item, plan, request):
+            continue
+        if collision:
             raise JobsError("Kubernetes already contains this name or output")
     return len(items)
+
+
+def _is_terminal_sfs_observer(item: object, plan: dict[str, Any], request: dict[str, Any]) -> bool:
+    """Recognize only the exact completed zero-GPU observer used by this launch.
+
+    The SFS observer intentionally carries the target run name and output in its
+    metadata, so a generic prefix scan would otherwise reject the evidence Job
+    that produced the required fresh receipt.  This exemption is deliberately
+    narrow: exact source bindings plus terminal success are required, and no
+    Ray resource or non-observer Job can enter it.
+    """
+    if not isinstance(item, dict) or item.get("kind") not in {"Job", "Pod"}:
+        return False
+    metadata = item.get("metadata")
+    if not isinstance(metadata, dict):
+        return False
+    name = metadata.get("name")
+    match = _SFS_OBSERVER_NAME.fullmatch(name) if isinstance(name, str) else None
+    if match is None or not match.group("job").startswith(request["name"] + "-sfs-a"):
+        return False
+    labels = metadata.get("labels")
+    annotations = metadata.get("annotations")
+    if not isinstance(labels, dict) or not isinstance(annotations, dict):
+        return False
+    if (
+        labels.get("cyber-post-train.fleet.ai/role") != _SFS_OBSERVER_ROLE
+        or labels.get("cyber-post-train.fleet.ai/owner") != "chris"
+        or labels.get("kueue.x-k8s.io/queue-name") != "training-lq"
+        or labels.get("kueue.x-k8s.io/priority-class") != "q1"
+        or annotations.get("fleet.ai/failure-alerts") != "off"
+        or annotations.get("cyber-post-train.fleet.ai/plan-sha256") != mechanics.digest(plan)
+        or annotations.get("cyber-post-train.fleet.ai/request-sha256") != digest(request)
+        or annotations.get("cyber-post-train.fleet.ai/training-output") != request["run_dir"]
+        or not re.fullmatch(
+            r"[0-9a-f]{64}",
+            annotations.get("cyber-post-train.fleet.ai/driver-sha256", ""),
+        )
+    ):
+        return False
+    status = item.get("status")
+    if not isinstance(status, dict):
+        return False
+    if item["kind"] == "Job":
+        conditions = status.get("conditions")
+        return (
+            isinstance(conditions, list)
+            and any(
+                isinstance(value, dict)
+                and value.get("type") == "Complete"
+                and value.get("status") == "True"
+                for value in conditions
+            )
+            and not any(
+                isinstance(value, dict)
+                and value.get("type") == "Failed"
+                and value.get("status") == "True"
+                for value in conditions
+            )
+        )
+    statuses = status.get("containerStatuses")
+    if status.get("phase") != "Succeeded" or not isinstance(statuses, list) or len(statuses) != 1:
+        return False
+    terminated = statuses[0].get("state", {}).get("terminated", {})
+    return statuses[0].get("restartCount") == 0 and terminated.get("exitCode") == 0
 
 
 def _prove_sfs_output_absent(

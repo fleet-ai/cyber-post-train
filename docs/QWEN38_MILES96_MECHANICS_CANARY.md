@@ -34,6 +34,20 @@ checkpoint/export source files plus the maintained recipe shape.  It calls
 `/opt/fleet/run.sh` route, which would otherwise select an old shared model
 directory when running outside a FleetJob mount.
 
+The pinned Miles W&B helper is also bound by source hash.  Its primary helper
+normally discards the parsed run ID and lets W&B choose another one.  The
+runtime patch instead makes the primary create the exact fresh ID checked by
+the launcher with `resume=never`.  Miles's secondary processes may use
+`resume=allow` only to join that already-live distributed run; they must carry
+the same exact ID.  They cannot use that setting to revive a historical run.
+The exact ID and `resume=never` policy are forwarded explicitly to the inner
+Ray runtime.  The API key is never written into the command or bundle: the
+reviewed root RayJob injects the required `wandb-api` Secret into its sole GPU
+Pod, and every W&B initializer fails closed if that credential is absent.
+The terminal receipt records these two distinct facts as primary
+`never` and secondary `allow_same_live_id`; it does not describe the whole
+distributed run with the primary's policy alone.
+
 ## Exact, deliberately small job
 
 - One eight-GPU node at `c1` priority.
@@ -78,8 +92,13 @@ freshly checked:
 2. An exact prepared-model SFS root.  It must contain both
    `Qwen3.8-27B/config.json` and
    `qwen3.8-27B_torch_dist/latest_checkpointed_iteration.txt` with the value
-   `release`.  Its binding digest is recorded in the plan.  The canary never
-   downloads or converts a model on the GPU allocation.
+   `release`.  Before building the plan, compute the binding with
+   `prepared_model_inventory(Path(root))["sha256"]` from a read-only process
+   that can see SFS.  This hashes every file in both the HF and Megatron trees.
+   The GPU runtime recomputes the same inventory both before training and
+   again before it composes the complete export, and refuses any changed,
+   missing, extra, or linked file.  The canary never downloads or converts a
+   model on the GPU allocation.
 3. A current authoritative observation for the exact task and verifier
    versions, plus the task-set, tool-catalog, and observation digests.  The V1
    wrapper checks those exact identities again when every episode opens.  This
@@ -153,6 +172,13 @@ create-once.  Never replay its create after an intent exists; inspect the exact
 named Job instead.  Collect immediately before submission so the five-minute
 receipt remains fresh.
 
+The final Kubernetes duplicate scan recognizes only that exact terminal
+observer Job and its successful zero-restart Pod.  Both must retain the plan
+digest, request digest, output path, alert-off annotation, c1 queue labels, and
+observer role.  This prevents the required evidence object from colliding with
+its own training name while every Ray object, active or failed observer, and
+differently bound Job still closes the launch gate.
+
 The only training create command is then:
 
 ```sh
@@ -186,10 +212,12 @@ receipts deliberately omit reward values, task text, answers, traces, and the
 exact verifier execution IDs.
 
 Neeraj's maintained `v004` run is useful prior evidence for this mechanical
-shape: one node, 96K context, 80 finite updates, a resume from 75 through 79,
-checkpoint/HF output, and evaluation.  Its lift was narrow and other metrics
-regressed, so it supports the trainer mechanics only—not transfer or capability
-improvement.  This one-update canary has the same limitation.
+shape: one node, 96K context, 80 recorded optimizer steps with finite sampled
+reward metrics, a resume from 75 through 79, checkpoint/HF output, and
+evaluation.  Its records do not independently prove every update tensor was
+finite.  Its lift was narrow and other metrics regressed, so it supports the
+trainer mechanics only—not transfer or capability improvement.  This
+one-update canary has the same limitation.
 
 Only after those receipts, the independent release observation, and the normal
 held-out evaluation gates may this route inform a larger RL experiment.  A
