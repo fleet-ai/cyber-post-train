@@ -25,23 +25,30 @@ tool interactions, answers, credentials, or raw rewards.
 
 | Source | Immutable reference | Relevant files |
 |---|---|---|
-| `fleet-ai/cyber-post-train` | current repository evidence at the time of this note; SkyRL prod9 inputs committed in `8e9ad6fcf031c862052acd4931fb0d73067cb17e` | `configs/qualification/qwen38-rl-reward-canary-prod-v9.json`, `configs/qualification/qwen38-rl-reward-canary-data-prod-v9.json`, `docs/QWEN38_SKYRL_PROD9_NONSUBMITTING_GATES.md` |
+| `fleet-ai/cyber-post-train` | audited head `8498507d2678769c1e59cc596f36c49aa4722129`; SkyRL prod9 inputs committed in `8e9ad6fcf031c862052acd4931fb0d73067cb17e` and the fresh runtime/terminal-acceptance closure in `7518b3bc4647bbe141fa1be5abad158e4ef7f348` | `configs/qualification/qwen38-rl-reward-canary-prod-v9.json`, `configs/qualification/qwen38-rl-reward-canary-data-prod-v9.json`, `training/skyrl_prod9_{training,rollout,hardening,direct}.py`, `docs/QWEN38_SKYRL_PROD9_NONSUBMITTING_GATES.md` |
 | `fleet-ai/cyber-post-train` historical Miles plan | FTI 0.9.2 source `0b1af5684310ee244bf7bdb0028e5ef78c08098b`; immutable trainer image is recorded in the plan | `configs/runs/qwen38-27b-fti-v1-rl-reward-canary-v3.json`, `configs/runs/qwen38-27b-fti-v1-rl-production-a1.json`, `docs/QWEN38_FLEET_RL_PATHS_2026-09-13.md` |
-| `fleet-ai/theseus` maintained FTI/Miles | recipe files last changed by `f2b0cb5db7c0a9dcc2210943f2ee1df31f9b50fc` (inspection checkout head: `a3aaa146bb8ee58e39ab8c99c1a9ddef7cc6e228`) | `services/fti/src/fti/trainers/miles/run_fleet.py`, `agent.py`, `README-miles-v1.md`, `README-miles-training.md`, `payloads/tool-use-qwen38-256k-v1.json` |
-| `fleet-ai/dataminer_v2` Neeraj v003 | experiment files last changed by `6c3d7aa79075d4ed0a6ed476664de71249febba0` (inspection checkout head: `d267fe246acc805ef72d4962eb79a2feea754b2c`) | `experiments/rl-transfer-v003/{protocol.md,launch.md,run_v003.py,proto-results.md,jobs/neeraj-v003-sy-2e6.yaml}` |
+| `fleet-ai/theseus` maintained FTI/Miles | recipe files last changed by `f2b0cb5db7c0a9dcc2210943f2ee1df31f9b50fc` | `services/fti/src/fti/trainers/miles/run_fleet.py`, `agent.py`, `README-miles-v1.md`, `README-miles-training.md`, `payloads/tool-use-qwen38-256k-v1.json`, `services/fti/CHANGELOG.md` |
+| `fleet-ai/theseus` SkyRL image | image source `8d62868d6dc00eee793d83efe5738dc21e42758d`, which pins upstream SkyRL `f5bc3b78dfddfb352870d5d7430cd226e5785838`; the qualified digest is bound by the prod9 qualification file | `services/skyrl-train/Dockerfile`; upstream `skyrl/train/config/config.py` and `skyrl/backends/skyrl_train/distributed/fsdp_strategy.py` |
+| `fleet-ai/dataminer_v2` Neeraj v003 | experiment files last changed by `6c3d7aa79075d4ed0a6ed476664de71249febba0` | `experiments/rl-transfer-v003/{protocol.md,launch.md,run_v003.py,proto-results.md,jobs/neeraj-v003-sy-2e6.yaml}` |
 
 The Dataminer tasks and evaluation distribution are not Fleet-cyber tasks.  Its
 evidence validates training mechanics and exposes failure modes; it is not
 evidence that its task mixture, learning rate, or transfer result should be
 copied into cyber.
 
+The default trees of `fleet-ai/SkyRL-Fleet@3da8f633f1c75125e6ab359f38c827238807e6a5`
+and `fleet-ai/skyrl-fleet-v2@fe1ad6c154f6c40bfcfb3c514f5afe3b1dbed5a4`
+contain no exact Qwen3.8-27B runnable recipe.  They are therefore not evidence
+for this model's topology or optimizer.  Prod9's relevant SkyRL authority is
+the exact upstream commit and Fleet image source pinned above.
+
 ## Comparison
 
 | Route | Framework and proven scope | Nodes / GPUs and context | Episode, reward, and update | Checkpoint evidence | Compaction | Status for Fleet cyber |
 |---|---|---|---|---|---|---|
-| **SkyRL prod9** | Repository SkyRL full-weight adapter.  It has local qualification and an explicit cyber-tool/verifier binding plan, but not yet one accepted end-to-end cyber RL run. | 1 node / 8 B300 GPUs for the canary; 262,144 context. | One prompt group, 8 samples, one update, LR `1e-6`.  Episode limit is 14 hours / 1,200 turns; each generation chunk is 4,096 tokens. | Save every update, retain two.  The canary must prove a readable checkpoint and model reload before it can scale. | **Yes, by design:** trigger at 163,840 tokens, replace earlier history with an 8,192-token summary. | **Primary canary.** It is the only current design compatible with the required long, compacted trajectories. |
-| **Maintained FTI/Miles V1 256K** | Fleet-supported Miles (SGLang rollout + Megatron training + GRPO), V1 Fleet task hook and stored-verifier grading.  Maintained source and separate Qwen runs establish the engine/trainer path; exact cyber loop remained unproved. | Exactly 4 nodes × 8 B300 GPUs.  Qwen recipe uses TP8 × CP4, 262,144 context, 245,760 response cap, and 65,536 train tokens/GPU.  The recipe exposes only `(4, 8)` for this model/context shape. | Payload uses 8 prompt groups × 8 samples at normal scale.  Current defaults are GRPO, Adam, LR `1e-6`, WD `0.1`, betas `.9/.98`; Qwen builds a zero-coefficient KL reference path. | Default normal save interval is 20; a cyber qualification must explicitly save at update 1.  Historical cyber canary was one 8-sample group, one update, checkpoint interval 1. | **No.** `agent.py` returns `context_full` when there is no room; a length-capped turn can continue, but earlier context is neither summarized nor removed. | **Parallel compatibility/qualification lane only.** Do not call it production cyber RL until it passes the cyber acceptance gate and either gains safe compaction or is restricted to an explicitly bounded-horizon study. |
-| **Neeraj Dataminer v003 sync Miles** | Working full-parameter Miles/SGLang/Megatron implementation with custom agent/reward bridge.  Smoke completed rollout → reward → update → save → weight sync. | The initial single-node design was 8 GPUs, TP4 × CP2, 8,192 dynamic train tokens/GPU, and CPU optimizer offload.  The real practical cap was 96K; a roughly 131K update OOMed.  Later sync sweep arms also packed TP4 × CP1 on 4 GPUs. | Wave-synchronous GRPO.  Production-style study: 8 prompts × G=4 = 32 episodes/wave, one optimizer epoch/wave, fixed sampling (`T=.7`, `top-p=.8`, `top-k=20`).  Reward bridge reads the agent's verified reward from sample metadata and drops malformed groups rather than inventing zero. | Checkpoint every 4 waves in the study; smoke saved and synchronized a full-weight checkpoint.  Each future cyber canary should be stricter: save/reload after its first update. | **No.** The practical 96K limit used truncation-with-reward; the protocol explicitly describes compaction as incompatible with its token-native estimator unless it gains per-turn forwards. | **Mechanics reference, not a cyber recipe.** Reuse its template/reward/update safeguards, not its distribution or conclusion. |
+| **SkyRL prod9** | Repository SkyRL full-weight FSDP adapter over upstream `f5bc3b78`.  It has local qualification and an explicit cyber-tool/verifier binding plan, but not yet one accepted end-to-end cyber RL run. | 1 node / 8 B300 GPUs; policy and reference each declare 8 colocated GPUs, sequence parallel size 1; rollout is 2 engines × TP4; 262,144 context. | One prompt group × 8 samples, one update; train/policy mini-batch 1 group, per-GPU micro-batch 1.  The pinned upstream FSDP path constructs AdamW with LR `1e-6`, betas `.9/.999`, WD `.01`, gradient clip `1.0`, constant-with-zero-warmup schedule, and optimizer offload after each step.  Episode limit is 14 hours / 1,200 turns; each generation chunk is 4,096 tokens. | Save every update, retain two.  Current source requires a sealed step-1 checkpoint, BF16 export, independent one-GPU finite reload with zero optimizer steps, and observed release.  Repository evidence contains no accepted prod9 run artifact yet. | **Yes, by design:** at a 163,840-token trigger, a separate 8,192-token policy step summarizes the prior messages; the next prompt contains the original task plus that lossy summary. | **Primary canary.** It is the minimum-delta current design compatible with the required long, compacted trajectories; it is not yet a proven RL outcome. |
+| **Maintained FTI/Miles V1 256K** | Fleet-supported Miles (SGLang rollout + Megatron training + GRPO), V1 Fleet task hook and stored-verifier grading.  Maintained source and separate Qwen runs establish the engine/trainer path; exact cyber loop remained unproved. | Exactly 4 nodes × 8 B300 GPUs.  Qwen recipe uses TP8 × CP4, 262,144 context, 245,760 response cap, and 65,536 train tokens/GPU.  The recipe exposes only `(4, 8)` for this model/context shape. | Payload uses 8 prompt groups × 8 samples at normal scale.  Current defaults are GRPO, Adam, LR `1e-6`, WD `0.1`, betas `.9/.98`; Qwen builds a zero-coefficient KL reference path. | Default normal save interval is 20.  A maintained four-node Qwen run wrote iteration 19 and the trainer later restored it after requeue; the next weight-sync check failed because rollout engines still held base weights.  That proves trainer restore mechanics, not an accepted resumed update or independent reload.  The historical cyber canary instead specified one 8-sample group, one update, and checkpoint interval 1, but never reached acceptance. | **No.** `agent.py` returns `context_full` when there is no room; a length-capped turn can continue, but earlier context is neither summarized nor removed. | **Parallel compatibility/qualification lane only.** Do not call it production cyber RL until it passes the cyber acceptance gate and either gains safe compaction or is restricted to an explicitly bounded-horizon study. |
+| **Neeraj Dataminer v003 sync Miles** | Working full-parameter Miles/SGLang/Megatron implementation with custom agent/reward bridge.  Smoke completed rollout → reward → update → save → weight sync. | The successful single-node route was 8 GPUs, TP4 × CP2, 8,192 dynamic train tokens/GPU, and CPU optimizer offload.  The practical cap was 96K; a roughly 131K update OOMed.  Later sync sweep arms also packed TP4 × CP1 on 4 GPUs. | Wave-synchronous GRPO.  Production-style study: 8 prompts × G=4 = 32 episodes/wave, one optimizer epoch/wave, fixed sampling (`T=.7`, `top-p=.8`, `top-k=20`).  Reward bridge reads the agent's verified reward from sample metadata and drops malformed groups rather than inventing zero. | Checkpoint every 4 waves in the study; smoke saved and synchronized a full-weight checkpoint.  The source also loads from the same checkpoint root, but it does not provide an independent sealed reload receipt.  A cyber canary must save/reload after its first update. | **No implementation.** The practical 96K route used truncation-with-reward.  The protocol requires token-native IDs and a per-turn prefix assertion, but it does **not** explicitly prove compaction is impossible; a compacted objective would need a separate design and qualification. | **Mechanics reference, not a cyber recipe.** Reuse its template/reward/update safeguards, not its distribution or conclusion. |
 | **Earlier custom cyber Miles** | Repository-specific adapter around Miles. | 96K generation envelope in the latest real canary. | A long interaction ended before grading with an undifferentiated `generation_incomplete`; no trusted reward/update. | No accepted RL checkpoint. | No safe long-horizon compaction. | **Retire as a launch path.** Keep only its incident tests and diagnosis history. |
 
 ## What can be reused immediately
@@ -74,6 +81,14 @@ These are portable safeguards, not permission to combine incompatible recipes.
    a first cyber canary, preserve `1e-6`; tune only after a valid reward/update
    loop exists.  The study's transfer metrics were poor because its reward
    distribution was weak, not because a larger LR was needed.
+
+The minimum-delta choice is therefore to keep prod9's existing one-node FSDP
+topology, upstream AdamW defaults, 262K context, and step-wise compaction
+objective unchanged.  Reuse only the proven *guards* from Miles and Dataminer:
+template qualification, authoritative reward metadata, a synchronous first
+update, bounded environment fan-out, and independent checkpoint reload.  Do
+not transplant their TP/CP layouts, optimizer constants, sampling policy,
+truncation rule, task mixture, or conclusions into the SkyRL rail.
 
 ## Recommended next sequence for the active RL lane
 
@@ -112,10 +127,17 @@ These are portable safeguards, not permission to combine incompatible recipes.
 
 The current configuration is intentionally a one-update qualification: one
 node, 8 samples/prompt, one group, one optimizer step, LR `1e-6`, checkpoint
-and evaluation interval 1.  Its limits are 262,144 context tokens, 4,096
-generation-token chunks, compaction at 163,840 tokens to an 8,192-token
-summary, up to 1,200 turns, 4,194,304 generated tokens in total, and a 14-hour
-episode timeout.
+and evaluation interval 1.  Its limits are 262,144 context tokens, 4,096-token
+generation chunks, 32,768 tokens per action, compaction at 163,840 tokens to an
+8,192-token summary, up to 1,200 turns, 4,194,304 generated tokens in total,
+and a 14-hour episode timeout.
+
+The exact optimizer is inherited from the image's pinned upstream SkyRL source,
+not invented by the prod9 compiler: FSDP AdamW, betas `.9/.999`, weight decay
+`.01`, gradient clipping `1.0`, constant schedule with zero warmup, and optimizer
+offload after each full step.  The compiler overrides the LR to the same
+`1e-6` default and binds one update epoch, one prompt-group train/mini-batch,
+and per-GPU micro-batch 1.
 
 ### Miles V1 256K compatibility qualification (secondary)
 
