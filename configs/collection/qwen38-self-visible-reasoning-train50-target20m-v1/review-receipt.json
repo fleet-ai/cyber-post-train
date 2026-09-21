@@ -1,0 +1,36 @@
+{
+  "external_submission": false,
+  "heldout_task_versions": 25,
+  "input_file_sha256": {
+    "family_split": "sha256:165ce18805f93a7d6434283eff001b394129735e324e8d287f0ff4441913f6bc",
+    "historical_token_basis": "sha256:ebcf6677e51adb22f73602c210281a3f4a847c257155da6ed48cd1c6cba9f3c8",
+    "inventory": "sha256:32432fe02c1f2253f77a4190c8730bc9348e9053aa2ff39420cb40d6f525c767",
+    "model_lock": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+    "protected_family_lock": "sha256:4fb335cbbafb55bf7f1ec39aa40b4849b091ef1f0362fd11c9d5ac0906a6e093",
+    "role_anchor": "sha256:0d384c154f7cf1f7284d5c3ae97549a22ffc61fafd1518bf1a5fbe565adfe386",
+    "runtime_bindings": "sha256:4f2f6eef5e0a4bb757a15bcb7d028bb8be8558929ca4783d8be0bc90678656fc",
+    "source_profile": "sha256:b52db3194f8682bcf88fb96049a1f3cf14afa8b3b7ab18932b0209f394d90b7c",
+    "task_selection": "sha256:e7b849eead6418cd1156a52027f234801bbf3bbe196023c56061ae68e3f0af19"
+  },
+  "minimum_unique_supervised_tokens": 20000000,
+  "output_sha256": {
+    "campaign-plan.json": "sha256:f50dd88f5851c0fb08c290171f3a9f951832cb3a179c9fc57d6e57e3f4d06f19",
+    "wave-plan.json": "sha256:33ebb60045349982574bd0d5599f1c1fdc0f7ecc469ea90dd2e7afa42c2219c3"
+  },
+  "planned_cells": 20000,
+  "private_or_hidden_reasoning_allowed": false,
+  "required_before_collection": [
+    "immutable_source_authorization_registry_artifact",
+    "exact_qwen_template_roundtrip_receipt",
+    "reasoning_preservation_request_and_response_receipt",
+    "exact_compaction_continuation_recording_receipt",
+    "collection_packet_and_operation_authorization",
+    "independent_source_review"
+  ],
+  "review_completed": false,
+  "schema": "cyber_qwen_opencode_visible_reasoning_campaign_review_v1",
+  "sha256": "sha256:2da61eb5de17fda70f4fd9dda6d533f3486814e5fe540d16573abb3000d3a647",
+  "source_spec_sha256": "sha256:a31c839664b391d71306e7650a0fb98b225c7d6d1dbc1134fe69161832687d5e",
+  "status": "source_only_review_required",
+  "train_task_versions": 50
+}

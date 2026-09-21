@@ -214,6 +214,13 @@ set; external benchmarks remain evaluation-only and cannot feed this corpus.
 4. Review the schema and tests. Only a separately authorized operator may then
    create a collection campaign.
 
+The first large source-only campaign candidate is documented in
+[First large Qwen visible-reasoning collection plan](QWEN38_VISIBLE_REASONING_LARGE_COLLECTION_V1.md).
+It covers all 50 currently admitted training families in balanced waves and
+targets at least 20 million unique supervised tokens. It remains explicitly
+unsubmitted and independently unreviewed; its presence does not satisfy step 4
+or authorize collection.
+
 The design stops rather than falling back to hidden teacher reasoning, opaque
 compaction, a mixed family split, or an unproven Qwen thinking template.
 
