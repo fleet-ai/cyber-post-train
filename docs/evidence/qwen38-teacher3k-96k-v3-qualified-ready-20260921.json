@@ -1,0 +1,258 @@
+{
+  "schema": "cyber_qwen38_teacher3k_96k_qualification_v1",
+  "observed_at": "2026-09-21T04:56:10Z",
+  "status": "qualified_not_submitted",
+  "motivation": "Test whether 96K context, including 24K tokens of masked history, improves imitation of intermediate expert actions relative to the otherwise identical 32K full-weight arm.",
+  "single_principal_contrast": "context_length_98304_instead_of_32768",
+  "scientific_disposition": "Model, corpus, split, optimizer, batch, epoch, seed, topology, checkpoint policy, and held-out outcome evaluations remain fixed. Only context length and the corresponding loss-masked history window differ.",
+  "source": {
+    "repository": "https://github.com/fleet-ai/cyber-post-train",
+    "head": "015172d9a269d1fee9a08865964874a58a07237e",
+    "config": "configs/runs/qwen38-teacher3k-96k-full-b8-lr3e6-v3.json"
+  },
+  "identity": {
+    "run_name": "chris-q38-t3k96-b8-v3",
+    "output_root": "/mnt/sfs/jobs/chris-q38-t3k96-b8-v3",
+    "wandb_url": "https://wandb.ai/thefleet/cyber-post-train/runs/chris-q38-t3k96-b8-v3"
+  },
+  "immutable_bindings": {
+    "runtime_sha256": "7f5c945b28f6d3fd8c84eaedd0b0322ffbaf09ce2f6ffbbf5620f69c72d4131e",
+    "plan_sha256": "d5c8993b1ec4054bfada655652e36a6458ae8bccf5577dbeb8b7e6aaf7606a12",
+    "request_sha256": "1dc630e9ff2738acc6947f7378dc5b17a51314d4d75746a27324e5c8a6c1b46d",
+    "corpus_manifest_sha256": "sha256:8297f035f4c5b0446578cfa46897733273286f76e55d486c9598452e5585a479",
+    "split_manifest_sha256": "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
+    "train_parquet_sha256": "sha256:d292e4cd9c7ec0e45a63274fa7b7bdb1be18509b1a512b09eb9180e050357824",
+    "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "model_weight_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4"
+  },
+  "prepared_packet": {
+    "gate_version": 2,
+    "prepared_file_sha256": "8286802048ca015489d15b8c7edf69b647c11e5325bbf0d137097ff681ce5cdb",
+    "plan_file_sha256": "2f779ee4413bb00a29f476d3a1970d34c52342ac62e9e127c72c0e1d51d0ad28",
+    "request_file_sha256": "733b3eb590ac44929f95241671b9d57b816962860f2b84311e1e6b6da09e33cb"
+  },
+  "qualification_reuse_proof": {
+    "qualified_source_head": "5f60d11fc688b6547723abe0d2ad0a48df2504b5",
+    "current_source_head": "015172d9a269d1fee9a08865964874a58a07237e",
+    "changed_paths_affecting_sft_runtime": [],
+    "identical_git_blobs": {
+      "training/sft.py": "7c932ebb35eee0eb3749519e2bcda1bf47e77996",
+      "training/sft_runtime.py": "c7ef2bf2334c2d5ec99c9af84f5859d1aca7351c",
+      "training/io.py": "275d1370471b280a6cc6a766c14ce45521b0a344",
+      "training/models.py": "863fcaee3f3a6459ce4f134b1a762a4aaeb391b5",
+      "cyber_post_train/jobs.py": "d5365f4df67fccad98873e932f7a402e23ac4a88"
+    },
+    "regenerated_canonical_digests_match_cpu_qualified_packet": {
+      "runtime_sha256": "7f5c945b28f6d3fd8c84eaedd0b0322ffbaf09ce2f6ffbbf5620f69c72d4131e",
+      "plan_sha256": "d5c8993b1ec4054bfada655652e36a6458ae8bccf5577dbeb8b7e6aaf7606a12",
+      "request_sha256": "1dc630e9ff2738acc6947f7378dc5b17a51314d4d75746a27324e5c8a6c1b46d"
+    }
+  },
+  "treatment": {
+    "model": "Qwen/Qwen3.8-27B",
+    "train_rows": 6847,
+    "task_keys": 496,
+    "source_sessions": 2886,
+    "assistant_targets": 176654,
+    "excluded_assistant_targets": 2,
+    "unique_supervised_tokens": 57384881,
+    "epochs": 1,
+    "planned_optimizer_steps": 856,
+    "global_batch": 8,
+    "microbatch_per_gpu": 1,
+    "learning_rate": 0.000003,
+    "max_length": 98304,
+    "masked_history_tokens": 24576,
+    "checkpoint_interval": 210,
+    "keep_checkpoints": 5,
+    "seed": 20260920,
+    "nodes": 1,
+    "gpus_per_node": 8,
+    "validation_mode": "task_outcomes_only",
+    "heldout_task_families_excluded": 25,
+    "webexploitbench_excluded": true
+  },
+  "wandb": {
+    "entity": "thefleet",
+    "project": "cyber-post-train",
+    "group": "qwen38-teacher3k-96k-v1",
+    "run_id": "chris-q38-t3k96-b8-v3",
+    "name": "chris-q38-t3k96-b8-v3",
+    "secret_names": [
+      "wandb-api"
+    ],
+    "tags": [
+      "qwen38",
+      "teacher-sft",
+      "broad-data",
+      "57m-unique-supervised-tokens",
+      "96k",
+      "batch8",
+      "lr3e-6",
+      "one-epoch",
+      "outcome-only",
+      "full-weight",
+      "runtime-forward-adapter-repair"
+    ]
+  },
+  "cpu_schedulability_incident": {
+    "status": "closed_before_gpu_authorization",
+    "first_pod": "chris-q38-t3k96-v3-cpu-pf",
+    "first_pod_uid": "f09b74d1-5375-41e5-b8df-227d9caf5ccb",
+    "first_pod_manifest_sha256": "ee2b4e96dd1ef91a38e97ff631733f2703c44d7eedaa8617b1bb8d1051bfe6ae",
+    "created_at": "2026-09-21T04:44:24Z",
+    "request": {
+      "cpu": "12",
+      "memory": "56Gi",
+      "gpus": 0
+    },
+    "server_dry_run_passed": true,
+    "scheduler_result": "never_scheduled_insufficient_live_cpu_and_memory",
+    "sanitized_scheduler_summary": "Five eligible CPU nodes lacked enough currently unclaimed CPU and memory; the remaining nodes had untolerated taints.",
+    "restarts": 0,
+    "receipt_present": false,
+    "control_output_absent": true,
+    "deleted_after_evidence": true,
+    "pod_absent_after_release": true,
+    "active_gpus_after_release": 0,
+    "repair_boundary": "compare candidate requests with allocatable capacity minus requests of assigned nonterminal Pods before server preview or create",
+    "observed_best_eligible_node": {
+      "allocatable_cpu_millicores": 15900,
+      "allocatable_memory_bytes": 66781769728,
+      "assigned_request_cpu_millicores": 4615,
+      "assigned_request_memory_bytes": 8815378432,
+      "free_cpu_millicores": 11285,
+      "free_memory_bytes": 57966391296
+    }
+  },
+  "exact_image_cpu_qualification": {
+    "status": "passed_and_released",
+    "pod": "chris-q38-t3k96-v3-cpu-pf2",
+    "pod_uid": "6840be21-61da-4ecc-bf86-e63ababb9060",
+    "pod_manifest_sha256": "2903f3f0cfa96d9d17c6c328b267763b23b98965d79b9f08839ae5efe1f0a690",
+    "config_map": "chris-q38-t3k96-v3-cpu-src",
+    "config_map_uid": "a7d7af34-e44f-4797-8973-1866720fc18f",
+    "config_map_sha256": "5a9924971ef194e6576600c94926beea542038a1aa24308044b75715a0583533",
+    "created_at": "2026-09-21T04:45:16Z",
+    "started_at": "2026-09-21T04:45:17Z",
+    "finished_at": "2026-09-21T04:51:06Z",
+    "node": "computeinstance-e04fw0f2anvp0de74v",
+    "runtime_image_id_verified": true,
+    "gpus": 0,
+    "priority": "c1",
+    "root_failure_alert_annotation": "off",
+    "restarts": 0,
+    "active_deadline_seconds": 1800,
+    "checks": [
+      "native_sources",
+      "model_files",
+      "dataset_files",
+      "native_config",
+      "native_forward_backward_signature",
+      "native_train_only_loader",
+      "tokenization",
+      "target_accounting"
+    ],
+    "verified_counts": {
+      "train_rows": 6847,
+      "task_keys": 496,
+      "supervised_tokens": 57384881
+    },
+    "receipt_file_sha256": "9c38fde53880ac830e9adb3a7357c0114ad24e43399bab474408294d14b5d932",
+    "receipt_sha256": "18225b3a7818890f3ad7ecd9990f427504494bc3c35fcaa165420d0dc90e3aff",
+    "pod_absent_after_release": true,
+    "config_map_absent_after_release": true,
+    "control_output_removed_after_transfer": true
+  },
+  "live_preview": {
+    "status": "accepted_without_create",
+    "source_head": "015172d9a269d1fee9a08865964874a58a07237e",
+    "refreshed_at": "2026-09-21T04:55:58Z",
+    "standard_jobs_api_preview": "failed_closed_because_root_alert_annotation_was_not_proven",
+    "supported_fallback": "render_sft_rayjob_plus_kubectl_server_dry_run",
+    "dry_run_id": "96000000-0000-4000-8000-000000000003",
+    "dry_run_name": "chris-q38-t3k96-b8-v3-96000000",
+    "preview_manifest_sha256": "3a89c3b4c797447a057063f641f06b13b418e5cde5aeb6aec9d4ed7a584635dc",
+    "rendered_manifest_sha256": "8349146481cbd6fb2d0e53bf3fe77da5bcffef9b7190cf856d5696c100ff46ac",
+    "root_failure_alert_annotation": "off",
+    "pod_template_priority": "c1",
+    "secret_names": [
+      "wandb-api"
+    ],
+    "wandb_secret_uid": "df475552-c2cb-440a-a878-161a69ecca92",
+    "workers": 1,
+    "gpus_per_worker": 8,
+    "jobs_api_history_rows_checked": 935,
+    "kubernetes_rayjobs_checked": 663,
+    "kubernetes_jobs_checked": 1106,
+    "api_duplicate_absent": true,
+    "kubernetes_duplicate_absent": true,
+    "output_absent": true,
+    "server_dry_run_passed": true,
+    "created": false
+  },
+  "capacity": {
+    "observed_at": "2026-09-21T04:56:10Z",
+    "census_sha256": "ea2d1279f4e667db08bd814a3a609d60272fd8fbc02f7bbba3dbb50b042b1b84",
+    "scope": "all_namespaces",
+    "current_nodes": 7,
+    "current_gpus": 56,
+    "planned_nodes": 1,
+    "planned_gpus": 8,
+    "projected_nodes": 8,
+    "projected_gpus": 64,
+    "problems": [],
+    "qualified": true,
+    "allocated_pods": [
+      {
+        "name": "inference-chris-q38-self-sft-step44-v1-95dcd4b6c-cnxt2",
+        "uid": "c1271f58-ca3e-41e7-8a01-1a3603cb9619",
+        "role": "serving",
+        "gpus": 8
+      },
+      {
+        "name": "inference-chris-q38-teacher-v5-step186-web-v1-59bd4967f9-xkc7z",
+        "uid": "4be8c23d-2762-44cc-ab1c-11fa19f17763",
+        "role": "serving",
+        "gpus": 8
+      },
+      {
+        "name": "chris-q38-rlreward-prod7-lpfmf-head-m9d6l",
+        "uid": "c2a20e94-52e0-43c2-97c1-a57cab5674d3",
+        "role": "training",
+        "gpus": 8
+      },
+      {
+        "name": "chris-q38-t3k32-b16-v1-46ca50db-99mq7-head-psw2m",
+        "uid": "d1c9fa07-402b-4978-a8bd-5a730555cca3",
+        "role": "training",
+        "gpus": 8
+      },
+      {
+        "name": "chris-q38-t3k32-b8-v1-0cb9fe51-5dwwd-head-5v8nq",
+        "uid": "826b5de3-85df-4d66-a785-6085b7ad93a3",
+        "role": "training",
+        "gpus": 8
+      },
+      {
+        "name": "chris-q38-t3k32-lr1-v1-4291c635-gr745-head-tmhsh",
+        "uid": "9b2b48d4-476a-44b6-8974-c8d6cd8162cb",
+        "role": "training",
+        "gpus": 8
+      },
+      {
+        "name": "chris-q38-t3k64-b8-v3-fc6b1fbe-g2g55-head-9ww4r",
+        "uid": "c9f226a7-ea0f-45eb-b8ea-d81bf2c6bb76",
+        "role": "training",
+        "gpus": 8
+      }
+    ]
+  },
+  "submission": {
+    "gpu_post_performed": false,
+    "job_or_rayjob_created": false,
+    "training_status": "not_submitted"
+  },
+  "next_gate": "Root authorization must be followed by a fresh current-source, duplicate, output, capacity, c1, W&B, and root alert-off reconciliation immediately before one create-once GPU submission."
+}

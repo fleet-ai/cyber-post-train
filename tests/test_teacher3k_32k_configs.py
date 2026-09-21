@@ -494,6 +494,91 @@ def test_teacher3k_64k_v3_qualification_is_bound_and_prepare_only():
     }
 
 
+def test_teacher3k_96k_v3_qualification_is_bound_and_prepare_only():
+    evidence = json.loads(
+        (EVIDENCE / "qwen38-teacher3k-96k-v3-qualified-ready-20260921.json").read_text()
+    )
+    config = json.loads((ROOT / evidence["source"]["config"]).read_text())
+    plan = sft.compile_sft(config, relative_to=RUNS)
+    request = sft.job_request(plan)
+
+    assert evidence["status"] == "qualified_not_submitted"
+    bindings = evidence["immutable_bindings"]
+    assert sft.digest(plan) == bindings["plan_sha256"]
+    assert sft.digest(request) == bindings["request_sha256"]
+    assert plan["runtime_sha256"] == bindings["runtime_sha256"]
+    assert plan["corpus_manifest_sha256"] == bindings["corpus_manifest_sha256"]
+    assert plan["split_manifest_sha256"] == bindings["split_manifest_sha256"]
+    assert plan["datasets"]["train"]["sha256"] == bindings["train_parquet_sha256"]
+
+    treatment = evidence["treatment"]
+    assert plan["recipe"] == {
+        "epochs": treatment["epochs"],
+        "batch_size": treatment["global_batch"],
+        "microbatch_per_gpu": treatment["microbatch_per_gpu"],
+        "lr": treatment["learning_rate"],
+        "max_length": treatment["max_length"],
+        "max_steps": treatment["planned_optimizer_steps"],
+        "checkpoint_interval": treatment["checkpoint_interval"],
+        "keep_checkpoints": treatment["keep_checkpoints"],
+        "eval_interval": 0,
+        "seed": treatment["seed"],
+        "nodes": treatment["nodes"],
+        "gpus_per_node": treatment["gpus_per_node"],
+    }
+    assert plan["datasets"]["train"]["rows"] == treatment["train_rows"]
+    assert plan["datasets"]["train"]["supervised_tokens"] == treatment["unique_supervised_tokens"]
+    assert plan["validation_mode"] == "task_outcomes_only"
+    assert plan["wandb"]["run_id"] == evidence["wandb"]["run_id"]
+    assert plan["wandb"]["tags"] == evidence["wandb"]["tags"]
+
+    incident = evidence["cpu_schedulability_incident"]
+    assert incident["server_dry_run_passed"] is True
+    assert incident["scheduler_result"] == "never_scheduled_insufficient_live_cpu_and_memory"
+    assert incident["active_gpus_after_release"] == 0
+    assert incident["pod_absent_after_release"] is True
+    cpu = evidence["exact_image_cpu_qualification"]
+    assert cpu["status"] == "passed_and_released"
+    assert cpu["gpus"] == 0
+    assert cpu["priority"] == "c1"
+    assert cpu["root_failure_alert_annotation"] == "off"
+    assert cpu["restarts"] == 0
+    assert cpu["pod_absent_after_release"] is True
+    assert cpu["config_map_absent_after_release"] is True
+    assert cpu["verified_counts"] == {
+        "train_rows": treatment["train_rows"],
+        "task_keys": treatment["task_keys"],
+        "supervised_tokens": treatment["unique_supervised_tokens"],
+    }
+
+    preview = evidence["live_preview"]
+    assert preview["status"] == "accepted_without_create"
+    assert preview["root_failure_alert_annotation"] == "off"
+    assert preview["pod_template_priority"] == "c1"
+    assert preview["secret_names"] == ["wandb-api"]
+    assert preview["api_duplicate_absent"] is True
+    assert preview["kubernetes_duplicate_absent"] is True
+    assert preview["output_absent"] is True
+    assert preview["server_dry_run_passed"] is True
+    assert preview["created"] is False
+    capacity = evidence["capacity"]
+    assert capacity["scope"] == "all_namespaces"
+    assert capacity["current_nodes"] == 7
+    assert capacity["current_gpus"] == 56
+    assert capacity["projected_nodes"] == 8
+    assert capacity["projected_gpus"] == 64
+    assert capacity["problems"] == []
+    assert capacity["qualified"] is True
+    assert request["failureAlerts"] is False
+    assert request["priority_class"] == "c1"
+    assert request["secrets"] == ["wandb-api"]
+    assert evidence["submission"] == {
+        "gpu_post_performed": False,
+        "job_or_rayjob_created": False,
+        "training_status": "not_submitted",
+    }
+
+
 @pytest.mark.parametrize(("context", "position"), [("64", 0), ("96", 1)])
 def test_teacher3k_later_context_launch_binds_current_inputs(context, position):
     evidence = json.loads(
