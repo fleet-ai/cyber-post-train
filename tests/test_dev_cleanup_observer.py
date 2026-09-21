@@ -1052,3 +1052,562 @@ def test_observer_read_failures_cannot_delete_an_active_gpu_run(tmp_path) -> Non
     assert result["last_observation_error_code"] == "kubectl_timeout"
     assert result["deletion_reason"] == "terminal_status"
     assert result["observer_error_class"] == ""
+
+
+class FakeJobsApiPrefixGuardCluster:
+    """Offline Kubernetes surface for the non-destructive Jobs API guard."""
+
+    def __init__(self) -> None:
+        self.rows: list[dict] = []
+        self.exact: dict | None = None
+        self.exact_after_reads = 0
+        self.exact_reads = 0
+        self.calls: list[list[str]] = []
+        self.delete_calls = 0
+
+    @staticmethod
+    def rayjob(
+        name: str = "collector-diag-1a2b3c4d",
+        uid: int = 301,
+        *,
+        run_dir: str = "/mnt/sfs/jobs/collector-diag-v1",
+        image: str = "registry/image@sha256:" + "d" * 64,
+    ) -> dict:
+        return {
+            "apiVersion": "ray.io/v1",
+            "kind": "RayJob",
+            "metadata": {
+                **_metadata(name, uid),
+                "namespace": cleanup.NAMESPACE,
+                "annotations": {
+                    "fleet.ai/run-dir": run_dir,
+                    "fleet.ai/failure-alerts": "off",
+                },
+                "labels": {
+                    "kueue.x-k8s.io/queue-name": "training-lq",
+                    "kueue.x-k8s.io/priority-class": "q1",
+                    "fleet.ai/requeue-if-preempted": "false",
+                },
+            },
+            "spec": {
+                "shutdownAfterJobFinishes": True,
+                "backoffLimit": 0,
+                "rayClusterSpec": {
+                    "headGroupSpec": {
+                        "template": {
+                            "spec": {
+                                "priorityClassName": "c1",
+                                "containers": [
+                                    {
+                                        "image": image,
+                                        "resources": {
+                                            "requests": {"nvidia.com/gpu": 8},
+                                            "limits": {"nvidia.com/gpu": 8},
+                                        },
+                                    }
+                                ],
+                            }
+                        }
+                    },
+                    "workerGroupSpecs": [{"replicas": 0}],
+                },
+            },
+        }
+
+    def __call__(self, argv, **_kwargs):
+        args = argv[5:]
+        self.calls.append(args)
+        if args == ["get", "rayjob", "--output", "json"]:
+            return NS(returncode=0, stdout=json.dumps({"items": self.rows}), stderr="")
+        if args[:2] == ["get", "rayjob"] and len(args) == 6:
+            assert args[3:] == ["--ignore-not-found", "--output", "json"]
+            self.exact_reads += 1
+            value = (
+                self.exact
+                if self.exact
+                and self.exact_reads > self.exact_after_reads
+                and args[2] == self.exact["metadata"]["name"]
+                else None
+            )
+            return NS(returncode=0, stdout=json.dumps(value) if value else "", stderr="")
+        if args[:2] == ["delete", "--raw"]:
+            self.delete_calls += 1
+        raise AssertionError(args)
+
+
+def _jobs_api_prefix_guard(
+    tmp_path: Path, runner: FakeJobsApiPrefixGuardCluster, **overrides: object
+) -> cleanup.JobsApiPrefixGuard:
+    values: dict[str, object] = {
+        "context": cleanup.DEV_CONTEXT,
+        "namespace": cleanup.NAMESPACE,
+        "run_name_prefix": "collector-diag",
+        "run_dir": "/mnt/sfs/jobs/collector-diag-v1",
+        "image": "registry/image@sha256:" + "d" * 64,
+        "plan_sha256": "sha256:" + "1" * 64,
+        "manifest_sha256": "sha256:" + "2" * 64,
+        "maximum_seconds": 1800,
+        "expected_gpus": 8,
+        "armed_path": tmp_path / "PREFIX_GUARD_ARMED.json",
+        "binding_path": tmp_path / "EXACT_BINDING.json",
+        "run": runner,
+    }
+    values.update(overrides)
+    return cleanup.JobsApiPrefixGuard(**values)
+
+
+def _creator_identity(**overrides: object) -> dict[str, object]:
+    value: dict[str, object] = {
+        "jobs_api_run_name": "collector-diag-1a2b3c4d",
+        "jobs_api_run_id": "00000000-0000-0000-0000-000000000302",
+        "run_dir": "/mnt/sfs/jobs/collector-diag-v1",
+    }
+    value.update(overrides)
+    return value
+
+
+def test_jobs_api_prefix_guard_arms_without_deletion_then_binds_exact_creator_name(
+    tmp_path,
+) -> None:
+    cluster = FakeJobsApiPrefixGuardCluster()
+    guard = _jobs_api_prefix_guard(tmp_path, cluster)
+    armed = guard.arm()
+    assert armed["schema"] == cleanup.JOBS_API_PREFIX_GUARD_SCHEMA
+    assert armed["status"] == "armed_non_destructive_prefix_guard"
+    assert armed["prefix_collision_count_before_post"] == 0
+    assert cluster.calls == [["get", "rayjob", "--output", "json"]]
+    assert cluster.delete_calls == 0
+
+    cluster.exact = cluster.rayjob()
+    binding = guard.bind_exact(_creator_identity())
+    assert binding["schema"] == cleanup.JOBS_API_EXACT_BINDING_SCHEMA
+    assert binding["status"] == "bound_exact_uid_cleanup_not_started"
+    assert binding["jobs_api_run_name"] == binding["rayjob_name"] == "collector-diag-1a2b3c4d"
+    assert binding["jobs_api_run_id"] == "00000000-0000-0000-0000-000000000302"
+    assert binding["rayjob_uid"] == _metadata("unused", 301)["uid"]
+    assert binding["prefix_guard_sha256"] == armed["sha256"]
+    # The only post-POST lookup uses the exact name returned by the creator;
+    # there is no second list/prefix discovery and no delete.
+    assert cluster.calls == [
+        ["get", "rayjob", "--output", "json"],
+        [
+            "get",
+            "rayjob",
+            "collector-diag-1a2b3c4d",
+            "--ignore-not-found",
+            "--output",
+            "json",
+        ],
+    ]
+    assert cluster.delete_calls == 0
+
+
+def test_jobs_api_exact_binding_can_resume_from_a_sealed_pre_post_guard(tmp_path) -> None:
+    cluster = FakeJobsApiPrefixGuardCluster()
+    _jobs_api_prefix_guard(tmp_path, cluster).arm()
+    # The POST and its response handling may be a separate process.  It must
+    # be able to reopen only the exact sealed guard, never rediscover a name by
+    # prefix after creation.
+    cluster.exact = cluster.rayjob()
+    binding = _jobs_api_prefix_guard(tmp_path, cluster).bind_exact(_creator_identity())
+    assert binding["rayjob_name"] == "collector-diag-1a2b3c4d"
+    assert [call[:3] for call in cluster.calls] == [
+        ["get", "rayjob", "--output"],
+        ["get", "rayjob", "collector-diag-1a2b3c4d"],
+    ]
+    assert cluster.delete_calls == 0
+
+
+def test_jobs_api_exact_binding_waits_only_for_the_creator_returned_name(tmp_path) -> None:
+    cluster = FakeJobsApiPrefixGuardCluster()
+    ticks = iter((0.0, 0.0, 0.1))
+    _jobs_api_prefix_guard(
+        tmp_path,
+        cluster,
+        bind_wait_seconds=1.0,
+        sleep=lambda _seconds: None,
+        monotonic=lambda: next(ticks),
+    ).arm()
+    cluster.exact = cluster.rayjob()
+    cluster.exact_after_reads = 1
+    binding = _jobs_api_prefix_guard(
+        tmp_path,
+        cluster,
+        bind_wait_seconds=1.0,
+        sleep=lambda _seconds: None,
+        monotonic=lambda: 0.1,
+    ).bind_exact(_creator_identity())
+    assert binding["rayjob_name"] == "collector-diag-1a2b3c4d"
+    assert cluster.exact_reads == 2
+    assert cluster.delete_calls == 0
+
+
+@pytest.mark.parametrize(
+    "existing_name",
+    ["collector-diag", "collector-diag-deadbeef", "collector-diag-x"],
+)
+def test_jobs_api_prefix_guard_rejects_any_preexisting_prefix_collision(
+    tmp_path, existing_name
+) -> None:
+    cluster = FakeJobsApiPrefixGuardCluster()
+    cluster.rows = [FakeJobsApiPrefixGuardCluster.rayjob(name=existing_name)]
+    guard = _jobs_api_prefix_guard(tmp_path, cluster)
+    with pytest.raises(cleanup.ObserverError, match="prefix is already in use"):
+        guard.arm()
+    assert not (tmp_path / "PREFIX_GUARD_ARMED.json").exists()
+    assert cluster.delete_calls == 0
+
+
+@pytest.mark.parametrize(
+    "mutate_identity, mutate_rayjob, error",
+    [
+        (
+            lambda identity: identity.update(jobs_api_run_name="collector-diag-not-hex"),
+            lambda rayjob: None,
+            "creator identity is invalid",
+        ),
+        (
+            lambda identity: identity.update(jobs_api_run_id="not-a-uuid"),
+            lambda rayjob: None,
+            "creator identity is invalid",
+        ),
+        (
+            lambda identity: None,
+            lambda rayjob: rayjob["metadata"]["annotations"].pop("fleet.ai/failure-alerts"),
+            "does not match",
+        ),
+        (
+            lambda identity: None,
+            lambda rayjob: rayjob["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"][
+                "containers"
+            ][0].update({"image": "registry/other@sha256:" + "e" * 64}),
+            "resource binding changed",
+        ),
+        (
+            lambda identity: None,
+            lambda rayjob: rayjob["spec"]["rayClusterSpec"].update(
+                {"workerGroupSpecs": [{"replicas": 1}]}
+            ),
+            "resource binding changed",
+        ),
+        (
+            lambda identity: None,
+            lambda rayjob: rayjob["spec"].update({"backoffLimit": 1}),
+            "does not match",
+        ),
+    ],
+)
+def test_jobs_api_exact_binding_fails_closed_without_cleanup(
+    tmp_path, mutate_identity, mutate_rayjob, error
+) -> None:
+    cluster = FakeJobsApiPrefixGuardCluster()
+    guard = _jobs_api_prefix_guard(tmp_path, cluster)
+    guard.arm()
+    identity = _creator_identity()
+    rayjob = cluster.rayjob()
+    mutate_identity(identity)
+    mutate_rayjob(rayjob)
+    cluster.exact = rayjob
+    with pytest.raises(cleanup.ObserverError, match=error):
+        guard.bind_exact(identity)
+    assert not (tmp_path / "EXACT_BINDING.json").exists()
+    assert cluster.delete_calls == 0
+
+
+def test_jobs_api_exact_binding_rejects_a_rayjob_that_predates_its_guard(tmp_path) -> None:
+    cluster = FakeJobsApiPrefixGuardCluster()
+    guard = _jobs_api_prefix_guard(tmp_path, cluster)
+    guard.arm()
+    cluster.exact = cluster.rayjob()
+    cluster.exact["metadata"]["creationTimestamp"] = "2000-01-01T00:00:00Z"
+    with pytest.raises(cleanup.ObserverError, match="predates"):
+        guard.bind_exact(_creator_identity())
+    assert not (tmp_path / "EXACT_BINDING.json").exists()
+    assert cluster.delete_calls == 0
+
+
+def test_jobs_api_exact_binding_requires_the_sealed_pre_post_guard(tmp_path) -> None:
+    cluster = FakeJobsApiPrefixGuardCluster()
+    guard = _jobs_api_prefix_guard(tmp_path, cluster)
+    cluster.exact = cluster.rayjob()
+    with pytest.raises(cleanup.ObserverError, match="has not been armed"):
+        guard.bind_exact(_creator_identity())
+    assert cluster.calls == []
+    assert cluster.delete_calls == 0
+
+
+def _jobs_api_exact_binding(tmp_path: Path, **overrides: object) -> Path:
+    created = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    value: dict[str, object] = {
+        "schema": cleanup.JOBS_API_EXACT_BINDING_SCHEMA,
+        "status": "bound_exact_uid_cleanup_not_started",
+        "prefix_guard_sha256": "sha256:" + "a" * 64,
+        "context": cleanup.DEV_CONTEXT,
+        "namespace": cleanup.NAMESPACE,
+        "jobs_api_run_name": "collector-diag-1a2b3c4d",
+        "jobs_api_run_id": "00000000-0000-0000-0000-000000000302",
+        "run_dir": "/mnt/sfs/jobs/collector-diag-v1",
+        "rayjob_name": "collector-diag-1a2b3c4d",
+        "rayjob_uid": _metadata("unused", 401)["uid"],
+        "rayjob_created_at": created,
+        "bound_at": created,
+        "failure_alerts": "off",
+        "maximum_seconds": 1800,
+        "expected_gpus": 8,
+        "cleanup_started": False,
+    }
+    value.update(overrides)
+    sealed = _seal(value)
+    path = tmp_path / "EXACT_BINDING.json"
+    path.write_text(json.dumps(sealed))
+    return path
+
+
+def _jobs_api_release_contract(tmp_path: Path, binding: dict) -> Path:
+    value = {
+        "schema": cleanup.JOBS_API_RELEASE_CONTRACT_SCHEMA,
+        "status": "creator_authorized_exact_uid_release",
+        "binding_sha256": binding["sha256"],
+        "context": binding["context"],
+        "namespace": binding["namespace"],
+        "jobs_api_run_name": binding["jobs_api_run_name"],
+        "jobs_api_run_id": binding["jobs_api_run_id"],
+        "rayjob_name": binding["rayjob_name"],
+        "rayjob_uid": binding["rayjob_uid"],
+        "authorized_at": binding["bound_at"],
+        "release_route": "raw_rayjob_uid_precondition_v1",
+    }
+    path = tmp_path / "RELEASE_CONTRACT.json"
+    path.write_text(json.dumps(_seal(value)))
+    return path
+
+
+class FakeJobsApiExactObserverCluster:
+    """Fake exact-name Kubernetes reads; it has no prefix or peer route."""
+
+    def __init__(self, binding: dict, *, auto_release: bool = True) -> None:
+        self.binding = binding
+        self.auto_release = auto_release
+        self.root_reads = 0
+        self.deleted = False
+        self.calls: list[tuple[list[str], object]] = []
+        self.root_uid = binding["rayjob_uid"]
+        self.cluster_uid = _metadata("unused", 402)["uid"]
+        self.workload_uid = _metadata("unused", 403)["uid"]
+        self.pod_uid = _metadata("unused", 404)["uid"]
+        self.replacement_root: dict | None = None
+        self.bad_workload_owner = False
+
+    def _owner(self, *, kind: str, name: str, uid: str) -> list[dict]:
+        return [{"kind": kind, "name": name, "uid": uid, "controller": True}]
+
+    def _root(self, *, uid: str | None = None) -> dict:
+        return {
+            "kind": "RayJob",
+            "metadata": {
+                **_metadata(self.binding["rayjob_name"], 401),
+                "uid": uid or self.root_uid,
+                "creationTimestamp": self.binding["rayjob_created_at"],
+                "namespace": cleanup.NAMESPACE,
+                "annotations": {
+                    "fleet.ai/run-dir": self.binding["run_dir"],
+                    "fleet.ai/failure-alerts": "off",
+                },
+            },
+            "status": {"jobStatus": "SUCCEEDED", "rayClusterName": "collector-cluster"},
+        }
+
+    def _workload(self) -> dict:
+        owner_uid = (
+            self.root_uid if not self.bad_workload_owner else _metadata("unused", 499)["uid"]
+        )
+        return {
+            "kind": "Workload",
+            "metadata": {
+                **_metadata("collector-workload", 403),
+                "namespace": cleanup.NAMESPACE,
+                "labels": {"kueue.x-k8s.io/job-uid": self.root_uid},
+                "ownerReferences": self._owner(
+                    kind="RayJob", name=self.binding["rayjob_name"], uid=owner_uid
+                ),
+            },
+        }
+
+    def _cluster(self) -> dict:
+        return {
+            "kind": "RayCluster",
+            "metadata": {
+                **_metadata("collector-cluster", 402),
+                "namespace": cleanup.NAMESPACE,
+                "ownerReferences": self._owner(
+                    kind="RayJob", name=self.binding["rayjob_name"], uid=self.root_uid
+                ),
+            },
+        }
+
+    def _pod(self) -> dict:
+        return {
+            "kind": "Pod",
+            "metadata": {
+                **_metadata("collector-pod", 404),
+                "namespace": cleanup.NAMESPACE,
+                "ownerReferences": self._owner(
+                    kind="RayCluster", name="collector-cluster", uid=self.cluster_uid
+                ),
+            },
+            "spec": {
+                "containers": [
+                    {
+                        "resources": {
+                            "requests": {"nvidia.com/gpu": 8},
+                            "limits": {"nvidia.com/gpu": 8},
+                        }
+                    }
+                ]
+            },
+        }
+
+    def __call__(self, argv, **kwargs):
+        args = argv[5:]
+        self.calls.append((args, kwargs.get("input")))
+        root_absent = self.deleted or (self.auto_release and self.root_reads > 1)
+        if args[:3] == ["get", "rayjob", self.binding["rayjob_name"]]:
+            self.root_reads += 1
+            if self.replacement_root is not None and self.root_reads > 1:
+                return NS(returncode=0, stdout=json.dumps(self.replacement_root), stderr="")
+            value = None if root_absent else self._root()
+            return NS(returncode=0, stdout=json.dumps(value) if value else "", stderr="")
+        if args[:3] == ["get", "workload", "--selector"]:
+            assert args[3] == "kueue.x-k8s.io/job-uid=" + self.root_uid
+            return NS(returncode=0, stdout=json.dumps({"items": [self._workload()]}), stderr="")
+        if args[:3] == ["get", "raycluster", "collector-cluster"]:
+            value = None if root_absent else self._cluster()
+            return NS(returncode=0, stdout=json.dumps(value) if value else "", stderr="")
+        if args[:3] == ["get", "pod", "--selector"]:
+            assert args[3] == "ray.io/cluster=collector-cluster"
+            return NS(returncode=0, stdout=json.dumps({"items": [self._pod()]}), stderr="")
+        if args[:3] in (
+            ["get", "workload", "collector-workload"],
+            ["get", "pod", "collector-pod"],
+        ):
+            return NS(returncode=0, stdout="", stderr="")
+        if args[:2] == ["delete", "--raw"]:
+            assert args[2] == (
+                f"/apis/ray.io/v1/namespaces/{cleanup.NAMESPACE}/rayjobs/"
+                + self.binding["rayjob_name"]
+            )
+            assert json.loads(kwargs["input"]) == {
+                "apiVersion": "v1",
+                "kind": "DeleteOptions",
+                "propagationPolicy": "Foreground",
+                "preconditions": {"uid": self.root_uid},
+            }
+            self.deleted = True
+            return NS(returncode=0, stdout="", stderr="")
+        raise AssertionError(args)
+
+
+def _jobs_api_exact_observer(
+    tmp_path: Path,
+    cluster: FakeJobsApiExactObserverCluster,
+    *,
+    release_contract_path: Path | None = None,
+) -> cleanup.JobsApiExactUidObserver:
+    return cleanup.JobsApiExactUidObserver(
+        binding_path=tmp_path / "EXACT_BINDING.json",
+        result_path=tmp_path / "EXACT_OBSERVER_RESULT.json",
+        release_contract_path=release_contract_path,
+        poll_seconds=0.001,
+        run=cluster,
+    )
+
+
+def test_jobs_api_exact_uid_observer_releases_only_proven_owned_children(tmp_path) -> None:
+    binding_path = _jobs_api_exact_binding(tmp_path)
+    binding = json.loads(binding_path.read_text())
+    cluster = FakeJobsApiExactObserverCluster(binding)
+    result = _jobs_api_exact_observer(tmp_path, cluster).run()
+    assert result["status"] == "released_after_terminal"
+    assert result["release_confirmed"] is True
+    assert result["terminal_status"] == "Succeeded"
+    assert result["peak_gpus"] == 8
+    assert result["cleanup_status"] == "not_authorized"
+    assert result["private_logs_read"] is False
+    assert [entry["uid"] for entry in result["workloads"]] == [cluster.workload_uid]
+    assert [entry["uid"] for entry in result["rayclusters"]] == [cluster.cluster_uid]
+    assert [entry["uid"] for entry in result["pods"]] == [cluster.pod_uid]
+    commands = [call[0] for call in cluster.calls]
+    assert ["get", "rayjob", "--output", "json"] not in commands
+    assert not any(command[:2] == ["delete", "--raw"] for command in commands)
+
+
+def test_jobs_api_exact_uid_observer_reports_owner_mismatch_without_cleanup(tmp_path) -> None:
+    binding_path = _jobs_api_exact_binding(tmp_path)
+    binding = json.loads(binding_path.read_text())
+    cluster = FakeJobsApiExactObserverCluster(binding)
+    cluster.bad_workload_owner = True
+    result = _jobs_api_exact_observer(tmp_path, cluster).run()
+    assert result["status"] == "release_uncertain"
+    assert result["release_confirmed"] is False
+    assert result["cleanup_requested"] is False
+    assert not any(call[0][:2] == ["delete", "--raw"] for call in cluster.calls)
+
+
+def test_jobs_api_exact_uid_observer_raw_deletes_only_with_creator_contract(tmp_path) -> None:
+    binding_path = _jobs_api_exact_binding(tmp_path)
+    binding = json.loads(binding_path.read_text())
+    cluster = FakeJobsApiExactObserverCluster(binding, auto_release=False)
+    contract = _jobs_api_release_contract(tmp_path, binding)
+    result = _jobs_api_exact_observer(tmp_path, cluster, release_contract_path=contract).run()
+    assert result["status"] == "released_after_terminal"
+    assert result["cleanup_requested"] is True
+    assert result["cleanup_status"] == "requested_exact_uid_precondition"
+    assert sum(call[0][:2] == ["delete", "--raw"] for call in cluster.calls) == 1
+
+
+def test_jobs_api_exact_uid_observer_rejects_same_name_uid_reuse(tmp_path) -> None:
+    binding_path = _jobs_api_exact_binding(tmp_path)
+    binding = json.loads(binding_path.read_text())
+    cluster = FakeJobsApiExactObserverCluster(binding, auto_release=False)
+    cluster.replacement_root = cluster._root(uid=_metadata("unused", 498)["uid"])
+    result = _jobs_api_exact_observer(tmp_path, cluster).run()
+    assert result["status"] == "release_uncertain"
+    assert result["release_confirmed"] is False
+    assert result["cleanup_requested"] is False
+    assert not any(call[0][:2] == ["delete", "--raw"] for call in cluster.calls)
+
+
+def test_jobs_api_exact_uid_observer_never_claims_release_without_a_bound_cluster(tmp_path) -> None:
+    binding_path = _jobs_api_exact_binding(tmp_path)
+    binding = json.loads(binding_path.read_text())
+    cluster = FakeJobsApiExactObserverCluster(binding)
+    root = cluster._root()
+    root["status"] = {"jobStatus": "SUCCEEDED"}
+    cluster._root = lambda **_kwargs: root
+    # The root disappears after the first observation, but no RayCluster UID
+    # was ever bound.  A successful release claim would be unsafe.
+    cluster.auto_release = True
+    result = _jobs_api_exact_observer(tmp_path, cluster).run()
+    assert result["status"] == "release_uncertain"
+    assert result["reason"] == "bound_root_absent_without_terminal_inventory"
+    assert result["raycluster_identity_observed"] is False
+    assert result["release_confirmed"] is False
+
+
+def test_jobs_api_exact_uid_observer_deadline_is_bound_to_root_creation(tmp_path) -> None:
+    binding_path = _jobs_api_exact_binding(
+        tmp_path,
+        rayjob_created_at="2000-01-01T00:00:00Z",
+        bound_at="2000-01-01T00:00:00Z",
+        maximum_seconds=1,
+    )
+    binding = json.loads(binding_path.read_text())
+    cluster = FakeJobsApiExactObserverCluster(binding, auto_release=False)
+    root = cluster._root()
+    root["status"] = {"jobStatus": "RUNNING"}
+    cluster._root = lambda **_kwargs: root
+    result = _jobs_api_exact_observer(tmp_path, cluster).run()
+    assert result["status"] == "release_uncertain"
+    assert result["reason"] == "creation_bound_deadline_elapsed"
+    assert result["cleanup_requested"] is False
+    assert not any(call[0][:2] == ["delete", "--raw"] for call in cluster.calls)
