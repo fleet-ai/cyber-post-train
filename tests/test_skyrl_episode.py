@@ -29,8 +29,8 @@ class Tokenizer:
         return [1, 2]
 
     def encode(self, text, **kwargs):
-        assert text == "\n" and kwargs == {"add_special_tokens": False}
-        return [10]
+        assert kwargs == {"add_special_tokens": False}
+        return [10] if text == "\n" else list(range(20, 44))
 
 
 class Engine:
@@ -38,6 +38,7 @@ class Engine:
 
     def __init__(self):
         self.requests = []
+        self.replies = []
         self.reply = {
             "responses": ['<tool_call>{"name":"submit_report","arguments":{}}</tool_call>'],
             "response_ids": [[77, 9]],
@@ -47,9 +48,10 @@ class Engine:
 
     async def generate(self, request):
         self.requests.append(copy.deepcopy(request))
-        if isinstance(self.reply, Exception):
-            raise self.reply
-        return copy.deepcopy(self.reply)
+        reply = self.replies.pop(0) if self.replies else self.reply
+        if isinstance(reply, Exception):
+            raise reply
+        return copy.deepcopy(reply)
 
 
 @pytest.fixture
@@ -67,7 +69,17 @@ def setup(tmp_path, monkeypatch):
             "root": "/model",
             "runtime_chat_template_sha256": fleet.sha256(b"synthetic-template"),
         },
-        "rl": {"context_tokens": 20, "max_tokens_per_turn": 8},
+        "rl": {
+            "context_tokens": 40,
+            "max_tokens_per_turn": 8,
+            "generation_chunk_tokens": 4,
+            "compaction_trigger_tokens": 20,
+            "compaction_summary_tokens": 4,
+            "max_turns": 8,
+            "episode_seconds": 60,
+            "tool_seconds": 10,
+            "tool_result_chars": 4,
+        },
         "initial_prompt_tokens_sha256": fleet.sha256(fleet.canonical_json([1, 2])),
     }
     return NS(
@@ -76,7 +88,7 @@ def setup(tmp_path, monkeypatch):
         engine=Engine(),
         sampling={"temperature": 0.7},
         helper=tmp_path / "helper",
-        response_tokens=18,
+        response_tokens=80,
     )
 
 
@@ -94,26 +106,26 @@ def recorder(setup):
 @pytest.mark.asyncio
 async def test_recording_keeps_sampled_ids_and_masks_only_observations(setup):
     value = recorder(setup)
-    value.begin_segment([], [])
+    value.begin_segment([{"role": "user", "content": "task"}], [])
     turn = await value.sample()
     assert value.append_assistant(turn.text, sky.parse(turn.text), 0)["content"] == turn.text
     observation = {"role": "tool", "content": "synthetic", "name": "submit_report"}
     assert value.append_observation(observation, []) == observation
     record = value.finalize(0.0, {"verifier_execution_id": "fixture"}, 0)[0]
-    assert record.tokens == [1, 2, 77, 9, 10, 11, 12]
-    assert record.loss_mask == [1, 1, 0, 0, 0]
-    assert record.rollout_log_probs == [-0.3, -0.2, 0, 0, 0]
-    assert record.reward == 0.0 and record.response_length == 5
+    assert record.tokens == [1, 2, 77, 9]
+    assert record.loss_mask == [1, 1]
+    assert record.rollout_log_probs == [-0.3, -0.2]
+    assert record.reward == 0.0 and record.response_length == 2
     assert setup.engine.requests == [
         {
             "prompt_token_ids": [[1, 2]],
-            "sampling_params": {"temperature": 0.7, "logprobs": 0, "max_tokens": 8},
+            "sampling_params": {"temperature": 0.7, "logprobs": 0, "max_tokens": 4},
         }
     ]
     for operation in (
         lambda: value.finalize(1, {}, 0),
         lambda: value.append_observation(observation, []),
-        lambda: value.begin_segment([], []),
+        lambda: value.begin_segment([{"role": "user", "content": "task"}], []),
         lambda: value.append_assistant("changed", None, 1),
     ):
         with pytest.raises(rl_episode.InvalidEpisode):
@@ -131,7 +143,7 @@ def test_model_drift(setup, field, value):
         recorder(setup)
 
 
-@pytest.mark.parametrize("tokens", [True, 0, 20])
+@pytest.mark.parametrize("tokens", [True, 0, -1])
 def test_response_budget(setup, tokens):
     setup.response_tokens = tokens
     with pytest.raises(rl_episode.InvalidEpisode, match="budget"):
@@ -151,8 +163,8 @@ def test_sampling_rejects_unreviewed_stops(setup, params):
 @pytest.mark.parametrize("tokens", [[], [True], [-1], [4], list(range(19))])
 def test_prompt_drift_or_overflow(setup, tokens, monkeypatch):
     monkeypatch.setattr(setup.tokenizer, "apply_chat_template", lambda *a, **k: tokens)
-    with pytest.raises(rl_episode.InvalidEpisode, match="initial_prompt"):
-        recorder(setup).begin_segment([], [])
+    with pytest.raises(rl_episode.InvalidEpisode, match="(prompt_tokens|initial_prompt)"):
+        recorder(setup).begin_segment([{"role": "user", "content": "task"}], [])
 
 
 @pytest.mark.asyncio
@@ -181,7 +193,7 @@ def test_prompt_drift_or_overflow(setup, tokens, monkeypatch):
 async def test_invalid_generation_never_becomes_reward_zero(setup, field, value):
     setup.engine.reply[field] = value
     value = recorder(setup)
-    value.begin_segment([], [])
+    value.begin_segment([{"role": "user", "content": "task"}], [])
     with pytest.raises(rl_episode.InvalidEpisode) as caught:
         await value.sample()
     assert rl_episode.budget_stop(caught.value) is None
@@ -189,24 +201,130 @@ async def test_invalid_generation_never_becomes_reward_zero(setup, field, value)
 
 
 @pytest.mark.asyncio
-async def test_exact_length_stop_is_rejected_without_sample_or_reward(setup):
-    setup.engine.reply.update(
-        response_ids=[[77] * 8], response_logprobs=[[-0.2] * 8], stop_reasons=["length"]
-    )
+async def test_length_chunk_continues_then_executes_ordered_tools_and_report(setup):
+    first = '<tool_call>{"name":"bash","arguments":{"script":"one"}}</tool_call>'
+    second = '<tool_call>{"name":"submit_report","arguments":{}}</tool_call>'
+    setup.engine.replies = [
+        {
+            "responses": [first],
+            "response_ids": [[31, 32, 33, 34]],
+            "response_logprobs": [[-0.2] * 4],
+            "stop_reasons": ["length"],
+        },
+        {
+            "responses": [second],
+            "response_ids": [[77, 9]],
+            "response_logprobs": [[-0.3, -0.2]],
+            "stop_reasons": ["stop"],
+        },
+    ]
+
+    class Session:
+        def __init__(self):
+            self.calls = []
+
+        async def call_tool(self, name, arguments):
+            self.calls.append((name, arguments))
+            return NS(content=[NS(type="text", text="ok")], is_error=False)
+
     value = recorder(setup)
-    value.begin_segment([], [])
+    messages = [{"role": "user", "content": "task"}]
+    session = Session()
+    messages, reason, _ = await rl_episode._agent(
+        value, session, messages, [], setup.config["rl"], sky.parse
+    )
+    assert reason == "report_submitted"
+    assert session.calls == [("bash", {"script": "one"}), ("submit_report", {})]
+    assert sky.parse(first + second) == [
+        {"name": "bash", "arguments": {"script": "one"}},
+        {"name": "submit_report", "arguments": {}},
+    ]
+    assert setup.engine.requests == [
+        {
+            "prompt_token_ids": [[1, 2]],
+            "sampling_params": {"temperature": 0.7, "logprobs": 0, "max_tokens": 4},
+        },
+        {
+            "prompt_token_ids": [[1, 2, 31, 32, 33, 34]],
+            "sampling_params": {"temperature": 0.7, "logprobs": 0, "max_tokens": 4},
+        },
+    ]
+    sample = value.finalize(1.0, {"verifier_execution_id": "fixture"}, 0)[0]
+    assert sample.tokens == [1, 2, 31, 32, 33, 34, 77, 9]
+    assert sample.response_length == 6 and sample.reward == 1.0
+
+
+@pytest.mark.asyncio
+async def test_length_chunks_stop_at_declared_turn_budget(setup):
+    setup.engine.reply = {
+        "responses": ["unfinished"],
+        "response_ids": [[31, 32, 33, 34]],
+        "response_logprobs": [[-0.2] * 4],
+        "stop_reasons": ["length"],
+    }
+    value = recorder(setup)
+    value.begin_segment([{"role": "user", "content": "task"}], [])
     with pytest.raises(rl_episode.EpisodeBudgetExceeded) as caught:
         await value.sample()
-    assert rl_episode.budget_stop(caught.value) == "generation_incomplete_length"
-    assert value.recording.response_length == 0 and not value.finalized
-    assert len(setup.engine.requests) == 1
+    assert rl_episode.budget_stop(caught.value) == "turn_response_budget_exhausted"
+    assert value.recording.response_length == 8 and not value.finalized
+    assert len(setup.engine.requests) == 2
+
+
+@pytest.mark.asyncio
+async def test_compaction_is_a_distinct_step_with_exact_replacement_prompt(setup):
+    class CompactTokenizer(Tokenizer):
+        def apply_chat_template(self, messages, **kwargs):
+            assert kwargs == dict(
+                tools=[] if messages[-1].get("content") == sky.COMPACTION_PROMPT else [],
+                tokenize=True,
+                return_dict=False,
+                add_generation_prompt=True,
+            )
+            if messages[-1].get("content") == sky.COMPACTION_PROMPT:
+                return [3, 4, 5]
+            if "Compact working memory:" in messages[0].get("content", ""):
+                return [6, 7]
+            return [1, 2]
+
+    setup.tokenizer = CompactTokenizer()
+    setup.config["model"]["runtime_chat_template_sha256"] = fleet.sha256(
+        setup.tokenizer.chat_template.encode()
+    )
+    setup.config["rl"]["compaction_trigger_tokens"] = 9
+    setup.engine.replies = [
+        {
+            "responses": ["memory"],
+            "response_ids": [[55, 9]],
+            "response_logprobs": [[-0.2, -0.1]],
+            "stop_reasons": ["stop"],
+        },
+        {
+            "responses": ['<tool_call>{"name":"submit_report","arguments":{}}</tool_call>'],
+            "response_ids": [[77, 9]],
+            "response_logprobs": [[-0.3, -0.2]],
+            "stop_reasons": ["stop"],
+        },
+    ]
+    value = recorder(setup)
+    value.begin_segment([{"role": "user", "content": "task"}], [])
+    turn = await value.sample()
+    assert sky.parse(turn.text) == {"name": "submit_report", "arguments": {}}
+    steps = value.finalize(1.0, {"verifier_execution_id": "fixture"}, 0)
+    assert [step.tokens for step in steps] == [[3, 4, 5, 55, 9], [6, 7, 77, 9]]
+    assert [step.reward for step in steps] == [0.0, 1.0]
+    assert [step.metadata["step_kind"] for step in steps] == ["compaction", "action"]
+    assert all(step.metadata["compactions"] == 1 for step in steps)
+    assert setup.engine.requests[0]["prompt_token_ids"] != setup.engine.requests[1][
+        "prompt_token_ids"
+    ]
 
 
 @pytest.mark.asyncio
 async def test_transport_error_sanitized_without_retry(setup):
     setup.engine.reply = ValueError("private response body")
     value = recorder(setup)
-    value.begin_segment([], [])
+    value.begin_segment([{"role": "user", "content": "task"}], [])
     with pytest.raises(rl_episode.InvalidEpisode, match="^generation_failure_ValueError$"):
         await value.sample()
     assert len(setup.engine.requests) == 1
@@ -221,7 +339,7 @@ async def test_budgets_no_truncation_and_order(setup):
         value.finalize(1, {}, 0)
     with pytest.raises(rl_episode.InvalidEpisode):
         value.append_observation({}, [])
-    value.begin_segment([], [])
+    value.begin_segment([{"role": "user", "content": "task"}], [])
     with pytest.raises(rl_episode.InvalidEpisode):
         value.append_observation({}, [1])
     value.response_tokens = 2
@@ -229,9 +347,9 @@ async def test_budgets_no_truncation_and_order(setup):
     assert setup.engine.requests[-1]["sampling_params"]["max_tokens"] == 2
     with pytest.raises(rl_episode.InvalidEpisode, match="exhausted"):
         await value.sample()
-    with pytest.raises(rl_episode.InvalidEpisode, match="exhausted"):
+    with pytest.raises(rl_episode.InvalidEpisode):
         value.append_observation({}, [])
-    assert value.recording.tokens == [1, 2, 77, 9]
+    assert value.steps[0].tokens == [1, 2, 77, 9]
 
 
 @pytest.mark.asyncio
@@ -239,7 +357,7 @@ async def test_budgets_no_truncation_and_order(setup):
 async def test_bad_turn_cap(setup, cap):
     setup.sampling["max_tokens"] = cap
     value = recorder(setup)
-    value.begin_segment([], [])
+    value.begin_segment([{"role": "user", "content": "task"}], [])
     with pytest.raises(rl_episode.InvalidEpisode, match="turn_budget"):
         await value.sample()
     assert not setup.engine.requests
@@ -280,16 +398,43 @@ def test_parser_preserves_multiple_calls_in_order():
     ]
 
 
+@pytest.mark.asyncio
+async def test_zero_gpu_long_horizon_probe_uses_actual_tokenizer_contract(setup):
+    class ProbeTokenizer(Tokenizer):
+        def apply_chat_template(self, messages, **kwargs):
+            assert kwargs == dict(
+                tools=[], tokenize=True, return_dict=False, add_generation_prompt=True
+            )
+            if messages[-1].get("content") == sky.COMPACTION_PROMPT:
+                return [3, 4, 5]
+            if "Compact working memory:" in messages[0].get("content", ""):
+                return [6, 7]
+            return [1, 2]
+
+    result = await sky.offline_long_horizon_probe(
+        {"repo": "Qwen/Qwen3.8-27B", "root": "/model"},
+        ProbeTokenizer(),
+        setup.helper,
+    )
+    assert result == {
+        "chunk_continuation_checked": True,
+        "compaction_checked": True,
+        "stepwise_prompt_checked": True,
+        "ordered_multi_tool_execution_checked": True,
+        "samples": 2,
+        "generation_requests": 5,
+    }
+
+
 def test_parallel_observations_receive_one_masked_next_turn_header(setup):
     value = recorder(setup)
-    value.begin_segment([], [])
+    value.begin_segment([{"role": "user", "content": "task"}], [])
     observations = [
         {"role": "tool", "content": "one", "name": "bash"},
         {"role": "tool", "content": "two", "name": "bash"},
     ]
     assert value.append_observations(observations, []) == observations
-    assert value.recording.tokens == [1, 2, 10, 11, 12]
-    assert value.recording.loss_mask == [0, 0, 0]
+    assert value.recording is None
 
 
 @pytest.mark.asyncio
@@ -303,6 +448,11 @@ async def test_shared_lifecycle_grades_once_and_confirms_release(
     state = fleet_fixture
     state.config["model"] = setup.config["model"]
     state.config["initial_prompt_tokens_sha256"] = setup.config["initial_prompt_tokens_sha256"]
+    state.config["rl"].update(
+        generation_chunk_tokens=4,
+        compaction_trigger_tokens=10000,
+        compaction_summary_tokens=4,
+    )
     seal(state.config)
     setup.config = state.config
     # This fixture's prompt token IDs deliberately stay fixed to isolate the
@@ -313,8 +463,8 @@ async def test_shared_lifecycle_grades_once_and_confirms_release(
         samples = await rl_episode.collect(
             state.config, tmp_path / "episode", recorder(setup), sky.parse, client=state.client
         )
-    assert state.deleted and samples[0].reward == score
-    assert samples[0].metadata["verifier_execution_id"] == state.reward["verifier_execution_id"]
+    assert state.deleted and samples[-1].reward == score
+    assert samples[-1].metadata["verifier_execution_id"] == state.reward["verifier_execution_id"]
     receipt = json.loads((tmp_path / "episode/ACCEPTED.json").read_text())
     assert receipt["sample_count"] == 1
     assert sum(m == "POST" and p.endswith("/instances") for m, p in state.calls) == 1

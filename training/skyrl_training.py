@@ -7,6 +7,7 @@ The initial profile starts from the pinned base; it never auto-resumes a run.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import dataclasses
 import hashlib
 import json
@@ -34,6 +35,9 @@ IMAGE = (
 )
 NATIVE = {
     **skyrl.NATIVE_SOURCES,
+    "skyrl.train.generators.utils": (
+        "55c15b660067749febda00d4fb1c2110ff436717bbd4b73bf66055a73d0b87d5"
+    ),
     "skyrl.train.entrypoints.main_base": (
         "aee8976aa5d18a0c19be93e0b99fc1d1868688af0fe26b08b8a863c0aed027d7"
     ),
@@ -127,6 +131,11 @@ def compile_rl(config, *, relative_to):
     ):
         raise ValueError("exact native train/dev files required")
     root, limits = Path(_sfs_root(data["root"], "data root")), metadata["limits"]
+    compaction_enabled = {
+        "generation_chunk_tokens",
+        "compaction_trigger_tokens",
+        "compaction_summary_tokens",
+    } <= limits.keys()
     qualification = None
     if config.get("qualification") is not None:
         from .rl_reward_canary import validate_run_config
@@ -153,6 +162,16 @@ def compile_rl(config, *, relative_to):
         context_tokens=limits["context_tokens"],
         response_tokens=limits["response_tokens"],
         tokens_per_turn=limits["max_tokens_per_turn"],
+        generation_chunk_tokens=limits.get(
+            "generation_chunk_tokens", limits["max_tokens_per_turn"]
+        ),
+        compaction_trigger_tokens=limits.get(
+            "compaction_trigger_tokens", limits["context_tokens"] // 3
+        ),
+        compaction_summary_tokens=limits.get(
+            "compaction_summary_tokens", limits["max_tokens_per_turn"]
+        ),
+        compaction_enabled=compaction_enabled,
         max_turns=limits["max_turns"],
         **recipe,
     )
@@ -424,7 +443,7 @@ def preflight(plan):
     if Path(plan["output_root"]).exists():
         raise FileExistsError("RL output already exists")
     rows = check_artifacts(plan)
-    native_source()
+    native = native_source()
     skyrl.native_config(skyrl.SkyRLConfig(**plan["arguments"]))
     tokenizer = AutoTokenizer.from_pretrained(
         plan["model"]["root"], trust_remote_code=False, local_files_only=True
@@ -444,6 +463,15 @@ def preflight(plan):
         {"name": "submit_report", "arguments": {"flags": [], "explanation": ""}},
     ]:
         raise ValueError("native ordered multi-tool parser changed")
+    from .skyrl_episode import offline_long_horizon_probe
+
+    horizon = asyncio.run(
+        offline_long_horizon_probe(
+            plan["model"],
+            tokenizer,
+            Path(native["skyrl.train.generators.utils"].__file__),
+        )
+    )
     return {
         "schema": "cyber_skyrl_training_cpu_preflight_v1",
         "status": "passed",
@@ -453,6 +481,7 @@ def preflight(plan):
         "request_sha256": digest(request),
         "native_parser_checked": True,
         "ordered_multi_tool_parser_checked": True,
+        **horizon,
         "counts": {k: len(v) for k, v in rows.items()},
         "planned_steps": plan["arguments"]["steps"],
         "rl_qualified": False,

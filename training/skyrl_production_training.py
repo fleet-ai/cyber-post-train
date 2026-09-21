@@ -122,13 +122,21 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
         metadata["tokenizer"][key] != bound[key] for key in ("repo", "revision")
     ):
         raise ValueError("production run/model/data identity mismatch")
+    arguments = dataclasses.asdict(args)
+    for key in (
+        "generation_chunk_tokens",
+        "compaction_trigger_tokens",
+        "compaction_summary_tokens",
+        "compaction_enabled",
+    ):
+        arguments.pop(key)
     plan = {
         "schema": SCHEMA,
         "run_name": args.name,
         "output_root": args.output_root,
         "model": bound,
         "data": metadata,
-        "arguments": dataclasses.asdict(args),
+        "arguments": arguments,
         "native_overrides": skyrl.overrides(args),
         "native_sources": base.NATIVE,
         "runtime_sha256": digest(_runtime()),

@@ -61,10 +61,14 @@ def config():
         {"lr": float("nan")},
         {"lr": float("inf")},
         {"lr": True},
-        {"context_tokens": 100000},
-        {"context_tokens": 81920},
+        {"context_tokens": 262145},
+        {"context_tokens": 8192},
         {"response_tokens": 1},
         {"tokens_per_turn": 0},
+        {"generation_chunk_tokens": 8192},
+        {"compaction_summary_tokens": 8192},
+        {"compaction_trigger_tokens": 95000},
+        {"compaction_enabled": 1},
         {"max_turns": 0},
         {"max_turns": 1},
         {"output_root": "/mnt/sfs/models/output"},
@@ -107,6 +111,9 @@ def test_bounded_native_recipe(config, nodes, groups, repetitions):
         == config.context_tokens
     )
     assert values["trainer.algorithm.dynamic_sampling.type"] is None
+    assert values["generator.step_wise_trajectories"] is False
+    assert "generator.merge_stepwise_output" not in values
+    assert values["generator.sampling_params"]["max_generate_length"] == config.tokens_per_turn
     for key in (
         "trainer.algorithm.zero_variance_filter",
         "generator.zero_reward_on_non_stop",
@@ -122,6 +129,27 @@ def test_bounded_native_recipe(config, nodes, groups, repetitions):
     before = copy.deepcopy(values)
     values["generator.eval_sampling_params"]["temperature"] = 0.1
     assert values["generator.sampling_params"] == before["generator.sampling_params"]
+
+
+def test_compacted_long_horizon_uses_trigger_not_total_episode_budget(config):
+    config = replace(
+        config,
+        context_tokens=262144,
+        response_tokens=4194304,
+        tokens_per_turn=32768,
+        generation_chunk_tokens=4096,
+        compaction_trigger_tokens=98304,
+        compaction_summary_tokens=8192,
+        compaction_enabled=True,
+        max_turns=1200,
+    )
+    values = skyrl.overrides(config)
+    assert values["trainer.max_prompt_length"] == 98304
+    assert values["generator.inference_engine.engine_init_kwargs.max_model_len"] == 262144
+    assert values["generator.max_turns"] == 1200
+    assert values["generator.step_wise_trajectories"] is True
+    assert values["generator.merge_stepwise_output"] is False
+    assert values["generator.sampling_params"]["max_generate_length"] == 4096
 
 
 def test_native_boundary_does_not_rewrite_config(config, monkeypatch):
@@ -197,7 +225,7 @@ async def test_native_sampling_settings_reach_recorder(config, recorder_setup, m
     )
     recorder_setup.sampling = get_sampling_params_for_backend("vllm", params)
     instance = recorder(recorder_setup)
-    instance.begin_segment([], [])
+    instance.begin_segment([{"role": "user", "content": "task"}], [])
     await instance.sample()
     sent = recorder_setup.engine.requests[0]["sampling_params"]
     assert sent["logprobs"] == 0 and sent["max_tokens"] == 8

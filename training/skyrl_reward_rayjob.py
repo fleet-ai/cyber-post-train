@@ -669,6 +669,12 @@ def preflight_runtime(plan: dict[str, Any]) -> dict[str, Any]:
             "planned_steps": proof["planned_steps"],
             "native_parser_checked": proof["native_parser_checked"],
             "ordered_multi_tool_parser_checked": proof["ordered_multi_tool_parser_checked"],
+            "chunk_continuation_checked": proof["chunk_continuation_checked"],
+            "compaction_checked": proof["compaction_checked"],
+            "stepwise_prompt_checked": proof["stepwise_prompt_checked"],
+            "ordered_multi_tool_execution_checked": proof[
+                "ordered_multi_tool_execution_checked"
+            ],
             "output_absent": True,
             "wandb_create_once": wandb_binding,
             "wandb_remote_lookup": "deferred_to_runtime_start",
@@ -985,6 +991,10 @@ def authorize(
         or preflight_receipt.get("planned_steps") != 1
         or preflight_receipt.get("native_parser_checked") is not True
         or preflight_receipt.get("ordered_multi_tool_parser_checked") is not True
+        or preflight_receipt.get("chunk_continuation_checked") is not True
+        or preflight_receipt.get("compaction_checked") is not True
+        or preflight_receipt.get("stepwise_prompt_checked") is not True
+        or preflight_receipt.get("ordered_multi_tool_execution_checked") is not True
         or (datetime.now(UTC) - checked).total_seconds() > 300
     ):
         raise JobsError("prod5 CPU preflight is stale or incomplete")

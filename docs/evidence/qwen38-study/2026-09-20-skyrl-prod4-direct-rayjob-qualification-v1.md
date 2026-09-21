@@ -237,3 +237,45 @@ creation. The created-proof SHA-256 is
 `513aebcda9c56666dad65e0d91a17f887d17c53504c66c46ec17b132738cc91f`.
 These facts prove the exact create and admission only; they do not yet prove any
 episode, reward, optimizer update, checkpoint, or capability result.
+
+## Prod5 terminal result and required repair
+
+Prod5 finished cleanly from Kubernetes' point of view, but it did **not** train.
+The first development episode asked Qwen for one response with a 4,096-token
+generation limit. Qwen used all 4,096 tokens without ending the response or calling a
+tool. The adapter then stopped the episode with the explicit reason
+`generation_incomplete_length`. That is a handled horizon rejection, not a task
+failure, reward result, optimizer result, or scientific success.
+
+- sealed `REJECTED.json` / `NATIVE_REJECTED.json` self SHA-256:
+  `aa6730f98679af67b9dbcac3206e64de9ab468e3e84661e815e46760cb77baf6`;
+- accepted train episodes: zero;
+- authoritative train rewards: zero;
+- optimizer updates: zero;
+- checkpoints: zero;
+- UID-bound release-observer result SHA-256:
+  `641852608dca0be4b7af7eafb77a614c7af0776d643a1a77fe3e70a6180fda4e`.
+
+The release observer proved the exact RayJob, Workload, RayCluster and Pod were all
+absent and the remaining allocation was zero GPUs. A separate zero-GPU evidence Pod,
+`chris-q38-prod5-evidence-v1` (UID
+`71bbaedb-bc57-4d10-9593-dbfd445c4db2`), independently read the sealed rejection and
+produced receipt SHA-256
+`6e7461d2c26e318f5acacf7ac03c650b433d40f9830b16519ae19df3bfa8d1b6`. It was then
+deleted by exact UID and confirmed absent.
+
+The durable lesson is that 4,096 tokens must be an engine request chunk, not an
+episode-ending limit. A successor must let one assistant response continue across
+multiple generation chunks without inserting a new chat header, and it must keep the
+exact sampled token IDs and log probabilities. More generally, a long cyber episode
+may outgrow one live context window. Correct training therefore also needs native
+step-wise records: every model turn is trained against the exact prompt that model
+turn actually saw, so a reviewed context-compaction step can replace old history
+without creating a false causal sequence or a wrong policy gradient.
+
+No prod6 GPU run is authorized merely by this diagnosis. Before one create, the code
+must have deterministic tests that reproduce the prod5 length stop, continue into an
+ordered tool/report turn, prove compacted later turns retain their exact sampling
+prefixes, and exhaust budgets truthfully. The exact pinned image must then pass a new
+zero-GPU CPU preflight, current-main review, rendered alert/priority checks, duplicate
+and destination checks, and a fresh resource census.

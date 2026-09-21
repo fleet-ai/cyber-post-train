@@ -42,6 +42,7 @@ class EpisodeBudgetExceeded(InvalidEpisode):
 BUDGET_STOPS = {
     "generation_incomplete_length",
     "generation_incomplete_context_full",
+    "turn_response_budget_exhausted",
     "turn_budget_exhausted",
     "response_budget_exhausted",
 }
@@ -95,6 +96,7 @@ def _failure(error, *, run_id, elapsed_seconds, phase):
                 "tool_result_exceeds_budget",
                 "bash_timeout_maximum_unresolved",
                 "tool_timeout_below_advertised_budget",
+                "turn_response_budget_exhausted",
                 "turn_budget_exhausted",
                 "response_budget_exhausted",
                 "instance_release_unconfirmed",
@@ -233,19 +235,38 @@ def _validate(config):
     if not re.fullmatch(r"sha256:[a-f0-9]{64}", tool_sha):
         raise InvalidEpisode("unpinned_tool_catalog")
     limits = config["rl"]
-    if set(limits) != {
+    base_limits = {
         "max_turns",
         "episode_seconds",
         "tool_seconds",
         "tool_result_chars",
         "max_tokens_per_turn",
         "context_tokens",
+    }
+    compacted_limits = {
+        "generation_chunk_tokens",
+        "compaction_trigger_tokens",
+        "compaction_summary_tokens",
+    }
+    if frozenset(limits) not in {
+        frozenset(base_limits),
+        frozenset(base_limits | compacted_limits),
     }:
         raise InvalidEpisode("incomplete_episode_limits")
     if any(type(v) is not int or v <= 0 for v in limits.values()):
         raise InvalidEpisode("invalid_episode_limits")
     if limits["max_tokens_per_turn"] >= limits["context_tokens"]:
         raise InvalidEpisode("generation_budget_exceeds_context")
+    if compacted_limits <= limits.keys() and not (
+        limits["generation_chunk_tokens"] <= limits["max_tokens_per_turn"]
+        and limits["compaction_summary_tokens"] <= limits["max_tokens_per_turn"]
+        and limits["compaction_trigger_tokens"]
+        + limits["max_tokens_per_turn"]
+        + limits["tool_result_chars"]
+        + limits["compaction_summary_tokens"]
+        < limits["context_tokens"]
+    ):
+        raise InvalidEpisode("invalid_compaction_limits")
     ttl = config["environment"]["ttl_seconds"]
     if type(ttl) is not int or not limits["episode_seconds"] + 240 < ttl <= 32400:
         raise InvalidEpisode("invalid_instance_ttl")

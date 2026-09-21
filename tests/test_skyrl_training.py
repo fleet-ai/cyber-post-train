@@ -16,7 +16,7 @@ from typer.testing import CliRunner
 from cyber_post_train import cli
 from cyber_post_train.jobs import digest
 from evals.fleet import opencode_self_hosted as fleet
-from training import rl_data, sft_runtime
+from training import rl_data, sft_runtime, skyrl_episode
 from training import skyrl_training as train
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -281,9 +281,25 @@ def test_cpu_preflight_dispatch_never_starts_ray(artifacts, monkeypatch, fault):
         NS(AutoTokenizer=NS(from_pretrained=lambda *a, **kw: tokenizer)),
     )
     monkeypatch.setattr(train, "job_request", lambda _: {"fixture": True})
-    monkeypatch.setattr(train, "native_source", lambda: {})
+    monkeypatch.setattr(
+        train,
+        "native_source",
+        lambda: {"skyrl.train.generators.utils": NS(__file__="/synthetic/helper.py")},
+    )
     monkeypatch.setattr(train.skyrl, "native_config", lambda _: NS())
     monkeypatch.setattr(train, "_module", lambda *a: NS(PromptDataset=Dataset))
+
+    async def horizon(*args):
+        return {
+            "chunk_continuation_checked": True,
+            "compaction_checked": True,
+            "stepwise_prompt_checked": True,
+            "ordered_multi_tool_execution_checked": True,
+            "samples": 2,
+            "generation_requests": 3,
+        }
+
+    monkeypatch.setattr(skyrl_episode, "offline_long_horizon_probe", horizon)
     if fault:
         with pytest.raises((ValueError, FileExistsError)):
             train.preflight(plan)
@@ -291,6 +307,7 @@ def test_cpu_preflight_dispatch_never_starts_ray(artifacts, monkeypatch, fault):
         proof = train.preflight(plan)
         assert proof["status"] == "passed" and proof["gpus"] == 0
         assert proof["native_parser_checked"] and not proof["rl_qualified"]
+        assert proof["chunk_continuation_checked"] and proof["compaction_checked"]
         assert proof["runtime_user"] == {"uid": 1000, "gid": 100}
 
 

@@ -196,11 +196,36 @@ def build(config: dict, *, relative_to: Path, client) -> dict:
     episode["config_sha256"] = fleet.digest_without(episode, "config_sha256")
     rl_episode._validate(episode)
     rl_episode.validate_tool_budget(catalog, limits["tool_seconds"])
+    compacted = {
+        "generation_chunk_tokens",
+        "compaction_trigger_tokens",
+        "compaction_summary_tokens",
+    } <= limits.keys()
     if type(response_tokens) is not int or not (
-        limits["max_tokens_per_turn"] <= response_tokens < limits["context_tokens"] <= 98304
+        limits["max_tokens_per_turn"] <= response_tokens
+        and (
+            (
+                backend == "skyrl"
+                and compacted
+                and limits["context_tokens"] <= 262144
+                and limits["generation_chunk_tokens"] <= limits["max_tokens_per_turn"]
+                and limits["compaction_summary_tokens"] <= limits["max_tokens_per_turn"]
+            )
+            or (
+                not compacted
+                and response_tokens < limits["context_tokens"] <= 98304
+            )
+        )
     ):
         raise ValueError("response/context budget outside native Qwen profile")
-    prompt_budget = limits["context_tokens"] - response_tokens
+    prompt_budget = (
+        min(
+            limits["compaction_trigger_tokens"] - limits["max_tokens_per_turn"],
+            limits["context_tokens"] - limits["max_tokens_per_turn"],
+        )
+        if compacted
+        else limits["context_tokens"] - response_tokens
+    )
     tokenizer, tito, Dataset, tokenizer_identity = (
         _native(lock, root) if backend == "miles" else _native_skyrl(lock, root)
     )
