@@ -170,6 +170,15 @@ def test_render_is_eval_compatible_and_contains_only_train_tasks() -> None:
     # request; the sealed packet keeps the source/admission facts that generic
     # eval plans intentionally do not retain.
     assert packet["training_data_eligible"] is True
+    assert packet["corpus_scope"] == {
+        "current": "verified_success_visible_actions_only_v1",
+        "visible_reasoning_included": False,
+        "future_visible_reasoning_requires": [
+            "separate_immutable_campaign_packet",
+            "student_visible_source_evidence",
+            "explicit_authorization_and_safety_evidence",
+        ],
+    }
     assert packet["generic_plan_source_job_id"] is None
     assert packet["eval_plan_sha256"].startswith("sha256:")
     assert packet["admission_policy"]["eligible_terminal_outcome"] == "verified_success_v1"

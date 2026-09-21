@@ -8,6 +8,11 @@ adapter must enforce.
 
 The rendered files are inputs to ``cyber-post-train eval prepare``; rendering
 them is not a launch and does not contact Fleet.
+
+This v1 packet collects only visible actions from verifier-confirmed successes.
+It rejects teacher hidden-thinking fields.  A corpus with student-visible
+reasoning, if separately authorized and safety-reviewed, must use a new
+immutable campaign packet; this policy cannot be relaxed in place.
 """
 
 from __future__ import annotations
@@ -390,6 +395,15 @@ def _packet(
             # deliberately null rather than a fabricated provenance claim.
             "generic_plan_source_job_id": None,
             "training_data_eligible": True,
+            "corpus_scope": {
+                "current": "verified_success_visible_actions_only_v1",
+                "visible_reasoning_included": False,
+                "future_visible_reasoning_requires": [
+                    "separate_immutable_campaign_packet",
+                    "student_visible_source_evidence",
+                    "explicit_authorization_and_safety_evidence",
+                ],
+            },
             "admission_policy": {
                 # Collection may preserve failed attempts as operational
                 # evidence, but only a verifier-confirmed success may enter
