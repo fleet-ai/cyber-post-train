@@ -44,8 +44,8 @@ DEV_CONTEXT = "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb"
 PROD_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 NAMESPACE = "fleet-train-jobs"
 RUN_NAME = "chris-q38-rlreward-prod7"
-STAGE_NAME = "chris-q38-prod7-data-v2"
-PREFLIGHT_NAME = "chris-q38-prod7-preflight-v2"
+STAGE_NAME = "chris-q38-prod7-data-v3"
+PREFLIGHT_NAME = "chris-q38-prod7-preflight-v3"
 STAGE_RECEIPT = "/dev/termination-log"
 UPLOAD = Path("/tmp/autoresearch-upload.tar.gz")
 PACKET_SCHEMA = "cyber_skyrl_reward_direct_rayjob_packet_v1"
@@ -327,6 +327,115 @@ def build_stage_archive(source: Path, archive: Path) -> dict[str, Any]:
         "bytes": archive.stat().st_size,
         "sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
     }
+
+
+def rebind_private_source_run_id(
+    source: Path,
+    destination: Path,
+    *,
+    prior_run_id: str,
+    new_run_id: str = RUN_NAME,
+) -> dict[str, Any]:
+    """Create one private package whose embedded episode identity matches its run.
+
+    Reusing train/dev bytes from a predecessor while changing only the public
+    manifest leaves ``cyber_config_json.run_id`` stale.  The exact-image
+    preflight correctly rejects that package.  This helper permits only the
+    two mechanically required changes inside each private row: ``run_id`` and
+    its self digest.  Prompts, task bindings and every other field stay byte-
+    equivalent after canonical JSON decoding.
+    """
+    from evals.fleet import opencode_self_hosted as fleet
+
+    expected = {"manifest.json", "split.json", "task-set.json", "train.jsonl", "dev.jsonl"}
+    found = {path.name: path for path in source.iterdir() if path.is_file()}
+    if (
+        set(found) != expected
+        or not prior_run_id
+        or prior_run_id == new_run_id
+        or destination.exists()
+        or destination.is_symlink()
+    ):
+        raise JobsError("private SkyRL successor identity inputs changed")
+    manifest = json.loads(found["manifest.json"].read_bytes())
+    body = {key: value for key, value in manifest.items() if key != "sha256"}
+    if (
+        manifest.get("schema") != "cyber_skyrl_data_v1"
+        or manifest.get("name") != prior_run_id
+        or manifest.get("sha256") != "sha256:" + digest(body)
+        or set(manifest.get("files", {})) != {"train", "dev"}
+    ):
+        raise JobsError("private SkyRL predecessor manifest changed")
+    temporary = destination.with_name("." + destination.name + ".partial")
+    if temporary.exists() or temporary.is_symlink():
+        raise JobsError("private SkyRL successor temporary path exists")
+    temporary.mkdir(parents=True, mode=0o700)
+    try:
+        for name in ("split.json", "task-set.json"):
+            shutil.copyfile(found[name], temporary / name)
+            (temporary / name).chmod(0o600)
+        updated_files: dict[str, dict[str, Any]] = {}
+        for split in ("train", "dev"):
+            path = found[f"{split}.jsonl"]
+            prior_payload = path.read_bytes()
+            expected_file = manifest["files"][split]
+            if (
+                expected_file.get("path") != path.name
+                or expected_file.get("sha256")
+                != "sha256:" + hashlib.sha256(prior_payload).hexdigest()
+            ):
+                raise JobsError("private SkyRL predecessor payload changed")
+            output = bytearray()
+            rows = prior_payload.splitlines()
+            if len(rows) != expected_file.get("rows") or not rows:
+                raise JobsError("private SkyRL predecessor row count changed")
+            for payload in rows:
+                row = json.loads(payload)
+                config = json.loads(row["cyber_config_json"])
+                if (
+                    row.get("split") != split
+                    or config.get("run_id") != prior_run_id
+                    or config.get("config_sha256") != fleet.digest_without(config, "config_sha256")
+                ):
+                    raise JobsError("private SkyRL predecessor episode identity changed")
+                before = copy.deepcopy(config)
+                config["run_id"] = new_run_id
+                config["config_sha256"] = fleet.digest_without(config, "config_sha256")
+                changed = {
+                    key for key in set(before) | set(config) if before.get(key) != config.get(key)
+                }
+                if changed != {"run_id", "config_sha256"}:
+                    raise JobsError("private SkyRL successor changed scientific content")
+                row["cyber_config_json"] = fleet.canonical_json(config).decode()
+                output.extend(fleet.canonical_json(row) + b"\n")
+            target = temporary / path.name
+            target.write_bytes(output)
+            target.chmod(0o600)
+            updated_files[split] = {
+                **expected_file,
+                "sha256": "sha256:" + hashlib.sha256(output).hexdigest(),
+            }
+        successor = {
+            **manifest,
+            "name": new_run_id,
+            "files": updated_files,
+        }
+        successor["sha256"] = "sha256:" + digest(
+            {key: value for key, value in successor.items() if key != "sha256"}
+        )
+        (temporary / "manifest.json").write_bytes(fleet.canonical_json(successor) + b"\n")
+        (temporary / "manifest.json").chmod(0o600)
+        os.rename(temporary, destination)
+        parent = os.open(destination.parent, os.O_RDONLY)
+        try:
+            os.fsync(parent)
+        finally:
+            os.close(parent)
+        return successor
+    except BaseException:
+        if temporary.exists() and temporary.parent == destination.parent:
+            shutil.rmtree(temporary)
+        raise
 
 
 def stage_plan(plan: dict[str, Any], source: Path, archive: Path) -> dict[str, Any]:

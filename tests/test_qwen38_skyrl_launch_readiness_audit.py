@@ -87,12 +87,12 @@ def test_v17_and_prod4_recompile_to_the_frozen_digests_and_resource_shape() -> N
     assert topology["submission_gate"]["submission_authorized"] is False
 
     assert prod4["compiled_digests"] == {
-        "plan_sha256": ("sha256:d43600f5bb9d8e4c4948f2b1c185ce891c2e416384543ef4d14305e129a4f336"),
+        "plan_sha256": ("sha256:c80fb774fed97aa6367245991292f5bb76078f43b7f0182c08bb1b5482d4294d"),
         "request_sha256": (
-            "sha256:dece471161351ebe22b3cd7794115c3b0d19b5b09a8344aead6ea6ed0bfc096f"
+            "sha256:49511ecb81f6897a06e44c850a86e9ea4152a331f9353fbb2bea97a58fc54525"
         ),
         "sanitized_manifest_self_sha256": (
-            "sha256:7e5c2e293a69b4d3bad6402a9945520182853a1caae1ae8a8c74f8f8bbe99471"
+            "sha256:109be2f4fba07a6eabaffc3c94048640214170d95ef311b2db107ac0331ffc16"
         ),
         "staged_manifest_observed": False,
     }
