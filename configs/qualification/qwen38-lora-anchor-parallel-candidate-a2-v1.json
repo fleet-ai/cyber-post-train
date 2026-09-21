@@ -3,7 +3,7 @@
   "status": "local_only_not_prepared_or_submitted",
   "candidate": {
     "config_path": "configs/runs/qwen38-27b-lora-sft-r64-a32-anchor-a2-v1.json",
-    "config_file_sha256": "sha256:bec204cd6bdbdbb71087587100e5fcc2c9cc7accdcdafeb268b552c2a0ff40ce",
+    "config_file_sha256": "sha256:c7f847f8b9d45051f8f5e730dcb6f2009fafecccdba465001a6c57c7ec37f483",
     "name": "chris-q38-lora-sft-a2-v1",
     "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-a2-v1",
     "model": {
@@ -39,6 +39,8 @@
       }
     },
     "runtime": {
+      "variant": "qwen38_lora_anchor_a2_v1",
+      "purpose": "A2 uses a small versioned entrypoint solely to keep the already sealed historical runtime byte-for-byte unchanged. It delegates to that unchanged runtime after binding the fresh A2 identity.",
       "skyrl_source_commit": "7e9356c8e02e7382e84b8484638baccdd1bbf680",
       "image": "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317"
     },
@@ -53,12 +55,13 @@
     "config_path": "configs/runs/qwen38-27b-lora-sft-r64-a32-anchor-v1.json",
     "terminal_preflight_evidence_path": "docs/evidence/qwen38-lora-anchor-a1-cpu-preflight-output-collision-20260921.json",
     "reason": "A1's zero-GPU CPU preflight stopped because its training output path already existed. A2 mints only a fresh create-once identity; it does not change the scientific treatment.",
-    "only_allowed_config_leaf_differences": [
+    "only_allowed_scientific_config_leaf_differences": [
       "name",
       "output_root",
       "wandb.run_id",
       "wandb.name"
-    ]
+    ],
+    "required_execution_binding_difference": "runtime_variant"
   },
   "corpus": {
     "manifest_path": "configs/data/qwen38-teacher3k-32k-v1.manifest.json",
@@ -71,6 +74,12 @@
     "unique_supervised_target_tokens": 57384881,
     "assistant_responses": 176654,
     "held_out_task_families_excluded": 25
+  },
+  "data_and_context_contract": {
+    "supervision": "A2 trains only on visible assistant actions and tool calls. Private or unknown thinking/reasoning fields are excluded before tokenization and rejected again by the training runtime.",
+    "paired_comparison": "A2 and its full-weight comparator use the same frozen 32K teacher corpus, task-family exclusions, base model, and task/tool contract. The method and its qualified learning rate are the intentional differences.",
+    "offline_context": "Training uses static 32K packed windows, not live context shortening. Each accepted assistant target is supervised once; copied history has no loss. Sessions with opaque context shortening are excluded because their later prompt cannot be reconstructed faithfully.",
+    "future_student_visible_reasoning": "Written reasoning is not part of A2. A later study needs a fresh, explicitly authorized student-visible source; an aggregate-only field census; an exact template and loss-mask contract; exact records for any context-shortening boundary; and the reviewed tests listed in docs/QWEN38_REASONING_AND_COMPACTION_POLICY.md."
   },
   "scientific_motivation": {
     "intended_comparator_config_path": "configs/runs/qwen38-teacher3k-32k-full-b8-lr3e6-v3.json",
@@ -122,5 +131,5 @@
     "a preview, dry-run, image, source, resource, or Secret-reference mismatch",
     "insufficient live c1 capacity"
   ],
-  "packet_sha256": "7b6f97f0e829eb5b5e63b254cee7abb2b4f9b5d0124fefa335ff9868bbff6bf4"
+  "packet_sha256": "29fc2def98818e0d005f5e0f128a56e1b6a169f2d5341a6a8c9a82b44f92e5f3"
 }

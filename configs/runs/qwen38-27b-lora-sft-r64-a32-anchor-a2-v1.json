@@ -1,5 +1,6 @@
 {
   "backend": "skyrl",
+  "runtime_variant": "qwen38_lora_anchor_a2_v1",
   "name": "chris-q38-lora-sft-a2-v1",
   "output_root": "/mnt/sfs/jobs/chris-q38-lora-sft-a2-v1",
   "model": {

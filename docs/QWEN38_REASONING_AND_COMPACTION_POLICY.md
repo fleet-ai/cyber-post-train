@@ -43,6 +43,20 @@ target-token occurrences**.  The 32K, 64K, and 96K variants re-group the same
 targets into different windows; they are context treatments, not three times as
 much independent supervision.
 
+### What this means for the A2 LoRA comparison
+
+The `qwen38-lora-anchor-a2-v1` packet is an action-only comparison against the
+paired full-weight treatment.  Both treatments use the same frozen 32K corpus,
+base model, task-family exclusions, and task/tool contract.  A2 changes the
+adaptation method and its separately qualified learning rate; it does not add
+teacher thinking, private reasoning, or extra examples.
+
+This matters when reading a result: any difference between A2 and its paired
+full-weight comparator can test the adaptation method under this action-only
+dataset.  It cannot establish that either model learned hidden chain of thought
+or learned to shorten its own context.  The packet records this explicitly so a
+later training or evaluation report cannot silently widen the claim.
+
 ## Current context treatment
 
 ### Offline SFT

@@ -1730,9 +1730,9 @@ def direct_submit_sft_once(
 ) -> dict:
     """Create one source-bound SFT RayJob through the maintained fallback."""
     _assert_sft_contract(plan, request)
-    from training.sft import job_request
+    from training.sft_dispatch import compiler_for_plan
 
-    if job_request(plan) != request:
+    if compiler_for_plan(plan).job_request(plan) != request:
         raise JobsError("saved SFT request differs from the current source-bound renderer")
 
     def output_absence_gate() -> dict:

@@ -1,11 +1,17 @@
+import base64
 import copy
+import gzip
 import hashlib
 import json
 from pathlib import Path
 
 import pytest
+from typer.testing import CliRunner
 
-from training import sft, sft_runtime
+from cyber_post_train import cli
+from training import sft, sft_dispatch, sft_runtime
+from training import sft_lora_anchor_a2_v1 as a2_compiler
+from training import sft_runtime_lora_anchor_a2_v1 as a2_runtime
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "configs" / "runs"
@@ -18,6 +24,7 @@ A1_COLLISION = (
     / "evidence"
     / "qwen38-lora-anchor-a1-cpu-preflight-output-collision-20260921.json"
 )
+RUNNER = CliRunner()
 
 
 def _read(path: Path) -> dict:
@@ -42,27 +49,73 @@ def _without_identity(value: dict) -> dict:
     return result
 
 
+def _without_execution_wrapper(value: dict) -> dict:
+    result = _without_identity(value)
+    result.pop("runtime_variant", None)
+    result.pop("runtime_sha256", None)
+    return result
+
+
+def _bundle(request: dict) -> dict:
+    encoded = request["env"].get("CYBER_SFT_BUNDLE")
+    if encoded is None:
+        encoded = "".join(
+            value
+            for _, value in sorted(
+                (int(name.rsplit("_", 1)[1]), value)
+                for name, value in request["env"].items()
+                if name.startswith("CYBER_SFT_BUNDLE_")
+            )
+        )
+    return json.loads(gzip.decompress(base64.b64decode(encoded, validate=True)))
+
+
 def test_a2_is_an_identity_only_successor_of_the_broad_lora_anchor():
     a1 = _read(A1_CONFIG)
     a2 = _read(A2_CONFIG)
 
-    assert _without_identity(a2) == _without_identity(a1)
+    assert _without_execution_wrapper(a2) == _without_execution_wrapper(a1)
+    assert a2["runtime_variant"] == a2_runtime.RUNTIME_VARIANT
     assert a2["name"] == "chris-q38-lora-sft-a2-v1"
     assert a2["output_root"] == "/mnt/sfs/jobs/chris-q38-lora-sft-a2-v1"
     assert a2["name"] == a2["wandb"]["run_id"] == a2["wandb"]["name"]
 
-    plan = sft.compile_sft(a2, relative_to=RUNS)
-    request = sft.job_request(plan)
-    assert _without_identity(plan) == _without_identity(sft.compile_sft(a1, relative_to=RUNS))
-    assert plan["qualification_gate"] == sft_runtime.QWEN38_LORA_PRODUCTION_QUALIFICATION
-    assert sft_runtime._qwen38_lora_one_step_identity(plan) == (
-        sft_runtime.qwen38_lora_broad_full_plan_binding(a2["name"])
+    plan = a2_compiler.compile_sft(a2, relative_to=RUNS)
+    request = a2_compiler.job_request(plan)
+    base_plan = sft.compile_sft(a1, relative_to=RUNS)
+    assert _without_execution_wrapper(plan) == _without_execution_wrapper(base_plan)
+    assert plan["runtime_variant"] == a2_runtime.runtime_binding(ROOT / "training/sft_runtime.py")
+    assert (
+        plan["runtime_sha256"]
+        == hashlib.sha256(
+            (ROOT / "training/sft_runtime_lora_anchor_a2_v1.py").read_bytes()
+        ).hexdigest()
     )
+    assert plan["runtime_sha256"] != plan["runtime_variant"]["base_runtime_sha256"]
+    assert plan["qualification_gate"] == sft_runtime.QWEN38_LORA_PRODUCTION_QUALIFICATION
+    # The wrapper keeps one temporary in-memory identity binding while the
+    # historical runtime calls back into its validator. That re-entry must not
+    # weaken the sealed identity or fail spuriously.
+    with a2_runtime.base_plan_context():
+        a2_runtime.validate_plan(plan, check_files=False)
+    assert a2_runtime.delegated_plan(plan) == {
+        **base_plan,
+        "run_name": a2["name"],
+        "output_root": a2["output_root"],
+        "wandb": plan["wandb"],
+    }
     assert request["name"] == request["title"] == a2["name"]
     assert request["run_dir"] == a2["output_root"]
     assert request["env"]["WANDB_RUN_ID"] == request["env"]["WANDB_NAME"] == a2["name"]
     assert request["priority_class"] == "c1"
     assert request["failureAlerts"] is False
+    assert sft_dispatch.compiler_for_config(a2) is a2_compiler
+    assert sft_dispatch.compiler_for_plan(plan) is a2_compiler
+
+    bundle = _bundle(request)
+    assert hashlib.sha256(bundle["runtime"].encode()).hexdigest() == plan["runtime_sha256"]
+    base_source = bundle["extra_files"]["training/sft_runtime.py"].encode()
+    assert hashlib.sha256(base_source).hexdigest() == plan["runtime_variant"]["base_runtime_sha256"]
 
 
 @pytest.mark.parametrize(
@@ -85,7 +138,19 @@ def test_a2_rejects_a_partial_identity_reversion(path):
     target[path[-1]] = source[path[-1]]
 
     with pytest.raises(ValueError, match="Qwen3.8 LoRA requires"):
-        sft.compile_sft(a2, relative_to=RUNS)
+        a2_compiler.compile_sft(a2, relative_to=RUNS)
+
+
+def test_a2_prepare_uses_the_versioned_compiler_without_an_sfs_mount(tmp_path):
+    prepared = tmp_path / "prepared"
+
+    result = RUNNER.invoke(cli.app, ["train", str(A2_CONFIG), "--output", str(prepared)])
+
+    assert result.exit_code == 0, result.output
+    plan, request = cli._prepared(prepared)
+    assert plan["runtime_variant"]["name"] == a2_runtime.RUNTIME_VARIANT
+    assert request == a2_compiler.job_request(plan)
+    assert request["failureAlerts"] is False
 
 
 def test_a1_output_collision_is_sanitized_and_a2_packet_preserves_its_lesson():
@@ -121,12 +186,22 @@ def test_a1_output_collision_is_sanitized_and_a2_packet_preserves_its_lesson():
     assert packet["identity_successor_of"]["terminal_preflight_evidence_path"] == str(
         A1_COLLISION.relative_to(ROOT)
     )
-    assert packet["identity_successor_of"]["only_allowed_config_leaf_differences"] == [
+    assert packet["identity_successor_of"]["only_allowed_scientific_config_leaf_differences"] == [
         "name",
         "output_root",
         "wandb.run_id",
         "wandb.name",
     ]
+    assert (
+        packet["identity_successor_of"]["required_execution_binding_difference"]
+        == "runtime_variant"
+    )
+    assert packet["candidate"]["runtime"]["variant"] == a2_runtime.RUNTIME_VARIANT
+    contract = packet["data_and_context_contract"]
+    assert "visible assistant actions" in contract["supervision"]
+    assert "same frozen 32K teacher corpus" in contract["paired_comparison"]
+    assert "static 32K packed windows" in contract["offline_context"]
+    assert "not part of A2" in contract["future_student_visible_reasoning"]
     assert packet["launch_rail"]["remote_preparation_boundary"]["status"] == (
         "supported_sft_only_zero_gpu_preflight_job"
     )
