@@ -222,6 +222,13 @@ def compile_eval(config: dict, *, relative_to: Path) -> dict:
         model = route["model"]
         if model not in models or not isinstance(versions, list) or not versions:
             raise ValueError("route has no valid model/task assignment")
+        if (
+            route["model_info"]["model_type"] == "qwen3_5"
+            and models[model]["session_model"] != f"qwen/{route['served_id']}"
+        ):
+            raise ValueError(
+                "Qwen session identity must use the exact Fleet qwen provider and served ID"
+            )
         if len(set(versions)) != len(versions) or set(versions) - tasks.keys():
             raise ValueError("route tasks are duplicate or outside the frozen set")
         if assignments[model] & set(versions):

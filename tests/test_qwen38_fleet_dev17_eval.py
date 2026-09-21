@@ -12,10 +12,10 @@ from evals.fleet import evaluate
 ROOT = Path(__file__).resolve().parents[1]
 SPLIT = ROOT / "configs/data/fleet-blackbox-current-study-split-20260914-v2.json"
 TASK_SET = ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json"
-CONFIG = ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-matched-pass1-v1.json"
+CONFIG = ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-matched-pass1-v2.json"
 BASE_CONFIG = ROOT / "configs/evaluation/qwen38-base-fleet-dev17-opencode-pass1-v1.json"
-CANDIDATE_CONFIG = ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-opencode-pass1-v1.json"
-TEACHER_CONFIG = ROOT / "configs/evaluation/qwen38-teacher-v5-fleet-dev17-opencode-pass1-v1.json"
+CANDIDATE_CONFIG = ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-opencode-pass1-v2.json"
+TEACHER_CONFIG = ROOT / "configs/evaluation/qwen38-teacher-v5-fleet-dev17-opencode-pass1-v2.json"
 BACKLOG = ROOT / "configs/evaluation/qwen38-fleet-dev17-backlog-v1.json"
 SUCCESSOR_JOB = ROOT / "evals/fleet/cluster/qwen38-base-dev17-opencode-pass1-v1-job.yaml"
 SUCCESSOR_SCRIPT = ROOT / "evals/fleet/scripts/run_qwen38_dev17_single_arm_v1.sh"
@@ -127,3 +127,4 @@ def test_successor_is_alert_silent_cpu_only_and_create_once():
     script = SUCCESSOR_SCRIPT.read_text()
     assert '"${EVAL_OUTPUT:?EVAL_OUTPUT is required}"' in script
     assert '"${EVAL_DATABASE:?EVAL_DATABASE is required}"' in script
+    assert 'cmp --silent /bootstrap/config.json "/bootstrap/$EVAL_CONFIG_NAME"' in script

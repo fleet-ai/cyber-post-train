@@ -31,6 +31,7 @@ done
 docker info >/dev/null
 
 cd "$root"
+cmp --silent /bootstrap/config.json "/bootstrap/$EVAL_CONFIG_NAME"
 exec uv run --no-project \
   --with httpx==0.28.1 \
   --with pyyaml==6.0.3 \
