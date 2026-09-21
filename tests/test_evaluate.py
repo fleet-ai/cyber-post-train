@@ -496,12 +496,30 @@ def test_real_worker_reaches_harness_with_durable_claim(prepared, monkeypatch):
     assert result["accepted"] == 1
 
 
-def test_endpoint_failure_preserves_terminal_without_claim(prepared, monkeypatch):
+def test_endpoint_failure_quarantines_exact_claimed_cell(prepared, monkeypatch):
+    row = evaluation.ledger._plan_rows(prepared / "plan.csv")[0]
+    cell = {**row, "worker_id": "worker", "claim_id": "claim", "cell_id": "cell"}
     monkeypatch.setattr(evaluation.postgres, "verify_plan", Mock())
+    monkeypatch.setattr(evaluation.postgres, "claim", Mock(return_value=cell))
+    monkeypatch.setattr(evaluation.postgres, "request_retry_review", Mock())
+    heartbeat = SimpleNamespace(check=lambda: None, close=lambda: None)
+    monkeypatch.setattr(rollout_worker, "_Heartbeat", lambda *a: nullcontext(heartbeat))
     monkeypatch.setattr(evaluation, "check_route", Mock(side_effect=RuntimeError("private")))
-    monkeypatch.setattr(rollout_worker, "run_one", lambda **k: pytest.fail("claimed after drift"))
     result = evaluation.run(prepared, dsn="synthetic", route="shared", worker_id="worker", limit=1)
-    assert result["results"][0]["controller_failure_code"] == "runtimeerror"
+    assert result["results"][0] == {
+        "serving_block": "shared",
+        "claimed": True,
+        "accepted": False,
+        "ledger_cell_id": "cell",
+        "failure_code": "post_claim.runtimeerror",
+    }
+    evaluation.postgres.request_retry_review.assert_called_once_with(
+        "synthetic",
+        cell_id="cell",
+        worker_id="worker",
+        claim_id="claim",
+        failure_code="post_claim.runtimeerror",
+    )
     assert (prepared / "TERMINAL-worker.json").exists()
     assert "private" not in json.dumps(result)
 
