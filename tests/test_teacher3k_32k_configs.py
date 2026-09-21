@@ -261,6 +261,7 @@ def test_teacher3k_later_context_treatments_are_sealed_and_distinct(
         "max_length",
         "steps",
         "checkpoint_interval",
+        "keep_checkpoints",
         "pause",
     ),
     [
@@ -271,6 +272,7 @@ def test_teacher3k_later_context_treatments_are_sealed_and_distinct(
             65_536,
             1_120,
             275,
+            5,
             1,
         ),
         (
@@ -280,6 +282,7 @@ def test_teacher3k_later_context_treatments_are_sealed_and_distinct(
             65_536,
             1_120,
             275,
+            5,
             None,
         ),
         (
@@ -289,6 +292,7 @@ def test_teacher3k_later_context_treatments_are_sealed_and_distinct(
             98_304,
             856,
             210,
+            5,
             1,
         ),
         (
@@ -298,6 +302,17 @@ def test_teacher3k_later_context_treatments_are_sealed_and_distinct(
             98_304,
             856,
             210,
+            5,
+            None,
+        ),
+        (
+            "qwen38-teacher3k-96k-full-b8-lr3e6-v3.json",
+            "chris-q38-t3k96-b8-v3",
+            "sha256:8297f035f4c5b0446578cfa46897733273286f76e55d486c9598452e5585a479",
+            98_304,
+            856,
+            50,
+            2,
             None,
         ),
     ],
@@ -309,6 +324,7 @@ def test_teacher3k_later_context_runs_compile_as_one_node_canary_first_arms(
     max_length,
     steps,
     checkpoint_interval,
+    keep_checkpoints,
     pause,
 ):
     config = json.loads((RUNS / filename).read_text())
@@ -323,7 +339,7 @@ def test_teacher3k_later_context_runs_compile_as_one_node_canary_first_arms(
         "max_length": max_length,
         "max_steps": steps,
         "checkpoint_interval": checkpoint_interval,
-        "keep_checkpoints": 5,
+        "keep_checkpoints": keep_checkpoints,
         "batch_size": 8,
         "lr": 3e-6,
     }
