@@ -1,0 +1,68 @@
+{
+  "schema": "cyber_qwen38_checkpoint_eval_acceptance_v1",
+  "artifact_alias": "self-sft-step44",
+  "observed_at": "2026-09-21T21:30:38Z",
+  "source_evidence": [
+    "git:e76bb622:docs/evidence/qwen38-study/2026-09-13-sft-checkpoint-seals-v1.json#accepted.self",
+    "git:0d0c97e1:docs/evidence/qwen38-study/2026-09-13-sft-export-gpu-acceptance-v1.json#accepted.self",
+    "docs/evidence/qwen38-self-sft-step44-inference-stage-v1-accepted-20260920.json"
+  ],
+  "training": {
+    "status": "SUCCEEDED",
+    "checkpoint_path": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/checkpoints/global_step_44",
+    "optimizer_steps_executed": 44,
+    "checkpoint_manifest_file_sha256": "sha256:0094cfeb62f120b55d9e2f7fdfd4217c4c0aab66f369e3c52c89fc5e7ccfff9b",
+    "checkpoint_receipt_sha256": "sha256:bf8237a5837dd75bf1163b5a5e134e1349417599c1a28f022b91281c2c7b7885"
+  },
+  "export": {
+    "receipt_path": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/hf-export-v1/EXPORT.json",
+    "receipt_file_sha256": "sha256:7d3d56da513488dab485114b49b4fe34c5efe4c2526577c0063a2cbc87413e50",
+    "receipt_sha256": "sha256:12f06f12a35f9c0509610f8bed8cb685fc23864490ec5de7739ee1e6aa48f606",
+    "source_plan_sha256": "sha256:4d97bb2e67f39aedd3bd49f85a49fa9f2c6c147c01628a612b24c3a5132678ed",
+    "export_files_sha256": "sha256:a0e55bebe9d78ac76c012446ae0147a421cd333e2a6bf2bb6f4fb3450fa776fe",
+    "dtype": "BF16",
+    "tensor_count": 1199,
+    "tensor_bytes": 55562855904,
+    "payload_files": 29,
+    "source_unchanged": true,
+    "all_output_tensors_reopened_equal": true,
+    "optimizer_steps_executed": 0
+  },
+  "gpu_check": {
+    "rayjob_uid": "ca872fa6-6a2b-46aa-aa48-105e19115c19",
+    "pod_uid": "b3d13079-86bb-4dfd-b51b-184cfcc4f0e3",
+    "gpu_check_path": "/mnt/sfs/jobs/chris-q38-self-sft-hfcheck-v1/GPU_CHECK.json",
+    "gpu_check_file_sha256": "sha256:e866e6381a4a79bf1cb759016afde3aa5756bc707e047572e7edc59b18a4653c",
+    "gpu_check_receipt_sha256": "sha256:9fed9b8368d58213af9999abe18d73dd5fb83cd273ee7923b57321f6c4d31e12",
+    "status": "passed",
+    "gpus": 1,
+    "gpu_reload_verified": true,
+    "finite_logits": true,
+    "generated_tokens": 2,
+    "source_unchanged": true,
+    "serving_qualified": false,
+    "optimizer_steps_executed": 0
+  },
+  "stage": {
+    "status": "accepted",
+    "source_export_root": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/hf-export-v1",
+    "source_export_receipt_file_sha256": "sha256:7d3d56da513488dab485114b49b4fe34c5efe4c2526577c0063a2cbc87413e50",
+    "source_export_receipt_sha256": "sha256:12f06f12a35f9c0509610f8bed8cb685fc23864490ec5de7739ee1e6aa48f606",
+    "model_source_path": "/models/chris-q38-self-sft-step44-v1",
+    "served_revision": "sha256:a0e55bebe9d78ac76c012446ae0147a421cd333e2a6bf2bb6f4fb3450fa776fe",
+    "revision_basis": "export_files_canonical_sha256",
+    "stage_receipt_sha256": "sha256:20460ed56f955b7054d60d944aa9e0e1a95a4eef53907df3a0dc2b345c3e87a8",
+    "resources_released": true
+  },
+  "release": {
+    "gpu_allocation_released": true
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_answers_or_scores_included": false,
+    "raw_logs_included": false,
+    "tensor_values_read": false,
+    "generated_token_text_read": false
+  },
+  "sha256": "sha256:d00a8e652ab5702ffe5325e05ead597779057ca3e516f63d05c3ba086e33d9d7"
+}

@@ -12,6 +12,7 @@ import yaml
 
 from evals.fleet import heldout_launch
 from scripts import prepare_qwen38_fleet_seed44_two_arm_packets as packets
+from scripts import prepare_qwen38_fleet_seed45_five_arm_packets as seed45_packets
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -262,3 +263,94 @@ def test_live_parity_self_digest_covers_both_arm_identities(tmp_path) -> None:
     path.write_text(json.dumps(changed, sort_keys=True) + "\n", encoding="utf-8")
     with pytest.raises(ValueError, match="self digest differs"):
         packets.prepare(output=tmp_path / "packets", live_parity=path, now=now)
+
+
+def _seed45_parities(tmp_path: Path, observed_at: datetime) -> dict[str, Path]:
+    readiness = json.loads(seed45_packets.READINESS.read_text())
+    configs = {
+        arm_id: json.loads((ROOT / arm["config_path"]).read_text())
+        for arm_id, arm in readiness["arms"].items()
+    }
+    result = {}
+    for index, candidate_id in enumerate(seed45_packets.CANDIDATES, start=8):
+        base = _arm(
+            configs["base"],
+            readiness["arms"]["base"]["expected_source_path"],
+            replicas=2,
+            character="1",
+        )
+        candidate = _arm(
+            configs[candidate_id],
+            readiness["arms"][candidate_id]["expected_source_path"],
+            replicas=1,
+            character=format(index, "x"),
+        )
+        value = {
+            "schema": packets.LIVE_PARITY_SCHEMA,
+            "status": "passed",
+            "observed_at": observed_at.isoformat().replace("+00:00", "Z"),
+            "endpoint_origin": "https://inference.flt.build",
+            "arms": {"base": base, "candidate": candidate},
+            "held_constant": {
+                "normalized_contract_sha256": base["normalized_contract_sha256"],
+                "model_info_sha256": _digest("b"),
+                "server_info_sha256": _digest("c"),
+                "inference_precision": "bf16",
+                "max_context_size": 262144,
+                "weight_quantization": "none",
+            },
+            "benchmark_content_included": False,
+            "response_content_recorded": False,
+            "scores_observed": False,
+            "task_content_included": False,
+            "external_mutations_performed": 0,
+            "resource_versions_are_non_atomic_live_observations": True,
+            "fixed_probe_logit_projection_differs_between_weights": True,
+        }
+        value["receipt_sha256"] = packets._canonical_digest(value)  # noqa: SLF001
+        path = tmp_path / f"{candidate_id}-parity.json"
+        path.write_text(json.dumps(value, sort_keys=True) + "\n")
+        result[candidate_id] = path
+    return result
+
+
+def test_seed45_renderer_builds_five_alert_off_cpu_packets(tmp_path) -> None:
+    now = datetime(2026, 9, 21, 21, tzinfo=UTC)
+    output = tmp_path / "seed45-packets"
+    receipt = seed45_packets.prepare(
+        output=output,
+        live_parity=_seed45_parities(tmp_path, now),
+        now=now,
+    )
+    assert receipt["launch_performed"] is False
+    assert receipt["external_mutations"] == 0
+    assert receipt["final8_opened"] is False
+    assert [arm["arm_id"] for arm in receipt["arms"]] == [
+        "base",
+        "fresh75",
+        "teacher186",
+        "self44",
+        "lr30s76",
+    ]
+    proofs = set()
+    for arm in receipt["arms"]:
+        package = heldout_launch.build_package(output / arm["packet_path"])
+        assert package.job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+        assert "nvidia.com/gpu" not in json.dumps(package.job)
+        data = package.config_map["data"]
+        assert "model_artifact_v2.py" in data
+        assert ("model-artifact.json" in data) is (arm["arm_id"] != "base")
+        assert ("model-artifact-acceptance.json" in data) is (arm["arm_id"] != "base")
+        proofs.add(package.packet.files["serving_route_proof"].read_bytes())
+    assert len(proofs) == 1
+
+
+def test_seed45_renderer_requires_every_candidate_parity_binding(tmp_path) -> None:
+    inputs = _seed45_parities(tmp_path, datetime(2026, 9, 21, 21, tzinfo=UTC))
+    inputs.pop("self44")
+    with pytest.raises(KeyError):
+        seed45_packets.prepare(
+            output=tmp_path / "packets",
+            live_parity=inputs,
+            now=datetime(2026, 9, 21, 21, tzinfo=UTC),
+        )

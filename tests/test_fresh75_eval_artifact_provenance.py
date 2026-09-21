@@ -11,7 +11,7 @@ from types import SimpleNamespace
 import pytest
 
 from cyber_post_train.jobs import digest
-from evals.fleet import cluster_entry, evaluate, model_artifact
+from evals.fleet import cluster_entry, evaluate, model_artifact, model_artifact_v2
 from training.io import file_sha256
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -496,6 +496,123 @@ def test_live_guard_reopens_exact_checkpoint_export_and_reload_chain(tmp_path, m
     assert proof["acceptance_evidence_sha256"] == config_binding["acceptance_evidence_sha256"]
 
 
+def synthetic_v2_local_model(tmp_path: Path, monkeypatch):
+    model, packet, config_binding, packet_path, acceptance_path = synthetic_local_model(
+        tmp_path, monkeypatch
+    )
+    binding = packet["models"]["student"]
+    legacy_payload = binding["payload"]
+    binding["schema"] = model_artifact_v2.BINDING_SCHEMA
+    binding["payload"] = {
+        "served_revision": model["revision"],
+        "revision_basis": "export_files_canonical_sha256",
+        "export_files_sha256": model["revision"],
+        "stage_source_path": "/models/synthetic",
+        "file_count": legacy_payload["file_count"],
+        "trained_tensors": legacy_payload["trained_tensors"],
+        "restored_mtp_tensors": legacy_payload["restored_mtp_tensors"],
+        "tensor_count": legacy_payload["tensor_count"],
+        "tensor_bytes": legacy_payload["tensor_bytes"],
+    }
+    old = read(acceptance_path)
+    exported = dict(old["export"])
+    exported["export_files_sha256"] = exported.pop("payload_manifest_sha256")
+    gpu = {
+        key: old["gpu_check"][key]
+        for key in (
+            "rayjob_uid",
+            "pod_uid",
+            "gpu_check_file_sha256",
+            "gpu_check_receipt_sha256",
+            "status",
+            "gpus",
+            "gpu_reload_verified",
+            "finite_logits",
+            "generated_tokens",
+            "source_unchanged",
+            "serving_qualified",
+            "optimizer_steps_executed",
+        )
+    }
+    gpu["gpu_check_path"] = binding["gpu_reload_receipt"]["path"]
+    evidence = {
+        "schema": model_artifact_v2.ACCEPTANCE_SCHEMA,
+        "artifact_alias": "student",
+        "observed_at": "2026-09-21T00:00:00Z",
+        "source_evidence": ["synthetic-test-receipts"],
+        "training": old["training"],
+        "export": exported,
+        "gpu_check": gpu,
+        "stage": {
+            "status": "accepted",
+            "source_export_root": model["repository"],
+            "source_export_receipt_file_sha256": binding["export_receipt"]["file_sha256"],
+            "source_export_receipt_sha256": binding["export_receipt"]["receipt_sha256"],
+            "model_source_path": "/models/synthetic",
+            "served_revision": model["revision"],
+            "revision_basis": "export_files_canonical_sha256",
+            "stage_receipt_sha256": "sha256:" + "5" * 64,
+            "resources_released": True,
+        },
+        "release": {"gpu_allocation_released": True},
+        "privacy": {
+            "credentials_included": False,
+            "prompts_traces_flags_answers_or_scores_included": False,
+            "raw_logs_included": False,
+            "tensor_values_read": False,
+            "generated_token_text_read": False,
+        },
+    }
+    evidence_file, evidence_self = _write_evidence(acceptance_path, evidence)
+    binding["qualification"]["acceptance_evidence_file_sha256"] = evidence_file
+    binding["qualification"]["acceptance_evidence_sha256"] = evidence_self
+    packet["schema"] = model_artifact_v2.PACKET_SCHEMA
+    packet, packet_file = _write_packet(packet_path, packet)
+    config_binding.update(
+        {
+            "validator_file_sha256": file_sha256(Path(model_artifact_v2.__file__)),
+            "packet_file_sha256": packet_file,
+            "packet_sha256": "sha256:" + packet["sha256"],
+            "acceptance_evidence_file_sha256": evidence_file,
+            "acceptance_evidence_sha256": evidence_self,
+        }
+    )
+    return model, packet, config_binding, packet_path, acceptance_path
+
+
+def test_v2_live_guard_binds_export_inventory_and_served_revision(tmp_path, monkeypatch) -> None:
+    model, packet, config_binding, packet_path, acceptance_path = synthetic_v2_local_model(
+        tmp_path, monkeypatch
+    )
+    proof = model_artifact_v2.validate_live_models(
+        {"student": model},
+        packet,
+        config_binding=config_binding,
+        packet_path=packet_path,
+        acceptance_path=acceptance_path,
+    )["student"]
+    assert proof["revision"] == model["revision"]
+    assert proof["revision_basis"] == "export_files_canonical_sha256"
+    assert proof["export_files_sha256"] == model["revision"]
+
+
+def test_v2_live_guard_rejects_revision_basis_swap(tmp_path, monkeypatch) -> None:
+    model, packet, config_binding, packet_path, acceptance_path = synthetic_v2_local_model(
+        tmp_path, monkeypatch
+    )
+    packet["models"]["student"]["payload"]["revision_basis"] = "export_receipt_sha256"
+    packet, config_binding["packet_file_sha256"] = _write_packet(packet_path, packet)
+    config_binding["packet_sha256"] = "sha256:" + packet["sha256"]
+    with pytest.raises(ValueError, match="accepted export receipt"):
+        model_artifact_v2.validate_live_models(
+            {"student": model},
+            packet,
+            config_binding=config_binding,
+            packet_path=packet_path,
+            acceptance_path=acceptance_path,
+        )
+
+
 @pytest.mark.parametrize("fault", ["swapped_hash", "missing_hash", "wrong_repository"])
 def test_live_guard_rejects_swapped_missing_or_wrong_receipt_binding(
     tmp_path, monkeypatch, fault
@@ -599,6 +716,7 @@ def test_cluster_entry_rejects_validator_drift_before_image_staging(tmp_path, mo
     [
         ROOT / "evals/fleet/scripts/run_qwen38_dev17_matched_v1.sh",
         ROOT / "evals/fleet/scripts/run_qwen38_dev17_single_arm_v1.sh",
+        ROOT / "evals/fleet/scripts/run_qwen38_dev17_single_arm_v2.sh",
     ],
 )
 def test_cluster_wrappers_require_packet_and_acceptance_evidence_together(script: Path) -> None:

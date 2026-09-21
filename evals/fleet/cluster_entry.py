@@ -16,7 +16,14 @@ import psycopg
 from psycopg import sql
 
 from cyber_post_train.jobs import digest
-from evals.fleet import evaluate, model_artifact, rollout_postgres, rollout_worker
+from evals.fleet import (
+    evaluate,
+    model_artifact,
+    rollout_postgres,
+    rollout_worker,
+)
+
+MODEL_ARTIFACT_V2_PACKET_SCHEMA = "cyber_fleet_eval_model_artifact_packet_v2"
 
 
 def _sha256(path: Path) -> str:
@@ -108,9 +115,18 @@ def execute(args: argparse.Namespace) -> dict:
     )
     if artifact_packet is not None and artifact_packet.get("campaign_name") != config.get("name"):
         raise ValueError("model artifact packet belongs to a different evaluation campaign")
+    artifact_validator = model_artifact
+    if artifact_packet is not None and artifact_packet.get("schema") == (
+        MODEL_ARTIFACT_V2_PACKET_SCHEMA
+    ):
+        # Imported only for a v2 packet so historical v1 bootstrap bundles do
+        # not need to stage a module they can never execute.
+        from evals.fleet import model_artifact_v2  # noqa: PLC0415
+
+        artifact_validator = model_artifact_v2
     # Reopen the complete local checkpoint/export/reload receipt chain before
     # pulling images, writing output, contacting Fleet, or creating a database.
-    artifact_proof = model_artifact.validate_live_models(
+    artifact_proof = artifact_validator.validate_live_models(
         config.get("models", {}),
         artifact_packet,
         config_binding=config.get("model_artifact_binding"),
@@ -133,7 +149,7 @@ def execute(args: argparse.Namespace) -> dict:
     if artifact_plan is not None:
         rollout_worker._safe_write_once(artifact_plan_path, artifact_plan)  # noqa: SLF001
     preflight = evaluate.preflight(output)
-    if artifact_proof != model_artifact.validate_live_models(
+    if artifact_proof != artifact_validator.validate_live_models(
         config["models"],
         artifact_packet,
         config_binding=config.get("model_artifact_binding"),

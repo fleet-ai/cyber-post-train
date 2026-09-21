@@ -1,0 +1,99 @@
+{
+  "schema": "cyber_fleet_eval_model_artifact_packet_v1",
+  "campaign_name": "q38-dev17-s45-fresh75-p1-v1",
+  "models": {
+    "fresh75-step230": {
+      "schema": "cyber_fleet_eval_model_artifact_v1",
+      "checkpoint_manifest": {
+        "path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/checkpoint-seals-step230-v1/step-230.json",
+        "file_sha256": "sha256:bf92e29d9f19dd589201214f25fe8d0e3b0f65de14ec08fc573217f50580a486",
+        "receipt_sha256": "sha256:9542502631b47cd730ccecb5938650103ed999bf4a4a6cf7d16d9be09c317cab",
+        "required_fields": {
+          "schema": "cyber_skyrl_checkpoint_manifest_v1",
+          "checkpoint_path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/checkpoints/global_step_230",
+          "optimizer_step": 230,
+          "world_size": 8,
+          "total_bytes": 324627486795,
+          "gpu_reload_verified": false
+        }
+      },
+      "export_receipt": {
+        "path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/hf-export-step230-v1/EXPORT.json",
+        "file_sha256": "sha256:7b4ed0c07cc0f9ed6a5cbdac7d3ad0b3bc08ba63447fc2d56e47885c3daa7c4f",
+        "receipt_sha256": "sha256:1bd81c78575c32fa52dc4ab9c7002d95db5028047fa52cc36297aa1954c3d2d3",
+        "required_fields": {
+          "schema": "cyber_native_checkpoint_hf_export_v1",
+          "source_checkpoint_receipt_sha256": "9542502631b47cd730ccecb5938650103ed999bf4a4a6cf7d16d9be09c317cab",
+          "source_manifest_file_sha256": "bf92e29d9f19dd589201214f25fe8d0e3b0f65de14ec08fc573217f50580a486",
+          "source_plan_sha256": "8733a752b461963609b3614f49b6d2ec04cd02779b189347e476b3532f0590b2",
+          "model_repo": "Qwen/Qwen3.8-27B",
+          "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+          "output_root": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/hf-export-step230-v1",
+          "optimizer_step": 230,
+          "optimizer_steps_executed": 0,
+          "gpu_reload_verified": false,
+          "trained_tensors": 1184,
+          "tensor_values": 27781427952,
+          "tensor_bytes": 55562855904,
+          "dtype": "BF16",
+          "source_inventory_sizes_mtimes_unchanged": true,
+          "all_output_tensors_reopened_equal": true
+        }
+      },
+      "gpu_reload_receipt": {
+        "path": "/mnt/sfs/jobs/chris-q38-f75-step230-export-gpu-check-v1/GPU_CHECK.json",
+        "file_sha256": "sha256:30cb5f9687d1cb08f8e78b9f425391807f0f16c0cefe712d97d9b155cf73b791",
+        "receipt_sha256": "sha256:43e40b5397f3db4fb6b603cb9774f9aa862d570c3191d8f71e7c14b599be6f01",
+        "required_fields": {
+          "schema": "cyber_hf_export_check_v1",
+          "status": "passed",
+          "export_sha256": "7b4ed0c07cc0f9ed6a5cbdac7d3ad0b3bc08ba63447fc2d56e47885c3daa7c4f",
+          "export_receipt_sha256": "1bd81c78575c32fa52dc4ab9c7002d95db5028047fa52cc36297aa1954c3d2d3",
+          "optimizer_steps_executed": 0,
+          "gpus": 1,
+          "gpu_reload_verified": true,
+          "serving_qualified": false,
+          "synthetic_only": true,
+          "source_unchanged": true,
+          "attention_implementation": "eager",
+          "finite_logits": true,
+          "generated_tokens": 2
+        }
+      },
+      "payload": {
+        "manifest_sha256": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
+        "file_count": 29,
+        "trained_tensors": 1184,
+        "restored_mtp_tensors": [
+          "mtp.fc.weight",
+          "mtp.layers.0.input_layernorm.weight",
+          "mtp.layers.0.mlp.down_proj.weight",
+          "mtp.layers.0.mlp.gate_proj.weight",
+          "mtp.layers.0.mlp.up_proj.weight",
+          "mtp.layers.0.post_attention_layernorm.weight",
+          "mtp.layers.0.self_attn.k_norm.weight",
+          "mtp.layers.0.self_attn.k_proj.weight",
+          "mtp.layers.0.self_attn.o_proj.weight",
+          "mtp.layers.0.self_attn.q_norm.weight",
+          "mtp.layers.0.self_attn.q_proj.weight",
+          "mtp.layers.0.self_attn.v_proj.weight",
+          "mtp.norm.weight",
+          "mtp.pre_fc_norm_embedding.weight",
+          "mtp.pre_fc_norm_hidden.weight"
+        ],
+        "tensor_count": 1199,
+        "tensor_bytes": 55562855904
+      },
+      "qualification": {
+        "acceptance_evidence_path": "docs/evidence/qwen38-fresh75-step230-reload-accepted-20260915.json",
+        "acceptance_evidence_file_sha256": "sha256:0ee0d79d047782598f58f4717a9e5f784ef407ff4825b01bc3616593d582691e",
+        "acceptance_evidence_sha256": "sha256:78b7d0064627b3fee11cb2bcb55735bbc5693cf11b104fa1d1d1927ea27d0301",
+        "gpu_reload_rayjob_uid": "64bc14b2-c418-4706-acad-7fc1535dfb9d",
+        "gpu_reload_pod_uid": "0b0c47e8-39a4-4ec5-a2ff-f336ae44402a",
+        "gpu_allocation_released": true
+      }
+    }
+  },
+  "authorization": "provenance_only_not_launch_authorization",
+  "sha256": "b8a3a0dcc732ebc9ba3f877f2a58473516496b125c3d3a7a0ab8de9ec7d2e211"
+}

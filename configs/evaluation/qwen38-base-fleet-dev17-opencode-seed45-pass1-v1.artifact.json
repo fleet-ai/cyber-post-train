@@ -1,0 +1,35 @@
+{
+  "schema": "cyber_fleet_eval_base_model_artifact_packet_v1",
+  "campaign_name": "q38-dev17-s45-base-p1-v1",
+  "authorization": "provenance_only_not_launch_authorization",
+  "model": {
+    "alias": "qwen3.8-27b-base",
+    "repository": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "session_model": "qwen/qwen3.8-27b",
+    "served_id": "qwen3.8-27b"
+  },
+  "evaluation_config": {
+    "path": "configs/evaluation/qwen38-base-fleet-dev17-opencode-seed45-pass1-v1.json",
+    "file_sha256": "sha256:f734f4d72836f6cf3fb9ac0ff6874d16c6feabe495a96fbbfee40804903e2239"
+  },
+  "model_lock": {
+    "path": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+    "file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+    "tokenizer_manifest_sha256": "sha256:3938a9a8172f2738fed1be44efc11e2562059269d50d3721213f44802b53b4e1",
+    "weight_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
+  },
+  "weight_manifest": {
+    "path": "configs/models/qwen38-27b-1d4bf0f2.weights.json",
+    "file_sha256": "sha256:80a5e9de066e068abb012a0e9bd144676813a31042bb578226472803f8e0e84f",
+    "payload_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+    "file_count": 18,
+    "total_bytes": 55563006776
+  },
+  "scientific_boundary": {
+    "fresh_live_serving_registration_required": true,
+    "fresh_live_parity_required": true,
+    "packet_does_not_authorize_serving_or_evaluation": true
+  },
+  "sha256": "sha256:ef553f6723309a1e2475f632e7aa81d58e778662aac9bd1ce5b357bc34d2f62f"
+}
