@@ -103,6 +103,13 @@ WATCHDOG_STARTUP_SECONDS = 30 * 60
 WATCHDOG_IDLE_SECONDS = 20 * 60
 WATCHDOG_HARD_SECONDS = 8 * 60 * 60
 WATCHDOG_DRAIN_SECONDS = 5 * 60
+# The absolute SFT ceiling is a last-resort resource bound, not an expected
+# duration.  Full-weight Qwen steps grow with both sequence length and gradient
+# accumulation, so a single eight-hour ceiling cannot safely cover broad runs.
+# Budget at least one optimizer microbatch per 64 planned tokens/second.  This
+# is deliberately much slower than the observed broad-run rates; the separate
+# idle watchdog still releases a genuinely stalled allocation after 20 minutes.
+WATCHDOG_MIN_TOKENS_PER_SECOND_PER_MICROBATCH = 64
 SOURCE_SHA256 = {
     "skyrl/train/sft_trainer.py": (
         "a5ef8a2e22de785b6760abffdd9353f1246a5898983b4d27b4aadd8089a3579a"
@@ -1512,11 +1519,37 @@ def retention_steps(saved: set[int], best_step: int, keep_latest: int) -> set[in
     return set(sorted(saved)[-keep_latest:]) | ({best_step} if best_step in saved else set())
 
 
+def sft_watchdog_hard_seconds(plan: dict) -> int:
+    """Derive a bounded full-run ceiling from the immutable SFT recipe.
+
+    The returned value is intentionally conservative.  It prevents useful
+    multi-day training from being killed by the historical eight-hour default,
+    while the independent no-progress watchdog remains the prompt release
+    mechanism for a stalled process.
+    """
+
+    recipe = plan["recipe"]
+    replicas = recipe["nodes"] * recipe["gpus_per_node"]
+    samples_per_microbatch = replicas * recipe["microbatch_per_gpu"]
+    accumulation_steps = math.ceil(recipe["batch_size"] / samples_per_microbatch)
+    seconds_per_microbatch = math.ceil(
+        recipe["max_length"] / WATCHDOG_MIN_TOKENS_PER_SECOND_PER_MICROBATCH
+    )
+    training_seconds = recipe["max_steps"] * accumulation_steps * seconds_per_microbatch
+    return max(
+        WATCHDOG_HARD_SECONDS,
+        WATCHDOG_STARTUP_SECONDS + training_seconds + WATCHDOG_DRAIN_SECONDS,
+    )
+
+
 class ProgressWatchdog:
     """Bounded fail-closed resource watchdog; unavailable telemetry is not idle."""
 
-    def __init__(self, started_at: float):
+    def __init__(self, started_at: float, *, hard_seconds: int | None = None):
         self.started_at = started_at
+        self.hard_seconds = WATCHDOG_HARD_SECONDS if hard_seconds is None else hard_seconds
+        if type(self.hard_seconds) is not int or self.hard_seconds <= 0:
+            raise ValueError("watchdog hard bound must be a positive integer")
         self.last_progress = started_at
         self.previous_marker = None
         self.previous_io = None
@@ -1542,8 +1575,8 @@ class ProgressWatchdog:
         )
         self.previous_io = process_io
         elapsed = now - self.started_at
-        if elapsed >= WATCHDOG_HARD_SECONDS and (
-            not checkpoint_advancing or elapsed >= WATCHDOG_HARD_SECONDS + WATCHDOG_DRAIN_SECONDS
+        if elapsed >= self.hard_seconds and (
+            not checkpoint_advancing or elapsed >= self.hard_seconds + WATCHDOG_DRAIN_SECONDS
         ):
             return "hard_runtime_bound"
         if changed or io_advanced or gpu_mean is None or process_io is None or gpu_mean >= 1:
@@ -1611,8 +1644,9 @@ def _utilization_snapshot() -> tuple[float | None, int | None]:
     return gpu_mean, io_bytes if observed else None
 
 
-def _wait_for_training(ray, task, output: Path) -> dict:
-    watchdog = ProgressWatchdog(time.monotonic())
+def _wait_for_training(ray, task, output: Path, *, plan: dict | None = None) -> dict:
+    hard_seconds = sft_watchdog_hard_seconds(plan) if plan is not None else None
+    watchdog = ProgressWatchdog(time.monotonic(), hard_seconds=hard_seconds)
     previous_checkpoint = None
     while True:
         ready, _ = ray.wait([task], timeout=WATCHDOG_POLL_SECONDS)
@@ -1635,6 +1669,7 @@ def _wait_for_training(ray, task, output: Path) -> dict:
                 "gpu_mean_utilization_pct": gpu_mean,
                 "process_io_available": io_bytes is not None,
                 "state": reason or "monitoring",
+                "hard_runtime_seconds": watchdog.hard_seconds,
             },
             replace=True,
         )
@@ -3253,7 +3288,7 @@ def main():
         cfg.trainer.log_path = str(output / "private_logs")
         initialize_ray(cfg)
         task = ray.remote(num_cpus=1)(_run_training).remote(plan)
-        result = _wait_for_training(ray, task, output)
+        result = _wait_for_training(ray, task, output, plan=plan)
         terminal = (
             "RELOAD_VALIDATED.json"
             if result["status"] == "reload_validated"

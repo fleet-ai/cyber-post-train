@@ -32,6 +32,7 @@ from training.sft_runtime import (
     public_failure_details,
     retention_steps,
     sft_overrides,
+    sft_watchdog_hard_seconds,
     tokenize_rows,
     training_result,
     validate_plan,
@@ -1280,6 +1281,35 @@ def test_watchdog_hard_bound_and_fixed_checkpoint_drain():
         == "hard_runtime_bound"
     )
     assert ProgressWatchdog(0).observe(28800, "training", 80, 100) == "hard_runtime_bound"
+
+
+@pytest.mark.parametrize(
+    "max_steps,batch_size,max_length,expected",
+    [
+        (1837, 8, 32768, 1800 + 1837 * 512 + 300),
+        (919, 16, 32768, 1800 + 919 * 2 * 512 + 300),
+        (1120, 8, 65536, 1800 + 1120 * 1024 + 300),
+    ],
+)
+def test_sft_watchdog_horizon_covers_the_complete_broad_recipe(
+    max_steps, batch_size, max_length, expected
+):
+    value = {
+        "recipe": {
+            "max_steps": max_steps,
+            "batch_size": batch_size,
+            "microbatch_per_gpu": 1,
+            "nodes": 1,
+            "gpus_per_node": 8,
+            "max_length": max_length,
+        }
+    }
+    hard_seconds = sft_watchdog_hard_seconds(value)
+    assert hard_seconds == expected
+    assert hard_seconds > 8 * 60 * 60
+    watchdog = ProgressWatchdog(0, hard_seconds=hard_seconds)
+    assert watchdog.observe(8 * 60 * 60, "training", 80, 100) is None
+    assert watchdog.observe(hard_seconds, "training", 80, 100) == "hard_runtime_bound"
 
 
 @pytest.mark.parametrize(
