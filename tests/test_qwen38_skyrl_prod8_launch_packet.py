@@ -56,8 +56,47 @@ def test_packet_binds_prod8_science_resources_and_alert_opt_out() -> None:
         "gpus": 0,
         "priority": "c1",
         "failure_alerts": "off",
-        "server_previewed_in_dev_and_prod": True,
+        "server_previewed_in_dev_and_prod": False,
         "executed": False,
+    }
+    assert value["local_cpu_preflight_preview_binding"] == {
+        "current_manifest_sha256": "219f8f6d8b289b5363a791be1013771610e371d9f578c675522a59e84a3d7bd8",
+        "preview_manifest_sha256": {
+            packet.direct.DEV_CONTEXT: "995a8c0eb5795920dc554fdcf9f332484a137e7f3d9ca2fa8b3efcdcdb820bd5",
+            packet.direct.PROD_CONTEXT: "995a8c0eb5795920dc554fdcf9f332484a137e7f3d9ca2fa8b3efcdcdb820bd5",
+        },
+        "matches_current_manifest": False,
+        "fresh_preview_required": True,
+    }
+
+
+def test_cpu_preview_binding_requires_an_exact_manifest_match() -> None:
+    preflight = {"metadata": {"name": "exact"}}
+    current = digest(preflight)
+    evidence = {
+        "cpu_preflight_previews": {
+            packet.direct.DEV_CONTEXT: {"manifest_sha256": current},
+            packet.direct.PROD_CONTEXT: {"manifest_sha256": current},
+        }
+    }
+    assert packet._current_cpu_preview_binding(evidence, preflight) == {
+        "current_manifest_sha256": current,
+        "preview_manifest_sha256": {
+            packet.direct.DEV_CONTEXT: current,
+            packet.direct.PROD_CONTEXT: current,
+        },
+        "matches_current_manifest": True,
+        "fresh_preview_required": False,
+    }
+    evidence["cpu_preflight_previews"][packet.direct.PROD_CONTEXT]["manifest_sha256"] = "different"
+    assert packet._current_cpu_preview_binding(evidence, preflight) == {
+        "current_manifest_sha256": current,
+        "preview_manifest_sha256": {
+            packet.direct.DEV_CONTEXT: current,
+            packet.direct.PROD_CONTEXT: "different",
+        },
+        "matches_current_manifest": False,
+        "fresh_preview_required": True,
     }
 
 
