@@ -567,8 +567,42 @@ def validate_visible_reasoning_requirements(value: dict[str, Any]) -> None:
 
 def validate_task_quality_requirements(value: dict[str, Any]) -> None:
     _sealed(value, TASK_QUALITY_REQUIREMENTS_SCHEMA)
-    if value.get("status") != "blocked_pending_reviewed_lineage_and_runtime_roster":
+    if value.get("status") != "source_ready_pending_merge_and_live_execution":
         raise ValueError("task-quality qualification requirements must fail closed")
+    if value.get("implementation") != {
+        "aggregate_receipt_schema": "cyber_task_quality_qualification_aggregate_receipt_v1",
+        "automatic_retry": False,
+        "controller": "evals.fleet.task_quality_qualification",
+        "create_claim_route_live_preflight": True,
+        "create_request_claim_reconciliation": True,
+        "execution_mode": "local_exactly_once_v1",
+        "maximum_concurrency": 64,
+        "model_calls": 0,
+        "private_catalog_schema": "cyber_fleet_task_qualification_catalog_v1",
+        "public_evidence": "aggregate_only",
+        "require_clean_origin_main_ancestor": True,
+        "resumable_exact_instance_cleanup": True,
+        "session_mode": "metadata_only_runtime_evidence_v1",
+        "session_must_be_new": True,
+        "submit_report_negative_control": "verdict_no_flag_with_nonempty_explanation_v1",
+    }:
+        raise ValueError("task-quality execution contract drift")
+    if value.get("missing_launch_gates") != [
+        "controller_source_commit_merged",
+        "fresh_private_plan_prepared_from_merged_source",
+        "fleet_team_authoritative_and_create_claim_route_live_preflight",
+        "exclusive_pre_mutation_run_intent",
+    ]:
+        raise ValueError("task-quality live launch gates drift")
+    if value.get("qualification_checks") != [
+        "exact_environment_startup",
+        "exact_bash_and_submit_report_tool_reachability",
+        "verifier_process_completion",
+        "finite_authoritative_outcome_recording",
+        "new_metadata_only_session_ingestion_completion",
+        "environment_and_container_cleanup",
+    ]:
+        raise ValueError("task-quality qualification checks drift")
     if value.get("public_evidence_policy") != {
         "aggregate_only": True,
         "task_or_session_identifiers": False,

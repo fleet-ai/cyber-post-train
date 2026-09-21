@@ -340,7 +340,7 @@ def test_unproven_task_quality_wave_is_aggregate_only_and_final_family_excluding
         "exact_bash_and_submit_report_tool_reachability",
         "verifier_process_completion",
         "finite_authoritative_outcome_recording",
-        "session_ingestion_completion",
+        "new_metadata_only_session_ingestion_completion",
         "environment_and_container_cleanup",
     } == set(requirements["qualification_checks"])
 

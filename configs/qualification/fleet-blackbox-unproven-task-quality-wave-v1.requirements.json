@@ -57,9 +57,15 @@
     "root_role_anchor_id": "fleet-blackbox-current-study-20260914-v2",
     "unknown_or_unreviewed_family_allowed": false
   },
+  "heldout_family_policy": {
+    "protected_dev_task_versions": 17,
+    "protected_final_task_versions": 8,
+    "stable_atom_artifact_key_overlap_allowed": false,
+    "zero_dev_or_final_overlap_receipt_required": true
+  },
   "inputs": {
     "current_inventory": {
-      "file_sha256": "sha256:4f3d4c70efc44844b240c81463ac78ede5921f31ad2546b96f7135b897ff486",
+      "file_sha256": "sha256:4f3d4c70efc44844b240c81463ac78ede5921f31ad254ab86fdbe0799973e78c",
       "logical_sha256": "sha256:388f9724c671235d18817777857179d124b8a7f699a2546b96f7135b897ff486",
       "path": "configs/data/fleet-blackbox-current-production-20260921-v1.json"
     },
@@ -74,13 +80,28 @@
       "path": "configs/data/fleet-blackbox-training-coverage-20260921-v1.json"
     }
   },
+  "implementation": {
+    "aggregate_receipt_schema": "cyber_task_quality_qualification_aggregate_receipt_v1",
+    "automatic_retry": false,
+    "controller": "evals.fleet.task_quality_qualification",
+    "create_claim_route_live_preflight": true,
+    "create_request_claim_reconciliation": true,
+    "execution_mode": "local_exactly_once_v1",
+    "maximum_concurrency": 64,
+    "model_calls": 0,
+    "private_catalog_schema": "cyber_fleet_task_qualification_catalog_v1",
+    "public_evidence": "aggregate_only",
+    "require_clean_origin_main_ancestor": true,
+    "resumable_exact_instance_cleanup": true,
+    "session_mode": "metadata_only_runtime_evidence_v1",
+    "session_must_be_new": true,
+    "submit_report_negative_control": "verdict_no_flag_with_nonempty_explanation_v1"
+  },
   "missing_launch_gates": [
-    "aggregate_only_qualification_receipt_schema_and_regressions",
-    "exact_runtime_environment_data_verifier_and_starting_data_roster",
-    "qualification_execution_profile_and_bounded_budget_receipt",
-    "reviewed_application_and_task_family_for_every_selected_version",
-    "server_preview_or_local_controller_execution_receipt",
-    "zero_protected_final_family_intersection_receipt"
+    "controller_source_commit_merged",
+    "fresh_private_plan_prepared_from_merged_source",
+    "fleet_team_authoritative_and_create_claim_route_live_preflight",
+    "exclusive_pre_mutation_run_intent"
   ],
   "purpose": "Qualify currently unproven production blackbox tasks for later train/dev consideration by proving runtime and grading health; this wave creates no training examples.",
   "public_evidence_policy": {
@@ -106,7 +127,7 @@
     "exact_bash_and_submit_report_tool_reachability",
     "verifier_process_completion",
     "finite_authoritative_outcome_recording",
-    "session_ingestion_completion",
+    "new_metadata_only_session_ingestion_completion",
     "environment_and_container_cleanup"
   ],
   "safety": {
@@ -119,6 +140,6 @@
     "request_or_pod_template_annotation_is_insufficient": true
   },
   "schema": "cyber_task_quality_qualification_wave_requirements_v1",
-  "sha256": "sha256:c8dbae8d1c7aeb7eb490c0e2227393a2fcf4a60644174fd0a7480f29b5d7abe7",
-  "status": "blocked_pending_reviewed_lineage_and_runtime_roster"
+  "sha256": "sha256:1af4ca79b0614615559120cd8ddfdf3870991a72dd3d5df1b8e08d8ee710cf6a",
+  "status": "source_ready_pending_merge_and_live_execution"
 }
