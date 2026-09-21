@@ -456,6 +456,63 @@ def test_lr30_one_off_prepare_preflight_and_direct_submit_are_exact(tmp_path, mo
     assert direct_calls[0]["journal"] == output / "DIRECT_SUBMISSION.jsonl"
 
 
+def test_lora_step60_v2_prepare_preflight_and_direct_submit_are_exact(tmp_path, monkeypatch):
+    from cyber_post_train import direct_submit
+    from training import qwen38_lora_export
+
+    plan_file = (
+        Path(__file__).resolve().parents[1]
+        / "configs/qualification/qwen38-lora-step60-zero-update-export-v2.json"
+    )
+    output = tmp_path / "lora60-v2"
+    result = RUNNER.invoke(
+        cli.app,
+        ["lora-step60-export-prepare", str(plan_file), "--output", str(output)],
+    )
+    assert result.exit_code == 0
+    plan, request = cli._prepared(output)
+    assert plan["schema"] == qwen38_lora_export.CONTINUATION_PLAN_SCHEMA
+    assert request == qwen38_lora_export.job_request(plan)
+
+    assert RUNNER.invoke(cli.app, ["preflight", str(output)]).exit_code == 0
+    cli._require_preflight(output, plan, request)
+    assert cli._read(output / "PREFLIGHT.json")["gpu_reload_verified_before_promotion"] is False
+
+    output_receipt = tmp_path / "OUTPUT_ABSENT.json"
+    output_receipt.write_text(json.dumps({"fresh": "synthetic"}))
+    monkeypatch.setattr(cli, "_client_for_plan", lambda _: nullcontext("jobs-client"))
+    direct_calls = []
+
+    class SyntheticKubectl:
+        def __init__(self, context):
+            self.context = context
+
+    def submit(**kwargs):
+        direct_calls.append(kwargs)
+        return {"name": "chris-q38-lora-s60-exp-v2-12345678", "submitted": True}
+
+    monkeypatch.setattr(direct_submit, "Kubectl", SyntheticKubectl)
+    monkeypatch.setattr(direct_submit, "direct_submit_lora_step60_export_once", submit)
+    result = RUNNER.invoke(
+        cli.app,
+        [
+            "direct-submit-lora-step60",
+            str(output),
+            "--context",
+            "prod-context",
+            "--output-absence-receipt",
+            str(output_receipt),
+        ],
+    )
+    assert result.exit_code == 0
+    assert direct_calls[0]["plan"] == plan and direct_calls[0]["request"] == request
+    assert direct_calls[0]["preflight_receipt"] == cli._read(output / "PREFLIGHT.json")
+    assert direct_calls[0]["output_absence_receipt"] == {"fresh": "synthetic"}
+    assert direct_calls[0]["jobs"] == "jobs-client"
+    assert direct_calls[0]["kubectl"].context == "prod-context"
+    assert direct_calls[0]["journal"] == output / "DIRECT_SUBMISSION.jsonl"
+
+
 def test_lr30_preflight_expires_before_any_network(tmp_path, monkeypatch):
     from training import qwen38_lr30_step76_gate as gate
 

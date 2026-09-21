@@ -94,6 +94,8 @@ def _current_request(plan: dict) -> dict:
         from training.qwen38_lr30_step76_gate import job_request
 
         return job_request()
+    elif schema == "cyber_qwen38_megatron_lora_continuation_export_plan_v1":
+        from training.qwen38_lora_export import job_request
     else:
         from training.sft import job_request
 
@@ -153,6 +155,9 @@ def _require_preflight(directory: Path, plan: dict, request: dict) -> None:
         "cyber_skyrl_topology_probe_v1": "cyber_skyrl_topology_probe_cpu_preflight_v1",
         "cyber_qwen38_lr30_step76_gpu_reload_plan_v1": (
             "cyber_qwen38_lr30_step76_cpu_preflight_v1"
+        ),
+        "cyber_qwen38_megatron_lora_continuation_export_plan_v1": (
+            "cyber_qwen38_lora_step60_export_source_preflight_v2"
         ),
     }
     expected = {
@@ -342,6 +347,32 @@ def lr30_step76_prepare(plan_file: Path, output: Annotated[Path, typer.Option("-
         validate_submission_contract(plan, request, require_launchable=False)
         _prepare(output, plan, request)
         _print({"prepared": str(output), "gpus": 1, "optimizer_steps": 0, "submitted": False})
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("lora-step60-export-prepare")
+def lora_step60_export_prepare(
+    plan_file: Path, output: Annotated[Path, typer.Option("--output")]
+) -> None:
+    """Prepare only the exact current-main V2 step-60 zero-update promotion."""
+    from training.qwen38_lora_export import job_request
+
+    from .direct_submit import _assert_lora_step60_contract
+
+    try:
+        plan = _read(plan_file)
+        request = job_request(plan)
+        _assert_lora_step60_contract(plan, request)
+        _prepare(output, plan, request)
+        _print(
+            {
+                "prepared": str(output),
+                "gpus": 8,
+                "optimizer_steps": 0,
+                "submitted": False,
+            }
+        )
     except Exception as exc:
         _fail(exc)
 
@@ -889,7 +920,8 @@ def preflight(directory: Path) -> None:
 
     try:
         plan, request = _prepared(directory)
-        _require_output_absent(request)
+        if plan.get("schema") != "cyber_qwen38_megatron_lora_continuation_export_plan_v1":
+            _require_output_absent(request)
         if plan.get("schema") == "cyber_miles_conversion_v1":
             from training.miles_conversion import preflight as check
         elif plan.get("schema") == "cyber_miles_training_v1":
@@ -902,16 +934,22 @@ def preflight(directory: Path) -> None:
             from training.skyrl_topology_probe import preflight as check
         elif plan.get("schema") == "cyber_qwen38_lr30_step76_gpu_reload_plan_v1":
             from training.qwen38_lr30_step76_gate import preflight as check
+        elif plan.get("schema") == "cyber_qwen38_megatron_lora_continuation_export_plan_v1":
+            from .direct_submit import build_lora_step60_preflight as check
         else:
             from training.sft import preflight as check
         if (directory / "PREFLIGHT.json").exists():
             raise ValueError("preflight already recorded")
-        receipt = (
-            check(plan, request)
-            if plan.get("schema") == "cyber_qwen38_lr30_step76_gpu_reload_plan_v1"
-            else check(plan)
-        )
-        _write(directory / "PREFLIGHT.json", {**receipt, "sha256": digest(receipt)})
+        schema = plan.get("schema")
+        if schema == "cyber_qwen38_lr30_step76_gpu_reload_plan_v1":
+            receipt = check(plan, request)
+            receipt = {**receipt, "sha256": digest(receipt)}
+        elif schema == "cyber_qwen38_megatron_lora_continuation_export_plan_v1":
+            receipt = check(plan, request)
+        else:
+            receipt = check(plan)
+            receipt = {**receipt, "sha256": digest(receipt)}
+        _write(directory / "PREFLIGHT.json", receipt)
         _print(receipt)
     except Exception as exc:
         _fail(exc)
@@ -928,8 +966,12 @@ def sfs_output_receipt(
         _submission_gate(directory, plan, request)
         _external_action_gate(plan, "submit")
         _require_preflight(directory, plan, request)
-        if plan.get("schema") not in {"cyber_sft_runtime_v2", "cyber_sft_runtime_dense_v1"}:
-            raise ValueError("SFS output-absence receipts are restricted to SFT")
+        if plan.get("schema") not in {
+            "cyber_sft_runtime_v2",
+            "cyber_sft_runtime_dense_v1",
+            "cyber_qwen38_megatron_lora_continuation_export_plan_v1",
+        }:
+            raise ValueError("SFS output-absence receipts are restricted to reviewed training")
         receipt = build_output_absence_receipt(plan, request)
         _write(output, receipt)
         _print(receipt)
@@ -1121,6 +1163,47 @@ def direct_submit_lr30_step76(
                 jobs=client,
                 kubectl=Kubectl(context),
                 journal=directory / DIRECT_JOURNAL,
+            )
+        _print(result)
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("direct-submit-lora-step60")
+def direct_submit_lora_step60(
+    directory: Path,
+    context: Annotated[str, typer.Option("--context")],
+    output_absence_receipt: Annotated[
+        Path | None,
+        typer.Option(
+            "--output-absence-receipt",
+            help="Fresh exact receipt from `sfs-output-job-collect` when this host lacks SFS.",
+        ),
+    ] = None,
+) -> None:
+    """Create the exact current-main V2 zero-update LoRA promotion once."""
+    from .direct_submit import (
+        DIRECT_JOURNAL,
+        Kubectl,
+        direct_submit_lora_step60_export_once,
+    )
+
+    try:
+        plan, request = _prepared(directory)
+        _submission_gate(directory, plan, request)
+        _external_action_gate(plan, "submit")
+        _require_preflight(directory, plan, request)
+        preflight_receipt = _read(directory / "PREFLIGHT.json")
+        output_receipt = _read(output_absence_receipt) if output_absence_receipt else None
+        with _client_for_plan(plan) as client:
+            result = direct_submit_lora_step60_export_once(
+                plan=plan,
+                request=request,
+                preflight_receipt=preflight_receipt,
+                jobs=client,
+                kubectl=Kubectl(context),
+                journal=directory / DIRECT_JOURNAL,
+                output_absence_receipt=output_receipt,
             )
         _print(result)
     except Exception as exc:

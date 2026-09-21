@@ -273,6 +273,63 @@ non-c1 priority, an already-qualified API preview, or any unreviewed placeholder
 or generated field. It is a compatibility bridge, not permission to bypass
 normal admission or scientific gates.
 
+### Exact step-60 Megatron-LoRA promotion
+
+The accepted step-60 checkpoint is intact but is not yet a serving or evaluation
+artifact: its terminal evidence explicitly records `gpu_reload_verified=false`.
+Promote it only through the fresh V2 plan. The historical V1 plan and its old
+run/output identity are immutable evidence and must never be submitted.
+
+```sh
+uv run cyber-post-train lora-step60-export-prepare \
+  configs/qualification/qwen38-lora-step60-zero-update-export-v2.json \
+  --output /shared/lora-step60-export-v2
+
+uv run cyber-post-train preflight /shared/lora-step60-export-v2
+
+uv run cyber-post-train sfs-output-job-create /shared/lora-step60-export-v2 \
+  --context <explicit-production-context> --attempt 1
+
+uv run cyber-post-train sfs-output-job-collect /shared/lora-step60-export-v2 \
+  --context <explicit-production-context> --attempt 1 \
+  --output /shared/lora-step60-export-v2/OUTPUT_ABSENT.json
+```
+
+The first two commands are local and allocate no GPU. They bind the exact V2
+plan and current producer bytes to the accepted step-60 terminal evidence. They
+do not claim that the checkpoint has been GPU-reloaded. The remote output check
+is the same bounded, root-alert-off, c1/q1, zero-GPU, read-only SFS observer
+described above. Collect its receipt immediately; it expires after five minutes.
+
+Only after this change is merged to current `main`, CI passes, and an independent
+reviewer approves the exact change may an operator create the GPU workload:
+
+```sh
+uv run cyber-post-train direct-submit-lora-step60 \
+  /shared/lora-step60-export-v2 \
+  --context <explicit-production-context> \
+  --output-absence-receipt /shared/lora-step60-export-v2/OUTPUT_ABSENT.json
+```
+
+This one-off route accepts only the exact V2 plan (`chris-q38-lora-s60-exp-v2`),
+uses a fresh Jobs API preview, preserves every reviewed field, removes only the
+generated Fleet-key reference that the secret-free request cannot consume, and
+adds the root `fleet.ai/failure-alerts: "off"` annotation before creation. It
+checks Jobs API and Kubernetes duplicates twice, proves the new SFS output absent
+twice, server-dry-runs the final object, and performs two all-namespace capacity
+censuses including the planned one node/eight GPUs. It stops unless projected
+project use is at most eight nodes and 64 GPUs. It then fsyncs one intent and
+issues exactly one non-retried `kubectl create`.
+
+Success is not the RayJob exit code alone. Accept the artifact only after the
+digest-valid continuation-checkpoint and merged-export receipts prove: all eight
+ranks reloaded step 60, zero optimizer updates ran, adapter and frozen-base bytes
+matched, two deterministic exports agreed, the complete BF16 model and tokenizer
+reloaded with finite logits, and the source checkpoint bytes were identical
+before and after. Finally prove the exact RayCluster, Pod, and Workload are gone.
+Downstream serving and evaluation must bind both receipt digests and the exact
+export path; they must not infer acceptance from a directory name.
+
 The API injects W&B from the existing `wandb-api` Secret. Never put its value in
 YAML or argv. Track scalars, configuration identities and checkpoint metadata;
 do not upload task text, traces or source code. Reuse neither a W&B run ID nor a

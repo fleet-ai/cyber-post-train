@@ -2,14 +2,16 @@
 
 The Jobs API remains the rendering authority.  This module accepts its live
 preview, changes only the run identity, removes the API-only Fleet credential
-Secret that SFT does not consume, and adds the project-required root alert
-annotation.  It never calls the Jobs API create endpoint and never applies or
-patches a Kubernetes object.  The non-SFT exception is restricted to one exact
-LR30 step-76 HF inference-forward qualification schema.
+Secret that the exact source-bound request does not consume, and adds the
+project-required root alert annotation.  It never calls the Jobs API create
+endpoint and never applies or patches a Kubernetes object.  Non-SFT exceptions
+are restricted to the exact LR30 step-76 qualification and the exact fresh V2
+step-60 Megatron-LoRA zero-update promotion.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -75,6 +77,25 @@ CPU_CHECKPOINT_OPERATIONS = {"seal", "verify"}
 LORA_TRAINER_IMAGE = (
     "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@"
     "sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317"
+)
+LORA_STEP60_PLAN_SCHEMA = "cyber_qwen38_megatron_lora_continuation_export_plan_v1"
+LORA_STEP60_PLAN_FILE_SHA256 = "36ab4a0156b875f61d206d1be0f450a46a72e3364fa613b4eae7994f10071ba0"
+LORA_STEP60_PLAN_SHA256 = "406a8108abb8f9f0c08bd80ca66f30edddb9eb1895ab933fab8781591029303b"
+LORA_STEP60_REQUEST_SHA256 = "31f4b1963c0460457f177fa63a62a958cdb6d30c5d259b2941f0fc1e52043dfc"
+LORA_STEP60_PREFLIGHT_SCHEMA = "cyber_qwen38_lora_step60_export_source_preflight_v2"
+LORA_STEP60_SOURCE_EVIDENCE_FILE_SHA256 = (
+    "09d848c8a0a50d9e479f01359d36705e633f48bd99e102aae5cfac6d41ba0d29"
+)
+LORA_STEP60_SOURCE_EVIDENCE_RECEIPT_SHA256 = (
+    "89f52215a4edefcd427517ef24d4e26c881f222868388c88a2fdf651873a80eb"
+)
+LORA_STEP60_PLAN_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "configs/qualification/qwen38-lora-step60-zero-update-export-v2.json"
+)
+LORA_STEP60_SOURCE_EVIDENCE_PATH = (
+    Path(__file__).resolve().parents[1]
+    / "docs/evidence/qwen38-lora-step60-recovery-terminal-20260921.json"
 )
 CPU_NODE_SELECTOR = {
     "kubernetes.io/arch": "amd64",
@@ -732,6 +753,172 @@ def _assert_lr30_contract(plan: dict, request: dict, *, require_launchable: bool
         raise JobsError(str(exc)) from None
 
 
+def _exact_json(path: Path, expected_file_sha256: str, label: str) -> dict:
+    try:
+        raw = path.read_bytes()
+        value = json.loads(raw)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise JobsError(f"{label} is unavailable or invalid") from exc
+    if hashlib.sha256(raw).hexdigest() != expected_file_sha256 or not isinstance(value, dict):
+        raise JobsError(f"{label} bytes differ from the reviewed source")
+    return value
+
+
+def _assert_lora_step60_source_evidence(plan: dict) -> dict:
+    evidence = _exact_json(
+        LORA_STEP60_SOURCE_EVIDENCE_PATH,
+        LORA_STEP60_SOURCE_EVIDENCE_FILE_SHA256,
+        "step-60 source evidence",
+    )
+    unsigned = {key: value for key, value in evidence.items() if key != "receipt_sha256"}
+    checkpoint = evidence.get("checkpoint")
+    boundary = evidence.get("acceptance_boundary")
+    readback = evidence.get("zero_gpu_readback")
+    release = evidence.get("resource_release")
+    if (
+        evidence.get("schema") != "cyber_qwen38_lora_step60_recovery_terminal_v1"
+        or evidence.get("receipt_sha256") != LORA_STEP60_SOURCE_EVIDENCE_RECEIPT_SHA256
+        or digest(unsigned) != LORA_STEP60_SOURCE_EVIDENCE_RECEIPT_SHA256
+        or not isinstance(checkpoint, dict)
+        or not isinstance(boundary, dict)
+        or not isinstance(readback, dict)
+        or not isinstance(release, dict)
+    ):
+        raise JobsError("step-60 source evidence is incomplete or changed")
+    expected_manifest = plan.get("checkpoint_manifest")
+    expected_identity = plan.get("checkpoint_identity")
+    if (
+        checkpoint.get("path") != expected_manifest.get("path")
+        or checkpoint.get("file_sha256") != expected_manifest.get("file_sha256")
+        or checkpoint.get("receipt_sha256") != expected_manifest.get("receipt_sha256")
+        or checkpoint.get("optimizer_step") != expected_identity.get("optimizer_step")
+        or checkpoint.get("source_plan_sha256") != expected_identity.get("source_plan_sha256")
+        or checkpoint.get("world_size") != 8
+        or checkpoint.get("tensor_parallel_size") != 8
+        or checkpoint.get("file_count") != 27
+        or checkpoint.get("total_bytes") != 5_477_467_060
+        or checkpoint.get("gpu_reload_verified") is not False
+    ):
+        raise JobsError("step-60 source evidence differs from the exact sealed checkpoint")
+    independent = readback.get("independent_verification")
+    if (
+        not isinstance(independent, dict)
+        or independent.get("exit_code") != 0
+        or independent.get("restarts") != 0
+        or independent.get("all_checkpoint_file_digests_reopened") is not True
+        or readback.get("all_temporary_pods_and_configmaps_released") is not True
+        or readback.get("all_temporary_objects_not_found_after_release") is not True
+        or release.get("raycluster_absent") is not True
+        or release.get("training_pod_absent") is not True
+        or release.get("problems") != []
+    ):
+        raise JobsError("step-60 source was not independently rehashed and released")
+    if (
+        boundary.get("step60_checkpoint_sealed") is not True
+        or boundary.get("step60_checkpoint_independently_rehashed") is not True
+        or boundary.get("step60_gpu_reload_verified") is not False
+        or boundary.get("export_or_serving_claimed") is not False
+    ):
+        raise JobsError("step-60 source acceptance boundary was broadened")
+    return evidence
+
+
+def _assert_lora_step60_contract(plan: dict, request: dict) -> None:
+    """Accept only the fresh current-main V2 step-60 promotion plan."""
+
+    from training.qwen38_lora_export import job_request, validate_plan
+
+    canonical = _exact_json(
+        LORA_STEP60_PLAN_PATH,
+        LORA_STEP60_PLAN_FILE_SHA256,
+        "step-60 V2 promotion plan",
+    )
+    try:
+        validate_plan(plan)
+        validate_request(request)
+    except ValueError as exc:
+        raise JobsError(str(exc)) from None
+    if (
+        plan.get("schema") != LORA_STEP60_PLAN_SCHEMA
+        or plan != canonical
+        or digest(plan) != LORA_STEP60_PLAN_SHA256
+        or request != job_request(plan)
+        or digest(request) != LORA_STEP60_REQUEST_SHA256
+    ):
+        raise JobsError("step-60 promotion differs from its exact V2 plan/request")
+    if (
+        request.get("workers") != 1
+        or request.get("gpus_per_worker") != 8
+        or request.get("priority_class") != "c1"
+        or request.get("failureAlerts") is not False
+        or request.get("secrets") != []
+        or request.get("image_pull_secrets") != ["ghcr-pull"]
+        or request.get("run_dir") != plan.get("run_dir")
+        or request.get("image") != plan.get("image")
+        or plan.get("optimizer_steps_executed") != 0
+        or plan.get("external_evaluation") is not False
+        or plan.get("create_once") is not True
+    ):
+        raise JobsError("step-60 promotion resource, credential or zero-update contract drift")
+    _assert_lora_step60_source_evidence(plan)
+
+
+def build_lora_step60_preflight(plan: dict, request: dict) -> dict:
+    """Build a zero-GPU proof that the immutable source is accepted, not reload-qualified."""
+
+    _assert_lora_step60_contract(plan, request)
+    proof = {
+        "schema": LORA_STEP60_PREFLIGHT_SCHEMA,
+        "status": "passed",
+        "gpus": 0,
+        "plan_sha256": digest(plan),
+        "request_sha256": digest(request),
+        "source_evidence_file_sha256": LORA_STEP60_SOURCE_EVIDENCE_FILE_SHA256,
+        "source_evidence_receipt_sha256": LORA_STEP60_SOURCE_EVIDENCE_RECEIPT_SHA256,
+        "checkpoint_manifest_file_sha256": plan["checkpoint_manifest"]["file_sha256"],
+        "checkpoint_manifest_receipt_sha256": plan["checkpoint_manifest"]["receipt_sha256"],
+        "optimizer_step": 60,
+        "optimizer_steps_executed": 0,
+        "gpu_reload_verified_before_promotion": False,
+        "export_or_serving_accepted_before_promotion": False,
+    }
+    return {**proof, "sha256": digest(proof)}
+
+
+def validate_lora_step60_preflight(receipt: dict, plan: dict, request: dict) -> dict:
+    expected = build_lora_step60_preflight(plan, request)
+    if receipt != expected:
+        raise JobsError("step-60 V2 source preflight is missing, stale or changed")
+    return receipt
+
+
+def validate_lora_step60_capacity(receipt: dict) -> dict:
+    """Require the live all-namespace census to include this planned 8-GPU node."""
+
+    if not isinstance(receipt, dict):
+        raise JobsError("step-60 capacity receipt is not an object")
+    unsigned = {key: value for key, value in receipt.items() if key != "sha256"}
+    current = receipt.get("current")
+    projected = receipt.get("projected")
+    if (
+        receipt.get("schema") != "cyber_project_gpu_capacity_census_v1"
+        or receipt.get("sha256") != digest(unsigned)
+        or receipt.get("qualified") is not True
+        or receipt.get("limits") != {"nodes": 8, "gpus": 64}
+        or receipt.get("planned") != {"nodes": 1, "gpus": 8}
+        or receipt.get("problems") != []
+        or not isinstance(current, dict)
+        or not isinstance(projected, dict)
+        or type(current.get("nodes")) is not int
+        or type(current.get("gpus")) is not int
+        or projected != {"nodes": current["nodes"] + 1, "gpus": current["gpus"] + 8}
+        or projected["nodes"] > 8
+        or projected["gpus"] > 64
+    ):
+        raise JobsError("step-60 promotion cannot prove the project GPU budget")
+    return receipt
+
+
 def _expected_generated_env(request: dict, placeholder_name: str) -> dict[str, str]:
     return {
         "FLEET_EXTERNAL_RAY": "1",
@@ -964,6 +1151,15 @@ def render_lr30_qualification_rayjob(
 ) -> tuple[dict, dict]:
     """Render only the exact LR30 step-76 HF inference-forward qualification."""
     _assert_lr30_contract(plan, request, require_launchable=False)
+    return _render_rayjob(request, preview, expected_secrets=[], run_id=run_id)
+
+
+def render_lora_step60_export_rayjob(
+    plan: dict, request: dict, preview: dict, *, run_id: str | None = None
+) -> tuple[dict, dict]:
+    """Render only the exact fresh V2 zero-update LoRA promotion."""
+
+    _assert_lora_step60_contract(plan, request)
     return _render_rayjob(request, preview, expected_secrets=[], run_id=run_id)
 
 
@@ -1516,6 +1712,7 @@ def _direct_submit_once(
     renderer: Any,
     run_id: str | None = None,
     output_absence_gate: Callable[[], dict] | None = None,
+    pre_create_gate: Callable[[], dict] | None = None,
 ) -> dict:
     """Preview, prove, journal and issue exactly one direct Kubernetes create."""
     if journal.exists() or journal.is_symlink():
@@ -1523,6 +1720,7 @@ def _direct_submit_once(
 
     if output_absence_gate is not None:
         output_absence_gate()
+    first_pre_create_proof = pre_create_gate() if pre_create_gate is not None else None
     _assert_api_unique(jobs.all_runs(), request)
     preview = jobs.raw_preview(request)
     manifest, proof = renderer(plan, request, preview, run_id=run_id)
@@ -1545,6 +1743,7 @@ def _direct_submit_once(
         [kubectl.list("rayjobs.ray.io"), kubectl.list("jobs.batch")], request, proof
     )
     output_absence_proof = output_absence_gate() if output_absence_gate is not None else None
+    final_pre_create_proof = pre_create_gate() if pre_create_gate is not None else None
     _write_intent(
         journal,
         {
@@ -1560,6 +1759,14 @@ def _direct_submit_once(
             **(
                 {"output_absence_receipt_sha256": output_absence_proof["sha256"]}
                 if output_absence_proof is not None
+                else {}
+            ),
+            **(
+                {
+                    "first_pre_create_proof": first_pre_create_proof,
+                    "final_pre_create_proof": final_pre_create_proof,
+                }
+                if pre_create_gate is not None
                 else {}
             ),
         },
@@ -1653,3 +1860,94 @@ def direct_submit_lr30_qualification_once(
         renderer=render_lr30_qualification_rayjob,
         run_id=run_id,
     )
+
+
+def direct_submit_lora_step60_export_once(
+    *,
+    plan: dict,
+    request: dict,
+    preflight_receipt: dict,
+    jobs: Any,
+    kubectl: Kubectl,
+    journal: Path,
+    run_id: str | None = None,
+    jobs_root: Path = SFS_JOBS_ROOT,
+    output_absence_receipt: dict | None = None,
+    capacity_reader: Callable[[], dict] | None = None,
+) -> dict:
+    """Create the exact fresh V2 promotion once, after all mutable gates pass twice."""
+
+    _assert_lora_step60_contract(plan, request)
+    validate_lora_step60_preflight(preflight_receipt, plan, request)
+
+    def output_absence_gate() -> dict:
+        try:
+            return prove_output_absent(
+                plan,
+                request,
+                jobs_root=jobs_root,
+                receipt=output_absence_receipt,
+            )
+        except ValueError as exc:
+            raise JobsError(str(exc)) from None
+
+    if capacity_reader is None:
+        from .gpu_capacity import live_capacity_census
+
+        def capacity_reader() -> dict:
+            return live_capacity_census(
+                kubectl.context,
+                owner_prefixes=("chris-q38-",),
+                max_nodes=8,
+                max_gpus=64,
+                planned_nodes=1,
+                planned_gpus=8,
+            )
+
+    def pre_create_gate() -> dict:
+        capacity = validate_lora_step60_capacity(capacity_reader())
+        return {
+            "capacity_sha256": capacity["sha256"],
+            "current_nodes": capacity["current"]["nodes"],
+            "current_gpus": capacity["current"]["gpus"],
+            "projected_nodes": capacity["projected"]["nodes"],
+            "projected_gpus": capacity["projected"]["gpus"],
+            "source_preflight_sha256": preflight_receipt["sha256"],
+        }
+
+    result = _direct_submit_once(
+        plan=plan,
+        request=request,
+        jobs=jobs,
+        kubectl=kubectl,
+        journal=journal,
+        renderer=render_lora_step60_export_rayjob,
+        run_id=run_id,
+        output_absence_gate=output_absence_gate,
+        pre_create_gate=pre_create_gate,
+    )
+    release_contract = {
+        "schema": "cyber_qwen38_lora_step60_export_release_contract_v1",
+        "namespace": NAMESPACE,
+        "rayjob_name": result["name"],
+        "rayjob_uid": result["uid"],
+        "run_id": result["run_id"],
+        "shutdown_after_job_finishes": True,
+        "required_absent_after_terminal": ["RayCluster", "Pod", "Workload"],
+        "acceptance_requires": [
+            "QWEN38_LORA_CONTINUATION_CHECKPOINT.json",
+            "QWEN38_LORA_MERGED_HF_EXPORT.json",
+            "source checkpoint before/after byte stability",
+            "all eight ranks reloaded with zero optimizer updates",
+            "exact RayCluster, Pod and Workload release",
+        ],
+    }
+    result["release_contract"] = {
+        **release_contract,
+        "sha256": digest(release_contract),
+    }
+    _append_journal(
+        journal,
+        {"state": "POST_RUN_ACCEPTANCE_AND_RELEASE_REQUIRED", **result["release_contract"]},
+    )
+    return result

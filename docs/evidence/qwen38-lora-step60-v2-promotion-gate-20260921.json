@@ -1,0 +1,58 @@
+{
+  "schema": "cyber_qwen38_lora_step60_v2_promotion_gate_v1",
+  "status": "implementation_and_tests_only_no_external_action",
+  "observed_at_utc_date": "2026-09-21",
+  "repository_base_commit": "75f1cba218b6f6b36954efc9b0b804cc8d859a98",
+  "source_checkpoint": {
+    "path": "/mnt/sfs/jobs/chris-q38-lora-r1-s60-v3/checkpoints/global_step_60",
+    "manifest_path": "/mnt/sfs/jobs/chris-q38-lora-r1-s60-v3/checkpoint_manifests/step-000060-megatron-v1.json",
+    "manifest_file_sha256": "cd53865f869eeb1975aa0e099aef143a736167c5c7b095c283f0da292ffecd78",
+    "manifest_receipt_sha256": "6bae9ef75e0a60f598eb32b63d31a64c0f42716611a43daf19a177d3c0ffebd2",
+    "checkpoint_inventory_sha256": "f87645a091b9a6cff07014a37fbbc657d5a19142e54e5b15e568e736b78ff171",
+    "terminal_evidence_file_sha256": "09d848c8a0a50d9e479f01359d36705e633f48bd99e102aae5cfac6d41ba0d29",
+    "terminal_evidence_receipt_sha256": "89f52215a4edefcd427517ef24d4e26c881f222868388c88a2fdf651873a80eb",
+    "optimizer_step": 60,
+    "gpu_reload_verified": false,
+    "preserved_immutable": true
+  },
+  "successor": {
+    "plan_path": "configs/qualification/qwen38-lora-step60-zero-update-export-v2.json",
+    "plan_file_sha256": "36ab4a0156b875f61d206d1be0f450a46a72e3364fa613b4eae7994f10071ba0",
+    "plan_sha256": "406a8108abb8f9f0c08bd80ca66f30edddb9eb1895ab933fab8781591029303b",
+    "request_sha256": "31f4b1963c0460457f177fa63a62a958cdb6d30c5d259b2941f0fc1e52043dfc",
+    "run_name": "chris-q38-lora-s60-exp-v2",
+    "run_dir": "/mnt/sfs/jobs/chris-q38-lora-s60-exp-v2",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lora-s60-exp-v2/merged-hf",
+    "optimizer_steps_executed": 0,
+    "workers": 1,
+    "gpus_per_worker": 8,
+    "priority": "c1/q1",
+    "root_failure_alert_annotation_required": "off"
+  },
+  "stale_input": {
+    "pull_request": 319,
+    "historical_plan": "configs/qualification/qwen38-lora-step60-zero-update-export-v1.json",
+    "disposition": "reviewed_for_lessons_only_not_reused_or_submitted"
+  },
+  "implemented_gates": [
+    "exact current-main V2 plan and request",
+    "exact accepted source terminal evidence with gpu_reload_verified false",
+    "fresh plan-bound zero-GPU SFS output absence receipt",
+    "two Jobs API and Kubernetes duplicate censuses",
+    "strict live Jobs API preview and Kubernetes server dry-run",
+    "root failure-alert opt-out and effective c1 priority 10000",
+    "two all-namespace capacity censuses including the planned one node and eight GPUs",
+    "durable create intent followed by exactly one non-retried create",
+    "post-run continuation/export receipt validation and exact resource release contract"
+  ],
+  "external_activity": {
+    "jobs_api_requests": 0,
+    "kubernetes_requests": 0,
+    "jobs_created": 0,
+    "gpus_allocated": 0,
+    "checkpoint_or_output_mutations": 0,
+    "serving_or_evaluation_actions": 0
+  },
+  "next_gate": "Pass CI and obtain an independent exact-head review, merge that exact head to main, rerun exact checks from current main, then use fresh duplicate/output/capacity gates before any live workload.",
+  "receipt_sha256": "3741716cf0eebe8c615d3eef4c257e20ec769b819115cbe293cf5177590a8748"
+}

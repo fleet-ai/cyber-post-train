@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 import io
 import json
@@ -21,15 +22,22 @@ from cyber_post_train.direct_submit import (
     CPU_SFS_OWNED_ROOT_ANNOTATION,
     CPU_SOURCE_ARCHIVE_SHA256_ANNOTATION,
     CPU_SOURCE_COMMIT_ANNOTATION,
+    LORA_STEP60_PLAN_PATH,
     LORA_TRAINER_IMAGE,
     Kubectl,
+    build_lora_step60_preflight,
     collect_sfs_output_check,
     create_sfs_output_check_once,
+    direct_submit_lora_step60_export_once,
     direct_submit_lr30_qualification_once,
     direct_submit_sft_once,
+    render_lora_step60_export_rayjob,
     render_lr30_qualification_rayjob,
     render_sft_rayjob,
+    validate_lora_step60_capacity,
+    validate_lora_step60_preflight,
 )
+from cyber_post_train.gpu_capacity import build_capacity_census
 from cyber_post_train.jobs import JobsError, digest
 from cyber_post_train.lora_cpu_preflight import build_lora_cpu_preflight_package
 from cyber_post_train.lora_cpu_preflight_driver import (
@@ -41,8 +49,8 @@ from cyber_post_train.lora_cpu_preflight_driver import (
 from cyber_post_train.sfs_output import build_output_absence_receipt
 from cyber_post_train.sfs_output_job import build_sfs_output_job
 from cyber_post_train.source_bundle import canonical_source_commit_bytes
+from training import qwen38_lora_export, sft
 from training import qwen38_lr30_step76_gate as lr30
-from training import sft
 
 RUN_ID = "12345678-1234-4234-9234-123456789abc"
 CREATED_UID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
@@ -434,6 +442,50 @@ def lr30_plan(*, launchable=False):
     return value
 
 
+def lora_step60_plan():
+    return json.loads(LORA_STEP60_PLAN_PATH.read_text())
+
+
+def lora_step60_request():
+    return qwen38_lora_export.job_request(lora_step60_plan())
+
+
+def lora_step60_capacity(*, current_nodes=0, current_gpus=0):
+    pods = []
+    for index in range(current_nodes):
+        gpus = current_gpus // current_nodes
+        pods.append(
+            {
+                "metadata": {
+                    "namespace": "fleet-train-jobs",
+                    "name": f"chris-q38-existing-{index}",
+                    "uid": f"00000000-0000-4000-8000-{index:012d}",
+                    "resourceVersion": str(index + 1),
+                    "labels": {"fleet.ai/run-name": f"chris-q38-existing-{index}"},
+                },
+                "spec": {
+                    "nodeName": f"gpu-node-{index}",
+                    "containers": [
+                        {
+                            "resources": {
+                                "requests": {"nvidia.com/gpu": str(gpus)},
+                                "limits": {"nvidia.com/gpu": str(gpus)},
+                            }
+                        }
+                    ],
+                },
+                "status": {"phase": "Running", "containerStatuses": []},
+            }
+        )
+    return build_capacity_census(
+        {"kind": "List", "items": pods},
+        {"kind": "List", "items": []},
+        planned_nodes=1,
+        planned_gpus=8,
+        observed_at="2026-09-21T00:00:00Z",
+    )
+
+
 def test_render_changes_only_reviewed_identity_secret_and_root_annotation():
     source = manifest()
     rendered, proof = render_sft_rayjob(plan(), request(), preview(source), run_id=RUN_ID)
@@ -477,6 +529,81 @@ def test_lr30_render_is_exact_one_gpu_root_annotated_and_secret_free():
         group["template"]["spec"]["containers"][0]["resources"]["requests"]["nvidia.com/gpu"] == 1
         for group in groups
     )
+
+
+def test_lora_step60_v2_preflight_and_render_are_exact_secret_free_zero_update():
+    plan_value = lora_step60_plan()
+    request_value = lora_step60_request()
+    preflight = build_lora_step60_preflight(plan_value, request_value)
+    assert validate_lora_step60_preflight(preflight, plan_value, request_value) == preflight
+    assert preflight["gpu_reload_verified_before_promotion"] is False
+    assert preflight["optimizer_steps_executed"] == 0
+
+    rendered, proof = render_lora_step60_export_rayjob(
+        plan_value,
+        request_value,
+        preview(manifest(request_value)),
+        run_id=RUN_ID,
+    )
+    assert proof["name"] == "chris-q38-lora-s60-exp-v2-12345678"
+    assert rendered["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+    assert rendered["spec"]["shutdownAfterJobFinishes"] is True
+    groups = [
+        rendered["spec"]["rayClusterSpec"]["headGroupSpec"],
+        *rendered["spec"]["rayClusterSpec"]["workerGroupSpecs"],
+    ]
+    assert len(groups) == 1
+    container = groups[0]["template"]["spec"]["containers"][0]
+    assert container["envFrom"] == []
+    assert container["resources"]["requests"]["nvidia.com/gpu"] == 8
+    assert groups[0]["template"]["spec"]["priority"] == 10_000
+
+
+def test_lora_step60_v2_rejects_historical_plan_and_broadened_source_evidence(
+    tmp_path, monkeypatch
+):
+    historical = json.loads(
+        (
+            Path(__file__).resolve().parents[1]
+            / "configs/qualification/qwen38-lora-step60-zero-update-export-v1.json"
+        ).read_text()
+    )
+    with pytest.raises(JobsError):
+        build_lora_step60_preflight(historical, lora_step60_request())
+
+    source = json.loads(
+        (
+            Path(__file__).resolve().parents[1]
+            / "docs/evidence/qwen38-lora-step60-recovery-terminal-20260921.json"
+        ).read_text()
+    )
+    source["acceptance_boundary"]["step60_gpu_reload_verified"] = True
+    source["receipt_sha256"] = digest(
+        {key: value for key, value in source.items() if key != "receipt_sha256"}
+    )
+    changed = tmp_path / "source.json"
+    changed.write_text(json.dumps(source))
+    monkeypatch.setattr("cyber_post_train.direct_submit.LORA_STEP60_SOURCE_EVIDENCE_PATH", changed)
+    monkeypatch.setattr(
+        "cyber_post_train.direct_submit.LORA_STEP60_SOURCE_EVIDENCE_FILE_SHA256",
+        hashlib.sha256(changed.read_bytes()).hexdigest(),
+    )
+    monkeypatch.setattr(
+        "cyber_post_train.direct_submit.LORA_STEP60_SOURCE_EVIDENCE_RECEIPT_SHA256",
+        source["receipt_sha256"],
+    )
+    with pytest.raises(JobsError, match="acceptance boundary"):
+        build_lora_step60_preflight(lora_step60_plan(), lora_step60_request())
+
+
+def test_lora_step60_capacity_includes_planned_node_and_fails_closed_at_limit():
+    assert validate_lora_step60_capacity(lora_step60_capacity(current_nodes=7, current_gpus=56))[
+        "projected"
+    ] == {"nodes": 8, "gpus": 64}
+    over = lora_step60_capacity(current_nodes=8, current_gpus=64)
+    assert over["qualified"] is False
+    with pytest.raises(JobsError, match="GPU budget"):
+        validate_lora_step60_capacity(over)
 
 
 @pytest.mark.parametrize(
@@ -692,6 +819,115 @@ def test_direct_submit_checks_twice_journals_then_creates_exactly_once(tmp_path,
     assert journal.stat().st_mode & 0o777 == 0o600
 
 
+def test_lora_step60_direct_submit_rechecks_capacity_and_records_release_contract(
+    tmp_path, sfs_jobs_root
+):
+    plan_value = lora_step60_plan()
+    request_value = lora_step60_request()
+    jobs = FakeJobs(preview_value=preview(manifest(request_value)))
+    kube = FakeKubectl()
+    journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
+    capacity_calls = []
+
+    def capacity_reader():
+        capacity_calls.append("read")
+        return lora_step60_capacity(current_nodes=1, current_gpus=8)
+
+    result = direct_submit_lora_step60_export_once(
+        plan=plan_value,
+        request=request_value,
+        preflight_receipt=build_lora_step60_preflight(plan_value, request_value),
+        jobs=jobs,
+        kubectl=kube,
+        journal=journal,
+        run_id=RUN_ID,
+        jobs_root=sfs_jobs_root,
+        capacity_reader=capacity_reader,
+    )
+    assert capacity_calls == ["read", "read"]
+    assert result["uid"] == CREATED_UID
+    assert result["release_contract"]["shutdown_after_job_finishes"] is True
+    assert result["release_contract"]["required_absent_after_terminal"] == [
+        "RayCluster",
+        "Pod",
+        "Workload",
+    ]
+    records = [json.loads(line) for line in journal.read_text().splitlines()]
+    assert [row["state"] for row in records] == [
+        "KUBECTL_CREATE_INTENT_DO_NOT_RETRY",
+        "KUBECTL_CREATE_RESPONSE",
+        "POST_RUN_ACCEPTANCE_AND_RELEASE_REQUIRED",
+    ]
+    assert records[0]["first_pre_create_proof"]["projected_gpus"] == 16
+    assert records[0]["final_pre_create_proof"]["projected_nodes"] == 2
+    assert [call[0] for call in kube.calls].count("create") == 1
+
+
+def test_lora_step60_direct_submit_stops_before_preview_on_capacity_or_output_failure(
+    tmp_path, sfs_jobs_root
+):
+    plan_value = lora_step60_plan()
+    request_value = lora_step60_request()
+    jobs = FakeJobs(preview_value=preview(manifest(request_value)))
+    kube = FakeKubectl()
+    (sfs_jobs_root / request_value["name"]).mkdir()
+    with pytest.raises(JobsError, match="already exists"):
+        direct_submit_lora_step60_export_once(
+            plan=plan_value,
+            request=request_value,
+            preflight_receipt=build_lora_step60_preflight(plan_value, request_value),
+            jobs=jobs,
+            kubectl=kube,
+            journal=tmp_path / "output-failed.jsonl",
+            jobs_root=sfs_jobs_root,
+            capacity_reader=lambda: lora_step60_capacity(),
+        )
+    assert jobs.calls == [] and kube.calls == []
+
+    (sfs_jobs_root / request_value["name"]).rmdir()
+    with pytest.raises(JobsError, match="GPU budget"):
+        direct_submit_lora_step60_export_once(
+            plan=plan_value,
+            request=request_value,
+            preflight_receipt=build_lora_step60_preflight(plan_value, request_value),
+            jobs=jobs,
+            kubectl=kube,
+            journal=tmp_path / "capacity-failed.jsonl",
+            jobs_root=sfs_jobs_root,
+            capacity_reader=lambda: lora_step60_capacity(current_nodes=8, current_gpus=64),
+        )
+    assert jobs.calls == [] and kube.calls == []
+
+
+def test_lora_step60_second_capacity_census_stops_before_intent_or_create(tmp_path, sfs_jobs_root):
+    plan_value = lora_step60_plan()
+    request_value = lora_step60_request()
+    jobs = FakeJobs(preview_value=preview(manifest(request_value)))
+    kube = FakeKubectl()
+    journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
+    receipts = iter(
+        [
+            lora_step60_capacity(current_nodes=1, current_gpus=8),
+            lora_step60_capacity(current_nodes=8, current_gpus=64),
+        ]
+    )
+    with pytest.raises(JobsError, match="GPU budget"):
+        direct_submit_lora_step60_export_once(
+            plan=plan_value,
+            request=request_value,
+            preflight_receipt=build_lora_step60_preflight(plan_value, request_value),
+            jobs=jobs,
+            kubectl=kube,
+            journal=journal,
+            run_id=RUN_ID,
+            jobs_root=sfs_jobs_root,
+            capacity_reader=lambda: next(receipts),
+        )
+    assert not journal.exists()
+    assert [call[0] for call in kube.calls].count("dry-run") == 1
+    assert [call[0] for call in kube.calls].count("create") == 0
+
+
 def test_output_check_create_is_suspended_queued_journaled_and_create_once(tmp_path):
     kube = FakeOutputCheckKubectl()
     journal = tmp_path / "SFS_OUTPUT_CHECK_A01.jsonl"
@@ -726,6 +962,15 @@ def test_output_check_create_is_suspended_queued_journaled_and_create_once(tmp_p
             journal=journal,
         )
     assert [call[0] for call in kube.calls].count("create") == 1
+
+
+def test_output_check_accepts_exact_lora_step60_plan_and_remains_zero_gpu():
+    package = build_sfs_output_job(lora_step60_plan(), lora_step60_request(), 1)
+    assert package.job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+    assert package.job["spec"]["template"]["spec"]["priority"] == 10_000
+    resources = package.job["spec"]["template"]["spec"]["containers"][0]["resources"]
+    assert "nvidia.com/gpu" not in resources["requests"]
+    assert "nvidia.com/gpu" not in resources["limits"]
 
 
 def test_output_check_exact_duplicate_stops_before_dry_run_or_intent(tmp_path):
