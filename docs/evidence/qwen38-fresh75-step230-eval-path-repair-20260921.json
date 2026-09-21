@@ -1,0 +1,96 @@
+{
+  "schema": "cyber_qwen38_fresh75_step230_eval_path_repair_v1",
+  "date": "2026-09-21",
+  "status": "review_only_do_not_launch",
+  "launchable": false,
+  "finding": "Three frozen evaluation configurations name a repository that does not match the already accepted Fresh75 max/full-v4 export. Their bytes remain historical evidence, but current live execution must reject them.",
+  "accepted_artifact": {
+    "checkpoint_path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/checkpoints/global_step_230",
+    "checkpoint_manifest_path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/checkpoint-seals-step230-v1/step-230.json",
+    "checkpoint_manifest_file_sha256": "sha256:bf92e29d9f19dd589201214f25fe8d0e3b0f65de14ec08fc573217f50580a486",
+    "checkpoint_manifest_receipt_sha256": "sha256:9542502631b47cd730ccecb5938650103ed999bf4a4a6cf7d16d9be09c317cab",
+    "export_path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/hf-export-step230-v1",
+    "export_receipt_file_sha256": "sha256:7b4ed0c07cc0f9ed6a5cbdac7d3ad0b3bc08ba63447fc2d56e47885c3daa7c4f",
+    "export_receipt_sha256": "sha256:1bd81c78575c32fa52dc4ab9c7002d95db5028047fa52cc36297aa1954c3d2d3",
+    "payload_model_revision": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
+    "trained_tensors": 1184,
+    "restored_mtp_tensors": 15,
+    "total_tensors": 1199,
+    "tensor_bytes": 55562855904,
+    "gpu_reload_receipt_path": "/mnt/sfs/jobs/chris-q38-f75-step230-export-gpu-check-v1/GPU_CHECK.json",
+    "gpu_reload_receipt_file_sha256": "sha256:30cb5f9687d1cb08f8e78b9f425391807f0f16c0cefe712d97d9b155cf73b791",
+    "gpu_reload_receipt_sha256": "sha256:43e40b5397f3db4fb6b603cb9774f9aa862d570c3191d8f71e7c14b599be6f01",
+    "gpu_reload_rayjob_uid": "64bc14b2-c418-4706-acad-7fc1535dfb9d",
+    "gpu_reload_pod_uid": "0b0c47e8-39a4-4ec5-a2ff-f336ae44402a",
+    "gpu_reload_was_finite_two_token_zero_optimizer_step": true,
+    "gpu_allocation_released": true
+  },
+  "qualification_evidence": {
+    "path": "docs/evidence/qwen38-fresh75-step230-reload-accepted-20260915.json",
+    "file_sha256": "sha256:0ee0d79d047782598f58f4717a9e5f784ef407ff4825b01bc3616593d582691e",
+    "sha256": "sha256:78b7d0064627b3fee11cb2bcb55735bbc5693cf11b104fa1d1d1927ea27d0301"
+  },
+  "historical_non_launchable_configs": [
+    {
+      "path": "configs/evaluation/qwen38-fresh75-fleet-dev17-opencode-seed43-pass1-v1.json",
+      "file_sha256": "sha256:90c0b6b942deecb0571e85e81419b4411d53e5c11fd0aa280afd2628ef79be80",
+      "configured_repository": "/mnt/sfs/jobs/chris-q38-fresh75-e1-v2/hf-export-v1",
+      "configured_revision": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
+      "config_path_binding_matches_accepted_export": false,
+      "sfs_path_presence": "not_reopened_in_this_change",
+      "launchable": false
+    },
+    {
+      "path": "configs/evaluation/qwen38-fresh75-fleet-dev17-opencode-pass1-v2.json",
+      "file_sha256": "sha256:e292d7df0ec9e35f22d3ea0f249a8d687fa6e517f87f5c6420a0d1b53e051bcb",
+      "configured_repository": "/mnt/sfs/jobs/chris-q38-fresh75-e1-v2/hf-export-v1",
+      "configured_revision": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
+      "config_path_binding_matches_accepted_export": false,
+      "sfs_path_presence": "not_reopened_in_this_change",
+      "launchable": false
+    },
+    {
+      "path": "configs/evaluation/qwen38-fresh75-fleet-dev17-matched-pass1-v2.json",
+      "file_sha256": "sha256:68f6510a92b6d57e6b24c08ecba9fd568bb0641f59b31a18573869eaa7ed1b25",
+      "configured_repository": "/mnt/sfs/jobs/chris-q38-fresh75-e1-v2/hf-export-v1",
+      "configured_revision": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
+      "config_path_binding_matches_accepted_export": false,
+      "sfs_path_presence": "not_reopened_in_this_change",
+      "launchable": false
+    }
+  ],
+  "successor": {
+    "path": "configs/evaluation/qwen38-fresh75-fleet-dev17-opencode-seed43-pass1-v2.json",
+    "file_sha256": "sha256:55f29bfe419238ecf63d8ae1587ee136936ff4fd6ad3dff5df41da56e17b1976",
+    "campaign_name": "q38-dev17-s43-fresh75-p1-v2",
+    "repository": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/hf-export-step230-v1",
+    "revision": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
+    "artifact_packet": {
+      "path": "configs/evaluation/qwen38-fresh75-fleet-dev17-opencode-seed43-pass1-v2.artifact.json",
+      "file_sha256": "sha256:d14edfc65ff0274a31e9d00dd8ebea468cec1c8f86b4eb57c09b86e9b0b87bd4",
+      "sha256": "3ff4f7f63d64ce29a486f225646e231bba18d23dca4a74dcd2275d52b1175387",
+      "authorization": "provenance_only_not_launch_authorization"
+    },
+    "launchable": false,
+    "non_authorizing_until": [
+      "this code is merged to current main",
+      "current-main tests and independent exact-head review pass",
+      "the local receipts are reopened successfully on the evaluator worker",
+      "the live base and candidate routes pass a fresh matched parity check",
+      "the exact scientific cell and output/database/job identities pass duplicate checks"
+    ]
+  },
+  "runtime_repair": {
+    "behavior": "Every local SFS model must carry an exact checkpoint/export/GPU-reload binding. The evaluator reopens and hashes all three receipts before image staging, Fleet calls, output creation, or database creation.",
+    "historical_config_bytes_changed": false,
+    "weights_read": false,
+    "private_logs_or_traces_read": false
+  },
+  "operation": {
+    "jobs_submitted": 0,
+    "resources_created": 0,
+    "external_evaluations_launched": 0,
+    "cluster_mutations_performed": 0
+  },
+  "sha256": "09a3b30817bb60354dbdb81e3dc1be413fcd77b0be297b357c2eb5c8fb5c5fe3"
+}
