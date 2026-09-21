@@ -1,7 +1,7 @@
 {
   "schema_version": "qwen38_web_important_checkpoint_budget_audit_v6",
   "status": "runtime_budget_repaired_prompt_preflight_parity_campaign_still_gated",
-  "observed_at": "2026-09-21T11:58:18Z",
+  "observed_at": "2026-09-21T17:34:47Z",
   "source": {
     "repair_source_commit": "44945a14d1102c929dee01a8f4871cf053e142d7",
     "repair_base_commit": "92d1609e160f69a7365570bc2163a763a1be9835",
@@ -15,7 +15,7 @@
     "collection_runner_path": "evals/webexploitbench/tensorlake/bootstrap/run_collection_partition.sh",
     "collection_runner_file_sha256": "sha256:5d46366a4c9353b66e5975093f44aedf188e1bc814e6d1e0e1d7b06a6d1898dc",
     "collection_launcher_path": "evals/webexploitbench/tensorlake/collection_launcher.py",
-    "collection_launcher_file_sha256": "sha256:95f6763f201af4da5a2907b407372dbbeaa99a6d4462daa23014ae5706ec2c9c",
+    "collection_launcher_file_sha256": "sha256:11650b97b04934c62acc1ce7984d55ba4f7bb1b0cfc255d4d863c985c8eed289",
     "collection_supervisor_path": "evals/webexploitbench/tensorlake/collection_supervisor.py",
     "collection_supervisor_file_sha256": "sha256:59bd6d77247fc6855297efaa6508b4da87edf8a9cf619cdb45b93fd9ecbf1586",
     "qualification_worker_path": "evals/webexploitbench/tensorlake/collection_snapshot_qualification_worker.py",
@@ -60,5 +60,5 @@
     "scoring_requests": 0,
     "external_mutations": 0
   },
-  "receipt_sha256": "sha256:bdce28eba7c03836540cc63e612aef65e9a20758b751774527a5d89356741844"
+  "receipt_sha256": "sha256:eeacc4b02c8c5cd2ea124c7efbd3303dbe061b87430de2e9185e8da2d1797e4d"
 }
