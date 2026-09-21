@@ -180,6 +180,10 @@ def test_all_four_arms_compile_to_the_same_new_protocol():
         assert held_constant == reference
 
 
+def test_read_only_status_observer_is_outside_the_frozen_execution_runtime():
+    assert "rollout_postgres_status.py" not in evaluate.RUNTIME_FILES
+
+
 @pytest.mark.parametrize("value", [-1, 2, True, "1"])
 def test_reviewed_retry_limit_is_narrow(value):
     config = read(next(iter(ARMS.values()))[0])
