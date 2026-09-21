@@ -34,6 +34,10 @@ Set `FLEET_API_KEY` and `ROLLOUT_DATABASE_URL` through the approved secret manag
 Neither value belongs in argv, YAML, receipts or Git. Workers verify the same
 frozen plan and claim only pending rows. Use a distinct worker ID per batch.
 Expired or ambiguous attempts are held for review, never automatically retried.
+The live serving-profile check for each planned session runs only after that
+session's atomic ledger claim. A transient profile-check failure is therefore
+held as infrastructure-invalid on one exact cell; it cannot consume a worker
+slot while leaving an unrelated cell silently pending.
 
 ## Configuration
 
