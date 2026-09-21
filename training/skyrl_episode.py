@@ -560,11 +560,77 @@ async def offline_long_horizon_probe(model, tokenizer, helper: Path):
     second_prompt = action_requests[1]["prompt_token_ids"][0]
     if second_prompt != first_prompt + action_ids[: limits["generation_chunk_tokens"]]:
         raise InvalidEpisode("skyrl_offline_chunk_continuation_failed")
+
+    class OutputLimitEngine:
+        model_name = model["root"]
+
+        def __init__(self):
+            self.requests = []
+
+        async def generate(self, request):
+            self.requests.append(copy.deepcopy(request))
+            cap = request["sampling_params"]["max_tokens"]
+            return {
+                "responses": ["unfinished"],
+                "response_ids": [[101] * cap],
+                "response_logprobs": [[-0.2] * cap],
+                "stop_reasons": ["length"],
+            }
+
+    class NoPartialToolSession:
+        def __init__(self):
+            self.calls = []
+
+        async def call_tool(self, name, arguments):
+            self.calls.append((name, copy.deepcopy(arguments)))
+            raise InvalidEpisode("skyrl_offline_output_limit_executed_partial_tool")
+
+    output_config = copy.deepcopy(config)
+    output_config["rl"] = {
+        **limits,
+        "max_tokens_per_turn": 16,
+        "generation_chunk_tokens": 8,
+    }
+    output_engine, output_session = OutputLimitEngine(), NoPartialToolSession()
+    output_recorder = Recorder(
+        output_config,
+        tokenizer,
+        output_engine,
+        {"temperature": 0.0, "logprobs": 0},
+        1024,
+        helper,
+    )
+    output_messages, output_reason, _ = await rl_episode._agent(
+        output_recorder,
+        output_session,
+        [{"role": "user", "content": task}],
+        tools,
+        output_config["rl"],
+        parse,
+    )
+    output_samples = output_recorder.finalize(
+        0.25,
+        {"done_reason": output_reason, "verifier_execution_id": "offline-output-limit-probe"},
+        0.0,
+    )
+    if (
+        output_reason != "turn_response_budget_exhausted"
+        or output_session.calls
+        or len(output_engine.requests) != 2
+        or len(output_samples) != 1
+        or output_samples[0].response_length != 16
+        or output_samples[0].reward != 0.25
+        or output_samples[0].metadata["done_reason"] != output_reason
+        or output_messages[-1].get("role") != "assistant"
+    ):
+        raise InvalidEpisode("skyrl_offline_output_limit_probe_failed")
     return {
         "chunk_continuation_checked": True,
         "compaction_checked": True,
         "stepwise_prompt_checked": True,
         "ordered_multi_tool_execution_checked": True,
+        "output_limit_gradeable_checked": True,
+        "output_limit_partial_tool_blocked_checked": True,
         "samples": len(samples),
         "generation_requests": len(engine.requests),
     }

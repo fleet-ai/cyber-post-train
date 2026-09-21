@@ -432,6 +432,8 @@ async def test_zero_gpu_long_horizon_probe_uses_actual_tokenizer_contract(setup)
         "compaction_checked": True,
         "stepwise_prompt_checked": True,
         "ordered_multi_tool_execution_checked": True,
+        "output_limit_gradeable_checked": True,
+        "output_limit_partial_tool_blocked_checked": True,
         "samples": 2,
         "generation_requests": 5,
     }
