@@ -319,6 +319,6 @@
   "regenerated_at": "2026-09-21T09:00:00Z",
   "schema": "cyber_qwen38_skyrl_production_experiment_queue_evidence_v1",
   "scope": "offline_no_submit_no_stage_no_serve_no_cancel",
-  "sha256": "sha256:1925fbd99a89e00914e64609cfe3811ddb049840f26b1e2211867434af9201d1",
-  "source_base_commit": "6254334cd85ebb02a6c6515be6f13fb63142f3bc"
+  "sha256": "sha256:6993fc82a991209340e439620779c771eb5735dd6b0fb909dca328ddfaf6ed79",
+  "source_base_commit": "40d55fae71510e04ed0f5a1c8c820ce34b7f612c"
 }
