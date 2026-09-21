@@ -19,6 +19,21 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA = "cyber_parameterized_task_family_split_v1"
+ROLE_ANCHOR_SCHEMA = "cyber_task_family_role_anchor_v1"
+ANCHORED_SCHEMA = "cyber_anchored_task_family_split_v1"
+SUPPORTED_SCHEMAS = frozenset({SCHEMA, ANCHORED_SCHEMA})
+# The broad Fleet collection path has one reviewed root today: the locked
+# September study split.  A self-digesting role anchor is useful evidence, but
+# it is not a trust root by itself: an input author could otherwise reseal a
+# different list of roles.  Keep this identity in reviewed source and derive
+# it again from the locked split/inventory before accepting it at collection
+# boundaries.  Adding a later root is a source-reviewed registry change, not
+# a request-level option.
+TRUSTED_FLEET_COLLECTION_ROOT_ID = "fleet-blackbox-current-study-20260914-v2"
+_TRUSTED_FLEET_COLLECTION_ROOT = {
+    "split": "configs/data/fleet-blackbox-current-study-split-20260914-v2.json",
+    "sha256": "sha256:48350b8fc23143abe297db3b2364590c72d564553ebb4e9a349fa06ec246a26b",
+}
 DEFAULT_DIMENSIONS = ("application", "environment", "difficulty", "vulnerability_family")
 SPLIT_UNIT = "reviewed application and task family; all exact versions stay together"
 FORBIDDEN_OUTPUT_TERMS = {
@@ -49,6 +64,16 @@ def _sealed(value: dict[str, Any]) -> bool:
     return value.get("sha256") == canonical_digest(
         {key: item for key, item in value.items() if key != "sha256"}
     )
+
+
+def is_supported_schema(value: object) -> bool:
+    """Return whether a split uses one of this module's sealed contracts."""
+    return isinstance(value, dict) and value.get("schema") in SUPPORTED_SCHEMAS
+
+
+def requires_role_anchor(value: object) -> bool:
+    """Return whether validation needs the independently sealed parent anchor."""
+    return isinstance(value, dict) and value.get("schema") == ANCHORED_SCHEMA
 
 
 def _sha256(value: object, label: str) -> str:
@@ -356,6 +381,7 @@ def _repair_representable_labels(
     seed: str,
     targets: dict[str, int],
     dimensions: tuple[str, ...],
+    locked_group_ids: frozenset[str] = frozenset(),
 ) -> dict[str, str]:
     """Use bounded, deterministic swaps to repair a greedy balance allocation.
 
@@ -379,10 +405,16 @@ def _repair_representable_labels(
             donors = [
                 group
                 for group in groups
-                if assignment[group["group_id"]] != needed_split
+                if group["group_id"] not in locked_group_ids
+                and assignment[group["group_id"]] != needed_split
                 and label in group["features"][dimension]
             ]
-            receivers = [group for group in groups if assignment[group["group_id"]] == needed_split]
+            receivers = [
+                group
+                for group in groups
+                if group["group_id"] not in locked_group_ids
+                and assignment[group["group_id"]] == needed_split
+            ]
             for donor in sorted(donors, key=lambda group: _rank(seed, "donor", group["group_id"])):
                 donor_split = assignment[donor["group_id"]]
                 for receiver in sorted(
@@ -559,7 +591,7 @@ def build(
     return value
 
 
-def validate(value: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any]:
+def _validate_v1(value: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any]:
     """Rebuild the split from its sealed public policy and reject any drift."""
     if not isinstance(value, dict) or value.get("schema") != SCHEMA or not _sealed(value):
         raise ValueError("invalid parameterized task-family split")
@@ -582,6 +614,627 @@ def validate(value: dict[str, Any], rows: list[dict[str, Any]]) -> dict[str, Any
     if any(f'"{term}"' in forbidden for term in FORBIDDEN_OUTPUT_TERMS):
         raise ValueError("split emitted a private task-content field")
     return value
+
+
+def _role_entries(value: object, label: str) -> dict[str, str]:
+    if not isinstance(value, list) or not value:
+        raise ValueError(f"{label} must contain at least one role")
+    result: dict[str, str] = {}
+    for raw in value:
+        if not isinstance(raw, dict) or set(raw) != {"group_id", "split"}:
+            raise ValueError(f"{label} role is malformed")
+        group_id = _sha256(raw.get("group_id"), f"{label} group")
+        split = _string(raw.get("split"), f"{label} split")
+        if group_id in result:
+            raise ValueError(f"{label} duplicates a group")
+        result[group_id] = split
+    if value != [{"group_id": group_id, "split": result[group_id]} for group_id in sorted(result)]:
+        raise ValueError(f"{label} roles must be sorted canonically")
+    return result
+
+
+def _task_key_group_entries(value: object, label: str) -> dict[str, str]:
+    if not isinstance(value, list):
+        raise ValueError(f"{label} must be a list")
+    result: dict[str, str] = {}
+    for raw in value:
+        if not isinstance(raw, dict) or set(raw) != {"task_key", "group_id"}:
+            raise ValueError(f"{label} entry is malformed")
+        task_key = _string(raw.get("task_key"), f"{label} task_key")
+        group_id = _sha256(raw.get("group_id"), f"{label} group")
+        if task_key in result:
+            raise ValueError(f"{label} duplicates a task_key")
+        result[task_key] = group_id
+    if value != [
+        {"task_key": task_key, "group_id": result[task_key]} for task_key in sorted(result)
+    ]:
+        raise ValueError(f"{label} entries must be sorted canonically")
+    return result
+
+
+def _role_anchor(value: dict[str, Any]) -> tuple[dict[str, str], dict[str, str]]:
+    required = {
+        "schema",
+        "source",
+        "roles",
+        "task_key_groups",
+        "heldout_group_ids",
+        "sha256",
+    }
+    if (
+        not isinstance(value, dict)
+        or value.get("schema") != ROLE_ANCHOR_SCHEMA
+        or set(value) != required
+        or not _sealed(value)
+    ):
+        raise ValueError("invalid task-family role anchor")
+    source = value.get("source")
+    if not isinstance(source, dict) or set(source) != {
+        "split_schema",
+        "split_sha256",
+        "inventory_sha256",
+    }:
+        raise ValueError("task-family role-anchor source is malformed")
+    if source.get("split_schema") not in {
+        SCHEMA,
+        ANCHORED_SCHEMA,
+        "cyber_representative_study_split_v2",
+    }:
+        raise ValueError("task-family role-anchor source schema is unsupported")
+    _sha256(source.get("split_sha256"), "role-anchor source split")
+    _sha256(source.get("inventory_sha256"), "role-anchor source inventory")
+    roles = _role_entries(value.get("roles"), "role-anchor")
+    task_key_groups = _task_key_group_entries(value.get("task_key_groups"), "role-anchor")
+    heldout = value.get("heldout_group_ids")
+    if (
+        not isinstance(heldout, list)
+        or any(not isinstance(group, str) for group in heldout)
+        or heldout != sorted(set(heldout))
+        or any(_sha256(group, "role-anchor held-out group") != group for group in heldout)
+    ):
+        raise ValueError("role-anchor held-out groups are malformed")
+    if heldout != sorted(group for group, split in roles.items() if split != "train"):
+        raise ValueError("role-anchor held-out groups do not match its immutable roles")
+    for task_key, group_id in task_key_groups.items():
+        if group_id not in roles:
+            raise ValueError(f"role-anchor task_key {task_key!r} names an unknown group")
+    return roles, task_key_groups
+
+
+def _role_rows(roles: dict[str, str]) -> list[dict[str, str]]:
+    return [{"group_id": group_id, "split": roles[group_id]} for group_id in sorted(roles)]
+
+
+def _task_key_group_rows(groups: dict[str, str]) -> list[dict[str, str]]:
+    return [{"task_key": key, "group_id": groups[key]} for key in sorted(groups)]
+
+
+def _make_role_anchor(
+    *,
+    split_schema: str,
+    split_sha256: str,
+    inventory_sha256: str,
+    roles: dict[str, str],
+    task_key_groups: dict[str, str],
+) -> dict[str, Any]:
+    """Seal a role anchor after callers have validated its source split."""
+    value = {
+        "schema": ROLE_ANCHOR_SCHEMA,
+        "source": {
+            "split_schema": split_schema,
+            "split_sha256": _sha256(split_sha256, "role-anchor source split"),
+            "inventory_sha256": _sha256(inventory_sha256, "role-anchor source inventory"),
+        },
+        "roles": _role_rows(roles),
+        "task_key_groups": _task_key_group_rows(task_key_groups),
+        "heldout_group_ids": sorted(
+            group_id for group_id, split in roles.items() if split != "train"
+        ),
+    }
+    value["sha256"] = canonical_digest(value)
+    _role_anchor(value)
+    return value
+
+
+def _task_maps_from_split(
+    value: dict[str, Any], rows: list[dict[str, Any]], dimensions: tuple[str, ...]
+) -> tuple[dict[str, str], dict[str, str]]:
+    """Return all currently assigned group roles and task-key lineage bindings."""
+    groups = _group_rows(rows, dimensions)
+    expected: dict[tuple[str, str], str] = {}
+    task_key_groups: dict[str, str] = {}
+    for group in groups:
+        for row in group["task_rows"]:
+            identity = (row["task_key"], row["task_version_id"])
+            expected[identity] = group["group_id"]
+            prior = task_key_groups.setdefault(row["task_key"], group["group_id"])
+            if prior != group["group_id"]:
+                raise ValueError("one task_key has inconsistent current family identity")
+    assigned: dict[str, str] = {}
+    tasks = value.get("tasks")
+    if not isinstance(tasks, list) or len(tasks) != len(expected):
+        raise ValueError("split task assignments are incomplete")
+    seen: set[tuple[str, str]] = set()
+    for raw in tasks:
+        if not isinstance(raw, dict) or set(raw) != {
+            "task_key",
+            "task_version_id",
+            "group_id",
+            "split",
+        }:
+            raise ValueError("split task assignment is malformed")
+        identity = _task_identity(raw)
+        if identity in seen or identity not in expected:
+            raise ValueError("split task assignment is ambiguous")
+        seen.add(identity)
+        group_id = _sha256(raw.get("group_id"), "split task group")
+        if group_id != expected[identity]:
+            raise ValueError("split task assignment changes reviewed family identity")
+        split = _string(raw.get("split"), "split task role")
+        prior = assigned.setdefault(group_id, split)
+        if prior != split:
+            raise ValueError("one reviewed task family crosses split roles")
+    if seen != set(expected):
+        raise ValueError("split task assignments do not cover the reviewed inventory")
+    return assigned, task_key_groups
+
+
+def freeze_role_anchor(
+    value: dict[str, Any], rows: list[dict[str, Any]], *, role_anchor: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Freeze a validated parameterized split for a later catalog expansion.
+
+    The output intentionally records all roles, including current training
+    families.  Freezing only held-out groups would allow an old training family
+    to migrate later and make comparisons with an earlier study ambiguous.
+    """
+    if not is_supported_schema(value):
+        raise ValueError("only supported parameterized family splits can be frozen")
+    validate(value, rows, role_anchor=role_anchor)
+    policy = value["policy"]
+    roles, task_key_groups = _task_maps_from_split(
+        value, rows, tuple(policy["balanced_dimensions"])
+    )
+    if value["schema"] == ANCHORED_SCHEMA:
+        inherited_roles = _role_entries(value["inherited_roles"], "anchored inherited")
+        inherited_keys = _task_key_group_entries(
+            value["inherited_task_key_groups"], "anchored inherited task-key"
+        )
+        for group_id, split in inherited_roles.items():
+            prior = roles.setdefault(group_id, split)
+            if prior != split:
+                raise ValueError("anchored split changed an inherited role before freezing")
+        for task_key, group_id in inherited_keys.items():
+            prior = task_key_groups.setdefault(task_key, group_id)
+            if prior != group_id:
+                raise ValueError("anchored split changed an inherited task-key family")
+    return _make_role_anchor(
+        split_schema=value["schema"],
+        split_sha256=value["sha256"],
+        inventory_sha256=value["inventory_sha256"],
+        roles=roles,
+        task_key_groups=task_key_groups,
+    )
+
+
+def freeze_study_v2_role_anchor(
+    legacy_split: dict[str, Any],
+    *,
+    legacy_inventory_path: Path,
+    legacy_inventory_display_path: Path | None = None,
+) -> dict[str, Any]:
+    """Convert the locked 75-task study split once, without recomputing roles."""
+    from . import study_split_v2
+
+    study_split_v2.validate(
+        legacy_split,
+        inventory_path=legacy_inventory_path,
+        inventory_display_path=legacy_inventory_display_path,
+    )
+    inventory = json.loads(legacy_inventory_path.read_text())
+    rows = inventory.get("task_versions")
+    if not isinstance(rows, list):
+        raise ValueError("legacy study inventory omits task_versions")
+    groups = _group_rows(rows, DEFAULT_DIMENSIONS)
+    by_identity = {
+        (row["task_key"], row["task_version_id"]): group["group_id"]
+        for group in groups
+        for row in group["task_rows"]
+    }
+    roles: dict[str, str] = {}
+    task_key_groups: dict[str, str] = {}
+    tasks = legacy_split.get("tasks")
+    if not isinstance(tasks, list) or not tasks:
+        raise ValueError("legacy study split omits task assignments")
+    for raw in tasks:
+        if not isinstance(raw, dict) or set(raw) != {
+            "task_key",
+            "task_version_id",
+            "group_id",
+            "split",
+        }:
+            raise ValueError("legacy study split task assignment is malformed")
+        identity = _task_identity(raw)
+        expected_group = by_identity.get(identity)
+        group_id = _sha256(raw.get("group_id"), "legacy study group")
+        if expected_group is None or group_id != expected_group:
+            raise ValueError("legacy study split task assignment drifts from its inventory")
+        split = _string(raw.get("split"), "legacy study role")
+        prior = roles.setdefault(group_id, split)
+        if prior != split:
+            raise ValueError("legacy study assigns one family to multiple roles")
+        prior_group = task_key_groups.setdefault(identity[0], group_id)
+        if prior_group != group_id:
+            raise ValueError("legacy study task_key changes family identity")
+    if legacy_split["inventory"]["logical_sha256"] != inventory.get("sha256"):
+        raise ValueError("legacy study inventory logical digest drift")
+    return _make_role_anchor(
+        split_schema=legacy_split["schema"],
+        split_sha256=legacy_split["sha256"],
+        inventory_sha256=legacy_split["inventory"]["logical_sha256"],
+        roles=roles,
+        task_key_groups=task_key_groups,
+    )
+
+
+def trusted_fleet_collection_root_anchor() -> dict[str, Any]:
+    """Return the one reviewed root accepted by broad Fleet collection.
+
+    This intentionally derives the object from the checked-in study split and
+    its exact inventory instead of merely loading a self-digesting anchor
+    supplied by a caller.  The hard-coded digest is the reviewed identity of
+    that derivation.  A future root must be added here in a reviewed source
+    change together with its own derivation/validation rule.
+    """
+
+    root = Path(__file__).resolve().parents[1]
+    split_path = root / _TRUSTED_FLEET_COLLECTION_ROOT["split"]
+    try:
+        legacy_split = json.loads(split_path.read_text())
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError("trusted Fleet collection root split is unreadable") from error
+    if not isinstance(legacy_split, dict):
+        raise ValueError("trusted Fleet collection root split is malformed")
+    inventory = legacy_split.get("inventory")
+    if not isinstance(inventory, dict) or not isinstance(inventory.get("path"), str):
+        raise ValueError("trusted Fleet collection root inventory is malformed")
+    inventory_path = root / inventory["path"]
+    anchor = freeze_study_v2_role_anchor(
+        legacy_split,
+        legacy_inventory_path=inventory_path,
+        legacy_inventory_display_path=Path(inventory["path"]),
+    )
+    if anchor["sha256"] != _TRUSTED_FLEET_COLLECTION_ROOT["sha256"]:
+        raise ValueError("trusted Fleet collection root digest drift")
+    return anchor
+
+
+def require_trusted_fleet_collection_root_anchor(value: object) -> dict[str, Any]:
+    """Reject a forged root before a broad collection can use its roles."""
+
+    if not isinstance(value, dict):
+        raise ValueError("broad Fleet collection requires the trusted role anchor")
+    expected = trusted_fleet_collection_root_anchor()
+    if value != expected:
+        raise ValueError("broad Fleet collection role anchor is not the trusted root")
+    return expected
+
+
+def _assign_anchored(
+    groups: list[dict[str, Any]],
+    *,
+    seed: str,
+    targets: dict[str, int],
+    dimensions: tuple[str, ...],
+    locked: dict[str, str],
+) -> dict[str, str]:
+    """Assign only novel groups while preserving every anchored role exactly."""
+    population = _population(groups, dimensions)
+
+    def rarity(group: dict[str, Any]) -> float:
+        return sum(
+            1 / population[dimension][label]
+            for dimension in dimensions
+            for label in group["features"][dimension]
+        )
+
+    assignment = dict(locked)
+    used = Counter(locked.values())
+    order = sorted(
+        (group for group in groups if group["group_id"] not in locked),
+        key=lambda group: (-rarity(group), _rank(seed, "anchored-order", group["group_id"])),
+    )
+    for group in order:
+        candidates = [split for split in targets if used[split] < targets[split]]
+        if not candidates:
+            raise ValueError("anchored task-family allocation exhausted unexpectedly")
+        split = min(
+            candidates,
+            key=lambda candidate: (
+                _assignment_score(
+                    groups,
+                    assignment | {group["group_id"]: candidate},
+                    targets=targets,
+                    dimensions=dimensions,
+                ),
+                _rank(seed, "anchored-choice", group["group_id"], candidate),
+            ),
+        )
+        assignment[group["group_id"]] = split
+        used[split] += 1
+    return assignment
+
+
+def _validate_anchor_roles_for_build(roles: dict[str, str], ratios: dict[str, float]) -> None:
+    if set(roles.values()) != set(ratios):
+        raise ValueError("role-anchor roles must exactly match the declared split roles")
+    if "train" not in ratios:
+        raise ValueError("anchored task-family splits require a train role")
+
+
+def _build_anchored_from_parts(
+    rows: list[dict[str, Any]],
+    *,
+    inventory_sha256: str,
+    parent_role_anchor_sha256: str,
+    inherited_roles: dict[str, str],
+    inherited_task_key_groups: dict[str, str],
+    seed: str,
+    ratios: dict[str, float],
+    dimensions: tuple[str, ...],
+    max_group_task_version_fraction: float,
+) -> dict[str, Any]:
+    inventory_sha256 = _sha256(inventory_sha256, "sanitized inventory")
+    parent_role_anchor_sha256 = _sha256(parent_role_anchor_sha256, "parent role anchor")
+    if not isinstance(seed, str) or not seed:
+        raise ValueError("nonempty split seed is required")
+    if not dimensions or len(set(dimensions)) != len(dimensions):
+        raise ValueError("unique balanced dimensions are required")
+    if set(dimensions) - set(DEFAULT_DIMENSIONS):
+        raise ValueError("unsupported balanced dimension")
+    if (
+        isinstance(max_group_task_version_fraction, bool)
+        or not isinstance(max_group_task_version_fraction, (int, float))
+        or not 0 < max_group_task_version_fraction <= 1
+    ):
+        raise ValueError("an explicit 0 < maximum family fraction <= 1 is required")
+    ratios = _normalise_ratios(ratios)
+    _validate_anchor_roles_for_build(inherited_roles, ratios)
+    groups = _group_rows(rows, dimensions)
+    current_group_ids = {group["group_id"] for group in groups}
+    current_task_key_groups = {
+        row["task_key"]: group["group_id"] for group in groups for row in group["task_rows"]
+    }
+    for task_key, prior_group in inherited_task_key_groups.items():
+        if task_key in current_task_key_groups and current_task_key_groups[task_key] != prior_group:
+            raise ValueError("historical task_key changes its immutable family identity")
+    locked = {
+        group_id: split
+        for group_id, split in inherited_roles.items()
+        if group_id in current_group_ids
+    }
+    targets = _target_group_counts(len(groups), ratios)
+    locked_counts = Counter(locked.values())
+    if any(locked_counts[split] > targets[split] for split in targets):
+        raise ValueError("immutable anchored roles exceed the declared target split counts")
+    assignment = _assign_anchored(
+        groups,
+        seed=seed,
+        targets=targets,
+        dimensions=dimensions,
+        locked=locked,
+    )
+    # A current catalog can be exactly the historic rooted study: every
+    # present family is immutable and there is no legal swap.  Re-running a
+    # representativeness allocator over that frozen fact would either move a
+    # protected family or reject an otherwise valid historical split.  Record
+    # that exceptional *lack of choice* explicitly.  Once even one novel
+    # family is present, the normal repair/coverage gate remains mandatory.
+    all_current_groups_immutable = len(locked) == len(groups)
+    if not all_current_groups_immutable:
+        assignment = _repair_representable_labels(
+            groups,
+            assignment,
+            seed=seed,
+            targets=targets,
+            dimensions=dimensions,
+            locked_group_ids=frozenset(locked),
+        )
+    if any(assignment[group_id] != split for group_id, split in locked.items()):
+        raise ValueError("representative repair changed an immutable anchored role")
+    representation = _representation(groups, assignment, targets=targets, dimensions=dimensions)
+    if not all_current_groups_immutable:
+        _require_representable_labels(representation, splits=tuple(ratios))
+    concentration = _concentration(groups, assignment, targets)
+    _require_split_concentration(
+        concentration,
+        max_group_task_version_fraction=max_group_task_version_fraction,
+    )
+    tasks = []
+    for group in groups:
+        split = assignment[group["group_id"]]
+        tasks.extend(
+            {**row, "group_id": group["group_id"], "split": split} for row in group["task_rows"]
+        )
+    new_group_ids = sorted(current_group_ids - set(inherited_roles))
+    value = {
+        "schema": ANCHORED_SCHEMA,
+        "inventory_sha256": inventory_sha256,
+        "parent_role_anchor_sha256": parent_role_anchor_sha256,
+        "inherited_roles": _role_rows(inherited_roles),
+        "inherited_task_key_groups": _task_key_group_rows(inherited_task_key_groups),
+        "new_group_ids": new_group_ids,
+        "seed": seed,
+        "split_unit": SPLIT_UNIT,
+        "policy": {
+            "ratios": ratios,
+            "target_group_counts": targets,
+            "balanced_dimensions": list(dimensions),
+            "algorithm": (
+                "deterministic rarity-first assignment of new groups with immutable inherited roles"
+            ),
+            "require_representable_labels": not all_current_groups_immutable,
+            "representative_coverage_exception": (
+                "all_current_groups_inherited" if all_current_groups_immutable else "none"
+            ),
+            "max_group_task_version_fraction": max_group_task_version_fraction,
+            "inherited_roles_immutable": True,
+        },
+        "tasks": sorted(tasks, key=lambda row: (row["task_key"], row["task_version_id"])),
+        "counts": {
+            split: {
+                "groups": sum(assignment[group["group_id"]] == split for group in groups),
+                "task_versions": sum(
+                    len(group["task_rows"])
+                    for group in groups
+                    if assignment[group["group_id"]] == split
+                ),
+            }
+            for split in ratios
+        },
+        "representation": representation,
+        "concentration": concentration,
+        "leakage_checks": {
+            "exact_identity_overlap": 0,
+            "reviewed_family_overlap": 0,
+            "all_inventory_versions_assigned_once": True,
+            "immutable_inherited_role_drift": 0,
+        },
+        "anchor_audit": {
+            "inherited_role_count": len(inherited_roles),
+            "present_inherited_group_count": len(locked),
+            "absent_inherited_group_count": len(inherited_roles) - len(locked),
+            "new_group_count": len(new_group_ids),
+            "inherited_heldout_group_count": sum(
+                split != "train" for split in inherited_roles.values()
+            ),
+            "historical_task_key_group_drift": 0,
+            "all_current_groups_immutable": all_current_groups_immutable,
+        },
+    }
+    value["sha256"] = canonical_digest(value)
+    return value
+
+
+def build_anchored(
+    rows: list[dict[str, Any]],
+    *,
+    inventory_sha256: str,
+    role_anchor: dict[str, Any],
+    seed: str,
+    ratios: dict[str, float],
+    dimensions: tuple[str, ...] = DEFAULT_DIMENSIONS,
+    max_group_task_version_fraction: float,
+) -> dict[str, Any]:
+    """Extend a catalog without changing any role already frozen in ``role_anchor``."""
+    roles, task_key_groups = _role_anchor(role_anchor)
+    return _build_anchored_from_parts(
+        rows,
+        inventory_sha256=inventory_sha256,
+        parent_role_anchor_sha256=role_anchor["sha256"],
+        inherited_roles=roles,
+        inherited_task_key_groups=task_key_groups,
+        seed=seed,
+        ratios=ratios,
+        dimensions=dimensions,
+        max_group_task_version_fraction=max_group_task_version_fraction,
+    )
+
+
+def _validate_anchored(
+    value: dict[str, Any], rows: list[dict[str, Any]], *, role_anchor: dict[str, Any] | None
+) -> dict[str, Any]:
+    required = {
+        "schema",
+        "inventory_sha256",
+        "parent_role_anchor_sha256",
+        "inherited_roles",
+        "inherited_task_key_groups",
+        "new_group_ids",
+        "seed",
+        "split_unit",
+        "policy",
+        "tasks",
+        "counts",
+        "representation",
+        "concentration",
+        "leakage_checks",
+        "anchor_audit",
+        "sha256",
+    }
+    if (
+        not isinstance(value, dict)
+        or value.get("schema") != ANCHORED_SCHEMA
+        or set(value) != required
+        or not _sealed(value)
+    ):
+        raise ValueError("invalid anchored task-family split")
+    if value.get("split_unit") != SPLIT_UNIT:
+        raise ValueError("anchored split unit drift")
+    if role_anchor is None:
+        raise ValueError("anchored split requires its independently sealed role anchor")
+    anchored_roles, anchored_task_key_groups = _role_anchor(role_anchor)
+    if value.get("parent_role_anchor_sha256") != role_anchor.get("sha256"):
+        raise ValueError("anchored split parent role anchor digest mismatch")
+    inherited_roles = _role_entries(value.get("inherited_roles"), "anchored inherited")
+    inherited_task_key_groups = _task_key_group_entries(
+        value.get("inherited_task_key_groups"), "anchored inherited task-key"
+    )
+    if inherited_roles != anchored_roles or inherited_task_key_groups != anchored_task_key_groups:
+        raise ValueError("anchored split does not exactly inherit its sealed role anchor")
+    for group_id in inherited_task_key_groups.values():
+        if group_id not in inherited_roles:
+            raise ValueError("anchored inherited task_key names an unknown role")
+    policy = value.get("policy")
+    if not isinstance(policy, dict) or set(policy) != {
+        "ratios",
+        "target_group_counts",
+        "balanced_dimensions",
+        "algorithm",
+        "require_representable_labels",
+        "representative_coverage_exception",
+        "max_group_task_version_fraction",
+        "inherited_roles_immutable",
+    }:
+        raise ValueError("anchored split policy is missing")
+    if (
+        policy.get("algorithm")
+        != "deterministic rarity-first assignment of new groups with immutable inherited roles"
+        or policy.get("inherited_roles_immutable") is not True
+    ):
+        raise ValueError("anchored split policy drift")
+    rebuilt = _build_anchored_from_parts(
+        rows,
+        inventory_sha256=value.get("inventory_sha256"),
+        parent_role_anchor_sha256=value.get("parent_role_anchor_sha256"),
+        inherited_roles=inherited_roles,
+        inherited_task_key_groups=inherited_task_key_groups,
+        seed=value.get("seed"),
+        ratios=policy.get("ratios"),
+        dimensions=tuple(policy.get("balanced_dimensions") or ()),
+        max_group_task_version_fraction=policy.get("max_group_task_version_fraction"),
+    )
+    if rebuilt != value:
+        raise ValueError("anchored task-family split drift")
+    forbidden = json.dumps(value).lower()
+    if any(f'"{term}"' in forbidden for term in FORBIDDEN_OUTPUT_TERMS):
+        raise ValueError("anchored split emitted a private task-content field")
+    return value
+
+
+def validate(
+    value: dict[str, Any], rows: list[dict[str, Any]], *, role_anchor: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Validate either the original split or an additive anchored extension."""
+    if not isinstance(value, dict):
+        raise ValueError("invalid parameterized task-family split")
+    if value.get("schema") == SCHEMA:
+        if role_anchor is not None:
+            raise ValueError("parameterized split must not carry an unrelated role anchor")
+        return _validate_v1(value, rows)
+    if value.get("schema") == ANCHORED_SCHEMA:
+        return _validate_anchored(value, rows, role_anchor=role_anchor)
+    raise ValueError("unsupported parameterized task-family split schema")
 
 
 def _read_inventory(path: Path) -> tuple[list[dict[str, Any]], str]:

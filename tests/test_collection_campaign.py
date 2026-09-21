@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import copy
 import json
-import subprocess
 import sys
 from pathlib import Path
 
@@ -43,13 +42,31 @@ def _inventory() -> dict:
     )
 
 
-def _split(inventory: dict) -> dict:
-    return task_family_split.build(
+def _split(inventory: dict, monkeypatch: pytest.MonkeyPatch) -> tuple[dict, dict]:
+    base = task_family_split.build(
         inventory["task_versions"],
         inventory_sha256=inventory["sha256"],
         seed="collection-test-v1",
         ratios={"train": 1 / 3, "dev": 1 / 3, "final_test": 1 / 3},
         max_group_task_version_fraction=0.6,
+    )
+    anchor = task_family_split.freeze_role_anchor(base, inventory["task_versions"])
+    # Synthetic fixtures cannot use the checked-in Fleet root.  Patch only the
+    # derivation point so these tests still exercise the real downstream trust
+    # boundary rather than accepting a caller-provided anchor by default.
+    monkeypatch.setattr(
+        task_family_split, "trusted_fleet_collection_root_anchor", lambda: copy.deepcopy(anchor)
+    )
+    return (
+        task_family_split.build_anchored(
+            inventory["task_versions"],
+            inventory_sha256=inventory["sha256"],
+            role_anchor=anchor,
+            seed="collection-test-v1",
+            ratios={"train": 1 / 3, "dev": 1 / 3, "final_test": 1 / 3},
+            max_group_task_version_fraction=0.6,
+        ),
+        anchor,
     )
 
 
@@ -147,15 +164,18 @@ def _request(*, source_kind: str = "self") -> dict:
     return request
 
 
-def test_render_is_eval_compatible_and_contains_only_train_tasks() -> None:
+def test_render_is_eval_compatible_and_contains_only_train_tasks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     inventory = _inventory()
-    split = _split(inventory)
+    split, anchor = _split(inventory, monkeypatch)
     bindings = _bindings(inventory)
-    rendered = campaign.render(_request(), inventory, split, bindings)
+    rendered = campaign.render(_request(), inventory, split, bindings, role_anchor=anchor)
 
     selection = rendered["task-selection.json"]
     roles = {(row["task_key"], row["task_version_id"]): row["split"] for row in split["tasks"]}
     assert selection["schema"] == campaign.SELECTION_SCHEMA
+    assert selection["root_role_anchor_id"] == task_family_split.TRUSTED_FLEET_COLLECTION_ROOT_ID
     assert selection["family_leakage_check"] == {
         "exact_identity_overlap": 0,
         "reviewed_family_overlap": 0,
@@ -171,6 +191,7 @@ def test_render_is_eval_compatible_and_contains_only_train_tasks() -> None:
     # request; the sealed packet keeps the source/admission facts that generic
     # eval plans intentionally do not retain.
     assert packet["training_data_eligible"] is True
+    assert packet["root_role_anchor_id"] == task_family_split.TRUSTED_FLEET_COLLECTION_ROOT_ID
     assert packet["source"]["model_alias"] == "source"
     assert packet["source"]["template_sha256"] == _sha("8")
     assert packet["corpus_scope"] == {
@@ -201,9 +222,11 @@ def test_render_is_eval_compatible_and_contains_only_train_tasks() -> None:
     assert packet["admission_policy"]["minimum_unique_visible_action_target_tokens"] == 20_000_000
 
 
-def test_requires_exact_runtime_bindings_and_split_protection() -> None:
+def test_requires_exact_runtime_bindings_and_split_protection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     inventory = _inventory()
-    split = _split(inventory)
+    split, anchor = _split(inventory, monkeypatch)
     bindings = _bindings(inventory)
 
     wrong_bindings = copy.deepcopy(bindings)
@@ -212,7 +235,15 @@ def test_requires_exact_runtime_bindings_and_split_protection() -> None:
         {key: value for key, value in wrong_bindings.items() if key != "sha256"}
     )
     with pytest.raises(ValueError, match="different metadata inventory"):
-        campaign.render(_request(), inventory, split, wrong_bindings)
+        campaign.render(_request(), inventory, split, wrong_bindings, role_anchor=anchor)
+
+    wrong_inventory_split = copy.deepcopy(split)
+    wrong_inventory_split["inventory_sha256"] = _sha("0")
+    wrong_inventory_split["sha256"] = task_family_split.canonical_digest(
+        {key: value for key, value in wrong_inventory_split.items() if key != "sha256"}
+    )
+    with pytest.raises(ValueError, match="exact collection inventory"):
+        campaign.render(_request(), inventory, wrong_inventory_split, bindings, role_anchor=anchor)
 
     mutated_split = copy.deepcopy(split)
     mutated_split["tasks"][0]["split"] = "train"
@@ -225,74 +256,84 @@ def test_requires_exact_runtime_bindings_and_split_protection() -> None:
     broken_split["tasks"][0]["split"] = "train"
     broken_split["sha256"] = mutated_split
     with pytest.raises(ValueError, match="split drift"):
-        campaign.render(_request(), inventory, broken_split, bindings)
+        campaign.render(_request(), inventory, broken_split, bindings, role_anchor=anchor)
 
 
-def test_rejects_hidden_reasoning_and_requires_teacher_strength_receipt() -> None:
+def test_rejects_hidden_reasoning_and_requires_teacher_strength_receipt(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     inventory = _inventory()
-    split = _split(inventory)
+    split, anchor = _split(inventory, monkeypatch)
     bindings = _bindings(inventory)
 
     hidden = _request()
     hidden["reasoning_policy"] = "include_hidden_reasoning"
     with pytest.raises(ValueError, match="visible actions only"):
-        campaign.render(hidden, inventory, split, bindings)
+        campaign.render(hidden, inventory, split, bindings, role_anchor=anchor)
 
     teacher = _request(source_kind="teacher")
     teacher.pop("teacher_strength_receipt_sha256")
     with pytest.raises(ValueError, match="teacher-strength"):
-        campaign.render(teacher, inventory, split, bindings)
+        campaign.render(teacher, inventory, split, bindings, role_anchor=anchor)
 
-    teacher = campaign.render(_request(source_kind="teacher"), inventory, split, bindings)
+    teacher = campaign.render(
+        _request(source_kind="teacher"), inventory, split, bindings, role_anchor=anchor
+    )
     assert teacher["collection-packet.json"]["source"]["kind"] == "teacher"
     assert "teacher_strength_receipt_sha256" in teacher["collection-packet.json"]["source"]
 
 
-def test_requires_qualified_262k_opencode_actions_only_harness() -> None:
+def test_requires_qualified_262k_opencode_actions_only_harness(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     inventory = _inventory()
-    split = _split(inventory)
+    split, anchor = _split(inventory, monkeypatch)
     bindings = _bindings(inventory)
 
     short_context = _request()
     short_context["harness"]["context_window_size"] = 98304
     with pytest.raises(ValueError, match="262K OpenCode"):
-        campaign.render(short_context, inventory, split, bindings)
+        campaign.render(short_context, inventory, split, bindings, role_anchor=anchor)
 
     wrong_tools = _request()
     wrong_tools["harness"]["tools"] = ["bash"]
     with pytest.raises(ValueError, match="262K OpenCode"):
-        campaign.render(wrong_tools, inventory, split, bindings)
+        campaign.render(wrong_tools, inventory, split, bindings, role_anchor=anchor)
 
 
-def test_write_and_check_are_create_once_and_no_submit(tmp_path: Path) -> None:
+def test_write_and_check_are_create_once_and_no_submit(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
     inventory = _inventory()
-    split = _split(inventory)
+    split, anchor = _split(inventory, monkeypatch)
     bindings = _bindings(inventory)
-    rendered = campaign.render(_request(), inventory, split, bindings)
+    rendered = campaign.render(_request(), inventory, split, bindings, role_anchor=anchor)
     output = tmp_path / "packet"
     campaign.write_once(output, rendered)
     campaign.check(output, rendered)
     with pytest.raises(FileExistsError, match="already exists"):
         campaign.write_once(output, rendered)
 
-    request, inventory_path, split_path, bindings_path = (
+    request, inventory_path, split_path, bindings_path, anchor_path = (
         tmp_path / "request.json",
         tmp_path / "inventory.json",
         tmp_path / "split.json",
         tmp_path / "bindings.json",
+        tmp_path / "anchor.json",
     )
     for path, value in (
         (request, _request()),
         (inventory_path, inventory),
         (split_path, split),
         (bindings_path, bindings),
+        (anchor_path, anchor),
     ):
         path.write_text(json.dumps(value))
-    result = subprocess.run(
+    monkeypatch.setattr(
+        sys,
+        "argv",
         [
-            sys.executable,
-            "-m",
-            "training.collection_campaign",
+            "collection_campaign",
             "--request",
             str(request),
             "--inventory",
@@ -301,16 +342,52 @@ def test_write_and_check_are_create_once_and_no_submit(tmp_path: Path) -> None:
             str(split_path),
             "--runtime-bindings",
             str(bindings_path),
+            "--role-anchor",
+            str(anchor_path),
             "--output",
             str(output),
             "--check",
         ],
-        check=False,
-        capture_output=True,
-        text=True,
     )
-    assert result.returncode == 0, result.stderr
-    assert json.loads(result.stdout) == {
+    campaign.main()
+    assert json.loads(capsys.readouterr().out) == {
         "checked": ["collection-packet.json", "eval-config.json", "task-selection.json"],
         "submitted": False,
     }
+
+
+def test_rejects_a_valid_resealed_legacy_split_that_moves_an_old_holdout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    inventory = _inventory()
+    base = task_family_split.build(
+        inventory["task_versions"],
+        inventory_sha256=inventory["sha256"],
+        seed="historic-role-v1",
+        ratios={"train": 1 / 3, "dev": 1 / 3, "final_test": 1 / 3},
+        max_group_task_version_fraction=0.6,
+    )
+    anchor = task_family_split.freeze_role_anchor(base, inventory["task_versions"])
+    monkeypatch.setattr(
+        task_family_split, "trusted_fleet_collection_root_anchor", lambda: copy.deepcopy(anchor)
+    )
+    historic = {row["group_id"]: row["split"] for row in base["tasks"]}
+    resealed = None
+    for index in range(1, 100):
+        candidate = task_family_split.build(
+            inventory["task_versions"],
+            inventory_sha256=inventory["sha256"],
+            seed=f"unsafe-reseed-{index}",
+            ratios={"train": 1 / 3, "dev": 1 / 3, "final_test": 1 / 3},
+            max_group_task_version_fraction=0.6,
+        )
+        if any(
+            historic[row["group_id"]] != "train" and row["split"] == "train"
+            for row in candidate["tasks"]
+        ):
+            resealed = candidate
+            break
+    assert resealed is not None
+    task_family_split.validate(resealed, inventory["task_versions"])
+    with pytest.raises(ValueError, match="anchored split and trusted role anchor"):
+        campaign.render(_request(), inventory, resealed, _bindings(inventory), role_anchor=anchor)

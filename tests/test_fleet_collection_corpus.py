@@ -193,8 +193,22 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         ratios={"train": 1 / 3, "dev": 1 / 3, "final_test": 1 / 3},
         max_group_task_version_fraction=0.6,
     )
+    role_anchor = task_family_split.freeze_role_anchor(split, inventory["task_versions"])
+    monkeypatch.setattr(
+        task_family_split,
+        "trusted_fleet_collection_root_anchor",
+        lambda: copy.deepcopy(role_anchor),
+    )
+    split = task_family_split.build_anchored(
+        inventory["task_versions"],
+        inventory_sha256=inventory["sha256"],
+        role_anchor=role_anchor,
+        seed="materializer-test-v1",
+        ratios={"train": 1 / 3, "dev": 1 / 3, "final_test": 1 / 3},
+        max_group_task_version_fraction=0.6,
+    )
     runtime = _runtime(inventory)
-    rendered = campaign.render(_request(), inventory, split, runtime)
+    rendered = campaign.render(_request(), inventory, split, runtime, role_anchor=role_anchor)
     roles = {(row["task_key"], row["task_version_id"]): row for row in split["tasks"]}
     candidate = rendered["task-selection.json"]["tasks"][0]
     role = roles[(candidate["task_key"], candidate["task_version_id"])]
@@ -266,6 +280,8 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
             "campaign_plan_sha256": packet["eval_plan_sha256"],
             "catalog_inventory_sha256": inventory["sha256"],
             "family_split_sha256": split["sha256"],
+            "root_role_anchor_id": task_family_split.TRUSTED_FLEET_COLLECTION_ROOT_ID,
+            "family_role_anchor_sha256": role_anchor["sha256"],
             "protected_family_lock_sha256": lock["sha256"],
             "source_kind": "teacher",
             "source_model_alias": "source",
@@ -295,9 +311,12 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
                     "56789",
                     strict=True,
                 )
-            },
+            }
+            | {"role_anchor": _sha("0")},
             "catalog_inventory_sha256": selection["catalog_inventory_sha256"],
             "family_split_sha256": selection["family_split_sha256"],
+            "root_role_anchor_id": task_family_split.TRUSTED_FLEET_COLLECTION_ROOT_ID,
+            "family_role_anchor_sha256": role_anchor["sha256"],
             "protected_family_lock_sha256": selection["protected_family_lock_sha256"],
             "protected_family_count": len(heldout_groups),
             "source_kind": "teacher",
@@ -337,6 +356,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         "eval-config.json": eval_config,
         "inventory.json": inventory,
         "split.json": split,
+        "role-anchor.json": role_anchor,
         "lock.json": lock,
         "runtime.json": runtime,
         "model-lock.json": {},
@@ -361,6 +381,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         "collection_eval_config": _ref(paths["eval-config.json"]),
         "inventory": _ref(paths["inventory.json"]),
         "family_split": _ref(paths["split.json"]),
+        "role_anchor": _ref(paths["role-anchor.json"]),
         "protected_family_lock": _ref(paths["lock.json"]),
         "runtime_bindings": _ref(paths["runtime.json"]),
         "records": _ref(records),
@@ -377,11 +398,37 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         lambda lock, root: (_Tokenizer(), {"repo": "Qwen/Qwen3.8-27B", "revision": "f" * 40}),
     )
     monkeypatch.setattr(corpus, "native_helper", lambda path: _helper)
-    return config, {"paths": paths, "record": record, "selection": selection, "receipt": receipt}
+    return config, {
+        "paths": paths,
+        "inventory": inventory,
+        "split": split,
+        "record": record,
+        "selection": selection,
+        "receipt": receipt,
+        "role_anchor": role_anchor,
+    }
 
 
 def _rewrite(path: Path, value: dict) -> None:
     _write(path, value)
+
+
+def _legacy_reseed_that_moves_a_heldout_family(state: dict) -> dict:
+    historic = {row["group_id"]: row["split"] for row in state["split"]["tasks"]}
+    for index in range(1, 100):
+        candidate = task_family_split.build(
+            state["inventory"]["task_versions"],
+            inventory_sha256=state["inventory"]["sha256"],
+            seed=f"unsafe-materializer-reseed-{index}",
+            ratios={"train": 1 / 3, "dev": 1 / 3, "final_test": 1 / 3},
+            max_group_task_version_fraction=0.6,
+        )
+        if any(
+            historic[row["group_id"]] != "train" and row["split"] == "train"
+            for row in candidate["tasks"]
+        ):
+            return candidate
+    raise AssertionError("test fixture did not produce a rebalanced held-out family")
 
 
 def test_materializes_only_bound_visible_action_windows(tmp_path: Path, monkeypatch) -> None:
@@ -608,5 +655,45 @@ def test_rejects_packet_template_binding_drift(tmp_path: Path, monkeypatch) -> N
     config["collection_packet"] = _ref(state["paths"]["packet.json"])
 
     with pytest.raises(ValueError, match="does not match admission selection"):
+        corpus.build(config, relative_to=tmp_path)
+    assert not Path(config["output"]).exists()
+
+
+def test_rejects_different_parent_anchor_before_private_record_read(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config, state = _fixture(tmp_path, monkeypatch)
+    changed = copy.deepcopy(state["role_anchor"])
+    changed["source"]["split_sha256"] = _sha("0")
+    changed["sha256"] = task_family_split.canonical_digest(
+        {key: item for key, item in changed.items() if key != "sha256"}
+    )
+    _rewrite(state["paths"]["role-anchor.json"], changed)
+    config["role_anchor"] = _ref(state["paths"]["role-anchor.json"])
+    monkeypatch.setattr(
+        corpus,
+        "iter_jsonl",
+        lambda *_args: pytest.fail("wrong anchor reached private record ingestion"),
+    )
+
+    with pytest.raises(ValueError, match="not the trusted root"):
+        corpus.build(config, relative_to=tmp_path)
+    assert not Path(config["output"]).exists()
+
+
+def test_rejects_resealed_legacy_resplit_before_private_record_read(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config, state = _fixture(tmp_path, monkeypatch)
+    legacy = _legacy_reseed_that_moves_a_heldout_family(state)
+    _rewrite(state["paths"]["split.json"], legacy)
+    config["family_split"] = _ref(state["paths"]["split.json"])
+    monkeypatch.setattr(
+        corpus,
+        "iter_jsonl",
+        lambda *_args: pytest.fail("legacy split reached private record ingestion"),
+    )
+
+    with pytest.raises(ValueError, match="family split is not bound to the reviewed catalog"):
         corpus.build(config, relative_to=tmp_path)
     assert not Path(config["output"]).exists()

@@ -18,6 +18,27 @@ from training import fleet_collection_admission as admission
 from training import task_family_split as splits
 from training.io import file_sha256
 
+_FIXTURE_ROOT: dict[str, Any] | None = None
+
+
+@pytest.fixture(autouse=True)
+def _synthetic_trusted_root(monkeypatch: pytest.MonkeyPatch):
+    """Use synthetic evidence only inside these isolated unit fixtures."""
+
+    global _FIXTURE_ROOT
+    _FIXTURE_ROOT = None
+
+    def trusted() -> dict[str, Any]:
+        if _FIXTURE_ROOT is None:
+            raise AssertionError(
+                "test must create its synthetic root before using a broad boundary"
+            )
+        return copy.deepcopy(_FIXTURE_ROOT)
+
+    monkeypatch.setattr(splits, "trusted_fleet_collection_root_anchor", trusted)
+    yield
+    _FIXTURE_ROOT = None
+
 
 def _sha(label: str) -> str:
     return "sha256:" + digest({"synthetic_label": label})
@@ -62,11 +83,22 @@ def _fixture(
     final_test_count: int = 0,
     pass_k: int = 1,
 ) -> dict[str, Any]:
+    global _FIXTURE_ROOT
     rows = _rows()
     inventory = _seal({"schema": "synthetic_sanitized_task_catalog_v1", "task_versions": rows})
     split = splits.build(
         rows,
         inventory_sha256=inventory["sha256"],
+        seed="admission-fixture-v1",
+        ratios={"train": 0.6, "dev": 0.2, "final_test": 0.2},
+        max_group_task_version_fraction=0.7,
+    )
+    role_anchor = splits.freeze_role_anchor(split, rows)
+    _FIXTURE_ROOT = copy.deepcopy(role_anchor)
+    split = splits.build_anchored(
+        rows,
+        inventory_sha256=inventory["sha256"],
+        role_anchor=role_anchor,
         seed="admission-fixture-v1",
         ratios={"train": 0.6, "dev": 0.2, "final_test": 0.2},
         max_group_task_version_fraction=0.7,
@@ -116,12 +148,14 @@ def _fixture(
         "campaign": _write_json(tmp_path / "campaign.json", campaign),
         "inventory": _write_json(tmp_path / "inventory.json", inventory),
         "family_split": _write_json(tmp_path / "split.json", split),
+        "role_anchor": _write_json(tmp_path / "role-anchor.json", role_anchor),
         "protected_family_lock": _write_json(tmp_path / "protected-lock.json", lock),
     }
     return {
         "campaign": campaign,
         "inventory": inventory,
         "split": split,
+        "role_anchor": role_anchor,
         "lock": lock,
         "model": model,
         "treatment": treatment,
@@ -216,6 +250,26 @@ def _run(fixture: dict[str, Any], attempts: list[dict[str, Any]]) -> tuple[dict[
     return result, fixture["tmp_path"] / request["output"]
 
 
+def _legacy_reseed_that_moves_a_heldout_family(fixture: dict[str, Any]) -> dict[str, Any]:
+    """Return a valid v1 split that moves a historical held-out family to train."""
+
+    historic = {row["group_id"]: row["split"] for row in fixture["split"]["tasks"]}
+    for index in range(1, 100):
+        candidate = splits.build(
+            fixture["inventory"]["task_versions"],
+            inventory_sha256=fixture["inventory"]["sha256"],
+            seed=f"unsafe-admission-reseed-{index}",
+            ratios={"train": 0.6, "dev": 0.2, "final_test": 0.2},
+            max_group_task_version_fraction=0.7,
+        )
+        if any(
+            historic[row["group_id"]] != "train" and row["split"] == "train"
+            for row in candidate["tasks"]
+        ):
+            return candidate
+    raise AssertionError("test fixture did not produce a rebalanced held-out family")
+
+
 def test_metadata_only_handoff_excludes_heldout_private_opaque_and_duplicates(
     tmp_path: Path,
 ) -> None:
@@ -298,6 +352,27 @@ def test_private_reasoning_marker_is_rejected(tmp_path: Path) -> None:
     )
     assert result["admitted_sessions"] == 0
     assert result["rejections"]["private_or_unknown_reasoning"] == 1
+
+
+def test_rejects_resealed_legacy_resplit_before_attempt_metadata_is_read(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixture = _fixture(tmp_path, train_count=1, dev_count=0)
+    legacy = _legacy_reseed_that_moves_a_heldout_family(fixture)
+    fixture["refs"]["family_split"] = _write_json(tmp_path / "split.json", legacy)
+    request = _request(
+        fixture,
+        [_attempt(fixture, fixture["by_role"]["train"][0], session_id="never-read")],
+    )
+    monkeypatch.setattr(
+        admission,
+        "iter_jsonl",
+        lambda *_args: pytest.fail("legacy split reached attempt-metadata ingestion"),
+    )
+
+    with pytest.raises(ValueError, match="anchored split and trusted role anchor"):
+        admission.build(request, relative_to=tmp_path)
+    assert not (tmp_path / request["output"]).exists()
 
 
 def test_campaign_must_explicitly_authorize_training_data_collection(tmp_path: Path) -> None:
@@ -409,6 +484,24 @@ def test_protected_family_lock_cannot_drop_a_heldout_family(tmp_path: Path) -> N
     )
 
     with pytest.raises(ValueError, match="exactly every immutable nontraining family"):
+        admission.build(request, relative_to=tmp_path)
+    assert not (tmp_path / request["output"]).exists()
+
+
+def test_anchored_admission_rejects_a_resealed_different_parent_anchor(tmp_path: Path) -> None:
+    fixture = _fixture(tmp_path, train_count=1, dev_count=0)
+    changed = copy.deepcopy(fixture["role_anchor"])
+    changed["source"]["split_sha256"] = _sha("different-parent")
+    changed["sha256"] = splits.canonical_digest(
+        {key: value for key, value in changed.items() if key != "sha256"}
+    )
+    fixture["refs"]["role_anchor"] = _write_json(tmp_path / "role-anchor.json", changed)
+    request = _request(
+        fixture,
+        [_attempt(fixture, fixture["by_role"]["train"][0], session_id="wrong-anchor")],
+    )
+
+    with pytest.raises(ValueError, match="not the trusted root"):
         admission.build(request, relative_to=tmp_path)
     assert not (tmp_path / request["output"]).exists()
 

@@ -84,6 +84,50 @@ def test_data_fleet_materialize_dispatches_private_builder(tmp_path, monkeypatch
     assert "train.parquet" not in result.stdout
 
 
+def test_data_fleet_roster_dispatches_metadata_only_builder(tmp_path, monkeypatch):
+    from training import fleet_collection_roster
+
+    config = tmp_path / "roster.json"
+    config.write_text("{}")
+    calls = []
+
+    def build(value, *, relative_to):
+        calls.append((value, relative_to))
+        return {
+            "submitted": False,
+            "artifact_kind": "metadata_roster_handoff_only",
+            "task_versions": 100,
+        }
+
+    monkeypatch.setattr(fleet_collection_roster, "build", build)
+    result = RUNNER.invoke(cli.app, ["data-fleet-roster", str(config)])
+    assert result.exit_code == 0
+    assert calls == [({}, config.parent.resolve())]
+    assert '"artifact_kind": "metadata_roster_handoff_only"' in result.stdout
+
+
+def test_data_fleet_freeze_role_anchor_dispatches_cpu_only_builder(tmp_path, monkeypatch):
+    from training import fleet_collection_anchor
+
+    config = tmp_path / "anchor.json"
+    config.write_text("{}")
+    calls = []
+
+    def build(value, *, relative_to):
+        calls.append((value, relative_to))
+        return {
+            "submitted": False,
+            "artifact_kind": "immutable_family_role_anchor",
+            "heldout_family_count": 25,
+        }
+
+    monkeypatch.setattr(fleet_collection_anchor, "build", build)
+    result = RUNNER.invoke(cli.app, ["data-fleet-freeze-role-anchor", str(config)])
+    assert result.exit_code == 0
+    assert calls == [({}, config.parent.resolve())]
+    assert '"artifact_kind": "immutable_family_role_anchor"' in result.stdout
+
+
 @pytest.fixture
 def prepared(tmp_path, monkeypatch):
     config = tmp_path / "config.yaml"
