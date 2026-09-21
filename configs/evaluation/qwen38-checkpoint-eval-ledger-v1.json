@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "observed_at": "2026-09-21T01:11:09Z",
+  "observed_at": "2026-09-21T04:07:44Z",
   "purpose": "Create-once checkpoint and evaluation ledger for the Qwen3.8-27B Fleet cyber lift study. A row is not a capability result until its exact matched evaluation is accepted.",
   "serving_readiness_matrix": "configs/evaluation/qwen38-checkpoint-serving-readiness-v1.json",
   "comparison_contract": {
@@ -424,11 +424,60 @@
     },
     {
       "artifact_id": "q38-full-weight-broad-64k-b8-lr3e-6",
-      "run_name": "chris-q38-t3k64-b8-v2-2f111132",
+      "run_name": "chris-q38-t3k64-b8-v3-fc6b1fbe",
       "priority_when_accepted": 2,
       "motivation": "Test whether increasing the supervised context ceiling from 32K to 64K improves learning from long successful teacher trajectories while holding the 57.4M-token corpus, global batch 8, one-epoch exposure, and full-weight method fixed.",
-      "status": "failed_type_error_after_wandb_reported_optimizer_step_1_resources_released_no_capability_result",
+      "status": "successor_v3_running_first_finite_optimizer_update_step_1_zero_restarts_checkpoint_due_step_275",
       "run_identity": {
+        "api_run_id": "fc6b1fbe-3827-4a9d-a793-e206d793f6f5",
+        "rayjob_name": "chris-q38-t3k64-b8-v3-fc6b1fbe",
+        "rayjob_uid": "545bd9db-479f-4064-b61b-40c8c4a491fe",
+        "workload_name": "rayjob-chris-q38-t3k64-b8-v3-fc6b1fbe-2b3eb",
+        "workload_uid": "34d14951-9b04-4f50-9c4f-086d70fa7aa6",
+        "raycluster_name": "chris-q38-t3k64-b8-v3-fc6b1fbe-g2g55",
+        "raycluster_uid": "a6fcf9e7-6ac4-40fc-aae2-b174360c40f7",
+        "pod_name": "chris-q38-t3k64-b8-v3-fc6b1fbe-g2g55-head-9ww4r",
+        "pod_uid": "c9f226a7-ea0f-45eb-b8ea-d81bf2c6bb76",
+        "output_root": "/mnt/sfs/jobs/chris-q38-t3k64-b8-v3",
+        "plan_sha256": "sha256:7891533965a69b7dff6dc2dfc72e323d440ddff645cbd646a36cbc4a0dc22dd5",
+        "request_sha256": "sha256:3d27e97337cb6d41c68dc840f57269998d613c2fb6e2c767b9ea15ef85faca7f",
+        "rendered_manifest_sha256": "sha256:99b820e0be9f876eb25bdca38f71ea7c41dbfcac637f2f34b65066d6ca8d4bfb",
+        "image_sha256": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+        "admitted_at": "2026-09-21T03:49:36Z",
+        "ready_at": "2026-09-21T03:49:54Z",
+        "failure_alerts": "off",
+        "priority_class": "c1",
+        "wandb_url": "https://wandb.ai/thefleet/cyber-post-train/runs/chris-q38-t3k64-b8-v3"
+      },
+      "first_finite_update": {
+        "optimizer_step": 1,
+        "loss": 0.45314645767211914,
+        "grad_norm": 2.2634124755859375,
+        "learning_rate": 3.000000106112566e-06,
+        "tokens_per_second": 1136.5356692204825,
+        "all_numeric_metrics_finite": true,
+        "progress_file_sha256": "sha256:55949815a51c91dea1eff65f4be591e56ef8777c7be15b79c7c0d80ac3257cba",
+        "progress_receipt_sha256": "sha256:e639fe89181de0f54d3e934fbe183943486fa03322e4f91f0e1122363b9af101",
+        "metrics_file_sha256": "sha256:77bc79ed96e95a109339300e81c08d2740020eac8a69f9201c68945c479d4637",
+        "evidence": "docs/evidence/qwen38-teacher3k-64k-v3-first-update-20260921.json"
+      },
+      "checkpoint_and_evaluation_route": {
+        "checkpoint_interval": 275,
+        "planned_final_step": 1120,
+        "status": "waiting_for_first_reloadable_checkpoint",
+        "fleet_holdout": {
+          "task_set": "frozen_dev17",
+          "harness": "opencode",
+          "status": "not_launched_waiting_for_checkpoint"
+        },
+        "webexploitbench": {
+          "harness": "opencode",
+          "rollout_and_scoring_separated": true,
+          "matched_base_control_required": true,
+          "status": "not_launched_waiting_for_checkpoint"
+        }
+      },
+      "predecessor_run_identity": {
         "api_run_id": "2f111132-a6d5-407c-aa3f-6ceed1033b8e",
         "rayjob_name": "chris-q38-t3k64-b8-v2-2f111132",
         "rayjob_uid": "d40e5a78-1d95-4353-a2aa-9c3c0fe314c6",
@@ -445,7 +494,7 @@
         "failure_alerts": "off",
         "priority_class": "c1"
       },
-      "terminal": {
+      "predecessor_terminal": {
         "end_at": "2026-09-21T00:57:41Z",
         "failed_file_sha256": "sha256:30d0492fb551ca5da15c94afe2d3954ca5aa7d46449ec91ba27d967b194f64e6",
         "failed_receipt_sha256": "sha256:eadc420c31facc867da571d2e409862ae73b8531b5db1ec0dc5eaed136f81818",
