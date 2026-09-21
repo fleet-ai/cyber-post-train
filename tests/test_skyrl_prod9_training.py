@@ -8,6 +8,7 @@ import gzip
 import hashlib
 import json
 import os
+import shutil
 import subprocess
 import sys
 from contextlib import asynccontextmanager
@@ -66,6 +67,35 @@ def test_prod9_reuses_only_the_proven_miles_shape_and_qwen38_reload_gate() -> No
     assert reload_gate["generated_tokens"] == 2
     assert reload_gate["optimizer_updates"] == 0
     assert hardening.verify_source_closure(SOURCE_CLOSURE)["tool_result_token_safe"] is True
+
+
+@pytest.mark.parametrize(
+    "relative",
+    ("training/skyrl.py", "training/skyrl_training.py"),
+)
+def test_prod9_source_closure_rejects_transitive_runtime_byte_drift(
+    tmp_path: Path, monkeypatch, relative: str
+) -> None:
+    """A self-consistent regenerated plan cannot authorize unreviewed runtime bytes."""
+    value = json.loads(SOURCE_CLOSURE.read_text())
+    review_root = tmp_path / "review-root"
+    for binding in value["tool_surface_authority"]["local_code"].values():
+        source = (SOURCE_CLOSURE.parent / binding["path"]).resolve()
+        destination = review_root / source.relative_to(ROOT)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, destination)
+    evidence = review_root / "configs/data/source-closure.json"
+    evidence.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(SOURCE_CLOSURE, evidence)
+    target = review_root / relative
+    target.write_bytes(target.read_bytes() + b"\n# adversarial unreviewed runtime drift\n")
+    monkeypatch.setattr(
+        hardening,
+        "__file__",
+        str(review_root / "training/skyrl_prod9_hardening.py"),
+    )
+    with pytest.raises(ValueError, match="source closure file digest changed"):
+        hardening.verify_source_closure(evidence)
 
 
 def _bundle(request: dict) -> dict:

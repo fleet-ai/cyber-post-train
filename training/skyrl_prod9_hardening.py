@@ -160,6 +160,42 @@ def verify_source_closure(path: Path) -> dict[str, Any]:
     if not isinstance(local_code, dict):
         raise ValueError("prod9 source closure lacks local source bindings")
     required = {
+        "skyrl_training_compiler": (
+            "training/skyrl_training.py",
+            {
+                "compile_rl",
+                "job_request",
+                "check_artifacts",
+                "native_source",
+                "dataset",
+                "native_result",
+            },
+        ),
+        "skyrl_config_runtime": (
+            "training/skyrl.py",
+            {"SkyRLConfig", "overrides", "native_config"},
+        ),
+        "skyrl_rollout_runtime": (
+            "training/skyrl_rollout.py",
+            {"Generator"},
+        ),
+        "reward_qualification": (
+            "training/rl_reward_canary.py",
+            {
+                "validate_source_package",
+                "source_proof",
+                "validate_run_config",
+                "validate_plan_binding",
+            },
+        ),
+        "rl_runtime": (
+            "training/rl_runtime.py",
+            {"native_failure", "native_rejection", "run"},
+        ),
+        "data_preparation": (
+            "training/rl_data.py",
+            {"build"},
+        ),
         "episode_runtime": ("training/rl_episode.py", {"collect", "_agent"}),
         "skyrl_episode_runtime": (
             "training/skyrl_episode.py",
@@ -178,6 +214,50 @@ def verify_source_closure(path: Path) -> dict[str, Any]:
         "prod9_rollout_runtime": (
             "training/skyrl_prod9_rollout.py",
             {"Generator", "offline_token_safe_tool_probe", "runtime_binding"},
+        ),
+        "sft_runtime_support": (
+            "training/sft_runtime.py",
+            {"write_receipt", "_checked_file"},
+        ),
+        "dense_runtime": (
+            "training/dense.py",
+            {"encode_record"},
+        ),
+        "io_runtime": (
+            "training/io.py",
+            {"canonical_json", "digest_json"},
+        ),
+        "sft_compiler": (
+            "training/sft.py",
+            {"compile_sft", "job_request"},
+        ),
+        "model_binding": (
+            "training/models.py",
+            {"bound_model"},
+        ),
+        "corpus_builder": (
+            "training/corpus.py",
+            {"build"},
+        ),
+        "split_runtime": (
+            "training/splits.py",
+            {"assign_split"},
+        ),
+        "qwen_tool_parser": (
+            "training/qwen_tools.py",
+            {"parse_tool_calls"},
+        ),
+        "miles_conversion_support": (
+            "training/miles_conversion.py",
+            {"_hash"},
+        ),
+        "miles_config_support": (
+            "training/miles.py",
+            {"MilesConfig"},
+        ),
+        "fleet_binding": (
+            "evals/fleet/opencode_self_hosted.py",
+            {"bind_task", "verify_task", "assert_required_task_tools"},
         ),
         "prod9_training_runtime": (
             "training/skyrl_prod9_training.py",
@@ -243,11 +323,24 @@ def verify_source_closure(path: Path) -> dict[str, Any]:
             "cyber_post_train/gpu_capacity.py",
             {"build_capacity_census", "live_capacity_census"},
         ),
+        "jobs_runtime": (
+            "cyber_post_train/jobs.py",
+            {"JobsError", "digest", "bundled_request", "Jobs"},
+        ),
         "checkpoint_sealer": (
             "training/skyrl_posttrain.py",
             {"seal_checkpoint", "verify_manifest", "export_checkpoint"},
         ),
     }
+    # The reviewed evidence must cover every byte that the prod9 bundle can
+    # execute.  This lazy import is safe because source verification runs only
+    # after module initialization, and it makes a future RUNTIME_FILES addition
+    # fail closed until the immutable evidence is extended too.
+    from . import skyrl_prod9_training
+
+    required_paths = {relative for relative, _symbols in required.values()}
+    if not set(skyrl_prod9_training.RUNTIME_FILES) <= required_paths:
+        raise ValueError("prod9 source closure omits a bundled runtime file")
     root = Path(__file__).resolve().parents[1]
     checked: dict[str, str] = {}
     for name, (relative, symbols) in required.items():

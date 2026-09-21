@@ -139,6 +139,46 @@
     ],
     "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
     "local_code": {
+      "skyrl_training_compiler": {
+        "path": "../../training/skyrl_training.py",
+        "file_sha256": "sha256:5f282826ddf892c3486820aea0621582f4b083e9a89b3a6a361a6f2e5f68294a",
+        "symbols": [
+          "compile_rl",
+          "job_request",
+          "check_artifacts",
+          "native_source",
+          "dataset",
+          "native_result"
+        ]
+      },
+      "skyrl_config_runtime": {
+        "path": "../../training/skyrl.py",
+        "file_sha256": "sha256:aaa3c4a2d26b3f75d521e0b37387e0a39e9f3b719038a8aa48dc6ebd3c130f74",
+        "symbols": [
+          "SkyRLConfig",
+          "overrides",
+          "native_config"
+        ]
+      },
+      "reward_qualification": {
+        "path": "../../training/rl_reward_canary.py",
+        "file_sha256": "sha256:6020d598b30743a6f63f2c6b0b2e457fe794bd3537fd1baa4b70cb0e10866209",
+        "symbols": [
+          "validate_source_package",
+          "source_proof",
+          "validate_run_config",
+          "validate_plan_binding"
+        ]
+      },
+      "rl_runtime": {
+        "path": "../../training/rl_runtime.py",
+        "file_sha256": "sha256:7e748b623a0411866b4a76b76f3d907f4d84cbf0779fb6a07db85310913cc947",
+        "symbols": [
+          "native_failure",
+          "native_rejection",
+          "run"
+        ]
+      },
       "data_preparation": {
         "path": "../../training/rl_data.py",
         "file_sha256": "sha256:49a5032de0e18f1fdde78c0e475488bd035b107a0403633bbfcb43f1c7569b8e",
@@ -164,7 +204,7 @@
       },
       "prod9_hardening": {
         "path": "../../training/skyrl_prod9_hardening.py",
-        "file_sha256": "sha256:de5b18194a0018878288ae601ba000f9365af97db685afe2d04de3659cffb443",
+        "file_sha256": "sha256:7775264a60f972ea65d9563ce21e05e4b8eb2be4f5ea7b6dda07606169f4a3db",
         "symbols": [
           "Recorder",
           "validate_episode_limits",
@@ -180,6 +220,79 @@
           "Generator",
           "offline_token_safe_tool_probe",
           "runtime_binding"
+        ]
+      },
+      "sft_runtime_support": {
+        "path": "../../training/sft_runtime.py",
+        "file_sha256": "sha256:8cb671f377d089e1303248e237f386c256b212b15e41dadc07ac49cf2695ee17",
+        "symbols": [
+          "write_receipt",
+          "_checked_file"
+        ]
+      },
+      "dense_runtime": {
+        "path": "../../training/dense.py",
+        "file_sha256": "sha256:712038f1abf4f461cf471afc50f7fbbfe90c9d2d7b9e0be1a81583378c933012",
+        "symbols": [
+          "encode_record"
+        ]
+      },
+      "io_runtime": {
+        "path": "../../training/io.py",
+        "file_sha256": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
+        "symbols": [
+          "canonical_json",
+          "digest_json"
+        ]
+      },
+      "sft_compiler": {
+        "path": "../../training/sft.py",
+        "file_sha256": "sha256:447dcaac2b610c1b6c124a13e7d541edc4c3145d26d8ff31577d75b37d8dd67d",
+        "symbols": [
+          "compile_sft",
+          "job_request"
+        ]
+      },
+      "model_binding": {
+        "path": "../../training/models.py",
+        "file_sha256": "sha256:712adce5f073de13d02168cd17c2f7c396ba094a1ebc9a34decafb8639b8375e",
+        "symbols": [
+          "bound_model"
+        ]
+      },
+      "corpus_builder": {
+        "path": "../../training/corpus.py",
+        "file_sha256": "sha256:28669e75e71323252765da81b8bd605e5dafaeecda55782a6316f3a0eb39f809",
+        "symbols": [
+          "build"
+        ]
+      },
+      "split_runtime": {
+        "path": "../../training/splits.py",
+        "file_sha256": "sha256:b3b5dd76e9307edb7572b5d71e192a4ae7846ac78e34f61cd19b57289bfda1c5",
+        "symbols": [
+          "assign_split"
+        ]
+      },
+      "qwen_tool_parser": {
+        "path": "../../training/qwen_tools.py",
+        "file_sha256": "sha256:00e0c3f322d5416c0697d2bb4504766bfa32f1436b3b5122f6dd7326c7698fd9",
+        "symbols": [
+          "parse_tool_calls"
+        ]
+      },
+      "miles_conversion_support": {
+        "path": "../../training/miles_conversion.py",
+        "file_sha256": "sha256:df7916887a1edf0f3f217dcc907fb514f38cf1409e07a144bab78b491120d8f0",
+        "symbols": [
+          "_hash"
+        ]
+      },
+      "miles_config_support": {
+        "path": "../../training/miles.py",
+        "file_sha256": "sha256:53d6bcc006e175bb2bff0011196f89759c34bed039dbaf14eff6209e98f31851",
+        "symbols": [
+          "MilesConfig"
         ]
       },
       "prod9_training_runtime": {
@@ -258,6 +371,16 @@
           "live_capacity_census"
         ]
       },
+      "jobs_runtime": {
+        "path": "../../cyber_post_train/jobs.py",
+        "file_sha256": "sha256:bc0d08a7a27b48ff5a21a5d824356d6e92e4856b17cc7296a976aa18a2baa40d",
+        "symbols": [
+          "JobsError",
+          "digest",
+          "bundled_request",
+          "Jobs"
+        ]
+      },
       "checkpoint_sealer": {
         "path": "../../training/skyrl_posttrain.py",
         "file_sha256": "sha256:295950d3605fc45eb3cb765340e819909e82af2a4e532548a61ad561f044408e",
@@ -322,5 +445,5 @@
       "incident_evidence_self_sha256": "sha256:c45f12a8fa799900053a1bd7b1e33ff26e89d517ae552188bda0e66cf675ca2d"
     }
   },
-  "sha256": "sha256:389670a0ef577d0436958b97f3e8355d1dcb3127f5205dc4027a7bc8decec45f"
+  "sha256": "sha256:19d045497bbc93926faa8f0f4ba70f67b7c798f478368a6f51310b3565caacd2"
 }
