@@ -253,7 +253,18 @@ class Recorder:
             if episode_remaining <= 0:
                 raise EpisodeBudgetExceeded("response_budget_exhausted")
             if turn_remaining <= 0:
-                raise EpisodeBudgetExceeded("turn_response_budget_exhausted")
+                if kind != "action" or not texts or record.response_length != turn_tokens:
+                    raise EpisodeBudgetExceeded("turn_response_budget_exhausted")
+                # This is the same model-visible output-limit outcome that the
+                # matched OpenCode harness reports when one assistant response
+                # consumes its full allowance. Preserve the exact sampled IDs
+                # as a final policy step, but never parse or execute a possibly
+                # incomplete tool call. The shared lifecycle can then request
+                # an authoritative Fleet grade instead of aborting the batch
+                # before collection or inventing a reward locally.
+                self.steps.append(record)
+                self.recording = None
+                return "".join(texts), "turn_limit"
             if context_remaining <= 0:
                 raise EpisodeBudgetExceeded("generation_incomplete_context_full")
             cap = min(
@@ -309,7 +320,7 @@ class Recorder:
             texts.append(text)
             self.steps.append(record)
             self.recording = None
-            return "".join(texts)
+            return "".join(texts), "ok"
 
     def _append(self, ids, probabilities):
         if self.response_length + len(ids) > self.response_tokens:
@@ -329,10 +340,10 @@ class Recorder:
         summary_budget = self.config["rl"]["compaction_summary_tokens"]
         if len(prompt) + summary_budget > self.config["rl"]["context_tokens"]:
             raise EpisodeBudgetExceeded("generation_incomplete_context_full")
-        summary = await self._generate_complete(
+        summary, finish = await self._generate_complete(
             prompt, turn_tokens=summary_budget, kind="compaction"
         )
-        if not summary.strip():
+        if finish != "ok" or not summary.strip():
             raise InvalidEpisode("empty_compaction_summary")
         self.messages[:] = [
             {
@@ -359,13 +370,13 @@ class Recorder:
             > self.config["rl"]["context_tokens"]
         ):
             raise EpisodeBudgetExceeded("generation_incomplete_context_full")
-        text = await self._generate_complete(
+        text, finish = await self._generate_complete(
             prompt,
             turn_tokens=self.config["rl"]["max_tokens_per_turn"],
             kind="action",
         )
         self.last_text = text
-        return SimpleNamespace(text=text, finish="ok")
+        return SimpleNamespace(text=text, finish=finish)
 
     def append_assistant(self, text, call, turn):
         if self.last_text is None or text != self.last_text:
@@ -549,11 +560,77 @@ async def offline_long_horizon_probe(model, tokenizer, helper: Path):
     second_prompt = action_requests[1]["prompt_token_ids"][0]
     if second_prompt != first_prompt + action_ids[: limits["generation_chunk_tokens"]]:
         raise InvalidEpisode("skyrl_offline_chunk_continuation_failed")
+
+    class OutputLimitEngine:
+        model_name = model["root"]
+
+        def __init__(self):
+            self.requests = []
+
+        async def generate(self, request):
+            self.requests.append(copy.deepcopy(request))
+            cap = request["sampling_params"]["max_tokens"]
+            return {
+                "responses": ["unfinished"],
+                "response_ids": [[101] * cap],
+                "response_logprobs": [[-0.2] * cap],
+                "stop_reasons": ["length"],
+            }
+
+    class NoPartialToolSession:
+        def __init__(self):
+            self.calls = []
+
+        async def call_tool(self, name, arguments):
+            self.calls.append((name, copy.deepcopy(arguments)))
+            raise InvalidEpisode("skyrl_offline_output_limit_executed_partial_tool")
+
+    output_config = copy.deepcopy(config)
+    output_config["rl"] = {
+        **limits,
+        "max_tokens_per_turn": 16,
+        "generation_chunk_tokens": 8,
+    }
+    output_engine, output_session = OutputLimitEngine(), NoPartialToolSession()
+    output_recorder = Recorder(
+        output_config,
+        tokenizer,
+        output_engine,
+        {"temperature": 0.0, "logprobs": 0},
+        1024,
+        helper,
+    )
+    output_messages, output_reason, _ = await rl_episode._agent(
+        output_recorder,
+        output_session,
+        [{"role": "user", "content": task}],
+        tools,
+        output_config["rl"],
+        parse,
+    )
+    output_samples = output_recorder.finalize(
+        0.25,
+        {"done_reason": output_reason, "verifier_execution_id": "offline-output-limit-probe"},
+        0.0,
+    )
+    if (
+        output_reason != "turn_response_budget_exhausted"
+        or output_session.calls
+        or len(output_engine.requests) != 2
+        or len(output_samples) != 1
+        or output_samples[0].response_length != 16
+        or output_samples[0].reward != 0.25
+        or output_samples[0].metadata["done_reason"] != output_reason
+        or output_messages[-1].get("role") != "assistant"
+    ):
+        raise InvalidEpisode("skyrl_offline_output_limit_probe_failed")
     return {
         "chunk_continuation_checked": True,
         "compaction_checked": True,
         "stepwise_prompt_checked": True,
         "ordered_multi_tool_execution_checked": True,
+        "output_limit_gradeable_checked": True,
+        "output_limit_partial_tool_blocked_checked": True,
         "samples": len(samples),
         "generation_requests": len(engine.requests),
     }

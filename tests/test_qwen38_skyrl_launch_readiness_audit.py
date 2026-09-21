@@ -53,18 +53,18 @@ def test_v17_and_prod4_recompile_to_the_frozen_digests_and_resource_shape() -> N
     topology = value["v17_development_topology_gate"]
     prod4 = value["prod4_one_step_reward_gate"]
     assert topology["compiled_digests"] == {
-        "plan_sha256": ("sha256:b5c8b625f9c42f4d77c5f2c5bfc6825ba7c7eadee685fa76b0acf2e258f311ee"),
+        "plan_sha256": ("sha256:b4122e3b07b0df82ed5a037c47cf268fb74ef20ec1e78f0f5d8c61d3f1712a53"),
         "request_sha256": (
-            "sha256:202174da94bcd30dfdd235a9c50218d3aa4f46b8dc9b6f44e0a582acfc869085"
+            "sha256:72c08c60b5e8f299e49977a1caa037c6b6f0524eba56806c2718c464fe6cb3a3"
         ),
         "fleetjob_manifest_sha256": (
-            "sha256:3d5f1b508e6999a8853d67ae1fdfb4c396ed05be92922c4c9b419ce325ab9c6f"
+            "sha256:de9ed0b8eed9a13d8c1fc180d7e3d09ff67c39e587f7bd7665f62f71dbe85803"
         ),
         "preflight_manifest_sha256": (
-            "sha256:fa008b04313ad576d46adfd0815b0836c8405ea62a47a6b569c13ad0277811fe"
+            "sha256:5eb59f63df0a436f88859e7586442507789304a08426374c255be4a353144a76"
         ),
         "receipt_verifier_manifest_sha256": (
-            "sha256:d13bcda162a66989a40d207828cd79dd3ce174b2a47b3b2480c4795349ff3529"
+            "sha256:e1d17fa2a3f941eb529b69a3f1eb0ca2a1f740e275ea48bb8d2f5308cad0b736"
         ),
     }
     assert topology["resource_shape"] == {
@@ -88,12 +88,12 @@ def test_v17_and_prod4_recompile_to_the_frozen_digests_and_resource_shape() -> N
     assert topology["submission_gate"]["submission_authorized"] is False
 
     assert prod4["compiled_digests"] == {
-        "plan_sha256": ("sha256:07f2da387d2b296a788575739b35ca10acfcf8af604dec6b97e1aef5838a97da"),
+        "plan_sha256": ("sha256:09cabfc727e8b8448bd00a5ea3cee03914844e67cfc80b1f033bdbe2671212de"),
         "request_sha256": (
-            "sha256:c873c40708fffa255da924b2593d67fbf93587f6370ccb28fb79b3dc1b6671a9"
+            "sha256:7c2df31feceb5c741cb16463b554b91d00b11c6bf50ec85b3203706823c2fb44"
         ),
         "sanitized_manifest_self_sha256": (
-            "sha256:109be2f4fba07a6eabaffc3c94048640214170d95ef311b2db107ac0331ffc16"
+            "sha256:5561f1a349abbe1a580dd5763368c1e6c1524861c39d744f7dad4f25d9950dd3"
         ),
         "staged_manifest_observed": False,
     }
@@ -104,7 +104,7 @@ def test_v17_and_prod4_recompile_to_the_frozen_digests_and_resource_shape() -> N
         "gpus": 8,
         "requeue_if_preempted": False,
     }
-    assert prod4["wandb"]["run_id"] == "chris-q38-rlreward-prod7"
+    assert prod4["wandb"]["run_id"] == "chris-q38-rlreward-prod8"
     assert prod4["wandb"]["resume"] == "never"
     assert prod4["wandb"]["fresh_run_ID_absence_checked_before_submit"] is False
     assert prod4["watchdog"]["hard_seconds"] == 14 * 60 * 60

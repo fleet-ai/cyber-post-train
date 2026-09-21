@@ -15,9 +15,9 @@ from training import rl_reward_canary as canary
 from training import sft, skyrl_training
 
 ROOT = Path(__file__).resolve().parents[1]
-DATA = ROOT / "configs/qualification/qwen38-rl-reward-canary-data-prod-v7.json"
-RUN = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod-v7.json"
-MANIFEST = ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v7.json"
+DATA = ROOT / "configs/qualification/qwen38-rl-reward-canary-data-prod-v8.json"
+RUN = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod-v8.json"
+MANIFEST = ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json"
 PROD6_TERMINAL_EVIDENCE = (
     ROOT / "docs/evidence/qwen38-study/2026-09-21-skyrl-prod6-observer-induced-release-v1.json"
 )
@@ -144,8 +144,8 @@ def test_canonical_source_receipts_remain_byte_identical() -> None:
 def test_one_node_one_step_config_compiles_to_the_qualified_image(monkeypatch) -> None:
     plan, manifest = compile_canary(monkeypatch)
     request = skyrl_training.job_request(plan)
-    assert digest(plan) == "07f2da387d2b296a788575739b35ca10acfcf8af604dec6b97e1aef5838a97da"
-    assert digest(request) == "c873c40708fffa255da924b2593d67fbf93587f6370ccb28fb79b3dc1b6671a9"
+    assert digest(plan) == "09cabfc727e8b8448bd00a5ea3cee03914844e67cfc80b1f033bdbe2671212de"
+    assert digest(request) == "7c2df31feceb5c741cb16463b554b91d00b11c6bf50ec85b3203706823c2fb44"
     arguments, overrides = plan["arguments"], plan["native_overrides"]
     assert plan["data"] == manifest
     assert request["image"] == canary.IMAGE

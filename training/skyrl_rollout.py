@@ -214,6 +214,20 @@ class Generator:
                 for samples in trajectories
                 for index in range(len(samples))
             ]
+            stop_reasons = [
+                (
+                    "length"
+                    if last
+                    and sample.metadata.get("done_reason") == "turn_response_budget_exhausted"
+                    else "stop"
+                )
+                for samples in trajectories
+                for sample, last in zip(
+                    samples,
+                    [index == len(samples) - 1 for index in range(len(samples))],
+                    strict=True,
+                )
+            ]
             generation_times = [
                 duration
                 for duration, samples in zip(durations, trajectories, strict=True)
@@ -225,7 +239,7 @@ class Generator:
                 "rewards": [step.reward for step in steps],
                 "loss_masks": [step.loss_mask for step in steps],
                 "rollout_logprobs": [step.rollout_log_probs for step in steps],
-                "stop_reasons": ["stop"] * len(steps),
+                "stop_reasons": stop_reasons,
                 "trajectory_ids": trajectory_ids,
                 "trajectory_generation_times": generation_times,
                 "is_last_step": is_last_step,

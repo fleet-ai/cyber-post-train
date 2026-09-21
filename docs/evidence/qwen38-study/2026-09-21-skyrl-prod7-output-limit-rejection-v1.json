@@ -1,0 +1,77 @@
+{
+  "schema": "cyber_skyrl_prod7_output_limit_rejection_v1",
+  "status": "clean_model_output_limit_rejection_before_collection",
+  "recorded_at": "2026-09-21T06:53:44Z",
+  "source": {
+    "qualification_main_commit": "3763994e15236a1fb42ebd7c3e46f867aed91c3c",
+    "plan_sha256": "c80fb774fed97aa6367245991292f5bb76078f43b7f0182c08bb1b5482d4294d",
+    "request_sha256": "49511ecb81f6897a06e44c850a86e9ea4152a331f9353fbb2bea97a58fc54525",
+    "server_preview_sha256": "6db071519e03246d29aaa56d3a21d98330a12637af9342b72d3a82fc5afa7caa",
+    "direct_manifest_sha256": "a5971c1210819aa21400f31cfa1711e7d1e1726074760797e1d156af5e7ed8a7",
+    "create_receipt_self_sha256": "1a6159bc1c76ed1b58c5f18146f96d0a230ffec3922a2200f643c661518136d8"
+  },
+  "run": {
+    "name": "chris-q38-rlreward-prod7",
+    "deterministic_run_id": "8cae141c-9e88-5186-8db0-e69f20f4d7e1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-rlreward-prod7",
+    "rayjob_uid": "8fc9fa58-48a9-4a47-bc88-687524078e04",
+    "workload_uid": "62aa7a2c-2872-4a37-99f0-404f76f65cd5",
+    "raycluster_uid": "ff9064c5-ca76-46dc-9ec7-5a692e3c71a2",
+    "pod_uid": "c2a20e94-52e0-43c2-97c1-a57cab5674d3",
+    "failure_alerts": "off",
+    "priority_class": "c1",
+    "queue_priority": "q1",
+    "gpus": 8,
+    "restarts": 0
+  },
+  "declared_horizon": {
+    "context_tokens": 262144,
+    "episode_response_tokens": 4194304,
+    "assistant_response_tokens": 32768,
+    "generation_chunk_tokens": 4096,
+    "compaction_trigger_tokens": 163840,
+    "compaction_summary_tokens": 8192,
+    "max_turns": 1200,
+    "episode_seconds": 14400
+  },
+  "observed_outcome": {
+    "phase": "development_evaluation_before_training",
+    "episode_started_at": "2026-09-21T04:57:29Z",
+    "terminal_observed_at": "2026-09-21T06:47:00Z",
+    "sanitized_reason": "turn_response_budget_exhausted",
+    "interpretation": "The runtime continued exact 4096-token chunks until one assistant response reached its declared 32768-token output ceiling. This is the model-visible output-limit outcome used by the matched OpenCode protocol; it is not context overflow, compaction failure, a Kubernetes failure, or an optimizer result.",
+    "native_rejected_file_sha256": "1d5bc394b1e36c6434bc56a8d324c171a855017e5fa078e68939238124396726",
+    "native_rejected_self_sha256": "c533104732ebf51234b8d5b8b080f4e678da0962a2710db1b4769fa3b72dc84f",
+    "batch_rejected_file_sha256": "1d5bc394b1e36c6434bc56a8d324c171a855017e5fa078e68939238124396726",
+    "metrics_file_sha256": "94521f65fd9b917741bb74768158b8d7a8585313967fecfaac3cfbdee7203819",
+    "metrics_lines": 1,
+    "reported_optimizer_steps": [
+      0
+    ],
+    "collected_episodes": 0,
+    "authoritative_rewards": 0,
+    "finite_optimizer_updates": 0,
+    "checkpoint_files": 0,
+    "capability_result": false
+  },
+  "release": {
+    "observer_status": "released_without_accepted_execution",
+    "observer_self_sha256": "ea0355c9bfb47ae38cc705ec476a6a4d1109cdfcc7271a04be68037050a288e0",
+    "safe_evidence_receipt_self_sha256": "30456f92c2a8856e0c8a826c3da536388ed82b35ac07ee2f793fd7bd791c1bfd",
+    "released_at": "2026-09-21T06:48:04Z",
+    "rayjob_not_found": true,
+    "workload_not_found": true,
+    "raycluster_not_found": true,
+    "pod_not_found": true,
+    "post_release_nodes": 6,
+    "post_release_gpus": 48,
+    "post_release_census_sha256": "2b037a14d9b1dcb30c62ea65497c53cd7a3c63da68bbcfdc62480fe845724cc9"
+  },
+  "repair_boundary": {
+    "gradeable_reason": "turn_response_budget_exhausted",
+    "required_behavior": "Preserve the exact sampled token IDs and log probabilities as the final policy step, execute no possibly partial tool call, obtain the authoritative Fleet score, report the final native stop reason as length, and release the environment. Context, total-response, turn-count, timeout, transport, parser, and infrastructure failures remain fail-closed.",
+    "why": "A declared model output ceiling is a truthful policy outcome. Aborting before grading discards usable negative evidence and can stop an entire grouped RL batch; assigning a local zero would fabricate reward. Authoritative scoring avoids both errors."
+  },
+  "privacy": "No task prompt, sampled response, tool result, flag, credential, private log, or sealed score is included.",
+  "sha256": "sha256:c45f12a8fa799900053a1bd7b1e33ff26e89d517ae552188bda0e66cf675ca2d"
+}

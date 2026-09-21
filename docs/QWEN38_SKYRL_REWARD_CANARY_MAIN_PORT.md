@@ -184,3 +184,38 @@ Sanitized incident and release evidence is recorded in
 It records zero collected training batches, zero optimizer updates, zero
 checkpoints, and complete release of the eight GPUs. It makes no capability
 claim.
+
+## A model output limit is graded, but partial tools never run
+
+Prod7 reached the pre-training development episode and generated continuously
+for about one hour and fifty minutes. The recorder correctly continued each
+4,096-token generation chunk from the exact preceding token IDs. The episode
+ended only when one assistant response consumed its declared 32,768-token
+allowance without an end marker. This is the same model-visible `output_limit`
+outcome reported by the matched OpenCode protocol. It is not a context-window
+overflow, compaction failure, cluster failure, reward, optimizer update, or
+capability result.
+
+Rejecting this outcome before scoring stops the whole grouped RL batch and
+throws away a useful failed policy attempt. Assigning zero locally would be
+worse because that would invent a reward. The repaired boundary therefore does
+four exact things:
+
+1. retain the sampled token IDs, masks, and log probabilities as the final
+   policy step;
+2. never parse or execute a tool call from the unfinished response;
+3. ask Fleet's authoritative grader for the reward and release the instance;
+4. report `length` to native SkyRL so the output limit remains visible.
+
+Only `turn_response_budget_exhausted` gets this treatment. Context exhaustion,
+the total episode-response limit, the 1,200-turn limit, episode timeout,
+transport failure, parser failure, and infrastructure failure remain
+fail-closed. The 262,144-token context, 4,096-token chunk continuation,
+compaction policy, 32,768-token assistant-response limit, and four-hour episode
+limit do not change.
+
+The sanitized prod7 evidence is
+[`2026-09-21-skyrl-prod7-output-limit-rejection-v1.json`](evidence/qwen38-study/2026-09-21-skyrl-prod7-output-limit-rejection-v1.json).
+It records zero collected episodes, zero authoritative rewards, zero optimizer
+updates, no checkpoint, and complete release of all eight GPUs. It contains no
+task prompt, model response, tool result, flag, credential, or sealed score.

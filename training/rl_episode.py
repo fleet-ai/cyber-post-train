@@ -318,6 +318,13 @@ async def _agent(recorder, session, messages, tools, limits, parse):
     env_time = 0.0
     for index in range(limits["max_turns"]):
         turn = await recorder.sample()
+        if turn.finish == "turn_limit" and isinstance(turn.text, str):
+            # A full declared assistant-response allowance is a gradeable
+            # policy outcome, not an infrastructure error. Preserve it as the
+            # final assistant step, execute no potentially partial tool call,
+            # and let collect() obtain the authoritative environment score.
+            messages.append(recorder.append_assistant(turn.text, None, index))
+            return messages, "turn_response_budget_exhausted", env_time
         if turn.finish != "ok" or not isinstance(turn.text, str):
             reason = {
                 "length": "generation_incomplete_length",

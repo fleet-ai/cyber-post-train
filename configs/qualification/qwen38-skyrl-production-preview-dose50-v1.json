@@ -4,8 +4,8 @@
   "external_reads": 0,
   "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
   "name": "chris-q38-skyrl50-a1",
-  "plan_sha256": "sha256:a78308af146a4f69997b90445ec41a79e1fc8f25576a19bc52a5f445124eb67d",
-  "request_sha256": "sha256:0ed839fd30981ddba6f893dc11448fae66102fae26f41d4bcb39b593d31f0100",
+  "plan_sha256": "sha256:e1d9fdbc5f4ce8ae8b4829ea782226e43721dd1e3b18f9d0462ea4ad3d598489",
+  "request_sha256": "sha256:06532f49ecd7d9f59956df06c4409a183b87f59c7e3eb6dc6ef6559de37846e6",
   "resources": {
     "cpu_limit": "64",
     "cpu_request": "64",
@@ -19,7 +19,7 @@
   "run_dir": "/mnt/sfs/jobs/chris-q38-skyrl50-a1",
   "schema": "cyber_skyrl_offline_request_preview_v1",
   "server_preview_requested": false,
-  "sha256": "sha256:ec7e9057ffbda45ec7f704b69bfc7cc3f0e7ebbe0dcf1c651610ea03124d9c2b",
+  "sha256": "sha256:d680d9e18af6168bd1f035e5f121df0a414e827288d906c5c1fab4e9a53f407c",
   "status": "locally_rendered_not_server_previewed",
   "submitted": false,
   "wandb": {
