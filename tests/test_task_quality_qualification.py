@@ -393,6 +393,7 @@ def test_qualify_one_requires_new_session_and_records_no_content(
     tmp_path, monkeypatch, created_new_session, expected_status
 ):
     binding = _binding()
+    config = qualification._config(binding, "fixture-wave")
 
     class Client:
         def close(self):
@@ -418,9 +419,18 @@ def test_qualify_one_requires_new_session_and_records_no_content(
                 "instance_id": "fixture-instance",
                 "evidence_run_id": EVIDENCE_RUN,
             }
+        if method == "GET" and "/create-requests/" in path:
+            return {
+                "request_id": self_hosted.provisioning_request_id(config),
+                "run_id": config["run_id"],
+                "team_id": qualification.EXPECTED_TEAM_ID,
+                "state": "materialized",
+                "instance_id": "fixture-instance",
+            }
         if method == "GET" and path.startswith("/v1/env/instances/"):
             return {
                 "instance_id": "fixture-instance",
+                "team_id": qualification.EXPECTED_TEAM_ID,
                 "env_key": binding["environment"]["id"],
                 "version": binding["environment"]["version"],
                 "status": "running",
@@ -516,6 +526,167 @@ def test_qualify_one_quarantines_ambiguous_provision_without_retry(tmp_path, mon
     assert receipt["automatic_retry_performed"] is False
 
 
+def test_qualify_one_never_deletes_instance_from_misbound_provision_response(tmp_path, monkeypatch):
+    binding = _binding()
+
+    class Client:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(qualification, "_client", lambda _key: Client())
+    monkeypatch.setattr(qualification, "_account", lambda _client: None)
+    monkeypatch.setattr(qualification, "_fetch_binding", lambda *_args, **_kwargs: binding)
+    monkeypatch.setattr(
+        self_hosted, "assert_authoritative_routes_deployed", lambda *_args: {"mode": "fixture"}
+    )
+    monkeypatch.setattr(
+        qualification,
+        "_assert_create_claim_routes_deployed",
+        lambda *_args: {"mode": "openapi"},
+    )
+    direct_deletes = 0
+
+    def request(_client, method, path, **_kwargs):
+        nonlocal direct_deletes
+        if method == "POST" and path.endswith("/instances"):
+            return {
+                "task_key": "wrong-task",
+                "task_version_id": binding["task_version_id"],
+                "instance_id": "fixture-instance",
+                "evidence_run_id": EVIDENCE_RUN,
+            }
+        if method == "DELETE" and path == "/v1/env/instances/fixture-instance":
+            direct_deletes += 1
+            return {"terminated_at": "2026-09-21T00:00:00Z"}
+        raise AssertionError((method, path))
+
+    monkeypatch.setattr(self_hosted, "_request", request)
+    directory = tmp_path / "cell"
+    receipt = qualification.qualify_one(
+        binding, wave_id="fixture-wave", directory=directory, api_key="secret"
+    )
+    assert direct_deletes == 0
+    assert receipt["qualification_status"] == "quarantined_ambiguous"
+    assert not (directory / "PROVISION_RECEIPT.json").exists()
+
+
+def test_qualify_one_never_deletes_instance_before_owned_readback(tmp_path, monkeypatch):
+    binding = _binding()
+
+    class Client:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(qualification, "_client", lambda _key: Client())
+    monkeypatch.setattr(qualification, "_account", lambda _client: None)
+    monkeypatch.setattr(qualification, "_fetch_binding", lambda *_args, **_kwargs: binding)
+    monkeypatch.setattr(
+        self_hosted, "assert_authoritative_routes_deployed", lambda *_args: {"mode": "fixture"}
+    )
+    monkeypatch.setattr(
+        qualification,
+        "_assert_create_claim_routes_deployed",
+        lambda *_args: {"mode": "openapi"},
+    )
+    direct_deletes = 0
+
+    def request(_client, method, path, **_kwargs):
+        nonlocal direct_deletes
+        if method == "POST" and path.endswith("/instances"):
+            return {
+                "task_key": binding["task_key"],
+                "task_version_id": binding["task_version_id"],
+                "instance_id": "fixture-instance",
+                "evidence_run_id": EVIDENCE_RUN,
+            }
+        if method == "GET" and path == "/v1/env/instances/fixture-instance":
+            return {
+                "instance_id": "fixture-instance",
+                "team_id": qualification.EXPECTED_TEAM_ID,
+                "env_key": "wrong-environment",
+                "version": binding["environment"]["version"],
+                "status": "running",
+                "terminated_at": None,
+                "urls": {"root": "https://fixture.invalid"},
+            }
+        if method == "DELETE" and path == "/v1/env/instances/fixture-instance":
+            direct_deletes += 1
+            return {"terminated_at": "2026-09-21T00:00:00Z"}
+        raise AssertionError((method, path))
+
+    monkeypatch.setattr(self_hosted, "_request", request)
+    directory = tmp_path / "cell"
+    receipt = qualification.qualify_one(
+        binding, wave_id="fixture-wave", directory=directory, api_key="secret"
+    )
+    assert direct_deletes == 0
+    assert receipt["qualification_status"] == "infrastructure_invalid"
+    assert not (directory / "PROVISION_RECEIPT.json").exists()
+
+
+def test_qualify_one_never_deletes_instance_before_create_claim_binding(tmp_path, monkeypatch):
+    binding = _binding()
+    config = qualification._config(binding, "fixture-wave")
+
+    class Client:
+        def close(self):
+            return None
+
+    monkeypatch.setattr(qualification, "_client", lambda _key: Client())
+    monkeypatch.setattr(qualification, "_account", lambda _client: None)
+    monkeypatch.setattr(qualification, "_fetch_binding", lambda *_args, **_kwargs: binding)
+    monkeypatch.setattr(
+        self_hosted, "assert_authoritative_routes_deployed", lambda *_args: {"mode": "fixture"}
+    )
+    monkeypatch.setattr(
+        qualification,
+        "_assert_create_claim_routes_deployed",
+        lambda *_args: {"mode": "openapi"},
+    )
+    direct_deletes = 0
+
+    def request(_client, method, path, **_kwargs):
+        nonlocal direct_deletes
+        if method == "POST" and path.endswith("/instances"):
+            return {
+                "task_key": binding["task_key"],
+                "task_version_id": binding["task_version_id"],
+                "instance_id": "fixture-instance",
+                "evidence_run_id": EVIDENCE_RUN,
+            }
+        if method == "GET" and "/create-requests/" in path:
+            return {
+                "request_id": self_hosted.provisioning_request_id(config),
+                "run_id": config["run_id"],
+                "team_id": qualification.EXPECTED_TEAM_ID,
+                "state": "materialized",
+                "instance_id": "different-instance",
+            }
+        if method == "GET" and path == "/v1/env/instances/fixture-instance":
+            return {
+                "instance_id": "fixture-instance",
+                "team_id": qualification.EXPECTED_TEAM_ID,
+                "env_key": binding["environment"]["id"],
+                "version": binding["environment"]["version"],
+                "status": "running",
+                "terminated_at": None,
+                "urls": {"root": "https://fixture.invalid"},
+            }
+        if method == "DELETE" and path == "/v1/env/instances/fixture-instance":
+            direct_deletes += 1
+            return {"terminated_at": "2026-09-21T00:00:00Z"}
+        raise AssertionError((method, path))
+
+    monkeypatch.setattr(self_hosted, "_request", request)
+    directory = tmp_path / "cell"
+    receipt = qualification.qualify_one(
+        binding, wave_id="fixture-wave", directory=directory, api_key="secret"
+    )
+    assert direct_deletes == 0
+    assert receipt["qualification_status"] == "infrastructure_invalid"
+    assert not (directory / "PROVISION_RECEIPT.json").exists()
+
+
 def test_qualify_one_fails_before_provision_when_create_claim_routes_are_missing(
     tmp_path, monkeypatch
 ):
@@ -573,6 +744,7 @@ def test_cleanup_resumes_only_the_exact_instance_after_transport_loss(tmp_path, 
         qualification.sealed(
             {
                 "schema": "cyber_task_quality_provision_receipt_v1",
+                "request_id": self_hosted.provisioning_request_id(config),
                 "instance_id": "fixture-instance",
                 "evidence_run_id": EVIDENCE_RUN,
                 "task_version_id": binding["task_version_id"],

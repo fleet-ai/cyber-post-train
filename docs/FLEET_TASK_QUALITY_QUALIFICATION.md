@@ -23,7 +23,8 @@ For every selected exact task/version, the controller:
    17-task dev or eight-task final held-out split;
 3. proves the durable create-request claim GET/DELETE routes are deployed,
    exclusively records a cell intent, provisions through the exact
-   task-version authority once, and verifies the live environment binding;
+   task-version authority once, and verifies the response, Fleet-team runtime,
+   and durable create-request claim all bind the same environment;
 4. initializes MCP, proves each advertised input schema admits the exact probe,
    then calls `bash` and `submit_report` with the runtime's `no_flag` verdict
    plus a nonempty qualification explanation;

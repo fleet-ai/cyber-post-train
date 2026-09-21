@@ -954,6 +954,7 @@ def qualify_one(
         )
 
         phase = "provisioning"
+        request_id = self_hosted.provisioning_request_id(config)
         _write_once(
             directory / "PROVISION_INTENT.json",
             sealed(
@@ -961,7 +962,7 @@ def qualify_one(
                     "schema": "cyber_task_quality_provision_intent_v1",
                     "run_id": config["run_id"],
                     "task_version_id": binding["task_version_id"],
-                    "request_id": self_hosted.provisioning_request_id(config),
+                    "request_id": request_id,
                     "request_body_sha256": digest({}),
                 }
             ),
@@ -971,31 +972,19 @@ def qualify_one(
             client,
             "POST",
             self_hosted.authoritative_route(config, "provisioning"),
-            headers={"X-Request-ID": self_hosted.provisioning_request_id(config)},
+            headers={"X-Request-ID": request_id},
             json={},
         )
-        if isinstance(rollout_instance, dict) and rollout_instance.get("instance_id") is not None:
-            instance_id = self_hosted._instance_identifier(  # noqa: SLF001
-                rollout_instance.get("instance_id")
-            )
-        instance_id, evidence_run_id = self_hosted.validate_rollout_instance_response(
+        validated_instance_id, evidence_run_id = self_hosted.validate_rollout_instance_response(
             config, rollout_instance
         )
         unbound_mutation = False
-        _write_once(
-            directory / "PROVISION_RECEIPT.json",
-            sealed(
-                {
-                    "schema": "cyber_task_quality_provision_receipt_v1",
-                    "instance_id": instance_id,
-                    "evidence_run_id": evidence_run_id,
-                    "task_version_id": binding["task_version_id"],
-                }
-            ),
+        instance = self_hosted._request(  # noqa: SLF001
+            client, "GET", f"/v1/env/instances/{validated_instance_id}"
         )
-        instance = self_hosted._request(client, "GET", f"/v1/env/instances/{instance_id}")  # noqa: SLF001
         if (
-            instance.get("instance_id") != instance_id
+            instance.get("instance_id") != validated_instance_id
+            or instance.get("team_id") != EXPECTED_TEAM_ID
             or instance.get("env_key") != binding["environment"]["id"]
             or instance.get("version") != binding["environment"]["version"]
             or instance.get("status") != "running"
@@ -1003,6 +992,27 @@ def qualify_one(
             or not isinstance((instance.get("urls") or {}).get("root"), str)
         ):
             raise QualificationError("provisioned environment differs from the exact task binding")
+        create_claim = _claim(client, request_id=request_id, config=config)
+        if (
+            create_claim.get("state") != "materialized"
+            or create_claim.get("instance_id") != validated_instance_id
+        ):
+            raise QualificationError("provisioned instance differs from its exact create claim")
+        # Inline cleanup is authorized only after both the response and the
+        # live instance/readback claim prove this exact Fleet-owned request.
+        instance_id = validated_instance_id
+        _write_once(
+            directory / "PROVISION_RECEIPT.json",
+            sealed(
+                {
+                    "schema": "cyber_task_quality_provision_receipt_v1",
+                    "request_id": request_id,
+                    "instance_id": instance_id,
+                    "evidence_run_id": evidence_run_id,
+                    "task_version_id": binding["task_version_id"],
+                }
+            ),
+        )
         evidence["environment_started"] = True
 
         phase = "tool_probe"
@@ -1480,8 +1490,11 @@ def cleanup_one(
                 "cyber_task_quality_provision_receipt_v1",
                 "provision receipt",
             )
-            if provision_receipt.get("task_version_id") != binding["task_version_id"]:
-                raise QualificationError("provision receipt task binding changed")
+            if (
+                provision_receipt.get("task_version_id") != binding["task_version_id"]
+                or provision_receipt.get("request_id") != request_id
+            ):
+                raise QualificationError("provision receipt request/task binding changed")
             instance_id = self_hosted._instance_identifier(  # noqa: SLF001
                 provision_receipt.get("instance_id")
             )
