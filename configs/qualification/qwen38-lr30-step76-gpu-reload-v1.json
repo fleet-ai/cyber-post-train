@@ -1,6 +1,6 @@
 {
   "schema": "cyber_qwen38_lr30_step76_gpu_reload_plan_v1",
-  "status": "inference_forward_direct_path_server_dry_run_passed_pending_merge_fresh_preflight_and_root_create_approval",
+  "status": "inference_forward_submission_code_current_main_ci_pending_fresh_post_merge_preview",
   "launchable": false,
   "purpose": "The native all-rank checkpoint reload and BF16 export are already accepted. This separate missing gate loads that exact HF export on one GPU, runs one fixed finite synthetic inference forward, executes zero optimizer updates, and releases the allocation before any serving stage.",
   "source": {
@@ -67,14 +67,14 @@
     "warnings": [],
     "kind": "RayJob",
     "namespace": "fleet-train-jobs",
-    "manifest_sha256": "sha256:c06b3998efb136c8cd9de793b4e73b34a3cd6dfcf365a9439da7deb08cedb3db",
-    "direct_rendered_manifest_sha256": "sha256:fbef3c493aff002377520058196400773280d0de4f1b82cc8f449446ae59604c",
-    "server_dry_run_manifest_sha256": "sha256:047c1b1af91d7a33c72ef37afec612c8d40374b9863778657ccaa80b4e3fc0b1",
+    "manifest_sha256": null,
+    "direct_rendered_manifest_sha256": null,
+    "server_dry_run_manifest_sha256": null,
     "suspended_for_queue": true,
     "queue_priority_class": "q1",
     "run_dir_matches": true,
-    "root_failure_alert_annotation": "off",
-    "direct_path_qualified": true,
+    "root_failure_alert_annotation": null,
+    "direct_path_qualified": false,
     "resources_created": 0,
     "qualified_for_create": false
   },
@@ -86,8 +86,8 @@
   "blockers": [
     {
       "gate": "current_main_merge_and_fresh_source_output_preflight",
-      "reason": "The exact current-main-bound HF inference-forward path passed a live server dry-run with root fleet.ai/failure-alerts=off, c1/q1, one GPU and no resources created, but the implementation is not yet merged and the source/output preflight must be repeated within 30 minutes of create.",
-      "unblock": "Merge this exact reviewed implementation, regenerate the prepared directory from current main, and pass the exact-image zero-GPU source/output preflight."
+      "reason": "The exact HF inference-forward submission code is rebased on current main, but it is not yet merged. Per coordinator direction, preview evidence from an earlier base is not reused even though the immutable runtime bytes still match; a fresh preview and server dry-run will be recorded only from the merged main implementation.",
+      "unblock": "Pass CI and merge this exact reviewed implementation, regenerate the prepared directory from merged current main, then repeat the live preview, server dry-run, and exact-image zero-GPU source/output preflight."
     },
     {
       "gate": "root_create_approval_after_capacity_reconciliation",
@@ -131,5 +131,5 @@
     "resources_created": 0,
     "gpus_allocated": 0
   },
-  "sha256": "sha256:b51a60802555227b355799c9465327d4dca096084f3f30d8a690ea6aa28a252f"
+  "sha256": "sha256:26e48936e10c49c412d7ca10aea373b0e137128addda3e841d793f5e34b84654"
 }

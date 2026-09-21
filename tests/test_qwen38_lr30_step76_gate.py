@@ -199,8 +199,8 @@ def test_prepared_plan_is_self_bound_and_fail_closed():
         "resources_created": 0,
         "gpus_allocated": 0,
     }
-    assert plan["live_preview"]["root_failure_alert_annotation"] == "off"
-    assert plan["live_preview"]["direct_path_qualified"] is True
+    assert plan["live_preview"]["root_failure_alert_annotation"] is None
+    assert plan["live_preview"]["direct_path_qualified"] is False
     assert plan["live_preview"]["resources_created"] == 0
     assert plan["live_preview"]["qualified_for_create"] is False
     assert plan["duplicate_gates"]["jobs_api_history_matches"] == 0
