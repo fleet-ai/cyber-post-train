@@ -1,0 +1,57 @@
+{
+  "schema": "cyber_qwen38_lora_step60_cpu_preflight_source_commit_rejection_v1",
+  "status": "rejected_before_output_and_released",
+  "source": {
+    "git_commit": "a108edff2062558359cc72ebdfaf5d40cadeb333",
+    "source_archive_sha256": "e1b7f7749b6e2617365878040673b2c86ff3e6212937250852ac4dfa7850f02e",
+    "driver_sha256": "b58d55083097f76a4e1d63cbfaa00428ff56cf39ecb79936f5ca36e2de8d1f91",
+    "pod_manifest_file_sha256": "a8f0036f54bd91ab663b8538659ddd35546b219e5a70f1468ab650e176e8ea5d",
+    "pod_server_dry_run_sha256": "2c1f9b29156f3e7ba41181539f9f3f3831317d61b3bce95193441739c98a95e7",
+    "configmap_manifest_sha256": "9f4c989c19986863297164e35e78bb919de77c00c7a709ed8ca0e9232069f4d3"
+  },
+  "pod": {
+    "name": "chris-q38-lora-s60-v3-preflight-p3",
+    "uid": "80c22b0f-d764-41ed-883f-7d90b934434a",
+    "created_at": "2026-09-21T02:20:45Z",
+    "started_at": "2026-09-21T02:20:46Z",
+    "finished_at": "2026-09-21T02:20:46Z",
+    "node": "computeinstance-e04fw0f2anvp0de74v",
+    "phase": "Failed",
+    "exit_code": 1,
+    "restarts": 0,
+    "gpus": 0,
+    "priority_class": "c1",
+    "failure_alert_annotation": "off",
+    "image_id": "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317",
+    "released": true,
+    "not_found_after_release": true,
+    "release_verified_at": "2026-09-21T02:21:29Z"
+  },
+  "source_configmap": {
+    "name": "chris-q38-lora-s60-v3-preflight-p3-source",
+    "uid": "3134568c-3f42-4961-9a51-f69ae819be99",
+    "created_at": "2026-09-21T02:20:42Z",
+    "released": true,
+    "not_found_after_release": true
+  },
+  "failure_boundary": {
+    "cause": "The regenerated archive used normal canonical text, which ends the commit with one newline. The operational wrapper compared those bytes with a string that omitted the newline.",
+    "source_archive_digest_verified": true,
+    "source_extracted_safely": true,
+    "commit_check_passed": false,
+    "plan_compiled": false,
+    "dataset_read": false,
+    "checkpoint_read": false,
+    "sfs_write_operations_before_failure": 0,
+    "training_output_written": false,
+    "prepared_output_written": false,
+    "optimizer_steps_executed": 0
+  },
+  "successor_gate": {
+    "use_repo_owned_canonical_commit_bytes": true,
+    "verify_exact_archive_commit_bytes": true,
+    "fresh_identity_required": true,
+    "gpu_create_authorized": false
+  },
+  "receipt_sha256": "04011504418e3becba34ac3e44f08239024ce84a2e193587ee4c59a00dccf5c5"
+}
