@@ -120,5 +120,102 @@
     "first_authoritative_model_readback_available": false,
     "capability_claim_made": false,
     "note": "The reviewed 4 CPU / 32 Gi evaluator profile was preserved. Queueing is not an infrastructure failure and no resource profile was reduced to force admission."
+  },
+  "first_live_progress": {
+    "observed_at": "2026-09-21T03:51:00Z",
+    "base": {
+      "pod": {
+        "name": "chris-q38-dev17-s43-base-p1-v1-kgrsk",
+        "uid": "ed4aff2f-d1e5-4273-9ba7-1e67ca88bf1e",
+        "ready": true,
+        "restarts": 0
+      },
+      "database_plan_sha256": "3f9b54c97d901b147597ac2530b048ff5909f7d7baedbe73ef2052c6cc00e137",
+      "accepted": 0,
+      "claimed": 8,
+      "pending": 9,
+      "retry_review": 0,
+      "stale_active": 0,
+      "route_last_active_at": "2026-09-21T03:48:37Z",
+      "authoritative_session_readback": null
+    },
+    "fresh75": {
+      "pod": {
+        "name": "chris-q38-dev17-s43-fresh75-p1-v1-j9vlm",
+        "uid": "9f3af19f-0896-47dc-a032-5372e42df8f4",
+        "ready": true,
+        "restarts": 0
+      },
+      "database_plan_sha256": "8bd55b50ce60c5a7b860c35433aa8f56208e9de0b0e12a0f937432e27097a990",
+      "accepted": 1,
+      "claimed": 8,
+      "pending": 8,
+      "retry_review": 0,
+      "stale_active": 0,
+      "route_last_active_at": "2026-09-21T03:48:43Z",
+      "authoritative_session_readback": {
+        "session_id": "9785f806-d45a-4831-8bb4-e394bda4061b",
+        "match_count": 1,
+        "model": "chris-q38-fresh75-step230-web-v2",
+        "status": "completed",
+        "verifier_execution_id_matches": true,
+        "scores_included": false,
+        "prompts_or_traces_included": false
+      }
+    },
+    "self44": {
+      "state": "queued",
+      "pod": null
+    },
+    "teacher186": {
+      "state": "queued",
+      "pod": null
+    },
+    "capability_claim_made": false
+  },
+  "second_live_progress": {
+    "observed_at": "2026-09-21T04:10:15Z",
+    "base": {
+      "pod_uid": "ed4aff2f-d1e5-4273-9ba7-1e67ca88bf1e",
+      "ready": true,
+      "restarts": 0,
+      "accepted": 2,
+      "claimed": 8,
+      "pending": 3,
+      "retry_review": 4,
+      "local_results": 6,
+      "stale_active": 0,
+      "route_last_active_at": "2026-09-21T04:10:08Z",
+      "authoritative_session_readback": {
+        "match_count": 1,
+        "model": "qwen3.8-27b",
+        "status": "completed",
+        "verifier_execution_id_matches": true,
+        "scores_included": false,
+        "prompts_or_traces_included": false
+      }
+    },
+    "fresh75": {
+      "pod_uid": "9f3af19f-0896-47dc-a032-5372e42df8f4",
+      "ready": true,
+      "restarts": 0,
+      "accepted": 12,
+      "claimed": 3,
+      "pending": 0,
+      "retry_review": 2,
+      "local_results": 12,
+      "stale_active": 0,
+      "route_last_active_at": "2026-09-21T04:10:15Z"
+    },
+    "self44": {
+      "state": "queued",
+      "pod": null
+    },
+    "teacher186": {
+      "state": "queued",
+      "pod": null
+    },
+    "capability_claim_made": false,
+    "final_eight_task_set_accessed": false
   }
 }
