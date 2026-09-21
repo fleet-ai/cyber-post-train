@@ -11,7 +11,7 @@ REPAIR_AUDIT_PATH = (
     ROOT / "docs/evidence/qwen38-web-important-checkpoint-budget-repair-20260921.json"
 )
 CURRENT_REPAIR_AUDIT_PATH = (
-    ROOT / "docs/evidence/qwen38-web-important-checkpoint-budget-repair-atomic-swap-20260921.json"
+    ROOT / "docs/evidence/qwen38-web-important-checkpoint-budget-repair-split-probe-20260921.json"
 )
 
 
@@ -187,9 +187,12 @@ def test_current_repaired_web_campaign_budget_binds_runner_supervisor_and_sandbo
     assert observed["supervisor_poll_horizon"] <= observed["sandbox_lifetime"]
     assert plan["execution"]["launchable_now"] is False
     assert audit["classification"] == (
-        "runtime_budget_repaired_noreplace_swap_campaign_still_gated"
+        "runtime_budget_repaired_split_identity_probe_campaign_still_gated"
     )
     assert audit["checks"]["noreplace_swap_runner_bound_to_current_source"] is True
+    assert audit["checks"]["production_user_identity_probe_bound_to_current_source"] is True
+    assert audit["checks"]["isolated_nonroot_write_probe_bound_to_current_source"] is True
+    assert audit["checks"]["nested_to_worker_acknowledgement_bound_to_current_source"] is True
     assert audit["checks"]["fresh_model_free_runtime_qualification_still_required"] is True
     assert audit["operation"] == {
         "provider_requests": 0,
