@@ -1,0 +1,138 @@
+{
+  "schema": "cyber_qwen38_lora_step60_recovery_terminal_v1",
+  "status": "gpu_recovery_passed_step42_to_step60_checkpoint_sealed_and_independently_verified",
+  "source": {
+    "git_commit": "ddba5eacc6a460c7c0b98f085e5a50dfcee2bea3",
+    "image": "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317",
+    "plan_sha256": "8839c2dd14604e6c93cfffedb91781be6021e7518bb9c456afac8950a712ad06",
+    "request_sha256": "0011c43d13b2c02f0920a7a9a6d77d887216a8d43018c2404a54ac9572bc7e88",
+    "runtime_sha256": "7f5c945b28f6d3fd8c84eaedd0b0322ffbaf09ce2f6ffbbf5620f69c72d4131e",
+    "cpu_preflight_sha256": "2a1a78bbd42661bbe1bac2ef02104ce4927c713acf5a58248bf55b4eb1448f00",
+    "cpu_preflight_acceptance_receipt_sha256": "1a52578aaf2aac3a5f76af669015296a88227f9a826ddbe42eb239d679ef64bf",
+    "rendered_rayjob_manifest_sha256": "0a935a51a0f3e43c52cc5eb9618e0f2028ddd581969f9e2c82702b44735a4149",
+    "direct_submission_journal_sha256": "8664f85191ab7b70d435eb25ba41c2a9c66e099c8f01f298ee440f880fc12b86"
+  },
+  "training": {
+    "rayjob": {
+      "name": "chris-q38-lora-r1-s60-v3-a4820ef7",
+      "uid": "98204fe7-bf70-4e30-9932-1396dffefca4",
+      "run_id": "a4820ef7-8a03-463a-a522-a7cfce1b38ce",
+      "started_at": "2026-09-21T03:16:27Z",
+      "finished_at": "2026-09-21T03:41:54Z",
+      "terminal": "SUCCEEDED"
+    },
+    "workload": {
+      "name": "rayjob-chris-q38-lora-r1-s60-v3-a4820ef7-16b8c",
+      "uid": "98f819ba-f259-4a3f-a06b-9c8d716bad33",
+      "admitted_at": "2026-09-21T03:16:08Z",
+      "terminal": "Succeeded"
+    },
+    "raycluster_uid": "c57dc55b-73c8-402a-85e1-bb271e6e79ea",
+    "pod_uid": "296e8e50-7b50-43dd-b994-8b3fe508a151",
+    "priority": "c1/q1",
+    "failure_alert_annotation": "off",
+    "gpus": 8,
+    "restarts": 0,
+    "output_root": "/mnt/sfs/jobs/chris-q38-lora-r1-s60-v3",
+    "started": {
+      "file_sha256": "ecec588c10c869a9a4a8d3aaed089247ea7d4534315d2a3e5a6a5eba7b776965",
+      "receipt_sha256": "6d846e4646457faea48ce6c9363abb7ef5f7bc5f49fcd4d0779c03d584732e82"
+    },
+    "recovered": {
+      "optimizer_step": 42,
+      "file_sha256": "3aa4e34716e93c634b7b3e1d7f1688caf378729fe0dc712501e42ce612002877",
+      "receipt_sha256": "4469aa0808aca3fc92834a293cb076025ebe0a57647b298d323319a4963cc1a0",
+      "source_checkpoint_receipt_sha256": "74045f65bf49610976a206a4ad16f4b2bfbf7bacb11573ea1d1db4de06c72b93",
+      "sampler_restored": true
+    },
+    "final_progress": {
+      "optimizer_step": 60,
+      "optimizer_steps_executed": 18,
+      "file_sha256": "84ff422cd772a7886629e493e648311c26eb752776ff4b32df504dd00401f36d",
+      "receipt_sha256": "b5f8a1f26147733f981d5209f534b8c2cc037be20d7fb3624ec4810d9bd01f6e"
+    },
+    "terminal_receipt": {
+      "status": "training_paused",
+      "checkpoint_path": "/mnt/sfs/jobs/chris-q38-lora-r1-s60-v3/checkpoints/global_step_60",
+      "file_sha256": "a8955bb7fe90002221409f171a85f1380d1523e4a816bdf472e800bc25966fba",
+      "receipt_sha256": "52840aa07bf75024f81814297de5cbddb9f819489ba87cc532dba47d86d0c33e"
+    },
+    "memory_boundary": {
+      "former_failure_step": 49,
+      "crossed_former_failure_step": true,
+      "largest_recorded_sample_mib_per_gpu": 118799,
+      "gpu_capacity_mib": 275040,
+      "interpretation": "The continuation crossed the prior step-49 OOM boundary and reached the planned step-60 pause without a restart. Instantaneous samples are operational evidence, not a complete peak-memory trace."
+    }
+  },
+  "checkpoint": {
+    "path": "/mnt/sfs/jobs/chris-q38-lora-r1-s60-v3/checkpoint_manifests/step-000060-megatron-v1.json",
+    "schema": "cyber_qwen38_megatron_checkpoint_manifest_v1",
+    "optimizer_step": 60,
+    "world_size": 8,
+    "tensor_parallel_size": 8,
+    "file_count": 27,
+    "total_bytes": 5477467060,
+    "file_sha256": "cd53865f869eeb1975aa0e099aef143a736167c5c7b095c283f0da292ffecd78",
+    "receipt_sha256": "6bae9ef75e0a60f598eb32b63d31a64c0f42716611a43daf19a177d3c0ffebd2",
+    "source_plan_sha256": "8839c2dd14604e6c93cfffedb91781be6021e7518bb9c456afac8950a712ad06",
+    "gpu_reload_verified": false
+  },
+  "zero_gpu_readback": {
+    "inspection": {
+      "pod_uid": "bae15551-c27b-4cb2-9d7b-5e3a374bcc21",
+      "manifest_sha256": "f8c405dd0ea4f5f29f3513f8dd3fca6836c58426e1315348a0f801624e405d60",
+      "phase": "Succeeded",
+      "exit_code": 0,
+      "restarts": 0
+    },
+    "ownership_check": {
+      "pod_uid": "d4fa5d9d-e8bd-49ca-be5f-3bfffbe0b7c5",
+      "manifest_sha256": "0533cd415e4b853d883685474196d0d286fa34366229e32a63ebecd18a643e4e",
+      "phase": "Succeeded",
+      "exit_code": 0,
+      "run_uid": 1000,
+      "run_gid": 100
+    },
+    "seal": {
+      "pod_uid": "5e6b27f2-b1f6-4379-ad85-cb9a735273fa",
+      "configmap_uid": "c1762260-d878-467b-a22f-832812832c1c",
+      "source_configmap_data_sha256": "426a24202fbe0b442d899f2c425c1ecbd5b458adf6e06d978bea6b2f02d82ffb",
+      "manifest_sha256": "ecaab3f5b6d1688dfecc4b3fe48b33dcf6255ad6edd23521555c7405fc2562b4",
+      "phase": "Succeeded",
+      "exit_code": 0,
+      "restarts": 0
+    },
+    "independent_verification": {
+      "pod_uid": "1ffe2fee-597a-4943-aeb6-b167b28fee83",
+      "manifest_sha256": "bca4c0c442d6d43bd41357baa90130eec9f0d1bbe4c94453c31d7cfa6686e482",
+      "phase": "Succeeded",
+      "exit_code": 0,
+      "restarts": 0,
+      "all_checkpoint_file_digests_reopened": true
+    },
+    "all_temporary_pods_and_configmaps_released": true,
+    "all_temporary_objects_not_found_after_release": true
+  },
+  "resource_release": {
+    "raycluster_absent": true,
+    "training_pod_absent": true,
+    "observed_at": "2026-09-21T03:43:33Z",
+    "project_nodes": 6,
+    "project_gpus": 48,
+    "queued": [],
+    "problems": [],
+    "capacity_receipt_sha256": "90afff962d7548079b4dc5c75b26ad4967c5f4bd56c004142c21ba8b37ab69f0"
+  },
+  "acceptance_boundary": {
+    "native_step42_checkpoint_reloaded": true,
+    "finite_optimizer_updates_completed": 18,
+    "former_oom_boundary_crossed": true,
+    "step60_checkpoint_sealed": true,
+    "step60_checkpoint_independently_rehashed": true,
+    "step60_gpu_reload_verified": false,
+    "export_or_serving_claimed": false,
+    "next_gate": "A separately authorized zero-update export or native GPU reload must reopen this exact step-60 manifest before serving or evaluation."
+  },
+  "receipt_sha256": "89f52215a4edefcd427517ef24d4e26c881f222868388c88a2fdf651873a80eb"
+}
