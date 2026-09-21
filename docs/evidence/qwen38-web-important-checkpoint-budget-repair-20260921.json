@@ -1,0 +1,50 @@
+{
+  "schema_version": "qwen38_web_important_checkpoint_budget_audit_v2",
+  "status": "runtime_budget_repaired_campaign_still_gated",
+  "observed_at": "2026-09-21T06:10:00Z",
+  "source": {
+    "review_base_commit": "91ab058ebbf744c0931dbb9692831bdbd7ecefaf",
+    "repair_pull_request": 278,
+    "campaign_plan_path": "configs/evaluation/qwen38-important-checkpoints-opencode-wbe-campaign-v1.json",
+    "campaign_plan_file_sha256": "sha256:5f5070e32bd56d7e4bb4d9c0c5aa049ba9ad9e8b0c4155138a504a5422647506",
+    "campaign_plan_sha256": "sha256:13e219cd49781427c0a00237d8bea037e85603646fc9451dacc6876f44f716d5",
+    "collection_runner_path": "evals/webexploitbench/tensorlake/bootstrap/run_collection_partition.sh",
+    "collection_runner_file_sha256": "sha256:b1462f13a3be437d42e818c5ab943b11c71e01a8c8d0a602d4f7ff67dbdbe65c",
+    "collection_launcher_path": "evals/webexploitbench/tensorlake/collection_launcher.py",
+    "collection_launcher_file_sha256": "sha256:0a9250aca0cf9b314fd74f7d6b391aad0538b1e02e3d444457a2910e8ba3d64e",
+    "collection_supervisor_path": "evals/webexploitbench/tensorlake/collection_supervisor.py",
+    "collection_supervisor_file_sha256": "sha256:85a4904d3447dc74f897660fafb820e653580ac6b41a4234e1423084f2cd7efc"
+  },
+  "observed_budget_seconds": {
+    "declared_task_max": 28800,
+    "actual_outer_collection_dispatch_limit": 28800,
+    "runner_pre_collection_budget": 7500,
+    "runner_preservation_budget": 720,
+    "runner_shutdown_reserve": 600,
+    "runner_envelope": 37620,
+    "supervisor_poll_interval": 5,
+    "supervisor_poll_max_cycles": 8000,
+    "supervisor_poll_horizon": 40000,
+    "snapshot_restore_and_readiness_allowance": 600,
+    "campaign_collection_and_preservation_allowance": 7200,
+    "sandbox_lifetime": 43200
+  },
+  "checks": {
+    "outer_collection_dispatch_covers_declared_task": true,
+    "runner_envelope_covers_dispatch_and_evidence_preservation": true,
+    "supervisor_horizon_covers_runner_envelope_with_reviewed_headroom": true,
+    "sandbox_covers_supervisor_horizon": true,
+    "campaign_is_marked_launchable": false,
+    "model_free_runtime_qualification_still_required": true
+  },
+  "classification": "runtime_budget_repaired_campaign_still_gated",
+  "reusable_rule": "Bind the declared task duration, runner dispatch timeout, complete runner envelope, terminal-supervisor poll horizon, and provider sandbox lifetime in one ordered contract. A repaired budget does not make a campaign launchable until the separate model-free runtime qualification passes.",
+  "scope": "Static, score-blind repository audit only. It performed no provider request, model request, scoring, collection, or external mutation and makes no capability or V23 root-cause claim.",
+  "operation": {
+    "provider_requests": 0,
+    "model_requests": 0,
+    "scoring_requests": 0,
+    "external_mutations": 0
+  },
+  "receipt_sha256": "sha256:89a3add05df9d3edd8c230bda42db5968b26a6cb3cedd34c75b208a50eb444d5"
+}
