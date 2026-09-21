@@ -1,0 +1,59 @@
+{
+  "schema": "cyber_qwen38_lora_step60_cpu_preflight_scheduling_rejection_v1",
+  "status": "never_started_and_released",
+  "source": {
+    "git_commit": "40077bb2902268519e2e07ac086737130b6df077",
+    "source_archive_sha256": "2422efbff45038e659957ff362ec779822b795844cbdcf8bb062665f9e227ffd",
+    "driver_sha256": "efc8cda7005e0b90cf401cf29095e2256835945ed7025013a55267cf6cd03d31",
+    "image": "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317"
+  },
+  "pod": {
+    "name": "chris-q38-lora-s60-v3-preflight-p2",
+    "uid": "dd988ab8-f117-42e5-bf4c-798e5b1f8a16",
+    "created_at": "2026-09-21T02:09:18Z",
+    "phase": "Pending",
+    "scheduled": false,
+    "started": false,
+    "node_assigned": false,
+    "restarts": 0,
+    "gpus": 0,
+    "priority_class": "c1",
+    "failure_alert_annotation": "off",
+    "requested_cpu": "16",
+    "requested_memory": "128Gi",
+    "scheduler_reason": "Unschedulable",
+    "scheduler_summary": "All five eligible shared CPU nodes reported insufficient CPU and memory; preemption could not make the request schedulable.",
+    "output_written": false,
+    "released": true,
+    "not_found_after_release": true,
+    "release_verified_at": "2026-09-21T02:10:55Z"
+  },
+  "source_configmap": {
+    "name": "chris-q38-lora-s60-v3-preflight-p2-source",
+    "uid": "1a9100c9-4c71-42b5-89ac-1c44c9804959",
+    "created_at": "2026-09-21T02:09:15Z",
+    "released": true,
+    "not_found_after_release": true
+  },
+  "eligible_node_evidence": {
+    "observed_at": "2026-09-21T02:09:31Z",
+    "node_count": 5,
+    "allocatable_cpu_each": "15900m",
+    "allocatable_memory_range": [
+      "65216556Ki",
+      "65216572Ki"
+    ],
+    "request_can_fit_one_observed_node": false
+  },
+  "cause": "The CPU preflight asked for more CPU and memory than any eligible node could ever provide. This was a manifest sizing defect, not queue pressure and not a training failure.",
+  "successor_gate": {
+    "fresh_identity_required": true,
+    "request": {
+      "cpu": "4",
+      "memory": "16Gi"
+    },
+    "must_fit_one_fresh_observed_eligible_node": true,
+    "gpu_create_authorized": false
+  },
+  "receipt_sha256": "da4adf1612f6c364d78abdd1428130057b2df94f07df0dbecb9ddd28426756c4"
+}

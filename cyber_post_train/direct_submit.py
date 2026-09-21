@@ -16,6 +16,7 @@ import re
 import subprocess
 import uuid
 from copy import deepcopy
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -41,6 +42,107 @@ CPU_NODE_SELECTOR = {
     "kubernetes.io/arch": "amd64",
     "workload": "fleetai-training-ng-cpu",
 }
+
+
+def _cpu_millicores(value: object) -> int:
+    if not isinstance(value, str) or not value:
+        raise JobsError("CPU checkpoint Pod has an invalid CPU quantity")
+    raw = value[:-1] if value.endswith("m") else value
+    try:
+        amount = Decimal(raw)
+    except InvalidOperation:
+        raise JobsError("CPU checkpoint Pod has an invalid CPU quantity") from None
+    millicores = amount if value.endswith("m") else amount * 1000
+    if millicores <= 0 or millicores != millicores.to_integral_value():
+        raise JobsError("CPU checkpoint Pod has an invalid CPU quantity")
+    return int(millicores)
+
+
+def _memory_bytes(value: object) -> int:
+    if not isinstance(value, str) or not value:
+        raise JobsError("CPU checkpoint Pod has an invalid memory quantity")
+    match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)([EPTGMK]i?|)", value)
+    if match is None:
+        raise JobsError("CPU checkpoint Pod has an invalid memory quantity")
+    suffix = match.group(2)
+    power = {"": 0, "K": 1, "M": 2, "G": 3, "T": 4, "P": 5, "E": 6}
+    binary = suffix.endswith("i")
+    unit = suffix[:-1] if binary else suffix
+    try:
+        amount = Decimal(match.group(1)) * (1024 if binary else 1000) ** power[unit]
+    except (InvalidOperation, KeyError):
+        raise JobsError("CPU checkpoint Pod has an invalid memory quantity") from None
+    if amount <= 0 or amount != amount.to_integral_value():
+        raise JobsError("CPU checkpoint Pod has an invalid memory quantity")
+    return int(amount)
+
+
+def _cpu_checkpoint_request(manifest: dict) -> tuple[int, int]:
+    spec = manifest["spec"]
+    if spec.get("initContainers") not in (None, []):
+        raise JobsError("CPU checkpoint Pod must not use init containers")
+    if spec.get("overhead") not in (None, {}):
+        raise JobsError("CPU checkpoint Pod must not add scheduling overhead")
+    cpu = 0
+    memory = 0
+    for container in spec["containers"]:
+        requests = container.get("resources", {}).get("requests", {})
+        if set(requests) != {"cpu", "memory"}:
+            raise JobsError("CPU checkpoint Pod must request exactly CPU and memory")
+        cpu += _cpu_millicores(requests["cpu"])
+        memory += _memory_bytes(requests["memory"])
+    return cpu, memory
+
+
+def validate_cpu_checkpoint_node_fit(manifest: dict, inventory: dict) -> dict:
+    """Prove the requested CPU and memory fit one currently observed eligible node."""
+    validate_cpu_checkpoint_pod(manifest)
+    if inventory.get("kind") != "List" or not isinstance(inventory.get("items"), list):
+        raise JobsError("CPU node inventory is incomplete")
+    requested_cpu, requested_memory = _cpu_checkpoint_request(manifest)
+    eligible = []
+    for node in inventory["items"]:
+        try:
+            metadata = node["metadata"]
+            spec = node["spec"]
+            status = node["status"]
+            labels = metadata["labels"]
+            allocatable = status["allocatable"]
+            conditions = status["conditions"]
+        except (KeyError, TypeError):
+            raise JobsError("CPU node inventory contains a malformed node") from None
+        if not all(labels.get(key) == value for key, value in CPU_NODE_SELECTOR.items()):
+            continue
+        if spec.get("unschedulable") is True:
+            continue
+        if not any(
+            condition.get("type") == "Ready" and condition.get("status") == "True"
+            for condition in conditions
+            if isinstance(condition, dict)
+        ):
+            continue
+        eligible.append(
+            {
+                "name": metadata.get("name"),
+                "cpu_millicores": _cpu_millicores(allocatable.get("cpu")),
+                "memory_bytes": _memory_bytes(allocatable.get("memory")),
+            }
+        )
+    if not eligible:
+        raise JobsError("no Ready eligible CPU node is visible")
+    fitting = [
+        node
+        for node in eligible
+        if node["cpu_millicores"] >= requested_cpu and node["memory_bytes"] >= requested_memory
+    ]
+    if not fitting:
+        raise JobsError("CPU checkpoint Pod cannot fit any observed eligible node")
+    return {
+        "requested_cpu_millicores": requested_cpu,
+        "requested_memory_bytes": requested_memory,
+        "eligible_node_count": len(eligible),
+        "fitting_node_count": len(fitting),
+    }
 
 
 def validate_cpu_checkpoint_pod(manifest: dict) -> dict:
@@ -436,6 +538,15 @@ class Kubectl:
     def dry_run_cpu_checkpoint_pod(self, manifest: dict) -> dict:
         """Server-preview one CPU seal/verifier after the local placement gate."""
         validate_cpu_checkpoint_pod(manifest)
+        inventory = self._run(
+            [
+                "get",
+                "nodes",
+                "--selector=kubernetes.io/arch=amd64,workload=fleetai-training-ng-cpu",
+                "--output=json",
+            ]
+        )
+        validate_cpu_checkpoint_node_fit(manifest, inventory)
         return self._run(
             ["create", "--dry-run=server", "--filename=-", "--output=json"],
             manifest=manifest,
@@ -444,6 +555,15 @@ class Kubectl:
     def create_cpu_checkpoint_pod_once(self, manifest: dict) -> dict:
         """Create exactly one locally validated CPU seal/verifier Pod."""
         validate_cpu_checkpoint_pod(manifest)
+        inventory = self._run(
+            [
+                "get",
+                "nodes",
+                "--selector=kubernetes.io/arch=amd64,workload=fleetai-training-ng-cpu",
+                "--output=json",
+            ]
+        )
+        validate_cpu_checkpoint_node_fit(manifest, inventory)
         return self._run(["create", "--filename=-", "--output=json"], manifest=manifest)
 
 
