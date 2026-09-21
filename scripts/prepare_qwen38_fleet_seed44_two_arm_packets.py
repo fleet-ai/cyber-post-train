@@ -613,6 +613,7 @@ def _prepare_arm(
     checkpoint_path: Path,
     proof_path: Path,
     ledger_path: Path,
+    source_files: dict[str, Path] | None = None,
 ) -> dict[str, Any]:
     directory.mkdir(mode=0o700)
     files = {
@@ -638,7 +639,10 @@ def _prepare_arm(
         _write(destination, source.read_bytes())
     config_text = json.dumps(config, sort_keys=True, separators=(",", ":"))
     config_name = config_path.name
-    data = {name: path.read_text(encoding="utf-8") for name, path in SOURCE_FILES.items()}
+    data = {
+        name: path.read_text(encoding="utf-8")
+        for name, path in (source_files or SOURCE_FILES).items()
+    }
     data.update(
         {
             "config.json": config_text,
@@ -646,11 +650,16 @@ def _prepare_arm(
             "task-set.json": task_set_path.read_text(encoding="utf-8"),
         }
     )
-    if arm_id == "fresh75":
+    artifact_binding = config.get("model_artifact_binding")
+    if artifact_binding is not None:
         data["model-artifact.json"] = checkpoint_path.read_text(encoding="utf-8")
-        data["model-artifact-acceptance.json"] = (
-            ROOT / "docs/evidence/qwen38-fresh75-step230-reload-accepted-20260915.json"
-        ).read_text(encoding="utf-8")
+        acceptance_path = _repo_path(
+            artifact_binding.get("acceptance_evidence_path"),
+            f"{arm_id} model artifact acceptance",
+        )
+        if _file_sha256(acceptance_path) != artifact_binding.get("acceptance_evidence_file_sha256"):
+            raise ValueError(f"{arm_id} model artifact acceptance bytes changed")
+        data["model-artifact-acceptance.json"] = acceptance_path.read_text(encoding="utf-8")
     config_map = {
         "apiVersion": "v1",
         "kind": "ConfigMap",
@@ -675,7 +684,9 @@ def _prepare_arm(
         "evaluation_config_sha256": file_digests["evaluation_config"],
         "task_selection_sha256": file_digests["task_set"],
         "split_manifest_file_sha256": file_digests["split_manifest"],
-        "split_manifest_sha256": protocol["split_manifest_sha256"],
+        "split_manifest_sha256": protocol.get(
+            "split_manifest_sha256", protocol.get("split_manifest", {}).get("sha256")
+        ),
         "comparison_protocol_file_sha256": file_digests["comparison_protocol"],
         "comparison_protocol_sha256": protocol["sha256"],
         "checkpoint_provenance_sha256": file_digests["checkpoint_provenance"],

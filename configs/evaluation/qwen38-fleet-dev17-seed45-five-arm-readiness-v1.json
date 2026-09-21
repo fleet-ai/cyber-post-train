@@ -1,0 +1,141 @@
+{
+  "schema": "cyber_qwen38_fleet_dev17_seed45_five_arm_readiness_v1",
+  "status": "source_prepared_not_launchable",
+  "launchable": false,
+  "protocol": {
+    "path": "configs/evaluation/qwen38-fleet-dev17-seed45-five-arm-matched-protocol-v1.json",
+    "file_sha256": "sha256:2d5c965745ad60310229094f11aff72e9094abcefe312bf5962882994e615892",
+    "sha256": "sha256:a55efaf70b18a04bf99d3e157a76c9ef949ca903dbd69592e5909a4181efdd9f"
+  },
+  "selection": {
+    "task_set_path": "configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json",
+    "task_set_file_sha256": "sha256:79c834e739246da29aca9513965ecfc7032f8df7744eb2245ce0303aba1b97c5",
+    "split_path": "configs/data/fleet-blackbox-current-study-split-20260914-v2.json",
+    "split_file_sha256": "sha256:28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb",
+    "task_count": 17,
+    "split_role": "dev_validation",
+    "final8_sealed": true
+  },
+  "arms": {
+    "base": {
+      "config_path": "configs/evaluation/qwen38-base-fleet-dev17-opencode-seed45-pass1-v1.json",
+      "config_file_sha256": "sha256:f734f4d72836f6cf3fb9ac0ff6874d16c6feabe495a96fbbfee40804903e2239",
+      "checkpoint_provenance_path": "configs/evaluation/qwen38-base-fleet-dev17-opencode-seed45-pass1-v1.artifact.json",
+      "checkpoint_provenance_file_sha256": "sha256:5e9f946d051dc141887b0eaedb7127b6915278970b25db3bff084ddf11a5a4c5",
+      "job_name": "chris-q38-dev17-s45-base-p1-v1",
+      "config_map_name": "chris-q38-dev17-s45-base-code-v1",
+      "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s45-base-p1-v1",
+      "database": "q38_dev17_s45_base_p1_v1",
+      "served_id": "qwen3.8-27b",
+      "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "expected_source_path": "/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+    },
+    "fresh75": {
+      "config_path": "configs/evaluation/qwen38-fresh75-fleet-dev17-opencode-seed45-pass1-v1.json",
+      "config_file_sha256": "sha256:b078764e3aecc5e79cb5f845c3a15f7d195db22d34b679183756fe21f5a33dbe",
+      "checkpoint_provenance_path": "configs/evaluation/qwen38-fresh75-fleet-dev17-opencode-seed45-pass1-v1.artifact.json",
+      "checkpoint_provenance_file_sha256": "sha256:971d5f2bb1e3183f816ed7737cc0f906dc9e747b885bffc3ddc42c6579f0b03e",
+      "job_name": "chris-q38-dev17-s45-fresh75-p1-v1",
+      "config_map_name": "chris-q38-dev17-s45-fresh75-code-v1",
+      "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s45-fresh75-p1-v1",
+      "database": "q38_dev17_s45_fresh75_p1_v1",
+      "served_id": "chris-q38-fresh75-step230-web-v2",
+      "model_revision": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
+      "expected_source_path": "/models/chris-q38-fresh75-step230-v1"
+    },
+    "teacher186": {
+      "config_path": "configs/evaluation/qwen38-teacher-v5-fleet-dev17-opencode-seed45-pass1-v1.json",
+      "config_file_sha256": "sha256:0fc64dd64c00151ca60dbf82dcd7578ae4dad82823a61612058df1cefaf3eb58",
+      "checkpoint_provenance_path": "configs/evaluation/qwen38-teacher-v5-fleet-dev17-opencode-seed45-pass1-v1.artifact.json",
+      "checkpoint_provenance_file_sha256": "sha256:d518e85a91597264f9acd4cc1c2e001bf36d61b25c3ce3efdacb9bdb21b19078",
+      "job_name": "chris-q38-dev17-s45-teacher186-p1-v1",
+      "config_map_name": "chris-q38-dev17-s45-teacher186-code-v1",
+      "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s45-teacher186-p1-v1",
+      "database": "q38_dev17_s45_teacher186_p1_v1",
+      "served_id": "chris-q38-teacher-v5-step186-web-v1",
+      "model_revision": "sha256:e6d59f5a58ce54b913d775cd71b81c64bd54637b53795df82baec0f71efefaf9",
+      "expected_source_path": "/models/chris-q38-teacher-sft-v5-step186-v1"
+    },
+    "self44": {
+      "config_path": "configs/evaluation/qwen38-self-sft-step44-fleet-dev17-opencode-seed45-pass1-v1.json",
+      "config_file_sha256": "sha256:62d643681f0aeea8ce065f62374338c7f074567c108b5cf9e8a5b838aa07a8b0",
+      "checkpoint_provenance_path": "configs/evaluation/qwen38-self-sft-step44-fleet-dev17-opencode-seed45-pass1-v1.artifact.json",
+      "checkpoint_provenance_file_sha256": "sha256:0f5865b378301fda8b30de0d3623da7e5dcee19cf1d3e95514cd28337f028773",
+      "job_name": "chris-q38-dev17-s45-self44-p1-v1",
+      "config_map_name": "chris-q38-dev17-s45-self44-code-v1",
+      "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s45-self44-p1-v1",
+      "database": "q38_dev17_s45_self44_p1_v1",
+      "served_id": "chris-q38-self-sft-step44-v1",
+      "model_revision": "sha256:a0e55bebe9d78ac76c012446ae0147a421cd333e2a6bf2bb6f4fb3450fa776fe",
+      "expected_source_path": "/models/chris-q38-self-sft-step44-v1"
+    },
+    "lr30s76": {
+      "config_path": "configs/evaluation/qwen38-lr30-step76-fleet-dev17-opencode-seed45-pass1-v1.json",
+      "config_file_sha256": "sha256:3aae730c2fff2ba42c429e72cd162ed1335385b23578956df86db373099164da",
+      "checkpoint_provenance_path": "configs/evaluation/qwen38-lr30-step76-fleet-dev17-opencode-seed45-pass1-v1.artifact.json",
+      "checkpoint_provenance_file_sha256": "sha256:9e4c3163b607d20d0e4ea1912ca6743b04e731e652e839294bd3c5333d8bb1d0",
+      "job_name": "chris-q38-dev17-s45-lr30s76-p1-v1",
+      "config_map_name": "chris-q38-dev17-s45-lr30s76-code-v1",
+      "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s45-lr30s76-p1-v1",
+      "database": "q38_dev17_s45_lr30s76_p1_v1",
+      "served_id": "chris-q38-lr30-step76-web-v1",
+      "model_revision": "sha256:3bef11697759b11db150b705e1882fb2d31a3efbdadbebd948aa917dcacc03a8",
+      "expected_source_path": "/models/chris-q38-available-a-lr30-step76-v1"
+    }
+  },
+  "live_gate": {
+    "required_candidate_parity_receipts": [
+      "fresh75",
+      "teacher186",
+      "self44",
+      "lr30s76"
+    ],
+    "all_candidate_routes_current_phase": "must_be_observed_jit",
+    "maximum_receipt_age_seconds": 3600,
+    "route_mutations_performed_by_this_source_preparation": 0
+  },
+  "sequence_gate": {
+    "seed44_base_and_fresh75_terminal_reconciliation_required": true,
+    "seed44_accepted_cells_must_not_be_replayed": true,
+    "candidate_routes_are_jit_only": true
+  },
+  "create_once_gate": {
+    "job_config_map_workload_pod_output_database_absence_required": true,
+    "server_preview_required": true,
+    "root_failure_alert_annotation": "off",
+    "automatic_retry": false
+  },
+  "live_evidence_binding": {
+    "kubernetes_context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+    "namespace": "fleet-train-jobs",
+    "assert_before_every_live_read": true,
+    "object_absence_valid_only_after_exact_binding_assertion": true
+  },
+  "scientific_boundary": {
+    "descriptive_train50_is_a_separate_nonheldout_campaign": true,
+    "final8_must_not_be_opened_by_this_protocol": true,
+    "scores_or_task_content_required_for_preparation": false
+  },
+  "capacity_gate": {
+    "owned_node_cap": 8,
+    "owned_gpu_cap": 64,
+    "candidate_route_nodes": 4,
+    "candidate_route_gpus": 32,
+    "fresh_read_only_owned_capacity_census_required_before_resume": true
+  },
+  "eligibility": {
+    "seed44_terminal_reconciled": false,
+    "fresh_live_parity_complete": false,
+    "duplicate_absence_complete": false,
+    "root_alert_off_server_preview_complete": false,
+    "eligible_now": false
+  },
+  "operation": {
+    "jobs_created": 0,
+    "config_maps_created": 0,
+    "routes_resumed": 0,
+    "databases_created": 0,
+    "outputs_created": 0
+  },
+  "sha256": "sha256:846b02347c9d8ac409efbe4e559cbcc130797078bb3d8e47c3efe8a0b80d2eaf"
+}
