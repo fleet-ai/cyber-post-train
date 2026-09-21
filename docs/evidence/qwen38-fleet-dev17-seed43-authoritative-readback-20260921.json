@@ -1,0 +1,67 @@
+{
+  "schema": "qwen38_fleet_dev17_seed43_authoritative_readback_v1",
+  "observed_at": "2026-09-21T04:44:22Z",
+  "scope": "Score-blind authoritative session-summary evidence for the two live seed43 checkpoint arms. No session identifiers, scores, prompts, traces, flags, or final-test content are retained.",
+  "source": {
+    "repository_commit": "defe905f42e2196d2b8244b4330a12209296fe7b",
+    "protocol_path": "configs/evaluation/qwen38-fleet-dev17-seed43-matched-protocol-v1.json",
+    "protocol_sha256": "85334a48a36c126a1134ab2e0ba6211e2fce5de06c4fce6bbcef5304ab9b4f4a"
+  },
+  "readbacks": {
+    "self44": {
+      "job_uid": "3d514935-1bbf-4ee7-97c3-22a34656c659",
+      "pod_uid": "daccf181-2f11-4c2a-a3bc-cb58d0b0655d",
+      "route_uid": "05057134-546f-484e-9672-3f9ca50cec77",
+      "expected_persisted_model": "chris-q38-self-sft-step44-v1",
+      "observed_persisted_model": "chris-q38-self-sft-step44-v1",
+      "authoritative_match_count": 1,
+      "status": "completed",
+      "task_binding_matches": true,
+      "verifier_execution_binding_matches": true,
+      "pod_ready": true,
+      "pod_restarts": 0
+    },
+    "teacher186": {
+      "job_uid": "6303b84c-63f5-472b-b7aa-f785e3d56932",
+      "pod_uid": "51394c0d-1dc3-4605-9865-6b7ea76c1060",
+      "route_uid": "10b1b0ce-7b02-429e-8361-084a3039f248",
+      "expected_persisted_model": "chris-q38-teacher-v5-step186-web-v1",
+      "observed_persisted_model": "chris-q38-teacher-v5-step186-web-v1",
+      "authoritative_match_count": 1,
+      "status": "completed",
+      "task_binding_matches": true,
+      "verifier_execution_binding_matches": true,
+      "pod_ready": true,
+      "pod_restarts": 0
+    }
+  },
+  "score_blind_counts": {
+    "self44": {
+      "accepted": 4,
+      "claimed": 8,
+      "pending": 4,
+      "retry_review": 1,
+      "local_results": 4,
+      "stale_active": 0,
+      "database_plan_sha256": "916a43d4c7f58e86586f16aec7b94d301f0ba64b1322360f51300a271c30bad9"
+    },
+    "teacher186": {
+      "accepted": 4,
+      "claimed": 8,
+      "pending": 1,
+      "retry_review": 4,
+      "local_results": 6,
+      "stale_active": 0,
+      "database_plan_sha256": "2a1d7292a3b56c61073a8134afe1580e53c42b6640357c141fc45464c38eafde"
+    }
+  },
+  "acceptance_boundary": {
+    "capability_claim_made": false,
+    "scores_included": false,
+    "session_identifiers_included": false,
+    "prompts_or_traces_included": false,
+    "final_eight_task_set_accessed": false,
+    "statement": "This proves only checkpoint identity and infrastructure health. It is not a capability result and does not make an arm terminal."
+  },
+  "receipt_sha256": "sha256:18d021610cbf0634b6db3947d2965db5228fd9e247b1ad59a85ec94008b60df3"
+}
