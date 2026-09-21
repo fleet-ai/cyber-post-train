@@ -1,14 +1,16 @@
 # Qwen3.8 SkyRL reward canary
 
-Status: **prod8 is the next run; it is prepared but not yet authorized for a
-GPU launch.**
+Status: **prod8 was created once on 2026-09-21 and is running on one eight-GPU
+node. It is not accepted yet.**
 
 The exact, non-authorizing packet is
 [`qwen38-rl-reward-canary-prod8-launch-packet-v1.json`](../configs/qualification/qwen38-rl-reward-canary-prod8-launch-packet-v1.json).
 It recompiles the plan from committed, sanitized inputs and records every gate
 that still must pass. The independent broader audit is
 [`2026-09-20-skyrl-launch-readiness-audit-v1.json`](evidence/qwen38-study/2026-09-20-skyrl-launch-readiness-audit-v1.json).
-Neither file creates or authorizes a workload.
+Neither file creates or authorizes a workload. The separate, sanitized live
+launch record is
+[`2026-09-21-skyrl-prod8-launch-v1.json`](evidence/qwen38-study/2026-09-21-skyrl-prod8-launch-v1.json).
 
 ## Exact prod8 run
 
@@ -66,9 +68,9 @@ The old `v17` topology packet remains historical evidence. It is not a prod8
 gate. Prod6 and prod7 already exercised the one-node topology live, and prod8's
 direct authorization path validates its own exact object shape.
 
-## Gates that still remain
+## Launch gates completed; acceptance still pending
 
-The operator must complete these steps in order:
+The operator completed these steps in order on 2026-09-21:
 
 1. Rehash the exact private one-train/one-development package and prove its new
    SFS destination, staging Job name, and upload archive are absent.
@@ -85,7 +87,12 @@ The operator must complete these steps in order:
 6. Authorize one RayJob create. An ambiguous create response is reconciled and
    never retried.
 
-After those gates pass, acceptance requires eight genuine rollouts, one
+The exact RayJob was created once at 2026-09-21T10:44:48Z. Its UIDs, launch
+receipt, capacity check, staged-data receipt, CPU-preflight receipt, and cleanup
+observer receipt are recorded in the live launch record linked above. Do not
+repeat the create.
+
+Acceptance still requires eight genuine rollouts, one
 authoritative verifier execution ID per rollout, non-constant rewards, one
 finite nonzero optimizer update, a sealed step-1 checkpoint, and complete
 release of the eight GPUs. All-zero genuine rewards are a valid experiment
