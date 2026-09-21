@@ -34,11 +34,11 @@
     "private_loader_log": "private-synthetic-loader.log",
     "files": {
       "training/qwen38_lr30_step76_gate.py": "sha256:f216cb1042c1f6eb2a707ded9d3a0529d36c7d66504d58121344912038a35df8",
-      "training/checkpoints.py": "sha256:34ff4bcf9cb44a45d467a182146d0a99d672fd393fa7f435437405f008a21136",
+      "training/checkpoints.py": "sha256:b2bfa604a45a7ea1ed1b195401ce3c489f6460b36d2cd39d68a43033d23873b7",
       "training/export_check.py": "sha256:a04811409178eedc6969e34766ca70c82d84c27b718944ecab93407609c4dfe7",
       "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
       "training/post_sft_artifacts.py": "sha256:c09555c61cb25ad5867cce80ed8bef0684734231b5708b1be892e75b9dd980eb",
-      "training/sft_runtime.py": "sha256:ccffa863d28101c6f138fd47cc870a684e4fdd80c2be39e879bd45e10a5a5c0a"
+      "training/sft_runtime.py": "sha256:3105f5211319cea56aa111cdea43eb7230d8b7e48bab958d44ed05506a019b08"
     },
     "focused_tests_passed": 97
   },
@@ -46,7 +46,7 @@
     "name": "chris-q38-lr30-s76-gpu-v1",
     "title": "Qwen3.8 LR30 step76 exact BF16 one-GPU zero-update reload v1",
     "run_dir": "/mnt/sfs/jobs/chris-q38-lr30-step76-hfcheck-v1",
-    "request_sha256": "sha256:0396e5f54d038024cee7b6fd9d4dd7d9d1ad5c5f01dcb6d23b494eb7babefab9",
+    "request_sha256": "sha256:eb73222ca1589b09c9513fc0d057b12387276eed303ec0493d24c29674a773c7",
     "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
     "workers": 1,
     "gpus_per_worker": 1,
@@ -67,9 +67,9 @@
     "warnings": [],
     "kind": "RayJob",
     "namespace": "fleet-train-jobs",
-    "manifest_sha256": "sha256:92c115ebdf5195b215b857a93ded9f175c150504549c6855de4ca4ef3ccb2ef6",
-    "direct_rendered_manifest_sha256": "sha256:7408819bbc6ff009525172bef1a17a4cf98d5233a70a0e1e2d7aec81b3ca5aee",
-    "server_dry_run_manifest_sha256": "sha256:66c7785e8b3382269c3d0344faa1d0ba99ec1dc82f0a44d36e8e07e01aad2d91",
+    "manifest_sha256": "sha256:bb21c90d4229c68a488029ad6fc18594253307b827b968e45e83358cc79e21ba",
+    "direct_rendered_manifest_sha256": "sha256:3338b25dbba3a30e53f0e1fa56de87cbff3f66a18ce16f17b4fd2aee27818dfd",
+    "server_dry_run_manifest_sha256": "sha256:06eaecbcb45c36432f72a0276d4fd26648e5b43c78d1433983125abc4c228498",
     "suspended_for_queue": true,
     "queue_priority_class": "q1",
     "run_dir_matches": true,
@@ -86,7 +86,7 @@
   "blockers": [
     {
       "gate": "current_main_merge_and_fresh_source_output_preflight",
-      "reason": "The exact one-off path passed a live server dry-run with root fleet.ai/failure-alerts=off, c1/q1, one GPU and no resources created, but the implementation is not yet merged and the source/output preflight must be repeated within 30 minutes of create.",
+      "reason": "The exact current-main-bound one-off path passed a live server dry-run with root fleet.ai/failure-alerts=off, c1/q1, one GPU and no resources created, but the implementation is not yet merged and the source/output preflight must be repeated within 30 minutes of create.",
       "unblock": "Merge this exact reviewed implementation, regenerate the prepared directory from current main, and pass the exact-image zero-GPU source/output preflight."
     },
     {
@@ -129,5 +129,5 @@
     "resources_created": 0,
     "gpus_allocated": 0
   },
-  "sha256": "sha256:db13eaf2740e41633d4d6900ad21c91aad6365484086604c920c8eb50c38e8ae"
+  "sha256": "sha256:0a0427bbb051046694c2495e2a79eb170264ca6c6b7014a3ecaa67962622e157"
 }
