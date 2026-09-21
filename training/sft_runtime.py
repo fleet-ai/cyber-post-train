@@ -24,6 +24,7 @@ import argparse
 import contextlib
 import hashlib
 import importlib.util
+import inspect
 import json
 import math
 import numbers
@@ -685,6 +686,32 @@ def qwen38_lora_broad_full_plan_binding(
         raise ValueError("Qwen3.8 broad LoRA plan is not reviewed") from exc
 
 
+def _qwen38_lora_production_source_plan(plan: dict) -> dict:
+    """Resolve a bounded recovery chain to its reviewed broad source plan."""
+    current = plan
+    seen = set()
+    for _ in range(8):
+        if not isinstance(current, dict) or id(current) in seen:
+            raise ValueError("Qwen3.8 LoRA recovery source-plan lineage is cyclic or invalid")
+        seen.add(id(current))
+        if current.get("run_name") in QWEN38_LORA_BROAD_FULL_PLANS:
+            expected = qwen38_lora_broad_full_plan_binding(current["run_name"])
+            if _qwen38_lora_one_step_identity(current) != expected:
+                raise ValueError("Qwen3.8 LoRA recovery root differs from its reviewed broad plan")
+            return current
+        recovery = current.get("recovery")
+        checkpoint = recovery.get("checkpoint") if isinstance(recovery, dict) else None
+        source = checkpoint.get("source_plan") if isinstance(checkpoint, dict) else None
+        if (
+            not isinstance(source, dict)
+            or id(source) in seen
+            or checkpoint.get("source_plan_sha256") != _unsigned_digest(source)
+        ):
+            raise ValueError("Qwen3.8 LoRA recovery source-plan lineage is cyclic or unsealed")
+        current = source
+    raise ValueError("Qwen3.8 LoRA recovery source-plan lineage is too deep")
+
+
 def write_receipt(path: Path, value: dict, *, replace: bool = False) -> None:
     payload = {**value, "receipt_sha256": _unsigned_digest(value)}
     path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -782,7 +809,7 @@ def _verify_qwen38_production_qualification(plan: dict) -> None:
     # scientific, data, model and topology field from that source.  Reopen the
     # reviewed source identity here instead of trying to find the fresh
     # successor name in the create-once broad-plan table.
-    source_plan = plan["recovery"]["checkpoint"]["source_plan"] if "recovery" in plan else plan
+    source_plan = _qwen38_lora_production_source_plan(plan)
     if (
         _qwen38_lora_one_step_identity(source_plan)
         != qwen38_lora_broad_full_plan_binding(source_plan.get("run_name", ""))
@@ -844,14 +871,39 @@ def _qwen38_policy_learning_rate(dispatch, plan: dict) -> float:
     return _reconcile_worker_learning_rates(ray.get(refs), expected_ranks=expected)
 
 
-def _scalar_sft_forward_backward(dispatch, batch):
-    """Run SFT without constructing unused per-token worker outputs."""
-    return dispatch.forward_backward(
-        "policy",
-        batch,
-        loss_fn="cross_entropy",
-        return_per_token_outputs=False,
+def _sft_forward_backward_kwargs(plan: dict) -> dict:
+    """Select only arguments implemented by the plan's pinned SkyRL image."""
+    kwargs = {"loss_fn": "cross_entropy"}
+    if _is_qwen38_lora(plan):
+        # The separately pinned Megatron-LoRA image owns this optimization.
+        # Full-weight f5bc3b78 has no such parameter and must use its native
+        # signature even though it returns per-token values we do not consume.
+        kwargs["return_per_token_outputs"] = False
+    return kwargs
+
+
+def _validate_sft_forward_backward_adapter(plan: dict, dispatch_type=None) -> None:
+    """Prove the selected call shape against the exact in-image dispatcher."""
+    if dispatch_type is None:
+        from skyrl.backends.skyrl_train.workers.worker_dispatch import WorkerDispatch
+
+        dispatch_type = WorkerDispatch
+    signature = inspect.signature(dispatch_type.forward_backward)
+    accepts_kwargs = any(
+        parameter.kind is inspect.Parameter.VAR_KEYWORD
+        for parameter in signature.parameters.values()
     )
+    unsupported = set(_sft_forward_backward_kwargs(plan)) - set(signature.parameters)
+    if unsupported and not accepts_kwargs:
+        names = ", ".join(sorted(unsupported))
+        raise ValueError(
+            f"selected SFT forward/backward arguments are unsupported by the image: {names}"
+        )
+
+
+def _scalar_sft_forward_backward(dispatch, batch, plan):
+    """Run one SFT forward/backward using the pinned image's exact call shape."""
+    return dispatch.forward_backward("policy", batch, **_sft_forward_backward_kwargs(plan))
 
 
 def validate_plan(plan: dict, *, check_files: bool = True) -> None:
@@ -986,13 +1038,9 @@ def validate_plan(plan: dict, *, check_files: bool = True) -> None:
             # those exact production-qualified plans; recovery.validate above
             # already requires every scientific/data/topology field to remain
             # identical to that source.
-            source_plan = plan["recovery"]["checkpoint"]["source_plan"]
+            source_plan = _qwen38_lora_production_source_plan(plan)
             source_identity = _qwen38_lora_one_step_identity(source_plan)
-            source_broad_identity = (
-                qwen38_lora_broad_full_plan_binding(source_plan.get("run_name", ""))
-                if source_plan.get("run_name") in QWEN38_LORA_BROAD_FULL_PLANS
-                else None
-            )
+            source_broad_identity = qwen38_lora_broad_full_plan_binding(source_plan["run_name"])
             expected_qualification = (
                 QWEN38_LORA_PRODUCTION_QUALIFICATION
                 if source_identity == source_broad_identity
@@ -2682,11 +2730,10 @@ def _make_trainer_class():
             if _is_qwen38_lora(self.plan):
                 self._record_qualification_stage("forward_backward_started")
             with Timer("forward_backward", timings):
-                # SFT consumes scalar metrics only.  The pinned SkyRL trainer
-                # explicitly disables its per-token outputs here; keep the
-                # audited override identical so 32K batches do not construct
-                # and transport unused logprob/loss arrays every step.
-                output = _scalar_sft_forward_backward(self.dispatch, batch)
+                # The pinned Megatron-LoRA image can suppress unused per-token
+                # outputs. The full-weight f5bc3b78 image has no such optional
+                # argument, so the adapter preserves its exact native call.
+                output = _scalar_sft_forward_backward(self.dispatch, batch, self.plan)
             if _is_qwen38_lora(self.plan):
                 self._record_qualification_stage("forward_backward_complete")
             loss = float(output.metrics.get("final_loss", output.metrics.get("loss", float("nan"))))
@@ -3118,6 +3165,7 @@ def main():
             or args.setup_probe_with_tracker
         ),
     )
+    _validate_sft_forward_backward_adapter(plan)
     if args.preflight_tokenize:
         import pyarrow.parquet as pq
         from skyrl.train.sft_trainer import tokenize_chat_example

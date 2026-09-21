@@ -16,8 +16,10 @@ CONFIG = ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-matched-pass1-v2.
 BASE_CONFIG = ROOT / "configs/evaluation/qwen38-base-fleet-dev17-opencode-pass1-v1.json"
 CANDIDATE_CONFIG = ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-opencode-pass1-v2.json"
 TEACHER_CONFIG = ROOT / "configs/evaluation/qwen38-teacher-v5-fleet-dev17-opencode-pass1-v2.json"
+TEACHER_V3_CONFIG = ROOT / "configs/evaluation/qwen38-teacher-v5-fleet-dev17-opencode-pass1-v3.json"
 BACKLOG = ROOT / "configs/evaluation/qwen38-fleet-dev17-backlog-v1.json"
 SUCCESSOR_JOB = ROOT / "evals/fleet/cluster/qwen38-base-dev17-opencode-pass1-v1-job.yaml"
+TEACHER_V3_JOB = ROOT / "evals/fleet/cluster/qwen38-teacher-v5-dev17-opencode-pass1-v3-job.yaml"
 SUCCESSOR_SCRIPT = ROOT / "evals/fleet/scripts/run_qwen38_dev17_single_arm_v1.sh"
 
 
@@ -99,6 +101,22 @@ def test_teacher_only_arm_preserves_exact_base_protocol():
         assert teacher[field] == base[field]
 
 
+def test_teacher_v3_changes_only_create_once_experiment_identity():
+    teacher_v2 = read(TEACHER_CONFIG)
+    teacher_v3 = read(TEACHER_V3_CONFIG)
+    assert teacher_v2["name"] == "q38-teacher-v5-dev17-p1-v2"
+    assert teacher_v3["name"] == "q38-teacher-v5-dev17-p1-v3"
+    assert {key: value for key, value in teacher_v3.items() if key != "name"} == {
+        key: value for key, value in teacher_v2.items() if key != "name"
+    }
+    compiled = evaluate.compile_eval(teacher_v3, relative_to=TEACHER_V3_CONFIG.parent)
+    assert compiled["automatic_retry"] is False
+    assert len(evaluate.plan_rows(compiled)) == 17
+    assert compiled["models"]["teacher-v5-step186"]["session_model"] == (
+        "qwen/chris-q38-teacher-v5-step186-web-v1"
+    )
+
+
 def test_backlog_reuses_frozen_protocol_and_unique_create_once_targets():
     backlog = read(BACKLOG)
     base = evaluate.compile_eval(read(BASE_CONFIG), relative_to=BASE_CONFIG.parent)
@@ -128,3 +146,25 @@ def test_successor_is_alert_silent_cpu_only_and_create_once():
     assert '"${EVAL_OUTPUT:?EVAL_OUTPUT is required}"' in script
     assert '"${EVAL_DATABASE:?EVAL_DATABASE is required}"' in script
     assert 'cmp --silent /bootstrap/config.json "/bootstrap/$EVAL_CONFIG_NAME"' in script
+
+
+def test_teacher_v3_job_is_alert_silent_cpu_only_and_capacity_matched():
+    job = yaml.safe_load(TEACHER_V3_JOB.read_text())
+    assert job["metadata"]["name"] == "chris-q38-teacher-v5-dev17-p1-v3"
+    assert job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+    assert job["spec"]["backoffLimit"] == 0
+    assert job["spec"]["template"]["spec"]["priorityClassName"] == "c1"
+    evaluator = next(
+        item
+        for item in job["spec"]["template"]["spec"]["containers"]
+        if item["name"] == "evaluator"
+    )
+    assert evaluator["resources"]["requests"] == {
+        "cpu": "4",
+        "memory": "32Gi",
+        "ephemeral-storage": "10Gi",
+    }
+    assert "nvidia.com/gpu" not in evaluator["resources"]["requests"]
+    env = {row["name"]: row.get("value") for row in evaluator["env"]}
+    assert env["EVAL_CONFIG_NAME"].endswith("pass1-v3.json")
+    assert env["EVAL_DATABASE"] == "q38_teacher_v5_dev17_p1_v3"

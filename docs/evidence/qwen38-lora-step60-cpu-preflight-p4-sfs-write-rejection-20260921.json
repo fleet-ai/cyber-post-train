@@ -1,0 +1,95 @@
+{
+  "schema": "cyber_qwen38_lora_step60_cpu_preflight_sfs_write_rejection_v1",
+  "status": "rejected_at_first_sfs_write_and_released",
+  "source": {
+    "git_commit": "bfe851a39bf2287c620d41a5608d81d1d8a4ac5d",
+    "source_archive_sha256": "2de35d1e076da7322bc1e50fbbb70e3947d43dc00b1b5de41e1c98f2cd33a774",
+    "driver_sha256": "d455190cc87e73163c5ac5c45cf139a67ae9f04d6c2d60a76ac5409f50fc2782",
+    "pod_manifest_file_sha256": "c62a171aee854cc83a968f92953df30255cc2ee8c48a1016ee14494227d00454",
+    "image": "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317"
+  },
+  "pod": {
+    "name": "chris-q38-lora-s60-v3-preflight-p4",
+    "uid": "0f08e88c-83d9-4f2f-8e92-c477de22d3ce",
+    "phase": "Failed",
+    "finished_at": "2026-09-21T02:34:43Z",
+    "exit_code": 1,
+    "restarts": 0,
+    "gpus": 0,
+    "priority_class": "c1",
+    "failure_alert_annotation": "off",
+    "runtime_user": {
+      "uid": 1000,
+      "gid": 100
+    },
+    "resources": {
+      "cpu_request": "4",
+      "cpu_limit": "8",
+      "memory_request": "16Gi",
+      "memory_limit": "32Gi",
+      "largest_point_in_time_memory_mib": 26207
+    },
+    "released": true,
+    "not_found_after_release": true,
+    "release_verified_at": "2026-09-21T02:35:24Z"
+  },
+  "source_configmap": {
+    "name": "chris-q38-lora-s60-v3-preflight-p4-source",
+    "uid": "30ccb4b2-4285-47e2-9030-3aa6d538b6d5",
+    "released": true,
+    "not_found_after_release": true
+  },
+  "failure_boundary": {
+    "cause": "The pinned trainer correctly ran as UID 1000 and GID 100, but the prepared packet was placed directly below the root-owned /mnt/sfs/jobs directory. That identity cannot create a new top-level job sibling.",
+    "source_archive_digest_verified": true,
+    "source_commit_bytes_verified": true,
+    "plan_compiled": true,
+    "native_dataset_materialized": true,
+    "checkpoint_read": true,
+    "first_failed_operation": "create the prepared transaction directory directly below /mnt/sfs/jobs",
+    "sfs_write_operations_succeeded": 0,
+    "training_output_written": false,
+    "prepared_output_written": false,
+    "optimizer_steps_executed": 0
+  },
+  "repair_binding": {
+    "runtime_identity": {
+      "uid": 1000,
+      "gid": 100,
+      "fs_group": 100
+    },
+    "owned_parent": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls",
+    "owned_parent_evidence": {
+      "durable_source": "docs/evidence/qwen38-lora-prod-canary-v1-submission-20260920.json",
+      "successful_helper_pod_uid": "fdda4741-2af9-41dd-996f-66b97879e11d",
+      "control_path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/q38-lora-prod-canary-control-v1",
+      "runtime_identity": {
+        "uid": 1000,
+        "gid": 100,
+        "fs_group": 100
+      },
+      "result": "one_jobs_api_post_succeeded",
+      "contrast": "The prior helper that tried to create a direct child of /mnt/sfs/jobs failed before submission with zero GPUs allocated."
+    },
+    "path_isolation": {
+      "create_once_leaf_required_absent": true,
+      "leaf_must_be_direct_child_of_owned_parent": true,
+      "full_sfs_mount_read_only": true,
+      "only_writable_mount": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls",
+      "corpus_and_checkpoint_paths_writable": false
+    },
+    "filesystem_group_is_not_privilege_widening": "fsGroup 100 equals the pinned image's existing GID and the reviewed launch-controls tree group. The Pod remains non-root, drops all capabilities, has no initializer and performs no chown or chmod of shared storage.",
+    "policy": "Create only one absent control leaf below the existing owned parent; never create or change ownership directly below /mnt/sfs/jobs or inside corpus data directories.",
+    "minimum_memory_request_mib": 26207,
+    "planned_memory_request": "32Gi",
+    "planned_memory_limit": "48Gi",
+    "gpu_create_authorized": false
+  },
+  "sanitization": {
+    "raw_logs_included": false,
+    "credentials_included": false,
+    "prompts_traces_flags_answers_or_scores_included": false,
+    "tensor_values_read": false
+  },
+  "receipt_sha256": "e84e9e2cd0aac43fc2f65aeaa340ae9ab2e5415798e541bbb0cd7fa6df5795c9"
+}

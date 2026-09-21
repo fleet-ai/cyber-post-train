@@ -24,6 +24,7 @@ from training.sft_runtime import (
     _scalar_sft_forward_backward,
     _setup_probe_plan,
     _unsigned_digest,
+    _validate_sft_forward_backward_adapter,
     build_runtime_configs,
     dense_rows,
     explicit_tracking_class,
@@ -39,22 +40,52 @@ from training.sft_runtime import (
 )
 
 
-def test_scalar_sft_forward_backward_disables_unused_per_token_outputs():
-    calls = []
+def test_sft_forward_backward_routes_arguments_by_pinned_plan_family():
+    legacy_calls = []
+    lora_calls = []
 
-    class Dispatcher:
-        def forward_backward(self, *args, **kwargs):
-            calls.append((args, kwargs))
-            return "result"
+    class LegacyDispatcher:
+        def forward_backward(self, model, batch, loss_fn=None, loss_fn_config=None, model_id=None):
+            legacy_calls.append((model, batch, loss_fn, loss_fn_config, model_id))
+            return "legacy"
+
+    class LoraDispatcher:
+        def forward_backward(self, model, batch, loss_fn, return_per_token_outputs):
+            lora_calls.append((model, batch, loss_fn, return_per_token_outputs))
+            return "lora"
 
     batch = object()
-    assert _scalar_sft_forward_backward(Dispatcher(), batch) == "result"
-    assert calls == [
-        (
-            ("policy", batch),
-            {"loss_fn": "cross_entropy", "return_per_token_outputs": False},
-        )
-    ]
+    full_plan = {"model": {"repo": "Qwen/Qwen3.8-27B"}}
+    lora_plan = {**full_plan, "lora": {}}
+    assert _scalar_sft_forward_backward(LegacyDispatcher(), batch, full_plan) == "legacy"
+    assert _scalar_sft_forward_backward(LoraDispatcher(), batch, lora_plan) == "lora"
+    assert legacy_calls == [("policy", batch, "cross_entropy", None, None)]
+    assert lora_calls == [("policy", batch, "cross_entropy", False)]
+
+
+def test_sft_forward_backward_preflight_rejects_image_signature_drift():
+    class LegacyDispatcher:
+        def forward_backward(self, model, data, loss_fn=None, loss_fn_config=None, model_id=None):
+            pass
+
+    class LoraDispatcher:
+        def forward_backward(
+            self,
+            model,
+            data,
+            loss_fn=None,
+            loss_fn_config=None,
+            model_id=None,
+            return_per_token_outputs=True,
+        ):
+            pass
+
+    full_plan = {"model": {"repo": "Qwen/Qwen3.8-27B"}}
+    lora_plan = {**full_plan, "lora": {}}
+    _validate_sft_forward_backward_adapter(full_plan, LegacyDispatcher)
+    _validate_sft_forward_backward_adapter(lora_plan, LoraDispatcher)
+    with pytest.raises(ValueError, match="unsupported by the image"):
+        _validate_sft_forward_backward_adapter(lora_plan, LegacyDispatcher)
 
 
 def plan(tmp_path):
@@ -1869,9 +1900,8 @@ def test_exact_native_loop_eval_never_optimizes_and_saves_final(
         def dp_size(self, model):
             return 8
 
-        def forward_backward(self, model, batch, loss_fn, return_per_token_outputs):
+        def forward_backward(self, model, batch, loss_fn):
             assert loss_fn == "cross_entropy"
-            assert return_per_token_outputs is False
             return SimpleNamespace(metrics={"loss": 1.0, "lr": 1e-6})
 
         def optim_step(self, model):

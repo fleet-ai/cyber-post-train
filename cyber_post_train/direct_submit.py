@@ -1,10 +1,11 @@
-"""Fail-closed, create-once SFT fallback when the Jobs API omits one annotation.
+"""Fail-closed, create-once fallbacks when the Jobs API omits one annotation.
 
 The Jobs API remains the rendering authority.  This module accepts its live
 preview, changes only the run identity, removes the API-only Fleet credential
 Secret that SFT does not consume, and adds the project-required root alert
 annotation.  It never calls the Jobs API create endpoint and never applies or
-patches a Kubernetes object.
+patches a Kubernetes object.  The non-SFT exception is restricted to one exact
+LR30 step-76 HF inference-forward qualification schema.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ import re
 import subprocess
 import uuid
 from copy import deepcopy
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
 
@@ -28,12 +30,277 @@ from .jobs import (
     validate_preview,
     validate_request,
 )
+from .sfs_write_identity import TRAINER_GID, TRAINER_UID, validate_owned_output_binding
 
 NAMESPACE = "fleet-train-jobs"
 ZERO_RUN_ID = "00000000-0000-0000-0000-000000000000"
 SFT_SCHEMAS = {"cyber_sft_runtime_v2", "cyber_sft_runtime_dense_v1"}
 SFT_SECRET = "wandb-api"
 DIRECT_JOURNAL = "DIRECT_SUBMISSION.jsonl"
+CPU_CHECKPOINT_OPERATION_ANNOTATION = "cyber-post-train.fleet.ai/cpu-checkpoint-operation"
+CPU_CHECKPOINT_OPERATIONS = {"seal", "verify"}
+CPU_SFS_OWNED_ROOT_ANNOTATION = "cyber-post-train.fleet.ai/sfs-owned-root"
+CPU_SFS_OUTPUT_ROOT_ANNOTATION = "cyber-post-train.fleet.ai/sfs-output-root"
+CPU_SFS_MEMORY_FLOOR_MIB_ANNOTATION = "cyber-post-train.fleet.ai/memory-floor-mib"
+LORA_TRAINER_IMAGE = (
+    "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@"
+    "sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317"
+)
+CPU_NODE_SELECTOR = {
+    "kubernetes.io/arch": "amd64",
+    "workload": "fleetai-training-ng-cpu",
+}
+
+
+def _cpu_millicores(value: object) -> int:
+    if not isinstance(value, str) or not value:
+        raise JobsError("CPU checkpoint Pod has an invalid CPU quantity")
+    raw = value[:-1] if value.endswith("m") else value
+    try:
+        amount = Decimal(raw)
+    except InvalidOperation:
+        raise JobsError("CPU checkpoint Pod has an invalid CPU quantity") from None
+    millicores = amount if value.endswith("m") else amount * 1000
+    if millicores <= 0 or millicores != millicores.to_integral_value():
+        raise JobsError("CPU checkpoint Pod has an invalid CPU quantity")
+    return int(millicores)
+
+
+def _memory_bytes(value: object) -> int:
+    if not isinstance(value, str) or not value:
+        raise JobsError("CPU checkpoint Pod has an invalid memory quantity")
+    match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)?)([EPTGMK]i?|)", value)
+    if match is None:
+        raise JobsError("CPU checkpoint Pod has an invalid memory quantity")
+    suffix = match.group(2)
+    power = {"": 0, "K": 1, "M": 2, "G": 3, "T": 4, "P": 5, "E": 6}
+    binary = suffix.endswith("i")
+    unit = suffix[:-1] if binary else suffix
+    try:
+        amount = Decimal(match.group(1)) * (1024 if binary else 1000) ** power[unit]
+    except (InvalidOperation, KeyError):
+        raise JobsError("CPU checkpoint Pod has an invalid memory quantity") from None
+    if amount <= 0 or amount != amount.to_integral_value():
+        raise JobsError("CPU checkpoint Pod has an invalid memory quantity")
+    return int(amount)
+
+
+def _cpu_checkpoint_request(manifest: dict) -> tuple[int, int]:
+    spec = manifest["spec"]
+    if spec.get("initContainers") not in (None, []):
+        raise JobsError("CPU checkpoint Pod must not use init containers")
+    if spec.get("overhead") not in (None, {}):
+        raise JobsError("CPU checkpoint Pod must not add scheduling overhead")
+    cpu = 0
+    memory = 0
+    for container in spec["containers"]:
+        requests = container.get("resources", {}).get("requests", {})
+        if set(requests) != {"cpu", "memory"}:
+            raise JobsError("CPU checkpoint Pod must request exactly CPU and memory")
+        cpu += _cpu_millicores(requests["cpu"])
+        memory += _memory_bytes(requests["memory"])
+    return cpu, memory
+
+
+def validate_cpu_checkpoint_node_fit(manifest: dict, inventory: dict) -> dict:
+    """Prove the requested CPU and memory fit one currently observed eligible node."""
+    validate_cpu_checkpoint_pod(manifest)
+    if inventory.get("kind") != "List" or not isinstance(inventory.get("items"), list):
+        raise JobsError("CPU node inventory is incomplete")
+    requested_cpu, requested_memory = _cpu_checkpoint_request(manifest)
+    eligible = []
+    for node in inventory["items"]:
+        try:
+            metadata = node["metadata"]
+            spec = node["spec"]
+            status = node["status"]
+            labels = metadata["labels"]
+            allocatable = status["allocatable"]
+            conditions = status["conditions"]
+        except (KeyError, TypeError):
+            raise JobsError("CPU node inventory contains a malformed node") from None
+        if not all(labels.get(key) == value for key, value in CPU_NODE_SELECTOR.items()):
+            continue
+        if spec.get("unschedulable") is True:
+            continue
+        if not any(
+            condition.get("type") == "Ready" and condition.get("status") == "True"
+            for condition in conditions
+            if isinstance(condition, dict)
+        ):
+            continue
+        eligible.append(
+            {
+                "name": metadata.get("name"),
+                "cpu_millicores": _cpu_millicores(allocatable.get("cpu")),
+                "memory_bytes": _memory_bytes(allocatable.get("memory")),
+            }
+        )
+    if not eligible:
+        raise JobsError("no Ready eligible CPU node is visible")
+    fitting = [
+        node
+        for node in eligible
+        if node["cpu_millicores"] >= requested_cpu and node["memory_bytes"] >= requested_memory
+    ]
+    if not fitting:
+        raise JobsError("CPU checkpoint Pod cannot fit any observed eligible node")
+    return {
+        "requested_cpu_millicores": requested_cpu,
+        "requested_memory_bytes": requested_memory,
+        "eligible_node_count": len(eligible),
+        "fitting_node_count": len(fitting),
+    }
+
+
+def validate_cpu_checkpoint_pod(manifest: dict) -> dict:
+    """Reject GPU use and host-specific placement for a CPU checkpoint operation."""
+    try:
+        metadata = manifest["metadata"]
+        spec = manifest["spec"]
+        annotations = metadata["annotations"]
+        containers = spec["containers"]
+    except (KeyError, TypeError) as exc:
+        raise JobsError("malformed CPU checkpoint Pod") from exc
+    if manifest.get("apiVersion") != "v1" or manifest.get("kind") != "Pod":
+        raise JobsError("CPU checkpoint operation must be one v1 Pod")
+    if metadata.get("namespace") != NAMESPACE or not isinstance(metadata.get("name"), str):
+        raise JobsError("CPU checkpoint Pod namespace/name drift")
+    if annotations.get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF:
+        raise JobsError("CPU checkpoint Pod must opt out of failed-job alerts before create")
+    if annotations.get(CPU_CHECKPOINT_OPERATION_ANNOTATION) not in CPU_CHECKPOINT_OPERATIONS:
+        raise JobsError("CPU checkpoint Pod must name a supported seal/verify operation")
+    if spec.get("priorityClassName") != "c1":
+        raise JobsError("CPU checkpoint Pod must use c1 priority")
+    if spec.get("nodeSelector") != CPU_NODE_SELECTOR:
+        raise JobsError("CPU checkpoint Pod must select only the shared CPU pool and architecture")
+    if spec.get("nodeName") is not None or spec.get("affinity") is not None:
+        raise JobsError("CPU checkpoint Pod must not pin one host or add placement affinity")
+    if spec.get("restartPolicy") != "Never":
+        raise JobsError("CPU checkpoint Pod must use restartPolicy Never")
+    if not isinstance(containers, list) or not containers:
+        raise JobsError("CPU checkpoint Pod has no containers")
+    for container in [*spec.get("initContainers", []), *containers]:
+        if not isinstance(container, dict):
+            raise JobsError("CPU checkpoint Pod contains a malformed container")
+        resources = container.get("resources", {})
+        if not isinstance(resources, dict):
+            raise JobsError("CPU checkpoint Pod resources are malformed")
+        for field in ("requests", "limits"):
+            values = resources.get(field, {})
+            if not isinstance(values, dict):
+                raise JobsError("CPU checkpoint Pod resource quantities are malformed")
+            if "nvidia.com/gpu" in values:
+                raise JobsError("CPU checkpoint Pod must not request or limit GPUs")
+    sfs_fields = {
+        field: annotations.get(field)
+        for field in (
+            CPU_SFS_OWNED_ROOT_ANNOTATION,
+            CPU_SFS_OUTPUT_ROOT_ANNOTATION,
+            CPU_SFS_MEMORY_FLOOR_MIB_ANNOTATION,
+        )
+    }
+    if any(value is not None for value in sfs_fields.values()):
+        if not all(isinstance(value, str) and value for value in sfs_fields.values()):
+            raise JobsError("CPU SFS control annotations must be complete")
+        _validate_cpu_sfs_control(manifest, sfs_fields)
+    return manifest
+
+
+def _validate_cpu_sfs_control(manifest: dict, fields: dict[str, str]) -> None:
+    """Bind one non-root control transaction below an already-owned SFS run tree."""
+
+    spec = manifest["spec"]
+    containers = spec["containers"]
+    if len(containers) != 1 or spec.get("initContainers") not in (None, []):
+        raise JobsError("CPU SFS control must use one non-root container and no initializer")
+    if spec.get("automountServiceAccountToken") is not False:
+        raise JobsError("CPU SFS control must not mount a service account token")
+    if not isinstance(spec.get("activeDeadlineSeconds"), int) or not (
+        1 <= spec["activeDeadlineSeconds"] <= 3600
+    ):
+        raise JobsError("CPU SFS control must have a fixed deadline of at most one hour")
+    if any(spec.get(field) not in (None, False) for field in ("hostNetwork", "hostPID", "hostIPC")):
+        raise JobsError("CPU SFS control must not join host namespaces")
+    if spec.get("securityContext") != {
+        "runAsNonRoot": True,
+        "runAsUser": TRAINER_UID,
+        "runAsGroup": TRAINER_GID,
+        "fsGroup": TRAINER_GID,
+    }:
+        raise JobsError("CPU SFS control must use the proven trainer and SFS group identity")
+    if spec.get("imagePullSecrets") != [{"name": "ghcr-pull"}]:
+        raise JobsError("CPU SFS control may use only the reviewed image pull Secret")
+    container = containers[0]
+    if container.get("image") != LORA_TRAINER_IMAGE:
+        raise JobsError("CPU SFS control must use the exact reviewed LoRA trainer image")
+    if container.get("command") != ["python", "/bundle/preflight_driver.py"]:
+        raise JobsError("CPU SFS control must run only the reviewed preflight driver")
+    if container.get("securityContext") != {
+        "allowPrivilegeEscalation": False,
+        "capabilities": {"drop": ["ALL"]},
+    }:
+        raise JobsError("CPU SFS control must drop capabilities and privilege escalation")
+    if container.get("envFrom") not in (None, []):
+        raise JobsError("CPU SFS control must not import Secret-backed environment")
+    environment = {}
+    for entry in container.get("env", []):
+        if (
+            not isinstance(entry, dict)
+            or set(entry) != {"name", "value"}
+            or not isinstance(entry.get("name"), str)
+            or not isinstance(entry.get("value"), str)
+            or entry["name"] in environment
+        ):
+            raise JobsError("CPU SFS control environment must contain literal unique values")
+        environment[entry["name"]] = entry["value"]
+    owned_root = fields[CPU_SFS_OWNED_ROOT_ANNOTATION]
+    output_root = fields[CPU_SFS_OUTPUT_ROOT_ANNOTATION]
+    if (
+        environment.get("CYBER_SFS_OWNED_ROOT") != owned_root
+        or environment.get("CYBER_SFS_OUTPUT_ROOT") != output_root
+    ):
+        raise JobsError("CPU SFS control path annotations and environment differ")
+    if environment.get("CYBER_SFS_CONTROL_MOUNT") != "/controls":
+        raise JobsError("CPU SFS control must bind the reviewed writable subpath mount")
+    try:
+        validate_owned_output_binding(owned_root, output_root)
+    except ValueError as exc:
+        raise JobsError(str(exc)) from None
+    try:
+        floor_mib = int(fields[CPU_SFS_MEMORY_FLOOR_MIB_ANNOTATION])
+    except ValueError:
+        raise JobsError("CPU SFS control memory floor is invalid") from None
+    if floor_mib <= 0:
+        raise JobsError("CPU SFS control memory floor is invalid")
+    requests = container.get("resources", {}).get("requests", {})
+    limits = container.get("resources", {}).get("limits", {})
+    request_memory = _memory_bytes(requests.get("memory"))
+    limit_memory = _memory_bytes(limits.get("memory"))
+    if request_memory < floor_mib * 1024**2 or limit_memory < request_memory:
+        raise JobsError("CPU SFS control memory does not cover its observed contract")
+    mounts = container.get("volumeMounts", [])
+    if mounts != [
+        {"name": "bundle", "mountPath": "/bundle", "readOnly": True},
+        {"name": "sfs-readonly", "mountPath": "/mnt/sfs", "readOnly": True},
+        {
+            "name": "sfs-control",
+            "mountPath": "/controls",
+            "subPath": "jobs/chris-q38-study-corpora-v1/launch-controls",
+        },
+    ]:
+        raise JobsError("CPU SFS control must expose only read-only SFS plus its control subpath")
+    volumes = spec.get("volumes", [])
+    expected_bundle = {
+        "name": "bundle",
+        "configMap": {"name": manifest["metadata"]["name"] + "-source", "defaultMode": 292},
+    }
+    if volumes != [
+        expected_bundle,
+        {"name": "sfs-readonly", "persistentVolumeClaim": {"claimName": "sfs-shared"}},
+        {"name": "sfs-control", "persistentVolumeClaim": {"claimName": "sfs-shared"}},
+    ]:
+        raise JobsError("CPU SFS control must use only its immutable bundle and shared SFS")
 
 
 def _templates(obj: dict) -> list[tuple[str, dict]]:
@@ -100,6 +367,15 @@ def _assert_sft_contract(plan: dict, request: dict) -> None:
         raise JobsError("direct fallback is restricted to current c1/q1 policy")
 
 
+def _assert_lr30_contract(plan: dict, request: dict, *, require_launchable: bool) -> None:
+    from training.qwen38_lr30_step76_gate import validate_submission_contract
+
+    try:
+        validate_submission_contract(plan, request, require_launchable=require_launchable)
+    except ValueError as exc:
+        raise JobsError(str(exc)) from None
+
+
 def _expected_generated_env(request: dict, placeholder_name: str) -> dict[str, str]:
     return {
         "FLEET_EXTERNAL_RAY": "1",
@@ -140,11 +416,14 @@ def _parse_preview(preview: dict) -> dict:
     return obj
 
 
-def render_sft_rayjob(
-    plan: dict, request: dict, preview: dict, *, run_id: str | None = None
+def _render_rayjob(
+    request: dict,
+    preview: dict,
+    *,
+    expected_secrets: list[str],
+    run_id: str | None = None,
 ) -> tuple[dict, dict]:
     """Return one reviewed RayJob and a sanitized proof; create nothing."""
-    _assert_sft_contract(plan, request)
     source = _parse_preview(preview)
     obj = deepcopy(source)
     expected_placeholder_name = request["name"] + "-00000000"
@@ -195,12 +474,12 @@ def render_sft_rayjob(
                 raise JobsError(f"{group_name} template run-name drift")
             containers = template["spec"]["containers"]
             if not isinstance(containers, list) or len(containers) != 1:
-                raise JobsError(f"{group_name} must contain exactly one SFT container")
+                raise JobsError(f"{group_name} must contain exactly one workload container")
             container = containers[0]
             if _env(container) != expected_env:
                 raise JobsError(f"{group_name} generated environment drift")
             names = _secret_names(container)
-            if names != [SFT_SECRET, generated_secret]:
+            if names != [*expected_secrets, generated_secret]:
                 raise JobsError(f"{group_name} Secret injection drift")
             container["envFrom"] = [
                 entry
@@ -294,6 +573,22 @@ def render_sft_rayjob(
     }
 
 
+def render_sft_rayjob(
+    plan: dict, request: dict, preview: dict, *, run_id: str | None = None
+) -> tuple[dict, dict]:
+    """Render the maintained SFT-only direct-create fallback."""
+    _assert_sft_contract(plan, request)
+    return _render_rayjob(request, preview, expected_secrets=[SFT_SECRET], run_id=run_id)
+
+
+def render_lr30_qualification_rayjob(
+    plan: dict, request: dict, preview: dict, *, run_id: str | None = None
+) -> tuple[dict, dict]:
+    """Render only the exact LR30 step-76 HF inference-forward qualification."""
+    _assert_lr30_contract(plan, request, require_launchable=False)
+    return _render_rayjob(request, preview, expected_secrets=[], run_id=run_id)
+
+
 def _json_object(payload: str, operation: str) -> dict:
     try:
         value = json.loads(payload)
@@ -354,6 +649,37 @@ class Kubectl:
         )
 
     def create_once(self, manifest: dict) -> dict:
+        return self._run(["create", "--filename=-", "--output=json"], manifest=manifest)
+
+    def dry_run_cpu_checkpoint_pod(self, manifest: dict) -> dict:
+        """Server-preview one CPU seal/verifier after the local placement gate."""
+        validate_cpu_checkpoint_pod(manifest)
+        inventory = self._run(
+            [
+                "get",
+                "nodes",
+                "--selector=kubernetes.io/arch=amd64,workload=fleetai-training-ng-cpu",
+                "--output=json",
+            ]
+        )
+        validate_cpu_checkpoint_node_fit(manifest, inventory)
+        return self._run(
+            ["create", "--dry-run=server", "--filename=-", "--output=json"],
+            manifest=manifest,
+        )
+
+    def create_cpu_checkpoint_pod_once(self, manifest: dict) -> dict:
+        """Create exactly one locally validated CPU seal/verifier Pod."""
+        validate_cpu_checkpoint_pod(manifest)
+        inventory = self._run(
+            [
+                "get",
+                "nodes",
+                "--selector=kubernetes.io/arch=amd64,workload=fleetai-training-ng-cpu",
+                "--output=json",
+            ]
+        )
+        validate_cpu_checkpoint_node_fit(manifest, inventory)
         return self._run(["create", "--filename=-", "--output=json"], manifest=manifest)
 
 
@@ -443,27 +769,23 @@ def _append_journal(path: Path, value: dict) -> None:
         os.fsync(stream.fileno())
 
 
-def direct_submit_sft_once(
+def _direct_submit_once(
     *,
     plan: dict,
     request: dict,
     jobs: Any,
     kubectl: Kubectl,
     journal: Path,
+    renderer: Any,
     run_id: str | None = None,
 ) -> dict:
     """Preview, prove, journal and issue exactly one direct Kubernetes create."""
-    _assert_sft_contract(plan, request)
-    from training.sft import job_request
-
-    if job_request(plan) != request:
-        raise JobsError("saved SFT request differs from the current source-bound renderer")
     if journal.exists() or journal.is_symlink():
         raise JobsError("direct-create journal already exists; reconcile, never retry")
 
     _assert_api_unique(jobs.all_runs(), request)
     preview = jobs.raw_preview(request)
-    manifest, proof = render_sft_rayjob(plan, request, preview, run_id=run_id)
+    manifest, proof = renderer(plan, request, preview, run_id=run_id)
     _assert_kubernetes_unique(
         [kubectl.list("rayjobs.ray.io"), kubectl.list("jobs.batch")], request, proof
     )
@@ -506,3 +828,55 @@ def direct_submit_sft_once(
     }
     _append_journal(journal, {"state": "KUBECTL_CREATE_RESPONSE", **result})
     return result
+
+
+def direct_submit_sft_once(
+    *,
+    plan: dict,
+    request: dict,
+    jobs: Any,
+    kubectl: Kubectl,
+    journal: Path,
+    run_id: str | None = None,
+) -> dict:
+    """Create one source-bound SFT RayJob through the maintained fallback."""
+    _assert_sft_contract(plan, request)
+    from training.sft import job_request
+
+    if job_request(plan) != request:
+        raise JobsError("saved SFT request differs from the current source-bound renderer")
+    return _direct_submit_once(
+        plan=plan,
+        request=request,
+        jobs=jobs,
+        kubectl=kubectl,
+        journal=journal,
+        renderer=render_sft_rayjob,
+        run_id=run_id,
+    )
+
+
+def direct_submit_lr30_qualification_once(
+    *,
+    plan: dict,
+    request: dict,
+    jobs: Any,
+    kubectl: Kubectl,
+    journal: Path,
+    run_id: str | None = None,
+) -> dict:
+    """Create only the approved LR30 step-76 HF inference-forward qualification."""
+    _assert_lr30_contract(plan, request, require_launchable=True)
+    from training.qwen38_lr30_step76_gate import job_request
+
+    if job_request() != request:
+        raise JobsError("saved LR30 request differs from the current source-bound renderer")
+    return _direct_submit_once(
+        plan=plan,
+        request=request,
+        jobs=jobs,
+        kubectl=kubectl,
+        journal=journal,
+        renderer=render_lr30_qualification_rayjob,
+        run_id=run_id,
+    )

@@ -6,6 +6,7 @@ import importlib.util
 import json
 import os
 import subprocess
+import time
 from pathlib import Path
 from typing import Annotated
 
@@ -84,6 +85,10 @@ def _current_request(plan: dict) -> dict:
         from training.skyrl_production_training import job_request
     elif schema == "cyber_skyrl_topology_probe_v1":
         from training.skyrl_topology_probe import request as job_request
+    elif schema == "cyber_qwen38_lr30_step76_gpu_reload_plan_v1":
+        from training.qwen38_lr30_step76_gate import job_request
+
+        return job_request()
     else:
         from training.sft import job_request
 
@@ -133,6 +138,7 @@ def _external_action_gate(plan: dict, action: str) -> None:
 
 def _require_preflight(directory: Path, plan: dict, request: dict) -> None:
     proof = _read(directory / "PREFLIGHT.json")
+    schema = plan.get("schema")
     schemas = {
         "cyber_miles_conversion_v1": "cyber_miles_conversion_cpu_preflight_v1",
         "cyber_miles_training_v1": "cyber_miles_training_cpu_preflight_v1",
@@ -140,9 +146,12 @@ def _require_preflight(directory: Path, plan: dict, request: dict) -> None:
         "cyber_skyrl_training_v1": "cyber_skyrl_training_cpu_preflight_v1",
         "cyber_skyrl_production_training_v1": "cyber_skyrl_production_cpu_preflight_v1",
         "cyber_skyrl_topology_probe_v1": "cyber_skyrl_topology_probe_cpu_preflight_v1",
+        "cyber_qwen38_lr30_step76_gpu_reload_plan_v1": (
+            "cyber_qwen38_lr30_step76_cpu_preflight_v1"
+        ),
     }
     expected = {
-        "schema": schemas.get(plan.get("schema"), "cyber_sft_cpu_preflight_v1"),
+        "schema": schemas.get(schema, "cyber_sft_cpu_preflight_v1"),
         "status": "passed",
         "gpus": 0,
         "plan_sha256": digest(plan),
@@ -152,6 +161,10 @@ def _require_preflight(directory: Path, plan: dict, request: dict) -> None:
         proof.get(k) != v for k, v in expected.items()
     ):
         raise ValueError("missing or mismatched CPU preflight")
+    if schema == "cyber_qwen38_lr30_step76_gpu_reload_plan_v1":
+        age = time.time() - proof.get("checked_at_epoch", 0)
+        if proof.get("output_absent") is not True or not 0 <= age <= 1800:
+            raise ValueError("LR30 source/output preflight is stale or incomplete")
 
 
 def _client(plan: dict | None = None) -> Jobs:
@@ -315,6 +328,24 @@ def train(config: Path, output: Annotated[Path, typer.Option("--output")]) -> No
                 "submitted": False,
             }
         )
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("lr30-step76-prepare")
+def lr30_step76_prepare(plan_file: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
+    """Prepare only the exact LR30 step-76 HF inference-forward qualification."""
+    from training.qwen38_lr30_step76_gate import (
+        job_request,
+        validate_submission_contract,
+    )
+
+    try:
+        plan = _read(plan_file)
+        request = job_request()
+        validate_submission_contract(plan, request, require_launchable=False)
+        _prepare(output, plan, request)
+        _print({"prepared": str(output), "gpus": 1, "optimizer_steps": 0, "submitted": False})
     except Exception as exc:
         _fail(exc)
 
@@ -873,11 +904,17 @@ def preflight(directory: Path) -> None:
             from training.skyrl_production_training import preflight as check
         elif plan.get("schema") == "cyber_skyrl_topology_probe_v1":
             from training.skyrl_topology_probe import preflight as check
+        elif plan.get("schema") == "cyber_qwen38_lr30_step76_gpu_reload_plan_v1":
+            from training.qwen38_lr30_step76_gate import preflight as check
         else:
             from training.sft import preflight as check
         if (directory / "PREFLIGHT.json").exists():
             raise ValueError("preflight already recorded")
-        receipt = check(plan)
+        receipt = (
+            check(plan, request)
+            if plan.get("schema") == "cyber_qwen38_lr30_step76_gpu_reload_plan_v1"
+            else check(plan)
+        )
         _write(directory / "PREFLIGHT.json", {**receipt, "sha256": digest(receipt)})
         _print(receipt)
     except Exception as exc:
@@ -979,6 +1016,35 @@ def direct_submit_sft(
         _fail(exc)
 
 
+@app.command("direct-submit-lr30-step76")
+def direct_submit_lr30_step76(
+    directory: Path,
+    context: Annotated[str, typer.Option("--context")],
+) -> None:
+    """Create only the exact approved LR30 step-76 HF inference-forward qualification."""
+    from .direct_submit import (
+        DIRECT_JOURNAL,
+        Kubectl,
+        direct_submit_lr30_qualification_once,
+    )
+
+    try:
+        plan, request = _prepared(directory)
+        _submission_gate(directory, plan, request)
+        _require_preflight(directory, plan, request)
+        with _client() as client:
+            result = direct_submit_lr30_qualification_once(
+                plan=plan,
+                request=request,
+                jobs=client,
+                kubectl=Kubectl(context),
+                journal=directory / DIRECT_JOURNAL,
+            )
+        _print(result)
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command("pod-publish-file")
 def pod_publish_file(
     source: Path,
@@ -1069,6 +1135,40 @@ def release(name: str) -> None:
     try:
         with _client() as client:
             _print(client.delete(name))
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("gpu-capacity")
+def gpu_capacity(
+    context: Annotated[str, typer.Option("--context")],
+    output: Annotated[Path, typer.Option("--output")],
+    owner_prefix: Annotated[str, typer.Option("--owner-prefix")] = "chris-q38-",
+    max_nodes: Annotated[int, typer.Option("--max-nodes")] = 8,
+    max_gpus: Annotated[int, typer.Option("--max-gpus")] = 64,
+    planned_nodes: Annotated[int, typer.Option("--planned-nodes")] = 0,
+    planned_gpus: Annotated[int, typer.Option("--planned-gpus")] = 0,
+) -> None:
+    """Count owned training and serving GPUs across every namespace; read only."""
+    from .gpu_capacity import live_capacity_census
+
+    try:
+        if output.exists() or output.is_symlink():
+            raise ValueError("capacity receipt output must be new")
+        receipt = live_capacity_census(
+            context,
+            owner_prefixes=(owner_prefix,),
+            max_nodes=max_nodes,
+            max_gpus=max_gpus,
+            planned_nodes=planned_nodes,
+            planned_gpus=planned_gpus,
+        )
+        _write(output, receipt)
+        _print(receipt)
+        if not receipt["qualified"]:
+            raise typer.Exit(2)
+    except typer.Exit:
+        raise
     except Exception as exc:
         _fail(exc)
 

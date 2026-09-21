@@ -1,7 +1,9 @@
 """Exercise the public workflow without credentials or a paid submission."""
 
 import json
+import time
 from contextlib import nullcontext
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -270,6 +272,92 @@ def test_direct_sft_submit_reuses_preflight_and_has_a_separate_journal(prepared,
     assert calls[0]["jobs"] == "jobs-client"
     assert calls[0]["kubectl"].context == "prod-context"
     assert calls[0]["journal"] == output / "DIRECT_SUBMISSION.jsonl"
+
+
+def test_lr30_one_off_prepare_preflight_and_direct_submit_are_exact(tmp_path, monkeypatch):
+    from cyber_post_train import direct_submit
+    from training import qwen38_lr30_step76_gate as gate
+
+    plan_file = (
+        Path(__file__).resolve().parents[1]
+        / "configs/qualification/qwen38-lr30-step76-gpu-reload-v1.json"
+    )
+    output = tmp_path / "lr30"
+    result = RUNNER.invoke(
+        cli.app,
+        ["lr30-step76-prepare", str(plan_file), "--output", str(output)],
+    )
+    assert result.exit_code == 0
+    plan, request = cli._prepared(output)
+    assert plan["schema"] == gate.PLAN_SCHEMA
+    assert request == gate.job_request()
+
+    monkeypatch.setattr(cli, "_require_output_absent", lambda _: None)
+    calls = []
+
+    def preflight(plan_value, request_value):
+        calls.append((plan_value, request_value))
+        return {
+            "schema": gate.PREFLIGHT_SCHEMA,
+            "status": "passed",
+            "gpus": 0,
+            "plan_sha256": digest(plan_value),
+            "request_sha256": digest(request_value),
+            "checked_at_epoch": time.time(),
+            "source_receipt_sha256": gate.EXPORT_RECEIPT_SHA256,
+            "source_manifest_file_sha256": gate.SOURCE_MANIFEST_FILE_SHA256,
+            "output_absent": True,
+        }
+
+    monkeypatch.setattr(gate, "preflight", preflight)
+    assert RUNNER.invoke(cli.app, ["preflight", str(output)]).exit_code == 0
+    assert calls == [(plan, request)]
+    cli._require_preflight(output, plan, request)
+
+    monkeypatch.setattr(cli, "_submission_gate", lambda *args: None)
+    monkeypatch.setattr(cli, "_client", lambda: nullcontext("jobs-client"))
+    direct_calls = []
+
+    class SyntheticKubectl:
+        def __init__(self, context):
+            self.context = context
+
+    def submit(**kwargs):
+        direct_calls.append(kwargs)
+        return {"name": "chris-q38-lr30-s76-gpu-v1-12345678", "submitted": True}
+
+    monkeypatch.setattr(direct_submit, "Kubectl", SyntheticKubectl)
+    monkeypatch.setattr(direct_submit, "direct_submit_lr30_qualification_once", submit)
+    result = RUNNER.invoke(
+        cli.app,
+        ["direct-submit-lr30-step76", str(output), "--context", "prod-context"],
+    )
+    assert result.exit_code == 0
+    assert direct_calls[0]["plan"] == plan and direct_calls[0]["request"] == request
+    assert direct_calls[0]["jobs"] == "jobs-client"
+    assert direct_calls[0]["kubectl"].context == "prod-context"
+    assert direct_calls[0]["journal"] == output / "DIRECT_SUBMISSION.jsonl"
+
+
+def test_lr30_preflight_expires_before_any_network(tmp_path, monkeypatch):
+    from training import qwen38_lr30_step76_gate as gate
+
+    plan = {"schema": gate.PLAN_SCHEMA}
+    request = {"immutable": "synthetic"}
+    output = tmp_path / "prepared"
+    output.mkdir()
+    proof = {
+        "schema": gate.PREFLIGHT_SCHEMA,
+        "status": "passed",
+        "gpus": 0,
+        "plan_sha256": digest(plan),
+        "request_sha256": digest(request),
+        "checked_at_epoch": time.time() - 1801,
+        "output_absent": True,
+    }
+    cli._write(output / "PREFLIGHT.json", {**proof, "sha256": digest(proof)})
+    with pytest.raises(ValueError, match="stale or incomplete"):
+        cli._require_preflight(output, plan, request)
 
 
 def test_submit_rejects_pre_gate_preparation_before_network(prepared, monkeypatch):

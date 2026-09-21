@@ -440,6 +440,7 @@ def preflight(plan: dict) -> dict:
     from transformers import AutoConfig, AutoTokenizer
 
     from .sft_runtime import (
+        _validate_sft_forward_backward_adapter,
         build_runtime_configs,
         prepare_rows,
         validate_runtime_sources,
@@ -450,6 +451,7 @@ def preflight(plan: dict) -> dict:
     validate_plan(plan)
     validate_runtime_sources(plan)
     build_runtime_configs(plan)
+    _validate_sft_forward_backward_adapter(plan)
     AutoConfig.from_pretrained(
         plan["model"]["root"], local_files_only=True, trust_remote_code=False
     )
@@ -486,6 +488,7 @@ def preflight(plan: dict) -> dict:
             "model_files",
             "dataset_files",
             "native_config",
+            "native_forward_backward_signature",
             "native_train_only_loader",
             "tokenization",
             "target_accounting",

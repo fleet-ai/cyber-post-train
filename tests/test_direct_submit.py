@@ -1,16 +1,26 @@
 import json
 import subprocess
 from copy import deepcopy
+from pathlib import Path
 
 import pytest
 import yaml
 
 from cyber_post_train.direct_submit import (
+    CPU_CHECKPOINT_OPERATION_ANNOTATION,
+    CPU_NODE_SELECTOR,
+    CPU_SFS_MEMORY_FLOOR_MIB_ANNOTATION,
+    CPU_SFS_OUTPUT_ROOT_ANNOTATION,
+    CPU_SFS_OWNED_ROOT_ANNOTATION,
+    LORA_TRAINER_IMAGE,
     Kubectl,
+    direct_submit_lr30_qualification_once,
     direct_submit_sft_once,
+    render_lr30_qualification_rayjob,
     render_sft_rayjob,
 )
 from cyber_post_train.jobs import JobsError, digest
+from training import qwen38_lr30_step76_gate as lr30
 from training import sft
 
 RUN_ID = "12345678-1234-4234-9234-123456789abc"
@@ -54,14 +64,14 @@ def template(value, container_name):
     placeholder = value["name"] + "-00000000"
     generated = {
         "FLEET_EXTERNAL_RAY": "1",
-        "FLEET_GPUS_PER_WORKER": "8",
+        "FLEET_GPUS_PER_WORKER": str(value["gpus_per_worker"]),
         "FLEET_RUN_ID": "00000000-0000-0000-0000-000000000000",
         "FLEET_RUN_NAME": placeholder,
         "FLEET_TRACE_ROOT": "/mnt/fleet/trajectory-spool",
         "RAY_memory_usage_threshold": "0.98",
         "RUN_DIR": value["run_dir"],
-        "SKYPILOT_NUM_GPUS_PER_NODE": "8",
-        "WORKERS": "2",
+        "SKYPILOT_NUM_GPUS_PER_NODE": str(value["gpus_per_worker"]),
+        "WORKERS": str(value["workers"]),
     }
     return {
         "metadata": {
@@ -75,7 +85,7 @@ def template(value, container_name):
         },
         "spec": {
             "priorityClassName": "c1",
-            "imagePullSecrets": [{"name": "registry-pull"}],
+            "imagePullSecrets": [{"name": name} for name in value.get("image_pull_secrets", [])],
             "nodeSelector": {"workload": "fleetai-training-ng-gpu"},
             "containers": [
                 {
@@ -86,19 +96,19 @@ def template(value, container_name):
                         for name, item in {**generated, **value["env"]}.items()
                     ],
                     "envFrom": [
-                        {"secretRef": {"name": "wandb-api"}},
+                        *[{"secretRef": {"name": name}} for name in value.get("secrets", [])],
                         {"secretRef": {"name": placeholder + "-fleet-key"}},
                     ],
                     "resources": {
                         "requests": {
-                            "cpu": "8",
-                            "memory": "64Gi",
-                            "nvidia.com/gpu": 8,
+                            "cpu": value["resources"]["cpu_request"],
+                            "memory": value["resources"]["memory_request"],
+                            "nvidia.com/gpu": value["gpus_per_worker"],
                         },
                         "limits": {
-                            "cpu": "16",
-                            "memory": "128Gi",
-                            "nvidia.com/gpu": 8,
+                            "cpu": value["resources"]["cpu_limit"],
+                            "memory": value["resources"]["memory_limit"],
+                            "nvidia.com/gpu": value["gpus_per_worker"],
                         },
                     },
                     "securityContext": {"privileged": False},
@@ -141,22 +151,165 @@ def manifest(value=None):
             "rayClusterSpec": {
                 "enableInTreeAutoscaling": False,
                 "headGroupSpec": {"template": template(value, "ray-head")},
-                "workerGroupSpecs": [
-                    {
-                        "groupName": "gpu",
-                        "replicas": 1,
-                        "minReplicas": 1,
-                        "maxReplicas": 1,
-                        "template": template(value, "ray-worker"),
-                    }
-                ],
+                "workerGroupSpecs": (
+                    [
+                        {
+                            "groupName": "gpu",
+                            "replicas": value["workers"] - 1,
+                            "minReplicas": value["workers"] - 1,
+                            "maxReplicas": value["workers"] - 1,
+                            "template": template(value, "ray-worker"),
+                        }
+                    ]
+                    if value["workers"] > 1
+                    else []
+                ),
             },
         },
     }
 
 
+def cpu_checkpoint_pod():
+    return {
+        "apiVersion": "v1",
+        "kind": "Pod",
+        "metadata": {
+            "name": "researcher-checkpoint-seal-v1",
+            "namespace": "fleet-train-jobs",
+            "annotations": {
+                "fleet.ai/failure-alerts": "off",
+                CPU_CHECKPOINT_OPERATION_ANNOTATION: "seal",
+            },
+        },
+        "spec": {
+            "priorityClassName": "c1",
+            "restartPolicy": "Never",
+            "nodeSelector": deepcopy(CPU_NODE_SELECTOR),
+            "containers": [
+                {
+                    "name": "seal",
+                    "image": "registry/image@sha256:" + "a" * 64,
+                    "resources": {
+                        "requests": {"cpu": "4", "memory": "16Gi"},
+                        "limits": {"cpu": "4", "memory": "16Gi"},
+                    },
+                }
+            ],
+        },
+    }
+
+
+def cpu_sfs_control_pod():
+    pod = cpu_checkpoint_pod()
+    owned = "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls"
+    output = owned + "/.preflight-control-step60-a21cbe7c"
+    pod["metadata"]["annotations"].update(
+        {
+            CPU_SFS_OWNED_ROOT_ANNOTATION: owned,
+            CPU_SFS_OUTPUT_ROOT_ANNOTATION: output,
+            CPU_SFS_MEMORY_FLOOR_MIB_ANNOTATION: "26207",
+        }
+    )
+    pod["spec"].update(
+        {
+            "activeDeadlineSeconds": 3600,
+            "automountServiceAccountToken": False,
+            "imagePullSecrets": [{"name": "ghcr-pull"}],
+            "securityContext": {
+                "runAsNonRoot": True,
+                "runAsUser": 1000,
+                "runAsGroup": 100,
+                "fsGroup": 100,
+            },
+            "volumes": [
+                {
+                    "name": "bundle",
+                    "configMap": {
+                        "name": "researcher-checkpoint-seal-v1-source",
+                        "defaultMode": 292,
+                    },
+                },
+                {
+                    "name": "sfs-readonly",
+                    "persistentVolumeClaim": {"claimName": "sfs-shared"},
+                },
+                {
+                    "name": "sfs-control",
+                    "persistentVolumeClaim": {"claimName": "sfs-shared"},
+                },
+            ],
+        }
+    )
+    container = pod["spec"]["containers"][0]
+    container.update(
+        {
+            "image": LORA_TRAINER_IMAGE,
+            "command": ["python", "/bundle/preflight_driver.py"],
+            "env": [
+                {"name": "CYBER_SFS_OWNED_ROOT", "value": owned},
+                {"name": "CYBER_SFS_OUTPUT_ROOT", "value": output},
+                {"name": "CYBER_SFS_CONTROL_MOUNT", "value": "/controls"},
+            ],
+            "resources": {
+                "requests": {"cpu": "4", "memory": "32Gi"},
+                "limits": {"cpu": "8", "memory": "48Gi"},
+            },
+            "securityContext": {
+                "allowPrivilegeEscalation": False,
+                "capabilities": {"drop": ["ALL"]},
+            },
+            "volumeMounts": [
+                {"name": "bundle", "mountPath": "/bundle", "readOnly": True},
+                {"name": "sfs-readonly", "mountPath": "/mnt/sfs", "readOnly": True},
+                {
+                    "name": "sfs-control",
+                    "mountPath": "/controls",
+                    "subPath": "jobs/chris-q38-study-corpora-v1/launch-controls",
+                },
+            ],
+        }
+    )
+    return pod
+
+
+def cpu_node_inventory():
+    return {
+        "apiVersion": "v1",
+        "kind": "List",
+        "items": [
+            {
+                "metadata": {
+                    "name": "shared-cpu-1",
+                    "labels": deepcopy(CPU_NODE_SELECTOR),
+                },
+                "spec": {},
+                "status": {
+                    "allocatable": {"cpu": "15900m", "memory": "65216572Ki"},
+                    "conditions": [{"type": "Ready", "status": "True"}],
+                },
+            }
+        ],
+    }
+
+
 def preview(obj=None):
     return {"manifest_yaml": yaml.safe_dump(obj or manifest()), "warnings": []}
+
+
+def lr30_plan(*, launchable=False):
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "configs/qualification/qwen38-lr30-step76-gpu-reload-v1.json"
+    )
+    value = json.loads(path.read_text())
+    if launchable:
+        value["launchable"] = True
+        value["status"] = "approved_for_exact_create"
+        value["blockers"] = []
+        value["sha256"] = "sha256:" + digest(
+            {key: item for key, item in value.items() if key != "sha256"}
+        )
+    return value
 
 
 def test_render_changes_only_reviewed_identity_secret_and_root_annotation():
@@ -183,6 +336,24 @@ def test_render_changes_only_reviewed_identity_secret_and_root_annotation():
         assert container["envFrom"] == [{"secretRef": {"name": "wandb-api"}}]
     assert proof["preview_manifest_sha256"] == digest(source)
     assert proof["manifest_sha256"] == digest(rendered)
+
+
+def test_lr30_render_is_exact_one_gpu_root_annotated_and_secret_free():
+    request_value = lr30.job_request()
+    rendered, proof = render_lr30_qualification_rayjob(
+        lr30_plan(), request_value, preview(manifest(request_value)), run_id=RUN_ID
+    )
+    assert proof["name"] == "chris-q38-lr30-s76-gpu-v1-12345678"
+    assert rendered["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+    groups = [
+        rendered["spec"]["rayClusterSpec"]["headGroupSpec"],
+        *rendered["spec"]["rayClusterSpec"]["workerGroupSpecs"],
+    ]
+    assert all(group["template"]["spec"]["containers"][0]["envFrom"] == [] for group in groups)
+    assert all(
+        group["template"]["spec"]["containers"][0]["resources"]["requests"]["nvidia.com/gpu"] == 1
+        for group in groups
+    )
 
 
 @pytest.mark.parametrize(
@@ -318,6 +489,37 @@ def test_direct_submit_checks_twice_journals_then_creates_exactly_once(tmp_path)
     assert journal.stat().st_mode & 0o777 == 0o600
 
 
+def test_lr30_direct_submit_requires_explicit_launchable_plan_and_creates_once(tmp_path):
+    request_value = lr30.job_request()
+    jobs = FakeJobs(preview_value=preview(manifest(request_value)))
+    kube = FakeKubectl()
+    journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
+    with pytest.raises(JobsError, match="not explicitly approved"):
+        direct_submit_lr30_qualification_once(
+            plan=lr30_plan(),
+            request=request_value,
+            jobs=jobs,
+            kubectl=kube,
+            journal=journal,
+            run_id=RUN_ID,
+        )
+    assert not journal.exists() and jobs.calls == [] and kube.calls == []
+
+    result = direct_submit_lr30_qualification_once(
+        plan=lr30_plan(launchable=True),
+        request=request_value,
+        jobs=jobs,
+        kubectl=kube,
+        journal=journal,
+        run_id=RUN_ID,
+    )
+    assert result["uid"] == CREATED_UID
+    assert [call[0] for call in kube.calls].count("create") == 1
+    assert json.loads(journal.read_text().splitlines()[0])["state"] == (
+        "KUBECTL_CREATE_INTENT_DO_NOT_RETRY"
+    )
+
+
 def test_ambiguous_create_leaves_intent_and_never_retries(tmp_path):
     jobs, kube = FakeJobs(), FakeKubectl(fail_create=True)
     journal = tmp_path / "DIRECT_SUBMISSION.jsonl"
@@ -412,6 +614,188 @@ def test_kubectl_boundary_uses_only_get_server_dry_run_and_one_create(monkeypatc
     assert (
         sum("create" in command and "--dry-run=server" not in command for command, _ in calls) == 1
     )
+
+
+def test_cpu_checkpoint_boundary_previews_and_creates_only_unpinned_zero_gpu_pod(monkeypatch):
+    calls = []
+    expected = cpu_checkpoint_pod()
+
+    def run(command, **kwargs):
+        payload = kwargs.get("input")
+        calls.append((command, json.loads(payload) if payload is not None else None))
+        output = cpu_node_inventory() if "get" in command else expected
+        return subprocess.CompletedProcess(command, 0, stdout=json.dumps(output), stderr="")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    kube = Kubectl("prod-context")
+    kube.dry_run_cpu_checkpoint_pod(expected)
+    kube.create_cpu_checkpoint_pod_once(expected)
+    assert len(calls) == 4
+    assert "get" in calls[0][0]
+    assert "--dry-run=server" in calls[1][0]
+    assert "get" in calls[2][0]
+    assert "--dry-run=server" not in calls[3][0]
+    manifests = [payload for _, payload in calls if payload is not None]
+    assert all(payload["spec"]["nodeSelector"] == CPU_NODE_SELECTOR for payload in manifests)
+
+
+@pytest.mark.parametrize(
+    ("resource", "quantity"),
+    [("cpu", "16"), ("memory", "128Gi")],
+)
+def test_cpu_checkpoint_create_rejects_request_that_cannot_fit_observed_node(
+    monkeypatch, resource, quantity
+):
+    calls = []
+    pod = cpu_checkpoint_pod()
+    pod["spec"]["containers"][0]["resources"]["requests"][resource] = quantity
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs.get("input")))
+        if "get" not in command:
+            raise AssertionError("an unschedulable CPU checkpoint Pod reached create")
+        return subprocess.CompletedProcess(
+            command, 0, stdout=json.dumps(cpu_node_inventory()), stderr=""
+        )
+
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(JobsError, match="cannot fit any observed eligible node"):
+        Kubectl("prod-context").create_cpu_checkpoint_pod_once(pod)
+    assert len(calls) == 1
+    assert "get" in calls[0][0]
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "hostname-selector",
+        "node-name",
+        "affinity",
+        "gpu-request",
+        "wrong-pool",
+        "wrong-priority",
+        "missing-alert-opt-out",
+        "missing-operation",
+    ],
+)
+def test_cpu_checkpoint_create_boundary_rejects_unsafe_placement_before_kubectl(monkeypatch, fault):
+    calls = []
+    pod = cpu_checkpoint_pod()
+    spec = pod["spec"]
+    if fault == "hostname-selector":
+        spec["nodeSelector"]["kubernetes.io/hostname"] = "busy-host"
+    elif fault == "node-name":
+        spec["nodeName"] = "busy-host"
+    elif fault == "affinity":
+        spec["affinity"] = {"nodeAffinity": {}}
+    elif fault == "gpu-request":
+        spec["containers"][0]["resources"]["requests"]["nvidia.com/gpu"] = 1
+    elif fault == "wrong-pool":
+        spec["nodeSelector"]["workload"] = "fleetai-training-ng-gpu"
+    elif fault == "wrong-priority":
+        spec["priorityClassName"] = "c0"
+    elif fault == "missing-alert-opt-out":
+        pod["metadata"]["annotations"].pop("fleet.ai/failure-alerts")
+    else:
+        pod["metadata"]["annotations"].pop(CPU_CHECKPOINT_OPERATION_ANNOTATION)
+
+    def run(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise AssertionError("unsafe CPU checkpoint Pod reached kubectl")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    kube = Kubectl("prod-context")
+    with pytest.raises(JobsError, match="CPU checkpoint Pod"):
+        kube.create_cpu_checkpoint_pod_once(pod)
+    assert calls == []
+
+
+def test_cpu_sfs_control_boundary_accepts_only_owned_non_root_transaction(monkeypatch):
+    calls = []
+    pod = cpu_sfs_control_pod()
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs.get("input")))
+        output = cpu_node_inventory() if "get" in command else pod
+        return subprocess.CompletedProcess(command, 0, stdout=json.dumps(output), stderr="")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    Kubectl("prod-context").create_cpu_checkpoint_pod_once(pod)
+    assert ["get" in command for command, _ in calls] == [True, False]
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "top-level-output",
+        "different-parent",
+        "root-user",
+        "wrong-fsgroup",
+        "initializer",
+        "low-memory",
+        "wrong-memory-floor",
+        "secret-env",
+        "secret-volume",
+        "wrong-pvc",
+        "writable-global-sfs",
+        "wrong-control-subpath",
+        "extra-image-pull-secret",
+        "capability",
+        "wrong-image",
+        "extra-volume",
+    ],
+)
+def test_cpu_sfs_control_drift_fails_before_kubectl(monkeypatch, fault):
+    calls = []
+    pod = cpu_sfs_control_pod()
+    spec = pod["spec"]
+    container = spec["containers"][0]
+    annotations = pod["metadata"]["annotations"]
+    if fault == "top-level-output":
+        value = "/mnt/sfs/jobs/.preflight-control-step60-a21cbe7c"
+        annotations[CPU_SFS_OUTPUT_ROOT_ANNOTATION] = value
+        container["env"][1]["value"] = value
+    elif fault == "different-parent":
+        value = "/mnt/sfs/jobs/chris-other-run/.preflight-control-step60-a21cbe7c"
+        annotations[CPU_SFS_OUTPUT_ROOT_ANNOTATION] = value
+        container["env"][1]["value"] = value
+    elif fault == "root-user":
+        spec["securityContext"]["runAsUser"] = 0
+    elif fault == "wrong-fsgroup":
+        spec["securityContext"]["fsGroup"] = 200
+    elif fault == "initializer":
+        spec["initContainers"] = [deepcopy(container)]
+    elif fault == "low-memory":
+        container["resources"]["requests"]["memory"] = "16Gi"
+    elif fault == "wrong-memory-floor":
+        annotations[CPU_SFS_MEMORY_FLOOR_MIB_ANNOTATION] = "not-a-number"
+    elif fault == "secret-env":
+        container["envFrom"] = [{"secretRef": {"name": "credential"}}]
+    elif fault == "secret-volume":
+        spec["volumes"].append({"name": "credential", "secret": {"secretName": "key"}})
+    elif fault == "wrong-pvc":
+        spec["volumes"][1]["persistentVolumeClaim"]["claimName"] = "other"
+    elif fault == "writable-global-sfs":
+        container["volumeMounts"][1]["readOnly"] = False
+    elif fault == "wrong-control-subpath":
+        container["volumeMounts"][2]["subPath"] = "jobs/chris-q38-study-corpora-v1"
+    elif fault == "extra-image-pull-secret":
+        spec["imagePullSecrets"].append({"name": "other"})
+    elif fault == "wrong-image":
+        container["image"] = LORA_TRAINER_IMAGE.replace("7da4", "8da4", 1)
+    elif fault == "extra-volume":
+        spec["volumes"].append({"name": "host", "hostPath": {"path": "/tmp"}})
+    else:
+        container["securityContext"]["capabilities"] = {"drop": ["ALL"], "add": ["CHOWN"]}
+
+    def run(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise AssertionError("unsafe CPU SFS control reached kubectl")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(JobsError):
+        Kubectl("prod-context").create_cpu_checkpoint_pod_once(pod)
+    assert calls == []
 
 
 def test_invalid_uuid_or_context_fails_locally():
