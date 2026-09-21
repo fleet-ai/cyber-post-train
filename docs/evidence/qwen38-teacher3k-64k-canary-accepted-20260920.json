@@ -1,0 +1,53 @@
+{
+  "schema": "cyber_qwen38_teacher3k_long_context_canary_acceptance_v1",
+  "status": "accepted_one_step_and_released",
+  "observed_at": "2026-09-20T15:43:46Z",
+  "treatment": {
+    "context_length": 65536,
+    "global_batch": 8,
+    "learning_rate": 0.000003,
+    "data_unique_supervised_tokens": 57384881,
+    "validation_mode": "task_outcomes_only"
+  },
+  "execution": {
+    "api_name": "chris-q38-t3k64-can-v1-f2fd71e0",
+    "api_run_id": "f2fd71e0-0a3f-41bf-885b-ceaca6507e29",
+    "rayjob_uid": "ada340e2-f252-4b28-b4be-ca67b8365a89",
+    "workload_uid": "00cb49a0-2824-46eb-bab6-8a687311f2a3",
+    "raycluster_uid": "39e4c915-0138-4cdd-b8a9-7477bfe82cb4",
+    "pod_uid": "bff5ed45-09b1-49a7-abf1-35f944f5caa6",
+    "plan_sha256": "7845fe0d2881433ee9d5f85bf0a259b9b5ec0b9b4a8db33b09265fcb96e06ff0",
+    "request_sha256": "d4ad9d8b2f8551a8e6f1e5653fd616856573d0c9d878fc59163f5284d7f89c56",
+    "priority": "c1",
+    "nodes": 1,
+    "gpus": 8,
+    "terminal_state": "SUCCEEDED",
+    "deployment_state": "Complete",
+    "restarts": 0
+  },
+  "scientific_result": {
+    "optimizer_step": 1,
+    "loss": 0.45314645767211914,
+    "gradient_norm": 2.264733076095581,
+    "learning_rate": 0.000003000000106112566,
+    "supervised_tokens": 90194,
+    "finite_metrics": true,
+    "checkpoint_path": "/mnt/sfs/jobs/chris-q38-t3k64-can-v1/checkpoints/global_step_1"
+  },
+  "receipts": {
+    "progress_file_sha256": "a973509d620fd1097f31815c8ee8ce22f1c003462f71cc88ab5cc4a54682fc6b",
+    "progress_receipt_sha256": "9c01873d77026c9a3e600ab49158ee66f9215ae24e6ecaa83efcaa40132a8246",
+    "training_paused_file_sha256": "356363a2a83c937922970fc8d2638b66d47c67eae77da48fd568ec5aa5d22c42",
+    "training_paused_receipt_sha256": "96f3ab2043b6573e4f9aa87df072f5a90c54c6672fb96984e0e51e0b5052ecff",
+    "checkpoint_file_sha256": "1dbb9a20c7531599227012fa415bc3aaf2bffa2ea7a3ac0c409c1c8a849a0526",
+    "checkpoint_receipt_sha256": "331aaa13852ed5c3302f633e80e32c700332f16d904913eeef58e3af63aa0493",
+    "all_embedded_receipt_digests_recomputed": true
+  },
+  "resource_release": {
+    "raycluster_absent": true,
+    "pod_absent": true,
+    "workload_absent": true,
+    "active_gpus": 0
+  },
+  "scope": "This accepts the 64K one-step memory, forward/backward, optimizer, checkpoint, and release gate. It does not measure capability lift or authorize selection using training loss."
+}
