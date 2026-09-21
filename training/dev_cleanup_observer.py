@@ -18,6 +18,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
+from urllib.parse import quote
 from uuid import UUID
 
 from cyber_post_train.jobs import digest, quantity
@@ -77,17 +78,31 @@ def _write_create_once(path: Path, value: dict) -> None:
 
 
 def _validated_receipt(message: object, *, kind: str) -> dict | None:
-    if not isinstance(message, str) or not message or len(message) > 16384:
+    if not isinstance(message, str) or not message:
+        return None
+    # Kubernetes bounds a termination message by bytes, but refuse an
+    # obviously oversized Python string before allocating a second UTF-8
+    # buffer.  The post-encode cap remains authoritative for multibyte text.
+    if len(message) > 16384:
         return None
     try:
-        value = prod8.parse_receipt_json(message)
+        raw = message.encode("utf-8")
+    except UnicodeEncodeError:
+        return None
+    # Preserve the legacy Kubernetes termination-message bound before schema
+    # dispatch.  The v2 reader applies its stricter 3500-byte raw cap before
+    # parsing its canonical receipt a second time below.
+    if len(raw) > 16384:
+        return None
+    try:
+        value = prod8.parse_receipt_json(raw)
     except (TypeError, ValueError, RecursionError):
         return None
     if not isinstance(value, dict):
         return None
     if value.get("schema") == prod8.RECEIPT_SCHEMA:
         try:
-            return prod8.validate_receipt(value)
+            return prod8.validate_canonical_receipt_bytes(raw)
         except ValueError:
             return None
     body = {key: item for key, item in value.items() if key != "sha256"}
@@ -150,9 +165,13 @@ class Snapshot:
     peak_gpus: int = 0
     receipt: dict | None = None
     prod8_normalized_manifest: dict | None = None
+    prod8_job_template: dict | None = None
+    prod8_last_listed_pod_count: int = 0
     prod8_container_observations: dict[str, dict] = field(default_factory=dict)
     prod8_receipt_bound: bool = False
+    prod8_manifest_error: str = ""
     prod8_binding_error: str = ""
+    prod8_receipt_error: str = ""
 
 
 class Observer:
@@ -213,11 +232,21 @@ class Observer:
             raise ObserverError("production recovery observer requires a root RayJob")
         if profile == "production-cpu" and kind != "job":
             raise ObserverError("production CPU observer requires a root Job")
+        is_prod8_terminal_probe = kind == "job" and name == prod8.NAME
         if profile == "production-recovery":
             try:
                 UUID(expected_uid)
             except (TypeError, ValueError) as exc:
                 raise ObserverError("production recovery observer requires an exact UID") from exc
+        elif is_prod8_terminal_probe:
+            if profile != "production-cpu":
+                raise ObserverError("prod8 terminal probe requires the production CPU observer")
+            try:
+                UUID(expected_uid)
+            except (TypeError, ValueError) as exc:
+                raise ObserverError(
+                    "prod8 terminal probe requires its creation-bound exact UID"
+                ) from exc
         elif expected_uid:
             raise ObserverError("only a recovery observer may bind an existing UID")
         if expected_gpus not in {0, 8} or (kind == "job") != (expected_gpus == 0):
@@ -225,6 +254,11 @@ class Observer:
         for value in (plan_sha256, manifest_sha256):
             if len(value.removeprefix("sha256:")) != 64:
                 raise ObserverError("cleanup observer digest binding is invalid")
+        if (
+            is_prod8_terminal_probe
+            and plan_sha256.removeprefix("sha256:") != prod8.TRAINING_PLAN_SHA256
+        ):
+            raise ObserverError("prod8 terminal probe training-plan binding is invalid")
         if armed_path.exists() or result_path.exists():
             raise ObserverError("cleanup observer evidence path already exists")
         self.context = context
@@ -255,7 +289,15 @@ class Observer:
     def _is_prod8_terminal_probe(self) -> bool:
         return self.kind == "job" and self.name == prod8.NAME
 
-    def _kubectl(self, *arguments: str) -> str:
+    def _is_fatal_prod8_binding_error(self, error: ObserverError) -> bool:
+        return self._is_prod8_terminal_probe() and error.code in {
+            "prod8_manifest_binding_failed",
+            "prod8_creation_uid_mismatch",
+            "prod8_pod_binding_failed",
+            "prod8_receipt_rejected",
+        }
+
+    def _kubectl(self, *arguments: str, input_text: str | None = None) -> str:
         command = [
             "kubectl",
             "--context",
@@ -269,6 +311,7 @@ class Observer:
             try:
                 result = self._run(
                     command,
+                    input=input_text,
                     capture_output=True,
                     text=True,
                     timeout=KUBECTL_TIMEOUT_SECONDS,
@@ -326,16 +369,29 @@ class Observer:
         target = self._target()
         recovery = {}
         if self.expected_uid:
-            if target is None:
+            if target is None and not self._is_prod8_terminal_probe():
                 raise ObserverError("recovery cleanup target is absent")
-            uid, created = self._metadata(target)
-            if uid != self.expected_uid:
-                raise ObserverError("recovery cleanup target UID differs")
-            recovery = {
-                "recovered_existing_target": True,
-                "expected_uid": uid,
-                "target_created_at": created,
-            }
+            if target is not None:
+                uid, created = self._metadata(target)
+                if uid != self.expected_uid:
+                    raise ObserverError("recovery cleanup target UID differs")
+                recovery = (
+                    {
+                        "creation_bound_uid": uid,
+                        "target_created_at": created,
+                    }
+                    if self._is_prod8_terminal_probe()
+                    else {
+                        "recovered_existing_target": True,
+                        "expected_uid": uid,
+                        "target_created_at": created,
+                    }
+                )
+            elif self._is_prod8_terminal_probe():
+                recovery = {
+                    "creation_bound_uid": self.expected_uid,
+                    "target_created_at": "",
+                }
         elif target is not None:
             raise ObserverError("cleanup target already exists")
         self.armed_at = _stamp(_now())
@@ -362,6 +418,8 @@ class Observer:
     @staticmethod
     def _metadata(resource: dict) -> tuple[str, str]:
         metadata = resource.get("metadata", {})
+        if not isinstance(metadata, dict):
+            raise ObserverError("workload identity metadata is invalid")
         uid, created = metadata.get("uid"), metadata.get("creationTimestamp")
         try:
             UUID(uid)
@@ -373,7 +431,14 @@ class Observer:
     def _bind(self, resource: dict) -> None:
         uid, created = self._metadata(resource)
         if self.expected_uid and uid != self.expected_uid:
-            raise ObserverError("recovery cleanup target UID changed")
+            raise ObserverError(
+                "cleanup target UID changed",
+                code=(
+                    "prod8_creation_uid_mismatch"
+                    if self._is_prod8_terminal_probe()
+                    else "observer_error"
+                ),
+            )
         if self.snapshot.uid and uid != self.snapshot.uid:
             raise ObserverError("cleanup target name was reused with another UID")
         if not self.expected_uid and _parse_stamp(created) < _parse_stamp(self.armed_at):
@@ -383,22 +448,31 @@ class Observer:
 
     def _bind_prod8_manifest(self, resource: dict) -> None:
         if self.manifest_sha256.removeprefix("sha256:") != prod8.manifest_digest():
-            self.snapshot.prod8_binding_error = "manifest_digest_mismatch"
+            self.snapshot.prod8_manifest_error = "manifest_digest_mismatch"
             return
         try:
             normalized = prod8.normalized_manifest(resource)
         except ValueError:
-            self.snapshot.prod8_binding_error = "manifest_malformed"
+            self.snapshot.prod8_manifest_error = "manifest_malformed"
             return
         if not prod8._exactly_equal(normalized, prod8.expected_normalized_manifest()):
-            self.snapshot.prod8_binding_error = "manifest_mismatch"
+            self.snapshot.prod8_manifest_error = "manifest_mismatch"
+            return
+        template = resource.get("spec", {}).get("template", {}).get("spec")
+        if not isinstance(template, dict):
+            self.snapshot.prod8_manifest_error = "manifest_malformed"
             return
         self.snapshot.prod8_normalized_manifest = normalized
+        self.snapshot.prod8_job_template = template
 
-    def _capture_prod8_pods(self, pods: list[dict]) -> None:
+    def _capture_prod8_pods(self, pods: list[dict], *, job_template: object) -> None:
         expected_digest = prod8.IMAGE.rsplit("@", 1)[1]
         for pod in pods:
-            uid, _ = self._metadata(pod)
+            try:
+                uid, _ = self._metadata(pod)
+            except ObserverError:
+                self.snapshot.prod8_binding_error = "pod_identity_invalid"
+                continue
             metadata = pod.get("metadata", {})
             name = metadata.get("name")
             if not isinstance(name, str) or not name:
@@ -411,7 +485,11 @@ class Observer:
                 self.snapshot.prod8_binding_error = "multiple_pods"
                 continue
             try:
-                observation = prod8.normalized_terminal_pod(pod, job_uid=self.snapshot.uid)
+                observation = prod8.normalized_terminal_pod(
+                    pod,
+                    job_uid=self.snapshot.uid,
+                    job_template=job_template,
+                )
             except ValueError:
                 self.snapshot.prod8_binding_error = "pod_binding_mismatch"
                 continue
@@ -430,21 +508,32 @@ class Observer:
             reason = observation.get("termination_reason")
             if isinstance(reason, str) and reason:
                 self.snapshot.termination_reasons.add(reason)
+            receipt = _validated_receipt(message, kind=self.kind) if message is not None else None
+            if message is not None and receipt is None:
+                # A termination message that is present but cannot prove the
+                # sealed v2 contract is a receipt rejection, not permission
+                # to delete the otherwise creation-bound Job.
+                self.snapshot.prod8_receipt_error = "receipt_invalid"
+                continue
             if (
                 not self.snapshot.prod8_binding_error
                 and observation.get("runtime_image_digest") == expected_digest
                 and observation.get("exit_code") == 0
                 and restart_count == 0
-                and message is not None
+                and receipt is not None
             ):
-                receipt = _validated_receipt(message, kind=self.kind)
-                if receipt is not None:
-                    self.snapshot.receipt = receipt
-                    self.snapshot.prod8_receipt_bound = True
+                self.snapshot.receipt = receipt
+                self.snapshot.prod8_receipt_bound = True
 
-    def _capture_pods(self, pods: list[dict]) -> None:
+    def _capture_pods(self, pods: list[dict], *, job_template: object | None = None) -> None:
         if self._is_prod8_terminal_probe():
-            self._capture_prod8_pods(pods)
+            template = (
+                job_template if job_template is not None else self.snapshot.prod8_job_template
+            )
+            if template is None:
+                self.snapshot.prod8_binding_error = "job_template_missing"
+                return
+            self._capture_prod8_pods(pods, job_template=template)
             return
         current_gpus = 0
         for pod in pods:
@@ -481,15 +570,17 @@ class Observer:
 
     def _observe_job(self, resource: dict) -> None:
         if self._is_prod8_terminal_probe():
-            self._bind_prod8_manifest(resource)
+            job_template = self.snapshot.prod8_job_template
             pods = self._list(
                 "pod",
                 "--selector",
                 f"batch.kubernetes.io/controller-uid={self.snapshot.uid}",
             )
+            self.snapshot.prod8_last_listed_pod_count = len(pods)
+            self._capture_pods(pods, job_template=job_template)
         else:
             pods = self._list("pod", "--selector", f"job-name={self.name}")
-        self._capture_pods(pods)
+            self._capture_pods(pods)
         conditions = resource.get("status", {}).get("conditions", [])
         for condition in conditions:
             if condition.get("status") != "True":
@@ -602,6 +693,19 @@ class Observer:
         self._capture_pods(pods)
 
     def observe(self, resource: dict) -> None:
+        if self._is_prod8_terminal_probe():
+            # Do not adopt the name (and therefore do not make it deletable)
+            # until the live object proves both its immutable manifest and the
+            # caller-supplied UID captured at creation.
+            self._bind_prod8_manifest(resource)
+            if (
+                self.snapshot.prod8_manifest_error
+                or self.snapshot.prod8_normalized_manifest is None
+            ):
+                raise ObserverError(
+                    "prod8 terminal probe manifest binding failed",
+                    code="prod8_manifest_binding_failed",
+                )
         self._bind(resource)
         if self.kind == "job":
             self._observe_job(resource)
@@ -609,6 +713,21 @@ class Observer:
             self._observe_fleetjob(resource)
         else:
             self._observe_rayjob(resource)
+        # A Pod that differs from the rendered template may be an admission
+        # mutation or another provenance failure.  Even though the root Job
+        # UID was creation-bound, do not turn a failed live-Pod binding into a
+        # destructive cleanup action: the terminal probe is evidence-only and
+        # must leave an unproven workload for explicit operator review.
+        if self._is_prod8_terminal_probe() and self.snapshot.prod8_binding_error:
+            raise ObserverError(
+                "prod8 terminal probe Pod binding failed",
+                code="prod8_pod_binding_failed",
+            )
+        if self._is_prod8_terminal_probe() and self.snapshot.prod8_receipt_error:
+            raise ObserverError(
+                "prod8 terminal probe receipt was rejected",
+                code="prod8_receipt_rejected",
+            )
         if self.snapshot.peak_gpus > self.expected_gpus:
             raise CleanupAuthorizedError(
                 "workload exceeded its plan-bound GPU count",
@@ -629,24 +748,74 @@ class Observer:
             return None
         uid, _ = self._metadata(resource)
         if uid != self.snapshot.uid:
-            raise ObserverError("refusing to delete a different workload UID")
+            raise ObserverError(
+                "refusing to delete a different workload UID",
+                code=(
+                    "prod8_creation_uid_mismatch"
+                    if self._is_prod8_terminal_probe()
+                    else "observer_error"
+                ),
+            )
         return resource
+
+    def _uid_delete_path(self) -> str:
+        """Return the fixed Kubernetes REST route for an observed root kind."""
+        routes = {
+            "job": ("batch/v1", "jobs"),
+            "fleetjob": ("fleet.ai/v1alpha1", "fleetjobs"),
+            "rayjob": ("ray.io/v1", "rayjobs"),
+        }
+        version, plural = routes[self.kind]
+        return (
+            f"/apis/{version}/namespaces/{quote(self.namespace, safe='')}/"
+            f"{plural}/{quote(self.name, safe='')}"
+        )
+
+    def _delete_uid_conditioned(self) -> None:
+        """Issue the sole destructive request as API DELETE with a UID CAS."""
+        body = json.dumps(
+            {
+                "apiVersion": "v1",
+                "kind": "DeleteOptions",
+                "propagationPolicy": "Foreground",
+                "preconditions": {"uid": self.snapshot.uid},
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        # kubectl's raw-delete stdin path sends this exact body to the API.
+        # Unlike `kubectl delete <name>`, a recreated same-name object cannot
+        # satisfy DeleteOptions.preconditions.uid.
+        self._kubectl(
+            "delete",
+            "--raw",
+            self._uid_delete_path(),
+            "-f",
+            "-",
+            input_text=body,
+        )
 
     def delete(self) -> None:
         if not self.snapshot.uid or self.deletion_requested_at:
             return
-        if self._same_target() is None:
+        target = self._same_target()
+        if target is None:
             self.deletion_requested_at = _stamp(_now())
             return
+        if self._is_prod8_terminal_probe():
+            # Re-read the exact root and its controller-selected Pod in the
+            # destructive path.  A mutable label could otherwise hide a live
+            # Job-owned Pod from an earlier observation, allowing a deadline
+            # or terminal transition to delete without current Pod provenance.
+            self.observe(target)
+            if self.snapshot.prod8_last_listed_pod_count != 1:
+                self.snapshot.prod8_binding_error = "final_pod_not_observed"
+                raise ObserverError(
+                    "prod8 terminal probe has no uniquely bound live Pod",
+                    code="prod8_pod_binding_failed",
+                )
         self.deletion_requested_at = _stamp(_now())
-        self._kubectl(
-            "delete",
-            self._target_resource(),
-            self.name,
-            "--cascade=foreground",
-            "--wait=false",
-            "--output=name",
-        )
+        self._delete_uid_conditioned()
 
     def _present(self, resource: str, name: str) -> bool:
         return bool(name and self._get(resource, name) is not None)
@@ -654,7 +823,10 @@ class Observer:
     def wait_for_release(self) -> dict:
         deadline = time.monotonic() + self.release_seconds
         while True:
-            target_present = self._present(self._target_resource(), self.name)
+            # A same-name replacement is neither proof that the bound target
+            # remains nor proof that it was released.  Never turn it into a
+            # successful release observation.
+            target_present = self._same_target() is not None
             live_pods = []
             for name in self.snapshot.pod_names:
                 pod = self._get("pod", name)
@@ -675,6 +847,11 @@ class Observer:
                     cluster_present,
                 )
             ):
+                # Re-read the root immediately before certifying release.  A
+                # recreated same-name target raises from _same_target rather
+                # than being mistaken for the just-deleted UID.
+                if self._same_target() is not None:
+                    continue
                 return {
                     "target_present": False,
                     "pods_present": False,
@@ -693,7 +870,9 @@ class Observer:
             self.snapshot.prod8_normalized_manifest is not None
             and self.snapshot.prod8_receipt_bound
             and len(self.snapshot.prod8_container_observations) == 1
+            and not self.snapshot.prod8_manifest_error
             and not self.snapshot.prod8_binding_error
+            and not self.snapshot.prod8_receipt_error
         )
         receipt = self.snapshot.receipt if prod8_bound else None
         accepted = (
@@ -761,7 +940,11 @@ class Observer:
                                 for uid in sorted(self.snapshot.prod8_container_observations)
                             ],
                             "receipt_container_bound": self.snapshot.prod8_receipt_bound,
-                            "binding_error": self.snapshot.prod8_binding_error,
+                            "binding_error": (
+                                self.snapshot.prod8_manifest_error
+                                or self.snapshot.prod8_binding_error
+                                or self.snapshot.prod8_receipt_error
+                            ),
                         }
                     }
                     if self._is_prod8_terminal_probe()
@@ -769,8 +952,12 @@ class Observer:
                 ),
                 **(
                     {"recovered_existing_target_uid": self.expected_uid}
-                    if self.expected_uid
-                    else {}
+                    if self.profile == "production-recovery" and self.expected_uid
+                    else (
+                        {"creation_bound_uid": self.expected_uid}
+                        if self._is_prod8_terminal_probe()
+                        else {}
+                    )
                 ),
                 **release,
             }
@@ -781,6 +968,7 @@ class Observer:
         creation_allowance = 300 if self.profile == "production-direct" else 120
         creation_deadline = time.monotonic() + min(creation_allowance, self.maximum_seconds)
         observer_error: BaseException | None = None
+        delete_failure: BaseException | None = None
         deletion_authorized = False
         try:
             consecutive_observation_failures = 0
@@ -794,6 +982,8 @@ class Observer:
                 except ObserverError as exc:
                     consecutive_observation_failures += 1
                     self._record_observation_failure(exc, consecutive_observation_failures)
+                    if self._is_fatal_prod8_binding_error(exc):
+                        raise
                     # _bind runs before child discovery.  If the exact target
                     # UID was bound and a later read failed, continue through
                     # the normal observation loop instead of treating that
@@ -829,6 +1019,9 @@ class Observer:
                 except ObserverError as exc:
                     consecutive_observation_failures += 1
                     self._record_observation_failure(exc, consecutive_observation_failures)
+                    if self._is_fatal_prod8_binding_error(exc):
+                        observer_error = exc
+                        break
                     # An observation failure is not evidence that a healthy
                     # workload is terminal, broken, or stalled.  In
                     # particular, repeated Kubernetes read timeouts must not
@@ -879,7 +1072,16 @@ class Observer:
                 try:
                     self.delete()
                 except BaseException as exc:
+                    delete_failure = exc
                     observer_error = observer_error or exc
+        # A DELETE conflict/time-out is intentionally not followed by name
+        # polling: the object at that name may now be a different workload.
+        if delete_failure is not None:
+            raise delete_failure
+        if isinstance(observer_error, ObserverError) and self._is_fatal_prod8_binding_error(
+            observer_error
+        ):
+            raise observer_error
         if not self.snapshot.uid:
             if observer_error is not None:
                 raise observer_error

@@ -899,7 +899,9 @@ def validate_cpu_preview(
         status != {}
         or not isinstance(timestamp, str)
         or generation != 1
-        or labels != generated_labels
+        # Job controller labels are generated on selector/template metadata,
+        # not root Job metadata.  The submitted source has no root labels.
+        or labels is not None
         or template_labels != generated_labels
         or defaults
         != {

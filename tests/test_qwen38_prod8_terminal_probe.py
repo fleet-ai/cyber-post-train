@@ -29,7 +29,6 @@ def _rendered() -> dict:
         {
             "creationTimestamp": "2026-09-21T12:00:00Z",
             "generation": 1,
-            "labels": labels,
             "uid": uid,
         }
     )
@@ -148,6 +147,10 @@ def _closed_receipt() -> dict:
     )
 
 
+def _canonical_receipt_text(value: dict) -> str:
+    return probe.canonical_receipt_bytes(value).decode("utf-8")
+
+
 def test_manifest_is_bounded_read_only_alert_safe_and_zero_gpu() -> None:
     value = probe.manifest()
     pod = value["spec"]["template"]["spec"]
@@ -164,12 +167,18 @@ def test_manifest_is_bounded_read_only_alert_safe_and_zero_gpu() -> None:
 
 
 def test_preview_is_exactly_validated() -> None:
-    proof = probe.preview_evidence(_rendered(), direct.PROD_CONTEXT)
+    rendered = _rendered()
+    assert "labels" not in rendered["metadata"]
+    proof = probe.preview_evidence(rendered, direct.PROD_CONTEXT)
     assert proof["sfs_mount_read_only"] is True
     assert proof["gpus"] == 0
     assert proof["failure_alerts"] == "off"
     changed = _rendered()
     changed["metadata"]["annotations"].pop("fleet.ai/failure-alerts")
+    with pytest.raises(JobsError):
+        probe.preview_evidence(changed, direct.PROD_CONTEXT)
+    changed = _rendered()
+    changed["metadata"]["labels"] = {"unreviewed": "true"}
     with pytest.raises(JobsError):
         probe.preview_evidence(changed, direct.PROD_CONTEXT)
 
@@ -180,8 +189,11 @@ def test_runtime_reads_only_sanitized_markers_and_inventory(tmp_path: Path) -> N
     assert "directory_snapshot(" in probe.RUNTIME
     assert "assert_directory_unchanged(" in probe.RUNTIME
     assert "MAX_SCAN_ATTEMPTS=2" in probe.RUNTIME
-    assert "batch_inventory(root_fd)" in probe.RUNTIME
-    assert "checkpoint_inventory(root_fd)" in probe.RUNTIME
+    assert "batch_inventory(root_fd,budget)" in probe.RUNTIME
+    assert "checkpoint_inventory(root_fd,budget)" in probe.RUNTIME
+    assert "os.scandir(fd)" in probe.RUNTIME
+    assert "MAX_SCAN_ENTRIES=4096" in probe.RUNTIME
+    assert "MAX_SCAN_DIRECTORIES=1024" in probe.RUNTIME
     assert "file_info_at(root_fd,name)" in probe.RUNTIME
     root = tmp_path / "run"
     root.mkdir()
@@ -344,8 +356,10 @@ def test_runtime_receipt_stays_below_kubernetes_limit_at_maximum_evidence(
         _write(batch / "COLLECTED.json", common)
         _write_unsealed(batch / "REJECTED.json", {"reason": "episode_seconds"})
         _write_unsealed(batch / "FAILED.json", {"error_type": "InvalidEpisode"})
-    for index in range(1000):
-        (root / f"checkpoints/global_step_{index}").mkdir(parents=True)
+    for index in range(500):
+        step = root / f"checkpoints/global_step_{index}"
+        step.mkdir(parents=True)
+        (step / "state.bin").write_bytes(b"")
     private_pointer = root / "private-pointer.txt"
     private_pointer.write_text("999\n")
     (root / "checkpoints/latest_ckpt_global_step.txt").symlink_to(private_pointer)
@@ -363,8 +377,8 @@ def test_runtime_receipt_stays_below_kubernetes_limit_at_maximum_evidence(
         assert summary["count"] == summary["direct_regular_count"] == 100
         assert summary["indirect_count"] == 0
     checkpoint = receipt["checkpoint_inventory"]
-    assert checkpoint["global_step_count"] == 1000
-    assert checkpoint["boundary_steps"] == [0, 1, 998, 999]
+    assert checkpoint["global_step_count"] == 500
+    assert checkpoint["boundary_steps"] == [0, 1, 498, 499]
     assert checkpoint["latest_pointer_step"] is None
 
 
@@ -487,13 +501,13 @@ def test_runtime_marks_repeated_directory_mutation_unaccepted(tmp_path: Path) ->
     hook_dir.mkdir()
     (hook_dir / "sitecustomize.py").write_text(
         "import os\n"
-        "_listdir = os.listdir\n"
-        'def _mutating_listdir(path="."):\n'
-        "    value = _listdir(path)\n"
+        "_scandir = os.scandir\n"
+        'def _mutating_scandir(path="."):\n'
+        "    value = _scandir(path)\n"
         "    with open(os.environ['PROBE_MUTATION_TARGET'], 'ab') as stream:\n"
         "        stream.write(b'x')\n"
         "    return value\n"
-        "os.listdir = _mutating_listdir\n"
+        "os.scandir = _mutating_scandir\n"
     )
     receipt = _receipt(
         root,
@@ -529,7 +543,7 @@ def test_checkpoint_inventory_is_complete_under_low_fd_limit(tmp_path: Path) -> 
 def test_receipt_and_observer_reject_closed_schema_drift() -> None:
     receipt = _closed_receipt()
     assert probe.validate_receipt(receipt) == receipt
-    assert cleanup._validated_receipt(json.dumps(receipt), kind="job") == receipt
+    assert cleanup._validated_receipt(_canonical_receipt_text(receipt), kind="job") == receipt
     changes = (
         lambda value: value.update({"unexpected_private_field": "must-not-persist"}),
         lambda value: value.pop("checked_at"),
@@ -548,7 +562,7 @@ def test_receipt_and_observer_reject_closed_schema_drift() -> None:
         changed = _reseal_receipt(changed)
         with pytest.raises(JobsError):
             probe.validate_receipt(changed)
-        assert cleanup._validated_receipt(json.dumps(changed), kind="job") is None
+        assert cleanup._validated_receipt(_canonical_receipt_text(changed), kind="job") is None
 
 
 def test_receipt_cli_and_observer_reject_duplicate_keys(
@@ -556,14 +570,201 @@ def test_receipt_cli_and_observer_reject_duplicate_keys(
 ) -> None:
     receipt = _closed_receipt()
     receipt_path = tmp_path / "receipt.json"
-    receipt_path.write_text(json.dumps(receipt, sort_keys=True, separators=(",", ":")))
+    receipt_path.write_bytes(probe.canonical_receipt_bytes(receipt))
     monkeypatch.setattr(sys, "argv", ["probe", "--validate-receipt", str(receipt_path)])
     probe.main()
     assert json.loads(capsys.readouterr().out) == receipt
 
-    duplicate = receipt_path.read_text()[:-1] + ',"status":"inspected"}'
+    duplicate = receipt_path.read_text().rstrip("\n")[:-1] + ',"status":"inspected"}\n'
     receipt_path.write_text(duplicate)
     monkeypatch.setattr(sys, "argv", ["probe", "--validate-receipt", str(receipt_path)])
     with pytest.raises(ValueError, match="duplicate receipt key"):
         probe.main()
     assert cleanup._validated_receipt(duplicate, kind="job") is None
+
+
+def test_receipt_readers_require_exact_canonical_raw_bytes_before_acceptance(
+    tmp_path: Path, monkeypatch
+) -> None:
+    receipt = _closed_receipt()
+    raw = probe.canonical_receipt_bytes(receipt)
+    assert probe.validate_canonical_receipt_bytes(raw) == receipt
+    assert cleanup._validated_receipt(raw.decode("utf-8"), kind="job") == receipt
+
+    padded = raw + b" "
+    with pytest.raises(JobsError, match="not canonical"):
+        probe.validate_canonical_receipt_bytes(padded)
+    assert cleanup._validated_receipt(padded.decode("utf-8"), kind="job") is None
+
+    parsed = False
+
+    def reject_parse(_value: object) -> object:
+        nonlocal parsed
+        parsed = True
+        raise AssertionError("raw cap must reject before JSON parsing")
+
+    monkeypatch.setattr(probe, "parse_receipt_json", reject_parse)
+    with pytest.raises(JobsError, match="out of bounds"):
+        probe.validate_canonical_receipt_bytes(b"{" + b" " * probe.MAX_RECEIPT_BYTES)
+    assert parsed is False
+
+    monkeypatch.undo()
+    receipt_path = tmp_path / "receipt.json"
+    receipt_path.write_bytes(padded)
+    monkeypatch.setattr(sys, "argv", ["probe", "--validate-receipt", str(receipt_path)])
+    with pytest.raises(JobsError, match="not canonical"):
+        probe.main()
+
+    oversized_path = tmp_path / "oversized-receipt.json"
+    oversized_path.write_bytes(b"{" + b" " * probe.MAX_RECEIPT_BYTES)
+
+    def reject_read(*_args, **_kwargs):  # pragma: no cover - must not execute
+        raise AssertionError("oversized receipt was read into memory")
+
+    monkeypatch.setattr(probe.os, "read", reject_read)
+    monkeypatch.setattr(sys, "argv", ["probe", "--validate-receipt", str(oversized_path)])
+    with pytest.raises(JobsError, match="out of bounds"):
+        probe.main()
+
+    monkeypatch.undo()
+    fifo_path = tmp_path / "receipt.fifo"
+    os.mkfifo(fifo_path)
+    monkeypatch.setattr(sys, "argv", ["probe", "--validate-receipt", str(fifo_path)])
+    with pytest.raises(JobsError, match="not a regular file"):
+        probe.main()
+
+
+def test_receipt_cross_field_invariants_are_closed() -> None:
+    root_missing = _closed_receipt()
+    root_missing["root_markers"][0] = {
+        "name": probe.ROOT_MARKERS[0],
+        "present": True,
+        "accepted": True,
+        "reason": "accepted",
+    }
+    root_missing = _reseal_receipt(root_missing)
+    with pytest.raises(JobsError, match="unavailable root retained"):
+        probe.validate_receipt(root_missing)
+
+    inventory = _closed_receipt()
+    inventory["batch_inventory"] = {
+        **probe._empty_batch_inventory(accepted=True),
+        "directory_present": True,
+        "batch_directories": 1,
+    }
+    inventory = _reseal_receipt(inventory)
+    with pytest.raises(JobsError, match="unavailable root retained"):
+        probe.validate_receipt(inventory)
+
+    impossible = _closed_receipt()
+    impossible.update(
+        {
+            "root_exists": True,
+            "root_direct": True,
+            "terminal_classification": "no_terminal_marker",
+            "checkpoint_inventory": {
+                **probe._empty_checkpoint_inventory(accepted=True),
+                "directory_present": True,
+                "file_count": 1,
+                "total_bytes": 1,
+            },
+        }
+    )
+    impossible = _reseal_receipt(impossible)
+    with pytest.raises(JobsError, match="empty checkpoint inventory conflicts"):
+        probe.validate_receipt(impossible)
+
+    impossible = _closed_receipt()
+    impossible.update(
+        {
+            "root_exists": True,
+            "root_direct": True,
+            "terminal_classification": "no_terminal_marker",
+            "checkpoint_inventory": {
+                **probe._empty_checkpoint_inventory(accepted=True),
+                "directory_present": True,
+                "global_step_count": 1,
+                "minimum_step": 1,
+                "maximum_step": 1,
+                "boundary_steps": [1],
+                "file_count": 0,
+            },
+        }
+    )
+    impossible = _reseal_receipt(impossible)
+    with pytest.raises(JobsError, match="file count conflicts"):
+        probe.validate_receipt(impossible)
+
+
+def test_runtime_allows_zero_step_pointer_and_closed_validator_matches(tmp_path: Path) -> None:
+    root = tmp_path / "run"
+    (root / "checkpoints").mkdir(parents=True)
+    (root / "checkpoints/latest_ckpt_global_step.txt").write_text("0\n")
+    receipt = _receipt(root, tmp_path / "receipt.json")
+    assert receipt["checkpoint_inventory"] == {
+        **probe._empty_checkpoint_inventory(accepted=True),
+        "directory_present": True,
+        "latest_pointer_step": 0,
+    }
+    assert probe.validate_receipt(receipt, target=str(root)) == receipt
+
+
+def test_runtime_and_host_accept_metadata_unavailable_marker_reason(tmp_path: Path) -> None:
+    root = tmp_path / "run"
+    root.mkdir()
+    _write(
+        root / "FAILED.json",
+        {
+            "status": "failed",
+            "plan_sha256": probe.TRAINING_PLAN_SHA256,
+            "error_class": "RuntimeError",
+            "watchdog_reason": None,
+        },
+    )
+    hook_dir = tmp_path / "site"
+    hook_dir.mkdir()
+    (hook_dir / "sitecustomize.py").write_text(
+        "import os\n"
+        "_open = os.open\n"
+        "def _fault(path, *args, **kwargs):\n"
+        "    if path == 'FAILED.json' and kwargs.get('dir_fd') is not None:\n"
+        "        raise OSError('fault')\n"
+        "    return _open(path, *args, **kwargs)\n"
+        "os.open = _fault\n"
+    )
+    receipt = _receipt(
+        root,
+        tmp_path / "receipt.json",
+        extra_env={"PYTHONPATH": str(hook_dir)},
+    )
+    marker = next(row for row in receipt["root_markers"] if row["name"] == "FAILED.json")
+    assert marker == {
+        "name": "FAILED.json",
+        "present": True,
+        "accepted": False,
+        "reason": "metadata_unavailable",
+    }
+    assert probe.validate_receipt(receipt, target=str(root)) == receipt
+
+
+@pytest.mark.parametrize(
+    ("field", "count"),
+    (("entries", probe.MAX_SCAN_ENTRIES + 1), ("directories", probe.MAX_SCAN_DIRECTORIES + 1)),
+)
+def test_runtime_rejects_global_scan_budget_exhaustion(
+    tmp_path: Path, field: str, count: int
+) -> None:
+    root = tmp_path / "run"
+    root.mkdir()
+    if field == "entries":
+        for index in range(count):
+            (root / f"entry-{index:04d}").touch()
+    else:
+        for index in range(count):
+            step = root / f"checkpoints/global_step_{index}"
+            step.mkdir(parents=True)
+            (step / "state.bin").write_bytes(b"")
+    receipt = _receipt(root, tmp_path / "receipt.json")
+    assert receipt["status"] == "unaccepted"
+    assert receipt["scan"] == {"attempts": probe.MAX_SCAN_ATTEMPTS, "stable": False}
+    assert receipt["terminal_classification"] == "unaccepted_scan_mutation"

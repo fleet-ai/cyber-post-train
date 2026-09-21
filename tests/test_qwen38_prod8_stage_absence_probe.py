@@ -25,7 +25,6 @@ def _rendered() -> dict:
         {
             "creationTimestamp": "2026-09-21T12:00:00Z",
             "generation": 1,
-            "labels": labels,
             "uid": uid,
         }
     )
