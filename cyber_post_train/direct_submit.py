@@ -5,7 +5,7 @@ preview, changes only the run identity, removes the API-only Fleet credential
 Secret that SFT does not consume, and adds the project-required root alert
 annotation.  It never calls the Jobs API create endpoint and never applies or
 patches a Kubernetes object.  The non-SFT exception is restricted to one exact
-LR30 step-76 zero-update qualification schema.
+LR30 step-76 HF inference-forward qualification schema.
 """
 
 from __future__ import annotations
@@ -366,7 +366,7 @@ def render_sft_rayjob(
 def render_lr30_qualification_rayjob(
     plan: dict, request: dict, preview: dict, *, run_id: str | None = None
 ) -> tuple[dict, dict]:
-    """Render only the exact LR30 step-76 zero-update qualification."""
+    """Render only the exact LR30 step-76 HF inference-forward qualification."""
     _assert_lr30_contract(plan, request, require_launchable=False)
     return _render_rayjob(request, preview, expected_secrets=[], run_id=run_id)
 
@@ -629,7 +629,7 @@ def direct_submit_lr30_qualification_once(
     journal: Path,
     run_id: str | None = None,
 ) -> dict:
-    """Create only the approved LR30 step-76 zero-update qualification."""
+    """Create only the approved LR30 step-76 HF inference-forward qualification."""
     _assert_lr30_contract(plan, request, require_launchable=True)
     from training.qwen38_lr30_step76_gate import job_request
 

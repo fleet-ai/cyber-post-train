@@ -1,8 +1,8 @@
 {
   "schema": "cyber_qwen38_lr30_step76_gpu_reload_plan_v1",
-  "status": "direct_path_server_dry_run_passed_pending_merge_fresh_preflight_and_root_create_approval",
+  "status": "inference_forward_direct_path_server_dry_run_passed_pending_merge_fresh_preflight_and_root_create_approval",
   "launchable": false,
-  "purpose": "Load the exact accepted LR30 step-76 BF16 export on one GPU, run one fixed finite synthetic forward, execute zero optimizer updates, and release the allocation before any serving stage.",
+  "purpose": "The native all-rank checkpoint reload and BF16 export are already accepted. This separate missing gate loads that exact HF export on one GPU, runs one fixed finite synthetic inference forward, executes zero optimizer updates, and releases the allocation before any serving stage.",
   "source": {
     "checkpoint": {
       "path": "/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/checkpoints/global_step_76",
@@ -33,7 +33,7 @@
     "fixed_synthetic_input": true,
     "private_loader_log": "private-synthetic-loader.log",
     "files": {
-      "training/qwen38_lr30_step76_gate.py": "sha256:f216cb1042c1f6eb2a707ded9d3a0529d36c7d66504d58121344912038a35df8",
+      "training/qwen38_lr30_step76_gate.py": "sha256:0c280c1894552c880d97a0f917c4478742233051f279909a195a4992f35687e2",
       "training/checkpoints.py": "sha256:b2bfa604a45a7ea1ed1b195401ce3c489f6460b36d2cd39d68a43033d23873b7",
       "training/export_check.py": "sha256:a04811409178eedc6969e34766ca70c82d84c27b718944ecab93407609c4dfe7",
       "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
@@ -44,9 +44,9 @@
   },
   "request": {
     "name": "chris-q38-lr30-s76-gpu-v1",
-    "title": "Qwen3.8 LR30 step76 exact BF16 one-GPU zero-update reload v1",
+    "title": "Qwen3.8 LR30 step76 accepted BF16 HF one-GPU inference-forward v1",
     "run_dir": "/mnt/sfs/jobs/chris-q38-lr30-step76-hfcheck-v1",
-    "request_sha256": "sha256:eb73222ca1589b09c9513fc0d057b12387276eed303ec0493d24c29674a773c7",
+    "request_sha256": "sha256:de1cb92e90c56f416b5b775ab6fe9b8e3679426cdcb27c8bdf09b85ebf871e51",
     "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
     "workers": 1,
     "gpus_per_worker": 1,
@@ -67,9 +67,9 @@
     "warnings": [],
     "kind": "RayJob",
     "namespace": "fleet-train-jobs",
-    "manifest_sha256": "sha256:bb21c90d4229c68a488029ad6fc18594253307b827b968e45e83358cc79e21ba",
-    "direct_rendered_manifest_sha256": "sha256:3338b25dbba3a30e53f0e1fa56de87cbff3f66a18ce16f17b4fd2aee27818dfd",
-    "server_dry_run_manifest_sha256": "sha256:06eaecbcb45c36432f72a0276d4fd26648e5b43c78d1433983125abc4c228498",
+    "manifest_sha256": "sha256:c06b3998efb136c8cd9de793b4e73b34a3cd6dfcf365a9439da7deb08cedb3db",
+    "direct_rendered_manifest_sha256": "sha256:fbef3c493aff002377520058196400773280d0de4f1b82cc8f449446ae59604c",
+    "server_dry_run_manifest_sha256": "sha256:047c1b1af91d7a33c72ef37afec612c8d40374b9863778657ccaa80b4e3fc0b1",
     "suspended_for_queue": true,
     "queue_priority_class": "q1",
     "run_dir_matches": true,
@@ -86,7 +86,7 @@
   "blockers": [
     {
       "gate": "current_main_merge_and_fresh_source_output_preflight",
-      "reason": "The exact current-main-bound one-off path passed a live server dry-run with root fleet.ai/failure-alerts=off, c1/q1, one GPU and no resources created, but the implementation is not yet merged and the source/output preflight must be repeated within 30 minutes of create.",
+      "reason": "The exact current-main-bound HF inference-forward path passed a live server dry-run with root fleet.ai/failure-alerts=off, c1/q1, one GPU and no resources created, but the implementation is not yet merged and the source/output preflight must be repeated within 30 minutes of create.",
       "unblock": "Merge this exact reviewed implementation, regenerate the prepared directory from current main, and pass the exact-image zero-GPU source/output preflight."
     },
     {
@@ -120,6 +120,8 @@
   },
   "scientific_boundary": {
     "optimizer_updates": 0,
+    "accepted_native_all_rank_reload_repeated": false,
+    "gate_proves_only_finite_hf_inference_forward": true,
     "benchmark_content_or_outcomes_read": false,
     "capability_claim": false,
     "serving_qualified_by_this_gate": false
@@ -129,5 +131,5 @@
     "resources_created": 0,
     "gpus_allocated": 0
   },
-  "sha256": "sha256:0a0427bbb051046694c2495e2a79eb170264ca6c6b7014a3ecaa67962622e157"
+  "sha256": "sha256:b51a60802555227b355799c9465327d4dca096084f3f30d8a690ea6aa28a252f"
 }

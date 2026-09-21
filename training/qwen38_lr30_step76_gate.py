@@ -1,4 +1,4 @@
-"""Bounded zero-update GPU forward for the accepted Qwen3.8 LR30 export."""
+"""Bounded inference forward for the accepted Qwen3.8 LR30 HF export."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def job_request() -> dict:
     return bundled_request(
         {
             "name": RUN_NAME,
-            "title": "Qwen3.8 LR30 step76 exact BF16 one-GPU zero-update reload v1",
+            "title": "Qwen3.8 LR30 step76 accepted BF16 HF one-GPU inference-forward v1",
             "run_dir": RUN_DIR,
             "image": IMAGE,
             "workers": 1,
@@ -88,7 +88,7 @@ def validate_submission_contract(plan: dict, request: dict, *, require_launchabl
     unsigned = {key: value for key, value in plan.items() if key != "sha256"}
     expected_request = {
         "name": RUN_NAME,
-        "title": "Qwen3.8 LR30 step76 exact BF16 one-GPU zero-update reload v1",
+        "title": "Qwen3.8 LR30 step76 accepted BF16 HF one-GPU inference-forward v1",
         "run_dir": RUN_DIR,
         "request_sha256": "sha256:" + digest(request),
         "image": IMAGE,

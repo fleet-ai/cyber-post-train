@@ -281,7 +281,7 @@ def train(config: Path, output: Annotated[Path, typer.Option("--output")]) -> No
 
 @app.command("lr30-step76-prepare")
 def lr30_step76_prepare(plan_file: Path, output: Annotated[Path, typer.Option("--output")]) -> None:
-    """Prepare only the exact LR30 step-76 zero-update GPU qualification."""
+    """Prepare only the exact LR30 step-76 HF inference-forward qualification."""
     from training.qwen38_lr30_step76_gate import (
         job_request,
         validate_submission_contract,
@@ -425,7 +425,7 @@ def direct_submit_lr30_step76(
     directory: Path,
     context: Annotated[str, typer.Option("--context")],
 ) -> None:
-    """Create only the exact approved LR30 step-76 zero-update qualification."""
+    """Create only the exact approved LR30 step-76 HF inference-forward qualification."""
     from .direct_submit import (
         DIRECT_JOURNAL,
         Kubectl,
