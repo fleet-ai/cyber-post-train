@@ -68,6 +68,42 @@ POSTGRES_SECRET_KEY = "ROLLOUT_DATABASE_URL"
 ACTIVE_DEADLINE_SECONDS = 768600
 EXPECTED_CELLS = 200
 EXPECTED_CONCURRENCY = 8
+CONFIG_MAP_MAX_SERIALIZED_BYTES = 900000
+CLUSTER_JOB_REQUIREMENTS = {
+    "active_deadline_seconds": ACTIVE_DEADLINE_SECONDS,
+    "ambiguous_cluster_create_retry_allowed": False,
+    "architecture": "amd64",
+    "backoff_limit": 0,
+    "cluster_create_attempts": 1,
+    "completions": 1,
+    "exact_launcher_bindings_required": [
+        "operation_authorization_sha256",
+        "operation_root_name",
+        "dedicated_ledger_id",
+        "source_git_commit",
+        "source_git_tree",
+        "agent_image_digest",
+        "proxy_image_digest",
+        "controller_image_digest",
+        "database_identity",
+        "sfs_pvc_identity",
+        "kube_context",
+        "namespace",
+        "queue_name",
+    ],
+    "exact_uid_foreground_cleanup_required": True,
+    "exclusive_local_cluster_create_intent_required": True,
+    "identical_normalized_server_preview_digests_required": True,
+    "owned_child_absence_and_no_idle_proof_required": True,
+    "parallelism": 1,
+    "priority_class_name": PRIORITY_CLASS,
+    "required_top_level_annotation": {FAILURE_ALERT_ANNOTATION: "off"},
+    "restart_policy": "Never",
+    "root_kind": "Job",
+    "server_preview_count": 2,
+    "terminal_exact_name_and_uid_observation_required": True,
+    "zero_gpu_requests_and_limits_across_regular_and_init_containers": True,
+}
 KUBERNETES_NAME = re.compile(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?")
 KUBERNETES_UID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 DATABASE_NAME = re.compile(r"[a-z][a-z0-9_]{0,62}")
@@ -262,6 +298,13 @@ def _write_json_once(path: Path, value: dict[str, Any]) -> None:
     _write_once(path, json.dumps(value, indent=2, sort_keys=True).encode() + b"\n")
 
 
+def _write_jsonl_once(path: Path, value: dict[str, Any]) -> None:
+    _write_once(
+        path,
+        json.dumps(value, sort_keys=True, separators=(",", ":")).encode() + b"\n",
+    )
+
+
 def _append_json(path: Path, value: dict[str, Any]) -> None:
     data = json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n"
     try:
@@ -300,6 +343,29 @@ def _copy_input(source: Path, destination: Path) -> dict[str, str]:
         "path": destination.relative_to(destination.parents[1]).as_posix(),
         "sha256": "sha256:" + hashlib.sha256(data).hexdigest(),
     }
+
+
+def _validate_admitted_packet(value: dict[str, Any], authorization: dict[str, Any]) -> None:
+    unsigned = {key: item for key, item in value.items() if key != "sha256"}
+    safety = value.get("execution_safety")
+    if (
+        value.get("schema") != "cyber_trajectory_collection_packet_v2"
+        or value.get("operation_authorization_sha256") != authorization["sha256"]
+        or value.get("eval_plan_sha256") != authorization["plan_sha256"]
+        or value.get("sha256") != "sha256:" + digest(unsigned)
+        or not isinstance(safety, dict)
+        or safety.get("execution_mode") != "authorized_amd64_cpu_job_v1"
+        or safety.get("cluster_wrapper_supported") is not True
+        or safety.get("external_submission") is not False
+        or safety.get("operation_authorization_sha256") != authorization["sha256"]
+        or safety.get("operation_root_name") != authorization["operation_root_name"]
+        or safety.get("dedicated_ledger_id") != authorization["dedicated_ledger_id"]
+        or safety.get("identity_map_sha256") != authorization["identity_map_sha256"]
+        or safety.get("planned_cells") != EXPECTED_CELLS
+        or safety.get("maximum_planned_cells") != EXPECTED_CELLS
+        or safety.get("cluster_job_execution_requirements") != CLUSTER_JOB_REQUIREMENTS
+    ):
+        raise CollectionJobError("collection packet v2 does not authorize this exact CPU Job rail")
 
 
 def prepare_packet(
@@ -383,16 +449,7 @@ def prepare_packet(
         input_dir / "task-selection.json"
     ):
         raise CollectionJobError("collection task selection identity is invalid")
-    if admitted_packet.get("schema") != "cyber_trajectory_collection_packet_v2":
-        raise CollectionJobError("launcher requires the visible-action collection packet v2")
-    if admitted_packet.get("operation_authorization_sha256") != authorization["sha256"]:
-        raise CollectionJobError("collection packet does not bind this operation authorization")
-    if admitted_packet.get("eval_plan_sha256") != authorization["plan_sha256"]:
-        raise CollectionJobError("collection packet does not bind this exact evaluation plan")
-    if admitted_packet.get("sha256") != "sha256:" + digest(
-        {key: item for key, item in admitted_packet.items() if key != "sha256"}
-    ):
-        raise CollectionJobError("collection packet v2 seal is invalid")
+    _validate_admitted_packet(admitted_packet, authorization)
 
     plan_short = authorization["plan_sha256"].removeprefix("sha256:")[:8]
     job_name = f"chris-q38-base-train50-p4-v2-{plan_short}"
@@ -582,7 +639,7 @@ def _build_config_map(packet: LaunchPacket) -> dict[str, Any]:
             ),
         }
     )
-    return {
+    config_map = {
         "apiVersion": "v1",
         "kind": "ConfigMap",
         "metadata": {
@@ -602,6 +659,12 @@ def _build_config_map(packet: LaunchPacket) -> dict[str, Any]:
         "immutable": True,
         "data": data,
     }
+    if (
+        len(json.dumps(config_map, sort_keys=True, separators=(",", ":")).encode())
+        > CONFIG_MAP_MAX_SERIALIZED_BYTES
+    ):
+        raise CollectionJobError("immutable source ConfigMap exceeds its reviewed size ceiling")
+    return config_map
 
 
 def _build_job(packet: LaunchPacket) -> dict[str, Any]:
@@ -841,15 +904,7 @@ def build_package(packet_path: Path) -> Package:
         or DATABASE_NAME.fullmatch(str(operation["database"])) is None
     ):
         raise CollectionJobError("operation identity differs from the exact authorized wave")
-    if (
-        admitted_packet.get("schema") != "cyber_trajectory_collection_packet_v2"
-        or admitted_packet.get("operation_authorization_sha256") != authorization["sha256"]
-        or admitted_packet.get("eval_plan_sha256") != authorization["plan_sha256"]
-        or admitted_packet.get("sha256")
-        != "sha256:"
-        + digest({key: item for key, item in admitted_packet.items() if key != "sha256"})
-    ):
-        raise CollectionJobError("collection packet v2 differs from the authorized operation")
+    _validate_admitted_packet(admitted_packet, authorization)
     if (
         plan.get("planned_cells") != EXPECTED_CELLS
         or plan.get("concurrency") != EXPECTED_CONCURRENCY
@@ -1099,7 +1154,7 @@ def launch_once(packet_path: Path, *, cluster: Cluster, journal: Path) -> dict[s
         "first_exact_name_census": first_census,
         "final_exact_name_census": final_census,
     }
-    _write_json_once(journal, intent)
+    _write_jsonl_once(journal, intent)
     try:
         response = cluster.create_once(NAMESPACE, package.bundle)
         job = _response_object(
