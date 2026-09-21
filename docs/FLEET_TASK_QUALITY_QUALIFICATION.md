@@ -90,6 +90,33 @@ reuses the same sealed intent, reads the same instance ID, and safely reissues
 only that delete. The wave is not resource-terminal until
 `CLEANUP_AGGREGATE.json` records zero unresolved task versions.
 
+### Claim-absent historical recovery
+
+If a terminal wave predates a deployed create-claim integration and the normal
+cleanup cannot resolve a provision intent, do not replay the qualification or
+guess an instance ID. The separate, read-only recovery issuer can seal only a
+strict independent-absence case:
+
+```sh
+git fetch origin main
+uv run --locked python -m evals.fleet.task_quality_cleanup_recovery \
+  /private/qualification-root/task-quality-<wave>-<plan-prefix>
+```
+
+The issuer requires the recovery code to equal freshly fetched `origin/main`,
+reopens the original merged controller bytes from Git, validates the sealed
+plan/run/cell/provision/terminal chain and deterministic request/run IDs,
+rechecks Fleet-team authentication and the deployed claim API, and then
+requires two successive observations of both a `404` create claim and an empty
+authoritative instance listing for the exact run ID. It performs no external
+mutation and fails on any claim, instance, binding change, nonempty list, or
+partial evidence. Each successful private resolution binds its independent
+absence-evidence digest. Finally, rerun the **original frozen controller's**
+normal `cleanup` command so it can consume those exact resolutions and seal
+`CLEANUP_AGGREGATE.json`. This issuer is an evidence-closure tool; it does not
+authorize another qualification wave. Repair and re-review the live ownership
+contract before any later wave.
+
 ## Continuous expansion
 
 For each later `not_analyzed` wave, pass the preceding private
