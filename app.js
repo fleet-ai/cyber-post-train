@@ -15,7 +15,7 @@ function escapeHtml(value) {
 
 function setTab() {
   const requested = location.hash.slice(1);
-  const tab = ["web-evals", "webexploitbench", "task-quality", "experiment-map"].includes(requested) ? requested : "web-evals";
+  const tab = ["web-evals", "fleet-evaluations", "webexploitbench", "task-quality", "experiment-map"].includes(requested) ? requested : "web-evals";
   document.querySelectorAll("[data-tab-page]").forEach(page => { page.hidden = page.dataset.tabPage !== tab; });
   document.querySelectorAll("[data-tab-link]").forEach(link => {
     const active = link.dataset.tabLink === tab;
@@ -24,6 +24,7 @@ function setTab() {
   });
   const titles = {
     "web-evals": "WEB evaluations · Fleet Cyber",
+    "fleet-evaluations": "Fleet task evaluations · Fleet Cyber",
     "webexploitbench": "WebExploitBench · Fleet Cyber",
     "task-quality": "Task quality · Fleet Cyber",
     "experiment-map": "Experiment plan · Fleet Cyber"
@@ -90,12 +91,35 @@ function renderFiltering() {
     <article><span>${String(i + 1).padStart(2, "0")}</span><div><h3>${item[0]}</h3><p>${item[1]}</p></div></article>`).join("");
 }
 
+function renderFleetEvaluations() {
+  const fleet = data.fleetEvaluations;
+  document.querySelector("#fleet-main-finding").textContent = fleet.mainFinding;
+  document.querySelector("#fleet-summary-cards").innerHTML = fleet.summary.map(([label, value, detail]) => `
+    <article class="fleet-summary-card">
+      <b>${escapeHtml(value)}</b>
+      <h3>${escapeHtml(label)}</h3>
+      <p>${escapeHtml(detail)}</p>
+    </article>`).join("");
+  document.querySelector("#fleet-evaluation-table").innerHTML = fleet.evaluations.map(item => `
+    <tr>
+      <th>${escapeHtml(item.model)}</th>
+      <td>${escapeHtml(item.training)}</td>
+      <td><span class="fleet-status">${escapeHtml(item.status)}</span></td>
+      <td>${escapeHtml(item.conclusion)}</td>
+    </tr>`).join("");
+  document.querySelector("#fleet-next-steps").innerHTML = fleet.nextSteps.map((item, index) => `
+    <article><span>${String(index + 1).padStart(2, "0")}</span><div><h3>${escapeHtml(item[0])}</h3><p>${escapeHtml(item[1])}</p></div></article>`).join("");
+  document.querySelector("#fleet-source-links").innerHTML = fleet.sources.map(([label, url]) =>
+    `<a href="${escapeHtml(url)}">${escapeHtml(label)}</a>`).join("");
+}
+
 
 renderResults();
 renderProtocol();
 renderTasks();
 renderTraceFindings();
 renderFiltering();
+renderFleetEvaluations();
 renderExperimentMap();
 addEventListener("hashchange", setTab);
 setTab();

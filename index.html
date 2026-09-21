@@ -16,6 +16,7 @@
       </a>
       <nav class="tabs" aria-label="Reports">
         <a data-tab-link="web-evals" href="#web-evals">WEB evaluations</a>
+        <a data-tab-link="fleet-evaluations" href="#fleet-evaluations">Fleet task evaluations</a>
         <a data-tab-link="webexploitbench" href="#webexploitbench">Early audit</a>
         <a data-tab-link="task-quality" href="#task-quality">Task quality</a>
         <a data-tab-link="experiment-map" href="#experiment-map">Experiment plan</a>
@@ -55,6 +56,83 @@
         <section class="section compact" aria-labelledby="our-web-results-title">
           <div class="section-heading"><p class="section-index">03</p><div><h2 id="our-web-results-title">Our Qwen3.8 results</h2><p id="web-scope"></p></div></div>
           <p id="web-count" aria-live="polite">Loading evaluations…</p><div id="web-campaigns"></div><div id="web-results-analysis"></div>
+        </section>
+      </section>
+      <section class="page" data-tab-page="fleet-evaluations" aria-labelledby="fleet-evaluations-title" hidden>
+        <div class="hero ruled">
+          <p class="eyebrow">Fleet development tasks · Qwen3.8-27B</p>
+          <h1 id="fleet-evaluations-title">We do not yet have a fair answer about whether training helped.</h1>
+          <p class="dek">We tried to compare several saved versions of trained Qwen with the original model on 17 kept-aside Fleet security tasks. The attempts taught us how to run the test safely, but only one trained version finished all 17 tasks—and it has no matching original-model comparison. We therefore show the work honestly, without turning incomplete tests into performance claims.</p>
+          <div class="hero-meta">
+            <span>17 development tasks per attempt</span>
+            <span>Final 8-task test set untouched</span>
+            <span>Updated 21 September 2026</span>
+          </div>
+        </div>
+
+        <aside class="finding" aria-label="Main finding">
+          <span class="finding-label">Main finding</span>
+          <p id="fleet-main-finding"></p>
+        </aside>
+
+        <section class="section" aria-labelledby="fleet-summary-title">
+          <div class="section-heading">
+            <p class="section-index">01</p>
+            <div>
+              <h2 id="fleet-summary-title">What we can say today</h2>
+              <p>A useful comparison needs the original and trained models to face the same task versions, with the same tool-using program, time limits, randomness settings, and automatic answer checker. The trained model itself should be the only planned difference.</p>
+            </div>
+          </div>
+          <div id="fleet-summary-cards" class="fleet-summary-grid"></div>
+        </section>
+
+        <section class="section" aria-labelledby="fleet-status-title">
+          <div class="section-heading">
+            <p class="section-index">02</p>
+            <div>
+              <h2 id="fleet-status-title">Each checkpoint we evaluated</h2>
+              <p>“No result” does not mean the model failed the tasks. It means the test did not meet the standard needed to compare model capability.</p>
+            </div>
+          </div>
+          <div class="comparison-table-wrap">
+            <table class="comparison-table fleet-evaluation-table">
+              <thead><tr><th>Model</th><th>How it was trained</th><th>What happened</th><th>What we can conclude</th></tr></thead>
+              <tbody id="fleet-evaluation-table"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="fleet-why-title">
+          <div class="section-heading">
+            <p class="section-index">03</p>
+            <div>
+              <h2 id="fleet-why-title">Why we are not publishing a pass rate</h2>
+              <p>A score from one model alone cannot tell us whether training helped. It might instead reflect a changed task, changed tool program, a different way of reaching the model, or a technical failure. The saved evaluation records also keep task outcomes private, so this public page reports only safe totals and test status.</p>
+              <p class="callout">The correct statement today is: no trained checkpoint has a completed, fair Fleet comparison against the original Qwen model. We have not established either an improvement or a decline.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="fleet-next-title">
+          <div class="section-heading">
+            <p class="section-index">04</p>
+            <div>
+              <h2 id="fleet-next-title">What a publishable result needs next</h2>
+              <p>We will run a newly matched pair: the original model and one selected trained version, each on the same 17 development tasks. Only after both finish with valid automatic checking will we compare their task-level results. The eight final test tasks remain untouched until a recipe is chosen.</p>
+            </div>
+          </div>
+          <div id="fleet-next-steps" class="finding-list"></div>
+        </section>
+
+        <section class="section compact" aria-labelledby="fleet-sources-title">
+          <div class="section-heading">
+            <p class="section-index">05</p>
+            <div>
+              <h2 id="fleet-sources-title">Evidence behind this page</h2>
+              <p>The linked records describe test setup and completion status without publishing task prompts, model conversations, flags, or private scores.</p>
+              <div id="fleet-source-links" class="source-links"></div>
+            </div>
+          </div>
         </section>
       </section>
       <section class="page" data-tab-page="webexploitbench" aria-labelledby="wbe-title">

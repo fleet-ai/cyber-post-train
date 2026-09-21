@@ -77,5 +77,59 @@ window.REPORT_DATA = {
       ["Apply the latest broken-task review", "Five of the 80 earlier proven versions that are still current are now marked broken, so the conservative current set contains 75."],
       ["Keep uncertain tasks separate", "Seventeen promising new tasks and 986 tasks without current review remain outside the high-quality set until the same exact proof is available."]
     ]
+  },
+  fleetEvaluations: {
+    mainFinding: "We have not measured a credible improvement or decline on Fleet tasks yet. Several evaluations had setup or completion problems. One saved trained-model version completed all 17 development tasks, but without an equally matched original-model run it cannot answer whether training helped.",
+    summary: [
+      ["Fair trained-versus-original comparisons", "0", "No checkpoint has both a complete trained-model result and a matching original-model result."],
+      ["Completed trained-only evaluation", "1", "One higher-rate trained version completed all 17 development tasks. It shows that the test ran, not whether training helped, because the matching original-model run is absent."],
+      ["Development tasks used per attempt", "17", "These are held aside for choosing a training recipe. They were not used to train the model."],
+      ["Final test tasks used", "0", "The separate eight-task final test set remains untouched."]
+    ],
+    evaluations: [
+      {
+        model: "Original Qwen3.8-27B",
+        training: "No added training; this is the comparison model.",
+        status: "Incomplete",
+        conclusion: "The original-model side did not finish as the matching comparison. It cannot be used as a baseline score."
+      },
+      {
+        model: "Fresh75 trained version (230 updates)",
+        training: "Training to copy saved examples from stronger models.",
+        status: "Not usable for comparison",
+        conclusion: "One early attempt did not record which model produced each saved attempt. Other attempts either pointed to the wrong saved model files or reused a replacement slot after earlier task attempts had already been recorded. Mixing them would be unfair."
+      },
+      {
+        model: "Teacher-trained Qwen (186 updates)",
+        training: "Training to copy saved examples from stronger models.",
+        status: "Incomplete",
+        conclusion: "The intended test started with the correct model identity, but it did not complete all 17 tasks. It is not a capability result."
+      },
+      {
+        model: "Self-trained Qwen (44 updates)",
+        training: "Supervised training on Qwen's own successful examples.",
+        status: "Incomplete",
+        conclusion: "The first setup selected the wrong evaluation file. The corrected attempt still did not complete all 17 tasks, so it is not a capability result."
+      },
+      {
+        model: "Higher-rate trained Qwen (76 updates)",
+        training: "Training to copy saved examples, using a higher update rate.",
+        status: "17 of 17 completed, but not a fair comparison",
+        conclusion: "All 17 saved attempts were later checked as belonging to this exact model and task setup. There is no matching original-model run under the same conditions, so this cannot show whether training helped."
+      }
+    ],
+    nextSteps: [
+      ["Run the original and trained models as a pair", "Use the same 17 development tasks, tool-using program, time limits, randomness settings, and automatic answer checker. The trained model itself should be the only planned difference."],
+      ["Finish both sides before looking at the comparison", "Do not replace a valid attempt or mix partial results from different attempts. Technical failures must be recorded separately instead of being counted as model failures."],
+      ["Choose a recipe on development tasks only", "Use the 17 development tasks to decide which training setup is worth testing. Keep the separate eight final tasks untouched until that choice is fixed."],
+      ["Then report task-level change", "Publish aggregate pass rates, the difference for each task, and uncertainty across tasks only after the matched pair has valid automatic checking on both sides."]
+    ],
+    sources: [
+      ["The fixed 50/17/8 task split", "https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/fleet-blackbox-current-study-split-20260914-v2.json"],
+      ["The matched-comparison rules", "https://github.com/fleet-ai/cyber-post-train/blob/main/configs/evaluation/qwen38-fleet-dev17-seed43-matched-protocol-v1.json"],
+      ["Why early model sessions were rejected", "https://github.com/fleet-ai/cyber-post-train/blob/main/docs/evidence/qwen38-fleet-dev17-session-model-identity-rejection-20260921.json"],
+      ["The completed trained-only checkpoint audit", "https://github.com/fleet-ai/cyber-post-train/blob/main/docs/evidence/qwen38-lr30-step76-stored-session-reconciliation-v3-terminal-20260921.json"],
+      ["The scientific reporting rules", "https://github.com/fleet-ai/cyber-post-train/blob/main/docs/SCIENTIFIC_PROTOCOL.md"]
+    ]
   }
 };
