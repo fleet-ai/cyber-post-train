@@ -448,6 +448,99 @@ def probe_projection(
     }
 
 
+def _capture_route(
+    *,
+    key: str,
+    context: str,
+    client: Client,
+    label: str,
+    model: str,
+    expected_revision: str | None,
+    expected_source_path: str | None,
+    expected_replicas: int | None,
+) -> dict[str, Any]:
+    """Return one sanitized, content-free live route observation.
+
+    ``capture`` uses this for the two arms of a matched comparison.  The
+    standalone-base gate uses the exact same readbacks and fixed probes, but
+    deliberately does not pretend that a base route is a checkpoint pair.
+    """
+
+    _need(
+        (expected_revision is None) == (expected_source_path is None),
+        "incomplete_expected_artifact_identity",
+    )
+    _, api = client.request("GET", API + "/" + model)
+    api = _mapping(api, f"invalid_{label}_api")
+    status = _mapping(api.get("status"), f"invalid_{label}_status")
+    _need(
+        status.get("phase") == "ready" and status.get("ready_replicas", 0) >= 1,
+        f"{label}_not_ready",
+    )
+    spec = _mapping(api.get("spec"), f"invalid_{label}_spec")
+    model_spec = _mapping(spec.get("model"), f"invalid_{label}_model")
+    runtime = _mapping(spec.get("runtime"), f"invalid_{label}_runtime")
+    revision = str(model_spec.get("revision"))
+    if expected_revision is not None:
+        _need(
+            revision == expected_revision and model_spec.get("sourcePath") == expected_source_path,
+            f"{label}_artifact_identity_drift",
+        )
+    image = _mapping(runtime.get("image"), f"invalid_{label}_image")
+    image_digest = str(image.get("digest"))
+    catalog = catalog_projection(
+        _request(key, "/fleet/v1/model-catalog", model=model), model, revision
+    )
+    model_info_raw = _request(key, "/model_info", model=model)
+    server_info_raw = _request(key, "/server_info", model=model)
+    tool = _request(key, "/v1/chat/completions", model=model, payload=_tool_request(model))
+    first = _request(key, "/v1/chat/completions", model=model, payload=_logit_request(model))
+    second = _request(key, "/v1/chat/completions", model=model, payload=_logit_request(model))
+    kubernetes = workload_projection(
+        context,
+        model,
+        image_digest,
+        expected_replicas=expected_replicas,
+    )
+    normalized_contract_sha256 = _digest(_normalized_contract(spec))
+    _need(
+        normalized_contract_sha256 == kubernetes["normalized_inference_spec_sha256"],
+        f"{label}_api_kubernetes_spec_drift",
+    )
+    # Probe requests can update live routing status. Re-read the API after all
+    # probes and bind the final resource-version observation while requiring
+    # the immutable serving spec to remain unchanged. API and Kubernetes
+    # resource versions are recorded separately because their status writes
+    # need not be atomic.
+    _, final_api = client.request("GET", API + "/" + model)
+    final_api = _mapping(final_api, f"invalid_final_{label}_api")
+    final_status = _mapping(final_api.get("status"), f"invalid_final_{label}_status")
+    _need(
+        final_status.get("phase") == "ready" and final_status.get("ready_replicas", 0) >= 1,
+        f"final_{label}_not_ready",
+    )
+    final_spec = _mapping(final_api.get("spec"), f"invalid_final_{label}_spec")
+    _need(
+        _digest(_normalized_contract(final_spec)) == normalized_contract_sha256,
+        f"{label}_spec_changed_during_capture",
+    )
+    return {
+        "served_model": model,
+        "resource_version": str(final_api.get("resource_version")),
+        "kubernetes_resource_version": str(kubernetes["inference_model_resource_version"]),
+        "model_revision": revision,
+        "source_path": model_spec.get("sourcePath"),
+        "serving_path": model_spec.get("path"),
+        "normalized_contract_sha256": normalized_contract_sha256,
+        "registration_spec_sha256": _digest(final_spec),
+        "catalog": catalog,
+        "model_info": model_projection(model_info_raw, str(model_spec.get("path")), model),
+        "server_info": server_projection(server_info_raw, str(model_spec.get("path")), model),
+        "kubernetes": kubernetes,
+        "probes": probe_projection(tool, first, second, model),
+    }
+
+
 def capture(
     key: str,
     context: str,
@@ -457,83 +550,28 @@ def capture(
     expected_source_path: str,
 ) -> dict[str, Any]:
     client = Client(key)
-    arms: dict[str, Any] = {}
-    for label, model in (("base", base_model), ("candidate", candidate_model)):
-        _, api = client.request("GET", API + "/" + model)
-        api = _mapping(api, f"invalid_{label}_api")
-        status = _mapping(api.get("status"), f"invalid_{label}_status")
-        _need(
-            status.get("phase") == "ready" and status.get("ready_replicas", 0) >= 1,
-            f"{label}_not_ready",
-        )
-        spec = _mapping(api.get("spec"), f"invalid_{label}_spec")
-        model_spec = _mapping(spec.get("model"), f"invalid_{label}_model")
-        runtime = _mapping(spec.get("runtime"), f"invalid_{label}_runtime")
-        revision = str(model_spec.get("revision"))
-        # The shared base has two replicas and its controller updates status
-        # continuously. Its API and Kubernetes resource versions may advance
-        # between reads, so bind its generation through the exact normalized
-        # spec instead. The single-replica candidate must remain byte-exact and
-        # resource-version exact throughout capture.
-        if label == "candidate":
-            _need(
-                revision == expected_revision
-                and model_spec.get("sourcePath") == expected_source_path,
-                "candidate_artifact_identity_drift",
-            )
-        image = _mapping(runtime.get("image"), f"invalid_{label}_image")
-        image_digest = str(image.get("digest"))
-        catalog = catalog_projection(
-            _request(key, "/fleet/v1/model-catalog", model=model), model, revision
-        )
-        model_info_raw = _request(key, "/model_info", model=model)
-        server_info_raw = _request(key, "/server_info", model=model)
-        tool = _request(key, "/v1/chat/completions", model=model, payload=_tool_request(model))
-        first = _request(key, "/v1/chat/completions", model=model, payload=_logit_request(model))
-        second = _request(key, "/v1/chat/completions", model=model, payload=_logit_request(model))
-        kubernetes = workload_projection(
-            context,
-            model,
-            image_digest,
-            expected_replicas=1 if label == "candidate" else None,
-        )
-        normalized_contract_sha256 = _digest(_normalized_contract(spec))
-        _need(
-            normalized_contract_sha256 == kubernetes["normalized_inference_spec_sha256"],
-            f"{label}_api_kubernetes_spec_drift",
-        )
-        # Probe requests can update live routing status. Re-read the API after
-        # all probes and bind the final resource-version observation while
-        # requiring the immutable serving spec to remain unchanged. API and
-        # Kubernetes resource versions are recorded separately because their
-        # status writes need not be atomic.
-        _, final_api = client.request("GET", API + "/" + model)
-        final_api = _mapping(final_api, f"invalid_final_{label}_api")
-        final_status = _mapping(final_api.get("status"), f"invalid_final_{label}_status")
-        _need(
-            final_status.get("phase") == "ready" and final_status.get("ready_replicas", 0) >= 1,
-            f"final_{label}_not_ready",
-        )
-        final_spec = _mapping(final_api.get("spec"), f"invalid_final_{label}_spec")
-        _need(
-            _digest(_normalized_contract(final_spec)) == normalized_contract_sha256,
-            f"{label}_spec_changed_during_capture",
-        )
-        arms[label] = {
-            "served_model": model,
-            "resource_version": str(final_api.get("resource_version")),
-            "kubernetes_resource_version": str(kubernetes["inference_model_resource_version"]),
-            "model_revision": revision,
-            "source_path": model_spec.get("sourcePath"),
-            "serving_path": model_spec.get("path"),
-            "normalized_contract_sha256": normalized_contract_sha256,
-            "registration_spec_sha256": _digest(final_spec),
-            "catalog": catalog,
-            "model_info": model_projection(model_info_raw, str(model_spec.get("path")), model),
-            "server_info": server_projection(server_info_raw, str(model_spec.get("path")), model),
-            "kubernetes": kubernetes,
-            "probes": probe_projection(tool, first, second, model),
-        }
+    arms = {
+        "base": _capture_route(
+            key=key,
+            context=context,
+            client=client,
+            label="base",
+            model=base_model,
+            expected_revision=None,
+            expected_source_path=None,
+            expected_replicas=None,
+        ),
+        "candidate": _capture_route(
+            key=key,
+            context=context,
+            client=client,
+            label="candidate",
+            model=candidate_model,
+            expected_revision=expected_revision,
+            expected_source_path=expected_source_path,
+            expected_replicas=1,
+        ),
+    }
     base = arms["base"]
     candidate = arms["candidate"]
     _need(
@@ -571,28 +609,81 @@ def capture(
     return receipt
 
 
+def capture_base_route(
+    key: str,
+    context: str,
+    base_model: str,
+    expected_revision: str,
+    expected_source_path: str,
+) -> dict[str, Any]:
+    """Capture the current, content-free identity of one exact base route.
+
+    This is intentionally a route proof rather than a fake two-arm parity
+    receipt.  A later paired checkpoint comparison still needs a fresh
+    base-versus-candidate ``capture`` receipt.
+    """
+
+    route = _capture_route(
+        key=key,
+        context=context,
+        client=Client(key),
+        label="base",
+        model=base_model,
+        expected_revision=expected_revision,
+        expected_source_path=expected_source_path,
+        expected_replicas=None,
+    )
+    receipt = {
+        "schema": "cyber_base_serving_live_route_proof_v1",
+        "status": "passed",
+        "observed_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "endpoint_origin": ORIGIN,
+        "route": route,
+        "benchmark_content_included": False,
+        "response_content_recorded": False,
+        "scores_observed": False,
+        "task_content_included": False,
+        "external_mutations_performed": 0,
+    }
+    receipt["receipt_sha256"] = _digest(receipt)
+    return receipt
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-model-id", default="qwen3.8-27b")
-    parser.add_argument("--candidate-model-id", required=True)
+    parser.add_argument("--base-only", action="store_true")
+    parser.add_argument("--candidate-model-id")
     parser.add_argument("--expected-revision", required=True)
     parser.add_argument("--expected-source-path", required=True)
     parser.add_argument("--kubernetes-context", required=True)
     parser.add_argument("--output", type=Path, required=True)
     arguments = parser.parse_args(argv)
     try:
-        value = capture(
-            os.environ.get("FLEET_API_KEY", ""),
-            arguments.kubernetes_context,
-            arguments.base_model_id,
-            arguments.candidate_model_id,
-            arguments.expected_revision,
-            arguments.expected_source_path,
-        )
+        if arguments.base_only:
+            _need(arguments.candidate_model_id is None, "base_proof_rejects_candidate_model")
+            value = capture_base_route(
+                os.environ.get("FLEET_API_KEY", ""),
+                arguments.kubernetes_context,
+                arguments.base_model_id,
+                arguments.expected_revision,
+                arguments.expected_source_path,
+            )
+        else:
+            _need(bool(arguments.candidate_model_id), "candidate_model_id_required")
+            value = capture(
+                os.environ.get("FLEET_API_KEY", ""),
+                arguments.kubernetes_context,
+                arguments.base_model_id,
+                arguments.candidate_model_id,
+                arguments.expected_revision,
+                arguments.expected_source_path,
+            )
         _write_once(arguments.output.resolve(), value)
         print(
             json.dumps(
                 {
+                    "base": arguments.base_model_id,
                     "candidate": arguments.candidate_model_id,
                     "receipt_sha256": value["receipt_sha256"],
                     "status": value["status"],
