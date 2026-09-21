@@ -32,15 +32,16 @@ writing the result.
 | --- | --- |
 | Private selection and aggregate admission receipt | Exact successful sessions, source model, template, tool treatment, campaign, and metadata-only admission policy from `data-fleet-admit`. |
 | Collection packet, task selection, and evaluation configuration | The approved source type, target of at least 20 million unique visible-action tokens, **digest of the source-authorization receipt**, OpenCode tool surface, and complete train roster. |
-| Catalog inventory, family split, parent role anchor when applicable, protected-family lock, and runtime bindings | The complete current task universe, one immutable role per task family, every held-out family, and the exact runnable task/environment/data binding.  For a growing anchored split, the parent anchor is a separate sealed file; the materializer compares the child split's inherited roles and task-family mapping to it rather than trusting the child alone. |
+| Catalog inventory, family split, reviewed root role anchor, protected-family lock, and runtime bindings | The complete current task universe, one immutable role per task family, every held-out family, and the exact runnable task/environment/data binding. The materializer requires the source-derived September-study root anchor, compares the child split's inherited roles and task-family mapping to it, and rejects generic re-splits or a caller-sealed replacement root. |
 | Private normalized records | The admitted records only.  Their self-digests, session identities, campaign cells, source settings, lineage, and trajectory digests must match the selection exactly. |
 | Model lock, local tokenizer, and native masking helper | Exact local tokenizer bytes and the approved dense-window implementation. |
 
-An inventory refresh therefore cannot quietly change an old split.  All task
+An inventory refresh therefore cannot quietly change an old split. All task
 versions of a family stay in one role; `dev` and `final_test` families are
-rejected even if they have a successful rollout.  An anchored child split that
-is rewritten and re-digested still fails unless its separately supplied parent
-anchor agrees exactly, so an old held-out family cannot be relabeled as train.
+rejected even if they have a successful rollout. An anchored child split that
+is rewritten and re-digested still fails unless its separately supplied,
+source-derived root anchor agrees exactly, so an old held-out family cannot be
+relabeled as train.
 
 The packet binds the exact digest of the authorization evidence and, for a
 teacher, the strength-evidence digest.  This local materializer can prove that

@@ -228,3 +228,24 @@ def test_real_locked_study_v2_converts_without_reassigning_roles() -> None:
         role: sum(row["split"] == role for row in anchor["roles"])
         for role in ("train", "dev", "final_test")
     } == {"train": 50, "dev": 17, "final_test": 8}
+
+
+def test_broad_collection_root_is_derived_from_the_reviewed_locked_study() -> None:
+    """The broad boundary has a source-reviewed root, not a caller checksum."""
+
+    anchor = splits.trusted_fleet_collection_root_anchor()
+    assert (
+        anchor["sha256"]
+        == "sha256:48350b8fc23143abe297db3b2364590c72d564553ebb4e9a349fa06ec246a26b"
+    )
+    assert splits.require_trusted_fleet_collection_root_anchor(copy.deepcopy(anchor)) == anchor
+    forged = copy.deepcopy(anchor)
+    original = forged["roles"][0]["split"]
+    forged["roles"][0]["split"] = next(
+        role for role in ("train", "dev", "final_test") if role != original
+    )
+    forged["sha256"] = splits.canonical_digest(
+        {key: value for key, value in forged.items() if key != "sha256"}
+    )
+    with pytest.raises(ValueError, match="not the trusted root"):
+        splits.require_trusted_fleet_collection_root_anchor(forged)

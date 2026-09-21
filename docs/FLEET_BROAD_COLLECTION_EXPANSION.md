@@ -78,26 +78,37 @@ The parent role anchor travels with every anchored split as a separate sealed
 file.  The collection renderer, admission adapter, and private materializer
 all require that exact file, verify its digest against the child split, and
 compare every inherited role and task-family mapping to it.  They never trust
-the child split's self-reported historical roles by themselves.  This means a
-rewritten and re-digested child cannot quietly move an original development or
-final-test family into training.
+the child split's self-reported historical roles by themselves.
+
+There is one additional trust rule: for this broad path, the root anchor must
+be the one derived in reviewed source from the locked September study split.
+The checked-in root identity is
+`fleet-blackbox-current-study-20260914-v2`, with its exact derived digest. A
+caller cannot make a new root authoritative just by changing roles and sealing
+a new checksum. The roster, collection packet, admission receipt, and corpus
+manifest carry both this root identity and its digest. To adopt a future root,
+add a reviewed source entry that derives and validates it; do not add a request
+flag or accept a caller-supplied replacement.
+
+This means a rewritten and re-digested child — or a freshly balanced legacy
+split — cannot quietly move an original development or final-test family into
+training.
 
 This makes a broad roster reproducible and family-safe even as the catalog
 grows from dozens toward thousands of versions.
 
-The two local, CPU-only commands make that sequence concrete:
+The local, CPU-only roster command makes that sequence concrete:
 
 ```sh
-uv run --locked cyber-post-train data-fleet-freeze-role-anchor anchor-request.json
 uv run --locked cyber-post-train data-fleet-roster roster-request.json
 ```
 
-The first command validates the frozen v2 study split against its exact old
-inventory and writes a create-once role anchor.  The second command accepts a
-sealed, content-free supply catalog, a sealed qualified subset, and that role
-anchor.  It writes a generic metadata inventory, exact runtime bindings, an
-anchored family split, and a protected-family lock for the existing collection
-renderer.  Neither command launches a rollout or reads a trace.
+The roster command accepts a sealed, content-free supply catalog, a sealed
+qualified subset, and the exact reviewed root-anchor artifact. It writes a
+generic metadata inventory, exact runtime bindings, an anchored family split,
+and a protected-family lock for the existing collection renderer. It rejects a
+generic v1 split or a different self-sealed root. It never launches a rollout
+or reads a trace.
 
 ## Outcome-blind collection and the 20M target
 

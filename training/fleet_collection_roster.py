@@ -268,6 +268,7 @@ def render(config: dict[str, Any], *, relative_to: Path) -> dict[str, dict[str, 
     _, supply = _input(relative_to, config.get("supply_catalog"), "supply catalog")
     _, qualified = _input(relative_to, config.get("qualified_catalog"), "qualified catalog")
     _, anchor = _input(relative_to, config.get("role_anchor"), "role anchor")
+    task_family_split.require_trusted_fleet_collection_root_anchor(anchor)
     supply_ids = _supply(supply)
     metadata, inventory, runtime_bindings = _qualified(qualified, supply_ids, supply["sha256"])
     if qualified["catalog_snapshot_sha256"] != supply["catalog_snapshot_sha256"]:
@@ -299,6 +300,7 @@ def render(config: dict[str, Any], *, relative_to: Path) -> dict[str, dict[str, 
             "supply_catalog_sha256": supply["sha256"],
             "catalog_snapshot_sha256": supply["catalog_snapshot_sha256"],
             "qualified_catalog_sha256": qualified["sha256"],
+            "root_role_anchor_id": task_family_split.TRUSTED_FLEET_COLLECTION_ROOT_ID,
             "role_anchor_sha256": anchor["sha256"],
             "metadata_inventory_sha256": inventory["sha256"],
             "runtime_bindings_sha256": runtime_bindings["sha256"],

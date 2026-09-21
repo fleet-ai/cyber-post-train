@@ -22,6 +22,18 @@ SCHEMA = "cyber_parameterized_task_family_split_v1"
 ROLE_ANCHOR_SCHEMA = "cyber_task_family_role_anchor_v1"
 ANCHORED_SCHEMA = "cyber_anchored_task_family_split_v1"
 SUPPORTED_SCHEMAS = frozenset({SCHEMA, ANCHORED_SCHEMA})
+# The broad Fleet collection path has one reviewed root today: the locked
+# September study split.  A self-digesting role anchor is useful evidence, but
+# it is not a trust root by itself: an input author could otherwise reseal a
+# different list of roles.  Keep this identity in reviewed source and derive
+# it again from the locked split/inventory before accepting it at collection
+# boundaries.  Adding a later root is a source-reviewed registry change, not
+# a request-level option.
+TRUSTED_FLEET_COLLECTION_ROOT_ID = "fleet-blackbox-current-study-20260914-v2"
+_TRUSTED_FLEET_COLLECTION_ROOT = {
+    "split": "configs/data/fleet-blackbox-current-study-split-20260914-v2.json",
+    "sha256": "sha256:48350b8fc23143abe297db3b2364590c72d564553ebb4e9a349fa06ec246a26b",
+}
 DEFAULT_DIMENSIONS = ("application", "environment", "difficulty", "vulnerability_family")
 SPLIT_UNIT = "reviewed application and task family; all exact versions stay together"
 FORBIDDEN_OUTPUT_TERMS = {
@@ -863,6 +875,49 @@ def freeze_study_v2_role_anchor(
         roles=roles,
         task_key_groups=task_key_groups,
     )
+
+
+def trusted_fleet_collection_root_anchor() -> dict[str, Any]:
+    """Return the one reviewed root accepted by broad Fleet collection.
+
+    This intentionally derives the object from the checked-in study split and
+    its exact inventory instead of merely loading a self-digesting anchor
+    supplied by a caller.  The hard-coded digest is the reviewed identity of
+    that derivation.  A future root must be added here in a reviewed source
+    change together with its own derivation/validation rule.
+    """
+
+    root = Path(__file__).resolve().parents[1]
+    split_path = root / _TRUSTED_FLEET_COLLECTION_ROOT["split"]
+    try:
+        legacy_split = json.loads(split_path.read_text())
+    except (OSError, json.JSONDecodeError) as error:
+        raise ValueError("trusted Fleet collection root split is unreadable") from error
+    if not isinstance(legacy_split, dict):
+        raise ValueError("trusted Fleet collection root split is malformed")
+    inventory = legacy_split.get("inventory")
+    if not isinstance(inventory, dict) or not isinstance(inventory.get("path"), str):
+        raise ValueError("trusted Fleet collection root inventory is malformed")
+    inventory_path = root / inventory["path"]
+    anchor = freeze_study_v2_role_anchor(
+        legacy_split,
+        legacy_inventory_path=inventory_path,
+        legacy_inventory_display_path=Path(inventory["path"]),
+    )
+    if anchor["sha256"] != _TRUSTED_FLEET_COLLECTION_ROOT["sha256"]:
+        raise ValueError("trusted Fleet collection root digest drift")
+    return anchor
+
+
+def require_trusted_fleet_collection_root_anchor(value: object) -> dict[str, Any]:
+    """Reject a forged root before a broad collection can use its roles."""
+
+    if not isinstance(value, dict):
+        raise ValueError("broad Fleet collection requires the trusted role anchor")
+    expected = trusted_fleet_collection_root_anchor()
+    if value != expected:
+        raise ValueError("broad Fleet collection role anchor is not the trusted root")
+    return expected
 
 
 def _assign_anchored(

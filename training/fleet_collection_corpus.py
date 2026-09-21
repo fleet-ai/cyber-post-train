@@ -30,7 +30,11 @@ from .dense import Excluded, compatible_messages, encode_record, native_helper, 
 from .io import atomic_write_json, atomic_write_jsonl, digest_json, file_sha256, iter_jsonl
 from .sft import _known, read_mapping
 from .sft_runtime import DENSE_FORMAT, dense_rows
-from .task_family_split import is_supported_schema, requires_role_anchor
+from .task_family_split import (
+    ANCHORED_SCHEMA,
+    TRUSTED_FLEET_COLLECTION_ROOT_ID,
+    require_trusted_fleet_collection_root_anchor,
+)
 from .task_family_split import validate as validate_split
 
 SCHEMA = "cyber_fleet_private_corpus_materialization_request_v1"
@@ -138,6 +142,7 @@ def _selection(value: dict[str, Any]) -> dict[str, dict[str, Any]]:
         "campaign_plan_sha256",
         "catalog_inventory_sha256",
         "family_split_sha256",
+        "root_role_anchor_id",
         "family_role_anchor_sha256",
         "protected_family_lock_sha256",
         "source_kind",
@@ -169,7 +174,9 @@ def _selection(value: dict[str, Any]) -> dict[str, dict[str, Any]]:
         "template_sha256",
     ):
         _sha(value.get(field), f"admission selection {field}")
-    _nullable_sha(value.get("family_role_anchor_sha256"), "admission selection role anchor")
+    if value.get("root_role_anchor_id") != TRUSTED_FLEET_COLLECTION_ROOT_ID:
+        raise ValueError("admission selection has an untrusted role-anchor root")
+    _sha(value.get("family_role_anchor_sha256"), "admission selection role anchor")
     model = _mapping(value.get("source_model"), "admission selection model")
     if set(model) != {"repository", "revision", "session_model"} or any(
         not isinstance(model.get(field), str) or not model[field]
@@ -254,6 +261,7 @@ def _admission_receipt(value: dict[str, Any], selection: dict[str, Any]) -> None
         "input_file_sha256",
         "catalog_inventory_sha256",
         "family_split_sha256",
+        "root_role_anchor_id",
         "family_role_anchor_sha256",
         "protected_family_lock_sha256",
         "protected_family_count",
@@ -292,9 +300,13 @@ def _admission_receipt(value: dict[str, Any], selection: dict[str, Any]) -> None
     ):
         if value.get(field) != selection.get(field):
             raise ValueError("admission receipt binding differs from selection")
-    if value.get("family_role_anchor_sha256") != selection.get("family_role_anchor_sha256"):
+    if (
+        value.get("root_role_anchor_id") != selection.get("root_role_anchor_id")
+        or value.get("root_role_anchor_id") != TRUSTED_FLEET_COLLECTION_ROOT_ID
+        or value.get("family_role_anchor_sha256") != selection.get("family_role_anchor_sha256")
+    ):
         raise ValueError("admission receipt role-anchor binding differs from selection")
-    _nullable_sha(value.get("family_role_anchor_sha256"), "admission receipt role anchor")
+    _sha(value.get("family_role_anchor_sha256"), "admission receipt role anchor")
     if (
         value.get("source_kind") != selection["source_kind"]
         or value.get("source_model_alias") != selection["source_model_alias"]
@@ -315,10 +327,7 @@ def _admission_receipt(value: dict[str, Any], selection: dict[str, Any]) -> None
     }:
         raise ValueError("admission receipt input-file bindings are incomplete")
     for name, value_sha in input_files.items():
-        if name == "role_anchor":
-            _nullable_sha(value_sha, "admission receipt input file role_anchor")
-        else:
-            _sha(value_sha, f"admission receipt input file {name}")
+        _sha(value_sha, f"admission receipt input file {name}")
     counts = _mapping(value.get("counts"), "admission receipt counts")
     expected_counts = {
         "attempt_metadata_records",
@@ -373,6 +382,7 @@ def _packet(
         "schema",
         "source",
         "task_selection_sha256",
+        "root_role_anchor_id",
         "family_role_anchor_sha256",
         "runtime_bindings_sha256",
         "eval_config_sha256",
@@ -411,6 +421,9 @@ def _packet(
         _sha(source.get("teacher_strength_receipt_sha256"), "teacher strength receipt")
     if (
         value.get("task_selection_sha256") != task_selection.get("sha256")
+        or value.get("root_role_anchor_id") != TRUSTED_FLEET_COLLECTION_ROOT_ID
+        or value.get("root_role_anchor_id") != task_selection.get("root_role_anchor_id")
+        or value.get("root_role_anchor_id") != selection.get("root_role_anchor_id")
         or value.get("family_role_anchor_sha256") != task_selection.get("family_role_anchor_sha256")
         or value.get("family_role_anchor_sha256") != selection.get("family_role_anchor_sha256")
         or value.get("eval_config_sha256") != collection_campaign.canonical_digest(eval_config)
@@ -478,14 +491,17 @@ def _task_boundary(
 ) -> dict[tuple[str, str], dict[str, Any]]:
     rows = collection_campaign._inventory_rows(inventory)
     bindings = collection_campaign._runtime_bindings(runtime, inventory, rows)
-    if not is_supported_schema(split) or split.get("inventory_sha256") != inventory.get("sha256"):
+    if split.get("schema") != ANCHORED_SCHEMA or split.get("inventory_sha256") != inventory.get(
+        "sha256"
+    ):
         raise ValueError("family split is not bound to the reviewed catalog")
-    if requires_role_anchor(split) and role_anchor is None:
-        raise ValueError("anchored family split requires the exact role-anchor artifact")
-    if not requires_role_anchor(split) and role_anchor is not None:
-        raise ValueError("parameterized family split must not carry a role-anchor artifact")
+    if role_anchor is None:
+        raise ValueError(
+            "broad corpus materialization requires the exact trusted role-anchor artifact"
+        )
+    require_trusted_fleet_collection_root_anchor(role_anchor)
     validate_split(split, rows, role_anchor=role_anchor)
-    role_anchor_sha256 = None if role_anchor is None else role_anchor["sha256"]
+    role_anchor_sha256 = role_anchor["sha256"]
     if lock.get("schema") != admission.PROTECTED_FAMILY_LOCK_SCHEMA:
         raise ValueError("invalid protected-family lock")
     _sealed(lock, admission.PROTECTED_FAMILY_LOCK_SCHEMA)
@@ -505,6 +521,7 @@ def _task_boundary(
         "schema",
         "inventory_sha256",
         "family_split_sha256",
+        "root_role_anchor_id",
         "family_role_anchor_sha256",
         "runtime_bindings_sha256",
         "task_validity_receipt_sha256",
@@ -519,6 +536,7 @@ def _task_boundary(
         or task_selection.get("sha256") != packet.get("task_selection_sha256")
         or task_selection.get("inventory_sha256") != inventory["sha256"]
         or task_selection.get("family_split_sha256") != split["sha256"]
+        or task_selection.get("root_role_anchor_id") != TRUSTED_FLEET_COLLECTION_ROOT_ID
         or task_selection.get("family_role_anchor_sha256") != role_anchor_sha256
         or task_selection.get("runtime_bindings_sha256") != runtime["sha256"]
     ):
@@ -549,8 +567,10 @@ def _task_boundary(
     if (
         selection["catalog_inventory_sha256"] != inventory["sha256"]
         or selection["family_split_sha256"] != split["sha256"]
+        or selection["root_role_anchor_id"] != TRUSTED_FLEET_COLLECTION_ROOT_ID
         or selection["family_role_anchor_sha256"] != role_anchor_sha256
         or selection["protected_family_lock_sha256"] != lock["sha256"]
+        or packet.get("root_role_anchor_id") != TRUSTED_FLEET_COLLECTION_ROOT_ID
         or packet.get("family_role_anchor_sha256") != role_anchor_sha256
         or packet.get("runtime_bindings_sha256") != runtime["sha256"]
     ):
@@ -791,16 +811,12 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
     eval_config = _json(paths["collection_eval_config"], "collection eval config")
     inventory = _json(paths["inventory"], "inventory")
     split = _json(paths["family_split"], "family split")
-    role_anchor_path = None
-    role_anchor_sha256 = None
-    role_anchor = None
-    if "role_anchor" in config:
-        role_anchor_path, role_anchor_sha256 = _input(
-            relative_to, config.get("role_anchor"), "family role anchor"
-        )
-        role_anchor = _json(role_anchor_path, "family role anchor")
-        paths["role_anchor"] = role_anchor_path
-        expected_files["role_anchor"] = role_anchor_sha256
+    role_anchor_path, role_anchor_sha256 = _input(
+        relative_to, config.get("role_anchor"), "family role anchor"
+    )
+    role_anchor = _json(role_anchor_path, "family role anchor")
+    paths["role_anchor"] = role_anchor_path
+    expected_files["role_anchor"] = role_anchor_sha256
     lock = _json(paths["protected_family_lock"], "protected-family lock")
     runtime = _json(paths["runtime_bindings"], "runtime bindings")
     # Validate the catalog-derived selection before the offline evaluator
@@ -957,7 +973,8 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
             "within_limit": family_balance_ok,
         },
         "family_split_sha256": split["sha256"],
-        "family_role_anchor_sha256": None if role_anchor is None else role_anchor["sha256"],
+        "root_role_anchor_id": TRUSTED_FLEET_COLLECTION_ROOT_ID,
+        "family_role_anchor_sha256": role_anchor["sha256"],
         "heldout_families_materialized": 0,
         "target_coverage": "every fitting visible assistant target appears exactly once",
     }
@@ -984,7 +1001,8 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
             "collection_eval_config_sha256": packet["eval_config_sha256"],
             "catalog_inventory_sha256": inventory["sha256"],
             "family_split_sha256": split["sha256"],
-            "family_role_anchor_sha256": None if role_anchor is None else role_anchor["sha256"],
+            "root_role_anchor_id": TRUSTED_FLEET_COLLECTION_ROOT_ID,
+            "family_role_anchor_sha256": role_anchor["sha256"],
             "protected_family_lock_sha256": lock["sha256"],
             "runtime_bindings_sha256": runtime["sha256"],
             "coverage_sha256": coverage["sha256"],

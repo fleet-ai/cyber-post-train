@@ -297,6 +297,9 @@ def _split_roles(
 ) -> dict[tuple[str, str], dict[str, Any]]:
     if split.get("inventory_sha256") != inventory_sha256:
         raise ValueError("family split is not bound to the exact collection inventory")
+    if split.get("schema") != task_family_split.ANCHORED_SCHEMA or role_anchor is None:
+        raise ValueError("broad collection requires an anchored split and trusted role anchor")
+    task_family_split.require_trusted_fleet_collection_root_anchor(role_anchor)
     task_family_split.validate(split, rows, role_anchor=role_anchor)
     roles = {row["split"] for row in split["tasks"]}
     if roles != {"train", "dev", "final_test"}:
@@ -318,7 +321,7 @@ def _selection(
     inventory: dict[str, Any],
     split: dict[str, Any],
     runtime_bindings: dict[str, Any],
-    role_anchor: dict[str, Any] | None,
+    role_anchor: dict[str, Any],
 ) -> dict[str, Any]:
     train = [
         {
@@ -335,7 +338,11 @@ def _selection(
             "schema": SELECTION_SCHEMA,
             "inventory_sha256": inventory["sha256"],
             "family_split_sha256": split["sha256"],
-            "family_role_anchor_sha256": None if role_anchor is None else role_anchor["sha256"],
+            # The role-anchor digest alone is not a trust root: it must name
+            # the reviewed root that ``_split_roles`` just derived from source.
+            # Carry both facts through every later private boundary.
+            "root_role_anchor_id": task_family_split.TRUSTED_FLEET_COLLECTION_ROOT_ID,
+            "family_role_anchor_sha256": role_anchor["sha256"],
             "runtime_bindings_sha256": runtime_bindings["sha256"],
             "task_validity_receipt_sha256": inventory["task_validity_receipt_sha256"],
             "tasks": train,
@@ -402,6 +409,7 @@ def _packet(
             "schema": PACKET_SCHEMA,
             "source": source,
             "task_selection_sha256": selection["sha256"],
+            "root_role_anchor_id": selection["root_role_anchor_id"],
             "family_role_anchor_sha256": selection["family_role_anchor_sha256"],
             "runtime_bindings_sha256": runtime_bindings["sha256"],
             "eval_config_sha256": canonical_digest(config),
@@ -478,6 +486,11 @@ def render(
         inventory_sha256=inventory["sha256"],
         role_anchor=role_anchor,
     )
+    # ``_split_roles`` rejects ``None`` before this point.  Keep the public
+    # API's optional type only so legacy callers fail at the explicit boundary
+    # with a useful error rather than a Python signature error.
+    if role_anchor is None:
+        raise ValueError("broad collection requires an anchored split and trusted role anchor")
     selection = _selection(rows, bindings, roles, inventory, split, runtime_bindings, role_anchor)
     config = _config(request, selection)
     plan = _compile_local(selection, config)
@@ -531,7 +544,7 @@ def main() -> None:
     parser.add_argument("--inventory", type=Path, required=True)
     parser.add_argument("--family-split", type=Path, required=True)
     parser.add_argument("--runtime-bindings", type=Path, required=True)
-    parser.add_argument("--role-anchor", type=Path)
+    parser.add_argument("--role-anchor", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument("--write", action="store_true")
@@ -542,7 +555,7 @@ def main() -> None:
         _load(args.inventory),
         _load(args.family_split),
         _load(args.runtime_bindings),
-        role_anchor=None if args.role_anchor is None else _load(args.role_anchor),
+        role_anchor=_load(args.role_anchor),
     )
     if args.write:
         write_once(args.output, rendered)

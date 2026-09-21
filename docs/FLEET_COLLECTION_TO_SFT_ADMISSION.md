@@ -44,8 +44,8 @@ cannot be mistaken for the reviewed admission result.
 | --- | --- | --- |
 | Fleet campaign plan | A self-digested `cyber_fleet_eval_v1` plan, selected source model, task/version bindings, action-tool treatment, and planned attempts | Prevents a session from another campaign, model route, or tool contract being silently mixed in.  The plan must set `training_data_eligible: true`. |
 | Sanitized task catalog inventory | A self-digested inventory of reviewed task-version and lineage metadata | Supplies the complete task universe used to make the split.  It contains no session text. |
-| Family-safe split | A sealed supported family split for that exact inventory | Keeps every version of a reviewed application/task family in one role: `train`, `dev`, or `final_test`.  A growing catalog uses an anchored split so the original held-out roles cannot change. |
-| Parent role anchor (growing splits only) | The sealed historical role map that the anchored split names | The adapter requires the exact anchor file for an anchored split and compares every inherited role and task-family mapping to it.  A child split cannot make its own rewritten role map authoritative. |
+| Family-safe split | A sealed anchored family split for that exact inventory | Keeps every version of a reviewed application/task family in one role: `train`, `dev`, or `final_test`. Generic v1 re-splits are not accepted on the broad collection path. |
+| Reviewed root role anchor | The one source-derived historical role map that the anchored split names | The adapter requires the exact root derived from the locked September study split, not merely a self-sealed file. It compares every inherited role and task-family mapping to it, so a child split or a replacement root cannot make a rewritten role map authoritative. |
 | Protected-family lock | A self-digested list of held-out family digests tied to the exact split digest | Adds an independent fail-closed check: a family named as protected cannot appear on the training side. |
 | Private attempt-metadata JSONL | One sealed metadata record per observed attempt | Provides outcome, provenance, ingestion, and content-policy evidence without exposing a transcript. |
 
@@ -67,12 +67,13 @@ it never silently treats an incomplete collection as complete.
 The inventory file has its own self-digest, the request records the inventory
 file digest, and the family-safe split is validated against that exact
 inventory.  This prevents a catalog refresh from changing which task versions
-or families a previously reviewed split represents.  When the catalog grows,
+or families a previously reviewed split represents. When the catalog grows,
 the split inherits every historical role and allocates only genuinely new
-families.  For an anchored split, the separate parent anchor file is required
-and must exactly match the split's recorded historical roles and task-family
-mapping; resealing a child split alone cannot change that authority.  See
-[broad collection expansion](FLEET_BROAD_COLLECTION_EXPANSION.md).
+families. The separate root-anchor file is required and must be the checked-in,
+source-derived root; it must exactly match the split's recorded historical
+roles and task-family mapping. Resealing a child split or creating a fresh
+generic split cannot change that authority. See [broad collection
+expansion](FLEET_BROAD_COLLECTION_EXPANSION.md).
 
 Only `train` assignments can be selected.  `dev` and `final_test` are never
 training candidates, even when a rollout there succeeded.  The protected-family

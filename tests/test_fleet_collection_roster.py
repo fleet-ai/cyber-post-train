@@ -48,7 +48,7 @@ def _write(path: Path, value: dict) -> dict:
     return {"path": path.name, "sha256": file_sha256(path)}
 
 
-def _fixture(tmp_path: Path) -> tuple[dict, dict, dict]:
+def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[dict, dict, dict]:
     base = [_task(index) for index in range(12)]
     base_rows = [
         {
@@ -66,6 +66,11 @@ def _fixture(tmp_path: Path) -> tuple[dict, dict, dict]:
         max_group_task_version_fraction=0.6,
     )
     anchor = task_family_split.freeze_role_anchor(base_split, base_rows)
+    monkeypatch.setattr(
+        task_family_split,
+        "trusted_fleet_collection_root_anchor",
+        lambda: json.loads(json.dumps(anchor)),
+    )
     # Keep a second exact version for an old training family and add twelve
     # genuinely new families.  The old family must retain its original role.
     expanded = [*base, _task(0, version="b"), *[_task(index) for index in range(12, 24)]]
@@ -101,8 +106,10 @@ def _fixture(tmp_path: Path) -> tuple[dict, dict, dict]:
     return config, base_split, anchor
 
 
-def test_render_preserves_old_roles_and_emits_generic_collection_inputs(tmp_path: Path) -> None:
-    config, base_split, _anchor = _fixture(tmp_path)
+def test_render_preserves_old_roles_and_emits_generic_collection_inputs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, base_split, _anchor = _fixture(tmp_path, monkeypatch)
     rendered = roster.render(config, relative_to=tmp_path)
 
     inventory = rendered["metadata-inventory.json"]
@@ -129,8 +136,10 @@ def test_render_preserves_old_roles_and_emits_generic_collection_inputs(tmp_path
     )
 
 
-def test_build_is_create_once_and_returns_aggregate_only_handoff(tmp_path: Path) -> None:
-    config, _base_split, _anchor = _fixture(tmp_path)
+def test_build_is_create_once_and_returns_aggregate_only_handoff(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _base_split, _anchor = _fixture(tmp_path, monkeypatch)
     result = roster.build(config, relative_to=tmp_path)
     assert result["submitted"] is False
     assert result["artifact_kind"] == "metadata_roster_handoff_only"
@@ -140,8 +149,10 @@ def test_build_is_create_once_and_returns_aggregate_only_handoff(tmp_path: Path)
         roster.build(config, relative_to=tmp_path)
 
 
-def test_rejects_unqualified_or_outcome_bearing_catalog_rows(tmp_path: Path) -> None:
-    config, _base_split, _anchor = _fixture(tmp_path)
+def test_rejects_unqualified_or_outcome_bearing_catalog_rows(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _base_split, _anchor = _fixture(tmp_path, monkeypatch)
     qualified_path = tmp_path / "qualified.json"
     qualified = json.loads(qualified_path.read_text())
     qualified["task_versions"][0]["task_version_id"] = "00000000-0000-4000-8000-999999999999"
@@ -150,7 +161,7 @@ def test_rejects_unqualified_or_outcome_bearing_catalog_rows(tmp_path: Path) -> 
     with pytest.raises(ValueError, match="absent from the supply"):
         roster.render(config, relative_to=tmp_path)
 
-    config, _base_split, _anchor = _fixture(tmp_path)
+    config, _base_split, _anchor = _fixture(tmp_path, monkeypatch)
     qualified_path = tmp_path / "qualified.json"
     qualified = json.loads(qualified_path.read_text())
     qualified["task_versions"][0]["outcome"] = "success"
@@ -160,8 +171,8 @@ def test_rejects_unqualified_or_outcome_bearing_catalog_rows(tmp_path: Path) -> 
         roster.render(config, relative_to=tmp_path)
 
 
-def test_rejects_catalog_snapshot_drift(tmp_path: Path) -> None:
-    config, _base_split, _anchor = _fixture(tmp_path)
+def test_rejects_catalog_snapshot_drift(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    config, _base_split, _anchor = _fixture(tmp_path, monkeypatch)
     qualified_path = tmp_path / "qualified.json"
     qualified = json.loads(qualified_path.read_text())
     qualified["catalog_snapshot_sha256"] = _sha("e")
@@ -171,8 +182,10 @@ def test_rejects_catalog_snapshot_drift(tmp_path: Path) -> None:
         roster.render(config, relative_to=tmp_path)
 
 
-def test_anchored_roster_can_render_only_train_tasks_for_collection(tmp_path: Path) -> None:
-    config, _base_split, _anchor = _fixture(tmp_path)
+def test_anchored_roster_can_render_only_train_tasks_for_collection(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _base_split, _anchor = _fixture(tmp_path, monkeypatch)
     rendered = roster.render(config, relative_to=tmp_path)
     inventory = rendered["metadata-inventory.json"]
     split = rendered["family-split.json"]
@@ -245,5 +258,22 @@ def test_anchored_roster_can_render_only_train_tasks_for_collection(tmp_path: Pa
         for row in collection["task-selection.json"]["tasks"]
     )
 
-    with pytest.raises(ValueError, match="requires its independently sealed role anchor"):
+    with pytest.raises(ValueError, match="anchored split and trusted role anchor"):
         campaign.render(request, inventory, split, bindings)
+
+
+def test_rejects_a_forged_resealed_root_anchor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config, _base_split, anchor = _fixture(tmp_path, monkeypatch)
+    forged = json.loads(json.dumps(anchor))
+    original = forged["roles"][0]["split"]
+    forged["roles"][0]["split"] = next(
+        role for role in ("train", "dev", "final_test") if role != original
+    )
+    forged["sha256"] = task_family_split.canonical_digest(
+        {key: value for key, value in forged.items() if key != "sha256"}
+    )
+    config["role_anchor"] = _write(tmp_path / "forged-anchor.json", forged)
+    with pytest.raises(ValueError, match="not the trusted root"):
+        roster.render(config, relative_to=tmp_path)

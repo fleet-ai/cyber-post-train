@@ -194,6 +194,11 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         max_group_task_version_fraction=0.6,
     )
     role_anchor = task_family_split.freeze_role_anchor(split, inventory["task_versions"])
+    monkeypatch.setattr(
+        task_family_split,
+        "trusted_fleet_collection_root_anchor",
+        lambda: copy.deepcopy(role_anchor),
+    )
     split = task_family_split.build_anchored(
         inventory["task_versions"],
         inventory_sha256=inventory["sha256"],
@@ -275,6 +280,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
             "campaign_plan_sha256": packet["eval_plan_sha256"],
             "catalog_inventory_sha256": inventory["sha256"],
             "family_split_sha256": split["sha256"],
+            "root_role_anchor_id": task_family_split.TRUSTED_FLEET_COLLECTION_ROOT_ID,
             "family_role_anchor_sha256": role_anchor["sha256"],
             "protected_family_lock_sha256": lock["sha256"],
             "source_kind": "teacher",
@@ -309,6 +315,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
             | {"role_anchor": _sha("0")},
             "catalog_inventory_sha256": selection["catalog_inventory_sha256"],
             "family_split_sha256": selection["family_split_sha256"],
+            "root_role_anchor_id": task_family_split.TRUSTED_FLEET_COLLECTION_ROOT_ID,
             "family_role_anchor_sha256": role_anchor["sha256"],
             "protected_family_lock_sha256": selection["protected_family_lock_sha256"],
             "protected_family_count": len(heldout_groups),
@@ -393,6 +400,8 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
     monkeypatch.setattr(corpus, "native_helper", lambda path: _helper)
     return config, {
         "paths": paths,
+        "inventory": inventory,
+        "split": split,
         "record": record,
         "selection": selection,
         "receipt": receipt,
@@ -402,6 +411,24 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
 
 def _rewrite(path: Path, value: dict) -> None:
     _write(path, value)
+
+
+def _legacy_reseed_that_moves_a_heldout_family(state: dict) -> dict:
+    historic = {row["group_id"]: row["split"] for row in state["split"]["tasks"]}
+    for index in range(1, 100):
+        candidate = task_family_split.build(
+            state["inventory"]["task_versions"],
+            inventory_sha256=state["inventory"]["sha256"],
+            seed=f"unsafe-materializer-reseed-{index}",
+            ratios={"train": 1 / 3, "dev": 1 / 3, "final_test": 1 / 3},
+            max_group_task_version_fraction=0.6,
+        )
+        if any(
+            historic[row["group_id"]] != "train" and row["split"] == "train"
+            for row in candidate["tasks"]
+        ):
+            return candidate
+    raise AssertionError("test fixture did not produce a rebalanced held-out family")
 
 
 def test_materializes_only_bound_visible_action_windows(tmp_path: Path, monkeypatch) -> None:
@@ -649,6 +676,24 @@ def test_rejects_different_parent_anchor_before_private_record_read(
         lambda *_args: pytest.fail("wrong anchor reached private record ingestion"),
     )
 
-    with pytest.raises(ValueError, match="parent role anchor digest mismatch"):
+    with pytest.raises(ValueError, match="not the trusted root"):
+        corpus.build(config, relative_to=tmp_path)
+    assert not Path(config["output"]).exists()
+
+
+def test_rejects_resealed_legacy_resplit_before_private_record_read(
+    tmp_path: Path, monkeypatch
+) -> None:
+    config, state = _fixture(tmp_path, monkeypatch)
+    legacy = _legacy_reseed_that_moves_a_heldout_family(state)
+    _rewrite(state["paths"]["split.json"], legacy)
+    config["family_split"] = _ref(state["paths"]["split.json"])
+    monkeypatch.setattr(
+        corpus,
+        "iter_jsonl",
+        lambda *_args: pytest.fail("legacy split reached private record ingestion"),
+    )
+
+    with pytest.raises(ValueError, match="family split is not bound to the reviewed catalog"):
         corpus.build(config, relative_to=tmp_path)
     assert not Path(config["output"]).exists()
