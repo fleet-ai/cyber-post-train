@@ -208,7 +208,7 @@ def test_teacher3k_32k_runs_compile_to_one_node_c1_jobs(
 def test_teacher3k_32k_runs_have_unique_external_identities():
     paths = sorted(RUNS.glob("qwen38-teacher3k-32k-*-v1.json"))
     configs = [json.loads(path.read_text()) for path in paths]
-    assert len(configs) == 5
+    assert len(configs) == 6
     for field in ("name", "output_root"):
         values = [config[field] for config in configs]
         assert len(values) == len(set(values))
