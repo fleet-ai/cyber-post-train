@@ -1,0 +1,82 @@
+{
+  "schema": "cyber_qwen38_lora_step60_promotion_preparation_v1",
+  "status": "prepare_only_zero_update_reload_export_not_launched",
+  "source": {
+    "repository_base_commit": "a062029e616c5013855f04f9541d81b4dedb5b84",
+    "checkpoint_manifest_path": "/mnt/sfs/jobs/chris-q38-lora-r1-s60-v3/checkpoint_manifests/step-000060-megatron-v1.json",
+    "checkpoint_manifest_file_sha256": "cd53865f869eeb1975aa0e099aef143a736167c5c7b095c283f0da292ffecd78",
+    "checkpoint_manifest_receipt_sha256": "6bae9ef75e0a60f598eb32b63d31a64c0f42716611a43daf19a177d3c0ffebd2",
+    "source_plan_sha256": "8839c2dd14604e6c93cfffedb91781be6021e7518bb9c456afac8950a712ad06",
+    "optimizer_step": 60,
+    "world_size": 8,
+    "tensor_parallel_size": 8,
+    "file_count": 27,
+    "total_bytes": 5477467060,
+    "gpu_reload_verified": false
+  },
+  "manifest_readback": {
+    "job": {
+      "name": "chris-q38-lora-s60-manifest-v1",
+      "uid": "9604c47c-982a-460b-8f21-90e531bbcf18",
+      "created_at": "2026-09-21T04:17:12Z",
+      "phase": "Succeeded",
+      "exit_code": 0,
+      "restarts": 0,
+      "priority": "c1/q1",
+      "failure_alert_annotation": "off",
+      "gpu_request": 0,
+      "cpu_request": "1",
+      "memory_request": "2Gi"
+    },
+    "pod": {
+      "name": "chris-q38-lora-s60-manifest-v1-g6hx2",
+      "uid": "cb7b2e8d-790b-41d7-ab31-97dbb3e4dcef"
+    },
+    "rendered_job_manifest_sha256": "ec3685bd1b749dd6dd9b56784ba05484654cfd6bcb5c5d14ba84a50a72ab6648",
+    "server_preview_sha256": "d5d0f35ea5cb315cc783d6069ed13e6b8631524f06bc433ed37fcaf6d5d279f1",
+    "created_readback_sha256": "ca10409a15fdcbfee99b7bf0f0087c2e1d837f331e58d418c6d09cd577b3ba98",
+    "unsuspended_readback_sha256": "706984b21a893e270f681e2097a0ef85b89028ef74b32136e32877b6e4f1b097",
+    "job_absent_after_foreground_delete": true,
+    "pod_absent_after_foreground_delete": true,
+    "workload_absent_after_foreground_delete": true
+  },
+  "prepared_promotion": {
+    "plan_path": "configs/qualification/qwen38-lora-step60-zero-update-export-v1.json",
+    "plan_file_sha256": "c3fe7f50033ba4569ef6297991a22dcd6e580e2124a380ec9424e0318640f815",
+    "plan_sha256": "31c9548c7119e01e3941049bcdaa79f9ee7a787a0191ce02c53644959d2d4547",
+    "request_sha256": "9330eaa230d2478354e8ea233283d13c7e41c5d120503c454e5d1eb8f2573aa2",
+    "run_name": "chris-q38-lora-s60-exp-v1",
+    "run_dir": "/mnt/sfs/jobs/chris-q38-lora-s60-exp-v1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-lora-s60-exp-v1/merged-hf",
+    "image": "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317",
+    "priority": "c1/q1",
+    "failure_alert_request": false,
+    "workers": 1,
+    "gpus_per_worker": 8,
+    "deadline_seconds": 1800,
+    "optimizer_steps_executed": 0,
+    "external_evaluation": false
+  },
+  "repair": {
+    "failure_boundary": "The accepted step-one checkpoint receipt proves one historical update and cannot truthfully certify a later step-60 continuation checkpoint.",
+    "deterministic_guard": "A separate continuation schema now requires the exact native manifest, a single runtime plan that preserves every scientific field, all-rank optimizer and scheduler step-60 reload evidence with one identical positive learning rate, unchanged frozen-base bytes, exact adapter-shard equality, zero optimizer updates, deterministic dual export, and a finite-logit reload.",
+    "claim_limit": "The Qwen recovery worker proves optimizer counters and scheduler step. It does not prove restored RNG equality, so the continuation receipt makes no RNG-restoration claim.",
+    "regressions": [
+      "tests/test_qwen38_lora_artifacts.py",
+      "tests/test_qwen38_lora_export.py"
+    ]
+  },
+  "acceptance_boundary": {
+    "exact_manifest_bytes_recovered": true,
+    "cpu_manifest_reader_released": true,
+    "zero_update_plan_prepared": true,
+    "gpu_job_created": false,
+    "gpu_reload_verified": false,
+    "merged_export_created": false,
+    "model_staged": false,
+    "serving_route_registered": false,
+    "evaluation_launched": false,
+    "next_gate": "After explicit capacity authorization, obtain a live rendered preview that proves the root failure-alert annotation, repeat duplicate and output-absence checks, then run this exact zero-update plan."
+  },
+  "receipt_sha256": "d9ab12f82b8b80342f4794e402514026237b69dae866bcb1506977700ab44bd1"
+}

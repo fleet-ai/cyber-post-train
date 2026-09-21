@@ -14,9 +14,13 @@ from training import qwen38_lora_artifacts, sft_runtime
 from training.io import digest_json, file_sha256
 from training.qwen38_lora_artifacts import (
     CHECKPOINT_SCHEMA,
+    CONTINUATION_CHECKPOINT_SCHEMA,
+    CONTINUATION_EXPORT_SCHEMA,
     EXPORT_SCHEMA,
     PHYSICAL_TARGETS,
+    validate_any_checkpoint_receipt,
     validate_checkpoint_receipt,
+    validate_continuation_checkpoint_receipt,
     validate_export_receipt,
 )
 from training.sft_runtime import (
@@ -303,8 +307,112 @@ def checkpoint() -> dict:
     )
 
 
+def continuation_source_manifest() -> dict:
+    source = plan()
+    source["run_name"] = "qwen38-lora-continuation"
+    source["output_root"] = "/mnt/sfs/jobs/qwen38-lora-continuation"
+    source["pause_after_step"] = 60
+    source["recipe"]["max_steps"] = 100
+    source["recovery"] = {
+        "mode": "resume",
+        "checkpoint": {"optimizer_step": 42},
+    }
+    files = {
+        f"policy/adapter_tp{rank}_pp0_cp0_dp0_ep0_etp{rank}.pt": {
+            "bytes": rank + 1,
+            "sha256": f"{rank + 500:064x}",
+        }
+        for rank in range(8)
+    }
+    value = {
+        "schema": "cyber_qwen38_megatron_checkpoint_manifest_v1",
+        "source_plan_sha256": digest_json(source).removeprefix("sha256:"),
+        "source_plan": source,
+        "checkpoint_path": source["output_root"] + "/checkpoints/global_step_60",
+        "optimizer_step": 60,
+        "world_size": 8,
+        "tensor_parallel_size": 8,
+        "sampler_batches_in_epoch": 60,
+        "files": files,
+        "total_bytes": sum(row["bytes"] for row in files.values()),
+        "gpu_reload_verified": False,
+    }
+    return signed(value)
+
+
+def continuation_checkpoint() -> dict:
+    source = continuation_source_manifest()
+    census = target_census()
+    parameters = adapter_parameters(census)
+    return signed(
+        {
+            "schema": CONTINUATION_CHECKPOINT_SCHEMA,
+            "source_native_manifest_path": (
+                source["source_plan"]["output_root"]
+                + "/checkpoint_manifests/step-000060-megatron-v1.json"
+            ),
+            "source_native_manifest_file_sha256": "d" * 64,
+            "source_native_manifest": source,
+            "topology": {
+                "world_size": 8,
+                "tensor_parallel": 8,
+                "pipeline_parallel": 1,
+                "context_parallel": 1,
+                "data_parallel": 1,
+                "expert_parallel": 1,
+                "expert_tensor_parallel": 1,
+            },
+            "target_census": census,
+            "adapter_parameters": parameters,
+            "trainable_parameter_census": {
+                "parameter_count": len(parameters),
+                "elements": len(parameters) * 64 * 128,
+                "rank_manifests": [
+                    {
+                        "tp_rank": rank,
+                        "before_sha256": f"{1000 + rank:064x}",
+                        "after_sha256": f"{1000 + rank:064x}",
+                    }
+                    for rank in range(8)
+                ],
+            },
+            "frozen_base": {
+                "parameter_count": 100,
+                "elements": 1000,
+                "bytes": 2000,
+                "rank_manifests": [
+                    {
+                        "tp_rank": rank,
+                        "before_sha256": f"{2000 + rank:064x}",
+                        "after_sha256": f"{2000 + rank:064x}",
+                    }
+                    for rank in range(8)
+                ],
+            },
+            "optimizer_reload": {
+                "ranks": [
+                    {
+                        "rank": rank,
+                        "optimizer_step": 60,
+                        "optimizer_states": 2,
+                        "scheduler_restored": True,
+                        "backend": "megatron",
+                    }
+                    for rank in range(8)
+                ],
+                "learning_rates": [1e-5] * 8,
+            },
+            "optimizer_steps_executed": 0,
+            "source_checkpoint_unchanged": True,
+            "source_base_unchanged": True,
+            "gpu_reload_verified": True,
+        }
+    )
+
+
 def export(checkpoint_receipt: dict, checkpoint_file_sha256: str) -> dict:
-    checkpoint_identity = validate_checkpoint_receipt(checkpoint_receipt)
+    checkpoint_identity = validate_any_checkpoint_receipt(checkpoint_receipt)
+    continuation = checkpoint_receipt["schema"] == CONTINUATION_CHECKPOINT_SCHEMA
     files = {
         "config.json": {"bytes": 1, "sha256": "5" * 64},
         "tokenizer.json": {"bytes": 2, "sha256": "6" * 64},
@@ -315,7 +423,7 @@ def export(checkpoint_receipt: dict, checkpoint_file_sha256: str) -> dict:
     }
     return signed(
         {
-            "schema": EXPORT_SCHEMA,
+            "schema": (CONTINUATION_EXPORT_SCHEMA if continuation else EXPORT_SCHEMA),
             "source_checkpoint_receipt_sha256": checkpoint_identity["receipt_sha256"],
             "source_manifest_file_sha256": checkpoint_file_sha256.removeprefix("sha256:"),
             "source_plan_sha256": checkpoint_identity["source_plan_sha256"],
@@ -323,7 +431,7 @@ def export(checkpoint_receipt: dict, checkpoint_file_sha256: str) -> dict:
             "model_repo": checkpoint_identity["model_repository"],
             "model_revision": checkpoint_identity["base_model_revision"],
             "output_root": "/mnt/sfs/jobs/qwen38-lora-artifact-test/merged-step-1",
-            "optimizer_step": 1,
+            "optimizer_step": checkpoint_identity["optimizer_step"],
             "optimizer_steps_executed": 0,
             "merge_method": "megatron_bridge_lora_merge_v1",
             "dtype": "BF16",
@@ -354,7 +462,11 @@ def export(checkpoint_receipt: dict, checkpoint_file_sha256: str) -> dict:
             "source_checkpoint_unchanged": True,
             "source_base_unchanged": True,
             "adapter_checkpoint_reload_verified": True,
-            "optimizer_resume_verified": True,
+            (
+                "optimizer_scheduler_resume_verified"
+                if continuation
+                else "optimizer_resume_verified"
+            ): True,
             "all_output_tensors_reopened_equal": True,
             "adapter_payloads_absent": True,
             "deterministic_merge": True,
@@ -393,6 +505,65 @@ def test_exact_qwen_megatron_checkpoint_and_merged_export_are_accepted(
     assert chain["checkpoint"]["schema"] == CHECKPOINT_SCHEMA
     assert chain["export"]["schema"] == EXPORT_SCHEMA
     assert chain["export"]["source_checkpoint_file_sha256"] == checkpoint_reference["file_sha256"]
+
+
+def test_exact_continuation_reload_and_export_are_accepted(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setattr("training.checkpoints.verify", lambda value, check_files: None)
+    checkpoint_receipt = continuation_checkpoint()
+    checkpoint_reference = write(tmp_path / "continuation.json", checkpoint_receipt)
+    export_receipt = export(checkpoint_receipt, checkpoint_reference["file_sha256"])
+    export_reference = write(tmp_path / "export.json", export_receipt)
+
+    identity = validate_continuation_checkpoint_receipt(checkpoint_receipt)
+    export_identity = validate_export_receipt(
+        export_receipt,
+        checkpoint_receipt,
+        checkpoint_file_sha256=checkpoint_reference["file_sha256"],
+    )
+    chain = validate_checkpoint_export(
+        {"checkpoint": checkpoint_reference, "export": export_reference}
+    )
+
+    assert identity["optimizer_step"] == 60
+    assert identity["schema"] == CONTINUATION_CHECKPOINT_SCHEMA
+    assert export_identity["optimizer_step"] == 60
+    assert chain["checkpoint"]["schema"] == CONTINUATION_CHECKPOINT_SCHEMA
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    [
+        (
+            lambda value: value["optimizer_reload"]["ranks"][0].__setitem__("optimizer_step", 59),
+            "optimizer/scheduler rank",
+        ),
+        (
+            lambda value: value["optimizer_reload"]["learning_rates"].__setitem__(0, 2e-5),
+            "optimizer/scheduler reload evidence",
+        ),
+        (
+            lambda value: value["frozen_base"]["rank_manifests"][0].__setitem__(
+                "after_sha256", "f" * 64
+            ),
+            "frozen base bytes changed",
+        ),
+        (
+            lambda value: value.__setitem__("optimizer_steps_executed", 1),
+            "zero-update reload",
+        ),
+    ],
+)
+def test_continuation_reload_fails_closed_on_state_or_update_drift(
+    monkeypatch, mutate, message: str
+) -> None:
+    monkeypatch.setattr("training.checkpoints.verify", lambda value, check_files: None)
+    value = continuation_checkpoint()
+    mutate(value)
+    value["receipt_sha256"] = _unsigned_digest(
+        {key: item for key, item in value.items() if key != "receipt_sha256"}
+    )
+    with pytest.raises(ValueError, match=message):
+        validate_continuation_checkpoint_receipt(value)
 
 
 @pytest.mark.parametrize(

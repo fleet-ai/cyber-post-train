@@ -6,9 +6,11 @@ that boundary with the already accepted checkpoint receipt: every live adapter
 shard and frozen-base rank digest is reconciled after load, then two independent
 exports must contain the same complete BF16 tensor values and exact base layout.
 
-This module never trains, evaluates, downloads, or selects a checkpoint.  Its
-only model input is an accepted ``QWEN38_LORA_CHECKPOINT.json`` and the exact
-base/checkpoint paths already bound by that receipt.
+This module never trains, evaluates, downloads, or selects a checkpoint.  It
+accepts either the exact step-one qualification receipt or a later native
+Megatron checkpoint manifest.  Later checkpoints first pass an all-rank,
+zero-update model/optimizer/scheduler reload and receive their own promotion
+receipt before the same deterministic merge/export checks run.
 """
 
 from __future__ import annotations
@@ -32,14 +34,20 @@ from typing import Any
 from cyber_post_train.jobs import bundled_request, digest, quantity
 
 from .qwen38_lora_artifacts import (
+    CONTINUATION_CHECKPOINT_SCHEMA,
+    CONTINUATION_EXPORT_SCHEMA,
     EXPORT_SCHEMA,
     validate_checkpoint_receipt,
+    validate_continuation_checkpoint_receipt,
+    validate_continuation_source_manifest,
     validate_export_receipt,
 )
 from .sft_runtime import QWEN38_MEGATRON_IMAGE, QWEN38_MEGATRON_SOURCE_SHA256
 
 PLAN_SCHEMA = "cyber_qwen38_megatron_lora_zero_step_export_plan_v1"
+CONTINUATION_PLAN_SCHEMA = "cyber_qwen38_megatron_lora_continuation_export_plan_v1"
 CHECKPOINT_FILENAME = "QWEN38_LORA_CHECKPOINT.json"
+PROMOTION_CHECKPOINT_FILENAME = "QWEN38_LORA_CONTINUATION_CHECKPOINT.json"
 RECEIPT_FILENAME = "QWEN38_LORA_MERGED_HF_EXPORT.json"
 MERGE_METHOD = "megatron_bridge_lora_merge_v1"
 DEADLINE_SECONDS = 1800
@@ -109,6 +117,21 @@ def _code_sha256() -> dict[str, str]:
     }
 
 
+def _continuation_code_sha256() -> dict[str, str]:
+    root = Path(__file__).parent
+    return {
+        name: _hash(root / name)
+        for name in (
+            "qwen38_lora_export.py",
+            "qwen38_lora_artifacts.py",
+            "sft_runtime.py",
+            "checkpoints.py",
+            "recovery.py",
+            "io.py",
+        )
+    }
+
+
 def _read_checkpoint(path: Path, expected_file_sha256: str) -> tuple[dict, dict]:
     if path.name != CHECKPOINT_FILENAME or not SHA256.fullmatch(expected_file_sha256):
         raise ValueError("checkpoint input must be one exact QWEN38_LORA_CHECKPOINT.json")
@@ -116,6 +139,22 @@ def _read_checkpoint(path: Path, expected_file_sha256: str) -> tuple[dict, dict]
         raise ValueError("checkpoint receipt file digest mismatch")
     value = json.loads(path.read_text())
     return value, validate_checkpoint_receipt(value)
+
+
+def _read_continuation_manifest(
+    path: Path,
+    expected_file_sha256: str,
+    *,
+    require_canonical_name: bool = True,
+) -> tuple[dict, dict]:
+    if (
+        require_canonical_name and re.fullmatch(r"step-\d{6}-megatron-v1\.json", path.name) is None
+    ) or not SHA256.fullmatch(expected_file_sha256):
+        raise ValueError("continuation input must be one exact sealed Megatron manifest")
+    if _hash(path) != expected_file_sha256:
+        raise ValueError("continuation manifest file digest mismatch")
+    value = json.loads(path.read_text())
+    return value, validate_continuation_source_manifest(value)
 
 
 def seal_plan(
@@ -185,7 +224,81 @@ def seal_plan(
     return plan
 
 
+def seal_continuation_plan(
+    checkpoint_manifest: Path,
+    *,
+    checkpoint_file_sha256: str,
+    checkpoint_runtime_path: str | None = None,
+    run_name: str,
+    run_dir: str,
+) -> dict:
+    """Bind a zero-update export to one exact sealed later-step manifest."""
+    manifest, identity = _read_continuation_manifest(
+        checkpoint_manifest,
+        checkpoint_file_sha256,
+        require_canonical_name=checkpoint_runtime_path is None,
+    )
+    runtime_manifest = _canonical_path(
+        checkpoint_runtime_path or str(checkpoint_manifest),
+        "continuation manifest runtime path",
+    )
+    step = identity["optimizer_step"]
+    expected_runtime = (
+        PurePosixPath(manifest["source_plan"]["output_root"])
+        / "checkpoint_manifests"
+        / f"step-{step:06d}-megatron-v1.json"
+    )
+    if PurePosixPath(runtime_manifest) != expected_runtime:
+        raise ValueError("continuation manifest runtime path differs from its sealed source")
+    root = _canonical_path(run_dir, "run directory")
+    if root.parts[:4] != ("/", "mnt", "sfs", "jobs") or len(root.parts) != 5:
+        raise ValueError("run directory must be one direct child of /mnt/sfs/jobs")
+    if not RUN_NAME.fullmatch(run_name) or root.name != run_name:
+        raise ValueError("run name and create-once run directory must agree")
+    source_root = Path(manifest["source_plan"]["output_root"])
+    if root == source_root or root.is_relative_to(source_root) or source_root.is_relative_to(root):
+        raise ValueError("export run and source training run must not overlap")
+    plan = {
+        "schema": CONTINUATION_PLAN_SCHEMA,
+        "run_name": run_name,
+        "run_dir": str(root),
+        "output_root": str(root / "merged-hf"),
+        "checkpoint_manifest": {
+            "path": str(runtime_manifest),
+            "file_sha256": checkpoint_file_sha256,
+            "receipt_sha256": identity["receipt_sha256"],
+        },
+        "checkpoint_identity": {
+            key: identity[key]
+            for key in (
+                "source_plan_sha256",
+                "checkpoint_path",
+                "optimizer_step",
+                "model_repository",
+                "base_model_revision",
+                "checkpoint_inventory_sha256",
+                "base_model_inventory_sha256",
+            )
+        },
+        "image": QWEN38_MEGATRON_IMAGE,
+        "source_files_sha256": dict(QWEN38_MEGATRON_SOURCE_SHA256),
+        "code_sha256": _continuation_code_sha256(),
+        "native_api": dict(NATIVE_API),
+        "optimizer_steps_executed": 0,
+        "external_evaluation": False,
+        "create_once": True,
+        "priority_class": "c1",
+        "resources": dict(RESOURCES),
+        "deadline_seconds": DEADLINE_SECONDS,
+    }
+    validate_plan(plan)
+    _continuation_runtime_plan(manifest, plan, check_files=False)
+    return plan
+
+
 def validate_plan(plan: dict, *, check_code: bool = True) -> dict:
+    if isinstance(plan, dict) and plan.get("schema") == CONTINUATION_PLAN_SCHEMA:
+        return validate_continuation_plan(plan, check_code=check_code)
     expected = {
         "schema",
         "run_name",
@@ -238,16 +351,101 @@ def validate_plan(plan: dict, *, check_code: bool = True) -> dict:
     return plan
 
 
+def validate_continuation_plan(plan: dict, *, check_code: bool = True) -> dict:
+    expected = {
+        "schema",
+        "run_name",
+        "run_dir",
+        "output_root",
+        "checkpoint_manifest",
+        "checkpoint_identity",
+        "image",
+        "source_files_sha256",
+        "code_sha256",
+        "native_api",
+        "optimizer_steps_executed",
+        "external_evaluation",
+        "create_once",
+        "priority_class",
+        "resources",
+        "deadline_seconds",
+    }
+    if not isinstance(plan, dict) or set(plan) != expected:
+        raise ValueError("continuation export plan has unknown or missing fields")
+    root = _canonical_path(plan["run_dir"], "run directory")
+    output = _canonical_path(plan["output_root"], "output root")
+    reference = plan["checkpoint_manifest"]
+    identity = plan["checkpoint_identity"]
+    identity_fields = {
+        "source_plan_sha256",
+        "checkpoint_path",
+        "optimizer_step",
+        "model_repository",
+        "base_model_revision",
+        "checkpoint_inventory_sha256",
+        "base_model_inventory_sha256",
+    }
+    if (
+        plan["schema"] != CONTINUATION_PLAN_SCHEMA
+        or not RUN_NAME.fullmatch(plan["run_name"])
+        or root.name != plan["run_name"]
+        or output != root / "merged-hf"
+        or not isinstance(reference, dict)
+        or set(reference) != {"path", "file_sha256", "receipt_sha256"}
+        or re.fullmatch(
+            r"step-\d{6}-megatron-v1\.json",
+            _canonical_path(reference["path"], "checkpoint manifest").name,
+        )
+        is None
+        or not SHA256.fullmatch(reference["file_sha256"])
+        or not SHA256.fullmatch(reference["receipt_sha256"])
+        or not isinstance(identity, dict)
+        or set(identity) != identity_fields
+        or type(identity.get("optimizer_step")) is not int
+        or identity["optimizer_step"] <= 1
+        or plan["image"] != QWEN38_MEGATRON_IMAGE
+        or plan["source_files_sha256"] != QWEN38_MEGATRON_SOURCE_SHA256
+        or plan["native_api"] != NATIVE_API
+        or plan["optimizer_steps_executed"] != 0
+        or plan["external_evaluation"] is not False
+        or plan["create_once"] is not True
+        or plan["priority_class"] != "c1"
+        or plan["resources"] != RESOURCES
+        or plan["deadline_seconds"] != DEADLINE_SECONDS
+    ):
+        raise ValueError("continuation export plan differs from the reviewed exact-image lane")
+    for field in identity_fields - {"optimizer_step", "checkpoint_path", "model_repository"}:
+        if field == "base_model_revision":
+            if not re.fullmatch(r"[a-f0-9]{40}", identity[field]):
+                raise ValueError("continuation export has an invalid base revision")
+        elif not SHA256.fullmatch(identity[field]):
+            raise ValueError("continuation export has an invalid checkpoint identity digest")
+    if identity["model_repository"] != "Qwen/Qwen3.8-27B":
+        raise ValueError("continuation export has an invalid model repository")
+    if (
+        _canonical_path(identity["checkpoint_path"], "checkpoint path")
+        != Path(reference["path"]).parents[1]
+        / "checkpoints"
+        / f"global_step_{identity['optimizer_step']}"
+    ):
+        raise ValueError("continuation export manifest and checkpoint paths disagree")
+    if check_code and plan["code_sha256"] != _continuation_code_sha256():
+        raise ValueError("continuation export producer bytes changed after plan sealing")
+    return plan
+
+
 def job_request(plan: dict) -> dict:
     validate_plan(plan)
     root = Path(__file__).resolve().parents[1]
-    names = (
+    names = [
         "training/qwen38_lora_export.py",
         "training/qwen38_lora_artifacts.py",
         "training/sft_runtime.py",
         "training/io.py",
         "cyber_post_train/jobs.py",
-    )
+    ]
+    if plan["schema"] == CONTINUATION_PLAN_SCHEMA:
+        names.extend(("training/checkpoints.py", "training/recovery.py"))
     files = {name: (root / name).read_text() for name in names}
     files.update({"training/__init__.py": "", "cyber_post_train/__init__.py": ""})
     files["plan.json"] = json.dumps(plan, sort_keys=True, separators=(",", ":"))
@@ -556,16 +754,256 @@ def complete_native_export_from_base(
     }
 
 
+def verify_continuation_reloaded_snapshots(
+    manifest: dict,
+    before_snapshots: list[dict],
+    after_snapshots: list[dict],
+    reload_ranks: list[dict],
+    learning_rates: list[float],
+) -> dict:
+    """Reconcile a later-step native checkpoint with its live TP8 reload."""
+    import torch
+
+    from .sft_runtime import _qwen38_rank_snapshots, _tensor_sha256
+
+    before = _qwen38_rank_snapshots(before_snapshots, stage="pre-reload")
+    after = _qwen38_rank_snapshots(after_snapshots, stage="post-reload")
+    census = before[0]["target_census"]
+    names = set(before[0]["adapters"])
+    if not names:
+        raise ValueError("continuation reload has no adapter tensors")
+    parameters = {}
+    changed = 0
+    checkpoint_hashes: dict[int, dict[str, str]] = {}
+    for rank in range(8):
+        first = before[rank]
+        last = after[rank]
+        if (
+            first["target_census"] != census
+            or last["target_census"] != census
+            or set(first["adapters"]) != names
+            or set(last["adapters"]) != names
+            or first["successful_optimizer_updates"] != 0
+            or last["successful_optimizer_updates"] != 0
+            or first["last_gradient_norm"] is not None
+            or last["last_gradient_norm"] is not None
+            or first["trainable"]["manifest_sha256"] != last["trainable"]["manifest_sha256"]
+            or first["frozen_base"] != last["frozen_base"]
+        ):
+            raise ValueError("continuation reload changed topology, metadata, or frozen base")
+        adapter_path = (
+            Path(manifest["checkpoint_path"])
+            / f"policy/adapter_tp{rank}_pp0_cp0_dp0_ep0_etp{rank}.pt"
+        )
+        payload = torch.load(adapter_path, map_location="cpu", weights_only=True)
+        if not isinstance(payload, dict) or set(payload) != {"model_state_dict"}:
+            raise ValueError("continuation adapter checkpoint payload fields drift")
+        state = payload["model_state_dict"]
+        if not isinstance(state, dict) or set(state) != names:
+            raise ValueError("continuation adapter checkpoint keys differ from live model")
+        checkpoint_hashes[rank] = {}
+        for name, tensor in state.items():
+            live = last["adapters"][name]
+            first_row = first["adapters"][name]
+            metadata = {"logical_target", "dtype", "global_shape", "local_shape", "sharding"}
+            if (
+                any(first_row[key] != live[key] for key in metadata)
+                or first_row["dtype"] != "BF16"
+                or not isinstance(tensor, torch.Tensor)
+                or tensor.layout != torch.strided
+                or tensor.numel() <= 0
+                or list(tensor.shape) != live["local_shape"]
+                or str(tensor.dtype).removeprefix("torch.").upper().replace("BFLOAT16", "BF16")
+                != live["dtype"]
+            ):
+                raise ValueError("continuation adapter metadata differs after reload")
+            saved_hash = _tensor_sha256(tensor)
+            if saved_hash != live["sha256"]:
+                raise ValueError("continuation adapter shard differs from live reloaded tensor")
+            checkpoint_hashes[rank][name] = saved_hash
+
+    for name in sorted(names):
+        reference = before[0]["adapters"][name]
+        shards = []
+        for rank in range(8):
+            first = before[rank]["adapters"][name]
+            last = after[rank]["adapters"][name]
+            if any(
+                first[key] != reference[key]
+                for key in ("logical_target", "dtype", "global_shape", "sharding")
+            ):
+                raise ValueError("continuation adapter global metadata differs across TP ranks")
+            changed += first["sha256"] != last["sha256"]
+            shards.append(
+                {
+                    "tp_rank": rank,
+                    "shape": first["local_shape"],
+                    "before_sha256": first["sha256"],
+                    "after_sha256": last["sha256"],
+                    "checkpoint_sha256": checkpoint_hashes[rank][name],
+                }
+            )
+        parameters[name] = {
+            "logical_target": reference["logical_target"],
+            "dtype": reference["dtype"],
+            "global_shape": reference["global_shape"],
+            "sharding": reference["sharding"],
+            "rank_shards": shards,
+        }
+    if changed <= 0:
+        raise ValueError("continuation reload changed no adapter tensor from fresh initialization")
+    if (
+        not isinstance(reload_ranks, list)
+        or sorted(row.get("rank") for row in reload_ranks) != list(range(8))
+        or any(
+            row.get("optimizer_step") != manifest["optimizer_step"]
+            or type(row.get("optimizer_states")) is not int
+            or row["optimizer_states"] <= 0
+            or row.get("scheduler_restored") is not True
+            or row.get("backend") != "megatron"
+            for row in reload_ranks
+        )
+        or not isinstance(learning_rates, list)
+        or len(learning_rates) != 8
+        or any(
+            type(value) not in {int, float} or not math.isfinite(value) or value <= 0
+            for value in learning_rates
+        )
+        or any(value != learning_rates[0] for value in learning_rates[1:])
+    ):
+        raise ValueError("continuation optimizer/scheduler reload lacks exact TP8 evidence")
+    return {
+        "target_census": census,
+        "adapter_parameters": parameters,
+        "trainable_parameter_census": {
+            "parameter_count": len(parameters),
+            "elements": sum(math.prod(row["global_shape"]) for row in parameters.values()),
+            "rank_manifests": [
+                {
+                    "tp_rank": rank,
+                    "before_sha256": before[rank]["trainable"]["manifest_sha256"],
+                    "after_sha256": after[rank]["trainable"]["manifest_sha256"],
+                }
+                for rank in range(8)
+            ],
+        },
+        "frozen_base": {
+            "parameter_count": sum(
+                before[rank]["frozen_base"]["parameter_count"] for rank in range(8)
+            ),
+            "elements": sum(before[rank]["frozen_base"]["elements"] for rank in range(8)),
+            "bytes": sum(before[rank]["frozen_base"]["bytes"] for rank in range(8)),
+            "rank_manifests": [
+                {
+                    "tp_rank": rank,
+                    "before_sha256": before[rank]["frozen_base"]["manifest_sha256"],
+                    "after_sha256": after[rank]["frozen_base"]["manifest_sha256"],
+                }
+                for rank in range(8)
+            ],
+        },
+        "optimizer_reload": {
+            "ranks": sorted(reload_ranks, key=lambda row: row["rank"]),
+            "learning_rates": list(learning_rates),
+        },
+        "optimizer_steps_executed": 0,
+        "strict_census": True,
+    }
+
+
+def _validate_continuation_runtime_derivation(
+    source: dict,
+    runtime: dict,
+    manifest: dict,
+    plan: dict,
+) -> None:
+    """Reject any runtime-plan change outside the export-only recovery boundary."""
+    allowed = {
+        "run_name",
+        "output_root",
+        "wandb",
+        "recovery",
+        "recovery_runtime_sha256",
+        "pause_after_step",
+        "plan_sha256",
+    }
+    source_science = {key: value for key, value in source.items() if key not in allowed}
+    runtime_science = {key: value for key, value in runtime.items() if key not in allowed}
+    if (
+        source_science != runtime_science
+        or runtime["run_name"] != plan["run_name"]
+        or runtime["output_root"] != plan["run_dir"]
+        or runtime["wandb"]
+        != {
+            **source["wandb"],
+            "run_id": plan["run_name"],
+            "name": plan["run_name"],
+        }
+        or "pause_after_step" in runtime
+        or runtime["recovery"]["mode"] != "validate"
+        or runtime["recovery"]["checkpoint"] != manifest
+        or runtime["recovery"]["manifest_file_sha256"] != plan["checkpoint_manifest"]["file_sha256"]
+        or runtime["plan_sha256"]
+        != digest({key: value for key, value in runtime.items() if key != "plan_sha256"})
+    ):
+        raise ValueError("continuation export runtime changed the sealed scientific plan")
+
+
+def _continuation_runtime_plan(
+    manifest: dict,
+    plan: dict,
+    *,
+    check_files: bool,
+) -> dict:
+    """Derive one export-only runtime plan from the sealed training plan.
+
+    The source plan is already validated by ``checkpoints.verify``.  This
+    derivation may change only the fresh execution identity and the recovery
+    binding needed to validate the exact later checkpoint.  One plan owns both
+    native config construction and worker selection, so the workers cannot
+    silently load a different checkpoint than the config describes.
+    """
+    from . import recovery
+
+    source = manifest["source_plan"]
+    runtime = copy.deepcopy(source)
+    runtime.pop("pause_after_step", None)
+    runtime["run_name"] = plan["run_name"]
+    runtime["output_root"] = plan["run_dir"]
+    runtime["wandb"] = {
+        **source["wandb"],
+        "run_id": plan["run_name"],
+        "name": plan["run_name"],
+    }
+    runtime["recovery"] = {
+        "mode": "validate",
+        "checkpoint": copy.deepcopy(manifest),
+        "manifest_file_sha256": plan["checkpoint_manifest"]["file_sha256"],
+    }
+    runtime["recovery_runtime_sha256"] = _hash(Path(recovery.__file__))
+    runtime.pop("plan_sha256", None)
+    runtime["plan_sha256"] = digest(runtime)
+    _validate_continuation_runtime_derivation(source, runtime, manifest, plan)
+    recovery.validate(runtime, check_files=check_files)
+    return runtime
+
+
 def _distributed_export(plan: dict, receipt: dict, first: Path, second: Path) -> dict:
     """Use the exact native TP8 APIs; no training loop or optimizer call exists here."""
     import ray
 
     from .sft_runtime import _make_trainer_class, build_runtime_configs
 
-    runtime_plan = copy.deepcopy(receipt["source_plan"])
-    runtime_plan["run_name"] = plan["run_name"]
-    runtime_plan["output_root"] = plan["run_dir"]
-    runtime_plan["plan_sha256"] = digest(runtime_plan)
+    continuation = plan["schema"] == CONTINUATION_PLAN_SCHEMA
+    runtime_plan = (
+        _continuation_runtime_plan(receipt, plan, check_files=True)
+        if continuation
+        else copy.deepcopy(receipt["source_plan"])
+    )
+    if not continuation:
+        runtime_plan["run_name"] = plan["run_name"]
+        runtime_plan["output_root"] = plan["run_dir"]
+        runtime_plan["plan_sha256"] = digest(runtime_plan)
     cfg, skyrl_cfg = build_runtime_configs(runtime_plan)
     megatron = skyrl_cfg.trainer.policy.megatron_config
     if (
@@ -588,13 +1026,30 @@ def _distributed_export(plan: dict, receipt: dict, first: Path, second: Path) ->
     trainer = ExportTrainer(cfg, skyrl_cfg, runtime_plan)
     try:
         trainer.setup()
-        trainer.dispatch.load_checkpoint(
-            "policy",
-            str(Path(receipt["checkpoint_path"]) / "policy"),
-            load_optimizer_states=True,
-            load_lr_scheduler_states=True,
-        )
         actor = trainer.dispatch._actor_groups["policy"]
+        before_snapshots = (
+            trainer.dispatch.collect_lora_qualification_snapshots("policy")
+            if continuation
+            else None
+        )
+        if continuation:
+            reload_ranks = ray.get(
+                actor.async_run_ray_method(
+                    "pass_through",
+                    "load_checkpoint",
+                    ckpt_dir=str(Path(receipt["checkpoint_path"]) / "policy"),
+                    load_optimizer_states=True,
+                    load_lr_scheduler_states=True,
+                )
+            )
+        else:
+            trainer.dispatch.load_checkpoint(
+                "policy",
+                str(Path(receipt["checkpoint_path"]) / "policy"),
+                load_optimizer_states=True,
+                load_lr_scheduler_states=True,
+            )
+            reload_ranks = []
         learning_rates = ray.get(actor.async_run_ray_method("pass_through", "get_lr"))
         if (
             not isinstance(learning_rates, list)
@@ -606,10 +1061,23 @@ def _distributed_export(plan: dict, receipt: dict, first: Path, second: Path) ->
         ):
             raise ValueError("checkpoint optimizer/scheduler reload lacks all-rank evidence")
         snapshots = trainer.dispatch.collect_lora_qualification_snapshots("policy")
-        evidence = verify_reloaded_snapshots(receipt, snapshots)
+        evidence = (
+            verify_continuation_reloaded_snapshots(
+                receipt,
+                before_snapshots,
+                snapshots,
+                reload_ranks,
+                learning_rates,
+            )
+            if continuation
+            else verify_reloaded_snapshots(receipt, snapshots)
+        )
         trainer.dispatch.save_hf_model("policy", str(first), trainer.tokenizer)
         trainer.dispatch.save_hf_model("policy", str(second), trainer.tokenizer)
-        return {**evidence, "optimizer_resume_verified": True}
+        resume_field = (
+            "optimizer_scheduler_resume_verified" if continuation else "optimizer_resume_verified"
+        )
+        return {**evidence, resume_field: True}
     finally:
         trainer.shutdown()
 
@@ -737,9 +1205,15 @@ def run(plan: dict) -> dict:
     if any(path.exists() or path.is_symlink() for path in (final, partial_first, partial_second)):
         raise FileExistsError("create-once export destination already exists")
     _stage("checkpoint_validation")
-    checkpoint_path = Path(plan["checkpoint_receipt"]["path"])
-    receipt, identity = _read_checkpoint(checkpoint_path, plan["checkpoint_receipt"]["file_sha256"])
-    if identity["receipt_sha256"] != plan["checkpoint_receipt"]["receipt_sha256"] or any(
+    continuation = plan["schema"] == CONTINUATION_PLAN_SCHEMA
+    reference = plan["checkpoint_manifest"] if continuation else plan["checkpoint_receipt"]
+    checkpoint_path = Path(reference["path"])
+    receipt, identity = (
+        _read_continuation_manifest(checkpoint_path, reference["file_sha256"])
+        if continuation
+        else _read_checkpoint(checkpoint_path, reference["file_sha256"])
+    )
+    if identity["receipt_sha256"] != reference["receipt_sha256"] or any(
         identity.get(key) != value for key, value in plan["checkpoint_identity"].items()
     ):
         raise ValueError("runtime checkpoint identity differs from the sealed plan")
@@ -843,10 +1317,49 @@ def run(plan: dict) -> dict:
         raise ValueError("base, checkpoint, or exact-image source changed during export")
     _stage("plan_revalidation")
     validate_plan(plan)
+    checkpoint_for_export = receipt
+    checkpoint_file_sha256 = reference["file_sha256"]
+    if continuation:
+        _stage("continuation_reload_receipt")
+        promotion_value = {
+            "schema": CONTINUATION_CHECKPOINT_SCHEMA,
+            "source_native_manifest_path": reference["path"],
+            "source_native_manifest_file_sha256": reference["file_sha256"],
+            "source_native_manifest": receipt,
+            "topology": {
+                "world_size": 8,
+                "tensor_parallel": 8,
+                "pipeline_parallel": 1,
+                "context_parallel": 1,
+                "data_parallel": 1,
+                "expert_parallel": 1,
+                "expert_tensor_parallel": 1,
+            },
+            "target_census": reload_evidence["target_census"],
+            "adapter_parameters": reload_evidence["adapter_parameters"],
+            "trainable_parameter_census": reload_evidence["trainable_parameter_census"],
+            "frozen_base": reload_evidence["frozen_base"],
+            "optimizer_reload": reload_evidence["optimizer_reload"],
+            "optimizer_steps_executed": 0,
+            "source_checkpoint_unchanged": True,
+            "source_base_unchanged": True,
+            "gpu_reload_verified": True,
+        }
+        checkpoint_for_export = {
+            **promotion_value,
+            "receipt_sha256": digest(promotion_value),
+        }
+        identity = validate_continuation_checkpoint_receipt(checkpoint_for_export)
+        promotion_path = run_root / PROMOTION_CHECKPOINT_FILENAME
+        _write_new(promotion_path, checkpoint_for_export)
+        checkpoint_file_sha256 = _hash(promotion_path)
+    resume_field = (
+        "optimizer_scheduler_resume_verified" if continuation else "optimizer_resume_verified"
+    )
     value = {
-        "schema": EXPORT_SCHEMA,
+        "schema": CONTINUATION_EXPORT_SCHEMA if continuation else EXPORT_SCHEMA,
         "source_checkpoint_receipt_sha256": identity["receipt_sha256"],
-        "source_manifest_file_sha256": plan["checkpoint_receipt"]["file_sha256"],
+        "source_manifest_file_sha256": checkpoint_file_sha256,
         "source_plan_sha256": identity["source_plan_sha256"],
         "code_sha256": plan["code_sha256"],
         "model_repo": identity["model_repository"],
@@ -871,7 +1384,7 @@ def run(plan: dict) -> dict:
         "source_checkpoint_unchanged": True,
         "source_base_unchanged": True,
         "adapter_checkpoint_reload_verified": reload_evidence["strict_census"],
-        "optimizer_resume_verified": reload_evidence["optimizer_resume_verified"],
+        resume_field: reload_evidence[resume_field],
         "all_output_tensors_reopened_equal": True,
         "adapter_payloads_absent": True,
         "deterministic_merge": True,
@@ -883,8 +1396,8 @@ def run(plan: dict) -> dict:
     _stage("receipt_validation")
     validate_export_receipt(
         signed,
-        receipt,
-        checkpoint_file_sha256=plan["checkpoint_receipt"]["file_sha256"],
+        checkpoint_for_export,
+        checkpoint_file_sha256=checkpoint_file_sha256,
     )
     _stage("receipt_write")
     _write_new(run_root / RECEIPT_FILENAME, signed)
@@ -895,9 +1408,14 @@ def build_runtime_configs_for_ray(receipt: dict, plan: dict):
     """Render the source config solely to initialize the pinned Ray topology."""
     from .sft_runtime import build_runtime_configs
 
-    runtime_plan = copy.deepcopy(receipt["source_plan"])
-    runtime_plan["run_name"] = plan["run_name"]
-    runtime_plan["output_root"] = plan["run_dir"]
+    runtime_plan = (
+        _continuation_runtime_plan(receipt, plan, check_files=True)
+        if plan["schema"] == CONTINUATION_PLAN_SCHEMA
+        else copy.deepcopy(receipt["source_plan"])
+    )
+    if plan["schema"] != CONTINUATION_PLAN_SCHEMA:
+        runtime_plan["run_name"] = plan["run_name"]
+        runtime_plan["output_root"] = plan["run_dir"]
     return build_runtime_configs(runtime_plan)
 
 

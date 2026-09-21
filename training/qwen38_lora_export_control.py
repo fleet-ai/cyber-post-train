@@ -9,14 +9,20 @@ from pathlib import Path
 
 from cyber_post_train.jobs import digest
 
-from .qwen38_lora_artifacts import validate_export_receipt
+from .qwen38_lora_artifacts import (
+    validate_continuation_checkpoint_receipt,
+    validate_export_receipt,
+)
 from .qwen38_lora_export import (
+    PROMOTION_CHECKPOINT_FILENAME,
     RECEIPT_FILENAME,
     _hash,
     _read_checkpoint,
+    _read_continuation_manifest,
     _runtime_source_inventory,
     _write_new,
     job_request,
+    seal_continuation_plan,
     seal_plan,
 )
 
@@ -46,12 +52,29 @@ def seal(args: argparse.Namespace) -> dict:
     run_dir = Path(args.run_dir)
     if run_dir.exists():
         raise ValueError("output root must be fresh")
-    plan = seal_plan(
-        Path(args.checkpoint_receipt),
-        checkpoint_file_sha256=args.checkpoint_file_sha256,
-        run_name=args.run_name,
-        run_dir=args.run_dir,
-    )
+    if args.checkpoint_manifest:
+        if not args.checkpoint_runtime_path:
+            raise ValueError("continuation seal requires its exact SFS runtime manifest path")
+        plan = seal_continuation_plan(
+            Path(args.checkpoint_manifest),
+            checkpoint_file_sha256=args.checkpoint_file_sha256,
+            checkpoint_runtime_path=args.checkpoint_runtime_path,
+            run_name=args.run_name,
+            run_dir=args.run_dir,
+        )
+        reference = plan["checkpoint_manifest"]
+        reference_kind = "native_continuation_manifest"
+    else:
+        if args.checkpoint_runtime_path:
+            raise ValueError("step-one seal does not accept a continuation runtime path")
+        plan = seal_plan(
+            Path(args.checkpoint_receipt),
+            checkpoint_file_sha256=args.checkpoint_file_sha256,
+            run_name=args.run_name,
+            run_dir=args.run_dir,
+        )
+        reference = plan["checkpoint_receipt"]
+        reference_kind = "accepted_step_one_receipt"
     request = job_request(plan)
     sources = _runtime_source_inventory()
     _claim_control_root(control)
@@ -64,8 +87,9 @@ def seal(args: argparse.Namespace) -> dict:
         "run_dir": plan["run_dir"],
         "plan_sha256": digest(plan),
         "request_sha256": digest(request),
-        "checkpoint_receipt_sha256": plan["checkpoint_receipt"]["receipt_sha256"],
-        "checkpoint_file_sha256": plan["checkpoint_receipt"]["file_sha256"],
+        "checkpoint_reference_kind": reference_kind,
+        "checkpoint_receipt_sha256": reference["receipt_sha256"],
+        "checkpoint_file_sha256": reference["file_sha256"],
         "image": plan["image"],
         "installed_source_sha256": {name: row["sha256"] for name, row in sources.items()},
         "optimizer_steps_executed": 0,
@@ -82,23 +106,58 @@ def seal(args: argparse.Namespace) -> dict:
 
 def verify(args: argparse.Namespace) -> dict:
     control = Path(args.control_dir)
-    checkpoint, _ = _read_checkpoint(Path(args.checkpoint_receipt), args.checkpoint_file_sha256)
+    if args.checkpoint_manifest:
+        if not args.checkpoint_runtime_path:
+            raise ValueError("continuation verify requires its exact SFS runtime manifest path")
+        source, source_identity = _read_continuation_manifest(
+            Path(args.checkpoint_manifest),
+            args.checkpoint_file_sha256,
+            require_canonical_name=False,
+        )
+        checkpoint_path = Path(args.run_dir) / PROMOTION_CHECKPOINT_FILENAME
+        checkpoint_file_sha256 = _hash(checkpoint_path)
+        checkpoint = json.loads(checkpoint_path.read_text())
+        if _hash(checkpoint_path) != checkpoint_file_sha256:
+            raise ValueError("promotion receipt changed while it was read")
+        checkpoint_identity = validate_continuation_checkpoint_receipt(checkpoint)
+        if (
+            checkpoint["source_native_manifest"] != source
+            or checkpoint["source_native_manifest_path"] != args.checkpoint_runtime_path
+            or checkpoint["source_native_manifest_file_sha256"] != args.checkpoint_file_sha256
+            or checkpoint_identity["source_plan_sha256"] != source_identity["source_plan_sha256"]
+        ):
+            raise ValueError("promotion receipt binds a different continuation checkpoint")
+        reference_kind = "native_continuation_manifest"
+    else:
+        if args.checkpoint_runtime_path:
+            raise ValueError("step-one verify does not accept a continuation runtime path")
+        checkpoint, _ = _read_checkpoint(Path(args.checkpoint_receipt), args.checkpoint_file_sha256)
+        checkpoint_file_sha256 = args.checkpoint_file_sha256
+        reference_kind = "accepted_step_one_receipt"
     export_path = Path(args.run_dir) / RECEIPT_FILENAME
     export = json.loads(export_path.read_text())
     identity = validate_export_receipt(
         export,
         checkpoint,
-        checkpoint_file_sha256=args.checkpoint_file_sha256,
+        checkpoint_file_sha256=checkpoint_file_sha256,
+    )
+    resume_field = (
+        "optimizer_scheduler_resume_verified"
+        if reference_kind == "native_continuation_manifest"
+        else "optimizer_resume_verified"
     )
     result = {
         "schema": VALIDATION_SCHEMA,
         "status": "accepted",
         "export_receipt_sha256": identity["receipt_sha256"],
         "export_receipt_file_sha256": _hash(export_path),
+        "checkpoint_reference_kind": reference_kind,
         "checkpoint_receipt_sha256": export["source_checkpoint_receipt_sha256"],
+        "checkpoint_receipt_file_sha256": checkpoint_file_sha256,
         "optimizer_steps_executed": export["optimizer_steps_executed"],
         "finite_logits": export["finite_logits"],
         "gpu_reload_verified": export["gpu_reload_verified"],
+        resume_field: export[resume_field],
         "source_checkpoint_unchanged": export["source_checkpoint_unchanged"],
         "source_base_unchanged": export["source_base_unchanged"],
         "deterministic_merge": export["deterministic_merge"],
@@ -113,8 +172,11 @@ def main() -> None:
     subparsers = parser.add_subparsers(dest="action", required=True)
     for action in ("seal", "verify"):
         command = subparsers.add_parser(action)
-        command.add_argument("--checkpoint-receipt", required=True)
+        source = command.add_mutually_exclusive_group(required=True)
+        source.add_argument("--checkpoint-receipt")
+        source.add_argument("--checkpoint-manifest")
         command.add_argument("--checkpoint-file-sha256", required=True)
+        command.add_argument("--checkpoint-runtime-path")
         command.add_argument("--run-dir", required=True)
         command.add_argument("--control-dir", required=True)
         if action == "seal":

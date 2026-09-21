@@ -28,7 +28,9 @@ from .sft_runtime import (
 )
 
 CHECKPOINT_SCHEMA = "cyber_qwen38_megatron_lora_checkpoint_manifest_v1"
+CONTINUATION_CHECKPOINT_SCHEMA = "cyber_qwen38_megatron_lora_continuation_reload_v1"
 EXPORT_SCHEMA = "cyber_qwen38_megatron_lora_merged_hf_export_v1"
+CONTINUATION_EXPORT_SCHEMA = "cyber_qwen38_megatron_lora_continuation_merged_hf_export_v1"
 MODEL_REPOSITORY = "Qwen/Qwen3.8-27B"
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
@@ -577,57 +579,299 @@ def validate_checkpoint_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def validate_continuation_source_manifest(manifest: Mapping[str, Any]) -> dict[str, Any]:
+    """Validate one sealed native continuation checkpoint without reading its files."""
+    from .checkpoints import QWEN38_MEGATRON_SCHEMA, verify
+
+    value = _object(manifest, "Qwen LoRA continuation source manifest")
+    verify(value, check_files=False)
+    if value.get("schema") != QWEN38_MEGATRON_SCHEMA:
+        raise ValueError("continuation source is not a native Qwen3.8 Megatron checkpoint")
+    plan = _object(value["source_plan"], "Qwen LoRA continuation source plan")
+    step = value["optimizer_step"]
+    recovery = _object(plan.get("recovery"), "Qwen LoRA continuation recovery binding")
+    source = _object(recovery.get("checkpoint"), "Qwen LoRA continuation parent checkpoint")
+    if (
+        type(step) is not int
+        or step <= 1
+        or plan.get("pause_after_step") != step
+        or recovery.get("mode") != "resume"
+        or type(source.get("optimizer_step")) is not int
+        or not 0 < source["optimizer_step"] < step
+        or value.get("gpu_reload_verified") is not False
+    ):
+        raise ValueError("continuation checkpoint lacks an exact later-step recovery boundary")
+    return {
+        "schema": value["schema"],
+        "receipt_sha256": _sha(value["receipt_sha256"], "native checkpoint receipt"),
+        "source_plan_sha256": _sha(value["source_plan_sha256"], "source plan"),
+        "checkpoint_path": value["checkpoint_path"],
+        "optimizer_step": step,
+        "model_repository": plan["model"]["repo"],
+        "base_model_revision": plan["model"]["revision"],
+        "checkpoint_inventory_sha256": digest_json(value["files"]).removeprefix("sha256:"),
+        "base_model_inventory_sha256": digest_json(plan["model"]["files"]).removeprefix("sha256:"),
+    }
+
+
+def _validate_rank_manifests(
+    value: Any,
+    *,
+    label: str,
+    require_unchanged: bool,
+) -> list[dict[str, Any]]:
+    rows = value
+    if not isinstance(rows, list) or len(rows) != 8:
+        raise ValueError(f"{label} rank manifests must cover TP8")
+    seen = set()
+    for raw in rows:
+        row = _object(raw, f"{label} rank manifest")
+        _exact(row, {"tp_rank", "before_sha256", "after_sha256"}, f"{label} rank manifest")
+        rank = row["tp_rank"]
+        before = _sha(row["before_sha256"], f"{label} before manifest")
+        after = _sha(row["after_sha256"], f"{label} after manifest")
+        if type(rank) is not int or not 0 <= rank < 8 or rank in seen:
+            raise ValueError(f"{label} rank manifests contain an invalid TP rank")
+        if require_unchanged and before != after:
+            raise ValueError(f"{label} bytes changed during checkpoint reload")
+        seen.add(rank)
+    if seen != set(range(8)):
+        raise ValueError(f"{label} rank manifests do not cover TP8")
+    return rows
+
+
+def validate_continuation_checkpoint_receipt(
+    receipt: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Validate a zero-update GPU reload of one sealed continuation checkpoint."""
+    value = _object(receipt, "Qwen LoRA continuation reload receipt")
+    _exact(
+        value,
+        {
+            "schema",
+            "source_native_manifest_path",
+            "source_native_manifest_file_sha256",
+            "source_native_manifest",
+            "topology",
+            "target_census",
+            "adapter_parameters",
+            "trainable_parameter_census",
+            "frozen_base",
+            "optimizer_reload",
+            "optimizer_steps_executed",
+            "source_checkpoint_unchanged",
+            "source_base_unchanged",
+            "gpu_reload_verified",
+            "receipt_sha256",
+        },
+        "Qwen LoRA continuation reload receipt",
+    )
+    if value["schema"] != CONTINUATION_CHECKPOINT_SCHEMA:
+        raise ValueError("unsupported Qwen LoRA continuation reload schema")
+    self_digest = _receipt_digest(value, "Qwen LoRA continuation reload receipt")
+    source = validate_continuation_source_manifest(value["source_native_manifest"])
+    source_manifest = value["source_native_manifest"]
+    source_plan = source_manifest["source_plan"]
+    step = source["optimizer_step"]
+    expected_manifest_path = (
+        PurePosixPath(source_plan["output_root"])
+        / "checkpoint_manifests"
+        / f"step-{step:06d}-megatron-v1.json"
+    )
+    if _absolute_path(
+        value["source_native_manifest_path"], "native manifest path"
+    ) != expected_manifest_path or not _sha(
+        value["source_native_manifest_file_sha256"], "native manifest file"
+    ):
+        raise ValueError("continuation reload binds an invalid native manifest path or digest")
+    topology = _object(value["topology"], "Qwen LoRA continuation topology")
+    _exact(
+        topology,
+        {
+            "world_size",
+            "tensor_parallel",
+            "pipeline_parallel",
+            "context_parallel",
+            "data_parallel",
+            "expert_parallel",
+            "expert_tensor_parallel",
+        },
+        "Qwen LoRA continuation topology",
+    )
+    if topology != {
+        "world_size": 8,
+        "tensor_parallel": 8,
+        "pipeline_parallel": 1,
+        "context_parallel": 1,
+        "data_parallel": 1,
+        "expert_parallel": 1,
+        "expert_tensor_parallel": 1,
+    }:
+        raise ValueError("continuation reload topology differs from exact TP8")
+    census = _validate_target_census(value["target_census"])
+    parameters = _validate_adapter_parameters(value["adapter_parameters"])
+    represented_targets = {row["logical_target"] for row in parameters.values()}
+    required_targets = {name for name, count in census["target_counts"].items() if count > 0}
+    changed = sum(
+        shard["before_sha256"] != shard["after_sha256"]
+        for row in parameters.values()
+        for shard in row["rank_shards"]
+    )
+    if represented_targets != required_targets or changed <= 0:
+        raise ValueError("continuation reload adapter census is incomplete or unchanged")
+
+    trainable = _object(value["trainable_parameter_census"], "trainable parameter census")
+    _exact(
+        trainable,
+        {"parameter_count", "elements", "rank_manifests"},
+        "trainable parameter census",
+    )
+    if (
+        trainable["parameter_count"] != len(parameters)
+        or type(trainable["elements"]) is not int
+        or trainable["elements"] <= 0
+    ):
+        raise ValueError("continuation trainable census differs from adapter inventory")
+    _validate_rank_manifests(
+        trainable["rank_manifests"], label="trainable metadata", require_unchanged=True
+    )
+    frozen = _object(value["frozen_base"], "frozen-base census")
+    _exact(
+        frozen,
+        {"parameter_count", "elements", "bytes", "rank_manifests"},
+        "frozen-base census",
+    )
+    if any(
+        type(frozen[field]) is not int or frozen[field] <= 0
+        for field in ("parameter_count", "elements", "bytes")
+    ):
+        raise ValueError("continuation frozen-base census counts are invalid")
+    _validate_rank_manifests(frozen["rank_manifests"], label="frozen base", require_unchanged=True)
+    reload = _object(value["optimizer_reload"], "optimizer reload evidence")
+    _exact(reload, {"ranks", "learning_rates"}, "optimizer reload evidence")
+    ranks = reload["ranks"]
+    rates = reload["learning_rates"]
+    if (
+        not isinstance(ranks, list)
+        or len(ranks) != 8
+        or not isinstance(rates, list)
+        or len(rates) != 8
+        or any(
+            type(rate) not in {int, float} or not math.isfinite(rate) or rate <= 0 for rate in rates
+        )
+        or any(rate != rates[0] for rate in rates[1:])
+    ):
+        raise ValueError("continuation optimizer/scheduler reload evidence is incomplete")
+    seen = set()
+    for raw in ranks:
+        row = _object(raw, "optimizer reload rank")
+        _exact(
+            row,
+            {"rank", "optimizer_step", "optimizer_states", "scheduler_restored", "backend"},
+            "optimizer reload rank",
+        )
+        rank = row["rank"]
+        if (
+            type(rank) is not int
+            or not 0 <= rank < 8
+            or rank in seen
+            or row["optimizer_step"] != step
+            or type(row["optimizer_states"]) is not int
+            or row["optimizer_states"] <= 0
+            or row["scheduler_restored"] is not True
+            or row["backend"] != "megatron"
+        ):
+            raise ValueError("continuation optimizer/scheduler rank evidence is invalid")
+        seen.add(rank)
+    if seen != set(range(8)):
+        raise ValueError("continuation optimizer/scheduler reload does not cover TP8")
+    if (
+        value["optimizer_steps_executed"] != 0
+        or value["source_checkpoint_unchanged"] is not True
+        or value["source_base_unchanged"] is not True
+        or value["gpu_reload_verified"] is not True
+    ):
+        raise ValueError("continuation receipt lacks zero-update reload/source evidence")
+    return {
+        "schema": CONTINUATION_CHECKPOINT_SCHEMA,
+        "receipt_sha256": self_digest,
+        "source_plan_sha256": source["source_plan_sha256"],
+        "checkpoint_path": source["checkpoint_path"],
+        "optimizer_step": step,
+        "model_repository": source["model_repository"],
+        "base_model_revision": source["base_model_revision"],
+        "checkpoint_inventory_sha256": source["checkpoint_inventory_sha256"],
+        "target_census_sha256": digest_json(census).removeprefix("sha256:"),
+        "adapter_parameter_inventory_sha256": digest_json(parameters).removeprefix("sha256:"),
+        "base_model_inventory_sha256": source["base_model_inventory_sha256"],
+    }
+
+
+def validate_any_checkpoint_receipt(receipt: Mapping[str, Any]) -> dict[str, Any]:
+    schema = receipt.get("schema") if isinstance(receipt, Mapping) else None
+    if schema == CHECKPOINT_SCHEMA:
+        return validate_checkpoint_receipt(receipt)
+    if schema == CONTINUATION_CHECKPOINT_SCHEMA:
+        return validate_continuation_checkpoint_receipt(receipt)
+    raise ValueError("unsupported Qwen LoRA checkpoint receipt schema")
+
+
 def validate_export_receipt(
     receipt: Mapping[str, Any],
     checkpoint_receipt: Mapping[str, Any],
     *,
     checkpoint_file_sha256: str,
 ) -> dict[str, Any]:
-    checkpoint = validate_checkpoint_receipt(checkpoint_receipt)
     value = _object(receipt, "Qwen LoRA merged export receipt")
-    _exact(
-        value,
-        {
-            "schema",
-            "source_checkpoint_receipt_sha256",
-            "source_manifest_file_sha256",
-            "source_plan_sha256",
-            "code_sha256",
-            "model_repo",
-            "model_revision",
-            "output_root",
-            "optimizer_step",
-            "optimizer_steps_executed",
-            "merge_method",
-            "dtype",
-            "adapter_parameter_inventory_sha256",
-            "target_census_sha256",
-            "base_model_inventory_sha256",
-            "base_tensor_layout_sha256",
-            "merged_tensor_layout_sha256",
-            "base_tensor_count",
-            "merged_tensor_count",
-            "adapter_updated_tensor_count",
-            "tensor_values",
-            "tensor_bytes",
-            "sidecars",
-            "files",
-            "source_checkpoint_unchanged",
-            "source_base_unchanged",
-            "adapter_checkpoint_reload_verified",
-            "optimizer_resume_verified",
-            "all_output_tensors_reopened_equal",
-            "adapter_payloads_absent",
-            "deterministic_merge",
-            "merged_model_reload_verified",
-            "finite_logits",
-            "gpu_reload_verified",
-            "receipt_sha256",
-        },
-        "Qwen LoRA merged export receipt",
-    )
-    if value["schema"] != EXPORT_SCHEMA:
+    if value.get("schema") == EXPORT_SCHEMA:
+        checkpoint = validate_checkpoint_receipt(checkpoint_receipt)
+    elif value.get("schema") == CONTINUATION_EXPORT_SCHEMA:
+        checkpoint = validate_continuation_checkpoint_receipt(checkpoint_receipt)
+    else:
         raise ValueError("unsupported Qwen LoRA merged export schema")
+    expected_fields = {
+        "schema",
+        "source_checkpoint_receipt_sha256",
+        "source_manifest_file_sha256",
+        "source_plan_sha256",
+        "code_sha256",
+        "model_repo",
+        "model_revision",
+        "output_root",
+        "optimizer_step",
+        "optimizer_steps_executed",
+        "merge_method",
+        "dtype",
+        "adapter_parameter_inventory_sha256",
+        "target_census_sha256",
+        "base_model_inventory_sha256",
+        "base_tensor_layout_sha256",
+        "merged_tensor_layout_sha256",
+        "base_tensor_count",
+        "merged_tensor_count",
+        "adapter_updated_tensor_count",
+        "tensor_values",
+        "tensor_bytes",
+        "sidecars",
+        "files",
+        "source_checkpoint_unchanged",
+        "source_base_unchanged",
+        "adapter_checkpoint_reload_verified",
+        "all_output_tensors_reopened_equal",
+        "adapter_payloads_absent",
+        "deterministic_merge",
+        "merged_model_reload_verified",
+        "finite_logits",
+        "gpu_reload_verified",
+        "receipt_sha256",
+    }
+    resume_field = (
+        "optimizer_resume_verified"
+        if value.get("schema") == EXPORT_SCHEMA
+        else "optimizer_scheduler_resume_verified"
+    )
+    expected_fields.add(resume_field)
+    _exact(value, expected_fields, "Qwen LoRA merged export receipt")
     self_digest = _receipt_digest(value, "Qwen LoRA merged export receipt")
     links = {
         "source_checkpoint_receipt_sha256": checkpoint["receipt_sha256"],
@@ -704,7 +948,7 @@ def validate_export_receipt(
         or value["source_checkpoint_unchanged"] is not True
         or value["source_base_unchanged"] is not True
         or value["adapter_checkpoint_reload_verified"] is not True
-        or value["optimizer_resume_verified"] is not True
+        or value[resume_field] is not True
         or value["all_output_tensors_reopened_equal"] is not True
         or value["adapter_payloads_absent"] is not True
         or value["deterministic_merge"] is not True
@@ -714,7 +958,7 @@ def validate_export_receipt(
     ):
         raise ValueError("merged export lacks exact layout/merge/reload/source evidence")
     return {
-        "schema": EXPORT_SCHEMA,
+        "schema": value["schema"],
         "receipt_sha256": self_digest,
         "source_checkpoint_receipt_sha256": checkpoint["receipt_sha256"],
         "source_plan_sha256": checkpoint["source_plan_sha256"],

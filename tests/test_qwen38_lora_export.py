@@ -4,11 +4,13 @@ import copy
 import hashlib
 import json
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
-from cyber_post_train.jobs import validate_request
+from cyber_post_train.jobs import digest, validate_request
 from training import qwen38_lora_export as export
+from training import qwen38_lora_export_control as control
 
 
 def checkpoint_identity() -> dict:
@@ -30,6 +32,43 @@ def checkpoint_receipt() -> dict:
     return {
         "source_plan": {"output_root": "/mnt/sfs/jobs/source"},
         "checkpoint_path": "/mnt/sfs/jobs/source/checkpoints/global_step_1",
+    }
+
+
+def continuation_identity() -> dict:
+    return {
+        "receipt_sha256": "1" * 64,
+        "source_plan_sha256": "2" * 64,
+        "checkpoint_path": "/mnt/sfs/jobs/source/checkpoints/global_step_60",
+        "optimizer_step": 60,
+        "model_repository": "Qwen/Qwen3.8-27B",
+        "base_model_revision": "3" * 40,
+        "checkpoint_inventory_sha256": "4" * 64,
+        "base_model_inventory_sha256": "7" * 64,
+    }
+
+
+def continuation_manifest() -> dict:
+    return {
+        "source_plan": {
+            "schema": "cyber_sft_runtime_dense_v1",
+            "run_name": "source",
+            "output_root": "/mnt/sfs/jobs/source",
+            "recipe": {"lr": 1e-5, "max_steps": 100},
+            "datasets": {"train": {"sha256": "8" * 64}},
+            "recovery": {"mode": "resume", "checkpoint": {"optimizer_step": 42}},
+            "recovery_runtime_sha256": "9" * 64,
+            "pause_after_step": 60,
+            "wandb": {
+                "entity": "thefleet",
+                "project": "cyber-post-train",
+                "group": "qwen38-lora",
+                "run_id": "source",
+                "name": "source",
+                "tags": ["qwen38", "lora"],
+            },
+        },
+        "checkpoint_path": "/mnt/sfs/jobs/source/checkpoints/global_step_60",
     }
 
 
@@ -63,6 +102,241 @@ def test_seal_plan_consumes_only_an_accepted_checkpoint_receipt(
     assert plan["create_once"] is True
     assert plan["priority_class"] == "c1"
     assert plan["output_root"] == plan["run_dir"] + "/merged-hf"
+
+
+def test_seal_continuation_plan_consumes_only_an_exact_native_manifest(
+    tmp_path: Path, monkeypatch
+) -> None:
+    manifest = tmp_path / "step-000060-megatron-v1.json"
+    manifest.write_text(json.dumps(continuation_manifest(), sort_keys=True) + "\n")
+    file_sha256 = hashlib.sha256(manifest.read_bytes()).hexdigest()
+    monkeypatch.setattr(
+        export,
+        "validate_continuation_source_manifest",
+        lambda value: continuation_identity(),
+    )
+    monkeypatch.setattr("training.recovery.validate", lambda value, check_files: None)
+
+    plan = export.seal_continuation_plan(
+        manifest,
+        checkpoint_file_sha256=file_sha256,
+        checkpoint_runtime_path=(
+            "/mnt/sfs/jobs/source/checkpoint_manifests/step-000060-megatron-v1.json"
+        ),
+        run_name="chris-q38-lora-s60-export-v1",
+        run_dir="/mnt/sfs/jobs/chris-q38-lora-s60-export-v1",
+    )
+
+    assert plan["schema"] == export.CONTINUATION_PLAN_SCHEMA
+    assert plan["checkpoint_manifest"]["file_sha256"] == file_sha256
+    assert plan["checkpoint_identity"]["optimizer_step"] == 60
+    assert plan["optimizer_steps_executed"] == 0
+    assert plan["create_once"] is True
+    request = export.job_request(plan)
+    assert request["failureAlerts"] is False
+    assert request["priority_class"] == "c1"
+
+
+def test_committed_step60_plan_binds_current_producer_and_exact_source() -> None:
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "configs/qualification/qwen38-lora-step60-zero-update-export-v1.json"
+    )
+    plan = json.loads(path.read_text())
+
+    assert export.validate_plan(plan) == plan
+    assert digest(plan) == "31c9548c7119e01e3941049bcdaa79f9ee7a787a0191ce02c53644959d2d4547"
+    assert plan["checkpoint_manifest"] == {
+        "path": (
+            "/mnt/sfs/jobs/chris-q38-lora-r1-s60-v3/"
+            "checkpoint_manifests/step-000060-megatron-v1.json"
+        ),
+        "file_sha256": "cd53865f869eeb1975aa0e099aef143a736167c5c7b095c283f0da292ffecd78",
+        "receipt_sha256": "6bae9ef75e0a60f598eb32b63d31a64c0f42716611a43daf19a177d3c0ffebd2",
+    }
+    request = export.job_request(plan)
+    assert request["failureAlerts"] is False
+    assert request["priority_class"] == "c1"
+    assert request["gpus_per_worker"] == 8
+
+
+def test_control_seals_continuation_without_treating_it_as_step_one(
+    tmp_path: Path, monkeypatch
+) -> None:
+    manifest = tmp_path / "step-000060-megatron-v1.json"
+    manifest.write_text(json.dumps(continuation_manifest(), sort_keys=True) + "\n")
+    file_sha256 = hashlib.sha256(manifest.read_bytes()).hexdigest()
+    monkeypatch.setattr(
+        export,
+        "validate_continuation_source_manifest",
+        lambda value: continuation_identity(),
+    )
+    monkeypatch.setattr("training.recovery.validate", lambda value, check_files: None)
+    monkeypatch.setattr(control, "_runtime_source_inventory", lambda: {})
+    args = SimpleNamespace(
+        checkpoint_receipt=None,
+        checkpoint_manifest=str(manifest),
+        checkpoint_file_sha256=file_sha256,
+        checkpoint_runtime_path=(
+            "/mnt/sfs/jobs/source/checkpoint_manifests/step-000060-megatron-v1.json"
+        ),
+        run_name="chris-q38-lora-s60-export-v1",
+        run_dir="/mnt/sfs/jobs/chris-q38-lora-s60-export-v1",
+        control_dir=str(tmp_path / "control"),
+    )
+
+    result = control.seal(args)
+    plan = json.loads((tmp_path / "control" / "plan.json").read_text())
+
+    assert result["checkpoint_reference_kind"] == "native_continuation_manifest"
+    assert result["checkpoint_receipt_sha256"] == "1" * 64
+    assert plan["schema"] == export.CONTINUATION_PLAN_SCHEMA
+    assert plan["checkpoint_manifest"]["path"] == args.checkpoint_runtime_path
+    assert plan["optimizer_steps_executed"] == 0
+
+
+def test_continuation_runtime_derivation_preserves_every_scientific_field(
+    tmp_path: Path, monkeypatch
+) -> None:
+    manifest_path = tmp_path / "step-000060-megatron-v1.json"
+    manifest = continuation_manifest()
+    manifest_path.write_text(json.dumps(manifest, sort_keys=True) + "\n")
+    file_sha256 = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    monkeypatch.setattr(
+        export,
+        "validate_continuation_source_manifest",
+        lambda value: continuation_identity(),
+    )
+    monkeypatch.setattr("training.recovery.validate", lambda value, check_files: None)
+    plan = export.seal_continuation_plan(
+        manifest_path,
+        checkpoint_file_sha256=file_sha256,
+        checkpoint_runtime_path=(
+            "/mnt/sfs/jobs/source/checkpoint_manifests/step-000060-megatron-v1.json"
+        ),
+        run_name="chris-q38-lora-s60-export-v1",
+        run_dir="/mnt/sfs/jobs/chris-q38-lora-s60-export-v1",
+    )
+    observed = {}
+    monkeypatch.setattr(
+        "training.recovery.validate",
+        lambda value, check_files: observed.update(
+            {"plan": copy.deepcopy(value), "check_files": check_files}
+        ),
+    )
+
+    runtime = export._continuation_runtime_plan(manifest, plan, check_files=True)
+
+    assert observed == {"plan": runtime, "check_files": True}
+    assert runtime["recipe"] == manifest["source_plan"]["recipe"]
+    assert runtime["datasets"] == manifest["source_plan"]["datasets"]
+    assert runtime["recovery"]["mode"] == "validate"
+    assert runtime["recovery"]["checkpoint"] == manifest
+    assert "pause_after_step" not in runtime
+
+    broken = copy.deepcopy(runtime)
+    broken["recipe"]["lr"] = 5e-5
+    with pytest.raises(ValueError, match="scientific plan"):
+        export._validate_continuation_runtime_derivation(
+            manifest["source_plan"], broken, manifest, plan
+        )
+
+
+def test_continuation_reload_reconciles_exact_tp8_checkpoint_tensors(
+    tmp_path: Path, monkeypatch
+) -> None:
+    torch = pytest.importorskip("torch")
+    name = "model.layers.0.linear_qkv.adapter.linear_in.weight"
+    tensor = torch.ones((2, 2), dtype=torch.bfloat16)
+    saved_sha = export._tensor_sha256(tensor)
+
+    def row(rank: int, *, after: bool) -> dict:
+        return {
+            "target_census": {"selector": "all-linear"},
+            "adapters": {
+                name: {
+                    "logical_target": "linear_qkv",
+                    "dtype": "BF16",
+                    "global_shape": [2, 16],
+                    "local_shape": [2, 2],
+                    "sharding": {
+                        "tensor_parallel": True,
+                        "partition_dim": 1,
+                        "partition_stride": 1,
+                    },
+                    "sha256": saved_sha if after else f"{rank + 1:064x}",
+                }
+            },
+            "trainable": {
+                "parameter_count": 1,
+                "elements": 4,
+                "manifest_sha256": f"{100 + rank:064x}",
+            },
+            "frozen_base": {
+                "parameter_count": 10,
+                "elements": 20,
+                "bytes": 40,
+                "manifest_sha256": f"{200 + rank:064x}",
+            },
+            "successful_optimizer_updates": 0,
+            "last_gradient_norm": None,
+        }
+
+    before = {rank: row(rank, after=False) for rank in range(8)}
+    after = {rank: row(rank, after=True) for rank in range(8)}
+    monkeypatch.setattr(
+        "training.sft_runtime._qwen38_rank_snapshots",
+        lambda snapshots, stage: snapshots,
+    )
+    monkeypatch.setattr(
+        torch,
+        "load",
+        lambda path, map_location, weights_only: {"model_state_dict": {name: tensor}},
+    )
+    ranks = [
+        {
+            "rank": rank,
+            "optimizer_step": 60,
+            "optimizer_states": 2,
+            "scheduler_restored": True,
+            "backend": "megatron",
+        }
+        for rank in range(8)
+    ]
+    evidence = export.verify_continuation_reloaded_snapshots(
+        {
+            "checkpoint_path": str(tmp_path / "checkpoint"),
+            "optimizer_step": 60,
+        },
+        before,
+        after,
+        ranks,
+        [1e-5] * 8,
+    )
+
+    assert evidence["optimizer_steps_executed"] == 0
+    assert evidence["strict_census"] is True
+    assert evidence["optimizer_reload"]["ranks"] == ranks
+    assert evidence["adapter_parameters"][name]["rank_shards"][0]["checkpoint_sha256"] == saved_sha
+
+    after[0]["frozen_base"]["manifest_sha256"] = "f" * 64
+    with pytest.raises(ValueError, match="frozen base"):
+        export.verify_continuation_reloaded_snapshots(
+            {"checkpoint_path": str(tmp_path / "checkpoint"), "optimizer_step": 60},
+            before,
+            after,
+            ranks,
+            [1e-5] * 8,
+        )
+
+    with pytest.raises(ValueError, match="optimizer/scheduler reload"):
+        export.verify_continuation_reloaded_snapshots(
+            {"checkpoint_path": str(tmp_path / "checkpoint"), "optimizer_step": 60},
+            before,
+            {rank: row(rank, after=True) for rank in range(8)},
+            ranks,
+            [1e-5] * 7 + [2e-5],
+        )
 
 
 def test_seal_plan_rejects_noncanonical_input_or_overlapping_output(
