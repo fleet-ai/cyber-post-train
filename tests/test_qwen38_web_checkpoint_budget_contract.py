@@ -13,9 +13,13 @@ REPAIR_AUDIT_PATH = (
 SPLIT_PROBE_REPAIR_AUDIT_PATH = (
     ROOT / "docs/evidence/qwen38-web-important-checkpoint-budget-repair-split-probe-20260921.json"
 )
-CURRENT_REPAIR_AUDIT_PATH = (
+NETPROXY_REPAIR_AUDIT_PATH = (
     ROOT
     / "docs/evidence/qwen38-web-important-checkpoint-budget-repair-netproxy-contract-20260921.json"
+)
+CURRENT_REPAIR_AUDIT_PATH = (
+    ROOT
+    / "docs/evidence/qwen38-web-important-checkpoint-budget-repair-prompt-preflight-20260921.json"
 )
 
 
@@ -115,6 +119,22 @@ def test_historical_split_probe_receipt_remains_byte_bound_to_its_runner() -> No
     assert audit["checks"]["fresh_model_free_runtime_qualification_still_required"] is True
 
 
+def test_historical_netproxy_receipt_remains_byte_bound_to_its_sources() -> None:
+    audit = json.loads(NETPROXY_REPAIR_AUDIT_PATH.read_bytes())
+    unsigned = dict(audit)
+    unsigned.pop("receipt_sha256")
+    assert audit["receipt_sha256"] == ("sha256:" + hashlib.sha256(_canonical(unsigned)).hexdigest())
+    assert _sha256(NETPROXY_REPAIR_AUDIT_PATH) == (
+        "sha256:9cb3ffc3170098d2bd0e966cd0b12c9f8a8a8142bd0750d23d1db4eb15b714dc"
+    )
+    assert audit["source"]["qualification_worker_file_sha256"] == (
+        "sha256:33bdd8cc83047a3f3fd75b9907e8d3d958a750e23f24c1b3cfd9df6126b4f613"
+    )
+    assert audit["classification"] == (
+        "runtime_budget_repaired_netproxy_contract_campaign_still_gated"
+    )
+
+
 def test_current_repaired_web_campaign_budget_binds_runner_supervisor_and_sandbox() -> None:
     audit = json.loads(CURRENT_REPAIR_AUDIT_PATH.read_bytes())
     unsigned = dict(audit)
@@ -130,13 +150,14 @@ def test_current_repaired_web_campaign_budget_binds_runner_supervisor_and_sandbo
             "collection_launcher",
             "collection_supervisor",
             "qualification_worker",
+            "qualification_execution_packet",
         )
     }
     for name, path in paths.items():
         assert _sha256(path) == source[f"{name}_file_sha256"]
     assert (
-        _sha256(ROOT / source["historical_split_probe_audit_path"])
-        == source["historical_split_probe_audit_file_sha256"]
+        _sha256(ROOT / source["historical_netproxy_audit_path"])
+        == source["historical_netproxy_audit_file_sha256"]
     )
     assert (
         _sha256(ROOT / source["runtime_failure_evidence_path"])
@@ -216,17 +237,18 @@ def test_current_repaired_web_campaign_budget_binds_runner_supervisor_and_sandbo
     assert observed["supervisor_poll_horizon"] <= observed["sandbox_lifetime"]
     assert plan["execution"]["launchable_now"] is False
     assert (
-        audit["classification"] == "runtime_budget_repaired_netproxy_contract_campaign_still_gated"
+        audit["classification"]
+        == "runtime_budget_repaired_prompt_preflight_parity_campaign_still_gated"
     )
-    assert audit["checks"]["noreplace_swap_runner_bound_to_current_source"] is True
-    assert audit["checks"]["production_user_identity_probe_bound_to_current_source"] is True
-    assert audit["checks"]["isolated_nonroot_write_probe_bound_to_current_source"] is True
-    assert audit["checks"]["nested_to_worker_acknowledgement_bound_to_current_source"] is True
-    assert audit["checks"]["one_task_owner_claim_bound_to_current_source"] is True
-    assert audit["checks"]["cage_netproxy_runtime_contract_bound_to_current_source"] is True
-    assert audit["checks"]["qualification_netproxy_parity_bound_to_current_source"] is True
-    assert audit["checks"]["cleanup_exact_once_hold_bound_to_current_source"] is True
-    assert audit["checks"]["historical_split_probe_receipt_preserved"] is True
+    assert audit["checks"]["prompt_runtime_dependency_probe_bound_to_current_source"] is True
+    assert audit["checks"]["prompt_render_before_netproxy_bound_to_current_source"] is True
+    assert audit["checks"]["non_strict_prompt_receipt_validation_bound_to_current_source"] is True
+    assert (
+        audit["checks"]["qualification_netproxy_network_restoration_bound_to_current_source"]
+        is True
+    )
+    assert audit["checks"]["isolated_release_reconciliation_import_bound_to_current_source"] is True
+    assert audit["checks"]["historical_netproxy_receipt_preserved"] is True
     assert audit["checks"]["fresh_model_free_runtime_qualification_still_required"] is True
     assert audit["operation"] == {
         "provider_requests": 0,
