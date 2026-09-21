@@ -19,6 +19,9 @@ from training.checkpoint_serving_route import (
 
 ROOT = Path(__file__).resolve().parents[1]
 LR30_ROUTE = ROOT / "configs/evaluation/qwen38-lr30-step76-serving-route-plan-v1.json"
+LR30_REGISTRATION = (
+    ROOT / "docs/evidence/qwen38-lr30-step76-matched-serving-registration-20260921.json"
+)
 
 
 def _base() -> dict:
@@ -100,6 +103,29 @@ def test_lr30_step76_route_plan_is_offline_paused_exact_base_clone() -> None:
     assert plan["normalized_contract_sha256"] == (
         "sha256:d82d78721f4ec8d4b0d6228242df4838b38086a48108e57fc6fe4e7be1fa3662"
     )
+
+
+def test_lr30_step76_route_registration_is_paused_zero_gpu_and_bound_to_plan() -> None:
+    plan = json.loads(LR30_ROUTE.read_text())
+    evidence = json.loads(LR30_REGISTRATION.read_text())
+    claimed = evidence.pop("sha256")
+    committed_plan = evidence["registration"]["committed_plan"]
+
+    assert claimed == _digest(evidence)
+    assert committed_plan["plan_sha256"] == plan["plan_sha256"]
+    assert committed_plan["registration_sha256"] == plan["registration_sha256"]
+    assert evidence["registration"]["create_result"]["post_attempts"] == 1
+    assert evidence["registration"]["create_result"]["second_post_performed"] is False
+    assert evidence["target_readback"]["spec_exactly_matches_committed_plan"] is True
+    assert evidence["target_readback"]["desired_state"] == "paused"
+    assert evidence["target_readback"]["minimum_replicas"] == 0
+    assert evidence["target_readback"]["active_pods"] == 0
+    assert evidence["target_readback"]["ready_replicas"] == 0
+    assert evidence["target_readback"]["pod_count"] == 0
+    assert evidence["target_readback"]["gpus_allocated"] == 0
+    assert evidence["scientific_boundary"]["live_route_resumed"] is False
+    assert evidence["scientific_boundary"]["evaluation_launched"] is False
+    assert evidence["next_gate"]["external_evaluation_launchable"] is False
 
 
 def test_rejects_non_sha_revision() -> None:
