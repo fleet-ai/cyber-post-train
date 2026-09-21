@@ -1,10 +1,11 @@
-"""Fail-closed, create-once SFT fallback when the Jobs API omits one annotation.
+"""Fail-closed, create-once fallbacks when the Jobs API omits one annotation.
 
 The Jobs API remains the rendering authority.  This module accepts its live
 preview, changes only the run identity, removes the API-only Fleet credential
 Secret that SFT does not consume, and adds the project-required root alert
 annotation.  It never calls the Jobs API create endpoint and never applies or
-patches a Kubernetes object.
+patches a Kubernetes object.  The non-SFT exception is restricted to one exact
+LR30 step-76 HF inference-forward qualification schema.
 """
 
 from __future__ import annotations
@@ -148,6 +149,15 @@ def _assert_sft_contract(plan: dict, request: dict) -> None:
         raise JobsError("direct fallback is restricted to current c1/q1 policy")
 
 
+def _assert_lr30_contract(plan: dict, request: dict, *, require_launchable: bool) -> None:
+    from training.qwen38_lr30_step76_gate import validate_submission_contract
+
+    try:
+        validate_submission_contract(plan, request, require_launchable=require_launchable)
+    except ValueError as exc:
+        raise JobsError(str(exc)) from None
+
+
 def _expected_generated_env(request: dict, placeholder_name: str) -> dict[str, str]:
     return {
         "FLEET_EXTERNAL_RAY": "1",
@@ -188,11 +198,14 @@ def _parse_preview(preview: dict) -> dict:
     return obj
 
 
-def render_sft_rayjob(
-    plan: dict, request: dict, preview: dict, *, run_id: str | None = None
+def _render_rayjob(
+    request: dict,
+    preview: dict,
+    *,
+    expected_secrets: list[str],
+    run_id: str | None = None,
 ) -> tuple[dict, dict]:
     """Return one reviewed RayJob and a sanitized proof; create nothing."""
-    _assert_sft_contract(plan, request)
     source = _parse_preview(preview)
     obj = deepcopy(source)
     expected_placeholder_name = request["name"] + "-00000000"
@@ -243,12 +256,12 @@ def render_sft_rayjob(
                 raise JobsError(f"{group_name} template run-name drift")
             containers = template["spec"]["containers"]
             if not isinstance(containers, list) or len(containers) != 1:
-                raise JobsError(f"{group_name} must contain exactly one SFT container")
+                raise JobsError(f"{group_name} must contain exactly one workload container")
             container = containers[0]
             if _env(container) != expected_env:
                 raise JobsError(f"{group_name} generated environment drift")
             names = _secret_names(container)
-            if names != [SFT_SECRET, generated_secret]:
+            if names != [*expected_secrets, generated_secret]:
                 raise JobsError(f"{group_name} Secret injection drift")
             container["envFrom"] = [
                 entry
@@ -340,6 +353,22 @@ def render_sft_rayjob(
         "name": run_name,
         "removed_api_fleet_secrets": removed,
     }
+
+
+def render_sft_rayjob(
+    plan: dict, request: dict, preview: dict, *, run_id: str | None = None
+) -> tuple[dict, dict]:
+    """Render the maintained SFT-only direct-create fallback."""
+    _assert_sft_contract(plan, request)
+    return _render_rayjob(request, preview, expected_secrets=[SFT_SECRET], run_id=run_id)
+
+
+def render_lr30_qualification_rayjob(
+    plan: dict, request: dict, preview: dict, *, run_id: str | None = None
+) -> tuple[dict, dict]:
+    """Render only the exact LR30 step-76 HF inference-forward qualification."""
+    _assert_lr30_contract(plan, request, require_launchable=False)
+    return _render_rayjob(request, preview, expected_secrets=[], run_id=run_id)
 
 
 def _json_object(payload: str, operation: str) -> dict:
@@ -504,27 +533,23 @@ def _append_journal(path: Path, value: dict) -> None:
         os.fsync(stream.fileno())
 
 
-def direct_submit_sft_once(
+def _direct_submit_once(
     *,
     plan: dict,
     request: dict,
     jobs: Any,
     kubectl: Kubectl,
     journal: Path,
+    renderer: Any,
     run_id: str | None = None,
 ) -> dict:
     """Preview, prove, journal and issue exactly one direct Kubernetes create."""
-    _assert_sft_contract(plan, request)
-    from training.sft import job_request
-
-    if job_request(plan) != request:
-        raise JobsError("saved SFT request differs from the current source-bound renderer")
     if journal.exists() or journal.is_symlink():
         raise JobsError("direct-create journal already exists; reconcile, never retry")
 
     _assert_api_unique(jobs.all_runs(), request)
     preview = jobs.raw_preview(request)
-    manifest, proof = render_sft_rayjob(plan, request, preview, run_id=run_id)
+    manifest, proof = renderer(plan, request, preview, run_id=run_id)
     _assert_kubernetes_unique(
         [kubectl.list("rayjobs.ray.io"), kubectl.list("jobs.batch")], request, proof
     )
@@ -567,3 +592,55 @@ def direct_submit_sft_once(
     }
     _append_journal(journal, {"state": "KUBECTL_CREATE_RESPONSE", **result})
     return result
+
+
+def direct_submit_sft_once(
+    *,
+    plan: dict,
+    request: dict,
+    jobs: Any,
+    kubectl: Kubectl,
+    journal: Path,
+    run_id: str | None = None,
+) -> dict:
+    """Create one source-bound SFT RayJob through the maintained fallback."""
+    _assert_sft_contract(plan, request)
+    from training.sft import job_request
+
+    if job_request(plan) != request:
+        raise JobsError("saved SFT request differs from the current source-bound renderer")
+    return _direct_submit_once(
+        plan=plan,
+        request=request,
+        jobs=jobs,
+        kubectl=kubectl,
+        journal=journal,
+        renderer=render_sft_rayjob,
+        run_id=run_id,
+    )
+
+
+def direct_submit_lr30_qualification_once(
+    *,
+    plan: dict,
+    request: dict,
+    jobs: Any,
+    kubectl: Kubectl,
+    journal: Path,
+    run_id: str | None = None,
+) -> dict:
+    """Create only the approved LR30 step-76 HF inference-forward qualification."""
+    _assert_lr30_contract(plan, request, require_launchable=True)
+    from training.qwen38_lr30_step76_gate import job_request
+
+    if job_request() != request:
+        raise JobsError("saved LR30 request differs from the current source-bound renderer")
+    return _direct_submit_once(
+        plan=plan,
+        request=request,
+        jobs=jobs,
+        kubectl=kubectl,
+        journal=journal,
+        renderer=render_lr30_qualification_rayjob,
+        run_id=run_id,
+    )
