@@ -15,12 +15,16 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import ctypes
+import errno
 import hashlib
 import inspect
 import json
 import math
 import os
 import re
+import shutil
+import stat
 import subprocess
 import sys
 import time
@@ -30,19 +34,30 @@ import uuid
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from cyber_post_train.jobs import bundled_request
-
 SCHEMA = "cyber_qwen38_miles96_mechanics_canary_v1"
 TRAIN_RECEIPT_SCHEMA = "cyber_qwen38_miles96_update_export_receipt_v1"
 RELOAD_RECEIPT_SCHEMA = "cyber_qwen38_miles96_reload_receipt_v1"
+REWARD_GATE_SCHEMA = "cyber_qwen38_miles96_selected_reward_group_v1"
+PRIVATE_EPISODE_SCHEMA = "cyber_qwen38_miles96_private_episode_v1"
+COMPLETE_MODEL_SCHEMA = "cyber_qwen38_miles96_complete_model_v1"
+CHECKPOINT_MANIFEST_SCHEMA = "cyber_qwen38_miles96_checkpoint_manifest_v1"
 IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/miles-trainer@sha256:"
     "ee273bee346ad8e1cea63d18026b2bc5703bbd2e14d3c65efbbd74f19854874a"
 )
-THESEUS_COMMIT = "f2b0cb5db7c0a9dcc2210943f2ee1df31f9b50fc"
+# This is the source commit used to build the pinned 0.10.9 image.  The later
+# 0.10.10 source exists in Theseus, but its changelog explicitly says that no
+# image was built.  Never claim 0.10.10 for the 0.10.9 image below.
+THESEUS_COMMIT = "224d6b81cb698f4785fb16123314583b981493f3"
 MILES_COMMIT = "9e178ca16839b0600155f3927f57ce0670b8f453"
-FTI_VERSION = "0.10.10"
-RUN_FLEET_SHA256 = "6f396d9fce6344ac7a8d6a3b5884c2258d50b2760c343d2d37eded2c5c25d582"
+FTI_VERSION = "0.10.9"
+RUN_FLEET_SHA256 = "340be7e1d1976fdd5f42f1ed934c07ae8aa98cb520d9af21bda2933ddd146faa"
+FTI_COMMON_SHA256 = "0a6801afe0cea5e4c0b6a53ffe07c083cc7e3691cf231dff460889e79c1626b0"
+FTI_CLIENT_RECORDING_SHA256 = "41292533ec356a51a722c2c98f92bdfd98c56fdce429537a816957bf7172e9dc"
+MILES_INFERENCE_ROLLOUT_SHA256 = "96e3cba12ae033527e823ed3dd8cb43c31d244775756ecf0bab4ad81eb4f06a4"
+MILES_HTTP_UTILS_SHA256 = "da630d6594c86d76e89a262d1060c7f81238da9659899dea917987c5f39fab86"
+MILES_MEGATRON_ACTOR_SHA256 = "eecd72a4387511916add2c97d9e2dad6716db9097fd6ec471468c1f7edc074b9"
+MILES_HF_EXPORT_SHA256 = "4986684bb62acf2ccd0e18a5ab7cf6bd50391f42d42be35ad3a377b36bbd4a34"
 RECIPE = "qwen3.8-27b"
 MODEL = "Qwen/Qwen3.8-27B"
 CONTEXT_TOKENS = 98_304
@@ -63,6 +78,17 @@ RELOAD_RESOURCES = {
 LAUNCH_FILE = "LAUNCH.json"
 UPDATE_FILE = "UPDATE_AND_EXPORT.json"
 RELOAD_FILE = "RELOAD_VALIDATED.json"
+REWARD_GATE_FILE = "REWARD_GATE.json"
+COMPLETE_MODEL_FILE = "COMPLETE_MODEL.json"
+PRIVATE_EVIDENCE_DIR = ".private-reward-evidence"
+PRIVATE_SELECTED_FILE = "SELECTED_GROUP.json"
+PRIVATE_CHECKPOINT_FILE = "CHECKPOINT_MANIFEST.json"
+RAW_HF_STEP = "hf/step-0"
+COMPLETE_HF_STEP = "hf-complete/step-0"
+FROZEN_TENSOR_PREFIXES = ("model.visual.", "mtp.")
+PROD_JOBS_API = "https://api.ft.flt.build"
+PROD_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
+NAMESPACE = "fleet-train-jobs"
 
 
 def digest(value: Any) -> str:
@@ -73,7 +99,11 @@ def digest(value: Any) -> str:
 
 
 def file_sha256(path: Path) -> str:
-    return hashlib.sha256(path.read_bytes()).hexdigest()
+    value = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(8 * 1024 * 1024), b""):
+            value.update(block)
+    return value.hexdigest()
 
 
 def _sha256(value: object, field: str) -> str:
@@ -127,6 +157,14 @@ def _write_once(path: Path, payload: bytes) -> None:
         os.fsync(stream.fileno())
 
 
+def _private_directory(run_dir: Path) -> Path:
+    path = run_dir / PRIVATE_EVIDENCE_DIR
+    path.mkdir(mode=0o700, exist_ok=True)
+    if path.is_symlink() or stat.S_IMODE(path.stat().st_mode) != 0o700:
+        raise ValueError("private evidence directory is not mode 0700")
+    return path
+
+
 def build_plan(
     *,
     name: str,
@@ -157,6 +195,18 @@ def build_plan(
             "miles_commit": MILES_COMMIT,
             "fti_version": FTI_VERSION,
             "run_fleet_sha256": RUN_FLEET_SHA256,
+            "fti_common_sha256": FTI_COMMON_SHA256,
+            "fti_client_recording_sha256": FTI_CLIENT_RECORDING_SHA256,
+            "miles_inference_rollout_sha256": MILES_INFERENCE_ROLLOUT_SHA256,
+            "miles_http_utils_sha256": MILES_HTTP_UTILS_SHA256,
+            "miles_megatron_actor_sha256": MILES_MEGATRON_ACTOR_SHA256,
+            "miles_hf_export_sha256": MILES_HF_EXPORT_SHA256,
+        },
+        "execution": {
+            "cluster_target": "prod",
+            "jobs_api_base_url": PROD_JOBS_API,
+            "kubernetes_context": PROD_CONTEXT,
+            "namespace": NAMESPACE,
         },
         "prepared_model": {
             "root": model_root,
@@ -219,6 +269,7 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "schema",
         "identity",
         "trainer",
+        "execution",
         "prepared_model",
         "task_binding",
         "episode",
@@ -248,9 +299,22 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
         "miles_commit": MILES_COMMIT,
         "fti_version": FTI_VERSION,
         "run_fleet_sha256": RUN_FLEET_SHA256,
+        "fti_common_sha256": FTI_COMMON_SHA256,
+        "fti_client_recording_sha256": FTI_CLIENT_RECORDING_SHA256,
+        "miles_inference_rollout_sha256": MILES_INFERENCE_ROLLOUT_SHA256,
+        "miles_http_utils_sha256": MILES_HTTP_UTILS_SHA256,
+        "miles_megatron_actor_sha256": MILES_MEGATRON_ACTOR_SHA256,
+        "miles_hf_export_sha256": MILES_HF_EXPORT_SHA256,
     }
     if value["trainer"] != expected_trainer:
         raise ValueError("maintained 96K Miles trainer binding drift")
+    if value["execution"] != {
+        "cluster_target": "prod",
+        "jobs_api_base_url": PROD_JOBS_API,
+        "kubernetes_context": PROD_CONTEXT,
+        "namespace": NAMESPACE,
+    }:
+        raise ValueError("production execution binding drift")
 
     prepared = value["prepared_model"]
     if set(prepared) != {"root", "binding_sha256"}:
@@ -264,6 +328,7 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     expected_task_fields = {
         "task_key",
         "task_version_id",
+        "verifier_version_id",
         "task_set_sha256",
         "tool_catalog_sha256",
         "authority_receipt_sha256",
@@ -273,8 +338,18 @@ def validate_plan(plan: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(task["task_key"], str) or not task["task_key"].strip():
         raise ValueError("task binding needs an exact task key")
     _uuid(task["task_version_id"], "task version")
-    for field in expected_task_fields - {"task_key", "task_version_id"}:
+    _uuid(task["verifier_version_id"], "verifier version")
+    for field in expected_task_fields - {"task_key", "task_version_id", "verifier_version_id"}:
         _sha256(task[field], field)
+    authority = {
+        "task_key": task["task_key"],
+        "task_version_id": task["task_version_id"],
+        "verifier_version_id": task["verifier_version_id"],
+        "task_set_sha256": task["task_set_sha256"],
+        "tool_catalog_sha256": task["tool_catalog_sha256"],
+    }
+    if task["authority_receipt_sha256"] != "sha256:" + digest(authority):
+        raise ValueError("task authority receipt digest is not self-consistent")
 
     expected_episode = {
         "max_turns": 32,
@@ -385,12 +460,20 @@ def native_arguments(plan: dict[str, Any]) -> list[str]:
     extra = " ".join(
         (
             "--num-rollout 1",
+            # FTI 0.10.9 defaults to two candidate prompt groups.  This
+            # mechanics canary deliberately collects exactly one group of
+            # eight episodes, so bind the Miles override explicitly.
+            "--over-sampling-batch-size 1",
             "--save-interval 1",
             f"--save-hf {run_dir}/hf/step-{{rollout_id}}",
             f"--lr {optim['learning_rate']}",
             f"--seed {optim['seed']}",
             f"--rollout-seed {optim['seed']}",
             f"--dynamic-sampling-filter-path {REWARD_FILTER}",
+            "--custom-generate-function-path "
+            "training.miles96_mechanics_canary.generate_with_evidence",
+            "--rollout-sample-filter-path "
+            "training.miles96_mechanics_canary.record_selected_reward_group",
             "--custom-megatron-post-save-hook-path "
             "training.miles96_mechanics_canary.post_save_hook",
             _wandb_args(plan),
@@ -451,11 +534,13 @@ def _runtime_files(plan: dict[str, Any]) -> dict[str, str]:
 
 def job_request(plan: dict[str, Any]) -> dict[str, Any]:
     """Render a one-node request; this function cannot submit it."""
+    from cyber_post_train.jobs import bundled_request
+
     plan = validate_plan(plan)
     identity = plan["identity"]
     request = {
         "name": identity["name"],
-        "title": "Qwen3.8 96K Miles V1 mechanics canary",
+        "title": f"Qwen3.8 96K Miles V1 mechanics canary: {identity['name']}",
         "run_dir": identity["run_dir"],
         "image": IMAGE,
         "command": "placeholder",
@@ -496,12 +581,31 @@ def job_request(plan: dict[str, Any]) -> dict[str, Any]:
 
 def _runtime_recipe_binding() -> None:
     import fti
+    import miles
+    from fti.miles.v1 import client_recording
+    from fti.miles.v1 import common as fti_common
     from fti.trainers.miles import run_fleet
 
     if fti.__version__ != FTI_VERSION:
         raise ValueError("FTI version drift")
     if file_sha256(Path(run_fleet.__file__)) != RUN_FLEET_SHA256:
         raise ValueError("maintained run_fleet source drift")
+    if file_sha256(Path(fti_common.__file__)) != FTI_COMMON_SHA256:
+        raise ValueError("maintained V1 task-session source drift")
+    if file_sha256(Path(client_recording.__file__)) != FTI_CLIENT_RECORDING_SHA256:
+        raise ValueError("maintained V1 rollout source drift")
+    miles_root = Path(miles.__file__).resolve().parent
+    if (
+        file_sha256(miles_root / "rollout/inference_rollout/inference_rollout_common.py")
+        != MILES_INFERENCE_ROLLOUT_SHA256
+    ):
+        raise ValueError("maintained Miles inference-rollout source drift")
+    if file_sha256(miles_root / "utils/http_utils.py") != MILES_HTTP_UTILS_SHA256:
+        raise ValueError("maintained Miles HTTP source drift")
+    if file_sha256(miles_root / "backends/megatron_utils/actor.py") != MILES_MEGATRON_ACTOR_SHA256:
+        raise ValueError("maintained Miles checkpoint/export source drift")
+    if file_sha256(miles_root / "backends/megatron_utils/hf_export.py") != MILES_HF_EXPORT_SHA256:
+        raise ValueError("maintained Miles HF-export source drift")
     recipe = run_fleet._RECIPES.get(RECIPE)
     expected = {
         "max_context_len": CONTEXT_TOKENS,
@@ -518,6 +622,7 @@ def _runtime_recipe_binding() -> None:
         not isinstance(shape, str)
         or "--tensor-model-parallel-size 4" not in shape
         or ("--context-parallel-size 2" not in shape)
+        or recipe.extra_sglang_args != "--sglang-attention-backend triton "
     ):
         raise ValueError("maintained one-node TP4/CP2 shape drift")
 
@@ -599,24 +704,647 @@ def _load_runtime_plan() -> dict[str, Any]:
     return validate_plan(plan)
 
 
+_EVIDENCE_SESSION_CLASS: type | None = None
+
+
+def _evidence_session_class() -> type:
+    """Build the maintained V1 session subclass lazily inside the pinned image."""
+    global _EVIDENCE_SESSION_CLASS
+    if _EVIDENCE_SESSION_CLASS is not None:
+        return _EVIDENCE_SESSION_CLASS
+
+    from fti.fleet import GradeResult
+    from fti.fleet.v1 import PlatformError
+    from fti.miles.v1.common import TaskSession, numeric_reward
+
+    class EvidenceTaskSession(TaskSession):
+        verifier_execution_id: str | None = None
+        authority_evidence_sha256: str | None = None
+
+        def open(self) -> None:
+            super().open()
+            plan = _load_runtime_plan()
+            binding = plan["task_binding"]
+            if (
+                self.task_key != binding["task_key"]
+                or self.task_version_id != binding["task_version_id"]
+                or self.verifier_version_id != binding["verifier_version_id"]
+                or "sha256:" + digest(self.tools) != binding["tool_catalog_sha256"]
+            ):
+                self.close()
+                raise ValueError("live V1 task authority differs from the immutable plan")
+
+        def grade(self, answer, reset_ack=None, close_final_step=False):
+            del reset_ack, close_final_step
+            if self.closed.is_set():
+                raise PlatformError("episode is closed")
+            if self.instance is None or self.verifier_version_id is None:
+                raise PlatformError("episode authority is incomplete")
+            result = self.client.execute_verifier(
+                self.verifier_version_id,
+                self.instance.instance_id,
+                final_answer=answer,
+                conversation=self.conversation if self.cfg.pass_conversation_to_verifier else None,
+                timeout_s=self.cfg.grade_timeout_s,
+            )
+            if result.get("success") is not True:
+                raise PlatformError("registered verifier execution failed")
+            execution_id = (
+                result.get("verifier_execution_id") or result.get("job_id") or result.get("id")
+            )
+            self.verifier_execution_id = _uuid(execution_id, "verifier execution identity")
+            verdict = result.get("result")
+            value = verdict.get("result") if isinstance(verdict, dict) else verdict
+            return GradeResult(reward=numeric_reward(value))
+
+    _EVIDENCE_SESSION_CLASS = EvidenceTaskSession
+    return EvidenceTaskSession
+
+
+def _evidence_episode_metadata(session: Any, result: Any, stats: Any) -> dict[str, Any]:
+    """Persist exact V1 authority privately and expose only its digest to Miles."""
+    if session.authority_evidence_sha256 is not None:
+        return {
+            "authority_evidence_sha256": session.authority_evidence_sha256,
+            "authority_verified": True,
+            "cleanup_confirmed": True,
+            "done_reason": result.done_reason,
+            "turns": stats.turns,
+            "round_number": stats.turns,
+            "tool_calls": stats.tool_calls,
+            "images": stats.images,
+        }
+    plan = _load_runtime_plan()
+    if (
+        session.instance is None
+        or session.verifier_execution_id is None
+        or not session.deleted
+        or session.cleanup_error is not None
+        or result.grade is None
+    ):
+        raise ValueError("V1 episode authority or cleanup evidence is incomplete")
+    reward = float(result.grade.reward)
+    if not math.isfinite(reward):
+        raise ValueError("V1 episode reward is not finite")
+    body = {
+        "schema": PRIVATE_EPISODE_SCHEMA,
+        "plan_sha256": "sha256:" + digest(plan),
+        "task_key": session.task_key,
+        "task_version_id": _uuid(session.task_version_id, "task version"),
+        "verifier_version_id": _uuid(session.verifier_version_id, "verifier version"),
+        "instance_id": _uuid(session.instance.instance_id, "instance identity"),
+        "verifier_execution_id": session.verifier_execution_id,
+        "reward": reward,
+        "cleanup_confirmed": True,
+    }
+    payload = {**body, "sha256": "sha256:" + digest(body)}
+    evidence_dir = _private_directory(
+        Path(os.environ.get("CYBER_EVIDENCE_RUN_DIR", plan["identity"]["run_dir"]))
+    )
+    _write_once(
+        evidence_dir / (payload["sha256"].removeprefix("sha256:") + ".json"),
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode() + b"\n",
+    )
+    session.authority_evidence_sha256 = payload["sha256"]
+    return {
+        "authority_evidence_sha256": payload["sha256"],
+        "authority_verified": True,
+        "cleanup_confirmed": True,
+        "done_reason": result.done_reason,
+        "turns": stats.turns,
+        "round_number": stats.turns,
+        "tool_calls": stats.tool_calls,
+        "images": stats.images,
+    }
+
+
+async def generate_with_evidence(input: Any) -> Any:
+    """Run the maintained V1 generator with exact authority evidence attached."""
+    from fti.miles.v1 import client_recording
+
+    client_recording.TaskSession = _evidence_session_class()
+    client_recording.episode_metadata = _evidence_episode_metadata
+    return await client_recording.generate(input)
+
+
+def _generate_add_arguments(parser: Any) -> None:
+    from fti.miles.v1.client_recording import add_arguments
+
+    add_arguments(parser)
+
+
+generate_with_evidence.add_arguments = _generate_add_arguments
+
+
+def _selected_samples(data: list[Any]) -> list[Any]:
+    samples: list[Any] = []
+    for group in data:
+        if not isinstance(group, list):
+            raise ValueError("selected reward group is malformed")
+        for item in group:
+            samples.extend(item if isinstance(item, list) else [item])
+    return samples
+
+
+def record_selected_reward_group(args: Any, data: list[Any]) -> None:
+    """Seal the exact post-filter group that will feed the sole optimizer update."""
+    plan = _load_runtime_plan()
+    if (
+        getattr(args, "rollout_batch_size", None) != 1
+        or getattr(args, "n_samples_per_prompt", None) != 8
+        or len(data) != 1
+    ):
+        raise ValueError("selected reward group differs from the one-update plan")
+    refs: set[str] = set()
+    for sample in _selected_samples(data):
+        metadata = getattr(sample, "metadata", None) or {}
+        fleet = metadata.get("fleet_v1") if isinstance(metadata, dict) else None
+        ref = fleet.get("authority_evidence_sha256") if isinstance(fleet, dict) else None
+        if isinstance(ref, str):
+            _sha256(ref, "authority evidence")
+            refs.add(ref)
+    if len(refs) != plan["optimization"]["samples_per_prompt"]:
+        raise ValueError("selected group lacks eight unique authoritative episodes")
+
+    evidence_dir = _private_directory(Path(plan["identity"]["run_dir"]))
+    episodes = []
+    for ref in sorted(refs):
+        path = evidence_dir / (ref.removeprefix("sha256:") + ".json")
+        value = json.loads(path.read_text())
+        body = {key: item for key, item in value.items() if key != "sha256"}
+        if (
+            value.get("schema") != PRIVATE_EPISODE_SCHEMA
+            or value.get("sha256") != "sha256:" + digest(body)
+            or value.get("sha256") != ref
+            or value.get("plan_sha256") != "sha256:" + digest(plan)
+            or value.get("task_key") != plan["task_binding"]["task_key"]
+            or value.get("task_version_id") != plan["task_binding"]["task_version_id"]
+            or value.get("verifier_version_id") != plan["task_binding"]["verifier_version_id"]
+            or value.get("cleanup_confirmed") is not True
+        ):
+            raise ValueError("private episode authority evidence is invalid")
+        episodes.append(value)
+    execution_ids = {item["verifier_execution_id"] for item in episodes}
+    instance_ids = {item["instance_id"] for item in episodes}
+    rewards = [item["reward"] for item in episodes]
+    if (
+        len(execution_ids) != len(episodes)
+        or len(instance_ids) != len(episodes)
+        or any(
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(float(value))
+            for value in rewards
+        )
+        or max(rewards) == min(rewards)
+    ):
+        raise ValueError("selected verifier rewards lack unique authority or variation")
+
+    private_body = {
+        "schema": REWARD_GATE_SCHEMA + "_private",
+        "plan_sha256": "sha256:" + digest(plan),
+        "native_rollout_id": 0,
+        "optimizer_updates": 1,
+        "episode_receipts": sorted(refs),
+        "verifier_execution_ids": sorted(execution_ids),
+        "instance_ids": sorted(instance_ids),
+        "rewards": rewards,
+    }
+    private = {**private_body, "sha256": "sha256:" + digest(private_body)}
+    _write_once(
+        evidence_dir / PRIVATE_SELECTED_FILE,
+        json.dumps(private, sort_keys=True, separators=(",", ":")).encode() + b"\n",
+    )
+    public_body = {
+        "schema": REWARD_GATE_SCHEMA,
+        "plan_sha256": "sha256:" + digest(plan),
+        "native_rollout_id": 0,
+        "optimizer_updates": 1,
+        "selected_episode_count": len(episodes),
+        "finite_rewards": True,
+        "reward_variation": True,
+        "unique_verifier_executions": len(execution_ids),
+        "all_instances_released": True,
+        "private_evidence_sha256": private["sha256"],
+    }
+    public = {**public_body, "sha256": "sha256:" + digest(public_body)}
+    _write_once(
+        Path(plan["identity"]["run_dir"]) / REWARD_GATE_FILE,
+        json.dumps(public, sort_keys=True, separators=(",", ":")).encode() + b"\n",
+    )
+
+
+def _hf_index(root: Path) -> dict[str, str]:
+    from safetensors import safe_open
+
+    try:
+        value = json.loads((root / "model.safetensors.index.json").read_text())
+        weight_map = value["weight_map"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise ValueError("HF safetensors index is absent or malformed") from exc
+    if (
+        not isinstance(weight_map, dict)
+        or not weight_map
+        or any(
+            not isinstance(key, str)
+            or not key
+            or not isinstance(filename, str)
+            or PurePosixPath(filename).name != filename
+            or not filename.endswith(".safetensors")
+            for key, filename in weight_map.items()
+        )
+    ):
+        raise ValueError("HF safetensors weight map is invalid")
+    indexed_by_shard: dict[str, set[str]] = {}
+    for key, filename in weight_map.items():
+        indexed_by_shard.setdefault(filename, set()).add(key)
+    for filename, indexed_keys in indexed_by_shard.items():
+        path = root / filename
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("HF safetensors shard is absent or unsafe")
+        with safe_open(path, framework="pt", device="cpu") as handle:
+            actual_keys = set(handle.keys())
+        if actual_keys != indexed_keys:
+            raise ValueError("HF safetensors shard contents differ from its index")
+    return weight_map
+
+
+def _tensor_record(root: Path, filename: str, key: str) -> tuple[dict[str, Any], Any]:
+    import torch
+    from safetensors import safe_open
+
+    with safe_open(root / filename, framework="pt", device="cpu") as handle:
+        # ``safe_open`` exposes keys(), but is intentionally not iterable.
+        if key not in handle.keys():  # noqa: SIM118
+            raise ValueError("HF index points to a missing tensor")
+        tensor = handle.get_tensor(key).contiguous()
+    raw = tensor.view(torch.uint8).numpy()
+    value = hashlib.sha256()
+    value.update(memoryview(raw))
+    record = {
+        "shape": list(tensor.shape),
+        "dtype": str(tensor.dtype),
+        "tensor_sha256": "sha256:" + value.hexdigest(),
+    }
+    return record, tensor
+
+
+def _copy_sidecars(base: Path, destination: Path, weight_files: set[str]) -> list[str]:
+    copied = []
+    excluded = weight_files | {"model.safetensors.index.json", ".complete", COMPLETE_MODEL_FILE}
+    for source in sorted(base.iterdir(), key=lambda path: path.name):
+        if source.name in excluded:
+            continue
+        target = destination / source.name
+        if source.is_symlink():
+            raise ValueError("base model sidecars may not be symlinks")
+        if source.is_file():
+            shutil.copy2(source, target)
+        elif source.is_dir():
+            shutil.copytree(source, target, symlinks=False)
+        else:
+            raise ValueError("base model contains an unsupported sidecar")
+        copied.append(source.name)
+    if "config.json" not in copied:
+        raise ValueError("complete model lacks the exact base config")
+    return copied
+
+
+def _all_file_records(
+    root: Path, *, exclude_complete_model_markers: bool = True
+) -> list[dict[str, Any]]:
+    result = []
+    for path in sorted(root.rglob("*")):
+        if path.is_symlink():
+            raise ValueError("complete model contains a symlink")
+        if not path.is_file() or (
+            exclude_complete_model_markers and path.name in {COMPLETE_MODEL_FILE, ".complete"}
+        ):
+            continue
+        relative = path.relative_to(root).as_posix()
+        result.append(
+            {
+                "path": relative,
+                "bytes": path.stat().st_size,
+                "sha256": "sha256:" + file_sha256(path),
+            }
+        )
+    return result
+
+
+def _rename_noreplace(source: Path, destination: Path) -> None:
+    if sys.platform.startswith("linux"):
+        libc = ctypes.CDLL(None, use_errno=True)
+        renameat2 = getattr(libc, "renameat2", None)
+        if renameat2 is None:
+            raise OSError(errno.ENOSYS, "renameat2 is required for create-once publication")
+        renameat2.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        renameat2.restype = ctypes.c_int
+        if renameat2(-100, os.fsencode(source), -100, os.fsencode(destination), 1) != 0:
+            error = ctypes.get_errno()
+            raise OSError(error, os.strerror(error), str(destination))
+        return
+    # Local Darwin tests cannot call renameat2.  The exclusive durable lock
+    # preserves create-once behavior for cooperating publishers; cluster
+    # execution always takes the stronger Linux kernel path above.
+    lock = destination.with_name(destination.name + ".publish.lock")
+    descriptor = os.open(lock, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    os.close(descriptor)
+    try:
+        if destination.exists() or destination.is_symlink():
+            raise FileExistsError("complete model destination already exists")
+        os.rename(source, destination)
+    finally:
+        lock.unlink(missing_ok=True)
+
+
+def compose_complete_model(plan: dict[str, Any], raw_hf: Path) -> dict[str, Any]:
+    """Compose trained text tensors with exact frozen Qwen VLM tensors and sidecars."""
+    import safetensors.torch
+    import torch
+
+    plan = validate_plan(plan)
+    run_dir = Path(plan["identity"]["run_dir"])
+    base = Path(plan["prepared_model"]["root"]) / "Qwen3.8-27B"
+    final = run_dir / COMPLETE_HF_STEP
+    partial = final.with_name(final.name + ".partial-" + uuid.uuid4().hex)
+    _require_relative(partial, run_dir, "complete model partial path")
+    if final.exists() or final.is_symlink():
+        raise FileExistsError("complete model destination already exists")
+    if Path(raw_hf) != run_dir / RAW_HF_STEP or not (raw_hf / ".complete").is_file():
+        raise ValueError("native step-0 HF export is absent or misbound")
+    base_map, trained_map = _hf_index(base), _hf_index(raw_hf)
+    base_keys, trained_keys = set(base_map), set(trained_map)
+    if not trained_keys < base_keys:
+        raise ValueError("native HF export is not a strict subset of the exact base model")
+    frozen_keys = base_keys - trained_keys
+    if not frozen_keys or any(not key.startswith(FROZEN_TENSOR_PREFIXES) for key in frozen_keys):
+        raise ValueError("native HF export complement is not limited to frozen VLM/MTP tensors")
+
+    partial.mkdir(parents=True, mode=0o700)
+    weight_map: dict[str, str] = {}
+    tensor_manifest: dict[str, dict[str, Any]] = {}
+    total_tensor_bytes = 0
+    changed = 0
+    raw_shards = sorted(set(trained_map.values()))
+    renamed_shards = {
+        filename: f"trained-{index:05d}.safetensors"
+        for index, filename in enumerate(raw_shards, start=1)
+    }
+    for filename, renamed in renamed_shards.items():
+        shutil.copy2(raw_hf / filename, partial / renamed)
+    for key in sorted(trained_keys):
+        trained_record, trained_tensor = _tensor_record(raw_hf, trained_map[key], key)
+        base_record, base_tensor = _tensor_record(base, base_map[key], key)
+        if (
+            trained_record["shape"] != base_record["shape"]
+            or trained_record["dtype"] != base_record["dtype"]
+            or not bool(torch.isfinite(trained_tensor).all())
+        ):
+            raise ValueError("trained tensor shape, dtype, or finiteness is invalid")
+        if trained_record["tensor_sha256"] != base_record["tensor_sha256"]:
+            changed += 1
+        weight_map[key] = renamed_shards[trained_map[key]]
+        total_tensor_bytes += trained_tensor.numel() * trained_tensor.element_size()
+        tensor_manifest[key] = {
+            **trained_record,
+            "source": "trained_step_0",
+            "base_tensor_sha256": base_record["tensor_sha256"],
+        }
+        del trained_tensor, base_tensor
+    if changed < 1:
+        raise ValueError("optimizer update produced no changed trained tensor")
+
+    frozen_by_shard: dict[str, list[str]] = {}
+    for key in sorted(frozen_keys):
+        frozen_by_shard.setdefault(base_map[key], []).append(key)
+    for index, (source_shard, keys) in enumerate(sorted(frozen_by_shard.items()), start=1):
+        destination_shard = f"frozen-{index:05d}.safetensors"
+        tensors = {}
+        for key in keys:
+            record, tensor = _tensor_record(base, source_shard, key)
+            tensors[key] = tensor
+            total_tensor_bytes += tensor.numel() * tensor.element_size()
+            weight_map[key] = destination_shard
+            tensor_manifest[key] = {**record, "source": "exact_frozen_base"}
+        safetensors.torch.save_file(tensors, partial / destination_shard)
+        del tensors
+
+    sidecars = _copy_sidecars(base, partial, set(base_map.values()))
+    (partial / "model.safetensors.index.json").write_text(
+        json.dumps(
+            {"metadata": {"total_size": total_tensor_bytes}, "weight_map": weight_map},
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    )
+    body = {
+        "schema": COMPLETE_MODEL_SCHEMA,
+        "plan_sha256": "sha256:" + digest(plan),
+        "native_rollout_id": 0,
+        "optimizer_updates": 1,
+        "base_binding_sha256": plan["prepared_model"]["binding_sha256"],
+        "base_tensor_count": len(base_keys),
+        "trained_tensor_count": len(trained_keys),
+        "frozen_tensor_count": len(frozen_keys),
+        "changed_trained_tensor_count": changed,
+        "all_trained_tensors_finite": True,
+        "total_tensor_bytes": total_tensor_bytes,
+        "tensor_manifest": tensor_manifest,
+        "sidecars": sidecars,
+        "files": _all_file_records(partial),
+    }
+    manifest = {**body, "sha256": "sha256:" + digest(body)}
+    _write_once(
+        partial / COMPLETE_MODEL_FILE,
+        json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode() + b"\n",
+    )
+    _write_once(partial / ".complete", (manifest["sha256"] + "\n").encode())
+    _rename_noreplace(partial, final)
+    return manifest
+
+
+def validate_complete_model(plan: dict[str, Any], root: Path) -> dict[str, Any]:
+    """Re-hash the complete model before a one-GPU reload is attempted."""
+    import torch
+
+    plan = validate_plan(plan)
+    if Path(root) != Path(plan["identity"]["run_dir"]) / COMPLETE_HF_STEP:
+        raise ValueError("complete model path is not plan-bound")
+    try:
+        value = json.loads((root / COMPLETE_MODEL_FILE).read_text())
+    except (OSError, ValueError) as exc:
+        raise ValueError("complete model manifest is absent") from exc
+    body = {key: item for key, item in value.items() if key != "sha256"}
+    if (
+        value.get("schema") != COMPLETE_MODEL_SCHEMA
+        or value.get("plan_sha256") != "sha256:" + digest(plan)
+        or value.get("native_rollout_id") != 0
+        or value.get("optimizer_updates") != 1
+        or value.get("all_trained_tensors_finite") is not True
+        or type(value.get("changed_trained_tensor_count")) is not int
+        or value["changed_trained_tensor_count"] < 1
+        or value.get("sha256") != "sha256:" + digest(body)
+        or (root / ".complete").read_text().strip() != value.get("sha256")
+    ):
+        raise ValueError("complete model manifest identity is invalid")
+    expected_files = value.get("files")
+    if not isinstance(expected_files, list) or expected_files != _all_file_records(root):
+        raise ValueError("complete model file manifest changed")
+    weight_map = _hf_index(root)
+    tensors = value.get("tensor_manifest")
+    if (
+        not isinstance(tensors, dict)
+        or set(tensors) != set(weight_map)
+        or value.get("base_tensor_count") != len(tensors)
+        or type(value.get("trained_tensor_count")) is not int
+        or type(value.get("frozen_tensor_count")) is not int
+        or value["trained_tensor_count"] + value["frozen_tensor_count"] != len(tensors)
+        or value["changed_trained_tensor_count"] > value["trained_tensor_count"]
+        or type(value.get("total_tensor_bytes")) is not int
+        or value["total_tensor_bytes"] < 1
+    ):
+        raise ValueError("complete model tensor manifest changed")
+    try:
+        index = json.loads((root / "model.safetensors.index.json").read_text())
+    except (OSError, ValueError) as exc:
+        raise ValueError("complete model index metadata changed") from exc
+    if index.get("metadata") != {"total_size": value["total_tensor_bytes"]}:
+        raise ValueError("complete model index metadata changed")
+    trained_keys = {key for key, item in tensors.items() if item.get("source") == "trained_step_0"}
+    frozen_keys = {
+        key for key, item in tensors.items() if item.get("source") == "exact_frozen_base"
+    }
+    if (
+        trained_keys | frozen_keys != set(tensors)
+        or trained_keys & frozen_keys
+        or len(trained_keys) != value["trained_tensor_count"]
+        or len(frozen_keys) != value["frozen_tensor_count"]
+        or any(not key.startswith(FROZEN_TENSOR_PREFIXES) for key in frozen_keys)
+    ):
+        raise ValueError("complete model tensor provenance changed")
+    observed_tensor_bytes = 0
+    for key in sorted(weight_map):
+        observed, tensor = _tensor_record(root, weight_map[key], key)
+        observed_tensor_bytes += tensor.numel() * tensor.element_size()
+        expected = tensors[key]
+        if any(observed[field] != expected.get(field) for field in observed) or not bool(
+            torch.isfinite(tensor).all()
+        ):
+            raise ValueError("complete model tensor bytes changed")
+        del tensor
+    if observed_tensor_bytes != value["total_tensor_bytes"]:
+        raise ValueError("complete model tensor byte count changed")
+    return value
+
+
+def _checkpoint_manifest(plan: dict[str, Any], checkpoint: Path) -> dict[str, Any]:
+    run_dir = Path(plan["identity"]["run_dir"])
+    _require_relative(checkpoint, run_dir / "model-output" / "checkpoints", "checkpoint path")
+    if checkpoint.is_symlink() or not checkpoint.is_dir():
+        raise ValueError("native step-0 checkpoint is absent")
+    files = _all_file_records(checkpoint, exclude_complete_model_markers=False)
+    if not files:
+        raise ValueError("native step-0 checkpoint is empty")
+    body = {
+        "schema": CHECKPOINT_MANIFEST_SCHEMA,
+        "plan_sha256": "sha256:" + digest(plan),
+        "native_rollout_id": 0,
+        "optimizer_updates": 1,
+        "checkpoint_path_sha256": "sha256:" + hashlib.sha256(str(checkpoint).encode()).hexdigest(),
+        "files": files,
+    }
+    manifest = {**body, "sha256": "sha256:" + digest(body)}
+    _write_once(
+        _private_directory(run_dir) / PRIVATE_CHECKPOINT_FILE,
+        json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode() + b"\n",
+    )
+    return manifest
+
+
 def _train_receipt(
     plan: dict[str, Any], *, rollout_id: int, checkpoint_dir: str, hf_dir: str
 ) -> dict[str, Any]:
     run_dir = Path(plan["identity"]["run_dir"])
     checkpoint = Path(checkpoint_dir)
-    expected_hf = run_dir / "hf" / "step-1"
-    if rollout_id != 1 or Path(hf_dir) != expected_hf:
+    expected_hf = run_dir / RAW_HF_STEP
+    if rollout_id != 0 or Path(hf_dir) != expected_hf:
         raise ValueError("post-save hook received an unexpected checkpoint identity")
-    _require_relative(checkpoint, run_dir / "model-output" / "checkpoints", "checkpoint path")
     if not checkpoint.exists() or not (expected_hf / ".complete").is_file():
         raise ValueError("post-save hook lacks a completed checkpoint/export")
+    reward_gate = json.loads((run_dir / REWARD_GATE_FILE).read_text())
+    reward_body = {key: item for key, item in reward_gate.items() if key != "sha256"}
+    private_reward = json.loads((_private_directory(run_dir) / PRIVATE_SELECTED_FILE).read_text())
+    private_reward_body = {key: item for key, item in private_reward.items() if key != "sha256"}
+    private_refs = private_reward.get("episode_receipts")
+    private_executions = private_reward.get("verifier_execution_ids")
+    private_instances = private_reward.get("instance_ids")
+    private_rewards = private_reward.get("rewards")
+    private_lists_valid = all(
+        isinstance(items, list) and len(items) == 8
+        for items in (private_refs, private_executions, private_instances, private_rewards)
+    )
+    if private_lists_valid:
+        try:
+            private_lists_valid = (
+                len({_sha256(item, "episode authority evidence") for item in private_refs}) == 8
+                and len({_uuid(item, "verifier execution identity") for item in private_executions})
+                == 8
+                and len({_uuid(item, "task instance identity") for item in private_instances}) == 8
+                and all(
+                    not isinstance(item, bool)
+                    and isinstance(item, (int, float))
+                    and math.isfinite(float(item))
+                    for item in private_rewards
+                )
+                and max(private_rewards) != min(private_rewards)
+            )
+        except (TypeError, ValueError):
+            private_lists_valid = False
+    if (
+        reward_gate.get("schema") != REWARD_GATE_SCHEMA
+        or reward_gate.get("plan_sha256") != "sha256:" + digest(plan)
+        or reward_gate.get("native_rollout_id") != 0
+        or reward_gate.get("optimizer_updates") != 1
+        or reward_gate.get("selected_episode_count") != 8
+        or reward_gate.get("finite_rewards") is not True
+        or reward_gate.get("reward_variation") is not True
+        or reward_gate.get("unique_verifier_executions") != 8
+        or reward_gate.get("all_instances_released") is not True
+        or reward_gate.get("sha256") != "sha256:" + digest(reward_body)
+        or private_reward.get("schema") != REWARD_GATE_SCHEMA + "_private"
+        or private_reward.get("plan_sha256") != "sha256:" + digest(plan)
+        or private_reward.get("native_rollout_id") != 0
+        or private_reward.get("optimizer_updates") != 1
+        or private_reward.get("sha256") != "sha256:" + digest(private_reward_body)
+        or reward_gate.get("private_evidence_sha256") != private_reward.get("sha256")
+        or not private_lists_valid
+    ):
+        raise ValueError("selected reward gate is absent or invalid")
+    checkpoint_manifest = _checkpoint_manifest(plan, checkpoint)
+    complete = compose_complete_model(plan, expected_hf)
     body = {
         "schema": TRAIN_RECEIPT_SCHEMA,
         "plan_sha256": "sha256:" + digest(plan),
-        "optimizer_steps": 1,
+        "native_rollout_id": 0,
+        "optimizer_updates": 1,
         "reward_filter": REWARD_FILTER,
-        "checkpoint_path_sha256": "sha256:" + hashlib.sha256(str(checkpoint).encode()).hexdigest(),
-        "hf_export_path_sha256": "sha256:" + hashlib.sha256(str(expected_hf).encode()).hexdigest(),
+        "reward_gate_sha256": reward_gate["sha256"],
+        "checkpoint_manifest_sha256": checkpoint_manifest["sha256"],
+        "complete_model_manifest_sha256": complete["sha256"],
+        "complete_model_path_sha256": "sha256:"
+        + hashlib.sha256(str(run_dir / COMPLETE_HF_STEP).encode()).hexdigest(),
+        "changed_trained_tensor_count": complete["changed_trained_tensor_count"],
+        "all_trained_tensors_finite": complete["all_trained_tensors_finite"],
+        "wandb_run_id": plan["wandb"]["run_id"],
+        "wandb_resume": "never",
         "hf_export_complete": True,
         "save_hook_after_checkpoint": True,
     }
@@ -651,31 +1379,54 @@ def validate_train_receipt(plan: dict[str, Any], receipt: dict[str, Any]) -> dic
     expected = {
         "schema": TRAIN_RECEIPT_SCHEMA,
         "plan_sha256": "sha256:" + digest(plan),
-        "optimizer_steps": 1,
+        "native_rollout_id": 0,
+        "optimizer_updates": 1,
         "reward_filter": REWARD_FILTER,
+        "wandb_run_id": plan["wandb"]["run_id"],
+        "wandb_resume": "never",
         "hf_export_complete": True,
         "save_hook_after_checkpoint": True,
     }
-    expected_fields = set(expected) | {"checkpoint_path_sha256", "hf_export_path_sha256"}
+    expected_fields = set(expected) | {
+        "reward_gate_sha256",
+        "checkpoint_manifest_sha256",
+        "complete_model_manifest_sha256",
+        "complete_model_path_sha256",
+        "changed_trained_tensor_count",
+        "all_trained_tensors_finite",
+    }
     if (
         set(body) != expected_fields
         or any(body[key] != item for key, item in expected.items())
+        or body.get("all_trained_tensors_finite") is not True
         or receipt.get("receipt_sha256") != "sha256:" + digest(body)
     ):
         raise ValueError("invalid update/export receipt")
-    _sha256(body["checkpoint_path_sha256"], "checkpoint path")
-    _sha256(body["hf_export_path_sha256"], "HF export path")
+    for field in (
+        "reward_gate_sha256",
+        "checkpoint_manifest_sha256",
+        "complete_model_manifest_sha256",
+        "complete_model_path_sha256",
+    ):
+        _sha256(body[field], field)
+    if (
+        type(body["changed_trained_tensor_count"]) is not int
+        or body["changed_trained_tensor_count"] < 1
+    ):
+        raise ValueError("invalid update/export receipt")
     return receipt
 
 
 def reload_request(plan: dict[str, Any], receipt: dict[str, Any]) -> dict[str, Any]:
     """Render the separate one-GPU, zero-optimizer reload observer."""
+    from cyber_post_train.jobs import bundled_request
+
     plan = validate_plan(plan)
     receipt = validate_train_receipt(plan, receipt)
     identity = plan["identity"]
     request = {
         "name": identity["reload_name"],
-        "title": "Qwen3.8 96K Miles checkpoint reload observer",
+        "title": f"Qwen3.8 96K Miles checkpoint reload observer: {identity['reload_name']}",
         "run_dir": identity["reload_run_dir"],
         "image": IMAGE,
         "command": "placeholder",
@@ -692,6 +1443,7 @@ def reload_request(plan: dict[str, Any], receipt: dict[str, Any]) -> dict[str, A
         "env": {
             "PYTHONPATH": identity["reload_run_dir"] + "/.runtime",
             "CYBER_PLAN_SHA256": digest(plan),
+            "CYBER_EVIDENCE_RUN_DIR": identity["reload_run_dir"],
             "TOKENIZERS_PARALLELISM": "false",
             "PYTHONUNBUFFERED": "1",
         },
@@ -729,8 +1481,7 @@ def _wait_health(port: int, process: subprocess.Popen[bytes]) -> None:
             time.sleep(5)
 
 
-async def _reload_episode(plan: dict[str, Any], model_path: Path) -> dict[str, bool]:
-    from fti.miles.v1.client_recording import generate
+async def _reload_episode(plan: dict[str, Any], model_path: Path) -> dict[str, Any]:
     from miles.rollout.base_types import GenerateFnInput
     from miles.rollout.inference_rollout.inference_rollout_common import GenerateState
     from miles.utils.chat_template_utils import resolve_fixed_chat_template
@@ -741,7 +1492,7 @@ async def _reload_episode(plan: dict[str, Any], model_path: Path) -> dict[str, b
     args = argparse.Namespace(
         hf_checkpoint=str(model_path),
         chat_template_path=template_path,
-        custom_generate_function_path="fti.miles.v1.client_recording.generate",
+        custom_generate_function_path="training.miles96_mechanics_canary.generate_with_evidence",
         fleet_tito_model="qwen35",
         partial_rollout=False,
         sglang_router_ip="127.0.0.1",
@@ -778,7 +1529,7 @@ async def _reload_episode(plan: dict[str, Any], model_path: Path) -> dict[str, b
     state = GenerateState(args)
     generated = GenerateFnInput(state, sample, state.sampling_params, evaluation=True)
     output = await asyncio.wait_for(
-        generate(generated),
+        generate_with_evidence(generated),
         timeout=plan["episode"]["episode_timeout_s"],
     )
     samples = output.samples if isinstance(output.samples, list) else [output.samples]
@@ -793,7 +1544,9 @@ async def _reload_episode(plan: dict[str, Any], model_path: Path) -> dict[str, b
         or not math.isfinite(float(item.reward))
         or not isinstance(fleet, dict)
         or fleet.get("graded") is not True
-        or fleet.get("cleanup_error") is not None
+        or fleet.get("authority_verified") is not True
+        or fleet.get("cleanup_confirmed") is not True
+        or not isinstance(fleet.get("authority_evidence_sha256"), str)
         or not isinstance(fleet.get("tool_calls"), int)
         or fleet["tool_calls"] < 1
         or not isinstance(item.response_length, int)
@@ -805,7 +1558,33 @@ async def _reload_episode(plan: dict[str, Any], model_path: Path) -> dict[str, b
         "verifier_graded": True,
         "task_cleanup_confirmed": True,
         "tool_call_seen": True,
+        "authority_evidence_sha256": _sha256(
+            fleet["authority_evidence_sha256"], "reload authority evidence"
+        ),
     }
+
+
+def _reload_server_arguments(model_path: Path) -> list[str]:
+    """Use the pinned recipe's one-engine attention/context settings."""
+    return [
+        sys.executable,
+        "-m",
+        "sglang.launch_server",
+        "--model-path",
+        str(model_path),
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "30000",
+        "--mem-fraction-static",
+        "0.8",
+        "--context-length",
+        str(CONTEXT_TOKENS),
+        "--tp-size",
+        "1",
+        "--attention-backend",
+        "triton",
+    ]
 
 
 def run_reload(plan: dict[str, Any], receipt: dict[str, Any]) -> None:
@@ -813,57 +1592,48 @@ def run_reload(plan: dict[str, Any], receipt: dict[str, Any]) -> None:
     validate_train_receipt(plan, receipt)
     identity = plan["identity"]
     run_dir = Path(identity["reload_run_dir"])
-    model_path = Path(identity["run_dir"]) / "hf" / "step-1"
+    model_path = Path(identity["run_dir"]) / COMPLETE_HF_STEP
     if os.environ.get("RUN_DIR") != str(run_dir) or os.environ.get("CYBER_PLAN_SHA256") != digest(
         plan
     ):
         raise ValueError("reload runtime identity drift")
     if not run_dir.is_dir() or (run_dir / RELOAD_FILE).exists():
         raise FileExistsError("reload output is not create-once")
-    if not (model_path / ".complete").is_file() or not (model_path / "config.json").is_file():
-        raise ValueError("the first HF export is not complete")
+    complete = validate_complete_model(plan, model_path)
+    if complete["sha256"] != receipt["complete_model_manifest_sha256"]:
+        raise ValueError("reload model differs from the update receipt")
     _reload_runtime_binding()
     import torch
 
     if torch.cuda.device_count() != 1:
         raise ValueError("reload observer must have exactly one GPU")
-    process = subprocess.Popen(
-        [
-            sys.executable,
-            "-m",
-            "sglang.launch_server",
-            "--model-path",
-            str(model_path),
-            "--host",
-            "127.0.0.1",
-            "--port",
-            "30000",
-            "--mem-fraction-static",
-            "0.75",
-            "--context-length",
-            str(CONTEXT_TOKENS),
-            "--tp-size",
-            "1",
-        ],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-    try:
-        _wait_health(30000, process)
-        checks = asyncio.run(_reload_episode(plan, model_path))
-    finally:
-        process.terminate()
+    private_log = _private_directory(run_dir) / "reload-sglang.log"
+    descriptor = os.open(private_log, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "wb") as log:
+        process = subprocess.Popen(
+            _reload_server_arguments(model_path),
+            stdout=log,
+            stderr=subprocess.STDOUT,
+        )
         try:
-            process.wait(timeout=30)
-        except subprocess.TimeoutExpired:
-            process.kill()
-            process.wait()
+            _wait_health(30000, process)
+            checks = asyncio.run(_reload_episode(plan, model_path))
+        finally:
+            process.terminate()
+            try:
+                process.wait(timeout=30)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait()
     body = {
         "schema": RELOAD_RECEIPT_SCHEMA,
         "plan_sha256": "sha256:" + digest(plan),
         "checkpoint_receipt_sha256": receipt["receipt_sha256"],
         "context_tokens": CONTEXT_TOKENS,
         "optimizer_steps": 0,
+        "native_rollout_id": 0,
+        "source_optimizer_updates": 1,
+        "complete_model_manifest_sha256": complete["sha256"],
         "engine_stopped": True,
         **checks,
     }

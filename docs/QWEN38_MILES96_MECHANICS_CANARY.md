@@ -17,30 +17,47 @@ Miles adapter:
 
 | Item | Bound value |
 | --- | --- |
-| Theseus source | `f2b0cb5db7c0a9dcc2210943f2ee1df31f9b50fc` |
+| Theseus source used to build the image | `224d6b81cb698f4785fb16123314583b981493f3` |
 | Trainer image | `miles-trainer@sha256:ee273bee346ad8e1cea63d18026b2bc5703bbd2e14d3c65efbbd74f19854874a` |
-| FTI version | `0.10.10` |
+| FTI version | `0.10.9` |
 | Miles source | `9e178ca16839b0600155f3927f57ce0670b8f453` |
 | Recipe | `qwen3.8-27b`: one node, eight GPUs, TP4/CP2, 96K context |
 
-The runtime checks the installed FTI version, the exact `run_fleet.py` digest,
-and the maintained recipe shape before it writes a training row or starts the
-trainer.  It calls `python -m fti.trainers.miles.run_fleet` directly.  It does
-not call the older `/opt/fleet/run.sh` route, which would otherwise select an
-old shared model directory when running outside a FleetJob mount.
+The image above is the built 0.10.9 image.  Theseus 0.10.10 exists as source,
+but its own changelog says no image was built for that version, so this canary
+must not claim 0.10.10.  The runtime checks the installed FTI version and the
+exact SHA-256 of `run_fleet.py`, the V1 task-session implementation, and the V1
+rollout implementation before it writes a training row or starts the trainer.
+It also checks the exact Miles inference-rollout, HTTP-client, and Megatron
+checkpoint/export source files plus the maintained recipe shape.  It calls
+`python -m fti.trainers.miles.run_fleet` directly.  It does not call the older
+`/opt/fleet/run.sh` route, which would otherwise select an old shared model
+directory when running outside a FleetJob mount.
 
 ## Exact, deliberately small job
 
 - One eight-GPU node at `c1` priority.
-- One task prompt with eight independent samples.
+- One task prompt with eight independent samples.  The launcher explicitly
+  sets Miles's over-sampling batch size to one; 0.10.9 otherwise asks for two
+  candidate prompt groups and can run as many as sixteen episodes in one
+  candidate wave.  A later wave is allowed only when the maintained filter
+  rejects the first group for lacking valid reward variation.
 - A group is eligible for an update only when none of its attempts aborted and
   their real verifier rewards vary.  A uniform reward cannot create a fake
   learning step.
 - One optimizer update at learning rate `1e-6`.
-- Save the Megatron checkpoint and an HF export at update one.
+- Miles numbers the first rollout and save as `0`.  The plan therefore asks
+  for one optimizer update while binding the native checkpoint and raw HF
+  export as `step-0`; it never relabels them as step 1.
+- Save the Megatron checkpoint and raw text-tensor HF export after that update.
+- Compose a complete Qwen3.8 artifact by taking trained text tensors from the
+  step-0 export and restoring only the exact frozen `model.visual.*` and
+  `mtp.*` tensors and runtime files from the bound base model.  Verify every
+  tensor key, shape, dtype, finite value, and digest, require at least one
+  trained tensor to change, and publish the complete directory create-once.
 - A maintained Miles post-save hook writes a small receipt only after the
   checkpoint and HF export complete.
-- A separate one-GPU observer loads that HF export and runs exactly one
+- A separate one-GPU observer loads that complete HF model and runs exactly one
   ordinary V1 task episode.  It does no optimizer work and writes no raw task
   text, model answer, reward number, or trace.
 
@@ -63,9 +80,11 @@ freshly checked:
    `qwen3.8-27B_torch_dist/latest_checkpointed_iteration.txt` with the value
    `release`.  Its binding digest is recorded in the plan.  The canary never
    downloads or converts a model on the GPU allocation.
-3. A current authoritative observation for the exact task version, plus the
-   task-set, tool-catalog, and observation digests.  This is only a task
-   identity check; no prompt or stored trajectory belongs in the plan.
+3. A current authoritative observation for the exact task and verifier
+   versions, plus the task-set, tool-catalog, and observation digests.  The V1
+   wrapper checks those exact identities again when every episode opens.  This
+   is only an authority check; no prompt or stored trajectory belongs in the
+   plan.
 4. Immediate duplicate/absence checks for both names and all four output
    destinations: train output, reload output, fresh row directory, and HF
    export.
@@ -77,9 +96,10 @@ historical task receipt just because it exists in this repository.
 ## Mandatory live safety gates
 
 `job_request` and `reload_request` only render generic Jobs API requests.
-They cannot submit them.  Before a create, the operator must use the ordinary
-Jobs API server preview for each request and pass it through
-`cyber_post_train.jobs.validate_preview`.
+They cannot submit them.  `training.miles96_mechanics_launch.submit_once` is
+the only create path for these requests.  It obtains a live Jobs API server
+preview for each request, passes it through the shared preview validator, and
+also requires an explicit controller retry limit of zero.
 
 The root rendered `RayJob` must contain exactly:
 
@@ -94,20 +114,82 @@ accepted as proof on its own.  The shared preview validator rejects a request
 unless the rendered root object carries the annotation, has `c1` priority,
 uses the pinned image, owns the expected GPU count, and releases after exit.
 
-Arm an exact-name, exact-UID cleanup observer before creating the training
-job.  It may release only the matching terminal or confirmed-stalled job and
-must record whether all GPUs and task instances were released.  If the update
-does not happen—for example because the group has no reward variation—preserve
-the sanitized evidence, release the exact allocation, and make a new plan;
-never resume or replay this one.
+The create path writes the plan, request, and preview proof, then starts a
+separate cleanup coordinator before any POST.  It freshly proves that the name,
+title, output directory, Kubernetes identity, and W&B run ID do not already
+exist.  When the submitter cannot see `/mnt/sfs/jobs`, it requires an exact
+plan/request-bound SFS absence receipt no more than five minutes old.  The
+receipt comes from the tracked zero-GPU, root-alert-off, create-once observer
+below; it is validated after server preview and again immediately before the
+create intent.  It then writes `POST_INTENT_DO_NOT_RETRY` durably, issues
+exactly one POST, and journals the returned API name and run ID.  The
+coordinator binds that creator-returned name to the exact RayJob UID and may
+release only that UID after terminal failure or a contract-defined stall.  An
+uncertain POST is never retried.  The same process is repeated with a new
+evidence directory for the one-GPU reload.
+
+After independent review, a submitter with the real SFS mount can use the
+create command directly.  A normal operator laptop first creates and collects
+one exact remote absence observation:
+
+```sh
+uv run python -m training.miles96_mechanics_launch --sfs-output-job-create \
+  --plan /restricted/fresh-plan.json \
+  --request /restricted/fresh-request.json \
+  --directory /restricted/train-sfs-check
+
+# Run only after that exact zero-GPU Job succeeds.
+uv run python -m training.miles96_mechanics_launch --sfs-output-job-collect \
+  --plan /restricted/fresh-plan.json \
+  --request /restricted/fresh-request.json \
+  --directory /restricted/train-sfs-check \
+  --output /restricted/train-sfs-absence.json
+```
+
+The zero-GPU Job is Kueue-admitted at `c1`, has a five-minute active deadline,
+has `backoffLimit: 0`, and carries the required root
+`fleet.ai/failure-alerts: "off"` annotation.  Its create journal is
+create-once.  Never replay its create after an intent exists; inspect the exact
+named Job instead.  Collect immediately before submission so the five-minute
+receipt remains fresh.
+
+The only training create command is then:
+
+```sh
+uv run python -m training.miles96_mechanics_launch --submit \
+  --plan /restricted/fresh-plan.json \
+  --request /restricted/fresh-request.json \
+  --directory /restricted/fresh-launch-evidence \
+  --output-absence-receipt /restricted/train-sfs-absence.json
+```
+
+The reload uses the same command with its separately rendered request and
+evidence directory plus `--receipt /restricted/UPDATE_AND_EXPORT.json`.  Its
+SFS observer create/collect commands also receive that `--receipt`, because the
+reload request is bound to the accepted training receipt.  The
+Fleet credential stays in the process environment; it is never written into a
+plan, request, command, or receipt.  Neither command is safe to repeat after a
+POST intent exists, even when the response is uncertain.
 
 ## What counts as passing
 
-The training receipt proves the maintained post-save hook saw update one after
-the real-reward variation filter and after a completed HF export.  The reload
-receipt proves the saved HF model loaded on one GPU, obtained a finite real
-verifier reward, observed a tool call, and cleaned up its task instance.  Both
-receipts deliberately omit reward values, task text, answers, and traces.
+The selected-group hook keeps the exact verifier execution, instance, and
+reward records in a private mode-0700 directory.  Its public receipt exposes
+only digests and the facts that all eight rewards were finite, varied, came
+from eight unique verifier executions, and all instances were released.  The
+training receipt then proves the maintained post-save hook saw native rollout
+0, exactly one optimizer update, a non-empty Megatron checkpoint, and a
+complete verified HF model.  It also carries the exact W&B run ID.  The reload
+receipt proves that complete model loaded on one GPU, obtained a finite real
+verifier reward, observed a tool call, and cleaned up its task instance.  Public
+receipts deliberately omit reward values, task text, answers, traces, and the
+exact verifier execution IDs.
+
+Neeraj's maintained `v004` run is useful prior evidence for this mechanical
+shape: one node, 96K context, 80 finite updates, a resume from 75 through 79,
+checkpoint/HF output, and evaluation.  Its lift was narrow and other metrics
+regressed, so it supports the trainer mechanics only—not transfer or capability
+improvement.  This one-update canary has the same limitation.
 
 Only after those receipts, the independent release observation, and the normal
 held-out evaluation gates may this route inform a larger RL experiment.  A
