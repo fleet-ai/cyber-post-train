@@ -264,6 +264,18 @@ def data_fleet_teachers(config: Path) -> None:
         _fail(exc)
 
 
+@app.command("data-fleet-admit")
+def data_fleet_admit(config: Path) -> None:
+    """Select Fleet metadata for a later corpus build; never emits a corpus or text."""
+    from training.fleet_collection_admission import build
+    from training.sft import read_mapping
+
+    try:
+        _print(build(read_mapping(config), relative_to=config.resolve().parent))
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command("data-rechunk")
 def data_rechunk(config: Path) -> None:
     """Re-window a sealed dense SFT corpus at a smaller context. CPU only."""

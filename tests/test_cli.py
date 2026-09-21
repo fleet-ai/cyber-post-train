@@ -34,6 +34,32 @@ def test_data_rechunk_dispatches_cpu_only_builder(tmp_path, monkeypatch):
     assert '"submitted": false' in result.stdout
 
 
+def test_data_fleet_admit_dispatches_metadata_handoff_only(tmp_path, monkeypatch):
+    from training import fleet_collection_admission
+
+    config = tmp_path / "admission.json"
+    config.write_text("{}")
+    calls = []
+
+    def build(value, *, relative_to):
+        calls.append((value, relative_to))
+        return {
+            "submitted": False,
+            "artifact_kind": "metadata_evidence_handoff_only",
+            "trainable_corpus_created": False,
+            "parquet_created": False,
+            "source_text_read": False,
+        }
+
+    monkeypatch.setattr(fleet_collection_admission, "build", build)
+    result = RUNNER.invoke(cli.app, ["data-fleet-admit", str(config)])
+    assert result.exit_code == 0
+    assert calls == [({}, config.parent.resolve())]
+    assert '"artifact_kind": "metadata_evidence_handoff_only"' in result.stdout
+    assert '"trainable_corpus_created": false' in result.stdout
+    assert '"parquet_created": false' in result.stdout
+
+
 @pytest.fixture
 def prepared(tmp_path, monkeypatch):
     config = tmp_path / "config.yaml"
