@@ -25,8 +25,9 @@ identities cannot be reused or mixed.
 
 ## Current implementation boundary
 
-The checked-in requirements file and two CPU-only commands implement the
-source contract and metadata admission boundary:
+The checked-in requirements and CPU-only commands implement the source
+contract, metadata admission boundary, private matched-corpus materializer,
+aggregate training permit, and dense-SFT manifest consumer:
 
 ```sh
 uv run --locked cyber-post-train data-fleet-teacher-visible-rationale-render \
@@ -36,20 +37,41 @@ uv run --locked cyber-post-train data-fleet-teacher-visible-rationale-render \
 
 uv run --locked cyber-post-train data-fleet-teacher-visible-rationale-admit \
   /private/path/to/admission-request.json
+
+uv run --locked cyber-post-train data-fleet-teacher-visible-rationale-materialize \
+  /private/path/to/matched-materialization-request.json
+
+uv run --locked cyber-post-train data-fleet-teacher-visible-rationale-authorize \
+  /private/corpus/matched-manifest.private.json \
+  /private/corpus/coverage.private.json \
+  /private/corpus/MATERIALIZATION.json \
+  /private/corpus/TRAINING-PERMIT.json
+
+uv run --locked cyber-post-train data-fleet-teacher-visible-rationale-consume \
+  /private/corpus/TRAINING-PERMIT.json \
+  /private/corpus/visible_rationale_plus_actions/manifest.pending.json \
+  visible_rationale_plus_actions \
+  /private/corpus/visible_rationale_plus_actions/manifest.json
 ```
 
-Both commands are offline. They do not contact Fleet, call a model, launch a
-job, read source text, or authorize external submission. The renderer will not
+All commands are offline. They do not contact Fleet, call a model, or launch a
+job. The renderer will not
 produce a packet until an immutable source authorization proves the exact
 teacher deployment, route, training-use permission, teacher-strength receipt,
 and ordinary visible-output surface. The current repository does not contain
 that issuer-owned artifact, so no collection is launchable from the committed
-files alone.
+files alone. Admission reads metadata, while materialization is deliberately
+the only step that opens the local private message export. It rejects every
+hidden/private field, repeats the one-to-four-sentence visible-rationale and
+OpenCode tool checks, and re-renders every target with the exact local
+Qwen3.8 tokenizer and chat template with thinking disabled. It writes no text:
+only token IDs, loss masks, opaque lineage digests, and private aggregate
+evidence leave that step.
 
 The first scaled, paired source plan is documented in
 [Broad stronger-teacher visible-rationale campaign v1](STRONGER_TEACHER_VISIBLE_RATIONALE_BROAD_V1.md).
 It expands the frozen 50-family wave to 64 predeclared attempts per family,
-adds exact create-once operation identities, and pairs rationale supervision
+emits the full 3,200-row task/version/attempt-to-execution map, and pairs rationale supervision
 with an action-only loss-mask control. It remains source-only and does not
 authorize an external call.
 
@@ -59,9 +81,15 @@ exact input-file digests, the complete sanitized success/verifier binding, the
 Qwen round-trip evidence, the visible-rationale coverage counts, and any
 compaction-boundary chain. This lets the private materializer audit the same
 decision without reopening or guessing at admission inputs. Its public receipt
-contains counts and digests only. It always says `sft_ready: false`; the next
-gate is a private Qwen tokenizer/template round trip, exact target-window
-deduplication, and final token coverage verification.
+contains counts and digests only. It always says `sft_ready: false`. The private
+materializer then verifies the exact private messages and proposed token
+boundaries, counts each original target-token
+occurrence independently of packing, rejects a target repeated in another
+window, and creates both masks from the same ordered token windows. The permit
+is emitted only if **each arm separately** reaches 20 million unique target
+tokens, 40 families, 80% family coverage, and the 25% maximum-family cap.
+The final consumer adds that permit digest to the standard dense-SFT manifest;
+rendering, admission, or an under-sized materialization cannot be consumed.
 
 ## Frozen initial comparison
 
@@ -122,8 +150,11 @@ sentences. The metadata includes the tool-call count, covered-tool-call count,
 segment count, minimum and maximum sentence count, and a zero-count census for
 every forbidden private-reasoning field. A missing explanation, an explanation
 longer than four sentences, any unknown reasoning field, or any occurrence of
-a forbidden private field excludes the record. The private materializer must
-repeat these checks against the actual message stream before producing tokens.
+a forbidden private field excludes the record. The exporter emits the exact
+admitted message stream and proposed source-occurrence/token boundaries. The
+materializer itself repeats the checks against those messages. It rejects
+unknown fields, hidden/private reasoning names at any nesting depth, span-token
+digest mismatches, and a record that lacks either visible rationale or actions.
 
 The serialization contract uses ordinary Qwen assistant content plus the exact
 OpenCode `bash` and `submit_report` tool-call representation. It pins
@@ -131,8 +162,12 @@ OpenCode `bash` and `submit_report` tool-call representation. It pins
 thinking channel. For every fixture, locally rendered prompt tokens from
 `messages_without_target` with `add_generation_prompt=true` must be the exact
 prefix of collection, training, and serving serializations, and those three
-full serializations must match. This metadata admission step binds the
-round-trip receipt; the private materializer must repeat the token-level check.
+full serializations must match. Admission binds the immutable round-trip
+receipt. The materializer also loads only the exact locally pinned tokenizer
+files and re-renders every private message window itself; a self-consistent
+caller-provided token list is not accepted. It binds every window to the
+admitted profile, packet, record, task, family, attempt, trajectory, transcript,
+and target-occurrence manifest before it writes tokens.
 
 Records are deduplicated in this order: record identity, source session,
 normalized trajectory, and then—at the private materializer—packed-window
@@ -174,13 +209,13 @@ provider reasoning are rejected.
    task, prompt, model, OpenCode, context, or retry bindings. Any Kubernetes
    wrapper still needs the mandatory root `fleet.ai/failure-alerts: "off"`
    annotation before creation.
-3. A private exporter must emit the metadata schema and keep raw text private.
-4. The teacher-specific Qwen token materializer must re-render ordinary visible
-   text locally, verify per-tool rationale coverage and the one-to-four-sentence
-   limit against the private messages, prove all compaction boundaries,
-   deduplicate target windows, and confirm the final **20 million unique**
-   supervised-token and family-concentration gates. Candidate token occurrences
-   reported by metadata are not permission to train and are never described as
-   unique tokens.
-5. A separate reviewed training permit must bind that corpus. Neither rendering
-   nor admission is permission to train.
+3. A private exporter must emit the implemented record schema containing the
+   exact admitted messages and keep those messages private. It must not emit a
+   hidden provider field or invent/reconstruct rationale. The materializer,
+   rather than the exporter, is the authority for local Qwen re-rendering.
+4. Run the implemented materializer and aggregate authorizer. Candidate counts
+   reported by admission are not unique-token evidence and are never permission
+   to train. Both matched arms must pass independently.
+5. Independently review the resulting permit and dense-SFT manifests before any
+   launcher uses them. This repository still provides no authority to collect,
+   submit, or train merely because those local files exist.

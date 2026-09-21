@@ -420,6 +420,66 @@ def data_fleet_teacher_visible_rationale_broad_render(
         _fail(exc)
 
 
+@app.command("data-fleet-teacher-visible-rationale-materialize")
+def data_fleet_teacher_visible_rationale_materialize(config: Path) -> None:
+    """Build the private matched teacher token corpora locally; never submit."""
+    from training.sft import read_mapping
+    from training.teacher_visible_rationale_corpus import build
+
+    try:
+        _print(build(read_mapping(config), relative_to=config.resolve().parent))
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("data-fleet-teacher-visible-rationale-authorize")
+def data_fleet_teacher_visible_rationale_authorize(
+    matched_manifest: Path,
+    coverage: Path,
+    materialization: Path,
+    output: Path,
+) -> None:
+    """Issue a local permit only after both matched arms pass every corpus gate."""
+    from training.teacher_visible_rationale_corpus import authorize_paths
+
+    try:
+        permit = authorize_paths(matched_manifest, coverage, materialization, output)
+        _print(
+            {
+                "submitted": False,
+                "schema": permit["schema"],
+                "sha256": permit["sha256"],
+                "external_submission_authorized": False,
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
+@app.command("data-fleet-teacher-visible-rationale-consume")
+def data_fleet_teacher_visible_rationale_consume(
+    permit: Path,
+    pending_manifest: Path,
+    arm: str,
+    output: Path,
+) -> None:
+    """Create the exact dense-SFT manifest for one permitted matched arm."""
+    from training.teacher_visible_rationale_corpus import consume_paths
+
+    try:
+        manifest = consume_paths(permit, pending_manifest, arm, output)
+        _print(
+            {
+                "submitted": False,
+                "arm": arm,
+                "manifest_sha256": manifest["sha256"],
+                "training_permit_sha256": manifest["training_permit_sha256"],
+            }
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
 @app.command("data-fleet-roster")
 def data_fleet_roster(config: Path) -> None:
     """Build a family-safe Fleet collection roster from sealed metadata only."""

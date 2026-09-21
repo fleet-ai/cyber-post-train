@@ -128,11 +128,13 @@ def test_authorized_render_adds_exactly_once_operation_and_matched_control() -> 
         "collection-packet.json",
         "broad-review.json",
         "operation-authorization.json",
+        "execution-map.private.json",
         "matched-materialization-plan.json",
     }
     profile = rendered["source-profile.json"]
     packet = rendered["collection-packet.json"]
     operation = rendered["operation-authorization.json"]
+    execution_map = rendered["execution-map.private.json"]
     matched = rendered["matched-materialization-plan.json"]
     assert profile["opencode"] == {
         **profile["opencode"],
@@ -145,6 +147,27 @@ def test_authorized_render_adds_exactly_once_operation_and_matched_control() -> 
     )
     assert packet["planned_cells"] == operation["planned_cells"] == 3_200
     assert operation["collection_packet_sha256"] == packet["sha256"]
+    assert operation["execution_map_sha256"] == execution_map["sha256"]
+    assert execution_map["identity_map_sha256"] == operation["identity_map_sha256"]
+    assert len(execution_map["cells"]) == 3_200
+    assert {
+        (cell["task_key"], cell["task_version_id"], cell["attempt"])
+        for cell in execution_map["cells"]
+    } == {
+        (cell["task_key"], cell["task_version_id"], cell["attempt"])
+        for cell in broad._scientific_cells(
+            requirements=teacher._requirements(_load(REQUIREMENTS), root=ROOT),
+            roster=teacher._roster(
+                teacher._requirements(_load(REQUIREMENTS), root=ROOT), root=ROOT
+            ),
+        )
+    }
+    assert all(
+        cell["operation_relative_path"]
+        == f"cells/{cell['authorized_execution_id'].removeprefix('sha256:')}.json"
+        for cell in execution_map["cells"]
+    )
+    assert len({cell["exclusive_intent_id"] for cell in execution_map["cells"]}) == 3_200
     assert operation["execution_contract"] == {
         "canonical_operation_root_required": True,
         "dedicated_empty_ledger_required": True,

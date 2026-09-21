@@ -28,6 +28,7 @@ SOURCE_SPEC_SCHEMA = "cyber_teacher_visible_rationale_broad_source_spec_v1"
 REVIEW_SCHEMA = "cyber_teacher_visible_rationale_broad_review_v1"
 OPERATION_SCHEMA = "cyber_teacher_visible_rationale_operation_authorization_v1"
 MATCHED_SCHEMA = "cyber_teacher_visible_rationale_matched_materialization_v1"
+EXECUTION_MAP_SCHEMA = "cyber_teacher_visible_rationale_execution_map_v1"
 
 SOURCE_ONLY_STATUS = "source_only_waiting_for_independent_review_and_teacher_authorization"
 MINIMUM_ATTEMPTS_PER_TASK = 64
@@ -388,7 +389,7 @@ def _operation_authorization(
     packet: dict[str, Any],
     requirements: dict[str, Any],
     roster: dict[str, Any],
-) -> dict[str, Any]:
+) -> tuple[dict[str, Any], dict[str, Any]]:
     scientific = _scientific_cells(requirements=requirements, roster=roster)
     identities = []
     for cell in scientific:
@@ -396,7 +397,23 @@ def _operation_authorization(
             "collection_packet_sha256": packet["sha256"],
             "scientific_cell_id": cell["scientific_cell_id"],
         }
-        identities.append({**source, "authorized_execution_id": digest_json(source)})
+        authorized_execution_id = digest_json(source)
+        intent = {
+            "collection_packet_sha256": packet["sha256"],
+            "authorized_execution_id": authorized_execution_id,
+            "operation": "create_teacher_visible_rationale_rollout_once",
+        }
+        identities.append(
+            {
+                **cell,
+                "collection_packet_sha256": packet["sha256"],
+                "authorized_execution_id": authorized_execution_id,
+                "exclusive_intent_id": digest_json(intent),
+                "operation_relative_path": (
+                    f"cells/{authorized_execution_id.removeprefix('sha256:')}.json"
+                ),
+            }
+        )
     universe = digest_json([item["authorized_execution_id"] for item in identities])
     root_payload = {
         "campaign_name": packet["campaign_name"],
@@ -404,6 +421,20 @@ def _operation_authorization(
         "authorized_execution_universe_sha256": universe,
     }
     root_digest = digest_json(root_payload)
+    execution_map = {
+        "schema": EXECUTION_MAP_SCHEMA,
+        "campaign_name": packet["campaign_name"],
+        "collection_packet_sha256": packet["sha256"],
+        "review_receipt_sha256": review_receipt["sha256"],
+        "planned_cells": len(identities),
+        "scientific_cell_universe_sha256": review_receipt["scientific_cell_universe_sha256"],
+        "authorized_execution_universe_sha256": universe,
+        "identity_map_sha256": digest_json(identities),
+        "cells": identities,
+        "external_submission_authorized": False,
+        "submitted": False,
+    }
+    execution_map["sha256"] = digest_json(execution_map)
     value = {
         "schema": OPERATION_SCHEMA,
         **root_payload,
@@ -412,6 +443,7 @@ def _operation_authorization(
         "scientific_cell_universe_sha256": review_receipt["scientific_cell_universe_sha256"],
         "authorized_execution_universe_sha256": universe,
         "identity_map_sha256": digest_json(identities),
+        "execution_map_sha256": execution_map["sha256"],
         "operation_root_name": (
             f"q38-teacher-visible-rationale-{root_digest.removeprefix('sha256:')[:12]}"
         ),
@@ -430,7 +462,7 @@ def _operation_authorization(
         "submitted": False,
     }
     value["sha256"] = digest_json(value)
-    return value
+    return value, execution_map
 
 
 def _matched_plan(
@@ -472,7 +504,7 @@ def render(
     rendered = base.render(requirements, authorization, root=root)
     roster = base._roster(requirements, root=root)
     packet = rendered["collection-packet.json"]
-    operation = _operation_authorization(
+    operation, execution_map = _operation_authorization(
         review_receipt=review_receipt,
         packet=packet,
         requirements=requirements,
@@ -487,6 +519,7 @@ def render(
         **rendered,
         "broad-review.json": review_receipt,
         "operation-authorization.json": operation,
+        "execution-map.private.json": execution_map,
         "matched-materialization-plan.json": matched,
     }
 

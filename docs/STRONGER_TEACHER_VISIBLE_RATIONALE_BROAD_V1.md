@@ -144,8 +144,11 @@ so it cannot disappear behind a generic "train only" label.
 The offline review derives one stable scientific-cell identity from the exact
 requirements, task/version, runtime binding, and attempt number. After an exact
 teacher authorization exists, the renderer derives a second execution identity
-from the immutable collection packet and scientific-cell identity. It binds
-the ordered map digest for all 3,200 identities to:
+from the immutable collection packet and scientific-cell identity. The private
+`execution-map.private.json` contains every exact task key, task-version ID,
+runtime-binding digest, attempt, scientific ID, authorized execution ID,
+exclusive-intent ID, and create-once relative path. The authorization binds the
+ordered map digest for all 3,200 identities to:
 
 - one canonical operation root;
 - one dedicated empty ledger;
@@ -183,3 +186,30 @@ operation authorization, prove its no-duplicate and cleanup behavior, and
 preserve the mandatory root `fleet.ai/failure-alerts: "off"` annotation if it
 creates a Kubernetes Job or RayJob. This PR deliberately does not implement or
 authorize that external step.
+
+After metadata admission, the local private path is executable without any
+external mutation:
+
+```sh
+uv run --locked cyber-post-train data-fleet-teacher-visible-rationale-materialize \
+  /private/path/to/matched-materialization-request.json
+
+uv run --locked cyber-post-train data-fleet-teacher-visible-rationale-authorize \
+  /private/corpus/matched-manifest.private.json \
+  /private/corpus/coverage.private.json \
+  /private/corpus/MATERIALIZATION.json \
+  /private/corpus/TRAINING-PERMIT.json
+```
+
+The materializer opens the private messages locally, rejects hidden/private
+fields, repeats the visible-rationale and OpenCode checks, and re-renders every
+window through the exact locked Qwen tokenizer/template with thinking disabled.
+It then writes two token-only Parquet files from the same ordered windows. It
+derives source-token occurrence IDs without using packed-window positions, so
+repacking cannot make one target count twice. It checks the 20M, family-count,
+family-coverage, and 25% concentration gates separately for both arms. Before
+issuing a permit, the authorizer reopens the bound Parquet/manifests and proves
+their rows, masks, counts, family totals, file digests, and same-window pairing.
+The permit fails closed unless both arms pass. A final `...-consume` command
+creates the standard dense-SFT manifest for exactly one permitted arm; it still
+launches nothing.
