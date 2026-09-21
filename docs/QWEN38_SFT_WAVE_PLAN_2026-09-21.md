@@ -28,7 +28,7 @@ checkpoint/reload gates.
 | SFT target | Visible assistant text and tool calls only.  Tool results and copied history have zero loss. |
 | Context variants | 32K/8K history: 14,693 rows/1,837 steps; 64K/16K history: 8,953/1,120; 96K/24K history: 6,847/856.  Each contains every target token exactly once. |
 | Dense anchor | One epoch, global batch 8 (= 1 microbatch × 8 GPUs), learning rate `3e-6`, one eight-GPU node, seed `20260920` |
-| Runtime schedule | Constant learning rate, no warmup, AdamW weight decay `0.01`, maximum gradient norm `1.0`; change these only as a separately declared intervention. |
+| Explicit schedule bindings | Both paths bind `constant_with_warmup` with zero warmup.  The LoRA path additionally binds weight decay `0.01` and maximum gradient norm `1.0`; the dense path does not currently bind those two fields in its source configuration. |
 
 Here, **masked history** means earlier conversation tokens are supplied to the
 model so it can condition an action on them, but the optimizer receives no
@@ -48,18 +48,21 @@ repeat existing windows merely to make a larger number.
 
 ## The five next training decisions
 
-The first two dense arms are already operating or in their ordinary
-completion/evaluation path.  They are the controls for this table, not fresh
-duplicate launches.  "After gate" means the row must not start merely because
+The existing 32K and 64K dense configurations are controls for this table, not
+fresh duplicate launches.  An existing configuration records a reviewed
+scientific identity; it is not proof that its create-once output path is still
+available.  Before any submission, the operator must prove the output and job
+identity are absent, or create a newly qualified successor rather than reuse a
+consumed identity.  "After gate" means the row must not start merely because
 its predecessor has lower training loss.
 
-| Priority | Proposed run | Data and method | Context | Global batch / LR / duration | What it answers | Start only after |
-|---|---|---|---|---|---|---|
-| 1 | **Dense 96K action-only** | Same 57.38M teacher targets, full-weight SFT | 98,304 tokens; 24,576 masked-history cap | `8` / `3e-6` / one epoch (856 planned updates) | Does retaining still more real trajectory state help beyond the 32K and 64K controls? | A fresh create-once successor passes the exact CPU and GPU qualification gates; it must not reuse an old failed identity. |
-| 2 | **LoRA anchor** | Same 32K corpus and split; rank-64, alpha-32 adapter on every linear layer | 32,768 / 8,192 masked history | `8` / `3e-5` / one epoch (1,837 planned updates) | Is a high-capacity all-linear adapter a practical alternative to the 32K dense reference? | The already accepted LoRA save, reload, merge, and full-model reload chain is revalidated for the exact run. |
-| 3 | **LoRA lower-LR control** | Identical to priority 2 except learning rate | 32,768 / 8,192 | `8` / `1e-5` / one epoch | Is the anchor's roughly tenfold dense-to-LoRA LR ratio too aggressive on this long tool-use corpus? | Priority 2 completes with finite updates, a reloadable merged checkpoint, and no operational defect. |
-| 4 | **LoRA upper-LR boundary** | Identical to priority 2 except learning rate | 32,768 / 8,192 | `8` / `1e-4` / one epoch | Brackets the high side rather than assuming `3e-5` is optimal.  It is an intentionally wide boundary check, not a default. | Priority 2 is operationally healthy and its development evaluation is available; do not spend a node on this if the anchor already shows instability. |
-| 5 | **Second epoch of the selected dense context** | Resume the best of 32K/64K/96K from its exact epoch-one checkpoint; no data or recipe change | Winning epoch-one context | `8` / `3e-6` / exactly one more epoch | Does a second pass improve protected task success instead of merely lowering imitation loss? | One context wins the predeclared Fleet development metric without a material reliability regression. |
+| Priority | Proposed run | Reviewed source artifact | Data and method | Context | Global batch / LR / duration | What it answers | Start only after |
+|---|---|---|---|---|---|---|---|
+| 1 | **Dense 96K action-only** | [`96K dense config`](../configs/runs/qwen38-teacher3k-96k-full-b8-lr3e6-v3.json) | Same 57.38M teacher targets, full-weight SFT | 98,304 tokens; 24,576 masked-history cap | `8` / `3e-6` / one epoch (856 planned updates) | Does retaining still more real trajectory state help beyond the 32K and 64K controls? | A fresh create-once successor passes the exact CPU and GPU qualification gates; it must not reuse an old failed identity. |
+| 2 | **LoRA anchor** | [`A2 config`](../configs/runs/qwen38-27b-lora-sft-r64-a32-anchor-a2-v1.json) | Same 32K corpus and split; rank-64, alpha-32 adapter on every linear layer | 32,768 / 8,192 masked history | `8` / `3e-5` / one epoch (1,837 planned updates) | Is a high-capacity all-linear adapter a practical alternative to the 32K dense reference? | The already accepted LoRA save, reload, merge, and full-model reload chain is revalidated for the exact run. |
+| 3 | **LoRA lower-LR control** | [`lower-LR config`](../configs/runs/qwen38-27b-lora-sft-r64-a32-lr1e5-v1.json) | Identical to priority 2 except learning rate | 32,768 / 8,192 | `8` / `1e-5` / one epoch | Is the anchor's roughly tenfold dense-to-LoRA LR ratio too aggressive on this long tool-use corpus? | Priority 2 completes with finite updates, a reloadable merged checkpoint, and no operational defect. |
+| 4 | **LoRA upper-LR boundary** | [`upper-LR config`](../configs/runs/qwen38-27b-lora-sft-r64-a32-lr1e4-v1.json) | Identical to priority 2 except learning rate | 32,768 / 8,192 | `8` / `1e-4` / one epoch | Brackets the high side rather than assuming `3e-5` is optimal.  It is an intentionally wide boundary check, not a default. | Priority 2 is operationally healthy and its development evaluation is available; do not spend a node on this if the anchor already shows instability. |
+| 5 | **Second epoch of the selected dense context** | New successor bound to the selected epoch-one checkpoint | Resume the best of 32K/64K/96K from its exact epoch-one checkpoint; no data or recipe change | Winning epoch-one context | `8` / `3e-6` / exactly one more epoch | Does a second pass improve protected task success instead of merely lowering imitation loss? | One context wins the predeclared Fleet development metric without a material reliability regression. |
 
 ### What makes these an intentional set
 
@@ -71,9 +74,15 @@ its predecessor has lower training loss.
   model, source, split, target exposure, context, batch, and epoch count to the
   32K dense reference.  They use rank 64, alpha 32, zero dropout, and all
   linear layers because that is the supported, receipt-qualified Qwen3.8
-  implementation.  Its Megatron runtime is not the dense FSDP runtime, so the
-  result is a useful *method-and-runtime* comparison; it is not a claim that
-  only one mathematical parameterization changed.
+  implementation.  The reviewed dense 32K configuration uses seed `20260920`,
+  while the reviewed LoRA configurations use seed `20260919`; their Megatron
+  runtime also differs from the dense FSDP runtime, and only the LoRA path
+  explicitly binds weight decay and gradient clipping.  The resulting
+  comparison is therefore a useful *method-and-runtime-and-seed* result, not a
+  claim that only one mathematical parameterization changed.  A causal
+  adapter-only claim requires a newly qualified paired successor with one
+  identical seed and explicit optimizer bindings on both paths; never edit
+  either sealed configuration to manufacture that match.
 - **The LR bracket is deliberately sparse.** `3e-5` is the direct tenfold
   companion to the dense `3e-6`; `1e-5` and `1e-4` check materially lower and
   higher regions.  There is no value in adjacent tiny changes before a
@@ -96,16 +105,27 @@ reduce the treatment to a context-length label.
 |---|---|
 | Data and history | Corpus and split digests; source/task-family counts; unique target tokens; explicit source/family caps; history cap and packing rule |
 | Adaptation and runtime | Full-weight or LoRA; adapter targets/rank/alpha when relevant; trainer/runtime image; nodes, parallelism, and accumulation |
-| Optimization | Effective global batch, learning-rate schedule, duration, checkpoint policy, and seed |
+| Optimization | Effective global batch, learning-rate schedule, duration, checkpoint policy, seed, and explicit weight-decay/gradient-clipping values (or an explicit statement that they are not bound) |
 | Usable artifact | Exact checkpoint, export/reload receipt, and matching serving template |
 | Choice rule | Protected Fleet development task outcome, invalid-run count, and the predeclared tie-break—not training loss or teacher-token loss |
 
-The dense and LoRA rows are deliberately a **method-and-runtime** comparison:
-the current dense FSDP and LoRA Megatron paths do not share every runtime
-detail. A task-outcome result may still be useful, but it must not be described
-as isolating only the adapter. The winning method is the one that improves the
-protected task protocol without a material reliability regression; the final
-Fleet split and WebExploitBench confirm that frozen choice.
+The dense and LoRA rows are deliberately a **method-and-runtime-and-seed**
+comparison: the current dense FSDP and LoRA Megatron paths do not share every
+runtime detail, their reviewed seeds differ, and only the LoRA path explicitly
+binds weight decay and gradient clipping. A task-outcome result may still be
+useful, but it must not be described as isolating only the adapter. The winning
+method is the one that improves the protected task protocol without a material
+reliability regression; the final Fleet split and WebExploitBench confirm that
+frozen choice.
+
+If the LoRA anchor produces an outcome that would change an investment
+decision, prepare a **new, source-qualified paired control** before making a
+causal full-weight-versus-adapter claim.  It must use the same corpus, context,
+global batch, epoch count, and seed on both sides, and both rendered plans must
+explicitly bind the optimizer values being compared.  The current FSDP-versus-
+Megatron runtime difference must remain disclosed.  This is a conditional
+follow-up to a useful anchor result, not a reason to duplicate the current
+arms or edit sealed plans.
 
 ## Data scale and source plan (parallel, but not a shortcut)
 
