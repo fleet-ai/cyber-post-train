@@ -60,6 +60,30 @@ def test_data_fleet_admit_dispatches_metadata_handoff_only(tmp_path, monkeypatch
     assert '"parquet_created": false' in result.stdout
 
 
+def test_data_fleet_materialize_dispatches_private_builder(tmp_path, monkeypatch):
+    from training import fleet_collection_corpus
+
+    config = tmp_path / "materialize.json"
+    config.write_text("{}")
+    calls = []
+
+    def build(value, *, relative_to):
+        calls.append((value, relative_to))
+        return {
+            "submitted": False,
+            "source_sessions": 3,
+            "visible_action_windows": 7,
+            "sft_ready": False,
+        }
+
+    monkeypatch.setattr(fleet_collection_corpus, "build", build)
+    result = RUNNER.invoke(cli.app, ["data-fleet-materialize", str(config)])
+    assert result.exit_code == 0
+    assert calls == [({}, config.parent.resolve())]
+    assert '"visible_action_windows": 7' in result.stdout
+    assert "train.parquet" not in result.stdout
+
+
 @pytest.fixture
 def prepared(tmp_path, monkeypatch):
     config = tmp_path / "config.yaml"

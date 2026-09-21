@@ -155,8 +155,9 @@ Before invoking it, the operator should verify all of the following:
 
 ## Downstream handoff
 
-Admission is the first half of the data path.  The next component must be a
-private, separately reviewed corpus materializer that:
+Admission is the first half of the data path.  The next component is the
+[private corpus materializer](FLEET_PRIVATE_CORPUS_MATERIALIZATION.md).  It
+must:
 
 1. reads `selection.private.json` without printing its identifiers;
 2. resolves each selected normalized record only by its recorded exact digest;
@@ -169,6 +170,8 @@ private, separately reviewed corpus materializer that:
 
 The existing `training/fleet_teacher_corpus.py` remains the frozen 75-task
 teacher-corpus path and must not be misrepresented as a generic consumer of
-this parameterized split.  A generic consumer is only ready when it enforces
-the handoff checks above and produces its own exact corpus manifest.  Until
-then, this adapter provides auditable selection evidence—not trainable examples.
+this parameterized split.  The generic materializer writes an immutable corpus
+manifest, but it still cannot feed SFT until it reaches its packet's 20M unique
+visible-action-token gate; below that threshold its manifest deliberately fails
+the existing SFT compiler.  Admission therefore remains auditable selection
+evidence, not trainable examples by itself.

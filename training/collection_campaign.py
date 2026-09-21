@@ -224,6 +224,7 @@ def _request(value: dict[str, Any]) -> None:
         "campaign_name",
         "source_kind",
         "source_model",
+        "template_sha256",
         "source_authorization_receipt_sha256",
         "teacher_strength_receipt_sha256",
         "route",
@@ -249,6 +250,7 @@ def _request(value: dict[str, Any]) -> None:
         raise ValueError("source_model identity must be nonempty")
     if re.fullmatch(r"(?:[a-f0-9]{40}|sha256:[a-f0-9]{64})", model["revision"]) is None:
         raise ValueError("source_model requires an immutable revision")
+    _sha256(value.get("template_sha256"), "source template")
     _sha256(value.get("source_authorization_receipt_sha256"), "source-authorization receipt")
     if value["source_kind"] == "self":
         if set(value) != required:
@@ -377,7 +379,12 @@ def _packet(
 ) -> dict[str, Any]:
     source = {
         "kind": request["source_kind"],
+        # ``source`` is the only model alias rendered by this source-only
+        # collection packet.  Seal it so the later admission/materialization
+        # path cannot silently bind a session from a second model route.
+        "model_alias": "source",
         "model": request["source_model"],
+        "template_sha256": request["template_sha256"],
         "source_authorization_receipt_sha256": request["source_authorization_receipt_sha256"],
     }
     if request["source_kind"] == "teacher":
@@ -421,6 +428,10 @@ def _packet(
                 "minimum_completed_non_submit_tool_rounds": 1,
                 "maximum_submit_report_response_fraction": 0.5,
                 "maximum_submit_report_target_token_fraction": 0.5,
+                # Per-task caps alone cannot stop one unusually long family
+                # from consuming a broad campaign.  Keep a fixed family
+                # concentration ceiling in the immutable packet.
+                "maximum_family_target_token_fraction": 0.25,
                 "deduplication_order": [
                     "source_session_identity",
                     "normalized_trajectory_digest",
