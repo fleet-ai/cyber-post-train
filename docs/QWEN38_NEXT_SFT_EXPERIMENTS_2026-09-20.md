@@ -16,6 +16,12 @@ loss-masked history are grouped into windows. Both exact treatments already
 passed a one-step forward, backward, optimizer, checkpoint, and resource-release
 gate on one eight-GPU B300 node.
 
+The corpus is deliberately visible-action SFT rather than teacher
+chain-of-thought distillation.  See
+[`QWEN38_REASONING_AND_COMPACTION_POLICY.md`](QWEN38_REASONING_AND_COMPACTION_POLICY.md)
+for the private-reasoning boundary, current compaction treatment, and the
+separate admission gate for a future student-visible reasoning corpus.
+
 ## Shared scientific contract
 
 - Model: `Qwen/Qwen3.8-27B` at revision

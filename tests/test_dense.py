@@ -1,4 +1,5 @@
 import copy
+import json
 from collections import UserDict
 
 import pytest
@@ -244,6 +245,24 @@ def test_original_direct_tool_contract_and_reasoning_omission():
     assert "thinking" not in messages[2]
     assert messages[2]["tool_calls"][0]["function"]["arguments"]["script"] == "true"
     assert src == original
+
+
+@pytest.mark.parametrize("private_field", ["thinking", "reasoning", "reasoning_content"])
+def test_visible_action_corpus_never_copies_private_reasoning(private_field):
+    """The action-only corpus must not turn a private field into a model target.
+
+    A separate, explicitly authorized student-visible reasoning corpus may be
+    added later.  It must not be enabled by accidentally widening this legacy
+    visible-action normalizer.
+    """
+    src = record()
+    sentinel = f"private-{private_field}-must-not-reach-the-student"
+    src["messages"][2][private_field] = sentinel
+
+    messages, _ = compatible_messages(src)
+
+    assert sentinel not in json.dumps(messages, sort_keys=True)
+    assert src["messages"][2][private_field] == sentinel
 
 
 @pytest.mark.parametrize(
