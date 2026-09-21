@@ -255,19 +255,30 @@ async def test_length_chunk_continues_then_executes_ordered_tools_and_report(set
 
 
 @pytest.mark.asyncio
-async def test_length_chunks_stop_at_declared_turn_budget(setup):
+async def test_length_chunks_become_authoritatively_gradeable_output_limit(setup):
     setup.engine.reply = {
         "responses": ["unfinished"],
         "response_ids": [[31, 32, 33, 34]],
         "response_logprobs": [[-0.2] * 4],
         "stop_reasons": ["length"],
     }
+
+    class Session:
+        async def call_tool(self, *args, **kwargs):
+            raise AssertionError("a partial response must never execute a tool")
+
     value = recorder(setup)
-    value.begin_segment([{"role": "user", "content": "task"}], [])
-    with pytest.raises(rl_episode.EpisodeBudgetExceeded) as caught:
-        await value.sample()
-    assert rl_episode.budget_stop(caught.value) == "turn_response_budget_exhausted"
-    assert value.recording.response_length == 8 and not value.finalized
+    messages = [{"role": "user", "content": "task"}]
+    messages, reason, _ = await rl_episode._agent(
+        value, Session(), messages, [], setup.config["rl"], sky.parse
+    )
+    assert reason == "turn_response_budget_exhausted"
+    assert messages[-1] == {"role": "assistant", "content": "unfinishedunfinished"}
+    sample = value.finalize(0.0, {"done_reason": reason, "verifier_execution_id": "v"}, 0)[0]
+    assert sample.response_length == 8
+    assert sample.tokens == [1, 2, 31, 32, 33, 34, 31, 32, 33, 34]
+    assert sample.metadata["done_reason"] == reason and sample.reward == 0.0
+    assert value.recording is None and value.finalized
     assert len(setup.engine.requests) == 2
 
 
@@ -468,6 +479,50 @@ async def test_shared_lifecycle_grades_once_and_confirms_release(
     receipt = json.loads((tmp_path / "episode/ACCEPTED.json").read_text())
     assert receipt["sample_count"] == 1
     assert sum(m == "POST" and p.endswith("/instances") for m, p in state.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_output_limit_uses_authoritative_grade_and_never_executes_partial_tools(
+    setup,
+    fleet_fixture,  # noqa: F811
+    tmp_path,
+):
+    state = fleet_fixture
+    state.config["model"] = setup.config["model"]
+    state.config["initial_prompt_tokens_sha256"] = setup.config["initial_prompt_tokens_sha256"]
+    state.config["rl"].update(
+        max_tokens_per_turn=8,
+        generation_chunk_tokens=4,
+        compaction_trigger_tokens=10000,
+        compaction_summary_tokens=4,
+    )
+    seal(state.config)
+    setup.config = state.config
+    setup.tokenizer.apply_chat_template = lambda *a, **kw: [1, 2]
+    setup.engine.reply = {
+        "responses": ['<tool_call>{"name":"bash"'],
+        "response_ids": [[31, 32, 33, 34]],
+        "response_logprobs": [[-0.2] * 4],
+        "stop_reasons": ["length"],
+    }
+    state.reward["reward"] = state.reward["cyber_verification_result"]["reward"] = 0.5
+
+    async with state.client:
+        samples = await rl_episode.collect(
+            state.config, tmp_path / "episode", recorder(setup), sky.parse, client=state.client
+        )
+
+    assert state.deleted and not state.tool_calls
+    assert samples[-1].reward == 0.5
+    assert samples[-1].metadata["done_reason"] == "turn_response_budget_exhausted"
+    assert samples[-1].response_length == 8
+    assert (tmp_path / "episode/ACCEPTED.json").exists()
+    assert not (tmp_path / "episode/failure.json").exists()
+    assert sum(m == "POST" and p.endswith("/instances") for m, p in state.calls) == 1
+    assert sum(
+        m == "POST" and "/rollout-rewards/" in p and not p.endswith("/instances")
+        for m, p in state.calls
+    ) == 1
 
 
 @dataclass

@@ -253,7 +253,18 @@ class Recorder:
             if episode_remaining <= 0:
                 raise EpisodeBudgetExceeded("response_budget_exhausted")
             if turn_remaining <= 0:
-                raise EpisodeBudgetExceeded("turn_response_budget_exhausted")
+                if kind != "action" or not texts or record.response_length != turn_tokens:
+                    raise EpisodeBudgetExceeded("turn_response_budget_exhausted")
+                # This is the same model-visible output-limit outcome that the
+                # matched OpenCode harness reports when one assistant response
+                # consumes its full allowance. Preserve the exact sampled IDs
+                # as a final policy step, but never parse or execute a possibly
+                # incomplete tool call. The shared lifecycle can then request
+                # an authoritative Fleet grade instead of aborting the batch
+                # before collection or inventing a reward locally.
+                self.steps.append(record)
+                self.recording = None
+                return "".join(texts), "turn_limit"
             if context_remaining <= 0:
                 raise EpisodeBudgetExceeded("generation_incomplete_context_full")
             cap = min(
@@ -309,7 +320,7 @@ class Recorder:
             texts.append(text)
             self.steps.append(record)
             self.recording = None
-            return "".join(texts)
+            return "".join(texts), "ok"
 
     def _append(self, ids, probabilities):
         if self.response_length + len(ids) > self.response_tokens:
@@ -329,10 +340,10 @@ class Recorder:
         summary_budget = self.config["rl"]["compaction_summary_tokens"]
         if len(prompt) + summary_budget > self.config["rl"]["context_tokens"]:
             raise EpisodeBudgetExceeded("generation_incomplete_context_full")
-        summary = await self._generate_complete(
+        summary, finish = await self._generate_complete(
             prompt, turn_tokens=summary_budget, kind="compaction"
         )
-        if not summary.strip():
+        if finish != "ok" or not summary.strip():
             raise InvalidEpisode("empty_compaction_summary")
         self.messages[:] = [
             {
@@ -359,13 +370,13 @@ class Recorder:
             > self.config["rl"]["context_tokens"]
         ):
             raise EpisodeBudgetExceeded("generation_incomplete_context_full")
-        text = await self._generate_complete(
+        text, finish = await self._generate_complete(
             prompt,
             turn_tokens=self.config["rl"]["max_tokens_per_turn"],
             kind="action",
         )
         self.last_text = text
-        return SimpleNamespace(text=text, finish="ok")
+        return SimpleNamespace(text=text, finish=finish)
 
     def append_assistant(self, text, call, turn):
         if self.last_text is None or text != self.last_text:

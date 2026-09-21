@@ -381,6 +381,35 @@ async def test_stepwise_trajectory_preserves_distinct_prompts_and_last_reward(se
 
 
 @pytest.mark.asyncio
+async def test_declared_output_limit_is_preserved_for_native_training(setup, monkeypatch):
+    async def collect(config, directory, *args, **kwargs):
+        setup.calls.append((config, directory))
+        return [
+            NS(
+                tokens=[1, 2, 31, 32],
+                response_length=2,
+                loss_mask=[1, 1],
+                rollout_log_probs=[-0.2, -0.1],
+                reward=0.0,
+                metadata={
+                    "step_kind": "action",
+                    "done_reason": "turn_response_budget_exhausted",
+                },
+                status=NS(name="COMPLETED"),
+            )
+        ]
+
+    monkeypatch.setattr(batch.rl_episode, "collect", collect)
+    source = input_batch(setup, phase="eval")
+    output = await generator(setup).generate(source)
+    assert output["stop_reasons"] == ["length"]
+    assert output["rewards"] == [0.0]
+    assert output["is_last_step"] == [True]
+    assert list(setup.root.glob("batches/*/COLLECTED.json"))
+    assert not list(setup.root.glob("batches/*/REJECTED.json"))
+
+
+@pytest.mark.asyncio
 async def test_cancellation_before_claim_writes_nothing(setup, monkeypatch):
     value = generator(setup)
 
