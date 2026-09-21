@@ -26,6 +26,7 @@ from cyber_post_train.direct_submit import (
     direct_submit_sft_once,
     render_lr30_qualification_rayjob,
     render_sft_rayjob,
+    validate_cpu_pod_live_fit,
 )
 from cyber_post_train.jobs import JobsError, digest
 from cyber_post_train.lora_cpu_preflight import build_lora_cpu_preflight_package
@@ -330,6 +331,33 @@ def cpu_node_inventory():
                     "allocatable": {"cpu": "15900m", "memory": "65216572Ki"},
                     "conditions": [{"type": "Ready", "status": "True"}],
                 },
+            }
+        ],
+    }
+
+
+def cpu_pod_inventory(*, requested_cpu="0", requested_memory="0"):
+    return {
+        "apiVersion": "v1",
+        "kind": "List",
+        "items": [
+            {
+                "metadata": {"name": "existing", "namespace": "fleet-train-jobs"},
+                "spec": {
+                    "nodeName": "shared-cpu-1",
+                    "containers": [
+                        {
+                            "name": "existing",
+                            "resources": {
+                                "requests": {
+                                    "cpu": requested_cpu,
+                                    "memory": requested_memory,
+                                }
+                            },
+                        }
+                    ],
+                },
+                "status": {"phase": "Running"},
             }
         ],
     }
@@ -666,20 +694,48 @@ def test_cpu_checkpoint_boundary_previews_and_creates_only_unpinned_zero_gpu_pod
     def run(command, **kwargs):
         payload = kwargs.get("input")
         calls.append((command, json.loads(payload) if payload is not None else None))
-        output = cpu_node_inventory() if "get" in command else expected
+        if "get" in command and "nodes" in command:
+            output = cpu_node_inventory()
+        elif "get" in command and "pods" in command:
+            output = cpu_pod_inventory()
+        else:
+            output = expected
         return subprocess.CompletedProcess(command, 0, stdout=json.dumps(output), stderr="")
 
     monkeypatch.setattr(subprocess, "run", run)
     kube = Kubectl("prod-context")
     kube.dry_run_cpu_checkpoint_pod(expected)
     kube.create_cpu_checkpoint_pod_once(expected)
-    assert len(calls) == 4
+    assert len(calls) == 6
     assert "get" in calls[0][0]
-    assert "--dry-run=server" in calls[1][0]
-    assert "get" in calls[2][0]
-    assert "--dry-run=server" not in calls[3][0]
+    assert "get" in calls[1][0]
+    assert "--dry-run=server" in calls[2][0]
+    assert "get" in calls[3][0]
+    assert "get" in calls[4][0]
+    assert "--dry-run=server" not in calls[5][0]
     manifests = [payload for _, payload in calls if payload is not None]
     assert all(payload["spec"]["nodeSelector"] == CPU_NODE_SELECTOR for payload in manifests)
+
+
+def test_cpu_checkpoint_live_fit_rejects_request_that_only_fits_an_empty_node():
+    pod = cpu_checkpoint_pod()
+    pod["spec"]["containers"][0]["resources"]["requests"] = {
+        "cpu": "12",
+        "memory": "56Gi",
+    }
+    occupied = cpu_pod_inventory(requested_cpu="4615m", requested_memory="8407Mi")
+
+    with pytest.raises(JobsError, match="cannot fit current requested capacity"):
+        validate_cpu_pod_live_fit(pod, cpu_node_inventory(), occupied)
+
+    pod["spec"]["containers"][0]["resources"]["requests"] = {
+        "cpu": "10",
+        "memory": "52Gi",
+    }
+    proof = validate_cpu_pod_live_fit(pod, cpu_node_inventory(), occupied)
+    assert proof["live_fitting_node_count"] == 1
+    assert proof["max_free_cpu_millicores"] == 11285
+    assert proof["max_free_memory_bytes"] == 57966391296
 
 
 @pytest.mark.parametrize(
@@ -791,7 +847,12 @@ def test_lora_cpu_preflight_package_binds_exact_driver_bytes_before_dry_run_and_
         payload = kwargs.get("input")
         obj = json.loads(payload) if payload is not None else None
         calls.append((command, obj))
-        output = cpu_node_inventory() if "get" in command else obj
+        if "get" in command and "nodes" in command:
+            output = cpu_node_inventory()
+        elif "get" in command and "pods" in command:
+            output = cpu_pod_inventory()
+        else:
+            output = obj
         return subprocess.CompletedProcess(command, 0, stdout=json.dumps(output), stderr="")
 
     monkeypatch.setattr(subprocess, "run", run)
@@ -802,16 +863,18 @@ def test_lora_cpu_preflight_package_binds_exact_driver_bytes_before_dry_run_and_
     assert preview["proof"] == created["proof"]
     assert [obj and obj["kind"] for _, obj in calls] == [
         None,
+        None,
         "ConfigMap",
         "Pod",
+        None,
         None,
         "ConfigMap",
         "Pod",
     ]
-    assert all(call[1]["data"] == package.config_map["data"] for call in (calls[1], calls[4]))
+    assert all(call[1]["data"] == package.config_map["data"] for call in (calls[2], calls[6]))
     assert all(
         payload["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
-        for payload in (calls[2][1], calls[5][1])
+        for payload in (calls[3][1], calls[7][1])
     )
 
 

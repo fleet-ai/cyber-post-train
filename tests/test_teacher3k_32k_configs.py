@@ -388,9 +388,12 @@ def test_teacher3k_context_runtime_repair_changes_only_external_identity(context
     assert successor_plan == expected_plan
 
 
-def test_teacher3k_64k_forward_adapter_repair_changes_only_external_identity():
-    retired = json.loads((RUNS / "qwen38-teacher3k-64k-full-b8-lr3e6-v2.json").read_text())
-    successor = json.loads((RUNS / "qwen38-teacher3k-64k-full-b8-lr3e6-v3.json").read_text())
+@pytest.mark.parametrize("context", ["64", "96"])
+def test_teacher3k_context_forward_adapter_repair_changes_only_external_identity(context):
+    retired = json.loads((RUNS / f"qwen38-teacher3k-{context}k-full-b8-lr3e6-v2.json").read_text())
+    successor = json.loads(
+        (RUNS / f"qwen38-teacher3k-{context}k-full-b8-lr3e6-v3.json").read_text()
+    )
 
     expected = json.loads(json.dumps(retired))
     expected["name"] = successor["name"]

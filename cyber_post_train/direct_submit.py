@@ -173,6 +173,112 @@ def validate_cpu_checkpoint_node_fit(manifest: dict, inventory: dict) -> dict:
     }
 
 
+def _scheduled_pod_request(pod: dict) -> tuple[int, int]:
+    """Return the scheduler-shaped CPU/memory request for one assigned Pod."""
+
+    try:
+        spec = pod["spec"]
+        containers = spec["containers"]
+    except (KeyError, TypeError):
+        raise JobsError("CPU Pod inventory contains a malformed Pod") from None
+    if not isinstance(containers, list) or not containers:
+        raise JobsError("CPU Pod inventory contains a malformed Pod")
+
+    app_cpu = 0
+    app_memory = 0
+    for container in containers:
+        requests = container.get("resources", {}).get("requests", {})
+        cpu_value = requests.get("cpu")
+        memory_value = requests.get("memory")
+        app_cpu += _cpu_millicores(cpu_value) if cpu_value not in {None, "", "0"} else 0
+        app_memory += _memory_bytes(memory_value) if memory_value not in {None, "", "0"} else 0
+
+    init_cpu = 0
+    init_memory = 0
+    for container in spec.get("initContainers", []):
+        requests = container.get("resources", {}).get("requests", {})
+        cpu_value = requests.get("cpu")
+        memory_value = requests.get("memory")
+        value_cpu = _cpu_millicores(cpu_value) if cpu_value not in {None, "", "0"} else 0
+        value_memory = _memory_bytes(memory_value) if memory_value not in {None, "", "0"} else 0
+        init_cpu = max(init_cpu, value_cpu)
+        init_memory = max(init_memory, value_memory)
+
+    overhead = spec.get("overhead", {})
+    if not isinstance(overhead, dict):
+        raise JobsError("CPU Pod inventory contains malformed scheduling overhead")
+    overhead_cpu = _cpu_millicores(overhead["cpu"]) if overhead.get("cpu") else 0
+    overhead_memory = _memory_bytes(overhead["memory"]) if overhead.get("memory") else 0
+    return max(app_cpu, init_cpu) + overhead_cpu, max(app_memory, init_memory) + overhead_memory
+
+
+def validate_cpu_pod_live_fit(manifest: dict, nodes: dict, pods: dict) -> dict:
+    """Fail closed unless one currently Ready CPU node has unclaimed request capacity.
+
+    Node ``allocatable`` proves only that a Pod could fit on an empty machine. The
+    scheduler must also account for requests already assigned to each node. This
+    gate deliberately uses requested, not sampled, utilization so a busy CPU
+    preflight is rejected before creation instead of sitting Pending.
+    """
+
+    static = validate_cpu_checkpoint_node_fit(manifest, nodes)
+    if pods.get("kind") != "List" or not isinstance(pods.get("items"), list):
+        raise JobsError("CPU Pod inventory is incomplete")
+
+    requested_cpu, requested_memory = _cpu_checkpoint_request(manifest)
+    used: dict[str, list[int]] = {}
+    for pod in pods["items"]:
+        try:
+            phase = pod["status"]["phase"]
+            node_name = pod["spec"].get("nodeName")
+        except (KeyError, TypeError):
+            raise JobsError("CPU Pod inventory contains a malformed Pod") from None
+        if phase in {"Succeeded", "Failed"} or not node_name:
+            continue
+        cpu, memory = _scheduled_pod_request(pod)
+        totals = used.setdefault(node_name, [0, 0])
+        totals[0] += cpu
+        totals[1] += memory
+
+    fitting = []
+    for node in nodes["items"]:
+        metadata = node.get("metadata", {})
+        spec = node.get("spec", {})
+        status = node.get("status", {})
+        labels = metadata.get("labels", {})
+        conditions = status.get("conditions", [])
+        if not all(labels.get(key) == value for key, value in CPU_NODE_SELECTOR.items()):
+            continue
+        if spec.get("unschedulable") is True or not any(
+            condition.get("type") == "Ready" and condition.get("status") == "True"
+            for condition in conditions
+            if isinstance(condition, dict)
+        ):
+            continue
+        name = metadata.get("name")
+        if not isinstance(name, str) or not name:
+            raise JobsError("CPU node inventory contains a malformed node")
+        allocatable = status.get("allocatable", {})
+        free_cpu = _cpu_millicores(allocatable.get("cpu")) - used.get(name, [0, 0])[0]
+        free_memory = _memory_bytes(allocatable.get("memory")) - used.get(name, [0, 0])[1]
+        if free_cpu >= requested_cpu and free_memory >= requested_memory:
+            fitting.append(
+                {
+                    "name": name,
+                    "free_cpu_millicores": free_cpu,
+                    "free_memory_bytes": free_memory,
+                }
+            )
+    if not fitting:
+        raise JobsError("CPU Pod cannot fit current requested capacity on any eligible node")
+    return {
+        **static,
+        "live_fitting_node_count": len(fitting),
+        "max_free_cpu_millicores": max(node["free_cpu_millicores"] for node in fitting),
+        "max_free_memory_bytes": max(node["free_memory_bytes"] for node in fitting),
+    }
+
+
 def _has_lora_cpu_preflight_surface(manifest: dict) -> bool:
     """Detect a partially stripped package instead of silently taking the generic path."""
 
@@ -724,6 +830,17 @@ class Kubectl:
             ]
         )
 
+    def _cpu_pod_inventory(self) -> dict:
+        return self._run(
+            [
+                "get",
+                "pods",
+                "--all-namespaces",
+                "--field-selector=status.phase!=Succeeded,status.phase!=Failed",
+                "--output=json",
+            ]
+        )
+
     @staticmethod
     def _require_generic_cpu_checkpoint(manifest: dict) -> None:
         validate_cpu_checkpoint_pod(manifest)
@@ -751,6 +868,8 @@ class Kubectl:
         self._require_generic_cpu_checkpoint(manifest)
         inventory = self._cpu_node_inventory()
         validate_cpu_checkpoint_node_fit(manifest, inventory)
+        pods = self._cpu_pod_inventory()
+        validate_cpu_pod_live_fit(manifest, inventory, pods)
         response = self._run(
             ["create", "--dry-run=server", "--filename=-", "--output=json"],
             manifest=manifest,
@@ -763,6 +882,8 @@ class Kubectl:
         self._require_generic_cpu_checkpoint(manifest)
         inventory = self._cpu_node_inventory()
         validate_cpu_checkpoint_node_fit(manifest, inventory)
+        pods = self._cpu_pod_inventory()
+        validate_cpu_pod_live_fit(manifest, inventory, pods)
         response = self._run(["create", "--filename=-", "--output=json"], manifest=manifest)
         validate_cpu_checkpoint_pod(response)
         return response
@@ -773,6 +894,8 @@ class Kubectl:
         proof = self._require_lora_cpu_preflight_package(package)
         inventory = self._cpu_node_inventory()
         validate_cpu_checkpoint_node_fit(package.pod, inventory)
+        pods = self._cpu_pod_inventory()
+        validate_cpu_pod_live_fit(package.pod, inventory, pods)
         config_map = self._run(
             ["create", "--dry-run=server", "--filename=-", "--output=json"],
             manifest=package.config_map,
@@ -791,6 +914,8 @@ class Kubectl:
         proof = self._require_lora_cpu_preflight_package(package)
         inventory = self._cpu_node_inventory()
         validate_cpu_checkpoint_node_fit(package.pod, inventory)
+        pods = self._cpu_pod_inventory()
+        validate_cpu_pod_live_fit(package.pod, inventory, pods)
         config_map = self._run(
             ["create", "--filename=-", "--output=json"], manifest=package.config_map
         )
