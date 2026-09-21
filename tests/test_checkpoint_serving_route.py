@@ -1,0 +1,132 @@
+from __future__ import annotations
+
+import copy
+import json
+
+import pytest
+
+from training.checkpoint_serving_route import (
+    RouteError,
+    _digest,
+    _normalized_contract,
+    build_paused_spec,
+    reconcile_create,
+)
+
+
+def _base() -> dict:
+    return {
+        "displayName": "Base",
+        "desiredState": "serving",
+        "capabilities": ["chat_completions", "reasoning", "streaming", "tool_calling"],
+        "model": {
+            "sourcePath": "/models/base/rev",
+            "path": "/scratch/models/base/rev",
+            "revision": "base-revision",
+            "precision": "bf16",
+            "tensorParallelSize": 1,
+            "dataParallelSize": 8,
+            "dataParallelAttention": False,
+        },
+        "runtime": {
+            "engine": "sglang",
+            "args": ["--model-path", "/scratch/models/base/rev", "--served-model-name", "base"],
+        },
+        "placement": {"nodeGroup": "gpu", "priorityClassName": "c0"},
+        "resources": {
+            "requests": {"cpu": "96", "memory": "1Ti", "nvidia.com/gpu": 8},
+            "limits": {"cpu": "192", "memory": "2Ti", "nvidia.com/gpu": 8},
+        },
+        "routing": {"enabled": True},
+        "scaling": {"minReplicas": 1, "replicas": 2},
+    }
+
+
+def test_build_paused_spec_changes_only_weights_identity_and_lifecycle() -> None:
+    base = _base()
+    candidate = build_paused_spec(
+        base,
+        model_id="chris-q38-test-v1",
+        display_name="Candidate",
+        source_path="/models/chris-q38-test-v1",
+        revision="sha256:" + "a" * 64,
+    )
+    assert candidate["desiredState"] == "paused"
+    assert candidate["placement"]["priorityClassName"] == "c1"
+    assert candidate["model"]["tensorParallelSize"] == 1
+    assert candidate["model"]["dataParallelSize"] == 8
+    assert candidate["scaling"] == {"minReplicas": 0, "replicas": 1}
+    assert _normalized_contract(candidate) == _normalized_contract(base)
+
+
+def test_contract_detects_runtime_drift() -> None:
+    base = _base()
+    candidate = build_paused_spec(
+        base,
+        model_id="chris-q38-test-v1",
+        display_name="Candidate",
+        source_path="/models/chris-q38-test-v1",
+        revision="sha256:" + "a" * 64,
+    )
+    drifted = copy.deepcopy(candidate)
+    drifted["runtime"]["args"].append("--different-runtime")
+    assert _normalized_contract(drifted) != _normalized_contract(base)
+
+
+def test_rejects_non_sha_revision() -> None:
+    with pytest.raises(RouteError, match="invalid_revision"):
+        build_paused_spec(
+            _base(),
+            model_id="chris-q38-test-v1",
+            display_name="Candidate",
+            source_path="/models/chris-q38-test-v1",
+            revision="mutable",
+        )
+
+
+def test_reconcile_create_never_posts(tmp_path) -> None:
+    spec = build_paused_spec(
+        _base(),
+        model_id="chris-q38-test-v1",
+        display_name="Candidate",
+        source_path="/models/chris-q38-test-v1",
+        revision="sha256:" + "a" * 64,
+    )
+    registration = {"id": "chris-q38-test-v1", "spec": spec}
+    plan = {
+        "schema": "cyber_checkpoint_serving_route_plan_v1",
+        "registration": registration,
+        "registration_sha256": _digest(registration),
+        "mutation_count": 0,
+    }
+    plan["plan_sha256"] = _digest(plan)
+    intent = {
+        "schema": "cyber_checkpoint_serving_route_intent_v1",
+        "plan_sha256": plan["plan_sha256"],
+        "registration_sha256": plan["registration_sha256"],
+        "post_will_be_attempted": True,
+    }
+    intent["receipt_sha256"] = _digest(intent)
+    plan_path = tmp_path / "plan.json"
+    intent_path = tmp_path / "intent.json"
+    result_path = tmp_path / "result.json"
+    plan_path.write_text(json.dumps(plan))
+    intent_path.write_text(json.dumps(intent))
+
+    class FakeClient:
+        methods: list[str] = []
+
+        def request(self, method, url):
+            self.methods.append(method)
+            return 200, {
+                "id": registration["id"],
+                "spec": spec,
+                "resource_version": "123",
+                "status": {"phase": "paused"},
+            }
+
+    client = FakeClient()
+    result = reconcile_create(client, plan_path, intent_path, result_path)
+    assert client.methods == ["GET"]
+    assert result["reconciled_after_create"] is True
+    assert json.loads(result_path.read_text())["post_attempts"] == 1
