@@ -25,6 +25,7 @@ from training import (
     skyrl,
     skyrl_production,
     skyrl_production_training,
+    skyrl_reward_rayjob,
     skyrl_topology_probe,
     skyrl_training,
 )
@@ -222,6 +223,20 @@ def prod4_audit(next_gates: dict) -> dict:
     run = load(CANARY_RUN)
     metadata = prod4_metadata(run, next_gates)
     plan, request = compile_prod4(run, metadata)
+    shared_budget = episode_ceiling(
+        run,
+        dev_rows=metadata["files"]["dev"]["rows"],
+        episode_seconds=metadata["limits"]["episode_seconds"],
+    )
+    direct_budget = episode_ceiling(
+        run,
+        dev_rows=metadata["files"]["dev"]["rows"],
+        episode_seconds=metadata["limits"]["episode_seconds"],
+        watchdog={
+            **shared_budget["watchdog"],
+            "hard_seconds": skyrl_reward_rayjob.MAXIMUM_SECONDS,
+        },
+    )
     if (
         request["workers"] != 1
         or request["gpus_per_worker"] != 8
@@ -306,14 +321,10 @@ def prod4_audit(next_gates: dict) -> dict:
             "poll_seconds": WATCHDOG_POLL_SECONDS,
             "startup_seconds": WATCHDOG_STARTUP_SECONDS,
             "confirmed_idle_seconds": WATCHDOG_IDLE_SECONDS,
-            "hard_seconds": WATCHDOG_HARD_SECONDS,
+            "hard_seconds": skyrl_reward_rayjob.MAXIMUM_SECONDS,
             "drain_seconds": WATCHDOG_DRAIN_SECONDS,
             "child_SIGTERM_then_SIGKILL_seconds": 60,
-            "episode_budget": episode_ceiling(
-                run,
-                dev_rows=metadata["files"]["dev"]["rows"],
-                episode_seconds=metadata["limits"]["episode_seconds"],
-            ),
+            "episode_budget": direct_budget,
             "Jobs_API_preview_must_render_shutdown_after_job_finishes": True,
             "independent_UID_bound_release_observer_recorded": False,
         },

@@ -874,20 +874,20 @@
         "episode_concurrency": 8,
         "episode_seconds": 14400,
         "evaluation_points": 2,
-        "fits_watchdog_hard_bound": false,
+        "fits_watchdog_hard_bound": true,
         "legal_episode_ceiling_seconds_excluding_startup_and_optimization": 43200,
         "minimum_hard_seconds_without_shortening_episode": 45300,
         "train_steps": 1,
         "watchdog": {
           "drain_seconds": 300,
           "episode_ceiling_seconds": 43200,
-          "hard_seconds": 28800,
+          "hard_seconds": 50400,
           "idle_seconds": 1200,
           "poll_seconds": 60,
           "startup_seconds": 1800
         }
       },
-      "hard_seconds": 28800,
+      "hard_seconds": 50400,
       "independent_UID_bound_release_observer_recorded": false,
       "poll_seconds": 60,
       "startup_seconds": 1800
@@ -895,7 +895,7 @@
   },
   "schema": "cyber_qwen38_skyrl_launch_readiness_audit_v1",
   "scope": "offline_no_submit_no_launch_no_cancel_no_private_logs_no_external_reads_or_writes",
-  "sha256": "sha256:90dac8e56aeb33835b40555745b6ccbec7d6efab13086b90dabec1cd93f292fe",
+  "sha256": "sha256:14a436178db723c7dd2bc8e4d26bc9553f352a1f3ae215b6645cf1499a83d055",
   "source_queue": {
     "file_sha256": "sha256:549bca1a8409cab10aaa9e0f754e5200c4401895e1507eb9c483d53e06286bd3",
     "path": "docs/evidence/qwen38-study/2026-09-20-skyrl-next-gates-queue-v1.json",

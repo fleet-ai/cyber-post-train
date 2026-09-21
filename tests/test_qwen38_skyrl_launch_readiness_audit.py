@@ -106,6 +106,12 @@ def test_v17_and_prod4_recompile_to_the_frozen_digests_and_resource_shape() -> N
     assert prod4["wandb"]["run_id"] == "chris-q38-rlreward-prod7"
     assert prod4["wandb"]["resume"] == "never"
     assert prod4["wandb"]["fresh_run_ID_absence_checked_before_submit"] is False
+    assert prod4["watchdog"]["hard_seconds"] == 14 * 60 * 60
+    assert prod4["watchdog"]["episode_budget"]["fits_watchdog_hard_bound"] is True
+    assert (
+        prod4["watchdog"]["episode_budget"]["minimum_hard_seconds_without_shortening_episode"]
+        == 45300
+    )
     encoded = prod4["encoded_absence_checks"]
     assert encoded["fresh_Kubernetes_name_absence_encoded"] is True
     assert encoded["fresh_SFS_manifest_payload_and_output_absence_encoded"] is True
