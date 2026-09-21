@@ -608,6 +608,7 @@ def _packet(value: Mapping[str, Any], profile: dict[str, Any]) -> dict[str, Any]
         != [
             "source_session_identity",
             "normalized_trajectory_digest",
+            "source_target_digest",
             "packed_window_payload_digest",
         ]
         or packet["rejection_policy"]
@@ -644,9 +645,7 @@ def _planned_cell_id(packet: Mapping[str, Any], row: Mapping[str, Any]) -> str:
     return CELL_ID_PREFIX + digest_json(payload).removeprefix("sha256:")[:24]
 
 
-def _operation_authorization(
-    value: Mapping[str, Any], packet: Mapping[str, Any]
-) -> dict[str, Any]:
+def _operation_authorization(value: Mapping[str, Any], packet: Mapping[str, Any]) -> dict[str, Any]:
     authorization = _sealed(
         value,
         OPERATION_AUTHORIZATION_SCHEMA,
@@ -724,15 +723,12 @@ def _campaign_artifacts(
         or packet["wave_plan_sha256"] != wave["sha256"]
         or wave.get("campaign_plan_sha256") != plan["sha256"]
         or plan.get("campaign_name") != packet["campaign_name"]
-        or identity.get("cell_identity_universe_sha256")
-        != packet["cell_identity_universe_sha256"]
+        or identity.get("cell_identity_universe_sha256") != packet["cell_identity_universe_sha256"]
         or boundary.get("task_selection_sha256") != packet["task_selection_sha256"]
-        or collection.get("attempts_per_task_version")
-        != packet["attempts_per_task_version"]
+        or collection.get("attempts_per_task_version") != packet["attempts_per_task_version"]
         or collection.get("minimum_unique_supervised_tokens")
         != packet["minimum_unique_supervised_tokens"]
-        or collection.get("minimum_successful_families")
-        != packet["minimum_successful_families"]
+        or collection.get("minimum_successful_families") != packet["minimum_successful_families"]
         or collection.get("maximum_family_target_token_fraction")
         != packet["maximum_family_target_token_fraction"]
     ):
@@ -1118,10 +1114,8 @@ def _selection(
         selection["collection_packet_sha256"] != packet["sha256"]
         or selection["campaign_plan_sha256"] != packet["campaign_plan_sha256"]
         or selection["wave_plan_sha256"] != packet["wave_plan_sha256"]
-        or selection["cell_identity_universe_sha256"]
-        != packet["cell_identity_universe_sha256"]
-        or selection["operation_authorization_sha256"]
-        != packet["operation_authorization_sha256"]
+        or selection["cell_identity_universe_sha256"] != packet["cell_identity_universe_sha256"]
+        or selection["operation_authorization_sha256"] != packet["operation_authorization_sha256"]
         or selection["task_selection_sha256"] != packet["task_selection_sha256"]
         or selection["catalog_inventory_sha256"] != packet["catalog_inventory_sha256"]
         or selection["family_split_sha256"] != split["sha256"]
@@ -1427,6 +1421,80 @@ def _window(value: object) -> dict[str, Any]:
     return window
 
 
+def _source_target_identity(record: Mapping[str, Any], window: Mapping[str, Any]) -> dict[str, Any]:
+    """Identify one supervised assistant target independently of packing.
+
+    Window ids, sequence numbers, prompt length, and absolute packed-token
+    offsets are deliberately absent from these identities.  The assistant
+    turn is rooted in the exact normalized trajectory and target message;
+    each supervised span is then normalized to offsets within that assistant
+    continuation.  This prevents a collector from counting the same source
+    turn twice merely by repacking it into another window.
+    """
+
+    evidence = _mapping(record.get("evidence"), "record evidence")
+    trajectory_sha256 = _sha(
+        evidence.get("normalized_trajectory_sha256"), "record normalized trajectory"
+    )
+    messages = record.get("messages")
+    if not isinstance(messages, list):
+        raise ValueError("private visible-reasoning record has no messages")
+    target_index = _count(window.get("target_message_index"), "window target message")
+    if target_index >= len(messages):
+        raise ValueError("window target message is outside its private record")
+    target_message = _mapping(messages[target_index], "window target message")
+    if target_message.get("role") != "assistant":
+        raise ValueError("window target message is not an assistant turn")
+    assistant_turn_id = _string(window.get("assistant_turn_id"), "assistant turn identity")
+    prompt_tokens = _count(window.get("prompt_token_count"), "window prompt token count")
+    spans = window.get("target_spans")
+    if not isinstance(spans, list) or not spans:
+        raise ValueError("window must have explicit supervised target spans")
+
+    source_turn = {
+        "normalized_trajectory_sha256": trajectory_sha256,
+        "target_message_index": target_index,
+        "target_message_sha256": digest_json(target_message),
+    }
+    source_turn_sha256 = digest_json(source_turn)
+    normalized_spans: list[dict[str, Any]] = []
+    span_sha256s: list[str] = []
+    for span in spans:
+        checked = _mapping(span, "target span")
+        if checked.get("source_message_index") != target_index:
+            raise ValueError("a supervised target span is not bound to this assistant turn")
+        start = _count(checked.get("token_start"), "target span start")
+        end = _count(checked.get("token_end"), "target span end", positive=True)
+        normalized = {
+            "kind": checked.get("kind"),
+            "source_message_index": target_index,
+            "assistant_token_start": start - prompt_tokens,
+            "assistant_token_end": end - prompt_tokens,
+            "token_ids_sha256": checked.get("token_ids_sha256"),
+        }
+        normalized_spans.append(normalized)
+        span_sha256s.append(
+            digest_json(
+                {
+                    "source_turn_sha256": source_turn_sha256,
+                    "normalized_supervised_span": normalized,
+                }
+            )
+        )
+    source_target_sha256 = digest_json(
+        {
+            "source_turn_sha256": source_turn_sha256,
+            "assistant_turn_id": assistant_turn_id,
+            "normalized_supervised_spans": normalized_spans,
+        }
+    )
+    return {
+        "source_turn_sha256": source_turn_sha256,
+        "source_target_sha256": source_target_sha256,
+        "source_span_sha256s": span_sha256s,
+    }
+
+
 def _compaction(
     value: object,
     windows: dict[str, dict[str, Any]],
@@ -1606,6 +1674,23 @@ def _record(value: Mapping[str, Any], profile: dict[str, Any]) -> dict[str, Any]
         windows
     ):
         raise ValueError("private visible-reasoning record duplicates a window identity or order")
+    source_turns: set[str] = set()
+    source_targets: set[str] = set()
+    assistant_turns: dict[str, str] = {}
+    for window in windows:
+        identity = _source_target_identity(record, window)
+        source_turn = identity["source_turn_sha256"]
+        source_target = identity["source_target_sha256"]
+        assistant_turn_id = window["assistant_turn_id"]
+        if source_turn in source_turns or source_target in source_targets:
+            raise ValueError(
+                "private visible-reasoning record duplicates a source assistant target"
+            )
+        prior_turn = assistant_turns.setdefault(assistant_turn_id, source_turn)
+        if prior_turn != source_turn:
+            raise ValueError("assistant turn identity names more than one source target")
+        source_turns.add(source_turn)
+        source_targets.add(source_target)
     _compaction(
         record["compaction"],
         by_id,
@@ -1815,9 +1900,7 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
         split,
         profile,
     )
-    bindings = _task_boundary(
-        inventory, split, role_anchor, lock, runtime, task_selection, packet
-    )
+    bindings = _task_boundary(inventory, split, role_anchor, lock, runtime, task_selection, packet)
     selection = _json(paths["selection"], "private selection")
     success_evidence_document, success_evidence = _success_evidence(
         _json(paths["success_evidence"], "success evidence"),
@@ -1860,7 +1943,9 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
     action_only_rows: list[dict[str, Any]] = []
     selection_rows: list[dict[str, Any]] = []
     window_digests: set[str] = set()
-    target_occurrences: set[str] = set()
+    source_turns: set[str] = set()
+    source_targets: set[str] = set()
+    source_span_occurrences: set[str] = set()
     family_tokens: dict[str, int] = {}
     reasoning_tokens = action_tokens = 0
     compacted_windows = 0
@@ -1890,27 +1975,27 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
         record_reasoning = record_action = 0
         for window in record["windows"]:
             _rendered_window(tokenizer, record, window)
+            identity = _source_target_identity(record, window)
+            source_turn = identity["source_turn_sha256"]
+            source_target = identity["source_target_sha256"]
+            if source_turn in source_turns or source_target in source_targets:
+                raise ValueError("duplicate source assistant target would repeat supervision")
+            source_turns.add(source_turn)
+            source_targets.add(source_target)
             payload = window["window_payload_sha256"]
             if payload in window_digests:
                 raise ValueError("duplicate packed window would repeat supervised targets")
             window_digests.add(payload)
             mask = _loss_mask(window)
-            for span in window["target_spans"]:
+            for span, occurrence in zip(
+                window["target_spans"], identity["source_span_sha256s"], strict=True
+            ):
                 # Equal token bytes can occur in two genuinely distinct tool
                 # actions.  Deduplicate the exact source occurrence, not a
                 # token-content hash that would incorrectly erase one of them.
-                occurrence = digest_json(
-                    [
-                        record["evidence"]["normalized_trajectory_sha256"],
-                        payload,
-                        span["kind"],
-                        span["token_start"],
-                        span["token_end"],
-                    ]
-                )
-                if occurrence in target_occurrences:
+                if occurrence in source_span_occurrences:
                     raise ValueError("one visible target span appears more than once")
-                target_occurrences.add(occurrence)
+                source_span_occurrences.add(occurrence)
                 width = span["token_end"] - span["token_start"]
                 family_tokens[selected_row["group_id"]] = (
                     family_tokens.get(selected_row["group_id"], 0) + width
@@ -1925,6 +2010,7 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
                 {
                     "source_record_sha256": selected_row["normalized_record_sha256"],
                     "source_task_version_id": selected_row["task_version_id"],
+                    "source_target_sha256": source_target,
                     "source_window_sha256": payload,
                     "input_ids_sha256": digest_json(window["input_ids"]),
                 }
@@ -1933,15 +2019,15 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
                 "input_ids": window["input_ids"],
                 "source_record_sha256": selected_row["normalized_record_sha256"],
                 "source_task_version_id": selected_row["task_version_id"],
+                "source_turn_sha256": source_turn,
+                "source_target_sha256": source_target,
                 "source_window_sha256": payload,
                 "source_profile_sha256": profile["sha256"],
                 "collection_packet_sha256": packet["sha256"],
                 "paired_window_sha256": paired_window_sha256,
             }
             rows.append({**common, "loss_mask": mask})
-            action_only_rows.append(
-                {**common, "loss_mask": _action_only_loss_mask(window)}
-            )
+            action_only_rows.append({**common, "loss_mask": _action_only_loss_mask(window)})
         if not record_reasoning or not record_action:
             raise ValueError("selected record lacks paired visible reasoning and action coverage")
         compacted_window_ids = _compacted_target_window_ids(record)
@@ -1961,8 +2047,11 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
         )
     if not rows:
         raise ValueError("visible-reasoning materialization produced no train windows")
+    if len(source_turns) != len(rows) or len(source_targets) != len(rows):
+        raise ValueError("source-target identity count differs from materialized windows")
     if len(action_only_rows) != len(rows) or any(
         reasoning_row["paired_window_sha256"] != action_row["paired_window_sha256"]
+        or reasoning_row["source_target_sha256"] != action_row["source_target_sha256"]
         or reasoning_row["input_ids"] != action_row["input_ids"]
         for reasoning_row, action_row in zip(rows, action_only_rows, strict=True)
     ):
@@ -2057,6 +2146,9 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
             "paired_window_identity_sha256": digest_json(
                 [row["paired_window_sha256"] for row in rows]
             ),
+            "source_target_identity_sha256": digest_json(
+                [row["source_target_sha256"] for row in rows]
+            ),
             "same_selected_windows": True,
             "same_input_ids": True,
             "only_reasoning_loss_mask_differs": True,
@@ -2068,6 +2160,10 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
         "limitations": [
             "Only explicitly authorized student-visible reasoning is supervised.",
             "Private or unknown reasoning fields and opaque compaction are rejected.",
+            (
+                "Unique tokens count each normalized source assistant span once, "
+                "independent of packing metadata."
+            ),
             "Output contains token IDs and masks only; it contains no raw source text.",
         ],
         "builder_sha256": {"fleet_visible_reasoning_corpus.py": file_sha256(Path(__file__))},
@@ -2094,6 +2190,7 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
         manifest["files"]["reasoning_plus_action"]["sha256"] = file_sha256(reasoning_path)
         manifest["files"]["matched_action_only"]["sha256"] = file_sha256(action_path)
         paired_identity = manifest["matched_ablation"]["paired_window_identity_sha256"]
+        source_target_identity = manifest["matched_ablation"]["source_target_identity_sha256"]
         arm_values = {
             "reasoning_plus_action": {
                 "path": reasoning_path.name,
@@ -2120,6 +2217,7 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
                 "collection_packet_sha256": packet["sha256"],
                 "selection_sha256": selection["sha256"],
                 "paired_window_identity_sha256": paired_identity,
+                "source_target_identity_sha256": source_target_identity,
             }
             arm_manifest["sha256"] = digest_json(arm_manifest)
             arm_manifests[arm_name] = arm_manifest
@@ -2127,10 +2225,9 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
             "reasoning_plus_action_manifest_sha256": arm_manifests["reasoning_plus_action"][
                 "sha256"
             ],
-            "matched_action_only_manifest_sha256": arm_manifests["matched_action_only"][
-                "sha256"
-            ],
+            "matched_action_only_manifest_sha256": arm_manifests["matched_action_only"]["sha256"],
             "paired_window_identity_sha256": paired_identity,
+            "source_target_identity_sha256": source_target_identity,
         }
         manifest["matched_ablation"]["cross_arm_sha256"] = digest_json(cross_arm)
         for arm_name, arm_manifest in arm_manifests.items():

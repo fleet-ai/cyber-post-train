@@ -3,6 +3,7 @@
     "deduplication_order": [
       "source_session_identity",
       "normalized_trajectory_digest",
+      "source_target_digest",
       "packed_window_payload_digest"
     ],
     "eligible_terminal_outcome": "verified_success",
@@ -114,7 +115,7 @@
     "maximum_task_versions_per_family": 1,
     "train_task_versions": 50
   },
-  "sha256": "sha256:aab13727249423beb138200d24aaa2e1f69367dc6862197687b8538ffd38f752",
+  "sha256": "sha256:4689985c60cb99e3c9b90d0bb8df76feb7d04c32d3941437bcff373164005992",
   "source": {
     "images": {
       "agent": "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92",

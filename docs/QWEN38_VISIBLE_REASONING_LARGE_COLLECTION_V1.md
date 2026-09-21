@@ -82,11 +82,13 @@ must contain both:
 1. explicitly student-visible Qwen reasoning; and
 2. a visible action or tool call.
 
-Source sessions, normalized trajectories, and packed windows are deduplicated
-in that order. The offline materializer produces a matched action-only arm from
+Source sessions, normalized trajectories, source assistant targets, and packed
+windows are deduplicated in that order. The offline materializer produces a
+matched action-only arm from
 the same selected turns by masking reasoning tokens while leaving action targets
 unchanged. It writes a separate manifest for each arm and a cross-arm digest
-that proves the record, window, and token inputs are paired. The two corpora
+that proves the source assistant target, record, window, and token inputs are
+paired. The two corpora
 remain separate. This makes it possible to test whether visible
 reasoning supervision helps rather than confounding reasoning with different
 tasks or successes.

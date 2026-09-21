@@ -71,8 +71,12 @@ authentication check, and no training launcher accepts its output today.
 Each accepted window must include both a `student_visible_reasoning` target
 span and a `visible_action` target span. All earlier context, tool results, and
 compaction summaries are loss-masked. Spans are hashed, ordered,
-non-overlapping, and deduplicated alongside source sessions, trajectories, and
-packed-window payloads.
+non-overlapping, and deduplicated alongside source sessions and trajectories.
+The unique-token count additionally keys every assistant target to the exact
+trajectory, target message, and supervised spans using offsets relative to the
+assistant boundary. Window ids, sequence numbers, prompt length, and other
+packing metadata cannot make one source target count twice. Packed-window
+payloads remain a separate integrity check.
 
 Opaque compaction is forbidden. Qwen self records may use only
 `student_generated_exact_continuation_v1`, with the parent window, prior
@@ -90,6 +94,8 @@ Parquet corpora: one supervises student-visible reasoning plus visible actions;
 the other uses the exact same source records, packed windows, and token IDs but
 masks the reasoning targets. Each arm has its own digest-sealed manifest, and a
 cross-arm digest binds both manifests to the same ordered window identities.
+It also binds the ordered packing-independent source-target identities, so the
+reasoning and action-only arms cannot silently select different assistant turns.
 Materialization itself
 is **never** a training permit: its receipt records `sft_ready: false` even at
 the target. The separate `data-fleet-visible-reasoning-authorize` command checks

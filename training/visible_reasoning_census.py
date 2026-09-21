@@ -217,9 +217,10 @@ def _manifest(value: Mapping[str, Any]) -> dict[str, Any]:
             raise ValueError("visible-reasoning corpus train file is malformed")
         _sha(checked["sha256"], f"{arm} train file")
         checked_files[arm] = checked
-    if checked_files["reasoning_plus_action"]["rows"] != checked_files[
-        "matched_action_only"
-    ]["rows"]:
+    if (
+        checked_files["reasoning_plus_action"]["rows"]
+        != checked_files["matched_action_only"]["rows"]
+    ):
         raise ValueError("matched visible-reasoning arms do not have the same windows")
     arm_manifests = _exact(
         manifest["arm_manifests"], set(expected_paths), "visible-reasoning arm manifests"
@@ -251,11 +252,14 @@ def _manifest(value: Mapping[str, Any]) -> dict[str, Any]:
     )
     for name in counts:
         _count(counts[name], f"manifest {name}", positive=True)
-    if counts["supervised_tokens"] != (
-        counts["student_visible_reasoning_target_tokens"] + counts["visible_action_target_tokens"]
-    ) or counts["matched_action_only_supervised_tokens"] != counts[
-        "visible_action_target_tokens"
-    ]:
+    if (
+        counts["supervised_tokens"]
+        != (
+            counts["student_visible_reasoning_target_tokens"]
+            + counts["visible_action_target_tokens"]
+        )
+        or counts["matched_action_only_supervised_tokens"] != counts["visible_action_target_tokens"]
+    ):
         raise ValueError("visible-reasoning manifest target totals are inconsistent")
     if checked_files["reasoning_plus_action"]["rows"] != counts["windows"]:
         raise ValueError("visible-reasoning train rows differ from manifest windows")
@@ -276,6 +280,7 @@ def _manifest(value: Mapping[str, Any]) -> dict[str, Any]:
         manifest["matched_ablation"],
         {
             "paired_window_identity_sha256",
+            "source_target_identity_sha256",
             "same_selected_windows",
             "same_input_ids",
             "only_reasoning_loss_mask_differs",
@@ -283,8 +288,9 @@ def _manifest(value: Mapping[str, Any]) -> dict[str, Any]:
         },
         "matched visible-reasoning ablation",
     )
-    paired_identity = _sha(
-        matched["paired_window_identity_sha256"], "paired-window identity"
+    paired_identity = _sha(matched["paired_window_identity_sha256"], "paired-window identity")
+    source_target_identity = _sha(
+        matched["source_target_identity_sha256"], "source-target identity"
     )
     if (
         matched["same_selected_windows"] is not True
@@ -296,10 +302,11 @@ def _manifest(value: Mapping[str, Any]) -> dict[str, Any]:
                 "reasoning_plus_action_manifest_sha256": checked_arm_manifests[
                     "reasoning_plus_action"
                 ]["logical_sha256"],
-                "matched_action_only_manifest_sha256": checked_arm_manifests[
-                    "matched_action_only"
-                ]["logical_sha256"],
+                "matched_action_only_manifest_sha256": checked_arm_manifests["matched_action_only"][
+                    "logical_sha256"
+                ],
                 "paired_window_identity_sha256": paired_identity,
+                "source_target_identity_sha256": source_target_identity,
             }
         )
     ):
@@ -381,10 +388,7 @@ def _coverage(value: Mapping[str, Any]) -> dict[str, Any]:
         positive=True,
     )
     token_goal = unique >= minimum
-    if (
-        minimum < MINIMUM_SUPERVISED_TOKENS
-        or coverage["token_goal_reached"] is not token_goal
-    ):
+    if minimum < MINIMUM_SUPERVISED_TOKENS or coverage["token_goal_reached"] is not token_goal:
         raise ValueError("visible-reasoning coverage target gate is not mathematically bound")
     minimum_families = _count(
         coverage["minimum_successful_families"],
@@ -413,11 +417,9 @@ def _coverage(value: Mapping[str, Any]) -> dict[str, Any]:
     ):
         raise ValueError("visible-reasoning coverage exceeds the family concentration limit")
     family_goal = family["families_with_targets"] >= minimum_families
-    if (
-        coverage["successful_family_goal_reached"] is not family_goal
-        or coverage["target_goal_reached"]
-        is not (token_goal and family_goal and family["within_limit"])
-    ):
+    if coverage["successful_family_goal_reached"] is not family_goal or coverage[
+        "target_goal_reached"
+    ] is not (token_goal and family_goal and family["within_limit"]):
         raise ValueError("visible-reasoning coverage family gate is not mathematically bound")
     compaction = _exact(
         coverage["compaction"],

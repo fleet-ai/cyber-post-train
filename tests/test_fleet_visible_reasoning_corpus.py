@@ -383,9 +383,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
             "served_id": "qwen3.8-27b",
             "task_selection_sha256": task_selection["sha256"],
             "runtime_bindings_sha256": runtime["sha256"],
-            "task_versions_sha256": digest_json(
-                [row["task_version_id"] for row in selected_tasks]
-            ),
+            "task_versions_sha256": digest_json([row["task_version_id"] for row in selected_tasks]),
             "task_version_count": len(selected_tasks),
             "catalog": {
                 "engine": "sglang",
@@ -420,9 +418,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
                 "attempts_per_task_version": corpus.CAMPAIGN_ATTEMPTS_PER_TASK,
                 "minimum_unique_supervised_tokens": corpus.MINIMUM_SUPERVISED_TOKENS,
                 "minimum_successful_families": corpus.MINIMUM_SUCCESSFUL_FAMILIES,
-                "maximum_family_target_token_fraction": (
-                    corpus.MAXIMUM_FAMILY_TOKEN_FRACTION
-                ),
+                "maximum_family_target_token_fraction": (corpus.MAXIMUM_FAMILY_TOKEN_FRACTION),
             },
             "source_treatment": source_treatment,
             "identity": {
@@ -495,6 +491,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         "deduplication_order": [
             "source_session_identity",
             "normalized_trajectory_digest",
+            "source_target_digest",
             "packed_window_payload_digest",
         ],
         "rejection_policy": {
@@ -749,15 +746,16 @@ def test_materializes_token_only_visible_reasoning_corpus(tmp_path: Path, monkey
     assert manifest["schema"] == corpus.CORPUS_SCHEMA
     assert manifest["validation_mode"] == "pending_reasoning_selection"
     assert "synthetic visible reasoning" not in json.dumps(manifest)
-    rows = pq.read_table(
-        tmp_path / "corpus" / "train-reasoning-plus-action.parquet"
-    ).to_pylist()
+    rows = pq.read_table(tmp_path / "corpus" / "train-reasoning-plus-action.parquet").to_pylist()
     action_rows = pq.read_table(
         tmp_path / "corpus" / "train-matched-action-only.parquet"
     ).to_pylist()
     assert rows[0]["input_ids"] == [1, 2, 3, 4, 5]
     assert rows[0]["loss_mask"] == [0, 0, 1, 1, 1]
+    assert rows[0]["source_turn_sha256"].startswith("sha256:")
+    assert rows[0]["source_target_sha256"].startswith("sha256:")
     assert action_rows[0]["input_ids"] == rows[0]["input_ids"]
+    assert action_rows[0]["source_target_sha256"] == rows[0]["source_target_sha256"]
     assert action_rows[0]["paired_window_sha256"] == rows[0]["paired_window_sha256"]
     assert action_rows[0]["loss_mask"] == [0, 0, 0, 1, 1]
     assert manifest["matched_ablation"]["same_selected_windows"] is True
@@ -767,9 +765,14 @@ def test_materializes_token_only_visible_reasoning_corpus(tmp_path: Path, monkey
         arm_manifest = json.loads((tmp_path / "corpus" / arm_ref["path"]).read_text())
         assert file_sha256(tmp_path / "corpus" / arm_ref["path"]) == arm_ref["file_sha256"]
         assert arm_manifest["sha256"] == arm_ref["logical_sha256"]
-        assert arm_manifest["paired_window_identity_sha256"] == manifest[
-            "matched_ablation"
-        ]["paired_window_identity_sha256"]
+        assert (
+            arm_manifest["paired_window_identity_sha256"]
+            == manifest["matched_ablation"]["paired_window_identity_sha256"]
+        )
+        assert (
+            arm_manifest["source_target_identity_sha256"]
+            == manifest["matched_ablation"]["source_target_identity_sha256"]
+        )
     assert (tmp_path / "corpus").stat().st_mode & 0o777 == 0o700
     for name in (
         "train-reasoning-plus-action.parquet",
@@ -782,6 +785,42 @@ def test_materializes_token_only_visible_reasoning_corpus(tmp_path: Path, monkey
         "MATERIALIZATION.json",
     ):
         assert (tmp_path / "corpus" / name).stat().st_mode & 0o777 == 0o600
+
+
+@pytest.mark.parametrize("change_assistant_turn_id", [False, True])
+def test_rejects_duplicate_source_target_repacked_as_another_window(
+    tmp_path: Path, monkeypatch, change_assistant_turn_id: bool
+) -> None:
+    _config, state = _fixture(tmp_path, monkeypatch)
+    record = copy.deepcopy(state["record"])
+    duplicate = copy.deepcopy(record["windows"][0])
+    duplicate["window_id"] = "repacked-window"
+    duplicate["sequence_index"] = 99
+    if change_assistant_turn_id:
+        duplicate["assistant_turn_id"] = "forged-assistant-id"
+    duplicate["window_payload_sha256"] = digest_json(
+        {
+            "sequence_index": duplicate["sequence_index"],
+            "message_indices": duplicate["message_indices"],
+            "target_message_index": duplicate["target_message_index"],
+            "input_ids": duplicate["input_ids"],
+            "prompt_token_count": duplicate["prompt_token_count"],
+            "target_spans": duplicate["target_spans"],
+        }
+    )
+    assert duplicate["window_payload_sha256"] != record["windows"][0]["window_payload_sha256"]
+    original_identity = corpus._source_target_identity(record, record["windows"][0])
+    duplicate_identity = corpus._source_target_identity(record, duplicate)
+    assert duplicate_identity["source_turn_sha256"] == original_identity["source_turn_sha256"]
+    if not change_assistant_turn_id:
+        assert (
+            duplicate_identity["source_target_sha256"] == original_identity["source_target_sha256"]
+        )
+    record["windows"].append(duplicate)
+    _reseal_record(record)
+
+    with pytest.raises(ValueError, match="duplicates a source assistant target"):
+        corpus._record(record, state["profile"])
 
 
 @pytest.mark.parametrize(
@@ -929,9 +968,7 @@ def test_rejects_operation_authorization_campaign_drift_before_private_records(
     authorization = copy.deepcopy(state["operation_authorization"])
     authorization["campaign_plan_sha256"] = _sha("9")
     authorization["registry_payload_sha256"] = corpus._registry_payload_sha256(authorization)
-    authorization["authority"]["content_sha256"] = authorization[
-        "registry_payload_sha256"
-    ]
+    authorization["authority"]["content_sha256"] = authorization["registry_payload_sha256"]
     authorization["sha256"] = digest_json(
         {key: value for key, value in authorization.items() if key != "sha256"}
     )

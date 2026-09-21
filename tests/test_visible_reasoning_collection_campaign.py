@@ -136,6 +136,12 @@ def test_campaign_only_accepts_explicit_student_visible_qwen_reasoning(rendered)
     assert source["opencode"]["context_window_tokens"] == 262_144
     assert source["opencode"]["context_headroom_tokens"] == 20_000
     assert source["opencode"]["tools"] == ["bash", "submit_report"]
+    assert plan["admission"]["deduplication_order"] == [
+        "source_session_identity",
+        "normalized_trajectory_digest",
+        "source_target_digest",
+        "packed_window_payload_digest",
+    ]
     rejected = set(plan["admission"]["reject"])
     assert {
         "private_or_unknown_reasoning",

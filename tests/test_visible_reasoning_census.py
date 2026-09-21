@@ -34,6 +34,7 @@ def _manifest() -> dict:
         },
     }
     paired = _sha("c")
+    source_target = _sha("d")
     return _seal(
         {
             "schema": "cyber_qwen_opencode_visible_reasoning_sft_corpus_v1",
@@ -79,6 +80,7 @@ def _manifest() -> dict:
             },
             "matched_ablation": {
                 "paired_window_identity_sha256": paired,
+                "source_target_identity_sha256": source_target,
                 "same_selected_windows": True,
                 "same_input_ids": True,
                 "only_reasoning_loss_mask_differs": True,
@@ -87,10 +89,11 @@ def _manifest() -> dict:
                         "reasoning_plus_action_manifest_sha256": arm_manifests[
                             "reasoning_plus_action"
                         ]["logical_sha256"],
-                        "matched_action_only_manifest_sha256": arm_manifests[
-                            "matched_action_only"
-                        ]["logical_sha256"],
+                        "matched_action_only_manifest_sha256": arm_manifests["matched_action_only"][
+                            "logical_sha256"
+                        ],
                         "paired_window_identity_sha256": paired,
+                        "source_target_identity_sha256": source_target,
                     }
                 ),
             },

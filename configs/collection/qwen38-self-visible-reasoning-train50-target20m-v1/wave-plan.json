@@ -1,5 +1,5 @@
 {
-  "campaign_plan_sha256": "sha256:1ab2c6f50627c5bf1a49a2cc1c01d485bd27f2ed2b0c3de6b7c9106915d4b181",
+  "campaign_plan_sha256": "sha256:5c2d0be1472c25d6e4a9a68c3b2e429dcf64cdd6d4b9f66e87133a1bc93500c0",
   "scheduling": {
     "finish_active_wave_before_target_stop": true,
     "maximum_rollouts_per_day": 500,
@@ -7,7 +7,7 @@
     "start_next_wave_only_if_aggregate_target_not_reached": true
   },
   "schema": "cyber_qwen_opencode_visible_reasoning_wave_plan_v1",
-  "sha256": "sha256:bccc06c59caf7171561c5ab295b13f2e8ef89ed4548214f629c7286e0be6e322",
+  "sha256": "sha256:c85130c307d4148b840d7debb0bcecf455db6d0e9bb36569c50921429c455e03",
   "submitted": false,
   "waves": [
     {

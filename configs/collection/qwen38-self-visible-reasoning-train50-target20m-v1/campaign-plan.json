@@ -3,6 +3,7 @@
     "deduplication_order": [
       "source_session_identity",
       "normalized_trajectory_digest",
+      "source_target_digest",
       "packed_window_payload_digest"
     ],
     "eligible_terminal_outcome": "verified_success",
@@ -91,8 +92,8 @@
     "review_completed": false
   },
   "schema": "cyber_qwen_opencode_visible_reasoning_campaign_plan_v1",
-  "sha256": "sha256:1ab2c6f50627c5bf1a49a2cc1c01d485bd27f2ed2b0c3de6b7c9106915d4b181",
-  "source_spec_sha256": "sha256:aab13727249423beb138200d24aaa2e1f69367dc6862197687b8538ffd38f752",
+  "sha256": "sha256:5c2d0be1472c25d6e4a9a68c3b2e429dcf64cdd6d4b9f66e87133a1bc93500c0",
+  "source_spec_sha256": "sha256:4689985c60cb99e3c9b90d0bb8df76feb7d04c32d3941437bcff373164005992",
   "source_treatment": {
     "images": {
       "agent": "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92",

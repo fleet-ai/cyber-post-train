@@ -176,8 +176,8 @@ Its public or broadly shared receipt may report only aggregates. At minimum:
 - visible-reasoning target tokens, action target tokens, and total supervised
   tokens, each counted once;
 - complete reasoning-to-action turn count;
-- duplicate counts at source-session, normalized-trajectory, and packed-window
-  levels;
+- duplicate counts at source-session, normalized-trajectory,
+  source-assistant-target, and packed-window levels;
 - per-family token distribution and maximum family share; and
 - no-compaction, exactly-recorded-compaction, and rejected-opaque-compaction
   target counts.

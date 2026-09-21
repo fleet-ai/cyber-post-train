@@ -133,6 +133,7 @@ def _validate_spec(spec: dict[str, Any]) -> None:
         "deduplication_order": [
             "source_session_identity",
             "normalized_trajectory_digest",
+            "source_target_digest",
             "packed_window_payload_digest",
         ],
         "reject": [
@@ -219,16 +220,12 @@ def _model_and_harness(
             "tensor_parallel_size": 1,
         },
         "model_info": {
-            "model_path": (
-                "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
-            ),
+            "model_path": ("/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"),
             "model_type": "qwen3_5",
             "architectures": ["Qwen3_5ForConditionalGeneration"],
         },
         "server_info": {
-            "model_path": (
-                "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
-            ),
+            "model_path": ("/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"),
             "context_length": 262_144,
             "tp_size": 1,
             "dp_size": 8,
