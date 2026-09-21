@@ -83,9 +83,7 @@ def test_repaired_web_campaign_budget_binds_runner_supervisor_and_sandbox() -> N
     audit = json.loads(REPAIR_AUDIT_PATH.read_bytes())
     unsigned = dict(audit)
     unsigned.pop("receipt_sha256")
-    assert audit["receipt_sha256"] == (
-        "sha256:" + hashlib.sha256(_canonical(unsigned)).hexdigest()
-    )
+    assert audit["receipt_sha256"] == ("sha256:" + hashlib.sha256(_canonical(unsigned)).hexdigest())
 
     source = audit["source"]
     paths = {
@@ -103,9 +101,7 @@ def test_repaired_web_campaign_budget_binds_runner_supervisor_and_sandbox() -> N
     plan = json.loads(paths["campaign_plan"].read_bytes())
     plan_unsigned = dict(plan)
     plan_unsigned.pop("sha256")
-    assert plan["sha256"] == (
-        "sha256:" + hashlib.sha256(_canonical(plan_unsigned)).hexdigest()
-    )
+    assert plan["sha256"] == ("sha256:" + hashlib.sha256(_canonical(plan_unsigned)).hexdigest())
     assert plan["sha256"] == source["campaign_plan_sha256"]
 
     runner_source = paths["collection_runner"].read_text(encoding="utf-8")
@@ -118,11 +114,7 @@ def test_repaired_web_campaign_budget_binds_runner_supervisor_and_sandbox() -> N
             "collection_acceptance_timeout_seconds",
             "runner_shutdown_reserve_seconds",
         )
-        if (
-            match := re.search(
-                rf"^readonly {name}=([0-9]+)$", runner_source, flags=re.MULTILINE
-            )
-        )
+        if (match := re.search(rf"^readonly {name}=([0-9]+)$", runner_source, flags=re.MULTILINE))
     }
     assert len(runner_values) == 5
     supervisor_source = paths["collection_supervisor"].read_text(encoding="utf-8")
@@ -158,9 +150,7 @@ def test_repaired_web_campaign_budget_binds_runner_supervisor_and_sandbox() -> N
         "actual_outer_collection_dispatch_limit": runner_values[
             "collection_dispatch_timeout_seconds"
         ],
-        "runner_pre_collection_budget": runner_values[
-            "runner_pre_collection_budget_seconds"
-        ],
+        "runner_pre_collection_budget": runner_values["runner_pre_collection_budget_seconds"],
         "runner_preservation_budget": preservation,
         "runner_shutdown_reserve": runner_values["runner_shutdown_reserve_seconds"],
         "runner_envelope": runner_envelope,
