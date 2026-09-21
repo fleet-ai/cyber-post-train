@@ -61,174 +61,148 @@ This changes only the embedded run identity and its per-row checksums in a
 local successor package. The offline receipt must say
 `prepared_not_authorized`. It does not contact Fleet, W&B, Kubernetes, or SFS.
 
-## 2. Generate the stage/preflight objects, inspect absence, and server-preview
+### SFS-only rebind alternative (design only)
 
-This one command does only local file creation, read-only inventory calls, Jobs
-API preview calls, and server dry-runs. It does **not** call the Jobs API
-creation endpoint or `kubectl create` without `--dry-run=server`.
+The operator machine may not have `/mnt/sfs` mounted. In that case, the local
+rebind above cannot be improvised by copying private inputs through a laptop.
+The safe alternative is a **new, separate, zero-GPU rebind Job**. It is not
+implemented or authorized by this document; no existing data-stage Job may be
+repurposed for it.
 
-`FLEET_API_KEY` must already be available in the operator environment. Do not
-put it in this document, a shell history file, or an artifact.
+The implementation must use a fresh create-once name such as
+`chris-q38-prod9-rebind-v1`, not the prod9 data-stage or preflight name. Its
+sealed plan must bind all of the following before any create:
 
-```sh
-test -n "${FLEET_API_KEY:-}"
+1. the sealed prod9 identity digest, the exact prod8 **input** directory, and
+   the empty prod9 destination directory;
+2. the exact pinned runtime image and source bundle; a fixed five-file input
+   inventory; and the rule that only `run_id` plus its row checksum may change;
+3. a root Kubernetes `Job` with
+   `metadata.annotations["fleet.ai/failure-alerts"] == "off"`, `c1` priority,
+   zero GPU requests and limits, the SFS PVC, and the same non-root runtime
+   user as the training reader; and
+4. a server preview in every intended cluster plus a UID-bound zero-GPU cleanup
+   observer before the single create.
 
-uv run --locked python - "$PROD9_GATE_DIR" <<'PY'
-import json
-import os
-import sys
-from pathlib import Path
+Inside that Job, the rebind code must reject a present destination or temporary
+sibling, read only the predecessor input package on SFS, write into a private
+temporary sibling, rehash every result, and atomically rename it into the new
+destination. It must never touch a prod8 output/checkpoint, a task instance,
+or a GPU. Its terminal receipt may contain only file counts, byte counts,
+digests, paths, the source/destination identity bindings, and release state;
+it must not contain rows, prompts, responses, flags, credentials, or scores.
 
-from cyber_post_train.jobs import API_URLS, Jobs, digest
-from scripts import prepare_qwen38_skyrl_prod9_successor as prepared
-from training import skyrl_reward_rayjob as direct
+One small supporting change is still required before this design can be used:
+the rebind Job must emit a sanitized public-manifest receipt sufficient for the
+following preflight to compile and verify prod9 without the operator reading
+the private SFS rows. That receipt must be a new schema and a new testable
+input to the plan compiler. Until it exists, fail closed rather than staging an
+archive or a hand-written manifest from an unmounted filesystem.
 
-gate = Path(sys.argv[1])
-root = Path.cwd()
-identity = direct.load_identity(
-    root / "configs/qualification/qwen38-rl-reward-canary-prod9-identity-v1.json"
-)
-manifest = json.loads((gate / "rebound-data" / "manifest.json").read_bytes())
-run = prepared._load(prepared.RUN)
-plan, request = prepared._compile(run, manifest)
-direct._identity_for_plan(plan, identity)
+## 2. What source is ready now, and what is intentionally not yet runnable
 
-def write(name, value):
-    path = gate / name
-    if path.exists() or path.is_symlink():
-        raise SystemExit(f"refusing to replace {path.name}")
-    path.write_text(json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n")
-    path.chmod(0o600)
-    return path
+The current source has three fresh prod9-only pieces:
 
-# This archive remains private and local. It is not uploaded in this command.
-stage = direct.stage_plan(plan, gate / "rebound-data", gate / "stage-data.tar.gz", identity=identity)
-stage_job = direct.stage_job_manifest(stage, identity=identity)
-preflight_job = direct.preflight_job_manifest(plan, identity=identity)
+1. `training.skyrl_prod9_training` builds the exact GPU bundle and the matching
+   CPU-preflight bundle. Both use the fresh rollout module.
+2. `training.skyrl_prod9_rollout.Generator` constructs
+   `training.skyrl_prod9_hardening.Recorder` directly. The finished batch
+   receipt names that recorder, so a later acceptance check can prove it ran.
+3. `training.skyrl_prod9_direct` can render (but cannot create) the exact
+   one-node/eight-GPU root RayJob and the zero-GPU CPU-preflight Job. Both have
+   the required root `fleet.ai/failure-alerts: "off"` annotation before any
+   server preview.
 
-with Jobs(os.environ["FLEET_API_KEY"], base_url=API_URLS["prod"]) as jobs:
-    source_preview = jobs.raw_preview(request)
-expected = direct.manifest(plan, request, source_preview, identity=identity)
+The old `training.skyrl_reward_rayjob` direct rail is deliberately rejected for
+this plan. It was built around the historical runtime bundle and must never be
+used to render, preview, or create prod9. The fresh renderer also deliberately
+has no `create` or `submit` function: its `live_create_is_available()` result is
+currently `False`.
 
-proofs = {}
-for context in (direct.DEV_CONTEXT, direct.PROD_CONTEXT):
-    rendered_stage = direct.server_dry_run(stage_job, context=context)
-    rendered_preflight = direct.server_dry_run(preflight_job, context=context)
-    rendered_rayjob = direct.server_dry_run(expected, context=context)
-    proofs[context] = {
-        "data_stage": direct.validate_cpu_preview(
-            stage_job, rendered_stage, context=context, purpose="data_stage"
-        ),
-        "preflight": direct.validate_cpu_preview(
-            preflight_job, rendered_preflight, context=context, purpose="preflight"
-        ),
-        "rayjob": direct.validate_preview(
-            plan, request, source_preview, expected, rendered_rayjob,
-            context=context, identity=identity,
-        ),
-    }
+That is a safety boundary, not a pause in the scientific design. It prevents a
+new bundle from accidentally being launched through old job code while the
+remaining SFS-only rebind and create-once evidence gates are made explicit.
 
-# Checks every relevant resource kind in both clusters and both Jobs API
-# histories. It fails if the prod9 run name or output root is already owned.
-absence = direct.duplicate_checks(
-    plan, token=os.environ["FLEET_API_KEY"], identity=identity
-)
+## 3. Exact next gates before any workload can be created
 
-# The GPU identity is covered above. CPU identities are separate create-once
-# names, so prove they do not already exist in either cluster too.
-import subprocess
-for context in (direct.DEV_CONTEXT, direct.PROD_CONTEXT):
-    for resource, name in (("job", identity.stage_name), ("job", identity.preflight_name)):
-        result = subprocess.run(
-            ["kubectl", "--context", context, "--namespace", direct.NAMESPACE,
-             "get", resource, name, "--ignore-not-found", "--output", "json"],
-            capture_output=True, text=True, timeout=60, check=False,
-        )
-        if result.returncode or result.stdout.strip():
-            raise SystemExit(f"existing or unreadable {resource}/{name} in {context}")
+The next implementation must stay on the fresh prod9 rail and produce these
+separate, sanitized proofs in order:
 
-write("PLAN.json", plan)
-write("REQUEST.json", request)
-write("JOBS_SOURCE_PREVIEW.json", source_preview)
-write("RAYJOB.json", expected)
-write("DATA_STAGE_JOB.json", stage_job)
-write("PREFLIGHT_JOB.json", preflight_job)
-write("STAGE_PLAN.json", stage)
-write("NON_SUBMITTING_LIVE_GATE_RECEIPT.json", {
-    "schema": "cyber_qwen38_skyrl_prod9_non_submitting_live_gate_v1",
-    "status": "passed_not_authorized",
-    "external_workloads_created": 0,
-    "identity_sha256": identity.sealed_mapping()["sha256"],
-    "plan_sha256": "sha256:" + digest(plan),
-    "request_sha256": "sha256:" + digest(request),
-    "rayjob_manifest_sha256": "sha256:" + digest(expected),
-    "data_stage_manifest_sha256": "sha256:" + digest(stage_job),
-    "preflight_manifest_sha256": "sha256:" + digest(preflight_job),
-    "stage_plan_sha256": stage["sha256"],
-    "duplicate_checks": absence,
-    "server_previews": proofs,
-})
-PY
-```
+1. a fresh zero-GPU SFS rebind Job, as described above, which publishes the
+   exact prod9 input package without exposing task rows;
+2. a fresh zero-GPU CPU-preflight Job produced by
+   `skyrl_prod9_direct.preflight_job_manifest`, server-previewed with the root
+   alert annotation present and then observed to release its exact UID;
+3. fresh Jobs-API and Kubernetes absence checks for the prod9 name, output
+   directory, and the CPU Job names;
+4. fresh server previews of the prod9 root RayJob in every intended cluster.
+   `skyrl_prod9_direct.validate_preview` must show the exact image, one node,
+   eight GPUs, `c1`/`q1`, the fresh bundle entrypoint, and the root annotation;
+5. immediately before a future one-time GPU create, a new all-namespace
+   project-capacity census. `skyrl_prod9_hardening.capacity_gate` includes the
+   planned one node/eight GPUs and rejects a stale, incomplete, or over-budget
+   result; and
+6. a separately reviewed create-once function that consumes only those exact
+   proofs, arms an exact-UID cleanup observer, records a no-retry create intent,
+   and never falls back to the prod8 rail.
 
-The command fails closed unless all six server previews pass: data-stage,
-preflight, and final root RayJob in both dev and prod. Each proof verifies the
-root `fleet.ai/failure-alerts: "off"` annotation. The RayJob proof also
-verifies the one-node/eight-GPU shape, `c1`/`q1`, fixed image, and the exact
-262K compaction contract.
+Until all six exist and are reviewed, no GPU workload is authorized. If a gate
+fails, preserve its sanitized receipt, release only a known owned zero-GPU
+object if one exists, and make a new successor identity rather than replaying
+prod8 or partially reusing prod9.
 
-The duplicate check covers both Kubernetes clusters and both Jobs API histories
-for the fresh prod9 run/output identity; the command also checks the two fresh
-CPU Job names directly in both clusters. It cannot prove an SFS directory is
-absent without mounting SFS; that proof is supplied only by the controlled
-zero-GPU stage/preflight sequence below. It also deliberately does not use a
-W&B read as an absence gate: W&B may collapse missing-run, subscription, and
-transient failures into the same error. The fresh W&B ID is instead bound to
-`resume="never"` and accepted or rejected by W&B at training startup.
+## 4. A finished training process is not an accepted model
 
-## 3. Controlled later steps — intentionally not executed here
+`NATIVE_TRAINING_COMPLETE.json` only says that the native training process
+returned. It is **not** permission to call the resulting checkpoint valid,
+evaluate it, serve it, or start a successor from it.
 
-Only after the receipt above passes may a separately authorized operator create
-the two zero-GPU Jobs. Do not substitute a manual `kubectl create` for the
-existing stage/preflight rails.
+The only terminal acceptance marker is
+`/mnt/sfs/jobs/chris-q38-rlreward-prod9/ACCEPTED.json`. It may be written once
+by `training.skyrl_prod9_hardening.accept_terminal`; no shell command or
+hand-written receipt is a substitute. The historical `skyrl_posttrain` module
+can seal/export a checkpoint, but it cannot by itself accept prod9. The fresh
+prod9 function accepts only these fixed paths for the exact planned final step:
 
-Immediately before each CPU create, start its exact observer in a separate
-terminal. The observer has a 120-second creation allowance, so do **not** arm
-it early. It binds the first Job UID it sees, records its terminal result and
-release, and can release only that exact UID.
+| Evidence | Required fixed path | What it proves |
+| --- | --- | --- |
+| Checkpoint seal | `.../checkpoint-seals-v1/step-<final-step>.json` | The final checkpoint is complete, changed model parameters, and has not changed since it was sealed. |
+| BF16 export | `.../hf-export-step<final-step>-v1/EXPORT.json` | Every model tensor and required sidecar was rebuilt and re-opened as BF16 from that seal. |
+| One-GPU reload check | `...-p<final-step>-reload-v1/GPU_CHECK.json` | The exact export loads with the model configuration and tokenizer, produces finite output, and performs no optimizer update. |
+| Cleanup observer | `...-p<final-step>-reload-v1/OBSERVER_RESULT.json` | The exact one-GPU reload RayJob succeeded without a restart and its RayJob, Ray cluster, workload, Pod, and GPU allocation were all released. |
 
-```sh
-# Stage observer. Start immediately before the separately authorized stage create.
-uv run --locked python -m training.dev_cleanup_observer \
-  --context nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6 \
-  --namespace fleet-train-jobs --kind job --name chris-q38-prod9-data-v1 \
-  --maximum-seconds 1800 --expected-gpus 0 \
-  --plan-sha256 "$(jq -r .plan_sha256 "$PROD9_GATE_DIR/NON_SUBMITTING_LIVE_GATE_RECEIPT.json")" \
-  --manifest-sha256 "$(jq -r .data_stage_manifest_sha256 "$PROD9_GATE_DIR/NON_SUBMITTING_LIVE_GATE_RECEIPT.json")" \
-  --profile production-cpu \
-  --armed "$PROD9_GATE_DIR/STAGE_OBSERVER_ARMED.json" \
-  --result "$PROD9_GATE_DIR/STAGE_OBSERVER_RESULT.json"
+The reload Job is a separate, future one-GPU operation. Its final server
+preview must prove the root `RayJob` annotation
+`fleet.ai/failure-alerts: "off"`, the fixed `c1`/`q1` priority, and exactly one
+GPU before it may be created. Its observer must be armed against the exact
+RayJob name and manifest before creation. The acceptance function rejects a
+missing or changed seal, a non-BF16 export, a reload that did not use exactly
+one GPU, a failed/restarted reload, or any unreleased resource. It also rejects
+all alternate file paths, so an old receipt cannot be substituted for prod9.
 
-# Preflight observer. Start immediately before the separately authorized preflight create.
-uv run --locked python -m training.dev_cleanup_observer \
-  --context nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6 \
-  --namespace fleet-train-jobs --kind job --name chris-q38-prod9-preflight-v1 \
-  --maximum-seconds 1800 --expected-gpus 0 \
-  --plan-sha256 "$(jq -r .plan_sha256 "$PROD9_GATE_DIR/NON_SUBMITTING_LIVE_GATE_RECEIPT.json")" \
-  --manifest-sha256 "$(jq -r .preflight_manifest_sha256 "$PROD9_GATE_DIR/NON_SUBMITTING_LIVE_GATE_RECEIPT.json")" \
-  --profile production-cpu \
-  --armed "$PROD9_GATE_DIR/PREFLIGHT_OBSERVER_ARMED.json" \
-  --result "$PROD9_GATE_DIR/PREFLIGHT_OBSERVER_RESULT.json"
-```
+## 5. Reasoning and long-context safety
 
-The data-stage Job is the create-once SFS absence check: it refuses an existing
-prod9 data directory before publishing the newly rebound package. The
-exact-image preflight then refuses an existing prod9 output directory, reopens
-the staged data, checks the parser and 262K compaction behavior, and proves it
-used zero GPUs. The GPU observer is armed only after both CPU receipts are
-accepted and immediately before the separate one-time RayJob create; its command
-is intentionally withheld with the GPU creation path.
+This RL run does not ingest teacher reasoning. It trains only on actions and
+working-memory summaries generated by the student during its own rollout. A
+summary is a normal, separately recorded model action: it is used to continue
+the same task and is not presented as an external answer key.
 
-If any check fails, preserve the sanitized receipt, release only an exact owned
-CPU object if one exists, and make a new successor identity rather than
-replaying prod9.
+If a future SFT data lane uses reasoning, it may contain only reasoning the
+model was explicitly allowed to see as an assistant message. It must never
+copy a teacher's hidden reasoning, hidden analysis, private prompt, trace,
+flag, credential, answer, or sealed score into a training target, W&B record,
+or public receipt. Those inputs remain private even when the corresponding
+task outcome is useful for training.
+
+The fresh prod9 bundle already binds
+`training.skyrl_prod9_rollout.Generator`, which constructs
+`training.skyrl_prod9_hardening.Recorder` directly rather than using the frozen
+prod8 recorder. It treats
+`tool_result_chars` only as an input-size limit. It does **not** assume that
+one character equals one model token. Before a tool result becomes part of the
+next model prompt, the recorder tokenizes it with the exact Qwen tokenizer and
+renders the full next prompt with the exact chat template. If the next action
+would need a summary, it also proves that the summary prompt and its reserved
+output fit in the configured context. If either does not fit, the episode ends
+with a declared context-limit result; it does not silently cut off or discard
+text.

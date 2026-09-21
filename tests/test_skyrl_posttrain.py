@@ -22,7 +22,9 @@ from evals.fleet import opencode_self_hosted as fleet
 from training import export as native_export
 from training import skyrl
 from training import skyrl_posttrain as post
+from training import skyrl_prod9_hardening as prod9
 from training.sft_runtime import digest as file_digest
+from training.sft_runtime import write_receipt
 
 
 def write(path: Path, value: dict) -> None:
@@ -282,6 +284,145 @@ def test_rl_checkpoint_seal_and_zero_update_bf16_export(completed_rl, monkeypatc
     assert before == {path: path.read_bytes() for path in before}
     with pytest.raises(FileExistsError):
         post.export_checkpoint(state.manifest, file_digest(state.manifest), output)
+
+
+def _terminal_inputs(state):
+    paths = prod9.terminal_paths(state.plan)
+    manifest = post.seal_checkpoint(state.plan, paths["checkpoint_manifest"])
+    exported = post.export_checkpoint(
+        paths["checkpoint_manifest"],
+        file_digest(paths["checkpoint_manifest"]),
+        paths["export"].parent,
+    )
+    write_receipt(
+        paths["gpu_check"],
+        {
+            "schema": "cyber_hf_export_check_v1",
+            "status": "passed",
+            "export_sha256": file_digest(paths["export"]),
+            "export_receipt_sha256": exported["receipt_sha256"],
+            "optimizer_steps_executed": 0,
+            "gpus": 1,
+            "gpu_reload_verified": True,
+            "source_unchanged": True,
+            "finite_logits": True,
+            "generated_tokens": 2,
+            "serving_qualified": False,
+        },
+    )
+    reload_name = state.plan["run_name"] + "-p2-reload-v1"
+    observer = {
+        "schema": prod9.RELOAD_OBSERVER_SCHEMA,
+        "status": "released",
+        "context": prod9.PROD_CONTEXT,
+        "namespace": prod9.NAMESPACE,
+        "kind": "rayjob",
+        "name": reload_name,
+        "plan_sha256": "sha256:" + digest(state.plan),
+        "manifest_sha256": "sha256:" + "a" * 64,
+        "expected_gpus": 1,
+        "uid": "10000000-0000-4000-8000-000000000001",
+        "rayjob_name": reload_name,
+        "rayjob_uid": "10000000-0000-4000-8000-000000000001",
+        "workload_name": "reload-workload",
+        "workload_uid": "10000000-0000-4000-8000-000000000002",
+        "raycluster_name": "reload-cluster",
+        "raycluster_uid": "10000000-0000-4000-8000-000000000003",
+        "pod_names": ["reload-pod"],
+        "pod_uids": ["10000000-0000-4000-8000-000000000004"],
+        "image_ids": ["sha256:" + "b" * 64],
+        "exit_codes": [0],
+        "termination_reasons": ["Completed"],
+        "terminal_status": "Succeeded",
+        "restarts": 0,
+        "observer_error_class": "",
+        "target_present": False,
+        "pods_present": False,
+        "rayjob_present": False,
+        "workload_present": False,
+        "raycluster_present": False,
+        "active_gpus": 0,
+        "peak_gpus": 1,
+        "release_observed_at": "2026-09-21T00:00:00Z",
+    }
+    write(paths["reload_observer"], sealed(observer))
+    return paths, manifest, exported
+
+
+def test_rl_terminal_acceptance_requires_exact_seal_export_reload_and_release(completed_rl):
+    state = completed_rl
+    paths, manifest, exported = _terminal_inputs(state)
+
+    accepted = prod9.accept_terminal(
+        state.plan,
+        checkpoint_manifest=paths["checkpoint_manifest"],
+        export=paths["export"],
+        gpu_check=paths["gpu_check"],
+        reload_observer=paths["reload_observer"],
+        output=paths["accepted"],
+    )
+
+    assert accepted["schema"] == prod9.ACCEPTANCE_SCHEMA
+    assert accepted["checkpoint_manifest_receipt_sha256"] == manifest["receipt_sha256"]
+    assert accepted["export_receipt_sha256"] == exported["receipt_sha256"]
+    assert accepted["complete_bf16_reload_verified"] is True
+    assert accepted["gpu_resources_released"] is True
+    with pytest.raises(FileExistsError):
+        prod9.accept_terminal(
+            state.plan,
+            checkpoint_manifest=paths["checkpoint_manifest"],
+            export=paths["export"],
+            gpu_check=paths["gpu_check"],
+            reload_observer=paths["reload_observer"],
+            output=paths["accepted"],
+        )
+
+
+@pytest.mark.parametrize("fault", ["gpu", "release", "terminal", "observer_manifest", "wrong_path"])
+def test_rl_terminal_acceptance_rejects_incomplete_reload_or_release(completed_rl, fault):
+    state = completed_rl
+    paths, _, _ = _terminal_inputs(state)
+    if fault == "gpu":
+        value = json.loads(paths["gpu_check"].read_text())
+        value["gpu_reload_verified"] = False
+        write_receipt(
+            paths["gpu_check"],
+            {key: item for key, item in value.items() if key != "receipt_sha256"},
+            replace=True,
+        )
+    elif fault == "release":
+        value = json.loads(paths["reload_observer"].read_text())
+        value["active_gpus"] = 1
+        write(
+            paths["reload_observer"],
+            sealed({key: item for key, item in value.items() if key != "sha256"}),
+        )
+    elif fault == "terminal":
+        value = json.loads(paths["reload_observer"].read_text())
+        value["terminal_status"] = "Failed"
+        write(
+            paths["reload_observer"],
+            sealed({key: item for key, item in value.items() if key != "sha256"}),
+        )
+    elif fault == "observer_manifest":
+        value = json.loads(paths["reload_observer"].read_text())
+        value["manifest_sha256"] = "not-a-digest"
+        write(
+            paths["reload_observer"],
+            sealed({key: item for key, item in value.items() if key != "sha256"}),
+        )
+    else:
+        paths["export"] = paths["export"].with_name("other.json")
+    with pytest.raises(ValueError):
+        prod9.accept_terminal(
+            state.plan,
+            checkpoint_manifest=paths["checkpoint_manifest"],
+            export=paths["export"],
+            gpu_check=paths["gpu_check"],
+            reload_observer=paths["reload_observer"],
+            output=paths["accepted"],
+        )
+    assert not paths["accepted"].exists()
 
 
 def test_rl_seal_rejects_source_drift_during_full_rehash(completed_rl):

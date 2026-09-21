@@ -8,7 +8,7 @@ from cyber_post_train.jobs import digest
 from scripts import prepare_qwen38_skyrl_prod8_launch_packet as packet
 
 
-def test_packet_is_current_self_sealed_and_never_authorizes_launch() -> None:
+def test_packet_is_historical_self_sealed_and_never_authorizes_launch() -> None:
     value = packet.build()
     assert value["sha256"] == "sha256:" + digest(
         {key: item for key, item in value.items() if key != "sha256"}
@@ -76,34 +76,14 @@ def test_packet_binds_prod8_science_resources_and_alert_opt_out() -> None:
     }
 
 
-def test_cpu_preview_binding_requires_an_exact_manifest_match() -> None:
-    preflight = {"metadata": {"name": "exact"}}
-    current = digest(preflight)
-    evidence = {
-        "cpu_preflight_previews": {
-            packet.direct.DEV_CONTEXT: {"manifest_sha256": current},
-            packet.direct.PROD_CONTEXT: {"manifest_sha256": current},
-        }
-    }
-    assert packet._current_cpu_preview_binding(evidence, preflight) == {
-        "current_manifest_sha256": current,
-        "preview_manifest_sha256": {
-            packet.direct.DEV_CONTEXT: current,
-            packet.direct.PROD_CONTEXT: current,
-        },
-        "matches_current_manifest": True,
-        "fresh_preview_required": False,
-    }
-    evidence["cpu_preflight_previews"][packet.direct.PROD_CONTEXT]["manifest_sha256"] = "different"
-    assert packet._current_cpu_preview_binding(evidence, preflight) == {
-        "current_manifest_sha256": current,
-        "preview_manifest_sha256": {
-            packet.direct.DEV_CONTEXT: current,
-            packet.direct.PROD_CONTEXT: "different",
-        },
-        "matches_current_manifest": False,
-        "fresh_preview_required": True,
-    }
+def test_current_source_status_never_reuses_prod8() -> None:
+    status = packet.current_source_status()
+    assert status["historical_digests"] == packet.EXPECTED
+    assert status["prod8_reusable"] is False
+    assert isinstance(status["matches_historical_source_closure"], bool)
+    # Byte equality does not turn a historical packet back into authorization.
+    assert status["prod8_reusable"] is False
+    assert len(status["current_preflight_manifest_sha256"]) == 64
 
 
 def test_checkpoint_and_followup_resume_remain_truthfully_unqualified() -> None:

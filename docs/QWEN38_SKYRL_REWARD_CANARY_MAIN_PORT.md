@@ -15,8 +15,10 @@ successor is prepared separately in
 
 The exact, non-authorizing packet is
 [`qwen38-rl-reward-canary-prod8-launch-packet-v1.json`](../configs/qualification/qwen38-rl-reward-canary-prod8-launch-packet-v1.json).
-It recompiles the plan from committed, sanitized inputs and records every gate
-that still must pass. The independent broader audit is
+It is frozen historical evidence. It is never refreshed to match newer runtime
+code, and it cannot authorize or recreate prod8. The fresh prod9 preparation
+receipt is the only place that may bind a current runtime, plan, request, and
+CPU-preflight digest. The independent broader audit is
 [`2026-09-20-skyrl-launch-readiness-audit-v1.json`](evidence/qwen38-study/2026-09-20-skyrl-launch-readiness-audit-v1.json).
 Neither file creates or authorizes a workload. The separate, sanitized live
 launch record is
@@ -53,6 +55,13 @@ turns, and up to four hours per episode. The total episode generation allowance
 is 4,194,304 tokens so long tasks can continue across many turns and
 compactions.
 
+In this historical specification, semantic compaction means the student emits
+a separately recorded working-memory summary. Before it replaces earlier
+history, the exact Qwen tokenizer and full chat template must prove that the
+summary plus the next action fit in 262,144 tokens. Otherwise an episode ends
+cleanly; it never silently truncates older history. This describes the intended
+contract, not evidence that prod8 completed it.
+
 The ordered tools are `bash` and `submit_report`. Only Fleet's authoritative
 grader may produce reward. A response that merely reaches its 32,768-token
 turn limit is still graded, but an unfinished tool call is never executed.
@@ -75,8 +84,9 @@ launch authority. Server previews and absence checks must be repeated
 immediately before the sole GPU create.
 
 The old `v17` topology packet remains historical evidence. It is not a prod8
-gate. Prod6 and prod7 already exercised the one-node topology live, and prod8's
-direct authorization path validates its own exact object shape.
+gate. Prod6 and prod7 already exercised the one-node topology live. At the
+time, prod8's historical direct path validated its recorded object shape; that
+path is frozen evidence and must never render, preview, or create prod9.
 
 ## Historical launch record; not acceptance evidence
 
@@ -111,7 +121,9 @@ release of the eight GPUs. All-zero genuine rewards are a valid experiment
 result but do not prove a learning update. Missing or truncated evidence is an
 infrastructure failure, not a model score.
 
-Review the deterministic packet without external access:
+Review the historical packet without external access. This confirms that its
+bytes are still the recorded prod8 evidence and reports whether current source
+code has changed; it never turns prod8 into a runnable job:
 
 ```sh
 uv run --locked python scripts/prepare_qwen38_skyrl_prod8_launch_packet.py --check
@@ -119,7 +131,7 @@ uv run --locked python scripts/prepare_qwen38_skyrl_production_queue.py --check
 uv run --locked python scripts/audit_qwen38_skyrl_launch_readiness.py --check
 ```
 
-## Checkpoint and resume truth
+## Retired hypothetical checkpoint and resume plan (do not execute)
 
 Prod8 saves every optimizer step and keeps the latest two checkpoints. Because
 it contains only one step, the expected checkpoint is
@@ -135,7 +147,7 @@ That is not yet the same as proven recovery. The current configuration sets
 claim that a stopped job will continue from this checkpoint. Checkpoint size
 and write duration are also still unobserved.
 
-The smallest resume qualification is a separate create-once successor named
+The former smallest resume qualification was a separate create-once successor named
 `chris-q38-rlreward-resume-step2-v1`. It must reopen the sealed step-1
 checkpoint without changing it; restore all model, optimizer, scheduler,
 rank-local random, trainer-step, and sampler state; resume at step 1; collect
@@ -144,21 +156,21 @@ one finite update to step 2; seal the complete step-2 checkpoint; then pass an
 independent zero-update GPU reload and finite inference check. Only that result
 can qualify native resume for a broader run.
 
-The non-authorizing offline packet for that chain is
+The non-authorizing offline packet for that retired chain is
 [`qwen38-rl-reward-prod8-resume-qualification-v1.json`](../configs/qualification/qwen38-rl-reward-prod8-resume-qualification-v1.json).
 It fixes the three create-once identities, resources, and acceptance checks for
 the step-1 reload, step-1-to-step-2 continuation, and step-2 reload. Its live
 step-1 receipt and checkpoint-manifest digests are deliberately `null`, and its
 implementation and launch gates are deliberately false. Do not edit those
-fields in place: after prod8 acceptance, generate a new immutable successor
-that binds the accepted source evidence and the separately reviewed native
-resume runtime.
+fields in place. No prod8 acceptance or resume is possible. Any future resume
+or broad arm must begin from a terminally accepted fresh prod9-or-later run,
+with new identities and current source.
 
-The first intended broad arm remains
+The first intended broad-arm document remains historical context only:
 [`qwen38-skyrl-production-a1-v1.json`](../configs/runs/qwen38-skyrl-production-a1-v1.json),
 but it is not launch-safe yet. Its old 98,304-token non-compacting horizon must
-be replaced by the prod8 long-context and output-limit contract, and it remains
-blocked behind prod8 acceptance plus the step-1-to-step-2 resume gate.
+be replaced by a current long-context and output-limit contract. It cannot be
+launched from prod8 or any of its historical artifacts.
 
 ## A successor data package must change its embedded run identity
 
