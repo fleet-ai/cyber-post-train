@@ -173,7 +173,7 @@ def test_queue_is_fail_closed_behind_canary_and_fresh_external_checks() -> None:
     assert len(qualification["private_data"]["arms"]) == 5
     assert evidence["scope"] == "offline_no_submit_no_stage_no_serve_no_cancel"
     assert evidence["regenerated_at"].startswith("2026-09-21T")
-    assert evidence["source_base_commit"] == "5ecb0ce744c37462dd6f15c25879a69dc6333216"
+    assert evidence["source_base_commit"] == "3603b774421df90b08d235c729d4fd78889c7be2"
     assert evidence["historical_origin"]["current_plan_or_request_binding"] is False
     assert evidence["external_mutations"] == 0
     assert len(evidence["arms"]) == 5

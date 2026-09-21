@@ -555,7 +555,7 @@ def queue_evidence(artifacts: dict[Path, dict]) -> dict:
         {
             "schema": "cyber_qwen38_skyrl_production_experiment_queue_evidence_v1",
             "regenerated_at": "2026-09-21T09:00:00Z",
-            "source_base_commit": "5ecb0ce744c37462dd6f15c25879a69dc6333216",
+            "source_base_commit": "3603b774421df90b08d235c729d4fd78889c7be2",
             "historical_origin": {
                 "observed_at": "2026-09-20T17:19:29Z",
                 "git_branch": "codex/q38-skyrl-full-queue-v1",
