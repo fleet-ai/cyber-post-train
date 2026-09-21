@@ -1548,5 +1548,59 @@ def eval_status() -> None:
         _fail(exc)
 
 
+@eval_app.command("heldout-create")
+def eval_heldout_create(
+    packet: Path,
+    context: Annotated[str, typer.Option("--context")],
+    journal: Annotated[Path, typer.Option("--journal")],
+    dsn_env: Annotated[str, typer.Option("--dsn-env")] = "ROLLOUT_DATABASE_URL",
+) -> None:
+    """Create one packet-bound CPU held-out evaluator after its two live gates."""
+    from evals.fleet.heldout_launch import (
+        KubectlCluster,
+        PostgresDatabase,
+        launch_once,
+    )
+
+    try:
+        _print(
+            launch_once(
+                packet,
+                cluster=KubectlCluster(context),
+                database=PostgresDatabase(dsn_env),
+                journal=journal,
+            )
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
+@eval_app.command("heldout-terminal-collect")
+def eval_heldout_terminal_collect(
+    packet: Path,
+    context: Annotated[str, typer.Option("--context")],
+    receipt: Annotated[Path, typer.Option("--receipt")],
+    dsn_env: Annotated[str, typer.Option("--dsn-env")] = "ROLLOUT_DATABASE_URL",
+) -> None:
+    """Read and record a score-blind terminal observation. It never retries or scores."""
+    from evals.fleet.heldout_launch import (
+        KubectlCluster,
+        PostgresDatabase,
+        collect_terminal,
+    )
+
+    try:
+        _print(
+            collect_terminal(
+                packet,
+                cluster=KubectlCluster(context),
+                database=PostgresDatabase(dsn_env),
+                receipt_path=receipt,
+            )
+        )
+    except Exception as exc:
+        _fail(exc)
+
+
 if __name__ == "__main__":
     app()

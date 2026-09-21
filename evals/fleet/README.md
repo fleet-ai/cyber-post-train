@@ -70,9 +70,22 @@ mutable current version or silently replace the task.
 
 For a new Qwen held-out campaign, read
 [`docs/FLEET_HELDOUT_EVALUATION_PRECREATE_GATE.md`](../../docs/FLEET_HELDOUT_EVALUATION_PRECREATE_GATE.md)
-before creating anything.  Historical Job YAML and prepared configs are not
-launch permission: a fresh duplicate census and a server-rendered root
-`fleet.ai/failure-alerts: "off"` proof are both required.
+before creating anything. Historical Job YAML and prepared configs are not
+launch permission. Use `cyber-post-train eval heldout-create` with a new sealed
+launch packet, explicit Kubernetes context, and new local create-intent journal.
+It performs a fresh duplicate census, two server dry-runs, and requires the
+server-rendered root `fleet.ai/failure-alerts: "off"` annotation before its
+single create request. After the Job is terminal, use
+`cyber-post-train eval heldout-terminal-collect` to record a score-blind
+reconciliation; neither command reads rollout traces or interprets a capability
+result.
+
+The packet also seals the full representative split and the selected split role.
+The evaluator route must contain exactly the selected task versions. Its shared
+comparison protocol seals the common harness, sampling, evaluator-image, and
+retry treatment for every arm. This makes new larger train/development/final-
+test splits safe to introduce without silently changing the held-out family set
+or treatment used by a baseline-versus-checkpoint comparison.
 
 Each route requires `model` (one alias above), `served_id`, `task_versions`,
 `endpoint_origin: https://inference.flt.build`, and these expected projections:
