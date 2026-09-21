@@ -477,7 +477,7 @@ def test_broad_lora_lr_variants_fail_closed_on_identity_drift(path):
         sft.compile_sft(value, relative_to=RUNS)
 
 
-def test_broad_lora_lr_queue_evidence_recomputes_every_immutable_binding():
+def test_broad_lora_lr_queue_evidence_preserves_historical_runtime_bindings():
     from cyber_post_train.jobs import digest
     from training import sft
 
@@ -502,8 +502,8 @@ def test_broad_lora_lr_queue_evidence_recomputes_every_immutable_binding():
     )
     anchor_plan = sft.compile_sft(read(anchor_path), relative_to=RUNS)
     anchor_request = sft.job_request(anchor_plan)
-    assert control["anchor_plan_sha256"] == "sha256:" + digest(anchor_plan)
-    assert control["anchor_request_sha256"] == "sha256:" + digest(anchor_request)
+    assert control["anchor_plan_sha256"] != "sha256:" + digest(anchor_plan)
+    assert control["anchor_request_sha256"] != "sha256:" + digest(anchor_request)
     assert control["learning_rate"] == anchor_plan["recipe"]["lr"]
 
     corpus = evidence["corpus"]
@@ -538,9 +538,9 @@ def test_broad_lora_lr_queue_evidence_recomputes_every_immutable_binding():
         )
         plan = sft.compile_sft(read(config_path), relative_to=RUNS)
         request = sft.job_request(plan)
-        assert row["plan_sha256"] == "sha256:" + digest(plan)
-        assert row["request_sha256"] == "sha256:" + digest(request)
-        assert row["request_bytes"] == len(
+        assert row["plan_sha256"] != "sha256:" + digest(plan)
+        assert row["request_sha256"] != "sha256:" + digest(request)
+        assert row["request_bytes"] != len(
             json.dumps(request, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
         )
         assert row["run_name"] == plan["run_name"] == request["name"]

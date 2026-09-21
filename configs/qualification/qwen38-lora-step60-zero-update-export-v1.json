@@ -19,7 +19,7 @@
     "qwen38_lora_artifacts.py": "a9fa4ba187cb91dbf181a67b4b29f725480ae0bc795c5a2320265b8f37f6919f",
     "qwen38_lora_export.py": "9c4ff866aa17ec878d99c32e4199fe2ce833cfbe19bc2d7151516d82f532c31d",
     "recovery.py": "0765eb0f09378566c68e47861f6cc3d04c245aa438353befdb1c176d8726e84a",
-    "sft_runtime.py": "7f5c945b28f6d3fd8c84eaedd0b0322ffbaf09ce2f6ffbbf5620f69c72d4131e"
+    "sft_runtime.py": "b66c5571dfdf054ec608e7a2bbd5092c7cf5f3931a5a5354fb42100910075b19"
   },
   "create_once": true,
   "deadline_seconds": 1800,

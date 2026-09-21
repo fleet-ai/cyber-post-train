@@ -145,7 +145,7 @@ def test_committed_step60_plan_binds_current_producer_and_exact_source() -> None
     plan = json.loads(path.read_text())
 
     assert export.validate_plan(plan) == plan
-    assert digest(plan) == "31c9548c7119e01e3941049bcdaa79f9ee7a787a0191ce02c53644959d2d4547"
+    assert digest(plan) == "5ca713cd281143d0ac6bfe349c0c22bf87ac99319425186bcded49d2c20d9f0b"
     assert plan["checkpoint_manifest"] == {
         "path": (
             "/mnt/sfs/jobs/chris-q38-lora-r1-s60-v3/"

@@ -150,6 +150,38 @@ def test_waiter_cancels_only_confirmed_idle_and_preserves_a_receipt(
     assert "synthetic" not in json.dumps(proof)
 
 
+def test_waiter_uses_the_full_sft_plan_horizon_instead_of_the_old_eight_hour_bound(
+    tmp_path, monkeypatch
+):
+    task = object()
+    moments = iter([0, runtime.WATCHDOG_HARD_SECONDS])
+    monkeypatch.setattr(runtime.time, "monotonic", lambda: next(moments))
+    monkeypatch.setattr(runtime.time, "time", lambda: 1234.0)
+    monkeypatch.setattr(runtime, "_utilization_snapshot", lambda: (100, 1024 * 1024))
+    ray = SimpleNamespace(
+        wait=Mock(side_effect=[([], [task]), ([task], [])]),
+        get=Mock(return_value={"step": 276}),
+        cancel=Mock(),
+    )
+    plan = {
+        "recipe": {
+            "max_steps": 1837,
+            "batch_size": 8,
+            "microbatch_per_gpu": 1,
+            "nodes": 1,
+            "gpus_per_node": 8,
+            "max_length": 32768,
+        }
+    }
+
+    assert runtime._wait_for_training(ray, task, tmp_path, plan=plan) == {"step": 276}
+    ray.cancel.assert_not_called()
+    proof = json.loads((tmp_path / "WATCHDOG.json").read_text())
+    assert proof["state"] == "monitoring"
+    assert proof["hard_runtime_seconds"] == runtime.sft_watchdog_hard_seconds(plan)
+    assert proof["hard_runtime_seconds"] > runtime.WATCHDOG_HARD_SECONDS
+
+
 def test_wandb_configuration_requires_injection_before_creating_output(tmp_path, monkeypatch):
     plan = {
         "output_root": str(tmp_path),

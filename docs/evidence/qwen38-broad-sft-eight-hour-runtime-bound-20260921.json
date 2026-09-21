@@ -1,0 +1,142 @@
+{
+  "schema": "cyber_qwen38_broad_sft_runtime_bound_incident_v1",
+  "observed_at": "2026-09-21T07:03:10Z",
+  "status": "deterministic_runtime_bound_defect_all_gpu_resources_released_no_checkpoint",
+  "defect": {
+    "summary": "The generic SFT watchdog stopped useful broad training after eight hours even though the immutable one-epoch recipes required materially longer than eight hours.",
+    "old_hard_runtime_seconds": 28800,
+    "idle_runtime_seconds": 1200,
+    "checkpoint_drain_seconds": 300,
+    "boundary": "The absolute emergency ceiling was fixed process-wide instead of being derived from each immutable SFT recipe. The independent no-progress check remained healthy and was not the cause.",
+    "scientific_result": false
+  },
+  "runs": [
+    {
+      "arm": "32k_batch8_lr3e-6_reference",
+      "run_name": "chris-q38-t3k32-b8-v1-0cb9fe51",
+      "api_run_id": "0cb9fe51-ac56-4e99-8b91-6bfbc6cc7db0",
+      "rayjob_uid": "6f311376-1c42-4faa-b82a-57b51bfbed85",
+      "workload_uid": "2d5c1c8a-3e0c-4170-9a32-1e9bddb73183",
+      "raycluster_uid": "5a974057-6ea8-4f2d-8c0d-80b9c8cc9f44",
+      "pod_uid": "826b5de3-85df-4d66-a785-6085b7ad93a3",
+      "output_root": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v1",
+      "started_at": "2026-09-20T22:42:11Z",
+      "ended_at": "2026-09-21T06:43:48Z",
+      "last_optimizer_step": 275,
+      "first_checkpoint_step": 450,
+      "progress_file_sha256": "sha256:08169ee020a3df293b69f7724eaa08c620211f436e21a3a3660a7b60d157cd5f",
+      "progress_receipt_sha256": "sha256:e1519a9609f1e453f28d152cef11154fcd36fda390249f4faf51cdf9451d3241",
+      "watchdog_file_sha256": "sha256:e97765f2c6fe2cebd737ebbd8a1c6a206648220e1510c9687d7ce54affdb72a9",
+      "watchdog_receipt_sha256": "sha256:f48bb1c12f686f4d6cf3234f9738388bee726957a63478896debdb16b647ea27",
+      "watchdog_state": "hard_runtime_bound",
+      "failed_file_sha256": "sha256:8e2785ca8beac56929187055946d7003182e8c212106ffed7e41c41ae3325238",
+      "failed_receipt_sha256": "sha256:84c2151d5e958e95dddbaf0b74dfe2e9ad6cffead8414e80104fdccb4e3e1265",
+      "checkpoint_present": false,
+      "release": "RayJob failed; Workload finished failed; RayCluster and Pod absent"
+    },
+    {
+      "arm": "32k_batch16_lr3e-6_control",
+      "run_name": "chris-q38-t3k32-b16-v1-46ca50db",
+      "api_run_id": "46ca50db-8aa6-49ae-a2a7-b216ee0c7c01",
+      "rayjob_uid": "7a57b843-f45d-4a24-93ed-8a817e03387e",
+      "workload_uid": "e7101200-d826-4644-89cb-5e3379c496be",
+      "raycluster_uid": "305621bf-fdce-47ef-bfba-05f55e63d2b7",
+      "pod_uid": "d1c9fa07-402b-4978-a8bd-5a730555cca3",
+      "output_root": "/mnt/sfs/jobs/chris-q38-t3k32-b16-v1",
+      "last_optimizer_step": 137,
+      "first_checkpoint_step": 225,
+      "progress_file_sha256": "sha256:72211b17051417070dd2533ef66a00d459ed4fa136392673682a5337c9332b74",
+      "progress_receipt_sha256": "sha256:76b25c528399b66625f441967bdd28b2afbfb08b8a6496425cbde0df4c2fce32",
+      "failed_file_sha256": "sha256:24e3b85d3458976c14b2bde4665d1d7b677ef80220bdb14672824ad3e54849fa",
+      "failed_receipt_sha256": "sha256:b657c1adcf96487f45f8f899710d24bbb3458d7c76014bb49067bcd1a04e63f1",
+      "checkpoint_present": false,
+      "release": "one Jobs API DELETE returned HTTP 204 after exact UID and run-id binding; RayJob, Workload, RayCluster, and Pod absent"
+    },
+    {
+      "arm": "32k_batch8_lr1e-6_control",
+      "run_name": "chris-q38-t3k32-lr1-v1-4291c635",
+      "api_run_id": "4291c635-872a-42c3-a66f-92d5cedab3bf",
+      "rayjob_uid": "8847f01f-2366-4a88-88de-2d900ed676d8",
+      "workload_uid": "0ad6a382-24e6-4a1d-a07c-48d50ecbb0f5",
+      "raycluster_uid": "ff05735f-bd99-497b-8539-d28f3f31759b",
+      "pod_uid": "9b2b48d4-476a-44b6-8974-c8d6cd8162cb",
+      "output_root": "/mnt/sfs/jobs/chris-q38-t3k32-lr1-v1",
+      "last_optimizer_step": 271,
+      "first_checkpoint_step": 450,
+      "progress_file_sha256": "sha256:256fc5500a2ca9a8a505d7ad1772ca117ea51f6c58cf85c759ce4f62f6d70b34",
+      "progress_receipt_sha256": "sha256:ee0f7258cebd51695047d6678328f2b22983b7e77204e8869fd75e9ee1ce9ad8",
+      "failed_file_sha256": "sha256:4025b7f5a15688dfdba5853260001eec42bf76decf6a0291969cf1727a55e1de",
+      "failed_receipt_sha256": "sha256:3e1bef58c3fd8e774bcde13cf842e68118457bb1e4571cc25aabfcd6e39219ac",
+      "checkpoint_present": false,
+      "release": "one Jobs API DELETE returned HTTP 204 after exact UID and run-id binding; RayJob, Workload, RayCluster, and Pod absent"
+    },
+    {
+      "arm": "64k_batch8_lr3e-6_context_control",
+      "run_name": "chris-q38-t3k64-b8-v3-fc6b1fbe",
+      "api_run_id": "fc6b1fbe-3827-4a9d-a793-e206d793f6f5",
+      "rayjob_uid": "545bd9db-479f-4064-b61b-40c8c4a491fe",
+      "workload_uid": "34d14951-9b04-4f50-9c4f-086d70fa7aa6",
+      "raycluster_uid": "a6fcf9e7-6ac4-40fc-aae2-b174360c40f7",
+      "pod_uid": "c9f226a7-ea0f-45eb-b8ea-d81bf2c6bb76",
+      "output_root": "/mnt/sfs/jobs/chris-q38-t3k64-b8-v3",
+      "last_optimizer_step": 37,
+      "first_checkpoint_step": 275,
+      "progress_file_sha256": "sha256:b4604981afc18f71e532eee28441c036c6e21a593b038bca44ce88ecd20e9b1a",
+      "progress_receipt_sha256": "sha256:a1767ede53bf0f94ecff0e6a0e9a1dbad318ae3e9262d831d0c256a0eeb74e38",
+      "checkpoint_present": false,
+      "terminal_marker_flushed": false,
+      "release": "one Jobs API DELETE returned HTTP 204 after exact UID and run-id binding; RayJob, Workload, RayCluster, and Pod absent"
+    }
+  ],
+  "common_launch_contract": {
+    "root_failure_alert_annotation": "off",
+    "priority_class": "c1",
+    "workload_priority": 10000,
+    "trainer_image_sha256": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "container_restarts": 0,
+    "wandb_receipts_present": true,
+    "private_examples_or_traces_read": false
+  },
+  "release_census": {
+    "observed_at": "2026-09-21T07:03:10Z",
+    "nodes": 3,
+    "gpus": 24,
+    "training_nodes": 0,
+    "serving_nodes": 3,
+    "queued": 0,
+    "unclassified": 0,
+    "problems": [],
+    "sha256": "sha256:067904f757ab9f028d37ab320fe6f2cb08fa017cb7d21de6cb49678f82777561"
+  },
+  "repair_gate": {
+    "successor_submitted": false,
+    "required": [
+      "derive the absolute SFT ceiling from the immutable recipe",
+      "keep the independent idle-resource bound unchanged",
+      "regress the exact eight-hour failure boundary",
+      "rerun CPU preflight and root-annotation preview before any create-once successor"
+    ]
+  },
+  "prepared_packets_invalidated_by_runtime_change": [
+    {
+      "config": "configs/runs/qwen38-teacher3k-64k-full-b8-lr3e6-v3.json",
+      "runtime_sha256": "7f5c945b28f6d3fd8c84eaedd0b0322ffbaf09ce2f6ffbbf5620f69c72d4131e",
+      "plan_sha256": "7891533965a69b7dff6dc2dfc72e323d440ddff645cbd646a36cbc4a0dc22dd5",
+      "request_sha256": "3d27e97337cb6d41c68dc840f57269998d613c2fb6e2c767b9ea15ef85faca7f",
+      "status": "historical_packet_was_submitted_once_and_is_not_reusable"
+    },
+    {
+      "config": "configs/runs/qwen38-teacher3k-96k-full-b8-lr3e6-v2.json",
+      "runtime_sha256": "7f5c945b28f6d3fd8c84eaedd0b0322ffbaf09ce2f6ffbbf5620f69c72d4131e",
+      "plan_sha256": "dbe188c32274c16d4d4822ebb8c110659203a55d1bc207561400efb5370d20c2",
+      "request_sha256": "b92ba0f7d782c5eb736cd22c49f1d14e014eaa89c1f6d514b30071bba61dec67",
+      "status": "historical_packet_not_submitted_and_requires_fresh_qualification"
+    }
+  ],
+  "sanitization": {
+    "private_logs_read": false,
+    "prompts_or_traces_read": false,
+    "credentials_included": false
+  },
+  "receipt_sha256": "sha256:73fe4211efa1a00dada78d09df0de35b2a454ad1e821487f19d1db1cb245cc84"
+}

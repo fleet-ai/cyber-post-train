@@ -401,9 +401,12 @@ def test_teacher3k_64k_forward_adapter_repair_changes_only_external_identity():
     assert successor == expected
 
 
-def test_teacher3k_64k_v3_qualification_is_bound_and_prepare_only():
+def test_teacher3k_64k_v3_qualification_is_historical_after_runtime_repair():
     evidence = json.loads(
         (EVIDENCE / "qwen38-teacher3k-64k-v3-qualified-ready-20260921.json").read_text()
+    )
+    incident = json.loads(
+        (EVIDENCE / "qwen38-broad-sft-eight-hour-runtime-bound-20260921.json").read_text()
     )
     config = json.loads((ROOT / evidence["source"]["config"]).read_text())
     plan = sft.compile_sft(config, relative_to=RUNS)
@@ -412,9 +415,17 @@ def test_teacher3k_64k_v3_qualification_is_bound_and_prepare_only():
     assert evidence["status"] == "qualified_not_submitted"
     assert evidence["source"]["head"] == "aecb8d9deab66014eccaeeda0a86cbc9c1a98fac"
     bindings = evidence["immutable_bindings"]
-    assert sft.digest(plan) == bindings["plan_sha256"]
-    assert sft.digest(request) == bindings["request_sha256"]
-    assert plan["runtime_sha256"] == bindings["runtime_sha256"]
+    invalidated = incident["prepared_packets_invalidated_by_runtime_change"][0]
+    assert invalidated == {
+        "config": evidence["source"]["config"],
+        "runtime_sha256": bindings["runtime_sha256"],
+        "plan_sha256": bindings["plan_sha256"],
+        "request_sha256": bindings["request_sha256"],
+        "status": "historical_packet_was_submitted_once_and_is_not_reusable",
+    }
+    assert sft.digest(plan) != bindings["plan_sha256"]
+    assert sft.digest(request) != bindings["request_sha256"]
+    assert plan["runtime_sha256"] != bindings["runtime_sha256"]
     assert plan["corpus_manifest_sha256"] == bindings["corpus_manifest_sha256"]
     assert plan["split_manifest_sha256"] == bindings["split_manifest_sha256"]
     assert plan["datasets"]["train"]["sha256"] == bindings["train_parquet_sha256"]
@@ -496,6 +507,9 @@ def test_teacher3k_later_context_launch_binds_current_inputs(context, position):
     evidence = json.loads(
         (EVIDENCE / "qwen38-next-sft-intentional-launch-20260920.json").read_text()
     )
+    incident = json.loads(
+        (EVIDENCE / "qwen38-broad-sft-eight-hour-runtime-bound-20260921.json").read_text()
+    )
     row = evidence["arms"][position]
     config_path = ROOT / row["config"]
     config = json.loads(config_path.read_text())
@@ -503,9 +517,14 @@ def test_teacher3k_later_context_launch_binds_current_inputs(context, position):
     request = sft.job_request(plan)
 
     assert evidence["status"] == "v2_64k_failed_v3_64k_qualified_not_submitted_96k_not_submitted"
-    assert sft.digest(plan) == row["plan_sha256"]
-    assert sft.digest(request) == row["request_sha256"]
-    assert plan["runtime_sha256"] == row["runtime_sha256"]
+    invalidated = incident["prepared_packets_invalidated_by_runtime_change"][position]
+    assert invalidated["config"] == row["config"]
+    assert invalidated["runtime_sha256"] == row["runtime_sha256"]
+    assert invalidated["plan_sha256"] == row["plan_sha256"]
+    assert invalidated["request_sha256"] == row["request_sha256"]
+    assert sft.digest(plan) != row["plan_sha256"]
+    assert sft.digest(request) != row["request_sha256"]
+    assert plan["runtime_sha256"] != row["runtime_sha256"]
     assert plan["recipe"]["max_length"] == int(context) * 1024
     assert plan["recipe"]["max_steps"] == row["planned_optimizer_steps"]
     assert request["workers"] == 1
@@ -514,6 +533,7 @@ def test_teacher3k_later_context_launch_binds_current_inputs(context, position):
     assert request["requeueIfPreempted"] is False
     assert request["failureAlerts"] is False
     if context == "64":
+        assert invalidated["status"] == "historical_packet_was_submitted_once_and_is_not_reusable"
         assert row["successor_status"].endswith("not_submitted")
         qualification = evidence["64k_successor_qualification"]
         assert qualification["source_head"] == "aecb8d9deab66014eccaeeda0a86cbc9c1a98fac"
@@ -535,6 +555,10 @@ def test_teacher3k_later_context_launch_binds_current_inputs(context, position):
         assert terminal["pod_absent"] is True
         assert terminal["active_gpus"] == 0
     else:
+        assert (
+            invalidated["status"]
+            == "historical_packet_not_submitted_and_requires_fresh_qualification"
+        )
         assert row["successor_status"].endswith("not_submitted")
         assert "retired_runtime_contract_attempt" not in row
     assert row["retired_attempt"]["optimizer_step"] == 0
