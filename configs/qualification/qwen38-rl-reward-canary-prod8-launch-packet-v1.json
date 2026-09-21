@@ -61,9 +61,9 @@
       "self_sha256": "sha256:a12f3d3486be567fc615b73a2e8663884ceb96218a6e331d9bfe916dfb0f2257"
     },
     "read_only_preview_evidence": {
-      "file_sha256": "sha256:0bdf572c24720204e6e59bc1ed6318e17baee6488516e7e3556ebbf1d0510b8b",
+      "file_sha256": "sha256:94926d12a1505c5a24a37d6cd4aedffdea3eef0bc0756afe8ba7148c03680e0d",
       "path": "docs/evidence/qwen38-study/2026-09-21-skyrl-prod8-read-only-previews-v1.json",
-      "self_sha256": "sha256:fcf3a21bcde520778ed28ae4ca19f549c19f3428335fdfd00ee329c915f812f5"
+      "self_sha256": "sha256:9a2cb2a2ae5c0b4d3810b88cdb4e4481b6d898c2cf76a649d9ce496d13896037"
     },
     "run_config": {
       "file_sha256": "sha256:b81a3e9dff118b66e6f715f1b00afd2cd640f17efcfe6fa84bcdabe5ecc865c8",
@@ -105,11 +105,11 @@
   },
   "read_only_preview_observation": {
     "authorization_reusable": false,
-    "dev_direct_preview_sha256": "sha256:df52c3832076bb6d69a992347001a25be7ee61adcb7911138282c6b9e9d0521b",
+    "dev_direct_preview_sha256": "sha256:dc7d7f4a5c8e7834cebf46b18f125b4cb140de73c3fb803c14babfe2aa65b516",
     "direct_manifest_sha256": "9631db3d22584dd00ecd7c294336f4a55ce7c86953895138d701eeb06d6b007d",
-    "observed_at": "2026-09-21T10:13:44Z",
-    "prod_direct_preview_sha256": "sha256:b2dd3488b3435c746dcd11d98d7f972291cc3aee4aa581adc8aa44c59a60d057",
-    "source_commit": "68c7dba76e9b508bf6b54268ec1db9fe683663e4"
+    "observed_at": "2026-09-21T10:21:10Z",
+    "prod_direct_preview_sha256": "sha256:cba14821ca6569337363b1dc920e0ba54d37d7247132286f688a5ddc1cd1e4f6",
+    "source_commit": "fae995dcda2c1ac16e8afb05dfe659e937f650a7"
   },
   "resources": {
     "failure_alerts": false,
@@ -163,6 +163,6 @@
     "steps": 1,
     "tokens_per_turn": 32768
   },
-  "sha256": "sha256:184f915e8a4fd39b12c8f875bd246ffda38ce5ef14c710d2b010a8e6005a09c2",
+  "sha256": "sha256:1350ebbc547516f9291774ef6247687956ea231b46fadb832dfa23a39e3b3fb3",
   "status": "prepared_external_stage_and_preflight_pending"
 }
