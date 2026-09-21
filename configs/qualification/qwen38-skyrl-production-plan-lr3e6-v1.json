@@ -362,7 +362,7 @@
       "release_requires_bound_descendants_absent_and_active_gpus_zero": true
     },
     "schema": "cyber_qwen38_skyrl_production_plan_binding_v1",
-    "sha256": "sha256:5abeb53329a9556121e5bc8c525c9a1116d03610d50ac0817c7843c481c9f292",
+    "sha256": "sha256:d2eff295924818b804d9a4200107c17a6b7085c0b9413678cffa686bc92acb8b",
     "staged_data": {
       "candidate_manifest_path": "configs/qualification/qwen38-skyrl-production-manifest-lr3e6-v1.json",
       "files": [
@@ -406,7 +406,9 @@
     },
     "submission_gate": {
       "blockers": [
-        "prod4_terminal_acceptance_receipt_absent",
+        "prod8_terminal_acceptance_receipt_absent",
+        "prod8_step1_to_step2_native_resume_not_yet_qualified",
+        "broad_horizon_not_yet_ported_to_prod8_long_context_contract",
         "broad_get_only_data_manifests_not_yet_create_once_staged_on_SFS",
         "exact_image_cpu_preflights_not_recorded",
         "jobs_api_server_previews_and_fresh_guard_receipts_not_recorded",

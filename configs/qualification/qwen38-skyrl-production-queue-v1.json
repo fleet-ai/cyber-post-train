@@ -8,7 +8,7 @@
       "reloadable_step_1_checkpoint",
       "all_owned_gpu_resources_released"
     ],
-    "run_name": "chris-q38-rlreward-prod4"
+    "run_name": "chris-q38-rlreward-prod8"
   },
   "execution": {
     "cluster_target": "prod",
@@ -770,7 +770,7 @@
     }
   ],
   "profile": "qwen38_skyrl_production_queue_v1",
-  "purpose": "Exact offline-compiled queue behind the prod4 reward-acquisition canary; all external preview and submission gates remain closed.",
+  "purpose": "Exact offline-compiled queue behind the prod8 reward-acquisition canary; all external preview and submission gates remain closed.",
   "release_observer": {
     "arm_before_jobs_post": true,
     "armed_receipt_schema": "cyber_skyrl_release_observer_armed_v1",
@@ -794,10 +794,12 @@
     }
   ],
   "schema": "cyber_qwen38_skyrl_production_queue_v1",
-  "sha256": "sha256:083f2d4d93957966e3fd715ec14458dcdbab2933957d48b43cf0d3d1a0c44685",
+  "sha256": "sha256:36f6ab6aeb7567b77c899a32c4b17084e98903cfe962592cab87ed5f16fbfd1c",
   "submission_gate": {
     "blockers": [
-      "prod4_terminal_acceptance_receipt_absent",
+      "prod8_terminal_acceptance_receipt_absent",
+      "prod8_step1_to_step2_native_resume_not_yet_qualified",
+      "broad_horizon_not_yet_ported_to_prod8_long_context_contract",
       "broad_get_only_data_manifests_not_yet_create_once_staged_on_SFS",
       "exact_image_cpu_preflights_not_recorded",
       "jobs_api_server_previews_and_fresh_guard_receipts_not_recorded",

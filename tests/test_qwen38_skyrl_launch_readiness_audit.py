@@ -1,4 +1,4 @@
-"""Offline regression contract for the V17, prod4, and five-arm launch audit."""
+"""Offline regression contract for legacy V17, prod8, and five broad arms."""
 
 from __future__ import annotations
 
@@ -48,10 +48,11 @@ def test_audit_is_current_self_sealed_and_performs_no_external_action() -> None:
     assert output["launch_authorized"] is False
 
 
-def test_v17_and_prod4_recompile_to_the_frozen_digests_and_resource_shape() -> None:
+def test_legacy_v17_and_prod8_recompile_to_the_frozen_digests_and_resource_shape() -> None:
     value = audit.build()
-    topology = value["v17_development_topology_gate"]
-    prod4 = value["prod4_one_step_reward_gate"]
+    topology = value["legacy_v17_development_topology_evidence"]
+    prod8 = value["prod8_one_step_reward_gate"]
+    assert topology["gating"] is False
     assert topology["compiled_digests"] == {
         "plan_sha256": ("sha256:b4122e3b07b0df82ed5a037c47cf268fb74ef20ec1e78f0f5d8c61d3f1712a53"),
         "request_sha256": (
@@ -87,7 +88,7 @@ def test_v17_and_prod4_recompile_to_the_frozen_digests_and_resource_shape() -> N
     assert topology["bounds"]["fleetjob_active_deadline_seconds"] == 1800
     assert topology["submission_gate"]["submission_authorized"] is False
 
-    assert prod4["compiled_digests"] == {
+    assert prod8["compiled_digests"] == {
         "plan_sha256": ("sha256:09cabfc727e8b8448bd00a5ea3cee03914844e67cfc80b1f033bdbe2671212de"),
         "request_sha256": (
             "sha256:7c2df31feceb5c741cb16463b554b91d00b11c6bf50ec85b3203706823c2fb44"
@@ -97,28 +98,28 @@ def test_v17_and_prod4_recompile_to_the_frozen_digests_and_resource_shape() -> N
         ),
         "staged_manifest_observed": False,
     }
-    assert prod4["resource_shape"] == {
+    assert prod8["resource_shape"] == {
         "priority": "c1",
         "nodes": 1,
         "gpus_per_node": 8,
         "gpus": 8,
         "requeue_if_preempted": False,
     }
-    assert prod4["wandb"]["run_id"] == "chris-q38-rlreward-prod8"
-    assert prod4["wandb"]["resume"] == "never"
-    assert prod4["wandb"]["fresh_run_ID_absence_checked_before_submit"] is False
-    assert prod4["watchdog"]["hard_seconds"] == 14 * 60 * 60
-    assert prod4["watchdog"]["episode_budget"]["fits_watchdog_hard_bound"] is True
+    assert prod8["wandb"]["run_id"] == "chris-q38-rlreward-prod8"
+    assert prod8["wandb"]["resume"] == "never"
+    assert prod8["wandb"]["fresh_run_ID_absence_checked_before_submit"] is False
+    assert prod8["watchdog"]["hard_seconds"] == 14 * 60 * 60
+    assert prod8["watchdog"]["episode_budget"]["fits_watchdog_hard_bound"] is True
     assert (
-        prod4["watchdog"]["episode_budget"]["minimum_hard_seconds_without_shortening_episode"]
+        prod8["watchdog"]["episode_budget"]["minimum_hard_seconds_without_shortening_episode"]
         == 45300
     )
-    encoded = prod4["encoded_absence_checks"]
+    encoded = prod8["encoded_absence_checks"]
     assert encoded["fresh_Kubernetes_name_absence_encoded"] is True
     assert encoded["fresh_SFS_manifest_payload_and_output_absence_encoded"] is True
     assert encoded["fresh_WandB_run_ID_absence_encoded"] is True
     assert encoded["fresh_guard_executed"] is False
-    assert prod4["submission_gate"]["submission_authorized"] is False
+    assert prod8["submission_gate"]["submission_authorized"] is False
 
 
 def test_full_arms_have_exact_offline_plans_and_plan_bound_watchdogs() -> None:

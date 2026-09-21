@@ -15,7 +15,7 @@ import pytest
 from cyber_post_train.jobs import JobsError, digest
 from evals.fleet import opencode_self_hosted as fleet
 from scripts.audit_qwen38_skyrl_launch_readiness import (
-    compile_prod4,
+    compile_prod8,
     load,
 )
 from training import dev_cleanup_observer as cleanup
@@ -158,7 +158,7 @@ def test_preflight_receipt_propagates_output_limit_proofs(plan_request, monkeypa
 @pytest.fixture(scope="module")
 def plan_request() -> tuple[dict, dict]:
     run = load(CANARY_RUN)
-    return compile_prod4(run, successor_metadata(run))
+    return compile_prod8(run, successor_metadata(run))
 
 
 def _source_preview(plan: dict, request: dict) -> dict:

@@ -210,10 +210,10 @@ def test_fresh_guard_checks_jobs_kubernetes_sfs_wandb_and_observer(monkeypatch) 
     assert proof["wandb_run_id_absent"] is True
 
 
-def test_prod4_uses_same_fresh_caller_surfaces_without_changing_its_plan(monkeypatch) -> None:
+def test_prod8_uses_same_fresh_caller_surfaces_without_changing_its_plan(monkeypatch) -> None:
     next_gates = readiness.load(readiness.NEXT_GATES)
     run = readiness.load(readiness.CANARY_RUN)
-    plan, request = readiness.compile_prod4(run, readiness.prod4_metadata(run, next_gates))
+    plan, request = readiness.compile_prod8(run, readiness.prod8_metadata(run, next_gates))
     current = 1_800_000_000.0
     monkeypatch.setattr(
         skyrl_launch_guard,

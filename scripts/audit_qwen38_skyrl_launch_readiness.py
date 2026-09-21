@@ -82,7 +82,7 @@ def raw(value: dict) -> bytes:
     return json.dumps(value, indent=2, sort_keys=True, allow_nan=False).encode() + b"\n"
 
 
-def prod4_metadata(run: dict, next_gates: dict) -> dict:
+def prod8_metadata(run: dict, next_gates: dict) -> dict:
     """Load the current committed sanitized manifest surface, never task text."""
     del next_gates
     value = load(CANARY_MANIFEST)
@@ -91,7 +91,7 @@ def prod4_metadata(run: dict, next_gates: dict) -> dict:
     return value
 
 
-def compile_prod4(run: dict, metadata: dict) -> tuple[dict, dict]:
+def compile_prod8(run: dict, metadata: dict) -> tuple[dict, dict]:
     """Exercise the real compiler against digests only, without touching SFS."""
     original = sft.read_mapping
 
@@ -219,10 +219,10 @@ def topology_audit(qualification: dict) -> dict:
     }
 
 
-def prod4_audit(next_gates: dict) -> dict:
+def prod8_audit(next_gates: dict) -> dict:
     run = load(CANARY_RUN)
-    metadata = prod4_metadata(run, next_gates)
-    plan, request = compile_prod4(run, metadata)
+    metadata = prod8_metadata(run, next_gates)
+    plan, request = compile_prod8(run, metadata)
     shared_budget = episode_ceiling(
         run,
         dev_rows=metadata["files"]["dev"]["rows"],
@@ -247,7 +247,7 @@ def prod4_audit(next_gates: dict) -> dict:
         or plan["model"]["revision"] != canary.MODEL["revision"]
         or plan["data"]["sha256"] != metadata["sha256"]
     ):
-        raise ValueError("prod4 plan, request, resource, model, data, or W&B binding changed")
+        raise ValueError("prod8 plan, request, resource, model, data, or W&B binding changed")
     return {
         "state": "compiled_from_sanitized_manifest_not_staged_or_submitted",
         "inputs": {
@@ -529,15 +529,16 @@ def build() -> dict:
     }:
         raise ValueError("historical next-gates receipt no longer matches its frozen record")
     topology = topology_audit(qualification)
-    prod4 = prod4_audit(next_gates)
+    prod8 = prod8_audit(next_gates)
     production = production_arms_audit()
     blockers = [
-        "v17_CPU_preflight_preview_observer_execution_receipt_and_release_are_not_accepted",
-        "prod4_private_data_is_not_create_once_staged_and_digest_verified",
-        "prod4_exact_image_CPU_preflight_and_Jobs_API_preview_are_not_recorded",
-        "fresh_prod4_Jobs_Kubernetes_SFS_and_WandB_absence_guard_is_not_executed",
-        "prod4_authoritative_reward_optimizer_checkpoint_and_UID_release_receipt_is_absent",
-        "full_arm_prod4_prerequisite_is_not_accepted",
+        "prod8_private_data_is_not_create_once_staged_and_digest_verified",
+        "prod8_exact_image_output_limit_CPU_preflight_and_server_previews_are_not_recorded",
+        "fresh_prod8_Jobs_Kubernetes_SFS_and_WandB_absence_guard_is_not_executed",
+        "prod8_authoritative_reward_optimizer_checkpoint_and_UID_release_receipt_is_absent",
+        "prod8_step1_to_step2_native_resume_is_not_qualified",
+        "full_arm_prod8_prerequisite_is_not_accepted",
+        "full_arm_horizon_is_not_ported_to_the_prod8_long_context_contract",
         "full_arm_private_data_is_not_create_once_staged_and_verified_on_SFS",
         "full_arm_exact_image_CPU_preflights_and_server_previews_are_not_recorded",
         "full_arm_fresh_absence_guards_and_UID_bound_release_observers_are_not_executed",
@@ -563,8 +564,15 @@ def build() -> dict:
                 "historical_source_receipt_is_not_a_current_submission_gate": True,
                 "failures_require_evidence_repair_and_resource_release": True,
             },
-            "v17_development_topology_gate": topology,
-            "prod4_one_step_reward_gate": prod4,
+            "legacy_v17_development_topology_evidence": {
+                **topology,
+                "gating": False,
+                "reason": (
+                    "The prod8 direct authorization path does not consume a V17 receipt; live "
+                    "prod6/prod7 execution already exercised the one-node topology."
+                ),
+            },
+            "prod8_one_step_reward_gate": prod8,
             "full_c1_arms": production,
             "tooling_bindings": {
                 "Jobs_client": source(ROOT / "cyber_post_train/jobs.py"),
