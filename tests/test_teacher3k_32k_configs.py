@@ -401,7 +401,7 @@ def test_teacher3k_later_context_launch_binds_current_inputs(context, position):
 
     assert (
         evidence["status"]
-        == "v1_infrastructure_invalid_v2_current_main_exact_image_preflight_running"
+        == "v1_infrastructure_invalid_v2_rebased_full_suite_passed_exact_image_preflight_pending"
     )
     assert sft.digest(plan) == row["plan_sha256"]
     assert sft.digest(request) == row["request_sha256"]

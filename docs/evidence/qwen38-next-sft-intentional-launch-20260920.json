@@ -1,7 +1,7 @@
 {
   "schema": "cyber_qwen38_next_sft_intentional_launch_v1",
-  "observed_at": "2026-09-21T00:16:00Z",
-  "status": "v1_infrastructure_invalid_v2_current_main_exact_image_preflight_running",
+  "observed_at": "2026-09-21T00:23:52Z",
+  "status": "v1_infrastructure_invalid_v2_rebased_full_suite_passed_exact_image_preflight_pending",
   "shared_treatment": {
     "model": "Qwen/Qwen3.8-27B",
     "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
@@ -69,7 +69,7 @@
     "root_failure_alert_annotation": "off",
     "status": "cancelled_without_receipt_after_ci_exposed_reference_dev_preflight_gap"
   },
-  "repair_preflight": {
+  "superseded_current_head_preflight": {
     "pod": "chris-q38-t3k-context-repair-preflight-v5",
     "pod_uid": "fb924e8d-077f-4965-bcc0-ee0f1fa94e0f",
     "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
@@ -78,7 +78,17 @@
     "gpus": 0,
     "priority": "c1",
     "root_failure_alert_annotation": "off",
-    "status": "running"
+    "status": "cancelled_without_receipt_after_main_advanced_to_2d55a2d4b571c3ccb03f174581ae22558b629d9f"
+  },
+  "repair_preflight": {
+    "qualified_code_parent": "7211ac5becec9e12581e0e26934d5773b0ff589f",
+    "base_head": "2d55a2d4b571c3ccb03f174581ae22558b629d9f",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "runtime_sha256": "3105f5211319cea56aa111cdea43eb7230d8b7e48bab958d44ed05506a019b08",
+    "gpus": 0,
+    "priority": "c1",
+    "root_failure_alert_annotation": "off",
+    "status": "pending_remote_ci_then_exact_image_create"
   },
   "arms": [
     {
@@ -136,5 +146,5 @@
       }
     }
   ],
-  "next_gate": "Require both exact-image zero-GPU preflights to pass against runtime sha256 3105f5211319cea56aa111cdea43eb7230d8b7e48bab958d44ed05506a019b08, merge the repair, then recheck duplicate-free outputs, total active nodes, root alert annotation, c1, and server dry-run before exactly one create per successor."
+  "next_gate": "Require remote CI and both exact-image zero-GPU preflights to pass after rebasing onto base 2d55a2d4b571c3ccb03f174581ae22558b629d9f against runtime sha256 3105f5211319cea56aa111cdea43eb7230d8b7e48bab958d44ed05506a019b08, merge the repair, then recheck duplicate-free outputs, total active nodes, root alert annotation, c1, and server dry-run before exactly one create per successor."
 }
