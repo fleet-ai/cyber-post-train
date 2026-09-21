@@ -214,6 +214,9 @@ def test_lr30_step76_acceptance_binds_forward_stage_cleanup_and_paused_registrat
     assert evidence["cleanup"]["stage_config_map_uid_absent"] is True
     assert evidence["registration"]["post_count"] == 1
     assert evidence["registration"]["second_post_performed"] is False
+    assert evidence["registration"]["registration_sha256"] == stage.digest_json(
+        plan["desired_registration"]
+    )
     assert evidence["registration"]["get_readback"]["phase"] == "paused"
     assert evidence["registration"]["get_readback"]["active_pods"] == 0
     assert evidence["registration"]["get_readback"]["gpus_allocated"] == 0
