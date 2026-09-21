@@ -89,6 +89,13 @@
           "offline_long_horizon_probe"
         ]
       },
+      "skyrl_rollout_runtime": {
+        "path": "../../training/skyrl_rollout.py",
+        "file_sha256": "sha256:a9ba203eb93d0622fda161636fb8499b46b30c1bbb349df4eda484f5fd407c52",
+        "symbols": [
+          "configure"
+        ]
+      },
       "fleet_binding": {
         "path": "../../evals/fleet/opencode_self_hosted.py",
         "file_sha256": "sha256:428e9f2e4d4c758c4f682cbed314cf96b866d051b34fa0eea8757a3aad97aa1d",
@@ -137,5 +144,5 @@
       "incident_evidence_self_sha256": "sha256:c45f12a8fa799900053a1bd7b1e33ff26e89d517ae552188bda0e66cf675ca2d"
     }
   },
-  "sha256": "sha256:34d5301fa008e4e7e00187997ff41db449d6cbf6457d70579ba1be80f2cb547c"
+  "sha256": "sha256:750915b1a79b6c8a2e65db01a79e05d97c8693d1804812a08976479e329e8b04"
 }

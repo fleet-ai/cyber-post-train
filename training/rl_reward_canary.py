@@ -35,20 +35,20 @@ SPLIT_SELF_SHA256 = "sha256:8279ea19808ad1accb00d3f3145c3ec087030677786e0188251c
 EVIDENCE_FILE_SHA256 = "sha256:73be894762968970c8cf0454281fe13d46615e40039b61b8f8a97c8cc883f365"
 EVIDENCE_SELF_SHA256 = "sha256:50491796b829388164faefc5fb9a9ad09fac89a8d94648a1791240f91826a285"
 RUNTIME_EVIDENCE_FILE_SHA256 = (
-    "sha256:827a93462a8d9aec151a6a9589d2c464bafae4ba463276e096cb0d008a0c8ea9"
+    "sha256:149b06156e4db384e02098e86d9f0c71adb91e6d9e4c4940a0ed0080cefa46d0"
 )
 RUNTIME_EVIDENCE_SELF_SHA256 = (
-    "sha256:34d5301fa008e4e7e00187997ff41db449d6cbf6457d70579ba1be80f2cb547c"
+    "sha256:750915b1a79b6c8a2e65db01a79e05d97c8693d1804812a08976479e329e8b04"
 )
 HORIZON_FILE_SHA256 = "sha256:d80cd804406ed1f181ba9cc6891cd11785d7fc3a63b84aa2f97a7238c3d435b3"
 HORIZON_SELF_SHA256 = "sha256:a2a13e123b51041b314c81772134dd63e89dd99c4f8a68822fa817968ca69182"
 TOOL_CATALOG_FILE_SHA256 = "sha256:e4a3c4fb5b5c34cdaf64ec568eb31fcc0d55a63cc0a134808db348c65d7b6858"
 TOOL_CATALOG_SHA256 = "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
 QUALIFICATION_FILE_SHA256 = (
-    "sha256:474a19b9283368d8a92f38f87d0aea15cccb95813525ae0332648ba4e5ca78f7"
+    "sha256:b38215513561f75e61b8c2e0c3eb57c2f2942bb6401fd6867e372721e25622e8"
 )
 QUALIFICATION_SELF_SHA256 = (
-    "sha256:4c95940d714b71f97831ddc17735f517e8cf39b2340de9ac65ad40895843812e"
+    "sha256:a12f3d3486be567fc615b73a2e8663884ceb96218a6e331d9bfe916dfb0f2257"
 )
 
 LIMITS = {
@@ -122,13 +122,16 @@ RUNTIME_SOURCES = {
     "training/skyrl_episode.py": (
         "sha256:1642ffe9a51425bdc77e5ea9624efcfeecfd1c005387359df75249ebab2e421d"
     ),
+    "training/skyrl_rollout.py": (
+        "sha256:a9ba203eb93d0622fda161636fb8499b46b30c1bbb349df4eda484f5fd407c52"
+    ),
     "evals/fleet/opencode_self_hosted.py": (
         "sha256:428e9f2e4d4c758c4f682cbed314cf96b866d051b34fa0eea8757a3aad97aa1d"
     ),
 }
 PORT_COMMITS = {
-    "runtime_commit": "07ec89e0f75a0043446b95d36b7d8f462c0d10a4",
-    "preflight_commit": "07ec89e0f75a0043446b95d36b7d8f462c0d10a4",
+    "runtime_commit": "480d699a98ccabbf1f44cd76447b8ab700841408",
+    "preflight_commit": "480d699a98ccabbf1f44cd76447b8ab700841408",
     "ported_onto_commit": "91ab058ebbf744c0931dbb9692831bdbd7ecefaf",
 }
 HISTORICAL_PORT_COMMITS = {
@@ -397,6 +400,7 @@ def validate_source_package(
         ("data_preparation", "training/rl_data.py"),
         ("episode_runtime", "training/rl_episode.py"),
         ("skyrl_episode_runtime", "training/skyrl_episode.py"),
+        ("skyrl_rollout_runtime", "training/skyrl_rollout.py"),
         ("fleet_binding", "evals/fleet/opencode_self_hosted.py"),
     ):
         if (

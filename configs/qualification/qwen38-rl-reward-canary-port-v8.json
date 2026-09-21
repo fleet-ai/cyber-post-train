@@ -1,8 +1,8 @@
 {
   "schema": "cyber_qwen38_skyrl_reward_canary_port_v8",
   "source": {
-    "runtime_commit": "07ec89e0f75a0043446b95d36b7d8f462c0d10a4",
-    "preflight_commit": "07ec89e0f75a0043446b95d36b7d8f462c0d10a4",
+    "runtime_commit": "480d699a98ccabbf1f44cd76447b8ab700841408",
+    "preflight_commit": "480d699a98ccabbf1f44cd76447b8ab700841408",
     "ported_onto_commit": "91ab058ebbf744c0931dbb9692831bdbd7ecefaf"
   },
   "execution": {
@@ -76,5 +76,5 @@
       "prod8_jobs_kubernetes_sfs_wandb_absence_not_yet_rechecked"
     ]
   },
-  "sha256": "sha256:4c95940d714b71f97831ddc17735f517e8cf39b2340de9ac65ad40895843812e"
+  "sha256": "sha256:a12f3d3486be567fc615b73a2e8663884ceb96218a6e331d9bfe916dfb0f2257"
 }
