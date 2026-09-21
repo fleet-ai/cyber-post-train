@@ -1,0 +1,64 @@
+{
+  "schema_version": "qwen38_web_source_snapshot_refresh_incident_v1",
+  "status": "v4_dependency_preflight_failed_released_source_refresh_repair_in_review",
+  "observed_at": "2026-09-21T13:31:04Z",
+  "qualification": {
+    "transaction_id": "wbe-prompt-parity-p338-v4",
+    "sandbox_name": "wbe-qual-prompt-parity-p338-v4",
+    "sandbox_id": "bvwusw7l9b6s6wrm4kq7n",
+    "parent_source_snapshot_id": "mp3wre17q6fwxbndexd50",
+    "classification": "infrastructure-invalid",
+    "failure_stage": "prompt_runtime_dependency_preflight",
+    "failure_reason": "prompt_runtime_dependency_preflight_failed",
+    "failure_error_class": "QualificationError",
+    "failure_capture_file_sha256": "sha256:76da57ff11b71143296e95241d68ba0c1e8ee76d3cdb53382b9c329250995c7f",
+    "failure_capture_receipt_sha256": "sha256:6e6f18ed606fc5b0d8d3f56972388e2b61af472ac7eb641e571722f29025f66d",
+    "remote_failure_file_sha256": "sha256:5949b934b73e4786fb16b7e54611b6092686a437a87088c0954e544166ac61e6",
+    "remote_failure_receipt_sha256": "sha256:fe8c1102a611e5241f5c8d0aeb11113adf4cd148eb039437c15ce88376957d37"
+  },
+  "release": {
+    "status": "released_and_absent",
+    "released_file_sha256": "sha256:80c409150fe6909bc86b4d7243cb8d008c3b8e99da48358e642f29531329a1b0",
+    "released_receipt_sha256": "sha256:5703a07400240c38a67c3b36a245cbfaac4651b787db4b9da71893fbf39fc541",
+    "reconciliation_file_sha256": "sha256:5185bb3b297fa3a32132b5aeb54dc9de95c5f817302130582e7415f6a34be30d",
+    "reconciliation_receipt_sha256": "sha256:3da6211646bb5403d3c7a7075910f3396f3d63f7e2fb7dfd0209157c7c0e7e41",
+    "owned_inventory_empty": true
+  },
+  "call_counts": {
+    "student_model_requests": 0,
+    "judge_model_requests": 0,
+    "benchmark_attempts": 0,
+    "scoring_attempts": 0
+  },
+  "source_snapshot_status": {
+    "parent_role": "immutable_parent_carrier_only",
+    "replacement_snapshot_created": false,
+    "replacement_snapshot_accepted": false,
+    "replacement_qualification_executed": false,
+    "matched_collection_accepted": false
+  },
+  "offline_repair": {
+    "base_commit": "c1c67d39482feb8ffaad1db7458d83f301bef195",
+    "operator_path": "evals/webexploitbench/tensorlake/source_snapshot_refresh.py",
+    "operator_file_sha256": "sha256:054d238e1de37144f8f5039729b375a4c72aee28d809c3f6dedef589aaa4cc61",
+    "worker_path": "evals/webexploitbench/tensorlake/source_snapshot_refresh_worker.py",
+    "worker_file_sha256": "sha256:5b4bebe65885b99591c15f94c01fdc8c4af130c261cab15ab7e82875bf57ee9c",
+    "test_path": "evals/webexploitbench/tests/test_tensorlake_source_snapshot_refresh.py",
+    "test_file_sha256": "sha256:ddb3fc0284a8ab51bbf1b8f4373fc450654bbde963cd51de6fb881222fbb533a",
+    "status": "offline_repair_in_review",
+    "provider_requests": 0,
+    "external_mutations": 0
+  },
+  "sealed_external_inputs": {
+    "cage_commit": "09a191c565230cebb8255899d622d23c7ddeff33",
+    "cage_bundle_sha256": "sha256:2fa42b952307872b942b16df657dbe82915f6b9691a36c209982e186d45d96c0",
+    "web_archive_sha256": "sha256:2ae9716cdc88678f86017ad2493891a32206148b83d7c5afe1ae15787a40e807",
+    "uv_binary_sha256": "sha256:d381f11517c66523211b0876552ff7dea5c1b4b0f13800571b35225761302fba",
+    "uv_release_archive_sha256": "sha256:8681d8921e7d520fb368991dcf5f9c1905b80f5bf2a265a0ed085c8d8e342477",
+    "huggingface_hub_wheel_sha256": "sha256:0e3a01829c19d86d03793e4577816fe3bdfc1602ac62c7fb220d593d351224ba",
+    "python_multipart_wheel_sha256": "sha256:8a62d3a8335e06589fe01f2a3e178cdcc632f3fbe0d492ad9ee0ec35aab1f104"
+  },
+  "reusable_rule": "Treat an inherited filesystem snapshot only as a carrier when its source or runtime dependencies are incomplete. Rebuild a separate successor from exact offline inputs, write claims before every provider mutation, never repeat an uncertain request, release every owned sandbox, and require a second restored-snapshot parity check before a fresh zero-model qualification can begin.",
+  "scope": "Sanitized terminal evidence plus an offline repository repair. No private prompt, task, trace, score, stderr, or credential was inspected or recorded. No replacement snapshot, model request, score, rollout, or provider mutation was produced by the repair work.",
+  "receipt_sha256": "sha256:4739cf4d16478b0557ec320e1709cfee214cb18a08ab1b2d702ba89ba6bf2534"
+}
