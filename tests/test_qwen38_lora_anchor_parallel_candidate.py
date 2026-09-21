@@ -4,7 +4,6 @@ from pathlib import Path
 
 from training import sft
 
-
 ROOT = Path(__file__).resolve().parents[1]
 RUNS = ROOT / "configs" / "runs"
 PACKET = ROOT / "configs" / "qualification" / "qwen38-lora-anchor-parallel-candidate-v1.json"
