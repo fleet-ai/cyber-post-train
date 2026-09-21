@@ -65,23 +65,34 @@ HTTP 422:
 > /mnt/sfs/models by the model-stage chart and registered in the models table
 > before a run can use it.
 
-The prepared correction mirrors the exact Qwen3.6 staging recipe without
-submitting it. `chris-cyber-qwen38-stage-1d4bf0f2` is a CPU-only, Kueue-managed
-job in `training-lq`. It downloads into a partial directory, verifies all 18
-LFS shard digests and every runtime sidecar, writes an immutable checkpoint
-lock, then atomically promotes the exact revision directory. A separate
-create-only `chris-cyber-qwen38-canonical-link` job exposes that exact tree as
-`/mnt/sfs/models/qwen3.8-27b`; it refuses to replace any existing nonmatching
-path. Both checked-in manifests remain suspended plans and were not submitted.
+The historical correction mirrored the exact Qwen3.6 staging recipe without
+submitting it. `chris-cyber-qwen38-stage-1d4bf0f2` was a CPU-only,
+Kueue-managed plan in `training-lq`. It downloaded into a partial directory,
+verified all 18 LFS shard digests and every runtime sidecar, wrote an immutable
+checkpoint lock, then atomically promoted the exact revision directory. A
+separate `chris-cyber-qwen38-canonical-link` plan exposed that exact tree as
+`/mnt/sfs/models/qwen3.8-27b` and refused to replace any existing nonmatching
+path.
+
+Those exact bytes are now fenced inside non-launchable Markdown evidence for
+the [stage Job](evidence/qwen38-study/2026-09-01-qwen38-stage-1d4bf0f2-historical-job.md)
+and [canonical-link Job](evidence/qwen38-study/2026-09-01-qwen38-canonical-link-historical-job.md).
+Their original SHA-256 values remain bound by both the 2026-09-01 readiness
+receipt and the [failed-job alert receipt](evidence/failed-job-alert-opt-out-20260920.json).
+They deliberately remain missing the later root alert annotation, no supported
+launch procedure consumes them, and neither the files nor their fenced blocks
+may be passed to `kubectl`.
 
 The end-to-end correction is:
 
 1. add `Qwen3.8-27B` as a base-model catalog row with provider `Qwen`, exact
    repository `Qwen/Qwen3.8-27B`, and context 262,144;
-2. run the reviewed immutable stage job with the exact 40-character revision,
-   never `main`;
+2. render and review a newly named stage successor with the exact 40-character
+   revision, never `main`, and require its root
+   `fleet.ai/failure-alerts: "off"` annotation before creation;
 3. verify its promoted SFS tree and lock against the committed model lock;
-4. create the canonical link only after that verification;
+4. render a newly named canonical-link successor with the same root annotation
+   and create it only after that verification;
 5. register local name `qwen3.8-27b` in the Training API catalog; and
 6. repeat the server preview and bind the returned model path and staged bytes.
 

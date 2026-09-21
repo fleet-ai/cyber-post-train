@@ -36,9 +36,11 @@
     "sft_preview_detail": "Unknown base model 'qwen3.8-27b'. Did you mean 'qwen3.6-27b'? Staged models: qwen2.5-1.5b-instruct, qwen3.6-27b. A model must be staged to /mnt/sfs/models by the model-stage chart and registered in the models table before a run can use it."
   },
   "model_staging": {
-    "status": "planned_not_submitted",
-    "immutable_stage_job": "cluster/jobs/chris-cyber-qwen38-stage-1d4bf0f2.yaml",
-    "canonical_link_job": "cluster/jobs/chris-cyber-qwen38-canonical-link.yaml",
+    "status": "historical_not_launchable",
+    "launchable": false,
+    "historical_stage_job_evidence": "docs/evidence/qwen38-study/2026-09-01-qwen38-stage-1d4bf0f2-historical-job.md",
+    "historical_canonical_link_job_evidence": "docs/evidence/qwen38-study/2026-09-01-qwen38-canonical-link-historical-job.md",
+    "successor_policy": "render a new uniquely named Job, then prove its root fleet.ai/failure-alerts annotation is exactly off before creation; never extract or submit the historical fenced manifests",
     "immutable_root": "/mnt/sfs/models/Qwen/Qwen3.8-27B/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
     "training_api_root": "/mnt/sfs/models/qwen3.8-27b",
     "queue": "training-lq",

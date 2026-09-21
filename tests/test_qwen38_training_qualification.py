@@ -20,8 +20,12 @@ Q38_RL_FULL = ROOT / "configs/runs/qwen38-27b-rl-base-full.template.json"
 Q36_SFT_GATE = ROOT / "configs/runs/qwen36-27b-sft-smoke.json"
 Q36_SFT_FULL = ROOT / "configs/runs/qwen36-27b-sft-full.json"
 SPLIT = ROOT / "configs/data/fleet-a62-task-split-v1.json"
-STAGE_JOB = ROOT / "cluster/jobs/chris-cyber-qwen38-stage-1d4bf0f2.yaml"
-LINK_JOB = ROOT / "cluster/jobs/chris-cyber-qwen38-canonical-link.yaml"
+STAGE_JOB_EVIDENCE = (
+    ROOT / "docs/evidence/qwen38-study/2026-09-01-qwen38-stage-1d4bf0f2-historical-job.md"
+)
+LINK_JOB_EVIDENCE = (
+    ROOT / "docs/evidence/qwen38-study/2026-09-01-qwen38-canonical-link-historical-job.md"
+)
 READINESS = ROOT / "configs/qualification/qwen38-27b-readiness-2026-09-01-v2.json"
 TRAINER_COMPATIBILITY = (
     ROOT / "configs/qualification/qwen38-27b-trainer-compatibility-2026-09-01-v1.json"
@@ -72,8 +76,23 @@ def _verification_namespace(script: str) -> dict:
     return namespace
 
 
+def _historical_manifest_text(path: Path) -> str:
+    before, marker, remainder = path.read_text().partition("```yaml\n")
+    manifest, closing, after = remainder.partition("```\n")
+    assert marker and closing
+    assert "non-launchable evidence" in before
+    assert not after.strip()
+    return manifest
+
+
+def _historical_job(path: Path) -> dict:
+    value = yaml.safe_load(_historical_manifest_text(path))
+    assert isinstance(value, dict)
+    return value
+
+
 def _stage_verifier_script() -> str:
-    script = yaml.safe_load(STAGE_JOB.read_text())["spec"]["template"]["spec"]["containers"][0][
+    script = _historical_job(STAGE_JOB_EVIDENCE)["spec"]["template"]["spec"]["containers"][0][
         "args"
     ][0]
     marker = (
@@ -84,9 +103,9 @@ def _stage_verifier_script() -> str:
 
 
 def _link_verifier_script() -> str:
-    return yaml.safe_load(LINK_JOB.read_text())["spec"]["template"]["spec"]["containers"][0][
-        "args"
-    ][0]
+    return _historical_job(LINK_JOB_EVIDENCE)["spec"]["template"]["spec"]["containers"][0]["args"][
+        0
+    ]
 
 
 def _write_tiny_checkpoint(root: Path) -> tuple[str, int, dict[str, str]]:
@@ -166,13 +185,20 @@ def test_live_catalog_observation_fail_closes_training() -> None:
     ]
 
 
-def test_model_staging_is_cpu_only_queue_safe_and_not_submitted() -> None:
+def test_historical_model_staging_is_cpu_only_and_not_launchable() -> None:
     qualification = _read(QUALIFICATION)
     staging = qualification["model_staging"]
-    stage = yaml.safe_load(STAGE_JOB.read_text())
-    link = yaml.safe_load(LINK_JOB.read_text())
+    stage = _historical_job(STAGE_JOB_EVIDENCE)
+    link = _historical_job(LINK_JOB_EVIDENCE)
 
-    assert staging["status"] == "planned_not_submitted"
+    assert staging["status"] == "historical_not_launchable"
+    assert staging["launchable"] is False
+    assert staging["historical_stage_job_evidence"] == str(STAGE_JOB_EVIDENCE.relative_to(ROOT))
+    assert staging["historical_canonical_link_job_evidence"] == str(
+        LINK_JOB_EVIDENCE.relative_to(ROOT)
+    )
+    assert "render a new uniquely named Job" in staging["successor_policy"]
+    assert "fleet.ai/failure-alerts" in staging["successor_policy"]
     assert staging["accelerator_request"] == 0
     assert stage["metadata"]["name"] == "chris-cyber-qwen38-stage-1d4bf0f2"
     assert link["metadata"]["name"] == "chris-cyber-qwen38-canonical-link"
@@ -414,8 +440,14 @@ def test_readiness_snapshot_is_self_digested_and_remains_fail_closed() -> None:
         "before_train_eval": True,
         "post_step_eval": True,
     }
-    assert receipt["staging_plan"]["stage_manifest_sha256"] == file_sha256(STAGE_JOB)
-    assert receipt["staging_plan"]["canonical_link_manifest_sha256"] == file_sha256(LINK_JOB)
+    assert receipt["staging_plan"]["stage_manifest_sha256"] == (
+        "sha256:"
+        + hashlib.sha256(_historical_manifest_text(STAGE_JOB_EVIDENCE).encode()).hexdigest()
+    )
+    assert receipt["staging_plan"]["canonical_link_manifest_sha256"] == (
+        "sha256:"
+        + hashlib.sha256(_historical_manifest_text(LINK_JOB_EVIDENCE).encode()).hexdigest()
+    )
     assert receipt["recommended_first_paid_run"]["template_sha256"] == file_sha256(Q38_SFT_GATE)
     assert all(value is False for value in receipt["mutation_attestation"].values())
 
