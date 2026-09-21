@@ -1,0 +1,90 @@
+{
+  "name": "q38-dev17-s43-base-p1-v1",
+  "task_set": "qwen38-fresh75-fleet-dev17-task-set-v1.json",
+  "models": {
+    "qwen3.8-27b-base": {
+      "repository": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "session_model": "qwen/qwen3.8-27b"
+    }
+  },
+  "routes": {
+    "base": {
+      "model": "qwen3.8-27b-base",
+      "served_id": "qwen3.8-27b",
+      "task_versions": [
+        "2e363dca-e74d-4855-a002-6761dc7f9f0f",
+        "18079a9c-cb79-4013-aa08-54092c415165",
+        "d6c906fc-ef92-4ce6-ab9c-54a9b7eb9037",
+        "037704a7-fc03-4cf6-a8da-3f3e3933717e",
+        "139ff10d-8c00-4bd6-9437-e6fbcccf2f4d",
+        "f1ce26fc-39b6-442c-a03c-3c18f99e119f",
+        "78971e60-851b-4f6a-85d8-ecb3391d2af2",
+        "e13f62eb-170a-40c6-86bf-3c3f3829e3d8",
+        "1407dcf7-46ad-4b82-8aa1-f88307dd8264",
+        "05d09c55-ccdf-4d26-b06d-b851a2314a35",
+        "d4f5e664-d4fd-4492-a103-429260ad9e99",
+        "2cb87286-a35e-4ba0-a949-1d93dfbd229a",
+        "eefe304c-499d-4c9e-b09c-8aa0fab87213",
+        "fb68f600-9850-4cc2-86e7-a4f554e5f93f",
+        "b6efa2e4-7743-4b8b-a014-832d90cd5e39",
+        "51b23680-27fa-4bdd-a077-16669f3f0e18",
+        "383a2b61-e82b-4426-9a2b-d5372c92e346"
+      ],
+      "catalog": {
+        "engine": "sglang",
+        "precision": "bf16",
+        "tensor_parallel_size": 1
+      },
+      "model_info": {
+        "model_path": "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "model_type": "qwen3_5",
+        "architectures": [
+          "Qwen3_5ForConditionalGeneration"
+        ]
+      },
+      "server_info": {
+        "model_path": "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "context_length": 262144,
+        "tp_size": 1,
+        "dp_size": 8,
+        "load_balance_method": "total_tokens",
+        "quantization": null,
+        "kv_cache_dtype": "fp8_e4m3",
+        "reasoning_parser": "qwen3",
+        "tool_call_parser": "qwen3_coder"
+      },
+      "endpoint_origin": "https://inference.flt.build"
+    }
+  },
+  "harness": {
+    "harness": "opencode",
+    "harness_version": "1.18.27",
+    "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "provider_adapter": "@ai-sdk/openai-compatible",
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v2",
+    "context_window_size": 262144,
+    "compaction_headroom_tokens": 20000,
+    "max_output_tokens": 32768,
+    "max_model_requests": 600,
+    "timeout_seconds": 28800,
+    "tools": [
+      "bash",
+      "submit_report"
+    ],
+    "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+  },
+  "images": {
+    "agent": "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92",
+    "proxy": "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+  },
+  "pass_k": 1,
+  "concurrency": 8,
+  "training_data_eligible": false,
+  "sampling": {
+    "temperature": 0.6,
+    "top_p": 0.95,
+    "seed": 43
+  },
+  "max_reviewed_infrastructure_retries": 1
+}

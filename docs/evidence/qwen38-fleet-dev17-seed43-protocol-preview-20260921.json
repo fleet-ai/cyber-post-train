@@ -1,0 +1,113 @@
+{
+  "schema": "qwen38_fleet_dev17_seed43_protocol_preview_v1",
+  "observed_at": "2026-09-21T01:50:30Z",
+  "scope": "Score-blind offline protocol, dry-run preview, duplicate-absence, and resource-shape evidence only. No capability outcomes, prompts, traces, or final-test content were read.",
+  "source": {
+    "base_main_commit": "7cddee707e271600934f2ccc2f325c32d265595a",
+    "protocol_file": "configs/evaluation/qwen38-fleet-dev17-seed43-matched-protocol-v1.json",
+    "protocol_sha256": "sha256:85334a48a36c126a1134ab2e0ba6211e2fce5de06c4fce6bbcef5304ab9b4f4a",
+    "status": "review_only_do_not_launch"
+  },
+  "dry_run": {
+    "namespace": "fleet-train-jobs",
+    "all_server_rendered_jobs_have_root_failure_alerts_off": true,
+    "all_server_rendered_jobs_have_priority_c1": true,
+    "all_server_rendered_jobs_are_suspended_for_queue_admission": true,
+    "all_jobs_are_cpu_only": true,
+    "server_preview_normalization": "Remove server-generated object UID, Job selector, and controller-UID labels before hashing. These values are fresh on every dry run; the normalized digest binds the submitted fields plus stable admission mutations.",
+    "all_jobs_request": {
+      "cpu": "4",
+      "memory": "32Gi",
+      "ephemeral_storage": "10Gi"
+    },
+    "arms": {
+      "base": {
+        "job_name": "chris-q38-dev17-s43-base-p1-v1",
+        "config_map_name": "chris-q38-dev17-s43-base-code-v1",
+        "config_sha256": "sha256:b52db3194f8682bcf88fb96049a1f3cf14afa8b3b7ab18932b0209f394d90b7c",
+        "evaluation_plan_sha256": "sha256:2cc8822ec7e3c0c5ef7cebfde9b7a7300eb03b097a4b4c6f84ec278839bbdc51",
+        "job_client_preview_sha256": "sha256:41b5e977be4b7d9ed5291a90c1817e36a18640b342818be70711135084533417",
+        "job_server_preview_sha256": "sha256:cbcaf822c78df5779a634552d1db446e08da683513c47ce2939416e68c2902ac",
+        "config_map_client_preview_sha256": "sha256:07e32c4e334b63b6dba54ee2d7f8e58161c9f3d61e10c5f36afc7c9b834f0e45",
+        "config_map_server_preview_sha256": "sha256:07e32c4e334b63b6dba54ee2d7f8e58161c9f3d61e10c5f36afc7c9b834f0e45",
+        "generic_and_named_config_bytes_equal": true,
+        "job_absent": true,
+        "config_map_absent": true,
+        "owned_workloads": 0,
+        "pods_absent": true,
+        "output_absent": true,
+        "database_absent": true
+      },
+      "fresh75": {
+        "job_name": "chris-q38-dev17-s43-fresh75-p1-v1",
+        "config_map_name": "chris-q38-dev17-s43-fresh75-code-v1",
+        "config_sha256": "sha256:90c0b6b942deecb0571e85e81419b4411d53e5c11fd0aa280afd2628ef79be80",
+        "evaluation_plan_sha256": "sha256:d030f378ceb6591defe77fbb0319cc580cc99d3ab2229c7fff81e1ace490a43d",
+        "job_client_preview_sha256": "sha256:516874a2315536bdbbf7a63842f6dea837436a784766b5bd0a7931a801944e88",
+        "job_server_preview_sha256": "sha256:b26b0cb17d0e38312a1598ed53bdedddd040343ea631257c2a4a210a69268493",
+        "config_map_client_preview_sha256": "sha256:2fcf55de78eb2aa00595a7b6e028b77ecf431e92b63c243d135bb1fce8364400",
+        "config_map_server_preview_sha256": "sha256:2fcf55de78eb2aa00595a7b6e028b77ecf431e92b63c243d135bb1fce8364400",
+        "generic_and_named_config_bytes_equal": true,
+        "job_absent": true,
+        "config_map_absent": true,
+        "owned_workloads": 0,
+        "pods_absent": true,
+        "output_absent": true,
+        "database_absent": true
+      },
+      "self44": {
+        "job_name": "chris-q38-dev17-s43-self44-p1-v1",
+        "config_map_name": "chris-q38-dev17-s43-self44-code-v1",
+        "config_sha256": "sha256:c8c71394eeadee25801b771e25060445581c25215e0592f07e1b5884799664ce",
+        "evaluation_plan_sha256": "sha256:37ca1e4f573c4c2fc4c9bea2ecb0567763df03de7a7ed2da49ea48273c08dafd",
+        "job_client_preview_sha256": "sha256:2abeed783b4e13aa63aed9133ab8890d8390d133937b9f69e9ec1cbea7732fd2",
+        "job_server_preview_sha256": "sha256:fbb9e1ff28cfef7b33d7c8850c4bbeaff01e3c34c1e1c461f813080aabbe8a3a",
+        "config_map_client_preview_sha256": "sha256:a75e78e13ed31d87a5047701c8d4901f54621ab58ab596b43d50398cca3e2ab7",
+        "config_map_server_preview_sha256": "sha256:a75e78e13ed31d87a5047701c8d4901f54621ab58ab596b43d50398cca3e2ab7",
+        "generic_and_named_config_bytes_equal": true,
+        "job_absent": true,
+        "config_map_absent": true,
+        "owned_workloads": 0,
+        "pods_absent": true,
+        "output_absent": true,
+        "database_absent": true
+      },
+      "teacher186": {
+        "job_name": "chris-q38-dev17-s43-teacher186-p1-v1",
+        "config_map_name": "chris-q38-dev17-s43-teacher186-code-v1",
+        "config_sha256": "sha256:9af42e2fbd84c51c219228fe75a515c448d694c6df0e69e70dfb3e1e9ed02ee5",
+        "evaluation_plan_sha256": "sha256:fefc68a10f0d569376239e2e67dd91bc7bef2e4d9be20d054f4252bbd52d803a",
+        "job_client_preview_sha256": "sha256:68dc7aa9909439c2e998f29d0b5cacda1898d41ab20b4361db32d66642b7d0f8",
+        "job_server_preview_sha256": "sha256:71d25e12d5f40624123db71eac9247bede9f242bbfce388187a918a8ddb99922",
+        "config_map_client_preview_sha256": "sha256:2348892ae0194291ab430161a31efcac30956d3f53d7a2c751fe7eb85bfd65d3",
+        "config_map_server_preview_sha256": "sha256:2348892ae0194291ab430161a31efcac30956d3f53d7a2c751fe7eb85bfd65d3",
+        "generic_and_named_config_bytes_equal": true,
+        "job_absent": true,
+        "config_map_absent": true,
+        "owned_workloads": 0,
+        "pods_absent": true,
+        "output_absent": true,
+        "database_absent": true
+      }
+    }
+  },
+  "capacity": {
+    "cpu_node_count_observed": 5,
+    "per_node_allocatable_cpu": "15900m",
+    "per_node_allocatable_memory_approx": "62Gi",
+    "existing_owned_evaluators_observed": {
+      "fresh75": "4CPU/32Gi",
+      "self44": "4CPU/32Gi",
+      "teacher186": "4CPU/32Gi"
+    },
+    "decision": "This packet does not authorize creation. Recheck live Kueue reservations, per-node headroom, exact endpoint parity, and duplicate/output/database absence immediately before each one create."
+  },
+  "interpretation": {
+    "server_objects_created": false,
+    "sessions_created": false,
+    "capability_claim_made": false,
+    "final_eight_task_set_accessed": false,
+    "root_review_required_before_post": true
+  },
+  "sha256": "c40ff9b50e7e4feae50f36a0d8982f89d2028fa8cfa30c859fe3a76149074bb2"
+}
