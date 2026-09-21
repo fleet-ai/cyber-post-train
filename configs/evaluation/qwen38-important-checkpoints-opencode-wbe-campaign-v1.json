@@ -1,0 +1,608 @@
+{
+  "schema": "cyber_qwen38_web_checkpoint_campaign_preparation_v1",
+  "source": {
+    "repository": "fleet-ai/cyber-post-train",
+    "prepared_against_main_commit": "c4725e7586d583821745391048c59a53f1eaadb8",
+    "base_model_lock": {
+      "path": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+      "file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac"
+    },
+    "base_weights_manifest": {
+      "path": "configs/models/qwen38-27b-1d4bf0f2.weights.json",
+      "file_sha256": "sha256:80a5e9de066e068abb012a0e9bd144676813a31042bb578226472803f8e0e84f"
+    },
+    "benchmark_snapshot_source": {
+      "path": "evals/webexploitbench/tensorlake/benchmark_snapshot.py",
+      "file_sha256": "sha256:7d35082be6f8224cde3d89bd5eb761d1ec7a6f5548e78dcab7505ff308476dca"
+    },
+    "collection_launcher_source": {
+      "path": "evals/webexploitbench/tensorlake/collection_launcher.py",
+      "file_sha256": "sha256:577fd2fad738bd4ac256ea032b7d4add6771b6c99b9a8c65e757df876978c551"
+    },
+    "collection_pair_source": {
+      "path": "evals/webexploitbench/tensorlake/collection_pair.py",
+      "file_sha256": "sha256:ea8280ec930eaa5553e5861fdad058d41b5daa747afc3ada401b76209bf515e9"
+    },
+    "deferred_score_source": {
+      "path": "evals/webexploitbench/tensorlake/deferred_score.py",
+      "file_sha256": "sha256:a59d33e0aa43a0aedda2179ee33327985a3090322edea2c8fbc92f2e8fa970d6"
+    },
+    "opencode_renderer_source": {
+      "path": "evals/webexploitbench/opencode_adapter/render_config.mjs",
+      "file_sha256": "sha256:949236e1031728f42db6c0ef0ebb89ceb0ef380e89459499c8c8e82552eb8520"
+    }
+  },
+  "status": {
+    "state": "prepared_not_launchable",
+    "external_mutations_by_this_preparation": 0,
+    "provider_api_calls_by_this_preparation": 0,
+    "evaluation_attempts_by_this_preparation": 0,
+    "capability_claimed": false,
+    "benchmark_content_or_results_read_for_training": false,
+    "reason": "The old V23 collection produced zero accepted rollouts. A fresh campaign must wait for both collection failure classes to be diagnosed and repaired, a fresh model-free qualification to pass, and every live duplicate and serving-parity gate to pass."
+  },
+  "scientific_boundary": {
+    "question": "How does each accepted post-training checkpoint change OpenCode WebExploitBench performance relative to one exact shared Qwen3.8-27B base control when every non-weight input is held constant?",
+    "intervention": "model_weights_only",
+    "web_results_role": "reporting_only_never_training_selection_or_reward",
+    "benchmark_content_must_remain_sealed": true,
+    "no_prompt_trace_flag_answer_score_or_credential_in_this_plan": true,
+    "candidate_order_is_operational_not_outcome_selected": true
+  },
+  "protocol": {
+    "benchmark": {
+      "name": "WebExploitBench",
+      "repository": "AgentCyberRange/WebExploitBench",
+      "revision": "7f97d87fa8ab728260c0ba9b09b9c8f00bb82ad5",
+      "task_count": 15,
+      "task_order_sha256": "sha256:d491b66885c8a379a887ee792d96ade76ffdc34cbfa3e75f9bc61c6975a29610",
+      "canary_task_index": 0
+    },
+    "cage": {
+      "repository": "https://github.com/AgentCyberRange/CAGE.git",
+      "commit": "09a191c565230cebb8255899d622d23c7ddeff33",
+      "patch_set_sha256": "sha256:baf629de2ea13a5648f9de792514efcd73c71667c1ffe375b8669cbc1ad72b51"
+    },
+    "harness": {
+      "name": "opencode",
+      "version": "1.18.27",
+      "qwen_code_allowed": false,
+      "tool_surface": [
+        "web_bash",
+        "web_submit_findings"
+      ]
+    },
+    "base_model": {
+      "repository": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "weights_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+      "tokenizer_manifest_sha256": "sha256:3938a9a8172f2738fed1be44efc11e2562059269d50d3721213f44802b53b4e1",
+      "chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
+    },
+    "sampling": {
+      "temperature": 0.6,
+      "top_p": 0.95,
+      "max_output_tokens": 32768,
+      "scientific_attempt_retries": 0
+    },
+    "context": {
+      "max_context_tokens": 262144,
+      "max_input_tokens": 229376,
+      "automatic_compaction": true,
+      "automatic_continuation": true,
+      "compaction_reserved_tokens": 20000,
+      "renderer_sha256": "sha256:949236e1031728f42db6c0ef0ebb89ceb0ef380e89459499c8c8e82552eb8520"
+    },
+    "budget": {
+      "max_agent_steps": 600,
+      "task_max_duration_minutes": 480,
+      "snapshot_restore_and_readiness_allowance_seconds": 600,
+      "collection_and_preservation_allowance_seconds": 7200,
+      "sandbox_timeout_seconds": 43200
+    },
+    "transient_model_request_retries": {
+      "maximum_attempts": 5,
+      "retryable_http_statuses": [
+        429,
+        502,
+        503,
+        504
+      ],
+      "retry_transport_errors": true,
+      "backoff_seconds": [
+        2,
+        4,
+        8,
+        16
+      ],
+      "jitter_fraction": 0.2
+    },
+    "serving": {
+      "precision": "bf16",
+      "weight_quantization": null,
+      "tensor_parallel_size": 1,
+      "data_parallel_size": 8,
+      "context_tokens": 262144,
+      "kv_cache_dtype": "fp8_e4m3",
+      "reasoning_parser": "qwen3",
+      "tool_call_parser": "qwen3_coder",
+      "image_sha256": "sha256:d6e7288627be8b02be88e4bba38e73f6d50e2826869f753c13a4c4385ab3eda9",
+      "normalized_runtime_sha256": "sha256:d82d78721f4ec8d4b0d6228242df4838b38086a48108e57fc6fe4e7be1fa3662"
+    },
+    "collection_and_scoring": {
+      "collection_launcher": "evals.webexploitbench.tensorlake.collection_launcher",
+      "pair_validator": "evals.webexploitbench.tensorlake.collection_pair",
+      "collection_output": "immutable_score_free_rollout_bundle",
+      "judge_calls_during_collection": 0,
+      "scoring_launcher": "evals.webexploitbench.tensorlake.deferred_score",
+      "scoring_input": "immutable_score_free_rollout_bundle",
+      "agent_calls_during_scoring": 0,
+      "judge_identity_in_collection_plan": false,
+      "recollection_required_after_scoring_failure": false
+    }
+  },
+  "comparison": {
+    "shared_snapshot_required": true,
+    "shared_benchmark_required": true,
+    "held_constant_student_fields": [
+      "endpoint_origin_sha256",
+      "tokenizer_sha256",
+      "chat_template_sha256",
+      "max_context_size",
+      "inference_precision",
+      "quantization",
+      "serving_runtime_sha256"
+    ],
+    "weight_intervention_fields": [
+      "served_model",
+      "model_revision",
+      "model_artifact_sha256",
+      "models_file_sha256"
+    ],
+    "pair_acceptance_rule": "collection_pair must prove byte-identical fixed-control JSON and distinct weight-intervention fields before either arm starts",
+    "shared_base_reuse_rule": "The one fresh base canary and four fresh base full replicas may be paired with every candidate only when every pair receipt binds the same accepted snapshot, benchmark, base plans, and fixed-control digest. A candidate may not substitute, mutate, or recollect the base arm.",
+    "aggregate_shape": {
+      "canary": {
+        "independent_replicas": 1,
+        "tasks_per_replica": 1,
+        "pass_k_per_replica": 1,
+        "collections_per_arm": 1
+      },
+      "full": {
+        "independent_replicas": 4,
+        "tasks_per_replica": 15,
+        "pass_k_per_replica": 1,
+        "collections_per_arm": 60,
+        "note": "Four independent pass-1 campaigns form pass@4; this is not one pass_k=4 campaign."
+      }
+    }
+  },
+  "recovery": {
+    "old_v23_disposition": {
+      "accepted_collections": 0,
+      "failure_preserved_and_released": 60,
+      "failure_classes": {
+        "collection_export": 45,
+        "collection_run": 15
+      },
+      "scoring_campaign_created": false,
+      "capability_result": false,
+      "permanently_excluded_campaign_ids": [
+        "q38-base-f75p230-oc-wbe-full-v23-r0",
+        "q38-base-f75p230-oc-wbe-full-v23-r1",
+        "q38-base-f75p230-oc-wbe-full-v23-r2",
+        "q38-base-f75p230-oc-wbe-full-v23-r3"
+      ],
+      "permanently_excluded_launch_receipt_sha256": "sha256:1889b6ff0e80e7709841d23447f44fb9a87b587e4b6b7cd3f5e36b619d44db09",
+      "terminal_observation_receipt_sha256": "sha256:b57c56c28988fa31f59f10621e3a4f7855972df3c55fe7a69a71b2a03479ea46",
+      "offline_reconciliation_receipt_sha256": "sha256:65d4b2b718be2309dc1e8d64e5ba07da2f04cfeb178517b61765136940687364",
+      "rule": "No V23 collection, sandbox, output root, launch receipt, or campaign identity is a valid base result or reusable launch target."
+    },
+    "exact16_review": {
+      "accepted_collections": 0,
+      "failure_preserved_and_released": 16,
+      "failure_classes": {
+        "collection_run": 15,
+        "collection_export": 1
+      },
+      "provider_release_replay_allowed": false
+    },
+    "attach_client_repair": {
+      "branch": "codex/web-attach-post-release-origin-v1",
+      "pull_request": "https://github.com/fleet-ai/cyber-post-train/pull/313",
+      "head_commit": "a17752d5f3e4a10b18e5914687dc3c885704c142",
+      "merge_commit": "c4725e7586d583821745391048c59a53f1eaadb8",
+      "merged_at": "2026-09-21T05:28:04Z",
+      "state": "merged_into_main",
+      "scope": "terminal receipt bookkeeping only",
+      "sufficient_for_relaunch": false,
+      "evidence_path_after_merge": "docs/evidence/qwen38-web-v23-attach-terminal-reconciliation-20260921.json",
+      "evidence_file_sha256": "sha256:2ffb023e85d37aecd4027fed6deb0253789bad9a13ac2cca4c434a01350a0cf1",
+      "evidence_receipt_sha256": "sha256:f20c4160546db49f2d262c21263f1e20c3692e9610caec933a32254141d141c8"
+    },
+    "causal_collection_repair": {
+      "state": "not_yet_diagnosed_or_repaired",
+      "metadata_only_provider_snapshot_get_is_insufficient": true,
+      "score_blind_snapshot_inventory_receipt_sha256": "sha256:f270d14003787e9b736b9ff3843605d7a9f53f3f5f2578e2d75dccd29c5af4bb",
+      "model_free_restore_required": true,
+      "model_free_restore_performed_by_this_preparation": false
+    },
+    "completed_launch_gates": [
+      "attach_client_terminal_bookkeeping_repair_merged"
+    ],
+    "fresh_launch_gates": [
+      "durable_sanitized_snapshot_diagnosis_for_collection_run_failures",
+      "durable_sanitized_snapshot_diagnosis_for_collection_export_failures",
+      "deterministic_causal_collection_guard_and_regression_merged",
+      "fresh_model_free_qualification_exercises_and_accepts_the_repaired_boundary",
+      "fresh_static_and_live_duplicate_campaign_sandbox_and_output_root_census_is_empty"
+    ]
+  },
+  "identity_templates": {
+    "sandbox_name": "{campaign_id}-t{task_index:02d}",
+    "run_id": "{campaign_id}:task{task_index:02d}",
+    "lifecycle_path": "/workspace/lifecycle/{campaign_id}/task{task_index:02d}/LIFECYCLE.json",
+    "result_root": "/workspace/results/{campaign_id}/task{task_index:02d}",
+    "collection_path": "/workspace/collections/{campaign_id}/task{task_index:02d}",
+    "collection_acceptance_path": "/workspace/collections/{campaign_id}/task{task_index:02d}/COLLECTION_ACCEPTED.json",
+    "local_state_root": ".private/web-checkpoint-campaign-v1/{campaign_id}",
+    "create_once": true
+  },
+  "shared_base": {
+    "artifact_id": "qwen38-27b-base-matched-control",
+    "served_model": "qwen3.8-27b",
+    "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "model_artifact_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+    "serving_lock": {
+      "path": "evals/webexploitbench/serving/qwen38-27b-1d4bf0f2.lock.json",
+      "file_sha256": "sha256:17c75a53ddbf23d7e4272f95446d0c5128a070a3a0fde0d5f8791e97568d53dd"
+    },
+    "campaigns": {
+      "canary": "q38-base-oc-wbe-cp1-c1",
+      "full_replicas": [
+        "q38-base-oc-wbe-cp1-r0",
+        "q38-base-oc-wbe-cp1-r1",
+        "q38-base-oc-wbe-cp1-r2",
+        "q38-base-oc-wbe-cp1-r3"
+      ]
+    }
+  },
+  "candidates": [
+    {
+      "priority": 1,
+      "artifact_id": "q38-fresh75-step230",
+      "checkpoint": {
+        "path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/checkpoints/global_step_230",
+        "optimizer_step": 230,
+        "manifest_file_sha256": "sha256:bf92e29d9f19dd589201214f25fe8d0e3b0f65de14ec08fc573217f50580a486"
+      },
+      "export": {
+        "path": "/mnt/sfs/jobs/chris-q38-f75-max-full-v4/hf-export-step230-v1",
+        "payload_manifest_sha256": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029"
+      },
+      "served_model": "chris-q38-fresh75-step230-web-v2",
+      "model_revision": "sha256:36eec01f1dd3f0d47f6b099e79970d9533cf59c37d8e15478907413dd162e029",
+      "route_state_at_preparation": "paused_requires_jit_resume_and_fresh_readback",
+      "campaigns": {
+        "canary": "q38-f75s230-oc-wbe-cp1-c1",
+        "full_replicas": [
+          "q38-f75s230-oc-wbe-cp1-r0",
+          "q38-f75s230-oc-wbe-cp1-r1",
+          "q38-f75s230-oc-wbe-cp1-r2",
+          "q38-f75s230-oc-wbe-cp1-r3"
+        ]
+      },
+      "evidence": [
+        {
+          "path": "docs/evidence/qwen38-fresh75-step230-reload-accepted-20260915.json",
+          "file_sha256": "sha256:0ee0d79d047782598f58f4717a9e5f784ef407ff4825b01bc3616593d582691e"
+        },
+        {
+          "path": "docs/evidence/qwen38-fresh75-step230-inference-stage-v2-accepted-20260915.json",
+          "file_sha256": "sha256:5a785f03c3ebe42043f56bbbd501c5fddc2a9dc73be90e212683c463d47feba9"
+        },
+        {
+          "path": "configs/evaluation/qwen38-fresh75-step230-base-runtime-clone-v1.json",
+          "file_sha256": "sha256:79541de0eda274740a8675a4f8e9e8f0bdf1a699f0b74f7227f30879fe8bbb6e"
+        },
+        {
+          "path": "docs/evidence/inference/2026-09-20-qwen38-checkpoint-serving-parity.md",
+          "file_sha256": "sha256:e39440e8b6c0f0529be203599533a92c7028b20e8198ac2867c0a0d05dbfa08d"
+        }
+      ],
+      "eligible_after_global_repair_gates": true
+    },
+    {
+      "priority": 2,
+      "artifact_id": "q38-teacher-dense-v5-step186",
+      "checkpoint": {
+        "path": "/mnt/sfs/jobs/chris-cyber-q38-teacher-dense-v5/checkpoints/global_step_186",
+        "optimizer_step": 186,
+        "manifest_file_sha256": "sha256:1b671c6ec4b39d1141e0d28c530243624f6a97a7922f9f222ffcbe20b8434d3e"
+      },
+      "export": {
+        "path": "/mnt/sfs/jobs/chris-cyber-q38-teacher-dense-v5/hf-export-v1",
+        "payload_manifest_sha256": "sha256:e6d59f5a58ce54b913d775cd71b81c64bd54637b53795df82baec0f71efefaf9"
+      },
+      "stage_path": "/models/chris-q38-teacher-sft-v5-step186-v1",
+      "served_model": "chris-q38-teacher-v5-step186-web-v1",
+      "model_revision": "sha256:e6d59f5a58ce54b913d775cd71b81c64bd54637b53795df82baec0f71efefaf9",
+      "route_state_at_preparation": "paused_requires_jit_resume_and_fresh_readback",
+      "campaigns": {
+        "canary": "q38-tchr186-oc-wbe-cp1-c1",
+        "full_replicas": [
+          "q38-tchr186-oc-wbe-cp1-r0",
+          "q38-tchr186-oc-wbe-cp1-r1",
+          "q38-tchr186-oc-wbe-cp1-r2",
+          "q38-tchr186-oc-wbe-cp1-r3"
+        ]
+      },
+      "evidence": [
+        {
+          "path": "configs/evaluation/qwen38-checkpoint-serving-readiness-v1.json",
+          "file_sha256": "sha256:618c35185d3756881df64669dca8df085e88bd20a13ae283a2ca1c31060f5c8e"
+        },
+        {
+          "path": "docs/evidence/inference/2026-09-20-qwen38-checkpoint-serving-parity.md",
+          "file_sha256": "sha256:e39440e8b6c0f0529be203599533a92c7028b20e8198ac2867c0a0d05dbfa08d"
+        }
+      ],
+      "eligible_after_global_repair_gates": true
+    },
+    {
+      "priority": 3,
+      "artifact_id": "q38-self-sft-step44",
+      "checkpoint": {
+        "path": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/checkpoints/global_step_44",
+        "optimizer_step": 44,
+        "manifest_file_sha256": "sha256:0094cfeb62f120b55d9e2f7fdfd4217c4c0aab66f369e3c52c89fc5e7ccfff9b"
+      },
+      "export": {
+        "path": "/mnt/sfs/jobs/chris-cyber-q38-dev20-self-lr1-v2/hf-export-v1",
+        "payload_manifest_sha256": "sha256:a0e55bebe9d78ac76c012446ae0147a421cd333e2a6bf2bb6f4fb3450fa776fe"
+      },
+      "stage_path": "/models/chris-q38-self-sft-step44-v1",
+      "served_model": "chris-q38-self-sft-step44-v1",
+      "model_revision": "sha256:a0e55bebe9d78ac76c012446ae0147a421cd333e2a6bf2bb6f4fb3450fa776fe",
+      "route_state_at_preparation": "paused_requires_jit_resume_and_fresh_readback",
+      "campaigns": {
+        "canary": "q38-self44-oc-wbe-cp1-c1",
+        "full_replicas": [
+          "q38-self44-oc-wbe-cp1-r0",
+          "q38-self44-oc-wbe-cp1-r1",
+          "q38-self44-oc-wbe-cp1-r2",
+          "q38-self44-oc-wbe-cp1-r3"
+        ]
+      },
+      "evidence": [
+        {
+          "path": "docs/evidence/qwen38-self-sft-step44-inference-stage-v1-accepted-20260920.json",
+          "file_sha256": "sha256:dd8c7cc3dc3fbf9fdaca847a3e3a180dfe6c4ed2e0b125678ff6d0dcfe22c1ae"
+        },
+        {
+          "path": "docs/evidence/inference/2026-09-20-qwen38-checkpoint-serving-parity.md",
+          "file_sha256": "sha256:e39440e8b6c0f0529be203599533a92c7028b20e8198ac2867c0a0d05dbfa08d"
+        }
+      ],
+      "eligible_after_global_repair_gates": true
+    },
+    {
+      "priority": 4,
+      "artifact_id": "q38-available-a-lr30-step76",
+      "checkpoint": {
+        "path": "/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/checkpoints/global_step_76",
+        "optimizer_step": 76,
+        "manifest_file_sha256": "sha256:cc4e2997e120a80bb1e209dc027f18e12ce1ebe12639594d28e23b08c459cf1a"
+      },
+      "export": {
+        "path": "/mnt/sfs/jobs/chris-q38-lr30-resume76-prod-v1/hf-export-step76-v1",
+        "payload_manifest_sha256": "sha256:3bef11697759b11db150b705e1882fb2d31a3efbdadbebd948aa917dcacc03a8"
+      },
+      "stage_path": "/models/chris-q38-available-a-lr30-step76-v1",
+      "served_model": "chris-q38-lr30-step76-web-v1",
+      "model_revision": "sha256:3bef11697759b11db150b705e1882fb2d31a3efbdadbebd948aa917dcacc03a8",
+      "route_state_at_preparation": "paused_requires_jit_resume_and_first_fresh_parity",
+      "campaigns": {
+        "canary": "q38-lr30s76-oc-wbe-cp1-c1",
+        "full_replicas": [
+          "q38-lr30s76-oc-wbe-cp1-r0",
+          "q38-lr30s76-oc-wbe-cp1-r1",
+          "q38-lr30s76-oc-wbe-cp1-r2",
+          "q38-lr30s76-oc-wbe-cp1-r3"
+        ]
+      },
+      "evidence": [
+        {
+          "path": "docs/evidence/qwen38-lr30-step76-inference-stage-v1-accepted-20260921.json",
+          "file_sha256": "sha256:b24706b2c71f94c0f656c1a79393c16c62abf5c081ee2440d71ad5f7cb5fdda2"
+        },
+        {
+          "path": "docs/evidence/qwen38-lr30-step76-matched-serving-registration-20260921.json",
+          "file_sha256": "sha256:c3c74b5c49a2c1d9135dd89bc822592d9e69b54998d57d468aa91cfec7511511"
+        },
+        {
+          "path": "configs/evaluation/qwen38-lr30-step76-serving-route-plan-v1.json",
+          "file_sha256": "sha256:b9dff542f1edac89c88d61f2d3f0fa18670896c1870717100fbf8265df7f473a"
+        }
+      ],
+      "eligible_after_global_repair_gates": true
+    },
+    {
+      "priority": 5,
+      "artifact_id": "q38-lora-step60",
+      "checkpoint": {
+        "path": "/mnt/sfs/jobs/chris-q38-lora-r1-s60-v3/checkpoint_manifests/step-000060-megatron-v1.json",
+        "optimizer_step": 60,
+        "manifest_file_sha256": "sha256:cd53865f869eeb1975aa0e099aef143a736167c5c7b095c283f0da292ffecd78",
+        "receipt_sha256": "sha256:6bae9ef75e0a60f598eb32b63d31a64c0f42716611a43daf19a177d3c0ffebd2"
+      },
+      "export": null,
+      "stage_path": null,
+      "served_model": null,
+      "model_revision": null,
+      "route_state_at_preparation": "absent_checkpoint_only",
+      "campaigns": {
+        "canary": "q38-lora60-oc-wbe-cp1-c1",
+        "full_replicas": [
+          "q38-lora60-oc-wbe-cp1-r0",
+          "q38-lora60-oc-wbe-cp1-r1",
+          "q38-lora60-oc-wbe-cp1-r2",
+          "q38-lora60-oc-wbe-cp1-r3"
+        ]
+      },
+      "evidence": [
+        {
+          "path": "docs/evidence/qwen38-lora-step60-recovery-terminal-20260921.json",
+          "file_sha256": "sha256:09d848c8a0a50d9e479f01359d36705e633f48bd99e102aae5cfac6d41ba0d29"
+        }
+      ],
+      "pending_promotion_pr": {
+        "url": "https://github.com/fleet-ai/cyber-post-train/pull/310",
+        "head_commit": "2c052b1123909828c959072a79aad5a706a4f798",
+        "prepared_plan_sha256": "sha256:31c9548c7119e01e3941049bcdaa79f9ee7a787a0191ce02c53644959d2d4547"
+      },
+      "eligible_after_global_repair_gates": false,
+      "additional_gates": [
+        "accepted_zero_update_gpu_reload",
+        "accepted_merged_bf16_export",
+        "accepted_export_reload",
+        "accepted_create_once_stage",
+        "paused_matched_runtime_registration",
+        "fresh_live_serving_parity"
+      ]
+    }
+  ],
+  "pairings": [
+    {
+      "artifact_id": "q38-fresh75-step230",
+      "canary": {
+        "pair_id": "q38-f75s230-oc-wbe-cp1-pair-c1",
+        "base_campaign_id": "q38-base-oc-wbe-cp1-c1",
+        "candidate_campaign_id": "q38-f75s230-oc-wbe-cp1-c1"
+      },
+      "full_replicas": [
+        {"pair_id": "q38-f75s230-oc-wbe-cp1-pair-r0", "base_campaign_id": "q38-base-oc-wbe-cp1-r0", "candidate_campaign_id": "q38-f75s230-oc-wbe-cp1-r0"},
+        {"pair_id": "q38-f75s230-oc-wbe-cp1-pair-r1", "base_campaign_id": "q38-base-oc-wbe-cp1-r1", "candidate_campaign_id": "q38-f75s230-oc-wbe-cp1-r1"},
+        {"pair_id": "q38-f75s230-oc-wbe-cp1-pair-r2", "base_campaign_id": "q38-base-oc-wbe-cp1-r2", "candidate_campaign_id": "q38-f75s230-oc-wbe-cp1-r2"},
+        {"pair_id": "q38-f75s230-oc-wbe-cp1-pair-r3", "base_campaign_id": "q38-base-oc-wbe-cp1-r3", "candidate_campaign_id": "q38-f75s230-oc-wbe-cp1-r3"}
+      ],
+      "launchable_after_candidate_and_global_gates": true
+    },
+    {
+      "artifact_id": "q38-teacher-dense-v5-step186",
+      "canary": {
+        "pair_id": "q38-tchr186-oc-wbe-cp1-pair-c1",
+        "base_campaign_id": "q38-base-oc-wbe-cp1-c1",
+        "candidate_campaign_id": "q38-tchr186-oc-wbe-cp1-c1"
+      },
+      "full_replicas": [
+        {"pair_id": "q38-tchr186-oc-wbe-cp1-pair-r0", "base_campaign_id": "q38-base-oc-wbe-cp1-r0", "candidate_campaign_id": "q38-tchr186-oc-wbe-cp1-r0"},
+        {"pair_id": "q38-tchr186-oc-wbe-cp1-pair-r1", "base_campaign_id": "q38-base-oc-wbe-cp1-r1", "candidate_campaign_id": "q38-tchr186-oc-wbe-cp1-r1"},
+        {"pair_id": "q38-tchr186-oc-wbe-cp1-pair-r2", "base_campaign_id": "q38-base-oc-wbe-cp1-r2", "candidate_campaign_id": "q38-tchr186-oc-wbe-cp1-r2"},
+        {"pair_id": "q38-tchr186-oc-wbe-cp1-pair-r3", "base_campaign_id": "q38-base-oc-wbe-cp1-r3", "candidate_campaign_id": "q38-tchr186-oc-wbe-cp1-r3"}
+      ],
+      "launchable_after_candidate_and_global_gates": true
+    },
+    {
+      "artifact_id": "q38-self-sft-step44",
+      "canary": {
+        "pair_id": "q38-self44-oc-wbe-cp1-pair-c1",
+        "base_campaign_id": "q38-base-oc-wbe-cp1-c1",
+        "candidate_campaign_id": "q38-self44-oc-wbe-cp1-c1"
+      },
+      "full_replicas": [
+        {"pair_id": "q38-self44-oc-wbe-cp1-pair-r0", "base_campaign_id": "q38-base-oc-wbe-cp1-r0", "candidate_campaign_id": "q38-self44-oc-wbe-cp1-r0"},
+        {"pair_id": "q38-self44-oc-wbe-cp1-pair-r1", "base_campaign_id": "q38-base-oc-wbe-cp1-r1", "candidate_campaign_id": "q38-self44-oc-wbe-cp1-r1"},
+        {"pair_id": "q38-self44-oc-wbe-cp1-pair-r2", "base_campaign_id": "q38-base-oc-wbe-cp1-r2", "candidate_campaign_id": "q38-self44-oc-wbe-cp1-r2"},
+        {"pair_id": "q38-self44-oc-wbe-cp1-pair-r3", "base_campaign_id": "q38-base-oc-wbe-cp1-r3", "candidate_campaign_id": "q38-self44-oc-wbe-cp1-r3"}
+      ],
+      "launchable_after_candidate_and_global_gates": true
+    },
+    {
+      "artifact_id": "q38-available-a-lr30-step76",
+      "canary": {
+        "pair_id": "q38-lr30s76-oc-wbe-cp1-pair-c1",
+        "base_campaign_id": "q38-base-oc-wbe-cp1-c1",
+        "candidate_campaign_id": "q38-lr30s76-oc-wbe-cp1-c1"
+      },
+      "full_replicas": [
+        {"pair_id": "q38-lr30s76-oc-wbe-cp1-pair-r0", "base_campaign_id": "q38-base-oc-wbe-cp1-r0", "candidate_campaign_id": "q38-lr30s76-oc-wbe-cp1-r0"},
+        {"pair_id": "q38-lr30s76-oc-wbe-cp1-pair-r1", "base_campaign_id": "q38-base-oc-wbe-cp1-r1", "candidate_campaign_id": "q38-lr30s76-oc-wbe-cp1-r1"},
+        {"pair_id": "q38-lr30s76-oc-wbe-cp1-pair-r2", "base_campaign_id": "q38-base-oc-wbe-cp1-r2", "candidate_campaign_id": "q38-lr30s76-oc-wbe-cp1-r2"},
+        {"pair_id": "q38-lr30s76-oc-wbe-cp1-pair-r3", "base_campaign_id": "q38-base-oc-wbe-cp1-r3", "candidate_campaign_id": "q38-lr30s76-oc-wbe-cp1-r3"}
+      ],
+      "launchable_after_candidate_and_global_gates": true
+    },
+    {
+      "artifact_id": "q38-lora-step60",
+      "canary": {
+        "pair_id": "q38-lora60-oc-wbe-cp1-pair-c1",
+        "base_campaign_id": "q38-base-oc-wbe-cp1-c1",
+        "candidate_campaign_id": "q38-lora60-oc-wbe-cp1-c1"
+      },
+      "full_replicas": [
+        {"pair_id": "q38-lora60-oc-wbe-cp1-pair-r0", "base_campaign_id": "q38-base-oc-wbe-cp1-r0", "candidate_campaign_id": "q38-lora60-oc-wbe-cp1-r0"},
+        {"pair_id": "q38-lora60-oc-wbe-cp1-pair-r1", "base_campaign_id": "q38-base-oc-wbe-cp1-r1", "candidate_campaign_id": "q38-lora60-oc-wbe-cp1-r1"},
+        {"pair_id": "q38-lora60-oc-wbe-cp1-pair-r2", "base_campaign_id": "q38-base-oc-wbe-cp1-r2", "candidate_campaign_id": "q38-lora60-oc-wbe-cp1-r2"},
+        {"pair_id": "q38-lora60-oc-wbe-cp1-pair-r3", "base_campaign_id": "q38-base-oc-wbe-cp1-r3", "candidate_campaign_id": "q38-lora60-oc-wbe-cp1-r3"}
+      ],
+      "launchable_after_candidate_and_global_gates": false
+    }
+  ],
+  "execution": {
+    "fresh_duplicate_census_max_age_seconds": 600,
+    "live_provider_inventory_required": true,
+    "static_repository_census": {
+      "prepared_against_commit": "c4725e7586d583821745391048c59a53f1eaadb8",
+      "proposed_campaign_id_hits_before_this_plan": 0
+    },
+    "candidate_route_policy": "Resume exactly one candidate route only when its accepted canary or full collections are ready to consume it. Pause it immediately after its terminal collection receipt is preserved. Never mutate a peer or shared endpoint.",
+    "launch_order": [
+      "accept_all_recovery_gates",
+      "compile_and_seal_fresh_base_and_candidate plans_from_the_same_accepted_snapshot",
+      "seal_collection_pair_receipts_for_base_against_each_ready_candidate",
+      "run_shared_base_and_fresh75_canaries",
+      "run_each_remaining_candidate_canary_before_its_full_campaign",
+      "start_full_base_and_fresh75_collections_concurrently",
+      "run_teacher_self_lr30_and_then_promoted_lora_full_collections_one_served_candidate_at_a_time",
+      "pause_each_candidate_route_after_collection",
+      "score_only_accepted_immutable_rollout_bundles_in_a_separate_model_agnostic_stage"
+    ],
+    "aggregate_tensorlake_sandbox_limit": 100,
+    "fastest_capacity_schedule": [
+      {
+        "wave": 1,
+        "collections": "shared_base_full_first_40_plus_fresh75_full_60",
+        "maximum_concurrent_tensorlake_sandboxes": 100
+      },
+      {
+        "wave": 2,
+        "collections": "shared_base_full_remaining_20_plus_teacher_full_60",
+        "maximum_concurrent_tensorlake_sandboxes": 80
+      },
+      {
+        "wave": 3,
+        "collections": "self_full_60",
+        "maximum_concurrent_tensorlake_sandboxes": 60
+      },
+      {
+        "wave": 4,
+        "collections": "lr30_full_60",
+        "maximum_concurrent_tensorlake_sandboxes": 60
+      },
+      {
+        "wave": 5,
+        "collections": "lora_full_60_only_after_all_additional_gates",
+        "maximum_concurrent_tensorlake_sandboxes": 60
+      }
+    ],
+    "launchable_now": false
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_traces_flags_answers_or_scores_included": false,
+    "raw_logs_included": false,
+    "tensor_values_read": false
+  },
+  "sha256": "sha256:13e219cd49781427c0a00237d8bea037e85603646fc9451dacc6876f44f716d5"
+}
