@@ -103,12 +103,14 @@ uv run --locked python -m evals.fleet.task_quality_cleanup_recovery \
   /private/qualification-root/task-quality-<wave>-<plan-prefix>
 ```
 
-The issuer requires the recovery code to equal freshly fetched `origin/main`,
+The issuer fetches the canonical repository's `main` itself and requires the
+recovery code to equal that exact commit,
 reopens the original merged controller bytes from Git, validates the sealed
 plan/run/cell/provision/terminal chain and deterministic request/run IDs,
 rechecks Fleet-team authentication and the deployed claim API, and then
 requires two successive observations of both a `404` create claim and an empty
-authoritative instance listing for the exact run ID. It performs no external
+authoritative instance listing for the exact run ID. Each observation carries
+an exact UTC timestamp. It performs no external
 mutation and fails on any claim, instance, binding change, nonempty list, or
 partial evidence. Each successful private resolution binds its independent
 absence-evidence digest. Finally, rerun the **original frozen controller's**

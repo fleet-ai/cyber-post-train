@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -89,6 +90,7 @@ def _operation_root(tmp_path: Path) -> tuple[Path, dict, dict]:
             {
                 "schema": "cyber_task_quality_qualification_cell_intent_v1",
                 "binding_sha256": binding["binding_sha256"],
+                "wave_id": plan["wave_id"],
                 "run_id": config["run_id"],
             }
         ),
@@ -110,6 +112,7 @@ def _operation_root(tmp_path: Path) -> tuple[Path, dict, dict]:
             {
                 "schema": qualification.CELL_TERMINAL_SCHEMA,
                 "binding_sha256": binding["binding_sha256"],
+                "wave_id": plan["wave_id"],
                 "qualification_status": "infrastructure_invalid",
             }
         ),
@@ -122,6 +125,7 @@ def _install_source_stubs(monkeypatch: pytest.MonkeyPatch) -> None:
         "git_commit": "d" * 40,
         "git_tree": "e" * 40,
         "origin_main_commit": "d" * 40,
+        "canonical_remote": recovery.CANONICAL_REMOTE,
         "module_path": "evals/fleet/task_quality_cleanup_recovery.py",
         "module_file_sha256": "sha256:" + "f" * 64,
     }
@@ -184,11 +188,11 @@ def _install_client(
 def test_recovery_seals_two_empty_reads_and_never_mutates(tmp_path, monkeypatch):
     root, plan, binding = _operation_root(tmp_path)
     _install_source_stubs(monkeypatch)
-    methods = _install_client(monkeypatch)
+    methods = _install_client(monkeypatch, list_responses=[[], [], [], []])
 
     result = recovery.recover(root, api_key="fixture", settle_seconds=0)
 
-    assert result["new_resolution_receipts"] == 1
+    assert result["resolution_receipts"] == 1
     assert result["all_claims_absent"] is True
     assert result["all_exact_run_instance_lists_empty"] is True
     assert result["external_mutations"] == 0
@@ -197,10 +201,13 @@ def test_recovery_seals_two_empty_reads_and_never_mutates(tmp_path, monkeypatch)
     evidence = json.loads((directory / recovery.RECOVERY_EVIDENCE_FILE).read_text())
     assert evidence["plan_sha256"] == plan["sha256"]
     assert evidence["binding_sha256"] == binding["binding_sha256"]
-    assert evidence["observations"] == [
-        {"claim_http_status": 404, "exact_run_instance_count": 0},
-        {"claim_http_status": 404, "exact_run_instance_count": 0},
-    ]
+    assert len(evidence["observations"]) == 2
+    for observation in evidence["observations"]:
+        assert observation["claim_http_status"] == 404
+        assert observation["exact_run_instance_count"] == 0
+        observed_at = datetime.fromisoformat(observation["observed_at_utc"])
+        assert observed_at.tzinfo is not None
+        assert observed_at.utcoffset() == UTC.utcoffset(observed_at)
     resolution = json.loads((directory / "CLEANUP_RESOLUTION.json").read_text())
     assert resolution["resolution"] == recovery.RECOVERY_RESOLUTION
     assert resolution["instance_id"] is None
@@ -209,6 +216,7 @@ def test_recovery_seals_two_empty_reads_and_never_mutates(tmp_path, monkeypatch)
     closed = qualification.cleanup_plan(plan, root, api_key="fixture")
     assert closed["resolved_task_versions"] == 1
     assert closed["unresolved_task_versions"] == 0
+    assert recovery.recover(root, api_key="fixture", settle_seconds=0) == result
 
 
 def test_recovery_rejects_existing_claim_without_writing_resolution(tmp_path, monkeypatch):
@@ -251,3 +259,68 @@ def test_recovery_rejects_run_intent_mismatch_before_network(tmp_path, monkeypat
         recovery.recover(root, api_key="fixture", settle_seconds=0)
 
     assert methods == []
+
+
+@pytest.mark.parametrize("artifact", ["CELL_INTENT.json", "CELL_TERMINAL.json"])
+def test_recovery_rejects_cross_wave_cell_evidence_before_network(tmp_path, monkeypatch, artifact):
+    root, _, _ = _operation_root(tmp_path)
+    path = root / "cells/cell-000" / artifact
+    value = json.loads(path.read_text())
+    value["wave_id"] = "other-wave"
+    value["sha256"] = qualification.digest(
+        {key: item for key, item in value.items() if key != "sha256"}
+    )
+    path.write_text(json.dumps(value))
+    _install_source_stubs(monkeypatch)
+    methods = _install_client(monkeypatch)
+
+    with pytest.raises(recovery.RecoveryError, match="frozen binding"):
+        recovery.recover(root, api_key="fixture", settle_seconds=0)
+
+    assert methods == []
+
+
+def test_recovery_source_requires_exact_freshly_fetched_main(monkeypatch):
+    monkeypatch.setattr(recovery, "_fresh_canonical_main", lambda _root: "b" * 40)
+
+    def fake_git(_root, *args):
+        if args == ("status", "--porcelain", "--untracked-files=no"):
+            return ""
+        if args == ("rev-parse", "HEAD"):
+            return "a" * 40
+        raise AssertionError(args)
+
+    monkeypatch.setattr(recovery, "_git", fake_git)
+    with pytest.raises(recovery.RecoveryError, match="freshly fetched origin/main"):
+        recovery.recovery_source_provenance()
+
+
+def test_canonical_main_observation_fetches_exact_remote_branch(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_git(_root, *args):
+        if args == ("remote", "get-url", "origin"):
+            return recovery.CANONICAL_REMOTE
+        if args == ("rev-parse", "FETCH_HEAD"):
+            return "a" * 40
+        raise AssertionError(args)
+
+    def fake_run(args, **kwargs):
+        calls.append((args, kwargs))
+        return object()
+
+    monkeypatch.setattr(recovery, "_git", fake_git)
+    monkeypatch.setattr(recovery.subprocess, "run", fake_run)
+
+    assert recovery._fresh_canonical_main(tmp_path) == "a" * 40
+    assert calls[0][0] == [
+        "git",
+        "-C",
+        str(tmp_path),
+        "fetch",
+        "--quiet",
+        "--no-tags",
+        "origin",
+        "main",
+    ]
+    assert calls[0][1]["check"] is True

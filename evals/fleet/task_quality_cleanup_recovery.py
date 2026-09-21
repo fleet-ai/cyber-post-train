@@ -15,6 +15,7 @@ import os
 import re
 import subprocess
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,7 @@ RECOVERY_AGGREGATE_FILE = "EMPTY_RUN_RECOVERY_AGGREGATE.json"
 RECOVERY_EVIDENCE_FILE = "INDEPENDENT_ABSENCE_EVIDENCE.json"
 RECOVERY_RESOLUTION = "independent_claim_absent_and_exact_run_empty"
 SHA1 = re.compile(r"[0-9a-f]{40}")
+CANONICAL_REMOTE = "https://github.com/fleet-ai/cyber-post-train.git"
 
 
 class RecoveryError(RuntimeError):
@@ -58,19 +60,31 @@ def _sha256_bytes(value: bytes) -> str:
     return "sha256:" + hashlib.sha256(value).hexdigest()
 
 
+def _fresh_canonical_main(root: Path) -> str:
+    if _git(root, "remote", "get-url", "origin") != CANONICAL_REMOTE:
+        raise RecoveryError("origin is not the canonical cyber-post-train repository")
+    subprocess.run(
+        ["git", "-C", str(root), "fetch", "--quiet", "--no-tags", "origin", "main"],
+        check=True,
+        capture_output=True,
+    )
+    return _git(root, "rev-parse", "FETCH_HEAD")
+
+
 def recovery_source_provenance() -> dict[str, Any]:
     """Require this issuer to be the exact clean, freshly fetched main commit."""
     root = Path(__file__).resolve().parents[2]
+    fetched_main = _fresh_canonical_main(root)
     if _git(root, "status", "--porcelain", "--untracked-files=no"):
         raise RecoveryError("recovery source worktree must be clean")
     commit = _git(root, "rev-parse", "HEAD")
-    origin_main = _git(root, "rev-parse", "refs/remotes/origin/main")
-    if commit != origin_main:
+    if commit != fetched_main:
         raise RecoveryError("recovery source must equal freshly fetched origin/main")
     return {
         "git_commit": commit,
         "git_tree": _git(root, "rev-parse", "HEAD^{tree}"),
-        "origin_main_commit": origin_main,
+        "origin_main_commit": fetched_main,
+        "canonical_remote": CANONICAL_REMOTE,
         "module_path": "evals/fleet/task_quality_cleanup_recovery.py",
         "module_file_sha256": qualification.file_digest(Path(__file__).resolve()),
     }
@@ -175,8 +189,10 @@ def _cell_inputs(
     )
     if (
         cell_intent.get("binding_sha256") != binding["binding_sha256"]
+        or cell_intent.get("wave_id") != plan["wave_id"]
         or cell_intent.get("run_id") != config["run_id"]
         or terminal.get("binding_sha256") != binding["binding_sha256"]
+        or terminal.get("wave_id") != plan["wave_id"]
         or provision_intent.get("run_id") != config["run_id"]
         or provision_intent.get("task_version_id") != binding["task_version_id"]
         or provision_intent.get("request_id") != request_id
@@ -199,7 +215,37 @@ def _exact_absence_read(client: httpx.Client, *, request_id: str, run_id: str) -
     )
     if not isinstance(instances, list) or instances:
         raise RecoveryError("exact run-id instance listing is not empty")
-    return {"claim_http_status": 404, "exact_run_instance_count": 0}
+    return {
+        "observed_at_utc": datetime.now(UTC).isoformat(),
+        "claim_http_status": 404,
+        "exact_run_instance_count": 0,
+    }
+
+
+def _validated_existing_evidence(path: Path, expected: dict[str, Any]) -> dict[str, Any] | None:
+    if not path.is_file():
+        return None
+    observed = _read_sealed(path, RECOVERY_EVIDENCE_SCHEMA, RECOVERY_EVIDENCE_FILE)
+    immutable_keys = set(expected) - {"observations", "sha256"}
+    if any(observed.get(key) != expected.get(key) for key in immutable_keys):
+        raise RecoveryError("existing independent absence evidence differs")
+    observations = observed.get("observations")
+    if not isinstance(observations, list) or len(observations) != 2:
+        raise RecoveryError("existing independent absence observations are invalid")
+    for observation in observations:
+        if (
+            not isinstance(observation, dict)
+            or observation.get("claim_http_status") != 404
+            or observation.get("exact_run_instance_count") != 0
+        ):
+            raise RecoveryError("existing independent absence observations differ")
+        try:
+            timestamp = datetime.fromisoformat(observation.get("observed_at_utc", ""))
+        except (TypeError, ValueError) as error:
+            raise RecoveryError("absence observation timestamp is invalid") from error
+        if timestamp.tzinfo is None or timestamp.utcoffset() != UTC.utcoffset(timestamp):
+            raise RecoveryError("absence observation timestamp is not UTC")
+    return observed
 
 
 def _write_cell_resolution(
@@ -213,7 +259,7 @@ def _write_cell_resolution(
     historical_source: dict[str, Any],
     recovery_source: dict[str, Any],
     observations: list[dict[str, Any]],
-) -> tuple[dict[str, Any], bool]:
+) -> dict[str, Any]:
     evidence_body = {
         "schema": RECOVERY_EVIDENCE_SCHEMA,
         "plan_sha256": plan["sha256"],
@@ -231,12 +277,11 @@ def _write_cell_resolution(
     }
     evidence = qualification.sealed(evidence_body)
     evidence_path = directory / RECOVERY_EVIDENCE_FILE
-    if evidence_path.is_file():
-        observed = qualification._read(evidence_path, RECOVERY_EVIDENCE_FILE)  # noqa: SLF001
-        if observed != evidence:
-            raise RecoveryError("existing independent absence evidence differs")
-    else:
+    existing_evidence = _validated_existing_evidence(evidence_path, evidence)
+    if existing_evidence is None:
         qualification._write_once(evidence_path, evidence)  # noqa: SLF001
+    else:
+        evidence = existing_evidence
 
     resolution = qualification.sealed(
         {
@@ -251,14 +296,13 @@ def _write_cell_resolution(
         }
     )
     resolution_path = directory / "CLEANUP_RESOLUTION.json"
-    created = not resolution_path.exists()
-    if created:
+    if not resolution_path.exists():
         qualification._write_once(resolution_path, resolution)  # noqa: SLF001
     else:
         observed = qualification._read(resolution_path, resolution_path.name)  # noqa: SLF001
         if observed != resolution:
             raise RecoveryError("existing cleanup resolution differs")
-    return resolution, created
+    return resolution
 
 
 def recover(root: Path, *, api_key: str, settle_seconds: float = 1.0) -> dict[str, Any]:
@@ -288,13 +332,11 @@ def recover(root: Path, *, api_key: str, settle_seconds: float = 1.0) -> dict[st
     # Do not write any resolution until every selected task has passed both
     # absence observations.  A mismatch in a later cell therefore cannot leave
     # a partially asserted wave.
-    created = 0
-    existing = 0
     resolution_digests: list[str] = []
     for binding, (directory, config, request_id, terminal_sha256), observations in zip(
         plan["tasks"], prepared, observation_sets, strict=True
     ):
-        resolution, was_created = _write_cell_resolution(
+        resolution = _write_cell_resolution(
             directory,
             plan=plan,
             binding=binding,
@@ -305,16 +347,13 @@ def recover(root: Path, *, api_key: str, settle_seconds: float = 1.0) -> dict[st
             recovery_source=recovery_source,
             observations=observations,
         )
-        created += int(was_created)
-        existing += int(not was_created)
         resolution_digests.append(resolution["sha256"])
     aggregate = qualification.sealed(
         {
             "schema": RECOVERY_AGGREGATE_SCHEMA,
             "plan_sha256": plan["sha256"],
             "planned_task_versions": len(plan["tasks"]),
-            "new_resolution_receipts": created,
-            "existing_resolution_receipts": existing,
+            "resolution_receipts": len(resolution_digests),
             "resolution_receipts_sha256": qualification.digest(sorted(resolution_digests)),
             "claim_reads_per_task_version": 2,
             "exact_run_list_reads_per_task_version": 2,
