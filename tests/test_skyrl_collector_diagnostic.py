@@ -7,19 +7,21 @@ or contact a Fleet service.
 
 from __future__ import annotations
 
-import copy
-import hashlib
 import json
 from types import SimpleNamespace as NS
 
 import pytest
 import yaml
-from test_rl_data import build, setup  # noqa: F401
-from test_skyrl_data import skyrl as data_setup  # noqa: F401
-from test_skyrl_training import prepared  # noqa: F401
 
 from cyber_post_train.jobs import API_URLS, Jobs, JobsError
 from scripts import prepare_skyrl_collector_diagnostic as packet_builder
+from scripts.audit_qwen38_skyrl_launch_readiness import (
+    CANARY_RUN,
+    NEXT_GATES,
+    compile_prod8,
+    load,
+    prod8_metadata,
+)
 from training import rl_episode
 from training import skyrl_collector_diagnostic as diagnostic
 
@@ -29,18 +31,14 @@ def _forbidden_network(*_args, **_kwargs):
 
 
 @pytest.fixture
-def diagnostic_inputs(prepared):  # noqa: F811
-    """Write a real synthetic training plan and the smallest diagnostic config."""
-    source = copy.deepcopy(prepared.plan)
-    root = prepared.state.tmp
+def diagnostic_inputs(tmp_path):
+    """Write a locally compiled, current qualified one-node source plan."""
+    run = load(CANARY_RUN)
+    source, _ = compile_prod8(run, prod8_metadata(run, load(NEXT_GATES)))
+    assert source["execution"]["image"] == diagnostic.IMAGE
+    root = tmp_path
     source_path = root / "source-plan.json"
     source_path.write_text(json.dumps(source, sort_keys=True))
-    # The frozen plan contains its intended SFS path.  The test fixture has the
-    # same immutable bytes under its temporary staging root; preparation must
-    # not read the SFS path or contact a service.
-    line = (root / "out" / "train.jsonl").read_bytes().splitlines()[0]
-    row = json.loads(line)
-    row_config = json.loads(row["cyber_config_json"])
     config = {
         "schema": diagnostic.CONFIG_SCHEMA,
         "source_plan": source_path.name,
@@ -49,18 +47,8 @@ def diagnostic_inputs(prepared):  # noqa: F811
         "selection": {
             "split": "train",
             "row_index": 0,
-            "line_sha256": "sha256:" + hashlib.sha256(line).hexdigest(),
-            "source_config_sha256": row_config["config_sha256"],
-        },
-        "image_native_sources": {
-            diagnostic.SETUP_BINDING: "sha256:" + "a" * 64,
-            diagnostic.REMOTE_CLIENT_BINDING: "sha256:" + diagnostic.skyrl_episode.CLIENT_SHA256,
-            diagnostic.GENERATOR_HELPER_BINDING: "sha256:"
-            + source["native_sources"]["skyrl.train.generators.utils"],
-            diagnostic.CONFIG_BINDING: "sha256:"
-            + source["native_sources"]["skyrl.train.config.config"],
-            diagnostic.UTILS_BINDING: "sha256:"
-            + source["native_sources"]["skyrl.train.utils.utils"],
+            "line_sha256": "sha256:" + "1" * 64,
+            "source_config_sha256": "sha256:" + "2" * 64,
         },
     }
     return NS(root=root, source=source, config=config)
@@ -183,6 +171,67 @@ def test_compile_request_and_offline_packets_are_network_free(diagnostic_inputs,
     assert observer["post_post_exact_binding_schema"] == "cyber_jobs_api_exact_rayjob_binding_v1"
     assert observer["exact_observer_schema"] == "cyber_jobs_api_exact_uid_observer_result_v1"
     assert observer["release_acceptance"]["raw_delete_requires_separate_creator_contract"] is True
+
+
+def test_compile_rejects_unattestable_image_module_hash_input(diagnostic_inputs):
+    config = {
+        **diagnostic_inputs.config,
+        "image_native_sources": {"setup": "sha256:" + "a" * 64},
+    }
+    with pytest.raises(JobsError, match="config fields changed"):
+        diagnostic.compile_diagnostic(config, relative_to=diagnostic_inputs.root)
+
+
+def test_post_start_setup_identity_excludes_private_module_path(monkeypatch):
+    module = NS(__name__=diagnostic.SETUP_MODULE, __file__="/private/image/setup.py")
+    monkeypatch.setattr(diagnostic.importlib.metadata, "version", lambda package: "0.4.1")
+
+    assert diagnostic._setup_identity(module) == {
+        "module": diagnostic.SETUP_MODULE,
+        "package": "skyrl",
+        "version": "0.4.1",
+    }
+
+
+def test_success_receipt_requires_sanitized_post_start_setup_identity():
+    receipt = {
+        "schema": diagnostic.RECEIPT_SCHEMA,
+        "status": "collection_completed_no_training",
+        "diagnostic_plan_sha256": "sha256:" + "1" * 64,
+        "legacy_runtime_sha256": "sha256:" + "2" * 64,
+        "diagnostic_runtime_sha256": "sha256:" + "3" * 64,
+        "image_digest": "sha256:" + "4" * 64,
+        "source_row_sha256": "sha256:" + "5" * 64,
+        "sampling_sha256": "sha256:" + "6" * 64,
+        "episode_attempted": True,
+        "collection_completed": True,
+        "optimizer_steps": 0,
+        "checkpoints": 0,
+        "wandb_events": 0,
+        "fleet_instance_release_confirmed": True,
+        "engine_cleanup_confirmed": True,
+        "external_job_cleanup_required": True,
+        "leaf_reason_count": 0,
+        "native_setup": {
+            "module": diagnostic.SETUP_MODULE,
+            "package": "skyrl",
+            "version": "0.4.1",
+        },
+    }
+    assert diagnostic._validate_receipt(receipt) == receipt
+
+    del receipt["native_setup"]
+    with pytest.raises(JobsError, match="native setup identity"):
+        diagnostic._validate_receipt(receipt)
+
+    receipt["native_setup"] = {
+        "module": diagnostic.SETUP_MODULE,
+        "package": "skyrl",
+        "version": "0.4.1",
+        "file": "/private/image/setup.py",
+    }
+    with pytest.raises(JobsError, match="native setup receipt changed"):
+        diagnostic._validate_receipt(receipt)
 
 
 def test_prepare_command_writes_only_a_local_nonlaunchable_packet(diagnostic_inputs, monkeypatch):
