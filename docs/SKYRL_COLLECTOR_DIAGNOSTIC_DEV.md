@@ -8,7 +8,9 @@ SkyRL image-native collector.  It does **not** start a trainer, make an
 optimizer update, write a checkpoint, or initialize Weights & Biases.  Private
 trajectory files stay in a temporary directory inside the container and are
 removed before the only durable output is written.  That output is a small,
-sealed receipt containing only fixed status categories and digests.
+sealed receipt containing only fixed status categories, identity digests, and,
+after engine startup, the public setup module/package version (never a path or
+source-file hash).
 
 ## What the preparation command does
 

@@ -21,6 +21,7 @@ import copy
 import dataclasses
 import hashlib
 import importlib
+import importlib.metadata
 import json
 import os
 import re
@@ -45,7 +46,7 @@ from cyber_post_train.jobs import (
 )
 from evals.fleet import opencode_self_hosted as fleet
 
-from . import rl_episode, skyrl, skyrl_episode, skyrl_training
+from . import rl_episode, skyrl, skyrl_episode, skyrl_production, skyrl_training
 
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = "cyber_skyrl_collector_diagnostic_v1"
@@ -56,7 +57,12 @@ OBSERVER_CONTRACT_SCHEMA = "cyber_skyrl_collector_diagnostic_release_contract_v1
 RECEIPT_SCHEMA = "cyber_skyrl_collection_diagnostic_v1"
 
 MODULE = "training.skyrl_collector_diagnostic"
-IMAGE = skyrl_training.IMAGE
+# This diagnostic must exercise the currently qualified one-node SkyRL image,
+# not the historical default that remains in the legacy compiler for older
+# training evidence.  The immutable OCI digest, then a fresh server render, is
+# the pre-launch identity proof.  Do not invent an unattested hash for an
+# individual file inside that image.
+IMAGE = skyrl_production.IMAGE
 MAXIMUM_SECONDS = 30 * 60
 # The Kubernetes observer owns the full 30-minute allocation.  Keep a full
 # minute outside this process for the observer's terminal transition and give
@@ -101,11 +107,8 @@ ALLOWED_LEAF_REASONS = frozenset(
 )
 
 SETUP_MODULE = "skyrl.backends.skyrl_train.inference_servers.setup"
-SETUP_BINDING = "setup"
-REMOTE_CLIENT_BINDING = "remote_inference_client"
-GENERATOR_HELPER_BINDING = "generator_utils"
-CONFIG_BINDING = "native_config"
-UTILS_BINDING = "native_utils"
+PACKAGE_NAME = "skyrl"
+PACKAGE_VERSION_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9.+_-]{0,127}")
 
 
 def _seal(value: Mapping[str, Any]) -> dict[str, Any]:
@@ -152,23 +155,23 @@ def _legacy_runtime() -> dict[str, str]:
     return dict(skyrl_training._runtime())
 
 
-def _module_sha256(module: object) -> str:
-    path = getattr(module, "__file__", None)
-    if not isinstance(path, str):
-        raise rl_episode.InvalidEpisode("native_module_file_unavailable")
+def _setup_identity(module: object) -> dict[str, str]:
+    """Return the only safe post-start description of the native setup module.
+
+    The immutable image digest and the server-rendered image identity establish
+    what was launched.  This receipt says which public module/package version
+    was reached after startup, without recording a private path, source bytes,
+    or a caller-supplied file digest.
+    """
+    if getattr(module, "__name__", None) != SETUP_MODULE:
+        raise rl_episode.InvalidEpisode("native_engine_module_drift")
     try:
-        payload = Path(path).read_bytes()
-    except OSError as exc:
-        raise rl_episode.InvalidEpisode("native_module_file_unavailable") from exc
-    return "sha256:" + hashlib.sha256(payload).hexdigest()
-
-
-def _bound_module(plan: Mapping[str, Any], binding: str, module_name: str) -> Any:
-    expected = plan["image_native_sources"][binding]
-    module = importlib.import_module(module_name)
-    if _module_sha256(module) != expected:
-        raise rl_episode.InvalidEpisode("native_image_source_drift")
-    return module
+        version = importlib.metadata.version(PACKAGE_NAME)
+    except importlib.metadata.PackageNotFoundError:
+        raise rl_episode.InvalidEpisode("native_engine_version_unavailable") from None
+    if not isinstance(version, str) or not PACKAGE_VERSION_RE.fullmatch(version):
+        raise rl_episode.InvalidEpisode("native_engine_version_unavailable")
+    return {"module": SETUP_MODULE, "package": PACKAGE_NAME, "version": version}
 
 
 def _source_plan(config: Mapping[str, Any], relative_to: Path) -> dict[str, Any]:
@@ -196,48 +199,6 @@ def _source_plan(config: Mapping[str, Any], relative_to: Path) -> dict[str, Any]
 def _known(value: Mapping[str, Any], allowed: set[str], label: str) -> None:
     if set(value) != allowed:
         raise JobsError(f"collector diagnostic {label} fields changed")
-
-
-def _image_native_sources(value: object) -> dict[str, str]:
-    if not isinstance(value, dict):
-        raise JobsError("collector diagnostic image native sources are missing")
-    expected = {
-        SETUP_BINDING,
-        REMOTE_CLIENT_BINDING,
-        GENERATOR_HELPER_BINDING,
-        CONFIG_BINDING,
-        UTILS_BINDING,
-    }
-    _known(value, expected, "image native source")
-    return {
-        name: _sha256(item, field=f"image native source {name}") for name, item in value.items()
-    }
-
-
-def _source_image_native_sources(source: Mapping[str, Any], value: object) -> dict[str, str]:
-    """Bind wrapper-owned image modules to the frozen training plan.
-
-    The separate setup module is not part of the old training-plan schema, so
-    its digest is supplied explicitly and checked again inside the image.  The
-    existing config, utility, recorder, and client digests must agree with the
-    byte-pinned legacy sources; this wrapper cannot silently substitute them.
-    """
-    result = _image_native_sources(value)
-    native = source.get("native_sources")
-    if not isinstance(native, Mapping):
-        raise JobsError("collector diagnostic source native bindings are missing")
-    expected = {
-        CONFIG_BINDING: native.get("skyrl.train.config.config"),
-        UTILS_BINDING: native.get("skyrl.train.utils.utils"),
-        GENERATOR_HELPER_BINDING: native.get("skyrl.train.generators.utils"),
-        REMOTE_CLIENT_BINDING: skyrl_episode.CLIENT_SHA256,
-    }
-    if any(
-        not isinstance(source_digest, str) or result[binding] != "sha256:" + source_digest
-        for binding, source_digest in expected.items()
-    ):
-        raise JobsError("collector diagnostic image bindings differ from the pinned runtime")
-    return result
 
 
 def _selection(value: object) -> dict[str, Any]:
@@ -291,7 +252,7 @@ def compile_diagnostic(config: Mapping[str, Any], *, relative_to: Path) -> dict[
         raise JobsError("collector diagnostic config schema changed")
     _known(
         config,
-        {"schema", "source_plan", "name", "output_root", "selection", "image_native_sources"},
+        {"schema", "source_plan", "name", "output_root", "selection"},
         "config",
     )
     name, output_root = config["name"], config["output_root"]
@@ -333,9 +294,6 @@ def compile_diagnostic(config: Mapping[str, Any], *, relative_to: Path) -> dict[
         "selection": _selection(config["selection"]),
         "sampling_sha256": "sha256:"
         + digest(skyrl.overrides(skyrl.SkyRLConfig(**args))["generator.sampling_params"]),
-        "image_native_sources": _source_image_native_sources(
-            source, config["image_native_sources"]
-        ),
         "execution": {
             "cluster_target": "dev",
             "jobs_api_base_url": API_URLS["dev"],
@@ -392,7 +350,6 @@ def _validate_plan(plan: Mapping[str, Any]) -> None:
             "arguments",
             "selection",
             "sampling_sha256",
-            "image_native_sources",
             "execution",
             "deadlines",
             "scientific_work",
@@ -447,18 +404,6 @@ def _validate_plan(plan: Mapping[str, Any]) -> None:
     _selection(plan["selection"])
     if plan["legacy_native_sources"] != skyrl_training.NATIVE:
         raise JobsError("collector diagnostic legacy native source bindings changed")
-    image_sources = _image_native_sources(plan["image_native_sources"])
-    expected_image_sources = {
-        CONFIG_BINDING: skyrl_training.NATIVE["skyrl.train.config.config"],
-        UTILS_BINDING: skyrl_training.NATIVE["skyrl.train.utils.utils"],
-        GENERATOR_HELPER_BINDING: skyrl_training.NATIVE["skyrl.train.generators.utils"],
-        REMOTE_CLIENT_BINDING: skyrl_episode.CLIENT_SHA256,
-    }
-    if any(
-        image_sources[binding] != "sha256:" + expected
-        for binding, expected in expected_image_sources.items()
-    ):
-        raise JobsError("collector diagnostic image source bindings changed")
     execution = plan["execution"]
     if not isinstance(execution, Mapping) or execution != {
         "cluster_target": "dev",
@@ -793,6 +738,20 @@ def _write_receipt(root: Path, value: Mapping[str, Any]) -> dict[str, Any]:
     return receipt
 
 
+def _validate_setup_receipt(value: object) -> dict[str, str]:
+    if not isinstance(value, Mapping) or set(value) != {"module", "package", "version"}:
+        raise JobsError("collector diagnostic native setup receipt changed")
+    module, package, version = value["module"], value["package"], value["version"]
+    if (
+        module != SETUP_MODULE
+        or package != PACKAGE_NAME
+        or not isinstance(version, str)
+        or not PACKAGE_VERSION_RE.fullmatch(version)
+    ):
+        raise JobsError("collector diagnostic native setup receipt is invalid")
+    return {"module": module, "package": package, "version": version}
+
+
 def _validate_receipt(value: Mapping[str, Any]) -> dict[str, Any]:
     """Accept only the deliberately tiny terminal receipt vocabulary."""
     base = {
@@ -816,7 +775,12 @@ def _validate_receipt(value: Mapping[str, Any]) -> dict[str, Any]:
     }
     status = value.get("status")
     has_leaf = status == "allowlisted_invalid_episode"
-    allowed = base | ({"allowlisted_leaf_reason"} if has_leaf else set())
+    has_native_setup = "native_setup" in value
+    allowed = (
+        base
+        | ({"allowlisted_leaf_reason"} if has_leaf else set())
+        | ({"native_setup"} if has_native_setup else set())
+    )
     if set(value) != allowed or value.get("schema") != RECEIPT_SCHEMA:
         raise JobsError("collector diagnostic receipt fields changed")
     if status not in {
@@ -852,6 +816,8 @@ def _validate_receipt(value: Mapping[str, Any]) -> dict[str, Any]:
         or value.get("external_job_cleanup_required") is not True
     ):
         raise JobsError("collector diagnostic receipt scientific boundary changed")
+    if has_native_setup:
+        _validate_setup_receipt(value["native_setup"])
     if has_leaf:
         if (
             value.get("allowlisted_leaf_reason") not in ALLOWED_LEAF_REASONS
@@ -867,11 +833,10 @@ def _validate_receipt(value: Mapping[str, Any]) -> dict[str, Any]:
         is not (status == "collection_completed_no_training")
     ):
         raise JobsError("collector diagnostic receipt terminal state changed")
-    if (
-        status == "collection_completed_no_training"
-        and value.get("engine_cleanup_confirmed") is not True
+    if status == "collection_completed_no_training" and (
+        value.get("engine_cleanup_confirmed") is not True or not has_native_setup
     ):
-        raise JobsError("collector diagnostic success lacks engine cleanup")
+        raise JobsError("collector diagnostic success lacks cleanup or native setup identity")
     return dict(value)
 
 
@@ -966,10 +931,9 @@ def _allowlisted_leaf_reason(error: BaseException) -> str | None:
     return values[0] if not unknown and len(values) == 1 else None
 
 
-def _native_config_equivalent(plan: Mapping[str, Any]) -> Any:
-    _bound_module(plan, CONFIG_BINDING, "skyrl.train.config.config")
-    _bound_module(plan, UTILS_BINDING, "skyrl.train.utils.utils")
-    args = skyrl.SkyRLConfig(**plan["arguments"])
+def _native_config_equivalent(arguments: Mapping[str, Any]) -> Any:
+    """Build the diagnostic-native config through the existing SkyRL guards."""
+    args = skyrl.SkyRLConfig(**arguments)
     training_cfg = skyrl.native_config(args)
     diagnostic_cfg = skyrl.diagnostic_native_config(args)
     if training_cfg.generator.inference_engine != diagnostic_cfg.generator.inference_engine:
@@ -1088,35 +1052,28 @@ def _shutdown_ray(ray: Any) -> bool:
     return True
 
 
-def _start_engine(plan: Mapping[str, Any], cfg: Any, tokenizer: Any, ray: Any) -> tuple[Any, Any]:
-    setup_module = _bound_module(plan, SETUP_BINDING, SETUP_MODULE)
-    remote_module = _bound_module(
-        plan,
-        REMOTE_CLIENT_BINDING,
-        "skyrl.backends.skyrl_train.inference_servers.remote_inference_client",
-    )
+def _start_engine(cfg: Any, tokenizer: Any, ray: Any) -> tuple[Any, Any, dict[str, str]]:
+    setup_module = importlib.import_module(SETUP_MODULE)
     if not callable(getattr(setup_module, "build_new_inference_client", None)):
         raise rl_episode.InvalidEpisode("native_engine_builder_unavailable")
+    setup_identity = _setup_identity(setup_module)
     engine, setup = setup_module.build_new_inference_client(cfg, tokenizer)
-    if type(engine) is not getattr(remote_module, "RemoteInferenceClient", None):
-        raise _EngineSetupRejected(
-            "native_engine_client_drift", cleanup_confirmed=_stop_setup(setup, ray)
-        )
     groups = tuple(getattr(setup, "server_groups", ()) or ())
     if len(groups) != 2 or len(tuple(getattr(setup, "server_urls", ()) or ())) != 2:
         raise _EngineSetupRejected(
             "diagnostic_engine_topology_drift", cleanup_confirmed=_stop_setup(setup, ray)
         )
-    return engine, setup
+    return engine, setup, setup_identity
 
 
 async def _collect_once(
     plan: Mapping[str, Any], tokenizer: Any, engine: Any, scratch: Path
 ) -> None:
     config = _load_selected_config(plan)
-    helper = _bound_module(plan, GENERATOR_HELPER_BINDING, "skyrl.train.generators.utils")
-    if _module_sha256(helper) != plan["image_native_sources"][GENERATOR_HELPER_BINDING]:
-        raise rl_episode.InvalidEpisode("native_image_source_drift")
+    helper = importlib.import_module("skyrl.train.generators.utils")
+    helper_path = getattr(helper, "__file__", None)
+    if not isinstance(helper_path, str):
+        raise rl_episode.InvalidEpisode("native_helper_file_unavailable")
     sampling = skyrl.overrides(skyrl.SkyRLConfig(**plan["arguments"]))["generator.sampling_params"]
     if "sha256:" + digest(sampling) != plan["sampling_sha256"]:
         raise rl_episode.InvalidEpisode("diagnostic_sampling_drift")
@@ -1144,7 +1101,7 @@ async def _collect_once(
             single_attempt,
             sampling,
             plan["arguments"]["response_tokens"],
-            Path(helper.__file__),
+            Path(helper_path),
         )
         await rl_episode.collect(
             config, scratch / "episode", recorder, skyrl_episode.parse, client=client
@@ -1170,6 +1127,7 @@ def run(plan: Mapping[str, Any]) -> dict[str, Any]:
     engine_setup = None
     ray = None
     engine_cleanup_confirmed: bool | None = None
+    native_setup: dict[str, str] | None = None
     collection_completed = False
     episode_attempted = False
     status, leaf = "unclassified_failure", None
@@ -1181,7 +1139,7 @@ def run(plan: Mapping[str, Any]) -> dict[str, Any]:
         with tempfile.TemporaryDirectory(prefix="skyrl-collector-", dir="/tmp") as temporary:
             scratch = Path(temporary)
             with _Deadline(plan["deadlines"]["setup_seconds"], "engine_setup"):
-                cfg = _native_config_equivalent(plan)
+                cfg = _native_config_equivalent(plan["arguments"])
                 _local_paths(cfg, scratch)
                 ray.init(address="auto", log_to_driver=False)
                 tokenizer = AutoTokenizer.from_pretrained(
@@ -1192,7 +1150,7 @@ def run(plan: Mapping[str, Any]) -> dict[str, Any]:
                     != plan["data"]["template_sha256"]
                 ):
                     raise rl_episode.InvalidEpisode("diagnostic_template_drift")
-                engine, engine_setup = _start_engine(plan, cfg, tokenizer, ray)
+                engine, engine_setup, native_setup = _start_engine(cfg, tokenizer, ray)
             episode_attempted = True
             with _Deadline(plan["deadlines"]["episode_seconds"], "episode_collection"):
                 asyncio.run(_collect_once(plan, tokenizer, engine, scratch))
@@ -1245,6 +1203,8 @@ def run(plan: Mapping[str, Any]) -> dict[str, Any]:
         "engine_cleanup_confirmed": engine_cleanup_confirmed,
         "external_job_cleanup_required": True,
     }
+    if native_setup is not None:
+        receipt["native_setup"] = native_setup
     if leaf is not None:
         receipt["allowlisted_leaf_reason"] = leaf
         receipt["leaf_reason_count"] = 1
