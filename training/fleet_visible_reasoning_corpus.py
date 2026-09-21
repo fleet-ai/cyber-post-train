@@ -5,29 +5,30 @@ The action-only corpus rejects all assistant prose because it cannot establish
 whether that prose is visible reasoning or private provider state.  This
 separate contract accepts only a narrowly described source profile, a sealed
 train-family selection, and records whose token boundaries are re-rendered by
-an independently pinned adapter.
+the exact local Qwen tokenizer and chat template.
 
 It is an offline CPU-only builder.  It does not contact Fleet, launch a
 workload, print records, or write source text to its output.  The only corpus
-payload is private token IDs and loss masks.  A caller must supply the exact
-Qwen/OpenCode serialization adapter named by the source profile; this module
-will fail closed rather than guess how a provider represented reasoning.
+payload is private token IDs and loss masks. It never loads a caller-supplied
+renderer: a reflection adapter could simply repeat stored token IDs. Instead it
+uses the exact locally pinned tokenizer and fails closed when the recorded
+OpenCode/Qwen boundary cannot be reproduced.
 """
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import re
-from collections.abc import Callable, Mapping
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-from . import collection_campaign
+from . import collection_campaign, dense, visible_reasoning_census
+from . import corpus as dense_corpus
 from . import fleet_collection_admission as admission
 from .io import atomic_write_json, atomic_write_jsonl, digest_json, file_sha256, iter_jsonl
-from .sft import _known
+from .sft import _known, read_mapping
 from .task_family_split import (
     ANCHORED_SCHEMA,
     TRUSTED_FLEET_COLLECTION_ROOT_ID,
@@ -44,6 +45,7 @@ CORPUS_SCHEMA = "cyber_qwen_opencode_visible_reasoning_sft_corpus_v1"
 COVERAGE_SCHEMA = "cyber_qwen_opencode_visible_reasoning_coverage_v1"
 RECEIPT_SCHEMA = "cyber_qwen_opencode_visible_reasoning_materialization_receipt_v1"
 ROUNDTRIP_SCHEMA = "cyber_qwen_opencode_template_roundtrip_v1"
+SUCCESS_EVIDENCE_SCHEMA = "cyber_qwen_opencode_student_visible_reasoning_success_evidence_v1"
 
 QWEN_REPOSITORY = "Qwen/Qwen3.8-27B"
 OPENCODE_HARNESS = "opencode"
@@ -180,13 +182,8 @@ def _profile(value: Mapping[str, Any]) -> dict[str, Any]:
         "source_authorization_receipt_sha256",
         "student_visible_reasoning_authorization_receipt_sha256",
     }
-    if kind == "teacher_visible":
-        base |= {
-            "teacher_visibility_receipt_sha256",
-            "teacher_training_authorization_receipt_sha256",
-        }
-    if kind not in {"qwen_self", "teacher_visible"} or set(source) != base:
-        raise ValueError("source must use one explicit visible-reasoning authorization mode")
+    if kind != "qwen_self" or set(source) != base:
+        raise ValueError("v1 accepts only the explicit Qwen-self visible-reasoning source")
     _string(source["model_alias"], "source model alias")
     source_model = _model(source["model"], "source model")
     for name in base - {"kind", "model_alias", "model"}:
@@ -194,7 +191,13 @@ def _profile(value: Mapping[str, Any]) -> dict[str, Any]:
 
     target = _exact(
         profile["qwen_target"],
-        {"repository", "revision", "tokenizer_sha256", "chat_template_sha256"},
+        {
+            "repository",
+            "revision",
+            "tokenizer_sha256",
+            "tokenizer_backend_sha256",
+            "chat_template_sha256",
+        },
         "Qwen target",
     )
     if (
@@ -203,9 +206,9 @@ def _profile(value: Mapping[str, Any]) -> dict[str, Any]:
         or not re.fullmatch(r"[0-9a-f]{40}", target["revision"])
     ):
         raise ValueError("visible-reasoning target must pin Qwen3.8-27B exactly")
-    for name in ("tokenizer_sha256", "chat_template_sha256"):
+    for name in ("tokenizer_sha256", "tokenizer_backend_sha256", "chat_template_sha256"):
         _sha(target[name], f"Qwen target {name}")
-    if kind == "qwen_self" and source_model != {
+    if source_model != {
         "repository": target["repository"],
         "revision": target["revision"],
         "session_model": source_model["session_model"],
@@ -246,7 +249,6 @@ def _profile(value: Mapping[str, Any]) -> dict[str, Any]:
         profile["serialization"],
         {
             "schema",
-            "renderer_adapter_sha256",
             "roundtrip_fixture_sha256",
             "collection_template_sha256",
             "training_template_sha256",
@@ -268,8 +270,7 @@ def _profile(value: Mapping[str, Any]) -> dict[str, Any]:
         )
     ):
         raise ValueError("Qwen/OpenCode template round-trip is not exactly bound")
-    for name in ("renderer_adapter_sha256", "roundtrip_fixture_sha256"):
-        _sha(serialization[name], f"serialization {name}")
+    _sha(serialization["roundtrip_fixture_sha256"], "serialization round-trip fixture")
 
     compaction = _exact(
         profile["compaction"], {"accepted_kind", "opaque_compaction_rejected"}, "compaction"
@@ -282,15 +283,38 @@ def _profile(value: Mapping[str, Any]) -> dict[str, Any]:
     return profile
 
 
-def _roundtrip(value: Mapping[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
-    """Validate synthetic, non-task Qwen/OpenCode template equivalence evidence."""
+def _template_ids(tokenizer: Any, messages: list[dict[str, Any]], *, generation: bool) -> list[int]:
+    """Render only through the pinned local Qwen chat template."""
+    try:
+        rendered = tokenizer.apply_chat_template(
+            [dense._normalized_for_template(message) for message in messages],
+            tokenize=True,
+            add_generation_prompt=generation,
+            tools=[],
+            enable_thinking=True,
+        )
+    except Exception as error:
+        raise ValueError("pinned Qwen chat-template rendering failed") from error
+    if isinstance(rendered, Mapping):
+        rendered = rendered.get("input_ids")
+    if isinstance(rendered, list) and len(rendered) == 1 and isinstance(rendered[0], list):
+        rendered = rendered[0]
+    return _token_ids(rendered, "pinned Qwen chat-template token IDs")
+
+
+def _roundtrip(
+    value: Mapping[str, Any],
+    profile: dict[str, Any],
+    tokenizer: Any,
+    tokenizer_identity: dict[str, Any],
+) -> dict[str, Any]:
+    """Re-render non-task fixtures through the exact local Qwen template."""
     fixture = _sealed(value, ROUNDTRIP_SCHEMA, "Qwen/OpenCode round-trip fixture")
     _exact(
         fixture,
         {
             "schema",
             "qwen_target",
-            "renderer_adapter_sha256",
             "cases",
             "sha256",
         },
@@ -298,13 +322,25 @@ def _roundtrip(value: Mapping[str, Any], profile: dict[str, Any]) -> dict[str, A
     )
     target = _exact(
         fixture["qwen_target"],
-        {"repository", "revision", "tokenizer_sha256", "chat_template_sha256"},
+        {
+            "repository",
+            "revision",
+            "tokenizer_sha256",
+            "tokenizer_backend_sha256",
+            "chat_template_sha256",
+        },
         "round-trip Qwen target",
     )
     if target != profile["qwen_target"]:
         raise ValueError("round-trip fixture changes the exact Qwen target")
-    if fixture["renderer_adapter_sha256"] != profile["serialization"]["renderer_adapter_sha256"]:
-        raise ValueError("round-trip fixture changes the pinned serializer")
+    if tokenizer_identity != {
+        "repository": profile["qwen_target"]["repository"],
+        "revision": profile["qwen_target"]["revision"],
+        "tokenizer_sha256": profile["qwen_target"]["tokenizer_sha256"],
+        "tokenizer_backend_sha256": profile["qwen_target"]["tokenizer_backend_sha256"],
+        "chat_template_sha256": profile["qwen_target"]["chat_template_sha256"],
+    }:
+        raise ValueError("local Qwen tokenizer identity differs from the source profile")
     cases = fixture["cases"]
     if not isinstance(cases, list) or not cases:
         raise ValueError("round-trip fixture requires synthetic cases")
@@ -314,10 +350,11 @@ def _roundtrip(value: Mapping[str, Any], profile: dict[str, Any]) -> dict[str, A
             case,
             {
                 "case_id",
-                "collection_token_ids_sha256",
-                "training_token_ids_sha256",
-                "serving_token_ids_sha256",
-                "assistant_start_token_index",
+                "messages",
+                "target_message_index",
+                "collection_token_ids",
+                "training_token_ids",
+                "serving_token_ids",
             },
             "round-trip case",
         )
@@ -325,19 +362,53 @@ def _roundtrip(value: Mapping[str, Any], profile: dict[str, Any]) -> dict[str, A
         if case_id in seen:
             raise ValueError("round-trip fixture duplicates a synthetic case")
         seen.add(case_id)
-        for name in (
-            "collection_token_ids_sha256",
-            "training_token_ids_sha256",
-            "serving_token_ids_sha256",
-        ):
-            _sha(case[name], f"round-trip {name}")
-        if (
-            case["collection_token_ids_sha256"] != case["training_token_ids_sha256"]
-            or case["collection_token_ids_sha256"] != case["serving_token_ids_sha256"]
-            or _count(case["assistant_start_token_index"], "assistant start token index") < 1
-        ):
+        raw_messages = case["messages"]
+        if not isinstance(raw_messages, list) or not raw_messages:
+            raise ValueError("round-trip case requires synthetic messages")
+        messages = [_message(message) for message in raw_messages]
+        target_index = _count(case["target_message_index"], "round-trip target message")
+        if target_index != len(messages) - 1 or messages[target_index]["role"] != "assistant":
+            raise ValueError("round-trip case must end at one assistant target")
+        collection = _token_ids(case["collection_token_ids"], "round-trip collection token IDs")
+        training = _token_ids(case["training_token_ids"], "round-trip training token IDs")
+        serving = _token_ids(case["serving_token_ids"], "round-trip serving token IDs")
+        actual = _template_ids(tokenizer, messages, generation=False)
+        if collection != training or collection != serving or collection != actual:
             raise ValueError("round-trip fixture does not prove exact token serialization")
     return fixture
+
+
+def _load_tokenizer(
+    model_lock: Mapping[str, Any], tokenizer_root: Path, profile: dict[str, Any]
+) -> tuple[Any, dict[str, str]]:
+    """Load only the exact local Qwen tokenizer bytes named by the profile."""
+    target = profile["qwen_target"]
+    lock = _mapping(model_lock, "Qwen model lock")
+    tokenizer = _mapping(lock.get("tokenizer"), "Qwen model-lock tokenizer")
+    identity_lock = {
+        "repository": lock.get("repo"),
+        "revision": lock.get("revision"),
+        "tokenizer_sha256": tokenizer.get("manifest_sha256"),
+    }
+    if identity_lock != {
+        "repository": target["repository"],
+        "revision": target["revision"],
+        "tokenizer_sha256": target["tokenizer_sha256"],
+    }:
+        raise ValueError("model lock differs from the exact Qwen source profile")
+    loaded, raw_identity = dense_corpus.local_tokenizer(lock, tokenizer_root)
+    identity = {
+        "repository": raw_identity.get("repo"),
+        "revision": raw_identity.get("revision"),
+        "tokenizer_sha256": tokenizer["manifest_sha256"],
+        "tokenizer_backend_sha256": "sha256:"
+        + _string(raw_identity.get("backend_sha256"), "local tokenizer backend digest"),
+        "chat_template_sha256": "sha256:"
+        + _string(raw_identity.get("chat_template_sha256"), "local chat-template digest"),
+    }
+    if identity != target:
+        raise ValueError("local tokenizer bytes differ from the Qwen source profile")
+    return loaded, identity
 
 
 def _packet(value: Mapping[str, Any], profile: dict[str, Any]) -> dict[str, Any]:
@@ -434,12 +505,115 @@ def _task_boundary(
     return bindings
 
 
+def _success_evidence(
+    value: Mapping[str, Any], packet: dict[str, Any], split: dict[str, Any], lock: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, dict[str, Any]]]:
+    """Validate the immutable success-to-task mapping before record content is read.
+
+    This file is expected to be materialized from one immutable Fleet Artifact
+    Registry version by the collection authority.  The offline builder cannot
+    contact that authority, so it verifies the locator/version/content binding
+    and requires an exact mapping for every selected private record.
+    """
+
+    evidence = _sealed(value, SUCCESS_EVIDENCE_SCHEMA, "visible-reasoning success evidence")
+    _exact(
+        evidence,
+        {
+            "schema",
+            "authority",
+            "source_profile_sha256",
+            "collection_packet_sha256",
+            "catalog_inventory_sha256",
+            "family_split_sha256",
+            "root_role_anchor_id",
+            "family_role_anchor_sha256",
+            "protected_family_lock_sha256",
+            "records",
+            "sha256",
+        },
+        "visible-reasoning success evidence",
+    )
+    authority = _exact(
+        evidence["authority"],
+        {"kind", "artifact_key", "version_index", "content_sha256"},
+        "success-evidence immutable authority",
+    )
+    if (
+        authority["kind"] != "fleet_artifact_registry_immutable_v1"
+        or not isinstance(authority["artifact_key"], str)
+        or not authority["artifact_key"].startswith("cyber/runs/")
+        or type(authority["version_index"]) is not int
+        or authority["version_index"] < 1
+    ):
+        raise ValueError("success evidence lacks an immutable Fleet artifact binding")
+    _sha(authority["content_sha256"], "success-evidence registry content")
+    expected = {
+        "collection_packet_sha256": packet["sha256"],
+        "catalog_inventory_sha256": packet["catalog_inventory_sha256"],
+        "family_split_sha256": split["sha256"],
+        "root_role_anchor_id": TRUSTED_FLEET_COLLECTION_ROOT_ID,
+        "family_role_anchor_sha256": packet["family_role_anchor_sha256"],
+        "protected_family_lock_sha256": lock["sha256"],
+    }
+    for name, target in expected.items():
+        checked_target = (
+            _string(target, f"success evidence {name}")
+            if name == "root_role_anchor_id"
+            else _sha(target, f"success evidence {name}")
+        )
+        if evidence.get(name) != checked_target:
+            raise ValueError("success evidence changes an immutable task binding")
+    _sha(evidence["source_profile_sha256"], "success evidence source profile")
+    rows = evidence["records"]
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("success evidence requires at least one immutable record mapping")
+    fields = {
+        "record_id",
+        "source_session_identity_sha256",
+        "normalized_record_sha256",
+        "normalized_trajectory_sha256",
+        "transcript_sha256",
+        "task_key",
+        "task_version_id",
+        "group_id",
+        "verifier_execution_sha256",
+        "outcome",
+    }
+    result: dict[str, dict[str, Any]] = {}
+    sessions: set[str] = set()
+    for row in rows:
+        if not isinstance(row, dict) or set(row) != fields:
+            raise ValueError("success evidence record has an unsupported contract")
+        record_id = _string(row["record_id"], "success-evidence record identity")
+        if record_id in result:
+            raise ValueError("success evidence duplicates a record identity")
+        for name in (
+            "source_session_identity_sha256",
+            "normalized_record_sha256",
+            "normalized_trajectory_sha256",
+            "transcript_sha256",
+            "verifier_execution_sha256",
+        ):
+            _sha(row[name], f"success evidence {name}")
+        if row["source_session_identity_sha256"] in sessions:
+            raise ValueError("success evidence duplicates a source session")
+        sessions.add(row["source_session_identity_sha256"])
+        if row["outcome"] != "verified_success":
+            raise ValueError("visible-reasoning evidence must be an authoritative success")
+        for name in ("task_key", "task_version_id", "group_id"):
+            _string(row[name], f"success evidence {name}")
+        result[record_id] = row
+    return evidence, result
+
+
 def _selection(
     value: Mapping[str, Any],
     packet: dict[str, Any],
     split: dict[str, Any],
     lock: dict[str, Any],
     bindings: dict[tuple[str, str], dict[str, Any]],
+    success_evidence: dict[str, dict[str, Any]],
 ) -> dict[str, dict[str, Any]]:
     selection = _sealed(value, SELECTION_SCHEMA, "visible-reasoning private selection")
     _exact(
@@ -539,6 +713,20 @@ def _selection(
             raise ValueError("private or unknown reasoning cannot enter selection")
         if row["compaction_kind"] not in {"none", EXACT_COMPACTION}:
             raise ValueError("opaque compaction cannot enter selection")
+        evidence = success_evidence.get(record_id)
+        if evidence is None or any(
+            row[name] != evidence[name]
+            for name in (
+                "source_session_identity_sha256",
+                "normalized_record_sha256",
+                "normalized_trajectory_sha256",
+                "transcript_sha256",
+                "task_key",
+                "task_version_id",
+                "group_id",
+            )
+        ):
+            raise ValueError("private selection is not covered by immutable success evidence")
         per_task[identity] = per_task.get(identity, 0) + 1
         if per_task[identity] > selection["max_sessions_per_task_version"]:
             raise ValueError("selection exceeds its deterministic per-task-version cap")
@@ -585,7 +773,11 @@ def _message(value: object) -> dict[str, Any]:
 
 
 def _span(value: object, ids: list[int]) -> dict[str, Any]:
-    span = _exact(value, {"kind", "token_start", "token_end", "token_ids_sha256"}, "target span")
+    span = _exact(
+        value,
+        {"kind", "source_message_index", "token_start", "token_end", "token_ids_sha256"},
+        "target span",
+    )
     if span["kind"] not in {"student_visible_reasoning", "visible_action"}:
         raise ValueError("target span has an unknown reasoning visibility")
     start = _count(span["token_start"], "target span start")
@@ -594,6 +786,7 @@ def _span(value: object, ids: list[int]) -> dict[str, Any]:
         raise ValueError("target span is outside rendered token IDs")
     if span["token_ids_sha256"] != digest_json(ids[start:end]):
         raise ValueError("target span token identity differs from its rendered tokens")
+    _count(span["source_message_index"], "target span source message")
     return span
 
 
@@ -602,7 +795,10 @@ def _window(value: object) -> dict[str, Any]:
         value,
         {
             "window_id",
+            "sequence_index",
             "assistant_turn_id",
+            "message_indices",
+            "target_message_index",
             "input_ids",
             "prompt_token_count",
             "prompt_token_sha256",
@@ -613,7 +809,18 @@ def _window(value: object) -> dict[str, Any]:
         "visible-reasoning window",
     )
     _string(window["window_id"], "window identity")
+    _count(window["sequence_index"], "window sequence index")
     _string(window["assistant_turn_id"], "assistant turn identity")
+    message_indices = window["message_indices"]
+    if (
+        not isinstance(message_indices, list)
+        or not message_indices
+        or any(type(index) is not int or index < 0 for index in message_indices)
+        or message_indices != sorted(set(message_indices))
+    ):
+        raise ValueError("window message indices must be strictly ordered nonnegative integers")
+    if window["target_message_index"] != message_indices[-1]:
+        raise ValueError("window target message must be the final serialized message")
     ids = _token_ids(window["input_ids"], "window input IDs")
     prompt = _count(window["prompt_token_count"], "window prompt token count")
     if prompt >= len(ids):
@@ -639,6 +846,9 @@ def _window(value: object) -> dict[str, Any]:
             "each reasoning window must prove both visible reasoning and action targets"
         )
     payload = {
+        "sequence_index": window["sequence_index"],
+        "message_indices": message_indices,
+        "target_message_index": window["target_message_index"],
         "input_ids": ids,
         "prompt_token_count": prompt,
         "target_spans": spans,
@@ -652,7 +862,9 @@ def _compaction(
     value: object,
     windows: dict[str, dict[str, Any]],
     messages: list[dict[str, Any]],
+    *,
     source_kind: str,
+    original_task_digest: str,
 ) -> dict[str, Any]:
     compaction = _mapping(value, "record compaction")
     kind = compaction.get("kind")
@@ -666,9 +878,10 @@ def _compaction(
         raise ValueError("exact compaction requires continuation boundaries")
     fields = {
         "boundary_id",
-        "parent_window_sha256",
+        "parent_window_id",
         "original_task_digest",
         "prior_history_digest",
+        "summary_message_index",
         "summary_message_digest",
         "continuation_token_sha256",
         "continuation_token_ids",
@@ -677,13 +890,12 @@ def _compaction(
         "pre_compaction_prompt_tokens",
         "post_compaction_prompt_token_sha256",
         "post_compaction_prompt_tokens",
+        "post_compaction_message_indices",
         "next_target_window_id",
         "next_target_prompt_token_sha256",
-        "summary_supervised",
     }
     seen: set[str] = set()
-    window_payloads = {window["window_payload_sha256"] for window in windows.values()}
-    message_digests = {digest_json(message) for message in messages}
+    next_targets: set[str] = set()
     for boundary in boundaries:
         boundary = _exact(boundary, fields, "compaction boundary")
         boundary_id = _string(boundary["boundary_id"], "compaction boundary identity")
@@ -692,12 +904,14 @@ def _compaction(
         seen.add(boundary_id)
         for name in fields - {
             "boundary_id",
+            "parent_window_id",
             "continuation_token_ids",
             "continuation_tokens",
             "pre_compaction_prompt_tokens",
             "post_compaction_prompt_tokens",
+            "summary_message_index",
+            "post_compaction_message_indices",
             "next_target_window_id",
-            "summary_supervised",
         }:
             _sha(boundary[name], f"compaction {name}")
         for name in (
@@ -712,18 +926,33 @@ def _compaction(
             or digest_json(continuation) != boundary["continuation_token_sha256"]
         ):
             raise ValueError("compaction continuation tokens do not match their exact proof")
+        parent = windows.get(boundary["parent_window_id"])
+        target = windows.get(boundary["next_target_window_id"])
+        summary_index = _count(boundary["summary_message_index"], "compaction summary message")
+        post_indices = boundary["post_compaction_message_indices"]
         if (
-            boundary["parent_window_sha256"] not in window_payloads
-            or boundary["summary_message_digest"] not in message_digests
+            parent is None
+            or target is None
+            or summary_index >= len(messages)
+            or not isinstance(post_indices, list)
+            or post_indices != target["message_indices"][:-1]
+            or summary_index not in post_indices
+            or parent["sequence_index"] >= target["sequence_index"]
+            or boundary["next_target_window_id"] in next_targets
         ):
             raise ValueError("compaction lineage is not bound to the exact private record")
-        if boundary["summary_supervised"] is not False:
-            raise ValueError("compaction summaries are context only, never reasoning targets")
-        target = windows.get(boundary["next_target_window_id"])
-        if target is None:
-            raise ValueError("compaction must name an existing next target window")
+        next_targets.add(boundary["next_target_window_id"])
         if (
-            boundary["post_compaction_prompt_token_sha256"]
+            boundary["original_task_digest"] != original_task_digest
+            or boundary["prior_history_digest"] != digest_json(messages[:summary_index])
+            or boundary["summary_message_digest"] != digest_json(messages[summary_index])
+            or any(window["target_message_index"] == summary_index for window in windows.values())
+        ):
+            raise ValueError("compaction summary is not an exact zero-loss context message")
+        if (
+            boundary["pre_compaction_prompt_token_sha256"] != parent["prompt_token_sha256"]
+            or boundary["pre_compaction_prompt_tokens"] != parent["prompt_token_count"]
+            or boundary["post_compaction_prompt_token_sha256"]
             != boundary["next_target_prompt_token_sha256"]
             or boundary["next_target_prompt_token_sha256"] != target["prompt_token_sha256"]
             or boundary["post_compaction_prompt_tokens"] != target["prompt_token_count"]
@@ -740,6 +969,7 @@ def _record(value: Mapping[str, Any], profile: dict[str, Any]) -> dict[str, Any]
             "record_id",
             "source_profile_sha256",
             "lineage",
+            "original_task_digest",
             "evidence",
             "reasoning_visibility",
             "messages",
@@ -763,13 +993,13 @@ def _record(value: Mapping[str, Any], profile: dict[str, Any]) -> dict[str, Any]
     )
     for name in lineage:
         _string(lineage[name], f"record lineage {name}")
+    _sha(record["original_task_digest"], "record original task")
     evidence = _exact(
         record["evidence"],
         {
             "source_session_identity_sha256",
             "normalized_trajectory_sha256",
             "transcript_sha256",
-            "verified_success_evidence_sha256",
         },
         "record evidence",
     )
@@ -788,53 +1018,52 @@ def _record(value: Mapping[str, Any], profile: dict[str, Any]) -> dict[str, Any]
         raise ValueError("private visible-reasoning record has no windows")
     windows = [_window(window) for window in raw_windows]
     by_id = {window["window_id"]: window for window in windows}
-    if len(by_id) != len(windows):
-        raise ValueError("private visible-reasoning record duplicates a window identity")
-    _compaction(record["compaction"], by_id, checked_messages, profile["source"]["kind"])
+    if len(by_id) != len(windows) or len({window["sequence_index"] for window in windows}) != len(
+        windows
+    ):
+        raise ValueError("private visible-reasoning record duplicates a window identity or order")
+    _compaction(
+        record["compaction"],
+        by_id,
+        checked_messages,
+        source_kind=profile["source"]["kind"],
+        original_task_digest=record["original_task_digest"],
+    )
     return record
 
 
-def _load_renderer(
-    path: Path, profile: dict[str, Any]
-) -> Callable[[dict[str, Any], dict[str, Any]], Any]:
-    expected = profile["serialization"]["renderer_adapter_sha256"]
-    if file_sha256(path) != expected:
-        raise ValueError("Qwen/OpenCode renderer adapter digest mismatch")
-    spec = importlib.util.spec_from_file_location("_qwen_visible_reasoning_renderer", path)
-    if spec is None or spec.loader is None:
-        raise ValueError("Qwen/OpenCode renderer adapter is not loadable")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    render = getattr(module, "render_visible_reasoning_window", None)
-    if not callable(render):
-        raise ValueError("Qwen/OpenCode renderer adapter lacks render_visible_reasoning_window")
-    return render
-
-
 def _rendered_window(
-    renderer: Callable[[dict[str, Any], dict[str, Any]], Any],
+    tokenizer: Any,
     record: dict[str, Any],
     window: dict[str, Any],
 ) -> None:
-    """Compare the stored private tokens with an exact pinned serialization adapter."""
-    try:
-        rendered = renderer(record, window)
-    except Exception as error:  # no payload is included in the public error
-        raise ValueError("Qwen/OpenCode serialization adapter failed") from error
-    checked = _exact(
-        rendered,
-        {"input_ids", "prompt_token_count", "target_spans"},
-        "renderer output",
-    )
-    expected = {
-        "input_ids": window["input_ids"],
-        "prompt_token_count": window["prompt_token_count"],
-        "target_spans": window["target_spans"],
-    }
-    if checked != expected:
+    """Re-render one source window; no caller-controlled adapter is trusted."""
+    indices = window["message_indices"]
+    messages = record["messages"]
+    if max(indices) >= len(messages):
+        raise ValueError("window names a message outside its private record")
+    selected = [messages[index] for index in indices]
+    if selected[-1]["role"] != "assistant":
+        raise ValueError("window target message is not an assistant turn")
+    prompt = _template_ids(tokenizer, selected[:-1], generation=True)
+    rendered = _template_ids(tokenizer, selected, generation=False)
+    if (
+        rendered != window["input_ids"]
+        or prompt != window["input_ids"][: window["prompt_token_count"]]
+        or len(prompt) != window["prompt_token_count"]
+    ):
         raise ValueError(
-            "Qwen/OpenCode template serialization differs from collected token boundaries"
+            "Qwen/OpenCode template serialization differs from the collected token boundary"
         )
+    target_index = window["target_message_index"]
+    if any(span["source_message_index"] != target_index for span in window["target_spans"]):
+        raise ValueError("a supervised target span is not bound to this assistant turn")
+    covered = []
+    for span in window["target_spans"]:
+        covered.extend(range(span["token_start"], span["token_end"]))
+    target = list(range(window["prompt_token_count"], len(window["input_ids"])))
+    if covered != target:
+        raise ValueError("supervised spans must cover the exact assistant continuation once")
 
 
 def _loss_mask(window: dict[str, Any]) -> list[int]:
@@ -862,14 +1091,17 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
             "source_profile",
             "collection_packet",
             "selection",
+            "success_evidence",
+            "reasoning_census",
             "inventory",
             "family_split",
             "role_anchor",
             "protected_family_lock",
             "runtime_bindings",
             "roundtrip_fixture",
+            "model_lock",
+            "tokenizer_root",
             "records",
-            "renderer_adapter",
             "output",
         },
         "visible-reasoning corpus materialization request",
@@ -883,13 +1115,15 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
         "source_profile",
         "collection_packet",
         "selection",
+        "success_evidence",
+        "reasoning_census",
         "inventory",
         "family_split",
         "role_anchor",
         "protected_family_lock",
         "runtime_bindings",
         "roundtrip_fixture",
-        "renderer_adapter",
+        "model_lock",
     )
     sources = {name: _input(relative_to, config.get(name), name) for name in public_names}
     records_path, records_sha256 = _private_records_input(relative_to, config.get("records"))
@@ -899,7 +1133,16 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
     profile = _profile(_json(paths["source_profile"], "source profile"))
     if expected_files["roundtrip_fixture"] != profile["serialization"]["roundtrip_fixture_sha256"]:
         raise ValueError("round-trip fixture file does not match the source profile")
-    _roundtrip(_json(paths["roundtrip_fixture"], "round-trip fixture"), profile)
+    tokenizer_root = _path(relative_to, config.get("tokenizer_root"), "tokenizer root")
+    tokenizer, tokenizer_identity = _load_tokenizer(
+        read_mapping(paths["model_lock"]), tokenizer_root, profile
+    )
+    _roundtrip(
+        _json(paths["roundtrip_fixture"], "round-trip fixture"),
+        profile,
+        tokenizer,
+        tokenizer_identity,
+    )
     packet = _packet(_json(paths["collection_packet"], "collection packet"), profile)
     inventory = _json(paths["inventory"], "catalog inventory")
     split = _json(paths["family_split"], "family split")
@@ -908,8 +1151,22 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
     runtime = _json(paths["runtime_bindings"], "runtime bindings")
     bindings = _task_boundary(inventory, split, role_anchor, lock, runtime, packet)
     selection = _json(paths["selection"], "private selection")
-    selected = _selection(selection, packet, split, lock, bindings)
-    renderer = _load_renderer(paths["renderer_adapter"], profile)
+    success_evidence_document, success_evidence = _success_evidence(
+        _json(paths["success_evidence"], "success evidence"), packet, split, lock
+    )
+    if success_evidence_document["source_profile_sha256"] != profile["sha256"]:
+        raise ValueError("success evidence changes the exact Qwen source profile")
+    if selection.get("verified_success_evidence_sha256") != success_evidence_document["sha256"]:
+        raise ValueError("private selection does not bind the immutable success evidence mapping")
+    selected = _selection(selection, packet, split, lock, bindings, success_evidence)
+    source_census = visible_reasoning_census.validate_source_census(
+        _json(paths["reasoning_census"], "visible-reasoning source census"),
+        source_profile_sha256=profile["sha256"],
+        collection_packet_sha256=packet["sha256"],
+        private_selection_sha256=selection["sha256"],
+        success_evidence_sha256=success_evidence_document["sha256"],
+        selected_sessions=len(selected),
+    )
 
     # This is the first point at which the private payload is read.  A bad
     # catalog, split, anchor, lock, packet, or selection stops above without
@@ -946,8 +1203,6 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
             or record["evidence"]["normalized_trajectory_sha256"]
             != selected_row["normalized_trajectory_sha256"]
             or record["evidence"]["transcript_sha256"] != selected_row["transcript_sha256"]
-            or record["evidence"]["verified_success_evidence_sha256"]
-            != selection["verified_success_evidence_sha256"]
             or digest_json(record) != selected_row["normalized_record_sha256"]
             or ("none" if record["compaction"]["kind"] == "none" else EXACT_COMPACTION)
             != selected_row["compaction_kind"]
@@ -955,7 +1210,7 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
             raise ValueError("private record differs from its sealed success selection")
         record_reasoning = record_action = 0
         for window in record["windows"]:
-            _rendered_window(renderer, record, window)
+            _rendered_window(tokenizer, record, window)
             payload = window["window_payload_sha256"]
             if payload in window_digests:
                 raise ValueError("duplicate packed window would repeat supervised targets")
@@ -1018,12 +1273,14 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
     total_tokens = reasoning_tokens + action_tokens
     family_total = sum(family_tokens.values())
     family_fraction = max(family_tokens.values()) / family_total
-    ready = total_tokens >= packet["minimum_unique_supervised_tokens"]
-    if ready and family_fraction > packet["maximum_family_target_token_fraction"]:
+    target_goal_reached = total_tokens >= packet["minimum_unique_supervised_tokens"]
+    if target_goal_reached and family_fraction > packet["maximum_family_target_token_fraction"]:
         raise ValueError("target-ready corpus exceeds immutable family concentration limit")
     coverage = {
         "schema": COVERAGE_SCHEMA,
         "selection_sha256": selection["sha256"],
+        "success_evidence_sha256": success_evidence_document["sha256"],
+        "source_census_sha256": source_census["sha256"],
         "collection_packet_sha256": packet["sha256"],
         "source_profile_sha256": profile["sha256"],
         "selected_source_records": len(selection_rows),
@@ -1032,7 +1289,7 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
         "visible_action_target_tokens": action_tokens,
         "unique_supervised_tokens": total_tokens,
         "minimum_unique_supervised_tokens": packet["minimum_unique_supervised_tokens"],
-        "target_goal_reached": ready,
+        "target_goal_reached": target_goal_reached,
         "family_token_concentration": {
             "families_with_targets": len(family_tokens),
             "largest_family_target_token_fraction": family_fraction,
@@ -1053,6 +1310,8 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
         "source_profile_sha256": profile["sha256"],
         "collection_packet_sha256": packet["sha256"],
         "selection_sha256": coverage["selection_sha256"],
+        "success_evidence_sha256": success_evidence_document["sha256"],
+        "source_census_sha256": source_census["sha256"],
         "catalog_inventory_sha256": packet["catalog_inventory_sha256"],
         "family_split_sha256": packet["family_split_sha256"],
         "root_role_anchor_id": TRUSTED_FLEET_COLLECTION_ROOT_ID,
@@ -1067,7 +1326,7 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
             "visible_action_target_tokens": action_tokens,
             "supervised_tokens": total_tokens,
         },
-        "validation_mode": "task_outcomes_only" if ready else "collection_pending_target",
+        "validation_mode": "pending_reasoning_selection",
         "coverage_sha256": coverage["sha256"],
         "limitations": [
             "Only explicitly authorized student-visible reasoning is supervised.",
@@ -1102,7 +1361,7 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
             "coverage_file_sha256": file_sha256(output / "coverage.private.json"),
             "coverage_sha256": coverage["sha256"],
             "source_selection_file_sha256": file_sha256(output / "source-selection.private.jsonl"),
-            "sft_ready": ready,
+            "sft_ready": False,
         }
         receipt["sha256"] = digest_json(receipt)
         atomic_write_json(output / "MATERIALIZATION.json", receipt, private=True)
@@ -1117,5 +1376,5 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
         "source_records": len(selection_rows),
         "student_visible_reasoning_target_tokens": reasoning_tokens,
         "visible_action_target_tokens": action_tokens,
-        "sft_ready": ready,
+        "sft_ready": False,
     }

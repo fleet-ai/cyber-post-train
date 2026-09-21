@@ -72,35 +72,44 @@ def _runtime(inventory: dict) -> dict:
     )
 
 
-def _adapter(path: Path) -> None:
-    path.write_text(
-        "def render_visible_reasoning_window(record, window):\n"
-        "    return {\n"
-        "        'input_ids': [1, 2, 3, 4, 5],\n"
-        "        'prompt_token_count': 2,\n"
-        "        'target_spans': [\n"
-        "            {'kind': 'student_visible_reasoning', 'token_start': 2, 'token_end': 3, "
-        "'token_ids_sha256': "
-        "'sha256:06d033ece6645de592db973644cf7357255f24536ff7b03c3b2ace10736f7636'},\n"
-        "            {'kind': 'visible_action', 'token_start': 3, 'token_end': 5, "
-        "'token_ids_sha256': "
-        "'sha256:d4c7a98da55490b0a5a65cc5057db99aa708a436609b177748505342d569457b'},\n"
-        "        ],\n"
-        "    }\n"
-    )
+class _Tokenizer:
+    """A synthetic local tokenizer that rejects any unpinned render treatment."""
+
+    def apply_chat_template(self, messages, **kwargs):
+        assert kwargs == {
+            "tokenize": True,
+            "add_generation_prompt": len(messages) == 2,
+            "tools": [],
+            "enable_thinking": True,
+        }
+        if len(messages) == 2:
+            return [1, 2]
+        if len(messages) == 3:
+            return [1, 2, 3, 4, 5]
+        raise ValueError("unexpected synthetic conversation")
 
 
-def _window(window_id: str = "window-1", *, ids: list[int] | None = None) -> dict:
+def _window(
+    window_id: str = "window-1",
+    *,
+    ids: list[int] | None = None,
+    sequence_index: int = 0,
+    message_indices: list[int] | None = None,
+) -> dict:
     ids = ids or [1, 2, 3, 4, 5]
+    message_indices = message_indices or [0, 1, 2]
+    target_message_index = message_indices[-1]
     spans = [
         {
             "kind": "student_visible_reasoning",
+            "source_message_index": target_message_index,
             "token_start": 2,
             "token_end": 3,
             "token_ids_sha256": digest_json(ids[2:3]),
         },
         {
             "kind": "visible_action",
+            "source_message_index": target_message_index,
             "token_start": 3,
             "token_end": 5,
             "token_ids_sha256": digest_json(ids[3:5]),
@@ -108,21 +117,29 @@ def _window(window_id: str = "window-1", *, ids: list[int] | None = None) -> dic
     ]
     return {
         "window_id": window_id,
+        "sequence_index": sequence_index,
         "assistant_turn_id": "assistant-1",
+        "message_indices": message_indices,
+        "target_message_index": target_message_index,
         "input_ids": ids,
         "prompt_token_count": 2,
         "prompt_token_sha256": digest_json(ids[:2]),
         "serialized_token_ids_sha256": digest_json(ids),
         "target_spans": spans,
         "window_payload_sha256": digest_json(
-            {"input_ids": ids, "prompt_token_count": 2, "target_spans": spans}
+            {
+                "sequence_index": sequence_index,
+                "message_indices": message_indices,
+                "target_message_index": target_message_index,
+                "input_ids": ids,
+                "prompt_token_count": 2,
+                "target_spans": spans,
+            }
         ),
     }
 
 
 def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
-    adapter = tmp_path / "renderer.py"
-    _adapter(adapter)
     inventory = _inventory()
     split_v1 = task_family_split.build(
         inventory["task_versions"],
@@ -162,19 +179,34 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         "repository": corpus.QWEN_REPOSITORY,
         "revision": revision,
         "tokenizer_sha256": _sha("d"),
-        "chat_template_sha256": _sha("e"),
+        "tokenizer_backend_sha256": _sha("e"),
+        "chat_template_sha256": _sha("f"),
     }
     roundtrip = {
         "schema": corpus.ROUNDTRIP_SCHEMA,
         "qwen_target": qwen_target,
-        "renderer_adapter_sha256": file_sha256(adapter),
         "cases": [
             {
                 "case_id": "synthetic-visible-reasoning",
-                "collection_token_ids_sha256": _sha("7"),
-                "training_token_ids_sha256": _sha("7"),
-                "serving_token_ids_sha256": _sha("7"),
-                "assistant_start_token_index": 2,
+                "messages": [
+                    {"role": "system", "content": "synthetic system"},
+                    {"role": "user", "content": "synthetic task"},
+                    {
+                        "role": "assistant",
+                        "content": "synthetic visible reasoning",
+                        "tool_calls": [
+                            {
+                                "id": "bash-1",
+                                "type": "function",
+                                "function": {"name": "bash", "arguments": {"script": "true"}},
+                            }
+                        ],
+                    },
+                ],
+                "target_message_index": 2,
+                "collection_token_ids": [1, 2, 3, 4, 5],
+                "training_token_ids": [1, 2, 3, 4, 5],
+                "serving_token_ids": [1, 2, 3, 4, 5],
             }
         ],
     }
@@ -208,11 +240,10 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         "thinking": {"enable_thinking": True, "preserve_thinking": True},
         "serialization": {
             "schema": "cyber_qwen_opencode_template_roundtrip_v1",
-            "renderer_adapter_sha256": file_sha256(adapter),
             "roundtrip_fixture_sha256": file_sha256(roundtrip_path),
-            "collection_template_sha256": _sha("e"),
-            "training_template_sha256": _sha("e"),
-            "serving_template_sha256": _sha("e"),
+            "collection_template_sha256": _sha("f"),
+            "training_template_sha256": _sha("f"),
+            "serving_template_sha256": _sha("f"),
             "round_trip_verified": True,
         },
         "compaction": {
@@ -272,11 +303,11 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
             "task_version_id": candidate["task_version_id"],
             "group_id": candidate["group_id"],
         },
+        "original_task_digest": _sha("7"),
         "evidence": {
             "source_session_identity_sha256": _sha("4"),
             "normalized_trajectory_sha256": digest_json(messages),
             "transcript_sha256": _sha("5"),
-            "verified_success_evidence_sha256": _sha("6"),
         },
         "reasoning_visibility": "student_visible",
         "messages": messages,
@@ -297,10 +328,46 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         "reasoning_visibility": "student_visible",
         "compaction_kind": "none",
     }
+    evidence = {
+        "schema": corpus.SUCCESS_EVIDENCE_SCHEMA,
+        "authority": {
+            "kind": "fleet_artifact_registry_immutable_v1",
+            "artifact_key": "cyber/runs/synthetic/visible-reasoning/evidence",
+            "version_index": 1,
+            "content_sha256": _sha("6"),
+        },
+        "source_profile_sha256": profile["sha256"],
+        "collection_packet_sha256": packet["sha256"],
+        "catalog_inventory_sha256": inventory["sha256"],
+        "family_split_sha256": split["sha256"],
+        "root_role_anchor_id": task_family_split.TRUSTED_FLEET_COLLECTION_ROOT_ID,
+        "family_role_anchor_sha256": role_anchor["sha256"],
+        "protected_family_lock_sha256": lock["sha256"],
+        "records": [
+            {
+                **{
+                    name: selected[name]
+                    for name in (
+                        "record_id",
+                        "source_session_identity_sha256",
+                        "normalized_record_sha256",
+                        "normalized_trajectory_sha256",
+                        "transcript_sha256",
+                        "task_key",
+                        "task_version_id",
+                        "group_id",
+                    )
+                },
+                "verifier_execution_sha256": _sha("8"),
+                "outcome": "verified_success",
+            }
+        ],
+    }
+    evidence["sha256"] = digest_json(evidence)
     selection = {
         "schema": corpus.SELECTION_SCHEMA,
         "collection_packet_sha256": packet["sha256"],
-        "verified_success_evidence_sha256": record["evidence"]["verified_success_evidence_sha256"],
+        "verified_success_evidence_sha256": evidence["sha256"],
         "catalog_inventory_sha256": inventory["sha256"],
         "family_split_sha256": split["sha256"],
         "root_role_anchor_id": task_family_split.TRUSTED_FLEET_COLLECTION_ROOT_ID,
@@ -310,16 +377,49 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         "selected": [selected],
     }
     selection["sha256"] = digest_json(selection)
+    source_census = {
+        "schema": "cyber_qwen_opencode_student_visible_reasoning_census_v1",
+        "source_profile_sha256": profile["sha256"],
+        "collection_packet_sha256": packet["sha256"],
+        "private_selection_sha256": selection["sha256"],
+        "success_evidence_sha256": evidence["sha256"],
+        "sessions": {"candidates": 1, "verified_successes": 1, "selected": 1},
+        "visibility": {"student_visible": 1, "private_or_unknown": 0, "absent": 0},
+        "target_tokens": {"student_visible_reasoning": 1, "visible_action": 2},
+        "compaction": {"none": 1, "exact_student_generated": 0, "opaque_rejected": 0},
+    }
+    source_census["sha256"] = digest_json(source_census)
+    model_lock = {
+        "repo": corpus.QWEN_REPOSITORY,
+        "revision": revision,
+        "tokenizer": {"manifest_sha256": _sha("d"), "files": []},
+    }
+    monkeypatch.setattr(
+        corpus.dense_corpus,
+        "local_tokenizer",
+        lambda _lock, _root: (
+            _Tokenizer(),
+            {
+                "repo": corpus.QWEN_REPOSITORY,
+                "revision": revision,
+                "backend_sha256": "e" * 64,
+                "chat_template_sha256": "f" * 64,
+            },
+        ),
+    )
     values = {
         "profile.json": profile,
         "packet.json": packet,
         "selection.json": selection,
+        "success-evidence.json": evidence,
+        "reasoning-census.json": source_census,
         "inventory.json": inventory,
         "split.json": split,
         "role-anchor.json": role_anchor,
         "lock.json": lock,
         "runtime.json": runtime,
         "roundtrip.json": roundtrip,
+        "model-lock.json": model_lock,
     }
     paths = {}
     for name, value in values.items():
@@ -334,14 +434,17 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         "source_profile": _ref(paths["profile.json"]),
         "collection_packet": _ref(paths["packet.json"]),
         "selection": _ref(paths["selection.json"]),
+        "success_evidence": _ref(paths["success-evidence.json"]),
+        "reasoning_census": _ref(paths["reasoning-census.json"]),
         "inventory": _ref(paths["inventory.json"]),
         "family_split": _ref(paths["split.json"]),
         "role_anchor": _ref(paths["role-anchor.json"]),
         "protected_family_lock": _ref(paths["lock.json"]),
         "runtime_bindings": _ref(paths["runtime.json"]),
         "roundtrip_fixture": _ref(paths["roundtrip.json"]),
+        "model_lock": _ref(paths["model-lock.json"]),
+        "tokenizer_root": str(tmp_path / "tokenizer"),
         "records": _ref(records),
-        "renderer_adapter": _ref(adapter),
         "output": str(tmp_path / "corpus"),
     }
     return config, {
@@ -379,7 +482,7 @@ def test_materializes_token_only_visible_reasoning_corpus(tmp_path: Path, monkey
     assert "train.parquet" not in json.dumps(result)
     manifest = json.loads((tmp_path / "corpus" / "manifest.json").read_text())
     assert manifest["schema"] == corpus.CORPUS_SCHEMA
-    assert manifest["validation_mode"] == "collection_pending_target"
+    assert manifest["validation_mode"] == "pending_reasoning_selection"
     assert "synthetic visible reasoning" not in json.dumps(manifest)
     rows = pq.read_table(tmp_path / "corpus" / "train.parquet").to_pylist()
     assert rows[0]["input_ids"] == [1, 2, 3, 4, 5]
@@ -522,32 +625,45 @@ def test_rejects_missing_success_evidence_before_reading_private_records(
     _rewrite(state["paths"]["selection.json"], selection)
     config["selection"] = _ref(state["paths"]["selection.json"])
     monkeypatch.setattr(corpus, "iter_jsonl", lambda _path: (_ for _ in ()).throw(AssertionError()))
-    with pytest.raises(ValueError, match="unknown or missing fields"):
+    with pytest.raises(ValueError, match="does not bind the immutable success evidence"):
         corpus.build(config, relative_to=tmp_path)
     assert not Path(config["output"]).exists()
 
 
 def test_exact_compaction_requires_the_real_next_prompt_and_zero_masked_summary() -> None:
     first = _window("before")
-    second = _window("after", ids=[1, 2, 6, 7, 8])
-    messages = [{"role": "assistant", "content": "synthetic summary"}]
+    second = _window(
+        "after",
+        ids=[1, 2, 6, 7, 8],
+        sequence_index=1,
+        message_indices=[4, 5],
+    )
+    messages = [
+        {"role": "system", "content": "synthetic system"},
+        {"role": "user", "content": "synthetic task"},
+        {"role": "assistant", "content": "first target"},
+        {"role": "tool", "content": "first result", "tool_call_id": "bash-1"},
+        {"role": "assistant", "content": "synthetic summary"},
+        {"role": "assistant", "content": "second target"},
+    ]
     continuation = [44, 45]
     boundary = {
         "boundary_id": "boundary-1",
-        "parent_window_sha256": first["window_payload_sha256"],
+        "parent_window_id": "before",
         "original_task_digest": _sha("a"),
-        "prior_history_digest": _sha("b"),
-        "summary_message_digest": digest_json(messages[0]),
+        "prior_history_digest": digest_json(messages[:4]),
+        "summary_message_index": 4,
+        "summary_message_digest": digest_json(messages[4]),
         "continuation_token_sha256": digest_json(continuation),
         "continuation_token_ids": continuation,
         "continuation_tokens": len(continuation),
-        "pre_compaction_prompt_token_sha256": _sha("c"),
-        "pre_compaction_prompt_tokens": 10,
+        "pre_compaction_prompt_token_sha256": first["prompt_token_sha256"],
+        "pre_compaction_prompt_tokens": first["prompt_token_count"],
         "post_compaction_prompt_token_sha256": second["prompt_token_sha256"],
         "post_compaction_prompt_tokens": second["prompt_token_count"],
+        "post_compaction_message_indices": [4],
         "next_target_window_id": "after",
         "next_target_prompt_token_sha256": second["prompt_token_sha256"],
-        "summary_supervised": False,
     }
     accepted = {
         "kind": corpus.EXACT_COMPACTION,
@@ -558,7 +674,8 @@ def test_exact_compaction_requires_the_real_next_prompt_and_zero_masked_summary(
             accepted,
             {"before": first, "after": second},
             messages,
-            "qwen_self",
+            source_kind="qwen_self",
+            original_task_digest=_sha("a"),
         )
         == accepted
     )
@@ -569,19 +686,21 @@ def test_exact_compaction_requires_the_real_next_prompt_and_zero_masked_summary(
             wrong_prompt,
             {"before": first, "after": second},
             messages,
-            "qwen_self",
+            source_kind="qwen_self",
+            original_task_digest=_sha("a"),
         )
     with pytest.raises(ValueError, match="opaque or unapproved compaction"):
         corpus._compaction(
             accepted,
             {"before": first, "after": second},
             messages,
-            "teacher_visible",
+            source_kind="teacher_visible",
+            original_task_digest=_sha("a"),
         )
 
 
-def test_rejects_renderer_token_boundary_drift(tmp_path: Path, monkeypatch) -> None:
-    config, state = _fixture(tmp_path, monkeypatch)
+def test_rejects_local_tokenizer_boundary_drift(tmp_path: Path, monkeypatch) -> None:
+    _config, state = _fixture(tmp_path, monkeypatch)
     record = copy.deepcopy(state["record"])
     window = record["windows"][0]
     window["input_ids"] = [1, 2, 3, 4, 6]
@@ -589,21 +708,15 @@ def test_rejects_renderer_token_boundary_drift(tmp_path: Path, monkeypatch) -> N
     window["target_spans"][1]["token_ids_sha256"] = digest_json(window["input_ids"][3:5])
     window["window_payload_sha256"] = digest_json(
         {
+            "sequence_index": window["sequence_index"],
+            "message_indices": window["message_indices"],
+            "target_message_index": window["target_message_index"],
             "input_ids": window["input_ids"],
             "prompt_token_count": window["prompt_token_count"],
             "target_spans": window["target_spans"],
         }
     )
     _reseal_record(record)
-    selection = copy.deepcopy(state["selection"])
-    selection["selected"][0]["normalized_record_sha256"] = digest_json(record)
-    selection["sha256"] = digest_json(
-        {key: value for key, value in selection.items() if key != "sha256"}
-    )
-    _rewrite(state["paths"]["records"], record)
-    _rewrite(state["paths"]["selection.json"], selection)
-    config["records"] = _ref(state["paths"]["records"])
-    config["selection"] = _ref(state["paths"]["selection.json"])
+    checked = corpus._record(record, state["profile"])
     with pytest.raises(ValueError, match="template serialization differs"):
-        corpus.build(config, relative_to=tmp_path)
-    assert not Path(config["output"]).exists()
+        corpus._rendered_window(_Tokenizer(), checked, checked["windows"][0])
