@@ -399,7 +399,10 @@ def test_teacher3k_later_context_launch_binds_current_inputs(context, position):
     plan = sft.compile_sft(config, relative_to=RUNS)
     request = sft.job_request(plan)
 
-    assert evidence["status"] == "v1_infrastructure_invalid_v2_64k_cpu_preflight_passed_96k_running"
+    assert (
+        evidence["status"]
+        == "v1_infrastructure_invalid_v2_preflights_passed_64k_running_96k_not_submitted"
+    )
     assert sft.digest(plan) == row["plan_sha256"]
     assert sft.digest(request) == row["request_sha256"]
     assert plan["recipe"]["max_length"] == int(context) * 1024
@@ -409,7 +412,16 @@ def test_teacher3k_later_context_launch_binds_current_inputs(context, position):
     assert request["priority_class"] == "c1"
     assert request["requeueIfPreempted"] is False
     assert request["failureAlerts"] is False
-    assert row["successor_status"].endswith("not_submitted")
+    if context == "64":
+        assert row["successor_status"] == "running_inside_startup_allowance"
+        assert row["launch"]["run_id"] == "2f111132-a6d5-407c-aa3f-6ceed1033b8e"
+        assert row["launch"]["root_failure_alert_annotation"] == "off"
+        assert row["launch"]["priority"] == "c1"
+        assert row["launch"]["restarts"] == 0
+        assert row["launch"]["optimizer_step"] == 0
+    else:
+        assert row["successor_status"] == "cpu_preflight_passed_not_submitted"
+        assert "launch" not in row
     assert row["retired_attempt"]["optimizer_step"] == 0
     assert row["retired_attempt"]["root_failure_alert_annotation"] == "off"
     assert row["retired_attempt"]["resource_release"].endswith("zero_gpu_held")
