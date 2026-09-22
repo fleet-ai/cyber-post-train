@@ -110,8 +110,11 @@ KUBERNETES_UID_PATTERN = re.compile(
 
 
 def _checkpoint_seal_binding(run_name: str, step: int) -> str:
-    return f'''run = Path({str(SFS_JOBS_ROOT / run_name)!r})
+    return f'''from pathlib import Path
+
+run = Path({str(SFS_JOBS_ROOT / run_name)!r})
 target_step = {step}
+plan_path = run / ".runtime" / "plan.json"
 receipt_path = run / "checkpoint_receipts" / f"step-{{target_step:06d}}.json"
 checkpoint_dir = run / "checkpoints" / f"global_step_{{target_step}}"
 out = Path("/output/checkpoint-seals-v1") / f"step-{{target_step}}.json"

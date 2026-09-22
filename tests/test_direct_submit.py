@@ -318,11 +318,9 @@ def checkpoint_seal_pod_template():
         f"""\
 import hashlib
 import json
-from pathlib import Path
 from training.checkpoints import receipt, seal, verify
 
 {CHECKPOINT_SEAL_BINDING_TOKEN}
-plan_path = run / ".runtime" / "plan.json"
 assert hashlib.sha256(plan_path.read_bytes()).hexdigest() == {"a" * 64!r}
 plan = json.loads(plan_path.read_text())
 saved = receipt(receipt_path)
@@ -1714,6 +1712,12 @@ def test_cpu_checkpoint_seal_renderer_binds_every_field_to_requested_step():
     assert annotations[CPU_CHECKPOINT_STEP_ANNOTATION] == str(requested_step)
     assert annotations["test.invalid/source-bundle-sha256"] == "b" * 64
     script = pod["spec"]["containers"][0]["command"][2]
+    compile(script, "<checkpoint-seal-render-regression>", "exec")
+    lines = script.splitlines()
+    assert lines.index("from pathlib import Path") < lines.index(f"run = Path({root!r})")
+    assert lines.index('plan_path = run / ".runtime" / "plan.json"') < lines.index(
+        f"assert hashlib.sha256(plan_path.read_bytes()).hexdigest() == {'a' * 64!r}"
+    )
     assert f"run = Path({root!r})" in script
     assert "target_step = 17" in script
     assert 'f"step-{target_step:06d}.json"' in script
@@ -1723,6 +1727,32 @@ def test_cpu_checkpoint_seal_renderer_binds_every_field_to_requested_step():
     assert "seal(plan, target_step, out," in script
     assert CHECKPOINT_SEAL_BINDING_TOKEN not in script
     validate_checkpoint_seal_step_binding(pod, requested_step)
+
+
+@pytest.mark.parametrize(
+    ("definition", "replacement"),
+    [
+        ("from pathlib import Path\n\n", ""),
+        ('plan_path = run / ".runtime" / "plan.json"\n', ""),
+    ],
+)
+def test_cpu_checkpoint_seal_create_rejects_missing_injected_symbol_definition(
+    definition,
+    replacement,
+):
+    requested_step = 17
+    pod = render_cpu_checkpoint_seal_pod(
+        checkpoint_seal_pod_template(),
+        arm_name="researcher-arm",
+        run_name="researcher-sft-v1",
+        requested_step=requested_step,
+    )
+    container = pod["spec"]["containers"][0]
+    assert container["command"][2].count(definition) == 1
+    container["command"][2] = container["command"][2].replace(definition, replacement, 1)
+
+    with pytest.raises(JobsError, match="differs from the requested run/step"):
+        validate_checkpoint_seal_step_binding(pod, requested_step)
 
 
 def test_cpu_checkpoint_seal_create_rejects_copied_stale_call_step_before_kubectl(
@@ -1883,6 +1913,23 @@ def test_cpu_checkpoint_stale_subpath_incident_receipt_is_self_consistent():
     assert hashlib.sha256(encoded).hexdigest() == expected
     assert all(row["exit_code"] == 1 for row in value["failed_v1"])
     assert all(row["phase"] == "Succeeded" for row in value["accepted_successors"])
+
+
+def test_checkpoint_seal_binding_symbol_incident_receipt_is_self_consistent():
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "docs/evidence/qwen38-step195-seal-binding-symbol-incident-20260922.json"
+    )
+    value = json.loads(path.read_text())
+    expected = value.pop("receipt_sha256")
+    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    assert hashlib.sha256(encoded).hexdigest() == expected
+    assert value["failed_v1"]["phase"] == "Failed"
+    assert value["failed_v1"]["exit_code"] == 1
+    assert value["failed_v1"]["gpus_requested"] == 0
+    assert value["failed_v1"]["seal_receipt_created"] is False
+    assert value["qualified_v2_preview"]["created"] is False
+    assert value["qualified_v2_preview"]["server_dry_run_passed"] is True
 
 
 def test_cpu_checkpoint_boundary_rejects_overlapping_same_pvc_with_distinct_volumes():
