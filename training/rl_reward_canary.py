@@ -46,10 +46,10 @@ HORIZON_SELF_SHA256 = "sha256:a2a13e123b51041b314c81772134dd63e89dd99c4f8a68822f
 TOOL_CATALOG_FILE_SHA256 = "sha256:e4a3c4fb5b5c34cdaf64ec568eb31fcc0d55a63cc0a134808db348c65d7b6858"
 TOOL_CATALOG_SHA256 = "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
 QUALIFICATION_FILE_SHA256 = (
-    "sha256:b38215513561f75e61b8c2e0c3eb57c2f2942bb6401fd6867e372721e25622e8"
+    "sha256:fc53cfe9fb5c3a70520fcefbae2c023a2d82f195810010614c20be84ad9fa771"
 )
 QUALIFICATION_SELF_SHA256 = (
-    "sha256:a12f3d3486be567fc615b73a2e8663884ceb96218a6e331d9bfe916dfb0f2257"
+    "sha256:bf40e69106e201a0c5c8eda578aa26d04e118dcae5898c54104bc3ab7ebb984a"
 )
 
 LIMITS = {
@@ -153,16 +153,16 @@ TOPOLOGY_SUCCESSOR = {
         "sha256:f7d53ee426ee4f23e1c608bc17583f5f105ac30b6a8c19b04f966b908cc47d52"
     ),
     "name": "chris-q38-skyrl-probe-v17",
-    "plan_sha256": "sha256:b4122e3b07b0df82ed5a037c47cf268fb74ef20ec1e78f0f5d8c61d3f1712a53",
-    "request_sha256": ("sha256:72c08c60b5e8f299e49977a1caa037c6b6f0524eba56806c2718c464fe6cb3a3"),
+    "plan_sha256": "sha256:f0759158a960c61ab67c37b2744e95881dadcb6de7ada4dfb3f727747446605d",
+    "request_sha256": ("sha256:147953c7ae14a2ff223a7a282f7e7961713b083cb96df56f8b24e468cac540dd"),
     "fleetjob_manifest_sha256": (
-        "sha256:de9ed0b8eed9a13d8c1fc180d7e3d09ff67c39e587f7bd7665f62f71dbe85803"
+        "sha256:87554b07e401cfa103a2f056261cfbd5ed3c14c4fa1277093f604481b24cdb0d"
     ),
     "preflight_manifest_sha256": (
-        "sha256:5eb59f63df0a436f88859e7586442507789304a08426374c255be4a353144a76"
+        "sha256:0c130c7dd7f7069e4658a9f2135ebb47ecc8a7f1836d06cdc9671c3a114e8922"
     ),
     "receipt_verifier_manifest_sha256": (
-        "sha256:e1d17fa2a3f941eb529b69a3f1eb0ca2a1f740e275ea48bb8d2f5308cad0b736"
+        "sha256:cf94ccaf23fba5cfbb0acec549735ff0b5ace54bdd54019bea173d7f32691f18"
     ),
     "required_terminal_receipt": "TOPOLOGY_PROBE.json",
     "terminal_receipt_grace_seconds": 30,

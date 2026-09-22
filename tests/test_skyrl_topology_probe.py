@@ -29,16 +29,16 @@ def plan():
 
 def test_probe_is_distinct_dev_only_bounded_and_zero_update(plan) -> None:
     request = probe.request(plan)
-    assert digest(plan) == "b4122e3b07b0df82ed5a037c47cf268fb74ef20ec1e78f0f5d8c61d3f1712a53"
-    assert digest(request) == "72c08c60b5e8f299e49977a1caa037c6b6f0524eba56806c2718c464fe6cb3a3"
+    assert digest(plan) == "f0759158a960c61ab67c37b2744e95881dadcb6de7ada4dfb3f727747446605d"
+    assert digest(request) == "147953c7ae14a2ff223a7a282f7e7961713b083cb96df56f8b24e468cac540dd"
     assert digest(probe.fleetjob_manifest(plan)) == (
-        "de9ed0b8eed9a13d8c1fc180d7e3d09ff67c39e587f7bd7665f62f71dbe85803"
+        "87554b07e401cfa103a2f056261cfbd5ed3c14c4fa1277093f604481b24cdb0d"
     )
     assert digest(probe.preflight_job_manifest(plan)) == (
-        "5eb59f63df0a436f88859e7586442507789304a08426374c255be4a353144a76"
+        "0c130c7dd7f7069e4658a9f2135ebb47ecc8a7f1836d06cdc9671c3a114e8922"
     )
     assert digest(probe.receipt_verify_job_manifest(plan)) == (
-        "e1d17fa2a3f941eb529b69a3f1eb0ca2a1f740e275ea48bb8d2f5308cad0b736"
+        "cf94ccaf23fba5cfbb0acec549735ff0b5ace54bdd54019bea173d7f32691f18"
     )
     assert plan["schema"] == probe.SCHEMA
     assert plan["execution"]["cluster_target"] == "dev"

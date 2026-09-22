@@ -162,7 +162,7 @@
       },
       "reward_qualification": {
         "path": "../../training/rl_reward_canary.py",
-        "file_sha256": "sha256:6246ad32a12d618739772660aa2143ef1ca900f35ec8a6bbeddc4d62c5d4f673",
+        "file_sha256": "sha256:c3697146823ff524ae7f867512942cab93f62a5e9a8b5fb323485194f881e6a6",
         "symbols": [
           "validate_source_package",
           "source_proof",
@@ -470,5 +470,5 @@
       "incident_evidence_self_sha256": "sha256:c45f12a8fa799900053a1bd7b1e33ff26e89d517ae552188bda0e66cf675ca2d"
     }
   },
-  "sha256": "sha256:46e14737820cfbd63b51d5290b8d3936383fe35a253650a3aa5430675d79e139"
+  "sha256": "sha256:3237ccebd0ba3959aa31769bc458350f5784601e84cb17ee49f894fe4ad47e40"
 }
