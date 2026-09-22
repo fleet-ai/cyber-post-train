@@ -398,8 +398,10 @@ When a seal, export, or independent verifier runs as a direct CPU Pod, send it t
 the repository's CPU-checkpoint create boundary. That boundary requires c1,
 zero GPUs, the shared CPU pool and architecture, the failed-job alert opt-out,
 and rejects a hostname, `nodeName`, or extra placement affinity before kubectl
-is called. A busy host must never strand a seal while equivalent CPU nodes are
-free.
+is called. Nested source/output mounts of the same PVC must reuse one volume
+declaration so a source-level read-only flag cannot silently override the writable
+output subpath. A busy host must never strand a seal while equivalent CPU nodes
+are free.
 The GLM LoRA path seals adapters plus optimizer/scheduler, per-rank random state,
 sampler and trainer state. It cross-checks the exact base, adapter configuration
 and consumed-data cursor; frozen base weights are never copied into checkpoints.
