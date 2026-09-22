@@ -448,9 +448,7 @@ def _preflight_native_config(args: skyrl.SkyRLConfig):
     _PREFLIGHT_STAGE = "native_config_overrides"
     values = skyrl.overrides(args)
     _PREFLIGHT_STAGE = "native_config_modules"
-    modules = {
-        name: skyrl_episode._module(name, sha) for name, sha in skyrl.NATIVE_SOURCES.items()
-    }
+    modules = {name: skyrl_episode._module(name, sha) for name, sha in skyrl.NATIVE_SOURCES.items()}
     _PREFLIGHT_STAGE = "native_config_parse"
     cfg = modules["skyrl.train.config.config"].SkyRLTrainConfig.from_cli_overrides(values)
     _PREFLIGHT_STAGE = "native_config_validate"
