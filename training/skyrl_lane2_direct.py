@@ -299,7 +299,7 @@ def validate_data_server_preview(
 
     normalized_expected = copy.deepcopy(expected)
     normalized_rendered = copy.deepcopy(rendered)
-    for value in (normalized_expected, normalized_rendered):
+    for index, value in enumerate((normalized_expected, normalized_rendered)):
         root_labels = value.get("metadata", {}).get("labels", {})
         template_labels = (
             value.get("spec", {}).get("template", {}).get("metadata", {}).get("labels", {})
@@ -311,6 +311,15 @@ def validate_data_server_preview(
         for key in queue_labels:
             root_labels.pop(key)
             template_labels.pop(key)
+        # With explicit queue labels the live API server keeps only those
+        # labels on the Job object, while still adding the controller labels
+        # to the Pod template.  The shared validator models an otherwise
+        # identical unlabelled Job, whose root receives that generated set.
+        # Copy only the already-server-generated template set into the
+        # normalized rendered root; the shared validator still proves every
+        # key/value and rejects any additional label.
+        if index == 1 and not root_labels and template_labels:
+            root_labels.update(template_labels)
         if not root_labels:
             value["metadata"].pop("labels")
         if not template_labels:

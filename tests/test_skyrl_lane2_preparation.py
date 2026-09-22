@@ -310,6 +310,14 @@ def test_lane2_current_runtime_request_and_manifests_are_alert_safe() -> None:
         context=direct.PROD_CONTEXT,
     )
     assert data_proof["gpus"] == 0 and data_proof["queue_priority"] == "q1"
+    live_style = _cpu_render(data_job)
+    live_style["metadata"]["labels"] = copy.deepcopy(data_job["metadata"]["labels"])
+    live_proof = direct.validate_data_server_preview(
+        data_job,
+        live_style,
+        context=direct.PROD_CONTEXT,
+    )
+    assert live_proof["gpus"] == 0 and live_proof["queue_priority"] == "q1"
     assert direct.live_create_is_available() is False
 
 
