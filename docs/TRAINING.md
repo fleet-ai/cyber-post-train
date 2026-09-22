@@ -402,6 +402,16 @@ is called. Nested source/output mounts of the same PVC must reuse one volume
 declaration so a source-level read-only flag cannot silently override the writable
 output subpath. A busy host must never strand a seal while equivalent CPU nodes
 are free.
+Build a seal Pod from the reviewed Pod template with
+`render_cpu_checkpoint_seal_pod(template, arm_name=..., run_name=...,
+requested_step=step, attempt=...)`. In its inline Python, bind
+the single `__CHECKPOINT_SEAL_BINDING__` marker; the renderer replaces it with
+`run`, `target_step`, and the derived producer receipt, checkpoint directory,
+output manifest, and terminal schema. The template's `seal()` call must consume
+that `target_step`. The renderer preserves the source, plan, receipt, and
+digest checks. The CPU-checkpoint preview/create boundary revalidates the rendered
+step annotation and these exact command bindings, rejecting a copied numeric
+literal in `seal()` or disagreement in any step-bearing field before kubectl.
 The GLM LoRA path seals adapters plus optimizer/scheduler, per-rank random state,
 sampler and trainer state. It cross-checks the exact base, adapter configuration
 and consumed-data cursor; frozen base weights are never copied into checkpoints.
