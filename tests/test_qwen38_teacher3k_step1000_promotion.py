@@ -6,7 +6,6 @@ from pathlib import Path
 
 from training import model_stage_current_base as stage
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PLAN = ROOT / "configs/qualification/qwen38-teacher3k32-step1000-inference-stage-v1.json"
 EVIDENCE = ROOT / "docs/evidence/qwen38-teacher3k32-step1000-promotion-20260922.json"
