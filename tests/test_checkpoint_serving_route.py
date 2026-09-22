@@ -22,6 +22,7 @@ LR30_ROUTE = ROOT / "configs/evaluation/qwen38-lr30-step76-serving-route-plan-v1
 LR30_REGISTRATION = (
     ROOT / "docs/evidence/qwen38-lr30-step76-matched-serving-registration-20260921.json"
 )
+STEP600_ROUTE = ROOT / "configs/evaluation/qwen38-teacher3k32-step600-serving-route-plan-v1.json"
 
 
 def _base() -> dict:
@@ -99,6 +100,29 @@ def test_lr30_step76_route_plan_is_offline_paused_exact_base_clone() -> None:
     assert spec["model"]["sourcePath"] == "/models/chris-q38-available-a-lr30-step76-v1"
     assert spec["model"]["revision"] == (
         "sha256:3bef11697759b11db150b705e1882fb2d31a3efbdadbebd948aa917dcacc03a8"
+    )
+    assert plan["normalized_contract_sha256"] == (
+        "sha256:d82d78721f4ec8d4b0d6228242df4838b38086a48108e57fc6fe4e7be1fa3662"
+    )
+
+
+def test_teacher3k32_step600_route_plan_is_paused_and_exactly_bound() -> None:
+    plan = json.loads(STEP600_ROUTE.read_text())
+    _validate_plan(plan)
+    registration = plan["registration"]
+    spec = registration["spec"]
+
+    assert plan["source_model_id"] == "chris-q38-t3k32-s600-v1"
+    assert plan["source_resource_version"] == "32786336"
+    assert plan["base_model_id"] == "qwen3.8-27b"
+    assert plan["mutation_count"] == 0
+    assert registration["id"] == "chris-q38-t3k32-s600-web-v1"
+    assert spec["desiredState"] == "paused"
+    assert spec["scaling"] == {"minReplicas": 0, "replicas": 1}
+    assert spec["placement"]["priorityClassName"] == "c1"
+    assert spec["model"]["sourcePath"] == "/models/chris-q38-t3k32-s600-v1"
+    assert spec["model"]["revision"] == (
+        "sha256:adf5d8c6609ea441744eab13ed0649c22eb4ad5f95baeebdcd60880c206702a6"
     )
     assert plan["normalized_contract_sha256"] == (
         "sha256:d82d78721f4ec8d4b0d6228242df4838b38086a48108e57fc6fe4e7be1fa3662"
