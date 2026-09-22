@@ -34,8 +34,7 @@ pytest_plugins = ("test_skyrl_training",)
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_CLOSURE = ROOT / "configs/data/qwen38-rl-reward-canary-exact-version-evidence-v8.json"
 STARTUP_INCIDENT = (
-    ROOT
-    / "docs/evidence/qwen38-study/2026-09-22-skyrl-fresh-wrapper-startup-failure-v1.json"
+    ROOT / "docs/evidence/qwen38-study/2026-09-22-skyrl-fresh-wrapper-startup-failure-v1.json"
 )
 
 
