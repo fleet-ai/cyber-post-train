@@ -97,14 +97,20 @@ def model(
     }
 
 
-def rayjob(name: str, *, uid: str = "rayjob-uid", gpus: int = 8) -> dict:
+def rayjob(
+    name: str,
+    *,
+    run_name: str | None = None,
+    uid: str = "rayjob-uid",
+    gpus: int = 8,
+) -> dict:
     return {
         "metadata": {
             "name": name,
             "namespace": "fleet-train-jobs",
             "uid": uid,
             "resourceVersion": "30",
-            "labels": {"fleet.ai/run-name": name},
+            "labels": {"fleet.ai/run-name": run_name or name},
         },
         "spec": {
             "suspend": True,
@@ -285,6 +291,60 @@ def test_suspended_rayjob_workload_without_a_pod_occupies_capacity() -> None:
     assert receipt["current"]["nodes"] == 8
     assert receipt["current"]["gpus"] == 64
     assert receipt["qualified"] is False
+
+
+def test_api_suffixed_rayjobs_reconcile_to_six_live_run_name_pods() -> None:
+    run_names = [f"chris-q38-t3k-{index}" for index in range(6)]
+    controllers = [f"{run_name}-{index:08x}" for index, run_name in enumerate(run_names)]
+    rayjob_uids = [f"rayjob-uid-{index}" for index in range(6)]
+    receipt = build_capacity_census(
+        {
+            "items": [
+                pod(
+                    f"{run_name}-head",
+                    namespace="fleet-train-jobs",
+                    uid=f"pod-uid-{index}",
+                    node=f"node-{index}",
+                    labels={"fleet.ai/run-name": run_name},
+                )
+                for index, run_name in enumerate(run_names)
+            ]
+        },
+        {"items": []},
+        {
+            "items": [
+                rayjob(
+                    controller,
+                    run_name=run_name,
+                    uid=rayjob_uid,
+                )
+                for controller, run_name, rayjob_uid in zip(
+                    controllers, run_names, rayjob_uids, strict=True
+                )
+            ]
+        },
+        {
+            "items": [
+                workload(
+                    f"workload-{index}",
+                    owner=controller,
+                    owner_uid=rayjob_uid,
+                )
+                for index, (controller, rayjob_uid) in enumerate(
+                    zip(controllers, rayjob_uids, strict=True)
+                )
+            ]
+        },
+        observed_at="2026-09-22T08:23:52Z",
+    )
+    assert receipt["qualified"] is True
+    assert receipt["problems"] == []
+    assert receipt["current"]["nodes"] == 6
+    assert receipt["current"]["gpus"] == 48
+    assert receipt["current"]["queued_claims"] == []
+    assert {row["uid"] for row in receipt["current"]["allocated_pods"]} == {
+        f"pod-uid-{index}" for index in range(6)
+    }
 
 
 def test_uncorrelated_owned_workload_fails_closed() -> None:

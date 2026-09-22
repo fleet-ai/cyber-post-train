@@ -355,18 +355,23 @@ def build_capacity_census(
             pod_gpus_by_identity[identity] = pod_gpus_by_identity.get(identity, 0) + pod["gpus"]
 
     owned_rayjobs: dict[str, dict] = {}
+    controller_names_by_pod_identity: dict[str, list[str]] = {}
     for rayjob in _items(rayjobs or {"items": []}, "RayJob"):
-        role, identity, identity_problems = _identity(rayjob, owner_prefixes)
+        role, pod_identity, identity_problems = _identity(rayjob, owner_prefixes)
         if role is None:
             continue
         metadata = rayjob.get("metadata") or {}
         namespace, name = metadata.get("namespace", "default"), metadata.get("name")
         for problem in identity_problems:
             problems.append(f"{namespace}/{name}: {problem}")
-        if role != "training" or not isinstance(identity, str) or identity != name:
+        if (
+            role != "training"
+            or not _starts_with(name, owner_prefixes)
+            or not _starts_with(pod_identity, owner_prefixes)
+        ):
             problems.append(f"{namespace}/{name}: owned RayJob identity is not exact")
             continue
-        if identity in owned_rayjobs:
+        if name in owned_rayjobs:
             problems.append(f"{namespace}/{name}: duplicate owned RayJob identity")
             continue
         status = rayjob.get("status") or {}
@@ -375,15 +380,24 @@ def build_capacity_census(
         nodes_claimed, gpus_claimed, claim_problems = _rayjob_claim(rayjob)
         for problem in claim_problems:
             problems.append(f"{namespace}/{name}: {problem}")
-        owned_rayjobs[identity] = {
+        owned_rayjobs[name] = {
             "namespace": namespace,
             "name": name,
             "uid": metadata.get("uid"),
             "resource_version": metadata.get("resourceVersion"),
+            "pod_identity": pod_identity,
             "nodes": nodes_claimed,
             "gpus": gpus_claimed,
             "source": "rayjob",
         }
+        controller_names_by_pod_identity.setdefault(pod_identity, []).append(name)
+
+    for pod_identity, controller_names in controller_names_by_pod_identity.items():
+        if len(controller_names) > 1:
+            problems.append(
+                f"training identity {pod_identity}: multiple active RayJobs "
+                f"{sorted(controller_names)}"
+            )
 
     workload_claims: dict[str, dict] = {}
     for workload in _items(workloads or {"items": []}, "Workload"):
@@ -446,8 +460,12 @@ def build_capacity_census(
             and (claim["nodes"] != rayjob["nodes"] or claim["gpus"] != rayjob["gpus"])
         ):
             problems.append(f"{claim['namespace']}/{claim['name']}: Workload/RayJob claim differs")
-        remaining_nodes = max(0, claim["nodes"] - pod_nodes_by_identity.get(identity, 0))
-        remaining_gpus = max(0, claim["gpus"] - pod_gpus_by_identity.get(identity, 0))
+        pod_identity = rayjob.get("pod_identity") if rayjob else identity
+        subtract_live_pods = len(controller_names_by_pod_identity.get(pod_identity, [])) == 1
+        live_nodes = pod_nodes_by_identity.get(pod_identity, 0) if subtract_live_pods else 0
+        live_gpus = pod_gpus_by_identity.get(pod_identity, 0) if subtract_live_pods else 0
+        remaining_nodes = max(0, claim["nodes"] - live_nodes)
+        remaining_gpus = max(0, claim["gpus"] - live_gpus)
         if (remaining_nodes == 0) != (remaining_gpus == 0):
             problems.append(
                 f"{claim['namespace']}/{claim['name']}: queued claim is only partially represented"

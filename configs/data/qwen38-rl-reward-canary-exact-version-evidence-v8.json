@@ -390,7 +390,7 @@
       },
       "gpu_capacity_census": {
         "path": "../../cyber_post_train/gpu_capacity.py",
-        "file_sha256": "sha256:7b2993aa3ac5cf17a086b52260f5f89cffbc05f6285f015d580748636f88785d",
+        "file_sha256": "sha256:0f63a23cc92b4dc64952638848e0865431edd1e001fc325f1eb7eac3feed0bef",
         "symbols": [
           "build_capacity_census",
           "live_capacity_census"
@@ -470,5 +470,5 @@
       "incident_evidence_self_sha256": "sha256:c45f12a8fa799900053a1bd7b1e33ff26e89d517ae552188bda0e66cf675ca2d"
     }
   },
-  "sha256": "sha256:3237ccebd0ba3959aa31769bc458350f5784601e84cb17ee49f894fe4ad47e40"
+  "sha256": "sha256:53a682e270048fd157a9a9dd00cd2a349e8745d633291449ac5b62f20583a34a"
 }
