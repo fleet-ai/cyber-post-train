@@ -9,6 +9,7 @@ from training import model_stage_current_base as stage
 
 ROOT = Path(__file__).resolve().parents[1]
 PLAN = ROOT / "configs/qualification/qwen38-teacher3k32-step1000-inference-stage-v1.json"
+EVIDENCE = ROOT / "docs/evidence/qwen38-teacher3k32-step1000-promotion-20260922.json"
 
 
 def test_step1000_stage_plan_binds_the_exact_export_and_reload() -> None:
@@ -39,3 +40,29 @@ def test_step1000_stage_plan_binds_the_exact_export_and_reload() -> None:
     assert desired["spec"]["desiredState"] == "paused"
     assert desired["spec"]["scaling"] == {"minReplicas": 0}
     assert "s900" not in json.dumps(plan)
+
+
+def test_step1000_promotion_evidence_is_self_digested_and_paused() -> None:
+    value = json.loads(EVIDENCE.read_text())
+    unsigned = {key: item for key, item in value.items() if key != "sha256"}
+
+    assert value["sha256"] == hashlib.sha256(
+        json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    assert value["status"] == "accepted_through_paused_serving_registration"
+    assert value["stage"]["stage_pod_and_config_map_released"] is True
+    assert value["serving_route"] == {
+        **value["serving_route"],
+        "model_id": "chris-q38-t3k32-s1000-v1",
+        "phase": "paused",
+        "active_pods": 0,
+        "ready_replicas": 0,
+        "desired_replicas": 0,
+        "routing_enabled": False,
+        "post_attempts": 1,
+    }
+    assert value["evaluation"] == {
+        "capability_claimed": False,
+        "fleet_heldout_launched": False,
+        "webexploitbench_launched": False,
+    }
