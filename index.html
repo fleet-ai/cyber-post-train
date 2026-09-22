@@ -61,12 +61,12 @@
       <section class="page" data-tab-page="fleet-evaluations" aria-labelledby="fleet-evaluations-title" hidden>
         <div class="hero ruled">
           <p class="eyebrow">Fleet development tasks · Qwen3.8-27B</p>
-          <h1 id="fleet-evaluations-title">We do not yet have a fair answer about whether training helped.</h1>
-          <p class="dek">We tried to compare several saved versions of trained Qwen with the original model on 17 kept-aside Fleet security tasks. The attempts taught us how to run the test safely, but only one trained version finished all 17 tasks—and it has no matching original-model comparison. We therefore show the work honestly, without turning incomplete tests into performance claims.</p>
+          <h1 id="fleet-evaluations-title">The original model has a valid baseline. We still do not know whether training helped.</h1>
+          <p class="dek">The original Qwen model completed all 17 kept-aside Fleet security tasks. Two attempts passed, for a single-attempt pass rate of 11.8%, and the automatic task checker returned a valid result for every task. No trained checkpoint has yet completed the same frozen test, so this baseline cannot be turned into a claim about improvement or decline.</p>
           <div class="hero-meta">
             <span>17 development tasks per attempt</span>
             <span>Final 8-task test set untouched</span>
-            <span>Updated 21 September 2026</span>
+            <span>Updated 22 September 2026</span>
           </div>
         </div>
 
@@ -106,9 +106,9 @@
           <div class="section-heading">
             <p class="section-index">03</p>
             <div>
-              <h2 id="fleet-why-title">Why we are not publishing a pass rate</h2>
-              <p>A score from one model alone cannot tell us whether training helped. It might instead reflect a changed task, changed tool program, a different way of reaching the model, or a technical failure. The saved evaluation records also keep task outcomes private, so this public page reports only safe totals and test status.</p>
-              <p class="callout">The correct statement today is: no trained checkpoint has a completed, fair Fleet comparison against the original Qwen model. We have not established either an improvement or a decline.</p>
+              <h2 id="fleet-why-title">Why the baseline is not a training result</h2>
+              <p>The original model's 11.8% pass rate is valid, but it only tells us how the untrained model performed. To learn whether training helped, a trained checkpoint must face the same task versions with the same tools, limits, randomness settings, and automatic checker. The saved records keep individual task outcomes private, so this public page reports only safe totals.</p>
+              <p class="callout">The correct statement today is: the original-model baseline is complete, but no trained checkpoint has completed its matching side of the comparison. We have not established either an improvement or a decline.</p>
             </div>
           </div>
         </section>
@@ -117,8 +117,8 @@
           <div class="section-heading">
             <p class="section-index">04</p>
             <div>
-              <h2 id="fleet-next-title">What a publishable result needs next</h2>
-              <p>We will run a newly matched pair: the original model and one selected trained version, each on the same 17 development tasks. Only after both finish with valid automatic checking will we compare their task-level results. The eight final test tasks remain untouched until a recipe is chosen.</p>
+              <h2 id="fleet-next-title">What a publishable training result needs next</h2>
+              <p>The original-model side is complete. One selected trained checkpoint must now run on the same 17 development tasks with the same test settings. Only after that side also finishes with valid automatic checking will we compare results. The eight final test tasks remain untouched until a training recipe is chosen.</p>
             </div>
           </div>
           <div id="fleet-next-steps" class="finding-list"></div>
