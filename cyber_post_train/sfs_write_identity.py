@@ -12,6 +12,7 @@ from __future__ import annotations
 import os
 import re
 import stat
+from copy import deepcopy
 from pathlib import Path, PurePosixPath
 
 SFS_JOBS_ROOT = PurePosixPath("/mnt/sfs/jobs")
@@ -19,9 +20,12 @@ LORA_CONTROL_ROOT = SFS_JOBS_ROOT / "chris-q38-study-corpora-v1" / "launch-contr
 TRAINER_UID = 1000
 TRAINER_GID = 100
 DEV_GPU_RELOAD_OPERATION_SUFFIX = "-dev-gpu-reload"
+DEV_GPU_RUN_NAME_LABEL = "fleet.ai/run-name"
+DEV_GPU_OWNER_PREFIXES = ("chris-q38-",)
 DEV_GPU_CONTROL_MOUNT = PurePosixPath("/controls")
 DEV_GPU_CONTROL_SUBPATH = str(LORA_CONTROL_ROOT.relative_to(PurePosixPath("/mnt/sfs")))
 _CONTROL = re.compile(r"\.preflight-control-[a-z0-9](?:[-a-z0-9]*[a-z0-9])?")
+_LABEL_NAME = re.compile(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?")
 
 
 def validate_owned_output_binding(owned_root: str, output_root: str) -> None:
@@ -54,11 +58,43 @@ def is_direct_dev_gpu_reload_pod(manifest: dict) -> bool:
     )
 
 
+def render_direct_dev_gpu_reload_pod(template: dict, *, run_name: str) -> dict:
+    """Render the Pod name and canonical capacity-owner label from one authority."""
+
+    if (
+        not isinstance(run_name, str)
+        or _LABEL_NAME.fullmatch(run_name) is None
+        or not run_name.startswith(DEV_GPU_OWNER_PREFIXES)
+    ):
+        raise ValueError("direct dev GPU reload run name is not a canonical project identity")
+    manifest = deepcopy(template)
+    metadata = manifest.get("metadata")
+    labels = metadata.get("labels") if isinstance(metadata, dict) else None
+    if not isinstance(labels, dict):
+        raise ValueError("direct dev GPU reload template metadata is malformed")
+    metadata["name"] = run_name
+    labels[DEV_GPU_RUN_NAME_LABEL] = run_name
+    validate_direct_dev_gpu_reload_output(manifest)
+    return manifest
+
+
 def validate_direct_dev_gpu_reload_output(manifest: dict) -> None:
     """Bind one direct dev reload to the proven non-root SFS output shape."""
 
     if not is_direct_dev_gpu_reload_pod(manifest):
         raise ValueError("direct dev GPU reload must be one labeled v1 Pod")
+    metadata = manifest["metadata"]
+    labels = metadata["labels"]
+    name = metadata.get("name")
+    if (
+        not isinstance(name, str)
+        or _LABEL_NAME.fullmatch(name) is None
+        or not name.startswith(DEV_GPU_OWNER_PREFIXES)
+        or labels.get(DEV_GPU_RUN_NAME_LABEL) != name
+    ):
+        raise ValueError(
+            "direct dev GPU reload must use its canonical fleet.ai/run-name ownership label"
+        )
     spec = manifest.get("spec")
     if not isinstance(spec, dict):
         raise ValueError("direct dev GPU reload Pod spec is malformed")
@@ -78,6 +114,18 @@ def validate_direct_dev_gpu_reload_output(manifest: dict) -> None:
     }:
         raise ValueError("direct dev GPU reload must use the proven UID 1000 SFS identity")
     container = containers[0]
+    resources = container.get("resources")
+    requests = resources.get("requests") if isinstance(resources, dict) else None
+    limits = resources.get("limits") if isinstance(resources, dict) else None
+    requested_gpu = requests.get("nvidia.com/gpu") if isinstance(requests, dict) else None
+    limited_gpu = limits.get("nvidia.com/gpu") if isinstance(limits, dict) else None
+    if (
+        isinstance(requested_gpu, bool)
+        or isinstance(limited_gpu, bool)
+        or str(requested_gpu) != "1"
+        or str(limited_gpu) != "1"
+    ):
+        raise ValueError("direct dev GPU reload must request and limit exactly one GPU")
     if container.get("securityContext") != {
         "allowPrivilegeEscalation": False,
         "capabilities": {"drop": ["ALL"]},
