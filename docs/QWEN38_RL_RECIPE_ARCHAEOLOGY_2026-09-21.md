@@ -18,6 +18,16 @@ eligible to scale only after it proves the exact task/version binding, finite
 mixed rewards, verifier execution identifiers, a finite non-zero update, a
 reloadable checkpoint, and release of every created task instance and GPU.
 
+### 96K mechanics update
+
+The separate
+[`QWEN38_MILES96_MECHANICS_CANARY.md`](QWEN38_MILES96_MECHANICS_CANARY.md)
+now specifies a one-node, maintained-Miles operational check. It is not a
+scientific alternative to prod9: it proves only the shortest useful chain
+(fresh V1 rows → varying real rewards → one update → HF export → one-GPU
+reload) at the maintained 96K hard context limit. It has no compaction and
+must never be described as a long-horizon cyber result.
+
 ## Evidence sources
 
 This review used source and run records only; it did not inspect task prompts,
@@ -106,11 +116,11 @@ truncation rule, task mixture, or conclusions into the SkyRL rail.
    useful task groups/updates while keeping the same compaction and exact
    verifier contract.  Evaluate each saved checkpoint on held-out Fleet tasks
    and WebExploitBench; do not use training reward alone as a success signal.
-4. **In parallel, optionally qualify Miles V1 on one bounded episode.**  This
-   is useful only to validate the alternative implementation's template,
-   verifier receipt, group filtering, update, and reload.  It must stay a
-   four-node 256K compatibility test if using the maintained 256K recipe.  Do
-   not scale it to long cyber trajectories until it has a scientifically sound
+4. **In parallel, optionally qualify Miles V1 on one bounded episode.** The
+   one-node 96K mechanics canary is the fastest current route for template,
+   verifier, reward-variation, update, and reload mechanics. The maintained
+   256K recipe remains a four-node compatibility route. Neither route may be
+   scaled into long cyber trajectories until it has a scientifically sound
    segment/compaction objective.
 5. **Do not relaunch the older custom Miles adapter.**  Its 96K failure cannot
    be repaired by repeating the same opaque path; it lacks the required

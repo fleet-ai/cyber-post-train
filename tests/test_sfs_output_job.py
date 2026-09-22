@@ -53,6 +53,16 @@ def request():
     }
 
 
+def test_output_check_supports_the_reviewed_miles96_plan_schema():
+    miles_plan = {
+        "schema": "cyber_qwen38_miles96_mechanics_canary_v1",
+        "immutable": "synthetic",
+    }
+    package = build_sfs_output_job(miles_plan, request(), 1)
+    assert package.job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+    assert package.job["spec"]["backoffLimit"] == 0
+
+
 def node_inventory(*, memory="65216572Ki"):
     return {
         "kind": "List",

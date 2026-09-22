@@ -52,7 +52,11 @@ WORKLOAD_PRIORITY_CLASS_REF = {
 WORKLOAD_TOPOLOGY_REQUEST = {
     "podIndexLabel": "batch.kubernetes.io/job-completion-index",
 }
-SFT_SCHEMAS = {"cyber_sft_runtime_v2", "cyber_sft_runtime_dense_v1"}
+OUTPUT_CHECK_PLAN_SCHEMAS = {
+    "cyber_sft_runtime_v2",
+    "cyber_sft_runtime_dense_v1",
+    "cyber_qwen38_miles96_mechanics_canary_v1",
+}
 _DRIVER_PATH = Path(__file__).with_name("sfs_output_driver.py")
 _SERVER_METADATA_KEYS = {
     "annotations",
@@ -156,8 +160,8 @@ def _driver() -> tuple[str, str, str]:
 
 def _render(plan: dict, request: dict, attempt: int) -> dict:
     validate_request(request)
-    if plan.get("schema") not in SFT_SCHEMAS:
-        raise ValueError("output-check Jobs are restricted to SFT")
+    if plan.get("schema") not in OUTPUT_CHECK_PLAN_SCHEMAS:
+        raise ValueError("output-check Job plan schema is not supported")
     if request.get("failureAlerts") is not False or request.get("priority_class") != "c1":
         raise ValueError("output-check source request must use alert-off c1 policy")
     expected_name = job_name(request, attempt)

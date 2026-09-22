@@ -1202,6 +1202,35 @@ def test_jobs_api_prefix_guard_arms_without_deletion_then_binds_exact_creator_na
     assert cluster.delete_calls == 0
 
 
+def test_jobs_api_guard_accepts_bounded_prod_one_gpu_observer(tmp_path) -> None:
+    cluster = FakeJobsApiPrefixGuardCluster()
+    guard = _jobs_api_prefix_guard(
+        tmp_path,
+        cluster,
+        context=cleanup.PROD_CONTEXT,
+        expected_gpus=1,
+        maximum_seconds=7200,
+    )
+    assert guard.context == cleanup.PROD_CONTEXT
+    assert guard.expected_gpus == 1
+    assert guard.maximum_seconds == 7200
+
+
+def test_jobs_api_exact_observer_accepts_server_suffix_after_maximum_prefix(tmp_path) -> None:
+    prefix = "a" * 31
+    exact_name = prefix + "-1a2b3c4d"
+    binding = _jobs_api_exact_binding(
+        tmp_path,
+        jobs_api_run_name=exact_name,
+        rayjob_name=exact_name,
+    )
+    observer = cleanup.JobsApiExactUidObserver(
+        binding_path=binding,
+        result_path=tmp_path / "result.json",
+    )
+    assert observer.root_name == exact_name
+
+
 def test_jobs_api_exact_binding_can_resume_from_a_sealed_pre_post_guard(tmp_path) -> None:
     cluster = FakeJobsApiPrefixGuardCluster()
     _jobs_api_prefix_guard(tmp_path, cluster).arm()
@@ -1347,6 +1376,7 @@ def _jobs_api_exact_binding(tmp_path: Path, **overrides: object) -> Path:
         "jobs_api_run_name": "collector-diag-1a2b3c4d",
         "jobs_api_run_id": "00000000-0000-0000-0000-000000000302",
         "run_dir": "/mnt/sfs/jobs/collector-diag-v1",
+        "image": "registry/image@sha256:" + "b" * 64,
         "rayjob_name": "collector-diag-1a2b3c4d",
         "rayjob_uid": _metadata("unused", 401)["uid"],
         "rayjob_created_at": created,
@@ -1458,10 +1488,20 @@ class FakeJobsApiExactObserverCluster:
             "spec": {
                 "containers": [
                     {
+                        "name": "trainer",
+                        "image": self.binding["image"],
                         "resources": {
-                            "requests": {"nvidia.com/gpu": 8},
-                            "limits": {"nvidia.com/gpu": 8},
-                        }
+                            "requests": {"nvidia.com/gpu": self.binding["expected_gpus"]},
+                            "limits": {"nvidia.com/gpu": self.binding["expected_gpus"]},
+                        },
+                    }
+                ]
+            },
+            "status": {
+                "containerStatuses": [
+                    {
+                        "name": "trainer",
+                        "imageID": "registry/image@sha256:" + "b" * 64,
                     }
                 ]
             },
@@ -1522,6 +1562,24 @@ def _jobs_api_exact_observer(
     )
 
 
+def test_jobs_api_exact_observer_accepts_bounded_prod_one_gpu_binding(tmp_path) -> None:
+    _jobs_api_exact_binding(
+        tmp_path,
+        context=cleanup.PROD_CONTEXT,
+        expected_gpus=1,
+        maximum_seconds=7200,
+    )
+    binding = json.loads((tmp_path / "EXACT_BINDING.json").read_text())
+    observer = _jobs_api_exact_observer(tmp_path, FakeJobsApiExactObserverCluster(binding))
+    assert observer.context == cleanup.PROD_CONTEXT
+    assert observer.binding["expected_gpus"] == 1
+    assert observer.maximum_seconds == 7200
+    result = observer.run()
+    assert result["release_confirmed"] is True
+    assert result["runtime_image_identity_complete"] is True
+    assert result["pods"][0]["gpus"] == 1
+
+
 def test_jobs_api_exact_uid_observer_releases_only_proven_owned_children(tmp_path) -> None:
     binding_path = _jobs_api_exact_binding(tmp_path)
     binding = json.loads(binding_path.read_text())
@@ -1531,11 +1589,22 @@ def test_jobs_api_exact_uid_observer_releases_only_proven_owned_children(tmp_pat
     assert result["release_confirmed"] is True
     assert result["terminal_status"] == "Succeeded"
     assert result["peak_gpus"] == 8
+    assert result["requested_image"] == binding["image"]
+    assert result["runtime_image_identity_complete"] is True
     assert result["cleanup_status"] == "not_authorized"
     assert result["private_logs_read"] is False
     assert [entry["uid"] for entry in result["workloads"]] == [cluster.workload_uid]
     assert [entry["uid"] for entry in result["rayclusters"]] == [cluster.cluster_uid]
     assert [entry["uid"] for entry in result["pods"]] == [cluster.pod_uid]
+    assert result["pods"] == [
+        {
+            "name": "collector-pod",
+            "uid": cluster.pod_uid,
+            "gpus": 8,
+            "runtime_image_id": "registry/image@sha256:" + "b" * 64,
+            "runtime_image_digest": "sha256:" + "b" * 64,
+        }
+    ]
     commands = [call[0] for call in cluster.calls]
     assert ["get", "rayjob", "--output", "json"] not in commands
     assert not any(command[:2] == ["delete", "--raw"] for command in commands)
@@ -1551,6 +1620,33 @@ def test_jobs_api_exact_uid_observer_reports_owner_mismatch_without_cleanup(tmp_
     assert result["release_confirmed"] is False
     assert result["cleanup_requested"] is False
     assert not any(call[0][:2] == ["delete", "--raw"] for call in cluster.calls)
+
+
+def test_jobs_api_exact_uid_observer_requires_matching_runtime_image_id(tmp_path) -> None:
+    binding_path = _jobs_api_exact_binding(tmp_path)
+    binding = json.loads(binding_path.read_text())
+    cluster = FakeJobsApiExactObserverCluster(binding)
+    pod = cluster._pod()
+    pod["status"]["containerStatuses"][0]["imageID"] = ""
+    cluster._pod = lambda: pod
+    result = _jobs_api_exact_observer(tmp_path, cluster).run()
+    assert result["status"] == "release_uncertain"
+    assert result["reason"] == "runtime_image_identity_not_observed"
+    assert result["release_confirmed"] is False
+    assert result["runtime_image_identity_complete"] is False
+
+    other = tmp_path / "other"
+    other.mkdir()
+    binding_path = _jobs_api_exact_binding(other)
+    binding = json.loads(binding_path.read_text())
+    cluster = FakeJobsApiExactObserverCluster(binding)
+    pod = cluster._pod()
+    pod["status"]["containerStatuses"][0]["imageID"] = "registry/image@sha256:" + "c" * 64
+    cluster._pod = lambda: pod
+    result = _jobs_api_exact_observer(other, cluster).run()
+    assert result["status"] == "release_uncertain"
+    assert result["reason"] == "observer_error"
+    assert result["release_confirmed"] is False
 
 
 def test_jobs_api_exact_uid_observer_raw_deletes_only_with_creator_contract(tmp_path) -> None:
@@ -1594,7 +1690,7 @@ def test_jobs_api_exact_uid_observer_never_claims_release_without_a_bound_cluste
     assert result["release_confirmed"] is False
 
 
-def test_jobs_api_exact_uid_observer_deadline_is_bound_to_root_creation(tmp_path) -> None:
+def test_jobs_api_exact_uid_observer_queue_wait_has_no_active_deadline(tmp_path) -> None:
     binding_path = _jobs_api_exact_binding(
         tmp_path,
         rayjob_created_at="2000-01-01T00:00:00Z",
@@ -1604,10 +1700,41 @@ def test_jobs_api_exact_uid_observer_deadline_is_bound_to_root_creation(tmp_path
     binding = json.loads(binding_path.read_text())
     cluster = FakeJobsApiExactObserverCluster(binding, auto_release=False)
     root = cluster._root()
-    root["status"] = {"jobStatus": "RUNNING"}
+    root["status"] = {"jobStatus": "PENDING"}
+    observer = _jobs_api_exact_observer(tmp_path, cluster)
+
+    cluster_name = observer._validate_root(root)
+    observer._observe_owned_children(cluster_name)
+
+    assert cluster_name == ""
+    assert observer.allocated_at is None
+    assert observer.deadline_at is None
+    assert observer.cleanup_requested is False
+    assert not any(call[0][:2] == ["delete", "--raw"] for call in cluster.calls)
+
+
+def test_jobs_api_exact_uid_observer_deadline_is_bound_to_gpu_pod_creation(tmp_path) -> None:
+    binding_path = _jobs_api_exact_binding(
+        tmp_path,
+        rayjob_created_at="2000-01-01T00:00:00Z",
+        bound_at="2000-01-01T00:00:00Z",
+        maximum_seconds=1,
+    )
+    binding = json.loads(binding_path.read_text())
+    cluster = FakeJobsApiExactObserverCluster(binding, auto_release=False)
+    root = cluster._root()
+    root["status"] = {
+        "jobStatus": "RUNNING",
+        "rayClusterName": "collector-cluster",
+    }
     cluster._root = lambda **_kwargs: root
+    pod = cluster._pod()
+    pod["metadata"]["creationTimestamp"] = "2000-01-01T00:00:00Z"
+    cluster._pod = lambda: pod
     result = _jobs_api_exact_observer(tmp_path, cluster).run()
     assert result["status"] == "release_uncertain"
-    assert result["reason"] == "creation_bound_deadline_elapsed"
+    assert result["reason"] == "allocation_bound_deadline_elapsed"
+    assert result["allocated_at"] == "2000-01-01T00:00:00Z"
+    assert result["deadline_at"] == "2000-01-01T00:00:01Z"
     assert result["cleanup_requested"] is False
     assert not any(call[0][:2] == ["delete", "--raw"] for call in cluster.calls)
