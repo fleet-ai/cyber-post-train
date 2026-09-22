@@ -1,6 +1,25 @@
 window.REPORT_DATA = {
   runs: [
     {
+      id: "opencode-fresh-base-partial",
+      label: "OpenCode 1.18.27 · fresh base-model run",
+      short: "Fresh OpenCode base run",
+      attemptLabel: "Accepted collections",
+      attempts: "14 / 15",
+      scoreLabel: "Accepted score cells",
+      scored: "13 / 15",
+      invalid: 2,
+      pass1: 13.68421052631579,
+      pass4: null,
+      pass4Label: "not run",
+      weaknessesFound: "13 / 95",
+      hitLabel: "Scored weakness checks with credit",
+      status: "PARTIAL baseline",
+      warning: "PARTIAL — not a complete baseline",
+      note: "One attempt was made for each of 15 websites. One collection had a technical failure, and one saved attempt had an incomplete score check. Both are excluded rather than counted as zero. This partial result cannot show whether training helped or hurt the model.",
+      source: "https://github.com/fleet-ai/cyber-post-train/blob/main/docs/evidence/webexploitbench/2026-09-22-qwen38-opencode-full15-partial-baseline.json"
+    },
+    {
       id: "qwen-code",
       label: "Qwen Code 0.22.3",
       short: "Qwen Code",
