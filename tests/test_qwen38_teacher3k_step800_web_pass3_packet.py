@@ -226,6 +226,55 @@ def test_protocol_is_paper_aligned_pass3_with_one_sandbox_per_target() -> None:
     )
 
 
+def test_exact_paper_base_qualification_and_sealed_packet_are_bound() -> None:
+    protocol = read_packet()["paper_aligned_protocol"]
+    qualification = protocol["qualified_snapshot"]
+    assert qualification == {
+        "snapshot_id": "s0owrpv46qbn109h35mto",
+        "qualification_file_sha256": (
+            "sha256:1c784814a872f43256ccb132ecc2eba251d80eab92d670e85c0f11996c6d7809"
+        ),
+        "qualification_self_sha256": (
+            "sha256:c4ac2d95279d329d9025b48735a4de8d12b3914aff0c42723594c19edf251edc"
+        ),
+        "qualification_complete_file_sha256": (
+            "sha256:fc3352d2c2adb04f56133b29273df223df96189d0da4ebc73e6998bcfbeed671"
+        ),
+        "qualification_complete_receipt_sha256": (
+            "sha256:39b10b5e6688ad21a2f599bdd6a4569b00d4ac31e91aeabf5410229b4468de41"
+        ),
+        "qualification_release_file_sha256": (
+            "sha256:2b4a30dd44d7603dcc9b115d4915963bb4cd1b1f681cb5f208f058b0dea289a1"
+        ),
+        "qualification_release_receipt_sha256": (
+            "sha256:5d50fa1e0d3d832c870ca993795098f6468c0b8764cf74fb16f03002e7b6d626"
+        ),
+        "accepted_and_resources_released": True,
+    }
+    base_packet = protocol["sealed_base_collection_packet"]
+    assert base_packet == {
+        "state": "sealed_external_base_campaign_collection_receipts_pending",
+        "campaign_id": "q38-base-oc-wbe-paper-p3-v1",
+        "protocol_file_sha256": (
+            "sha256:c7b21cce064fc66abcff783a9a615eaaaa6de4219dd88dbfdfbf64764110e1ce"
+        ),
+        "protocol_self_sha256": (
+            "sha256:e74f1c44745e303660ec10d157e6a6398645b2466232e0dd10e70083d82d4427"
+        ),
+        "plan_file_sha256": (
+            "sha256:3df3220dfce9e2a607e8f853cf59aac03df35b3dd70b4874698eceb8be23d874"
+        ),
+        "plan_self_sha256": (
+            "sha256:71c80541a9c26a26eb12c8b7337006a50fd53ee06ca0a4dcd7a44c8191b5b132"
+        ),
+        "comparison_protocol_sha256": (
+            "sha256:b2b198d6be31b5f5c790864d260e3965927eb912392f1fadad20060713db94b0"
+        ),
+        "bound_controls": "pass_k=3, temperature=1.0, top_p=0.95",
+        "collection_acceptance_roster": None,
+    }
+
+
 def _expand_arm(arm: dict) -> tuple[list[str], list[str]]:
     partitions = [
         arm["partition_identity_template"].format(target_index=target)
@@ -256,7 +305,10 @@ def test_reserved_partition_and_attempt_identities_are_exact_and_unique() -> Non
     assert len(all_partitions) == len(set(all_partitions)) == 30
     assert len(all_attempts) == len(set(all_attempts)) == 90
     assert arms["base"]["campaign_id"] != arms["candidate"]["campaign_id"]
-    assert arms["base"]["rendered_launch_plan"] is None
+    assert arms["base"]["state"] == "sealed_external_collection_in_progress_acceptance_pending"
+    assert arms["base"]["rendered_launch_plan"]["plan_self_sha256"] == (
+        "sha256:71c80541a9c26a26eb12c8b7337006a50fd53ee06ca0a4dcd7a44c8191b5b132"
+    )
     assert arms["candidate"]["rendered_launch_plan"] is None
     assert arms["candidate"]["served_model"] is None
 

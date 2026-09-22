@@ -1,8 +1,8 @@
 {
   "schema": "cyber_qwen38_teacher3k_32k_step800_opencode_wbe_pass3_preparation_v1",
   "packet_id": "q38-teacher3k32-step800-opencode-wbe-pass3-preparation-v1",
-  "prepared_at": "2026-09-22T16:55:43Z",
-  "prepared_against_main_commit": "54db6824927ed680b19705525ad2bc3f9d8701f3",
+  "prepared_at": "2026-09-22T17:40:02Z",
+  "prepared_against_main_commit": "3944f04edb2d9601daa59a644f952a8a1500d5f9",
   "status": "blocked_not_launchable",
   "launchable": false,
   "scientific_boundary": {
@@ -117,7 +117,7 @@
   "paper_aligned_protocol": {
     "protocol_id": "q38-opencode-wbe-l0-paper-pass3-v1",
     "state": "frozen_before_results_no_launch",
-    "protocol_sha256": "sha256:804a71a6589a5f23d8cf31ff4c72041bea9bb4b32fbdc26d4f234b3d5cc89167",
+    "protocol_sha256": "sha256:92de220230806ebda38f96b21db99111bccbe2c65cb30ca96d48af1bff56f59e",
     "benchmark": {
       "name": "WebExploitBench",
       "level": 0,
@@ -134,10 +134,25 @@
       "vulnerability_denominator": 110
     },
     "qualified_snapshot": {
-      "snapshot_id": "r5qfhoernmujgne9qyhs4",
-      "qualification_sha256": "sha256:24dbfcf8096a94f353132d0c0d613239fab4f4370b5c1987655230694d45778e",
-      "qualification_self_sha256": "sha256:e7f3e15d8014b1b8e5f6e803f3b0b746d026ef3bc6ea4e68cc9e56dad53fd39a",
-      "qualification_complete_receipt_sha256": "sha256:e0306c26e6fc21f3d1a9ce2ef48689f2f0b262b11cb32348d79e76c12081184a"
+      "snapshot_id": "s0owrpv46qbn109h35mto",
+      "qualification_file_sha256": "sha256:1c784814a872f43256ccb132ecc2eba251d80eab92d670e85c0f11996c6d7809",
+      "qualification_self_sha256": "sha256:c4ac2d95279d329d9025b48735a4de8d12b3914aff0c42723594c19edf251edc",
+      "qualification_complete_file_sha256": "sha256:fc3352d2c2adb04f56133b29273df223df96189d0da4ebc73e6998bcfbeed671",
+      "qualification_complete_receipt_sha256": "sha256:39b10b5e6688ad21a2f599bdd6a4569b00d4ac31e91aeabf5410229b4468de41",
+      "qualification_release_file_sha256": "sha256:2b4a30dd44d7603dcc9b115d4915963bb4cd1b1f681cb5f208f058b0dea289a1",
+      "qualification_release_receipt_sha256": "sha256:5d50fa1e0d3d832c870ca993795098f6468c0b8764cf74fb16f03002e7b6d626",
+      "accepted_and_resources_released": true
+    },
+    "sealed_base_collection_packet": {
+      "state": "sealed_external_base_campaign_collection_receipts_pending",
+      "campaign_id": "q38-base-oc-wbe-paper-p3-v1",
+      "protocol_file_sha256": "sha256:c7b21cce064fc66abcff783a9a615eaaaa6de4219dd88dbfdfbf64764110e1ce",
+      "protocol_self_sha256": "sha256:e74f1c44745e303660ec10d157e6a6398645b2466232e0dd10e70083d82d4427",
+      "plan_file_sha256": "sha256:3df3220dfce9e2a607e8f853cf59aac03df35b3dd70b4874698eceb8be23d874",
+      "plan_self_sha256": "sha256:71c80541a9c26a26eb12c8b7337006a50fd53ee06ca0a4dcd7a44c8191b5b132",
+      "comparison_protocol_sha256": "sha256:b2b198d6be31b5f5c790864d260e3965927eb912392f1fadad20060713db94b0",
+      "bound_controls": "pass_k=3, temperature=1.0, top_p=0.95",
+      "collection_acceptance_roster": null
     },
     "harness": {
       "name": "opencode",
@@ -266,22 +281,28 @@
   },
   "arms": {
     "base": {
-      "state": "prepared_identity_only_not_rendered_not_launchable",
-      "campaign_id": "q38-base-oc-wbe-l0-p3-paper-v1",
+      "state": "sealed_external_collection_in_progress_acceptance_pending",
+      "campaign_id": "q38-base-oc-wbe-paper-p3-v1",
       "arm_id": "base",
-      "partition_identity_template": "q38-base-oc-wbe-l0-p3-paper-v1-t{target_index:02d}",
-      "logical_attempt_identity_template": "q38-base-oc-wbe-l0-p3-paper-v1-t{target_index:02d}-r{repeat_index}",
+      "partition_identity_template": "q38-base-oc-wbe-paper-p3-v1-t{target_index:02d}",
+      "logical_attempt_identity_template": "q38-base-oc-wbe-paper-p3-v1-t{target_index:02d}-r{repeat_index}",
       "target_indexes": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
       "repeat_indexes": [0, 1, 2],
       "expected_attempt_count": 45,
       "expected_partition_count": 15,
-      "partition_identity_roster_sha256": "sha256:dde24d14eb8cad91dcd28aaaa17526555cdc5114f1bd7afacc449052ffe51eb7",
-      "logical_attempt_identity_roster_sha256": "sha256:c64ba09a5e4435afc57fc06d4a7fc13ef3d48e1cbab36049fce8f641cf0b7a93",
+      "partition_identity_roster_sha256": "sha256:a1fed55358b78e94387e42eb3a4b2918ae31a767822930ed97366270fb9cc493",
+      "logical_attempt_identity_roster_sha256": "sha256:f136b8738f2924a9a1005b16e67fd630f44afbf97776e6c4823ea546887bb2c3",
       "served_model": "qwen3.8-27b",
       "model_artifact_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
       "models_file_sha256": "sha256:d5457b91a4449aa979858144ca106c8274440f3c94c28a1b101c8ada4b196d87",
       "route_live_parity_receipt_sha256": null,
-      "rendered_launch_plan": null,
+      "rendered_launch_plan": {
+        "plan_file_sha256": "sha256:3df3220dfce9e2a607e8f853cf59aac03df35b3dd70b4874698eceb8be23d874",
+        "plan_self_sha256": "sha256:71c80541a9c26a26eb12c8b7337006a50fd53ee06ca0a4dcd7a44c8191b5b132",
+        "protocol_file_sha256": "sha256:c7b21cce064fc66abcff783a9a615eaaaa6de4219dd88dbfdfbf64764110e1ce",
+        "protocol_self_sha256": "sha256:e74f1c44745e303660ec10d157e6a6398645b2466232e0dd10e70083d82d4427",
+        "comparison_protocol_sha256": "sha256:b2b198d6be31b5f5c790864d260e3965927eb912392f1fadad20060713db94b0"
+      },
       "collection_acceptance_roster": null
     },
     "candidate": {
@@ -499,5 +520,5 @@
     "credentials_included": false,
     "private_filesystem_paths_included": false
   },
-  "sha256": "9337d5bbef7d3d29f13e4197f00fd6b9d0638c52ec89b66761c8779e6f1e0ff5"
+  "sha256": "b821a0880583740368f5f5a8cab1ef0bfb225d22c5f343dab8dd8525090a77c7"
 }

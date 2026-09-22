@@ -1,17 +1,17 @@
 {
   "schema": "cyber_qwen38_teacher3k_32k_step900_opencode_wbe_pass3_preparation_v1",
   "packet_id": "q38-teacher3k32-step900-opencode-wbe-pass3-preparation-v1",
-  "prepared_at": "2026-09-22T17:24:45Z",
-  "prepared_against_main_commit": "54db6824927ed680b19705525ad2bc3f9d8701f3",
+  "prepared_at": "2026-09-22T17:40:02Z",
+  "prepared_against_main_commit": "3944f04edb2d9601daa59a644f952a8a1500d5f9",
   "status": "blocked_not_launchable",
   "launchable": false,
   "derivation": {
     "step800_packet_path": "configs/evaluation/qwen38-teacher3k-32k-step800-opencode-wbe-pass3-preparation-v1.json",
-    "step800_packet_sha256": "sha256:9337d5bbef7d3d29f13e4197f00fd6b9d0638c52ec89b66761c8779e6f1e0ff5",
-    "paper_protocol_sha256": "sha256:804a71a6589a5f23d8cf31ff4c72041bea9bb4b32fbdc26d4f234b3d5cc89167",
-    "base_arm_campaign_id": "q38-base-oc-wbe-l0-p3-paper-v1",
-    "base_partition_identity_roster_sha256": "sha256:dde24d14eb8cad91dcd28aaaa17526555cdc5114f1bd7afacc449052ffe51eb7",
-    "base_logical_attempt_identity_roster_sha256": "sha256:c64ba09a5e4435afc57fc06d4a7fc13ef3d48e1cbab36049fce8f641cf0b7a93",
+    "step800_packet_sha256": "sha256:b821a0880583740368f5f5a8cab1ef0bfb225d22c5f343dab8dd8525090a77c7",
+    "paper_protocol_sha256": "sha256:92de220230806ebda38f96b21db99111bccbe2c65cb30ca96d48af1bff56f59e",
+    "base_arm_campaign_id": "q38-base-oc-wbe-paper-p3-v1",
+    "base_partition_identity_roster_sha256": "sha256:a1fed55358b78e94387e42eb3a4b2918ae31a767822930ed97366270fb9cc493",
+    "base_logical_attempt_identity_roster_sha256": "sha256:f136b8738f2924a9a1005b16e67fd630f44afbf97776e6c4823ea546887bb2c3",
     "same_frozen_base_and_protocol_required": true,
     "base_collection_policy": "If the exact immutable base collection is already accepted, reference it without replay. Otherwise create it once under the reserved base identity.",
     "step800_candidate_identity_must_not_be_reused_or_relabelled": true
@@ -145,5 +145,5 @@
     "flags_or_answers_included": false,
     "credentials_included": false
   },
-  "sha256": "9ff29649bbad5d4224286cadef09e525ab71c6f2fba0a9c3027eebb124bffd58"
+  "sha256": "f978e5dafea997863d0cdd873566ad1863d19c9c50d70a8e391367751bbb1bb2"
 }
