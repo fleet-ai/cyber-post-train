@@ -26,6 +26,28 @@ DEFERRED_SCORE = ROOT / "evals/webexploitbench/tensorlake/deferred_score.py"
 
 CANONICAL_CHECKPOINT = "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoints/global_step_600"
 REJECTED_CHECKPOINT = "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoints/step-600"
+EXPORT_ROOT = "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/hf-export-step600-v1"
+EXPORT_RECEIPT = {
+    "path": f"{EXPORT_ROOT}/EXPORT.json",
+    "file_sha256": "sha256:93b27c9a58ec85c309ee214a8e6924754fbfdd766f9537ec68d2ac3f978d1543",
+    "receipt_sha256": "sha256:24ea5e61ef8b6866ec72b4150f308ce90e0c07a585fd486692f4cd98e1e6ec67",
+}
+PAYLOAD_MANIFEST_SHA256 = "sha256:adf5d8c6609ea441744eab13ed0649c22eb4ad5f95baeebdcd60880c206702a6"
+CPU_LAYOUT_RECEIPT = {
+    "path": f"{EXPORT_ROOT}-cpu-check.json",
+    "file_sha256": "sha256:d7afc0aa51666658d4cc377f14f095bf2b81e5ad9338f519b30f2f6d162d86eb",
+    "receipt_sha256": "sha256:1253403c8088c6e610ad025d573b7fe618a9a2af9ee4bbc683bb888008de74bd",
+}
+GPU_RELOAD_RECEIPT = {
+    "path": "/mnt/sfs/jobs/chris-q38-t3k32-s600-gpu-v1/GPU_CHECK.json",
+    "file_sha256": "sha256:6ed89d240fcb97e96a596200dc6e315c82a89a68a427306be0e0ab5f622b8567",
+    "receipt_sha256": "sha256:23682ab03cfdd6d5ad12563394514b75a4287334e8e05516e0a1d9dea924cb3a",
+}
+GPU_COMPLETE_RECEIPT = {
+    "path": "/mnt/sfs/jobs/chris-q38-t3k32-s600-gpu-v1/COMPLETE.json",
+    "file_sha256": "sha256:43c2b671f5f267976883be9570d1357ad467ab506b02d4d647b19c05ace69b32",
+    "receipt_sha256": "sha256:780cca3069af58db4f6248c3a38a61c4c7745055f4406032e763f15ab65f7c2e",
+}
 
 
 def read(path: Path) -> dict:
@@ -215,7 +237,7 @@ def test_wbe_collection_and_gpt_scoring_remain_separate_and_fail_closed() -> Non
     assert score["recollection_after_scoring_failure"] is False
 
 
-def test_wbe_promotion_receipts_are_all_fail_closed() -> None:
+def test_wbe_binds_accepted_export_reload_and_keeps_later_gates_fail_closed() -> None:
     gates = read(WBE)["promotion_gates"]
     assert set(gates) == {
         "export",
@@ -224,10 +246,30 @@ def test_wbe_promotion_receipts_are_all_fail_closed() -> None:
         "serving_registration",
         "live_parity",
     }
-    assert all(gate["state"] == "unaccepted" for gate in gates.values())
-    assert gates["export"]["accepted_receipt_sha256"] is None
-    assert gates["export"]["payload_manifest_sha256"] is None
-    assert gates["gpu_reload"]["accepted_receipt_sha256"] is None
+    export = gates["export"]
+    assert export["state"] == "accepted"
+    assert export["expected_destination"] == EXPORT_ROOT
+    assert export["accepted_receipt_path"] == EXPORT_RECEIPT["path"]
+    assert export["accepted_receipt_file_sha256"] == EXPORT_RECEIPT["file_sha256"]
+    assert export["accepted_receipt_sha256"] == EXPORT_RECEIPT["receipt_sha256"]
+    assert export["payload_manifest_sha256"] == PAYLOAD_MANIFEST_SHA256
+    assert export["cpu_layout_receipt_path"] == CPU_LAYOUT_RECEIPT["path"]
+    assert export["cpu_layout_receipt_file_sha256"] == CPU_LAYOUT_RECEIPT["file_sha256"]
+    assert export["cpu_layout_receipt_sha256"] == CPU_LAYOUT_RECEIPT["receipt_sha256"]
+
+    reload = gates["gpu_reload"]
+    assert reload["state"] == "accepted"
+    assert reload["accepted_receipt_path"] == GPU_RELOAD_RECEIPT["path"]
+    assert reload["accepted_receipt_file_sha256"] == GPU_RELOAD_RECEIPT["file_sha256"]
+    assert reload["accepted_receipt_sha256"] == GPU_RELOAD_RECEIPT["receipt_sha256"]
+    assert reload["complete_receipt_path"] == GPU_COMPLETE_RECEIPT["path"]
+    assert reload["complete_receipt_file_sha256"] == GPU_COMPLETE_RECEIPT["file_sha256"]
+    assert reload["complete_receipt_sha256"] == GPU_COMPLETE_RECEIPT["receipt_sha256"]
+
+    assert all(
+        gates[name]["state"] == "unaccepted"
+        for name in ("stage", "serving_registration", "live_parity")
+    )
     assert gates["stage"]["accepted_receipt_sha256"] is None
     assert gates["serving_registration"]["accepted_receipt_sha256"] is None
     assert gates["serving_registration"]["served_model"] is None
@@ -290,10 +332,22 @@ def test_fleet_candidate_and_resource_identities_remain_fail_closed() -> None:
     assert candidate["native_checkpoint_receipt_sha256"] == (
         "sha256:af655527bcf21d441723f38d4dc0bb523fee30df47b03ff0206ddf0046ffab26"
     )
+    assert candidate["export_receipt_path"] == EXPORT_RECEIPT["path"]
+    assert candidate["export_receipt_file_sha256"] == EXPORT_RECEIPT["file_sha256"]
+    assert candidate["export_receipt_sha256"] == EXPORT_RECEIPT["receipt_sha256"]
+    assert candidate["export_payload_revision"] == PAYLOAD_MANIFEST_SHA256
+    assert candidate["cpu_layout_receipt_path"] == CPU_LAYOUT_RECEIPT["path"]
+    assert candidate["cpu_layout_receipt_file_sha256"] == CPU_LAYOUT_RECEIPT["file_sha256"]
+    assert candidate["cpu_layout_receipt_sha256"] == CPU_LAYOUT_RECEIPT["receipt_sha256"]
+    assert candidate["gpu_reload_receipt_path"] == GPU_RELOAD_RECEIPT["path"]
+    assert candidate["gpu_reload_receipt_file_sha256"] == GPU_RELOAD_RECEIPT["file_sha256"]
+    assert candidate["gpu_reload_receipt_sha256"] == GPU_RELOAD_RECEIPT["receipt_sha256"]
+    assert candidate["gpu_reload_complete_receipt_path"] == GPU_COMPLETE_RECEIPT["path"]
+    assert (
+        candidate["gpu_reload_complete_receipt_file_sha256"] == GPU_COMPLETE_RECEIPT["file_sha256"]
+    )
+    assert candidate["gpu_reload_complete_receipt_sha256"] == GPU_COMPLETE_RECEIPT["receipt_sha256"]
     for field in (
-        "export_receipt_sha256",
-        "export_payload_revision",
-        "gpu_reload_receipt_sha256",
         "stage_receipt_sha256",
         "serving_registration_receipt_sha256",
         "live_parity_receipt_sha256",
