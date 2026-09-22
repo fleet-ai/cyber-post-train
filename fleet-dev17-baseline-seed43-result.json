@@ -1,0 +1,74 @@
+{
+  "schema": "fleet_dev17_baseline_seed43_aggregate_result_v1",
+  "observed_at": "2026-09-22T08:52:57Z",
+  "scope": "Aggregate-only public receipt. It contains no task-to-result mapping, session identifiers, prompts, model output, traces, flags, or answers.",
+  "authority": {
+    "source": "PostgreSQL rollout ledger",
+    "database": "q38_dev17_s43_base_p1_v1",
+    "ledger_schema": "fleet_cyber_rollout_ledger_v3",
+    "query_transaction": "REPEATABLE READ, READ ONLY",
+    "ledger_plan_sha256": "3f9b54c97d901b147597ac2530b048ff5909f7d7baedbe73ef2052c6cc00e137"
+  },
+  "evaluation": {
+    "config_path": "configs/evaluation/qwen38-base-fleet-dev17-opencode-seed43-pass1-v1.json",
+    "config_file_sha256": "b52db3194f8682bcf88fb96049a1f3cf14afa8b3b7ab18932b0209f394d90b7c",
+    "evaluation_plan_sha256": "2cc8822ec7e3c0c5ef7cebfde9b7a7300eb03b097a4b4c6f84ec278839bbdc51",
+    "matched_protocol_file_sha256": "12ff102e82a848d760587ef0af4848e7b288ca4f5e0acfe248cd60dfe0dd17aa",
+    "matched_protocol_sha256": "85334a48a36c126a1134ab2e0ba6211e2fce5de06c4fce6bbcef5304ab9b4f4a",
+    "task_set_file_sha256": "79c834e739246da29aca9513965ecfc7032f8df7744eb2245ce0303aba1b97c5",
+    "split_file_sha256": "28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb",
+    "selection_sha256": "38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
+    "model_repository": "Qwen/Qwen3.8-27B",
+    "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "endpoint_model_id": "qwen3.8-27b",
+    "harness": "OpenCode 1.18.27",
+    "sampling_seed": 43,
+    "attempts_per_task": 1
+  },
+  "aggregate_result": {
+    "planned_tasks": 17,
+    "accepted_results": 17,
+    "valid_results": 17,
+    "technical_invalid_results": 0,
+    "passes": 2,
+    "failures": 15,
+    "partial_scores": 0,
+    "pass_rate": 0.11764705882352941,
+    "automatic_checker_results": 17,
+    "missing_automatic_checker_results": 0,
+    "distinct_automatic_checker_execution_ids": 17,
+    "missing_local_records": 0,
+    "duplicate_local_records": 0
+  },
+  "runtime_endings": {
+    "completed": 7,
+    "output_limit": 9,
+    "process_error": 1,
+    "note": "All 17 outcomes were classified as valid by the frozen ledger contract and had an automatic checker result. Runtime endings are reported separately and are not missing evaluation results."
+  },
+  "receipt_integrity": {
+    "distinct_receipt_digests": 17,
+    "missing_receipt_digests": 0,
+    "receipt_roster_canonicalization": "SHA-256 of the 17 lowercase receipt digests, sorted lexicographically, one digest per line with a final newline",
+    "receipt_roster_sha256": "7a2c57d0e37318a46825afaca2e8361b598c2673f2cdc8af8882d0c723cd565d",
+    "local_record_roster_sha256": "8e657bf3f87052d5c789c84967e3d70901bfce7653ed3b7157a2531cb5059100",
+    "automatic_checker_id_roster_sha256": "e939ea9e9167c306773c671b3b5761693453bec5c68189934890e7794a2e17bd",
+    "reviewed_reconciliation_digest": "ae1525e807eed912dd2c4af65fbff9d70d00f5c2fba8dd361408358e3ed6d9b3"
+  },
+  "cluster_identity": {
+    "job_name": "chris-q38-dev17-s43-base-p1-v1",
+    "job_uid": "6dc5320f-02f5-470d-ae83-a5dec0fe2a62",
+    "config_map_uid": "f2737bf7-9d1e-4ad1-bbd6-5977e5417bab",
+    "workload_uid": "43f91553-77ac-439d-b402-e9dafc805ff2",
+    "pod_uid": "ed4aff2f-d1e5-4273-9ba7-1e67ca88bf1e",
+    "route_uid_at_launch": "d06c0531-7181-41ad-a3fd-cd8e3e774ab9"
+  },
+  "controller_terminal_state": {
+    "state": "Failed",
+    "reason": "BackoffLimitExceeded",
+    "last_result_recorded_at": "2026-09-21T04:32:32.733570Z",
+    "job_failed_at": "2026-09-21T04:32:38Z",
+    "interpretation": "The controller ended after all 17 results were durably recorded and accepted. Its terminal state does not erase or replace the accepted evaluation records."
+  },
+  "scientific_conclusion": "This is a valid original-model baseline. It is not evidence that training improved or harmed the model because a matched trained-checkpoint result is not yet complete."
+}

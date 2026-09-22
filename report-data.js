@@ -79,10 +79,10 @@ window.REPORT_DATA = {
     ]
   },
   fleetEvaluations: {
-    mainFinding: "We have not measured a credible improvement or decline on Fleet tasks yet. Several evaluations had setup or completion problems. One saved trained-model version completed all 17 development tasks, but without an equally matched original-model run it cannot answer whether training helped.",
+    mainFinding: "The original Qwen model now has a complete, valid baseline: all 17 development-task attempts were checked, and 2 passed (11.8%). We still have not measured an improvement or decline because no trained checkpoint has completed the matching test.",
     summary: [
       ["Fair trained-versus-original comparisons", "0", "No checkpoint has both a complete trained-model result and a matching original-model result."],
-      ["Completed trained-only evaluation", "1", "One higher-rate trained version completed all 17 development tasks. It shows that the test ran, not whether training helped, because the matching original-model run is absent."],
+      ["Original-model baseline", "2 of 17", "All 17 attempts are valid and automatically checked. With one attempt per task, the pass rate is 11.8%."],
       ["Development tasks used per attempt", "17", "These are held aside for choosing a training recipe. They were not used to train the model."],
       ["Final test tasks used", "0", "The separate eight-task final test set remains untouched."]
     ],
@@ -90,8 +90,8 @@ window.REPORT_DATA = {
       {
         model: "Original Qwen3.8-27B",
         training: "No added training; this is the comparison model.",
-        status: "Incomplete",
-        conclusion: "The original-model side did not finish as the matching comparison. It cannot be used as a baseline score."
+        status: "17 of 17 valid; 2 passed (11.8%)",
+        conclusion: "This is a valid baseline for the frozen 17-task test. It does not show whether training helped because the matching trained checkpoint has not finished."
       },
       {
         model: "Fresh75 trained version (230 updates)",
@@ -119,12 +119,13 @@ window.REPORT_DATA = {
       }
     ],
     nextSteps: [
-      ["Run the original and trained models as a pair", "Use the same 17 development tasks, tool-using program, time limits, randomness settings, and automatic answer checker. The trained model itself should be the only planned difference."],
-      ["Finish both sides before looking at the comparison", "Do not replace a valid attempt or mix partial results from different attempts. Technical failures must be recorded separately instead of being counted as model failures."],
+      ["Complete the trained side of the frozen test", "The original-model side is already complete. Run one selected trained checkpoint on the same 17 development tasks with the same tools, limits, randomness settings, and automatic answer checker."],
+      ["Keep the accepted baseline fixed", "Do not rerun or replace a valid baseline attempt. Do not mix partial results from different tests. Technical failures must be recorded separately instead of being counted as model failures."],
       ["Choose a recipe on development tasks only", "Use the 17 development tasks to decide which training setup is worth testing. Keep the separate eight final tasks untouched until that choice is fixed."],
       ["Then report task-level change", "Publish aggregate pass rates, the difference for each task, and uncertainty across tasks only after the matched pair has valid automatic checking on both sides."]
     ],
     sources: [
+      ["The accepted original-model baseline result", "fleet-dev17-baseline-seed43-result.json"],
       ["The fixed 50/17/8 task split", "https://github.com/fleet-ai/cyber-post-train/blob/main/configs/data/fleet-blackbox-current-study-split-20260914-v2.json"],
       ["The matched-comparison rules", "https://github.com/fleet-ai/cyber-post-train/blob/main/configs/evaluation/qwen38-fleet-dev17-seed43-matched-protocol-v1.json"],
       ["Why early model sessions were rejected", "https://github.com/fleet-ai/cyber-post-train/blob/main/docs/evidence/qwen38-fleet-dev17-session-model-identity-rejection-20260921.json"],
