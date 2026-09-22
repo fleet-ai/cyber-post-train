@@ -1,7 +1,7 @@
 {
   "schema": "cyber_qwen38_current_sft_fleet_dev17_eval_roster_v1",
   "roster_id": "q38-current-sft-fleet-dev17-eval-roster-20260922-v1",
-  "observed_at": "2026-09-22T18:48:29Z",
+  "observed_at": "2026-09-22T19:11:48Z",
   "status": "prepared_no_launch",
   "launchable": false,
   "purpose": "Choose the newest independently accepted checkpoint from each current full-weight SFT arm for a matched Fleet dev17 evaluation, while preserving one exact accepted base control and refusing promotion, serving, or evaluation work that has not passed its own gates.",
@@ -93,29 +93,39 @@
         "rayjob_uid": "e4d1376c-5d3f-49e5-9f0c-6469cd32c753"
       },
       "selected_checkpoint": {
-        "artifact_id": "q38-teacher3k-32k-step900",
-        "optimizer_step": 900,
-        "checkpoint_path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoints/global_step_900",
-        "checkpoint_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoint_receipts/step-000900.json",
-        "checkpoint_receipt_file_sha256": "sha256:cb1933fb770c2c77adcc84db25b89a024f32df8abdb7d58cdf5f90515b2a224f",
-        "checkpoint_receipt_sha256": "sha256:f7eb50db657486f901db6b03e1a17ebf0dcd0d0124c8c7491cb5a405110e54e8",
-        "supervised_tokens": 27896516,
+        "artifact_id": "q38-teacher3k-32k-step1000",
+        "optimizer_step": 1000,
+        "checkpoint_path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoints/global_step_1000",
+        "checkpoint_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoint_receipts/step-001000.json",
+        "checkpoint_receipt_file_sha256": "sha256:378011c8f0c8908d156aaf5dffa4d8a9ffe68b10373dbd4e0eecf14a5155e934",
+        "checkpoint_receipt_sha256": "sha256:bae4b7215a6b9ebd38461555a2de02dfe822013222280ee0ca6498ad27e892b7",
+        "supervised_tokens": 31035607,
         "world_size": 8,
         "file_count": 33,
         "total_bytes": 324627486795
       },
-      "latest_observed_training_step": 991,
-      "latest_accepted_checkpoint_step": 900,
+      "latest_observed_training_step": 1004,
+      "latest_accepted_checkpoint_step": 1000,
       "newer_metric_is_not_checkpoint_evidence": true,
-      "promotion_state": "accepted_through_paused_zero_gpu_registration",
-      "promotion_evidence": "docs/evidence/qwen38-teacher3k32-step900-preservation-20260922.json",
-      "serving_model_id": "chris-q38-t3k32-s900-v1",
-      "route_state": "paused_routing_disabled_zero_pods",
+      "promotion_state": "native_checkpoint_only",
+      "serving_model_id": null,
+      "route_state": "absent",
       "live_parity_state": "not_run",
-      "eval_state": "blocked_before_candidate_config",
-      "retarget_if_accepted_before_live_parity": {
-        "optimizer_step": 1000,
-        "receipt_required": true,
+      "eval_state": "blocked_before_promotion",
+      "remaining_first_gate": "seal_export_cpu_validate_and_gpu_reload_without_training",
+      "fallback_checkpoint": {
+        "artifact_id": "q38-teacher3k-32k-step900",
+        "optimizer_step": 900,
+        "checkpoint_receipt_sha256": "sha256:f7eb50db657486f901db6b03e1a17ebf0dcd0d0124c8c7491cb5a405110e54e8",
+        "promotion_evidence": "docs/evidence/qwen38-teacher3k32-step900-preservation-20260922.json",
+        "serving_model_id": "chris-q38-t3k32-s900-v1",
+        "route_state": "paused_routing_disabled_zero_pods",
+        "selected_for_next_eval": false,
+        "reason": "superseded_by_newer_accepted_step1000_before_live_parity"
+      },
+      "retarget_before_live_parity": {
+        "current_selection_step": 1000,
+        "next_accepted_receipt_wins": true,
         "promotion_required": true,
         "resource_identities_minted": false
       }
@@ -144,7 +154,7 @@
         "file_count": 33,
         "total_bytes": 324627486795
       },
-      "latest_observed_training_step": 706,
+      "latest_observed_training_step": 721,
       "latest_accepted_checkpoint_step": 700,
       "newer_metric_is_not_checkpoint_evidence": true,
       "promotion_state": "native_checkpoint_only",
@@ -178,7 +188,7 @@
         "file_count": 33,
         "total_bytes": 324627486859
       },
-      "latest_observed_training_step": 601,
+      "latest_observed_training_step": 616,
       "latest_accepted_checkpoint_step": 600,
       "newer_metric_is_not_checkpoint_evidence": true,
       "promotion_state": "native_checkpoint_only",
@@ -213,7 +223,7 @@
         "file_count": 33,
         "total_bytes": 324627486859
       },
-      "latest_observed_training_step": 310,
+      "latest_observed_training_step": 316,
       "latest_accepted_checkpoint_step": 300,
       "newer_metric_is_not_checkpoint_evidence": true,
       "promotion_state": "native_checkpoint_only",
@@ -238,20 +248,20 @@
         "plan_sha256": "sha256:9b2e930486e199a16b9b4f6f47960f5655e803f07d2c01a89b9ed474c073fdc0"
       },
       "selected_checkpoint": {
-        "artifact_id": "q38-t3k64-b8-step270",
-        "optimizer_step": 270,
-        "checkpoint_path": "/mnt/sfs/jobs/chris-q38-t3k64-b8-v5/checkpoints/global_step_270",
-        "checkpoint_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k64-b8-v5/checkpoint_receipts/step-000270.json",
-        "checkpoint_receipt_file_sha256": "sha256:c158b44ee1810013f84926ed3fdef3d60c41356da529b61a860ac076659b6404",
-        "checkpoint_receipt_sha256": "sha256:31a4db6702a6442f92051bb27885e1f45d1bfe865ceefdd00a0a7a34be655d80",
-        "supervised_tokens": 14519237,
+        "artifact_id": "q38-t3k64-b8-step285",
+        "optimizer_step": 285,
+        "checkpoint_path": "/mnt/sfs/jobs/chris-q38-t3k64-b8-v5/checkpoints/global_step_285",
+        "checkpoint_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k64-b8-v5/checkpoint_receipts/step-000285.json",
+        "checkpoint_receipt_file_sha256": "sha256:931cbf2585e64753cf6d8ad9e9978aef84c20e8570998dde402e146b5111b03f",
+        "checkpoint_receipt_sha256": "sha256:fb0068f4d3f60ded3d3a725273343672822eeaeea718f4802edbc33a67e432d0",
+        "supervised_tokens": 15380675,
         "world_size": 8,
         "file_count": 33,
         "total_bytes": 324627486859
       },
-      "latest_observed_training_step": 282,
-      "latest_accepted_checkpoint_step": 270,
-      "newer_metric_is_not_checkpoint_evidence": true,
+      "latest_observed_training_step": 285,
+      "latest_accepted_checkpoint_step": 285,
+      "newer_metric_is_not_checkpoint_evidence": false,
       "promotion_state": "native_checkpoint_only",
       "latest_full_promotion_package_step": 225,
       "serving_model_id": null,
@@ -259,7 +269,14 @@
       "live_parity_state": "not_run",
       "eval_state": "blocked_before_promotion",
       "remaining_first_gate": "seal_export_cpu_validate_and_gpu_reload_without_training",
-      "resume_disposition": "recovery_schema_exists_but_exact_arm_gpu_reload_is_unqualified"
+      "resume_disposition": "recovery_schema_exists_but_exact_arm_gpu_reload_is_unqualified",
+      "fallback_checkpoint": {
+        "artifact_id": "q38-t3k64-b8-step270",
+        "optimizer_step": 270,
+        "checkpoint_receipt_sha256": "sha256:31a4db6702a6442f92051bb27885e1f45d1bfe865ceefdd00a0a7a34be655d80",
+        "selected_for_next_eval": false,
+        "reason": "superseded_by_newer_accepted_step285_before_promotion"
+      }
     },
     {
       "eval_priority": 6,
@@ -285,7 +302,7 @@
         "file_count": 33,
         "total_bytes": 324627486795
       },
-      "latest_observed_training_step": 131,
+      "latest_observed_training_step": 134,
       "latest_accepted_checkpoint_step": 100,
       "newer_metric_is_not_checkpoint_evidence": true,
       "promotion_state": "accepted_through_cpu_validation_gpu_reload_absent",
@@ -299,8 +316,8 @@
     }
   ],
   "capacity_snapshot": {
-    "observed_at": "2026-09-22T18:54:01Z",
-    "census_sha256": "sha256:ae29973e62008059692530375617fafa5e8ea8c65058664b8a5c87c02ccc1c09",
+    "observed_at": "2026-09-22T19:11:48Z",
+    "census_sha256": "sha256:903a5b3bca46a7819e6a77560446be38a0946e7714b488a7aceb0dba120d04e2",
     "physical_training_nodes": 6,
     "physical_training_gpus": 48,
     "queued_rl_logical_nodes": 2,
@@ -335,5 +352,5 @@
     "evaluation_sessions_created": 0,
     "webapp_writes": 0
   },
-  "sha256": "3e26ba4868fb071cd01d72e19d7ba2e4125665e336f1cfedb047d4dfd58eb8bc"
+  "sha256": "4ea5fbe53e29f1979f4fa395b04bb81137775cb00b2546272be3226b3c20cf22"
 }
