@@ -1,0 +1,103 @@
+{
+  "claims": [
+    {
+      "api_run_id": "cdd9818e-a033-4ebe-bbf3-483b41d3a680",
+      "api_run_name": "chris-q38-rlreward-prod9-cdd9818e",
+      "compressed_bundle_sha256": "sha256:69fc031d12b655ea6a103be721da8731f02c5085821e54e1a4b8ae2e346f4f31",
+      "plan_sha256": "sha256:eefaa2c033b39ee44908edc60cb0092e50ec0252ed925f098027fb68bce74e61",
+      "rayjob_uid": "66875036-ec2e-4aa6-ace5-0ac2f2c05119",
+      "request_sha256": "sha256:052ecfb2614e0a3761027b142f9c91c6fe7d09e04b90d3139674cd878279f9ce",
+      "runtime": {
+        "bundled_files": 29,
+        "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
+        "module": "training.skyrl_prod9_training",
+        "non_marker_repo_files_exact": true,
+        "plan_schema": "cyber_skyrl_prod9_training_v1"
+      },
+      "science": {
+        "checkpoint_interval": 1,
+        "compaction_enabled": true,
+        "compaction_summary_tokens": 8192,
+        "compaction_trigger_tokens": 163840,
+        "context_tokens": 262144,
+        "episode_seconds": 14400,
+        "groups": 1,
+        "learning_rate": 1e-06,
+        "max_turns": 1200,
+        "nodes": 1,
+        "response_tokens": 4194304,
+        "samples_per_prompt": 8,
+        "steps": 1
+      },
+      "state": {
+        "allocated_gpus": 0,
+        "failure_alerts": "off",
+        "suspended": true
+      }
+    },
+    {
+      "api_run_id": "a30b73e0-aff1-48c3-9f4f-a664324b3702",
+      "api_run_name": "chris-q38-rlreward-lane2-v1-a30b73e0",
+      "compressed_bundle_sha256": "sha256:857ce10f4fc3a15f4dc9810f47804a5ea74835b8a06066a2ca0f1af2a8e93eff",
+      "plan_sha256": "sha256:a6c19d0d688663c63eb7aa93eecac712e1cf1db09cc6a037d80ac5a4ed54cabd",
+      "rayjob_uid": "3a06bae8-28a2-46e5-b121-ed2014ce9507",
+      "request_sha256": "sha256:5ff8b97c121bbf18b4cc1f41a05c3e508f84e6969679068a8da5f5bd499b47d2",
+      "runtime": {
+        "bundled_files": 32,
+        "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
+        "module": "training.skyrl_lane2_training",
+        "non_marker_repo_files_exact": true,
+        "plan_schema": "cyber_skyrl_lane2_training_v1"
+      },
+      "science": {
+        "checkpoint_interval": 1,
+        "compaction_enabled": true,
+        "compaction_summary_tokens": 8192,
+        "compaction_trigger_tokens": 163840,
+        "context_tokens": 262144,
+        "episode_seconds": 14400,
+        "groups": 1,
+        "learning_rate": 1e-06,
+        "max_turns": 1200,
+        "nodes": 1,
+        "response_tokens": 4194304,
+        "samples_per_prompt": 8,
+        "steps": 1
+      },
+      "state": {
+        "allocated_gpus": 0,
+        "failure_alerts": "off",
+        "suspended": true
+      }
+    }
+  ],
+  "method": {
+    "checks": [
+      "exact RayJob name and UID",
+      "root failure-alert annotation",
+      "runtime bundle transport digest",
+      "embedded plan validation through its current compiler",
+      "exact long-context episode limits",
+      "bundled runtime source equality against repository main"
+    ],
+    "external_mutations": 0,
+    "package_marker_files_excluded_from_source_equality": [
+      "cyber_post_train/__init__.py",
+      "evals/__init__.py",
+      "evals/fleet/__init__.py",
+      "training/__init__.py"
+    ],
+    "private_rows_read": 0,
+    "raw_bundle_persisted": false
+  },
+  "observed_at": "2026-09-22T17:05:41Z",
+  "result": {
+    "episode_limit_validation": "passed",
+    "plan_validation": "passed",
+    "runtime_source_validation": "passed",
+    "safe_to_preserve_claims": true
+  },
+  "schema": "cyber_skyrl_live_bundle_read_only_qualification_v1",
+  "sha256": "sha256:91137e4a8a6e31eb2049761cfd6573d87659ca480a1b8bccadd5affb90103297",
+  "source_commit": "9d0785e188ac62b02e027cbaaa129e877e41ab72"
+}
