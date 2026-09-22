@@ -36,6 +36,9 @@ SOURCE_CLOSURE = ROOT / "configs/data/qwen38-rl-reward-canary-exact-version-evid
 STARTUP_INCIDENT = (
     ROOT / "docs/evidence/qwen38-study/2026-09-22-skyrl-fresh-wrapper-startup-failure-v1.json"
 )
+PROD10_RUN = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod-v10.json"
+PROD10_DATA = ROOT / "configs/qualification/qwen38-rl-reward-canary-data-prod-v10.json"
+PROD10_IDENTITY = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod10-identity-v1.json"
 
 
 def test_prod9_reuses_only_the_proven_miles_shape_and_qwen38_reload_gate() -> None:
@@ -181,6 +184,79 @@ def _prod9_plan() -> tuple[dict, dict, historical_direct.RailIdentity]:
     )
     plan, request = prod9_prepare._compile(run, manifest)
     return plan, request, identity
+
+
+def test_prod10_is_a_fresh_identity_on_the_exact_reviewed_prod9_rail(tmp_path: Path) -> None:
+    identity = historical_direct.load_identity(PROD10_IDENTITY)
+    run = json.loads(PROD10_RUN.read_text())
+    data = json.loads(PROD10_DATA.read_text())
+    predecessor = json.loads(
+        (ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json").read_text()
+    )
+    manifest = copy.deepcopy(predecessor)
+    manifest["name"] = identity.run_name
+    manifest["sha256"] = "sha256:" + digest(
+        {key: value for key, value in manifest.items() if key != "sha256"}
+    )
+    manifest_path = tmp_path / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest))
+
+    receipt = prod9_prepare.build(
+        manifest_path,
+        run_path=PROD10_RUN,
+        data_path=PROD10_DATA,
+        identity_path=PROD10_IDENTITY,
+    )
+    plan, request = prod9_prepare._compile(run, manifest, relative_to=PROD10_RUN.parent)
+    stage = prod9_training.stage_spec(identity, predecessor)
+    stage_job = prod9_direct.stage_job_manifest(stage, identity=identity)
+    preflight_job = prod9_direct.preflight_job_manifest(plan, identity=identity)
+
+    assert receipt["launch_authorized"] is False
+    assert receipt["private_rows_read"] is False
+    assert receipt["identity"] == identity.sealed_mapping()
+    assert receipt["inputs"]["run"]["path"] == str(PROD10_RUN.relative_to(ROOT))
+    assert receipt["inputs"]["data"]["path"] == str(PROD10_DATA.relative_to(ROOT))
+    assert receipt["inputs"]["identity"]["path"] == str(PROD10_IDENTITY.relative_to(ROOT))
+    assert identity.predecessor_run_name == "chris-q38-rlreward-prod8"
+    assert identity.predecessor_data_root.endswith("/rlreward-inputs-prod8-v1/data")
+    assert run["name"] == data["name"] == identity.run_name
+    assert run["output_root"] == identity.output_root
+    assert run["data"]["root"] == data["output"] == identity.data_root
+    assert data["limits"] == hardening.EXACT_PROD9_LIMITS
+    assert request["workers"] == 1 and request["gpus_per_worker"] == 8
+    assert request["priority_class"] == "c1" and request["failureAlerts"] is False
+    assert plan["arguments"]["compaction_enabled"] is True
+    for job in (stage_job, preflight_job):
+        assert job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+        assert (
+            job["spec"]["template"]["spec"]["containers"][0]["resources"]
+            .get("requests", {})
+            .get("nvidia.com/gpu")
+            is None
+        )
+
+    unreviewed_run = tmp_path / "run.json"
+    unreviewed_run.write_text(json.dumps(run))
+    with pytest.raises(ValueError, match="reviewed qualification JSON"):
+        prod9_prepare.build(
+            manifest_path,
+            run_path=unreviewed_run,
+            data_path=PROD10_DATA,
+            identity_path=PROD10_IDENTITY,
+        )
+    linked_run = tmp_path / "run-link.json"
+    linked_run.symlink_to(PROD10_RUN)
+    try:
+        with pytest.raises(ValueError, match="reviewed qualification JSON"):
+            prod9_prepare.build(
+                manifest_path,
+                run_path=linked_run,
+                data_path=PROD10_DATA,
+                identity_path=PROD10_IDENTITY,
+            )
+    finally:
+        linked_run.unlink()
 
 
 def _source_preview(plan: dict, request: dict) -> dict:
