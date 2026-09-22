@@ -22,10 +22,7 @@ LR30_ROUTE = ROOT / "configs/evaluation/qwen38-lr30-step76-serving-route-plan-v1
 LR30_REGISTRATION = (
     ROOT / "docs/evidence/qwen38-lr30-step76-matched-serving-registration-20260921.json"
 )
-STEP600_ROUTE = (
-    ROOT
-    / "configs/evaluation/qwen38-teacher3k32-step600-serving-route-plan-v1.json"
-)
+STEP600_ROUTE = ROOT / "configs/evaluation/qwen38-teacher3k32-step600-serving-route-plan-v1.json"
 
 
 def _base() -> dict:

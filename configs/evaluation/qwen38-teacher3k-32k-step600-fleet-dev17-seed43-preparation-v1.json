@@ -1,226 +1,248 @@
 {
-  "schema": "cyber_qwen38_teacher3k_32k_step600_fleet_dev17_seed43_preparation_v1",
-  "packet_id": "q38-t3k32-s600-dev17-s43-p1-v1",
-  "status": "blocked_not_launchable",
-  "launchable": false,
-  "prepared_against_main_commit": "6dad25c49151f085b3167dbf104a355f4b8c0192",
-  "scientific_boundary": {
-    "question": "How does the exact Teacher3K 32K step-600 checkpoint change the immutable Fleet dev17 seed-43 pass@1 result relative to the accepted Qwen3.8 base control when the task set, harness, sampling, retry treatment, and serving contract are unchanged?",
-    "evaluation_only": true,
-    "checkpoint_selected_before_candidate_outcomes": true,
-    "baseline_capability_outcomes_copied_into_this_packet": false,
-    "task_prompts_or_rollouts_accessed_by_this_preparation": false,
-    "final_test_split_access": "sealed",
-    "capability_claimed": false,
-    "intended_intervention": "model_weights_only"
-  },
-  "candidate_checkpoint": {
-    "artifact_id": "q38-teacher3k-32k-step600",
-    "status": "accepted_sealed_native_checkpoint",
-    "checkpoint_path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoints/global_step_600",
-    "optimizer_step": 600,
-    "world_size": 8,
-    "file_count": 33,
-    "total_bytes": 324627486795,
-    "supervised_tokens_at_step": 18382331,
-    "gpu_reload_verified": false,
-    "checkpoint_receipt": {
-      "path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoint_receipts/step-000600.json",
-      "file_sha256": "sha256:7d7ddbef66228fe2d9fe483605d5c7e345b04956b153bf5c5948cc7e7b62a0dd",
-      "receipt_sha256": "sha256:af655527bcf21d441723f38d4dc0bb523fee30df47b03ff0206ddf0046ffab26"
-    },
-    "seal_manifest": {
-      "schema": "cyber_skyrl_checkpoint_manifest_v1",
-      "path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoint-seals-v1/step-600.json",
-      "file_sha256": "sha256:2ac52a051db7e7c71813f387360fe0b69cee23d1a2b86f1248a1189cc48e1e6a",
-      "receipt_sha256": "sha256:6ba2ecc2e12607dbd41565ae33452abb542d13528469691136c04194f304a2ac",
-      "seal_pod": "chris-q38-t3k32-s600-seal-v1",
-      "seal_pod_uid": "278e2ec2-69e2-4b73-9082-dc6d6a9fe8c4",
-      "seal_pod_succeeded": true
-    },
-    "source_provenance": {
-      "source_config_path": "configs/runs/qwen38-teacher3k-32k-full-b8-lr3e6-v3.json",
-      "source_config_file_sha256": "sha256:f2de71872423fcdc08ba3139728daf4c2948f2e1fd88a723a128e4568209576f",
-      "source_config_introduced_commit": "6254334cd85ebb02a6c6515be6f13fb63142f3bc",
-      "source_plan_path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/.runtime/plan.json",
-      "source_plan_file_sha256": "sha256:8488f03a65e3d158a46697eefda2751736681e3a503c26ee9c39c63fb130679c",
-      "runtime_sha256": "sha256:8cb671f377d089e1303248e237f386c256b212b15e41dadc07ac49cf2695ee17",
-      "api_run_name": "chris-q38-t3k32-b8-v3-34148b91",
-      "api_run_id": "34148b91-efe7-45e3-861f-1edd1798935b",
-      "rayjob_name": "chris-q38-t3k32-b8-v3-34148b91-lkctv",
-      "rayjob_uid": "e4d1376c-5d3f-49e5-9f0c-6469cd32c753",
-      "raycluster_uid": "f919d852-d055-4cd7-bfd8-ee19349caf94",
-      "head_pod_uid": "420f30f3-6af7-4fcb-a092-5bcc055efcc7",
-      "trainer_image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4"
-    },
-    "base_model": {
-      "repository": "Qwen/Qwen3.8-27B",
-      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
-      "lock_path": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
-      "lock_file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
-      "weights_path": "configs/models/qwen38-27b-1d4bf0f2.weights.json",
-      "weights_file_sha256": "sha256:80a5e9de066e068abb012a0e9bd144676813a31042bb578226472803f8e0e84f",
-      "weights_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
-      "tokenizer_manifest_sha256": "sha256:3938a9a8172f2738fed1be44efc11e2562059269d50d3721213f44802b53b4e1",
-      "tokenizer_json_sha256": "sha256:0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
-      "chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
-    },
-    "corpus": {
-      "manifest_path": "configs/data/qwen38-teacher3k-32k-v1.manifest.json",
-      "manifest_file_sha256": "sha256:ebcf6677e51adb22f73602c210281a3f4a847c257155da6ed48cd1c6cba9f3c8",
-      "manifest_sha256": "sha256:a8d08609991d7960cdcdab826bd07c3216bfcd3aa8f6fb33ab7a5fd29648d6f5",
-      "split_manifest_sha256": "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
-      "train_parquet_sha256": "sha256:bf245db073fcd5a39ff6f90f6fc322710a3694408845bc27bfb6d9eaa6c41e0c"
-    }
-  },
   "accepted_baseline": {
-    "state": "accepted_complete",
-    "capability_outcomes_included": false,
     "accepted_cells": 17,
-    "required_cells": 17,
-    "evidence": {
-      "repository_ref": "origin/gh-pages",
-      "commit": "ac8f79e51fc322461d14f80806d1f9aa81d28e68",
-      "path": "fleet-dev17-baseline-seed43-result.json",
-      "git_blob_sha1": "9a38d01f6dfe1a84408a683fef3f9b2fc9f11c3f",
-      "file_sha256": "sha256:50158a06a9688500b0c1840ba717f7707560d49ec080d4fb32b6b56e482f98cd",
-      "schema": "fleet_dev17_baseline_seed43_aggregate_result_v1"
-    },
     "authority": {
       "database": "q38_dev17_s43_base_p1_v1",
-      "ledger_schema": "fleet_cyber_rollout_ledger_v3",
-      "ledger_plan_sha256": "sha256:3f9b54c97d901b147597ac2530b048ff5909f7d7baedbe73ef2052c6cc00e137"
+      "ledger_plan_sha256": "sha256:3f9b54c97d901b147597ac2530b048ff5909f7d7baedbe73ef2052c6cc00e137",
+      "ledger_schema": "fleet_cyber_rollout_ledger_v3"
     },
-    "receipt_integrity": {
-      "distinct_receipt_digests": 17,
-      "missing_receipt_digests": 0,
-      "receipt_roster_sha256": "sha256:7a2c57d0e37318a46825afaca2e8361b598c2673f2cdc8af8882d0c723cd565d",
-      "local_record_roster_sha256": "sha256:8e657bf3f87052d5c789c84967e3d70901bfce7653ed3b7157a2531cb5059100",
-      "automatic_checker_id_roster_sha256": "sha256:e939ea9e9167c306773c671b3b5761693453bec5c68189934890e7794a2e17bd",
-      "reviewed_reconciliation_digest": "sha256:ae1525e807eed912dd2c4af65fbff9d70d00f5c2fba8dd361408358e3ed6d9b3"
-    },
+    "capability_outcomes_included": false,
     "config": {
-      "path": "configs/evaluation/qwen38-base-fleet-dev17-opencode-seed43-pass1-v1.json",
+      "evaluation_plan_sha256": "sha256:2cc8822ec7e3c0c5ef7cebfde9b7a7300eb03b097a4b4c6f84ec278839bbdc51",
       "file_sha256": "sha256:b52db3194f8682bcf88fb96049a1f3cf14afa8b3b7ab18932b0209f394d90b7c",
-      "evaluation_plan_sha256": "sha256:2cc8822ec7e3c0c5ef7cebfde9b7a7300eb03b097a4b4c6f84ec278839bbdc51"
+      "path": "configs/evaluation/qwen38-base-fleet-dev17-opencode-seed43-pass1-v1.json"
+    },
+    "evidence": {
+      "commit": "ac8f79e51fc322461d14f80806d1f9aa81d28e68",
+      "file_sha256": "sha256:50158a06a9688500b0c1840ba717f7707560d49ec080d4fb32b6b56e482f98cd",
+      "git_blob_sha1": "9a38d01f6dfe1a84408a683fef3f9b2fc9f11c3f",
+      "path": "fleet-dev17-baseline-seed43-result.json",
+      "repository_ref": "origin/gh-pages",
+      "schema": "fleet_dev17_baseline_seed43_aggregate_result_v1"
     },
     "matched_protocol": {
-      "path": "configs/evaluation/qwen38-fleet-dev17-seed43-matched-protocol-v1.json",
       "file_sha256": "sha256:12ff102e82a848d760587ef0af4848e7b288ca4f5e0acfe248cd60dfe0dd17aa",
-      "sha256": "sha256:85334a48a36c126a1134ab2e0ba6211e2fce5de06c4fce6bbcef5304ab9b4f4a",
-      "protocol_id": "q38-dev17-seed43-matched-p1-v1"
+      "path": "configs/evaluation/qwen38-fleet-dev17-seed43-matched-protocol-v1.json",
+      "protocol_id": "q38-dev17-seed43-matched-p1-v1",
+      "sha256": "sha256:85334a48a36c126a1134ab2e0ba6211e2fce5de06c4fce6bbcef5304ab9b4f4a"
     },
     "model": {
       "repository": "Qwen/Qwen3.8-27B",
       "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
-      "session_model": "qwen/qwen3.8-27b",
-      "served_id": "qwen3.8-27b"
-    }
+      "served_id": "qwen3.8-27b",
+      "session_model": "qwen/qwen3.8-27b"
+    },
+    "receipt_integrity": {
+      "automatic_checker_id_roster_sha256": "sha256:e939ea9e9167c306773c671b3b5761693453bec5c68189934890e7794a2e17bd",
+      "distinct_receipt_digests": 17,
+      "local_record_roster_sha256": "sha256:8e657bf3f87052d5c789c84967e3d70901bfce7653ed3b7157a2531cb5059100",
+      "missing_receipt_digests": 0,
+      "receipt_roster_sha256": "sha256:7a2c57d0e37318a46825afaca2e8361b598c2673f2cdc8af8882d0c723cd565d",
+      "reviewed_reconciliation_digest": "sha256:ae1525e807eed912dd2c4af65fbff9d70d00f5c2fba8dd361408358e3ed6d9b3"
+    },
+    "required_cells": 17,
+    "state": "accepted_complete"
   },
+  "accepted_promotion_requirements": [
+    "accepted_source_preserving_step600_export_receipt",
+    "accepted_complete_export_layout_receipt",
+    "accepted_one_gpu_finite_reload_receipt",
+    "accepted_atomic_stage_receipt",
+    "accepted_serving_registration_receipt"
+  ],
+  "candidate_arm": {
+    "cpu_layout_receipt_file_sha256": "sha256:d7afc0aa51666658d4cc377f14f095bf2b81e5ad9338f519b30f2f6d162d86eb",
+    "cpu_layout_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/hf-export-step600-v1-cpu-check.json",
+    "cpu_layout_receipt_sha256": "sha256:1253403c8088c6e610ad025d573b7fe618a9a2af9ee4bbc683bb888008de74bd",
+    "evaluation_config": null,
+    "evaluation_plan_sha256": null,
+    "export_payload_revision": "sha256:adf5d8c6609ea441744eab13ed0649c22eb4ad5f95baeebdcd60880c206702a6",
+    "export_receipt_file_sha256": "sha256:93b27c9a58ec85c309ee214a8e6924754fbfdd766f9537ec68d2ac3f978d1543",
+    "export_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/hf-export-step600-v1/EXPORT.json",
+    "export_receipt_sha256": "sha256:24ea5e61ef8b6866ec72b4150f308ce90e0c07a585fd486692f4cd98e1e6ec67",
+    "gpu_reload_complete_receipt_file_sha256": "sha256:43c2b671f5f267976883be9570d1357ad467ab506b02d4d647b19c05ace69b32",
+    "gpu_reload_complete_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k32-s600-gpu-v1/COMPLETE.json",
+    "gpu_reload_complete_receipt_sha256": "sha256:780cca3069af58db4f6248c3a38a61c4c7745055f4406032e763f15ab65f7c2e",
+    "gpu_reload_receipt_file_sha256": "sha256:6ed89d240fcb97e96a596200dc6e315c82a89a68a427306be0e0ab5f622b8567",
+    "gpu_reload_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k32-s600-gpu-v1/GPU_CHECK.json",
+    "gpu_reload_receipt_sha256": "sha256:23682ab03cfdd6d5ad12563394514b75a4287334e8e05516e0a1d9dea924cb3a",
+    "live_parity_receipt_sha256": null,
+    "model_repository": "Qwen/Qwen3.8-27B",
+    "model_revision": "sha256:adf5d8c6609ea441744eab13ed0649c22eb4ad5f95baeebdcd60880c206702a6",
+    "native_checkpoint_receipt_sha256": "sha256:af655527bcf21d441723f38d4dc0bb523fee30df47b03ff0206ddf0046ffab26",
+    "served_id": null,
+    "serving_registration_receipt_file_sha256": "sha256:0c72365a51dbfbbe7bb4aedd1dd92e9678694c93b177c7c8bbdd17c06389bcc4",
+    "serving_registration_receipt_sha256": "sha256:d92a0b302013767a94df4793ef5650bc982ac5fc4de8170a92594e58e562734e",
+    "serving_route_id": "chris-q38-t3k32-s600-web-v1",
+    "serving_route_phase": "paused",
+    "serving_route_plan_file_sha256": "sha256:67d20337f8f4263110bd8fc4760d0cfb671b3474c3a8c18d8c0415ca755f3b70",
+    "serving_route_plan_path": "configs/evaluation/qwen38-teacher3k32-step600-serving-route-plan-v1.json",
+    "serving_route_plan_sha256": "sha256:a951d20a70e43117157a16f1ac7474f2180ddae4bb67e644d1fe6cca185f73d0",
+    "serving_route_uid": "6be6cfbb-33b5-42b2-9797-2eece777e3cf",
+    "session_model": null,
+    "stage_receipt_file_sha256": "sha256:9cafd196d19e82c23c46cffed3ac5ab13587d273d9135d4e52fdd40a1bf461fd",
+    "stage_receipt_path": "/models/chris-q38-t3k32-s600-v1/.fleet-acceptance.json",
+    "stage_receipt_sha256": "sha256:456c9e962420a0f653dd33ac37e0c8e6d13c1533ff26c25fdcf8188a36c62c61",
+    "staged_model_id": "chris-q38-t3k32-s600-v1",
+    "staged_model_uid": "fa404bec-3b10-4647-a078-483467d2ba7f",
+    "state": "blocked_pending_live_parity_and_evaluation_config"
+  },
+  "candidate_checkpoint": {
+    "artifact_id": "q38-teacher3k-32k-step600",
+    "base_model": {
+      "chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+      "lock_file_sha256": "sha256:f3926fe675263b25dc79c2b3881a9c463d6b7931e9d61aeb777d15efc61e35ac",
+      "lock_path": "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+      "repository": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "tokenizer_json_sha256": "sha256:0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
+      "tokenizer_manifest_sha256": "sha256:3938a9a8172f2738fed1be44efc11e2562059269d50d3721213f44802b53b4e1",
+      "weights_file_sha256": "sha256:80a5e9de066e068abb012a0e9bd144676813a31042bb578226472803f8e0e84f",
+      "weights_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
+      "weights_path": "configs/models/qwen38-27b-1d4bf0f2.weights.json"
+    },
+    "checkpoint_path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoints/global_step_600",
+    "checkpoint_receipt": {
+      "file_sha256": "sha256:7d7ddbef66228fe2d9fe483605d5c7e345b04956b153bf5c5948cc7e7b62a0dd",
+      "path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoint_receipts/step-000600.json",
+      "receipt_sha256": "sha256:af655527bcf21d441723f38d4dc0bb523fee30df47b03ff0206ddf0046ffab26"
+    },
+    "corpus": {
+      "manifest_file_sha256": "sha256:ebcf6677e51adb22f73602c210281a3f4a847c257155da6ed48cd1c6cba9f3c8",
+      "manifest_path": "configs/data/qwen38-teacher3k-32k-v1.manifest.json",
+      "manifest_sha256": "sha256:a8d08609991d7960cdcdab826bd07c3216bfcd3aa8f6fb33ab7a5fd29648d6f5",
+      "split_manifest_sha256": "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
+      "train_parquet_sha256": "sha256:bf245db073fcd5a39ff6f90f6fc322710a3694408845bc27bfb6d9eaa6c41e0c"
+    },
+    "file_count": 33,
+    "gpu_reload_verified": true,
+    "optimizer_step": 600,
+    "seal_manifest": {
+      "file_sha256": "sha256:2ac52a051db7e7c71813f387360fe0b69cee23d1a2b86f1248a1189cc48e1e6a",
+      "path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoint-seals-v1/step-600.json",
+      "receipt_sha256": "sha256:6ba2ecc2e12607dbd41565ae33452abb542d13528469691136c04194f304a2ac",
+      "schema": "cyber_skyrl_checkpoint_manifest_v1",
+      "seal_pod": "chris-q38-t3k32-s600-seal-v1",
+      "seal_pod_succeeded": true,
+      "seal_pod_uid": "278e2ec2-69e2-4b73-9082-dc6d6a9fe8c4"
+    },
+    "source_provenance": {
+      "api_run_id": "34148b91-efe7-45e3-861f-1edd1798935b",
+      "api_run_name": "chris-q38-t3k32-b8-v3-34148b91",
+      "head_pod_uid": "420f30f3-6af7-4fcb-a092-5bcc055efcc7",
+      "raycluster_uid": "f919d852-d055-4cd7-bfd8-ee19349caf94",
+      "rayjob_name": "chris-q38-t3k32-b8-v3-34148b91-lkctv",
+      "rayjob_uid": "e4d1376c-5d3f-49e5-9f0c-6469cd32c753",
+      "runtime_sha256": "sha256:8cb671f377d089e1303248e237f386c256b212b15e41dadc07ac49cf2695ee17",
+      "source_config_file_sha256": "sha256:f2de71872423fcdc08ba3139728daf4c2948f2e1fd88a723a128e4568209576f",
+      "source_config_introduced_commit": "6254334cd85ebb02a6c6515be6f13fb63142f3bc",
+      "source_config_path": "configs/runs/qwen38-teacher3k-32k-full-b8-lr3e6-v3.json",
+      "source_plan_file_sha256": "sha256:8488f03a65e3d158a46697eefda2751736681e3a503c26ee9c39c63fb130679c",
+      "source_plan_path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/.runtime/plan.json",
+      "trainer_image_digest": "sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4"
+    },
+    "status": "accepted_sealed_native_checkpoint",
+    "supervised_tokens_at_step": 18382331,
+    "total_bytes": 324627486795,
+    "world_size": 8
+  },
+  "future_root_job_contract": {
+    "api_version": "batch/v1",
+    "backoff_limit": 0,
+    "cyber-post-train.fleet.ai/create-once": "true",
+    "evaluator_gpu_request": 0,
+    "fleet.ai/failure-alerts": "off",
+    "job_configmap_workload_pod_output_database_absence_required": true,
+    "kind": "Job",
+    "priority_class": "c1",
+    "server_preview_required_before_create": true,
+    "uncertain_create_must_not_be_repeated": true
+  },
+  "launchable": false,
   "matched_protocol": {
-    "comparison_mode": "reuse_accepted_base_only_if_candidate_parity_proves_exact_match",
-    "fallback_rule": "If exact candidate export, serving, harness, or live parity cannot be proven against the accepted baseline treatment, do not compare against the historical control; prepare a newly matched base and candidate pair.",
-    "selection": {
-      "split_path": "configs/data/fleet-blackbox-current-study-split-20260914-v2.json",
-      "split_file_sha256": "sha256:28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb",
-      "task_set_path": "configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json",
-      "task_set_file_sha256": "sha256:79c834e739246da29aca9513965ecfc7032f8df7744eb2245ce0303aba1b97c5",
-      "selection_sha256": "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
-      "task_count": 17,
-      "final_test_split_access": "sealed"
-    },
-    "treatment": {
-      "harness": "opencode",
-      "harness_version": "1.18.27",
-      "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
-      "provider_adapter": "@ai-sdk/openai-compatible",
-      "context_management": "opencode_1.18.27_native_compaction_autocontinue_v2",
-      "context_window_size": 262144,
-      "compaction_headroom_tokens": 20000,
-      "max_output_tokens": 32768,
-      "max_model_requests": 600,
-      "timeout_seconds": 28800,
-      "tools": [
-        "bash",
-        "submit_report"
-      ],
-      "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
-    },
-    "images": {
-      "agent": "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92",
-      "proxy": "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
-    },
-    "sampling": {
-      "temperature": 0.6,
-      "top_p": 0.95,
-      "seed": 43
-    },
-    "pass_k": 1,
-    "concurrency_per_arm": 8,
-    "training_data_eligible": false,
-    "retry_policy": {
-      "automatic_retry": false,
-      "max_reviewed_infrastructure_retries_per_cell": 1,
-      "review_requires_score_blind_reconciliation_digest_and_proof_of_no_valid_outcome": true,
-      "decision_rule_is_arm_blind": true,
-      "valid_outcome_including_valid_zero_is_final": true,
-      "cross_arm_splicing_forbidden": true,
-      "selective_replay_forbidden": true
-    },
     "allowed_differences": [
       "candidate_model_weight_artifact",
       "candidate_served_model_binding",
       "candidate_resource_identity"
-    ]
+    ],
+    "comparison_mode": "reuse_accepted_base_only_if_candidate_parity_proves_exact_match",
+    "concurrency_per_arm": 8,
+    "fallback_rule": "If exact candidate export, serving, harness, or live parity cannot be proven against the accepted baseline treatment, do not compare against the historical control; prepare a newly matched base and candidate pair.",
+    "images": {
+      "agent": "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92",
+      "proxy": "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+    },
+    "pass_k": 1,
+    "retry_policy": {
+      "automatic_retry": false,
+      "cross_arm_splicing_forbidden": true,
+      "decision_rule_is_arm_blind": true,
+      "max_reviewed_infrastructure_retries_per_cell": 1,
+      "review_requires_score_blind_reconciliation_digest_and_proof_of_no_valid_outcome": true,
+      "selective_replay_forbidden": true,
+      "valid_outcome_including_valid_zero_is_final": true
+    },
+    "sampling": {
+      "seed": 43,
+      "temperature": 0.6,
+      "top_p": 0.95
+    },
+    "selection": {
+      "final_test_split_access": "sealed",
+      "selection_sha256": "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
+      "split_file_sha256": "sha256:28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb",
+      "split_path": "configs/data/fleet-blackbox-current-study-split-20260914-v2.json",
+      "task_count": 17,
+      "task_set_file_sha256": "sha256:79c834e739246da29aca9513965ecfc7032f8df7744eb2245ce0303aba1b97c5",
+      "task_set_path": "configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json"
+    },
+    "training_data_eligible": false,
+    "treatment": {
+      "compaction_headroom_tokens": 20000,
+      "context_management": "opencode_1.18.27_native_compaction_autocontinue_v2",
+      "context_window_size": 262144,
+      "harness": "opencode",
+      "harness_version": "1.18.27",
+      "max_model_requests": 600,
+      "max_output_tokens": 32768,
+      "provider_adapter": "@ai-sdk/openai-compatible",
+      "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+      "timeout_seconds": 28800,
+      "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+      "tools": [
+        "bash",
+        "submit_report"
+      ]
+    }
   },
-  "candidate_arm": {
-    "state": "blocked_before_evaluation_config",
-    "model_repository": "Qwen/Qwen3.8-27B",
-    "native_checkpoint_receipt_sha256": "sha256:af655527bcf21d441723f38d4dc0bb523fee30df47b03ff0206ddf0046ffab26",
-    "export_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/hf-export-step600-v1/EXPORT.json",
-    "export_receipt_file_sha256": "sha256:93b27c9a58ec85c309ee214a8e6924754fbfdd766f9537ec68d2ac3f978d1543",
-    "export_receipt_sha256": "sha256:24ea5e61ef8b6866ec72b4150f308ce90e0c07a585fd486692f4cd98e1e6ec67",
-    "export_payload_revision": "sha256:adf5d8c6609ea441744eab13ed0649c22eb4ad5f95baeebdcd60880c206702a6",
-    "cpu_layout_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/hf-export-step600-v1-cpu-check.json",
-    "cpu_layout_receipt_file_sha256": "sha256:d7afc0aa51666658d4cc377f14f095bf2b81e5ad9338f519b30f2f6d162d86eb",
-    "cpu_layout_receipt_sha256": "sha256:1253403c8088c6e610ad025d573b7fe618a9a2af9ee4bbc683bb888008de74bd",
-    "gpu_reload_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k32-s600-gpu-v1/GPU_CHECK.json",
-    "gpu_reload_receipt_file_sha256": "sha256:6ed89d240fcb97e96a596200dc6e315c82a89a68a427306be0e0ab5f622b8567",
-    "gpu_reload_receipt_sha256": "sha256:23682ab03cfdd6d5ad12563394514b75a4287334e8e05516e0a1d9dea924cb3a",
-    "gpu_reload_complete_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k32-s600-gpu-v1/COMPLETE.json",
-    "gpu_reload_complete_receipt_file_sha256": "sha256:43c2b671f5f267976883be9570d1357ad467ab506b02d4d647b19c05ace69b32",
-    "gpu_reload_complete_receipt_sha256": "sha256:780cca3069af58db4f6248c3a38a61c4c7745055f4406032e763f15ab65f7c2e",
-    "stage_receipt_sha256": null,
-    "serving_registration_receipt_sha256": null,
-    "live_parity_receipt_sha256": null,
-    "model_revision": null,
-    "session_model": null,
-    "served_id": null,
-    "evaluation_config": null,
-    "evaluation_plan_sha256": null
+  "operation": {
+    "config_maps_created": 0,
+    "databases_created": 0,
+    "evaluation_sessions_created": 0,
+    "jobs_submitted": 0,
+    "outputs_created": 0,
+    "routes_resumed_or_created": 0
   },
-  "resource_identities": {
-    "minted": false,
-    "job": null,
-    "config_map": null,
-    "database": null,
-    "output_root": null,
-    "workload": null,
-    "pod": null,
-    "reason": "New candidate resource identities are minted only after accepted export, reload, stage, serving-registration, and fresh live-parity receipts exist."
+  "packet_id": "q38-t3k32-s600-dev17-s43-p1-v1",
+  "prepared_against_main_commit": "f31d1769d76976c7da483cc19d56177d3a57741f",
+  "privacy": {
+    "credentials_included": false,
+    "private_task_mappings_included": false,
+    "prompts_rollouts_flags_answers_or_scores_included": false,
+    "raw_logs_included": false,
+    "tensor_values_read": false
   },
-  "future_root_job_contract": {
-    "api_version": "batch/v1",
-    "kind": "Job",
-    "fleet.ai/failure-alerts": "off",
-    "cyber-post-train.fleet.ai/create-once": "true",
-    "priority_class": "c1",
-    "backoff_limit": 0,
-    "evaluator_gpu_request": 0,
-    "server_preview_required_before_create": true,
-    "job_configmap_workload_pod_output_database_absence_required": true,
-    "uncertain_create_must_not_be_repeated": true
+  "promotion_evidence": {
+    "file_sha256": "sha256:ae6c24c5b1e6103c107adf1a9762b35c601d4b1c84a9d2afb1b40cf824f8d7a1",
+    "path": "docs/evidence/qwen38-teacher3k32-step600-promotion-20260922.json",
+    "sha256": "sha256:a64e02e172c14e5a9ff0a8b16579b065a339c3f3193a61fdad5acac128418e5c"
   },
+  "remaining_before_launch_packet": [
+    "accepted_candidate_to_baseline_live_parity_receipt",
+    "compiled_candidate_config_proving_exact_seed43_task_harness_sampling_and_retry_parity",
+    "fresh_duplicate_census_for_new_job_configmap_database_output_and_workload_identities",
+    "double_server_dry_run_proving_the_exact_root_failure_alert_annotation"
+  ],
   "required_before_launch_packet": [
     "accepted_source_preserving_step600_export_receipt",
     "accepted_complete_export_layout_receipt",
@@ -232,20 +254,27 @@
     "fresh_duplicate_census_for_new_job_configmap_database_output_and_workload_identities",
     "double_server_dry_run_proving_the_exact_root_failure_alert_annotation"
   ],
-  "operation": {
-    "jobs_submitted": 0,
-    "config_maps_created": 0,
-    "databases_created": 0,
-    "outputs_created": 0,
-    "routes_resumed_or_created": 0,
-    "evaluation_sessions_created": 0
+  "resource_identities": {
+    "config_map": null,
+    "database": null,
+    "job": null,
+    "minted": false,
+    "output_root": null,
+    "pod": null,
+    "reason": "New candidate evaluation resource identities are minted only after fresh live parity, the exact candidate config, duplicate census, and double server dry-run are accepted.",
+    "workload": null
   },
-  "privacy": {
-    "credentials_included": false,
-    "prompts_rollouts_flags_answers_or_scores_included": false,
-    "private_task_mappings_included": false,
-    "raw_logs_included": false,
-    "tensor_values_read": false
+  "schema": "cyber_qwen38_teacher3k_32k_step600_fleet_dev17_seed43_preparation_v1",
+  "scientific_boundary": {
+    "baseline_capability_outcomes_copied_into_this_packet": false,
+    "capability_claimed": false,
+    "checkpoint_selected_before_candidate_outcomes": true,
+    "evaluation_only": true,
+    "final_test_split_access": "sealed",
+    "intended_intervention": "model_weights_only",
+    "question": "How does the exact Teacher3K 32K step-600 checkpoint change the immutable Fleet dev17 seed-43 pass@1 result relative to the accepted Qwen3.8 base control when the task set, harness, sampling, retry treatment, and serving contract are unchanged?",
+    "task_prompts_or_rollouts_accessed_by_this_preparation": false
   },
-  "sha256": "f3e27ec3b042d05edccef55b0ffb97e56effe66def2be6cf68aeb99d81e86f91"
+  "sha256": "e2b99adf1b5d622887bd27749a9b3d0df0d46482614f0aed5686cfe759d8fbb2",
+  "status": "blocked_not_launchable"
 }

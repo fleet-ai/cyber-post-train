@@ -23,6 +23,8 @@ CORPUS = ROOT / "configs/data/qwen38-teacher3k-32k-v1.manifest.json"
 MODEL_LOCK = ROOT / "configs/models/qwen38-27b-1d4bf0f2.lock.json"
 MODEL_WEIGHTS = ROOT / "configs/models/qwen38-27b-1d4bf0f2.weights.json"
 DEFERRED_SCORE = ROOT / "evals/webexploitbench/tensorlake/deferred_score.py"
+ROUTE_PLAN = EVAL / "qwen38-teacher3k32-step600-serving-route-plan-v1.json"
+PROMOTION_EVIDENCE = ROOT / "docs/evidence/qwen38-teacher3k32-step600-promotion-20260922.json"
 
 CANONICAL_CHECKPOINT = "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoints/global_step_600"
 REJECTED_CHECKPOINT = "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoints/step-600"
@@ -110,7 +112,7 @@ def test_both_packets_bind_the_same_exact_sealed_checkpoint() -> None:
         assert checkpoint["file_count"] == 33
         assert checkpoint["total_bytes"] == 324627486795
         assert checkpoint["supervised_tokens_at_step"] == 18382331
-        assert checkpoint["gpu_reload_verified"] is False
+        assert checkpoint["gpu_reload_verified"] is True
         assert checkpoint["checkpoint_receipt"] == {
             "path": ("/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/checkpoint_receipts/step-000600.json"),
             "file_sha256": (
@@ -216,7 +218,7 @@ def test_wbe_packet_matches_the_exact_recovering_q8_score_free_protocol() -> Non
 def test_wbe_collection_and_gpt_scoring_remain_separate_and_fail_closed() -> None:
     packet = read(WBE)
     collection = packet["score_free_collection"]
-    assert collection["state"] == "blocked_pending_candidate_promotion_receipts"
+    assert collection["state"] == "blocked_pending_live_parity_and_candidate_collection_plan"
     assert collection["judge_identity_in_collection"] is False
     assert collection["judge_calls_during_collection"] == 0
     assert collection["candidate_launch_plan"] is None
@@ -237,7 +239,7 @@ def test_wbe_collection_and_gpt_scoring_remain_separate_and_fail_closed() -> Non
     assert score["recollection_after_scoring_failure"] is False
 
 
-def test_wbe_binds_accepted_export_reload_and_keeps_later_gates_fail_closed() -> None:
+def test_wbe_binds_accepted_promotion_through_paused_serving() -> None:
     gates = read(WBE)["promotion_gates"]
     assert set(gates) == {
         "export",
@@ -266,15 +268,49 @@ def test_wbe_binds_accepted_export_reload_and_keeps_later_gates_fail_closed() ->
     assert reload["complete_receipt_file_sha256"] == GPU_COMPLETE_RECEIPT["file_sha256"]
     assert reload["complete_receipt_sha256"] == GPU_COMPLETE_RECEIPT["receipt_sha256"]
 
-    assert all(
-        gates[name]["state"] == "unaccepted"
-        for name in ("stage", "serving_registration", "live_parity")
+    stage = gates["stage"]
+    assert stage["state"] == "accepted"
+    assert stage["immutable_path"] == "/models/chris-q38-t3k32-s600-v1"
+    assert stage["accepted_receipt_sha256"] == (
+        "sha256:456c9e962420a0f653dd33ac37e0c8e6d13c1533ff26c25fdcf8188a36c62c61"
     )
-    assert gates["stage"]["accepted_receipt_sha256"] is None
-    assert gates["serving_registration"]["accepted_receipt_sha256"] is None
-    assert gates["serving_registration"]["served_model"] is None
-    assert gates["serving_registration"]["model_revision"] is None
+    assert stage["promotion_evidence_file_sha256"] == file_sha256(PROMOTION_EVIDENCE)
+
+    serving = gates["serving_registration"]
+    assert serving["state"] == "accepted_paused_zero_gpu"
+    assert serving["matched_route_id"] == "chris-q38-t3k32-s600-web-v1"
+    assert serving["route_plan_file_sha256"] == file_sha256(ROUTE_PLAN)
+    assert serving["accepted_receipt_sha256"] == (
+        "sha256:d92a0b302013767a94df4793ef5650bc982ac5fc4de8170a92594e58e562734e"
+    )
+    assert serving["model_revision"] == PAYLOAD_MANIFEST_SHA256
+    assert serving["current_phase"] == "paused"
+    assert serving["current_ready_replicas"] == serving["current_active_pods"] == 0
+    assert serving["current_routing_enabled"] is False
+
+    assert gates["live_parity"]["state"] == "unaccepted"
     assert gates["live_parity"]["accepted_receipt_sha256"] is None
+    assert gates["live_parity"]["candidate_route_ready_observed"] is False
+
+
+def test_promotion_evidence_is_self_digesting_and_records_no_live_parity() -> None:
+    evidence = read(PROMOTION_EVIDENCE)
+    assert_self_digest(evidence)
+    assert evidence["stage"]["source_registration"]["phase"] == "paused"
+    assert evidence["stage"]["source_registration"]["active_pods"] == 0
+    assert evidence["serving_route"]["current_phase"] == "paused"
+    assert evidence["serving_route"]["current_active_pods"] == 0
+    reversal = evidence["serving_route"]["resume_reversal"]
+    assert reversal["pending_pod_scheduled"] is False
+    assert reversal["pending_pod_ready"] is False
+    assert reversal["former_pod_absent_by_name_and_uid"] is True
+    assert reversal["gpu_node_consumed"] is False
+    assert evidence["live_parity"]["state"] == "unaccepted"
+    assert evidence["evaluation"] == {
+        "webexploitbench_launched": False,
+        "fleet_heldout_launched": False,
+        "capability_claimed": False,
+    }
 
 
 def test_fleet_packet_reuses_the_exact_accepted_seed43_protocol() -> None:
@@ -328,7 +364,7 @@ def test_fleet_packet_reuses_the_exact_accepted_seed43_protocol() -> None:
 def test_fleet_candidate_and_resource_identities_remain_fail_closed() -> None:
     packet = read(FLEET)
     candidate = packet["candidate_arm"]
-    assert candidate["state"] == "blocked_before_evaluation_config"
+    assert candidate["state"] == "blocked_pending_live_parity_and_evaluation_config"
     assert candidate["native_checkpoint_receipt_sha256"] == (
         "sha256:af655527bcf21d441723f38d4dc0bb523fee30df47b03ff0206ddf0046ffab26"
     )
@@ -347,11 +383,18 @@ def test_fleet_candidate_and_resource_identities_remain_fail_closed() -> None:
         candidate["gpu_reload_complete_receipt_file_sha256"] == GPU_COMPLETE_RECEIPT["file_sha256"]
     )
     assert candidate["gpu_reload_complete_receipt_sha256"] == GPU_COMPLETE_RECEIPT["receipt_sha256"]
+    assert candidate["stage_receipt_sha256"] == (
+        "sha256:456c9e962420a0f653dd33ac37e0c8e6d13c1533ff26c25fdcf8188a36c62c61"
+    )
+    assert candidate["serving_registration_receipt_sha256"] == (
+        "sha256:d92a0b302013767a94df4793ef5650bc982ac5fc4de8170a92594e58e562734e"
+    )
+    assert candidate["serving_route_plan_file_sha256"] == file_sha256(ROUTE_PLAN)
+    assert candidate["serving_route_id"] == "chris-q38-t3k32-s600-web-v1"
+    assert candidate["serving_route_phase"] == "paused"
+    assert candidate["model_revision"] == PAYLOAD_MANIFEST_SHA256
     for field in (
-        "stage_receipt_sha256",
-        "serving_registration_receipt_sha256",
         "live_parity_receipt_sha256",
-        "model_revision",
         "session_model",
         "served_id",
         "evaluation_config",
