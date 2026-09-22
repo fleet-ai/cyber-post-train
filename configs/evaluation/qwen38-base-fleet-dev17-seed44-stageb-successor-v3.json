@@ -1,0 +1,53 @@
+{
+  "schema": "qwen38-fleet-dev17-seed44-base-stageb-successor-v2",
+  "status": "source_prepared_not_launchable",
+  "launchable": false,
+  "prior_successor_plan": {
+    "path": "configs/evaluation/qwen38-base-fleet-dev17-seed44-stageb-successor-v2.json",
+    "file_sha256": "sha256:bff3ced422bbf8d16f7a04faf9df17acd88602ab0b25819303debdf3235ac1a6",
+    "sha256": "sha256:b6fdbb9d86cb7c54e283d530ba9ad6806431469ca8644bd0016711325005f71b"
+  },
+  "failure_evidence": {
+    "path": "docs/evidence/qwen38-base-fleet-dev17-seed44-stageb-v2-worker-id-failure-20260921.json",
+    "file_sha256": "sha256:7636d731aa91515c95bf2ffc022fdef31010d19e4a271a5f78d5bcff5a7ca488",
+    "receipt_sha256": "sha256:62e26ea344b1ba75500130d78d03219ab5f55050cec292463219b13498160f5c"
+  },
+  "stage_overrides": {
+    "job_name": "chris-q38-s44-base-reroll-v3",
+    "config_map_name": "chris-q38-s44-base-reroll-code-v3",
+    "secret_name": "chris-q38-s44-base-reroll-intent-v3",
+    "output_root": "/mnt/sfs/jobs/chris-q38-s44-base-reroll-v3",
+    "worker_id": "q38-s44-base-repair-v3",
+    "run_script_sha256": "280e4a9ee0435bed537ee0f2b3d94425453db27e45b95f3549c44955c5af60d4"
+  },
+  "contract": {
+    "selected_cell_count": 2,
+    "infrastructure_successor_generation": 3,
+    "scientific_execution_generation": 2,
+    "scientific_generation_two_was_never_opened": true,
+    "accepted_cell_replay_count": 0,
+    "stored_session_rescore_count": 0,
+    "stored_session_regeneration_count": 0,
+    "final_eight_task_set_accessed": false,
+    "identical_private_intent_required": true,
+    "distinct_deterministic_fix": "runtime_worker_name_grammar",
+    "same_signature_successor_allowed": false
+  },
+  "live_evidence_binding": {
+    "kubernetes_context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+    "namespace": "fleet-train-jobs",
+    "assert_before_every_live_read": true,
+    "object_absence_valid_only_after_exact_binding_assertion": true
+  },
+  "operation": {
+    "jobs_created": 0,
+    "config_maps_created": 0,
+    "secrets_created": 0,
+    "database_cells_changed": 0,
+    "outputs_created": 0,
+    "model_generation_calls": 0,
+    "scoring_calls": 0,
+    "accepted_cell_replays": 0
+  },
+  "sha256": "sha256:9a0c8e74ff59633b210dc1f91a8bcdc29215fa4b8e4f16e1c11f4e02dc04aeb0"
+}

@@ -1,0 +1,159 @@
+{
+  "schema": "qwen38_fleet_dev17_seed44_stageb_v2_worker_id_failure_v1",
+  "observed_at": "2026-09-22T00:03:10Z",
+  "live_evidence_binding": {
+    "kubernetes_context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+    "namespace": "fleet-train-jobs",
+    "context_asserted_before_every_live_read": true
+  },
+  "failed_successor": {
+    "plan_sha256": "sha256:b6fdbb9d86cb7c54e283d530ba9ad6806431469ca8644bd0016711325005f71b",
+    "job": {
+      "name": "chris-q38-s44-base-reroll-v2",
+      "uid": "4c67e114-7095-4aca-9b35-d2a69237a798",
+      "condition": "Failed",
+      "reason": "BackoffLimitExceeded",
+      "finished_at": "2026-09-21T23:49:40Z",
+      "root_failure_alert_annotation": "off",
+      "backoff_limit": 0
+    },
+    "pod": {
+      "name": "chris-q38-s44-base-reroll-v2-j4fpn",
+      "uid": "cd886f64-33fb-4f07-b5ec-3be683e78101",
+      "phase": "Failed",
+      "repair_started_at": "2026-09-21T23:49:26Z",
+      "repair_finished_at": "2026-09-21T23:49:33Z",
+      "repair_restart_count": 0,
+      "repair_exit_code": 1,
+      "dind_restart_count": 0,
+      "dind_exit_code": 0
+    },
+    "config_map": {
+      "name": "chris-q38-s44-base-reroll-code-v2",
+      "uid": "73863333-0df0-427d-82bb-c9e191b87935"
+    },
+    "secret": {
+      "name": "chris-q38-s44-base-reroll-intent-v2",
+      "uid": "e2f2c1e7-7aa8-4845-a40e-9ffd645d8f4e"
+    },
+    "workload": {
+      "name": "job-chris-q38-s44-base-reroll-v2-aac02",
+      "uid": "7c65ed27-8bc4-4f1d-bab1-f47a66cc654e",
+      "finished": true,
+      "reason": "Failed"
+    },
+    "controller_terminal": {
+      "schema_version": "fleet-reviewed-recovery-controller-terminal-v2",
+      "accepted": false,
+      "controller_failure_code": "reviewed_recovery_v2_startup_failed",
+      "canonical_json_sha256": "sha256:65732400dd862d19ff8544d5ae32a14778735186c59939673a24a797d0eadceb",
+      "scores_included": false,
+      "prompts_or_traces_included": false,
+      "private_cell_task_session_or_trace_identifiers_included": false
+    }
+  },
+  "failure_signature": {
+    "stage": "evaluate._name_before_output_root_or_intent_apply",
+    "error_type": "valueerror",
+    "error_message_sha256": "sha256:29e821e19509a7cbc6ea4172046d2545652bca56372d67009057137a1ededaa1",
+    "error_message_plaintext": "expected an owner-specific lowercase name",
+    "worker_id": "q38_s44_base_repair_v2",
+    "worker_id_contract": "[a-z0-9][a-z0-9-]{0,40}",
+    "worker_id_contract_satisfied": false,
+    "same_as_predecessor_v1": true,
+    "docker_image_staging_started": false
+  },
+  "diagnostic": {
+    "pod_name": "chris-q38-s44-base-reroll-v2-diagnostic-v1",
+    "pod_uid": "ebc7a115-1be7-412a-86fa-c6fc3de7452b",
+    "config_map_name": "chris-q38-s44-base-reroll-v2-diagnostic-code-v1",
+    "config_map_uid": "5aad467b-77d1-4948-ac88-bbcfcf04f607",
+    "phase": "Failed",
+    "restart_count": 0,
+    "exit_code": 1,
+    "failure_stage": "entry",
+    "error_type": "valueerror",
+    "error_message_sha256": "sha256:29e821e19509a7cbc6ea4172046d2545652bca56372d67009057137a1ededaa1",
+    "output_root_created": false,
+    "ledger_mutations": 0,
+    "model_generation_calls": 0,
+    "scoring_calls": 0,
+    "private_content_included": false,
+    "objects_released_after_terminal_evidence": true
+  },
+  "postfailure_preflight": {
+    "pod_name": "chris-q38-s44-base-reroll-v2-postfailure-v2",
+    "pod_uid": "a1816752-9f86-49a6-997b-a1243a9f8113",
+    "config_map_name": "chris-q38-s44-base-reroll-v2-postfailure-code-v2",
+    "config_map_uid": "7045b2bc-da2d-42e8-9ae7-6a1b3fb8b92a",
+    "phase": "Succeeded",
+    "restart_count": 0,
+    "exit_code": 0,
+    "receipt_sha256": "sha256:e012b8fe162f378c85bbf4976629f20344cc056c4c121be51bc05e1da842aed7",
+    "ledger_census": {
+      "total": 17,
+      "accepted": 15,
+      "retry_review": 2,
+      "local_results": 15,
+      "active": 0,
+      "stale_active": 0
+    },
+    "selected_roster": {
+      "count": 2,
+      "retry_review": 2,
+      "retry_count_zero": 2,
+      "reconciliation_digest_null": 2,
+      "session_id_null": 2,
+      "receipt_digest_null": 2,
+      "local_result_count": 0,
+      "matching_recovery_apply_receipt_count": 0,
+      "exact_authoritative_session_count": 0,
+      "model_execution_artifact_count": 0,
+      "scoring_artifact_count": 0
+    },
+    "predecessor_v1_output_absent": true,
+    "failed_successor_v2_output_absent": true,
+    "route_ready": true,
+    "ledger_mutations": 0,
+    "model_generation_calls": 0,
+    "scoring_calls": 0,
+    "accepted_cell_replays": 0,
+    "private_content_included": false,
+    "objects_released_after_terminal_evidence": true
+  },
+  "resources": {
+    "evaluator_gpu_request": 0,
+    "evaluator_pod_terminal": true,
+    "workload_finished": true,
+    "active_gpu_allocation": 0,
+    "diagnostic_objects_released": true
+  },
+  "corrected_successor_contract": {
+    "infrastructure_successor_generation": 3,
+    "scientific_execution_generation": 2,
+    "scientific_generation_two_was_never_opened": true,
+    "job_name": "chris-q38-s44-base-reroll-v3",
+    "config_map_name": "chris-q38-s44-base-reroll-code-v3",
+    "secret_name": "chris-q38-s44-base-reroll-intent-v3",
+    "output_root": "/mnt/sfs/jobs/chris-q38-s44-base-reroll-v3",
+    "worker_id": "q38-s44-base-repair-v3",
+    "worker_id_contract_satisfied": true,
+    "same_signature_replay_allowed": false,
+    "distinct_deterministic_fix_required": true
+  },
+  "classification": {
+    "deterministic_repository_owned_source_defect": true,
+    "prior_attempts_crossed_mutation_boundary": false,
+    "prior_attempts_applied_intent": false,
+    "prior_attempts_started_model_generation": false,
+    "prior_attempts_started_scoring": false,
+    "corrected_successor_allowed_after_review": true,
+    "final_eight_task_set_accessed": false
+  },
+  "privacy": {
+    "scores_included": false,
+    "prompts_responses_flags_rewards_or_traces_included": false,
+    "cell_task_session_or_trace_identifiers_included": false
+  },
+  "receipt_sha256": "sha256:62e26ea344b1ba75500130d78d03219ab5f55050cec292463219b13498160f5c"
+}
