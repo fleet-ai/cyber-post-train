@@ -576,7 +576,6 @@ def test_prod9_fresh_direct_renderer_and_cpu_preflight_are_alert_safe() -> None:
         "--receipt",
         "/dev/termination-log",
     ]
-    assert prod9_direct.live_create_is_available() is True
     assert not hasattr(hardening, "create_once")
 
     cpu_rendered = _cpu_render(cpu_job)
@@ -609,7 +608,6 @@ def test_prod9_fresh_direct_renderer_and_cpu_preflight_are_alert_safe() -> None:
     retrying_preview["manifest_yaml"] = yaml.safe_dump(retrying_manifest)
     with pytest.raises(JobsError, match="execution changed"):
         prod9_direct.manifest(plan, request, retrying_preview, identity=identity)
-
     root_preview = copy.deepcopy(preview)
     root_manifest = yaml.safe_load(root_preview["manifest_yaml"])
     root_manifest["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]["containers"][0][
@@ -667,6 +665,31 @@ def test_prod9_fresh_direct_renderer_and_cpu_preflight_are_alert_safe() -> None:
             context=prod9_direct.PROD_CONTEXT,
             identity=identity,
         )
+
+
+def test_prod9_live_create_requires_the_operational_sfs_root(tmp_path: Path, monkeypatch) -> None:
+    assert (
+        Path("/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/prod9-create-once-v1")
+        == hardening.CREATE_ONCE_ROOT
+    )
+    root = tmp_path.resolve() / "prod9-create-once-v1"
+    owner = tmp_path.stat()
+    monkeypatch.setattr(hardening, "CREATE_ONCE_ROOT", root)
+    monkeypatch.setattr(prod9_direct, "RUNTIME_UID", owner.st_uid)
+    monkeypatch.setattr(prod9_direct, "RUNTIME_GID", owner.st_gid)
+    monkeypatch.setattr(prod9_direct.os, "geteuid", lambda: owner.st_uid)
+    monkeypatch.setattr(prod9_direct.os, "getegid", lambda: owner.st_gid)
+
+    assert prod9_direct.live_create_is_available() is False
+
+    root.mkdir(mode=0o700)
+    assert prod9_direct.live_create_is_available() is True
+
+    root.rmdir()
+    target = tmp_path / "target"
+    target.mkdir(mode=0o700)
+    root.symlink_to(target, target_is_directory=True)
+    assert prod9_direct.live_create_is_available() is False
 
 
 def test_prod9_preflight_replaces_the_preexisting_termination_file(

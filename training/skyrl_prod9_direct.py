@@ -17,6 +17,7 @@ import copy
 import json
 import os
 import re
+import stat
 import subprocess
 from collections.abc import Callable
 from datetime import UTC, datetime
@@ -1970,5 +1971,28 @@ def create_once(
 
 
 def live_create_is_available() -> bool:
-    """The fresh prod9 one-submit rail is present; callers still need live gates."""
-    return True
+    """Return whether this process can use the canonical prod9 journal root.
+
+    Importing the one-submit rail is not operational readiness.  The caller
+    must be the pinned trainer identity and must see the real, canonical,
+    owner-writable directory on SFS.  In particular, an operator laptop with
+    no ``/mnt/sfs`` mount must report ``False``.
+    """
+    root = hardening.CREATE_ONCE_ROOT
+    try:
+        identity = root.lstat()
+        canonical = root.resolve(strict=True)
+    except OSError:
+        return False
+    mode = stat.S_IMODE(identity.st_mode)
+    return bool(
+        (os.geteuid(), os.getegid()) == (RUNTIME_UID, RUNTIME_GID)
+        and stat.S_ISDIR(identity.st_mode)
+        and not root.is_symlink()
+        and canonical == root
+        and (identity.st_uid, identity.st_gid) == (RUNTIME_UID, RUNTIME_GID)
+        and mode & stat.S_IRUSR
+        and mode & stat.S_IWUSR
+        and mode & stat.S_IXUSR
+        and os.access(root, os.R_OK | os.W_OK | os.X_OK)
+    )
