@@ -46,11 +46,20 @@ def _identity(plan: dict[str, Any]) -> tuple[str, str]:
     return name, preflight
 
 
-def manifest(plan: dict[str, Any], request: dict[str, Any], preview: dict[str, Any]) -> dict:
+def manifest(
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    preview: dict[str, Any],
+    *,
+    image_identity_receipt: dict[str, Any] | None = None,
+) -> dict:
     """Accept the exact current Jobs API preview without transforming it."""
     name, _ = _identity(plan)
     if training.job_request(plan) != request:
         raise JobsError("lane2 plan/request identity changed")
+    bound_preview, runtime_identity_source = shared._runtime_bound_preview(
+        request, preview, image_identity_receipt
+    )
     source = shared._source(preview)
     placeholder = name + "-00000000"
     metadata = source.get("metadata", {})
@@ -73,14 +82,14 @@ def manifest(plan: dict[str, Any], request: dict[str, Any], preview: dict[str, A
         raise JobsError(
             "lane2 Jobs API preview lacks the exact root alert-off or admission contract"
         )
-    training.validate_preview(plan, request, preview)
+    training.validate_preview(plan, request, bound_preview)
     spec = source["spec"]
     if (
         spec.get("entrypoint") != request["command"]
         or spec.get("suspend") is not True
         or spec.get("shutdownAfterJobFinishes") is not True
         or spec.get("submissionMode") != "HTTPMode"
-        or spec.get("backoffLimit") != 0
+        or spec.get("backoffLimit") not in (None, 0)
     ):
         raise JobsError("lane2 Jobs preview execution changed")
     cluster = spec.get("rayClusterSpec", {})
@@ -95,7 +104,10 @@ def manifest(plan: dict[str, Any], request: dict[str, Any], preview: dict[str, A
     secret_names = [row.get("secretRef", {}).get("name") for row in container.get("envFrom", [])]
     if secret_names != ["fleet-api", "wandb-api", generated_secret]:
         raise JobsError("lane2 Jobs preview secret bindings changed")
-    if container.get("securityContext") != shared._runtime_context():
+    if (
+        container.get("securityContext") != shared._runtime_context()
+        and runtime_identity_source != "exact_image_default_receipt"
+    ):
         raise JobsError("lane2 Jobs preview runtime security context changed")
     if container.get("terminationMessagePath", "/dev/termination-log") != ("/dev/termination-log"):
         raise JobsError("lane2 Jobs preview termination receipt path changed")
@@ -110,8 +122,14 @@ def manifest(plan: dict[str, Any], request: dict[str, Any], preview: dict[str, A
     return source
 
 
-def packet(plan: dict, request: dict, preview: dict) -> dict:
-    value = manifest(plan, request, preview)
+def packet(
+    plan: dict,
+    request: dict,
+    preview: dict,
+    *,
+    image_identity_receipt: dict[str, Any] | None = None,
+) -> dict:
+    value = manifest(plan, request, preview, image_identity_receipt=image_identity_receipt)
     body = {
         "schema": PACKET_SCHEMA,
         "plan_sha256": digest(plan),
@@ -253,8 +271,14 @@ def validate_server_preview(
     rendered: dict,
     *,
     context: str,
+    image_identity_receipt: dict[str, Any] | None = None,
 ) -> dict:
-    if expected != manifest(plan, request, source_preview):
+    if expected != manifest(
+        plan,
+        request,
+        source_preview,
+        image_identity_receipt=image_identity_receipt,
+    ):
         raise JobsError("lane2 direct packet changed")
     if (
         context not in {DEV_CONTEXT, PROD_CONTEXT}

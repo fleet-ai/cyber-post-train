@@ -312,7 +312,7 @@
       },
       "prod9_direct_rail": {
         "path": "../../training/skyrl_prod9_direct.py",
-        "file_sha256": "sha256:d35eb5e337234b5d8eacc62c3e2e148c803242c31439446356775dec5f594ffc",
+        "file_sha256": "sha256:779ad241f78e8e525e13b081b1917bcb0f62f6c4dae8bfaddc8061b0a6a37f6b",
         "symbols": [
           "manifest",
           "stage_job_manifest",
@@ -470,5 +470,5 @@
       "incident_evidence_self_sha256": "sha256:c45f12a8fa799900053a1bd7b1e33ff26e89d517ae552188bda0e66cf675ca2d"
     }
   },
-  "sha256": "sha256:9f98c63a8fd5e421de2699076b1a45dfc2fcece8de0a220a9560338e21052bbf"
+  "sha256": "sha256:b83882a7d4cd14009d07cf76f06e1a63db166198c3b96494fcbea177b388950c"
 }
