@@ -62,21 +62,87 @@ def gpu_container(name: str, gpus: int, *, restartable: bool = False) -> dict:
     return value
 
 
-def model(name: str, *, active: int, phase: str = "ready") -> dict:
+def model(
+    name: str,
+    *,
+    active: int,
+    phase: str = "ready",
+    desired_state: str | None = None,
+    generation: int = 1,
+    observed_generation: int = 1,
+    gpus: int = 8,
+) -> dict:
     return {
         "metadata": {
             "name": name,
             "namespace": "inference",
             "uid": "model-" + name,
             "resourceVersion": "20",
+            "generation": generation,
         },
-        "spec": {"desiredState": "serving" if active else "paused"},
+        "spec": {
+            "desiredState": desired_state or ("serving" if active else "paused"),
+            "resources": {
+                "requests": {"nvidia.com/gpu": gpus},
+                "limits": {"nvidia.com/gpu": gpus},
+            },
+            "scaling": {"minReplicas": 0, "replicas": 1},
+        },
         "status": {
             "phase": phase,
             "activePods": active,
             "readyReplicas": active,
-            "observedGeneration": 1,
+            "observedGeneration": observed_generation,
         },
+    }
+
+
+def rayjob(
+    name: str,
+    *,
+    run_name: str | None = None,
+    uid: str = "rayjob-uid",
+    gpus: int = 8,
+) -> dict:
+    return {
+        "metadata": {
+            "name": name,
+            "namespace": "fleet-train-jobs",
+            "uid": uid,
+            "resourceVersion": "30",
+            "labels": {"fleet.ai/run-name": run_name or name},
+        },
+        "spec": {
+            "suspend": True,
+            "rayClusterSpec": {
+                "headGroupSpec": {
+                    "template": {"spec": {"containers": [gpu_container("head", gpus)]}}
+                },
+                "workerGroupSpecs": [],
+            },
+        },
+        "status": {},
+    }
+
+
+def workload(name: str, *, owner: str, owner_uid: str = "rayjob-uid", gpus: int = 8) -> dict:
+    return {
+        "metadata": {
+            "name": name,
+            "namespace": "fleet-train-jobs",
+            "uid": "workload-uid",
+            "resourceVersion": "40",
+            "ownerReferences": [{"kind": "RayJob", "name": owner, "uid": owner_uid}],
+        },
+        "spec": {
+            "podSets": [
+                {
+                    "count": 1,
+                    "template": {"spec": {"containers": [gpu_container("head", gpus)]}},
+                }
+            ]
+        },
+        "status": {},
     }
 
 
@@ -163,6 +229,136 @@ def test_projected_create_fails_closed_above_eight_nodes() -> None:
     assert "projected GPUs 72 exceed limit 64" in receipt["problems"]
 
 
+def test_pending_unscheduled_pod_occupies_capacity_before_a_new_create() -> None:
+    pods = {
+        "items": [
+            *[
+                pod(
+                    f"chris-q38-running-{index}",
+                    namespace="fleet-train-jobs",
+                    uid=f"running-{index}",
+                    node=f"node-{index}",
+                    labels={"fleet.ai/run-name": f"chris-q38-running-{index}"},
+                )
+                for index in range(7)
+            ],
+            pod(
+                "chris-q38-queued",
+                namespace="fleet-train-jobs",
+                uid="queued",
+                node=None,
+                labels={"fleet.ai/run-name": "chris-q38-queued"},
+                phase="Pending",
+            ),
+        ]
+    }
+    receipt = build_capacity_census(
+        pods,
+        {"items": []},
+        planned_nodes=1,
+        planned_gpus=8,
+        observed_at="2026-09-21T00:00:00Z",
+    )
+    assert receipt["current"]["nodes"] == 8
+    assert receipt["current"]["gpus"] == 64
+    assert receipt["projected"] == {"nodes": 9, "gpus": 72}
+    assert receipt["qualified"] is False
+
+
+def test_suspended_rayjob_workload_without_a_pod_occupies_capacity() -> None:
+    name = "chris-q38-queued"
+    receipt = build_capacity_census(
+        {
+            "items": [
+                pod(
+                    f"chris-q38-running-{index}",
+                    namespace="fleet-train-jobs",
+                    uid=f"running-{index}",
+                    node=f"node-{index}",
+                    labels={"fleet.ai/run-name": f"chris-q38-running-{index}"},
+                )
+                for index in range(7)
+            ]
+        },
+        {"items": []},
+        {"items": [rayjob(name)]},
+        {"items": [workload("queued-workload", owner=name)]},
+        planned_nodes=1,
+        planned_gpus=8,
+        observed_at="2026-09-21T00:00:00Z",
+    )
+    assert receipt["current"]["queued_claims"][0]["identity"] == name
+    assert receipt["current"]["nodes"] == 8
+    assert receipt["current"]["gpus"] == 64
+    assert receipt["qualified"] is False
+
+
+def test_api_suffixed_rayjobs_reconcile_to_six_live_run_name_pods() -> None:
+    run_names = [f"chris-q38-t3k-{index}" for index in range(6)]
+    controllers = [f"{run_name}-{index:08x}" for index, run_name in enumerate(run_names)]
+    rayjob_uids = [f"rayjob-uid-{index}" for index in range(6)]
+    receipt = build_capacity_census(
+        {
+            "items": [
+                pod(
+                    f"{run_name}-head",
+                    namespace="fleet-train-jobs",
+                    uid=f"pod-uid-{index}",
+                    node=f"node-{index}",
+                    labels={"fleet.ai/run-name": run_name},
+                )
+                for index, run_name in enumerate(run_names)
+            ]
+        },
+        {"items": []},
+        {
+            "items": [
+                rayjob(
+                    controller,
+                    run_name=run_name,
+                    uid=rayjob_uid,
+                )
+                for controller, run_name, rayjob_uid in zip(
+                    controllers, run_names, rayjob_uids, strict=True
+                )
+            ]
+        },
+        {
+            "items": [
+                workload(
+                    f"workload-{index}",
+                    owner=controller,
+                    owner_uid=rayjob_uid,
+                )
+                for index, (controller, rayjob_uid) in enumerate(
+                    zip(controllers, rayjob_uids, strict=True)
+                )
+            ]
+        },
+        observed_at="2026-09-22T08:23:52Z",
+    )
+    assert receipt["qualified"] is True
+    assert receipt["problems"] == []
+    assert receipt["current"]["nodes"] == 6
+    assert receipt["current"]["gpus"] == 48
+    assert receipt["current"]["queued_claims"] == []
+    assert {row["uid"] for row in receipt["current"]["allocated_pods"]} == {
+        f"pod-uid-{index}" for index in range(6)
+    }
+
+
+def test_uncorrelated_owned_workload_fails_closed() -> None:
+    receipt = build_capacity_census(
+        {"items": []},
+        {"items": []},
+        {"items": []},
+        {"items": [workload("orphan", owner="chris-q38-missing")]},
+        observed_at="2026-09-21T00:00:00Z",
+    )
+    assert receipt["qualified"] is False
+    assert any("no exact RayJob owner" in problem for problem in receipt["problems"])
+
+
 def test_regular_init_gpu_is_peak_not_added_to_app_gpu() -> None:
     receipt = build_capacity_census(
         {
@@ -247,9 +443,118 @@ def test_inference_model_and_pod_count_must_reconcile() -> None:
     assert "activePods=1" in receipt["problems"][0]
 
 
-def test_live_census_reads_pods_and_inference_models_across_all_namespaces(monkeypatch) -> None:
+@pytest.mark.parametrize("phase", ["ready", "queued", "resuming"])
+def test_serving_or_starting_inference_model_without_a_pod_fails_closed(phase: str) -> None:
+    receipt = build_capacity_census(
+        {
+            "items": [
+                pod(
+                    f"chris-q38-running-{index}",
+                    namespace="fleet-train-jobs",
+                    uid=f"running-{index}",
+                    node=f"node-{index}",
+                    labels={"fleet.ai/run-name": f"chris-q38-running-{index}"},
+                )
+                for index in range(7)
+            ]
+        },
+        {
+            "items": [
+                model(
+                    "chris-q38-resuming",
+                    active=0,
+                    phase=phase,
+                    desired_state="serving",
+                )
+            ]
+        },
+        planned_nodes=1,
+        planned_gpus=8,
+        observed_at="2026-09-21T00:00:00Z",
+    )
+    assert receipt["current"]["gpus"] == 64
+    assert receipt["current"]["nodes"] == 8
+    assert receipt["projected"] == {"nodes": 9, "gpus": 72}
+    assert receipt["current"]["serving_claims"] == [
+        {
+            "namespace": "inference",
+            "name": "chris-q38-resuming",
+            "uid": "model-chris-q38-resuming",
+            "resource_version": "20",
+            "identity": "chris-q38-resuming",
+            "nodes": 1,
+            "gpus": 8,
+            "source": "inference_model",
+        }
+    ]
+    assert receipt["qualified"] is False
+    assert "projected GPUs 72 exceed limit 64" in receipt["problems"]
+
+
+def test_stale_inference_model_generation_fails_closed_with_a_counted_pod() -> None:
+    name = "chris-q38-serving"
+    receipt = build_capacity_census(
+        {
+            "items": [
+                pod(
+                    "inference-" + name,
+                    namespace="inference",
+                    uid="serving",
+                    node="node-a",
+                    labels={"inference.fleet.ai/model": name},
+                )
+            ]
+        },
+        {
+            "items": [
+                model(
+                    name,
+                    active=1,
+                    phase="ready",
+                    generation=2,
+                    observed_generation=1,
+                )
+            ]
+        },
+        observed_at="2026-09-21T00:00:00Z",
+    )
+    assert receipt["current"]["gpus"] == 8
+    assert receipt["qualified"] is False
+    assert any(
+        "generation=2 but observedGeneration=1" in problem for problem in receipt["problems"]
+    )
+
+
+@pytest.mark.parametrize("phase", ["ready", "serving", "queued", "resuming"])
+def test_stale_active_inference_route_without_pods_is_still_counted(phase: str) -> None:
+    receipt = build_capacity_census(
+        {"items": []},
+        {
+            "items": [
+                model(
+                    "chris-q38-stale-route",
+                    active=0,
+                    phase=phase,
+                    desired_state="paused",
+                    generation=2,
+                    observed_generation=1,
+                )
+            ]
+        },
+        observed_at="2026-09-21T00:00:00Z",
+    )
+    assert receipt["current"]["nodes"] == 1
+    assert receipt["current"]["gpus"] == 8
+    assert receipt["current"]["serving_claims"][0]["name"] == "chris-q38-stale-route"
+    assert receipt["qualified"] is False
+    assert any(
+        "generation=2 but observedGeneration=1" in problem for problem in receipt["problems"]
+    )
+
+
+def test_live_census_reads_pods_and_queued_claims_across_all_namespaces(monkeypatch) -> None:
     calls: list[list[str]] = []
-    responses = iter(({"items": []}, {"items": []}))
+    responses = iter(({"items": []}, {"items": []}, {"items": []}, {"items": []}))
 
     def run(command, **kwargs):
         calls.append(command)
@@ -261,7 +566,7 @@ def test_live_census_reads_pods_and_inference_models_across_all_namespaces(monke
         observed_at="2026-09-21T00:00:00Z",
     )
     assert receipt["qualified"] is True
-    assert len(calls) == 2
+    assert len(calls) == 4
     assert calls[0][-4:] == ["get", "pods", "--all-namespaces", "-o", "json"][-4:]
     assert calls[1][-4:] == [
         "inferencemodels.inference.fleet.ai",
@@ -269,6 +574,8 @@ def test_live_census_reads_pods_and_inference_models_across_all_namespaces(monke
         "-o",
         "json",
     ]
+    assert "rayjobs.ray.io" in calls[2]
+    assert "workloads.kueue.x-k8s.io" in calls[3]
     assert all("--context" in command and "prod-context" in command for command in calls)
 
 

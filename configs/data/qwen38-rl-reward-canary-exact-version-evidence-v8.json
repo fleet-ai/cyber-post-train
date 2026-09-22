@@ -1,10 +1,83 @@
 {
   "schema": "cyber_rl_exact_version_evidence_v1",
-  "purpose": "Prod9-only source closure for exact Qwen3.8 reward-canary eligibility, token-safe tool-result compaction, direct GPU-capacity proof, terminal checkpoint sealing, one-GPU reload evidence, and authoritative grading",
+  "purpose": "Prod9-only source closure for exact Qwen3.8 reward-canary eligibility, token-safe tool-result compaction, fresh zero-GPU rebind and CPU preflight gates, a one-create GPU-capacity proof, terminal checkpoint sealing, one-GPU reload evidence, and authoritative grading",
   "port_provenance": {
     "runtime_commit": "8b5e8a00521b4fe412e3e7d0bce9b8ea6855b005",
     "preflight_commit": "6c0bc541e136fc114a3f7a17ce6ba07e9178bb78",
     "historical_preflight_is_gating": false
+  },
+  "proven_recipe_comparison": {
+    "scope": "Reuse only exact operational controls; model, backend, runtime, and learning evidence remain independently gated.",
+    "prod9_one_update_recipe": {
+      "source": {
+        "path": "../qualification/qwen38-rl-reward-canary-prod-v9.json",
+        "file_sha256": "sha256:022fcfd09db7b65ff43504e3ffe12a0ea945b821f4da1b3e6279ff153e1f859f"
+      },
+      "model": "Qwen/Qwen3.8-27B",
+      "backend": "skyrl",
+      "nodes": 1,
+      "gpus_per_node": 8,
+      "groups": 1,
+      "samples_per_prompt": 8,
+      "global_batch_size": 8,
+      "optimizer_updates": 1,
+      "learning_rate": 1e-06,
+      "checkpoint_interval": 1
+    },
+    "miles_rank_safe_precedent": {
+      "evidence": {
+        "path": "../../docs/evidence/qwen36-study/2026-08-31-miles-canary03-terminal-v1.json",
+        "file_sha256": "sha256:f37fa390b3f08adca55727cb9484437cab2e35a209202a42be641ff803700847"
+      },
+      "role": "operational_topology_precedent_only_not_model_runtime_or_learning_equivalence",
+      "model": "Qwen/Qwen3.6-27B",
+      "backend": "miles",
+      "nodes": 1,
+      "gpus_per_node": 8,
+      "groups": 1,
+      "samples_per_prompt": 8,
+      "global_batch_size": 8,
+      "optimizer_updates": 1,
+      "learning_rate": 1e-06,
+      "checkpoint_interval": 1,
+      "checkpoint_observed": true,
+      "reward_variation_observed": false,
+      "finite_nonzero_parameter_update_observed": false
+    },
+    "qwen38_lr30_reload_precedent": {
+      "source": {
+        "path": "../../training/qwen38_lr30_step76_gate.py",
+        "file_sha256": "sha256:0c280c1894552c880d97a0f917c4478742233051f279909a195a4992f35687e2"
+      },
+      "qualification": {
+        "path": "../qualification/qwen38-lr30-step76-gpu-reload-v1.json",
+        "file_sha256": "sha256:7276e307ded2254402e69353b9f06b3aa2496c4aa9b3a066b079c8fd3e82f654",
+        "self_sha256": "sha256:6fdfa587b5fcd9169edb0c41a8a4c4ed5b0648f97932de424cb7f084f7c0ba89"
+      },
+      "role": "exact_Qwen38_one_GPU_reload_topology_and_forward_gate_precedent",
+      "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+      "nodes": 1,
+      "gpus": 1,
+      "priority_class": "c1",
+      "queue_priority_class": "q1",
+      "cpu_request": "8",
+      "cpu_limit": "8",
+      "memory_request": "64Gi",
+      "memory_limit": "128Gi",
+      "hard_child_seconds": 1200,
+      "generated_tokens": 2,
+      "optimizer_updates": 0,
+      "requeue_if_preempted": false,
+      "secrets": []
+    },
+    "prod9_only_gates": [
+      "exact_prod9_checkpoint_manifest_and_BF16_export_identity",
+      "stable_server_preview_with_root_failure_alerts_off",
+      "fresh_cross_namespace_one_GPU_capacity_census",
+      "one_create_with_no_automatic_retry",
+      "creator_UID_handoff_to_exact_UID_cleanup_observer",
+      "terminal_receipt_equality_and_zero_active_GPU_release"
+    ]
   },
   "selected_version": {
     "task_key": "cysec1-2-current-gen_blackbox-0708aea62e0d8ccf09331568__blackbox_ctf_v1",
@@ -66,6 +139,46 @@
     ],
     "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
     "local_code": {
+      "skyrl_training_compiler": {
+        "path": "../../training/skyrl_training.py",
+        "file_sha256": "sha256:5f282826ddf892c3486820aea0621582f4b083e9a89b3a6a361a6f2e5f68294a",
+        "symbols": [
+          "compile_rl",
+          "job_request",
+          "check_artifacts",
+          "native_source",
+          "dataset",
+          "native_result"
+        ]
+      },
+      "skyrl_config_runtime": {
+        "path": "../../training/skyrl.py",
+        "file_sha256": "sha256:aaa3c4a2d26b3f75d521e0b37387e0a39e9f3b719038a8aa48dc6ebd3c130f74",
+        "symbols": [
+          "SkyRLConfig",
+          "overrides",
+          "native_config"
+        ]
+      },
+      "reward_qualification": {
+        "path": "../../training/rl_reward_canary.py",
+        "file_sha256": "sha256:c3697146823ff524ae7f867512942cab93f62a5e9a8b5fb323485194f881e6a6",
+        "symbols": [
+          "validate_source_package",
+          "source_proof",
+          "validate_run_config",
+          "validate_plan_binding"
+        ]
+      },
+      "rl_runtime": {
+        "path": "../../training/rl_runtime.py",
+        "file_sha256": "sha256:7e748b623a0411866b4a76b76f3d907f4d84cbf0779fb6a07db85310913cc947",
+        "symbols": [
+          "native_failure",
+          "native_rejection",
+          "run"
+        ]
+      },
       "data_preparation": {
         "path": "../../training/rl_data.py",
         "file_sha256": "sha256:49a5032de0e18f1fdde78c0e475488bd035b107a0403633bbfcb43f1c7569b8e",
@@ -75,7 +188,7 @@
       },
       "episode_runtime": {
         "path": "../../training/rl_episode.py",
-        "file_sha256": "sha256:db31a0644371750de061120475454578c3b34cfae1ceeb8102975230d8fbcbce",
+        "file_sha256": "sha256:00b6f38ebc33cead6dcb5ebb468c04d8192314333094b5767147e733cecc4ff8",
         "symbols": [
           "collect",
           "_agent"
@@ -89,12 +202,13 @@
           "offline_long_horizon_probe"
         ]
       },
-    "prod9_hardening": {
-      "path": "../../training/skyrl_prod9_hardening.py",
-      "file_sha256": "sha256:67f62a80a2ac85fa7fca479e2d440ca06dbf7b67b69c09578274ff4abf914f45",
+      "prod9_hardening": {
+        "path": "../../training/skyrl_prod9_hardening.py",
+        "file_sha256": "sha256:ef2f15e698b1d5510276c8597f1b428560199bdb6d09d8b4208f264e51806aa7",
         "symbols": [
           "Recorder",
           "validate_episode_limits",
+          "validate_exact_episode_limits",
           "capacity_gate",
           "accept_terminal"
         ]
@@ -108,28 +222,151 @@
           "runtime_binding"
         ]
       },
-    "prod9_training_runtime": {
-      "path": "../../training/skyrl_prod9_training.py",
-      "file_sha256": "sha256:d2a45e52edfec009409c33b2b58712682782e2531d4c2a9dc5870e449418be59",
-      "symbols": [
-        "compile_rl",
-        "job_request",
-        "preflight_request",
-        "preflight",
-        "reject_historical_direct_rail",
-        "_native"
-      ]
-    },
-    "prod9_direct_rail": {
-      "path": "../../training/skyrl_prod9_direct.py",
-      "file_sha256": "sha256:0fe319fe40aeeaac0c85f6b467e271e79018758d3d95c8d8c5e4402e436d8559",
-      "symbols": [
-        "manifest",
-        "preflight_job_manifest",
-        "validate_preview",
-        "live_create_is_available"
-      ]
-    },
+      "sft_runtime_support": {
+        "path": "../../training/sft_runtime.py",
+        "file_sha256": "sha256:8cb671f377d089e1303248e237f386c256b212b15e41dadc07ac49cf2695ee17",
+        "symbols": [
+          "write_receipt",
+          "_checked_file"
+        ]
+      },
+      "dense_runtime": {
+        "path": "../../training/dense.py",
+        "file_sha256": "sha256:712038f1abf4f461cf471afc50f7fbbfe90c9d2d7b9e0be1a81583378c933012",
+        "symbols": [
+          "encode_record"
+        ]
+      },
+      "io_runtime": {
+        "path": "../../training/io.py",
+        "file_sha256": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
+        "symbols": [
+          "canonical_json",
+          "digest_json"
+        ]
+      },
+      "sft_compiler": {
+        "path": "../../training/sft.py",
+        "file_sha256": "sha256:447dcaac2b610c1b6c124a13e7d541edc4c3145d26d8ff31577d75b37d8dd67d",
+        "symbols": [
+          "compile_sft",
+          "job_request"
+        ]
+      },
+      "model_binding": {
+        "path": "../../training/models.py",
+        "file_sha256": "sha256:712adce5f073de13d02168cd17c2f7c396ba094a1ebc9a34decafb8639b8375e",
+        "symbols": [
+          "bound_model"
+        ]
+      },
+      "corpus_builder": {
+        "path": "../../training/corpus.py",
+        "file_sha256": "sha256:28669e75e71323252765da81b8bd605e5dafaeecda55782a6316f3a0eb39f809",
+        "symbols": [
+          "build"
+        ]
+      },
+      "split_runtime": {
+        "path": "../../training/splits.py",
+        "file_sha256": "sha256:b3b5dd76e9307edb7572b5d71e192a4ae7846ac78e34f61cd19b57289bfda1c5",
+        "symbols": [
+          "assign_split"
+        ]
+      },
+      "qwen_tool_parser": {
+        "path": "../../training/qwen_tools.py",
+        "file_sha256": "sha256:00e0c3f322d5416c0697d2bb4504766bfa32f1436b3b5122f6dd7326c7698fd9",
+        "symbols": [
+          "parse_tool_calls"
+        ]
+      },
+      "miles_conversion_support": {
+        "path": "../../training/miles_conversion.py",
+        "file_sha256": "sha256:df7916887a1edf0f3f217dcc907fb514f38cf1409e07a144bab78b491120d8f0",
+        "symbols": [
+          "_hash"
+        ]
+      },
+      "miles_config_support": {
+        "path": "../../training/miles.py",
+        "file_sha256": "sha256:53d6bcc006e175bb2bff0011196f89759c34bed039dbaf14eff6209e98f31851",
+        "symbols": [
+          "MilesConfig"
+        ]
+      },
+      "prod9_training_runtime": {
+        "path": "../../training/skyrl_prod9_training.py",
+        "file_sha256": "sha256:de07fc16f0ae010e6d84023b3059d59bcdcc45771f76b1102eada7814b39320e",
+        "symbols": [
+          "compile_rl",
+          "job_request",
+          "preflight_request",
+          "preflight",
+          "stage_spec",
+          "stage_request",
+          "stage_rebind",
+          "reject_historical_direct_rail",
+          "_native"
+        ]
+      },
+      "prod9_direct_rail": {
+        "path": "../../training/skyrl_prod9_direct.py",
+        "file_sha256": "sha256:cb1bf30c6a57daa22e91ceecd7216b1c90fd5e18bdb7dd28edf83c5eea9592db",
+        "symbols": [
+          "manifest",
+          "stage_job_manifest",
+          "preflight_job_manifest",
+          "server_dry_run",
+          "validate_cpu_preview",
+          "validate_preview",
+          "authorize_stage",
+          "authorize_preflight",
+          "authorize",
+          "create_stage_once",
+          "create_preflight_once",
+          "create_once",
+          "live_create_is_available"
+        ]
+      },
+      "prod9_reload_rail": {
+        "path": "../../training/skyrl_prod9_reload.py",
+        "file_sha256": "sha256:28cee8cba0ce84e5efd2e4c763bc067a6cc1cd05f220fe6ad2b297b6799f9096",
+        "symbols": [
+          "build_spec",
+          "job_request",
+          "manifest",
+          "validate_preview",
+          "capacity_gate",
+          "authorize",
+          "create_once",
+          "validate_source",
+          "run_check"
+        ]
+      },
+      "reload_checkpoint_support": {
+        "path": "../../training/checkpoints.py",
+        "file_sha256": "sha256:b2bfa604a45a7ea1ed1b195401ce3c489f6460b36d2cd39d68a43033d23873b7",
+        "symbols": [
+          "receipt"
+        ]
+      },
+      "reload_export_check_support": {
+        "path": "../../training/export_check.py",
+        "file_sha256": "sha256:a04811409178eedc6969e34766ca70c82d84c27b718944ecab93407609c4dfe7",
+        "symbols": [
+          "enable_native_patch",
+          "model_contract",
+          "synthetic_forward"
+        ]
+      },
+      "reload_artifact_support": {
+        "path": "../../training/post_sft_artifacts.py",
+        "file_sha256": "sha256:c09555c61cb25ad5867cce80ed8bef0684734231b5708b1be892e75b9dd980eb",
+        "symbols": [
+          "_safetensor_layout"
+        ]
+      },
       "direct_rail": {
         "path": "../../training/skyrl_reward_rayjob.py",
         "file_sha256": "sha256:f99b7b47a1bdae0900a2224626fd1ef02bcdbe063e09aff07e6d0cf0a8a72411",
@@ -137,12 +374,41 @@
           "manifest",
           "authorize",
           "duplicate_checks",
-          "validate_preview"
+          "validate_preview",
+          "rebind_private_source_for_identity"
+        ]
+      },
+      "prod9_cleanup_observer": {
+        "path": "../../training/dev_cleanup_observer.py",
+        "file_sha256": "sha256:16542b681bd53e44b159bbee611eb29c9483bf4bd39ab62a29070cfad682c211",
+        "symbols": [
+          "_validated_receipt",
+          "Observer",
+          "JobsApiPrefixGuard",
+          "JobsApiExactUidObserver"
+        ]
+      },
+      "gpu_capacity_census": {
+        "path": "../../cyber_post_train/gpu_capacity.py",
+        "file_sha256": "sha256:0f63a23cc92b4dc64952638848e0865431edd1e001fc325f1eb7eac3feed0bef",
+        "symbols": [
+          "build_capacity_census",
+          "live_capacity_census"
+        ]
+      },
+      "jobs_runtime": {
+        "path": "../../cyber_post_train/jobs.py",
+        "file_sha256": "sha256:bc0d08a7a27b48ff5a21a5d824356d6e92e4856b17cc7296a976aa18a2baa40d",
+        "symbols": [
+          "JobsError",
+          "digest",
+          "bundled_request",
+          "Jobs"
         ]
       },
       "checkpoint_sealer": {
         "path": "../../training/skyrl_posttrain.py",
-        "file_sha256": "sha256:310b12303a5538a5e2aa923975b9756cba110b33ac2380f134fed6ec12bd6acd",
+        "file_sha256": "sha256:295950d3605fc45eb3cb765340e819909e82af2a4e532548a61ad561f044408e",
         "symbols": [
           "seal_checkpoint",
           "verify_manifest",
@@ -204,5 +470,5 @@
       "incident_evidence_self_sha256": "sha256:c45f12a8fa799900053a1bd7b1e33ff26e89d517ae552188bda0e66cf675ca2d"
     }
   },
-  "sha256": "sha256:163296fe1aeedecc8b6bb9d9610b0e4eae82554acc7ecde4e0dc55430b78a390"
+  "sha256": "sha256:53a682e270048fd157a9a9dd00cd2a349e8745d633291449ac5b62f20583a34a"
 }

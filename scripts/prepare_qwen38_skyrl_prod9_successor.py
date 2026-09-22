@@ -102,6 +102,11 @@ def build(manifest_path: Path) -> dict:
     direct._identity_for_plan(plan, identity)
     historical_rail = skyrl_prod9_training.reject_historical_direct_rail(plan)
     arguments = plan["arguments"]
+    qualified_limits = plan.get("qualification", {}).get("source_proof", {}).get("limits")
+    try:
+        skyrl_prod9_hardening.validate_exact_episode_limits(qualified_limits)
+    except (ValueError, RuntimeError) as exc:
+        raise ValueError("prod9 exact horizon contract changed") from exc
     if (
         plan.get("schema") != skyrl_prod9_training.SCHEMA
         or plan.get("prod9_runtime") != skyrl_prod9_training._binding()
@@ -110,23 +115,19 @@ def build(manifest_path: Path) -> dict:
         or request.get("priority_class") != "c1"
         or request.get("failureAlerts") is not False
         or request.get("image") != plan["execution"]["image"]
-        or {
-            key: arguments.get(key)
-            for key in (
-                "context_tokens",
-                "generation_chunk_tokens",
-                "compaction_trigger_tokens",
-                "compaction_summary_tokens",
-                "max_turns",
-            )
-        }
-        != {
-            "context_tokens": 262144,
-            "generation_chunk_tokens": 4096,
-            "compaction_trigger_tokens": 163840,
-            "compaction_summary_tokens": 8192,
-            "max_turns": 1200,
-        }
+        or qualified_limits != skyrl_prod9_hardening.EXACT_PROD9_LIMITS
+        or arguments.get("context_tokens") != qualified_limits["context_tokens"]
+        or arguments.get("response_tokens") != qualified_limits["response_tokens"]
+        or arguments.get("tokens_per_turn") != qualified_limits["max_tokens_per_turn"]
+        or arguments.get("generation_chunk_tokens") != qualified_limits["generation_chunk_tokens"]
+        or arguments.get("compaction_trigger_tokens")
+        != qualified_limits["compaction_trigger_tokens"]
+        or arguments.get("compaction_summary_tokens")
+        != qualified_limits["compaction_summary_tokens"]
+        or arguments.get("max_turns") != qualified_limits["max_turns"]
+        or arguments.get("compaction_enabled") is not True
+        or hardening.get("response_tokens")
+        != skyrl_prod9_hardening.EXACT_PROD9_LIMITS["response_tokens"]
     ):
         raise ValueError("prod9 one-node, compact, or fresh-runtime contract changed")
     return _seal(
@@ -151,6 +152,13 @@ def build(manifest_path: Path) -> dict:
             "runtime_sha256": "sha256:" + plan["runtime_sha256"],
             "plan_sha256": "sha256:" + digest(plan),
             "request_sha256": "sha256:" + digest(request),
+            "fresh_rebind_stage": {
+                "module": "training.skyrl_prod9_training",
+                "function": "stage_rebind",
+                "schema": "cyber_skyrl_prod9_rebind_stage_receipt_v1",
+                "root_alert_annotation_required": FAILURE_ALERT_OFF,
+                "bundle_module": skyrl_prod9_training.MODULE,
+            },
             "fresh_cpu_preflight": {
                 "module": "training.skyrl_prod9_direct",
                 "function": "preflight_job_manifest",
@@ -161,12 +169,13 @@ def build(manifest_path: Path) -> dict:
             },
             "historical_direct_rail": historical_rail,
             "next_live_gates": [
-                "fresh absence checks for the prod9 names and destinations",
-                "a fresh root-annotated zero-GPU preflight wrapper for the prod9 module",
-                "create-once data stage and accepted zero-GPU release evidence",
-                "exact-image CPU preflight and accepted zero-GPU release evidence",
-                "fresh direct-RayJob server previews in dev and prod",
-                "a separately reviewed create-once rail before any GPU create",
+                "fresh dev and prod server previews proving the root alert opt-out",
+                "one root-annotated zero-GPU SFS rebind create, receipt, and exact-UID release",
+                "one root-annotated zero-GPU exact-image preflight create, "
+                "receipt, and exact-UID release",
+                "fresh Jobs-API, Kubernetes, output-root, and W&B identity absence checks",
+                "fresh one-node/eight-GPU direct RayJob previews plus all-namespace capacity proof",
+                "one reviewed no-retry GPU create with the pre-armed exact-UID observer",
             ],
         }
     )

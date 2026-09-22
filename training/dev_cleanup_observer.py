@@ -32,6 +32,8 @@ ARMED_SCHEMA = "cyber_dev_cleanup_observer_armed_v1"
 RESULT_SCHEMA = "cyber_dev_cleanup_observer_result_v1"
 DIRECT_ARMED_SCHEMA = "cyber_direct_cleanup_observer_armed_v1"
 DIRECT_RESULT_SCHEMA = "cyber_direct_cleanup_observer_result_v1"
+CREATOR_BINDING_SCHEMA = "cyber_direct_cleanup_creator_binding_v1"
+PROD9_RELOAD_RESULT_SCHEMA = "cyber_skyrl_prod9_reload_observer_result_v1"
 RECOVERY_ARMED_SCHEMA = "cyber_direct_cleanup_recovery_observer_armed_v1"
 RECOVERY_RESULT_SCHEMA = "cyber_direct_cleanup_recovery_observer_result_v1"
 JOBS_API_PREFIX_GUARD_SCHEMA = "cyber_jobs_api_prefix_guard_armed_v1"
@@ -136,14 +138,14 @@ class JobsApiPrefixGuard:
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         if context not in {DEV_CONTEXT, PROD_CONTEXT} or namespace != NAMESPACE:
-            raise ObserverError("Jobs API prefix guard cluster binding is invalid")
+            raise ObserverError("Jobs API prefix guard context or namespace is invalid")
         if _RUN_NAME_PREFIX.fullmatch(run_name_prefix) is None:
             raise ObserverError("Jobs API run-name prefix is invalid")
         if not re.fullmatch(r"[^\s]+@sha256:[a-f0-9]{64}", image):
             raise ObserverError("Jobs API image binding is invalid")
         if (
             maximum_seconds < 1
-            or maximum_seconds > (1800 if context == DEV_CONTEXT else 16 * 60 * 60)
+            or maximum_seconds > (1800 if context == DEV_CONTEXT else 24 * 60 * 60)
             or expected_gpus not in {1, 8}
             or not 0 <= bind_wait_seconds <= 300
         ):
@@ -543,6 +545,9 @@ class JobsApiExactUidObserver:
         self.peak_gpus = 0
         self.gpu_pods: dict[str, dict[str, object]] = {}
         self.runtime_images: dict[str, dict[str, str]] = {}
+        self.receipt: dict | None = None
+        self.pod_restarts: dict[str, int] = {}
+        self.pod_exit_codes: dict[str, tuple[int, ...]] = {}
         self.known: dict[str, dict[str, str]] = {
             "workload": {},
             "raycluster": {},
@@ -601,7 +606,7 @@ class JobsApiExactUidObserver:
             or re.fullmatch(r"[^\s]+@sha256:[a-f0-9]{64}", value["image"]) is None
             or not 1
             <= value.get("maximum_seconds", 0)
-            <= (1800 if value.get("context") == DEV_CONTEXT else 16 * 60 * 60)
+            <= (1800 if value.get("context") == DEV_CONTEXT else 24 * 60 * 60)
             or not isinstance(value.get("prefix_guard_sha256"), str)
             or not re.fullmatch(r"sha256:[a-f0-9]{64}", value["prefix_guard_sha256"])
         ):
@@ -909,6 +914,39 @@ class JobsApiExactUidObserver:
                 if self.allocated_at is None or pod_allocated_at < self.allocated_at:
                     self.allocated_at = pod_allocated_at
                     self.deadline_at = self.allocated_at + timedelta(seconds=self.maximum_seconds)
+            status = pod.get("status") or {}
+            statuses = [
+                *(status.get("initContainerStatuses") or []),
+                *(status.get("containerStatuses") or []),
+            ]
+            if any(not isinstance(item, dict) for item in statuses):
+                raise ObserverError("Jobs API exact observer Pod status is malformed")
+            restarts = []
+            exit_codes = []
+            for item in statuses:
+                restart_count = item.get("restartCount", 0)
+                if type(restart_count) is not int or restart_count < 0:
+                    raise ObserverError("Jobs API exact observer Pod restart count is invalid")
+                restarts.append(restart_count)
+                terminated = (item.get("state") or {}).get("terminated")
+                if terminated is None:
+                    continue
+                if not isinstance(terminated, dict) or type(terminated.get("exitCode")) is not int:
+                    raise ObserverError("Jobs API exact observer termination state is malformed")
+                exit_codes.append(terminated["exitCode"])
+                message = terminated.get("message")
+                if message:
+                    receipt = _validated_receipt(message, kind="rayjob")
+                    if receipt is None:
+                        raise ObserverError(
+                            "Jobs API exact observer termination receipt is invalid"
+                        )
+                    if self.receipt is not None and self.receipt != receipt:
+                        raise ObserverError("Jobs API exact observer termination receipt changed")
+                    self.receipt = receipt
+            self.pod_restarts[pod_uid] = max(restarts, default=0)
+            if exit_codes:
+                self.pod_exit_codes[pod_uid] = tuple(exit_codes)
         self.raycluster_identity_observed = True
         self.inventory_seen = True
 
@@ -999,6 +1037,12 @@ class JobsApiExactUidObserver:
                 ],
                 "runtime_image_identity_complete": self._runtime_image_identity_complete(),
                 "peak_gpus": self.peak_gpus,
+                "active_gpus": 0 if release_confirmed else self.peak_gpus,
+                "restarts": sum(self.pod_restarts.values()),
+                "exit_codes": sorted(
+                    code for codes in self.pod_exit_codes.values() for code in codes
+                ),
+                "receipt": self.receipt,
                 "cleanup_status": self.cleanup_status,
                 "cleanup_requested": self.cleanup_requested,
                 "private_logs_read": False,
@@ -1116,6 +1160,34 @@ def _validated_receipt(message: object, *, kind: str) -> dict | None:
             return prod8.validate_canonical_receipt_bytes(raw)
         except ValueError:
             return None
+    # Fresh prod9 CPU gates write their fixed-path receipt with a
+    # ``receipt_sha256`` field because Kubernetes' termination file is not a
+    # create-once artifact.  The prod9 direct rail validates every semantic
+    # field before accepting either receipt; this observer only needs to bind
+    # the sealed object to the exact terminal Pod without parsing private data.
+    if kind == "job" and value.get("schema") in {
+        "cyber_skyrl_prod9_rebind_stage_receipt_v1",
+        "cyber_skyrl_prod9_training_cpu_preflight_v1",
+    }:
+        body = {key: item for key, item in value.items() if key != "receipt_sha256"}
+        return value if value.get("receipt_sha256") == digest(body) else None
+    if kind == "rayjob" and value.get("schema") == "cyber_hf_export_check_v1":
+        body = {key: item for key, item in value.items() if key != "receipt_sha256"}
+        return value if value.get("receipt_sha256") == digest(body) else None
+    if kind == "rayjob" and value.get("status") == "native_loop_returned":
+        body = {key: item for key, item in value.items() if key != "sha256"}
+        if set(value) == {
+            "status",
+            "plan_sha256",
+            "checkpoint_global_step",
+            "completed_batches",
+            "completed_at",
+            "optimizer_update_independently_verified",
+            "checkpoint_reload_verified",
+            "sha256",
+        } and value.get("sha256") == digest(body):
+            return value
+        return None
     body = {key: item for key, item in value.items() if key != "sha256"}
     schemas = {
         "job": {
@@ -1151,6 +1223,7 @@ def _receipt_execution_accepted(value: dict | None) -> bool:
             "passed",
             "published",
             "setup_and_internal_cleanup_passed",
+            "native_loop_returned",
         }
     return prod8.receipt_execution_accepted(value)
 
@@ -1219,6 +1292,12 @@ class Observer:
                 DIRECT_RESULT_SCHEMA,
                 1800,
             ),
+            "production-reload": (
+                PROD_CONTEXT,
+                DIRECT_ARMED_SCHEMA,
+                PROD9_RELOAD_RESULT_SCHEMA,
+                1800,
+            ),
             "production-recovery": (
                 PROD_CONTEXT,
                 RECOVERY_ARMED_SCHEMA,
@@ -1243,6 +1322,8 @@ class Observer:
             raise ObserverError("production recovery observer requires a root RayJob")
         if profile == "production-cpu" and kind != "job":
             raise ObserverError("production CPU observer requires a root Job")
+        if profile == "production-reload" and kind != "rayjob":
+            raise ObserverError("production reload observer requires a root RayJob")
         is_prod8_terminal_probe = kind == "job" and name == prod8.NAME
         if profile == "production-recovery":
             try:
@@ -1260,7 +1341,7 @@ class Observer:
                 ) from exc
         elif expected_uid:
             raise ObserverError("only a recovery observer may bind an existing UID")
-        if expected_gpus not in {0, 8} or (kind == "job") != (expected_gpus == 0):
+        if expected_gpus not in {0, 1, 8} or (kind == "job") != (expected_gpus == 0):
             raise ObserverError("cleanup observer GPU contract is invalid")
         for value in (plan_sha256, manifest_sha256):
             if len(value.removeprefix("sha256:")) != 64:
@@ -1288,6 +1369,16 @@ class Observer:
         self.armed_schema = armed_schema
         self.result_schema = result_schema
         self.expected_uid = expected_uid
+        self.creator_binding_path = armed_path.with_name(armed_path.name + ".created.json")
+        self.requires_creator_binding = profile in {
+            "production-direct",
+            "production-cpu",
+            "production-reload",
+        } and not (is_prod8_terminal_probe or expected_uid)
+        if self.requires_creator_binding and (
+            self.creator_binding_path.exists() or self.creator_binding_path.is_symlink()
+        ):
+            raise ObserverError("cleanup observer creator binding already exists")
         self._run = run
         self.snapshot = Snapshot()
         self.armed_at = ""
@@ -1420,6 +1511,11 @@ class Observer:
                 "manifest_sha256": self.manifest_sha256,
                 "armed_at": self.armed_at,
                 "observer_pid": os.getpid(),
+                **(
+                    {"creator_binding_path": str(self.creator_binding_path)}
+                    if self.requires_creator_binding
+                    else {}
+                ),
                 **recovery,
             }
         )
@@ -1456,6 +1552,40 @@ class Observer:
             raise ObserverError("cleanup target predates the armed observer")
         self.snapshot.uid = uid
         self.snapshot.created_at = created
+
+    def _creator_uid(self) -> str | None:
+        """Load the create response handoff before adopting a production name."""
+        if not self.requires_creator_binding:
+            return self.expected_uid or None
+        path = self.creator_binding_path
+        if not path.exists():
+            return None
+        if path.is_symlink() or not path.is_file():
+            raise ObserverError("cleanup observer creator binding is indirect")
+        try:
+            value = json.loads(path.read_bytes())
+        except (OSError, ValueError) as exc:
+            raise ObserverError("cleanup observer creator binding is invalid") from exc
+        body = {key: item for key, item in value.items() if key != "sha256"}
+        try:
+            uid = str(UUID(value.get("uid")))
+        except (TypeError, ValueError) as exc:
+            raise ObserverError("cleanup observer creator binding UID is invalid") from exc
+        if (
+            value.get("schema") != CREATOR_BINDING_SCHEMA
+            or value.get("sha256") != "sha256:" + digest(body)
+            or value.get("status") != "created_once"
+            or value.get("context") != self.context
+            or value.get("namespace") != self.namespace
+            or value.get("kind") != self.kind
+            or value.get("name") != self.name
+            or value.get("plan_sha256") != self.plan_sha256
+            or value.get("manifest_sha256") != self.manifest_sha256
+        ):
+            raise ObserverError("cleanup observer creator binding changed")
+        self.expected_uid = uid
+        self.requires_creator_binding = False
+        return uid
 
     def _bind_prod8_manifest(self, resource: dict) -> None:
         if self.manifest_sha256.removeprefix("sha256:") != prod8.manifest_digest():
@@ -1984,6 +2114,11 @@ class Observer:
         try:
             consecutive_observation_failures = 0
             while not self.snapshot.uid:
+                if self._creator_uid() is None and self.requires_creator_binding:
+                    if time.monotonic() >= creation_deadline:
+                        raise ObserverError("cleanup target was not creation-bound after arming")
+                    time.sleep(self.poll_seconds)
+                    continue
                 try:
                     resource = self._target()
                     if resource is not None:
@@ -2127,6 +2262,7 @@ def main() -> None:
             "development",
             "production-direct",
             "production-cpu",
+            "production-reload",
             "production-recovery",
         ),
         default="development",
@@ -2149,7 +2285,15 @@ def main() -> None:
         )
         result = observer.run()
         print(json.dumps({"status": result["status"], "sha256": result["sha256"]}))
-        if args.profile in {"development", "production-cpu"} and result["status"] != "released":
+        if (
+            args.profile
+            in {
+                "development",
+                "production-cpu",
+                "production-reload",
+            }
+            and result["status"] != "released"
+        ):
             raise SystemExit(1)
     except BaseException as exc:
         print(json.dumps({"status": "failed", "error_class": type(exc).__name__}))

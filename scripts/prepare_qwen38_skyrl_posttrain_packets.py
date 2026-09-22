@@ -22,10 +22,15 @@ SERVING_TEMPLATE = ROOT / "configs/qualification/qwen38-fresh75-step230-inferenc
 PACKET_DIR = ROOT / "configs/qualification"
 EVIDENCE = ROOT / "docs/evidence/qwen38-study/2026-09-20-skyrl-production-posttrain-queue-v1.json"
 POSTTRAIN_ADAPTER = ROOT / "training/skyrl_posttrain.py"
+RELOAD_ADAPTER = ROOT / "training/skyrl_prod9_reload.py"
 
 IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
     "89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
+)
+RELOAD_IMAGE = (
+    "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
+    "ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4"
 )
 EXECUTION_CONTRACT = "sha256:6092f664d93d2ff8037b5834135727759b9dd03e4b631bb563b5f4c5984d3b65"
 
@@ -189,7 +194,18 @@ def export_and_reload(run: dict, schedule: dict) -> tuple[dict, dict]:
     reload = {
         "state": "blocked_waiting_digest_valid_BF16_export",
         "launchable": False,
-        "image": IMAGE,
+        "tooling_ready": True,
+        "image": RELOAD_IMAGE,
+        "launcher": {
+            "adapter": source(RELOAD_ADAPTER),
+            "spec_schema": "cyber_skyrl_prod9_reload_spec_v1",
+            "preview_schema": "cyber_skyrl_prod9_reload_preview_v1",
+            "authorization_schema": "cyber_skyrl_prod9_reload_authorization_v1",
+            "created_schema": "cyber_skyrl_prod9_reload_created_v1",
+            "create_once": True,
+            "retry_on_any_result": False,
+            "exact_uid_cleanup_profile": "production-reload",
+        },
         "cpu_check": {
             "gpus": 0,
             "output": f"{run['output_root']}/export-check-step{step}-cpu-v1.json",

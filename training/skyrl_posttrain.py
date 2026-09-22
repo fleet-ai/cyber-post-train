@@ -53,9 +53,12 @@ def _json(path: Path) -> dict:
 
 
 def _validate_plan(plan: dict) -> skyrl.SkyRLConfig:
-    from .skyrl_training import SCHEMA
+    from .skyrl_training import SCHEMA as HISTORICAL_SCHEMA
 
-    if not isinstance(plan, dict) or plan.get("schema") != SCHEMA:
+    if not isinstance(plan, dict) or plan.get("schema") not in {
+        HISTORICAL_SCHEMA,
+        "cyber_skyrl_prod9_training_v1",
+    }:
         raise ValueError("not a native SkyRL training plan")
     required = {
         "schema",
@@ -69,13 +72,23 @@ def _validate_plan(plan: dict) -> skyrl.SkyRLConfig:
         "runtime_sha256",
         "execution",
     }
-    if not required <= set(plan) or set(plan) - required - {"qualification"}:
+    optional = {"qualification"}
+    if plan.get("schema") == "cyber_skyrl_prod9_training_v1":
+        optional.add("prod9_runtime")
+    if not required <= set(plan) or set(plan) - required - optional:
         raise ValueError("native SkyRL plan fields changed")
     args = skyrl.SkyRLConfig(**plan["arguments"])
     args.validate()
     sealed(plan["data"], "cyber_skyrl_data_v1")
     model = plan["model"]
     execution = plan["execution"]
+    if plan.get("schema") == "cyber_skyrl_prod9_training_v1":
+        from . import skyrl_prod9_training
+
+        if plan.get("prod9_runtime") != skyrl_prod9_training._binding() or plan.get(
+            "runtime_sha256"
+        ) != digest(skyrl_prod9_training._runtime()):
+            raise ValueError("prod9 SkyRL runtime binding disagrees")
     if (
         args.model != "Qwen/Qwen3.8-27B"
         or model.get("repo") != args.model
