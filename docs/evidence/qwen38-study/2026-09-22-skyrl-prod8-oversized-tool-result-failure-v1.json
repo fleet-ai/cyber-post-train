@@ -1,0 +1,106 @@
+{
+  "schema": "cyber_qwen38_skyrl_prod8_oversized_tool_result_failure_v1",
+  "classification": "infrastructure_invalid_harness_rejection_before_collection",
+  "recorded_at": "2026-09-22T08:25:52Z",
+  "prior_status": {
+    "receipt": "docs/evidence/qwen38-study/2026-09-21-skyrl-prod8-reconciliation-v1.json",
+    "classification": "unknown",
+    "disposition": "Preserved unchanged. This later receipt adds durable terminal artifacts, an exact source mapping, and a fresh UID-bound Kubernetes absence observation."
+  },
+  "run": {
+    "name": "chris-q38-rlreward-prod8",
+    "namespace": "fleet-train-jobs",
+    "output_root": "/mnt/sfs/jobs/chris-q38-rlreward-prod8",
+    "launch_source_commit": "1e38fab52b6c40f3c6aa8a7b0447760c5b3acc0f",
+    "plan_sha256": "09cabfc727e8b8448bd00a5ea3cee03914844e67cfc80b1f033bdbe2671212de",
+    "request_sha256": "7c2df31feceb5c741cb16463b554b91d00b11c6bf50ec85b3203706823c2fb44",
+    "rayjob_uid": "c43c9d70-5cd8-48be-897a-a22ad340cba3",
+    "workload_uid": "55d5c856-1705-4848-8e88-89fc8606e90f",
+    "raycluster_uid": "d0305592-df79-4ed2-bf95-4ac54acd1a6a",
+    "pod_uid": "ca372010-ffe8-4ecd-bc27-46e347a609b7",
+    "priority_class": "c1",
+    "queue_priority": "q1",
+    "failure_alerts": "off",
+    "nodes": 1,
+    "gpus": 8
+  },
+  "durable_terminal_evidence": {
+    "failed_receipt": {
+      "path": "FAILED.json",
+      "sha256": "sha256:9eb4e44b23544380d23580647f34c9aeff045314fb4ed01717e0c20df7db1a52",
+      "bytes": 237,
+      "status": "failed",
+      "error_class": "RuntimeError"
+    },
+    "native_failure_receipt": {
+      "path": "NATIVE_FAILURE.json",
+      "sha256": "sha256:0a259cdf1e2b248b6e4aaed3a50be16fef1121ac412920a43d2b8bb61e46bd65",
+      "bytes": 2564,
+      "contains_exception_group_layers": true,
+      "leaf_error_class": "InvalidEpisode",
+      "leaf_local_frame": {
+        "file": "rl_episode.py",
+        "function": "_agent",
+        "line": 366
+      },
+      "leaf_reason_was_not_preserved_in_receipt": true
+    },
+    "metrics": {
+      "path": "metrics.jsonl",
+      "sha256": "sha256:a3469d70ec347f43d6f89fee4b60eee2787c3c7578b8aff8a8e9f357f6a45400",
+      "lines": 1,
+      "reported_optimizer_steps": [
+        0
+      ]
+    },
+    "absent_terminal_markers": [
+      "NATIVE_REJECTED.json",
+      "NATIVE_TRAINING_COMPLETE.json",
+      "ACCEPTED.json"
+    ],
+    "checkpoint_present": false
+  },
+  "root_cause": {
+    "phase": "development_evaluation_before_training",
+    "source_mapping": "At the exact launch commit, training/rl_episode.py lines 365-366 had one branch at the recorded leaf frame: a tool result longer than the configured character limit raised InvalidEpisode(\"tool_result_exceeds_budget\").",
+    "sanitized_observation": "A real tool result exceeded the configured 50000-character visible-observation limit. The harness rejected the whole episode and the grouped training path surfaced a RuntimeError instead of retaining a bounded observation.",
+    "classification_basis": "The leaf reason is a deterministic inference from the immutable launch source and recorded file/function/line, not a reason string recovered from the private trace.",
+    "model_or_optimizer_failure": false
+  },
+  "scientific_result": {
+    "episodes_collected": 0,
+    "authoritative_rewards": 0,
+    "finite_optimizer_updates": 0,
+    "checkpoints": 0,
+    "capability_claim": false
+  },
+  "current_resource_reconciliation": {
+    "observed_at": "2026-09-22T08:25:52Z",
+    "kubernetes_context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+    "namespace": "fleet-train-jobs",
+    "exact_rayjob_uid_absent": true,
+    "exact_workload_uid_absent": true,
+    "exact_raycluster_uid_absent": true,
+    "exact_pod_uid_absent": true,
+    "active_gpus_for_exact_uids": 0,
+    "release_action_or_time_observed": false
+  },
+  "repair": {
+    "required_behavior": "Treat the configured tool-result character limit as the maximum model-visible observation size. Keep one deterministic leading prefix followed by a fixed visible truncation marker, persist no hidden tail, and do not retry the tool call or authoritative score.",
+    "prior_exact_repair_commit": "43d324891afd6c83b933c8343a0f4ed3b050511f",
+    "forward_port_files": [
+      "training/rl_episode.py",
+      "tests/test_rl_episode.py"
+    ],
+    "focused_regressions": [
+      "test_oversized_parallel_tool_results_are_clipped_without_retry_or_tail_persistence",
+      "test_tool_result_truncation_is_a_stable_prefix_and_leaves_short_results_unchanged",
+      "test_tool_result_cap_must_leave_room_for_visible_truncation_marker"
+    ],
+    "proven_scope": "The tests prove exact bounded observations in a multi-tool turn, stable call order, one authoritative score request, one environment release, and absence of the hidden suffix from persisted episode files.",
+    "status": "repair_in_review",
+    "successor_launched": false
+  },
+  "privacy": "No task prompt, sampled response, tool content, hidden tail, flag, credential, private log, reward value, or sealed score is included.",
+  "sha256": "sha256:26eb5a1040da9e3e7a297d8f2027a2d9a732c30f88f7844beaed27a7a1d905c0"
+}

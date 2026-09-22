@@ -47,6 +47,8 @@ BUDGET_STOPS = {
     "response_budget_exhausted",
 }
 
+TOOL_RESULT_TRUNCATION_MARKER = "\n...[tool result truncated to configured prefix]"
+
 
 def budget_stop(error):
     """Only explicitly typed budget stops qualify, never an arbitrary cause chain."""
@@ -255,6 +257,8 @@ def _validate(config):
         raise InvalidEpisode("incomplete_episode_limits")
     if any(type(v) is not int or v <= 0 for v in limits.values()):
         raise InvalidEpisode("invalid_episode_limits")
+    if limits["tool_result_chars"] <= len(TOOL_RESULT_TRUNCATION_MARKER):
+        raise InvalidEpisode("invalid_episode_limits")
     if limits["max_tokens_per_turn"] >= limits["context_tokens"]:
         raise InvalidEpisode("generation_budget_exceeds_context")
     if compacted_limits <= limits.keys() and not (
@@ -313,6 +317,14 @@ def validate_tool_budget(catalog, seconds):
         raise InvalidEpisode("tool_timeout_below_advertised_budget")
 
 
+def _truncate_tool_result(text, max_chars):
+    """Keep one deterministic, model-visible prefix; never retain the omitted tail."""
+    if len(text) <= max_chars:
+        return text
+    prefix_chars = max_chars - len(TOOL_RESULT_TRUNCATION_MARKER)
+    return text[:prefix_chars] + TOOL_RESULT_TRUNCATION_MARKER
+
+
 async def _agent(recorder, session, messages, tools, limits, parse):
     recorder.begin_segment(messages, tools)
     env_time = 0.0
@@ -362,8 +374,7 @@ async def _agent(recorder, session, messages, tools, limits, parse):
                 if type(error) is not bool:
                     raise InvalidEpisode("tool_error_status_missing")
             env_time += time.monotonic() - start
-            if len(text) > limits["tool_result_chars"]:
-                raise InvalidEpisode("tool_result_exceeds_budget")
+            text = _truncate_tool_result(text, limits["tool_result_chars"])
             tool_call_id = (
                 f"call_{index:06d}" if len(calls) == 1 else f"call_{index:06d}_{offset:03d}"
             )

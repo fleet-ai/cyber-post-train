@@ -283,6 +283,12 @@ def _cpu_render(value: dict) -> dict:
             "creationTimestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "generation": 1,
             "uid": uid,
+            "labels": {
+                "batch.kubernetes.io/controller-uid": uid,
+                "batch.kubernetes.io/job-name": name,
+                "controller-uid": uid,
+                "job-name": name,
+            },
         }
     )
     rendered["status"] = {}
@@ -572,6 +578,23 @@ def test_prod9_fresh_direct_renderer_and_cpu_preflight_are_alert_safe() -> None:
     ]
     assert prod9_direct.live_create_is_available() is True
     assert not hasattr(hardening, "create_once")
+
+    cpu_rendered = _cpu_render(cpu_job)
+    cpu_proof = prod9_direct.validate_cpu_preview(
+        cpu_job,
+        cpu_rendered,
+        context=prod9_direct.PROD_CONTEXT,
+        purpose="preflight",
+    )
+    assert cpu_proof["gpus"] == 0 and cpu_proof["failure_alerts"] == "off"
+    cpu_rendered["metadata"]["labels"]["job-name"] = "other"
+    with pytest.raises(JobsError, match="Kubernetes defaults"):
+        prod9_direct.validate_cpu_preview(
+            cpu_job,
+            cpu_rendered,
+            context=prod9_direct.PROD_CONTEXT,
+            purpose="preflight",
+        )
 
     missing_alert_preview = copy.deepcopy(preview)
     missing_alert_manifest = yaml.safe_load(missing_alert_preview["manifest_yaml"])

@@ -162,7 +162,7 @@
       },
       "reward_qualification": {
         "path": "../../training/rl_reward_canary.py",
-        "file_sha256": "sha256:6020d598b30743a6f63f2c6b0b2e457fe794bd3537fd1baa4b70cb0e10866209",
+        "file_sha256": "sha256:6246ad32a12d618739772660aa2143ef1ca900f35ec8a6bbeddc4d62c5d4f673",
         "symbols": [
           "validate_source_package",
           "source_proof",
@@ -188,7 +188,7 @@
       },
       "episode_runtime": {
         "path": "../../training/rl_episode.py",
-        "file_sha256": "sha256:db31a0644371750de061120475454578c3b34cfae1ceeb8102975230d8fbcbce",
+        "file_sha256": "sha256:00b6f38ebc33cead6dcb5ebb468c04d8192314333094b5767147e733cecc4ff8",
         "symbols": [
           "collect",
           "_agent"
@@ -312,7 +312,7 @@
       },
       "prod9_direct_rail": {
         "path": "../../training/skyrl_prod9_direct.py",
-        "file_sha256": "sha256:55f30c4769a6e9b2b986578e2c51fecd75c6615ebe911d6b43b99076998bceac",
+        "file_sha256": "sha256:cb1bf30c6a57daa22e91ceecd7216b1c90fd5e18bdb7dd28edf83c5eea9592db",
         "symbols": [
           "manifest",
           "stage_job_manifest",
@@ -470,5 +470,5 @@
       "incident_evidence_self_sha256": "sha256:c45f12a8fa799900053a1bd7b1e33ff26e89d517ae552188bda0e66cf675ca2d"
     }
   },
-  "sha256": "sha256:4670e4f31a4a2e894847dd8759b210406b805c200ac1028d3970e0426f403782"
+  "sha256": "sha256:46e14737820cfbd63b51d5290b8d3936383fe35a253650a3aa5430675d79e139"
 }

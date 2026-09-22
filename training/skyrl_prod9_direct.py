@@ -683,7 +683,7 @@ def _strip_cpu_server_defaults(
     if (
         status != {}
         or generation != 1
-        or labels is not None
+        or labels != generated_labels
         or template_labels != generated_labels
         or defaults
         != {

@@ -1,0 +1,50 @@
+{
+  "schema": "cyber_qwen38_skyrl_prod9_stage_server_previews_v1",
+  "status": "passed_without_create",
+  "observed_at": "2026-09-22T08:28:40Z",
+  "identity": {
+    "stage_name": "chris-q38-prod9-data-v1",
+    "namespace": "fleet-train-jobs",
+    "identity_sha256": "sha256:c666bbe82dfc1f084afc8233865edfd4bf1f34fbdf5f8f5f10d69a4f91fad311"
+  },
+  "rendered_contract": {
+    "kind": "Job",
+    "gpus": 0,
+    "priority_class": "c1",
+    "failure_alerts": "off",
+    "manifest_sha256": "sha256:6ffa565cde155ab9a89b2d69bfd3a52055dd8505690865281b00bbb40daeb863"
+  },
+  "server_previews": [
+    {
+      "context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+      "checked_at": "2026-09-22T08:28:37Z",
+      "server_render_sha256": "sha256:5a322874f27e1bc4ca10008f07b2c94726cb66b7c4452f92290dce8a2bc019f9",
+      "status": "passed"
+    },
+    {
+      "context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+      "checked_at": "2026-09-22T08:28:40Z",
+      "server_render_sha256": "sha256:5045a158b3c215723eadc44991437a69fba746965f7a34429409cd36459d4b93",
+      "status": "passed"
+    }
+  ],
+  "source_bindings": {
+    "episode_runtime_sha256": "sha256:00b6f38ebc33cead6dcb5ebb468c04d8192314333094b5767147e733cecc4ff8",
+    "direct_rail_sha256": "sha256:cb1bf30c6a57daa22e91ceecd7216b1c90fd5e18bdb7dd28edf83c5eea9592db",
+    "source_closure_self_sha256": "sha256:46e14737820cfbd63b51d5290b8d3936383fe35a253650a3aa5430675d79e139"
+  },
+  "external_mutations": 0,
+  "submitted": false,
+  "launch_authorized": false,
+  "remaining_gates": [
+    "review and merge the repaired runtime and preview validator",
+    "prove the prod9 stage identity and destination are absent in the Jobs API and both clusters",
+    "create the zero-GPU stage once with its exact cleanup observer and verify its receipt and release",
+    "compile from the resulting sealed successor manifest",
+    "server-preview and run the zero-GPU exact-image preflight once",
+    "prove the training name, output root, W&B identity, and Jobs API identity are absent",
+    "server-preview the one-node eight-GPU RayJob in development and production",
+    "take a fresh all-namespace capacity census and arm the exact cleanup observer before one create"
+  ],
+  "sha256": "sha256:2a532b8391c4c74431ceca301f6bbc20dfeff1d6120950db36dbe3d637f0434a"
+}
