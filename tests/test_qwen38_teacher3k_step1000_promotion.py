@@ -49,7 +49,7 @@ def test_step1000_promotion_evidence_is_self_digested_and_paused() -> None:
     assert value["sha256"] == hashlib.sha256(
         json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
-    assert value["status"] == "accepted_through_paused_serving_registration"
+    assert value["status"] == "accepted_through_live_serving_parity"
     assert value["stage"]["stage_pod_and_config_map_released"] is True
     assert value["serving_route"] == {
         **value["serving_route"],
@@ -66,3 +66,14 @@ def test_step1000_promotion_evidence_is_self_digested_and_paused() -> None:
         "fleet_heldout_launched": False,
         "webexploitbench_launched": False,
     }
+    assert value["activation"]["capacity"]["projected_nodes"] == 7
+    assert value["activation"]["route_at_parity"] == {
+        "active_pods": 1,
+        "desired_replicas": 1,
+        "phase": "ready",
+        "ready_replicas": 1,
+        "resource_version": "33420207",
+        "routing_enabled": True,
+    }
+    assert value["live_parity"]["status"] == "passed"
+    assert value["live_parity"]["scores_observed"] is False
