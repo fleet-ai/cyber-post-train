@@ -14,6 +14,112 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+function pendingValue(detail = "Pending") {
+  return `<span class="metric-pending">${escapeHtml(detail)}</span>`;
+}
+
+function paperPercent(value) {
+  return value == null ? pendingValue() : escapeHtml(pct(value));
+}
+
+function paperCount(value, suffix = "") {
+  return value == null ? pendingValue() : `${escapeHtml(value)}${escapeHtml(suffix)}`;
+}
+
+function paperTelemetry(value) {
+  return value == null ? pendingValue("Missing — not published yet") : escapeHtml(value);
+}
+
+function paperCost(value, trialCount, missingCount, formatter) {
+  if (value == null) {
+    if (missingCount > 0) return pendingValue(`Missing for ${missingCount} accepted attempt${missingCount === 1 ? "" : "s"}`);
+    return pendingValue();
+  }
+  const coverage = trialCount == null || missingCount == null
+    ? "coverage not published"
+    : `${trialCount} accepted attempts included · ${missingCount} missing`;
+  return `${escapeHtml(formatter(value))}<small>${escapeHtml(coverage)}</small>`;
+}
+
+function renderPaperAligned() {
+  const root = document.querySelector("#paper-headline");
+  const paper = data.paperAligned;
+  const suppliedReport = paper.report;
+  const reportMatchesContract = suppliedReport == null || (
+    suppliedReport.schema_version === paper.reportSchema
+    && suppliedReport.fixed_denominator === paper.protocol.vulnerabilities
+    && suppliedReport.pass_at_1?.predeclared_attempt_index === 0
+    && suppliedReport.coverage?.expected_targets === paper.protocol.apps
+    && suppliedReport.coverage?.expected_trials === paper.protocol.apps * paper.protocol.repeats
+  );
+  const report = reportMatchesContract ? suppliedReport : null;
+  const expectedTrials = report?.coverage?.expected_trials ?? paper.protocol.apps * paper.protocol.repeats;
+  const reportState = !reportMatchesContract
+    ? "Unavailable — report does not match the fixed protocol"
+    : report == null
+      ? paper.status
+      : report.complete
+        ? "Complete matched result"
+        : "Incomplete — coverage gaps remain";
+  const range = report?.attempt_rate_range;
+  const completeRange = range?.best_percent != null
+    && range?.worst_percent != null
+    && range?.range_percentage_points != null;
+  const tokenCost = report?.cost;
+  const coverage = report?.coverage;
+
+  root.innerHTML = `
+    <div class="paper-report-heading">
+      <div>
+        <p class="paper-kicker">Three-repeat paper view</p>
+        <h3>${escapeHtml(paper.title)}</h3>
+      </div>
+      <span class="paper-status ${report?.complete ? "complete" : "pending"}">${escapeHtml(reportState)}</span>
+    </div>
+    <p class="paper-denominator"><strong>Fixed denominator:</strong> ${paper.protocol.apps} apps · ${paper.protocol.vulnerabilities} known vulnerabilities · ${paper.protocol.repeats} attempts per app. Missing or technically invalid attempts stay visible and never become zero scores.</p>
+    <div class="paper-metric-grid">
+      <div><b>${paperPercent(report?.pass_at_1?.rate_percent)}</b><span>Pass@1 · attempt 0</span></div>
+      <div><b>${paperPercent(report?.pass_at_3?.avg_percent)}</b><span>Pass@3 Avg</span></div>
+      <div><b>${paperPercent(report?.pass_at_3?.max_percent)}</b><span>Pass@3 Max</span></div>
+    </div>
+    <div class="paper-band">
+      <h4>Best-to-worst three-repeat band</h4>
+      ${completeRange ? `
+        <p><strong>${escapeHtml(pct(range.worst_percent))}</strong> worst · <strong>${escapeHtml(pct(range.best_percent))}</strong> best · <strong>${escapeHtml(range.range_percentage_points.toFixed(1))} percentage points</strong> wide</p>
+      ` : `<p>${pendingValue("Pending — all three attempts must be complete")}</p>`}
+    </div>
+    <div class="paper-details">
+      <section aria-labelledby="paper-coverage-title">
+        <h4 id="paper-coverage-title">Coverage</h4>
+        <dl>
+          <div><dt>Accepted attempts</dt><dd>${paperCount(coverage?.valid_model_outcome_trials, ` / ${expectedTrials}`)}</dd></div>
+          <div><dt>Technically invalid</dt><dd>${paperCount(coverage?.infrastructure_invalid?.trial_count)}</dd></div>
+          <div><dt>Missing</dt><dd>${paperCount(coverage?.missing?.trial_count)}</dd></div>
+        </dl>
+      </section>
+      <section aria-labelledby="paper-telemetry-title">
+        <h4 id="paper-telemetry-title">Telemetry and evidence</h4>
+        <dl>
+          <div><dt>Mean model tokens</dt><dd>${paperCost(tokenCost?.mean_token_cost_millions, tokenCost?.token_cost_trial_count, tokenCost?.token_cost_missing_valid_trial_count, value => `${value.toFixed(3)} million`)}</dd></div>
+          <div><dt>Mean wall time</dt><dd>${paperCost(tokenCost?.mean_wall_time_seconds, tokenCost?.wall_time_trial_count, tokenCost?.wall_time_missing_valid_trial_count, value => `${value.toFixed(1)} seconds`)}</dd></div>
+          <div><dt>Model requests</dt><dd>${paperTelemetry(paper.telemetry.modelRequests)}</dd></div>
+          <div><dt>Provider cost</dt><dd>${paperTelemetry(paper.telemetry.providerCost)}</dd></div>
+          <div><dt>Judge calls</dt><dd>${paperTelemetry(paper.telemetry.judgeCalls)}</dd></div>
+          <div><dt>Collection receipts</dt><dd>${paperTelemetry(paper.telemetry.collectionReceiptDigests)}</dd></div>
+          <div><dt>Scoring receipts</dt><dd>${paperTelemetry(paper.telemetry.scoringReceiptDigests)}</dd></div>
+        </dl>
+      </section>
+    </div>
+    <div class="paper-deviations">
+      <h4>What matches the paper — and what does not</h4>
+      <div>${paper.deviations.map(item => `
+        <article>
+          <div><strong>${escapeHtml(item.label)}</strong><span class="deviation-status">${escapeHtml(item.status)}</span></div>
+          <p>${escapeHtml(item.detail)}</p>
+        </article>`).join("")}</div>
+    </div>`;
+}
+
 function setTab() {
   const requested = location.hash.slice(1);
   const tab = ["webexploitbench", "task-quality", "experiment-map"].includes(requested) ? requested : "webexploitbench";
@@ -160,6 +266,7 @@ async function renderExperimentMap() {
   }
 }
 
+renderPaperAligned();
 renderResults();
 renderProtocol();
 renderTasks();

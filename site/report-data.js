@@ -1,4 +1,49 @@
 window.REPORT_DATA = {
+  paperAligned: {
+    title: "Paper-aligned matched comparison",
+    status: "Pending complete matched results",
+    reportSchema: "webexploitbench-paper-report-v1",
+    report: null,
+    protocol: {
+      apps: 15,
+      vulnerabilities: 110,
+      repeats: 3
+    },
+    telemetry: {
+      modelRequests: null,
+      providerCost: null,
+      judgeCalls: null,
+      collectionReceiptDigests: null,
+      scoringReceiptDigests: null
+    },
+    deviations: [
+      {
+        label: "Tasks",
+        status: "Matched",
+        detail: "No task-set deviation is planned: the same 15 Level-0 apps and all 110 official known vulnerabilities are required. Any missing or technically invalid attempt remains visible."
+      },
+      {
+        label: "Model",
+        status: "Different",
+        detail: "The evaluated Qwen3.8-27B base model and exact trained checkpoint differ from the paper’s model. Every accepted result must name the exact model revision."
+      },
+      {
+        label: "Harness / agent program",
+        status: "Different",
+        detail: "The frozen plan uses OpenCode 1.18.27 instead of the paper’s original agent program."
+      },
+      {
+        label: "Sampling",
+        status: "Different",
+        detail: "The paper does not disclose sampling temperature. The frozen matched plan uses temperature 1.0 and top-p 0.95 for both arms."
+      },
+      {
+        label: "Scorer",
+        status: "Different",
+        detail: "The paper does not specify an AI report judge. The frozen plan uses the same qualified GLM-5.3 low-reasoning judge for both arms because the pinned CAGE default judge is unavailable."
+      }
+    ]
+  },
   runs: [
     {
       id: "opencode-fresh-base-partial",
