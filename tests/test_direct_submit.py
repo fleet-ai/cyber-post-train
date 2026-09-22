@@ -1,3 +1,4 @@
+import hashlib
 import importlib.util
 import io
 import json
@@ -1820,6 +1821,68 @@ def test_cpu_checkpoint_boundary_accepts_truthful_export_operation(monkeypatch):
     assert len(calls) == 2
     assert "get" in calls[0][0]
     assert "--dry-run=server" in calls[1][0]
+
+
+def cpu_checkpoint_pod_with_nested_sfs_mounts():
+    pod = cpu_checkpoint_pod()
+    run = "/mnt/sfs/jobs/chris-q38-t3k64-b8-v5"
+    pod["spec"]["volumes"] = [{"name": "sfs", "persistentVolumeClaim": {"claimName": "sfs-shared"}}]
+    pod["spec"]["containers"][0]["volumeMounts"] = [
+        {"name": "sfs", "mountPath": "/mnt/sfs", "readOnly": True},
+        {
+            "name": "sfs",
+            "mountPath": run,
+            "subPath": "jobs/chris-q38-t3k64-b8-v5",
+        },
+        {
+            "name": "sfs",
+            "mountPath": run + "/hf-export-step180-v1",
+            "subPath": "jobs/chris-q38-t3k64-b8-v5/hf-export-step180-v1",
+            "readOnly": True,
+        },
+    ]
+    return pod
+
+
+def test_cpu_checkpoint_boundary_accepts_matching_nested_sfs_subpaths():
+    validate_cpu_checkpoint_pod(cpu_checkpoint_pod_with_nested_sfs_mounts())
+
+
+@pytest.mark.parametrize(
+    ("method", "mount_index"),
+    [("dry_run_cpu_checkpoint_pod", 1), ("create_cpu_checkpoint_pod_once", 2)],
+)
+def test_cpu_checkpoint_boundary_rejects_stale_nested_sfs_subpath_before_kubectl(
+    monkeypatch, method, mount_index
+):
+    calls = []
+    pod = cpu_checkpoint_pod_with_nested_sfs_mounts()
+    suffix = "" if mount_index == 1 else "/hf-export-step180-v1"
+    pod["spec"]["containers"][0]["volumeMounts"][mount_index]["subPath"] = (
+        "jobs/chris-q38-t3k32-b8-v3" + suffix
+    )
+
+    def run(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise AssertionError("stale PVC subPath reached kubectl")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(JobsError, match="mountPath and PVC subPath differ"):
+        getattr(Kubectl("prod-context"), method)(pod)
+    assert calls == []
+
+
+def test_cpu_checkpoint_stale_subpath_incident_receipt_is_self_consistent():
+    path = (
+        Path(__file__).resolve().parents[1]
+        / "docs/evidence/qwen38-cpu-check-stale-pvc-subpath-incident-20260922.json"
+    )
+    value = json.loads(path.read_text())
+    expected = value.pop("receipt_sha256")
+    encoded = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    assert hashlib.sha256(encoded).hexdigest() == expected
+    assert all(row["exit_code"] == 1 for row in value["failed_v1"])
+    assert all(row["phase"] == "Succeeded" for row in value["accepted_successors"])
 
 
 def test_cpu_checkpoint_boundary_rejects_overlapping_same_pvc_with_distinct_volumes():
