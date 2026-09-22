@@ -19,12 +19,12 @@ from . import rl_reward_canary
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA = "cyber_qwen38_skyrl_lane2_authority_v1"
 PLAN_SCHEMA = "cyber_qwen38_skyrl_lane2_plan_binding_v1"
-AUTHORITY_FILE_SHA256 = "sha256:04eeda6a3a43082cf61dacc2a3668cf5274d806fd1dca0fd739d3aa37bd49f45"
-AUTHORITY_SELF_SHA256 = "sha256:c86f892244da06c90badeb0752492c3bfdf1203cedec0e4f2f2e64cb0c249a5c"
-TASK_SET_SELF_SHA256 = "sha256:261c08c51d33baa88b7c94396059c3ad98bb98ded708d8b7f1658557f35f2563"
-SPLIT_SELF_SHA256 = "sha256:594b6a6c9aebb69422ece630fb9571f581f4756ce9933021c5c8ebd6e8e66cbc"
+AUTHORITY_FILE_SHA256 = "sha256:0e8e95bfd38986306eeafcfc456c2ecd39829ed9d85aaaf366d8a6fac4ec6274"
+AUTHORITY_SELF_SHA256 = "sha256:86c47e256e8586da3c57036493dc76b1793d0d46e522f8e513afa12bb3efd7a0"
+TASK_SET_SELF_SHA256 = "sha256:b4b9aae4acdfe40403d788a06e76106729306e4eb65f46893d9a84296c73311a"
+SPLIT_SELF_SHA256 = "sha256:de434f25243790cb265c2ed9182fa0a332c2450de6ba204d6d785885618d8393"
 OPTIMIZER_TASK_VERSION_ID = "dd8dd22e-75c0-4b93-8f8e-ea8a292d92bb"
-DIAGNOSTIC_TASK_VERSION_ID = "54425601-6fd2-43d8-8cb9-e565b767676a"
+DIAGNOSTIC_TASK_VERSION_ID = "33527414-ced7-4005-9c5a-eb9c211a32da"
 IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:"
     "89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
@@ -142,21 +142,26 @@ def validate_authority(path: Path) -> dict:
         ):
             raise ValueError("lane2 exact environment/verifier binding changed")
 
-    ease = next(
-        (
-            row
-            for row in historical.get("tasks", [])
-            if row.get("task_version_id") == OPTIMIZER_TASK_VERSION_ID
-        ),
-        None,
-    )
+    ease = {row.get("task_version_id"): row for row in historical.get("tasks", [])}
     prior = authority["historical_selection_prior"]
-    if ease is None or ease.get("historical_ease") != {
-        "exact_task_version": prior["optimizer_exact_task_version"],
-        "pass_rate": prior["optimizer_pass_rate"],
-        "passes": prior["optimizer_passes"],
-        "sessions": prior["optimizer_sessions"],
-    }:
+    expected_priors = {
+        OPTIMIZER_TASK_VERSION_ID: {
+            "exact_task_version": prior["optimizer_exact_task_version"],
+            "pass_rate": prior["optimizer_pass_rate"],
+            "passes": prior["optimizer_passes"],
+            "sessions": prior["optimizer_sessions"],
+        },
+        DIAGNOSTIC_TASK_VERSION_ID: {
+            "exact_task_version": prior["diagnostic_exact_task_version"],
+            "pass_rate": prior["diagnostic_pass_rate"],
+            "passes": prior["diagnostic_passes"],
+            "sessions": prior["diagnostic_sessions"],
+        },
+    }
+    if any(
+        ease.get(version, {}).get("historical_ease") != expected
+        for version, expected in expected_priors.items()
+    ):
         raise ValueError("lane2 mixed-outcome selection prior changed")
     return authority
 

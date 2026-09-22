@@ -17,13 +17,13 @@
   "lane2_shard": {
     "task_set": {
       "path": "../data/qwen38-skyrl-lane2-task-set-v1.json",
-      "file_sha256": "sha256:45ae4885bfccf55f377033c7418368571dababfe9967b8a908a6e8071fa94613",
-      "self_sha256": "sha256:261c08c51d33baa88b7c94396059c3ad98bb98ded708d8b7f1658557f35f2563"
+      "file_sha256": "sha256:d0e75601ae936efa7983f61760d8e5fc1aa27f1759031f44028e7277ded54fdd",
+      "self_sha256": "sha256:b4b9aae4acdfe40403d788a06e76106729306e4eb65f46893d9a84296c73311a"
     },
     "split": {
       "path": "../data/qwen38-skyrl-lane2-split-v1.json",
-      "file_sha256": "sha256:eb093e8c24d3ccf2413e7d07168a798dbbf44887b8616720a5e4a51b52a3754d",
-      "self_sha256": "sha256:594b6a6c9aebb69422ece630fb9571f581f4756ce9933021c5c8ebd6e8e66cbc"
+      "file_sha256": "sha256:ecabc7800c0f3239997a3e833e51732f5f3e05f510920a44e07f8eb431aa2356",
+      "self_sha256": "sha256:de434f25243790cb265c2ed9182fa0a332c2450de6ba204d6d785885618d8393"
     },
     "optimizer_task": {
       "task_key": "cysec1-2-current-gen_blackbox-9afe9e08da314948b573657e__blackbox_ctf_v1",
@@ -37,16 +37,16 @@
       "current_binding_sha256": "sha256:4d503eb81c242510199bf4457a44516a106f1c547efeeae3f56cd36e5d14f38f"
     },
     "internal_diagnostic_task": {
-      "task_key": "cysec1-2-current-gen_blackbox-0708aea62e0d8ccf09331568__blackbox_ctf_v1",
-      "task_version_id": "54425601-6fd2-43d8-8cb9-e565b767676a",
+      "task_key": "cysec1-2-fira-gen_blackbox-f1d8a0c49352bdf40faf015f__blackbox_ctf_v1",
+      "task_version_id": "33527414-ced7-4005-9c5a-eb9c211a32da",
       "authority_split": "train",
       "trainer_role": "dev",
       "protected_holdout": false,
-      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
-      "verifier_id": "71687232-bce9-4c95-a807-bdeb0389d5bc",
-      "verifier_version_id": "14c6b6dd-f189-416c-b34d-29bf55ff1b87",
-      "verifier_sha256": "51eedfc9a10f987ea7475eb49405f8940977e32ea2f3610c21cc4008fb3919c3",
-      "current_binding_sha256": "sha256:35533b58a12b810e789b4c0acdddbb169c23c038bb8757253f8a348076030444"
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "verifier_id": "252eb5ce-7383-46e1-ac1d-f1a389362d7d",
+      "verifier_version_id": "db631382-f3ed-4c97-b887-27a510cb63c2",
+      "verifier_sha256": "d77228dd5ad954a5ffc99c6eadf49f896288d9ef7836f87b09d0fed9e2d3a788",
+      "current_binding_sha256": "sha256:afc5fd2ce5efd52ef1fa0f9ff4e0f00c060a568fda7a557630190cb3378bb9f5"
     }
   },
   "exact_binding_evidence": {
@@ -61,6 +61,10 @@
     "optimizer_passes": 4,
     "optimizer_sessions": 8,
     "optimizer_pass_rate": 0.5,
+    "diagnostic_exact_task_version": true,
+    "diagnostic_passes": 4,
+    "diagnostic_sessions": 8,
+    "diagnostic_pass_rate": 0.5,
     "interpretation": "Historical stronger-model outcomes are only a task-selection prior. They do not substitute for live rewards and do not promise reward variation for Qwen."
   },
   "execution": {
@@ -84,5 +88,5 @@
       "lane2_create_once_destination_and_name_absence_not_yet_proven"
     ]
   },
-  "sha256": "sha256:c86f892244da06c90badeb0752492c3bfdf1203cedec0e4f2f2e64cb0c249a5c"
+  "sha256": "sha256:86c47e256e8586da3c57036493dc76b1793d0d46e522f8e513afa12bb3efd7a0"
 }

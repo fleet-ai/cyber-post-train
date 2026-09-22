@@ -169,6 +169,10 @@ def test_lane2_is_disjoint_mixed_outcome_and_train_only() -> None:
     assert optimizer["task_version_id"] == authority.OPTIMIZER_TASK_VERSION_ID
     assert optimizer["task_version_id"] != diagnostic["task_version_id"]
     assert diagnostic["task_version_id"] == authority.DIAGNOSTIC_TASK_VERSION_ID
+    assert "54425601-6fd2-43d8-8cb9-e565b767676a" not in {
+        optimizer["task_version_id"],
+        diagnostic["task_version_id"],
+    }
     assert optimizer["authority_split"] == diagnostic["authority_split"] == "train"
     assert diagnostic["protected_holdout"] is False
     assert (
@@ -180,6 +184,11 @@ def test_lane2_is_disjoint_mixed_outcome_and_train_only() -> None:
         8,
         0.5,
     )
+    assert (
+        prior["diagnostic_passes"],
+        prior["diagnostic_sessions"],
+        prior["diagnostic_pass_rate"],
+    ) == (4, 8, 0.5)
 
 
 def test_lane2_current_runtime_request_and_manifests_are_alert_safe() -> None:
