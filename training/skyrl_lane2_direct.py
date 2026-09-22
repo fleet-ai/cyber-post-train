@@ -4,12 +4,19 @@ from __future__ import annotations
 
 import copy
 import json
+from pathlib import Path
 from typing import Any
 from uuid import NAMESPACE_URL, uuid5
 
 import yaml
 
-from cyber_post_train.jobs import FAILURE_ALERT_ANNOTATION, FAILURE_ALERT_OFF, JobsError, digest
+from cyber_post_train.jobs import (
+    FAILURE_ALERT_ANNOTATION,
+    FAILURE_ALERT_OFF,
+    JobsError,
+    bundled_request,
+    digest,
+)
 
 from . import skyrl_lane2_training as training
 from . import skyrl_prod9_direct as shared
@@ -166,6 +173,75 @@ def preflight_job_manifest(plan: dict[str, Any]) -> dict[str, Any]:
         job["metadata"]["annotations"].get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
     ):
         raise JobsError("lane2 CPU preflight root resource/alert contract changed")
+    return job
+
+
+def data_job_manifest() -> dict[str, Any]:
+    """Render the GET-only private-data constructor; never submit it."""
+    root = Path(__file__).resolve().parents[1]
+    authority_value = training.authority.validate_authority(
+        root / "configs/qualification/qwen38-skyrl-lane2-authority-v1.json"
+    )
+    name = authority_value["execution"]["data_stage_name"]
+    paths = (
+        "configs/qualification/qwen38-skyrl-lane2-authority-v1.json",
+        "configs/qualification/qwen38-skyrl-lane2-data-v1.json",
+        "configs/data/qwen38-skyrl-lane2-task-set-v1.json",
+        "configs/data/qwen38-skyrl-lane2-split-v1.json",
+        "configs/data/qwen38-rl-filtered-canary-tool-catalog-v1.json",
+        "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+    )
+    files = training._runtime()
+    files.update(
+        {
+            package + "/__init__.py": ""
+            for package in ("training", "evals", "evals/fleet", "cyber_post_train")
+        }
+    )
+    files.update({path: (root / path).read_text() for path in paths})
+    bundled = bundled_request(
+        {
+            "name": name,
+            "title": name + " zero-GPU GET-only data construction",
+            "run_dir": "/mnt/sfs/jobs/" + name,
+            "image": training.authority.IMAGE,
+            "workers": 1,
+            "gpus_per_worker": 1,
+            "resources": {
+                "cpu_request": "4",
+                "cpu_limit": "8",
+                "memory_request": "32Gi",
+                "memory_limit": "48Gi",
+            },
+            "priority_class": "c1",
+            "requeueIfPreempted": False,
+            "failureAlerts": False,
+            "secrets": ["fleet-api"],
+            "env": {
+                "HF_HUB_OFFLINE": "1",
+                "TRANSFORMERS_OFFLINE": "1",
+                "TOKENIZERS_PARALLELISM": "false",
+                "PYTHONUNBUFFERED": "1",
+            },
+        },
+        files,
+        "training.skyrl_lane2_data",
+        ["--config", "configs/qualification/qwen38-skyrl-lane2-data-v1.json"],
+    )
+    job = shared._cpu_job(
+        name,
+        training.authority.IMAGE,
+        bundled["command"],
+        {**bundled["env"], "RUN_DIR": "/tmp"},
+    )
+    container = job["spec"]["template"]["spec"]["containers"][0]
+    container["envFrom"] = [{"secretRef": {"name": "fleet-api"}}]
+    if (
+        "nvidia.com/gpu" in json.dumps(job, sort_keys=True)
+        or job["metadata"]["annotations"] != {FAILURE_ALERT_ANNOTATION: FAILURE_ALERT_OFF}
+        or job["spec"]["template"]["spec"]["priorityClassName"] != "c1"
+    ):
+        raise JobsError("lane2 data Job resource/alert contract changed")
     return job
 
 

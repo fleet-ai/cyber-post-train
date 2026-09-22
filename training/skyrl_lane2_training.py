@@ -26,6 +26,7 @@ PREFLIGHT_RECEIPT = Path("/dev/termination-log")
 RUNTIME_FILES = (
     *current.RUNTIME_FILES,
     "training/skyrl_lane2_authority.py",
+    "training/skyrl_lane2_data.py",
     "training/skyrl_lane2_training.py",
 )
 

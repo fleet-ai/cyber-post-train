@@ -197,6 +197,7 @@ def test_lane2_current_runtime_request_and_manifests_are_alert_safe() -> None:
     preview = _source_preview(plan, request)
     rayjob = direct.manifest(plan, request, preview)
     cpu_job = direct.preflight_job_manifest(plan)
+    data_job = direct.data_job_manifest()
 
     assert plan["schema"] == training.SCHEMA
     assert plan["qualification"]["optimizer_task_version_id"] == authority.OPTIMIZER_TASK_VERSION_ID
@@ -213,6 +214,12 @@ def test_lane2_current_runtime_request_and_manifests_are_alert_safe() -> None:
     assert cpu_job["metadata"]["annotations"] == {"fleet.ai/failure-alerts": "off"}
     assert cpu_job["spec"]["template"]["spec"]["priorityClassName"] == "c1"
     assert "nvidia.com/gpu" not in json.dumps(cpu_job, sort_keys=True)
+    data_container = data_job["spec"]["template"]["spec"]["containers"][0]
+    data_environment = {item["name"]: item["value"] for item in data_container["env"]}
+    assert data_job["metadata"]["annotations"] == {"fleet.ai/failure-alerts": "off"}
+    assert data_container["envFrom"] == [{"secretRef": {"name": "fleet-api"}}]
+    assert "nvidia.com/gpu" not in json.dumps(data_job, sort_keys=True)
+    assert _bundle({"env": data_environment})["module"] == "training.skyrl_lane2_data"
     assert direct.live_create_is_available() is False
 
 
