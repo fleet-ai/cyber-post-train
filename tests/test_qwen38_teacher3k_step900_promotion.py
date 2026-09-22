@@ -55,6 +55,7 @@ def test_step900_evidence_proves_cleanup_and_keeps_live_evaluation_closed() -> N
     plan = stage.read_plan(PLAN)
 
     assert evidence["sha256"] == base_stage.digest_json(base_stage._unsigned(evidence, "sha256"))
+    assert evidence["status"] == "accepted_through_paused_serving_registration"
     assert evidence["checkpoint"]["optimizer_step"] == 900
     assert evidence["checkpoint"]["source_plan_sha256"] == (
         "sha256:8488f03a65e3d158a46697eefda2751736681e3a503c26ee9c39c63fb130679c"
