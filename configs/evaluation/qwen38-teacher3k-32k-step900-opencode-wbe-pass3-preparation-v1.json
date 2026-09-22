@@ -7,8 +7,8 @@
   "launchable": false,
   "derivation": {
     "step800_packet_path": "configs/evaluation/qwen38-teacher3k-32k-step800-opencode-wbe-pass3-preparation-v1.json",
-    "step800_packet_sha256": "sha256:9337d5bbef7d3d29f13e4197f00fd6b9d0638c52ec89b66761c8779e6f1e0ff5",
-    "paper_protocol_sha256": "sha256:804a71a6589a5f23d8cf31ff4c72041bea9bb4b32fbdc26d4f234b3d5cc89167",
+    "step800_packet_sha256": "sha256:5faa685a305631178bea8acaffc4593e3b5c08aaf0348ffc4cdc428817fd599a",
+    "paper_protocol_sha256": "sha256:bb06f43061c93cceaa1ea16674f656156d26d2dea4f6d0a7d9696890a59da4f9",
     "base_arm_campaign_id": "q38-base-oc-wbe-l0-p3-paper-v1",
     "base_partition_identity_roster_sha256": "sha256:dde24d14eb8cad91dcd28aaaa17526555cdc5114f1bd7afacc449052ffe51eb7",
     "base_logical_attempt_identity_roster_sha256": "sha256:c64ba09a5e4435afc57fc06d4a7fc13ef3d48e1cbab36049fce8f641cf0b7a93",
@@ -91,19 +91,27 @@
     "vulnerability_denominator": 110,
     "pass_k": 3,
     "attempts_per_arm": 45,
+    "custom_headline_pass_at_1_attempt_index": 0,
+    "cage_native_average_yield_pass_at_1_used": false,
     "sandboxes_per_arm": 15,
     "max_concurrent_attempts_per_partition": 1,
     "max_cage_model_decision_rounds_per_attempt": 150,
     "trial_timeout_seconds": 7200,
     "harness": "OpenCode 1.18.27",
     "agent_input": "target_url_only_no_source_code",
+    "task_specific_vulnerability_hint": "target_url",
+    "common_prompt_tools_report_and_verifier_instructions_remain": true,
     "temperature": 1.0,
     "top_p": 0.95,
     "top_k": null,
     "collection_and_scoring_separate": true,
     "score_free_immutable_collection_first": true,
+    "live_verifier_required_before_target_teardown": true,
+    "step_budget_curve_status": "unsupported_no_stepwise_live_verifier_evidence",
+    "step_budget_curve_policy": "emit a null paper curve with terminal_only evidence granularity; retain the separately labeled 150-step endpoint without presenting it as a reproduction of the paper curve",
     "report_calculator_path": "evals/webexploitbench/paper_report.py",
-    "report_calculator_file_sha256": "sha256:9f50a623dfd4cab6475dd4f6907637f14848e93e5daccc8372b37519b099b965"
+    "report_calculator_output_schema": "webexploitbench-paper-report-v3",
+    "report_calculator_file_sha256": "sha256:7d7c390c80648a694f97252e360a7258df5f772873447f988ef6f51820b2ed80"
   },
   "remaining_launch_gates": [
     "step900 export is staged and registered without changing accepted payload bytes",
@@ -111,7 +119,7 @@
     "candidate route is Ready and exact base-versus-candidate live parity is accepted",
     "exact paper project render and fixed-control parity validation pass",
     "fresh duplicate census proves candidate and shared base identities are unused or already accepted exactly",
-    "TensorLake credential and 15-arm or 30-paired sandbox capacity preflights pass",
+    "TensorLake credential, 15 joint-active sandbox capacity, and 30 lifetime create-once identity preflights pass",
     "candidate route remains healthy immediately before create-once collection"
   ],
   "launch_controls": {
@@ -145,5 +153,5 @@
     "flags_or_answers_included": false,
     "credentials_included": false
   },
-  "sha256": "9ff29649bbad5d4224286cadef09e525ab71c6f2fba0a9c3027eebb124bffd58"
+  "sha256": "4cf005b26047759366c566cb69070fe7b16e2377d542e70d6e7e2c2be5c4a1ad"
 }
