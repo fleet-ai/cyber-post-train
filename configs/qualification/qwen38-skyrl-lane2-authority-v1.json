@@ -76,7 +76,7 @@
     "gpus": 8,
     "failure_alerts": "off",
     "preflight_name": "chris-q38-lane2-preflight-v1",
-    "data_stage_name": "chris-q38-lane2-data-v1"
+    "data_stage_name": "chris-q38-lane2-data-v2"
   },
   "submission_gate": {
     "preview_authorized": true,
@@ -88,5 +88,5 @@
       "lane2_create_once_destination_and_name_absence_not_yet_proven"
     ]
   },
-  "sha256": "sha256:86c47e256e8586da3c57036493dc76b1793d0d46e522f8e513afa12bb3efd7a0"
+  "sha256": "sha256:eed6dcba8b5111d436c21db53e897bcc9a802fc122f641b806986c60d392a305"
 }

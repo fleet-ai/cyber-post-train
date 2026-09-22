@@ -303,7 +303,14 @@ def test_lane2_current_runtime_request_and_manifests_are_alert_safe() -> None:
     assert data_job["spec"]["suspend"] is True
     assert data_container["envFrom"] == [{"secretRef": {"name": "fleet-api"}}]
     assert "nvidia.com/gpu" not in json.dumps(data_job, sort_keys=True)
-    assert _bundle({"env": data_environment})["module"] == "training.skyrl_lane2_data"
+    data_bundle = _bundle({"env": data_environment})
+    assert data_bundle["module"] == "training.skyrl_lane2_data"
+    assert {
+        "configs/data/qwen38-skyrl-production-task-set-v1.json",
+        "configs/data/qwen38-skyrl-production-split-v1.json",
+        "configs/data/qwen-blackbox-eligible-v1.json",
+        "evals/fleet/configs/opencode-easiest-train100-selection-v2.json",
+    } <= set(data_bundle["files"])
     data_proof = direct.validate_data_server_preview(
         data_job,
         _cpu_render(data_job),

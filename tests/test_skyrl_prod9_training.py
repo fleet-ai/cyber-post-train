@@ -736,6 +736,37 @@ def test_prod9_failed_preflight_writes_only_a_sanitized_phase_receipt(
     assert "secret" not in target.read_text()
 
 
+def test_prod9_native_config_diagnostic_identifies_the_exact_failing_phase(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Config:
+        class SkyRLTrainConfig:
+            @staticmethod
+            def from_cli_overrides(_values: dict) -> object:
+                raise AssertionError("private native detail")
+
+    class Utils:
+        @staticmethod
+        def validate_cfg(_cfg: object) -> None:
+            pytest.fail("validation must not run after parse failure")
+
+    modules = {
+        "skyrl.train.config.config": Config,
+        "skyrl.train.utils.utils": Utils,
+    }
+    monkeypatch.setattr(prod9_training.skyrl, "overrides", lambda _args: {"exact": "values"})
+    monkeypatch.setattr(
+        prod9_training.skyrl_episode,
+        "_module",
+        lambda name, _sha: modules[name],
+    )
+
+    with pytest.raises(AssertionError, match="private native detail"):
+        prod9_training._preflight_native_config(object())
+
+    assert prod9_training._PREFLIGHT_STAGE == "native_config_parse"
+
+
 def test_prod9_one_create_rail_rejects_a_historical_plan_before_any_live_check(
     tmp_path: Path,
 ) -> None:

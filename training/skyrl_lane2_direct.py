@@ -162,10 +162,14 @@ def data_job_manifest() -> dict[str, Any]:
     paths = (
         "configs/qualification/qwen38-skyrl-lane2-authority-v1.json",
         "configs/qualification/qwen38-skyrl-lane2-data-v1.json",
+        "configs/data/qwen38-skyrl-production-task-set-v1.json",
+        "configs/data/qwen38-skyrl-production-split-v1.json",
         "configs/data/qwen38-skyrl-lane2-task-set-v1.json",
         "configs/data/qwen38-skyrl-lane2-split-v1.json",
+        "configs/data/qwen-blackbox-eligible-v1.json",
         "configs/data/qwen38-rl-filtered-canary-tool-catalog-v1.json",
         "configs/models/qwen38-27b-1d4bf0f2.lock.json",
+        "evals/fleet/configs/opencode-easiest-train100-selection-v2.json",
     )
     files = training._runtime()
     files.update(

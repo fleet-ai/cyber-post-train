@@ -442,6 +442,22 @@ def validate_preview(plan: dict, request: dict, preview: dict) -> dict:
     return historical.validate_gpu_runtime_preview(request, preview)
 
 
+def _preflight_native_config(args: skyrl.SkyRLConfig):
+    """Run the native parse/validation path with bounded diagnostic phases."""
+    global _PREFLIGHT_STAGE
+    _PREFLIGHT_STAGE = "native_config_overrides"
+    values = skyrl.overrides(args)
+    _PREFLIGHT_STAGE = "native_config_modules"
+    modules = {
+        name: skyrl_episode._module(name, sha) for name, sha in skyrl.NATIVE_SOURCES.items()
+    }
+    _PREFLIGHT_STAGE = "native_config_parse"
+    cfg = modules["skyrl.train.config.config"].SkyRLTrainConfig.from_cli_overrides(values)
+    _PREFLIGHT_STAGE = "native_config_validate"
+    modules["skyrl.train.utils.utils"].validate_cfg(cfg)
+    return cfg
+
+
 def preflight(plan: dict) -> dict:
     """CPU-only exact-image check for the fresh runtime closure.
 
@@ -464,9 +480,9 @@ def preflight(plan: dict) -> dict:
         raise FileExistsError("prod9 output already exists")
     rows = historical.check_artifacts(plan)
     modules = historical.native_source()
-    _PREFLIGHT_STAGE = "native_config"
+    _PREFLIGHT_STAGE = "native_config_arguments"
     args = skyrl.SkyRLConfig(**plan["arguments"])
-    skyrl.native_config(args)
+    _preflight_native_config(args)
     _PREFLIGHT_STAGE = "tokenizer"
     tokenizer = AutoTokenizer.from_pretrained(
         plan["model"]["root"], trust_remote_code=False, local_files_only=True
