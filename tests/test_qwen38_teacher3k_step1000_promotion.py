@@ -45,9 +45,12 @@ def test_step1000_promotion_evidence_is_self_digested_and_paused() -> None:
     value = json.loads(EVIDENCE.read_text())
     unsigned = {key: item for key, item in value.items() if key != "sha256"}
 
-    assert value["sha256"] == hashlib.sha256(
-        json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
-    ).hexdigest()
+    assert (
+        value["sha256"]
+        == hashlib.sha256(
+            json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+    )
     assert value["status"] == "accepted_through_live_serving_parity"
     assert value["stage"]["stage_pod_and_config_map_released"] is True
     assert value["serving_route"] == {
