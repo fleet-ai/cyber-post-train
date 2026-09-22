@@ -96,6 +96,13 @@ def test_renderer_makes_sixteen_cpu_only_alert_suppressed_launchers(tmp_path, mo
     config_maps = [item for item in bundle["items"] if item["kind"] == "ConfigMap"]
     assert len(jobs) == len(config_maps) == 16
     for job in jobs:
+        assert job["metadata"]["name"].endswith("-launch-v2")
         assert job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
         assert job["spec"]["template"]["spec"]["priorityClassName"] == "c1"
+        assert (
+            job["spec"]["template"]["metadata"]["labels"][
+                "cyber-post-train.fleet.ai/postgres-client"
+            ]
+            == "true"
+        )
         assert "nvidia.com/gpu" not in json.dumps(job)

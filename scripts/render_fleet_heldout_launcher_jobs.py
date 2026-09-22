@@ -114,7 +114,12 @@ def _bundle(packet_dir: Path) -> tuple[bytes, str]:
 
 
 def _objects(*, replica: str, compressed: bytes, evaluator_job: str) -> tuple[dict, dict]:
-    name = f"{evaluator_job}-launch"
+    # ``-launch`` was the first operational attempt.  Those Pods could not
+    # reach the rollout ledger because they lacked the NetworkPolicy client
+    # label.  Keep the deterministic repair create-once under a new name; the
+    # evaluator identity itself remains unchanged and is still protected by
+    # its SFS, PostgreSQL, Kubernetes, and ledger duplicate gates.
+    name = f"{evaluator_job}-launch-v2"
     if len(name) > 63:
         raise ValueError("launcher Kubernetes name is too long")
     config_map = {
@@ -148,6 +153,7 @@ def _objects(*, replica: str, compressed: bytes, evaluator_job: str) -> tuple[di
                     "labels": {
                         "cyber-post-train.fleet.ai/experiment": name,
                         "cyber-post-train.fleet.ai/owner": "chris",
+                        "cyber-post-train.fleet.ai/postgres-client": "true",
                     }
                 },
                 "spec": {
