@@ -70,7 +70,7 @@
     "cage_commit": "09a191c565230cebb8255899d622d23c7ddeff33",
     "cage_patch_set_sha256": "sha256:baf629de2ea13a5648f9de792514efcd73c71667c1ffe375b8669cbc1ad72b51",
     "collection_bundle_sha256": null,
-    "deferred_score_source_file_sha256": "sha256:55c3bbdfc4c8f47b9d8f27c83d032928b29948103aa589162337f465c55696d4",
+    "deferred_score_source_file_sha256": "sha256:fffb7a4d91076d7396a691247895d150558c91b0381ba0846bd7ea21ed0eff06",
     "deferred_score_source_path": "evals/webexploitbench/tensorlake/deferred_score.py",
     "exact_judge_identity": null,
     "judge_family": "GPT",
@@ -304,6 +304,6 @@
     "shared_snapshot_required": true,
     "state": "blocked_pending_live_parity_and_candidate_collection_plan"
   },
-  "sha256": "ebeefdb944967a882c44aa349afc51b6321cb14fdd4f0bd3b2d40e3a3c2be85d",
+  "sha256": "576526e8b566a888973f3d71e5b661aea0b858b8a4a73ea0b9c573cde6603489",
   "status": "blocked_not_launchable"
 }
