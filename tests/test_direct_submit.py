@@ -13,7 +13,10 @@ import yaml
 
 from cyber_post_train import lora_cpu_preflight_driver
 from cyber_post_train.direct_submit import (
+    CHECKPOINT_SEAL_BINDING_TOKEN,
     CPU_CHECKPOINT_OPERATION_ANNOTATION,
+    CPU_CHECKPOINT_RUN_ANNOTATION,
+    CPU_CHECKPOINT_STEP_ANNOTATION,
     CPU_NODE_SELECTOR,
     CPU_PREFLIGHT_BUNDLE_SHA256_ANNOTATION,
     CPU_SFS_MEMORY_FLOOR_MIB_ANNOTATION,
@@ -29,8 +32,10 @@ from cyber_post_train.direct_submit import (
     create_sfs_output_check_once,
     direct_submit_lr30_qualification_once,
     direct_submit_sft_once,
+    render_cpu_checkpoint_seal_pod,
     render_lr30_qualification_rayjob,
     render_sft_rayjob,
+    validate_checkpoint_seal_step_binding,
     validate_cpu_checkpoint_pod,
 )
 from cyber_post_train.jobs import JobsError, digest
@@ -277,7 +282,7 @@ def cpu_checkpoint_pod():
             "namespace": "fleet-train-jobs",
             "annotations": {
                 "fleet.ai/failure-alerts": "off",
-                CPU_CHECKPOINT_OPERATION_ANNOTATION: "seal",
+                CPU_CHECKPOINT_OPERATION_ANNOTATION: "verify",
             },
         },
         "spec": {
@@ -296,6 +301,40 @@ def cpu_checkpoint_pod():
             ],
         },
     }
+
+
+def checkpoint_seal_pod_template():
+    pod = cpu_checkpoint_pod()
+    pod["metadata"]["annotations"].update(
+        {
+            CPU_CHECKPOINT_OPERATION_ANNOTATION: "seal",
+            "test.invalid/source-bundle-sha256": "b" * 64,
+        }
+    )
+    pod["spec"]["containers"][0]["command"] = [
+        "python",
+        "-c",
+        f"""\
+import hashlib
+import json
+from pathlib import Path
+from training.checkpoints import receipt, seal, verify
+
+{CHECKPOINT_SEAL_BINDING_TOKEN}
+plan_path = run / ".runtime" / "plan.json"
+assert hashlib.sha256(plan_path.read_bytes()).hexdigest() == {"a" * 64!r}
+plan = json.loads(plan_path.read_text())
+saved = receipt(receipt_path)
+assert saved["optimizer_step"] == target_step
+assert saved["checkpoint_path"] == str(checkpoint_dir)
+assert not out.exists() and not out.is_symlink()
+progress = lambda *_: None
+value = seal(plan, target_step, out, progress=progress)
+verify(value, check_files=True)
+print(json.dumps({{"schema": terminal_schema, "status": "sealed"}}, sort_keys=True))
+""",
+    ]
+    return pod
 
 
 def cpu_sfs_control_pod(*, source_bound=True):
@@ -1656,6 +1695,114 @@ def test_cpu_checkpoint_boundary_previews_and_creates_only_unpinned_zero_gpu_pod
     assert "--dry-run=server" not in calls[3][0]
     manifests = [payload for _, payload in calls if payload is not None]
     assert all(payload["spec"]["nodeSelector"] == CPU_NODE_SELECTOR for payload in manifests)
+
+
+def test_cpu_checkpoint_seal_renderer_binds_every_field_to_requested_step():
+    requested_step = 17
+    pod = render_cpu_checkpoint_seal_pod(
+        checkpoint_seal_pod_template(),
+        arm_name="researcher-arm",
+        run_name="researcher-sft-v1",
+        requested_step=requested_step,
+        attempt=2,
+    )
+    root = "/mnt/sfs/jobs/researcher-sft-v1"
+    assert pod["metadata"]["name"] == "researcher-arm-s17-seal-v2"
+    annotations = pod["metadata"]["annotations"]
+    assert annotations[CPU_CHECKPOINT_RUN_ANNOTATION] == "researcher-sft-v1"
+    assert annotations[CPU_CHECKPOINT_STEP_ANNOTATION] == str(requested_step)
+    assert annotations["test.invalid/source-bundle-sha256"] == "b" * 64
+    script = pod["spec"]["containers"][0]["command"][2]
+    assert f"run = Path({root!r})" in script
+    assert "target_step = 17" in script
+    assert 'f"step-{target_step:06d}.json"' in script
+    assert 'f"global_step_{target_step}"' in script
+    assert 'f"step-{target_step}.json"' in script
+    assert 'f"cyber_qwen38_step{target_step}_seal_terminal_v1"' in script
+    assert "seal(plan, target_step, out," in script
+    assert CHECKPOINT_SEAL_BINDING_TOKEN not in script
+    validate_checkpoint_seal_step_binding(pod, requested_step)
+
+
+def test_cpu_checkpoint_seal_create_rejects_copied_stale_call_step_before_kubectl(
+    monkeypatch,
+):
+    requested_step = 17
+    stale_template_step = 23
+    pod = render_cpu_checkpoint_seal_pod(
+        checkpoint_seal_pod_template(),
+        arm_name="researcher-arm",
+        run_name="researcher-sft-v1",
+        requested_step=requested_step,
+    )
+    container = pod["spec"]["containers"][0]
+    container["command"][2] = container["command"][2].replace(
+        "seal(plan, target_step, out,", f"seal(plan, {stale_template_step}, out,"
+    )
+    calls = []
+
+    def run(*args, **kwargs):
+        calls.append((args, kwargs))
+        raise AssertionError("stale checkpoint-seal template reached kubectl")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(JobsError, match="differs from the requested run/step"):
+        Kubectl("prod-context").create_cpu_checkpoint_pod_once(pod)
+    assert calls == []
+
+
+@pytest.mark.parametrize(
+    "field",
+    [
+        "pod_name",
+        "run_root",
+        "source_receipt",
+        "checkpoint_directory",
+        "output",
+        "step_annotation",
+        "terminal_schema",
+    ],
+)
+def test_cpu_checkpoint_seal_create_rejects_other_stale_step_fields(field):
+    requested_step = 17
+    stale_template_step = 23
+    pod = render_cpu_checkpoint_seal_pod(
+        checkpoint_seal_pod_template(),
+        arm_name="researcher-arm",
+        run_name="researcher-sft-v1",
+        requested_step=requested_step,
+    )
+    annotations = pod["metadata"]["annotations"]
+    container = pod["spec"]["containers"][0]
+    if field == "pod_name":
+        pod["metadata"]["name"] = "researcher-arm-s23-seal-v1"
+    elif field == "run_root":
+        container["command"][2] = container["command"][2].replace(
+            "run = Path('/mnt/sfs/jobs/researcher-sft-v1')",
+            "run = Path('/mnt/sfs/jobs/other-sft-v1')",
+        )
+    elif field == "source_receipt":
+        container["command"][2] = container["command"][2].replace(
+            'f"step-{target_step:06d}.json"', '"step-000023.json"'
+        )
+    elif field == "checkpoint_directory":
+        container["command"][2] = container["command"][2].replace(
+            'f"global_step_{target_step}"', '"global_step_23"'
+        )
+    elif field == "output":
+        container["command"][2] = container["command"][2].replace(
+            'f"step-{target_step}.json"', '"step-23.json"'
+        )
+    elif field == "step_annotation":
+        annotations[CPU_CHECKPOINT_STEP_ANNOTATION] = str(stale_template_step)
+    else:
+        container["command"][2] = container["command"][2].replace(
+            'f"cyber_qwen38_step{target_step}_seal_terminal_v1"',
+            '"cyber_qwen38_step23_seal_terminal_v1"',
+        )
+
+    with pytest.raises(JobsError, match="differs from the requested run/step"):
+        validate_checkpoint_seal_step_binding(pod, requested_step)
 
 
 def test_cpu_checkpoint_boundary_accepts_truthful_export_operation(monkeypatch):

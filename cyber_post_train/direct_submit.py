@@ -83,6 +83,9 @@ SFT_SECRET = "wandb-api"
 DIRECT_JOURNAL = "DIRECT_SUBMISSION.jsonl"
 CPU_CHECKPOINT_OPERATION_ANNOTATION = "cyber-post-train.fleet.ai/cpu-checkpoint-operation"
 CPU_CHECKPOINT_OPERATIONS = {"export", "seal", "verify"}
+CPU_CHECKPOINT_RUN_ANNOTATION = "cyber-post-train.fleet.ai/checkpoint-run"
+CPU_CHECKPOINT_STEP_ANNOTATION = "cyber-post-train.fleet.ai/checkpoint-step"
+CHECKPOINT_SEAL_BINDING_TOKEN = "__CHECKPOINT_SEAL_BINDING__"
 LORA_TRAINER_IMAGE = (
     "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@"
     "sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317"
@@ -98,6 +101,74 @@ SFT_PRODUCTION_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 KUBERNETES_UID_PATTERN = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
 )
+
+
+def _checkpoint_seal_binding(run_name: str, step: int) -> str:
+    return f'''run = Path({str(SFS_JOBS_ROOT / run_name)!r})
+target_step = {step}
+receipt_path = run / "checkpoint_receipts" / f"step-{{target_step:06d}}.json"
+checkpoint_dir = run / "checkpoints" / f"global_step_{{target_step}}"
+out = Path("/output/checkpoint-seals-v1") / f"step-{{target_step}}.json"
+terminal_schema = f"cyber_qwen38_step{{target_step}}_seal_terminal_v1"'''
+
+
+def validate_checkpoint_seal_step_binding(manifest: dict, requested_step: int) -> dict:
+    """Require one run/step binding and no copied literal in seal()."""
+    try:
+        metadata = manifest["metadata"]
+        annotations = metadata["annotations"]
+        [container] = manifest["spec"]["containers"]
+        _, _, script = container["command"]
+        run_name = annotations[CPU_CHECKPOINT_RUN_ANNOTATION]
+        binding = _checkpoint_seal_binding(run_name, requested_step)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise JobsError("malformed checkpoint seal Pod binding") from exc
+    call = "value = seal(plan, target_step, out, progress=progress)"
+    pod_pattern = rf"[a-z0-9][-a-z0-9]*-s{requested_step}-seal-v[1-9][0-9]*"
+    if (
+        type(requested_step) is not int
+        or requested_step <= 0
+        or annotations.get(CPU_CHECKPOINT_OPERATION_ANNOTATION) != "seal"
+        or annotations.get(CPU_CHECKPOINT_STEP_ANNOTATION) != str(requested_step)
+        or re.fullmatch(pod_pattern, metadata.get("name", "")) is None
+        or not isinstance(script, str)
+        or script.count(binding) != 1
+        or script.count("seal(") != 1
+        or script.splitlines().count(call) != 1
+    ):
+        raise JobsError("checkpoint seal Pod differs from the requested run/step")
+    return manifest
+
+
+def render_cpu_checkpoint_seal_pod(
+    template: dict,
+    *,
+    arm_name: str,
+    run_name: str,
+    requested_step: int,
+    attempt: int = 1,
+) -> dict:
+    """Render one reviewed seal template from a single run/step authority."""
+    name = f"{arm_name}-s{requested_step}-seal-v{attempt}"
+    manifest = deepcopy(template)
+    try:
+        metadata = manifest["metadata"]
+        annotations = metadata["annotations"]
+        [container] = manifest["spec"]["containers"]
+        script = container["command"][-1]
+        if not isinstance(script, str) or script.count(CHECKPOINT_SEAL_BINDING_TOKEN) != 1:
+            raise ValueError("binding token")
+        container["command"][-1] = script.replace(
+            CHECKPOINT_SEAL_BINDING_TOKEN, _checkpoint_seal_binding(run_name, requested_step)
+        )
+        metadata["name"] = name
+        annotations[CPU_CHECKPOINT_RUN_ANNOTATION] = run_name
+        annotations[CPU_CHECKPOINT_STEP_ANNOTATION] = str(requested_step)
+    except (KeyError, TypeError, ValueError) as exc:
+        raise JobsError("checkpoint seal template is malformed") from exc
+    validate_cpu_checkpoint_pod(manifest)
+    validate_checkpoint_seal_step_binding(manifest, requested_step)
+    return manifest
 
 
 def _cpu_millicores(value: object) -> int:
@@ -1213,6 +1284,12 @@ class Kubectl:
         validate_cpu_checkpoint_pod(manifest)
         if _has_lora_cpu_preflight_surface(manifest):
             raise JobsError("LoRA CPU preflight must use the exact packaged submission path")
+        operation = manifest["metadata"]["annotations"][CPU_CHECKPOINT_OPERATION_ANNOTATION]
+        if operation == "seal":
+            step = manifest["metadata"]["annotations"].get(CPU_CHECKPOINT_STEP_ANNOTATION, "")
+            if not step.isdecimal():
+                raise JobsError("checkpoint seal Pod is missing its rendered step")
+            validate_checkpoint_seal_step_binding(manifest, int(step))
 
     @staticmethod
     def _require_lora_cpu_preflight_package(package: LoraCpuPreflightPackage) -> dict:
@@ -1239,7 +1316,7 @@ class Kubectl:
             ["create", "--dry-run=server", "--filename=-", "--output=json"],
             manifest=manifest,
         )
-        validate_cpu_checkpoint_pod(response)
+        self._require_generic_cpu_checkpoint(response)
         return response
 
     def create_cpu_checkpoint_pod_once(self, manifest: dict) -> dict:
@@ -1248,7 +1325,7 @@ class Kubectl:
         inventory = self._cpu_node_inventory()
         validate_cpu_checkpoint_node_fit(manifest, inventory)
         response = self._run(["create", "--filename=-", "--output=json"], manifest=manifest)
-        validate_cpu_checkpoint_pod(response)
+        self._require_generic_cpu_checkpoint(response)
         return response
 
     def dry_run_lora_cpu_preflight(self, package: LoraCpuPreflightPackage) -> dict:
