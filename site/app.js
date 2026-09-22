@@ -40,12 +40,12 @@ function renderResults() {
       ${run.warning ? `<div class="score-warning">${run.warning}</div>` : ""}
       <div class="score-pair">
         <div><b>${pct(run.pass1)}</b><small>pass@1</small></div>
-        <div><b>${pct(run.pass4)}</b><small>pass@4</small></div>
+        <div><b>${pct(run.pass4)}</b><small>${run.pass4Label ?? "pass@4"}</small></div>
       </div>
       <dl><div><dt>${run.attemptLabel}</dt><dd>${run.attempts}</dd></div><div><dt>${run.scoreLabel}</dt><dd>${run.scored ?? "Not checked yet"}</dd></div><div><dt>${run.hitLabel}</dt><dd>${run.weaknessesFound}</dd></div></dl>
-      <p>${run.note}</p>
+      <p>${run.note}${run.source ? ` <a href="${run.source}">Read the aggregate evidence.</a>` : ""}</p>
     </article>`).join("");
-  document.querySelector("#main-finding").textContent = "Qwen Code gives us a genuine partial result from 48 usable attempts, not the complete 15-website baseline we intended. OpenCode’s saved 2.4% four-attempt result is not a real model score: its AI report checker failed on all 206 submitted findings.";
+  document.querySelector("#main-finding").textContent = "The new one-attempt OpenCode run is still partial: 14 of 15 collections are valid, all 14 valid saved attempts have accepted scores under one policy, and 11 of 98 scored weakness checks received credit. The one technical exclusion is not a zero. This is not a complete baseline and does not show whether training helped.";
 }
 
 function renderProtocol() {
@@ -67,7 +67,7 @@ function renderTasks() {
 function renderTraceFindings() {
   document.querySelector("#trace-findings").innerHTML = data.traces.map((item, i) => `
     <article><span>${String(i + 1).padStart(2, "0")}</span><div><h3>${item[0]}</h3><p>${item[1]}</p></div></article>`).join("");
-  document.querySelector("#limitations").textContent = "We are rebuilding both tests on the Tensorlake cloud platform. Before the full run, one small test for each agent program must prove that the website, model, written-report checker, and final score all work together. The new pair will use the same model copies, website software, number of model turns, time limit, scoring code, and rules for technical failures.";
+  document.querySelector("#limitations").textContent = "The fresh run gives one accepted score for each of the 14 valid collections. A complete baseline still requires valid evidence for the collection that failed technically. Any future replacement rule must be written before another run. A training claim also needs a separately collected trained-model result under the same rules.";
 }
 
 function renderFunnel() {
