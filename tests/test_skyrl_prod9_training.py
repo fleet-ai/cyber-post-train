@@ -257,6 +257,18 @@ def _source_preview(plan: dict, request: dict) -> dict:
     return {"name": placeholder, "warnings": [], "manifest_yaml": yaml.safe_dump(value)}
 
 
+def _image_identity_receipt(request: dict) -> dict:
+    body = {
+        "schema": prod9_direct.IMAGE_DEFAULT_IDENTITY_SCHEMA,
+        "status": "passed",
+        "image": request["image"],
+        "uid": 1000,
+        "gid": 100,
+        "gpus": 0,
+    }
+    return {**body, "receipt_sha256": digest(body)}
+
+
 def _direct_render(value: dict) -> dict:
     rendered = copy.deepcopy(value)
     rendered["metadata"].update(
@@ -621,6 +633,35 @@ def test_prod9_fresh_direct_renderer_and_cpu_preflight_are_alert_safe() -> None:
     root_preview["manifest_yaml"] = yaml.safe_dump(root_manifest)
     with pytest.raises(JobsError, match="runtime security context"):
         prod9_direct.manifest(plan, request, root_preview, identity=identity)
+
+    default_user_preview = copy.deepcopy(preview)
+    default_user_manifest = yaml.safe_load(default_user_preview["manifest_yaml"])
+    default_user_manifest["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"][
+        "containers"
+    ][0].pop("securityContext")
+    default_user_preview["manifest_yaml"] = yaml.safe_dump(default_user_manifest)
+    with pytest.raises(JobsError, match="exact-image runtime-user receipt"):
+        prod9_direct.manifest(plan, request, default_user_preview, identity=identity)
+    assert prod9_direct.manifest(
+        plan,
+        request,
+        default_user_preview,
+        identity=identity,
+        image_identity_receipt=_image_identity_receipt(request),
+    ) == default_user_manifest
+    wrong_image = _image_identity_receipt(request)
+    wrong_image["image"] = "invalid.example/image@sha256:" + "0" * 64
+    wrong_image["receipt_sha256"] = digest(
+        {key: value for key, value in wrong_image.items() if key != "receipt_sha256"}
+    )
+    with pytest.raises(JobsError, match="receipt changed"):
+        prod9_direct.manifest(
+            plan,
+            request,
+            default_user_preview,
+            identity=identity,
+            image_identity_receipt=wrong_image,
+        )
 
     census = build_capacity_census(
         {"items": []},

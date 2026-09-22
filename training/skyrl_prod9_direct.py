@@ -49,6 +49,7 @@ PREFLIGHT_AUTHORIZATION_SCHEMA = "cyber_skyrl_prod9_preflight_authorization_v1"
 AUTHORIZATION_SCHEMA = "cyber_skyrl_prod9_direct_authorization_v1"
 CPU_CREATED_SCHEMA = "cyber_skyrl_prod9_cpu_created_v1"
 CREATED_SCHEMA = "cyber_skyrl_prod9_direct_created_v1"
+IMAGE_DEFAULT_IDENTITY_SCHEMA = "cyber_exact_image_default_identity_v1"
 RUNTIME_UID = 1000
 RUNTIME_GID = 100
 NAMESPACE = historical.NAMESPACE
@@ -326,12 +327,74 @@ def _runtime_context() -> dict[str, Any]:
     }
 
 
+def _image_default_identity(
+    request: dict[str, Any], receipt: dict[str, Any] | None
+) -> dict[str, Any]:
+    """Validate the bounded exact-image proof used when the API omits a user.
+
+    The Jobs API currently has no request field for a container security
+    context.  A zero-GPU probe therefore proves the immutable image's default
+    user instead.  The proof is deliberately exact and cannot authorize a
+    different image, UID/GID, GPU allocation, or receipt shape.
+    """
+    if not isinstance(receipt, dict):
+        raise JobsError("prod9 Jobs preview lacks an exact-image runtime-user receipt")
+    body = {key: item for key, item in receipt.items() if key != "receipt_sha256"}
+    expected_keys = {"schema", "status", "image", "uid", "gid", "gpus"}
+    if (
+        set(body) != expected_keys
+        or receipt.get("schema") != IMAGE_DEFAULT_IDENTITY_SCHEMA
+        or receipt.get("status") != "passed"
+        or receipt.get("image") != request.get("image")
+        or receipt.get("uid") != RUNTIME_UID
+        or receipt.get("gid") != RUNTIME_GID
+        or receipt.get("gpus") != 0
+        or receipt.get("receipt_sha256") != digest(body)
+    ):
+        raise JobsError("prod9 exact-image runtime-user receipt changed")
+    return receipt
+
+
+def _runtime_bound_preview(
+    request: dict[str, Any],
+    preview: dict[str, Any],
+    receipt: dict[str, Any] | None,
+) -> tuple[dict[str, Any], str]:
+    """Return a validation-only preview with the proven effective user.
+
+    The raw Jobs API render remains the object submitted.  The synthetic copy
+    exists only so the shared resource/image/secret validator can verify the
+    effective identity already proven by the exact-image zero-GPU receipt.
+    """
+    source = _source(preview)
+    try:
+        container = source["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"][
+            "containers"
+        ][0]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise JobsError("prod9 Jobs preview is missing its GPU container") from exc
+    context = container.get("securityContext")
+    if context == _runtime_context():
+        return preview, "rendered_security_context"
+    if context not in (None, {}):
+        raise JobsError("prod9 Jobs preview runtime security context changed")
+    _image_default_identity(request, receipt)
+    validated = copy.deepcopy(preview)
+    validated_source = copy.deepcopy(source)
+    validated_source["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"][
+        "containers"
+    ][0]["securityContext"] = _runtime_context()
+    validated["manifest_yaml"] = yaml.safe_dump(validated_source, sort_keys=False)
+    return validated, "exact_image_default_receipt"
+
+
 def manifest(
     plan: dict[str, Any],
     request: dict[str, Any],
     preview: dict[str, Any],
     *,
     identity: historical.RailIdentity,
+    image_identity_receipt: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Accept the exact Jobs API render without transforming one byte.
 
@@ -342,6 +405,9 @@ def manifest(
     bound = _identity(plan, identity)
     if training.job_request(plan) != request:
         raise JobsError("prod9 plan/request identity changed")
+    bound_preview, runtime_identity_source = _runtime_bound_preview(
+        request, preview, image_identity_receipt
+    )
     source = _source(preview)
     placeholder = bound.run_name + "-00000000"
     metadata = source.get("metadata", {})
@@ -367,7 +433,7 @@ def manifest(
     # Shared validation proves c1/q1, one node/eight GPUs, image/resources,
     # request environment and the required Secrets against the unmodified API
     # response.  It also independently checks the root alert annotation.
-    training.validate_preview(plan, request, preview)
+    training.validate_preview(plan, request, bound_preview)
     spec = source["spec"]
     if (
         spec.get("entrypoint") != request["command"]
@@ -389,7 +455,10 @@ def manifest(
     secret_names = [row.get("secretRef", {}).get("name") for row in container.get("envFrom", [])]
     if secret_names != ["fleet-api", "wandb-api", generated_secret]:
         raise JobsError("prod9 Jobs preview Secret bindings changed")
-    if container.get("securityContext") != _runtime_context():
+    if (
+        container.get("securityContext") != _runtime_context()
+        and runtime_identity_source != "exact_image_default_receipt"
+    ):
         raise JobsError("prod9 Jobs preview runtime security context changed")
     if container.get("terminationMessagePath", "/dev/termination-log") != "/dev/termination-log":
         raise JobsError("prod9 Jobs preview termination receipt path changed")
@@ -410,10 +479,17 @@ def packet(
     preview: dict[str, Any],
     *,
     identity: historical.RailIdentity,
+    image_identity_receipt: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Seal a non-submitting proof of the unmodified Jobs API preview."""
     bound = _identity(plan, identity)
-    value = manifest(plan, request, preview, identity=bound)
+    value = manifest(
+        plan,
+        request,
+        preview,
+        identity=bound,
+        image_identity_receipt=image_identity_receipt,
+    )
     body = {
         "schema": PACKET_SCHEMA,
         "plan_sha256": digest(plan),
@@ -580,10 +656,17 @@ def validate_preview(
     *,
     context: str,
     identity: historical.RailIdentity,
+    image_identity_receipt: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Prove server rendering preserves the fresh root annotation and runtime."""
     bound = _identity(plan, identity)
-    if expected != manifest(plan, request, source_preview, identity=bound):
+    if expected != manifest(
+        plan,
+        request,
+        source_preview,
+        identity=bound,
+        image_identity_receipt=image_identity_receipt,
+    ):
         raise JobsError("prod9 direct packet changed")
     if (
         context not in {DEV_CONTEXT, PROD_CONTEXT}
@@ -1613,6 +1696,7 @@ def _direct_authorization(
     preflight_created: dict[str, Any],
     preflight_receipt: dict[str, Any],
     preflight_release: dict[str, Any],
+    image_identity_receipt: dict[str, Any] | None = None,
     *,
     dev_preview: dict[str, Any],
     prod_preview: dict[str, Any],
@@ -1621,7 +1705,18 @@ def _direct_authorization(
 ) -> dict[str, Any]:
     """Bind every completed zero-GPU gate to one Jobs API POST authority."""
     bound = _identity(plan, identity)
-    if expected != manifest(plan, request, source_preview, identity=bound):
+    checked_image_identity = (
+        _image_default_identity(request, image_identity_receipt)
+        if image_identity_receipt is not None
+        else None
+    )
+    if expected != manifest(
+        plan,
+        request,
+        source_preview,
+        identity=bound,
+        image_identity_receipt=checked_image_identity,
+    ):
         raise JobsError("prod9 direct manifest changed")
     checked_stage, stage_identity = training._stage_identity(stage)
     if stage_identity != bound:
@@ -1736,6 +1831,7 @@ def _direct_authorization(
             "preflight_created": preflight_created_value,
             "preflight_receipt": checked_preflight,
             "preflight_release": preflight_release_value,
+            "image_identity_receipt": checked_image_identity,
             "dev_preview": previews[0],
             "prod_preview": previews[1],
             "observer": armed,
@@ -1759,6 +1855,7 @@ def authorize(
     preflight_created: dict[str, Any],
     preflight_receipt: dict[str, Any],
     preflight_release: dict[str, Any],
+    image_identity_receipt: dict[str, Any] | None = None,
     *,
     dev_preview: dict[str, Any],
     prod_preview: dict[str, Any],
@@ -1780,6 +1877,7 @@ def authorize(
         preflight_created,
         preflight_receipt,
         preflight_release,
+        image_identity_receipt,
         dev_preview=dev_preview,
         prod_preview=prod_preview,
         observer=observer,
@@ -1838,6 +1936,7 @@ def create_once(
         auth["preflight_created"],
         auth["preflight_receipt"],
         auth["preflight_release"],
+        auth["image_identity_receipt"],
         dev_preview=auth["dev_preview"],
         prod_preview=auth["prod_preview"],
         observer=auth["observer"],
@@ -1863,7 +1962,13 @@ def create_once(
         # This live response is the deployed creator contract.  A missing root
         # alert annotation fails in Jobs.preview/manifest before any POST.
         live_source_preview = client.preview(request)
-        live_expected = manifest(plan, request, live_source_preview, identity=bound)
+        live_expected = manifest(
+            plan,
+            request,
+            live_source_preview,
+            identity=bound,
+            image_identity_receipt=auth["image_identity_receipt"],
+        )
         if live_source_preview != source_preview or live_expected != expected:
             raise JobsError("prod9 live Jobs API preview changed after authorization")
         rendered = server_dry_run(live_expected, context=PROD_CONTEXT, runner=runner)
@@ -1875,6 +1980,7 @@ def create_once(
             rendered,
             context=PROD_CONTEXT,
             identity=bound,
+            image_identity_receipt=auth["image_identity_receipt"],
         )
         # Capacity is the final external-state read. Everything after it is a
         # local liveness/freshness check, durable intent, and the sole API POST.
