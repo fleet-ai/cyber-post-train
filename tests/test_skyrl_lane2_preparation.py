@@ -343,6 +343,13 @@ def test_lane2_current_runtime_request_and_manifests_are_alert_safe() -> None:
     assert direct.live_create_is_available() is False
 
 
+def test_lane2_exposes_native_source_to_the_shared_supervisor(monkeypatch) -> None:
+    sentinel = {"native": object()}
+    monkeypatch.setattr(training.historical, "native_source", lambda: sentinel)
+
+    assert training.native_source() is sentinel
+
+
 def test_lane2_fails_closed_on_optimizer_or_alert_drift() -> None:
     plan, request = _compile()
     changed = copy.deepcopy(plan)

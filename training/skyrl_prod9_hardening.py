@@ -272,6 +272,7 @@ def verify_source_closure(path: Path) -> dict[str, Any]:
                 "stage_request",
                 "stage_rebind",
                 "reject_historical_direct_rail",
+                "native_source",
                 "_native",
             },
         ),

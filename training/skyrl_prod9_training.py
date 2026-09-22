@@ -553,6 +553,11 @@ def native_result(plan: dict) -> dict:
     return historical.native_result(plan)
 
 
+def native_source():
+    """Expose the native loader required by the shared supervised lifecycle."""
+    return historical.native_source()
+
+
 def _native(plan: dict) -> None:
     """Run native SkyRL with the fresh prod9 rollout generator."""
     import ray

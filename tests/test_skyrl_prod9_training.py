@@ -523,6 +523,13 @@ def test_prod9_request_bundles_fresh_entrypoint_and_historical_rail_rejects(
     }
 
 
+def test_prod9_exposes_native_source_to_the_shared_supervisor(monkeypatch) -> None:
+    sentinel = {"native": object()}
+    monkeypatch.setattr(prod9_training.historical, "native_source", lambda: sentinel)
+
+    assert prod9_training.native_source() is sentinel
+
+
 def test_prod9_stage_bundle_imports_hermetically(tmp_path: Path) -> None:
     _plan, _request, identity = _prod9_plan()
     predecessor = json.loads(
