@@ -381,9 +381,9 @@ def _runtime_bound_preview(
     _image_default_identity(request, receipt)
     validated = copy.deepcopy(preview)
     validated_source = copy.deepcopy(source)
-    validated_source["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"][
-        "containers"
-    ][0]["securityContext"] = _runtime_context()
+    validated_source["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]["containers"][
+        0
+    ]["securityContext"] = _runtime_context()
     validated["manifest_yaml"] = yaml.safe_dump(validated_source, sort_keys=False)
     return validated, "exact_image_default_receipt"
 
@@ -440,7 +440,7 @@ def manifest(
         or spec.get("suspend") is not True
         or spec.get("shutdownAfterJobFinishes") is not True
         or spec.get("submissionMode") != "HTTPMode"
-        or spec.get("backoffLimit") != 0
+        or spec.get("backoffLimit") not in (None, 0)
     ):
         raise JobsError("prod9 Jobs preview execution changed")
     cluster = spec.get("rayClusterSpec", {})
@@ -634,6 +634,8 @@ def _strip_server_defaults(expected: dict[str, Any], rendered: dict[str, Any]) -
     if actual.pop("status", None) not in (None, {}):
         raise JobsError("prod9 server dry-run added status")
     spec = actual.get("spec", {})
+    if "backoffLimit" not in expected.get("spec", {}) and spec.pop("backoffLimit", None) != 0:
+        raise JobsError("prod9 RayJob backoff default changed")
     if spec.pop("ttlSecondsAfterFinished", None) not in (None, 0):
         raise JobsError("prod9 RayJob TTL default changed")
     cluster = spec.get("rayClusterSpec", {})

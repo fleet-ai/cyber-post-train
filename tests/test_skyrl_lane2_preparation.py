@@ -366,6 +366,25 @@ def test_lane2_fails_closed_on_optimizer_or_alert_drift() -> None:
 
     preview = _source_preview(plan, request)
     source = yaml.safe_load(preview["manifest_yaml"])
+    source["spec"].pop("backoffLimit")
+    preview["manifest_yaml"] = yaml.safe_dump(source)
+    accepted_default = direct.manifest(plan, request, preview)
+    rendered = _direct_render(accepted_default)
+    rendered["spec"]["backoffLimit"] = 0
+    assert (
+        direct.validate_server_preview(
+            plan,
+            request,
+            preview,
+            accepted_default,
+            rendered,
+            context=direct.PROD_CONTEXT,
+        )["status"]
+        == "passed"
+    )
+
+    preview = _source_preview(plan, request)
+    source = yaml.safe_load(preview["manifest_yaml"])
     source["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]["containers"][0][
         "securityContext"
     ].pop("allowPrivilegeEscalation")
@@ -375,18 +394,21 @@ def test_lane2_fails_closed_on_optimizer_or_alert_drift() -> None:
 
     preview = _source_preview(plan, request)
     source = yaml.safe_load(preview["manifest_yaml"])
-    source["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]["containers"][
-        0
-    ].pop("securityContext")
+    source["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]["containers"][0].pop(
+        "securityContext"
+    )
     preview["manifest_yaml"] = yaml.safe_dump(source)
     with pytest.raises(JobsError, match="exact-image runtime-user receipt"):
         direct.manifest(plan, request, preview)
-    assert direct.manifest(
-        plan,
-        request,
-        preview,
-        image_identity_receipt=_image_identity_receipt(request),
-    ) == source
+    assert (
+        direct.manifest(
+            plan,
+            request,
+            preview,
+            image_identity_receipt=_image_identity_receipt(request),
+        )
+        == source
+    )
 
     data_job = direct.data_job_manifest()
     rendered = _cpu_render(data_job)

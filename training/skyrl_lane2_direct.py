@@ -89,7 +89,7 @@ def manifest(
         or spec.get("suspend") is not True
         or spec.get("shutdownAfterJobFinishes") is not True
         or spec.get("submissionMode") != "HTTPMode"
-        or spec.get("backoffLimit") != 0
+        or spec.get("backoffLimit") not in (None, 0)
     ):
         raise JobsError("lane2 Jobs preview execution changed")
     cluster = spec.get("rayClusterSpec", {})
@@ -129,9 +129,7 @@ def packet(
     *,
     image_identity_receipt: dict[str, Any] | None = None,
 ) -> dict:
-    value = manifest(
-        plan, request, preview, image_identity_receipt=image_identity_receipt
-    )
+    value = manifest(plan, request, preview, image_identity_receipt=image_identity_receipt)
     body = {
         "schema": PACKET_SCHEMA,
         "plan_sha256": digest(plan),

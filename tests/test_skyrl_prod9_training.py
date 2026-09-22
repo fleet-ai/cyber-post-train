@@ -620,6 +620,28 @@ def test_prod9_fresh_direct_renderer_and_cpu_preflight_are_alert_safe() -> None:
     retrying_preview["manifest_yaml"] = yaml.safe_dump(retrying_manifest)
     with pytest.raises(JobsError, match="execution changed"):
         prod9_direct.manifest(plan, request, retrying_preview, identity=identity)
+
+    default_backoff_preview = copy.deepcopy(preview)
+    default_backoff_manifest = yaml.safe_load(default_backoff_preview["manifest_yaml"])
+    default_backoff_manifest["spec"].pop("backoffLimit")
+    default_backoff_preview["manifest_yaml"] = yaml.safe_dump(default_backoff_manifest)
+    accepted_default = prod9_direct.manifest(
+        plan, request, default_backoff_preview, identity=identity
+    )
+    defaulted_render = _direct_render(accepted_default)
+    defaulted_render["spec"]["backoffLimit"] = 0
+    assert (
+        prod9_direct.validate_preview(
+            plan,
+            request,
+            default_backoff_preview,
+            accepted_default,
+            defaulted_render,
+            context=prod9_direct.PROD_CONTEXT,
+            identity=identity,
+        )["status"]
+        == "passed"
+    )
     root_preview = copy.deepcopy(preview)
     root_manifest = yaml.safe_load(root_preview["manifest_yaml"])
     root_manifest["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]["containers"][0][
@@ -642,13 +664,16 @@ def test_prod9_fresh_direct_renderer_and_cpu_preflight_are_alert_safe() -> None:
     default_user_preview["manifest_yaml"] = yaml.safe_dump(default_user_manifest)
     with pytest.raises(JobsError, match="exact-image runtime-user receipt"):
         prod9_direct.manifest(plan, request, default_user_preview, identity=identity)
-    assert prod9_direct.manifest(
-        plan,
-        request,
-        default_user_preview,
-        identity=identity,
-        image_identity_receipt=_image_identity_receipt(request),
-    ) == default_user_manifest
+    assert (
+        prod9_direct.manifest(
+            plan,
+            request,
+            default_user_preview,
+            identity=identity,
+            image_identity_receipt=_image_identity_receipt(request),
+        )
+        == default_user_manifest
+    )
     wrong_image = _image_identity_receipt(request)
     wrong_image["image"] = "invalid.example/image@sha256:" + "0" * 64
     wrong_image["receipt_sha256"] = digest(
