@@ -20,12 +20,14 @@ import subprocess
 import uuid
 from collections.abc import Callable
 from copy import deepcopy
+from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
 
+from .gpu_capacity import ROLE_LABELS, CapacityError, live_capacity_census
 from .jobs import (
     FAILURE_ALERT_ANNOTATION,
     FAILURE_ALERT_OFF,
@@ -66,6 +68,7 @@ from .sfs_output_job import (
     validate_sfs_output_job_response,
 )
 from .sfs_write_identity import (
+    DEV_GPU_OWNER_PREFIXES,
     TRAINER_GID,
     TRAINER_UID,
     is_direct_dev_gpu_reload_pod,
@@ -107,6 +110,9 @@ SFT_PRODUCTION_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 KUBERNETES_UID_PATTERN = re.compile(
     r"[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}"
 )
+DIRECT_DEV_GPU_MAX_NODES = 8
+DIRECT_DEV_GPU_MAX_GPUS = 64
+DIRECT_DEV_GPU_CAPACITY_MAX_AGE_SECONDS = 120
 
 
 def _checkpoint_seal_binding(run_name: str, step: int) -> str:
@@ -1159,6 +1165,76 @@ def _json_object(payload: str, operation: str) -> dict:
     return value
 
 
+def validate_direct_dev_gpu_reload_precreate(
+    manifest: dict,
+    context: str,
+    *,
+    reader: Callable[..., dict] | None = None,
+    now: datetime | None = None,
+) -> dict:
+    """Require one fresh project-wide census immediately before a direct create."""
+
+    try:
+        validate_direct_dev_gpu_reload_output(manifest)
+    except ValueError as exc:
+        raise JobsError(str(exc)) from None
+    if not isinstance(context, str) or not context:
+        raise JobsError("direct dev GPU reload requires an explicit Kubernetes context")
+    reader = live_capacity_census if reader is None else reader
+    try:
+        census = reader(
+            context,
+            owner_prefixes=DEV_GPU_OWNER_PREFIXES,
+            max_nodes=DIRECT_DEV_GPU_MAX_NODES,
+            max_gpus=DIRECT_DEV_GPU_MAX_GPUS,
+            planned_nodes=1,
+            planned_gpus=1,
+        )
+    except CapacityError as exc:
+        raise JobsError("direct dev GPU reload cross-namespace capacity census failed") from exc
+    if not isinstance(census, dict):
+        raise JobsError("direct dev GPU reload capacity census is invalid")
+    try:
+        observed = datetime.fromisoformat(str(census.get("observed_at")).replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise JobsError("direct dev GPU reload capacity timestamp is invalid") from exc
+    observed_now = now or datetime.now(UTC)
+    if observed.tzinfo is None or observed_now.tzinfo is None:
+        raise JobsError("direct dev GPU reload capacity timestamp is invalid")
+    current = census.get("current")
+    projected = census.get("projected")
+    role_counts = current.get("role_pod_counts") if isinstance(current, dict) else None
+    unsigned = {key: value for key, value in census.items() if key != "sha256"}
+    age = (observed_now.astimezone(UTC) - observed.astimezone(UTC)).total_seconds()
+    if (
+        census.get("sha256") != digest(unsigned)
+        or census.get("schema") != "cyber_project_gpu_capacity_census_v1"
+        or census.get("scope")
+        != {
+            "kubernetes_namespaces": "all",
+            "owner_prefixes": list(DEV_GPU_OWNER_PREFIXES),
+            "ownership_labels": ROLE_LABELS,
+        }
+        or census.get("limits")
+        != {"nodes": DIRECT_DEV_GPU_MAX_NODES, "gpus": DIRECT_DEV_GPU_MAX_GPUS}
+        or census.get("planned") != {"nodes": 1, "gpus": 1}
+        or census.get("qualified") is not True
+        or census.get("problems") != []
+        or not isinstance(current, dict)
+        or not isinstance(projected, dict)
+        or not isinstance(role_counts, dict)
+        or role_counts.get("unclassified") != 0
+        or type(current.get("nodes")) is not int
+        or type(current.get("gpus")) is not int
+        or projected != {"nodes": current["nodes"] + 1, "gpus": current["gpus"] + 1}
+        or projected["nodes"] > DIRECT_DEV_GPU_MAX_NODES
+        or projected["gpus"] > DIRECT_DEV_GPU_MAX_GPUS
+        or not 0 <= age <= DIRECT_DEV_GPU_CAPACITY_MAX_AGE_SECONDS
+    ):
+        raise JobsError("direct dev GPU reload capacity census is stale or incomplete")
+    return census
+
+
 class Kubectl:
     """Small no-shell Kubernetes boundary; mutation is create-only and never retried."""
 
@@ -1226,6 +1302,7 @@ class Kubectl:
         direct_dev_reload = is_direct_dev_gpu_reload_pod(manifest)
         if direct_dev_reload:
             self._require_direct_dev_gpu_reload_output(manifest)
+            validate_direct_dev_gpu_reload_precreate(manifest, self.context)
         response = self._run(["create", "--filename=-", "--output=json"], manifest=manifest)
         if direct_dev_reload:
             self._require_direct_dev_gpu_reload_output(response)
