@@ -1,6 +1,25 @@
 window.REPORT_DATA = {
   runs: [
     {
+      id: "opencode-fresh-base-partial",
+      label: "OpenCode 1.18.27 · fresh base-model run",
+      short: "Fresh OpenCode base run",
+      attemptLabel: "Accepted collections",
+      attempts: "14 / 15",
+      scoreLabel: "Accepted score cells",
+      scored: "14 / 15",
+      invalid: 1,
+      pass1: 11.224489795918368,
+      pass4: null,
+      pass4Label: "not run",
+      weaknessesFound: "11 / 98",
+      hitLabel: "Scored weakness checks with credit",
+      status: "PARTIAL baseline",
+      warning: "PARTIAL — not a complete baseline",
+      note: "One attempt was made for each of 15 websites. One collection had a technical failure and is excluded rather than counted as zero. All 14 valid saved attempts were scored under the same policy. This partial result cannot show whether training helped or hurt the model.",
+      source: "https://github.com/fleet-ai/cyber-post-train/blob/main/docs/evidence/webexploitbench/2026-09-22-qwen38-opencode-full15-partial-baseline.json"
+    },
+    {
       id: "qwen-code",
       label: "Qwen Code 0.22.3",
       short: "Qwen Code",
@@ -41,7 +60,7 @@ window.REPORT_DATA = {
     ["Web-security challenges", "15 websites in the benchmark's easiest difficulty level", "The same 15 websites", true],
     ["Chances per website", "4", "4", true],
     ["AI chosen to check written reports", "GLM-5.3", "GLM-5.3", true],
-    ["Did that report-checking AI work?", "Mostly—one attempt lost its score check", "No—the name in the setup did not exist", false],
+    ["Did that report-checking AI work?", "Yes, for all 14 valid saved attempts", "No—the name in the setup did not exist", false],
     ["Program that gave the model tools", "Qwen Code 0.22.3", "OpenCode 1.18.27", false],
     ["Where the test ran", "Local benchmark program (CAGE)", "Tensorlake cloud platform", false],
     ["Typical number of model requests", "150 per scored attempt", "341 per completed attempt", false],
