@@ -23,6 +23,9 @@ LR30_STEP76 = ROOT / "configs/qualification/qwen38-lr30-step76-inference-stage-v
 TEACHER3K32_STEP600 = (
     ROOT / "configs/qualification/qwen38-teacher3k32-step600-inference-stage-v1.json"
 )
+TEACHER3K32_STEP700 = (
+    ROOT / "configs/qualification/qwen38-teacher3k32-step700-inference-stage-v1.json"
+)
 ACCEPTED_V2 = (
     ROOT / "docs/evidence/qwen38-fresh75-step230-inference-stage-v2-accepted-20260915.json"
 )
@@ -218,6 +221,33 @@ def test_teacher3k32_step600_plan_clones_current_base_and_binds_accepted_reload(
     assert source["gpu_check_receipt"]["required_fields"]["finite_logits"] is True
     assert source["gpu_check_receipt"]["required_fields"]["optimizer_steps_executed"] == 0
     assert desired["id"] == "chris-q38-t3k32-s600-v1"
+    assert desired["spec"]["desiredState"] == "paused"
+    assert desired["spec"]["scaling"] == {"minReplicas": 0}
+    assert desired["spec"]["placement"]["priorityClassName"] == "c1"
+    assert desired["spec"]["model"]["revision"] == source["payload"]["manifest_sha256"]
+
+
+def test_teacher3k32_step700_plan_binds_durable_accepted_reload_receipt() -> None:
+    plan = current_stage.read_plan(TEACHER3K32_STEP700)
+    source = plan["source"]
+    desired = plan["desired_registration"]
+
+    assert plan["registration_source"]["id"] == "qwen3.8-27b"
+    assert plan["execution"]["gpus"] == 0
+    assert plan["execution"]["priority_class"] == "c1"
+    assert plan["destination"]["path"] == "/models/chris-q38-t3k32-s700-v1"
+    assert source["export_receipt"]["receipt_sha256"] == (
+        "sha256:ed320b7535ed439850a419cd717d55172b260cfa63df8abf4f0ebf6f4714c0ec"
+    )
+    assert source["gpu_check_receipt"]["sfs_path"].endswith("/GPU_CHECK.json")
+    assert source["gpu_check_receipt"]["receipt_sha256"] == (
+        "sha256:7fca6bb17f1660579bac96a57e3b5e8c1fe161ee28e7508239f4c6ebe886d306"
+    )
+    fields = source["gpu_check_receipt"]["required_fields"]
+    assert fields["finite_logits"] is True
+    assert fields["optimizer_steps_executed"] == 0
+    assert fields["loader_contract"]["model_class"] == ("Qwen3_5ForConditionalGeneration")
+    assert desired["id"] == "chris-q38-t3k32-s700-v1"
     assert desired["spec"]["desiredState"] == "paused"
     assert desired["spec"]["scaling"] == {"minReplicas": 0}
     assert desired["spec"]["placement"]["priorityClassName"] == "c1"

@@ -162,7 +162,7 @@ def test_accepted_base_is_complete_and_fixed_without_copying_outcomes() -> None:
     assert baseline["scientific_use"].startswith("reuse_without_rerun_only_if")
 
 
-def test_step700_binds_the_accepted_seal_and_export_but_not_readiness() -> None:
+def test_step700_binds_the_accepted_seal_export_and_gpu_reload_but_not_readiness() -> None:
     packet = read(PACKET)
     checkpoint = packet["candidate_checkpoint"]
     assert checkpoint["optimizer_step"] == 700
@@ -181,7 +181,7 @@ def test_step700_binds_the_accepted_seal_and_export_but_not_readiness() -> None:
     assert checkpoint["world_size"] == 8
     assert checkpoint["total_bytes"] == 324627486795
     assert checkpoint["supervised_tokens_at_step"] == 21596883
-    assert checkpoint["gpu_reload_verified"] is False
+    assert checkpoint["gpu_reload_verified"] is True
 
     gates = packet["promotion_gates"]
     assert gates["export"]["state"] == "accepted"
@@ -192,7 +192,27 @@ def test_step700_binds_the_accepted_seal_and_export_but_not_readiness() -> None:
     assert gates["cpu_layout"]["synthetic_only"] is True
     assert gates["cpu_layout"]["serving_qualified"] is False
     assert gates["cpu_layout"]["gpu_reload_verified"] is False
-    for gate in ("gpu_reload", "stage", "serving_registration", "live_parity"):
+    reload_gate = gates["gpu_reload"]
+    assert reload_gate["state"] == "accepted_bounded_zero_update_reload"
+    assert reload_gate["gpus"] == 1
+    assert reload_gate["optimizer_steps_executed"] == 0
+    assert reload_gate["finite_logits"] is True
+    assert reload_gate["generated_tokens"] == 2
+    assert reload_gate["source_unchanged"] is True
+    assert reload_gate["serving_qualified"] is False
+    assert reload_gate["pod_absent_after_cleanup"] is True
+    assert reload_gate["receipt_sha256"] == (
+        "sha256:7fca6bb17f1660579bac96a57e3b5e8c1fe161ee28e7508239f4c6ebe886d306"
+    )
+    assert reload_gate["complete_receipt_sha256"] == (
+        "sha256:d590c924a8b8eedd06dc5a1b86477a485096db428c43aab49c97fdb3631c660a"
+    )
+    assert reload_gate["receipt_sfs_path"] == (
+        "/jobs/chris-q38-study-corpora-v1/launch-controls/"
+        "chris-q38-t3k32-s700-gpu-check-v1/GPU_CHECK.json"
+    )
+    assert "accepted_one_gpu_finite_reload_receipt" not in packet["remaining_before_launch_packet"]
+    for gate in ("stage", "serving_registration", "live_parity"):
         assert gates[gate]["state"].startswith("unaccepted")
     assert gates["stage"]["payload_manifest_sha256"] is None
     assert gates["serving_registration"]["served_id"] is None
