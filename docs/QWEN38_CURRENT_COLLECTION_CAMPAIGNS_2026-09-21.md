@@ -137,10 +137,9 @@ student-visible-reasoning schema.
 The first v2 live prefix exposed one deterministic runtime defect without
 opening prompts, traces, logs, or scores: OpenCode discovery (`/v1/models`) and
 chat completions shared `FIXED_MAX_REQUESTS=600`. The sanitized attempt census
-showed the same exit-1/process-error lifecycle across every reviewed failure:
-599 completed model rounds followed by the same scoring-stage runtime
-classification. V2 and its packet remain immutable evidence; no digest is
-rewritten.
+showed a repeated exit-1/process-error cohort with 599 completed model rounds
+followed by the same scoring-stage runtime classification. V2 and its packet
+remain immutable evidence; no digest is rewritten.
 
 V3 binds `collection_fixed_proxy_v2.py`, which retains a bounded total-request
 ceiling but counts only `/v1/chat/completions` against the exact 600-completion
