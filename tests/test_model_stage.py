@@ -20,6 +20,9 @@ FAILED_V1 = ROOT / "configs/qualification/qwen38-fresh75-step230-inference-stage
 PRODUCTION = ROOT / "configs/qualification/qwen38-fresh75-step230-inference-stage-v2.json"
 SELF_SFT = ROOT / "configs/qualification/qwen38-self-sft-step44-inference-stage-v1.json"
 LR30_STEP76 = ROOT / "configs/qualification/qwen38-lr30-step76-inference-stage-v1.json"
+TEACHER3K32_STEP600 = (
+    ROOT / "configs/qualification/qwen38-teacher3k32-step600-inference-stage-v1.json"
+)
 ACCEPTED_V2 = (
     ROOT / "docs/evidence/qwen38-fresh75-step230-inference-stage-v2-accepted-20260915.json"
 )
@@ -195,6 +198,30 @@ def test_lr30_step76_plan_clones_current_base_and_binds_accepted_forward() -> No
     assert desired_spec["model"]["dataParallelSize"] == 8
     assert desired_spec["model"]["tensorParallelSize"] == 1
     assert desired_spec["model"]["revision"] == source["payload"]["manifest_sha256"]
+
+
+def test_teacher3k32_step600_plan_clones_current_base_and_binds_accepted_reload() -> None:
+    plan = current_stage.read_plan(TEACHER3K32_STEP600)
+    source = plan["source"]
+    desired = plan["desired_registration"]
+
+    assert plan["registration_source"]["id"] == "qwen3.8-27b"
+    assert plan["execution"]["gpus"] == 0
+    assert plan["execution"]["priority_class"] == "c1"
+    assert plan["destination"]["path"] == "/models/chris-q38-t3k32-s600-v1"
+    assert source["export_receipt"]["receipt_sha256"] == (
+        "sha256:24ea5e61ef8b6866ec72b4150f308ce90e0c07a585fd486692f4cd98e1e6ec67"
+    )
+    assert source["gpu_check_receipt"]["receipt_sha256"] == (
+        "sha256:23682ab03cfdd6d5ad12563394514b75a4287334e8e05516e0a1d9dea924cb3a"
+    )
+    assert source["gpu_check_receipt"]["required_fields"]["finite_logits"] is True
+    assert source["gpu_check_receipt"]["required_fields"]["optimizer_steps_executed"] == 0
+    assert desired["id"] == "chris-q38-t3k32-s600-v1"
+    assert desired["spec"]["desiredState"] == "paused"
+    assert desired["spec"]["scaling"] == {"minReplicas": 0}
+    assert desired["spec"]["placement"]["priorityClassName"] == "c1"
+    assert desired["spec"]["model"]["revision"] == source["payload"]["manifest_sha256"]
 
 
 def test_lr30_step76_acceptance_binds_forward_stage_cleanup_and_paused_registration() -> None:
