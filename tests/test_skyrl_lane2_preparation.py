@@ -15,6 +15,7 @@ import yaml
 from cyber_post_train.jobs import JobsError, digest
 from training import sft
 from training import skyrl_lane2_authority as authority
+from training import skyrl_lane2_data as data
 from training import skyrl_lane2_direct as direct
 from training import skyrl_lane2_training as training
 
@@ -236,3 +237,41 @@ def test_lane2_fails_closed_on_optimizer_or_alert_drift() -> None:
     preview["manifest_yaml"] = yaml.safe_dump(source)
     with pytest.raises(JobsError, match="identity or admission changed"):
         direct.manifest(plan, request, preview)
+
+
+def test_lane2_data_main_reports_the_existing_builder_contract(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    built = {
+        "manifest_sha256": "sha256:" + "a" * 64,
+        "files": {
+            "train": {"rows": 1, "sha256": "sha256:" + "b" * 64},
+            "dev": {"rows": 1, "sha256": "sha256:" + "c" * 64},
+        },
+        "submitted": False,
+    }
+
+    class Client:
+        def __enter__(self) -> object:
+            return object()
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+    monkeypatch.setenv("FLEET_API_KEY", "test-only")
+    monkeypatch.setattr(data.httpx, "Client", lambda **_: Client())
+    monkeypatch.setattr(data.rl_data, "build", lambda *_args, **_kwargs: built)
+    monkeypatch.setattr("sys.argv", ["skyrl_lane2_data"])
+
+    data.main()
+
+    assert json.loads(capsys.readouterr().out) == {
+        "status": "built",
+        "submitted": False,
+        "gpus": 0,
+        "files": {
+            "train": {"rows": 1, "sha256": "sha256:" + "b" * 64},
+            "dev": {"rows": 1, "sha256": "sha256:" + "c" * 64},
+        },
+        "manifest_sha256": "sha256:" + "a" * 64,
+    }

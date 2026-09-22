@@ -43,7 +43,11 @@ def validate_config(config: dict, *, relative_to: Path) -> None:
 def build(config: dict, *, relative_to: Path, client: httpx.Client) -> dict:
     validate_config(config, relative_to=relative_to)
     value = rl_data.build(config, relative_to=relative_to, client=client)
-    if value.get("submitted") is not False or value.get("gpus") != 0:
+    if (
+        value.get("submitted") is not False
+        or not isinstance(value.get("manifest_sha256"), str)
+        or not isinstance(value.get("files"), dict)
+    ):
         raise ValueError("lane2 data construction crossed its GET-only CPU boundary")
     return value
 
@@ -69,12 +73,12 @@ def main() -> None:
             {
                 "status": "built",
                 "submitted": value["submitted"],
-                "gpus": value["gpus"],
+                "gpus": 0,
                 "files": {
                     split: {"rows": item["rows"], "sha256": item["sha256"]}
                     for split, item in value["files"].items()
                 },
-                "sha256": value["sha256"],
+                "manifest_sha256": value["manifest_sha256"],
             },
             sort_keys=True,
         )
