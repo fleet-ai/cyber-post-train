@@ -711,6 +711,31 @@ def test_prod9_preflight_replaces_the_preexisting_termination_file(
         prod9_training._write_preflight_receipt(tmp_path / "other", value)
 
 
+def test_prod9_failed_preflight_writes_only_a_sanitized_phase_receipt(
+    tmp_path: Path, monkeypatch
+) -> None:
+    target = tmp_path / "termination-log"
+    monkeypatch.setattr(prod9_training, "PREFLIGHT_RECEIPT", target)
+    monkeypatch.setattr(prod9_training, "_PREFLIGHT_STAGE", "long_horizon_probe")
+    plan = {"schema": "synthetic", "private": "must-not-enter-receipt"}
+
+    prod9_training._write_preflight_failure_receipt(target, plan, AssertionError("secret"))
+
+    value = json.loads(target.read_bytes())
+    body = {key: item for key, item in value.items() if key != "receipt_sha256"}
+    assert value["receipt_sha256"] == digest(body)
+    assert body == {
+        "schema": prod9_training.PREFLIGHT_FAILURE_SCHEMA,
+        "status": "failed",
+        "stage": "long_horizon_probe",
+        "error_class": "AssertionError",
+        "plan_sha256": digest(plan),
+        "gpus": 0,
+        "runtime_user": {"uid": prod9_training.os.geteuid(), "gid": prod9_training.os.getegid()},
+    }
+    assert "secret" not in target.read_text()
+
+
 def test_prod9_one_create_rail_rejects_a_historical_plan_before_any_live_check(
     tmp_path: Path,
 ) -> None:
