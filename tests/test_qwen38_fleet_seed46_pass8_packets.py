@@ -75,9 +75,7 @@ def test_preparer_seals_eight_matched_pass1_pairs(tmp_path, monkeypatch) -> None
     assert len(identities) == 16
 
 
-def test_renderer_makes_sixteen_cpu_only_alert_suppressed_launchers(
-    tmp_path, monkeypatch
-) -> None:
+def test_renderer_makes_sixteen_cpu_only_alert_suppressed_launchers(tmp_path, monkeypatch) -> None:
     packet_root, _receipt = _prepare(tmp_path, monkeypatch)
     output = tmp_path / "launchers"
 
@@ -87,9 +85,7 @@ def test_renderer_makes_sixteen_cpu_only_alert_suppressed_launchers(
     assert receipt["launch_performed"] is False
     assert len(receipt["arms"]) == 16
     assert {row["replica"] for row in receipt["arms"]} == {
-        f"seed{seed}-{arm}"
-        for seed in range(46, 54)
-        for arm in ("base", "candidate")
+        f"seed{seed}-{arm}" for seed in range(46, 54) for arm in ("base", "candidate")
     }
     assert all(row["failure_alerts"] == "off" for row in receipt["arms"])
     assert all(row["priority_class"] == "c1" for row in receipt["arms"])

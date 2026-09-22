@@ -42,9 +42,12 @@ CANDIDATE_ID = "chris-q38-t3k32-s1000-v1"
 
 
 def _canonical(value: Any) -> str:
-    return "sha256:" + hashlib.sha256(
-        json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
-    ).hexdigest()
+    return (
+        "sha256:"
+        + hashlib.sha256(
+            json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        ).hexdigest()
+    )
 
 
 def _write_json(path: Path, value: dict[str, Any]) -> None:
@@ -120,9 +123,7 @@ def _inputs() -> tuple[
     return base, task_set, split, corpus, roster
 
 
-def _configs(
-    base_template: dict[str, Any], seed: int
-) -> tuple[dict[str, Any], dict[str, Any]]:
+def _configs(base_template: dict[str, Any], seed: int) -> tuple[dict[str, Any], dict[str, Any]]:
     base = copy.deepcopy(base_template)
     base["name"] = f"q38-dev17-s{seed}-base-p1-v1"
     base["pass_k"] = 1
@@ -229,9 +230,7 @@ def prepare(*, output: Path, live_parity: Path, now: datetime | None = None) -> 
     }
     parity = shared._live_parity(  # noqa: SLF001
         live_parity,
-        readiness={
-            "arms": {"base": parity_arms["base"], "fresh75": parity_arms["candidate"]}
-        },
+        readiness={"arms": {"base": parity_arms["base"], "fresh75": parity_arms["candidate"]}},
         configs={"base": parity_base, "fresh75": parity_candidate},
         now=now or datetime.now(UTC),
     )
@@ -245,9 +244,7 @@ def prepare(*, output: Path, live_parity: Path, now: datetime | None = None) -> 
             seed_dir.mkdir(mode=0o700)
             base, candidate = _configs(base_template, seed)
             protocol = _protocol(base, seed)
-            base_path = seed_dir / (
-                f"qwen38-base-fleet-dev17-opencode-seed{seed}-pass1-v1.json"
-            )
+            base_path = seed_dir / (f"qwen38-base-fleet-dev17-opencode-seed{seed}-pass1-v1.json")
             candidate_path = seed_dir / (
                 f"qwen38-teacher3k32-step1000-fleet-dev17-opencode-seed{seed}-pass1-v1.json"
             )
@@ -255,15 +252,11 @@ def prepare(*, output: Path, live_parity: Path, now: datetime | None = None) -> 
                 f"qwen38-fleet-dev17-seed{seed}-base-step1000-pass1-protocol-v1.json"
             )
             base_provenance = seed_dir / f"qwen38-base-seed{seed}-provenance-v1.json"
-            candidate_provenance = seed_dir / (
-                f"qwen38-step1000-seed{seed}-provenance-v1.json"
-            )
+            candidate_provenance = seed_dir / (f"qwen38-step1000-seed{seed}-provenance-v1.json")
             _write_json(base_path, base)
             _write_json(candidate_path, candidate)
             _write_json(protocol_path, protocol)
-            _write_json(
-                base_provenance, _base_provenance(base_path, roster, base["name"])
-            )
+            _write_json(base_provenance, _base_provenance(base_path, roster, base["name"]))
             candidate_evidence = {
                 "schema": "cyber_fleet_eval_promoted_checkpoint_provenance_v1",
                 "campaign_name": candidate["name"],
@@ -289,9 +282,7 @@ def prepare(*, output: Path, live_parity: Path, now: datetime | None = None) -> 
                     **parity_arms["base"],
                     "job_name": f"chris-q38-dev17-s{seed}-base-p1-v1",
                     "config_map_name": f"chris-q38-dev17-s{seed}-base-code-v1",
-                    "output_root": (
-                        f"/mnt/sfs/jobs/chris-q38-fleet-dev17-s{seed}-base-p1-v1"
-                    ),
+                    "output_root": (f"/mnt/sfs/jobs/chris-q38-fleet-dev17-s{seed}-base-p1-v1"),
                     "database": f"q38_dev17_s{seed}_base_p1_v1",
                 },
                 "candidate": {
@@ -350,9 +341,9 @@ def prepare(*, output: Path, live_parity: Path, now: datetime | None = None) -> 
             },
             "leakage_gate": {
                 "exact_dev_task_key_overlap": 0,
-                "held_out_task_families_excluded_across_all_versions": corpus[
-                    "catalog_provenance"
-                ]["held_out_task_families_excluded_across_all_versions"],
+                "held_out_task_families_excluded_across_all_versions": corpus["catalog_provenance"][
+                    "held_out_task_families_excluded_across_all_versions"
+                ],
                 "corpus_dev_windows": corpus["dev_windows"],
                 "live_task_bindings_equal_frozen_roster_required_before_launch": True,
                 "binding_roster_file_sha256": _file_sha(BINDING_ROSTER),

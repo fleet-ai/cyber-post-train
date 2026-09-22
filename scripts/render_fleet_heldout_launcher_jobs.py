@@ -36,7 +36,7 @@ SOURCE_ROOTS = (
     ROOT / "evals" / "__init__.py",
     ROOT / "evals" / "fleet" / "__init__.py",
 )
-LAUNCHER = r'''from __future__ import annotations
+LAUNCHER = r"""from __future__ import annotations
 
 import json
 import os
@@ -79,13 +79,16 @@ result = launch_once(
     journal=journal,
 )
 print(json.dumps(result, sort_keys=True))
-'''
+"""
 
 
 def _canonical(value: Any) -> str:
-    return "sha256:" + hashlib.sha256(
-        json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
-    ).hexdigest()
+    return (
+        "sha256:"
+        + hashlib.sha256(
+            json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        ).hexdigest()
+    )
 
 
 def _file_sha(path: Path) -> str:
