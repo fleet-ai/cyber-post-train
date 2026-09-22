@@ -292,6 +292,9 @@ def test_lane2_current_runtime_request_and_manifests_are_alert_safe() -> None:
     assert rayjob["spec"]["rayClusterSpec"].get("workerGroupSpecs") in (None, [])
     assert cpu_job["metadata"]["annotations"] == {"fleet.ai/failure-alerts": "off"}
     assert cpu_job["spec"]["template"]["spec"]["priorityClassName"] == "c1"
+    assert cpu_job["spec"]["template"]["spec"]["containers"][0]["envFrom"] == [
+        {"secretRef": {"name": "wandb-api"}}
+    ]
     assert "nvidia.com/gpu" not in json.dumps(cpu_job, sort_keys=True)
     data_container = data_job["spec"]["template"]["spec"]["containers"][0]
     data_environment = {item["name"]: item["value"] for item in data_container["env"]}

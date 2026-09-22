@@ -144,9 +144,14 @@ def preflight_job_manifest(plan: dict[str, Any]) -> dict[str, Any]:
         request["image"],
         request["command"],
         {**request["env"], "RUN_DIR": "/tmp"},
+        wandb=True,
     )
-    if "nvidia.com/gpu" in json.dumps(job, sort_keys=True) or (
-        job["metadata"]["annotations"].get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
+    container = job["spec"]["template"]["spec"]["containers"][0]
+    if (
+        request.get("secrets") != ["fleet-api", "wandb-api"]
+        or "nvidia.com/gpu" in json.dumps(job, sort_keys=True)
+        or job["metadata"]["annotations"].get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
+        or container.get("envFrom") != [{"secretRef": {"name": "wandb-api"}}]
     ):
         raise JobsError("lane2 CPU preflight root resource/alert contract changed")
     return job
@@ -218,6 +223,7 @@ def data_job_manifest() -> dict[str, Any]:
         training.authority.IMAGE,
         bundled["command"],
         {**bundled["env"], "RUN_DIR": "/tmp"},
+        wandb=False,
     )
     container = job["spec"]["template"]["spec"]["containers"][0]
     container["envFrom"] = [{"secretRef": {"name": "fleet-api"}}]
