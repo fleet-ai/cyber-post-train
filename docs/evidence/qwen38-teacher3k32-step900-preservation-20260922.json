@@ -21,12 +21,21 @@
       "final_dev_census_sha256": "sha256:e5ba0807320e30593952bb8fd402938839d9fc0d225bd9eb26decb98eaf51f2b",
       "optimizer_steps_executed": 0,
       "path": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/chris-q38-t3k32-s900-gpu-check-v1/GPU_CHECK.json",
+      "preflight_census": {
+        "current_gpus": 0,
+        "current_nodes": 0,
+        "observed_at": "2026-09-22T17:21:34Z",
+        "projected_gpus": 1,
+        "projected_nodes": 1,
+        "sha256": "sha256:6012379d5461c897b42a4f2eaa574307b8f83ecb46d0c9783869ce45573bbcc4"
+      },
       "receipt_sha256": "sha256:93a7c4d90afe22f11ebb20d15afe2514078ee3f2f0802801348773ee3c1fdad3",
       "state": "accepted_and_fully_cleaned"
     },
     "paused_registration": {
       "active_pods": 0,
       "desired_replicas": 0,
+      "immediate_get_after_create": "not_found_no_replay",
       "intent_file_sha256": "sha256:4cd19fa031cb3d90117aa8a019a073499f08b88cddefd7e5b81d741b918781a4",
       "intent_receipt_sha256": "sha256:1237bf20c2b30e399c6105467134359c8fdb87a54294968ab84b58d47e53100d",
       "matching_kubernetes_pods": 0,
@@ -34,11 +43,17 @@
       "phase": "paused",
       "post_attempts": 1,
       "ready_replicas": 0,
+      "reconciled_after_create": true,
       "registration_sha256": "sha256:123240d48584bb992aa12920bf7d5b706ed09bfd33d36e181cffa98520337b50",
       "resource_version": "33186708",
       "result_file_sha256": "sha256:0d2f0ce2b9d725fc2480f06032177cc7b21ea41f2283f9d56cb920e10fca0a3d",
       "result_receipt_sha256": "sha256:f27b13bedb598cebc30896631edfacdbf61839eaaa589934c3c69f23e59a50f2",
       "routing_enabled": false,
+      "server_default_delta": {
+        "observed": 1,
+        "path": "spec.scaling.replicas",
+        "requested": "absent"
+      },
       "server_spec_sha256": "sha256:e59e7cabf61bc4673a2916cd18a2c545163db614037f60eee9e1bfa83d243be7",
       "state": "accepted_zero_replica",
       "uid_readback_supported": false
@@ -73,7 +88,7 @@
     "external_benchmark_content_or_outcomes_used": false,
     "optimizer_updates": 0
   },
-  "sha256": "sha256:560a46c3e3fcb44186bdfa616c5d4d4f00a6340b6b87bd04c91c146bb5b4a5b5",
+  "sha256": "sha256:9b9145c52d634233be90272cd25231ca95de6f5a6d569b7f876e82c41a465e5c",
   "source_eval_packet": {
     "file_sha256": "sha256:659bc2f7140f1acec6624ec29b2b8d64a4db300ac61196586ff75184eb6b23c4",
     "launchable": false,

@@ -77,6 +77,14 @@ def test_step900_receipt_cross_binds_the_merged_packet_and_closed_gates() -> Non
         durable["dev_gpu_reload"]["final_dev_census_sha256"]
         == (reload["final_dev_capacity_census"]["sha256"])
     )
+    assert durable["dev_gpu_reload"]["preflight_census"] == {
+        "current_gpus": 0,
+        "current_nodes": 0,
+        "observed_at": "2026-09-22T17:21:34Z",
+        "projected_gpus": 1,
+        "projected_nodes": 1,
+        "sha256": "sha256:6012379d5461c897b42a4f2eaa574307b8f83ecb46d0c9783869ce45573bbcc4",
+    }
     assert durable["dev_gpu_reload"]["optimizer_steps_executed"] == 0
 
     stage_receipt = durable["stage"]
@@ -95,11 +103,19 @@ def test_step900_receipt_cross_binds_the_merged_packet_and_closed_gates() -> Non
         == (observed_registration["desired_registration_sha256"])
     )
     assert registration["post_attempts"] == observed_registration["post_attempts"] == 1
+    assert registration["immediate_get_after_create"] == "not_found_no_replay"
+    assert registration["reconciled_after_create"] is True
     assert registration["phase"] == observed_registration["phase"] == "paused"
     assert registration["desired_replicas"] == registration["ready_replicas"] == 0
     assert registration["active_pods"] == registration["matching_kubernetes_pods"] == 0
     assert observed_registration["matching_kubernetes_pods"] == []
     assert registration["routing_enabled"] is False
+    assert "replicas" not in read(PLAN)["desired_registration"]["spec"]["scaling"]
+    assert registration["server_default_delta"] == {
+        "observed": 1,
+        "path": "spec.scaling.replicas",
+        "requested": "absent",
+    }
 
     assert evidence["next_gates"] == {
         "evaluation": "unlaunched",
