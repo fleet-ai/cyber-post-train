@@ -6,7 +6,10 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
+
 from cyber_post_train.jobs import digest
+from evals.webexploitbench.tensorlake import collection_launcher, collection_pair
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKET = (
@@ -141,14 +144,27 @@ def test_protocol_is_paper_aligned_pass3_with_one_sandbox_per_target() -> None:
         "sha256:7976411d3b5b8eacbb887b8e6148fc14680513b0d35f202fbd7a6205080a329c"
     )
     assert harness["runner_sha256"] == (
-        "sha256:f0de4863a072b66346159df7a8cd7e3cf183333f44a30b18d4d6559513dce0bf"
+        "sha256:01a97284d2b8bfc94b8487605b3f19279136f718d0ccf861e7f1cb22a6f7c70c"
     )
+    runner = ROOT / "evals/webexploitbench/tensorlake/bootstrap/run_collection_partition.sh"
+    assert harness["runner_sha256"] == ("sha256:" + hashlib.sha256(runner.read_bytes()).hexdigest())
     assert harness["collector_sha256"] == (
-        "sha256:a0912a4a6dbe6b8bebf8d0d02e6719adfb71bcdd4ea2140c97fc8e1317d325d3"
+        "sha256:24d2862b54d7d75502cc1d714cd14e4ce468b6d6fc235ec17953f6ef4d5f3e0c"
+    )
+    collector = ROOT / "evals/webexploitbench/tensorlake/rollout_bundle.py"
+    assert harness["collector_sha256"] == (
+        "sha256:" + hashlib.sha256(collector.read_bytes()).hexdigest()
     )
 
     design = protocol["attempt_design"]
     assert design["level0_agent_input"] == "target_url_only_no_source_code"
+    assert design["level0_task_specific_vulnerability_hint"] == "target_url"
+    assert design["level0_common_instructions_remain"] == [
+        "prompt",
+        "tools",
+        "report",
+        "verifier",
+    ]
     assert design["pass_k"] == 3
     assert design["target_partitions_per_arm"] == 15
     assert design["attempts_executed_serially_per_partition"] == 3
@@ -157,6 +173,8 @@ def test_protocol_is_paper_aligned_pass3_with_one_sandbox_per_target() -> None:
     assert design["unique_attempt_id_workdir_and_container_per_attempt"] is True
     assert design["independent_attempts_per_target"] == 3
     assert design["total_attempts_per_arm"] == 45
+    assert design["custom_headline_pass_at_1_attempt_index"] == 0
+    assert design["cage_native_average_yield_pass_at_1_used"] is False
     assert design["max_cage_model_decision_rounds_per_attempt"] == 150
     assert design["round_definition"] == (
         "one successful non-compaction model turn counted by CAGE"
@@ -174,20 +192,44 @@ def test_protocol_is_paper_aligned_pass3_with_one_sandbox_per_target() -> None:
     runtime = protocol["runtime"]
     assert runtime["defer_scoring"] is True
     assert runtime["judge_calls_during_collection"] == 0
+    assert runtime["live_verifier_required_before_target_teardown"] is True
+    assert runtime["deferred_scoring_requires_preserved_live_verifier_evidence"] is True
     assert runtime["sandboxes_per_arm"] == 15
     assert runtime["maximum_created_sandboxes_for_both_arms"] == 30
     assert runtime["maximum_created_sandboxes_for_both_arms"] <= 50
     assert runtime["base_only_launch_capacity_required_sandboxes"] == 15
     assert runtime["candidate_only_launch_capacity_required_sandboxes"] == 15
-    assert runtime["paired_simultaneous_launch_capacity_required_sandboxes"] == 30
-    assert runtime["maximum_active_attempt_slots"] == 48
-    assert runtime["maximum_actively_running_attempts_from_serial_partition_execution"] == 30
-    assert runtime["paired_controller_mode"] == "paper"
+    assert runtime["paired_joint_active_capacity_required_sandboxes"] == 15
+    assert runtime["maximum_active_attempt_slots"] == 15
+    assert runtime["maximum_actively_running_attempts_from_serial_partition_execution"] == 15
+    assert runtime["paired_controller_mode"] == "score_free_collection_pair"
+    assert runtime["paired_controller_source_path"] == (
+        "evals/webexploitbench/tensorlake/collection_pair.py"
+    )
     controller = ROOT / runtime["paired_controller_source_path"]
     assert runtime["paired_controller_source_file_sha256"] == (
         "sha256:" + hashlib.sha256(controller.read_bytes()).hexdigest()
     )
+    assert runtime["paired_controller_collection_plan_schema"] == collection_launcher.PLAN_SCHEMA
+    assert runtime["paired_controller_pair_receipt_schema"] == collection_pair.PAIR_SCHEMA
+    assert (
+        runtime["paired_controller_arm_terminal_receipt_schema"]
+        == collection_pair.ARM_TERMINAL_SCHEMA
+    )
+    assert runtime["paired_controller_pair_receipt_required_values"] == {
+        "score_free_collection": True,
+    }
+    assert runtime["paired_controller_arm_terminal_required_values"] == {
+        "outcome": "accepted_score_free_collection",
+        "score_calls_during_collection": 0,
+        "scoring_started": False,
+    }
+    assert runtime["judge_gate_forbidden_during_collection"] is True
+    assert "judge_gate" not in protocol
     assert runtime["paired_schedule_unit"] == "whole_task_partition"
+    assert "accepted score-free terminal and release receipt" in runtime["paired_schedule"]
+    assert "joint active limit of 15" in runtime["reason_both_arms_fit"]
+    assert "campaign lifetime" in runtime["reason_both_arms_fit"]
     assert runtime["resources_per_target_partition_sandbox"] == {
         "cpus": 8,
         "memory_mb": 65_536,
@@ -197,11 +239,15 @@ def test_protocol_is_paper_aligned_pass3_with_one_sandbox_per_target() -> None:
     assert runtime["agent_memory_limit"] == "48g"
 
     alignment = protocol["paper_alignment_and_named_deviations"]
-    assert any("target URL" in row for row in alignment["matched_to_paper"])
+    level0_alignment = next(row for row in alignment["matched_to_paper"] if "target URL" in row)
+    assert "only task-specific vulnerability hint" in level0_alignment
+    assert "prompt, tool, report, and verifier instructions remain" in level0_alignment
     assert any("OpenCode 1.18.27" in row for row in alignment["named_deviations"])
     assert any("Qwen3.8-27B" in row for row in alignment["named_deviations"])
     assert any("DeepSeek-V4-Pro" in row for row in alignment["named_deviations"])
     assert any("paper does not disclose" in row.lower() for row in alignment["named_deviations"])
+    assert any("average-yield-across-k" in row for row in alignment["named_deviations"])
+    assert any("step-budget" in row for row in alignment["named_deviations"])
     assert alignment["deviations_must_be_visible_in_every_result"] is True
 
     project_validation = protocol["rendered_project_validation"]
@@ -216,6 +262,8 @@ def test_protocol_is_paper_aligned_pass3_with_one_sandbox_per_target() -> None:
         "top_p": 0.95,
         "top_k": None,
         "agent_input": "target_url_only_no_source_code",
+        "task_specific_vulnerability_hint": "target_url",
+        "common_prompt_tools_report_and_verifier_instructions_remain": True,
     }
     assert len(project_validation["required_snapshot_digests_before_launch"]) == 6
     assert (
@@ -224,6 +272,24 @@ def test_protocol_is_paper_aligned_pass3_with_one_sandbox_per_target() -> None:
         ]
         is True
     )
+
+
+@pytest.mark.parametrize(
+    ("protocol", "plan_extra"),
+    [
+        ({"runtime": {"defer_scoring": False}}, {}),
+        ({"runtime": {"defer_scoring": True}, "judge_gate": {}}, {}),
+        ({"runtime": {"defer_scoring": True}}, {"judge_gate": {}}),
+    ],
+)
+def test_bound_pair_controller_rejects_eager_or_judge_gated_collection(
+    tmp_path: Path, protocol: dict, plan_extra: dict
+) -> None:
+    protocol_path = tmp_path / "protocol.json"
+    protocol_path.write_text(json.dumps(protocol))
+    plan = {"protocol": {"path": str(protocol_path)}, **plan_extra}
+    with pytest.raises(collection_pair.CollectionPairError, match="collection_not_score_free"):
+        collection_pair._assert_score_free(plan)  # noqa: SLF001
 
 
 def _expand_arm(arm: dict) -> tuple[list[str], list[str]]:
@@ -279,6 +345,10 @@ def test_official_judge_absence_is_an_explicit_rescoreable_deviation() -> None:
     assert deviation["same_judge_required_for_both_arms"] is True
     assert scoring["immutable_collections_rescoreable_with_pinned_cage_default_judge_later"] is True
     assert scoring["rescoring_must_not_replay_model_rollouts"] is True
+    assert (
+        scoring["score_free_collection_requires_live_verifier_evidence_before_target_teardown"]
+        is True
+    )
 
 
 def test_reporting_contract_covers_paper_metrics_and_infrastructure_exclusions() -> None:
@@ -291,7 +361,8 @@ def test_reporting_contract_covers_paper_metrics_and_infrastructure_exclusions()
     assert report["calculator_file_sha256"] == (
         "sha256:" + hashlib.sha256(calculator.read_bytes()).hexdigest()
     )
-    assert report["calculator_output_schema"] == "webexploitbench-paper-report-v1"
+    assert report["schema"] == "webexploitbench_paper_aligned_pass3_report_v3"
+    assert report["calculator_output_schema"] == "webexploitbench-paper-report-v3"
     assert report["primary_denominator"] == {
         "vulnerabilities": 110,
         "targets": 15,
@@ -302,24 +373,39 @@ def test_reporting_contract_covers_paper_metrics_and_infrastructure_exclusions()
         "per_attempt_pass_at_1",
         "pass_at_3_avg",
         "pass_at_3_max",
-        "attempt_variance",
         "attempt_range",
+        "step_budget_curve",
         "vulnerability_overlap",
         "mean_tokens_millions",
-        "mean_wall_time_seconds",
+        "mean_wall_time_minutes",
     }
-    assert set(report["required_secondary_metrics"]) == {
-        "per_target_macro_pass_at_1",
-        "per_target_macro_pass_at_3_avg",
-        "per_target_macro_pass_at_3_max",
+    assert report["required_secondary_metrics"] == {}
+    assert set(report["optional_extra_analysis"]) == {
+        "attempt_variance_and_standard_deviation",
+        "pairwise_attempt_intersections",
+        "per_target_macro_rates",
+        "paired_task_family_confidence_interval",
+        "model_request_count_and_provider_currency_cost",
     }
-    assert "paired_task_family_confidence_interval" in report["optional_extra_analysis"]
-    operational = " ".join(report["required_operational_fields"])
+    assert "input plus output" in report["required_primary_metrics"]["mean_tokens_millions"]
+    operational = " ".join(report["required_calculator_operational_fields"])
     assert "infrastructure" in operational
-    assert "wall time" in operational
-    assert "cost" in operational
-    assert "judge identity" in operational
+    assert "final-evidence" in operational
+    assert "before target teardown" in operational
+    assert "score-completion" in operational
+    assert "terminal-acceptance" in operational
+    assert "wall-time telemetry completeness" in operational
+    provenance = " ".join(report["required_campaign_provenance_outside_calculator"])
+    assert "judge identity" in provenance
+    assert "receipt digests" in provenance
     assert "all 45 immutable attempts accepted for each arm" in report["completeness_rule"]
+    assert "custom predeclared repeat index 0" in report["pass_at_1_rule"]
+    assert "unsupported_no_stepwise_live_verifier_evidence" in report["step_budget_curve_rule"]
+    assert "does not reproduce" in report["step_budget_curve_rule"]
+    assert "remote acceptance-receipt" in report["live_verifier_rule"]
+    assert "not required to equal terminal passed status" in report["live_verifier_rule"]
+    assert "conjunction" in report["scoring_outcome_rule"]
+    assert "null mean plus explicit incompleteness" in report["telemetry_rule"]
     assert report["valid_zero_is_final"] is True
 
 
@@ -347,7 +433,7 @@ def test_launch_controls_fail_closed_and_require_root_alert_opt_out() -> None:
     assert controls["post_creation_patch_is_not_sufficient"] is True
     assert controls["tensorlake_concurrency_allowance"] == 50
     assert controls["maximum_created_sandboxes"] == 30
-    assert controls["maximum_active_attempt_slots"] == 48
+    assert controls["maximum_active_attempt_slots"] == 15
     assert len(packet["remaining_launch_gates"]) == 11
 
 
@@ -461,14 +547,30 @@ def test_step900_sibling_reserves_unique_pass3_identity_and_inherits_sampling() 
     assert set(attempts).isdisjoint(step800_attempts)
 
     controls = step900["paper_controls_inherited_exactly"]
+    assert controls["task_specific_vulnerability_hint"] == "target_url"
+    assert controls["common_prompt_tools_report_and_verifier_instructions_remain"] is True
     assert controls["temperature"] == 1.0
     assert controls["top_p"] == 0.95
     assert controls["top_k"] is None
+    assert controls["custom_headline_pass_at_1_attempt_index"] == 0
+    assert controls["cage_native_average_yield_pass_at_1_used"] is False
+    assert controls["live_verifier_required_before_target_teardown"] is True
+    assert controls["step_budget_curve_status"] == (
+        "unsupported_no_stepwise_live_verifier_evidence"
+    )
+    assert "without presenting it as a reproduction" in controls["step_budget_curve_policy"]
+    assert controls["report_calculator_output_schema"] == "webexploitbench-paper-report-v3"
     calculator = ROOT / controls["report_calculator_path"]
     assert controls["report_calculator_file_sha256"] == (
         "sha256:" + hashlib.sha256(calculator.read_bytes()).hexdigest()
     )
     assert len(step900["remaining_launch_gates"]) == 7
+    capacity_gate = next(
+        gate for gate in step900["remaining_launch_gates"] if "TensorLake credential" in gate
+    )
+    assert "15 joint-active sandbox capacity" in capacity_gate
+    assert "30 lifetime create-once identity" in capacity_gate
+    assert "30-paired" not in capacity_gate
     assert step900["launch_controls"]["required_root_metadata_annotation"] == {
         "fleet.ai/failure-alerts": "off"
     }

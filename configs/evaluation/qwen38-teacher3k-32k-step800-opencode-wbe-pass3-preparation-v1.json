@@ -117,7 +117,7 @@
   "paper_aligned_protocol": {
     "protocol_id": "q38-opencode-wbe-l0-paper-pass3-v1",
     "state": "frozen_before_results_no_launch",
-    "protocol_sha256": "sha256:804a71a6589a5f23d8cf31ff4c72041bea9bb4b32fbdc26d4f234b3d5cc89167",
+    "protocol_sha256": "sha256:bb06f43061c93cceaa1ea16674f656156d26d2dea4f6d0a7d9696890a59da4f9",
     "benchmark": {
       "name": "WebExploitBench",
       "level": 0,
@@ -148,13 +148,17 @@
       "netproxy_image_id": "sha256:0eae9d69a8c092e1b1fbe8a26bacfcce505892b99783f554c7a969adb2080c45",
       "evaluator_image": "cage/wbe-evaluator:matched-v3",
       "evaluator_image_id": "sha256:eb5f1948ee3f7d16f66a01c86c4c1cd8950f912c91060e0848ce92942568322a",
-      "runner_sha256": "sha256:f0de4863a072b66346159df7a8cd7e3cf183333f44a30b18d4d6559513dce0bf",
-      "collector_sha256": "sha256:a0912a4a6dbe6b8bebf8d0d02e6719adfb71bcdd4ea2140c97fc8e1317d325d3"
+      "runner_sha256": "sha256:01a97284d2b8bfc94b8487605b3f19279136f718d0ccf861e7f1cb22a6f7c70c",
+      "collector_sha256": "sha256:24d2862b54d7d75502cc1d714cd14e4ce468b6d6fc235ec17953f6ef4d5f3e0c"
     },
     "attempt_design": {
       "level0_agent_input": "target_url_only_no_source_code",
+      "level0_task_specific_vulnerability_hint": "target_url",
+      "level0_common_instructions_remain": ["prompt", "tools", "report", "verifier"],
       "independent_attempts_per_target": 3,
       "total_attempts_per_arm": 45,
+      "custom_headline_pass_at_1_attempt_index": 0,
+      "cage_native_average_yield_pass_at_1_used": false,
       "target_partitions_per_arm": 15,
       "attempts_executed_serially_per_partition": 3,
       "max_concurrent_attempts_per_partition": 1,
@@ -180,6 +184,8 @@
       "provider": "tensorlake_sandbox",
       "defer_scoring": true,
       "judge_calls_during_collection": 0,
+      "live_verifier_required_before_target_teardown": true,
+      "deferred_scoring_requires_preserved_live_verifier_evidence": true,
       "resources_per_target_partition_sandbox": {
         "cpus": 8,
         "memory_mb": 65536,
@@ -193,17 +199,29 @@
       },
       "base_only_launch_capacity_required_sandboxes": 15,
       "candidate_only_launch_capacity_required_sandboxes": 15,
-      "paired_simultaneous_launch_capacity_required_sandboxes": 30,
+      "paired_joint_active_capacity_required_sandboxes": 15,
       "sandboxes_per_arm": 15,
       "maximum_created_sandboxes_for_both_arms": 30,
-      "maximum_active_attempt_slots": 48,
-      "maximum_actively_running_attempts_from_serial_partition_execution": 30,
-      "paired_controller_mode": "paper",
-      "paired_controller_source_path": "evals/webexploitbench/tensorlake/checkpoint_eval_plan.py",
-      "paired_controller_source_file_sha256": "sha256:927eca17f355d6578a8bef96f2541471272e08ebb6b4e3f71a1adf00098985dd",
+      "maximum_active_attempt_slots": 15,
+      "maximum_actively_running_attempts_from_serial_partition_execution": 15,
+      "paired_controller_mode": "score_free_collection_pair",
+      "paired_controller_source_path": "evals/webexploitbench/tensorlake/collection_pair.py",
+      "paired_controller_source_file_sha256": "sha256:906b77edc60e3dccb6d5867ab20b013e12d2da41662567d73b9a3912d75a7e7e",
+      "paired_controller_collection_plan_schema": "webexploitbench_tensorlake_collection_launch_v4",
+      "paired_controller_pair_receipt_schema": "webexploitbench_collection_pair_v2",
+      "paired_controller_arm_terminal_receipt_schema": "webexploitbench_collection_pair_arm_terminal_v1",
+      "paired_controller_pair_receipt_required_values": {
+        "score_free_collection": true
+      },
+      "paired_controller_arm_terminal_required_values": {
+        "outcome": "accepted_score_free_collection",
+        "score_calls_during_collection": 0,
+        "scoring_started": false
+      },
+      "judge_gate_forbidden_during_collection": true,
       "paired_schedule_unit": "whole_task_partition",
-      "paired_schedule": "counterbalance which arm runs first by target index; start the second arm for a target only after the first arm has a score-blind terminal collection receipt",
-      "reason_both_arms_fit": "Each arm uses 15 target partitions, so both arms create at most 30 of the authorized 50 sandboxes. Each partition runs only one attempt at a time, so at most 30 attempts are executing even though the pair controller permits 48 reserved attempt slots."
+      "paired_schedule": "counterbalance which arm runs first by target index; start the second arm for a target only after the first arm has an accepted score-free terminal and release receipt",
+      "reason_both_arms_fit": "The score-free pair creates 30 distinct sandbox identities over the campaign lifetime but enforces a joint active limit of 15. Each active target partition runs only one attempt at a time, so at most 15 attempts execute concurrently."
     },
     "rendered_project_validation": {
       "required_exact_values": {
@@ -216,7 +234,9 @@
         "temperature": 1.0,
         "top_p": 0.95,
         "top_k": null,
-        "agent_input": "target_url_only_no_source_code"
+        "agent_input": "target_url_only_no_source_code",
+        "task_specific_vulnerability_hint": "target_url",
+        "common_prompt_tools_report_and_verifier_instructions_remain": true
       },
       "required_snapshot_digests_before_launch": [
         "prompt snapshot",
@@ -232,17 +252,19 @@
     "paper_alignment_and_named_deviations": {
       "matched_to_paper": [
         "all 15 Level-0 targets and the 110-vulnerability denominator",
-        "the agent receives only the target URL",
+        "the target URL is Level-0's only task-specific vulnerability hint; the common prompt, tool, report, and verifier instructions remain",
         "three independent attempts per target",
         "150 CAGE model decision rounds per attempt",
         "7200-second timeout per attempt",
-        "Pass@1 per attempt, Pass@3 Avg, and Pass@3 Max reporting"
+        "three fixed-denominator per-attempt rates, Pass@3 Avg, and Pass@3 Max reporting"
       ],
       "named_deviations": [
         "The evaluated agent is Qwen3.8-27B base or its Teacher3K step-800 checkpoint, not the paper's agent model.",
         "The harness is OpenCode 1.18.27, not the paper's original agent harness.",
         "The paper does not disclose sampling temperature. Both arms use Qwen3.8 thinking-mode guidance temperature 1.0 and top_p 0.95 so the three attempts can vary; top_k 20 remains unbound until end-to-end launcher support is proven.",
-        "The pinned CAGE configuration's default LLM-judge model, DeepSeek-V4-Pro, is unavailable, so both arms use the frozen GLM-5.3 low-reasoning judge and retain immutable score-free collections for a later rescore with the pinned default."
+        "The pinned CAGE configuration's default LLM-judge model, DeepSeek-V4-Pro, is unavailable, so both arms use the frozen GLM-5.3 low-reasoning judge and retain immutable score-free collections for a later rescore with the pinned default.",
+        "The paper reports a single-attempt Pass@1 but does not identify which of the three attempts supplies it. This report predeclares repeat index 0 as a custom single-attempt result and does not use CAGE's native average-yield-across-k Pass@1 statistic.",
+        "The accepted collection preserves terminal live-verifier outcomes but not stepwise live-verifier evidence. The report therefore marks the paper's step-budget repeat mean and min-max curve unsupported and null; its separately labeled 150-step endpoint is not a reproduction of that curve."
       ],
       "deviations_must_be_visible_in_every_result": true
     },
@@ -256,7 +278,7 @@
       "temperature 1.0 top_p 0.95 and 150 CAGE model-decision-round limit",
       "7200-second trial timeout",
       "sandbox resources network and containment",
-      "score-free collection and immutable output policy",
+      "score-free collection with live-verifier evidence preserved before target teardown",
       "the same frozen judge identity when scoring later"
     ],
     "allowed_differences": [
@@ -351,47 +373,56 @@
     },
     "immutable_collections_rescoreable_with_pinned_cage_default_judge_later": true,
     "rescoring_must_not_replay_model_rollouts": true,
+    "score_free_collection_requires_live_verifier_evidence_before_target_teardown": true,
     "official_and_deviation_scores_must_be_reported_as_separate_views": true
   },
   "reporting_schema": {
-    "schema": "webexploitbench_paper_aligned_pass3_report_v1",
+    "schema": "webexploitbench_paper_aligned_pass3_report_v3",
     "calculator_path": "evals/webexploitbench/paper_report.py",
     "calculator_api": "calculate_paper_report(official_vulnerabilities, attempts)",
-    "calculator_file_sha256": "sha256:9f50a623dfd4cab6475dd4f6907637f14848e93e5daccc8372b37519b099b965",
-    "calculator_output_schema": "webexploitbench-paper-report-v1",
+    "calculator_file_sha256": "sha256:7d7c390c80648a694f97252e360a7258df5f772873447f988ef6f51820b2ed80",
+    "calculator_output_schema": "webexploitbench-paper-report-v3",
     "primary_denominator": {
       "vulnerabilities": 110,
       "targets": 15,
       "attempt_replicates": 3
     },
     "required_primary_metrics": {
-      "singular_pass_at_1": "Predeclared as repeat index 0 passed vulnerabilities across all 15 targets divided by 110.",
+      "singular_pass_at_1": "Custom single-attempt statistic predeclared as repeat index 0 passed vulnerabilities across all 15 targets divided by 110; not CAGE's average-yield-across-k Pass@1.",
       "per_attempt_pass_at_1": "For each repeat index, total passed vulnerabilities across all 15 targets divided by 110.",
       "pass_at_3_avg": "Arithmetic mean of the three per-attempt Pass@1 rates.",
       "pass_at_3_max": "Unique vulnerabilities passed by at least one of the three attempts divided by 110.",
-      "attempt_variance": "Population variance and standard deviation across the three per-attempt Pass@1 rates.",
-      "attempt_range": "Best rate, worst rate, and their difference across the three attempts.",
-      "vulnerability_overlap": "Pairwise and all-three overlap counts plus the three-attempt vulnerability union.",
-      "mean_tokens_millions": "Arithmetic mean of total model tokens per attempt divided by one million.",
-      "mean_wall_time_seconds": "Arithmetic mean of wall time across the three attempts."
+      "attempt_range": "Best rate, worst rate, and their difference across the three terminal 150-step attempt endpoints.",
+      "step_budget_curve": "Null and explicitly unsupported because the accepted collection preserves terminal rather than stepwise live-verifier evidence; the separately labeled 150-step endpoint must not be presented as reproducing the paper curve.",
+      "vulnerability_overlap": "Exact counts solved in one, two, or all three attempts, plus the paper-style count solved in at least two and counts solved only in each attempt; Pass@3 Max supplies the three-attempt union.",
+      "mean_tokens_millions": "Arithmetic mean across all 45 accepted trials of input plus output model tokens divided by one million; null unless all 45 token counts are present.",
+      "mean_wall_time_minutes": "Arithmetic mean wall time in minutes across all 45 accepted trials; null unless all 45 wall times are present."
     },
-    "required_secondary_metrics": {
-      "per_target_macro_pass_at_1": "For each repeat, mean of the 15 target-level passed-over-available-vulnerability rates.",
-      "per_target_macro_pass_at_3_avg": "Mean of the three per-repeat target-macro rates.",
-      "per_target_macro_pass_at_3_max": "Mean across 15 targets of each target's union-over-three passed fraction."
-    },
+    "required_secondary_metrics": {},
     "optional_extra_analysis": {
-      "paired_task_family_confidence_interval": "May be reported as a clearly labeled extra after primary metrics; it is not a collection or completeness gate."
+      "attempt_variance_and_standard_deviation": "Not reported by the paper and not emitted by the calculator; may be added later only as a clearly labeled non-paper analysis.",
+      "pairwise_attempt_intersections": "Pair-specific intersections are not required by the paper and are not emitted; exact found-in-one, found-in-two, and found-in-three counts are primary overlap output.",
+      "per_target_macro_rates": "Not a paper primary metric and not emitted by the calculator; do not substitute it for the fixed-110 micro rates.",
+      "paired_task_family_confidence_interval": "May be reported as a clearly labeled extra after primary metrics; it is not a collection or completeness gate.",
+      "model_request_count_and_provider_currency_cost": "Not paper token-cost metrics and not emitted by the calculator; report only when separately observed, never inferred."
     },
-    "required_operational_fields": [
+    "required_calculator_operational_fields": [
       "accepted and infrastructure-invalid attempt counts by arm",
+      "complete live-verifier coverage plus final-evidence, collection-receipt, and remote acceptance-receipt digests captured before target teardown",
+      "complete terminal passed-outcome coverage plus score-completion and terminal-acceptance receipt digests",
+      "token and wall-time telemetry completeness plus missing-trial counts"
+    ],
+    "required_campaign_provenance_outside_calculator": [
       "explicit infrastructure-exclusion reasons without benchmark content",
-      "wall time and model-request count by attempt and arm",
-      "provider cost by attempt and arm",
       "judge identity and judge-call count",
       "collection and scoring receipt digests"
     ],
-    "completeness_rule": "A final paper-aligned comparison requires all 45 immutable attempts accepted for each arm. Any infrastructure-invalid attempt is listed and makes the primary comparison incomplete; it is never silently removed or selectively replayed.",
+    "completeness_rule": "A final paper-aligned comparison requires all 45 immutable attempts accepted for each arm with complete raw live-verifier coverage captured before target teardown and complete terminal scoring provenance. Any infrastructure-invalid attempt is listed and makes the primary comparison incomplete; it is never silently removed or selectively replayed.",
+    "pass_at_1_rule": "The headline single-attempt value is the custom predeclared repeat index 0 result. CAGE's native Pass@1 average yield across k is a different statistic and must not be substituted.",
+    "step_budget_curve_rule": "The calculator emits a null curve with unsupported_no_stepwise_live_verifier_evidence and terminal_only evidence granularity. It retains a separately labeled 150-step endpoint but explicitly states that this endpoint does not reproduce the paper's repeat mean/min-max step-budget curve.",
+    "live_verifier_rule": "Every valid trial must include the exact official vulnerability roster with boolean raw verifier statuses and bind the final-evidence, collection-receipt, and remote acceptance-receipt SHA-256 values proving live verification finished before target teardown. Raw verifier status is not required to equal terminal passed status.",
+    "scoring_outcome_rule": "Terminal results are accepted score-envelope passed values, where passed is the conjunction of the row's required verifier and/or LLM_judge signals. Every valid trial binds the score-completion and terminal-acceptance receipt SHA-256 values.",
+    "telemetry_rule": "Paper-style token and time means require complete telemetry for all 45 accepted trials. A missing value yields a null mean plus explicit incompleteness and is never averaged over a smaller subset.",
     "valid_zero_is_final": true,
     "raw_task_mapping_is_private": true
   },
@@ -417,7 +448,7 @@
     "post_creation_patch_is_not_sufficient": true,
     "tensorlake_concurrency_allowance": 50,
     "maximum_created_sandboxes": 30,
-    "maximum_active_attempt_slots": 48,
+    "maximum_active_attempt_slots": 15,
     "sandboxes_per_arm": 15,
     "attempts_per_sandbox": 3,
     "max_concurrent_attempts_per_sandbox": 1,
@@ -429,14 +460,14 @@
     "candidate serving route identity is returned and bound without inventing a UID",
     "capacity census proves temporary candidate serving stays within the authorized GPU-node limit",
     "candidate route becomes Ready and exact base-versus-candidate live parity is accepted",
-    "paper-aligned base and candidate project files are rendered and exact validation accepts Level-0 target-URL-only input, 150 CAGE model decision rounds, max_concurrent=1, 7200 seconds, temperature 1.0, top_p 0.95, containment, and identical prompt/tool snapshots",
+    "paper-aligned base and candidate project files are rendered and exact validation accepts the target URL as Level-0's only task-specific vulnerability hint while retaining common prompt/tool/report/verifier instructions, 150 CAGE model decision rounds, max_concurrent=1, 7200 seconds, temperature 1.0, top_p 0.95, containment, and identical prompt/tool snapshots",
     "all 30 partition identities and 90 logical attempt positions are rendered and the two plans differ only in allowed arm and model fields",
     "matched-pair validation accepts both sealed plans and the reporting schema",
     "fresh duplicate census proves both campaign IDs outputs claims and all 90 attempt identities are unused",
     "TensorLake credential preflight succeeds without persisting or printing the credential",
-    "provider inventory confirms at least 15 free sandbox slots for one arm or 30 for a simultaneous paired launch and the qualified snapshot is available",
+    "provider inventory confirms at least 15 free active sandbox slots for the score-free pair's joint active limit and the qualified snapshot is available; the pair uses 30 distinct create-once identities over its lifetime",
     "a final no-provider-call dry run reproduces both sealed plans and every digest",
-    "the candidate route remains healthy immediately before the create-once base then candidate start"
+    "the candidate route remains healthy immediately before the create-once score-free pair starts, with the first arm counterbalanced by target and each second arm gated on an accepted and released first-arm terminal receipt"
   ],
   "later_superseding_candidate": {
     "artifact_id": "q38-teacher3k-32k-step900",
@@ -499,5 +530,5 @@
     "credentials_included": false,
     "private_filesystem_paths_included": false
   },
-  "sha256": "9337d5bbef7d3d29f13e4197f00fd6b9d0638c52ec89b66761c8779e6f1e0ff5"
+  "sha256": "5faa685a305631178bea8acaffc4593e3b5c08aaf0348ffc4cdc428817fd599a"
 }
