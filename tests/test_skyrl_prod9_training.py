@@ -83,7 +83,12 @@ def test_fresh_wrapper_startup_incident_preserves_failure_and_release_evidence()
     assert all(row["sanitized_entrypoint_error_class"] == "RuntimeError" for row in value["runs"])
     assert all(row["failure_alerts"] == "off" for row in value["runs"])
     assert value["root_cause"]["native_subprocess_started"] is False
-    assert value["resource_reconciliation"]["active_gpus_for_exact_runs"] == 0
+    resources = value["resource_reconciliation"]
+    assert resources["terminal_rayjob_records_present"] is True
+    assert resources["terminal_finished_workload_records_present"] is True
+    assert resources["generated_rayclusters_present"] is False
+    assert resources["pods_present"] is False
+    assert resources["active_gpus_for_exact_runs"] == 0
     assert value["scientific_result"]["capability_claim"] is False
 
 
