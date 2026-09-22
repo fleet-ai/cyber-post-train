@@ -1657,6 +1657,23 @@ def test_cpu_checkpoint_boundary_previews_and_creates_only_unpinned_zero_gpu_pod
     assert all(payload["spec"]["nodeSelector"] == CPU_NODE_SELECTOR for payload in manifests)
 
 
+def test_cpu_checkpoint_boundary_accepts_truthful_export_operation(monkeypatch):
+    calls = []
+    expected = cpu_checkpoint_pod()
+    expected["metadata"]["annotations"][CPU_CHECKPOINT_OPERATION_ANNOTATION] = "export"
+
+    def run(command, **kwargs):
+        calls.append((command, kwargs.get("input")))
+        output = cpu_node_inventory() if "get" in command else expected
+        return subprocess.CompletedProcess(command, 0, stdout=json.dumps(output), stderr="")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    Kubectl("prod-context").dry_run_cpu_checkpoint_pod(expected)
+    assert len(calls) == 2
+    assert "get" in calls[0][0]
+    assert "--dry-run=server" in calls[1][0]
+
+
 @pytest.mark.parametrize(
     ("resource", "quantity"),
     [("cpu", "16"), ("memory", "128Gi")],
