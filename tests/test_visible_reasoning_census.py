@@ -67,9 +67,9 @@ def _manifest() -> dict:
                 "source_records": 20,
                 "windows": 20,
                 "student_visible_reasoning_target_tokens": 8_000_000,
-                "visible_action_target_tokens": 12_000_000,
-                "supervised_tokens": 20_000_000,
-                "matched_action_only_supervised_tokens": 12_000_000,
+                "visible_action_target_tokens": 20_000_000,
+                "supervised_tokens": 28_000_000,
+                "matched_action_only_supervised_tokens": 20_000_000,
             },
             "campaign_identity": {
                 "campaign_plan_sha256": _sha("1"),
@@ -118,7 +118,7 @@ def _source_census(manifest: dict) -> dict:
             "visibility": {"student_visible": 20, "private_or_unknown": 1, "absent": 1},
             "target_tokens": {
                 "student_visible_reasoning": 8_000_000,
-                "visible_action": 12_000_000,
+                "visible_action": 20_000_000,
             },
             "compaction": {"none": 21, "exact_student_generated": 1, "opaque_rejected": 0},
         }
@@ -138,9 +138,17 @@ def _coverage(manifest: dict, source: dict) -> dict:
             "selected_source_records": 20,
             "visible_reasoning_windows": 20,
             "student_visible_reasoning_target_tokens": 8_000_000,
-            "visible_action_target_tokens": 12_000_000,
-            "unique_supervised_tokens": 20_000_000,
+            "visible_action_target_tokens": 20_000_000,
+            "unique_supervised_tokens": 28_000_000,
+            "arm_unique_supervised_tokens": {
+                "reasoning_plus_action": 28_000_000,
+                "matched_action_only": 20_000_000,
+            },
             "minimum_unique_supervised_tokens": 20_000_000,
+            "arm_token_goal_reached": {
+                "reasoning_plus_action": True,
+                "matched_action_only": True,
+            },
             "token_goal_reached": True,
             "minimum_successful_families": 20,
             "successful_family_goal_reached": True,
@@ -175,7 +183,7 @@ def test_separate_visible_reasoning_selection_binds_all_aggregates() -> None:
     selection = census.select(source, manifest, coverage)
 
     assert selection["objective"] == census.OBJECTIVE
-    assert selection["selected"]["supervised_tokens"] == 20_000_000
+    assert selection["selected"]["supervised_tokens"] == 28_000_000
     assert census.validate_selection(
         selection, census=source, corpus_manifest=manifest, coverage=coverage
     )
@@ -274,4 +282,52 @@ def test_visible_reasoning_selection_fails_closed_on_aggregate_drift(mutate, mat
     _seal(manifest)
     _seal(coverage)
     with pytest.raises(ValueError, match=match):
+        census.select(source, manifest, coverage)
+
+
+def test_combined_20m_cannot_hide_an_underfilled_action_only_arm() -> None:
+    manifest = _manifest()
+    manifest["counts"].update(
+        {
+            "visible_action_target_tokens": 12_000_000,
+            "supervised_tokens": 20_000_000,
+            "matched_action_only_supervised_tokens": 12_000_000,
+        }
+    )
+    source = _source_census(manifest)
+    source["target_tokens"]["visible_action"] = 12_000_000
+    _seal(source)
+    manifest["source_census_sha256"] = source["sha256"]
+    _seal(manifest)
+    coverage = _coverage(manifest, source)
+    coverage.update(
+        {
+            "visible_action_target_tokens": 12_000_000,
+            "unique_supervised_tokens": 20_000_000,
+            "arm_unique_supervised_tokens": {
+                "reasoning_plus_action": 20_000_000,
+                "matched_action_only": 12_000_000,
+            },
+            # This is the old, unsafe aggregate-only conclusion.
+            "arm_token_goal_reached": {
+                "reasoning_plus_action": True,
+                "matched_action_only": True,
+            },
+            "token_goal_reached": True,
+            "target_goal_reached": True,
+        }
+    )
+    _seal(coverage)
+    manifest["coverage_sha256"] = coverage["sha256"]
+    _seal(manifest)
+    coverage = copy.deepcopy(coverage)
+    coverage.update(
+        {
+            "selection_sha256": manifest["selection_sha256"],
+            "source_census_sha256": source["sha256"],
+        }
+    )
+    _seal(coverage)
+
+    with pytest.raises(ValueError, match="per-arm token gates"):
         census.select(source, manifest, coverage)

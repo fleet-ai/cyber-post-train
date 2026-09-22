@@ -99,8 +99,20 @@ and lengths, and the next true target prompt. The builder re-renders the
 summary boundary with the pinned Qwen template; a self-consistent hash of
 caller-provided continuation IDs is not enough. OpenCode 1.18.27 generates that
 summary from a separate synthetic user request, not from the ordinary session
-prefix, so each boundary captures the exact request `messages`, `system=[]`,
-`tools={}`, payload digest, and rendered prompt token IDs. The post prompt must
+prefix. The pinned release resolves to commit
+`b04697366f05419e9bd7a92f841813dd976161c9`; the active CLI compaction source
+and imported core prompt source are digest-bound separately so the core
+package's different serializer cannot be substituted. Each boundary therefore
+captures the ordered, post-plugin
+`selected.head` projection, binds every projected part back to exact prior
+message indices, and independently reserializes the supported
+reasoning→text→completed-tool subset. The template system anchor is excluded;
+tool results are embedded beside their calls. Nonidentity message transforms,
+plugin prompt/context changes, attachments, pruned/error tool states, and any
+other native part order are rejected. The validator derives the exact
+OpenCode `buildPrompt` text using the last completed prior summary, then
+requires the captured request `messages`, `system=[]`, `tools={}`, payload
+digest, and rendered prompt token IDs to match it byte for byte. The post prompt must
 equal the prompt used for the next target, and every later training window must
 retain an unbroken ancestry through the declared post-compaction root until a
 new declared boundary replaces it. Pre-boundary parents and unrelated later
@@ -119,9 +131,11 @@ Materialization itself
 is **never** a training permit: its receipt records `sft_ready: false` even at
 the target. The separate `data-fleet-visible-reasoning-authorize` command checks
 the aggregate source census, corpus manifest, and coverage receipt together.
-It writes `source_only_qualified`, not a collection or training approval, after
-at least 20M unique supervised tokens, verified successes from at least 20
-training families, and the 25% maximum task-family share are met. No current
+It writes `source_only_qualified`, not a collection or training approval, only
+after **each** emitted arm independently has at least 20M packing-independent
+unique supervised tokens, verified successes come from at least 20 training
+families, and the 25% maximum task-family share is met. The reasoning-plus-action
+count cannot compensate for an underfilled matched action-only arm. No current
 SFT launcher accepts that qualification, so this remains a
 source-only admission boundary rather than authorization to train.
 

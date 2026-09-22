@@ -59,11 +59,72 @@ WAVE_PLAN_SCHEMA = "cyber_qwen_opencode_visible_reasoning_wave_plan_v1"
 QWEN_REPOSITORY = "Qwen/Qwen3.8-27B"
 OPENCODE_HARNESS = "opencode"
 OPENCODE_VERSION = "1.18.27"
+OPENCODE_RELEASE_COMMIT = "b04697366f05419e9bd7a92f841813dd976161c9"
+OPENCODE_COMPACTION_SOURCE_SHA256 = (
+    "sha256:8d478570a7e4ad32b746030d4f86a1c673949b1e2259bd716b3885d99283289a"
+)
+OPENCODE_BUILD_PROMPT_SOURCE_SHA256 = (
+    "sha256:35bc2da1578b6bb80a3c39c1d6c51f234f34ce6586dd4f9d230e2a31b257138d"
+)
 OPENCODE_MCP_SERVER = "fleet"
 OPENCODE_MCP_TOOLS = ["bash", "submit_report"]
 OPENCODE_TEMPLATE_TOOL_NAMES = ["fleet_bash", "fleet_submit_report"]
 ONLINE_COMPACTION = "opencode_1.18.27_native_compaction_autocontinue_v2"
 EXACT_COMPACTION = "student_generated_exact_continuation_v1"
+OPENCODE_TOOL_OUTPUT_MAX_CHARS = 2_000
+OPENCODE_SUMMARY_TEMPLATE = (
+    "Output exactly the Markdown structure shown inside <template> and keep the section order "
+    "unchanged. Do not include the <template> tags in your response.\n"
+    "<template>\n"
+    "## Objective\n"
+    "- [one or two brief sentences describing what the user is trying to accomplish]\n"
+    "\n"
+    "## Important Details\n"
+    "- [constraints/preferences, decisions and why, important facts/assumptions, exact context "
+    'needed to continue, or "(none)"]\n'
+    "\n"
+    "## Work State\n"
+    "### Completed\n"
+    '- [finished work, verified facts, or changes made; otherwise "(none)"]\n'
+    "\n"
+    "### Active\n"
+    '- [current work, partial changes, or investigation state; otherwise "(none)"]\n'
+    "\n"
+    "### Blocked\n"
+    '- [blockers, failing commands, or unknowns; otherwise "(none)"]\n'
+    "\n"
+    "## Next Move\n"
+    '1. [immediate concrete action, or "(none)"]\n'
+    '2. [next action if known, or "(none)"]\n'
+    "\n"
+    "## Relevant Files\n"
+    '- [file or directory path: why it matters, or "(none)"]\n'
+    "</template>\n"
+    "\n"
+    "Rules:\n"
+    "- Keep every section, even when empty.\n"
+    "- Use terse bullets, not prose paragraphs.\n"
+    "- Preserve exact file paths, symbols, commands, error strings, URLs, and identifiers when "
+    "known.\n"
+    "- Do not mention the summary process or that context was compacted."
+)
+OPENCODE_SUMMARY_UPDATE_INSTRUCTIONS = (
+    "The <prior-summary> summarizes everything that happened before the <conversation>. "
+    "Construct a new summary that combines both. The <prior-summary> is discarded after this: "
+    "anything you do not carry into the new summary is lost.\n"
+    "\n"
+    "When combining:\n"
+    "- Carry forward objectives, constraints, user directives, decisions, and parallel "
+    "workstreams from the <prior-summary> even when the <conversation> does not mention them. "
+    "Drop only what is finished and no longer needed.\n"
+    "- The <conversation> is more recent than the <prior-summary>. Where they conflict, the "
+    "conversation wins: state the corrected fact and drop the old claim.\n"
+    "- Add new progress, decisions, constraints, and context from the conversation.\n"
+    '- Move completed work from "Active" to "Completed".\n'
+    "- If a blocker has been resolved, update the summary to reflect that while keeping any "
+    "details still needed to continue the work.\n"
+    '- Update "Objective" and "Next Move" to reflect the current work state.'
+)
 MINIMUM_SUPERVISED_TOKENS = 20_000_000
 MAXIMUM_FAMILY_TOKEN_FRACTION = 0.25
 MINIMUM_SUCCESSFUL_FAMILIES = 20
@@ -341,7 +402,10 @@ def _profile(value: Mapping[str, Any]) -> dict[str, Any]:
         {
             "harness",
             "harness_version",
+            "release_commit",
             "release_asset_sha256",
+            "compaction_source_sha256",
+            "build_prompt_source_sha256",
             "tool_catalog_sha256",
             "template_tools_sha256",
             "mcp_server",
@@ -356,6 +420,9 @@ def _profile(value: Mapping[str, Any]) -> dict[str, Any]:
     if (
         opencode["harness"] != OPENCODE_HARNESS
         or opencode["harness_version"] != OPENCODE_VERSION
+        or opencode["release_commit"] != OPENCODE_RELEASE_COMMIT
+        or opencode["compaction_source_sha256"] != OPENCODE_COMPACTION_SOURCE_SHA256
+        or opencode["build_prompt_source_sha256"] != OPENCODE_BUILD_PROMPT_SOURCE_SHA256
         or opencode["context_management"] != ONLINE_COMPACTION
         or opencode["context_window_tokens"] != 262_144
         or opencode["context_headroom_tokens"] != 20_000
@@ -364,7 +431,13 @@ def _profile(value: Mapping[str, Any]) -> dict[str, Any]:
         or opencode["tools"] != OPENCODE_TEMPLATE_TOOL_NAMES
     ):
         raise ValueError("source must use the qualified Qwen/OpenCode treatment")
-    for name in ("release_asset_sha256", "tool_catalog_sha256", "template_tools_sha256"):
+    for name in (
+        "release_asset_sha256",
+        "compaction_source_sha256",
+        "build_prompt_source_sha256",
+        "tool_catalog_sha256",
+        "template_tools_sha256",
+    ):
         _sha(opencode[name], f"OpenCode {name}")
 
     thinking = _exact(profile["thinking"], {"enable_thinking", "preserve_thinking"}, "thinking")
@@ -662,6 +735,7 @@ def _packet(value: Mapping[str, Any], profile: dict[str, Any]) -> dict[str, Any]
             "training_data_eligible",
             "objective",
             "minimum_unique_supervised_tokens",
+            "minimum_unique_supervised_tokens_applies_per_arm",
             "minimum_successful_families",
             "maximum_family_target_token_fraction",
             "matched_action_only_required",
@@ -697,6 +771,7 @@ def _packet(value: Mapping[str, Any], profile: dict[str, Any]) -> dict[str, Any]
         or packet["training_data_eligible"] is not True
         or packet["objective"] != "student_visible_reasoning_plus_visible_actions"
         or packet["minimum_unique_supervised_tokens"] < MINIMUM_SUPERVISED_TOKENS
+        or packet["minimum_unique_supervised_tokens_applies_per_arm"] is not True
         or packet["minimum_successful_families"] != MINIMUM_SUCCESSFUL_FAMILIES
         or packet["maximum_family_target_token_fraction"] != MAXIMUM_FAMILY_TOKEN_FRACTION
         or packet["matched_action_only_required"] is not True
@@ -824,6 +899,8 @@ def _campaign_artifacts(
         or collection.get("attempts_per_task_version") != packet["attempts_per_task_version"]
         or collection.get("minimum_unique_supervised_tokens")
         != packet["minimum_unique_supervised_tokens"]
+        or collection.get("minimum_unique_supervised_tokens_applies_per_arm") is not True
+        or packet["minimum_unique_supervised_tokens_applies_per_arm"] is not True
         or collection.get("minimum_successful_families") != packet["minimum_successful_families"]
         or collection.get("maximum_family_target_token_fraction")
         != packet["maximum_family_target_token_fraction"]
@@ -847,7 +924,10 @@ def _campaign_artifacts(
             for name in (
                 "harness",
                 "harness_version",
+                "release_commit",
                 "release_asset_sha256",
+                "compaction_source_sha256",
+                "build_prompt_source_sha256",
                 "tool_catalog_sha256",
                 "context_management",
                 "context_window_tokens",
@@ -1601,6 +1681,195 @@ def _source_target_identity(record: Mapping[str, Any], window: Mapping[str, Any]
     }
 
 
+def _opencode_history_groups(
+    messages: list[dict[str, Any]],
+    stop: int,
+    *,
+    hidden_summary_indices: set[int],
+) -> list[list[int]]:
+    """Project normalized messages back to OpenCode SessionV1 message groups.
+
+    OpenCode stores a completed tool call and its result in one assistant
+    ``WithParts`` message.  The private training representation deliberately
+    flattens the result to a following ``role=tool`` message for the Qwen chat
+    template.  These groups are therefore the only supported, lossless bridge
+    back to the exact history on which OpenCode 1.18.27 ran ``select``.
+    """
+
+    if stop > len(messages) or any(index < 0 or index >= stop for index in hidden_summary_indices):
+        raise ValueError("OpenCode compaction history boundary is invalid")
+    groups: list[list[int]] = []
+    index = 0
+    while index < stop:
+        if index in hidden_summary_indices:
+            index += 1
+            continue
+        message = messages[index]
+        role = message["role"]
+        if role == "system":
+            if index != 0:
+                raise ValueError("OpenCode compaction history contains a non-session system turn")
+            index += 1
+            continue
+        if role == "user":
+            groups.append([index])
+            index += 1
+            continue
+        if role != "assistant":
+            raise ValueError("OpenCode compaction history contains an orphaned tool result")
+        group = [index]
+        result_index = index + 1
+        while result_index < stop and messages[result_index]["role"] == "tool":
+            if result_index in hidden_summary_indices:
+                raise ValueError("OpenCode compaction hides only complete summary messages")
+            group.append(result_index)
+            result_index += 1
+        calls = message.get("tool_calls") or []
+        call_ids = [call["id"] for call in calls]
+        result_ids = [messages[item]["tool_call_id"] for item in group[1:]]
+        if len(call_ids) != len(result_ids) or set(call_ids) != set(result_ids):
+            raise ValueError("OpenCode compaction history cannot reconstruct assistant tool parts")
+        groups.append(group)
+        index = result_index
+    return groups
+
+
+def _opencode_selected_head_entry(
+    value: object,
+    messages: list[dict[str, Any]],
+    expected_indices: list[int],
+) -> dict[str, Any]:
+    """Validate one post-plugin serialization projection of ``selected.head``."""
+
+    entry = _exact(
+        value,
+        {"source_message_indices", "role", "parts"},
+        "OpenCode selected.head entry",
+    )
+    if entry["source_message_indices"] != expected_indices:
+        raise ValueError("OpenCode selected.head is cross-wired to different history messages")
+    role = entry["role"]
+    source = messages[expected_indices[0]]
+    if role != source["role"] or role not in {"user", "assistant"}:
+        raise ValueError("OpenCode selected.head entry role differs from its exact history")
+    parts = entry["parts"]
+    if not isinstance(parts, list) or not parts:
+        raise ValueError("OpenCode selected.head entry must capture ordered SessionV1 parts")
+    if role == "user":
+        expected = [{"type": "text", "text": source["content"], "ignored": False}]
+        if parts != expected or len(expected_indices) != 1:
+            raise ValueError("OpenCode selected.head user parts differ from exact history")
+        return entry
+
+    calls = source.get("tool_calls") or []
+    results = {messages[index]["tool_call_id"]: messages[index] for index in expected_indices[1:]}
+    expected_parts: list[dict[str, Any]] = []
+    if source.get("student_visible_reasoning"):
+        expected_parts.append({"type": "reasoning", "text": source["student_visible_reasoning"]})
+    if source["content"]:
+        expected_parts.append({"type": "text", "text": source["content"]})
+    for call in calls:
+        call_id = call["id"]
+        result = results.get(call_id)
+        if result is None:
+            raise ValueError("OpenCode selected.head tool part has no exact result")
+        expected_parts.append(
+            {
+                "type": "tool",
+                "tool_call_id": call_id,
+                "name": call["function"]["name"],
+                "input": call["function"]["arguments"],
+                "status": "completed",
+                "output": result["content"],
+                "attachments": [],
+                "compacted": False,
+            }
+        )
+    if parts != expected_parts:
+        raise ValueError(
+            "OpenCode selected.head assistant parts differ from the strict exact-history projection"
+        )
+    if any(
+        actual["type"] == "tool"
+        and _opencode_json_stringify(actual["input"]) != _opencode_json_stringify(expected["input"])
+        for actual, expected in zip(parts, expected_parts, strict=True)
+    ):
+        raise ValueError("OpenCode selected.head tool input JSON order differs from exact history")
+    return entry
+
+
+def _opencode_truncate(value: str) -> str:
+    """Match JavaScript UTF-16 truncation, rejecting an unpaired cut surrogate."""
+
+    encoded = value.encode("utf-16-le", errors="surrogatepass")
+    limit = OPENCODE_TOOL_OUTPUT_MAX_CHARS * 2
+    if len(encoded) <= limit:
+        return value
+    truncated = encoded[:limit].decode("utf-16-le", errors="surrogatepass")
+    if any(0xD800 <= ord(character) <= 0xDFFF for character in truncated):
+        raise ValueError("OpenCode tool-output truncation splits a UTF-16 surrogate pair")
+    return truncated + "\n[truncated]"
+
+
+def _opencode_json_stringify(value: object) -> str:
+    """Match JSON.stringify for the contract's string/int/list/object grammar."""
+
+    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+
+
+def _opencode_serialize_entry(entry: Mapping[str, Any]) -> str:
+    parts = entry["parts"]
+    if entry["role"] == "user":
+        text = "\n".join(
+            part["text"]
+            for part in parts
+            if part["type"] == "text" and part["ignored"] is False and part["text"]
+        )
+        return f"[User]: {text}" if text else ""
+    serialized: list[str] = []
+    for part in parts:
+        if part["type"] == "text":
+            if part["text"]:
+                serialized.append(f"[Assistant]: {part['text']}")
+            continue
+        if part["type"] == "reasoning":
+            if part["text"]:
+                serialized.append(f"[Assistant reasoning]: {part['text']}")
+            continue
+        arguments = _opencode_json_stringify(part["input"])
+        serialized.append(f"[Assistant tool call]: {part['name']}({arguments})")
+        serialized.append(f"[Tool result]: {_opencode_truncate(part['output'])}")
+    return "\n".join(serialized)
+
+
+def _opencode_build_summary_prompt(conversation: str, previous_summary: str | None) -> str:
+    """Exact ``buildPrompt`` from OpenCode 1.18.27 core compaction."""
+
+    context = f"Here is the conversation so far:\n\n<conversation>\n{conversation}\n</conversation>"
+    if previous_summary is None:
+        return "\n\n".join(
+            [
+                context,
+                (
+                    "Create a new anchored summary from the conversation history in the "
+                    "<conversation> tags above so another coding agent can continue the work."
+                ),
+                OPENCODE_SUMMARY_TEMPLATE,
+            ]
+        )
+    return "\n\n".join(
+        [
+            context,
+            (
+                "Here is the summary of the conversation before the <conversation> above:\n\n"
+                f"<prior-summary>\n{previous_summary}\n</prior-summary>"
+            ),
+            OPENCODE_SUMMARY_UPDATE_INSTRUCTIONS,
+            OPENCODE_SUMMARY_TEMPLATE,
+        ]
+    )
+
+
 def _summary_request(value: object) -> dict[str, Any]:
     """Validate the exact model-visible request used by native compaction."""
 
@@ -1656,6 +1925,16 @@ def _compaction(
         "continuation_token_sha256",
         "continuation_token_ids",
         "continuation_tokens",
+        "selected_head",
+        "selected_head_sha256",
+        "selected_head_serialized_messages",
+        "selected_head_serialized_messages_sha256",
+        "selected_head_serialized_conversation_sha256",
+        "selected_tail_start_message_index",
+        "previous_summary_message_index",
+        "previous_summary_sha256",
+        "messages_transform_identity",
+        "compacting_plugin",
         "summary_request",
         "summary_request_prompt_token_ids",
         "summary_generation_prompt_token_sha256",
@@ -1670,6 +1949,7 @@ def _compaction(
     }
     seen: set[str] = set()
     next_targets: set[str] = set()
+    prior_summary_indices: list[int] = []
     checked_boundaries: list[dict[str, Any]] = []
     for boundary in boundaries:
         boundary = _exact(boundary, fields, "compaction boundary")
@@ -1677,20 +1957,19 @@ def _compaction(
         if boundary_id in seen:
             raise ValueError("compaction boundary identity is duplicated")
         seen.add(boundary_id)
-        for name in fields - {
-            "boundary_id",
-            "parent_window_id",
-            "continuation_token_ids",
-            "continuation_tokens",
-            "summary_request",
-            "summary_request_prompt_token_ids",
-            "summary_generation_prompt_tokens",
-            "pre_compaction_prompt_tokens",
-            "post_compaction_prompt_tokens",
-            "summary_message_index",
-            "post_compaction_message_indices",
-            "next_target_window_id",
-        }:
+        for name in (
+            "original_task_digest",
+            "prior_history_digest",
+            "summary_message_digest",
+            "continuation_token_sha256",
+            "selected_head_sha256",
+            "selected_head_serialized_messages_sha256",
+            "selected_head_serialized_conversation_sha256",
+            "summary_generation_prompt_token_sha256",
+            "pre_compaction_prompt_token_sha256",
+            "post_compaction_prompt_token_sha256",
+            "next_target_prompt_token_sha256",
+        ):
             _sha(boundary[name], f"compaction {name}")
         for name in (
             "continuation_tokens",
@@ -1700,7 +1979,7 @@ def _compaction(
         ):
             _count(boundary[name], f"compaction {name}", positive=True)
         continuation = _token_ids(boundary["continuation_token_ids"], "compaction continuation")
-        _summary_request(boundary["summary_request"])
+        summary_request = _summary_request(boundary["summary_request"])
         summary_prompt = _token_ids(
             boundary["summary_request_prompt_token_ids"], "compaction summary request prompt"
         )
@@ -1739,6 +2018,86 @@ def _compaction(
             or any(window["target_message_index"] == summary_index for window in windows.values())
         ):
             raise ValueError("compaction summary is not an exact zero-loss context message")
+
+        previous_summary_index = boundary["previous_summary_message_index"]
+        expected_previous_summary_index = (
+            prior_summary_indices[-1] if prior_summary_indices else None
+        )
+        if previous_summary_index != expected_previous_summary_index:
+            raise ValueError("OpenCode previousSummary is not the last completed compaction")
+        previous_summary: str | None = None
+        if previous_summary_index is not None:
+            _count(previous_summary_index, "OpenCode previous summary message")
+            previous_message = messages[previous_summary_index]
+            if previous_message["role"] != "assistant" or set(previous_message) != {
+                "role",
+                "content",
+            }:
+                raise ValueError("OpenCode previousSummary is not an exact summary message")
+            previous_summary = previous_message["content"].strip()
+            if not previous_summary:
+                raise ValueError("OpenCode previousSummary is empty")
+        previous_summary_sha256 = boundary["previous_summary_sha256"]
+        if previous_summary is None:
+            if previous_summary_sha256 is not None:
+                raise ValueError("first OpenCode compaction cannot claim a previousSummary")
+        elif previous_summary_sha256 != digest_json(previous_summary):
+            raise ValueError("OpenCode previousSummary digest differs from exact history")
+
+        if boundary["messages_transform_identity"] is not True or boundary["compacting_plugin"] != {
+            "prompt": None,
+            "context": [],
+        }:
+            raise ValueError("OpenCode compaction plugin transforms are not reconstructable")
+        eligible_groups = _opencode_history_groups(
+            messages,
+            summary_index,
+            hidden_summary_indices=set(prior_summary_indices),
+        )
+        selected_head = boundary["selected_head"]
+        if (
+            not isinstance(selected_head, list)
+            or not selected_head
+            or len(selected_head) > len(eligible_groups)
+        ):
+            raise ValueError("OpenCode selected.head is empty or outside exact prior history")
+        checked_head = [
+            _opencode_selected_head_entry(entry, messages, eligible_groups[index])
+            for index, entry in enumerate(selected_head)
+        ]
+        if boundary["selected_head_sha256"] != digest_json(checked_head):
+            raise ValueError("OpenCode selected.head digest differs from exact prior history")
+        expected_tail_start = (
+            eligible_groups[len(checked_head)][0]
+            if len(checked_head) < len(eligible_groups)
+            else None
+        )
+        if boundary["selected_tail_start_message_index"] is not None:
+            _count(
+                boundary["selected_tail_start_message_index"],
+                "OpenCode selected tail start message",
+            )
+        if boundary["selected_tail_start_message_index"] != expected_tail_start:
+            raise ValueError("OpenCode selected.head does not bind its exact retained tail")
+        serialized_messages = [
+            serialized for serialized in map(_opencode_serialize_entry, checked_head) if serialized
+        ]
+        if boundary["selected_head_serialized_messages"] != serialized_messages:
+            raise ValueError("OpenCode selected.head serialized messages differ from exact history")
+        if boundary["selected_head_serialized_messages_sha256"] != digest_json(serialized_messages):
+            raise ValueError("OpenCode selected.head serialized-message digest is invalid")
+        conversation = "\n\n".join(serialized_messages)
+        if boundary["selected_head_serialized_conversation_sha256"] != digest_json(conversation):
+            raise ValueError("OpenCode selected.head conversation digest is invalid")
+        expected_summary_prompt = _opencode_build_summary_prompt(
+            conversation,
+            previous_summary,
+        )
+        request_text = summary_request["messages"][0]["content"][0]["text"]
+        if request_text != expected_summary_prompt:
+            raise ValueError(
+                "OpenCode summary request is not derived from selected.head and previousSummary"
+            )
         if (
             boundary["pre_compaction_prompt_token_sha256"] != parent["prompt_token_sha256"]
             or boundary["pre_compaction_prompt_tokens"] != parent["prompt_token_count"]
@@ -1748,6 +2107,7 @@ def _compaction(
             or boundary["post_compaction_prompt_tokens"] != target["prompt_token_count"]
         ):
             raise ValueError("compaction continuation does not bind the true next target prompt")
+        prior_summary_indices.append(summary_index)
         checked_boundaries.append(boundary)
 
     ordered_windows = sorted(windows.values(), key=lambda window: window["sequence_index"])
@@ -2338,7 +2698,15 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
     total_tokens = reasoning_tokens + action_tokens
     family_total = sum(family_tokens.values())
     family_fraction = max(family_tokens.values()) / family_total
-    token_goal_reached = total_tokens >= packet["minimum_unique_supervised_tokens"]
+    arm_unique_supervised_tokens = {
+        "reasoning_plus_action": total_tokens,
+        "matched_action_only": action_tokens,
+    }
+    arm_token_goal_reached = {
+        name: tokens >= packet["minimum_unique_supervised_tokens"]
+        for name, tokens in arm_unique_supervised_tokens.items()
+    }
+    token_goal_reached = all(arm_token_goal_reached.values())
     family_goal_reached = len(family_tokens) >= packet["minimum_successful_families"]
     target_goal_reached = (
         token_goal_reached
@@ -2360,7 +2728,9 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
         "student_visible_reasoning_target_tokens": reasoning_tokens,
         "visible_action_target_tokens": action_tokens,
         "unique_supervised_tokens": total_tokens,
+        "arm_unique_supervised_tokens": arm_unique_supervised_tokens,
         "minimum_unique_supervised_tokens": packet["minimum_unique_supervised_tokens"],
+        "arm_token_goal_reached": arm_token_goal_reached,
         "token_goal_reached": token_goal_reached,
         "minimum_successful_families": packet["minimum_successful_families"],
         "successful_family_goal_reached": family_goal_reached,
@@ -2440,8 +2810,8 @@ def build(config: Mapping[str, Any], *, relative_to: Path) -> dict[str, Any]:
             "Only explicitly authorized student-visible reasoning is supervised.",
             "Private or unknown reasoning fields and opaque compaction are rejected.",
             (
-                "Unique tokens count each normalized source assistant span once, "
-                "independent of packing metadata."
+                "Each arm independently counts each normalized source assistant span once, "
+                "independent of packing metadata, and must clear the 20M floor."
             ),
             "Output contains token IDs and masks only; it contains no raw source text.",
         ],

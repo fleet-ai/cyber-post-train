@@ -135,6 +135,7 @@ def _validate_spec(spec: dict[str, Any]) -> None:
         "maximum_rollouts_per_day": CELLS_PER_WAVE,
         "finish_active_wave_before_target_stop": True,
         "minimum_unique_supervised_tokens": corpus.MINIMUM_SUPERVISED_TOKENS,
+        "minimum_unique_supervised_tokens_applies_per_arm": True,
         "minimum_successful_families": MINIMUM_SUCCESSFUL_FAMILIES,
         "maximum_family_target_token_fraction": corpus.MAXIMUM_FAMILY_TOKEN_FRACTION,
     }:
@@ -264,9 +265,12 @@ def _model_and_harness(
     expected_harness = {
         "harness": corpus.OPENCODE_HARNESS,
         "harness_version": corpus.OPENCODE_VERSION,
+        "release_commit": corpus.OPENCODE_RELEASE_COMMIT,
         "release_asset_sha256": (
             "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702"
         ),
+        "compaction_source_sha256": corpus.OPENCODE_COMPACTION_SOURCE_SHA256,
+        "build_prompt_source_sha256": corpus.OPENCODE_BUILD_PROMPT_SOURCE_SHA256,
         "provider_adapter": "@ai-sdk/openai-compatible",
         "tool_catalog_sha256": (
             "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
@@ -485,6 +489,12 @@ def render(spec: dict[str, Any], *, root: Path) -> dict[str, dict[str, Any]]:
                 "online": corpus.ONLINE_COMPACTION,
                 "accepted_offline_kind": corpus.EXACT_COMPACTION,
                 "exact_synthetic_summary_request_payload_required": True,
+                "selected_head_exact_history_projection_required": True,
+                "selected_head_serialization_and_digest_required": True,
+                "previous_summary_from_last_completed_boundary_required": True,
+                "message_transform_must_be_identity": True,
+                "compacting_plugin_prompt": None,
+                "compacting_plugin_context": [],
                 "summary_request_system": [],
                 "summary_request_tools": {},
                 "summary_request_rendered_token_ids_required": True,
@@ -497,6 +507,7 @@ def render(spec: dict[str, Any], *, root: Path) -> dict[str, dict[str, Any]]:
                 "derive_action_only_from_same_selected_turns": True,
                 "visible_action_spans_identical": True,
                 "reasoning_spans_masked_only_in_action_arm": True,
+                "minimum_unique_supervised_tokens_per_arm": corpus.MINIMUM_SUPERVISED_TOKENS,
                 "mix_corpora": False,
             },
             "review": spec["review"],
@@ -534,6 +545,7 @@ def render(spec: dict[str, Any], *, root: Path) -> dict[str, dict[str, Any]]:
             "heldout_task_versions": DEV_TASKS + FINAL_TASKS,
             "planned_cells": PLANNED_CELLS,
             "minimum_unique_supervised_tokens": corpus.MINIMUM_SUPERVISED_TOKENS,
+            "minimum_unique_supervised_tokens_applies_per_arm": True,
             "private_or_hidden_reasoning_allowed": False,
             "external_submission": False,
             "review_completed": False,

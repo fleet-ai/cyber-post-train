@@ -33,6 +33,7 @@
     "maximum_rollouts_per_day": 500,
     "minimum_successful_families": 20,
     "minimum_unique_supervised_tokens": 20000000,
+    "minimum_unique_supervised_tokens_applies_per_arm": true,
     "waves": 40
   },
   "execution": {
@@ -120,7 +121,7 @@
     "maximum_task_versions_per_family": 1,
     "train_task_versions": 50
   },
-  "sha256": "sha256:ed00368a8739a1b7c8a20b288d766803311e1f85f6054abac8474adec48e7362",
+  "sha256": "sha256:0d9e24c8e472b6cc656b5b6f1079ce4f164d8abf0fb3d492a6d40280337de435",
   "source": {
     "images": {
       "agent": "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92",
@@ -136,6 +137,8 @@
       "context_headroom_tokens": 20000,
       "context_management": "opencode_1.18.27_native_compaction_autocontinue_v2",
       "context_window_tokens": 262144,
+      "build_prompt_source_sha256": "sha256:35bc2da1578b6bb80a3c39c1d6c51f234f34ce6586dd4f9d230e2a31b257138d",
+      "compaction_source_sha256": "sha256:8d478570a7e4ad32b746030d4f86a1c673949b1e2259bd716b3885d99283289a",
       "harness": "opencode",
       "harness_version": "1.18.27",
       "max_model_requests": 600,
@@ -147,6 +150,7 @@
       ],
       "provider_adapter": "@ai-sdk/openai-compatible",
       "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+      "release_commit": "b04697366f05419e9bd7a92f841813dd976161c9",
       "timeout_seconds": 28800,
       "template_tools_sha256": "sha256:585574ec1a459141a2e79f4945d140864876224ebef1260be65f06c6d237610f",
       "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",

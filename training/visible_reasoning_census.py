@@ -335,7 +335,9 @@ def _coverage(value: Mapping[str, Any]) -> dict[str, Any]:
             "student_visible_reasoning_target_tokens",
             "visible_action_target_tokens",
             "unique_supervised_tokens",
+            "arm_unique_supervised_tokens",
             "minimum_unique_supervised_tokens",
+            "arm_token_goal_reached",
             "token_goal_reached",
             "minimum_successful_families",
             "successful_family_goal_reached",
@@ -382,12 +384,31 @@ def _coverage(value: Mapping[str, Any]) -> dict[str, Any]:
         "visible-reasoning coverage minimum supervised tokens",
         positive=True,
     )
-    unique = _count(
-        coverage["unique_supervised_tokens"],
-        "visible-reasoning coverage unique supervised tokens",
-        positive=True,
+    arm_tokens = _exact(
+        coverage["arm_unique_supervised_tokens"],
+        {"reasoning_plus_action", "matched_action_only"},
+        "visible-reasoning per-arm unique supervised tokens",
     )
-    token_goal = unique >= minimum
+    checked_arm_tokens = {
+        name: _count(tokens, f"{name} unique supervised tokens", positive=True)
+        for name, tokens in arm_tokens.items()
+    }
+    if checked_arm_tokens != {
+        "reasoning_plus_action": coverage["unique_supervised_tokens"],
+        "matched_action_only": coverage["visible_action_target_tokens"],
+    }:
+        raise ValueError("visible-reasoning per-arm token totals are inconsistent")
+    arm_goals = _exact(
+        coverage["arm_token_goal_reached"],
+        set(checked_arm_tokens),
+        "visible-reasoning per-arm token gates",
+    )
+    expected_arm_goals = {name: tokens >= minimum for name, tokens in checked_arm_tokens.items()}
+    if arm_goals != expected_arm_goals or any(
+        type(reached) is not bool for reached in arm_goals.values()
+    ):
+        raise ValueError("visible-reasoning per-arm token gates are not mathematically bound")
+    token_goal = all(expected_arm_goals.values())
     if minimum < MINIMUM_SUPERVISED_TOKENS or coverage["token_goal_reached"] is not token_goal:
         raise ValueError("visible-reasoning coverage target gate is not mathematically bound")
     minimum_families = _count(
@@ -482,6 +503,11 @@ def select(
         or checked_coverage["visible_action_target_tokens"]
         != counts["visible_action_target_tokens"]
         or checked_coverage["unique_supervised_tokens"] != counts["supervised_tokens"]
+        or checked_coverage["arm_unique_supervised_tokens"]
+        != {
+            "reasoning_plus_action": counts["supervised_tokens"],
+            "matched_action_only": counts["matched_action_only_supervised_tokens"],
+        }
     ):
         raise ValueError("visible-reasoning coverage totals differ from the corpus manifest")
     source_targets = checked_census["target_tokens"]

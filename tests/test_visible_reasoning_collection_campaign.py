@@ -47,6 +47,7 @@ def test_committed_large_campaign_is_reproducible_and_source_only(rendered) -> N
     assert receipt["heldout_task_versions"] == 25
     assert receipt["planned_cells"] == 20_000
     assert receipt["minimum_unique_supervised_tokens"] == 20_000_000
+    assert receipt["minimum_unique_supervised_tokens_applies_per_arm"] is True
     assert receipt["private_or_hidden_reasoning_allowed"] is False
     assert receipt["external_submission"] is False
     assert receipt["review_completed"] is False
@@ -68,6 +69,7 @@ def test_campaign_uses_all_train_families_and_zero_heldout_cells(rendered) -> No
         "heldout_collection_cells": 0,
     }
     assert plan["collection"]["minimum_successful_families"] == 20
+    assert plan["collection"]["minimum_unique_supervised_tokens_applies_per_arm"] is True
     assert plan["collection"]["maximum_family_target_token_fraction"] == 0.25
 
 
@@ -136,6 +138,14 @@ def test_campaign_only_accepts_explicit_student_visible_qwen_reasoning(rendered)
     }
     assert source["opencode"]["context_window_tokens"] == 262_144
     assert source["opencode"]["context_headroom_tokens"] == 20_000
+    assert source["opencode"]["release_commit"] == corpus.OPENCODE_RELEASE_COMMIT
+    assert (
+        source["opencode"]["compaction_source_sha256"] == corpus.OPENCODE_COMPACTION_SOURCE_SHA256
+    )
+    assert (
+        source["opencode"]["build_prompt_source_sha256"]
+        == corpus.OPENCODE_BUILD_PROMPT_SOURCE_SHA256
+    )
     assert source["opencode"]["mcp_tools"] == ["bash", "submit_report"]
     assert source["opencode"]["tools"] == ["fleet_bash", "fleet_submit_report"]
     assert source["opencode"]["template_tools_sha256"] == (
@@ -158,6 +168,7 @@ def test_campaign_only_accepts_explicit_student_visible_qwen_reasoning(rendered)
         "derive_action_only_from_same_selected_turns": True,
         "visible_action_spans_identical": True,
         "reasoning_spans_masked_only_in_action_arm": True,
+        "minimum_unique_supervised_tokens_per_arm": 20_000_000,
         "mix_corpora": False,
     }
 
@@ -190,6 +201,12 @@ def test_compaction_requires_exact_visible_summary_lineage(rendered) -> None:
         "online": "opencode_1.18.27_native_compaction_autocontinue_v2",
         "accepted_offline_kind": "student_generated_exact_continuation_v1",
         "exact_synthetic_summary_request_payload_required": True,
+        "selected_head_exact_history_projection_required": True,
+        "selected_head_serialization_and_digest_required": True,
+        "previous_summary_from_last_completed_boundary_required": True,
+        "message_transform_must_be_identity": True,
+        "compacting_plugin_prompt": None,
+        "compacting_plugin_context": [],
         "summary_request_system": [],
         "summary_request_tools": {},
         "summary_request_rendered_token_ids_required": True,
@@ -200,7 +217,7 @@ def test_compaction_requires_exact_visible_summary_lineage(rendered) -> None:
     }
 
 
-def test_20m_budget_has_an_explicit_aggregate_planning_basis(rendered) -> None:
+def test_20m_per_arm_budget_has_an_explicit_aggregate_planning_basis(rendered) -> None:
     basis = rendered["campaign-plan.json"]["planning_basis"]
     assert basis["historical_verified_success_sessions"] == 2_886
     assert basis["historical_unique_supervised_tokens"] == 57_384_881

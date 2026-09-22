@@ -13,9 +13,10 @@
     "task_selection": "sha256:e7b849eead6418cd1156a52027f234801bbf3bbe196023c56061ae68e3f0af19"
   },
   "minimum_unique_supervised_tokens": 20000000,
+  "minimum_unique_supervised_tokens_applies_per_arm": true,
   "output_sha256": {
-    "campaign-plan.json": "sha256:8af33f037989c33ed289f46349130c0333142d2543d318105522302f84c1d342",
-    "wave-plan.json": "sha256:fbfa7655472465a1bcd191fb856913b629800ffe16ffd6407fa38eb069caf61e"
+    "campaign-plan.json": "sha256:37ce8de29f449a42c4a925fcccf8654050125d38b9fe0caf36cabbc3763ffd34",
+    "wave-plan.json": "sha256:0a16a661fad79a9ec82bed3bc7ab87eb3c7aafce80c9b1f9c3851100b64cbe48"
   },
   "planned_cells": 20000,
   "private_or_hidden_reasoning_allowed": false,
@@ -29,8 +30,8 @@
   ],
   "review_completed": false,
   "schema": "cyber_qwen_opencode_visible_reasoning_campaign_review_v1",
-  "sha256": "sha256:fd6658d4969ea4e5001fa8e4ebd51fc55df664089a78ecbb0e533f4bd62a25e6",
-  "source_spec_sha256": "sha256:ed00368a8739a1b7c8a20b288d766803311e1f85f6054abac8474adec48e7362",
+  "sha256": "sha256:3f80631b7c2c5edac6325f933f72745e56a3e868a773eb684d286eab13f02234",
+  "source_spec_sha256": "sha256:0d9e24c8e472b6cc656b5b6f1079ce4f164d8abf0fb3d492a6d40280337de435",
   "status": "source_only_review_required",
   "train_task_versions": 50
 }

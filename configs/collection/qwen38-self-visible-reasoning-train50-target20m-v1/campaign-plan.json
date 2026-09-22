@@ -33,16 +33,23 @@
     "maximum_rollouts_per_day": 500,
     "minimum_successful_families": 20,
     "minimum_unique_supervised_tokens": 20000000,
+    "minimum_unique_supervised_tokens_applies_per_arm": true,
     "waves": 40
   },
   "compaction": {
     "accepted_offline_kind": "student_generated_exact_continuation_v1",
     "actual_post_summary_prompt_required": true,
+    "compacting_plugin_context": [],
+    "compacting_plugin_prompt": null,
     "compaction_summary_loss_mask": 0,
     "every_later_training_window_must_descend_from_boundary": true,
     "exact_synthetic_summary_request_payload_required": true,
+    "message_transform_must_be_identity": true,
     "online": "opencode_1.18.27_native_compaction_autocontinue_v2",
     "opaque_or_unreconstructable_continuation": "reject_target_and_later_continuation",
+    "previous_summary_from_last_completed_boundary_required": true,
+    "selected_head_exact_history_projection_required": true,
+    "selected_head_serialization_and_digest_required": true,
     "summary_request_rendered_token_ids_required": true,
     "summary_request_system": [],
     "summary_request_tools": {}
@@ -70,6 +77,7 @@
   },
   "matched_ablation": {
     "derive_action_only_from_same_selected_turns": true,
+    "minimum_unique_supervised_tokens_per_arm": 20000000,
     "mix_corpora": false,
     "reasoning_spans_masked_only_in_action_arm": true,
     "visible_action_spans_identical": true
@@ -97,8 +105,8 @@
     "review_completed": false
   },
   "schema": "cyber_qwen_opencode_visible_reasoning_campaign_plan_v1",
-  "sha256": "sha256:8af33f037989c33ed289f46349130c0333142d2543d318105522302f84c1d342",
-  "source_spec_sha256": "sha256:ed00368a8739a1b7c8a20b288d766803311e1f85f6054abac8474adec48e7362",
+  "sha256": "sha256:37ce8de29f449a42c4a925fcccf8654050125d38b9fe0caf36cabbc3763ffd34",
+  "source_spec_sha256": "sha256:0d9e24c8e472b6cc656b5b6f1079ce4f164d8abf0fb3d492a6d40280337de435",
   "source_treatment": {
     "images": {
       "agent": "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92",
@@ -111,6 +119,8 @@
       "session_model": "qwen/qwen3.8-27b"
     },
     "opencode": {
+      "build_prompt_source_sha256": "sha256:35bc2da1578b6bb80a3c39c1d6c51f234f34ce6586dd4f9d230e2a31b257138d",
+      "compaction_source_sha256": "sha256:8d478570a7e4ad32b746030d4f86a1c673949b1e2259bd716b3885d99283289a",
       "context_headroom_tokens": 20000,
       "context_management": "opencode_1.18.27_native_compaction_autocontinue_v2",
       "context_window_tokens": 262144,
@@ -125,6 +135,7 @@
       ],
       "provider_adapter": "@ai-sdk/openai-compatible",
       "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+      "release_commit": "b04697366f05419e9bd7a92f841813dd976161c9",
       "template_tools_sha256": "sha256:585574ec1a459141a2e79f4945d140864876224ebef1260be65f06c6d237610f",
       "timeout_seconds": 28800,
       "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",

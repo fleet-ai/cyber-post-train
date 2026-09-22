@@ -146,11 +146,19 @@ the resulting history valid offline training data.
 For each compaction boundary, the private source record must prove all of these
 exact identities:
 
-1. The serialized pre-compaction prompt token digest and length.
-2. The generated continuation or summary token digest and length.
-3. The serialized post-compaction prompt token digest and length.
-4. The exact prompt-token digest used to generate the next assistant target.
-5. Equality of items 3 and 4 at the target boundary.
+1. The ordered post-plugin `selected.head` projection, with every supported
+   user/assistant/tool part bound to exact prior normalized message indices.
+2. The exact OpenCode serialization of that head and the native `buildPrompt`
+   request derived from it and the last completed prior summary. The template
+   system anchor is not SessionV1 history and must be excluded.
+3. The synthetic request payload: one user text part, `system=[]`, `tools={}`,
+   plus its exact Qwen rendered prompt-token identity. Any nonidentity message
+   transform or compaction prompt/context plugin is rejected.
+4. The serialized pre-compaction prompt token digest and length.
+5. The generated continuation or summary token digest and length.
+6. The serialized post-compaction prompt token digest and length.
+7. The exact prompt-token digest used to generate the next assistant target,
+   equal to item 6 at the boundary.
 
 The offline renderer must use the actual post-compaction prompt, not replay the
 old uncompressed history. The compaction text is zero-masked unless it is
@@ -180,7 +188,8 @@ Its public or broadly shared receipt may report only aggregates. At minimum:
 - rejection counts by fixed reason, including private/unknown reasoning,
   template mismatch, and non-reconstructable compaction;
 - visible-reasoning target tokens, action target tokens, and total supervised
-  tokens, each counted once;
+  tokens, each counted once, plus the packing-independent total and 20M gate
+  for each emitted matched arm;
 - complete reasoning-to-action turn count;
 - duplicate counts at source-session, normalized-trajectory,
   source-assistant-target, and packed-window levels;
@@ -273,6 +282,7 @@ for the exact requirements, commands, and remaining gates.
 The source-only renderer and admission checker do not authorize an external
 collection or create trainable data.  Until an issuer supplies the exact
 teacher authorization, an approved collector writes sealed metadata, a private
-Qwen token materializer reaches the 20M unique-token gate, and a separate
+Qwen token materializer reaches the 20M unique-token gate independently in
+each emitted matched arm, and a separate
 training permit is accepted, teacher runs can add only visible actions to the
 established action-only lane.

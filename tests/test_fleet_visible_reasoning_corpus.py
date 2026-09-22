@@ -109,10 +109,11 @@ class _Tokenizer:
             "enable_thinking": True,
         }
         if tools == []:
-            assert messages[0] == {
-                "role": "user",
-                "content": [{"type": "text", "text": "synthetic summary request"}],
-            }
+            assert messages[0]["role"] == "user"
+            assert messages[0]["content"][0]["type"] == "text"
+            summary_prompt = messages[0]["content"][0]["text"]
+            assert summary_prompt.startswith("Here is the conversation so far:\n\n<conversation>\n")
+            assert corpus.OPENCODE_SUMMARY_TEMPLATE in summary_prompt
             if len(messages) == 1:
                 return [10, 11]
             assert len(messages) == 2 and messages[1] == {
@@ -182,6 +183,94 @@ def _window(
                 "target_spans": spans,
             }
         ),
+    }
+
+
+def _selected_head(messages: list[dict], groups: list[list[int]]) -> list[dict]:
+    entries: list[dict] = []
+    for group in groups:
+        source = messages[group[0]]
+        if source["role"] == "user":
+            parts = [{"type": "text", "text": source["content"], "ignored": False}]
+        else:
+            parts = []
+            if source.get("student_visible_reasoning"):
+                parts.append({"type": "reasoning", "text": source["student_visible_reasoning"]})
+            if source["content"]:
+                parts.append({"type": "text", "text": source["content"]})
+            results = {messages[index]["tool_call_id"]: messages[index] for index in group[1:]}
+            for call in source.get("tool_calls") or []:
+                result = results[call["id"]]
+                parts.append(
+                    {
+                        "type": "tool",
+                        "tool_call_id": call["id"],
+                        "name": call["function"]["name"],
+                        "input": call["function"]["arguments"],
+                        "status": "completed",
+                        "output": result["content"],
+                        "attachments": [],
+                        "compacted": False,
+                    }
+                )
+        entries.append(
+            {
+                "source_message_indices": group,
+                "role": source["role"],
+                "parts": parts,
+            }
+        )
+    return entries
+
+
+def _native_compaction_fields(
+    messages: list[dict],
+    groups: list[list[int]],
+    *,
+    previous_summary_message_index: int | None = None,
+    tail_start_message_index: int | None = None,
+) -> dict:
+    selected_head = _selected_head(messages, groups)
+    serialized = [corpus._opencode_serialize_entry(entry) for entry in selected_head]
+    serialized = [value for value in serialized if value]
+    conversation = "\n\n".join(serialized)
+    previous_summary = (
+        messages[previous_summary_message_index]["content"].strip()
+        if previous_summary_message_index is not None
+        else None
+    )
+    request = {
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": corpus._opencode_build_summary_prompt(
+                            conversation, previous_summary
+                        ),
+                    }
+                ],
+            }
+        ],
+        "system": [],
+        "tools": {},
+    }
+    request["payload_sha256"] = digest_json(request)
+    return {
+        "selected_head": selected_head,
+        "selected_head_sha256": digest_json(selected_head),
+        "selected_head_serialized_messages": serialized,
+        "selected_head_serialized_messages_sha256": digest_json(serialized),
+        "selected_head_serialized_conversation_sha256": digest_json(conversation),
+        "selected_tail_start_message_index": tail_start_message_index,
+        "previous_summary_message_index": previous_summary_message_index,
+        "previous_summary_sha256": (
+            digest_json(previous_summary) if previous_summary is not None else None
+        ),
+        "messages_transform_identity": True,
+        "compacting_plugin": {"prompt": None, "context": []},
+        "summary_request": request,
     }
 
 
@@ -276,7 +365,10 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
     opencode = {
         "harness": corpus.OPENCODE_HARNESS,
         "harness_version": corpus.OPENCODE_VERSION,
+        "release_commit": corpus.OPENCODE_RELEASE_COMMIT,
         "release_asset_sha256": _sha("1"),
+        "compaction_source_sha256": corpus.OPENCODE_COMPACTION_SOURCE_SHA256,
+        "build_prompt_source_sha256": corpus.OPENCODE_BUILD_PROMPT_SOURCE_SHA256,
         "tool_catalog_sha256": campaign.canonical_digest(_TOOL_CATALOG),
         "template_tools_sha256": campaign.canonical_digest(_TEMPLATE_TOOLS),
         "mcp_server": corpus.OPENCODE_MCP_SERVER,
@@ -466,6 +558,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
             "collection": {
                 "attempts_per_task_version": corpus.CAMPAIGN_ATTEMPTS_PER_TASK,
                 "minimum_unique_supervised_tokens": corpus.MINIMUM_SUPERVISED_TOKENS,
+                "minimum_unique_supervised_tokens_applies_per_arm": True,
                 "minimum_successful_families": corpus.MINIMUM_SUCCESSFUL_FAMILIES,
                 "maximum_family_target_token_fraction": (corpus.MAXIMUM_FAMILY_TOKEN_FRACTION),
             },
@@ -534,6 +627,7 @@ def _fixture(tmp_path: Path, monkeypatch) -> tuple[dict, dict]:
         "training_data_eligible": True,
         "objective": "student_visible_reasoning_plus_visible_actions",
         "minimum_unique_supervised_tokens": corpus.MINIMUM_SUPERVISED_TOKENS,
+        "minimum_unique_supervised_tokens_applies_per_arm": True,
         "minimum_successful_families": corpus.MINIMUM_SUCCESSFUL_FAMILIES,
         "maximum_family_target_token_fraction": corpus.MAXIMUM_FAMILY_TOKEN_FRACTION,
         "matched_action_only_required": True,
@@ -815,6 +909,16 @@ def test_materializes_token_only_visible_reasoning_corpus(tmp_path: Path, monkey
     assert action_rows[0]["loss_mask"] == [0, 0, 0, 1, 1]
     assert manifest["matched_ablation"]["same_selected_windows"] is True
     assert manifest["matched_ablation"]["cross_arm_sha256"].startswith("sha256:")
+    coverage = json.loads((tmp_path / "corpus" / "coverage.private.json").read_text())
+    assert coverage["arm_unique_supervised_tokens"] == {
+        "reasoning_plus_action": 3,
+        "matched_action_only": 2,
+    }
+    assert coverage["arm_token_goal_reached"] == {
+        "reasoning_plus_action": False,
+        "matched_action_only": False,
+    }
+    assert coverage["token_goal_reached"] is False
     for arm_name in ("reasoning_plus_action", "matched_action_only"):
         arm_ref = manifest["arm_manifests"][arm_name]
         arm_manifest = json.loads((tmp_path / "corpus" / arm_ref["path"]).read_text())
@@ -964,7 +1068,10 @@ def test_rejects_teacher_source_profile() -> None:
         "opencode": {
             "harness": corpus.OPENCODE_HARNESS,
             "harness_version": corpus.OPENCODE_VERSION,
+            "release_commit": corpus.OPENCODE_RELEASE_COMMIT,
             "release_asset_sha256": _sha("e"),
+            "compaction_source_sha256": corpus.OPENCODE_COMPACTION_SOURCE_SHA256,
+            "build_prompt_source_sha256": corpus.OPENCODE_BUILD_PROMPT_SOURCE_SHA256,
             "tool_catalog_sha256": _sha("f"),
             "template_tools_sha256": _sha("0"),
             "mcp_server": corpus.OPENCODE_MCP_SERVER,
@@ -1228,23 +1335,27 @@ def test_exact_compaction_requires_the_real_next_prompt_and_zero_masked_summary(
     messages = [
         {"role": "system", "content": "synthetic system"},
         {"role": "user", "content": "synthetic task"},
-        {"role": "assistant", "content": "first target"},
+        {
+            "role": "assistant",
+            "student_visible_reasoning": "first reasoning",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "bash-1",
+                    "type": "function",
+                    "function": {
+                        "name": "fleet_bash",
+                        "arguments": {"script": "true"},
+                    },
+                }
+            ],
+        },
         {"role": "tool", "content": "first result", "tool_call_id": "bash-1"},
         {"role": "assistant", "content": "synthetic summary"},
         {"role": "assistant", "content": "second target"},
     ]
     continuation = [44, 45]
-    summary_request = {
-        "messages": [
-            {
-                "role": "user",
-                "content": [{"type": "text", "text": "synthetic summary request"}],
-            }
-        ],
-        "system": [],
-        "tools": {},
-    }
-    summary_request["payload_sha256"] = digest_json(summary_request)
+    native = _native_compaction_fields(messages, [[1], [2, 3]])
     boundary = {
         "boundary_id": "boundary-1",
         "parent_window_id": "before",
@@ -1255,7 +1366,7 @@ def test_exact_compaction_requires_the_real_next_prompt_and_zero_masked_summary(
         "continuation_token_sha256": digest_json(continuation),
         "continuation_token_ids": continuation,
         "continuation_tokens": len(continuation),
-        "summary_request": summary_request,
+        **native,
         "summary_request_prompt_token_ids": [10, 11],
         "summary_generation_prompt_token_sha256": digest_json([10, 11]),
         "summary_generation_prompt_tokens": 2,
@@ -1267,6 +1378,12 @@ def test_exact_compaction_requires_the_real_next_prompt_and_zero_masked_summary(
         "next_target_window_id": "after",
         "next_target_prompt_token_sha256": second["prompt_token_sha256"],
     }
+    request_text = boundary["summary_request"]["messages"][0]["content"][0]["text"]
+    assert "[User]: synthetic task" in request_text
+    assert "[Assistant reasoning]: first reasoning" in request_text
+    assert '[Assistant tool call]: fleet_bash({"script":"true"})' in request_text
+    assert "[Tool result]: first result" in request_text
+    assert "synthetic system" not in request_text
     accepted = {
         "kind": corpus.EXACT_COMPACTION,
         "boundaries": [boundary],
@@ -1320,6 +1437,65 @@ def test_exact_compaction_requires_the_real_next_prompt_and_zero_masked_summary(
             source_kind="qwen_self",
             original_task_digest=_sha("a"),
         )
+    arbitrary_request = copy.deepcopy(accepted)
+    arbitrary_payload = arbitrary_request["boundaries"][0]["summary_request"]
+    arbitrary_payload["messages"][0]["content"][0]["text"] = "self-digested fiction"
+    arbitrary_payload["payload_sha256"] = digest_json(
+        {name: arbitrary_payload[name] for name in ("messages", "system", "tools")}
+    )
+    with pytest.raises(ValueError, match=r"selected\.head and previousSummary"):
+        corpus._compaction(
+            arbitrary_request,
+            {"before": first, "after": second},
+            messages,
+            source_kind="qwen_self",
+            original_task_digest=_sha("a"),
+        )
+
+    reordered_parts = copy.deepcopy(accepted)
+    reordered_boundary = reordered_parts["boundaries"][0]
+    reordered_boundary["selected_head"][1]["parts"].reverse()
+    reordered_boundary["selected_head_sha256"] = digest_json(reordered_boundary["selected_head"])
+    reordered_serialized = [
+        corpus._opencode_serialize_entry(entry) for entry in reordered_boundary["selected_head"]
+    ]
+    reordered_boundary["selected_head_serialized_messages"] = reordered_serialized
+    reordered_boundary["selected_head_serialized_messages_sha256"] = digest_json(
+        reordered_serialized
+    )
+    reordered_conversation = "\n\n".join(reordered_serialized)
+    reordered_boundary["selected_head_serialized_conversation_sha256"] = digest_json(
+        reordered_conversation
+    )
+    reordered_payload = reordered_boundary["summary_request"]
+    reordered_payload["messages"][0]["content"][0]["text"] = corpus._opencode_build_summary_prompt(
+        reordered_conversation, None
+    )
+    reordered_payload["payload_sha256"] = digest_json(
+        {name: reordered_payload[name] for name in ("messages", "system", "tools")}
+    )
+    with pytest.raises(ValueError, match="strict exact-history projection"):
+        corpus._compaction(
+            reordered_parts,
+            {"before": first, "after": second},
+            messages,
+            source_kind="qwen_self",
+            original_task_digest=_sha("a"),
+        )
+
+    cross_wired = copy.deepcopy(accepted)
+    other_messages = copy.deepcopy(messages)
+    other_messages[1]["content"] = "different task with the same shape"
+    other_native = _native_compaction_fields(other_messages, [[1], [2, 3]])
+    cross_wired["boundaries"][0].update(other_native)
+    with pytest.raises(ValueError, match="differ.*exact history"):
+        corpus._compaction(
+            cross_wired,
+            {"before": first, "after": second},
+            messages,
+            source_kind="qwen_self",
+            original_task_digest=_sha("a"),
+        )
     with pytest.raises(ValueError, match="opaque or unapproved compaction"):
         corpus._compaction(
             accepted,
@@ -1330,6 +1506,58 @@ def test_exact_compaction_requires_the_real_next_prompt_and_zero_masked_summary(
         )
 
 
+def test_opencode_11827_compaction_source_and_prompt_literals_are_exact() -> None:
+    assert corpus.OPENCODE_RELEASE_COMMIT == "b04697366f05419e9bd7a92f841813dd976161c9"
+    assert corpus.OPENCODE_COMPACTION_SOURCE_SHA256 == (
+        "sha256:8d478570a7e4ad32b746030d4f86a1c673949b1e2259bd716b3885d99283289a"
+    )
+    assert corpus.OPENCODE_BUILD_PROMPT_SOURCE_SHA256 == (
+        "sha256:35bc2da1578b6bb80a3c39c1d6c51f234f34ce6586dd4f9d230e2a31b257138d"
+    )
+    assert digest_json(corpus.OPENCODE_SUMMARY_TEMPLATE) == (
+        "sha256:61d9a9e32e40c7504f54b9997cc77f726686bb55126e6de76b3f57445796da4d"
+    )
+    assert digest_json(corpus.OPENCODE_SUMMARY_UPDATE_INSTRUCTIONS) == (
+        "sha256:82cfb3d547a8dcf83185614b01813e0d2bcb190a6044853a94a63a02449d50e6"
+    )
+    assert digest_json(corpus._opencode_build_summary_prompt("[User]: x", None)) == (
+        "sha256:7ff4aab7f778fe94c881ae9422b909bf899de4533fd7a6dcede4fd54df8fec0a"
+    )
+    assert digest_json(corpus._opencode_build_summary_prompt("[User]: x", "prior")) == (
+        "sha256:4d6c991cbb130938d13af66495b181a1a7c4b6a51e136060362011dedefa0036"
+    )
+    assert corpus._opencode_truncate("a" * 1_998 + "😀z") == ("a" * 1_998 + "😀\n[truncated]")
+    with pytest.raises(ValueError, match="splits a UTF-16 surrogate pair"):
+        corpus._opencode_truncate("a" * 1_999 + "😀z")
+
+
+def test_opencode_selected_head_rejects_reordered_tool_input_json() -> None:
+    messages = [
+        {"role": "system", "content": "template system"},
+        {"role": "user", "content": "task"},
+        {
+            "role": "assistant",
+            "student_visible_reasoning": "reason",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "bash-1",
+                    "type": "function",
+                    "function": {
+                        "name": "fleet_bash",
+                        "arguments": {"script": "true", "timeoutMs": 1_000},
+                    },
+                }
+            ],
+        },
+        {"role": "tool", "content": "result", "tool_call_id": "bash-1"},
+    ]
+    entry = _selected_head(messages, [[2, 3]])[0]
+    entry["parts"][1]["input"] = {"timeoutMs": 1_000, "script": "true"}
+    with pytest.raises(ValueError, match="tool input JSON order"):
+        corpus._opencode_selected_head_entry(entry, messages, [2, 3])
+
+
 def test_compaction_rejects_preboundary_parent_and_unrelated_later_window() -> None:
     first = _window("before")
     second = _window("after", ids=[1, 2, 6, 7, 8], sequence_index=1, message_indices=[4, 5])
@@ -1337,24 +1565,28 @@ def test_compaction_rejects_preboundary_parent_and_unrelated_later_window() -> N
     messages = [
         {"role": "system", "content": "synthetic system"},
         {"role": "user", "content": "synthetic task"},
-        {"role": "assistant", "content": "first target"},
+        {
+            "role": "assistant",
+            "student_visible_reasoning": "first reasoning",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": "bash-1",
+                    "type": "function",
+                    "function": {
+                        "name": "fleet_bash",
+                        "arguments": {"script": "true"},
+                    },
+                }
+            ],
+        },
         {"role": "tool", "content": "first result", "tool_call_id": "bash-1"},
         {"role": "assistant", "content": "synthetic summary"},
         {"role": "assistant", "content": "second target"},
         {"role": "user", "content": "later request"},
         {"role": "assistant", "content": "later target"},
     ]
-    request = {
-        "messages": [
-            {
-                "role": "user",
-                "content": [{"type": "text", "text": "synthetic summary request"}],
-            }
-        ],
-        "system": [],
-        "tools": {},
-    }
-    request["payload_sha256"] = digest_json(request)
+    native = _native_compaction_fields(messages, [[1], [2, 3]])
     boundary = {
         "boundary_id": "boundary-1",
         "parent_window_id": "before",
@@ -1365,7 +1597,7 @@ def test_compaction_rejects_preboundary_parent_and_unrelated_later_window() -> N
         "continuation_token_sha256": digest_json([44, 45]),
         "continuation_token_ids": [44, 45],
         "continuation_tokens": 2,
-        "summary_request": request,
+        **native,
         "summary_request_prompt_token_ids": [10, 11],
         "summary_generation_prompt_token_sha256": digest_json([10, 11]),
         "summary_generation_prompt_tokens": 2,
@@ -1407,6 +1639,97 @@ def test_compaction_rejects_preboundary_parent_and_unrelated_later_window() -> N
         corpus._compaction(
             accepted,
             {"before": post_boundary_parent, "after": second, "later": later},
+            messages,
+            source_kind="qwen_self",
+            original_task_digest=_sha("a"),
+        )
+
+
+def test_compaction_request_carries_forward_only_the_last_exact_previous_summary() -> None:
+    before = _window("before", message_indices=[0, 1, 2])
+    after_one = _window(
+        "after-one",
+        ids=[1, 2, 6, 7, 8],
+        sequence_index=1,
+        message_indices=[3, 4],
+    )
+    after_two = _window(
+        "after-two",
+        ids=[1, 2, 9, 10, 11],
+        sequence_index=2,
+        message_indices=[5, 6],
+    )
+    messages = [
+        {"role": "system", "content": "template system"},
+        {"role": "user", "content": "task"},
+        {"role": "assistant", "content": "before target"},
+        {"role": "assistant", "content": "first exact summary"},
+        {"role": "assistant", "content": "after first target"},
+        {"role": "assistant", "content": "second exact summary"},
+        {"role": "assistant", "content": "after second target"},
+    ]
+
+    def boundary(
+        identity: str,
+        parent: dict,
+        target: dict,
+        summary_index: int,
+        groups: list[list[int]],
+        previous_index: int | None,
+    ) -> dict:
+        return {
+            "boundary_id": identity,
+            "parent_window_id": parent["window_id"],
+            "original_task_digest": _sha("a"),
+            "prior_history_digest": digest_json(messages[:summary_index]),
+            "summary_message_index": summary_index,
+            "summary_message_digest": digest_json(messages[summary_index]),
+            "continuation_token_sha256": digest_json([44, 45]),
+            "continuation_token_ids": [44, 45],
+            "continuation_tokens": 2,
+            **_native_compaction_fields(
+                messages,
+                groups,
+                previous_summary_message_index=previous_index,
+            ),
+            "summary_request_prompt_token_ids": [10, 11],
+            "summary_generation_prompt_token_sha256": digest_json([10, 11]),
+            "summary_generation_prompt_tokens": 2,
+            "pre_compaction_prompt_token_sha256": parent["prompt_token_sha256"],
+            "pre_compaction_prompt_tokens": parent["prompt_token_count"],
+            "post_compaction_prompt_token_sha256": target["prompt_token_sha256"],
+            "post_compaction_prompt_tokens": target["prompt_token_count"],
+            "post_compaction_message_indices": target["message_indices"][:-1],
+            "next_target_window_id": target["window_id"],
+            "next_target_prompt_token_sha256": target["prompt_token_sha256"],
+        }
+
+    first = boundary("boundary-1", before, after_one, 3, [[1], [2]], None)
+    second = boundary("boundary-2", after_one, after_two, 5, [[1], [2], [4]], 3)
+    accepted = {"kind": corpus.EXACT_COMPACTION, "boundaries": [first, second]}
+    windows = {window["window_id"]: window for window in (before, after_one, after_two)}
+    assert (
+        corpus._compaction(
+            accepted,
+            windows,
+            messages,
+            source_kind="qwen_self",
+            original_task_digest=_sha("a"),
+        )
+        == accepted
+    )
+    second_text = second["summary_request"]["messages"][0]["content"][0]["text"]
+    assert "<prior-summary>\nfirst exact summary\n</prior-summary>" in second_text
+    assert "second exact summary" not in second_text
+
+    cross_wired = copy.deepcopy(accepted)
+    cross_wired["boundaries"][1].update(
+        _native_compaction_fields(messages, [[1], [2]], previous_summary_message_index=None)
+    )
+    with pytest.raises(ValueError, match="last completed compaction"):
+        corpus._compaction(
+            cross_wired,
+            windows,
             messages,
             source_kind="qwen_self",
             original_task_digest=_sha("a"),

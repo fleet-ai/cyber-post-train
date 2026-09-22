@@ -36,9 +36,11 @@ them. This v1 plan never silently absorbs mutable catalog growth.
 
 ## Why 20,000 rollout cells
 
-The final corpus gate is **at least 20,000,000 unique supervised tokens** after
-deduplication, with no task family contributing more than 25% and at least 20
-families contributing verified successes.
+The final corpus gate is **at least 20,000,000 unique supervised tokens in each
+emitted matched arm** after packing-independent source-target deduplication,
+with no task family contributing more than 25% and at least 20 families
+contributing verified successes. Reasoning-plus-action tokens cannot make an
+underfilled action-only arm eligible.
 
 The planning reference is aggregate-only. The existing teacher corpus has
 57,384,881 supervised tokens from 2,886 verified-success sessions, or about
@@ -66,9 +68,12 @@ deterministic distinct seed per attempt.
 
 Online trajectories use the existing 262,144-token OpenCode context and 20,000
 tokens of compaction headroom. Compaction is allowed online so long tasks can
-continue. It is trainable offline only when the collector records the exact
-pre-compaction prompt, the student-generated summary, the actual post-summary
-prompt, and proves that this is the prompt used for the next target. Compaction
+continue. It is trainable offline only when the collector records OpenCode's
+exact post-plugin `selected.head`, binds its ordered parts to the prior message
+history, rederives the native serialization and `buildPrompt` request using the
+last completed prior summary, records the student-generated summary and actual
+post-summary prompt, and proves that this is the prompt used for the next target.
+The default compaction and message-transform plugins must be inert. Compaction
 summary tokens are loss-masked. An opaque or unreconstructable compaction
 boundary rejects that target and everything after it; the materializer never
 replays an invented full history.
