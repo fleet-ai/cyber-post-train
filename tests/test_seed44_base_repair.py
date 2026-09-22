@@ -298,6 +298,9 @@ def test_rollout_repair_uses_fresh_generation_two_execution_identity(tmp_path: P
 ROOT = Path(__file__).resolve().parents[1]
 REPAIR_PLAN = ROOT / "configs/evaluation/qwen38-base-fleet-dev17-seed44-narrow-repair-v1.json"
 SUCCESSOR_PLAN = ROOT / "configs/evaluation/qwen38-base-fleet-dev17-seed44-stageb-successor-v2.json"
+CORRECTED_SUCCESSOR_PLAN = (
+    ROOT / "configs/evaluation/qwen38-base-fleet-dev17-seed44-stageb-successor-v3.json"
+)
 
 
 def _packet_intents(tmp_path: Path) -> tuple[Path, Path]:
@@ -348,103 +351,111 @@ def _packet_intents(tmp_path: Path) -> tuple[Path, Path]:
     )
 
 
-def test_seed44_base_repair_package_is_two_stage_alert_off_and_cpu_only(tmp_path: Path):
+def test_seed44_historical_base_packet_is_rejected_before_private_publication(
+    tmp_path: Path,
+):
+    stored_intent, recovery_intent = _packet_intents(tmp_path)
+    with pytest.raises(seed44_base_repair_job.PackageError, match="worker identity"):
+        seed44_base_repair_job.render(
+            repo_root=ROOT,
+            plan_path=REPAIR_PLAN,
+            stored_intent_path=stored_intent,
+            recovery_intent_path=recovery_intent,
+        )
+    output = tmp_path / "historical-private-packages"
+    with pytest.raises(seed44_base_repair_job.PackageError, match="worker identity"):
+        seed44_base_repair_job.write_private_packages(
+            repo_root=ROOT,
+            plan_path=REPAIR_PLAN,
+            stored_intent_path=stored_intent,
+            recovery_intent_path=recovery_intent,
+            output_root=output,
+        )
+    assert not output.exists()
+
+
+def test_seed44_stageb_v2_successor_is_rejected_before_dispatch_for_invalid_worker_name(
+    tmp_path: Path,
+):
+    stored_intent, recovery_intent = _packet_intents(tmp_path)
+    with pytest.raises(seed44_base_repair_job.PackageError, match="worker identity"):
+        seed44_base_repair_job.render(
+            repo_root=ROOT,
+            plan_path=SUCCESSOR_PLAN,
+            stored_intent_path=stored_intent,
+            recovery_intent_path=recovery_intent,
+        )
+
+
+def test_seed44_stageb_corrected_successor_is_unique_alert_off_and_prevalidated(
+    tmp_path: Path,
+):
     stored_intent, recovery_intent = _packet_intents(tmp_path)
     packages = seed44_base_repair_job.render(
         repo_root=ROOT,
-        plan_path=REPAIR_PLAN,
-        stored_intent_path=stored_intent,
-        recovery_intent_path=recovery_intent,
-    )
-    assert list(packages) == [
-        "accept_existing_scored_session",
-        "single_rollout_repair",
-    ]
-    for stage, package in packages.items():
-        job = package.job
-        assert job["metadata"]["annotations"] == {
-            "fleet.ai/failure-alerts": "off",
-            "cyber-post-train.fleet.ai/create-once": "true",
-        }
-        assert job["spec"]["backoffLimit"] == 0
-        assert job["spec"]["template"]["spec"]["priorityClassName"] == "c1"
-        assert "nvidia.com/gpu" not in json.dumps(job)
-        assert package.config_map["immutable"] is True
-        assert package.secret["immutable"] is True
-        assert package.proof["selected_cell_count"] == (
-            5 if stage == "accept_existing_scored_session" else 2
-        )
-        assert package.proof["private_intent_content_included"] is False
-        public = json.dumps(package.proof)
-        assert all(
-            cell_id not in public
-            for cell_id in (
-                stored_session_reconciliation_v2.load_intent(stored_intent).selected_cell_ids
-                + reviewed_recovery_v2.load_intent(recovery_intent).selected_cell_ids
-            )
-        )
-    assert (
-        packages["accept_existing_scored_session"]
-        .job["spec"]["template"]["spec"]
-        .get("initContainers")
-        is None
-    )
-    assert (
-        packages["single_rollout_repair"].job["spec"]["template"]["spec"]["initContainers"][0][
-            "name"
-        ]
-        == "dind"
-    )
-    assert packages["single_rollout_repair"].proof["execution_generation"] == 2
-    plan = json.loads(REPAIR_PLAN.read_text())
-    recovery = packages["single_rollout_repair"]
-    staging = plan["stages"]["single_rollout_repair"]["image_staging"]
-    assert recovery.proof["image_staging"] == staging
-    assert {"cluster_entry.py", "model_artifact.py"} <= set(recovery.config_map["data"])
-    environment = {
-        row["name"]: row.get("value")
-        for row in recovery.job["spec"]["template"]["spec"]["containers"][0]["env"]
-    }
-    assert environment["HARNESS_TAR"] == staging["harness_tar"]
-    assert environment["HARNESS_TAR_SHA256"] == staging["harness_tar_sha256"]
-    assert environment["HARNESS_RECEIPT"] == staging["harness_receipt"]
-    assert environment["HARNESS_RECEIPT_SHA256"] == staging["harness_receipt_sha256"]
-    run_script = recovery.config_map["data"]["run.sh"]
-    assert '--harness-tar "$HARNESS_TAR"' in run_script
-    assert '--harness-tar-sha256 "$HARNESS_TAR_SHA256"' in run_script
-    assert '--harness-receipt "$HARNESS_RECEIPT"' in run_script
-    assert '--harness-receipt-sha256 "$HARNESS_RECEIPT_SHA256"' in run_script
-
-
-def test_seed44_stageb_successor_is_unique_alert_off_and_cannot_replay_stage_a(tmp_path: Path):
-    stored_intent, recovery_intent = _packet_intents(tmp_path)
-    packages = seed44_base_repair_job.render(
-        repo_root=ROOT,
-        plan_path=SUCCESSOR_PLAN,
+        plan_path=CORRECTED_SUCCESSOR_PLAN,
         stored_intent_path=stored_intent,
         recovery_intent_path=recovery_intent,
     )
     assert list(packages) == ["single_rollout_repair"]
     recovery = packages["single_rollout_repair"]
-    assert recovery.job["metadata"]["name"] == "chris-q38-s44-base-reroll-v2"
-    assert recovery.config_map["metadata"]["name"] == "chris-q38-s44-base-reroll-code-v2"
-    assert recovery.secret["metadata"]["name"] == "chris-q38-s44-base-reroll-intent-v2"
+    assert recovery.job["metadata"]["name"] == "chris-q38-s44-base-reroll-v3"
+    assert recovery.config_map["metadata"]["name"] == "chris-q38-s44-base-reroll-code-v3"
+    assert recovery.secret["metadata"]["name"] == "chris-q38-s44-base-reroll-intent-v3"
+    assert recovery.config_map["immutable"] is True
+    assert recovery.secret["immutable"] is True
     assert recovery.job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+    assert recovery.job["spec"]["backoffLimit"] == 0
     assert recovery.job["spec"]["template"]["spec"]["priorityClassName"] == "c1"
     assert "nvidia.com/gpu" not in json.dumps(recovery.job)
-    assert "--worker-id q38_s44_base_repair_v2" in recovery.config_map["data"]["run.sh"]
+    assert recovery.proof["output_root"] == (f"/mnt/sfs/jobs/{recovery.job['metadata']['name']}")
+    assert "--worker-id q38-s44-base-repair-v3" in recovery.config_map["data"]["run.sh"]
+    seed44_base_repair_job.evaluate._name("q38-s44-base-repair-v3")  # noqa: SLF001
+    assert recovery.proof["execution_generation"] == 2
+    assert recovery.proof["selected_cell_count"] == 2
+    assert recovery.proof["private_intent_content_included"] is False
+    assert recovery.job["spec"]["template"]["spec"]["initContainers"][0]["name"] == "dind"
     assert recovery.proof["successor_binding"] == {
         "successor_plan_sha256": (
+            "sha256:9a0c8e74ff59633b210dc1f91a8bcdc29215fa4b8e4f16e1c11f4e02dc04aeb0"
+        ),
+        "predecessor_successor_plan_sha256": (
             "sha256:b6fdbb9d86cb7c54e283d530ba9ad6806431469ca8644bd0016711325005f71b"
         ),
         "predecessor_evidence_receipt_sha256": (
-            "sha256:0be0d611e086ad1c3874aad7d8e5ac2b60c01a6b50b77da7f4b89d3e916cdf26"
+            "sha256:62e26ea344b1ba75500130d78d03219ab5f55050cec292463219b13498160f5c"
         ),
-        "predecessor_job_uid": "fe2d6df2-9a04-4247-a246-8331d0a5571f",
+        "predecessor_job_uid": "4c67e114-7095-4aca-9b35-d2a69237a798",
         "successor_preflight_receipt_sha256": (
             "sha256:e012b8fe162f378c85bbf4976629f20344cc056c4c121be51bc05e1da842aed7"
         ),
+        "infrastructure_successor_generation": 3,
+        "scientific_execution_generation": 2,
     }
+
+
+def test_seed44_stageb_corrected_successor_rejects_underscore_worker_after_reseal(
+    tmp_path: Path,
+):
+    stored_intent, recovery_intent = _packet_intents(tmp_path)
+    value = json.loads(CORRECTED_SUCCESSOR_PLAN.read_text())
+    invalid_worker = "q38_s44_base_repair_v3"
+    value["stage_overrides"]["worker_id"] = invalid_worker
+    value["stage_overrides"]["run_script_sha256"] = hashlib.sha256(
+        seed44_base_repair_job._rollout_script(invalid_worker).encode()  # noqa: SLF001
+    ).hexdigest()
+    value["sha256"] = seed44_base_repair_job._canonical_digest(  # noqa: SLF001
+        {key: item for key, item in value.items() if key != "sha256"}
+    )
+    plan = tmp_path / "invalid-worker-plan.json"
+    plan.write_text(json.dumps(value), encoding="utf-8")
+    with pytest.raises(seed44_base_repair_job.PackageError, match="worker identity"):
+        seed44_base_repair_job.render(
+            repo_root=ROOT,
+            plan_path=plan,
+            stored_intent_path=stored_intent,
+            recovery_intent_path=recovery_intent,
+        )
 
 
 def test_recovery_stages_exact_harness_before_fresh_dind_image_check(
@@ -520,7 +531,7 @@ def test_seed44_recovery_bootstrap_imports_from_only_the_rendered_closure(tmp_pa
     stored_intent, recovery_intent = _packet_intents(tmp_path)
     recovery = seed44_base_repair_job.render(
         repo_root=ROOT,
-        plan_path=REPAIR_PLAN,
+        plan_path=CORRECTED_SUCCESSOR_PLAN,
         stored_intent_path=stored_intent,
         recovery_intent_path=recovery_intent,
     )["single_rollout_repair"]
@@ -559,17 +570,14 @@ def test_seed44_private_packages_are_create_once_and_not_printed(tmp_path: Path)
     output = tmp_path / "private-packages"
     receipt = seed44_base_repair_job.write_private_packages(
         repo_root=ROOT,
-        plan_path=REPAIR_PLAN,
+        plan_path=CORRECTED_SUCCESSOR_PLAN,
         stored_intent_path=stored_intent,
         recovery_intent_path=recovery_intent,
         output_root=output,
     )
     assert receipt["jobs_created"] == 0
     assert receipt["private_cell_task_session_or_trace_identifiers_included"] is False
-    for stage in (
-        "accept_existing_scored_session",
-        "single_rollout_repair",
-    ):
+    for stage in ("single_rollout_repair",):
         bundle = output / stage / "bundle.json"
         assert bundle.stat().st_mode & 0o077 == 0
         value = json.loads(bundle.read_text())
@@ -578,7 +586,7 @@ def test_seed44_private_packages_are_create_once_and_not_printed(tmp_path: Path)
     with pytest.raises(FileExistsError, match="already exists"):
         seed44_base_repair_job.write_private_packages(
             repo_root=ROOT,
-            plan_path=REPAIR_PLAN,
+            plan_path=CORRECTED_SUCCESSOR_PLAN,
             stored_intent_path=stored_intent,
             recovery_intent_path=recovery_intent,
             output_root=output,
@@ -623,4 +631,27 @@ def test_seed44_stageb_successor_plan_is_inert_narrow_and_final8_sealed():
         "identical_private_intent_required": True,
         "third_successor_on_unchanged_signature_allowed": False,
     }
+    assert set(plan["operation"].values()) == {0}
+
+
+def test_seed44_stageb_corrected_successor_plan_separates_infrastructure_generation():
+    plan = json.loads(CORRECTED_SUCCESSOR_PLAN.read_text())
+    assert plan["sha256"] == seed44_base_repair_job._canonical_digest(  # noqa: SLF001
+        {key: value for key, value in plan.items() if key != "sha256"}
+    )
+    assert plan["launchable"] is False
+    assert plan["contract"] == {
+        "selected_cell_count": 2,
+        "infrastructure_successor_generation": 3,
+        "scientific_execution_generation": 2,
+        "scientific_generation_two_was_never_opened": True,
+        "accepted_cell_replay_count": 0,
+        "stored_session_rescore_count": 0,
+        "stored_session_regeneration_count": 0,
+        "final_eight_task_set_accessed": False,
+        "identical_private_intent_required": True,
+        "distinct_deterministic_fix": "runtime_worker_name_grammar",
+        "same_signature_successor_allowed": False,
+    }
+    assert plan["stage_overrides"]["worker_id"] == "q38-s44-base-repair-v3"
     assert set(plan["operation"].values()) == {0}

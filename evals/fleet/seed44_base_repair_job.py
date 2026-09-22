@@ -13,11 +13,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from evals.fleet import reviewed_recovery_v2
+from evals.fleet import evaluate, reviewed_recovery_v2
 from evals.fleet import stored_session_reconciliation_v2 as stored_v2
 
 SCHEMA = "qwen38-fleet-dev17-seed44-base-narrow-repair-v1"
 SUCCESSOR_SCHEMA = "qwen38-fleet-dev17-seed44-base-stageb-successor-v1"
+CORRECTED_SUCCESSOR_SCHEMA = "qwen38-fleet-dev17-seed44-base-stageb-successor-v2"
 FAILURE_ALERT_ANNOTATION = "fleet.ai/failure-alerts"
 NAMESPACE = "fleet-train-jobs"
 EXPECTED_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
@@ -59,6 +60,18 @@ ROLLOUT_CODE_FILES = {
 
 class PackageError(ValueError):
     """The narrow repair package differs from its reviewed public plan."""
+
+
+def _worker_name(value: Any) -> str:
+    """Apply the runtime worker-name grammar before a package can render."""
+
+    if not isinstance(value, str):
+        raise PackageError("rollout repair worker identity is invalid")
+    try:
+        evaluate._name(value)  # noqa: SLF001
+    except ValueError as exc:
+        raise PackageError("rollout repair worker identity is invalid") from exc
+    return value
 
 
 def _sha256(value: bytes) -> str:
@@ -257,7 +270,12 @@ def _terminal_semantics(value: dict[str, Any], source: dict[str, Any]) -> None:
         raise PackageError("source terminal evidence semantics differ from narrow repair")
 
 
-def _successor_plan(repo_root: Path, value: dict[str, Any]) -> dict[str, Any]:
+def _successor_plan(
+    repo_root: Path,
+    value: dict[str, Any],
+    *,
+    allow_historical_invalid_worker: bool = False,
+) -> dict[str, Any]:
     """Materialize the sole reviewed Stage B successor over the immutable v1 plan."""
 
     if set(value) != {
@@ -458,8 +476,11 @@ def _successor_plan(repo_root: Path, value: dict[str, Any]) -> dict[str, Any]:
         or old["output_root"] != preflight.get("predecessor_output_root")
     ):
         raise PackageError("Stage B successor output identity is invalid")
-    if not isinstance(overrides["worker_id"], str) or not overrides["worker_id"].isidentifier():
-        raise PackageError("Stage B successor worker identity is invalid")
+    if allow_historical_invalid_worker:
+        if not isinstance(overrides["worker_id"], str) or not overrides["worker_id"].isidentifier():
+            raise PackageError("Stage B successor worker identity is invalid")
+    else:
+        _worker_name(overrides["worker_id"])
 
     effective = copy.deepcopy(base)
     effective["stages"]["single_rollout_repair"].update(overrides)
@@ -468,6 +489,304 @@ def _successor_plan(repo_root: Path, value: dict[str, Any]) -> dict[str, Any]:
         "predecessor_evidence_receipt_sha256": evidence["receipt_sha256"],
         "predecessor_job_uid": predecessor["job"]["uid"],
         "successor_preflight_receipt_sha256": preflight["receipt_sha256"],
+    }
+    return effective
+
+
+def _corrected_successor_plan(repo_root: Path, value: dict[str, Any]) -> dict[str, Any]:
+    """Bind the v3 infrastructure successor to the exact v2 naming defect."""
+
+    if set(value) != {
+        "schema",
+        "status",
+        "launchable",
+        "prior_successor_plan",
+        "failure_evidence",
+        "stage_overrides",
+        "contract",
+        "live_evidence_binding",
+        "operation",
+        "sha256",
+    } or value.get("sha256") != _canonical_digest(
+        {key: item for key, item in value.items() if key != "sha256"}
+    ):
+        raise PackageError("corrected Stage B successor plan identity differs")
+    if (
+        value.get("status") != "source_prepared_not_launchable"
+        or value.get("launchable") is not False
+        or value.get("live_evidence_binding")
+        != {
+            "kubernetes_context": EXPECTED_CONTEXT,
+            "namespace": NAMESPACE,
+            "assert_before_every_live_read": True,
+            "object_absence_valid_only_after_exact_binding_assertion": True,
+        }
+        or set(value.get("operation", {}).values()) != {0}
+    ):
+        raise PackageError("corrected Stage B successor must remain launch inert")
+
+    prior_reference = value.get("prior_successor_plan")
+    if not isinstance(prior_reference, dict) or set(prior_reference) != {
+        "path",
+        "file_sha256",
+        "sha256",
+    }:
+        raise PackageError("prior Stage B successor reference is invalid")
+    prior_path = _safe_repo_path(repo_root, prior_reference["path"], "prior Stage B successor plan")
+    prior = _load(prior_path, "prior Stage B successor plan")
+    if any(
+        (
+            prior.get("schema") != SUCCESSOR_SCHEMA,
+            prior.get("sha256") != prior_reference["sha256"],
+            "sha256:" + _sha256(prior_path.read_bytes()) != prior_reference["file_sha256"],
+            prior.get("sha256")
+            != _canonical_digest({key: item for key, item in prior.items() if key != "sha256"}),
+        )
+    ):
+        raise PackageError("prior Stage B successor plan differs")
+    effective = _successor_plan(repo_root, prior, allow_historical_invalid_worker=True)
+    prior_execution = effective["stages"]["single_rollout_repair"]
+
+    evidence_reference = value.get("failure_evidence")
+    if not isinstance(evidence_reference, dict) or set(evidence_reference) != {
+        "path",
+        "file_sha256",
+        "receipt_sha256",
+    }:
+        raise PackageError("corrected Stage B failure evidence reference is invalid")
+    evidence_path = _safe_repo_path(
+        repo_root, evidence_reference["path"], "corrected Stage B failure evidence"
+    )
+    evidence = _load(evidence_path, "corrected Stage B failure evidence")
+    if any(
+        (
+            "sha256:" + _sha256(evidence_path.read_bytes()) != evidence_reference["file_sha256"],
+            evidence.get("receipt_sha256") != evidence_reference["receipt_sha256"],
+            evidence.get("receipt_sha256")
+            != _canonical_digest(
+                {key: item for key, item in evidence.items() if key != "receipt_sha256"}
+            ),
+        )
+    ):
+        raise PackageError("corrected Stage B failure evidence digest differs")
+
+    try:
+        failed = evidence["failed_successor"]
+        failed_job = failed["job"]
+        failed_pod = failed["pod"]
+        failed_workload = failed["workload"]
+        signature = evidence["failure_signature"]
+        diagnostic = evidence["diagnostic"]
+        preflight = evidence["postfailure_preflight"]
+        selected = preflight["selected_roster"]
+        resources = evidence["resources"]
+        correction = evidence["corrected_successor_contract"]
+        classification = evidence["classification"]
+        for identity in (
+            failed_job["uid"],
+            failed_pod["uid"],
+            failed["config_map"]["uid"],
+            failed["secret"]["uid"],
+            failed_workload["uid"],
+            diagnostic["pod_uid"],
+            diagnostic["config_map_uid"],
+            preflight["pod_uid"],
+            preflight["config_map_uid"],
+        ):
+            if str(uuid.UUID(identity)) != identity:
+                raise ValueError("non-canonical UUID")
+    except (KeyError, TypeError, ValueError) as exc:
+        raise PackageError("corrected Stage B failure evidence shape is invalid") from exc
+
+    expected_error = "expected an owner-specific lowercase name"
+    expected_error_sha256 = "sha256:" + _sha256(expected_error.encode())
+    prior_worker = prior_execution.get("worker_id")
+    try:
+        evaluate._name(prior_worker)  # noqa: SLF001
+    except ValueError:
+        prior_worker_invalid = True
+    else:
+        prior_worker_invalid = False
+    if any(
+        (
+            evidence.get("schema") != "qwen38_fleet_dev17_seed44_stageb_v2_worker_id_failure_v1",
+            evidence.get("live_evidence_binding")
+            != {
+                "kubernetes_context": EXPECTED_CONTEXT,
+                "namespace": NAMESPACE,
+                "context_asserted_before_every_live_read": True,
+            },
+            failed.get("plan_sha256") != prior["sha256"],
+            failed_job.get("name") != prior_execution["job_name"],
+            failed_job.get("condition") != "Failed",
+            failed_job.get("reason") != "BackoffLimitExceeded",
+            failed_job.get("root_failure_alert_annotation") != "off",
+            failed_job.get("backoff_limit") != 0,
+            failed_pod.get("phase") != "Failed",
+            failed_pod.get("repair_restart_count") != 0,
+            failed_pod.get("repair_exit_code") != 1,
+            failed_pod.get("dind_restart_count") != 0,
+            failed_pod.get("dind_exit_code") != 0,
+            failed["config_map"].get("name") != prior_execution["config_map_name"],
+            failed["secret"].get("name") != prior_execution["secret_name"],
+            failed_workload.get("finished") is not True,
+            failed_workload.get("reason") != "Failed",
+            failed.get("controller_terminal", {}).get("accepted") is not False,
+            failed.get("controller_terminal", {}).get("controller_failure_code")
+            != "reviewed_recovery_v2_startup_failed",
+            signature.get("stage") != "evaluate._name_before_output_root_or_intent_apply",
+            signature.get("error_type") != "valueerror",
+            signature.get("error_message_plaintext") != expected_error,
+            signature.get("error_message_sha256") != expected_error_sha256,
+            signature.get("worker_id") != prior_worker,
+            signature.get("worker_id_contract") != r"[a-z0-9][a-z0-9-]{0,40}",
+            signature.get("worker_id_contract_satisfied") is not False,
+            signature.get("same_as_predecessor_v1") is not True,
+            signature.get("docker_image_staging_started") is not False,
+            prior_worker_invalid is not True,
+            diagnostic.get("phase") != "Failed",
+            diagnostic.get("restart_count") != 0,
+            diagnostic.get("exit_code") != 1,
+            diagnostic.get("failure_stage") != "entry",
+            diagnostic.get("error_type") != "valueerror",
+            diagnostic.get("error_message_sha256") != expected_error_sha256,
+            diagnostic.get("output_root_created") is not False,
+            diagnostic.get("ledger_mutations") != 0,
+            diagnostic.get("model_generation_calls") != 0,
+            diagnostic.get("scoring_calls") != 0,
+            diagnostic.get("objects_released_after_terminal_evidence") is not True,
+            preflight.get("phase") != "Succeeded",
+            preflight.get("restart_count") != 0,
+            preflight.get("exit_code") != 0,
+            preflight.get("receipt_sha256")
+            != "sha256:e012b8fe162f378c85bbf4976629f20344cc056c4c121be51bc05e1da842aed7",
+            preflight.get("ledger_census")
+            != {
+                "total": 17,
+                "accepted": 15,
+                "retry_review": 2,
+                "local_results": 15,
+                "active": 0,
+                "stale_active": 0,
+            },
+            selected
+            != {
+                "count": 2,
+                "retry_review": 2,
+                "retry_count_zero": 2,
+                "reconciliation_digest_null": 2,
+                "session_id_null": 2,
+                "receipt_digest_null": 2,
+                "local_result_count": 0,
+                "matching_recovery_apply_receipt_count": 0,
+                "exact_authoritative_session_count": 0,
+                "model_execution_artifact_count": 0,
+                "scoring_artifact_count": 0,
+            },
+            preflight.get("predecessor_v1_output_absent") is not True,
+            preflight.get("failed_successor_v2_output_absent") is not True,
+            preflight.get("route_ready") is not True,
+            preflight.get("ledger_mutations") != 0,
+            preflight.get("model_generation_calls") != 0,
+            preflight.get("scoring_calls") != 0,
+            preflight.get("accepted_cell_replays") != 0,
+            preflight.get("objects_released_after_terminal_evidence") is not True,
+            resources
+            != {
+                "evaluator_gpu_request": 0,
+                "evaluator_pod_terminal": True,
+                "workload_finished": True,
+                "active_gpu_allocation": 0,
+                "diagnostic_objects_released": True,
+            },
+            classification
+            != {
+                "deterministic_repository_owned_source_defect": True,
+                "prior_attempts_crossed_mutation_boundary": False,
+                "prior_attempts_applied_intent": False,
+                "prior_attempts_started_model_generation": False,
+                "prior_attempts_started_scoring": False,
+                "corrected_successor_allowed_after_review": True,
+                "final_eight_task_set_accessed": False,
+            },
+            any(item is not False for item in evidence.get("privacy", {}).values()),
+        )
+    ):
+        raise PackageError("corrected Stage B failure evidence semantics differ")
+
+    contract = value.get("contract")
+    if contract != {
+        "selected_cell_count": 2,
+        "infrastructure_successor_generation": 3,
+        "scientific_execution_generation": 2,
+        "scientific_generation_two_was_never_opened": True,
+        "accepted_cell_replay_count": 0,
+        "stored_session_rescore_count": 0,
+        "stored_session_regeneration_count": 0,
+        "final_eight_task_set_accessed": False,
+        "identical_private_intent_required": True,
+        "distinct_deterministic_fix": "runtime_worker_name_grammar",
+        "same_signature_successor_allowed": False,
+    }:
+        raise PackageError("corrected Stage B successor contract differs")
+    if correction.get("infrastructure_successor_generation") != 3 or correction.get(
+        "scientific_execution_generation"
+    ) != prior_execution.get("execution_generation"):
+        raise PackageError("corrected Stage B generation binding differs")
+    if (
+        correction.get("scientific_generation_two_was_never_opened") is not True
+        or correction.get("worker_id_contract_satisfied") is not True
+        or correction.get("same_signature_replay_allowed") is not False
+        or correction.get("distinct_deterministic_fix_required") is not True
+    ):
+        raise PackageError("corrected Stage B repair classification differs")
+
+    overrides = value.get("stage_overrides")
+    if not isinstance(overrides, dict) or set(overrides) != {
+        "job_name",
+        "config_map_name",
+        "secret_name",
+        "output_root",
+        "worker_id",
+        "run_script_sha256",
+    }:
+        raise PackageError("corrected Stage B successor overrides are invalid")
+    for field in ("job_name", "config_map_name", "secret_name"):
+        if (
+            not isinstance(overrides[field], str)
+            or re.fullmatch(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?", overrides[field]) is None
+            or overrides[field] == prior_execution[field]
+            or overrides[field] != correction[field]
+        ):
+            raise PackageError("corrected Stage B Kubernetes identity is invalid")
+    if any(
+        (
+            not isinstance(overrides["output_root"], str),
+            not overrides["output_root"].startswith("/mnt/sfs/jobs/"),
+            ".." in Path(overrides["output_root"]).parts,
+            overrides["output_root"] == prior_execution["output_root"],
+            overrides["output_root"] != correction["output_root"],
+        )
+    ):
+        raise PackageError("corrected Stage B output identity is invalid")
+    worker_id = _worker_name(overrides["worker_id"])
+    if worker_id == prior_worker or worker_id != correction["worker_id"]:
+        raise PackageError("corrected Stage B worker identity is not a distinct fix")
+    if (
+        not isinstance(overrides["run_script_sha256"], str)
+        or re.fullmatch(r"[0-9a-f]{64}", overrides["run_script_sha256"]) is None
+    ):
+        raise PackageError("corrected Stage B run script digest is invalid")
+
+    effective["stages"]["single_rollout_repair"].update(overrides)
+    effective["_successor_binding"] = {
+        "successor_plan_sha256": value["sha256"],
+        "predecessor_successor_plan_sha256": prior["sha256"],
+        "predecessor_evidence_receipt_sha256": evidence["receipt_sha256"],
+        "predecessor_job_uid": failed_job["uid"],
+        "successor_preflight_receipt_sha256": preflight["receipt_sha256"],
+        "infrastructure_successor_generation": 3,
+        "scientific_execution_generation": prior_execution["execution_generation"],
     }
     return effective
 
@@ -654,9 +973,7 @@ def _stage(
     elif stage == "single_rollout_repair":
         intent = reviewed_recovery_v2.load_intent(intent_path)
         files = ROLLOUT_CODE_FILES
-        worker_id = execution.get("worker_id", "q38_s44_base_repair")
-        if not isinstance(worker_id, str) or not worker_id.isidentifier():
-            raise PackageError("rollout repair worker identity is invalid")
+        worker_id = _worker_name(execution.get("worker_id", "q38_s44_base_repair"))
         run_script = _rollout_script(worker_id)
         expected_count = 2
         dind = True
@@ -767,9 +1084,14 @@ def render(
     recovery_intent_path: Path,
 ) -> dict[str, StagePackage]:
     source_plan = _load(plan_path, "narrow repair plan")
-    is_successor = source_plan.get("schema") == SUCCESSOR_SCHEMA
-    if is_successor:
+    is_successor = source_plan.get("schema") in {
+        SUCCESSOR_SCHEMA,
+        CORRECTED_SUCCESSOR_SCHEMA,
+    }
+    if source_plan.get("schema") == SUCCESSOR_SCHEMA:
         plan = _successor_plan(repo_root, source_plan)
+    elif source_plan.get("schema") == CORRECTED_SUCCESSOR_SCHEMA:
+        plan = _corrected_successor_plan(repo_root, source_plan)
     else:
         plan = source_plan
         if plan.get("schema") != SCHEMA:
@@ -838,6 +1160,7 @@ def validate(package: StagePackage) -> None:
             package.secret.get("immutable") is not True,
             package.proof.get("gpu_request") != 0,
             package.proof.get("private_intent_content_included") is not False,
+            package.proof.get("output_root") != f"/mnt/sfs/jobs/{job['metadata']['name']}",
         )
     ):
         raise PackageError("narrow repair package violates the execution contract")
