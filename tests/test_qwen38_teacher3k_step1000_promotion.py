@@ -1,0 +1,41 @@
+from __future__ import annotations
+
+import hashlib
+import json
+from pathlib import Path
+
+from training import model_stage_current_base as stage
+
+
+ROOT = Path(__file__).resolve().parents[1]
+PLAN = ROOT / "configs/qualification/qwen38-teacher3k32-step1000-inference-stage-v1.json"
+
+
+def test_step1000_stage_plan_binds_the_exact_export_and_reload() -> None:
+    plan = stage.read_plan(PLAN)
+    source = plan["source"]
+    desired = plan["desired_registration"]
+
+    assert "sha256:" + hashlib.sha256(PLAN.read_bytes()).hexdigest() == (
+        "sha256:8b5debe64294b02ea2d454d0f7eec73a03177cf46975171f29c7ec4fa75fc69e"
+    )
+    assert plan["plan_sha256"] == (
+        "sha256:c8d99519be6703075afaf2ac0254434b82e4448cb72aaf6cea81d514a99cf47a"
+    )
+    assert source["export_receipt"]["file_sha256"] == (
+        "sha256:e79d2cdaaebe52da61a37e4f4ad35c2c8ccd4878afaf77de0fc4796e8e1c6463"
+    )
+    assert source["gpu_check_receipt"]["file_sha256"] == (
+        "sha256:2a19f9c99f712b81604f8b89ba6c498ca89167f2ad778f9d5fb8fa4a0a1c22a0"
+    )
+    assert source["payload"]["manifest_sha256"] == (
+        "sha256:023c5f8b0559ba050f0d672a6bc27aabecec7d5837595f8ea5bc914446d26db5"
+    )
+    assert source["payload"]["manifest_sha256"] == desired["spec"]["model"]["revision"]
+    assert plan["destination"]["path"] == "/models/chris-q38-t3k32-s1000-v1"
+    assert plan["execution"]["gpus"] == 0
+    assert plan["execution"]["priority_class"] == "c1"
+    assert desired["id"] == "chris-q38-t3k32-s1000-v1"
+    assert desired["spec"]["desiredState"] == "paused"
+    assert desired["spec"]["scaling"] == {"minReplicas": 0}
+    assert "s900" not in json.dumps(plan)
