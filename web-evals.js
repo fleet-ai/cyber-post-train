@@ -5,6 +5,15 @@ const paperMetricLabels = {
   pass_at_3_max: "Pass@3 (Max)"
 };
 
+const resultStatusLabels = {
+  partial: "partial coverage",
+  complete: "complete coverage"
+};
+
+function resultStatusLabel(status) {
+  return resultStatusLabels[status] ?? status;
+}
+
 function standardizedMetric(key, metric) {
   return `<div><dt>${paperMetricLabels[key]}</dt><dd>${Number(metric.percent).toFixed(2)}%</dd><small>${escapeHtml(metric.coverage)} weaknesses · ${escapeHtml(metric.qualification)}</small></div>`;
 }
@@ -22,7 +31,7 @@ function renderWebRows(runs) {
   document.querySelector("#web-count").textContent = `${runs.length} checked results`;
   document.querySelector("#web-campaigns").innerHTML = runs.map(run => `
     <article class="web-campaign" id="web-${escapeHtml(run.id)}">
-      <div class="web-campaign-heading"><div><p class="eyebrow">${escapeHtml(run.date)} · partial coverage</p><h3>${escapeHtml(run.name)}</h3></div></div>
+      <div class="web-campaign-heading"><div><p class="eyebrow">${escapeHtml(run.date)} · ${escapeHtml(resultStatusLabel(run.status))}</p><h3>${escapeHtml(run.name)}</h3></div></div>
       <dl class="web-config"><div><dt>Model</dt><dd>${escapeHtml(run.model)}</dd></div><div><dt>Agent program</dt><dd>${escapeHtml(run.harness)}</dd></div><div><dt>Report-checking AI</dt><dd>${escapeHtml(run.judge)}</dd></div><div><dt>Websites covered</dt><dd>${escapeHtml(run.targets)}</dd></div></dl>
       <div class="web-stages"><p><strong>Collection</strong> ${escapeHtml(run.collection)}</p><p><strong>Scoring</strong> ${escapeHtml(run.scoring)}</p></div>
       <dl class="web-metrics">${Object.entries(paperMetricLabels).map(([key]) => standardizedMetric(key, run.paper_metrics[key])).join("")}</dl>
