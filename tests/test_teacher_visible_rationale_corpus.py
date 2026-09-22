@@ -82,6 +82,177 @@ def _target_data() -> tuple[list[int], int, list[int], list[int]]:
     return rendered, len(prompt), rationale, action
 
 
+def _compaction_fixture() -> tuple[list[dict], list[dict], dict]:
+    tokenizer = _FakeTokenizer()
+    messages = [
+        {"role": "system", "content": "You are a security researcher."},
+        {"role": "user", "content": "Test the target."},
+        {
+            "role": "assistant",
+            "content": "First visible rationale.",
+            "tool_calls": [
+                {
+                    "id": "call-1",
+                    "type": "function",
+                    "function": {"name": "bash", "arguments": {"script": "printf first"}},
+                }
+            ],
+        },
+        {"role": "tool", "content": "first", "tool_call_id": "call-1"},
+        {"role": "assistant", "content": "First visible compacted summary."},
+        {
+            "role": "assistant",
+            "content": "Second visible rationale.",
+            "tool_calls": [
+                {
+                    "id": "call-2",
+                    "type": "function",
+                    "function": {"name": "bash", "arguments": {"script": "printf second"}},
+                }
+            ],
+        },
+        {"role": "tool", "content": "second", "tool_call_id": "call-2"},
+        {"role": "assistant", "content": "Second visible compacted summary."},
+        {
+            "role": "assistant",
+            "content": "Third visible rationale.",
+            "tool_calls": [
+                {
+                    "id": "call-3",
+                    "type": "function",
+                    "function": {"name": "bash", "arguments": {"script": "printf third"}},
+                }
+            ],
+        },
+    ]
+
+    def window(
+        window_id: str,
+        sequence_index: int,
+        prompt_indices: list[int],
+        target_index: int,
+        occurrence: str,
+    ) -> dict:
+        prompt = tokenizer.apply_chat_template(
+            [messages[index] for index in prompt_indices], add_generation_prompt=True
+        )
+        return {
+            "window_id": window_id,
+            "sequence_index": sequence_index,
+            "message_indices": [*prompt_indices, target_index],
+            "target_message_index": target_index,
+            "prompt_token_count": len(prompt),
+            "prompt_token_sha256": digest_json(prompt),
+            "target_spans": [
+                {
+                    "kind": corpus.ACTION_KIND,
+                    "target_occurrence_sha256": occurrence,
+                }
+            ],
+        }
+
+    windows = [
+        window("before", 0, [0, 1], 2, _digest("1")),
+        window("middle", 1, [0, 1, 4], 5, _digest("2")),
+        window("after", 2, [0, 1, 7], 8, _digest("3")),
+    ]
+
+    def boundary(
+        *,
+        boundary_index: int,
+        previous_boundary_id: str | None,
+        parent: dict,
+        summary_index: int,
+        summary_indices: list[int],
+        target: dict,
+    ) -> dict:
+        pre_indices = parent["message_indices"][:-1]
+        post_indices = target["message_indices"][:-1]
+        pre_prompt = tokenizer.apply_chat_template(
+            [messages[index] for index in pre_indices], add_generation_prompt=True
+        )
+        summary_prompt = tokenizer.apply_chat_template(
+            [messages[index] for index in summary_indices], add_generation_prompt=True
+        )
+        summary_rendered = tokenizer.apply_chat_template(
+            [*[messages[index] for index in summary_indices], messages[summary_index]],
+            add_generation_prompt=False,
+        )
+        summary_tokens = summary_rendered[len(summary_prompt) :]
+        post_prompt = tokenizer.apply_chat_template(
+            [messages[index] for index in post_indices], add_generation_prompt=True
+        )
+        value = {
+            "boundary_index": boundary_index,
+            "previous_boundary_id": previous_boundary_id,
+            "source_session_identity_sha256": _digest("4"),
+            "normalized_trajectory_sha256": _digest("5"),
+            "transcript_sha256": _digest("6"),
+            "target_occurrence_manifest_sha256": _digest("7"),
+            "parent_window_id": parent["window_id"],
+            "parent_target_message_index": parent["target_message_index"],
+            "pre_compaction_prompt_message_indices": pre_indices,
+            "pre_compaction_prompt_sha256": digest_json(pre_prompt),
+            "pre_compaction_prompt_tokens": len(pre_prompt),
+            "summary_generation_message_indices": summary_indices,
+            "summary_generation_prompt_sha256": digest_json(summary_prompt),
+            "summary_generation_prompt_tokens": len(summary_prompt),
+            "summary_message_index": summary_index,
+            "visible_summary_message_sha256": digest_json(messages[summary_index]),
+            "visible_summary_qwen_token_sha256": digest_json(summary_tokens),
+            "visible_summary_qwen_tokens": len(summary_tokens),
+            "post_compaction_prompt_message_indices": post_indices,
+            "post_compaction_prompt_sha256": digest_json(post_prompt),
+            "post_compaction_prompt_tokens": len(post_prompt),
+            "next_target_window_id": target["window_id"],
+            "next_target_message_index": target["target_message_index"],
+            "next_target_prompt_sha256": digest_json(post_prompt),
+            "next_target_occurrence_sha256": target["target_spans"][0]["target_occurrence_sha256"],
+            "summary_visible_to_student": True,
+            "summary_surface": "ordinary_assistant_content",
+            "provider_private_reasoning_present": False,
+            "summary_loss": "context_only_zero_loss",
+        }
+        value["boundary_id"] = digest_json(value)
+        return value
+
+    first = boundary(
+        boundary_index=0,
+        previous_boundary_id=None,
+        parent=windows[0],
+        summary_index=4,
+        summary_indices=[0, 1, 2, 3],
+        target=windows[1],
+    )
+    second = boundary(
+        boundary_index=1,
+        previous_boundary_id=first["boundary_id"],
+        parent=windows[1],
+        summary_index=7,
+        summary_indices=[0, 1, 4, 5, 6],
+        target=windows[2],
+    )
+    return (
+        messages,
+        windows,
+        {
+            "kind": teacher.EXACT_VISIBLE_SUMMARY,
+            "boundaries": [first, second],
+        },
+    )
+
+
+def _reseal_boundaries(boundaries: list[dict]) -> None:
+    previous: str | None = None
+    for index, boundary in enumerate(boundaries):
+        boundary["boundary_index"] = index
+        boundary["previous_boundary_id"] = previous
+        boundary["boundary_id"] = digest_json(
+            {key: item for key, item in boundary.items() if key != "boundary_id"}
+        )
+        previous = boundary["boundary_id"]
+
+
 def _load(path: Path) -> dict:
     return json.loads(path.read_text())
 
@@ -608,6 +779,63 @@ def test_local_qwen_rerender_rejects_swapped_rationale_and_action_labels(
         )
     with pytest.raises(ValueError, match="labels do not match"):
         corpus._rendered_window(_FakeTokenizer(), record["messages"], window)
+
+
+def test_compaction_binds_two_monotone_immediate_parent_transitions() -> None:
+    messages, windows, compaction = _compaction_fixture()
+    checked = teacher._compaction(compaction)
+    corpus._rendered_compaction(_FakeTokenizer(), messages, windows, checked)
+
+
+def test_compaction_rejects_cross_wired_and_nonadjacent_windows() -> None:
+    messages, windows, compaction = _compaction_fixture()
+    cross_wired = copy.deepcopy(compaction)
+    first = cross_wired["boundaries"][0]
+    first["parent_window_id"] = "cross-wired-window"
+    _reseal_boundaries(cross_wired["boundaries"])
+    checked = teacher._compaction(cross_wired)
+    with pytest.raises(ValueError, match="immediate parent/next-target"):
+        corpus._rendered_compaction(_FakeTokenizer(), messages, windows, checked)
+
+    nonadjacent = copy.deepcopy(compaction)
+    first = nonadjacent["boundaries"][0]
+    after = windows[2]
+    first["next_target_window_id"] = after["window_id"]
+    first["next_target_message_index"] = after["target_message_index"]
+    first["next_target_occurrence_sha256"] = after["target_spans"][0]["target_occurrence_sha256"]
+    nonadjacent["boundaries"] = [first]
+    _reseal_boundaries(nonadjacent["boundaries"])
+    checked = teacher._compaction(nonadjacent)
+    with pytest.raises(ValueError, match="immediate parent/next-target"):
+        corpus._rendered_compaction(_FakeTokenizer(), messages, windows, checked)
+
+
+def test_compaction_rejects_reversed_or_future_message_chronology() -> None:
+    _messages_value, _windows_value, compaction = _compaction_fixture()
+    reversed_boundaries = copy.deepcopy(compaction)
+    reversed_boundaries["boundaries"].reverse()
+    _reseal_boundaries(reversed_boundaries["boundaries"])
+    with pytest.raises(ValueError, match="chronology is not monotone"):
+        teacher._compaction(reversed_boundaries)
+
+    future = copy.deepcopy(compaction)
+    first = future["boundaries"][0]
+    first["summary_generation_message_indices"] = [0, 1, 2, 3, 4]
+    _reseal_boundaries(future["boundaries"])
+    with pytest.raises(ValueError, match="chronology is not monotone"):
+        teacher._compaction(future)
+
+
+def test_compaction_rejects_cross_wired_prompt_tokens() -> None:
+    messages, windows, compaction = _compaction_fixture()
+    wrong_tokens = copy.deepcopy(compaction)
+    first = wrong_tokens["boundaries"][0]
+    first["post_compaction_prompt_sha256"] = windows[2]["prompt_token_sha256"]
+    first["next_target_prompt_sha256"] = windows[2]["prompt_token_sha256"]
+    _reseal_boundaries(wrong_tokens["boundaries"])
+    checked = teacher._compaction(wrong_tokens)
+    with pytest.raises(ValueError, match="real visible continuation"):
+        corpus._rendered_compaction(_FakeTokenizer(), messages, windows, checked)
 
 
 def test_source_occurrence_cannot_be_repeated_by_repacking(tmp_path: Path, monkeypatch) -> None:

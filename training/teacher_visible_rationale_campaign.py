@@ -865,12 +865,23 @@ def _compaction(
         "normalized_trajectory_sha256",
         "transcript_sha256",
         "target_occurrence_manifest_sha256",
+        "parent_window_id",
+        "parent_target_message_index",
+        "pre_compaction_prompt_message_indices",
         "pre_compaction_prompt_sha256",
+        "pre_compaction_prompt_tokens",
+        "summary_generation_message_indices",
         "summary_generation_prompt_sha256",
+        "summary_generation_prompt_tokens",
+        "summary_message_index",
         "visible_summary_message_sha256",
         "visible_summary_qwen_token_sha256",
         "visible_summary_qwen_tokens",
+        "post_compaction_prompt_message_indices",
         "post_compaction_prompt_sha256",
+        "post_compaction_prompt_tokens",
+        "next_target_window_id",
+        "next_target_message_index",
         "next_target_prompt_sha256",
         "next_target_occurrence_sha256",
         "summary_visible_to_student",
@@ -879,6 +890,20 @@ def _compaction(
         "summary_loss",
     }
     previous_boundary_id: str | None = None
+    previous_summary_message_index: int | None = None
+    previous_post_indices: list[int] | None = None
+    previous_next_target_index: int | None = None
+
+    def ordered_indices(value: object, label: str) -> list[int]:
+        if (
+            not isinstance(value, list)
+            or not value
+            or any(type(item) is not int or item < 0 for item in value)
+            or value != sorted(set(value))
+        ):
+            raise ValueError(f"{label} must be one exact ordered message-index list")
+        return value
+
     for index, raw in enumerate(boundaries):
         boundary = _exact(raw, fields, "teacher visible-summary boundary")
         boundary_id = _sha(boundary["boundary_id"], "compaction boundary")
@@ -892,6 +917,60 @@ def _compaction(
             previous_boundary_id
         ):
             raise ValueError("teacher visible-summary boundaries are not one ordered chain")
+        _text(boundary["parent_window_id"], "compaction parent window")
+        _text(boundary["next_target_window_id"], "compaction next-target window")
+        parent_target_index = _count(
+            boundary["parent_target_message_index"], "compaction parent target message"
+        )
+        summary_index = _count(
+            boundary["summary_message_index"], "compaction summary message", positive=True
+        )
+        next_target_index = _count(
+            boundary["next_target_message_index"], "compaction next target message"
+        )
+        pre_indices = ordered_indices(
+            boundary["pre_compaction_prompt_message_indices"],
+            "pre-compaction prompt indices",
+        )
+        summary_indices = ordered_indices(
+            boundary["summary_generation_message_indices"],
+            "summary-generation prompt indices",
+        )
+        post_indices = ordered_indices(
+            boundary["post_compaction_prompt_message_indices"],
+            "post-compaction prompt indices",
+        )
+        for name in (
+            "pre_compaction_prompt_tokens",
+            "summary_generation_prompt_tokens",
+            "post_compaction_prompt_tokens",
+        ):
+            _count(boundary[name], f"compaction {name}", positive=True)
+        if previous_post_indices is None:
+            expected_summary_indices = list(range(summary_index))
+        elif previous_next_target_index is None:  # pragma: no cover - local invariant
+            raise ValueError("teacher visible-summary chain lost its preceding target")
+        else:
+            expected_summary_indices = [
+                *previous_post_indices,
+                *range(previous_next_target_index, summary_index),
+            ]
+        if (
+            max(pre_indices) >= parent_target_index
+            or summary_indices != expected_summary_indices
+            or parent_target_index not in summary_indices
+            or parent_target_index >= summary_index
+            or summary_index not in post_indices
+            or max(post_indices) >= next_target_index
+            or summary_index >= next_target_index
+            or pre_indices == post_indices
+            or boundary["pre_compaction_prompt_sha256"] == boundary["post_compaction_prompt_sha256"]
+            or (
+                previous_summary_message_index is not None
+                and summary_index <= previous_summary_message_index
+            )
+        ):
+            raise ValueError("teacher visible-summary message chronology is not monotone")
         for name in fields:
             if name.endswith("sha256"):
                 _sha(boundary[name], f"compaction {name}")
@@ -926,6 +1005,9 @@ def _compaction(
         ):
             raise ValueError("teacher compaction does not preserve the true visible next prompt")
         previous_boundary_id = boundary_id
+        previous_summary_message_index = summary_index
+        previous_post_indices = post_indices
+        previous_next_target_index = next_target_index
     return result
 
 

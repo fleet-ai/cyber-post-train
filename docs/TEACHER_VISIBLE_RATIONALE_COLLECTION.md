@@ -186,15 +186,30 @@ one ordered, digest-linked chain. Each boundary is tied to the exact source
 session, normalized trajectory, transcript, and target-occurrence manifest,
 and records:
 
-- the prompt before compaction;
-- the prompt used to generate the summary;
+- the identity of the immediately preceding packed window, with the exact
+  ordered message indices, re-rendered token count, and token digest for its
+  prompt;
+- the exact ordered message indices, re-rendered token count, and token digest
+  for the prompt used to generate the summary;
 - the exact ordinary, student-visible summary message;
 - the summary re-rendered through the pinned Qwen tokenizer/template;
-- the prompt after compaction; and
-- the exact prompt used for the next supervised target.
+- the summary's exact source-message index;
+- the exact ordered message indices, re-rendered token count, and token digest
+  for the prompt after compaction; and
+- the identity of the immediately following packed window and the exact prompt
+  used for its supervised target.
 
 It also binds the exact next target occurrence. Boundary indices must be
-contiguous, and each boundary names the digest of the preceding boundary.
+contiguous, and each boundary names the digest of the preceding boundary. For
+records with more than one boundary, summary indices and parent/next packed
+windows must move monotonically forward. A reversed chain, a skipped window, a
+future message, a pre-summary/post-summary identity collision, or a prompt from
+another boundary is rejected even when all caller-provided hashes are
+self-consistent. For a second or later boundary, the summary-generation message
+indices must equal the preceding boundary's post-summary root followed by every
+message from that boundary's next target up to the new summary. This makes the
+ordered continuation ancestry explicit instead of reconstructing compacted-away
+history.
 
 The last two prompt digests must be equal. The visible summary is retained as
 zero-loss context; rationale and actions after it are trained from the prompt

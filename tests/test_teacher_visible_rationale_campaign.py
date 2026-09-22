@@ -442,12 +442,23 @@ def test_exact_visible_compaction_summary_binds_true_next_prompt(tmp_path: Path)
         "normalized_trajectory_sha256": _digest("e"),
         "transcript_sha256": _digest("f"),
         "target_occurrence_manifest_sha256": _digest("3"),
+        "parent_window_id": "window-before",
+        "parent_target_message_index": 2,
+        "pre_compaction_prompt_message_indices": [0, 1],
         "pre_compaction_prompt_sha256": _digest("8"),
+        "pre_compaction_prompt_tokens": 30,
+        "summary_generation_message_indices": [0, 1, 2, 3],
         "summary_generation_prompt_sha256": _digest("9"),
+        "summary_generation_prompt_tokens": 90,
+        "summary_message_index": 4,
         "visible_summary_message_sha256": _digest("a"),
         "visible_summary_qwen_token_sha256": _digest("b"),
         "visible_summary_qwen_tokens": 42,
+        "post_compaction_prompt_message_indices": [0, 1, 4],
         "post_compaction_prompt_sha256": _digest("c"),
+        "post_compaction_prompt_tokens": 45,
+        "next_target_window_id": "window-after",
+        "next_target_message_index": 5,
         "next_target_prompt_sha256": _digest("c"),
         "next_target_occurrence_sha256": _digest("d"),
         "summary_visible_to_student": True,
@@ -509,6 +520,21 @@ def test_exact_visible_compaction_summary_binds_true_next_prompt(tmp_path: Path)
     wrong_manifest = _seal(wrong_manifest)
     with pytest.raises(ValueError, match="true visible next prompt"):
         teacher._attempt(wrong_manifest)
+
+    same_prompt = copy.deepcopy(attempt)
+    same_prompt["compaction"]["boundaries"][0]["post_compaction_prompt_sha256"] = _digest("8")
+    same_prompt["compaction"]["boundaries"][0]["next_target_prompt_sha256"] = _digest("8")
+    same_prompt["compaction"]["boundaries"][0]["post_compaction_prompt_message_indices"] = [0, 1]
+    same_prompt["compaction"]["boundaries"][0]["boundary_id"] = digest_json(
+        {
+            key: item
+            for key, item in same_prompt["compaction"]["boundaries"][0].items()
+            if key != "boundary_id"
+        }
+    )
+    same_prompt = _seal(same_prompt)
+    with pytest.raises(ValueError, match="chronology is not monotone"):
+        teacher._attempt(same_prompt)
 
 
 def test_admission_recomputes_authorized_profile_and_rejects_serialization_drift(

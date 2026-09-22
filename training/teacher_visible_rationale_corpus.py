@@ -522,27 +522,53 @@ def _rendered_compaction(
     windows: list[dict[str, Any]],
     compaction: dict[str, Any],
 ) -> None:
-    """Bind every visible compaction summary to real messages and next prompts."""
+    """Bind every visible compaction summary to one exact parent/child transition."""
 
     if compaction["kind"] == "none":
         return
     message_digests: dict[str, list[int]] = defaultdict(list)
     for index, message in enumerate(messages):
         message_digests[digest_json(message)].append(index)
-    occurrence_windows = {
-        span["target_occurrence_sha256"]: window
-        for window in windows
-        for span in window["target_spans"]
-        if span["kind"] != SUMMARY_KIND
-    }
-    prompt_digests = {window["prompt_token_sha256"] for window in windows}
+    windows_by_id = {window["window_id"]: window for window in windows}
+    if len(windows_by_id) != len(windows):
+        raise ValueError("teacher compaction windows do not have unique identities")
+    ordered_windows = sorted(windows, key=lambda window: window["sequence_index"])
+    position = {window["window_id"]: index for index, window in enumerate(ordered_windows)}
     summary_indices: set[int] = set()
+    previous_parent_position: int | None = None
+    previous_next_position: int | None = None
+    previous_summary_index: int | None = None
+    previous_next_target_index: int | None = None
+    previous_post_indices: list[int] | None = None
     for boundary in compaction["boundaries"]:
+        summary_index = boundary["summary_message_index"]
         candidates = message_digests.get(boundary["visible_summary_message_sha256"], [])
-        if len(candidates) != 1:
+        if len(candidates) != 1 or candidates[0] != summary_index or summary_index >= len(messages):
             raise ValueError("teacher compaction summary is not one exact visible message")
-        summary_index = candidates[0]
         summary = messages[summary_index]
+        parent = windows_by_id.get(boundary["parent_window_id"])
+        next_window = windows_by_id.get(boundary["next_target_window_id"])
+        parent_position = position.get(boundary["parent_window_id"])
+        next_position = position.get(boundary["next_target_window_id"])
+        if (
+            parent is None
+            or next_window is None
+            or parent_position is None
+            or next_position is None
+            or next_position != parent_position + 1
+            or parent["target_message_index"] != boundary["parent_target_message_index"]
+            or next_window["target_message_index"] != boundary["next_target_message_index"]
+            or parent["target_message_index"] >= summary_index
+            or summary_index >= next_window["target_message_index"]
+            or boundary["next_target_occurrence_sha256"]
+            not in {
+                span["target_occurrence_sha256"]
+                for span in next_window["target_spans"]
+                if span["kind"] != SUMMARY_KIND
+            }
+            or summary_index in {window["target_message_index"] for window in windows}
+        ):
+            raise ValueError("teacher compaction is not one immediate parent/next-target boundary")
         if (
             summary_index in summary_indices
             or summary["role"] != "assistant"
@@ -551,24 +577,86 @@ def _rendered_compaction(
         ):
             raise ValueError("teacher compaction summary is hidden, duplicated, or not plain text")
         summary_indices.add(summary_index)
-        prompt = _template_ids(tokenizer, messages[:summary_index], generation=True)
-        rendered = _template_ids(tokenizer, messages[: summary_index + 1], generation=False)
-        continuation = rendered[len(prompt) :] if rendered[: len(prompt)] == prompt else []
-        next_window = occurrence_windows.get(boundary["next_target_occurrence_sha256"])
+
+        pre_indices = boundary["pre_compaction_prompt_message_indices"]
+        summary_prompt_indices = boundary["summary_generation_message_indices"]
+        post_indices = boundary["post_compaction_prompt_message_indices"]
+        if previous_post_indices is None:
+            expected_summary_indices = list(range(summary_index))
+        elif previous_next_target_index is None:  # pragma: no cover - local invariant
+            raise ValueError("teacher compaction chain lost its preceding target")
+        else:
+            expected_summary_indices = [
+                *previous_post_indices,
+                *range(previous_next_target_index, summary_index),
+            ]
+        if (
+            pre_indices != parent["message_indices"][:-1]
+            or summary_prompt_indices != expected_summary_indices
+            or post_indices != next_window["message_indices"][:-1]
+            or summary_index not in post_indices
+            or pre_indices == post_indices
+        ):
+            raise ValueError("teacher compaction message ancestry is cross-wired")
+
+        pre_prompt = _template_ids(
+            tokenizer,
+            [messages[index] for index in pre_indices],
+            generation=True,
+        )
+        summary_prompt = _template_ids(
+            tokenizer,
+            [messages[index] for index in summary_prompt_indices],
+            generation=True,
+        )
+        summary_rendered = _template_ids(
+            tokenizer,
+            [*[messages[index] for index in summary_prompt_indices], summary],
+            generation=False,
+        )
+        continuation = (
+            summary_rendered[len(summary_prompt) :]
+            if summary_rendered[: len(summary_prompt)] == summary_prompt
+            else []
+        )
+        post_prompt = _template_ids(
+            tokenizer,
+            [messages[index] for index in post_indices],
+            generation=True,
+        )
         if (
             not continuation
-            or digest_json(prompt) != boundary["summary_generation_prompt_sha256"]
+            or digest_json(pre_prompt) != boundary["pre_compaction_prompt_sha256"]
+            or len(pre_prompt) != boundary["pre_compaction_prompt_tokens"]
+            or digest_json(summary_prompt) != boundary["summary_generation_prompt_sha256"]
+            or len(summary_prompt) != boundary["summary_generation_prompt_tokens"]
             or digest_json(continuation) != boundary["visible_summary_qwen_token_sha256"]
             or len(continuation) != boundary["visible_summary_qwen_tokens"]
-            or next_window is None
-            or summary_index not in next_window["message_indices"]
-            or next_window["target_message_index"] <= summary_index
+            or digest_json(post_prompt) != boundary["post_compaction_prompt_sha256"]
+            or len(post_prompt) != boundary["post_compaction_prompt_tokens"]
+            or pre_prompt == post_prompt
+            or parent["prompt_token_sha256"] != boundary["pre_compaction_prompt_sha256"]
+            or parent["prompt_token_count"] != boundary["pre_compaction_prompt_tokens"]
             or next_window["prompt_token_sha256"] != boundary["post_compaction_prompt_sha256"]
+            or next_window["prompt_token_count"] != boundary["post_compaction_prompt_tokens"]
             or next_window["prompt_token_sha256"] != boundary["next_target_prompt_sha256"]
-            or boundary["pre_compaction_prompt_sha256"]
-            not in prompt_digests | {boundary["summary_generation_prompt_sha256"]}
         ):
             raise ValueError("teacher compaction does not bind a real visible continuation")
+        if (
+            (previous_parent_position is not None and parent_position <= previous_parent_position)
+            or (previous_next_position is not None and parent_position < previous_next_position)
+            or (previous_summary_index is not None and summary_index <= previous_summary_index)
+            or (
+                previous_next_target_index is not None
+                and parent["target_message_index"] < previous_next_target_index
+            )
+        ):
+            raise ValueError("teacher compaction boundaries reverse or cross their chronology")
+        previous_parent_position = parent_position
+        previous_next_position = next_position
+        previous_summary_index = summary_index
+        previous_next_target_index = next_window["target_message_index"]
+        previous_post_indices = post_indices
 
 
 def _private_record(
@@ -724,8 +812,11 @@ def _private_record(
         window["sequence_index"] for window in checked_windows
     ] != list(range(len(checked_windows))):
         raise ValueError("private teacher windows duplicate or skip their exact order")
-    if len({window["target_message_index"] for window in checked_windows}) != len(checked_windows):
+    target_message_indices = [window["target_message_index"] for window in checked_windows]
+    if len(set(target_message_indices)) != len(target_message_indices):
         raise ValueError("teacher target assistant message is repeated across packed windows")
+    if target_message_indices != sorted(target_message_indices):
+        raise ValueError("teacher target assistant messages are not in exact chronological order")
     expected_offset = 0
     target_tokens = {RATIONALE_KIND: 0, ACTION_KIND: 0}
     for window in checked_windows:

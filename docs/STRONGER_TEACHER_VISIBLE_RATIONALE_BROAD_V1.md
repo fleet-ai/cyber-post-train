@@ -104,10 +104,19 @@ tokens of reserved headroom, and native compaction with automatic continuation.
 Long sessions may continue after compaction, but opaque summaries are never
 accepted as training context.
 
-Every accepted compaction boundary must bind the actual visible summary, the
-prompt before and after compaction, and the true next supervised target in one
-ordered digest chain. The summary remains zero-loss context in both comparison
-arms. It is never treated as a rationale target.
+Every accepted compaction boundary must name the immediately preceding packed
+window and the immediately following packed window. It records the exact,
+ordered source-message indices plus the locally re-rendered Qwen token count and
+digest for the parent prompt, the summary-generation prompt, and the
+post-summary prompt. It also records the exact summary-message index and next
+target-message index. Multiple boundaries must move forward through both the
+message history and packed-window order; reversed, skipped, future, duplicated,
+or cross-wired boundaries are rejected. The actual visible summary is checked
+against the pinned Qwen template, remains zero-loss context in both comparison
+arms, and is never treated as a rationale target. After the first boundary, the
+next summary-generation history must be exactly the previous post-summary root
+followed by every intervening message. It cannot silently restore compacted-away
+history or omit a later action/result.
 
 ## The matched comparison
 
