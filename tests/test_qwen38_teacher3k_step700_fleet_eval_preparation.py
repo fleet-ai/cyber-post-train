@@ -18,6 +18,7 @@ BASE = EVAL / "qwen38-base-fleet-dev17-opencode-seed43-pass1-v1.json"
 PROTOCOL = EVAL / "qwen38-fleet-dev17-seed43-matched-protocol-v1.json"
 SPLIT = ROOT / "configs/data/fleet-blackbox-current-study-split-20260914-v2.json"
 CORPUS = ROOT / "configs/data/qwen38-teacher3k-32k-v1.manifest.json"
+EVIDENCE = ROOT / "docs/evidence/qwen38-teacher3k32-step700-preservation-20260922.json"
 
 
 def read(path: Path) -> dict:
@@ -33,7 +34,7 @@ def assert_self_digest(value: dict, *, prefixed: bool) -> None:
     assert value["sha256"] == (f"sha256:{expected}" if prefixed else expected)
 
 
-def test_packet_is_self_digesting_review_only_and_created_nothing() -> None:
+def test_packet_is_self_digesting_and_evaluation_created_nothing() -> None:
     packet = read(PACKET)
     assert_self_digest(packet, prefixed=False)
     assert packet["status"] == "blocked_not_launchable"
@@ -47,10 +48,24 @@ def test_packet_is_self_digesting_review_only_and_created_nothing() -> None:
         "config_maps_created": 0,
         "databases_created": 0,
         "outputs_created": 0,
-        "routes_resumed_or_created": 0,
+        "routes_resumed_or_created": 1,
         "evaluation_sessions_created": 0,
         "gh_pages_writes": 0,
     }
+
+
+def test_promotion_evidence_records_accepted_stage_and_paused_zero_gpu_route() -> None:
+    evidence = read(EVIDENCE)
+    assert_self_digest(evidence, prefixed=False)
+    assert evidence["status"] == "accepted_through_paused_serving_registration"
+    assert evidence["staging"]["status"] == "accepted_atomic_create_once_stage"
+    assert evidence["staging"]["pod_and_config_map_absent_after_cleanup"] is True
+    registration = evidence["serving_registration"]
+    assert registration["phase"] == "paused"
+    assert registration["active_pods"] == registration["ready_replicas"] == 0
+    assert registration["routing_enabled"] is False
+    assert registration["serving_qualified"] is False
+    assert evidence["live_parity"]["state"] == "unaccepted_not_run_capacity_gate_closed"
 
 
 def test_dev17_is_family_held_out_but_not_application_held_out() -> None:
@@ -162,7 +177,7 @@ def test_accepted_base_is_complete_and_fixed_without_copying_outcomes() -> None:
     assert baseline["scientific_use"].startswith("reuse_without_rerun_only_if")
 
 
-def test_step700_binds_the_accepted_seal_export_and_gpu_reload_but_not_readiness() -> None:
+def test_step700_binds_promotion_through_paused_registration_but_not_live_parity() -> None:
     packet = read(PACKET)
     checkpoint = packet["candidate_checkpoint"]
     assert checkpoint["optimizer_step"] == 700
@@ -212,11 +227,34 @@ def test_step700_binds_the_accepted_seal_export_and_gpu_reload_but_not_readiness
         "chris-q38-t3k32-s700-gpu-check-v1/GPU_CHECK.json"
     )
     assert "accepted_one_gpu_finite_reload_receipt" not in packet["remaining_before_launch_packet"]
-    for gate in ("stage", "serving_registration", "live_parity"):
-        assert gates[gate]["state"].startswith("unaccepted")
-    assert gates["stage"]["payload_manifest_sha256"] is None
-    assert gates["serving_registration"]["served_id"] is None
-    assert gates["serving_registration"]["session_model"] is None
+    stage = gates["stage"]
+    assert stage["state"] == "accepted_atomic_create_once_stage"
+    assert stage["payload_manifest_sha256"] == (
+        "sha256:41310cfdc8ea0d096d784c2f86c2d01fba9ad12263426d1e0fcd812bedcde013"
+    )
+    assert stage["pod_and_config_map_absent_after_cleanup"] is True
+    registration = gates["serving_registration"]
+    assert registration["state"] == "accepted_paused_zero_gpu_not_live_parity_qualified"
+    assert registration["served_id"] == "chris-q38-t3k32-s700-v1"
+    assert registration["session_model"] == "chris-q38-t3k32-s700-v1"
+    assert registration["active_pods"] == 0
+    assert registration["routing_enabled"] is False
+    assert registration["serving_qualified"] is False
+    parity = gates["live_parity"]
+    assert parity["state"] == "unaccepted_not_run_capacity_gate_closed"
+    assert parity["receipt_sha256"] is None
+    assert parity["capacity_gate"] == {
+        "active_project_gpu_nodes": 6,
+        "candidate_gpu_nodes_if_resumed": 1,
+        "limit_gpu_nodes": 8,
+        "queued_rl_gpu_node_claims": 2,
+        "state": "closed",
+    }
+    assert (
+        "accepted_atomic_stage_receipt_with_payload_manifest_sha256"
+        not in packet["remaining_before_launch_packet"]
+    )
+    assert "accepted_serving_registration_receipt" not in packet["remaining_before_launch_packet"]
 
 
 def test_future_config_can_change_only_checkpoint_and_resource_identity() -> None:
@@ -235,8 +273,10 @@ def test_future_config_can_change_only_checkpoint_and_resource_identity() -> Non
     future = packet["future_candidate_config"]
     assert future["state"].startswith("deferred")
     assert future["file_sha256"] is future["evaluation_plan_sha256"] is None
-    assert future["model_revision_from_staged_payload_manifest_sha256"] is None
-    assert future["session_model"] is future["served_id"] is None
+    assert future["model_revision_from_staged_payload_manifest_sha256"] == (
+        "sha256:41310cfdc8ea0d096d784c2f86c2d01fba9ad12263426d1e0fcd812bedcde013"
+    )
+    assert future["session_model"] == future["served_id"] == "chris-q38-t3k32-s700-v1"
     assert all(
         future[field] is None
         for field in ("route_catalog", "route_model_info", "route_server_info")

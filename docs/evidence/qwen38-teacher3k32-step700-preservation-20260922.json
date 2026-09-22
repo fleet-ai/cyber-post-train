@@ -120,11 +120,27 @@
     "started_receipt_sha256": "sha256:c39994af3c42de8c94749f24f97cd38dc2d05697acb1f95b62c1e7fe8c7c71b5",
     "status": "accepted_bounded_zero_update_reload"
   },
+  "live_parity": {
+    "base_route_uid": "d06c0531-7181-41ad-a3fd-cd8e3e774ab9",
+    "candidate_route_uid": "fee02836-0b89-4d2e-8937-65de0bc8dd57",
+    "capacity_gate": {
+      "active_project_gpu_nodes": 6,
+      "candidate_gpu_nodes_if_resumed": 1,
+      "limit_gpu_nodes": 8,
+      "queued_rl_gpu_node_claims": 2,
+      "reason": "Six SFT nodes plus two valid queued RL one-node claims already account for the complete eight-node project plan. Resuming this candidate would project nine nodes.",
+      "state": "closed"
+    },
+    "receipt_file_sha256": null,
+    "receipt_sha256": null,
+    "state": "unaccepted_not_run_capacity_gate_closed"
+  },
   "next_gates": {
     "evaluation": "unlaunched",
     "gpu_reload": "accepted",
-    "serving": "unaccepted",
-    "staging": "unaccepted"
+    "live_parity": "blocked_by_eight_node_capacity_gate",
+    "serving": "accepted_paused_zero_gpu_not_live_parity_qualified",
+    "staging": "accepted"
   },
   "privacy": {
     "credentials_included": false,
@@ -133,6 +149,50 @@
     "tensor_values_read": false
   },
   "schema": "cyber_qwen38_teacher3k32_step700_preservation_evidence_v1",
-  "sha256": "cc02f31f333d7d5e8c4ff1701bf8fd5a4184681652f3724dd1fbe1bdea3c1c57",
-  "status": "accepted_through_gpu_reload_verification"
+  "sha256": "030f28aec04d644fdb5a08f1697ec71f6b4ff1f4aa31ff2ccc6aefaf7d87dece",
+  "serving_registration": {
+    "active_pods": 0,
+    "create_intent_file_sha256": "sha256:89f8c6a1df16ec355f90ea14e0cb606d8009f88449b96f0dd35b5ddfa36bac88",
+    "create_intent_receipt_sha256": "sha256:71eaabb9a891bcbd629f58dfc057458b1ea23a055f2e3362393163caa2353fd8",
+    "create_result_file_sha256": "sha256:fd4bc3c2afe782bdacea97aa7a63224679c989f821fb15d1c1723751f261db6b",
+    "create_result_receipt_sha256": "sha256:39a7c4aad1aa2fddf4cbed9cda06dfad77b756a6bc76d662c5ff5b6edfd027e6",
+    "created_at": "2026-09-22T11:36:27Z",
+    "desired_state": "paused",
+    "minimum_replicas": 0,
+    "model_id": "chris-q38-t3k32-s700-v1",
+    "phase": "paused",
+    "post_attempts": 1,
+    "priority_class": "c1",
+    "ready_replicas": 0,
+    "registration_sha256": "sha256:72cb0f5c2695be7081bdf034e1649585745d06071c8d35a65c806c9be6e0145d",
+    "resource_version_at_acceptance": "32884701",
+    "routing_enabled": false,
+    "serving_qualified": false,
+    "source_path": "/models/chris-q38-t3k32-s700-v1",
+    "uid": "fee02836-0b89-4d2e-8937-65de0bc8dd57"
+  },
+  "staging": {
+    "acceptance_file_sha256": "sha256:ae8708630f1261d0639e43e8ed7d702ab592d31561b18fbd0ee8b09ae2e06442",
+    "acceptance_path": "/models/chris-q38-t3k32-s700-v1/.fleet-acceptance.json",
+    "acceptance_sha256": "sha256:c1966235ee6d4920734d96dccf60be4e6b569c3ca71f3d629ab8216d99f195c1",
+    "config_map_uid": "b435b680-e661-48ee-ab8a-86435ee53fd4",
+    "finished_at": "2026-09-22T11:33:32Z",
+    "gpus": 0,
+    "immutable_path": "/models/chris-q38-t3k32-s700-v1",
+    "payload_file_count": 29,
+    "payload_manifest_sha256": "sha256:41310cfdc8ea0d096d784c2f86c2d01fba9ad12263426d1e0fcd812bedcde013",
+    "payload_total_bytes": 55586032099,
+    "plan_file_sha256": "sha256:e43071a89b798e6bbb215c637af4c8b0702f5aaebe16902a1764e740f5d83513",
+    "plan_path": "configs/qualification/qwen38-teacher3k32-step700-inference-stage-v1.json",
+    "plan_sha256": "sha256:a965b6dc06c502365edaec35be223bd7d3f5c7003dd078aacccc85e609f8644d",
+    "pod_and_config_map_absent_after_cleanup": true,
+    "pod_exit_code": 0,
+    "pod_restarts": 0,
+    "pod_uid": "2f15bda3-9ae4-4f1a-8a3e-9216921a525e",
+    "priority_class": "c1",
+    "source_gpu_reload_verified": true,
+    "source_optimizer_steps_executed": 0,
+    "status": "accepted_atomic_create_once_stage"
+  },
+  "status": "accepted_through_paused_serving_registration"
 }
