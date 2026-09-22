@@ -36,7 +36,9 @@ CAPACITY_MAX_AGE_SECONDS = 120
 PROD_CONTEXT = "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6"
 NAMESPACE = "fleet-train-jobs"
 SOURCE_CLOSURE_SCHEMA = "cyber_skyrl_prod9_source_closure_check_v1"
-CREATE_ONCE_ROOT = Path("/mnt/sfs/jobs/.cyber-post-train-prod9-create-once-v1")
+CREATE_ONCE_ROOT = Path(
+    "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/prod9-create-once-v1"
+)
 CREATOR_BINDING_FILES = {
     "stage": "STAGE_OBSERVER_ARMED.json.created.json",
     "preflight": "PREFLIGHT_OBSERVER_ARMED.json.created.json",

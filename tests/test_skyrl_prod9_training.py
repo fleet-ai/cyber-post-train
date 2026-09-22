@@ -576,7 +576,6 @@ def test_prod9_fresh_direct_renderer_and_cpu_preflight_are_alert_safe() -> None:
         "--receipt",
         "/dev/termination-log",
     ]
-    assert prod9_direct.live_create_is_available() is True
     assert not hasattr(hardening, "create_once")
 
     cpu_rendered = _cpu_render(cpu_job)
@@ -609,7 +608,6 @@ def test_prod9_fresh_direct_renderer_and_cpu_preflight_are_alert_safe() -> None:
     retrying_preview["manifest_yaml"] = yaml.safe_dump(retrying_manifest)
     with pytest.raises(JobsError, match="execution changed"):
         prod9_direct.manifest(plan, request, retrying_preview, identity=identity)
-
     root_preview = copy.deepcopy(preview)
     root_manifest = yaml.safe_load(root_preview["manifest_yaml"])
     root_manifest["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]["containers"][0][
@@ -669,6 +667,31 @@ def test_prod9_fresh_direct_renderer_and_cpu_preflight_are_alert_safe() -> None:
         )
 
 
+def test_prod9_live_create_requires_the_operational_sfs_root(tmp_path: Path, monkeypatch) -> None:
+    assert (
+        Path("/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/prod9-create-once-v1")
+        == hardening.CREATE_ONCE_ROOT
+    )
+    root = tmp_path.resolve() / "prod9-create-once-v1"
+    owner = tmp_path.stat()
+    monkeypatch.setattr(hardening, "CREATE_ONCE_ROOT", root)
+    monkeypatch.setattr(prod9_direct, "RUNTIME_UID", owner.st_uid)
+    monkeypatch.setattr(prod9_direct, "RUNTIME_GID", owner.st_gid)
+    monkeypatch.setattr(prod9_direct.os, "geteuid", lambda: owner.st_uid)
+    monkeypatch.setattr(prod9_direct.os, "getegid", lambda: owner.st_gid)
+
+    assert prod9_direct.live_create_is_available() is False
+
+    root.mkdir(mode=0o700)
+    assert prod9_direct.live_create_is_available() is True
+
+    root.rmdir()
+    target = tmp_path / "target"
+    target.mkdir(mode=0o700)
+    root.symlink_to(target, target_is_directory=True)
+    assert prod9_direct.live_create_is_available() is False
+
+
 def test_prod9_preflight_replaces_the_preexisting_termination_file(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -686,6 +709,62 @@ def test_prod9_preflight_replaces_the_preexisting_termination_file(
     }
     with pytest.raises(ValueError, match="receipt path"):
         prod9_training._write_preflight_receipt(tmp_path / "other", value)
+
+
+def test_prod9_failed_preflight_writes_only_a_sanitized_phase_receipt(
+    tmp_path: Path, monkeypatch
+) -> None:
+    target = tmp_path / "termination-log"
+    monkeypatch.setattr(prod9_training, "PREFLIGHT_RECEIPT", target)
+    monkeypatch.setattr(prod9_training, "_PREFLIGHT_STAGE", "long_horizon_probe")
+    plan = {"schema": "synthetic", "private": "must-not-enter-receipt"}
+
+    prod9_training._write_preflight_failure_receipt(target, plan, AssertionError("secret"))
+
+    value = json.loads(target.read_bytes())
+    body = {key: item for key, item in value.items() if key != "receipt_sha256"}
+    assert value["receipt_sha256"] == digest(body)
+    assert body == {
+        "schema": prod9_training.PREFLIGHT_FAILURE_SCHEMA,
+        "status": "failed",
+        "stage": "long_horizon_probe",
+        "error_class": "AssertionError",
+        "plan_sha256": digest(plan),
+        "gpus": 0,
+        "runtime_user": {"uid": prod9_training.os.geteuid(), "gid": prod9_training.os.getegid()},
+    }
+    assert "secret" not in target.read_text()
+
+
+def test_prod9_native_config_diagnostic_identifies_the_exact_failing_phase(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Config:
+        class SkyRLTrainConfig:
+            @staticmethod
+            def from_cli_overrides(_values: dict) -> object:
+                raise AssertionError("private native detail")
+
+    class Utils:
+        @staticmethod
+        def validate_cfg(_cfg: object) -> None:
+            pytest.fail("validation must not run after parse failure")
+
+    modules = {
+        "skyrl.train.config.config": Config,
+        "skyrl.train.utils.utils": Utils,
+    }
+    monkeypatch.setattr(prod9_training.skyrl, "overrides", lambda _args: {"exact": "values"})
+    monkeypatch.setattr(
+        prod9_training.skyrl_episode,
+        "_module",
+        lambda name, _sha: modules[name],
+    )
+
+    with pytest.raises(AssertionError, match="private native detail"):
+        prod9_training._preflight_native_config(object())
+
+    assert prod9_training._PREFLIGHT_STAGE == "native_config_parse"
 
 
 def test_prod9_one_create_rail_rejects_a_historical_plan_before_any_live_check(
