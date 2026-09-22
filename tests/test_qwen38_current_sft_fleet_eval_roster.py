@@ -86,9 +86,9 @@ def test_each_arm_selects_only_an_exact_accepted_native_receipt() -> None:
     ]
     expected = {
         "q38-t3k32-lead": (
-            900,
-            "sha256:f7eb50db657486f901db6b03e1a17ebf0dcd0d0124c8c7491cb5a405110e54e8",
-            27896516,
+            1000,
+            "sha256:bae4b7215a6b9ebd38461555a2de02dfe822013222280ee0ca6498ad27e892b7",
+            31035607,
         ),
         "q38-t3k32-lr1": (
             700,
@@ -106,9 +106,9 @@ def test_each_arm_selects_only_an_exact_accepted_native_receipt() -> None:
             18752000,
         ),
         "q38-t3k64-b8": (
-            270,
-            "sha256:31a4db6702a6442f92051bb27885e1f45d1bfe865ceefdd00a0a7a34be655d80",
-            14519237,
+            285,
+            "sha256:fb0068f4d3f60ded3d3a725273343672822eeaeea718f4802edbc33a67e432d0",
+            15380675,
         ),
         "q38-t3k96-b8": (
             100,
@@ -124,21 +124,42 @@ def test_each_arm_selects_only_an_exact_accepted_native_receipt() -> None:
         assert checkpoint["world_size"] == 8
         assert checkpoint["file_count"] == 33
         assert row["latest_observed_training_step"] >= step
-        assert row["newer_metric_is_not_checkpoint_evidence"] is True
+        assert row["newer_metric_is_not_checkpoint_evidence"] is (
+            row["latest_observed_training_step"] > step
+        )
 
 
-def test_lead_retargets_atomically_but_native_only_rows_do_not_skip_promotion() -> None:
+def test_lead_retargets_to_step1000_and_keeps_step900_only_as_fallback() -> None:
     candidates = {row["arm_id"]: row for row in read(ROSTER)["candidates"]}
     lead = candidates["q38-t3k32-lead"]
-    assert lead["promotion_state"] == "accepted_through_paused_zero_gpu_registration"
-    assert lead["route_state"] == "paused_routing_disabled_zero_pods"
+    assert lead["selected_checkpoint"]["optimizer_step"] == 1000
+    assert lead["promotion_state"] == "native_checkpoint_only"
+    assert lead["serving_model_id"] is None
+    assert lead["route_state"] == "absent"
     assert lead["live_parity_state"] == "not_run"
-    assert lead["retarget_if_accepted_before_live_parity"] == {
-        "optimizer_step": 1000,
-        "receipt_required": True,
+    assert lead["eval_state"] == "blocked_before_promotion"
+    assert lead["fallback_checkpoint"] == {
+        "artifact_id": "q38-teacher3k-32k-step900",
+        "optimizer_step": 900,
+        "checkpoint_receipt_sha256": (
+            "sha256:f7eb50db657486f901db6b03e1a17ebf0dcd0d0124c8c7491cb5a405110e54e8"
+        ),
+        "promotion_evidence": "docs/evidence/qwen38-teacher3k32-step900-preservation-20260922.json",
+        "serving_model_id": "chris-q38-t3k32-s900-v1",
+        "route_state": "paused_routing_disabled_zero_pods",
+        "selected_for_next_eval": False,
+        "reason": "superseded_by_newer_accepted_step1000_before_live_parity",
+    }
+    assert lead["retarget_before_live_parity"] == {
+        "current_selection_step": 1000,
+        "next_accepted_receipt_wins": True,
         "promotion_required": True,
         "resource_identities_minted": False,
     }
+
+
+def test_other_native_only_rows_do_not_skip_promotion() -> None:
+    candidates = {row["arm_id"]: row for row in read(ROSTER)["candidates"]}
     for arm_id in (
         "q38-t3k32-lr1",
         "q38-sft32-dense-m1",
@@ -155,6 +176,20 @@ def test_lead_retargets_atomically_but_native_only_rows_do_not_skip_promotion() 
     assert ninety_six["serving_model_id"] is None
     assert ninety_six["route_state"] == "absent"
     assert ninety_six["eval_state"] == "blocked_before_gpu_reload"
+
+
+def test_64k_retargets_to_step285_and_keeps_step270_only_as_fallback() -> None:
+    row = {row["arm_id"]: row for row in read(ROSTER)["candidates"]}["q38-t3k64-b8"]
+    assert row["selected_checkpoint"]["optimizer_step"] == 285
+    assert row["fallback_checkpoint"] == {
+        "artifact_id": "q38-t3k64-b8-step270",
+        "optimizer_step": 270,
+        "checkpoint_receipt_sha256": (
+            "sha256:31a4db6702a6442f92051bb27885e1f45d1bfe865ceefdd00a0a7a34be655d80"
+        ),
+        "selected_for_next_eval": False,
+        "reason": "superseded_by_newer_accepted_step285_before_promotion",
+    }
 
 
 def test_atomic_latest_rule_applies_to_every_running_arm() -> None:
