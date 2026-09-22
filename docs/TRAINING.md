@@ -394,7 +394,7 @@ This verifies the saved step and sampler cursor, hashes every rank's model,
 optimizer and random-state files, and writes a create-once manifest without
 changing the checkpoint. Only use trusted checkpoints from the bound run: native
 PyTorch metadata uses pickle. Sealing proves file identity, **not GPU reload**.
-When a seal or independent verifier runs as a direct CPU Pod, send it through
+When a seal, export, or independent verifier runs as a direct CPU Pod, send it through
 the repository's CPU-checkpoint create boundary. That boundary requires c1,
 zero GPUs, the shared CPU pool and architecture, the failed-job alert opt-out,
 and rejects a hostname, `nodeName`, or extra placement affinity before kubectl

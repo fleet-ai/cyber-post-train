@@ -82,7 +82,7 @@ SFT_SCHEMAS = {"cyber_sft_runtime_v2", "cyber_sft_runtime_dense_v1"}
 SFT_SECRET = "wandb-api"
 DIRECT_JOURNAL = "DIRECT_SUBMISSION.jsonl"
 CPU_CHECKPOINT_OPERATION_ANNOTATION = "cyber-post-train.fleet.ai/cpu-checkpoint-operation"
-CPU_CHECKPOINT_OPERATIONS = {"seal", "verify"}
+CPU_CHECKPOINT_OPERATIONS = {"export", "seal", "verify"}
 LORA_TRAINER_IMAGE = (
     "ghcr.io/fleet-ai/skyrl-fleet-v2/trainer@"
     "sha256:7da4adba80d032509dba69fb4dd23bedca17fde3e2b88643815f80d6ee6c5317"
