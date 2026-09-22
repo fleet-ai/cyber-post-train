@@ -13,7 +13,7 @@
     "campaign_plan_file_sha256": "sha256:5f5070e32bd56d7e4bb4d9c0c5aa049ba9ad9e8b0c4155138a504a5422647506",
     "campaign_plan_sha256": "sha256:13e219cd49781427c0a00237d8bea037e85603646fc9451dacc6876f44f716d5",
     "collection_runner_path": "evals/webexploitbench/tensorlake/bootstrap/run_collection_partition.sh",
-    "collection_runner_file_sha256": "sha256:f0de4863a072b66346159df7a8cd7e3cf183333f44a30b18d4d6559513dce0bf",
+    "collection_runner_file_sha256": "sha256:01a97284d2b8bfc94b8487605b3f19279136f718d0ccf861e7f1cb22a6f7c70c",
     "collection_launcher_path": "evals/webexploitbench/tensorlake/collection_launcher.py",
     "collection_launcher_file_sha256": "sha256:f7082ee21af35929ade5c554c8cf87824bb18ededcd6f9dde87d821437ee3679",
     "collection_supervisor_path": "evals/webexploitbench/tensorlake/collection_supervisor.py",
@@ -60,5 +60,5 @@
     "scoring_requests": 0,
     "external_mutations": 0
   },
-  "receipt_sha256": "sha256:ca47200ac20fa9a3688d125a0dd59ed3b3198e264a138d4c1cb09101c7d79110"
+  "receipt_sha256": "sha256:e93f1cbf424097f566c8db8171389101e31027d81cddc0842c9c4c8c977d7882"
 }
