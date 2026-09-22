@@ -429,7 +429,14 @@ def packet(
     return {**body, "sha256": "sha256:" + digest(body)}
 
 
-def _cpu_job(name: str, image: str, command: str, env: dict[str, str]) -> dict[str, Any]:
+def _cpu_job(
+    name: str,
+    image: str,
+    command: str,
+    env: dict[str, str],
+    *,
+    wandb: bool,
+) -> dict[str, Any]:
     """Build the root-annotated zero-GPU exact-image preflight Job."""
     if not re.fullmatch(r"[a-z0-9]([-a-z0-9]*[a-z0-9])?", name):
         raise JobsError("prod9 CPU preflight name changed")
@@ -447,6 +454,8 @@ def _cpu_job(name: str, image: str, command: str, env: dict[str, str]) -> dict[s
         "terminationMessagePolicy": "File",
         "volumeMounts": [{"name": "sfs", "mountPath": "/mnt/sfs"}],
     }
+    if wandb:
+        container["envFrom"] = [{"secretRef": {"name": "wandb-api"}}]
     return {
         "apiVersion": "batch/v1",
         "kind": "Job",
@@ -496,6 +505,7 @@ def stage_job_manifest(
         request["image"],
         request["command"],
         {**request["env"], "RUN_DIR": "/tmp"},
+        wandb=False,
     )
     if "nvidia.com/gpu" in json.dumps(job, sort_keys=True) or (
         job["metadata"]["annotations"].get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
@@ -515,6 +525,7 @@ def preflight_job_manifest(
         or request.get("priority_class") != "c1"
         or request.get("workers") != 1
         or request.get("gpus_per_worker") != 8
+        or request.get("secrets") != ["fleet-api", "wandb-api"]
     ):
         raise JobsError("prod9 CPU preflight request changed")
     job = _cpu_job(
@@ -522,9 +533,13 @@ def preflight_job_manifest(
         request["image"],
         request["command"],
         {**request["env"], "RUN_DIR": "/tmp"},
+        wandb=True,
     )
-    if "nvidia.com/gpu" in json.dumps(job, sort_keys=True) or (
-        job["metadata"]["annotations"].get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
+    container = job["spec"]["template"]["spec"]["containers"][0]
+    if (
+        "nvidia.com/gpu" in json.dumps(job, sort_keys=True)
+        or job["metadata"]["annotations"].get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
+        or container.get("envFrom") != [{"secretRef": {"name": "wandb-api"}}]
     ):
         raise JobsError("prod9 CPU preflight root resource/alert contract changed")
     return job

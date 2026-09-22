@@ -711,6 +711,24 @@ def test_prod9_preflight_replaces_the_preexisting_termination_file(
         prod9_training._write_preflight_receipt(tmp_path / "other", value)
 
 
+def test_prod9_cpu_preflight_projects_only_the_required_wandb_secret() -> None:
+    plan, _request, identity = _prod9_plan()
+    predecessor = json.loads(
+        (ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json").read_text()
+    )
+
+    preflight = prod9_direct.preflight_job_manifest(plan, identity=identity)
+    stage = prod9_direct.stage_job_manifest(
+        prod9_training.stage_spec(identity, predecessor),
+        identity=identity,
+    )
+
+    container = preflight["spec"]["template"]["spec"]["containers"][0]
+    stage_container = stage["spec"]["template"]["spec"]["containers"][0]
+    assert container["envFrom"] == [{"secretRef": {"name": "wandb-api"}}]
+    assert "envFrom" not in stage_container
+
+
 def test_prod9_failed_preflight_writes_only_a_sanitized_phase_receipt(
     tmp_path: Path, monkeypatch
 ) -> None:
