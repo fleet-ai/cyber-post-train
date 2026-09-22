@@ -9,12 +9,14 @@ from pathlib import Path
 import pytest
 
 from cyber_post_train.jobs import digest
+from evals.fleet import evaluate
 
 ROOT = Path(__file__).resolve().parents[1]
 EVAL = ROOT / "configs/evaluation"
 WBE = EVAL / "qwen38-teacher3k-32k-step600-opencode-wbe-preparation-v1.json"
 FLEET = EVAL / "qwen38-teacher3k-32k-step600-fleet-dev17-seed43-preparation-v1.json"
 FLEET_BASE = EVAL / "qwen38-base-fleet-dev17-opencode-seed43-pass1-v1.json"
+FLEET_CANDIDATE = EVAL / "qwen38-teacher3k32-step600-fleet-dev17-opencode-seed43-pass1-v1.json"
 FLEET_PROTOCOL = EVAL / "qwen38-fleet-dev17-seed43-matched-protocol-v1.json"
 TASK_SET = EVAL / "qwen38-fresh75-fleet-dev17-task-set-v1.json"
 SPLIT = ROOT / "configs/data/fleet-blackbox-current-study-split-20260914-v2.json"
@@ -361,6 +363,35 @@ def test_fleet_packet_reuses_the_exact_accepted_seed43_protocol() -> None:
     assert matched["fallback_rule"].startswith("If exact candidate export")
 
 
+def test_fleet_candidate_config_matches_base_treatment_and_changes_only_model() -> None:
+    candidate_config = read(FLEET_CANDIDATE)
+    base_config = read(FLEET_BASE)
+    candidate = evaluate.compile_eval(candidate_config, relative_to=FLEET_CANDIDATE.parent)
+    base = evaluate.compile_eval(base_config, relative_to=FLEET_BASE.parent)
+
+    packet = read(FLEET)["candidate_arm"]
+    assert packet["evaluation_config"] == {
+        "path": str(FLEET_CANDIDATE.relative_to(ROOT)),
+        "file_sha256": file_sha256(FLEET_CANDIDATE),
+    }
+    assert packet["evaluation_plan_sha256"] == "sha256:" + candidate["sha256"]
+    assert candidate["tasks"] == base["tasks"]
+    assert candidate["treatment"] == base["treatment"]
+    assert candidate["images"] == base["images"]
+    assert candidate["sampling"] == base["sampling"]
+    assert candidate["pass_k"] == base["pass_k"] == 1
+    assert candidate["max_reviewed_infrastructure_retries"] == 1
+    assert candidate["automatic_retry"] is False
+    assert candidate["training_data_eligible"] is False
+    assert len(evaluate.plan_rows(candidate)) == 17
+
+    route = candidate["routes"]["teacher3k32"]
+    model = candidate["models"]["teacher3k32-step600"]
+    assert route["served_id"] == "chris-q38-t3k32-s600-web-v1"
+    assert model["revision"] == PAYLOAD_MANIFEST_SHA256
+    assert model["session_model"] == "qwen/chris-q38-t3k32-s600-web-v1"
+
+
 def test_fleet_candidate_and_resource_identities_remain_fail_closed() -> None:
     packet = read(FLEET)
     candidate = packet["candidate_arm"]
@@ -397,10 +428,13 @@ def test_fleet_candidate_and_resource_identities_remain_fail_closed() -> None:
         "live_parity_receipt_sha256",
         "session_model",
         "served_id",
-        "evaluation_config",
-        "evaluation_plan_sha256",
     ):
         assert candidate[field] is None
+    assert candidate["evaluation_config"] == {
+        "path": str(FLEET_CANDIDATE.relative_to(ROOT)),
+        "file_sha256": file_sha256(FLEET_CANDIDATE),
+    }
+    assert candidate["evaluation_plan_sha256"].startswith("sha256:")
 
     resources = packet["resource_identities"]
     assert resources["minted"] is False

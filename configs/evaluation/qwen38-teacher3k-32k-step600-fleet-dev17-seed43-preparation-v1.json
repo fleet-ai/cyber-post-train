@@ -48,14 +48,18 @@
     "accepted_complete_export_layout_receipt",
     "accepted_one_gpu_finite_reload_receipt",
     "accepted_atomic_stage_receipt",
-    "accepted_serving_registration_receipt"
+    "accepted_serving_registration_receipt",
+    "compiled_candidate_config_proving_exact_seed43_task_harness_sampling_and_retry_parity"
   ],
   "candidate_arm": {
     "cpu_layout_receipt_file_sha256": "sha256:d7afc0aa51666658d4cc377f14f095bf2b81e5ad9338f519b30f2f6d162d86eb",
     "cpu_layout_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/hf-export-step600-v1-cpu-check.json",
     "cpu_layout_receipt_sha256": "sha256:1253403c8088c6e610ad025d573b7fe618a9a2af9ee4bbc683bb888008de74bd",
-    "evaluation_config": null,
-    "evaluation_plan_sha256": null,
+    "evaluation_config": {
+      "file_sha256": "sha256:293503f1185ab682fb71512a8427d68cb5a480c1ce315a6135644952fa87644e",
+      "path": "configs/evaluation/qwen38-teacher3k32-step600-fleet-dev17-opencode-seed43-pass1-v1.json"
+    },
+    "evaluation_plan_sha256": "sha256:31f90cb389c66be8041cfd3b9a4cdab287d9678196aee5d8b4f7afd3c8a1a2c9",
     "export_payload_revision": "sha256:adf5d8c6609ea441744eab13ed0649c22eb4ad5f95baeebdcd60880c206702a6",
     "export_receipt_file_sha256": "sha256:93b27c9a58ec85c309ee214a8e6924754fbfdd766f9537ec68d2ac3f978d1543",
     "export_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/hf-export-step600-v1/EXPORT.json",
@@ -239,7 +243,6 @@
   },
   "remaining_before_launch_packet": [
     "accepted_candidate_to_baseline_live_parity_receipt",
-    "compiled_candidate_config_proving_exact_seed43_task_harness_sampling_and_retry_parity",
     "fresh_duplicate_census_for_new_job_configmap_database_output_and_workload_identities",
     "double_server_dry_run_proving_the_exact_root_failure_alert_annotation"
   ],
@@ -261,7 +264,7 @@
     "minted": false,
     "output_root": null,
     "pod": null,
-    "reason": "New candidate evaluation resource identities are minted only after fresh live parity, the exact candidate config, duplicate census, and double server dry-run are accepted.",
+    "reason": "New candidate evaluation resource identities are minted only after fresh live parity, duplicate census, and double server dry-run are accepted.",
     "workload": null
   },
   "schema": "cyber_qwen38_teacher3k_32k_step600_fleet_dev17_seed43_preparation_v1",
@@ -275,6 +278,6 @@
     "question": "How does the exact Teacher3K 32K step-600 checkpoint change the immutable Fleet dev17 seed-43 pass@1 result relative to the accepted Qwen3.8 base control when the task set, harness, sampling, retry treatment, and serving contract are unchanged?",
     "task_prompts_or_rollouts_accessed_by_this_preparation": false
   },
-  "sha256": "e2b99adf1b5d622887bd27749a9b3d0df0d46482614f0aed5686cfe759d8fbb2",
+  "sha256": "f610a3598325adb43022342eba37b8b1ceb4065260a56ec14e044efb4e2f0ad8",
   "status": "blocked_not_launchable"
 }
