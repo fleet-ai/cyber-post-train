@@ -33,6 +33,10 @@ from training import skyrl_reward_rayjob as historical_direct
 pytest_plugins = ("test_skyrl_training",)
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_CLOSURE = ROOT / "configs/data/qwen38-rl-reward-canary-exact-version-evidence-v8.json"
+STARTUP_INCIDENT = (
+    ROOT
+    / "docs/evidence/qwen38-study/2026-09-22-skyrl-fresh-wrapper-startup-failure-v1.json"
+)
 
 
 def test_prod9_reuses_only_the_proven_miles_shape_and_qwen38_reload_gate() -> None:
@@ -69,6 +73,19 @@ def test_prod9_reuses_only_the_proven_miles_shape_and_qwen38_reload_gate() -> No
     assert reload_gate["generated_tokens"] == 2
     assert reload_gate["optimizer_updates"] == 0
     assert hardening.verify_source_closure(SOURCE_CLOSURE)["tool_result_token_safe"] is True
+
+
+def test_fresh_wrapper_startup_incident_preserves_failure_and_release_evidence() -> None:
+    value = json.loads(STARTUP_INCIDENT.read_text())
+    unsigned = {key: item for key, item in value.items() if key != "sha256"}
+
+    assert value["sha256"] == "sha256:" + digest(unsigned)
+    assert {row["lane"] for row in value["runs"]} == {"prod9", "lane2"}
+    assert all(row["sanitized_entrypoint_error_class"] == "RuntimeError" for row in value["runs"])
+    assert all(row["failure_alerts"] == "off" for row in value["runs"])
+    assert value["root_cause"]["native_subprocess_started"] is False
+    assert value["resource_reconciliation"]["active_gpus_for_exact_runs"] == 0
+    assert value["scientific_result"]["capability_claim"] is False
 
 
 @pytest.mark.parametrize(
