@@ -69,8 +69,9 @@ def test_step900_evidence_proves_cleanup_and_keeps_live_evaluation_closed() -> N
     assert evidence["dev_cleanup"]["all_objects_absent"] is True
     assert evidence["dev_cleanup"]["gpus_after_cleanup"] == 0
     assert evidence["stage"]["plan_sha256"] == plan["plan_sha256"]
-    assert evidence["stage"]["payload_manifest_sha256"] == (
-        plan["source"]["payload"]["manifest_sha256"]
+    assert (
+        evidence["stage"]["payload_manifest_sha256"]
+        == (plan["source"]["payload"]["manifest_sha256"])
     )
     assert evidence["stage"]["pod_and_config_map_absent_after_cleanup"] is True
     registration = evidence["registration"]
