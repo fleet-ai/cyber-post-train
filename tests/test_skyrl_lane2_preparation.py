@@ -6,6 +6,7 @@ import base64
 import copy
 import gzip
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest import mock
 
@@ -104,9 +105,11 @@ def _source_preview(plan: dict, request: dict) -> dict:
                 "fleet.ai/run-id": "00000000-0000-0000-0000-000000000000",
                 "fleet.ai/job-image": request["image"],
                 "fleet.ai/run-dir": plan["output_root"],
+                "fleet.ai/failure-alerts": "off",
             },
         },
         "spec": {
+            "backoffLimit": 0,
             "entrypoint": request["command"],
             "submissionMode": "HTTPMode",
             "suspend": True,
@@ -127,6 +130,7 @@ def _source_preview(plan: dict, request: dict) -> dict:
                                         {"secretRef": {"name": "wandb-api"}},
                                         {"secretRef": {"name": placeholder + "-fleet-key"}},
                                     ],
+                                    "securityContext": direct.shared._runtime_context(),
                                     "resources": {
                                         "requests": {
                                             "cpu": resources["cpu_request"],
@@ -159,6 +163,67 @@ def _source_preview(plan: dict, request: dict) -> dict:
         },
     }
     return {"name": placeholder, "warnings": [], "manifest_yaml": yaml.safe_dump(value)}
+
+
+def _direct_render(value: dict) -> dict:
+    rendered = copy.deepcopy(value)
+    rendered["metadata"].update(
+        {
+            "creationTimestamp": "2026-09-22T00:00:00Z",
+            "generation": 1,
+            "uid": "00000000-0000-0000-0000-000000000001",
+        }
+    )
+    rendered["spec"]["ttlSecondsAfterFinished"] = 0
+    rendered["spec"]["rayClusterSpec"]["headGroupSpec"].update(
+        {"numOfHosts": 1, "scaleStrategy": {}}
+    )
+    return rendered
+
+
+def _cpu_render(value: dict) -> dict:
+    rendered = copy.deepcopy(value)
+    uid = "00000000-0000-0000-0000-000000000002"
+    name = value["metadata"]["name"]
+    generated = {
+        "batch.kubernetes.io/controller-uid": uid,
+        "batch.kubernetes.io/job-name": name,
+        "controller-uid": uid,
+        "job-name": name,
+    }
+    rendered["metadata"].update(
+        {
+            "creationTimestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "generation": 1,
+            "uid": uid,
+            "labels": {**value["metadata"]["labels"], **generated},
+        }
+    )
+    rendered["status"] = {}
+    rendered["spec"].update(
+        {
+            "completionMode": "NonIndexed",
+            "completions": 1,
+            "manualSelector": False,
+            "parallelism": 1,
+            "podReplacementPolicy": "TerminatingOrFailed",
+            "selector": {"matchLabels": {"batch.kubernetes.io/controller-uid": uid}},
+            "suspend": True,
+        }
+    )
+    rendered["spec"]["template"]["metadata"]["labels"] = {
+        **value["spec"]["template"]["metadata"]["labels"],
+        **generated,
+    }
+    rendered["spec"]["template"]["spec"].update(
+        {
+            "dnsPolicy": "ClusterFirst",
+            "schedulerName": "default-scheduler",
+            "terminationGracePeriodSeconds": 30,
+        }
+    )
+    rendered["spec"]["template"]["spec"]["containers"][0]["imagePullPolicy"] = "IfNotPresent"
+    return rendered
 
 
 def test_lane2_is_disjoint_mixed_outcome_and_train_only() -> None:
@@ -197,6 +262,15 @@ def test_lane2_current_runtime_request_and_manifests_are_alert_safe() -> None:
     bundle = _bundle(request)
     preview = _source_preview(plan, request)
     rayjob = direct.manifest(plan, request, preview)
+    packet = direct.packet(plan, request, preview)
+    server_proof = direct.validate_server_preview(
+        plan,
+        request,
+        preview,
+        rayjob,
+        _direct_render(rayjob),
+        context=direct.PROD_CONTEXT,
+    )
     cpu_job = direct.preflight_job_manifest(plan)
     data_job = direct.data_job_manifest()
 
@@ -210,6 +284,10 @@ def test_lane2_current_runtime_request_and_manifests_are_alert_safe() -> None:
         bundle["files"]["training/skyrl_lane2_training.py"] == Path(training.__file__).read_text()
     )
     assert rayjob["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+    assert rayjob == yaml.safe_load(preview["manifest_yaml"])
+    assert packet["name"] == preview["name"]
+    assert packet["run_name_prefix"] == plan["run_name"]
+    assert server_proof["nodes"] == 1 and server_proof["gpus"] == 8
     assert rayjob["metadata"]["labels"]["kueue.x-k8s.io/priority-class"] == "q1"
     assert rayjob["spec"]["rayClusterSpec"].get("workerGroupSpecs") in (None, [])
     assert cpu_job["metadata"]["annotations"] == {"fleet.ai/failure-alerts": "off"}
@@ -218,9 +296,20 @@ def test_lane2_current_runtime_request_and_manifests_are_alert_safe() -> None:
     data_container = data_job["spec"]["template"]["spec"]["containers"][0]
     data_environment = {item["name"]: item["value"] for item in data_container["env"]}
     assert data_job["metadata"]["annotations"] == {"fleet.ai/failure-alerts": "off"}
+    assert data_job["metadata"]["labels"] == {
+        "kueue.x-k8s.io/queue-name": "training-lq",
+        "kueue.x-k8s.io/priority-class": "q1",
+    }
+    assert data_job["spec"]["suspend"] is True
     assert data_container["envFrom"] == [{"secretRef": {"name": "fleet-api"}}]
     assert "nvidia.com/gpu" not in json.dumps(data_job, sort_keys=True)
     assert _bundle({"env": data_environment})["module"] == "training.skyrl_lane2_data"
+    data_proof = direct.validate_data_server_preview(
+        data_job,
+        _cpu_render(data_job),
+        context=direct.PROD_CONTEXT,
+    )
+    assert data_proof["gpus"] == 0 and data_proof["queue_priority"] == "q1"
     assert direct.live_create_is_available() is False
 
 
@@ -233,10 +322,32 @@ def test_lane2_fails_closed_on_optimizer_or_alert_drift() -> None:
 
     preview = _source_preview(plan, request)
     source = yaml.safe_load(preview["manifest_yaml"])
-    source["metadata"]["annotations"]["fleet.ai/failure-alerts"] = "off"
+    source["metadata"]["annotations"].pop("fleet.ai/failure-alerts")
     preview["manifest_yaml"] = yaml.safe_dump(source)
-    with pytest.raises(JobsError, match="identity or admission changed"):
+    with pytest.raises(JobsError, match="root alert-off"):
         direct.manifest(plan, request, preview)
+
+    preview = _source_preview(plan, request)
+    source = yaml.safe_load(preview["manifest_yaml"])
+    source["spec"]["backoffLimit"] = 1
+    preview["manifest_yaml"] = yaml.safe_dump(source)
+    with pytest.raises(JobsError, match="execution changed"):
+        direct.manifest(plan, request, preview)
+
+    preview = _source_preview(plan, request)
+    source = yaml.safe_load(preview["manifest_yaml"])
+    source["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]["containers"][0][
+        "securityContext"
+    ].pop("allowPrivilegeEscalation")
+    preview["manifest_yaml"] = yaml.safe_dump(source)
+    with pytest.raises(JobsError, match="runtime security context"):
+        direct.manifest(plan, request, preview)
+
+    data_job = direct.data_job_manifest()
+    rendered = _cpu_render(data_job)
+    rendered["spec"]["suspend"] = False
+    with pytest.raises(JobsError, match="Kueue suspension"):
+        direct.validate_data_server_preview(data_job, rendered, context=direct.PROD_CONTEXT)
 
 
 def test_lane2_data_main_reports_the_existing_builder_contract(
@@ -266,6 +377,7 @@ def test_lane2_data_main_reports_the_existing_builder_contract(
     data.main()
 
     assert json.loads(capsys.readouterr().out) == {
+        "schema": "cyber_skyrl_lane2_data_receipt_v1",
         "status": "built",
         "submitted": False,
         "gpus": 0,
@@ -275,3 +387,41 @@ def test_lane2_data_main_reports_the_existing_builder_contract(
         },
         "manifest_sha256": "sha256:" + "a" * 64,
     }
+
+
+def test_lane2_data_main_writes_only_the_sanitized_termination_receipt(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    built = {
+        "manifest_sha256": "sha256:" + "a" * 64,
+        "files": {
+            "train": {"rows": 1, "sha256": "sha256:" + "b" * 64},
+            "dev": {"rows": 1, "sha256": "sha256:" + "c" * 64},
+        },
+        "submitted": False,
+        "private_rows": [{"prompt": "must-not-enter-receipt"}],
+    }
+
+    class Client:
+        def __enter__(self) -> object:
+            return object()
+
+        def __exit__(self, *_: object) -> None:
+            return None
+
+    receipt = tmp_path / "termination-log"
+    monkeypatch.setenv("FLEET_API_KEY", "test-only")
+    monkeypatch.setattr(data, "RECEIPT", receipt)
+    monkeypatch.setattr(data.httpx, "Client", lambda **_: Client())
+    monkeypatch.setattr(data.rl_data, "build", lambda *_args, **_kwargs: built)
+    monkeypatch.setattr("sys.argv", ["skyrl_lane2_data", "--receipt", str(receipt)])
+
+    data.main()
+
+    value = json.loads(receipt.read_bytes())
+    body = {key: item for key, item in value.items() if key != "receipt_sha256"}
+    assert value["receipt_sha256"] == digest(body)
+    assert "must-not-enter-receipt" not in receipt.read_text()
+    assert json.loads(capsys.readouterr().out) == body

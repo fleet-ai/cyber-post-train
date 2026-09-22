@@ -1,14 +1,12 @@
-"""Non-submitting root-annotated manifests for the lane2 SkyRL canary."""
+"""Non-submitting, current-API launch gates for the lane2 SkyRL canary."""
 
 from __future__ import annotations
 
 import copy
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from uuid import NAMESPACE_URL, uuid5
-
-import yaml
 
 from cyber_post_train.jobs import (
     FAILURE_ALERT_ANNOTATION,
@@ -23,6 +21,7 @@ from . import skyrl_prod9_direct as shared
 
 PACKET_SCHEMA = "cyber_skyrl_lane2_direct_rayjob_packet_v1"
 PREVIEW_SCHEMA = "cyber_skyrl_lane2_direct_rayjob_preview_v1"
+DATA_PREVIEW_SCHEMA = "cyber_skyrl_lane2_data_job_preview_v1"
 NAMESPACE = shared.NAMESPACE
 DEV_CONTEXT = shared.DEV_CONTEXT
 PROD_CONTEXT = shared.PROD_CONTEXT
@@ -47,13 +46,8 @@ def _identity(plan: dict[str, Any]) -> tuple[str, str]:
     return name, preflight
 
 
-def _run_id(plan: dict[str, Any]) -> str:
-    name, _ = _identity(plan)
-    return str(uuid5(NAMESPACE_URL, f"fleet-direct-rayjob:{name}:{digest(plan)}"))
-
-
 def manifest(plan: dict[str, Any], request: dict[str, Any], preview: dict[str, Any]) -> dict:
-    """Project a Jobs preview into one root-annotated one-node RayJob."""
+    """Accept the exact current Jobs API preview without transforming it."""
     name, _ = _identity(plan)
     if training.job_request(plan) != request:
         raise JobsError("lane2 plan/request identity changed")
@@ -74,25 +68,21 @@ def manifest(plan: dict[str, Any], request: dict[str, Any], preview: dict[str, A
         or annotations.get("fleet.ai/run-id") != "00000000-0000-0000-0000-000000000000"
         or annotations.get("fleet.ai/run-dir") != plan["output_root"]
         or annotations.get("fleet.ai/job-image") != request["image"]
-        or FAILURE_ALERT_ANNOTATION in annotations
+        or annotations.get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
     ):
-        raise JobsError("lane2 Jobs preview identity or admission changed")
-    result = copy.deepcopy(source)
-    run_id = _run_id(plan)
-    result["metadata"]["name"] = name
-    result["metadata"]["labels"]["fleet.ai/run-id"] = run_id
-    result["metadata"]["annotations"]["fleet.ai/run-id"] = run_id
-    result["metadata"]["annotations"][FAILURE_ALERT_ANNOTATION] = FAILURE_ALERT_OFF
-    spec = result["spec"]
+        raise JobsError(
+            "lane2 Jobs API preview lacks the exact root alert-off or admission contract"
+        )
+    training.validate_preview(plan, request, preview)
+    spec = source["spec"]
     if (
         spec.get("entrypoint") != request["command"]
         or spec.get("suspend") is not True
         or spec.get("shutdownAfterJobFinishes") is not True
         or spec.get("submissionMode") != "HTTPMode"
+        or spec.get("backoffLimit") != 0
     ):
         raise JobsError("lane2 Jobs preview execution changed")
-    spec["backoffLimit"] = 0
-    spec["activeDeadlineSeconds"] = MAXIMUM_SECONDS
     cluster = spec.get("rayClusterSpec", {})
     if cluster.get("workerGroupSpecs") not in (None, []):
         raise JobsError("lane2 must remain one physical GPU node")
@@ -101,18 +91,14 @@ def manifest(plan: dict[str, Any], request: dict[str, Any], preview: dict[str, A
     if len(containers) != 1:
         raise JobsError("lane2 preview must contain one head container")
     container = containers[0]
-    shared._replace_env(container, "FLEET_RUN_ID", run_id)
-    shared._replace_env(container, "FLEET_RUN_NAME", name)
     generated_secret = placeholder + "-fleet-key"
     secret_names = [row.get("secretRef", {}).get("name") for row in container.get("envFrom", [])]
     if secret_names != ["fleet-api", "wandb-api", generated_secret]:
         raise JobsError("lane2 Jobs preview secret bindings changed")
-    container["envFrom"] = [
-        row
-        for row in container["envFrom"]
-        if row.get("secretRef", {}).get("name") != generated_secret
-    ]
-    container["securityContext"] = shared._runtime_context()
+    if container.get("securityContext") != shared._runtime_context():
+        raise JobsError("lane2 Jobs preview runtime security context changed")
+    if container.get("terminationMessagePath", "/dev/termination-log") != ("/dev/termination-log"):
+        raise JobsError("lane2 Jobs preview termination receipt path changed")
     init = head.get("initContainers", [])
     sfs = [item for item in init if item.get("name") == "sfs-init"]
     if len(sfs) != 1 or sfs[0].get("command") != [
@@ -121,17 +107,7 @@ def manifest(plan: dict[str, Any], request: dict[str, Any], preview: dict[str, A
         f"mkdir -p {plan['output_root']} && chown 1000:100 {plan['output_root']}",
     ]:
         raise JobsError("lane2 output initialization changed")
-    sfs[0]["command"] = [
-        "sh",
-        "-ec",
-        f"mkdir {plan['output_root']}; chown 1000:100 {plan['output_root']}",
-    ]
-    training.validate_preview(
-        plan,
-        request,
-        {"manifest_yaml": yaml.safe_dump(result, sort_keys=True), "warnings": []},
-    )
-    return result
+    return source
 
 
 def packet(plan: dict, request: dict, preview: dict) -> dict:
@@ -142,8 +118,8 @@ def packet(plan: dict, request: dict, preview: dict) -> dict:
         "request_sha256": digest(request),
         "jobs_preview_sha256": digest(preview),
         "manifest_sha256": digest(value),
-        "direct_run_id": _run_id(plan),
-        "name": plan["run_name"],
+        "name": preview["name"],
+        "run_name_prefix": plan["run_name"],
         "namespace": NAMESPACE,
         "failure_alerts": "off",
         "submitted": False,
@@ -226,7 +202,12 @@ def data_job_manifest() -> dict[str, Any]:
         },
         files,
         "training.skyrl_lane2_data",
-        ["--config", "configs/qualification/qwen38-skyrl-lane2-data-v1.json"],
+        [
+            "--config",
+            "configs/qualification/qwen38-skyrl-lane2-data-v1.json",
+            "--receipt",
+            PREFLIGHT_RECEIPT,
+        ],
     )
     job = shared._cpu_job(
         name,
@@ -236,9 +217,18 @@ def data_job_manifest() -> dict[str, Any]:
     )
     container = job["spec"]["template"]["spec"]["containers"][0]
     container["envFrom"] = [{"secretRef": {"name": "fleet-api"}}]
+    queue_labels = {
+        "kueue.x-k8s.io/queue-name": "training-lq",
+        "kueue.x-k8s.io/priority-class": "q1",
+    }
+    job["metadata"]["labels"] = copy.deepcopy(queue_labels)
+    job["spec"]["suspend"] = True
+    job["spec"]["template"]["metadata"]["labels"] = copy.deepcopy(queue_labels)
     if (
         "nvidia.com/gpu" in json.dumps(job, sort_keys=True)
         or job["metadata"]["annotations"] != {FAILURE_ALERT_ANNOTATION: FAILURE_ALERT_OFF}
+        or job["metadata"]["labels"] != queue_labels
+        or job["spec"].get("suspend") is not True
         or job["spec"]["template"]["spec"]["priorityClassName"] != "c1"
     ):
         raise JobsError("lane2 data Job resource/alert contract changed")
@@ -270,13 +260,84 @@ def validate_server_preview(
         "request_sha256": digest(request),
         "manifest_sha256": digest(expected),
         "server_render_sha256": digest(rendered),
-        "name": plan["run_name"],
+        "name": source_preview["name"],
+        "run_name_prefix": plan["run_name"],
         "nodes": 1,
         "gpus": 8,
         "priority": "c1",
         "queue_priority": "q1",
         "failure_alerts": "off",
         "submitted": False,
+        "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    return {**body, "sha256": "sha256:" + digest(body)}
+
+
+def validate_data_server_preview(
+    expected: dict[str, Any], rendered: dict[str, Any], *, context: str
+) -> dict[str, Any]:
+    """Prove Kueue preserves the exact alert-safe, suspended data Job.
+
+    The shared prod9 validator owns the Kubernetes default surface.  Normalize
+    only the two explicit queue labels and explicit suspension before invoking
+    it; every other unexpected server mutation remains fatal.
+    """
+    queue_labels = {
+        "kueue.x-k8s.io/queue-name": "training-lq",
+        "kueue.x-k8s.io/priority-class": "q1",
+    }
+    if expected != data_job_manifest():
+        raise JobsError("lane2 data Job changed before server preview")
+    if (
+        context not in {DEV_CONTEXT, PROD_CONTEXT}
+        or expected.get("metadata", {}).get("labels") != queue_labels
+        or expected.get("spec", {}).get("suspend") is not True
+        or expected.get("spec", {}).get("template", {}).get("metadata", {}).get("labels")
+        != queue_labels
+    ):
+        raise JobsError("lane2 data Job queue binding changed")
+
+    normalized_expected = copy.deepcopy(expected)
+    normalized_rendered = copy.deepcopy(rendered)
+    for value in (normalized_expected, normalized_rendered):
+        root_labels = value.get("metadata", {}).get("labels", {})
+        template_labels = (
+            value.get("spec", {}).get("template", {}).get("metadata", {}).get("labels", {})
+        )
+        if any(root_labels.get(key) != item for key, item in queue_labels.items()) or any(
+            template_labels.get(key) != item for key, item in queue_labels.items()
+        ):
+            raise JobsError("lane2 data Job server preview changed queue labels")
+        for key in queue_labels:
+            root_labels.pop(key)
+            template_labels.pop(key)
+        if not root_labels:
+            value["metadata"].pop("labels")
+        if not template_labels:
+            value["spec"]["template"]["metadata"].pop("labels")
+    if normalized_rendered.get("spec", {}).get("suspend") is not True:
+        raise JobsError("lane2 data Job server preview bypassed Kueue suspension")
+    normalized_expected["spec"].pop("suspend")
+    normalized_rendered["spec"]["suspend"] = False
+    shared.validate_cpu_preview(
+        normalized_expected,
+        normalized_rendered,
+        context=context,
+        purpose="stage",
+    )
+    body = {
+        "schema": DATA_PREVIEW_SCHEMA,
+        "status": "passed",
+        "context": context,
+        "name": expected["metadata"]["name"],
+        "manifest_sha256": "sha256:" + digest(expected),
+        "server_render_sha256": "sha256:" + digest(rendered),
+        "gpus": 0,
+        "priority": "c1",
+        "queue_priority": "q1",
+        "failure_alerts": "off",
+        "submitted": False,
+        "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     return {**body, "sha256": "sha256:" + digest(body)}
 
