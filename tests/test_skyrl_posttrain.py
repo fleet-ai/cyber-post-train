@@ -11,7 +11,6 @@ from types import SimpleNamespace
 import pytest
 import torch
 from safetensors.torch import save_file
-from test_dev_cleanup_observer import FakeDirectRayJobCluster
 from test_export import distributed
 from test_rl_data import setup  # noqa: F401
 from test_skyrl_data import skyrl as data_setup  # noqa: F401
@@ -285,6 +284,16 @@ def completed_prod9_rl(completed_rl, monkeypatch):
     create_once_root = state.root.parent / "prod9-create-once"
     create_once_root.mkdir()
     monkeypatch.setattr(prod9, "CREATE_ONCE_ROOT", create_once_root)
+    monkeypatch.setattr(
+        skyrl_prod9_training,
+        "job_request",
+        lambda plan: {"synthetic_request_plan_sha256": digest(plan)},
+    )
+    monkeypatch.setattr(
+        skyrl_prod9_reload,
+        "_reload_run_dir",
+        lambda plan, step: f"/mnt/sfs/jobs/{plan['run_name']}-p{step}-reload-v1",
+    )
     state.manifest = state.root.parent / "prod9-seal.json"
     return state
 
@@ -379,6 +388,8 @@ def test_prod9_reload_spec_binds_exact_checkpoint_export_and_model(
 
 
 def _terminal_inputs(state):
+    from cyber_post_train.gpu_capacity import build_capacity_census
+
     paths = prod9.terminal_paths(state.plan)
     manifest = post.seal_checkpoint(state.plan, paths["checkpoint_manifest"])
     exported = post.export_checkpoint(
@@ -387,43 +398,6 @@ def _terminal_inputs(state):
         paths["export"].parent,
     )
     training_receipt = json.loads((state.root / "NATIVE_TRAINING_COMPLETE.json").read_text())
-    training_manifest_sha256 = "sha256:" + "b" * 64
-    training_cluster = FakeDirectRayJobCluster(
-        name=state.plan["run_name"],
-        gpus=8,
-        receipt=training_receipt,
-    )
-    training_observer = cleanup_observer.Observer(
-        context=cleanup_observer.PROD_CONTEXT,
-        namespace=cleanup_observer.NAMESPACE,
-        kind="rayjob",
-        name=state.plan["run_name"],
-        maximum_seconds=skyrl_prod9_direct.MAXIMUM_SECONDS,
-        expected_gpus=8,
-        plan_sha256="sha256:" + digest(state.plan),
-        manifest_sha256=training_manifest_sha256,
-        armed_path=paths["training_creator_binding"].parent / "TRAINING_OBSERVER_ARMED.json",
-        result_path=paths["training_observer"],
-        poll_seconds=0.001,
-        profile="production-direct",
-        run=training_cluster,
-    )
-    original_training_arm = training_observer.arm
-
-    def arm_and_bind_training():
-        armed = original_training_arm()
-        skyrl_prod9_direct._publish_creator_binding(
-            armed,
-            kind="rayjob",
-            name=state.plan["run_name"],
-            plan_sha256="sha256:" + digest(state.plan),
-            manifest_sha256=training_manifest_sha256,
-            uid="00000000-0000-0000-0000-000000000020",
-        )
-        return armed
-
-    training_observer.arm = arm_and_bind_training
-    training_observer.run()
     write_receipt(
         paths["gpu_check"],
         {
@@ -446,41 +420,227 @@ def _terminal_inputs(state):
             "serving_qualified": False,
         },
     )
-    reload_name = state.plan["run_name"] + "-p2-reload-v1"
     gpu_receipt = json.loads(paths["gpu_check"].read_text())
-    manifest_sha256 = "sha256:" + "a" * 64
-    cluster = FakeDirectRayJobCluster(name=reload_name, gpus=1, receipt=gpu_receipt)
-    observer = cleanup_observer.Observer(
-        context=cleanup_observer.PROD_CONTEXT,
-        namespace=cleanup_observer.NAMESPACE,
-        kind="rayjob",
-        name=reload_name,
-        maximum_seconds=1800,
-        expected_gpus=1,
-        plan_sha256="sha256:" + digest(state.plan),
-        manifest_sha256=manifest_sha256,
-        armed_path=paths["reload_observer"].with_name("OBSERVER_ARMED.json"),
-        result_path=paths["reload_observer"],
-        poll_seconds=0.001,
-        profile="production-reload",
-        run=cluster,
+    reload_spec = skyrl_prod9_reload.build_spec(
+        state.plan,
+        manifest,
+        exported,
+        checkpoint_manifest_file_sha256=file_digest(paths["checkpoint_manifest"]),
+        export_file_sha256=file_digest(paths["export"]),
     )
-    original_arm = observer.arm
+    reload_operation = prod9.reload_operation_root(reload_spec)
+    reload_operation.mkdir()
+    paths["reload_creator_binding"] = prod9.creator_binding_path(reload_operation, "reload")
+    paths["reload_create_journal"] = reload_operation / "PROD9_RELOAD_RAYJOB_CREATE.jsonl"
 
-    def arm_and_bind():
-        armed = original_arm()
-        skyrl_prod9_direct._publish_creator_binding(
-            armed,
-            kind="rayjob",
-            name=reload_name,
-            plan_sha256="sha256:" + digest(state.plan),
-            manifest_sha256=manifest_sha256,
-            uid="00000000-0000-0000-0000-000000000020",
+    def creator(path, *, prefix, run_dir, gpus, maximum, suffix, uid):
+        value = sealed(
+            {
+                "schema": cleanup_observer.JOBS_API_EXACT_BINDING_SCHEMA,
+                "status": "bound_exact_uid_cleanup_not_started",
+                "prefix_guard_sha256": "sha256:" + "a" * 64,
+                "context": cleanup_observer.PROD_CONTEXT,
+                "namespace": cleanup_observer.NAMESPACE,
+                "jobs_api_run_name": prefix + "-" + suffix,
+                "jobs_api_run_id": "00000000-0000-0000-0000-000000000019",
+                "run_dir": run_dir,
+                "rayjob_name": prefix + "-" + suffix,
+                "rayjob_uid": uid,
+                "rayjob_created_at": "2026-09-21T00:00:00Z",
+                "bound_at": "2026-09-21T00:00:01Z",
+                "failure_alerts": "off",
+                "maximum_seconds": maximum,
+                "expected_gpus": gpus,
+                "cleanup_started": False,
+            }
         )
-        return armed
+        path.parent.mkdir(parents=True, exist_ok=True)
+        write(path, value)
+        return value
 
-    observer.arm = arm_and_bind
-    observer.run()
+    def journal(
+        path,
+        *,
+        schema,
+        plan_sha,
+        request_sha,
+        creator_value,
+        gpus,
+        manifest_sha,
+        spec_sha=None,
+    ):
+        census = build_capacity_census(
+            {"items": []},
+            {"items": []},
+            planned_nodes=1,
+            planned_gpus=gpus,
+            observed_at="2026-09-21T00:00:00Z",
+        )
+        capacity = sealed(
+            {
+                "schema": "synthetic_prod9_capacity_gate_v1",
+                "status": "passed",
+                "context": prod9.PROD_CONTEXT,
+                "plan_sha256": plan_sha,
+                "request_sha256": request_sha,
+                "manifest_sha256": manifest_sha,
+                "planned": {"nodes": 1, "gpus": gpus},
+                "capacity_census": census,
+            }
+        )
+        preview = sealed(
+            {
+                "schema": "synthetic_prod9_live_preview_v1",
+                "status": "passed",
+                "context": prod9.PROD_CONTEXT,
+                "request_sha256": request_sha,
+                "manifest_sha256": manifest_sha,
+                "failure_alerts": "off",
+                "priority": "c1",
+                "queue_priority": "q1",
+                "nodes": 1,
+                "gpus": gpus,
+            }
+        )
+        auth_sha = "sha256:" + "d" * 64
+        preview_sha = "sha256:" + "e" * 64
+        created_body = {
+            "schema": schema,
+            "status": "submitted_once_and_bound_exact_uid",
+            "plan_sha256": plan_sha,
+            "request_sha256": request_sha,
+            "manifest_sha256": manifest_sha,
+            "authorization_sha256": auth_sha,
+            "live_jobs_preview_sha256": preview_sha,
+            "live_preview_proof_sha256": preview["sha256"],
+            "capacity_gate_sha256": capacity["sha256"],
+            "jobs_api_run_name": creator_value["jobs_api_run_name"],
+            "jobs_api_run_id": creator_value["jobs_api_run_id"],
+            "rayjob_name": creator_value["rayjob_name"],
+            "rayjob_uid": creator_value["rayjob_uid"],
+            "creator_binding_sha256": creator_value["sha256"],
+            "created_at": creator_value["rayjob_created_at"],
+            "failure_alerts": "off",
+            "priority": "c1",
+            "queue_priority": "q1",
+            "nodes": 1,
+            "gpus": gpus,
+        }
+        if spec_sha is not None:
+            created_body["spec_sha256"] = spec_sha
+        created = sealed(created_body)
+        rows = [
+            {
+                "state": "POST_INTENT_DO_NOT_RETRY",
+                "plan_sha256": plan_sha,
+                "request_sha256": request_sha,
+                "manifest_sha256": manifest_sha,
+                "authorization_sha256": auth_sha,
+                "live_jobs_preview_sha256": preview_sha,
+                "live_preview_proof": preview,
+                "capacity_gate": capacity,
+            },
+            {
+                "state": "POST_RESPONSE",
+                "name": creator_value["jobs_api_run_name"],
+                "job_id": creator_value["jobs_api_run_id"],
+                "run_dir": creator_value["run_dir"],
+                "status": "queued",
+                "created_at": None,
+            },
+            created,
+        ]
+        path.write_text("".join(json.dumps(row, sort_keys=True) + "\n" for row in rows))
+        return created
+
+    def observer(path, *, creator_value, gpus, receipt, child_suffix):
+        value = sealed(
+            {
+                "schema": cleanup_observer.JOBS_API_EXACT_OBSERVER_SCHEMA,
+                "status": "released_after_terminal",
+                "reason": "exact_root_and_observed_children_absent",
+                "release_confirmed": True,
+                "context": cleanup_observer.PROD_CONTEXT,
+                "namespace": cleanup_observer.NAMESPACE,
+                "binding_sha256": creator_value["sha256"],
+                "jobs_api_run_name": creator_value["jobs_api_run_name"],
+                "jobs_api_run_id": creator_value["jobs_api_run_id"],
+                "rayjob_name": creator_value["rayjob_name"],
+                "rayjob_uid": creator_value["rayjob_uid"],
+                "created_at": creator_value["rayjob_created_at"],
+                "deadline_at": "2026-09-21T06:00:00Z",
+                "maximum_seconds": creator_value["maximum_seconds"],
+                "terminal_status": "Succeeded",
+                "owned_inventory_observed": True,
+                "raycluster_identity_observed": True,
+                "workloads": [{"name": child_suffix + "-workload", "uid": str(uuid.uuid4())}],
+                "rayclusters": [{"name": child_suffix + "-cluster", "uid": str(uuid.uuid4())}],
+                "pods": [{"name": child_suffix + "-pod-23", "uid": str(uuid.uuid4())}],
+                "peak_gpus": gpus,
+                "active_gpus": 0,
+                "restarts": 0,
+                "exit_codes": [0],
+                "receipt": receipt,
+                "cleanup_status": "not_requested_root_already_absent",
+                "cleanup_requested": False,
+                "private_logs_read": False,
+            }
+        )
+        write(path, value)
+        return value
+
+    training_creator = creator(
+        paths["training_creator_binding"],
+        prefix=state.plan["run_name"],
+        run_dir=state.plan["output_root"],
+        gpus=8,
+        maximum=skyrl_prod9_direct.MAXIMUM_SECONDS,
+        suffix="1a2b3c4d",
+        uid="00000000-0000-0000-0000-000000000020",
+    )
+    journal(
+        paths["training_create_journal"],
+        schema=skyrl_prod9_direct.CREATED_SCHEMA,
+        plan_sha="sha256:" + digest(state.plan),
+        request_sha="sha256:" + digest(skyrl_prod9_training.job_request(state.plan)),
+        creator_value=training_creator,
+        gpus=8,
+        manifest_sha="sha256:" + "b" * 64,
+    )
+    observer(
+        paths["training_observer"],
+        creator_value=training_creator,
+        gpus=8,
+        receipt=training_receipt,
+        child_suffix=state.plan["run_name"],
+    )
+    reload_request = skyrl_prod9_reload.job_request(reload_spec)
+    reload_creator = creator(
+        paths["reload_creator_binding"],
+        prefix=reload_request["name"],
+        run_dir=reload_spec["run_dir"],
+        gpus=1,
+        maximum=skyrl_prod9_reload.MAXIMUM_SECONDS,
+        suffix="2b3c4d5e",
+        uid="00000000-0000-0000-0000-000000000021",
+    )
+    journal(
+        paths["reload_create_journal"],
+        schema=skyrl_prod9_reload.CREATED_SCHEMA,
+        plan_sha="sha256:" + digest(state.plan),
+        request_sha="sha256:" + digest(reload_request),
+        creator_value=reload_creator,
+        gpus=1,
+        manifest_sha="sha256:" + "a" * 64,
+        spec_sha=reload_spec["sha256"],
+    )
+    observer(
+        paths["reload_observer"],
+        creator_value=reload_creator,
+        gpus=1,
+        receipt=gpu_receipt,
+        child_suffix=reload_spec["name"],
+    )
     return paths, manifest, exported
 
 
@@ -496,15 +656,18 @@ def test_rl_terminal_acceptance_requires_exact_seal_export_reload_and_release(
         export=paths["export"],
         training_observer=paths["training_observer"],
         training_creator_binding=paths["training_creator_binding"],
+        training_create_journal=paths["training_create_journal"],
         gpu_check=paths["gpu_check"],
         reload_observer=paths["reload_observer"],
+        reload_creator_binding=paths["reload_creator_binding"],
+        reload_create_journal=paths["reload_create_journal"],
         output=paths["accepted"],
     )
 
     assert accepted["schema"] == prod9.ACCEPTANCE_SCHEMA
     assert accepted["checkpoint_manifest_receipt_sha256"] == manifest["receipt_sha256"]
     assert accepted["export_receipt_sha256"] == exported["receipt_sha256"]
-    assert accepted["training_rayjob_name"] == state.plan["run_name"]
+    assert accepted["training_rayjob_name"] == state.plan["run_name"] + "-1a2b3c4d"
     assert accepted["training_pod_names"] == [state.plan["run_name"] + "-pod-23"]
     assert accepted["complete_bf16_reload_verified"] is True
     assert accepted["gpu_resources_released"] is True
@@ -515,8 +678,11 @@ def test_rl_terminal_acceptance_requires_exact_seal_export_reload_and_release(
             export=paths["export"],
             training_observer=paths["training_observer"],
             training_creator_binding=paths["training_creator_binding"],
+            training_create_journal=paths["training_create_journal"],
             gpu_check=paths["gpu_check"],
             reload_observer=paths["reload_observer"],
+            reload_creator_binding=paths["reload_creator_binding"],
+            reload_create_journal=paths["reload_create_journal"],
             output=paths["accepted"],
         )
 
@@ -532,6 +698,9 @@ def test_rl_terminal_acceptance_requires_exact_seal_export_reload_and_release(
         "training_release",
         "training_uid",
         "training_receipt",
+        "training_created",
+        "training_request",
+        "reload_capacity",
         "wrong_path",
     ],
 )
@@ -570,7 +739,7 @@ def test_rl_terminal_acceptance_rejects_incomplete_reload_or_release(completed_p
         )
     elif fault == "observer_manifest":
         value = json.loads(paths["reload_observer"].read_text())
-        value["manifest_sha256"] = "not-a-digest"
+        value["binding_sha256"] = "sha256:" + "0" * 64
         write(
             paths["reload_observer"],
             sealed({key: item for key, item in value.items() if key != "sha256"}),
@@ -596,6 +765,49 @@ def test_rl_terminal_acceptance_rejects_incomplete_reload_or_release(completed_p
             paths["training_observer"],
             sealed({key: item for key, item in value.items() if key != "sha256"}),
         )
+    elif fault == "training_created":
+        rows = [
+            json.loads(line) for line in paths["training_create_journal"].read_text().splitlines()
+        ]
+        rows[2]["capacity_gate_sha256"] = "sha256:" + "0" * 64
+        rows[2] = sealed({key: item for key, item in rows[2].items() if key != "sha256"})
+        paths["training_create_journal"].write_text(
+            "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows)
+        )
+    elif fault == "training_request":
+        rows = [
+            json.loads(line) for line in paths["training_create_journal"].read_text().splitlines()
+        ]
+        wrong = "sha256:" + "9" * 64
+        rows[0]["request_sha256"] = wrong
+        for key in ("capacity_gate", "live_preview_proof"):
+            rows[0][key]["request_sha256"] = wrong
+            rows[0][key] = sealed(
+                {item: value for item, value in rows[0][key].items() if item != "sha256"}
+            )
+        rows[2]["request_sha256"] = wrong
+        rows[2]["capacity_gate_sha256"] = rows[0]["capacity_gate"]["sha256"]
+        rows[2]["live_preview_proof_sha256"] = rows[0]["live_preview_proof"]["sha256"]
+        rows[2] = sealed({key: item for key, item in rows[2].items() if key != "sha256"})
+        paths["training_create_journal"].write_text(
+            "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows)
+        )
+    elif fault == "reload_capacity":
+        rows = [
+            json.loads(line) for line in paths["reload_create_journal"].read_text().splitlines()
+        ]
+        census = rows[0]["capacity_gate"]["capacity_census"]
+        census["planned"] = {"nodes": 1, "gpus": 8}
+        census["sha256"] = digest({key: item for key, item in census.items() if key != "sha256"})
+        capacity = rows[0]["capacity_gate"]
+        rows[0]["capacity_gate"] = sealed(
+            {key: item for key, item in capacity.items() if key != "sha256"}
+        )
+        rows[2]["capacity_gate_sha256"] = rows[0]["capacity_gate"]["sha256"]
+        rows[2] = sealed({key: item for key, item in rows[2].items() if key != "sha256"})
+        paths["reload_create_journal"].write_text(
+            "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows)
+        )
     else:
         paths["export"] = paths["export"].with_name("other.json")
     with pytest.raises(ValueError):
@@ -605,8 +817,11 @@ def test_rl_terminal_acceptance_rejects_incomplete_reload_or_release(completed_p
             export=paths["export"],
             training_observer=paths["training_observer"],
             training_creator_binding=paths["training_creator_binding"],
+            training_create_journal=paths["training_create_journal"],
             gpu_check=paths["gpu_check"],
             reload_observer=paths["reload_observer"],
+            reload_creator_binding=paths["reload_creator_binding"],
+            reload_create_journal=paths["reload_create_journal"],
             output=paths["accepted"],
         )
     assert not paths["accepted"].exists()

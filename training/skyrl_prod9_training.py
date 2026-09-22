@@ -2,8 +2,8 @@
 
 This module binds the long-horizon canary to the token-safe prod9 recorder
 without changing the sealed historical SkyRL compiler or rollout module.  It
-is intentionally preparation-only: the historical direct-RayJob rail rejects
-this schema, so a future launch needs a separately reviewed fresh direct rail.
+is accepted only through the separately reviewed generic Jobs API rail; the
+historical direct-RayJob rail continues to reject this schema.
 """
 
 from __future__ import annotations
@@ -14,11 +14,12 @@ import copy
 import hashlib
 import json
 import os
+import shlex
 import sys
 from contextlib import suppress
 from pathlib import Path
 
-from cyber_post_train.jobs import JobsError, bundled_request, digest
+from cyber_post_train.jobs import JobsError, bundled_request, digest, validate_request
 
 from . import skyrl, skyrl_episode
 from . import skyrl_prod9_hardening as hardening
@@ -229,7 +230,11 @@ def _bundled_request(plan: dict, extra_argv: list[str]) -> dict:
 
 def job_request(plan: dict) -> dict:
     """Build one fresh GPU bundle whose entrypoint is this module, not historical."""
-    return _bundled_request(plan, [])
+    request = _bundled_request(plan, [])
+    claim = plan["output_root"] + "/.prod9-training-create-claim-v1"
+    request["command"] = "mkdir " + shlex.quote(claim) + " && exec " + request["command"]
+    validate_request(request)
+    return request
 
 
 def preflight_request(plan: dict, *, receipt: str = "/dev/termination-log") -> dict:
@@ -397,6 +402,21 @@ def _write_preflight_receipt(path: Path, value: dict) -> None:
 def _write_stage_receipt(path: Path, value: dict) -> None:
     """Write only the zero-GPU stage receipt to Kubernetes' fixed file."""
     _write_termination_receipt(path, value)
+
+
+def _write_gpu_termination_receipt(value: dict) -> None:
+    """Expose the sealed native completion to the exact-UID observer."""
+    body = {key: item for key, item in value.items() if key != "sha256"}
+    if value.get("status") != "native_loop_returned" or value.get("sha256") != digest(body):
+        raise ValueError("prod9 GPU termination receipt is not a sealed native completion")
+    encoded = (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    if len(encoded) > TERMINATION_MESSAGE_MAX_BYTES:
+        raise ValueError("prod9 GPU termination receipt is too large")
+    fd = os.open(PREFLIGHT_RECEIPT, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as stream:
+        stream.write(encoded)
+        stream.flush()
+        os.fsync(stream.fileno())
 
 
 def validate_preview(plan: dict, request: dict, preview: dict) -> dict:
@@ -618,6 +638,7 @@ def main() -> None:
                 raise
         else:
             result = run(plan, args.plan)
+            _write_gpu_termination_receipt(result)
             print(json.dumps({key: result[key] for key in ("status", "sha256")}))
     except BaseException as exc:
         print(json.dumps({"status": "failed", "error_class": type(exc).__name__}))

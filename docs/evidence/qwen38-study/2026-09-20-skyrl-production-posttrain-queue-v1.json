@@ -5,8 +5,8 @@
       "launchable": false,
       "name": "chris-q38-skyrl10-a1",
       "packet": "configs/qualification/qwen38-skyrl-production-posttrain-a1-v1.json",
-      "packet_file_sha256": "sha256:f3dbc214cf05cc39efa99eab3831d905f9b1e50a18c1e691dfbafbc7d468f716",
-      "packet_self_sha256": "sha256:cafd44e37fdbeb295bed7104a05073ae3563611d1e4f3349704ae64c1d99f4ce",
+      "packet_file_sha256": "sha256:358625b83d30aedb24eb9273a7c8a116a092b41a8d1d3f0361a2800db752e387",
+      "packet_self_sha256": "sha256:d6c42f968c6d033bf54aaa9d2d18e6b6ed80b17dfa716373343f8e2d37f7f1db",
       "terminal_checkpoint": "/mnt/sfs/jobs/chris-q38-skyrl10-a1/checkpoints/global_step_10"
     },
     {
@@ -14,8 +14,8 @@
       "launchable": false,
       "name": "chris-q38-skyrl10-lr3e7",
       "packet": "configs/qualification/qwen38-skyrl-production-posttrain-lr3e7-v1.json",
-      "packet_file_sha256": "sha256:9633c40c16c76ee7efc201cd34aa849f27543a1ecaa4d09b7e348ff31fe09a48",
-      "packet_self_sha256": "sha256:e6312bb26dd1dd8dab886f032bcdc31f447c5f6924e39190eb91fcb2097d1598",
+      "packet_file_sha256": "sha256:7c6e5e4ea4f9d8feaece78581dc2d5eed66972065663b1be2c860cc3c7f52ad6",
+      "packet_self_sha256": "sha256:a63e1f38f59e3f9a6aa33c02b9a8f0ab6b163f903a8952414b55c65dfab0abdd",
       "terminal_checkpoint": "/mnt/sfs/jobs/chris-q38-skyrl10-lr3e7/checkpoints/global_step_10"
     },
     {
@@ -23,8 +23,8 @@
       "launchable": false,
       "name": "chris-q38-skyrl10-lr3e6",
       "packet": "configs/qualification/qwen38-skyrl-production-posttrain-lr3e6-v1.json",
-      "packet_file_sha256": "sha256:0e02846377714b9a5e6f6e075cea52d56f252481727fdb85b506190bedef98f9",
-      "packet_self_sha256": "sha256:f04cbdf2d53a4d60c6d44fd8b306fc0ef84b46fc46e10ba556c255329d137551",
+      "packet_file_sha256": "sha256:a807675b95be2024f4079165a86b1c9cb3b4e2a95e402509ede431bf15dbc074",
+      "packet_self_sha256": "sha256:eec2e3cd57f035b0345904f81729d6bbb480435f92259d6e60f222704d17f06c",
       "terminal_checkpoint": "/mnt/sfs/jobs/chris-q38-skyrl10-lr3e6/checkpoints/global_step_10"
     },
     {
@@ -32,8 +32,8 @@
       "launchable": false,
       "name": "chris-q38-skyrl10-seed43",
       "packet": "configs/qualification/qwen38-skyrl-production-posttrain-seed43-v1.json",
-      "packet_file_sha256": "sha256:abb007748265384c2ac1df7b9d159230802792bef3fce6c223bfa44326ea6a92",
-      "packet_self_sha256": "sha256:9d70e12ecf804489bf25f20bda80f28c97dbbcac5921475ca90f427d2673f463",
+      "packet_file_sha256": "sha256:f5c6e5be73c220b81eb1db3e53c519fe369fc31729a54fe3a0592072bc933fe1",
+      "packet_self_sha256": "sha256:ef448256ccec7de9899719aff2c134f7c2f1de190455754ce176f6ffa33b30d2",
       "terminal_checkpoint": "/mnt/sfs/jobs/chris-q38-skyrl10-seed43/checkpoints/global_step_10"
     },
     {
@@ -41,8 +41,8 @@
       "launchable": false,
       "name": "chris-q38-skyrl50-a1",
       "packet": "configs/qualification/qwen38-skyrl-production-posttrain-dose50-v1.json",
-      "packet_file_sha256": "sha256:e24b4b9f2c23a8e8ab7c1a9f4c00378e0b95ad7b9da2c991482e54e5985f7f34",
-      "packet_self_sha256": "sha256:bd6e76a115a6da55fda72783be722edd10e3220efab750e6c4464f493b40378f",
+      "packet_file_sha256": "sha256:119d0b85f295801b5fd5a227b2ac667079763e73f880436cdeb279faa9a8b9b2",
+      "packet_self_sha256": "sha256:50302871b5b7cc3e551311f21732e1b6979042f8fc6bc9aab2fdeb513ea39d9d",
       "terminal_checkpoint": "/mnt/sfs/jobs/chris-q38-skyrl50-a1/checkpoints/global_step_50"
     }
   ],
@@ -64,5 +64,5 @@
   ],
   "schema": "cyber_qwen38_skyrl_posttrain_queue_evidence_v1",
   "scope": "offline_no_submit_no_stage_no_serve_no_eval",
-  "sha256": "sha256:740d54b37afce83698e43ccd7b0696ac6721315806690bbe480849f759caff42"
+  "sha256": "sha256:bcb05ad7ed98b8c57430e97057c396dc8cadf9a10e789af0a7e444efd1da2e1b"
 }

@@ -1529,6 +1529,16 @@ class FakeJobsApiExactObserverCluster:
         self.pod_uid = _metadata("unused", 404)["uid"]
         self.replacement_root: dict | None = None
         self.bad_workload_owner = False
+        self.receipt = {
+            "status": "native_loop_returned",
+            "plan_sha256": "1" * 64,
+            "checkpoint_global_step": 1,
+            "completed_batches": 3,
+            "completed_at": 1.0,
+            "optimizer_update_independently_verified": False,
+            "checkpoint_reload_verified": False,
+        }
+        self.receipt["sha256"] = digest(self.receipt)
 
     def _owner(self, *, kind: str, name: str, uid: str) -> list[dict]:
         return [{"kind": kind, "name": name, "uid": uid, "controller": True}]
@@ -1588,6 +1598,7 @@ class FakeJobsApiExactObserverCluster:
                 ),
             },
             "spec": {
+                "initContainers": [{"name": "sfs-init", "resources": {}}],
                 "containers": [
                     {
                         "name": "trainer",
@@ -1597,15 +1608,30 @@ class FakeJobsApiExactObserverCluster:
                             "limits": {"nvidia.com/gpu": self.binding["expected_gpus"]},
                         },
                     }
-                ]
+                ],
             },
             "status": {
+                "initContainerStatuses": [
+                    {
+                        "restartCount": 0,
+                        "state": {"terminated": {"exitCode": 0}},
+                    }
+                ],
                 "containerStatuses": [
                     {
                         "name": "trainer",
                         "imageID": "registry/image@sha256:" + "b" * 64,
+                        "restartCount": 0,
+                        "state": {
+                            "terminated": {
+                                "exitCode": 0,
+                                "message": json.dumps(
+                                    self.receipt, sort_keys=True, separators=(",", ":")
+                                ),
+                            }
+                        },
                     }
-                ]
+                ],
             },
         }
 
@@ -1693,6 +1719,10 @@ def test_jobs_api_exact_uid_observer_releases_only_proven_owned_children(tmp_pat
     assert result["peak_gpus"] == 8
     assert result["requested_image"] == binding["image"]
     assert result["runtime_image_identity_complete"] is True
+    assert result["active_gpus"] == 0
+    assert result["restarts"] == 0
+    assert result["exit_codes"] == [0, 0]
+    assert result["receipt"] == cluster.receipt
     assert result["cleanup_status"] == "not_authorized"
     assert result["private_logs_read"] is False
     assert [entry["uid"] for entry in result["workloads"]] == [cluster.workload_uid]

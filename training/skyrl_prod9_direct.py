@@ -1,12 +1,14 @@
-"""Fresh prod9-only RayJob renderer and bounded one-create rail.
+"""Fresh prod9-only Jobs API gate and bounded one-submit rail.
 
 The historical prod8 direct rail deliberately rejects prod9's fresh runtime
-schema.  This module owns the replacement *rendering* boundary: it makes the
-exact-image CPU preflight Job and the one-node RayJob available for review and
-server preview, with the root failed-job-alert opt-out already present.  It has
+schema.  This module owns the replacement *validation* boundary: it makes the
+exact-image CPU preflight Job available for review and requires the generic
+Jobs API to render the one-node RayJob with the root failed-job-alert opt-out
+already present.  It has
 the exact zero-GPU stage/preflight receipts, fresh preview/absence evidence,
 root alert-off proof, and project capacity proof before it can perform one
-non-retry create.  Nothing in this module invokes that create by itself.
+non-retry Jobs API submission.  Nothing in this module invokes that submission
+by itself, and it never rewrites or directly creates a GPU RayJob.
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-from uuid import NAMESPACE_URL, UUID, uuid5
+from uuid import UUID
 
 import yaml
 
@@ -136,6 +138,61 @@ def _observer_pid(
     return value
 
 
+def jobs_api_guard_path(root: Path, purpose: str) -> Path:
+    """Return the identity-derived pre-POST prefix-guard receipt path."""
+    if purpose not in {"training", "reload"}:
+        raise JobsError("prod9 Jobs API guard purpose is invalid")
+    return root / (purpose.upper() + "_JOBS_API_PREFIX_GUARD.json")
+
+
+def _jobs_api_prefix_guard(
+    observer: object,
+    *,
+    operation_root: Path,
+    purpose: str,
+    request: dict[str, Any],
+    plan_sha256: str,
+    manifest_sha256: str,
+    gpus: int,
+    maximum_seconds: int,
+) -> dict[str, Any]:
+    """Validate the non-destructive guard for a generated Jobs API name."""
+    from .dev_cleanup_observer import JOBS_API_PREFIX_GUARD_SCHEMA
+
+    value = _validate_seal(observer, JOBS_API_PREFIX_GUARD_SCHEMA)
+    path = jobs_api_guard_path(operation_root, purpose)
+    try:
+        stored = json.loads(path.read_bytes())
+    except (OSError, ValueError) as exc:
+        raise JobsError("prod9 Jobs API prefix guard is not durably armed") from exc
+    pid = value.get("observer_pid")
+    if (
+        stored != value
+        or value.get("status") != "armed_non_destructive_prefix_guard"
+        or value.get("context") != PROD_CONTEXT
+        or value.get("namespace") != NAMESPACE
+        or value.get("run_name_prefix") != request.get("name")
+        or value.get("generated_name_pattern")
+        != "^" + re.escape(str(request.get("name"))) + r"-[a-f0-9]{8}$"
+        or value.get("run_dir") != request.get("run_dir")
+        or value.get("image") != request.get("image")
+        or value.get("plan_sha256") != plan_sha256
+        or value.get("manifest_sha256") != manifest_sha256
+        or value.get("maximum_seconds") != maximum_seconds
+        or value.get("expected_gpus") != gpus
+        or value.get("prefix_collision_count_before_post") != 0
+        or type(pid) is not int
+        or pid < 1
+    ):
+        raise JobsError("prod9 Jobs API prefix guard binding changed")
+    _fresh_at(value.get("armed_at"))
+    try:
+        os.kill(pid, 0)
+    except OSError as exc:
+        raise JobsError("prod9 Jobs API prefix guard is not running") from exc
+    return value
+
+
 def _operation_root(observer: dict[str, Any], *, expected_root: Path, purpose: str) -> Path:
     """Require the observer handoff inside the identity-derived global root."""
     binding = observer.get("creator_binding_path")
@@ -157,6 +214,21 @@ def _operation_root(observer: dict[str, Any], *, expected_root: Path, purpose: s
     ):
         raise JobsError("prod9 operation root is not one canonical durable directory")
     return parent
+
+
+def _canonical_operation_root(expected_root: Path) -> Path:
+    if (
+        not expected_root.is_absolute()
+        or expected_root.parent != hardening.CREATE_ONCE_ROOT
+        or hardening.CREATE_ONCE_ROOT.is_symlink()
+        or not hardening.CREATE_ONCE_ROOT.is_dir()
+        or hardening.CREATE_ONCE_ROOT.resolve() != hardening.CREATE_ONCE_ROOT
+        or expected_root.is_symlink()
+        or not expected_root.is_dir()
+        or expected_root.resolve() != expected_root
+    ):
+        raise JobsError("prod9 operation root is not one canonical durable directory")
+    return expected_root
 
 
 def _publish_creator_binding(
@@ -185,13 +257,54 @@ def _publish_creator_binding(
     return value
 
 
-def _run_id(plan: dict[str, Any], identity: historical.RailIdentity) -> str:
-    _identity(plan, identity)
-    return str(uuid5(NAMESPACE_URL, f"fleet-direct-rayjob:{identity.run_name}:{digest(plan)}"))
+def _bind_jobs_api_created(
+    *,
+    operation_root: Path,
+    purpose: str,
+    request: dict[str, Any],
+    plan_sha256: str,
+    manifest_sha256: str,
+    maximum_seconds: int,
+    expected_gpus: int,
+    response: dict[str, Any],
+    runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> dict[str, Any]:
+    """Bind only the exact name/ID returned by the authenticated Jobs API."""
+    from .dev_cleanup_observer import JobsApiPrefixGuard, ObserverError
+
+    try:
+        guard = JobsApiPrefixGuard(
+            context=PROD_CONTEXT,
+            namespace=NAMESPACE,
+            run_name_prefix=request["name"],
+            run_dir=request["run_dir"],
+            image=request["image"],
+            plan_sha256=plan_sha256,
+            manifest_sha256=manifest_sha256,
+            maximum_seconds=maximum_seconds,
+            expected_gpus=expected_gpus,
+            armed_path=jobs_api_guard_path(operation_root, purpose),
+            binding_path=hardening.creator_binding_path(operation_root, purpose),
+            run=runner,
+        )
+        return guard.bind_exact(
+            {
+                "jobs_api_run_name": response.get("name"),
+                "jobs_api_run_id": response.get("job_id"),
+                "run_dir": response.get("run_dir") or request["run_dir"],
+            }
+        )
+    except ObserverError as exc:
+        raise JobsError("prod9 Jobs API response could not bind the exact RayJob UID") from exc
 
 
 def _source(preview: dict[str, Any]) -> dict[str, Any]:
-    if preview.get("warnings") or set(preview) != {"name", "warnings", "manifest_yaml"}:
+    if (
+        preview.get("warnings")
+        or preview.get("errors")
+        or set(preview) - {"name", "warnings", "errors", "manifest_yaml"}
+        or not {"name", "warnings", "manifest_yaml"} <= set(preview)
+    ):
         raise JobsError("prod9 Jobs preview reported warnings or changed shape")
     try:
         value = yaml.safe_load(preview["manifest_yaml"])
@@ -200,14 +313,6 @@ def _source(preview: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise JobsError("prod9 Jobs preview is not an object")
     return value
-
-
-def _replace_env(container: dict[str, Any], name: str, value: str) -> None:
-    entries = container.get("env", [])
-    matches = [entry for entry in entries if entry.get("name") == name]
-    if len(matches) != 1 or set(matches[0]) != {"name", "value"}:
-        raise JobsError("prod9 Jobs preview environment changed")
-    matches[0]["value"] = value
 
 
 def _runtime_context() -> dict[str, Any]:
@@ -227,7 +332,12 @@ def manifest(
     *,
     identity: historical.RailIdentity,
 ) -> dict[str, Any]:
-    """Project a fresh Jobs preview into one root-annotated prod9 RayJob."""
+    """Accept the exact Jobs API render without transforming one byte.
+
+    The generic Jobs API is the only supported GPU creator.  In particular,
+    an API render that omits the root failed-job-alert opt-out is a platform
+    blocker, not input to a local RayJob rewrite.
+    """
     bound = _identity(plan, identity)
     if training.job_request(plan) != request:
         raise JobsError("prod9 plan/request identity changed")
@@ -248,25 +358,24 @@ def manifest(
         or annotations.get("fleet.ai/run-id") != "00000000-0000-0000-0000-000000000000"
         or annotations.get("fleet.ai/run-dir") != plan["output_root"]
         or annotations.get("fleet.ai/job-image") != request["image"]
-        or FAILURE_ALERT_ANNOTATION in annotations
+        or annotations.get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
     ):
-        raise JobsError("prod9 Jobs preview identity or admission changed")
-    result = copy.deepcopy(source)
-    run_id = _run_id(plan, bound)
-    result["metadata"]["name"] = bound.run_name
-    result["metadata"]["labels"]["fleet.ai/run-id"] = run_id
-    result["metadata"]["annotations"]["fleet.ai/run-id"] = run_id
-    result["metadata"]["annotations"][FAILURE_ALERT_ANNOTATION] = FAILURE_ALERT_OFF
-    spec = result["spec"]
+        raise JobsError(
+            "prod9 Jobs API preview lacks the exact root alert-off or admission contract"
+        )
+    # Shared validation proves c1/q1, one node/eight GPUs, image/resources,
+    # request environment and the required Secrets against the unmodified API
+    # response.  It also independently checks the root alert annotation.
+    training.validate_preview(plan, request, preview)
+    spec = source["spec"]
     if (
         spec.get("entrypoint") != request["command"]
         or spec.get("suspend") is not True
         or spec.get("shutdownAfterJobFinishes") is not True
         or spec.get("submissionMode") != "HTTPMode"
+        or spec.get("backoffLimit") != 0
     ):
         raise JobsError("prod9 Jobs preview execution changed")
-    spec["backoffLimit"] = 0
-    spec["activeDeadlineSeconds"] = MAXIMUM_SECONDS
     cluster = spec.get("rayClusterSpec", {})
     if cluster.get("workerGroupSpecs") not in (None, []):
         raise JobsError("prod9 must remain one physical GPU node")
@@ -275,20 +384,14 @@ def manifest(
     if len(containers) != 1:
         raise JobsError("prod9 preview must contain one head container")
     container = containers[0]
-    _replace_env(container, "FLEET_RUN_ID", run_id)
-    _replace_env(container, "FLEET_RUN_NAME", bound.run_name)
     generated_secret = placeholder + "-fleet-key"
     secret_names = [row.get("secretRef", {}).get("name") for row in container.get("envFrom", [])]
     if secret_names != ["fleet-api", "wandb-api", generated_secret]:
         raise JobsError("prod9 Jobs preview Secret bindings changed")
-    container["envFrom"] = [
-        row
-        for row in container["envFrom"]
-        if row.get("secretRef", {}).get("name") != generated_secret
-    ]
-    container["securityContext"] = _runtime_context()
-    container["terminationMessagePath"] = plan["output_root"] + "/NATIVE_TRAINING_COMPLETE.json"
-    container["terminationMessagePolicy"] = "File"
+    if container.get("securityContext") != _runtime_context():
+        raise JobsError("prod9 Jobs preview runtime security context changed")
+    if container.get("terminationMessagePath", "/dev/termination-log") != "/dev/termination-log":
+        raise JobsError("prod9 Jobs preview termination receipt path changed")
     init = head.get("initContainers", [])
     sfs = [item for item in init if item.get("name") == "sfs-init"]
     if len(sfs) != 1 or sfs[0].get("command") != [
@@ -297,17 +400,7 @@ def manifest(
         f"mkdir -p {plan['output_root']} && chown 1000:100 {plan['output_root']}",
     ]:
         raise JobsError("prod9 output initialization changed")
-    sfs[0]["command"] = [
-        "sh",
-        "-ec",
-        f"mkdir {plan['output_root']}; chown 1000:100 {plan['output_root']}",
-    ]
-    training.validate_preview(
-        plan,
-        request,
-        {"manifest_yaml": yaml.safe_dump(result, sort_keys=True), "warnings": []},
-    )
-    return result
+    return source
 
 
 def packet(
@@ -317,7 +410,7 @@ def packet(
     *,
     identity: historical.RailIdentity,
 ) -> dict[str, Any]:
-    """Seal a source-previewed, non-submitting prod9 direct-RayJob packet."""
+    """Seal a non-submitting proof of the unmodified Jobs API preview."""
     bound = _identity(plan, identity)
     value = manifest(plan, request, preview, identity=bound)
     body = {
@@ -326,8 +419,8 @@ def packet(
         "request_sha256": digest(request),
         "jobs_preview_sha256": digest(preview),
         "manifest_sha256": digest(value),
-        "direct_run_id": _run_id(plan, bound),
-        "name": bound.run_name,
+        "name": preview["name"],
+        "run_name_prefix": bound.run_name,
         "namespace": NAMESPACE,
         "failure_alerts": "off",
         "submitted": False,
@@ -490,7 +583,8 @@ def validate_preview(
         "request_sha256": digest(request),
         "manifest_sha256": digest(expected),
         "server_render_sha256": digest(rendered),
-        "name": bound.run_name,
+        "name": source_preview["name"],
+        "run_name_prefix": bound.run_name,
         "nodes": 1,
         "gpus": 8,
         "priority": "c1",
@@ -1381,7 +1475,8 @@ def _direct_previews(
             or value.get("plan_sha256") != digest(plan)
             or value.get("request_sha256") != digest(request)
             or value.get("manifest_sha256") != digest(expected)
-            or value.get("name") != identity.run_name
+            or value.get("name") != source_preview.get("name")
+            or value.get("run_name_prefix") != identity.run_name
             or value.get("nodes") != 1
             or value.get("gpus") != 8
             or value.get("priority") != "c1"
@@ -1507,9 +1602,8 @@ def _direct_authorization(
     prod_preview: dict[str, Any],
     observer: dict[str, Any],
     identity: historical.RailIdentity,
-    require_live_observer: bool,
 ) -> dict[str, Any]:
-    """Bind every completed zero-GPU gate to one fresh GPU-create authority."""
+    """Bind every completed zero-GPU gate to one Jobs API POST authority."""
     bound = _identity(plan, identity)
     if expected != manifest(plan, request, source_preview, identity=bound):
         raise JobsError("prod9 direct manifest changed")
@@ -1595,39 +1689,25 @@ def _direct_authorization(
         plan, request, source_preview, expected, [dev_preview, prod_preview], identity=bound
     )
     plan_sha256, manifest_sha256 = "sha256:" + digest(plan), "sha256:" + digest(expected)
-    if require_live_observer:
-        armed = _observer_pid(
-            observer,
-            kind="rayjob",
-            name=bound.run_name,
-            plan_sha256=plan_sha256,
-            manifest_sha256=manifest_sha256,
-            gpus=8,
-            maximum_seconds=MAXIMUM_SECONDS,
-        )
-    else:
-        armed = _validate_seal(observer, "cyber_direct_cleanup_observer_armed_v1")
-        if (
-            armed.get("status") != "armed"
-            or armed.get("context") != PROD_CONTEXT
-            or armed.get("namespace") != NAMESPACE
-            or armed.get("kind") != "rayjob"
-            or armed.get("name") != bound.run_name
-            or armed.get("plan_sha256") != plan_sha256
-            or armed.get("manifest_sha256") != manifest_sha256
-            or armed.get("expected_gpus") != 8
-            or armed.get("maximum_seconds") != MAXIMUM_SECONDS
-        ):
-            raise JobsError("prod9 direct observer binding changed")
     stage_root = hardening.stage_operation_root(checked_stage)
     operation_root = hardening.training_operation_root(plan)
     _operation_root(stage_auth["observer"], expected_root=stage_root, purpose="stage")
     _operation_root(preflight_auth["observer"], expected_root=operation_root, purpose="preflight")
-    _operation_root(armed, expected_root=operation_root, purpose="training")
+    _canonical_operation_root(operation_root)
+    armed = _jobs_api_prefix_guard(
+        observer,
+        operation_root=operation_root,
+        purpose="training",
+        request=request,
+        plan_sha256=plan_sha256,
+        manifest_sha256=manifest_sha256,
+        gpus=8,
+        maximum_seconds=MAXIMUM_SECONDS,
+    )
     return _seal(
         {
             "schema": AUTHORIZATION_SCHEMA,
-            "status": "authorized_for_one_create",
+            "status": "authorized_for_one_jobs_api_post",
             "plan_sha256": plan_sha256,
             "request_sha256": "sha256:" + digest(request),
             "manifest_sha256": manifest_sha256,
@@ -1644,7 +1724,7 @@ def _direct_authorization(
             "prod_preview": previews[1],
             "observer": armed,
             "operation_root": str(operation_root),
-            "output_absence_enforcement": "fresh_cpu_preflight_plus_non_idempotent_gpu_init",
+            "output_absence_enforcement": "fresh_cpu_preflight_plus_atomic_runtime_claim",
         }
     )
 
@@ -1669,7 +1749,7 @@ def authorize(
     observer: dict[str, Any],
     identity: historical.RailIdentity,
 ) -> dict[str, Any]:
-    """Authorize one prod9 GPU create after the rebind and preflight release."""
+    """Authorize one prod9 Jobs API POST after rebind and preflight release."""
     return _direct_authorization(
         plan,
         request,
@@ -1688,7 +1768,6 @@ def authorize(
         prod_preview=prod_preview,
         observer=observer,
         identity=identity,
-        require_live_observer=True,
     )
 
 
@@ -1707,7 +1786,7 @@ def create_once(
     wandb_exists: Callable[[str, str, str], bool] = _wandb_exists_default,
     capacity_reader: Callable[..., dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Perform the single prod9 GPU create after re-checking every live gate.
+    """Perform the single prod9 Jobs API POST after re-checking every live gate.
 
     This is deliberately the only mutating operation in the fresh rail.  An
     uncertain return leaves a durable intent and prohibits retry; operators
@@ -1747,7 +1826,6 @@ def create_once(
         prod_preview=auth["prod_preview"],
         observer=auth["observer"],
         identity=bound,
-        require_live_observer=True,
     ):
         raise JobsError("prod9 direct authorization changed")
     if stage.get("sha256") != auth["stage_authorization"].get("stage_spec_sha256"):
@@ -1762,98 +1840,126 @@ def create_once(
         arguments.get("wandb_run_id", ""),
     ):
         raise JobsError("W&B run ID already exists")
-    rendered = server_dry_run(expected, context=PROD_CONTEXT, runner=runner)
-    validate_preview(
-        plan,
-        request,
-        source_preview,
-        expected,
-        rendered,
-        context=PROD_CONTEXT,
-        identity=bound,
-    )
-    # Capacity is the final external-state read.  Everything after it is a
-    # local liveness/freshness check, durable intent, and the sole create.
-    capacity = hardening.capacity_gate(
-        plan, request, expected, identity=bound, reader=capacity_reader
-    )
-    _observer_pid(
-        auth["observer"],
-        kind="rayjob",
-        name=bound.run_name,
-        plan_sha256="sha256:" + digest(plan),
-        manifest_sha256="sha256:" + digest(expected),
-        gpus=8,
-        maximum_seconds=MAXIMUM_SECONDS,
-    )
-    _fresh_at(capacity.get("observed_at"), maximum_age=hardening.CAPACITY_MAX_AGE_SECONDS)
-    _fresh_at(auth["preflight_release"].get("release_observed_at"))
-    for preview in (auth["dev_preview"], auth["prod_preview"]):
-        _fresh_at(preview.get("checked_at"))
-    _write_once_fsynced(
-        journal,
-        {
-            "state": "CREATE_INTENT_DO_NOT_RETRY",
-            "plan_sha256": "sha256:" + digest(plan),
-            "request_sha256": "sha256:" + digest(request),
-            "manifest_sha256": "sha256:" + digest(expected),
-            "authorization_sha256": auth["sha256"],
-            "capacity_gate": capacity,
-            "duplicate_checks": duplicate,
-            "wandb_run_id_absent": True,
-        },
-    )
-    # This is the sole mutating command.  There is intentionally no retry.
-    result = runner(
-        [
-            "kubectl",
-            "--context",
-            PROD_CONTEXT,
-            "--namespace",
-            NAMESPACE,
-            "create",
-            "-f",
-            "-",
-            "-o",
-            "json",
-        ],
-        input=json.dumps(expected),
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    if result.returncode:
-        raise JobsError("prod9 create returned failure; reconcile intent, never retry")
+    plan_sha256 = "sha256:" + digest(plan)
+    request_sha256 = "sha256:" + digest(request)
+    manifest_sha256 = "sha256:" + digest(expected)
+    with jobs_factory(token, base_url=API_URLS["prod"]) as client:
+        # This live response is the deployed creator contract.  A missing root
+        # alert annotation fails in Jobs.preview/manifest before any POST.
+        live_source_preview = client.preview(request)
+        live_expected = manifest(plan, request, live_source_preview, identity=bound)
+        if live_source_preview != source_preview or live_expected != expected:
+            raise JobsError("prod9 live Jobs API preview changed after authorization")
+        rendered = server_dry_run(live_expected, context=PROD_CONTEXT, runner=runner)
+        live_preview_proof = validate_preview(
+            plan,
+            request,
+            live_source_preview,
+            live_expected,
+            rendered,
+            context=PROD_CONTEXT,
+            identity=bound,
+        )
+        # Capacity is the final external-state read. Everything after it is a
+        # local liveness/freshness check, durable intent, and the sole API POST.
+        capacity = hardening.capacity_gate(
+            plan, request, live_expected, identity=bound, reader=capacity_reader
+        )
+        _jobs_api_prefix_guard(
+            auth["observer"],
+            operation_root=canonical,
+            purpose="training",
+            request=request,
+            plan_sha256=plan_sha256,
+            manifest_sha256=manifest_sha256,
+            gpus=8,
+            maximum_seconds=MAXIMUM_SECONDS,
+        )
+        _fresh_at(capacity.get("observed_at"), maximum_age=hardening.CAPACITY_MAX_AGE_SECONDS)
+        _fresh_at(auth["preflight_release"].get("release_observed_at"))
+        for preview in (auth["dev_preview"], auth["prod_preview"]):
+            _fresh_at(preview.get("checked_at"))
+        _write_once_fsynced(
+            journal,
+            {
+                "state": "POST_INTENT_DO_NOT_RETRY",
+                "plan_sha256": plan_sha256,
+                "request_sha256": request_sha256,
+                "manifest_sha256": manifest_sha256,
+                "authorization_sha256": auth["sha256"],
+                "live_jobs_preview_sha256": "sha256:" + digest(live_source_preview),
+                "live_preview_proof": live_preview_proof,
+                "capacity_gate": capacity,
+                "duplicate_checks": duplicate,
+                "wandb_run_id_absent": True,
+            },
+        )
+        # This is the sole mutating call. There is intentionally no retry.
+        response = client.request("POST", "/v1/runs", json=request)
     try:
-        created = json.loads(result.stdout)
-        uid = str(UUID(created["metadata"]["uid"]))
-        created_at = created["metadata"]["creationTimestamp"]
-        _timestamp(created_at)
-    except (KeyError, TypeError, ValueError, JobsError) as exc:
+        jobs_api_run_name = response["name"]
+        jobs_api_run_id = str(UUID(response["job_id"]))
+    except (KeyError, TypeError, ValueError) as exc:
         raise JobsError(
-            "prod9 create response is ambiguous; reconcile intent, never retry"
+            "prod9 Jobs API response is ambiguous; reconcile intent, never retry"
         ) from exc
-    if created.get("metadata", {}).get("name") != bound.run_name:
-        raise JobsError("prod9 create returned another identity; reconcile intent, never retry")
-    _publish_creator_binding(
-        auth["observer"],
-        kind="rayjob",
-        name=bound.run_name,
-        plan_sha256="sha256:" + digest(plan),
-        manifest_sha256="sha256:" + digest(expected),
-        uid=uid,
+    if (
+        not isinstance(jobs_api_run_name, str)
+        or re.fullmatch(re.escape(request["name"]) + r"-[a-f0-9]{8}", jobs_api_run_name) is None
+        or response.get("run_dir") not in (None, request["run_dir"])
+    ):
+        raise JobsError("prod9 Jobs API returned another identity; reconcile intent, never retry")
+    normalized_response = {
+        "name": jobs_api_run_name,
+        "job_id": jobs_api_run_id,
+        "run_dir": response.get("run_dir") or request["run_dir"],
+        "status": response.get("status"),
+        "created_at": response.get("created_at"),
+    }
+    with journal.open("a") as stream:
+        stream.write(
+            json.dumps(
+                {"state": "POST_RESPONSE", **normalized_response},
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n"
+        )
+        stream.flush()
+        os.fsync(stream.fileno())
+    binding = _bind_jobs_api_created(
+        operation_root=canonical,
+        purpose="training",
+        request=request,
+        plan_sha256=plan_sha256,
+        manifest_sha256=manifest_sha256,
+        maximum_seconds=MAXIMUM_SECONDS,
+        expected_gpus=8,
+        response=normalized_response,
+        runner=runner,
     )
     proof = _seal(
         {
             "schema": CREATED_SCHEMA,
-            "status": "created_once",
-            "plan_sha256": "sha256:" + digest(plan),
-            "manifest_sha256": "sha256:" + digest(expected),
+            "status": "submitted_once_and_bound_exact_uid",
+            "plan_sha256": plan_sha256,
+            "request_sha256": request_sha256,
+            "manifest_sha256": manifest_sha256,
             "authorization_sha256": auth["sha256"],
+            "live_jobs_preview_sha256": "sha256:" + digest(live_source_preview),
+            "live_preview_proof_sha256": live_preview_proof["sha256"],
             "capacity_gate_sha256": capacity["sha256"],
-            "rayjob_name": bound.run_name,
-            "rayjob_uid": uid,
-            "created_at": created_at,
+            "jobs_api_run_name": jobs_api_run_name,
+            "jobs_api_run_id": jobs_api_run_id,
+            "rayjob_name": binding["rayjob_name"],
+            "rayjob_uid": binding["rayjob_uid"],
+            "creator_binding_sha256": binding["sha256"],
+            "created_at": binding["rayjob_created_at"],
+            "failure_alerts": binding["failure_alerts"],
+            "priority": "c1",
+            "queue_priority": "q1",
+            "nodes": 1,
+            "gpus": 8,
         }
     )
     with journal.open("a") as stream:
@@ -1864,5 +1970,5 @@ def create_once(
 
 
 def live_create_is_available() -> bool:
-    """The fresh prod9 one-create rail is present; callers still need live gates."""
+    """The fresh prod9 one-submit rail is present; callers still need live gates."""
     return True

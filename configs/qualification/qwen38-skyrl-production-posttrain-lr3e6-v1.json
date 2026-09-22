@@ -363,7 +363,7 @@
     "launchable": false,
     "launcher": {
       "adapter": {
-        "file_sha256": "sha256:63659630c459b343f567d0f8c55c85dac28e858235386258f1ee7c90e02325f4",
+        "file_sha256": "sha256:28cee8cba0ce84e5efd2e4c763bc067a6cc1cd05f220fe6ad2b297b6799f9096",
         "path": "training/skyrl_prod9_reload.py"
       },
       "authorization_schema": "cyber_skyrl_prod9_reload_authorization_v1",
@@ -501,7 +501,7 @@
       "release_and_exact_UID_absence_required_on_success_or_failure": true
     }
   },
-  "sha256": "sha256:f04cbdf2d53a4d60c6d44fd8b306fc0ef84b46fc46e10ba556c255329d137551",
+  "sha256": "sha256:eec2e3cd57f035b0345904f81729d6bbb480435f92259d6e60f222704d17f06c",
   "state": "offline_blocked_waiting_training_acceptance",
   "training_acceptance": {
     "accepted": false,

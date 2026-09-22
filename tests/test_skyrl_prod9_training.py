@@ -8,6 +8,7 @@ import gzip
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -24,6 +25,7 @@ from cyber_post_train.jobs import JobsError, digest
 from scripts import prepare_qwen38_skyrl_prod9_successor as prod9_prepare
 from training import skyrl_prod9_direct as prod9_direct
 from training import skyrl_prod9_hardening as hardening
+from training import skyrl_prod9_reload as prod9_reload
 from training import skyrl_prod9_rollout as rollout
 from training import skyrl_prod9_training as prod9_training
 from training import skyrl_reward_rayjob as historical_direct
@@ -71,7 +73,7 @@ def test_prod9_reuses_only_the_proven_miles_shape_and_qwen38_reload_gate() -> No
 
 @pytest.mark.parametrize(
     "relative",
-    ("training/skyrl.py", "training/skyrl_training.py"),
+    ("training/skyrl.py", "training/skyrl_training.py", *prod9_reload.RUNTIME_FILES),
 )
 def test_prod9_source_closure_rejects_transitive_runtime_byte_drift(
     tmp_path: Path, monkeypatch, relative: str
@@ -84,9 +86,13 @@ def test_prod9_source_closure_rejects_transitive_runtime_byte_drift(
         destination = review_root / source.relative_to(ROOT)
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
+        binding["file_sha256"] = "sha256:" + hashlib.sha256(destination.read_bytes()).hexdigest()
     evidence = review_root / "configs/data/source-closure.json"
     evidence.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(SOURCE_CLOSURE, evidence)
+    value["sha256"] = "sha256:" + digest(
+        {key: item for key, item in value.items() if key != "sha256"}
+    )
+    evidence.write_text(json.dumps(value))
     target = review_root / relative
     target.write_bytes(target.read_bytes() + b"\n# adversarial unreviewed runtime drift\n")
     monkeypatch.setattr(
@@ -189,9 +195,11 @@ def _source_preview(plan: dict, request: dict) -> dict:
                 "fleet.ai/run-id": "00000000-0000-0000-0000-000000000000",
                 "fleet.ai/job-image": request["image"],
                 "fleet.ai/run-dir": plan["output_root"],
+                "fleet.ai/failure-alerts": "off",
             },
         },
         "spec": {
+            "backoffLimit": 0,
             "entrypoint": request["command"],
             "submissionMode": "HTTPMode",
             "suspend": True,
@@ -212,6 +220,7 @@ def _source_preview(plan: dict, request: dict) -> dict:
                                         {"secretRef": {"name": "wandb-api"}},
                                         {"secretRef": {"name": placeholder + "-fleet-key"}},
                                     ],
+                                    "securityContext": prod9_direct._runtime_context(),
                                     "resources": {
                                         "requests": {
                                             "cpu": resources["cpu_request"],
@@ -331,6 +340,38 @@ def _observer(
             "creator_binding_path": str(creator_binding_path),
         }
     )
+
+
+def _jobs_api_guard(
+    root: Path,
+    purpose: str,
+    request: dict,
+    plan_sha256: str,
+    manifest_sha256: str,
+    gpus: int,
+    seconds: int,
+) -> dict:
+    value = prod9_direct._seal(
+        {
+            "schema": "cyber_jobs_api_prefix_guard_armed_v1",
+            "status": "armed_non_destructive_prefix_guard",
+            "context": prod9_direct.PROD_CONTEXT,
+            "namespace": prod9_direct.NAMESPACE,
+            "run_name_prefix": request["name"],
+            "generated_name_pattern": "^" + re.escape(request["name"]) + r"-[a-f0-9]{8}$",
+            "run_dir": request["run_dir"],
+            "image": request["image"],
+            "plan_sha256": plan_sha256,
+            "manifest_sha256": manifest_sha256,
+            "maximum_seconds": seconds,
+            "expected_gpus": gpus,
+            "armed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "observer_pid": os.getpid(),
+            "prefix_collision_count_before_post": 0,
+        }
+    )
+    prod9_direct.jobs_api_guard_path(root, purpose).write_text(json.dumps(value))
+    return value
 
 
 def _release(
@@ -492,6 +533,9 @@ def test_prod9_limits_accept_manifest_and_recorder_surfaces() -> None:
 
 def test_prod9_fresh_direct_renderer_and_cpu_preflight_are_alert_safe() -> None:
     plan, request, identity = _prod9_plan()
+    assert request["command"].startswith(
+        "mkdir " + plan["output_root"] + "/.prod9-training-create-claim-v1 && exec "
+    )
     preview = _source_preview(plan, request)
     rayjob = prod9_direct.manifest(plan, request, preview, identity=identity)
     packet = prod9_direct.packet(plan, request, preview, identity=identity)
@@ -528,6 +572,34 @@ def test_prod9_fresh_direct_renderer_and_cpu_preflight_are_alert_safe() -> None:
     ]
     assert prod9_direct.live_create_is_available() is True
     assert not hasattr(hardening, "create_once")
+
+    missing_alert_preview = copy.deepcopy(preview)
+    missing_alert_manifest = yaml.safe_load(missing_alert_preview["manifest_yaml"])
+    missing_alert_manifest["metadata"]["annotations"].pop("fleet.ai/failure-alerts")
+    missing_alert_preview["manifest_yaml"] = yaml.safe_dump(missing_alert_manifest)
+    with pytest.raises(JobsError, match="root alert-off"):
+        prod9_direct.manifest(plan, request, missing_alert_preview, identity=identity)
+
+    retrying_preview = copy.deepcopy(preview)
+    retrying_manifest = yaml.safe_load(retrying_preview["manifest_yaml"])
+    retrying_manifest["spec"]["backoffLimit"] = 1
+    retrying_preview["manifest_yaml"] = yaml.safe_dump(retrying_manifest)
+    with pytest.raises(JobsError, match="execution changed"):
+        prod9_direct.manifest(plan, request, retrying_preview, identity=identity)
+
+    root_preview = copy.deepcopy(preview)
+    root_manifest = yaml.safe_load(root_preview["manifest_yaml"])
+    root_manifest["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]["containers"][0][
+        "securityContext"
+    ] = {
+        "privileged": False,
+        "runAsUser": 1000,
+        "runAsGroup": 100,
+        "runAsNonRoot": True,
+    }
+    root_preview["manifest_yaml"] = yaml.safe_dump(root_manifest)
+    with pytest.raises(JobsError, match="runtime security context"):
+        prod9_direct.manifest(plan, request, root_preview, identity=identity)
 
     census = build_capacity_census(
         {"items": []},
@@ -876,14 +948,14 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
         context=prod9_direct.PROD_CONTEXT,
         identity=identity,
     )
-    direct_observer = _observer(
-        "rayjob",
-        identity.run_name,
+    direct_observer = _jobs_api_guard(
+        training_root,
+        "training",
+        request,
         "sha256:" + digest(plan),
         "sha256:" + digest(rayjob),
         8,
         prod9_direct.MAXIMUM_SECONDS,
-        hardening.creator_binding_path(training_root, "training"),
     )
     fresh_checks = []
     original_fresh_at = prod9_direct._fresh_at
@@ -920,7 +992,17 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
     ]
     alternate_training = tmp_path / "alternate-training"
     alternate_training.mkdir()
-    with pytest.raises(JobsError, match="canonical durable directory"):
+    alternate_guard = _jobs_api_guard(
+        alternate_training,
+        "training",
+        request,
+        "sha256:" + digest(plan),
+        "sha256:" + digest(rayjob),
+        8,
+        prod9_direct.MAXIMUM_SECONDS,
+    )
+    alternate_guard = prod9_direct._seal({**alternate_guard, "observer_pid": os.getpid() + 1})
+    with pytest.raises(JobsError, match="binding changed"):
         prod9_direct.authorize(
             plan,
             request,
@@ -937,18 +1019,12 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
             preflight_release,
             dev_preview=direct_dev,
             prod_preview=direct_prod,
-            observer=_observer(
-                "rayjob",
-                identity.run_name,
-                "sha256:" + digest(plan),
-                "sha256:" + digest(rayjob),
-                8,
-                prod9_direct.MAXIMUM_SECONDS,
-                alternate_training / "TRAINING_OBSERVER_ARMED.json.created.json",
-            ),
+            observer=alternate_guard,
             identity=identity,
         )
     created_rayjob_uid = "00000000-0000-0000-0000-000000000004"
+    jobs_api_run_id = "00000000-0000-0000-0000-000000000005"
+    jobs_api_run_name = request["name"] + "-1a2b3c4d"
     mutations = []
     live_order = []
 
@@ -966,6 +1042,22 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
             live_order.append("jobs")
             return []
 
+        def preview(self, submitted):
+            assert submitted == request
+            live_order.append("api-preview")
+            return source_preview
+
+        def request(self, method, path, **kwargs):
+            assert (method, path, kwargs.get("json")) == ("POST", "/v1/runs", request)
+            live_order.append("post")
+            mutations.append((method, path))
+            return {
+                "name": jobs_api_run_name,
+                "job_id": jobs_api_run_id,
+                "run_dir": request["run_dir"],
+                "status": "queued",
+            }
+
     census = build_capacity_census(
         {"items": []},
         {"items": []},
@@ -981,25 +1073,20 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
         if "--dry-run=server" in command:
             live_order.append("dry-run")
             return NS(returncode=0, stdout=json.dumps(_direct_render(json.loads(kwargs["input"]))))
+        if "get" in command and jobs_api_run_name in command:
+            live_order.append("exact-bind")
+            created_resource = copy.deepcopy(rayjob)
+            created_resource["metadata"].update(
+                {
+                    "name": jobs_api_run_name,
+                    "uid": created_rayjob_uid,
+                    "creationTimestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                }
+            )
+            return NS(returncode=0, stdout=json.dumps(created_resource))
         if "get" in command:
             live_order.append("inventory")
             return NS(returncode=0, stdout=json.dumps({"items": []}))
-        if "create" in command:
-            live_order.append("create")
-            mutations.append(command)
-            expected = json.loads(kwargs["input"])
-            return NS(
-                returncode=0,
-                stdout=json.dumps(
-                    {
-                        "metadata": {
-                            "name": expected["metadata"]["name"],
-                            "uid": created_rayjob_uid,
-                            "creationTimestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                        }
-                    }
-                ),
-            )
         pytest.fail(f"unexpected direct command: {command}")
 
     created = prod9_direct.create_once(
@@ -1019,13 +1106,17 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
 
     assert created["rayjob_uid"] == created_rayjob_uid
     assert len(mutations) == 1
-    assert live_order[-2:] == ["capacity", "create"]
+    assert live_order.index("capacity") < live_order.index("post") < live_order.index("exact-bind")
     journal = [
         json.loads(line)
         for line in (training_root / "PROD9_DIRECT_RAYJOB_CREATE.jsonl").read_text().splitlines()
     ]
-    assert journal[0]["state"] == "CREATE_INTENT_DO_NOT_RETRY"
-    assert journal[1]["status"] == "created_once"
+    assert [row.get("state") for row in journal[:2]] == [
+        "POST_INTENT_DO_NOT_RETRY",
+        "POST_RESPONSE",
+    ]
+    assert journal[2]["status"] == "submitted_once_and_bound_exact_uid"
+    assert journal[2]["capacity_gate_sha256"] == journal[0]["capacity_gate"]["sha256"]
     with pytest.raises(JobsError, match="create intent exists"):
         prod9_direct.create_once(
             training_root,

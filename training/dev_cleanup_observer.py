@@ -138,14 +138,14 @@ class JobsApiPrefixGuard:
         monotonic: Callable[[], float] = time.monotonic,
     ) -> None:
         if context not in {DEV_CONTEXT, PROD_CONTEXT} or namespace != NAMESPACE:
-            raise ObserverError("Jobs API prefix guard cluster binding is invalid")
+            raise ObserverError("Jobs API prefix guard context or namespace is invalid")
         if _RUN_NAME_PREFIX.fullmatch(run_name_prefix) is None:
             raise ObserverError("Jobs API run-name prefix is invalid")
         if not re.fullmatch(r"[^\s]+@sha256:[a-f0-9]{64}", image):
             raise ObserverError("Jobs API image binding is invalid")
         if (
             maximum_seconds < 1
-            or maximum_seconds > (1800 if context == DEV_CONTEXT else 16 * 60 * 60)
+            or maximum_seconds > (1800 if context == DEV_CONTEXT else 24 * 60 * 60)
             or expected_gpus not in {1, 8}
             or not 0 <= bind_wait_seconds <= 300
         ):
@@ -545,6 +545,9 @@ class JobsApiExactUidObserver:
         self.peak_gpus = 0
         self.gpu_pods: dict[str, dict[str, object]] = {}
         self.runtime_images: dict[str, dict[str, str]] = {}
+        self.receipt: dict | None = None
+        self.pod_restarts: dict[str, int] = {}
+        self.pod_exit_codes: dict[str, tuple[int, ...]] = {}
         self.known: dict[str, dict[str, str]] = {
             "workload": {},
             "raycluster": {},
@@ -603,7 +606,7 @@ class JobsApiExactUidObserver:
             or re.fullmatch(r"[^\s]+@sha256:[a-f0-9]{64}", value["image"]) is None
             or not 1
             <= value.get("maximum_seconds", 0)
-            <= (1800 if value.get("context") == DEV_CONTEXT else 16 * 60 * 60)
+            <= (1800 if value.get("context") == DEV_CONTEXT else 24 * 60 * 60)
             or not isinstance(value.get("prefix_guard_sha256"), str)
             or not re.fullmatch(r"sha256:[a-f0-9]{64}", value["prefix_guard_sha256"])
         ):
@@ -911,6 +914,39 @@ class JobsApiExactUidObserver:
                 if self.allocated_at is None or pod_allocated_at < self.allocated_at:
                     self.allocated_at = pod_allocated_at
                     self.deadline_at = self.allocated_at + timedelta(seconds=self.maximum_seconds)
+            status = pod.get("status") or {}
+            statuses = [
+                *(status.get("initContainerStatuses") or []),
+                *(status.get("containerStatuses") or []),
+            ]
+            if any(not isinstance(item, dict) for item in statuses):
+                raise ObserverError("Jobs API exact observer Pod status is malformed")
+            restarts = []
+            exit_codes = []
+            for item in statuses:
+                restart_count = item.get("restartCount", 0)
+                if type(restart_count) is not int or restart_count < 0:
+                    raise ObserverError("Jobs API exact observer Pod restart count is invalid")
+                restarts.append(restart_count)
+                terminated = (item.get("state") or {}).get("terminated")
+                if terminated is None:
+                    continue
+                if not isinstance(terminated, dict) or type(terminated.get("exitCode")) is not int:
+                    raise ObserverError("Jobs API exact observer termination state is malformed")
+                exit_codes.append(terminated["exitCode"])
+                message = terminated.get("message")
+                if message:
+                    receipt = _validated_receipt(message, kind="rayjob")
+                    if receipt is None:
+                        raise ObserverError(
+                            "Jobs API exact observer termination receipt is invalid"
+                        )
+                    if self.receipt is not None and self.receipt != receipt:
+                        raise ObserverError("Jobs API exact observer termination receipt changed")
+                    self.receipt = receipt
+            self.pod_restarts[pod_uid] = max(restarts, default=0)
+            if exit_codes:
+                self.pod_exit_codes[pod_uid] = tuple(exit_codes)
         self.raycluster_identity_observed = True
         self.inventory_seen = True
 
@@ -1001,6 +1037,12 @@ class JobsApiExactUidObserver:
                 ],
                 "runtime_image_identity_complete": self._runtime_image_identity_complete(),
                 "peak_gpus": self.peak_gpus,
+                "active_gpus": 0 if release_confirmed else self.peak_gpus,
+                "restarts": sum(self.pod_restarts.values()),
+                "exit_codes": sorted(
+                    code for codes in self.pod_exit_codes.values() for code in codes
+                ),
+                "receipt": self.receipt,
                 "cleanup_status": self.cleanup_status,
                 "cleanup_requested": self.cleanup_requested,
                 "private_logs_read": False,

@@ -2,19 +2,20 @@
 
 This is a deliberately narrow successor to the proven Qwen3.8 LR30 reload
 check.  It binds one prod9 plan, its terminal checkpoint receipt and its BF16
-export, then renders one c1/q1, one-node/one-GPU RayJob.  The live rail requires
-two stable server previews, a fresh capacity census, an already armed exact-UID
-cleanup observer and one durable create intent.  It never retries a create.
+export, then requires the generic Jobs API to render one c1/q1,
+one-node/one-GPU RayJob.  The live rail requires two stable server previews, a
+fresh capacity census, an already armed exact-UID cleanup observer and one
+durable POST intent.  It never retries a submission.
 """
 
 from __future__ import annotations
 
 import argparse
-import copy
 import hashlib
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import time
@@ -22,9 +23,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
-from uuid import NAMESPACE_URL, UUID, uuid5
-
-import yaml
+from uuid import UUID
 
 SPEC_SCHEMA = "cyber_skyrl_prod9_reload_spec_v1"
 PREVIEW_SCHEMA = "cyber_skyrl_prod9_reload_preview_v1"
@@ -308,7 +307,7 @@ def build_spec(
 
 def job_request(spec: dict[str, Any]) -> dict[str, Any]:
     """Build the proven one-node Qwen3.8 runtime bundle without previewing it."""
-    from cyber_post_train.jobs import bundled_request
+    from cyber_post_train.jobs import bundled_request, validate_request
 
     value = _spec_identity(spec)
     root = Path(__file__).resolve().parents[1]
@@ -318,7 +317,7 @@ def job_request(spec: dict[str, Any]) -> dict[str, Any]:
     source_name = (
         "q38-rld-" + value["plan_sha256"][:8] + "-" + str(value["checkpoint"]["optimizer_step"])
     )
-    return bundled_request(
+    request = bundled_request(
         {
             "name": source_name,
             "title": "Qwen3.8 prod9 exact BF16 one-GPU reload " + value["plan_sha256"][:12],
@@ -349,19 +348,16 @@ def job_request(spec: dict[str, Any]) -> dict[str, Any]:
         MODULE,
         ["--spec", "spec.json", "--sha256", value["sha256"]],
     )
-
-
-def _replace_env(container: dict[str, Any], name: str, value: str) -> None:
-    matches = [item for item in container.get("env", []) if item.get("name") == name]
-    if len(matches) != 1 or set(matches[0]) != {"name", "value"}:
-        raise ValueError("prod9 reload preview environment changed")
-    matches[0]["value"] = value
+    claim = value["run_dir"] + "/.prod9-reload-create-claim-v1"
+    request["command"] = "mkdir " + shlex.quote(claim) + " && exec " + request["command"]
+    validate_request(request)
+    return request
 
 
 def manifest(
     spec: dict[str, Any], request: dict[str, Any], source_preview: dict[str, Any]
 ) -> dict[str, Any]:
-    """Project one raw Jobs preview into the exact fixed-name reload RayJob."""
+    """Accept the exact Jobs API render without transforming one byte."""
     from cyber_post_train.jobs import validate_preview, validate_request
 
     from . import skyrl_prod9_direct as direct
@@ -387,17 +383,13 @@ def manifest(
         or annotations.get("fleet.ai/run-id") != "00000000-0000-0000-0000-000000000000"
         or annotations.get("fleet.ai/run-dir") != value["run_dir"]
         or annotations.get("fleet.ai/job-image") != IMAGE
-        or FAILURE_ALERT_ANNOTATION in annotations
+        or annotations.get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
     ):
-        raise ValueError("prod9 reload Jobs preview identity/admission changed")
-    result = copy.deepcopy(source)
-    run_id = str(uuid5(NAMESPACE_URL, "prod9-reload:" + value["sha256"]))
-    result["metadata"]["name"] = value["name"]
-    result["metadata"]["labels"]["fleet.ai/run-id"] = run_id
-    result["metadata"]["labels"]["fleet.ai/run-name"] = value["name"]
-    result["metadata"]["annotations"]["fleet.ai/run-id"] = run_id
-    result["metadata"]["annotations"][FAILURE_ALERT_ANNOTATION] = FAILURE_ALERT_OFF
-    ray_spec = result.get("spec", {})
+        raise ValueError("prod9 reload Jobs preview lacks exact root alert-off/admission")
+    # The supported generic Jobs API validator independently proves the root
+    # annotation, c1/q1 admission, one node/GPU, resources, image and env.
+    validate_preview(request, source_preview)
+    ray_spec = source.get("spec", {})
     if (
         ray_spec.get("entrypoint") != request["command"]
         or ray_spec.get("suspend") is not True
@@ -405,8 +397,8 @@ def manifest(
         or ray_spec.get("submissionMode") != "HTTPMode"
     ):
         raise ValueError("prod9 reload Jobs preview execution changed")
-    ray_spec["backoffLimit"] = 0
-    ray_spec["activeDeadlineSeconds"] = MAXIMUM_SECONDS
+    if ray_spec.get("backoffLimit") != 0:
+        raise ValueError("prod9 reload Jobs preview retry contract changed")
     cluster = ray_spec.get("rayClusterSpec", {})
     if cluster.get("workerGroupSpecs") not in (None, []):
         raise ValueError("prod9 reload must remain one physical GPU node")
@@ -423,24 +415,14 @@ def manifest(
         or container.get("image") != IMAGE
     ):
         raise ValueError("prod9 reload preview is not exactly one GPU")
-    _replace_env(container, "FLEET_RUN_ID", run_id)
-    _replace_env(container, "FLEET_RUN_NAME", value["name"])
     generated_secret = placeholder + "-fleet-key"
     secret_names = [item.get("secretRef", {}).get("name") for item in container.get("envFrom", [])]
     if secret_names != [generated_secret]:
         raise ValueError("prod9 reload preview Secret bindings changed")
-    container["envFrom"] = []
-    container["securityContext"] = direct._runtime_context()
-    pod_labels = head.get("metadata", {}).get("labels")
-    if isinstance(pod_labels, dict):
-        if pod_labels.get("fleet.ai/run-id") not in (None, "00000000-0000-0000-0000-000000000000"):
-            raise ValueError("prod9 reload Pod run ID changed")
-        if pod_labels.get("fleet.ai/run-name") not in (None, request["name"]):
-            raise ValueError("prod9 reload Pod run name changed")
-        if "fleet.ai/run-id" in pod_labels:
-            pod_labels["fleet.ai/run-id"] = run_id
-        if "fleet.ai/run-name" in pod_labels:
-            pod_labels["fleet.ai/run-name"] = value["name"]
+    if container.get("securityContext") != direct._runtime_context():
+        raise ValueError("prod9 reload runtime user contract changed")
+    if container.get("terminationMessagePath", "/dev/termination-log") != "/dev/termination-log":
+        raise ValueError("prod9 reload termination receipt path changed")
     init = pod.get("initContainers", [])
     sfs = [item for item in init if item.get("name") == "sfs-init"]
     if len(sfs) != 1 or sfs[0].get("command") != [
@@ -449,28 +431,13 @@ def manifest(
         f"mkdir -p {value['run_dir']} && chown 1000:100 {value['run_dir']}",
     ]:
         raise ValueError("prod9 reload output initialization changed")
-    sfs[0]["command"] = [
-        "sh",
-        "-ec",
-        f"mkdir {value['run_dir']}; chown 1000:100 {value['run_dir']}",
-    ]
-    validate_preview(
-        request,
-        {
-            "manifest_yaml": yaml.safe_dump(result, sort_keys=True),
-            "warnings": [],
-            "errors": [],
-        },
-    )
-    _validate_manifest(value, request, result)
-    return result
+    _validate_manifest(value, request, source)
+    return source
 
 
 def _validate_manifest(
     spec: dict[str, Any], request: dict[str, Any], expected: dict[str, Any]
 ) -> None:
-    from cyber_post_train.jobs import validate_preview
-
     value = _spec_identity(spec)
     try:
         metadata = expected["metadata"]
@@ -484,7 +451,7 @@ def _validate_manifest(
     if (
         expected.get("apiVersion") != "ray.io/v1"
         or expected.get("kind") != "RayJob"
-        or metadata.get("name") != value["name"]
+        or metadata.get("name") != request["name"] + "-00000000"
         or metadata.get("namespace") != NAMESPACE
         or metadata.get("annotations", {}).get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
         or metadata.get("annotations", {}).get("fleet.ai/run-dir") != value["run_dir"]
@@ -492,26 +459,26 @@ def _validate_manifest(
         or metadata.get("labels", {}).get("kueue.x-k8s.io/priority-class") != "q1"
         or ray_spec.get("entrypoint") != request["command"]
         or ray_spec.get("backoffLimit") != 0
-        or ray_spec.get("activeDeadlineSeconds") != MAXIMUM_SECONDS
         or ray_spec.get("shutdownAfterJobFinishes") is not True
         or ray_spec.get("suspend") is not True
         or cluster.get("workerGroupSpecs") not in (None, [])
         or pod.get("priorityClassName") != "c1"
         or len(pod.get("containers", [])) != 1
         or container.get("image") != IMAGE
-        or container.get("envFrom") != []
+        or [item.get("secretRef", {}).get("name") for item in container.get("envFrom", [])]
+        != [request["name"] + "-00000000-fleet-key"]
+        or container.get("securityContext")
+        != {
+            "allowPrivilegeEscalation": False,
+            "privileged": False,
+            "runAsGroup": 100,
+            "runAsNonRoot": True,
+            "runAsUser": 1000,
+        }
         or resources.get("requests", {}).get("nvidia.com/gpu") != 1
         or resources.get("limits", {}).get("nvidia.com/gpu") != 1
     ):
         raise ValueError("prod9 reload manifest contract changed")
-    validate_preview(
-        request,
-        {
-            "manifest_yaml": yaml.safe_dump(expected, sort_keys=True),
-            "warnings": [],
-            "errors": [],
-        },
-    )
 
 
 def validate_preview(
@@ -546,7 +513,8 @@ def validate_preview(
             "request_sha256": "sha256:" + digest(request),
             "manifest_sha256": "sha256:" + digest(expected),
             "server_render_sha256": "sha256:" + digest(rendered),
-            "name": value["name"],
+            "name": source_preview["name"],
+            "run_name_prefix": request["name"],
             "nodes": 1,
             "gpus": 1,
             "priority": "c1",
@@ -656,7 +624,8 @@ def _preview_set(
             or item.get("spec_sha256") != value["sha256"]
             or item.get("request_sha256") != "sha256:" + digest(request)
             or item.get("manifest_sha256") != "sha256:" + digest(expected)
-            or item.get("name") != value["name"]
+            or item.get("name") != request["name"] + "-00000000"
+            or item.get("run_name_prefix") != request["name"]
             or item.get("nodes") != 1
             or item.get("gpus") != 1
             or item.get("priority") != "c1"
@@ -681,7 +650,6 @@ def _authorization(
     dev_preview: dict[str, Any],
     prod_preview: dict[str, Any],
     observer: dict[str, Any],
-    require_live_observer: bool,
 ) -> dict[str, Any]:
     from cyber_post_train.jobs import digest
 
@@ -694,36 +662,22 @@ def _authorization(
     previews = _preview_set(value, request, expected, [dev_preview, prod_preview])
     plan_sha256 = "sha256:" + value["plan_sha256"]
     manifest_sha256 = "sha256:" + digest(expected)
-    if require_live_observer:
-        armed = direct._observer_pid(
-            observer,
-            kind="rayjob",
-            name=value["name"],
-            plan_sha256=plan_sha256,
-            manifest_sha256=manifest_sha256,
-            gpus=1,
-            maximum_seconds=MAXIMUM_SECONDS,
-        )
-    else:
-        armed = direct._validate_seal(observer, "cyber_direct_cleanup_observer_armed_v1")
-        if (
-            armed.get("status") != "armed"
-            or armed.get("context") != PROD_CONTEXT
-            or armed.get("namespace") != NAMESPACE
-            or armed.get("kind") != "rayjob"
-            or armed.get("name") != value["name"]
-            or armed.get("plan_sha256") != plan_sha256
-            or armed.get("manifest_sha256") != manifest_sha256
-            or armed.get("expected_gpus") != 1
-            or armed.get("maximum_seconds") != MAXIMUM_SECONDS
-        ):
-            raise ValueError("prod9 reload observer binding changed")
     operation_root = hardening.reload_operation_root(value)
-    direct._operation_root(armed, expected_root=operation_root, purpose="reload")
+    direct._canonical_operation_root(operation_root)
+    armed = direct._jobs_api_prefix_guard(
+        observer,
+        operation_root=operation_root,
+        purpose="reload",
+        request=request,
+        plan_sha256=plan_sha256,
+        manifest_sha256=manifest_sha256,
+        gpus=1,
+        maximum_seconds=MAXIMUM_SECONDS,
+    )
     return _seal(
         {
             "schema": AUTHORIZATION_SCHEMA,
-            "status": "authorized_for_one_create",
+            "status": "authorized_for_one_jobs_api_post",
             "spec": value,
             "request_sha256": "sha256:" + digest(request),
             "source_preview_sha256": "sha256:" + digest(source_preview),
@@ -746,7 +700,7 @@ def authorize(
     prod_preview: dict[str, Any],
     observer: dict[str, Any],
 ) -> dict[str, Any]:
-    """Authorize one create only after previews and cleanup are live."""
+    """Authorize one Jobs API POST only after previews and cleanup are live."""
     return _authorization(
         spec,
         request,
@@ -755,7 +709,6 @@ def authorize(
         dev_preview=dev_preview,
         prod_preview=prod_preview,
         observer=observer,
-        require_live_observer=True,
     )
 
 
@@ -852,8 +805,8 @@ def create_once(
     jobs_factory: Any = None,
     capacity_reader: Callable[..., dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """Perform the sole reload create; any uncertain result permanently stops replay."""
-    from cyber_post_train.jobs import Jobs, digest
+    """Perform the sole reload Jobs API POST; an uncertain result stops replay."""
+    from cyber_post_train.jobs import API_URLS, Jobs, digest
 
     from . import skyrl_prod9_direct as direct
     from . import skyrl_prod9_hardening as hardening
@@ -880,7 +833,6 @@ def create_once(
         dev_preview=auth["dev_preview"],
         prod_preview=auth["prod_preview"],
         observer=auth["observer"],
-        require_live_observer=True,
     ):
         raise ValueError("prod9 reload authorization changed")
     duplicate = _duplicate_checks(
@@ -890,96 +842,121 @@ def create_once(
         runner=runner,
         jobs_factory=jobs_factory,
     )
-    rendered = direct.server_dry_run(expected, context=PROD_CONTEXT, runner=runner)
-    validate_preview(
-        value,
-        request,
-        source_preview,
-        expected,
-        rendered,
-        context=PROD_CONTEXT,
-    )
-    capacity = capacity_gate(
-        value,
-        request,
-        expected,
-        reader=capacity_reader,
-    )
-    direct._observer_pid(
-        auth["observer"],
-        kind="rayjob",
-        name=value["name"],
-        plan_sha256="sha256:" + value["plan_sha256"],
-        manifest_sha256="sha256:" + digest(expected),
-        gpus=1,
-        maximum_seconds=MAXIMUM_SECONDS,
-    )
-    direct._fresh_at(
-        capacity.get("observed_at"),
-        maximum_age=120,
-    )
-    for preview in (auth["dev_preview"], auth["prod_preview"]):
-        direct._fresh_at(preview.get("checked_at"))
-    direct._write_once_fsynced(
-        journal,
-        {
-            "state": "CREATE_INTENT_DO_NOT_RETRY",
-            "spec_sha256": value["sha256"],
-            "request_sha256": "sha256:" + digest(request),
-            "manifest_sha256": "sha256:" + digest(expected),
-            "authorization_sha256": auth["sha256"],
-            "capacity_gate": capacity,
-            "duplicate_checks": duplicate,
-        },
-    )
-    result = runner(
-        [
-            "kubectl",
-            "--context",
-            PROD_CONTEXT,
-            "--namespace",
-            NAMESPACE,
-            "create",
-            "-f",
-            "-",
-            "-o",
-            "json",
-        ],
-        input=json.dumps(expected),
-        capture_output=True,
-        text=True,
-        timeout=60,
-    )
-    if result.returncode:
-        raise ValueError("prod9 reload create failed; reconcile intent, never retry")
+    plan_sha256 = "sha256:" + value["plan_sha256"]
+    request_sha256 = "sha256:" + digest(request)
+    manifest_sha256 = "sha256:" + digest(expected)
+    with jobs_factory(token, base_url=API_URLS["prod"]) as client:
+        live_source_preview = client.preview(request)
+        live_expected = manifest(value, request, live_source_preview)
+        if live_source_preview != source_preview or live_expected != expected:
+            raise ValueError("prod9 reload live Jobs API preview changed after authorization")
+        rendered = direct.server_dry_run(live_expected, context=PROD_CONTEXT, runner=runner)
+        live_preview_proof = validate_preview(
+            value,
+            request,
+            live_source_preview,
+            live_expected,
+            rendered,
+            context=PROD_CONTEXT,
+        )
+        capacity = capacity_gate(
+            value,
+            request,
+            live_expected,
+            reader=capacity_reader,
+        )
+        direct._jobs_api_prefix_guard(
+            auth["observer"],
+            operation_root=canonical,
+            purpose="reload",
+            request=request,
+            plan_sha256=plan_sha256,
+            manifest_sha256=manifest_sha256,
+            gpus=1,
+            maximum_seconds=MAXIMUM_SECONDS,
+        )
+        direct._fresh_at(capacity.get("observed_at"), maximum_age=120)
+        for preview in (auth["dev_preview"], auth["prod_preview"]):
+            direct._fresh_at(preview.get("checked_at"))
+        direct._write_once_fsynced(
+            journal,
+            {
+                "state": "POST_INTENT_DO_NOT_RETRY",
+                "spec_sha256": value["sha256"],
+                "plan_sha256": plan_sha256,
+                "request_sha256": request_sha256,
+                "manifest_sha256": manifest_sha256,
+                "authorization_sha256": auth["sha256"],
+                "live_jobs_preview_sha256": "sha256:" + digest(live_source_preview),
+                "live_preview_proof": live_preview_proof,
+                "capacity_gate": capacity,
+                "duplicate_checks": duplicate,
+            },
+        )
+        response = client.request("POST", "/v1/runs", json=request)
     try:
-        created = json.loads(result.stdout)
-        uid = str(UUID(created["metadata"]["uid"]))
-        created_at = created["metadata"]["creationTimestamp"]
-        direct._timestamp(created_at)
+        jobs_api_run_name = response["name"]
+        jobs_api_run_id = str(UUID(response["job_id"]))
     except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError("prod9 reload create response is ambiguous; never retry") from exc
-    if created.get("metadata", {}).get("name") != value["name"]:
-        raise ValueError("prod9 reload create returned another identity; never retry")
-    direct._publish_creator_binding(
-        auth["observer"],
-        kind="rayjob",
-        name=value["name"],
-        plan_sha256="sha256:" + value["plan_sha256"],
-        manifest_sha256="sha256:" + digest(expected),
-        uid=uid,
+        raise ValueError("prod9 reload API response is ambiguous; never retry") from exc
+    if (
+        not isinstance(jobs_api_run_name, str)
+        or re.fullmatch(re.escape(request["name"]) + r"-[a-f0-9]{8}", jobs_api_run_name) is None
+        or response.get("run_dir") not in (None, request["run_dir"])
+    ):
+        raise ValueError("prod9 reload API returned another identity; never retry")
+    normalized_response = {
+        "name": jobs_api_run_name,
+        "job_id": jobs_api_run_id,
+        "run_dir": response.get("run_dir") or request["run_dir"],
+        "status": response.get("status"),
+        "created_at": response.get("created_at"),
+    }
+    with journal.open("a") as stream:
+        stream.write(
+            json.dumps(
+                {"state": "POST_RESPONSE", **normalized_response},
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n"
+        )
+        stream.flush()
+        os.fsync(stream.fileno())
+    binding = direct._bind_jobs_api_created(
+        operation_root=canonical,
+        purpose="reload",
+        request=request,
+        plan_sha256=plan_sha256,
+        manifest_sha256=manifest_sha256,
+        maximum_seconds=MAXIMUM_SECONDS,
+        expected_gpus=1,
+        response=normalized_response,
+        runner=runner,
     )
     proof = _seal(
         {
             "schema": CREATED_SCHEMA,
-            "status": "created_once",
+            "status": "submitted_once_and_bound_exact_uid",
             "spec_sha256": value["sha256"],
-            "manifest_sha256": "sha256:" + digest(expected),
+            "plan_sha256": plan_sha256,
+            "request_sha256": request_sha256,
+            "manifest_sha256": manifest_sha256,
             "authorization_sha256": auth["sha256"],
+            "live_jobs_preview_sha256": "sha256:" + digest(live_source_preview),
+            "live_preview_proof_sha256": live_preview_proof["sha256"],
             "capacity_gate_sha256": capacity["sha256"],
-            "rayjob_name": value["name"],
-            "rayjob_uid": uid,
-            "created_at": created_at,
+            "jobs_api_run_name": jobs_api_run_name,
+            "jobs_api_run_id": jobs_api_run_id,
+            "rayjob_name": binding["rayjob_name"],
+            "rayjob_uid": binding["rayjob_uid"],
+            "creator_binding_sha256": binding["sha256"],
+            "created_at": binding["rayjob_created_at"],
+            "failure_alerts": binding["failure_alerts"],
+            "priority": "c1",
+            "queue_priority": "q1",
+            "nodes": 1,
+            "gpus": 1,
         }
     )
     with journal.open("a") as stream:

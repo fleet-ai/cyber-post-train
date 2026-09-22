@@ -173,6 +173,31 @@ def _rayjob_claim(rayjob: dict) -> tuple[int, int, list[str]]:
     return _claim_from_pod_sets(pod_sets)
 
 
+def _inference_model_claim(spec: dict) -> tuple[int, int, list[str]]:
+    """Return the conservative zero-Pod claim for an owned serving route."""
+    resources = spec.get("resources") or {}
+    if not isinstance(resources, dict):
+        return 0, 0, ["InferenceModel resources are malformed"]
+    requested = _gpu_quantity((resources.get("requests") or {}).get(GPU_RESOURCE))
+    limited = _gpu_quantity((resources.get("limits") or {}).get(GPU_RESOURCE))
+    problems = []
+    if requested != limited:
+        problems.append("InferenceModel GPU requests and limits differ")
+    per_replica = max(requested, limited)
+    scaling = spec.get("scaling") or {}
+    if not isinstance(scaling, dict):
+        return 0, 0, [*problems, "InferenceModel scaling is malformed"]
+    declared = [scaling.get(field) for field in ("replicas", "minReplicas")]
+    if any(value is not None and (type(value) is not int or value < 0) for value in declared):
+        return 0, 0, [*problems, "InferenceModel replica count is malformed"]
+    # A serving/queued/resuming route with zero Pods still owns at least one
+    # future scheduling slot.  Use the largest declared floor when present.
+    replicas = max(1, *(value for value in declared if isinstance(value, int)))
+    if not per_replica:
+        problems.append("InferenceModel claim contains no GPU request")
+    return replicas, replicas * per_replica, problems
+
+
 def build_capacity_census(
     pods: dict,
     inference_models: dict,
@@ -248,6 +273,7 @@ def build_capacity_census(
     queued.sort(key=lambda row: (row["role"], row["namespace"], row["name"]))
 
     models: list[dict] = []
+    serving_claims: list[dict] = []
     serving_pods: dict[str, int] = {}
     for pod in [*allocated, *queued]:
         if pod["role"] == "serving":
@@ -260,19 +286,55 @@ def build_capacity_census(
             continue
         spec = model.get("spec") or {}
         status = model.get("status") or {}
+        generation = metadata.get("generation")
+        observed_generation = status.get("observedGeneration")
         row = {
             "namespace": metadata.get("namespace", "default"),
             "name": name,
             "uid": metadata.get("uid"),
             "resource_version": metadata.get("resourceVersion"),
+            "generation": generation,
             "desired_state": spec.get("desiredState"),
             "phase": status.get("phase"),
             "active_pods": int(status.get("activePods") or 0),
             "ready_replicas": int(status.get("readyReplicas") or 0),
-            "observed_generation": status.get("observedGeneration"),
+            "observed_generation": observed_generation,
         }
         actual = serving_pods.pop(name, 0)
         row["observed_gpu_pods"] = actual
+        phase = str(row["phase"] or "").lower()
+        if (
+            type(generation) is not int
+            or generation < 1
+            or type(observed_generation) is not int
+            or observed_generation != generation
+        ):
+            problems.append(
+                f"{row['namespace']}/{name}: InferenceModel generation={generation} "
+                f"but observedGeneration={observed_generation}"
+            )
+        active_route = (
+            row["desired_state"] == "serving"
+            or phase in {"ready", "serving", "queued", "resuming"}
+            or row["active_pods"] > 0
+            or row["ready_replicas"] > 0
+        )
+        if actual == 0 and active_route:
+            claimed_nodes, claimed_gpus, claim_problems = _inference_model_claim(spec)
+            serving_claims.append(
+                {
+                    "namespace": row["namespace"],
+                    "name": name,
+                    "uid": row["uid"],
+                    "resource_version": row["resource_version"],
+                    "identity": name,
+                    "nodes": claimed_nodes,
+                    "gpus": claimed_gpus,
+                    "source": "inference_model",
+                }
+            )
+            for problem in claim_problems:
+                problems.append(f"{row['namespace']}/{name}: {problem}")
         if row["active_pods"] != actual:
             problems.append(
                 f"{row['namespace']}/{name}: InferenceModel activePods={row['active_pods']} "
@@ -282,6 +344,7 @@ def build_capacity_census(
     for name, count in sorted(serving_pods.items()):
         problems.append(f"serving identity {name}: {count} GPU Pod(s) have no InferenceModel")
     models.sort(key=lambda row: (row["namespace"], row["name"]))
+    serving_claims.sort(key=lambda row: (row["namespace"], row["name"]))
 
     pod_nodes_by_identity: dict[str, int] = {}
     pod_gpus_by_identity: dict[str, int] = {}
@@ -400,11 +463,17 @@ def build_capacity_census(
             )
 
     nodes = sorted({row["node"] for row in allocated})
-    current_nodes = len(nodes) + len(queued) + sum(row["nodes"] for row in queued_claims)
+    current_nodes = (
+        len(nodes)
+        + len(queued)
+        + sum(row["nodes"] for row in queued_claims)
+        + sum(row["nodes"] for row in serving_claims)
+    )
     current_gpus = (
         sum(row["gpus"] for row in allocated)
         + sum(row["gpus"] for row in queued)
         + sum(row["gpus"] for row in queued_claims)
+        + sum(row["gpus"] for row in serving_claims)
     )
     projected_nodes = current_nodes + planned_nodes
     projected_gpus = current_gpus + planned_gpus
@@ -432,6 +501,7 @@ def build_capacity_census(
             "allocated_pods": allocated,
             "queued_pods": queued,
             "queued_claims": queued_claims,
+            "serving_claims": serving_claims,
             "inference_models": models,
         },
         "projected": {"nodes": projected_nodes, "gpus": projected_gpus},

@@ -62,20 +62,37 @@ def gpu_container(name: str, gpus: int, *, restartable: bool = False) -> dict:
     return value
 
 
-def model(name: str, *, active: int, phase: str = "ready") -> dict:
+def model(
+    name: str,
+    *,
+    active: int,
+    phase: str = "ready",
+    desired_state: str | None = None,
+    generation: int = 1,
+    observed_generation: int = 1,
+    gpus: int = 8,
+) -> dict:
     return {
         "metadata": {
             "name": name,
             "namespace": "inference",
             "uid": "model-" + name,
             "resourceVersion": "20",
+            "generation": generation,
         },
-        "spec": {"desiredState": "serving" if active else "paused"},
+        "spec": {
+            "desiredState": desired_state or ("serving" if active else "paused"),
+            "resources": {
+                "requests": {"nvidia.com/gpu": gpus},
+                "limits": {"nvidia.com/gpu": gpus},
+            },
+            "scaling": {"minReplicas": 0, "replicas": 1},
+        },
         "status": {
             "phase": phase,
             "activePods": active,
             "readyReplicas": active,
-            "observedGeneration": 1,
+            "observedGeneration": observed_generation,
         },
     }
 
@@ -364,6 +381,115 @@ def test_inference_model_and_pod_count_must_reconcile() -> None:
     )
     assert receipt["qualified"] is False
     assert "activePods=1" in receipt["problems"][0]
+
+
+@pytest.mark.parametrize("phase", ["ready", "queued", "resuming"])
+def test_serving_or_starting_inference_model_without_a_pod_fails_closed(phase: str) -> None:
+    receipt = build_capacity_census(
+        {
+            "items": [
+                pod(
+                    f"chris-q38-running-{index}",
+                    namespace="fleet-train-jobs",
+                    uid=f"running-{index}",
+                    node=f"node-{index}",
+                    labels={"fleet.ai/run-name": f"chris-q38-running-{index}"},
+                )
+                for index in range(7)
+            ]
+        },
+        {
+            "items": [
+                model(
+                    "chris-q38-resuming",
+                    active=0,
+                    phase=phase,
+                    desired_state="serving",
+                )
+            ]
+        },
+        planned_nodes=1,
+        planned_gpus=8,
+        observed_at="2026-09-21T00:00:00Z",
+    )
+    assert receipt["current"]["gpus"] == 64
+    assert receipt["current"]["nodes"] == 8
+    assert receipt["projected"] == {"nodes": 9, "gpus": 72}
+    assert receipt["current"]["serving_claims"] == [
+        {
+            "namespace": "inference",
+            "name": "chris-q38-resuming",
+            "uid": "model-chris-q38-resuming",
+            "resource_version": "20",
+            "identity": "chris-q38-resuming",
+            "nodes": 1,
+            "gpus": 8,
+            "source": "inference_model",
+        }
+    ]
+    assert receipt["qualified"] is False
+    assert "projected GPUs 72 exceed limit 64" in receipt["problems"]
+
+
+def test_stale_inference_model_generation_fails_closed_with_a_counted_pod() -> None:
+    name = "chris-q38-serving"
+    receipt = build_capacity_census(
+        {
+            "items": [
+                pod(
+                    "inference-" + name,
+                    namespace="inference",
+                    uid="serving",
+                    node="node-a",
+                    labels={"inference.fleet.ai/model": name},
+                )
+            ]
+        },
+        {
+            "items": [
+                model(
+                    name,
+                    active=1,
+                    phase="ready",
+                    generation=2,
+                    observed_generation=1,
+                )
+            ]
+        },
+        observed_at="2026-09-21T00:00:00Z",
+    )
+    assert receipt["current"]["gpus"] == 8
+    assert receipt["qualified"] is False
+    assert any(
+        "generation=2 but observedGeneration=1" in problem for problem in receipt["problems"]
+    )
+
+
+@pytest.mark.parametrize("phase", ["ready", "serving", "queued", "resuming"])
+def test_stale_active_inference_route_without_pods_is_still_counted(phase: str) -> None:
+    receipt = build_capacity_census(
+        {"items": []},
+        {
+            "items": [
+                model(
+                    "chris-q38-stale-route",
+                    active=0,
+                    phase=phase,
+                    desired_state="paused",
+                    generation=2,
+                    observed_generation=1,
+                )
+            ]
+        },
+        observed_at="2026-09-21T00:00:00Z",
+    )
+    assert receipt["current"]["nodes"] == 1
+    assert receipt["current"]["gpus"] == 8
+    assert receipt["current"]["serving_claims"][0]["name"] == "chris-q38-stale-route"
+    assert receipt["qualified"] is False
+    assert any(
+        "generation=2 but observedGeneration=1" in problem for problem in receipt["problems"]
+    )
 
 
 def test_live_census_reads_pods_and_queued_claims_across_all_namespaces(monkeypatch) -> None:

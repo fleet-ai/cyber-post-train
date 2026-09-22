@@ -6,6 +6,8 @@ import base64
 import copy
 import gzip
 import json
+import os
+import re
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -114,9 +116,11 @@ def _source_preview(spec: dict, request: dict) -> dict:
                 "fleet.ai/run-id": "00000000-0000-0000-0000-000000000000",
                 "fleet.ai/job-image": reload.IMAGE,
                 "fleet.ai/run-dir": spec["run_dir"],
+                reload.FAILURE_ALERT_ANNOTATION: reload.FAILURE_ALERT_OFF,
             },
         },
         "spec": {
+            "backoffLimit": 0,
             "entrypoint": request["command"],
             "submissionMode": "HTTPMode",
             "suspend": True,
@@ -135,6 +139,7 @@ def _source_preview(spec: dict, request: dict) -> dict:
                                     "envFrom": [
                                         {"secretRef": {"name": placeholder + "-fleet-key"}}
                                     ],
+                                    "securityContext": direct._runtime_context(),
                                     "resources": {
                                         "requests": {
                                             "cpu": resources["cpu_request"],
@@ -189,24 +194,28 @@ def _server_render(value: dict) -> dict:
     return result
 
 
-def _observer(tmp_path: Path, spec: dict, manifest: dict) -> dict:
-    return direct._seal(
+def _observer(tmp_path: Path, spec: dict, request: dict, manifest: dict) -> dict:
+    value = direct._seal(
         {
-            "schema": "cyber_direct_cleanup_observer_armed_v1",
-            "status": "armed",
+            "schema": "cyber_jobs_api_prefix_guard_armed_v1",
+            "status": "armed_non_destructive_prefix_guard",
             "context": reload.PROD_CONTEXT,
             "namespace": reload.NAMESPACE,
-            "kind": "rayjob",
-            "name": spec["name"],
+            "run_name_prefix": request["name"],
+            "generated_name_pattern": "^" + re.escape(request["name"]) + r"-[a-f0-9]{8}$",
+            "run_dir": request["run_dir"],
+            "image": request["image"],
             "maximum_seconds": reload.MAXIMUM_SECONDS,
             "expected_gpus": 1,
             "plan_sha256": "sha256:" + spec["plan_sha256"],
             "manifest_sha256": "sha256:" + digest(manifest),
             "armed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "observer_pid": 12345,
-            "creator_binding_path": str(hardening.creator_binding_path(tmp_path, "reload")),
+            "observer_pid": os.getpid(),
+            "prefix_collision_count_before_post": 0,
         }
     )
+    direct.jobs_api_guard_path(tmp_path, "reload").write_text(json.dumps(value))
+    return value
 
 
 def _capacity(_context=None, **kwargs) -> dict:
@@ -237,6 +246,9 @@ def _bundle(request: dict) -> dict:
 def _prepared(tmp_path: Path, monkeypatch):
     spec = _spec()
     request = reload.job_request(spec)
+    assert request["command"].startswith(
+        "mkdir " + spec["run_dir"] + "/.prod9-reload-create-claim-v1 && exec "
+    )
     source = _source_preview(spec, request)
     expected = reload.manifest(spec, request, source)
     rendered = _server_render(expected)
@@ -251,7 +263,7 @@ def _prepared(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(hardening, "CREATE_ONCE_ROOT", global_root)
     operation_root = hardening.reload_operation_root(spec)
     operation_root.mkdir()
-    observer = _observer(operation_root, spec, expected)
+    observer = _observer(operation_root, spec, request, expected)
     monkeypatch.setattr(direct.os, "kill", lambda *_: None)
     auth = reload.authorize(
         spec,
@@ -297,14 +309,16 @@ def test_reload_bundle_is_hermetic_and_manifest_is_exact_one_gpu(tmp_path) -> No
     assert imported.returncode == 0, imported.stderr
 
     expected = reload.manifest(spec, request, _source_preview(spec, request))
-    assert expected["metadata"]["name"] == spec["name"]
+    assert expected["metadata"]["name"] == request["name"] + "-00000000"
     assert expected["metadata"]["annotations"][reload.FAILURE_ALERT_ANNOTATION] == "off"
     cluster = expected["spec"]["rayClusterSpec"]
     assert cluster.get("workerGroupSpecs") in (None, [])
     pod = cluster["headGroupSpec"]["template"]["spec"]
     assert pod["priorityClassName"] == "c1"
     assert pod["containers"][0]["resources"]["limits"]["nvidia.com/gpu"] == 1
-    assert pod["containers"][0]["envFrom"] == []
+    assert pod["containers"][0]["envFrom"] == [
+        {"secretRef": {"name": request["name"] + "-00000000-fleet-key"}}
+    ]
     assert expected["spec"]["backoffLimit"] == 0
 
 
@@ -340,7 +354,9 @@ def test_full_reload_authorization_is_no_mutation_and_wrong_root_stops_before_io
 def test_reload_create_is_exactly_once_and_publishes_creator_uid(tmp_path, monkeypatch) -> None:
     spec, request, source, expected, auth = _prepared(tmp_path, monkeypatch)
     operation_root = Path(auth["operation_root"])
-    creates = []
+    posts = []
+    actual_name = request["name"] + "-1a2b3c4d"
+    job_id = "00000000-0000-0000-0000-000000000019"
 
     class FakeJobs:
         def __init__(self, *_args, **_kwargs):
@@ -355,7 +371,31 @@ def test_reload_create_is_exactly_once_and_publishes_creator_uid(tmp_path, monke
         def all_runs(self):
             return []
 
+        def preview(self, submitted):
+            assert submitted == request
+            return source
+
+        def request(self, method, path, **kwargs):
+            assert (method, path, kwargs.get("json")) == ("POST", "/v1/runs", request)
+            posts.append((method, path))
+            return {
+                "name": actual_name,
+                "job_id": job_id,
+                "run_dir": request["run_dir"],
+                "status": "queued",
+            }
+
     def runner(command, **kwargs):
+        if "get" in command and actual_name in command:
+            created = copy.deepcopy(expected)
+            created["metadata"].update(
+                {
+                    "name": actual_name,
+                    "uid": "00000000-0000-0000-0000-000000000020",
+                    "creationTimestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                }
+            )
+            return subprocess.CompletedProcess(command, 0, stdout=json.dumps(created), stderr="")
         if "get" in command:
             return subprocess.CompletedProcess(command, 0, stdout='{"items":[]}', stderr="")
         if "--dry-run=server" in command:
@@ -365,15 +405,7 @@ def test_reload_create_is_exactly_once_and_publishes_creator_uid(tmp_path, monke
                 stdout=json.dumps(_server_render(json.loads(kwargs["input"]))),
                 stderr="",
             )
-        creates.append(command)
-        created = copy.deepcopy(expected)
-        created["metadata"].update(
-            {
-                "uid": "00000000-0000-0000-0000-000000000020",
-                "creationTimestamp": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            }
-        )
-        return subprocess.CompletedProcess(command, 0, stdout=json.dumps(created), stderr="")
+        pytest.fail(f"unexpected mutating command: {command}")
 
     proof = reload.create_once(
         operation_root,
@@ -387,14 +419,14 @@ def test_reload_create_is_exactly_once_and_publishes_creator_uid(tmp_path, monke
         jobs_factory=FakeJobs,
         capacity_reader=_capacity,
     )
-    assert proof["status"] == "created_once"
+    assert proof["status"] == "submitted_once_and_bound_exact_uid"
     assert proof["rayjob_uid"] == "00000000-0000-0000-0000-000000000020"
-    assert len(creates) == 1
+    assert posts == [("POST", "/v1/runs")]
     binding = json.loads(hardening.creator_binding_path(operation_root, "reload").read_text())
-    assert binding["uid"] == proof["rayjob_uid"]
-    assert binding["name"] == spec["name"]
+    assert binding["rayjob_uid"] == proof["rayjob_uid"]
+    assert binding["jobs_api_run_name"] == actual_name
 
-    before = len(creates)
+    before = len(posts)
     with pytest.raises(ValueError, match="never retry"):
         reload.create_once(
             operation_root,
@@ -408,12 +440,14 @@ def test_reload_create_is_exactly_once_and_publishes_creator_uid(tmp_path, monke
             jobs_factory=FakeJobs,
             capacity_reader=_capacity,
         )
-    assert len(creates) == before
+    assert len(posts) == before
 
     alternate = tmp_path / "fresh-alternate-operation"
     alternate.mkdir()
-    changed = _observer(alternate, spec, expected)
-    with pytest.raises(ValueError, match="canonical durable directory"):
+    changed = _observer(alternate, spec, request, expected)
+    changed["observer_pid"] += 1
+    changed = direct._seal(changed)
+    with pytest.raises(ValueError, match="binding changed"):
         reload.authorize(
             spec,
             request,
@@ -423,7 +457,7 @@ def test_reload_create_is_exactly_once_and_publishes_creator_uid(tmp_path, monke
             prod_preview=auth["prod_preview"],
             observer=changed,
         )
-    assert len(creates) == before
+    assert len(posts) == before
 
 
 def test_reload_preview_rejects_root_alert_or_gpu_drift() -> None:
@@ -431,6 +465,12 @@ def test_reload_preview_rejects_root_alert_or_gpu_drift() -> None:
     request = reload.job_request(spec)
     source = _source_preview(spec, request)
     expected = reload.manifest(spec, request, source)
+    missing_alert = copy.deepcopy(source)
+    missing_alert_manifest = yaml.safe_load(missing_alert["manifest_yaml"])
+    missing_alert_manifest["metadata"]["annotations"].pop(reload.FAILURE_ALERT_ANNOTATION)
+    missing_alert["manifest_yaml"] = yaml.safe_dump(missing_alert_manifest)
+    with pytest.raises(ValueError, match="root alert-off"):
+        reload.manifest(spec, request, missing_alert)
     for fault in ("alert", "gpu"):
         changed = _server_render(expected)
         if fault == "alert":
