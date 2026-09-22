@@ -29,6 +29,14 @@ def test_canary_is_reproducible_bounded_and_heldout_excluding() -> None:
     assert receipt["heldout_roles_excluded"] == ["dev", "final_test"]
     assert receipt["submitted"] is False
     assert receipt["model_calls"] == receipt["trace_or_score_reads"] == 0
+    assert (
+        receipt["operation_root_name"]
+        == rendered["operation-authorization.json"]["operation_root_name"]
+    )
+    assert (
+        receipt["identity_map_sha256"]
+        == rendered["operation-authorization.json"]["identity_map_sha256"]
+    )
     assert packet["execution_safety"]["planned_cells"] == 4
     assert packet["execution_safety"]["maximum_planned_cells"] == 4
     assert packet["corpus_scope"]["visible_reasoning_included"] is False

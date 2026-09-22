@@ -120,6 +120,9 @@ def render(spec: dict[str, Any], *, root: Path) -> dict[str, dict[str, Any]]:
             "heldout_roles_excluded": ["dev", "final_test"],
             "planned_cells": 4,
             "operation_authorization_sha256": authorization["sha256"],
+            "operation_root_name": authorization["operation_root_name"],
+            "dedicated_ledger_id": authorization["dedicated_ledger_id"],
+            "identity_map_sha256": authorization["identity_map_sha256"],
             "completion_budget_runtime_sha256": packet["completion_budget_runtime_sha256"],
             "output_logical_sha256": {
                 name: value.get("sha256", v1.canonical_digest(value))

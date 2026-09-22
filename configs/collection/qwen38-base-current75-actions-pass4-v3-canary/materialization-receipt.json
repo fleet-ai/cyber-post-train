@@ -1,12 +1,15 @@
 {
   "completion_budget_runtime_sha256": "sha256:f36b3f273bf7108734d532d2b0ebb72e2feafec1afea5cffb71978b9e15c1064",
+  "dedicated_ledger_id": "sha256:c10c8470d8da4eba9216d9194b6ecec44d65b69107175d20933aa4148b09fdf4",
   "fleet_api_calls": 0,
   "heldout_roles_excluded": [
     "dev",
     "final_test"
   ],
+  "identity_map_sha256": "sha256:713c51dc3b093debe90c0c88f4d2932aa3528e4dee4a38d59656531d0658b229",
   "model_calls": 0,
   "operation_authorization_sha256": "sha256:9cee1cdf02cfe05980a504e60f0cceb761de309f801bb52762c557ce7ea50217",
+  "operation_root_name": "q38-base-actions-budget-canary-p4-v1-2e7829a6fb43",
   "output_logical_sha256": {
     "collection-packet.json": "sha256:7603e3e143c92a5de7d88452a9851497dc931ba0d27582d45a0107112641fc74",
     "eval-config.json": "sha256:44d8168e54039b4e18808d6100c1f88ff84c5e3f2f11cca7011fcff27d124689",
@@ -18,7 +21,7 @@
   "schema": "cyber_visible_action_collection_budget_canary_receipt_v1",
   "selected_family_group_id": "sha256:33850200bc71bc7996f9c0ce122452cf494b8b9de338d2d74b94fe7f62b79e0c",
   "selected_task_version_id": "54425601-6fd2-43d8-8cb9-e565b767676a",
-  "sha256": "sha256:09d82b7932cf02878094ed20c71a3d21da9edf94ab1e62794ccb6d5f3042cce5",
+  "sha256": "sha256:8687335b61cd63c384f451c1bab12aea38675ea4be39670ef46f4a4ffb34345d",
   "source_spec_sha256": "sha256:45c2f47515d6b4facb2fde95a7630527f8e8c84a06f2346bfa9cf43ea6c99ce4",
   "submitted": false,
   "trace_or_score_reads": 0
