@@ -1,0 +1,25 @@
+{
+  "campaign_id": "q38-base-actions-budget-canary-p4-v1",
+  "dedicated_ledger_id": "sha256:c10c8470d8da4eba9216d9194b6ecec44d65b69107175d20933aa4148b09fdf4",
+  "execution_contract": {
+    "alternate_path_retry_allowed": false,
+    "ambiguous_external_mutation_replay_allowed": false,
+    "canonical_private_operation_root_required": true,
+    "dedicated_empty_ledger_required": true,
+    "exclusive_pre_mutation_intent_required": true,
+    "same_path_retry_allowed": false
+  },
+  "identity_derivation": {
+    "execution_generation": 1,
+    "execution_id": "sha256-scientific-cell-generation-v1",
+    "ledger_cell_id": "fleet-cyber-rollout-cell-v1",
+    "scientific_cell_id": "sha256-canonical-ledger-row-v1"
+  },
+  "identity_map_sha256": "sha256:713c51dc3b093debe90c0c88f4d2932aa3528e4dee4a38d59656531d0658b229",
+  "operation_root_name": "q38-base-actions-budget-canary-p4-v1-2e7829a6fb43",
+  "plan_sha256": "sha256:2e7829a6fb433925fec1bfbca0de92ed8377dacb2e126ac393a2f8d7fc2e9a08",
+  "planned_cell_universe_sha256": "sha256:9bd3f96424683175a2c5b6766f7f2bc4703486095d1875d0d52f518f4af7a9f6",
+  "planned_cells": 4,
+  "schema": "cyber_fleet_visible_action_collection_operation_authorization_v1",
+  "sha256": "sha256:9cee1cdf02cfe05980a504e60f0cceb761de309f801bb52762c557ce7ea50217"
+}

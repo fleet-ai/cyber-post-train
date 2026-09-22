@@ -24,8 +24,9 @@ from typing import Any
 from cyber_post_train.jobs import digest
 from evals.fleet import visible_action_collection as collection_runtime
 from evals.fleet import visible_action_collection_v2 as collection_runtime_v2
+from evals.fleet import visible_action_collection_v3 as collection_runtime_v3
 
-from . import collection_campaign, collection_campaign_v2
+from . import collection_campaign, collection_campaign_v2, collection_campaign_v3
 from . import fleet_collection_admission as admission
 from .corpus import local_tokenizer
 from .dense import Excluded, compatible_messages, encode_record, native_helper, segment_record
@@ -41,10 +42,12 @@ from .task_family_split import validate as validate_split
 
 SCHEMA = "cyber_fleet_private_corpus_materialization_request_v1"
 SCHEMA_V2 = "cyber_fleet_private_corpus_materialization_request_v2"
+SCHEMA_V3 = "cyber_fleet_private_corpus_materialization_request_v3"
 RECORD_SCHEMA = "cyber_fleet_visible_action_record_v1"
 COVERAGE_SCHEMA = "cyber_fleet_collection_coverage_v1"
 RECEIPT_SCHEMA = "cyber_fleet_collection_materialization_receipt_v1"
 RECEIPT_SCHEMA_V2 = "cyber_fleet_collection_materialization_receipt_v2"
+RECEIPT_SCHEMA_V3 = "cyber_fleet_collection_materialization_receipt_v3"
 
 _SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 _PRIVATE_REASONING_MARKER = re.compile(r"<\s*/?\s*think\b", re.IGNORECASE)
@@ -136,7 +139,16 @@ def _json(path: Path, label: str) -> dict[str, Any]:
 
 def _selection(value: dict[str, Any]) -> dict[str, dict[str, Any]]:
     v2 = value.get("schema") == admission.SELECTION_SCHEMA_V2
-    _sealed(value, admission.SELECTION_SCHEMA_V2 if v2 else admission.SELECTION_SCHEMA)
+    v3 = value.get("schema") == admission.SELECTION_SCHEMA_V3
+    versioned = v2 or v3
+    expected_schema = (
+        admission.SELECTION_SCHEMA_V3
+        if v3
+        else admission.SELECTION_SCHEMA_V2
+        if v2
+        else admission.SELECTION_SCHEMA
+    )
+    _sealed(value, expected_schema)
     required = {
         "schema",
         "artifact_kind",
@@ -160,12 +172,14 @@ def _selection(value: dict[str, Any]) -> dict[str, dict[str, Any]]:
         "selected",
         "sha256",
     }
-    if v2:
+    if versioned:
         required |= {
             "collection_packet_sha256",
             "operation_authorization_sha256",
             "identity_map_sha256",
         }
+    if v3:
+        required.add("completion_budget_runtime_sha256")
     if set(value) != required or value["artifact_kind"] != admission.HANDOFF_KIND:
         raise ValueError("admission selection has an unexpected contract")
     metadata_only = ("trainable_corpus_created", "parquet_created", "source_text_read")
@@ -189,9 +203,10 @@ def _selection(value: dict[str, Any]) -> dict[str, dict[str, Any]]:
                 "operation_authorization_sha256",
                 "identity_map_sha256",
             )
-            if v2
+            if versioned
             else ()
         ),
+        *(("completion_budget_runtime_sha256",) if v3 else ()),
     ):
         _sha(value.get(field), f"admission selection {field}")
     if value.get("root_role_anchor_id") != TRUSTED_FLEET_COLLECTION_ROOT_ID:
@@ -232,13 +247,15 @@ def _selection(value: dict[str, Any]) -> dict[str, dict[str, Any]]:
         "normalized_trajectory_sha256",
         "transcript_sha256",
     }
-    if v2:
+    if versioned:
         fields |= {
             "operation_authorization_sha256",
             "ledger_cell_id",
             "scientific_cell_id",
             "execution_id",
         }
+    if v3:
+        fields.add("completion_budget_runtime_sha256")
     for row in rows:
         if not isinstance(row, dict) or set(row) != fields:
             raise ValueError("admission selection row is malformed")
@@ -265,18 +282,23 @@ def _selection(value: dict[str, Any]) -> dict[str, dict[str, Any]]:
             "transcript_sha256",
             *(
                 ("operation_authorization_sha256", "scientific_cell_id", "execution_id")
-                if v2
+                if versioned
                 else ()
             ),
+            *(("completion_budget_runtime_sha256",) if v3 else ()),
         ):
             _sha(row.get(field), f"selected {field}")
-        if v2:
+        if versioned:
             _string(row.get("ledger_cell_id"), "selected ledger cell")
             if (
                 row["operation_authorization_sha256"] != value["operation_authorization_sha256"]
                 or row["cell_sha256"] != row["scientific_cell_id"]
             ):
-                raise ValueError("v2 selection row changes operation or cell identity")
+                raise ValueError("versioned selection row changes operation or cell identity")
+        if v3 and (
+            row["completion_budget_runtime_sha256"] != value["completion_budget_runtime_sha256"]
+        ):
+            raise ValueError("v3 selection row changes completion-budget runtime identity")
         if row["normalized_trajectory_sha256"] in seen_trajectories:
             raise ValueError("admission selection contains a duplicate trajectory")
         seen_trajectories.add(row["normalized_trajectory_sha256"])
@@ -289,7 +311,15 @@ def _selection(value: dict[str, Any]) -> dict[str, dict[str, Any]]:
 
 def _admission_receipt(value: dict[str, Any], selection: dict[str, Any]) -> None:
     v2 = selection.get("schema") == admission.SELECTION_SCHEMA_V2
-    expected_schema = admission.RECEIPT_SCHEMA_V2 if v2 else admission.RECEIPT_SCHEMA
+    v3 = selection.get("schema") == admission.SELECTION_SCHEMA_V3
+    versioned = v2 or v3
+    expected_schema = (
+        admission.RECEIPT_SCHEMA_V3
+        if v3
+        else admission.RECEIPT_SCHEMA_V2
+        if v2
+        else admission.RECEIPT_SCHEMA
+    )
     _sealed(value, expected_schema)
     required = {
         "schema",
@@ -318,12 +348,14 @@ def _admission_receipt(value: dict[str, Any], selection: dict[str, Any]) -> None
         "selection_sha256",
         "sha256",
     }
-    if v2:
+    if versioned:
         required |= {
             "collection_packet_sha256",
             "operation_authorization_sha256",
             "identity_map_sha256",
         }
+    if v3:
+        required.add("completion_budget_runtime_sha256")
     if set(value) != required or value.get("selection_sha256") != selection["sha256"]:
         raise ValueError("admission receipt does not bind the private selection")
     if (
@@ -363,7 +395,7 @@ def _admission_receipt(value: dict[str, Any], selection: dict[str, Any]) -> None
         or value.get("max_sessions_per_task_version") != selection["max_sessions_per_task_version"]
     ):
         raise ValueError("admission receipt source binding differs from selection")
-    if v2 and any(
+    if versioned and any(
         value.get(field) != selection.get(field)
         for field in (
             "collection_packet_sha256",
@@ -371,7 +403,12 @@ def _admission_receipt(value: dict[str, Any], selection: dict[str, Any]) -> None
             "identity_map_sha256",
         )
     ):
-        raise ValueError("v2 admission receipt operation binding differs from selection")
+        raise ValueError("versioned admission receipt operation binding differs from selection")
+    if v3 and (
+        value.get("completion_budget_runtime_sha256")
+        != selection.get("completion_budget_runtime_sha256")
+    ):
+        raise ValueError("v3 admission receipt runtime binding differs from selection")
     input_files = _mapping(value.get("input_file_sha256"), "admission receipt input files")
     if set(input_files) != {
         "campaign",
@@ -380,7 +417,7 @@ def _admission_receipt(value: dict[str, Any], selection: dict[str, Any]) -> None
         "role_anchor",
         "protected_family_lock",
         "attempts",
-    } | ({"collection_packet", "operation_authorization"} if v2 else set()):
+    } | ({"collection_packet", "operation_authorization"} if versioned else set()):
         raise ValueError("admission receipt input-file bindings are incomplete")
     for name, value_sha in input_files.items():
         _sha(value_sha, f"admission receipt input file {name}")
@@ -435,9 +472,18 @@ def _packet(
     operation: dict[str, Any] | None = None,
 ) -> None:
     v2 = value.get("schema") == collection_campaign_v2.PACKET_SCHEMA
+    v3 = value.get("schema") == collection_campaign_v3.PACKET_SCHEMA
+    versioned = v2 or v3
+    expected_schema = (
+        collection_campaign_v3.PACKET_SCHEMA
+        if v3
+        else collection_campaign_v2.PACKET_SCHEMA
+        if v2
+        else collection_campaign.PACKET_SCHEMA
+    )
     _sealed(
         value,
-        collection_campaign_v2.PACKET_SCHEMA if v2 else collection_campaign.PACKET_SCHEMA,
+        expected_schema,
     )
     expected = {
         "schema",
@@ -456,8 +502,10 @@ def _packet(
         "metrics_required",
         "sha256",
     }
-    if v2:
+    if versioned:
         expected.add("operation_authorization_sha256")
+    if v3:
+        expected.add("completion_budget_runtime_sha256")
     if set(value) != expected or value.get("training_data_eligible") is not True:
         raise ValueError("collection packet has an unexpected contract")
     source = _mapping(value.get("source"), "collection packet source")
@@ -499,7 +547,9 @@ def _packet(
     # changed task assignment, runtime contract, or evaluator identity cannot
     # be relabeled as the admitted campaign.
     compiled = (
-        collection_campaign_v2.compile_local(task_selection, eval_config)
+        collection_campaign_v3.compile_local(task_selection, eval_config)
+        if v3
+        else collection_campaign_v2.compile_local(task_selection, eval_config)
         if v2
         else collection_campaign._compile_local(task_selection, eval_config)
     )
@@ -529,11 +579,12 @@ def _packet(
         ),
         "maximum_admitted_sessions_per_family": policy.get("maximum_admitted_sessions_per_family"),
     }
-    if v2:
+    if versioned:
         expected_policy["adapter_must_bind"] = [
             "collection_packet_sha256",
             "eval_plan_sha256",
             "operation_authorization_sha256",
+            *(("completion_budget_runtime_sha256",) if v3 else ()),
         ]
     if (
         policy != expected_policy
@@ -558,20 +609,33 @@ def _packet(
     if not isinstance(task_rows, list):
         raise ValueError("collection task selection is malformed")
     planned_cells = len(task_rows) * pass_k
-    if v2:
+    if versioned:
         if operation is None:
-            raise ValueError("v2 packet requires its exact operation authorization")
-        collection_runtime_v2.validate_operation_authorization(operation, compiled)
+            raise ValueError("versioned packet requires its exact operation authorization")
+        runtime_module = collection_runtime_v3 if v3 else collection_runtime_v2
+        runtime_module.validate_operation_authorization(operation, compiled)
+        expected_selection_schema = (
+            admission.SELECTION_SCHEMA_V3 if v3 else admission.SELECTION_SCHEMA_V2
+        )
         if (
-            selection.get("schema") != admission.SELECTION_SCHEMA_V2
+            selection.get("schema") != expected_selection_schema
             or selection.get("collection_packet_sha256") != value["sha256"]
             or selection.get("operation_authorization_sha256") != operation["sha256"]
             or selection.get("identity_map_sha256") != operation["identity_map_sha256"]
             or value.get("operation_authorization_sha256") != operation["sha256"]
         ):
-            raise ValueError("v2 packet, admission, and operation versions or bindings differ")
+            raise ValueError(
+                "versioned packet, admission, and operation versions or bindings differ"
+            )
+        if v3 and (
+            value.get("completion_budget_runtime_sha256")
+            != "sha256:" + digest(collection_runtime_v3.runtime_identity())
+            or selection.get("completion_budget_runtime_sha256")
+            != value["completion_budget_runtime_sha256"]
+        ):
+            raise ValueError("v3 packet completion-budget runtime binding differs")
         expected_safety = {
-            "execution_mode": collection_runtime_v2.EXECUTION_MODE,
+            "execution_mode": runtime_module.EXECUTION_MODE,
             "planned_cells": planned_cells,
             "maximum_planned_cells": runtime.get("maximum_planned_cells"),
             "operation_authorization_required": True,
@@ -588,12 +652,22 @@ def _packet(
             "external_submission": False,
             "cluster_wrapper_supported": True,
             "cluster_job_execution_requirements": (
-                collection_campaign_v2.JOB_EXECUTION_REQUIREMENTS
+                collection_campaign_v3.JOB_EXECUTION_REQUIREMENTS
+                if v3
+                else collection_campaign_v2.JOB_EXECUTION_REQUIREMENTS
+            ),
+            **(
+                {
+                    "completion_budget_runtime_sha256": value["completion_budget_runtime_sha256"],
+                    "completion_budget": collection_runtime_v3.COMPLETION_BUDGET_POLICY,
+                }
+                if v3
+                else {}
             ),
         }
     else:
         if selection.get("schema") != admission.SELECTION_SCHEMA or operation is not None:
-            raise ValueError("v1 packet cannot consume v2 admission or operation evidence")
+            raise ValueError("v1 packet cannot consume versioned admission or operation evidence")
         expected_safety = {
             "execution_mode": collection_campaign.LOCAL_CPU_EXECUTION,
             "planned_cells": planned_cells,
@@ -938,6 +1012,8 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
     import pyarrow.parquet as pq
 
     v2 = config.get("schema") == SCHEMA_V2
+    v3 = config.get("schema") == SCHEMA_V3
+    versioned = v2 or v3
     request_fields = {
         "schema",
         "admission_selection",
@@ -958,14 +1034,14 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
         "context_tokens",
         "output",
     }
-    if v2:
+    if versioned:
         request_fields.add("operation_authorization")
     _known(
         config,
         request_fields,
         "Fleet collection corpus materialization",
     )
-    if config.get("schema") not in {SCHEMA, SCHEMA_V2}:
+    if config.get("schema") not in {SCHEMA, SCHEMA_V2, SCHEMA_V3}:
         raise ValueError("unsupported Fleet collection corpus materialization request")
     output = _path(relative_to, config.get("output"), "output")
     if output.exists() or output.is_symlink():
@@ -983,7 +1059,7 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
         "records",
         "model_lock",
         "native_helper",
-    ) + (("operation_authorization",) if v2 else ())
+    ) + (("operation_authorization",) if versioned else ())
     sources = {name: _input(relative_to, config.get(name), name) for name in names}
     paths = {name: item[0] for name, item in sources.items()}
     expected_files = {name: item[1] for name, item in sources.items()}
@@ -992,7 +1068,9 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
     receipt = _json(paths["admission_receipt"], "admission receipt")
     _admission_receipt(receipt, selection)
     packet = _json(paths["collection_packet"], "collection packet")
-    operation = _json(paths["operation_authorization"], "operation authorization") if v2 else None
+    operation = (
+        _json(paths["operation_authorization"], "operation authorization") if versioned else None
+    )
     task_selection = _json(paths["collection_task_selection"], "collection task selection")
     eval_config = _json(paths["collection_eval_config"], "collection eval config")
     inventory = _json(paths["inventory"], "inventory")
@@ -1091,6 +1169,15 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
                     "source_admission_selection_sha256": selection["sha256"],
                     "source_normalized_record_sha256": admitted["normalized_record_sha256"],
                     "source_task_version_id": admitted["task_version_id"],
+                    **(
+                        {
+                            "source_completion_budget_runtime_sha256": packet[
+                                "completion_budget_runtime_sha256"
+                            ]
+                        }
+                        if v3
+                        else {}
+                    ),
                 }
             )
         packed_rows.extend(rows)
@@ -1166,6 +1253,11 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
         **(
             {"operation_authorization_sha256": operation["sha256"]} if operation is not None else {}
         ),
+        **(
+            {"completion_budget_runtime_sha256": packet["completion_budget_runtime_sha256"]}
+            if v3
+            else {}
+        ),
     }
     coverage["sha256"] = "sha256:" + digest(coverage)
     manifest = {
@@ -1202,6 +1294,11 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
                     "identity_map_sha256": operation["identity_map_sha256"],
                 }
                 if operation is not None
+                else {}
+            ),
+            **(
+                {"completion_budget_runtime_sha256": packet["completion_budget_runtime_sha256"]}
+                if v3
                 else {}
             ),
         },
@@ -1243,7 +1340,7 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
         atomic_write_json(output / "coverage.private.json", coverage, private=True)
         atomic_write_json(output / "manifest.json", manifest, private=True)
         receipt_out = {
-            "schema": RECEIPT_SCHEMA_V2 if v2 else RECEIPT_SCHEMA,
+            "schema": (RECEIPT_SCHEMA_V3 if v3 else RECEIPT_SCHEMA_V2 if v2 else RECEIPT_SCHEMA),
             "manifest_file_sha256": file_sha256(output / "manifest.json"),
             "manifest_sha256": manifest["sha256"],
             "coverage_file_sha256": file_sha256(output / "coverage.private.json"),
@@ -1253,6 +1350,11 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
             **(
                 {"operation_authorization_sha256": operation["sha256"]}
                 if operation is not None
+                else {}
+            ),
+            **(
+                {"completion_budget_runtime_sha256": packet["completion_budget_runtime_sha256"]}
+                if v3
                 else {}
             ),
         }

@@ -24,8 +24,9 @@ from typing import Any
 
 from cyber_post_train.jobs import digest
 from evals.fleet import visible_action_collection_v2 as collection_runtime_v2
+from evals.fleet import visible_action_collection_v3 as collection_runtime_v3
 
-from . import collection_campaign_v2
+from . import collection_campaign_v2, collection_campaign_v3
 from .io import atomic_write_json, file_sha256, iter_jsonl
 from .sft import _known
 from .task_family_split import (
@@ -43,9 +44,14 @@ REQUEST_SCHEMA_V2 = "cyber_fleet_collection_admission_request_v2"
 ATTEMPT_SCHEMA_V2 = "cyber_fleet_collection_attempt_metadata_v2"
 SELECTION_SCHEMA_V2 = "cyber_fleet_collection_selection_v2"
 RECEIPT_SCHEMA_V2 = "cyber_fleet_collection_admission_receipt_v2"
+REQUEST_SCHEMA_V3 = "cyber_fleet_collection_admission_request_v3"
+ATTEMPT_SCHEMA_V3 = "cyber_fleet_collection_attempt_metadata_v3"
+SELECTION_SCHEMA_V3 = "cyber_fleet_collection_selection_v3"
+RECEIPT_SCHEMA_V3 = "cyber_fleet_collection_admission_receipt_v3"
 PROTECTED_FAMILY_LOCK_SCHEMA = "cyber_protected_task_family_lock_v1"
 CAMPAIGN_SCHEMA = "cyber_fleet_eval_v1"
 CAMPAIGN_SCHEMA_V2 = collection_runtime_v2.PLAN_SCHEMA
+CAMPAIGN_SCHEMA_V3 = collection_runtime_v3.PLAN_SCHEMA
 HANDOFF_KIND = "metadata_evidence_handoff_only"
 
 _SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
@@ -172,7 +178,7 @@ def _campaign_cells(
     dict[str, Any],
 ]:
     """Return exact cells for one model without trusting a mutable job roster."""
-    if plan.get("schema") not in {CAMPAIGN_SCHEMA, CAMPAIGN_SCHEMA_V2}:
+    if plan.get("schema") not in {CAMPAIGN_SCHEMA, CAMPAIGN_SCHEMA_V2, CAMPAIGN_SCHEMA_V3}:
         raise ValueError("unsupported Fleet campaign plan schema")
     campaign_sha = _campaign_sha(plan)
     if plan.get("training_data_eligible") is not True:
@@ -296,6 +302,7 @@ def _attempt(value: Mapping[str, Any]) -> dict[str, Any]:
     """Validate one metadata record and reject any hidden trace payload field."""
     row = dict(value)
     v2 = row.get("schema") == ATTEMPT_SCHEMA_V2
+    v3 = row.get("schema") == ATTEMPT_SCHEMA_V3
     identity_fields = (
         {
             "operation_authorization_sha256",
@@ -303,9 +310,11 @@ def _attempt(value: Mapping[str, Any]) -> dict[str, Any]:
             "scientific_cell_id",
             "execution_id",
         }
-        if v2
+        if v2 or v3
         else set()
     )
+    if v3:
+        identity_fields.add("completion_budget_runtime_sha256")
     _known(
         row,
         {
@@ -328,19 +337,25 @@ def _attempt(value: Mapping[str, Any]) -> dict[str, Any]:
         | identity_fields,
         "collection attempt metadata",
     )
-    if row.get("schema") not in {ATTEMPT_SCHEMA, ATTEMPT_SCHEMA_V2} or not _sealed(row):
+    if row.get("schema") not in {
+        ATTEMPT_SCHEMA,
+        ATTEMPT_SCHEMA_V2,
+        ATTEMPT_SCHEMA_V3,
+    } or not _sealed(row):
         raise ValueError("collection attempt metadata digest/schema mismatch")
     for field in ("session_id", "task_key", "task_version_id", "model_alias"):
         _string(row.get(field), f"attempt {field}")
     _sha(row.get("campaign_plan_sha256"), "attempt campaign plan")
     _sha(row.get("cell_sha256"), "attempt cell")
-    if v2:
+    if v2 or v3:
         _sha(row.get("operation_authorization_sha256"), "attempt operation authorization")
         _string(row.get("ledger_cell_id"), "attempt ledger cell")
         _sha(row.get("scientific_cell_id"), "attempt scientific cell")
         _sha(row.get("execution_id"), "attempt execution")
         if row["cell_sha256"] != row["scientific_cell_id"]:
-            raise ValueError("v2 attempt cell must be the exact scientific cell identity")
+            raise ValueError("versioned attempt cell must be the exact scientific cell identity")
+    if v3:
+        _sha(row.get("completion_budget_runtime_sha256"), "attempt completion-budget runtime")
     if type(row.get("attempt")) is not int or row["attempt"] < 1:
         raise ValueError("attempt number must be a positive integer")
     model = _mapping(row.get("model"), "attempt model")
@@ -489,6 +504,8 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
     """
     version = config.get("schema")
     v2 = version == REQUEST_SCHEMA_V2
+    v3 = version == REQUEST_SCHEMA_V3
+    versioned = v2 or v3
     request_fields = {
         "schema",
         "campaign",
@@ -501,14 +518,14 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
         "max_sessions_per_task_version",
         "output",
     }
-    if v2:
+    if versioned:
         request_fields |= {"collection_packet", "operation_authorization"}
     _known(
         config,
         request_fields,
         "collection admission request",
     )
-    if version not in {REQUEST_SCHEMA, REQUEST_SCHEMA_V2}:
+    if version not in {REQUEST_SCHEMA, REQUEST_SCHEMA_V2, REQUEST_SCHEMA_V3}:
         raise ValueError("unsupported collection admission request")
     source = _mapping(config.get("source"), "collection source")
     _known(source, {"kind", "model_alias", "template_sha256"}, "collection source")
@@ -549,7 +566,7 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
     operation_file_sha: str | None = None
     packet_file_sha: str | None = None
     identities: dict[tuple[str, str, str, int], dict[str, Any]] = {}
-    if v2:
+    if versioned:
         operation_path, operation_file_sha = _input_path(
             relative_to,
             config.get("operation_authorization"),
@@ -560,24 +577,42 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
         )
         operation = _read_json(operation_path, "operation authorization")
         packet = _read_json(packet_path, "collection packet")
-        collection_runtime_v2.validate_operation_authorization(operation, plan)
+        runtime = collection_runtime_v3 if v3 else collection_runtime_v2
+        campaign = collection_campaign_v3 if v3 else collection_campaign_v2
+        runtime.validate_operation_authorization(operation, plan)
         if (
-            packet.get("schema") != collection_campaign_v2.PACKET_SCHEMA
+            packet.get("schema") != campaign.PACKET_SCHEMA
             or not _sealed(packet)
             or packet.get("eval_plan_sha256") != _campaign_sha(plan)
             or packet.get("operation_authorization_sha256") != operation["sha256"]
             or packet.get("execution_safety", {}).get("operation_authorization_sha256")
             != operation["sha256"]
             or packet.get("execution_safety", {}).get("cluster_job_execution_requirements")
-            != collection_campaign_v2.JOB_EXECUTION_REQUIREMENTS
+            != campaign.JOB_EXECUTION_REQUIREMENTS
         ):
-            raise ValueError("v2 collection packet is not bound to the exact operation")
+            raise ValueError("versioned collection packet is not bound to the exact operation")
+        if v3 and (
+            packet.get("completion_budget_runtime_sha256")
+            != "sha256:" + digest(collection_runtime_v3.runtime_identity())
+            or packet.get("execution_safety", {}).get("completion_budget_runtime_sha256")
+            != packet.get("completion_budget_runtime_sha256")
+            or packet.get("execution_safety", {}).get("completion_budget")
+            != collection_runtime_v3.COMPLETION_BUDGET_POLICY
+            or packet.get("admission_policy", {}).get("adapter_must_bind")
+            != [
+                "collection_packet_sha256",
+                "eval_plan_sha256",
+                "operation_authorization_sha256",
+                "completion_budget_runtime_sha256",
+            ]
+        ):
+            raise ValueError("v3 collection packet completion-budget binding differs")
         identities = {
             (row["task_key"], row["task_version_id"], row["model_id"], row["attempt"]): row
-            for row in collection_runtime_v2.identity_map(plan)
+            for row in runtime.identity_map(plan)
         }
         if len(identities) != operation["planned_cells"]:
-            raise ValueError("v2 operation identity map is ambiguous")
+            raise ValueError("versioned operation identity map is ambiguous")
     elif plan.get("schema") != CAMPAIGN_SCHEMA:
         raise ValueError("v1 admission cannot consume a versioned v2 campaign")
     expected, model, treatment = _campaign_cells(plan, model_alias)
@@ -600,7 +635,9 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
             raise ValueError("family split assigns an immutable held-out family to training")
 
     attempts = [_attempt(row) for row in iter_jsonl(attempts_path)]
-    expected_attempt_schema = ATTEMPT_SCHEMA_V2 if v2 else ATTEMPT_SCHEMA
+    expected_attempt_schema = (
+        ATTEMPT_SCHEMA_V3 if v3 else ATTEMPT_SCHEMA_V2 if v2 else ATTEMPT_SCHEMA
+    )
     if any(row["schema"] != expected_attempt_schema for row in attempts):
         raise ValueError("collection request and attempt metadata versions differ")
     rejections = collections.Counter({reason: 0 for reason in _REJECTION_REASONS})
@@ -633,7 +670,7 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
 
     candidates: list[dict[str, Any]] = []
     for row in uniquely_sourced:
-        if v2:
+        if versioned:
             assert operation is not None
             identity = identities.get(
                 (row["task_key"], row["task_version_id"], row["model_alias"], row["attempt"])
@@ -644,6 +681,11 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
                 or row["ledger_cell_id"] != identity["ledger_cell_id"]
                 or row["scientific_cell_id"] != identity["scientific_cell_id"]
                 or row["execution_id"] != identity["execution_id"]
+                or (
+                    v3
+                    and row["completion_budget_runtime_sha256"]
+                    != packet["completion_budget_runtime_sha256"]
+                )
             ):
                 rejections["wrong_campaign_binding"] += 1
                 continue
@@ -653,7 +695,7 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
             treatment=treatment,
             campaign_sha256=campaign_sha256,
             template_sha256=template_sha256,
-            validate_legacy_cell=not v2,
+            validate_legacy_cell=not versioned,
         )
         if reason is not None:
             rejections[reason] += 1
@@ -714,14 +756,19 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
                     "scientific_cell_id": row["scientific_cell_id"],
                     "execution_id": row["execution_id"],
                 }
-                if v2
+                if versioned
+                else {}
+            ),
+            **(
+                {"completion_budget_runtime_sha256": row["completion_budget_runtime_sha256"]}
+                if v3
                 else {}
             ),
         }
         for row in selected
     ]
     selection = {
-        "schema": SELECTION_SCHEMA_V2 if v2 else SELECTION_SCHEMA,
+        "schema": SELECTION_SCHEMA_V3 if v3 else SELECTION_SCHEMA_V2 if v2 else SELECTION_SCHEMA,
         "artifact_kind": HANDOFF_KIND,
         "trainable_corpus_created": False,
         "parquet_created": False,
@@ -746,14 +793,19 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
                 "operation_authorization_sha256": operation["sha256"],
                 "identity_map_sha256": operation["identity_map_sha256"],
             }
-            if v2 and packet is not None and operation is not None
+            if versioned and packet is not None and operation is not None
+            else {}
+        ),
+        **(
+            {"completion_budget_runtime_sha256": packet["completion_budget_runtime_sha256"]}
+            if v3 and packet is not None
             else {}
         ),
         "selected": selected_rows,
     }
     selection["sha256"] = "sha256:" + digest(selection)
     receipt = {
-        "schema": RECEIPT_SCHEMA_V2 if v2 else RECEIPT_SCHEMA,
+        "schema": RECEIPT_SCHEMA_V3 if v3 else RECEIPT_SCHEMA_V2 if v2 else RECEIPT_SCHEMA,
         "artifact_kind": HANDOFF_KIND,
         "trainable_corpus_created": False,
         "parquet_created": False,
@@ -772,7 +824,7 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
                     "collection_packet": packet_file_sha,
                     "operation_authorization": operation_file_sha,
                 }
-                if v2
+                if versioned
                 else {}
             ),
         },
@@ -795,7 +847,12 @@ def build(config: dict[str, Any], *, relative_to: Path) -> dict[str, Any]:
                 "operation_authorization_sha256": operation["sha256"],
                 "identity_map_sha256": operation["identity_map_sha256"],
             }
-            if v2 and packet is not None and operation is not None
+            if versioned and packet is not None and operation is not None
+            else {}
+        ),
+        **(
+            {"completion_budget_runtime_sha256": packet["completion_budget_runtime_sha256"]}
+            if v3 and packet is not None
             else {}
         ),
         "counts": {

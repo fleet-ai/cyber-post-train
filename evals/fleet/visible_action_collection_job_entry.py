@@ -27,11 +27,24 @@ from typing import Any
 
 from cyber_post_train.jobs import digest
 from evals.fleet import cluster_entry, evaluate, rollout_postgres, rollout_worker
-from evals.fleet import visible_action_collection_v2 as collection
+from evals.fleet import visible_action_collection_v2 as collection_v2
+from evals.fleet import visible_action_collection_v3 as collection_v3
+
+# Backwards-compatible module handle for the immutable v2 entrypoint tests.
+collection = collection_v2
 
 TERMINAL_SCHEMA = "cyber_fleet_visible_action_collection_job_terminal_v1"
 TERMINAL_FILE = "COLLECTION_JOB_TERMINAL.json"
 ACTIVE_STATES = {"pending", "claimed", "running", "grading"}
+
+
+def _collection_runtime(config: dict[str, Any]) -> Any:
+    schema = config.get("collection_runtime", {}).get("schema")
+    if schema == collection_v2.RUNTIME_SCHEMA:
+        return collection
+    if schema == collection_v3.RUNTIME_SCHEMA:
+        return collection_v3
+    raise ValueError("collection runtime schema is unsupported")
 
 
 def _file_sha256(path: Path) -> str:
@@ -95,6 +108,7 @@ def execute(args: argparse.Namespace) -> dict[str, Any]:
     authorization_path = Path(args.authorization)
     private_root = Path(args.private_root)
     config = evaluate.read_mapping(config_path)
+    collection = _collection_runtime(config)
     authorization_input = evaluate.read_mapping(authorization_path)
     plan = collection.compile_eval(config, relative_to=config_path.resolve().parent)
     authorization = collection.validate_operation_authorization(authorization_input, plan)

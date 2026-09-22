@@ -1,0 +1,105 @@
+{
+  "collection_runtime": {
+    "automatic_replay_of_ambiguous_cells": false,
+    "canonical_private_operation_root_required": true,
+    "cluster_wrapper_supported": true,
+    "completion_budget": {
+      "discovery_requests_consume_completion_budget": false,
+      "exhausted_trajectory_training_data_eligible": false,
+      "exhaustion_evidence_schema": "cyber_fleet_collection_completion_budget_exhausted_v1",
+      "exhaustion_termination": "output_limit",
+      "maximum_completions_source": "harness.max_model_requests",
+      "scope": "chat_completions_only_v1",
+      "total_request_headroom": 30
+    },
+    "dedicated_empty_ledger_required": true,
+    "exclusive_pre_mutation_intent_required": true,
+    "execution_mode": "authorized_amd64_cpu_job_v1",
+    "external_submission": false,
+    "maximum_planned_cells": 4,
+    "opencode_cli_thinking_flag": false,
+    "opencode_model_reasoning": false,
+    "operation_authorization_required": true,
+    "reasoning_generation": "disabled",
+    "reasoning_request_override": {
+      "chat_template_kwargs": {
+        "enable_thinking": false
+      }
+    },
+    "schema": "cyber_visible_action_collection_runtime_v3",
+    "source_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
+  },
+  "concurrency": 8,
+  "harness": {
+    "compaction_headroom_tokens": 20000,
+    "context_management": "opencode_1.18.27_native_compaction_autocontinue_v2",
+    "context_window_size": 262144,
+    "harness": "opencode",
+    "harness_version": "1.18.27",
+    "max_model_requests": 600,
+    "max_output_tokens": 32768,
+    "provider_adapter": "@ai-sdk/openai-compatible",
+    "release_asset_sha256": "sha256:4af5494f9433f59db8c1e344198f0ee72a50c06ec009fb4a8aeab4c2d4abd702",
+    "thinking_mode": "disabled",
+    "timeout_seconds": 28800,
+    "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a",
+    "tools": [
+      "bash",
+      "submit_report"
+    ]
+  },
+  "images": {
+    "agent": "sha256:c7d048c98e6b8e52e5b76ab4006a7626b1ccf63a37bfa4b47ecd0fe9028e1f92",
+    "proxy": "ghcr.io/astral-sh/uv:python3.12-bookworm@sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
+  },
+  "max_reviewed_infrastructure_retries": 0,
+  "models": {
+    "source": {
+      "repository": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "session_model": "qwen/qwen3.8-27b"
+    }
+  },
+  "name": "q38-base-actions-budget-canary-p4-v1",
+  "pass_k": 4,
+  "routes": {
+    "base": {
+      "catalog": {
+        "engine": "sglang",
+        "precision": "bf16",
+        "tensor_parallel_size": 1
+      },
+      "endpoint_origin": "https://inference.flt.build",
+      "model": "source",
+      "model_info": {
+        "architectures": [
+          "Qwen3_5ForConditionalGeneration"
+        ],
+        "model_path": "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "model_type": "qwen3_5"
+      },
+      "served_id": "qwen3.8-27b",
+      "server_info": {
+        "context_length": 262144,
+        "dp_size": 8,
+        "kv_cache_dtype": "fp8_e4m3",
+        "load_balance_method": "total_tokens",
+        "model_path": "/scratch/models/qwen3.8-27b/1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        "quantization": null,
+        "reasoning_parser": "qwen3",
+        "tool_call_parser": "qwen3_coder",
+        "tp_size": 1
+      },
+      "task_versions": [
+        "54425601-6fd2-43d8-8cb9-e565b767676a"
+      ]
+    }
+  },
+  "sampling": {
+    "seed": 43,
+    "temperature": 0.6,
+    "top_p": 0.95
+  },
+  "task_set": "task-selection.json",
+  "training_data_eligible": true
+}

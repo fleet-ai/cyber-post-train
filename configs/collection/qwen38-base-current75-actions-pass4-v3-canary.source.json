@@ -1,0 +1,20 @@
+{
+  "attempts_per_task": 4,
+  "authorization": {
+    "bounded_canary_before_scale": true,
+    "external_launch_by_this_artifact": false,
+    "reasoning_generation": "disabled"
+  },
+  "campaign_name": "q38-base-actions-budget-canary-p4-v1",
+  "maximum_planned_cells": 4,
+  "parent": {
+    "collection_packet": "configs/collection/qwen38-base-current75-actions-pass4-v3/collection-packet.json",
+    "eval_config": "configs/collection/qwen38-base-current75-actions-pass4-v3/eval-config.json",
+    "family_split": "configs/collection/qwen38-base-current75-actions-pass4-v3/family-split.json",
+    "task_selection": "configs/collection/qwen38-base-current75-actions-pass4-v3/task-selection.json"
+  },
+  "schema": "cyber_visible_action_collection_budget_canary_source_v1",
+  "selected_family_group_id": "sha256:33850200bc71bc7996f9c0ce122452cf494b8b9de338d2d74b94fe7f62b79e0c",
+  "selected_task_version_id": "54425601-6fd2-43d8-8cb9-e565b767676a",
+  "sha256": "sha256:45c2f47515d6b4facb2fde95a7630527f8e8c84a06f2346bfa9cf43ea6c99ce4"
+}

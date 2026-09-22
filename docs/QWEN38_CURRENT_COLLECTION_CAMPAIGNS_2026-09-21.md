@@ -132,6 +132,31 @@ Only after all those checks does it execute the 200 cells.  V2 remains
 non-thinking visible-action collection; it does not widen the separate
 student-visible-reasoning schema.
 
+### Completion-budget v3 successor
+
+The first v2 live prefix exposed one deterministic runtime defect without
+opening prompts, traces, logs, or scores: OpenCode discovery (`/v1/models`) and
+chat completions shared `FIXED_MAX_REQUESTS=600`. The sanitized attempt census
+showed 11 identical exit-1/process-error lifecycles with 599 completed model
+rounds, followed by the same scoring-stage runtime classification. V2 and its
+packet remain immutable evidence; no digest is rewritten.
+
+V3 binds `collection_fixed_proxy_v2.py`, which retains a bounded total-request
+ceiling but counts only `/v1/chat/completions` against the exact 600-completion
+budget. On request 601 it writes one content-free, create-once exhaustion
+receipt before returning 429. `collection_completion_budget.py` reclassifies a
+nonzero OpenCode exit as `output_limit` only when that exact receipt proves 600
+completed chats and the rejected 601st chat; altered, missing, discovery-only,
+or premature receipts remain `process_error`. Output-limit attempts are never
+accepted as training trajectories.
+
+The checked-in bounded gate is one admitted train family × pass@4 (4 cells):
+`configs/collection/qwen38-base-current75-actions-pass4-v3-canary`. Only after
+that Job has four valid accepted lifecycles may the separate 50-family × pass@4
+packet at `configs/collection/qwen38-base-current75-actions-pass4-v3` be
+launched. Both remain non-thinking visible-action campaigns; neither may be
+mixed with student-visible reasoning or teacher-visible rationale.
+
 The historical runtime is `evals.fleet.visible_action_collection`; the v2
 successor is `evals.fleet.visible_action_collection_v2`.  Both use the
 standalone `collection_fixed_proxy.py` and import the unchanged historical
@@ -293,6 +318,18 @@ uv run --locked python -m training.current_collection_campaigns_v2 \
   --root . \
   --output configs/collection/qwen38-base-current75-actions-pass4-v2 \
   --check
+
+uv run --locked python -m training.current_collection_campaigns_v3 \
+  --spec configs/collection/qwen38-base-current75-actions-pass4-v3.source.json \
+  --root . \
+  --output configs/collection/qwen38-base-current75-actions-pass4-v3 \
+  --check
+
+uv run --locked python -m training.collection_budget_canary \
+  --spec configs/collection/qwen38-base-current75-actions-pass4-v3-canary.source.json \
+  --root . \
+  --output configs/collection/qwen38-base-current75-actions-pass4-v3-canary \
+  --check
 ```
 
 After qualification produces a sealed supply/qualified/root-anchor request,
@@ -327,6 +364,14 @@ uv run --locked python -m evals.fleet.visible_action_collection_job prepare \
   --output <new-private-launch-packet-directory> \
   --expected-source-commit <exact-merged-main-sha>
 ```
+
+For the completion-budget repair, substitute the four files from
+`qwen38-base-current75-actions-pass4-v3-canary` in that same prepare command.
+The launcher derives a distinct four-cell operation root/database and still
+requires a clean exact merged commit, two byte-identical server previews,
+absence checks, one create intent/call, root alert annotation `off`, c1/amd64,
+and zero GPUs. Do not prepare or launch the 200-cell v3 packet until the canary
+has four accepted cells and exact-UID cleanup evidence.
 
 Validate locally, then launch once.  `launch` performs the two server previews
 and exact-name absence checks before its single mutation.  The Job's internal

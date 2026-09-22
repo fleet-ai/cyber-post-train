@@ -1,0 +1,30 @@
+{
+  "family_leakage_check": {
+    "exact_identity_overlap": 0,
+    "held_out_roles": [
+      "dev",
+      "final_test"
+    ],
+    "reviewed_family_overlap": 0
+  },
+  "family_role_anchor_sha256": "sha256:48350b8fc23143abe297db3b2364590c72d564553ebb4e9a349fa06ec246a26b",
+  "family_split_sha256": "sha256:8859da6ac391add1b405ee5c453924657dfd9a14b2826dfa2a681456556af4df",
+  "held_out_task_version_count": 25,
+  "inventory_sha256": "sha256:d84b822611129059a4d60165a2ea7f2e0d44f084f2d74c45f904b445a83e0fbf",
+  "root_role_anchor_id": "fleet-blackbox-current-study-20260914-v2",
+  "runtime_bindings_sha256": "sha256:849542785db0cb71fdc9ecd29e1008c8af26e0bf25ad0dd74e22b6d6fb3cb694",
+  "schema": "cyber_collection_task_selection_v1",
+  "sha256": "sha256:8f59998e6ca5e30c0808acfb07d02e3e04bd4362988b0d3187c5848168558077",
+  "task_validity_receipt_sha256": "sha256:23cfc25af183ff474e914443682e4707162110ddc2aa16103a13d984fe05b83c",
+  "tasks": [
+    {
+      "data_key": "commercial",
+      "data_version": "v0.0.9",
+      "env_key": "cysec1-2-current-gen",
+      "env_version": "v0.0.3",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "task_key": "cysec1-2-current-gen_blackbox-0708aea62e0d8ccf09331568__blackbox_ctf_v1",
+      "task_version_id": "54425601-6fd2-43d8-8cb9-e565b767676a"
+    }
+  ]
+}

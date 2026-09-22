@@ -1,0 +1,25 @@
+{
+  "campaign_id": "q38-base-train50-actions-p4-budget-v1",
+  "dedicated_ledger_id": "sha256:ffd35133b093c123498dede78a47abaafaf85ed84706e4d39e8acbc5e2ccd5c1",
+  "execution_contract": {
+    "alternate_path_retry_allowed": false,
+    "ambiguous_external_mutation_replay_allowed": false,
+    "canonical_private_operation_root_required": true,
+    "dedicated_empty_ledger_required": true,
+    "exclusive_pre_mutation_intent_required": true,
+    "same_path_retry_allowed": false
+  },
+  "identity_derivation": {
+    "execution_generation": 1,
+    "execution_id": "sha256-scientific-cell-generation-v1",
+    "ledger_cell_id": "fleet-cyber-rollout-cell-v1",
+    "scientific_cell_id": "sha256-canonical-ledger-row-v1"
+  },
+  "identity_map_sha256": "sha256:d256a709c475d2a69bc6151e0cab083348b3a9adf94a879de37bdf456ccbf8f8",
+  "operation_root_name": "q38-base-train50-actions-p4-budget-v1-0a674d45ad9e",
+  "plan_sha256": "sha256:0a674d45ad9eeef875cc9738f8d8efcb934971b85a3f8ed825a7caa17483052d",
+  "planned_cell_universe_sha256": "sha256:91b38871fa3ea385ca1b3296af6ca5f3b4cfcd8d276609eccb54c77049dde967",
+  "planned_cells": 200,
+  "schema": "cyber_fleet_visible_action_collection_operation_authorization_v1",
+  "sha256": "sha256:a543910aaa5f028466e4c2d6ec8b728f8f25092fc86943c6969008ab897bb9d9"
+}

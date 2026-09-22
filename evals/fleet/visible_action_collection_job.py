@@ -6,10 +6,12 @@ ConfigMap, renders one fixed CPU Job, proves two identical server previews,
 records a durable local intent, and performs one Kubernetes create request.
 
 The collection Job itself owns the create-once SFS root and dedicated database
-bound by :mod:`visible_action_collection_v2`.  Historical Fleet sessions are
-outside this operation identity.  A missing or ambiguous create response is
-never retried.  Terminal cleanup is separately bound to the returned Job and
-ConfigMap UIDs and uses Kubernetes UID preconditions.
+bound by an exact v2 or v3 visible-action plan.  V3 is the separately versioned
+completion-budget successor; v2 inputs and artifacts remain unchanged.
+Historical Fleet sessions are outside this operation identity.  A missing or
+ambiguous create response is never retried.  Terminal cleanup is separately
+bound to the returned Job and ConfigMap UIDs and uses Kubernetes UID
+preconditions.
 """
 
 from __future__ import annotations
@@ -28,7 +30,8 @@ from typing import Any, Protocol
 from urllib.parse import quote
 
 from cyber_post_train.jobs import digest
-from evals.fleet import visible_action_collection_v2 as collection
+from evals.fleet import visible_action_collection_v2 as collection_v2
+from evals.fleet import visible_action_collection_v3 as collection_v3
 from evals.fleet.evaluate import stable_job_preview
 
 PACKET_SCHEMA = "cyber_fleet_visible_action_collection_job_packet_v1"
@@ -68,6 +71,7 @@ POSTGRES_SECRET = "chris-cyber-rollout-postgres-v1"
 POSTGRES_SECRET_KEY = "ROLLOUT_DATABASE_URL"
 ACTIVE_DEADLINE_SECONDS = 768600
 EXPECTED_CELLS = 200
+CANARY_CELLS = 4
 EXPECTED_CONCURRENCY = 8
 CONFIG_MAP_MAX_SERIALIZED_BYTES = 900000
 CLUSTER_JOB_REQUIREMENTS = {
@@ -111,7 +115,7 @@ DATABASE_NAME = re.compile(r"[a-z][a-z0-9_]{0,62}")
 SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 GIT_ID = re.compile(r"[0-9a-f]{40}")
 
-SOURCE_FILES = {
+SOURCE_FILES_V2 = {
     "jobs.py": "cyber_post_train/jobs.py",
     "cluster_entry.py": "evals/fleet/cluster_entry.py",
     "collection_fixed_proxy.py": "evals/fleet/collection_fixed_proxy.py",
@@ -131,6 +135,12 @@ SOURCE_FILES = {
         "evals/fleet/visible_action_collection_job_entry.py"
     ),
 }
+SOURCE_FILES_V3 = {
+    **SOURCE_FILES_V2,
+    "collection_completion_budget.py": "evals/fleet/collection_completion_budget.py",
+    "collection_fixed_proxy_v2.py": "evals/fleet/collection_fixed_proxy_v2.py",
+    "visible_action_collection_v3.py": "evals/fleet/visible_action_collection_v3.py",
+}
 
 BOOTSTRAP_SCRIPT = """#!/usr/bin/env bash
 set -euo pipefail
@@ -148,12 +158,16 @@ root=/workspace/cyber-post-train
 mkdir -p "$root/cyber_post_train" "$root/evals/fleet" "$root/configs/collection"
 touch "$root/cyber_post_train/__init__.py" "$root/evals/__init__.py" "$root/evals/fleet/__init__.py"
 install -m 0644 /bootstrap/jobs.py "$root/cyber_post_train/jobs.py"
-for name in cluster_entry.py collection_fixed_proxy.py evaluate.py exact_pass4_crypto.py \
+for name in cluster_entry.py collection_fixed_proxy.py collection_fixed_proxy_v2.py \
+  collection_completion_budget.py evaluate.py exact_pass4_crypto.py \
   exact_pass4_universe.py fixed_proxy.py model_artifact.py opencode_self_hosted.py \
   rollout_campaign.py rollout_ledger.py rollout_postgres.py rollout_worker.py \
   visible_action_collection.py visible_action_collection_v2.py \
+  visible_action_collection_v3.py \
   visible_action_collection_job_entry.py; do
-  install -m 0644 "/bootstrap/$name" "$root/evals/fleet/$name"
+  if [[ -f "/bootstrap/$name" ]]; then
+    install -m 0644 "/bootstrap/$name" "$root/evals/fleet/$name"
+  fi
 done
 install -m 0600 /bootstrap/eval-config.json "$root/configs/collection/eval-config.json"
 install -m 0600 /bootstrap/task-selection.json "$root/configs/collection/task-selection.json"
@@ -346,11 +360,32 @@ def _copy_input(source: Path, destination: Path) -> dict[str, str]:
     }
 
 
-def _validate_admitted_packet(value: dict[str, Any], authorization: dict[str, Any]) -> None:
+def _collection_runtime(config: dict[str, Any]) -> Any:
+    schema = config.get("collection_runtime", {}).get("schema")
+    if schema == collection_v2.RUNTIME_SCHEMA:
+        return collection_v2
+    if schema == collection_v3.RUNTIME_SCHEMA:
+        return collection_v3
+    raise CollectionJobError("collection runtime schema is unsupported")
+
+
+def _source_files(runtime: Any) -> dict[str, str]:
+    return SOURCE_FILES_V3 if runtime is collection_v3 else SOURCE_FILES_V2
+
+
+def _validate_admitted_packet(
+    value: dict[str, Any], authorization: dict[str, Any], runtime: Any
+) -> None:
     unsigned = {key: item for key, item in value.items() if key != "sha256"}
     safety = value.get("execution_safety")
+    expected_cells = authorization["planned_cells"]
+    packet_schema = (
+        "cyber_trajectory_collection_packet_v3"
+        if runtime is collection_v3
+        else "cyber_trajectory_collection_packet_v2"
+    )
     if (
-        value.get("schema") != "cyber_trajectory_collection_packet_v2"
+        value.get("schema") != packet_schema
         or value.get("operation_authorization_sha256") != authorization["sha256"]
         or value.get("eval_plan_sha256") != authorization["plan_sha256"]
         or value.get("sha256") != "sha256:" + digest(unsigned)
@@ -362,11 +397,22 @@ def _validate_admitted_packet(value: dict[str, Any], authorization: dict[str, An
         or safety.get("operation_root_name") != authorization["operation_root_name"]
         or safety.get("dedicated_ledger_id") != authorization["dedicated_ledger_id"]
         or safety.get("identity_map_sha256") != authorization["identity_map_sha256"]
-        or safety.get("planned_cells") != EXPECTED_CELLS
-        or safety.get("maximum_planned_cells") != EXPECTED_CELLS
+        or safety.get("planned_cells") != expected_cells
+        or safety.get("maximum_planned_cells") != expected_cells
         or safety.get("cluster_job_execution_requirements") != CLUSTER_JOB_REQUIREMENTS
     ):
-        raise CollectionJobError("collection packet v2 does not authorize this exact CPU Job rail")
+        raise CollectionJobError("collection packet does not authorize this exact CPU Job rail")
+    if runtime is collection_v3:
+        runtime_sha = "sha256:" + digest(runtime.runtime_identity())
+        if (
+            expected_cells not in {CANARY_CELLS, EXPECTED_CELLS}
+            or value.get("completion_budget_runtime_sha256") != runtime_sha
+            or safety.get("completion_budget_runtime_sha256") != runtime_sha
+            or safety.get("completion_budget") != runtime.COMPLETION_BUDGET_POLICY
+        ):
+            raise CollectionJobError("collection packet v3 completion budget binding differs")
+    elif expected_cells != EXPECTED_CELLS:
+        raise CollectionJobError("collection packet v2 is only the exact 200-cell wave")
 
 
 def prepare_packet(
@@ -391,6 +437,9 @@ def prepare_packet(
         or commit != expected_source_commit
     ):
         raise CollectionJobError("source commit is not the explicitly expected merged commit")
+    source_config = _json(config_path, "collection eval config")
+    runtime = _collection_runtime(source_config)
+    source_files = _source_files(runtime)
     try:
         output.mkdir(mode=0o700)
     except FileExistsError as error:
@@ -401,7 +450,7 @@ def prepare_packet(
     input_dir.mkdir(mode=0o700)
 
     source_entries: dict[str, dict[str, str]] = {}
-    for key, relative in sorted(SOURCE_FILES.items()):
+    for key, relative in sorted(source_files.items()):
         source = repo_root / relative
         if source.is_symlink() or not source.is_file():
             raise CollectionJobError("required source file is unavailable")
@@ -429,19 +478,20 @@ def prepare_packet(
             collection_packet_path, input_dir / "collection-packet.json"
         ),
     }
-    config = _json(input_dir / "eval-config.json", "collection v2 eval config")
+    config = _json(input_dir / "eval-config.json", "collection eval config")
+    if _collection_runtime(config) is not runtime:
+        raise CollectionJobError("collection runtime changed while packaging")
     selection = _json(input_dir / "task-selection.json", "collection task selection")
     authorization_input = _json(
         input_dir / "operation-authorization.json", "operation authorization"
     )
-    admitted_packet = _json(input_dir / "collection-packet.json", "collection packet v2")
-    plan = collection.compile_eval(config, relative_to=input_dir)
-    authorization = collection.validate_operation_authorization(authorization_input, plan)
-    if (
-        plan.get("planned_cells") != EXPECTED_CELLS
-        or plan.get("concurrency") != EXPECTED_CONCURRENCY
-    ):
-        raise CollectionJobError("launcher accepts only the exact 200-cell concurrency-8 wave")
+    admitted_packet = _json(input_dir / "collection-packet.json", "collection packet")
+    plan = runtime.compile_eval(config, relative_to=input_dir)
+    authorization = runtime.validate_operation_authorization(authorization_input, plan)
+    planned_cells = plan.get("planned_cells")
+    allowed_cells = {EXPECTED_CELLS} if runtime is collection_v2 else {CANARY_CELLS, EXPECTED_CELLS}
+    if planned_cells not in allowed_cells or plan.get("concurrency") != EXPECTED_CONCURRENCY:
+        raise CollectionJobError("launcher cell count or concurrency differs from its exact rail")
     if config.get("images") != {"agent": AGENT_IMAGE_ID, "proxy": PROXY_IMAGE}:
         raise CollectionJobError("collection image identity differs from the qualified Job rail")
     if config.get("task_set") != "task-selection.json":
@@ -450,12 +500,22 @@ def prepare_packet(
         input_dir / "task-selection.json"
     ):
         raise CollectionJobError("collection task selection identity is invalid")
-    _validate_admitted_packet(admitted_packet, authorization)
+    _validate_admitted_packet(admitted_packet, authorization, runtime)
 
     plan_short = authorization["plan_sha256"].removeprefix("sha256:")[:8]
-    job_name = f"chris-q38-base-train50-p4-v2-{plan_short}"
+    if runtime is collection_v2:
+        job_name = f"chris-q38-base-train50-p4-v2-{plan_short}"
+        database = f"q38_base_train50_actions_p4_v2_{plan_short}"
+        worker_id = "base-v2"
+    else:
+        job_name = f"chris-{authorization['campaign_id']}-{plan_short}"
+        database = f"{authorization['campaign_id'].replace('-', '_')}_{plan_short}"
+        worker_id = "base-v3"
+    if KUBERNETES_NAME.fullmatch(job_name) is None or DATABASE_NAME.fullmatch(database) is None:
+        raise CollectionJobError("derived Job or database name is invalid")
     config_map_name = f"{job_name}-code"
-    database = f"q38_base_train50_actions_p4_v2_{plan_short}"
+    if KUBERNETES_NAME.fullmatch(config_map_name) is None:
+        raise CollectionJobError("derived ConfigMap name is invalid")
     operation_root = f"{PRIVATE_ROOT}/{authorization['operation_root_name']}"
     body = {
         "schema": PACKET_SCHEMA,
@@ -476,12 +536,12 @@ def prepare_packet(
             "planned_cell_universe_sha256": authorization["planned_cell_universe_sha256"],
             "operation_authorization_sha256": authorization["sha256"],
             "collection_packet_sha256": admitted_packet["sha256"],
-            "planned_cells": EXPECTED_CELLS,
+            "planned_cells": planned_cells,
             "private_root": PRIVATE_ROOT,
             "operation_root": operation_root,
             "database": database,
             "route": "base",
-            "worker_id": "base-v2",
+            "worker_id": worker_id,
         },
         "images": {
             "controller": CONTROLLER_IMAGE,
@@ -530,7 +590,7 @@ def prepare_packet(
         "packet_file_sha256": _file_sha256(packet_path),
         "packet_sha256": packet["sha256"],
         "operation_authorization_sha256": authorization["sha256"],
-        "planned_cells": EXPECTED_CELLS,
+        "planned_cells": planned_cells,
         "external_mutations": 0,
     }
 
@@ -591,7 +651,8 @@ def load_packet(path: Path) -> LaunchPacket:
     if source.get("launcher_sha256") != _file_sha256(Path(__file__)):
         raise CollectionJobError("launcher source changed after packet preparation")
     source_files = _mapping(source.get("files"), "source files")
-    if set(source_files) != set(SOURCE_FILES) | {"run.sh"}:
+    allowed_source_sets = [set(files) | {"run.sh"} for files in (SOURCE_FILES_V2, SOURCE_FILES_V3)]
+    if set(source_files) not in allowed_source_sets:
         raise CollectionJobError("source file set is incomplete")
     files: dict[str, Path] = {}
     for key in sorted(source_files):
@@ -630,10 +691,8 @@ def _env_secret(name: str, secret: dict[str, Any]) -> dict[str, Any]:
 
 def _build_config_map(packet: LaunchPacket) -> dict[str, Any]:
     value = packet.value
-    data = {
-        key: packet.files[key].read_text(encoding="utf-8")
-        for key in sorted(set(SOURCE_FILES) | {"run.sh"})
-    }
+    source_keys = set(_mapping(value["source"]["files"], "source files"))
+    data = {key: packet.files[key].read_text(encoding="utf-8") for key in sorted(source_keys)}
     data.update(
         {
             "eval-config.json": packet.files["eval_config"].read_text(encoding="utf-8"),
@@ -871,10 +930,13 @@ def build_package(packet_path: Path) -> Package:
     packet = load_packet(packet_path)
     value = packet.value
     config = _json(packet.files["eval_config"], "collection eval config")
+    runtime = _collection_runtime(config)
+    if set(packet.value["source"]["files"]) != set(_source_files(runtime)) | {"run.sh"}:
+        raise CollectionJobError("source file set does not match the selected runtime")
     authorization_input = _json(packet.files["operation_authorization"], "operation authorization")
     admitted_packet = _json(packet.files["collection_packet"], "collection packet")
-    plan = collection.compile_eval(config, relative_to=packet.files["eval_config"].parent)
-    authorization = collection.validate_operation_authorization(authorization_input, plan)
+    plan = runtime.compile_eval(config, relative_to=packet.files["eval_config"].parent)
+    authorization = runtime.validate_operation_authorization(authorization_input, plan)
     operation = _mapping(value.get("operation"), "operation identity")
     if set(operation) != {
         "campaign_id",
@@ -890,30 +952,33 @@ def build_package(packet_path: Path) -> Package:
         "worker_id",
     }:
         raise CollectionJobError("operation identity has unknown or missing fields")
+    planned_cells = authorization["planned_cells"]
+    worker_id = "base-v3" if runtime is collection_v3 else "base-v2"
     expected_operation = {
         "campaign_id": authorization["campaign_id"],
         "plan_sha256": authorization["plan_sha256"],
         "planned_cell_universe_sha256": authorization["planned_cell_universe_sha256"],
         "operation_authorization_sha256": authorization["sha256"],
         "collection_packet_sha256": admitted_packet.get("sha256"),
-        "planned_cells": EXPECTED_CELLS,
+        "planned_cells": planned_cells,
         "private_root": PRIVATE_ROOT,
         "operation_root": f"{PRIVATE_ROOT}/{authorization['operation_root_name']}",
         "database": operation.get("database"),
         "route": "base",
-        "worker_id": "base-v2",
+        "worker_id": worker_id,
     }
     if (
         operation != expected_operation
         or DATABASE_NAME.fullmatch(str(operation["database"])) is None
     ):
         raise CollectionJobError("operation identity differs from the exact authorized wave")
-    _validate_admitted_packet(admitted_packet, authorization)
+    _validate_admitted_packet(admitted_packet, authorization, runtime)
+    allowed_cells = {EXPECTED_CELLS} if runtime is collection_v2 else {CANARY_CELLS, EXPECTED_CELLS}
     if (
-        plan.get("planned_cells") != EXPECTED_CELLS
+        plan.get("planned_cells") not in allowed_cells
         or plan.get("concurrency") != EXPECTED_CONCURRENCY
     ):
-        raise CollectionJobError("collection Job accepts only the exact 200-cell wave")
+        raise CollectionJobError("collection Job cell count or concurrency differs")
     if value.get("images") != {
         "controller": CONTROLLER_IMAGE,
         "dind": DIND_IMAGE,
