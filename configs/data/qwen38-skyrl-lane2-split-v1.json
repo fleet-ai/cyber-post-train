@@ -1,0 +1,20 @@
+{
+  "schema": "cyber_task_split_v1",
+  "purpose": "Trainer-role assignment over two production-train tasks; dev means internal diagnostic only and is not a protected held-out partition",
+  "parent_split_sha256": "sha256:1f0da5054df25a7d67476f591d8c9c8d42d44de65c0b9d4b542ba9e33b132472",
+  "tasks": [
+    {
+      "task_key": "cysec1-2-current-gen_blackbox-9afe9e08da314948b573657e__blackbox_ctf_v1",
+      "task_version_id": "dd8dd22e-75c0-4b93-8f8e-ea8a292d92bb",
+      "split": "train",
+      "reference_session_id": null
+    },
+    {
+      "task_key": "cysec1-2-fira-gen_blackbox-f1d8a0c49352bdf40faf015f__blackbox_ctf_v1",
+      "task_version_id": "33527414-ced7-4005-9c5a-eb9c211a32da",
+      "split": "dev",
+      "reference_session_id": null
+    }
+  ],
+  "sha256": "sha256:de434f25243790cb265c2ed9182fa0a332c2450de6ba204d6d785885618d8393"
+}

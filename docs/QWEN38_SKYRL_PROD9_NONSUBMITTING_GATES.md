@@ -51,11 +51,53 @@ authorized operator must execute the following sequence with fresh evidence:
    once.
 
 Every create intent and creator handoff is stored under the single durable
-root `/mnt/sfs/jobs/.cyber-post-train-prod9-create-once-v1`. The exact child
-directory is computed from the complete sealed stage, training plan, or reload
+root
+`/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/prod9-create-once-v1`.
+This is inside the existing `launch-controls` tree proven writable by the
+pinned UID 1000/GID 100 runtime; a non-root process cannot safely create the
+old root-level child under `/mnt/sfs/jobs`. The exact operation child is
+computed from the complete sealed stage, training plan, or reload
 specification; it is never chosen by the caller. A second process using a new
 working directory therefore sees the same journal and must reconcile the
 original object instead of creating another Job or RayJob.
+
+`live_create_is_available()` is an environment check, not a source-code
+feature flag. It returns true only when the current process is UID 1000/GID
+100 and the exact canonical create-once root already exists, is owned by that
+identity, and is readable, writable, and searchable. An operator laptop with
+no `/mnt/sfs` mount therefore cannot authorize a create merely because it has
+checked out this code.
+
+## Smallest cluster-native controller/observer
+
+The current create rail still uses a same-host process check for its cleanup
+observer, so it cannot be driven from a laptop without `/mnt/sfs`. The smallest
+safe successor is one bounded, zero-GPU Kubernetes Job that runs the existing
+authorization, one-create, and cleanup-observer code inside the pinned image.
+It should not be a general cluster operator.
+
+That Job must have the root annotation `fleet.ai/failure-alerts: "off"`, use
+`c1`/`q1`, request zero GPUs, run as UID 1000/GID 100, use `backoffLimit: 0`,
+and have a fixed active deadline. It must mount the shared SFS claim twice:
+
+1. all of `/mnt/sfs` read-only, for the sealed inputs and evidence; and
+2. only `jobs/chris-q38-study-corpora-v1/launch-controls` read-write at
+   `/controls`, using the PVC `subPath` mechanism already validated by the SFT
+   CPU-control path.
+
+The controller then maps the canonical create-once root to
+`/controls/prod9-create-once-v1`, atomically creates the absent operation
+child, writes the armed observer receipt before the target create, records the
+returned target UID exactly once, observes only that UID, releases only that
+owned object if the documented limit is reached, and writes a terminal result
+before exiting. It must use the Jobs API for the target create and cleanup; do
+not give it broad Kubernetes create/delete permission. A small sanitized
+termination receipt lets an operator collect the result without reading SFS.
+
+This document records the design boundary only. The remote receipt handshake
+and same-host liveness replacement are not implemented yet, so the cluster
+controller must not be submitted and the prod9 live-create gate remains closed
+on an operator laptop.
 
 If any gate fails, preserve only its sanitized receipt and release only the
 exact owned object. Do not retry a create after an uncertain response, reuse
@@ -78,7 +120,7 @@ prod9 function accepts only these fixed paths for the exact planned final step:
 | --- | --- | --- |
 | Checkpoint seal | `.../checkpoint-seals-v1/step-<final-step>.json` | The final checkpoint is complete, changed model parameters, and has not changed since it was sealed. |
 | BF16 export | `.../hf-export-step<final-step>-v1/EXPORT.json` | Every model tensor and required sidecar was rebuilt and re-opened as BF16 from that seal. |
-| Training creator handoff | `/mnt/sfs/jobs/.cyber-post-train-prod9-create-once-v1/training-<plan-digest>/TRAINING_OBSERVER_ARMED.json.created.json` | The cleanup observer and the one create call agreed on the exact original RayJob UID, name, plan, and rendered manifest. |
+| Training creator handoff | `/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/prod9-create-once-v1/training-<plan-digest>/TRAINING_OBSERVER_ARMED.json.created.json` | The cleanup observer and the one create call agreed on the exact original RayJob UID, name, plan, and rendered manifest. |
 | Training cleanup observer | `.../TRAINING_OBSERVER_RESULT.json` | The original eight-GPU training RayJob succeeded without a restart, carried the exact native completion receipt used by the checkpoint seal, and its RayJob, Ray cluster, workload, Pod, and all eight GPUs were released. |
 | One-GPU reload check | `...-p<final-step>-reload-v1/GPU_CHECK.json` | The exact export loads with the model configuration and tokenizer, produces finite output, and performs no optimizer update. |
 | Reload cleanup observer | `...-p<final-step>-reload-v1/OBSERVER_RESULT.json` | The exact one-GPU reload RayJob succeeded without a restart and its RayJob, Ray cluster, workload, Pod, and GPU allocation were all released. |

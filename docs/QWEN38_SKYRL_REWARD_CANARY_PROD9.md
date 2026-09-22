@@ -140,7 +140,9 @@ blocked until this source is reviewed and all evidence below is fresh.
 
 The create journals are not stored in a caller-selected working directory.
 Stage, training, and reload roots are computed from their sealed immutable
-identity below `/mnt/sfs/jobs/.cyber-post-train-prod9-create-once-v1`; a fresh
+identity below
+`/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/prod9-create-once-v1`;
+a fresh
 alternate directory cannot authorize or replay a create.
 
 The preparation code does not create a workload. A separate authorized

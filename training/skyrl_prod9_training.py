@@ -38,6 +38,8 @@ PREFLIGHT_RECEIPT = Path("/dev/termination-log")
 STAGE_SCHEMA = "cyber_skyrl_prod9_rebind_stage_v1"
 STAGE_RECEIPT_SCHEMA = "cyber_skyrl_prod9_rebind_stage_receipt_v1"
 TERMINATION_MESSAGE_MAX_BYTES = 16384
+PREFLIGHT_FAILURE_SCHEMA = "cyber_skyrl_prod9_training_cpu_preflight_failure_v1"
+_PREFLIGHT_STAGE = "not_started"
 RUNTIME_FILES = (
     *historical.RUNTIME_FILES,
     "training/skyrl_reward_rayjob.py",
@@ -399,6 +401,20 @@ def _write_preflight_receipt(path: Path, value: dict) -> None:
     _write_termination_receipt(path, value)
 
 
+def _write_preflight_failure_receipt(path: Path, plan: object, exc: BaseException) -> None:
+    """Persist only a bounded phase and exception class for failed CPU probes."""
+    value = {
+        "schema": PREFLIGHT_FAILURE_SCHEMA,
+        "status": "failed",
+        "stage": _PREFLIGHT_STAGE,
+        "error_class": type(exc).__name__,
+        "plan_sha256": digest(plan) if isinstance(plan, dict) else "",
+        "gpus": 0,
+        "runtime_user": {"uid": os.geteuid(), "gid": os.getegid()},
+    }
+    _write_termination_receipt(path, value)
+
+
 def _write_stage_receipt(path: Path, value: dict) -> None:
     """Write only the zero-GPU stage receipt to Kubernetes' fixed file."""
     _write_termination_receipt(path, value)
@@ -426,6 +442,20 @@ def validate_preview(plan: dict, request: dict, preview: dict) -> dict:
     return historical.validate_gpu_runtime_preview(request, preview)
 
 
+def _preflight_native_config(args: skyrl.SkyRLConfig):
+    """Run the native parse/validation path with bounded diagnostic phases."""
+    global _PREFLIGHT_STAGE
+    _PREFLIGHT_STAGE = "native_config_overrides"
+    values = skyrl.overrides(args)
+    _PREFLIGHT_STAGE = "native_config_modules"
+    modules = {name: skyrl_episode._module(name, sha) for name, sha in skyrl.NATIVE_SOURCES.items()}
+    _PREFLIGHT_STAGE = "native_config_parse"
+    cfg = modules["skyrl.train.config.config"].SkyRLTrainConfig.from_cli_overrides(values)
+    _PREFLIGHT_STAGE = "native_config_validate"
+    modules["skyrl.train.utils.utils"].validate_cfg(cfg)
+    return cfg
+
+
 def preflight(plan: dict) -> dict:
     """CPU-only exact-image check for the fresh runtime closure.
 
@@ -433,6 +463,8 @@ def preflight(plan: dict) -> dict:
     rail must wrap this entrypoint in a fresh root-annotated zero-GPU Job,
     rather than reuse the historical rail that cannot prove this runtime.
     """
+    global _PREFLIGHT_STAGE
+    _PREFLIGHT_STAGE = "runtime_identity"
     if (os.geteuid(), os.getegid()) != (1000, 100):
         raise ValueError("prod9 CPU preflight must use image user 1000:100")
     import torch
@@ -440,20 +472,25 @@ def preflight(plan: dict) -> dict:
 
     if torch.cuda.is_available():
         raise ValueError("prod9 CPU preflight is CPU-only")
+    _PREFLIGHT_STAGE = "request_and_artifacts"
     request = job_request(plan)
     if Path(plan["output_root"]).exists():
         raise FileExistsError("prod9 output already exists")
     rows = historical.check_artifacts(plan)
     modules = historical.native_source()
+    _PREFLIGHT_STAGE = "native_config_arguments"
     args = skyrl.SkyRLConfig(**plan["arguments"])
-    skyrl.native_config(args)
+    _preflight_native_config(args)
+    _PREFLIGHT_STAGE = "tokenizer"
     tokenizer = AutoTokenizer.from_pretrained(
         plan["model"]["root"], trust_remote_code=False, local_files_only=True
     )
     if "sha256:" + historical.digest_template(tokenizer) != plan["data"]["template_sha256"]:
         raise ValueError("native template changed")
+    _PREFLIGHT_STAGE = "dataset"
     for split in rows:
         historical.dataset(plan, tokenizer, split, rows[split])
+    _PREFLIGHT_STAGE = "parser_and_limits"
     multi_tool_probe = skyrl_episode.parse(
         '<tool_call>{"name":"bash","arguments":{"script":"true"}}</tool_call>'
         '<tool_call>{"name":"submit_report","arguments":{"flags":[],"explanation":""}}</tool_call>'
@@ -464,6 +501,7 @@ def preflight(plan: dict) -> dict:
     ]:
         raise ValueError("native ordered multi-tool parser changed")
     hardening.validate_episode_limits(plan["data"]["limits"])
+    _PREFLIGHT_STAGE = "long_horizon_probe"
     horizon = asyncio.run(
         skyrl_episode.offline_long_horizon_probe(
             plan["model"],
@@ -471,6 +509,7 @@ def preflight(plan: dict) -> dict:
             Path(modules["skyrl.train.generators.utils"].__file__),
         )
     )
+    _PREFLIGHT_STAGE = "token_safe_tool_probe"
     fresh = asyncio.run(
         offline_token_safe_tool_probe(
             plan["model"],
@@ -478,6 +517,7 @@ def preflight(plan: dict) -> dict:
             Path(modules["skyrl.train.generators.utils"].__file__),
         )
     )
+    _PREFLIGHT_STAGE = "passed"
     return {
         "schema": "cyber_skyrl_prod9_training_cpu_preflight_v1",
         "status": "passed",
@@ -588,6 +628,7 @@ def main() -> None:
     parser.add_argument("--identity", type=Path)
     parser.add_argument("--receipt", type=Path)
     args = parser.parse_args()
+    plan: object = None
     try:
         modes = sum((args.native, args.preflight, args.stage))
         if modes > 1:
@@ -641,6 +682,9 @@ def main() -> None:
             _write_gpu_termination_receipt(result)
             print(json.dumps({key: result[key] for key in ("status", "sha256")}))
     except BaseException as exc:
+        if args.preflight and args.receipt == PREFLIGHT_RECEIPT:
+            with suppress(Exception):
+                _write_preflight_failure_receipt(args.receipt, plan, exc)
         print(json.dumps({"status": "failed", "error_class": type(exc).__name__}))
         raise SystemExit(1) from None
 

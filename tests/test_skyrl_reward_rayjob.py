@@ -883,7 +883,10 @@ def test_prod9_config_compiles_through_the_real_qualification_gate() -> None:
     }
 
 
-def test_prod9_offline_preparation_requires_a_fresh_rebound_manifest(tmp_path: Path) -> None:
+def test_prod9_offline_preparation_requires_a_fresh_rebound_manifest(
+    tmp_path: Path, monkeypatch
+) -> None:
+    monkeypatch.setattr(prod9, "CREATE_ONCE_ROOT", tmp_path / "missing-create-root")
     identity = direct.load_identity(PROD9_IDENTITY)
     manifest = successor_metadata(load(CANARY_RUN))
     manifest["name"] = identity.run_name
@@ -932,7 +935,7 @@ def test_prod9_offline_preparation_requires_a_fresh_rebound_manifest(tmp_path: P
         "schema": "cyber_skyrl_prod9_training_cpu_preflight_v1",
         "root_alert_annotation_required": "off",
         "bundle_module": "training.skyrl_prod9_training",
-        "live_create_available": True,
+        "live_create_available": False,
     }
 
     predecessor = successor_metadata(load(CANARY_RUN))

@@ -1,0 +1,92 @@
+{
+  "schema": "cyber_qwen38_skyrl_lane2_authority_v1",
+  "purpose": "Non-submitting authority for a one-step SkyRL canary on a mixed-outcome production-train task disjoint from prod9",
+  "sealed_production_authority": {
+    "task_set": {
+      "path": "../data/qwen38-skyrl-production-task-set-v1.json",
+      "file_sha256": "sha256:5786d9b1f4f505d89ef257718706e50b0c071f4c7c1fd80afd1ae1568fb61b9f",
+      "self_sha256": "sha256:5de88eada94119fd21ac715bb1956a745376d775c13ce7d5584936e70b3a003a"
+    },
+    "split": {
+      "path": "../data/qwen38-skyrl-production-split-v1.json",
+      "file_sha256": "sha256:69dc546fa1f3db706355554ac6213b555229b360f3a5235954c33daa08c59100",
+      "self_sha256": "sha256:1f0da5054df25a7d67476f591d8c9c8d42d44de65c0b9d4b542ba9e33b132472",
+      "task_count": 89
+    }
+  },
+  "lane2_shard": {
+    "task_set": {
+      "path": "../data/qwen38-skyrl-lane2-task-set-v1.json",
+      "file_sha256": "sha256:d0e75601ae936efa7983f61760d8e5fc1aa27f1759031f44028e7277ded54fdd",
+      "self_sha256": "sha256:b4b9aae4acdfe40403d788a06e76106729306e4eb65f46893d9a84296c73311a"
+    },
+    "split": {
+      "path": "../data/qwen38-skyrl-lane2-split-v1.json",
+      "file_sha256": "sha256:ecabc7800c0f3239997a3e833e51732f5f3e05f510920a44e07f8eb431aa2356",
+      "self_sha256": "sha256:de434f25243790cb265c2ed9182fa0a332c2450de6ba204d6d785885618d8393"
+    },
+    "optimizer_task": {
+      "task_key": "cysec1-2-current-gen_blackbox-9afe9e08da314948b573657e__blackbox_ctf_v1",
+      "task_version_id": "dd8dd22e-75c0-4b93-8f8e-ea8a292d92bb",
+      "authority_split": "train",
+      "trainer_role": "train",
+      "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+      "verifier_id": "d42d96e8-690c-45ef-bf86-f03b064ed3c5",
+      "verifier_version_id": "e380dd5d-121a-4c53-a866-74a4adf57706",
+      "verifier_sha256": "fd4f7612e00c76913e7ab80572aaffd987483169c8502be99550ce305a3b5713",
+      "current_binding_sha256": "sha256:4d503eb81c242510199bf4457a44516a106f1c547efeeae3f56cd36e5d14f38f"
+    },
+    "internal_diagnostic_task": {
+      "task_key": "cysec1-2-fira-gen_blackbox-f1d8a0c49352bdf40faf015f__blackbox_ctf_v1",
+      "task_version_id": "33527414-ced7-4005-9c5a-eb9c211a32da",
+      "authority_split": "train",
+      "trainer_role": "dev",
+      "protected_holdout": false,
+      "environment_version_id": "e83377eb-4f65-49be-b9c2-37a1fabc43e4",
+      "verifier_id": "252eb5ce-7383-46e1-ac1d-f1a389362d7d",
+      "verifier_version_id": "db631382-f3ed-4c97-b887-27a510cb63c2",
+      "verifier_sha256": "d77228dd5ad954a5ffc99c6eadf49f896288d9ef7836f87b09d0fed9e2d3a788",
+      "current_binding_sha256": "sha256:afc5fd2ce5efd52ef1fa0f9ff4e0f00c060a568fda7a557630190cb3378bb9f5"
+    }
+  },
+  "exact_binding_evidence": {
+    "path": "../data/qwen-blackbox-eligible-v1.json",
+    "file_sha256": "sha256:b12a755c7e65bc04694eab85d9b0c21fadc222207d7bcc6ed8f0c788e032589b",
+    "self_sha256": "c45c9cc420a3dbf1aa6b635b84ed1ca3c404254f046ffdac234e053929a1bf12"
+  },
+  "historical_selection_prior": {
+    "path": "../../evals/fleet/configs/opencode-easiest-train100-selection-v2.json",
+    "file_sha256": "sha256:9f5e83123cfe7d8a3f4cc0b791ac1dc9032a3d5faf5eba2a431c7246069255df",
+    "optimizer_exact_task_version": true,
+    "optimizer_passes": 4,
+    "optimizer_sessions": 8,
+    "optimizer_pass_rate": 0.5,
+    "diagnostic_exact_task_version": true,
+    "diagnostic_passes": 4,
+    "diagnostic_sessions": 8,
+    "diagnostic_pass_rate": 0.5,
+    "interpretation": "Historical stronger-model outcomes are only a task-selection prior. They do not substitute for live rewards and do not promise reward variation for Qwen."
+  },
+  "execution": {
+    "cluster_target": "prod",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
+    "priority_class": "c1",
+    "queue_priority": "q1",
+    "nodes": 1,
+    "gpus": 8,
+    "failure_alerts": "off",
+    "preflight_name": "chris-q38-lane2-preflight-v1",
+    "data_stage_name": "chris-q38-lane2-data-v2"
+  },
+  "submission_gate": {
+    "preview_authorized": true,
+    "submission_authorized": false,
+    "blockers": [
+      "lane2_private_data_not_yet_built_and_staged",
+      "lane2_exact_image_cpu_preflight_not_yet_accepted",
+      "lane2_fresh_dev_and_prod_server_previews_not_yet_recorded",
+      "lane2_create_once_destination_and_name_absence_not_yet_proven"
+    ]
+  },
+  "sha256": "sha256:eed6dcba8b5111d436c21db53e897bcc9a802fc122f641b806986c60d392a305"
+}
