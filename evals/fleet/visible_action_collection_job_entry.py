@@ -28,10 +28,10 @@ from typing import Any
 from cyber_post_train.jobs import digest
 from evals.fleet import cluster_entry, evaluate, rollout_postgres, rollout_worker
 from evals.fleet import visible_action_collection_v2 as collection_v2
-from evals.fleet import visible_action_collection_v3 as collection_v3
 
 # Backwards-compatible module handle for the immutable v2 entrypoint tests.
 collection = collection_v2
+COLLECTION_RUNTIME_V3_SCHEMA = "cyber_visible_action_collection_runtime_v3"
 
 TERMINAL_SCHEMA = "cyber_fleet_visible_action_collection_job_terminal_v1"
 TERMINAL_FILE = "COLLECTION_JOB_TERMINAL.json"
@@ -42,7 +42,12 @@ def _collection_runtime(config: dict[str, Any]) -> Any:
     schema = config.get("collection_runtime", {}).get("schema")
     if schema == collection_v2.RUNTIME_SCHEMA:
         return collection
-    if schema == collection_v3.RUNTIME_SCHEMA:
+    if schema == COLLECTION_RUNTIME_V3_SCHEMA:
+        # V2 packets intentionally exclude all v3 files.  Keep this import
+        # behind the exact v3 schema so the historical source closure remains
+        # independently executable.
+        from evals.fleet import visible_action_collection_v3 as collection_v3
+
         return collection_v3
     raise ValueError("collection runtime schema is unsupported")
 

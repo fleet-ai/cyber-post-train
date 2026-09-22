@@ -5,7 +5,9 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import subprocess
+import sys
 from argparse import Namespace
 from pathlib import Path
 from typing import Any
@@ -238,6 +240,40 @@ def test_package_binds_exact_cpu_job_and_source(packet_path: Path) -> None:
         assert "nvidia.com/gpu" not in container["resources"]["limits"]
     serialized = json.dumps(package.config_map, separators=(",", ":")).encode()
     assert len(serialized) < job.CONFIG_MAP_MAX_SERIALIZED_BYTES
+
+
+def test_v2_staged_entrypoint_does_not_require_v3_source(packet_path: Path, tmp_path: Path) -> None:
+    packet = json.loads(packet_path.read_text())
+    staged = tmp_path / "staged"
+    (staged / "cyber_post_train").mkdir(parents=True)
+    (staged / "evals/fleet").mkdir(parents=True)
+    for package in ("cyber_post_train", "evals", "evals/fleet"):
+        (staged / package / "__init__.py").touch()
+    for name, reference in packet["source"]["files"].items():
+        if name == "run.sh":
+            continue
+        destination = (
+            staged / "cyber_post_train/jobs.py"
+            if name == "jobs.py"
+            else staged / "evals/fleet" / name
+        )
+        destination.write_bytes((packet_path.parent / reference["path"]).read_bytes())
+    assert not (staged / "evals/fleet/visible_action_collection_v3.py").exists()
+    command = (
+        "from evals.fleet import visible_action_collection_job_entry as entry; "
+        "assert entry._collection_runtime({"  # noqa: SLF001
+        "'collection_runtime': {'schema': 'cyber_visible_action_collection_runtime_v2'}"
+        "}) is entry.collection"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", command],
+        cwd=staged,
+        env={**os.environ, "PYTHONPATH": str(staged)},
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
 
 
 def test_launch_proves_two_previews_and_creates_once(packet_path: Path, tmp_path: Path) -> None:
