@@ -177,9 +177,19 @@
     "state": "blocked_before_evaluation_config",
     "model_repository": "Qwen/Qwen3.8-27B",
     "native_checkpoint_receipt_sha256": "sha256:af655527bcf21d441723f38d4dc0bb523fee30df47b03ff0206ddf0046ffab26",
-    "export_receipt_sha256": null,
-    "export_payload_revision": null,
-    "gpu_reload_receipt_sha256": null,
+    "export_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/hf-export-step600-v1/EXPORT.json",
+    "export_receipt_file_sha256": "sha256:93b27c9a58ec85c309ee214a8e6924754fbfdd766f9537ec68d2ac3f978d1543",
+    "export_receipt_sha256": "sha256:24ea5e61ef8b6866ec72b4150f308ce90e0c07a585fd486692f4cd98e1e6ec67",
+    "export_payload_revision": "sha256:adf5d8c6609ea441744eab13ed0649c22eb4ad5f95baeebdcd60880c206702a6",
+    "cpu_layout_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/hf-export-step600-v1-cpu-check.json",
+    "cpu_layout_receipt_file_sha256": "sha256:d7afc0aa51666658d4cc377f14f095bf2b81e5ad9338f519b30f2f6d162d86eb",
+    "cpu_layout_receipt_sha256": "sha256:1253403c8088c6e610ad025d573b7fe618a9a2af9ee4bbc683bb888008de74bd",
+    "gpu_reload_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k32-s600-gpu-v1/GPU_CHECK.json",
+    "gpu_reload_receipt_file_sha256": "sha256:6ed89d240fcb97e96a596200dc6e315c82a89a68a427306be0e0ab5f622b8567",
+    "gpu_reload_receipt_sha256": "sha256:23682ab03cfdd6d5ad12563394514b75a4287334e8e05516e0a1d9dea924cb3a",
+    "gpu_reload_complete_receipt_path": "/mnt/sfs/jobs/chris-q38-t3k32-s600-gpu-v1/COMPLETE.json",
+    "gpu_reload_complete_receipt_file_sha256": "sha256:43c2b671f5f267976883be9570d1357ad467ab506b02d4d647b19c05ace69b32",
+    "gpu_reload_complete_receipt_sha256": "sha256:780cca3069af58db4f6248c3a38a61c4c7745055f4406032e763f15ab65f7c2e",
     "stage_receipt_sha256": null,
     "serving_registration_receipt_sha256": null,
     "live_parity_receipt_sha256": null,
@@ -237,5 +247,5 @@
     "raw_logs_included": false,
     "tensor_values_read": false
   },
-  "sha256": "7d0fc0da09b01113a9416ae8b49530ac5e14ecd22374f60fd00837e88a36332e"
+  "sha256": "f3e27ec3b042d05edccef55b0ffb97e56effe66def2be6cf68aeb99d81e86f91"
 }
