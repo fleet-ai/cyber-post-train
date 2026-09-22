@@ -33,6 +33,25 @@
     "direct_rail_sha256": "sha256:cb1bf30c6a57daa22e91ceecd7216b1c90fd5e18bdb7dd28edf83c5eea9592db",
     "source_closure_self_sha256": "sha256:46e14737820cfbd63b51d5290b8d3936383fe35a253650a3aa5430675d79e139"
   },
+  "point_in_time_absence": {
+    "checked_at": "2026-09-22T08:33:50Z",
+    "jobs_api": {
+      "dev_matching_runs": 0,
+      "prod_matching_runs": 0
+    },
+    "kubernetes": {
+      "dev_matching_jobs_or_rayjobs": 0,
+      "prod_matching_jobs_or_rayjobs": 0
+    },
+    "sfs": {
+      "read_through_pod_uid": "0e53926c-8bcc-43d0-a121-51ffcc05d272",
+      "predecessor_data_present": true,
+      "successor_data_present": false,
+      "training_output_present": false,
+      "create_once_root_present": false
+    },
+    "must_repeat_immediately_before_create": true
+  },
   "external_mutations": 0,
   "submitted": false,
   "launch_authorized": false,
@@ -46,5 +65,5 @@
     "server-preview the one-node eight-GPU RayJob in development and production",
     "take a fresh all-namespace capacity census and arm the exact cleanup observer before one create"
   ],
-  "sha256": "sha256:2a532b8391c4c74431ceca301f6bbc20dfeff1d6120950db36dbe3d637f0434a"
+  "sha256": "sha256:0dc3772dda36cffc308f9520cbd7f44b56fd9677e7cb303fb128e58c23b14567"
 }
