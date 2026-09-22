@@ -45,7 +45,7 @@ function renderResults() {
       <dl><div><dt>${run.attemptLabel}</dt><dd>${run.attempts}</dd></div><div><dt>${run.scoreLabel}</dt><dd>${run.scored ?? "Not checked yet"}</dd></div><div><dt>${run.hitLabel}</dt><dd>${run.weaknessesFound}</dd></div></dl>
       <p>${run.note}${run.source ? ` <a href="${run.source}">Read the aggregate evidence.</a>` : ""}</p>
     </article>`).join("");
-  document.querySelector("#main-finding").textContent = "The new one-attempt OpenCode run is still partial: 14 of 15 collections are valid, 13 score cells are accepted, and 13 of 95 scored weakness checks received credit. The two technical exclusions are not zeros. This is not a complete baseline and does not show whether training helped.";
+  document.querySelector("#main-finding").textContent = "The new one-attempt OpenCode run is still partial: 14 of 15 collections are valid, all 14 valid saved attempts have accepted scores under one policy, and 11 of 98 scored weakness checks received credit. The one technical exclusion is not a zero. This is not a complete baseline and does not show whether training helped.";
 }
 
 function renderProtocol() {
@@ -67,7 +67,7 @@ function renderTasks() {
 function renderTraceFindings() {
   document.querySelector("#trace-findings").innerHTML = data.traces.map((item, i) => `
     <article><span>${String(i + 1).padStart(2, "0")}</span><div><h3>${item[0]}</h3><p>${item[1]}</p></div></article>`).join("");
-  document.querySelector("#limitations").textContent = "The fresh run gives one accepted score for 13 of the 15 websites. A complete baseline still requires valid evidence for the collection that failed technically and a complete score for the saved attempt whose report check stopped at its output limit. Any future replacement rule must be written before another run. A training claim also needs a separately collected trained-model result under the same rules.";
+  document.querySelector("#limitations").textContent = "The fresh run gives one accepted score for each of the 14 valid collections. A complete baseline still requires valid evidence for the collection that failed technically. Any future replacement rule must be written before another run. A training claim also needs a separately collected trained-model result under the same rules.";
 }
 
 function renderFunnel() {
