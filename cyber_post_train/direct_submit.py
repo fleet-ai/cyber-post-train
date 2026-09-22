@@ -21,7 +21,7 @@ import uuid
 from collections.abc import Callable
 from copy import deepcopy
 from decimal import Decimal, InvalidOperation
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 import yaml
@@ -245,7 +245,7 @@ def validate_cpu_checkpoint_pod(manifest: dict) -> dict:
     if annotations.get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF:
         raise JobsError("CPU checkpoint Pod must opt out of failed-job alerts before create")
     if annotations.get(CPU_CHECKPOINT_OPERATION_ANNOTATION) not in CPU_CHECKPOINT_OPERATIONS:
-        raise JobsError("CPU checkpoint Pod must name a supported seal/verify operation")
+        raise JobsError("CPU checkpoint Pod must name a supported seal/export/verify operation")
     if spec.get("priorityClassName") != "c1":
         raise JobsError("CPU checkpoint Pod must use c1 priority")
     if spec.get("nodeSelector") != CPU_NODE_SELECTOR:
@@ -256,6 +256,14 @@ def validate_cpu_checkpoint_pod(manifest: dict) -> dict:
         raise JobsError("CPU checkpoint Pod must use restartPolicy Never")
     if not isinstance(containers, list) or not containers:
         raise JobsError("CPU checkpoint Pod has no containers")
+    volume_claims = {}
+    for volume in spec.get("volumes", []):
+        if not isinstance(volume, dict) or not isinstance(volume.get("name"), str):
+            continue
+        claim = volume.get("persistentVolumeClaim")
+        if isinstance(claim, dict) and isinstance(claim.get("claimName"), str):
+            volume_claims[volume["name"]] = claim["claimName"]
+    pvc_mounts = []
     for container in [*spec.get("initContainers", []), *containers]:
         if not isinstance(container, dict):
             raise JobsError("CPU checkpoint Pod contains a malformed container")
@@ -268,6 +276,29 @@ def validate_cpu_checkpoint_pod(manifest: dict) -> dict:
                 raise JobsError("CPU checkpoint Pod resource quantities are malformed")
             if "nvidia.com/gpu" in values:
                 raise JobsError("CPU checkpoint Pod must not request or limit GPUs")
+        for mount in container.get("volumeMounts", []):
+            if not isinstance(mount, dict):
+                continue
+            volume_name = mount.get("name")
+            mount_path = mount.get("mountPath")
+            if volume_name in volume_claims and isinstance(mount_path, str):
+                pvc_mounts.append(
+                    (volume_claims[volume_name], volume_name, PurePosixPath(mount_path))
+                )
+    for index, (claim, volume_name, mount_path) in enumerate(pvc_mounts):
+        for other_claim, other_name, other_path in pvc_mounts[index + 1 :]:
+            if (
+                claim == other_claim
+                and volume_name != other_name
+                and (
+                    mount_path == other_path
+                    or mount_path in other_path.parents
+                    or other_path in mount_path.parents
+                )
+            ):
+                raise JobsError(
+                    "overlapping CPU checkpoint mounts of one PVC must reuse one volume source"
+                )
     sfs_fields = {field: annotations.get(field) for field in CPU_PREFLIGHT_BINDING_ANNOTATIONS}
     if _has_lora_cpu_preflight_surface(manifest):
         if not all(isinstance(value, str) and value for value in sfs_fields.values()):

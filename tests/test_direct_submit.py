@@ -31,6 +31,7 @@ from cyber_post_train.direct_submit import (
     direct_submit_sft_once,
     render_lr30_qualification_rayjob,
     render_sft_rayjob,
+    validate_cpu_checkpoint_pod,
 )
 from cyber_post_train.jobs import JobsError, digest
 from cyber_post_train.lora_cpu_preflight import build_lora_cpu_preflight_package
@@ -1672,6 +1673,33 @@ def test_cpu_checkpoint_boundary_accepts_truthful_export_operation(monkeypatch):
     assert len(calls) == 2
     assert "get" in calls[0][0]
     assert "--dry-run=server" in calls[1][0]
+
+
+def test_cpu_checkpoint_boundary_rejects_overlapping_same_pvc_with_distinct_volumes():
+    pod = cpu_checkpoint_pod()
+    pod["spec"]["volumes"] = [
+        {
+            "name": "sfs-readonly",
+            "persistentVolumeClaim": {"claimName": "sfs-shared", "readOnly": True},
+        },
+        {"name": "sfs-output", "persistentVolumeClaim": {"claimName": "sfs-shared"}},
+    ]
+    pod["spec"]["containers"][0]["volumeMounts"] = [
+        {"name": "sfs-readonly", "mountPath": "/mnt/sfs", "readOnly": True},
+        {
+            "name": "sfs-output",
+            "mountPath": "/mnt/sfs/jobs/researcher-run",
+            "subPath": "jobs/researcher-run",
+        },
+    ]
+
+    with pytest.raises(JobsError, match="overlapping CPU checkpoint mounts"):
+        validate_cpu_checkpoint_pod(pod)
+
+    pod["spec"]["volumes"] = [{"name": "sfs", "persistentVolumeClaim": {"claimName": "sfs-shared"}}]
+    for mount in pod["spec"]["containers"][0]["volumeMounts"]:
+        mount["name"] = "sfs"
+    validate_cpu_checkpoint_pod(pod)
 
 
 @pytest.mark.parametrize(
