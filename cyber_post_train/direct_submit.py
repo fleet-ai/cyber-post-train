@@ -360,10 +360,22 @@ def validate_cpu_checkpoint_pod(manifest: dict) -> dict:
             mount_path = mount.get("mountPath")
             if volume_name in volume_claims and isinstance(mount_path, str):
                 pvc_mounts.append(
-                    (volume_claims[volume_name], volume_name, PurePosixPath(mount_path))
+                    (
+                        volume_claims[volume_name],
+                        volume_name,
+                        PurePosixPath(mount_path),
+                        mount.get("subPath"),
+                    )
                 )
-    for index, (claim, volume_name, mount_path) in enumerate(pvc_mounts):
-        for other_claim, other_name, other_path in pvc_mounts[index + 1 :]:
+    sfs_root = PurePosixPath("/mnt/sfs")
+    root_claims = {claim for claim, _, mount_path, _ in pvc_mounts if mount_path == sfs_root}
+    for claim, _, mount_path, subpath in pvc_mounts:
+        if claim in root_claims and sfs_root in mount_path.parents:
+            expected_subpath = str(mount_path.relative_to(sfs_root))
+            if subpath != expected_subpath:
+                raise JobsError("nested /mnt/sfs CPU checkpoint mountPath and PVC subPath differ")
+    for index, (claim, volume_name, mount_path, _) in enumerate(pvc_mounts):
+        for other_claim, other_name, other_path, _ in pvc_mounts[index + 1 :]:
             if (
                 claim == other_claim
                 and volume_name != other_name
