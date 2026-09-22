@@ -65,7 +65,13 @@ from .sfs_output_job import (
     validate_sfs_output_job_package,
     validate_sfs_output_job_response,
 )
-from .sfs_write_identity import TRAINER_GID, TRAINER_UID, validate_owned_output_binding
+from .sfs_write_identity import (
+    TRAINER_GID,
+    TRAINER_UID,
+    is_direct_dev_gpu_reload_pod,
+    validate_direct_dev_gpu_reload_output,
+    validate_owned_output_binding,
+)
 from .sft_cpu_preflight_job import (
     build_sft_cpu_preflight_job,
     collect_sft_cpu_preflight_receipt,
@@ -1190,13 +1196,32 @@ class Kubectl:
         return self._run(["get", "rayjobs.ray.io", name, "--namespace", NAMESPACE, "--output=json"])
 
     def dry_run(self, manifest: dict) -> dict:
-        return self._run(
+        direct_dev_reload = is_direct_dev_gpu_reload_pod(manifest)
+        if direct_dev_reload:
+            self._require_direct_dev_gpu_reload_output(manifest)
+        response = self._run(
             ["create", "--dry-run=server", "--filename=-", "--output=json"],
             manifest=manifest,
         )
+        if direct_dev_reload:
+            self._require_direct_dev_gpu_reload_output(response)
+        return response
 
     def create_once(self, manifest: dict) -> dict:
-        return self._run(["create", "--filename=-", "--output=json"], manifest=manifest)
+        direct_dev_reload = is_direct_dev_gpu_reload_pod(manifest)
+        if direct_dev_reload:
+            self._require_direct_dev_gpu_reload_output(manifest)
+        response = self._run(["create", "--filename=-", "--output=json"], manifest=manifest)
+        if direct_dev_reload:
+            self._require_direct_dev_gpu_reload_output(response)
+        return response
+
+    @staticmethod
+    def _require_direct_dev_gpu_reload_output(manifest: dict) -> None:
+        try:
+            validate_direct_dev_gpu_reload_output(manifest)
+        except ValueError as exc:
+            raise JobsError(str(exc)) from None
 
     def _cpu_node_inventory(self) -> dict:
         return self._run(
