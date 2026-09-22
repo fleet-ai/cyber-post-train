@@ -52,9 +52,77 @@
     "tensor_values": 27781427952,
     "trained_tensors": 1184
   },
+  "gpu_reload": {
+    "cleanup": {
+      "control_leaf_absent_after_cleanup": true,
+      "control_leaf_name": ".preflight-control-s700-gpu-dev-v2",
+      "finished_at": "2026-09-22T11:00:51Z",
+      "gpu_pod_absent_after_cleanup": true,
+      "node_active_gpu_requests_after_cleanup": 0,
+      "pod_absent_after_cleanup": true,
+      "pod_name": "chris-q38-s700-dev-cleanup-v1",
+      "pod_uid": "e76767af-e3ac-4d79-af23-b0bfa89daa1a",
+      "private_loader_log_read": false,
+      "status": "passed"
+    },
+    "cluster_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+    "complete_receipt_file_sha256": "sha256:c164e1d696517ae48ba48d9f890e262090b6098ecfb38f9c558fb1e3e866f25c",
+    "complete_receipt_sha256": "sha256:0e419dde02002d2e7e3a4ec96c49079727bb33701fb68b97cf96446000cef544",
+    "durable_receipt_handoff": {
+      "cleanup": {
+        "ephemeral_control_leaf_absent": true,
+        "finished_at": "2026-09-22T11:12:17Z",
+        "node_active_gpu_requests_after_cleanup": 0,
+        "pod_absent_after_cleanup": true,
+        "pod_name": "chris-q38-s700-dev-cleanup-v3",
+        "pod_uid": "6ea6ee0f-b7c1-4c5c-a68d-5deb691fe8b1",
+        "private_loader_log_read": false,
+        "status": "passed"
+      },
+      "complete_receipt_file_sha256": "sha256:7931a1dc78d1fa55232fe1b480fcf92bee32d9db9b46f97814ea6eece940e28e",
+      "complete_receipt_sha256": "sha256:d590c924a8b8eedd06dc5a1b86477a485096db428c43aab49c97fdb3631c660a",
+      "finished_at": "2026-09-22T11:10:26Z",
+      "gpu_check_receipt_file_sha256": "sha256:1765f822890a87f2e83d934a4b2247eb922b37dd6dc29770574499abbb9cda46",
+      "gpu_check_receipt_sha256": "sha256:7fca6bb17f1660579bac96a57e3b5e8c1fe161ee28e7508239f4c6ebe886d306",
+      "pod_name": "chris-q38-s700-dev-gpu-v3",
+      "pod_uid": "3a485651-5d20-4a2d-9ff9-26ef7c5ed33b",
+      "receipt_layout": {
+        "flat_source_absent": true,
+        "finished_at": "2026-09-22T11:15:42Z",
+        "pod_absent_after_validation": true,
+        "pod_name": "chris-q38-s700-dev-receipt-layout-v1",
+        "pod_uid": "9a6fb423-2773-4419-a5af-3c15a04ce072",
+        "status": "passed"
+      },
+      "receipt_sfs_path": "/jobs/chris-q38-study-corpora-v1/launch-controls/chris-q38-t3k32-s700-gpu-check-v1/GPU_CHECK.json",
+      "restarts": 0,
+      "source_receipts_unchanged": true,
+      "status": "accepted_durable_exact_receipt_copy"
+    },
+    "finite_logits": true,
+    "finished_at": "2026-09-22T10:56:59Z",
+    "generated_tokens": 2,
+    "gpu_check_receipt_file_sha256": "sha256:1765f822890a87f2e83d934a4b2247eb922b37dd6dc29770574499abbb9cda46",
+    "gpu_check_receipt_sha256": "sha256:7fca6bb17f1660579bac96a57e3b5e8c1fe161ee28e7508239f4c6ebe886d306",
+    "gpu_reload_verified": true,
+    "gpus": 1,
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
+    "model_class": "Qwen3_5ForConditionalGeneration",
+    "optimizer_steps_executed": 0,
+    "pod_name": "chris-q38-s700-dev-gpu-v2",
+    "pod_uid": "d5d95421-d0b2-499c-92d3-8bd204918128",
+    "priority_class": "c1",
+    "receipt_source_path_before_cleanup": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/.preflight-control-s700-gpu-dev-v2",
+    "restarts": 0,
+    "serving_qualified": false,
+    "source_unchanged": true,
+    "started_receipt_file_sha256": "sha256:9eb2dd37fd847ff53805dd1fefa68e3fcea17bc63fc83406fbf99e179a4adf12",
+    "started_receipt_sha256": "sha256:c39994af3c42de8c94749f24f97cd38dc2d05697acb1f95b62c1e7fe8c7c71b5",
+    "status": "accepted_bounded_zero_update_reload"
+  },
   "next_gates": {
     "evaluation": "unlaunched",
-    "gpu_reload": "unaccepted",
+    "gpu_reload": "accepted",
     "serving": "unaccepted",
     "staging": "unaccepted"
   },
@@ -65,6 +133,6 @@
     "tensor_values_read": false
   },
   "schema": "cyber_qwen38_teacher3k32_step700_preservation_evidence_v1",
-  "sha256": "19f83d9ebaab7bf7c0201ba84b456dfd9bcd86ee362417c032880023c722d702",
-  "status": "accepted_through_cpu_layout_verification"
+  "sha256": "cc02f31f333d7d5e8c4ff1701bf8fd5a4184681652f3724dd1fbe1bdea3c1c57",
+  "status": "accepted_through_gpu_reload_verification"
 }

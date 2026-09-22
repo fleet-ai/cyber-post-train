@@ -67,7 +67,7 @@
       "train_parquet_sha256": "sha256:bf245db073fcd5a39ff6f90f6fc322710a3694408845bc27bfb6d9eaa6c41e0c"
     },
     "file_count": 33,
-    "gpu_reload_verified": false,
+    "gpu_reload_verified": true,
     "optimizer_step": 700,
     "sampler_batches_in_epoch": 700,
     "seal_manifest": {
@@ -307,13 +307,25 @@
       "values": 27781427952
     },
     "gpu_reload": {
-      "complete_receipt_file_sha256": null,
-      "complete_receipt_path": null,
-      "complete_receipt_sha256": null,
-      "receipt_file_sha256": null,
-      "receipt_path": null,
-      "receipt_sha256": null,
-      "state": "unaccepted_not_run"
+      "cluster_context": "nebius-mk8s-fleetai-training-dev-e04p03enwk5c0va9tb",
+      "complete_receipt_file_sha256": "sha256:7931a1dc78d1fa55232fe1b480fcf92bee32d9db9b46f97814ea6eece940e28e",
+      "complete_receipt_path_before_cleanup": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/.preflight-control-s700-gpu-dev-v3/COMPLETE.json",
+      "complete_receipt_sha256": "sha256:d590c924a8b8eedd06dc5a1b86477a485096db428c43aab49c97fdb3631c660a",
+      "durable_evidence_path": "docs/evidence/qwen38-teacher3k32-step700-preservation-20260922.json",
+      "finite_logits": true,
+      "generated_tokens": 2,
+      "gpus": 1,
+      "model_class": "Qwen3_5ForConditionalGeneration",
+      "optimizer_steps_executed": 0,
+      "pod_absent_after_cleanup": true,
+      "pod_name": "chris-q38-s700-dev-gpu-v3",
+      "pod_uid": "3a485651-5d20-4a2d-9ff9-26ef7c5ed33b",
+      "receipt_file_sha256": "sha256:1765f822890a87f2e83d934a4b2247eb922b37dd6dc29770574499abbb9cda46",
+      "receipt_sfs_path": "/jobs/chris-q38-study-corpora-v1/launch-controls/chris-q38-t3k32-s700-gpu-check-v1/GPU_CHECK.json",
+      "receipt_sha256": "sha256:7fca6bb17f1660579bac96a57e3b5e8c1fe161ee28e7508239f4c6ebe886d306",
+      "serving_qualified": false,
+      "source_unchanged": true,
+      "state": "accepted_bounded_zero_update_reload"
     },
     "live_parity": {
       "base_route_uid": null,
@@ -348,7 +360,6 @@
     }
   },
   "remaining_before_launch_packet": [
-    "accepted_one_gpu_finite_reload_receipt",
     "accepted_atomic_stage_receipt_with_payload_manifest_sha256",
     "accepted_serving_registration_receipt",
     "accepted_candidate_to_baseline_live_parity_receipt",
@@ -476,6 +487,6 @@
     "intended_intervention": "model_weights_only",
     "question": "How does the exact Teacher3K 32K step-700 checkpoint change the immutable Fleet dev17 seed-43 pass@1 result relative to the accepted Qwen3.8 base control when task, runtime seed, verifier, harness, sampling, retry treatment, and serving contract are unchanged?"
   },
-  "sha256": "69e1b041eef32c56565e00e33f4d1fa23a3d8aecf6bb7c7f76410338909bd90f",
+  "sha256": "c1292ac2dbcd273a379928363a035ea77ed2a0235812c89b3af50d6a8fe9ef62",
   "status": "blocked_not_launchable"
 }
