@@ -33,6 +33,9 @@ from training import skyrl_reward_rayjob as historical_direct
 pytest_plugins = ("test_skyrl_training",)
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE_CLOSURE = ROOT / "configs/data/qwen38-rl-reward-canary-exact-version-evidence-v8.json"
+STARTUP_INCIDENT = (
+    ROOT / "docs/evidence/qwen38-study/2026-09-22-skyrl-fresh-wrapper-startup-failure-v1.json"
+)
 
 
 def test_prod9_reuses_only_the_proven_miles_shape_and_qwen38_reload_gate() -> None:
@@ -69,6 +72,24 @@ def test_prod9_reuses_only_the_proven_miles_shape_and_qwen38_reload_gate() -> No
     assert reload_gate["generated_tokens"] == 2
     assert reload_gate["optimizer_updates"] == 0
     assert hardening.verify_source_closure(SOURCE_CLOSURE)["tool_result_token_safe"] is True
+
+
+def test_fresh_wrapper_startup_incident_preserves_failure_and_release_evidence() -> None:
+    value = json.loads(STARTUP_INCIDENT.read_text())
+    unsigned = {key: item for key, item in value.items() if key != "sha256"}
+
+    assert value["sha256"] == "sha256:" + digest(unsigned)
+    assert {row["lane"] for row in value["runs"]} == {"prod9", "lane2"}
+    assert all(row["sanitized_entrypoint_error_class"] == "RuntimeError" for row in value["runs"])
+    assert all(row["failure_alerts"] == "off" for row in value["runs"])
+    assert value["root_cause"]["native_subprocess_started"] is False
+    resources = value["resource_reconciliation"]
+    assert resources["terminal_rayjob_records_present"] is True
+    assert resources["terminal_finished_workload_records_present"] is True
+    assert resources["generated_rayclusters_present"] is False
+    assert resources["pods_present"] is False
+    assert resources["active_gpus_for_exact_runs"] == 0
+    assert value["scientific_result"]["capability_claim"] is False
 
 
 @pytest.mark.parametrize(
@@ -521,6 +542,13 @@ def test_prod9_request_bundles_fresh_entrypoint_and_historical_rail_rejects(
         "status": "rejected",
         "reason": "historical_direct_rail_cannot_render_fresh_prod9_runtime",
     }
+
+
+def test_prod9_exposes_native_source_to_the_shared_supervisor(monkeypatch) -> None:
+    sentinel = {"native": object()}
+    monkeypatch.setattr(prod9_training.historical, "native_source", lambda: sentinel)
+
+    assert prod9_training.native_source() is sentinel
 
 
 def test_prod9_stage_bundle_imports_hermetically(tmp_path: Path) -> None:

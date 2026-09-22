@@ -230,6 +230,11 @@ def native_result(plan: dict) -> dict:
     return current.native_result(plan)
 
 
+def native_source():
+    """Expose the native loader required by the shared supervised lifecycle."""
+    return historical.native_source()
+
+
 def _native(plan: dict) -> None:
     current._native(plan)
 
