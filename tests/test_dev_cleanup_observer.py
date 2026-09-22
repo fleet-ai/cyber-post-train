@@ -14,6 +14,7 @@ import pytest
 from cyber_post_train.jobs import digest
 from scripts import probe_qwen38_prod8_terminal as probe
 from training import dev_cleanup_observer as cleanup
+from training import skyrl_prod9_direct
 
 
 def _seal(value: dict) -> dict:
@@ -149,6 +150,25 @@ def test_job_observer_arms_before_creation_captures_receipt_and_releases(tmp_pat
     assert cluster.delete_calls == 1
     assert json.loads((tmp_path / "ARMED.json").read_text())["status"] == "armed"
     assert json.loads((tmp_path / "RESULT.json").read_text()) == result
+
+
+def test_production_observer_never_adopts_same_name_without_creator_uid(
+    tmp_path, monkeypatch
+) -> None:
+    cluster = FakeJobCluster()
+    ticks = iter((0.0, 121.0))
+    monkeypatch.setattr(cleanup.time, "monotonic", lambda: next(ticks))
+    observer = _observer(
+        tmp_path,
+        cluster,
+        context=cleanup.PROD_CONTEXT,
+        profile="production-cpu",
+    )
+    with pytest.raises(cleanup.ObserverError, match="not creation-bound"):
+        observer.run()
+    assert cluster.target_reads == 1  # the required pre-arm absence read only
+    assert cluster.delete_calls == 0
+    assert observer.snapshot.uid == ""
 
 
 class Prod8TerminalProbeCluster:
@@ -622,7 +642,13 @@ class FakeFleetCluster:
                                 {
                                     "restartCount": 0,
                                     "imageID": "registry/image@sha256:" + "b" * 64,
-                                    "state": {"terminated": {"message": json.dumps(self.receipt)}},
+                                    "state": {
+                                        "terminated": {
+                                            "exitCode": 0,
+                                            "reason": "Completed",
+                                            "message": json.dumps(self.receipt),
+                                        }
+                                    },
                                 }
                             ]
                         },
@@ -727,10 +753,12 @@ def test_fleetjob_observer_waits_bounded_time_for_terminal_receipt(tmp_path) -> 
 
 
 class FakeDirectRayJobCluster:
-    def __init__(self) -> None:
+    def __init__(self, *, name: str = "probe", gpus: int = 8, receipt: dict | None = None) -> None:
+        self.name = name
+        self.gpus = gpus
         self.target_reads = 0
         self.deleted = False
-        self.receipt = _seal(
+        self.receipt = receipt or _seal(
             {
                 "schema": "cyber_skyrl_topology_probe_receipt_v1",
                 "status": "setup_and_internal_cleanup_passed",
@@ -748,37 +776,47 @@ class FakeDirectRayJobCluster:
             value = None
             if self.target_reads > 1 and not self.deleted:
                 value = self._object(
-                    "probe",
+                    self.name,
                     20,
-                    status={"rayClusterName": "cluster-probe", "jobStatus": "SUCCEEDED"},
+                    status={"rayClusterName": f"cluster-{self.name}", "jobStatus": "SUCCEEDED"},
                 )
             return NS(returncode=0, stdout=json.dumps(value) if value else "", stderr="")
         if args[:3] == ["get", "workload", "--output"]:
             items = []
             if not self.deleted:
-                row = self._object("workload-probe", 21)
-                row["metadata"]["ownerReferences"] = [{"name": "probe"}]
+                row = self._object(f"workload-{self.name}", 21)
+                row["metadata"]["ownerReferences"] = [{"name": self.name}]
                 items.append(row)
             return NS(returncode=0, stdout=json.dumps({"items": items}), stderr="")
-        if args[:3] == ["get", "workload", "workload-probe"]:
+        if args[:3] == ["get", "workload", f"workload-{self.name}"]:
             return NS(returncode=0, stdout="", stderr="")
-        if args[:3] == ["get", "raycluster", "cluster-probe"]:
-            value = None if self.deleted else self._object("cluster-probe", 22)
+        if args[:3] == ["get", "raycluster", f"cluster-{self.name}"]:
+            value = None if self.deleted else self._object(f"cluster-{self.name}", 22)
             return NS(returncode=0, stdout=json.dumps(value) if value else "", stderr="")
         if args[:2] == ["get", "pod"] and "--selector" in args:
             items = []
             if not self.deleted:
                 items.append(
                     self._object(
-                        "probe-pod-23",
+                        f"{self.name}-pod-23",
                         23,
-                        spec={"containers": [{"resources": {"requests": {"nvidia.com/gpu": 8}}}]},
+                        spec={
+                            "containers": [
+                                {"resources": {"requests": {"nvidia.com/gpu": self.gpus}}}
+                            ]
+                        },
                         status={
                             "containerStatuses": [
                                 {
                                     "restartCount": 0,
                                     "imageID": "registry/image@sha256:" + "c" * 64,
-                                    "state": {"terminated": {"message": json.dumps(self.receipt)}},
+                                    "state": {
+                                        "terminated": {
+                                            "exitCode": 0,
+                                            "reason": "Completed",
+                                            "message": json.dumps(self.receipt),
+                                        }
+                                    },
                                 }
                             ]
                         },
@@ -810,6 +848,57 @@ def test_direct_rayjob_observer_binds_children_receipt_and_releases(tmp_path) ->
     assert result["raycluster_uid"].endswith("000000000022")
     assert result["receipt"]["status"] == "setup_and_internal_cleanup_passed"
     assert result["deletion_reason"] == "terminal_status"
+
+
+def test_prod9_reload_observer_produces_one_gpu_acceptance_schema(tmp_path, monkeypatch) -> None:
+    name = "chris-q38-reload-v1"
+    plan_sha256 = "sha256:" + "1" * 64
+    manifest_sha256 = "sha256:" + "2" * 64
+    gpu_body = {
+        "schema": "cyber_hf_export_check_v1",
+        "status": "passed",
+        "gpus": 1,
+        "optimizer_steps_executed": 0,
+        "gpu_reload_verified": True,
+        "source_unchanged": True,
+        "finite_logits": True,
+        "generated_tokens": 2,
+        "serving_qualified": False,
+    }
+    gpu_receipt = {**gpu_body, "receipt_sha256": digest(gpu_body)}
+    cluster = FakeDirectRayJobCluster(name=name, gpus=1, receipt=gpu_receipt)
+    observer = _observer(
+        tmp_path,
+        cluster,
+        context=cleanup.PROD_CONTEXT,
+        kind="rayjob",
+        name=name,
+        maximum_seconds=1800,
+        expected_gpus=1,
+        plan_sha256=plan_sha256,
+        manifest_sha256=manifest_sha256,
+        profile="production-reload",
+    )
+    original_arm = observer.arm
+
+    def arm_and_publish_creator_uid():
+        armed = original_arm()
+        skyrl_prod9_direct._publish_creator_binding(
+            armed,
+            kind="rayjob",
+            name=name,
+            plan_sha256=plan_sha256,
+            manifest_sha256=manifest_sha256,
+            uid="00000000-0000-0000-0000-000000000020",
+        )
+        return armed
+
+    monkeypatch.setattr(observer, "arm", arm_and_publish_creator_uid)
+    result = observer.run()
+    assert result["schema"] == cleanup.PROD9_RELOAD_RESULT_SCHEMA
+    assert result["status"] == "released"
+    assert result["peak_gpus"] == result["expected_gpus"] == 1
+    assert result["receipt"] == gpu_receipt
 
 
 def test_production_recovery_observer_adopts_only_the_exact_live_uid(tmp_path) -> None:
@@ -894,6 +983,19 @@ def test_observer_accepts_digest_valid_model_stage_receipt() -> None:
         }
     )
     assert cleanup._validated_receipt(json.dumps(receipt), kind="job") == receipt
+
+
+def test_observer_accepts_only_digest_valid_prod9_cpu_receipt() -> None:
+    body = {
+        "schema": "cyber_skyrl_prod9_training_cpu_preflight_v1",
+        "status": "passed",
+        "gpus": 0,
+        "runtime_user": {"uid": 1000, "gid": 100},
+    }
+    receipt = {**body, "receipt_sha256": digest(body)}
+    assert cleanup._validated_receipt(json.dumps(receipt), kind="job") == receipt
+    receipt["status"] = "changed"
+    assert cleanup._validated_receipt(json.dumps(receipt), kind="job") is None
 
 
 def test_observer_accepts_digest_valid_topology_receipt_verifier() -> None:
@@ -1427,6 +1529,16 @@ class FakeJobsApiExactObserverCluster:
         self.pod_uid = _metadata("unused", 404)["uid"]
         self.replacement_root: dict | None = None
         self.bad_workload_owner = False
+        self.receipt = {
+            "status": "native_loop_returned",
+            "plan_sha256": "1" * 64,
+            "checkpoint_global_step": 1,
+            "completed_batches": 3,
+            "completed_at": 1.0,
+            "optimizer_update_independently_verified": False,
+            "checkpoint_reload_verified": False,
+        }
+        self.receipt["sha256"] = digest(self.receipt)
 
     def _owner(self, *, kind: str, name: str, uid: str) -> list[dict]:
         return [{"kind": kind, "name": name, "uid": uid, "controller": True}]
@@ -1486,6 +1598,7 @@ class FakeJobsApiExactObserverCluster:
                 ),
             },
             "spec": {
+                "initContainers": [{"name": "sfs-init", "resources": {}}],
                 "containers": [
                     {
                         "name": "trainer",
@@ -1495,15 +1608,30 @@ class FakeJobsApiExactObserverCluster:
                             "limits": {"nvidia.com/gpu": self.binding["expected_gpus"]},
                         },
                     }
-                ]
+                ],
             },
             "status": {
+                "initContainerStatuses": [
+                    {
+                        "restartCount": 0,
+                        "state": {"terminated": {"exitCode": 0}},
+                    }
+                ],
                 "containerStatuses": [
                     {
                         "name": "trainer",
                         "imageID": "registry/image@sha256:" + "b" * 64,
+                        "restartCount": 0,
+                        "state": {
+                            "terminated": {
+                                "exitCode": 0,
+                                "message": json.dumps(
+                                    self.receipt, sort_keys=True, separators=(",", ":")
+                                ),
+                            }
+                        },
                     }
-                ]
+                ],
             },
         }
 
@@ -1591,6 +1719,10 @@ def test_jobs_api_exact_uid_observer_releases_only_proven_owned_children(tmp_pat
     assert result["peak_gpus"] == 8
     assert result["requested_image"] == binding["image"]
     assert result["runtime_image_identity_complete"] is True
+    assert result["active_gpus"] == 0
+    assert result["restarts"] == 0
+    assert result["exit_codes"] == [0, 0]
+    assert result["receipt"] == cluster.receipt
     assert result["cleanup_status"] == "not_authorized"
     assert result["private_logs_read"] is False
     assert [entry["uid"] for entry in result["workloads"]] == [cluster.workload_uid]

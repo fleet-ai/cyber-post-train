@@ -1,157 +1,67 @@
-# Prod9: non-submitting live gates
+# Prod9: staged one-create gates
 
-This is the exact preparation sequence for the fresh prod9 SkyRL canary after
-the successor change has merged. It intentionally contains **no command that
-creates a Kubernetes object**. `kubectl create --dry-run=server` asks the
-cluster to validate an object and immediately discards it; it does not queue a
-Job or allocate a GPU.
+This document describes the fresh prod9 source rail. It does **not** create a
+Kubernetes object, allocate a GPU, or inspect private task rows. A server
+preview validates an object and discards it; only a later explicit call to one
+of the bounded create functions can create an object.
 
-The final GPU create is deliberately absent. The two CPU-only Jobs that stage
-the private package and run the exact-image preflight are also deliberately
-absent: each needs a separate, explicit decision to create it after these
-checks pass.
+## What is now implemented
 
-All paths below are local operator paths. The command never prints a private
-row, prompt, response, credential, or W&B key.
+The fresh prod9-only source contains three linked stages:
 
-## 1. Start from the merged source and make a private local package
+1. `training.skyrl_prod9_training.stage_rebind` runs only in a zero-GPU Job
+   with the SFS mount. It reads the earlier input package, creates the fresh
+   prod9 data package, and emits a small receipt containing paths, counts, and
+   hashes—not task rows.
+2. `training.skyrl_prod9_training.preflight` runs in a separate zero-GPU Job
+   from the exact training image. It checks the fresh runtime, token-safe
+   compaction, output conditions, and the new W&B run identity.
+3. `training.skyrl_prod9_direct.create_once` is the only GPU create path. It
+   accepts just the sealed receipts from the first two stages, fresh previews,
+   a live cleanup observer, absence checks, W&B absence, and a fresh
+   all-namespace capacity proof that includes the planned one node/eight GPUs.
+   It records an intent before one create and refuses every retry.
 
-Set `PROD9_SOURCE` to the restricted local directory containing the earlier
-**input** package only. It must not point at any prod8 output or checkpoint.
-The destination must be new and empty.
+All three root Kubernetes objects are rendered with
+`metadata.annotations["fleet.ai/failure-alerts"] == "off"`. The old prod8
+rail rejects the fresh prod9 runtime and cannot be used as a fallback.
 
-```sh
-export PROD9_SOURCE_REPO="$(git rev-parse --show-toplevel)"
-git -C "$PROD9_SOURCE_REPO" fetch origin main
-export PROD9_REPO="$(mktemp -d /private/tmp/cpt-prod9-main.XXXXXX)"
-rmdir "$PROD9_REPO"
-git -C "$PROD9_SOURCE_REPO" worktree add --detach "$PROD9_REPO" origin/main
-cd "$PROD9_REPO"
-test "$(jq -r .sha256 configs/qualification/qwen38-rl-reward-canary-prod9-identity-v1.json)" \
-  = "sha256:c666bbe82dfc1f084afc8233865edfd4bf1f34fbdf5f8f5f10d69a4f91fad311"
+## Required live sequence after review
 
-umask 077
-export PROD9_GATE_DIR="$(mktemp -d /private/tmp/q38-prod9-gates.XXXXXX)"
-chmod 700 "$PROD9_GATE_DIR"
-export PROD9_SOURCE="/restricted/local/path/to/rlreward-inputs-prod8-v1/data"
-export PROD9_REBOUND="$PROD9_GATE_DIR/rebound-data"
-test -d "$PROD9_SOURCE"
-test ! -e "$PROD9_REBOUND"
+No live operation is authorized merely because these functions exist. An
+authorized operator must execute the following sequence with fresh evidence:
 
-uv run --locked python - "$PROD9_SOURCE" "$PROD9_REBOUND" <<'PY'
-import sys
-from pathlib import Path
-from training import skyrl_reward_rayjob as direct
+1. Run the offline preparation check against a sanitized prod9 manifest. It
+   confirms the sealed source, identity, one-node/eight-GPU plan, and the
+   native 262,144-token context contract without reading data rows.
+2. Server-preview the zero-GPU SFS rebind Job in development and production.
+   Verify the root alert opt-out, image, SFS mount, non-root user, and zero GPU
+   request. Arm the exact-UID cleanup observer, create the Job once, then
+   require its receipt and release evidence.
+3. Server-preview and create the zero-GPU exact-image preflight Job with the
+   same root-annotation and observer rules. Require its exact receipt and
+   release evidence.
+4. Server-preview the fresh root RayJob in development and production. Verify
+   its root alert opt-out, one-node/eight-GPU shape, `c1`/`q1` priority, exact
+   image, and fresh prod9 bundle.
+5. Immediately before the one GPU create, recheck all prod9 names and output
+   paths in both Kubernetes clusters and the Jobs API, prove the W&B run ID is
+   unused, take the all-namespace capacity census, and confirm the cleanup
+   observer is still alive. Record the no-retry intent, then create exactly
+   once.
 
-root = Path.cwd()
-identity = direct.load_identity(
-    root / "configs/qualification/qwen38-rl-reward-canary-prod9-identity-v1.json"
-)
-direct.rebind_private_source_for_identity(
-    Path(sys.argv[1]), Path(sys.argv[2]), identity
-)
-PY
+Every create intent and creator handoff is stored under the single durable
+root `/mnt/sfs/jobs/.cyber-post-train-prod9-create-once-v1`. The exact child
+directory is computed from the complete sealed stage, training plan, or reload
+specification; it is never chosen by the caller. A second process using a new
+working directory therefore sees the same journal and must reconcile the
+original object instead of creating another Job or RayJob.
 
-uv run --locked python scripts/prepare_qwen38_skyrl_prod9_successor.py \
-  --manifest "$PROD9_REBOUND/manifest.json" \
-  > "$PROD9_GATE_DIR/OFFLINE_PREPARATION.json"
-```
+If any gate fails, preserve only its sanitized receipt and release only the
+exact owned object. Do not retry a create after an uncertain response, reuse
+prod8, or copy private data through the operator machine.
 
-This changes only the embedded run identity and its per-row checksums in a
-local successor package. The offline receipt must say
-`prepared_not_authorized`. It does not contact Fleet, W&B, Kubernetes, or SFS.
-
-### SFS-only rebind alternative (design only)
-
-The operator machine may not have `/mnt/sfs` mounted. In that case, the local
-rebind above cannot be improvised by copying private inputs through a laptop.
-The safe alternative is a **new, separate, zero-GPU rebind Job**. It is not
-implemented or authorized by this document; no existing data-stage Job may be
-repurposed for it.
-
-The implementation must use a fresh create-once name such as
-`chris-q38-prod9-rebind-v1`, not the prod9 data-stage or preflight name. Its
-sealed plan must bind all of the following before any create:
-
-1. the sealed prod9 identity digest, the exact prod8 **input** directory, and
-   the empty prod9 destination directory;
-2. the exact pinned runtime image and source bundle; a fixed five-file input
-   inventory; and the rule that only `run_id` plus its row checksum may change;
-3. a root Kubernetes `Job` with
-   `metadata.annotations["fleet.ai/failure-alerts"] == "off"`, `c1` priority,
-   zero GPU requests and limits, the SFS PVC, and the same non-root runtime
-   user as the training reader; and
-4. a server preview in every intended cluster plus a UID-bound zero-GPU cleanup
-   observer before the single create.
-
-Inside that Job, the rebind code must reject a present destination or temporary
-sibling, read only the predecessor input package on SFS, write into a private
-temporary sibling, rehash every result, and atomically rename it into the new
-destination. It must never touch a prod8 output/checkpoint, a task instance,
-or a GPU. Its terminal receipt may contain only file counts, byte counts,
-digests, paths, the source/destination identity bindings, and release state;
-it must not contain rows, prompts, responses, flags, credentials, or scores.
-
-One small supporting change is still required before this design can be used:
-the rebind Job must emit a sanitized public-manifest receipt sufficient for the
-following preflight to compile and verify prod9 without the operator reading
-the private SFS rows. That receipt must be a new schema and a new testable
-input to the plan compiler. Until it exists, fail closed rather than staging an
-archive or a hand-written manifest from an unmounted filesystem.
-
-## 2. What source is ready now, and what is intentionally not yet runnable
-
-The current source has three fresh prod9-only pieces:
-
-1. `training.skyrl_prod9_training` builds the exact GPU bundle and the matching
-   CPU-preflight bundle. Both use the fresh rollout module.
-2. `training.skyrl_prod9_rollout.Generator` constructs
-   `training.skyrl_prod9_hardening.Recorder` directly. The finished batch
-   receipt names that recorder, so a later acceptance check can prove it ran.
-3. `training.skyrl_prod9_direct` can render (but cannot create) the exact
-   one-node/eight-GPU root RayJob and the zero-GPU CPU-preflight Job. Both have
-   the required root `fleet.ai/failure-alerts: "off"` annotation before any
-   server preview.
-
-The old `training.skyrl_reward_rayjob` direct rail is deliberately rejected for
-this plan. It was built around the historical runtime bundle and must never be
-used to render, preview, or create prod9. The fresh renderer also deliberately
-has no `create` or `submit` function: its `live_create_is_available()` result is
-currently `False`.
-
-That is a safety boundary, not a pause in the scientific design. It prevents a
-new bundle from accidentally being launched through old job code while the
-remaining SFS-only rebind and create-once evidence gates are made explicit.
-
-## 3. Exact next gates before any workload can be created
-
-The next implementation must stay on the fresh prod9 rail and produce these
-separate, sanitized proofs in order:
-
-1. a fresh zero-GPU SFS rebind Job, as described above, which publishes the
-   exact prod9 input package without exposing task rows;
-2. a fresh zero-GPU CPU-preflight Job produced by
-   `skyrl_prod9_direct.preflight_job_manifest`, server-previewed with the root
-   alert annotation present and then observed to release its exact UID;
-3. fresh Jobs-API and Kubernetes absence checks for the prod9 name, output
-   directory, and the CPU Job names;
-4. fresh server previews of the prod9 root RayJob in every intended cluster.
-   `skyrl_prod9_direct.validate_preview` must show the exact image, one node,
-   eight GPUs, `c1`/`q1`, the fresh bundle entrypoint, and the root annotation;
-5. immediately before a future one-time GPU create, a new all-namespace
-   project-capacity census. `skyrl_prod9_hardening.capacity_gate` includes the
-   planned one node/eight GPUs and rejects a stale, incomplete, or over-budget
-   result; and
-6. a separately reviewed create-once function that consumes only those exact
-   proofs, arms an exact-UID cleanup observer, records a no-retry create intent,
-   and never falls back to the prod8 rail.
-
-Until all six exist and are reviewed, no GPU workload is authorized. If a gate
-fails, preserve its sanitized receipt, release only a known owned zero-GPU
-object if one exists, and make a new successor identity rather than replaying
-prod8 or partially reusing prod9.
-
-## 4. A finished training process is not an accepted model
+## Terminal acceptance
 
 `NATIVE_TRAINING_COMPLETE.json` only says that the native training process
 returned. It is **not** permission to call the resulting checkpoint valid,
@@ -168,8 +78,10 @@ prod9 function accepts only these fixed paths for the exact planned final step:
 | --- | --- | --- |
 | Checkpoint seal | `.../checkpoint-seals-v1/step-<final-step>.json` | The final checkpoint is complete, changed model parameters, and has not changed since it was sealed. |
 | BF16 export | `.../hf-export-step<final-step>-v1/EXPORT.json` | Every model tensor and required sidecar was rebuilt and re-opened as BF16 from that seal. |
+| Training creator handoff | `/mnt/sfs/jobs/.cyber-post-train-prod9-create-once-v1/training-<plan-digest>/TRAINING_OBSERVER_ARMED.json.created.json` | The cleanup observer and the one create call agreed on the exact original RayJob UID, name, plan, and rendered manifest. |
+| Training cleanup observer | `.../TRAINING_OBSERVER_RESULT.json` | The original eight-GPU training RayJob succeeded without a restart, carried the exact native completion receipt used by the checkpoint seal, and its RayJob, Ray cluster, workload, Pod, and all eight GPUs were released. |
 | One-GPU reload check | `...-p<final-step>-reload-v1/GPU_CHECK.json` | The exact export loads with the model configuration and tokenizer, produces finite output, and performs no optimizer update. |
-| Cleanup observer | `...-p<final-step>-reload-v1/OBSERVER_RESULT.json` | The exact one-GPU reload RayJob succeeded without a restart and its RayJob, Ray cluster, workload, Pod, and GPU allocation were all released. |
+| Reload cleanup observer | `...-p<final-step>-reload-v1/OBSERVER_RESULT.json` | The exact one-GPU reload RayJob succeeded without a restart and its RayJob, Ray cluster, workload, Pod, and GPU allocation were all released. |
 
 The reload Job is a separate, future one-GPU operation. Its final server
 preview must prove the root `RayJob` annotation
@@ -180,12 +92,25 @@ missing or changed seal, a non-BF16 export, a reload that did not use exactly
 one GPU, a failed/restarted reload, or any unreleased resource. It also rejects
 all alternate file paths, so an old receipt cannot be substituted for prod9.
 
-## 5. Reasoning and long-context safety
+## Reasoning and long-context safety
 
 This RL run does not ingest teacher reasoning. It trains only on actions and
 working-memory summaries generated by the student during its own rollout. A
 summary is a normal, separately recorded model action: it is used to continue
 the same task and is not presented as an external answer key.
+
+The hard Qwen context envelope is 262,144 tokens, and the complete episode may
+generate at most 4,194,304 response tokens across all turns. Before an ordinary
+action
+would cross the 163,840-token compaction trigger, the model receives the same
+visible conversation plus a visible request to write a short working summary.
+That summary is capped at 8,192 tokens. The next prompt contains the original
+task and that student-written summary; it is not an opaque background rewrite.
+The summary generation remains its own rollout step, while the real task reward
+is placed only on the final step. A later action is rejected if its rendered
+prompt plus its allowed output cannot fit the 262,144-token envelope. This is
+what lets a long episode continue without pretending an overflowed transcript
+was still available to the model.
 
 If a future SFT data lane uses reasoning, it may contain only reasoning the
 model was explicitly allowed to see as an assistant message. It must never

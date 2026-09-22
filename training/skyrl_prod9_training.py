@@ -2,8 +2,8 @@
 
 This module binds the long-horizon canary to the token-safe prod9 recorder
 without changing the sealed historical SkyRL compiler or rollout module.  It
-is intentionally preparation-only: the historical direct-RayJob rail rejects
-this schema, so a future launch needs a separately reviewed fresh direct rail.
+is accepted only through the separately reviewed generic Jobs API rail; the
+historical direct-RayJob rail continues to reject this schema.
 """
 
 from __future__ import annotations
@@ -11,16 +11,19 @@ from __future__ import annotations
 import argparse
 import asyncio
 import copy
+import hashlib
 import json
 import os
+import shlex
 import sys
 from contextlib import suppress
 from pathlib import Path
 
-from cyber_post_train.jobs import JobsError, bundled_request, digest
+from cyber_post_train.jobs import JobsError, bundled_request, digest, validate_request
 
 from . import skyrl, skyrl_episode
 from . import skyrl_prod9_hardening as hardening
+from . import skyrl_reward_rayjob as legacy_direct
 from . import skyrl_training as historical
 from .skyrl_prod9_rollout import (
     RECORDER_IMPLEMENTATION,
@@ -32,8 +35,12 @@ from .skyrl_prod9_rollout import (
 SCHEMA = "cyber_skyrl_prod9_training_v1"
 MODULE = "training.skyrl_prod9_training"
 PREFLIGHT_RECEIPT = Path("/dev/termination-log")
+STAGE_SCHEMA = "cyber_skyrl_prod9_rebind_stage_v1"
+STAGE_RECEIPT_SCHEMA = "cyber_skyrl_prod9_rebind_stage_receipt_v1"
+TERMINATION_MESSAGE_MAX_BYTES = 16384
 RUNTIME_FILES = (
     *historical.RUNTIME_FILES,
+    "training/skyrl_reward_rayjob.py",
     "training/skyrl_prod9_hardening.py",
     "training/skyrl_prod9_rollout.py",
     "training/skyrl_prod9_training.py",
@@ -51,6 +58,81 @@ def _runtime() -> dict[str, str]:
 def _binding() -> dict[str, str]:
     """Keep the plan's declared runtime equal to the executed source binding."""
     return {"module": MODULE, **runtime_binding()}
+
+
+def _seal(value: dict) -> dict:
+    """Return a canonical, self-digesting public receipt or stage specification."""
+    body = {key: item for key, item in value.items() if key not in {"sha256", "receipt_sha256"}}
+    return {**body, "sha256": "sha256:" + digest(body)}
+
+
+def _validate_seal(value: object, schema: str) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError("prod9 rebind evidence is not an object")
+    body = {key: item for key, item in value.items() if key != "sha256"}
+    if value.get("schema") != schema or value.get("sha256") != "sha256:" + digest(body):
+        raise ValueError("prod9 rebind evidence digest/schema changed")
+    return value
+
+
+def stage_spec(identity: legacy_direct.RailIdentity, predecessor_manifest: dict) -> dict:
+    """Seal the zero-GPU, SFS-local transformation needed before compilation.
+
+    The predecessor package is the only permitted source.  This specification
+    deliberately contains only public manifest metadata, never its task rows.
+    The resulting successor manifest becomes the sole data input to the later
+    training-plan compilation.
+    """
+    if not isinstance(identity, legacy_direct.RailIdentity):
+        raise ValueError("prod9 rebind identity is invalid")
+    body = {key: item for key, item in predecessor_manifest.items() if key != "sha256"}
+    files = predecessor_manifest.get("files") if isinstance(predecessor_manifest, dict) else None
+    if (
+        predecessor_manifest.get("schema") != "cyber_skyrl_data_v1"
+        or predecessor_manifest.get("name") != identity.predecessor_run_name
+        or predecessor_manifest.get("sha256") != "sha256:" + digest(body)
+        or not isinstance(files, dict)
+        or set(files) != {"train", "dev"}
+        or any(
+            not isinstance(files[split], dict)
+            or files[split].get("path") != split + ".jsonl"
+            or type(files[split].get("rows")) is not int
+            or files[split]["rows"] < 1
+            or not isinstance(files[split].get("sha256"), str)
+            or not files[split]["sha256"].startswith("sha256:")
+            for split in ("train", "dev")
+        )
+    ):
+        raise ValueError("prod9 predecessor manifest is not an exact private-data source")
+    return _seal(
+        {
+            "schema": STAGE_SCHEMA,
+            "name": identity.stage_name,
+            "identity": identity.sealed_mapping(),
+            "source": identity.predecessor_data_root,
+            "destination": identity.data_root,
+            "predecessor_manifest": predecessor_manifest,
+            "predecessor_manifest_sha256": predecessor_manifest["sha256"],
+            "image": historical.IMAGE,
+            "gpus": 0,
+            "scientific_work": {
+                "task_rows_read": 0,
+                "rollout_episodes": 0,
+                "optimizer_steps": 0,
+                "checkpoints": 0,
+            },
+        }
+    )
+
+
+def _stage_identity(value: object) -> tuple[dict, legacy_direct.RailIdentity]:
+    stage = _validate_seal(value, STAGE_SCHEMA)
+    identity = legacy_direct.identity_from_mapping(stage.get("identity"))
+    predecessor = stage.get("predecessor_manifest")
+    expected = stage_spec(identity, predecessor)
+    if stage != expected:
+        raise ValueError("prod9 rebind stage specification changed")
+    return stage, identity
 
 
 def _historical_plan(plan: dict) -> dict:
@@ -148,7 +230,11 @@ def _bundled_request(plan: dict, extra_argv: list[str]) -> dict:
 
 def job_request(plan: dict) -> dict:
     """Build one fresh GPU bundle whose entrypoint is this module, not historical."""
-    return _bundled_request(plan, [])
+    request = _bundled_request(plan, [])
+    claim = plan["output_root"] + "/.prod9-training-create-claim-v1"
+    request["command"] = "mkdir " + shlex.quote(claim) + " && exec " + request["command"]
+    validate_request(request)
+    return request
 
 
 def preflight_request(plan: dict, *, receipt: str = "/dev/termination-log") -> dict:
@@ -158,7 +244,136 @@ def preflight_request(plan: dict, *, receipt: str = "/dev/termination-log") -> d
     return _bundled_request(plan, ["--preflight", "--receipt", receipt])
 
 
-def _write_preflight_receipt(path: Path, value: dict) -> None:
+def stage_request(stage: dict) -> dict:
+    """Bundle the exact-image, zero-GPU SFS-local rebind entrypoint.
+
+    This bundle intentionally includes the historical pure rebind helper but
+    never calls its historical renderer, authorizer, or create rail.  It is
+    the narrow bridge that lets an SFS-mounted Pod turn an old private input
+    package into a fresh run-ID-bound package without exposing its rows to the
+    operator machine.
+    """
+    checked, identity = _stage_identity(stage)
+    files = _runtime()
+    files.update(
+        {
+            path + "/__init__.py": ""
+            for path in ("training", "evals", "evals/fleet", "cyber_post_train")
+        }
+    )
+    files["stage.json"] = json.dumps(checked, sort_keys=True, separators=(",", ":"))
+    files["identity.json"] = json.dumps(
+        identity.sealed_mapping(), sort_keys=True, separators=(",", ":")
+    )
+    return bundled_request(
+        {
+            "name": identity.stage_name,
+            "title": identity.stage_name + " zero-GPU SFS rebind",
+            "run_dir": "/mnt/sfs/jobs/" + identity.stage_name,
+            "image": checked["image"],
+            "workers": 1,
+            "gpus_per_worker": 1,
+            "resources": {
+                "cpu_request": "4",
+                "cpu_limit": "8",
+                "memory_request": "32Gi",
+                "memory_limit": "48Gi",
+            },
+            "priority_class": "c1",
+            "requeueIfPreempted": False,
+            "failureAlerts": False,
+            "secrets": [],
+            "env": {"PYTHONUNBUFFERED": "1"},
+        },
+        files,
+        MODULE,
+        [
+            "--stage",
+            "--stage-spec",
+            "stage.json",
+            "--identity",
+            "identity.json",
+            "--receipt",
+            str(PREFLIGHT_RECEIPT),
+        ],
+    )
+
+
+def stage_rebind(stage: dict, *, identity: legacy_direct.RailIdentity) -> dict:
+    """Rebind only private row run IDs inside the exact SFS source package."""
+    checked, bound = _stage_identity(stage)
+    if identity != bound:
+        raise ValueError("prod9 rebind identity differs from the sealed stage specification")
+    if (os.geteuid(), os.getegid()) != (1000, 100):
+        raise ValueError("prod9 rebind must use image user 1000:100")
+    source, destination = Path(bound.predecessor_data_root), Path(bound.data_root)
+    if (
+        source.is_symlink()
+        or not source.is_dir()
+        or destination.exists()
+        or destination.is_symlink()
+        or destination.parent.is_symlink()
+    ):
+        raise ValueError("prod9 rebind SFS source or destination changed")
+    try:
+        observed_predecessor = json.loads((source / "manifest.json").read_bytes())
+    except (OSError, ValueError) as exc:
+        raise ValueError("prod9 rebind predecessor manifest is unreadable") from exc
+    if observed_predecessor != checked["predecessor_manifest"]:
+        raise ValueError("prod9 rebind predecessor manifest differs from the sealed source")
+    successor = legacy_direct.rebind_private_source_for_identity(source, destination, bound)
+    successor_body = {key: item for key, item in successor.items() if key != "sha256"}
+    expected_names = {"manifest.json", "split.json", "task-set.json", "train.jsonl", "dev.jsonl"}
+    found = {path.name: path for path in destination.iterdir()}
+    if (
+        successor.get("schema") != "cyber_skyrl_data_v1"
+        or successor.get("name") != bound.run_name
+        or successor.get("sha256") != "sha256:" + digest(successor_body)
+        or set(found) != expected_names
+        or any(path.is_symlink() or not path.is_file() for path in found.values())
+    ):
+        raise ValueError("prod9 rebind successor package is malformed")
+    try:
+        persisted = json.loads((destination / "manifest.json").read_bytes())
+    except (OSError, ValueError) as exc:
+        raise ValueError("prod9 rebind successor manifest is unreadable") from exc
+    if persisted != successor:
+        raise ValueError("prod9 rebind successor manifest changed")
+    files = []
+    for name in sorted(found):
+        path = found[name]
+        payload = path.read_bytes()
+        files.append(
+            {
+                "path": name,
+                "bytes": len(payload),
+                "sha256": "sha256:" + hashlib.sha256(payload).hexdigest(),
+            }
+        )
+    by_name = {item["path"]: item for item in files}
+    if any(
+        by_name[successor["files"][split]["path"]]["sha256"] != successor["files"][split]["sha256"]
+        for split in ("train", "dev")
+    ):
+        raise ValueError("prod9 rebind successor payload digest changed")
+    return {
+        "schema": STAGE_RECEIPT_SCHEMA,
+        "status": "published",
+        "stage_spec_sha256": checked["sha256"],
+        "identity_sha256": bound.sealed_mapping()["sha256"],
+        "source": str(source),
+        "destination": str(destination),
+        "predecessor_manifest_sha256": checked["predecessor_manifest_sha256"],
+        "successor_manifest": successor,
+        "successor_manifest_sha256": successor["sha256"],
+        "files": files,
+        "gpus": 0,
+        "runtime_user": {"uid": os.geteuid(), "gid": os.getegid()},
+        **checked["scientific_work"],
+    }
+
+
+def _write_termination_receipt(path: Path, value: dict) -> None:
     """Replace Kubernetes' pre-created termination file with a sealed receipt.
 
     ``/dev/termination-log`` already exists in a Kubernetes container, so the
@@ -170,7 +385,34 @@ def _write_preflight_receipt(path: Path, value: dict) -> None:
         raise ValueError("prod9 CPU preflight receipt path changed")
     payload = {**value, "receipt_sha256": digest(value)}
     encoded = (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    if len(encoded) > TERMINATION_MESSAGE_MAX_BYTES:
+        raise ValueError("prod9 CPU termination receipt is too large")
     fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as stream:
+        stream.write(encoded)
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
+def _write_preflight_receipt(path: Path, value: dict) -> None:
+    """Keep the fixed-path preflight writer as a named public test seam."""
+    _write_termination_receipt(path, value)
+
+
+def _write_stage_receipt(path: Path, value: dict) -> None:
+    """Write only the zero-GPU stage receipt to Kubernetes' fixed file."""
+    _write_termination_receipt(path, value)
+
+
+def _write_gpu_termination_receipt(value: dict) -> None:
+    """Expose the sealed native completion to the exact-UID observer."""
+    body = {key: item for key, item in value.items() if key != "sha256"}
+    if value.get("status") != "native_loop_returned" or value.get("sha256") != digest(body):
+        raise ValueError("prod9 GPU termination receipt is not a sealed native completion")
+    encoded = (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    if len(encoded) > TERMINATION_MESSAGE_MAX_BYTES:
+        raise ValueError("prod9 GPU termination receipt is too large")
+    fd = os.open(PREFLIGHT_RECEIPT, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(fd, "wb") as stream:
         stream.write(encoded)
         stream.flush()
@@ -250,6 +492,13 @@ def preflight(plan: dict) -> dict:
         **fresh,
         "counts": {key: len(value) for key, value in rows.items()},
         "planned_steps": plan["arguments"]["steps"],
+        "output_absent": True,
+        "wandb_create_once": {
+            "entity": plan["arguments"]["wandb_entity"],
+            "project": plan["arguments"]["wandb_project"],
+            "run_id": plan["arguments"]["wandb_run_id"],
+            "resume": "never",
+        },
         "rl_qualified": False,
     }
 
@@ -330,17 +579,42 @@ def run(plan: dict, plan_path: Path) -> dict:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--plan", type=Path, required=True)
-    parser.add_argument("--sha256", required=True)
+    parser.add_argument("--plan", type=Path)
+    parser.add_argument("--sha256")
     parser.add_argument("--native", action="store_true")
     parser.add_argument("--preflight", action="store_true")
+    parser.add_argument("--stage", action="store_true")
+    parser.add_argument("--stage-spec", type=Path)
+    parser.add_argument("--identity", type=Path)
     parser.add_argument("--receipt", type=Path)
     args = parser.parse_args()
     try:
-        if args.native and args.preflight:
-            raise ValueError("prod9 native and CPU preflight modes are exclusive")
+        modes = sum((args.native, args.preflight, args.stage))
+        if modes > 1:
+            raise ValueError("prod9 native, CPU preflight, and stage modes are exclusive")
+        if args.stage:
+            if (
+                args.plan is not None
+                or args.sha256 is not None
+                or args.stage_spec is None
+                or args.identity is None
+            ):
+                raise ValueError(
+                    "prod9 stage accepts only its sealed stage specification and identity"
+                )
+            stage = json.loads(args.stage_spec.read_bytes())
+            identity = legacy_direct.load_identity(args.identity)
+            result = stage_rebind(stage, identity=identity)
+            if args.receipt is not None:
+                _write_stage_receipt(args.receipt, result)
+            print(json.dumps({"status": result["status"], "sha256": digest(result)}))
+            return
+        if args.plan is None or args.sha256 is None:
+            raise ValueError("prod9 training and CPU preflight require an immutable plan digest")
+        if args.stage_spec is not None or args.identity is not None:
+            raise ValueError("prod9 stage inputs are not valid for training or CPU preflight")
         if args.receipt is not None and not args.preflight:
-            raise ValueError("prod9 receipt is only valid for CPU preflight")
+            raise ValueError("prod9 receipt is only valid for CPU preflight or stage")
         plan = json.loads(args.plan.read_bytes())
         if digest(plan) != args.sha256:
             raise ValueError("plan digest mismatch")
@@ -364,6 +638,7 @@ def main() -> None:
                 raise
         else:
             result = run(plan, args.plan)
+            _write_gpu_termination_receipt(result)
             print(json.dumps({key: result[key] for key in ("status", "sha256")}))
     except BaseException as exc:
         print(json.dumps({"status": "failed", "error_class": type(exc).__name__}))

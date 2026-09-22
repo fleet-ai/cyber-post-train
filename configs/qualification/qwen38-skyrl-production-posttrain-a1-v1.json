@@ -300,7 +300,7 @@
   },
   "export": {
     "adapter": {
-      "file_sha256": "sha256:310b12303a5538a5e2aa923975b9756cba110b33ac2380f134fed6ec12bd6acd",
+      "file_sha256": "sha256:295950d3605fc45eb3cb765340e819909e82af2a4e532548a61ad561f044408e",
       "path": "training/skyrl_posttrain.py"
     },
     "checkpoint_manifest_schema": "cyber_native_skyrl_rl_checkpoint_manifest_v1",
@@ -359,8 +359,21 @@
         "source_unchanged"
       ]
     },
-    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:ba288751cd227c5be146d28f4a03237545d87d2cbd4c48464945b17fde566ff4",
     "launchable": false,
+    "launcher": {
+      "adapter": {
+        "file_sha256": "sha256:28cee8cba0ce84e5efd2e4c763bc067a6cc1cd05f220fe6ad2b297b6799f9096",
+        "path": "training/skyrl_prod9_reload.py"
+      },
+      "authorization_schema": "cyber_skyrl_prod9_reload_authorization_v1",
+      "create_once": true,
+      "created_schema": "cyber_skyrl_prod9_reload_created_v1",
+      "exact_uid_cleanup_profile": "production-reload",
+      "preview_schema": "cyber_skyrl_prod9_reload_preview_v1",
+      "retry_on_any_result": false,
+      "spec_schema": "cyber_skyrl_prod9_reload_spec_v1"
+    },
     "one_gpu_check": {
       "gpus_per_worker": 1,
       "name": "chris-q38-skyrl10-a1-p10-reload-v1",
@@ -378,7 +391,8 @@
       "run_dir": "/mnt/sfs/jobs/chris-q38-skyrl10-a1-p10-reload-v1",
       "workers": 1
     },
-    "state": "blocked_waiting_digest_valid_BF16_export"
+    "state": "blocked_waiting_digest_valid_BF16_export",
+    "tooling_ready": true
   },
   "schema": "cyber_qwen38_skyrl_posttrain_packet_v1",
   "serving": {
@@ -487,7 +501,7 @@
       "release_and_exact_UID_absence_required_on_success_or_failure": true
     }
   },
-  "sha256": "sha256:fae4f6eac024dace52d8027b178f9aeffc9519b625f99e9ed56b3b0604464e79",
+  "sha256": "sha256:d6c42f968c6d033bf54aaa9d2d18e6b6ed80b17dfa716373343f8e2d37f7f1db",
   "state": "offline_blocked_waiting_training_acceptance",
   "training_acceptance": {
     "accepted": false,
