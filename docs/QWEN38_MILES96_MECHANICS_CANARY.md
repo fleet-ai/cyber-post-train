@@ -58,7 +58,11 @@ distributed run with the primary's policy alone.
 
 ## Exact, deliberately small job
 
-- One eight-GPU node at `c1` priority.
+- One unprivileged eight-GPU node at `c1` priority.  The maintained Miles/FTI
+  payload does not need host-level access, and the production Jobs API treats
+  a privileged whole-node request as a warning.  Because this repository
+  requires a warning-free preview, the canary fails closed if that setting
+  drifts.
 - One task prompt with eight independent samples.  The launcher explicitly
   sets Miles's over-sampling batch size to one; 0.10.9 otherwise asks for two
   candidate prompt groups and can run as many as sixteen episodes in one
@@ -136,8 +140,11 @@ historical task receipt just because it exists in this repository.
 `job_request` and `reload_request` only render generic Jobs API requests.
 They cannot submit them.  `training.miles96_mechanics_launch.submit_once` is
 the only create path for these requests.  It obtains a live Jobs API server
-preview for each request, passes it through the shared preview validator, and
-also requires an explicit controller retry limit of zero.
+preview for each request and passes it through the shared preview validator.
+The current server omits `backoffLimit` from its `ray.io/v1` render, so the
+launcher also reads the live `RayJob` CRD and requires its admission default to
+be exactly zero.  An explicit rendered value is accepted only when it is zero;
+an unreadable or nonzero live default fails closed.
 
 The root rendered `RayJob` must contain exactly:
 

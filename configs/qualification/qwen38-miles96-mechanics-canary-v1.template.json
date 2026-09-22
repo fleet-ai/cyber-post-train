@@ -26,6 +26,7 @@
     "nodes": 1,
     "gpus_per_node": 8,
     "priority": "c1",
+    "privileged": false,
     "context_tokens": 98304,
     "compaction": false,
     "prompt_groups": 1,

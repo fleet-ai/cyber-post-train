@@ -723,7 +723,10 @@ def job_request(plan: dict[str, Any]) -> dict[str, Any]:
         "topology_mode": "preferred",
         "requeueIfPreempted": False,
         "failureAlerts": False,
-        "privileged": True,
+        # The maintained Miles/FTI payload does not require host-level access.
+        # Keeping this unprivileged also makes the live Jobs API preview
+        # warning-free, which is a hard launch gate for this repository.
+        "privileged": False,
         "resources": TRAIN_RESOURCES,
         "secrets": ["fleet-api", "wandb-api"],
         "image_pull_secrets": ["ecr-pull"],

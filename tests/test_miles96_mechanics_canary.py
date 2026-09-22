@@ -185,6 +185,7 @@ def test_one_node_current_recipe_request_and_fresh_v1_row() -> None:
     }
     assert request["workers"] == 1 and request["gpus_per_worker"] == 8
     assert request["priority_class"] == "c1" and request["failureAlerts"] is False
+    assert request["privileged"] is False
     assert request["requeueIfPreempted"] is False
     assert request["env"]["WANDB_RESUME"] == "never"
     assert request["env"]["WANDB_RUN_ID"] == plan["wandb"]["run_id"]
@@ -365,6 +366,55 @@ def test_server_preview_proves_root_alert_annotation_and_no_retry() -> None:
     broken["metadata"]["annotations"].pop("fleet.ai/failure-alerts")
     with pytest.raises(JobsError, match="failed-job alerts"):
         validate_preview(request, {"manifest_yaml": yaml.safe_dump(broken), "warnings": []})
+
+
+def test_server_preview_accepts_only_live_zero_retry_default() -> None:
+    request = mechanics.job_request(_plan())
+    preview = _server_preview(request)
+    rendered = yaml.safe_load(preview["manifest_yaml"])
+    rendered["apiVersion"] = "ray.io/v1"
+    rendered["spec"].pop("backoffLimit")
+    preview["manifest_yaml"] = yaml.safe_dump(rendered)
+
+    def crd(default: int) -> subprocess.CompletedProcess[str]:
+        value = {
+            "spec": {
+                "versions": [
+                    {
+                        "name": "v1",
+                        "schema": {
+                            "openAPIV3Schema": {
+                                "properties": {
+                                    "spec": {
+                                        "properties": {
+                                            "backoffLimit": {"type": "integer", "default": default}
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                    }
+                ]
+            }
+        }
+        return subprocess.CompletedProcess([], 0, json.dumps(value), "")
+
+    proof = launch._live_preview_proof(
+        request,
+        preview,
+        context=mechanics.PROD_CONTEXT,
+        runner=lambda *_args, **_kwargs: crd(0),
+    )
+    assert proof["backoff_limit"] == 0
+    assert proof["backoff_limit_source"] == "live_crd_default"
+
+    with pytest.raises(JobsError, match="retry default must be zero"):
+        launch._live_preview_proof(
+            request,
+            preview,
+            context=mechanics.PROD_CONTEXT,
+            runner=lambda *_args, **_kwargs: crd(1),
+        )
 
 
 @pytest.mark.parametrize(

@@ -479,17 +479,76 @@ def _expected_request(
     raise JobsError("request mode and receipt do not form a valid mechanics launch")
 
 
-def _live_preview_proof(request: dict[str, Any], preview: dict[str, Any]) -> dict[str, Any]:
+def _live_rayjob_backoff_default(
+    context: str,
+    api_version: object,
+    *,
+    runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> int:
+    """Prove the omitted RayJob retry limit from the live v1 CRD."""
+    if api_version != "ray.io/v1":
+        raise JobsError("live preview omitted retries for an unsupported RayJob API version")
+    result = runner(
+        [
+            "kubectl",
+            "--context",
+            context,
+            "get",
+            "crd",
+            "rayjobs.ray.io",
+            "--output=json",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    if result.returncode:
+        raise JobsError("live RayJob retry-default check failed")
+    try:
+        crd = json.loads(result.stdout)
+        matches = [version for version in crd["spec"]["versions"] if version.get("name") == "v1"]
+        default = matches[0]["schema"]["openAPIV3Schema"]["properties"]["spec"]["properties"][
+            "backoffLimit"
+        ]["default"]
+    except (IndexError, KeyError, TypeError, ValueError) as exc:
+        raise JobsError("live RayJob retry default is unavailable") from exc
+    if len(matches) != 1 or type(default) is not int or default != 0:
+        raise JobsError("live RayJob retry default must be zero")
+    return default
+
+
+def _live_preview_proof(
+    request: dict[str, Any],
+    preview: dict[str, Any],
+    *,
+    context: str,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+) -> dict[str, Any]:
     """Validate the shared contract plus the canary's no-controller-retry rule."""
     proof = validate_preview(request, preview)
     try:
         rendered = yaml.safe_load(preview["manifest_yaml"])
-        backoff_limit = rendered["spec"]["backoffLimit"]
+        spec = rendered["spec"]
     except (KeyError, TypeError, yaml.YAMLError) as exc:
-        raise JobsError("live preview lacks an explicit controller retry limit") from exc
+        raise JobsError("live preview lacks a readable controller retry contract") from exc
+    if "backoffLimit" in spec:
+        backoff_limit = spec["backoffLimit"]
+        backoff_limit_source = "rendered_manifest"
+    else:
+        backoff_limit = _live_rayjob_backoff_default(
+            context,
+            rendered.get("apiVersion"),
+            runner=runner,
+        )
+        backoff_limit_source = "live_crd_default"
     if type(backoff_limit) is not int or backoff_limit != 0:
         raise JobsError("live preview must disable controller retries")
-    return proof
+    return {
+        **proof,
+        "backoff_limit": backoff_limit,
+        "backoff_limit_source": backoff_limit_source,
+    }
 
 
 def capacity_gate(
@@ -595,7 +654,12 @@ def submit_once(
     if directory.exists() and any(directory.iterdir()):
         raise JobsError("launch evidence directory is not create-once empty")
     directory.mkdir(parents=True, exist_ok=True)
-    preview_proof = _live_preview_proof(request, client.preview(request))
+    preview_proof = _live_preview_proof(
+        request,
+        client.preview(request),
+        context=plan["execution"]["kubernetes_context"],
+        runner=runner,
+    )
     preview_receipt = _seal(
         {
             "schema": "cyber_miles96_live_server_preview_v1",
@@ -603,7 +667,8 @@ def submit_once(
             "request_sha256": "sha256:" + digest(request),
             "manifest_sha256": "sha256:" + preview_proof["manifest_sha256"],
             "root_failure_alerts": "off",
-            "backoff_limit": 0,
+            "backoff_limit": preview_proof["backoff_limit"],
+            "backoff_limit_source": preview_proof["backoff_limit_source"],
             "shutdown_after_job_finishes": True,
             "nodes": preview_proof["nodes"],
             "gpus": preview_proof["gpus"],
