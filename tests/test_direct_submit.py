@@ -1696,9 +1696,7 @@ def test_cpu_checkpoint_boundary_rejects_overlapping_same_pvc_with_distinct_volu
     with pytest.raises(JobsError, match="overlapping CPU checkpoint mounts"):
         validate_cpu_checkpoint_pod(pod)
 
-    pod["spec"]["volumes"] = [
-        {"name": "sfs", "persistentVolumeClaim": {"claimName": "sfs-shared"}}
-    ]
+    pod["spec"]["volumes"] = [{"name": "sfs", "persistentVolumeClaim": {"claimName": "sfs-shared"}}]
     for mount in pod["spec"]["containers"][0]["volumeMounts"]:
         mount["name"] = "sfs"
     validate_cpu_checkpoint_pod(pod)
