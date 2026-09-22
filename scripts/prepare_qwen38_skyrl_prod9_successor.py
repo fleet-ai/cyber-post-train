@@ -50,7 +50,12 @@ def _seal(value: dict) -> dict:
     return {**body, "sha256": "sha256:" + digest(body)}
 
 
-def _compile(run: dict, manifest: dict) -> tuple[dict, dict]:
+def _compile(
+    run: dict,
+    manifest: dict,
+    *,
+    relative_to: Path = RUN.parent,
+) -> tuple[dict, dict]:
     """Use the real compiler while supplying only its public manifest surface."""
     original = sft.read_mapping
 
@@ -60,14 +65,34 @@ def _compile(run: dict, manifest: dict) -> tuple[dict, dict]:
         return original(path)
 
     with mock.patch.object(sft, "read_mapping", side_effect=read):
-        plan = skyrl_prod9_training.compile_rl(run, relative_to=RUN.parent)
+        plan = skyrl_prod9_training.compile_rl(run, relative_to=relative_to)
     return plan, skyrl_prod9_training.job_request(plan)
 
 
-def build(manifest_path: Path) -> dict:
+def _reviewed_config(path: Path) -> Path:
+    """Limit successor selectors to reviewed, repository-owned JSON configs."""
+    if path.is_symlink():
+        raise ValueError("successor config must be a reviewed qualification JSON file")
+    resolved = path.resolve()
+    root = (ROOT / "configs/qualification").resolve()
+    if resolved.parent != root or resolved.suffix != ".json" or not resolved.is_file():
+        raise ValueError("successor config must be a reviewed qualification JSON file")
+    return resolved
+
+
+def build(
+    manifest_path: Path,
+    *,
+    run_path: Path = RUN,
+    data_path: Path = DATA,
+    identity_path: Path = IDENTITY,
+) -> dict:
     """Return a sealed, non-authorizing prod9 preparation receipt."""
-    identity = direct.load_identity(IDENTITY)
-    run, data, manifest = _load(RUN), _load(DATA), _load(manifest_path)
+    run_path = _reviewed_config(run_path)
+    data_path = _reviewed_config(data_path)
+    identity_path = _reviewed_config(identity_path)
+    identity = direct.load_identity(identity_path)
+    run, data, manifest = _load(run_path), _load(data_path), _load(manifest_path)
     predecessor, reconciliation = _load(PREDECESSOR_MANIFEST), _load(RECONCILIATION)
     manifest_body = {key: value for key, value in manifest.items() if key != "sha256"}
     expected_files = {"train", "dev"}
@@ -98,7 +123,7 @@ def build(manifest_path: Path) -> dict:
         raise ValueError("prod9 identity, reconciliation, or public data contract changed")
 
     hardening = skyrl_prod9_hardening.verify_source_closure(RUNTIME_EVIDENCE)
-    plan, request = _compile(run, manifest)
+    plan, request = _compile(run, manifest, relative_to=run_path.parent)
     direct._identity_for_plan(plan, identity)
     historical_rail = skyrl_prod9_training.reject_historical_direct_rail(plan)
     arguments = plan["arguments"]
@@ -139,9 +164,9 @@ def build(manifest_path: Path) -> dict:
             "launch_authorized": False,
             "identity": identity.sealed_mapping(),
             "inputs": {
-                "run": _source(RUN),
-                "data": _source(DATA),
-                "identity": _source(IDENTITY),
+                "run": _source(run_path),
+                "data": _source(data_path),
+                "identity": _source(identity_path),
                 "reconciliation": _source(RECONCILIATION),
                 "rebound_manifest": {
                     "path": str(manifest_path),
@@ -184,8 +209,16 @@ def build(manifest_path: Path) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--manifest", type=Path, required=True)
+    parser.add_argument("--run", type=Path, default=RUN)
+    parser.add_argument("--data", type=Path, default=DATA)
+    parser.add_argument("--identity", type=Path, default=IDENTITY)
     args = parser.parse_args()
-    value = build(args.manifest)
+    value = build(
+        args.manifest,
+        run_path=args.run,
+        data_path=args.data,
+        identity_path=args.identity,
+    )
     print(json.dumps(value, sort_keys=True))
 
 

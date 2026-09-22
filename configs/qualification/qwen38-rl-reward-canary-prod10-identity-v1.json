@@ -1,0 +1,12 @@
+{
+  "data_root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-prod10-v1/data",
+  "output_root": "/mnt/sfs/jobs/chris-q38-rlreward-prod10",
+  "predecessor_data_root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-prod8-v1/data",
+  "predecessor_run_name": "chris-q38-rlreward-prod8",
+  "preflight_name": "chris-q38-prod10-preflight-v1",
+  "run_name": "chris-q38-rlreward-prod10",
+  "schema": "cyber_skyrl_reward_direct_identity_v1",
+  "sha256": "sha256:506162841427f41568f1b9747f1d5d3d95148910a849069778fc672e740fd8c0",
+  "stage_name": "chris-q38-prod10-data-v1",
+  "wandb_run_id": "chris-q38-rlreward-prod10"
+}
