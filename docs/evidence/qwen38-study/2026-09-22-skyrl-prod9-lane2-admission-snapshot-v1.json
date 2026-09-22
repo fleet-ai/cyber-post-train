@@ -50,10 +50,11 @@
     }
   },
   "schema": "cyber_skyrl_admission_snapshot_v1",
-  "sha256": "sha256:3568a7ace7a986ff445046b55166190bd94c892804ac8620edc5d97eaa3a3816",
+  "sha256": "sha256:63819ba7052237a47f39f0eb342c1e2923ad141e9fb154c5d8a9678e9461be7f",
   "source_commit": "2e8b9dc8fcbd45a30ba7f34b366baf4f11bd26b6",
   "workloads": [
     {
+      "api_run_id": "cdd9818e-a033-4ebe-bbf3-483b41d3a680",
       "allocated_gpus": 0,
       "failure_alerts": "off",
       "name": "chris-q38-rlreward-prod9-cdd9818e",
@@ -65,6 +66,7 @@
       "workload_uid": "a73c2b1f-1666-450d-955d-80b55d698ca4"
     },
     {
+      "api_run_id": "a30b73e0-aff1-48c3-9f4f-a664324b3702",
       "allocated_gpus": 0,
       "failure_alerts": "off",
       "name": "chris-q38-rlreward-lane2-v1-a30b73e0",
