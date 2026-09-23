@@ -171,6 +171,7 @@ def _objects(
     evaluator_job: str,
     operation: Literal["launch", "terminal"] = "launch",
     terminal_generation: int = 1,
+    launch_journal_id: str | None = None,
 ) -> tuple[dict, dict]:
     # ``-launch`` was the first operational attempt.  Those Pods could not
     # reach the rollout ledger because they lacked the NetworkPolicy client
@@ -179,13 +180,16 @@ def _objects(
     # its SFS, PostgreSQL, Kubernetes, and ledger duplicate gates.
     if operation == "launch":
         name = f"{evaluator_job}-launch-v2"
+        journal_id = launch_journal_id or replica
+        if heldout_launch.KUBERNETES_NAME.fullmatch(journal_id) is None:
+            raise ValueError("launcher journal identity is invalid")
         operation_environment = [
             {"name": "PACKET_PATH", "value": "packet/LAUNCH_PACKET.json"},
             {
                 "name": "CREATE_JOURNAL",
                 "value": (
                     "/mnt/sfs/jobs/chris-q38-fleet-dev17-s46to53-launch-control-v1/"
-                    f"{replica}-CREATE_INTENT.jsonl"
+                    f"{journal_id}-CREATE_INTENT.jsonl"
                 ),
             },
         ]
@@ -302,7 +306,11 @@ def _objects(
 
 
 def render_terminal_collectors(
-    *, packets: Path, output: Path, terminal_generation: int = 1
+    *,
+    packets: Path,
+    output: Path,
+    terminal_generation: int = 1,
+    candidate_only: bool = False,
 ) -> dict[str, Any]:
     """Render score-blind collectors; never create them before evaluator terminal state."""
     if output.exists() or output.is_symlink():
@@ -313,11 +321,16 @@ def render_terminal_collectors(
     try:
         items = []
         arms = []
-        packet_paths = sorted(packets.glob("seed*/base/LAUNCH_PACKET.json")) + sorted(
-            packets.glob("seed*/candidate/LAUNCH_PACKET.json")
-        )
-        if len(packet_paths) != 16:
-            raise ValueError("exactly eight base and eight candidate packets are required")
+        if candidate_only:
+            packet_paths = sorted(packets.glob("seed*/candidate/LAUNCH_PACKET.json"))
+            if len(packet_paths) != 8:
+                raise ValueError("exactly eight candidate successor packets are required")
+        else:
+            packet_paths = sorted(packets.glob("seed*/base/LAUNCH_PACKET.json")) + sorted(
+                packets.glob("seed*/candidate/LAUNCH_PACKET.json")
+            )
+            if len(packet_paths) != 16:
+                raise ValueError("exactly eight base and eight candidate packets are required")
         for packet_path in packet_paths:
             relative = packet_path.relative_to(packets)
             replica = f"{relative.parts[0]}-{relative.parts[1]}"
@@ -352,6 +365,7 @@ def render_terminal_collectors(
             "bundle_path": "terminal-collectors.yaml",
             "bundle_file_sha256": _file_sha(bundle_path),
             "collector_generation": terminal_generation,
+            "candidate_only": candidate_only,
             "arms": arms,
             "external_mutations": 0,
             "launch_performed": False,
@@ -367,7 +381,7 @@ def render_terminal_collectors(
     return receipt
 
 
-def render(*, packets: Path, output: Path) -> dict[str, Any]:
+def render(*, packets: Path, output: Path, candidate_only: bool = False) -> dict[str, Any]:
     if output.exists() or output.is_symlink():
         raise FileExistsError("launcher output already exists")
     if not output.parent.is_dir():
@@ -376,17 +390,25 @@ def render(*, packets: Path, output: Path) -> dict[str, Any]:
     try:
         items = []
         arms = []
-        packet_paths = sorted(packets.glob("seed*/base/LAUNCH_PACKET.json")) + sorted(
-            packets.glob("seed*/candidate/LAUNCH_PACKET.json")
-        )
-        if len(packet_paths) != 16:
-            raise ValueError("exactly eight base and eight candidate packets are required")
+        if candidate_only:
+            packet_paths = sorted(packets.glob("seed*/candidate/LAUNCH_PACKET.json"))
+            if len(packet_paths) != 8:
+                raise ValueError("exactly eight candidate successor packets are required")
+        else:
+            packet_paths = sorted(packets.glob("seed*/base/LAUNCH_PACKET.json")) + sorted(
+                packets.glob("seed*/candidate/LAUNCH_PACKET.json")
+            )
+            if len(packet_paths) != 16:
+                raise ValueError("exactly eight base and eight candidate packets are required")
         for packet_path in packet_paths:
             relative = packet_path.relative_to(packets)
             replica = f"{relative.parts[0]}-{relative.parts[1]}"
             compressed, evaluator_job = _bundle(packet_path.parent)
             config_map, job = _objects(
-                replica=replica, compressed=compressed, evaluator_job=evaluator_job
+                replica=replica,
+                compressed=compressed,
+                evaluator_job=evaluator_job,
+                launch_journal_id=evaluator_job if candidate_only else None,
             )
             items.extend([config_map, job])
             arms.append(
@@ -410,6 +432,7 @@ def render(*, packets: Path, output: Path) -> dict[str, Any]:
             "schema": "cyber_fleet_heldout_incluster_launcher_render_v1",
             "bundle_path": "launchers.yaml",
             "bundle_file_sha256": _file_sha(bundle_path),
+            "candidate_only": candidate_only,
             "arms": arms,
             "external_mutations": 0,
             "launch_performed": False,
@@ -430,6 +453,7 @@ def main() -> None:
     parser.add_argument("--packets", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--terminal-collectors", action="store_true")
+    parser.add_argument("--candidate-only", action="store_true")
     parser.add_argument("--terminal-generation", type=int, default=1)
     args = parser.parse_args()
     if args.terminal_collectors:
@@ -437,11 +461,16 @@ def main() -> None:
             packets=args.packets,
             output=args.output,
             terminal_generation=args.terminal_generation,
+            candidate_only=args.candidate_only,
         )
     else:
         if args.terminal_generation != 1:
             raise ValueError("terminal generation applies only to terminal collectors")
-        result = render(packets=args.packets, output=args.output)
+        result = render(
+            packets=args.packets,
+            output=args.output,
+            candidate_only=args.candidate_only,
+        )
     print(json.dumps(result, indent=2))
 
 

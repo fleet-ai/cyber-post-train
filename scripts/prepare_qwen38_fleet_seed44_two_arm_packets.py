@@ -615,6 +615,33 @@ def _prepare_arm(
     ledger_path: Path,
     source_files: dict[str, Path] | None = None,
 ) -> dict[str, Any]:
+    local_models = {
+        alias: model
+        for alias, model in config.get("models", {}).items()
+        if isinstance(model, dict)
+        and isinstance(model.get("repository"), str)
+        and model["repository"].startswith("/mnt/sfs/jobs/")
+    }
+    artifact_binding = config.get("model_artifact_binding")
+    if local_models and artifact_binding is None:
+        raise ValueError(
+            f"{arm_id} local SFS model requires a staged artifact binding before render"
+        )
+    actual_source_files = source_files or SOURCE_FILES
+    if artifact_binding is not None:
+        artifact = _read_json(checkpoint_path, f"{arm_id} model artifact packet")
+        schema = artifact.get("schema")
+        required: set[str] = set()
+        if schema == "cyber_fleet_eval_model_artifact_packet_v2":
+            required.add("model_artifact_v2.py")
+        elif schema == "cyber_fleet_eval_model_artifact_packet_v3":
+            required.update({"model_artifact_v2.py", "model_artifact_v3.py"})
+        elif schema != "cyber_fleet_eval_model_artifact_packet_v1":
+            raise ValueError(f"{arm_id} model artifact packet schema is unsupported")
+        if not required.issubset(actual_source_files) or (
+            required and actual_source_files.get("run.sh") == SOURCE_FILES["run.sh"]
+        ):
+            raise ValueError(f"{arm_id} artifact validator/runtime files are not staged")
     directory.mkdir(mode=0o700)
     files = {
         "evaluation_config": directory / config_path.name,
@@ -639,10 +666,7 @@ def _prepare_arm(
         _write(destination, source.read_bytes())
     config_text = json.dumps(config, sort_keys=True, separators=(",", ":"))
     config_name = config_path.name
-    data = {
-        name: path.read_text(encoding="utf-8")
-        for name, path in (source_files or SOURCE_FILES).items()
-    }
+    data = {name: path.read_text(encoding="utf-8") for name, path in actual_source_files.items()}
     data.update(
         {
             "config.json": config_text,
@@ -650,7 +674,6 @@ def _prepare_arm(
             "task-set.json": task_set_path.read_text(encoding="utf-8"),
         }
     )
-    artifact_binding = config.get("model_artifact_binding")
     if artifact_binding is not None:
         data["model-artifact.json"] = checkpoint_path.read_text(encoding="utf-8")
         acceptance_path = _repo_path(

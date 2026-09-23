@@ -1,0 +1,61 @@
+{
+  "schema": "cyber_qwen38_serving_stale_pod_cleanup_v1",
+  "observed_at": "2026-09-23T05:29:11Z",
+  "kubernetes_context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+  "namespace": "inference",
+  "deployment": {
+    "name": "inference-chris-q38-t3k32-s1000-v1",
+    "uid": "23496776-9f14-475c-8a65-b47b7da8eff8"
+  },
+  "replica_set": {
+    "name": "inference-chris-q38-t3k32-s1000-v1-5bb4f44b97",
+    "uid": "75b84e1c-34a5-4f4d-9f65-e707f0f6e32a"
+  },
+  "stale_pod": {
+    "name": "inference-chris-q38-t3k32-s1000-v1-5bb4f44b97-pxt85",
+    "uid": "12b516ec-5f98-4cff-ac6f-1f2d123d0f6a",
+    "deletion_timestamp": "2026-09-23T05:08:00Z",
+    "phase": "Running",
+    "restarts": 0,
+    "endpoint_conditions": {
+      "ready": false,
+      "serving": false,
+      "terminating": true
+    }
+  },
+  "replacement_pod": {
+    "name": "inference-chris-q38-t3k32-s1000-v1-5bb4f44b97-qllsr",
+    "uid": "0f0a1c86-b836-4b15-81d8-794b6470e92b",
+    "phase": "Running",
+    "ready": true,
+    "restarts": 0,
+    "endpoint_conditions": {
+      "ready": true,
+      "serving": true,
+      "terminating": false
+    }
+  },
+  "authorization": {
+    "scope": "force-delete only the exact stale Pod after a fresh UID and endpoint check",
+    "deployment_service_and_replacement_untouched": true
+  },
+  "result": {
+    "deleted_at": "2026-09-23T05:29:52Z",
+    "stale_pod_not_found": true,
+    "remaining_model_pod_count": 1,
+    "replacement_uid": "0f0a1c86-b836-4b15-81d8-794b6470e92b",
+    "replacement_ready": true,
+    "replacement_restarts": 0,
+    "replacement_endpoint_conditions": {
+      "ready": true,
+      "serving": true,
+      "terminating": false
+    },
+    "deployment_service_and_replacement_mutated": false
+  },
+  "privacy": {
+    "credentials_included": false,
+    "prompts_responses_flags_answers_scores_or_logs_included": false,
+    "network_addresses_included": false
+  }
+}

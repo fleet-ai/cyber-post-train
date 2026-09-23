@@ -24,6 +24,7 @@ from evals.fleet import (
 )
 
 MODEL_ARTIFACT_V2_PACKET_SCHEMA = "cyber_fleet_eval_model_artifact_packet_v2"
+MODEL_ARTIFACT_V3_PACKET_SCHEMA = "cyber_fleet_eval_model_artifact_packet_v3"
 
 
 def _sha256(path: Path) -> str:
@@ -124,6 +125,14 @@ def execute(args: argparse.Namespace) -> dict:
         from evals.fleet import model_artifact_v2  # noqa: PLC0415
 
         artifact_validator = model_artifact_v2
+    if artifact_packet is not None and artifact_packet.get("schema") == (
+        MODEL_ARTIFACT_V3_PACKET_SCHEMA
+    ):
+        # v3 keeps the same strict receipt chain while preserving whether the
+        # reviewed reload was owned by a bounded Pod or by a RayJob.
+        from evals.fleet import model_artifact_v3  # noqa: PLC0415
+
+        artifact_validator = model_artifact_v3
     # Reopen the complete local checkpoint/export/reload receipt chain before
     # pulling images, writing output, contacting Fleet, or creating a database.
     artifact_proof = artifact_validator.validate_live_models(

@@ -417,7 +417,7 @@ def test_seed44_stageb_corrected_successor_is_unique_alert_off_and_prevalidated(
     assert recovery.job["spec"]["template"]["spec"]["initContainers"][0]["name"] == "dind"
     assert recovery.proof["successor_binding"] == {
         "successor_plan_sha256": (
-            "sha256:9a0c8e74ff59633b210dc1f91a8bcdc29215fa4b8e4f16e1c11f4e02dc04aeb0"
+            "sha256:01800d16141ea8ed9a5e914e6fe78476a413efdac26fc62dafaef880e4075a65"
         ),
         "predecessor_successor_plan_sha256": (
             "sha256:b6fdbb9d86cb7c54e283d530ba9ad6806431469ca8644bd0016711325005f71b"
@@ -654,4 +654,13 @@ def test_seed44_stageb_corrected_successor_plan_separates_infrastructure_generat
         "same_signature_successor_allowed": False,
     }
     assert plan["stage_overrides"]["worker_id"] == "q38-s44-base-repair-v3"
+    _, current_code = seed44_base_repair_job._code(  # noqa: SLF001
+        ROOT, seed44_base_repair_job.ROLLOUT_CODE_FILES
+    )
+    prior = json.loads(REPAIR_PLAN.read_text())["code_sha256"]["single_rollout_repair"]
+    assert plan["code_sha256_overrides"] == {
+        "single_rollout_repair": {
+            path: digest for path, digest in current_code.items() if prior.get(path) != digest
+        }
+    }
     assert set(plan["operation"].values()) == {0}

@@ -11,7 +11,13 @@ from types import SimpleNamespace
 import pytest
 
 from cyber_post_train.jobs import digest
-from evals.fleet import cluster_entry, evaluate, model_artifact, model_artifact_v2
+from evals.fleet import (
+    cluster_entry,
+    evaluate,
+    model_artifact,
+    model_artifact_v2,
+    model_artifact_v3,
+)
 from training.io import file_sha256
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -594,6 +600,60 @@ def test_v2_live_guard_binds_export_inventory_and_served_revision(tmp_path, monk
     assert proof["revision"] == model["revision"]
     assert proof["revision_basis"] == "export_files_canonical_sha256"
     assert proof["export_files_sha256"] == model["revision"]
+
+
+def synthetic_v3_local_model(tmp_path: Path, monkeypatch):
+    model, packet, config_binding, packet_path, acceptance_path = synthetic_v2_local_model(
+        tmp_path, monkeypatch
+    )
+    binding = packet["models"]["student"]
+    binding["schema"] = model_artifact_v3.BINDING_SCHEMA
+    qualification = binding["qualification"]
+    pod_uid = qualification.pop("gpu_reload_pod_uid")
+    qualification["gpu_reload_workload_kind"] = "Pod"
+    qualification.pop("gpu_reload_rayjob_uid")
+    qualification["gpu_reload_workload_uid"] = pod_uid
+    qualification["gpu_reload_pod_uid"] = pod_uid
+
+    evidence = read(acceptance_path)
+    evidence.pop("sha256")
+    evidence["schema"] = model_artifact_v3.ACCEPTANCE_SCHEMA
+    gpu = evidence["gpu_check"]
+    gpu["workload_kind"] = "Pod"
+    gpu.pop("rayjob_uid")
+    gpu["workload_uid"] = pod_uid
+    evidence_file, evidence_self = _write_evidence(acceptance_path, evidence)
+    qualification["acceptance_evidence_file_sha256"] = evidence_file
+    qualification["acceptance_evidence_sha256"] = evidence_self
+
+    packet["schema"] = model_artifact_v3.PACKET_SCHEMA
+    packet, packet_file = _write_packet(packet_path, packet)
+    config_binding.update(
+        {
+            "validator_file_sha256": file_sha256(Path(model_artifact_v3.__file__)),
+            "packet_file_sha256": packet_file,
+            "packet_sha256": "sha256:" + packet["sha256"],
+            "acceptance_evidence_file_sha256": evidence_file,
+            "acceptance_evidence_sha256": evidence_self,
+        }
+    )
+    return model, packet, config_binding, packet_path, acceptance_path
+
+
+def test_v3_live_guard_preserves_pod_reload_identity(tmp_path, monkeypatch) -> None:
+    model, packet, config_binding, packet_path, acceptance_path = synthetic_v3_local_model(
+        tmp_path, monkeypatch
+    )
+    proof = model_artifact_v3.validate_live_models(
+        {"student": model},
+        packet,
+        config_binding=config_binding,
+        packet_path=packet_path,
+        acceptance_path=acceptance_path,
+    )["student"]
+    assert proof["revision"] == model["revision"]
+    assert proof["gpu_reload_workload_kind"] == "Pod"
+    assert proof["gpu_reload_workload_uid"] == proof["gpu_reload_pod_uid"]
 
 
 def test_v2_live_guard_rejects_revision_basis_swap(tmp_path, monkeypatch) -> None:

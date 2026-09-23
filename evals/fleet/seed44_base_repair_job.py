@@ -503,6 +503,7 @@ def _corrected_successor_plan(repo_root: Path, value: dict[str, Any]) -> dict[st
         "prior_successor_plan",
         "failure_evidence",
         "stage_overrides",
+        "code_sha256_overrides",
         "contract",
         "live_evidence_binding",
         "operation",
@@ -546,6 +547,15 @@ def _corrected_successor_plan(repo_root: Path, value: dict[str, Any]) -> dict[st
         raise PackageError("prior Stage B successor plan differs")
     effective = _successor_plan(repo_root, prior, allow_historical_invalid_worker=True)
     prior_execution = effective["stages"]["single_rollout_repair"]
+
+    _, current_code = _code(repo_root, ROLLOUT_CODE_FILES)
+    prior_code = effective["code_sha256"]["single_rollout_repair"]
+    changed_code = {
+        path: digest for path, digest in current_code.items() if prior_code.get(path) != digest
+    }
+    if value.get("code_sha256_overrides") != {"single_rollout_repair": changed_code}:
+        raise PackageError("corrected Stage B runtime closure override differs")
+    effective["code_sha256"]["single_rollout_repair"].update(changed_code)
 
     evidence_reference = value.get("failure_evidence")
     if not isinstance(evidence_reference, dict) or set(evidence_reference) != {
