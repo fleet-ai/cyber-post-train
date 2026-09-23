@@ -29,6 +29,9 @@ ROOT = Path(__file__).resolve().parents[1]
 IDENTITY = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod10-identity-v1.json"
 PREDECESSOR = ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json"
 PROD11_IDENTITY = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod11-identity-v1.json"
+PROD11_FAST_IDENTITY = (
+    ROOT / "configs/qualification/qwen38-rl-reward-canary-prod11-fast1-identity-v1.json"
+)
 PROD10_MANIFEST = ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v10.json"
 
 
@@ -216,6 +219,16 @@ def _prod11_stage_inputs() -> tuple[historical.RailIdentity, dict]:
     return identity, training.stage_spec(identity, predecessor)
 
 
+def _prod11_fast_stage_inputs() -> tuple[historical.RailIdentity, dict]:
+    identity = historical.load_identity(PROD11_FAST_IDENTITY)
+    predecessor = json.loads(PROD10_MANIFEST.read_bytes())
+    predecessor["name"] = identity.predecessor_run_name
+    predecessor["sha256"] = "sha256:" + digest(
+        {key: value for key, value in predecessor.items() if key != "sha256"}
+    )
+    return identity, training.stage_spec(identity, predecessor)
+
+
 def test_prod11_stage_package_is_fresh_alert_off_c1_q1_zero_gpu() -> None:
     identity, stage = _prod11_stage_inputs()
     packet = operator_job.stage_packet(identity=identity, stage=stage)
@@ -243,6 +256,26 @@ def test_prod11_stage_package_is_fresh_alert_off_c1_q1_zero_gpu() -> None:
     assert (
         package.job["metadata"]["labels"]["cyber-post-train.fleet.ai/role"]
         == "prod11-bounded-operator"
+    )
+    assert "nvidia.com/gpu" not in json.dumps(package.job, sort_keys=True)
+
+
+def test_prod11_fast_stage_package_has_unique_alert_off_zero_gpu_identity() -> None:
+    identity, stage = _prod11_fast_stage_inputs()
+    packet = operator_job.stage_packet(identity=identity, stage=stage)
+    package = operator_job.build_operator_package(packet)
+    proof = operator_job.validate_operator_package(package)
+
+    assert packet["operator_name"] == operator.PROD11_FAST_OPERATOR_NAMES["stage"]
+    assert packet["fresh_identity"] is True
+    assert proof["failure_alerts"] == "off"
+    assert proof["priority"] == "c1"
+    assert proof["queue_priority"] == "q1"
+    assert proof["gpus"] == 0
+    assert package.job["metadata"]["annotations"][FAILURE_ALERT_ANNOTATION] == "off"
+    assert (
+        package.job["metadata"]["labels"]["cyber-post-train.fleet.ai/role"]
+        == "prod11-fast-bounded-operator"
     )
     assert "nvidia.com/gpu" not in json.dumps(package.job, sort_keys=True)
 
@@ -1529,7 +1562,9 @@ def test_prod10_dead_guard_is_atomically_archived_and_crash_reconciled(
 
 
 def _prod11_archived_guard_state(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    identity_path: Path = PROD11_IDENTITY,
 ) -> dict[str, object]:
     controls_root = tmp_path / "controls"
     controls_root.mkdir()
@@ -1537,7 +1572,7 @@ def _prod11_archived_guard_state(
     monkeypatch.setattr(operator, "RUNTIME_UID", os.getuid())
     monkeypatch.setattr(operator, "RUNTIME_GID", os.getgid())
     monkeypatch.setattr(launch_direct, "_jit_duplicate", lambda value, *_args, **_kwargs: value)
-    identity = historical.load_identity(PROD11_IDENTITY)
+    identity = historical.load_identity(identity_path)
     plan = {"schema": training.SCHEMA, "identity": "prod11-archive-reuse"}
     request = {
         "name": identity.run_name,
@@ -1644,10 +1679,11 @@ def _prod11_archived_guard_state(
     }
 
 
+@pytest.mark.parametrize("identity_path", (PROD11_IDENTITY, PROD11_FAST_IDENTITY))
 def test_prod11_reuses_exact_v10_guard_archive_without_writes(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, identity_path: Path
 ) -> None:
-    state = _prod11_archived_guard_state(tmp_path, monkeypatch)
+    state = _prod11_archived_guard_state(tmp_path, monkeypatch, identity_path)
     archive_path = state["archive_path"]
     receipt_path = state["receipt_path"]
     assert isinstance(archive_path, Path) and isinstance(receipt_path, Path)
@@ -2686,6 +2722,35 @@ def test_prod10_launch_observes_only_created_uid_to_valid_terminal_receipt(
         "non_native",
         "wrong_step",
     ]
+
+    fast_plan = {"arguments": {"steps": 1, "eval_interval": 1, "eval_before_train": False}}
+    fast_receipt_body = {
+        **receipt_body,
+        "plan_sha256": digest(fast_plan),
+        "completed_batches": 2,
+    }
+    fast_result = {
+        **accepted,
+        "receipt": {**fast_receipt_body, "sha256": digest(fast_receipt_body)},
+    }
+    result.clear()
+    result.update(fast_result)
+    (operation_root / "PROD10_EXACT_RELEASE_CONTRACT.json").unlink()
+    assert (
+        operator._observe_created_run(
+            operation_root, fast_plan, created, runner=lambda *_args, **_kwargs: None
+        )
+        == fast_result
+    )
+
+    result["receipt"]["completed_batches"] = 1
+    body = {key: value for key, value in result["receipt"].items() if key != "sha256"}
+    result["receipt"]["sha256"] = digest(body)
+    (operation_root / "PROD10_EXACT_RELEASE_CONTRACT.json").unlink()
+    with pytest.raises(operator.OperatorFailure, match="exact_observer_rejected"):
+        operator._observe_created_run(
+            operation_root, fast_plan, created, runner=lambda *_args, **_kwargs: None
+        )
 
 
 def test_prod10_exact_observer_waits_for_terminal_receipt_before_release(

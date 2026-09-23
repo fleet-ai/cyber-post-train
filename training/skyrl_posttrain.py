@@ -197,7 +197,8 @@ def _reject_aliases(*groups: dict[str, Path]) -> None:
 def _expected_batches(args: skyrl.SkyRLConfig) -> set[tuple[str, int]]:
     return (
         {("train", step) for step in range(1, args.steps + 1)}
-        | {("eval", 0), ("eval", args.steps)}
+        | ({("eval", 0)} if args.eval_before_train else set())
+        | {("eval", args.steps)}
         | {("eval", step) for step in range(1, args.steps + 1) if step % args.eval_interval == 0}
     )
 

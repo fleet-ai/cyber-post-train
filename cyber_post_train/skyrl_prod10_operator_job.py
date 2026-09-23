@@ -593,11 +593,10 @@ def _job(
         PHASE_ANNOTATION: phase,
     }
     labels = {
-        "cyber-post-train.fleet.ai/role": (
-            "prod11-bounded-operator"
-            if packet.get("identity", {}).get("run_name") == "chris-q38-rlreward-prod11"
-            else "prod10-bounded-operator"
-        ),
+        "cyber-post-train.fleet.ai/role": {
+            "chris-q38-rlreward-prod11": "prod11-bounded-operator",
+            "chris-q38-rlreward-prod11-fast1": "prod11-fast-bounded-operator",
+        }.get(packet.get("identity", {}).get("run_name"), "prod10-bounded-operator"),
         QUEUE_LABEL: QUEUE,
         QUEUE_PRIORITY_LABEL: QUEUE_PRIORITY,
     }

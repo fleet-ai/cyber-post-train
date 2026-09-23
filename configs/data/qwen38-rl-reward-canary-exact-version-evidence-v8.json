@@ -141,7 +141,7 @@
     "local_code": {
       "skyrl_training_compiler": {
         "path": "../../training/skyrl_training.py",
-        "file_sha256": "sha256:5f282826ddf892c3486820aea0621582f4b083e9a89b3a6a361a6f2e5f68294a",
+        "file_sha256": "sha256:34c9b1ed498360dc2a0d3d45a83ec6f1b54f3ac4482dce9af0213bfe7ba0fce4",
         "symbols": [
           "compile_rl",
           "job_request",
@@ -153,7 +153,7 @@
       },
       "skyrl_config_runtime": {
         "path": "../../training/skyrl.py",
-        "file_sha256": "sha256:aaa3c4a2d26b3f75d521e0b37387e0a39e9f3b719038a8aa48dc6ebd3c130f74",
+        "file_sha256": "sha256:0a74d5fab8b7c3eef1cd2412f320243cd0ab16f0b9073c290c8a9bfd67082007",
         "symbols": [
           "SkyRLConfig",
           "overrides",
@@ -409,7 +409,7 @@
       },
       "checkpoint_sealer": {
         "path": "../../training/skyrl_posttrain.py",
-        "file_sha256": "sha256:295950d3605fc45eb3cb765340e819909e82af2a4e532548a61ad561f044408e",
+        "file_sha256": "sha256:b62c576027f086be26c2e565652f2052f6193c71d7bf2999444cd90b28906606",
         "symbols": [
           "seal_checkpoint",
           "verify_manifest",
@@ -471,5 +471,5 @@
       "incident_evidence_self_sha256": "sha256:c45f12a8fa799900053a1bd7b1e33ff26e89d517ae552188bda0e66cf675ca2d"
     }
   },
-  "sha256": "sha256:19615dc098f08aaf8e548965f2650813c83cf48f19bd730082461ec2399f485c"
+  "sha256": "sha256:ce719b242a101ec225bb8c0dee0bcd9d0c06c88a0ef16d0cc065853ce12adea8"
 }

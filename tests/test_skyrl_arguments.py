@@ -69,6 +69,7 @@ def config():
         {"compaction_summary_tokens": 8192},
         {"compaction_trigger_tokens": 95000},
         {"compaction_enabled": 1},
+        {"eval_before_train": 1},
         {"max_turns": 0},
         {"max_turns": 1},
         {"output_root": "/mnt/sfs/models/output"},
@@ -129,6 +130,15 @@ def test_bounded_native_recipe(config, nodes, groups, repetitions):
     before = copy.deepcopy(values)
     values["generator.eval_sampling_params"]["temperature"] = 0.1
     assert values["generator.sampling_params"] == before["generator.sampling_params"]
+
+
+def test_pretrain_eval_is_explicitly_skippable_without_changing_update_gates(config):
+    values = skyrl.overrides(replace(config, eval_before_train=False))
+
+    assert values["trainer.eval_before_train"] is False
+    assert values["trainer.eval_interval"] == config.eval_interval == 1
+    assert values["trainer.ckpt_interval"] == config.checkpoint_interval == 1
+    assert values["trainer.max_training_steps"] == config.steps == 1
 
 
 def test_compacted_long_horizon_uses_trigger_not_total_episode_budget(config):

@@ -1,5 +1,6 @@
 """Offline launch/lifecycle tests; synthetic task data and no paid requests."""
 
+import copy
 import importlib.util
 import json
 import os
@@ -105,6 +106,21 @@ def test_prepare_cli_and_portable_runtime_are_offline(prepared, monkeypatch):
         capture_output=True,
     )
     assert result.returncode == 0, result.stderr.decode()
+
+
+def test_compile_can_skip_only_pretrain_eval(prepared):
+    baseline = prepared.plan
+    config = copy.deepcopy(prepared.config)
+    config["recipe"]["eval_before_train"] = False
+
+    fast = train.compile_rl(config, relative_to=prepared.state.tmp)
+
+    assert fast["arguments"]["eval_before_train"] is False
+    assert fast["native_overrides"]["trainer.eval_before_train"] is False
+    normalized = copy.deepcopy(fast)
+    normalized["arguments"].pop("eval_before_train")
+    normalized["native_overrides"]["trainer.eval_before_train"] = True
+    assert normalized == baseline
 
 
 def test_gpu_runtime_user_gate_is_fail_closed(monkeypatch):
@@ -391,6 +407,24 @@ def test_terminal_checks_do_not_fabricate_acceptance(completed, fault):
             and not proof["checkpoint_reload_verified"]
         )
     assert not (root / "ACCEPTED.json").exists()
+
+
+def test_terminal_skips_only_baseline_eval_and_still_requires_post_update_eval(completed):
+    plan, root = completed
+    plan["arguments"]["eval_before_train"] = False
+    baseline = root / "episodes/batches/eval-0"
+    (baseline / "COLLECTED.json").unlink()
+    baseline.rmdir()
+
+    proof = train.native_result(plan)
+    assert proof["checkpoint_global_step"] == 2
+    assert proof["completed_batches"] == 4
+
+    final = root / "episodes/batches/eval-2"
+    (final / "COLLECTED.json").unlink()
+    final.rmdir()
+    with pytest.raises(ValueError, match="batch missing"):
+        train.native_result(plan)
 
 
 def test_scalar_tracking_does_not_upload_private_exceptions(prepared, monkeypatch):

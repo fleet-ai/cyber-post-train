@@ -115,6 +115,7 @@ def compile_rl(config, *, relative_to):
             "eval_interval",
             "checkpoint_interval",
             "keep_checkpoints",
+            "eval_before_train",
             "seed",
         },
         "SkyRL recipe",
@@ -184,13 +185,19 @@ def compile_rl(config, *, relative_to):
     )
     if cluster_target not in API_URLS:
         raise ValueError("cluster target must be dev or prod")
+    arguments = dataclasses.asdict(args)
+    if "eval_before_train" not in recipe:
+        # Preserve historical plan bytes for every recipe that did not opt in
+        # to this explicit scheduling control. SkyRLConfig defaults it to true
+        # when reading those already-sealed plans.
+        arguments.pop("eval_before_train")
     plan = {
         "schema": SCHEMA,
         "run_name": args.name,
         "output_root": args.output_root,
         "model": bound,
         "data": metadata,
-        "arguments": dataclasses.asdict(args),
+        "arguments": arguments,
         "native_overrides": skyrl.overrides(args),
         "native_sources": NATIVE,
         "runtime_sha256": digest(_runtime()),
@@ -623,7 +630,8 @@ def native_result(plan):
     root, args = Path(plan["output_root"]), plan["arguments"]
     expected = (
         {("train", i) for i in range(1, args["steps"] + 1)}
-        | {("eval", 0), ("eval", args["steps"])}
+        | ({("eval", 0)} if args.get("eval_before_train", True) else set())
+        | {("eval", args["steps"])}
         | {("eval", i) for i in range(1, args["steps"] + 1) if i % args["eval_interval"] == 0}
     )
     seen = set()

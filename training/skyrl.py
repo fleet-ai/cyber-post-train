@@ -39,6 +39,7 @@ class SkyRLConfig:
     eval_interval: int = 1
     checkpoint_interval: int = 1
     keep_checkpoints: int = 2
+    eval_before_train: bool = True
     seed: int = 42
     context_tokens: int = 98304
     response_tokens: int = 81920
@@ -96,8 +97,8 @@ class SkyRLConfig:
                 raise ValueError("SkyRL counts must be positive integers")
         if self.nodes not in (1, 2) or self.samples_per_prompt < 2 or self.max_turns < 2:
             raise ValueError("profile requires 1–2 whole nodes and grouped GRPO samples")
-        if type(self.compaction_enabled) is not bool:
-            raise ValueError("compaction mode must be explicit")
+        if type(self.compaction_enabled) is not bool or type(self.eval_before_train) is not bool:
+            raise ValueError("compaction and pre-train evaluation modes must be explicit")
         if self.train_rows % self.groups or self.groups * self.samples_per_prompt % (
             8 * self.nodes
         ):
@@ -172,7 +173,7 @@ def overrides(config: SkyRLConfig) -> dict:
         "trainer.micro_train_batch_size_per_gpu": 1,
         "trainer.micro_forward_batch_size_per_gpu": 1,
         "trainer.eval_batch_size": config.dev_rows,
-        "trainer.eval_before_train": True,
+        "trainer.eval_before_train": config.eval_before_train,
         "trainer.eval_interval": config.eval_interval,
         "trainer.max_prompt_length": (
             config.compaction_trigger_tokens

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import shutil
 import uuid
 from pathlib import Path
 from types import SimpleNamespace
@@ -323,6 +324,57 @@ def test_rl_checkpoint_seal_and_zero_update_bf16_export(completed_rl, monkeypatc
     assert before == {path: path.read_bytes() for path in before}
     with pytest.raises(FileExistsError):
         post.export_checkpoint(state.manifest, file_digest(state.manifest), output)
+
+
+def test_fast_update_batch_contract_keeps_train_and_post_update_eval(completed_rl):
+    values = {**completed_rl.plan["arguments"], "eval_before_train": False}
+    args = skyrl.SkyRLConfig(**values)
+
+    expected = post._expected_batches(args)
+
+    assert ("eval", 0) not in expected
+    assert ("train", args.steps) in expected
+    assert ("eval", args.steps) in expected
+    assert len(expected) == args.steps * 2
+
+
+def test_fast_update_still_seals_exports_and_builds_reload_spec(completed_prod9_rl):
+    state = completed_prod9_rl
+    state.plan["arguments"]["eval_before_train"] = False
+    state.plan["native_overrides"]["trainer.eval_before_train"] = False
+    for directory in (state.root / "episodes/batches").iterdir():
+        receipt = json.loads((directory / "COLLECTED.json").read_bytes())
+        if (receipt["phase"], receipt["global_step"]) == ("eval", 0):
+            shutil.rmtree(directory)
+            break
+    else:
+        raise AssertionError("synthetic baseline eval is missing")
+    terminal_path = state.root / "NATIVE_TRAINING_COMPLETE.json"
+    terminal = json.loads(terminal_path.read_text())
+    terminal = {key: value for key, value in terminal.items() if key != "sha256"}
+    terminal["plan_sha256"] = digest(state.plan)
+    terminal["completed_batches"] = 4
+    write(terminal_path, sealed(terminal, prefix=False))
+
+    paths = prod9.terminal_paths(state.plan)
+    manifest = post.seal_checkpoint(state.plan, paths["checkpoint_manifest"])
+    post.verify_manifest(manifest)
+    exported = post.export_checkpoint(
+        paths["checkpoint_manifest"],
+        file_digest(paths["checkpoint_manifest"]),
+        paths["export"].parent,
+    )
+    spec = skyrl_prod9_reload.build_spec(
+        state.plan,
+        manifest,
+        exported,
+        checkpoint_manifest_file_sha256=file_digest(paths["checkpoint_manifest"]),
+        export_file_sha256=file_digest(paths["export"]),
+    )
+
+    assert manifest["optimizer_update_verified"] is True
+    assert spec["resources"]["gpus"] == 1
+    assert spec["resources"]["maximum_seconds"] == 1800
 
 
 def test_prod9_plan_seals_and_verifies_without_historical_plan_rewrite(

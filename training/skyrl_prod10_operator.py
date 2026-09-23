@@ -90,6 +90,12 @@ PROD11_OPERATOR_NAMES = {
     "preflight": "chris-q38-prod11-preflight-operator-v1",
     "launch": "chris-q38-prod11-launch-operator-v1",
 }
+PROD11_FAST_OPERATOR_NAMES = {
+    "stage": "chris-q38-prod11-fast-stage-operator-v1",
+    "manifest": "chris-q38-prod11-fast-manifest-operator-v1",
+    "preflight": "chris-q38-prod11-fast-preflight-operator-v1",
+    "launch": "chris-q38-prod11-fast-launch-operator-v1",
+}
 
 
 def operator_names(identity: historical.RailIdentity) -> dict[str, str]:
@@ -97,6 +103,8 @@ def operator_names(identity: historical.RailIdentity) -> dict[str, str]:
         return OPERATOR_NAMES
     if identity.run_name == "chris-q38-rlreward-prod11":
         return PROD11_OPERATOR_NAMES
+    if identity.run_name == "chris-q38-rlreward-prod11-fast1":
+        return PROD11_FAST_OPERATOR_NAMES
     raise ValueError("prod10/prod11 operator identity changed")
 
 
@@ -2368,7 +2376,8 @@ def _observe_created_run(
     expected_batches = (
         len(
             {("train", step) for step in range(1, steps + 1)}
-            | {("eval", 0), ("eval", steps)}
+            | ({("eval", 0)} if args.get("eval_before_train", True) else set())
+            | {("eval", steps)}
             | {("eval", step) for step in range(1, steps + 1) if step % interval == 0}
         )
         if type(steps) is int and steps > 0 and type(interval) is int and interval > 0
@@ -2888,7 +2897,10 @@ def _archive_launch_v3_guard(
     journal_path = historical_operation_root / "PROD10_DIRECT_V3_CREATE.jsonl"
     archive_path = historical_operation_root / _GUARD_ARCHIVE_NAME
     receipt_path = historical_operation_root / _GUARD_ARCHIVE_RECEIPT_NAME
-    if identity.run_name == "chris-q38-rlreward-prod11":
+    if identity.run_name in {
+        "chris-q38-rlreward-prod11",
+        "chris-q38-rlreward-prod11-fast1",
+    }:
         return _reuse_launch_v3_guard_archive(
             guard_path=guard_path,
             binding_path=binding_path,
