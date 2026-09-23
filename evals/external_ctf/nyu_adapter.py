@@ -382,6 +382,107 @@ def agent_contract(
     return contract
 
 
+def runtime_qualification_contract(protocol: dict[str, Any], task: NyuTask) -> dict[str, Any]:
+    """Return a content-free contract for one future Linux runtime qualification."""
+    benchmark = _benchmark(protocol)
+    if (
+        task.task_id not in benchmark["task_ids"]
+        or task.task_id in UNAVAILABLE
+        or task.source_commit != benchmark["source"]["commit"]
+    ):
+        raise NyuAdapterError("nyu_task_identity_invalid")
+    unsigned = {
+        "schema": "external_ctf_nyu_runtime_qualification_contract_v1",
+        "protocol_sha256": protocol["protocol_sha256"],
+        "benchmark": BENCHMARK,
+        "task_index": benchmark["task_ids"].index(task.task_id),
+        "task_id_sha256": _digest_bytes(task.task_id.encode()),
+        "source_commit": task.source_commit,
+        "task_binding_sha256": _digest(
+            {
+                "challenge_sha256": task.challenge_sha256,
+                "compose_sha256": task.compose_sha256,
+                "attachment_manifest_sha256": task.attachment_manifest_sha256,
+                "target_host": task.target_host,
+                "target_port": task.target_port,
+            }
+        ),
+        "platform": "linux/amd64",
+        "agent_image_id": benchmark["harness"]["image_id"],
+        "opencode_version": benchmark["harness"]["version"],
+        "model_requests": 0,
+        "required_controls": {
+            "startup_healthy": True,
+            "target_reachable": True,
+            "grader_negative_control": False,
+            "grader_positive_control": True,
+            "isolated_task_network": True,
+            "resolved_image_digests_required": True,
+        },
+    }
+    return {**unsigned, "contract_sha256": _digest(unsigned)}
+
+
+def source_qualification_manifest(protocol: dict[str, Any], checkout: Path) -> dict[str, Any]:
+    """Qualify exact source bytes and predeclare every task without starting a runtime."""
+    benchmark = _benchmark(protocol)
+    if benchmark.get("adapter_qualified") is not False:
+        raise NyuAdapterError("nyu_qualification_requires_closed_adapter_gate")
+    rows: list[dict[str, Any]] = []
+    contracts: list[str] = []
+    for task_index, task_id in enumerate(benchmark["task_ids"]):
+        identity = {
+            "task_index": task_index,
+            "task_id_sha256": _digest_bytes(task_id.encode()),
+        }
+        if task_id in UNAVAILABLE:
+            rows.append(
+                {
+                    **identity,
+                    "source_state": "present_runtime_unavailable",
+                    "runtime_state": "infra_invalid_no_reproducible_runtime",
+                    "runtime_qualification_contract_sha256": None,
+                }
+            )
+            continue
+        task = load_task(protocol, checkout, task_id)
+        contract = runtime_qualification_contract(protocol, task)
+        contracts.append(contract["contract_sha256"])
+        rows.append(
+            {
+                **identity,
+                "source_state": "present",
+                "runtime_state": "pending_model_free_linux_amd64_qualification",
+                "runtime_qualification_contract_sha256": contract["contract_sha256"],
+            }
+        )
+    if (
+        len(rows) != TASK_COUNT
+        or sum(row["source_state"] == "present" for row in rows) != 16
+        or sum(row["source_state"] == "present_runtime_unavailable" for row in rows) != 3
+    ):
+        raise NyuAdapterError("nyu_source_qualification_count_mismatch")
+    unsigned = {
+        "schema": "external_ctf_nyu_source_qualification_v1",
+        "protocol_sha256": protocol["protocol_sha256"],
+        "benchmark": BENCHMARK,
+        "source_commit": benchmark["source"]["commit"],
+        "official_task_count": TASK_COUNT,
+        "runtime_candidate_task_count": 16,
+        "runtime_unavailable_task_count": 3,
+        "task_rows": rows,
+        "runtime_qualification_contracts_sha256": _digest(contracts),
+        "status": "source_qualified_runtime_pending",
+        "adapter_qualified": False,
+        "runtime_qualified": False,
+        "provider_calls": 0,
+        "model_requests": 0,
+        "challenge_containers_started": 0,
+        "contains_prompts_flags_solutions_traces_or_scores": False,
+    }
+    return {**unsigned, "receipt_sha256": _digest(unsigned)}
+
+
 def assert_matched_pair(base: dict[str, Any], candidate: dict[str, Any]) -> None:
     if base.get("arm") != "base" or candidate.get("arm") != "step_1000":
         raise NyuAdapterError("nyu_pair_arm_invalid")

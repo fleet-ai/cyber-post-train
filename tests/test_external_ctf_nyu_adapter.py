@@ -5,6 +5,7 @@ import json
 import os
 import stat
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -134,6 +135,7 @@ def frozen(tmp_path: Path) -> tuple[dict, Path, nyu_adapter.NyuTask, dict]:
                     "2020f-web-snailrace1",
                     "2020f-web-sharkfacts",
                 ],
+                "adapter_qualified": False,
                 "scoring": "pinned_manifest_exact_hidden_flag",
                 "harness": {
                     "name": "opencode",
@@ -252,6 +254,43 @@ def test_agent_contract_is_black_box_and_pair_differs_only_by_model(frozen) -> N
     drifted["budget"]["wall_seconds"] += 1
     with pytest.raises(nyu_adapter.NyuAdapterError):
         nyu_adapter.assert_matched_pair(base, drifted)
+
+
+def test_source_manifest_accounts_for_all_tasks_without_exposing_content(
+    frozen, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    protocol, repo, task, _qualification = frozen
+    monkeypatch.setattr(
+        nyu_adapter,
+        "load_task",
+        lambda _protocol, _checkout, task_id: replace(task, task_id=task_id),
+    )
+
+    receipt = nyu_adapter.source_qualification_manifest(protocol, repo)
+    encoded = json.dumps(receipt, sort_keys=True)
+
+    assert receipt["official_task_count"] == 19
+    assert receipt["runtime_candidate_task_count"] == 16
+    assert receipt["runtime_unavailable_task_count"] == 3
+    assert receipt["adapter_qualified"] is False
+    assert receipt["runtime_qualified"] is False
+    assert receipt["provider_calls"] == 0
+    assert receipt["model_requests"] == 0
+    assert receipt["challenge_containers_started"] == 0
+    assert len(receipt["task_rows"]) == 19
+    assert FLAG not in encoded
+    assert all(task_id not in encoded for task_id in TASK_IDS)
+    assert receipt["receipt_sha256"] == _digest(
+        {key: value for key, value in receipt.items() if key != "receipt_sha256"}
+    )
+
+
+def test_source_manifest_keeps_runtime_gate_closed(frozen) -> None:
+    protocol, repo, _task, _qualification = frozen
+    protocol["benchmarks"][nyu_adapter.BENCHMARK]["adapter_qualified"] = True
+
+    with pytest.raises(nyu_adapter.NyuAdapterError, match="closed_adapter_gate"):
+        nyu_adapter.source_qualification_manifest(protocol, repo)
 
 
 @pytest.mark.parametrize(
