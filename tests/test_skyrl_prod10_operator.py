@@ -210,8 +210,9 @@ def test_stage_v7_preserves_released_v6_and_rebinds_without_nested_job(
     root = tmp_path / "prod9-create-once-v1"
     root.mkdir(mode=0o700)
     monkeypatch.setattr(operator.hardening, "CREATE_ONCE_ROOT", root)
-    monkeypatch.setattr(operator, "RUNTIME_UID", os.geteuid())
-    monkeypatch.setattr(operator, "RUNTIME_GID", os.getegid())
+    root_identity = root.stat()
+    monkeypatch.setattr(operator, "RUNTIME_UID", root_identity.st_uid)
+    monkeypatch.setattr(operator, "RUNTIME_GID", root_identity.st_gid)
     monkeypatch.setattr(direct, "live_create_is_available", lambda: True)
     expected = direct.stage_job_manifest(stage, identity=identity)
     manifest_sha256 = "sha256:" + direct.digest(expected)
@@ -450,10 +451,23 @@ def test_stage_v7_preserves_released_v6_and_rebinds_without_nested_job(
     monkeypatch.setenv(
         "OPERATOR_JOB_UID", "00000000-0000-4000-8000-000000000099"
     )
+    monkeypatch.setenv("OPERATOR_SOURCE_SHA256", "sha256:" + "9" * 64)
 
     result = operator.run_stage(packet, runner=runner)
 
+    assert result["schema"] == operator.DIRECT_STAGE_RESULT_SCHEMA
     assert result["status"] == "stage_ready"
+    assert result["execution"] == {
+        "kind": "job",
+        "name": operator.OPERATOR_NAMES["stage"],
+        "uid": "00000000-0000-4000-8000-000000000099",
+        "image": stage["image"],
+        "source_sha256": "sha256:" + "9" * 64,
+        "sfs_output": stage["destination"],
+        "receipt_sha256": digest(raw_receipt),
+        "nested_jobs_created": 0,
+    }
+    assert not {"authorization", "created", "release"}.intersection(result)
     assert result["execution"]["nested_jobs_created"] == 0
     assert validated == [{**raw_receipt, "receipt_sha256": digest(raw_receipt)}]
     assert calls and all(method == "GET" for method, _path in calls)
@@ -508,15 +522,31 @@ def test_prod10_operator_launcher_requires_two_alert_off_c1_q1_previews_and_abse
             self.context = context
 
         def dry_run(self, manifest: dict) -> dict:
-            return copy.deepcopy(manifest)
+            value = copy.deepcopy(manifest)
+            if value.get("kind") == "Job":
+                value["metadata"]["uid"] = (
+                    "00000000-0000-4000-8000-000000000021"
+                    if self.context == direct.DEV_CONTEXT
+                    else "00000000-0000-4000-8000-000000000022"
+                )
+            return value
 
         def list_operator_resources(self, resource: str) -> dict:
-            assert resource in operator_launch._RESOURCES
-            return {"kind": "List", "items": []}
+            raise AssertionError(f"unbounded inventory used for {resource}")
 
         def get_operator_object(self, resource: str, name: str) -> None:
-            assert resource == "configmap" and name.endswith(("-source", "-packet"))
+            assert resource in {
+                "configmap",
+                "job",
+                "workload",
+                "rayjob",
+                "raycluster",
+            }
             return None
+
+        def list_operator_pods(self, job_name: str) -> dict:
+            assert job_name == operator.OPERATOR_NAMES["stage"]
+            return {"kind": "PartialObjectMetadataList", "items": []}
 
     previews = operator_launch.server_previews(package, factory=FakeKubectl)
     assert {value["context"] for value in previews} == {
@@ -530,15 +560,50 @@ def test_prod10_operator_launcher_requires_two_alert_off_c1_q1_previews_and_abse
         and value["gpus"] == 0
         for value in previews
     )
-    absence = operator_launch.duplicate_proof(package, factory=FakeKubectl)
+    absence = operator_launch.duplicate_proof(
+        package, previews=previews, factory=FakeKubectl
+    )
     assert absence["kubernetes_inventories_checked"] == 12
-    assert operator_launch._validate_duplicate(package, absence) == absence
+    assert absence["derived_workload_names"] == {
+        direct.DEV_CONTEXT: "job-chris-q38-prod10-stage-operator-v7-12a46",
+        direct.PROD_CONTEXT: "job-chris-q38-prod10-stage-operator-v7-3286c",
+    }
+    assert operator_launch._validate_duplicate(package, absence, previews) == absence
 
     changed = copy.deepcopy(previews)
     changed[0]["failure_alerts"] = "on"
     changed[0] = operator_launch._seal(changed[0])
     with pytest.raises(JobsError, match="preview"):
         operator_launch._preview_set(package, changed)
+
+
+def test_prod10_operator_workload_duplicate_gate_is_exact_and_never_lists_namespace(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert operator_launch._derived_workload_name(
+        "chris-q38-dev17-s51-base-p1-v1",
+        "75d47351-61c7-4bd1-995a-93cbfd112d0d",
+    ) == "job-chris-q38-dev17-s51-base-p1-v1-c7f37"
+    client = operator_launch.Kubectl(direct.PROD_CONTEXT)
+    calls: list[list[str]] = []
+
+    def run_text(args: list[str], *, manifest: dict | None = None) -> str:
+        assert manifest is None
+        calls.append(args)
+        return ""
+
+    monkeypatch.setattr(client, "_run_text", run_text)
+    name = "job-chris-q38-prod10-stage-operator-v7-3286c"
+    assert client.get_operator_object("workload", name) is None
+    assert client.list_operator_pods(operator.OPERATOR_NAMES["stage"])["items"] == []
+    assert calls[0][:3] == ["get", "workload", name]
+    assert "--selector=batch.kubernetes.io/job-name=" + operator.OPERATOR_NAMES["stage"] in calls[1]
+    with pytest.raises(JobsError, match="unsupported"):
+        client.list_operator_resources("workloads.kueue.x-k8s.io")
+    assert all(
+        not (call[:2] == ["get", "workloads.kueue.x-k8s.io"] and len(call) < 3)
+        for call in calls
+    )
 
 
 def test_cpu_remote_duplicate_proof_still_rechecks_production() -> None:

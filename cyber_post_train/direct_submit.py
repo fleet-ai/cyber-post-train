@@ -1286,7 +1286,6 @@ class Kubectl:
         prefixes = {
             "jobs.batch": "job.batch/",
             "pods": "pod/",
-            "workloads.kueue.x-k8s.io": "workload.kueue.x-k8s.io/",
             "rayjobs.ray.io": "rayjob.ray.io/",
             "rayclusters.ray.io": "raycluster.ray.io/",
         }
@@ -1317,7 +1316,7 @@ class Kubectl:
 
     def get_operator_object(self, resource: str, name: str) -> dict | None:
         """Read one fixed helper identity when namespace-wide list is unavailable."""
-        if resource not in {"configmap", "job"} or re.fullmatch(
+        if resource not in {"configmap", "job", "workload", "rayjob", "raycluster"} or re.fullmatch(
             r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", name
         ) is None:
             raise JobsError("bounded-operator read identity is invalid")
@@ -1333,6 +1332,39 @@ class Kubectl:
             ]
         ).strip()
         return _json_object(output, "get") if output else None
+
+    def list_operator_pods(self, job_name: str) -> dict:
+        """Read only Pods carrying the exact root Job owner label."""
+        if re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", job_name) is None:
+            raise JobsError("bounded-operator Pod owner identity is invalid")
+        output = self._run_text(
+            [
+                "get",
+                "pods",
+                "--namespace",
+                NAMESPACE,
+                "--selector=batch.kubernetes.io/job-name=" + job_name,
+                "--output=name",
+            ]
+        )
+        items = []
+        for line in output.splitlines():
+            if not line.startswith("pod/") or line.count("/") != 1:
+                raise JobsError("bounded-operator Pod inventory is invalid")
+            name = line.removeprefix("pod/")
+            if re.fullmatch(r"[a-z0-9](?:[-a-z0-9.]{0,251}[a-z0-9])?", name) is None:
+                raise JobsError("bounded-operator Pod inventory is invalid")
+            items.append(
+                {
+                    "metadata": {
+                        "name": name,
+                        "labels": {"batch.kubernetes.io/job-name": job_name},
+                        "annotations": {},
+                        "ownerReferences": [],
+                    }
+                }
+            )
+        return {"kind": "PartialObjectMetadataList", "items": items}
 
     def delete_operator_object_uid_once(self, resource: str, name: str, uid: str) -> dict:
         """Delete one helper object only with its immutable UID precondition."""

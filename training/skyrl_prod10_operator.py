@@ -31,6 +31,7 @@ from .incluster_kubernetes import InClusterKubernetesRunner
 
 PACKET_SCHEMA = "cyber_skyrl_prod10_operator_packet_v1"
 RESULT_SCHEMA = "cyber_skyrl_prod10_operator_result_v1"
+DIRECT_STAGE_RESULT_SCHEMA = "cyber_skyrl_prod10_operator_direct_stage_result_v2"
 TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_termination_v1"
 FAILURE_TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_failure_v1"
 OPERATOR_NAMES = {
@@ -809,7 +810,7 @@ def run_stage(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> d
     )
     return _seal(
         {
-            "schema": RESULT_SCHEMA,
+            "schema": DIRECT_STAGE_RESULT_SCHEMA,
             "status": "stage_ready",
             "phase": "stage",
             "packet_sha256": packet["sha256"],
@@ -820,6 +821,10 @@ def run_stage(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> d
                 "kind": "job",
                 "name": packet["operator_name"],
                 "uid": os.environ["OPERATOR_JOB_UID"],
+                "image": stage["image"],
+                "source_sha256": os.environ["OPERATOR_SOURCE_SHA256"],
+                "sfs_output": stage["destination"],
+                "receipt_sha256": receipt["receipt_sha256"],
                 "nested_jobs_created": 0,
             },
             "gpus": 0,

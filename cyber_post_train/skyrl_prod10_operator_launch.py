@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import stat
@@ -26,7 +27,7 @@ from .skyrl_prod10_operator_job import (
 )
 
 PREVIEW_SCHEMA = "cyber_skyrl_prod10_operator_preview_v1"
-DUPLICATE_SCHEMA = "cyber_skyrl_prod10_operator_duplicate_absence_v2"
+DUPLICATE_SCHEMA = "cyber_skyrl_prod10_operator_duplicate_absence_v3"
 CREATED_SCHEMA = "cyber_skyrl_prod10_operator_created_v1"
 RESULT_SCHEMA = "cyber_skyrl_prod10_operator_launch_result_v1"
 _RESOURCES = (
@@ -103,6 +104,10 @@ def server_previews(
             packet, package.packet_config_map, require_uid=False
         )
         job_proof = validate_server_response(job, package.job, require_uid=False)
+        try:
+            UUID(job_proof["uid"])
+        except (TypeError, ValueError) as exc:
+            raise JobsError("prod10 operator server preview omitted its dry-run UID") from exc
         results.append(
             _seal(
                 {
@@ -117,6 +122,7 @@ def server_previews(
                     "source_config_map_server_sha256": source_proof["server_sha256"],
                     "packet_config_map_server_sha256": packet_proof["server_sha256"],
                     "job_server_sha256": job_proof["server_sha256"],
+                    "job_uid": job_proof["uid"],
                     "failure_alerts": job_proof["failure_alerts"],
                     "priority": job_proof["priority"],
                     "queue_priority": job_proof["queue_priority"],
@@ -149,6 +155,10 @@ def _preview_set(package: OperatorPackage, values: list[dict[str, Any]]) -> list
             or value.get("submitted") is not False
         ):
             raise JobsError("prod10 operator server preview changed")
+        try:
+            UUID(value.get("job_uid"))
+        except (TypeError, ValueError) as exc:
+            raise JobsError("prod10 operator server preview UID changed") from exc
         direct._fresh_at(value.get("checked_at"))
         contexts.append(value["context"])
     if sorted(contexts) != sorted({direct.DEV_CONTEXT, direct.PROD_CONTEXT}) or len(values) != 2:
@@ -156,12 +166,27 @@ def _preview_set(package: OperatorPackage, values: list[dict[str, Any]]) -> list
     return values
 
 
+def _derived_workload_name(job_name: str, job_uid: str) -> str:
+    """Mirror Kueue's fixed Batch Job workload-name function."""
+    try:
+        UUID(job_uid)
+    except (TypeError, ValueError) as exc:
+        raise JobsError("prod10 operator dry-run Job UID is invalid") from exc
+    suffix = hashlib.sha1(
+        f"Job\nbatch\n{job_name}\n{job_uid}".encode(), usedforsecurity=False
+    ).hexdigest()[:5]
+    return f"job-{job_name}-{suffix}"
+
+
 def duplicate_proof(
     package: OperatorPackage,
     *,
+    previews: list[dict[str, Any]],
     factory: type[Kubectl] = Kubectl,
 ) -> dict[str, Any]:
     proof = validate_operator_package(package)
+    preview_set = _preview_set(package, previews)
+    preview_by_context = {value["context"]: value for value in preview_set}
     names = {
         package.source_config_map["metadata"]["name"],
         package.packet_config_map["metadata"]["name"],
@@ -185,11 +210,26 @@ def duplicate_proof(
                 if value is not None
             ]
             return context, resource, {"kind": "ConfigMapList", "items": items}
-        return context, resource, client.list_operator_resources(resource)
+        if resource == "jobs.batch":
+            value = client.get_operator_object("job", proof["name"])
+            return context, resource, {"kind": "JobList", "items": [value] if value else []}
+        if resource == "pods":
+            return context, resource, client.list_operator_pods(proof["name"])
+        if resource == "workloads.kueue.x-k8s.io":
+            name = _derived_workload_name(
+                proof["name"], preview_by_context[context]["job_uid"]
+            )
+            value = client.get_operator_object("workload", name)
+            return context, resource, {"kind": "WorkloadList", "items": [value] if value else []}
+        exact = {
+            "rayjobs.ray.io": "rayjob",
+            "rayclusters.ray.io": "raycluster",
+        }[resource]
+        value = client.get_operator_object(exact, proof["name"])
+        return context, resource, {"kind": "List", "items": [value] if value else []}
 
-    # Namespace inventories are deliberately exhaustive and can be tens of
-    # megabytes in production. Serialize them so one large response cannot
-    # starve another kubectl transport and turn absence into a flaky result.
+    # Serialize the exact-name and owner-label reads so every refusal has one
+    # unambiguous transport boundary.
     with ThreadPoolExecutor(max_workers=1) as pool:
         futures = {pool.submit(read, *item): item for item in work}
         for future in as_completed(futures):
@@ -236,14 +276,26 @@ def duplicate_proof(
             "source_sha256": proof["source_sha256"],
             "names": sorted(names),
             "contexts": [direct.DEV_CONTEXT, direct.PROD_CONTEXT],
+            "derived_workload_names": {
+                context: _derived_workload_name(
+                    proof["name"], preview_by_context[context]["job_uid"]
+                )
+                for context in (direct.DEV_CONTEXT, direct.PROD_CONTEXT)
+            },
             "kubernetes_inventories_checked": checked,
             "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
     )
 
 
-def _validate_duplicate(package: OperatorPackage, value: dict[str, Any]) -> dict[str, Any]:
+def _validate_duplicate(
+    package: OperatorPackage,
+    value: dict[str, Any],
+    previews: list[dict[str, Any]],
+) -> dict[str, Any]:
     proof = validate_operator_package(package)
+    preview_set = _preview_set(package, previews)
+    preview_by_context = {item["context"]: item for item in preview_set}
     checked = _validate_seal(value, DUPLICATE_SCHEMA)
     names = sorted(
         {
@@ -259,6 +311,13 @@ def _validate_duplicate(package: OperatorPackage, value: dict[str, Any]) -> dict
         or checked.get("source_sha256") != proof["source_sha256"]
         or checked.get("names") != names
         or checked.get("contexts") != [direct.DEV_CONTEXT, direct.PROD_CONTEXT]
+        or checked.get("derived_workload_names")
+        != {
+            context: _derived_workload_name(
+                proof["name"], preview_by_context[context]["job_uid"]
+            )
+            for context in (direct.DEV_CONTEXT, direct.PROD_CONTEXT)
+        }
         or checked.get("kubernetes_inventories_checked") != len(_RESOURCES) * 2
     ):
         raise JobsError("prod10 operator duplicate proof changed")
@@ -300,7 +359,7 @@ def create_once(
 ) -> dict[str, Any]:
     package_proof = validate_operator_package(package)
     preview_set = _preview_set(package, previews)
-    duplicate = _validate_duplicate(package, duplicates)
+    duplicate = _validate_duplicate(package, duplicates, preview_set)
     root = _operation_directory(operation_directory)
     journal = root / "OPERATOR_CREATE.jsonl"
     if journal.exists() or journal.is_symlink():
