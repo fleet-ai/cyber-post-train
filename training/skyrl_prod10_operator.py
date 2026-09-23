@@ -38,7 +38,7 @@ FAILURE_TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_failure_v1"
 OPERATOR_NAMES = {
     "stage": "chris-q38-prod10-stage-operator-v7",
     "manifest": "chris-q38-prod10-manifest-operator-v1",
-    "preflight": "chris-q38-prod10-preflight-operator-v1",
+    "preflight": "chris-q38-prod10-preflight-operator-v2",
 }
 _PREFLIGHT_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_preflight_v1_failure_recovery_v1",
@@ -272,6 +272,10 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
             raise ValueError("prod10 preflight v1 recovery binding changed")
     else:
         direct._validate_seal(packet.get("dev_preview"), direct.CPU_PREVIEW_SCHEMA)
+        direct._validate_seal(
+            packet.get("manifest_launch_result"),
+            direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA,
+        )
         duplicate = direct._validate_seal(
             packet.get("dev_duplicate_proof"), direct.CPU_DUPLICATE_PROOF_SCHEMA
         )
@@ -901,7 +905,7 @@ def run_preflight(
         stage,
         identity=identity,
         operator_name=OPERATOR_NAMES["stage"],
-        fresh=True,
+        fresh=False,
     )
     result_path = hardening.stage_operation_root(stage) / "STAGE_OPERATOR_RESULT.json"
     if stage_launch["observer"]["receipt"].get("result_path") != str(result_path):
@@ -918,7 +922,15 @@ def run_preflight(
         plan=plan,
         identity=identity,
         operator_name=OPERATOR_NAMES["stage"],
-        fresh_release=True,
+        fresh_release=False,
+    )
+    manifest_launch = direct._direct_manifest_launch(
+        packet.get("manifest_launch_result"),
+        plan,
+        stage_result,
+        stage_launch,
+        operator_name=OPERATOR_NAMES["manifest"],
+        fresh=True,
     )
     for resource, name in (
         ("job", OPERATOR_NAMES["stage"]),
@@ -926,6 +938,11 @@ def run_preflight(
         ("configmap", stage_launch["created"]["source_config_map"]["name"]),
         ("configmap", stage_launch["created"]["packet_config_map"]["name"]),
         *(("pod", name) for name in stage_launch["observer"]["pod_names"]),
+        ("job", OPERATOR_NAMES["manifest"]),
+        ("workload", manifest_launch["observer"]["workload_name"]),
+        ("configmap", manifest_launch["created"]["source_config_map"]["name"]),
+        ("configmap", manifest_launch["created"]["packet_config_map"]["name"]),
+        *(("pod", name) for name in manifest_launch["observer"]["pod_names"]),
     ):
         _resource_absent(runner, resource, name, code="direct_stage_resource_still_present")
     expected = direct.preflight_job_manifest(plan, identity=identity)
@@ -969,14 +986,16 @@ def run_preflight(
     prod_preview = direct.validate_cpu_preview(
         expected, prod_rendered, context=direct.PROD_CONTEXT, purpose="preflight"
     )
-    authorization = direct.authorize_preflight_direct_stage(
+    authorization = direct.authorize_preflight_direct_manifest(
         plan,
         request,
         stage,
         stage_result,
         stage_launch,
+        manifest_launch,
         expected,
         stage_operator_name=OPERATOR_NAMES["stage"],
+        manifest_operator_name=OPERATOR_NAMES["manifest"],
         dev_preview=packet["dev_preview"],
         prod_preview=prod_preview,
         observer=state["armed"],
@@ -1005,6 +1024,7 @@ def run_preflight(
             "request_sha256": "sha256:" + digest(request),
             "stage_result_sha256": stage_result["sha256"],
             "stage_launch_result_sha256": stage_launch["sha256"],
+            "manifest_launch_result_sha256": manifest_launch["sha256"],
             "authorization": authorization,
             "created": created,
             "receipt": receipt,

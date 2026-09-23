@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from training import skyrl_prod9_direct as direct
+from training import dev_cleanup_observer as cleanup
 from training import skyrl_prod9_training as training
 from training import skyrl_prod10_operator as operator
 from training import skyrl_reward_rayjob as historical
@@ -200,6 +201,7 @@ def preflight_packet(
     request: dict[str, Any],
     stage: dict[str, Any],
     stage_launch_result: dict[str, Any],
+    manifest_launch_result: dict[str, Any],
     dev_preview: dict[str, Any],
     dev_duplicate_proof: dict[str, Any],
 ) -> dict[str, Any]:
@@ -215,6 +217,41 @@ def preflight_packet(
         identity=identity,
         operator_name=operator.OPERATOR_NAMES["stage"],
         fresh=False,
+    )
+    checked_manifest_launch = direct._validate_seal(
+        manifest_launch_result, direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA
+    )
+    manifest_package = checked_manifest_launch.get("package")
+    manifest_release = direct._validate_seal(
+        checked_manifest_launch.get("observer"), cleanup.DIRECT_RESULT_SCHEMA
+    )
+    manifest_receipt = direct._validate_seal(
+        manifest_release.get("receipt"), direct.DIRECT_MANIFEST_RESULT_SCHEMA
+    )
+    if (
+        checked_manifest_launch.get("status") != "operator_succeeded_and_released"
+        or checked_manifest_launch.get("gpus") != 0
+        or not isinstance(manifest_package, dict)
+        or manifest_package.get("name") != operator.OPERATOR_NAMES["manifest"]
+        or manifest_package.get("phase") != "manifest"
+        or manifest_package.get("failure_alerts") != "off"
+        or manifest_package.get("priority") != "c1"
+        or manifest_package.get("queue_priority") != "q1"
+        or manifest_package.get("gpus") != 0
+        or manifest_release.get("status") != "released"
+        or manifest_release.get("terminal_status") != "Succeeded"
+        or manifest_receipt.get("status") != "passed"
+        or manifest_receipt.get("successor_manifest") != plan.get("data")
+        or manifest_receipt.get("successor_manifest_sha256")
+        != plan.get("data", {}).get("sha256")
+        or manifest_receipt.get("private_rows_exported") is not False
+        or manifest_receipt.get("nested_jobs_created") != 0
+        or manifest_receipt.get("gpus") != 0
+    ):
+        raise ValueError("prod10 manifest handoff changed")
+    direct._fresh_at(
+        manifest_release.get("release_observed_at"),
+        maximum_age=direct.DIRECT_STAGE_RELEASE_MAX_AGE_SECONDS,
     )
     expected = direct.preflight_job_manifest(plan, identity=identity)
     direct.validate_cpu_preview_proof(
@@ -239,6 +276,7 @@ def preflight_packet(
             "request": request,
             "stage": checked_stage,
             "stage_launch_result": checked_stage_launch,
+            "manifest_launch_result": checked_manifest_launch,
             "manifest_sha256": "sha256:" + digest(expected),
             "dev_preview": dev_preview,
             "dev_duplicate_proof": duplicate,
@@ -267,6 +305,7 @@ def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
             request=checked["request"],
             stage=checked["stage"],
             stage_launch_result=checked["stage_launch_result"],
+            manifest_launch_result=checked["manifest_launch_result"],
             dev_preview=checked["dev_preview"],
             dev_duplicate_proof=checked["dev_duplicate_proof"],
         )

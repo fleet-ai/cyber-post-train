@@ -49,6 +49,9 @@ PREFLIGHT_AUTHORIZATION_SCHEMA = "cyber_skyrl_prod9_preflight_authorization_v1"
 PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA = (
     "cyber_skyrl_prod10_preflight_direct_stage_authorization_v2"
 )
+PREFLIGHT_AUTHORIZATION_DIRECT_MANIFEST_SCHEMA = (
+    "cyber_skyrl_prod10_preflight_direct_manifest_authorization_v3"
+)
 AUTHORIZATION_SCHEMA = "cyber_skyrl_prod9_direct_authorization_v1"
 CPU_CREATED_SCHEMA = "cyber_skyrl_prod9_cpu_created_v1"
 CPU_DUPLICATE_PROOF_SCHEMA = "cyber_skyrl_prod9_cpu_duplicate_absence_v1"
@@ -68,6 +71,7 @@ DIRECT_STAGE_RELEASE_MAX_AGE_SECONDS = CPU_MAXIMUM_SECONDS
 DIRECT_STAGE_RESULT_SCHEMA = "cyber_skyrl_prod10_operator_direct_stage_result_v2"
 STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA = "cyber_skyrl_prod10_operator_launch_result_v1"
 STAGE_OPERATOR_TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_termination_v1"
+DIRECT_MANIFEST_RESULT_SCHEMA = "cyber_skyrl_prod10_rebound_manifest_result_v1"
 _CPU_DUPLICATE_NAME_PREFIXES = {
     "job": "job.batch/",
     "rayjob": "rayjob.ray.io/",
@@ -1511,6 +1515,107 @@ def _direct_stage_rebound_evidence(
     return result, launch, receipt["successor_manifest"]
 
 
+def _direct_manifest_launch(
+    value: object,
+    plan: dict[str, Any],
+    stage_result: dict[str, Any],
+    stage_launch_result: dict[str, Any],
+    *,
+    operator_name: str,
+    fresh: bool,
+) -> dict[str, Any]:
+    """Validate the fresh, released public-manifest handoff for preflight."""
+    launch = _validate_seal(value, STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA)
+    package = launch.get("package")
+    created = launch.get("created")
+    observer = launch.get("observer")
+    if not isinstance(package, dict) or not isinstance(created, dict):
+        raise JobsError("prod10 manifest launch evidence is incomplete")
+    created_job = created.get("job")
+    source_map = created.get("source_config_map")
+    packet_map = created.get("packet_config_map")
+    if not all(isinstance(item, dict) for item in (created_job, source_map, packet_map)):
+        raise JobsError("prod10 manifest created identities are incomplete")
+    release = _validate_seal(observer, "cyber_direct_cleanup_observer_result_v1")
+    receipt = _validate_seal(release.get("receipt"), DIRECT_MANIFEST_RESULT_SCHEMA)
+    checked_stage_result = _validate_seal(stage_result, DIRECT_STAGE_RESULT_SCHEMA)
+    checked_stage_launch = _validate_seal(
+        stage_launch_result, STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA
+    )
+    try:
+        job_uid = str(UUID(created_job.get("uid")))
+        UUID(source_map.get("uid"))
+        UUID(packet_map.get("uid"))
+        UUID(release.get("workload_uid"))
+        for pod_uid in release.get("pod_uids", []):
+            UUID(pod_uid)
+    except (TypeError, ValueError) as exc:
+        raise JobsError("prod10 manifest launch identity is invalid") from exc
+    absent = (
+        "target_present",
+        "pods_present",
+        "workload_present",
+        "rayjob_present",
+        "raycluster_present",
+    )
+    if (
+        launch.get("status") != "operator_succeeded_and_released"
+        or launch.get("gpus") != 0
+        or package.get("name") != operator_name
+        or package.get("phase") != "manifest"
+        or package.get("failure_alerts") != "off"
+        or package.get("priority") != "c1"
+        or package.get("queue_priority") != "q1"
+        or package.get("gpus") != 0
+        or not isinstance(package.get("packet_sha256"), str)
+        or not isinstance(package.get("source_sha256"), str)
+        or not isinstance(package.get("job_manifest_sha256"), str)
+        or source_map.get("name") != operator_name + "-source"
+        or packet_map.get("name") != operator_name + "-packet"
+        or created_job.get("name") != operator_name
+        or created_job.get("uid") != job_uid
+        or created_job.get("manifest_sha256") != package.get("job_manifest_sha256")
+        or created_job.get("failure_alerts") != "off"
+        or created_job.get("priority") != "c1"
+        or created_job.get("queue_priority") != "q1"
+        or created_job.get("gpus") != 0
+        or release.get("status") != "released"
+        or release.get("context") != PROD_CONTEXT
+        or release.get("namespace") != NAMESPACE
+        or release.get("kind") != "job"
+        or release.get("name") != operator_name
+        or release.get("uid") != job_uid
+        or release.get("plan_sha256") != package.get("packet_sha256")
+        or release.get("manifest_sha256") != package.get("job_manifest_sha256")
+        or release.get("terminal_status") != "Succeeded"
+        or release.get("exit_codes") != [0]
+        or release.get("restarts") != 0
+        or release.get("expected_gpus") != 0
+        or release.get("peak_gpus") != 0
+        or release.get("active_gpus") != 0
+        or release.get("image_ids") != [training.historical.IMAGE]
+        or any(release.get(key) is not False for key in absent)
+        or release.get("receipt") != receipt
+        or receipt.get("status") != "passed"
+        or receipt.get("phase") != "manifest"
+        or receipt.get("stage_result_sha256") != checked_stage_result.get("sha256")
+        or receipt.get("stage_launch_result_sha256") != checked_stage_launch.get("sha256")
+        or receipt.get("successor_manifest") != plan.get("data")
+        or receipt.get("successor_manifest_sha256")
+        != plan.get("data", {}).get("sha256")
+        or receipt.get("private_rows_exported") is not False
+        or receipt.get("nested_jobs_created") != 0
+        or receipt.get("gpus") != 0
+    ):
+        raise JobsError("prod10 manifest launch evidence changed")
+    if fresh:
+        _fresh_at(
+            release.get("release_observed_at"),
+            maximum_age=DIRECT_STAGE_RELEASE_MAX_AGE_SECONDS,
+        )
+    return launch
+
+
 def _preflight_authorization_direct_stage(
     plan: dict[str, Any],
     request: dict[str, Any],
@@ -1620,6 +1725,96 @@ def authorize_preflight_direct_stage(
         identity=identity,
         require_live_observer=True,
         fresh_stage_release=True,
+        fresh_previews=True,
+    )
+
+
+def _preflight_authorization_direct_manifest(
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    stage: dict[str, Any],
+    stage_result: dict[str, Any],
+    stage_launch_result: dict[str, Any],
+    manifest_launch_result: dict[str, Any],
+    expected: dict[str, Any],
+    *,
+    stage_operator_name: str,
+    manifest_operator_name: str,
+    dev_preview: dict[str, Any],
+    prod_preview: dict[str, Any],
+    observer: dict[str, Any],
+    identity: historical.RailIdentity,
+    require_live_observer: bool,
+    fresh_manifest_release: bool,
+    fresh_previews: bool,
+) -> dict[str, Any]:
+    """Authorize from immutable stage evidence plus its fresh public handoff."""
+    base = _preflight_authorization_direct_stage(
+        plan,
+        request,
+        stage,
+        stage_result,
+        stage_launch_result,
+        expected,
+        stage_operator_name=stage_operator_name,
+        dev_preview=dev_preview,
+        prod_preview=prod_preview,
+        observer=observer,
+        identity=identity,
+        require_live_observer=require_live_observer,
+        fresh_stage_release=False,
+        fresh_previews=fresh_previews,
+    )
+    checked_manifest_launch = _direct_manifest_launch(
+        manifest_launch_result,
+        plan,
+        base["stage_result"],
+        base["stage_launch_result"],
+        operator_name=manifest_operator_name,
+        fresh=fresh_manifest_release,
+    )
+    return _seal(
+        {
+            **{key: value for key, value in base.items() if key not in {"schema", "sha256"}},
+            "schema": PREFLIGHT_AUTHORIZATION_DIRECT_MANIFEST_SCHEMA,
+            "manifest_operator_name": manifest_operator_name,
+            "manifest_launch_result": checked_manifest_launch,
+        }
+    )
+
+
+def authorize_preflight_direct_manifest(
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    stage: dict[str, Any],
+    stage_result: dict[str, Any],
+    stage_launch_result: dict[str, Any],
+    manifest_launch_result: dict[str, Any],
+    expected: dict[str, Any],
+    *,
+    stage_operator_name: str,
+    manifest_operator_name: str,
+    dev_preview: dict[str, Any],
+    prod_preview: dict[str, Any],
+    observer: dict[str, Any],
+    identity: historical.RailIdentity,
+) -> dict[str, Any]:
+    return _preflight_authorization_direct_manifest(
+        plan,
+        request,
+        stage,
+        stage_result,
+        stage_launch_result,
+        manifest_launch_result,
+        expected,
+        stage_operator_name=stage_operator_name,
+        manifest_operator_name=manifest_operator_name,
+        dev_preview=dev_preview,
+        prod_preview=prod_preview,
+        observer=observer,
+        identity=identity,
+        require_live_observer=True,
+        fresh_manifest_release=True,
         fresh_previews=True,
     )
 
@@ -1786,6 +1981,11 @@ def _create_cpu_once(
     manifest_sha256 = "sha256:" + digest(expected)
     if purpose == "stage":
         authorization_schema = STAGE_AUTHORIZATION_SCHEMA
+    elif (
+        isinstance(authorization, dict)
+        and authorization.get("schema") == PREFLIGHT_AUTHORIZATION_DIRECT_MANIFEST_SCHEMA
+    ):
+        authorization_schema = PREFLIGHT_AUTHORIZATION_DIRECT_MANIFEST_SCHEMA
     elif isinstance(authorization, dict) and authorization.get("schema") == PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA:
         authorization_schema = PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA
     else:
@@ -1831,7 +2031,9 @@ def _create_cpu_once(
         _fresh_at(preview.get("checked_at"))
     if purpose == "preflight":
         release = (
-            auth["stage_launch_result"]["observer"]
+            auth["manifest_launch_result"]["observer"]
+            if authorization_schema == PREFLIGHT_AUTHORIZATION_DIRECT_MANIFEST_SCHEMA
+            else auth["stage_launch_result"]["observer"]
             if authorization_schema == PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA
             else auth["stage_release"]
         )
@@ -1839,7 +2041,11 @@ def _create_cpu_once(
             release.get("release_observed_at"),
             maximum_age=(
                 DIRECT_STAGE_RELEASE_MAX_AGE_SECONDS
-                if authorization_schema == PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA
+                if authorization_schema
+                in {
+                    PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA,
+                    PREFLIGHT_AUTHORIZATION_DIRECT_MANIFEST_SCHEMA,
+                }
                 else EVIDENCE_MAX_AGE_SECONDS
             ),
         )
@@ -1965,6 +2171,10 @@ def create_preflight_once(
 ) -> dict[str, Any]:
     """Create the one permitted zero-GPU exact-image prod9 preflight Job."""
     authorization_schema = (
+        PREFLIGHT_AUTHORIZATION_DIRECT_MANIFEST_SCHEMA
+        if isinstance(authorization, dict)
+        and authorization.get("schema") == PREFLIGHT_AUTHORIZATION_DIRECT_MANIFEST_SCHEMA
+        else
         PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA
         if isinstance(authorization, dict)
         and authorization.get("schema") == PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA
@@ -1975,7 +2185,26 @@ def create_preflight_once(
     if directory.resolve() != canonical or Path(auth.get("operation_root", "")) != canonical:
         raise JobsError("prod9 CPU create directory differs from its sealed operation root")
     expected = preflight_job_manifest(plan, identity=identity)
-    if authorization_schema == PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA:
+    if authorization_schema == PREFLIGHT_AUTHORIZATION_DIRECT_MANIFEST_SCHEMA:
+        expected_auth = _preflight_authorization_direct_manifest(
+            plan,
+            request,
+            stage,
+            auth["stage_result"],
+            auth["stage_launch_result"],
+            auth["manifest_launch_result"],
+            expected,
+            stage_operator_name=auth["stage_operator_name"],
+            manifest_operator_name=auth["manifest_operator_name"],
+            dev_preview=auth["dev_preview"],
+            prod_preview=auth["prod_preview"],
+            observer=auth["observer"],
+            identity=identity,
+            require_live_observer=True,
+            fresh_manifest_release=True,
+            fresh_previews=True,
+        )
+    elif authorization_schema == PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA:
         expected_auth = _preflight_authorization_direct_stage(
             plan,
             request,

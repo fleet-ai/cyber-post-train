@@ -687,6 +687,103 @@ def _direct_stage_v2_evidence(
     return stage_result, launch
 
 
+def _direct_manifest_evidence(
+    plan: dict,
+    stage_result: dict,
+    stage_launch: dict,
+    operator_name: str,
+) -> dict:
+    job_uid = "00000000-0000-4000-8000-000000000081"
+    packet_sha256 = "sha256:" + "e" * 64
+    source_sha256 = "sha256:" + "f" * 64
+    manifest_sha256 = "sha256:" + "1" * 64
+    receipt = prod9_direct._seal(
+        {
+            "schema": prod9_direct.DIRECT_MANIFEST_RESULT_SCHEMA,
+            "status": "passed",
+            "phase": "manifest",
+            "stage_result_sha256": stage_result["sha256"],
+            "stage_launch_result_sha256": stage_launch["sha256"],
+            "preflight_v1_failure_sha256": "sha256:" + "2" * 64,
+            "successor_manifest": plan["data"],
+            "successor_manifest_sha256": plan["data"]["sha256"],
+            "private_rows_exported": False,
+            "nested_jobs_created": 0,
+            "gpus": 0,
+        }
+    )
+    release = prod9_direct._seal(
+        {
+            "schema": "cyber_direct_cleanup_observer_result_v1",
+            "status": "released",
+            "context": prod9_direct.PROD_CONTEXT,
+            "namespace": prod9_direct.NAMESPACE,
+            "kind": "job",
+            "name": operator_name,
+            "plan_sha256": packet_sha256,
+            "manifest_sha256": manifest_sha256,
+            "expected_gpus": 0,
+            "peak_gpus": 0,
+            "active_gpus": 0,
+            "terminal_status": "Succeeded",
+            "restarts": 0,
+            "exit_codes": [0],
+            "receipt": receipt,
+            "uid": job_uid,
+            "pod_names": [operator_name + "-abcde"],
+            "pod_uids": ["00000000-0000-4000-8000-000000000082"],
+            "workload_name": "job-" + operator_name + "-abcde",
+            "workload_uid": "00000000-0000-4000-8000-000000000083",
+            "image_ids": [prod9_training.historical.IMAGE],
+            "target_present": False,
+            "pods_present": False,
+            "rayjob_present": False,
+            "workload_present": False,
+            "raycluster_present": False,
+            "release_observed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+    return prod9_direct._seal(
+        {
+            "schema": prod9_direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA,
+            "status": "operator_succeeded_and_released",
+            "package": {
+                "name": operator_name,
+                "phase": "manifest",
+                "packet_sha256": packet_sha256,
+                "source_sha256": source_sha256,
+                "job_manifest_sha256": manifest_sha256,
+                "failure_alerts": "off",
+                "priority": "c1",
+                "queue_priority": "q1",
+                "gpus": 0,
+            },
+            "created": {
+                "source_config_map": {
+                    "name": operator_name + "-source",
+                    "uid": "00000000-0000-4000-8000-000000000084",
+                },
+                "packet_config_map": {
+                    "name": operator_name + "-packet",
+                    "uid": "00000000-0000-4000-8000-000000000085",
+                },
+                "job": {
+                    "name": operator_name,
+                    "uid": job_uid,
+                    "manifest_sha256": manifest_sha256,
+                    "failure_alerts": "off",
+                    "priority": "c1",
+                    "queue_priority": "q1",
+                    "gpus": 0,
+                },
+            },
+            "observer": release,
+            "config_map_release": {"source_status": None, "packet_status": None},
+            "gpus": 0,
+        }
+    )
+
+
 def _real_rebound_manifests(
     tmp_path: Path, identity: historical_direct.RailIdentity
 ) -> tuple[dict, dict]:
@@ -825,6 +922,117 @@ def test_prod10_direct_stage_v2_authorizes_preflight_without_legacy_fields(
             identity=identity,
         )
 
+
+def test_prod10_manifest_handoff_is_fresh_and_keeps_real_rebind_equality(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan, _request, identity = _prod9_plan()
+    predecessor, successor = _real_rebound_manifests(tmp_path, identity)
+    plan["data"] = successor
+    request = prod9_training.job_request(plan)
+    stage = prod9_training.stage_spec(identity, predecessor)
+    root = (tmp_path / "prod9-create-once-v1").resolve()
+    root.mkdir(mode=0o700)
+    monkeypatch.setattr(hardening, "CREATE_ONCE_ROOT", root)
+    operation_root = hardening.training_operation_root(plan)
+    operation_root.mkdir(mode=0o700)
+    stage_name = "chris-q38-prod10-stage-operator-v7"
+    manifest_name = "chris-q38-prod10-manifest-operator-v1"
+    stage_result, stage_launch = _direct_stage_v2_evidence(
+        stage, successor, identity, stage_name
+    )
+    manifest_launch = _direct_manifest_evidence(
+        plan, stage_result, stage_launch, manifest_name
+    )
+    expected = prod9_direct.preflight_job_manifest(plan, identity=identity)
+    dev_preview = prod9_direct.validate_cpu_preview(
+        expected,
+        _cpu_render(expected),
+        context=prod9_direct.DEV_CONTEXT,
+        purpose="preflight",
+    )
+    prod_preview = prod9_direct.validate_cpu_preview(
+        expected,
+        _cpu_render(expected),
+        context=prod9_direct.PROD_CONTEXT,
+        purpose="preflight",
+    )
+    observer = _observer(
+        "job",
+        identity.preflight_name,
+        "sha256:" + digest(plan),
+        "sha256:" + digest(expected),
+        0,
+        prod9_direct.CPU_MAXIMUM_SECONDS,
+        hardening.creator_binding_path(operation_root, "preflight"),
+    )
+    authorization = prod9_direct.authorize_preflight_direct_manifest(
+        plan,
+        request,
+        stage,
+        stage_result,
+        stage_launch,
+        manifest_launch,
+        expected,
+        stage_operator_name=stage_name,
+        manifest_operator_name=manifest_name,
+        dev_preview=dev_preview,
+        prod_preview=prod_preview,
+        observer=observer,
+        identity=identity,
+    )
+    assert authorization["schema"] == (
+        prod9_direct.PREFLIGHT_AUTHORIZATION_DIRECT_MANIFEST_SCHEMA
+    )
+    assert authorization["stage_result"] == stage_result
+    assert authorization["manifest_launch_result"] == manifest_launch
+
+    stale = copy.deepcopy(manifest_launch)
+    stale["observer"]["release_observed_at"] = "2020-01-01T00:00:00Z"
+    stale["observer"] = prod9_direct._seal(stale["observer"])
+    stale = prod9_direct._seal(stale)
+    with pytest.raises(JobsError, match="stale"):
+        prod9_direct.authorize_preflight_direct_manifest(
+            plan,
+            request,
+            stage,
+            stage_result,
+            stage_launch,
+            stale,
+            expected,
+            stage_operator_name=stage_name,
+            manifest_operator_name=manifest_name,
+            dev_preview=dev_preview,
+            prod_preview=prod_preview,
+            observer=observer,
+            identity=identity,
+        )
+
+    stale_plan = copy.deepcopy(plan)
+    stale_plan["data"] = {
+        **predecessor,
+        "name": identity.run_name,
+    }
+    stale_plan["data"]["sha256"] = "sha256:" + digest(
+        {key: value for key, value in stale_plan["data"].items() if key != "sha256"}
+    )
+    with pytest.raises(JobsError, match="direct stage result"):
+        prod9_direct.authorize_preflight_direct_manifest(
+            stale_plan,
+            prod9_training.job_request(stale_plan),
+            stage,
+            stage_result,
+            stage_launch,
+            manifest_launch,
+            prod9_direct.preflight_job_manifest(stale_plan, identity=identity),
+            stage_operator_name=stage_name,
+            manifest_operator_name=manifest_name,
+            dev_preview=dev_preview,
+            prod_preview=prod_preview,
+            observer=observer,
+            identity=identity,
+        )
+
     changed = copy.deepcopy(stage_result)
     changed["execution"]["nested_jobs_created"] = 1
     changed = prod9_direct._seal(changed)
@@ -836,7 +1044,7 @@ def test_prod10_direct_stage_v2_authorizes_preflight_without_legacy_fields(
             changed,
             stage_launch,
             expected,
-            stage_operator_name=operator_name,
+            stage_operator_name=stage_name,
             dev_preview=dev_preview,
             prod_preview=prod_preview,
             observer=observer,
