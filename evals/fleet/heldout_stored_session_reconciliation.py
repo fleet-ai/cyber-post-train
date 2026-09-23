@@ -1326,10 +1326,14 @@ def validate_server_previews(
             ("completions", 1),
             ("completionMode", "NonIndexed"),
             ("manualSelector", False),
-            ("suspend", False),
             ("podReplacementPolicy", "TerminatingOrFailed"),
         ):
             drop_default(actual_spec, wanted_spec, key, default)
+        if "suspend" not in wanted_spec and type(actual_spec.get("suspend")) is bool:
+            # Kueue owns this admission field.  A server dry-run may return
+            # either state depending on whether the queue has admitted the
+            # object; neither state was supplied by the reviewed manifest.
+            actual_spec.pop("suspend")
         for key, default in (
             ("dnsPolicy", "ClusterFirst"),
             ("enableServiceLinks", True),
