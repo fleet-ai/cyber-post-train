@@ -1,0 +1,26 @@
+{
+  "schema": "qwen38_external_ctf_source_qualification_supersession_v1",
+  "status": "superseded_non_authoritative",
+  "may_authorize_launch": false,
+  "supersedes_path": "docs/evidence/external-ctf/2026-09-23-qwen38-three-benchmark-source-qualification.json",
+  "historical_file_sha256": "sha256:6154b2c37c3dd2dd0e2697a111497cd74e9e7328b82339f713bc1b45c60305ab",
+  "historical_protocol_sha256": "sha256:799268240ee01d69626a0e8983dc60d4c8bda8cddd171e93453fb6d057ca7624",
+  "valid_scope": "historical_source_census_only",
+  "invalidated_claims": [
+    "exact_serving_provenance_verified",
+    "same_non_weight_runtime",
+    "all_cve_tasks_runtime_executable"
+  ],
+  "supersession_reasons": [
+    "current_base_and_step1000_routes_have_unmatched_priority_classes",
+    "no_remote_cve_runtime_qualification_receipt_exists",
+    "execution_protocol_and_bound_source_hashes_advanced"
+  ],
+  "required_successor_evidence": [
+    "matched_priority_fresh_two_arm_live_parity_receipt",
+    "shared_capacity_successor_and_pending_reservation_authority",
+    "immutable_external_ctf_execution_packet",
+    "remote_model_free_cve_runtime_qualification_terminal"
+  ],
+  "contains_prompts_traces_solutions_or_scores": false
+}
