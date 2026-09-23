@@ -28,6 +28,7 @@ from . import skyrl_reward_rayjob as historical
 AUTHORIZATION_SCHEMA = "cyber_skyrl_prod10_direct_authorization_v3"
 PREFLIGHT_RESULT_SCHEMA = "cyber_skyrl_prod10_operator_result_v1"
 DUPLICATE_SCHEMA = "cyber_skyrl_prod10_direct_duplicate_absence_v1"
+JIT_DUPLICATE_SCHEMA = "cyber_skyrl_prod10_jit_duplicate_absence_v1"
 CAPACITY_SCHEMA = "cyber_skyrl_prod10_direct_capacity_gate_v1"
 CREATED_SCHEMA = "cyber_skyrl_prod10_direct_created_v1"
 REVALIDATION_SCHEMA = "cyber_skyrl_prod10_preflight_revalidation_v1"
@@ -295,7 +296,12 @@ def duplicate_proof(
     )
 
 
-def _duplicate(value: object, identity: historical.RailIdentity) -> dict[str, Any]:
+def _duplicate(
+    value: object,
+    identity: historical.RailIdentity,
+    *,
+    fresh: bool = True,
+) -> dict[str, Any]:
     checked = direct._validate_seal(value, DUPLICATE_SCHEMA)
     if (
         checked.get("status") != "identity_and_output_absent"
@@ -307,6 +313,132 @@ def _duplicate(value: object, identity: historical.RailIdentity) -> dict[str, An
         or checked["jobs_api_rows_checked"] < 0
     ):
         raise JobsError("prod10 direct-v3 duplicate proof changed")
+    if fresh:
+        direct._fresh_at(checked.get("checked_at"))
+    return checked
+
+
+def jit_duplicate_proof(
+    identity: historical.RailIdentity,
+    host_duplicate: object,
+    *,
+    token: str,
+    prior_duplicate: object | None = None,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+    jobs_factory: Callable[..., Jobs] = Jobs,
+) -> dict[str, Any]:
+    """Refresh prod Kubernetes, both Jobs APIs, and mounted output at point of use."""
+    host = _duplicate(host_duplicate, identity, fresh=False)
+    prior_sha256 = None
+    if prior_duplicate is not None:
+        prior_sha256 = _jit_duplicate(
+            prior_duplicate,
+            identity,
+            host_duplicate,
+            prior_sha256=None,
+        )["sha256"]
+    names = {identity.run_name, identity.stage_name, identity.preflight_name}
+    output_root = identity.output_root
+    inventories = 0
+    for resource in ("rayjob", "raycluster", "job", "workload", "pod"):
+        result = direct._kubectl(
+            runner,
+            direct.PROD_CONTEXT,
+            "get",
+            resource,
+            "--output=json",
+        )
+        if result.returncode:
+            raise JobsError("prod10 JIT Kubernetes duplicate inventory failed")
+        inventories += 1
+        try:
+            items = json.loads(result.stdout).get("items", [])
+        except (AttributeError, ValueError) as exc:
+            raise JobsError("prod10 JIT Kubernetes duplicate inventory is invalid") from exc
+        if not isinstance(items, list):
+            raise JobsError("prod10 JIT Kubernetes duplicate inventory is invalid")
+        for item in items:
+            if not isinstance(item, dict):
+                raise JobsError("prod10 JIT Kubernetes duplicate inventory is invalid")
+            metadata = item.get("metadata", {})
+            labels = metadata.get("labels", {}) if isinstance(metadata, dict) else {}
+            annotations = metadata.get("annotations", {}) if isinstance(metadata, dict) else {}
+            values = [metadata.get("name", "")]
+            if isinstance(labels, dict):
+                values.extend(labels.values())
+            if isinstance(annotations, dict):
+                values.extend(annotations.values())
+            serialized = json.dumps(item.get("spec", {}), sort_keys=True)
+            if (
+                any(
+                    value in names or any(str(value).startswith(name + "-") for name in names)
+                    for value in values
+                )
+                or output_root in values
+                or output_root in serialized
+            ):
+                raise JobsError("prod10 JIT Kubernetes identity/output already exists")
+    api_rows = 0
+    for target in ("dev", "prod"):
+        with jobs_factory(token, base_url=API_URLS[target]) as client:
+            rows = client.all_runs()
+        api_rows += len(rows)
+        for row in rows:
+            name = str(row.get("name", ""))
+            if (
+                row.get("run_dir") == output_root
+                or name in names
+                or any(name.startswith(value + "-") for value in names)
+            ):
+                raise JobsError("prod10 JIT Jobs API history already owns this identity/output")
+    output = Path(identity.output_root)
+    if output.exists() or output.is_symlink():
+        raise JobsError("prod10 output root already exists")
+    return _seal(
+        {
+            "schema": JIT_DUPLICATE_SCHEMA,
+            "status": "jit_identity_and_output_absent",
+            "identity_sha256": identity.sealed_mapping()["sha256"],
+            "run_name": identity.run_name,
+            "output_root": identity.output_root,
+            "host_duplicate_sha256": host["sha256"],
+            "prior_jit_duplicate_sha256": prior_sha256,
+            "historical_host_kubernetes_inventories_checked": (
+                host["kubernetes_inventories_checked"]
+            ),
+            "prod_kubernetes_inventories_checked": inventories,
+            "jobs_api_targets_checked": ["dev", "prod"],
+            "jobs_api_rows_checked": api_rows,
+            "output_absent": True,
+            "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+
+
+def _jit_duplicate(
+    value: object,
+    identity: historical.RailIdentity,
+    host_duplicate: object,
+    *,
+    prior_sha256: str | None = None,
+) -> dict[str, Any]:
+    host = _duplicate(host_duplicate, identity, fresh=False)
+    checked = direct._validate_seal(value, JIT_DUPLICATE_SCHEMA)
+    if (
+        checked.get("status") != "jit_identity_and_output_absent"
+        or checked.get("identity_sha256") != identity.sealed_mapping()["sha256"]
+        or checked.get("run_name") != identity.run_name
+        or checked.get("output_root") != identity.output_root
+        or checked.get("host_duplicate_sha256") != host["sha256"]
+        or checked.get("prior_jit_duplicate_sha256") != prior_sha256
+        or checked.get("historical_host_kubernetes_inventories_checked") != 10
+        or checked.get("prod_kubernetes_inventories_checked") != 5
+        or checked.get("jobs_api_targets_checked") != ["dev", "prod"]
+        or type(checked.get("jobs_api_rows_checked")) is not int
+        or checked["jobs_api_rows_checked"] < 0
+        or checked.get("output_absent") is not True
+    ):
+        raise JobsError("prod10 JIT duplicate proof changed")
     direct._fresh_at(checked.get("checked_at"))
     return checked
 
@@ -594,10 +726,13 @@ def create_once(
     token: str,
     identity: historical.RailIdentity,
     duplicate: dict[str, Any],
+    final_duplicate: dict[str, Any],
+    host_duplicate: dict[str, Any],
     census: dict[str, Any],
+    live_preview: dict[str, Any],
+    wandb_absent: bool,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     jobs_factory: Callable[..., Jobs] = Jobs,
-    wandb_exists: Callable[[str, str, str], bool] = direct._wandb_exists_default,
 ) -> dict[str, Any]:
     """Revalidate live state, journal intent, and perform exactly one API POST."""
     bound = direct._identity(plan, identity)
@@ -628,71 +763,61 @@ def create_once(
     )
     if auth != expected_auth:
         raise JobsError("prod10 direct-v3 authorization changed")
-    absence = _duplicate(duplicate, bound)
-    output = Path(bound.output_root)
-    if output.exists() or output.is_symlink():
-        raise JobsError("prod10 output root already exists")
-    arguments = plan.get("arguments", {})
-    if not isinstance(arguments, dict) or wandb_exists(
-        arguments.get("wandb_entity", ""),
-        arguments.get("wandb_project", ""),
-        arguments.get("wandb_run_id", ""),
-    ):
-        raise JobsError("W&B run ID already exists")
+    absence_before_guard = _jit_duplicate(duplicate, bound, host_duplicate)
+    absence_before_intent = _jit_duplicate(
+        final_duplicate,
+        bound,
+        host_duplicate,
+        prior_sha256=absence_before_guard["sha256"],
+    )
+    if wandb_absent is not True:
+        raise JobsError("W&B run ID absence changed")
     plan_sha, request_sha, manifest_sha = (
         "sha256:" + digest(plan),
         "sha256:" + digest(request),
         "sha256:" + digest(expected),
     )
+    checked_live_preview = _preview_binding(
+        plan,
+        request,
+        source_preview,
+        expected,
+        live_preview,
+        context=direct.PROD_CONTEXT,
+        identity=bound,
+        fresh=True,
+    )
+    capacity = capacity_gate(plan, request, expected, census, identity=bound)
+    direct._jobs_api_prefix_guard(
+        auth["observer"],
+        operation_root=root,
+        purpose="training",
+        request=request,
+        plan_sha256=plan_sha,
+        manifest_sha256=manifest_sha,
+        gpus=request["workers"] * request["gpus_per_worker"],
+        maximum_seconds=direct.MAXIMUM_SECONDS,
+    )
+    for preview in (auth["dev_preview_refresh"], auth["prod_preview"], checked_live_preview):
+        direct._fresh_at(preview.get("checked_at"))
+    direct._write_once_fsynced(
+        journal,
+        {
+            "state": "POST_INTENT_DO_NOT_RETRY",
+            "plan_sha256": plan_sha,
+            "request_sha256": request_sha,
+            "manifest_sha256": manifest_sha,
+            "authorization_sha256": auth["sha256"],
+            "live_jobs_preview_sha256": "sha256:" + digest(source_preview),
+            "live_preview_proof": checked_live_preview,
+            "capacity_gate": capacity,
+            "duplicate_checks_before_guard": absence_before_guard,
+            "duplicate_checks_before_intent": absence_before_intent,
+            "host_duplicate_sha256": absence_before_intent["host_duplicate_sha256"],
+            "wandb_run_id_absent": True,
+        },
+    )
     with jobs_factory(token, base_url=API_URLS["prod"]) as client:
-        live_source = client.preview(request)
-        live_expected = direct.manifest(
-            plan,
-            request,
-            live_source,
-            identity=bound,
-            image_identity_receipt=auth["image_identity_receipt"],
-        )
-        if live_source != source_preview or live_expected != expected:
-            raise JobsError("prod10 live Jobs API preview changed")
-        live_preview = direct.validate_preview(
-            plan,
-            request,
-            live_source,
-            live_expected,
-            direct.server_dry_run(live_expected, context=direct.PROD_CONTEXT, runner=runner),
-            context=direct.PROD_CONTEXT,
-            identity=bound,
-            image_identity_receipt=auth["image_identity_receipt"],
-        )
-        capacity = capacity_gate(plan, request, live_expected, census, identity=bound)
-        direct._jobs_api_prefix_guard(
-            auth["observer"],
-            operation_root=root,
-            purpose="training",
-            request=request,
-            plan_sha256=plan_sha,
-            manifest_sha256=manifest_sha,
-            gpus=request["workers"] * request["gpus_per_worker"],
-            maximum_seconds=direct.MAXIMUM_SECONDS,
-        )
-        for preview in (auth["dev_preview_refresh"], auth["prod_preview"], live_preview):
-            direct._fresh_at(preview.get("checked_at"))
-        direct._write_once_fsynced(
-            journal,
-            {
-                "state": "POST_INTENT_DO_NOT_RETRY",
-                "plan_sha256": plan_sha,
-                "request_sha256": request_sha,
-                "manifest_sha256": manifest_sha,
-                "authorization_sha256": auth["sha256"],
-                "live_jobs_preview_sha256": "sha256:" + digest(live_source),
-                "live_preview_proof": live_preview,
-                "capacity_gate": capacity,
-                "duplicate_checks": absence,
-                "wandb_run_id_absent": True,
-            },
-        )
         response = client.request("POST", "/v1/runs", json=request)
     try:
         name, run_id = response["name"], str(UUID(response["job_id"]))
@@ -741,6 +866,8 @@ def create_once(
             "authorization_sha256": auth["sha256"],
             "live_preview_proof_sha256": live_preview["sha256"],
             "capacity_gate_sha256": capacity["sha256"],
+            "jit_duplicate_before_guard_sha256": absence_before_guard["sha256"],
+            "jit_duplicate_before_intent_sha256": absence_before_intent["sha256"],
             "jobs_api_run_name": name,
             "jobs_api_run_id": run_id,
             "rayjob_name": binding["rayjob_name"],

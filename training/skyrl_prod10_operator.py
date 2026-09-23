@@ -38,11 +38,14 @@ DIRECT_STAGE_RESULT_SCHEMA = "cyber_skyrl_prod10_operator_direct_stage_result_v2
 MANIFEST_RESULT_SCHEMA = "cyber_skyrl_prod10_rebound_manifest_result_v1"
 TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_termination_v1"
 FAILURE_TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_failure_v1"
+GUARD_ARCHIVE_SCHEMA = "cyber_skyrl_prod10_dead_guard_archive_v1"
+_GUARD_ARCHIVE_NAME = "TRAINING_JOBS_API_PREFIX_GUARD.launch-v3-failed.json"
+_GUARD_ARCHIVE_RECEIPT_NAME = "TRAINING_JOBS_API_PREFIX_GUARD.launch-v3-archive.json"
 OPERATOR_NAMES = {
     "stage": "chris-q38-prod10-stage-operator-v7",
     "manifest": "chris-q38-prod10-manifest-operator-v1",
     "preflight": "chris-q38-prod10-preflight-operator-v2",
-    "launch": "chris-q38-prod10-launch-operator-v3",
+    "launch": "chris-q38-prod10-launch-operator-v4",
     "inspect": "chris-q38-prod10-launch-inspect-v4",
     "probe": "chris-q38-prod10-launch-probe-v9",
 }
@@ -280,6 +283,80 @@ _LAUNCH_V3_FAILURE = {
     "resources_preserved_for_inspection": True,
     "gpus": 0,
 }
+_LAUNCH_V3_RECOVERY = {
+    "schema": "cyber_skyrl_prod10_launch_v3_recovery_binding_v1",
+    "status": "failed_operator_observed_and_released",
+    "operator_name": "chris-q38-prod10-launch-operator-v3",
+    "launch_source_head": "4aca57593c2c85621d7adbbcf601d32784621d16",
+    "recovery_source_head": "4bc0eefafb8a7912ba0472f551502028a4e6acd1",
+    "packet_sha256": (
+        "sha256:fc46c321f2b1db78b4bc16f062509f0a5e21e1066bc5d7a98d1060427729f9b5"
+    ),
+    "source_sha256": (
+        "sha256:c08891d89f1c91ba8039501998f86a21111d728e3eabfd626a5b822fd5c8a9d2"
+    ),
+    "job_manifest_sha256": (
+        "sha256:f68113d0a626c5e0011cc8074db9d0f2678707a4025297df7a46c9abffd4bd0e"
+    ),
+    "operator_job_uid": "bd8bb3f3-b792-4054-a15d-9956d29b3b8c",
+    "operator_pod_uid": "2936bdce-9893-49d3-8912-6fe068804f3c",
+    "operator_workload_uid": "3e6f36d9-e06a-45fa-9c4d-df7f21e8a82a",
+    "source_config_map_uid": "cb913fb2-e80d-4c68-b1c9-d9eea8b56033",
+    "packet_config_map_uid": "c4b4bf8f-10ea-47f8-8366-16c60dd972d6",
+    "failure_receipt_sha256": (
+        "sha256:6f7d724ae7a0a61179616871895c0e2cbcb496ef351279527c6d6fb4b6f145c1"
+    ),
+    "recovery_observer_sha256": (
+        "sha256:d5a86e98e2ac1ce7bc8adb728ade8d05839175d1a72f2a0c9c62268d37208153"
+    ),
+    "recovery_result_sha256": (
+        "sha256:62fe01f77e66983c875757c7319f2d8b232f7dbb0fd695d0f384c8d18ca415bb"
+    ),
+    "release_observed_at": "2026-09-23T10:20:59Z",
+    "terminal_status": "Failed",
+    "exit_codes": [1],
+    "restarts": 0,
+    "nested_jobs_created": 0,
+    "resources_absent": True,
+    "gpus": 0,
+}
+_INSPECT_V4_SUCCESS = {
+    "schema": "cyber_skyrl_prod10_inspect_v4_success_binding_v1",
+    "status": "operator_succeeded_and_released",
+    "operator_name": "chris-q38-prod10-launch-inspect-v4",
+    "source_head": "7bf1d68fab830ae84ab33249abdc540181ac68d6",
+    "packet_sha256": (
+        "sha256:0cc7b21d135df340138ff524ba0034cd1a6bf5b7f0f67dd23ce1f5ff9f7c106d"
+    ),
+    "source_sha256": (
+        "sha256:823461183ce50dc896d105d7cbf0652677f487c2567abb27ca69ae5c19e0d480"
+    ),
+    "job_manifest_sha256": (
+        "sha256:230f4630337519e2ab14f8fd61c6e13e67df5616c2c873d600933874faf9fb03"
+    ),
+    "operator_job_uid": "7a53969b-017b-4546-98b6-3062246306ca",
+    "operator_pod_uid": "dfc855c9-f4d7-40d3-bbb0-220510615d37",
+    "operator_workload_uid": "592d0766-199e-444d-9c9f-7932ea56810a",
+    "source_config_map_uid": "13d63940-0dc3-4a84-8247-61092992c59f",
+    "packet_config_map_uid": "73e4fa42-951a-4a7d-8163-75940cacf322",
+    "receipt_sha256": (
+        "sha256:3288695e924eeff1187c4b27d59087eea45240d067ca808a6885b965726f6656"
+    ),
+    "observer_sha256": (
+        "sha256:8f5f2e535570810bddf9b62c4a065228f6a0bbc201f6ec9c0f7b66e674bf9a12"
+    ),
+    "result_sha256": (
+        "sha256:155dacd9efe4f1588ade9b7f41b8a50d173bca7587115bfe065b1e7d9985099d"
+    ),
+    "launch_boundary": "after_guard_before_intent",
+    "contents_read": False,
+    "terminal_status": "Succeeded",
+    "exit_codes": [0],
+    "restarts": 0,
+    "nested_jobs_created": 0,
+    "resources_absent": True,
+    "gpus": 0,
+}
 _PREFLIGHT_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_preflight_v1_failure_recovery_v1",
     "status": "failed_closed_released",
@@ -467,6 +544,16 @@ def probe_v9_success_binding() -> dict[str, Any]:
 def launch_v3_failure_binding() -> dict[str, Any]:
     """Bind the exact failed v3 outer while its owned resources are preserved."""
     return _seal(_LAUNCH_V3_FAILURE)
+
+
+def launch_v3_recovery_binding() -> dict[str, Any]:
+    """Bind the exact-UID release of the failed v3 outer and its owned objects."""
+    return _seal(_LAUNCH_V3_RECOVERY)
+
+
+def inspect_v4_success_binding() -> dict[str, Any]:
+    """Bind the released metadata-only proof of the v3 SFS marker boundary."""
+    return _seal(_INSPECT_V4_SUCCESS)
 
 
 def _write_once(path: Path, value: dict[str, Any]) -> None:
@@ -658,6 +745,10 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
             raise ValueError("prod10 launch probe-v8 predecessor changed")
         if packet.get("probe_v9_success") != probe_v9_success_binding():
             raise ValueError("prod10 launch probe-v9 predecessor changed")
+        if packet.get("launch_v3_recovery") != launch_v3_recovery_binding():
+            raise ValueError("prod10 launch-v3 recovery predecessor changed")
+        if packet.get("inspect_v4_success") != inspect_v4_success_binding():
+            raise ValueError("prod10 launch inspector-v4 predecessor changed")
         _launch_packet_inputs(packet)
     return packet
 
@@ -1860,15 +1951,62 @@ def run_probe(
     )
 
 
-def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> dict[str, Any]:
-    """Consume the sealed direct-v3 preflight and perform the sole GPU POST."""
-    pre_guard = _pre_guard_launch(packet, runner)
-    identity = pre_guard["identity"]
-    plan, request = pre_guard["plan"], pre_guard["request"]
-    preflight, revalidation = pre_guard["preflight"], pre_guard["revalidation"]
-    image_identity = pre_guard["image_identity"]
-    source_preview, expected = pre_guard["source_preview"], pre_guard["expected"]
-    operation_root = pre_guard["operation_root"]
+def _archive_launch_v3_guard(
+    packet: dict[str, Any],
+    *,
+    identity: historical.RailIdentity,
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    expected: dict[str, Any],
+    operation_root: Path,
+    jit_before_guard: dict[str, Any],
+    jit_before_intent: dict[str, Any],
+    runner: InClusterKubernetesRunner,
+) -> dict[str, Any]:
+    """Archive the exact dead v3 guard once after fresh absence revalidation."""
+    recovery = launch_v3_recovery_binding()
+    inspection = inspect_v4_success_binding()
+    first_absence = launch_direct._jit_duplicate(
+        jit_before_guard,
+        identity,
+        packet["duplicate_proof"],
+    )
+    final_absence = launch_direct._jit_duplicate(
+        jit_before_intent,
+        identity,
+        packet["duplicate_proof"],
+        prior_sha256=first_absence["sha256"],
+    )
+    guard_path = direct.jobs_api_guard_path(operation_root, "training")
+    binding_path = hardening.creator_binding_path(operation_root, "training")
+    journal_path = operation_root / "PROD10_DIRECT_V3_CREATE.jsonl"
+    archive_path = operation_root / _GUARD_ARCHIVE_NAME
+    receipt_path = operation_root / _GUARD_ARCHIVE_RECEIPT_NAME
+    source_exists = guard_path.exists() or guard_path.is_symlink()
+    archive_exists = archive_path.exists() or archive_path.is_symlink()
+    if (
+        source_exists == archive_exists
+        or binding_path.exists()
+        or binding_path.is_symlink()
+        or journal_path.exists()
+        or journal_path.is_symlink()
+        or receipt_path.exists()
+        or receipt_path.is_symlink()
+    ):
+        raise OperatorFailure("launch_v3_guard_archive_state_rejected")
+    candidate = guard_path if source_exists else archive_path
+    try:
+        file_identity = candidate.lstat()
+        stored = json.loads(candidate.read_bytes())
+    except (OSError, ValueError) as exc:
+        raise OperatorFailure("launch_v3_guard_archive_read_rejected") from exc
+    if (
+        candidate.is_symlink()
+        or not stat.S_ISREG(file_identity.st_mode)
+        or (file_identity.st_uid, file_identity.st_gid) != (RUNTIME_UID, RUNTIME_GID)
+        or stat.S_IMODE(file_identity.st_mode) != 0o600
+    ):
+        raise OperatorFailure("launch_v3_guard_archive_file_rejected")
     guard = cleanup.JobsApiPrefixGuard(
         context=direct.PROD_CONTEXT,
         namespace=direct.NAMESPACE,
@@ -1879,11 +2017,69 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         manifest_sha256="sha256:" + digest(expected),
         maximum_seconds=direct.MAXIMUM_SECONDS,
         expected_gpus=request["workers"] * request["gpus_per_worker"],
-        armed_path=direct.jobs_api_guard_path(operation_root, "training"),
-        binding_path=hardening.creator_binding_path(operation_root, "training"),
+        armed_path=guard_path,
+        binding_path=binding_path,
         run=runner,
     )
-    armed = guard.arm()
+    checked = guard._validate_armed(stored)
+    recovered_after_rename = not source_exists
+    if source_exists:
+        try:
+            os.rename(guard_path, archive_path)
+        except OSError as exc:
+            raise OperatorFailure("launch_v3_guard_archive_rename_rejected") from exc
+    parent = os.open(operation_root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(parent)
+    finally:
+        os.close(parent)
+    try:
+        archive_identity = archive_path.lstat()
+        archived = json.loads(archive_path.read_bytes())
+    except (OSError, ValueError) as exc:
+        raise OperatorFailure("launch_v3_guard_archive_postcondition_rejected") from exc
+    if (
+        archive_path.is_symlink()
+        or not stat.S_ISREG(archive_identity.st_mode)
+        or (archive_identity.st_dev, archive_identity.st_ino)
+        != (file_identity.st_dev, file_identity.st_ino)
+        or (archive_identity.st_uid, archive_identity.st_gid) != (RUNTIME_UID, RUNTIME_GID)
+        or stat.S_IMODE(archive_identity.st_mode) != 0o600
+        or archived != checked
+    ):
+        raise OperatorFailure("launch_v3_guard_archive_postcondition_rejected")
+    receipt = _seal(
+        {
+            "schema": GUARD_ARCHIVE_SCHEMA,
+            "status": "dead_v3_guard_archived_create_once",
+            "launch_v3_recovery_sha256": recovery["sha256"],
+            "inspect_v4_success_sha256": inspection["sha256"],
+            "host_duplicate_sha256": packet["duplicate_proof"]["sha256"],
+            "jit_duplicate_before_guard_sha256": first_absence["sha256"],
+            "jit_duplicate_before_intent_sha256": final_absence["sha256"],
+            "guard_sha256": checked["sha256"],
+            "archive_name": archive_path.name,
+            "archived_via_atomic_rename": True,
+            "recovered_after_atomic_rename": recovered_after_rename,
+            "source_guard_absent": not guard_path.exists() and not guard_path.is_symlink(),
+            "archived_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+    if receipt["source_guard_absent"] is not True:
+        raise OperatorFailure("launch_v3_guard_archive_source_still_present")
+    _write_once(receipt_path, receipt)
+    return receipt
+
+
+def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> dict[str, Any]:
+    """Consume the sealed direct-v3 preflight and perform the sole GPU POST."""
+    pre_guard = _pre_guard_launch(packet, runner)
+    identity = pre_guard["identity"]
+    plan, request = pre_guard["plan"], pre_guard["request"]
+    preflight, revalidation = pre_guard["preflight"], pre_guard["revalidation"]
+    image_identity = pre_guard["image_identity"]
+    source_preview, expected = pre_guard["source_preview"], pre_guard["expected"]
+    operation_root = pre_guard["operation_root"]
     prod_preview = direct.validate_preview(
         plan,
         request,
@@ -1908,6 +2104,79 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         identity=identity,
         jobs_factory=Jobs,
     )
+    jit_before_guard = launch_direct.jit_duplicate_proof(
+        identity,
+        packet["duplicate_proof"],
+        token=token,
+        runner=runner,
+        jobs_factory=Jobs,
+    )
+    arguments = plan.get("arguments", {})
+    if not isinstance(arguments, dict) or direct._wandb_exists_default(
+        arguments.get("wandb_entity", ""),
+        arguments.get("wandb_project", ""),
+        arguments.get("wandb_run_id", ""),
+    ):
+        raise OperatorFailure("launch_wandb_run_exists")
+    with Jobs(token, base_url=launch_direct.API_URLS["prod"]) as client:
+        live_source = client.preview(request)
+    live_expected = direct.manifest(
+        plan,
+        request,
+        live_source,
+        identity=identity,
+        image_identity_receipt=image_identity,
+    )
+    if live_source != source_preview or live_expected != expected:
+        raise OperatorFailure("launch_live_preview_changed")
+    live_preview = direct.validate_preview(
+        plan,
+        request,
+        live_source,
+        live_expected,
+        direct.server_dry_run(live_expected, context=direct.PROD_CONTEXT, runner=runner),
+        context=direct.PROD_CONTEXT,
+        identity=identity,
+        image_identity_receipt=image_identity,
+    )
+    fresh_capacity = _fresh_capacity_census(request, runner)
+    launch_direct.capacity_gate(plan, request, expected, fresh_capacity, identity=identity)
+    for preview in (dev_refresh, prod_preview, live_preview):
+        direct._fresh_at(preview.get("checked_at"))
+    jit_before_intent = launch_direct.jit_duplicate_proof(
+        identity,
+        packet["duplicate_proof"],
+        token=token,
+        prior_duplicate=jit_before_guard,
+        runner=runner,
+        jobs_factory=Jobs,
+    )
+    guard_archive = _archive_launch_v3_guard(
+        packet,
+        identity=identity,
+        plan=plan,
+        request=request,
+        expected=expected,
+        operation_root=operation_root,
+        jit_before_guard=jit_before_guard,
+        jit_before_intent=jit_before_intent,
+        runner=runner,
+    )
+    guard = cleanup.JobsApiPrefixGuard(
+        context=direct.PROD_CONTEXT,
+        namespace=direct.NAMESPACE,
+        run_name_prefix=request["name"],
+        run_dir=request["run_dir"],
+        image=request["image"],
+        plan_sha256="sha256:" + digest(plan),
+        manifest_sha256="sha256:" + digest(expected),
+        maximum_seconds=direct.MAXIMUM_SECONDS,
+        expected_gpus=request["workers"] * request["gpus_per_worker"],
+        armed_path=direct.jobs_api_guard_path(operation_root, "training"),
+        binding_path=hardening.creator_binding_path(operation_root, "training"),
+        run=runner,
+    )
+    armed = guard.arm()
     authorization = launch_direct.authorize(
         plan,
         request,
@@ -1921,7 +2190,6 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         observer=armed,
         identity=identity,
     )
-    fresh_capacity = _fresh_capacity_census(request, runner)
     created = launch_direct.create_once(
         operation_root,
         plan,
@@ -1934,7 +2202,11 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         runner=runner,
         jobs_factory=Jobs,
         census=fresh_capacity,
-        duplicate=packet["duplicate_proof"],
+        duplicate=jit_before_guard,
+        final_duplicate=jit_before_intent,
+        host_duplicate=packet["duplicate_proof"],
+        live_preview=live_preview,
+        wandb_absent=True,
     )
     observed = _observe_created_run(operation_root, plan, created, runner=runner)
     return _seal(
@@ -1946,6 +2218,8 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
             "preflight_result_sha256": preflight["sha256"],
             "preflight_revalidation_sha256": revalidation["sha256"],
             "authorization_sha256": authorization["sha256"],
+            "guard_archive_sha256": guard_archive["sha256"],
+            "jit_duplicate_before_guard_sha256": jit_before_guard["sha256"],
             "created": created,
             "exact_observer": observed,
             "host_capacity_census_sha256": packet["capacity_census"]["sha256"],

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -164,7 +165,7 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
     monkeypatch.setattr(training, "job_request", lambda _plan: request)
     monkeypatch.setattr(launch_direct, "_preflight_launch", lambda value, *_args, **_kwargs: value)
     monkeypatch.setattr(direct, "_source", lambda value: value)
-    monkeypatch.setattr(launch_direct, "_duplicate", lambda value, _identity: value)
+    monkeypatch.setattr(launch_direct, "_duplicate", lambda value, _identity, **_kwargs: value)
     preflight = direct._seal({"schema": direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA, "gpus": 0})
     preview = direct._seal(
         {
@@ -198,7 +199,7 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
     container = package.job["spec"]["template"]["spec"]["containers"][0]
 
     assert proof["phase"] == "launch"
-    assert proof["name"] == "chris-q38-prod10-launch-operator-v3"
+    assert proof["name"] == "chris-q38-prod10-launch-operator-v4"
     assert proof["failure_alerts"] == "off"
     assert proof["priority"] == "c1"
     assert proof["queue_priority"] == "q1"
@@ -276,6 +277,8 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
         ("probe_v7_failure", "probe-v7 predecessor"),
         ("probe_v8_failure", "probe-v8 predecessor"),
         ("probe_v9_success", "probe-v9 predecessor"),
+        ("launch_v3_recovery", "launch-v3 recovery predecessor"),
+        ("inspect_v4_success", "inspector-v4 predecessor"),
     ):
         changed = copy.deepcopy(packet)
         changed[key]["operator_job_uid"] = "00000000-0000-4000-8000-000000000001"
@@ -283,6 +286,30 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
         changed = operator._seal(changed)
         with pytest.raises(ValueError, match=match):
             operator_job.build_operator_package(changed)
+
+    freshness: list[bool] = []
+
+    def duplicate(value: dict, _identity: object, *, fresh: bool = True) -> dict:
+        freshness.append(fresh)
+        if fresh:
+            raise JobsError("stale host proof")
+        return value
+
+    monkeypatch.setattr(launch_direct, "_duplicate", duplicate)
+    with pytest.raises(JobsError, match="stale host proof"):
+        operator_job.launch_packet(
+            identity=identity,
+            plan=plan,
+            request=request,
+            preflight_launch_result=preflight,
+            source_preview={"manifest_yaml": "{}"},
+            manifest_sha256="sha256:" + "1" * 64,
+            dev_preview=preview,
+            duplicate_proof=packet["duplicate_proof"],
+            capacity_census=capacity,
+        )
+    assert operator_job._validate_packet_semantics(packet) == packet
+    assert freshness == [True, False]
 
 
 def test_prod10_launch_recovery_observer_binds_existing_job_at_construction(
@@ -591,7 +618,7 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
         launch_direct, "_preflight_launch", lambda value, *_args, **_kw: value
     )
     monkeypatch.setattr(direct, "_source", lambda value: value)
-    monkeypatch.setattr(launch_direct, "_duplicate", lambda value, _identity: value)
+    monkeypatch.setattr(launch_direct, "_duplicate", lambda value, _identity, **_kwargs: value)
     source = operator_job.launch_packet(
         identity=identity,
         plan=plan,
@@ -769,6 +796,328 @@ def test_prod10_launch_uses_shared_pre_guard_path_before_any_guard(
         operator.run_launch({}, runner=object())
 
 
+def test_prod10_jit_duplicate_rechecks_prod_kubernetes_both_apis_and_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity = historical.load_identity(IDENTITY)
+    host = direct._seal(
+        {
+            "schema": launch_direct.DUPLICATE_SCHEMA,
+            "status": "identity_and_output_absent",
+            "identity_sha256": identity.sealed_mapping()["sha256"],
+            "run_name": identity.run_name,
+            "output_root": identity.output_root,
+            "kubernetes_inventories_checked": 10,
+            "jobs_api_rows_checked": 0,
+            "checked_at": "2026-09-23T00:00:00Z",
+        }
+    )
+    items: list[object] = []
+    contexts: list[str] = []
+
+    def runner(command: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        context = command[command.index("--context") + 1]
+        contexts.append(context)
+        return subprocess.CompletedProcess(
+            command, 0, stdout=json.dumps({"items": items}), stderr=""
+        )
+
+    bases: list[str] = []
+    rows: list[dict] = []
+
+    class FakeJobs:
+        def __init__(self, _token: str, *, base_url: str):
+            bases.append(base_url)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def all_runs(self):
+            return rows
+
+    first = launch_direct.jit_duplicate_proof(
+        identity, host, token="token", runner=runner, jobs_factory=FakeJobs
+    )
+    second = launch_direct.jit_duplicate_proof(
+        identity,
+        host,
+        token="token",
+        prior_duplicate=first,
+        runner=runner,
+        jobs_factory=FakeJobs,
+    )
+    assert contexts == [direct.PROD_CONTEXT] * 10
+    assert bases == [launch_direct.API_URLS["dev"], launch_direct.API_URLS["prod"]] * 2
+    assert second["prior_jit_duplicate_sha256"] == first["sha256"]
+    assert second["prod_kubernetes_inventories_checked"] == 5
+
+    items.append({"metadata": {"name": identity.run_name}, "spec": {}})
+    with pytest.raises(JobsError, match="Kubernetes identity/output"):
+        launch_direct.jit_duplicate_proof(
+            identity, host, token="token", runner=runner, jobs_factory=FakeJobs
+        )
+    items[:] = [None]
+    with pytest.raises(JobsError, match="inventory is invalid"):
+        launch_direct.jit_duplicate_proof(
+            identity, host, token="token", runner=runner, jobs_factory=FakeJobs
+        )
+    items.clear()
+    rows.append({"name": identity.run_name, "run_dir": "other"})
+    with pytest.raises(JobsError, match="Jobs API history"):
+        launch_direct.jit_duplicate_proof(
+            identity, host, token="token", runner=runner, jobs_factory=FakeJobs
+        )
+    rows.clear()
+    monkeypatch.setattr(
+        launch_direct,
+        "Path",
+        lambda _value: SimpleNamespace(exists=lambda: True, is_symlink=lambda: False),
+    )
+    with pytest.raises(JobsError, match="output root already exists"):
+        launch_direct.jit_duplicate_proof(
+            identity, host, token="token", runner=runner, jobs_factory=FakeJobs
+        )
+
+
+def test_prod10_dead_guard_is_atomically_archived_and_crash_reconciled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    identity = historical.load_identity(IDENTITY)
+    operation_root = tmp_path / "operation"
+    operation_root.mkdir()
+    plan = {"schema": training.SCHEMA}
+    request = {
+        "name": identity.run_name,
+        "run_dir": identity.output_root,
+        "image": "image@sha256:" + "1" * 64,
+        "workers": 1,
+        "gpus_per_worker": 8,
+    }
+    expected = {"kind": "RayJob"}
+    packet = {"duplicate_proof": {"sha256": "sha256:" + "2" * 64}}
+    first = {"sha256": "sha256:" + "3" * 64}
+    final = {"sha256": "sha256:" + "4" * 64}
+    guard_path = direct.jobs_api_guard_path(operation_root, "training")
+    archive_path = operation_root / operator._GUARD_ARCHIVE_NAME
+    receipt_path = operation_root / operator._GUARD_ARCHIVE_RECEIPT_NAME
+    stored = operator._seal({"schema": cleanup.JOBS_API_PREFIX_GUARD_SCHEMA})
+    operator._write_once(guard_path, stored)
+    source_inode = guard_path.stat().st_ino
+    monkeypatch.setattr(operator, "RUNTIME_UID", os.getuid())
+    monkeypatch.setattr(operator, "RUNTIME_GID", os.getgid())
+    monkeypatch.setattr(
+        launch_direct,
+        "_jit_duplicate",
+        lambda value, *_args, **_kwargs: value,
+    )
+    monkeypatch.setattr(
+        cleanup.JobsApiPrefixGuard,
+        "_validate_armed",
+        lambda _self, value: value,
+    )
+
+    journal = operation_root / "PROD10_DIRECT_V3_CREATE.jsonl"
+    journal.write_text("intent")
+    with pytest.raises(operator.OperatorFailure, match="archive_state"):
+        operator._archive_launch_v3_guard(
+            packet,
+            identity=identity,
+            plan=plan,
+            request=request,
+            expected=expected,
+            operation_root=operation_root,
+            jit_before_guard=first,
+            jit_before_intent=final,
+            runner=object(),
+        )
+    journal.unlink()
+
+    receipt = operator._archive_launch_v3_guard(
+        packet,
+        identity=identity,
+        plan=plan,
+        request=request,
+        expected=expected,
+        operation_root=operation_root,
+        jit_before_guard=first,
+        jit_before_intent=final,
+        runner=object(),
+    )
+    assert not guard_path.exists()
+    assert archive_path.stat().st_ino == source_inode
+    assert json.loads(archive_path.read_bytes()) == stored
+    assert receipt["archived_via_atomic_rename"] is True
+    assert receipt["recovered_after_atomic_rename"] is False
+
+    receipt_path.unlink()
+    recovered = operator._archive_launch_v3_guard(
+        packet,
+        identity=identity,
+        plan=plan,
+        request=request,
+        expected=expected,
+        operation_root=operation_root,
+        jit_before_guard=first,
+        jit_before_intent=final,
+        runner=object(),
+    )
+    assert recovered["recovered_after_atomic_rename"] is True
+    assert archive_path.stat().st_ino == source_inode
+    with pytest.raises(operator.OperatorFailure, match="archive_state"):
+        operator._archive_launch_v3_guard(
+            packet,
+            identity=identity,
+            plan=plan,
+            request=request,
+            expected=expected,
+            operation_root=operation_root,
+            jit_before_guard=first,
+            jit_before_intent=final,
+            runner=object(),
+        )
+
+
+def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity = historical.load_identity(IDENTITY)
+    plan = {
+        "schema": training.SCHEMA,
+        "arguments": {"wandb_entity": "e", "wandb_project": "p", "wandb_run_id": "r"},
+    }
+    request = {
+        "name": identity.run_name,
+        "run_dir": identity.output_root,
+        "image": "image@sha256:" + "1" * 64,
+        "workers": 1,
+        "gpus_per_worker": 8,
+    }
+    source, expected = {"name": identity.run_name + "-00000000"}, {"kind": "RayJob"}
+    preview = {"checked_at": "2026-09-23T10:00:00Z", "sha256": "sha256:" + "2" * 64}
+    events: list[str] = []
+    monkeypatch.setenv("FLEET_API_KEY", "token")
+    monkeypatch.setenv("WANDB_API_KEY", "token")
+    monkeypatch.setattr(
+        operator,
+        "_pre_guard_launch",
+        lambda *_args: {
+            "identity": identity,
+            "plan": plan,
+            "request": request,
+            "preflight": {"sha256": "sha256:" + "a" * 64},
+            "revalidation": {"sha256": "sha256:" + "b" * 64},
+            "image_identity": {},
+            "source_preview": source,
+            "expected": expected,
+            "operation_root": Path("/operation"),
+        },
+    )
+    monkeypatch.setattr(direct, "server_dry_run", lambda *_args, **_kwargs: expected)
+    monkeypatch.setattr(direct, "validate_preview", lambda *_args, **_kwargs: preview)
+    monkeypatch.setattr(
+        launch_direct,
+        "refresh_dev_preview",
+        lambda *_args, **_kwargs: events.append("dev_refresh") or preview,
+    )
+    jit = iter(
+        [
+            {"sha256": "sha256:" + "3" * 64},
+            {"sha256": "sha256:" + "4" * 64},
+        ]
+    )
+    monkeypatch.setattr(
+        launch_direct,
+        "jit_duplicate_proof",
+        lambda *_args, **_kwargs: events.append("jit") or next(jit),
+    )
+    monkeypatch.setattr(
+        direct,
+        "_wandb_exists_default",
+        lambda *_args: events.append("wandb") or False,
+    )
+
+    class FakeJobs:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def preview(self, _request):
+            events.append("live_preview")
+            return source
+
+    monkeypatch.setattr(operator, "Jobs", FakeJobs)
+    monkeypatch.setattr(direct, "manifest", lambda *_args, **_kwargs: expected)
+    monkeypatch.setattr(
+        operator,
+        "_fresh_capacity_census",
+        lambda *_args: events.append("capacity") or {},
+    )
+    monkeypatch.setattr(launch_direct, "capacity_gate", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(direct, "_fresh_at", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        operator,
+        "_archive_launch_v3_guard",
+        lambda *_args, **_kwargs: events.append("archive")
+        or {"sha256": "sha256:" + "5" * 64},
+    )
+
+    class FakeGuard:
+        def __init__(self, **_kwargs):
+            events.append("guard_construct")
+
+        def arm(self):
+            events.append("guard_arm")
+            return {}
+
+    monkeypatch.setattr(cleanup, "JobsApiPrefixGuard", FakeGuard)
+    monkeypatch.setattr(
+        launch_direct,
+        "authorize",
+        lambda *_args, **_kwargs: events.append("authorize") or {"sha256": "sha256:" + "6" * 64},
+    )
+    monkeypatch.setattr(
+        launch_direct,
+        "create_once",
+        lambda *_args, **_kwargs: events.append("create_once")
+        or {"capacity_gate_sha256": "sha256:" + "7" * 64, "gpus": 8},
+    )
+    monkeypatch.setattr(
+        operator,
+        "_observe_created_run",
+        lambda *_args, **_kwargs: events.append("observe") or {},
+    )
+    packet = {
+        "sha256": "sha256:" + "8" * 64,
+        "dev_preview": {},
+        "duplicate_proof": {},
+        "capacity_census": {"sha256": "sha256:" + "9" * 64},
+    }
+    result = operator.run_launch(packet, runner=object())
+    assert result["status"] == "gpu_run_succeeded_and_released"
+    assert events == [
+        "dev_refresh",
+        "jit",
+        "wandb",
+        "live_preview",
+        "capacity",
+        "jit",
+        "archive",
+        "guard_construct",
+        "guard_arm",
+        "authorize",
+        "create_once",
+        "observe",
+    ]
+
+
 def test_prod10_probe_rechecks_markers_and_stops_before_guard(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -849,7 +1198,25 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
     )
     monkeypatch.setattr(operator.hardening, "training_operation_root", lambda _plan: root)
     monkeypatch.setattr(launch_direct, "authorize", lambda *_args, **_kwargs: auth)
-    monkeypatch.setattr(launch_direct, "_duplicate", lambda value, _identity: value)
+    monkeypatch.setattr(launch_direct, "_duplicate", lambda value, _identity, **_kwargs: value)
+    monkeypatch.setattr(
+        launch_direct,
+        "_jit_duplicate",
+        lambda value, _identity, _host, **_kwargs: value,
+    )
+    jit_before_guard = {
+        "sha256": "sha256:" + "5" * 64,
+        "host_duplicate_sha256": "sha256:" + "6" * 64,
+    }
+    jit_before_intent = {
+        "sha256": "sha256:" + "7" * 64,
+        "host_duplicate_sha256": "sha256:" + "6" * 64,
+    }
+    monkeypatch.setattr(
+        launch_direct,
+        "jit_duplicate_proof",
+        lambda *_args, **_kwargs: jit_before_intent,
+    )
     monkeypatch.setattr(direct, "manifest", lambda *_args, **_kwargs: expected)
     monkeypatch.setattr(direct, "server_dry_run", lambda *_args, **_kwargs: expected)
     live_preview = {
@@ -857,6 +1224,7 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
         "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
     }
     monkeypatch.setattr(direct, "validate_preview", lambda *_args, **_kwargs: live_preview)
+    monkeypatch.setattr(launch_direct, "_preview_binding", lambda *_args, **_kwargs: live_preview)
     monkeypatch.setattr(
         launch_direct, "capacity_gate", lambda *_args, **_kwargs: {"sha256": "sha256:" + "3" * 64}
     )
@@ -905,10 +1273,13 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
         auth,
         token="token",
         identity=identity,
-        duplicate={},
+        duplicate=jit_before_guard,
+        final_duplicate=jit_before_intent,
+        host_duplicate={},
         census={},
+        live_preview=live_preview,
+        wandb_absent=True,
         jobs_factory=FakeJobs,
-        wandb_exists=lambda *_args: False,
     )
     assert posts == [("POST", "/v1/runs")]
     assert created["failure_alerts"] == "off"
@@ -922,10 +1293,13 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
             auth,
             token="token",
             identity=identity,
-            duplicate={},
+            duplicate=jit_before_guard,
+            final_duplicate=jit_before_intent,
+            host_duplicate={},
             census={},
+            live_preview=live_preview,
+            wandb_absent=True,
             jobs_factory=FakeJobs,
-            wandb_exists=lambda *_args: False,
         )
     assert len(posts) == 1
 

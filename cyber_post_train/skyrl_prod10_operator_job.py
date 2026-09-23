@@ -294,6 +294,7 @@ def launch_packet(
     dev_preview: dict[str, Any],
     duplicate_proof: dict[str, Any],
     capacity_census: dict[str, Any],
+    fresh_duplicate: bool = True,
 ) -> dict[str, Any]:
     direct._identity(plan, identity)
     if training.job_request(plan) != request:
@@ -306,7 +307,7 @@ def launch_packet(
     )
     direct._source(source_preview)
     direct._validate_seal(dev_preview, direct.PREVIEW_SCHEMA)
-    duplicate = launch_direct._duplicate(duplicate_proof, identity)
+    duplicate = launch_direct._duplicate(duplicate_proof, identity, fresh=fresh_duplicate)
     if re.fullmatch(r"sha256:[0-9a-f]{64}", manifest_sha256) is None:
         raise ValueError("prod10 launch manifest digest changed")
     return _seal(
@@ -329,6 +330,8 @@ def launch_packet(
             "probe_v7_failure": operator.probe_v7_failure_binding(),
             "probe_v8_failure": operator.probe_v8_failure_binding(),
             "probe_v9_success": operator.probe_v9_success_binding(),
+            "launch_v3_recovery": operator.launch_v3_recovery_binding(),
+            "inspect_v4_success": operator.inspect_v4_success_binding(),
         }
     )
 
@@ -435,6 +438,7 @@ def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
             dev_preview=checked["dev_preview"],
             duplicate_proof=checked["duplicate_proof"],
             capacity_census=checked["capacity_census"],
+            fresh_duplicate=False,
         )
     if checked != expected:
         raise ValueError("prod10 operator packet differs from current exact renderer")
