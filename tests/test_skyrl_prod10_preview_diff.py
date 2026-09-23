@@ -7,6 +7,7 @@ from types import SimpleNamespace
 import pytest
 
 from cyber_post_train import skyrl_prod10_operator_job as operator_job
+from training import dev_cleanup_observer as cleanup
 from training import skyrl_prod10_operator as operator
 from training import skyrl_prod10_preview_diff as preview_diff
 
@@ -226,4 +227,17 @@ def test_sanitized_difference_receipt_stays_below_termination_limit() -> None:
         }
     )
     assert len((json.dumps(result, sort_keys=True, separators=(",", ":")) + "\n").encode()) < 3900
-    assert operator.OPERATOR_NAMES["preview-diff"] == "chris-q38-prod10-preview-diff-v1"
+    assert operator.OPERATOR_NAMES["preview-diff"] == "chris-q38-prod10-preview-diff-v2"
+
+
+def test_observer_accepts_only_completed_preview_diagnostic() -> None:
+    completed = preview_diff._seal(
+        {"schema": preview_diff.RESULT_SCHEMA, "status": "diagnostic_completed"}
+    )
+    fail_closed = preview_diff._seal(
+        {"schema": preview_diff.RESULT_SCHEMA, "status": "diagnostic_fail_closed"}
+    )
+    assert cleanup._validated_receipt(json.dumps(completed), kind="job") == completed
+    assert cleanup._receipt_execution_accepted(completed) is True
+    assert cleanup._validated_receipt(json.dumps(fail_closed), kind="job") == fail_closed
+    assert cleanup._receipt_execution_accepted(fail_closed) is False

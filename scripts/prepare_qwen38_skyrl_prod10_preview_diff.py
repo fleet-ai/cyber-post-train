@@ -82,6 +82,44 @@ def prepare(args: argparse.Namespace) -> dict:
     if {**host, "file_sha256": host_file_sha} != operator.host_preview_recheck_binding():
         raise ValueError("host preview recheck binding changed")
 
+    v1 = args.v1_operation_directory
+    v1_binding = operator.preview_diff_v1_result_binding()
+    v1_armed = _load(v1 / "OPERATOR_OBSERVER_ARMED.json")
+    v1_creator = _load(v1 / "OPERATOR_OBSERVER_ARMED.json.created.json")
+    v1_observer = _load(v1 / "OPERATOR_OBSERVER_RESULT.json")
+    if (
+        "sha256:" + hashlib.sha256((v1 / "OPERATOR_CREATE.jsonl").read_bytes()).hexdigest()
+        != v1_binding["create_journal_file_sha256"]
+        or "sha256:"
+        + hashlib.sha256((v1 / "OPERATOR_OBSERVER_ARMED.json").read_bytes()).hexdigest()
+        != v1_binding["observer_armed_file_sha256"]
+        or v1_armed.get("sha256") != v1_binding["observer_armed_sha256"]
+        or "sha256:"
+        + hashlib.sha256(
+            (v1 / "OPERATOR_OBSERVER_ARMED.json.created.json").read_bytes()
+        ).hexdigest()
+        != v1_binding["creator_binding_file_sha256"]
+        or v1_creator.get("sha256") != v1_binding["creator_binding_sha256"]
+        or "sha256:"
+        + hashlib.sha256((v1 / "OPERATOR_OBSERVER_RESULT.json").read_bytes()).hexdigest()
+        != v1_binding["observer_result_file_sha256"]
+        or v1_observer.get("sha256") != v1_binding["observer_result_sha256"]
+        or v1_observer.get("uid") != v1_binding["operator_job_uid"]
+        or v1_observer.get("name") != v1_binding["operator_name"]
+        or v1_observer.get("pod_names") != [v1_binding["operator_pod_name"]]
+        or v1_observer.get("pod_uids") != [v1_binding["operator_pod_uid"]]
+        or v1_observer.get("workload_name") != v1_binding["operator_workload_name"]
+        or v1_observer.get("workload_uid") != v1_binding["operator_workload_uid"]
+        or v1_observer.get("receipt") is not None
+        or v1_observer.get("status") != "released_without_accepted_execution"
+        or v1_observer.get("terminal_status") != "Succeeded"
+        or v1_observer.get("exit_codes") != [0]
+        or v1_observer.get("restarts") != 0
+        or v1_observer.get("peak_gpus") != 0
+        or v1_observer.get("release_observed_at") != v1_binding["release_observed_at"]
+    ):
+        raise ValueError("preview-difference v1 terminal evidence changed")
+
     identity_path = root / "configs/qualification/qwen38-rl-reward-canary-prod10-identity-v1.json"
     identity = historical.load_identity(identity_path)
     image_body = {
@@ -156,6 +194,7 @@ def prepare(args: argparse.Namespace) -> dict:
         "expected_submitter_identity_proof_sha256": submitter["sha256"],
         "launch_v9_failure_sha256": operator.launch_v9_failure_binding()["sha256"],
         "host_preview_recheck_file_sha256": HOST_RECHECK_FILE_SHA256,
+        "preview_diff_v1_result_sha256": v1_binding["sha256"],
         "packet_sha256": packet["sha256"],
         "package": proof,
         "preview_sha256": [value["sha256"] for value in previews],
@@ -175,6 +214,7 @@ def parser() -> argparse.ArgumentParser:
     value.add_argument("--source-root", type=Path, required=True)
     value.add_argument("--source-head", required=True)
     value.add_argument("--v9-operation-directory", type=Path, required=True)
+    value.add_argument("--v1-operation-directory", type=Path, required=True)
     value.add_argument("--operation-directory", type=Path, required=True)
     return value
 

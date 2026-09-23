@@ -1204,6 +1204,7 @@ def _validated_receipt(message: object, *, kind: str) -> dict | None:
             "cyber_skyrl_prod10_rebound_manifest_result_v1",
             "cyber_skyrl_prod10_operator_failure_v1",
             "cyber_skyrl_prod10_bootstrap_failure_v1",
+            "cyber_skyrl_prod10_preview_difference_result_v1",
         },
         "fleetjob": {
             "cyber_skyrl_topology_probe_receipt_v1",
@@ -1222,6 +1223,8 @@ def _validated_receipt(message: object, *, kind: str) -> dict | None:
 def _receipt_execution_accepted(value: dict | None) -> bool:
     if value is None:
         return False
+    if value.get("schema") == "cyber_skyrl_prod10_preview_difference_result_v1":
+        return value.get("status") == "diagnostic_completed"
     if value.get("schema") != prod8.RECEIPT_SCHEMA:
         return value.get("status") in {
             "passed",
@@ -1742,9 +1745,7 @@ class Observer:
             and labels.get("kueue.x-k8s.io/priority-class") == "q1"
         )
         workloads = (
-            self._list(
-                "workload", "--selector", f"kueue.x-k8s.io/job-uid={self.snapshot.uid}"
-            )
+            self._list("workload", "--selector", f"kueue.x-k8s.io/job-uid={self.snapshot.uid}")
             if queued
             else []
         )

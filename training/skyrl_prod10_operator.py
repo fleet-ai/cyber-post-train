@@ -51,7 +51,7 @@ OPERATOR_NAMES = {
     "launch": "chris-q38-prod10-launch-operator-v9",
     "inspect": "chris-q38-prod10-launch-inspect-v6",
     "probe": "chris-q38-prod10-launch-probe-v9",
-    "preview-diff": "chris-q38-prod10-preview-diff-v1",
+    "preview-diff": "chris-q38-prod10-preview-diff-v2",
 }
 _LAUNCH_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_launch_failure_binding_v1",
@@ -768,6 +768,56 @@ _HOST_PREVIEW_RECHECK = {
     "self_sha256": "sha256:424b35d20dbf7ffd70c34beef02b79d0ca9d33d7c4c3b65661cc963fb8e35f16",
     "file_sha256": "sha256:82ba08a0b889d83fe8668e2e2419622c0d27539f02a097c9247862c201445112",
 }
+_PREVIEW_DIFF_V1_RESULT = {
+    "schema": "cyber_skyrl_prod10_preview_difference_v1_result_binding_v1",
+    "status": "runtime_succeeded_receipt_schema_rejected_released",
+    "operator_name": "chris-q38-prod10-preview-diff-v1",
+    "source_head": "6fede2eacc8deefebd21ae829eedd619a2b141fe",
+    "packet_sha256": "sha256:0ffb8e8db7209b777ea3b657f70871667d309281c025f4444ce4ce5c7c146cf1",
+    "source_sha256": "sha256:4d7959801b0d11e43e7b3c154e0d7ce76cebcffbfa13522f1c01dd0559a93e91",
+    "job_manifest_sha256": (
+        "sha256:ce1483fd8a9b2e487d3b3eb43f68549afd099a77538457d6316336c917b906b2"
+    ),
+    "operator_job_uid": "4b8cb6ff-c1f8-44d6-b36e-c9db830410dc",
+    "operator_pod_name": "chris-q38-prod10-preview-diff-v1-zct6m",
+    "operator_pod_uid": "5ff2520f-f01a-4deb-9e6f-b7249c283451",
+    "operator_workload_name": "job-chris-q38-prod10-preview-diff-v1-af917",
+    "operator_workload_uid": "6cf7e0ff-1f53-4e38-81a5-b74862070c5c",
+    "source_config_map_name": "chris-q38-prod10-preview-diff-v1-source",
+    "source_config_map_uid": "270160c3-9975-40e8-90c8-ba151d4aa73d",
+    "packet_config_map_name": "chris-q38-prod10-preview-diff-v1-packet",
+    "packet_config_map_uid": "0f002677-fbdd-4b37-8fff-d79d378f9cc5",
+    "create_journal_file_sha256": (
+        "sha256:58193cbcf9b5c296c936d5348da3881b138ef8a2409c28150235860ef244b1a3"
+    ),
+    "observer_armed_sha256": (
+        "sha256:f486a958c2da5df2b1ca8562beb6f5b4b57f1b203fe0f8b73a7f8d2c054db56b"
+    ),
+    "observer_armed_file_sha256": (
+        "sha256:2a7579142f313dee033a1537df4dab62e49dbd879a8f5ce17932867dbd68a7e3"
+    ),
+    "creator_binding_sha256": (
+        "sha256:6e6045f9cff7de8c566f72dd73e5436b3e342a067eee89fd2cba67e5833476f8"
+    ),
+    "creator_binding_file_sha256": (
+        "sha256:71826bf16d84cf724244d32b1beb8ac9d941ecd9af53de0b41721d6fe53eda2f"
+    ),
+    "observer_result_sha256": (
+        "sha256:49aaf11de144e33cf0dfc1a7a2e0e5b8040828b3070e3b1f2ee611332ac02afc"
+    ),
+    "observer_result_file_sha256": (
+        "sha256:130c297bd46457d963e30874d3917bf7c302cb5595cca6c3553e9cb52aa79c7a"
+    ),
+    "release_observed_at": "2026-09-23T14:54:16Z",
+    "terminal_status": "Succeeded",
+    "observer_status": "released_without_accepted_execution",
+    "receipt": None,
+    "exit_codes": [0],
+    "restarts": 0,
+    "peak_gpus": 0,
+    "nested_jobs_created": 0,
+    "gpus": 0,
+}
 _PREFLIGHT_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_preflight_v1_failure_recovery_v1",
     "status": "failed_closed_released",
@@ -1034,6 +1084,11 @@ def host_preview_recheck_binding() -> dict[str, Any]:
     return dict(_HOST_PREVIEW_RECHECK)
 
 
+def preview_diff_v1_result_binding() -> dict[str, Any]:
+    """Bind the released v1 whose valid new receipt schema was not admitted."""
+    return _seal(_PREVIEW_DIFF_V1_RESULT)
+
+
 def _write_once(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=False, exist_ok=True)
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -1242,6 +1297,7 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
             != "sha256:c33f585e0cfb15a90bc0f3034a3de6e5dfb87eeaba390caa71575865259d120d"
             or packet.get("launch_v9_failure") != launch_v9_failure_binding()
             or packet.get("host_preview_recheck") != host_preview_recheck_binding()
+            or packet.get("preview_diff_v1_result") != preview_diff_v1_result_binding()
         ):
             raise ValueError("prod10 preview-difference predecessor changed")
         direct._identity(plan, identity)

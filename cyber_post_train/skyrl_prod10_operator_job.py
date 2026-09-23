@@ -433,6 +433,7 @@ def preview_difference_packet(
             "image_identity_receipt": image_identity_receipt,
             "launch_v9_failure": operator.launch_v9_failure_binding(),
             "host_preview_recheck": operator.host_preview_recheck_binding(),
+            "preview_diff_v1_result": operator.preview_diff_v1_result_binding(),
         }
     )
 
