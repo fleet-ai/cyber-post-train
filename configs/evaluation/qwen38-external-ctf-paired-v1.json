@@ -21,28 +21,57 @@
   },
   "arms": {
     "base": {
+      "model_id": "qwen38-shared",
       "served_model": "qwen3.8-27b",
       "model_revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
       "model_artifact_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352",
       "endpoint_origin_sha256": "sha256:6d543f3afd08f04e28b39d2d66034ece6d5b50e3a722ee273bb1080e8802dab7",
       "tokenizer_sha256": "sha256:0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
       "chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
-      "serving_runtime_sha256": "sha256:6d543f3afd08f04e28b39d2d66034ece6d5b50e3a722ee273bb1080e8802dab7",
+      "serving_runtime_sha256": "sha256:d82d78721f4ec8d4b0d6228242df4838b38086a48108e57fc6fe4e7be1fa3662",
+      "models_file_sha256": "sha256:d5457b91a4449aa979858144ca106c8274440f3c94c28a1b101c8ada4b196d87",
       "max_context_size": 262144,
       "inference_precision": "bf16",
-      "quantization": "none"
+      "quantization": "none",
+      "provenance": {
+        "kind": "base",
+        "checkpoint_manifest_sha256": null,
+        "export_receipt_sha256": null,
+        "serving_registration_receipt_sha256": null,
+        "live_parity_receipt_sha256": null,
+        "source_models_file_sha256": "sha256:d5457b91a4449aa979858144ca106c8274440f3c94c28a1b101c8ada4b196d87",
+        "candidate_receipt_file_sha256s": null
+      }
     },
     "step_1000": {
+      "model_id": "qwen38-shared",
       "served_model": "chris-q38-t3k32-s1000-v1",
       "model_revision": "sha256:023c5f8b0559ba050f0d672a6bc27aabecec7d5837595f8ea5bc914446d26db5",
       "model_artifact_sha256": "sha256:023c5f8b0559ba050f0d672a6bc27aabecec7d5837595f8ea5bc914446d26db5",
       "endpoint_origin_sha256": "sha256:6d543f3afd08f04e28b39d2d66034ece6d5b50e3a722ee273bb1080e8802dab7",
       "tokenizer_sha256": "sha256:0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3",
       "chat_template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
-      "serving_runtime_sha256": "sha256:6d543f3afd08f04e28b39d2d66034ece6d5b50e3a722ee273bb1080e8802dab7",
+      "serving_runtime_sha256": "sha256:d82d78721f4ec8d4b0d6228242df4838b38086a48108e57fc6fe4e7be1fa3662",
+      "models_file_sha256": "sha256:3eb509c021c65f02bfced755fab07a2d0a4c90f833688c9bfaf9a024da849815",
       "max_context_size": 262144,
       "inference_precision": "bf16",
-      "quantization": "none"
+      "quantization": "none",
+      "provenance": {
+        "kind": "post_checkpoint",
+        "checkpoint_manifest_sha256": "sha256:b639cd04c1a4d1ee9b7a461808af3cfb77a91d71d841f6de83106fc4d3b7e48c",
+        "export_receipt_sha256": "sha256:8a1d9e093fa1f856c35d357cf34861862317491ee83a9268613f1cf86160eef0",
+        "serving_registration_receipt_sha256": "sha256:d482336ec2ab0ed80c99040610716ae67b1ae7da39affb7b4fc7a794c00b6a9e",
+        "live_parity_receipt_sha256": "sha256:832bd917dbac2df48f25520120e60224090bdc315075520f0c52093a7682cf62",
+        "source_models_file_sha256": "sha256:3eb509c021c65f02bfced755fab07a2d0a4c90f833688c9bfaf9a024da849815",
+        "candidate_receipt_file_sha256s": {
+          "checkpoint": "sha256:b639cd04c1a4d1ee9b7a461808af3cfb77a91d71d841f6de83106fc4d3b7e48c",
+          "export": "sha256:e79d2cdaaebe52da61a37e4f4ad35c2c8ccd4878afaf77de0fc4796e8e1c6463",
+          "live_parity": "sha256:bce7a4a6eb64a617ee10e9790a86fedc6b71d196dba93f93978322289a6b2084",
+          "registration": "sha256:ca1a574402d49898eda268a99d33ac2090a0d9c9a77b8942a50675a1fa3f2350",
+          "registration_plan": "sha256:8b5debe64294b02ea2d454d0f7eec73a03177cf46975171f29c7ec4fa75fc69e",
+          "registration_result": "sha256:1348b01ac03bcfc62274bd391baca9bdaa651f7dca319b438c0af6bdf1f21ed6"
+        }
+      }
     }
   },
   "benchmarks": {
@@ -183,5 +212,5 @@
       "infrastructure_failures": "reported_separately_never_model_failure"
     }
   },
-  "protocol_sha256": "sha256:baeb73b8de1b927d9c19049871f3b02e12a19db624643746e41c3f6602928c2f"
+  "protocol_sha256": "sha256:799268240ee01d69626a0e8983dc60d4c8bda8cddd171e93453fb6d057ca7624"
 }

@@ -27,6 +27,14 @@ def test_protocol_binds_exact_benchmarks_models_and_eval_only_boundary() -> None
     assert value["data_policy"] == "evaluation_only_never_training_or_tuning"
     assert value["arms"]["base"]["served_model"] == "qwen3.8-27b"
     assert value["arms"]["step_1000"]["served_model"] == "chris-q38-t3k32-s1000-v1"
+    assert (
+        value["arms"]["base"]["serving_runtime_sha256"]
+        == value["arms"]["step_1000"]["serving_runtime_sha256"]
+    )
+    assert value["arms"]["step_1000"]["provenance"]["kind"] == "post_checkpoint"
+    assert value["arms"]["step_1000"]["provenance"]["live_parity_receipt_sha256"].startswith(
+        "sha256:"
+    )
 
 
 def test_plan_is_paired_counterbalanced_and_excludes_only_missing_source() -> None:
@@ -99,6 +107,10 @@ def test_plan_is_paired_counterbalanced_and_excludes_only_missing_source() -> No
         lambda value: value["benchmarks"]["cybench_web"]["harness"].update(platform="linux/arm64"),
         lambda value: value["execution"]["sampling"].update(temperature=0.6),
         lambda value: value["execution"]["retry"].update(automatic_model_retry=True),
+        lambda value: value["arms"]["base"].update(serving_runtime_sha256="sha256:" + "0" * 64),
+        lambda value: value["arms"]["step_1000"]["provenance"].update(
+            live_parity_receipt_sha256="sha256:" + "0" * 64
+        ),
         lambda value: value["benchmarks"]["cvebench_zero_day"]["bindings"].update(
             grader_sha256="sha256:" + "0" * 64
         ),

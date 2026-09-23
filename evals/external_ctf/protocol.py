@@ -20,6 +20,7 @@ RETRY = {
     "automatic_process_retry": False,
     "selective_retry": False,
 }
+MODEL_ARMS_SHA256 = "sha256:a591eff3857a332926bc361e6421cef49404cb143df307fcf5b39d439b3a2a14"
 BINDINGS = {
     "cvebench_zero_day": {
         "system_prompt_sha256": (
@@ -87,7 +88,10 @@ def validate_protocol(value: dict[str, Any]) -> None:
     arms = value.get("arms")
     if not isinstance(arms, dict) or set(arms) != {"base", "step_1000"}:
         raise ValueError("protocol must bind exactly two model arms")
+    if digest(arms) != MODEL_ARMS_SHA256:
+        raise ValueError("exact model arm identities or serving provenance drifted")
     expected_common = {
+        "model_id",
         "endpoint_origin_sha256",
         "tokenizer_sha256",
         "chat_template_sha256",
@@ -101,6 +105,8 @@ def validate_protocol(value: dict[str, Any]) -> None:
             "served_model",
             "model_revision",
             "model_artifact_sha256",
+            "models_file_sha256",
+            "provenance",
             *expected_common,
         }:
             raise ValueError("model arm fields drifted")
@@ -109,6 +115,60 @@ def validate_protocol(value: dict[str, Any]) -> None:
             raise ValueError(f"non-weight model setting differs across arms: {field}")
     if arms["base"]["model_artifact_sha256"] == arms["step_1000"]["model_artifact_sha256"]:
         raise ValueError("model arms do not bind different weights")
+    base_provenance = arms["base"]["provenance"]
+    if base_provenance != {
+        "kind": "base",
+        "checkpoint_manifest_sha256": None,
+        "export_receipt_sha256": None,
+        "serving_registration_receipt_sha256": None,
+        "live_parity_receipt_sha256": None,
+        "source_models_file_sha256": arms["base"]["models_file_sha256"],
+        "candidate_receipt_file_sha256s": None,
+    }:
+        raise ValueError("base serving provenance drifted")
+    candidate_provenance = arms["step_1000"]["provenance"]
+    expected_receipts = {
+        "checkpoint",
+        "export",
+        "live_parity",
+        "registration",
+        "registration_plan",
+        "registration_result",
+    }
+    if (
+        not isinstance(candidate_provenance, dict)
+        or set(candidate_provenance)
+        != {
+            "kind",
+            "checkpoint_manifest_sha256",
+            "export_receipt_sha256",
+            "serving_registration_receipt_sha256",
+            "live_parity_receipt_sha256",
+            "source_models_file_sha256",
+            "candidate_receipt_file_sha256s",
+        }
+        or candidate_provenance.get("kind") != "post_checkpoint"
+        or candidate_provenance.get("source_models_file_sha256")
+        != arms["step_1000"]["models_file_sha256"]
+        or not isinstance(candidate_provenance.get("candidate_receipt_file_sha256s"), dict)
+        or set(candidate_provenance["candidate_receipt_file_sha256s"]) != expected_receipts
+    ):
+        raise ValueError("candidate serving provenance drifted")
+    for provenance_digest in (
+        arms["base"]["models_file_sha256"],
+        arms["step_1000"]["models_file_sha256"],
+        candidate_provenance["checkpoint_manifest_sha256"],
+        candidate_provenance["export_receipt_sha256"],
+        candidate_provenance["serving_registration_receipt_sha256"],
+        candidate_provenance["live_parity_receipt_sha256"],
+        *candidate_provenance["candidate_receipt_file_sha256s"].values(),
+    ):
+        if (
+            not isinstance(provenance_digest, str)
+            or not provenance_digest.startswith("sha256:")
+            or len(provenance_digest) != 71
+        ):
+            raise ValueError("serving provenance digest is invalid")
     execution = value.get("execution")
     if execution != {
         "required_host_os": "linux",
