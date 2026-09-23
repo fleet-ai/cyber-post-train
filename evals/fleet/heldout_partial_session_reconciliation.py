@@ -330,7 +330,12 @@ def _frozen_config(
         selected[row["task_version_id"]],
         client,
     )
-    if config["config_sha256"] != intent.config_sha256:
+    if (
+        rollout_ledger._require_digest(  # noqa: SLF001
+            config["config_sha256"], "reconstructed config digest"
+        )
+        != intent.config_sha256
+    ):
         raise rollout_ledger.LedgerError("partial-session reconstructed config differs")
     return row, config
 

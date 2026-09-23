@@ -136,6 +136,48 @@ def test_source_row_requires_exact_failed_partial_session(tmp_path: Path, monkey
         recovery._source_row_in_connection(object(), intent, lock=False)
 
 
+def test_frozen_config_accepts_canonical_prefixed_digest(tmp_path: Path, monkeypatch) -> None:
+    from evals.fleet import evaluate
+
+    intent = _load(tmp_path, _intent_value(tmp_path))
+    plan_csv = tmp_path / "plan.csv"
+    plan_csv.write_text("frozen\n")
+    plan = {
+        "tasks": [{"task_version_id": "task-version"}],
+        "_plan_csv": str(plan_csv),
+    }
+    row = {"model_id": "model", "task_version_id": "task-version", "attempt": 1}
+    key = ("model", "task-version", 1)
+    monkeypatch.setattr(
+        evaluate,
+        "checked_preflight",
+        lambda *_a, **_k: (plan, {"task_bindings": {"task-version": []}}),
+    )
+    monkeypatch.setattr(recovery.rollout_ledger, "_plan_rows", lambda *_a, **_k: [])
+    monkeypatch.setattr(
+        recovery.rollout_ledger,
+        "_plan_digest",
+        lambda *_a, **_k: intent.evaluation_plan_sha256,
+    )
+    monkeypatch.setattr(
+        recovery.rollout_postgres,
+        "verify_plan",
+        lambda *_a, **_k: {"plan_sha256": intent.evaluation_plan_sha256},
+    )
+    monkeypatch.setattr(recovery, "_source_row", lambda *_a, **_k: row)
+    monkeypatch.setattr(recovery.stored, "_scientific_index", lambda *_a, **_k: {key: {}})
+    monkeypatch.setattr(
+        recovery.rollout_worker,
+        "build_config",
+        lambda *_a, **_k: {"config_sha256": "sha256:" + intent.config_sha256},
+    )
+
+    assert recovery._frozen_config("unused", intent, tmp_path, object()) == (
+        row,
+        {"config_sha256": "sha256:" + intent.config_sha256},
+    )
+
+
 def test_run_resumes_same_session_before_accepting(tmp_path: Path, monkeypatch) -> None:
     output = tmp_path / "out"
     intent = _load(
