@@ -693,13 +693,15 @@ def test_rl_terminal_acceptance_requires_exact_seal_export_reload_and_release(
         )
 
 
-def test_prod10_terminal_acceptance_binds_exact_prod10_create_and_observer_evidence(
-    completed_prod9_rl,
-):
-    state = completed_prod9_rl
-    paths, manifest, exported = _terminal_inputs(state)
+def _prod10_terminal_inputs(state, paths):
     prod10_paths = skyrl_prod10_direct.terminal_paths(state.plan)
     paths["training_observer"].replace(prod10_paths["training_observer"])
+    observer = json.loads(prod10_paths["training_observer"].read_text())
+    observer["runtime_image_identity_complete"] = True
+    write(
+        prod10_paths["training_observer"],
+        sealed({key: item for key, item in observer.items() if key != "sha256"}),
+    )
     rows = [json.loads(line) for line in paths["training_create_journal"].read_text().splitlines()]
     census = rows[0]["capacity_gate"]["capacity_census"]
     census["limits"] = {
@@ -707,8 +709,40 @@ def test_prod10_terminal_acceptance_binds_exact_prod10_create_and_observer_evide
         "gpus": skyrl_prod10_direct.MAX_GPUS,
     }
     census["sha256"] = digest({key: item for key, item in census.items() if key != "sha256"})
+    identity_sha256 = "sha256:" + "1" * 64
+    host_duplicate_sha256 = "sha256:" + "2" * 64
+
+    def duplicate(prior):
+        return sealed(
+            {
+                "schema": skyrl_prod10_direct.JIT_DUPLICATE_SCHEMA,
+                "status": "jit_identity_and_output_absent",
+                "identity_sha256": identity_sha256,
+                "run_name": state.plan["run_name"],
+                "output_root": state.plan["output_root"],
+                "fresh_host_all_context_duplicate_sha256": host_duplicate_sha256,
+                "fresh_host_all_context_checked_at": "2026-09-21T00:00:00Z",
+                "prior_jit_duplicate_sha256": prior,
+                "fresh_host_all_context_kubernetes_inventories_checked": 10,
+                "fresh_host_all_context_jobs_api_rows_checked": 0,
+                "runtime_prod_kubernetes_inventories_checked": 5,
+                "runtime_jobs_api_targets_checked": ["prod"],
+                "runtime_jobs_api_rows_checked": 0,
+                "output_absent": True,
+                "checked_at": "2026-09-21T00:00:01Z",
+            }
+        )
+
+    before_guard = duplicate(None)
+    before_intent = duplicate(before_guard["sha256"])
+    rows[0]["duplicate_checks_before_guard"] = before_guard
+    rows[0]["duplicate_checks_before_intent"] = before_intent
+    rows[0]["fresh_host_all_context_duplicate_sha256"] = host_duplicate_sha256
     capacity = rows[0]["capacity_gate"]
     capacity["schema"] = skyrl_prod10_direct.CAPACITY_SCHEMA
+    capacity["identity_sha256"] = identity_sha256
+    capacity["observed_at"] = census["observed_at"]
+    capacity.pop("context")
     rows[0]["capacity_gate"] = sealed(
         {key: item for key, item in capacity.items() if key != "sha256"}
     )
@@ -723,13 +757,18 @@ def test_prod10_terminal_acceptance_binds_exact_prod10_create_and_observer_evide
     rows[2]["schema"] = skyrl_prod10_direct.CREATED_SCHEMA
     rows[2]["capacity_gate_sha256"] = rows[0]["capacity_gate"]["sha256"]
     rows[2]["live_preview_proof_sha256"] = rows[0]["live_preview_proof"]["sha256"]
+    rows[2]["jit_duplicate_before_guard_sha256"] = before_guard["sha256"]
+    rows[2]["jit_duplicate_before_intent_sha256"] = before_intent["sha256"]
     rows[2] = sealed({key: item for key, item in rows[2].items() if key != "sha256"})
     paths["training_create_journal"].replace(prod10_paths["training_create_journal"])
     prod10_paths["training_create_journal"].write_text(
         "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows)
     )
+    return prod10_paths, rows
 
-    accepted = skyrl_prod10_direct.accept_terminal(
+
+def _accept_prod10(state, paths, prod10_paths):
+    return skyrl_prod10_direct.accept_terminal(
         state.plan,
         checkpoint_manifest=paths["checkpoint_manifest"],
         export=paths["export"],
@@ -743,12 +782,68 @@ def test_prod10_terminal_acceptance_binds_exact_prod10_create_and_observer_evide
         output=paths["accepted"],
     )
 
+
+def test_prod10_terminal_acceptance_binds_exact_prod10_create_and_observer_evidence(
+    completed_prod9_rl,
+):
+    state = completed_prod9_rl
+    paths, manifest, exported = _terminal_inputs(state)
+    prod10_paths, rows = _prod10_terminal_inputs(state, paths)
+
+    accepted = _accept_prod10(state, paths, prod10_paths)
+
     assert accepted["schema"] == skyrl_prod10_direct.ACCEPTANCE_SCHEMA
     assert accepted["checkpoint_manifest_receipt_sha256"] == manifest["receipt_sha256"]
     assert accepted["export_receipt_sha256"] == exported["receipt_sha256"]
     assert accepted["training_capacity_gate_sha256"] == rows[0]["capacity_gate"]["sha256"]
     assert accepted["complete_bf16_reload_verified"] is True
     assert accepted["gpu_resources_released"] is True
+
+
+@pytest.mark.parametrize(
+    "fault",
+    ["census_schema", "census_scope", "capacity_identity", "capacity_observed_at", "jit", "image"],
+)
+def test_prod10_terminal_acceptance_rejects_incomplete_prod10_evidence(completed_prod9_rl, fault):
+    state = completed_prod9_rl
+    paths, _, _ = _terminal_inputs(state)
+    prod10_paths, rows = _prod10_terminal_inputs(state, paths)
+    if fault == "image":
+        observer = json.loads(prod10_paths["training_observer"].read_text())
+        observer["runtime_image_identity_complete"] = False
+        write(
+            prod10_paths["training_observer"],
+            sealed({key: item for key, item in observer.items() if key != "sha256"}),
+        )
+    else:
+        if fault == "census_schema":
+            rows[0]["capacity_gate"]["capacity_census"]["schema"] = "wrong"
+        elif fault == "census_scope":
+            rows[0]["capacity_gate"]["capacity_census"]["scope"] = {}
+        elif fault == "capacity_identity":
+            rows[0]["capacity_gate"]["identity_sha256"] = "sha256:" + "9" * 64
+        elif fault == "capacity_observed_at":
+            rows[0]["capacity_gate"]["observed_at"] = "2026-09-21T00:00:02Z"
+        else:
+            rows[2]["jit_duplicate_before_intent_sha256"] = "sha256:" + "9" * 64
+        if fault.startswith("census_"):
+            census = rows[0]["capacity_gate"]["capacity_census"]
+            census["sha256"] = digest(
+                {key: item for key, item in census.items() if key != "sha256"}
+            )
+        if fault != "jit":
+            rows[0]["capacity_gate"] = sealed(
+                {key: item for key, item in rows[0]["capacity_gate"].items() if key != "sha256"}
+            )
+            rows[2]["capacity_gate_sha256"] = rows[0]["capacity_gate"]["sha256"]
+        rows[2] = sealed({key: item for key, item in rows[2].items() if key != "sha256"})
+        prod10_paths["training_create_journal"].write_text(
+            "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows)
+        )
+
+    with pytest.raises(ValueError):
+        _accept_prod10(state, paths, prod10_paths)
+    assert not paths["accepted"].exists()
 
 
 def test_prod10_terminal_acceptance_rejects_prod9_create_evidence(completed_prod9_rl):

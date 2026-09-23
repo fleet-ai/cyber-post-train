@@ -1019,17 +1019,74 @@ def _training_create_journal(
     intent, response, created = rows
     capacity = intent.get("capacity_gate")
     preview = intent.get("live_preview_proof")
-    if not isinstance(capacity, dict) or not isinstance(preview, dict):
-        raise ValueError("prod10 create journal lacks capacity or preview evidence")
+    duplicate_before_guard = intent.get("duplicate_checks_before_guard")
+    duplicate_before_intent = intent.get("duplicate_checks_before_intent")
+    if not all(
+        isinstance(value, dict)
+        for value in (
+            capacity,
+            preview,
+            duplicate_before_guard,
+            duplicate_before_intent,
+        )
+    ):
+        raise ValueError("prod10 create journal lacks capacity, preview, or duplicate evidence")
     try:
         capacity = direct._validate_seal(capacity, CAPACITY_SCHEMA)
         preview = direct._validate_seal(preview, direct.PREVIEW_SCHEMA)
+        duplicate_before_guard = direct._validate_seal(duplicate_before_guard, JIT_DUPLICATE_SCHEMA)
+        duplicate_before_intent = direct._validate_seal(
+            duplicate_before_intent, JIT_DUPLICATE_SCHEMA
+        )
         created = direct._validate_seal(created, CREATED_SCHEMA)
     except JobsError as exc:
         raise ValueError("prod10 create journal evidence schema/digest mismatch") from exc
     census = capacity.get("capacity_census")
     current = census.get("current") if isinstance(census, dict) else None
     projected = census.get("projected") if isinstance(census, dict) else None
+    identity_sha256 = capacity.get("identity_sha256")
+    expected_scope = {
+        "kubernetes_namespaces": "all",
+        "owner_prefixes": list(hardening.PROJECT_OWNER_PREFIXES),
+        "ownership_labels": ROLE_LABELS,
+    }
+    duplicate_keys = {
+        "schema",
+        "status",
+        "identity_sha256",
+        "run_name",
+        "output_root",
+        "fresh_host_all_context_duplicate_sha256",
+        "fresh_host_all_context_checked_at",
+        "prior_jit_duplicate_sha256",
+        "fresh_host_all_context_kubernetes_inventories_checked",
+        "fresh_host_all_context_jobs_api_rows_checked",
+        "runtime_prod_kubernetes_inventories_checked",
+        "runtime_jobs_api_targets_checked",
+        "runtime_jobs_api_rows_checked",
+        "output_absent",
+        "checked_at",
+        "sha256",
+    }
+
+    def duplicate_is_exact(value: dict[str, Any], *, prior: str | None) -> bool:
+        return (
+            set(value) == duplicate_keys
+            and value.get("status") == "jit_identity_and_output_absent"
+            and value.get("identity_sha256") == identity_sha256
+            and value.get("run_name") == creator["jobs_api_run_name"].rsplit("-", 1)[0]
+            and value.get("output_root") == creator["run_dir"]
+            and value.get("prior_jit_duplicate_sha256") == prior
+            and value.get("fresh_host_all_context_kubernetes_inventories_checked") == 10
+            and type(value.get("fresh_host_all_context_jobs_api_rows_checked")) is int
+            and value["fresh_host_all_context_jobs_api_rows_checked"] >= 0
+            and value.get("runtime_prod_kubernetes_inventories_checked") == 5
+            and value.get("runtime_jobs_api_targets_checked") == ["prod"]
+            and type(value.get("runtime_jobs_api_rows_checked")) is int
+            and value["runtime_jobs_api_rows_checked"] >= 0
+            and value.get("output_absent") is True
+        )
+
     try:
         UUID(response["job_id"])
     except (KeyError, TypeError, ValueError) as exc:
@@ -1062,13 +1119,26 @@ def _training_create_journal(
         or created.get("queue_priority") != "q1"
         or created.get("nodes") != 1
         or created.get("gpus") != 8
+        or created.get("jit_duplicate_before_guard_sha256") != duplicate_before_guard["sha256"]
+        or created.get("jit_duplicate_before_intent_sha256") != duplicate_before_intent["sha256"]
+        or not duplicate_is_exact(duplicate_before_guard, prior=None)
+        or not duplicate_is_exact(duplicate_before_intent, prior=duplicate_before_guard["sha256"])
+        or duplicate_before_guard.get("fresh_host_all_context_duplicate_sha256")
+        != duplicate_before_intent.get("fresh_host_all_context_duplicate_sha256")
+        or intent.get("fresh_host_all_context_duplicate_sha256")
+        != duplicate_before_intent.get("fresh_host_all_context_duplicate_sha256")
         or capacity.get("status") != "passed"
+        or re.fullmatch(r"sha256:[0-9a-f]{64}", str(identity_sha256)) is None
+        or capacity.get("identity_sha256") != duplicate_before_guard.get("identity_sha256")
         or capacity.get("plan_sha256") != plan_sha256
         or capacity.get("request_sha256") != request_sha256
         or capacity.get("manifest_sha256") != intent["manifest_sha256"]
         or capacity.get("planned") != {"nodes": 1, "gpus": 8}
         or created.get("capacity_gate_sha256") != capacity["sha256"]
         or not isinstance(census, dict)
+        or capacity.get("observed_at") != census.get("observed_at")
+        or census.get("schema") != "cyber_project_gpu_capacity_census_v1"
+        or census.get("scope") != expected_scope
         or census.get("sha256")
         != digest({key: item for key, item in census.items() if key != "sha256"})
         or census.get("qualified") is not True
@@ -1197,6 +1267,7 @@ def accept_terminal(
         or training_receipt.get("optimizer_update_independently_verified") is not False
         or training_receipt.get("checkpoint_reload_verified") is not False
         or manifest.get("terminal_receipt_sha256") != training_receipt["sha256"]
+        or candidate.get("runtime_image_identity_complete") is not True
     ):
         raise ValueError("training observer termination receipt differs from the exact run")
     training_release, training_observer_file_sha256 = hardening._exact_observer(
