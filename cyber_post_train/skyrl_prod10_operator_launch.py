@@ -188,9 +188,9 @@ def duplicate_proof(
         return context, resource, client.list_operator_resources(resource)
 
     # Namespace inventories are deliberately exhaustive and can be tens of
-    # megabytes in production. A small bound avoids a ten-way response burst
-    # while still reading the two clusters concurrently.
-    with ThreadPoolExecutor(max_workers=2) as pool:
+    # megabytes in production. Serialize them so one large response cannot
+    # starve another kubectl transport and turn absence into a flaky result.
+    with ThreadPoolExecutor(max_workers=1) as pool:
         futures = {pool.submit(read, *item): item for item in work}
         for future in as_completed(futures):
             _context, _resource, inventory = future.result()
