@@ -39,9 +39,11 @@ def _migration(packet_root: Path) -> dict[str, Any]:
     path = packet_root / "MIGRATION_RECEIPT.json"
     value = protocol_v2._verified(path, "protocol-v2 migration receipt")  # noqa: SLF001
     arms = value.get("replacement_arms")
+    retained_arms = value.get("retained_arms")
     migrations = value.get("migrations")
     definition = value.get("comparison_definition")
     seed51 = protocol_v2._seed51_invalid_evidence()  # noqa: SLF001
+    partial_hold = protocol_v2._partial_recovery_hold_evidence()  # noqa: SLF001
     expected_invalid_evidence = [
         {"seed": seed, **protocol_v2.FROZEN_INVALID_REPLICA_EVIDENCE[seed]}
         for seed in protocol_v2.FROZEN_INVALID_SEEDS
@@ -51,6 +53,14 @@ def _migration(packet_root: Path) -> dict[str, Any]:
         "file_sha256": _file_sha(protocol_v2.SEED51_INVALID_EVIDENCE),
         "receipt_sha256": seed51["sha256"],
     }
+    expected_checked_in_partial_hold = {
+        "path": str(protocol_v2.PARTIAL_RECOVERY_HOLD_EVIDENCE.relative_to(ROOT)),
+        "file_sha256": _file_sha(protocol_v2.PARTIAL_RECOVERY_HOLD_EVIDENCE),
+        "receipt_sha256": "sha256:" + partial_hold["sha256"],
+        "source_private_receipt_sha256": (
+            "sha256:" + partial_hold["private_evidence_binding"]["source_receipt_sha256"]
+        ),
+    }
     expected_privacy = {
         "score_values_read": False,
         "prompts_responses_flags_rewards_or_trace_content_read": False,
@@ -59,8 +69,12 @@ def _migration(packet_root: Path) -> dict[str, Any]:
     if (
         value.get("schema") != protocol_v2.RECEIPT_SCHEMA
         or not isinstance(arms, list)
+        or not isinstance(retained_arms, list)
         or not isinstance(migrations, list)
         or len(arms) != len(migrations) * len(protocol_v2.ARMS)
+        or len(retained_arms)
+        != (len(protocol_v2.SOURCE_SEEDS) - len(protocol_v2.FROZEN_INVALID_SEEDS))
+        * len(protocol_v2.ARMS)
         or value.get("scientific_identity", {}).get("whole_replica_pairs_only") is not True
         or value.get("scientific_identity", {}).get("retry_limit") != 0
         or value.get("privacy") != expected_privacy
@@ -68,6 +82,8 @@ def _migration(packet_root: Path) -> dict[str, Any]:
         or value.get("launch_performed") is not False
         or value.get("sanitized_invalid_replica_evidence") != expected_invalid_evidence
         or value.get("checked_in_seed51_invalid_evidence") != expected_checked_in_seed51
+        or value.get("checked_in_partial_recovery_hold_evidence")
+        != expected_checked_in_partial_hold
         or not isinstance(definition, dict)
         or definition.get("schema") != protocol_v2.COMPARISON_DEFINITION_SCHEMA
         or definition.get("sha256")
@@ -76,9 +92,30 @@ def _migration(packet_root: Path) -> dict[str, Any]:
         )
         or definition.get("included_seeds") != value.get("included_seeds")
         or len(definition.get("included_seeds", [])) != len(protocol_v2.SOURCE_SEEDS)
-        or definition.get("sha256") == protocol_v2.PREDECESSOR_COMPARISON_DEFINITION_SHA256
+        or definition.get("sha256") == protocol_v2.PREDECESSOR_LAUNCH_RECEIPT_SHA256
     ):
         raise ValueError("protocol-v2 migration receipt is invalid")
+    for label, rows in (("replacement", arms), ("retained", retained_arms)):
+        for row in rows:
+            identity = row.get("evaluation_identity")
+            plan = row.get("evaluation_plan_sha256")
+            runtime = row.get("runtime_files_sha256")
+            if (
+                not isinstance(identity, dict)
+                or row.get("evaluation_identity_sha256") != protocol_v2._canonical(identity)  # noqa: SLF001
+                or not isinstance(plan, str)
+                or len(plan) != 71
+                or not plan.startswith("sha256:")
+                or not isinstance(runtime, dict)
+                or set(runtime) != set(protocol_v2.SEALED_RUNTIME_IDENTITY_FILES)
+                or any(
+                    not isinstance(digest, str)
+                    or len(digest) != 64
+                    or any(character not in "0123456789abcdef" for character in digest)
+                    for digest in runtime.values()
+                )
+            ):
+                raise ValueError(f"protocol-v2 {label} arm runtime identity is invalid")
     definition_path = packet_root / "COMPARISON_DEFINITION.json"
     retirement_path = packet_root / "RETIREMENT_EVIDENCE.json"
     daily_budget_path = packet_root / "DAILY_BUDGET_EVIDENCE.json"
@@ -178,6 +215,7 @@ def render(*, packets: Path, output: Path) -> dict[str, Any]:
             if (
                 _file_sha(packet_path) != binding["packet_file_sha256"]
                 or package.packet.identity_sha256 != binding["evaluation_identity_sha256"]
+                or package.packet.identity != binding["evaluation_identity"]
                 or identity["comparison_protocol_file_sha256"]
                 != binding["comparison_protocol_file_sha256"]
                 or identity["comparison_protocol_sha256"] != binding["comparison_protocol_sha256"]
@@ -186,6 +224,12 @@ def render(*, packets: Path, output: Path) -> dict[str, Any]:
                 or identity["retry_limit"] != 0
             ):
                 raise ValueError("replacement packet differs from the migration receipt")
+            plan = protocol_v2._sealed_evaluation_plan(package)  # noqa: SLF001
+            if (
+                "sha256:" + plan["sha256"] != binding["evaluation_plan_sha256"]
+                or plan["runtime_files"] != binding["runtime_files_sha256"]
+            ):
+                raise ValueError("replacement evaluator plan differs from the migration receipt")
             compressed, evaluator_job = shared._bundle(packet_path.parent)  # noqa: SLF001
             config_map, job = shared._objects(  # noqa: SLF001
                 replica=f"seed{seed}-{arm}",

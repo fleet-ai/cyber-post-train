@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import re
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -13,6 +14,7 @@ import yaml
 
 from evals.fleet import heldout_launch
 from scripts import prepare_qwen38_fleet_protocol_v2_replacements as replacements
+from scripts import prepare_qwen38_fleet_seed46_candidate_successors as successors
 from scripts import prepare_qwen38_fleet_seed46_pass8_packets as source
 from scripts import render_qwen38_fleet_protocol_v2_replacement_launchers as launchers
 
@@ -50,7 +52,7 @@ def _intent(
     tmp_path: Path,
     source_packets: Path,
     *,
-    seeds: tuple[int, ...] = (47, 51, 52, 53),
+    seeds: tuple[int, ...] = (46, 47, 49, 50, 51, 52, 53),
 ) -> Path:
     receipt_path = source_packets / "PREPARATION_RECEIPT.json"
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
@@ -83,12 +85,41 @@ def _intent(
 
 def _prepare(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path, dict]:
     source_packets = _source(tmp_path, monkeypatch)
+    source_receipt_path = source_packets / "PREPARATION_RECEIPT.json"
+    source_receipt = json.loads(source_receipt_path.read_text(encoding="utf-8"))
+    monkeypatch.setattr(
+        replacements, "EXPECTED_SOURCE_PREPARATION_RECEIPT_SHA256", source_receipt["sha256"]
+    )
+    monkeypatch.setattr(
+        replacements,
+        "EXPECTED_SOURCE_PREPARATION_RECEIPT_FILE_SHA256",
+        replacements._file_sha(source_receipt_path),  # noqa: SLF001
+    )
     intent = _intent(tmp_path, source_packets)
     live = tmp_path / "replacement-live-parity.json"
     live.write_text("{}\n", encoding="utf-8")
+    candidate_successor_packets = tmp_path / "candidate-successor-packets"
+    successors.prepare(
+        output=candidate_successor_packets,
+        live_parity=live,
+        now=datetime(2026, 9, 23, tzinfo=UTC),
+    )
+    successor_receipt_path = candidate_successor_packets / "PREPARATION_RECEIPT.json"
+    successor_receipt = json.loads(successor_receipt_path.read_text(encoding="utf-8"))
+    monkeypatch.setattr(
+        replacements,
+        "EXPECTED_CANDIDATE_SUCCESSOR_PREPARATION_SHA256",
+        successor_receipt["sha256"],
+    )
+    monkeypatch.setattr(
+        replacements,
+        "EXPECTED_CANDIDATE_SUCCESSOR_PREPARATION_FILE_SHA256",
+        replacements._file_sha(successor_receipt_path),  # noqa: SLF001
+    )
     output = tmp_path / "replacement-packets"
     receipt = replacements.prepare(
         source_packets=source_packets,
+        candidate_successor_packets=candidate_successor_packets,
         migration_intent=intent,
         live_parity=live,
         output=output,
@@ -98,17 +129,9 @@ def _prepare(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Pat
 
 
 def test_mapping_is_deterministic_and_never_reuses_source_seeds() -> None:
-    assert replacements.deterministic_mapping([47, 51, 52, 53]) == [
-        {"invalid_original_seed": 47, "replacement_seed": 54},
-        {"invalid_original_seed": 51, "replacement_seed": 55},
-        {"invalid_original_seed": 52, "replacement_seed": 56},
-        {"invalid_original_seed": 53, "replacement_seed": 57},
-    ]
-    assert replacements.deterministic_mapping([47, 50, 52, 53]) == [
-        {"invalid_original_seed": 47, "replacement_seed": 54},
-        {"invalid_original_seed": 50, "replacement_seed": 55},
-        {"invalid_original_seed": 52, "replacement_seed": 56},
-        {"invalid_original_seed": 53, "replacement_seed": 57},
+    assert replacements.deterministic_mapping(list(replacements.FROZEN_INVALID_SEEDS)) == [
+        {"invalid_original_seed": seed, "replacement_seed": replacement}
+        for seed, replacement in zip(replacements.FROZEN_INVALID_SEEDS, range(54, 61), strict=True)
     ]
     with pytest.raises(ValueError, match="canonical"):
         replacements.deterministic_mapping([52, 47])
@@ -116,6 +139,40 @@ def test_mapping_is_deterministic_and_never_reuses_source_seeds() -> None:
         replacements.deterministic_mapping([47, 47])
     with pytest.raises(ValueError, match="canonical"):
         replacements.deterministic_mapping([47, 54])
+
+
+def test_partial_recovery_hold_evidence_is_sanitized() -> None:
+    evidence = replacements._partial_recovery_hold_evidence()  # noqa: SLF001
+    serialized = json.dumps(evidence, sort_keys=True)
+    assert (
+        re.search(
+            r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}",
+            serialized,
+        )
+        is None
+    )
+    string_values: list[str] = []
+
+    def visit(value: object) -> None:
+        if isinstance(value, str):
+            string_values.append(value)
+        elif isinstance(value, dict):
+            for item in value.values():
+                visit(item)
+        elif isinstance(value, list):
+            for item in value:
+                visit(item)
+
+    visit(evidence)
+    for forbidden in ("/mnt/", "http://", "https://", "FLAG{", "prompt_text", "trace_content"):
+        assert all(forbidden not in value for value in string_values)
+    assert evidence["privacy"] == {
+        "credentials_included": False,
+        "task_or_session_ids_included": False,
+        "scores_included": False,
+        "prompts_responses_flags_answers_or_trace_content_included": False,
+        "private_provider_ids_included": False,
+    }
 
 
 def test_preparer_replaces_complete_pairs_and_binds_new_protocols(
@@ -129,12 +186,12 @@ def test_preparer_replaces_complete_pairs_and_binds_new_protocols(
     )
     assert [
         (row["invalid_original_seed"], row["replacement_seed"]) for row in receipt["migrations"]
-    ] == [(47, 54), (51, 55), (52, 56), (53, 57)]
+    ] == [(46, 54), (47, 55), (49, 56), (50, 57), (51, 58), (52, 59), (53, 60)]
     assert all(row["whole_pair_excluded"] is True for row in receipt["migrations"])
-    assert receipt["excluded_original_seeds"] == [47, 51, 52, 53]
-    assert receipt["included_seeds"] == [46, 48, 49, 50, 54, 55, 56, 57]
+    assert receipt["excluded_original_seeds"] == [46, 47, 49, 50, 51, 52, 53]
+    assert receipt["included_seeds"] == [48, 54, 55, 56, 57, 58, 59, 60]
     assert receipt["capacity"] == {
-        "new_replacement_rollouts": 136,
+        "new_replacement_rollouts": 238,
         "final_comparison_rollouts": 272,
         "original_base_rollouts": 136,
         "original_candidate_pre_model_rollouts": 0,
@@ -143,7 +200,7 @@ def test_preparer_replaces_complete_pairs_and_binds_new_protocols(
         "candidate_successor_retired_before_start_seeds": [52, 53],
         "candidate_successor_retired_before_start_rollouts": 0,
         "scoring_or_metadata_cpu_model_rollouts": 0,
-        "cumulative_model_rollouts_consumed_or_planned_today": 374,
+        "cumulative_model_rollouts_consumed_or_planned_today": 476,
         "daily_rollout_cap": 500,
         "within_daily_cap": True,
     }
@@ -158,21 +215,46 @@ def test_preparer_replaces_complete_pairs_and_binds_new_protocols(
     ]
     assert receipt["checked_in_seed51_invalid_evidence"] == {
         "path": "docs/evidence/qwen38-fleet-dev17-seed51-base-invalid-replica-20260923.json",
-        "file_sha256": (
-            "sha256:525885e6650d6d742144b12de2ac1807a77cd25f23e07cec58d2832551150497"
-        ),
+        "file_sha256": ("sha256:525885e6650d6d742144b12de2ac1807a77cd25f23e07cec58d2832551150497"),
         "receipt_sha256": (
             "sha256:572e330d1340e83d2aaf188665c0fd99b401e33eeec5f858717e2db60952bfa3"
         ),
     }
-    assert len(receipt["replacement_arms"]) == 8
-    assert {(row["replacement_seed"], row["arm_id"]) for row in receipt["replacement_arms"]} == {
-        (seed, arm) for seed in (54, 55, 56, 57) for arm in replacements.ARMS
+    assert receipt["checked_in_partial_recovery_hold_evidence"] == {
+        "path": ("docs/evidence/qwen38-fleet-dev17-base-prefix-recovery-hold-20260923.json"),
+        "file_sha256": ("sha256:d20b4fe2310de95cfd5561877f6d93133dcf7e5ed903f425addfb28bda2583ae"),
+        "receipt_sha256": (
+            "sha256:e7b0031010f097f66dd3c87de94ecbc0d1505de97167c47d0a2d7615a0164e52"
+        ),
+        "source_private_receipt_sha256": (
+            "sha256:45893e380d1d9755cbe514ec85628b7fec930d9e2bf5e61920967155112bda09"
+        ),
     }
+    assert len(receipt["replacement_arms"]) == 14
+    assert {(row["replacement_seed"], row["arm_id"]) for row in receipt["replacement_arms"]} == {
+        (seed, arm) for seed in range(54, 61) for arm in replacements.ARMS
+    }
+    assert {(row["seed"], row["arm_id"]) for row in receipt["retained_arms"]} == {
+        (48, arm) for arm in replacements.ARMS
+    }
+    for row in [*receipt["retained_arms"], *receipt["replacement_arms"]]:
+        assert row["evaluation_identity_sha256"] == _canonical(row["evaluation_identity"])
+        assert row["evaluation_plan_sha256"].startswith("sha256:")
+        assert len(row["evaluation_plan_sha256"]) == 71
+        assert row["runtime_files_sha256"]
+    retained_candidates = [row for row in receipt["retained_arms"] if row["arm_id"] == "candidate"]
+    assert all(
+        row["evaluation_identity"]["evaluation_config_name"].endswith("-p1-v2")
+        for row in retained_candidates
+    )
     definition = receipt["comparison_definition"]
     assert definition["schema"] == replacements.COMPARISON_DEFINITION_SCHEMA
     assert definition["protocol_study_id"] == replacements.PROTOCOL_V2_STUDY_ID
-    assert definition["sha256"] != replacements.PREDECESSOR_COMPARISON_DEFINITION_SHA256
+    assert definition["sha256"] != replacements.PREDECESSOR_LAUNCH_RECEIPT_SHA256
+    assert (
+        definition["predecessor_launch_receipt_sha256"]
+        == replacements.PREDECESSOR_LAUNCH_RECEIPT_SHA256
+    )
     assert definition["sha256"] == _canonical(
         {key: item for key, item in definition.items() if key != "sha256"}
     )
@@ -195,7 +277,11 @@ def test_preparer_replaces_complete_pairs_and_binds_new_protocols(
     daily = json.loads((output / "DAILY_BUDGET_EVIDENCE.json").read_text(encoding="utf-8"))
     assert daily["sha256"] == receipt["daily_budget_evidence"]["sha256"]
     assert daily["budget_date_utc"] == "2026-09-23"
-    assert daily["cumulative_model_rollouts_consumed_or_reserved"] == 374
+    assert daily["cumulative_model_rollouts_consumed_or_reserved"] == 476
+    assert daily["accounting_kind"] == "campaign_local_conservative_upper_bound"
+    assert daily["daily_rollout_cap_scope"] == "this_protocol_v2_campaign"
+    assert daily["unrelated_campaigns_included"] is False
+    assert daily["external_mutations"] == 0
     assert daily["within_daily_cap"] is True
 
     original = heldout_launch.build_package(
@@ -203,7 +289,7 @@ def test_preparer_replaces_complete_pairs_and_binds_new_protocols(
     )
     original_tasks = next(iter(original.evaluation_config["routes"].values()))["task_versions"]
     protocol_digests = set()
-    for seed in (54, 55, 56, 57):
+    for seed in range(54, 61):
         pair = []
         for arm in replacements.ARMS:
             package = heldout_launch.build_package(
@@ -221,6 +307,12 @@ def test_preparer_replaces_complete_pairs_and_binds_new_protocols(
             assert package.evaluation_config["training_data_eligible"] is False
             assert package.job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
             assert package.job["spec"]["template"]["spec"]["priorityClassName"] == "c1"
+            assert (
+                package.job["spec"]["template"]["metadata"]["labels"][
+                    "cyber-post-train.fleet.ai/postgres-client"
+                ]
+                == "true"
+            )
             assert "nvidia.com/gpu" not in json.dumps(package.job)
             protocol_digests.add(package.packet.identity["comparison_protocol_sha256"])
         assert (
@@ -228,25 +320,25 @@ def test_preparer_replaces_complete_pairs_and_binds_new_protocols(
             == pair[1].packet.identity["comparison_protocol_sha256"]
         )
         assert pair[0].packet.identity["protocol_id"].endswith("replacement-p1-v2")
-        source_seed = {54: 47, 55: 51, 56: 52, 57: 53}[seed]
-        source_protocol = receipt["migrations"][(47, 51, 52, 53).index(source_seed)][
-            "excluded_source_arms"
-        ]["base"]["comparison_protocol_sha256"]
+        source_seed = dict(zip(range(54, 61), replacements.FROZEN_INVALID_SEEDS, strict=True))[seed]
+        source_protocol = receipt["migrations"][
+            list(replacements.FROZEN_INVALID_SEEDS).index(source_seed)
+        ]["excluded_source_arms"]["base"]["comparison_protocol_sha256"]
         assert pair[0].packet.identity["comparison_protocol_sha256"] != source_protocol
-    assert len(protocol_digests) == 4
+    assert len(protocol_digests) == 7
 
 
 def test_replacement_changes_only_declared_identity_axes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     source_packets, output, _receipt = _prepare(tmp_path, monkeypatch)
-    old = heldout_launch.build_package(source_packets / "seed47" / "base" / "LAUNCH_PACKET.json")
+    old = heldout_launch.build_package(source_packets / "seed46" / "base" / "LAUNCH_PACKET.json")
     new = heldout_launch.build_package(output / "seed54" / "base" / "LAUNCH_PACKET.json")
     old_config = copy.deepcopy(old.evaluation_config)
     new_config = copy.deepcopy(new.evaluation_config)
     old_config.pop("name")
     new_config.pop("name")
-    assert old_config["sampling"].pop("seed") == 47
+    assert old_config["sampling"].pop("seed") == 46
     assert new_config["sampling"].pop("seed") == 54
     assert new_config == old_config
     assert new.packet.identity["model_revision"] == old.packet.identity["model_revision"]
@@ -305,7 +397,7 @@ def test_retirement_evidence_rejects_resigned_post_state_disagreement(
     post["sha256"] = _canonical({key: item for key, item in post.items() if key != "sha256"})
     post_path.write_text(json.dumps(post, sort_keys=True), encoding="utf-8")
 
-    with pytest.raises(ValueError, match="post-verification"):
+    with pytest.raises(ValueError, match="incomplete or disagree"):
         replacements._retirement_evidence(preflight, post_path)  # noqa: SLF001
 
 
@@ -337,11 +429,11 @@ def test_renderer_binds_all_eight_packets_and_launch_guards(
     assert receipt["schema"] == launchers.RENDER_SCHEMA
     assert receipt["migration_receipt_sha256"] == migration["sha256"]
     assert receipt["comparison_definition_sha256"] == migration["comparison_definition"]["sha256"]
-    assert receipt["included_seeds"] == [46, 48, 49, 50, 54, 55, 56, 57]
+    assert receipt["included_seeds"] == [48, 54, 55, 56, 57, 58, 59, 60]
     assert receipt["sha256"] == _canonical(
         {key: item for key, item in receipt.items() if key != "sha256"}
     )
-    assert len(receipt["arms"]) == 8
+    assert len(receipt["arms"]) == 14
     assert receipt["create_gates"] == {
         "identical_server_previews_required": 2,
         "duplicate_census_before_first_preview": True,
@@ -354,9 +446,14 @@ def test_renderer_binds_all_eight_packets_and_launch_guards(
     bundle = yaml.safe_load((output / "launchers.yaml").read_text(encoding="utf-8"))
     jobs = [item for item in bundle["items"] if item["kind"] == "Job"]
     maps = [item for item in bundle["items"] if item["kind"] == "ConfigMap"]
-    assert len(jobs) == len(maps) == 8
+    assert len(jobs) == len(maps) == 14
     assert all(job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off" for job in jobs)
     assert all(job["spec"]["template"]["spec"]["priorityClassName"] == "c1" for job in jobs)
+    assert all(
+        job["spec"]["template"]["metadata"]["labels"]["cyber-post-train.fleet.ai/postgres-client"]
+        == "true"
+        for job in jobs
+    )
     assert all("nvidia.com/gpu" not in json.dumps(job) for job in jobs)
 
 
@@ -378,6 +475,13 @@ def test_renderer_rejects_unsealed_packet_sibling(
     _source_packets, packets, _migration = _prepare(tmp_path, monkeypatch)
     (packets / "seed54" / "base" / "stray-score.txt").write_text("not bundled\n", encoding="utf-8")
     with pytest.raises(ValueError, match="unexpected or missing file"):
+        launchers.render(packets=packets, output=tmp_path / "bad-launchers")
+
+
+def test_renderer_rejects_packet_symlink(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    _source_packets, packets, _migration = _prepare(tmp_path, monkeypatch)
+    (packets / "seed54" / "base" / "stray-link").symlink_to("LAUNCH_PACKET.json")
+    with pytest.raises(ValueError, match="non-regular entry"):
         launchers.render(packets=packets, output=tmp_path / "bad-launchers")
 
 
@@ -411,7 +515,7 @@ def test_comparison_definition_forbids_cell_level_replacement(
     assert definition["cell_level_replacement_forbidden"] is True
     assert len(definition["included_seeds"]) == 8
     assert len(definition["replica_protocols"]) == 8
-    assert len(receipt["migrations"]) == 4
+    assert len(receipt["migrations"]) == 7
     assert all(
         set(row["excluded_source_arms"]) == set(replacements.ARMS) for row in receipt["migrations"]
     )

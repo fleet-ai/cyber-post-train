@@ -1139,12 +1139,8 @@ def _validate_server_preview(response: dict[str, Any], package: Package) -> str:
     ):
         raise HeldoutLaunchError("server-rendered root Job is missing failure-alerts off")
     rendered_spec = job.get("spec")
-    rendered_template = (
-        rendered_spec.get("template") if isinstance(rendered_spec, dict) else None
-    )
-    rendered_pod = (
-        rendered_template.get("spec") if isinstance(rendered_template, dict) else None
-    )
+    rendered_template = rendered_spec.get("template") if isinstance(rendered_spec, dict) else None
+    rendered_pod = rendered_template.get("spec") if isinstance(rendered_template, dict) else None
     if not isinstance(rendered_pod, dict):
         raise HeldoutLaunchError("server-rendered Job Pod template is invalid")
     _assert_cpu_only(rendered_pod)
@@ -1326,12 +1322,8 @@ def launch_once(
         ):
             raise HeldoutLaunchError("create response lacks exact root alert annotation or UID")
         created_spec = job.get("spec")
-        created_template = (
-            created_spec.get("template") if isinstance(created_spec, dict) else None
-        )
-        created_pod = (
-            created_template.get("spec") if isinstance(created_template, dict) else None
-        )
+        created_template = created_spec.get("template") if isinstance(created_spec, dict) else None
+        created_pod = created_template.get("spec") if isinstance(created_template, dict) else None
         if not isinstance(created_pod, dict):
             raise HeldoutLaunchError("created Job Pod template is invalid")
         _assert_cpu_only(created_pod)

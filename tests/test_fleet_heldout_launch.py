@@ -137,9 +137,7 @@ class FakeCluster:
             labels[launch.POSTGRES_CLIENT_LABEL] = launch.POSTGRES_CLIENT_LABEL_VALUE
             environment.append({"name": launch.ROLLOUT_DATABASE_ENV, "value": "injected"})
         if self.inject_gpu is not None:
-            resources = job["spec"]["template"]["spec"]["containers"][0].setdefault(
-                "resources", {}
-            )
+            resources = job["spec"]["template"]["spec"]["containers"][0].setdefault("resources", {})
             resources.setdefault("requests", {})[self.inject_gpu] = "1"
             resources.setdefault("limits", {})[self.inject_gpu] = "1"
         config_map = next(item for item in result["items"] if item["kind"] == "ConfigMap")

@@ -17,6 +17,8 @@ import hashlib
 import json
 import os
 import shutil
+import subprocess
+import sys
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,7 +34,7 @@ COMPARISON_DEFINITION_SCHEMA = "cyber_qwen38_fleet_dev17_pass8_comparison_defini
 RETIREMENT_EVIDENCE_SCHEMA = "cyber_qwen38_fleet_protocol_v2_retirement_evidence_v1"
 DAILY_BUDGET_EVIDENCE_SCHEMA = "cyber_qwen38_fleet_protocol_v2_daily_budget_evidence_v1"
 PROTOCOL_V2_STUDY_ID = "q38-dev17-base-step1000-p8-v2"
-PREDECESSOR_COMPARISON_DEFINITION_SHA256 = (
+PREDECESSOR_LAUNCH_RECEIPT_SHA256 = (
     "sha256:1154b450624a8b9a567464916da95874c44933175c408b86a80ff5bca0eada70"
 )
 RETIREMENT_PREFLIGHT = (
@@ -45,23 +47,54 @@ RETIREMENT_POST = (
 SEED51_INVALID_EVIDENCE = (
     ROOT / "docs/evidence/qwen38-fleet-dev17-seed51-base-invalid-replica-20260923.json"
 )
+PARTIAL_RECOVERY_HOLD_EVIDENCE = (
+    ROOT / "docs/evidence/qwen38-fleet-dev17-base-prefix-recovery-hold-20260923.json"
+)
 SOURCE_LAUNCH_EVIDENCE = (
     ROOT / "docs/evidence/qwen38-fleet-dev17-seed46to53-pass8-launch-20260923.json"
+)
+SOURCE_CREATE_BINDINGS_EVIDENCE = (
+    ROOT / "docs/evidence/qwen38-fleet-dev17-seed46to53-pass8-create-bindings-20260923.json"
 )
 CANDIDATE_SUCCESSOR_CREATE_EVIDENCE = (
     ROOT / "docs/evidence/qwen38-fleet-dev17-seed46to53-candidate-successors-20260923.json"
 )
+EXPECTED_SOURCE_PREPARATION_RECEIPT_SHA256 = (
+    "sha256:22b59a3e9e1ea2ed8e8b92920304f27bbd953925fe0ecf709c7308433db8f0d3"
+)
+EXPECTED_SOURCE_PREPARATION_RECEIPT_FILE_SHA256 = (
+    "sha256:2827250c73d024cab06906d393eba9270784f99b70bb3812d9893c53b1f84859"
+)
+EXPECTED_CANDIDATE_SUCCESSOR_PREPARATION_SHA256 = (
+    "sha256:d3624db05e0665cf0483d802a49c54be601293e5267b5475143a282791269189"
+)
+EXPECTED_CANDIDATE_SUCCESSOR_PREPARATION_FILE_SHA256 = (
+    "sha256:5605623bf5f6205a70a6bad0f02985f985858904badfa7be413a1cead1cbe67a"
+)
 SOURCE_SEEDS = tuple(range(46, 54))
-FROZEN_INVALID_SEEDS = (47, 51, 52, 53)
+FROZEN_INVALID_SEEDS = (46, 47, 49, 50, 51, 52, 53)
 FIRST_REPLACEMENT_SEED = 54
 DAILY_ROLLOUT_CAP = 500
 TASKS_PER_ARM = 17
 ARMS = ("base", "candidate")
+SEALED_EVALUATOR_MODULES = (
+    "evaluate.py",
+    "rollout_worker.py",
+    "rollout_postgres.py",
+    "rollout_ledger.py",
+    "opencode_self_hosted.py",
+    "fixed_proxy.py",
+    "exact_pass4_crypto.py",
+    "exact_pass4_universe.py",
+    "rollout_campaign.py",
+)
+SEALED_RUNTIME_IDENTITY_FILES = SEALED_EVALUATOR_MODULES[:7]
 ALLOWED_REASON_CLASSES = frozenset(
     {
         "terminal_replica_incomplete",
         "replica_not_started",
         "mixed_infrastructure_invalid_replica",
+        "persisted_transcript_prefix_mismatch",
     }
 )
 INTENT_FIELDS = {
@@ -76,12 +109,30 @@ INTENT_FIELDS = {
 }
 INVALID_FIELDS = {"seed", "reason_class", "evidence_receipt_sha256s"}
 FROZEN_INVALID_REPLICA_EVIDENCE: dict[int, dict[str, Any]] = {
+    46: {
+        "reason_class": "persisted_transcript_prefix_mismatch",
+        "evidence_receipt_sha256s": [
+            "sha256:e7b0031010f097f66dd3c87de94ecbc0d1505de97167c47d0a2d7615a0164e52"
+        ],
+    },
     47: {
         "reason_class": "terminal_replica_incomplete",
         "evidence_receipt_sha256s": [
             "sha256:9bd0f1c415d32cdeae47744cbaa140c5e39781b7790ea318573d38772d8dd5bf",
             "sha256:a8d3ca88eaab62d4642ca3fab0fdf17b21a9eb0c92bb5de8971d8d0273928b0e",
             "sha256:7bf0cbc8715c51d6945bb133357f392646cf07ccc7e71a84dc887a30c902e083",
+        ],
+    },
+    49: {
+        "reason_class": "persisted_transcript_prefix_mismatch",
+        "evidence_receipt_sha256s": [
+            "sha256:e7b0031010f097f66dd3c87de94ecbc0d1505de97167c47d0a2d7615a0164e52"
+        ],
+    },
+    50: {
+        "reason_class": "persisted_transcript_prefix_mismatch",
+        "evidence_receipt_sha256s": [
+            "sha256:e7b0031010f097f66dd3c87de94ecbc0d1505de97167c47d0a2d7615a0164e52"
         ],
     },
     51: {
@@ -232,8 +283,7 @@ def _load_intent(
     if seeds != list(FROZEN_INVALID_SEEDS):
         raise ValueError("migration intent differs from the frozen invalid-replica roster")
     expected_rows = [
-        {"seed": seed, **FROZEN_INVALID_REPLICA_EVIDENCE[seed]}
-        for seed in FROZEN_INVALID_SEEDS
+        {"seed": seed, **FROZEN_INVALID_REPLICA_EVIDENCE[seed]} for seed in FROZEN_INVALID_SEEDS
     ]
     if rows != expected_rows:
         raise ValueError("migration intent differs from the exact frozen evidence contract")
@@ -318,6 +368,155 @@ def _source_inventory(
     return result
 
 
+def _sealed_evaluation_plan(package: heldout_launch.Package) -> dict[str, Any]:
+    """Compile with the exact evaluator/runtime bytes sealed in the packet ConfigMap."""
+    data = package.config_map.get("data")
+    if not isinstance(data, dict) or any(
+        not isinstance(data.get(name), str) for name in SEALED_EVALUATOR_MODULES
+    ):
+        raise ValueError("evaluation packet lacks its complete sealed evaluator runtime")
+    scientific_config = dict(package.evaluation_config)
+    scientific_config.pop("model_artifact_binding", None)
+    with tempfile.TemporaryDirectory(prefix="fleet-sealed-evaluator-") as directory:
+        root = Path(directory)
+        package_root = root / "evals" / "fleet"
+        package_root.mkdir(parents=True, mode=0o700)
+        (root / "evals" / "__init__.py").write_text("", encoding="utf-8")
+        (package_root / "__init__.py").write_text("", encoding="utf-8")
+        for name in SEALED_EVALUATOR_MODULES:
+            (package_root / name).write_text(data[name], encoding="utf-8")
+        task_set = data.get("task-set.json")
+        task_set_name = scientific_config.get("task_set")
+        if (
+            not isinstance(task_set, str)
+            or not isinstance(task_set_name, str)
+            or not task_set_name
+            or Path(task_set_name).name != task_set_name
+        ):
+            raise ValueError("evaluation packet lacks its sealed task set")
+        (root / task_set_name).write_text(task_set, encoding="utf-8")
+        (root / "config.json").write_text(
+            json.dumps(scientific_config, sort_keys=True, separators=(",", ":")),
+            encoding="utf-8",
+        )
+        command = (
+            "import json; from pathlib import Path; from evals.fleet import evaluate; "
+            "config=json.loads(Path('config.json').read_text(encoding='utf-8')); "
+            "plan=evaluate.compile_eval(config, relative_to=Path('.')); "
+            "print(json.dumps(plan, sort_keys=True, separators=(',', ':'), allow_nan=False))"
+        )
+        try:
+            completed = subprocess.run(
+                [sys.executable, "-c", command],
+                cwd=root,
+                env={
+                    "PYTHONPATH": str(root),
+                    "PYTHONNOUSERSITE": "1",
+                    "PYTHONDONTWRITEBYTECODE": "1",
+                },
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            plan = json.loads(completed.stdout)
+        except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as exc:
+            raise ValueError("sealed evaluator could not compile its exact plan") from exc
+    if not isinstance(plan, dict):
+        raise ValueError("sealed evaluator returned an invalid plan")
+    return plan
+
+
+def _evaluation_binding(packet_path: Path) -> dict[str, Any]:
+    package = heldout_launch.build_package(packet_path)
+    plan = _sealed_evaluation_plan(package)
+    if (
+        package.packet.identity_sha256 != _canonical(package.packet.identity)
+        or not isinstance(plan.get("sha256"), str)
+        or len(plan["sha256"]) != 64
+        or not isinstance(plan.get("runtime_files"), dict)
+        or set(plan["runtime_files"]) != set(SEALED_RUNTIME_IDENTITY_FILES)
+        or any(
+            not isinstance(digest, str)
+            or len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+            for digest in plan["runtime_files"].values()
+        )
+    ):
+        raise ValueError("evaluation packet does not compile to an exact runtime identity")
+    return {
+        "evaluation_identity": package.packet.identity,
+        "evaluation_identity_sha256": package.packet.identity_sha256,
+        "evaluation_plan_sha256": "sha256:" + plan["sha256"],
+        "runtime_files_sha256": plan["runtime_files"],
+        "packet_file_sha256": _file_sha(packet_path),
+    }
+
+
+def _retained_arms(
+    *,
+    source_packets: Path,
+    candidate_successor_packets: Path,
+    invalid_seeds: list[int],
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    receipt_path = candidate_successor_packets / "PREPARATION_RECEIPT.json"
+    receipt = _verified(receipt_path, "candidate successor preparation receipt")
+    rows = receipt.get("arms")
+    if (
+        receipt.get("sha256") != EXPECTED_CANDIDATE_SUCCESSOR_PREPARATION_SHA256
+        or _file_sha(receipt_path) != EXPECTED_CANDIDATE_SUCCESSOR_PREPARATION_FILE_SHA256
+        or receipt.get("schema") != "cyber_qwen38_fleet_seed46_candidate_successor_preparation_v1"
+        or receipt.get("protocol_study_id") != source.PROTOCOL_STUDY_ID
+        or receipt.get("successor_generation") != 2
+        or receipt.get("seeds") != list(SOURCE_SEEDS)
+        or receipt.get("external_mutations") != 0
+        or receipt.get("launch_performed") is not False
+        or receipt.get("credentials_read") is not False
+        or receipt.get("scores_read") is not False
+        or receipt.get("final8_opened") is not False
+        or not isinstance(rows, list)
+        or len(rows) != len(SOURCE_SEEDS)
+    ):
+        raise ValueError("candidate successor preparation receipt differs")
+    rows_by_seed = {row.get("seed"): row for row in rows}
+    if set(rows_by_seed) != set(SOURCE_SEEDS):
+        raise ValueError("candidate successor packet roster differs")
+
+    retained: list[dict[str, Any]] = []
+    retained_seeds = sorted(set(SOURCE_SEEDS) - set(invalid_seeds))
+    for seed in retained_seeds:
+        pair = {
+            "base": source_packets / f"seed{seed}" / "base" / "LAUNCH_PACKET.json",
+            "candidate": (
+                candidate_successor_packets / f"seed{seed}" / "candidate" / "LAUNCH_PACKET.json"
+            ),
+        }
+        bindings = {arm: _evaluation_binding(path) for arm, path in pair.items()}
+        candidate_receipt = rows_by_seed[seed]
+        if (
+            candidate_receipt.get("arm_id") != "candidate"
+            or candidate_receipt.get("evaluation_identity_sha256")
+            != bindings["candidate"]["evaluation_identity_sha256"]
+            or candidate_receipt.get("packet_file_sha256")
+            != bindings["candidate"]["packet_file_sha256"]
+            or bindings["base"]["evaluation_identity"]["sampling_seed"] != seed
+            or bindings["candidate"]["evaluation_identity"]["sampling_seed"] != seed
+            or bindings["base"]["evaluation_identity"]["arm_id"] != "base"
+            or bindings["candidate"]["evaluation_identity"]["arm_id"] != "candidate"
+            or bindings["base"]["evaluation_identity"]["comparison_protocol_sha256"]
+            != bindings["candidate"]["evaluation_identity"]["comparison_protocol_sha256"]
+        ):
+            raise ValueError("retained candidate successor differs from its sealed receipt")
+        for arm in ARMS:
+            retained.append({"seed": seed, "arm_id": arm, **bindings[arm]})
+    return retained, {
+        "path": _path_label(receipt_path),
+        "file_sha256": _file_sha(receipt_path),
+        "receipt_sha256": receipt["sha256"],
+        "successor_generation": 2,
+    }
+
+
 def _comparison_definition(
     *,
     invalid_seeds: list[int],
@@ -357,7 +556,7 @@ def _comparison_definition(
     value = {
         "schema": COMPARISON_DEFINITION_SCHEMA,
         "protocol_study_id": PROTOCOL_V2_STUDY_ID,
-        "predecessor_comparison_definition_sha256": (PREDECESSOR_COMPARISON_DEFINITION_SHA256),
+        "predecessor_launch_receipt_sha256": PREDECESSOR_LAUNCH_RECEIPT_SHA256,
         "aggregation": "eight_predeclared_pass1_replicas_per_task_and_arm",
         "original_seeds": list(SOURCE_SEEDS),
         "excluded_original_seeds": invalid_seeds,
@@ -398,7 +597,7 @@ def _comparison_definition(
         ),
     }
     value["sha256"] = _canonical(value)
-    if value["sha256"] == PREDECESSOR_COMPARISON_DEFINITION_SHA256:
+    if value["sha256"] == PREDECESSOR_LAUNCH_RECEIPT_SHA256:
         raise ValueError("protocol-v2 comparison definition reused the v1 public digest")
     return value
 
@@ -440,7 +639,15 @@ def _retirement_evidence(
         "source_preflight",
     }
     if (
-        set(preflight) != expected_preflight_fields
+        _file_sha(preflight_path)
+        != "sha256:0a36bf0f88ffe35200b4e0826f15c2cc6d9c49a3df536ae7fbd6c3748f1d7628"
+        or preflight.get("sha256")
+        != "sha256:9a1296727060d303a3fe6d81fe51d2021482113c0dba8f4a9c4b4ba5efb1ccf3"
+        or _file_sha(post_path)
+        != "sha256:661ecd1974f0f1fa79887e509732bae302b997c67d16d62be72dc1385ca1b22e"
+        or post.get("sha256")
+        != "sha256:952bbaaabbb6c3a2fa105bb3780090d2ff8cc749345ba65904fc401ddb152aad"
+        or set(preflight) != expected_preflight_fields
         or set(post) != expected_post_fields
         or preflight.get("schema") != "cyber_fleet_eval_queued_job_retirement_preflight_v1"
         or preflight.get("classification") != "queued_unstarted_no_execution"
@@ -640,8 +847,91 @@ def _seed51_invalid_evidence() -> dict[str, Any]:
     return value
 
 
+def _partial_recovery_hold_evidence() -> dict[str, Any]:
+    value = _read(PARTIAL_RECOVERY_HOLD_EVIDENCE, "partial-recovery HOLD evidence")
+    raw_self_digest = hashlib.sha256(
+        json.dumps(
+            {key: item for key, item in value.items() if key != "sha256"},
+            sort_keys=True,
+            separators=(",", ":"),
+            allow_nan=False,
+        ).encode()
+    ).hexdigest()
+    if (
+        set(value)
+        != {
+            "schema",
+            "observed_at",
+            "status",
+            "affected_seeds",
+            "infrastructure_class",
+            "recovery",
+            "resources",
+            "decision",
+            "private_evidence_binding",
+            "privacy",
+            "sha256",
+        }
+        or _file_sha(PARTIAL_RECOVERY_HOLD_EVIDENCE)
+        != "sha256:d20b4fe2310de95cfd5561877f6d93133dcf7e5ed903f425addfb28bda2583ae"
+        or value.get("sha256") != "e7b0031010f097f66dd3c87de94ecbc0d1505de97167c47d0a2d7615a0164e52"
+        or value.get("sha256") != raw_self_digest
+        or value.get("schema") != "cyber_qwen38_fleet_partial_session_terminal_hold_v1"
+        or value.get("observed_at") != "2026-09-23T07:47:03Z"
+        or value.get("status") != "terminal_hold"
+        or value.get("affected_seeds") != [46, 49, 50]
+        or value.get("infrastructure_class") != "persisted_transcript_prefix_mismatch"
+        or value.get("recovery")
+        != {
+            "attempted_cells": 3,
+            "suffix_chunks_appended": 0,
+            "scoring_calls": 0,
+            "model_replays": 0,
+            "verifier_replays": 0,
+            "ledger_writes": 0,
+            "exact_recovery_safe": False,
+            "hold_not_guess": True,
+        }
+        or value.get("resources")
+        != {
+            "cpu_jobs_terminal": 3,
+            "cpu_pods_terminal": 3,
+            "cpu_workloads_terminal": 3,
+            "all_cpu_resources_released": True,
+            "gpu_resources_requested": 0,
+        }
+        or value.get("decision")
+        != {
+            "retry_these_identities": False,
+            "reroll_missing_base_cells": False,
+            "exclude_whole_replica_pairs": True,
+            "exclude_both_arms_for_each_seed": True,
+        }
+        or value.get("private_evidence_binding")
+        != {
+            "source_file_sha256": (
+                "35e96255b827d7c8502fa06a44a010b4c677deae2a1a65bb8aa126d6e5e03e01"
+            ),
+            "source_receipt_sha256": (
+                "45893e380d1d9755cbe514ec85628b7fec930d9e2bf5e61920967155112bda09"
+            ),
+        }
+        or value.get("privacy")
+        != {
+            "credentials_included": False,
+            "task_or_session_ids_included": False,
+            "scores_included": False,
+            "prompts_responses_flags_answers_or_trace_content_included": False,
+            "private_provider_ids_included": False,
+        }
+    ):
+        raise ValueError("partial-recovery HOLD evidence differs")
+    return value
+
+
 def _daily_budget_evidence(retirement: dict[str, Any]) -> dict[str, Any]:
     source_launch = _verified(SOURCE_LAUNCH_EVIDENCE, "source launch evidence")
+    source_bindings = _verified(SOURCE_CREATE_BINDINGS_EVIDENCE, "source create bindings evidence")
     successor_create = _verified(
         CANDIDATE_SUCCESSOR_CREATE_EVIDENCE, "candidate successor create evidence"
     )
@@ -650,17 +940,52 @@ def _daily_budget_evidence(retirement: dict[str, Any]) -> dict[str, Any]:
     successor_rows = successor_create.get("rows")
     privacy = successor_create.get("privacy", {})
     source_evaluators = source_launch.get("evaluators")
+    source_binding_rows = source_bindings.get("rows")
+    launch_bindings = (
+        {
+            (row.get("seed"), row.get("arm"), row.get("job_name"), row.get("job_uid"))
+            for row in source_evaluators
+        }
+        if isinstance(source_evaluators, list)
+        else set()
+    )
+    created_bindings = (
+        {
+            (row.get("seed"), row.get("arm"), row.get("job_name"), row.get("job_uid"))
+            for row in source_binding_rows
+        }
+        if isinstance(source_binding_rows, list)
+        else set()
+    )
     if (
-        source_launch.get("sha256")
+        _file_sha(SOURCE_LAUNCH_EVIDENCE)
+        != "sha256:e7acd1517e214aecf60b8d1c7e5d31fe5016d91591c37af11322dc92da0a339f"
+        or source_launch.get("sha256")
         != "sha256:1154b450624a8b9a567464916da95874c44933175c408b86a80ff5bca0eada70"
-        or source_launch.get("schema")
-        != "cyber_qwen38_fleet_dev17_seed46to53_pass8_launch_v1"
+        or source_launch.get("schema") != "cyber_qwen38_fleet_dev17_seed46to53_pass8_launch_v1"
         or not str(source_launch.get("observed_at", "")).startswith("2026-09-23T")
         or source_launch.get("study", {}).get("seeds") != list(SOURCE_SEEDS)
         or source_launch.get("study", {}).get("sessions_per_arm") != 136
         or source_launch.get("study", {}).get("total_sessions") != 272
         or not isinstance(source_evaluators, list)
         or len(source_evaluators) != 16
+        or _file_sha(SOURCE_CREATE_BINDINGS_EVIDENCE)
+        != "sha256:62c27e21cc6cdf3d9773617aaa7aa082cbc9fb6caf62d73428c7508960a1bce3"
+        or source_bindings.get("sha256")
+        != "sha256:e76ae2aac0c370999d43de1caa4a76e704f4eb410fe7fdef623c705877470768"
+        or source_bindings.get("schema") != "cyber_qwen38_fleet_dev17_pass8_create_bindings_v1"
+        or not str(source_bindings.get("observed_at", "")).startswith("2026-09-23T")
+        or source_bindings.get("binding_count") != 16
+        or source_bindings.get("external_mutations") != 0
+        or source_bindings.get("credentials_included") is not False
+        or source_bindings.get("score_values_included") is not False
+        or source_bindings.get("prompts_responses_flags_rewards_or_trace_content_included")
+        is not False
+        or not isinstance(source_binding_rows, list)
+        or len(source_binding_rows) != 16
+        or created_bindings != launch_bindings
+        or _file_sha(CANDIDATE_SUCCESSOR_CREATE_EVIDENCE)
+        != "sha256:924ce77582cc3e8370fc8a4ca1a7cbdfa8edcd69c10e14b373918cbd5b0410fc"
         or successor_create.get("sha256")
         != "sha256:da2a8d3e40e7c8c925164300a66976626b4c36329f2ffe20ad5627846f0f61c8"
         or successor_create.get("schema")
@@ -691,9 +1016,10 @@ def _daily_budget_evidence(retirement: dict[str, Any]) -> dict[str, Any]:
     ):
         raise ValueError("daily budget source evidence differs from the sealed campaign")
 
-    original_base = 136
+    original_base = len(SOURCE_SEEDS) * TASKS_PER_ARM
     failed_original_candidate = 0
-    successor_seeds = [46, 47, 48, 49, 50, 51]
+    retired_successor_seeds = [row["seed"] for row in retirement["targets"]]
+    successor_seeds = sorted(set(SOURCE_SEEDS) - set(retired_successor_seeds))
     successor_reserved = len(successor_seeds) * TASKS_PER_ARM
     replacements = len(FROZEN_INVALID_SEEDS) * len(ARMS) * TASKS_PER_ARM
     total = original_base + failed_original_candidate + successor_reserved + replacements
@@ -706,6 +1032,11 @@ def _daily_budget_evidence(retirement: dict[str, Any]) -> dict[str, Any]:
                 "path": _path_label(SOURCE_LAUNCH_EVIDENCE),
                 "file_sha256": _file_sha(SOURCE_LAUNCH_EVIDENCE),
                 "receipt_sha256": source_launch["sha256"],
+            },
+            "source_create_bindings": {
+                "path": _path_label(SOURCE_CREATE_BINDINGS_EVIDENCE),
+                "file_sha256": _file_sha(SOURCE_CREATE_BINDINGS_EVIDENCE),
+                "receipt_sha256": source_bindings["sha256"],
             },
             "candidate_successor_create": {
                 "path": _path_label(CANDIDATE_SUCCESSOR_CREATE_EVIDENCE),
@@ -722,16 +1053,20 @@ def _daily_budget_evidence(retirement: dict[str, Any]) -> dict[str, Any]:
             "failed_original_candidate_pre_model": failed_original_candidate,
             "candidate_successor_nonretired_seeds": successor_seeds,
             "candidate_successor_nonretired_rollouts_reserved": successor_reserved,
-            "candidate_successor_retired_before_start_seeds": [52, 53],
+            "candidate_successor_retired_before_start_seeds": retired_successor_seeds,
             "candidate_successor_retired_before_start_rollouts": 0,
             "protocol_v2_whole_pair_replacements_planned": replacements,
             "scoring_or_metadata_cpu_model_rollouts": 0,
         },
         "cumulative_model_rollouts_consumed_or_reserved": total,
+        "accounting_kind": "campaign_local_conservative_upper_bound",
         "daily_rollout_cap": DAILY_ROLLOUT_CAP,
+        "daily_rollout_cap_scope": "this_protocol_v2_campaign",
+        "unrelated_campaigns_included": False,
         "within_daily_cap": total <= DAILY_ROLLOUT_CAP,
         "score_values_read": False,
         "prompts_responses_flags_rewards_or_trace_content_read": False,
+        "external_mutations": 0,
     }
     value["sha256"] = _canonical(value)
     return value
@@ -739,8 +1074,8 @@ def _daily_budget_evidence(retirement: dict[str, Any]) -> dict[str, Any]:
 
 def _configs(base_template: dict[str, Any], seed: int) -> tuple[dict[str, Any], dict[str, Any]]:
     base, candidate = source._configs(base_template, seed, candidate_generation=2)  # noqa: SLF001
-    base["name"] = f"q38-dev17-s{seed}-base-replacement-p1-v2"
-    candidate["name"] = f"q38-dev17-s{seed}-t3k32s1000-replacement-p1-v2"
+    base["name"] = f"q38-s{seed}-base-repl-p1-v2"
+    candidate["name"] = f"q38-s{seed}-t3k32s1000-repl-p1-v2"
     packet_name = f"qwen38-step1000-seed{seed}-replacement-provenance-v2.json"
     artifact = source._candidate_packet(candidate["name"])  # noqa: SLF001
     model_artifact_v3.validate_packet(candidate["models"], artifact)
@@ -760,6 +1095,7 @@ def _protocol(base: dict[str, Any], seed: int) -> dict[str, Any]:
 def prepare(
     *,
     source_packets: Path,
+    candidate_successor_packets: Path,
     migration_intent: Path,
     live_parity: Path,
     output: Path,
@@ -771,17 +1107,35 @@ def prepare(
         raise ValueError("replacement packet output parent does not exist")
     source_receipt_path = source_packets / "PREPARATION_RECEIPT.json"
     source_receipt = _verified(source_receipt_path, "source preparation receipt")
+    if (
+        source_receipt.get("sha256") != EXPECTED_SOURCE_PREPARATION_RECEIPT_SHA256
+        or _file_sha(source_receipt_path) != EXPECTED_SOURCE_PREPARATION_RECEIPT_FILE_SHA256
+    ):
+        raise ValueError("source preparation receipt differs from the exact launched study")
     inventory = _source_inventory(source_packets, source_receipt)
     intent = _load_intent(migration_intent, source_receipt, source_receipt_path)
     invalid = intent["invalid_original_replicas"]
+    retained_arms, retained_candidate_source = _retained_arms(
+        source_packets=source_packets,
+        candidate_successor_packets=candidate_successor_packets,
+        invalid_seeds=[row["seed"] for row in invalid],
+    )
     mapping = deterministic_mapping([row["seed"] for row in invalid])
     reason_by_seed = {row["seed"]: row for row in invalid}
     seed51_evidence = _seed51_invalid_evidence()
+    partial_hold_evidence = _partial_recovery_hold_evidence()
     if (
         seed51_evidence["sha256"] not in reason_by_seed[51]["evidence_receipt_sha256s"]
         or reason_by_seed[51]["reason_class"] != seed51_evidence["classification"]["reason_class"]
     ):
         raise ValueError("migration intent does not bind the exact seed-51 invalid evidence")
+    partial_hold_sha256 = "sha256:" + partial_hold_evidence["sha256"]
+    for seed in partial_hold_evidence["affected_seeds"]:
+        if (
+            partial_hold_sha256 not in reason_by_seed[seed]["evidence_receipt_sha256s"]
+            or reason_by_seed[seed]["reason_class"] != partial_hold_evidence["infrastructure_class"]
+        ):
+            raise ValueError("migration intent does not bind the exact partial-recovery HOLD")
     base_template, task_set, split, corpus, roster = source._inputs()  # noqa: SLF001
     first_seed = mapping[0]["replacement_seed"]
     parity_base, parity_candidate = _configs(base_template, first_seed)
@@ -887,9 +1241,9 @@ def prepare(
                 replacement_arms.append(
                     {
                         **row,
+                        **_evaluation_binding(packet_path),
                         "invalid_original_seed": original_seed,
                         "replacement_seed": seed,
-                        "packet_file_sha256": _file_sha(packet_path),
                         "comparison_protocol_file_sha256": package.packet.identity[
                             "comparison_protocol_file_sha256"
                         ],
@@ -939,9 +1293,7 @@ def prepare(
         source._write_json(  # noqa: SLF001
             temporary / "DAILY_BUDGET_EVIDENCE.json", daily_budget_evidence
         )
-        planned = daily_budget_evidence["line_items"][
-            "protocol_v2_whole_pair_replacements_planned"
-        ]
+        planned = daily_budget_evidence["line_items"]["protocol_v2_whole_pair_replacements_planned"]
         cumulative_rollouts = daily_budget_evidence[
             "cumulative_model_rollouts_consumed_or_reserved"
         ]
@@ -953,6 +1305,7 @@ def prepare(
                 "preparation_receipt_file_sha256": _file_sha(source_receipt_path),
                 "seeds": list(SOURCE_SEEDS),
                 "arm_count": len(SOURCE_SEEDS) * len(ARMS),
+                "retained_candidate_successor_preparation": retained_candidate_source,
             },
             "migration_intent_sha256": intent["sha256"],
             "sanitized_invalid_replica_evidence": [
@@ -963,6 +1316,15 @@ def prepare(
                 "path": str(SEED51_INVALID_EVIDENCE.relative_to(ROOT)),
                 "file_sha256": _file_sha(SEED51_INVALID_EVIDENCE),
                 "receipt_sha256": seed51_evidence["sha256"],
+            },
+            "checked_in_partial_recovery_hold_evidence": {
+                "path": str(PARTIAL_RECOVERY_HOLD_EVIDENCE.relative_to(ROOT)),
+                "file_sha256": _file_sha(PARTIAL_RECOVERY_HOLD_EVIDENCE),
+                "receipt_sha256": partial_hold_sha256,
+                "source_private_receipt_sha256": (
+                    "sha256:"
+                    + partial_hold_evidence["private_evidence_binding"]["source_receipt_sha256"]
+                ),
             },
             "comparison_definition": comparison_definition,
             "comparison_definition_file_sha256": _file_sha(
@@ -977,6 +1339,7 @@ def prepare(
             "included_seeds": comparison_definition["included_seeds"],
             "replacement_protocols": replacement_protocols,
             "replacement_arms": replacement_arms,
+            "retained_arms": retained_arms,
             "retirement_evidence": {
                 "sha256": retirement_evidence["sha256"],
                 "file_sha256": _file_sha(temporary / "RETIREMENT_EVIDENCE.json"),
@@ -1059,6 +1422,7 @@ def prepare(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--source-packets", type=Path, required=True)
+    parser.add_argument("--candidate-successor-packets", type=Path, required=True)
     parser.add_argument("--migration-intent", type=Path, required=True)
     parser.add_argument("--live-parity", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
@@ -1067,6 +1431,7 @@ def main() -> None:
         json.dumps(
             prepare(
                 source_packets=args.source_packets,
+                candidate_successor_packets=args.candidate_successor_packets,
                 migration_intent=args.migration_intent,
                 live_parity=args.live_parity,
                 output=args.output,
