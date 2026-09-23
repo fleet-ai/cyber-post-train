@@ -46,7 +46,7 @@ OPERATOR_NAMES = {
     "stage": "chris-q38-prod10-stage-operator-v7",
     "manifest": "chris-q38-prod10-manifest-operator-v1",
     "preflight": "chris-q38-prod10-preflight-operator-v2",
-    "launch": "chris-q38-prod10-launch-operator-v5",
+    "launch": "chris-q38-prod10-launch-operator-v6",
     "inspect": "chris-q38-prod10-launch-inspect-v6",
     "probe": "chris-q38-prod10-launch-probe-v9",
 }
@@ -530,6 +530,64 @@ _LAUNCH_V5_FAILURE = {
     "nested_jobs_created": 0,
     "gpus": 0,
 }
+_INSPECT_V6_SUCCESS = {
+    "schema": "cyber_skyrl_prod10_launch_inspection_binding_v4",
+    "status": "succeeded_and_released",
+    "operator_name": "chris-q38-prod10-launch-inspect-v6",
+    "source_head": "2acc1a5a12a1ea016d142f7a8be03610724c0653",
+    "packet_sha256": (
+        "sha256:7974587b39a6cfc318749d8822699d60a339dd66173b4cb5792e3adc4802c844"
+    ),
+    "source_sha256": (
+        "sha256:9c80f5019ef76b875a50922c8fe92706b1e5862d04df093f386fa7b9ecda75f7"
+    ),
+    "job_manifest_sha256": (
+        "sha256:044da1a2117e0c1f43d7314621452f04645595f68c1f1c525004fe6b7ba3837a"
+    ),
+    "operator_job_uid": "320975b1-2870-4895-8bf1-694203af2f9b",
+    "operator_pod_name": "chris-q38-prod10-launch-inspect-v6-sdbj5",
+    "operator_pod_uid": "a60cf173-e259-4252-b5d4-e4e90d967938",
+    "operator_workload_name": "job-chris-q38-prod10-launch-inspect-v6-a36a1",
+    "operator_workload_uid": "d6546c96-8cd2-45dd-ae22-b0330d7ad798",
+    "source_config_map_uid": "067c36d8-3e54-4f0a-9b7a-44d67887e6e1",
+    "packet_config_map_uid": "8c43424b-c8bf-4ae3-98cb-ef02a781bf00",
+    "create_journal_file_sha256": (
+        "sha256:3e72e59a655611ae5dbc9eb4ccac80ae717628f3ad5309be6c6dcfcfff64c6d8"
+    ),
+    "receipt_sha256": (
+        "sha256:02b41ea17f82f995b8f105963cc355961ddd0d86053bd182726427ff3a1949d4"
+    ),
+    "observer_sha256": (
+        "sha256:c023c239f9cd43481d30e833ddd6cdc33aef92636817786c65a7c6b409058e80"
+    ),
+    "observer_result_file_sha256": (
+        "sha256:a735e450416025df0ca622c7e03b78f7d2ac63a23459c28c8b7f5422c2fb26fd"
+    ),
+    "result_sha256": (
+        "sha256:841598410d1445041c3be2649be6c73e716a0327e763f91cd8f7efc16ee72831"
+    ),
+    "launch_v5_failure_sha256": (
+        "sha256:e89237593facb2e08e477a5764243389820704a5a2c431a28b4d451a86dafc0e"
+    ),
+    "launch_boundary": "before_v3_guard_archive_or_archive_write",
+    "current_guard_sha256": (
+        "sha256:2817096db1757335358c04ea134a0d6eae05d691c3faf497c48e987e07efbc39"
+    ),
+    "v3_guard_archive_absent": True,
+    "v3_guard_archive_receipt_absent": True,
+    "create_journal_absent": True,
+    "creator_binding_absent": True,
+    "inspection_external_calls": 0,
+    "runtime_binding_kubernetes_reads": 2,
+    "contents_exported": False,
+    "nested_jobs_created": 0,
+    "terminal_status": "Succeeded",
+    "exit_codes": [0],
+    "restarts": 0,
+    "resources_absent": True,
+    "config_maps_absent": True,
+    "gpus": 0,
+}
 _PREFLIGHT_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_preflight_v1_failure_recovery_v1",
     "status": "failed_closed_released",
@@ -767,6 +825,11 @@ def launch_v5_failure_binding() -> dict[str, Any]:
     return _seal(_LAUNCH_V5_FAILURE)
 
 
+def inspect_v6_success_binding() -> dict[str, Any]:
+    """Bind the released metadata-only diagnosis of launch v5."""
+    return _seal(_INSPECT_V6_SUCCESS)
+
+
 def _write_once(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=False, exist_ok=True)
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -965,6 +1028,10 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
             raise ValueError("prod10 launch-v4 failure predecessor changed")
         if packet.get("inspect_v5_success") != inspect_v5_success_binding():
             raise ValueError("prod10 launch inspector-v5 predecessor changed")
+        if packet.get("launch_v5_failure") != launch_v5_failure_binding():
+            raise ValueError("prod10 launch-v5 failure predecessor changed")
+        if packet.get("inspect_v6_success") != inspect_v6_success_binding():
+            raise ValueError("prod10 launch inspector-v6 predecessor changed")
         _launch_packet_inputs(packet)
     return packet
 
@@ -2282,6 +2349,8 @@ def _archive_launch_v3_guard(
     inspection = inspect_v4_success_binding()
     launch_v4_failure = launch_v4_failure_binding()
     inspection_v5 = inspect_v5_success_binding()
+    launch_v5_failure = launch_v5_failure_binding()
+    inspection_v6 = inspect_v6_success_binding()
     first_absence = launch_direct._jit_duplicate(
         jit_before_guard,
         identity,
@@ -2323,7 +2392,7 @@ def _archive_launch_v3_guard(
         or (file_identity.st_uid, file_identity.st_gid) != (RUNTIME_UID, RUNTIME_GID)
         or stat.S_IMODE(file_identity.st_mode) != 0o600
         or "sha256:" + hashlib.sha256(stored_bytes).hexdigest()
-        != inspection_v5["current_guard_sha256"]
+        != inspection_v6["current_guard_sha256"]
     ):
         raise OperatorFailure("launch_v3_guard_archive_file_rejected")
     guard = cleanup.JobsApiPrefixGuard(
@@ -2377,11 +2446,13 @@ def _archive_launch_v3_guard(
             "inspect_v4_success_sha256": inspection["sha256"],
             "launch_v4_failure_sha256": launch_v4_failure["sha256"],
             "inspect_v5_success_sha256": inspection_v5["sha256"],
+            "launch_v5_failure_sha256": launch_v5_failure["sha256"],
+            "inspect_v6_success_sha256": inspection_v6["sha256"],
             "host_duplicate_sha256": packet["duplicate_proof"]["sha256"],
             "jit_duplicate_before_guard_sha256": first_absence["sha256"],
             "jit_duplicate_before_intent_sha256": final_absence["sha256"],
             "guard_sha256": checked["sha256"],
-            "guard_file_sha256": inspection_v5["current_guard_sha256"],
+            "guard_file_sha256": inspection_v6["current_guard_sha256"],
             "archive_name": archive_path.name,
             "archived_via_atomic_rename": True,
             "recovered_after_atomic_rename": recovered_after_rename,

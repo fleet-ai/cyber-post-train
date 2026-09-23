@@ -201,7 +201,7 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
     container = package.job["spec"]["template"]["spec"]["containers"][0]
 
     assert proof["phase"] == "launch"
-    assert proof["name"] == "chris-q38-prod10-launch-operator-v5"
+    assert proof["name"] == "chris-q38-prod10-launch-operator-v6"
     assert proof["failure_alerts"] == "off"
     assert proof["priority"] == "c1"
     assert proof["queue_priority"] == "q1"
@@ -283,6 +283,8 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
         ("inspect_v4_success", "inspector-v4 predecessor"),
         ("launch_v4_failure", "launch-v4 failure predecessor"),
         ("inspect_v5_success", "inspector-v5 predecessor"),
+        ("launch_v5_failure", "launch-v5 failure predecessor"),
+        ("inspect_v6_success", "inspector-v6 predecessor"),
     ):
         changed = copy.deepcopy(packet)
         changed[key]["operator_job_uid"] = "00000000-0000-4000-8000-000000000001"
@@ -1093,7 +1095,7 @@ def test_prod10_dead_guard_is_atomically_archived_and_crash_reconciled(
     )
     monkeypatch.setattr(
         operator,
-        "inspect_v5_success_binding",
+        "inspect_v6_success_binding",
         lambda: {
             "sha256": "sha256:" + "5" * 64,
             "current_guard_sha256": "sha256:" + "0" * 64,
@@ -1116,6 +1118,11 @@ def test_prod10_dead_guard_is_atomically_archived_and_crash_reconciled(
         "current_guard_sha256": guard_file_sha256,
     }
     monkeypatch.setattr(operator, "inspect_v5_success_binding", lambda: inspection_v5)
+    inspection_v6 = {
+        "sha256": "sha256:" + "6" * 64,
+        "current_guard_sha256": guard_file_sha256,
+    }
+    monkeypatch.setattr(operator, "inspect_v6_success_binding", lambda: inspection_v6)
 
     journal = operation_root / "PROD10_DIRECT_V3_CREATE.jsonl"
     journal.write_text("intent")
@@ -1150,8 +1157,10 @@ def test_prod10_dead_guard_is_atomically_archived_and_crash_reconciled(
     assert receipt["archived_via_atomic_rename"] is True
     assert receipt["recovered_after_atomic_rename"] is False
     assert receipt["inspect_v5_success_sha256"] == inspection_v5["sha256"]
+    assert receipt["inspect_v6_success_sha256"] == inspection_v6["sha256"]
     assert receipt["guard_file_sha256"] == guard_file_sha256
     assert receipt["launch_v4_failure_sha256"] == operator.launch_v4_failure_binding()["sha256"]
+    assert receipt["launch_v5_failure_sha256"] == operator.launch_v5_failure_binding()["sha256"]
 
     receipt_path.unlink()
     recovered = operator._archive_launch_v3_guard(
