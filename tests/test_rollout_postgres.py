@@ -684,6 +684,51 @@ def _stored_session_subset_intent(selected, unselected, counts):
     )
 
 
+def _stored_session_local_gap_intent(selected, unselected, counts, missing):
+    body = {
+        "schema_version": (stored_session_reconciliation_v2.SUBSET_LOCAL_GAPS_INTENT_SCHEMA),
+        "evaluation_plan_sha256": "a" * 64,
+        "runtime_files_sha256": stored_session_reconciliation_v2.runtime_identity(),
+        "serving_block": "route",
+        "source_output_root": "/mnt/sfs/jobs/source-eval",
+        "source_database": "stored_session_test",
+        "source_job_uid": str(uuid.uuid4()),
+        "source_job_terminal_receipt_sha256": "b" * 64,
+        "selected_cell_ids": list(selected),
+        "unselected_cell_ids": list(unselected),
+        "expected_arm_state_counts": counts,
+        "expected_agent_exit_code": 0,
+        "expected_agent_termination": "output_limit",
+        "expected_failure_code": "authoritative_scoring_started.runtimeerror",
+        "expected_local_result_count": 15,
+        "missing_local_result_cell_ids": list(missing),
+        "expected_missing_local_result_failure_code": (
+            stored_session_reconciliation_v2.MISSING_LOCAL_RESULT_FAILURE_CODE
+        ),
+    }
+    return stored_session_reconciliation_v2.ExactStoredSessionSubsetIntent(
+        evaluation_plan_sha256=body["evaluation_plan_sha256"],
+        runtime_files_sha256=body["runtime_files_sha256"],
+        serving_block=body["serving_block"],
+        source_output_root=body["source_output_root"],
+        source_database=body["source_database"],
+        source_job_uid=body["source_job_uid"],
+        source_job_terminal_receipt_sha256=body["source_job_terminal_receipt_sha256"],
+        selected_cell_ids=tuple(body["selected_cell_ids"]),
+        unselected_cell_ids=tuple(body["unselected_cell_ids"]),
+        expected_arm_state_counts=body["expected_arm_state_counts"],
+        expected_agent_exit_code=body["expected_agent_exit_code"],
+        expected_agent_termination=body["expected_agent_termination"],
+        expected_failure_code=body["expected_failure_code"],
+        sha256=stored_session_reconciliation_v2._body_digest(body),  # noqa: SLF001
+        expected_local_result_count=body["expected_local_result_count"],
+        missing_local_result_cell_ids=tuple(body["missing_local_result_cell_ids"]),
+        expected_missing_local_result_failure_code=body[
+            "expected_missing_local_result_failure_code"
+        ],
+    )
+
+
 def test_subset_stored_session_acceptance_preserves_full_complement(tmp_path, pg_dsn):
     rollout_postgres.initialize(pg_dsn, _plan(tmp_path / "plan.csv", count=3))
     owners = [
@@ -790,6 +835,126 @@ def test_subset_stored_session_acceptance_preserves_full_complement(tmp_path, pg
             event_count_after
         )
         assert connection.execute("SELECT COUNT(*) FROM ledger_reconciliations").fetchone()[0] == 1
+
+
+def test_exact_two_unselected_local_result_gaps_are_locked_and_preserved(tmp_path, pg_dsn):
+    rollout_postgres.initialize(pg_dsn, _plan(tmp_path / "plan.csv", count=17))
+    owners = [
+        rollout_postgres.claim(pg_dsn, worker_id=f"gap-{index}", serving_block="route")
+        for index in range(17)
+    ]
+    selected = owners[:4]
+    missing = owners[4:6]
+    partial = owners[6]
+    accepted = owners[7:]
+    observations = []
+
+    for index, owner in enumerate([*selected, partial, *accepted]):
+        record = {
+            **_local_record(),
+            "execution_id": "sha256:" + f"{index + 1:064x}",
+            "run_id": f"gap-run-{index}",
+            "session_id": f"gap-session-{index}",
+            "verifier_execution_id": f"gap-verifier-{index}",
+            "agent_exit_code": 0,
+            "agent_termination": "output_limit",
+        }
+        created = rollout_postgres.record_local_result(
+            pg_dsn,
+            cell_id=owner["cell_id"],
+            worker_id=owner["worker_id"],
+            claim_id=owner["claim_id"],
+            record=record,
+        )
+        if owner in selected:
+            observations.append(
+                _stored_session_observation(
+                    owner["cell_id"],
+                    record["session_id"],
+                    created["record_sha256"],
+                    task_version_id=owner["task_version_id"],
+                    model="endpoint",
+                    verifier_execution_id=record["verifier_execution_id"],
+                )
+            )
+
+    for owner in selected:
+        rollout_postgres.request_retry_review(
+            pg_dsn,
+            cell_id=owner["cell_id"],
+            worker_id=owner["worker_id"],
+            claim_id=owner["claim_id"],
+            failure_code="authoritative_scoring_started.runtimeerror",
+        )
+    for owner in missing:
+        rollout_postgres.request_retry_review(
+            pg_dsn,
+            cell_id=owner["cell_id"],
+            worker_id=owner["worker_id"],
+            claim_id=owner["claim_id"],
+            failure_code=(stored_session_reconciliation_v2.MISSING_LOCAL_RESULT_FAILURE_CODE),
+        )
+    rollout_postgres.request_retry_review(
+        pg_dsn,
+        cell_id=partial["cell_id"],
+        worker_id=partial["worker_id"],
+        claim_id=partial["claim_id"],
+        failure_code="manual-review-required",
+    )
+    for owner in accepted:
+        rollout_postgres.start(
+            pg_dsn,
+            cell_id=owner["cell_id"],
+            worker_id=owner["worker_id"],
+            claim_id=owner["claim_id"],
+            session_id=f"accepted-{owner['cell_id']}",
+        )
+        rollout_postgres.accept(
+            pg_dsn,
+            cell_id=owner["cell_id"],
+            worker_id=owner["worker_id"],
+            claim_id=owner["claim_id"],
+            receipt_digest="f" * 64,
+        )
+
+    counts = {state: 0 for state in rollout_ledger.STATES}
+    counts.update(accepted=10, retry_review=7)
+    unselected_ids = [owner["cell_id"] for owner in owners[4:]]
+    intent = _stored_session_local_gap_intent(
+        [owner["cell_id"] for owner in selected],
+        unselected_ids,
+        counts,
+        [owner["cell_id"] for owner in missing],
+    )
+    with psycopg.connect(pg_dsn, row_factory=psycopg.rows.dict_row) as connection:
+        complement_before = connection.execute(
+            "SELECT * FROM rollout_cells WHERE cell_id = ANY(%s::text[]) ORDER BY cell_id",
+            (unselected_ids,),
+        ).fetchall()
+        local_before = connection.execute(
+            "SELECT cell_id FROM rollout_local_results ORDER BY cell_id"
+        ).fetchall()
+
+    receipt = stored_session_reconciliation_v2.accept_roster(
+        pg_dsn, intent=intent, observations=observations
+    )
+
+    assert receipt["source_local_result_count"] == 15
+    assert receipt["missing_local_result_count"] == 2
+    assert receipt["selected_cells_have_local_results"] is True
+    assert receipt["post_arm_state_counts"]["accepted"] == 14
+    assert receipt["post_arm_state_counts"]["retry_review"] == 3
+    with psycopg.connect(pg_dsn, row_factory=psycopg.rows.dict_row) as connection:
+        complement_after = connection.execute(
+            "SELECT * FROM rollout_cells WHERE cell_id = ANY(%s::text[]) ORDER BY cell_id",
+            (unselected_ids,),
+        ).fetchall()
+        local_after = connection.execute(
+            "SELECT cell_id FROM rollout_local_results ORDER BY cell_id"
+        ).fetchall()
+    assert complement_after == complement_before
+    assert local_after == local_before
+    assert rollout_postgres.summary(pg_dsn)["local_results"] == 15
 
 
 @pytest.mark.parametrize("field", ["cell_id", "worker_id", "claim_id"])

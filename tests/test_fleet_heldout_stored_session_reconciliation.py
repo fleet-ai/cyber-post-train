@@ -48,7 +48,7 @@ def _source_package(tmp_path: Path) -> SimpleNamespace:
     )
 
 
-def _terminal(source: SimpleNamespace, *, selected: int = 2) -> dict:
+def _terminal(source: SimpleNamespace, *, selected: int = 2, local_results: int = 17) -> dict:
     states = {state: 0 for state in rollout_ledger.STATES}
     states.update(accepted=17 - selected, retry_review=selected)
     value = {
@@ -81,7 +81,7 @@ def _terminal(source: SimpleNamespace, *, selected: int = 2) -> dict:
             "name": source.packet.database,
             "summary": {
                 "total": 17,
-                "local_results": 17,
+                "local_results": local_results,
                 "by_state": states,
                 "by_serving_block": [
                     {"serving_block": "base", "state": state, "count": count}
@@ -215,6 +215,31 @@ def _build_subset_authorization(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     return value, source, terminal, terminal_path, evidence
 
 
+def _build_s47_local_gap_authorization(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    source = _source_package(tmp_path)
+    terminal = _terminal(source, selected=7, local_results=15)
+    terminal_path = _terminal_path(tmp_path, terminal)
+    evidence = _create_evidence(tmp_path, source, terminal)
+    monkeypatch.setattr(packet.heldout_launch, "build_package", lambda _: source)
+    selected = [str(uuid.uuid4()) for _ in range(4)]
+    unselected = [str(uuid.uuid4()) for _ in range(13)]
+    missing = unselected[:2]
+    value = packet.build_private_intent_value(
+        repo_root=ROOT,
+        source_launch_packet=source.packet.path,
+        source_terminal_receipt=terminal_path,
+        source_create_evidence=evidence,
+        selected_cell_ids=selected,
+        unselected_cell_ids=unselected,
+        missing_local_result_cell_ids=missing,
+        job_name=JOB_NAME,
+        config_map_name=CONFIG_MAP_NAME,
+        secret_name=SECRET_NAME,
+        output_root=OUTPUT_ROOT,
+    )
+    return value, source, terminal, terminal_path, evidence, selected, unselected, missing
+
+
 def test_build_authorization_binds_source_create_closure_and_exact_bundle(tmp_path, monkeypatch):
     value, source, terminal, _, evidence = _build_authorization(tmp_path, monkeypatch)
     runtime = value["runtime_intent"]
@@ -276,6 +301,111 @@ def test_subset_authorization_binds_full_mixed_arm_census(tmp_path, monkeypatch)
     first = _server_preview(rendered, "11111111-1111-4111-8111-111111111111")
     second = _server_preview(rendered, "22222222-2222-4222-8222-222222222222")
     assert packet.validate_server_previews(rendered, first, second).startswith("sha256:")
+
+
+def test_s47_authorization_binds_exact_two_unselected_local_result_gaps(tmp_path, monkeypatch):
+    (
+        value,
+        source,
+        terminal,
+        terminal_path,
+        evidence,
+        selected,
+        unselected,
+        missing,
+    ) = _build_s47_local_gap_authorization(tmp_path, monkeypatch)
+    runtime = value["runtime_intent"]
+    assert runtime["schema_version"] == reconciliation.SUBSET_LOCAL_GAPS_INTENT_SCHEMA
+    assert runtime["expected_local_result_count"] == 15
+    assert runtime["missing_local_result_cell_ids"] == missing
+    assert set(missing).issubset(unselected)
+    assert set(missing).isdisjoint(selected)
+    intent_path = tmp_path / "s47-gap-intent.json"
+    packet.write_private_intent(intent_path, value)
+
+    rendered = packet.render(
+        repo_root=ROOT,
+        source_launch_packet=source.packet.path,
+        source_terminal_receipt=terminal_path,
+        source_create_evidence=evidence,
+        private_intent=intent_path,
+        job_name=JOB_NAME,
+        config_map_name=CONFIG_MAP_NAME,
+        secret_name=SECRET_NAME,
+        output_root=OUTPUT_ROOT,
+    )
+
+    assert rendered.proof["source_local_result_count"] == 15
+    assert rendered.proof["missing_local_result_count"] == 2
+    assert rendered.proof["missing_local_results_are_unselected"] is True
+    assert rendered.proof["selected_cells_have_local_results"] is True
+    assert rendered.proof["missing_local_result_cells_preserved"] is True
+    assert rendered.proof["model_generation_allowed"] is False
+    assert rendered.proof["scoring_call_allowed"] is False
+    assert terminal["database"]["summary"]["total"] == 17
+    serialized_proof = json.dumps(rendered.proof)
+    assert all(cell_id not in serialized_proof for cell_id in selected + unselected)
+
+
+def test_partial_local_results_require_exact_private_missing_roster(tmp_path, monkeypatch):
+    source = _source_package(tmp_path)
+    terminal = _terminal(source, selected=7, local_results=15)
+    terminal_path = _terminal_path(tmp_path, terminal)
+    evidence = _create_evidence(tmp_path, source, terminal)
+    monkeypatch.setattr(packet.heldout_launch, "build_package", lambda _: source)
+    selected = [str(uuid.uuid4()) for _ in range(4)]
+    unselected = [str(uuid.uuid4()) for _ in range(13)]
+
+    with pytest.raises(packet.ReconciliationPacketError, match="review-held"):
+        packet.build_private_intent_value(
+            repo_root=ROOT,
+            source_launch_packet=source.packet.path,
+            source_terminal_receipt=terminal_path,
+            source_create_evidence=evidence,
+            selected_cell_ids=selected,
+            unselected_cell_ids=unselected,
+            job_name=JOB_NAME,
+            config_map_name=CONFIG_MAP_NAME,
+            secret_name=SECRET_NAME,
+            output_root=OUTPUT_ROOT,
+        )
+
+
+@pytest.mark.parametrize("fault", ["one", "three", "selected", "wrong-count"])
+def test_partial_local_result_packet_rejects_any_broader_exception(tmp_path, monkeypatch, fault):
+    source = _source_package(tmp_path)
+    terminal = _terminal(
+        source,
+        selected=7,
+        local_results=14 if fault == "wrong-count" else 15,
+    )
+    terminal_path = _terminal_path(tmp_path, terminal)
+    evidence = _create_evidence(tmp_path, source, terminal)
+    monkeypatch.setattr(packet.heldout_launch, "build_package", lambda _: source)
+    selected = [str(uuid.uuid4()) for _ in range(4)]
+    unselected = [str(uuid.uuid4()) for _ in range(13)]
+    missing = unselected[:2]
+    if fault == "one":
+        missing = missing[:1]
+    elif fault == "three":
+        missing.append(unselected[2])
+    elif fault == "selected":
+        missing[0] = selected[0]
+
+    with pytest.raises(packet.ReconciliationPacketError, match="private reconciliation intent"):
+        packet.build_private_intent_value(
+            repo_root=ROOT,
+            source_launch_packet=source.packet.path,
+            source_terminal_receipt=terminal_path,
+            source_create_evidence=evidence,
+            selected_cell_ids=selected,
+            unselected_cell_ids=unselected,
+            missing_local_result_cell_ids=missing,
+            job_name=JOB_NAME,
+            config_map_name=CONFIG_MAP_NAME,
+            secret_name=SECRET_NAME,
+            output_root=OUTPUT_ROOT,
+        )
 
 
 @pytest.mark.parametrize(

@@ -29,6 +29,7 @@ from evals.fleet import stored_session_reconciliation as legacy
 
 INTENT_SCHEMA = "fleet-stored-session-reconciliation-intent-v3"
 SUBSET_INTENT_SCHEMA = "fleet-stored-session-subset-reconciliation-intent-v1"
+SUBSET_LOCAL_GAPS_INTENT_SCHEMA = "fleet-stored-session-subset-reconciliation-intent-v2"
 RECEIPT_SCHEMA = "fleet-stored-session-reconciliation-v2"
 RUNTIME_FILES = (
     "stored_session_reconciliation_v2.py",
@@ -51,7 +52,13 @@ INTENT_FIELDS = {
     "sha256",
 }
 SUBSET_INTENT_FIELDS = INTENT_FIELDS | {"expected_arm_state_counts", "unselected_cell_ids"}
+SUBSET_LOCAL_GAPS_INTENT_FIELDS = SUBSET_INTENT_FIELDS | {
+    "expected_local_result_count",
+    "missing_local_result_cell_ids",
+    "expected_missing_local_result_failure_code",
+}
 SUPPORTED_AGENT_OUTCOMES = {(0, "output_limit")}
+MISSING_LOCAL_RESULT_FAILURE_CODE = "authoritative_scoring_started.fleetrequesterror"
 
 
 def _body_digest(value: dict[str, Any]) -> str:
@@ -186,6 +193,9 @@ class ExactStoredSessionSubsetIntent:
     expected_agent_termination: str
     expected_failure_code: str
     sha256: str
+    expected_local_result_count: int | None = None
+    missing_local_result_cell_ids: tuple[str, ...] = ()
+    expected_missing_local_result_failure_code: str | None = None
 
     def __post_init__(self) -> None:
         normalized = _normalized_common(
@@ -224,13 +234,61 @@ class ExactStoredSessionSubsetIntent:
         ):
             raise rollout_ledger.LedgerError("stored-session subset arm census is invalid")
         normalized_counts = {state: counts[state] for state in states}
+        local_gap_values_supplied = any(
+            (
+                self.expected_local_result_count is not None,
+                bool(self.missing_local_result_cell_ids),
+                self.expected_missing_local_result_failure_code is not None,
+            )
+        )
+        missing_local_results: tuple[str, ...] = ()
+        if local_gap_values_supplied:
+            try:
+                missing_local_results = tuple(
+                    str(uuid.UUID(value)) for value in self.missing_local_result_cell_ids
+                )
+            except (AttributeError, TypeError, ValueError) as exc:
+                raise rollout_ledger.LedgerError(
+                    "stored-session subset local-result identity is malformed"
+                ) from exc
+            total = len(selected) + len(unselected)
+            if (
+                total != 17
+                or len(selected) != 4
+                or len(unselected) != 13
+                or normalized_counts["accepted"] != 10
+                or normalized_counts["retry_review"] != 7
+                or type(self.expected_local_result_count) is not int
+                or self.expected_local_result_count != 15
+                or len(missing_local_results) != 2
+                or len(set(missing_local_results)) != 2
+                or not set(missing_local_results).issubset(unselected)
+                or self.expected_local_result_count != total - len(missing_local_results)
+                or self.expected_missing_local_result_failure_code
+                != MISSING_LOCAL_RESULT_FAILURE_CODE
+            ):
+                raise rollout_ledger.LedgerError(
+                    "stored-session subset local-result exception is unsupported"
+                )
         body = {
-            "schema_version": SUBSET_INTENT_SCHEMA,
+            "schema_version": (
+                SUBSET_LOCAL_GAPS_INTENT_SCHEMA
+                if local_gap_values_supplied
+                else SUBSET_INTENT_SCHEMA
+            ),
             **normalized,
             "selected_cell_ids": list(selected),
             "unselected_cell_ids": list(unselected),
             "expected_arm_state_counts": normalized_counts,
         }
+        if local_gap_values_supplied:
+            body.update(
+                expected_local_result_count=self.expected_local_result_count,
+                missing_local_result_cell_ids=list(missing_local_results),
+                expected_missing_local_result_failure_code=(
+                    self.expected_missing_local_result_failure_code
+                ),
+            )
         intent_sha256 = rollout_ledger._require_digest(self.sha256, "intent sha256")  # noqa: SLF001
         if intent_sha256 != _body_digest(body):
             raise rollout_ledger.LedgerError("stored-session subset intent self digest differs")
@@ -238,6 +296,7 @@ class ExactStoredSessionSubsetIntent:
             object.__setattr__(self, name, value)
         object.__setattr__(self, "unselected_cell_ids", unselected)
         object.__setattr__(self, "expected_arm_state_counts", normalized_counts)
+        object.__setattr__(self, "missing_local_result_cell_ids", missing_local_results)
         object.__setattr__(self, "sha256", intent_sha256)
 
 
@@ -257,7 +316,12 @@ def load_intent(path: Path) -> StoredSessionIntent:
         raise rollout_ledger.LedgerError("stored-session v2 intent is unreadable") from exc
     if not isinstance(value, dict) or not isinstance(value.get("selected_cell_ids"), list):
         raise rollout_ledger.LedgerError("stored-session v2 intent schema is unsupported")
-    if value.get("schema_version") == SUBSET_INTENT_SCHEMA and set(value) == SUBSET_INTENT_FIELDS:
+    subset_schema = value.get("schema_version")
+    subset_fields = set(value)
+    if (subset_schema == SUBSET_INTENT_SCHEMA and subset_fields == SUBSET_INTENT_FIELDS) or (
+        subset_schema == SUBSET_LOCAL_GAPS_INTENT_SCHEMA
+        and subset_fields == SUBSET_LOCAL_GAPS_INTENT_FIELDS
+    ):
         if not isinstance(value.get("unselected_cell_ids"), list):
             raise rollout_ledger.LedgerError("stored-session v2 intent schema is unsupported")
         return ExactStoredSessionSubsetIntent(
@@ -275,6 +339,11 @@ def load_intent(path: Path) -> StoredSessionIntent:
             expected_agent_termination=value["expected_agent_termination"],
             expected_failure_code=value["expected_failure_code"],
             sha256=value["sha256"],
+            expected_local_result_count=value.get("expected_local_result_count"),
+            missing_local_result_cell_ids=tuple(value.get("missing_local_result_cell_ids", ())),
+            expected_missing_local_result_failure_code=value.get(
+                "expected_missing_local_result_failure_code"
+            ),
         )
     if set(value) != INTENT_FIELDS or value.get("schema_version") != INTENT_SCHEMA:
         raise rollout_ledger.LedgerError("stored-session v2 intent schema is unsupported")
@@ -546,6 +615,50 @@ def _locked_arm_rows(
     return rows
 
 
+def _locked_local_result_cell_ids(
+    connection: Any,
+    intent: ExactStoredSessionSubsetIntent,
+    arm_rows: list[dict[str, Any]],
+) -> tuple[str, ...] | None:
+    """Prove the one supported partial local-result roster under the arm lock."""
+
+    if intent.expected_local_result_count is None:
+        return None
+    # ``_locked_arm_rows`` already holds every parent cell ``FOR UPDATE``.
+    # ``record_local_result`` takes the same cell lock before inserting, so an
+    # absent result cannot appear between this census and transaction commit.
+    rows = connection.execute(
+        """
+        SELECT cell_id FROM rollout_local_results
+        WHERE cell_id = ANY(%s::text[])
+        ORDER BY cell_id
+        FOR UPDATE
+        """,
+        ([row["cell_id"] for row in arm_rows],),
+    ).fetchall()
+    observed = tuple(row["cell_id"] for row in rows)
+    observed_set = set(observed)
+    all_ids = {row["cell_id"] for row in arm_rows}
+    missing = set(intent.missing_local_result_cell_ids)
+    selected = set(intent.selected_cell_ids)
+    arm_by_id = {row["cell_id"]: row for row in arm_rows}
+    if (
+        len(observed) != intent.expected_local_result_count
+        or len(observed_set) != len(observed)
+        or observed_set != all_ids - missing
+        or not selected.issubset(observed_set)
+        or any(
+            arm_by_id[cell_id]["state"] != "retry_review"
+            or arm_by_id[cell_id]["failure_code"]
+            != intent.expected_missing_local_result_failure_code
+            or arm_by_id[cell_id]["reconciliation_digest"] is not None
+            for cell_id in missing
+        )
+    ):
+        raise rollout_ledger.LedgerError("stored-session subset local-result roster differs")
+    return observed
+
+
 def _expected_post_counts(intent: ExactStoredSessionSubsetIntent) -> dict[str, int]:
     result = dict(intent.expected_arm_state_counts)
     result["retry_review"] -= len(intent.selected_cell_ids)
@@ -581,6 +694,18 @@ def _subset_receipt(intent: ExactStoredSessionSubsetIntent) -> dict[str, Any]:
         "prompt_response_flag_reward_or_trace_content_included": False,
         "cell_task_session_or_trace_identifiers_included": False,
     }
+    if intent.expected_local_result_count is not None:
+        body.update(
+            source_local_result_count=intent.expected_local_result_count,
+            missing_local_result_count=len(intent.missing_local_result_cell_ids),
+            missing_local_results_are_unselected=True,
+            selected_cells_have_local_results=True,
+            missing_local_result_cells_preserved=True,
+            missing_local_result_failure_code_sha256="sha256:"
+            + hashlib.sha256(
+                intent.expected_missing_local_result_failure_code.encode()
+            ).hexdigest(),
+        )
     return {**body, "receipt_sha256": crypto.digest_without(body, "receipt_sha256")}
 
 
@@ -610,6 +735,7 @@ def _accept_subset_roster(
         connection.execute("SET LOCAL statement_timeout = '30s'")
         connection.execute("SET LOCAL lock_timeout = '5s'")
         arm_before = _locked_arm_rows(connection, intent)
+        local_results_before = _locked_local_result_cell_ids(connection, intent, arm_before)
         selected_rows = legacy._rows(connection, intent, lock=True)  # noqa: SLF001
         selected_ids = set(intent.selected_cell_ids)
         unselected_before = {
@@ -625,10 +751,11 @@ def _accept_subset_roster(
             arm_after = connection.execute(
                 "SELECT * FROM rollout_cells ORDER BY cell_id"
             ).fetchall()
+            local_results_after = _locked_local_result_cell_ids(connection, intent, arm_after)
             unselected_after = {
                 row["cell_id"]: dict(row) for row in arm_after if row["cell_id"] not in selected_ids
             }
-            if unselected_after != unselected_before:
+            if unselected_after != unselected_before or local_results_after != local_results_before:
                 raise rollout_ledger.LedgerError("stored-session subset complement changed")
             return receipt
         if _state_counts(arm_before) != intent.expected_arm_state_counts:
@@ -693,10 +820,11 @@ def _accept_subset_roster(
                 },
             )
         arm_after = connection.execute("SELECT * FROM rollout_cells ORDER BY cell_id").fetchall()
+        local_results_after = _locked_local_result_cell_ids(connection, intent, arm_after)
         unselected_after = {
             row["cell_id"]: dict(row) for row in arm_after if row["cell_id"] not in selected_ids
         }
-        if unselected_after != unselected_before:
+        if unselected_after != unselected_before or local_results_after != local_results_before:
             raise rollout_ledger.LedgerError("stored-session subset complement changed")
         if _state_counts(arm_after) != post_counts:
             raise rollout_ledger.LedgerError("stored-session subset post-state census drifted")
