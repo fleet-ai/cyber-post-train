@@ -1,0 +1,132 @@
+{
+  "schema": "q38_dev17_s58_score_blind_pair_classification_v1",
+  "observed_at": "2026-09-23T12:58:48Z",
+  "protocol_id": "q38-dev17-s58-base-t3k32s1000-replacement-p1-v2",
+  "evaluation_identity_sha256": "sha256:de817dba5cd9c38cae45ce90d040d7bed14b9413ff2a3c51fc91b9243a7d9144",
+  "comparison_protocol_sha256": "sha256:fd645d784d659b0931881827cfd9ef0141c90213058e234eaa06225766e7521a",
+  "source_jobs": {
+    "base": {
+      "name": "chris-q38-dev17-s58-base-repl-p1-v2",
+      "uid": "b5eb411a-3c2b-4364-9954-59f4f6a5b3de",
+      "terminal_condition": "Failed",
+      "terminal_at": "2026-09-23T10:35:00Z",
+      "active": 0,
+      "pod_uid": "fa43bef3-9cbf-4086-bcb5-a865cff69b69",
+      "pod_phase": "Failed",
+      "pod_restarts": 0,
+      "workload_uid": "701f4ff3-9fd0-4925-a5c5-1c07a3826215",
+      "workload_finished": true
+    },
+    "candidate": {
+      "name": "chris-q38-dev17-s58-t3k32s1000-repl-p1-v2",
+      "uid": "76f3c027-dd1c-42cf-b6a8-b0a04a2ed4fb",
+      "terminal_condition": "Failed",
+      "terminal_at": "2026-09-23T12:45:52Z",
+      "active": 0,
+      "pod_uid": "27007749-5037-4ea6-896d-c4176920ac8c",
+      "pod_phase": "Failed",
+      "pod_restarts": 0,
+      "workload_uid": "f8507cf6-80a4-4099-a0e9-2d28ed4bbfd9",
+      "workload_finished": true
+    }
+  },
+  "terminal_receipts": {
+    "base": {
+      "path": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s58-base-repl-p1-v2/TERMINAL_OBSERVATION.json",
+      "bytes": 1835,
+      "mode": "600",
+      "file_sha256": "sha256:71e0c3962440cf97bdb57e17a1e1383f22736fb8389073c8b1bc25698b24dbd3",
+      "self_sha256": "sha256:b2aacc51b095a5cc50696b397d78de337b486d9ada8eef623226940ca9a6dea2",
+      "self_valid": true
+    },
+    "candidate": {
+      "path": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s58-t3k32s1000-repl-p1-v2/TERMINAL_OBSERVATION.json",
+      "bytes": 1950,
+      "mode": "600",
+      "file_sha256": "sha256:19c81fde9d07aa0f4ddf8cf44a69768d00e415fec233da2353c92e6bb265bd31",
+      "self_sha256": "sha256:3b72cbe230ca7c63b134be488aaa86e8f9e5d64e23b9e99879760a6520e45e51",
+      "self_valid": true
+    }
+  },
+  "candidate_terminal_collector": {
+    "config_map_uid": "2e70bc86-72d2-435d-b735-4e281fa4c25a",
+    "job_uid": "57cbba91-ce73-49cc-a3a6-6807d7c1693b",
+    "pod_uid": "1fd30afd-6dbc-491b-94df-fb2022dd09ed",
+    "workload_uid": "77396045-6f73-4ff4-9f96-0263cdb0ac39",
+    "completed_at": "2026-09-23T12:54:33Z",
+    "exit_code": 0,
+    "restarts": 0,
+    "server_preview_semantic_sha256": "sha256:2e093dd2ad77bdecc57c17a8ec45be4d669a2b2ad066561916e420426232e9f4"
+  },
+  "frozen_score_blind_counts": {
+    "base": {
+      "total": 17,
+      "accepted": 17,
+      "pending": 0,
+      "retry_review": 0,
+      "active_states": 0,
+      "unexpired_leases": 0
+    },
+    "candidate": {
+      "total": 17,
+      "accepted": 8,
+      "pending": 1,
+      "retry_review": 8,
+      "active_states": 0,
+      "unexpired_leases": 0,
+      "local_results": 16
+    }
+  },
+  "candidate_unresolved_classification": {
+    "retry_review": {
+      "count": 8,
+      "failure_code": "authoritative_scoring_started.runtimeerror",
+      "result_class": "infrastructure_invalid",
+      "stored_local_result": true,
+      "stored_local_session": true,
+      "stored_artifact_and_result_paths": true,
+      "session_ingest_status": "completed",
+      "agent_exit_code": 0,
+      "agent_termination": "output_limit",
+      "consume_only_reconciliation_technically_possible": true
+    },
+    "pending": {
+      "count": 1,
+      "retry_count": 0,
+      "max_retries": 0,
+      "worker_present": false,
+      "claim_present": false,
+      "lease_present": false,
+      "session_present": false,
+      "local_result_or_artifact_present": false,
+      "events": [
+        "initialized"
+      ],
+      "recoverable_without_new_rollout": false
+    }
+  },
+  "release_census": {
+    "source_job_active_count": 0,
+    "source_active_pod_count": 0,
+    "source_unfinished_workload_count": 0,
+    "active_session_claim_state_count": 0,
+    "unexpired_lease_count": 0,
+    "resources_held": false
+  },
+  "decision": {
+    "classification": "infrastructure_invalid_whole_pair",
+    "roster_eligible": false,
+    "reason": "The candidate arm has one sealed cell that never acquired a worker, claim, lease, session, local result, or artifact before the source job terminated. Reconciliation of the eight stored retry-review rows cannot restore the missing cell or complete the frozen matched pair.",
+    "reroll_performed": false,
+    "rescore_performed": false,
+    "reconciliation_performed": false,
+    "ledger_mutated": false
+  },
+  "privacy": {
+    "scores_read_or_included": false,
+    "prompts_responses_flags_rewards_or_trace_content_included": false,
+    "private_cell_session_task_or_claim_ids_included": false,
+    "credentials_included": false
+  },
+  "sha256": "sha256:8656ec064ddcdcb54e78c8f51a8c3b487719ec334c367b136c3f3fa87f373c42"
+}
