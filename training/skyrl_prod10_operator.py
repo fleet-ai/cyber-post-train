@@ -34,7 +34,7 @@ RESULT_SCHEMA = "cyber_skyrl_prod10_operator_result_v1"
 TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_termination_v1"
 FAILURE_TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_failure_v1"
 OPERATOR_NAMES = {
-    "stage": "chris-q38-prod10-stage-operator-v3",
+    "stage": "chris-q38-prod10-stage-operator-v4",
     "preflight": "chris-q38-prod10-preflight-operator-v1",
 }
 _TERMINATION_PATH = Path("/dev/termination-log")
@@ -141,25 +141,89 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
     return packet
 
 
-def _validate_runtime(packet: dict[str, Any]) -> str:
+def _validate_runtime(
+    packet: dict[str, Any], runner: InClusterKubernetesRunner
+) -> str:
     if (os.geteuid(), os.getegid()) != (direct.RUNTIME_UID, direct.RUNTIME_GID):
         raise OperatorFailure("runtime_identity_rejected")
     name = os.environ.get("OPERATOR_JOB_NAME", "")
-    uid = os.environ.get("OPERATOR_JOB_UID", "")
+    pod_name = os.environ.get("OPERATOR_POD_NAME", "")
+    pod_uid = os.environ.get("OPERATOR_POD_UID", "")
     packet_sha256 = os.environ.get("OPERATOR_PACKET_SHA256", "")
     source_sha256 = os.environ.get("OPERATOR_SOURCE_SHA256", "")
+    if name != packet["operator_name"]:
+        raise OperatorFailure("runtime_job_name_rejected")
+    if packet_sha256 != packet["sha256"]:
+        raise OperatorFailure("runtime_packet_digest_rejected")
+    if not source_sha256.startswith("sha256:") or len(source_sha256) != 71:
+        raise OperatorFailure("runtime_source_digest_rejected")
     try:
-        UUID(uid)
+        UUID(pod_uid)
     except ValueError as exc:
-        raise OperatorFailure("runtime_job_uid_rejected") from exc
+        raise OperatorFailure("runtime_pod_uid_rejected") from exc
+    if not pod_name.startswith(name + "-"):
+        raise OperatorFailure("runtime_pod_name_rejected")
+
+    def get(resource: str, target: str, code: str) -> dict[str, Any]:
+        result = direct._kubectl(
+            runner, direct.PROD_CONTEXT, "get", resource, target, "--output=json"
+        )
+        if result.returncode:
+            raise OperatorFailure(code + "_read_failed")
+        try:
+            value = json.loads(result.stdout)
+        except ValueError as exc:
+            raise OperatorFailure(code + "_read_invalid") from exc
+        if not isinstance(value, dict):
+            raise OperatorFailure(code + "_read_invalid")
+        return value
+
+    pod = get("pod", pod_name, "runtime_pod")
+    pod_metadata = pod.get("metadata", {})
     if (
-        name != packet["operator_name"]
-        or packet_sha256 != packet["sha256"]
-        or not source_sha256.startswith("sha256:")
-        or len(source_sha256) != 71
+        not isinstance(pod_metadata, dict)
+        or pod_metadata.get("name") != pod_name
+        or pod_metadata.get("uid") != pod_uid
     ):
-        raise OperatorFailure("runtime_binding_rejected")
-    return uid
+        raise OperatorFailure("runtime_pod_binding_rejected")
+    owners = pod_metadata.get("ownerReferences", [])
+    owner_matches = [
+        owner
+        for owner in owners
+        if isinstance(owner, dict)
+        and owner.get("apiVersion") == "batch/v1"
+        and owner.get("kind") == "Job"
+        and owner.get("name") == name
+        and owner.get("controller") is True
+    ]
+    if len(owner_matches) != 1:
+        raise OperatorFailure("runtime_job_owner_rejected")
+    job_uid = owner_matches[0].get("uid")
+    try:
+        UUID(job_uid)
+    except (TypeError, ValueError) as exc:
+        raise OperatorFailure("runtime_job_uid_rejected") from exc
+    job = get("job", name, "runtime_job")
+    metadata = job.get("metadata", {})
+    annotations = metadata.get("annotations", {}) if isinstance(metadata, dict) else {}
+    labels = metadata.get("labels", {}) if isinstance(metadata, dict) else {}
+    if (
+        metadata.get("name") != name
+        or metadata.get("uid") != job_uid
+        or annotations.get("fleet.ai/failure-alerts") != "off"
+        or annotations.get("cyber-post-train.fleet.ai/operator-packet-sha256")
+        != packet_sha256
+        or annotations.get("cyber-post-train.fleet.ai/operator-source-sha256")
+        != source_sha256
+        or labels.get("kueue.x-k8s.io/queue-name") != "training-lq"
+        or labels.get("kueue.x-k8s.io/priority-class") != "q1"
+        or job.get("spec", {}).get("template", {}).get("spec", {}).get(
+            "priorityClassName"
+        )
+        != "c1"
+    ):
+        raise OperatorFailure("runtime_job_binding_rejected")
+    return job_uid
 
 
 def _canonical_directory(path: Path, *, owner: bool = True, code: str) -> None:
@@ -465,8 +529,8 @@ def run(packet_path: Path, phase: str) -> dict[str, Any]:
     except (OSError, ValueError) as exc:
         raise ValueError("prod10 operator packet is unreadable") from exc
     packet = _packet(value, phase)
-    _validate_runtime(packet)
     runner = InClusterKubernetesRunner()
+    os.environ["OPERATOR_JOB_UID"] = _validate_runtime(packet, runner)
     result = run_stage(packet, runner=runner) if phase == "stage" else run_preflight(
         packet, runner=runner
     )

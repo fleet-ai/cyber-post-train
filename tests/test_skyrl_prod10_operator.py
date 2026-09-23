@@ -114,6 +114,14 @@ def test_prod10_operator_package_is_exact_alert_off_c1_q1_zero_gpu() -> None:
     assert pod["serviceAccountName"] == "default"
     assert pod["automountServiceAccountToken"] is True
     [container] = pod["containers"]
+    environment = {value["name"]: value for value in container["env"]}
+    assert environment["OPERATOR_JOB_NAME"] == {
+        "name": "OPERATOR_JOB_NAME",
+        "value": operator.OPERATOR_NAMES["stage"],
+    }
+    assert environment["OPERATOR_POD_NAME"]["valueFrom"]["fieldRef"]["fieldPath"] == "metadata.name"
+    assert environment["OPERATOR_POD_UID"]["valueFrom"]["fieldRef"]["fieldPath"] == "metadata.uid"
+    assert "OPERATOR_JOB_UID" not in environment
     assert container["securityContext"]["runAsUser"] == 1000
     assert container["securityContext"]["runAsGroup"] == 100
     mounts = {value["name"]: value for value in container["volumeMounts"]}
@@ -124,6 +132,60 @@ def test_prod10_operator_package_is_exact_alert_off_c1_q1_zero_gpu() -> None:
         "subPath": operator_job.CONTROLS_SUBPATH,
     }
     assert "nvidia.com/gpu" not in json.dumps(package.job, sort_keys=True)
+
+
+def test_prod10_runtime_derives_root_job_uid_from_exact_pod_owner(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity, stage, preview, duplicate = _stage_inputs()
+    packet = operator_job.stage_packet(
+        identity=identity,
+        stage=stage,
+        dev_preview=preview,
+        dev_duplicate_proof=duplicate,
+    )
+    package = operator_job.build_operator_package(packet)
+    proof = operator_job.validate_operator_package(package)
+    name = operator.OPERATOR_NAMES["stage"]
+    pod_name = name + "-abcde"
+    pod_uid = "00000000-0000-4000-8000-000000000010"
+    job_uid = "00000000-0000-4000-8000-000000000011"
+
+    def runner(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        resource, target = command[6:8]
+        if resource == "pod":
+            value = {
+                "metadata": {
+                    "name": pod_name,
+                    "uid": pod_uid,
+                    "ownerReferences": [
+                        {
+                            "apiVersion": "batch/v1",
+                            "kind": "Job",
+                            "name": name,
+                            "uid": job_uid,
+                            "controller": True,
+                        }
+                    ],
+                }
+            }
+        else:
+            value = copy.deepcopy(package.job)
+            value["metadata"]["uid"] = job_uid
+        return subprocess.CompletedProcess(command, 0, json.dumps(value), "")
+
+    monkeypatch.setattr(operator.os, "geteuid", lambda: 1000)
+    monkeypatch.setattr(operator.os, "getegid", lambda: 100)
+    monkeypatch.setenv("OPERATOR_JOB_NAME", name)
+    monkeypatch.setenv("OPERATOR_POD_NAME", pod_name)
+    monkeypatch.setenv("OPERATOR_POD_UID", pod_uid)
+    monkeypatch.setenv("OPERATOR_PACKET_SHA256", packet["sha256"])
+    monkeypatch.setenv("OPERATOR_SOURCE_SHA256", proof["source_sha256"])
+    assert operator._validate_runtime(packet, runner) == job_uid
+
+    monkeypatch.setenv("OPERATOR_JOB_NAME", pod_name)
+    with pytest.raises(operator.OperatorFailure, match="runtime_job_name_rejected"):
+        operator._validate_runtime(packet, runner)
 
 
 def test_prod10_operator_package_rejects_root_alert_or_packet_drift() -> None:
