@@ -11,7 +11,12 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from pathlib import Path
+
+# Keep the documented direct-file ``--check`` entrypoint equivalent to
+# ``python -m scripts.prepare_qwen38_skyrl_posttrain_packets``.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from scripts import prepare_qwen38_skyrl_production_queue as queue
 
