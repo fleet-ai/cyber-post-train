@@ -28,6 +28,8 @@ ROOT = Path(__file__).resolve().parents[1]
 class FakeDatabase:
     def __init__(self) -> None:
         self.present = False
+        self.exists_calls = 0
+        self.summary_calls = 0
         self.summary_value = {
             "total": 2,
             "local_results": 2,
@@ -39,10 +41,12 @@ class FakeDatabase:
 
     def exists(self, database: str) -> bool:
         assert database == DATABASE
+        self.exists_calls += 1
         return self.present
 
     def summary(self, database: str) -> dict[str, Any]:
         assert database == DATABASE
+        self.summary_calls += 1
         return copy.deepcopy(self.summary_value)
 
 
@@ -644,10 +648,13 @@ def test_uncertain_create_is_observed_but_never_retried(tmp_path):
     assert lines[-1]["state"] == "KUBECTL_CREATE_RESPONSE_UNCERTAIN_DO_NOT_RETRY"
 
 
-def test_terminal_collection_is_score_blind_and_never_retries_or_scores(tmp_path):
+@pytest.mark.parametrize("database_present", [True, False])
+def test_terminal_collection_is_score_blind_and_never_retries_or_scores(tmp_path, database_present):
     packet = _packet(tmp_path)
     cluster, database = FakeCluster(), FakeDatabase()
     _launch(packet, cluster, database, tmp_path / "intent.jsonl")
+    preterminal_exists_calls = database.exists_calls
+    database.present = database_present
     assert cluster.created is not None
     job = next(item for item in cluster.created["items"] if item["kind"] == "Job")
     job["status"] = {
@@ -695,12 +702,34 @@ def test_terminal_collection_is_score_blind_and_never_retries_or_scores(tmp_path
     assert receipt["job"]["terminal_condition"] == "Complete"
     assert receipt["protocol_id"] == "heldout-protocol-a1"
     assert receipt["arm_id"] == "base"
-    assert receipt["database"]["summary"]["by_state"] == {
-        "accepted": 2,
-        "claimed": 0,
-        "pending": 0,
-        "retry_review": 0,
-    }
+    if database_present:
+        assert receipt["database"]["summary"]["by_state"] == {
+            "accepted": 2,
+            "claimed": 0,
+            "pending": 0,
+            "retry_review": 0,
+        }
+        assert database.exists_calls - preterminal_exists_calls == 1
+        assert database.summary_calls == 1
+    else:
+        assert receipt["database"]["summary"] == {
+            "total": 0,
+            "local_results": 0,
+            "by_state": {
+                "accepted": 0,
+                "claimed": 0,
+                "grading": 0,
+                "pending": 0,
+                "retry_review": 0,
+                "running": 0,
+                "terminal": 0,
+            },
+            "by_serving_block": [],
+            "stale_active": 0,
+            "plan_sha256": None,
+        }
+        assert database.exists_calls - preterminal_exists_calls == 2
+        assert database.summary_calls == 0
     assert receipt["decision"] == {
         "capability_result_status": "not_interpreted",
         "score_blind_reconciliation_required": False,
@@ -714,3 +743,90 @@ def test_terminal_collection_is_score_blind_and_never_retries_or_scores(tmp_path
         None,
         f"kueue.x-k8s.io/job-uid={JOB_UID}",
     ) in cluster.list_calls
+
+
+def test_postgres_summary_preserves_uri_scheme_when_selecting_database(monkeypatch):
+    from evals.fleet import rollout_postgres
+
+    monkeypatch.setenv(
+        "TEST_ROLLOUT_DATABASE_URL",
+        "postgresql://user:password@postgres.example:5432/rollout?sslmode=disable",
+    )
+    observed: dict[str, str] = {}
+
+    def fake_summary(dsn: str) -> dict[str, Any]:
+        observed["dsn"] = dsn
+        return {"total": 17}
+
+    monkeypatch.setattr(rollout_postgres, "summary", fake_summary)
+    result = launch.PostgresDatabase("TEST_ROLLOUT_DATABASE_URL").summary(DATABASE)
+    assert result == {"total": 17}
+    assert observed["dsn"] == (
+        "postgresql://user:password@postgres.example:5432/" + DATABASE + "?sslmode=disable"
+    )
+
+
+@pytest.mark.parametrize(
+    "dsn",
+    [
+        "host=postgres.example dbname=rollout",
+        "https://postgres.example/rollout",
+        "postgresql:///rollout",
+        "postgresql://postgres.example/rollout#fragment",
+    ],
+)
+def test_postgres_summary_rejects_non_uri_or_ambiguous_database_targets(monkeypatch, dsn):
+    monkeypatch.setenv("TEST_ROLLOUT_DATABASE_URL", dsn)
+    with pytest.raises(launch.HeldoutLaunchError, match="supported PostgreSQL URI"):
+        launch.PostgresDatabase("TEST_ROLLOUT_DATABASE_URL").summary(DATABASE)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "dbname=wrong_database",
+        "%64bname=wrong_database",
+        "sslmode=disable&dbname=wrong_database",
+        "sslmode=disable&DATABASE=",
+        "dbname=wrong_database&dbname=another_database",
+    ],
+)
+def test_postgres_summary_rejects_query_database_overrides(monkeypatch, query):
+    monkeypatch.setenv(
+        "TEST_ROLLOUT_DATABASE_URL",
+        f"postgresql://user:password@postgres.example:5432/rollout?{query}",
+    )
+    with pytest.raises(
+        launch.HeldoutLaunchError,
+        match="select its database only by URI path",
+    ):
+        launch.PostgresDatabase("TEST_ROLLOUT_DATABASE_URL").summary(DATABASE)
+
+
+def test_terminal_receipt_path_uses_existing_evaluation_output(tmp_path):
+    output = tmp_path / "evaluation"
+    output.mkdir()
+    assert (
+        launch.terminal_receipt_path(str(output), JOB_NAME, fallback_root=tmp_path)
+        == output / "TERMINAL_OBSERVATION.json"
+    )
+
+
+def test_terminal_receipt_path_falls_back_when_evaluation_never_started(tmp_path):
+    missing = tmp_path / "evaluation-never-created"
+    assert (
+        launch.terminal_receipt_path(str(missing), JOB_NAME, fallback_root=tmp_path)
+        == tmp_path / f"{JOB_NAME}-TERMINAL_OBSERVATION.json"
+    )
+
+
+def test_terminal_receipt_path_rejects_ambiguous_roots(tmp_path):
+    regular = tmp_path / "regular"
+    regular.write_text("not a directory", encoding="utf-8")
+    with pytest.raises(launch.HeldoutLaunchError, match="not a directory"):
+        launch.terminal_receipt_path(str(regular), JOB_NAME, fallback_root=tmp_path)
+
+    symlink = tmp_path / "symlink"
+    symlink.symlink_to(tmp_path, target_is_directory=True)
+    with pytest.raises(launch.HeldoutLaunchError, match="must not be a symlink"):
+        launch.terminal_receipt_path(str(symlink), JOB_NAME, fallback_root=tmp_path)

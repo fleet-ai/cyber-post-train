@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Protocol
+from urllib.parse import parse_qsl, quote, urlsplit, urlunsplit
 
 import yaml
 
@@ -1298,6 +1299,31 @@ def _score_blind_summary(value: Any) -> dict[str, Any]:
     }
 
 
+def _absent_database_summary() -> dict[str, Any]:
+    """Represent a twice-observed missing ledger without inventing rollout rows."""
+    return _score_blind_summary(
+        {
+            "total": 0,
+            "local_results": 0,
+            "by_state": {
+                state: 0
+                for state in (
+                    "accepted",
+                    "claimed",
+                    "grading",
+                    "pending",
+                    "retry_review",
+                    "running",
+                    "terminal",
+                )
+            },
+            "by_serving_block": [],
+            "stale_active": 0,
+            "plan_sha256": None,
+        }
+    )
+
+
 def _terminal_resource_rows(items: list[dict[str, Any]], *, kind: str) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for item in items:
@@ -1314,6 +1340,29 @@ def _terminal_resource_rows(items: list[dict[str, Any]], *, kind: str) -> list[d
         phase = status.get("phase") if isinstance(status, dict) else None
         rows.append({"name": name, "uid": uid, "phase": phase if isinstance(phase, str) else None})
     return sorted(rows, key=lambda row: (row["name"], row["uid"]))
+
+
+def terminal_receipt_path(
+    output_root: str,
+    job_name: str,
+    *,
+    fallback_root: Path = Path("/mnt/sfs/jobs"),
+) -> Path:
+    """Choose a no-overwrite receipt path even when evaluation never made output."""
+    if not isinstance(output_root, str) or not output_root:
+        raise HeldoutLaunchError("terminal output root is invalid")
+    if not isinstance(job_name, str) or KUBERNETES_NAME.fullmatch(job_name) is None:
+        raise HeldoutLaunchError("terminal Job name is invalid")
+    output = Path(output_root)
+    if output.is_symlink():
+        raise HeldoutLaunchError("terminal output root must not be a symlink")
+    if output.is_dir():
+        return output / "TERMINAL_OBSERVATION.json"
+    if output.exists():
+        raise HeldoutLaunchError("terminal output root exists but is not a directory")
+    if fallback_root.is_symlink() or not fallback_root.is_dir():
+        raise HeldoutLaunchError("terminal fallback root is not an exact directory")
+    return fallback_root / f"{job_name}-TERMINAL_OBSERVATION.json"
 
 
 def collect_terminal(
@@ -1368,7 +1417,13 @@ def collect_terminal(
         raise HeldoutLaunchError("scoped Workload read differs from the created Job")
     pods = _owned_pods(cluster, packet)
     try:
-        summary = _score_blind_summary(database.summary(packet.database))
+        database_exists = database.exists(packet.database)
+        if database_exists:
+            summary = _score_blind_summary(database.summary(packet.database))
+        else:
+            if database.exists(packet.database):
+                raise HeldoutLaunchError("terminal database appeared between absence observations")
+            summary = _absent_database_summary()
         destination_exists = output_exists(packet.output_root)
     except HeldoutLaunchError:
         raise
@@ -1563,11 +1618,33 @@ class PostgresDatabase:
 
     def summary(self, database: str) -> dict[str, Any]:
         try:
-            import psycopg.conninfo
-
             from evals.fleet import rollout_postgres
 
-            dsn = psycopg.conninfo.make_conninfo(self._dsn(), dbname=database)
+            if not isinstance(database, str) or DATABASE_NAME.fullmatch(database) is None:
+                raise HeldoutLaunchError("database name is invalid")
+            original = urlsplit(self._dsn())
+            if (
+                original.scheme not in {"postgres", "postgresql"}
+                or not original.netloc
+                or original.fragment
+            ):
+                raise HeldoutLaunchError("database environment is not a supported PostgreSQL URI")
+            query_keys = {
+                key.casefold() for key, _ in parse_qsl(original.query, keep_blank_values=True)
+            }
+            if query_keys & {"database", "dbname"}:
+                raise HeldoutLaunchError(
+                    "database environment must select its database only by URI path"
+                )
+            dsn = urlunsplit(
+                (
+                    original.scheme,
+                    original.netloc,
+                    "/" + quote(database, safe=""),
+                    original.query,
+                    "",
+                )
+            )
             return rollout_postgres.summary(dsn)
         except HeldoutLaunchError:
             raise

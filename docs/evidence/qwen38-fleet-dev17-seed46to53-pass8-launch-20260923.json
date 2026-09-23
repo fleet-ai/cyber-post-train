@@ -1,0 +1,94 @@
+{
+  "schema": "cyber_qwen38_fleet_dev17_seed46to53_pass8_launch_v1",
+  "observed_at": "2026-09-23T00:07:15Z",
+  "study": {
+    "protocol_id": "q38-dev17-seeds46to53-base-step1000-p8-v1",
+    "aggregation": "eight_predeclared_pass1_replicas_per_task_and_arm",
+    "seeds": [46, 47, 48, 49, 50, 51, 52, 53],
+    "task_count": 17,
+    "sessions_per_arm": 136,
+    "total_sessions": 272,
+    "retry_limit": 0,
+    "harness": "opencode",
+    "harness_version": "1.18.27",
+    "context_window_tokens": 262144,
+    "training_data_eligible": false
+  },
+  "selection": {
+    "task_set_path": "configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.json",
+    "task_selection_sha256": "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
+    "binding_roster_path": "configs/evaluation/qwen38-fleet-dev17-exact-binding-roster-20260922-v1.json",
+    "binding_roster_sha256": "sha256:39ae49c2db322725800b15347d5da5d171e7e03b21dec5b570683414d70e83c5",
+    "live_binding_audit_receipt_sha256": "sha256:74ea48d0973c21d31d98d40553399cbc9582f53f5c9f1e8d372c63cafb1ab3",
+    "live_binding_mismatch_count": 0,
+    "teacher3k_direct_dev_task_key_overlap": 0
+  },
+  "models": {
+    "base": {
+      "model_id": "qwen3.8-27b",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+    },
+    "candidate": {
+      "model_id": "chris-q38-t3k32-s1000-v1",
+      "revision": "sha256:023c5f8b0559ba050f0d672a6bc27aabecec7d5837595f8ea5bc914446d26db5",
+      "serving_pod_uid": "12b516ec-5f98-4cff-ac6f-1f2d123d0f6a",
+      "serving_ready": true,
+      "serving_restarts": 0
+    },
+    "fresh_live_parity_receipt_sha256": "sha256:9f6d2a0af61c5561c55ab34a08a8d48a7031c75614520595c601f5df3bd0a215"
+  },
+  "preparation": {
+    "packet_receipt_sha256": "sha256:22b59a3e9e1ea2ed8e8b92920304f27bbd953925fe0ecf709c7308433db8f0d3",
+    "evaluator_double_preview_receipt_sha256": "sha256:f593bc96f76e7eb82aa6673375c9978adc7fa741d4f1f4a3e881b1fdf5e71f4b",
+    "repaired_launcher_double_preview_receipt_sha256": "sha256:8759712c9f5bc810f01cb509bd09b255a2ad6d5fb2879044039ce3f6fc0b0695",
+    "root_failure_alerts": "off",
+    "priority_class": "c1",
+    "evaluator_gpu_requests": 0,
+    "server_preview_count": 64
+  },
+  "launcher_repair": {
+    "first_attempt_jobs": 16,
+    "first_attempt_terminal_failed": 16,
+    "first_attempt_failure_boundary": "before_evaluator_creation",
+    "cause": "launcher_pods_lacked_the_postgres_client_label_required_by_the_existing_network_policy",
+    "repair_commit": "5ac3777e",
+    "repair": "add_exact_postgres_client_label_and_use_new_create_once_launcher_names",
+    "repaired_attempt_jobs": 16,
+    "repaired_attempt_terminal_succeeded": 16,
+    "cleanup_receipt_sha256": "sha256:e5ab7010a145095e7cf72b5588c8406dff81e213d1b48cf7146345991e37c856",
+    "terminal_launcher_jobs_and_config_maps_deleted": true,
+    "evaluator_objects_deleted": false
+  },
+  "evaluators": [
+    {"seed": 46, "arm": "base", "job_name": "chris-q38-dev17-s46-base-p1-v1", "job_uid": "c4b0daa1-db1f-49b1-a8c8-20671e232e0a"},
+    {"seed": 46, "arm": "candidate", "job_name": "chris-q38-dev17-s46-t3k32s1000-p1-v1", "job_uid": "133fff1f-91bc-44b5-9aa1-ea37b9aead3b"},
+    {"seed": 47, "arm": "base", "job_name": "chris-q38-dev17-s47-base-p1-v1", "job_uid": "179824ee-bebc-4a5f-8b05-1f6f10caca38"},
+    {"seed": 47, "arm": "candidate", "job_name": "chris-q38-dev17-s47-t3k32s1000-p1-v1", "job_uid": "b471b73d-ca66-458d-8da9-b2965f35711f"},
+    {"seed": 48, "arm": "base", "job_name": "chris-q38-dev17-s48-base-p1-v1", "job_uid": "d9e965b2-b644-42eb-a3cb-56dbedac0bdd"},
+    {"seed": 48, "arm": "candidate", "job_name": "chris-q38-dev17-s48-t3k32s1000-p1-v1", "job_uid": "19123e77-94d2-4f11-b161-bd1940aa036c"},
+    {"seed": 49, "arm": "base", "job_name": "chris-q38-dev17-s49-base-p1-v1", "job_uid": "855a452b-5aee-4516-aa2b-681132ddc196"},
+    {"seed": 49, "arm": "candidate", "job_name": "chris-q38-dev17-s49-t3k32s1000-p1-v1", "job_uid": "5ee4da2f-60b5-4e63-af58-1c781983e016"},
+    {"seed": 50, "arm": "base", "job_name": "chris-q38-dev17-s50-base-p1-v1", "job_uid": "0da37e67-dd4d-4131-a2f7-6419b0dfed88"},
+    {"seed": 50, "arm": "candidate", "job_name": "chris-q38-dev17-s50-t3k32s1000-p1-v1", "job_uid": "effa7f3e-bd63-4586-b7ea-e5192940648d"},
+    {"seed": 51, "arm": "base", "job_name": "chris-q38-dev17-s51-base-p1-v1", "job_uid": "75d47351-61c7-4bd1-995a-93cbfd112d0d"},
+    {"seed": 51, "arm": "candidate", "job_name": "chris-q38-dev17-s51-t3k32s1000-p1-v1", "job_uid": "a109153f-180d-4bd4-8f89-bc4958bedef3"},
+    {"seed": 52, "arm": "base", "job_name": "chris-q38-dev17-s52-base-p1-v1", "job_uid": "84099f49-4a49-42ed-98f3-850887f0f57d"},
+    {"seed": 52, "arm": "candidate", "job_name": "chris-q38-dev17-s52-t3k32s1000-p1-v1", "job_uid": "e25a984e-eabc-4b3b-afdc-6965a3143934"},
+    {"seed": 53, "arm": "base", "job_name": "chris-q38-dev17-s53-base-p1-v1", "job_uid": "333b2104-370c-45ff-891a-c95ff4918674"},
+    {"seed": 53, "arm": "candidate", "job_name": "chris-q38-dev17-s53-t3k32s1000-p1-v1", "job_uid": "6299bd75-e2c1-4279-ab0d-8279cb2440cf"}
+  ],
+  "current_state": {
+    "active_evaluators": 3,
+    "queued_evaluators": 13,
+    "terminal_evaluators": 0,
+    "active_score_blind_cells": {"claimed": 12, "pending": 39},
+    "capability_result_status": "not_interpreted",
+    "scores_read": false
+  },
+  "privacy": {
+    "prompts_responses_flags_rewards_or_trace_content_included": false,
+    "score_values_included": false,
+    "credentials_included": false
+  },
+  "sha256": "sha256:1154b450624a8b9a567464916da95874c44933175c408b86a80ff5bca0eada70"
+}
