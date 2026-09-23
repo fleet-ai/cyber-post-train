@@ -34,7 +34,7 @@ RESULT_SCHEMA = "cyber_skyrl_prod10_operator_result_v1"
 TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_termination_v1"
 FAILURE_TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_failure_v1"
 OPERATOR_NAMES = {
-    "stage": "chris-q38-prod10-stage-operator-v5",
+    "stage": "chris-q38-prod10-stage-operator-v6",
     "preflight": "chris-q38-prod10-preflight-operator-v1",
 }
 _STAGE_V4_RECOVERY = {
@@ -52,6 +52,24 @@ _STAGE_V4_RECOVERY = {
         "sha256:3a1a9c8c89ed28310afcec312f7cea3db6d117f16405d9720b65a6356a34eacb"
     ),
     "previous_error_code": "operator_unclassified",
+    "gpus": 0,
+}
+_STAGE_V5_RECOVERY = {
+    "schema": "cyber_skyrl_prod10_stage_precreate_recovery_v1",
+    "status": "authorized_precreate_recovery",
+    "previous_operator_name": "chris-q38-prod10-stage-operator-v5",
+    "previous_operator_job_uid": "4ba8eb38-c3e1-400d-9488-1e281d2a3aa9",
+    "previous_packet_sha256": (
+        "sha256:2a10bba1d58dd004a03dfb03afd3630d742cf553f3ec98b6bb032b535a9ea851"
+    ),
+    "previous_failure_receipt_sha256": (
+        "sha256:e01d4fda69e75213434eb328287b9966f020f2758ff373342a2b6d2708d7ba9e"
+    ),
+    "previous_release_sha256": (
+        "sha256:07e44b411667adaa154e96694523a54f06a4ffbbabf6344e8a95ed221aadd2bf"
+    ),
+    "previous_error_code": "stage_production_preview_rejected",
+    "root_cause": "kubectl_hidden_managed_fields",
     "gpus": 0,
 }
 _TERMINATION_PATH = Path("/dev/termination-log")
@@ -78,8 +96,8 @@ def _validate_seal(value: object, schema: str) -> dict[str, Any]:
 
 
 def stage_recovery_binding() -> dict[str, Any]:
-    """Return the one reviewed pre-create recovery binding for stage v5."""
-    return _seal(_STAGE_V4_RECOVERY)
+    """Return the one reviewed pre-create recovery binding for stage v6."""
+    return _seal(_STAGE_V5_RECOVERY)
 
 
 def _write_once(path: Path, value: dict[str, Any]) -> None:
@@ -343,7 +361,7 @@ def _job_absent(
         raise OperatorFailure(code)
 
 
-def _reconcile_stage_v4_precreate(
+def _reconcile_stage_v5_precreate(
     packet: dict[str, Any],
     *,
     stage: dict[str, Any],
@@ -351,18 +369,50 @@ def _reconcile_stage_v4_precreate(
     identity: historical.RailIdentity,
     runner: InClusterKubernetesRunner,
 ) -> Path:
-    """Preserve and replace only v4 evidence proven to predate a create intent."""
+    """Preserve and replace only v5 evidence proven to predate a create intent."""
     if packet.get("precreate_recovery") != stage_recovery_binding():
-        raise OperatorFailure("stage_v4_recovery_binding_rejected")
+        raise OperatorFailure("stage_v5_recovery_binding_rejected")
     _existing_root()
     operation_root = hardening.stage_operation_root(stage)
-    _canonical_directory(operation_root, code="stage_v4_operation_root")
+    _canonical_directory(operation_root, code="stage_v5_operation_root")
     names = {entry.name for entry in operation_root.iterdir()}
-    if names != {"STAGE_OPERATOR_INTENT.json", "STAGE_OBSERVER_ARMED.json"}:
-        raise OperatorFailure("stage_v4_recovery_inventory_rejected")
+    if names != {
+        "STAGE_OPERATOR_INTENT.json",
+        "STAGE_OBSERVER_ARMED.json",
+        "STAGE_OPERATOR_INTENT.v4.failed.json",
+        "STAGE_OBSERVER_ARMED.v4.failed.json",
+        "STAGE_OPERATOR_RECOVERY_V5.json",
+    }:
+        raise OperatorFailure("stage_v5_recovery_inventory_rejected")
     recovery = stage_recovery_binding()
     intent_path = operation_root / "STAGE_OPERATOR_INTENT.json"
     armed_path = operation_root / "STAGE_OBSERVER_ARMED.json"
+    v4_intent = _read_recovery_file(
+        operation_root / "STAGE_OPERATOR_INTENT.v4.failed.json",
+        "cyber_skyrl_prod10_operator_intent_v1",
+    )
+    v4_armed = _read_recovery_file(
+        operation_root / "STAGE_OBSERVER_ARMED.v4.failed.json",
+        "cyber_direct_cleanup_observer_armed_v1",
+    )
+    v5_receipt = _read_recovery_file(
+        operation_root / "STAGE_OPERATOR_RECOVERY_V5.json",
+        "cyber_skyrl_prod10_stage_precreate_recovery_receipt_v1",
+    )
+    if (
+        v4_intent.get("packet_sha256")
+        != _STAGE_V4_RECOVERY["previous_packet_sha256"]
+        or v4_intent.get("operator_job_uid")
+        != _STAGE_V4_RECOVERY["previous_operator_job_uid"]
+        or v5_receipt.get("status") != "v4_precreate_evidence_preserved"
+        or v5_receipt.get("binding_sha256") != _seal(_STAGE_V4_RECOVERY)["sha256"]
+        or v5_receipt.get("previous_intent_sha256") != v4_intent.get("sha256")
+        or v5_receipt.get("previous_observer_sha256") != v4_armed.get("sha256")
+        or v5_receipt.get("archived_files")
+        != ["STAGE_OBSERVER_ARMED.v4.failed.json", "STAGE_OPERATOR_INTENT.v4.failed.json"]
+        or v5_receipt.get("gpus") != 0
+    ):
+        raise OperatorFailure("stage_v4_recovery_chain_rejected")
     intent = _read_recovery_file(
         intent_path, "cyber_skyrl_prod10_operator_intent_v1"
     )
@@ -383,11 +433,11 @@ def _reconcile_stage_v4_precreate(
         or intent.get("packet_sha256") != recovery["previous_packet_sha256"]
         or intent.get("operator_job_uid") != recovery["previous_operator_job_uid"]
     ):
-        raise OperatorFailure("stage_v4_recovery_intent_rejected")
+        raise OperatorFailure("stage_v5_recovery_intent_rejected")
     try:
         direct._timestamp(intent.get("created_at"))
     except JobsError as exc:
-        raise OperatorFailure("stage_v4_recovery_intent_rejected") from exc
+        raise OperatorFailure("stage_v5_recovery_intent_rejected") from exc
     expected_binding = hardening.creator_binding_path(operation_root, "stage")
     if (
         armed.get("status") != "armed"
@@ -403,24 +453,24 @@ def _reconcile_stage_v4_precreate(
         or type(armed.get("observer_pid")) is not int
         or armed["observer_pid"] < 1
     ):
-        raise OperatorFailure("stage_v4_recovery_observer_rejected")
+        raise OperatorFailure("stage_v5_recovery_observer_rejected")
     try:
         direct._timestamp(armed.get("armed_at"))
     except JobsError as exc:
-        raise OperatorFailure("stage_v4_recovery_observer_rejected") from exc
+        raise OperatorFailure("stage_v5_recovery_observer_rejected") from exc
     _job_absent(
         runner,
         recovery["previous_operator_name"],
-        code="stage_v4_operator_still_present",
+        code="stage_v5_operator_still_present",
     )
     _job_absent(runner, identity.stage_name, code="stage_target_already_present")
-    archived_intent = operation_root / "STAGE_OPERATOR_INTENT.v4.failed.json"
-    archived_armed = operation_root / "STAGE_OBSERVER_ARMED.v4.failed.json"
+    archived_intent = operation_root / "STAGE_OPERATOR_INTENT.v5.failed.json"
+    archived_armed = operation_root / "STAGE_OBSERVER_ARMED.v5.failed.json"
     if any(
         path.exists() or path.is_symlink()
         for path in (archived_intent, archived_armed, expected_binding)
     ):
-        raise OperatorFailure("stage_v4_recovery_destination_exists")
+        raise OperatorFailure("stage_v5_recovery_destination_exists")
     os.rename(intent_path, archived_intent)
     os.rename(armed_path, archived_armed)
     descriptor = os.open(operation_root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
@@ -429,11 +479,11 @@ def _reconcile_stage_v4_precreate(
     finally:
         os.close(descriptor)
     _write_once(
-        operation_root / "STAGE_OPERATOR_RECOVERY_V5.json",
+        operation_root / "STAGE_OPERATOR_RECOVERY_V6.json",
         _seal(
             {
                 "schema": "cyber_skyrl_prod10_stage_precreate_recovery_receipt_v1",
-                "status": "v4_precreate_evidence_preserved",
+                "status": "v5_precreate_evidence_preserved",
                 "binding_sha256": recovery["sha256"],
                 "previous_intent_sha256": intent["sha256"],
                 "previous_observer_sha256": armed["sha256"],
@@ -525,7 +575,7 @@ def run_stage(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> d
         )
     except JobsError as exc:
         raise OperatorFailure("stage_development_preview_rejected") from exc
-    operation_root = _reconcile_stage_v4_precreate(
+    operation_root = _reconcile_stage_v5_precreate(
         packet,
         stage=stage,
         expected=expected,

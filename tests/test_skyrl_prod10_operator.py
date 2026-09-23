@@ -189,7 +189,7 @@ def test_prod10_runtime_derives_root_job_uid_from_exact_pod_owner(
         operator._validate_runtime(packet, runner)
 
 
-def test_stage_v5_preserves_and_reconciles_exact_v4_precreate_evidence(
+def test_stage_v6_preserves_and_reconciles_exact_v5_precreate_evidence(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     identity, stage, preview, duplicate = _stage_inputs()
@@ -207,6 +207,58 @@ def test_stage_v5_preserves_and_reconciles_exact_v4_precreate_evidence(
     monkeypatch.setattr(direct, "RUNTIME_GID", os.getegid())
     operation_root = operator.hardening.stage_operation_root(stage)
     operation_root.mkdir(mode=0o700)
+    v4_recovery = operator._seal(operator._STAGE_V4_RECOVERY)
+    v4_intent = operator._seal(
+        {
+            "schema": "cyber_skyrl_prod10_operator_intent_v1",
+            "phase": "stage",
+            "packet_sha256": v4_recovery["previous_packet_sha256"],
+            "operator_job_uid": v4_recovery["previous_operator_job_uid"],
+            "created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+    v4_armed = direct._seal(
+        {
+            "schema": "cyber_direct_cleanup_observer_armed_v1",
+            "status": "armed",
+            "context": direct.PROD_CONTEXT,
+            "namespace": direct.NAMESPACE,
+            "kind": "job",
+            "name": identity.stage_name,
+            "maximum_seconds": direct.CPU_MAXIMUM_SECONDS,
+            "expected_gpus": 0,
+            "plan_sha256": stage["sha256"],
+            "manifest_sha256": "sha256:" + direct.digest(expected),
+            "armed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "observer_pid": 6,
+            "creator_binding_path": str(
+                operator.hardening.creator_binding_path(operation_root, "stage")
+            ),
+        }
+    )
+    operator._write_once(
+        operation_root / "STAGE_OPERATOR_INTENT.v4.failed.json", v4_intent
+    )
+    operator._write_once(
+        operation_root / "STAGE_OBSERVER_ARMED.v4.failed.json", v4_armed
+    )
+    operator._write_once(
+        operation_root / "STAGE_OPERATOR_RECOVERY_V5.json",
+        operator._seal(
+            {
+                "schema": "cyber_skyrl_prod10_stage_precreate_recovery_receipt_v1",
+                "status": "v4_precreate_evidence_preserved",
+                "binding_sha256": v4_recovery["sha256"],
+                "previous_intent_sha256": v4_intent["sha256"],
+                "previous_observer_sha256": v4_armed["sha256"],
+                "archived_files": [
+                    "STAGE_OBSERVER_ARMED.v4.failed.json",
+                    "STAGE_OPERATOR_INTENT.v4.failed.json",
+                ],
+                "gpus": 0,
+            }
+        ),
+    )
     recovery = operator.stage_recovery_binding()
     operator._write_once(
         operation_root / "STAGE_OPERATOR_INTENT.json",
@@ -246,7 +298,7 @@ def test_stage_v5_preserves_and_reconciles_exact_v4_precreate_evidence(
     runner = incluster_kubernetes.InClusterKubernetesRunner(
         request=lambda *_args: (404, b'{"kind":"Status"}')
     )
-    assert operator._reconcile_stage_v4_precreate(
+    assert operator._reconcile_stage_v5_precreate(
         packet,
         stage=stage,
         expected=expected,
@@ -255,12 +307,12 @@ def test_stage_v5_preserves_and_reconciles_exact_v4_precreate_evidence(
     ) == operation_root
     assert not (operation_root / "STAGE_OPERATOR_INTENT.json").exists()
     assert not (operation_root / "STAGE_OBSERVER_ARMED.json").exists()
-    assert (operation_root / "STAGE_OPERATOR_INTENT.v4.failed.json").is_file()
-    assert (operation_root / "STAGE_OBSERVER_ARMED.v4.failed.json").is_file()
+    assert (operation_root / "STAGE_OPERATOR_INTENT.v5.failed.json").is_file()
+    assert (operation_root / "STAGE_OBSERVER_ARMED.v5.failed.json").is_file()
     receipt = json.loads(
-        (operation_root / "STAGE_OPERATOR_RECOVERY_V5.json").read_bytes()
+        (operation_root / "STAGE_OPERATOR_RECOVERY_V6.json").read_bytes()
     )
-    assert receipt["status"] == "v4_precreate_evidence_preserved"
+    assert receipt["status"] == "v5_precreate_evidence_preserved"
     assert receipt == operator._seal(receipt)
 
 
@@ -385,7 +437,13 @@ def test_incluster_runner_allows_only_prod_get_create_and_uid_cas_delete() -> No
         calls.append((method, path, body))
         if method == "GET":
             return 200, b'{"kind":"List","items":[]}'
-        return 201 if method == "POST" else 200, b'{"kind":"Status","status":"Success"}'
+        if method == "POST":
+            value = json.loads(body or b"{}")
+            value["metadata"]["managedFields"] = [
+                {"manager": "cyber-post-train-prod10", "operation": "Update"}
+            ]
+            return 201, json.dumps(value).encode()
+        return 200, b'{"kind":"Status","status":"Success"}'
 
     runner = incluster_kubernetes.InClusterKubernetesRunner(request=request)
     prefix = [
@@ -415,6 +473,7 @@ def test_incluster_runner_allows_only_prod_get_create_and_uid_cas_delete() -> No
     assert result.returncode == 0
     assert calls[-1][0] == "POST"
     assert "dryRun=All" in calls[-1][1]
+    assert "managedFields" not in json.loads(result.stdout)["metadata"]
 
     delete = json.dumps(
         {

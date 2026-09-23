@@ -310,7 +310,21 @@ class InClusterKubernetesRunner:
         )
         if status not in {200, 201}:
             return self._completed(command, 1, stderr="Kubernetes create failed")
-        return self._completed(command, 0, stdout=payload.decode("utf-8"))
+        try:
+            response = json.loads(payload)
+        except (UnicodeDecodeError, ValueError) as exc:
+            raise InClusterKubernetesError("Kubernetes create response is invalid") from exc
+        response_metadata = response.get("metadata") if isinstance(response, dict) else None
+        if not isinstance(response_metadata, dict):
+            raise InClusterKubernetesError("Kubernetes create response is invalid")
+        managed_fields = response_metadata.pop("managedFields", None)
+        if managed_fields is not None and not isinstance(managed_fields, list):
+            raise InClusterKubernetesError("Kubernetes managed fields are invalid")
+        # `kubectl ... -o json` hides managedFields unless explicitly asked to
+        # show them.  The REST adapter must return the same bytes-shape to the
+        # already-reviewed server-preview validator.
+        stdout = json.dumps(response, sort_keys=True, separators=(",", ":"))
+        return self._completed(command, 0, stdout=stdout)
 
     def _delete_raw(
         self, command: list[str], arguments: list[str], input_text: str | None
