@@ -17,12 +17,17 @@ from evals.fleet import visible_action_collection_job_entry as entry
 
 ROOT = Path(__file__).resolve().parents[1]
 CAMPAIGN = ROOT / "configs/collection/qwen38-base-current75-actions-pass4-v2"
+DELETE_DRYRUN_EVIDENCE = (
+    ROOT / "docs/evidence/qwen38-study/2026-09-23-kubernetes-delete-dryrun-applied-v1.json"
+)
 SOURCE_COMMIT = "a" * 40
 SOURCE_TREE = "b" * 40
 JOB_UID = "11111111-1111-4111-8111-111111111111"
 CONFIG_MAP_UID = "22222222-2222-4222-8222-222222222222"
 POD_UID = "33333333-3333-4333-8333-333333333333"
 WORKLOAD_UID = "44444444-4444-4444-8444-444444444444"
+JOB_RESOURCE_VERSION = "101"
+CONFIG_MAP_RESOURCE_VERSION = "102"
 
 
 @pytest.fixture(scope="module")
@@ -60,7 +65,7 @@ class FakeCluster:
     def __init__(self) -> None:
         self.previews = 0
         self.creates = 0
-        self.deletes: list[tuple[str, str, str]] = []
+        self.deletes: list[tuple[str, str, str, str]] = []
         self.job: dict[str, Any] | None = None
         self.config_map: dict[str, Any] | None = None
         self.pods: list[dict[str, Any]] = []
@@ -122,23 +127,37 @@ class FakeCluster:
         rows = copy.deepcopy(bundle["items"])
         self.config_map = next(row for row in rows if row["kind"] == "ConfigMap")
         self.job = next(row for row in rows if row["kind"] == "Job")
-        self.config_map["metadata"]["uid"] = CONFIG_MAP_UID
-        self.job["metadata"]["uid"] = JOB_UID
+        self.config_map["metadata"].update(
+            uid=CONFIG_MAP_UID, resourceVersion=CONFIG_MAP_RESOURCE_VERSION
+        )
+        self.job["metadata"].update(uid=JOB_UID, resourceVersion=JOB_RESOURCE_VERSION)
         response = {"apiVersion": "v1", "kind": "List", "items": rows}
         if self.create_raises:
             raise RuntimeError("response lost")
         return response
 
-    def delete_uid(self, resource: str, namespace: str, name: str, uid: str) -> dict[str, Any]:
+    def delete_uid(
+        self,
+        resource: str,
+        namespace: str,
+        name: str,
+        uid: str,
+        resource_version: str,
+        *,
+        confirmed_live: bool,
+    ) -> dict[str, Any]:
         assert namespace == job.NAMESPACE
-        self.deletes.append((resource, name, uid))
+        assert confirmed_live is True
+        self.deletes.append((resource, name, uid, resource_version))
         if resource == "jobs.batch":
             assert self.job is not None and self.job["metadata"]["uid"] == uid
+            assert self.job["metadata"]["resourceVersion"] == resource_version
             self.job = None
             self.pods = []
             self.workloads = []
         elif resource == "configmaps":
             assert self.config_map is not None and self.config_map["metadata"]["uid"] == uid
+            assert self.config_map["metadata"]["resourceVersion"] == resource_version
             self.config_map = None
         else:
             raise AssertionError(resource)
@@ -300,11 +319,17 @@ def test_terminal_cleanup_uses_exact_uids_and_proves_release(
     assert receipt["gpus"] == 0
     assert receipt["logs_traces_scores_or_credentials_read"] is False
     assert cluster.deletes == [
-        ("jobs.batch", "chris-q38-base-train50-p4-v2-fb0d54ec", JOB_UID),
+        (
+            "jobs.batch",
+            "chris-q38-base-train50-p4-v2-fb0d54ec",
+            JOB_UID,
+            JOB_RESOURCE_VERSION,
+        ),
         (
             "configmaps",
             "chris-q38-base-train50-p4-v2-fb0d54ec-code",
             CONFIG_MAP_UID,
+            CONFIG_MAP_RESOURCE_VERSION,
         ),
     ]
     assert cluster.job is None
@@ -366,12 +391,28 @@ def test_cleanup_resumes_same_uid_after_lost_delete_response(
     class LostResponseCluster(FakeCluster):
         lose_once = True
 
-        def delete_uid(self, resource: str, namespace: str, name: str, uid: str) -> dict[str, Any]:
+        def delete_uid(
+            self,
+            resource: str,
+            namespace: str,
+            name: str,
+            uid: str,
+            resource_version: str,
+            *,
+            confirmed_live: bool,
+        ) -> dict[str, Any]:
             if resource == "jobs.batch" and self.lose_once:
                 self.lose_once = False
-                self.deletes.append((resource, name, uid))
+                self.deletes.append((resource, name, uid, resource_version))
                 raise RuntimeError("transport lost before server mutation")
-            return super().delete_uid(resource, namespace, name, uid)
+            return super().delete_uid(
+                resource,
+                namespace,
+                name,
+                uid,
+                resource_version,
+                confirmed_live=confirmed_live,
+            )
 
     cluster = LostResponseCluster()
     journal = tmp_path / "create.jsonl"
@@ -395,12 +436,23 @@ def test_cleanup_resumes_same_uid_after_lost_delete_response(
     )
     assert result["release_confirmed"] is True
     assert cluster.deletes == [
-        ("jobs.batch", "chris-q38-base-train50-p4-v2-fb0d54ec", JOB_UID),
-        ("jobs.batch", "chris-q38-base-train50-p4-v2-fb0d54ec", JOB_UID),
+        (
+            "jobs.batch",
+            "chris-q38-base-train50-p4-v2-fb0d54ec",
+            JOB_UID,
+            JOB_RESOURCE_VERSION,
+        ),
+        (
+            "jobs.batch",
+            "chris-q38-base-train50-p4-v2-fb0d54ec",
+            JOB_UID,
+            JOB_RESOURCE_VERSION,
+        ),
         (
             "configmaps",
             "chris-q38-base-train50-p4-v2-fb0d54ec-code",
             CONFIG_MAP_UID,
+            CONFIG_MAP_RESOURCE_VERSION,
         ),
     ]
 
@@ -549,7 +601,7 @@ def test_job_entry_orders_preflight_before_create_and_emits_only_aggregate(
     assert written["path"] == operation_root / entry.TERMINAL_FILE
 
 
-def test_kubectl_cleanup_uses_raw_uid_precondition(
+def test_kubectl_cleanup_uses_raw_uid_and_resource_version_preconditions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[tuple[list[str], str | None]] = []
@@ -570,6 +622,8 @@ def test_kubectl_cleanup_uses_raw_uid_precondition(
         job.NAMESPACE,
         "chris-q38-base-train50-p4-v2-fb0d54ec",
         JOB_UID,
+        JOB_RESOURCE_VERSION,
+        confirmed_live=True,
     )
     arguments, body = calls[0]
     assert arguments[-5:] == [
@@ -583,5 +637,68 @@ def test_kubectl_cleanup_uses_raw_uid_precondition(
         "apiVersion": "v1",
         "kind": "DeleteOptions",
         "propagationPolicy": "Foreground",
-        "preconditions": {"uid": JOB_UID},
+        "preconditions": {"uid": JOB_UID, "resourceVersion": JOB_RESOURCE_VERSION},
     }
+
+
+def test_kubectl_cleanup_rejects_delete_dry_run_semantics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    called = False
+
+    def run(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("live delete must not run")
+
+    monkeypatch.setattr(job.subprocess, "run", run)
+    cluster = job.KubectlCluster(job.CONTEXT)
+    with pytest.raises(job.CollectionJobError, match="no safe dry-run preview"):
+        cluster.delete_uid(
+            "jobs.batch",
+            job.NAMESPACE,
+            "chris-q38-base-train50-p4-v2-fb0d54ec",
+            JOB_UID,
+            JOB_RESOURCE_VERSION,
+            confirmed_live=False,
+        )
+    assert called is False
+
+
+def test_delete_dry_run_incident_evidence_is_self_digested_and_score_blind() -> None:
+    evidence = json.loads(DELETE_DRYRUN_EVIDENCE.read_text())
+    expected_digest = evidence.pop("sha256")
+    canonical = json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode()
+    assert expected_digest == "sha256:" + hashlib.sha256(canonical).hexdigest()
+
+    privacy = evidence["privacy"]
+    assert privacy == {
+        "credentials_included": False,
+        "flags_included": False,
+        "prompts_or_traces_included": False,
+        "raw_logs_included": False,
+        "score_blind": True,
+        "scores_included": False,
+        "session_ids_included": False,
+    }
+    before = evidence["pre_release_state"]
+    request = evidence["delete_request_and_response"]
+    assert request["query"] == {"dryRun": "All"}
+    assert request["request"]["preconditions"] == {
+        "uid": before["job"]["uid"],
+        "resourceVersion": before["job"]["resourceVersion"],
+    }
+    assert request["response"]["uid"] == before["job"]["uid"]
+    for resource in ("job", "pod", "workload"):
+        assert all(before[resource][key] for key in ("kind", "name", "uid", "resourceVersion"))
+    after = evidence["post_release_state"]
+    assert all(
+        after[key] == 0
+        for key in (
+            "job_count_by_exact_name",
+            "pod_count_by_exact_job_name",
+            "pod_count_by_exact_job_uid",
+            "workload_count_by_exact_name",
+            "workload_count_by_exact_job_uid",
+        )
+    )
