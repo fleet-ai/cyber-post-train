@@ -6,6 +6,7 @@ import argparse
 import base64
 import contextlib
 import fcntl
+import gzip
 import json
 import os
 import re
@@ -27,9 +28,64 @@ from evals.webexploitbench.tensorlake.collection_replica_set import PROJECT_ACTI
 from evals.webexploitbench.tensorlake.controller import API, TensorlakeClient
 
 from . import live_parity
-from .protocol import canonical, cve_execution_schedule, file_digest, load_protocol
+from .protocol import (
+    ROOT,
+    RUNTIME_QUALIFICATION_SOURCE_PATHS,
+    canonical,
+    cve_execution_schedule,
+    file_digest,
+    load_protocol,
+    runtime_qualification_contract_sha256,
+)
 
 WORKER = Path(__file__).with_name("worker.py")
+QUALIFICATION_BUNDLE_CORE = {
+    "evals/external_ctf/protocol.py": ROOT / "evals/external_ctf/protocol.py",
+}
+WORKER_BOOTSTRAP = """\
+import base64
+import gzip
+import hashlib
+import json
+import os
+import pathlib
+import runpy
+import sys
+
+bundle = os.environ.pop("QUALIFICATION_BUNDLE_B64", None)
+if bundle is not None:
+    compressed = base64.b64decode(bundle, validate=True)
+    if "sha256:" + hashlib.sha256(compressed).hexdigest() != os.environ.pop(
+        "QUALIFICATION_BUNDLE_SHA256"
+    ):
+        raise RuntimeError("qualification_bundle_digest_mismatch")
+    raw = gzip.decompress(compressed)
+    files = json.loads(raw)
+    root = pathlib.Path("/workspace/external_ctf_runtime")
+    if root.exists() or root.is_symlink():
+        raise RuntimeError("qualification_bundle_root_exists")
+    for package in (root / "evals", root / "evals/external_ctf"):
+        package.mkdir(mode=0o700, parents=True)
+        (package / "__init__.py").write_bytes(b"")
+    for relative, encoded in files.items():
+        path = pathlib.PurePosixPath(relative)
+        if (
+            path.is_absolute()
+            or not path.parts
+            or any(part in {"", ".", ".."} for part in path.parts)
+        ):
+            raise RuntimeError("qualification_bundle_path_invalid")
+        target = root.joinpath(*path.parts)
+        target.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        target.write_bytes(base64.b64decode(encoded, validate=True))
+    sys.path.insert(0, str(root))
+worker = base64.b64decode(os.environ.pop("WORKER_B64"), validate=True)
+if "sha256:" + hashlib.sha256(worker).hexdigest() != os.environ.pop("WORKER_SHA256"):
+    raise RuntimeError("worker_digest_mismatch")
+path = pathlib.Path("/workspace/external_ctf_worker.py")
+path.write_bytes(worker)
+runpy.run_path(str(path), run_name="__main__")
+"""
 SCORED_ARMS = {"base": "b", "step_1000": "s1000"}
 ARMS = {**SCORED_ARMS, "qualification": "qual"}
 BENCHMARKS = {"cvebench_zero_day": "cve", "nyu_ctf_web_test": "nyu", "cybench_web": "cyb"}
@@ -47,6 +103,23 @@ class ExternalCtfError(RuntimeError):
 
 def _is_digest(value: object) -> bool:
     return isinstance(value, str) and re.fullmatch(r"sha256:[0-9a-f]{64}", value) is not None
+
+
+def _qualification_bundle(protocol: dict[str, Any], benchmark: str) -> bytes:
+    expected = protocol["benchmarks"][benchmark]["runtime_qualification"]["executor_source_sha256"]
+    paths = RUNTIME_QUALIFICATION_SOURCE_PATHS[benchmark]
+    observed = {label: file_digest(path.read_bytes()) for label, path in paths.items()}
+    if any(expected.get(label) != value for label, value in observed.items()):
+        raise ExternalCtfError("runtime_qualification_executor_source_drifted")
+    bundle_paths = {
+        **QUALIFICATION_BUNDLE_CORE,
+        **{path.relative_to(ROOT).as_posix(): path for path in paths.values()},
+    }
+    files = {
+        relative: base64.b64encode(path.read_bytes()).decode()
+        for relative, path in sorted(bundle_paths.items())
+    }
+    return gzip.compress(canonical(files), compresslevel=9, mtime=0)
 
 
 def external_names(protocol: dict[str, Any]) -> set[str]:
@@ -280,7 +353,7 @@ def seal_start_route_preflight(
     output_path: Path,
 ) -> dict[str, Any]:
     protocol = load_protocol(protocol_path)
-    _cell(protocol, benchmark, task_index, arm)
+    cell = _cell(protocol, benchmark, task_index, arm)
     if arm not in SCORED_ARMS:
         raise ExternalCtfError("route_preflight_only_for_scored_cell")
     _authority, packet = _execution_context(
@@ -290,6 +363,7 @@ def seal_start_route_preflight(
         require_live_owner=False,
         require_current_source=True,
     )
+    _require_packet_allows_cell(packet, protocol, cell)
     key = os.environ.pop("FLEET_API_KEY", "")
     if not key or key.strip() != key or any(character.isspace() for character in key):
         raise ExternalCtfError("fleet_credential_missing_or_invalid")
@@ -585,6 +659,8 @@ def _require_runtime_qualification(
         or any(terminal.get(key) != value for key, value in cell.items())
         or terminal.get("name") != name
         or terminal.get("protocol_sha256") != protocol["protocol_sha256"]
+        or terminal.get("qualification_contract_sha256")
+        != runtime_qualification_contract_sha256(protocol, "cvebench_zero_day")
         or terminal.get("execution_packet_receipt_sha256") != execution_packet_receipt_sha256
         or terminal.get("outcome") != "runtime_preflight_passed"
         or terminal.get("infrastructure_error_class") is not None
@@ -708,6 +784,8 @@ def _seal_qualification_pair_skip(
         qualification_terminal.get("outcome") != "infrastructure_invalid"
         or qualification_terminal.get("arm") != "qualification"
         or qualification_terminal.get("task_index") != task_index
+        or qualification_terminal.get("qualification_contract_sha256")
+        != runtime_qualification_contract_sha256(protocol, "cvebench_zero_day")
         or qualification_terminal.get("execution_packet_receipt_sha256")
         != execution_packet_receipt_sha256
     ):
@@ -744,30 +822,198 @@ def _client() -> TensorlakeClient:
 
 def _cell(protocol: dict[str, Any], benchmark: str, task_index: int, arm: str) -> dict[str, Any]:
     value = protocol["benchmarks"].get(benchmark)
-    if (
-        benchmark != protocol["execution_benchmark"]
-        or value is None
-        or arm not in ARMS
-        or not 0 <= task_index < len(value["task_ids"])
-    ):
+    if value is None or arm not in ARMS or not 0 <= task_index < len(value["task_ids"]):
         raise ExternalCtfError("invalid_cell_identity")
-    if value.get("adapter_qualified") is not True:
-        raise ExternalCtfError("benchmark_adapter_not_qualified")
     task_id = value["task_ids"][task_index]
     if arm == "qualification":
-        if benchmark != "cvebench_zero_day":
-            raise ExternalCtfError("invalid_qualification_identity")
+        if task_index not in value["runtime_qualification"]["task_indices"]:
+            raise ExternalCtfError("runtime_qualification_task_is_not_launchable")
         return {
             "benchmark": benchmark,
             "task_index": task_index,
             "task_id": task_id,
             "arm": arm,
         }
+    if benchmark != protocol["execution_benchmark"]:
+        raise ExternalCtfError("invalid_cell_identity")
+    if value.get("adapter_qualified") is not True:
+        raise ExternalCtfError("benchmark_adapter_not_qualified")
     if task_id in value.get("source_unavailable_task_ids", []):
         raise ExternalCtfError("source_unavailable_cell_is_not_launchable")
     if task_id in value.get("execution_unavailable_task_ids", []):
         raise ExternalCtfError("execution_unavailable_cell_is_not_launchable")
     return {"benchmark": benchmark, "task_index": task_index, "task_id": task_id, "arm": arm}
+
+
+def _qualification_contract_binding(protocol: dict[str, Any], cell: dict[str, Any]) -> str | None:
+    return (
+        runtime_qualification_contract_sha256(protocol, cell["benchmark"])
+        if cell["arm"] == "qualification"
+        else None
+    )
+
+
+def _require_packet_allows_cell(
+    packet: dict[str, Any], protocol: dict[str, Any], cell: dict[str, Any]
+) -> None:
+    mode = packet.get("packet_mode")
+    if mode == "scored":
+        return
+    expected = {
+        **cell,
+        "qualification_contract_sha256": _qualification_contract_binding(protocol, cell),
+    }
+    if (
+        mode != "qualification_only"
+        or cell["arm"] != "qualification"
+        or expected not in packet.get("execution", {}).get("qualification_cells", [])
+    ):
+        raise ExternalCtfError("execution_packet_forbids_cell")
+
+
+def _accepted_qualification_release(
+    state: Path,
+    *,
+    protocol: dict[str, Any],
+    row: dict[str, Any],
+    packet_receipt_sha256: str,
+    protocol_sha256: str,
+) -> bool:
+    cell = {key: row[key] for key in ("benchmark", "task_index", "task_id", "arm")}
+    name = cell_name(cell["benchmark"], cell["task_index"], cell["arm"])
+    release_path = state / f"{name}.released.json"
+    if not release_path.exists():
+        return False
+    terminal = _read_signed(state / f"{name}.terminal.json", "qualification_terminal")
+    release = _read_signed(release_path, "qualification_release")
+    result = terminal.get("result")
+    if (
+        terminal.get("schema") != "external_ctf_cell_terminal_v1"
+        or any(terminal.get(key) != value for key, value in cell.items())
+        or terminal.get("name") != name
+        or terminal.get("protocol_sha256") != protocol_sha256
+        or terminal.get("qualification_contract_sha256") != row["qualification_contract_sha256"]
+        or terminal.get("execution_packet_receipt_sha256") != packet_receipt_sha256
+        or terminal.get("outcome") != "runtime_preflight_passed"
+        or terminal.get("infrastructure_error_class") is not None
+        or not isinstance(result, dict)
+        or _result_value(canonical(result) + b"\n", protocol=protocol, cell=cell) != result
+        or release.get("schema") != "external_ctf_sandbox_release_v1"
+        or any(release.get(key) != value for key, value in cell.items())
+        or release.get("name") != name
+        or release.get("status") != "terminated"
+        or release.get("protocol_sha256") != protocol_sha256
+        or release.get("execution_packet_receipt_sha256") != packet_receipt_sha256
+        or release.get("terminal_receipt_sha256") != terminal.get("receipt_sha256")
+    ):
+        raise ExternalCtfError("qualification_canary_not_accepted_and_released")
+    return True
+
+
+def _qualification_open_names(
+    state: Path,
+    rows: list[dict[str, Any]],
+    *,
+    capacity_state: Path,
+    owned_names: set[str] | frozenset[str],
+) -> set[str]:
+    qualification_names = {
+        cell_name(row["benchmark"], row["task_index"], row["arm"]) for row in rows
+    }
+    claimed = {
+        name
+        for name in qualification_names
+        if (state / f"{name}.create-claim.json").exists()
+        and not (state / f"{name}.released.json").exists()
+    }
+    try:
+        pending = set(
+            replica_set._shared_capacity_reservations(capacity_state, owned_names)  # noqa: SLF001
+        )
+    except replica_set.CollectionReplicaSetError as exc:
+        raise ExternalCtfError(str(exc)) from exc
+    return claimed | (pending & qualification_names)
+
+
+def _enforce_qualification_stage(
+    state: Path,
+    *,
+    protocol: dict[str, Any],
+    packet: dict[str, Any],
+    target: str,
+    capacity_state: Path,
+    owned_names: set[str] | frozenset[str],
+) -> None:
+    execution = packet.get("execution", {})
+    rows = execution.get("qualification_cells")
+    stages = execution.get("staged_concurrency")
+    if not isinstance(rows, list) or not rows or not isinstance(stages, dict):
+        raise ExternalCtfError("qualification_packet_schedule_invalid")
+    canary = stages.get("canary")
+    batch = stages.get("batch")
+    if not isinstance(canary, dict) or not isinstance(batch, dict):
+        raise ExternalCtfError("qualification_packet_schedule_invalid")
+    canary_rows = canary.get("ordered_cells")
+    batch_rows = batch.get("cells")
+    if not isinstance(canary_rows, list) or not isinstance(batch_rows, list):
+        raise ExternalCtfError("qualification_packet_schedule_invalid")
+    for row in canary_rows:
+        if _accepted_qualification_release(
+            state,
+            protocol=protocol,
+            row=row,
+            packet_receipt_sha256=packet["receipt_sha256"],
+            protocol_sha256=packet.get("protocol", {}).get("receipt_sha256"),
+        ):
+            continue
+        expected = cell_name(row["benchmark"], row["task_index"], row["arm"])
+        if target != expected:
+            raise ExternalCtfError("qualification_canary_order_violation")
+        open_names = _qualification_open_names(
+            state,
+            rows,
+            capacity_state=capacity_state,
+            owned_names=owned_names,
+        )
+        if len(open_names - {target}) >= canary["max_parallel_cells"]:
+            raise ExternalCtfError("qualification_stage_parallel_limit")
+        return
+    batch_names = {
+        cell_name(row["benchmark"], row["task_index"], row["arm"]): row for row in batch_rows
+    }
+    if target not in batch_names:
+        raise ExternalCtfError("qualification_schedule_complete")
+    open_names = _qualification_open_names(
+        state,
+        rows,
+        capacity_state=capacity_state,
+        owned_names=owned_names,
+    )
+    if len(open_names - {target}) >= batch["max_parallel_cells"]:
+        raise ExternalCtfError("qualification_stage_parallel_limit")
+
+
+def _enforce_packet_open_cell_limit(
+    state: Path,
+    *,
+    protocol: dict[str, Any],
+    packet: dict[str, Any],
+    cell: dict[str, Any],
+    target: str,
+    capacity_state: Path,
+    owned_names: set[str] | frozenset[str],
+) -> None:
+    if cell["arm"] == "qualification" and packet.get("packet_mode") == "qualification_only":
+        _enforce_qualification_stage(
+            state,
+            protocol=protocol,
+            packet=packet,
+            target=target,
+            capacity_state=capacity_state,
+            owned_names=owned_names,
+        )
+        return
+    _enforce_single_open_cell(state, target=target)
 
 
 def _sandbox_spec(name: str, snapshot_id: str) -> dict[str, Any]:
@@ -831,13 +1077,14 @@ def create(
 ) -> dict[str, Any]:
     protocol = load_protocol(protocol_path)
     cell = _cell(protocol, benchmark, task_index, arm)
-    authority, _packet = _execution_context(
+    authority, packet = _execution_context(
         protocol,
         retry_execution_path,
         execution_packet_path,
         require_live_owner=True,
         require_current_source=True,
     )
+    _require_packet_allows_cell(packet, protocol, cell)
     state = authority["external_state"]
     name = cell_name(benchmark, task_index, arm)
     claim = state / f"{name}.create-claim.json"
@@ -853,6 +1100,7 @@ def create(
             require_live_owner=True,
             require_current_source=True,
         )
+        _require_packet_allows_cell(refreshed_packet, protocol, cell)
         if (
             refreshed["state"] != authority["state"]
             or refreshed["snapshot_id"] != authority["snapshot_id"]
@@ -885,14 +1133,26 @@ def create(
                 arm=arm,
             )["receipt_sha256"]
         client = _client()
-        _enforce_single_open_cell(state, target=name)
+        _enforce_packet_open_cell_limit(
+            state,
+            protocol=protocol,
+            packet=refreshed_packet,
+            cell=cell,
+            target=name,
+            capacity_state=refreshed["state"],
+            owned_names=refreshed["owned_names"],
+        )
         if arm == "qualification":
-            _require_qualification_for_next_pair(
-                state,
-                protocol=protocol,
-                task_index=task_index,
-                execution_packet_receipt_sha256=authority["execution_packet_receipt_sha256"],
-            )
+            if (
+                refreshed_packet.get("packet_mode") != "qualification_only"
+                and benchmark == "cvebench_zero_day"
+            ):
+                _require_qualification_for_next_pair(
+                    state,
+                    protocol=protocol,
+                    task_index=task_index,
+                    execution_packet_receipt_sha256=authority["execution_packet_receipt_sha256"],
+                )
         else:
             _require_runtime_qualification(
                 state,
@@ -990,13 +1250,14 @@ def reconcile_create(
 
     protocol = load_protocol(protocol_path)
     cell = _cell(protocol, benchmark, task_index, arm)
-    authority, _packet = _execution_context(
+    authority, packet = _execution_context(
         protocol,
         retry_execution_path,
         execution_packet_path,
         require_live_owner=False,
         require_current_source=False,
     )
+    _require_packet_allows_cell(packet, protocol, cell)
     state = authority["external_state"]
     name = cell_name(benchmark, task_index, arm)
     claim_path = state / f"{name}.create-claim.json"
@@ -1076,13 +1337,14 @@ def abort_create_absent(
 
     protocol = load_protocol(protocol_path)
     cell = _cell(protocol, benchmark, task_index, arm)
-    authority, _packet = _execution_context(
+    authority, packet = _execution_context(
         protocol,
         retry_execution_path,
         execution_packet_path,
         require_live_owner=False,
         require_current_source=False,
     )
+    _require_packet_allows_cell(packet, protocol, cell)
     state = authority["external_state"]
     name = cell_name(benchmark, task_index, arm)
     claim_path = state / f"{name}.create-claim.json"
@@ -1155,6 +1417,11 @@ def abort_create_absent(
                     "sandbox_id": None,
                     "pid": None,
                     "protocol_sha256": protocol["protocol_sha256"],
+                    "qualification_contract_sha256": (
+                        runtime_qualification_contract_sha256(protocol, benchmark)
+                        if arm == "qualification"
+                        else None
+                    ),
                     "execution_packet_receipt_sha256": authority["execution_packet_receipt_sha256"],
                     "provider_post_failure_receipt_sha256": failure["receipt_sha256"],
                     "absence_reconciliation": observations
@@ -1195,7 +1462,11 @@ def abort_create_absent(
                 )
             except replica_set.CollectionReplicaSetError as exc:
                 raise ExternalCtfError(str(exc)) from exc
-        if arm == "qualification":
+        if (
+            arm == "qualification"
+            and benchmark == "cvebench_zero_day"
+            and packet.get("packet_mode") == "scored"
+        ):
             _seal_qualification_pair_skip(
                 state,
                 protocol=protocol,
@@ -1226,13 +1497,22 @@ def start(
         require_live_owner=False,
         require_current_source=True,
     )
+    _require_packet_allows_cell(packet, protocol, cell)
     state = authority["external_state"]
     process_claim = state / f"{name}.process-claim.json"
     process_receipt = state / f"{name}.process.json"
     with _state_lock(state):
         if process_claim.exists() or process_receipt.exists():
             raise ExternalCtfError("cell_start_already_claimed")
-        _enforce_single_open_cell(state, target=name)
+        _enforce_packet_open_cell_limit(
+            state,
+            protocol=protocol,
+            packet=packet,
+            cell=cell,
+            target=name,
+            capacity_state=authority["state"],
+            owned_names=authority["owned_names"],
+        )
         created = _read_canonical(state / f"{name}.created.json", "created")
         if (
             created.get("schema") != "external_ctf_sandbox_created_v1"
@@ -1291,6 +1571,14 @@ def start(
         }
         if arm == "qualification":
             env["EXTERNAL_CTF_MODE"] = "runtime_qualification"
+            bundle = _qualification_bundle(protocol, benchmark)
+            if bundle is not None:
+                env.update(
+                    {
+                        "QUALIFICATION_BUNDLE_B64": base64.b64encode(bundle).decode(),
+                        "QUALIFICATION_BUNDLE_SHA256": file_digest(bundle),
+                    }
+                )
             fleet_account_sha256 = None
         else:
             _require_runtime_qualification(
@@ -1323,16 +1611,9 @@ def start(
                     "FLEET_API_KEY": fleet_key,
                 }
             )
-        script = (
-            "import base64,hashlib,os,runpy,pathlib;"
-            "b=base64.b64decode(os.environ.pop('WORKER_B64'),validate=True);"
-            "assert 'sha256:'+hashlib.sha256(b).hexdigest()==os.environ.pop('WORKER_SHA256');"
-            "p=pathlib.Path('/workspace/external_ctf_worker.py');p.write_bytes(b);"
-            "runpy.run_path(str(p),run_name='__main__')"
-        )
         process_spec = {
             "command": "/usr/bin/python3",
-            "args": ["-c", script],
+            "args": ["-c", WORKER_BOOTSTRAP],
             "user": "root",
             "env": env,
             "stdin_mode": "closed",
@@ -1412,13 +1693,14 @@ def reconcile_start(
 
     protocol = load_protocol(protocol_path)
     cell = _cell(protocol, benchmark, task_index, arm)
-    authority, _packet = _execution_context(
+    authority, packet = _execution_context(
         protocol,
         retry_execution_path,
         execution_packet_path,
         require_live_owner=False,
         require_current_source=False,
     )
+    _require_packet_allows_cell(packet, protocol, cell)
     state = authority["external_state"]
     name = cell_name(benchmark, task_index, arm)
     claim_path = state / f"{name}.process-claim.json"
@@ -1499,13 +1781,14 @@ def abort_start_absent(
 
     protocol = load_protocol(protocol_path)
     cell = _cell(protocol, benchmark, task_index, arm)
-    authority, _packet = _execution_context(
+    authority, packet = _execution_context(
         protocol,
         retry_execution_path,
         execution_packet_path,
         require_live_owner=False,
         require_current_source=False,
     )
+    _require_packet_allows_cell(packet, protocol, cell)
     state = authority["external_state"]
     name = cell_name(benchmark, task_index, arm)
     claim_path = state / f"{name}.process-claim.json"
@@ -1579,6 +1862,11 @@ def abort_start_absent(
                 "sandbox_id": created["sandbox_id"],
                 "pid": None,
                 "protocol_sha256": protocol["protocol_sha256"],
+                "qualification_contract_sha256": (
+                    runtime_qualification_contract_sha256(protocol, benchmark)
+                    if arm == "qualification"
+                    else None
+                ),
                 "execution_packet_receipt_sha256": authority["execution_packet_receipt_sha256"],
                 "provider_post_failure_receipt_sha256": failure["receipt_sha256"],
                 "absence_reconciliation": observations,
@@ -1603,13 +1891,14 @@ def abort_unstarted(
 
     protocol = load_protocol(protocol_path)
     cell = _cell(protocol, benchmark, task_index, arm)
-    authority, _packet = _execution_context(
+    authority, packet = _execution_context(
         protocol,
         retry_execution_path,
         execution_packet_path,
         require_live_owner=False,
         require_current_source=False,
     )
+    _require_packet_allows_cell(packet, protocol, cell)
     state = authority["external_state"]
     name = cell_name(benchmark, task_index, arm)
     created_path = state / f"{name}.created.json"
@@ -1667,6 +1956,11 @@ def abort_unstarted(
                 "sandbox_id": created["sandbox_id"],
                 "pid": None,
                 "protocol_sha256": protocol["protocol_sha256"],
+                "qualification_contract_sha256": (
+                    runtime_qualification_contract_sha256(protocol, benchmark)
+                    if arm == "qualification"
+                    else None
+                ),
                 "execution_packet_receipt_sha256": authority["execution_packet_receipt_sha256"],
                 "absence_reconciliation": observations,
                 "result": None,
@@ -1722,6 +2016,185 @@ def _bound_process(
     return process, path
 
 
+def _object_digest_matches(value: object, observed: object) -> bool:
+    return observed is None if value is None else observed == file_digest(canonical(value))
+
+
+def _external_qualification_result(
+    value: dict[str, Any], *, protocol: dict[str, Any], cell: dict[str, Any]
+) -> dict[str, Any] | None:
+    benchmark = protocol["benchmarks"][cell["benchmark"]]
+    task_index = cell["task_index"]
+    expected_name = cell_name(cell["benchmark"], task_index, "qualification")
+    unsigned = {key: item for key, item in value.items() if key != "receipt_sha256"}
+    status = value.get("status")
+    error_code = value.get("error_code")
+    admitted = value.get("qualification_name") == expected_name
+    expected_schema = {
+        "nyu_ctf_web_test": (
+            "external_ctf_nyu_runtime_qualification_execution_v1"
+            if admitted
+            else "external_ctf_nyu_runtime_qualification_precondition_v1"
+        ),
+        "cybench_web": (
+            "cybench_remote_runtime_qualification_task_execution_v1"
+            if admitted
+            else "cybench_remote_runtime_qualification_precondition_v1"
+        ),
+    }[cell["benchmark"]]
+    common_keys = {
+        "schema",
+        "protocol_sha256",
+        "qualification_contract_sha256",
+        "benchmark",
+        "qualification_name",
+        "task_index",
+        "task_id_sha256",
+        "source_commit",
+        "task_source",
+        "task_source_sha256",
+        "published_port_entries_removed",
+        "container_names_removed",
+        "harness_image_id",
+        "harness_image",
+        "harness_image_sha256",
+        "platform",
+        "status",
+        "error_code",
+        "provider_calls",
+        "model_requests",
+        "scored_attempts",
+        "contains_prompts_flags_solutions_traces_or_scores",
+        "receipt_sha256",
+    }
+    benchmark_keys = {
+        "nyu_ctf_web_test": {
+            "challenge_runtime_images",
+            "challenge_runtime_images_sha256",
+            "target_address_binding",
+            "qualification",
+            "official_solution_solvability_claimed",
+        },
+        "cybench_web": {
+            "controller_image_reference",
+            "controller_image",
+            "controller_image_sha256",
+            "challenge_images",
+            "challenge_image_set_sha256",
+            "official_solution_manifest_sha256",
+            "official_solution_helper_sha256",
+            "task_evidence",
+        },
+    }[cell["benchmark"]]
+    if (
+        set(value) != common_keys | benchmark_keys
+        or value.get("receipt_sha256") != file_digest(canonical(unsigned))
+        or value.get("schema") != expected_schema
+        or value.get("protocol_sha256") != protocol["protocol_sha256"]
+        or value.get("qualification_contract_sha256")
+        != runtime_qualification_contract_sha256(protocol, cell["benchmark"])
+        or value.get("benchmark") != cell["benchmark"]
+        or value.get("task_index") != task_index
+        or value.get("task_id_sha256") != file_digest(cell["task_id"].encode())
+        or value.get("source_commit") != benchmark["source"]["commit"]
+        or not _object_digest_matches(value.get("task_source"), value.get("task_source_sha256"))
+        or value.get("harness_image_id") != benchmark["harness"]["image_id"]
+        or not _object_digest_matches(value.get("harness_image"), value.get("harness_image_sha256"))
+        or value.get("platform") != "linux/amd64"
+        or value.get("provider_calls") != 0
+        or value.get("model_requests") != 0
+        or value.get("scored_attempts") != 0
+        or value.get("contains_prompts_flags_solutions_traces_or_scores") is not False
+        or status not in {"runtime_qualified", "infrastructure_invalid", "precondition_failed"}
+        or (
+            error_code is not None
+            and (not isinstance(error_code, str) or re.fullmatch(r"[a-z0-9_]+", error_code) is None)
+        )
+        or (status == "runtime_qualified") is (error_code is not None)
+        or (status == "precondition_failed") is admitted
+        or (status != "precondition_failed") is not admitted
+    ):
+        return None
+    harness = value.get("harness_image")
+    if status == "runtime_qualified" and (
+        not isinstance(harness, dict) or harness.get("image_id") != benchmark["harness"]["image_id"]
+    ):
+        return None
+    if cell["benchmark"] == "nyu_ctf_web_test":
+        images = value.get("challenge_runtime_images")
+        qualification = value.get("qualification")
+        if (
+            not _object_digest_matches(images, value.get("challenge_runtime_images_sha256"))
+            or value.get("official_solution_solvability_claimed") is not False
+        ):
+            return None
+        if status == "runtime_qualified":
+            task_source = value.get("task_source")
+            if (
+                not isinstance(qualification, dict)
+                or qualification.get("receipt_sha256")
+                != file_digest(
+                    canonical(
+                        {
+                            key: item
+                            for key, item in qualification.items()
+                            if key != "receipt_sha256"
+                        }
+                    )
+                )
+                or qualification.get("schema") != "external_ctf_nyu_runtime_qualification_v1"
+                or not _is_digest(qualification.get("protocol_sha256"))
+                or qualification.get("qualification_contract_sha256")
+                != value["qualification_contract_sha256"]
+                or qualification.get("benchmark") != cell["benchmark"]
+                or qualification.get("task_id") != cell["task_id"]
+                or qualification.get("source_commit") != benchmark["source"]["commit"]
+                or not isinstance(task_source, dict)
+                or qualification.get("challenge_sha256") != task_source.get("challenge_sha256")
+                or qualification.get("compose_sha256") != task_source.get("compose_sha256")
+                or qualification.get("attachment_manifest_sha256")
+                != task_source.get("attachment_manifest_sha256")
+                or qualification.get("status") != "runtime_preflight_passed"
+                or qualification.get("model_requests") != 0
+                or qualification.get("startup_healthy") is not True
+                or qualification.get("target_reachable") is not True
+                or qualification.get("grader_negative_control") is not False
+                or qualification.get("grader_positive_control") is not True
+                or qualification.get("agent_image_id") != benchmark["harness"]["image_id"]
+                or qualification.get("opencode_version") != benchmark["harness"]["version"]
+                or qualification.get("platform") != "linux/amd64"
+                or qualification.get("isolated_task_network") is not True
+                or qualification.get("images") != images
+                or not isinstance(value.get("target_address_binding"), str)
+                or not value["target_address_binding"]
+            ):
+                return None
+        elif qualification is not None:
+            return None
+    else:
+        images = value.get("challenge_images")
+        expected_controller = benchmark["runtime_qualification"]["controller_image"]
+        if (
+            value.get("controller_image_reference") != expected_controller
+            or not _object_digest_matches(
+                value.get("controller_image"), value.get("controller_image_sha256")
+            )
+            or not _object_digest_matches(images, value.get("challenge_image_set_sha256"))
+        ):
+            return None
+        if status == "runtime_qualified":
+            from . import cybench_qualification
+
+            expected = cybench_qualification.expected_remote_runtime_evidence(protocol)["tasks"][
+                task_index
+            ]
+            if value.get("task_evidence") != expected:
+                return None
+        elif value.get("task_evidence") is not None:
+            return None
+    return value
+
+
 def _result_value(
     raw: bytes,
     *,
@@ -1746,6 +2219,8 @@ def _result_value(
     if not isinstance(value, dict) or raw != canonical(value) + b"\n":
         return None
     if cell["arm"] == "qualification":
+        if cell["benchmark"] != "cvebench_zero_day":
+            return _external_qualification_result(value, protocol=protocol, cell=cell)
         task = value.get("task")
         toolchain = value.get("toolchain")
         inspect_binding = protocol["benchmarks"]["cvebench_zero_day"]["harness"]["inspect_ai"]
@@ -1755,6 +2230,7 @@ def _result_value(
             set(value)
             != {
                 *common,
+                "qualification_contract_sha256",
                 "status",
                 "source_commit",
                 "kali_size",
@@ -1767,6 +2243,8 @@ def _result_value(
                 "task_sha256",
             }
             or any(value.get(key) != item for key, item in common.items())
+            or value.get("qualification_contract_sha256")
+            != runtime_qualification_contract_sha256(protocol, cell["benchmark"])
             or value.get("status") != "runtime_preflight_passed"
             or value.get("source_commit")
             != protocol["benchmarks"]["cvebench_zero_day"]["source"]["commit"]
@@ -1915,13 +2393,14 @@ def status(
     protocol = load_protocol(protocol_path)
     cell = _cell(protocol, benchmark, task_index, arm)
     name = cell_name(benchmark, task_index, arm)
-    authority, _packet = _execution_context(
+    authority, packet = _execution_context(
         protocol,
         retry_execution_path,
         execution_packet_path,
         require_live_owner=False,
         require_current_source=False,
     )
+    _require_packet_allows_cell(packet, protocol, cell)
     state = authority["external_state"]
     terminal_path = state / f"{name}.terminal.json"
     with _state_lock(state):
@@ -1932,6 +2411,8 @@ def status(
                 or terminal.get("name") != name
                 or any(terminal.get(key) != value for key, value in cell.items())
                 or terminal.get("protocol_sha256") != protocol["protocol_sha256"]
+                or terminal.get("qualification_contract_sha256")
+                != _qualification_contract_binding(protocol, cell)
                 or terminal.get("execution_packet_receipt_sha256")
                 != authority["execution_packet_receipt_sha256"]
             ):
@@ -1973,7 +2454,7 @@ def status(
             cell["arm"] == "qualification"
             and row["exit_code"] == 0
             and result is not None
-            and result["status"] == "runtime_preflight_passed"
+            and result["status"] in {"runtime_preflight_passed", "runtime_qualified"}
         )
         accepted = (
             cell["arm"] != "qualification"
@@ -1990,6 +2471,11 @@ def status(
                 "sandbox_id": process["sandbox_id"],
                 "pid": process["pid"],
                 "protocol_sha256": protocol["protocol_sha256"],
+                "qualification_contract_sha256": (
+                    runtime_qualification_contract_sha256(protocol, cell["benchmark"])
+                    if cell["arm"] == "qualification"
+                    else None
+                ),
                 "execution_packet_receipt_sha256": authority["execution_packet_receipt_sha256"],
                 "worker_sha256": process["worker_sha256"],
                 "start_route_preflight_receipt_sha256": process[
@@ -2010,7 +2496,15 @@ def status(
                     else ("accepted_model_outcome" if accepted else "infrastructure_invalid")
                 ),
                 "infrastructure_error_class": (
-                    None if preflight_passed or accepted else "worker_or_result_invalid"
+                    None
+                    if preflight_passed or accepted
+                    else (
+                        result.get("error_code")
+                        if cell["arm"] == "qualification"
+                        and isinstance(result, dict)
+                        and isinstance(result.get("error_code"), str)
+                        else "worker_or_result_invalid"
+                    )
                 ),
             },
         )
@@ -2029,13 +2523,14 @@ def release(
     protocol = load_protocol(protocol_path)
     cell = _cell(protocol, benchmark, task_index, arm)
     name = cell_name(benchmark, task_index, arm)
-    authority, _packet = _execution_context(
+    authority, packet = _execution_context(
         protocol,
         retry_execution_path,
         execution_packet_path,
         require_live_owner=False,
         require_current_source=False,
     )
+    _require_packet_allows_cell(packet, protocol, cell)
     state = authority["external_state"]
     created = _read_canonical(state / f"{name}.created.json", "created")
     if (
@@ -2096,6 +2591,10 @@ def release(
             raise ExternalCtfError("terminal_receipt_binding_mismatch")
     if terminal is None:
         raise ExternalCtfError("terminal_receipt_required_before_release")
+    if terminal.get("qualification_contract_sha256") != _qualification_contract_binding(
+        protocol, cell
+    ):
+        raise ExternalCtfError("terminal_receipt_binding_mismatch")
     client = _client()
     client.request("DELETE", API + "/sandboxes/" + created["sandbox_id"], raw=True)
     for _ in range(60):
@@ -2130,6 +2629,8 @@ def release(
                     raise ExternalCtfError(str(exc)) from exc
             if (
                 arm == "qualification"
+                and benchmark == "cvebench_zero_day"
+                and packet.get("packet_mode") == "scored"
                 and terminal is not None
                 and terminal.get("outcome") == "infrastructure_invalid"
             ):

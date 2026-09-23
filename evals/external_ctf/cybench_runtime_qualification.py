@@ -16,7 +16,13 @@ import yaml
 
 from . import cybench_qualification as source_gate
 from . import runtime_qualification as rt
-from .protocol import DEFAULT_PROTOCOL, digest, file_digest, load_protocol
+from .protocol import (
+    DEFAULT_PROTOCOL,
+    digest,
+    file_digest,
+    load_protocol,
+    runtime_qualification_contract_sha256,
+)
 
 BENCHMARK = source_gate.BENCHMARK
 IMMUTABLE_IMAGE = re.compile(r"^[^\s@]+@sha256:[0-9a-f]{64}$")
@@ -327,6 +333,7 @@ def qualify(
             else "cybench_remote_runtime_qualification_precondition_v1"
         ),
         "protocol_sha256": protocol["protocol_sha256"],
+        "qualification_contract_sha256": runtime_qualification_contract_sha256(protocol, BENCHMARK),
         "benchmark": BENCHMARK,
         "qualification_name": f"extctf-cyb-t{task_index:02d}-qual-v1" if admitted else None,
         "task_index": task_index,

@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
-from . import worker
+from . import cvebench_runtime_qualification as runtime
 from .protocol import (
     DEFAULT_PROTOCOL,
     canonical,
@@ -20,6 +20,7 @@ from .protocol import (
     git_no_replace_env,
     load_protocol,
     observed_source,
+    runtime_qualification_contract_sha256,
 )
 
 BENCHMARK = "cvebench_zero_day"
@@ -75,7 +76,7 @@ def _source_qualification(protocol: dict[str, Any], checkout: Path) -> dict[str,
     if tracked_status:
         raise QualificationError("source_checkout_tracked_files_dirty")
     observed = observed_source(protocol, BENCHMARK, checkout)
-    benchmark = worker._bind_cve_source(protocol, checkout)
+    benchmark = runtime.bind_source(protocol, checkout)
     if (
         observed.get("verified") is not True
         or observed.get("task_count") != 40
@@ -157,6 +158,7 @@ def _validate_runtime_result(protocol: dict[str, Any], value: object) -> dict[st
     expected_fields = {
         "schema",
         "protocol_sha256",
+        "qualification_contract_sha256",
         "benchmark",
         "task_id",
         "arm",
@@ -175,6 +177,8 @@ def _validate_runtime_result(protocol: dict[str, Any], value: object) -> dict[st
         set(value) != expected_fields
         or value.get("schema") != "external_ctf_runtime_qualification_v1"
         or value.get("protocol_sha256") != protocol["protocol_sha256"]
+        or value.get("qualification_contract_sha256")
+        != runtime_qualification_contract_sha256(protocol, BENCHMARK)
         or value.get("benchmark") != BENCHMARK
         or value.get("task_id") != canary["task_id"]
         or value.get("arm") != "qualification"
@@ -189,7 +193,7 @@ def _validate_runtime_result(protocol: dict[str, Any], value: object) -> dict[st
         or not isinstance(toolchain, dict)
     ):
         raise QualificationError("runtime_result_binding_mismatch")
-    images = worker._validate_qualification_images(task.get("images"))
+    images = runtime.validate_images(task.get("images"))
     if (
         set(task)
         != {
@@ -230,6 +234,7 @@ def qualify(checkout: Path, protocol_path: Path = DEFAULT_PROTOCOL) -> dict[str,
         "schema": RECEIPT_SCHEMA,
         "framework_base_commit": FRAMEWORK_BASE_COMMIT,
         "protocol_sha256": protocol["protocol_sha256"],
+        "qualification_contract_sha256": runtime_qualification_contract_sha256(protocol, BENCHMARK),
         "protocol_file_sha256": file_digest(protocol_path.read_bytes()),
         "qualification_module_sha256": file_digest(_SOURCE.read_bytes()),
         "benchmark": BENCHMARK,
@@ -263,12 +268,12 @@ def qualify(checkout: Path, protocol_path: Path = DEFAULT_PROTOCOL) -> dict[str,
             }
         )
     try:
-        raw_runtime = worker._run_cvebench_qualification(
+        raw_runtime = runtime.qualify(
             protocol,
             protocol["operational_canary"]["task_id"],
             checkout,
         )
-        runtime = _validate_runtime_result(protocol, raw_runtime)
+        runtime_evidence = _validate_runtime_result(protocol, raw_runtime)
     except Exception as error:
         return _signed(
             {
@@ -291,9 +296,9 @@ def qualify(checkout: Path, protocol_path: Path = DEFAULT_PROTOCOL) -> dict[str,
             "task5_positive_control_completed": True,
             "missing_prerequisites": [],
             "runtime_failure_class": None,
-            "runtime_evidence_sha256": digest(runtime),
-            "task_image_set_sha256": runtime["task"]["image_set_sha256"],
-            "toolchain_sha256": digest(runtime["toolchain"]),
+            "runtime_evidence_sha256": digest(runtime_evidence),
+            "task_image_set_sha256": runtime_evidence["task"]["image_set_sha256"],
+            "toolchain_sha256": digest(runtime_evidence["toolchain"]),
         }
     )
 

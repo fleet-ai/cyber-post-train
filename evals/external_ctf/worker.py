@@ -11,6 +11,7 @@ import subprocess
 from pathlib import Path
 
 RESULT = Path("/workspace/external-ctf-result.json")
+PROTOCOL = Path("/workspace/external-ctf-protocol.json")
 _CONTEXT: dict[str, str] = {}
 
 STRICT_CVEBENCH_ADAPTER = b"""\
@@ -100,6 +101,8 @@ def _protocol() -> dict:
     unsigned = {key: item for key, item in value.items() if key != "protocol_sha256"}
     if value.get("protocol_sha256") != _sha(_canonical(unsigned)):
         raise ValueError("protocol_digest_mismatch")
+    PROTOCOL.write_bytes(raw)
+    os.chmod(PROTOCOL, 0o600)
     return value
 
 
@@ -304,180 +307,21 @@ def _pin_qualified_images(checkout: Path, task_id: str, qualification: dict) -> 
         raise RuntimeError("cvebench_pinned_image_binding_mismatch")
 
 
-def _checker_status(checkout: Path, task_id: str) -> bool:
-    result = subprocess.run(
-        [
-            "./run",
-            "compose",
-            task_id,
-            "exec",
-            "-T",
-            "target",
-            "sh",
-            "-c",
-            "/evaluator/done.sh",
-        ],
-        cwd=checkout,
-        env=_cve_environment(),
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-    start = result.stdout.find("{")
-    if start < 0:
-        raise RuntimeError("cvebench_checker_json_missing")
-    value = json.loads(result.stdout[start:])
-    if type(value.get("status")) is not bool:
-        raise RuntimeError("cvebench_checker_status_invalid")
-    return value["status"]
+def _run_external_runtime_qualification(
+    protocol: dict, benchmark_name: str, checkout: Path, task_index: int
+) -> dict:
+    if benchmark_name == "nyu_ctf_web_test":
+        from evals.external_ctf import nyu_runtime_qualification
 
+        return nyu_runtime_qualification.qualify(checkout, task_index, PROTOCOL)
+    if benchmark_name == "cybench_web":
+        from evals.external_ctf import cybench_runtime_qualification
 
-def _qualify_cve_task(
-    checkout: Path,
-    task_id: str,
-    *,
-    run_official_solution: bool,
-) -> dict[str, object]:
-    environment = _cve_environment()
-    subprocess.run(["./run", "pull", task_id], cwd=checkout, env=environment, check=True)
-    before = _image_locks(checkout, task_id)
-    primary_error: Exception | None = None
-    checker_before: bool | None = None
-    checker_after: bool | None = None
-    try:
-        subprocess.run(
-            ["./run", "up", task_id, "--no-build"],
-            cwd=checkout,
-            env=environment,
-            check=True,
-        )
-        checker_before = _checker_status(checkout, task_id)
-        if checker_before:
-            raise RuntimeError("cvebench_checker_false_positive_before_solution")
-        if run_official_solution:
-            subprocess.run(
-                ["./run", "cp-solution", task_id],
-                cwd=checkout,
-                env=environment,
-                check=True,
-            )
-            subprocess.run(
-                ["./run", "compose", task_id, "exec", "-T", "agent", "/app/solution.sh"],
-                cwd=checkout,
-                env=environment,
-                check=True,
-                timeout=600,
-            )
-            checker_after = _checker_status(checkout, task_id)
-            if not checker_after:
-                raise RuntimeError("cvebench_official_solution_not_accepted")
-    except Exception as error:
-        primary_error = error
-    cleanup = subprocess.run(
-        ["./run", "down", task_id],
-        cwd=checkout,
-        env=environment,
-        check=False,
-    )
-    if cleanup.returncode != 0:
-        raise RuntimeError("cvebench_qualification_cleanup_failed") from primary_error
-    if primary_error is not None:
-        raise primary_error
-    after = _image_locks(checkout, task_id)
-    if after != before:
-        raise RuntimeError("cvebench_image_binding_changed_during_qualification")
-    return {
-        "task_id": task_id,
-        "startup_healthy": True,
-        "checker_before_solution": checker_before,
-        "official_solution_executed": run_official_solution,
-        "checker_after_solution": checker_after,
-        "images": before,
-        "image_set_sha256": _sha(_canonical(before)),
-    }
-
-
-def _run_cvebench_qualification(protocol: dict, task_id: str, checkout: Path) -> dict[str, object]:
-    benchmark = _bind_cve_source(protocol, checkout)
-    if task_id not in benchmark["task_ids"]:
-        raise ValueError("runtime_qualification_task_identity_invalid")
-    if "FLEET_API_KEY" in os.environ or "OPENAI_API_KEY" in os.environ:
-        raise ValueError("runtime_qualification_model_credential_present")
-    subprocess.run(["uv", "sync", "--frozen"], cwd=checkout, check=True)
-    inspect_runtime = json.loads(
-        subprocess.check_output(
-            [
-                str(checkout / ".venv/bin/python"),
-                "-c",
-                (
-                    "import hashlib,importlib.metadata,json,pathlib,inspect_ai;"
-                    "p=pathlib.Path(inspect_ai.__file__).parent/'_eval/task/run.py';"
-                    "print(json.dumps({'inspect_ai_version':"
-                    "importlib.metadata.version('inspect-ai'),'inspect_limit_behavior_sha256':"
-                    "'sha256:'+hashlib.sha256(p.read_bytes()).hexdigest()},sort_keys=True))"
-                ),
-            ],
-            cwd=checkout,
-            text=True,
-        )
-    )
-    inspect_binding = benchmark["harness"]["inspect_ai"]
-    if inspect_runtime != {
-        "inspect_ai_version": inspect_binding["version"],
-        "inspect_limit_behavior_sha256": inspect_binding["limit_behavior_source_sha256"],
-    }:
-        raise RuntimeError("cvebench_inspect_runtime_binding_mismatch")
-    docker_versions = (
-        subprocess.run(
-            ["docker", "version", "--format", "{{.Client.Version}}|{{.Server.Version}}"],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        .stdout.strip()
-        .split("|")
-    )
-    compose_version = subprocess.run(
-        ["docker", "compose", "version", "--short"],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-    if (
-        len(docker_versions) != 2
-        or any(not version for version in docker_versions)
-        or not compose_version
-    ):
-        raise RuntimeError("cvebench_toolchain_version_invalid")
-    run_official_solution = task_id == protocol["operational_canary"]["task_id"]
-    task = _qualify_cve_task(
-        checkout,
-        task_id,
-        run_official_solution=run_official_solution,
-    )
-    return {
-        "schema": "external_ctf_runtime_qualification_v1",
-        "protocol_sha256": protocol["protocol_sha256"],
-        "benchmark": "cvebench_zero_day",
-        "task_id": task_id,
-        "arm": "qualification",
-        "status": "runtime_preflight_passed",
-        "source_commit": benchmark["source"]["commit"],
-        "kali_size": "large",
-        "model_requests": 0,
-        "docker_available": True,
-        "compose_available": True,
-        "toolchain": {
-            "docker_client_version": docker_versions[0],
-            "docker_server_version": docker_versions[1],
-            "docker_compose_version": compose_version,
-            **inspect_runtime,
-        },
-        "positive_grader_control": "passed" if run_official_solution else "not_run",
-        "task": task,
-        "task_sha256": _sha(_canonical(task)),
-    }
+        controller = protocol["benchmarks"][benchmark_name]["runtime_qualification"][
+            "controller_image"
+        ]
+        return cybench_runtime_qualification.qualify(checkout, task_index, controller, PROTOCOL)
+    raise ValueError("runtime_qualification_identity_invalid")
 
 
 def _run_cvebench(
@@ -599,7 +443,7 @@ def main() -> None:
     if task_id not in benchmark["task_ids"]:
         raise ValueError("cell_identity_invalid")
     if mode == "runtime_qualification":
-        if benchmark_name != "cvebench_zero_day" or arm != "qualification":
+        if benchmark_name not in protocol["benchmarks"] or arm != "qualification":
             raise ValueError("runtime_qualification_identity_invalid")
     elif mode != "scored" or arm not in protocol["arms"]:
         raise ValueError("cell_identity_invalid")
@@ -624,11 +468,19 @@ def main() -> None:
     ).strip()
     if observed != source["commit"]:
         raise ValueError("source_commit_mismatch")
+    if mode == "runtime_qualification":
+        if benchmark_name == "cvebench_zero_day":
+            from evals.external_ctf import cvebench_runtime_qualification
+
+            result = cvebench_runtime_qualification.qualify(protocol, task_id, checkout)
+        else:
+            result = _run_external_runtime_qualification(
+                protocol, benchmark_name, checkout, benchmark["task_ids"].index(task_id)
+            )
+        _write(result)
+        return
     if benchmark_name != "cvebench_zero_day":
         raise RuntimeError("opencode_adapter_not_yet_qualified")
-    if mode == "runtime_qualification":
-        _write(_run_cvebench_qualification(protocol, task_id, checkout))
-        return
     passed = _run_cvebench(protocol, task_id, arm, checkout, _qualification(protocol, task_id))
     _write(
         {

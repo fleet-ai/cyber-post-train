@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from evals.external_ctf import analyze as external_analysis
-from evals.external_ctf import execution_packet, tensorlake
+from evals.external_ctf import cvebench_runtime_qualification, execution_packet, tensorlake
 from evals.external_ctf import worker as external_worker
 from evals.external_ctf.protocol import (
     build_plan,
@@ -328,11 +328,11 @@ def test_task5_qualification_copies_solution_only_after_false_checker(monkeypatc
         events.append(("checker", value))
         return value
 
-    monkeypatch.setattr(external_worker.subprocess, "run", fake_run)
-    monkeypatch.setattr(external_worker, "_checker_status", fake_checker)
-    monkeypatch.setattr(external_worker, "_image_locks", lambda *_args: images)
+    monkeypatch.setattr(cvebench_runtime_qualification.subprocess, "run", fake_run)
+    monkeypatch.setattr(cvebench_runtime_qualification, "_checker_status", fake_checker)
+    monkeypatch.setattr(cvebench_runtime_qualification, "_image_locks", lambda *_args: images)
 
-    result = external_worker._qualify_cve_task(  # noqa: SLF001
+    result = cvebench_runtime_qualification.qualify_task(
         Path("/synthetic/cvebench"), task_id, run_official_solution=True
     )
 
@@ -496,7 +496,7 @@ def _install_packet_context(monkeypatch, state: Path) -> None:
         tensorlake,
         "_load_execution_packet",
         lambda _protocol, authority, _path, **_kwargs: (
-            {"receipt_sha256": EXECUTION_PACKET_RECEIPT},
+            {"receipt_sha256": EXECUTION_PACKET_RECEIPT, "packet_mode": "scored"},
             state if state is not None else authority["external_state"],
         ),
     )
@@ -533,6 +533,9 @@ def _write_runtime_qualification_complete(
             **cell,
             "name": name,
             "protocol_sha256": protocol["protocol_sha256"],
+            "qualification_contract_sha256": protocol["benchmarks"]["cvebench_zero_day"][
+                "runtime_qualification"
+            ]["contract_sha256"],
             "execution_packet_receipt_sha256": EXECUTION_PACKET_RECEIPT,
             "outcome": "runtime_preflight_passed",
             "result": {
@@ -1426,6 +1429,9 @@ def test_runtime_qualification_result_binds_false_solution_true_and_image_digest
     value = {
         "schema": "external_ctf_runtime_qualification_v1",
         "protocol_sha256": protocol["protocol_sha256"],
+        "qualification_contract_sha256": protocol["benchmarks"]["cvebench_zero_day"][
+            "runtime_qualification"
+        ]["contract_sha256"],
         "benchmark": "cvebench_zero_day",
         "task_id": "CVE-2024-2624",
         "arm": "qualification",
@@ -1487,6 +1493,9 @@ def test_non_canary_runtime_preflight_is_task_scoped_and_not_positive_grader_cla
     value = {
         "schema": "external_ctf_runtime_qualification_v1",
         "protocol_sha256": protocol["protocol_sha256"],
+        "qualification_contract_sha256": protocol["benchmarks"]["cvebench_zero_day"][
+            "runtime_qualification"
+        ]["contract_sha256"],
         "benchmark": "cvebench_zero_day",
         "task_id": cell["task_id"],
         "arm": "qualification",
@@ -1549,11 +1558,7 @@ def test_worker_accepts_non_canary_task_scoped_runtime_preflight(monkeypatch) ->
             "positive_grader_control": "not_run",
         }
 
-    monkeypatch.setattr(
-        external_worker,
-        "_run_cvebench_qualification",
-        qualify,
-    )
+    monkeypatch.setattr(cvebench_runtime_qualification, "qualify", qualify)
     monkeypatch.setattr(
         external_worker,
         "_write",

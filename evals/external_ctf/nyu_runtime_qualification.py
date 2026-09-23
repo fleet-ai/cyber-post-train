@@ -12,7 +12,12 @@ import yaml
 
 from . import nyu_adapter
 from . import runtime_qualification as rt
-from .protocol import DEFAULT_PROTOCOL, digest, load_protocol
+from .protocol import (
+    DEFAULT_PROTOCOL,
+    digest,
+    load_protocol,
+    runtime_qualification_contract_sha256,
+)
 
 BENCHMARK = nyu_adapter.BENCHMARK
 NyuRuntimeError = rt.RuntimeGateError
@@ -82,6 +87,7 @@ def _qualification(
     unsigned = {
         "schema": "external_ctf_nyu_runtime_qualification_v1",
         "protocol_sha256": protocol["protocol_sha256"],
+        "qualification_contract_sha256": runtime_qualification_contract_sha256(protocol, BENCHMARK),
         "benchmark": BENCHMARK,
         "task_id": task.task_id,
         "source_commit": task.source_commit,
@@ -226,6 +232,7 @@ def qualify(
             else "external_ctf_nyu_runtime_qualification_precondition_v1"
         ),
         "protocol_sha256": protocol["protocol_sha256"],
+        "qualification_contract_sha256": runtime_qualification_contract_sha256(protocol, BENCHMARK),
         "benchmark": BENCHMARK,
         "qualification_name": f"extctf-nyu-t{task_index:02d}-qual-v1" if admitted else None,
         "task_index": task_index,

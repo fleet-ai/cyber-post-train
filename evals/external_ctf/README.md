@@ -88,6 +88,25 @@ content: 16 receive task-specific Linux/amd64 runtime-qualification contracts,
 while the three declared runtime-unavailable tasks remain explicit
 infrastructure rows. The Cybench manifest binds five source-present tasks and
 the one declared source-missing row. Neither manifest opens its adapter gate.
+The remote coordinator admits exactly those 16 NYU and five Cybench
+qualification identities under the shared capacity authority and the staged
+concurrency policy below.
+Each receipt binds a benchmark-specific, model-neutral qualification contract;
+changing a model route or scored budget cannot change that contract. Unsafe or
+unsupported pinned Compose features produce explicit infrastructure-invalid
+qualification receipts before challenge execution, never model scores.
+The qualification-only execution packet binds the shared capacity authority,
+all three exact source checkouts, the 61 qualification cells, and those three
+contracts. Its schema sets models and live parity to null and rejects every
+scored create, start, or route preflight. It runs the task-5 CVE positive
+control first, then one NYU and one Cybench canary at concurrency one. Only
+after all three canaries have accepted terminals and confirmed releases does
+it admit the remaining cells in batches of at most four; the shared project
+limit of 100 remains authoritative for every create. Once one benchmark's
+qualification rows are all terminal and released,
+`execution_packet seal-qualification-summary` emits a score-free manifest of
+the exact terminal and release receipt digests. A later scored packet must
+import that reviewed manifest and independently bind fresh serving parity.
 
 `observe-models` is a diagnostic check of Fleet team identity and model-name
 availability. It is not launch authority and does not prove exact route parity.
@@ -147,17 +166,26 @@ Only a small sealed terminal receipt can be read back from the sandbox.
 
 ## Current execution boundary
 
-All provider launches are currently blocked. The matched-priority c1 base clone,
-fresh two-arm live parity, shared-capacity successor, immutable execution packet,
-and remote task-5 model-free preflight do not yet exist. CVE-Bench is the only
-launch-integrated adapter, but it is not launch-qualified until those receipts
-are sealed. NYU now has a source-bound OpenCode contract and hidden-flag-isolation
-tests; Cybench now has source/native exact-grader qualification. Both adapters
-remain false and explicitly blocked until their Linux/amd64 challenge startup,
-OpenCode isolation, remote-runtime, and terminal-acceptance controls pass. The
+All provider launches are currently blocked. A live shared-capacity successor,
+immutable qualification packet, and remote model-free receipts do not yet exist.
+CVE-Bench is the only
+scored adapter, but it is not launch-qualified until those receipts are sealed.
+NYU and Cybench now have create-once, model-free runtime qualification executors;
+their scored adapters remain false and explicitly blocked until their
+Linux/amd64 challenge startup, OpenCode isolation, remote-runtime, and
+terminal-acceptance receipts pass. The
 pinned NYU census proves 16 source-qualified runtime candidates, not 16
 reproducible executions. Local platform checks are not benchmark results and do
 not authorize a launch.
+The frozen containment census currently admits 11 of those 16 NYU candidates
+and four of the five source-present Cybench tasks to a runtime attempt; the
+remaining five NYU and one Cybench rows are predeclared infrastructure-invalid.
+Runtime-qualified task count is still zero until the Linux/amd64 receipts exist.
+No new serving route may be created by this lane. A future scored packet must
+reuse the exact already-live WEB baseline and step-1000 routes, but only after a
+fresh read-only check proves their immutable identities, health, and matched
+serving contract. If either route is absent, unhealthy, or mismatched, scored
+execution remains blocked while qualification stays model-neutral.
 The earlier source-qualification JSON is historical and cannot authorize a
 launch; its separate supersession record enumerates the missing successor
 evidence without rewriting that historical receipt.

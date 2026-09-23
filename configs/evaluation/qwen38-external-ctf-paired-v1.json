@@ -54,8 +54,8 @@
     "shared_create_lock": "derived_from_bound_capacity_successor_state",
     "capacity_authority": "web_retry_capacity_successor_v1",
     "capacity_successor_required": true,
-    "worker_sha256": "sha256:9dae7881eeb6e392e22df363202907da7859c81e09b2e6849cfb3502252ae6c4",
-    "coordinator_sha256": "sha256:431c3e673fc493284ac1b6afcd25583731ab9af7699f7582142ead7ad92a4995",
+    "worker_sha256": "sha256:eda973d385a913c7db2a25014700cf7af3db501d63655bfb261619440490e7ba",
+    "coordinator_sha256": "sha256:c8a588e132e024f0244d71fa5f4dbb511f4a88c99a1d7e6cdfbcdda05e5ef8dc",
     "analyzer_sha256": "sha256:f31861b821b9b881d4719dc22896ea16c71fecaff3e5874e87cb1977d2ab252e",
     "sampling": {"temperature": 1.0, "top_p": 0.95, "top_k": null, "seed": null},
     "retry": {
@@ -201,6 +201,17 @@
       "source_unavailable_task_ids": [],
       "execution_unavailable_task_ids": [],
       "adapter_qualified": true,
+      "runtime_qualification": {
+        "schema": "external_ctf_cvebench_zero_day_runtime_qualification_contract_v1",
+        "canary_task_index": 5,
+        "task_indices": [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39],
+        "executor_source_sha256": {
+          "executor": "sha256:294dc977b849f3c22246cfe15eeb6be0a6239ad188d03fa056ef6ebb6d1972e0",
+          "strict_adapter": "sha256:75dd17b8c60651e4ba41057aa52d1abf97d92386f38fb0f5a9370de78be7aeb6"
+        },
+        "controller_image": null,
+        "contract_sha256": "sha256:f1c7afdff322a1deedccea5ff881f66a3402d934b7f7a775a86ca58e0d5005c6"
+      },
       "harness": {
         "name": "cvebench_inspect_native",
         "version": "2.1.0",
@@ -263,6 +274,18 @@
         "2020f-web-sharkfacts"
       ],
       "adapter_qualified": false,
+      "runtime_qualification": {
+        "schema": "external_ctf_nyu_ctf_web_test_runtime_qualification_contract_v1",
+        "canary_task_index": 6,
+        "task_indices": [0, 1, 2, 3, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18],
+        "executor_source_sha256": {
+          "adapter": "sha256:c9be680db2e627dbc249d195f5889f470fd8cff0352b550fe532ae2a83cd8db3",
+          "common": "sha256:e4866311bacc5778fa544493ed75208c06f5dc680cb7a7497a758c74acdaf618",
+          "executor": "sha256:ec92e6c27b5198207ace4b71fe53a6fda4b2cbf772cdff7db7d556861b7425a2"
+        },
+        "controller_image": null,
+        "contract_sha256": "sha256:ecb7a36dedde820ad0d16851294e38382311dead23e4a126079018cd7e00e84e"
+      },
       "harness": {
         "name": "opencode",
         "version": "1.18.27",
@@ -308,6 +331,18 @@
       ],
       "execution_unavailable_task_ids": [],
       "adapter_qualified": false,
+      "runtime_qualification": {
+        "schema": "external_ctf_cybench_web_runtime_qualification_contract_v1",
+        "canary_task_index": 2,
+        "task_indices": [0, 2, 3, 4, 5],
+        "executor_source_sha256": {
+          "common": "sha256:e4866311bacc5778fa544493ed75208c06f5dc680cb7a7497a758c74acdaf618",
+          "executor": "sha256:288e0bc653061b15519e4e396adb77bb5f1a2c83997061760aa935553bf30b5f",
+          "source_gate": "sha256:d2ebb90f853d75d96cfc93b4e63363e14489426efc85ceff09140cc4d733af78"
+        },
+        "controller_image": "docker.io/cybench/cybench@sha256:c0b895b8b9de7f8004cb85e1d0582c6b22f6c2d3dfb52d5fb42b79a3397835be",
+        "contract_sha256": "sha256:6826f487d797f0de4f522ead6f375de2e0063b376a56b5bca56856895f69a866"
+      },
       "harness": {
         "name": "opencode",
         "version": "1.18.27",
@@ -339,5 +374,5 @@
       "infrastructure_failures": "reported_separately_never_model_failure"
     }
   },
-  "protocol_sha256": "sha256:b9d3b81ce52ea6bda22287c942ac82e63321cb729ca935902627d31c23d54940"
+  "protocol_sha256": "sha256:ed0e820a4a140b6eddc744c9adeade73437030e8139824e2e7d91a330a745685"
 }

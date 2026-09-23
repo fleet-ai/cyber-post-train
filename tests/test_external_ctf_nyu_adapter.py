@@ -136,6 +136,9 @@ def frozen(tmp_path: Path) -> tuple[dict, Path, nyu_adapter.NyuTask, dict]:
                     "2020f-web-sharkfacts",
                 ],
                 "adapter_qualified": False,
+                "runtime_qualification": {
+                    "contract_sha256": "sha256:" + "f" * 64,
+                },
                 "scoring": "pinned_manifest_exact_hidden_flag",
                 "harness": {
                     "name": "opencode",
@@ -162,6 +165,9 @@ def frozen(tmp_path: Path) -> tuple[dict, Path, nyu_adapter.NyuTask, dict]:
     unsigned = {
         "schema": "external_ctf_nyu_runtime_qualification_v1",
         "protocol_sha256": protocol["protocol_sha256"],
+        "qualification_contract_sha256": protocol["benchmarks"][nyu_adapter.BENCHMARK][
+            "runtime_qualification"
+        ]["contract_sha256"],
         "benchmark": nyu_adapter.BENCHMARK,
         "task_id": task.task_id,
         "source_commit": task.source_commit,
