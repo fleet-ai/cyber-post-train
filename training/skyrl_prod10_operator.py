@@ -43,7 +43,7 @@ OPERATOR_NAMES = {
     "manifest": "chris-q38-prod10-manifest-operator-v1",
     "preflight": "chris-q38-prod10-preflight-operator-v2",
     "launch": "chris-q38-prod10-launch-operator-v2",
-    "inspect": "chris-q38-prod10-launch-inspect-v2",
+    "inspect": "chris-q38-prod10-launch-inspect-v3",
     "probe": "chris-q38-prod10-launch-probe-v6",
 }
 _LAUNCH_V1_FAILURE = {
@@ -58,6 +58,22 @@ _LAUNCH_V1_FAILURE = {
     ),
     "release_sha256": (
         "sha256:c9adf0f0b995906813668bba82180c84384f9de5f0185270d3f428ae404c0292"
+    ),
+    "inner_gpu_run_created": False,
+    "gpus": 0,
+}
+_LAUNCH_V2_FAILURE = {
+    "schema": "cyber_skyrl_prod10_launch_failure_binding_v1",
+    "status": "failed_before_gpu_create_and_released",
+    "operator_name": "chris-q38-prod10-launch-operator-v2",
+    "operator_job_uid": "1be3b0e6-3825-4ea3-aac4-1a2c92c19165",
+    "operator_pod_uid": "909bea1d-fa24-4525-8cc2-068cd6d616af",
+    "operator_workload_uid": "e01df31f-f821-4661-9b65-d35159480a7a",
+    "failure_receipt_sha256": (
+        "sha256:6f7d724ae7a0a61179616871895c0e2cbcb496ef351279527c6d6fb4b6f145c1"
+    ),
+    "release_sha256": (
+        "sha256:2cb973f61095c77641602fdf2ebb469c31f0a7b0aa907b053b01119dd0bc3992"
     ),
     "inner_gpu_run_created": False,
     "gpus": 0,
@@ -245,6 +261,11 @@ def launch_v1_failure_binding() -> dict[str, Any]:
     return _seal(_LAUNCH_V1_FAILURE)
 
 
+def launch_v2_failure_binding() -> dict[str, Any]:
+    """Bind the released launch-v2 failure for its read-only inspector."""
+    return _seal(_LAUNCH_V2_FAILURE)
+
+
 def inspect_v2_success_binding() -> dict[str, Any]:
     """Bind the exact released inspector used by the phase-coded probe."""
     return _seal(_INSPECT_V2_SUCCESS)
@@ -362,7 +383,7 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
         if duplicate.get("context") != direct.DEV_CONTEXT:
             raise ValueError("prod10 operator development proof changed")
     elif phase == "inspect":
-        if packet.get("launch_v1_failure") != launch_v1_failure_binding():
+        if packet.get("launch_v2_failure") != launch_v2_failure_binding():
             raise ValueError("prod10 launch inspection predecessor changed")
         plan = packet.get("plan")
         if not isinstance(plan, dict):
@@ -1418,7 +1439,7 @@ def _inspection_boundary(probes: dict[str, dict[str, Any]]) -> str:
 
 
 def run_inspect(packet: dict[str, Any]) -> dict[str, Any]:
-    """Inspect only allowlisted public path metadata after the released v1 failure."""
+    """Inspect only allowlisted public path metadata after the released v2 failure."""
     identity = _identity(packet["identity"])
     plan = packet.get("plan")
     if not isinstance(plan, dict):
@@ -1462,7 +1483,7 @@ def run_inspect(packet: dict[str, Any]) -> dict[str, Any]:
             "schema": MANIFEST_RESULT_SCHEMA,
             "status": "passed",
             "phase": "inspect",
-            "launch_v1_failure_sha256": launch_v1_failure_binding()["sha256"],
+            "launch_v2_failure_sha256": launch_v2_failure_binding()["sha256"],
             "preflight_launch_sha256": launch["sha256"],
             "paths": probes,
             "launch_boundary": _inspection_boundary(probes),

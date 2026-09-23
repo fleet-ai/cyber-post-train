@@ -295,7 +295,7 @@ def test_prod10_inspector_is_read_only_alert_off_c1_q1_zero_gpu(
     assert proof == {
         **proof,
         "phase": "inspect",
-        "name": "chris-q38-prod10-launch-inspect-v2",
+        "name": "chris-q38-prod10-launch-inspect-v3",
         "failure_alerts": "off",
         "priority": "c1",
         "queue_priority": "q1",
@@ -313,10 +313,10 @@ def test_prod10_inspector_is_read_only_alert_off_c1_q1_zero_gpu(
     assert "nvidia.com/gpu" not in json.dumps(package.job, sort_keys=True)
 
     changed = copy.deepcopy(packet)
-    changed["launch_v1_failure"]["operator_job_uid"] = (
+    changed["launch_v2_failure"]["operator_job_uid"] = (
         "00000000-0000-4000-8000-000000000001"
     )
-    changed["launch_v1_failure"] = operator._seal(changed["launch_v1_failure"])
+    changed["launch_v2_failure"] = operator._seal(changed["launch_v2_failure"])
     changed = operator._seal(changed)
     with pytest.raises(ValueError, match="predecessor"):
         operator_job.build_operator_package(changed)
