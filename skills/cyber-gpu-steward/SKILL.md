@@ -50,6 +50,12 @@ When no useful consumer or valid bounded exception remains:
 If release is required but not authorized, report the resource leak and request authority.
 Resource release is operational evidence, not a capability result.
 
+Treat every Kubernetes `DELETE` as a live mutation. Do not use `dryRun=All` or a
+client-side delete dry-run as a preview: a deployed API path may still apply the
+request. Preview with read-only `GET` calls instead, verify the exact name, UID,
+and resource version, then—only with release authority—send one foreground
+delete whose preconditions contain that UID and resource version.
+
 ## Preserve scientific blocks
 
 - Keep hosted and dedicated outcomes explicitly separated and every session bound to one

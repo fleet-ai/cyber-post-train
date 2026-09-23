@@ -210,7 +210,16 @@ class Cluster(Protocol):
 
     def create_once(self, namespace: str, bundle: dict[str, Any]) -> dict[str, Any]: ...
 
-    def delete_uid(self, resource: str, namespace: str, name: str, uid: str) -> dict[str, Any]: ...
+    def delete_uid(
+        self,
+        resource: str,
+        namespace: str,
+        name: str,
+        uid: str,
+        resource_version: str,
+        *,
+        confirmed_live: bool,
+    ) -> dict[str, Any]: ...
 
 
 @dataclass(frozen=True)
@@ -1277,6 +1286,13 @@ def _bound_resource(value: dict[str, Any], *, label: str, name: str, uid: str) -
     return metadata
 
 
+def _resource_version(metadata: dict[str, Any], label: str) -> str:
+    value = metadata.get("resourceVersion")
+    if not isinstance(value, str) or not value or value != value.strip():
+        raise CollectionJobError(f"{label} resourceVersion is invalid")
+    return value
+
+
 def _owned_inventory(
     cluster: Cluster, binding: dict[str, Any]
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
@@ -1490,7 +1506,14 @@ def cleanup_once(
         _write_json_once(intent_path, intent)
     if root is not None:
         try:
-            cluster.delete_uid("jobs.batch", NAMESPACE, binding["job_name"], binding["job_uid"])
+            cluster.delete_uid(
+                "jobs.batch",
+                NAMESPACE,
+                binding["job_name"],
+                binding["job_uid"],
+                _resource_version(root_metadata, "created Job"),
+                confirmed_live=True,
+            )
         except Exception:
             observed = cluster.get_optional("jobs.batch", NAMESPACE, binding["job_name"])
             if observed is not None:
@@ -1523,7 +1546,7 @@ def cleanup_once(
         sleep(min(5.0, max(0.0, deadline - monotonic())))
     current_config = cluster.get_optional("configmaps", NAMESPACE, binding["config_map_name"])
     if current_config is not None:
-        _bound_resource(
+        config_metadata = _bound_resource(
             current_config,
             label="created ConfigMap",
             name=binding["config_map_name"],
@@ -1535,6 +1558,8 @@ def cleanup_once(
                 NAMESPACE,
                 binding["config_map_name"],
                 binding["config_map_uid"],
+                _resource_version(config_metadata, "created ConfigMap"),
+                confirmed_live=True,
             )
         except Exception:
             observed = cluster.get_optional("configmaps", NAMESPACE, binding["config_map_name"])
@@ -1689,7 +1714,16 @@ class KubectlCluster:
         assert result is not None
         return result
 
-    def delete_uid(self, resource: str, namespace: str, name: str, uid: str) -> dict[str, Any]:
+    def delete_uid(
+        self,
+        resource: str,
+        namespace: str,
+        name: str,
+        uid: str,
+        resource_version: str,
+        *,
+        confirmed_live: bool,
+    ) -> dict[str, Any]:
         prefixes = {
             "jobs.batch": "/apis/batch/v1",
             "configmaps": "/api/v1",
@@ -1699,13 +1733,20 @@ class KubectlCluster:
             resource not in prefixes
             or KUBERNETES_NAME.fullmatch(name) is None
             or KUBERNETES_UID.fullmatch(uid) is None
+            or not isinstance(resource_version, str)
+            or not resource_version
+            or resource_version != resource_version.strip()
         ):
-            raise CollectionJobError("Kubernetes delete is not exact-UID scoped")
+            raise CollectionJobError("Kubernetes delete is not exact UID/resourceVersion scoped")
+        if confirmed_live is not True:
+            raise CollectionJobError(
+                "Kubernetes DELETE has no safe dry-run preview; confirm the live mutation"
+            )
         body = {
             "apiVersion": "v1",
             "kind": "DeleteOptions",
             "propagationPolicy": "Foreground",
-            "preconditions": {"uid": uid},
+            "preconditions": {"uid": uid, "resourceVersion": resource_version},
         }
         path = (
             f"{prefixes[resource]}/namespaces/{quote(namespace, safe='')}/"
