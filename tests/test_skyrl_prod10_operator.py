@@ -1144,13 +1144,14 @@ def test_prod10_dead_guard_is_atomically_archived_and_crash_reconciled(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     identity = historical.load_identity(IDENTITY)
-    operation_root = tmp_path / "operation"
-    operation_root.mkdir()
+    controls_root = tmp_path / "controls"
+    controls_root.mkdir()
+    monkeypatch.setattr(hardening, "CREATE_ONCE_ROOT", controls_root)
     plan = {"schema": training.SCHEMA}
     request = {
         "name": identity.run_name,
         "run_dir": identity.output_root,
-        "image": "image@sha256:" + "1" * 64,
+        "image": operator._LAUNCH_V3_GUARD_IMAGE,
         "workers": 1,
         "gpus_per_worker": 8,
     }
@@ -1158,10 +1159,65 @@ def test_prod10_dead_guard_is_atomically_archived_and_crash_reconciled(
     packet = {"duplicate_proof": {"sha256": "sha256:" + "2" * 64}}
     first = {"sha256": "sha256:" + "3" * 64}
     final = {"sha256": "sha256:" + "4" * 64}
-    guard_path = direct.jobs_api_guard_path(operation_root, "training")
-    archive_path = operation_root / operator._GUARD_ARCHIVE_NAME
-    receipt_path = operation_root / operator._GUARD_ARCHIVE_RECEIPT_NAME
-    stored = operator._seal({"schema": cleanup.JOBS_API_PREFIX_GUARD_SCHEMA})
+    operation_root = hardening.training_operation_root(plan)
+    historical_root = controls_root / (
+        "training-" + operator._LAUNCH_V3_GUARD_OPERATION_ID_SHA256.removeprefix("sha256:")
+    )
+    historical_root.mkdir()
+    guard_path = direct.jobs_api_guard_path(historical_root, "training")
+    binding_path = hardening.creator_binding_path(historical_root, "training")
+    archive_path = historical_root / operator._GUARD_ARCHIVE_NAME
+    receipt_path = historical_root / operator._GUARD_ARCHIVE_RECEIPT_NAME
+    historical_guard = cleanup.JobsApiPrefixGuard(
+        context=direct.PROD_CONTEXT,
+        namespace=direct.NAMESPACE,
+        run_name_prefix=operator._LAUNCH_V3_GUARD_RUN_NAME,
+        run_dir=operator._LAUNCH_V3_GUARD_RUN_DIR,
+        image=operator._LAUNCH_V3_GUARD_IMAGE,
+        plan_sha256=operator._LAUNCH_V3_GUARD_PLAN_SHA256,
+        manifest_sha256=operator._LAUNCH_V3_GUARD_MANIFEST_SHA256,
+        maximum_seconds=direct.MAXIMUM_SECONDS,
+        expected_gpus=8,
+        armed_path=guard_path,
+        binding_path=binding_path,
+        run=lambda *_args, **_kwargs: pytest.fail("historical guard contacted Kubernetes"),
+    )
+    stored = operator._seal(
+        {
+            "schema": cleanup.JOBS_API_PREFIX_GUARD_SCHEMA,
+            "status": "armed_non_destructive_prefix_guard",
+            "context": historical_guard.context,
+            "namespace": historical_guard.namespace,
+            "run_name_prefix": historical_guard.run_name_prefix,
+            "generated_name_pattern": historical_guard.generated_name_pattern,
+            "run_dir": historical_guard.run_dir,
+            "image": historical_guard.image,
+            "plan_sha256": historical_guard.plan_sha256,
+            "manifest_sha256": historical_guard.manifest_sha256,
+            "maximum_seconds": historical_guard.maximum_seconds,
+            "expected_gpus": historical_guard.expected_gpus,
+            "armed_at": "2026-09-23T10:00:00Z",
+            "observer_pid": 1,
+            "prefix_collision_count_before_post": 0,
+        }
+    )
+    assert historical_guard._validate_armed(stored) == stored
+    current_guard = cleanup.JobsApiPrefixGuard(
+        context=direct.PROD_CONTEXT,
+        namespace=direct.NAMESPACE,
+        run_name_prefix=request["name"],
+        run_dir=request["run_dir"],
+        image=request["image"],
+        plan_sha256="sha256:" + digest(plan),
+        manifest_sha256="sha256:" + digest(expected),
+        maximum_seconds=direct.MAXIMUM_SECONDS,
+        expected_gpus=request["workers"] * request["gpus_per_worker"],
+        armed_path=direct.jobs_api_guard_path(operation_root, "training"),
+        binding_path=hardening.creator_binding_path(operation_root, "training"),
+        run=lambda *_args, **_kwargs: pytest.fail("successor guard contacted Kubernetes"),
+    )
+    with pytest.raises(cleanup.ObserverError, match="receipt is invalid"):
+        current_guard._validate_armed(stored)
     operator._write_once(guard_path, stored)
     source_inode = guard_path.stat().st_ino
     guard_file_sha256 = "sha256:" + hashlib.sha256(guard_path.read_bytes()).hexdigest()
@@ -1171,11 +1227,6 @@ def test_prod10_dead_guard_is_atomically_archived_and_crash_reconciled(
         launch_direct,
         "_jit_duplicate",
         lambda value, *_args, **_kwargs: value,
-    )
-    monkeypatch.setattr(
-        cleanup.JobsApiPrefixGuard,
-        "_validate_armed",
-        lambda _self, value: value,
     )
     monkeypatch.setattr(
         operator,
@@ -1208,7 +1259,7 @@ def test_prod10_dead_guard_is_atomically_archived_and_crash_reconciled(
     }
     monkeypatch.setattr(operator, "inspect_v6_success_binding", lambda: inspection_v6)
 
-    journal = operation_root / "PROD10_DIRECT_V3_CREATE.jsonl"
+    journal = historical_root / "PROD10_DIRECT_V3_CREATE.jsonl"
     journal.write_text("intent")
     with pytest.raises(operator.OperatorFailure, match="archive_state"):
         operator._archive_launch_v3_guard(
@@ -1247,6 +1298,19 @@ def test_prod10_dead_guard_is_atomically_archived_and_crash_reconciled(
     assert receipt["launch_v5_failure_sha256"] == operator.launch_v5_failure_binding()["sha256"]
     assert receipt["launch_v6_failure_sha256"] == operator.launch_v6_failure_binding()["sha256"]
     assert receipt["launch_v7_failure_sha256"] == operator.launch_v7_failure_binding()["sha256"]
+    assert receipt["archived_guard_operation_id_sha256"] == (
+        operator._LAUNCH_V3_GUARD_OPERATION_ID_SHA256
+    )
+    assert receipt["archived_guard_plan_sha256"] == operator._LAUNCH_V3_GUARD_PLAN_SHA256
+    assert receipt["archived_guard_request_sha256"] == (operator._LAUNCH_V3_GUARD_REQUEST_SHA256)
+    assert receipt["archived_guard_manifest_sha256"] == (operator._LAUNCH_V3_GUARD_MANIFEST_SHA256)
+    assert receipt["successor_plan_sha256"] == "sha256:" + digest(plan)
+    assert receipt["successor_request_sha256"] == "sha256:" + digest(request)
+    assert receipt["successor_manifest_sha256"] == "sha256:" + digest(expected)
+    assert receipt["successor_operation_id_sha256"] == (
+        "sha256:" + digest({"scope": "training", "identity": plan})
+    )
+    assert not direct.jobs_api_guard_path(operation_root, "training").exists()
 
     receipt_path.unlink()
     recovered = operator._archive_launch_v3_guard(
@@ -1407,9 +1471,11 @@ def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
         "_archive_launch_v3_guard",
         lambda *_args, **_kwargs: events.append("archive") or {"sha256": "sha256:" + "5" * 64},
     )
+    guard_kwargs: dict = {}
 
     class FakeGuard:
-        def __init__(self, **_kwargs):
+        def __init__(self, **kwargs):
+            guard_kwargs.update(kwargs)
             events.append("guard_construct")
 
         def arm(self):
@@ -1443,14 +1509,29 @@ def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
         "duplicate_proof": {},
         "capacity_census": {"sha256": "sha256:" + "9" * 64},
     }
+    runner = object()
     if manifest_changed:
         with pytest.raises(operator.OperatorFailure, match="launch_live_preview_changed"):
-            operator.run_launch(packet, runner=object())
+            operator.run_launch(packet, runner=runner)
         assert operator._LAUNCH_STAGE == "live_manifest_rebuild"
         assert events == ["dev_provenance", "jit", "live_preview"]
         return
-    result = operator.run_launch(packet, runner=object())
+    result = operator.run_launch(packet, runner=runner)
     assert result["status"] == "gpu_run_succeeded_and_released"
+    assert guard_kwargs.pop("run") is runner
+    assert guard_kwargs == {
+        "context": direct.PROD_CONTEXT,
+        "namespace": direct.NAMESPACE,
+        "run_name_prefix": request["name"],
+        "run_dir": request["run_dir"],
+        "image": request["image"],
+        "plan_sha256": "sha256:" + digest(plan),
+        "manifest_sha256": "sha256:" + digest(expected),
+        "maximum_seconds": direct.MAXIMUM_SECONDS,
+        "expected_gpus": request["workers"] * request["gpus_per_worker"],
+        "armed_path": Path("/operation/TRAINING_JOBS_API_PREFIX_GUARD.json"),
+        "binding_path": Path("/operation/TRAINING_OBSERVER_ARMED.json.created.json"),
+    }
     assert events == [
         "dev_provenance",
         "jit",

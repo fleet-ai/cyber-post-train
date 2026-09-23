@@ -41,9 +41,27 @@ DIRECT_STAGE_RESULT_SCHEMA = "cyber_skyrl_prod10_operator_direct_stage_result_v2
 MANIFEST_RESULT_SCHEMA = "cyber_skyrl_prod10_rebound_manifest_result_v1"
 TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_termination_v1"
 FAILURE_TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_failure_v1"
-GUARD_ARCHIVE_SCHEMA = "cyber_skyrl_prod10_dead_guard_archive_v1"
+GUARD_ARCHIVE_SCHEMA = "cyber_skyrl_prod10_dead_guard_archive_v2"
 _GUARD_ARCHIVE_NAME = "TRAINING_JOBS_API_PREFIX_GUARD.launch-v3-failed.json"
 _GUARD_ARCHIVE_RECEIPT_NAME = "TRAINING_JOBS_API_PREFIX_GUARD.launch-v3-archive.json"
+_LAUNCH_V3_GUARD_OPERATION_ID_SHA256 = (
+    "sha256:854efb60698adc3048db448be5f5537ddf03c9cb433bc98f8c0728746d7a9218"
+)
+_LAUNCH_V3_GUARD_PLAN_SHA256 = (
+    "sha256:96cd9fa1343a17389c4cc0e4a6d9e3c89d2e21cc3ab45b5256bc9f0dd578fbb6"
+)
+_LAUNCH_V3_GUARD_REQUEST_SHA256 = (
+    "sha256:9ba0700bca6c88030cd761f7ae2394c7cda3ea58558aea4339fc6bc1a3cee501"
+)
+_LAUNCH_V3_GUARD_MANIFEST_SHA256 = (
+    "sha256:6693f547904794b6edc2b9f677a0baad2b524279959ef831128388f1e6fda329"
+)
+_LAUNCH_V3_GUARD_RUN_NAME = "chris-q38-rlreward-prod10"
+_LAUNCH_V3_GUARD_RUN_DIR = "/mnt/sfs/jobs/chris-q38-rlreward-prod10"
+_LAUNCH_V3_GUARD_IMAGE = (
+    "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train"
+    "@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
+)
 OPERATOR_NAMES = {
     "stage": "chris-q38-prod10-stage-operator-v7",
     "manifest": "chris-q38-prod10-manifest-operator-v2",
@@ -2710,11 +2728,23 @@ def _archive_launch_v3_guard(
         packet["duplicate_proof"],
         prior_sha256=first_absence["sha256"],
     )
-    guard_path = direct.jobs_api_guard_path(operation_root, "training")
-    binding_path = hardening.creator_binding_path(operation_root, "training")
-    journal_path = operation_root / "PROD10_DIRECT_V3_CREATE.jsonl"
-    archive_path = operation_root / _GUARD_ARCHIVE_NAME
-    receipt_path = operation_root / _GUARD_ARCHIVE_RECEIPT_NAME
+    successor_operation_id_sha256 = "sha256:" + digest({"scope": "training", "identity": plan})
+    if (
+        successor_operation_id_sha256 == _LAUNCH_V3_GUARD_OPERATION_ID_SHA256
+        or operation_root
+        != hardening.CREATE_ONCE_ROOT
+        / ("training-" + successor_operation_id_sha256.removeprefix("sha256:"))
+    ):
+        raise OperatorFailure("launch_v3_guard_successor_identity_rejected")
+    historical_operation_root = hardening.CREATE_ONCE_ROOT / (
+        "training-" + _LAUNCH_V3_GUARD_OPERATION_ID_SHA256.removeprefix("sha256:")
+    )
+    _canonical_directory(historical_operation_root, code="launch_v3_historical_operation_root")
+    guard_path = direct.jobs_api_guard_path(historical_operation_root, "training")
+    binding_path = hardening.creator_binding_path(historical_operation_root, "training")
+    journal_path = historical_operation_root / "PROD10_DIRECT_V3_CREATE.jsonl"
+    archive_path = historical_operation_root / _GUARD_ARCHIVE_NAME
+    receipt_path = historical_operation_root / _GUARD_ARCHIVE_RECEIPT_NAME
     source_exists = guard_path.exists() or guard_path.is_symlink()
     archive_exists = archive_path.exists() or archive_path.is_symlink()
     if (
@@ -2746,13 +2776,13 @@ def _archive_launch_v3_guard(
     guard = cleanup.JobsApiPrefixGuard(
         context=direct.PROD_CONTEXT,
         namespace=direct.NAMESPACE,
-        run_name_prefix=request["name"],
-        run_dir=request["run_dir"],
-        image=request["image"],
-        plan_sha256="sha256:" + digest(plan),
-        manifest_sha256="sha256:" + digest(expected),
+        run_name_prefix=_LAUNCH_V3_GUARD_RUN_NAME,
+        run_dir=_LAUNCH_V3_GUARD_RUN_DIR,
+        image=_LAUNCH_V3_GUARD_IMAGE,
+        plan_sha256=_LAUNCH_V3_GUARD_PLAN_SHA256,
+        manifest_sha256=_LAUNCH_V3_GUARD_MANIFEST_SHA256,
         maximum_seconds=direct.MAXIMUM_SECONDS,
-        expected_gpus=request["workers"] * request["gpus_per_worker"],
+        expected_gpus=8,
         armed_path=guard_path,
         binding_path=binding_path,
         run=runner,
@@ -2764,7 +2794,7 @@ def _archive_launch_v3_guard(
             os.rename(guard_path, archive_path)
         except OSError as exc:
             raise OperatorFailure("launch_v3_guard_archive_rename_rejected") from exc
-    parent = os.open(operation_root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    parent = os.open(historical_operation_root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
     try:
         os.fsync(parent)
     finally:
@@ -2803,6 +2833,14 @@ def _archive_launch_v3_guard(
             "jit_duplicate_before_intent_sha256": final_absence["sha256"],
             "guard_sha256": checked["sha256"],
             "guard_file_sha256": inspection_v6["current_guard_sha256"],
+            "archived_guard_operation_id_sha256": _LAUNCH_V3_GUARD_OPERATION_ID_SHA256,
+            "archived_guard_plan_sha256": _LAUNCH_V3_GUARD_PLAN_SHA256,
+            "archived_guard_request_sha256": _LAUNCH_V3_GUARD_REQUEST_SHA256,
+            "archived_guard_manifest_sha256": _LAUNCH_V3_GUARD_MANIFEST_SHA256,
+            "successor_operation_id_sha256": successor_operation_id_sha256,
+            "successor_plan_sha256": "sha256:" + digest(plan),
+            "successor_request_sha256": "sha256:" + digest(request),
+            "successor_manifest_sha256": "sha256:" + digest(expected),
             "archive_name": archive_path.name,
             "archived_via_atomic_rename": True,
             "recovered_after_atomic_rename": recovered_after_rename,
