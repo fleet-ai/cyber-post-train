@@ -231,7 +231,9 @@ def _objects(
                     "labels": {
                         "cyber-post-train.fleet.ai/experiment": name,
                         "cyber-post-train.fleet.ai/owner": "chris",
-                        "cyber-post-train.fleet.ai/postgres-client": "true",
+                        heldout_launch.POSTGRES_CLIENT_LABEL: (
+                            heldout_launch.POSTGRES_CLIENT_LABEL_VALUE
+                        ),
                     }
                 },
                 "spec": {
@@ -302,6 +304,7 @@ def _objects(
             },
         },
     }
+    heldout_launch.require_postgres_client_label(job, label=f"rendered {operation} Job")
     return config_map, job
 
 

@@ -38,10 +38,15 @@ NAMESPACE = "fleet-train-jobs"
 FAILURE_ALERT_ANNOTATION = "fleet.ai/failure-alerts"
 FAILURE_ALERT_OFF = "off"
 CREATE_ONCE_ANNOTATION = "cyber-post-train.fleet.ai/create-once"
+POSTGRES_CLIENT_LABEL = "cyber-post-train.fleet.ai/postgres-client"
+POSTGRES_CLIENT_LABEL_VALUE = "true"
+ROLLOUT_DATABASE_ENV = "ROLLOUT_DATABASE_URL"
+ROLLOUT_DATABASE_SECRET = "chris-cyber-rollout-postgres-v1"
 KUBERNETES_NAME = re.compile(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?")
 DATABASE_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,62}")
 KUBERNETES_UID = re.compile(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
+ENV_PREFIX = re.compile(r"(?:[A-Za-z_][A-Za-z0-9_]*)?")
 SUPPORTED_SPLIT_SCHEMAS = {
     "cyber_representative_study_split_v2",
     "cyber_parameterized_task_family_split_v1",
@@ -380,6 +385,106 @@ def _metadata(value: dict[str, Any], label: str) -> dict[str, Any]:
     return metadata
 
 
+def require_postgres_client_label(job: dict[str, Any], *, label: str) -> bool:
+    """Fail closed when a PostgreSQL-reading Job lacks its NetworkPolicy label.
+
+    The live rollout PostgreSQL policy selects Pods, not root Jobs. Therefore
+    the exact label belongs on ``spec.template.metadata.labels``. Jobs which do
+    not receive the rollout database credential are intentionally unaffected.
+    """
+    if job.get("apiVersion") != "batch/v1" or job.get("kind") != "Job":
+        raise HeldoutLaunchError(f"{label} is not a batch/v1 Job")
+    spec = job.get("spec")
+    template = spec.get("template") if isinstance(spec, dict) else None
+    pod = template.get("spec") if isinstance(template, dict) else None
+    if not isinstance(pod, dict):
+        raise HeldoutLaunchError(f"{label} Pod template is invalid")
+    reads_postgres = False
+    for group in ("initContainers", "containers"):
+        containers = pod.get(group, [])
+        if not isinstance(containers, list) or any(
+            not isinstance(container, dict) for container in containers
+        ):
+            raise HeldoutLaunchError(f"{label} {group} is invalid")
+        for container in containers:
+            environment = container.get("env", [])
+            if not isinstance(environment, list) or any(
+                not isinstance(entry, dict) for entry in environment
+            ):
+                raise HeldoutLaunchError(f"{label} container environment is invalid")
+            for entry in environment:
+                value_from = entry.get("valueFrom")
+                secret_ref = (
+                    value_from.get("secretKeyRef") if isinstance(value_from, dict) else None
+                )
+                if (
+                    isinstance(value_from, dict)
+                    and "secretKeyRef" in value_from
+                    and (
+                        not isinstance(secret_ref, dict)
+                        or set(secret_ref) - {"name", "key", "optional"}
+                        or not isinstance(secret_ref.get("name"), str)
+                        or not secret_ref["name"]
+                        or not isinstance(secret_ref.get("key"), str)
+                        or not secret_ref["key"]
+                        or ("optional" in secret_ref and type(secret_ref["optional"]) is not bool)
+                    )
+                ):
+                    raise HeldoutLaunchError(f"{label} secretKeyRef is invalid")
+                reads_postgres = reads_postgres or entry.get("name") == ROLLOUT_DATABASE_ENV
+                reads_postgres = reads_postgres or (
+                    isinstance(secret_ref, dict)
+                    and (
+                        secret_ref.get("name") == ROLLOUT_DATABASE_SECRET
+                        or secret_ref.get("key") == ROLLOUT_DATABASE_ENV
+                    )
+                )
+            environment_from = container.get("envFrom", [])
+            if not isinstance(environment_from, list) or any(
+                not isinstance(entry, dict) for entry in environment_from
+            ):
+                raise HeldoutLaunchError(f"{label} container envFrom is invalid")
+            for entry in environment_from:
+                prefix = entry.get("prefix", "")
+                if (
+                    set(entry) - {"prefix", "secretRef", "configMapRef"}
+                    or (("secretRef" in entry) == ("configMapRef" in entry))
+                    or not isinstance(prefix, str)
+                    or ENV_PREFIX.fullmatch(prefix) is None
+                ):
+                    raise HeldoutLaunchError(f"{label} container envFrom entry is invalid")
+                ref_name = "secretRef" if "secretRef" in entry else "configMapRef"
+                reference = entry[ref_name]
+                if (
+                    not isinstance(reference, dict)
+                    or set(reference) - {"name", "optional"}
+                    or not isinstance(reference.get("name"), str)
+                    or not reference["name"]
+                    or ("optional" in reference and type(reference["optional"]) is not bool)
+                ):
+                    raise HeldoutLaunchError(f"{label} container envFrom entry is invalid")
+                secret_ref = entry.get("secretRef")
+                reads_postgres = reads_postgres or (
+                    isinstance(secret_ref, dict)
+                    and secret_ref.get("name") == ROLLOUT_DATABASE_SECRET
+                )
+    template_metadata = template.get("metadata")
+    labels = template_metadata.get("labels") if isinstance(template_metadata, dict) else None
+    label_present = isinstance(labels, dict) and POSTGRES_CLIENT_LABEL in labels
+    label_exact = label_present and labels.get(POSTGRES_CLIENT_LABEL) == POSTGRES_CLIENT_LABEL_VALUE
+    if reads_postgres and not label_exact:
+        raise HeldoutLaunchError(
+            f"{label} reads rollout PostgreSQL but its Pod template lacks the exact "
+            f"{POSTGRES_CLIENT_LABEL}={POSTGRES_CLIENT_LABEL_VALUE} label"
+        )
+    if not reads_postgres and label_present:
+        raise HeldoutLaunchError(
+            f"{label} has a stale {POSTGRES_CLIENT_LABEL} label without a rollout "
+            "PostgreSQL dependency"
+        )
+    return reads_postgres
+
+
 def _namespace_name(value: dict[str, Any], label: str) -> tuple[str, str]:
     metadata = _metadata(value, label)
     name = metadata.get("name")
@@ -591,6 +696,7 @@ def build_package(packet_path: Path) -> Package:
         raise HeldoutLaunchError("packet ConfigMap manifest is invalid")
     if job.get("apiVersion") != "batch/v1" or job.get("kind") != "Job":
         raise HeldoutLaunchError("packet Job manifest is invalid")
+    require_postgres_client_label(job, label="sealed packet Job")
     if _namespace_name(config_map, "ConfigMap") != (packet.namespace, packet.config_map_name):
         raise HeldoutLaunchError("ConfigMap name differs from launch packet")
     if _namespace_name(job, "Job") != (packet.namespace, packet.job_name):
@@ -1009,6 +1115,12 @@ def _validate_server_preview(response: dict[str, Any], package: Package) -> str:
         name=packet.config_map_name,
         label="server dry-run",
     )
+    expected_reads_postgres = require_postgres_client_label(package.job, label="sealed packet Job")
+    observed_reads_postgres = require_postgres_client_label(job, label="server-rendered Job")
+    if observed_reads_postgres != expected_reads_postgres:
+        raise HeldoutLaunchError(
+            "server-rendered Job changed the rollout PostgreSQL dependency contract"
+        )
     annotations = _metadata(job, "server-rendered Job").get("annotations")
     if (
         not isinstance(annotations, dict)
@@ -1172,6 +1284,14 @@ def launch_once(
             name=package.packet.config_map_name,
             label="create response",
         )
+        expected_reads_postgres = require_postgres_client_label(
+            package.job, label="sealed packet Job"
+        )
+        observed_reads_postgres = require_postgres_client_label(job, label="created Job")
+        if observed_reads_postgres != expected_reads_postgres:
+            raise HeldoutLaunchError(
+                "created Job changed the rollout PostgreSQL dependency contract"
+            )
         annotations = _metadata(job, "created Job").get("annotations")
         uid = _metadata(job, "created Job").get("uid")
         config_map_uid = _metadata(config_map, "created ConfigMap").get("uid")

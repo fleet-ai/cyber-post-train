@@ -66,6 +66,10 @@ class FakeCluster:
         self.missing_root_alert = False
         self.raise_on_create = False
         self.add_job_after_second_preview = False
+        self.drop_postgres_label_in_preview = False
+        self.postgres_label_in_create: str | None = None
+        self.drop_postgres_contract_in_create = False
+        self.add_postgres_contract_in_create = False
         self.created: dict[str, Any] | None = None
 
     def list(
@@ -107,7 +111,7 @@ class FakeCluster:
                 return copy.deepcopy(item)
         raise AssertionError(f"missing created {kind}")
 
-    def _server_response(self, bundle: dict[str, Any]) -> dict[str, Any]:
+    def _server_response(self, bundle: dict[str, Any], *, create: bool = False) -> dict[str, Any]:
         result = copy.deepcopy(bundle)
         job = next(item for item in result["items"] if item["kind"] == "Job")
         job["metadata"]["uid"] = JOB_UID
@@ -117,6 +121,20 @@ class FakeCluster:
         if self.missing_root_alert:
             job["metadata"]["annotations"].pop("fleet.ai/failure-alerts")
             template_metadata.setdefault("annotations", {})["fleet.ai/failure-alerts"] = "off"
+        labels = template_metadata.setdefault("labels", {})
+        if not create and self.drop_postgres_label_in_preview:
+            labels.pop(launch.POSTGRES_CLIENT_LABEL, None)
+        if create and self.postgres_label_in_create is not None:
+            labels[launch.POSTGRES_CLIENT_LABEL] = self.postgres_label_in_create
+        environment = job["spec"]["template"]["spec"]["containers"][0].setdefault("env", [])
+        if create and self.drop_postgres_contract_in_create:
+            labels.pop(launch.POSTGRES_CLIENT_LABEL, None)
+            environment[:] = [
+                entry for entry in environment if entry.get("name") != launch.ROLLOUT_DATABASE_ENV
+            ]
+        if create and self.add_postgres_contract_in_create:
+            labels[launch.POSTGRES_CLIENT_LABEL] = launch.POSTGRES_CLIENT_LABEL_VALUE
+            environment.append({"name": launch.ROLLOUT_DATABASE_ENV, "value": "injected"})
         config_map = next(item for item in result["items"] if item["kind"] == "ConfigMap")
         config_map["metadata"]["uid"] = CONFIG_MAP_UID
         return result
@@ -133,7 +151,7 @@ class FakeCluster:
         self.create_calls += 1
         if self.raise_on_create:
             raise OSError("transport interruption")
-        self.created = self._server_response(bundle)
+        self.created = self._server_response(bundle, create=True)
         return copy.deepcopy(self.created)
 
 
@@ -335,6 +353,158 @@ def _reseal_packet(packet: Path, raw: dict[str, Any]) -> None:
     identity["split_manifest_file_sha256"] = raw["files"]["split_manifest"]["sha256"]
     raw["evaluation_identity_sha256"] = launch._canonical_digest(identity)  # noqa: SLF001
     _write_json(packet, raw)
+
+
+def _enable_rollout_database(packet: Path) -> None:
+    raw = json.loads(packet.read_text())
+    job_path = packet.parent / raw["files"]["job"]["path"]
+    job = yaml.safe_load(job_path.read_text())
+    template = job["spec"]["template"]
+    template.setdefault("metadata", {}).setdefault("labels", {})[launch.POSTGRES_CLIENT_LABEL] = (
+        launch.POSTGRES_CLIENT_LABEL_VALUE
+    )
+    job["spec"]["template"]["spec"]["containers"][0]["env"].append(
+        {
+            "name": launch.ROLLOUT_DATABASE_ENV,
+            "valueFrom": {
+                "secretKeyRef": {
+                    "name": "chris-cyber-rollout-postgres-v1",
+                    "key": launch.ROLLOUT_DATABASE_ENV,
+                }
+            },
+        }
+    )
+    job_path.write_text(yaml.safe_dump(job), encoding="utf-8")
+    raw["files"]["job"]["sha256"] = _sha(job_path)
+    _reseal_packet(packet, raw)
+
+
+def _set_postgres_label(packet: Path, value: str | None) -> None:
+    raw = json.loads(packet.read_text())
+    job_path = packet.parent / raw["files"]["job"]["path"]
+    job = yaml.safe_load(job_path.read_text())
+    labels = job["spec"]["template"].setdefault("metadata", {}).setdefault("labels", {})
+    if value is None:
+        labels.pop(launch.POSTGRES_CLIENT_LABEL, None)
+    else:
+        labels[launch.POSTGRES_CLIENT_LABEL] = value
+    job_path.write_text(yaml.safe_dump(job), encoding="utf-8")
+    raw["files"]["job"]["sha256"] = _sha(job_path)
+    _reseal_packet(packet, raw)
+
+
+def test_non_database_job_is_unaffected_by_postgres_client_label_gate(tmp_path):
+    package = launch.build_package(_packet(tmp_path))
+
+    assert launch.require_postgres_client_label(package.job, label="test Job") is False
+
+
+def test_stale_postgres_client_label_on_non_database_job_fails_render(tmp_path):
+    packet = _packet(tmp_path)
+    _set_postgres_label(packet, launch.POSTGRES_CLIENT_LABEL_VALUE)
+
+    with pytest.raises(launch.HeldoutLaunchError, match="stale .*postgres-client"):
+        launch.build_package(packet)
+
+
+def test_database_secret_env_from_requires_postgres_client_label(tmp_path):
+    packet = _packet(tmp_path)
+    raw = json.loads(packet.read_text())
+    job_path = packet.parent / raw["files"]["job"]["path"]
+    job = yaml.safe_load(job_path.read_text())
+    job["spec"]["template"]["spec"]["containers"][0]["envFrom"] = [
+        {"secretRef": {"name": launch.ROLLOUT_DATABASE_SECRET}}
+    ]
+    job_path.write_text(yaml.safe_dump(job), encoding="utf-8")
+    raw["files"]["job"]["sha256"] = _sha(job_path)
+    _reseal_packet(packet, raw)
+
+    with pytest.raises(launch.HeldoutLaunchError, match="reads rollout PostgreSQL"):
+        launch.build_package(packet)
+
+
+@pytest.mark.parametrize(
+    "env_from",
+    [
+        [{}],
+        [{"prefix": 1, "secretRef": {"name": launch.ROLLOUT_DATABASE_SECRET}}],
+        [{"prefix": "bad-", "secretRef": {"name": launch.ROLLOUT_DATABASE_SECRET}}],
+        [
+            {
+                "secretRef": {
+                    "name": launch.ROLLOUT_DATABASE_SECRET,
+                    "optional": "false",
+                }
+            }
+        ],
+        [{"secretRef": {"name": launch.ROLLOUT_DATABASE_SECRET, "unexpected": True}}],
+    ],
+)
+def test_malformed_env_from_fails_closed(tmp_path, env_from):
+    package = launch.build_package(_packet(tmp_path))
+    package.job["spec"]["template"]["spec"]["containers"][0]["envFrom"] = env_from
+
+    with pytest.raises(launch.HeldoutLaunchError, match="envFrom entry is invalid"):
+        launch.require_postgres_client_label(package.job, label="test Job")
+
+
+@pytest.mark.parametrize("value", [None, "false"])
+def test_database_reader_missing_or_tampered_postgres_client_label_fails_render(tmp_path, value):
+    packet = _packet(tmp_path)
+    _enable_rollout_database(packet)
+    _set_postgres_label(packet, value)
+
+    with pytest.raises(launch.HeldoutLaunchError, match="reads rollout PostgreSQL"):
+        launch.build_package(packet)
+
+
+def test_server_preview_must_retain_database_client_label(tmp_path):
+    packet = _packet(tmp_path)
+    _enable_rollout_database(packet)
+    cluster, database = FakeCluster(), FakeDatabase()
+    cluster.drop_postgres_label_in_preview = True
+
+    with pytest.raises(launch.HeldoutLaunchError, match="reads rollout PostgreSQL"):
+        _launch(packet, cluster, database, tmp_path / "intent.jsonl")
+
+    assert cluster.preview_calls == 1
+    assert cluster.create_calls == 0
+
+
+def test_create_response_must_retain_database_client_label(tmp_path):
+    packet = _packet(tmp_path)
+    _enable_rollout_database(packet)
+    cluster, database = FakeCluster(), FakeDatabase()
+    cluster.postgres_label_in_create = "false"
+    journal = tmp_path / "intent.jsonl"
+
+    with pytest.raises(launch.HeldoutLaunchError, match="reads rollout PostgreSQL"):
+        _launch(packet, cluster, database, journal)
+
+    assert cluster.preview_calls == 2
+    assert cluster.create_calls == 1
+    assert [json.loads(line)["state"] for line in journal.read_text().splitlines()] == [
+        "KUBECTL_CREATE_INTENT_DO_NOT_RETRY",
+        "KUBECTL_CREATE_RESPONSE_UNCERTAIN_DO_NOT_RETRY",
+    ]
+
+
+@pytest.mark.parametrize("mutation", ["remove", "add"])
+def test_create_response_must_retain_database_dependency_contract(tmp_path, mutation):
+    packet = _packet(tmp_path)
+    cluster, database = FakeCluster(), FakeDatabase()
+    if mutation == "remove":
+        _enable_rollout_database(packet)
+        cluster.drop_postgres_contract_in_create = True
+    else:
+        cluster.add_postgres_contract_in_create = True
+    journal = tmp_path / "intent.jsonl"
+
+    with pytest.raises(launch.HeldoutLaunchError, match="dependency contract"):
+        _launch(packet, cluster, database, journal)
+
+    assert cluster.preview_calls == 2
+    assert cluster.create_calls == 1
 
 
 def test_existing_job_stops_before_server_preview_or_create(tmp_path):
