@@ -66,6 +66,9 @@ _KUBERNETES_NAME_PATTERN = re.compile(r"[a-z0-9](?:[-a-z0-9.]{0,251}[a-z0-9])?")
 _CREATE_PATHS = {
     ("batch/v1", "Job"): "/apis/batch/v1/namespaces/{namespace}/jobs",
 }
+_DRY_RUN_ONLY_CREATE_PATHS = {
+    ("ray.io/v1", "RayJob"): "/apis/ray.io/v1/namespaces/{namespace}/rayjobs",
+}
 _CAPACITY_PATHS = {
     "pods": "/api/v1/pods",
     "inference_models": "/apis/inference.fleet.ai/v1alpha1/inferencemodels",
@@ -315,7 +318,16 @@ class InClusterKubernetesRunner:
         try:
             template = _CREATE_PATHS[key]
         except KeyError as exc:
-            raise InClusterKubernetesError("Kubernetes create kind is not reviewed") from exc
+            try:
+                template = _DRY_RUN_ONLY_CREATE_PATHS[key]
+            except KeyError:
+                raise InClusterKubernetesError(
+                    "Kubernetes create kind is not reviewed"
+                ) from exc
+            if not dry_run:
+                raise InClusterKubernetesError(
+                    "Kubernetes create kind is reviewed only for server dry-run"
+                ) from exc
         metadata = value.get("metadata")
         if not isinstance(metadata, dict) or metadata.get("namespace") != namespace:
             raise InClusterKubernetesError("Kubernetes create namespace changed")

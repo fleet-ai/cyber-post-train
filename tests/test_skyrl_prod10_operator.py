@@ -1741,6 +1741,56 @@ def test_incluster_runner_allows_only_prod_get_create_and_uid_cas_delete() -> No
             denied.capacity_inventory()
 
 
+def test_incluster_runner_allows_rayjob_only_for_server_dry_run() -> None:
+    calls: list[tuple[str, str, bytes | None]] = []
+
+    def request(
+        method: str, path: str, body: bytes | None, _headers: dict[str, str]
+    ) -> tuple[int, bytes]:
+        calls.append((method, path, body))
+        return 201, body or b"{}"
+
+    runner = incluster_kubernetes.InClusterKubernetesRunner(request=request)
+    prefix = [
+        "kubectl",
+        "--context",
+        direct.PROD_CONTEXT,
+        "--namespace",
+        direct.NAMESPACE,
+    ]
+    manifest = {
+        "apiVersion": "ray.io/v1",
+        "kind": "RayJob",
+        "metadata": {"name": "exact", "namespace": direct.NAMESPACE},
+        "spec": {},
+    }
+    result = runner(
+        prefix + ["create", "--dry-run=server", "-f", "-", "-o", "json"],
+        input=json.dumps(manifest),
+    )
+    assert result.returncode == 0
+    assert calls == [
+        (
+            "POST",
+            (
+                "/apis/ray.io/v1/namespaces/fleet-train-jobs/rayjobs"
+                "?dryRun=All&fieldManager=cyber-post-train-prod10"
+            ),
+            json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode(),
+        )
+    ]
+
+    with pytest.raises(
+        incluster_kubernetes.InClusterKubernetesError,
+        match="reviewed only for server dry-run",
+    ):
+        runner(
+            prefix + ["create", "-f", "-", "-o", "json"],
+            input=json.dumps(manifest),
+        )
+    assert len(calls) == 1
+
+
 def test_operator_termination_receipt_is_accepted_by_exact_observer(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
