@@ -21,10 +21,11 @@ class _Result:
 
 
 class _Connection:
-    def __init__(self, cells, events, receipts, *, fail_receipt=False):
+    def __init__(self, cells, events, receipts, *, local_result_cell_ids=None, fail_receipt=False):
         self.cells = cells
         self.events = events
         self.receipts = receipts
+        self.local_result_cell_ids = set(local_result_cell_ids or ())
         self.fail_receipt = fail_receipt
 
     def execute(self, statement, params=None):
@@ -33,6 +34,8 @@ class _Connection:
             return _Result()
         if sql.startswith("SELECT * FROM rollout_cells ORDER BY cell_id"):
             return _Result([self.cells[key] for key in sorted(self.cells)])
+        if sql.startswith("SELECT cell_id FROM rollout_local_results"):
+            return _Result([{"cell_id": cell_id} for cell_id in sorted(self.local_result_cell_ids)])
         if sql.startswith("SELECT receipt_json FROM ledger_reconciliations"):
             return _Result([{"receipt_json": value} for value in self.receipts])
         if sql.startswith("UPDATE rollout_cells"):
@@ -96,6 +99,51 @@ def _intent(selected, unselected, counts):
     )
 
 
+def _local_gap_intent(selected, unselected, counts, missing):
+    body = {
+        "schema_version": reconciliation.SUBSET_LOCAL_GAPS_INTENT_SCHEMA,
+        "evaluation_plan_sha256": "a" * 64,
+        "runtime_files_sha256": reconciliation.runtime_identity(),
+        "serving_block": "base",
+        "source_output_root": "/mnt/sfs/jobs/source",
+        "source_database": "source_database",
+        "source_job_uid": str(uuid.uuid4()),
+        "source_job_terminal_receipt_sha256": "b" * 64,
+        "selected_cell_ids": selected,
+        "unselected_cell_ids": unselected,
+        "expected_arm_state_counts": counts,
+        "expected_agent_exit_code": 0,
+        "expected_agent_termination": "output_limit",
+        "expected_failure_code": "authoritative_scoring_started.runtimeerror",
+        "expected_local_result_count": 15,
+        "missing_local_result_cell_ids": missing,
+        "expected_missing_local_result_failure_code": (
+            reconciliation.MISSING_LOCAL_RESULT_FAILURE_CODE
+        ),
+    }
+    return reconciliation.ExactStoredSessionSubsetIntent(
+        evaluation_plan_sha256=body["evaluation_plan_sha256"],
+        runtime_files_sha256=body["runtime_files_sha256"],
+        serving_block=body["serving_block"],
+        source_output_root=body["source_output_root"],
+        source_database=body["source_database"],
+        source_job_uid=body["source_job_uid"],
+        source_job_terminal_receipt_sha256=body["source_job_terminal_receipt_sha256"],
+        selected_cell_ids=tuple(selected),
+        unselected_cell_ids=tuple(unselected),
+        expected_arm_state_counts=counts,
+        expected_agent_exit_code=0,
+        expected_agent_termination="output_limit",
+        expected_failure_code="authoritative_scoring_started.runtimeerror",
+        sha256=reconciliation._body_digest(body),  # noqa: SLF001
+        expected_local_result_count=15,
+        missing_local_result_cell_ids=tuple(missing),
+        expected_missing_local_result_failure_code=(
+            reconciliation.MISSING_LOCAL_RESULT_FAILURE_CODE
+        ),
+    )
+
+
 def _row(cell_id, state, *, local_session=None, failure=None):
     return {
         "cell_id": cell_id,
@@ -120,10 +168,23 @@ def _row(cell_id, state, *, local_session=None, failure=None):
     }
 
 
-def _install(monkeypatch, cells, *, fail_event=False, fail_receipt=False):
+def _install(
+    monkeypatch,
+    cells,
+    *,
+    local_result_cell_ids=None,
+    fail_event=False,
+    fail_receipt=False,
+):
     events = []
     receipts = []
-    connection = _Connection(cells, events, receipts, fail_receipt=fail_receipt)
+    connection = _Connection(
+        cells,
+        events,
+        receipts,
+        local_result_cell_ids=local_result_cell_ids,
+        fail_receipt=fail_receipt,
+    )
 
     @contextmanager
     def transaction(_dsn):
@@ -360,3 +421,186 @@ def test_subset_idempotency_rejects_tampered_stored_receipt(monkeypatch):
     receipts[0] = json.dumps(value)
     with pytest.raises(rollout_ledger.LedgerError, match="ambiguous"):
         reconciliation.accept_roster("unused", intent=intent, observations=_observations(selected))
+
+
+def _local_gap_case():
+    selected = [str(uuid.uuid4()) for _ in range(4)]
+    unselected = [str(uuid.uuid4()) for _ in range(13)]
+    missing = unselected[:2]
+    counts = {state: 0 for state in rollout_ledger.STATES}
+    counts.update(accepted=10, retry_review=7)
+    cells = {
+        cell_id: _row(
+            cell_id,
+            "retry_review",
+            local_session=f"session-{index}",
+            failure="authoritative_scoring_started.runtimeerror",
+        )
+        for index, cell_id in enumerate(selected)
+    }
+    for index, cell_id in enumerate(unselected):
+        if cell_id in missing:
+            cells[cell_id] = _row(
+                cell_id,
+                "retry_review",
+                failure=reconciliation.MISSING_LOCAL_RESULT_FAILURE_CODE,
+            )
+        elif index == 2:
+            cells[cell_id] = _row(
+                cell_id,
+                "retry_review",
+                local_session="partial-session",
+                failure="manual-review-required",
+            )
+        else:
+            cells[cell_id] = _row(
+                cell_id,
+                "accepted",
+                local_session=f"accepted-session-{index}",
+            )
+    local_result_cell_ids = set(selected + unselected) - set(missing)
+    return (
+        selected,
+        unselected,
+        missing,
+        counts,
+        cells,
+        local_result_cell_ids,
+    )
+
+
+def test_exact_two_unselected_local_result_gaps_are_bound_and_preserved(monkeypatch):
+    selected, unselected, missing, counts, cells, local_result_cell_ids = _local_gap_case()
+    intent = _local_gap_intent(selected, unselected, counts, missing)
+    complement_before = {cell_id: copy.deepcopy(cells[cell_id]) for cell_id in unselected}
+    events, receipts = _install(
+        monkeypatch,
+        cells,
+        local_result_cell_ids=local_result_cell_ids,
+    )
+
+    receipt = reconciliation.accept_roster(
+        "unused", intent=intent, observations=_observations(selected)
+    )
+
+    assert all(cells[cell_id]["state"] == "accepted" for cell_id in selected)
+    assert {cell_id: cells[cell_id] for cell_id in unselected} == complement_before
+    assert len(events) == 4 and len(receipts) == 1
+    assert receipt["source_local_result_count"] == 15
+    assert receipt["missing_local_result_count"] == 2
+    assert receipt["missing_local_results_are_unselected"] is True
+    assert receipt["selected_cells_have_local_results"] is True
+    assert receipt["missing_local_result_cells_preserved"] is True
+    assert receipt["model_generation_performed"] is False
+    assert receipt["scoring_call_performed"] is False
+    serialized = json.dumps(receipt)
+    assert all(cell_id not in serialized for cell_id in selected + unselected)
+
+    assert (
+        reconciliation.accept_roster("unused", intent=intent, observations=_observations(selected))
+        == receipt
+    )
+    assert len(events) == 4 and len(receipts) == 1
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "one-missing",
+        "three-missing",
+        "selected-missing",
+        "wrong-local-count",
+        "wrong-failure-code",
+        "wrong-arm-size",
+        "wrong-selected-count",
+        "wrong-state-counts",
+    ],
+)
+def test_local_result_gap_intent_is_not_a_generic_weakening(fault):
+    selected, unselected, missing, counts, _cells, _local = _local_gap_case()
+    if fault == "one-missing":
+        missing = missing[:1]
+    elif fault == "three-missing":
+        missing = [*missing, unselected[2]]
+    elif fault == "selected-missing":
+        missing[0] = selected[0]
+    elif fault == "wrong-arm-size":
+        unselected.pop()
+        counts.update(accepted=9)
+    elif fault == "wrong-selected-count":
+        unselected.insert(0, selected.pop())
+    elif fault == "wrong-state-counts":
+        counts.update(accepted=9, retry_review=8)
+
+    body = {
+        "schema_version": reconciliation.SUBSET_LOCAL_GAPS_INTENT_SCHEMA,
+        "evaluation_plan_sha256": "a" * 64,
+        "runtime_files_sha256": reconciliation.runtime_identity(),
+        "serving_block": "base",
+        "source_output_root": "/mnt/sfs/jobs/source",
+        "source_database": "source_database",
+        "source_job_uid": str(uuid.uuid4()),
+        "source_job_terminal_receipt_sha256": "b" * 64,
+        "selected_cell_ids": selected,
+        "unselected_cell_ids": unselected,
+        "expected_arm_state_counts": counts,
+        "expected_agent_exit_code": 0,
+        "expected_agent_termination": "output_limit",
+        "expected_failure_code": "authoritative_scoring_started.runtimeerror",
+        "expected_local_result_count": 14 if fault == "wrong-local-count" else 15,
+        "missing_local_result_cell_ids": missing,
+        "expected_missing_local_result_failure_code": (
+            "other"
+            if fault == "wrong-failure-code"
+            else reconciliation.MISSING_LOCAL_RESULT_FAILURE_CODE
+        ),
+    }
+    with pytest.raises(rollout_ledger.LedgerError, match="local-result exception"):
+        reconciliation.ExactStoredSessionSubsetIntent(
+            evaluation_plan_sha256=body["evaluation_plan_sha256"],
+            runtime_files_sha256=body["runtime_files_sha256"],
+            serving_block=body["serving_block"],
+            source_output_root=body["source_output_root"],
+            source_database=body["source_database"],
+            source_job_uid=body["source_job_uid"],
+            source_job_terminal_receipt_sha256=body["source_job_terminal_receipt_sha256"],
+            selected_cell_ids=tuple(selected),
+            unselected_cell_ids=tuple(unselected),
+            expected_arm_state_counts=counts,
+            expected_agent_exit_code=0,
+            expected_agent_termination="output_limit",
+            expected_failure_code="authoritative_scoring_started.runtimeerror",
+            sha256=reconciliation._body_digest(body),  # noqa: SLF001
+            expected_local_result_count=body["expected_local_result_count"],
+            missing_local_result_cell_ids=tuple(missing),
+            expected_missing_local_result_failure_code=body[
+                "expected_missing_local_result_failure_code"
+            ],
+        )
+
+
+@pytest.mark.parametrize(
+    "fault",
+    ["missing-gained-result", "other-lost-result", "selected-lost-result", "failure-code"],
+)
+def test_local_result_gap_runtime_rejects_any_roster_or_failure_drift(monkeypatch, fault):
+    selected, unselected, missing, counts, cells, local_result_cell_ids = _local_gap_case()
+    intent = _local_gap_intent(selected, unselected, counts, missing)
+    if fault == "missing-gained-result":
+        local_result_cell_ids.add(missing[0])
+    elif fault == "other-lost-result":
+        local_result_cell_ids.remove(unselected[2])
+    elif fault == "selected-lost-result":
+        local_result_cell_ids.remove(selected[0])
+    else:
+        cells[missing[0]]["failure_code"] = "other"
+    before = copy.deepcopy(cells)
+    events, receipts = _install(
+        monkeypatch,
+        cells,
+        local_result_cell_ids=local_result_cell_ids,
+    )
+    with pytest.raises(rollout_ledger.LedgerError, match="local-result roster"):
+        reconciliation.accept_roster("unused", intent=intent, observations=_observations(selected))
+    assert cells == before
+    assert events == [] and receipts == []

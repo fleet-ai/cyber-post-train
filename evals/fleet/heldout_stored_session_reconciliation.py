@@ -145,11 +145,18 @@ def _intent_from_value(value: Any) -> reconciliation.StoredSessionIntent:
     if not isinstance(value, dict) or not isinstance(value.get("selected_cell_ids"), list):
         raise ReconciliationPacketError("private reconciliation intent schema is unsupported")
     try:
+        subset_schema = value.get("schema_version")
+        subset_fields = set(value)
         if (
-            value.get("schema_version") == reconciliation.SUBSET_INTENT_SCHEMA
-            and set(value) == reconciliation.SUBSET_INTENT_FIELDS
-            and isinstance(value.get("unselected_cell_ids"), list)
-        ):
+            (
+                subset_schema == reconciliation.SUBSET_INTENT_SCHEMA
+                and subset_fields == reconciliation.SUBSET_INTENT_FIELDS
+            )
+            or (
+                subset_schema == reconciliation.SUBSET_LOCAL_GAPS_INTENT_SCHEMA
+                and subset_fields == reconciliation.SUBSET_LOCAL_GAPS_INTENT_FIELDS
+            )
+        ) and isinstance(value.get("unselected_cell_ids"), list):
             return reconciliation.ExactStoredSessionSubsetIntent(
                 evaluation_plan_sha256=value["evaluation_plan_sha256"],
                 runtime_files_sha256=value["runtime_files_sha256"],
@@ -165,6 +172,11 @@ def _intent_from_value(value: Any) -> reconciliation.StoredSessionIntent:
                 expected_agent_termination=value["expected_agent_termination"],
                 expected_failure_code=value["expected_failure_code"],
                 sha256=value["sha256"],
+                expected_local_result_count=value.get("expected_local_result_count"),
+                missing_local_result_cell_ids=tuple(value.get("missing_local_result_cell_ids", ())),
+                expected_missing_local_result_failure_code=value.get(
+                    "expected_missing_local_result_failure_code"
+                ),
             )
         if (
             value.get("schema_version") != reconciliation.INTENT_SCHEMA
@@ -684,6 +696,11 @@ def _terminal_source(
     selected = len(intent.selected_cell_ids)
     subset = isinstance(intent, reconciliation.ExactStoredSessionSubsetIntent)
     expected_states = intent.expected_arm_state_counts if subset else None
+    expected_local_results = (
+        intent.expected_local_result_count
+        if subset and intent.expected_local_result_count is not None
+        else total
+    )
     routes = source.evaluation_config.get("routes")
     route = routes.get(intent.serving_block) if isinstance(routes, dict) else None
     task_versions = route.get("task_versions") if isinstance(route, dict) else None
@@ -716,7 +733,7 @@ def _terminal_source(
             by_state.get(state) != 0
             for state in ("pending", *rollout_ledger.ACTIVE_STATES, "terminal")
         )
-        or summary.get("local_results") != total
+        or summary.get("local_results") != expected_local_results
         or summary.get("stale_active") != 0
         or not route_rows_valid
         or sum(row["count"] for row in route_counts) != total
@@ -777,6 +794,7 @@ def _runtime_intent_value(
     terminal: dict[str, Any],
     selected_cell_ids: list[str],
     unselected_cell_ids: list[str] | None = None,
+    missing_local_result_cell_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     job = terminal.get("job")
     database = terminal.get("database")
@@ -791,11 +809,7 @@ def _runtime_intent_value(
     ):
         raise ReconciliationPacketError("source cannot bind a private reconciliation intent")
     body = {
-        "schema_version": (
-            reconciliation.SUBSET_INTENT_SCHEMA
-            if unselected_cell_ids is not None
-            else reconciliation.INTENT_SCHEMA
-        ),
+        "schema_version": reconciliation.INTENT_SCHEMA,
         "evaluation_plan_sha256": _digest(summary.get("plan_sha256"), "source evaluation plan"),
         "runtime_files_sha256": reconciliation.runtime_identity(),
         "serving_block": next(iter(routes)),
@@ -815,8 +829,25 @@ def _runtime_intent_value(
         if not isinstance(by_state, dict):
             raise ReconciliationPacketError("source terminal arm census differs")
         body.update(
+            schema_version=(
+                reconciliation.SUBSET_LOCAL_GAPS_INTENT_SCHEMA
+                if missing_local_result_cell_ids is not None
+                else reconciliation.SUBSET_INTENT_SCHEMA
+            ),
             expected_arm_state_counts=dict(by_state),
             unselected_cell_ids=list(unselected_cell_ids),
+        )
+        if missing_local_result_cell_ids is not None:
+            body.update(
+                expected_local_result_count=summary.get("local_results"),
+                missing_local_result_cell_ids=list(missing_local_result_cell_ids),
+                expected_missing_local_result_failure_code=(
+                    reconciliation.MISSING_LOCAL_RESULT_FAILURE_CODE
+                ),
+            )
+    elif missing_local_result_cell_ids is not None:
+        raise ReconciliationPacketError(
+            "missing local-result roster requires subset reconciliation"
         )
     value = {**body, "sha256": _canonical_digest(body).removeprefix("sha256:")}
     _intent_from_value(value)
@@ -998,6 +1029,7 @@ def build_private_intent_value(
     source_create_evidence: Path,
     selected_cell_ids: list[str],
     unselected_cell_ids: list[str] | None = None,
+    missing_local_result_cell_ids: list[str] | None = None,
     job_name: str,
     config_map_name: str,
     secret_name: str,
@@ -1011,7 +1043,13 @@ def build_private_intent_value(
 
     source = heldout_launch.build_package(source_launch_packet)
     terminal = _load_json(source_terminal_receipt, "source terminal receipt")
-    runtime_value = _runtime_intent_value(source, terminal, selected_cell_ids, unselected_cell_ids)
+    runtime_value = _runtime_intent_value(
+        source,
+        terminal,
+        selected_cell_ids,
+        unselected_cell_ids,
+        missing_local_result_cell_ids,
+    )
     runtime_intent = _intent_from_value(runtime_value)
     _terminal_source(source, terminal, runtime_intent)
     create_evidence_sha256 = _source_create_evidence(
@@ -1190,6 +1228,14 @@ def render(
             nonselected_cell_count=len(intent.unselected_cell_ids),
             nonselected_cells_preserved_byte_for_byte_and_state_for_state=True,
         )
+        if intent.expected_local_result_count is not None:
+            proof_body.update(
+                source_local_result_count=intent.expected_local_result_count,
+                missing_local_result_count=len(intent.missing_local_result_cell_ids),
+                missing_local_results_are_unselected=True,
+                selected_cells_have_local_results=True,
+                missing_local_result_cells_preserved=True,
+            )
     proof = {**proof_body, "sha256": _canonical_digest(proof_body)}
     package = Package(
         config_map=config_map,
