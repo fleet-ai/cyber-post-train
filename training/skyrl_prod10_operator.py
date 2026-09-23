@@ -2559,7 +2559,7 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         identity=identity,
         image_identity_receipt=image_identity,
     )
-    if live_source != source_preview or live_expected != expected:
+    if live_expected != expected:
         raise OperatorFailure("launch_live_preview_changed")
     _LAUNCH_STAGE = "live_preview_dry_run"
     live_server_render = direct.server_dry_run(
@@ -2658,6 +2658,7 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         duplicate=jit_before_guard,
         final_duplicate=jit_before_intent,
         host_duplicate=packet["duplicate_proof"],
+        live_source_preview=live_source,
         live_preview=live_preview,
     )
     _LAUNCH_STAGE = "observe"

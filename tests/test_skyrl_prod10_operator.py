@@ -11,6 +11,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import yaml
 
 from cyber_post_train import skyrl_prod10_operator_job as operator_job
 from cyber_post_train import skyrl_prod10_operator_launch as operator_launch
@@ -82,6 +83,86 @@ def _cpu_render(value: dict) -> dict:
     )
     rendered["spec"]["template"]["spec"]["containers"][0]["imagePullPolicy"] = "IfNotPresent"
     return rendered
+
+
+def _strict_live_preview_inputs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[historical.RailIdentity, dict, dict, dict, dict]:
+    identity = historical.load_identity(IDENTITY)
+    placeholder = identity.run_name + "-00000000"
+    plan = {"schema": training.SCHEMA, "output_root": identity.output_root}
+    request = {
+        "name": identity.run_name,
+        "run_dir": identity.output_root,
+        "image": "image@sha256:" + "1" * 64,
+        "command": "python -m training.skyrl_prod9_training",
+        "workers": 1,
+        "gpus_per_worker": 8,
+    }
+    manifest = {
+        "apiVersion": "ray.io/v1",
+        "kind": "RayJob",
+        "metadata": {
+            "name": placeholder,
+            "namespace": direct.NAMESPACE,
+            "labels": {
+                "fleet.ai/run-id": "00000000-0000-0000-0000-000000000000",
+                "fleet.ai/run-name": identity.run_name,
+                "kueue.x-k8s.io/queue-name": "training-lq",
+                "kueue.x-k8s.io/priority-class": "q1",
+            },
+            "annotations": {
+                "fleet.ai/run-id": "00000000-0000-0000-0000-000000000000",
+                "fleet.ai/run-dir": identity.output_root,
+                "fleet.ai/job-image": request["image"],
+                FAILURE_ALERT_ANNOTATION: "off",
+            },
+        },
+        "spec": {
+            "entrypoint": request["command"],
+            "suspend": True,
+            "shutdownAfterJobFinishes": True,
+            "submissionMode": "HTTPMode",
+            "backoffLimit": 0,
+            "rayClusterSpec": {
+                "headGroupSpec": {
+                    "template": {
+                        "spec": {
+                            "containers": [
+                                {
+                                    "securityContext": direct._runtime_context(),
+                                    "envFrom": [
+                                        {"secretRef": {"name": "fleet-api"}},
+                                        {"secretRef": {"name": "wandb-api"}},
+                                        {"secretRef": {"name": placeholder + "-fleet-key"}},
+                                    ],
+                                }
+                            ],
+                            "initContainers": [
+                                {
+                                    "name": "sfs-init",
+                                    "command": [
+                                        "sh",
+                                        "-c",
+                                        (
+                                            f"mkdir -p {identity.output_root} && chown 1000:100 "
+                                            f"{identity.output_root}"
+                                        ),
+                                    ],
+                                }
+                            ],
+                        }
+                    }
+                }
+            },
+        },
+    }
+    source = {"name": placeholder, "warnings": [], "manifest_yaml": yaml.safe_dump(manifest)}
+    monkeypatch.setattr(direct, "_identity", lambda _plan, _identity: identity)
+    monkeypatch.setattr(training, "job_request", lambda _plan: request)
+    monkeypatch.setattr(training, "validate_preview", lambda *_args, **_kwargs: None)
+    expected = direct.manifest(plan, request, source, identity=identity)
+    return identity, plan, request, source, expected
 
 
 def _stage_inputs() -> tuple[historical.RailIdentity, dict, dict, dict]:
@@ -1194,8 +1275,37 @@ def test_prod10_dead_guard_is_atomically_archived_and_crash_reconciled(
         )
 
 
-def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
+def test_prod10_live_preview_accepts_representation_drift_but_keeps_strict_policy(
     monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity, plan, request, source, expected = _strict_live_preview_inputs(monkeypatch)
+    harmless = copy.deepcopy(source)
+    harmless["errors"] = []
+    harmless["manifest_yaml"] += "\n"
+
+    assert harmless != source
+    assert direct.manifest(plan, request, harmless, identity=identity) == expected
+
+    warnings = copy.deepcopy(source)
+    warnings["warnings"] = ["changed"]
+    errors = copy.deepcopy(source)
+    errors["errors"] = ["changed"]
+    wrong_name = copy.deepcopy(source)
+    wrong_name["name"] = identity.run_name + "-ffffffff"
+    extra = copy.deepcopy(source)
+    extra["transient"] = False
+    policy = copy.deepcopy(source)
+    policy_manifest = yaml.safe_load(policy["manifest_yaml"])
+    policy_manifest["metadata"]["annotations"][FAILURE_ALERT_ANNOTATION] = "on"
+    policy["manifest_yaml"] = yaml.safe_dump(policy_manifest)
+    for changed in (warnings, errors, wrong_name, extra, policy):
+        with pytest.raises(JobsError):
+            direct.manifest(plan, request, changed, identity=identity)
+
+
+@pytest.mark.parametrize("manifest_changed", [False, True])
+def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
+    monkeypatch: pytest.MonkeyPatch, manifest_changed: bool,
 ) -> None:
     identity = historical.load_identity(IDENTITY)
     plan = {
@@ -1213,7 +1323,13 @@ def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
         "workers": 1,
         "gpus_per_worker": 8,
     }
-    source, expected = {"name": identity.run_name + "-00000000"}, {"kind": "RayJob"}
+    source = {
+        "name": identity.run_name + "-00000000",
+        "warnings": [],
+        "manifest_yaml": "kind: RayJob\n",
+    }
+    live_source = {**source, "errors": [], "manifest_yaml": source["manifest_yaml"] + "\n"}
+    expected = {"kind": "RayJob"}
     preview = {"checked_at": "2026-09-23T10:00:00Z", "sha256": "sha256:" + "2" * 64}
     events: list[str] = []
     monkeypatch.setenv("FLEET_API_KEY", "token")
@@ -1269,10 +1385,14 @@ def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
 
         def preview(self, _request):
             events.append("live_preview")
-            return source
+            return live_source
 
     monkeypatch.setattr(operator, "Jobs", FakeJobs)
-    monkeypatch.setattr(direct, "manifest", lambda *_args, **_kwargs: expected)
+    monkeypatch.setattr(
+        direct,
+        "manifest",
+        lambda *_args, **_kwargs: {"kind": "Other"} if manifest_changed else expected,
+    )
     monkeypatch.setattr(
         operator,
         "_fresh_capacity_census",
@@ -1303,6 +1423,8 @@ def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
 
     def create_once(*_args, **kwargs):
         assert "wandb_absent" not in kwargs
+        assert kwargs["live_source_preview"] == live_source
+        assert digest(kwargs["live_source_preview"]) != digest(source)
         events.append("create_once")
         return {"capacity_gate_sha256": "sha256:" + "7" * 64, "gpus": 8}
 
@@ -1319,6 +1441,12 @@ def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
         "duplicate_proof": {},
         "capacity_census": {"sha256": "sha256:" + "9" * 64},
     }
+    if manifest_changed:
+        with pytest.raises(operator.OperatorFailure, match="launch_live_preview_changed"):
+            operator.run_launch(packet, runner=object())
+        assert operator._LAUNCH_STAGE == "live_manifest_rebuild"
+        assert events == ["dev_provenance", "jit", "live_preview"]
+        return
     result = operator.run_launch(packet, runner=object())
     assert result["status"] == "gpu_run_succeeded_and_released"
     assert events == [
@@ -1402,7 +1530,13 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
         "workers": 1,
         "gpus_per_worker": 8,
     }
-    source, expected = {"source": "preview"}, {"kind": "RayJob"}
+    source = {"name": identity.run_name + "-00000000", "manifest_yaml": "kind: RayJob\n"}
+    live_source = {
+        **source,
+        "errors": [],
+        "manifest_yaml": source["manifest_yaml"] + "\n",
+    }
+    expected = {"kind": "RayJob"}
     auth = direct._seal(
         {
             "schema": launch_direct.AUTHORIZATION_SCHEMA,
@@ -1509,10 +1643,17 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
             final_duplicate=jit_before_intent,
             host_duplicate={},
             census={},
+            live_source_preview=live_source,
             live_preview=live_preview,
             jobs_factory=FakeJobs,
         )
 
+    monkeypatch.setattr(direct, "manifest", lambda *_args, **_kwargs: {"kind": "Other"})
+    with pytest.raises(JobsError, match="live Jobs API manifest changed"):
+        create()
+    assert not (root / "PROD10_DIRECT_V3_CREATE.jsonl").exists()
+    assert posts == []
+    monkeypatch.setattr(direct, "manifest", lambda *_args, **_kwargs: expected)
     monkeypatch.delenv("WANDB_API_KEY", raising=False)
     with pytest.raises(JobsError, match="runtime create-once binding"):
         create()
@@ -1523,6 +1664,8 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
     assert created["failure_alerts"] == "off"
     journal_lines = (root / "PROD10_DIRECT_V3_CREATE.jsonl").read_text().splitlines()
     intent = json.loads(journal_lines[0])
+    assert intent["live_jobs_preview_sha256"] == "sha256:" + digest(live_source)
+    assert intent["live_jobs_preview_sha256"] != "sha256:" + digest(source)
     assert "wandb_run_id_absent" not in intent
     assert intent["wandb_runtime_create_once"] == {
         "credential_present": True,

@@ -730,6 +730,7 @@ def create_once(
     final_duplicate: dict[str, Any],
     host_duplicate: dict[str, Any],
     census: dict[str, Any],
+    live_source_preview: dict[str, Any],
     live_preview: dict[str, Any],
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     jobs_factory: Callable[..., Jobs] = Jobs,
@@ -763,6 +764,14 @@ def create_once(
     )
     if auth != expected_auth:
         raise JobsError("prod10 direct-v3 authorization changed")
+    if expected != direct.manifest(
+        plan,
+        request,
+        live_source_preview,
+        identity=bound,
+        image_identity_receipt=auth["image_identity_receipt"],
+    ):
+        raise JobsError("prod10 live Jobs API manifest changed")
     absence_before_guard = _jit_duplicate(duplicate, bound, host_duplicate)
     absence_before_intent = _jit_duplicate(
         final_duplicate,
@@ -823,7 +832,7 @@ def create_once(
             "request_sha256": request_sha,
             "manifest_sha256": manifest_sha,
             "authorization_sha256": auth["sha256"],
-            "live_jobs_preview_sha256": "sha256:" + digest(source_preview),
+            "live_jobs_preview_sha256": "sha256:" + digest(live_source_preview),
             "live_preview_proof": checked_live_preview,
             "capacity_gate": capacity,
             "duplicate_checks_before_guard": absence_before_guard,
