@@ -7,18 +7,24 @@ its legacy authorization schema.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import re
 import subprocess
+import sys
 from collections.abc import Callable
+from copy import deepcopy
 from datetime import UTC, datetime
+from functools import lru_cache
 from pathlib import Path
+from types import ModuleType
 from typing import Any
 from uuid import UUID
 
 from cyber_post_train.gpu_capacity import ROLE_LABELS
 from cyber_post_train.jobs import API_URLS, Jobs, JobsError, digest
+from cyber_post_train.sfs_output import require_output_absent
 
 from . import skyrl_prod9_direct as direct
 from . import skyrl_prod9_hardening as hardening
@@ -28,6 +34,7 @@ from . import skyrl_reward_rayjob as historical
 AUTHORIZATION_SCHEMA = "cyber_skyrl_prod10_direct_authorization_v4"
 PREFLIGHT_RESULT_SCHEMA = "cyber_skyrl_prod10_operator_result_v1"
 DUPLICATE_SCHEMA = "cyber_skyrl_prod10_direct_duplicate_absence_v1"
+FAST3_HOST_IDENTITY_SCHEMA = "cyber_skyrl_prod11_fast3_host_identity_absence_v1"
 JIT_DUPLICATE_SCHEMA = "cyber_skyrl_prod10_jit_duplicate_absence_v2"
 CAPACITY_SCHEMA = "cyber_skyrl_prod10_direct_capacity_gate_v1"
 CREATED_SCHEMA = "cyber_skyrl_prod10_direct_created_v1"
@@ -35,12 +42,313 @@ REVALIDATION_SCHEMA = "cyber_skyrl_prod10_preflight_revalidation_v1"
 SEALED_DEV_PREVIEW_PROVENANCE_SCHEMA = (
     "cyber_skyrl_prod10_sealed_external_dev_server_preview_provenance_v1"
 )
+SUBMITTER_NORMALIZATION_SCHEMA = "cyber_skyrl_prod10_submitter_normalization_v1"
+_SUBMITTER_ANNOTATIONS = (
+    "fleet.ai/submitted-by",
+    "fleet.ai/submitted-by-profile",
+)
 MAX_NODES = 10
 MAX_GPUS = 80
+FAST3_IDENTITY = historical.RailIdentity(
+    run_name="chris-q38-rlreward-prod11-fast3",
+    stage_name="chris-q38-prod11-fast3-data-v1",
+    preflight_name="chris-q38-prod11-fast3-preflight-v1",
+    output_root="/mnt/sfs/jobs/chris-q38-rlreward-prod11-fast3",
+    data_root="/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-prod11-fast3-v1/data",
+    wandb_run_id="chris-q38-rlreward-prod11-fast3",
+    predecessor_run_name="chris-q38-rlreward-prod11-fast2",
+    predecessor_data_root=(
+        "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-prod11-fast2-v1/data"
+    ),
+)
 
 
 def _seal(value: dict[str, Any]) -> dict[str, Any]:
     return direct._seal(value)
+
+
+@lru_cache(maxsize=1)
+def _fast3_modules() -> tuple[ModuleType, ModuleType]:
+    """Load the historical direct checks over the append-only Fast3 compiler.
+
+    This second module namespace leaves the historical module's process-global
+    ``training`` binding untouched. Stage operations continue to dispatch to
+    prod9; only plan/request/preflight operations dispatch to Fast3.
+    """
+    try:
+        from . import skyrl_fast3_training as fast3_training
+    except ImportError as exc:  # pragma: no cover - source PR dependency
+        raise JobsError("prod11 Fast3 source runtime is unavailable") from exc
+
+    class Fast3TrainingFacade:
+        SCHEMA = fast3_training.SCHEMA
+
+        def __getattr__(self, name: str) -> Any:
+            if name in {
+                "job_request",
+                "preflight",
+                "preflight_request",
+                "validate_preview",
+            }:
+                return getattr(fast3_training, name)
+            return getattr(training, name)
+
+    class Fast3HardeningFacade:
+        @staticmethod
+        def training_operation_root(plan: dict[str, Any]) -> Path:
+            fast3_training._validated(plan)
+            return hardening._canonical_operation_root("training", plan)
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(hardening, name)
+
+    name = "training._skyrl_prod11_fast3_direct_backend"
+    spec = importlib.util.spec_from_file_location(name, Path(direct.__file__).resolve())
+    if spec is None or spec.loader is None:
+        raise JobsError("prod11 Fast3 direct backend cannot be loaded")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    try:
+        spec.loader.exec_module(module)
+    except BaseException:
+        sys.modules.pop(name, None)
+        raise
+    module.training = Fast3TrainingFacade()
+    module.hardening = Fast3HardeningFacade()
+
+    def fast3_preflight_receipt(
+        plan: dict[str, Any],
+        request: dict[str, Any],
+        receipt: object,
+        *,
+        identity: historical.RailIdentity,
+    ) -> dict[str, Any]:
+        bound = module._identity(plan, identity)
+        value = module._receipt(receipt, "cyber_skyrl_fast3_training_cpu_preflight_v1")
+        required_true = {
+            "native_parser_checked",
+            "ordered_multi_tool_parser_checked",
+            "chunk_continuation_checked",
+            "compaction_checked",
+            "stepwise_prompt_checked",
+            "ordered_multi_tool_execution_checked",
+            "output_limit_gradeable_checked",
+            "output_limit_partial_tool_blocked_checked",
+            "fresh_recorder_checked",
+            "tool_result_token_safe",
+        }
+        policy = plan.get("qualification", {}).get("fast3", {}).get("generation_retry_policy", {})
+        if (
+            value.get("status") != "passed"
+            or value.get("gpus") != 0
+            or value.get("runtime_user") != {"uid": 1000, "gid": 100}
+            or value.get("plan_sha256") != digest(plan)
+            or value.get("request_sha256") != digest(request)
+            or value.get("prod9_runtime") != training._binding()
+            or value.get("fast3_runtime") != fast3_training._binding()
+            or value.get("generation_retry_policy_sha256") != policy.get("sha256")
+            or value.get("counts") != {"train": 1, "dev": 1}
+            or value.get("planned_steps") != plan.get("arguments", {}).get("steps")
+            or value.get("output_absent") is not True
+            or value.get("wandb_create_once")
+            != {
+                "entity": "thefleet",
+                "project": "cyber-post-train",
+                "run_id": bound.wandb_run_id,
+                "resume": "never",
+            }
+            or value.get("recorder_implementation") != "training.skyrl_prod9_hardening.Recorder"
+            or any(value.get(key) is not True for key in required_true)
+        ):
+            raise JobsError("prod11 Fast3 CPU preflight receipt is incomplete")
+        return value
+
+    module._preflight_receipt = fast3_preflight_receipt
+    return module, fast3_training
+
+
+def _plan_direct(identity: historical.RailIdentity) -> ModuleType:
+    return _fast3_modules()[0] if identity == FAST3_IDENTITY else direct
+
+
+def _plan_training(identity: historical.RailIdentity) -> ModuleType:
+    return _fast3_modules()[1] if identity == FAST3_IDENTITY else training
+
+
+def plan_identity(
+    plan: dict[str, Any], identity: historical.RailIdentity
+) -> historical.RailIdentity:
+    return _plan_direct(identity)._identity(plan, identity)
+
+
+def job_request(plan: dict[str, Any], *, identity: historical.RailIdentity) -> dict[str, Any]:
+    plan_identity(plan, identity)
+    return _plan_training(identity).job_request(plan)
+
+
+def training_operation_root(plan: dict[str, Any], *, identity: historical.RailIdentity) -> Path:
+    plan_identity(plan, identity)
+    return _plan_direct(identity).hardening.training_operation_root(plan)
+
+
+def preflight_job_manifest(
+    plan: dict[str, Any], *, identity: historical.RailIdentity
+) -> dict[str, Any]:
+    return _plan_direct(identity).preflight_job_manifest(plan, identity=identity)
+
+
+def gpu_manifest(
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    preview: dict[str, Any],
+    *,
+    identity: historical.RailIdentity,
+    image_identity_receipt: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return _plan_direct(identity).manifest(
+        plan,
+        request,
+        preview,
+        identity=identity,
+        image_identity_receipt=image_identity_receipt,
+    )
+
+
+def validate_gpu_preview(
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    source_preview: dict[str, Any],
+    expected: dict[str, Any],
+    rendered: dict[str, Any],
+    *,
+    context: str,
+    identity: historical.RailIdentity,
+    image_identity_receipt: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return _plan_direct(identity).validate_preview(
+        plan,
+        request,
+        source_preview,
+        expected,
+        rendered,
+        context=context,
+        identity=identity,
+        image_identity_receipt=image_identity_receipt,
+    )
+
+
+def authorize_preflight_direct_manifest(
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    stage: dict[str, Any],
+    stage_result: dict[str, Any],
+    stage_launch_result: dict[str, Any],
+    manifest_launch_result: dict[str, Any],
+    expected: dict[str, Any],
+    *,
+    stage_operator_name: str,
+    manifest_operator_name: str,
+    dev_preview: dict[str, Any],
+    prod_preview: dict[str, Any],
+    observer: dict[str, Any],
+    identity: historical.RailIdentity,
+) -> dict[str, Any]:
+    return _plan_direct(identity).authorize_preflight_direct_manifest(
+        plan,
+        request,
+        stage,
+        stage_result,
+        stage_launch_result,
+        manifest_launch_result,
+        expected,
+        stage_operator_name=stage_operator_name,
+        manifest_operator_name=manifest_operator_name,
+        dev_preview=dev_preview,
+        prod_preview=prod_preview,
+        observer=observer,
+        identity=identity,
+    )
+
+
+def create_preflight_once(
+    directory: Path,
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    stage: dict[str, Any],
+    authorization: dict[str, Any],
+    *,
+    identity: historical.RailIdentity,
+    runner: Callable[..., subprocess.CompletedProcess[str]],
+    dev_duplicate_proof: dict[str, Any],
+) -> dict[str, Any]:
+    return _plan_direct(identity).create_preflight_once(
+        directory,
+        plan,
+        request,
+        stage,
+        authorization,
+        identity=identity,
+        runner=runner,
+        dev_duplicate_proof=dev_duplicate_proof,
+    )
+
+
+def preflight_receipt(
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    receipt: object,
+    *,
+    identity: historical.RailIdentity,
+) -> dict[str, Any]:
+    return _plan_direct(identity)._preflight_receipt(plan, request, receipt, identity=identity)
+
+
+def _submitter_identity_valid(manifest: object) -> bool:
+    if not isinstance(manifest, dict):
+        return False
+    metadata = manifest.get("metadata")
+    annotations = metadata.get("annotations") if isinstance(metadata, dict) else None
+    if not isinstance(annotations, dict):
+        return False
+    email = annotations.get(_SUBMITTER_ANNOTATIONS[0])
+    profile = annotations.get(_SUBMITTER_ANNOTATIONS[1])
+    if (
+        not isinstance(email, str)
+        or len(email) > 254
+        or re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9._%+\-]{0,63}@[A-Za-z0-9]"
+            r"(?:[A-Za-z0-9.\-]{0,251}[A-Za-z0-9])?",
+            email,
+        )
+        is None
+    ):
+        return False
+    try:
+        return isinstance(profile, str) and str(UUID(profile)) == profile
+    except (TypeError, ValueError):
+        return False
+
+
+def live_submitter_normalization(expected: dict[str, Any], live: dict[str, Any]) -> dict[str, Any]:
+    """Allow only authenticated server-owned submitter annotations to differ."""
+    if not _submitter_identity_valid(expected) or not _submitter_identity_valid(live):
+        raise JobsError("prod10 live Jobs API submitter identity is invalid")
+    normalized = deepcopy(live)
+    for key in _SUBMITTER_ANNOTATIONS:
+        normalized["metadata"]["annotations"][key] = expected["metadata"]["annotations"][key]
+    if normalized != expected:
+        raise JobsError("prod10 live Jobs API manifest changed")
+    return _seal(
+        {
+            "schema": SUBMITTER_NORMALIZATION_SCHEMA,
+            "status": "two_server_owned_annotations_normalized",
+            "annotations": list(_SUBMITTER_ANNOTATIONS),
+            "expected_manifest_sha256": "sha256:" + digest(expected),
+            "live_manifest_sha256": "sha256:" + digest(live),
+            "normalized_manifest_sha256": "sha256:" + digest(normalized),
+            "values_exported": False,
+        }
+    )
 
 
 def _preflight_launch(
@@ -51,7 +359,7 @@ def _preflight_launch(
     operator_name: str,
 ) -> dict[str, Any]:
     """Bind the released zero-GPU producer, without treating age as truth."""
-    direct._identity(plan, identity)
+    plan_identity(plan, identity)
     launch = direct._validate_seal(value, direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA)
     package, created = launch.get("package"), launch.get("created")
     if not isinstance(package, dict) or not isinstance(created, dict):
@@ -78,7 +386,9 @@ def _preflight_launch(
             UUID(uid)
     except (TypeError, ValueError) as exc:
         raise JobsError("prod10 preflight launch identity is invalid") from exc
-    expected_path = str(hardening.training_operation_root(plan) / "PREFLIGHT_OPERATOR_RESULT.json")
+    expected_path = str(
+        training_operation_root(plan, identity=identity) / "PREFLIGHT_OPERATOR_RESULT.json"
+    )
     absent = (
         "target_present",
         "pods_present",
@@ -134,7 +444,8 @@ def preflight_result(
     identity: historical.RailIdentity,
 ) -> dict[str, Any]:
     """Strictly validate the immutable v3 result; launch rechecks live state."""
-    bound = direct._identity(plan, identity)
+    backend = _plan_direct(identity)
+    bound = backend._identity(plan, identity)
     result = direct._validate_seal(value, PREFLIGHT_RESULT_SCHEMA)
     authorization = direct._validate_seal(
         result.get("authorization"), direct.PREFLIGHT_AUTHORIZATION_DIRECT_MANIFEST_SCHEMA
@@ -142,8 +453,8 @@ def preflight_result(
     stage_result = authorization.get("stage_result")
     if not isinstance(stage_result, dict) or not isinstance(stage_result.get("stage"), dict):
         raise JobsError("prod10 direct-v3 preflight stage evidence is missing")
-    expected_manifest = direct.preflight_job_manifest(plan, identity=bound)
-    expected_authorization = direct._preflight_authorization_direct_manifest(
+    expected_manifest = backend.preflight_job_manifest(plan, identity=bound)
+    expected_authorization = backend._preflight_authorization_direct_manifest(
         plan,
         request,
         stage_result["stage"],
@@ -171,7 +482,7 @@ def preflight_result(
         manifest_sha256="sha256:" + digest(expected_manifest),
         authorization_sha256=authorization["sha256"],
     )
-    receipt = direct._preflight_receipt(plan, request, result.get("receipt"), identity=bound)
+    receipt = backend._preflight_receipt(plan, request, result.get("receipt"), identity=bound)
     release = direct._cpu_release(
         result.get("release"),
         receipt,
@@ -238,8 +549,9 @@ def revalidate_preflight(
 ) -> dict[str, Any]:
     """Rerun the exact-image CPU gate; never extend the old result's TTL."""
     checked = preflight_result(plan, request, preflight, identity=identity)
-    receipt = _seal_fresh_preflight_receipt(training.preflight(plan))
-    receipt = direct._preflight_receipt(plan, request, receipt, identity=identity)
+    backend = _plan_direct(identity)
+    receipt = _seal_fresh_preflight_receipt(_plan_training(identity).preflight(plan))
+    receipt = backend._preflight_receipt(plan, request, receipt, identity=identity)
     if receipt != checked["receipt"]:
         raise JobsError("prod10 fresh preflight differs from the sealed result")
     return _seal(
@@ -298,22 +610,78 @@ def duplicate_proof(
     )
 
 
+def host_identity_proof(
+    identity: historical.RailIdentity,
+    *,
+    token: str,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+    jobs_factory: Callable[..., Jobs] = Jobs,
+) -> dict[str, Any]:
+    """Prove only Kubernetes and Jobs API identity absence for Fast3.
+
+    A host without the shared SFS mount must not claim output absence.  The
+    accepted zero-GPU preflight binds the earlier SFS check and the in-cluster
+    JIT rail repeats it immediately before the sole Jobs API POST.
+    """
+    if identity != FAST3_IDENTITY:
+        raise JobsError("prod11 Fast3 host identity proof used for another run")
+    checked = direct._direct_duplicate_checks(
+        identity, token=token, runner=runner, jobs_factory=jobs_factory
+    )
+    return _seal(
+        {
+            "schema": FAST3_HOST_IDENTITY_SCHEMA,
+            "status": "kubernetes_and_jobs_identity_absent",
+            "identity_sha256": identity.sealed_mapping()["sha256"],
+            "run_name": identity.run_name,
+            **checked,
+            "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+
+
 def _duplicate(
     value: object,
     identity: historical.RailIdentity,
     *,
     fresh: bool = True,
 ) -> dict[str, Any]:
-    checked = direct._validate_seal(value, DUPLICATE_SCHEMA)
-    if (
-        checked.get("status") != "identity_and_output_absent"
-        or checked.get("identity_sha256") != identity.sealed_mapping()["sha256"]
+    schema = value.get("schema") if isinstance(value, dict) else None
+    expected_schema = FAST3_HOST_IDENTITY_SCHEMA if identity == FAST3_IDENTITY else DUPLICATE_SCHEMA
+    if schema != expected_schema:
+        raise JobsError("prod10/Fast3 host duplicate proof schema changed")
+    checked = direct._validate_seal(value, expected_schema)
+    common_changed = (
+        checked.get("identity_sha256") != identity.sealed_mapping()["sha256"]
         or checked.get("run_name") != identity.run_name
-        or checked.get("output_root") != identity.output_root
         or checked.get("kubernetes_inventories_checked") != 10
         or type(checked.get("jobs_api_rows_checked")) is not int
         or checked["jobs_api_rows_checked"] < 0
-    ):
+    )
+    if schema == FAST3_HOST_IDENTITY_SCHEMA:
+        changed = (
+            identity != FAST3_IDENTITY
+            or set(checked)
+            != {
+                "schema",
+                "status",
+                "identity_sha256",
+                "run_name",
+                "kubernetes_inventories_checked",
+                "jobs_api_rows_checked",
+                "checked_at",
+                "sha256",
+            }
+            or checked.get("status") != "kubernetes_and_jobs_identity_absent"
+            or common_changed
+        )
+    else:
+        changed = (
+            checked.get("status") != "identity_and_output_absent"
+            or checked.get("output_root") != identity.output_root
+            or common_changed
+        )
+    if changed:
         raise JobsError("prod10 direct-v3 duplicate proof changed")
     if fresh:
         direct._fresh_at(checked.get("checked_at"))
@@ -392,9 +760,17 @@ def jit_duplicate_proof(
             or any(name.startswith(value + "-") for value in names)
         ):
             raise JobsError("prod10 JIT Jobs API history already owns this identity/output")
-    output = Path(identity.output_root)
-    if output.exists() or output.is_symlink():
-        raise JobsError("prod10 output root already exists")
+    if identity == FAST3_IDENTITY:
+        try:
+            require_output_absent({"run_dir": identity.output_root})
+        except ValueError as exc:
+            raise JobsError("prod11 Fast3 JIT SFS output absence check failed") from exc
+    else:
+        # Preserve the historical prod10 rail. Fast3 may only use the stronger
+        # mount-aware helper above, which fails closed when SFS is unavailable.
+        output = Path(identity.output_root)
+        if output.exists() or output.is_symlink():
+            raise JobsError("prod10 output root already exists")
     return _seal(
         {
             "schema": JIT_DUPLICATE_SCHEMA,
@@ -457,7 +833,7 @@ def capacity_gate(
     *,
     identity: historical.RailIdentity,
 ) -> dict[str, Any]:
-    direct._identity(plan, identity)
+    plan_identity(plan, identity)
     if not isinstance(census, dict):
         raise JobsError("prod10 capacity census is invalid")
     unsigned = {key: item for key, item in census.items() if key != "sha256"}
@@ -549,7 +925,7 @@ def sealed_dev_preview_provenance(
     identity: historical.RailIdentity,
 ) -> dict[str, Any]:
     """Validate the sealed host dev render at time of use without redating it."""
-    bound = direct._identity(plan, identity)
+    bound = plan_identity(plan, identity)
     sealed_dev = _preview_binding(
         plan,
         request,
@@ -560,7 +936,7 @@ def sealed_dev_preview_provenance(
         identity=bound,
         fresh=True,
     )
-    if expected != direct.manifest(
+    if expected != gpu_manifest(
         plan,
         request,
         source_preview,
@@ -601,7 +977,7 @@ def _sealed_dev_preview_provenance(
     *,
     identity: historical.RailIdentity,
 ) -> dict[str, Any]:
-    bound = direct._identity(plan, identity)
+    bound = plan_identity(plan, identity)
     sealed_dev = _preview_binding(
         plan,
         request,
@@ -646,11 +1022,11 @@ def authorize(
     observer: dict[str, Any],
     identity: historical.RailIdentity,
 ) -> dict[str, Any]:
-    bound = direct._identity(plan, identity)
+    bound = plan_identity(plan, identity)
     checked = preflight_result(plan, request, preflight, identity=bound)
     fresh = _revalidation(revalidation, plan, request, checked, identity=bound)
     image = image_identity(request, checked)
-    if expected != direct.manifest(
+    if expected != gpu_manifest(
         plan, request, source_preview, identity=bound, image_identity_receipt=image
     ):
         raise JobsError("prod10 direct-v3 GPU manifest changed")
@@ -684,7 +1060,7 @@ def authorize(
         fresh=True,
     )
     plan_sha, manifest_sha = "sha256:" + digest(plan), "sha256:" + digest(expected)
-    root = hardening.training_operation_root(plan)
+    root = training_operation_root(plan, identity=bound)
     armed = direct._jobs_api_prefix_guard(
         observer,
         operation_root=root,
@@ -731,12 +1107,13 @@ def create_once(
     host_duplicate: dict[str, Any],
     census: dict[str, Any],
     live_preview: dict[str, Any],
+    live_source_preview: dict[str, Any] | None = None,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     jobs_factory: Callable[..., Jobs] = Jobs,
 ) -> dict[str, Any]:
     """Revalidate live state, journal intent, and perform exactly one API POST."""
-    bound = direct._identity(plan, identity)
-    root = hardening.training_operation_root(plan)
+    bound = plan_identity(plan, identity)
+    root = training_operation_root(plan, identity=bound)
     journal = root / "PROD10_DIRECT_V3_CREATE.jsonl"
     if journal.exists() or journal.is_symlink():
         raise JobsError("prod10 create intent exists; reconcile, never retry")
@@ -763,6 +1140,19 @@ def create_once(
     )
     if auth != expected_auth:
         raise JobsError("prod10 direct-v3 authorization changed")
+    live_manifest = expected
+    submitter_normalization = None
+    if live_source_preview is not None:
+        if bound != FAST3_IDENTITY:
+            raise JobsError("live submitter normalization is restricted to exact Fast3")
+        live_manifest = gpu_manifest(
+            plan,
+            request,
+            live_source_preview,
+            identity=bound,
+            image_identity_receipt=auth["image_identity_receipt"],
+        )
+        submitter_normalization = live_submitter_normalization(expected, live_manifest)
     absence_before_guard = _jit_duplicate(duplicate, bound, host_duplicate)
     absence_before_intent = _jit_duplicate(
         final_duplicate,
@@ -795,8 +1185,8 @@ def create_once(
     checked_live_preview = _preview_binding(
         plan,
         request,
-        source_preview,
-        expected,
+        source_preview if live_source_preview is None else live_source_preview,
+        live_manifest,
         live_preview,
         context=direct.PROD_CONTEXT,
         identity=bound,
@@ -823,7 +1213,15 @@ def create_once(
             "request_sha256": request_sha,
             "manifest_sha256": manifest_sha,
             "authorization_sha256": auth["sha256"],
-            "live_jobs_preview_sha256": "sha256:" + digest(source_preview),
+            **(
+                {
+                    "sealed_jobs_preview_sha256": "sha256:" + digest(source_preview),
+                    "live_jobs_preview_sha256": "sha256:" + digest(live_source_preview),
+                    "submitter_normalization": submitter_normalization,
+                }
+                if live_source_preview is not None
+                else {"live_jobs_preview_sha256": "sha256:" + digest(source_preview)}
+            ),
             "live_preview_proof": checked_live_preview,
             "capacity_gate": capacity,
             "duplicate_checks_before_guard": absence_before_guard,
@@ -881,6 +1279,15 @@ def create_once(
             "request_sha256": request_sha,
             "manifest_sha256": manifest_sha,
             "authorization_sha256": auth["sha256"],
+            **(
+                {
+                    "sealed_jobs_preview_sha256": "sha256:" + digest(source_preview),
+                    "live_jobs_preview_sha256": "sha256:" + digest(live_source_preview),
+                    "submitter_normalization_sha256": submitter_normalization["sha256"],
+                }
+                if live_source_preview is not None and isinstance(submitter_normalization, dict)
+                else {}
+            ),
             "live_preview_proof_sha256": live_preview["sha256"],
             "capacity_gate_sha256": capacity["sha256"],
             "jit_duplicate_before_guard_sha256": absence_before_guard["sha256"],
