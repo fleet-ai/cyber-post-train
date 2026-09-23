@@ -324,7 +324,11 @@ def launch_packet(
             "duplicate_proof": duplicate,
             "capacity_census": capacity_census,
             "launch_v1_failure": operator.launch_v1_failure_binding(),
+            "launch_v2_failure": operator.launch_v2_failure_binding(),
             "probe_v6_success": operator.probe_v6_success_binding(),
+            "probe_v7_failure": operator.probe_v7_failure_binding(),
+            "probe_v8_failure": operator.probe_v8_failure_binding(),
+            "probe_v9_success": operator.probe_v9_success_binding(),
         }
     )
 
@@ -362,7 +366,7 @@ def probe_packet(
     # The probe binds the exact, already-rendered launch-v2 predecessor after
     # its time-limited duplicate proof has expired.  Validate its immutable
     # packet contract without pretending the historical proof is fresh.
-    checked_launch = operator._packet(launch_packet, "launch")
+    checked_launch = operator._launch_v2_packet(launch_packet)
     failure = operator.launch_v2_failure_binding()
     if checked_launch.get("sha256") != failure["launch_packet_sha256"]:
         raise ValueError("prod10 launch probe packet predecessor changed")

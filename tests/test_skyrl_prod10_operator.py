@@ -198,7 +198,7 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
     container = package.job["spec"]["template"]["spec"]["containers"][0]
 
     assert proof["phase"] == "launch"
-    assert proof["name"] == "chris-q38-prod10-launch-operator-v2"
+    assert proof["name"] == "chris-q38-prod10-launch-operator-v3"
     assert proof["failure_alerts"] == "off"
     assert proof["priority"] == "c1"
     assert proof["queue_priority"] == "q1"
@@ -270,6 +270,19 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
     changed = operator._seal(changed)
     with pytest.raises(ValueError, match="repair proof"):
         operator_job.build_operator_package(changed)
+
+    for key, match in (
+        ("launch_v2_failure", "launch-v2 failure predecessor"),
+        ("probe_v7_failure", "probe-v7 predecessor"),
+        ("probe_v8_failure", "probe-v8 predecessor"),
+        ("probe_v9_success", "probe-v9 predecessor"),
+    ):
+        changed = copy.deepcopy(packet)
+        changed[key]["operator_job_uid"] = "00000000-0000-4000-8000-000000000001"
+        changed[key] = operator._seal(changed[key])
+        changed = operator._seal(changed)
+        with pytest.raises(ValueError, match=match):
+            operator_job.build_operator_package(changed)
 
 
 def test_prod10_inspector_is_read_only_alert_off_c1_q1_zero_gpu(
@@ -521,6 +534,16 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
         duplicate_proof=duplicate,
         capacity_census=capacity,
     )
+    source = copy.deepcopy(source)
+    source["operator_name"] = operator._LAUNCH_V2_FAILURE["operator_name"]
+    for key in (
+        "launch_v2_failure",
+        "probe_v7_failure",
+        "probe_v8_failure",
+        "probe_v9_success",
+    ):
+        source.pop(key)
+    source = operator._seal(source)
     monkeypatch.setitem(
         operator._LAUNCH_V2_FAILURE, "launch_packet_sha256", source["sha256"]
     )

@@ -42,7 +42,7 @@ OPERATOR_NAMES = {
     "stage": "chris-q38-prod10-stage-operator-v7",
     "manifest": "chris-q38-prod10-manifest-operator-v1",
     "preflight": "chris-q38-prod10-preflight-operator-v2",
-    "launch": "chris-q38-prod10-launch-operator-v2",
+    "launch": "chris-q38-prod10-launch-operator-v3",
     "inspect": "chris-q38-prod10-launch-inspect-v3",
     "probe": "chris-q38-prod10-launch-probe-v9",
 }
@@ -200,6 +200,44 @@ _PROBE_V8_FAILURE = {
     "error_class": "OtherException",
     "error_code": "launch_operation_root_validate_other_exception",
     "expected_diagnosis": "before_guard_passed",
+    "terminal_status": "Succeeded",
+    "exit_codes": [0],
+    "restarts": 0,
+    "nested_jobs_created": 0,
+    "resources_absent": True,
+    "gpus": 0,
+}
+_PROBE_V9_SUCCESS = {
+    "schema": "cyber_skyrl_prod10_launch_probe_success_binding_v1",
+    "status": "diagnostic_succeeded_and_released",
+    "operator_name": "chris-q38-prod10-launch-probe-v9",
+    "source_head": "4b484fe8b95acc585ead8dc8b05eeb78828f77d0",
+    "packet_sha256": (
+        "sha256:032b61b0074a14772391fb72abba4bb722dec03212041fdeea9ce11a391d1d8e"
+    ),
+    "source_sha256": (
+        "sha256:3ac1f08b4f16e0d72ced9f05c0886e3018f4705146dfacc0d0d3655014862d26"
+    ),
+    "job_manifest_sha256": (
+        "sha256:b59259e38a58be4e902851ccf73925f781f1c3cd413bf59062922cc8e9c392c4"
+    ),
+    "operator_job_uid": "5b7b940c-30a0-4315-aa25-3aca790aa8f2",
+    "operator_pod_uid": "004357d7-164d-48ee-988c-de82c405e1c2",
+    "operator_workload_uid": "cf283cbe-e524-4c07-8346-332280f7e4b2",
+    "source_config_map_uid": "bd178f72-f9df-4ac1-b7c1-7bd6996ded36",
+    "packet_config_map_uid": "955aa7e1-a0a5-4d28-8ec3-ba121d82e7fd",
+    "receipt_sha256": (
+        "sha256:fcbce183246141c31ab2724449c2cfc33a299b32fccd3357c6d95a2168d4dc0c"
+    ),
+    "observer_sha256": (
+        "sha256:22f95f8ac82a4e52b289e4622dbeb9c7622c98b7bcb60fdd4e5687202ca00d49"
+    ),
+    "result_sha256": (
+        "sha256:cf6723ede2b20bba9a74fdef6ad049a52c150e929b0e5c9227ccf36b778c5ba2"
+    ),
+    "diagnosis": "before_guard_passed",
+    "launch_stage": "before_guard_passed",
+    "preflight_stage": "passed",
     "terminal_status": "Succeeded",
     "exit_codes": [0],
     "restarts": 0,
@@ -386,6 +424,11 @@ def probe_v8_failure_binding() -> dict[str, Any]:
     return _seal(_PROBE_V8_FAILURE)
 
 
+def probe_v9_success_binding() -> dict[str, Any]:
+    """Bind the released v9 proof that the full production pre-guard path passed."""
+    return _seal(_PROBE_V9_SUCCESS)
+
+
 def _write_once(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=False, exist_ok=True)
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -463,6 +506,54 @@ def _identity(value: object) -> historical.RailIdentity:
     return identity
 
 
+def _launch_packet_inputs(packet: dict[str, Any]) -> None:
+    direct._validate_seal(
+        packet.get("preflight_launch_result"),
+        direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA,
+    )
+    direct._validate_seal(packet.get("dev_preview"), direct.PREVIEW_SCHEMA)
+    direct._validate_seal(packet.get("duplicate_proof"), launch_direct.DUPLICATE_SCHEMA)
+    census = packet.get("capacity_census")
+    request = packet.get("request")
+    planned = (
+        {
+            "nodes": request.get("workers"),
+            "gpus": request.get("workers", 0) * request.get("gpus_per_worker", 0),
+        }
+        if isinstance(request, dict)
+        else None
+    )
+    body = (
+        {key: item for key, item in census.items() if key != "sha256"}
+        if isinstance(census, dict)
+        else {}
+    )
+    if (
+        not isinstance(census, dict)
+        or census.get("schema") != "cyber_project_gpu_capacity_census_v1"
+        or census.get("sha256") != digest(body)
+        or census.get("limits") != {"nodes": 10, "gpus": 80}
+        or census.get("planned") != planned
+    ):
+        raise ValueError("prod10 launch capacity proof changed")
+
+
+def _launch_v2_packet(value: object) -> dict[str, Any]:
+    """Validate the exact historical launch-v2 packet without renewing freshness."""
+    packet = _validate_seal(value, PACKET_SCHEMA)
+    if (
+        packet.get("phase") != "launch"
+        or packet.get("operator_name") != _LAUNCH_V2_FAILURE["operator_name"]
+        or packet.get("sha256") != _LAUNCH_V2_FAILURE["launch_packet_sha256"]
+        or packet.get("launch_v1_failure") != launch_v1_failure_binding()
+        or packet.get("probe_v6_success") != probe_v6_success_binding()
+    ):
+        raise ValueError("prod10 launch-v2 packet predecessor changed")
+    _identity(packet.get("identity"))
+    _launch_packet_inputs(packet)
+    return packet
+
+
 def _packet(value: object, phase: str) -> dict[str, Any]:
     packet = _validate_seal(value, PACKET_SCHEMA)
     if phase not in OPERATOR_NAMES or packet.get("phase") != phase:
@@ -513,43 +604,21 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
             raise ValueError("prod10 launch probe writable-controls binding changed")
         if packet.get("expected_diagnosis") != "before_guard_passed":
             raise ValueError("prod10 launch probe expected diagnosis changed")
-        launch_packet = _packet(packet.get("launch_packet"), "launch")
-        if launch_packet.get("sha256") != _LAUNCH_V2_FAILURE["launch_packet_sha256"]:
-            raise ValueError("prod10 launch probe packet predecessor changed")
+        _launch_v2_packet(packet.get("launch_packet"))
     else:
         if packet.get("launch_v1_failure") != launch_v1_failure_binding():
             raise ValueError("prod10 launch failure predecessor changed")
+        if packet.get("launch_v2_failure") != launch_v2_failure_binding():
+            raise ValueError("prod10 launch-v2 failure predecessor changed")
         if packet.get("probe_v6_success") != probe_v6_success_binding():
             raise ValueError("prod10 launch repair proof changed")
-        direct._validate_seal(
-            packet.get("preflight_launch_result"),
-            direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA,
-        )
-        direct._validate_seal(packet.get("dev_preview"), direct.PREVIEW_SCHEMA)
-        direct._validate_seal(packet.get("duplicate_proof"), launch_direct.DUPLICATE_SCHEMA)
-        census = packet.get("capacity_census")
-        request = packet.get("request")
-        planned = (
-            {
-                "nodes": request.get("workers"),
-                "gpus": request.get("workers", 0) * request.get("gpus_per_worker", 0),
-            }
-            if isinstance(request, dict)
-            else None
-        )
-        body = (
-            {key: item for key, item in census.items() if key != "sha256"}
-            if isinstance(census, dict)
-            else {}
-        )
-        if (
-            not isinstance(census, dict)
-            or census.get("schema") != "cyber_project_gpu_capacity_census_v1"
-            or census.get("sha256") != digest(body)
-            or census.get("limits") != {"nodes": 10, "gpus": 80}
-            or census.get("planned") != planned
-        ):
-            raise ValueError("prod10 launch capacity proof changed")
+        if packet.get("probe_v7_failure") != probe_v7_failure_binding():
+            raise ValueError("prod10 launch probe-v7 predecessor changed")
+        if packet.get("probe_v8_failure") != probe_v8_failure_binding():
+            raise ValueError("prod10 launch probe-v8 predecessor changed")
+        if packet.get("probe_v9_success") != probe_v9_success_binding():
+            raise ValueError("prod10 launch probe-v9 predecessor changed")
+        _launch_packet_inputs(packet)
     return packet
 
 
