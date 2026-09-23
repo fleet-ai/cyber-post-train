@@ -34,8 +34,25 @@ RESULT_SCHEMA = "cyber_skyrl_prod10_operator_result_v1"
 TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_termination_v1"
 FAILURE_TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_failure_v1"
 OPERATOR_NAMES = {
-    "stage": "chris-q38-prod10-stage-operator-v4",
+    "stage": "chris-q38-prod10-stage-operator-v5",
     "preflight": "chris-q38-prod10-preflight-operator-v1",
+}
+_STAGE_V4_RECOVERY = {
+    "schema": "cyber_skyrl_prod10_stage_precreate_recovery_v1",
+    "status": "authorized_precreate_recovery",
+    "previous_operator_name": "chris-q38-prod10-stage-operator-v4",
+    "previous_operator_job_uid": "a9a2c37d-2003-442a-aea8-d589ba9df2d8",
+    "previous_packet_sha256": (
+        "sha256:7e354a7a441fdbc9f8faec162fc5e5cc3ccdf2a83b47cbf68c10055b9e327e52"
+    ),
+    "previous_failure_receipt_sha256": (
+        "sha256:d7b6e0ccebd728848544f01630b708ae57b89f306a33468046d1ee7ee8f85f02"
+    ),
+    "previous_release_sha256": (
+        "sha256:3a1a9c8c89ed28310afcec312f7cea3db6d117f16405d9720b65a6356a34eacb"
+    ),
+    "previous_error_code": "operator_unclassified",
+    "gpus": 0,
 }
 _TERMINATION_PATH = Path("/dev/termination-log")
 _POLL_SECONDS = 0.25
@@ -58,6 +75,11 @@ def _validate_seal(value: object, schema: str) -> dict[str, Any]:
     if not isinstance(value, dict) or value.get("schema") != schema or value != _seal(value):
         raise ValueError("prod10 operator evidence is invalid")
     return value
+
+
+def stage_recovery_binding() -> dict[str, Any]:
+    """Return the one reviewed pre-create recovery binding for stage v5."""
+    return _seal(_STAGE_V4_RECOVERY)
 
 
 def _write_once(path: Path, value: dict[str, Any]) -> None:
@@ -138,6 +160,8 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
     )
     if duplicate.get("context") != direct.DEV_CONTEXT:
         raise ValueError("prod10 operator development proof changed")
+    if phase == "stage" and packet.get("precreate_recovery") != stage_recovery_binding():
+        raise ValueError("prod10 stage pre-create recovery binding changed")
     return packet
 
 
@@ -236,7 +260,11 @@ def _canonical_directory(path: Path, *, owner: bool = True, code: str) -> None:
         path.is_symlink()
         or not stat.S_ISDIR(identity.st_mode)
         or path.resolve() != path
-        or (owner and (identity.st_uid, identity.st_gid) != (1000, 100))
+        or (
+            owner
+            and (identity.st_uid, identity.st_gid)
+            != (direct.RUNTIME_UID, direct.RUNTIME_GID)
+        )
         or not mode & stat.S_IRUSR
         or not mode & stat.S_IWUSR
         or not mode & stat.S_IXUSR
@@ -277,6 +305,144 @@ def _create_operation_root(path: Path) -> None:
         raise ValueError("prod10 operator operation root already exists")
     path.mkdir(mode=0o700)
     _canonical_directory(path, code="sfs_operation_root_postcondition")
+
+
+def _read_recovery_file(path: Path, schema: str) -> dict[str, Any]:
+    try:
+        identity = path.lstat()
+        value = json.loads(path.read_bytes())
+    except (OSError, ValueError) as exc:
+        raise OperatorFailure("stage_v4_recovery_evidence_unreadable") from exc
+    if (
+        path.is_symlink()
+        or not stat.S_ISREG(identity.st_mode)
+        or (identity.st_uid, identity.st_gid)
+        != (direct.RUNTIME_UID, direct.RUNTIME_GID)
+        or stat.S_IMODE(identity.st_mode) != 0o600
+    ):
+        raise OperatorFailure("stage_v4_recovery_evidence_rejected")
+    try:
+        return _validate_seal(value, schema)
+    except ValueError as exc:
+        raise OperatorFailure("stage_v4_recovery_evidence_rejected") from exc
+
+
+def _job_absent(
+    runner: InClusterKubernetesRunner, name: str, *, code: str
+) -> None:
+    result = direct._kubectl(
+        runner,
+        direct.PROD_CONTEXT,
+        "get",
+        "job",
+        name,
+        "--ignore-not-found",
+        "--output=json",
+    )
+    if result.returncode or result.stdout.strip():
+        raise OperatorFailure(code)
+
+
+def _reconcile_stage_v4_precreate(
+    packet: dict[str, Any],
+    *,
+    stage: dict[str, Any],
+    expected: dict[str, Any],
+    identity: historical.RailIdentity,
+    runner: InClusterKubernetesRunner,
+) -> Path:
+    """Preserve and replace only v4 evidence proven to predate a create intent."""
+    if packet.get("precreate_recovery") != stage_recovery_binding():
+        raise OperatorFailure("stage_v4_recovery_binding_rejected")
+    _existing_root()
+    operation_root = hardening.stage_operation_root(stage)
+    _canonical_directory(operation_root, code="stage_v4_operation_root")
+    names = {entry.name for entry in operation_root.iterdir()}
+    if names != {"STAGE_OPERATOR_INTENT.json", "STAGE_OBSERVER_ARMED.json"}:
+        raise OperatorFailure("stage_v4_recovery_inventory_rejected")
+    recovery = stage_recovery_binding()
+    intent_path = operation_root / "STAGE_OPERATOR_INTENT.json"
+    armed_path = operation_root / "STAGE_OBSERVER_ARMED.json"
+    intent = _read_recovery_file(
+        intent_path, "cyber_skyrl_prod10_operator_intent_v1"
+    )
+    armed = _read_recovery_file(
+        armed_path, "cyber_direct_cleanup_observer_armed_v1"
+    )
+    if (
+        set(intent)
+        != {
+            "schema",
+            "phase",
+            "packet_sha256",
+            "operator_job_uid",
+            "created_at",
+            "sha256",
+        }
+        or intent.get("phase") != "stage"
+        or intent.get("packet_sha256") != recovery["previous_packet_sha256"]
+        or intent.get("operator_job_uid") != recovery["previous_operator_job_uid"]
+    ):
+        raise OperatorFailure("stage_v4_recovery_intent_rejected")
+    try:
+        direct._timestamp(intent.get("created_at"))
+    except JobsError as exc:
+        raise OperatorFailure("stage_v4_recovery_intent_rejected") from exc
+    expected_binding = hardening.creator_binding_path(operation_root, "stage")
+    if (
+        armed.get("status") != "armed"
+        or armed.get("context") != direct.PROD_CONTEXT
+        or armed.get("namespace") != direct.NAMESPACE
+        or armed.get("kind") != "job"
+        or armed.get("name") != identity.stage_name
+        or armed.get("maximum_seconds") != direct.CPU_MAXIMUM_SECONDS
+        or armed.get("expected_gpus") != 0
+        or armed.get("plan_sha256") != stage["sha256"]
+        or armed.get("manifest_sha256") != "sha256:" + digest(expected)
+        or armed.get("creator_binding_path") != str(expected_binding)
+        or type(armed.get("observer_pid")) is not int
+        or armed["observer_pid"] < 1
+    ):
+        raise OperatorFailure("stage_v4_recovery_observer_rejected")
+    try:
+        direct._timestamp(armed.get("armed_at"))
+    except JobsError as exc:
+        raise OperatorFailure("stage_v4_recovery_observer_rejected") from exc
+    _job_absent(
+        runner,
+        recovery["previous_operator_name"],
+        code="stage_v4_operator_still_present",
+    )
+    _job_absent(runner, identity.stage_name, code="stage_target_already_present")
+    archived_intent = operation_root / "STAGE_OPERATOR_INTENT.v4.failed.json"
+    archived_armed = operation_root / "STAGE_OBSERVER_ARMED.v4.failed.json"
+    if any(
+        path.exists() or path.is_symlink()
+        for path in (archived_intent, archived_armed, expected_binding)
+    ):
+        raise OperatorFailure("stage_v4_recovery_destination_exists")
+    os.rename(intent_path, archived_intent)
+    os.rename(armed_path, archived_armed)
+    descriptor = os.open(operation_root, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+    _write_once(
+        operation_root / "STAGE_OPERATOR_RECOVERY_V5.json",
+        _seal(
+            {
+                "schema": "cyber_skyrl_prod10_stage_precreate_recovery_receipt_v1",
+                "status": "v4_precreate_evidence_preserved",
+                "binding_sha256": recovery["sha256"],
+                "previous_intent_sha256": intent["sha256"],
+                "previous_observer_sha256": armed["sha256"],
+                "archived_files": [archived_armed.name, archived_intent.name],
+                "gpus": 0,
+            }
+        ),
+    )
+    return operation_root
 
 
 def _observer_thread(observer: cleanup.Observer) -> tuple[threading.Thread, dict[str, Any]]:
@@ -359,10 +525,13 @@ def run_stage(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> d
         )
     except JobsError as exc:
         raise OperatorFailure("stage_development_preview_rejected") from exc
-    _create_root_for_stage()
-    _existing_root()
-    operation_root = hardening.stage_operation_root(stage)
-    _create_operation_root(operation_root)
+    operation_root = _reconcile_stage_v4_precreate(
+        packet,
+        stage=stage,
+        expected=expected,
+        identity=identity,
+        runner=runner,
+    )
     _write_once(
         operation_root / "STAGE_OPERATOR_INTENT.json",
         _seal(
@@ -384,27 +553,38 @@ def run_stage(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> d
         runner=runner,
     )
     thread, state = _observer_thread(observer)
-    prod_rendered = direct.server_dry_run(expected, context=direct.PROD_CONTEXT, runner=runner)
-    prod_preview = direct.validate_cpu_preview(
-        expected, prod_rendered, context=direct.PROD_CONTEXT, purpose="stage"
-    )
-    authorization = direct.authorize_stage(
-        stage,
-        expected,
-        dev_preview=packet["dev_preview"],
-        prod_preview=prod_preview,
-        observer=state["armed"],
-        identity=identity,
-    )
-    created = direct.create_stage_once(
-        operation_root,
-        stage,
-        expected,
-        authorization,
-        identity=identity,
-        runner=runner,
-        dev_duplicate_proof=packet["dev_duplicate_proof"],
-    )
+    try:
+        prod_rendered = direct.server_dry_run(
+            expected, context=direct.PROD_CONTEXT, runner=runner
+        )
+        prod_preview = direct.validate_cpu_preview(
+            expected, prod_rendered, context=direct.PROD_CONTEXT, purpose="stage"
+        )
+    except JobsError as exc:
+        raise OperatorFailure("stage_production_preview_rejected") from exc
+    try:
+        authorization = direct.authorize_stage(
+            stage,
+            expected,
+            dev_preview=packet["dev_preview"],
+            prod_preview=prod_preview,
+            observer=state["armed"],
+            identity=identity,
+        )
+    except JobsError as exc:
+        raise OperatorFailure("stage_authorization_rejected") from exc
+    try:
+        created = direct.create_stage_once(
+            operation_root,
+            stage,
+            expected,
+            authorization,
+            identity=identity,
+            runner=runner,
+            dev_duplicate_proof=packet["dev_duplicate_proof"],
+        )
+    except JobsError as exc:
+        raise OperatorFailure("stage_create_gate_rejected") from exc
     release = _join_observer(thread, state)
     receipt = release.get("receipt")
     direct._stage_receipt(stage, receipt, identity=identity)

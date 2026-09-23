@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import ssl
 import subprocess
 import urllib.error
@@ -41,6 +42,25 @@ _RESOURCE_PATHS = {
     "workloads": ("/apis/kueue.x-k8s.io/v1beta2", "workloads"),
     "workloads.kueue.x-k8s.io": ("/apis/kueue.x-k8s.io/v1beta2", "workloads"),
 }
+_RESOURCE_NAME_PREFIXES = {
+    "job": "job.batch/",
+    "jobs": "job.batch/",
+    "jobs.batch": "job.batch/",
+    "pod": "pod/",
+    "pods": "pod/",
+    "rayjob": "rayjob.ray.io/",
+    "rayjobs": "rayjob.ray.io/",
+    "rayjobs.ray.io": "rayjob.ray.io/",
+    "raycluster": "raycluster.ray.io/",
+    "rayclusters": "raycluster.ray.io/",
+    "rayclusters.ray.io": "raycluster.ray.io/",
+    "workload": "workload.kueue.x-k8s.io/",
+    "workloads": "workload.kueue.x-k8s.io/",
+    "workloads.kueue.x-k8s.io": "workload.kueue.x-k8s.io/",
+}
+_KUBERNETES_NAME_PATTERN = re.compile(
+    r"[a-z0-9](?:[-a-z0-9.]{0,251}[a-z0-9])?"
+)
 _CREATE_PATHS = {
     ("batch/v1", "Job"): "/apis/batch/v1/namespaces/{namespace}/jobs",
 }
@@ -145,15 +165,29 @@ class InClusterKubernetesRunner:
             index += 1
         ignore_not_found = False
         selector: str | None = None
+        output = "json"
+        output_seen = False
         while index < len(arguments):
             flag = arguments[index]
             index += 1
             if flag in {"--output", "-o"} and index < len(arguments):
-                if arguments[index] != "json":
+                if output_seen:
+                    raise InClusterKubernetesError("Kubernetes get output is repeated")
+                if arguments[index] not in {"json", "name"}:
                     raise InClusterKubernetesError("Kubernetes get output is not reviewed")
+                output = arguments[index]
+                output_seen = True
                 index += 1
             elif flag in {"--output=json", "-o=json"}:
-                continue
+                if output_seen:
+                    raise InClusterKubernetesError("Kubernetes get output is repeated")
+                output = "json"
+                output_seen = True
+            elif flag in {"--output=name", "-o=name"}:
+                if output_seen:
+                    raise InClusterKubernetesError("Kubernetes get output is repeated")
+                output = "name"
+                output_seen = True
             elif flag == "--ignore-not-found":
                 ignore_not_found = True
             elif flag == "--selector" and index < len(arguments):
@@ -165,15 +199,59 @@ class InClusterKubernetesRunner:
                 raise InClusterKubernetesError("Kubernetes get flag is not reviewed")
         if name is not None and selector is not None:
             raise InClusterKubernetesError("Kubernetes get cannot mix name and selector")
+        if output == "name" and (name is not None or selector is not None or ignore_not_found):
+            raise InClusterKubernetesError(
+                "Kubernetes name output is reviewed only for unfiltered namespace lists"
+            )
         path = self._get_path(namespace, resource, name)
         if selector is not None:
             path += "?" + urllib.parse.urlencode({"labelSelector": selector})
-        status, payload = self._request("GET", path, None, {"Accept": "application/json"})
+        accept = (
+            "application/json;as=PartialObjectMetadataList;g=meta.k8s.io;v=v1"
+            if output == "name"
+            else "application/json"
+        )
+        status, payload = self._request("GET", path, None, {"Accept": accept})
         if status == 404 and ignore_not_found:
             return self._completed(command, 0)
         if status != 200:
             return self._completed(command, 1, stderr="Kubernetes read failed")
-        return self._completed(command, 0, stdout=payload.decode("utf-8"))
+        try:
+            decoded = payload.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise InClusterKubernetesError("Kubernetes read response is invalid") from exc
+        if output == "json":
+            return self._completed(command, 0, stdout=decoded)
+        try:
+            value = json.loads(decoded)
+            items = value.get("items")
+            prefix = _RESOURCE_NAME_PREFIXES[resource]
+        except (AttributeError, KeyError, ValueError) as exc:
+            raise InClusterKubernetesError(
+                "Kubernetes name inventory is invalid"
+            ) from exc
+        if (
+            not isinstance(value, dict)
+            or value.get("apiVersion") != "meta.k8s.io/v1"
+            or value.get("kind") != "PartialObjectMetadataList"
+            or not isinstance(items, list)
+        ):
+            raise InClusterKubernetesError("Kubernetes name inventory is invalid")
+        names: list[str] = []
+        for item in items:
+            metadata = item.get("metadata") if isinstance(item, dict) else None
+            item_name = metadata.get("name") if isinstance(metadata, dict) else None
+            if (
+                not isinstance(item, dict)
+                or item.get("apiVersion") != "meta.k8s.io/v1"
+                or item.get("kind") != "PartialObjectMetadata"
+                or not isinstance(item_name, str)
+                or _KUBERNETES_NAME_PATTERN.fullmatch(item_name) is None
+            ):
+                raise InClusterKubernetesError("Kubernetes name inventory is invalid")
+            names.append(prefix + item_name)
+        stdout = "" if not names else "\n".join(names) + "\n"
+        return self._completed(command, 0, stdout=stdout)
 
     def _create(
         self,

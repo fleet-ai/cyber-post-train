@@ -23,6 +23,7 @@ import yaml
 from cyber_post_train.gpu_capacity import build_capacity_census
 from cyber_post_train.jobs import JobsError, digest
 from scripts import prepare_qwen38_skyrl_prod9_successor as prod9_prepare
+from training import incluster_kubernetes
 from training import skyrl_prod9_direct as prod9_direct
 from training import skyrl_prod9_hardening as hardening
 from training import skyrl_prod9_reload as prod9_reload
@@ -1055,6 +1056,174 @@ def test_prod9_prior_stage_evidence_is_uid_bound_without_global_freshness() -> N
         )
 
 
+def test_prod9_cpu_duplicate_inventory_uses_only_compact_reviewed_names() -> None:
+    commands: list[list[str]] = []
+    outputs = {
+        "job": "job.batch/unrelated-job\n",
+        "rayjob": "rayjob.ray.io/unrelated-rayjob\n",
+        "raycluster": "raycluster.ray.io/unrelated-raycluster\n",
+        "workload": "workload.kueue.x-k8s.io/job-unrelated-job-abc12\n",
+        "pod": "pod/unrelated-job-abc12\n",
+    }
+
+    def runner(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        resource = command[-2]
+        return subprocess.CompletedProcess(command, 0, outputs[resource], "")
+
+    assert (
+        prod9_direct._cpu_duplicate_inventory(
+            "chris-q38-prod10-data-v1",
+            context=prod9_direct.PROD_CONTEXT,
+            runner=runner,
+        )
+        == 5
+    )
+    assert len(commands) == 5
+    assert all(command[-1] == "--output=name" for command in commands)
+    assert all("--output=json" not in command for command in commands)
+
+
+@pytest.mark.parametrize(
+    ("resource", "rendered_name"),
+    (
+        ("job", "job.batch/chris-q38-prod10-data-v1"),
+        ("pod", "pod/chris-q38-prod10-data-v1-abc12"),
+        (
+            "workload",
+            "workload.kueue.x-k8s.io/job-chris-q38-prod10-data-v1-abc12",
+        ),
+    ),
+)
+def test_prod9_cpu_duplicate_inventory_rejects_all_reviewed_name_forms(
+    resource: str, rendered_name: str
+) -> None:
+    def runner(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        stdout = rendered_name + "\n" if command[-2] == resource else ""
+        return subprocess.CompletedProcess(command, 0, stdout, "")
+
+    with pytest.raises(JobsError, match="identity already exists"):
+        prod9_direct._cpu_duplicate_inventory(
+            "chris-q38-prod10-data-v1",
+            context=prod9_direct.PROD_CONTEXT,
+            runner=runner,
+        )
+
+
+def test_prod9_cpu_duplicate_inventory_rejects_unreviewed_name_prefix() -> None:
+    def runner(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        stdout = "job/chris-q38-prod10-data-v1\n" if command[-2] == "job" else ""
+        return subprocess.CompletedProcess(command, 0, stdout, "")
+
+    with pytest.raises(JobsError, match="inventory is invalid"):
+        prod9_direct._cpu_duplicate_inventory(
+            "chris-q38-prod10-data-v1",
+            context=prod9_direct.PROD_CONTEXT,
+            runner=runner,
+        )
+
+
+@pytest.mark.parametrize(
+    ("resource", "path", "prefix"),
+    (
+        ("job", "/apis/batch/v1/namespaces/fleet-train-jobs/jobs", "job.batch/"),
+        ("pod", "/api/v1/namespaces/fleet-train-jobs/pods", "pod/"),
+        (
+            "rayjob",
+            "/apis/ray.io/v1/namespaces/fleet-train-jobs/rayjobs",
+            "rayjob.ray.io/",
+        ),
+        (
+            "raycluster",
+            "/apis/ray.io/v1/namespaces/fleet-train-jobs/rayclusters",
+            "raycluster.ray.io/",
+        ),
+        (
+            "workload",
+            "/apis/kueue.x-k8s.io/v1beta2/namespaces/fleet-train-jobs/workloads",
+            "workload.kueue.x-k8s.io/",
+        ),
+    ),
+)
+def test_incluster_kubernetes_converts_reviewed_lists_to_compact_names(
+    resource: str, path: str, prefix: str
+) -> None:
+    calls: list[tuple[str, str, dict[str, str]]] = []
+
+    def request(
+        method: str, requested_path: str, _body: bytes | None, headers: dict[str, str]
+    ) -> tuple[int, bytes]:
+        calls.append((method, requested_path, headers))
+        return 200, json.dumps(
+            {
+                "apiVersion": "meta.k8s.io/v1",
+                "kind": "PartialObjectMetadataList",
+                "items": [
+                    {
+                        "apiVersion": "meta.k8s.io/v1",
+                        "kind": "PartialObjectMetadata",
+                        "metadata": {"name": "first-name"},
+                    },
+                    {
+                        "apiVersion": "meta.k8s.io/v1",
+                        "kind": "PartialObjectMetadata",
+                        "metadata": {"name": "second-name"},
+                    },
+                ],
+            }
+        ).encode()
+
+    runner = incluster_kubernetes.InClusterKubernetesRunner(request=request)
+    command = [
+        "kubectl",
+        "--context",
+        prod9_direct.PROD_CONTEXT,
+        "--namespace",
+        prod9_direct.NAMESPACE,
+        "get",
+        resource,
+        "--output=name",
+    ]
+    result = runner(command)
+
+    assert result.returncode == 0
+    assert result.stdout == f"{prefix}first-name\n{prefix}second-name\n"
+    assert calls == [
+        (
+            "GET",
+            path,
+            {
+                "Accept": (
+                    "application/json;as=PartialObjectMetadataList;"
+                    "g=meta.k8s.io;v=v1"
+                )
+            },
+        )
+    ]
+
+
+def test_incluster_kubernetes_rejects_full_object_fallback_for_compact_names() -> None:
+    def request(*_args: object) -> tuple[int, bytes]:
+        return 200, b'{"apiVersion":"v1","kind":"PodList","items":[]}'
+
+    runner = incluster_kubernetes.InClusterKubernetesRunner(request=request)
+    command = [
+        "kubectl",
+        "--context",
+        prod9_direct.PROD_CONTEXT,
+        "--namespace",
+        prod9_direct.NAMESPACE,
+        "get",
+        "pod",
+        "--output=name",
+    ]
+    with pytest.raises(
+        incluster_kubernetes.InClusterKubernetesError,
+        match="name inventory is invalid",
+    ):
+        runner(command)
+
+
 def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -1122,7 +1291,8 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
             expected = json.loads(kwargs["input"])
             return NS(returncode=0, stdout=json.dumps(_cpu_render(expected)))
         if "get" in command:
-            return NS(returncode=0, stdout=json.dumps({"items": []}))
+            assert command[-1] == "--output=name"
+            return NS(returncode=0, stdout="")
         if "create" in command:
             expected = json.loads(kwargs["input"])
             return NS(

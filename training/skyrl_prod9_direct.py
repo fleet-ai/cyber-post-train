@@ -61,6 +61,16 @@ PREFLIGHT_RECEIPT = "/dev/termination-log"
 MAXIMUM_SECONDS = historical.MAXIMUM_SECONDS
 CPU_MAXIMUM_SECONDS = 1800
 EVIDENCE_MAX_AGE_SECONDS = 300
+_CPU_DUPLICATE_NAME_PREFIXES = {
+    "job": "job.batch/",
+    "rayjob": "rayjob.ray.io/",
+    "raycluster": "raycluster.ray.io/",
+    "workload": "workload.kueue.x-k8s.io/",
+    "pod": "pod/",
+}
+_KUBERNETES_NAME_PATTERN = re.compile(
+    r"[a-z0-9](?:[-a-z0-9.]{0,251}[a-z0-9])?"
+)
 
 
 def _identity(plan: dict[str, Any], identity: historical.RailIdentity) -> historical.RailIdentity:
@@ -1379,26 +1389,22 @@ def _cpu_duplicate_inventory(
     if context not in {DEV_CONTEXT, PROD_CONTEXT}:
         raise JobsError("prod9 CPU duplicate context is invalid")
     checked = 0
-    for resource in ("job", "rayjob", "raycluster", "workload", "pod"):
-        result = _kubectl(runner, context, "get", resource, "--output=json")
+    for resource, prefix in _CPU_DUPLICATE_NAME_PREFIXES.items():
+        result = _kubectl(runner, context, "get", resource, "--output=name")
         if result.returncode:
             raise JobsError("prod9 CPU Kubernetes duplicate inventory failed")
         checked += 1
-        try:
-            value = json.loads(result.stdout)
-            items = value.get("items", [])
-        except (AttributeError, ValueError) as exc:
-            raise JobsError("prod9 CPU Kubernetes duplicate inventory is invalid") from exc
-        if not isinstance(value, dict) or not isinstance(items, list):
-            raise JobsError("prod9 CPU Kubernetes duplicate inventory is invalid")
-        for item in items:
-            metadata = item.get("metadata", {}) if isinstance(item, dict) else {}
-            labels = metadata.get("labels", {})
-            annotations = metadata.get("annotations", {})
-            if not isinstance(labels, dict) or not isinstance(annotations, dict):
+        for line in result.stdout.splitlines():
+            if not line.startswith(prefix) or line.count("/") != 1:
                 raise JobsError("prod9 CPU Kubernetes duplicate inventory is invalid")
-            values = [metadata.get("name", ""), *labels.values(), *annotations.values()]
-            if any(value == name or str(value).startswith(name + "-") for value in values):
+            object_name = line.removeprefix(prefix)
+            if _KUBERNETES_NAME_PATTERN.fullmatch(object_name) is None:
+                raise JobsError("prod9 CPU Kubernetes duplicate inventory is invalid")
+            if (
+                object_name == name
+                or object_name.startswith(name + "-")
+                or object_name.startswith("job-" + name + "-")
+            ):
                 raise JobsError("prod9 CPU Kubernetes identity already exists")
     return checked
 

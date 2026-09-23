@@ -177,6 +177,7 @@ def stage_packet(
             "manifest_sha256": "sha256:" + digest(expected),
             "dev_preview": dev_preview,
             "dev_duplicate_proof": duplicate,
+            "precreate_recovery": operator.stage_recovery_binding(),
         }
     )
 

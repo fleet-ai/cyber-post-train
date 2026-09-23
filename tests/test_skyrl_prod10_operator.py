@@ -103,6 +103,7 @@ def test_prod10_operator_package_is_exact_alert_off_c1_q1_zero_gpu() -> None:
     package = operator_job.build_operator_package(packet)
     proof = operator_job.validate_operator_package(package)
 
+    assert packet["precreate_recovery"] == operator.stage_recovery_binding()
     assert proof["failure_alerts"] == "off"
     assert proof["priority"] == "c1"
     assert proof["queue_priority"] == "q1"
@@ -188,6 +189,81 @@ def test_prod10_runtime_derives_root_job_uid_from_exact_pod_owner(
         operator._validate_runtime(packet, runner)
 
 
+def test_stage_v5_preserves_and_reconciles_exact_v4_precreate_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    identity, stage, preview, duplicate = _stage_inputs()
+    packet = operator_job.stage_packet(
+        identity=identity,
+        stage=stage,
+        dev_preview=preview,
+        dev_duplicate_proof=duplicate,
+    )
+    expected = direct.stage_job_manifest(stage, identity=identity)
+    root = tmp_path / "prod9-create-once-v1"
+    root.mkdir(mode=0o700)
+    monkeypatch.setattr(operator.hardening, "CREATE_ONCE_ROOT", root)
+    monkeypatch.setattr(direct, "RUNTIME_UID", os.geteuid())
+    monkeypatch.setattr(direct, "RUNTIME_GID", os.getegid())
+    operation_root = operator.hardening.stage_operation_root(stage)
+    operation_root.mkdir(mode=0o700)
+    recovery = operator.stage_recovery_binding()
+    operator._write_once(
+        operation_root / "STAGE_OPERATOR_INTENT.json",
+        operator._seal(
+            {
+                "schema": "cyber_skyrl_prod10_operator_intent_v1",
+                "phase": "stage",
+                "packet_sha256": recovery["previous_packet_sha256"],
+                "operator_job_uid": recovery["previous_operator_job_uid"],
+                "created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            }
+        ),
+    )
+    operator._write_once(
+        operation_root / "STAGE_OBSERVER_ARMED.json",
+        direct._seal(
+            {
+                "schema": "cyber_direct_cleanup_observer_armed_v1",
+                "status": "armed",
+                "context": direct.PROD_CONTEXT,
+                "namespace": direct.NAMESPACE,
+                "kind": "job",
+                "name": identity.stage_name,
+                "maximum_seconds": direct.CPU_MAXIMUM_SECONDS,
+                "expected_gpus": 0,
+                "plan_sha256": stage["sha256"],
+                "manifest_sha256": "sha256:" + direct.digest(expected),
+                "armed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "observer_pid": 7,
+                "creator_binding_path": str(
+                    operator.hardening.creator_binding_path(operation_root, "stage")
+                ),
+            }
+        ),
+    )
+
+    runner = incluster_kubernetes.InClusterKubernetesRunner(
+        request=lambda *_args: (404, b'{"kind":"Status"}')
+    )
+    assert operator._reconcile_stage_v4_precreate(
+        packet,
+        stage=stage,
+        expected=expected,
+        identity=identity,
+        runner=runner,
+    ) == operation_root
+    assert not (operation_root / "STAGE_OPERATOR_INTENT.json").exists()
+    assert not (operation_root / "STAGE_OBSERVER_ARMED.json").exists()
+    assert (operation_root / "STAGE_OPERATOR_INTENT.v4.failed.json").is_file()
+    assert (operation_root / "STAGE_OBSERVER_ARMED.v4.failed.json").is_file()
+    receipt = json.loads(
+        (operation_root / "STAGE_OPERATOR_RECOVERY_V5.json").read_bytes()
+    )
+    assert receipt["status"] == "v4_precreate_evidence_preserved"
+    assert receipt == operator._seal(receipt)
+
+
 def test_prod10_operator_package_rejects_root_alert_or_packet_drift() -> None:
     identity, stage, preview, duplicate = _stage_inputs()
     packet = operator_job.stage_packet(
@@ -205,6 +281,13 @@ def test_prod10_operator_package_rejects_root_alert_or_packet_drift() -> None:
     changed["manifest_sha256"] = "sha256:" + "0" * 64
     changed = operator._seal(changed)
     with pytest.raises((JobsError, ValueError), match="packet|manifest"):
+        operator_job.build_operator_package(changed)
+
+    changed = copy.deepcopy(packet)
+    changed["precreate_recovery"]["previous_release_sha256"] = "sha256:" + "0" * 64
+    changed["precreate_recovery"] = operator._seal(changed["precreate_recovery"])
+    changed = operator._seal(changed)
+    with pytest.raises(ValueError, match="recovery"):
         operator_job.build_operator_package(changed)
 
 
@@ -275,9 +358,7 @@ def test_cpu_remote_duplicate_proof_still_rechecks_production() -> None:
 
     def runner(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
         commands.append(command)
-        return subprocess.CompletedProcess(
-            command, 0, json.dumps({"kind": "List", "items": []}), ""
-        )
+        return subprocess.CompletedProcess(command, 0, "", "")
 
     proof = direct.cpu_duplicate_proof(
         identity.stage_name, context=direct.DEV_CONTEXT, runner=runner
