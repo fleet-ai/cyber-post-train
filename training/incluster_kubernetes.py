@@ -62,11 +62,15 @@ _RESOURCE_NAME_PREFIXES = {
     "workloads": "workload.kueue.x-k8s.io/",
     "workloads.kueue.x-k8s.io": "workload.kueue.x-k8s.io/",
 }
-_KUBERNETES_NAME_PATTERN = re.compile(
-    r"[a-z0-9](?:[-a-z0-9.]{0,251}[a-z0-9])?"
-)
+_KUBERNETES_NAME_PATTERN = re.compile(r"[a-z0-9](?:[-a-z0-9.]{0,251}[a-z0-9])?")
 _CREATE_PATHS = {
     ("batch/v1", "Job"): "/apis/batch/v1/namespaces/{namespace}/jobs",
+}
+_CAPACITY_PATHS = {
+    "pods": "/api/v1/pods",
+    "inference_models": "/apis/inference.fleet.ai/v1alpha1/inferencemodels",
+    "rayjobs": "/apis/ray.io/v1/rayjobs",
+    "workloads": "/apis/kueue.x-k8s.io/v1beta2/workloads",
 }
 
 
@@ -120,6 +124,23 @@ class InClusterKubernetesRunner:
         command: list[str], returncode: int, stdout: str = "", stderr: str = ""
     ) -> subprocess.CompletedProcess[str]:
         return subprocess.CompletedProcess(command, returncode, stdout, stderr)
+
+    def capacity_inventory(self) -> dict[str, dict[str, Any]]:
+        """Read only the four reviewed all-namespace capacity inventories."""
+        inventories: dict[str, dict[str, Any]] = {}
+        for name, path in _CAPACITY_PATHS.items():
+            status, payload = self._request("GET", path, None, {"Accept": "application/json"})
+            if status != 200:
+                raise InClusterKubernetesError("Kubernetes capacity read failed")
+            try:
+                value = json.loads(payload)
+            except (UnicodeDecodeError, ValueError) as exc:
+                raise InClusterKubernetesError("Kubernetes capacity response is invalid") from exc
+            items = value.get("items") if isinstance(value, dict) else None
+            if not isinstance(items, list) or any(not isinstance(row, dict) for row in items):
+                raise InClusterKubernetesError("Kubernetes capacity response is not a list")
+            inventories[name] = value
+        return inventories
 
     @staticmethod
     def _prefix(command: list[str]) -> tuple[str, str, list[str]]:
@@ -231,9 +252,7 @@ class InClusterKubernetesRunner:
             items = value.get("items")
             prefix = _RESOURCE_NAME_PREFIXES[resource]
         except (AttributeError, KeyError, ValueError) as exc:
-            raise InClusterKubernetesError(
-                "Kubernetes name inventory is invalid"
-            ) from exc
+            raise InClusterKubernetesError("Kubernetes name inventory is invalid") from exc
         if (
             not isinstance(value, dict)
             or value.get("apiVersion") != "meta.k8s.io/v1"

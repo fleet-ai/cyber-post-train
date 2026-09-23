@@ -1,10 +1,10 @@
-"""Bounded in-cluster stage/preflight coordinator for the prod10 RL canary.
+"""Bounded in-cluster stage/preflight/launch coordinator for prod10 RL.
 
 This is intentionally not a general controller.  One sealed packet selects one
-of two fixed phases and all Kubernetes names, SFS paths, manifests, and source
-identities are re-derived by the existing prod9 rail.  The stage phase performs
-the existing create-once rebind inside this exact-image root Job; it does not
-create a second schedulable Job.  It never launches a GPU workload.
+fixed phase and all Kubernetes names, SFS paths, manifests, and source identities
+are re-derived by the existing prod9 rail.  Stage and preflight remain zero-GPU;
+launch performs one Jobs API create and then observes that exact run through
+terminal status, receipt capture, and confirmed resource release.
 """
 
 from __future__ import annotations
@@ -20,17 +20,20 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
-from cyber_post_train.jobs import JobsError, digest
+from cyber_post_train.gpu_capacity import build_capacity_census
+from cyber_post_train.jobs import Jobs, JobsError, digest
 
 from . import dev_cleanup_observer as cleanup
 from . import skyrl_prod9_direct as direct
 from . import skyrl_prod9_hardening as hardening
 from . import skyrl_prod9_training as training
+from . import skyrl_prod10_direct as launch_direct
 from . import skyrl_reward_rayjob as historical
 from .incluster_kubernetes import InClusterKubernetesRunner
 
 PACKET_SCHEMA = "cyber_skyrl_prod10_operator_packet_v1"
 RESULT_SCHEMA = "cyber_skyrl_prod10_operator_result_v1"
+LAUNCH_RESULT_SCHEMA = "cyber_skyrl_prod10_launch_result_v1"
 DIRECT_STAGE_RESULT_SCHEMA = "cyber_skyrl_prod10_operator_direct_stage_result_v2"
 MANIFEST_RESULT_SCHEMA = "cyber_skyrl_prod10_rebound_manifest_result_v1"
 TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_termination_v1"
@@ -39,6 +42,7 @@ OPERATOR_NAMES = {
     "stage": "chris-q38-prod10-stage-operator-v7",
     "manifest": "chris-q38-prod10-manifest-operator-v1",
     "preflight": "chris-q38-prod10-preflight-operator-v2",
+    "launch": "chris-q38-prod10-launch-operator-v1",
 }
 _PREFLIGHT_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_preflight_v1_failure_recovery_v1",
@@ -56,9 +60,7 @@ _PREFLIGHT_V1_FAILURE = {
     "failure_receipt_sha256": (
         "sha256:edf26867c2a26fdf476852e7e83cb5df8ebd0f89b06002795cb898e128253086"
     ),
-    "release_sha256": (
-        "sha256:29c67ae6990e3401f92268cc758b17a9ec3b07aae6596ea1462b38c6d06e2ecc"
-    ),
+    "release_sha256": ("sha256:29c67ae6990e3401f92268cc758b17a9ec3b07aae6596ea1462b38c6d06e2ecc"),
     "child_name": "chris-q38-prod10-preflight-v1",
     "child_created": False,
     "operation_root": (
@@ -270,7 +272,7 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
     elif phase == "manifest":
         if packet.get("preflight_v1_failure") != preflight_v1_failure_binding():
             raise ValueError("prod10 preflight v1 recovery binding changed")
-    else:
+    elif phase == "preflight":
         direct._validate_seal(packet.get("dev_preview"), direct.CPU_PREVIEW_SCHEMA)
         direct._validate_seal(
             packet.get("manifest_launch_result"),
@@ -281,12 +283,40 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
         )
         if duplicate.get("context") != direct.DEV_CONTEXT:
             raise ValueError("prod10 operator development proof changed")
+    else:
+        direct._validate_seal(
+            packet.get("preflight_launch_result"),
+            direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA,
+        )
+        direct._validate_seal(packet.get("dev_preview"), direct.PREVIEW_SCHEMA)
+        direct._validate_seal(packet.get("duplicate_proof"), launch_direct.DUPLICATE_SCHEMA)
+        census = packet.get("capacity_census")
+        request = packet.get("request")
+        planned = (
+            {
+                "nodes": request.get("workers"),
+                "gpus": request.get("workers", 0) * request.get("gpus_per_worker", 0),
+            }
+            if isinstance(request, dict)
+            else None
+        )
+        body = (
+            {key: item for key, item in census.items() if key != "sha256"}
+            if isinstance(census, dict)
+            else {}
+        )
+        if (
+            not isinstance(census, dict)
+            or census.get("schema") != "cyber_project_gpu_capacity_census_v1"
+            or census.get("sha256") != digest(body)
+            or census.get("limits") != {"nodes": 10, "gpus": 80}
+            or census.get("planned") != planned
+        ):
+            raise ValueError("prod10 launch capacity proof changed")
     return packet
 
 
-def _validate_runtime(
-    packet: dict[str, Any], runner: InClusterKubernetesRunner
-) -> str:
+def _validate_runtime(packet: dict[str, Any], runner: InClusterKubernetesRunner) -> str:
     if (os.geteuid(), os.getegid()) != (RUNTIME_UID, RUNTIME_GID):
         raise OperatorFailure("runtime_identity_rejected")
     name = os.environ.get("OPERATOR_JOB_NAME", "")
@@ -354,16 +384,11 @@ def _validate_runtime(
         metadata.get("name") != name
         or metadata.get("uid") != job_uid
         or annotations.get("fleet.ai/failure-alerts") != "off"
-        or annotations.get("cyber-post-train.fleet.ai/operator-packet-sha256")
-        != packet_sha256
-        or annotations.get("cyber-post-train.fleet.ai/operator-source-sha256")
-        != source_sha256
+        or annotations.get("cyber-post-train.fleet.ai/operator-packet-sha256") != packet_sha256
+        or annotations.get("cyber-post-train.fleet.ai/operator-source-sha256") != source_sha256
         or labels.get("kueue.x-k8s.io/queue-name") != "training-lq"
         or labels.get("kueue.x-k8s.io/priority-class") != "q1"
-        or job.get("spec", {}).get("template", {}).get("spec", {}).get(
-            "priorityClassName"
-        )
-        != "c1"
+        or job.get("spec", {}).get("template", {}).get("spec", {}).get("priorityClassName") != "c1"
     ):
         raise OperatorFailure("runtime_job_binding_rejected")
     return job_uid
@@ -379,11 +404,7 @@ def _canonical_directory(path: Path, *, owner: bool = True, code: str) -> None:
         path.is_symlink()
         or not stat.S_ISDIR(identity.st_mode)
         or path.resolve() != path
-        or (
-            owner
-            and (identity.st_uid, identity.st_gid)
-            != (RUNTIME_UID, RUNTIME_GID)
-        )
+        or (owner and (identity.st_uid, identity.st_gid) != (RUNTIME_UID, RUNTIME_GID))
         or not mode & stat.S_IRUSR
         or not mode & stat.S_IWUSR
         or not mode & stat.S_IXUSR
@@ -401,9 +422,7 @@ def _create_root_for_stage() -> None:
         hardening.CREATE_ONCE_ROOT.mkdir(mode=0o700)
     except OSError as exc:
         raise OperatorFailure("sfs_create_once_root_mkdir_failed") from exc
-    _canonical_directory(
-        hardening.CREATE_ONCE_ROOT, code="sfs_create_once_root_postcondition"
-    )
+    _canonical_directory(hardening.CREATE_ONCE_ROOT, code="sfs_create_once_root_postcondition")
     descriptor = os.open(parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
     try:
         os.fsync(descriptor)
@@ -435,8 +454,7 @@ def _read_recovery_file(path: Path, schema: str) -> dict[str, Any]:
     if (
         path.is_symlink()
         or not stat.S_ISREG(identity.st_mode)
-        or (identity.st_uid, identity.st_gid)
-        != (RUNTIME_UID, RUNTIME_GID)
+        or (identity.st_uid, identity.st_gid) != (RUNTIME_UID, RUNTIME_GID)
         or stat.S_IMODE(identity.st_mode) != 0o600
     ):
         raise OperatorFailure("stage_v4_recovery_evidence_rejected")
@@ -446,9 +464,7 @@ def _read_recovery_file(path: Path, schema: str) -> dict[str, Any]:
         raise OperatorFailure("stage_v4_recovery_evidence_rejected") from exc
 
 
-def _job_absent(
-    runner: InClusterKubernetesRunner, name: str, *, code: str
-) -> None:
+def _job_absent(runner: InClusterKubernetesRunner, name: str, *, code: str) -> None:
     _resource_absent(runner, "job", name, code=code)
 
 
@@ -477,8 +493,7 @@ def _read_recovery_jsonl(path: Path) -> list[dict[str, Any]]:
     if (
         path.is_symlink()
         or not stat.S_ISREG(identity.st_mode)
-        or (identity.st_uid, identity.st_gid)
-        != (RUNTIME_UID, RUNTIME_GID)
+        or (identity.st_uid, identity.st_gid) != (RUNTIME_UID, RUNTIME_GID)
         or stat.S_IMODE(identity.st_mode) != 0o600
         or len(rows) != 2
         or not all(isinstance(row, dict) for row in rows)
@@ -532,10 +547,8 @@ def _reconcile_stage_v6_failed(
         "cyber_skyrl_prod10_stage_precreate_recovery_receipt_v1",
     )
     if (
-        v4_intent.get("packet_sha256")
-        != _STAGE_V4_RECOVERY["previous_packet_sha256"]
-        or v4_intent.get("operator_job_uid")
-        != _STAGE_V4_RECOVERY["previous_operator_job_uid"]
+        v4_intent.get("packet_sha256") != _STAGE_V4_RECOVERY["previous_packet_sha256"]
+        or v4_intent.get("operator_job_uid") != _STAGE_V4_RECOVERY["previous_operator_job_uid"]
         or v5_receipt.get("status") != "v4_precreate_evidence_preserved"
         or v5_receipt.get("binding_sha256") != _seal(_STAGE_V4_RECOVERY)["sha256"]
         or v5_receipt.get("previous_intent_sha256") != v4_intent.get("sha256")
@@ -558,13 +571,10 @@ def _reconcile_stage_v6_failed(
         "cyber_skyrl_prod10_stage_precreate_recovery_receipt_v1",
     )
     if (
-        v5_intent.get("packet_sha256")
-        != _STAGE_V5_RECOVERY["previous_packet_sha256"]
-        or v5_intent.get("operator_job_uid")
-        != _STAGE_V5_RECOVERY["previous_operator_job_uid"]
+        v5_intent.get("packet_sha256") != _STAGE_V5_RECOVERY["previous_packet_sha256"]
+        or v5_intent.get("operator_job_uid") != _STAGE_V5_RECOVERY["previous_operator_job_uid"]
         or v6_recovery.get("status") != "v5_precreate_evidence_preserved"
-        or v6_recovery.get("binding_sha256")
-        != _seal(_STAGE_V5_RECOVERY)["sha256"]
+        or v6_recovery.get("binding_sha256") != _seal(_STAGE_V5_RECOVERY)["sha256"]
         or v6_recovery.get("previous_intent_sha256") != v5_intent.get("sha256")
         or v6_recovery.get("previous_observer_sha256") != v5_armed.get("sha256")
         or v6_recovery.get("archived_files")
@@ -572,12 +582,8 @@ def _reconcile_stage_v6_failed(
         or v6_recovery.get("gpus") != 0
     ):
         raise OperatorFailure("stage_v5_recovery_chain_rejected")
-    intent = _read_recovery_file(
-        intent_path, "cyber_skyrl_prod10_operator_intent_v1"
-    )
-    armed = _read_recovery_file(
-        armed_path, "cyber_direct_cleanup_observer_armed_v1"
-    )
+    intent = _read_recovery_file(intent_path, "cyber_skyrl_prod10_operator_intent_v1")
+    armed = _read_recovery_file(armed_path, "cyber_direct_cleanup_observer_armed_v1")
     creator = _read_recovery_file(
         operation_root / "STAGE_OBSERVER_ARMED.json.created.json",
         cleanup.CREATOR_BINDING_SCHEMA,
@@ -639,9 +645,7 @@ def _reconcile_stage_v6_failed(
         or creator.get("uid") != recovery["previous_target_job_uid"]
     ):
         raise OperatorFailure("stage_v6_creator_binding_rejected")
-    journal_intent, created = _read_recovery_jsonl(
-        operation_root / "PROD9_STAGE_CREATE.jsonl"
-    )
+    journal_intent, created = _read_recovery_jsonl(operation_root / "PROD9_STAGE_CREATE.jsonl")
     if (
         journal_intent.get("state") != "CREATE_INTENT_DO_NOT_RETRY"
         or journal_intent.get("purpose") != "stage"
@@ -806,7 +810,12 @@ def _join_observer(thread: threading.Thread, state: dict[str, Any]) -> dict[str,
 
 
 def _new_observer(
-    *, operation_root: Path, purpose: str, name: str, plan_sha256: str, manifest_sha256: str,
+    *,
+    operation_root: Path,
+    purpose: str,
+    name: str,
+    plan_sha256: str,
+    manifest_sha256: str,
     runner: InClusterKubernetesRunner,
 ) -> cleanup.Observer:
     prefix = purpose.upper()
@@ -886,9 +895,7 @@ def run_stage(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> d
     )
 
 
-def run_preflight(
-    packet: dict[str, Any], *, runner: InClusterKubernetesRunner
-) -> dict[str, Any]:
+def run_preflight(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> dict[str, Any]:
     identity = _identity(packet["identity"])
     plan = packet.get("plan")
     request = packet.get("request")
@@ -911,9 +918,7 @@ def run_preflight(
     if stage_launch["observer"]["receipt"].get("result_path") != str(result_path):
         raise OperatorFailure("direct_stage_result_path_rejected")
     stage_result = _read_recovery_file(result_path, DIRECT_STAGE_RESULT_SCHEMA)
-    if stage_result.get("sha256") != stage_launch["observer"]["receipt"].get(
-        "result_sha256"
-    ):
+    if stage_result.get("sha256") != stage_launch["observer"]["receipt"].get("result_sha256"):
         raise OperatorFailure("direct_stage_result_digest_rejected")
     direct._direct_stage_evidence(
         stage,
@@ -1034,9 +1039,7 @@ def run_preflight(
     )
 
 
-def run_manifest(
-    packet: dict[str, Any], *, runner: InClusterKubernetesRunner
-) -> dict[str, Any]:
+def run_manifest(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> dict[str, Any]:
     identity = _identity(packet["identity"])
     stage, stage_identity = training._stage_identity(packet.get("stage"))
     if stage_identity != identity:
@@ -1052,9 +1055,7 @@ def run_manifest(
     if stage_launch["observer"]["receipt"].get("result_path") != str(result_path):
         raise OperatorFailure("manifest_stage_result_path_rejected")
     stage_result = _read_recovery_file(result_path, DIRECT_STAGE_RESULT_SCHEMA)
-    if stage_result.get("sha256") != stage_launch["observer"]["receipt"].get(
-        "result_sha256"
-    ):
+    if stage_result.get("sha256") != stage_launch["observer"]["receipt"].get("result_sha256"):
         raise OperatorFailure("manifest_stage_result_digest_rejected")
     stage_result, stage_launch, successor = direct._direct_stage_rebound_evidence(
         stage,
@@ -1079,9 +1080,7 @@ def run_manifest(
         ("job", recovery["child_name"]),
     ]
     for resource, name in resources:
-        _resource_absent(
-            runner, resource, name, code="manifest_predecessor_resource_still_present"
-        )
+        _resource_absent(runner, resource, name, code="manifest_predecessor_resource_still_present")
     operation_root = Path(recovery["operation_root"])
     if operation_root.exists() or operation_root.is_symlink():
         raise OperatorFailure("manifest_failed_preflight_root_exists")
@@ -1105,6 +1104,263 @@ def run_manifest(
     )
 
 
+def _observe_created_run(
+    operation_root: Path,
+    plan: dict[str, Any],
+    created: dict[str, Any],
+    *,
+    runner: InClusterKubernetesRunner,
+) -> dict[str, Any]:
+    """Retain the launch operator until its exact created RayJob is released."""
+    binding_path = hardening.creator_binding_path(operation_root, "training")
+    try:
+        binding = json.loads(binding_path.read_bytes())
+    except (OSError, ValueError) as exc:
+        raise OperatorFailure("launch_exact_binding_unavailable") from exc
+    binding = direct._validate_seal(binding, cleanup.JOBS_API_EXACT_BINDING_SCHEMA)
+    release_contract = direct._seal(
+        {
+            "schema": cleanup.JOBS_API_RELEASE_CONTRACT_SCHEMA,
+            "status": "creator_authorized_exact_uid_release",
+            "binding_sha256": binding["sha256"],
+            "context": binding["context"],
+            "namespace": binding["namespace"],
+            "jobs_api_run_name": binding["jobs_api_run_name"],
+            "jobs_api_run_id": binding["jobs_api_run_id"],
+            "rayjob_name": binding["rayjob_name"],
+            "rayjob_uid": binding["rayjob_uid"],
+            "authorized_at": binding["bound_at"],
+            "release_route": "raw_rayjob_uid_precondition_v1",
+        }
+    )
+    release_path = operation_root / "PROD10_EXACT_RELEASE_CONTRACT.json"
+    observer_path = operation_root / "PROD10_EXACT_OBSERVER_RESULT.json"
+    _write_once(release_path, release_contract)
+    observed = _Prod10ExactUidObserver(
+        binding_path=binding_path,
+        result_path=observer_path,
+        release_contract_path=release_path,
+        run=runner,
+    ).run()
+    receipt = observed.get("receipt")
+    args = plan.get("arguments", {})
+    steps, interval = args.get("steps"), args.get("eval_interval")
+    expected_batches = (
+        len(
+            {("train", step) for step in range(1, steps + 1)}
+            | {("eval", 0), ("eval", steps)}
+            | {("eval", step) for step in range(1, steps + 1) if step % interval == 0}
+        )
+        if type(steps) is int and steps > 0 and type(interval) is int and interval > 0
+        else -1
+    )
+    receipt_body = (
+        {key: value for key, value in receipt.items() if key != "sha256"}
+        if isinstance(receipt, dict)
+        else {}
+    )
+    if (
+        observed.get("status") != "released_after_terminal"
+        or observed.get("release_confirmed") is not True
+        or observed.get("binding_sha256") != binding["sha256"]
+        or observed.get("rayjob_uid") != created["rayjob_uid"]
+        or observed.get("peak_gpus") != created["gpus"]
+        or observed.get("runtime_image_identity_complete") is not True
+        or observed.get("restarts") != 0
+        or not isinstance(observed.get("exit_codes"), list)
+        or not observed["exit_codes"]
+        or any(type(code) is not int or code != 0 for code in observed["exit_codes"])
+        or observed.get("terminal_status") != "Succeeded"
+        or not isinstance(receipt, dict)
+        or set(receipt)
+        != {
+            "status",
+            "plan_sha256",
+            "checkpoint_global_step",
+            "completed_batches",
+            "completed_at",
+            "optimizer_update_independently_verified",
+            "checkpoint_reload_verified",
+            "sha256",
+        }
+        or receipt.get("sha256") != digest(receipt_body)
+        or receipt.get("status") != "native_loop_returned"
+        or receipt.get("plan_sha256") != digest(plan)
+        or receipt.get("checkpoint_global_step") != steps
+        or receipt.get("completed_batches") != expected_batches
+        or receipt.get("optimizer_update_independently_verified") is not False
+        or receipt.get("checkpoint_reload_verified") is not False
+    ):
+        raise OperatorFailure("launch_exact_observer_rejected")
+    return observed
+
+
+class _Prod10ExactUidObserver(cleanup.JobsApiExactUidObserver):
+    """Wait briefly for a terminal Pod receipt before exact-UID release."""
+
+    def _request_exact_uid_cleanup(self) -> None:
+        if self.terminal_status and self.receipt is None:
+            remaining = (
+                max(0.0, (self.deadline_at - cleanup._now()).total_seconds())
+                if self.deadline_at is not None
+                else cleanup.TERMINAL_RECEIPT_GRACE_SECONDS
+            )
+            deadline = time.monotonic() + min(cleanup.TERMINAL_RECEIPT_GRACE_SECONDS, remaining)
+            while self.receipt is None and time.monotonic() < deadline:
+                time.sleep(min(self.poll_seconds, deadline - time.monotonic()))
+                root = self._get("rayjob", self.root_name)
+                if root is None:
+                    return
+                cluster_name = self._validate_root(root)
+                self._observe_owned_children(cluster_name)
+        super()._request_exact_uid_cleanup()
+
+
+def _fresh_capacity_census(
+    request: dict[str, Any], runner: InClusterKubernetesRunner
+) -> dict[str, Any]:
+    inventories = runner.capacity_inventory()
+    census = build_capacity_census(
+        inventories["pods"],
+        inventories["inference_models"],
+        inventories["rayjobs"],
+        inventories["workloads"],
+        owner_prefixes=tuple(hardening.PROJECT_OWNER_PREFIXES),
+        max_nodes=launch_direct.MAX_NODES,
+        max_gpus=launch_direct.MAX_GPUS,
+        planned_nodes=request["workers"],
+        planned_gpus=request["workers"] * request["gpus_per_worker"],
+    )
+    if census.get("qualified") is not True:
+        raise OperatorFailure("launch_capacity_rejected")
+    return census
+
+
+def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> dict[str, Any]:
+    """Consume the sealed direct-v3 preflight and perform the sole GPU POST."""
+    identity = _identity(packet["identity"])
+    plan, request = packet.get("plan"), packet.get("request")
+    if not isinstance(plan, dict) or not isinstance(request, dict):
+        raise ValueError("prod10 launch plan/request is invalid")
+    direct._identity(plan, identity)
+    if training.job_request(plan) != request:
+        raise ValueError("prod10 launch request changed")
+    preflight_launch = launch_direct._preflight_launch(
+        packet.get("preflight_launch_result"),
+        plan,
+        identity=identity,
+        operator_name=OPERATOR_NAMES["preflight"],
+    )
+    receipt = preflight_launch["observer"]["receipt"]
+    result_path = Path(receipt["result_path"])
+    preflight = _read_recovery_file(result_path, launch_direct.PREFLIGHT_RESULT_SCHEMA)
+    if preflight.get("sha256") != receipt["result_sha256"]:
+        raise OperatorFailure("launch_preflight_result_digest_rejected")
+    preflight = launch_direct.preflight_result(plan, request, preflight, identity=identity)
+    revalidation = launch_direct.revalidate_preflight(plan, request, preflight, identity=identity)
+    image_identity = launch_direct.image_identity(request, preflight)
+    source_preview = packet.get("source_preview")
+    if not isinstance(source_preview, dict):
+        raise ValueError("prod10 launch Jobs preview is invalid")
+    expected = direct.manifest(
+        plan,
+        request,
+        source_preview,
+        identity=identity,
+        image_identity_receipt=image_identity,
+    )
+    if packet.get("manifest_sha256") != "sha256:" + digest(expected):
+        raise ValueError("prod10 launch GPU manifest changed")
+    operation_root = hardening.training_operation_root(plan)
+    _canonical_directory(operation_root, code="launch_operation_root")
+    output_root = Path(identity.output_root)
+    if output_root.exists() or output_root.is_symlink():
+        raise OperatorFailure("launch_output_exists")
+    direct.validate_preview(
+        plan,
+        request,
+        source_preview,
+        expected,
+        direct.server_dry_run(expected, context=direct.PROD_CONTEXT, runner=runner),
+        context=direct.PROD_CONTEXT,
+        identity=identity,
+        image_identity_receipt=image_identity,
+    )
+    guard = cleanup.JobsApiPrefixGuard(
+        context=direct.PROD_CONTEXT,
+        namespace=direct.NAMESPACE,
+        run_name_prefix=request["name"],
+        run_dir=request["run_dir"],
+        image=request["image"],
+        plan_sha256="sha256:" + digest(plan),
+        manifest_sha256="sha256:" + digest(expected),
+        maximum_seconds=direct.MAXIMUM_SECONDS,
+        expected_gpus=request["workers"] * request["gpus_per_worker"],
+        armed_path=direct.jobs_api_guard_path(operation_root, "training"),
+        binding_path=hardening.creator_binding_path(operation_root, "training"),
+        run=runner,
+    )
+    armed = guard.arm()
+    prod_preview = direct.validate_preview(
+        plan,
+        request,
+        source_preview,
+        expected,
+        direct.server_dry_run(expected, context=direct.PROD_CONTEXT, runner=runner),
+        context=direct.PROD_CONTEXT,
+        identity=identity,
+        image_identity_receipt=image_identity,
+    )
+    authorization = launch_direct.authorize(
+        plan,
+        request,
+        source_preview,
+        expected,
+        preflight,
+        revalidation,
+        dev_preview=packet["dev_preview"],
+        prod_preview=prod_preview,
+        observer=armed,
+        identity=identity,
+    )
+    token = os.environ.get("FLEET_API_KEY", "")
+    if not token or not os.environ.get("WANDB_API_KEY"):
+        raise OperatorFailure("launch_credentials_unavailable")
+    fresh_capacity = _fresh_capacity_census(request, runner)
+    created = launch_direct.create_once(
+        operation_root,
+        plan,
+        request,
+        source_preview,
+        expected,
+        authorization,
+        token=token,
+        identity=identity,
+        runner=runner,
+        jobs_factory=Jobs,
+        census=fresh_capacity,
+        duplicate=packet["duplicate_proof"],
+    )
+    observed = _observe_created_run(operation_root, plan, created, runner=runner)
+    return _seal(
+        {
+            "schema": LAUNCH_RESULT_SCHEMA,
+            "status": "gpu_run_succeeded_and_released",
+            "phase": "launch",
+            "packet_sha256": packet["sha256"],
+            "preflight_result_sha256": preflight["sha256"],
+            "preflight_revalidation_sha256": revalidation["sha256"],
+            "authorization_sha256": authorization["sha256"],
+            "created": created,
+            "exact_observer": observed,
+            "host_capacity_census_sha256": packet["capacity_census"]["sha256"],
+            "fresh_capacity_gate_sha256": created["capacity_gate_sha256"],
+            "operator_gpus": 0,
+            "created_gpus": created["gpus"],
+        }
+    )
+
+
 def run(packet_path: Path, phase: str) -> dict[str, Any]:
     try:
         value = json.loads(packet_path.read_bytes())
@@ -1117,6 +1373,8 @@ def run(packet_path: Path, phase: str) -> dict[str, Any]:
         result = run_stage(packet, runner=runner)
     elif phase == "manifest":
         result = run_manifest(packet, runner=runner)
+    elif phase == "launch":
+        result = run_launch(packet, runner=runner)
     else:
         result = run_preflight(packet, runner=runner)
     if phase == "manifest":
@@ -1127,7 +1385,12 @@ def run(packet_path: Path, phase: str) -> dict[str, Any]:
         if phase == "stage"
         else hardening.training_operation_root(packet["plan"])
     )
-    result_path = root / ("STAGE_OPERATOR_RESULT.json" if phase == "stage" else "PREFLIGHT_OPERATOR_RESULT.json")
+    result_name = {
+        "stage": "STAGE_OPERATOR_RESULT.json",
+        "preflight": "PREFLIGHT_OPERATOR_RESULT.json",
+        "launch": "LAUNCH_OPERATOR_RESULT.json",
+    }[phase]
+    result_path = root / result_name
     _write_once(result_path, result)
     _write_termination(phase=phase, result_path=result_path, result=result)
     return result

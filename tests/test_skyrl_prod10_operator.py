@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import copy
 import json
-import os
 import subprocess
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -16,6 +15,7 @@ from training import dev_cleanup_observer as cleanup
 from training import incluster_kubernetes
 from training import skyrl_prod9_direct as direct
 from training import skyrl_prod9_training as training
+from training import skyrl_prod10_direct as launch_direct
 from training import skyrl_prod10_operator as operator
 from training import skyrl_reward_rayjob as historical
 
@@ -115,6 +115,7 @@ def test_prod10_operator_package_is_exact_alert_off_c1_q1_zero_gpu() -> None:
     assert proof["priority"] == "c1"
     assert proof["queue_priority"] == "q1"
     assert proof["gpus"] == 0
+    assert package.job["spec"]["activeDeadlineSeconds"] == 2400
     assert proof["source_bytes"] < 1024 * 1024
     assert package.job["metadata"]["annotations"][FAILURE_ALERT_ANNOTATION] == "off"
     pod = package.job["spec"]["template"]["spec"]
@@ -150,6 +151,397 @@ def test_prod10_operator_package_is_exact_alert_off_c1_q1_zero_gpu() -> None:
     assert "nvidia.com/gpu" not in json.dumps(package.job, sort_keys=True)
 
 
+def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity = historical.load_identity(IDENTITY)
+    plan = {"schema": training.SCHEMA}
+    request = {"workers": 1, "gpus_per_worker": 8}
+    monkeypatch.setattr(direct, "_identity", lambda _plan, bound: bound)
+    monkeypatch.setattr(training, "job_request", lambda _plan: request)
+    monkeypatch.setattr(launch_direct, "_preflight_launch", lambda value, *_args, **_kwargs: value)
+    monkeypatch.setattr(direct, "_source", lambda value: value)
+    monkeypatch.setattr(launch_direct, "_duplicate", lambda value, _identity: value)
+    preflight = direct._seal({"schema": direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA, "gpus": 0})
+    preview = direct._seal(
+        {
+            "schema": direct.PREVIEW_SCHEMA,
+            "context": direct.DEV_CONTEXT,
+            "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+    duplicate = direct._seal(
+        {"schema": launch_direct.DUPLICATE_SCHEMA, "status": "identities_absent"}
+    )
+    capacity = {
+        "schema": "cyber_project_gpu_capacity_census_v1",
+        "limits": {"nodes": 10, "gpus": 80},
+        "planned": {"nodes": 1, "gpus": 8},
+    }
+    capacity["sha256"] = digest(capacity)
+    packet = operator_job.launch_packet(
+        identity=identity,
+        plan=plan,
+        request=request,
+        preflight_launch_result=preflight,
+        source_preview={"manifest_yaml": "{}"},
+        manifest_sha256="sha256:" + "1" * 64,
+        dev_preview=preview,
+        duplicate_proof=duplicate,
+        capacity_census=capacity,
+    )
+    package = operator_job.build_operator_package(packet)
+    proof = operator_job.validate_operator_package(package)
+    container = package.job["spec"]["template"]["spec"]["containers"][0]
+
+    assert proof["phase"] == "launch"
+    assert proof["failure_alerts"] == "off"
+    assert proof["priority"] == "c1"
+    assert proof["queue_priority"] == "q1"
+    assert proof["gpus"] == 0
+    assert (
+        package.job["spec"]["activeDeadlineSeconds"]
+        == operator_job.LAUNCH_ACTIVE_DEADLINE_SECONDS
+        > direct.MAXIMUM_SECONDS
+    )
+    assert (
+        operator_launch.LAUNCH_OPERATOR_JOIN_SECONDS
+        > operator_launch.LAUNCH_OPERATOR_OBSERVER_SECONDS
+        > operator_job.LAUNCH_ACTIVE_DEADLINE_SECONDS
+        > direct.MAXIMUM_SECONDS
+    )
+    outer = operator_launch._operator_observer(proof, tmp_path)
+    assert outer.profile == "prod10-launch-operator"
+    assert outer.maximum_seconds == operator_launch.LAUNCH_OPERATOR_OBSERVER_SECONDS
+    with pytest.raises(cleanup.ObserverError, match="deadline"):
+        cleanup.Observer(
+            context=direct.PROD_CONTEXT,
+            namespace=direct.NAMESPACE,
+            kind="job",
+            name=proof["name"],
+            maximum_seconds=operator_launch.LAUNCH_OPERATOR_OBSERVER_SECONDS,
+            expected_gpus=0,
+            plan_sha256=proof["packet_sha256"],
+            manifest_sha256=proof["job_manifest_sha256"],
+            armed_path=tmp_path / "old-profile-armed.json",
+            result_path=tmp_path / "old-profile-result.json",
+            profile="production-operator",
+        )
+    assert container["envFrom"] == [
+        {"secretRef": {"name": "fleet-api"}},
+        {"secretRef": {"name": "wandb-api"}},
+    ]
+    assert "private_rows" not in json.dumps(packet, sort_keys=True)
+
+    changed = copy.deepcopy(packet)
+    changed["capacity_census"]["limits"] = {"nodes": 8, "gpus": 64}
+    changed["capacity_census"]["sha256"] = digest(
+        {key: value for key, value in changed["capacity_census"].items() if key != "sha256"}
+    )
+    changed = operator._seal(changed)
+    with pytest.raises(ValueError, match="capacity"):
+        operator_job.build_operator_package(changed)
+
+
+def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    identity = historical.load_identity(IDENTITY)
+    monkeypatch.setattr(direct, "_identity", lambda _plan, bound: bound)
+    with pytest.raises(JobsError, match="digest"):
+        launch_direct.preflight_result(
+            {"schema": training.SCHEMA},
+            {},
+            {"schema": launch_direct.PREFLIGHT_RESULT_SCHEMA},
+            identity=identity,
+        )
+
+    root = tmp_path / "operation"
+    root.mkdir()
+    plan = {
+        "schema": training.SCHEMA,
+        "arguments": {"wandb_entity": "e", "wandb_project": "p", "wandb_run_id": "r"},
+    }
+    request = {
+        "name": identity.run_name,
+        "run_dir": identity.output_root,
+        "workers": 1,
+        "gpus_per_worker": 8,
+    }
+    source, expected = {"source": "preview"}, {"kind": "RayJob"}
+    auth = direct._seal(
+        {
+            "schema": launch_direct.AUTHORIZATION_SCHEMA,
+            "operation_root": str(root),
+            "preflight_result": {},
+            "preflight_revalidation": {},
+            "dev_preview": {},
+            "prod_preview": {},
+            "observer": {},
+            "image_identity_receipt": {},
+        }
+    )
+    monkeypatch.setattr(operator.hardening, "training_operation_root", lambda _plan: root)
+    monkeypatch.setattr(launch_direct, "authorize", lambda *_args, **_kwargs: auth)
+    monkeypatch.setattr(launch_direct, "_duplicate", lambda value, _identity: value)
+    monkeypatch.setattr(direct, "manifest", lambda *_args, **_kwargs: expected)
+    monkeypatch.setattr(direct, "server_dry_run", lambda *_args, **_kwargs: expected)
+    live_preview = {
+        "sha256": "sha256:" + "2" * 64,
+        "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    monkeypatch.setattr(direct, "validate_preview", lambda *_args, **_kwargs: live_preview)
+    monkeypatch.setattr(
+        launch_direct, "capacity_gate", lambda *_args, **_kwargs: {"sha256": "sha256:" + "3" * 64}
+    )
+    monkeypatch.setattr(direct, "_jobs_api_prefix_guard", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(direct, "_fresh_at", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        direct,
+        "_bind_jobs_api_created",
+        lambda **_kwargs: {
+            "rayjob_name": identity.run_name + "-1a2b3c4d",
+            "rayjob_uid": "00000000-0000-4000-8000-000000000007",
+            "sha256": "sha256:" + "4" * 64,
+            "rayjob_created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "failure_alerts": "off",
+        },
+    )
+    posts: list[tuple[str, str]] = []
+
+    class FakeJobs:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def preview(self, _request):
+            return source
+
+        def request(self, method, path, **_kwargs):
+            posts.append((method, path))
+            return {
+                "name": identity.run_name + "-1a2b3c4d",
+                "job_id": "00000000-0000-4000-8000-000000000006",
+                "run_dir": identity.output_root,
+            }
+
+    created = launch_direct.create_once(
+        root,
+        plan,
+        request,
+        source,
+        expected,
+        auth,
+        token="token",
+        identity=identity,
+        duplicate={},
+        census={},
+        jobs_factory=FakeJobs,
+        wandb_exists=lambda *_args: False,
+    )
+    assert posts == [("POST", "/v1/runs")]
+    assert created["failure_alerts"] == "off"
+    with pytest.raises(JobsError, match="create intent"):
+        launch_direct.create_once(
+            root,
+            plan,
+            request,
+            source,
+            expected,
+            auth,
+            token="token",
+            identity=identity,
+            duplicate={},
+            census={},
+            jobs_factory=FakeJobs,
+            wandb_exists=lambda *_args: False,
+        )
+    assert len(posts) == 1
+
+
+def test_prod10_launch_reruns_preflight_and_freshly_dates_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity = historical.load_identity(IDENTITY)
+    receipt = {"status": "passed", "gpus": 0}
+    checked = {"receipt": receipt, "sha256": "sha256:" + "1" * 64}
+    calls: list[dict] = []
+    monkeypatch.setattr(
+        launch_direct,
+        "preflight_result",
+        lambda *_args, **_kwargs: checked,
+    )
+    monkeypatch.setattr(
+        training,
+        "preflight",
+        lambda plan: calls.append(plan) or receipt,
+    )
+    monkeypatch.setattr(
+        direct,
+        "_preflight_receipt",
+        lambda _plan, _request, value, **_kwargs: value,
+    )
+    fresh: list[str] = []
+    monkeypatch.setattr(direct, "_fresh_at", lambda value, **_kwargs: fresh.append(value))
+
+    plan, request = {"schema": training.SCHEMA}, {}
+    result = launch_direct.revalidate_preflight(plan, request, checked, identity=identity)
+    assert calls == [plan]
+    assert result["status"] == "fresh_exact_image_preflight_passed"
+    assert launch_direct._revalidation(result, plan, request, checked, identity=identity) == result
+    assert fresh == [result["revalidated_at"]]
+
+    monkeypatch.setattr(training, "preflight", lambda _plan: {"status": "changed"})
+    with pytest.raises(JobsError, match="fresh preflight differs"):
+        launch_direct.revalidate_preflight(plan, request, checked, identity=identity)
+
+
+def test_prod10_launch_observes_only_created_uid_to_valid_terminal_receipt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    operation_root = tmp_path / "operation"
+    operation_root.mkdir()
+    rayjob_uid = "00000000-0000-4000-8000-000000000041"
+    bound_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    binding = direct._seal(
+        {
+            "schema": cleanup.JOBS_API_EXACT_BINDING_SCHEMA,
+            "status": "bound_exact_uid_cleanup_not_started",
+            "prefix_guard_sha256": "sha256:" + "2" * 64,
+            "context": direct.PROD_CONTEXT,
+            "namespace": direct.NAMESPACE,
+            "jobs_api_run_name": "chris-q38-prod10-12345678",
+            "jobs_api_run_id": "00000000-0000-4000-8000-000000000042",
+            "run_dir": "/mnt/sfs/jobs/chris-q38-prod10",
+            "image": "registry/image@sha256:" + "3" * 64,
+            "rayjob_name": "chris-q38-prod10-12345678",
+            "rayjob_uid": rayjob_uid,
+            "rayjob_created_at": bound_at,
+            "bound_at": bound_at,
+            "failure_alerts": "off",
+            "maximum_seconds": direct.MAXIMUM_SECONDS,
+            "expected_gpus": 8,
+            "cleanup_started": False,
+        }
+    )
+    binding_path = operator.hardening.creator_binding_path(operation_root, "training")
+    binding_path.write_text(json.dumps(binding))
+    plan = {"arguments": {"steps": 1, "eval_interval": 1}}
+    receipt_body = {
+        "status": "native_loop_returned",
+        "plan_sha256": digest(plan),
+        "checkpoint_global_step": 1,
+        "completed_batches": 3,
+        "completed_at": 1.0,
+        "optimizer_update_independently_verified": False,
+        "checkpoint_reload_verified": False,
+    }
+    receipt = {**receipt_body, "sha256": digest(receipt_body)}
+    result = {
+        "status": "released_after_terminal",
+        "release_confirmed": True,
+        "binding_sha256": binding["sha256"],
+        "rayjob_uid": rayjob_uid,
+        "peak_gpus": 8,
+        "runtime_image_identity_complete": True,
+        "restarts": 0,
+        "exit_codes": [0, 0],
+        "terminal_status": "Succeeded",
+        "receipt": receipt,
+    }
+    captured: dict = {}
+
+    class FakeObserver:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+
+        def run(self):
+            return result
+
+    monkeypatch.setattr(operator, "_Prod10ExactUidObserver", FakeObserver)
+    created = {"rayjob_uid": rayjob_uid, "gpus": 8}
+    assert (
+        operator._observe_created_run(
+            operation_root, plan, created, runner=lambda *_args, **_kwargs: None
+        )
+        == result
+    )
+    assert captured["binding_path"] == binding_path
+    assert captured["result_path"] == operation_root / "PROD10_EXACT_OBSERVER_RESULT.json"
+    contract = json.loads((operation_root / "PROD10_EXACT_RELEASE_CONTRACT.json").read_bytes())
+    assert contract["rayjob_uid"] == rayjob_uid
+    assert contract["binding_sha256"] == binding["sha256"]
+
+    accepted = copy.deepcopy(result)
+    rejected = []
+    for change in ("exit", "empty_exit", "missing_receipt", "non_native", "wrong_step"):
+        candidate = copy.deepcopy(accepted)
+        if change == "exit":
+            candidate["exit_codes"] = [0, 1]
+        elif change == "empty_exit":
+            candidate["exit_codes"] = []
+        elif change == "missing_receipt":
+            candidate["receipt"] = None
+        else:
+            candidate["receipt"][
+                "status" if change == "non_native" else "checkpoint_global_step"
+            ] = "changed" if change == "non_native" else 2
+            body = {key: value for key, value in candidate["receipt"].items() if key != "sha256"}
+            candidate["receipt"]["sha256"] = digest(body)
+        result.clear()
+        result.update(candidate)
+        (operation_root / "PROD10_EXACT_RELEASE_CONTRACT.json").unlink()
+        with pytest.raises(operator.OperatorFailure, match="exact_observer_rejected"):
+            operator._observe_created_run(
+                operation_root, plan, created, runner=lambda *_args, **_kwargs: None
+            )
+        rejected.append(change)
+    assert rejected == [
+        "exit",
+        "empty_exit",
+        "missing_receipt",
+        "non_native",
+        "wrong_step",
+    ]
+
+
+def test_prod10_exact_observer_waits_for_terminal_receipt_before_release(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observer = object.__new__(operator._Prod10ExactUidObserver)
+    observer.terminal_status = "Succeeded"
+    observer.receipt = None
+    observer.deadline_at = datetime.now(UTC) + timedelta(seconds=1)
+    observer.poll_seconds = 0.001
+    observer.root_name = "chris-q38-prod10-12345678"
+    observer._get = lambda _kind, _name: {"kind": "RayJob"}
+    observer._validate_root = lambda _root: "cluster"
+    observations: list[str] = []
+
+    def observe(_cluster: str) -> None:
+        observations.append("receipt")
+        observer.receipt = {"status": "native_loop_returned"}
+
+    observer._observe_owned_children = observe
+    releases: list[str] = []
+    monkeypatch.setattr(
+        cleanup.JobsApiExactUidObserver,
+        "_request_exact_uid_cleanup",
+        lambda _self: releases.append("released"),
+    )
+
+    observer._request_exact_uid_cleanup()
+
+    assert observations == ["receipt"]
+    assert releases == ["released"]
+
+
 def test_prod10_manifest_operator_is_distinct_read_only_and_recovery_bound(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -180,9 +572,7 @@ def test_prod10_manifest_operator_is_distinct_read_only_and_recovery_bound(
     assert "nvidia.com/gpu" not in json.dumps(package.job, sort_keys=True)
 
     changed = copy.deepcopy(packet)
-    changed["preflight_v1_failure"]["operator_job_uid"] = (
-        "00000000-0000-4000-8000-000000000001"
-    )
+    changed["preflight_v1_failure"]["operator_job_uid"] = "00000000-0000-4000-8000-000000000001"
     changed["preflight_v1_failure"] = operator._seal(changed["preflight_v1_failure"])
     changed = operator._seal(changed)
     with pytest.raises(ValueError, match="recovery"):
@@ -348,12 +738,8 @@ def test_stage_v7_preserves_released_v6_and_rebinds_without_nested_job(
             ),
         }
     )
-    operator._write_once(
-        operation_root / "STAGE_OPERATOR_INTENT.v4.failed.json", v4_intent
-    )
-    operator._write_once(
-        operation_root / "STAGE_OBSERVER_ARMED.v4.failed.json", v4_armed
-    )
+    operator._write_once(operation_root / "STAGE_OPERATOR_INTENT.v4.failed.json", v4_intent)
+    operator._write_once(operation_root / "STAGE_OBSERVER_ARMED.v4.failed.json", v4_armed)
     operator._write_once(
         operation_root / "STAGE_OPERATOR_RECOVERY_V5.json",
         operator._seal(
@@ -387,12 +773,8 @@ def test_stage_v7_preserves_released_v6_and_rebinds_without_nested_job(
             "observer_pid": 7,
         }
     )
-    operator._write_once(
-        operation_root / "STAGE_OPERATOR_INTENT.v5.failed.json", v5_intent
-    )
-    operator._write_once(
-        operation_root / "STAGE_OBSERVER_ARMED.v5.failed.json", v5_armed
-    )
+    operator._write_once(operation_root / "STAGE_OPERATOR_INTENT.v5.failed.json", v5_intent)
+    operator._write_once(operation_root / "STAGE_OBSERVER_ARMED.v5.failed.json", v5_armed)
     operator._write_once(
         operation_root / "STAGE_OPERATOR_RECOVERY_V6.json",
         operator._seal(
@@ -427,9 +809,7 @@ def test_stage_v7_preserves_released_v6_and_rebinds_without_nested_job(
             "observer_pid": 8,
         }
     )
-    operator._write_once(
-        operation_root / "STAGE_OBSERVER_ARMED.json", v6_armed
-    )
+    operator._write_once(operation_root / "STAGE_OBSERVER_ARMED.json", v6_armed)
     creator = direct._seal(
         {
             "schema": cleanup.CREATOR_BINDING_SCHEMA,
@@ -443,9 +823,7 @@ def test_stage_v7_preserves_released_v6_and_rebinds_without_nested_job(
             "uid": recovery["previous_target_job_uid"],
         }
     )
-    operator._write_once(
-        operation_root / "STAGE_OBSERVER_ARMED.json.created.json", creator
-    )
+    operator._write_once(operation_root / "STAGE_OBSERVER_ARMED.json.created.json", creator)
     authorization_sha256 = "sha256:" + "1" * 64
     created = direct._seal(
         {
@@ -549,9 +927,7 @@ def test_stage_v7_preserves_released_v6_and_rebinds_without_nested_job(
         "_stage_receipt",
         lambda _stage, receipt, **_kwargs: validated.append(receipt),
     )
-    monkeypatch.setenv(
-        "OPERATOR_JOB_UID", "00000000-0000-4000-8000-000000000099"
-    )
+    monkeypatch.setenv("OPERATOR_JOB_UID", "00000000-0000-4000-8000-000000000099")
     monkeypatch.setenv("OPERATOR_SOURCE_SHA256", "sha256:" + "9" * 64)
 
     result = operator.run_stage(packet, runner=runner)
@@ -577,9 +953,7 @@ def test_stage_v7_preserves_released_v6_and_rebinds_without_nested_job(
     assert (operation_root / "STAGE_OBSERVER_RESULT.v6.failed.json").is_file()
     assert (operation_root / "PROD9_STAGE_CREATE.v6.failed.jsonl").is_file()
     assert (operation_root / "STAGE_OPERATOR_INTENT.json").is_file()
-    receipt = json.loads(
-        (operation_root / "STAGE_OPERATOR_RECOVERY_V7.json").read_bytes()
-    )
+    receipt = json.loads((operation_root / "STAGE_OPERATOR_RECOVERY_V7.json").read_bytes())
     assert receipt["status"] == "v6_released_child_evidence_preserved"
     assert receipt == operator._seal(receipt)
 
@@ -661,9 +1035,7 @@ def test_prod10_operator_launcher_requires_two_alert_off_c1_q1_previews_and_abse
         and value["gpus"] == 0
         for value in previews
     )
-    absence = operator_launch.duplicate_proof(
-        package, previews=previews, factory=FakeKubectl
-    )
+    absence = operator_launch.duplicate_proof(package, previews=previews, factory=FakeKubectl)
     assert absence["kubernetes_inventories_checked"] == 12
     assert absence["derived_workload_names"] == {
         direct.DEV_CONTEXT: "job-chris-q38-prod10-stage-operator-v7-12a46",
@@ -681,10 +1053,13 @@ def test_prod10_operator_launcher_requires_two_alert_off_c1_q1_previews_and_abse
 def test_prod10_operator_workload_duplicate_gate_is_exact_and_never_lists_namespace(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    assert operator_launch._derived_workload_name(
-        "chris-q38-dev17-s51-base-p1-v1",
-        "75d47351-61c7-4bd1-995a-93cbfd112d0d",
-    ) == "job-chris-q38-dev17-s51-base-p1-v1-c7f37"
+    assert (
+        operator_launch._derived_workload_name(
+            "chris-q38-dev17-s51-base-p1-v1",
+            "75d47351-61c7-4bd1-995a-93cbfd112d0d",
+        )
+        == "job-chris-q38-dev17-s51-base-p1-v1-c7f37"
+    )
     client = operator_launch.Kubectl(direct.PROD_CONTEXT)
     calls: list[list[str]] = []
 
@@ -702,8 +1077,7 @@ def test_prod10_operator_workload_duplicate_gate_is_exact_and_never_lists_namesp
     with pytest.raises(JobsError, match="unsupported"):
         client.list_operator_resources("workloads.kueue.x-k8s.io")
     assert all(
-        not (call[:2] == ["get", "workloads.kueue.x-k8s.io"] and len(call) < 3)
-        for call in calls
+        not (call[:2] == ["get", "workloads.kueue.x-k8s.io"] and len(call) < 3) for call in calls
     )
 
 
@@ -722,9 +1096,7 @@ def test_cpu_remote_duplicate_proof_still_rechecks_production() -> None:
     assert all(direct.DEV_CONTEXT in command for command in commands)
     commands.clear()
 
-    result = direct._cpu_duplicate_checks(
-        identity.stage_name, runner=runner, dev_proof=proof
-    )
+    result = direct._cpu_duplicate_checks(identity.stage_name, runner=runner, dev_proof=proof)
     assert result["kubernetes_inventories_checked"] == 10
     assert result["development_duplicate_proof_sha256"] == proof["sha256"]
     assert len(commands) == 5
@@ -734,9 +1106,7 @@ def test_cpu_remote_duplicate_proof_still_rechecks_production() -> None:
 def test_incluster_runner_allows_only_prod_get_create_and_uid_cas_delete() -> None:
     calls: list[tuple[str, str, bytes | None]] = []
 
-    def request(
-        method: str, path: str, body: bytes | None, _: dict[str, str]
-    ) -> tuple[int, bytes]:
+    def request(method: str, path: str, body: bytes | None, _: dict[str, str]) -> tuple[int, bytes]:
         calls.append((method, path, body))
         if method == "GET":
             return 200, b'{"kind":"List","items":[]}'
@@ -791,6 +1161,64 @@ def test_incluster_runner_allows_only_prod_get_create_and_uid_cas_delete() -> No
     assert result.returncode == 0
     assert calls[-1][0] == "DELETE"
 
+    assert set(runner.capacity_inventory()) == {
+        "pods",
+        "inference_models",
+        "rayjobs",
+        "workloads",
+    }
+    assert [path for method, path, _body in calls[-4:] if method == "GET"] == [
+        "/api/v1/pods",
+        "/apis/inference.fleet.ai/v1alpha1/inferencemodels",
+        "/apis/ray.io/v1/rayjobs",
+        "/apis/kueue.x-k8s.io/v1beta2/workloads",
+    ]
+    census = operator._fresh_capacity_census({"workers": 1, "gpus_per_worker": 8}, runner)
+    assert census["limits"] == {"nodes": 10, "gpus": 80}
+    assert census["planned"] == {"nodes": 1, "gpus": 8}
+    assert census["projected"] == {"nodes": 1, "gpus": 8}
+    assert census["qualified"] is True
+
+    pods = {
+        "items": [
+            {
+                "metadata": {
+                    "name": f"chris-q38-live-{index}",
+                    "namespace": direct.NAMESPACE,
+                    "uid": f"00000000-0000-4000-8000-{index:012d}",
+                    "resourceVersion": str(index),
+                    "labels": {"fleet.ai/run-name": f"chris-q38-live-{index}"},
+                },
+                "spec": {
+                    "nodeName": f"node-{index}",
+                    "containers": [
+                        {
+                            "resources": {
+                                "requests": {"nvidia.com/gpu": "8"},
+                                "limits": {"nvidia.com/gpu": "8"},
+                            }
+                        }
+                    ],
+                },
+                "status": {"phase": "Running", "containerStatuses": []},
+            }
+            for index in range(10)
+        ]
+    }
+
+    class FullCapacity:
+        @staticmethod
+        def capacity_inventory():
+            return {
+                "pods": pods,
+                "inference_models": {"items": []},
+                "rayjobs": {"items": []},
+                "workloads": {"items": []},
+            }
+
+    with pytest.raises(operator.OperatorFailure, match="capacity"):
+        operator._fresh_capacity_census({"workers": 1, "gpus_per_worker": 8}, FullCapacity())
+
     with pytest.raises(incluster_kubernetes.InClusterKubernetesError, match="production"):
         runner(
             [
@@ -809,8 +1237,20 @@ def test_incluster_runner_allows_only_prod_get_create_and_uid_cas_delete() -> No
     with pytest.raises(incluster_kubernetes.InClusterKubernetesError, match="kind"):
         runner(
             prefix + ["create", "-f", "-", "-o", "json"],
-            input=json.dumps({"apiVersion": "v1", "kind": "Pod", "metadata": {"namespace": direct.NAMESPACE}}),
+            input=json.dumps(
+                {"apiVersion": "v1", "kind": "Pod", "metadata": {"namespace": direct.NAMESPACE}}
+            ),
         )
+
+    for status, payload, message in (
+        (403, b'{"kind":"Status"}', "read failed"),
+        (200, b'{"kind":"List","items":[1]}', "not a list"),
+    ):
+        denied = incluster_kubernetes.InClusterKubernetesRunner(
+            request=lambda *_args, status=status, payload=payload: (status, payload)
+        )
+        with pytest.raises(incluster_kubernetes.InClusterKubernetesError, match=message):
+            denied.capacity_inventory()
 
 
 def test_operator_termination_receipt_is_accepted_by_exact_observer(

@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import stat
+import subprocess
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
@@ -14,7 +15,6 @@ from typing import Any
 from uuid import UUID
 
 from training import dev_cleanup_observer as cleanup
-from training import skyrl_prod10_operator as operator
 from training import skyrl_prod9_direct as direct
 
 from .direct_submit import Kubectl
@@ -38,6 +38,58 @@ _RESOURCES = (
     "rayjobs.ray.io",
     "rayclusters.ray.io",
 )
+LAUNCH_OPERATOR_OBSERVER_SECONDS = direct.MAXIMUM_SECONDS + 5400
+LAUNCH_OPERATOR_JOIN_SECONDS = LAUNCH_OPERATOR_OBSERVER_SECONDS + 360
+
+
+class _Prod10LaunchObserver(cleanup.Observer):
+    """Long-lived, Job-only observer without changing the frozen prod9 module."""
+
+    def __init__(self, package_proof: dict[str, Any], root: Path) -> None:
+        maximum_seconds = LAUNCH_OPERATOR_OBSERVER_SECONDS
+        armed_path = root / "OPERATOR_OBSERVER_ARMED.json"
+        result_path = root / "OPERATOR_OBSERVER_RESULT.json"
+        for value in (package_proof["packet_sha256"], package_proof["job_manifest_sha256"]):
+            if len(value.removeprefix("sha256:")) != 64:
+                raise cleanup.ObserverError("cleanup observer digest binding is invalid")
+        if (
+            package_proof.get("phase") != "launch"
+            or package_proof.get("gpus") != 0
+            or not package_proof.get("name")
+            or maximum_seconds <= direct.MAXIMUM_SECONDS
+            or maximum_seconds > 16 * 60 * 60
+            or armed_path.exists()
+            or result_path.exists()
+        ):
+            raise cleanup.ObserverError("prod10 launch observer binding is invalid")
+        self.context = direct.PROD_CONTEXT
+        self.namespace = NAMESPACE
+        self.kind = "job"
+        self.name = package_proof["name"]
+        self.maximum_seconds = maximum_seconds
+        self.expected_gpus = 0
+        self.plan_sha256 = package_proof["packet_sha256"]
+        self.manifest_sha256 = package_proof["job_manifest_sha256"]
+        self.armed_path = armed_path
+        self.result_path = result_path
+        self.poll_seconds = 2.0
+        self.release_seconds = 300
+        self.profile = "prod10-launch-operator"
+        self.armed_schema = cleanup.DIRECT_ARMED_SCHEMA
+        self.result_schema = cleanup.DIRECT_RESULT_SCHEMA
+        self.expected_uid = ""
+        self.creator_binding_path = armed_path.with_name(armed_path.name + ".created.json")
+        self.requires_creator_binding = True
+        if self.creator_binding_path.exists() or self.creator_binding_path.is_symlink():
+            raise cleanup.ObserverError("cleanup observer creator binding already exists")
+        self._run = subprocess.run
+        self.snapshot = cleanup.Snapshot()
+        self.armed_at = ""
+        self.deletion_requested_at = ""
+        self.deletion_reason = ""
+        self.observation_failures = 0
+        self.max_consecutive_observation_failures = 0
+        self.last_observation_error_code = ""
 
 
 def _seal(value: dict[str, Any]) -> dict[str, Any]:
@@ -216,9 +268,7 @@ def duplicate_proof(
         if resource == "pods":
             return context, resource, client.list_operator_pods(proof["name"])
         if resource == "workloads.kueue.x-k8s.io":
-            name = _derived_workload_name(
-                proof["name"], preview_by_context[context]["job_uid"]
-            )
+            name = _derived_workload_name(proof["name"], preview_by_context[context]["job_uid"])
             value = client.get_operator_object("workload", name)
             return context, resource, {"kind": "WorkloadList", "items": [value] if value else []}
         exact = {
@@ -253,11 +303,7 @@ def duplicate_proof(
                     metadata.get("name"),
                     *labels.values(),
                     *annotations.values(),
-                    *(
-                        owner.get("name")
-                        for owner in owners
-                        if isinstance(owner, dict)
-                    ),
+                    *(owner.get("name") for owner in owners if isinstance(owner, dict)),
                 }
                 if any(
                     value == name
@@ -313,9 +359,7 @@ def _validate_duplicate(
         or checked.get("contexts") != [direct.DEV_CONTEXT, direct.PROD_CONTEXT]
         or checked.get("derived_workload_names")
         != {
-            context: _derived_workload_name(
-                proof["name"], preview_by_context[context]["job_uid"]
-            )
+            context: _derived_workload_name(proof["name"], preview_by_context[context]["job_uid"])
             for context in (direct.DEV_CONTEXT, direct.PROD_CONTEXT)
         }
         or checked.get("kubernetes_inventories_checked") != len(_RESOURCES) * 2
@@ -349,6 +393,27 @@ def _operation_directory(path: Path) -> Path:
     return path
 
 
+def _operator_observer(package_proof: dict[str, Any], root: Path) -> cleanup.Observer:
+    """Select the long, Job-only profile only for the prod10 launch phase."""
+    launch_phase = package_proof["phase"] == "launch"
+    if launch_phase:
+        return _Prod10LaunchObserver(package_proof, root)
+    return cleanup.Observer(
+        context=direct.PROD_CONTEXT,
+        namespace=NAMESPACE,
+        kind="job",
+        name=package_proof["name"],
+        maximum_seconds=2500,
+        expected_gpus=0,
+        plan_sha256=package_proof["packet_sha256"],
+        manifest_sha256=package_proof["job_manifest_sha256"],
+        armed_path=root / "OPERATOR_OBSERVER_ARMED.json",
+        result_path=root / "OPERATOR_OBSERVER_RESULT.json",
+        profile="production-operator",
+        poll_seconds=2,
+    )
+
+
 def create_once(
     package: OperatorPackage,
     *,
@@ -364,20 +429,9 @@ def create_once(
     journal = root / "OPERATOR_CREATE.jsonl"
     if journal.exists() or journal.is_symlink():
         raise JobsError("prod10 operator create intent exists; reconcile, never retry")
-    observer = cleanup.Observer(
-        context=direct.PROD_CONTEXT,
-        namespace=NAMESPACE,
-        kind="job",
-        name=package_proof["name"],
-        maximum_seconds=2500,
-        expected_gpus=0,
-        plan_sha256=package_proof["packet_sha256"],
-        manifest_sha256=package_proof["job_manifest_sha256"],
-        armed_path=root / "OPERATOR_OBSERVER_ARMED.json",
-        result_path=root / "OPERATOR_OBSERVER_RESULT.json",
-        profile="production-operator",
-        poll_seconds=2,
-    )
+    launch_phase = package_proof["phase"] == "launch"
+    observer = _operator_observer(package_proof, root)
+    observer_maximum_seconds = observer.maximum_seconds
     state: dict[str, Any] = {}
 
     def observe() -> None:
@@ -426,7 +480,7 @@ def create_once(
         manifest_sha256=package_proof["job_manifest_sha256"],
         uid=job_proof["uid"],
     )
-    thread.join(2760)
+    thread.join(LAUNCH_OPERATOR_JOIN_SECONDS if launch_phase else observer_maximum_seconds + 260)
     if thread.is_alive():
         raise JobsError("prod10 operator observer exceeded its bound")
     error = state.get("error")

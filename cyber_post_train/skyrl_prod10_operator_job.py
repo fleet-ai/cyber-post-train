@@ -14,9 +14,10 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from training import skyrl_prod9_direct as direct
 from training import dev_cleanup_observer as cleanup
+from training import skyrl_prod9_direct as direct
 from training import skyrl_prod9_training as training
+from training import skyrl_prod10_direct as launch_direct
 from training import skyrl_prod10_operator as operator
 from training import skyrl_reward_rayjob as historical
 
@@ -34,13 +35,14 @@ IMAGE = training.historical.IMAGE
 PVC = "sfs-shared"
 CONTROLS_SUBPATH = "jobs/chris-q38-study-corpora-v1/launch-controls"
 CONTROLS_PATH = "/mnt/sfs/" + CONTROLS_SUBPATH
+LAUNCH_ACTIVE_DEADLINE_SECONDS = direct.MAXIMUM_SECONDS + 3600
 _ROOT = Path(__file__).resolve().parents[1]
 _SOURCE_DIRS = ("training", "cyber_post_train")
 _SOURCE_FILES = (
     "scripts/probe_qwen38_prod8_terminal.py",
     "evals/fleet/opencode_self_hosted.py",
 )
-_BOOTSTRAP = r'''import gzip,hashlib,json,os,sys,tarfile
+_BOOTSTRAP = r"""import gzip,hashlib,json,os,sys,tarfile
 from pathlib import Path,PurePosixPath
 def failure(error):
     body={"schema":"cyber_skyrl_prod10_bootstrap_failure_v1","status":"failed","phase":os.environ.get("OPERATOR_PHASE",""),"error_class":type(error).__name__,"error_code":"bootstrap_failure","gpus":0}
@@ -89,7 +91,7 @@ try:
 except BaseException as error:
     failure(error)
     raise
-'''
+"""
 
 
 @dataclass(frozen=True)
@@ -242,8 +244,7 @@ def preflight_packet(
         or manifest_release.get("terminal_status") != "Succeeded"
         or manifest_receipt.get("status") != "passed"
         or manifest_receipt.get("successor_manifest") != plan.get("data")
-        or manifest_receipt.get("successor_manifest_sha256")
-        != plan.get("data", {}).get("sha256")
+        or manifest_receipt.get("successor_manifest_sha256") != plan.get("data", {}).get("sha256")
         or manifest_receipt.get("private_rows_exported") is not False
         or manifest_receipt.get("nested_jobs_created") != 0
         or manifest_receipt.get("gpus") != 0
@@ -261,9 +262,7 @@ def preflight_packet(
         context=direct.DEV_CONTEXT,
         fresh=True,
     )
-    duplicate = direct._validate_seal(
-        dev_duplicate_proof, direct.CPU_DUPLICATE_PROOF_SCHEMA
-    )
+    duplicate = direct._validate_seal(dev_duplicate_proof, direct.CPU_DUPLICATE_PROOF_SCHEMA)
     if duplicate.get("name") != identity.preflight_name:
         raise ValueError("prod10 preflight duplicate proof changed")
     return _seal(
@@ -284,6 +283,50 @@ def preflight_packet(
     )
 
 
+def launch_packet(
+    *,
+    identity: historical.RailIdentity,
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    preflight_launch_result: dict[str, Any],
+    source_preview: dict[str, Any],
+    manifest_sha256: str,
+    dev_preview: dict[str, Any],
+    duplicate_proof: dict[str, Any],
+    capacity_census: dict[str, Any],
+) -> dict[str, Any]:
+    direct._identity(plan, identity)
+    if training.job_request(plan) != request:
+        raise ValueError("prod10 launch request changed")
+    checked_launch = launch_direct._preflight_launch(
+        preflight_launch_result,
+        plan,
+        identity=identity,
+        operator_name=operator.OPERATOR_NAMES["preflight"],
+    )
+    direct._source(source_preview)
+    direct._validate_seal(dev_preview, direct.PREVIEW_SCHEMA)
+    duplicate = launch_direct._duplicate(duplicate_proof, identity)
+    if re.fullmatch(r"sha256:[0-9a-f]{64}", manifest_sha256) is None:
+        raise ValueError("prod10 launch manifest digest changed")
+    return _seal(
+        {
+            "schema": operator.PACKET_SCHEMA,
+            "phase": "launch",
+            "operator_name": operator.OPERATOR_NAMES["launch"],
+            "identity": identity.sealed_mapping(),
+            "plan": plan,
+            "request": request,
+            "preflight_launch_result": checked_launch,
+            "source_preview": source_preview,
+            "manifest_sha256": manifest_sha256,
+            "dev_preview": dev_preview,
+            "duplicate_proof": duplicate,
+            "capacity_census": capacity_census,
+        }
+    )
+
+
 def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
     checked = operator._packet(packet, packet.get("phase", ""))
     identity = historical.identity_from_mapping(checked["identity"])
@@ -298,7 +341,7 @@ def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
             stage=checked["stage"],
             stage_launch_result=checked["stage_launch_result"],
         )
-    else:
+    elif checked["phase"] == "preflight":
         expected = preflight_packet(
             identity=identity,
             plan=checked["plan"],
@@ -308,6 +351,18 @@ def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
             manifest_launch_result=checked["manifest_launch_result"],
             dev_preview=checked["dev_preview"],
             dev_duplicate_proof=checked["dev_duplicate_proof"],
+        )
+    else:
+        expected = launch_packet(
+            identity=identity,
+            plan=checked["plan"],
+            request=checked["request"],
+            preflight_launch_result=checked["preflight_launch_result"],
+            source_preview=checked["source_preview"],
+            manifest_sha256=checked["manifest_sha256"],
+            dev_preview=checked["dev_preview"],
+            duplicate_proof=checked["duplicate_proof"],
+            capacity_census=checked["capacity_census"],
         )
     if checked != expected:
         raise ValueError("prod10 operator packet differs from current exact renderer")
@@ -386,6 +441,45 @@ def _job(
     if phase != "stage":
         sfs_mount["readOnly"] = True
         sfs_claim["readOnly"] = True
+    container = {
+        "name": "operator",
+        "image": IMAGE,
+        "imagePullPolicy": "IfNotPresent",
+        "command": ["python", "-u", "-c", _BOOTSTRAP],
+        "env": environment,
+        "resources": {
+            "requests": {"cpu": "2", "memory": "8Gi"},
+            "limits": {"cpu": "4", "memory": "16Gi"},
+        },
+        "securityContext": {
+            "allowPrivilegeEscalation": False,
+            "capabilities": {"drop": ["ALL"]},
+            "privileged": False,
+            "readOnlyRootFilesystem": True,
+            "runAsNonRoot": True,
+            "runAsUser": 1000,
+            "runAsGroup": 100,
+        },
+        "terminationMessagePath": "/dev/termination-log",
+        "terminationMessagePolicy": "File",
+        "volumeMounts": [
+            {"name": "source", "mountPath": "/bundle", "readOnly": True},
+            {"name": "packet", "mountPath": "/packet", "readOnly": True},
+            {"name": "runtime", "mountPath": "/runtime"},
+            {"name": "work", "mountPath": "/work"},
+            sfs_mount,
+            {
+                "name": "controls-rw",
+                "mountPath": CONTROLS_PATH,
+                "subPath": CONTROLS_SUBPATH,
+            },
+        ],
+    }
+    if phase == "launch":
+        container["envFrom"] = [
+            {"secretRef": {"name": "fleet-api"}},
+            {"secretRef": {"name": "wandb-api"}},
+        ]
     return {
         "apiVersion": "batch/v1",
         "kind": "Job",
@@ -396,7 +490,9 @@ def _job(
             "labels": deepcopy(labels),
         },
         "spec": {
-            "activeDeadlineSeconds": 2400,
+            "activeDeadlineSeconds": (
+                LAUNCH_ACTIVE_DEADLINE_SECONDS if phase == "launch" else 2400
+            ),
             "backoffLimit": 0,
             "suspend": True,
             "template": {
@@ -407,42 +503,7 @@ def _job(
                 "spec": {
                     "automountServiceAccountToken": True,
                     "serviceAccountName": "default",
-                    "containers": [
-                        {
-                            "name": "operator",
-                            "image": IMAGE,
-                            "imagePullPolicy": "IfNotPresent",
-                            "command": ["python", "-u", "-c", _BOOTSTRAP],
-                            "env": environment,
-                            "resources": {
-                                "requests": {"cpu": "2", "memory": "8Gi"},
-                                "limits": {"cpu": "4", "memory": "16Gi"},
-                            },
-                            "securityContext": {
-                                "allowPrivilegeEscalation": False,
-                                "capabilities": {"drop": ["ALL"]},
-                                "privileged": False,
-                                "readOnlyRootFilesystem": True,
-                                "runAsNonRoot": True,
-                                "runAsUser": 1000,
-                                "runAsGroup": 100,
-                            },
-                            "terminationMessagePath": "/dev/termination-log",
-                            "terminationMessagePolicy": "File",
-                            "volumeMounts": [
-                                {"name": "source", "mountPath": "/bundle", "readOnly": True},
-                                {"name": "packet", "mountPath": "/packet", "readOnly": True},
-                                {"name": "runtime", "mountPath": "/runtime"},
-                                {"name": "work", "mountPath": "/work"},
-                                sfs_mount,
-                                {
-                                    "name": "controls-rw",
-                                    "mountPath": CONTROLS_PATH,
-                                    "subPath": CONTROLS_SUBPATH,
-                                },
-                            ],
-                        }
-                    ],
+                    "containers": [container],
                     "hostIPC": False,
                     "hostNetwork": False,
                     "hostPID": False,
@@ -470,8 +531,14 @@ def _job(
                         }
                     ],
                     "volumes": [
-                        {"name": "source", "configMap": {"name": name + "-source", "defaultMode": 292}},
-                        {"name": "packet", "configMap": {"name": name + "-packet", "defaultMode": 292}},
+                        {
+                            "name": "source",
+                            "configMap": {"name": name + "-source", "defaultMode": 292},
+                        },
+                        {
+                            "name": "packet",
+                            "configMap": {"name": name + "-packet", "defaultMode": 292},
+                        },
                         {"name": "runtime", "emptyDir": {"sizeLimit": "256Mi"}},
                         {"name": "work", "emptyDir": {"sizeLimit": "64Mi"}},
                         {"name": "sfs", "persistentVolumeClaim": sfs_claim},
@@ -542,17 +609,26 @@ def validate_operator_package(package: OperatorPackage) -> dict[str, Any]:
         or metadata["labels"].get(QUEUE_PRIORITY_LABEL) != QUEUE_PRIORITY
         or pod.get("priorityClassName") != "c1"
         or expected_job["spec"].get("backoffLimit") != 0
+        or expected_job["spec"].get("activeDeadlineSeconds")
+        != (LAUNCH_ACTIVE_DEADLINE_SECONDS if packet["phase"] == "launch" else 2400)
         or expected_job["spec"].get("suspend") is not True
         or pod.get("serviceAccountName") != "default"
         or pod.get("automountServiceAccountToken") is not True
         or "nvidia.com/gpu" in json.dumps(expected_job, sort_keys=True)
         or container["securityContext"].get("runAsUser") != 1000
         or container["securityContext"].get("runAsGroup") != 100
-        or container.get("resources", {}).get("requests")
-        != {"cpu": "2", "memory": "8Gi"}
+        or container.get("resources", {}).get("requests") != {"cpu": "2", "memory": "8Gi"}
         or mounts.get("sfs") != expected_sfs_mount
-        or volumes.get("sfs")
-        != {"name": "sfs", "persistentVolumeClaim": expected_sfs_claim}
+        or volumes.get("sfs") != {"name": "sfs", "persistentVolumeClaim": expected_sfs_claim}
+        or container.get("envFrom")
+        != (
+            [
+                {"secretRef": {"name": "fleet-api"}},
+                {"secretRef": {"name": "wandb-api"}},
+            ]
+            if packet["phase"] == "launch"
+            else None
+        )
     ):
         raise ValueError("prod10 operator execution policy changed")
     return {
@@ -575,7 +651,11 @@ def validate_server_response(
     actual: dict[str, Any], expected: dict[str, Any], *, require_uid: bool
 ) -> dict[str, Any]:
     """Validate reviewed fields after API defaulting without accepting mutation."""
-    if not isinstance(actual, dict) or actual.get("apiVersion") != expected.get("apiVersion") or actual.get("kind") != expected.get("kind"):
+    if (
+        not isinstance(actual, dict)
+        or actual.get("apiVersion") != expected.get("apiVersion")
+        or actual.get("kind") != expected.get("kind")
+    ):
         raise JobsError("prod10 operator server response kind changed")
     actual_meta = actual.get("metadata", {})
     expected_meta = expected.get("metadata", {})
@@ -583,7 +663,10 @@ def validate_server_response(
         actual_meta.get("name") != expected_meta.get("name")
         or actual_meta.get("namespace") != NAMESPACE
         or actual_meta.get("annotations") != expected_meta.get("annotations")
-        or any(actual_meta.get("labels", {}).get(key) != value for key, value in expected_meta.get("labels", {}).items())
+        or any(
+            actual_meta.get("labels", {}).get(key) != value
+            for key, value in expected_meta.get("labels", {}).items()
+        )
     ):
         raise JobsError("prod10 operator server response metadata changed")
     if require_uid and re.fullmatch(r"[0-9a-f-]{36}", str(actual_meta.get("uid", ""))) is None:
@@ -626,16 +709,31 @@ def validate_server_response(
                     and actual_field.get("apiVersion") == "v1"
                 ):
                     actual_field.pop("apiVersion")
-    if actual_template.get("metadata", {}).get("annotations") != expected_template.get("metadata", {}).get("annotations"):
+    if actual_template.get("metadata", {}).get("annotations") != expected_template.get(
+        "metadata", {}
+    ).get("annotations"):
         raise JobsError("prod10 operator Pod annotations changed")
     for key in (
-        "automountServiceAccountToken", "serviceAccountName", "containers", "hostIPC",
-        "hostNetwork", "hostPID", "nodeSelector", "priorityClassName", "restartPolicy",
-        "securityContext", "terminationGracePeriodSeconds", "tolerations", "volumes",
+        "automountServiceAccountToken",
+        "serviceAccountName",
+        "containers",
+        "hostIPC",
+        "hostNetwork",
+        "hostPID",
+        "nodeSelector",
+        "priorityClassName",
+        "restartPolicy",
+        "securityContext",
+        "terminationGracePeriodSeconds",
+        "tolerations",
+        "volumes",
     ):
         if actual_pod.get(key) != expected_pod.get(key):
             raise JobsError(f"prod10 operator server response Pod {key} changed")
-    if len(actual_pod.get("containers", [])) != 1 or actual_pod.get("initContainers") not in (None, []):
+    if len(actual_pod.get("containers", [])) != 1 or actual_pod.get("initContainers") not in (
+        None,
+        [],
+    ):
         raise JobsError("prod10 operator server response gained a container")
     return {
         "name": actual_meta["name"],
