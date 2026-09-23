@@ -218,6 +218,13 @@ def image_identity(request: dict[str, Any], preflight: dict[str, Any]) -> dict[s
     return {**body, "receipt_sha256": digest(body)}
 
 
+def _seal_fresh_preflight_receipt(value: object) -> dict[str, Any]:
+    """Apply the exact digest that the CPU Job's termination writer adds."""
+    if not isinstance(value, dict) or "receipt_sha256" in value:
+        raise JobsError("prod10 fresh preflight receipt body changed")
+    return {**value, "receipt_sha256": digest(value)}
+
+
 def revalidate_preflight(
     plan: dict[str, Any],
     request: dict[str, Any],
@@ -227,7 +234,7 @@ def revalidate_preflight(
 ) -> dict[str, Any]:
     """Rerun the exact-image CPU gate; never extend the old result's TTL."""
     checked = preflight_result(plan, request, preflight, identity=identity)
-    receipt = training.preflight(plan)
+    receipt = _seal_fresh_preflight_receipt(training.preflight(plan))
     receipt = direct._preflight_receipt(plan, request, receipt, identity=identity)
     if receipt != checked["receipt"]:
         raise JobsError("prod10 fresh preflight differs from the sealed result")

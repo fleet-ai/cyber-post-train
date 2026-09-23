@@ -795,7 +795,8 @@ def test_prod10_launch_reruns_preflight_and_freshly_dates_it(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     identity = historical.load_identity(IDENTITY)
-    receipt = {"status": "passed", "gpus": 0}
+    raw_receipt = {"status": "passed", "gpus": 0}
+    receipt = {**raw_receipt, "receipt_sha256": digest(raw_receipt)}
     checked = {"receipt": receipt, "sha256": "sha256:" + "1" * 64}
     calls: list[dict] = []
     monkeypatch.setattr(
@@ -806,7 +807,7 @@ def test_prod10_launch_reruns_preflight_and_freshly_dates_it(
     monkeypatch.setattr(
         training,
         "preflight",
-        lambda plan: calls.append(plan) or receipt,
+        lambda plan: calls.append(plan) or raw_receipt,
     )
     monkeypatch.setattr(
         direct,
@@ -826,6 +827,67 @@ def test_prod10_launch_reruns_preflight_and_freshly_dates_it(
     monkeypatch.setattr(training, "preflight", lambda _plan: {"status": "changed"})
     with pytest.raises(JobsError, match="fresh preflight differs"):
         launch_direct.revalidate_preflight(plan, request, checked, identity=identity)
+
+
+def test_prod10_fresh_preflight_receipt_uses_cpu_writer_digest_and_rejects_tamper() -> None:
+    identity = historical.load_identity(IDENTITY)
+    schema = "cyber_skyrl_prod9_training_cpu_preflight_v1"
+    plan = {
+        "schema": training.SCHEMA,
+        "run_name": identity.run_name,
+        "output_root": identity.output_root,
+        "arguments": {
+            "steps": 1,
+            "wandb_run_id": identity.wandb_run_id,
+            "data_manifest": identity.data_root + "/manifest.json",
+            "train_data": identity.data_root + "/train.jsonl",
+            "dev_data": identity.data_root + "/dev.jsonl",
+        },
+        "data": {"name": identity.run_name},
+    }
+    request: dict = {}
+    raw = {
+        "schema": schema,
+        "status": "passed",
+        "gpus": 0,
+        "runtime_user": {"uid": 1000, "gid": 100},
+        "plan_sha256": digest(plan),
+        "request_sha256": digest(request),
+        "prod9_runtime": training._binding(),
+        "native_parser_checked": True,
+        "ordered_multi_tool_parser_checked": True,
+        "chunk_continuation_checked": True,
+        "compaction_checked": True,
+        "stepwise_prompt_checked": True,
+        "ordered_multi_tool_execution_checked": True,
+        "output_limit_gradeable_checked": True,
+        "output_limit_partial_tool_blocked_checked": True,
+        "fresh_recorder_checked": True,
+        "tool_result_token_safe": True,
+        "recorder_implementation": "training.skyrl_prod9_hardening.Recorder",
+        "counts": {"train": 1, "dev": 1},
+        "planned_steps": 1,
+        "output_absent": True,
+        "wandb_create_once": {
+            "entity": "thefleet",
+            "project": "cyber-post-train",
+            "run_id": identity.wandb_run_id,
+            "resume": "never",
+        },
+    }
+    with pytest.raises(JobsError, match="digest/schema"):
+        direct._receipt(raw, schema)
+
+    sealed = launch_direct._seal_fresh_preflight_receipt(raw)
+    assert sealed == {**raw, "receipt_sha256": digest(raw)}
+    assert direct._preflight_receipt(plan, request, sealed, identity=identity) == sealed
+
+    changed_body = {**raw, "counts": {"train": 2, "dev": 1}}
+    changed = {**changed_body, "receipt_sha256": digest(changed_body)}
+    with pytest.raises(JobsError, match="receipt is incomplete"):
+        direct._preflight_receipt(plan, request, changed, identity=identity)
+    with pytest.raises(JobsError, match="body changed"):
+        launch_direct._seal_fresh_preflight_receipt(sealed)
 
 
 def test_prod10_launch_observes_only_created_uid_to_valid_terminal_receipt(
