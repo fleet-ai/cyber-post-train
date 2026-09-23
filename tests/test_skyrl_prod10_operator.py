@@ -441,7 +441,7 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     mounts = {item["name"]: item for item in container["volumeMounts"]}
     volumes = {item["name"]: item for item in pod["volumes"]}
 
-    assert proof["name"] == "chris-q38-prod10-launch-probe-v4"
+    assert proof["name"] == "chris-q38-prod10-launch-probe-v5"
     assert proof["phase"] == "probe"
     assert proof["failure_alerts"] == "off"
     assert proof["priority"] == "c1" and proof["queue_priority"] == "q1"
@@ -452,6 +452,13 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     assert "envFrom" not in container
     assert "secretRef" not in json.dumps(package.job, sort_keys=True)
     assert "nvidia.com/gpu" not in json.dumps(package.job, sort_keys=True)
+    environment = {
+        item["name"]: item["value"]
+        for item in container["env"]
+        if "value" in item
+    }
+    assert environment["WANDB_MODE"] == "disabled"
+    assert environment["WANDB_API_KEY"] == "diagnostic-not-a-credential"
 
     monkeypatch.setattr(operator, "_identity", lambda _value: identity)
 
@@ -482,10 +489,10 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     assert len(encoded.encode()) < 3900
 
     changed = copy.deepcopy(packet)
-    changed["probe_v3_failure"]["operator_job_uid"] = (
+    changed["probe_v4_success"]["operator_job_uid"] = (
         "00000000-0000-4000-8000-000000000001"
     )
-    changed["probe_v3_failure"] = operator._seal(changed["probe_v3_failure"])
+    changed["probe_v4_success"] = operator._seal(changed["probe_v4_success"])
     changed = operator._seal(changed)
     with pytest.raises(ValueError, match="predecessor"):
         operator_job.build_operator_package(changed)

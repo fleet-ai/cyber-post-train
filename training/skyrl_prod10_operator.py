@@ -44,7 +44,7 @@ OPERATOR_NAMES = {
     "preflight": "chris-q38-prod10-preflight-operator-v2",
     "launch": "chris-q38-prod10-launch-operator-v1",
     "inspect": "chris-q38-prod10-launch-inspect-v2",
-    "probe": "chris-q38-prod10-launch-probe-v4",
+    "probe": "chris-q38-prod10-launch-probe-v5",
 }
 _LAUNCH_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_launch_failure_binding_v1",
@@ -75,18 +75,17 @@ _INSPECT_V2_SUCCESS = {
     "launch_boundary": "before_guard_or_guard_write",
     "gpus": 0,
 }
-_PROBE_V3_FAILURE = {
-    "schema": "cyber_skyrl_prod10_launch_probe_failure_binding_v1",
-    "status": "failed_closed_released",
-    "operator_name": "chris-q38-prod10-launch-probe-v3",
-    "operator_job_uid": "6a1cc16d-69e4-4ca8-94d0-996c94b6164e",
-    "operator_pod_uid": "96106ed8-3da1-4f7e-892f-939271dda135",
-    "operator_workload_uid": "cf844513-5f07-4fe8-9e38-955671a88136",
-    "failure_receipt_sha256": (
-        "sha256:e5cfd5f198c0d9b306c975898e824b3579c99ced4c04648227166dc4aaa902a9"
-    ),
-    "release_sha256": "sha256:cdf20dfeca53a5e40dfcbea6b0323311391a1c35c640e279caaae8f0221be921",
-    "error_class": "AssertionError",
+_PROBE_V4_SUCCESS = {
+    "schema": "cyber_skyrl_prod10_launch_probe_success_binding_v1",
+    "status": "diagnostic_succeeded_and_released",
+    "operator_name": "chris-q38-prod10-launch-probe-v4",
+    "operator_job_uid": "2b0093c2-522f-4c0a-b75f-d74c588ed1a7",
+    "operator_pod_uid": "87dea88b-dea5-4175-9bac-eb1cf8d146a2",
+    "operator_workload_uid": "3138ea86-5ee6-4f9a-940b-63f6a56763e0",
+    "receipt_sha256": "sha256:c37afe929655fbb525e98cf2561c8550118f076bd79469a2c8656f6dfcba86c8",
+    "observer_sha256": "sha256:b00972c24fcae0d5315f3721d7ec57302f7f5e38318f23d3945f216080074a24",
+    "result_sha256": "sha256:db8988cff77e0e35e1e4f88bdae2e48d589a6da49dcae4a5e436efef1684a8df",
+    "diagnosis": "missing_wandb_environment_assertion",
     "gpus": 0,
 }
 _PREFLIGHT_V1_FAILURE = {
@@ -238,9 +237,9 @@ def inspect_v2_success_binding() -> dict[str, Any]:
     return _seal(_INSPECT_V2_SUCCESS)
 
 
-def probe_v3_failure_binding() -> dict[str, Any]:
-    """Bind the exact released probe-v3 failure before the diagnostic successor."""
-    return _seal(_PROBE_V3_FAILURE)
+def probe_v4_success_binding() -> dict[str, Any]:
+    """Bind the released v4 diagnostic before restoring the validation predicate."""
+    return _seal(_PROBE_V4_SUCCESS)
 
 
 def _write_once(path: Path, value: dict[str, Any]) -> None:
@@ -358,7 +357,7 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
             operator_name=OPERATOR_NAMES["preflight"],
         )
     elif phase == "probe":
-        if packet.get("probe_v3_failure") != probe_v3_failure_binding():
+        if packet.get("probe_v4_success") != probe_v4_success_binding():
             raise ValueError("prod10 launch probe predecessor changed")
         plan = packet.get("plan")
         if not isinstance(plan, dict):
@@ -1494,7 +1493,7 @@ def run_probe(packet: dict[str, Any]) -> dict[str, Any]:
                 "launch_stage": _LAUNCH_STAGE,
                 "preflight_stage": training._PREFLIGHT_STAGE,
                 "preflight_launch_sha256": launch["sha256"],
-                "probe_v3_failure_sha256": probe_v3_failure_binding()["sha256"],
+                "probe_v4_success_sha256": probe_v4_success_binding()["sha256"],
                 "error_path_exported": False,
                 "error_errno_exported": False,
                 "error_message_exported": False,
@@ -1514,7 +1513,7 @@ def run_probe(packet: dict[str, Any]) -> dict[str, Any]:
             "launch_stage": _LAUNCH_STAGE,
             "preflight_stage": training._PREFLIGHT_STAGE,
             "preflight_launch_sha256": launch["sha256"],
-            "probe_v3_failure_sha256": probe_v3_failure_binding()["sha256"],
+            "probe_v4_success_sha256": probe_v4_success_binding()["sha256"],
             "nested_jobs_created": 0,
             "gpus": 0,
         }

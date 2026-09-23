@@ -374,7 +374,7 @@ def probe_packet(
             "identity": identity.sealed_mapping(),
             "plan": plan,
             "preflight_launch_result": checked_launch,
-            "probe_v3_failure": operator.probe_v3_failure_binding(),
+            "probe_v4_success": operator.probe_v4_success_binding(),
         }
     )
 
@@ -500,6 +500,10 @@ def _job(
         {"name": "CUDA_VISIBLE_DEVICES", "value": ""},
         {"name": "NVIDIA_VISIBLE_DEVICES", "value": "none"},
     ]
+    if phase == "probe":
+        environment.append(
+            {"name": "WANDB_API_KEY", "value": "diagnostic-not-a-credential"}
+        )
     sfs_mount: dict[str, Any] = {"name": "sfs", "mountPath": "/mnt/sfs"}
     sfs_claim: dict[str, Any] = {"claimName": PVC}
     if phase != "stage":
