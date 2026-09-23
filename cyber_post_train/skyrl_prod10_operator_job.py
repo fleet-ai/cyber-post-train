@@ -1,4 +1,4 @@
-"""Immutable package and zero-GPU Job for the bounded prod10 coordinator."""
+"""Immutable package and zero-GPU Job for the bounded prod10/prod11 coordinator."""
 
 from __future__ import annotations
 
@@ -161,14 +161,19 @@ def stage_packet(
     checked, bound = training._stage_identity(stage)
     if bound != identity:
         raise ValueError("prod10 stage operator identity changed")
+    names = operator.operator_names(identity)
     return _seal(
         {
             "schema": operator.PACKET_SCHEMA,
             "phase": "stage",
-            "operator_name": operator.OPERATOR_NAMES["stage"],
+            "operator_name": names["stage"],
             "identity": identity.sealed_mapping(),
             "stage": checked,
-            "precreate_recovery": operator.stage_recovery_binding(),
+            **(
+                {"precreate_recovery": operator.stage_recovery_binding()}
+                if identity.run_name == "chris-q38-rlreward-prod10"
+                else {"fresh_identity": True}
+            ),
         }
     )
 
@@ -182,22 +187,27 @@ def manifest_packet(
     checked_stage, stage_identity = training._stage_identity(stage)
     if stage_identity != identity:
         raise ValueError("prod10 manifest stage identity changed")
+    names = operator.operator_names(identity)
     checked_launch = direct._direct_stage_launch(
         stage_launch_result,
         checked_stage,
         identity=identity,
-        operator_name=operator.OPERATOR_NAMES["stage"],
+        operator_name=names["stage"],
         fresh=False,
     )
     return _seal(
         {
             "schema": operator.PACKET_SCHEMA,
             "phase": "manifest",
-            "operator_name": operator.OPERATOR_NAMES["manifest"],
+            "operator_name": names["manifest"],
             "identity": identity.sealed_mapping(),
             "stage": checked_stage,
             "stage_launch_result": checked_launch,
-            "preflight_v1_failure": operator.preflight_v1_failure_binding(),
+            **(
+                {"preflight_v1_failure": operator.preflight_v1_failure_binding()}
+                if identity.run_name == "chris-q38-rlreward-prod10"
+                else {"fresh_identity": True}
+            ),
         }
     )
 
@@ -216,6 +226,7 @@ def preflight_packet(
     direct._identity(plan, identity)
     if training.job_request(plan) != request:
         raise ValueError("prod10 preflight operator request changed")
+    names = operator.operator_names(identity)
     checked_stage, stage_identity = training._stage_identity(stage)
     if stage_identity != identity:
         raise ValueError("prod10 preflight stage identity changed")
@@ -223,7 +234,7 @@ def preflight_packet(
         stage_launch_result,
         checked_stage,
         identity=identity,
-        operator_name=operator.OPERATOR_NAMES["stage"],
+        operator_name=names["stage"],
         fresh=False,
     )
     checked_manifest_launch = direct._validate_seal(
@@ -240,7 +251,7 @@ def preflight_packet(
         checked_manifest_launch.get("status") != "operator_succeeded_and_released"
         or checked_manifest_launch.get("gpus") != 0
         or not isinstance(manifest_package, dict)
-        or manifest_package.get("name") != operator.OPERATOR_NAMES["manifest"]
+        or manifest_package.get("name") != names["manifest"]
         or manifest_package.get("phase") != "manifest"
         or manifest_package.get("failure_alerts") != "off"
         or manifest_package.get("priority") != "c1"
@@ -275,7 +286,7 @@ def preflight_packet(
         {
             "schema": operator.PACKET_SCHEMA,
             "phase": "preflight",
-            "operator_name": operator.OPERATOR_NAMES["preflight"],
+            "operator_name": names["preflight"],
             "identity": identity.sealed_mapping(),
             "plan": plan,
             "request": request,
@@ -537,7 +548,7 @@ def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
 def _config_maps(
     *, phase: str, source: bytes, source_sha256: str, packet: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any], bytes]:
-    name = operator.OPERATOR_NAMES[phase]
+    name = packet["operator_name"]
     packet_bytes = (json.dumps(packet, sort_keys=True, separators=(",", ":")) + "\n").encode()
     packet_gz = gzip.compress(packet_bytes, mtime=0)
     annotations = {
@@ -573,7 +584,7 @@ def _config_maps(
 def _job(
     *, phase: str, source_sha256: str, packet: dict[str, Any], packet_bytes: bytes
 ) -> dict[str, Any]:
-    name = operator.OPERATOR_NAMES[phase]
+    name = packet["operator_name"]
     annotations = {
         FAILURE_ALERT_ANNOTATION: FAILURE_ALERT_OFF,
         SOURCE_ANNOTATION: source_sha256,
@@ -581,7 +592,11 @@ def _job(
         PHASE_ANNOTATION: phase,
     }
     labels = {
-        "cyber-post-train.fleet.ai/role": "prod10-bounded-operator",
+        "cyber-post-train.fleet.ai/role": (
+            "prod11-bounded-operator"
+            if packet["identity"]["run_name"] == "chris-q38-rlreward-prod11"
+            else "prod10-bounded-operator"
+        ),
         QUEUE_LABEL: QUEUE,
         QUEUE_PRIORITY_LABEL: QUEUE_PRIORITY,
     }

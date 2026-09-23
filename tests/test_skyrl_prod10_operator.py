@@ -28,6 +28,8 @@ from training import skyrl_reward_rayjob as historical
 ROOT = Path(__file__).resolve().parents[1]
 IDENTITY = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod10-identity-v1.json"
 PREDECESSOR = ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json"
+PROD11_IDENTITY = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod11-identity-v1.json"
+PROD10_MANIFEST = ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v10.json"
 
 
 def _dev_preview_provenance(preview: dict) -> dict:
@@ -188,6 +190,83 @@ def _stage_inputs() -> tuple[historical.RailIdentity, dict, dict, dict]:
         }
     )
     return identity, stage, dev_preview, duplicate
+
+
+def _prod11_stage_inputs() -> tuple[historical.RailIdentity, dict]:
+    identity = historical.load_identity(PROD11_IDENTITY)
+    predecessor = json.loads(PROD10_MANIFEST.read_bytes())
+    return identity, training.stage_spec(identity, predecessor)
+
+
+def test_prod11_stage_package_is_fresh_alert_off_c1_q1_zero_gpu() -> None:
+    identity, stage = _prod11_stage_inputs()
+    packet = operator_job.stage_packet(identity=identity, stage=stage)
+    package = operator_job.build_operator_package(packet)
+    proof = operator_job.validate_operator_package(package)
+
+    assert set(packet) == {
+        "schema",
+        "phase",
+        "operator_name",
+        "identity",
+        "stage",
+        "fresh_identity",
+        "sha256",
+    }
+    assert packet["fresh_identity"] is True
+    assert packet["operator_name"] == operator.PROD11_OPERATOR_NAMES["stage"]
+    assert "precreate_recovery" not in packet
+    assert proof["name"] == operator.PROD11_OPERATOR_NAMES["stage"]
+    assert proof["failure_alerts"] == "off"
+    assert proof["priority"] == "c1"
+    assert proof["queue_priority"] == "q1"
+    assert proof["gpus"] == 0
+    assert package.job["metadata"]["annotations"][FAILURE_ALERT_ANNOTATION] == "off"
+    assert (
+        package.job["metadata"]["labels"]["cyber-post-train.fleet.ai/role"]
+        == "prod11-bounded-operator"
+    )
+    assert "nvidia.com/gpu" not in json.dumps(package.job, sort_keys=True)
+
+
+def test_prod11_stage_runs_fresh_without_prod10_recovery(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    identity, stage = _prod11_stage_inputs()
+    packet = operator_job.stage_packet(identity=identity, stage=stage)
+    root = tmp_path / "prod9-create-once-v1"
+    root.mkdir(mode=0o700)
+    root_identity = root.stat()
+    monkeypatch.setattr(operator.hardening, "CREATE_ONCE_ROOT", root)
+    monkeypatch.setattr(operator, "RUNTIME_UID", root_identity.st_uid)
+    monkeypatch.setattr(operator, "RUNTIME_GID", root_identity.st_gid)
+    monkeypatch.setattr(direct, "live_create_is_available", lambda: True)
+    raw_receipt = {
+        "schema": training.STAGE_RECEIPT_SCHEMA,
+        "status": "published",
+        "successor_manifest": {"name": identity.run_name},
+        "receipt_sha256": "sha256:" + "1" * 64,
+    }
+    monkeypatch.setattr(training, "stage_rebind", lambda *_args, **_kwargs: raw_receipt)
+    validated: list[dict] = []
+    monkeypatch.setattr(
+        direct,
+        "_stage_receipt",
+        lambda _stage, receipt, **_kwargs: validated.append(receipt) or receipt,
+    )
+    monkeypatch.setenv("OPERATOR_JOB_UID", "00000000-0000-4000-8000-000000000099")
+    monkeypatch.setenv("OPERATOR_SOURCE_SHA256", "sha256:" + "9" * 64)
+
+    result = operator.run_stage(packet, runner=object())
+
+    operation_root = operator.hardening.stage_operation_root(stage)
+    assert result["status"] == "stage_ready"
+    assert result["fresh_identity"] is True
+    assert "recovery_sha256" not in result
+    assert result["execution"]["name"] == operator.PROD11_OPERATOR_NAMES["stage"]
+    assert (operation_root / "STAGE_OPERATOR_INTENT.json").is_file()
+    assert not (operation_root / "STAGE_OPERATOR_RECOVERY_V7.json").exists()
+    assert len(validated) == 1
 
 
 def test_prod10_operator_package_is_exact_alert_off_c1_q1_zero_gpu() -> None:
@@ -2280,6 +2359,120 @@ def test_prod10_manifest_operator_is_distinct_read_only_and_recovery_bound(
     changed = operator._seal(changed)
     with pytest.raises(ValueError, match="recovery"):
         operator_job.build_operator_package(changed)
+
+
+def test_prod11_manifest_operator_uses_fresh_identity_without_prod10_recovery(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity, stage = _prod11_stage_inputs()
+    launch = {"schema": "synthetic-prod11-stage-launch"}
+    monkeypatch.setattr(direct, "_direct_stage_launch", lambda value, *_args, **_kwargs: value)
+    packet = operator_job.manifest_packet(
+        identity=identity,
+        stage=stage,
+        stage_launch_result=launch,
+    )
+    package = operator_job.build_operator_package(packet)
+    proof = operator_job.validate_operator_package(package)
+
+    assert packet["fresh_identity"] is True
+    assert "preflight_v1_failure" not in packet
+    assert packet["operator_name"] == operator.PROD11_OPERATOR_NAMES["manifest"]
+    assert proof["name"] == operator.PROD11_OPERATOR_NAMES["manifest"]
+    assert proof["failure_alerts"] == "off"
+    assert proof["gpus"] == 0
+    mounts = {
+        item["name"]: item
+        for item in package.job["spec"]["template"]["spec"]["containers"][0]["volumeMounts"]
+    }
+    assert mounts["sfs"]["readOnly"] is True
+
+
+def test_prod11_preflight_operator_keeps_fresh_name_and_zero_gpu(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity, stage = _prod11_stage_inputs()
+    plan = {"schema": training.SCHEMA, "data": {"sha256": "sha256:" + "1" * 64}}
+    request = {"name": identity.run_name}
+    stage_launch = {"schema": "synthetic-prod11-stage-launch"}
+    receipt = direct._seal(
+        {
+            "schema": direct.DIRECT_MANIFEST_RESULT_SCHEMA,
+            "status": "passed",
+            "phase": "manifest",
+            "successor_manifest": plan["data"],
+            "successor_manifest_sha256": plan["data"]["sha256"],
+            "private_rows_exported": False,
+            "nested_jobs_created": 0,
+            "gpus": 0,
+        }
+    )
+    release = direct._seal(
+        {
+            "schema": cleanup.DIRECT_RESULT_SCHEMA,
+            "status": "released",
+            "terminal_status": "Succeeded",
+            "release_observed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "receipt": receipt,
+        }
+    )
+    manifest_launch = direct._seal(
+        {
+            "schema": direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA,
+            "status": "operator_succeeded_and_released",
+            "gpus": 0,
+            "package": {
+                "name": operator.PROD11_OPERATOR_NAMES["manifest"],
+                "phase": "manifest",
+                "failure_alerts": "off",
+                "priority": "c1",
+                "queue_priority": "q1",
+                "gpus": 0,
+            },
+            "observer": release,
+        }
+    )
+    preview = direct._seal(
+        {
+            "schema": direct.CPU_PREVIEW_SCHEMA,
+            "context": direct.DEV_CONTEXT,
+            "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+    duplicate = direct._seal(
+        {
+            "schema": direct.CPU_DUPLICATE_PROOF_SCHEMA,
+            "context": direct.DEV_CONTEXT,
+            "name": identity.preflight_name,
+        }
+    )
+    expected = {"apiVersion": "batch/v1", "kind": "Job"}
+    monkeypatch.setattr(direct, "_identity", lambda *_args, **_kwargs: identity)
+    monkeypatch.setattr(training, "job_request", lambda _plan: request)
+    monkeypatch.setattr(direct, "_direct_stage_launch", lambda value, *_args, **_kwargs: value)
+    monkeypatch.setattr(direct, "preflight_job_manifest", lambda *_args, **_kwargs: expected)
+    monkeypatch.setattr(direct, "validate_cpu_preview_proof", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(direct, "_fresh_at", lambda *_args, **_kwargs: None)
+
+    packet = operator_job.preflight_packet(
+        identity=identity,
+        plan=plan,
+        request=request,
+        stage=stage,
+        stage_launch_result=stage_launch,
+        manifest_launch_result=manifest_launch,
+        dev_preview=preview,
+        dev_duplicate_proof=duplicate,
+    )
+    package = operator_job.build_operator_package(packet)
+    proof = operator_job.validate_operator_package(package)
+
+    assert packet["operator_name"] == operator.PROD11_OPERATOR_NAMES["preflight"]
+    assert proof["name"] == operator.PROD11_OPERATOR_NAMES["preflight"]
+    assert proof["failure_alerts"] == "off"
+    assert proof["priority"] == "c1"
+    assert proof["queue_priority"] == "q1"
+    assert proof["gpus"] == 0
 
 
 def test_prod10_manifest_result_exports_only_sanitized_public_metadata(

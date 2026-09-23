@@ -1,4 +1,4 @@
-"""Bounded in-cluster stage/preflight/launch coordinator for prod10 RL.
+"""Bounded in-cluster coordinator for the prod10 rail and prod11 data gates.
 
 This is intentionally not a general controller.  One sealed packet selects one
 fixed phase and all Kubernetes names, SFS paths, manifests, and source identities
@@ -71,6 +71,21 @@ OPERATOR_NAMES = {
     "probe": "chris-q38-prod10-launch-probe-v9",
     "preview-diff": "chris-q38-prod10-preview-diff-v2",
 }
+PROD11_OPERATOR_NAMES = {
+    "stage": "chris-q38-prod11-stage-operator-v1",
+    "manifest": "chris-q38-prod11-manifest-operator-v1",
+    "preflight": "chris-q38-prod11-preflight-operator-v1",
+}
+
+
+def operator_names(identity: historical.RailIdentity) -> dict[str, str]:
+    if identity.run_name == "chris-q38-rlreward-prod10":
+        return OPERATOR_NAMES
+    if identity.run_name == "chris-q38-rlreward-prod11":
+        return PROD11_OPERATOR_NAMES
+    raise ValueError("prod10/prod11 operator identity changed")
+
+
 _LAUNCH_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_launch_failure_binding_v1",
     "status": "failed_before_gpu_create_and_released",
@@ -1260,8 +1275,7 @@ def _identity(value: object) -> historical.RailIdentity:
     if not isinstance(value, dict):
         raise ValueError("prod10 operator identity is invalid")
     identity = historical.identity_from_mapping(value)
-    if identity.run_name != "chris-q38-rlreward-prod10":
-        raise ValueError("prod10 operator identity changed")
+    operator_names(identity)
     return identity
 
 
@@ -1319,17 +1333,24 @@ def _launch_v2_packet(value: object) -> dict[str, Any]:
 
 def _packet(value: object, phase: str) -> dict[str, Any]:
     packet = _validate_seal(value, PACKET_SCHEMA)
-    if phase not in OPERATOR_NAMES or packet.get("phase") != phase:
+    identity = _identity(packet.get("identity"))
+    names = operator_names(identity)
+    if phase not in names or packet.get("phase") != phase:
         raise ValueError("prod10 operator phase changed")
-    if packet.get("operator_name") != OPERATOR_NAMES[phase]:
+    if packet.get("operator_name") != names[phase]:
         raise ValueError("prod10 operator name changed")
-    _identity(packet.get("identity"))
     if phase == "stage":
-        if packet.get("precreate_recovery") != stage_recovery_binding():
-            raise ValueError("prod10 stage pre-create recovery binding changed")
+        if identity.run_name == "chris-q38-rlreward-prod10":
+            if packet.get("precreate_recovery") != stage_recovery_binding():
+                raise ValueError("prod10 stage pre-create recovery binding changed")
+        elif packet.get("fresh_identity") is not True:
+            raise ValueError("prod11 stage fresh identity changed")
     elif phase == "manifest":
-        if packet.get("preflight_v1_failure") != preflight_v1_failure_binding():
-            raise ValueError("prod10 preflight v1 recovery binding changed")
+        if identity.run_name == "chris-q38-rlreward-prod10":
+            if packet.get("preflight_v1_failure") != preflight_v1_failure_binding():
+                raise ValueError("prod10 preflight v1 recovery binding changed")
+        elif packet.get("fresh_identity") is not True:
+            raise ValueError("prod11 manifest fresh identity changed")
     elif phase == "preflight":
         direct._validate_seal(packet.get("dev_preview"), direct.CPU_PREVIEW_SCHEMA)
         direct._validate_seal(
@@ -1992,13 +2013,23 @@ def run_stage(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> d
     # The child manifest is historical v6 evidence only.  V7 executes the
     # already-reviewed pure rebind directly in this exact-image root Job.
     expected = direct.stage_job_manifest(stage, identity=identity)
-    operation_root = _reconcile_stage_v6_failed(
-        packet,
-        stage=stage,
-        expected=expected,
-        identity=identity,
-        runner=runner,
-    )
+    if identity.run_name == "chris-q38-rlreward-prod10":
+        operation_root = _reconcile_stage_v6_failed(
+            packet,
+            stage=stage,
+            expected=expected,
+            identity=identity,
+            runner=runner,
+        )
+    else:
+        if packet.get("fresh_identity") is not True:
+            raise OperatorFailure("stage_fresh_identity_rejected")
+        _existing_root()
+        destination = Path(identity.data_root)
+        if destination.exists() or destination.is_symlink():
+            raise OperatorFailure("stage_destination_already_present")
+        operation_root = hardening.stage_operation_root(stage)
+        _create_operation_root(operation_root)
     _write_once(
         operation_root / "STAGE_OPERATOR_INTENT.json",
         _seal(
@@ -2017,10 +2048,6 @@ def run_stage(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> d
         direct._stage_receipt(stage, receipt, identity=identity)
     except (JobsError, ValueError, OSError) as exc:
         raise OperatorFailure("stage_rebind_rejected") from exc
-    recovery = _read_recovery_file(
-        operation_root / "STAGE_OPERATOR_RECOVERY_V7.json",
-        "cyber_skyrl_prod10_stage_precreate_recovery_receipt_v1",
-    )
     return _seal(
         {
             "schema": DIRECT_STAGE_RESULT_SCHEMA,
@@ -2029,7 +2056,16 @@ def run_stage(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> d
             "packet_sha256": packet["sha256"],
             "stage": stage,
             "receipt": receipt,
-            "recovery_sha256": recovery["sha256"],
+            **(
+                {
+                    "recovery_sha256": _read_recovery_file(
+                        operation_root / "STAGE_OPERATOR_RECOVERY_V7.json",
+                        "cyber_skyrl_prod10_stage_precreate_recovery_receipt_v1",
+                    )["sha256"]
+                }
+                if identity.run_name == "chris-q38-rlreward-prod10"
+                else {"fresh_identity": True}
+            ),
             "execution": {
                 "kind": "job",
                 "name": packet["operator_name"],
@@ -2047,6 +2083,7 @@ def run_stage(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> d
 
 def run_preflight(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> dict[str, Any]:
     identity = _identity(packet["identity"])
+    names = operator_names(identity)
     plan = packet.get("plan")
     request = packet.get("request")
     if not isinstance(plan, dict) or not isinstance(request, dict):
@@ -2061,7 +2098,7 @@ def run_preflight(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) 
         packet.get("stage_launch_result"),
         stage,
         identity=identity,
-        operator_name=OPERATOR_NAMES["stage"],
+        operator_name=names["stage"],
         fresh=False,
     )
     result_path = hardening.stage_operation_root(stage) / "STAGE_OPERATOR_RESULT.json"
@@ -2076,7 +2113,7 @@ def run_preflight(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) 
         stage_launch,
         plan=plan,
         identity=identity,
-        operator_name=OPERATOR_NAMES["stage"],
+        operator_name=names["stage"],
         fresh_release=False,
     )
     manifest_launch = direct._direct_manifest_launch(
@@ -2084,16 +2121,16 @@ def run_preflight(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) 
         plan,
         stage_result,
         stage_launch,
-        operator_name=OPERATOR_NAMES["manifest"],
+        operator_name=names["manifest"],
         fresh=True,
     )
     for resource, name in (
-        ("job", OPERATOR_NAMES["stage"]),
+        ("job", names["stage"]),
         ("workload", stage_launch["observer"]["workload_name"]),
         ("configmap", stage_launch["created"]["source_config_map"]["name"]),
         ("configmap", stage_launch["created"]["packet_config_map"]["name"]),
         *(("pod", name) for name in stage_launch["observer"]["pod_names"]),
-        ("job", OPERATOR_NAMES["manifest"]),
+        ("job", names["manifest"]),
         ("workload", manifest_launch["observer"]["workload_name"]),
         ("configmap", manifest_launch["created"]["source_config_map"]["name"]),
         ("configmap", manifest_launch["created"]["packet_config_map"]["name"]),
@@ -2149,8 +2186,8 @@ def run_preflight(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) 
         stage_launch,
         manifest_launch,
         expected,
-        stage_operator_name=OPERATOR_NAMES["stage"],
-        manifest_operator_name=OPERATOR_NAMES["manifest"],
+        stage_operator_name=names["stage"],
+        manifest_operator_name=names["manifest"],
         dev_preview=packet["dev_preview"],
         prod_preview=prod_preview,
         observer=state["armed"],
@@ -2191,6 +2228,7 @@ def run_preflight(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) 
 
 def run_manifest(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> dict[str, Any]:
     identity = _identity(packet["identity"])
+    names = operator_names(identity)
     stage, stage_identity = training._stage_identity(packet.get("stage"))
     if stage_identity != identity:
         raise ValueError("prod10 manifest stage identity changed")
@@ -2198,7 +2236,7 @@ def run_manifest(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -
         packet.get("stage_launch_result"),
         stage,
         identity=identity,
-        operator_name=OPERATOR_NAMES["stage"],
+        operator_name=names["stage"],
         fresh=False,
     )
     result_path = hardening.stage_operation_root(stage) / "STAGE_OPERATOR_RESULT.json"
@@ -2212,28 +2250,42 @@ def run_manifest(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -
         stage_result,
         stage_launch,
         identity=identity,
-        operator_name=OPERATOR_NAMES["stage"],
+        operator_name=names["stage"],
         fresh_release=False,
     )
-    recovery = preflight_v1_failure_binding()
     resources = [
-        ("job", OPERATOR_NAMES["stage"]),
+        ("job", names["stage"]),
         ("workload", stage_launch["observer"]["workload_name"]),
         ("configmap", stage_launch["created"]["source_config_map"]["name"]),
         ("configmap", stage_launch["created"]["packet_config_map"]["name"]),
         *(("pod", name) for name in stage_launch["observer"]["pod_names"]),
-        ("job", recovery["operator_name"]),
-        ("pod", recovery["operator_pod_name"]),
-        ("workload", recovery["operator_workload_name"]),
-        ("configmap", recovery["source_config_map_name"]),
-        ("configmap", recovery["packet_config_map_name"]),
-        ("job", recovery["child_name"]),
     ]
+    recovery = None
+    if identity.run_name == "chris-q38-rlreward-prod10":
+        recovery = preflight_v1_failure_binding()
+        resources.extend(
+            [
+                ("job", recovery["operator_name"]),
+                ("pod", recovery["operator_pod_name"]),
+                ("workload", recovery["operator_workload_name"]),
+                ("configmap", recovery["source_config_map_name"]),
+                ("configmap", recovery["packet_config_map_name"]),
+                ("job", recovery["child_name"]),
+            ]
+        )
+    else:
+        resources.extend(
+            [
+                ("job", names["preflight"]),
+                ("job", identity.preflight_name),
+            ]
+        )
     for resource, name in resources:
         _resource_absent(runner, resource, name, code="manifest_predecessor_resource_still_present")
-    operation_root = Path(recovery["operation_root"])
-    if operation_root.exists() or operation_root.is_symlink():
-        raise OperatorFailure("manifest_failed_preflight_root_exists")
+    if recovery is not None:
+        operation_root = Path(recovery["operation_root"])
+        if operation_root.exists() or operation_root.is_symlink():
+            raise OperatorFailure("manifest_failed_preflight_root_exists")
     output_root = Path(identity.output_root)
     if output_root.exists() or output_root.is_symlink():
         raise OperatorFailure("manifest_gpu_output_exists")
@@ -2244,7 +2296,11 @@ def run_manifest(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -
             "phase": "manifest",
             "stage_result_sha256": stage_result["sha256"],
             "stage_launch_result_sha256": stage_launch["sha256"],
-            "preflight_v1_failure_sha256": recovery["sha256"],
+            **(
+                {"preflight_v1_failure_sha256": recovery["sha256"]}
+                if recovery is not None
+                else {"fresh_identity": True}
+            ),
             "successor_manifest": successor,
             "successor_manifest_sha256": successor["sha256"],
             "private_rows_exported": False,

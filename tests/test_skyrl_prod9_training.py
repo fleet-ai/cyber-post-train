@@ -41,6 +41,55 @@ STARTUP_INCIDENT = (
 PROD10_RUN = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod-v10.json"
 PROD10_DATA = ROOT / "configs/qualification/qwen38-rl-reward-canary-data-prod-v10.json"
 PROD10_IDENTITY = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod10-identity-v1.json"
+PROD10_MANIFEST = ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v10.json"
+PROD11_RUN = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod-v11.json"
+PROD11_DATA = ROOT / "configs/qualification/qwen38-rl-reward-canary-data-prod-v11.json"
+PROD11_IDENTITY = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod11-identity-v1.json"
+
+
+def test_prod11_changes_only_create_once_operational_identity_before_rebind() -> None:
+    prod10_run = json.loads(PROD10_RUN.read_text())
+    prod11_run = json.loads(PROD11_RUN.read_text())
+    prod10_data = json.loads(PROD10_DATA.read_text())
+    prod11_data = json.loads(PROD11_DATA.read_text())
+    identity = historical_direct.load_identity(PROD11_IDENTITY)
+    predecessor = json.loads(PROD10_MANIFEST.read_text())
+
+    assert predecessor["name"] == identity.predecessor_run_name
+    assert predecessor["sha256"] == "sha256:" + digest(
+        {key: value for key, value in predecessor.items() if key != "sha256"}
+    )
+    assert identity.sealed_mapping() == json.loads(PROD11_IDENTITY.read_text())
+    assert identity.predecessor_data_root == prod10_run["data"]["root"]
+    assert identity.data_root == prod11_run["data"]["root"] == prod11_data["output"]
+    assert identity.output_root == prod11_run["output_root"]
+    assert identity.run_name == prod11_run["name"] == prod11_data["name"]
+    assert identity.wandb_run_id == prod11_run["wandb"]["run_id"]
+
+    run10_science = copy.deepcopy(prod10_run)
+    run11_science = copy.deepcopy(prod11_run)
+    for value in (run10_science, run11_science):
+        value.pop("name")
+        value.pop("output_root")
+        value["wandb"].pop("run_id")
+        value["data"] = {"manifest": "<identity>", "root": "<identity>"}
+    assert run11_science == run10_science
+
+    data10_science = copy.deepcopy(prod10_data)
+    data11_science = copy.deepcopy(prod11_data)
+    for value in (data10_science, data11_science):
+        value.pop("name")
+        value.pop("output")
+    assert data11_science == data10_science
+    stage = prod9_training.stage_spec(identity, predecessor)
+    assert stage["source"] == identity.predecessor_data_root
+    assert stage["destination"] == identity.data_root
+    assert stage["scientific_work"] == {
+        "task_rows_read": 0,
+        "rollout_episodes": 0,
+        "optimizer_steps": 0,
+        "checkpoints": 0,
+    }
 
 
 def test_prod9_reuses_only_the_proven_miles_shape_and_qwen38_reload_gate() -> None:
