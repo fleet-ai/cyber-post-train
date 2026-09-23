@@ -1741,6 +1741,9 @@ class FakeJobsApiExactObserverCluster:
         self.pod_uid = _metadata("unused", 404)["uid"]
         self.replacement_root: dict | None = None
         self.bad_workload_owner = False
+        self.pod_inventory_empty_reads = 0
+        self.pod_identity_pending_reads = 0
+        self.pod_reads = 0
         self.receipt = {
             "status": "native_loop_returned",
             "plan_sha256": "1" * 64,
@@ -1865,7 +1868,13 @@ class FakeJobsApiExactObserverCluster:
             return NS(returncode=0, stdout=json.dumps(value) if value else "", stderr="")
         if args[:3] == ["get", "pod", "--selector"]:
             assert args[3] == "ray.io/cluster=collector-cluster"
-            return NS(returncode=0, stdout=json.dumps({"items": [self._pod()]}), stderr="")
+            self.pod_reads += 1
+            if self.pod_reads <= self.pod_inventory_empty_reads:
+                return NS(returncode=0, stdout=json.dumps({"items": []}), stderr="")
+            pod = self._pod()
+            if self.pod_reads <= self.pod_identity_pending_reads:
+                pod["metadata"]["ownerReferences"] = []
+            return NS(returncode=0, stdout=json.dumps({"items": [pod]}), stderr="")
         if args[:3] in (
             ["get", "workload", "collector-workload"],
             ["get", "pod", "collector-pod"],
@@ -1964,6 +1973,53 @@ def test_jobs_api_exact_uid_observer_reports_owner_mismatch_without_cleanup(tmp_
     assert result["release_confirmed"] is False
     assert result["cleanup_requested"] is False
     assert not any(call[0][:2] == ["delete", "--raw"] for call in cluster.calls)
+
+
+@pytest.mark.parametrize("pending_kind", ["empty", "owner"])
+def test_jobs_api_exact_uid_observer_waits_for_owned_pod_inventory(tmp_path, pending_kind) -> None:
+    binding_path = _jobs_api_exact_binding(tmp_path)
+    binding = json.loads(binding_path.read_text())
+    cluster = FakeJobsApiExactObserverCluster(binding, auto_release=False)
+    release_contract = _jobs_api_release_contract(tmp_path, binding)
+    if pending_kind == "empty":
+        cluster.pod_inventory_empty_reads = 1
+    else:
+        cluster.pod_identity_pending_reads = 1
+    result = _jobs_api_exact_observer(
+        tmp_path, cluster, release_contract_path=release_contract
+    ).run()
+    assert cluster.pod_reads == 2
+    assert result["status"] == "released_after_terminal"
+    assert result["release_confirmed"] is True
+    assert result["raycluster_identity_observed"] is True
+    assert result["owned_inventory_observed"] is True
+    assert [entry["uid"] for entry in result["workloads"]] == [cluster.workload_uid]
+    assert [entry["uid"] for entry in result["rayclusters"]] == [cluster.cluster_uid]
+    assert [entry["uid"] for entry in result["pods"]] == [cluster.pod_uid]
+
+
+@pytest.mark.parametrize("pending_kind", ["empty", "owner"])
+def test_jobs_api_exact_uid_observer_fails_closed_after_pod_startup_allowance(
+    tmp_path, monkeypatch, pending_kind
+) -> None:
+    binding_path = _jobs_api_exact_binding(tmp_path)
+    binding = json.loads(binding_path.read_text())
+    cluster = FakeJobsApiExactObserverCluster(binding, auto_release=False)
+    if pending_kind == "empty":
+        cluster.pod_inventory_empty_reads = 10
+    else:
+        cluster.pod_identity_pending_reads = 10
+    monkeypatch.setattr(cleanup, "JOBS_API_POD_STARTUP_ALLOWANCE_SECONDS", 0)
+    result = _jobs_api_exact_observer(tmp_path, cluster).run()
+    assert result["status"] == "release_uncertain"
+    assert result["reason"] == "pod_inventory_startup_timeout"
+    assert result["release_confirmed"] is False
+    assert result["raycluster_identity_observed"] is True
+    assert result["owned_inventory_observed"] is False
+    assert [entry["uid"] for entry in result["workloads"]] == [cluster.workload_uid]
+    assert [entry["uid"] for entry in result["rayclusters"]] == [cluster.cluster_uid]
+    assert result["pods"] == []
+    assert result["cleanup_requested"] is False
 
 
 def test_jobs_api_exact_uid_observer_requires_matching_runtime_image_id(tmp_path) -> None:

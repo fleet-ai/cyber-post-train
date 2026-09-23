@@ -46,6 +46,7 @@ KUBECTL_TIMEOUT_SECONDS = 20
 MAX_CONSECUTIVE_OBSERVATION_FAILURES = 5
 DELETE_REQUEST_MARGIN_SECONDS = 60
 TERMINAL_RECEIPT_GRACE_SECONDS = 30
+JOBS_API_POD_STARTUP_ALLOWANCE_SECONDS = 300
 _RUN_NAME_PREFIX = re.compile(r"[a-z0-9](?:[-a-z0-9]{0,29}[a-z0-9])?")
 _KUBERNETES_DNS_LABEL = re.compile(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?")
 
@@ -709,6 +710,7 @@ class JobsApiExactUidObserver:
         self.terminal_status = ""
         self.inventory_seen = False
         self.raycluster_identity_observed = False
+        self.pod_inventory_deadline_at: datetime | None = None
         self.cleanup_requested = False
         self.cleanup_status = (
             "authorized_not_requested" if self.release_contract is not None else "not_authorized"
@@ -1065,15 +1067,51 @@ class JobsApiExactUidObserver:
         cluster = self._get("raycluster", cluster_name)
         if cluster is None:
             return
-        name, uid, _ = self._metadata(cluster, expected_kind="RayCluster")
+        name, uid, created = self._metadata(cluster, expected_kind="RayCluster")
         if not self._owned_by(cluster, kind="RayJob", name=self.root_name, uid=self.root_uid):
             raise ObserverError("Jobs API exact observer RayCluster owner binding changed")
         self._record_known("raycluster", name=name, uid=uid)
-        pods = self._list_owned("pod", f"ray.io/cluster={name}")
+        self.raycluster_identity_observed = True
+        if self.pod_inventory_deadline_at is None:
+            self.pod_inventory_deadline_at = _parse_stamp(created) + timedelta(
+                seconds=JOBS_API_POD_STARTUP_ALLOWANCE_SECONDS
+            )
+        try:
+            pods = self._list_owned("pod", f"ray.io/cluster={name}")
+        except ObserverError as exc:
+            if exc.code == "observer_error" and not self.inventory_seen and not self.known["pod"]:
+                if _now() < self.pod_inventory_deadline_at:
+                    return
+                raise ObserverError(
+                    "Jobs API exact observer Pod inventory startup allowance elapsed",
+                    code="pod_inventory_startup_timeout",
+                ) from exc
+            raise
+        if not pods:
+            if _now() < self.pod_inventory_deadline_at:
+                return
+            raise ObserverError(
+                "Jobs API exact observer Pod inventory did not appear within startup allowance",
+                code="pod_inventory_startup_timeout",
+            )
         for pod in pods:
-            pod_name, pod_uid, pod_created = self._metadata(pod, expected_kind="Pod")
-            if not self._owned_by(pod, kind="RayCluster", name=name, uid=uid):
-                raise ObserverError("Jobs API exact observer Pod owner binding changed")
+            try:
+                pod_name, pod_uid, pod_created = self._metadata(pod, expected_kind="Pod")
+                if not self._owned_by(pod, kind="RayCluster", name=name, uid=uid):
+                    raise ObserverError("Jobs API exact observer Pod owner binding changed")
+            except ObserverError as exc:
+                if (
+                    exc.code == "observer_error"
+                    and not self.inventory_seen
+                    and not self.known["pod"]
+                ):
+                    if _now() < self.pod_inventory_deadline_at:
+                        return
+                    raise ObserverError(
+                        "Jobs API exact observer Pod inventory startup allowance elapsed",
+                        code="pod_inventory_startup_timeout",
+                    ) from exc
+                raise
             self._record_known("pod", name=pod_name, uid=pod_uid)
             pod_gpus = self._pod_gpus(pod)
             self._observe_runtime_image(pod, name=pod_name, uid=pod_uid, gpus=pod_gpus)
@@ -1118,7 +1156,6 @@ class JobsApiExactUidObserver:
             self.pod_restarts[pod_uid] = max(restarts, default=0)
             if exit_codes:
                 self.pod_exit_codes[pod_uid] = tuple(exit_codes)
-        self.raycluster_identity_observed = True
         self.inventory_seen = True
 
     def _known_children_absent(self) -> bool:

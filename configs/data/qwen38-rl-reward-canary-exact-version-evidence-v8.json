@@ -381,7 +381,7 @@
       },
       "prod9_cleanup_observer": {
         "path": "../../training/dev_cleanup_observer.py",
-        "file_sha256": "sha256:d2b100b41794410d464c0b493739e36185481274f3ec1b04289a1b4d8ec4b4b5",
+        "file_sha256": "sha256:8b2d7259eb272f53797ed20d0d03ad7df13a7372a4de207ffe3ad452e013f62a",
         "symbols": [
           "_validated_receipt",
           "Observer",
@@ -471,5 +471,5 @@
       "incident_evidence_self_sha256": "sha256:c45f12a8fa799900053a1bd7b1e33ff26e89d517ae552188bda0e66cf675ca2d"
     }
   },
-  "sha256": "sha256:cf52ab96db9a0097473768d59f3ef64487bfc66de68fe24d1d7e450481d92c78"
+  "sha256": "sha256:19615dc098f08aaf8e548965f2650813c83cf48f19bd730082461ec2399f485c"
 }
