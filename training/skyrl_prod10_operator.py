@@ -44,7 +44,7 @@ OPERATOR_NAMES = {
     "preflight": "chris-q38-prod10-preflight-operator-v2",
     "launch": "chris-q38-prod10-launch-operator-v2",
     "inspect": "chris-q38-prod10-launch-inspect-v3",
-    "probe": "chris-q38-prod10-launch-probe-v8",
+    "probe": "chris-q38-prod10-launch-probe-v9",
 }
 _LAUNCH_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_launch_failure_binding_v1",
@@ -161,6 +161,45 @@ _PROBE_V7_FAILURE = {
     "preflight_stage": "passed",
     "error_class": "JobsError",
     "error_code": "launch_fresh_preflight_revalidate_jobserror",
+    "terminal_status": "Succeeded",
+    "exit_codes": [0],
+    "restarts": 0,
+    "nested_jobs_created": 0,
+    "resources_absent": True,
+    "gpus": 0,
+}
+_PROBE_V8_FAILURE = {
+    "schema": "cyber_skyrl_prod10_launch_probe_failure_binding_v1",
+    "status": "diagnostic_exception_localized_and_released",
+    "operator_name": "chris-q38-prod10-launch-probe-v8",
+    "source_head": "a574fa6600a7b712a12f82a22d38213e1c65770b",
+    "packet_sha256": (
+        "sha256:0e38b4d21f8975405b64b137558e8a8819ac29b3079ae7ec02bfeaa29e845689"
+    ),
+    "source_sha256": (
+        "sha256:d835b90c76d49944f8b957ff0d11e853539632e6ccec59e0fe97466aee73cd7e"
+    ),
+    "job_manifest_sha256": (
+        "sha256:2a54ed04697b3b1ab77ac5e5a9fbbe97ea525a7bed9e80c891a4c29221f29211"
+    ),
+    "operator_job_uid": "c404e11f-7658-4a33-8da1-32b6d7559191",
+    "operator_pod_uid": "89f8eb55-2590-4085-b916-e525f64f9eb6",
+    "operator_workload_uid": "e437a89b-08ed-4aa3-a40d-ad135450a211",
+    "receipt_sha256": (
+        "sha256:eb7dc08bb9c15bccb25a725f1fee67f024fb9a2ccc2f1b9f4c2942403a68aad7"
+    ),
+    "observer_sha256": (
+        "sha256:2faaf4aea8d90e6432643e953fe8a17dee1e53c0931e1fb7d645f5f89ba8d9d7"
+    ),
+    "result_sha256": (
+        "sha256:869c916f5436dad56c430c371334598bdf3f67fa38e41167fb76a5b9d9667c5e"
+    ),
+    "diagnosis": "exception_localized",
+    "launch_stage": "operation_root_validate",
+    "preflight_stage": "passed",
+    "error_class": "OtherException",
+    "error_code": "launch_operation_root_validate_other_exception",
+    "expected_diagnosis": "before_guard_passed",
     "terminal_status": "Succeeded",
     "exit_codes": [0],
     "restarts": 0,
@@ -342,6 +381,11 @@ def probe_v7_failure_binding() -> dict[str, Any]:
     return _seal(_PROBE_V7_FAILURE)
 
 
+def probe_v8_failure_binding() -> dict[str, Any]:
+    """Bind the released v8 proof that the read-only probe mount was insufficient."""
+    return _seal(_PROBE_V8_FAILURE)
+
+
 def _write_once(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=False, exist_ok=True)
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -463,6 +507,10 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
             raise ValueError("prod10 launch probe inspection predecessor changed")
         if packet.get("probe_v7_failure") != probe_v7_failure_binding():
             raise ValueError("prod10 launch probe v7 predecessor changed")
+        if packet.get("probe_v8_failure") != probe_v8_failure_binding():
+            raise ValueError("prod10 launch probe v8 predecessor changed")
+        if packet.get("writable_controls_probe") is not True:
+            raise ValueError("prod10 launch probe writable-controls binding changed")
         if packet.get("expected_diagnosis") != "before_guard_passed":
             raise ValueError("prod10 launch probe expected diagnosis changed")
         launch_packet = _packet(packet.get("launch_packet"), "launch")
@@ -1705,6 +1753,7 @@ def run_probe(
                 "launch_v2_failure_sha256": launch_v2_failure_binding()["sha256"],
                 "inspect_v3_success_sha256": inspect_v3_success_binding()["sha256"],
                 "probe_v7_failure_sha256": probe_v7_failure_binding()["sha256"],
+                "probe_v8_failure_sha256": probe_v8_failure_binding()["sha256"],
                 "expected_diagnosis": "before_guard_passed",
                 "error_path_exported": False,
                 "error_errno_exported": False,
@@ -1725,6 +1774,7 @@ def run_probe(
             "launch_v2_failure_sha256": launch_v2_failure_binding()["sha256"],
             "inspect_v3_success_sha256": inspect_v3_success_binding()["sha256"],
             "probe_v7_failure_sha256": probe_v7_failure_binding()["sha256"],
+            "probe_v8_failure_sha256": probe_v8_failure_binding()["sha256"],
             "expected_diagnosis": "before_guard_passed",
             "nested_jobs_created": 0,
             "gpus": 0,

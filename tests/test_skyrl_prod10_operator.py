@@ -532,14 +532,22 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     mounts = {item["name"]: item for item in container["volumeMounts"]}
     volumes = {item["name"]: item for item in pod["volumes"]}
 
-    assert proof["name"] == "chris-q38-prod10-launch-probe-v8"
+    assert proof["name"] == "chris-q38-prod10-launch-probe-v9"
     assert proof["phase"] == "probe"
     assert proof["failure_alerts"] == "off"
     assert proof["priority"] == "c1" and proof["queue_priority"] == "q1"
     assert proof["gpus"] == 0
     assert mounts["sfs"]["readOnly"] is True
     assert volumes["sfs"]["persistentVolumeClaim"]["readOnly"] is True
-    assert "controls-rw" not in mounts and "controls-rw" not in volumes
+    assert mounts["controls-rw"] == {
+        "name": "controls-rw",
+        "mountPath": operator_job.CONTROLS_PATH,
+        "subPath": operator_job.CONTROLS_SUBPATH,
+    }
+    assert volumes["controls-rw"] == {
+        "name": "controls-rw",
+        "persistentVolumeClaim": {"claimName": operator_job.PVC},
+    }
     assert "envFrom" not in container
     assert "secretRef" not in json.dumps(package.job, sort_keys=True)
     assert "nvidia.com/gpu" not in json.dumps(package.job, sort_keys=True)
@@ -598,6 +606,7 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     assert result["error_message_exported"] is False
     assert result["expected_diagnosis"] == "before_guard_passed"
     assert result["probe_v7_failure_sha256"] == operator.probe_v7_failure_binding()["sha256"]
+    assert result["probe_v8_failure_sha256"] == operator.probe_v8_failure_binding()["sha256"]
     assert result["nested_jobs_created"] == result["gpus"] == 0
     encoded = json.dumps(result, sort_keys=True)
     assert "private" not in encoded
@@ -622,9 +631,24 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
         operator_job.build_operator_package(changed)
 
     changed = copy.deepcopy(packet)
+    changed["probe_v8_failure"]["operator_job_uid"] = (
+        "00000000-0000-4000-8000-000000000001"
+    )
+    changed["probe_v8_failure"] = operator._seal(changed["probe_v8_failure"])
+    changed = operator._seal(changed)
+    with pytest.raises(ValueError, match="v8 predecessor"):
+        operator_job.build_operator_package(changed)
+
+    changed = copy.deepcopy(packet)
     changed["expected_diagnosis"] = "exception_localized"
     changed = operator._seal(changed)
     with pytest.raises(ValueError, match="expected diagnosis"):
+        operator_job.build_operator_package(changed)
+
+    changed = copy.deepcopy(packet)
+    changed["writable_controls_probe"] = False
+    changed = operator._seal(changed)
+    with pytest.raises(ValueError, match="writable-controls"):
         operator_job.build_operator_package(changed)
 
     changed = copy.deepcopy(packet)
@@ -686,6 +710,7 @@ def test_prod10_probe_rechecks_markers_and_stops_before_guard(
     assert result["diagnosis"] == result["launch_stage"] == "before_guard_passed"
     assert result["expected_diagnosis"] == "before_guard_passed"
     assert result["probe_v7_failure_sha256"] == operator.probe_v7_failure_binding()["sha256"]
+    assert result["probe_v8_failure_sha256"] == operator.probe_v8_failure_binding()["sha256"]
     assert result["nested_jobs_created"] == result["gpus"] == 0
 
 

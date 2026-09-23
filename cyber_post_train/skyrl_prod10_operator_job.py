@@ -378,6 +378,8 @@ def probe_packet(
             "launch_v2_failure": failure,
             "inspect_v3_success": operator.inspect_v3_success_binding(),
             "probe_v7_failure": operator.probe_v7_failure_binding(),
+            "probe_v8_failure": operator.probe_v8_failure_binding(),
+            "writable_controls_probe": True,
             "expected_diagnosis": "before_guard_passed",
         }
     )
@@ -546,7 +548,8 @@ def _job(
             sfs_mount,
             *(
                 []
-                if phase in {"inspect", "probe"}
+                if phase == "inspect"
+                or (phase == "probe" and packet.get("writable_controls_probe") is not True)
                 else [
                     {
                         "name": "controls-rw",
@@ -626,7 +629,11 @@ def _job(
                         {"name": "sfs", "persistentVolumeClaim": sfs_claim},
                         *(
                             []
-                            if phase in {"inspect", "probe"}
+                            if phase == "inspect"
+                            or (
+                                phase == "probe"
+                                and packet.get("writable_controls_probe") is not True
+                            )
                             else [
                                 {
                                     "name": "controls-rw",
@@ -711,8 +718,22 @@ def validate_operator_package(package: OperatorPackage) -> dict[str, Any]:
         or container.get("resources", {}).get("requests") != {"cpu": "2", "memory": "8Gi"}
         or mounts.get("sfs") != expected_sfs_mount
         or volumes.get("sfs") != {"name": "sfs", "persistentVolumeClaim": expected_sfs_claim}
-        or (packet["phase"] in {"inspect", "probe"} and "controls-rw" in mounts)
-        or (packet["phase"] in {"inspect", "probe"} and "controls-rw" in volumes)
+        or (packet["phase"] == "inspect" and "controls-rw" in mounts)
+        or (packet["phase"] == "inspect" and "controls-rw" in volumes)
+        or (
+            packet["phase"] == "probe"
+            and mounts.get("controls-rw")
+            != {
+                "name": "controls-rw",
+                "mountPath": CONTROLS_PATH,
+                "subPath": CONTROLS_SUBPATH,
+            }
+        )
+        or (
+            packet["phase"] == "probe"
+            and volumes.get("controls-rw")
+            != {"name": "controls-rw", "persistentVolumeClaim": {"claimName": PVC}}
+        )
         or container.get("envFrom")
         != (
             [
