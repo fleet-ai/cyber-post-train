@@ -7,6 +7,7 @@ validates a model-free runtime qualification, and seals one private result.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import hmac
 import json
@@ -17,6 +18,8 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
+
+from .protocol import DEFAULT_PROTOCOL, load_protocol
 
 BENCHMARK = "nyu_ctf_web_test"
 TASK_COUNT = 19
@@ -620,3 +623,25 @@ def seal_result_once(
     ):
         raise NyuAdapterError("nyu_sealed_result_permissions_invalid")
     return receipt
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Seal the provider-free NYU web source and runtime-qualification manifest."
+    )
+    parser.add_argument("--checkout", type=Path, required=True)
+    parser.add_argument("--protocol", type=Path, default=DEFAULT_PROTOCOL)
+    parser.add_argument("--output", type=Path, required=True)
+    args = parser.parse_args()
+    receipt = source_qualification_manifest(load_protocol(args.protocol), args.checkout)
+    _write_once(args.output, _canonical(receipt) + b"\n")
+    print(
+        json.dumps(
+            {"receipt_sha256": receipt["receipt_sha256"], "status": receipt["status"]},
+            sort_keys=True,
+        )
+    )
+
+
+if __name__ == "__main__":
+    main()
