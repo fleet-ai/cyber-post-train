@@ -19,7 +19,12 @@ original with cells from its replacement.
 The final gate consumes the self-digested protocol-v2 migration receipt and
 its byte-identical `COMPARISON_DEFINITION.json`. This preserves the original
 evidence hashes privately while making the final included seed roster and
-whole-pair replacements explicit. The gate opens no score until it holds one
+whole-pair replacements explicit. The final definition is frozen at
+`sha256:bff3b01e6dcc4b189c9acb6140fbf868fda74e9bef4288c39bab0490cfc49fd2`;
+it includes seeds 46, 48, 49, 50, 54, 55, 56, and 57. If score-blind evidence
+later invalidates any included seed, the current comparison cannot be edited:
+a new versioned definition and receipt are required before score unseal. The
+gate opens no score until it holds one
 read-only, repeatable database snapshot for all 16 included replicas and has
 proved all of the following:
 
@@ -96,7 +101,9 @@ uv run python scripts/render_qwen38_fleet_pass8_final_aggregate.py \
 ```
 
 The validator removes only ordinary server metadata and the Job UID-derived
-selector labels. Admission, command, image, resources, priority, module bytes,
-secret reference, and the root alert annotation remain bound. A green render
-or preview does not mean the 272 outcomes are complete; the private final Job
-must still pass the live database and terminal-receipt gates above.
+selector labels. The two previews must carry different valid server-assigned
+Job UIDs, and neither preview may contain a GPU resource in any container
+class. Admission, command, image, resources, priority, module bytes, secret
+reference, and the root alert annotation remain bound. A green render or
+preview does not mean the 272 outcomes are complete; the private final Job must
+still pass the live database and terminal-receipt gates above.

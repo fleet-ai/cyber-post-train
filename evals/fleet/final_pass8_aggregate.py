@@ -31,6 +31,9 @@ BENCHMARK = "fleet_development_dev17"
 PREDECESSOR_COMPARISON_DEFINITION_SHA256 = (
     "sha256:1154b450624a8b9a567464916da95874c44933175c408b86a80ff5bca0eada70"
 )
+FROZEN_COMPARISON_DEFINITION_SHA256 = (
+    "sha256:bff3b01e6dcc4b189c9acb6140fbf868fda74e9bef4288c39bab0490cfc49fd2"
+)
 MIGRATION_SCHEMA = "cyber_qwen38_fleet_protocol_v2_replica_migration_receipt_v1"
 COMPARISON_DEFINITION_SCHEMA = "cyber_qwen38_fleet_dev17_pass8_comparison_definition_v2"
 TERMINAL_SCHEMA = "cyber_fleet_heldout_terminal_observation_v1"
@@ -38,6 +41,16 @@ ACCEPTED_SCHEMA = "fleet-rollout-ledger-cell-accepted-v1"
 CONTROLLER_TERMINAL_SCHEMA = "fleet-rollout-ledger-controller-terminal-v1"
 SOURCE_SEEDS = tuple(range(46, 54))
 FROZEN_INVALID_SEEDS = (47, 51, 52, 53)
+RETAINED_EVALUATION_IDENTITIES = {
+    (46, "base"): "sha256:68e6873311dd982e79eec72a1a3abe4ae95052c8d01c0c80f2258cb23809b037",
+    (46, "candidate"): "sha256:798de026fc49b6ae013b54018e857b42173c221036193bb6f5e69ca818d9f9c5",
+    (48, "base"): "sha256:df6bdb006f7346331ba008a8bfd64e9c14ffa6367943b49832b0d5281b4c3ed4",
+    (48, "candidate"): "sha256:a1a7a9f820f1c8efb47d53ca9395627bb77b0fd3c30a387620e2e08b65afa9d5",
+    (49, "base"): "sha256:355ef848fbd6f5d0a62d6a68734daacc3687b775dbb3b8fd26f2120854201362",
+    (49, "candidate"): "sha256:b0a9f9f2668c5857e80ae0f476edb17f27ae628c94a88d9f2f1fd7093b7f73c9",
+    (50, "base"): "sha256:2fd46153827937cfa144168e018f27d5a2f7fe4d27739c92bbc39bde3175a230",
+    (50, "candidate"): "sha256:40bb94f44e9a613f3ac4d409d2b56445f17d6364c2a5cd94c57303bfd743e790",
+}
 ARMS = ("base", "candidate")
 TASK_COUNT = 17
 PASS_K = 8
@@ -292,6 +305,7 @@ def _comparison_contract(
     )
     if any(
         (
+            comparison.get("sha256") != FROZEN_COMPARISON_DEFINITION_SHA256,
             comparison.get("schema") != COMPARISON_DEFINITION_SCHEMA,
             comparison.get("protocol_study_id") != "q38-dev17-base-step1000-p8-v2",
             comparison.get("predecessor_comparison_definition_sha256")
@@ -311,6 +325,13 @@ def _comparison_contract(
             comparison.get("training_data_eligible") is not False,
             comparison.get("whole_replica_pairs_only") is not True,
             comparison.get("cell_level_replacement_forbidden") is not True,
+            comparison.get("included_seed_status")
+            != "provisional_until_all_valid8_terminal_gates_pass",
+            comparison.get("later_invalid_seed_policy")
+            != (
+                "create a versioned successor intent, definition, and receipt before score "
+                "unseal; never edit this definition in place"
+            ),
             comparison.get("task_selection_sha256")
             != "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
             comparison.get("split_manifest_sha256")
@@ -604,7 +625,7 @@ def _replica_descriptor(
         )
         output_root = f"/mnt/sfs/jobs/chris-q38-fleet-dev17-s{seed}-{suffix}"
         database = experiment.replace("-", "_")
-        expected_evaluation_identity = None
+        expected_evaluation_identity = RETAINED_EVALUATION_IDENTITIES[(seed, arm)]
         replaces_seed = None
     else:
         model = "base" if arm == "base" else "t3k32s1000"
@@ -834,7 +855,11 @@ def validate_plan(plan: dict[str, Any]) -> None:
             or replica.get("protocol_id") != protocol_by_seed[seed]["protocol_id"]
             or replica.get("comparison_protocol_sha256")
             != protocol_by_seed[seed]["comparison_protocol_sha256"]
-            or (not replacement and replica.get("evaluation_identity_sha256") is not None)
+            or (
+                not replacement
+                and replica.get("evaluation_identity_sha256")
+                != RETAINED_EVALUATION_IDENTITIES[(seed, arm)]
+            )
         ):
             raise FinalAggregateError("final aggregate replica protocol identity differs")
     for replica in replicas:
@@ -923,8 +948,7 @@ def _terminal_receipt(replica: Mapping[str, Any]) -> tuple[dict[str, Any], str]:
             receipt.get("schema") != TERMINAL_SCHEMA,
             receipt.get("protocol_id") != replica["protocol_id"],
             receipt.get("comparison_protocol_sha256") != replica["comparison_protocol_sha256"],
-            replica.get("evaluation_identity_sha256") is not None
-            and receipt.get("evaluation_identity_sha256") != replica["evaluation_identity_sha256"],
+            receipt.get("evaluation_identity_sha256") != replica["evaluation_identity_sha256"],
             receipt.get("arm_id") != replica["arm"],
             job.get("name") != replica["job_name"],
             not isinstance(job.get("uid"), str),
@@ -965,8 +989,71 @@ def _event_detail(row: Mapping[str, Any]) -> dict[str, Any]:
     return value
 
 
+RECONCILIATION_COMMON_FIELDS = {
+    "schema_version",
+    "reviewed_intent_sha256",
+    "evaluation_plan_sha256",
+    "source_job_uid_sha256",
+    "source_job_terminal_receipt_sha256",
+    "selected_cell_count",
+    "prior_retry_review_count",
+    "accepted_existing_completed_session_count",
+    "model_generation_performed",
+    "scoring_call_performed",
+    "score_values_included",
+    "prompt_response_flag_reward_or_trace_content_included",
+    "cell_task_session_or_trace_identifiers_included",
+    "receipt_sha256",
+}
+RECONCILIATION_V1_FIELDS = RECONCILIATION_COMMON_FIELDS | {"prior_stale_active_count"}
+RECONCILIATION_V2_FIELDS = RECONCILIATION_COMMON_FIELDS | {
+    "source_agent_exit_code",
+    "source_agent_termination",
+    "source_failure_code_sha256",
+    "action",
+}
+RECONCILIATION_V2_SUBSET_FIELDS = RECONCILIATION_V2_FIELDS | {
+    "source_total_cell_count",
+    "prior_arm_state_counts",
+    "post_arm_state_counts",
+    "nonselected_cell_count",
+    "nonselected_cells_preserved",
+}
+RECONCILIATION_V2_LOCAL_GAP_FIELDS = {
+    "source_local_result_count",
+    "missing_local_result_count",
+    "missing_local_results_are_unselected",
+    "selected_cells_have_local_results",
+    "missing_local_result_cells_preserved",
+    "missing_local_result_failure_code_sha256",
+}
+
+
+def _reconciliation_shape(evidence: Mapping[str, Any], schema: str) -> None:
+    fields = set(evidence)
+    if schema == "fleet-stored-session-reconciliation-v1":
+        expected = RECONCILIATION_V1_FIELDS
+    elif schema == "fleet-stored-session-reconciliation-v2":
+        expected = RECONCILIATION_V2_FIELDS
+        if "source_total_cell_count" in fields:
+            expected = set(RECONCILIATION_V2_SUBSET_FIELDS)
+            if fields & RECONCILIATION_V2_LOCAL_GAP_FIELDS:
+                expected |= RECONCILIATION_V2_LOCAL_GAP_FIELDS
+    else:
+        raise FinalAggregateError("accepted reconciliation receipt is invalid")
+    if fields != expected:
+        raise FinalAggregateError("accepted reconciliation receipt is invalid")
+
+
 def _validate_acceptance_evidence(
-    cell: Mapping[str, Any], events: Sequence[Mapping[str, Any]], reconciliations: Sequence[dict]
+    cell: Mapping[str, Any],
+    events: Sequence[Mapping[str, Any]],
+    reconciliations: Sequence[dict],
+    *,
+    evaluation_plan_sha256: str,
+    terminal_receipt_sha256: str,
+    source_job_uid: str,
+    reconciled_cell_count: int,
 ) -> None:
     cell_events = [row for row in events if row.get("cell_id") == cell["cell_id"]]
     if len(cell_events) != 1 or cell_events[0].get("to_state") != "accepted":
@@ -1000,17 +1087,87 @@ def _validate_acceptance_evidence(
         raise FinalAggregateError("accepted reconciliation receipt is missing or ambiguous")
     evidence = matches[0]
     _require_self_digest(evidence, "receipt_sha256", "accepted reconciliation receipt")
+    schema = evidence.get("schema_version")
+    _reconciliation_shape(evidence, schema)
+    expected_event = {
+        "fleet-stored-session-reconciliation-v1": "stored_session_reconciled",
+        "fleet-stored-session-reconciliation-v2": "stored_scored_session_reconciled",
+    }.get(schema)
+    source_job_uid_sha256 = "sha256:" + hashlib.sha256(source_job_uid.encode()).hexdigest()
+    selected = evidence.get("selected_cell_count")
+    prior_retry = evidence.get("prior_retry_review_count")
+    if type(selected) is not int or type(prior_retry) is not int or selected < 1 or prior_retry < 0:
+        raise FinalAggregateError("accepted reconciliation receipt is invalid")
+    if schema == "fleet-stored-session-reconciliation-v1":
+        stale = evidence.get("prior_stale_active_count")
+        if type(stale) is not int or stale < 0 or prior_retry + stale != selected:
+            raise FinalAggregateError("accepted reconciliation receipt is invalid")
+    else:
+        if prior_retry < selected:
+            raise FinalAggregateError("accepted reconciliation receipt is invalid")
+        _normalized_digest(evidence.get("source_failure_code_sha256"), "source failure code")
+        if type(evidence.get("source_agent_exit_code")) is not int or (
+            evidence.get("source_agent_exit_code"),
+            evidence.get("source_agent_termination"),
+        ) not in {(0, "output_limit"), (1, "process_error")}:
+            raise FinalAggregateError("accepted reconciliation receipt is invalid")
+        if "source_total_cell_count" in evidence:
+            total = evidence.get("source_total_cell_count")
+            nonselected = evidence.get("nonselected_cell_count")
+            if (
+                type(total) is not int
+                or type(nonselected) is not int
+                or total != selected + nonselected
+                or nonselected < 1
+                or evidence.get("nonselected_cells_preserved") is not True
+                or not isinstance(evidence.get("prior_arm_state_counts"), dict)
+                or not isinstance(evidence.get("post_arm_state_counts"), dict)
+            ):
+                raise FinalAggregateError("accepted reconciliation receipt is invalid")
+        if "source_local_result_count" in evidence:
+            _normalized_digest(
+                evidence.get("missing_local_result_failure_code_sha256"),
+                "missing local result failure code",
+            )
+            if any(
+                evidence.get(field) is not True
+                for field in (
+                    "missing_local_results_are_unselected",
+                    "selected_cells_have_local_results",
+                    "missing_local_result_cells_preserved",
+                )
+            ):
+                raise FinalAggregateError("accepted reconciliation receipt is invalid")
     if any(
         (
-            evidence.get("schema_version")
-            not in {
-                "fleet-stored-session-reconciliation-v1",
-                "fleet-stored-session-reconciliation-v2",
-            },
-            evidence.get("accepted_existing_completed_session_count", 0) < 1,
+            expected_event is None,
+            cell_events[0].get("event") != expected_event,
+            _normalized_digest(
+                evidence.get("evaluation_plan_sha256"), "reconciliation evaluation plan"
+            )
+            != _normalized_digest(evaluation_plan_sha256, "evaluation plan"),
+            _normalized_digest(
+                evidence.get("source_job_terminal_receipt_sha256"),
+                "reconciliation source terminal",
+            )
+            != _normalized_digest(terminal_receipt_sha256, "source terminal"),
+            evidence.get("source_job_uid_sha256") != source_job_uid_sha256,
+            evidence.get("selected_cell_count") != reconciled_cell_count,
+            evidence.get("accepted_existing_completed_session_count") != reconciled_cell_count,
             evidence.get("model_generation_performed") is not False,
             evidence.get("scoring_call_performed") is not False,
             evidence.get("score_values_included") is not False,
+            evidence.get("prompt_response_flag_reward_or_trace_content_included") is not False,
+            evidence.get("cell_task_session_or_trace_identifiers_included") is not False,
+            _normalized_digest(
+                detail.get("source_job_terminal_receipt_sha256"),
+                "accepted event source terminal",
+            )
+            != _normalized_digest(terminal_receipt_sha256, "source terminal"),
+            schema == "fleet-stored-session-reconciliation-v2"
+            and evidence.get("action") != "accept_existing_scored_session",
+            schema == "fleet-stored-session-reconciliation-v2"
+            and detail.get("action") != "accept_existing_scored_session",
         )
     ):
         raise FinalAggregateError("accepted reconciliation receipt is invalid")
@@ -1058,6 +1215,11 @@ def validate_gate(
     cells = snapshot.cells
     if len(cells) != TASK_COUNT or {row.get("task_version_id") for row in cells} != set(tasks):
         raise FinalAggregateError("replica ledger does not contain the exact dev17 roster")
+    reconciliation_counts = Counter(
+        _normalized_digest(row["reconciliation_digest"], "reconciliation digest")
+        for row in cells
+        if row.get("reconciliation_digest") is not None
+    )
     for cell in cells:
         version = cell["task_version_id"]
         if any(
@@ -1083,7 +1245,20 @@ def validate_gate(
         _normalized_digest(cell.get("receipt_digest"), "accepted receipt")
         if cell.get("cell_id") != _cell_id(cell):
             raise FinalAggregateError("replica cell identity differs from its immutable plan row")
-        _validate_acceptance_evidence(cell, snapshot.events, snapshot.reconciliations)
+        reconciliation = cell.get("reconciliation_digest")
+        _validate_acceptance_evidence(
+            cell,
+            snapshot.events,
+            snapshot.reconciliations,
+            evaluation_plan_sha256=evaluation["sha256"],
+            terminal_receipt_sha256=terminal["sha256"],
+            source_job_uid=terminal["job"]["uid"],
+            reconciled_cell_count=(
+                reconciliation_counts[_normalized_digest(reconciliation, "reconciliation digest")]
+                if reconciliation is not None
+                else 0
+            ),
+        )
     stored_plan = [
         {field: row.get(field) for field in PLAN_STORED_FIELDS}
         for row in sorted(

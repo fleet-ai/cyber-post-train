@@ -50,7 +50,7 @@ BENCHMARKS = {
         "title": "Fleet development tasks",
         "metric": "Tasks solved at least once across eight attempts",
         "comparison_definition_sha256": (
-            "sha256:1154b450624a8b9a567464916da95874c44933175c408b86a80ff5bca0eada70"
+            "sha256:bff3b01e6dcc4b189c9acb6140fbf868fda74e9bef4288c39bab0490cfc49fd2"
         ),
         "terminal_schemas": {
             "launch_terminal": "cyber_fleet_heldout_terminal_observation_v1",

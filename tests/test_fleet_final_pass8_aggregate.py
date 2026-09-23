@@ -36,12 +36,22 @@ def _signed(value: dict[str, Any], field: str = "sha256") -> dict[str, Any]:
 
 
 def _protocol(seed: int, *, replacement: bool) -> dict[str, Any]:
+    protocol_sha256s = {
+        46: "sha256:fc4c31caddf382f064bf4301f7ca88bcbf744207190386c491e055df23d30899",
+        48: "sha256:6e8a15d372bda78978ea48c1889b7c5ef4a1f902e3dd85d534ede185cd5a646a",
+        49: "sha256:29d56d78a5c2a2ea6f1763c8cc0fdda9bf7018088f71061986b92a27fdcd2315",
+        50: "sha256:82f3f5fa3e41f854ef60a555a7bff2f373d5233cafa6802db18cb3347e09361c",
+        54: "sha256:8355cf7a9682b96e2d83cdc5de5098f25954f3d21f85706fcdfe59c36073a319",
+        55: "sha256:46775efd79f44e0c692be974ee7f48d270a43c6da25be90f60e56ffc20ce340d",
+        56: "sha256:2792a3808fe69d14cb6cfe7a38c8860ba20a183f259505215a64eea2bdbdd086",
+        57: "sha256:22a256cf7fb861e1720d6f80c2ea9b8bada730f1da6806f997fbd4e0dc9806b7",
+    }
     suffix = "replacement-p1-v2" if replacement else "p1-v1"
     return {
         "seed": seed,
         "origin": "whole_pair_replacement" if replacement else "retained_original",
         "protocol_id": f"q38-dev17-s{seed}-base-t3k32s1000-{suffix}",
-        "comparison_protocol_sha256": "sha256:" + f"{seed + 1000:064x}",
+        "comparison_protocol_sha256": protocol_sha256s[seed],
     }
 
 
@@ -107,8 +117,14 @@ def _migration(tmp_path: Path, excluded: tuple[int, ...] = (47, 51, 52, 53)) -> 
             "training_data_eligible": False,
             "whole_replica_pairs_only": True,
             "cell_level_replacement_forbidden": True,
+            "included_seed_status": "provisional_until_all_valid8_terminal_gates_pass",
+            "later_invalid_seed_policy": (
+                "create a versioned successor intent, definition, and receipt before score "
+                "unseal; never edit this definition in place"
+            ),
         }
     )
+    assert comparison["sha256"] == final.FROZEN_COMPARISON_DEFINITION_SHA256
     definition_path = migration_root / "COMPARISON_DEFINITION.json"
     definition_path.write_text(json.dumps(comparison, sort_keys=True) + "\n")
     protocol_by_seed = {row["seed"]: row for row in protocols}
@@ -354,9 +370,7 @@ def _study(tmp_path: Path) -> tuple[dict[str, Any], dict[tuple[int, str], FakeSn
         terminal = _signed(
             {
                 "schema": final.TERMINAL_SCHEMA,
-                "evaluation_identity_sha256": (
-                    replica["evaluation_identity_sha256"] or "sha256:" + "e" * 64
-                ),
+                "evaluation_identity_sha256": replica["evaluation_identity_sha256"],
                 "comparison_protocol_sha256": replica["comparison_protocol_sha256"],
                 "protocol_id": replica["protocol_id"],
                 "arm_id": replica["arm"],
@@ -448,7 +462,7 @@ def _study(tmp_path: Path) -> tuple[dict[str, Any], dict[tuple[int, str], FakeSn
 
 
 def test_final_gate_opens_scores_only_after_all_replicas_and_emits_safe_public_input(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
 ) -> None:
     plan, snapshots = _study(tmp_path)
 
@@ -459,11 +473,6 @@ def test_final_gate_opens_scores_only_after_all_replicas_and_emits_safe_public_i
     assert all(snapshot.score_reads == 1 for snapshot in snapshots.values())
     public_path = Path(plan["private_output_root"]) / "SANITIZED_AGGREGATE.json"
     public = json.loads(public_path.read_text())
-    monkeypatch.setitem(
-        public_eval_import.BENCHMARKS[final.BENCHMARK],
-        "comparison_definition_sha256",
-        plan["comparison_definition_sha256"],
-    )
     validated = public_eval_import._validate(public, final._file_digest(public_path))  # noqa: SLF001
     assert validated["summary"]["paired_valid_tasks"] == 17
     assert all(
@@ -561,6 +570,32 @@ def test_migration_receipt_tamper_is_rejected_before_plan_build(tmp_path: Path) 
         )
 
 
+def test_resigned_alternate_exclusion_roster_is_rejected(tmp_path: Path) -> None:
+    receipt_path = _migration(tmp_path)
+    receipt = json.loads(receipt_path.read_text())
+    comparison = receipt["comparison_definition"]
+    comparison.pop("sha256")
+    comparison["excluded_original_seeds"] = [47, 52, 53]
+    comparison["sha256"] = final._digest(comparison)  # noqa: SLF001
+    definition_path = receipt_path.parent / "COMPARISON_DEFINITION.json"
+    definition_path.write_text(json.dumps(comparison, sort_keys=True) + "\n")
+    receipt.pop("sha256")
+    receipt["comparison_definition"] = comparison
+    receipt["comparison_definition_file_sha256"] = final._file_digest(  # noqa: SLF001
+        definition_path
+    )
+    receipt["sha256"] = final._digest(receipt)  # noqa: SLF001
+    receipt_path.write_text(json.dumps(receipt, sort_keys=True) + "\n")
+
+    with pytest.raises(final.FinalAggregateError, match="excluded original seeds differ"):
+        final.build_current_study_plan(
+            task_set_path=renderer.TASK_SET,
+            roster_path=renderer.ROSTER,
+            base_config_path=renderer.BASE_CONFIG,
+            migration_receipt_path=receipt_path,
+        )
+
+
 def _rewrite_terminal(replica: dict[str, Any], mutate: Any) -> None:
     path = Path(replica["terminal_receipt_path"])
     receipt = json.loads(path.read_text())
@@ -604,6 +639,34 @@ def test_live_ledger_plan_must_recompute_from_exact_cells(tmp_path: Path) -> Non
     assert all(value.score_reads == 0 for value in snapshots.values())
 
 
+@pytest.mark.parametrize(
+    "drift",
+    ("evaluation_identity", "job_uid", "config_map_name", "config_map_uid", "privacy"),
+)
+def test_terminal_identity_drift_prevents_every_score_read(tmp_path: Path, drift: str) -> None:
+    plan, snapshots = _study(tmp_path)
+    replica = next(row for row in plan["replicas"] if row["seed"] == 46 and row["arm"] == "base")
+
+    def mutate(receipt: dict[str, Any]) -> None:
+        if drift == "evaluation_identity":
+            receipt["evaluation_identity_sha256"] = "sha256:" + "0" * 64
+        elif drift == "job_uid":
+            receipt["job"]["uid"] = "not-a-uid"
+        elif drift == "config_map_name":
+            receipt["config_map"]["name"] = "wrong-config-map"
+        elif drift == "config_map_uid":
+            receipt["config_map"]["uid"] = "not-a-uid"
+        else:
+            receipt["privacy"]["prompts_responses_flags_rewards_or_trace_content_included"] = True
+
+    _rewrite_terminal(replica, mutate)
+
+    with pytest.raises(final.FinalAggregateError, match="terminal receipt identity"):
+        final.finalize(plan, snapshots, output_root=Path(plan["private_output_root"]))
+
+    assert all(value.score_reads == 0 for value in snapshots.values())
+
+
 def test_scored_query_cannot_change_score_blind_metadata(tmp_path: Path) -> None:
     plan, snapshots = _study(tmp_path)
     snapshot = snapshots[(46, "base")]
@@ -616,8 +679,12 @@ def test_scored_query_cannot_change_score_blind_metadata(tmp_path: Path) -> None
     assert not Path(plan["private_output_root"]).exists()
 
 
-def test_reviewed_stored_session_needs_matching_private_reconciliation(tmp_path: Path) -> None:
-    plan, snapshots = _study(tmp_path)
+def _add_reconciliation(
+    plan: dict[str, Any], snapshots: dict[tuple[int, str], FakeSnapshot]
+) -> dict[str, Any]:
+    replica = next(row for row in plan["replicas"] if row["seed"] == 46 and row["arm"] == "base")
+    evaluation = json.loads((Path(replica["output_root"]) / "EVAL.json").read_text())
+    terminal = json.loads(Path(replica["terminal_receipt_path"]).read_text())
     snapshot = snapshots[(46, "base")]
     cell = snapshot.value.cells[0]
     intent = "9" * 64
@@ -630,26 +697,93 @@ def test_reviewed_stored_session_needs_matching_private_reconciliation(tmp_path:
             {
                 "reviewed_intent_sha256": intent,
                 "cell_receipt_sha256": cell["receipt_digest"],
+                "source_job_terminal_receipt_sha256": terminal["sha256"],
+                "action": "accept_existing_scored_session",
             }
         ),
     }
-    snapshot.value.reconciliations.append(
-        _signed(
-            {
-                "schema_version": "fleet-stored-session-reconciliation-v2",
-                "reviewed_intent_sha256": intent,
-                "accepted_existing_completed_session_count": 1,
-                "model_generation_performed": False,
-                "scoring_call_performed": False,
-                "score_values_included": False,
-            },
-            "receipt_sha256",
-        )
+    evidence = _signed(
+        {
+            "schema_version": "fleet-stored-session-reconciliation-v2",
+            "reviewed_intent_sha256": intent,
+            "evaluation_plan_sha256": evaluation["sha256"],
+            "source_job_uid_sha256": (
+                "sha256:" + hashlib.sha256(terminal["job"]["uid"].encode()).hexdigest()
+            ),
+            "source_job_terminal_receipt_sha256": terminal["sha256"],
+            "selected_cell_count": 1,
+            "prior_retry_review_count": 1,
+            "accepted_existing_completed_session_count": 1,
+            "source_agent_exit_code": 1,
+            "source_agent_termination": "process_error",
+            "source_failure_code_sha256": "sha256:" + "f" * 64,
+            "action": "accept_existing_scored_session",
+            "model_generation_performed": False,
+            "scoring_call_performed": False,
+            "score_values_included": False,
+            "prompt_response_flag_reward_or_trace_content_included": False,
+            "cell_task_session_or_trace_identifiers_included": False,
+        },
+        "receipt_sha256",
     )
+    snapshot.value.reconciliations.append(evidence)
+    return evidence
+
+
+def test_reviewed_stored_session_needs_matching_private_reconciliation(tmp_path: Path) -> None:
+    plan, snapshots = _study(tmp_path)
+    _add_reconciliation(plan, snapshots)
 
     final.finalize(plan, snapshots, output_root=Path(plan["private_output_root"]))
 
     assert Path(plan["private_output_root"], "FINAL.json").is_file()
+
+
+def test_legacy_reconciliation_receipt_is_fully_bound_before_score_open(tmp_path: Path) -> None:
+    plan, snapshots = _study(tmp_path)
+    evidence = _add_reconciliation(plan, snapshots)
+    evidence.pop("receipt_sha256")
+    evidence["schema_version"] = "fleet-stored-session-reconciliation-v1"
+    evidence["prior_stale_active_count"] = 0
+    for field in (
+        "source_agent_exit_code",
+        "source_agent_termination",
+        "source_failure_code_sha256",
+        "action",
+    ):
+        evidence.pop(field)
+    evidence["receipt_sha256"] = final._digest(evidence)  # noqa: SLF001
+    event = snapshots[(46, "base")].value.events[0]
+    event["event"] = "stored_session_reconciled"
+    detail = json.loads(event["detail_json"])
+    detail.pop("action")
+    event["detail_json"] = json.dumps(detail)
+
+    final.finalize(plan, snapshots, output_root=Path(plan["private_output_root"]))
+
+    assert Path(plan["private_output_root"], "FINAL.json").is_file()
+
+
+@pytest.mark.parametrize("drift", ("plan", "source", "action", "count"))
+def test_reconciliation_identity_drift_prevents_score_open(tmp_path: Path, drift: str) -> None:
+    plan, snapshots = _study(tmp_path)
+    evidence = _add_reconciliation(plan, snapshots)
+    evidence.pop("receipt_sha256")
+    if drift == "plan":
+        evidence["evaluation_plan_sha256"] = "sha256:" + "0" * 64
+    elif drift == "source":
+        evidence["source_job_terminal_receipt_sha256"] = "sha256:" + "0" * 64
+    elif drift == "action":
+        evidence["action"] = "generate_more_model_output"
+    else:
+        evidence["selected_cell_count"] = 2
+        evidence["accepted_existing_completed_session_count"] = 2
+    evidence["receipt_sha256"] = final._digest(evidence)  # noqa: SLF001
+
+    with pytest.raises(final.FinalAggregateError, match="reconciliation receipt is invalid"):
+        final.finalize(plan, snapshots, output_root=Path(plan["private_output_root"]))
+
+    assert all(value.score_reads == 0 for value in snapshots.values())
 
 
 def test_renderer_is_cpu_only_c1_alert_suppressed_and_module_bound(tmp_path: Path) -> None:
@@ -707,8 +841,8 @@ def test_two_preview_validator_normalizes_only_server_job_identity(tmp_path: Pat
     bundle = yaml.safe_load((root / "final-aggregate.yaml").read_text())
     first = tmp_path / "first.json"
     second = tmp_path / "second.json"
-    first.write_text(json.dumps(_server_preview(bundle, "1" * 36)))
-    second.write_text(json.dumps(_server_preview(bundle, "2" * 36)))
+    first.write_text(json.dumps(_server_preview(bundle, "11111111-1111-4111-8111-111111111111")))
+    second.write_text(json.dumps(_server_preview(bundle, "22222222-2222-4222-8222-222222222222")))
 
     receipt = renderer.validate_previews(
         render_root=root,
@@ -729,8 +863,8 @@ def test_two_preview_validator_rejects_render_receipt_drift(tmp_path: Path) -> N
     bundle = yaml.safe_load((root / "final-aggregate.yaml").read_text())
     first = tmp_path / "first.json"
     second = tmp_path / "second.json"
-    first.write_text(json.dumps(_server_preview(bundle, "1" * 36)))
-    second.write_text(json.dumps(_server_preview(bundle, "2" * 36)))
+    first.write_text(json.dumps(_server_preview(bundle, "11111111-1111-4111-8111-111111111111")))
+    second.write_text(json.dumps(_server_preview(bundle, "22222222-2222-4222-8222-222222222222")))
     receipt = json.loads((root / "RENDER.json").read_text())
     receipt["gpu_requests"] = 1
     (root / "RENDER.json").write_text(json.dumps(receipt))
@@ -740,5 +874,50 @@ def test_two_preview_validator_rejects_render_receipt_drift(tmp_path: Path) -> N
             render_root=root,
             first=first,
             second=second,
+            output=tmp_path / "previews.json",
+        )
+
+
+def test_two_preview_validator_rejects_admission_added_gpu(tmp_path: Path) -> None:
+    root = tmp_path / "render"
+    renderer.render(output=root, migration_receipt=_migration(tmp_path))
+    bundle = yaml.safe_load((root / "final-aggregate.yaml").read_text())
+    first_value = _server_preview(bundle, "11111111-1111-4111-8111-111111111111")
+    second_value = _server_preview(bundle, "22222222-2222-4222-8222-222222222222")
+    for value in (first_value, second_value):
+        job = next(item for item in value["items"] if item["kind"] == "Job")
+        job["spec"]["template"]["spec"]["initContainers"] = [
+            {
+                "name": "admission-added",
+                "image": "example.invalid/image@sha256:" + "0" * 64,
+                "resources": {"limits": {"nvidia.com/gpu": 1}},
+            }
+        ]
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+    first.write_text(json.dumps(first_value))
+    second.write_text(json.dumps(second_value))
+
+    with pytest.raises(renderer.RenderError, match="unexpectedly requests a GPU"):
+        renderer.validate_previews(
+            render_root=root,
+            first=first,
+            second=second,
+            output=tmp_path / "previews.json",
+        )
+
+
+def test_two_preview_validator_rejects_one_preview_replayed_twice(tmp_path: Path) -> None:
+    root = tmp_path / "render"
+    renderer.render(output=root, migration_receipt=_migration(tmp_path))
+    bundle = yaml.safe_load((root / "final-aggregate.yaml").read_text())
+    preview = tmp_path / "preview.json"
+    preview.write_text(json.dumps(_server_preview(bundle, "11111111-1111-4111-8111-111111111111")))
+
+    with pytest.raises(renderer.RenderError, match="distinct Job UIDs"):
+        renderer.validate_previews(
+            render_root=root,
+            first=preview,
+            second=preview,
             output=tmp_path / "previews.json",
         )

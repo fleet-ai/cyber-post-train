@@ -11,6 +11,7 @@ import json
 import os
 import shutil
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -289,6 +290,27 @@ def _contains(actual: Any, expected: Any) -> bool:
     return actual == expected
 
 
+def _contains_gpu_resource(value: Any) -> bool:
+    if isinstance(value, dict):
+        return "nvidia.com/gpu" in value or any(
+            _contains_gpu_resource(item) for item in value.values()
+        )
+    if isinstance(value, list):
+        return any(_contains_gpu_resource(item) for item in value)
+    return False
+
+
+def _job_uid(value: dict[str, Any]) -> str:
+    jobs = [item for item in _items(value) if item.get("kind") == "Job"]
+    if len(jobs) != 1:
+        raise RenderError("server preview lacks the exact Job")
+    raw = jobs[0].get("metadata", {}).get("uid")
+    try:
+        return str(uuid.UUID(raw))
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise RenderError("server preview lacks a valid server-assigned Job UID") from exc
+
+
 def _normalized_preview(value: dict[str, Any], expected: dict[str, Any]) -> dict[str, Any]:
     items = _items(value)
     jobs = [item for item in items if item.get("kind") == "Job"]
@@ -302,6 +324,8 @@ def _normalized_preview(value: dict[str, Any], expected: dict[str, Any]) -> dict
     expected_map = next(item for item in expected_items if item["kind"] == "ConfigMap")
     if job.get("metadata", {}).get("annotations", {}).get("fleet.ai/failure-alerts") != "off":
         raise RenderError("server-rendered root Job did not retain failure alerts off")
+    if _contains_gpu_resource(job):
+        raise RenderError("server-rendered Job unexpectedly requests a GPU")
     normalized_job = stable_job_preview(job)
     if not _contains(normalized_job, stable_job_preview(expected_job)):
         raise RenderError("server-rendered Job differs from the immutable render")
@@ -348,6 +372,10 @@ def validate_previews(
     expected = yaml.safe_load(bundle_path.read_text(encoding="utf-8"))
     one = json.loads(first.read_text(encoding="utf-8"))
     two = json.loads(second.read_text(encoding="utf-8"))
+    first_uid = _job_uid(one)
+    second_uid = _job_uid(two)
+    if first_uid == second_uid:
+        raise RenderError("two independent server previews must have distinct Job UIDs")
     stable_one = _normalized_preview(one, expected)
     stable_two = _normalized_preview(two, expected)
     first_digest = _canonical_digest(stable_one)
@@ -360,6 +388,8 @@ def validate_previews(
         "first_preview_file_sha256": _file_digest(first),
         "second_preview_file_sha256": _file_digest(second),
         "stable_server_preview_sha256": first_digest,
+        "first_job_uid_sha256": "sha256:" + hashlib.sha256(first_uid.encode()).hexdigest(),
+        "second_job_uid_sha256": "sha256:" + hashlib.sha256(second_uid.encode()).hexdigest(),
         "root_failure_alerts": "off",
         "priority_class": "c1",
         "gpu_requests": 0,
