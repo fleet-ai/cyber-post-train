@@ -128,3 +128,33 @@ def test_live_launch_evidence_is_self_digested_and_score_blind() -> None:
     assert value["launcher_repair"]["repaired_attempt_terminal_succeeded"] == 16
     assert value["current_state"]["scores_read"] is False
     assert value["privacy"]["prompts_responses_flags_rewards_or_trace_content_included"] is False
+
+
+def test_renderer_prepares_terminal_collectors_without_launching(tmp_path, monkeypatch) -> None:
+    packet_root, _receipt = _prepare(tmp_path, monkeypatch)
+    output = tmp_path / "terminal-collectors"
+
+    receipt = launchers.render_terminal_collectors(packets=packet_root, output=output)
+
+    assert receipt["external_mutations"] == 0
+    assert receipt["launch_performed"] is False
+    assert len(receipt["arms"]) == 16
+    bundle = yaml.safe_load((output / "terminal-collectors.yaml").read_text(encoding="utf-8"))
+    jobs = [item for item in bundle["items"] if item["kind"] == "Job"]
+    assert len(jobs) == 16
+    for job in jobs:
+        assert job["metadata"]["name"].endswith("-terminal-v1")
+        assert job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+        assert job["spec"]["template"]["spec"]["priorityClassName"] == "c1"
+        assert (
+            job["spec"]["template"]["metadata"]["labels"][
+                "cyber-post-train.fleet.ai/postgres-client"
+            ]
+            == "true"
+        )
+        environment = job["spec"]["template"]["spec"]["containers"][0]["env"]
+        assert {item["name"] for item in environment} == {
+            "PACKET_PATH",
+            "ROLLOUT_DATABASE_URL",
+        }
+        assert "nvidia.com/gpu" not in json.dumps(job)

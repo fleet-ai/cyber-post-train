@@ -19,7 +19,7 @@ import os
 import shutil
 import tempfile
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 
@@ -81,6 +81,52 @@ result = launch_once(
 print(json.dumps(result, sort_keys=True))
 """
 
+TERMINAL_COLLECTOR = r"""from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+
+from evals.fleet.heldout_launch import KubectlCluster, PostgresDatabase, collect_terminal
+
+workspace = Path(__file__).resolve().parent
+token_root = Path("/var/run/secrets/kubernetes.io/serviceaccount")
+kubeconfig = workspace / "kubeconfig.yaml"
+kubeconfig.write_text(
+    "apiVersion: v1\n"
+    "kind: Config\n"
+    "clusters:\n"
+    "- name: incluster\n"
+    "  cluster:\n"
+    "    server: https://kubernetes.default.svc\n"
+    f"    certificate-authority: {token_root / 'ca.crt'}\n"
+    "users:\n"
+    "- name: collector\n"
+    "  user:\n"
+    f"    tokenFile: {token_root / 'token'}\n"
+    "contexts:\n"
+    "- name: incluster\n"
+    "  context:\n"
+    "    cluster: incluster\n"
+    "    user: collector\n"
+    "    namespace: fleet-train-jobs\n"
+    "current-context: incluster\n",
+    encoding="utf-8",
+)
+os.chmod(kubeconfig, 0o600)
+os.environ["KUBECONFIG"] = str(kubeconfig)
+packet_path = workspace / os.environ["PACKET_PATH"]
+packet = json.loads(packet_path.read_text(encoding="utf-8"))
+receipt_path = Path(packet["output_root"]) / "TERMINAL_OBSERVATION.json"
+result = collect_terminal(
+    packet_path,
+    cluster=KubectlCluster("incluster"),
+    database=PostgresDatabase(),
+    receipt_path=receipt_path,
+)
+print(json.dumps(result, sort_keys=True))
+"""
+
 
 def _canonical(value: Any) -> str:
     return (
@@ -95,9 +141,9 @@ def _file_sha(path: Path) -> str:
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _bundle(packet_dir: Path) -> tuple[bytes, str]:
+def _bundle(packet_dir: Path, *, program: str = LAUNCHER) -> tuple[bytes, str]:
     packet = heldout_launch.build_package(packet_dir / "LAUNCH_PACKET.json")
-    files: dict[str, str] = {"launch.py": LAUNCHER}
+    files: dict[str, str] = {"launch.py": program}
     for source in SOURCE_ROOTS:
         files[str(source.relative_to(ROOT))] = source.read_text(encoding="utf-8")
     for source in sorted((ROOT / "evals" / "fleet").glob("*.py")):
@@ -113,13 +159,33 @@ def _bundle(packet_dir: Path) -> tuple[bytes, str]:
     return compressed, packet.packet.job_name
 
 
-def _objects(*, replica: str, compressed: bytes, evaluator_job: str) -> tuple[dict, dict]:
+def _objects(
+    *,
+    replica: str,
+    compressed: bytes,
+    evaluator_job: str,
+    operation: Literal["launch", "terminal"] = "launch",
+) -> tuple[dict, dict]:
     # ``-launch`` was the first operational attempt.  Those Pods could not
     # reach the rollout ledger because they lacked the NetworkPolicy client
     # label.  Keep the deterministic repair create-once under a new name; the
     # evaluator identity itself remains unchanged and is still protected by
     # its SFS, PostgreSQL, Kubernetes, and ledger duplicate gates.
-    name = f"{evaluator_job}-launch-v2"
+    if operation == "launch":
+        name = f"{evaluator_job}-launch-v2"
+        operation_environment = [
+            {"name": "PACKET_PATH", "value": "packet/LAUNCH_PACKET.json"},
+            {
+                "name": "CREATE_JOURNAL",
+                "value": (
+                    "/mnt/sfs/jobs/chris-q38-fleet-dev17-s46to53-launch-control-v1/"
+                    f"{replica}-CREATE_INTENT.jsonl"
+                ),
+            },
+        ]
+    else:
+        name = f"{evaluator_job}-terminal-v1"
+        operation_environment = [{"name": "PACKET_PATH", "value": "packet/LAUNCH_PACKET.json"}]
     if len(name) > 63:
         raise ValueError("launcher Kubernetes name is too long")
     config_map = {
@@ -195,14 +261,7 @@ def _objects(*, replica: str, compressed: bytes, evaluator_job: str) -> tuple[di
                                 "--with 'psycopg[binary]==3.3.5' python launch.py\n"
                             ],
                             "env": [
-                                {"name": "PACKET_PATH", "value": "packet/LAUNCH_PACKET.json"},
-                                {
-                                    "name": "CREATE_JOURNAL",
-                                    "value": (
-                                        "/mnt/sfs/jobs/chris-q38-fleet-dev17-s46to53-launch-control-v1/"
-                                        f"{replica}-CREATE_INTENT.jsonl"
-                                    ),
-                                },
+                                *operation_environment,
                                 {
                                     "name": "ROLLOUT_DATABASE_URL",
                                     "valueFrom": {
@@ -232,6 +291,67 @@ def _objects(*, replica: str, compressed: bytes, evaluator_job: str) -> tuple[di
         },
     }
     return config_map, job
+
+
+def render_terminal_collectors(*, packets: Path, output: Path) -> dict[str, Any]:
+    """Render score-blind collectors; never create them before evaluator terminal state."""
+    if output.exists() or output.is_symlink():
+        raise FileExistsError("terminal collector output already exists")
+    if not output.parent.is_dir():
+        raise ValueError("terminal collector output parent does not exist")
+    temporary = Path(tempfile.mkdtemp(prefix=".fleet-terminal-collectors-", dir=output.parent))
+    try:
+        items = []
+        arms = []
+        packet_paths = sorted(packets.glob("seed*/base/LAUNCH_PACKET.json")) + sorted(
+            packets.glob("seed*/candidate/LAUNCH_PACKET.json")
+        )
+        if len(packet_paths) != 16:
+            raise ValueError("exactly eight base and eight candidate packets are required")
+        for packet_path in packet_paths:
+            relative = packet_path.relative_to(packets)
+            replica = f"{relative.parts[0]}-{relative.parts[1]}"
+            compressed, evaluator_job = _bundle(packet_path.parent, program=TERMINAL_COLLECTOR)
+            config_map, job = _objects(
+                replica=replica,
+                compressed=compressed,
+                evaluator_job=evaluator_job,
+                operation="terminal",
+            )
+            items.extend([config_map, job])
+            arms.append(
+                {
+                    "replica": replica,
+                    "evaluator_job": evaluator_job,
+                    "collector_job": job["metadata"]["name"],
+                    "bundle_sha256": "sha256:" + hashlib.sha256(compressed).hexdigest(),
+                    "failure_alerts": job["metadata"]["annotations"][
+                        heldout_launch.FAILURE_ALERT_ANNOTATION
+                    ],
+                    "priority_class": job["spec"]["template"]["spec"]["priorityClassName"],
+                    "gpu_requests": 0,
+                }
+            )
+        bundle = {"apiVersion": "v1", "kind": "List", "items": items}
+        bundle_path = temporary / "terminal-collectors.yaml"
+        bundle_path.write_text(yaml.safe_dump(bundle, sort_keys=False), encoding="utf-8")
+        receipt = {
+            "schema": "cyber_fleet_heldout_terminal_collector_render_v1",
+            "bundle_path": "terminal-collectors.yaml",
+            "bundle_file_sha256": _file_sha(bundle_path),
+            "arms": arms,
+            "external_mutations": 0,
+            "launch_performed": False,
+        }
+        receipt["sha256"] = _canonical(receipt)
+        (temporary / "RENDER.json").write_text(
+            json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        os.replace(temporary, output)
+    except Exception:
+        shutil.rmtree(temporary, ignore_errors=True)
+        raise
+    return receipt
 
 
 def render(*, packets: Path, output: Path) -> dict[str, Any]:
@@ -296,8 +416,10 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--packets", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--terminal-collectors", action="store_true")
     args = parser.parse_args()
-    print(json.dumps(render(packets=args.packets, output=args.output), indent=2))
+    renderer = render_terminal_collectors if args.terminal_collectors else render
+    print(json.dumps(renderer(packets=args.packets, output=args.output), indent=2))
 
 
 if __name__ == "__main__":
