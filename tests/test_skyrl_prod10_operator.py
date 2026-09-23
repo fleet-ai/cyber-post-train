@@ -438,7 +438,7 @@ def test_prod10_inspector_is_read_only_alert_off_c1_q1_zero_gpu(
     assert proof == {
         **proof,
         "phase": "inspect",
-        "name": "chris-q38-prod10-launch-inspect-v5",
+        "name": "chris-q38-prod10-launch-inspect-v6",
         "failure_alerts": "off",
         "priority": "c1",
         "queue_priority": "q1",
@@ -454,12 +454,17 @@ def test_prod10_inspector_is_read_only_alert_off_c1_q1_zero_gpu(
     assert "envFrom" not in container
     assert "secretRef" not in json.dumps(package.job, sort_keys=True)
     assert "nvidia.com/gpu" not in json.dumps(package.job, sort_keys=True)
+    assert packet["launch_v5_failure"] == operator.launch_v5_failure_binding()
+    assert packet["launch_v5_failure"]["config_maps_absent"] is True
+    assert packet["launch_v5_failure"]["config_map_cleanup_result_sha256"] == (
+        "sha256:0becb6f7dd07640ce5f3a8e24ed2bcb3e967dc1539683b65693e716bcb96e5e2"
+    )
 
     changed = copy.deepcopy(packet)
-    changed["launch_v4_failure"]["operator_job_uid"] = (
+    changed["launch_v5_failure"]["operator_job_uid"] = (
         "00000000-0000-4000-8000-000000000001"
     )
-    changed["launch_v4_failure"] = operator._seal(changed["launch_v4_failure"])
+    changed["launch_v5_failure"] = operator._seal(changed["launch_v5_failure"])
     changed = operator._seal(changed)
     with pytest.raises(ValueError, match="predecessor"):
         operator_job.build_operator_package(changed)
@@ -480,10 +485,10 @@ def test_prod10_inspector_reads_only_allowlisted_path_metadata(
     current_guard = operation_root / "TRAINING_JOBS_API_PREFIX_GUARD.json"
     current_guard.touch()
     current_guard.chmod(0o600)
-    fake_identity = SimpleNamespace(output_root=str(tmp_path / "unused-output"))
     plan = {
         "schema": training.SCHEMA,
     }
+    fake_identity = SimpleNamespace(output_root=str(tmp_path / "unused-output"))
     checked_launch = operator._seal(
         {
             "schema": direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA,
@@ -503,12 +508,33 @@ def test_prod10_inspector_reads_only_allowlisted_path_metadata(
         "_preflight_launch",
         lambda *_args, **_kwargs: checked_launch,
     )
+    monkeypatch.setattr(
+        operator,
+        "Jobs",
+        lambda *_args, **_kwargs: pytest.fail("inspector contacted the Jobs API"),
+    )
+    monkeypatch.setattr(
+        direct,
+        "server_dry_run",
+        lambda *_args, **_kwargs: pytest.fail("inspector contacted Kubernetes"),
+    )
+    monkeypatch.setattr(
+        launch_direct,
+        "jit_duplicate_proof",
+        lambda *_args, **_kwargs: pytest.fail("inspector ran a duplicate scan"),
+    )
+    monkeypatch.setattr(
+        operator,
+        "_fresh_capacity_census",
+        lambda *_args, **_kwargs: pytest.fail("inspector ran a capacity census"),
+    )
 
     result = operator.run_inspect(
         {
             "identity": {},
             "plan": plan,
             "preflight_launch_result": checked_launch,
+            "launch_v5_failure": operator.launch_v5_failure_binding(),
         }
     )
 
@@ -529,8 +555,18 @@ def test_prod10_inspector_reads_only_allowlisted_path_metadata(
         "create_journal",
         "creator_binding",
     }
-    assert result["launch_v4_failure_sha256"] == operator.launch_v4_failure_binding()["sha256"]
+    assert result["launch_v5_failure_sha256"] == operator.launch_v5_failure_binding()["sha256"]
+    assert result["launch_packet_sha256"] == (
+        operator.launch_v5_failure_binding()["packet_sha256"]
+    )
+    assert result["preflight_launch_sha256"] == checked_launch["sha256"]
     assert result["launch_boundary"] == "after_new_guard_before_intent"
+    assert result["inspection_external_calls"] == 0
+    assert result["runtime_binding_kubernetes_reads"] == 2
+    assert result["archive_attempted"] is False
+    assert result["guard_constructed"] is False
+    assert result["create_intent_written"] is False
+    assert result["provider_create_called"] is False
     for metadata in result["paths"].values():
         assert set(metadata) <= {"state", "kind", "mode", "mtime_ns", "sha256"}
         assert not {"uid", "gid", "readable", "traversable", "path", "content"} & set(

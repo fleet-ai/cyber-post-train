@@ -47,7 +47,7 @@ OPERATOR_NAMES = {
     "manifest": "chris-q38-prod10-manifest-operator-v1",
     "preflight": "chris-q38-prod10-preflight-operator-v2",
     "launch": "chris-q38-prod10-launch-operator-v5",
-    "inspect": "chris-q38-prod10-launch-inspect-v5",
+    "inspect": "chris-q38-prod10-launch-inspect-v6",
     "probe": "chris-q38-prod10-launch-probe-v9",
 }
 _LAUNCH_V1_FAILURE = {
@@ -466,6 +466,70 @@ _INSPECT_V5_SUCCESS = {
     "resources_absent": True,
     "gpus": 0,
 }
+_LAUNCH_V5_FAILURE = {
+    "schema": "cyber_skyrl_prod10_launch_failure_binding_v4",
+    "status": "failed_before_gpu_create_all_outer_resources_released",
+    "operator_name": "chris-q38-prod10-launch-operator-v5",
+    "source_head": "bd85078353751589e23391a59bc415befc505db9",
+    "packet_sha256": (
+        "sha256:e4a79c34dcc803eb8409ea6e95aef95245b5eca0f20d4dce2d6aa5881cd50c5e"
+    ),
+    "source_sha256": (
+        "sha256:5c3c9768f5b6f825c984b52ed2de5ce49c3f2daffeec499cc2fc76014926f24b"
+    ),
+    "job_manifest_sha256": (
+        "sha256:d670eed91fae1b1df27d8c6decb9fcd4eb2a778fa392113c5afd979967117cdc"
+    ),
+    "operator_job_uid": "a09581ec-b02d-486a-829c-c6b01989545e",
+    "operator_pod_name": "chris-q38-prod10-launch-operator-v5-vqscr",
+    "operator_pod_uid": "15c932e3-ab1b-4fa0-93f8-7d6ca43ddb5c",
+    "operator_workload_name": "job-chris-q38-prod10-launch-operator-v5-85652",
+    "operator_workload_uid": "bc1f65e1-181a-46bb-a787-47801b7ec166",
+    "source_config_map_name": "chris-q38-prod10-launch-operator-v5-source",
+    "source_config_map_uid": "4938cd46-d6cf-4f90-a2d7-25110e5ff18a",
+    "packet_config_map_name": "chris-q38-prod10-launch-operator-v5-packet",
+    "packet_config_map_uid": "4e92235b-37aa-4750-964b-5b424c61a3c9",
+    "create_journal_file_sha256": (
+        "sha256:d019d8dd77e2f86639071c2c30e5e3c3c3e267e76b7658032ddaa03385ebcc18"
+    ),
+    "observer_armed_sha256": (
+        "sha256:7182a89af9c9123eaf5b5a7309b540485125df7402926563993de2b7bea5e3c5"
+    ),
+    "observer_armed_file_sha256": (
+        "sha256:335cb9bd30e9cda5cbe92e762e2643325f3ea411d279f1e2fafe0d63af9a7a76"
+    ),
+    "creator_binding_sha256": (
+        "sha256:ed2b8e2e94cf65b9ec20a3e65d1ffd7d42432009f69c626a32d9a793ed0d4d08"
+    ),
+    "creator_binding_file_sha256": (
+        "sha256:805696e0011f28feada414f5f1414806c5abde66897318cb74b506c66910e39a"
+    ),
+    "failure_receipt_sha256": (
+        "sha256:6f7d724ae7a0a61179616871895c0e2cbcb496ef351279527c6d6fb4b6f145c1"
+    ),
+    "observer_result_sha256": (
+        "sha256:d993b27d544db8ded1ca5ca01c26a05638e253d1c227c37ebb5b915d25d8e54d"
+    ),
+    "observer_result_file_sha256": (
+        "sha256:678fe45820426fe8a678f564d1166df1a48a3f0eb209cd089b5886f8347601fd"
+    ),
+    "release_observed_at": "2026-09-23T11:44:30Z",
+    "terminal_status": "Failed",
+    "exit_codes": [1],
+    "restarts": 0,
+    "inner_gpu_run_created": False,
+    "workload_resources_absent": True,
+    "config_map_cleanup_result_sha256": (
+        "sha256:0becb6f7dd07640ce5f3a8e24ed2bcb3e967dc1539683b65693e716bcb96e5e2"
+    ),
+    "config_map_cleanup_result_file_sha256": (
+        "sha256:9317bd57c5e2c6cd8e52c9c622a98f1a1b1aa8893ccd8a5e25a57cf16f2008b3"
+    ),
+    "config_maps_uid_rv_precondition_deleted": True,
+    "config_maps_absent": True,
+    "nested_jobs_created": 0,
+    "gpus": 0,
+}
 _PREFLIGHT_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_preflight_v1_failure_recovery_v1",
     "status": "failed_closed_released",
@@ -675,6 +739,11 @@ def inspect_v5_success_binding() -> dict[str, Any]:
     return _seal(_INSPECT_V5_SUCCESS)
 
 
+def launch_v5_failure_binding() -> dict[str, Any]:
+    """Bind the exact released v5 outer and UID/RV ConfigMap cleanup."""
+    return _seal(_LAUNCH_V5_FAILURE)
+
+
 def _write_once(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=False, exist_ok=True)
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -825,8 +894,8 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
         if duplicate.get("context") != direct.DEV_CONTEXT:
             raise ValueError("prod10 operator development proof changed")
     elif phase == "inspect":
-        if packet.get("launch_v4_failure") != launch_v4_failure_binding():
-            raise ValueError("prod10 launch-v4 inspection predecessor changed")
+        if packet.get("launch_v5_failure") != launch_v5_failure_binding():
+            raise ValueError("prod10 launch-v5 inspection predecessor changed")
         plan = packet.get("plan")
         if not isinstance(plan, dict):
             raise ValueError("prod10 launch inspection plan changed")
@@ -1937,8 +2006,27 @@ def _inspection_boundary(probes: dict[str, dict[str, Any]]) -> str:
     return "indeterminate_or_inconsistent"
 
 
+def _inspect_launch_markers(operation_root: Path) -> dict[str, dict[str, Any]]:
+    """Inspect the five fixed create-once markers without following links."""
+    return {
+        "v3_guard_archive": _inspect_path(operation_root / _GUARD_ARCHIVE_NAME),
+        "v3_guard_archive_receipt": _inspect_path(
+            operation_root / _GUARD_ARCHIVE_RECEIPT_NAME
+        ),
+        "current_guard": _inspect_path(
+            direct.jobs_api_guard_path(operation_root, "training")
+        ),
+        "create_journal": _inspect_path(
+            operation_root / "PROD10_DIRECT_V3_CREATE.jsonl"
+        ),
+        "creator_binding": _inspect_path(
+            hardening.creator_binding_path(operation_root, "training")
+        ),
+    }
+
+
 def run_inspect(packet: dict[str, Any]) -> dict[str, Any]:
-    """Inspect only five allowlisted SFS marker paths after the failed v4 outer."""
+    """Inspect only the five canonical SFS markers after the failed v5 outer."""
     identity = _identity(packet["identity"])
     plan = packet.get("plan")
     if not isinstance(plan, dict):
@@ -1951,32 +2039,26 @@ def run_inspect(packet: dict[str, Any]) -> dict[str, Any]:
         operator_name=OPERATOR_NAMES["preflight"],
     )
     operation_root = hardening.training_operation_root(plan)
-    probes = {
-        "v3_guard_archive": _inspect_path(operation_root / _GUARD_ARCHIVE_NAME),
-        "v3_guard_archive_receipt": _inspect_path(
-            operation_root / _GUARD_ARCHIVE_RECEIPT_NAME
-        ),
-        "current_guard": _inspect_path(
-            direct.jobs_api_guard_path(operation_root, "training")
-        ),
-        "create_journal": _inspect_path(operation_root / "PROD10_DIRECT_V3_CREATE.jsonl"),
-        "creator_binding": _inspect_path(
-            hardening.creator_binding_path(operation_root, "training")
-        ),
-    }
+    probes = _inspect_launch_markers(operation_root)
     return _seal(
         {
             # Reuse the existing sanitized, observer-accepted CPU receipt
-            # envelope so this diagnostic does not alter the frozen prod9
-            # observer allowlist.  ``phase`` distinguishes the payload.
+            # envelope so this diagnostic does not alter the frozen observer.
             "schema": MANIFEST_RESULT_SCHEMA,
             "status": "passed",
             "phase": "inspect",
-            "launch_v4_failure_sha256": launch_v4_failure_binding()["sha256"],
+            "launch_v5_failure_sha256": launch_v5_failure_binding()["sha256"],
+            "launch_packet_sha256": launch_v5_failure_binding()["packet_sha256"],
             "preflight_launch_sha256": launch["sha256"],
             "paths": probes,
             "launch_boundary": _inspection_boundary(probes),
             "contents_exported": False,
+            "inspection_external_calls": 0,
+            "runtime_binding_kubernetes_reads": 2,
+            "archive_attempted": False,
+            "guard_constructed": False,
+            "create_intent_written": False,
+            "provider_create_called": False,
             "nested_jobs_created": 0,
             "gpus": 0,
         }

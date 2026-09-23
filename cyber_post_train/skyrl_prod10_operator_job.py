@@ -359,7 +359,7 @@ def inspect_packet(
             "identity": identity.sealed_mapping(),
             "plan": plan,
             "preflight_launch_result": checked_launch,
-            "launch_v4_failure": operator.launch_v4_failure_binding(),
+            "launch_v5_failure": operator.launch_v5_failure_binding(),
         }
     )
 
