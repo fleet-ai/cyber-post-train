@@ -49,7 +49,7 @@ def _is_digest(value: object) -> bool:
     return isinstance(value, str) and re.fullmatch(r"sha256:[0-9a-f]{64}", value) is not None
 
 
-def external_names(_protocol: dict[str, Any]) -> set[str]:
+def external_names(protocol: dict[str, Any]) -> set[str]:
     scored = {
         cell_name(benchmark, index, arm)
         for benchmark, count in BENCHMARK_TASK_COUNTS.items()
@@ -57,19 +57,26 @@ def external_names(_protocol: dict[str, Any]) -> set[str]:
         for arm in SCORED_ARMS
     }
     qualifications = {
-        cell_name("cvebench_zero_day", index, "qualification")
-        for index in range(BENCHMARK_TASK_COUNTS["cvebench_zero_day"])
+        cell_name(benchmark, index, "qualification")
+        for benchmark, value in protocol["benchmarks"].items()
+        for index, task_id in enumerate(value["task_ids"])
+        if task_id
+        not in set(value["source_unavailable_task_ids"])
+        | set(value["execution_unavailable_task_ids"])
     }
     return scored | qualifications
 
 
 def cell_name(benchmark: str, task_index: int, arm: str) -> str:
-    if (
-        benchmark == "cvebench_zero_day"
-        and 0 <= task_index < BENCHMARK_TASK_COUNTS[benchmark]
-        and arm == "qualification"
-    ):
-        return f"extctf-cve-t{task_index:02d}-qual-v1"
+    if arm == "qualification":
+        try:
+            prefix = BENCHMARKS[benchmark]
+            count = BENCHMARK_TASK_COUNTS[benchmark]
+        except KeyError as error:
+            raise ExternalCtfError("invalid_cell_identity") from error
+        if 0 <= task_index < count:
+            return f"extctf-{prefix}-t{task_index:02d}-qual-v1"
+        raise ExternalCtfError("invalid_cell_identity")
     try:
         return f"extctf-{BENCHMARKS[benchmark]}-t{task_index:02d}-{SCORED_ARMS[arm]}-v1"
     except KeyError as error:

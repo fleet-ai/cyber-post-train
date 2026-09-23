@@ -230,10 +230,16 @@ def test_protocol_rejects_rehashed_but_nonofficial_roster() -> None:
 def test_shared_capacity_counts_only_exact_live_project_names() -> None:
     protocol = load_protocol(PROTOCOL)
     names = external_names(protocol)
-    assert len(names) == (40 + 19 + 6) * 2 + 40
-    assert "extctf-cve-t00-qual-v1" in names
-    assert "extctf-cve-t05-qual-v1" in names
-    assert "extctf-cve-t39-qual-v1" in names
+    assert len(names) == (40 + 19 + 6) * 2 + 40 + 16 + 5
+    expected_qualifications = {
+        *(f"extctf-cve-t{index:02d}-qual-v1" for index in range(40)),
+        *(
+            f"extctf-nyu-t{index:02d}-qual-v1"
+            for index in (0, 1, 2, 3, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18)
+        ),
+        *(f"extctf-cyb-t{index:02d}-qual-v1" for index in (0, 2, 3, 4, 5)),
+    }
+    assert {name for name in names if name.endswith("-qual-v1")} == expected_qualifications
     target = cell_name("cvebench_zero_day", 0, "base")
     rows = [
         {"name": target, "status": "running"},
@@ -245,6 +251,17 @@ def test_shared_capacity_counts_only_exact_live_project_names() -> None:
         active_project_count([rows[0], rows[0]], names)
     with pytest.raises(RuntimeError, match="inventory_conflict"):
         active_project_count([{"name": "extctf-unreviewed", "status": "running"}], names)
+
+
+def test_external_capacity_roster_seals_against_shared_authority(tmp_path: Path) -> None:
+    protocol = load_protocol(PROTOCOL)
+    roster = tensorlake.seal_capacity_roster(
+        protocol_path=PROTOCOL,
+        output_path=tmp_path / "shared-capacity.json",
+    )
+
+    assert roster["external_sandbox_name_count"] == 191
+    assert set(roster["external_sandbox_names"]) == external_names(protocol)
 
 
 def test_remote_worker_fails_closed_off_linux_amd64(monkeypatch) -> None:
