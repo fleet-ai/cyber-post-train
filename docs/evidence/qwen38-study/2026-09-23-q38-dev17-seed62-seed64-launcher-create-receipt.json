@@ -1,0 +1,112 @@
+{
+  "create_calls_performed": 1,
+  "create_intent_file_sha256": "sha256:2683cd3569ea2247b5220f6ee83af4e514325193ceb092f1f0d677970bf42f62",
+  "create_intent_sha256": "sha256:ce96e09d3bc41f57b6e47521b14272ce1ecea2f76a35a97271efa983f233f25d",
+  "create_response_file_sha256": "sha256:04890367fef498d152a600714fe168b66a01b9924cb2988a596660f386b7fe56",
+  "external_mutations": {
+    "config_maps_created": 6,
+    "jobs_created": 6,
+    "other": 0
+  },
+  "objects": [
+    {
+      "create_response_resource_version": "34227927",
+      "current_resource_version": "34227927",
+      "kind": "ConfigMap",
+      "name": "chris-q38-dev17-s62-base-repl-p1-v2-launch-v2",
+      "uid": "baa5661b-26db-420a-a984-a924b7ee9bc6"
+    },
+    {
+      "create_response_resource_version": "34227962",
+      "current_resource_version": "34227962",
+      "kind": "ConfigMap",
+      "name": "chris-q38-dev17-s62-t3k32s1000-repl-p1-v2-launch-v2",
+      "uid": "607564d6-b6c5-40b8-bd08-ef388a28b3d5"
+    },
+    {
+      "create_response_resource_version": "34227992",
+      "current_resource_version": "34227992",
+      "kind": "ConfigMap",
+      "name": "chris-q38-dev17-s63-base-repl-p1-v2-launch-v2",
+      "uid": "8b399894-c47c-41c6-b77c-4fe2e53031e7"
+    },
+    {
+      "create_response_resource_version": "34228027",
+      "current_resource_version": "34228027",
+      "kind": "ConfigMap",
+      "name": "chris-q38-dev17-s63-t3k32s1000-repl-p1-v2-launch-v2",
+      "uid": "edfdfc94-611f-4fdc-9721-201b8b177f28"
+    },
+    {
+      "create_response_resource_version": "34228056",
+      "current_resource_version": "34228056",
+      "kind": "ConfigMap",
+      "name": "chris-q38-dev17-s64-base-repl-p1-v2-launch-v2",
+      "uid": "89a8d5e1-d730-4d8a-ba68-a9b1554f6576"
+    },
+    {
+      "create_response_resource_version": "34228090",
+      "current_resource_version": "34228090",
+      "kind": "ConfigMap",
+      "name": "chris-q38-dev17-s64-t3k32s1000-repl-p1-v2-launch-v2",
+      "uid": "2fc30e23-7456-44ec-b360-7ecf50f1638c"
+    },
+    {
+      "create_response_resource_version": "34227938",
+      "current_resource_version": "34228515",
+      "kind": "Job",
+      "name": "chris-q38-dev17-s62-base-repl-p1-v2-launch-v2",
+      "uid": "6eb1bf08-a9d9-46dc-b0ab-be7c68f2d4cc"
+    },
+    {
+      "create_response_resource_version": "34227967",
+      "current_resource_version": "34228506",
+      "kind": "Job",
+      "name": "chris-q38-dev17-s62-t3k32s1000-repl-p1-v2-launch-v2",
+      "uid": "35882b8f-c99f-4dfb-8fdd-2cae561b6c35"
+    },
+    {
+      "create_response_resource_version": "34228002",
+      "current_resource_version": "34228519",
+      "kind": "Job",
+      "name": "chris-q38-dev17-s63-base-repl-p1-v2-launch-v2",
+      "uid": "b52b46c1-d779-4926-a42b-6439683d118d"
+    },
+    {
+      "create_response_resource_version": "34228034",
+      "current_resource_version": "34228499",
+      "kind": "Job",
+      "name": "chris-q38-dev17-s63-t3k32s1000-repl-p1-v2-launch-v2",
+      "uid": "be10bc4e-dd2f-415e-8744-6436f8184add"
+    },
+    {
+      "create_response_resource_version": "34228063",
+      "current_resource_version": "34228350",
+      "kind": "Job",
+      "name": "chris-q38-dev17-s64-base-repl-p1-v2-launch-v2",
+      "uid": "a4a48bd1-0bc4-42fc-815b-d45a1134b790"
+    },
+    {
+      "create_response_resource_version": "34228097",
+      "current_resource_version": "34228561",
+      "kind": "Job",
+      "name": "chris-q38-dev17-s64-t3k32s1000-repl-p1-v2-launch-v2",
+      "uid": "a0d4aba7-a845-489b-b8a0-82ace9936081"
+    }
+  ],
+  "observed_at": "2026-09-23T14:08:28.663887+00:00",
+  "repeat_create_calls_performed": 0,
+  "repository_commit": "955416264369013d5584edb8c4c473b5a5be306f",
+  "resource_version_note": "Job resourceVersions advanced after create through normal admission-controller updates; immutable UIDs match the single create response",
+  "root_job_policy": {
+    "count": 6,
+    "create_once": true,
+    "failure_alerts_off": true,
+    "gpu_requests": 0,
+    "postgres_client_label": true,
+    "priority_class": "c1"
+  },
+  "schema": "cyber_fleet_seed62_seed63_seed64_launcher_create_receipt_v1",
+  "seed65_created": false,
+  "sha256": "sha256:bb848c1b0afc0a259438e623280626adfe6d0b18f95a7f5d3803df52777f82d6"
+}

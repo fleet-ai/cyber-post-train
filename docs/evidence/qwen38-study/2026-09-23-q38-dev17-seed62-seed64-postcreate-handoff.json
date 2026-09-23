@@ -1,0 +1,234 @@
+{
+  "create_calls_performed": 1,
+  "create_receipt_file_sha256": "sha256:e7073e4a8dfef52dc9d4df9365282f8b6da36e40e1c340fb136af338a2c20b2a",
+  "create_receipt_sha256": "sha256:bb848c1b0afc0a259438e623280626adfe6d0b18f95a7f5d3803df52777f82d6",
+  "create_response_file_sha256": "sha256:04890367fef498d152a600714fe168b66a01b9924cb2988a596660f386b7fe56",
+  "external_mutations": {
+    "evaluator_config_maps_created_by_launchers": 6,
+    "evaluator_jobs_created_by_launchers": 6,
+    "launcher_config_maps_created": 6,
+    "launcher_jobs_created": 6,
+    "other": 0
+  },
+  "inner_evaluators": [
+    {
+      "admitted": true,
+      "arm_id": "base",
+      "evaluator_config_map_name": "chris-q38-dev17-s62-base-repl-code-v2",
+      "evaluator_config_map_resource_version": "34228274",
+      "evaluator_config_map_uid": "15c28b02-b03f-47c8-a38f-0aa25ec568f8",
+      "evaluator_job_name": "chris-q38-dev17-s62-base-repl-p1-v2",
+      "evaluator_job_resource_version": "34228385",
+      "evaluator_job_uid": "c60ceaa2-8fff-41c1-b5cb-1042eefca376",
+      "job_active": 1,
+      "job_failed": 0,
+      "job_succeeded": 0,
+      "pod_name": "chris-q38-dev17-s62-base-repl-p1-v2-47tmm",
+      "pod_phase": "Running",
+      "pod_restarts": 0,
+      "pod_uid": "c2ae66f9-36bc-4dea-a4b0-3ce1d4d85a64",
+      "successor_seed": 62,
+      "workload_name": "job-chris-q38-dev17-s62-base-repl-p1-v2-e8ce2",
+      "workload_uid": "d65b5323-7918-44ef-af4e-4dd3d7928778"
+    },
+    {
+      "admitted": false,
+      "arm_id": "candidate",
+      "evaluator_config_map_name": "chris-q38-dev17-s62-t3k32s1000-repl-code-v2",
+      "evaluator_config_map_resource_version": "34228301",
+      "evaluator_config_map_uid": "6027f81f-64bc-4cf2-93d6-9a0bedb0715a",
+      "evaluator_job_name": "chris-q38-dev17-s62-t3k32s1000-repl-p1-v2",
+      "evaluator_job_resource_version": "34228304",
+      "evaluator_job_uid": "cbcb80ff-89af-4774-adbb-f5def68a80d2",
+      "job_active": 0,
+      "job_failed": 0,
+      "job_succeeded": 0,
+      "pod_name": null,
+      "pod_phase": null,
+      "pod_restarts": null,
+      "pod_uid": null,
+      "successor_seed": 62,
+      "workload_name": "job-chris-q38-dev17-s62-t3k32s1000-repl-p1-v2-608f0",
+      "workload_uid": "cafef9a8-6ffc-4969-9e78-55160f189e37"
+    },
+    {
+      "admitted": false,
+      "arm_id": "base",
+      "evaluator_config_map_name": "chris-q38-dev17-s63-base-repl-code-v2",
+      "evaluator_config_map_resource_version": "34228378",
+      "evaluator_config_map_uid": "89e58a63-05c2-49b9-9579-00c6e054453b",
+      "evaluator_job_name": "chris-q38-dev17-s63-base-repl-p1-v2",
+      "evaluator_job_resource_version": "34228381",
+      "evaluator_job_uid": "de7d833f-861a-4a0e-ba64-97964a83d96d",
+      "job_active": 0,
+      "job_failed": 0,
+      "job_succeeded": 0,
+      "pod_name": null,
+      "pod_phase": null,
+      "pod_restarts": null,
+      "pod_uid": null,
+      "successor_seed": 63,
+      "workload_name": "job-chris-q38-dev17-s63-base-repl-p1-v2-35eb1",
+      "workload_uid": "835f571b-a658-408a-b365-e71ce423d986"
+    },
+    {
+      "admitted": false,
+      "arm_id": "candidate",
+      "evaluator_config_map_name": "chris-q38-dev17-s63-t3k32s1000-repl-code-v2",
+      "evaluator_config_map_resource_version": "34228420",
+      "evaluator_config_map_uid": "037829f8-9e7b-430b-a7b5-186f03c1cb84",
+      "evaluator_job_name": "chris-q38-dev17-s63-t3k32s1000-repl-p1-v2",
+      "evaluator_job_resource_version": "34228426",
+      "evaluator_job_uid": "661e595b-8108-4a9a-892c-d4bd3570eec0",
+      "job_active": 0,
+      "job_failed": 0,
+      "job_succeeded": 0,
+      "pod_name": null,
+      "pod_phase": null,
+      "pod_restarts": null,
+      "pod_uid": null,
+      "successor_seed": 63,
+      "workload_name": "job-chris-q38-dev17-s63-t3k32s1000-repl-p1-v2-f38ac",
+      "workload_uid": "c5e0504a-0e9c-4014-b4b9-379c2366e51e"
+    },
+    {
+      "admitted": true,
+      "arm_id": "base",
+      "evaluator_config_map_name": "chris-q38-dev17-s64-base-repl-code-v2",
+      "evaluator_config_map_resource_version": "34228239",
+      "evaluator_config_map_uid": "63f428a2-fb12-4b0b-a767-27f865eca625",
+      "evaluator_job_name": "chris-q38-dev17-s64-base-repl-p1-v2",
+      "evaluator_job_resource_version": "34228500",
+      "evaluator_job_uid": "310b3362-5f34-4ecb-90da-f8ebdae2cbd9",
+      "job_active": 1,
+      "job_failed": 0,
+      "job_succeeded": 0,
+      "pod_name": "chris-q38-dev17-s64-base-repl-p1-v2-n76j5",
+      "pod_phase": "Running",
+      "pod_restarts": 0,
+      "pod_uid": "57944243-f1e4-4bff-b4c6-bce2426bf706",
+      "successor_seed": 64,
+      "workload_name": "job-chris-q38-dev17-s64-base-repl-p1-v2-266b1",
+      "workload_uid": "f7731587-d6e8-4f84-b842-ccf24db3336f"
+    },
+    {
+      "admitted": false,
+      "arm_id": "candidate",
+      "evaluator_config_map_name": "chris-q38-dev17-s64-t3k32s1000-repl-code-v2",
+      "evaluator_config_map_resource_version": "34228449",
+      "evaluator_config_map_uid": "61f6e016-f379-4a66-b171-e96eff37ab6d",
+      "evaluator_job_name": "chris-q38-dev17-s64-t3k32s1000-repl-p1-v2",
+      "evaluator_job_resource_version": "34228452",
+      "evaluator_job_uid": "6a692c38-d99e-4742-8570-1b4c7aaa218c",
+      "job_active": 0,
+      "job_failed": 0,
+      "job_succeeded": 0,
+      "pod_name": null,
+      "pod_phase": null,
+      "pod_restarts": null,
+      "pod_uid": null,
+      "successor_seed": 64,
+      "workload_name": "job-chris-q38-dev17-s64-t3k32s1000-repl-p1-v2-ccf43",
+      "workload_uid": "4cf16331-da5c-412e-af9c-60d5a3a1819d"
+    }
+  ],
+  "inner_evaluators_created_count": 6,
+  "observed_at": "2026-09-23T14:10:33.976388+00:00",
+  "outer_launcher_objects": [
+    {
+      "create_response_resource_version": "34227927",
+      "current_resource_version": "34227927",
+      "kind": "ConfigMap",
+      "name": "chris-q38-dev17-s62-base-repl-p1-v2-launch-v2",
+      "uid": "baa5661b-26db-420a-a984-a924b7ee9bc6"
+    },
+    {
+      "create_response_resource_version": "34227962",
+      "current_resource_version": "34227962",
+      "kind": "ConfigMap",
+      "name": "chris-q38-dev17-s62-t3k32s1000-repl-p1-v2-launch-v2",
+      "uid": "607564d6-b6c5-40b8-bd08-ef388a28b3d5"
+    },
+    {
+      "create_response_resource_version": "34227992",
+      "current_resource_version": "34227992",
+      "kind": "ConfigMap",
+      "name": "chris-q38-dev17-s63-base-repl-p1-v2-launch-v2",
+      "uid": "8b399894-c47c-41c6-b77c-4fe2e53031e7"
+    },
+    {
+      "create_response_resource_version": "34228027",
+      "current_resource_version": "34228027",
+      "kind": "ConfigMap",
+      "name": "chris-q38-dev17-s63-t3k32s1000-repl-p1-v2-launch-v2",
+      "uid": "edfdfc94-611f-4fdc-9721-201b8b177f28"
+    },
+    {
+      "create_response_resource_version": "34228056",
+      "current_resource_version": "34228056",
+      "kind": "ConfigMap",
+      "name": "chris-q38-dev17-s64-base-repl-p1-v2-launch-v2",
+      "uid": "89a8d5e1-d730-4d8a-ba68-a9b1554f6576"
+    },
+    {
+      "create_response_resource_version": "34228090",
+      "current_resource_version": "34228090",
+      "kind": "ConfigMap",
+      "name": "chris-q38-dev17-s64-t3k32s1000-repl-p1-v2-launch-v2",
+      "uid": "2fc30e23-7456-44ec-b360-7ecf50f1638c"
+    },
+    {
+      "create_response_resource_version": "34227938",
+      "current_resource_version": "34228515",
+      "kind": "Job",
+      "name": "chris-q38-dev17-s62-base-repl-p1-v2-launch-v2",
+      "uid": "6eb1bf08-a9d9-46dc-b0ab-be7c68f2d4cc"
+    },
+    {
+      "create_response_resource_version": "34227967",
+      "current_resource_version": "34228506",
+      "kind": "Job",
+      "name": "chris-q38-dev17-s62-t3k32s1000-repl-p1-v2-launch-v2",
+      "uid": "35882b8f-c99f-4dfb-8fdd-2cae561b6c35"
+    },
+    {
+      "create_response_resource_version": "34228002",
+      "current_resource_version": "34228519",
+      "kind": "Job",
+      "name": "chris-q38-dev17-s63-base-repl-p1-v2-launch-v2",
+      "uid": "b52b46c1-d779-4926-a42b-6439683d118d"
+    },
+    {
+      "create_response_resource_version": "34228034",
+      "current_resource_version": "34228499",
+      "kind": "Job",
+      "name": "chris-q38-dev17-s63-t3k32s1000-repl-p1-v2-launch-v2",
+      "uid": "be10bc4e-dd2f-415e-8744-6436f8184add"
+    },
+    {
+      "create_response_resource_version": "34228063",
+      "current_resource_version": "34228350",
+      "kind": "Job",
+      "name": "chris-q38-dev17-s64-base-repl-p1-v2-launch-v2",
+      "uid": "a4a48bd1-0bc4-42fc-815b-d45a1134b790"
+    },
+    {
+      "create_response_resource_version": "34228097",
+      "current_resource_version": "34228561",
+      "kind": "Job",
+      "name": "chris-q38-dev17-s64-t3k32s1000-repl-p1-v2-launch-v2",
+      "uid": "a0d4aba7-a845-489b-b8a0-82ace9936081"
+    }
+  ],
+  "outer_launchers_terminal_success_count": 6,
+  "privacy": {
+    "infrastructure_state_only": true,
+    "prompts_responses_flags_rewards_or_trace_content_read": false,
+    "scores_read": false
+  },
+  "repeat_create_calls_performed": 0,
+  "repository_commit": "955416264369013d5584edb8c4c473b5a5be306f",
+  "schema": "cyber_fleet_seed62_seed63_seed64_postcreate_handoff_v1",
+  "seed65_created": false,
+  "sha256": "sha256:9b766e91256aaa5905ba4ae123ce680b6ac88c5327be5b5c4f7cd3924d0daa91"
+}
