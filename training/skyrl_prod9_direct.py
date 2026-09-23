@@ -1451,6 +1451,29 @@ def _direct_stage_evidence(
     operator_name: str,
     fresh_release: bool,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
+    result, launch, successor = _direct_stage_rebound_evidence(
+        stage,
+        stage_result,
+        stage_launch_result,
+        identity=identity,
+        operator_name=operator_name,
+        fresh_release=fresh_release,
+    )
+    if successor != plan.get("data"):
+        raise JobsError("prod10 direct stage result evidence changed")
+    return result, launch
+
+
+def _direct_stage_rebound_evidence(
+    stage: dict[str, Any],
+    stage_result: object,
+    stage_launch_result: object,
+    *,
+    identity: historical.RailIdentity,
+    operator_name: str,
+    fresh_release: bool,
+) -> tuple[dict[str, Any], dict[str, Any], dict[str, Any]]:
+    """Validate the released stage before a plan exists for its rebound rows."""
     checked_stage, bound = training._stage_identity(stage)
     if bound != identity:
         raise JobsError("prod10 direct stage identity changed")
@@ -1473,7 +1496,6 @@ def _direct_stage_evidence(
         or result.get("stage") != checked_stage
         or result.get("packet_sha256") != launch["package"]["packet_sha256"]
         or result.get("gpus") != 0
-        or receipt.get("successor_manifest") != plan.get("data")
         or execution.get("kind") != "job"
         or execution.get("name") != operator_name
         or execution.get("uid") != launch["created"]["job"]["uid"]
@@ -1486,7 +1508,7 @@ def _direct_stage_evidence(
         or launch_receipt.get("result_sha256") != result.get("sha256")
     ):
         raise JobsError("prod10 direct stage result evidence changed")
-    return result, launch
+    return result, launch, receipt["successor_manifest"]
 
 
 def _preflight_authorization_direct_stage(

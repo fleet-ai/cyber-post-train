@@ -164,6 +164,35 @@ def stage_packet(
     )
 
 
+def manifest_packet(
+    *,
+    identity: historical.RailIdentity,
+    stage: dict[str, Any],
+    stage_launch_result: dict[str, Any],
+) -> dict[str, Any]:
+    checked_stage, stage_identity = training._stage_identity(stage)
+    if stage_identity != identity:
+        raise ValueError("prod10 manifest stage identity changed")
+    checked_launch = direct._direct_stage_launch(
+        stage_launch_result,
+        checked_stage,
+        identity=identity,
+        operator_name=operator.OPERATOR_NAMES["stage"],
+        fresh=False,
+    )
+    return _seal(
+        {
+            "schema": operator.PACKET_SCHEMA,
+            "phase": "manifest",
+            "operator_name": operator.OPERATOR_NAMES["manifest"],
+            "identity": identity.sealed_mapping(),
+            "stage": checked_stage,
+            "stage_launch_result": checked_launch,
+            "preflight_v1_failure": operator.preflight_v1_failure_binding(),
+        }
+    )
+
+
 def preflight_packet(
     *,
     identity: historical.RailIdentity,
@@ -224,6 +253,12 @@ def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
         expected = stage_packet(
             identity=identity,
             stage=checked["stage"],
+        )
+    elif checked["phase"] == "manifest":
+        expected = manifest_packet(
+            identity=identity,
+            stage=checked["stage"],
+            stage_launch_result=checked["stage_launch_result"],
         )
     else:
         expected = preflight_packet(

@@ -1201,6 +1201,7 @@ def _validated_receipt(message: object, *, kind: str) -> dict | None:
             "cyber_skyrl_reward_cpu_preflight_v1",
             "cyber_skyrl_reward_cpu_preflight_rejection_v1",
             "cyber_skyrl_prod10_operator_termination_v1",
+            "cyber_skyrl_prod10_rebound_manifest_result_v1",
             "cyber_skyrl_prod10_operator_failure_v1",
             "cyber_skyrl_prod10_bootstrap_failure_v1",
         },

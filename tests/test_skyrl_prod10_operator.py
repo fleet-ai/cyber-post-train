@@ -150,6 +150,107 @@ def test_prod10_operator_package_is_exact_alert_off_c1_q1_zero_gpu() -> None:
     assert "nvidia.com/gpu" not in json.dumps(package.job, sort_keys=True)
 
 
+def test_prod10_manifest_operator_is_distinct_read_only_and_recovery_bound(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity, stage, _preview, _duplicate = _stage_inputs()
+    launch = {"schema": "synthetic-stage-launch"}
+    monkeypatch.setattr(direct, "_direct_stage_launch", lambda value, *_args, **_kwargs: value)
+    packet = operator_job.manifest_packet(
+        identity=identity,
+        stage=stage,
+        stage_launch_result=launch,
+    )
+    package = operator_job.build_operator_package(packet)
+    proof = operator_job.validate_operator_package(package)
+    container = package.job["spec"]["template"]["spec"]["containers"][0]
+    mounts = {item["name"]: item for item in container["volumeMounts"]}
+
+    assert packet["preflight_v1_failure"] == operator.preflight_v1_failure_binding()
+    assert proof == {
+        **proof,
+        "phase": "manifest",
+        "name": "chris-q38-prod10-manifest-operator-v1",
+        "failure_alerts": "off",
+        "priority": "c1",
+        "queue_priority": "q1",
+        "gpus": 0,
+    }
+    assert mounts["sfs"]["readOnly"] is True
+    assert "nvidia.com/gpu" not in json.dumps(package.job, sort_keys=True)
+
+    changed = copy.deepcopy(packet)
+    changed["preflight_v1_failure"]["operator_job_uid"] = (
+        "00000000-0000-4000-8000-000000000001"
+    )
+    changed["preflight_v1_failure"] = operator._seal(changed["preflight_v1_failure"])
+    changed = operator._seal(changed)
+    with pytest.raises(ValueError, match="recovery"):
+        operator_job.build_operator_package(changed)
+
+
+def test_prod10_manifest_result_exports_only_sanitized_public_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity, stage, _preview, _duplicate = _stage_inputs()
+    successor = copy.deepcopy(stage["predecessor_manifest"])
+    successor["name"] = identity.run_name
+    successor["sha256"] = "sha256:" + digest(
+        {key: value for key, value in successor.items() if key != "sha256"}
+    )
+    result_path = operator.hardening.stage_operation_root(stage) / "STAGE_OPERATOR_RESULT.json"
+    stage_result = operator._seal(
+        {"schema": operator.DIRECT_STAGE_RESULT_SCHEMA, "status": "stage_ready"}
+    )
+    launch = operator._seal(
+        {
+            "schema": direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA,
+            "observer": {
+                "receipt": {
+                    "result_path": str(result_path),
+                    "result_sha256": stage_result["sha256"],
+                },
+                "workload_name": "job-stage-abcde",
+                "pod_names": [],
+            },
+            "created": {
+                "source_config_map": {"name": operator.OPERATOR_NAMES["stage"] + "-source"},
+                "packet_config_map": {"name": operator.OPERATOR_NAMES["stage"] + "-packet"},
+            },
+        }
+    )
+    monkeypatch.setattr(direct, "_direct_stage_launch", lambda *_args, **_kwargs: launch)
+    monkeypatch.setattr(operator, "_read_recovery_file", lambda *_args: stage_result)
+    monkeypatch.setattr(
+        direct,
+        "_direct_stage_rebound_evidence",
+        lambda *_args, **_kwargs: (stage_result, launch, successor),
+    )
+    absent: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        operator,
+        "_resource_absent",
+        lambda _runner, resource, name, **_kwargs: absent.append((resource, name)),
+    )
+
+    result = operator.run_manifest(
+        {
+            "identity": identity.sealed_mapping(),
+            "stage": stage,
+            "stage_launch_result": launch,
+        },
+        runner=object(),
+    )
+
+    assert result["schema"] == operator.MANIFEST_RESULT_SCHEMA
+    assert result["successor_manifest"] == successor
+    assert result["private_rows_exported"] is False
+    assert result["nested_jobs_created"] == result["gpus"] == 0
+    assert len(json.dumps(result, sort_keys=True, separators=(",", ":"))) < 3900
+    assert ("job", "chris-q38-prod10-preflight-operator-v1") in absent
+    assert ("job", identity.preflight_name) in absent
+
+
 def test_prod10_runtime_derives_root_job_uid_from_exact_pod_owner(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

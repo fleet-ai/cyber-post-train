@@ -22,6 +22,7 @@ import yaml
 
 from cyber_post_train.gpu_capacity import build_capacity_census
 from cyber_post_train.jobs import JobsError, digest
+from evals.fleet import opencode_self_hosted as fleet
 from scripts import prepare_qwen38_skyrl_prod9_successor as prod9_prepare
 from training import incluster_kubernetes
 from training import skyrl_prod9_direct as prod9_direct
@@ -529,16 +530,18 @@ def _release(
     )
 
 
-def _stage_receipt(stage: dict, plan: dict, identity: historical_direct.RailIdentity) -> dict:
+def _stage_receipt(
+    stage: dict, successor: dict, identity: historical_direct.RailIdentity
+) -> dict:
     files = [
         {"path": name, "bytes": 1, "sha256": "sha256:" + name.encode().hex().ljust(64, "0")}
         for name in ("manifest.json", "split.json", "task-set.json")
     ]
     files.extend(
         {
-            "path": plan["data"]["files"][split]["path"],
+            "path": successor["files"][split]["path"],
             "bytes": 1,
-            "sha256": plan["data"]["files"][split]["sha256"],
+            "sha256": successor["files"][split]["sha256"],
         }
         for split in ("train", "dev")
     )
@@ -550,8 +553,8 @@ def _stage_receipt(stage: dict, plan: dict, identity: historical_direct.RailIden
         "source": identity.predecessor_data_root,
         "destination": identity.data_root,
         "predecessor_manifest_sha256": stage["predecessor_manifest_sha256"],
-        "successor_manifest": plan["data"],
-        "successor_manifest_sha256": plan["data"]["sha256"],
+        "successor_manifest": successor,
+        "successor_manifest_sha256": successor["sha256"],
         "files": files,
         "gpus": 0,
         "runtime_user": {"uid": 1000, "gid": 100},
@@ -565,7 +568,7 @@ def _stage_receipt(stage: dict, plan: dict, identity: historical_direct.RailIden
 
 def _direct_stage_v2_evidence(
     stage: dict,
-    plan: dict,
+    successor: dict,
     identity: historical_direct.RailIdentity,
     operator_name: str,
 ) -> tuple[dict, dict]:
@@ -575,7 +578,7 @@ def _direct_stage_v2_evidence(
     source_sha256 = "sha256:" + "a" * 64
     packet_sha256 = "sha256:" + "b" * 64
     manifest_sha256 = "sha256:" + "c" * 64
-    receipt = _stage_receipt(stage, plan, identity)
+    receipt = _stage_receipt(stage, successor, identity)
     stage_result = prod9_direct._seal(
         {
             "schema": prod9_direct.DIRECT_STAGE_RESULT_SCHEMA,
@@ -684,13 +687,59 @@ def _direct_stage_v2_evidence(
     return stage_result, launch
 
 
+def _real_rebound_manifests(
+    tmp_path: Path, identity: historical_direct.RailIdentity
+) -> tuple[dict, dict]:
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    source.mkdir()
+    files: dict[str, dict] = {}
+    for split in ("train", "dev"):
+        config = {"run_id": identity.predecessor_run_name, "task": "synthetic"}
+        config["config_sha256"] = fleet.digest_without(config, "config_sha256")
+        row = {
+            "split": split,
+            "cyber_config_json": fleet.canonical_json(config).decode(),
+        }
+        payload = fleet.canonical_json(row) + b"\n"
+        (source / f"{split}.jsonl").write_bytes(payload)
+        files[split] = {
+            "path": f"{split}.jsonl",
+            "rows": 1,
+            "max_prompt_tokens": 1,
+            "sha256": "sha256:" + hashlib.sha256(payload).hexdigest(),
+        }
+    (source / "split.json").write_text("{}\n")
+    (source / "task-set.json").write_text("{}\n")
+    predecessor_body = {
+        key: value
+        for key, value in json.loads(
+            (
+                ROOT
+                / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json"
+            ).read_text()
+        ).items()
+        if key != "sha256"
+    }
+    predecessor_body.update(name=identity.predecessor_run_name, files=files)
+    predecessor = {
+        **predecessor_body,
+        "sha256": "sha256:" + digest(predecessor_body),
+    }
+    (source / "manifest.json").write_bytes(fleet.canonical_json(predecessor) + b"\n")
+    successor = historical_direct.rebind_private_source_for_identity(
+        source, destination, identity
+    )
+    return predecessor, successor
+
+
 def test_prod10_direct_stage_v2_authorizes_preflight_without_legacy_fields(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     plan, request, identity = _prod9_plan()
-    predecessor = json.loads(
-        (ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json").read_text()
-    )
+    predecessor, successor = _real_rebound_manifests(tmp_path, identity)
+    plan["data"] = successor
+    request = prod9_training.job_request(plan)
     stage = prod9_training.stage_spec(identity, predecessor)
     root = (tmp_path / "prod9-create-once-v1").resolve()
     root.mkdir(mode=0o700)
@@ -699,7 +748,7 @@ def test_prod10_direct_stage_v2_authorizes_preflight_without_legacy_fields(
     operation_root.mkdir(mode=0o700)
     operator_name = "chris-q38-prod10-stage-operator-v7"
     stage_result, stage_launch = _direct_stage_v2_evidence(
-        stage, plan, identity, operator_name
+        stage, successor, identity, operator_name
     )
     expected = prod9_direct.preflight_job_manifest(plan, identity=identity)
     dev_preview = prod9_direct.validate_cpu_preview(
@@ -745,6 +794,36 @@ def test_prod10_direct_stage_v2_authorizes_preflight_without_legacy_fields(
     }.intersection(authorization)
     assert authorization["stage_result"] == stage_result
     assert authorization["stage_launch_result"] == stage_launch
+
+    stale = copy.deepcopy(plan)
+    stale["data"] = {
+        **predecessor,
+        "name": identity.run_name,
+    }
+    stale["data"]["sha256"] = "sha256:" + digest(
+        {key: value for key, value in stale["data"].items() if key != "sha256"}
+    )
+    assert {
+        split: stale["data"]["files"][split]["sha256"]
+        for split in ("train", "dev")
+    } != {
+        split: successor["files"][split]["sha256"]
+        for split in ("train", "dev")
+    }
+    with pytest.raises(JobsError, match="direct stage result"):
+        prod9_direct.authorize_preflight_direct_stage(
+            stale,
+            prod9_training.job_request(stale),
+            stage,
+            stage_result,
+            stage_launch,
+            prod9_direct.preflight_job_manifest(stale, identity=identity),
+            stage_operator_name=operator_name,
+            dev_preview=dev_preview,
+            prod_preview=prod_preview,
+            observer=observer,
+            identity=identity,
+        )
 
     changed = copy.deepcopy(stage_result)
     changed["execution"]["nested_jobs_created"] = 1
@@ -1514,7 +1593,7 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
     stage_created = prod9_direct.create_stage_once(
         stage_root, stage, stage_job, stage_auth, identity=identity, runner=cpu_runner
     )
-    staged = _stage_receipt(stage, plan, identity)
+    staged = _stage_receipt(stage, plan["data"], identity)
     stage_release = _release(
         name=identity.stage_name,
         plan_sha256=stage["sha256"],
