@@ -5,6 +5,7 @@ import json
 import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -242,6 +243,172 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
     changed = operator._seal(changed)
     with pytest.raises(ValueError, match="capacity"):
         operator_job.build_operator_package(changed)
+
+
+def test_prod10_inspector_is_read_only_alert_off_c1_q1_zero_gpu(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity = historical.load_identity(IDENTITY)
+    plan = {"schema": training.SCHEMA}
+    launch = direct._seal({"schema": direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA})
+    monkeypatch.setattr(direct, "_identity", lambda _plan, bound: bound)
+    monkeypatch.setattr(launch_direct, "_preflight_launch", lambda value, *_args, **_kw: value)
+
+    packet = operator_job.inspect_packet(
+        identity=identity,
+        plan=plan,
+        preflight_launch_result=launch,
+    )
+    package = operator_job.build_operator_package(packet)
+    proof = operator_job.validate_operator_package(package)
+    pod = package.job["spec"]["template"]["spec"]
+    [container] = pod["containers"]
+    mounts = {item["name"]: item for item in container["volumeMounts"]}
+    volumes = {item["name"]: item for item in pod["volumes"]}
+
+    assert proof == {
+        **proof,
+        "phase": "inspect",
+        "name": "chris-q38-prod10-launch-inspect-v2",
+        "failure_alerts": "off",
+        "priority": "c1",
+        "queue_priority": "q1",
+        "gpus": 0,
+    }
+    assert package.job["metadata"]["annotations"][FAILURE_ALERT_ANNOTATION] == "off"
+    assert package.job["spec"]["activeDeadlineSeconds"] == 2400
+    assert package.job["spec"]["backoffLimit"] == 0
+    assert mounts["sfs"]["readOnly"] is True
+    assert volumes["sfs"]["persistentVolumeClaim"]["readOnly"] is True
+    assert "controls-rw" not in mounts
+    assert "controls-rw" not in volumes
+    assert "envFrom" not in container
+    assert "secretRef" not in json.dumps(package.job, sort_keys=True)
+    assert "nvidia.com/gpu" not in json.dumps(package.job, sort_keys=True)
+
+    changed = copy.deepcopy(packet)
+    changed["launch_v1_failure"]["operator_job_uid"] = (
+        "00000000-0000-4000-8000-000000000001"
+    )
+    changed["launch_v1_failure"] = operator._seal(changed["launch_v1_failure"])
+    changed = operator._seal(changed)
+    with pytest.raises(ValueError, match="predecessor"):
+        operator_job.build_operator_package(changed)
+
+
+def test_prod10_inspector_reads_only_allowlisted_path_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    operation_root = tmp_path / "operation"
+    operation_root.mkdir()
+    data_root = tmp_path / "data"
+    data_root.mkdir()
+    model_root = tmp_path / "model"
+    model_root.mkdir()
+    preflight_result = tmp_path / "preflight.json"
+    preflight_result.touch()
+    for name in ("manifest.json", "split.json", "task-set.json", "train.jsonl", "dev.jsonl"):
+        (data_root / name).touch()
+    tokenizer_names = ["tokenizer.json", "tokenizer_config.json"]
+    sidecar_names = ["config.json", *tokenizer_names]
+    shard_names = ["model-00001-of-00001.safetensors"]
+    for name in [*sidecar_names, *shard_names]:
+        (model_root / name).touch()
+    guard = operation_root / "TRAINING_JOBS_API_PREFIX_GUARD.json"
+    guard.touch()
+    fake_identity = SimpleNamespace(output_root=str(tmp_path / "absent-output"))
+    plan = {
+        "schema": training.SCHEMA,
+        "arguments": {"data_manifest": str(data_root / "manifest.json")},
+        "data": {"tokenizer": {"files": [{"path": name} for name in tokenizer_names]}},
+        "model": {
+            "root": str(model_root),
+            "files": [{"path": name} for name in [*sidecar_names, *shard_names]],
+        },
+    }
+    checked_launch = operator._seal(
+        {
+            "schema": direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA,
+            "observer": {
+                "receipt": {
+                    "result_path": str(preflight_result),
+                    "result_sha256": "sha256:" + "1" * 64,
+                }
+            },
+        }
+    )
+    monkeypatch.setattr(operator, "_identity", lambda _value: fake_identity)
+    monkeypatch.setattr(direct, "_identity", lambda _plan, bound: bound)
+    monkeypatch.setattr(operator.hardening, "training_operation_root", lambda _plan: operation_root)
+    monkeypatch.setattr(
+        launch_direct,
+        "_preflight_launch",
+        lambda *_args, **_kwargs: checked_launch,
+    )
+
+    result = operator.run_inspect(
+        {
+            "identity": {},
+            "plan": plan,
+            "preflight_launch_result": checked_launch,
+        }
+    )
+
+    assert result["schema"] == operator.MANIFEST_RESULT_SCHEMA
+    assert result["status"] == "passed"
+    assert result["phase"] == "inspect"
+    assert result["contents_read"] is False
+    assert result["nested_jobs_created"] == result["gpus"] == 0
+    assert result["paths"]["guard"]["state"] == "present"
+    assert result["paths"]["create_journal"] == {"state": "absent"}
+    assert result["paths"]["creator_binding"] == {"state": "absent"}
+    assert result["paths"]["preflight_result"]["state"] == "present"
+    assert result["paths"]["output_root"] == {"state": "absent"}
+    assert all(value["state"] == "present" for value in result["data_files"].values())
+    assert result["tokenizer_files"] == {
+        "expected": 2,
+        "present": 2,
+        "regular": 2,
+        "readable": 2,
+        "lstat_errors": 0,
+    }
+    assert result["model_sidecars"]["expected"] == 3
+    assert result["model_shards"]["expected"] == 1
+    assert result["launch_boundary"] == "after_guard_before_intent"
+    encoded = json.dumps(result, sort_keys=True, separators=(",", ":"))
+    assert len(encoded.encode()) < 3900
+    assert str(tmp_path) not in encoded
+
+    termination = tmp_path / "termination.log"
+    monkeypatch.setattr(operator, "_TERMINATION_PATH", termination)
+    operator._write_manifest_termination(result)
+    message = termination.read_text()
+    assert cleanup._validated_receipt(message, kind="job") == result
+    assert cleanup._receipt_execution_accepted(result) is True
+
+
+@pytest.mark.parametrize(
+    ("states", "expected"),
+    [
+        (("absent", "absent", "absent"), "before_guard_or_guard_write"),
+        (("present", "absent", "absent"), "after_guard_before_intent"),
+        (("present", "present", "absent"), "intent_crossed_never_retry"),
+        (("present", "present", "present"), "binding_present"),
+        (("absent", "present", "absent"), "indeterminate_or_inconsistent"),
+        (("lstat_error", "absent", "absent"), "indeterminate_or_inconsistent"),
+    ],
+)
+def test_prod10_inspection_boundary_is_fixed_and_fail_closed(
+    states: tuple[str, str, str], expected: str
+) -> None:
+    probes = {
+        name: {"state": state}
+        for name, state in zip(
+            ("guard", "create_journal", "creator_binding"), states, strict=True
+        )
+    }
+    assert operator._inspection_boundary(probes) == expected
 
 
 def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(

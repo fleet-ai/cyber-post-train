@@ -43,6 +43,23 @@ OPERATOR_NAMES = {
     "manifest": "chris-q38-prod10-manifest-operator-v1",
     "preflight": "chris-q38-prod10-preflight-operator-v2",
     "launch": "chris-q38-prod10-launch-operator-v1",
+    "inspect": "chris-q38-prod10-launch-inspect-v2",
+}
+_LAUNCH_V1_FAILURE = {
+    "schema": "cyber_skyrl_prod10_launch_failure_binding_v1",
+    "status": "failed_before_gpu_create_and_released",
+    "operator_name": "chris-q38-prod10-launch-operator-v1",
+    "operator_job_uid": "a8b8373c-926f-4aa3-a475-d49a7457f591",
+    "operator_pod_uid": "a112c349-acb0-4134-a1e6-cf0425279cb7",
+    "operator_workload_uid": "2dc0b188-1e9b-401e-bb48-4744a27e2c81",
+    "failure_receipt_sha256": (
+        "sha256:7c45bc3c4356b0ca94ecd0fdd312ed068dc890144dc91e5d26c6c2793a53d421"
+    ),
+    "release_sha256": (
+        "sha256:c9adf0f0b995906813668bba82180c84384f9de5f0185270d3f428ae404c0292"
+    ),
+    "inner_gpu_run_created": False,
+    "gpus": 0,
 }
 _PREFLIGHT_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_preflight_v1_failure_recovery_v1",
@@ -182,6 +199,11 @@ def preflight_v1_failure_binding() -> dict[str, Any]:
     return _seal(_PREFLIGHT_V1_FAILURE)
 
 
+def launch_v1_failure_binding() -> dict[str, Any]:
+    """Bind the released launch failure inspected by the zero-GPU successor."""
+    return _seal(_LAUNCH_V1_FAILURE)
+
+
 def _write_once(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=False, exist_ok=True)
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -283,6 +305,19 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
         )
         if duplicate.get("context") != direct.DEV_CONTEXT:
             raise ValueError("prod10 operator development proof changed")
+    elif phase == "inspect":
+        if packet.get("launch_v1_failure") != launch_v1_failure_binding():
+            raise ValueError("prod10 launch inspection predecessor changed")
+        plan = packet.get("plan")
+        if not isinstance(plan, dict):
+            raise ValueError("prod10 launch inspection plan changed")
+        direct._identity(plan, _identity(packet.get("identity")))
+        launch_direct._preflight_launch(
+            packet.get("preflight_launch_result"),
+            plan,
+            identity=_identity(packet.get("identity")),
+            operator_name=OPERATOR_NAMES["preflight"],
+        )
     else:
         direct._validate_seal(
             packet.get("preflight_launch_result"),
@@ -1236,6 +1271,139 @@ def _fresh_capacity_census(
     return census
 
 
+def _inspect_path(path: Path) -> dict[str, Any]:
+    """Return bounded lstat/access metadata without reading file contents."""
+    try:
+        identity = path.lstat()
+    except FileNotFoundError:
+        return {"state": "absent"}
+    except OSError:
+        return {"state": "lstat_error"}
+    kind = (
+        "regular"
+        if stat.S_ISREG(identity.st_mode)
+        else "directory"
+        if stat.S_ISDIR(identity.st_mode)
+        else "symlink"
+        if stat.S_ISLNK(identity.st_mode)
+        else "other"
+    )
+    return {
+        "state": "present",
+        "kind": kind,
+        "uid": identity.st_uid,
+        "gid": identity.st_gid,
+        "mode": f"{stat.S_IMODE(identity.st_mode):04o}",
+        "readable": os.access(path, os.R_OK),
+        "traversable": os.access(path, os.X_OK) if kind == "directory" else False,
+    }
+
+
+def _inspect_group(paths: list[Path]) -> dict[str, Any]:
+    probes = [_inspect_path(path) for path in paths]
+    return {
+        "expected": len(probes),
+        "present": sum(value.get("state") == "present" for value in probes),
+        "regular": sum(value.get("kind") == "regular" for value in probes),
+        "readable": sum(value.get("readable") is True for value in probes),
+        "lstat_errors": sum(value.get("state") == "lstat_error" for value in probes),
+    }
+
+
+def _inspection_boundary(probes: dict[str, dict[str, Any]]) -> str:
+    states = {
+        name: probes[name].get("state")
+        for name in ("guard", "create_journal", "creator_binding")
+    }
+    if "lstat_error" in states.values():
+        return "indeterminate_or_inconsistent"
+    if states == {
+        "guard": "absent",
+        "create_journal": "absent",
+        "creator_binding": "absent",
+    }:
+        return "before_guard_or_guard_write"
+    if states == {
+        "guard": "present",
+        "create_journal": "absent",
+        "creator_binding": "absent",
+    }:
+        return "after_guard_before_intent"
+    if states == {
+        "guard": "present",
+        "create_journal": "present",
+        "creator_binding": "absent",
+    }:
+        return "intent_crossed_never_retry"
+    if states == {
+        "guard": "present",
+        "create_journal": "present",
+        "creator_binding": "present",
+    }:
+        return "binding_present"
+    return "indeterminate_or_inconsistent"
+
+
+def run_inspect(packet: dict[str, Any]) -> dict[str, Any]:
+    """Inspect only allowlisted public path metadata after the released v1 failure."""
+    identity = _identity(packet["identity"])
+    plan = packet.get("plan")
+    if not isinstance(plan, dict):
+        raise ValueError("prod10 launch inspection plan changed")
+    direct._identity(plan, identity)
+    launch = launch_direct._preflight_launch(
+        packet.get("preflight_launch_result"),
+        plan,
+        identity=identity,
+        operator_name=OPERATOR_NAMES["preflight"],
+    )
+    operation_root = hardening.training_operation_root(plan)
+    data_root = Path(plan["arguments"]["data_manifest"]).parent
+    model_root = Path(plan["model"]["root"])
+    tokenizer_names = [item["path"] for item in plan["data"]["tokenizer"]["files"]]
+    model_names = [item["path"] for item in plan["model"]["files"]]
+    shard_names = [name for name in model_names if name.endswith(".safetensors")]
+    sidecar_names = [name for name in model_names if name not in shard_names]
+    result_path = Path(launch["observer"]["receipt"]["result_path"])
+    probes = {
+        "control_root": _inspect_path(hardening.CREATE_ONCE_ROOT),
+        "operation_root": _inspect_path(operation_root),
+        "guard": _inspect_path(direct.jobs_api_guard_path(operation_root, "training")),
+        "create_journal": _inspect_path(operation_root / "PROD10_DIRECT_V3_CREATE.jsonl"),
+        "creator_binding": _inspect_path(
+            hardening.creator_binding_path(operation_root, "training")
+        ),
+        "preflight_result": _inspect_path(result_path),
+        "data_root": _inspect_path(data_root),
+        "output_root": _inspect_path(Path(identity.output_root)),
+    }
+    data = {
+        name: _inspect_path(data_root / name)
+        for name in ("manifest.json", "split.json", "task-set.json", "train.jsonl", "dev.jsonl")
+    }
+    return _seal(
+        {
+            # Reuse the existing sanitized, observer-accepted CPU receipt
+            # envelope so this diagnostic does not alter the frozen prod9
+            # observer allowlist.  ``phase`` distinguishes the payload.
+            "schema": MANIFEST_RESULT_SCHEMA,
+            "status": "passed",
+            "phase": "inspect",
+            "launch_v1_failure_sha256": launch_v1_failure_binding()["sha256"],
+            "preflight_launch_sha256": launch["sha256"],
+            "paths": probes,
+            "launch_boundary": _inspection_boundary(probes),
+            "data_files": data,
+            "tokenizer_files": _inspect_group([model_root / name for name in tokenizer_names]),
+            "model_sidecars": _inspect_group([model_root / name for name in sidecar_names]),
+            "model_shards": _inspect_group([model_root / name for name in shard_names]),
+            "contents_read": False,
+            "nested_jobs_created": 0,
+            "gpus": 0,
+        }
+    )
+
+
 def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> dict[str, Any]:
     """Consume the sealed direct-v3 preflight and perform the sole GPU POST."""
     identity = _identity(packet["identity"])
@@ -1375,9 +1543,11 @@ def run(packet_path: Path, phase: str) -> dict[str, Any]:
         result = run_manifest(packet, runner=runner)
     elif phase == "launch":
         result = run_launch(packet, runner=runner)
+    elif phase == "inspect":
+        result = run_inspect(packet)
     else:
         result = run_preflight(packet, runner=runner)
-    if phase == "manifest":
+    if phase in {"manifest", "inspect"}:
         _write_manifest_termination(result)
         return result
     root = (

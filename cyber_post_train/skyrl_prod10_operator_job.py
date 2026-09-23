@@ -327,6 +327,32 @@ def launch_packet(
     )
 
 
+def inspect_packet(
+    *,
+    identity: historical.RailIdentity,
+    plan: dict[str, Any],
+    preflight_launch_result: dict[str, Any],
+) -> dict[str, Any]:
+    direct._identity(plan, identity)
+    checked_launch = launch_direct._preflight_launch(
+        preflight_launch_result,
+        plan,
+        identity=identity,
+        operator_name=operator.OPERATOR_NAMES["preflight"],
+    )
+    return _seal(
+        {
+            "schema": operator.PACKET_SCHEMA,
+            "phase": "inspect",
+            "operator_name": operator.OPERATOR_NAMES["inspect"],
+            "identity": identity.sealed_mapping(),
+            "plan": plan,
+            "preflight_launch_result": checked_launch,
+            "launch_v1_failure": operator.launch_v1_failure_binding(),
+        }
+    )
+
+
 def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
     checked = operator._packet(packet, packet.get("phase", ""))
     identity = historical.identity_from_mapping(checked["identity"])
@@ -351,6 +377,12 @@ def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
             manifest_launch_result=checked["manifest_launch_result"],
             dev_preview=checked["dev_preview"],
             dev_duplicate_proof=checked["dev_duplicate_proof"],
+        )
+    elif checked["phase"] == "inspect":
+        expected = inspect_packet(
+            identity=identity,
+            plan=checked["plan"],
+            preflight_launch_result=checked["preflight_launch_result"],
         )
     else:
         expected = launch_packet(
@@ -468,11 +500,17 @@ def _job(
             {"name": "runtime", "mountPath": "/runtime"},
             {"name": "work", "mountPath": "/work"},
             sfs_mount,
-            {
-                "name": "controls-rw",
-                "mountPath": CONTROLS_PATH,
-                "subPath": CONTROLS_SUBPATH,
-            },
+            *(
+                []
+                if phase == "inspect"
+                else [
+                    {
+                        "name": "controls-rw",
+                        "mountPath": CONTROLS_PATH,
+                        "subPath": CONTROLS_SUBPATH,
+                    }
+                ]
+            ),
         ],
     }
     if phase == "launch":
@@ -542,7 +580,16 @@ def _job(
                         {"name": "runtime", "emptyDir": {"sizeLimit": "256Mi"}},
                         {"name": "work", "emptyDir": {"sizeLimit": "64Mi"}},
                         {"name": "sfs", "persistentVolumeClaim": sfs_claim},
-                        {"name": "controls-rw", "persistentVolumeClaim": {"claimName": PVC}},
+                        *(
+                            []
+                            if phase == "inspect"
+                            else [
+                                {
+                                    "name": "controls-rw",
+                                    "persistentVolumeClaim": {"claimName": PVC},
+                                }
+                            ]
+                        ),
                     ],
                 },
             },
@@ -620,6 +667,8 @@ def validate_operator_package(package: OperatorPackage) -> dict[str, Any]:
         or container.get("resources", {}).get("requests") != {"cpu": "2", "memory": "8Gi"}
         or mounts.get("sfs") != expected_sfs_mount
         or volumes.get("sfs") != {"name": "sfs", "persistentVolumeClaim": expected_sfs_claim}
+        or (packet["phase"] == "inspect" and "controls-rw" in mounts)
+        or (packet["phase"] == "inspect" and "controls-rw" in volumes)
         or container.get("envFrom")
         != (
             [
