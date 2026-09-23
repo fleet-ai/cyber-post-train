@@ -39,7 +39,7 @@ BENCHMARKS = {
             "sha256:ce3e0706e9c8f73bb552d83bd0841602dbb68c0f0d2909b1588432dff86fe95f"
         ),
         "terminal_schemas": {
-            "experiment": "webexploitbench_collection_replica_set_v1",
+            "experiment": "webexploitbench_collection_replica_set_v2",
             "arm_terminal": "webexploitbench_collection_replica_arm_terminal_v1",
             "score_acceptance": "webexploitbench_deferred_score_acceptance_v1",
         },

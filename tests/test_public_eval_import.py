@@ -105,6 +105,12 @@ def test_builds_recomputed_public_studies_without_private_material(tmp_path: Pat
         assert forbidden not in serialized
 
 
+def test_web_import_requires_the_live_replica_set_schema() -> None:
+    assert importer.BENCHMARKS["webexploitbench_level0"]["terminal_schemas"]["experiment"] == (
+        "webexploitbench_collection_replica_set_v2"
+    )
+
+
 def test_recomputes_headline_delta_and_bootstrap_from_task_counts(tmp_path: Path) -> None:
     web = _write(tmp_path / "web.json", _aggregate("webexploitbench_level0"))
     fleet = _write(tmp_path / "fleet.json", _aggregate("fleet_development_dev17"))
