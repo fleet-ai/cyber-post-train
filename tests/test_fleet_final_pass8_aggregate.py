@@ -764,6 +764,72 @@ def test_legacy_reconciliation_receipt_is_fully_bound_before_score_open(tmp_path
     assert Path(plan["private_output_root"], "FINAL.json").is_file()
 
 
+def _as_subset_receipt(evidence: dict[str, Any]) -> None:
+    evidence.pop("receipt_sha256")
+    evidence.update(
+        source_total_cell_count=17,
+        prior_arm_state_counts={
+            "pending": 0,
+            "claimed": 0,
+            "running": 0,
+            "grading": 0,
+            "accepted": 16,
+            "retry_review": 1,
+            "terminal": 0,
+        },
+        post_arm_state_counts={
+            "pending": 0,
+            "claimed": 0,
+            "running": 0,
+            "grading": 0,
+            "accepted": 17,
+            "retry_review": 0,
+            "terminal": 0,
+        },
+        nonselected_cell_count=16,
+        nonselected_cells_preserved=True,
+    )
+    evidence["receipt_sha256"] = final._digest(evidence)  # noqa: SLF001
+
+
+def test_subset_reconciliation_state_transition_is_fully_bound(tmp_path: Path) -> None:
+    plan, snapshots = _study(tmp_path)
+    evidence = _add_reconciliation(plan, snapshots)
+    _as_subset_receipt(evidence)
+
+    final.finalize(plan, snapshots, output_root=Path(plan["private_output_root"]))
+
+    assert Path(plan["private_output_root"], "FINAL.json").is_file()
+
+
+@pytest.mark.parametrize("drift", ("total", "states", "local_counts"))
+def test_subset_reconciliation_count_drift_prevents_score_open(tmp_path: Path, drift: str) -> None:
+    plan, snapshots = _study(tmp_path)
+    evidence = _add_reconciliation(plan, snapshots)
+    _as_subset_receipt(evidence)
+    evidence.pop("receipt_sha256")
+    if drift == "total":
+        evidence["source_total_cell_count"] = 18
+    elif drift == "states":
+        evidence["post_arm_state_counts"]["accepted"] = 16
+        evidence["post_arm_state_counts"]["retry_review"] = 1
+    else:
+        evidence.update(
+            source_local_result_count=15,
+            missing_local_result_count=1,
+            missing_local_results_are_unselected=True,
+            selected_cells_have_local_results=True,
+            missing_local_result_cells_preserved=True,
+            missing_local_result_failure_code_sha256="sha256:" + "a" * 64,
+        )
+    evidence["receipt_sha256"] = final._digest(evidence)  # noqa: SLF001
+
+    with pytest.raises(final.FinalAggregateError, match="reconciliation receipt is invalid"):
+        final.finalize(plan, snapshots, output_root=Path(plan["private_output_root"]))
+
+    assert all(value.score_reads == 0 for value in snapshots.values())
+
+
 @pytest.mark.parametrize("drift", ("plan", "source", "action", "count"))
 def test_reconciliation_identity_drift_prevents_score_open(tmp_path: Path, drift: str) -> None:
     plan, snapshots = _study(tmp_path)
@@ -890,7 +956,7 @@ def test_two_preview_validator_rejects_admission_added_gpu(tmp_path: Path) -> No
             {
                 "name": "admission-added",
                 "image": "example.invalid/image@sha256:" + "0" * 64,
-                "resources": {"limits": {"nvidia.com/gpu": 1}},
+                "resources": {"limits": {"nvidia.com/mig-1g.10gb": 1}},
             }
         ]
     first = tmp_path / "first.json"
@@ -898,7 +964,7 @@ def test_two_preview_validator_rejects_admission_added_gpu(tmp_path: Path) -> No
     first.write_text(json.dumps(first_value))
     second.write_text(json.dumps(second_value))
 
-    with pytest.raises(renderer.RenderError, match="unexpectedly requests a GPU"):
+    with pytest.raises(renderer.RenderError, match="unexpectedly requests an accelerator"):
         renderer.validate_previews(
             render_root=root,
             first=first,
@@ -914,10 +980,72 @@ def test_two_preview_validator_rejects_one_preview_replayed_twice(tmp_path: Path
     preview = tmp_path / "preview.json"
     preview.write_text(json.dumps(_server_preview(bundle, "11111111-1111-4111-8111-111111111111")))
 
-    with pytest.raises(renderer.RenderError, match="distinct Job UIDs"):
+    with pytest.raises(renderer.RenderError, match="distinct regular files"):
         renderer.validate_previews(
             render_root=root,
             first=preview,
             second=preview,
+            output=tmp_path / "previews.json",
+        )
+
+
+@pytest.mark.parametrize("drift", ("host_network", "privileged", "env_from"))
+def test_two_preview_validator_rejects_unsafe_admission_fields(tmp_path: Path, drift: str) -> None:
+    root = tmp_path / "render"
+    renderer.render(output=root, migration_receipt=_migration(tmp_path))
+    bundle = yaml.safe_load((root / "final-aggregate.yaml").read_text())
+    previews = [
+        _server_preview(bundle, "11111111-1111-4111-8111-111111111111"),
+        _server_preview(bundle, "22222222-2222-4222-8222-222222222222"),
+    ]
+    for value in previews:
+        job = next(item for item in value["items"] if item["kind"] == "Job")
+        pod = job["spec"]["template"]["spec"]
+        if drift == "host_network":
+            pod["hostNetwork"] = True
+        elif drift == "privileged":
+            pod["containers"][0]["securityContext"] = {"privileged": True}
+        else:
+            pod["containers"][0]["envFrom"] = [{"secretRef": {"name": "unreviewed-secret"}}]
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+    first.write_text(json.dumps(previews[0]))
+    second.write_text(json.dumps(previews[1]))
+
+    with pytest.raises(renderer.RenderError):
+        renderer.validate_previews(
+            render_root=root,
+            first=first,
+            second=second,
+            output=tmp_path / "previews.json",
+        )
+
+
+def test_preview_validator_rebuilds_render_policy_after_resigning_tamper(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "render"
+    renderer.render(output=root, migration_receipt=_migration(tmp_path))
+    bundle_path = root / "final-aggregate.yaml"
+    bundle = yaml.safe_load(bundle_path.read_text())
+    job = next(item for item in bundle["items"] if item["kind"] == "Job")
+    job["spec"]["template"]["spec"]["priorityClassName"] = "c0"
+    bundle_path.write_text(yaml.safe_dump(bundle, sort_keys=False))
+    receipt_path = root / "RENDER.json"
+    receipt = json.loads(receipt_path.read_text())
+    receipt.pop("sha256")
+    receipt["rendered_bundle_file_sha256"] = final._file_digest(bundle_path)  # noqa: SLF001
+    receipt["sha256"] = renderer._canonical_digest(receipt)  # noqa: SLF001
+    receipt_path.write_text(json.dumps(receipt, sort_keys=True) + "\n")
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+    first.write_text(json.dumps(_server_preview(bundle, "11111111-1111-4111-8111-111111111111")))
+    second.write_text(json.dumps(_server_preview(bundle, "22222222-2222-4222-8222-222222222222")))
+
+    with pytest.raises(renderer.RenderError, match="Kubernetes objects differ"):
+        renderer.validate_previews(
+            render_root=root,
+            first=first,
+            second=second,
             output=tmp_path / "previews.json",
         )

@@ -103,7 +103,13 @@ uv run python scripts/render_qwen38_fleet_pass8_final_aggregate.py \
 The validator removes only ordinary server metadata and the Job UID-derived
 selector labels. The two previews must carry different valid server-assigned
 Job UIDs, and neither preview may contain a GPU resource in any container
-class. Admission, command, image, resources, priority, module bytes, secret
-reference, and the root alert annotation remain bound. A green render or
-preview does not mean the 272 outcomes are complete; the private final Job must
-still pass the live database and terminal-receipt gates above.
+class. Both preview files must be distinct exact regular files and are hashed
+from the same bytes that are parsed. Before comparing either preview, the
+validator reopens the source bundle, reconstructs the exact c1 zero-GPU Job and
+immutable ConfigMap, revalidates the frozen study plan, and recomputes the full
+render receipt. Admission may add only a small set of ordinary Kubernetes
+defaults; a sidecar, secret source, host namespace, security privilege, volume,
+resource claim, accelerator, changed command/image, or changed service account
+fails closed. A green render or preview does not mean the 272 outcomes are
+complete; the private final Job must still pass the live database and
+terminal-receipt gates above.

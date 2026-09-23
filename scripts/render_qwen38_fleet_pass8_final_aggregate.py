@@ -5,13 +5,16 @@ from __future__ import annotations
 
 import argparse
 import base64
+import binascii
 import gzip
 import hashlib
 import json
 import os
 import shutil
-import tempfile
+import stat
 import uuid
+import zlib
+from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
@@ -76,6 +79,32 @@ def _canonical_digest(value: object) -> str:
 
 def _file_digest(path: Path) -> str:
     return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _read_regular_once(path: Path, label: str) -> tuple[bytes, tuple[int, int]]:
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise RenderError(f"{label} is not an exact regular file") from exc
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode):
+            raise RenderError(f"{label} is not an exact regular file")
+        chunks = []
+        while chunk := os.read(descriptor, 1024 * 1024):
+            chunks.append(chunk)
+        after = os.fstat(descriptor)
+        identity = (before.st_dev, before.st_ino)
+        if (
+            identity != (after.st_dev, after.st_ino)
+            or before.st_size != after.st_size
+            or before.st_mtime_ns != after.st_mtime_ns
+        ):
+            raise RenderError(f"{label} changed while it was read")
+        return b"".join(chunks), identity
+    finally:
+        os.close(descriptor)
 
 
 def _bundle(plan: dict[str, Any]) -> tuple[bytes, dict[str, str]]:
@@ -216,6 +245,37 @@ def _objects(plan: dict[str, Any], compressed: bytes, digests: dict[str, str]) -
     return config_map, job
 
 
+def _render_receipt(
+    *,
+    plan: dict[str, Any],
+    compressed: bytes,
+    digests: dict[str, str],
+    rendered_bundle_file_sha256: str,
+) -> dict[str, Any]:
+    receipt = {
+        "schema": "cyber_fleet_matched_pass8_protocol_v2_final_job_render_v1",
+        "namespace": NAMESPACE,
+        "config_map_name": CONFIG_MAP,
+        "job_name": NAME,
+        "study_plan_sha256": plan["sha256"],
+        "migration_receipt_sha256": plan["migration_receipt_sha256"],
+        "migration_receipt_file_sha256": plan["migration_receipt_file_sha256"],
+        "comparison_definition_sha256": plan["comparison_definition_sha256"],
+        "comparison_definition_file_sha256": plan["comparison_definition_file_sha256"],
+        "source_files": digests,
+        "compressed_bundle_sha256": "sha256:" + hashlib.sha256(compressed).hexdigest(),
+        "rendered_bundle_file_sha256": rendered_bundle_file_sha256,
+        "failure_alerts": "off",
+        "priority_class": "c1",
+        "gpu_requests": 0,
+        "create_once": True,
+        "two_server_previews_required_before_create": True,
+        "external_mutations": 0,
+        "launch_performed": False,
+    }
+    return {**receipt, "sha256": _canonical_digest(receipt)}
+
+
 def render(*, output: Path, migration_receipt: Path) -> dict[str, Any]:
     if output.exists() or output.is_symlink():
         raise FileExistsError("private final aggregate render already exists")
@@ -229,43 +289,22 @@ def render(*, output: Path, migration_receipt: Path) -> dict[str, Any]:
     )
     compressed, digests = _bundle(plan)
     config_map, job = _objects(plan, compressed, digests)
-    temporary = Path(tempfile.mkdtemp(prefix=".fleet-pass8-final-", dir=output.parent))
+    output.mkdir(mode=0o700)
     try:
         bundle = {"apiVersion": "v1", "kind": "List", "items": [config_map, job]}
-        bundle_path = temporary / "final-aggregate.yaml"
+        bundle_path = output / "final-aggregate.yaml"
         bundle_path.write_text(yaml.safe_dump(bundle, sort_keys=False), encoding="utf-8")
-        receipt = {
-            "schema": "cyber_fleet_matched_pass8_protocol_v2_final_job_render_v1",
-            "namespace": NAMESPACE,
-            "config_map_name": CONFIG_MAP,
-            "job_name": NAME,
-            "study_plan_sha256": plan["sha256"],
-            "migration_receipt_sha256": plan["migration_receipt_sha256"],
-            "migration_receipt_file_sha256": plan["migration_receipt_file_sha256"],
-            "comparison_definition_sha256": plan["comparison_definition_sha256"],
-            "comparison_definition_file_sha256": plan["comparison_definition_file_sha256"],
-            "source_files": {
-                "aggregate.py": digests["aggregate.py"],
-                "run.py": digests["run.py"],
-                "study.json": digests["study.json"],
-            },
-            "compressed_bundle_sha256": ("sha256:" + hashlib.sha256(compressed).hexdigest()),
-            "rendered_bundle_file_sha256": _file_digest(bundle_path),
-            "failure_alerts": job["metadata"]["annotations"]["fleet.ai/failure-alerts"],
-            "priority_class": job["spec"]["template"]["spec"]["priorityClassName"],
-            "gpu_requests": 0,
-            "create_once": True,
-            "two_server_previews_required_before_create": True,
-            "external_mutations": 0,
-            "launch_performed": False,
-        }
-        receipt["sha256"] = _canonical_digest(receipt)
-        (temporary / "RENDER.json").write_text(
+        receipt = _render_receipt(
+            plan=plan,
+            compressed=compressed,
+            digests=digests,
+            rendered_bundle_file_sha256=_file_digest(bundle_path),
+        )
+        (output / "RENDER.json").write_text(
             json.dumps(receipt, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
-        os.rename(temporary, output)
     except BaseException:
-        shutil.rmtree(temporary, ignore_errors=True)
+        shutil.rmtree(output, ignore_errors=True)
         raise
     return receipt
 
@@ -290,14 +329,137 @@ def _contains(actual: Any, expected: Any) -> bool:
     return actual == expected
 
 
-def _contains_gpu_resource(value: Any) -> bool:
+def _contains_accelerator_resource(value: Any) -> bool:
     if isinstance(value, dict):
-        return "nvidia.com/gpu" in value or any(
-            _contains_gpu_resource(item) for item in value.values()
-        )
+        return any(
+            isinstance(key, str)
+            and ("gpu" in key.lower() or "mig" in key.lower() or key.startswith("nvidia.com/"))
+            for key in value
+        ) or any(_contains_accelerator_resource(item) for item in value.values())
     if isinstance(value, list):
-        return any(_contains_gpu_resource(item) for item in value)
+        return any(_contains_accelerator_resource(item) for item in value)
     return False
+
+
+def _extra_keys(
+    actual: Mapping[str, Any], expected: Mapping[str, Any], allowed: set[str], label: str
+) -> None:
+    unexpected = set(actual) - set(expected) - allowed
+    if unexpected:
+        raise RenderError(f"server-rendered {label} added unreviewed fields")
+
+
+def _server_defaults_only(job: dict[str, Any], expected: dict[str, Any]) -> None:
+    normalized = stable_job_preview(job)
+    reviewed = stable_job_preview(expected)
+    _extra_keys(normalized, reviewed, set(), "Job")
+    _extra_keys(normalized["metadata"], reviewed["metadata"], set(), "Job metadata")
+    _extra_keys(
+        normalized["spec"],
+        reviewed["spec"],
+        {
+            "completionMode",
+            "completions",
+            "manualSelector",
+            "parallelism",
+            "podReplacementPolicy",
+            "suspend",
+        },
+        "Job spec",
+    )
+    actual_template = normalized["spec"]["template"]
+    expected_template = reviewed["spec"]["template"]
+    _extra_keys(actual_template, expected_template, set(), "Pod template")
+    _extra_keys(
+        actual_template["metadata"],
+        expected_template["metadata"],
+        {"creationTimestamp"},
+        "Pod metadata",
+    )
+    labels = actual_template["metadata"].get("labels", {})
+    expected_labels = expected_template["metadata"].get("labels", {})
+    _extra_keys(
+        labels,
+        expected_labels,
+        {"batch.kubernetes.io/job-name", "job-name"},
+        "Pod labels",
+    )
+    if any(
+        labels.get(key) not in (None, NAME) for key in ("batch.kubernetes.io/job-name", "job-name")
+    ):
+        raise RenderError("server-rendered Pod job-name label differs")
+    pod = actual_template["spec"]
+    expected_pod = expected_template["spec"]
+    _extra_keys(
+        pod,
+        expected_pod,
+        {
+            "dnsPolicy",
+            "enableServiceLinks",
+            "preemptionPolicy",
+            "priority",
+            "schedulerName",
+            "schedulingGates",
+            "securityContext",
+            "serviceAccount",
+            "serviceAccountName",
+            "terminationGracePeriodSeconds",
+        },
+        "Pod spec",
+    )
+    if any(pod.get(field) is True for field in ("hostIPC", "hostNetwork", "hostPID")):
+        raise RenderError("server-rendered Pod enables a host namespace")
+    if pod.get("securityContext") not in (None, {}):
+        raise RenderError("server-rendered Pod adds a security context")
+    if pod.get("serviceAccountName") not in (None, "default") or pod.get("serviceAccount") not in (
+        None,
+        "default",
+    ):
+        raise RenderError("server-rendered Pod changes the service account")
+    gates = pod.get("schedulingGates", [])
+    if gates not in ([], [{"name": "kueue.x-k8s.io/admission"}]):
+        raise RenderError("server-rendered Pod adds an unknown scheduling gate")
+    if pod.get("initContainers") or pod.get("ephemeralContainers") or pod.get("resourceClaims"):
+        raise RenderError("server-rendered Pod adds an unreviewed container or resource claim")
+    containers = pod.get("containers")
+    expected_containers = expected_pod["containers"]
+    if not isinstance(containers, list) or len(containers) != len(expected_containers):
+        raise RenderError("server-rendered Pod changes the container roster")
+    for container, expected_container in zip(containers, expected_containers, strict=True):
+        _extra_keys(
+            container,
+            expected_container,
+            {"imagePullPolicy", "terminationMessagePath", "terminationMessagePolicy"},
+            "container",
+        )
+        if container.get("securityContext") not in (None, {}):
+            raise RenderError("server-rendered container adds a security context")
+        resources = container.get("resources", {})
+        expected_resources = expected_container.get("resources", {})
+        _extra_keys(resources, expected_resources, set(), "container resources")
+        for kind in ("requests", "limits"):
+            if set(resources.get(kind, {})) != set(expected_resources.get(kind, {})):
+                raise RenderError("server-rendered container resource keys differ")
+    volumes = pod.get("volumes")
+    expected_volumes = expected_pod["volumes"]
+    if not isinstance(volumes, list) or len(volumes) != len(expected_volumes):
+        raise RenderError("server-rendered Pod changes the volume roster")
+    for volume, expected_volume in zip(volumes, expected_volumes, strict=True):
+        _extra_keys(volume, expected_volume, set(), "volume")
+        if "configMap" in volume:
+            _extra_keys(
+                volume["configMap"],
+                expected_volume["configMap"],
+                {"defaultMode"},
+                "ConfigMap volume",
+            )
+        if "persistentVolumeClaim" in volume:
+            _extra_keys(
+                volume["persistentVolumeClaim"],
+                expected_volume["persistentVolumeClaim"],
+                set(),
+                "persistent volume",
+            )
 
 
 def _job_uid(value: dict[str, Any]) -> str:
@@ -324,11 +486,12 @@ def _normalized_preview(value: dict[str, Any], expected: dict[str, Any]) -> dict
     expected_map = next(item for item in expected_items if item["kind"] == "ConfigMap")
     if job.get("metadata", {}).get("annotations", {}).get("fleet.ai/failure-alerts") != "off":
         raise RenderError("server-rendered root Job did not retain failure alerts off")
-    if _contains_gpu_resource(job):
-        raise RenderError("server-rendered Job unexpectedly requests a GPU")
+    if _contains_accelerator_resource(job):
+        raise RenderError("server-rendered Job unexpectedly requests an accelerator")
     normalized_job = stable_job_preview(job)
     if not _contains(normalized_job, stable_job_preview(expected_job)):
         raise RenderError("server-rendered Job differs from the immutable render")
+    _server_defaults_only(job, expected_job)
     normalized_map = {
         "apiVersion": config_map.get("apiVersion"),
         "kind": config_map.get("kind"),
@@ -354,24 +517,95 @@ def _normalized_preview(value: dict[str, Any], expected: dict[str, Any]) -> dict
     return {"job": normalized_job, "config_map": normalized_map}
 
 
-def validate_previews(
-    *, render_root: Path, first: Path, second: Path, output: Path
-) -> dict[str, Any]:
-    if output.exists() or output.is_symlink():
-        raise FileExistsError("server preview receipt already exists")
+def _validated_render(render_root: Path) -> tuple[dict[str, Any], str]:
     bundle_path = render_root / "final-aggregate.yaml"
     receipt_path = render_root / "RENDER.json"
-    render_receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    bundle_bytes, _ = _read_regular_once(bundle_path, "rendered bundle")
+    receipt_bytes, _ = _read_regular_once(receipt_path, "render receipt")
+    try:
+        expected = yaml.safe_load(bundle_bytes)
+        render_receipt = json.loads(receipt_bytes)
+    except (UnicodeDecodeError, json.JSONDecodeError, yaml.YAMLError) as exc:
+        raise RenderError("rendered bundle or receipt is unreadable") from exc
+    if not isinstance(expected, dict) or not isinstance(render_receipt, dict):
+        raise RenderError("rendered bundle or receipt is malformed")
     claimed = render_receipt.get("sha256")
     if claimed != _canonical_digest(
         {key: value for key, value in render_receipt.items() if key != "sha256"}
     ):
         raise RenderError("render receipt self digest differs")
-    if render_receipt.get("rendered_bundle_file_sha256") != _file_digest(bundle_path):
-        raise RenderError("rendered bundle differs from its immutable receipt")
-    expected = yaml.safe_load(bundle_path.read_text(encoding="utf-8"))
-    one = json.loads(first.read_text(encoding="utf-8"))
-    two = json.loads(second.read_text(encoding="utf-8"))
+    items = _items(expected)
+    maps = [item for item in items if item.get("kind") == "ConfigMap"]
+    jobs = [item for item in items if item.get("kind") == "Job"]
+    if len(items) != 2 or len(maps) != 1 or len(jobs) != 1:
+        raise RenderError("rendered bundle lacks the exact Job and ConfigMap")
+    encoded = maps[0].get("binaryData", {}).get("bundle.json.gz")
+    if not isinstance(encoded, str):
+        raise RenderError("rendered ConfigMap lacks the immutable source bundle")
+    try:
+        compressed = base64.b64decode(encoded, validate=True)
+        files = json.loads(gzip.decompress(compressed))
+    except (
+        ValueError,
+        binascii.Error,
+        gzip.BadGzipFile,
+        zlib.error,
+        json.JSONDecodeError,
+        UnicodeDecodeError,
+    ) as exc:
+        raise RenderError("rendered source bundle is unreadable") from exc
+    if (
+        not isinstance(files, dict)
+        or set(files) != {"aggregate.py", "run.py", "study.json"}
+        or any(not isinstance(value, str) for value in files.values())
+    ):
+        raise RenderError("rendered source bundle file roster differs")
+    digests = {
+        name: "sha256:" + hashlib.sha256(value.encode()).hexdigest()
+        for name, value in files.items()
+    }
+    try:
+        plan = json.loads(files["study.json"])
+    except json.JSONDecodeError as exc:
+        raise RenderError("rendered study plan is unreadable") from exc
+    if not isinstance(plan, dict):
+        raise RenderError("rendered study plan is malformed")
+    try:
+        aggregate.validate_plan(plan)
+    except aggregate.FinalAggregateError as exc:
+        raise RenderError("rendered study plan differs from the frozen comparison") from exc
+    expected_map, expected_job = _objects(plan, compressed, digests)
+    if maps[0] != expected_map or jobs[0] != expected_job:
+        raise RenderError("rendered Kubernetes objects differ from the immutable source bundle")
+    bundle_file_sha256 = "sha256:" + hashlib.sha256(bundle_bytes).hexdigest()
+    exact_receipt = _render_receipt(
+        plan=plan,
+        compressed=compressed,
+        digests=digests,
+        rendered_bundle_file_sha256=bundle_file_sha256,
+    )
+    if render_receipt != exact_receipt:
+        raise RenderError("render receipt policy or source identity differs")
+    return expected, "sha256:" + hashlib.sha256(receipt_bytes).hexdigest()
+
+
+def validate_previews(
+    *, render_root: Path, first: Path, second: Path, output: Path
+) -> dict[str, Any]:
+    if output.exists() or output.is_symlink():
+        raise FileExistsError("server preview receipt already exists")
+    expected, render_receipt_file_sha256 = _validated_render(render_root)
+    first_bytes, first_identity = _read_regular_once(first, "first server preview")
+    second_bytes, second_identity = _read_regular_once(second, "second server preview")
+    if first_identity == second_identity:
+        raise RenderError("two server previews must be distinct regular files")
+    try:
+        one = json.loads(first_bytes)
+        two = json.loads(second_bytes)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RenderError("server preview is unreadable") from exc
+    if not isinstance(one, dict) or not isinstance(two, dict):
+        raise RenderError("server preview is malformed")
     first_uid = _job_uid(one)
     second_uid = _job_uid(two)
     if first_uid == second_uid:
@@ -384,9 +618,9 @@ def validate_previews(
         raise RenderError("identical server dry-runs produced different stable previews")
     receipt = {
         "schema": "cyber_fleet_matched_pass8_protocol_v2_final_server_preview_v1",
-        "render_receipt_file_sha256": _file_digest(receipt_path),
-        "first_preview_file_sha256": _file_digest(first),
-        "second_preview_file_sha256": _file_digest(second),
+        "render_receipt_file_sha256": render_receipt_file_sha256,
+        "first_preview_file_sha256": "sha256:" + hashlib.sha256(first_bytes).hexdigest(),
+        "second_preview_file_sha256": "sha256:" + hashlib.sha256(second_bytes).hexdigest(),
         "stable_server_preview_sha256": first_digest,
         "first_job_uid_sha256": "sha256:" + hashlib.sha256(first_uid.encode()).hexdigest(),
         "second_job_uid_sha256": "sha256:" + hashlib.sha256(second_uid.encode()).hexdigest(),

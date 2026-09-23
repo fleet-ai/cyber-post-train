@@ -1027,6 +1027,15 @@ RECONCILIATION_V2_LOCAL_GAP_FIELDS = {
     "missing_local_result_cells_preserved",
     "missing_local_result_failure_code_sha256",
 }
+RECONCILIATION_STATES = (
+    "pending",
+    "claimed",
+    "running",
+    "grading",
+    "accepted",
+    "retry_review",
+    "terminal",
+)
 
 
 def _reconciliation_shape(evidence: Mapping[str, Any], schema: str) -> None:
@@ -1114,15 +1123,30 @@ def _validate_acceptance_evidence(
         if "source_total_cell_count" in evidence:
             total = evidence.get("source_total_cell_count")
             nonselected = evidence.get("nonselected_cell_count")
+            prior_states = evidence.get("prior_arm_state_counts")
+            post_states = evidence.get("post_arm_state_counts")
             if (
                 type(total) is not int
                 or type(nonselected) is not int
+                or total != TASK_COUNT
                 or total != selected + nonselected
                 or nonselected < 1
                 or evidence.get("nonselected_cells_preserved") is not True
-                or not isinstance(evidence.get("prior_arm_state_counts"), dict)
-                or not isinstance(evidence.get("post_arm_state_counts"), dict)
+                or not isinstance(prior_states, dict)
+                or not isinstance(post_states, dict)
+                or set(prior_states) != set(RECONCILIATION_STATES)
+                or set(post_states) != set(RECONCILIATION_STATES)
+                or any(type(value) is not int or value < 0 for value in prior_states.values())
+                or any(type(value) is not int or value < 0 for value in post_states.values())
+                or sum(prior_states.values()) != total
+                or sum(post_states.values()) != total
+                or prior_states["retry_review"] != prior_retry
             ):
+                raise FinalAggregateError("accepted reconciliation receipt is invalid")
+            expected_post = dict(prior_states)
+            expected_post["retry_review"] -= selected
+            expected_post["accepted"] += selected
+            if expected_post != post_states:
                 raise FinalAggregateError("accepted reconciliation receipt is invalid")
         if "source_local_result_count" in evidence:
             _normalized_digest(
@@ -1136,6 +1160,13 @@ def _validate_acceptance_evidence(
                     "selected_cells_have_local_results",
                     "missing_local_result_cells_preserved",
                 )
+            ) or (
+                type(evidence.get("source_local_result_count")) is not int
+                or type(evidence.get("missing_local_result_count")) is not int
+                or evidence["missing_local_result_count"] < 1
+                or evidence["source_local_result_count"] + evidence["missing_local_result_count"]
+                != evidence["source_total_cell_count"]
+                or evidence["missing_local_result_count"] > evidence["nonselected_cell_count"]
             ):
                 raise FinalAggregateError("accepted reconciliation receipt is invalid")
     if any(
