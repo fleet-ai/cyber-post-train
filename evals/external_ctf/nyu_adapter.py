@@ -278,6 +278,7 @@ def _validate_qualification(
     expected = {
         "schema",
         "protocol_sha256",
+        "qualification_contract_sha256",
         "benchmark",
         "task_id",
         "source_commit",
@@ -303,7 +304,9 @@ def _validate_qualification(
         set(qualification) != expected
         or not _signed(qualification)
         or qualification.get("schema") != "external_ctf_nyu_runtime_qualification_v1"
-        or qualification.get("protocol_sha256") != protocol.get("protocol_sha256")
+        or not _SHA256.fullmatch(str(qualification.get("protocol_sha256")))
+        or qualification.get("qualification_contract_sha256")
+        != protocol["benchmarks"][BENCHMARK]["runtime_qualification"]["contract_sha256"]
         or qualification.get("benchmark") != BENCHMARK
         or qualification.get("task_id") != task.task_id
         or qualification.get("source_commit") != task.source_commit

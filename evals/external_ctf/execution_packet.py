@@ -32,6 +32,12 @@ from .protocol import (
 SCHEMA = "external_ctf_execution_packet_v1"
 BOUND_SCHEMA = "external_ctf_execution_packet_bound_v1"
 QUIESCENCE_SCHEMA = "external_ctf_unmigrated_creator_quiescence_v1"
+PACKET_MODES = frozenset({"qualification_only", "scored"})
+QUALIFICATION_BATCH_MAX_PARALLEL = 4
+BOUND_MARKERS = {
+    "qualification_only": "SET_EXTERNAL_CTF_QUALIFICATION_PACKET_BOUND.json",
+    "scored": "SET_EXTERNAL_CTF_EXECUTION_PACKET_BOUND.json",
+}
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 SOURCE_FILES = {
     "protocol": ROOT / "evals/external_ctf/protocol.py",
@@ -44,6 +50,14 @@ SOURCE_FILES = {
     "base_clone_intent": (
         ROOT / "configs/evaluation/qwen38-external-ctf-base-c1-clone-intent-v1.json"
     ),
+    "cvebench_runtime_qualification": (
+        ROOT / "evals/external_ctf/cvebench_runtime_qualification.py"
+    ),
+    "runtime_qualification": ROOT / "evals/external_ctf/runtime_qualification.py",
+    "nyu_adapter": ROOT / "evals/external_ctf/nyu_adapter.py",
+    "nyu_runtime_qualification": (ROOT / "evals/external_ctf/nyu_runtime_qualification.py"),
+    "cybench_qualification": ROOT / "evals/external_ctf/cybench_qualification.py",
+    "cybench_runtime_qualification": (ROOT / "evals/external_ctf/cybench_runtime_qualification.py"),
     "web_collection_launcher": (ROOT / "evals/webexploitbench/tensorlake/collection_launcher.py"),
     "web_collection_replica_set": (
         ROOT / "evals/webexploitbench/tensorlake/collection_replica_set.py"
@@ -84,6 +98,43 @@ def _signed(value: dict[str, Any]) -> dict[str, Any]:
     unsigned = dict(value)
     unsigned.pop("receipt_sha256", None)
     return {**unsigned, "receipt_sha256": _digest(unsigned)}
+
+
+def qualification_schedule(protocol: dict[str, Any]) -> list[dict[str, Any]]:
+    canaries: list[dict[str, Any]] = []
+    batches: list[dict[str, Any]] = []
+    for benchmark_name in ("cvebench_zero_day", "nyu_ctf_web_test", "cybench_web"):
+        benchmark = protocol["benchmarks"][benchmark_name]
+        contract = benchmark["runtime_qualification"]
+        canary_index = contract["canary_task_index"]
+        for task_index in contract["task_indices"]:
+            row = {
+                "benchmark": benchmark_name,
+                "task_index": task_index,
+                "task_id": benchmark["task_ids"][task_index],
+                "arm": "qualification",
+                "qualification_contract_sha256": contract["contract_sha256"],
+            }
+            (canaries if task_index == canary_index else batches).append(row)
+    return [*canaries, *batches]
+
+
+def qualification_stages(protocol: dict[str, Any]) -> dict[str, Any]:
+    schedule = qualification_schedule(protocol)
+    canary_cells = schedule[:3]
+    return {
+        "canary": {
+            "max_parallel_cells": 1,
+            "ordered_cells": canary_cells,
+            "unlock": "packet_bound",
+        },
+        "batch": {
+            "max_parallel_cells": QUALIFICATION_BATCH_MAX_PARALLEL,
+            "cells": schedule[3:],
+            "unlock": "all_canaries_runtime_preflight_passed_and_released",
+            "shared_capacity_limit_still_authoritative": True,
+        },
+    }
 
 
 def _write_once(path: Path, value: dict[str, Any]) -> dict[str, Any]:
@@ -379,13 +430,20 @@ def _packet_state(root: Path, receipt_sha256: str) -> Path:
     return state
 
 
-def _initial_state_absent(root: Path, external_names: set[str]) -> None:
+def _bound_marker(root: Path, packet_mode: str) -> Path:
+    try:
+        return root / BOUND_MARKERS[packet_mode]
+    except KeyError as exc:
+        raise ExecutionPacketError("execution_packet_mode_invalid") from exc
+
+
+def _initial_state_absent(root: Path, cell_names: set[str], marker: Path) -> None:
     for path in root.rglob("*"):
         if not path.is_file():
             continue
-        if any(path.name.startswith(name + ".") for name in external_names):
+        if any(path.name.startswith(name + ".") for name in cell_names):
             raise ExecutionPacketError("external_campaign_state_not_initial")
-    if (root / "SET_EXTERNAL_CTF_EXECUTION_PACKET_BOUND.json").exists():
+    if marker.exists():
         raise ExecutionPacketError("external_execution_packet_already_bound")
 
 
@@ -407,15 +465,16 @@ def _stable_authority(original: dict[str, Any], refreshed: dict[str, Any]) -> No
 
 def _seal_under_shared_lock(
     *,
+    packet_mode: str,
     protocol: dict[str, Any],
     authority: dict[str, Any],
     retry_execution_path: Path,
     tensorlake: Any,
     source: dict[str, Any],
     official_sources: dict[str, Any],
-    base_clone_serving: dict[str, Any],
-    parity: dict[str, Any],
-    parity_bytes: bytes,
+    base_clone_serving: dict[str, Any] | None,
+    parity: dict[str, Any] | None,
+    parity_bytes: bytes | None,
     quiescence: dict[str, Any],
     quiescence_bytes: bytes,
     retry_bytes: bytes,
@@ -424,6 +483,47 @@ def _seal_under_shared_lock(
     current: datetime,
     output: Path,
 ) -> dict[str, Any]:
+    if packet_mode not in PACKET_MODES:
+        raise ExecutionPacketError("execution_packet_mode_invalid")
+    if packet_mode == "scored":
+        if base_clone_serving is None or parity is None or parity_bytes is None:
+            raise ExecutionPacketError("scored_execution_packet_serving_evidence_required")
+        models: dict[str, Any] | None = protocol["arms"]
+        parity_binding: dict[str, Any] | None = {
+            "receipt": parity,
+            "file_sha256": file_digest(parity_bytes),
+        }
+        execution = {
+            "mode": packet_mode,
+            "state_namespace_policy": "protocol_root/packets/packet_receipt_sha256",
+            "max_parallel_cells": 1,
+            "task_scoped_runtime_preflight_before_each_pair": True,
+            "task5_preflight_requires_official_solution_positive_control": True,
+            "scored_starts_require_fresh_packet_bound_route_and_fleet_team_preflight": True,
+            "ordered_cells": schedule,
+            "ordered_cells_sha256": protocol["execution_schedule"]["ordered_cells_sha256"],
+            "pause_after_cell_count": protocol["execution_schedule"]["pause_after_cell_count"],
+            "score_blind_until_terminal_analysis": True,
+        }
+    else:
+        if base_clone_serving is not None or parity is not None or parity_bytes is not None:
+            raise ExecutionPacketError("qualification_packet_must_not_bind_serving")
+        models = None
+        parity_binding = None
+        execution = {
+            "mode": packet_mode,
+            "state_namespace_policy": "protocol_root/packets/packet_receipt_sha256",
+            "max_parallel_cells": QUALIFICATION_BATCH_MAX_PARALLEL,
+            "staged_concurrency": qualification_stages(protocol),
+            "model_or_scored_cells_permitted": False,
+            "qualification_cells": schedule,
+            "qualification_cells_sha256": _digest(schedule),
+            "qualification_contracts": {
+                name: protocol["benchmarks"][name]["runtime_qualification"]["contract_sha256"]
+                for name in ("cvebench_zero_day", "nyu_ctf_web_test", "cybench_web")
+            },
+            "score_reads": 0,
+        }
     refreshed = tensorlake.capacity_authority(
         protocol, retry_execution_path, require_live_owner=True
     )
@@ -444,7 +544,16 @@ def _seal_under_shared_lock(
     if _process_matches():
         raise ExecutionPacketError("unmigrated_tensorlake_creator_is_running")
     external_names = tensorlake.external_names(protocol)
-    _initial_state_absent(root, external_names)
+    initial_names = (
+        external_names
+        if packet_mode == "qualification_only"
+        else {
+            tensorlake.cell_name(row["benchmark"], row["task_index"], row["arm"])
+            for row in schedule
+        }
+    )
+    marker = _bound_marker(root, packet_mode)
+    _initial_state_absent(root, initial_names, marker)
     client = tensorlake._client()  # noqa: SLF001
     rows = client.inventory()
     active_rows = [row for row in rows if row.get("status") != "terminated"]
@@ -462,6 +571,7 @@ def _seal_under_shared_lock(
         {
             "schema": SCHEMA,
             "status": "sealed_no_launch",
+            "packet_mode": packet_mode,
             "sealed_at": current.isoformat().replace("+00:00", "Z"),
             "protocol": {
                 "receipt_sha256": protocol["protocol_sha256"],
@@ -470,12 +580,9 @@ def _seal_under_shared_lock(
             },
             "repository": source,
             "official_sources": official_sources,
-            "models": protocol["arms"],
+            "models": models,
             "base_clone_serving": base_clone_serving,
-            "live_parity": {
-                "receipt": parity,
-                "file_sha256": file_digest(parity_bytes),
-            },
+            "live_parity": parity_binding,
             "shared_capacity": {
                 "limit": replica_set.PROJECT_ACTIVE_SANDBOX_LIMIT,
                 "active_at_seal": active,
@@ -498,17 +605,7 @@ def _seal_under_shared_lock(
                 "file_sha256": file_digest(quiescence_bytes),
                 "prohibition_receipt": prohibition,
             },
-            "execution": {
-                "state_namespace_policy": "protocol_root/packets/packet_receipt_sha256",
-                "max_parallel_cells": 1,
-                "task_scoped_runtime_preflight_before_each_pair": True,
-                "task5_preflight_requires_official_solution_positive_control": True,
-                "scored_starts_require_fresh_packet_bound_route_and_fleet_team_preflight": True,
-                "ordered_cells": schedule,
-                "ordered_cells_sha256": protocol["execution_schedule"]["ordered_cells_sha256"],
-                "pause_after_cell_count": protocol["execution_schedule"]["pause_after_cell_count"],
-                "score_blind_until_terminal_analysis": True,
-            },
+            "execution": execution,
             "initial_state": {
                 "provider_external_active_names": [],
                 "local_external_cell_receipts": [],
@@ -525,10 +622,11 @@ def _seal_under_shared_lock(
         stream.flush()
         os.fsync(stream.fileno())
     bound = _write_once(
-        root / "SET_EXTERNAL_CTF_EXECUTION_PACKET_BOUND.json",
+        marker,
         {
             "schema": BOUND_SCHEMA,
             "status": "bound_create_once",
+            "packet_mode": packet_mode,
             "protocol_sha256": protocol["protocol_sha256"],
             "packet_path": str(output.resolve()),
             "packet_file_sha256": file_digest(output.read_bytes()),
@@ -539,6 +637,17 @@ def _seal_under_shared_lock(
     )
     _packet_state(root, packet["receipt_sha256"])
     return {**packet, "bound_receipt_sha256": bound["receipt_sha256"]}
+
+
+def _official_sources(
+    protocol: dict[str, Any], source_checkouts: dict[str, Path]
+) -> dict[str, Any]:
+    expected = {"cvebench_zero_day", "nyu_ctf_web_test", "cybench_web"}
+    if set(source_checkouts) != expected:
+        raise ExecutionPacketError("official_source_checkout_set_invalid")
+    return {
+        name: observed_source(protocol, name, source_checkouts[name]) for name in sorted(expected)
+    }
 
 
 def seal(
@@ -570,13 +679,7 @@ def seal(
         capacity_successor_receipt_sha256=authority["capacity_successor_receipt_sha256"],
         now=current,
     )
-    expected_checkouts = {"cvebench_zero_day", "nyu_ctf_web_test", "cybench_web"}
-    if set(source_checkouts) != expected_checkouts:
-        raise ExecutionPacketError("official_source_checkout_set_invalid")
-    official_sources = {
-        name: observed_source(protocol, name, source_checkouts[name])
-        for name in sorted(expected_checkouts)
-    }
+    official_sources = _official_sources(protocol, source_checkouts)
     base_clone_serving = _clone_serving_evidence(
         protocol=protocol,
         clone_intent_path=clone_intent_path,
@@ -592,6 +695,7 @@ def seal(
     schedule = cve_execution_schedule(protocol)
     with replica_set._shared_tensorlake_create_lock(authority["state"]):  # noqa: SLF001
         return _seal_under_shared_lock(
+            packet_mode="scored",
             protocol=protocol,
             authority=authority,
             retry_execution_path=retry_execution_path,
@@ -611,6 +715,57 @@ def seal(
         )
 
 
+def seal_qualification(
+    *,
+    protocol_path: Path,
+    retry_execution_path: Path,
+    quiescence_path: Path,
+    source_checkouts: dict[str, Path],
+    output: Path,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Seal one model-neutral packet that can run qualification cells only."""
+
+    from . import tensorlake
+
+    protocol = load_protocol(protocol_path)
+    current = datetime.now(UTC) if now is None else now.astimezone(UTC)
+    source = _source_identity(require_clean=True)
+    authority = tensorlake.capacity_authority(
+        protocol, retry_execution_path, require_live_owner=True
+    )
+    quiescence = _load_quiescence(
+        quiescence_path,
+        capacity_successor_receipt_sha256=authority["capacity_successor_receipt_sha256"],
+        now=current,
+    )
+    official_sources = _official_sources(protocol, source_checkouts)
+    protocol_bytes = protocol_path.read_bytes()
+    retry_bytes = retry_execution_path.read_bytes()
+    quiescence_bytes = quiescence_path.read_bytes()
+    schedule = qualification_schedule(protocol)
+    with replica_set._shared_tensorlake_create_lock(authority["state"]):  # noqa: SLF001
+        return _seal_under_shared_lock(
+            packet_mode="qualification_only",
+            protocol=protocol,
+            authority=authority,
+            retry_execution_path=retry_execution_path,
+            tensorlake=tensorlake,
+            source=source,
+            official_sources=official_sources,
+            base_clone_serving=None,
+            parity=None,
+            parity_bytes=None,
+            quiescence=quiescence,
+            quiescence_bytes=quiescence_bytes,
+            retry_bytes=retry_bytes,
+            protocol_bytes=protocol_bytes,
+            schedule=schedule,
+            current=current,
+            output=output,
+        )
+
+
 def load(
     path: Path,
     *,
@@ -619,30 +774,62 @@ def load(
     require_current_source: bool = True,
 ) -> tuple[dict[str, Any], Path]:
     packet, raw = _read(path, "execution_packet")
+    packet_mode = packet.get("packet_mode")
     if (
         packet.get("schema") != SCHEMA
         or packet.get("status") != "sealed_no_launch"
+        or packet_mode not in PACKET_MODES
         or packet.get("external_mutations_performed") != 0
         or packet.get("protocol", {}).get("receipt_sha256") != protocol["protocol_sha256"]
         or packet.get("protocol", {}).get("execution_benchmark") != protocol["execution_benchmark"]
-        or packet.get("models") != protocol["arms"]
-        or packet.get("execution", {}).get("ordered_cells") != cve_execution_schedule(protocol)
-        or packet.get("execution", {}).get("ordered_cells_sha256")
-        != protocol["execution_schedule"]["ordered_cells_sha256"]
-        or packet.get("execution", {}).get("max_parallel_cells") != 1
     ):
         raise ExecutionPacketError("execution_packet_binding_invalid")
-    clone = packet.get("base_clone_serving")
-    base_provenance = protocol["arms"]["base"]["provenance"]
-    if (
-        not isinstance(clone, dict)
-        or clone.get("intent", {}).get("intent_sha256") != base_provenance["clone_intent_sha256"]
-        or clone.get("plan", {}).get("registration_sha256") is None
-        or clone.get("create_result", {}).get("receipt_sha256") is None
-        or clone.get("resume_preflight", {}).get("receipt_sha256") is None
-        or clone.get("resume_result", {}).get("receipt_sha256") is None
-    ):
-        raise ExecutionPacketError("execution_packet_base_clone_binding_invalid")
+    execution = packet["execution"]
+    if packet_mode == "qualification_only":
+        schedule = qualification_schedule(protocol)
+        expected_execution = {
+            "mode": packet_mode,
+            "state_namespace_policy": "protocol_root/packets/packet_receipt_sha256",
+            "max_parallel_cells": QUALIFICATION_BATCH_MAX_PARALLEL,
+            "staged_concurrency": qualification_stages(protocol),
+            "model_or_scored_cells_permitted": False,
+            "qualification_cells": schedule,
+            "qualification_cells_sha256": _digest(schedule),
+            "qualification_contracts": {
+                name: protocol["benchmarks"][name]["runtime_qualification"]["contract_sha256"]
+                for name in ("cvebench_zero_day", "nyu_ctf_web_test", "cybench_web")
+            },
+            "score_reads": 0,
+        }
+        if (
+            execution != expected_execution
+            or packet.get("models") is not None
+            or packet.get("base_clone_serving") is not None
+            or packet.get("live_parity") is not None
+        ):
+            raise ExecutionPacketError("qualification_packet_binding_invalid")
+    else:
+        if (
+            packet.get("models") != protocol["arms"]
+            or execution.get("mode") != packet_mode
+            or execution.get("max_parallel_cells") != 1
+            or execution.get("ordered_cells") != cve_execution_schedule(protocol)
+            or execution.get("ordered_cells_sha256")
+            != protocol["execution_schedule"]["ordered_cells_sha256"]
+        ):
+            raise ExecutionPacketError("scored_execution_packet_binding_invalid")
+        clone = packet.get("base_clone_serving")
+        base_provenance = protocol["arms"]["base"]["provenance"]
+        if (
+            not isinstance(clone, dict)
+            or clone.get("intent", {}).get("intent_sha256")
+            != base_provenance["clone_intent_sha256"]
+            or clone.get("plan", {}).get("registration_sha256") is None
+            or clone.get("create_result", {}).get("receipt_sha256") is None
+            or clone.get("resume_preflight", {}).get("receipt_sha256") is None
+            or clone.get("resume_result", {}).get("receipt_sha256") is None
+        ):
+            raise ExecutionPacketError("execution_packet_base_clone_binding_invalid")
     capacity = packet.get("shared_capacity")
     expected_capacity = {
         "snapshot_id": authority["snapshot_id"],
@@ -674,18 +861,20 @@ def load(
         source = _source_identity(require_clean=True)
         if packet.get("repository") != source or _process_matches():
             raise ExecutionPacketError("execution_packet_source_or_creator_drifted")
-    parity_binding = packet.get("live_parity")
-    if not isinstance(parity_binding, dict) or not isinstance(parity_binding.get("receipt"), dict):
-        raise ExecutionPacketError("execution_packet_live_parity_invalid")
-    observed = _timestamp(parity_binding["receipt"].get("observed_at"))
-    live_parity.validate(parity_binding["receipt"], protocol=protocol, now=observed)
+    if packet_mode == "scored":
+        parity_binding = packet.get("live_parity")
+        if not isinstance(parity_binding, dict) or not isinstance(
+            parity_binding.get("receipt"), dict
+        ):
+            raise ExecutionPacketError("execution_packet_live_parity_invalid")
+        observed = _timestamp(parity_binding["receipt"].get("observed_at"))
+        live_parity.validate(parity_binding["receipt"], protocol=protocol, now=observed)
     root = _protocol_root(authority)
-    bound, _bound_raw = _read(
-        root / "SET_EXTERNAL_CTF_EXECUTION_PACKET_BOUND.json", "execution_packet_bound"
-    )
+    bound, _bound_raw = _read(_bound_marker(root, packet_mode), "execution_packet_bound")
     if (
         bound.get("schema") != BOUND_SCHEMA
         or bound.get("status") != "bound_create_once"
+        or bound.get("packet_mode") != packet_mode
         or bound.get("protocol_sha256") != protocol["protocol_sha256"]
         or bound.get("packet_path") != str(path.resolve())
         or bound.get("packet_file_sha256") != file_digest(raw)
@@ -697,6 +886,107 @@ def load(
     ):
         raise ExecutionPacketError("execution_packet_bound_receipt_invalid")
     return packet, _packet_state(root, packet["receipt_sha256"])
+
+
+def seal_qualification_summary(
+    *,
+    protocol_path: Path,
+    retry_execution_path: Path,
+    qualification_packet_path: Path,
+    benchmark: str,
+    output: Path,
+) -> dict[str, Any]:
+    """Seal score-free terminal/release bindings for one completed benchmark."""
+
+    from . import tensorlake
+
+    protocol = load_protocol(protocol_path)
+    if benchmark not in protocol["benchmarks"]:
+        raise ExecutionPacketError("qualification_summary_benchmark_invalid")
+    authority = tensorlake.capacity_authority(
+        protocol, retry_execution_path, require_live_owner=False
+    )
+    packet, state = load(
+        qualification_packet_path,
+        protocol=protocol,
+        authority=authority,
+        require_current_source=False,
+    )
+    if packet.get("packet_mode") != "qualification_only":
+        raise ExecutionPacketError("qualification_summary_packet_mode_invalid")
+    expected = [row for row in qualification_schedule(protocol) if row["benchmark"] == benchmark]
+    rows = []
+    for row in expected:
+        cell = {key: row[key] for key in ("benchmark", "task_index", "task_id", "arm")}
+        name = tensorlake.cell_name(benchmark, row["task_index"], "qualification")
+        terminal, _terminal_raw = _read(state / f"{name}.terminal.json", "qualification_terminal")
+        release, _release_raw = _read(state / f"{name}.released.json", "qualification_release")
+        outcome = terminal.get("outcome")
+        error_class = terminal.get("infrastructure_error_class")
+        result = terminal.get("result")
+        if (
+            terminal.get("schema") != "external_ctf_cell_terminal_v1"
+            or any(terminal.get(key) != value for key, value in cell.items())
+            or terminal.get("name") != name
+            or terminal.get("protocol_sha256") != protocol["protocol_sha256"]
+            or terminal.get("qualification_contract_sha256") != row["qualification_contract_sha256"]
+            or terminal.get("execution_packet_receipt_sha256") != packet["receipt_sha256"]
+            or outcome not in {"runtime_preflight_passed", "infrastructure_invalid"}
+            or (outcome == "runtime_preflight_passed" and error_class is not None)
+            or (
+                outcome == "infrastructure_invalid"
+                and (not isinstance(error_class, str) or not error_class)
+            )
+            or (outcome == "runtime_preflight_passed" and not isinstance(result, dict))
+            or (
+                result is not None
+                and tensorlake._result_value(  # noqa: SLF001
+                    canonical(result) + b"\n", protocol=protocol, cell=cell
+                )
+                != result
+            )
+            or release.get("schema") != "external_ctf_sandbox_release_v1"
+            or any(release.get(key) != value for key, value in cell.items())
+            or release.get("name") != name
+            or release.get("status") not in {"absent", "terminated"}
+            or (outcome == "runtime_preflight_passed" and release.get("status") != "terminated")
+            or release.get("protocol_sha256") != protocol["protocol_sha256"]
+            or release.get("execution_packet_receipt_sha256") != packet["receipt_sha256"]
+            or release.get("terminal_receipt_sha256") != terminal["receipt_sha256"]
+        ):
+            raise ExecutionPacketError("qualification_summary_cell_binding_invalid")
+        rows.append(
+            {
+                **cell,
+                "name": name,
+                "qualification_contract_sha256": row["qualification_contract_sha256"],
+                "outcome": outcome,
+                "infrastructure_error_class": error_class,
+                "terminal_receipt_sha256": terminal["receipt_sha256"],
+                "release_receipt_sha256": release["receipt_sha256"],
+            }
+        )
+    passed = sum(row["outcome"] == "runtime_preflight_passed" for row in rows)
+    return _write_once(
+        output,
+        {
+            "schema": "external_ctf_qualification_summary_v1",
+            "benchmark": benchmark,
+            "protocol_sha256": protocol["protocol_sha256"],
+            "qualification_contract_sha256": protocol["benchmarks"][benchmark][
+                "runtime_qualification"
+            ]["contract_sha256"],
+            "qualification_packet_receipt_sha256": packet["receipt_sha256"],
+            "qualification_packet_file_sha256": file_digest(qualification_packet_path.read_bytes()),
+            "scheduled_task_count": len(expected),
+            "runtime_preflight_passed_count": passed,
+            "infrastructure_invalid_count": len(rows) - passed,
+            "rows": rows,
+            "rows_sha256": _digest(rows),
+            "score_reads": 0,
+            "model_requests": 0,
+        },
+    )
 
 
 def main() -> None:
@@ -719,13 +1009,31 @@ def main() -> None:
     seal_parser.add_argument("--nyu-checkout", type=Path, required=True)
     seal_parser.add_argument("--cybench-checkout", type=Path, required=True)
     seal_parser.add_argument("--output", type=Path, required=True)
+    qualification_parser = sub.add_parser("seal-qualification")
+    qualification_parser.add_argument("--protocol", type=Path, required=True)
+    qualification_parser.add_argument("--web-retry-execution", type=Path, required=True)
+    qualification_parser.add_argument("--creator-quiescence", type=Path, required=True)
+    qualification_parser.add_argument("--cve-checkout", type=Path, required=True)
+    qualification_parser.add_argument("--nyu-checkout", type=Path, required=True)
+    qualification_parser.add_argument("--cybench-checkout", type=Path, required=True)
+    qualification_parser.add_argument("--output", type=Path, required=True)
+    summary_parser = sub.add_parser("seal-qualification-summary")
+    summary_parser.add_argument("--protocol", type=Path, required=True)
+    summary_parser.add_argument("--web-retry-execution", type=Path, required=True)
+    summary_parser.add_argument("--qualification-packet", type=Path, required=True)
+    summary_parser.add_argument(
+        "--benchmark",
+        choices=("cvebench_zero_day", "nyu_ctf_web_test", "cybench_web"),
+        required=True,
+    )
+    summary_parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.command == "seal-quiescence":
         result = seal_quiescence(
             output=args.output,
             capacity_successor_receipt_sha256=args.capacity_successor_receipt_sha256,
         )
-    else:
+    elif args.command == "seal":
         result = seal(
             protocol_path=args.protocol,
             retry_execution_path=args.web_retry_execution,
@@ -741,6 +1049,26 @@ def main() -> None:
                 "nyu_ctf_web_test": args.nyu_checkout,
                 "cybench_web": args.cybench_checkout,
             },
+            output=args.output,
+        )
+    elif args.command == "seal-qualification":
+        result = seal_qualification(
+            protocol_path=args.protocol,
+            retry_execution_path=args.web_retry_execution,
+            quiescence_path=args.creator_quiescence,
+            source_checkouts={
+                "cvebench_zero_day": args.cve_checkout,
+                "nyu_ctf_web_test": args.nyu_checkout,
+                "cybench_web": args.cybench_checkout,
+            },
+            output=args.output,
+        )
+    else:
+        result = seal_qualification_summary(
+            protocol_path=args.protocol,
+            retry_execution_path=args.web_retry_execution,
+            qualification_packet_path=args.qualification_packet,
+            benchmark=args.benchmark,
             output=args.output,
         )
     print(json.dumps({"receipt_sha256": result["receipt_sha256"]}, sort_keys=True))

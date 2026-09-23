@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import json
 import os
+import re
 import subprocess
 import tomllib
 import urllib.request
@@ -241,6 +242,22 @@ FROZEN_BENCHMARK_AUTHORITIES = {
     },
 }
 
+RUNTIME_QUALIFICATION_SOURCE_PATHS = {
+    "cvebench_zero_day": {
+        "executor": ROOT / "evals/external_ctf/cvebench_runtime_qualification.py",
+    },
+    "nyu_ctf_web_test": {
+        "adapter": ROOT / "evals/external_ctf/nyu_adapter.py",
+        "common": ROOT / "evals/external_ctf/runtime_qualification.py",
+        "executor": ROOT / "evals/external_ctf/nyu_runtime_qualification.py",
+    },
+    "cybench_web": {
+        "common": ROOT / "evals/external_ctf/runtime_qualification.py",
+        "executor": ROOT / "evals/external_ctf/cybench_runtime_qualification.py",
+        "source_gate": ROOT / "evals/external_ctf/cybench_qualification.py",
+    },
+}
+
 
 def canonical(value: object) -> bytes:
     return json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
@@ -252,6 +269,39 @@ def digest(value: object) -> str:
 
 def file_digest(data: bytes) -> str:
     return "sha256:" + hashlib.sha256(data).hexdigest()
+
+
+def runtime_qualification_contract(protocol: dict[str, Any], benchmark_name: str) -> dict[str, Any]:
+    """Return the stable, model-neutral qualification contract for one benchmark."""
+
+    benchmark = protocol["benchmarks"][benchmark_name]
+    qualification = benchmark["runtime_qualification"]
+    grader = {
+        "bindings": benchmark["bindings"],
+        "native_grading": benchmark.get("native_grading"),
+        "scoring": benchmark["scoring"],
+    }
+    return {
+        "schema": qualification["schema"],
+        "benchmark": benchmark_name,
+        "source": benchmark["source"],
+        "source_manifest_sha256": benchmark.get("source_manifest_sha256"),
+        "task_count": benchmark["task_count"],
+        "task_ids": benchmark["task_ids"],
+        "task_ids_sha256": benchmark["task_ids_sha256"],
+        "source_unavailable_task_ids": benchmark["source_unavailable_task_ids"],
+        "execution_unavailable_task_ids": benchmark["execution_unavailable_task_ids"],
+        "qualification_canary_task_index": qualification["canary_task_index"],
+        "qualification_task_indices": qualification["task_indices"],
+        "harness": benchmark["harness"],
+        "grader": grader,
+        "executor_source_sha256": qualification["executor_source_sha256"],
+        "controller_image": qualification["controller_image"],
+    }
+
+
+def runtime_qualification_contract_sha256(protocol: dict[str, Any], benchmark_name: str) -> str:
+    return digest(runtime_qualification_contract(protocol, benchmark_name))
 
 
 def cve_execution_schedule(protocol: dict[str, Any]) -> list[dict[str, Any]]:
@@ -391,9 +441,9 @@ def validate_protocol(value: dict[str, Any]) -> None:
         "shared_create_lock": "derived_from_bound_capacity_successor_state",
         "capacity_authority": "web_retry_capacity_successor_v1",
         "capacity_successor_required": True,
-        "worker_sha256": "sha256:9dae7881eeb6e392e22df363202907da7859c81e09b2e6849cfb3502252ae6c4",
+        "worker_sha256": "sha256:eda973d385a913c7db2a25014700cf7af3db501d63655bfb261619440490e7ba",
         "coordinator_sha256": (
-            "sha256:431c3e673fc493284ac1b6afcd25583731ab9af7699f7582142ead7ad92a4995"
+            "sha256:c8a588e132e024f0244d71fa5f4dbb511f4a88c99a1d7e6cdfbcdda05e5ef8dc"
         ),
         "analyzer_sha256": (
             "sha256:f31861b821b9b881d4719dc22896ea16c71fecaff3e5874e87cb1977d2ab252e"
@@ -468,6 +518,53 @@ def validate_protocol(value: dict[str, Any]) -> None:
         harness = benchmark.get("harness")
         if not isinstance(harness, dict) or harness.get("platform") != "linux/amd64":
             raise ValueError(f"{name} must fail closed outside linux/amd64")
+        qualification = benchmark.get("runtime_qualification")
+        expected_indices = [
+            index
+            for index, task_id in enumerate(tasks)
+            if task_id not in set(source_unavailable) | set(execution_unavailable)
+        ]
+        expected_sources = {
+            label: file_digest(path.read_bytes())
+            for label, path in RUNTIME_QUALIFICATION_SOURCE_PATHS[name].items()
+        }
+        if name == "cvebench_zero_day":
+            expected_sources["strict_adapter"] = benchmark["bindings"]["adapter_sha256"]
+        controller_image = (
+            qualification.get("controller_image") if isinstance(qualification, dict) else None
+        )
+        if (
+            not isinstance(qualification, dict)
+            or set(qualification)
+            != {
+                "schema",
+                "canary_task_index",
+                "task_indices",
+                "executor_source_sha256",
+                "controller_image",
+                "contract_sha256",
+            }
+            or qualification.get("schema")
+            != f"external_ctf_{name}_runtime_qualification_contract_v1"
+            or qualification.get("task_indices") != expected_indices
+            or qualification.get("canary_task_index")
+            != {
+                "cvebench_zero_day": 5,
+                "nyu_ctf_web_test": 6,
+                "cybench_web": 2,
+            }[name]
+            or qualification["canary_task_index"] not in expected_indices
+            or qualification.get("executor_source_sha256") != expected_sources
+            or (
+                controller_image is not None
+                if name != "cybench_web"
+                else not isinstance(controller_image, str)
+                or re.fullmatch(r"[^\s@]+@sha256:[0-9a-f]{64}", controller_image) is None
+            )
+            or qualification.get("contract_sha256")
+            != runtime_qualification_contract_sha256(value, name)
+        ):
+            raise ValueError(f"{name} runtime qualification contract drifted")
         if name == "cvebench_zero_day" and harness.get("kali_size") != "large":
             raise ValueError("CVE-Bench must use its official large Kali image")
         if name == "cvebench_zero_day" and (

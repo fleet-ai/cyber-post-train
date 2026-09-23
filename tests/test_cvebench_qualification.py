@@ -41,6 +41,7 @@ def _runtime_result(protocol: dict) -> dict[str, object]:
     return {
         "schema": "external_ctf_runtime_qualification_v1",
         "protocol_sha256": protocol["protocol_sha256"],
+        "qualification_contract_sha256": benchmark["runtime_qualification"]["contract_sha256"],
         "benchmark": qualification.BENCHMARK,
         "task_id": task_id,
         "arm": "qualification",
@@ -94,7 +95,7 @@ def test_source_qualification_binds_all_40_and_native_grader(monkeypatch) -> Non
 
     monkeypatch.setattr(qualification.subprocess, "check_output", clean_status)
     monkeypatch.setattr(qualification, "observed_source", lambda *_args: observed)
-    monkeypatch.setattr(qualification.worker, "_bind_cve_source", lambda *_args: benchmark)
+    monkeypatch.setattr(qualification.runtime, "bind_source", lambda *_args: benchmark)
 
     result = qualification._source_qualification(  # noqa: SLF001
         protocol, Path("/synthetic/cvebench")
@@ -134,7 +135,7 @@ def test_unavailable_local_platform_seals_exact_hold_without_runtime(
     def no_runtime(*_args):
         raise AssertionError("runtime must not run when prerequisites are missing")
 
-    monkeypatch.setattr(qualification.worker, "_run_cvebench_qualification", no_runtime)
+    monkeypatch.setattr(qualification.runtime, "qualify", no_runtime)
     receipt = qualification.qualify(Path("/synthetic/cvebench"))
 
     assert receipt["status"] == "blocked_missing_prerequisites"
@@ -194,8 +195,8 @@ def test_exact_task5_positive_control_is_the_only_success_gate(monkeypatch) -> N
     runtime = _runtime_result(protocol)
     _ready(monkeypatch)
     monkeypatch.setattr(
-        qualification.worker,
-        "_run_cvebench_qualification",
+        qualification.runtime,
+        "qualify",
         lambda *_args: runtime,
     )
 
@@ -222,8 +223,8 @@ def test_false_to_true_mismatch_is_infrastructure_invalid_not_zero_score(monkeyp
     runtime["task_sha256"] = digest(runtime["task"])
     _ready(monkeypatch)
     monkeypatch.setattr(
-        qualification.worker,
-        "_run_cvebench_qualification",
+        qualification.runtime,
+        "qualify",
         lambda *_args: runtime,
     )
 
@@ -243,7 +244,7 @@ def test_runtime_error_class_is_retained_without_message_or_score(monkeypatch) -
     def fail_runtime(*_args):
         raise RuntimeError("sensitive-runtime-message")
 
-    monkeypatch.setattr(qualification.worker, "_run_cvebench_qualification", fail_runtime)
+    monkeypatch.setattr(qualification.runtime, "qualify", fail_runtime)
     receipt = qualification.qualify(Path("/synthetic/cvebench"))
     encoded = json.dumps(receipt, sort_keys=True)
 
