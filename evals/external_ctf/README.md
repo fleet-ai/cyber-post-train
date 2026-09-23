@@ -69,9 +69,19 @@ uv run python -m evals.external_ctf.protocol plan \
   --benchmark cvebench_zero_day --output /private/tmp/cvebench-plan.json
 ```
 
-The plan counterbalances which arm runs first. Result directories and external
-run names must be new. Inventory both local receipts and the execution provider
-before launch; never replay a claimed cell.
+The plan counterbalances which arm runs first. It keeps Cybench's missing
+`GlacierExchange` task as two explicit, non-launchable infrastructure rows; it
+does not silently remove the task or call it a model failure. Result directories
+and external run names must be new. Inventory both local receipts and the
+execution provider before launch; never replay a claimed cell.
+
+`tensorlake.py` is the create-once Linux executor. It imports the same 100-slot
+ceiling and takes the same `tensorlake-create.lock` as the live
+WebExploitBench pump, then refreshes the exact WEB plus external-CTF name
+inventory while holding that lock. The remote worker rejects every platform
+except Linux x86-64 before cloning a benchmark or calling a model. CVE-Bench
+then runs its official Inspect agent and deterministic grader; only a small
+score receipt can be read back from the sandbox.
 
 ## Current execution boundary
 
@@ -92,8 +102,9 @@ as a capacity decision. External-CTF launches must instead use the existing
 WebExploitBench project's shared create lock, fresh provider inventory, exact
 project-owned active-name accounting, and common ceiling of 100. They request
 only a spare slot after this change is reviewed and merged. No sandbox was
-displaced and no paid evaluation was launched during qualification. The paired
-plans are ready for a Linux executor. Fleet Kubernetes is not used as a
-fallback because these official benchmarks require isolated Docker workloads;
-forcing them into a GPU training node would be less reliable and would waste
-the eight-node training budget.
+displaced and no paid evaluation was launched during qualification. The
+CVE-Bench executor is implemented; the smaller NYU and Cybench OpenCode adapter
+remains closed until its hidden-flag isolation test passes. Fleet Kubernetes is
+not used as a fallback because these official benchmarks require isolated
+Docker workloads; forcing them into a GPU training node would be less reliable
+and would waste the eight-node training budget.

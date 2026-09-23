@@ -14,6 +14,47 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PROTOCOL = ROOT / "configs/evaluation/qwen38-external-ctf-paired-v1.json"
 FLEET_TEAM_ID = "a1025f0b-ad67-49fc-a023-51800ab43e84"
+SAMPLING = {"temperature": 1.0, "top_p": 0.95, "top_k": None, "seed": None}
+RETRY = {
+    "automatic_model_retry": False,
+    "automatic_process_retry": False,
+    "selective_retry": False,
+}
+BINDINGS = {
+    "cvebench_zero_day": {
+        "system_prompt_sha256": (
+            "sha256:05d0fdccc00339bc89aa0d0d00d89172e1d600578ed3691723cac5af900cb2e2"
+        ),
+        "tool_schema_sha256": (
+            "sha256:f78d8195e4b7ae009a16254e956966163f9e96a1bb96bc64a72bb0c649c74bf7"
+        ),
+        "runner_sha256": "sha256:bd210dea91d3d9c8fdfe89007c0ca7a4e5179ef419f14a62f3d8d1fa290196f0",
+        "grader_sha256": "sha256:d07f1721a60f7ba09e9951a17d95f21a521081ac7bce2a49da82fa6ffc87da8c",
+        "adapter_sha256": "sha256:f78d8195e4b7ae009a16254e956966163f9e96a1bb96bc64a72bb0c649c74bf7",
+    },
+    "nyu_ctf_web_test": {
+        "system_prompt_sha256": (
+            "sha256:8512560b0706f8859774bfe8e93c2c86ecf6a6a4603fe59db004fd04fcc738d1"
+        ),
+        "tool_schema_sha256": (
+            "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+        ),
+        "runner_sha256": "sha256:149a977a452608e4a14e55463b4c987f70341fd0cb13b79d35183a9b6068c59f",
+        "grader_sha256": "sha256:149a977a452608e4a14e55463b4c987f70341fd0cb13b79d35183a9b6068c59f",
+        "adapter_sha256": "sha256:7976411d3b5b8eacbb887b8e6148fc14680513b0d35f202fbd7a6205080a329c",
+    },
+    "cybench_web": {
+        "system_prompt_sha256": (
+            "sha256:8512560b0706f8859774bfe8e93c2c86ecf6a6a4603fe59db004fd04fcc738d1"
+        ),
+        "tool_schema_sha256": (
+            "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+        ),
+        "runner_sha256": "sha256:858e50807bfa6bbdbe653e9e07ba92ffbfd6decaa045dd11842693461713998b",
+        "grader_sha256": "sha256:7bff10a348d99a0938f6e386af264a60add0fa008814e71b013af8771ea569ec",
+        "adapter_sha256": "sha256:7976411d3b5b8eacbb887b8e6148fc14680513b0d35f202fbd7a6205080a329c",
+    },
+}
 
 
 def canonical(value: object) -> bytes:
@@ -68,6 +109,28 @@ def validate_protocol(value: dict[str, Any]) -> None:
             raise ValueError(f"non-weight model setting differs across arms: {field}")
     if arms["base"]["model_artifact_sha256"] == arms["step_1000"]["model_artifact_sha256"]:
         raise ValueError("model arms do not bind different weights")
+    execution = value.get("execution")
+    if execution != {
+        "required_host_os": "linux",
+        "required_host_arch": "x86_64",
+        "provider": "tensorlake_sandbox",
+        "shared_capacity_limit": 100,
+        "shared_create_lock": "state/tensorlake-create.lock",
+        "worker_sha256": "sha256:c29e25f18f617be7d6d410b75e28b8fc064df9e3ab5a25797161df86395389ac",
+        "coordinator_sha256": (
+            "sha256:e3b3be475310091464a0f6c773d0a66feda4a01e6f30a7e318e478a10caf674e"
+        ),
+        "sampling": SAMPLING,
+        "retry": RETRY,
+        "max_parallel_cells": 1,
+    }:
+        raise ValueError("execution controls drifted")
+    for field, source in (
+        ("worker_sha256", ROOT / "evals/external_ctf/worker.py"),
+        ("coordinator_sha256", ROOT / "evals/external_ctf/tensorlake.py"),
+    ):
+        if execution[field] != file_digest(source.read_bytes()):
+            raise ValueError(f"{field} source drifted")
     benchmarks = value.get("benchmarks")
     if not isinstance(benchmarks, dict) or set(benchmarks) != {
         "cvebench_zero_day",
@@ -85,6 +148,28 @@ def validate_protocol(value: dict[str, Any]) -> None:
             raise ValueError(f"{name} task roster digest mismatch")
         if benchmark.get("pass_k") != 1:
             raise ValueError(f"{name} must retain its native one-attempt report")
+        harness = benchmark.get("harness")
+        if not isinstance(harness, dict) or harness.get("platform") != "linux/amd64":
+            raise ValueError(f"{name} must fail closed outside linux/amd64")
+        bindings = benchmark.get("bindings")
+        required_bindings = {
+            "system_prompt_sha256",
+            "tool_schema_sha256",
+            "runner_sha256",
+            "grader_sha256",
+            "adapter_sha256",
+        }
+        if (
+            not isinstance(bindings, dict)
+            or set(bindings) != required_bindings
+            or bindings != BINDINGS[name]
+        ):
+            raise ValueError(f"{name} execution bindings drifted")
+        if any(
+            not isinstance(item, str) or not item.startswith("sha256:") or len(item) != 71
+            for item in bindings.values()
+        ):
+            raise ValueError(f"{name} execution binding digest is invalid")
         if benchmark.get("scoring") not in {
             "official_deterministic_exploit_grader",
             "official_exact_flag",
@@ -168,11 +253,19 @@ def build_plan(protocol: dict[str, Any], name: str) -> dict[str, Any]:
     unavailable = set(benchmark.get("source_unavailable_task_ids", []))
     cells = []
     for index, task_id in enumerate(benchmark["task_ids"]):
-        if task_id in unavailable:
-            continue
         first = "base" if index % 2 == 0 else "step_1000"
         for arm in (first, "step_1000" if first == "base" else "base"):
-            cells.append({"task_id": task_id, "attempt": 0, "arm": arm})
+            cells.append(
+                {
+                    "task_id": task_id,
+                    "attempt": 0,
+                    "arm": arm,
+                    "launchable": task_id not in unavailable,
+                    "preflight_state": (
+                        "ready" if task_id not in unavailable else "infra_invalid_source_missing"
+                    ),
+                }
+            )
     plan = {
         "schema": "qwen38_external_ctf_execution_plan_v1",
         "study_id": protocol["study_id"],
@@ -183,8 +276,14 @@ def build_plan(protocol: dict[str, Any], name: str) -> dict[str, Any]:
         "scoring": benchmark["scoring"],
         "harness": benchmark["harness"],
         "budget": benchmark["budget"],
+        "bindings": benchmark["bindings"],
+        "execution": protocol["execution"],
         "arms": protocol["arms"],
         "cells": cells,
+        "official_task_count": len(benchmark["task_ids"]),
+        "executable_task_count": len(benchmark["task_ids"]) - len(unavailable),
+        "infrastructure_invalid_task_count": len(unavailable),
+        "infrastructure_invalid_task_ids": sorted(unavailable),
         "data_policy": protocol["data_policy"],
         "result_policy": "append_only_one_terminal_receipt_per_cell",
     }
