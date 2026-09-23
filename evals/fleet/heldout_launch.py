@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any, Protocol
+from urllib.parse import parse_qsl, quote, urlsplit, urlunsplit
 
 import yaml
 
@@ -1563,11 +1564,34 @@ class PostgresDatabase:
 
     def summary(self, database: str) -> dict[str, Any]:
         try:
-            import psycopg.conninfo
-
             from evals.fleet import rollout_postgres
 
-            dsn = psycopg.conninfo.make_conninfo(self._dsn(), dbname=database)
+            if not isinstance(database, str) or DATABASE_NAME.fullmatch(database) is None:
+                raise HeldoutLaunchError("database name is invalid")
+            original = urlsplit(self._dsn())
+            if (
+                original.scheme not in {"postgres", "postgresql"}
+                or not original.netloc
+                or original.fragment
+            ):
+                raise HeldoutLaunchError("database environment is not a supported PostgreSQL URI")
+            query_keys = {
+                key.casefold()
+                for key, _ in parse_qsl(original.query, keep_blank_values=True)
+            }
+            if query_keys & {"database", "dbname"}:
+                raise HeldoutLaunchError(
+                    "database environment must select its database only by URI path"
+                )
+            dsn = urlunsplit(
+                (
+                    original.scheme,
+                    original.netloc,
+                    "/" + quote(database, safe=""),
+                    original.query,
+                    "",
+                )
+            )
             return rollout_postgres.summary(dsn)
         except HeldoutLaunchError:
             raise

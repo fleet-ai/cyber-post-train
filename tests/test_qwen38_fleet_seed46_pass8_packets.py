@@ -7,6 +7,7 @@ import json
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
 import yaml
 
 from evals.fleet import heldout_launch
@@ -162,6 +163,7 @@ def test_renderer_prepares_terminal_collectors_without_launching(tmp_path, monke
 
     assert receipt["external_mutations"] == 0
     assert receipt["launch_performed"] is False
+    assert receipt["collector_generation"] == 1
     assert len(receipt["arms"]) == 16
     bundle = yaml.safe_load((output / "terminal-collectors.yaml").read_text(encoding="utf-8"))
     jobs = [item for item in bundle["items"] if item["kind"] == "Job"]
@@ -182,3 +184,36 @@ def test_renderer_prepares_terminal_collectors_without_launching(tmp_path, monke
             "ROLLOUT_DATABASE_URL",
         }
         assert "nvidia.com/gpu" not in json.dumps(job)
+
+
+def test_renderer_gives_reviewed_terminal_successor_a_fresh_generation(
+    tmp_path, monkeypatch
+) -> None:
+    packet_root, _receipt = _prepare(tmp_path, monkeypatch)
+    output = tmp_path / "terminal-collectors-v2"
+
+    receipt = launchers.render_terminal_collectors(
+        packets=packet_root,
+        output=output,
+        terminal_generation=2,
+    )
+
+    assert receipt["collector_generation"] == 2
+    assert {row["collector_generation"] for row in receipt["arms"]} == {2}
+    bundle = yaml.safe_load((output / "terminal-collectors.yaml").read_text(encoding="utf-8"))
+    names = [item["metadata"]["name"] for item in bundle["items"]]
+    assert len(names) == 32
+    assert len(set(names)) == 16
+    assert all(names.count(name) == 2 for name in set(names))
+    assert all(name.endswith("-terminal-v2") for name in names)
+
+
+@pytest.mark.parametrize("generation", [0, 100, True])
+def test_renderer_rejects_invalid_terminal_generation(tmp_path, monkeypatch, generation) -> None:
+    packet_root, _receipt = _prepare(tmp_path, monkeypatch)
+    with pytest.raises(ValueError, match="terminal collector generation"):
+        launchers.render_terminal_collectors(
+            packets=packet_root,
+            output=tmp_path / f"terminal-{generation}",
+            terminal_generation=generation,
+        )

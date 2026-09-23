@@ -165,6 +165,7 @@ def _objects(
     compressed: bytes,
     evaluator_job: str,
     operation: Literal["launch", "terminal"] = "launch",
+    terminal_generation: int = 1,
 ) -> tuple[dict, dict]:
     # ``-launch`` was the first operational attempt.  Those Pods could not
     # reach the rollout ledger because they lacked the NetworkPolicy client
@@ -184,7 +185,9 @@ def _objects(
             },
         ]
     else:
-        name = f"{evaluator_job}-terminal-v1"
+        if type(terminal_generation) is not int or not 1 <= terminal_generation <= 99:
+            raise ValueError("terminal collector generation must be an integer from 1 through 99")
+        name = f"{evaluator_job}-terminal-v{terminal_generation}"
         operation_environment = [{"name": "PACKET_PATH", "value": "packet/LAUNCH_PACKET.json"}]
     if len(name) > 63:
         raise ValueError("launcher Kubernetes name is too long")
@@ -293,7 +296,9 @@ def _objects(
     return config_map, job
 
 
-def render_terminal_collectors(*, packets: Path, output: Path) -> dict[str, Any]:
+def render_terminal_collectors(
+    *, packets: Path, output: Path, terminal_generation: int = 1
+) -> dict[str, Any]:
     """Render score-blind collectors; never create them before evaluator terminal state."""
     if output.exists() or output.is_symlink():
         raise FileExistsError("terminal collector output already exists")
@@ -317,11 +322,13 @@ def render_terminal_collectors(*, packets: Path, output: Path) -> dict[str, Any]
                 compressed=compressed,
                 evaluator_job=evaluator_job,
                 operation="terminal",
+                terminal_generation=terminal_generation,
             )
             items.extend([config_map, job])
             arms.append(
                 {
                     "replica": replica,
+                    "collector_generation": terminal_generation,
                     "evaluator_job": evaluator_job,
                     "collector_job": job["metadata"]["name"],
                     "bundle_sha256": "sha256:" + hashlib.sha256(compressed).hexdigest(),
@@ -339,6 +346,7 @@ def render_terminal_collectors(*, packets: Path, output: Path) -> dict[str, Any]
             "schema": "cyber_fleet_heldout_terminal_collector_render_v1",
             "bundle_path": "terminal-collectors.yaml",
             "bundle_file_sha256": _file_sha(bundle_path),
+            "collector_generation": terminal_generation,
             "arms": arms,
             "external_mutations": 0,
             "launch_performed": False,
@@ -417,9 +425,19 @@ def main() -> None:
     parser.add_argument("--packets", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--terminal-collectors", action="store_true")
+    parser.add_argument("--terminal-generation", type=int, default=1)
     args = parser.parse_args()
-    renderer = render_terminal_collectors if args.terminal_collectors else render
-    print(json.dumps(renderer(packets=args.packets, output=args.output), indent=2))
+    if args.terminal_collectors:
+        result = render_terminal_collectors(
+            packets=args.packets,
+            output=args.output,
+            terminal_generation=args.terminal_generation,
+        )
+    else:
+        if args.terminal_generation != 1:
+            raise ValueError("terminal generation applies only to terminal collectors")
+        result = render(packets=args.packets, output=args.output)
+    print(json.dumps(result, indent=2))
 
 
 if __name__ == "__main__":

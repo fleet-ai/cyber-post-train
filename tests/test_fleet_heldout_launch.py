@@ -714,3 +714,65 @@ def test_terminal_collection_is_score_blind_and_never_retries_or_scores(tmp_path
         None,
         f"kueue.x-k8s.io/job-uid={JOB_UID}",
     ) in cluster.list_calls
+
+
+def test_postgres_summary_preserves_uri_scheme_when_selecting_database(monkeypatch):
+    from evals.fleet import rollout_postgres
+
+    monkeypatch.setenv(
+        "TEST_ROLLOUT_DATABASE_URL",
+        "postgresql://user:password@postgres.example:5432/rollout?sslmode=disable",
+    )
+    observed: dict[str, str] = {}
+
+    def fake_summary(dsn: str) -> dict[str, Any]:
+        observed["dsn"] = dsn
+        return {"total": 17}
+
+    monkeypatch.setattr(rollout_postgres, "summary", fake_summary)
+    result = launch.PostgresDatabase("TEST_ROLLOUT_DATABASE_URL").summary(DATABASE)
+    assert result == {"total": 17}
+    assert observed["dsn"] == (
+        "postgresql://user:password@postgres.example:5432/"
+        + DATABASE
+        + "?sslmode=disable"
+    )
+
+
+@pytest.mark.parametrize(
+    "dsn",
+    [
+        "host=postgres.example dbname=rollout",
+        "https://postgres.example/rollout",
+        "postgresql:///rollout",
+        "postgresql://postgres.example/rollout#fragment",
+    ],
+)
+def test_postgres_summary_rejects_non_uri_or_ambiguous_database_targets(
+    monkeypatch, dsn
+):
+    monkeypatch.setenv("TEST_ROLLOUT_DATABASE_URL", dsn)
+    with pytest.raises(launch.HeldoutLaunchError, match="supported PostgreSQL URI"):
+        launch.PostgresDatabase("TEST_ROLLOUT_DATABASE_URL").summary(DATABASE)
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "dbname=wrong_database",
+        "%64bname=wrong_database",
+        "sslmode=disable&dbname=wrong_database",
+        "sslmode=disable&DATABASE=",
+        "dbname=wrong_database&dbname=another_database",
+    ],
+)
+def test_postgres_summary_rejects_query_database_overrides(monkeypatch, query):
+    monkeypatch.setenv(
+        "TEST_ROLLOUT_DATABASE_URL",
+        f"postgresql://user:password@postgres.example:5432/rollout?{query}",
+    )
+    with pytest.raises(
+        launch.HeldoutLaunchError,
+        match="select its database only by URI path",
+    ):
+        launch.PostgresDatabase("TEST_ROLLOUT_DATABASE_URL").summary(DATABASE)
