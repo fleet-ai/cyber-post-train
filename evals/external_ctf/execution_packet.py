@@ -24,6 +24,7 @@ from .protocol import (
     canonical,
     cve_execution_schedule,
     file_digest,
+    git_no_replace_env,
     load_protocol,
     observed_source,
 )
@@ -241,7 +242,11 @@ def _clone_serving_evidence(
 
 
 def _git(*arguments: str) -> str:
-    return subprocess.check_output(["git", "-C", str(ROOT), *arguments], text=True).strip()
+    return subprocess.check_output(
+        ["git", "-C", str(ROOT), *arguments],
+        text=True,
+        env=git_no_replace_env(),
+    ).strip()
 
 
 def _source_identity(*, require_clean: bool) -> dict[str, Any]:

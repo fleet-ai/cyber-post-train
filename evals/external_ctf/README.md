@@ -69,6 +69,26 @@ uv run python -m evals.external_ctf.protocol verify-source \
   --benchmark cybench_web --checkout /path/to/cybench-1097a722
 ```
 
+Seal content-free, model-free qualification evidence with new private output
+paths. These commands do not create provider sandboxes or make model requests.
+On a non-Linux host they preserve an explicit runtime-prerequisite hold rather
+than claiming qualification:
+
+```sh
+uv run python -m evals.external_ctf.cvebench_qualification \
+  --checkout /path/to/cve-bench-v2.1.0 --output /private/path/cvebench-qualification.json
+uv run python -m evals.external_ctf.nyu_adapter \
+  --checkout /path/to/nyu-ctf-v20250206 --output /private/path/nyu-qualification.json
+uv run python -m evals.external_ctf.cybench_qualification \
+  --checkout /path/to/cybench-1097a722 --output /private/path/cybench-qualification.json
+```
+
+The NYU manifest binds all 19 official identities without prompt or flag
+content: 16 receive task-specific Linux/amd64 runtime-qualification contracts,
+while the three declared runtime-unavailable tasks remain explicit
+infrastructure rows. The Cybench manifest binds five source-present tasks and
+the one declared source-missing row. Neither manifest opens its adapter gate.
+
 `observe-models` is a diagnostic check of Fleet team identity and model-name
 availability. It is not launch authority and does not prove exact route parity.
 It never prints a credential:
@@ -130,11 +150,14 @@ Only a small sealed terminal receipt can be read back from the sandbox.
 All provider launches are currently blocked. The matched-priority c1 base clone,
 fresh two-arm live parity, shared-capacity successor, immutable execution packet,
 and remote task-5 model-free preflight do not yet exist. CVE-Bench is the only
-implemented adapter, but it is not launch-qualified until those receipts are
-sealed. NYU and Cybench remain explicitly blocked until their OpenCode isolation,
-remote-runtime, and terminal-acceptance tests pass. The pinned NYU census proves
-16 compose-declared candidates, not 16 reproducible executions. Local platform
-experiments are not benchmark results and do not authorize a launch.
+launch-integrated adapter, but it is not launch-qualified until those receipts
+are sealed. NYU now has a source-bound OpenCode contract and hidden-flag-isolation
+tests; Cybench now has source/native exact-grader qualification. Both adapters
+remain false and explicitly blocked until their Linux/amd64 challenge startup,
+OpenCode isolation, remote-runtime, and terminal-acceptance controls pass. The
+pinned NYU census proves 16 source-qualified runtime candidates, not 16
+reproducible executions. Local platform checks are not benchmark results and do
+not authorize a launch.
 The earlier source-qualification JSON is historical and cannot authorize a
 launch; its separate supersession record enumerates the missing successor
 evidence without rewriting that historical receipt.
@@ -147,8 +170,8 @@ WebExploitBench project's shared create lock, fresh provider inventory, exact
 project-owned active-name accounting, and common ceiling of 100. They request
 only a spare slot after this change is reviewed and merged. No sandbox was
 displaced and no paid evaluation has been launched. The
-CVE-Bench executor is implemented; the smaller NYU and Cybench OpenCode adapter
-remains closed until its hidden-flag isolation test passes. Fleet Kubernetes is
+CVE-Bench executor is implemented; the NYU and Cybench execution gates remain
+closed until their model-free remote runtime receipts pass. Fleet Kubernetes is
 not used as a fallback because these official benchmarks require isolated
 Docker workloads; forcing them into a GPU training node would be less reliable
 and would waste the eight-node training budget.
