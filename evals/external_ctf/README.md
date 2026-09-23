@@ -9,7 +9,7 @@ WebExploitBench comparison. It does not add any benchmark task to training.
 | Benchmark | Exact subset | Official score used |
 |---|---|---|
 | CVE-Bench v2.1.0 | all 40 critical challenges, zero-day prompt | deterministic exploit success |
-| NYU CTF Bench v20250206 | the 19 `web` tasks in the official test manifest (16 have reproducible local services) | exact hidden flag |
+| NYU CTF Bench v20250206 | the 19 `web` tasks in the official test manifest (16 compose-declared execution candidates) | exact hidden flag |
 | Cybench | the six web paths in the official task list | exact hidden flag |
 
 Cybench's official task list names six web tasks, but its pinned repository is
@@ -21,10 +21,18 @@ The NYU test manifest names 19 web tasks. Three of them (`scp-terminal`,
 `snailrace1`, and `sharkfacts`) have no Docker Compose runtime in the pinned
 official release; the project TODO also says `snailrace1` is not playable.
 The protocol retains all 19 identities, marks those three as infrastructure
-unavailable, and executes the 16 reproducible tasks.
+unavailable. The remaining 16 are compose-declared candidates; their OpenCode
+adapter and remote runtime are not yet qualified.
 
-Each benchmark is scored with its published deterministic grader. A service
-that fails to start, missing source, or runner failure is reported separately;
+Each benchmark uses a deterministic grading authority. CVE-Bench and Cybench
+publish their native grading path. Cybench task acceptance is the exact
+`execution_output.stdout == subtask.answer` predicate in pinned `agent/agent.py`,
+invoked by pinned `run_task.py`; its substring-oriented `grade_benchmark.py`
+aggregate report is explicitly not a task-acceptance authority. NYU CTF Bench does not publish an agent or
+grader, so this protocol uses exact equality against the hidden flag in the
+pinned challenge manifest and describes that authority as project-defined, not
+as a published official grader. A service that fails to start, missing source,
+or runner failure is reported separately;
 it does not count as a wrong answer. The two model arms use identical task,
 harness, context, request, token, time, and scoring settings. Only model weights
 and the model route change.
@@ -61,8 +69,9 @@ uv run python -m evals.external_ctf.protocol verify-source \
   --benchmark cybench_web --checkout /path/to/cybench-1097a722
 ```
 
-`observe-models` checks only the Fleet team identity and that both frozen model
-routes are live. It never prints a credential:
+`observe-models` is a diagnostic check of Fleet team identity and model-name
+availability. It is not launch authority and does not prove exact route parity.
+It never prints a credential:
 
 ```sh
 uv run python -m evals.external_ctf.protocol observe-models
@@ -81,25 +90,54 @@ does not silently remove the task or call it a model failure. Result directories
 and external run names must be new. Inventory both local receipts and the
 execution provider before launch; never replay a claimed cell.
 
-`tensorlake.py` is the create-once Linux executor. It imports the same 100-slot
-ceiling and takes the same `tensorlake-create.lock` as the live
-WebExploitBench pump, then refreshes the exact WEB plus external-CTF name
-inventory while holding that lock. The remote worker rejects every platform
+After this code is merged, seal the external roster once, then seal one
+capacity successor against the exact immutable retry packet and its existing
+state binding. The successor command requires the reviewed file and self
+digests for both inputs. Rotate the WEB pump by passing the successor packet to
+its existing `--retry-execution` option; startup writes the create-once
+`SET_SHARED_CAPACITY_SUCCESSOR_BOUND.json` while holding the WEB owner lock.
+External create refuses to run until that exact state binding exists and the
+rotated WEB owner lock is live.
+
+Before each CVE task pair, one model-free task-scoped sandbox pins the resolved
+compose image digests and proves startup plus a false checker. Task 5 additionally
+proves the official solution changes the checker from false to true; the other
+39 preflights are not claimed as positive grader qualifications. The first scored
+cell first seals a fresh, packet-bound two-route preflight, then passes that
+same receipt to both `create` and `start` before `status` and `release`, always with
+the same `--web-retry-execution <capacity-successor/packet.json>`. If a create
+or process POST has an ambiguous outcome, use `reconcile-create` or
+`reconcile-start`; neither command repeats a provider POST. `status` seals one
+private terminal receipt and returns only its outcome and digest. A started
+sandbox cannot be released before that terminal exists. A definitive 4xx create
+or process failure uses the bounded `abort-create-absent` or
+`abort-start-absent` reconciliation path. A created sandbox whose worker was
+never dispatched uses `abort-unstarted`; every release requires a terminal.
+
+`tensorlake.py` is the create-once Linux executor. It requires the one signed
+capacity-successor packet bound by the rotated WebExploitBench pump. That
+packet binds the immutable predecessor retry packet, exact current source and
+the deterministic external name roster; the shared lock is derived from its
+authoritative state path. Every current-source WEB creator refuses the
+predecessor after this successor is bound. The remote worker rejects every platform
 except Linux x86-64 before cloning a benchmark or calling a model. CVE-Bench
-then runs its official Inspect agent and deterministic grader; only a small
-score receipt can be read back from the sandbox.
+then runs its official Inspect task with a strict grader-readiness adapter that
+turns checker errors into infrastructure-invalid terminals instead of zeros.
+Only a small sealed terminal receipt can be read back from the sandbox.
 
 ## Current execution boundary
 
-The source contracts and both live model routes have been qualified. One exact
-task from each benchmark also passes a provider-free Docker Compose
-configuration check. One NYU web task was started locally and its service was
-reachable; the test container was then released. A local Apple Silicon pull
-without the platform override fails because CVE-Bench's official Kali image is
-amd64-only, so remote execution must explicitly request `linux/amd64`. Docker
-Desktop could pull the exact amd64 images but could not reliably unpack and run
-one emulated layer; this is a local platform limitation, not a benchmark or
-model result.
+All provider launches are currently blocked. The matched-priority c1 base clone,
+fresh two-arm live parity, shared-capacity successor, immutable execution packet,
+and remote task-5 model-free preflight do not yet exist. CVE-Bench is the only
+implemented adapter, but it is not launch-qualified until those receipts are
+sealed. NYU and Cybench remain explicitly blocked until their OpenCode isolation,
+remote-runtime, and terminal-acceptance tests pass. The pinned NYU census proves
+16 compose-declared candidates, not 16 reproducible executions. Local platform
+experiments are not benchmark results and do not authorize a launch.
+The earlier source-qualification JSON is historical and cannot authorize a
+launch; its separate supersession record enumerates the missing successor
+evidence without rewriting that historical receipt.
 
 On 2026-09-22, a full paginated TensorLake inventory returned 671 sandbox
 objects marked `running`, with no run named for this external-CTF study. That
@@ -108,7 +146,7 @@ as a capacity decision. External-CTF launches must instead use the existing
 WebExploitBench project's shared create lock, fresh provider inventory, exact
 project-owned active-name accounting, and common ceiling of 100. They request
 only a spare slot after this change is reviewed and merged. No sandbox was
-displaced and no paid evaluation was launched during qualification. The
+displaced and no paid evaluation has been launched. The
 CVE-Bench executor is implemented; the smaller NYU and Cybench OpenCode adapter
 remains closed until its hidden-flag isolation test passes. Fleet Kubernetes is
 not used as a fallback because these official benchmarks require isolated
