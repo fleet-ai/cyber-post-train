@@ -41,38 +41,53 @@ _SOURCE_FILES = (
 )
 _BOOTSTRAP = r'''import gzip,hashlib,json,os,sys,tarfile
 from pathlib import Path,PurePosixPath
-archive=Path("/bundle/source.tgz")
-packet_gz=Path("/packet/packet.json.gz")
-source=archive.read_bytes()
-packet=packet_gz.read_bytes()
-if "sha256:"+hashlib.sha256(source).hexdigest()!=os.environ["OPERATOR_SOURCE_SHA256"]:
-    raise SystemExit("operator source digest mismatch")
-if "sha256:"+hashlib.sha256(gzip.decompress(packet)).hexdigest()!=os.environ["OPERATOR_PACKET_FILE_SHA256"]:
-    raise SystemExit("operator packet digest mismatch")
-root=Path("/runtime")
-with tarfile.open(fileobj=__import__("io").BytesIO(source),mode="r:gz") as bundle:
-    members=bundle.getmembers()
-    if not members or len(members)>512:
-        raise SystemExit("operator source inventory invalid")
-    for member in members:
-        path=PurePosixPath(member.name)
-        if path.is_absolute() or ".." in path.parts or not member.isfile():
-            raise SystemExit("operator source member invalid")
-        payload=bundle.extractfile(member)
-        if payload is None:
-            raise SystemExit("operator source member unreadable")
-        target=root.joinpath(*path.parts)
-        target.parent.mkdir(parents=True,exist_ok=True)
-        descriptor=os.open(target,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o444)
-        with os.fdopen(descriptor,"wb") as stream:
-            stream.write(payload.read())
-packet_path=Path("/work/packet.json")
-descriptor=os.open(packet_path,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o400)
-with os.fdopen(descriptor,"wb") as stream:
-    stream.write(gzip.decompress(packet))
-os.environ["PYTHONPATH"]="/runtime"
-os.chdir("/runtime")
-os.execv(sys.executable,[sys.executable,"-u","-m","training.skyrl_prod10_operator","--packet",str(packet_path),"--phase",os.environ["OPERATOR_PHASE"]])
+def failure(error):
+    body={"schema":"cyber_skyrl_prod10_bootstrap_failure_v1","status":"failed","phase":os.environ.get("OPERATOR_PHASE",""),"error_class":type(error).__name__,"error_code":"bootstrap_failure","gpus":0}
+    body["sha256"]="sha256:"+hashlib.sha256(json.dumps(body,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+    encoded=(json.dumps(body,sort_keys=True,separators=(",",":"))+"\n").encode()
+    descriptor=os.open("/dev/termination-log",os.O_WRONLY|os.O_CREAT|os.O_TRUNC,0o600)
+    with os.fdopen(descriptor,"wb") as stream:
+        stream.write(encoded)
+        stream.flush()
+        os.fsync(stream.fileno())
+def bootstrap():
+    archive=Path("/bundle/source.tgz")
+    packet_gz=Path("/packet/packet.json.gz")
+    source=archive.read_bytes()
+    packet=packet_gz.read_bytes()
+    if "sha256:"+hashlib.sha256(source).hexdigest()!=os.environ["OPERATOR_SOURCE_SHA256"]:
+        raise SystemExit("operator source digest mismatch")
+    if "sha256:"+hashlib.sha256(gzip.decompress(packet)).hexdigest()!=os.environ["OPERATOR_PACKET_FILE_SHA256"]:
+        raise SystemExit("operator packet digest mismatch")
+    root=Path("/runtime")
+    with tarfile.open(fileobj=__import__("io").BytesIO(source),mode="r:gz") as bundle:
+        members=bundle.getmembers()
+        if not members or len(members)>512:
+            raise SystemExit("operator source inventory invalid")
+        for member in members:
+            path=PurePosixPath(member.name)
+            if path.is_absolute() or ".." in path.parts or not member.isfile():
+                raise SystemExit("operator source member invalid")
+            payload=bundle.extractfile(member)
+            if payload is None:
+                raise SystemExit("operator source member unreadable")
+            target=root.joinpath(*path.parts)
+            target.parent.mkdir(parents=True,exist_ok=True)
+            descriptor=os.open(target,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o444)
+            with os.fdopen(descriptor,"wb") as stream:
+                stream.write(payload.read())
+    packet_path=Path("/work/packet.json")
+    descriptor=os.open(packet_path,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o400)
+    with os.fdopen(descriptor,"wb") as stream:
+        stream.write(gzip.decompress(packet))
+    os.environ["PYTHONPATH"]="/runtime"
+    os.chdir("/runtime")
+    os.execv(sys.executable,[sys.executable,"-u","-m","training.skyrl_prod10_operator","--packet",str(packet_path),"--phase",os.environ["OPERATOR_PHASE"]])
+try:
+    bootstrap()
+except BaseException as error:
+    failure(error)
+    raise
 '''
 
 

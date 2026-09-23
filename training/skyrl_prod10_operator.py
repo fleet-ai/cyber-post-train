@@ -32,12 +32,21 @@ from .incluster_kubernetes import InClusterKubernetesRunner
 PACKET_SCHEMA = "cyber_skyrl_prod10_operator_packet_v1"
 RESULT_SCHEMA = "cyber_skyrl_prod10_operator_result_v1"
 TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_termination_v1"
+FAILURE_TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_failure_v1"
 OPERATOR_NAMES = {
-    "stage": "chris-q38-prod10-stage-operator-v2",
+    "stage": "chris-q38-prod10-stage-operator-v3",
     "preflight": "chris-q38-prod10-preflight-operator-v1",
 }
 _TERMINATION_PATH = Path("/dev/termination-log")
 _POLL_SECONDS = 0.25
+
+
+class OperatorFailure(ValueError):
+    """Sanitized fixed-code refusal suitable for a termination receipt."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__(code)
+        self.code = code
 
 
 def _seal(value: dict[str, Any]) -> dict[str, Any]:
@@ -86,6 +95,27 @@ def _write_termination(*, phase: str, result_path: Path, result: dict[str, Any])
         os.fsync(stream.fileno())
 
 
+def _write_failure_termination(*, phase: str, error: BaseException) -> None:
+    value = _seal(
+        {
+            "schema": FAILURE_TERMINATION_SCHEMA,
+            "status": "failed",
+            "phase": phase,
+            "error_class": type(error).__name__,
+            "error_code": getattr(error, "code", "operator_unclassified"),
+            "gpus": 0,
+        }
+    )
+    encoded = (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    if len(encoded) > 1000:
+        raise ValueError("prod10 operator failure receipt is too large")
+    descriptor = os.open(_TERMINATION_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, "wb") as stream:
+        stream.write(encoded)
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
 def _identity(value: object) -> historical.RailIdentity:
     if not isinstance(value, dict):
         raise ValueError("prod10 operator identity is invalid")
@@ -113,7 +143,7 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
 
 def _validate_runtime(packet: dict[str, Any]) -> str:
     if (os.geteuid(), os.getegid()) != (direct.RUNTIME_UID, direct.RUNTIME_GID):
-        raise ValueError("prod10 operator must run as image user 1000:100")
+        raise OperatorFailure("runtime_identity_rejected")
     name = os.environ.get("OPERATOR_JOB_NAME", "")
     uid = os.environ.get("OPERATOR_JOB_UID", "")
     packet_sha256 = os.environ.get("OPERATOR_PACKET_SHA256", "")
@@ -121,19 +151,22 @@ def _validate_runtime(packet: dict[str, Any]) -> str:
     try:
         UUID(uid)
     except ValueError as exc:
-        raise ValueError("prod10 operator Job UID is invalid") from exc
+        raise OperatorFailure("runtime_job_uid_rejected") from exc
     if (
         name != packet["operator_name"]
         or packet_sha256 != packet["sha256"]
         or not source_sha256.startswith("sha256:")
         or len(source_sha256) != 71
     ):
-        raise ValueError("prod10 operator runtime binding changed")
+        raise OperatorFailure("runtime_binding_rejected")
     return uid
 
 
-def _canonical_directory(path: Path, *, owner: bool = True) -> None:
-    identity = path.lstat()
+def _canonical_directory(path: Path, *, owner: bool = True, code: str) -> None:
+    try:
+        identity = path.lstat()
+    except OSError as exc:
+        raise OperatorFailure(code + "_stat_failed") from exc
     mode = stat.S_IMODE(identity.st_mode)
     if (
         path.is_symlink()
@@ -145,16 +178,21 @@ def _canonical_directory(path: Path, *, owner: bool = True) -> None:
         or not mode & stat.S_IXUSR
         or not os.access(path, os.R_OK | os.W_OK | os.X_OK)
     ):
-        raise ValueError("prod10 operator SFS directory is not canonical and writable")
+        raise OperatorFailure(code + "_rejected")
 
 
 def _create_root_for_stage() -> None:
     parent = hardening.CREATE_ONCE_ROOT.parent
-    _canonical_directory(parent, owner=False)
+    _canonical_directory(parent, owner=False, code="sfs_control_parent")
     if hardening.CREATE_ONCE_ROOT.exists() or hardening.CREATE_ONCE_ROOT.is_symlink():
-        raise ValueError("prod10 operator create-once root already exists")
-    hardening.CREATE_ONCE_ROOT.mkdir(mode=0o700)
-    _canonical_directory(hardening.CREATE_ONCE_ROOT)
+        raise OperatorFailure("sfs_create_once_root_exists")
+    try:
+        hardening.CREATE_ONCE_ROOT.mkdir(mode=0o700)
+    except OSError as exc:
+        raise OperatorFailure("sfs_create_once_root_mkdir_failed") from exc
+    _canonical_directory(
+        hardening.CREATE_ONCE_ROOT, code="sfs_create_once_root_postcondition"
+    )
     descriptor = os.open(parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
     try:
         os.fsync(descriptor)
@@ -163,7 +201,7 @@ def _create_root_for_stage() -> None:
 
 
 def _existing_root() -> None:
-    _canonical_directory(hardening.CREATE_ONCE_ROOT)
+    _canonical_directory(hardening.CREATE_ONCE_ROOT, code="sfs_create_once_root")
     if not direct.live_create_is_available():
         raise ValueError("prod10 operator live create root is unavailable")
 
@@ -174,7 +212,7 @@ def _create_operation_root(path: Path) -> None:
     if path.exists() or path.is_symlink():
         raise ValueError("prod10 operator operation root already exists")
     path.mkdir(mode=0o700)
-    _canonical_directory(path)
+    _canonical_directory(path, code="sfs_operation_root_postcondition")
 
 
 def _observer_thread(observer: cleanup.Observer) -> tuple[threading.Thread, dict[str, Any]]:
@@ -247,13 +285,16 @@ def run_stage(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> d
     expected = direct.stage_job_manifest(stage, identity=identity)
     if packet.get("manifest_sha256") != "sha256:" + digest(expected):
         raise ValueError("prod10 stage operator manifest changed")
-    direct.validate_cpu_preview_proof(
-        expected,
-        packet["dev_preview"],
-        purpose="stage",
-        context=direct.DEV_CONTEXT,
-        fresh=True,
-    )
+    try:
+        direct.validate_cpu_preview_proof(
+            expected,
+            packet["dev_preview"],
+            purpose="stage",
+            context=direct.DEV_CONTEXT,
+            fresh=True,
+        )
+    except JobsError as exc:
+        raise OperatorFailure("stage_development_preview_rejected") from exc
     _create_root_for_stage()
     _existing_root()
     operation_root = hardening.stage_operation_root(stage)
@@ -335,13 +376,16 @@ def run_preflight(
     expected = direct.preflight_job_manifest(plan, identity=identity)
     if packet.get("manifest_sha256") != "sha256:" + digest(expected):
         raise ValueError("prod10 preflight operator manifest changed")
-    direct.validate_cpu_preview_proof(
-        expected,
-        packet["dev_preview"],
-        purpose="preflight",
-        context=direct.DEV_CONTEXT,
-        fresh=True,
-    )
+    try:
+        direct.validate_cpu_preview_proof(
+            expected,
+            packet["dev_preview"],
+            purpose="preflight",
+            context=direct.DEV_CONTEXT,
+            fresh=True,
+        )
+    except JobsError as exc:
+        raise OperatorFailure("preflight_development_preview_rejected") from exc
     _existing_root()
     operation_root = hardening.training_operation_root(plan)
     _create_operation_root(operation_root)
@@ -445,6 +489,10 @@ def main() -> None:
     try:
         value = run(args.packet, args.phase)
     except BaseException as exc:
+        try:
+            _write_failure_termination(phase=args.phase, error=exc)
+        except BaseException:
+            pass
         print(json.dumps({"status": "failed", "error_class": type(exc).__name__}))
         raise SystemExit(1) from None
     print(json.dumps({"status": value["status"], "sha256": value["sha256"]}))

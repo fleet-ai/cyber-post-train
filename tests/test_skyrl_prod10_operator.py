@@ -12,6 +12,7 @@ import pytest
 from cyber_post_train import skyrl_prod10_operator_job as operator_job
 from cyber_post_train import skyrl_prod10_operator_launch as operator_launch
 from cyber_post_train.jobs import FAILURE_ALERT_ANNOTATION, JobsError, digest
+from training import dev_cleanup_observer as cleanup
 from training import incluster_kubernetes
 from training import skyrl_prod10_operator as operator
 from training import skyrl_prod9_direct as direct
@@ -320,3 +321,28 @@ def test_operator_termination_receipt_is_accepted_by_exact_observer(
     assert value["sha256"] == "sha256:" + digest(
         {key: item for key, item in value.items() if key != "sha256"}
     )
+
+
+def test_operator_failure_termination_receipt_is_sanitized_and_not_accepted_execution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "termination-log"
+    monkeypatch.setattr(operator, "_TERMINATION_PATH", target)
+    operator._write_failure_termination(
+        phase="stage", error=operator.OperatorFailure("sfs_control_parent_rejected")
+    )
+    value = json.loads(target.read_text())
+    assert value == operator._seal(
+        {
+            "schema": operator.FAILURE_TERMINATION_SCHEMA,
+            "status": "failed",
+            "phase": "stage",
+            "error_class": "OperatorFailure",
+            "error_code": "sfs_control_parent_rejected",
+            "gpus": 0,
+        }
+    )
+    assert cleanup._validated_receipt(json.dumps(value), kind="job") == value
+    assert cleanup._receipt_execution_accepted(value) is False
+    assert "bootstrap_failure" in operator_job._BOOTSTRAP
+    assert "cyber_skyrl_prod10_bootstrap_failure_v1" in operator_job._BOOTSTRAP
