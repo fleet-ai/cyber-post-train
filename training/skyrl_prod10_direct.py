@@ -12,6 +12,7 @@ import json
 import os
 import re
 import subprocess
+import time
 from collections.abc import Callable
 from copy import deepcopy
 from datetime import UTC, datetime
@@ -21,6 +22,7 @@ from uuid import UUID
 
 from cyber_post_train.gpu_capacity import ROLE_LABELS
 from cyber_post_train.jobs import API_URLS, Jobs, JobsError, digest
+from cyber_post_train.sfs_output import require_output_absent
 
 from . import skyrl_prod9_direct as direct
 from . import skyrl_prod9_hardening as hardening
@@ -33,6 +35,7 @@ DUPLICATE_SCHEMA = "cyber_skyrl_prod10_direct_duplicate_absence_v1"
 JIT_DUPLICATE_SCHEMA = "cyber_skyrl_prod10_jit_duplicate_absence_v2"
 CAPACITY_SCHEMA = "cyber_skyrl_prod10_direct_capacity_gate_v1"
 CREATED_SCHEMA = "cyber_skyrl_prod10_direct_created_v1"
+POST_RECONCILIATION_SCHEMA = "cyber_skyrl_prod10_post_reconciliation_v1"
 ACCEPTANCE_SCHEMA = "cyber_skyrl_prod10_terminal_acceptance_v1"
 REVALIDATION_SCHEMA = "cyber_skyrl_prod10_preflight_revalidation_v1"
 SEALED_DEV_PREVIEW_PROVENANCE_SCHEMA = (
@@ -454,9 +457,10 @@ def jit_duplicate_proof(
             or any(name.startswith(value + "-") for value in names)
         ):
             raise JobsError("prod10 JIT Jobs API history already owns this identity/output")
-    output = Path(identity.output_root)
-    if output.exists() or output.is_symlink():
-        raise JobsError("prod10 output root already exists")
+    try:
+        require_output_absent({"run_dir": identity.output_root})
+    except ValueError as exc:
+        raise JobsError("prod10 JIT SFS output absence check failed") from exc
     return _seal(
         {
             "schema": JIT_DUPLICATE_SCHEMA,
@@ -778,6 +782,139 @@ def authorize(
     )
 
 
+def _bind_prod10_jobs_api_created(
+    *,
+    operation_root: Path,
+    purpose: str,
+    request: dict[str, Any],
+    plan_sha256: str,
+    manifest_sha256: str,
+    maximum_seconds: int,
+    expected_gpus: int,
+    response: dict[str, Any],
+    runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> dict[str, Any]:
+    """Bind a complete prod10 response with prod10's exact 1x8 shape."""
+    from .dev_cleanup_observer import ObserverError, Prod10JobsApiPrefixGuard
+
+    try:
+        guard = Prod10JobsApiPrefixGuard(
+            context=direct.PROD_CONTEXT,
+            namespace=direct.NAMESPACE,
+            run_name_prefix=request["name"],
+            run_dir=request["run_dir"],
+            image=request["image"],
+            plan_sha256=plan_sha256,
+            manifest_sha256=manifest_sha256,
+            maximum_seconds=maximum_seconds,
+            expected_gpus=expected_gpus,
+            armed_path=direct.jobs_api_guard_path(operation_root, purpose),
+            binding_path=hardening.creator_binding_path(operation_root, purpose),
+            run=runner,
+        )
+        return guard.bind_exact(
+            {
+                "jobs_api_run_name": response.get("name"),
+                "jobs_api_run_id": response.get("run_id"),
+                "run_dir": request["run_dir"],
+            }
+        )
+    except ObserverError as exc:
+        raise JobsError("prod10 Jobs API response could not bind the exact RayJob UID") from exc
+
+
+def _reconcile_jobs_api_accepted_post(
+    *,
+    operation_root: Path,
+    purpose: str,
+    request: dict[str, Any],
+    plan_sha256: str,
+    manifest_sha256: str,
+    maximum_seconds: int,
+    expected_gpus: int,
+    trigger: str,
+    returned_name: str | None,
+    token: str,
+    runner: Callable[..., subprocess.CompletedProcess[str]],
+    jobs_factory: Callable[..., Jobs],
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Reconcile one ambiguously accepted POST without issuing another POST."""
+    from .dev_cleanup_observer import ObserverError, Prod10JobsApiPrefixGuard
+
+    if trigger not in {"successful_missing_or_invalid_run_id", "jobs_error_after_intent"}:
+        raise JobsError("prod10 accepted-POST reconciliation trigger is invalid")
+
+    def read_jobs() -> list[dict]:
+        rows: list[dict] = []
+        seen: set[str] = set()
+        deadline = time.monotonic() + 120
+        with jobs_factory(token, base_url=API_URLS["prod"]) as client:
+            for _page in range(50):
+                if time.monotonic() >= deadline:
+                    raise JobsError("prod10 Jobs history reconciliation exceeded 120 seconds")
+                page = client.request("GET", "/v1/runs", params={"limit": 200, "offset": len(rows)})
+                items, more = page.get("items"), page.get("has_more")
+                if not isinstance(items, list) or type(more) is not bool or (more and not items):
+                    raise JobsError("prod10 Jobs history reconciliation page is invalid")
+                for row in items:
+                    name = row.get("name") if isinstance(row, dict) else None
+                    if not isinstance(name, str) or not name or name in seen:
+                        raise JobsError("prod10 Jobs history reconciliation changed while paging")
+                    seen.add(name)
+                    rows.append(row)
+                if not more:
+                    return rows
+        raise JobsError("prod10 Jobs history reconciliation exceeded 50 pages")
+
+    try:
+        guard = Prod10JobsApiPrefixGuard(
+            context=direct.PROD_CONTEXT,
+            namespace=direct.NAMESPACE,
+            run_name_prefix=request["name"],
+            run_dir=request["run_dir"],
+            image=request["image"],
+            plan_sha256=plan_sha256,
+            manifest_sha256=manifest_sha256,
+            maximum_seconds=maximum_seconds,
+            expected_gpus=expected_gpus,
+            armed_path=direct.jobs_api_guard_path(operation_root, purpose),
+            binding_path=hardening.creator_binding_path(operation_root, purpose),
+            run=runner,
+        )
+        binding, observed = guard.reconcile_accepted_post(
+            title=request["title"],
+            jobs_reader=read_jobs,
+            returned_name=returned_name,
+        )
+    except ObserverError as exc:
+        raise JobsError(
+            "prod10 accepted POST could not reconcile one exact Jobs row and RayJob UID"
+        ) from exc
+    reconciliation = _seal(
+        {
+            "schema": POST_RECONCILIATION_SCHEMA,
+            "state": "POST_RECONCILIATION",
+            "status": "accepted_post_reconciled_without_retry",
+            "trigger": trigger,
+            "name": binding["jobs_api_run_name"],
+            "run_id": binding["jobs_api_run_id"],
+            "run_dir": binding["run_dir"],
+            "jobs_api_status": observed["jobs_api_status"],
+            "jobs_api_created_at": observed["jobs_api_created_at"],
+            "jobs_api_rows_checked": observed["jobs_api_rows_checked"],
+            "kubernetes_rayjobs_checked": observed["kubernetes_rayjobs_checked"],
+            "matching_jobs_api_rows": observed["matching_jobs_api_rows"],
+            "matching_kubernetes_rayjobs": observed["matching_kubernetes_rayjobs"],
+            "rayjob_uid": binding["rayjob_uid"],
+            "rayjob_created_at": binding["rayjob_created_at"],
+            "title_sha256": "sha256:" + digest(request["title"]),
+            "prefix_guard_sha256": binding["prefix_guard_sha256"],
+            "post_retried": False,
+        }
+    )
+    return binding, reconciliation
+
+
 def create_once(
     directory: Path,
     plan: dict[str, Any],
@@ -892,6 +1029,7 @@ def create_once(
             "state": "POST_INTENT_DO_NOT_RETRY",
             "plan_sha256": plan_sha,
             "request_sha256": request_sha,
+            "request_title_sha256": "sha256:" + digest(request["title"]),
             "manifest_sha256": manifest_sha,
             "authorization_sha256": auth["sha256"],
             "sealed_jobs_preview_sha256": "sha256:" + digest(source_preview),
@@ -907,73 +1045,110 @@ def create_once(
             "wandb_runtime_create_once": wandb_runtime,
         },
     )
-    with jobs_factory(token, base_url=API_URLS["prod"]) as client:
-        response = client.request("POST", "/v1/runs", json=request)
+    response: dict[str, Any] | None = None
+    post_error = False
     try:
-        name, run_id = response["name"], str(UUID(response["job_id"]))
-    except (KeyError, TypeError, ValueError) as exc:
-        raise JobsError("prod10 Jobs API response is ambiguous; reconcile, never retry") from exc
-    if (
+        with jobs_factory(token, base_url=API_URLS["prod"]) as client:
+            response = client.request("POST", "/v1/runs", json=request)
+    except JobsError:
+        post_error = True
+    name = response.get("name") if response is not None else None
+    if response is not None and (
         not isinstance(name, str)
         or re.fullmatch(re.escape(request["name"]) + r"-[a-f0-9]{8}", name) is None
         or response.get("run_dir") not in (None, request["run_dir"])
+        or response.get("title") not in (None, request["title"])
     ):
         raise JobsError("prod10 Jobs API returned another identity; reconcile, never retry")
-    normalized = {
-        "name": name,
-        "job_id": run_id,
-        "run_dir": response.get("run_dir") or request["run_dir"],
-        "status": response.get("status"),
-        "created_at": response.get("created_at"),
-    }
-    with journal.open("a") as stream:
-        stream.write(
-            json.dumps(
-                {"state": "POST_RESPONSE", **normalized}, sort_keys=True, separators=(",", ":")
-            )
-            + "\n"
+    response_run_id = response.get("run_id") if response is not None else None
+    requires_reconciliation = post_error or response_run_id is None
+    if not requires_reconciliation:
+        try:
+            canonical_response_run_id = str(UUID(response_run_id))
+        except (TypeError, ValueError):
+            requires_reconciliation = True
+        else:
+            if not isinstance(response_run_id, str) or canonical_response_run_id != response_run_id:
+                requires_reconciliation = True
+    if requires_reconciliation:
+        binding, journal_row = _reconcile_jobs_api_accepted_post(
+            operation_root=root,
+            purpose="training",
+            request=request,
+            plan_sha256=plan_sha,
+            manifest_sha256=manifest_sha,
+            maximum_seconds=direct.MAXIMUM_SECONDS,
+            expected_gpus=request["workers"] * request["gpus_per_worker"],
+            trigger=(
+                "jobs_error_after_intent" if post_error else "successful_missing_or_invalid_run_id"
+            ),
+            returned_name=name,
+            token=token,
+            runner=runner,
+            jobs_factory=jobs_factory,
         )
+        name = binding["jobs_api_run_name"]
+        run_id = binding["jobs_api_run_id"]
+    else:
+        journal_row = {
+            "state": "POST_RESPONSE",
+            "name": name,
+            "run_id": response_run_id,
+            "title": response.get("title"),
+        }
+    with journal.open("a") as stream:
+        stream.write(json.dumps(journal_row, sort_keys=True, separators=(",", ":")) + "\n")
         stream.flush()
         os.fsync(stream.fileno())
-    binding = direct._bind_jobs_api_created(
-        operation_root=root,
-        purpose="training",
-        request=request,
-        plan_sha256=plan_sha,
-        manifest_sha256=manifest_sha,
-        maximum_seconds=direct.MAXIMUM_SECONDS,
-        expected_gpus=request["workers"] * request["gpus_per_worker"],
-        response=normalized,
-        runner=runner,
-    )
-    proof = _seal(
-        {
-            "schema": CREATED_SCHEMA,
-            "status": "submitted_once_and_bound_exact_uid",
-            "plan_sha256": plan_sha,
-            "request_sha256": request_sha,
-            "manifest_sha256": manifest_sha,
-            "authorization_sha256": auth["sha256"],
-            "sealed_jobs_preview_sha256": "sha256:" + digest(source_preview),
-            "live_jobs_preview_sha256": "sha256:" + digest(live_source_preview),
-            "submitter_normalization_sha256": submitter_normalization["sha256"],
-            "live_preview_proof_sha256": live_preview["sha256"],
-            "capacity_gate_sha256": capacity["sha256"],
-            "jit_duplicate_before_guard_sha256": absence_before_guard["sha256"],
-            "jit_duplicate_before_intent_sha256": absence_before_intent["sha256"],
-            "jobs_api_run_name": name,
-            "jobs_api_run_id": run_id,
-            "rayjob_name": binding["rayjob_name"],
-            "rayjob_uid": binding["rayjob_uid"],
-            "creator_binding_sha256": binding["sha256"],
-            "created_at": binding["rayjob_created_at"],
-            "failure_alerts": binding["failure_alerts"],
-            "priority": "c1",
-            "queue_priority": "q1",
-            "nodes": request["workers"],
-            "gpus": request["workers"] * request["gpus_per_worker"],
-        }
-    )
+    binding_arguments = {
+        "operation_root": root,
+        "purpose": "training",
+        "request": request,
+        "plan_sha256": plan_sha,
+        "manifest_sha256": manifest_sha,
+        "maximum_seconds": direct.MAXIMUM_SECONDS,
+        "expected_gpus": request["workers"] * request["gpus_per_worker"],
+        "response": {
+            "name": name,
+            "run_id": response_run_id,
+        },
+        "runner": runner,
+    }
+    if not requires_reconciliation:
+        binding = _bind_prod10_jobs_api_created(**binding_arguments)
+        run_id = response_run_id
+    created_body = {
+        "schema": CREATED_SCHEMA,
+        "status": "submitted_once_and_bound_exact_uid",
+        "plan_sha256": plan_sha,
+        "request_sha256": request_sha,
+        "manifest_sha256": manifest_sha,
+        "authorization_sha256": auth["sha256"],
+        "sealed_jobs_preview_sha256": "sha256:" + digest(source_preview),
+        "live_jobs_preview_sha256": "sha256:" + digest(live_source_preview),
+        "submitter_normalization_sha256": submitter_normalization["sha256"],
+        "live_preview_proof_sha256": live_preview["sha256"],
+        "capacity_gate_sha256": capacity["sha256"],
+        "jit_duplicate_before_guard_sha256": absence_before_guard["sha256"],
+        "jit_duplicate_before_intent_sha256": absence_before_intent["sha256"],
+        "jobs_api_run_name": name,
+        "jobs_api_run_id": run_id,
+        "rayjob_name": binding["rayjob_name"],
+        "rayjob_uid": binding["rayjob_uid"],
+        "creator_binding_sha256": binding["sha256"],
+        "created_at": binding["rayjob_created_at"],
+        "failure_alerts": binding["failure_alerts"],
+        "priority": "c1",
+        "queue_priority": "q1",
+        "nodes": request["workers"],
+        "gpus": request["workers"] * request["gpus_per_worker"],
+    }
+    if requires_reconciliation:
+        created_body["jobs_api_run_id_source"] = (
+            "exact_jobs_and_kubernetes_reconciliation_after_accepted_post"
+        )
+        created_body["post_reconciliation_sha256"] = journal_row["sha256"]
+    proof = _seal(created_body)
     with journal.open("a") as stream:
         stream.write(json.dumps(proof, sort_keys=True, separators=(",", ":")) + "\n")
         stream.flush()
@@ -1108,21 +1283,88 @@ def _training_create_journal(
             and value.get("output_absent") is True
         )
 
+    direct_response_keys = {"state", "name", "run_id", "title"}
+    reconciliation_keys = {
+        "schema",
+        "state",
+        "status",
+        "trigger",
+        "name",
+        "run_id",
+        "run_dir",
+        "jobs_api_status",
+        "jobs_api_created_at",
+        "jobs_api_rows_checked",
+        "kubernetes_rayjobs_checked",
+        "matching_jobs_api_rows",
+        "matching_kubernetes_rayjobs",
+        "rayjob_uid",
+        "rayjob_created_at",
+        "title_sha256",
+        "prefix_guard_sha256",
+        "post_retried",
+        "sha256",
+    }
+    response_run_id = response.get("run_id")
+    if response_run_id is not None:
+        try:
+            if str(UUID(response_run_id)) != response_run_id:
+                raise ValueError
+        except (TypeError, ValueError) as exc:
+            raise ValueError("prod10 create journal response has an invalid ID") from exc
+    direct_response_identity = (
+        set(response) == direct_response_keys
+        and response.get("state") == "POST_RESPONSE"
+        and response_run_id == creator["jobs_api_run_id"]
+        and (
+            response.get("title") is None
+            or "sha256:" + digest(response["title"]) == intent.get("request_title_sha256")
+        )
+        and "jobs_api_run_id_source" not in created
+        and "post_reconciliation_sha256" not in created
+    )
     try:
-        UUID(response["job_id"])
-    except (KeyError, TypeError, ValueError) as exc:
-        raise ValueError("prod10 create journal response lacks an exact ID") from exc
+        sealed_reconciliation = direct._validate_seal(response, POST_RECONCILIATION_SCHEMA)
+    except JobsError:
+        sealed_reconciliation = None
+    reconciled_response_identity = (
+        isinstance(sealed_reconciliation, dict)
+        and set(response) == reconciliation_keys
+        and response.get("state") == "POST_RECONCILIATION"
+        and response.get("status") == "accepted_post_reconciled_without_retry"
+        and response.get("trigger")
+        in {"successful_missing_or_invalid_run_id", "jobs_error_after_intent"}
+        and response_run_id == creator["jobs_api_run_id"]
+        and response.get("rayjob_uid") == creator["rayjob_uid"]
+        and response.get("rayjob_created_at") == creator["rayjob_created_at"]
+        and response.get("title_sha256") == intent.get("request_title_sha256")
+        and response.get("prefix_guard_sha256") == creator["prefix_guard_sha256"]
+        and type(response.get("jobs_api_rows_checked")) is int
+        and response["jobs_api_rows_checked"] >= 1
+        and type(response.get("kubernetes_rayjobs_checked")) is int
+        and response["kubernetes_rayjobs_checked"] >= 1
+        and response.get("matching_jobs_api_rows") == 1
+        and response.get("matching_kubernetes_rayjobs") == 1
+        and response.get("post_retried") is False
+        and created.get("jobs_api_run_id_source")
+        == "exact_jobs_and_kubernetes_reconciliation_after_accepted_post"
+        and created.get("post_reconciliation_sha256") == response.get("sha256")
+    )
     if (
         intent.get("state") != "POST_INTENT_DO_NOT_RETRY"
         or intent.get("plan_sha256") != plan_sha256
         or intent.get("request_sha256") != request_sha256
+        or re.fullmatch(r"sha256:[0-9a-f]{64}", str(intent.get("request_title_sha256"))) is None
         or re.fullmatch(r"sha256:[0-9a-f]{64}", str(intent.get("manifest_sha256"))) is None
         or re.fullmatch(r"sha256:[0-9a-f]{64}", str(intent.get("authorization_sha256"))) is None
         or re.fullmatch(r"sha256:[0-9a-f]{64}", str(intent.get("live_jobs_preview_sha256"))) is None
-        or response.get("state") != "POST_RESPONSE"
         or response.get("name") != creator["jobs_api_run_name"]
-        or response.get("job_id") != creator["jobs_api_run_id"]
-        or response.get("run_dir") != creator["run_dir"]
+        or not (direct_response_identity or reconciled_response_identity)
+        or (
+            response.get("run_dir") != creator["run_dir"]
+            if response.get("state") == "POST_RECONCILIATION"
+            else False
+        )
         or created.get("status") != "submitted_once_and_bound_exact_uid"
         or created.get("plan_sha256") != plan_sha256
         or created.get("request_sha256") != request_sha256
@@ -1282,10 +1524,11 @@ def accept_terminal(
         expected_gpus=8,
         maximum_seconds=direct.MAXIMUM_SECONDS,
     )
+    training_request = training.job_request(plan)
     created, journal_file_sha256, capacity = _training_create_journal(
         training_create_journal,
         plan_sha256="sha256:" + digest(plan),
-        request_sha256="sha256:" + digest(training.job_request(plan)),
+        request_sha256="sha256:" + digest(training_request),
         creator=creator,
     )
     candidate = skyrl_posttrain._json(training_observer)

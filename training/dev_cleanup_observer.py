@@ -454,6 +454,7 @@ class JobsApiPrefixGuard:
                 raise ObserverError("Jobs API exact RayJob is absent after bounded bind wait")
             self._sleep(min(1.0, remaining))
         uid, created = self._validate_exact_rayjob(resource, name=name)
+        self._validate_creator_run_id(resource, name=name, run_id=run_id)
         value = _seal(
             {
                 "schema": JOBS_API_EXACT_BINDING_SCHEMA,
@@ -477,6 +478,176 @@ class JobsApiPrefixGuard:
         )
         _write_create_once(self.binding_path, value)
         return value
+
+    def reconcile_accepted_post(
+        self,
+        *,
+        title: str,
+        jobs_reader: Callable[[], list[dict]],
+        returned_name: str | None,
+    ) -> tuple[dict, dict]:
+        """Bind one ambiguously accepted POST without ever repeating the POST.
+
+        Reconciliation is intentionally narrower than ordinary discovery.  The
+        armed guard must be durable and there must be exactly one Jobs row and
+        one RayJob related by either immutable
+        name/output signal.  The selected pair must then agree on both signals
+        and on the canonical server run UUID.  The deployed history schema does
+        not expose title, so its sealed request hash remains journal evidence.
+        """
+        if not self.armed_at:
+            try:
+                stored = json.loads(self.armed_path.read_text())
+            except (OSError, ValueError) as exc:
+                raise ObserverError("Jobs API prefix guard has not been armed") from exc
+            self.armed_at = self._validate_armed(stored)["armed_at"]
+        else:
+            try:
+                stored = json.loads(self.armed_path.read_text())
+            except (OSError, ValueError) as exc:
+                raise ObserverError("Jobs API prefix guard receipt is unavailable") from exc
+            self._validate_armed(stored)
+        if self.binding_path.exists():
+            raise ObserverError("Jobs API exact binding already exists")
+        if not isinstance(title, str) or not title or len(title) > 256:
+            raise ObserverError("Jobs API reconciliation title is invalid")
+        if returned_name is not None and (
+            not isinstance(returned_name, str)
+            or re.fullmatch(self.generated_name_pattern, returned_name) is None
+        ):
+            raise ObserverError("Jobs API reconciliation returned name is invalid")
+        deadline = self._monotonic() + self.bind_wait_seconds
+        while True:
+            rows = jobs_reader()
+            if not isinstance(rows, list) or not all(isinstance(row, dict) for row in rows):
+                raise ObserverError("Jobs API reconciliation rows have the wrong shape")
+            rayjobs = self._list_rayjobs()
+            related_rows = [
+                row
+                for row in rows
+                if (
+                    re.fullmatch(self.generated_name_pattern, str(row.get("name", "")))
+                    or row.get("run_dir") == self.run_dir
+                )
+            ]
+            related_rayjobs = []
+            for row in rayjobs:
+                metadata = row.get("metadata")
+                if not isinstance(metadata, dict):
+                    continue
+                annotations = metadata.get("annotations")
+                name = metadata.get("name")
+                if (isinstance(name, str) and re.fullmatch(self.generated_name_pattern, name)) or (
+                    isinstance(annotations, dict)
+                    and annotations.get("fleet.ai/run-dir") == self.run_dir
+                ):
+                    related_rayjobs.append(row)
+            if len(related_rows) > 1 or len(related_rayjobs) > 1:
+                raise ObserverError("Jobs API reconciliation identity is not unique")
+            if len(related_rows) == len(related_rayjobs) == 1:
+                break
+            remaining = deadline - self._monotonic()
+            if remaining <= 0:
+                raise ObserverError("Jobs API accepted POST is absent after bounded reconciliation")
+            self._sleep(min(1.0, remaining))
+        api_row, resource = related_rows[0], related_rayjobs[0]
+        name = api_row.get("name")
+        if (
+            not isinstance(name, str)
+            or re.fullmatch(self.generated_name_pattern, name) is None
+            or api_row.get("run_dir") != self.run_dir
+            or (returned_name is not None and returned_name != name)
+        ):
+            raise ObserverError("Jobs API reconciliation row does not match the armed intent")
+        listed_metadata = resource.get("metadata")
+        if not isinstance(listed_metadata, dict) or listed_metadata.get("name") != name:
+            raise ObserverError("Jobs API reconciliation RayJob name does not agree")
+        exact = self._get_exact_rayjob(name)
+        if exact is None or exact.get("metadata", {}).get("uid") != listed_metadata.get("uid"):
+            raise ObserverError("Jobs API reconciliation exact RayJob changed")
+        resource = exact
+        uid, created = self._validate_exact_rayjob(resource, name=name)
+        canonical_run_id = self._rayjob_run_id(resource, name=name)
+        api_run_ids = [api_row.get(field) for field in ("job_id", "run_id")]
+        if any(run_id is not None and run_id != canonical_run_id for run_id in api_run_ids):
+            raise ObserverError("Jobs API reconciliation run ID does not agree")
+        value = _seal(
+            {
+                "schema": JOBS_API_EXACT_BINDING_SCHEMA,
+                "status": "bound_exact_uid_cleanup_not_started",
+                "prefix_guard_sha256": stored["sha256"],
+                "context": self.context,
+                "namespace": self.namespace,
+                "jobs_api_run_name": name,
+                "jobs_api_run_id": canonical_run_id,
+                "run_dir": self.run_dir,
+                "image": self.image,
+                "rayjob_name": name,
+                "rayjob_uid": uid,
+                "rayjob_created_at": created,
+                "bound_at": _stamp(_now()),
+                "failure_alerts": "off",
+                "maximum_seconds": self.maximum_seconds,
+                "expected_gpus": self.expected_gpus,
+                "cleanup_started": False,
+            }
+        )
+        _write_create_once(self.binding_path, value)
+        return value, {
+            "jobs_api_rows_checked": len(rows),
+            "kubernetes_rayjobs_checked": len(rayjobs),
+            "matching_jobs_api_rows": len(related_rows),
+            "matching_kubernetes_rayjobs": len(related_rayjobs),
+            "jobs_api_status": api_row.get("status"),
+            "jobs_api_created_at": api_row.get("created_at"),
+        }
+
+    def _rayjob_run_id(self, resource: dict, *, name: str) -> str:
+        metadata = resource["metadata"]
+        annotation_run_id = metadata["annotations"].get("fleet.ai/run-id")
+        label_run_id = metadata["labels"].get("fleet.ai/run-id")
+        try:
+            canonical_run_id = str(UUID(annotation_run_id))
+        except (TypeError, ValueError) as exc:
+            raise ObserverError("Jobs API exact RayJob run ID evidence is invalid") from exc
+        if (
+            annotation_run_id != canonical_run_id
+            or label_run_id != canonical_run_id
+            or name != self.run_name_prefix + "-" + canonical_run_id.split("-", 1)[0]
+        ):
+            raise ObserverError("Jobs API exact RayJob run ID evidence does not agree")
+        return canonical_run_id
+
+    def _validate_creator_run_id(self, resource: dict, *, name: str, run_id: str) -> None:
+        del resource, name, run_id
+
+
+class Prod10JobsApiPrefixGuard(JobsApiPrefixGuard):
+    """Prod10-only exact topology and server-run-ID binding."""
+
+    def _validate_exact_rayjob(self, resource: dict, *, name: str) -> tuple[str, str]:
+        uid, created = super()._validate_exact_rayjob(resource, name=name)
+        try:
+            cluster = resource["spec"]["rayClusterSpec"]
+            head = cluster["headGroupSpec"]
+            annotations = head["template"]["metadata"]["annotations"]
+            pod = head["template"]["spec"]
+            if (
+                cluster.get("workerGroupSpecs", []) != []
+                or annotations.get("kueue.x-k8s.io/podset-preferred-topology")
+                != "topology.nebius.com/tier-1"
+                or "kueue.x-k8s.io/podset-required-topology" in annotations
+                or pod.get("nodeSelector")
+                != {"kubernetes.io/os": "linux", "workload": "fleetai-training-ng-gpu"}
+            ):
+                raise ValueError
+        except (KeyError, TypeError, ValueError):
+            raise ObserverError("prod10 Jobs API exact RayJob topology changed") from None
+        return uid, created
+
+    def _validate_creator_run_id(self, resource: dict, *, name: str, run_id: str) -> None:
+        if self._rayjob_run_id(resource, name=name) != run_id:
+            raise ObserverError("Jobs API response and exact RayJob run IDs do not agree")
 
 
 class JobsApiExactUidObserver:

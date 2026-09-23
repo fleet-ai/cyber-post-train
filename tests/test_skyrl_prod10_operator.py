@@ -129,6 +129,13 @@ def _strict_live_preview_inputs(
             "rayClusterSpec": {
                 "headGroupSpec": {
                     "template": {
+                        "metadata": {
+                            "annotations": {
+                                "kueue.x-k8s.io/podset-preferred-topology": (
+                                    "topology.nebius.com/tier-1"
+                                )
+                            }
+                        },
                         "spec": {
                             "containers": [
                                 {
@@ -153,7 +160,7 @@ def _strict_live_preview_inputs(
                                     ],
                                 }
                             ],
-                        }
+                        },
                     }
                 }
             },
@@ -165,6 +172,17 @@ def _strict_live_preview_inputs(
     monkeypatch.setattr(training, "validate_preview", lambda *_args, **_kwargs: None)
     expected = direct.manifest(plan, request, source, identity=identity)
     return identity, plan, request, source, expected
+
+
+def test_prod10_one_node_manifest_retains_head_preferred_topology(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, _, _, _, expected = _strict_live_preview_inputs(monkeypatch)
+    cluster = expected["spec"]["rayClusterSpec"]
+    assert cluster.get("workerGroupSpecs", []) == []
+    assert cluster["headGroupSpec"]["template"]["metadata"]["annotations"] == {
+        "kueue.x-k8s.io/podset-preferred-topology": "topology.nebius.com/tier-1"
+    }
 
 
 def _stage_inputs() -> tuple[historical.RailIdentity, dict, dict, dict]:
@@ -1129,6 +1147,7 @@ def test_prod10_jit_duplicate_uses_fresh_host_dev_proof_and_only_live_prod_state
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     identity = historical.load_identity(IDENTITY)
+    monkeypatch.setattr(launch_direct, "require_output_absent", lambda _request: None)
     host = direct._seal(
         {
             "schema": launch_direct.DUPLICATE_SCHEMA,
@@ -1206,10 +1225,10 @@ def test_prod10_jit_duplicate_uses_fresh_host_dev_proof_and_only_live_prod_state
     rows.clear()
     monkeypatch.setattr(
         launch_direct,
-        "Path",
-        lambda _value: SimpleNamespace(exists=lambda: True, is_symlink=lambda: False),
+        "require_output_absent",
+        lambda _request: (_ for _ in ()).throw(ValueError("output exists")),
     )
-    with pytest.raises(JobsError, match="output root already exists"):
+    with pytest.raises(JobsError, match="SFS output absence"):
         launch_direct.jit_duplicate_proof(
             identity, host, token="token", runner=runner, jobs_factory=FakeJobs
         )
@@ -1720,8 +1739,20 @@ def test_prod10_probe_rechecks_markers_and_stops_before_guard(
     assert result["nested_jobs_created"] == result["gpus"] == 0
 
 
+@pytest.mark.parametrize(
+    "post_mode",
+    [
+        "complete",
+        "complete_no_title",
+        "mismatched_title",
+        "null_id",
+        "invalid_id",
+        "noncanonical_id",
+        "raised_after_persist",
+    ],
+)
 def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, post_mode: str
 ) -> None:
     identity = historical.load_identity(IDENTITY)
     monkeypatch.setattr(direct, "_identity", lambda _plan, bound: bound)
@@ -1746,6 +1777,8 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
     request = {
         "name": identity.run_name,
         "run_dir": identity.output_root,
+        "title": "Prod10 RL reward",
+        "image": "registry/image@sha256:" + "a" * 64,
         "workers": 1,
         "gpus_per_worker": 8,
     }
@@ -1827,16 +1860,59 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
     )
     monkeypatch.setattr(direct, "_jobs_api_prefix_guard", lambda *_args, **_kwargs: {})
     monkeypatch.setattr(direct, "_fresh_at", lambda *_args, **_kwargs: None)
+    exact_run_id = "00000000-0000-4000-8000-000000000006"
+    exact_binding = {
+        "jobs_api_run_name": identity.run_name + "-1a2b3c4d",
+        "run_dir": identity.output_root,
+        "rayjob_name": identity.run_name + "-1a2b3c4d",
+        "rayjob_uid": "00000000-0000-4000-8000-000000000007",
+        "jobs_api_run_id": exact_run_id,
+        "sha256": "sha256:" + "4" * 64,
+        "rayjob_created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "failure_alerts": "off",
+        "prefix_guard_sha256": "sha256:" + "8" * 64,
+    }
     monkeypatch.setattr(
-        direct,
-        "_bind_jobs_api_created",
-        lambda **_kwargs: {
-            "rayjob_name": identity.run_name + "-1a2b3c4d",
-            "rayjob_uid": "00000000-0000-4000-8000-000000000007",
-            "sha256": "sha256:" + "4" * 64,
-            "rayjob_created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-            "failure_alerts": "off",
-        },
+        launch_direct,
+        "_bind_prod10_jobs_api_created",
+        lambda **kwargs: (
+            exact_binding
+            if kwargs["response"]
+            == {
+                "name": identity.run_name + "-1a2b3c4d",
+                "run_id": exact_run_id,
+            }
+            else pytest.fail("canonical run_id was not passed to the prod10 exact binder")
+        ),
+    )
+    monkeypatch.setattr(
+        launch_direct,
+        "_reconcile_jobs_api_accepted_post",
+        lambda **kwargs: (
+            exact_binding,
+            direct._seal(
+                {
+                    "schema": launch_direct.POST_RECONCILIATION_SCHEMA,
+                    "state": "POST_RECONCILIATION",
+                    "status": "accepted_post_reconciled_without_retry",
+                    "trigger": kwargs["trigger"],
+                    "name": exact_binding["rayjob_name"],
+                    "run_id": exact_run_id,
+                    "run_dir": identity.output_root,
+                    "jobs_api_status": "Suspended",
+                    "jobs_api_created_at": None,
+                    "jobs_api_rows_checked": 1,
+                    "kubernetes_rayjobs_checked": 1,
+                    "matching_jobs_api_rows": 1,
+                    "matching_kubernetes_rayjobs": 1,
+                    "rayjob_uid": exact_binding["rayjob_uid"],
+                    "rayjob_created_at": exact_binding["rayjob_created_at"],
+                    "title_sha256": "sha256:" + digest(request["title"]),
+                    "prefix_guard_sha256": exact_binding["prefix_guard_sha256"],
+                    "post_retried": False,
+                }
+            ),
+        ),
     )
     posts: list[tuple[str, str]] = []
 
@@ -1855,11 +1931,26 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
 
         def request(self, method, path, **_kwargs):
             posts.append((method, path))
-            return {
+            if post_mode == "raised_after_persist":
+                raise JobsError("response lost after accepted POST")
+            response = {
                 "name": identity.run_name + "-1a2b3c4d",
-                "job_id": "00000000-0000-4000-8000-000000000006",
+                "run_id": (
+                    None
+                    if post_mode == "null_id"
+                    else "not-a-uuid"
+                    if post_mode == "invalid_id"
+                    else "{" + exact_run_id + "}"
+                    if post_mode == "noncanonical_id"
+                    else exact_run_id
+                ),
                 "run_dir": identity.output_root,
             }
+            if post_mode != "complete_no_title":
+                response["title"] = (
+                    "wrong title" if post_mode == "mismatched_title" else request["title"]
+                )
+            return response
 
     def create():
         return launch_direct.create_once(
@@ -1893,11 +1984,17 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
         create()
     assert not (root / "PROD10_DIRECT_V3_CREATE.jsonl").exists()
     monkeypatch.setenv("WANDB_API_KEY", "credential-present")
+    if post_mode == "mismatched_title":
+        with pytest.raises(JobsError, match="another identity"):
+            create()
+        assert posts == [("POST", "/v1/runs")]
+        return
     created = create()
     assert posts == [("POST", "/v1/runs")]
     assert created["failure_alerts"] == "off"
     journal_lines = (root / "PROD10_DIRECT_V3_CREATE.jsonl").read_text().splitlines()
     intent = json.loads(journal_lines[0])
+    response = json.loads(journal_lines[1])
     assert intent["sealed_jobs_preview_sha256"] == "sha256:" + digest(source)
     assert intent["live_jobs_preview_sha256"] == "sha256:" + digest(live_source)
     assert intent["live_jobs_preview_sha256"] != "sha256:" + digest(source)
@@ -1917,6 +2014,22 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
     assert (
         created["submitter_normalization_sha256"] == (intent["submitter_normalization"]["sha256"])
     )
+    if post_mode not in {"complete", "complete_no_title"}:
+        assert response["state"] == "POST_RECONCILIATION"
+        assert response["trigger"] == (
+            "jobs_error_after_intent"
+            if post_mode == "raised_after_persist"
+            else "successful_missing_or_invalid_run_id"
+        )
+        assert response["post_retried"] is False
+        assert created["jobs_api_run_id"] == exact_run_id
+        assert created["jobs_api_run_id_source"] == (
+            "exact_jobs_and_kubernetes_reconciliation_after_accepted_post"
+        )
+        assert created["post_reconciliation_sha256"] == response["sha256"]
+    else:
+        assert response["run_id"] == exact_run_id
+        assert "jobs_api_run_id_source" not in created
     assert "wandb_run_id_absent" not in intent
     assert intent["wandb_runtime_create_once"] == {
         "credential_present": True,

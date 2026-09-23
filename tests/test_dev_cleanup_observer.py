@@ -1174,6 +1174,7 @@ class FakeJobsApiPrefixGuardCluster:
         *,
         run_dir: str = "/mnt/sfs/jobs/collector-diag-v1",
         image: str = "registry/image@sha256:" + "d" * 64,
+        run_id: str = "1a2b3c4d-0000-4000-8000-000000000302",
     ) -> dict:
         return {
             "apiVersion": "ray.io/v1",
@@ -1184,11 +1185,13 @@ class FakeJobsApiPrefixGuardCluster:
                 "annotations": {
                     "fleet.ai/run-dir": run_dir,
                     "fleet.ai/failure-alerts": "off",
+                    "fleet.ai/run-id": run_id,
                 },
                 "labels": {
                     "kueue.x-k8s.io/queue-name": "training-lq",
                     "kueue.x-k8s.io/priority-class": "q1",
                     "fleet.ai/requeue-if-preempted": "false",
+                    "fleet.ai/run-id": run_id,
                 },
             },
             "spec": {
@@ -1197,8 +1200,19 @@ class FakeJobsApiPrefixGuardCluster:
                 "rayClusterSpec": {
                     "headGroupSpec": {
                         "template": {
+                            "metadata": {
+                                "annotations": {
+                                    "kueue.x-k8s.io/podset-preferred-topology": (
+                                        "topology.nebius.com/tier-1"
+                                    )
+                                }
+                            },
                             "spec": {
                                 "priorityClassName": "c1",
+                                "nodeSelector": {
+                                    "kubernetes.io/os": "linux",
+                                    "workload": "fleetai-training-ng-gpu",
+                                },
                                 "containers": [
                                     {
                                         "image": image,
@@ -1208,10 +1222,10 @@ class FakeJobsApiPrefixGuardCluster:
                                         },
                                     }
                                 ],
-                            }
+                            },
                         }
                     },
-                    "workerGroupSpecs": [{"replicas": 0}],
+                    "workerGroupSpecs": [],
                 },
             },
         }
@@ -1239,7 +1253,7 @@ class FakeJobsApiPrefixGuardCluster:
 
 def _jobs_api_prefix_guard(
     tmp_path: Path, runner: FakeJobsApiPrefixGuardCluster, **overrides: object
-) -> cleanup.JobsApiPrefixGuard:
+) -> cleanup.Prod10JobsApiPrefixGuard:
     values: dict[str, object] = {
         "context": cleanup.DEV_CONTEXT,
         "namespace": cleanup.NAMESPACE,
@@ -1255,13 +1269,13 @@ def _jobs_api_prefix_guard(
         "run": runner,
     }
     values.update(overrides)
-    return cleanup.JobsApiPrefixGuard(**values)
+    return cleanup.Prod10JobsApiPrefixGuard(**values)
 
 
 def _creator_identity(**overrides: object) -> dict[str, object]:
     value: dict[str, object] = {
         "jobs_api_run_name": "collector-diag-1a2b3c4d",
-        "jobs_api_run_id": "00000000-0000-0000-0000-000000000302",
+        "jobs_api_run_id": "1a2b3c4d-0000-4000-8000-000000000302",
         "run_dir": "/mnt/sfs/jobs/collector-diag-v1",
     }
     value.update(overrides)
@@ -1285,11 +1299,9 @@ def test_jobs_api_prefix_guard_arms_without_deletion_then_binds_exact_creator_na
     assert binding["schema"] == cleanup.JOBS_API_EXACT_BINDING_SCHEMA
     assert binding["status"] == "bound_exact_uid_cleanup_not_started"
     assert binding["jobs_api_run_name"] == binding["rayjob_name"] == "collector-diag-1a2b3c4d"
-    assert binding["jobs_api_run_id"] == "00000000-0000-0000-0000-000000000302"
+    assert binding["jobs_api_run_id"] == "1a2b3c4d-0000-4000-8000-000000000302"
     assert binding["rayjob_uid"] == _metadata("unused", 301)["uid"]
     assert binding["prefix_guard_sha256"] == armed["sha256"]
-    # The only post-POST lookup uses the exact name returned by the creator;
-    # there is no second list/prefix discovery and no delete.
     assert cluster.calls == [
         ["get", "rayjob", "--output", "json"],
         [
@@ -1301,6 +1313,206 @@ def test_jobs_api_prefix_guard_arms_without_deletion_then_binds_exact_creator_na
             "json",
         ],
     ]
+    assert cluster.delete_calls == 0
+
+
+def test_jobs_api_complete_response_must_match_exact_rayjob_run_id(tmp_path) -> None:
+    cluster = FakeJobsApiPrefixGuardCluster()
+    guard = _jobs_api_prefix_guard(tmp_path, cluster)
+    guard.arm()
+    cluster.exact = cluster.rayjob()
+    with pytest.raises(cleanup.ObserverError, match="run IDs do not agree"):
+        guard.bind_exact(_creator_identity(jobs_api_run_id="9a2b3c4d-0000-4000-8000-000000000302"))
+    assert not (tmp_path / "EXACT_BINDING.json").exists()
+
+
+def test_jobs_api_guard_reconciles_an_accepted_null_id_from_one_exact_rayjob(tmp_path) -> None:
+    cluster = FakeJobsApiPrefixGuardCluster()
+    guard = _jobs_api_prefix_guard(tmp_path, cluster)
+    guard.arm()
+    cluster.exact = cluster.rayjob()
+    cluster.rows = [cluster.exact]
+    binding, observed = guard.reconcile_accepted_post(
+        title="Prod10 RL reward",
+        returned_name="collector-diag-1a2b3c4d",
+        jobs_reader=lambda: [
+            {
+                "name": "collector-diag-1a2b3c4d",
+                "job_id": None,
+                "run_dir": "/mnt/sfs/jobs/collector-diag-v1",
+                "title": "Prod10 RL reward",
+                "status": "Suspended",
+                "created_at": None,
+            }
+        ],
+    )
+    assert binding["jobs_api_run_id"] == "1a2b3c4d-0000-4000-8000-000000000302"
+    assert binding["rayjob_uid"] == _metadata("unused", 301)["uid"]
+    assert observed["jobs_api_rows_checked"] == 1
+    assert observed["kubernetes_rayjobs_checked"] == 1
+    assert cluster.delete_calls == 0
+
+
+def test_jobs_api_reconciliation_accepts_bounded_delayed_history_visibility(tmp_path) -> None:
+    cluster = FakeJobsApiPrefixGuardCluster()
+    guard = _jobs_api_prefix_guard(tmp_path, cluster, sleep=lambda _seconds: None)
+    guard.arm()
+    cluster.exact = cluster.rayjob()
+    cluster.rows = [cluster.exact]
+    calls = 0
+
+    def jobs_reader():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return []
+        return [
+            {
+                "name": "collector-diag-1a2b3c4d",
+                "job_id": None,
+                "run_dir": "/mnt/sfs/jobs/collector-diag-v1",
+                "status": "Suspended",
+            }
+        ]
+
+    binding, _ = guard.reconcile_accepted_post(
+        title="Prod10 RL reward",
+        returned_name=None,
+        jobs_reader=jobs_reader,
+    )
+    assert calls == 2
+    assert binding["jobs_api_run_id"] == "1a2b3c4d-0000-4000-8000-000000000302"
+
+
+def test_jobs_api_reconciliation_accepts_output_created_after_post(tmp_path, monkeypatch) -> None:
+    output = tmp_path / "accepted-run-output"
+    monkeypatch.setattr(cleanup, "_canonical_jobs_run_dir", lambda value: value)
+    cluster = FakeJobsApiPrefixGuardCluster()
+    guard = _jobs_api_prefix_guard(
+        tmp_path,
+        cluster,
+        run_dir=str(output),
+        sleep=lambda _seconds: None,
+    )
+    guard.arm()
+    cluster.exact = cluster.rayjob(run_dir=str(output))
+    cluster.rows = [cluster.exact]
+    calls = 0
+
+    def jobs_reader():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            output.mkdir()
+            return []
+        return [
+            {
+                "name": "collector-diag-1a2b3c4d",
+                "job_id": None,
+                "run_dir": str(output),
+                "status": "Running",
+            }
+        ]
+
+    binding, observed = guard.reconcile_accepted_post(
+        title="Prod10 RL reward",
+        returned_name=None,
+        jobs_reader=jobs_reader,
+    )
+    assert calls == 2
+    assert output.is_dir()
+    assert binding["run_dir"] == str(output)
+    assert observed["matching_jobs_api_rows"] == 1
+    assert observed["matching_kubernetes_rayjobs"] == 1
+
+
+@pytest.mark.parametrize(
+    "fault", ["zero", "multiple", "name", "run_dir", "job_id", "run_id", "uid"]
+)
+def test_jobs_api_reconciliation_fails_closed_on_nonunique_or_mismatched_evidence(
+    tmp_path, fault
+) -> None:
+    cluster = FakeJobsApiPrefixGuardCluster()
+    guard = _jobs_api_prefix_guard(tmp_path, cluster, bind_wait_seconds=0)
+    guard.arm()
+    exact = cluster.rayjob()
+    row = {
+        "name": "collector-diag-1a2b3c4d",
+        "job_id": None,
+        "run_dir": "/mnt/sfs/jobs/collector-diag-v1",
+        "title": "Prod10 RL reward",
+    }
+    cluster.exact = exact
+    cluster.rows = [exact]
+    rows = [row]
+    if fault == "zero":
+        cluster.rows = []
+        rows = []
+    elif fault == "multiple":
+        other = cluster.rayjob(
+            name="collector-diag-2a2b3c4d",
+            uid=302,
+            run_id="2a2b3c4d-0000-4000-8000-000000000302",
+        )
+        cluster.rows.append(other)
+        rows.append({**row, "name": "collector-diag-2a2b3c4d"})
+    elif fault == "name":
+        rows[0]["name"] = "another-name"
+    elif fault == "run_dir":
+        rows[0]["run_dir"] = "/mnt/sfs/jobs/another-run"
+    elif fault == "job_id":
+        rows[0]["job_id"] = "9a2b3c4d-0000-4000-8000-000000000302"
+    elif fault == "run_id":
+        rows[0]["run_id"] = "9a2b3c4d-0000-4000-8000-000000000302"
+    else:
+        cluster.rows = [copy.deepcopy(exact)]
+        cluster.rows[0]["metadata"]["uid"] = "00000000-0000-4000-8000-000000000999"
+    with pytest.raises(cleanup.ObserverError):
+        guard.reconcile_accepted_post(
+            title="Prod10 RL reward",
+            returned_name=None,
+            jobs_reader=lambda: rows,
+        )
+    assert not (tmp_path / "EXACT_BINDING.json").exists()
+    assert cluster.delete_calls == 0
+
+
+@pytest.mark.parametrize("field", ["annotation", "label", "suffix"])
+def test_jobs_api_null_id_reconciliation_requires_matching_canonical_run_id(
+    tmp_path, field
+) -> None:
+    cluster = FakeJobsApiPrefixGuardCluster()
+    guard = _jobs_api_prefix_guard(tmp_path, cluster)
+    guard.arm()
+    cluster.exact = cluster.rayjob()
+    cluster.rows = [cluster.exact]
+    if field == "annotation":
+        cluster.exact["metadata"]["annotations"]["fleet.ai/run-id"] = (
+            "9a2b3c4d-0000-4000-8000-000000000302"
+        )
+    elif field == "label":
+        cluster.exact["metadata"]["labels"]["fleet.ai/run-id"] = (
+            "9a2b3c4d-0000-4000-8000-000000000302"
+        )
+    else:
+        for metadata_field in ("annotations", "labels"):
+            cluster.exact["metadata"][metadata_field]["fleet.ai/run-id"] = (
+                "9a2b3c4d-0000-4000-8000-000000000302"
+            )
+    with pytest.raises(cleanup.ObserverError, match="run ID evidence"):
+        guard.reconcile_accepted_post(
+            title="Prod10 RL reward",
+            returned_name="collector-diag-1a2b3c4d",
+            jobs_reader=lambda: [
+                {
+                    "name": "collector-diag-1a2b3c4d",
+                    "job_id": None,
+                    "run_dir": "/mnt/sfs/jobs/collector-diag-v1",
+                    "title": "Prod10 RL reward",
+                }
+            ],
+        )
+    assert not (tmp_path / "EXACT_BINDING.json").exists()
     assert cluster.delete_calls == 0
 
 
@@ -1833,6 +2045,18 @@ def test_jobs_api_exact_uid_observer_queue_wait_has_no_active_deadline(tmp_path)
     cluster = FakeJobsApiExactObserverCluster(binding, auto_release=False)
     root = cluster._root()
     root["status"] = {"jobStatus": "PENDING"}
+    workload = cluster._workload()
+    workload["status"] = {
+        "conditions": [
+            {
+                "type": "Admitted",
+                "status": "False",
+                "reason": "Pending",
+                "message": "Flavor cpu-head does not support TopologyAwareScheduling",
+            }
+        ]
+    }
+    cluster._workload = lambda: workload
     observer = _jobs_api_exact_observer(tmp_path, cluster)
 
     cluster_name = observer._validate_root(root)
@@ -1841,6 +2065,7 @@ def test_jobs_api_exact_uid_observer_queue_wait_has_no_active_deadline(tmp_path)
     assert cluster_name == ""
     assert observer.allocated_at is None
     assert observer.deadline_at is None
+    assert observer.known["workload"] == {"collector-workload": cluster.workload_uid}
     assert observer.cleanup_requested is False
     assert not any(call[0][:2] == ["delete", "--raw"] for call in cluster.calls)
 

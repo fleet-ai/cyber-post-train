@@ -753,7 +753,15 @@ def _prod10_terminal_inputs(state, paths):
     rows[0]["duplicate_checks_before_guard"] = before_guard
     rows[0]["duplicate_checks_before_intent"] = before_intent
     rows[0]["submitter_normalization"] = submitter_normalization
+    rows[0]["request_title_sha256"] = "sha256:" + "4" * 64
     rows[0]["fresh_host_all_context_duplicate_sha256"] = host_duplicate_sha256
+    rows[1] = {
+        "state": "POST_RESPONSE",
+        "name": rows[2]["jobs_api_run_name"],
+        "run_id": rows[2]["jobs_api_run_id"],
+        "title": "synthetic prod10 training",
+    }
+    rows[0]["request_title_sha256"] = "sha256:" + digest(rows[1]["title"])
     capacity = rows[0]["capacity_gate"]
     capacity["schema"] = skyrl_prod10_direct.CAPACITY_SCHEMA
     capacity["identity_sha256"] = identity_sha256
@@ -817,6 +825,81 @@ def test_prod10_terminal_acceptance_binds_exact_prod10_create_and_observer_evide
     assert accepted["training_capacity_gate_sha256"] == rows[0]["capacity_gate"]["sha256"]
     assert accepted["complete_bf16_reload_verified"] is True
     assert accepted["gpu_resources_released"] is True
+
+
+def _prod10_reconciled_create_rows(state, rows, *, trigger="successful_missing_or_invalid_run_id"):
+    creator = rows[2]
+    rows[1] = sealed(
+        {
+            "schema": skyrl_prod10_direct.POST_RECONCILIATION_SCHEMA,
+            "state": "POST_RECONCILIATION",
+            "status": "accepted_post_reconciled_without_retry",
+            "trigger": trigger,
+            "name": creator["jobs_api_run_name"],
+            "run_id": creator["jobs_api_run_id"],
+            "run_dir": state.plan["output_root"],
+            "jobs_api_status": "Suspended",
+            "jobs_api_created_at": None,
+            "jobs_api_rows_checked": 1,
+            "kubernetes_rayjobs_checked": 1,
+            "matching_jobs_api_rows": 1,
+            "matching_kubernetes_rayjobs": 1,
+            "rayjob_uid": creator["rayjob_uid"],
+            "rayjob_created_at": creator["created_at"],
+            "title_sha256": rows[0]["request_title_sha256"],
+            "prefix_guard_sha256": "sha256:" + "a" * 64,
+            "post_retried": False,
+        }
+    )
+    rows[2]["jobs_api_run_id_source"] = (
+        "exact_jobs_and_kubernetes_reconciliation_after_accepted_post"
+    )
+    rows[2]["post_reconciliation_sha256"] = rows[1]["sha256"]
+    rows[2] = sealed({key: item for key, item in rows[2].items() if key != "sha256"})
+    return rows
+
+
+@pytest.mark.parametrize(
+    "trigger", ["successful_missing_or_invalid_run_id", "jobs_error_after_intent"]
+)
+def test_prod10_terminal_acceptance_accepts_exact_post_reconciliation(completed_prod9_rl, trigger):
+    state = completed_prod9_rl
+    paths, _, _ = _terminal_inputs(state)
+    prod10_paths, rows = _prod10_terminal_inputs(state, paths)
+    rows = _prod10_reconciled_create_rows(state, rows, trigger=trigger)
+    prod10_paths["training_create_journal"].write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows)
+    )
+
+    accepted = _accept_prod10(state, paths, prod10_paths)
+    assert accepted["gpu_resources_released"] is True
+
+
+@pytest.mark.parametrize("fault", ["extra", "source", "digest", "trigger"])
+def test_prod10_terminal_acceptance_rejects_inexact_post_reconciliation(completed_prod9_rl, fault):
+    state = completed_prod9_rl
+    paths, _, _ = _terminal_inputs(state)
+    prod10_paths, rows = _prod10_terminal_inputs(state, paths)
+    rows = _prod10_reconciled_create_rows(state, rows)
+    if fault == "extra":
+        rows[1]["alternate_source"] = "untrusted"
+        rows[1] = sealed({key: item for key, item in rows[1].items() if key != "sha256"})
+    elif fault == "source":
+        rows[2]["jobs_api_run_id_source"] = "another_source"
+        rows[2] = sealed({key: item for key, item in rows[2].items() if key != "sha256"})
+    elif fault == "digest":
+        rows[2]["post_reconciliation_sha256"] = "sha256:" + "9" * 64
+        rows[2] = sealed({key: item for key, item in rows[2].items() if key != "sha256"})
+    else:
+        rows[1]["trigger"] = "unknown"
+        rows[1] = sealed({key: item for key, item in rows[1].items() if key != "sha256"})
+    prod10_paths["training_create_journal"].write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows)
+    )
+
+    with pytest.raises(ValueError):
+        _accept_prod10(state, paths, prod10_paths)
+    assert not paths["accepted"].exists()
 
 
 @pytest.mark.parametrize(
