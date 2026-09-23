@@ -309,7 +309,7 @@ def test_prod10_inspector_is_read_only_alert_off_c1_q1_zero_gpu(
     assert proof == {
         **proof,
         "phase": "inspect",
-        "name": "chris-q38-prod10-launch-inspect-v3",
+        "name": "chris-q38-prod10-launch-inspect-v4",
         "failure_alerts": "off",
         "priority": "c1",
         "queue_priority": "q1",
@@ -327,10 +327,10 @@ def test_prod10_inspector_is_read_only_alert_off_c1_q1_zero_gpu(
     assert "nvidia.com/gpu" not in json.dumps(package.job, sort_keys=True)
 
     changed = copy.deepcopy(packet)
-    changed["launch_v2_failure"]["operator_job_uid"] = (
+    changed["launch_v3_failure"]["operator_job_uid"] = (
         "00000000-0000-4000-8000-000000000001"
     )
-    changed["launch_v2_failure"] = operator._seal(changed["launch_v2_failure"])
+    changed["launch_v3_failure"] = operator._seal(changed["launch_v3_failure"])
     changed = operator._seal(changed)
     with pytest.raises(ValueError, match="predecessor"):
         operator_job.build_operator_package(changed)
@@ -342,37 +342,18 @@ def test_prod10_inspector_reads_only_allowlisted_path_metadata(
 ) -> None:
     operation_root = tmp_path / "operation"
     operation_root.mkdir()
-    data_root = tmp_path / "data"
-    data_root.mkdir()
-    model_root = tmp_path / "model"
-    model_root.mkdir()
-    preflight_result = tmp_path / "preflight.json"
-    preflight_result.touch()
-    for name in ("manifest.json", "split.json", "task-set.json", "train.jsonl", "dev.jsonl"):
-        (data_root / name).touch()
-    tokenizer_names = ["tokenizer.json", "tokenizer_config.json"]
-    sidecar_names = ["config.json", *tokenizer_names]
-    shard_names = ["model-00001-of-00001.safetensors"]
-    for name in [*sidecar_names, *shard_names]:
-        (model_root / name).touch()
     guard = operation_root / "TRAINING_JOBS_API_PREFIX_GUARD.json"
     guard.touch()
-    fake_identity = SimpleNamespace(output_root=str(tmp_path / "absent-output"))
+    fake_identity = SimpleNamespace(output_root=str(tmp_path / "unused-output"))
     plan = {
         "schema": training.SCHEMA,
-        "arguments": {"data_manifest": str(data_root / "manifest.json")},
-        "data": {"tokenizer": {"files": [{"path": name} for name in tokenizer_names]}},
-        "model": {
-            "root": str(model_root),
-            "files": [{"path": name} for name in [*sidecar_names, *shard_names]],
-        },
     }
     checked_launch = operator._seal(
         {
             "schema": direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA,
             "observer": {
                 "receipt": {
-                    "result_path": str(preflight_result),
+                    "result_path": str(tmp_path / "unused-preflight.json"),
                     "result_sha256": "sha256:" + "1" * 64,
                 }
             },
@@ -403,18 +384,8 @@ def test_prod10_inspector_reads_only_allowlisted_path_metadata(
     assert result["paths"]["guard"]["state"] == "present"
     assert result["paths"]["create_journal"] == {"state": "absent"}
     assert result["paths"]["creator_binding"] == {"state": "absent"}
-    assert result["paths"]["preflight_result"]["state"] == "present"
-    assert result["paths"]["output_root"] == {"state": "absent"}
-    assert all(value["state"] == "present" for value in result["data_files"].values())
-    assert result["tokenizer_files"] == {
-        "expected": 2,
-        "present": 2,
-        "regular": 2,
-        "readable": 2,
-        "lstat_errors": 0,
-    }
-    assert result["model_sidecars"]["expected"] == 3
-    assert result["model_shards"]["expected"] == 1
+    assert set(result["paths"]) == {"guard", "create_journal", "creator_binding"}
+    assert result["launch_v3_failure_sha256"] == operator.launch_v3_failure_binding()["sha256"]
     assert result["launch_boundary"] == "after_guard_before_intent"
     encoded = json.dumps(result, sort_keys=True, separators=(",", ":"))
     assert len(encoded.encode()) < 3900

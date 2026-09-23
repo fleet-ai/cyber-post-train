@@ -43,7 +43,7 @@ OPERATOR_NAMES = {
     "manifest": "chris-q38-prod10-manifest-operator-v1",
     "preflight": "chris-q38-prod10-preflight-operator-v2",
     "launch": "chris-q38-prod10-launch-operator-v3",
-    "inspect": "chris-q38-prod10-launch-inspect-v3",
+    "inspect": "chris-q38-prod10-launch-inspect-v4",
     "probe": "chris-q38-prod10-launch-probe-v9",
 }
 _LAUNCH_V1_FAILURE = {
@@ -245,6 +245,41 @@ _PROBE_V9_SUCCESS = {
     "resources_absent": True,
     "gpus": 0,
 }
+_LAUNCH_V3_FAILURE = {
+    "schema": "cyber_skyrl_prod10_launch_failure_binding_v2",
+    "status": "failed_before_gpu_create_preserved_for_inspection",
+    "operator_name": "chris-q38-prod10-launch-operator-v3",
+    "source_head": "4aca57593c2c85621d7adbbcf601d32784621d16",
+    "packet_sha256": (
+        "sha256:fc46c321f2b1db78b4bc16f062509f0a5e21e1066bc5d7a98d1060427729f9b5"
+    ),
+    "source_sha256": (
+        "sha256:c08891d89f1c91ba8039501998f86a21111d728e3eabfd626a5b822fd5c8a9d2"
+    ),
+    "job_manifest_sha256": (
+        "sha256:f68113d0a626c5e0011cc8074db9d0f2678707a4025297df7a46c9abffd4bd0e"
+    ),
+    "operator_job_uid": "bd8bb3f3-b792-4054-a15d-9956d29b3b8c",
+    "operator_pod_uid": "2936bdce-9893-49d3-8912-6fe068804f3c",
+    "operator_workload_uid": "3e6f36d9-e06a-45fa-9c4d-df7f21e8a82a",
+    "source_config_map_uid": "cb913fb2-e80d-4c68-b1c9-d9eea8b56033",
+    "packet_config_map_uid": "c4b4bf8f-10ea-47f8-8366-16c60dd972d6",
+    "observer_armed_sha256": (
+        "sha256:fd967fcd87862f5767e8e41e8fea6dbd63f8aa1a64fda38fdbc7faf30d595a56"
+    ),
+    "creator_binding_sha256": (
+        "sha256:bf8a6211bc424aa39abc47eb096797456cef8db4cec4ffb8ae58ed2b50ab638c"
+    ),
+    "failure_receipt_sha256": (
+        "sha256:6f7d724ae7a0a61179616871895c0e2cbcb496ef351279527c6d6fb4b6f145c1"
+    ),
+    "terminal_status": "Failed",
+    "exit_codes": [1],
+    "restarts": 0,
+    "inner_gpu_run_created": False,
+    "resources_preserved_for_inspection": True,
+    "gpus": 0,
+}
 _PREFLIGHT_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_preflight_v1_failure_recovery_v1",
     "status": "failed_closed_released",
@@ -429,6 +464,11 @@ def probe_v9_success_binding() -> dict[str, Any]:
     return _seal(_PROBE_V9_SUCCESS)
 
 
+def launch_v3_failure_binding() -> dict[str, Any]:
+    """Bind the exact failed v3 outer while its owned resources are preserved."""
+    return _seal(_LAUNCH_V3_FAILURE)
+
+
 def _write_once(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=False, exist_ok=True)
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -579,7 +619,7 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
         if duplicate.get("context") != direct.DEV_CONTEXT:
             raise ValueError("prod10 operator development proof changed")
     elif phase == "inspect":
-        if packet.get("launch_v2_failure") != launch_v2_failure_binding():
+        if packet.get("launch_v3_failure") != launch_v3_failure_binding():
             raise ValueError("prod10 launch inspection predecessor changed")
         plan = packet.get("plan")
         if not isinstance(plan, dict):
@@ -1570,17 +1610,6 @@ def _inspect_path(path: Path) -> dict[str, Any]:
     }
 
 
-def _inspect_group(paths: list[Path]) -> dict[str, Any]:
-    probes = [_inspect_path(path) for path in paths]
-    return {
-        "expected": len(probes),
-        "present": sum(value.get("state") == "present" for value in probes),
-        "regular": sum(value.get("kind") == "regular" for value in probes),
-        "readable": sum(value.get("readable") is True for value in probes),
-        "lstat_errors": sum(value.get("state") == "lstat_error" for value in probes),
-    }
-
-
 def _inspection_boundary(probes: dict[str, dict[str, Any]]) -> str:
     states = {
         name: probes[name].get("state")
@@ -1616,7 +1645,7 @@ def _inspection_boundary(probes: dict[str, dict[str, Any]]) -> str:
 
 
 def run_inspect(packet: dict[str, Any]) -> dict[str, Any]:
-    """Inspect only allowlisted public path metadata after the released v2 failure."""
+    """Inspect only three allowlisted SFS marker paths after the failed v3 outer."""
     identity = _identity(packet["identity"])
     plan = packet.get("plan")
     if not isinstance(plan, dict):
@@ -1629,28 +1658,12 @@ def run_inspect(packet: dict[str, Any]) -> dict[str, Any]:
         operator_name=OPERATOR_NAMES["preflight"],
     )
     operation_root = hardening.training_operation_root(plan)
-    data_root = Path(plan["arguments"]["data_manifest"]).parent
-    model_root = Path(plan["model"]["root"])
-    tokenizer_names = [item["path"] for item in plan["data"]["tokenizer"]["files"]]
-    model_names = [item["path"] for item in plan["model"]["files"]]
-    shard_names = [name for name in model_names if name.endswith(".safetensors")]
-    sidecar_names = [name for name in model_names if name not in shard_names]
-    result_path = Path(launch["observer"]["receipt"]["result_path"])
     probes = {
-        "control_root": _inspect_path(hardening.CREATE_ONCE_ROOT),
-        "operation_root": _inspect_path(operation_root),
         "guard": _inspect_path(direct.jobs_api_guard_path(operation_root, "training")),
         "create_journal": _inspect_path(operation_root / "PROD10_DIRECT_V3_CREATE.jsonl"),
         "creator_binding": _inspect_path(
             hardening.creator_binding_path(operation_root, "training")
         ),
-        "preflight_result": _inspect_path(result_path),
-        "data_root": _inspect_path(data_root),
-        "output_root": _inspect_path(Path(identity.output_root)),
-    }
-    data = {
-        name: _inspect_path(data_root / name)
-        for name in ("manifest.json", "split.json", "task-set.json", "train.jsonl", "dev.jsonl")
     }
     return _seal(
         {
@@ -1660,14 +1673,10 @@ def run_inspect(packet: dict[str, Any]) -> dict[str, Any]:
             "schema": MANIFEST_RESULT_SCHEMA,
             "status": "passed",
             "phase": "inspect",
-            "launch_v2_failure_sha256": launch_v2_failure_binding()["sha256"],
+            "launch_v3_failure_sha256": launch_v3_failure_binding()["sha256"],
             "preflight_launch_sha256": launch["sha256"],
             "paths": probes,
             "launch_boundary": _inspection_boundary(probes),
-            "data_files": data,
-            "tokenizer_files": _inspect_group([model_root / name for name in tokenizer_names]),
-            "model_sidecars": _inspect_group([model_root / name for name in sidecar_names]),
-            "model_shards": _inspect_group([model_root / name for name in shard_names]),
             "contents_read": False,
             "nested_jobs_created": 0,
             "gpus": 0,
