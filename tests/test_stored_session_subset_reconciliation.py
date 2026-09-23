@@ -230,9 +230,7 @@ def test_subset_acceptance_mutates_only_selected_and_is_idempotent(monkeypatch):
     serialized = json.dumps(receipt)
     assert all(cell not in serialized for cell in selected + unselected)
     assert (
-        reconciliation.accept_roster(
-            "unused", intent=intent, observations=_observations(selected)
-        )
+        reconciliation.accept_roster("unused", intent=intent, observations=_observations(selected))
         == receipt
     )
     assert len(events) == 1 and len(receipts) == 1
@@ -304,9 +302,7 @@ def test_subset_acceptance_rejects_full_database_census_drift(monkeypatch, fault
     before = copy.deepcopy(cells)
     events, receipts = _install(monkeypatch, cells)
     with pytest.raises(rollout_ledger.LedgerError, match="census|route"):
-        reconciliation.accept_roster(
-            "unused", intent=intent, observations=_observations(selected)
-        )
+        reconciliation.accept_roster("unused", intent=intent, observations=_observations(selected))
     assert cells == before
     assert events == [] and receipts == []
 
@@ -336,9 +332,7 @@ def test_subset_acceptance_rolls_back_every_write(monkeypatch, failure):
         fail_receipt=failure == "receipt",
     )
     with pytest.raises(RuntimeError, match="injected"):
-        reconciliation.accept_roster(
-            "unused", intent=intent, observations=_observations(selected)
-        )
+        reconciliation.accept_roster("unused", intent=intent, observations=_observations(selected))
     assert cells == before
     assert events == []
     assert receipts == []
@@ -365,6 +359,4 @@ def test_subset_idempotency_rejects_tampered_stored_receipt(monkeypatch):
     value["nonselected_cells_preserved"] = False
     receipts[0] = json.dumps(value)
     with pytest.raises(rollout_ledger.LedgerError, match="ambiguous"):
-        reconciliation.accept_roster(
-            "unused", intent=intent, observations=_observations(selected)
-        )
+        reconciliation.accept_roster("unused", intent=intent, observations=_observations(selected))

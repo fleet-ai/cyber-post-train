@@ -529,9 +529,7 @@ def _accept_full_roster(
 
 
 def _state_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
-    return {
-        state: sum(row["state"] == state for row in rows) for state in rollout_ledger.STATES
-    }
+    return {state: sum(row["state"] == state for row in rows) for state in rollout_ledger.STATES}
 
 
 def _locked_arm_rows(
@@ -586,9 +584,7 @@ def _subset_receipt(intent: ExactStoredSessionSubsetIntent) -> dict[str, Any]:
     return {**body, "receipt_sha256": crypto.digest_without(body, "receipt_sha256")}
 
 
-def _existing_receipt(
-    connection: Any, intent: ExactStoredSessionSubsetIntent
-) -> dict[str, Any]:
+def _existing_receipt(connection: Any, intent: ExactStoredSessionSubsetIntent) -> dict[str, Any]:
     existing = connection.execute(
         "SELECT receipt_json FROM ledger_reconciliations WHERE kind = %s",
         (RECEIPT_SCHEMA,),
@@ -630,9 +626,7 @@ def _accept_subset_roster(
                 "SELECT * FROM rollout_cells ORDER BY cell_id"
             ).fetchall()
             unselected_after = {
-                row["cell_id"]: dict(row)
-                for row in arm_after
-                if row["cell_id"] not in selected_ids
+                row["cell_id"]: dict(row) for row in arm_after if row["cell_id"] not in selected_ids
             }
             if unselected_after != unselected_before:
                 raise rollout_ledger.LedgerError("stored-session subset complement changed")
@@ -700,9 +694,7 @@ def _accept_subset_roster(
             )
         arm_after = connection.execute("SELECT * FROM rollout_cells ORDER BY cell_id").fetchall()
         unselected_after = {
-            row["cell_id"]: dict(row)
-            for row in arm_after
-            if row["cell_id"] not in selected_ids
+            row["cell_id"]: dict(row) for row in arm_after if row["cell_id"] not in selected_ids
         }
         if unselected_after != unselected_before:
             raise rollout_ledger.LedgerError("stored-session subset complement changed")

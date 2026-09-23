@@ -738,9 +738,7 @@ def test_subset_stored_session_acceptance_preserves_full_complement(tmp_path, pg
     counts = {state: 0 for state in rollout_ledger.STATES}
     counts.update(accepted=1, retry_review=2)
     unselected_ids = [unselected_retry["cell_id"], accepted["cell_id"]]
-    intent = _stored_session_subset_intent(
-        [selected_owner["cell_id"]], unselected_ids, counts
-    )
+    intent = _stored_session_subset_intent([selected_owner["cell_id"]], unselected_ids, counts)
     observation = _stored_session_observation(
         selected_owner["cell_id"],
         record["session_id"],
@@ -783,10 +781,8 @@ def test_subset_stored_session_acceptance_preserves_full_complement(tmp_path, pg
         "accepted": 2,
         "retry_review": 1,
     }
-    second_receipt = (
-        stored_session_reconciliation_v2.accept_roster(
-            pg_dsn, intent=intent, observations=[observation]
-        )
+    second_receipt = stored_session_reconciliation_v2.accept_roster(
+        pg_dsn, intent=intent, observations=[observation]
     )
     assert second_receipt == receipt
     with psycopg.connect(pg_dsn) as connection:

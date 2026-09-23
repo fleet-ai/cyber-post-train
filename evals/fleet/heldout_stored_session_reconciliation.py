@@ -157,9 +157,7 @@ def _intent_from_value(value: Any) -> reconciliation.StoredSessionIntent:
                 source_output_root=value["source_output_root"],
                 source_database=value["source_database"],
                 source_job_uid=value["source_job_uid"],
-                source_job_terminal_receipt_sha256=value[
-                    "source_job_terminal_receipt_sha256"
-                ],
+                source_job_terminal_receipt_sha256=value["source_job_terminal_receipt_sha256"],
                 selected_cell_ids=tuple(value["selected_cell_ids"]),
                 unselected_cell_ids=tuple(value["unselected_cell_ids"]),
                 expected_arm_state_counts=value["expected_arm_state_counts"],
@@ -172,9 +170,7 @@ def _intent_from_value(value: Any) -> reconciliation.StoredSessionIntent:
             value.get("schema_version") != reconciliation.INTENT_SCHEMA
             or set(value) != reconciliation.INTENT_FIELDS
         ):
-            raise ReconciliationPacketError(
-                "private reconciliation intent schema is unsupported"
-            )
+            raise ReconciliationPacketError("private reconciliation intent schema is unsupported")
         return reconciliation.ExactStoredSessionIntent(
             evaluation_plan_sha256=value["evaluation_plan_sha256"],
             runtime_files_sha256=value["runtime_files_sha256"],
@@ -1015,9 +1011,7 @@ def build_private_intent_value(
 
     source = heldout_launch.build_package(source_launch_packet)
     terminal = _load_json(source_terminal_receipt, "source terminal receipt")
-    runtime_value = _runtime_intent_value(
-        source, terminal, selected_cell_ids, unselected_cell_ids
-    )
+    runtime_value = _runtime_intent_value(source, terminal, selected_cell_ids, unselected_cell_ids)
     runtime_intent = _intent_from_value(runtime_value)
     _terminal_source(source, terminal, runtime_intent)
     create_evidence_sha256 = _source_create_evidence(
@@ -1191,9 +1185,7 @@ def render(
     if isinstance(intent, reconciliation.ExactStoredSessionSubsetIntent):
         proof_body.update(
             schema=SUBSET_PROOF_SCHEMA,
-            source_retry_review_count=terminal["database"]["summary"]["by_state"][
-                "retry_review"
-            ],
+            source_retry_review_count=terminal["database"]["summary"]["by_state"]["retry_review"],
             subset_reconciliation=True,
             nonselected_cell_count=len(intent.unselected_cell_ids),
             nonselected_cells_preserved_byte_for_byte_and_state_for_state=True,
