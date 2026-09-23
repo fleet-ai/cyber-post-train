@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from evals.fleet import model_artifact, model_artifact_v3
 from scripts import prepare_qwen38_fleet_seed44_two_arm_packets as shared
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -29,6 +30,10 @@ TASK_SET = ROOT / "configs/evaluation/qwen38-fresh75-fleet-dev17-task-set-v1.jso
 SPLIT = ROOT / "configs/data/fleet-blackbox-current-study-split-20260914-v2.json"
 CORPUS = ROOT / "configs/data/qwen38-teacher3k-32k-v1.manifest.json"
 PROMOTION = ROOT / "docs/evidence/qwen38-teacher3k32-step1000-promotion-20260922.json"
+STAGE_PLAN = ROOT / "configs/qualification/qwen38-teacher3k32-step1000-inference-stage-v1.json"
+ARTIFACT_ACCEPTANCE = (
+    ROOT / "docs/evidence/qwen38-teacher3k32-step1000-eval-artifact-accepted-20260923.json"
+)
 LEDGER = ROOT / "configs/evaluation/qwen38-checkpoint-eval-ledger-v2.json"
 BINDING_ROSTER = (
     ROOT / "configs/evaluation/qwen38-fleet-dev17-exact-binding-roster-20260922-v1.json"
@@ -39,6 +44,13 @@ SEEDS = tuple(range(46, 54))
 BASE_REVISION = "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
 CANDIDATE_REVISION = "sha256:023c5f8b0559ba050f0d672a6bc27aabecec7d5837595f8ea5bc914446d26db5"
 CANDIDATE_ID = "chris-q38-t3k32-s1000-v1"
+ARTIFACT_ALIAS = "teacher3k32-step1000"
+V3_SOURCE_FILES = {
+    **shared.SOURCE_FILES,
+    "model_artifact_v2.py": ROOT / "evals/fleet/model_artifact_v2.py",
+    "model_artifact_v3.py": ROOT / "evals/fleet/model_artifact_v3.py",
+    "run.sh": ROOT / "evals/fleet/scripts/run_qwen38_dev17_single_arm_v3.sh",
+}
 
 
 def _canonical(value: Any) -> str:
@@ -52,6 +64,10 @@ def _canonical(value: Any) -> str:
 
 def _write_json(path: Path, value: dict[str, Any]) -> None:
     path.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
+def _encoded(value: dict[str, Any]) -> bytes:
+    return (json.dumps(value, indent=2, sort_keys=True) + "\n").encode()
 
 
 def _file_sha(path: Path) -> str:
@@ -123,7 +139,114 @@ def _inputs() -> tuple[
     return base, task_set, split, corpus, roster
 
 
-def _configs(base_template: dict[str, Any], seed: int) -> tuple[dict[str, Any], dict[str, Any]]:
+def _candidate_packet(campaign_name: str) -> dict[str, Any]:
+    promotion = _verified_json(PROMOTION, "step-1000 promotion")
+    stage_plan = shared._read_json(STAGE_PLAN, "step-1000 stage plan")  # noqa: SLF001
+    if stage_plan.get("plan_sha256") != _canonical(
+        {key: item for key, item in stage_plan.items() if key != "plan_sha256"}
+    ):
+        raise ValueError("step-1000 stage plan self digest differs")
+    acceptance = _verified_json(ARTIFACT_ACCEPTANCE, "step-1000 evaluation acceptance")
+    checkpoint = promotion["checkpoint"]
+    source = stage_plan["source"]
+    export = source["export_receipt"]
+    gpu = source["gpu_check_receipt"]
+    payload = source["payload"]
+    export_required = export["required_fields"]
+    gpu_required = gpu["required_fields"]
+    binding = {
+        "schema": model_artifact_v3.BINDING_SCHEMA,
+        "checkpoint_manifest": {
+            "path": checkpoint["seal_path"],
+            "file_sha256": checkpoint["seal_file_sha256"],
+            "receipt_sha256": checkpoint["seal_sha256"],
+            "required_fields": {
+                "schema": "cyber_skyrl_checkpoint_manifest_v1",
+                "checkpoint_path": checkpoint["path"],
+                "optimizer_step": checkpoint["optimizer_step"],
+                "world_size": 8,
+                "total_bytes": 324627486795,
+                "gpu_reload_verified": False,
+            },
+        },
+        "export_receipt": {
+            "path": "/mnt/sfs" + export["sfs_path"],
+            "file_sha256": export["file_sha256"],
+            "receipt_sha256": export["receipt_sha256"],
+            "required_fields": export_required,
+        },
+        "gpu_reload_receipt": {
+            "path": "/mnt/sfs" + gpu["sfs_path"],
+            "file_sha256": gpu["file_sha256"],
+            "receipt_sha256": gpu["receipt_sha256"],
+            "required_fields": {
+                key: gpu_required[key]
+                for key in (
+                    "schema",
+                    "status",
+                    "export_sha256",
+                    "export_receipt_sha256",
+                    "optimizer_steps_executed",
+                    "gpus",
+                    "gpu_reload_verified",
+                    "serving_qualified",
+                    "synthetic_only",
+                    "source_unchanged",
+                    "attention_implementation",
+                    "finite_logits",
+                    "generated_tokens",
+                )
+            },
+        },
+        "payload": {
+            "served_revision": CANDIDATE_REVISION,
+            "revision_basis": "export_files_canonical_sha256",
+            "export_files_sha256": payload["manifest_sha256"],
+            "stage_source_path": f"/models/{CANDIDATE_ID}",
+            "file_count": payload["file_count"],
+            "trained_tensors": 1184,
+            "restored_mtp_tensors": sorted(model_artifact.EXACT_MTP_TENSORS),
+            "tensor_count": 1199,
+            "tensor_bytes": export_required["tensor_bytes"],
+        },
+        "qualification": {
+            "acceptance_evidence_path": str(ARTIFACT_ACCEPTANCE.relative_to(ROOT)),
+            "acceptance_evidence_file_sha256": _file_sha(ARTIFACT_ACCEPTANCE),
+            "acceptance_evidence_sha256": acceptance["sha256"],
+            "gpu_reload_workload_kind": "Pod",
+            "gpu_reload_workload_uid": promotion["gpu_reload"]["dev_pod_uid"],
+            "gpu_reload_pod_uid": promotion["gpu_reload"]["dev_pod_uid"],
+            "gpu_allocation_released": promotion["gpu_reload"]["temporary_gpu_released"],
+        },
+    }
+    value = {
+        "schema": model_artifact_v3.PACKET_SCHEMA,
+        "campaign_name": campaign_name,
+        "models": {ARTIFACT_ALIAS: binding},
+        "authorization": "provenance_only_not_launch_authorization",
+    }
+    value["sha256"] = hashlib.sha256(
+        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return value
+
+
+def _candidate_binding(packet: dict[str, Any], packet_name: str) -> dict[str, Any]:
+    acceptance = _verified_json(ARTIFACT_ACCEPTANCE, "step-1000 evaluation acceptance")
+    return {
+        "validator_file_sha256": _file_sha(Path(model_artifact_v3.__file__)),
+        "packet_path": packet_name,
+        "packet_file_sha256": "sha256:" + hashlib.sha256(_encoded(packet)).hexdigest(),
+        "packet_sha256": "sha256:" + packet["sha256"],
+        "acceptance_evidence_path": str(ARTIFACT_ACCEPTANCE.relative_to(ROOT)),
+        "acceptance_evidence_file_sha256": _file_sha(ARTIFACT_ACCEPTANCE),
+        "acceptance_evidence_sha256": acceptance["sha256"],
+    }
+
+
+def _configs(
+    base_template: dict[str, Any], seed: int, *, candidate_generation: int = 1
+) -> tuple[dict[str, Any], dict[str, Any]]:
     base = copy.deepcopy(base_template)
     base["name"] = f"q38-dev17-s{seed}-base-p1-v1"
     base["pass_k"] = 1
@@ -134,7 +257,7 @@ def _configs(base_template: dict[str, Any], seed: int) -> tuple[dict[str, Any], 
     base["max_reviewed_infrastructure_retries"] = 0
 
     candidate = copy.deepcopy(base)
-    candidate["name"] = f"q38-dev17-s{seed}-t3k32s1000-p1-v1"
+    candidate["name"] = f"q38-dev17-s{seed}-t3k32s1000-p1-v{candidate_generation}"
     candidate["models"] = {
         "teacher3k32-step1000": {
             "repository": "/mnt/sfs/jobs/chris-q38-t3k32-b8-v3/hf-export-step1000-v1",
@@ -142,6 +265,10 @@ def _configs(base_template: dict[str, Any], seed: int) -> tuple[dict[str, Any], 
             "session_model": f"qwen/{CANDIDATE_ID}",
         }
     }
+    packet_name = f"qwen38-step1000-seed{seed}-provenance-v{candidate_generation}.json"
+    packet = _candidate_packet(candidate["name"])
+    model_artifact_v3.validate_packet(candidate["models"], packet)
+    candidate["model_artifact_binding"] = _candidate_binding(packet, packet_name)
     route = copy.deepcopy(next(iter(base["routes"].values())))
     route["model"] = "teacher3k32-step1000"
     route["served_id"] = CANDIDATE_ID
@@ -236,7 +363,6 @@ def prepare(*, output: Path, live_parity: Path, now: datetime | None = None) -> 
     )
     temporary = Path(tempfile.mkdtemp(prefix=".seed46-p8-", dir=output.parent))
     try:
-        promotion = _verified_json(PROMOTION, "step-1000 promotion")
         receipt_arms = []
         protocols = []
         for seed in SEEDS:
@@ -257,25 +383,7 @@ def prepare(*, output: Path, live_parity: Path, now: datetime | None = None) -> 
             _write_json(candidate_path, candidate)
             _write_json(protocol_path, protocol)
             _write_json(base_provenance, _base_provenance(base_path, roster, base["name"]))
-            candidate_evidence = {
-                "schema": "cyber_fleet_eval_promoted_checkpoint_provenance_v1",
-                "campaign_name": candidate["name"],
-                "authorization": "provenance_only_not_launch_authorization",
-                "promotion_evidence": {
-                    "path": str(PROMOTION.relative_to(ROOT)),
-                    "file_sha256": _file_sha(PROMOTION),
-                    "sha256": promotion["sha256"],
-                    "evidence": promotion,
-                },
-                "exact_task_binding_roster": {
-                    "path": str(BINDING_ROSTER.relative_to(ROOT)),
-                    "file_sha256": _file_sha(BINDING_ROSTER),
-                    "sha256": roster["sha256"],
-                    "bindings_sha256": roster["bindings_sha256"],
-                    "bindings": roster["bindings"],
-                },
-            }
-            candidate_evidence["sha256"] = _canonical(candidate_evidence)
+            candidate_evidence = _candidate_packet(candidate["name"])
             _write_json(candidate_provenance, candidate_evidence)
             arms = {
                 "base": {
@@ -312,6 +420,7 @@ def prepare(*, output: Path, live_parity: Path, now: datetime | None = None) -> 
                     checkpoint_path=checkpoint,
                     proof_path=live_parity,
                     ledger_path=LEDGER,
+                    source_files=V3_SOURCE_FILES if arm_id == "candidate" else None,
                 )
                 row["seed"] = seed
                 receipt_arms.append(row)
