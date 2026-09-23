@@ -151,6 +151,7 @@ def test_preview_difference_job_is_alert_off_c1_q1_zero_gpu_fleet_secret_only() 
         "phase": "preview-diff",
         "sha256": "sha256:" + "3" * 64,
         "writable_controls_probe": False,
+        "request": {"image": "registry.example/exact@sha256:" + "5" * 64},
     }
     job = operator_job._job(
         phase="preview-diff",
@@ -168,6 +169,7 @@ def test_preview_difference_job_is_alert_off_c1_q1_zero_gpu_fleet_secret_only() 
     assert pod["priorityClassName"] == "c1"
     assert job["spec"]["backoffLimit"] == 0
     assert pod["automountServiceAccountToken"] is False
+    assert container["image"] == packet["request"]["image"]
     assert container["envFrom"] == [{"secretRef": {"name": "fleet-api"}}]
     assert "wandb-api" not in encoded
     assert "controls-rw" not in encoded

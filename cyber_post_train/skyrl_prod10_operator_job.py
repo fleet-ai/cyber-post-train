@@ -611,9 +611,10 @@ def _job(
     if phase != "stage":
         sfs_mount["readOnly"] = True
         sfs_claim["readOnly"] = True
+    image = packet["request"]["image"] if phase == "preview-diff" else IMAGE
     container = {
         "name": "operator",
-        "image": IMAGE,
+        "image": image,
         "imagePullPolicy": "IfNotPresent",
         "command": ["python", "-u", "-c", _BOOTSTRAP],
         "env": environment,
@@ -810,6 +811,10 @@ def validate_operator_package(package: OperatorPackage) -> dict[str, Any]:
         or container["securityContext"].get("runAsUser") != 1000
         or container["securityContext"].get("runAsGroup") != 100
         or container.get("resources", {}).get("requests") != {"cpu": "2", "memory": "8Gi"}
+        or (
+            packet["phase"] == "preview-diff"
+            and container.get("image") != packet["request"]["image"]
+        )
         or mounts.get("sfs") != expected_sfs_mount
         or volumes.get("sfs") != {"name": "sfs", "persistentVolumeClaim": expected_sfs_claim}
         or (packet["phase"] in {"inspect", "preview-diff"} and "controls-rw" in mounts)
@@ -853,6 +858,7 @@ def validate_operator_package(package: OperatorPackage) -> dict[str, Any]:
         "failure_alerts": "off",
         "priority": "c1",
         "queue_priority": "q1",
+        "image": container["image"],
         "gpus": 0,
     }
 
