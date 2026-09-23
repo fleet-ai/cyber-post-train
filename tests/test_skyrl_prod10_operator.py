@@ -15,6 +15,7 @@ from cyber_post_train.jobs import FAILURE_ALERT_ANNOTATION, JobsError, digest
 from training import dev_cleanup_observer as cleanup
 from training import incluster_kubernetes
 from training import skyrl_prod9_direct as direct
+from training import skyrl_prod9_hardening as hardening
 from training import skyrl_prod9_training as training
 from training import skyrl_prod10_direct as launch_direct
 from training import skyrl_prod10_operator as operator
@@ -437,29 +438,90 @@ def test_prod10_inspection_boundary_is_fixed_and_fail_closed(
     assert operator._inspection_boundary(probes) == expected
 
 
+_PRE_GUARD_STAGES = (
+    "plan_identity",
+    "request_identity",
+    "preflight_launch_binding",
+    "preflight_result_read",
+    "preflight_result_digest",
+    "sealed_preflight_validate",
+    "fresh_preflight_revalidate",
+    "image_identity",
+    "source_preview_shape",
+    "manifest_rebuild",
+    "manifest_digest",
+    "operation_root_validate",
+    "output_absence",
+    "server_dry_run",
+    "server_preview_validate",
+)
+
+
+@pytest.mark.parametrize("stage", _PRE_GUARD_STAGES)
 @pytest.mark.parametrize(
     ("failure", "expected_class", "expected_code"),
     [
         (OSError("private path and errno must not escape"), "OSError", "oserror"),
         (AssertionError("private assertion must not escape"), "AssertionError", "assertionerror"),
+        (JobsError("private Jobs response must not escape"), "JobsError", "jobserror"),
+        (
+            incluster_kubernetes.InClusterKubernetesError(
+                "private Kubernetes response must not escape"
+            ),
+            "InClusterKubernetesError",
+            "inclusterkuberneteserror",
+        ),
     ],
 )
 def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
+    tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    stage: str,
     failure: Exception,
     expected_class: str,
     expected_code: str,
 ) -> None:
     identity = historical.load_identity(IDENTITY)
     plan = {"schema": training.SCHEMA}
-    launch = direct._seal({"schema": direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA})
+    request = {"workers": 1, "gpus_per_worker": 8}
+    launch = direct._seal(
+        {"schema": direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA, "gpus": 0}
+    )
+    preview = direct._seal(
+        {
+            "schema": direct.PREVIEW_SCHEMA,
+            "context": direct.DEV_CONTEXT,
+            "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+    duplicate = direct._seal(
+        {"schema": launch_direct.DUPLICATE_SCHEMA, "status": "identities_absent"}
+    )
+    capacity = {
+        "schema": "cyber_project_gpu_capacity_census_v1",
+        "limits": {"nodes": 10, "gpus": 80},
+        "planned": {"nodes": 1, "gpus": 8},
+    }
+    capacity["sha256"] = digest(capacity)
     monkeypatch.setattr(direct, "_identity", lambda _plan, bound: bound)
-    monkeypatch.setattr(launch_direct, "_preflight_launch", lambda value, *_args, **_kw: value)
-    packet = operator_job.probe_packet(
+    monkeypatch.setattr(training, "job_request", lambda _plan: request)
+    monkeypatch.setattr(
+        launch_direct, "_preflight_launch", lambda value, *_args, **_kw: value
+    )
+    monkeypatch.setattr(direct, "_source", lambda value: value)
+    monkeypatch.setattr(launch_direct, "_duplicate", lambda value, _identity: value)
+    source = operator_job.launch_packet(
         identity=identity,
         plan=plan,
+        request=request,
         preflight_launch_result=launch,
+        source_preview={"manifest_yaml": "{}"},
+        manifest_sha256="sha256:" + "1" * 64,
+        dev_preview=preview,
+        duplicate_proof=duplicate,
+        capacity_census=capacity,
     )
+    packet = operator_job.probe_packet(launch_packet=source)
     package = operator_job.build_operator_package(packet)
     proof = operator_job.validate_operator_package(package)
     pod = package.job["spec"]["template"]["spec"]
@@ -467,7 +529,7 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     mounts = {item["name"]: item for item in container["volumeMounts"]}
     volumes = {item["name"]: item for item in pod["volumes"]}
 
-    assert proof["name"] == "chris-q38-prod10-launch-probe-v6"
+    assert proof["name"] == "chris-q38-prod10-launch-probe-v7"
     assert proof["phase"] == "probe"
     assert proof["failure_alerts"] == "off"
     assert proof["priority"] == "c1" and proof["queue_priority"] == "q1"
@@ -494,43 +556,108 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
         "TRANSFORMERS_OFFLINE",
         "TOKENIZERS_PARALLELISM",
     }.isdisjoint(environment)
+    assert len(json.dumps(packet, sort_keys=True, separators=(",", ":")).encode()) < 1024 * 1024
 
-    monkeypatch.setattr(operator, "_identity", lambda _value: identity)
+    operation_root = tmp_path / "operation"
+    operation_root.mkdir()
+    monkeypatch.setattr(hardening, "training_operation_root", lambda _plan: operation_root)
 
-    def fail_preflight(_plan: dict) -> dict:
-        training._PREFLIGHT_STAGE = "tokenizer"
+    def fail_pre_guard(_packet: dict, _runner: object) -> dict:
+        operator._LAUNCH_STAGE = stage
+        training._PREFLIGHT_STAGE = "native_config_validate"
         raise failure
 
-    monkeypatch.setattr(training, "preflight", fail_preflight)
-    result = operator.run_probe(
-        {
-            "identity": identity.sealed_mapping(),
-            "plan": plan,
-            "preflight_launch_result": launch,
-        }
+    monkeypatch.setattr(operator, "_pre_guard_launch", fail_pre_guard)
+    monkeypatch.setattr(
+        cleanup.JobsApiPrefixGuard,
+        "__init__",
+        lambda *_args, **_kwargs: pytest.fail("guard must not be constructed"),
     )
+    monkeypatch.setattr(
+        operator,
+        "_fresh_capacity_census",
+        lambda *_args, **_kwargs: pytest.fail("capacity must not be read"),
+    )
+    monkeypatch.setattr(
+        launch_direct,
+        "create_once",
+        lambda *_args, **_kwargs: pytest.fail("Jobs API must not be called"),
+    )
+    result = operator.run_probe(packet, runner=object())
     assert result["status"] == "passed"
     assert result["diagnosis"] == "exception_localized"
     assert result["error_class"] == expected_class
-    assert result["error_code"] == f"launch_fresh_training_preflight_{expected_code}"
-    assert result["launch_stage"] == "fresh_training_preflight"
-    assert result["preflight_stage"] == "tokenizer"
+    assert result["error_code"] == f"launch_{stage}_{expected_code}"
+    assert result["launch_stage"] == stage
+    assert result["preflight_stage"] == "native_config_validate"
     assert result["error_path_exported"] is False
     assert result["error_errno_exported"] is False
     assert result["error_message_exported"] is False
     assert result["nested_jobs_created"] == result["gpus"] == 0
     encoded = json.dumps(result, sort_keys=True)
-    assert "private path" not in encoded and "private assertion" not in encoded
+    assert "private" not in encoded
     assert len(encoded.encode()) < 3900
 
     changed = copy.deepcopy(packet)
-    changed["probe_v5_success"]["operator_job_uid"] = (
+    changed["inspect_v3_success"]["operator_job_uid"] = (
         "00000000-0000-4000-8000-000000000001"
     )
-    changed["probe_v5_success"] = operator._seal(changed["probe_v5_success"])
+    changed["inspect_v3_success"] = operator._seal(changed["inspect_v3_success"])
     changed = operator._seal(changed)
-    with pytest.raises(ValueError, match="predecessor"):
+    with pytest.raises(ValueError, match="inspection predecessor"):
         operator_job.build_operator_package(changed)
+
+
+def test_prod10_launch_uses_shared_pre_guard_path_before_any_guard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    failure = RuntimeError("shared pre-guard sentinel")
+
+    def fail_shared(_packet: dict, _runner: object) -> dict:
+        raise failure
+
+    monkeypatch.setattr(operator, "_pre_guard_launch", fail_shared)
+    monkeypatch.setattr(
+        cleanup.JobsApiPrefixGuard,
+        "__init__",
+        lambda *_args, **_kwargs: pytest.fail("guard constructed before shared path"),
+    )
+    with pytest.raises(RuntimeError, match="shared pre-guard sentinel"):
+        operator.run_launch({}, runner=object())
+
+
+def test_prod10_probe_rechecks_markers_and_stops_before_guard(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    operation_root = tmp_path / "operation"
+    operation_root.mkdir()
+    launch_packet = {
+        "plan": {"schema": training.SCHEMA},
+        "sha256": "sha256:" + "1" * 64,
+    }
+    packet = {"launch_packet": launch_packet}
+    checks: list[Path] = []
+    monkeypatch.setattr(hardening, "training_operation_root", lambda _plan: operation_root)
+    monkeypatch.setattr(
+        operator,
+        "_assert_probe_markers_absent",
+        lambda root: checks.append(root),
+    )
+
+    def pass_shared(_packet: dict, _runner: object) -> dict:
+        operator._LAUNCH_STAGE = "before_guard_passed"
+        return {"operation_root": operation_root}
+
+    monkeypatch.setattr(operator, "_pre_guard_launch", pass_shared)
+    monkeypatch.setattr(
+        cleanup.JobsApiPrefixGuard,
+        "__init__",
+        lambda *_args, **_kwargs: pytest.fail("probe constructed a guard"),
+    )
+    result = operator.run_probe(packet, runner=object())
+    assert checks == [operation_root, operation_root]
+    assert result["diagnosis"] == result["launch_stage"] == "before_guard_passed"
+    assert result["nested_jobs_created"] == result["gpus"] == 0
 
 
 def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(

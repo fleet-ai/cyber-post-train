@@ -357,26 +357,20 @@ def inspect_packet(
 
 def probe_packet(
     *,
-    identity: historical.RailIdentity,
-    plan: dict[str, Any],
-    preflight_launch_result: dict[str, Any],
+    launch_packet: dict[str, Any],
 ) -> dict[str, Any]:
-    direct._identity(plan, identity)
-    checked_launch = launch_direct._preflight_launch(
-        preflight_launch_result,
-        plan,
-        identity=identity,
-        operator_name=operator.OPERATOR_NAMES["preflight"],
-    )
+    checked_launch = _validate_packet_semantics(launch_packet)
+    if checked_launch.get("phase") != "launch":
+        raise ValueError("prod10 launch probe source packet changed")
     return _seal(
         {
             "schema": operator.PACKET_SCHEMA,
             "phase": "probe",
             "operator_name": operator.OPERATOR_NAMES["probe"],
-            "identity": identity.sealed_mapping(),
-            "plan": plan,
-            "preflight_launch_result": checked_launch,
-            "probe_v5_success": operator.probe_v5_success_binding(),
+            "identity": checked_launch["identity"],
+            "launch_packet": checked_launch,
+            "launch_v2_failure": operator.launch_v2_failure_binding(),
+            "inspect_v3_success": operator.inspect_v3_success_binding(),
         }
     )
 
@@ -414,9 +408,7 @@ def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
         )
     elif checked["phase"] == "probe":
         expected = probe_packet(
-            identity=identity,
-            plan=checked["plan"],
-            preflight_launch_result=checked["preflight_launch_result"],
+            launch_packet=checked["launch_packet"],
         )
     else:
         expected = launch_packet(

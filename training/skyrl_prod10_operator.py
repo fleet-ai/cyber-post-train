@@ -29,7 +29,7 @@ from . import skyrl_prod9_hardening as hardening
 from . import skyrl_prod9_training as training
 from . import skyrl_prod10_direct as launch_direct
 from . import skyrl_reward_rayjob as historical
-from .incluster_kubernetes import InClusterKubernetesRunner
+from .incluster_kubernetes import InClusterKubernetesError, InClusterKubernetesRunner
 
 PACKET_SCHEMA = "cyber_skyrl_prod10_operator_packet_v1"
 RESULT_SCHEMA = "cyber_skyrl_prod10_operator_result_v1"
@@ -44,7 +44,7 @@ OPERATOR_NAMES = {
     "preflight": "chris-q38-prod10-preflight-operator-v2",
     "launch": "chris-q38-prod10-launch-operator-v2",
     "inspect": "chris-q38-prod10-launch-inspect-v3",
-    "probe": "chris-q38-prod10-launch-probe-v6",
+    "probe": "chris-q38-prod10-launch-probe-v7",
 }
 _LAUNCH_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_launch_failure_binding_v1",
@@ -88,6 +88,19 @@ _INSPECT_V2_SUCCESS = {
     "receipt_sha256": "sha256:73f751235514f1b05a6bde2074dc3bdb62995f1c84ebb096d33ad0e461725c21",
     "observer_sha256": "sha256:62a7cc889963bba3f561b7d3fbd00a5e1d61e328e22c59092b509638a537ef59",
     "result_sha256": "sha256:0ec4bcbe9aa48f9b96a7bb83a8c24aee7ee7c0961d5cca00afa63a04d7dfadbb",
+    "launch_boundary": "before_guard_or_guard_write",
+    "gpus": 0,
+}
+_INSPECT_V3_SUCCESS = {
+    "schema": "cyber_skyrl_prod10_launch_inspection_binding_v1",
+    "status": "succeeded_and_released",
+    "operator_name": "chris-q38-prod10-launch-inspect-v3",
+    "operator_job_uid": "64437ed3-a2e6-4aae-9da7-b9b927c1a694",
+    "operator_pod_uid": "6edc20ad-51f8-4f90-bb2e-e9a46bfd2455",
+    "operator_workload_uid": "53713f63-eeff-42a7-ab92-1795316c2912",
+    "receipt_sha256": "sha256:20ce05dfc0ad401a8bb3137dcd7cd3ae2db2f933360f3decbf12243209e102b9",
+    "observer_sha256": "sha256:d48742b1d2fdfe49db98fe08b98155f7d98f08931c461c66562940c2afc77703",
+    "result_sha256": "sha256:ed30f976916f023e9e5a2533040a6d76fe79fa4aec910de5d7e274a044a403e1",
     "launch_boundary": "before_guard_or_guard_write",
     "gpus": 0,
 }
@@ -271,6 +284,11 @@ def inspect_v2_success_binding() -> dict[str, Any]:
     return _seal(_INSPECT_V2_SUCCESS)
 
 
+def inspect_v3_success_binding() -> dict[str, Any]:
+    """Bind the exact released launch-v2 boundary inspection."""
+    return _seal(_INSPECT_V3_SUCCESS)
+
+
 def probe_v5_success_binding() -> dict[str, Any]:
     """Bind the released v5 diagnostic before testing writable cache roots."""
     return _seal(_PROBE_V5_SUCCESS)
@@ -396,18 +414,11 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
             operator_name=OPERATOR_NAMES["preflight"],
         )
     elif phase == "probe":
-        if packet.get("probe_v5_success") != probe_v5_success_binding():
-            raise ValueError("prod10 launch probe predecessor changed")
-        plan = packet.get("plan")
-        if not isinstance(plan, dict):
-            raise ValueError("prod10 launch probe plan changed")
-        direct._identity(plan, _identity(packet.get("identity")))
-        launch_direct._preflight_launch(
-            packet.get("preflight_launch_result"),
-            plan,
-            identity=_identity(packet.get("identity")),
-            operator_name=OPERATOR_NAMES["preflight"],
-        )
+        if packet.get("launch_v2_failure") != launch_v2_failure_binding():
+            raise ValueError("prod10 launch probe failure predecessor changed")
+        if packet.get("inspect_v3_success") != inspect_v3_success_binding():
+            raise ValueError("prod10 launch probe inspection predecessor changed")
+        _packet(packet.get("launch_packet"), "launch")
     else:
         if packet.get("launch_v1_failure") != launch_v1_failure_binding():
             raise ValueError("prod10 launch failure predecessor changed")
@@ -1498,31 +1509,137 @@ def run_inspect(packet: dict[str, Any]) -> dict[str, Any]:
     )
 
 
-def run_probe(packet: dict[str, Any]) -> dict[str, Any]:
-    """Localize a pre-guard exception without logging args, path, errno, or message."""
+def _pre_guard_launch(
+    packet: dict[str, Any], runner: InClusterKubernetesRunner
+) -> dict[str, Any]:
+    """Run the exact launch sequence that precedes guard construction."""
     global _LAUNCH_STAGE
+    _LAUNCH_STAGE = "plan_identity"
     identity = _identity(packet["identity"])
     plan = packet.get("plan")
     if not isinstance(plan, dict):
-        raise ValueError("prod10 launch probe plan changed")
-    _LAUNCH_STAGE = "plan_identity"
+        raise ValueError("prod10 launch plan changed")
     direct._identity(plan, identity)
-    _LAUNCH_STAGE = "preflight_launch_evidence"
-    launch = launch_direct._preflight_launch(
+    _LAUNCH_STAGE = "request_identity"
+    request = packet.get("request")
+    if not isinstance(request, dict) or training.job_request(plan) != request:
+        raise ValueError("prod10 launch request changed")
+    _LAUNCH_STAGE = "preflight_launch_binding"
+    preflight_launch = launch_direct._preflight_launch(
         packet.get("preflight_launch_result"),
         plan,
         identity=identity,
         operator_name=OPERATOR_NAMES["preflight"],
     )
-    _LAUNCH_STAGE = "fresh_training_preflight"
+    _LAUNCH_STAGE = "preflight_result_read"
+    receipt = preflight_launch["observer"]["receipt"]
+    preflight = _read_recovery_file(
+        Path(receipt["result_path"]), launch_direct.PREFLIGHT_RESULT_SCHEMA
+    )
+    _LAUNCH_STAGE = "preflight_result_digest"
+    if preflight.get("sha256") != receipt["result_sha256"]:
+        raise OperatorFailure("launch_preflight_result_digest_rejected")
+    _LAUNCH_STAGE = "sealed_preflight_validate"
+    preflight = launch_direct.preflight_result(
+        plan, request, preflight, identity=identity
+    )
+    _LAUNCH_STAGE = "fresh_preflight_revalidate"
+    revalidation = launch_direct.revalidate_preflight(
+        plan, request, preflight, identity=identity
+    )
+    _LAUNCH_STAGE = "image_identity"
+    image_identity = launch_direct.image_identity(request, preflight)
+    _LAUNCH_STAGE = "source_preview_shape"
+    source_preview = packet.get("source_preview")
+    if not isinstance(source_preview, dict):
+        raise ValueError("prod10 launch Jobs preview is invalid")
+    _LAUNCH_STAGE = "manifest_rebuild"
+    expected = direct.manifest(
+        plan,
+        request,
+        source_preview,
+        identity=identity,
+        image_identity_receipt=image_identity,
+    )
+    _LAUNCH_STAGE = "manifest_digest"
+    if packet.get("manifest_sha256") != "sha256:" + digest(expected):
+        raise ValueError("prod10 launch GPU manifest changed")
+    _LAUNCH_STAGE = "operation_root_validate"
+    operation_root = hardening.training_operation_root(plan)
+    _canonical_directory(operation_root, code="launch_operation_root")
+    _LAUNCH_STAGE = "output_absence"
+    output_root = Path(identity.output_root)
+    if output_root.exists() or output_root.is_symlink():
+        raise OperatorFailure("launch_output_exists")
+    _LAUNCH_STAGE = "server_dry_run"
+    prod_dry_run = direct.server_dry_run(
+        expected, context=direct.PROD_CONTEXT, runner=runner
+    )
+    _LAUNCH_STAGE = "server_preview_validate"
+    direct.validate_preview(
+        plan,
+        request,
+        source_preview,
+        expected,
+        prod_dry_run,
+        context=direct.PROD_CONTEXT,
+        identity=identity,
+        image_identity_receipt=image_identity,
+    )
+    _LAUNCH_STAGE = "before_guard_passed"
+    return {
+        "identity": identity,
+        "plan": plan,
+        "request": request,
+        "preflight": preflight,
+        "revalidation": revalidation,
+        "image_identity": image_identity,
+        "source_preview": source_preview,
+        "expected": expected,
+        "operation_root": operation_root,
+    }
+
+
+def _assert_probe_markers_absent(operation_root: Path) -> None:
+    """Prove the diagnostic neither inherits nor creates a durable intent."""
+    paths = (
+        direct.jobs_api_guard_path(operation_root, "training"),
+        operation_root / "PROD10_DIRECT_V3_CREATE.jsonl",
+        hardening.creator_binding_path(operation_root, "training"),
+    )
+    if any(path.exists() or path.is_symlink() for path in paths):
+        raise OperatorFailure("launch_probe_marker_present")
+
+
+def run_probe(
+    packet: dict[str, Any], *, runner: InClusterKubernetesRunner
+) -> dict[str, Any]:
+    """Localize the pre-guard path without exposing exception details."""
+    global _LAUNCH_STAGE
+    launch_packet = packet.get("launch_packet")
+    if not isinstance(launch_packet, dict):
+        raise ValueError("prod10 launch probe source packet changed")
     try:
-        receipt = training.preflight(plan)
+        _LAUNCH_STAGE = "plan_identity"
+        plan = launch_packet.get("plan")
+        if not isinstance(plan, dict):
+            raise ValueError("prod10 launch probe plan changed")
+        operation_root = hardening.training_operation_root(plan)
+        _assert_probe_markers_absent(operation_root)
+        pre_guard = _pre_guard_launch(launch_packet, runner)
+        if pre_guard["operation_root"] != operation_root:
+            raise OperatorFailure("launch_probe_operation_root_changed")
+        _assert_probe_markers_absent(operation_root)
     except Exception as error:
         error_class, error_code = (
             ("OSError", "oserror")
             if isinstance(error, OSError)
             else ("AssertionError", "assertionerror")
             if isinstance(error, AssertionError)
+            else ("JobsError", "jobserror")
+            if isinstance(error, JobsError)
+            else ("InClusterKubernetesError", "inclusterkuberneteserror")
+            if isinstance(error, InClusterKubernetesError)
             else ("OtherException", "other_exception")
         )
         return _seal(
@@ -1535,8 +1652,9 @@ def run_probe(packet: dict[str, Any]) -> dict[str, Any]:
                 "error_code": f"launch_{_LAUNCH_STAGE}_{error_code}",
                 "launch_stage": _LAUNCH_STAGE,
                 "preflight_stage": training._PREFLIGHT_STAGE,
-                "preflight_launch_sha256": launch["sha256"],
-                "probe_v5_success_sha256": probe_v5_success_binding()["sha256"],
+                "launch_packet_sha256": launch_packet["sha256"],
+                "launch_v2_failure_sha256": launch_v2_failure_binding()["sha256"],
+                "inspect_v3_success_sha256": inspect_v3_success_binding()["sha256"],
                 "error_path_exported": False,
                 "error_errno_exported": False,
                 "error_message_exported": False,
@@ -1544,19 +1662,17 @@ def run_probe(packet: dict[str, Any]) -> dict[str, Any]:
                 "gpus": 0,
             }
         )
-    _LAUNCH_STAGE = "fresh_training_preflight_passed"
-    if receipt.get("status") != "passed" or receipt.get("gpus") != 0:
-        raise OperatorFailure("launch_probe_preflight_receipt_rejected")
     return _seal(
         {
             "schema": MANIFEST_RESULT_SCHEMA,
             "status": "passed",
             "phase": "probe",
-            "diagnosis": "fresh_training_preflight_passed",
+            "diagnosis": "before_guard_passed",
             "launch_stage": _LAUNCH_STAGE,
             "preflight_stage": training._PREFLIGHT_STAGE,
-            "preflight_launch_sha256": launch["sha256"],
-            "probe_v5_success_sha256": probe_v5_success_binding()["sha256"],
+            "launch_packet_sha256": launch_packet["sha256"],
+            "launch_v2_failure_sha256": launch_v2_failure_binding()["sha256"],
+            "inspect_v3_success_sha256": inspect_v3_success_binding()["sha256"],
             "nested_jobs_created": 0,
             "gpus": 0,
         }
@@ -1565,54 +1681,13 @@ def run_probe(packet: dict[str, Any]) -> dict[str, Any]:
 
 def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> dict[str, Any]:
     """Consume the sealed direct-v3 preflight and perform the sole GPU POST."""
-    identity = _identity(packet["identity"])
-    plan, request = packet.get("plan"), packet.get("request")
-    if not isinstance(plan, dict) or not isinstance(request, dict):
-        raise ValueError("prod10 launch plan/request is invalid")
-    direct._identity(plan, identity)
-    if training.job_request(plan) != request:
-        raise ValueError("prod10 launch request changed")
-    preflight_launch = launch_direct._preflight_launch(
-        packet.get("preflight_launch_result"),
-        plan,
-        identity=identity,
-        operator_name=OPERATOR_NAMES["preflight"],
-    )
-    receipt = preflight_launch["observer"]["receipt"]
-    result_path = Path(receipt["result_path"])
-    preflight = _read_recovery_file(result_path, launch_direct.PREFLIGHT_RESULT_SCHEMA)
-    if preflight.get("sha256") != receipt["result_sha256"]:
-        raise OperatorFailure("launch_preflight_result_digest_rejected")
-    preflight = launch_direct.preflight_result(plan, request, preflight, identity=identity)
-    revalidation = launch_direct.revalidate_preflight(plan, request, preflight, identity=identity)
-    image_identity = launch_direct.image_identity(request, preflight)
-    source_preview = packet.get("source_preview")
-    if not isinstance(source_preview, dict):
-        raise ValueError("prod10 launch Jobs preview is invalid")
-    expected = direct.manifest(
-        plan,
-        request,
-        source_preview,
-        identity=identity,
-        image_identity_receipt=image_identity,
-    )
-    if packet.get("manifest_sha256") != "sha256:" + digest(expected):
-        raise ValueError("prod10 launch GPU manifest changed")
-    operation_root = hardening.training_operation_root(plan)
-    _canonical_directory(operation_root, code="launch_operation_root")
-    output_root = Path(identity.output_root)
-    if output_root.exists() or output_root.is_symlink():
-        raise OperatorFailure("launch_output_exists")
-    direct.validate_preview(
-        plan,
-        request,
-        source_preview,
-        expected,
-        direct.server_dry_run(expected, context=direct.PROD_CONTEXT, runner=runner),
-        context=direct.PROD_CONTEXT,
-        identity=identity,
-        image_identity_receipt=image_identity,
-    )
+    pre_guard = _pre_guard_launch(packet, runner)
+    identity = pre_guard["identity"]
+    plan, request = pre_guard["plan"], pre_guard["request"]
+    preflight, revalidation = pre_guard["preflight"], pre_guard["revalidation"]
+    image_identity = pre_guard["image_identity"]
+    source_preview, expected = pre_guard["source_preview"], pre_guard["expected"]
+    operation_root = pre_guard["operation_root"]
     guard = cleanup.JobsApiPrefixGuard(
         context=direct.PROD_CONTEXT,
         namespace=direct.NAMESPACE,
@@ -1705,7 +1780,7 @@ def run(packet_path: Path, phase: str) -> dict[str, Any]:
     elif phase == "inspect":
         result = run_inspect(packet)
     elif phase == "probe":
-        result = run_probe(packet)
+        result = run_probe(packet, runner=runner)
     else:
         result = run_preflight(packet, runner=runner)
     if phase in {"manifest", "inspect", "probe"}:
