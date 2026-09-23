@@ -75,6 +75,7 @@ PROD11_OPERATOR_NAMES = {
     "stage": "chris-q38-prod11-stage-operator-v1",
     "manifest": "chris-q38-prod11-manifest-operator-v1",
     "preflight": "chris-q38-prod11-preflight-operator-v1",
+    "launch": "chris-q38-prod11-launch-operator-v1",
 }
 
 
@@ -2663,6 +2664,7 @@ def _pre_guard_launch(packet: dict[str, Any], runner: InClusterKubernetesRunner)
     global _LAUNCH_STAGE
     _LAUNCH_STAGE = "plan_identity"
     identity = _identity(packet["identity"])
+    names = operator_names(identity)
     plan = packet.get("plan")
     if not isinstance(plan, dict):
         raise ValueError("prod10 launch plan changed")
@@ -2676,7 +2678,7 @@ def _pre_guard_launch(packet: dict[str, Any], runner: InClusterKubernetesRunner)
         packet.get("preflight_launch_result"),
         plan,
         identity=identity,
-        operator_name=OPERATOR_NAMES["preflight"],
+        operator_name=names["preflight"],
     )
     _LAUNCH_STAGE = "preflight_result_read"
     receipt = preflight_launch["observer"]["receipt"]

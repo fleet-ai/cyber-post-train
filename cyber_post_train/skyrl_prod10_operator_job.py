@@ -315,13 +315,14 @@ def launch_packet(
     fresh_duplicate: bool = True,
 ) -> dict[str, Any]:
     direct._identity(plan, identity)
+    names = operator.operator_names(identity)
     if training.job_request(plan) != request:
         raise ValueError("prod10 launch request changed")
     checked_launch = launch_direct._preflight_launch(
         preflight_launch_result,
         plan,
         identity=identity,
-        operator_name=operator.OPERATOR_NAMES["preflight"],
+        operator_name=names["preflight"],
     )
     direct._source(source_preview)
     checked_dev = direct._validate_seal(dev_preview, direct.PREVIEW_SCHEMA)
@@ -343,7 +344,7 @@ def launch_packet(
         {
             "schema": operator.PACKET_SCHEMA,
             "phase": "launch",
-            "operator_name": operator.OPERATOR_NAMES["launch"],
+            "operator_name": names["launch"],
             "identity": identity.sealed_mapping(),
             "plan": plan,
             "request": request,

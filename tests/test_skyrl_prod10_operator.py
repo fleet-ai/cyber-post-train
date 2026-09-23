@@ -429,6 +429,7 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
         {"secretRef": {"name": "fleet-api"}},
         {"secretRef": {"name": "wandb-api"}},
     ]
+
     environment = {item["name"]: item["value"] for item in container["env"] if "value" in item}
     assert environment["HF_DATASETS_CACHE"] == "/work/hf-datasets"
     assert "WANDB_API_KEY" not in environment
@@ -510,6 +511,88 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
         )
     assert operator_job._validate_packet_semantics(packet) == packet
     assert freshness == [True, False]
+
+
+def test_prod11_launch_packet_uses_prod11_operator_names(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity = historical.load_identity(PROD11_IDENTITY)
+    plan = {"schema": training.SCHEMA}
+    request = {"workers": 1, "gpus_per_worker": 8}
+    observed: list[str] = []
+    monkeypatch.setattr(direct, "_identity", lambda _plan, bound: bound)
+    monkeypatch.setattr(training, "job_request", lambda _plan: request)
+    monkeypatch.setattr(
+        launch_direct,
+        "_preflight_launch",
+        lambda value, *_args, **kwargs: observed.append(kwargs["operator_name"]) or value,
+    )
+    monkeypatch.setattr(direct, "_source", lambda value: value)
+    monkeypatch.setattr(launch_direct, "_duplicate", lambda value, _identity, **_kwargs: value)
+    preflight = direct._seal({"schema": direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA, "gpus": 0})
+    preview = direct._seal(
+        {
+            "schema": direct.PREVIEW_SCHEMA,
+            "context": direct.DEV_CONTEXT,
+            "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+    duplicate = direct._seal(
+        {"schema": launch_direct.DUPLICATE_SCHEMA, "status": "identities_absent"}
+    )
+    capacity = {
+        "schema": "cyber_project_gpu_capacity_census_v1",
+        "limits": {"nodes": 10, "gpus": 80},
+        "planned": {"nodes": 1, "gpus": 8},
+    }
+    capacity["sha256"] = digest(capacity)
+
+    packet = operator_job.launch_packet(
+        identity=identity,
+        plan=plan,
+        request=request,
+        preflight_launch_result=preflight,
+        source_preview={"manifest_yaml": "{}"},
+        manifest_sha256="sha256:" + "1" * 64,
+        dev_preview=preview,
+        dev_preview_provenance=_dev_preview_provenance(preview),
+        duplicate_proof=duplicate,
+        capacity_census=capacity,
+    )
+    package = operator_job.build_operator_package(packet)
+
+    assert observed and set(observed) == {operator.PROD11_OPERATOR_NAMES["preflight"]}
+    assert packet["operator_name"] == operator.PROD11_OPERATOR_NAMES["launch"]
+    assert package.job["metadata"]["name"] == operator.PROD11_OPERATOR_NAMES["launch"]
+
+
+def test_prod11_pre_guard_launch_binds_prod11_preflight_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity = historical.load_identity(PROD11_IDENTITY)
+    plan = {"schema": training.SCHEMA}
+    request = {"workers": 1, "gpus_per_worker": 8}
+    observed: list[str] = []
+    monkeypatch.setattr(direct, "_identity", lambda _plan, bound: bound)
+    monkeypatch.setattr(training, "job_request", lambda _plan: request)
+
+    def stop_after_binding(*_args: object, **kwargs: object) -> dict:
+        observed.append(str(kwargs["operator_name"]))
+        raise RuntimeError("stop after prod11 preflight binding")
+
+    monkeypatch.setattr(launch_direct, "_preflight_launch", stop_after_binding)
+    with pytest.raises(RuntimeError, match="stop after prod11 preflight binding"):
+        operator._pre_guard_launch(
+            {
+                "identity": identity.sealed_mapping(),
+                "plan": plan,
+                "request": request,
+                "preflight_launch_result": {},
+            },
+            runner=object(),
+        )
+
+    assert observed == [operator.PROD11_OPERATOR_NAMES["preflight"]]
 
 
 def test_prod10_launch_recovery_observer_binds_existing_job_at_construction(
