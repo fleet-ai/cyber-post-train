@@ -172,7 +172,7 @@ def _migration(tmp_path: Path, excluded: tuple[int, ...] = (47, 51, 52, 53)) -> 
         {
             "schema": final.MIGRATION_SCHEMA,
             "source": {
-                "protocol_study_id": "source-v1",
+                "protocol_study_id": "q38-dev17-seeds46to53-base-step1000-p8-v1",
                 "preparation_receipt_sha256": "sha256:" + "1" * 64,
                 "preparation_receipt_file_sha256": "sha256:" + "2" * 64,
                 "seeds": list(final.SOURCE_SEEDS),
@@ -192,12 +192,12 @@ def _migration(tmp_path: Path, excluded: tuple[int, ...] = (47, 51, 52, 53)) -> 
             "included_seeds": included,
             "replacement_protocols": replacement_protocols,
             "replacement_arms": replacement_arms,
-            "retirement_plan": {
+            "retirement_evidence": {
                 "sha256": "sha256:" + "4" * 64,
                 "file_sha256": "sha256:" + "5" * 64,
-                "targets": 0,
-                "external_mutations": 0,
-                "retirement_performed": False,
+                "targets": 2,
+                "model_rollouts": 0,
+                "outputs_or_databases_deleted": False,
             },
             "scientific_identity": {
                 "task_count_per_arm": final.TASK_COUNT,
@@ -213,6 +213,17 @@ def _migration(tmp_path: Path, excluded: tuple[int, ...] = (47, 51, 52, 53)) -> 
             "capacity": {
                 "new_replacement_rollouts": len(mapping) * len(final.ARMS) * final.TASK_COUNT,
                 "final_comparison_rollouts": final.TASK_COUNT * final.PASS_K * len(final.ARMS),
+                "original_base_rollouts": final.TASK_COUNT * final.PASS_K,
+                "original_candidate_started_seeds": [46, 47, 48, 49, 50, 51],
+                "original_candidate_started_seed_rollouts": final.TASK_COUNT * 6,
+                "original_candidate_retired_before_start_seeds": [52, 53],
+                "original_candidate_retired_before_start_rollouts": 0,
+                "scoring_or_metadata_cpu_model_rollouts": 0,
+                "cumulative_model_rollouts_consumed_or_planned_today": (
+                    final.TASK_COUNT * final.PASS_K
+                    + final.TASK_COUNT * 6
+                    + len(mapping) * len(final.ARMS) * final.TASK_COUNT
+                ),
                 "daily_rollout_cap": 500,
                 "within_daily_cap": True,
             },
@@ -357,7 +368,7 @@ def _study(tmp_path: Path) -> tuple[dict[str, Any], dict[tuple[int, str], FakeSn
                     "failed": 0,
                 },
                 "config_map": {
-                    "name": replica["job_name"],
+                    "name": replica["config_map_name"],
                     "uid": "22222222-2222-4222-8222-222222222222",
                 },
                 "workloads": [],
@@ -475,11 +486,21 @@ def test_final_gate_opens_scores_only_after_all_replicas_and_emits_safe_public_i
     assert oct(public_path.stat().st_mode & 0o777) == "0o600"
 
 
-def test_one_unready_cell_prevents_every_score_read(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("state", "result_class"),
+    (
+        ("running", None),
+        ("retry_review", "infrastructure_invalid"),
+        ("terminal", "infrastructure_invalid"),
+    ),
+)
+def test_one_unready_cell_prevents_every_score_read(
+    tmp_path: Path, state: str, result_class: str | None
+) -> None:
     plan, snapshots = _study(tmp_path)
     first = snapshots[(46, "base")]
-    first.value.cells[0]["state"] = "retry_review"
-    first.value.cells[0]["result_class"] = "infrastructure_invalid"
+    first.value.cells[0]["state"] = state
+    first.value.cells[0]["result_class"] = result_class
 
     with pytest.raises(final.FinalAggregateError, match="non-authoritative"):
         final.finalize(plan, snapshots, output_root=Path(plan["private_output_root"]))

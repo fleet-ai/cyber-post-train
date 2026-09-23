@@ -37,6 +37,7 @@ TERMINAL_SCHEMA = "cyber_fleet_heldout_terminal_observation_v1"
 ACCEPTED_SCHEMA = "fleet-rollout-ledger-cell-accepted-v1"
 CONTROLLER_TERMINAL_SCHEMA = "fleet-rollout-ledger-controller-terminal-v1"
 SOURCE_SEEDS = tuple(range(46, 54))
+FROZEN_INVALID_SEEDS = (47, 51, 52, 53)
 ARMS = ("base", "candidate")
 TASK_COUNT = 17
 PASS_K = 8
@@ -262,10 +263,11 @@ def _deterministic_mapping(originals: Sequence[int]) -> list[dict[str, int]]:
     if (
         not originals
         or list(originals) != sorted(originals)
+        or tuple(originals) != FROZEN_INVALID_SEEDS
         or len(set(originals)) != len(originals)
         or any(type(seed) is not int or seed not in SOURCE_SEEDS for seed in originals)
     ):
-        raise FinalAggregateError("protocol-v2 excluded original seeds are not canonical")
+        raise FinalAggregateError("protocol-v2 excluded original seeds differ from the freeze")
     return [
         {"invalid_original_seed": original, "replacement_seed": 54 + index}
         for index, original in enumerate(originals)
@@ -336,7 +338,11 @@ def _comparison_contract(
     ):
         raise FinalAggregateError("protocol-v2 model or treatment identity differs")
     protocols = comparison.get("replica_protocols")
-    if not isinstance(protocols, list) or len(protocols) != PASS_K:
+    if (
+        not isinstance(protocols, list)
+        or len(protocols) != PASS_K
+        or [row.get("seed") for row in protocols if isinstance(row, dict)] != included
+    ):
         raise FinalAggregateError("protocol-v2 included replica protocol roster is incomplete")
     protocol_by_seed: dict[int, dict[str, Any]] = {}
     replacement_seeds = {row["replacement_seed"] for row in mapping}
@@ -382,9 +388,26 @@ def _migration_input(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     ):
         raise FinalAggregateError("protocol-v2 comparison definition file differs")
     excluded = comparison["excluded_original_seeds"]
+    source = receipt.get("source")
+    if not isinstance(source, dict):
+        raise FinalAggregateError("protocol-v2 source study evidence is missing")
+    _exact_digest_fields(
+        source,
+        ("preparation_receipt_sha256", "preparation_receipt_file_sha256"),
+        "protocol-v2 source study",
+    )
+    _normalized_digest(receipt.get("migration_intent_sha256"), "migration intent")
     if any(
         (
             receipt.get("schema") != MIGRATION_SCHEMA,
+            source.get("protocol_study_id") != "q38-dev17-seeds46to53-base-step1000-p8-v1",
+            source.get("seeds") != list(SOURCE_SEEDS),
+            source.get("arm_count") != len(SOURCE_SEEDS) * len(ARMS),
+            receipt.get("mapping_rule")
+            != (
+                "invalid original seeds sorted ascending map to the smallest unused seeds "
+                "greater than 53, ascending"
+            ),
             receipt.get("excluded_original_seeds") != excluded,
             receipt.get("included_seeds") != included,
             receipt.get("external_mutations") != 0,
@@ -486,6 +509,19 @@ def _migration_input(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     capacity = receipt.get("capacity")
     privacy = receipt.get("privacy")
     selection = receipt.get("selection")
+    retirement = receipt.get("retirement_evidence")
+    if isinstance(retirement, dict):
+        _exact_digest_fields(
+            retirement,
+            ("sha256", "file_sha256"),
+            "protocol-v2 retirement evidence",
+        )
+    _exact_digest_fields(
+        receipt,
+        ("live_parity_file_sha256", "live_parity_receipt_sha256"),
+        "protocol-v2 migration",
+    )
+    planned = len(mapping) * len(ARMS) * TASK_COUNT
     if any(
         (
             scientific
@@ -501,12 +537,31 @@ def _migration_input(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
                 "later_invalid_seed_requires_versioned_successor_before_score_unseal": True,
             },
             not isinstance(capacity, dict),
-            isinstance(capacity, dict)
-            and capacity.get("new_replacement_rollouts") != len(mapping) * len(ARMS) * TASK_COUNT,
+            isinstance(capacity, dict) and capacity.get("new_replacement_rollouts") != planned,
             isinstance(capacity, dict)
             and capacity.get("final_comparison_rollouts") != TASK_COUNT * PASS_K * len(ARMS),
+            isinstance(capacity, dict)
+            and capacity.get("original_base_rollouts") != TASK_COUNT * PASS_K,
+            isinstance(capacity, dict)
+            and capacity.get("original_candidate_started_seeds") != [46, 47, 48, 49, 50, 51],
+            isinstance(capacity, dict)
+            and capacity.get("original_candidate_started_seed_rollouts") != TASK_COUNT * 6,
+            isinstance(capacity, dict)
+            and capacity.get("original_candidate_retired_before_start_seeds") != [52, 53],
+            isinstance(capacity, dict)
+            and capacity.get("original_candidate_retired_before_start_rollouts") != 0,
+            isinstance(capacity, dict)
+            and capacity.get("scoring_or_metadata_cpu_model_rollouts") != 0,
+            isinstance(capacity, dict)
+            and capacity.get("cumulative_model_rollouts_consumed_or_planned_today")
+            != TASK_COUNT * PASS_K + TASK_COUNT * 6 + planned,
             isinstance(capacity, dict) and capacity.get("daily_rollout_cap") != 500,
             isinstance(capacity, dict) and capacity.get("within_daily_cap") is not True,
+            not isinstance(retirement, dict),
+            isinstance(retirement, dict) and retirement.get("targets") != 2,
+            isinstance(retirement, dict) and retirement.get("model_rollouts") != 0,
+            isinstance(retirement, dict)
+            and retirement.get("outputs_or_databases_deleted") is not False,
             privacy
             != {
                 "score_values_read": False,
@@ -517,6 +572,9 @@ def _migration_input(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
             isinstance(selection, dict)
             and selection.get("selection_sha256")
             != "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
+            isinstance(selection, dict)
+            and selection.get("split_sha256")
+            != "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
             isinstance(selection, dict)
             and selection.get("binding_roster_sha256")
             != "sha256:39ae49c2db322725800b15347d5da5d171e7e03b21dec5b570683414d70e83c5",
@@ -539,6 +597,11 @@ def _replica_descriptor(
         suffix = "base-p1-v1" if arm == "base" else "t3k32s1000-p1-v2"
         experiment = f"q38-dev17-s{seed}-{suffix}"
         job_name = f"chris-{experiment}"
+        config_map_name = (
+            f"chris-q38-dev17-s{seed}-base-code-v1"
+            if arm == "base"
+            else f"chris-q38-dev17-s{seed}-t3k32s1000-code-v2"
+        )
         output_root = f"/mnt/sfs/jobs/chris-q38-fleet-dev17-s{seed}-{suffix}"
         database = experiment.replace("-", "_")
         expected_evaluation_identity = None
@@ -548,6 +611,7 @@ def _replica_descriptor(
         experiment = f"q38-dev17-s{seed}-{model}-replacement-p1-v2"
         short = f"{model}-repl-p1-v2"
         job_name = f"chris-q38-dev17-s{seed}-{short}"
+        config_map_name = f"chris-q38-dev17-s{seed}-{model}-repl-code-v2"
         output_root = f"/mnt/sfs/jobs/chris-q38-fleet-dev17-s{seed}-{short}"
         database = f"q38_dev17_s{seed}_{model}_repl_p1_v2"
         expected_evaluation_identity = replacement_evidence[(seed, arm)][
@@ -562,6 +626,7 @@ def _replica_descriptor(
         "experiment_id": experiment,
         "database": database,
         "job_name": job_name,
+        "config_map_name": config_map_name,
         "output_root": output_root,
         "terminal_receipt_path": f"{output_root}/TERMINAL_OBSERVATION.json",
         "protocol_id": protocol["protocol_id"],
@@ -862,10 +927,20 @@ def _terminal_receipt(replica: Mapping[str, Any]) -> tuple[dict[str, Any], str]:
             and receipt.get("evaluation_identity_sha256") != replica["evaluation_identity_sha256"],
             receipt.get("arm_id") != replica["arm"],
             job.get("name") != replica["job_name"],
+            not isinstance(job.get("uid"), str),
+            isinstance(job.get("uid"), str) and UUID.fullmatch(job["uid"]) is None,
+            receipt.get("config_map", {}).get("name") != replica["config_map_name"],
+            not isinstance(receipt.get("config_map", {}).get("uid"), str),
+            isinstance(receipt.get("config_map", {}).get("uid"), str)
+            and UUID.fullmatch(receipt["config_map"]["uid"]) is None,
             not terminal_counts_match,
             receipt.get("database", {}).get("name") != replica["database"],
             receipt.get("output_root", {}).get("path") != replica["output_root"],
             receipt.get("decision", {}).get("score_read_or_generated") is not False,
+            receipt.get("privacy", {}).get(
+                "prompts_responses_flags_rewards_or_trace_content_included"
+            )
+            is not False,
             receipt.get("privacy", {}).get("score_values_included") is not False,
             receipt.get("privacy", {}).get("credentials_included") is not False,
         )
@@ -1188,7 +1263,7 @@ def finalize(
         "receipt_sha256": _digest(anonymization_body),
     }
     terminal_body = {
-        "schema": "cyber_fleet_matched_pass8_terminal_index_v1",
+        "schema": "cyber_fleet_matched_pass8_terminal_index_v2",
         "study_plan_sha256": plan["sha256"],
         "protocol_v2_migration": {
             "migration_receipt_sha256": plan["migration_receipt_sha256"],
@@ -1222,7 +1297,7 @@ def finalize(
     }
     terminal_index = {**terminal_body, "receipt_sha256": _digest(terminal_body)}
     outcome_body = {
-        "schema": "cyber_fleet_matched_pass8_private_scored_outcome_index_v1",
+        "schema": "cyber_fleet_matched_pass8_protocol_v2_private_scored_outcome_index_v1",
         "study_plan_sha256": plan["sha256"],
         "outcome_count": len(outcomes),
         "rows": sorted(
@@ -1269,7 +1344,7 @@ def finalize(
     }
     public = {**public_body, "receipt_sha256": _digest(public_body)}
     final_body = {
-        "schema": "cyber_fleet_matched_pass8_final_receipt_v1",
+        "schema": "cyber_fleet_matched_pass8_protocol_v2_final_receipt_v1",
         "study_plan_sha256": plan["sha256"],
         "status": "final",
         "task_count": TASK_COUNT,

@@ -355,7 +355,7 @@ def validate_previews(
     if first_digest != second_digest:
         raise RenderError("identical server dry-runs produced different stable previews")
     receipt = {
-        "schema": "cyber_fleet_matched_pass8_final_server_preview_v1",
+        "schema": "cyber_fleet_matched_pass8_protocol_v2_final_server_preview_v1",
         "render_receipt_file_sha256": _file_digest(receipt_path),
         "first_preview_file_sha256": _file_digest(first),
         "second_preview_file_sha256": _file_digest(second),
