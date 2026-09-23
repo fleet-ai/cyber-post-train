@@ -1606,11 +1606,16 @@ class PostgresDatabase:
         try:
             import psycopg
 
-            with psycopg.connect(self._dsn(), connect_timeout=15) as connection:
-                row = connection.execute(
-                    "SELECT 1 FROM pg_database WHERE datname = %s", (database,)
-                ).fetchone()
-            return row is not None
+            for attempt in range(2):
+                try:
+                    with psycopg.connect(self._dsn(), connect_timeout=5) as connection:
+                        row = connection.execute(
+                            "SELECT 1 FROM pg_database WHERE datname = %s", (database,)
+                        ).fetchone()
+                    return row is not None
+                except psycopg.OperationalError:
+                    if attempt == 1:
+                        raise
         except HeldoutLaunchError:
             raise
         except Exception:

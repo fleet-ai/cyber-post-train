@@ -5,7 +5,9 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -764,6 +766,88 @@ def test_postgres_summary_preserves_uri_scheme_when_selecting_database(monkeypat
     assert observed["dsn"] == (
         "postgresql://user:password@postgres.example:5432/" + DATABASE + "?sslmode=disable"
     )
+
+
+def test_postgres_exists_retries_one_transient_connection_failure(monkeypatch):
+    class OperationalError(Exception):
+        pass
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def execute(self, query, parameters):
+            assert query == "SELECT 1 FROM pg_database WHERE datname = %s"
+            assert parameters == (DATABASE,)
+            return SimpleNamespace(fetchone=lambda: (1,))
+
+    calls = []
+
+    def connect(dsn, *, connect_timeout):
+        calls.append((dsn, connect_timeout))
+        if len(calls) == 1:
+            raise OperationalError("transient")
+        return Connection()
+
+    monkeypatch.setenv("TEST_ROLLOUT_DATABASE_URL", "postgresql://db/rollout")
+    monkeypatch.setitem(
+        sys.modules,
+        "psycopg",
+        SimpleNamespace(connect=connect, OperationalError=OperationalError),
+    )
+    assert launch.PostgresDatabase("TEST_ROLLOUT_DATABASE_URL").exists(DATABASE) is True
+    assert calls == [
+        ("postgresql://db/rollout", 5),
+        ("postgresql://db/rollout", 5),
+    ]
+
+
+def test_postgres_exists_stops_after_two_transient_connection_failures(monkeypatch):
+    class OperationalError(Exception):
+        pass
+
+    calls = []
+
+    def connect(dsn, *, connect_timeout):
+        calls.append((dsn, connect_timeout))
+        raise OperationalError("still unavailable")
+
+    monkeypatch.setenv("TEST_ROLLOUT_DATABASE_URL", "postgresql://db/rollout")
+    monkeypatch.setitem(
+        sys.modules,
+        "psycopg",
+        SimpleNamespace(connect=connect, OperationalError=OperationalError),
+    )
+    with pytest.raises(launch.HeldoutLaunchError, match="database duplicate check failed"):
+        launch.PostgresDatabase("TEST_ROLLOUT_DATABASE_URL").exists(DATABASE)
+    assert calls == [
+        ("postgresql://db/rollout", 5),
+        ("postgresql://db/rollout", 5),
+    ]
+
+
+def test_postgres_exists_does_not_retry_non_operational_errors(monkeypatch):
+    class OperationalError(Exception):
+        pass
+
+    calls = []
+
+    def connect(dsn, *, connect_timeout):
+        calls.append((dsn, connect_timeout))
+        raise ValueError("semantic defect")
+
+    monkeypatch.setenv("TEST_ROLLOUT_DATABASE_URL", "postgresql://db/rollout")
+    monkeypatch.setitem(
+        sys.modules,
+        "psycopg",
+        SimpleNamespace(connect=connect, OperationalError=OperationalError),
+    )
+    with pytest.raises(launch.HeldoutLaunchError, match="database duplicate check failed"):
+        launch.PostgresDatabase("TEST_ROLLOUT_DATABASE_URL").exists(DATABASE)
+    assert calls == [("postgresql://db/rollout", 5)]
 
 
 @pytest.mark.parametrize(
