@@ -306,7 +306,11 @@ def _objects(
 
 
 def render_terminal_collectors(
-    *, packets: Path, output: Path, terminal_generation: int = 1
+    *,
+    packets: Path,
+    output: Path,
+    terminal_generation: int = 1,
+    candidate_only: bool = False,
 ) -> dict[str, Any]:
     """Render score-blind collectors; never create them before evaluator terminal state."""
     if output.exists() or output.is_symlink():
@@ -317,11 +321,16 @@ def render_terminal_collectors(
     try:
         items = []
         arms = []
-        packet_paths = sorted(packets.glob("seed*/base/LAUNCH_PACKET.json")) + sorted(
-            packets.glob("seed*/candidate/LAUNCH_PACKET.json")
-        )
-        if len(packet_paths) != 16:
-            raise ValueError("exactly eight base and eight candidate packets are required")
+        if candidate_only:
+            packet_paths = sorted(packets.glob("seed*/candidate/LAUNCH_PACKET.json"))
+            if len(packet_paths) != 8:
+                raise ValueError("exactly eight candidate successor packets are required")
+        else:
+            packet_paths = sorted(packets.glob("seed*/base/LAUNCH_PACKET.json")) + sorted(
+                packets.glob("seed*/candidate/LAUNCH_PACKET.json")
+            )
+            if len(packet_paths) != 16:
+                raise ValueError("exactly eight base and eight candidate packets are required")
         for packet_path in packet_paths:
             relative = packet_path.relative_to(packets)
             replica = f"{relative.parts[0]}-{relative.parts[1]}"
@@ -356,6 +365,7 @@ def render_terminal_collectors(
             "bundle_path": "terminal-collectors.yaml",
             "bundle_file_sha256": _file_sha(bundle_path),
             "collector_generation": terminal_generation,
+            "candidate_only": candidate_only,
             "arms": arms,
             "external_mutations": 0,
             "launch_performed": False,
@@ -447,12 +457,11 @@ def main() -> None:
     parser.add_argument("--terminal-generation", type=int, default=1)
     args = parser.parse_args()
     if args.terminal_collectors:
-        if args.candidate_only:
-            raise ValueError("candidate-only applies only to evaluator launchers")
         result = render_terminal_collectors(
             packets=args.packets,
             output=args.output,
             terminal_generation=args.terminal_generation,
+            candidate_only=args.candidate_only,
         )
     else:
         if args.terminal_generation != 1:

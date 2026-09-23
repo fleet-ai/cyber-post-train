@@ -159,3 +159,24 @@ def test_candidate_successor_launchers_are_fresh_alert_suppressed_and_cpu_only(
         environment = job["spec"]["template"]["spec"]["containers"][0]["env"]
         journal = next(item["value"] for item in environment if item["name"] == "CREATE_JOURNAL")
         assert "-p1-v2-CREATE_INTENT.jsonl" in journal
+
+
+def test_candidate_successor_terminal_collectors_can_be_prepared_without_launch(
+    tmp_path, monkeypatch
+) -> None:
+    packets = _prepare(tmp_path, monkeypatch)
+    output = tmp_path / "candidate-terminal-collectors"
+    receipt = launchers.render_terminal_collectors(
+        packets=packets,
+        output=output,
+        candidate_only=True,
+    )
+
+    assert receipt["candidate_only"] is True
+    assert receipt["launch_performed"] is False
+    assert len(receipt["arms"]) == 8
+    bundle = yaml.safe_load((output / "terminal-collectors.yaml").read_text(encoding="utf-8"))
+    jobs = [item for item in bundle["items"] if item["kind"] == "Job"]
+    assert len(jobs) == 8
+    assert all(job["metadata"]["name"].endswith("-terminal-v1") for job in jobs)
+    assert all(job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off" for job in jobs)
