@@ -106,9 +106,12 @@ def test_builds_recomputed_public_studies_without_private_material(tmp_path: Pat
 
 
 def test_web_import_requires_the_live_replica_set_schema() -> None:
-    assert importer.BENCHMARKS["webexploitbench_level0"]["terminal_schemas"]["experiment"] == (
-        "webexploitbench_collection_replica_set_v2"
-    )
+    schemas = importer.BENCHMARKS["webexploitbench_level0"]["terminal_schemas"]
+    assert schemas == {
+        "experiment": "webexploitbench_collection_replica_set_v2",
+        "arm_terminal": "webexploitbench_collection_replica_arm_terminal_v1",
+        "score_acceptance": "webexploitbench_deferred_score_replica_cell_acceptance_v1",
+    }
 
 
 def test_recomputes_headline_delta_and_bootstrap_from_task_counts(tmp_path: Path) -> None:

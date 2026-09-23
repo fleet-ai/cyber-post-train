@@ -41,7 +41,7 @@ BENCHMARKS = {
         "terminal_schemas": {
             "experiment": "webexploitbench_collection_replica_set_v2",
             "arm_terminal": "webexploitbench_collection_replica_arm_terminal_v1",
-            "score_acceptance": "webexploitbench_deferred_score_acceptance_v1",
+            "score_acceptance": "webexploitbench_deferred_score_replica_cell_acceptance_v1",
         },
     },
     "fleet_development_dev17": {

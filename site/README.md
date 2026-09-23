@@ -42,9 +42,10 @@ The command also requires the exact reviewed SHA-256 of each source file. Each
 source file must be a
 `cyber_sanitized_matched_pass8_aggregate_v1` self-digesting record. Both need
 the exact comparison definition, terminal-index, and scored-outcome-index
-digests. The WebExploitBench record must name the current replica-set, arm-
-terminal, and deferred-score-acceptance schemas. The Fleet record must name the
-held-out launch observation, accepted-cell, and controller-terminal schemas.
+digests. The WebExploitBench record must name the current replica-set,
+arm-terminal, and deferred-score replica-cell-acceptance schemas. The Fleet
+record must name the held-out launch observation, accepted-cell, and
+controller-terminal schemas.
 The exact comparison-definition digest binds the base and step-1,000 revisions,
 OpenCode version, saved task list, and all eight attempt identities.
 It recomputes task percentages, paired totals, changes, and the deterministic
