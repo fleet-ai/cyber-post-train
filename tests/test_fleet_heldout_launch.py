@@ -649,9 +649,7 @@ def test_uncertain_create_is_observed_but_never_retried(tmp_path):
 
 
 @pytest.mark.parametrize("database_present", [True, False])
-def test_terminal_collection_is_score_blind_and_never_retries_or_scores(
-    tmp_path, database_present
-):
+def test_terminal_collection_is_score_blind_and_never_retries_or_scores(tmp_path, database_present):
     packet = _packet(tmp_path)
     cluster, database = FakeCluster(), FakeDatabase()
     _launch(packet, cluster, database, tmp_path / "intent.jsonl")
@@ -764,9 +762,7 @@ def test_postgres_summary_preserves_uri_scheme_when_selecting_database(monkeypat
     result = launch.PostgresDatabase("TEST_ROLLOUT_DATABASE_URL").summary(DATABASE)
     assert result == {"total": 17}
     assert observed["dsn"] == (
-        "postgresql://user:password@postgres.example:5432/"
-        + DATABASE
-        + "?sslmode=disable"
+        "postgresql://user:password@postgres.example:5432/" + DATABASE + "?sslmode=disable"
     )
 
 
@@ -779,9 +775,7 @@ def test_postgres_summary_preserves_uri_scheme_when_selecting_database(monkeypat
         "postgresql://postgres.example/rollout#fragment",
     ],
 )
-def test_postgres_summary_rejects_non_uri_or_ambiguous_database_targets(
-    monkeypatch, dsn
-):
+def test_postgres_summary_rejects_non_uri_or_ambiguous_database_targets(monkeypatch, dsn):
     monkeypatch.setenv("TEST_ROLLOUT_DATABASE_URL", dsn)
     with pytest.raises(launch.HeldoutLaunchError, match="supported PostgreSQL URI"):
         launch.PostgresDatabase("TEST_ROLLOUT_DATABASE_URL").summary(DATABASE)
@@ -812,16 +806,18 @@ def test_postgres_summary_rejects_query_database_overrides(monkeypatch, query):
 def test_terminal_receipt_path_uses_existing_evaluation_output(tmp_path):
     output = tmp_path / "evaluation"
     output.mkdir()
-    assert launch.terminal_receipt_path(
-        str(output), JOB_NAME, fallback_root=tmp_path
-    ) == output / "TERMINAL_OBSERVATION.json"
+    assert (
+        launch.terminal_receipt_path(str(output), JOB_NAME, fallback_root=tmp_path)
+        == output / "TERMINAL_OBSERVATION.json"
+    )
 
 
 def test_terminal_receipt_path_falls_back_when_evaluation_never_started(tmp_path):
     missing = tmp_path / "evaluation-never-created"
-    assert launch.terminal_receipt_path(
-        str(missing), JOB_NAME, fallback_root=tmp_path
-    ) == tmp_path / f"{JOB_NAME}-TERMINAL_OBSERVATION.json"
+    assert (
+        launch.terminal_receipt_path(str(missing), JOB_NAME, fallback_root=tmp_path)
+        == tmp_path / f"{JOB_NAME}-TERMINAL_OBSERVATION.json"
+    )
 
 
 def test_terminal_receipt_path_rejects_ambiguous_roots(tmp_path):

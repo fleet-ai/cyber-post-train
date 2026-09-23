@@ -1422,9 +1422,7 @@ def collect_terminal(
             summary = _score_blind_summary(database.summary(packet.database))
         else:
             if database.exists(packet.database):
-                raise HeldoutLaunchError(
-                    "terminal database appeared between absence observations"
-                )
+                raise HeldoutLaunchError("terminal database appeared between absence observations")
             summary = _absent_database_summary()
         destination_exists = output_exists(packet.output_root)
     except HeldoutLaunchError:
@@ -1632,8 +1630,7 @@ class PostgresDatabase:
             ):
                 raise HeldoutLaunchError("database environment is not a supported PostgreSQL URI")
             query_keys = {
-                key.casefold()
-                for key, _ in parse_qsl(original.query, keep_blank_values=True)
+                key.casefold() for key, _ in parse_qsl(original.query, keep_blank_values=True)
             }
             if query_keys & {"database", "dbname"}:
                 raise HeldoutLaunchError(
