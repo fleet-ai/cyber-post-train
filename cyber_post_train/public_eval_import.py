@@ -50,7 +50,7 @@ BENCHMARKS = {
         "title": "Fleet development tasks",
         "metric": "Tasks solved at least once across eight attempts",
         "comparison_definition_sha256": (
-            "sha256:1154b450624a8b9a567464916da95874c44933175c408b86a80ff5bca0eada70"
+            "sha256:9813713ef2ab023ac6c64df494ca7cbf39b920e8fba2f05f5949daaa006479f1"
         ),
         "terminal_schemas": {
             "launch_terminal": "cyber_fleet_heldout_terminal_observation_v1",
@@ -135,7 +135,13 @@ def _metric_percent(numerator: int, denominator: int) -> float:
     return numerator * 100.0 / denominator
 
 
-def _validate_arm(raw: object, *, denominator: int, label: str) -> dict[str, Any]:
+def _validate_arm(
+    raw: object,
+    *,
+    denominator: int,
+    label: str,
+    require_complete: bool = False,
+) -> dict[str, Any]:
     arm = _exact_fields(raw, _ARM_FIELDS, label)
     valid = arm["valid_attempts"]
     invalid = arm["infrastructure_invalid_attempts"]
@@ -143,6 +149,8 @@ def _validate_arm(raw: object, *, denominator: int, label: str) -> dict[str, Any
         raise PublicEvalImportError(f"{label} attempt counts are invalid")
     if valid + invalid != PASS_K:
         raise PublicEvalImportError(f"{label} does not account for all eight attempts")
+    if require_complete and (valid != PASS_K or invalid != 0):
+        raise PublicEvalImportError(f"{label} must contain eight valid attempts and no failures")
     numerator = arm["metric_numerator"]
     if valid != PASS_K:
         if numerator is not None:
@@ -229,7 +237,10 @@ def _validate(value: dict[str, Any], file_sha256: str) -> dict[str, Any]:
         denominator_total += denominator
         arms = {
             arm: _validate_arm(
-                row[arm], denominator=denominator, label=f"task {expected_index} {arm}"
+                row[arm],
+                denominator=denominator,
+                label=f"task {expected_index} {arm}",
+                require_complete=benchmark == "fleet_development_dev17",
             )
             for arm in ARMS
         }
