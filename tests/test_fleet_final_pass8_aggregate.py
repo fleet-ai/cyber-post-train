@@ -1049,3 +1049,54 @@ def test_preview_validator_rebuilds_render_policy_after_resigning_tamper(
             second=second,
             output=tmp_path / "previews.json",
         )
+
+
+def test_preview_validator_rejects_resigned_executable_bundle_tamper(tmp_path: Path) -> None:
+    root = tmp_path / "render"
+    renderer.render(output=root, migration_receipt=_migration(tmp_path))
+    bundle_path = root / "final-aggregate.yaml"
+    original = yaml.safe_load(bundle_path.read_text())
+    config_map = next(item for item in original["items"] if item["kind"] == "ConfigMap")
+    files = json.loads(gzip.decompress(base64_decode(config_map["binaryData"]["bundle.json.gz"])))
+    files["aggregate.py"] += "\nraise RuntimeError('unreviewed executable')\n"
+    compressed = gzip.compress(
+        json.dumps(files, sort_keys=True, separators=(",", ":")).encode(),
+        compresslevel=9,
+        mtime=0,
+    )
+    compressed = compressed[:9] + b"\xff" + compressed[10:]
+    digests = {
+        name: "sha256:" + hashlib.sha256(value.encode()).hexdigest()
+        for name, value in files.items()
+    }
+    plan = json.loads(files["study.json"])
+    changed_map, changed_job = renderer._objects(plan, compressed, digests)  # noqa: SLF001
+    changed_bundle = {
+        "apiVersion": "v1",
+        "kind": "List",
+        "items": [changed_map, changed_job],
+    }
+    bundle_path.write_text(yaml.safe_dump(changed_bundle, sort_keys=False))
+    changed_receipt = renderer._render_receipt(  # noqa: SLF001
+        plan=plan,
+        compressed=compressed,
+        digests=digests,
+        rendered_bundle_file_sha256=final._file_digest(bundle_path),  # noqa: SLF001
+    )
+    (root / "RENDER.json").write_text(json.dumps(changed_receipt, sort_keys=True) + "\n")
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+    first.write_text(
+        json.dumps(_server_preview(changed_bundle, "11111111-1111-4111-8111-111111111111"))
+    )
+    second.write_text(
+        json.dumps(_server_preview(changed_bundle, "22222222-2222-4222-8222-222222222222"))
+    )
+
+    with pytest.raises(renderer.RenderError, match="executable bytes differ"):
+        renderer.validate_previews(
+            render_root=root,
+            first=first,
+            second=second,
+            output=tmp_path / "previews.json",
+        )

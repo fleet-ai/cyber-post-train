@@ -594,6 +594,8 @@ def _validated_render(render_root: Path) -> tuple[dict[str, Any], str]:
         or any(not isinstance(value, str) for value in files.values())
     ):
         raise RenderError("rendered source bundle file roster differs")
+    if files["aggregate.py"] != SOURCE.read_text(encoding="utf-8") or files["run.py"] != RUNNER:
+        raise RenderError("rendered executable bytes differ from the reviewed source")
     digests = {
         name: "sha256:" + hashlib.sha256(value.encode()).hexdigest()
         for name, value in files.items()
@@ -608,6 +610,9 @@ def _validated_render(render_root: Path) -> tuple[dict[str, Any], str]:
         aggregate.validate_plan(plan)
     except aggregate.FinalAggregateError as exc:
         raise RenderError("rendered study plan differs from the frozen comparison") from exc
+    expected_compressed, expected_digests = _bundle(plan)
+    if compressed != expected_compressed or digests != expected_digests:
+        raise RenderError("rendered source bundle differs from the canonical package")
     expected_map, expected_job = _objects(plan, compressed, digests)
     if maps[0] != expected_map or jobs[0] != expected_job:
         raise RenderError("rendered Kubernetes objects differ from the immutable source bundle")
