@@ -6,8 +6,8 @@ import argparse
 import base64
 import contextlib
 import fcntl
-import gzip
 import json
+import lzma
 import os
 import re
 import stat
@@ -52,9 +52,9 @@ QUALIFICATION_BUNDLE_CORE = {
 }
 WORKER_BOOTSTRAP = """\
 import base64
-import gzip
 import hashlib
 import json
+import lzma
 import os
 import pathlib
 import runpy
@@ -67,7 +67,7 @@ if bundle is not None:
         "QUALIFICATION_BUNDLE_SHA256"
     ):
         raise RuntimeError("qualification_bundle_digest_mismatch")
-    raw = gzip.decompress(compressed)
+    raw = lzma.decompress(compressed)
     files = json.loads(raw)
     root = pathlib.Path("/workspace/external_ctf_runtime")
     if root.exists() or root.is_symlink():
@@ -128,7 +128,7 @@ def _qualification_bundle(protocol: dict[str, Any], benchmark: str) -> bytes:
         relative: base64.b64encode(path.read_bytes()).decode()
         for relative, path in sorted(bundle_paths.items())
     }
-    return gzip.compress(canonical(files), compresslevel=9, mtime=0)
+    return lzma.compress(canonical(files), preset=9)
 
 
 def base_external_names(protocol: dict[str, Any]) -> set[str]:
@@ -185,11 +185,25 @@ def capacity_authority(
     *,
     require_live_owner: bool = False,
     require_roster_successor: bool = True,
+    pending_roster_successor: tuple[Path, str, str] | None = None,
 ) -> dict[str, Any]:
     try:
-        receipt, loaded, upgrade, retry = collection_replica_retry.load_execution(
-            retry_execution_path
-        )
+        if pending_roster_successor is None:
+            receipt, loaded, upgrade, retry = collection_replica_retry.load_execution(
+                retry_execution_path
+            )
+        else:
+            successor_path, successor_file_sha256, successor_receipt_sha256 = (
+                pending_roster_successor
+            )
+            receipt, loaded, upgrade, retry = (
+                collection_replica_retry.load_execution_for_capacity_roster_successor_bind(
+                    retry_execution_path,
+                    successor_path=successor_path,
+                    expected_successor_file_sha256=successor_file_sha256,
+                    expected_successor_receipt_sha256=successor_receipt_sha256,
+                )
+            )
         state = replica_set._global_state_root(  # noqa: SLF001
             Path(receipt["state_path"]), sealing=False
         )
@@ -314,6 +328,9 @@ def seal_capacity_roster_successor(
     predecessor_roster_path: Path,
     expected_predecessor_roster_file_sha256: str,
     expected_predecessor_roster_receipt_sha256: str,
+    capacity_successor_path: Path,
+    expected_capacity_successor_file_sha256: str,
+    expected_capacity_successor_receipt_sha256: str,
     retired_terminal_path: Path,
     retired_release_path: Path,
     retired_capacity_release_path: Path,
@@ -353,6 +370,9 @@ def seal_capacity_roster_successor(
             predecessor_path=predecessor_roster_path,
             expected_predecessor_file_sha256=expected_predecessor_roster_file_sha256,
             expected_predecessor_receipt_sha256=expected_predecessor_roster_receipt_sha256,
+            capacity_successor_path=capacity_successor_path,
+            expected_capacity_successor_file_sha256=expected_capacity_successor_file_sha256,
+            expected_capacity_successor_receipt_sha256=(expected_capacity_successor_receipt_sha256),
             external_retirement_evidence={
                 "terminal": retired_terminal_path,
                 "release": retired_release_path,
@@ -383,9 +403,19 @@ def bind_capacity_roster_successor(
     expected_successor_roster_receipt_sha256: str,
 ) -> dict[str, Any]:
     protocol = load_protocol(protocol_path)
+    pending = (
+        successor_roster_path,
+        expected_successor_roster_file_sha256,
+        expected_successor_roster_receipt_sha256,
+    )
     try:
-        receipt, _loaded, _upgrade, retry = collection_replica_retry.load_execution(
-            retry_execution_path
+        receipt, _loaded, _upgrade, retry = (
+            collection_replica_retry.load_execution_for_capacity_roster_successor_bind(
+                retry_execution_path,
+                successor_path=successor_roster_path,
+                expected_successor_file_sha256=expected_successor_roster_file_sha256,
+                expected_successor_receipt_sha256=expected_successor_roster_receipt_sha256,
+            )
         )
         state = replica_set._global_state_root(  # noqa: SLF001
             Path(receipt["state_path"]), sealing=False
@@ -421,6 +451,7 @@ def bind_capacity_roster_successor(
         retry_execution_path,
         require_live_owner=True,
         require_roster_successor=False,
+        pending_roster_successor=pending,
     )
     if authority["state"] != state:
         raise ExternalCtfError("shared_capacity_authority_changed")
@@ -430,6 +461,7 @@ def bind_capacity_roster_successor(
             retry_execution_path,
             require_live_owner=True,
             require_roster_successor=False,
+            pending_roster_successor=pending,
         )
         stable = {
             "state",
@@ -2895,6 +2927,9 @@ def main() -> None:
     roster_successor.add_argument("--predecessor-roster", type=Path, required=True)
     roster_successor.add_argument("--expected-predecessor-roster-file-sha256", required=True)
     roster_successor.add_argument("--expected-predecessor-roster-receipt-sha256", required=True)
+    roster_successor.add_argument("--capacity-successor", type=Path, required=True)
+    roster_successor.add_argument("--expected-capacity-successor-file-sha256", required=True)
+    roster_successor.add_argument("--expected-capacity-successor-receipt-sha256", required=True)
     roster_successor.add_argument("--retired-terminal", type=Path, required=True)
     roster_successor.add_argument("--retired-release", type=Path, required=True)
     roster_successor.add_argument("--retired-capacity-release", type=Path, required=True)
@@ -2934,6 +2969,13 @@ def main() -> None:
                     ),
                     expected_predecessor_roster_receipt_sha256=(
                         args.expected_predecessor_roster_receipt_sha256
+                    ),
+                    capacity_successor_path=args.capacity_successor,
+                    expected_capacity_successor_file_sha256=(
+                        args.expected_capacity_successor_file_sha256
+                    ),
+                    expected_capacity_successor_receipt_sha256=(
+                        args.expected_capacity_successor_receipt_sha256
                     ),
                     retired_terminal_path=args.retired_terminal,
                     retired_release_path=args.retired_release,

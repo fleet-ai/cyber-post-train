@@ -288,6 +288,34 @@ def test_shared_capacity_roster_successor_is_exact_two_name_append_only(
         protocol_path=PROTOCOL,
         output_path=predecessor_path,
     )
+    capacity_path = tmp_path / "capacity-successor.json"
+    capacity = _write_signed_receipt(
+        capacity_path,
+        {"schema_version": "synthetic_capacity_successor"},
+    )
+    source_bridge = {
+        "capacity_successor": {
+            "path": str(capacity_path.resolve()),
+            "file_sha256": file_digest(capacity_path.read_bytes()),
+            "receipt_sha256": capacity["receipt_sha256"],
+        },
+        "capacity_successor_state": {
+            "path": str((tmp_path / "capacity-bound.json").resolve()),
+            "file_sha256": "sha256:" + "a" * 64,
+            "receipt_sha256": "sha256:" + "b" * 64,
+        },
+        "predecessor_execution_source": {"commit": "predecessor"},
+        "execution_source": {"commit": "successor"},
+        "allowed_capacity_source_delta": [
+            "collection_replica_retry",
+            "collection_replica_set",
+        ],
+    }
+    monkeypatch.setattr(
+        tensorlake.collection_replica_retry,
+        "capacity_roster_successor_source_binding",
+        lambda *_args, **_kwargs: source_bridge,
+    )
     terminal_path = tmp_path / "extctf-cve-t05-qual-v1.terminal.json"
     terminal = _write_signed_receipt(
         terminal_path,
@@ -494,6 +522,9 @@ def test_shared_capacity_roster_successor_is_exact_two_name_append_only(
         predecessor_roster_path=predecessor_path,
         expected_predecessor_roster_file_sha256=file_digest(predecessor_path.read_bytes()),
         expected_predecessor_roster_receipt_sha256=predecessor["receipt_sha256"],
+        capacity_successor_path=capacity_path,
+        expected_capacity_successor_file_sha256=file_digest(capacity_path.read_bytes()),
+        expected_capacity_successor_receipt_sha256=capacity["receipt_sha256"],
         retired_terminal_path=terminal_path,
         retired_release_path=release_path,
         retired_capacity_release_path=capacity_release_path,
@@ -600,8 +631,8 @@ def test_shared_capacity_roster_successor_is_exact_two_name_append_only(
 
     monkeypatch.setattr(
         tensorlake.collection_replica_retry,
-        "load_execution",
-        lambda _path: (
+        "load_execution_for_capacity_roster_successor_bind",
+        lambda _path, **_kwargs: (
             {"state_path": str(state)},
             [],
             {},
@@ -674,8 +705,8 @@ def test_capacity_roster_successor_bind_rejects_existing_successor_name(
 
     monkeypatch.setattr(
         tensorlake.collection_replica_retry,
-        "load_execution",
-        lambda _path: ({"state_path": str(state)}, [], {}, retry),
+        "load_execution_for_capacity_roster_successor_bind",
+        lambda _path, **_kwargs: ({"state_path": str(state)}, [], {}, retry),
     )
     monkeypatch.setattr(tensorlake.replica_set, "_global_state_root", lambda *_a, **_k: state)
     monkeypatch.setattr(tensorlake, "capacity_authority", lambda *_a, **_k: authority)

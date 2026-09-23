@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import base64
 import copy
-import gzip
 import json
+import lzma
 import subprocess
 import sys
 from pathlib import Path
@@ -863,7 +863,7 @@ def test_qualification_bundle_rejects_executor_source_drift(
 ) -> None:
     protocol = _protocol()
     bundle = tensorlake._qualification_bundle(protocol, "nyu_ctf_web_test")  # noqa: SLF001
-    files = json.loads(gzip.decompress(bundle))
+    files = json.loads(lzma.decompress(bundle))
     assert "evals/external_ctf/nyu_runtime_qualification.py" in files
     assert "evals/external_ctf/cybench_runtime_qualification.py" in files
 
@@ -882,7 +882,7 @@ def test_cve_qualification_contract_uses_stable_dedicated_executor() -> None:
     assert set(paths) == {"executor"}
     assert paths["executor"].name == "cvebench_runtime_qualification.py"
     bundle = tensorlake._qualification_bundle(protocol, "cvebench_zero_day")  # noqa: SLF001
-    files = json.loads(gzip.decompress(bundle))
+    files = json.loads(lzma.decompress(bundle))
     assert "evals/external_ctf/cvebench_runtime_qualification.py" in files
     expected = {
         "evals/external_ctf/analyze.py",
@@ -905,7 +905,7 @@ def test_qualification_bundle_is_a_complete_protocol_runtime(
     bundle = tensorlake._qualification_bundle(_protocol(), benchmark)  # noqa: SLF001
     root = tmp_path / "runtime"
     assert len(base64.b64encode(bundle)) < 128 * 1024
-    for relative, encoded in json.loads(gzip.decompress(bundle)).items():
+    for relative, encoded in json.loads(lzma.decompress(bundle)).items():
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(base64.b64decode(encoded, validate=True))
