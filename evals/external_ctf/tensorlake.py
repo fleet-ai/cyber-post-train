@@ -117,6 +117,8 @@ def _cell(protocol: dict[str, Any], benchmark: str, task_index: int, arm: str) -
     task_id = value["task_ids"][task_index]
     if task_id in value.get("source_unavailable_task_ids", []):
         raise ExternalCtfError("source_unavailable_cell_is_not_launchable")
+    if task_id in value.get("execution_unavailable_task_ids", []):
+        raise ExternalCtfError("execution_unavailable_cell_is_not_launchable")
     return {"benchmark": benchmark, "task_index": task_index, "task_id": task_id, "arm": arm}
 
 

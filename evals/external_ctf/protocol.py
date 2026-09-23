@@ -116,9 +116,9 @@ def validate_protocol(value: dict[str, Any]) -> None:
         "provider": "tensorlake_sandbox",
         "shared_capacity_limit": 100,
         "shared_create_lock": "state/tensorlake-create.lock",
-        "worker_sha256": "sha256:c29e25f18f617be7d6d410b75e28b8fc064df9e3ab5a25797161df86395389ac",
+        "worker_sha256": "sha256:c55832d7e69deb92b017f6c76807b722e7f6a03f67d5722ea7ca5abca08ad1f0",
         "coordinator_sha256": (
-            "sha256:e3b3be475310091464a0f6c773d0a66feda4a01e6f30a7e318e478a10caf674e"
+            "sha256:259b83fdc27d8ca5c0cec25411e13baba3c0964f07713c7d2a19adfb3d59332a"
         ),
         "sampling": SAMPLING,
         "retry": RETRY,
@@ -146,6 +146,19 @@ def validate_protocol(value: dict[str, Any]) -> None:
             raise ValueError(f"{name} task count mismatch")
         if benchmark.get("task_ids_sha256") != file_digest(("\n".join(tasks) + "\n").encode()):
             raise ValueError(f"{name} task roster digest mismatch")
+        source_unavailable = benchmark.get("source_unavailable_task_ids")
+        execution_unavailable = benchmark.get("execution_unavailable_task_ids")
+        if not all(
+            isinstance(items, list) for items in (source_unavailable, execution_unavailable)
+        ):
+            raise ValueError(f"{name} availability roster is invalid")
+        if (
+            len(source_unavailable) != len(set(source_unavailable))
+            or len(execution_unavailable) != len(set(execution_unavailable))
+            or set(source_unavailable) & set(execution_unavailable)
+            or not (set(source_unavailable) | set(execution_unavailable)) <= set(tasks)
+        ):
+            raise ValueError(f"{name} availability roster is invalid")
         if benchmark.get("pass_k") != 1:
             raise ValueError(f"{name} must retain its native one-attempt report")
         harness = benchmark.get("harness")
@@ -215,6 +228,15 @@ def observed_source(protocol: dict[str, Any], name: str, checkout: Path) -> dict
         dataset = json.loads(raw)
         tasks = [task_id for task_id, row in dataset.items() if row.get("category") == "web"]
         unavailable = []
+        execution_unavailable = []
+        for task_id in tasks:
+            task = dataset[task_id]
+            challenge = json.loads((checkout / task["path"] / "challenge.json").read_bytes())
+            if (
+                not challenge.get("compose")
+                or not (checkout / task["path"] / "docker-compose.yml").is_file()
+            ):
+                execution_unavailable.append(task_id)
     else:
         raw = _git(checkout, "show", f"{source['commit']}:task_list.txt", raw=True)
         if file_digest(raw) != benchmark["source_manifest_sha256"]:
@@ -233,16 +255,22 @@ def observed_source(protocol: dict[str, Any], name: str, checkout: Path) -> dict
             )
             if not exists:
                 unavailable.append(task)
+        execution_unavailable = []
+    if name == "cvebench_zero_day":
+        execution_unavailable = []
     if tasks != benchmark["task_ids"]:
         raise ValueError(f"{name} official task roster drifted")
     if unavailable != benchmark.get("source_unavailable_task_ids", []):
         raise ValueError(f"{name} source availability drifted")
+    if execution_unavailable != benchmark.get("execution_unavailable_task_ids", []):
+        raise ValueError(f"{name} execution availability drifted")
     return {
         "benchmark": name,
         "commit": source["commit"],
         "license": source["license"],
         "task_count": len(tasks),
         "source_unavailable_task_count": len(unavailable),
+        "execution_unavailable_task_count": len(execution_unavailable),
         "task_ids_sha256": benchmark["task_ids_sha256"],
         "verified": True,
     }
@@ -250,7 +278,9 @@ def observed_source(protocol: dict[str, Any], name: str, checkout: Path) -> dict
 
 def build_plan(protocol: dict[str, Any], name: str) -> dict[str, Any]:
     benchmark = protocol["benchmarks"][name]
-    unavailable = set(benchmark.get("source_unavailable_task_ids", []))
+    source_unavailable = set(benchmark.get("source_unavailable_task_ids", []))
+    execution_unavailable = set(benchmark.get("execution_unavailable_task_ids", []))
+    unavailable = source_unavailable | execution_unavailable
     cells = []
     for index, task_id in enumerate(benchmark["task_ids"]):
         first = "base" if index % 2 == 0 else "step_1000"
@@ -262,7 +292,13 @@ def build_plan(protocol: dict[str, Any], name: str) -> dict[str, Any]:
                     "arm": arm,
                     "launchable": task_id not in unavailable,
                     "preflight_state": (
-                        "ready" if task_id not in unavailable else "infra_invalid_source_missing"
+                        "ready"
+                        if task_id not in unavailable
+                        else (
+                            "infra_invalid_source_missing"
+                            if task_id in source_unavailable
+                            else "infra_invalid_no_reproducible_runtime"
+                        )
                     ),
                 }
             )

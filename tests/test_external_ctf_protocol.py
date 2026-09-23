@@ -74,6 +74,20 @@ def test_plan_is_paired_counterbalanced_and_excludes_only_missing_source() -> No
     assert cybench["plan_sha256"] == digest(
         {key: item for key, item in cybench.items() if key != "plan_sha256"}
     )
+    nyu = build_plan(value, "nyu_ctf_web_test")
+    unavailable_nyu = [row for row in nyu["cells"] if not row["launchable"]]
+    assert len(unavailable_nyu) == 6
+    assert {row["task_id"] for row in unavailable_nyu} == {
+        "2021q-web-scp_terminal",
+        "2020f-web-snailrace1",
+        "2020f-web-sharkfacts",
+    }
+    assert {row["preflight_state"] for row in unavailable_nyu} == {
+        "infra_invalid_no_reproducible_runtime"
+    }
+    assert nyu["official_task_count"] == 19
+    assert nyu["executable_task_count"] == 16
+    assert nyu["infrastructure_invalid_task_count"] == 3
 
 
 @pytest.mark.parametrize(

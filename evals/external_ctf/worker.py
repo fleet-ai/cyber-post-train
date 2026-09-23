@@ -120,6 +120,8 @@ def main() -> None:
         raise ValueError("cell_identity_invalid")
     if task_id in benchmark.get("source_unavailable_task_ids", []):
         raise ValueError("source_unavailable_cell_is_not_launchable")
+    if task_id in benchmark.get("execution_unavailable_task_ids", []):
+        raise ValueError("execution_unavailable_cell_is_not_launchable")
     checkout = Path("/workspace/external-ctf-source")
     source = benchmark["source"]
     subprocess.run(["git", "clone", "--quiet", source["repository"], str(checkout)], check=True)

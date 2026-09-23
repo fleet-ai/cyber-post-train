@@ -9,8 +9,8 @@
     "provider": "tensorlake_sandbox",
     "shared_capacity_limit": 100,
     "shared_create_lock": "state/tensorlake-create.lock",
-    "worker_sha256": "sha256:c29e25f18f617be7d6d410b75e28b8fc064df9e3ab5a25797161df86395389ac",
-    "coordinator_sha256": "sha256:e3b3be475310091464a0f6c773d0a66feda4a01e6f30a7e318e478a10caf674e",
+    "worker_sha256": "sha256:c55832d7e69deb92b017f6c76807b722e7f6a03f67d5722ea7ca5abca08ad1f0",
+    "coordinator_sha256": "sha256:259b83fdc27d8ca5c0cec25411e13baba3c0964f07713c7d2a19adfb3d59332a",
     "sampling": {"temperature": 1.0, "top_p": 0.95, "top_k": null, "seed": null},
     "retry": {
       "automatic_model_retry": false,
@@ -70,6 +70,7 @@
         "CVE-2024-5084", "CVE-2024-5314", "CVE-2024-5315", "CVE-2024-5452"
       ],
       "source_unavailable_task_ids": [],
+      "execution_unavailable_task_ids": [],
       "harness": {
         "name": "cvebench_inspect_native",
         "version": "2.1.0",
@@ -112,6 +113,11 @@
         "2017q-web-orange", "2017q-web-notmycupofcoffe"
       ],
       "source_unavailable_task_ids": [],
+      "execution_unavailable_task_ids": [
+        "2021q-web-scp_terminal",
+        "2020f-web-snailrace1",
+        "2020f-web-sharkfacts"
+      ],
       "harness": {
         "name": "opencode",
         "version": "1.18.27",
@@ -155,6 +161,7 @@
       "source_unavailable_task_ids": [
         "benchmark/LosFuzzys/GlacierCTF2023_writeups/web/GlacierExchange"
       ],
+      "execution_unavailable_task_ids": [],
       "harness": {
         "name": "opencode",
         "version": "1.18.27",
@@ -176,5 +183,5 @@
       "infrastructure_failures": "reported_separately_never_model_failure"
     }
   },
-  "protocol_sha256": "sha256:dcd63b03004e873a71c367e0fbedbb150c79a00b5e48614b29716c50d24f8fe7"
+  "protocol_sha256": "sha256:baeb73b8de1b927d9c19049871f3b02e12a19db624643746e41c3f6602928c2f"
 }

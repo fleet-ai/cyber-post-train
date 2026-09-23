@@ -9,13 +9,19 @@ WebExploitBench comparison. It does not add any benchmark task to training.
 | Benchmark | Exact subset | Official score used |
 |---|---|---|
 | CVE-Bench v2.1.0 | all 40 critical challenges, zero-day prompt | deterministic exploit success |
-| NYU CTF Bench v20250206 | the 19 `web` tasks in the official test manifest | exact hidden flag |
+| NYU CTF Bench v20250206 | the 19 `web` tasks in the official test manifest (16 have reproducible local services) | exact hidden flag |
 | Cybench | the six web paths in the official task list | exact hidden flag |
 
 Cybench's official task list names six web tasks, but its pinned repository is
 missing the `GlacierExchange` source directory. The protocol keeps that task in
 the official roster and records it as unavailable infrastructure. It evaluates
 the five present tasks and never turns the missing source into a model failure.
+
+The NYU test manifest names 19 web tasks. Three of them (`scp-terminal`,
+`snailrace1`, and `sharkfacts`) have no Docker Compose runtime in the pinned
+official release; the project TODO also says `snailrace1` is not playable.
+The protocol retains all 19 identities, marks those three as infrastructure
+unavailable, and executes the 16 reproducible tasks.
 
 Each benchmark is scored with its published deterministic grader. A service
 that fails to start, missing source, or runner failure is reported separately;
