@@ -14,9 +14,9 @@ from cyber_post_train import skyrl_prod10_operator_launch as operator_launch
 from cyber_post_train.jobs import FAILURE_ALERT_ANNOTATION, JobsError, digest
 from training import dev_cleanup_observer as cleanup
 from training import incluster_kubernetes
-from training import skyrl_prod10_operator as operator
 from training import skyrl_prod9_direct as direct
 from training import skyrl_prod9_training as training
+from training import skyrl_prod10_operator as operator
 from training import skyrl_reward_rayjob as historical
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -97,19 +97,25 @@ def test_prod10_operator_package_is_exact_alert_off_c1_q1_zero_gpu() -> None:
     packet = operator_job.stage_packet(
         identity=identity,
         stage=stage,
-        dev_preview=preview,
-        dev_duplicate_proof=duplicate,
     )
     package = operator_job.build_operator_package(packet)
     proof = operator_job.validate_operator_package(package)
 
+    assert set(packet) == {
+        "schema",
+        "phase",
+        "operator_name",
+        "identity",
+        "stage",
+        "precreate_recovery",
+        "sha256",
+    }
     assert packet["precreate_recovery"] == operator.stage_recovery_binding()
     assert proof["failure_alerts"] == "off"
     assert proof["priority"] == "c1"
     assert proof["queue_priority"] == "q1"
     assert proof["gpus"] == 0
     assert proof["source_bytes"] < 1024 * 1024
-    assert preview["queue_priority"] == "q1"
     assert package.job["metadata"]["annotations"][FAILURE_ALERT_ANNOTATION] == "off"
     pod = package.job["spec"]["template"]["spec"]
     assert pod["serviceAccountName"] == "default"
@@ -125,12 +131,21 @@ def test_prod10_operator_package_is_exact_alert_off_c1_q1_zero_gpu() -> None:
     assert "OPERATOR_JOB_UID" not in environment
     assert container["securityContext"]["runAsUser"] == 1000
     assert container["securityContext"]["runAsGroup"] == 100
+    assert container["resources"] == {
+        "requests": {"cpu": "2", "memory": "8Gi"},
+        "limits": {"cpu": "4", "memory": "16Gi"},
+    }
     mounts = {value["name"]: value for value in container["volumeMounts"]}
-    assert mounts["sfs-ro"] == {"name": "sfs-ro", "mountPath": "/mnt/sfs", "readOnly": True}
+    assert mounts["sfs"] == {"name": "sfs", "mountPath": "/mnt/sfs"}
     assert mounts["controls-rw"] == {
         "name": "controls-rw",
         "mountPath": operator_job.CONTROLS_PATH,
         "subPath": operator_job.CONTROLS_SUBPATH,
+    }
+    volumes = {value["name"]: value for value in pod["volumes"]}
+    assert volumes["sfs"] == {
+        "name": "sfs",
+        "persistentVolumeClaim": {"claimName": operator_job.PVC},
     }
     assert "nvidia.com/gpu" not in json.dumps(package.job, sort_keys=True)
 
@@ -142,8 +157,6 @@ def test_prod10_runtime_derives_root_job_uid_from_exact_pod_owner(
     packet = operator_job.stage_packet(
         identity=identity,
         stage=stage,
-        dev_preview=preview,
-        dev_duplicate_proof=duplicate,
     )
     package = operator_job.build_operator_package(packet)
     proof = operator_job.validate_operator_package(package)
@@ -189,22 +202,19 @@ def test_prod10_runtime_derives_root_job_uid_from_exact_pod_owner(
         operator._validate_runtime(packet, runner)
 
 
-def test_stage_v6_preserves_and_reconciles_exact_v5_precreate_evidence(
+def test_stage_v7_preserves_released_v6_and_rebinds_without_nested_job(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     identity, stage, preview, duplicate = _stage_inputs()
-    packet = operator_job.stage_packet(
-        identity=identity,
-        stage=stage,
-        dev_preview=preview,
-        dev_duplicate_proof=duplicate,
-    )
-    expected = direct.stage_job_manifest(stage, identity=identity)
+    packet = operator_job.stage_packet(identity=identity, stage=stage)
     root = tmp_path / "prod9-create-once-v1"
     root.mkdir(mode=0o700)
     monkeypatch.setattr(operator.hardening, "CREATE_ONCE_ROOT", root)
-    monkeypatch.setattr(direct, "RUNTIME_UID", os.geteuid())
-    monkeypatch.setattr(direct, "RUNTIME_GID", os.getegid())
+    monkeypatch.setattr(operator, "RUNTIME_UID", os.geteuid())
+    monkeypatch.setattr(operator, "RUNTIME_GID", os.getegid())
+    monkeypatch.setattr(direct, "live_create_is_available", lambda: True)
+    expected = direct.stage_job_manifest(stage, identity=identity)
+    manifest_sha256 = "sha256:" + direct.digest(expected)
     operation_root = operator.hardening.stage_operation_root(stage)
     operation_root.mkdir(mode=0o700)
     v4_recovery = operator._seal(operator._STAGE_V4_RECOVERY)
@@ -259,60 +269,203 @@ def test_stage_v6_preserves_and_reconciles_exact_v5_precreate_evidence(
             }
         ),
     )
-    recovery = operator.stage_recovery_binding()
+    v5_recovery = operator._seal(operator._STAGE_V5_RECOVERY)
+    v5_intent = operator._seal(
+        {
+            "schema": "cyber_skyrl_prod10_operator_intent_v1",
+            "phase": "stage",
+            "packet_sha256": v5_recovery["previous_packet_sha256"],
+            "operator_job_uid": v5_recovery["previous_operator_job_uid"],
+            "created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+    v5_armed = direct._seal(
+        {
+            **{key: value for key, value in v4_armed.items() if key != "sha256"},
+            "observer_pid": 7,
+        }
+    )
     operator._write_once(
-        operation_root / "STAGE_OPERATOR_INTENT.json",
+        operation_root / "STAGE_OPERATOR_INTENT.v5.failed.json", v5_intent
+    )
+    operator._write_once(
+        operation_root / "STAGE_OBSERVER_ARMED.v5.failed.json", v5_armed
+    )
+    operator._write_once(
+        operation_root / "STAGE_OPERATOR_RECOVERY_V6.json",
         operator._seal(
             {
-                "schema": "cyber_skyrl_prod10_operator_intent_v1",
-                "phase": "stage",
-                "packet_sha256": recovery["previous_packet_sha256"],
-                "operator_job_uid": recovery["previous_operator_job_uid"],
-                "created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "schema": "cyber_skyrl_prod10_stage_precreate_recovery_receipt_v1",
+                "status": "v5_precreate_evidence_preserved",
+                "binding_sha256": v5_recovery["sha256"],
+                "previous_intent_sha256": v5_intent["sha256"],
+                "previous_observer_sha256": v5_armed["sha256"],
+                "archived_files": [
+                    "STAGE_OBSERVER_ARMED.v5.failed.json",
+                    "STAGE_OPERATOR_INTENT.v5.failed.json",
+                ],
+                "gpus": 0,
             }
         ),
+    )
+    recovery = operator.stage_recovery_binding()
+    v6_intent = operator._seal(
+        {
+            "schema": "cyber_skyrl_prod10_operator_intent_v1",
+            "phase": "stage",
+            "packet_sha256": recovery["previous_packet_sha256"],
+            "operator_job_uid": recovery["previous_operator_job_uid"],
+            "created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+    operator._write_once(operation_root / "STAGE_OPERATOR_INTENT.json", v6_intent)
+    v6_armed = direct._seal(
+        {
+            **{key: value for key, value in v4_armed.items() if key != "sha256"},
+            "observer_pid": 8,
+        }
     )
     operator._write_once(
-        operation_root / "STAGE_OBSERVER_ARMED.json",
-        direct._seal(
-            {
-                "schema": "cyber_direct_cleanup_observer_armed_v1",
-                "status": "armed",
-                "context": direct.PROD_CONTEXT,
-                "namespace": direct.NAMESPACE,
-                "kind": "job",
-                "name": identity.stage_name,
-                "maximum_seconds": direct.CPU_MAXIMUM_SECONDS,
-                "expected_gpus": 0,
-                "plan_sha256": stage["sha256"],
-                "manifest_sha256": "sha256:" + direct.digest(expected),
-                "armed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-                "observer_pid": 7,
-                "creator_binding_path": str(
-                    operator.hardening.creator_binding_path(operation_root, "stage")
-                ),
-            }
-        ),
+        operation_root / "STAGE_OBSERVER_ARMED.json", v6_armed
+    )
+    creator = direct._seal(
+        {
+            "schema": cleanup.CREATOR_BINDING_SCHEMA,
+            "status": "created_once",
+            "context": direct.PROD_CONTEXT,
+            "namespace": direct.NAMESPACE,
+            "kind": "job",
+            "name": identity.stage_name,
+            "plan_sha256": stage["sha256"],
+            "manifest_sha256": manifest_sha256,
+            "uid": recovery["previous_target_job_uid"],
+        }
+    )
+    operator._write_once(
+        operation_root / "STAGE_OBSERVER_ARMED.json.created.json", creator
+    )
+    authorization_sha256 = "sha256:" + "1" * 64
+    created = direct._seal(
+        {
+            "schema": direct.CPU_CREATED_SCHEMA,
+            "status": "created_once",
+            "purpose": "stage",
+            "name": identity.stage_name,
+            "plan_sha256": stage["sha256"],
+            "manifest_sha256": manifest_sha256,
+            "authorization_sha256": authorization_sha256,
+            "job_uid": recovery["previous_target_job_uid"],
+            "created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+    journal = operation_root / "PROD9_STAGE_CREATE.jsonl"
+    journal.write_text(
+        "\n".join(
+            json.dumps(value, sort_keys=True, separators=(",", ":"))
+            for value in (
+                {
+                    "state": "CREATE_INTENT_DO_NOT_RETRY",
+                    "purpose": "stage",
+                    "plan_sha256": stage["sha256"],
+                    "manifest_sha256": manifest_sha256,
+                    "authorization_sha256": authorization_sha256,
+                    "duplicate_checks": {
+                        "kubernetes_inventories_checked": 10,
+                        "development_duplicate_proof_sha256": "sha256:" + "2" * 64,
+                    },
+                },
+                created,
+            )
+        )
+        + "\n"
+    )
+    journal.chmod(0o600)
+    released = direct._seal(
+        {
+            "schema": cleanup.DIRECT_RESULT_SCHEMA,
+            "status": "released_without_accepted_execution",
+            "context": direct.PROD_CONTEXT,
+            "namespace": direct.NAMESPACE,
+            "kind": "job",
+            "name": identity.stage_name,
+            "plan_sha256": stage["sha256"],
+            "manifest_sha256": manifest_sha256,
+            "expected_gpus": 0,
+            "maximum_seconds": direct.CPU_MAXIMUM_SECONDS,
+            "armed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "uid": recovery["previous_target_job_uid"],
+            "created_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "terminal_status": "Deleted",
+            "job_id": "",
+            "rayjob_name": "",
+            "rayjob_uid": "",
+            "workload_name": recovery["previous_target_workload_name"],
+            "workload_uid": recovery["previous_target_workload_uid"],
+            "raycluster_name": "",
+            "raycluster_uid": "",
+            "pod_names": [],
+            "pod_uids": [],
+            "image_ids": [],
+            "exit_codes": [],
+            "termination_reasons": [],
+            "restarts": 0,
+            "peak_gpus": 0,
+            "receipt": None,
+            "observer_error_class": "",
+            "observation_failures": 0,
+            "max_consecutive_observation_failures": 0,
+            "last_observation_error_code": "",
+            "deletion_reason": "target_absent",
+            "deletion_requested_at": "",
+            "target_present": False,
+            "pods_present": False,
+            "rayjob_present": False,
+            "workload_present": False,
+            "raycluster_present": False,
+            "active_gpus": 0,
+            "release_observed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+    operator._write_once(operation_root / "STAGE_OBSERVER_RESULT.json", released)
+
+    calls: list[tuple[str, str]] = []
+
+    def request(method: str, path: str, *_: object) -> tuple[int, bytes]:
+        calls.append((method, path))
+        return 404, b'{"kind":"Status"}'
+
+    runner = incluster_kubernetes.InClusterKubernetesRunner(request=request)
+    raw_receipt = {
+        "schema": training.STAGE_RECEIPT_SCHEMA,
+        "status": "published",
+        "gpus": 0,
+    }
+    monkeypatch.setattr(training, "stage_rebind", lambda *_args, **_kwargs: raw_receipt)
+    validated: list[dict] = []
+    monkeypatch.setattr(
+        direct,
+        "_stage_receipt",
+        lambda _stage, receipt, **_kwargs: validated.append(receipt),
+    )
+    monkeypatch.setenv(
+        "OPERATOR_JOB_UID", "00000000-0000-4000-8000-000000000099"
     )
 
-    runner = incluster_kubernetes.InClusterKubernetesRunner(
-        request=lambda *_args: (404, b'{"kind":"Status"}')
-    )
-    assert operator._reconcile_stage_v5_precreate(
-        packet,
-        stage=stage,
-        expected=expected,
-        identity=identity,
-        runner=runner,
-    ) == operation_root
-    assert not (operation_root / "STAGE_OPERATOR_INTENT.json").exists()
-    assert not (operation_root / "STAGE_OBSERVER_ARMED.json").exists()
-    assert (operation_root / "STAGE_OPERATOR_INTENT.v5.failed.json").is_file()
-    assert (operation_root / "STAGE_OBSERVER_ARMED.v5.failed.json").is_file()
+    result = operator.run_stage(packet, runner=runner)
+
+    assert result["status"] == "stage_ready"
+    assert result["execution"]["nested_jobs_created"] == 0
+    assert validated == [{**raw_receipt, "receipt_sha256": digest(raw_receipt)}]
+    assert calls and all(method == "GET" for method, _path in calls)
+    assert not (operation_root / "STAGE_OPERATOR_INTENT.v6.failed.json").is_symlink()
+    assert (operation_root / "STAGE_OPERATOR_INTENT.v6.failed.json").is_file()
+    assert (operation_root / "STAGE_OBSERVER_RESULT.v6.failed.json").is_file()
+    assert (operation_root / "PROD9_STAGE_CREATE.v6.failed.jsonl").is_file()
+    assert (operation_root / "STAGE_OPERATOR_INTENT.json").is_file()
     receipt = json.loads(
-        (operation_root / "STAGE_OPERATOR_RECOVERY_V6.json").read_bytes()
+        (operation_root / "STAGE_OPERATOR_RECOVERY_V7.json").read_bytes()
     )
-    assert receipt["status"] == "v5_precreate_evidence_preserved"
+    assert receipt["status"] == "v6_released_child_evidence_preserved"
     assert receipt == operator._seal(receipt)
 
 
@@ -321,8 +474,6 @@ def test_prod10_operator_package_rejects_root_alert_or_packet_drift() -> None:
     packet = operator_job.stage_packet(
         identity=identity,
         stage=stage,
-        dev_preview=preview,
-        dev_duplicate_proof=duplicate,
     )
     package = operator_job.build_operator_package(packet)
     package.job["metadata"]["annotations"][FAILURE_ALERT_ANNOTATION] = "on"
@@ -349,8 +500,6 @@ def test_prod10_operator_launcher_requires_two_alert_off_c1_q1_previews_and_abse
         operator_job.stage_packet(
             identity=identity,
             stage=stage,
-            dev_preview=preview,
-            dev_duplicate_proof=duplicate,
         )
     )
 
@@ -383,19 +532,7 @@ def test_prod10_operator_launcher_requires_two_alert_off_c1_q1_previews_and_abse
     )
     absence = operator_launch.duplicate_proof(package, factory=FakeKubectl)
     assert absence["kubernetes_inventories_checked"] == 12
-    refreshed_preview = copy.deepcopy(preview)
-    refreshed_preview["server_render_sha256"] = "sha256:" + "f" * 64
-    refreshed_preview = direct._seal(refreshed_preview)
-    refreshed_package = operator_job.build_operator_package(
-        operator_job.stage_packet(
-            identity=identity,
-            stage=stage,
-            dev_preview=refreshed_preview,
-            dev_duplicate_proof=duplicate,
-        )
-    )
-    assert refreshed_package.packet["sha256"] != package.packet["sha256"]
-    assert operator_launch._validate_duplicate(refreshed_package, absence) == absence
+    assert operator_launch._validate_duplicate(package, absence) == absence
 
     changed = copy.deepcopy(previews)
     changed[0]["failure_alerts"] = "on"

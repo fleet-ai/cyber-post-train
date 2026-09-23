@@ -11,12 +11,12 @@ import re
 import tarfile
 from copy import deepcopy
 from dataclasses import dataclass
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any
 
-from training import skyrl_prod10_operator as operator
 from training import skyrl_prod9_direct as direct
 from training import skyrl_prod9_training as training
+from training import skyrl_prod10_operator as operator
 from training import skyrl_reward_rayjob as historical
 
 from .jobs import FAILURE_ALERT_ANNOTATION, FAILURE_ALERT_OFF, JobsError, digest
@@ -148,25 +148,10 @@ def stage_packet(
     *,
     identity: historical.RailIdentity,
     stage: dict[str, Any],
-    dev_preview: dict[str, Any],
-    dev_duplicate_proof: dict[str, Any],
 ) -> dict[str, Any]:
     checked, bound = training._stage_identity(stage)
-    expected = direct.stage_job_manifest(checked, identity=identity)
     if bound != identity:
         raise ValueError("prod10 stage operator identity changed")
-    direct.validate_cpu_preview_proof(
-        expected,
-        dev_preview,
-        purpose="stage",
-        context=direct.DEV_CONTEXT,
-        fresh=True,
-    )
-    duplicate = direct._validate_seal(
-        dev_duplicate_proof, direct.CPU_DUPLICATE_PROOF_SCHEMA
-    )
-    if duplicate.get("name") != identity.stage_name:
-        raise ValueError("prod10 stage duplicate proof changed")
     return _seal(
         {
             "schema": operator.PACKET_SCHEMA,
@@ -174,9 +159,6 @@ def stage_packet(
             "operator_name": operator.OPERATOR_NAMES["stage"],
             "identity": identity.sealed_mapping(),
             "stage": checked,
-            "manifest_sha256": "sha256:" + digest(expected),
-            "dev_preview": dev_preview,
-            "dev_duplicate_proof": duplicate,
             "precreate_recovery": operator.stage_recovery_binding(),
         }
     )
@@ -233,8 +215,6 @@ def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
         expected = stage_packet(
             identity=identity,
             stage=checked["stage"],
-            dev_preview=checked["dev_preview"],
-            dev_duplicate_proof=checked["dev_duplicate_proof"],
         )
     else:
         expected = preflight_packet(
@@ -317,6 +297,11 @@ def _job(
         {"name": "CUDA_VISIBLE_DEVICES", "value": ""},
         {"name": "NVIDIA_VISIBLE_DEVICES", "value": "none"},
     ]
+    sfs_mount: dict[str, Any] = {"name": "sfs", "mountPath": "/mnt/sfs"}
+    sfs_claim: dict[str, Any] = {"claimName": PVC}
+    if phase != "stage":
+        sfs_mount["readOnly"] = True
+        sfs_claim["readOnly"] = True
     return {
         "apiVersion": "batch/v1",
         "kind": "Job",
@@ -365,7 +350,7 @@ def _job(
                                 {"name": "packet", "mountPath": "/packet", "readOnly": True},
                                 {"name": "runtime", "mountPath": "/runtime"},
                                 {"name": "work", "mountPath": "/work"},
-                                {"name": "sfs-ro", "mountPath": "/mnt/sfs", "readOnly": True},
+                                sfs_mount,
                                 {
                                     "name": "controls-rw",
                                     "mountPath": CONTROLS_PATH,
@@ -405,7 +390,7 @@ def _job(
                         {"name": "packet", "configMap": {"name": name + "-packet", "defaultMode": 292}},
                         {"name": "runtime", "emptyDir": {"sizeLimit": "256Mi"}},
                         {"name": "work", "emptyDir": {"sizeLimit": "64Mi"}},
-                        {"name": "sfs-ro", "persistentVolumeClaim": {"claimName": PVC, "readOnly": True}},
+                        {"name": "sfs", "persistentVolumeClaim": sfs_claim},
                         {"name": "controls-rw", "persistentVolumeClaim": {"claimName": PVC}},
                     ],
                 },
@@ -460,6 +445,13 @@ def validate_operator_package(package: OperatorPackage) -> dict[str, Any]:
     metadata = expected_job["metadata"]
     pod = expected_job["spec"]["template"]["spec"]
     [container] = pod["containers"]
+    mounts = {item["name"]: item for item in container["volumeMounts"]}
+    volumes = {item["name"]: item for item in pod["volumes"]}
+    expected_sfs_mount: dict[str, Any] = {"name": "sfs", "mountPath": "/mnt/sfs"}
+    expected_sfs_claim: dict[str, Any] = {"claimName": PVC}
+    if packet["phase"] != "stage":
+        expected_sfs_mount["readOnly"] = True
+        expected_sfs_claim["readOnly"] = True
     if (
         metadata["annotations"].get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
         or metadata["labels"].get(QUEUE_LABEL) != QUEUE
@@ -472,6 +464,11 @@ def validate_operator_package(package: OperatorPackage) -> dict[str, Any]:
         or "nvidia.com/gpu" in json.dumps(expected_job, sort_keys=True)
         or container["securityContext"].get("runAsUser") != 1000
         or container["securityContext"].get("runAsGroup") != 100
+        or container.get("resources", {}).get("requests")
+        != {"cpu": "2", "memory": "8Gi"}
+        or mounts.get("sfs") != expected_sfs_mount
+        or volumes.get("sfs")
+        != {"name": "sfs", "persistentVolumeClaim": expected_sfs_claim}
     ):
         raise ValueError("prod10 operator execution policy changed")
     return {
