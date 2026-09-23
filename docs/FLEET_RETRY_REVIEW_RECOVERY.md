@@ -232,6 +232,16 @@ NetworkPolicy selects that label; omitting it causes a connection timeout
 before any database read. Check the label on the server-rendered Pod template
 before create. A Job-level label alone does not satisfy this requirement.
 
+A recovery observer must derive its expected plan rows and `harness_id` from
+the exact evaluator modules and task set embedded in the sealed launch packet.
+Do not copy a harness identifier from another arm, an older packet, or the
+current checkout. Use `heldout_launch.sealed_evaluation` and
+`heldout_terminal_observer.validate_then_publish`: finish the terminal receipt,
+database, private audit, and artifact checks before creating any output, then
+publish the complete private directory with one atomic no-replace rename. A
+validation failure must leave the final path absent. Preserve an older partial
+root as incident evidence; never delete it, overwrite it, or reuse its identity.
+
 ## Seed-44 Base narrow repair
 
 The seed-44 Base controller left one partial but scientifically usable arm: ten
