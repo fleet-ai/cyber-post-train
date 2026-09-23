@@ -411,6 +411,75 @@ def test_prod10_inspection_boundary_is_fixed_and_fail_closed(
     assert operator._inspection_boundary(probes) == expected
 
 
+def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity = historical.load_identity(IDENTITY)
+    plan = {"schema": training.SCHEMA}
+    launch = direct._seal({"schema": direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA})
+    monkeypatch.setattr(direct, "_identity", lambda _plan, bound: bound)
+    monkeypatch.setattr(launch_direct, "_preflight_launch", lambda value, *_args, **_kw: value)
+    packet = operator_job.probe_packet(
+        identity=identity,
+        plan=plan,
+        preflight_launch_result=launch,
+    )
+    package = operator_job.build_operator_package(packet)
+    proof = operator_job.validate_operator_package(package)
+    pod = package.job["spec"]["template"]["spec"]
+    [container] = pod["containers"]
+    mounts = {item["name"]: item for item in container["volumeMounts"]}
+    volumes = {item["name"]: item for item in pod["volumes"]}
+
+    assert proof["name"] == "chris-q38-prod10-launch-probe-v3"
+    assert proof["phase"] == "probe"
+    assert proof["failure_alerts"] == "off"
+    assert proof["priority"] == "c1" and proof["queue_priority"] == "q1"
+    assert proof["gpus"] == 0
+    assert mounts["sfs"]["readOnly"] is True
+    assert volumes["sfs"]["persistentVolumeClaim"]["readOnly"] is True
+    assert "controls-rw" not in mounts and "controls-rw" not in volumes
+    assert "envFrom" not in container
+    assert "secretRef" not in json.dumps(package.job, sort_keys=True)
+    assert "nvidia.com/gpu" not in json.dumps(package.job, sort_keys=True)
+
+    monkeypatch.setattr(operator, "_identity", lambda _value: identity)
+
+    def fail_preflight(_plan: dict) -> dict:
+        training._PREFLIGHT_STAGE = "tokenizer"
+        raise OSError("private path and errno must not escape")
+
+    monkeypatch.setattr(training, "preflight", fail_preflight)
+    result = operator.run_probe(
+        {
+            "identity": identity.sealed_mapping(),
+            "plan": plan,
+            "preflight_launch_result": launch,
+        }
+    )
+    assert result["status"] == "passed"
+    assert result["diagnosis"] == "oserror_localized"
+    assert result["error_code"] == "launch_fresh_training_preflight_oserror"
+    assert result["launch_stage"] == "fresh_training_preflight"
+    assert result["preflight_stage"] == "tokenizer"
+    assert result["error_path_exported"] is False
+    assert result["error_errno_exported"] is False
+    assert result["error_message_exported"] is False
+    assert result["nested_jobs_created"] == result["gpus"] == 0
+    encoded = json.dumps(result, sort_keys=True)
+    assert "private path" not in encoded and "errno must not escape" not in encoded
+    assert len(encoded.encode()) < 3900
+
+    changed = copy.deepcopy(packet)
+    changed["inspect_v2_success"]["operator_job_uid"] = (
+        "00000000-0000-4000-8000-000000000001"
+    )
+    changed["inspect_v2_success"] = operator._seal(changed["inspect_v2_success"])
+    changed = operator._seal(changed)
+    with pytest.raises(ValueError, match="predecessor"):
+        operator_job.build_operator_package(changed)
+
+
 def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

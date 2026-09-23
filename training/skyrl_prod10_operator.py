@@ -44,6 +44,7 @@ OPERATOR_NAMES = {
     "preflight": "chris-q38-prod10-preflight-operator-v2",
     "launch": "chris-q38-prod10-launch-operator-v1",
     "inspect": "chris-q38-prod10-launch-inspect-v2",
+    "probe": "chris-q38-prod10-launch-probe-v3",
 }
 _LAUNCH_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_launch_failure_binding_v1",
@@ -59,6 +60,19 @@ _LAUNCH_V1_FAILURE = {
         "sha256:c9adf0f0b995906813668bba82180c84384f9de5f0185270d3f428ae404c0292"
     ),
     "inner_gpu_run_created": False,
+    "gpus": 0,
+}
+_INSPECT_V2_SUCCESS = {
+    "schema": "cyber_skyrl_prod10_launch_inspection_binding_v1",
+    "status": "succeeded_and_released",
+    "operator_name": "chris-q38-prod10-launch-inspect-v2",
+    "operator_job_uid": "f92a3770-de2d-4fb0-97aa-70b09bd1cde5",
+    "operator_pod_uid": "a0c637db-0b75-4af3-9ec2-4d7e31abf566",
+    "operator_workload_uid": "7fb710ec-e24e-45c7-9301-53c08c2e0f6a",
+    "receipt_sha256": "sha256:73f751235514f1b05a6bde2074dc3bdb62995f1c84ebb096d33ad0e461725c21",
+    "observer_sha256": "sha256:62a7cc889963bba3f561b7d3fbd00a5e1d61e328e22c59092b509638a537ef59",
+    "result_sha256": "sha256:0ec4bcbe9aa48f9b96a7bb83a8c24aee7ee7c0961d5cca00afa63a04d7dfadbb",
+    "launch_boundary": "before_guard_or_guard_write",
     "gpus": 0,
 }
 _PREFLIGHT_V1_FAILURE = {
@@ -168,6 +182,7 @@ _TERMINATION_PATH = Path("/dev/termination-log")
 _POLL_SECONDS = 0.25
 RUNTIME_UID = 1000
 RUNTIME_GID = 100
+_LAUNCH_STAGE = "not_started"
 
 
 class OperatorFailure(ValueError):
@@ -202,6 +217,11 @@ def preflight_v1_failure_binding() -> dict[str, Any]:
 def launch_v1_failure_binding() -> dict[str, Any]:
     """Bind the released launch failure inspected by the zero-GPU successor."""
     return _seal(_LAUNCH_V1_FAILURE)
+
+
+def inspect_v2_success_binding() -> dict[str, Any]:
+    """Bind the exact released inspector used by the phase-coded probe."""
+    return _seal(_INSPECT_V2_SUCCESS)
 
 
 def _write_once(path: Path, value: dict[str, Any]) -> None:
@@ -311,6 +331,19 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
         plan = packet.get("plan")
         if not isinstance(plan, dict):
             raise ValueError("prod10 launch inspection plan changed")
+        direct._identity(plan, _identity(packet.get("identity")))
+        launch_direct._preflight_launch(
+            packet.get("preflight_launch_result"),
+            plan,
+            identity=_identity(packet.get("identity")),
+            operator_name=OPERATOR_NAMES["preflight"],
+        )
+    elif phase == "probe":
+        if packet.get("inspect_v2_success") != inspect_v2_success_binding():
+            raise ValueError("prod10 launch probe predecessor changed")
+        plan = packet.get("plan")
+        if not isinstance(plan, dict):
+            raise ValueError("prod10 launch probe plan changed")
         direct._identity(plan, _identity(packet.get("identity")))
         launch_direct._preflight_launch(
             packet.get("preflight_launch_result"),
@@ -1404,6 +1437,63 @@ def run_inspect(packet: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def run_probe(packet: dict[str, Any]) -> dict[str, Any]:
+    """Localize a pre-guard OSError without logging its path, errno, or message."""
+    global _LAUNCH_STAGE
+    identity = _identity(packet["identity"])
+    plan = packet.get("plan")
+    if not isinstance(plan, dict):
+        raise ValueError("prod10 launch probe plan changed")
+    _LAUNCH_STAGE = "plan_identity"
+    direct._identity(plan, identity)
+    _LAUNCH_STAGE = "preflight_launch_evidence"
+    launch = launch_direct._preflight_launch(
+        packet.get("preflight_launch_result"),
+        plan,
+        identity=identity,
+        operator_name=OPERATOR_NAMES["preflight"],
+    )
+    _LAUNCH_STAGE = "fresh_training_preflight"
+    try:
+        receipt = training.preflight(plan)
+    except OSError:
+        return _seal(
+            {
+                "schema": MANIFEST_RESULT_SCHEMA,
+                "status": "passed",
+                "phase": "probe",
+                "diagnosis": "oserror_localized",
+                "error_code": f"launch_{_LAUNCH_STAGE}_oserror",
+                "launch_stage": _LAUNCH_STAGE,
+                "preflight_stage": training._PREFLIGHT_STAGE,
+                "preflight_launch_sha256": launch["sha256"],
+                "inspect_v2_success_sha256": inspect_v2_success_binding()["sha256"],
+                "error_path_exported": False,
+                "error_errno_exported": False,
+                "error_message_exported": False,
+                "nested_jobs_created": 0,
+                "gpus": 0,
+            }
+        )
+    _LAUNCH_STAGE = "fresh_training_preflight_passed"
+    if receipt.get("status") != "passed" or receipt.get("gpus") != 0:
+        raise OperatorFailure("launch_probe_preflight_receipt_rejected")
+    return _seal(
+        {
+            "schema": MANIFEST_RESULT_SCHEMA,
+            "status": "passed",
+            "phase": "probe",
+            "diagnosis": "fresh_training_preflight_passed",
+            "launch_stage": _LAUNCH_STAGE,
+            "preflight_stage": training._PREFLIGHT_STAGE,
+            "preflight_launch_sha256": launch["sha256"],
+            "inspect_v2_success_sha256": inspect_v2_success_binding()["sha256"],
+            "nested_jobs_created": 0,
+            "gpus": 0,
+        }
+    )
+
+
 def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> dict[str, Any]:
     """Consume the sealed direct-v3 preflight and perform the sole GPU POST."""
     identity = _identity(packet["identity"])
@@ -1545,9 +1635,11 @@ def run(packet_path: Path, phase: str) -> dict[str, Any]:
         result = run_launch(packet, runner=runner)
     elif phase == "inspect":
         result = run_inspect(packet)
+    elif phase == "probe":
+        result = run_probe(packet)
     else:
         result = run_preflight(packet, runner=runner)
-    if phase in {"manifest", "inspect"}:
+    if phase in {"manifest", "inspect", "probe"}:
         _write_manifest_termination(result)
         return result
     root = (

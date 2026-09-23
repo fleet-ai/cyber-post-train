@@ -353,6 +353,32 @@ def inspect_packet(
     )
 
 
+def probe_packet(
+    *,
+    identity: historical.RailIdentity,
+    plan: dict[str, Any],
+    preflight_launch_result: dict[str, Any],
+) -> dict[str, Any]:
+    direct._identity(plan, identity)
+    checked_launch = launch_direct._preflight_launch(
+        preflight_launch_result,
+        plan,
+        identity=identity,
+        operator_name=operator.OPERATOR_NAMES["preflight"],
+    )
+    return _seal(
+        {
+            "schema": operator.PACKET_SCHEMA,
+            "phase": "probe",
+            "operator_name": operator.OPERATOR_NAMES["probe"],
+            "identity": identity.sealed_mapping(),
+            "plan": plan,
+            "preflight_launch_result": checked_launch,
+            "inspect_v2_success": operator.inspect_v2_success_binding(),
+        }
+    )
+
+
 def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
     checked = operator._packet(packet, packet.get("phase", ""))
     identity = historical.identity_from_mapping(checked["identity"])
@@ -380,6 +406,12 @@ def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
         )
     elif checked["phase"] == "inspect":
         expected = inspect_packet(
+            identity=identity,
+            plan=checked["plan"],
+            preflight_launch_result=checked["preflight_launch_result"],
+        )
+    elif checked["phase"] == "probe":
+        expected = probe_packet(
             identity=identity,
             plan=checked["plan"],
             preflight_launch_result=checked["preflight_launch_result"],
@@ -502,7 +534,7 @@ def _job(
             sfs_mount,
             *(
                 []
-                if phase == "inspect"
+                if phase in {"inspect", "probe"}
                 else [
                     {
                         "name": "controls-rw",
@@ -582,7 +614,7 @@ def _job(
                         {"name": "sfs", "persistentVolumeClaim": sfs_claim},
                         *(
                             []
-                            if phase == "inspect"
+                            if phase in {"inspect", "probe"}
                             else [
                                 {
                                     "name": "controls-rw",
@@ -667,8 +699,8 @@ def validate_operator_package(package: OperatorPackage) -> dict[str, Any]:
         or container.get("resources", {}).get("requests") != {"cpu": "2", "memory": "8Gi"}
         or mounts.get("sfs") != expected_sfs_mount
         or volumes.get("sfs") != {"name": "sfs", "persistentVolumeClaim": expected_sfs_claim}
-        or (packet["phase"] == "inspect" and "controls-rw" in mounts)
-        or (packet["phase"] == "inspect" and "controls-rw" in volumes)
+        or (packet["phase"] in {"inspect", "probe"} and "controls-rw" in mounts)
+        or (packet["phase"] in {"inspect", "probe"} and "controls-rw" in volumes)
         or container.get("envFrom")
         != (
             [
