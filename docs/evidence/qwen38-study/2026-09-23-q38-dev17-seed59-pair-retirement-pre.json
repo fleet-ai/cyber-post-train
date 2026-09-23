@@ -1,0 +1,87 @@
+{
+  "schema": "q38_dev17_protocol_v2_exact_pair_retirement_pre_v1",
+  "observed_at": "2026-09-23T12:15:30Z",
+  "authorized_scope": {
+    "seed": 59,
+    "base_job_uid": "b0bf7c08-afbf-4946-abff-7dda6000038f",
+    "candidate_job_uid": "b144188e-c16f-489d-a6ce-83057be8a25d",
+    "uid_and_resource_version_preconditions": true,
+    "foreground": true,
+    "no_peer_mutation": true
+  },
+  "reason": {
+    "class": "exact_valid8_whole_pair_exclusion",
+    "detail": "base replica contains one post_claim.connecterror row without a local result, stored session, or verifier; frozen retries are zero and whole matched pair is excluded",
+    "provisional_snapshot_path": "/private/tmp/q38-s59-provisional-noartifact.20260923T121234Z/PROVISIONAL_SNAPSHOT.json",
+    "provisional_snapshot_file_sha256": "sha256:5d1a9c70699e375e9bddf82d4e3746be98a6c6b2a25c23199089d47bd0d4b630",
+    "provisional_snapshot_self_sha256": "sha256:196771c9acd4cd684f46d337c62f34ee987451df52bd9986d3bb6549d3e58386"
+  },
+  "jobs": [
+    {
+      "name": "chris-q38-dev17-s59-base-repl-p1-v2",
+      "uid": "b0bf7c08-afbf-4946-abff-7dda6000038f",
+      "resource_version": "34096099",
+      "suspend": false,
+      "active": 1,
+      "succeeded": 0,
+      "failed": 0,
+      "root_failure_alerts": "off",
+      "priority_class": "c1",
+      "gpu_request": 0,
+      "workload_name": "job-chris-q38-dev17-s59-base-repl-p1-v2-a010c",
+      "workload_uid": "64e2b6c3-ee5d-4e6b-8549-dc83a80a1df9",
+      "workload_resource_version": "34096100",
+      "workload_conditions": ["Admitted", "PodsReady", "QuotaReserved"],
+      "pods": [
+        {
+          "name": "chris-q38-dev17-s59-base-repl-p1-v2-wpcwk",
+          "uid": "4e7219ce-b715-4b48-a54a-f7cab97835b7",
+          "phase": "Running",
+          "ready": true,
+          "restarts": 0
+        }
+      ]
+    },
+    {
+      "name": "chris-q38-dev17-s59-t3k32s1000-repl-p1-v2",
+      "uid": "b144188e-c16f-489d-a6ce-83057be8a25d",
+      "resource_version": "34099478",
+      "suspend": true,
+      "active": 0,
+      "succeeded": 0,
+      "failed": 0,
+      "root_failure_alerts": "off",
+      "priority_class": "c1",
+      "gpu_request": 0,
+      "workload_name": "job-chris-q38-dev17-s59-t3k32s1000-repl-p1-v2-10010",
+      "workload_uid": "3315cfef-578e-49e0-9e89-d9dc915090a4",
+      "workload_resource_version": "33965069",
+      "workload_conditions": [],
+      "pods": []
+    }
+  ],
+  "base_database": {
+    "total": 17,
+    "accepted": 5,
+    "claimed": 4,
+    "pending": 6,
+    "retry_review": 2,
+    "local_results": 6,
+    "stale_active": 0,
+    "claimed_rows_with_session_id": 0,
+    "max_heartbeat_age_seconds": 31,
+    "min_lease_remaining_seconds": 269
+  },
+  "candidate_database": {
+    "exists_first_observation": false,
+    "exists_second_observation": false
+  },
+  "privacy": {
+    "score_blind": true,
+    "scores_read_or_included": false,
+    "cell_session_task_or_verifier_ids_included": false,
+    "prompts_responses_flags_rewards_or_trace_content_read_or_included": false,
+    "credentials_included": false
+  },
+  "sha256": "sha256:aa58aa7d4934dfa9813340f8234b1a49d6d742679e83cc4684e75b83ec4803e2"
+}

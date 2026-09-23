@@ -1,0 +1,159 @@
+{
+  "schema": "q38_dev17_protocol_v2_exact_pair_retirement_receipt_v2",
+  "observed_at": "2026-09-23T12:17:21Z",
+  "supersedes_invalid_receipt": {
+    "path": "/private/tmp/q38-s59-provisional-noartifact.20260923T121234Z/RETIREMENT_RECEIPT_INVALID_V1.json",
+    "file_sha256": "sha256:35235bd522ba7b188eaee9a3f0de3c82e7a3327270d4e8ef2ce6c591de5ea11e",
+    "embedded_self_sha256": "sha256:5c4d2812706ffd69b1ed96a9c9bfff1f9b0c336e2c50e680ba82e6fd536dd02a",
+    "canonical_self_sha256": "sha256:7b740197ad415576804ecdbc74b118f9974a6de33ac557962488ef3c367f44f1",
+    "reason": "embedded self digest included a trailing newline and failed canonical verification"
+  },
+  "pre_snapshot": {
+    "path": "/private/tmp/q38-s59-provisional-noartifact.20260923T121234Z/RETIREMENT_PRE.json",
+    "file_sha256": "sha256:a2b341b186a23701c240d16a57cc54c670fad94b5bdea3a31eeb3c15de174666",
+    "self_sha256": "sha256:aa58aa7d4934dfa9813340f8234b1a49d6d742679e83cc4684e75b83ec4803e2"
+  },
+  "scope": {
+    "seed": 59,
+    "whole_pair_excluded": true,
+    "other_jobs_mutated": false,
+    "serving_route_mutated": false
+  },
+  "deletes": [
+    {
+      "name": "chris-q38-dev17-s59-base-repl-p1-v2",
+      "uid": "b0bf7c08-afbf-4946-abff-7dda6000038f",
+      "resource_version": "34096099",
+      "propagation_policy": "Foreground",
+      "uid_and_resource_version_preconditions": true,
+      "response_kind": "Job",
+      "response_name_matched": true,
+      "response_uid_matched": true
+    },
+    {
+      "name": "chris-q38-dev17-s59-t3k32s1000-repl-p1-v2",
+      "uid": "b144188e-c16f-489d-a6ce-83057be8a25d",
+      "resource_version": "34099478",
+      "propagation_policy": "Foreground",
+      "uid_and_resource_version_preconditions": true,
+      "response_kind": "Job",
+      "response_name_matched": true,
+      "response_uid_matched": true
+    }
+  ],
+  "post_release": {
+    "exact_job_count": 0,
+    "exact_owner_workload_count": 0,
+    "exact_owner_pod_count": 0,
+    "kueue_quota_claims_released": true,
+    "ledger_claims_mutated": false,
+    "live_session_ids_attached_to_claims": 0,
+    "residual_lease_bound_claims_without_session": 4,
+    "base_database": {
+      "total": 17,
+      "accepted": 5,
+      "claimed": 4,
+      "pending": 6,
+      "retry_review": 2,
+      "local_results": 6,
+      "stale_active": 0,
+      "claimed_rows_with_session_id": 0,
+      "max_heartbeat_age_seconds": 99,
+      "min_lease_remaining_seconds": 201,
+      "retry_review_signatures": [
+        {
+          "failure_code": "authoritative_scoring_started.runtimeerror",
+          "agent_exit_code": 0,
+          "agent_termination": "output_limit",
+          "session_ingest_status": "completed",
+          "count": 1,
+          "has_local_result": true
+        },
+        {
+          "failure_code": "post_claim.connecterror",
+          "agent_exit_code": null,
+          "agent_termination": null,
+          "session_ingest_status": null,
+          "count": 1,
+          "has_local_result": false
+        }
+      ]
+    },
+    "candidate_database": {
+      "exists": false,
+      "sessions_started": 0
+    }
+  },
+  "automatic_admission_after_release": [
+    {
+      "name": "chris-q38-dev17-s58-t3k32s1000-repl-p1-v2",
+      "uid": "76f3c027-dd1c-42cf-b6a8-b0a04a2ed4fb",
+      "active": 1,
+      "suspend": false,
+      "workload_uid": "f8507cf6-80a4-4099-a0e9-2d28ed4bbfd9",
+      "pod_uid": "27007749-5037-4ea6-896d-c4176920ac8c"
+    },
+    {
+      "name": "chris-q38-dev17-s61-base-repl-p1-v2",
+      "uid": "5232b375-09d8-43ff-ac35-ab259e582d0b",
+      "active": 1,
+      "suspend": false,
+      "workload_uid": "e17c55ec-ec99-4394-af42-ce530ff53067",
+      "pod_uid": "b6605292-f0a8-47bb-8a1b-113cd2518c43"
+    }
+  ],
+  "peer_verification": [
+    {
+      "name": "chris-q38-dev17-s58-t3k32s1000-repl-p1-v2",
+      "uid": "76f3c027-dd1c-42cf-b6a8-b0a04a2ed4fb",
+      "suspend": false,
+      "active": 1,
+      "failed": 0
+    },
+    {
+      "name": "chris-q38-dev17-s60-base-repl-p1-v2",
+      "uid": "939b2331-ea0b-492a-8188-aab217f80e5b",
+      "suspend": false,
+      "active": 1,
+      "failed": 0
+    },
+    {
+      "name": "chris-q38-dev17-s60-t3k32s1000-repl-p1-v2",
+      "uid": "df2d079f-5fd0-46a9-9ef6-b1d1252c4303",
+      "suspend": false,
+      "active": 0,
+      "failed": 1
+    },
+    {
+      "name": "chris-q38-dev17-s61-base-repl-p1-v2",
+      "uid": "5232b375-09d8-43ff-ac35-ab259e582d0b",
+      "suspend": false,
+      "active": 1,
+      "failed": 0
+    },
+    {
+      "name": "chris-q38-dev17-s61-t3k32s1000-repl-p1-v2",
+      "uid": "64a42745-f7fb-4faf-9e34-a72421ff0e9f",
+      "suspend": true,
+      "active": 0,
+      "failed": 0
+    }
+  ],
+  "budget": {
+    "reference_receipt_file_sha256": "sha256:e0190275fbb5c80bcbf8b8d3ff2af9e8c25e17977f7165f5016a3b891d24f2cf",
+    "reference_receipt_self_sha256": "sha256:613ee62e980b23bc95cd958400a21e4479c1f28c631fc11340bde1af7ffc5b54",
+    "projected_with_seed64": 486,
+    "daily_cap": 500,
+    "remaining": 14,
+    "retirement_credit": 0,
+    "fresh_census_required_before_successor_launch": true
+  },
+  "privacy": {
+    "score_blind": true,
+    "scores_read_or_included": false,
+    "cell_session_task_or_verifier_ids_included": false,
+    "prompts_responses_flags_rewards_or_trace_content_read_or_included": false,
+    "credentials_included": false
+  },
+  "sha256": "sha256:b45f9e2b5e88489d9b43e75c5abd1b2325d75f9fa32839bef31da113545290d6"
+}
