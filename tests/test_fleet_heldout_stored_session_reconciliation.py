@@ -510,7 +510,8 @@ def test_two_exact_server_previews_are_stable(tmp_path, monkeypatch):
     assert packet.validate_server_previews(rendered, first, second).startswith("sha256:")
 
 
-def test_enumerated_api_defaults_and_non_job_metadata_are_accepted(tmp_path, monkeypatch):
+@pytest.mark.parametrize("suspend", [False, True])
+def test_enumerated_api_defaults_and_non_job_metadata_are_accepted(tmp_path, monkeypatch, suspend):
     rendered, *_ = _render(tmp_path, monkeypatch)
     previews = [
         _server_preview(rendered, "11111111-1111-4111-8111-111111111111"),
@@ -525,7 +526,7 @@ def test_enumerated_api_defaults_and_non_job_metadata_are_accepted(tmp_path, mon
             completions=1,
             completionMode="NonIndexed",
             manualSelector=False,
-            suspend=False,
+            suspend=suspend,
             podReplacementPolicy="TerminatingOrFailed",
         )
         pod = job["spec"]["template"]["spec"]
