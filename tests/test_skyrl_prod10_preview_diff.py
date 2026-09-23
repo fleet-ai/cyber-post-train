@@ -167,6 +167,7 @@ def test_preview_difference_job_is_alert_off_c1_q1_zero_gpu_fleet_secret_only() 
     assert job["metadata"]["labels"]["kueue.x-k8s.io/priority-class"] == "q1"
     assert pod["priorityClassName"] == "c1"
     assert job["spec"]["backoffLimit"] == 0
+    assert pod["automountServiceAccountToken"] is False
     assert container["envFrom"] == [{"secretRef": {"name": "fleet-api"}}]
     assert "wandb-api" not in encoded
     assert "controls-rw" not in encoded

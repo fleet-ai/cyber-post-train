@@ -680,7 +680,7 @@ def _job(
                     "labels": deepcopy(labels),
                 },
                 "spec": {
-                    "automountServiceAccountToken": True,
+                    "automountServiceAccountToken": phase != "preview-diff",
                     "serviceAccountName": "default",
                     "containers": [container],
                     "hostIPC": False,
@@ -805,7 +805,7 @@ def validate_operator_package(package: OperatorPackage) -> dict[str, Any]:
         != (LAUNCH_ACTIVE_DEADLINE_SECONDS if packet["phase"] == "launch" else 2400)
         or expected_job["spec"].get("suspend") is not True
         or pod.get("serviceAccountName") != "default"
-        or pod.get("automountServiceAccountToken") is not True
+        or pod.get("automountServiceAccountToken") is not (packet["phase"] != "preview-diff")
         or "nvidia.com/gpu" in json.dumps(expected_job, sort_keys=True)
         or container["securityContext"].get("runAsUser") != 1000
         or container["securityContext"].get("runAsGroup") != 100

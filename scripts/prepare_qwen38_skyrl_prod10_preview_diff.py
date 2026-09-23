@@ -162,6 +162,8 @@ def prepare(args: argparse.Namespace) -> dict:
         "duplicate_sha256": duplicate["sha256"],
         "jobs_api_preview_calls_at_runtime": 1,
         "jobs_api_create_calls_at_runtime": 0,
+        "kubernetes_api_calls_at_runtime": 0,
+        "kubernetes_service_account_token_mounted": False,
         "create_authorized": False,
     }
     _write_once(output, "SUMMARY.json", summary)

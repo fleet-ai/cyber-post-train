@@ -1375,6 +1375,29 @@ def _validate_runtime(packet: dict[str, Any], runner: InClusterKubernetesRunner)
     return job_uid
 
 
+def _validate_preview_diff_runtime(packet: dict[str, Any]) -> None:
+    """Bind the zero-GPU probe without mounting Kubernetes credentials."""
+    if (os.geteuid(), os.getegid()) != (RUNTIME_UID, RUNTIME_GID):
+        raise OperatorFailure("runtime_identity_rejected")
+    name = os.environ.get("OPERATOR_JOB_NAME", "")
+    pod_name = os.environ.get("OPERATOR_POD_NAME", "")
+    pod_uid = os.environ.get("OPERATOR_POD_UID", "")
+    packet_sha256 = os.environ.get("OPERATOR_PACKET_SHA256", "")
+    source_sha256 = os.environ.get("OPERATOR_SOURCE_SHA256", "")
+    try:
+        UUID(pod_uid)
+    except ValueError as exc:
+        raise OperatorFailure("runtime_pod_uid_rejected") from exc
+    if (
+        name != packet["operator_name"]
+        or not pod_name.startswith(name + "-")
+        or packet_sha256 != packet["sha256"]
+        or not source_sha256.startswith("sha256:")
+        or len(source_sha256) != 71
+    ):
+        raise OperatorFailure("runtime_binding_rejected")
+
+
 def _canonical_directory(path: Path, *, owner: bool = True, code: str) -> None:
     try:
         identity = path.lstat()
@@ -2924,8 +2947,12 @@ def run(packet_path: Path, phase: str) -> dict[str, Any]:
     except (OSError, ValueError) as exc:
         raise ValueError("prod10 operator packet is unreadable") from exc
     packet = _packet(value, phase)
-    runner = InClusterKubernetesRunner()
-    os.environ["OPERATOR_JOB_UID"] = _validate_runtime(packet, runner)
+    if phase == "preview-diff":
+        _validate_preview_diff_runtime(packet)
+        runner = None
+    else:
+        runner = InClusterKubernetesRunner()
+        os.environ["OPERATOR_JOB_UID"] = _validate_runtime(packet, runner)
     if phase == "stage":
         result = run_stage(packet, runner=runner)
     elif phase == "manifest":
