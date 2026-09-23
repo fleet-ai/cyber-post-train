@@ -49,6 +49,7 @@ def test_exact_plans_preserve_science_shape_and_final_test_exclusion() -> None:
         assert plan["model"]["revision"] == skyrl_production.MODEL["revision"]
         assert "sha256:" + digest(plan["model"]) == (skyrl_production.MODEL_INVENTORY_SHA256)
         assert plan["data"] == artifacts[queue.path_for("manifest", arm)]
+        assert "eval_before_train" not in plan["arguments"]
         assert set(plan["data"]["files"]) == {"train", "dev"}
         assert request["workers"] == 1
         assert request["gpus_per_worker"] == 8

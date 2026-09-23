@@ -6,7 +6,11 @@ import copy
 import json
 from pathlib import Path
 
+import pytest
+
 from cyber_post_train.jobs import digest
+from training import rl_reward_canary as canary
+from training import sft, skyrl_training
 from training import skyrl_reward_rayjob as historical
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,10 +20,29 @@ FAST_RUN = QUALIFICATION / "qwen38-rl-reward-canary-prod-v11-fast1.json"
 PROD11_DATA = QUALIFICATION / "qwen38-rl-reward-canary-data-prod-v11.json"
 FAST_DATA = QUALIFICATION / "qwen38-rl-reward-canary-data-prod11-fast1.json"
 FAST_IDENTITY = QUALIFICATION / "qwen38-rl-reward-canary-prod11-fast1-identity-v1.json"
+BASE_MANIFEST = QUALIFICATION / "qwen38-rl-reward-canary-manifest-prod-v8.json"
 
 
 def _load(path: Path) -> dict:
     return json.loads(path.read_bytes())
+
+
+def _compile_fast(monkeypatch) -> dict:
+    run = _load(FAST_RUN)
+    manifest = copy.deepcopy(_load(BASE_MANIFEST))
+    manifest["name"] = run["name"]
+    manifest["sha256"] = "sha256:" + digest(
+        {key: value for key, value in manifest.items() if key != "sha256"}
+    )
+    original = sft.read_mapping
+
+    def read(path: Path) -> dict:
+        if Path(path) == Path(run["data"]["manifest"]):
+            return copy.deepcopy(manifest)
+        return original(path)
+
+    monkeypatch.setattr(sft, "read_mapping", read)
+    return skyrl_training.compile_rl(run, relative_to=FAST_RUN.parent)
 
 
 def test_fast_update_changes_only_operational_identity_and_baseline_eval() -> None:
@@ -76,3 +99,102 @@ def test_fast_update_identity_is_sealed_fresh_and_never_reuses_prod11_output() -
     assert identity.output_root == "/mnt/sfs/jobs/chris-q38-rlreward-prod11-fast1"
     assert identity.output_root != "/mnt/sfs/jobs/chris-q38-rlreward-prod11"
     assert identity.data_root != identity.predecessor_data_root
+
+
+def test_fast_update_exact_identity_compiles_and_plan_binding_revalidates(monkeypatch) -> None:
+    plan = _compile_fast(monkeypatch)
+
+    assert plan["arguments"]["eval_before_train"] is False
+    assert plan["native_overrides"]["trainer.eval_before_train"] is False
+    assert plan["qualification"]["fast_update"] == {
+        "schema": "cyber_rl_reward_canary_fast_update_binding_v1",
+        "identity_path": canary.FAST_UPDATE_IDENTITY_PATH,
+        "identity_file_sha256": canary.FAST_UPDATE_IDENTITY_FILE_SHA256,
+        "identity_self_sha256": canary.FAST_UPDATE_IDENTITY_SELF_SHA256,
+        "eval_before_train": False,
+        "sha256": plan["qualification"]["fast_update"]["sha256"],
+    }
+    assert (
+        canary.validate_plan_binding(plan["qualification"], plan["data"], plan["arguments"])
+        == plan["qualification"]
+    )
+    skyrl_training.job_request(plan)
+
+
+@pytest.mark.parametrize(
+    ("path", "value"),
+    [
+        (("recipe", "eval_before_train"), True),
+        (("recipe", "steps"), 2),
+        (("name",), "chris-q38-rlreward-prod11-fast2"),
+        (("output_root",), "/mnt/sfs/jobs/chris-q38-rlreward-prod11-fast2"),
+        (("data", "root"), "/mnt/sfs/jobs/chris-q38-study-corpora-v1/other/data"),
+        (("wandb", "run_id"), "chris-q38-rlreward-prod11-fast2"),
+    ],
+)
+def test_fast_update_rejects_recipe_or_identity_mutation(monkeypatch, path, value) -> None:
+    run = _load(FAST_RUN)
+    target = run
+    for key in path[:-1]:
+        target = target[key]
+    target[path[-1]] = value
+    manifest = copy.deepcopy(_load(BASE_MANIFEST))
+    manifest["name"] = run["name"]
+    manifest["sha256"] = "sha256:" + digest(
+        {key: item for key, item in manifest.items() if key != "sha256"}
+    )
+    original = sft.read_mapping
+
+    def read(source: Path) -> dict:
+        if Path(source) == Path(run["data"]["manifest"]):
+            return copy.deepcopy(manifest)
+        return original(source)
+
+    monkeypatch.setattr(sft, "read_mapping", read)
+    with pytest.raises(ValueError, match="reward-canary"):
+        skyrl_training.compile_rl(run, relative_to=FAST_RUN.parent)
+
+
+def test_fast_update_rejects_deleting_explicit_no_pre_eval_mode(monkeypatch) -> None:
+    run = _load(FAST_RUN)
+    run["recipe"].pop("eval_before_train")
+    manifest = copy.deepcopy(_load(BASE_MANIFEST))
+    manifest["name"] = run["name"]
+    manifest["sha256"] = "sha256:" + digest(
+        {key: item for key, item in manifest.items() if key != "sha256"}
+    )
+    original = sft.read_mapping
+
+    def read(source: Path) -> dict:
+        if Path(source) == Path(run["data"]["manifest"]):
+            return copy.deepcopy(manifest)
+        return original(source)
+
+    monkeypatch.setattr(sft, "read_mapping", read)
+    with pytest.raises(ValueError, match="reward-canary recipe changed"):
+        skyrl_training.compile_rl(run, relative_to=FAST_RUN.parent)
+
+
+def test_fast_update_plan_binding_rejects_missing_receipt_or_identity_drift(monkeypatch) -> None:
+    plan = _compile_fast(monkeypatch)
+    missing = copy.deepcopy(plan)
+    missing["qualification"].pop("fast_update")
+    missing["qualification"]["sha256"] = "sha256:" + digest(
+        {key: value for key, value in missing["qualification"].items() if key != "sha256"}
+    )
+    with pytest.raises(ValueError, match="plan binding changed"):
+        skyrl_training.job_request(missing)
+
+    baseline_shaped = copy.deepcopy(plan)
+    baseline_shaped["arguments"].pop("eval_before_train")
+    baseline_shaped["qualification"].pop("fast_update")
+    baseline_shaped["qualification"]["sha256"] = "sha256:" + digest(
+        {key: value for key, value in baseline_shaped["qualification"].items() if key != "sha256"}
+    )
+    with pytest.raises(ValueError, match="plan binding changed"):
+        skyrl_training.job_request(baseline_shaped)
+
+    drifted = copy.deepcopy(plan)
+    drifted["arguments"]["wandb_run_id"] = "chris-q38-rlreward-prod11-fast2"
+    with pytest.raises(ValueError, match="plan binding changed"):
+        skyrl_training.job_request(drifted)

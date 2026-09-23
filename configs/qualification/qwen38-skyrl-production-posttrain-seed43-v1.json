@@ -300,7 +300,7 @@
   },
   "export": {
     "adapter": {
-      "file_sha256": "sha256:295950d3605fc45eb3cb765340e819909e82af2a4e532548a61ad561f044408e",
+      "file_sha256": "sha256:b62c576027f086be26c2e565652f2052f6193c71d7bf2999444cd90b28906606",
       "path": "training/skyrl_posttrain.py"
     },
     "checkpoint_manifest_schema": "cyber_native_skyrl_rl_checkpoint_manifest_v1",
@@ -501,7 +501,7 @@
       "release_and_exact_UID_absence_required_on_success_or_failure": true
     }
   },
-  "sha256": "sha256:ef448256ccec7de9899719aff2c134f7c2f1de190455754ce176f6ffa33b30d2",
+  "sha256": "sha256:9fce3bf3a084be51a9719733965e71631b206fd6d10bb6a9a8e97af8663659fb",
   "state": "offline_blocked_waiting_training_acceptance",
   "training_acceptance": {
     "accepted": false,

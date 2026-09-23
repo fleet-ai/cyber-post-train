@@ -144,8 +144,8 @@ def test_canonical_source_receipts_remain_byte_identical() -> None:
 def test_one_node_one_step_config_compiles_to_the_qualified_image(monkeypatch) -> None:
     plan, manifest = compile_canary(monkeypatch)
     request = skyrl_training.job_request(plan)
-    assert digest(plan) == "3684d5e15964d048e11fbc3d27bef7830e3849d8ae7ab32809c13ca8638f69e4"
-    assert digest(request) == "5a1179e0e945c8330efbaf50d56cbb34c06b39c3f8ec670550f106a5d45fb088"
+    assert digest(plan) == "06628d58a3f1f00c2d399a3cbb2e0d9e7eda4a207b889aae4f85f301ce7981c1"
+    assert digest(request) == "72a026e13354c673f4c474c1c81edb86d9f6e8b701882ed7cc9e2e521b2e63a8"
     arguments, overrides = plan["arguments"], plan["native_overrides"]
     assert plan["data"] == manifest
     assert request["image"] == canary.IMAGE

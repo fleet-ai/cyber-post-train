@@ -28,6 +28,9 @@ RUNTIME_EVIDENCE_PATH = "configs/data/qwen38-rl-reward-canary-exact-version-evid
 HORIZON_PATH = "configs/data/qwen38-rl-reward-canary-horizon-v2.json"
 TOOL_CATALOG_PATH = "configs/data/qwen38-rl-filtered-canary-tool-catalog-v1.json"
 QUALIFICATION_PATH = "configs/qualification/qwen38-rl-reward-canary-port-v8.json"
+FAST_UPDATE_IDENTITY_PATH = (
+    "configs/qualification/qwen38-rl-reward-canary-prod11-fast1-identity-v1.json"
+)
 
 TASK_SET_FILE_SHA256 = "sha256:c3ee0a239dcb836b1951e65eda5a9813360a0378747716df8d8ca3753e741517"
 TASK_SET_SELF_SHA256 = "sha256:9b88bac1510720926ea041d942044804d6c54c083a0ea56d07cae5f448685909"
@@ -46,10 +49,16 @@ HORIZON_SELF_SHA256 = "sha256:a2a13e123b51041b314c81772134dd63e89dd99c4f8a68822f
 TOOL_CATALOG_FILE_SHA256 = "sha256:e4a3c4fb5b5c34cdaf64ec568eb31fcc0d55a63cc0a134808db348c65d7b6858"
 TOOL_CATALOG_SHA256 = "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
 QUALIFICATION_FILE_SHA256 = (
-    "sha256:fc53cfe9fb5c3a70520fcefbae2c023a2d82f195810010614c20be84ad9fa771"
+    "sha256:1f6b5ccbf9632f8a2788c57ffc9fd250a2863af76de4432aa625d3d18a1272b2"
 )
 QUALIFICATION_SELF_SHA256 = (
-    "sha256:bf40e69106e201a0c5c8eda578aa26d04e118dcae5898c54104bc3ab7ebb984a"
+    "sha256:1754606c1e7e720e905560b92826839b1a41fb3943ef427f515c8c1e824897d5"
+)
+FAST_UPDATE_IDENTITY_FILE_SHA256 = (
+    "sha256:8d5cbe08c630dc8812473fdde35b041b59b02e4deef073aa134338437374a884"
+)
+FAST_UPDATE_IDENTITY_SELF_SHA256 = (
+    "sha256:2671fb67b61b0c94616850e3b9c3ee06989838ced0c13ae3ccecd0181db4df16"
 )
 
 LIMITS = {
@@ -74,6 +83,13 @@ RECIPE = {
     "checkpoint_interval": 1,
     "keep_checkpoints": 2,
     "seed": 42,
+}
+FAST_UPDATE_RECIPE = {**RECIPE, "eval_before_train": False}
+FAST_UPDATE_IDENTITY = {
+    "run_name": "chris-q38-rlreward-prod11-fast1",
+    "output_root": "/mnt/sfs/jobs/chris-q38-rlreward-prod11-fast1",
+    "data_root": ("/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-prod11-fast1-v1/data"),
+    "wandb_run_id": "chris-q38-rlreward-prod11-fast1",
 }
 RESOURCES = {
     "cpu_request": "64",
@@ -153,16 +169,16 @@ TOPOLOGY_SUCCESSOR = {
         "sha256:f7d53ee426ee4f23e1c608bc17583f5f105ac30b6a8c19b04f966b908cc47d52"
     ),
     "name": "chris-q38-skyrl-probe-v17",
-    "plan_sha256": "sha256:f0759158a960c61ab67c37b2744e95881dadcb6de7ada4dfb3f727747446605d",
-    "request_sha256": ("sha256:147953c7ae14a2ff223a7a282f7e7961713b083cb96df56f8b24e468cac540dd"),
+    "plan_sha256": "sha256:c7dba701b3b8805a8efbf5cda67f346a5aec0fddd2c8356756131830beca2c40",
+    "request_sha256": ("sha256:6e6826a35a45028b8ef0aad05ef476a9c941f22fcb58dbbde830712891f95d95"),
     "fleetjob_manifest_sha256": (
-        "sha256:87554b07e401cfa103a2f056261cfbd5ed3c14c4fa1277093f604481b24cdb0d"
+        "sha256:0a8ba4e08b8a1e3149b9a19f1bba339834f0369894e9d8f42c854099fd0dae05"
     ),
     "preflight_manifest_sha256": (
-        "sha256:0c130c7dd7f7069e4658a9f2135ebb47ecc8a7f1836d06cdc9671c3a114e8922"
+        "sha256:4f97ad8c26a6a3529813218424249e5d2894f48657ac5306ae6cccce011646b4"
     ),
     "receipt_verifier_manifest_sha256": (
-        "sha256:cf94ccaf23fba5cfbb0acec549735ff0b5ace54bdd54019bea173d7f32691f18"
+        "sha256:4eb41b7109baae0b6d95b993dcb293a55fdaf6651ca9f517dd74f9ef87b8aa27"
     ),
     "required_terminal_receipt": "TOPOLOGY_PROBE.json",
     "terminal_receipt_grace_seconds": 30,
@@ -607,6 +623,42 @@ def _validate_qualification(path: Path) -> dict:
     return value
 
 
+def _fast_update_binding(config: dict) -> dict | None:
+    selected = {
+        "run_name": config.get("name"),
+        "output_root": config.get("output_root"),
+        "data_root": config.get("data", {}).get("root"),
+        "wandb_run_id": config.get("wandb", {}).get("run_id"),
+    }
+    selects_fast_identity = any(
+        selected[key] == value for key, value in FAST_UPDATE_IDENTITY.items()
+    )
+    if config.get("recipe") == RECIPE and not selects_fast_identity:
+        return None
+    if config.get("recipe") != FAST_UPDATE_RECIPE or selected != FAST_UPDATE_IDENTITY:
+        raise ValueError("reward-canary recipe changed")
+    identity = _bound_json(
+        ROOT / FAST_UPDATE_IDENTITY_PATH,
+        FAST_UPDATE_IDENTITY_FILE_SHA256,
+    )
+    _sealed(identity, "cyber_skyrl_reward_direct_identity_v1")
+    if (
+        identity.get("sha256") != FAST_UPDATE_IDENTITY_SELF_SHA256
+        or {key: identity.get(key) for key in FAST_UPDATE_IDENTITY} != FAST_UPDATE_IDENTITY
+        or selected != FAST_UPDATE_IDENTITY
+    ):
+        raise ValueError("reward-canary fast-update identity changed")
+    result = {
+        "schema": "cyber_rl_reward_canary_fast_update_binding_v1",
+        "identity_path": FAST_UPDATE_IDENTITY_PATH,
+        "identity_file_sha256": FAST_UPDATE_IDENTITY_FILE_SHA256,
+        "identity_self_sha256": FAST_UPDATE_IDENTITY_SELF_SHA256,
+        "eval_before_train": False,
+    }
+    result["sha256"] = "sha256:" + digest(result)
+    return result
+
+
 def validate_run_config(
     config: dict,
     metadata: dict,
@@ -625,13 +677,14 @@ def validate_run_config(
     data = config["data"]
     output = PurePosixPath(config["output_root"])
     data_root = PurePosixPath(data["root"])
+    fast_update = _fast_update_binding(config)
     if (
         metadata.get("selection_sha256") != TASK_SET_SELF_SHA256
         or metadata.get("split_sha256") != SPLIT_SELF_SHA256
         or metadata.get("tool_catalog_sha256") != TOOL_CATALOG_SHA256
         or {key: item["rows"] for key, item in metadata.get("files", {}).items()}
         != {"train": 1, "dev": 1}
-        or config["recipe"] != RECIPE
+        or config["recipe"] not in (RECIPE, FAST_UPDATE_RECIPE)
         or config["cluster"] != {"priority": "c1", "resources": RESOURCES}
         or any(bound_model.get(key) != value for key, value in MODEL.items())
         or config["name"] != metadata.get("name")
@@ -657,6 +710,8 @@ def validate_run_config(
         "jobs_api_base_url": qualification["execution"]["jobs_api_base_url"],
         "submission_gate": qualification["submission_gate"],
     }
+    if fast_update is not None:
+        result["fast_update"] = fast_update
     result["sha256"] = "sha256:" + digest(result)
     return result
 
@@ -666,6 +721,27 @@ def validate_plan_binding(binding: object, metadata: dict, arguments: dict) -> d
     if not isinstance(binding, dict):
         raise ValueError("reward-canary plan lacks its source binding")
     body = {key: item for key, item in binding.items() if key != "sha256"}
+    fast_update = binding.get("fast_update")
+    expected_fast_update = {
+        "schema": "cyber_rl_reward_canary_fast_update_binding_v1",
+        "identity_path": FAST_UPDATE_IDENTITY_PATH,
+        "identity_file_sha256": FAST_UPDATE_IDENTITY_FILE_SHA256,
+        "identity_self_sha256": FAST_UPDATE_IDENTITY_SELF_SHA256,
+        "eval_before_train": False,
+    }
+    expected_fast_update["sha256"] = "sha256:" + digest(expected_fast_update)
+    fast_arguments = arguments.get("eval_before_train") is False
+    selected_fast_identity = any(
+        value
+        in {
+            arguments.get("name"),
+            arguments.get("output_root"),
+            str(PurePosixPath(arguments.get("data_manifest", "")).parent),
+            arguments.get("wandb_run_id"),
+            metadata.get("name"),
+        }
+        for value in FAST_UPDATE_IDENTITY.values()
+    )
     if (
         binding.get("schema") != "cyber_qwen38_skyrl_reward_canary_plan_binding_v8"
         or binding.get("sha256") != "sha256:" + digest(body)
@@ -689,6 +765,20 @@ def validate_plan_binding(binding: object, metadata: dict, arguments: dict) -> d
         or {key: item["rows"] for key, item in metadata.get("files", {}).items()}
         != {"train": 1, "dev": 1}
         or {key: arguments[key] for key in RECIPE} != RECIPE
+        or fast_arguments != selected_fast_identity
+        or fast_arguments != (fast_update == expected_fast_update)
+        or (
+            fast_arguments
+            and (
+                arguments.get("name") != FAST_UPDATE_IDENTITY["run_name"]
+                or arguments.get("output_root") != FAST_UPDATE_IDENTITY["output_root"]
+                or PurePosixPath(arguments.get("data_manifest", "")).parent
+                != PurePosixPath(FAST_UPDATE_IDENTITY["data_root"])
+                or arguments.get("wandb_run_id") != FAST_UPDATE_IDENTITY["wandb_run_id"]
+                or metadata.get("name") != FAST_UPDATE_IDENTITY["run_name"]
+            )
+        )
+        or (not fast_arguments and ("eval_before_train" in arguments or fast_update is not None))
         or arguments.get("context_tokens") != LIMITS["context_tokens"]
         or arguments.get("response_tokens") != LIMITS["response_tokens"]
         or arguments.get("tokens_per_turn") != LIMITS["max_tokens_per_turn"]

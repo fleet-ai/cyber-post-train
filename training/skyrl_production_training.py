@@ -128,6 +128,7 @@ def compile_rl(config: dict, *, relative_to: Path) -> dict:
         "compaction_trigger_tokens",
         "compaction_summary_tokens",
         "compaction_enabled",
+        "eval_before_train",
     ):
         arguments.pop(key)
     plan = {
