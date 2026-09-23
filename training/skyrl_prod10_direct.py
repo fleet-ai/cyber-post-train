@@ -7,6 +7,7 @@ its legacy authorization schema.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -32,6 +33,7 @@ DUPLICATE_SCHEMA = "cyber_skyrl_prod10_direct_duplicate_absence_v1"
 JIT_DUPLICATE_SCHEMA = "cyber_skyrl_prod10_jit_duplicate_absence_v2"
 CAPACITY_SCHEMA = "cyber_skyrl_prod10_direct_capacity_gate_v1"
 CREATED_SCHEMA = "cyber_skyrl_prod10_direct_created_v1"
+ACCEPTANCE_SCHEMA = "cyber_skyrl_prod10_terminal_acceptance_v1"
 REVALIDATION_SCHEMA = "cyber_skyrl_prod10_preflight_revalidation_v1"
 SEALED_DEV_PREVIEW_PROVENANCE_SCHEMA = (
     "cyber_skyrl_prod10_sealed_external_dev_server_preview_provenance_v1"
@@ -977,3 +979,321 @@ def create_once(
         stream.flush()
         os.fsync(stream.fileno())
     return proof
+
+
+def terminal_paths(plan: dict[str, Any]) -> dict[str, Path]:
+    """Return the exact prod10 training evidence paths plus the proven reload paths."""
+    paths = hardening.terminal_paths(plan)
+    operation_root = hardening.training_operation_root(plan)
+    return {
+        **paths,
+        "training_observer": operation_root / "PROD10_EXACT_OBSERVER_RESULT.json",
+        "training_create_journal": operation_root / "PROD10_DIRECT_V3_CREATE.jsonl",
+    }
+
+
+def _training_create_journal(
+    path: Path,
+    *,
+    plan_sha256: str,
+    request_sha256: str,
+    creator: dict[str, Any],
+) -> tuple[dict[str, Any], str, dict[str, Any]]:
+    """Validate the immutable prod10 three-row create journal without rewriting it."""
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("missing or indirect prod10 Jobs API create journal")
+    before = path.stat()
+    payload = path.read_bytes()
+    after = path.stat()
+    if any(
+        getattr(before, field) != getattr(after, field)
+        for field in ("st_dev", "st_ino", "st_size", "st_mtime_ns", "st_ctime_ns")
+    ):
+        raise ValueError("prod10 Jobs API create journal changed while being read")
+    try:
+        rows = [json.loads(line) for line in payload.splitlines()]
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("prod10 Jobs API create journal is not valid JSONL") from exc
+    if len(rows) != 3 or any(not isinstance(row, dict) for row in rows):
+        raise ValueError("prod10 Jobs API create journal must contain exactly three rows")
+    intent, response, created = rows
+    capacity = intent.get("capacity_gate")
+    preview = intent.get("live_preview_proof")
+    if not isinstance(capacity, dict) or not isinstance(preview, dict):
+        raise ValueError("prod10 create journal lacks capacity or preview evidence")
+    try:
+        capacity = direct._validate_seal(capacity, CAPACITY_SCHEMA)
+        preview = direct._validate_seal(preview, direct.PREVIEW_SCHEMA)
+        created = direct._validate_seal(created, CREATED_SCHEMA)
+    except JobsError as exc:
+        raise ValueError("prod10 create journal evidence schema/digest mismatch") from exc
+    census = capacity.get("capacity_census")
+    current = census.get("current") if isinstance(census, dict) else None
+    projected = census.get("projected") if isinstance(census, dict) else None
+    try:
+        UUID(response["job_id"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise ValueError("prod10 create journal response lacks an exact ID") from exc
+    if (
+        intent.get("state") != "POST_INTENT_DO_NOT_RETRY"
+        or intent.get("plan_sha256") != plan_sha256
+        or intent.get("request_sha256") != request_sha256
+        or re.fullmatch(r"sha256:[0-9a-f]{64}", str(intent.get("manifest_sha256"))) is None
+        or re.fullmatch(r"sha256:[0-9a-f]{64}", str(intent.get("authorization_sha256"))) is None
+        or re.fullmatch(r"sha256:[0-9a-f]{64}", str(intent.get("live_jobs_preview_sha256"))) is None
+        or response.get("state") != "POST_RESPONSE"
+        or response.get("name") != creator["jobs_api_run_name"]
+        or response.get("job_id") != creator["jobs_api_run_id"]
+        or response.get("run_dir") != creator["run_dir"]
+        or created.get("status") != "submitted_once_and_bound_exact_uid"
+        or created.get("plan_sha256") != plan_sha256
+        or created.get("request_sha256") != request_sha256
+        or created.get("manifest_sha256") != intent["manifest_sha256"]
+        or created.get("authorization_sha256") != intent["authorization_sha256"]
+        or created.get("live_jobs_preview_sha256") != intent["live_jobs_preview_sha256"]
+        or created.get("jobs_api_run_name") != creator["jobs_api_run_name"]
+        or created.get("jobs_api_run_id") != creator["jobs_api_run_id"]
+        or created.get("rayjob_name") != creator["rayjob_name"]
+        or created.get("rayjob_uid") != creator["rayjob_uid"]
+        or created.get("creator_binding_sha256") != creator["sha256"]
+        or created.get("created_at") != creator["rayjob_created_at"]
+        or created.get("failure_alerts") != "off"
+        or created.get("priority") != "c1"
+        or created.get("queue_priority") != "q1"
+        or created.get("nodes") != 1
+        or created.get("gpus") != 8
+        or capacity.get("status") != "passed"
+        or capacity.get("plan_sha256") != plan_sha256
+        or capacity.get("request_sha256") != request_sha256
+        or capacity.get("manifest_sha256") != intent["manifest_sha256"]
+        or capacity.get("planned") != {"nodes": 1, "gpus": 8}
+        or created.get("capacity_gate_sha256") != capacity["sha256"]
+        or not isinstance(census, dict)
+        or census.get("sha256")
+        != digest({key: item for key, item in census.items() if key != "sha256"})
+        or census.get("qualified") is not True
+        or census.get("problems") != []
+        or census.get("planned") != {"nodes": 1, "gpus": 8}
+        or census.get("limits") != {"nodes": MAX_NODES, "gpus": MAX_GPUS}
+        or not isinstance(current, dict)
+        or not isinstance(projected, dict)
+        or current.get("role_pod_counts", {}).get("unclassified") != 0
+        or type(current.get("nodes")) is not int
+        or type(current.get("gpus")) is not int
+        or projected != {"nodes": current["nodes"] + 1, "gpus": current["gpus"] + 8}
+        or projected["nodes"] > MAX_NODES
+        or projected["gpus"] > MAX_GPUS
+        or preview.get("status") != "passed"
+        or preview.get("context") != direct.PROD_CONTEXT
+        or preview.get("plan_sha256") != plan_sha256.removeprefix("sha256:")
+        or preview.get("request_sha256") != request_sha256.removeprefix("sha256:")
+        or preview.get("manifest_sha256") != intent["manifest_sha256"].removeprefix("sha256:")
+        or preview.get("failure_alerts") != "off"
+        or preview.get("priority") != "c1"
+        or preview.get("queue_priority") != "q1"
+        or preview.get("nodes") != 1
+        or preview.get("gpus") != 8
+        or created.get("live_preview_proof_sha256") != preview["sha256"]
+    ):
+        raise ValueError("prod10 create journal/CREATED/capacity binding is incomplete")
+    return created, hashlib.sha256(payload).hexdigest(), capacity
+
+
+def accept_terminal(
+    plan: dict[str, Any],
+    *,
+    checkpoint_manifest: Path,
+    export: Path,
+    training_observer: Path,
+    training_creator_binding: Path,
+    training_create_journal: Path,
+    gpu_check: Path,
+    reload_observer: Path,
+    reload_creator_binding: Path,
+    reload_create_journal: Path,
+    output: Path,
+) -> dict[str, Any]:
+    """Accept only exact prod10 create evidence and the shared reload/release proof."""
+    from . import skyrl_posttrain, skyrl_prod9_reload
+    from .sft_runtime import write_receipt
+
+    args = skyrl_posttrain._validate_plan(plan)
+    paths = terminal_paths(plan)
+    supplied = {
+        "checkpoint_manifest": checkpoint_manifest,
+        "export": export,
+        "training_observer": training_observer,
+        "training_creator_binding": training_creator_binding,
+        "training_create_journal": training_create_journal,
+        "gpu_check": gpu_check,
+        "reload_observer": reload_observer,
+        "accepted": output,
+    }
+    if any(Path(value) != paths[name] for name, value in supplied.items()):
+        raise ValueError("terminal acceptance paths differ from the exact prod10 handoff")
+    if output.exists() or output.is_symlink():
+        raise FileExistsError("prod10 terminal acceptance already exists")
+    manifest, manifest_file_sha256 = hardening._receipt_file(checkpoint_manifest)
+    skyrl_posttrain.verify_manifest(manifest)
+    if (
+        manifest.get("source_plan_sha256") != digest(plan)
+        or manifest.get("optimizer_step") != args.steps
+        or manifest.get("optimizer_update_verified") is not True
+        or manifest.get("source_inputs_unchanged") is not True
+    ):
+        raise ValueError("terminal checkpoint seal differs from the exact run")
+    export_file_sha256 = hardening._hash(export)
+    export_receipt, _ = hardening._inspect_export(export, export_file_sha256)
+    if (
+        export_receipt.get("source_checkpoint_receipt_sha256") != manifest["receipt_sha256"]
+        or export_receipt.get("source_manifest_file_sha256") != manifest_file_sha256
+        or export_receipt.get("source_plan_sha256") != digest(plan)
+        or export_receipt.get("optimizer_step") != args.steps
+        or export_receipt.get("optimizer_steps_executed") != 0
+        or export_receipt.get("gpu_reload_verified") is not False
+        or export_receipt.get("output_root") != str(export.parent)
+    ):
+        raise ValueError("BF16 export differs from the exact terminal checkpoint")
+    reload_spec = skyrl_prod9_reload.build_spec(
+        plan,
+        manifest,
+        export_receipt,
+        checkpoint_manifest_file_sha256=manifest_file_sha256,
+        export_file_sha256=export_file_sha256,
+    )
+    reload_operation = hardening.reload_operation_root(reload_spec)
+    if (
+        reload_creator_binding != hardening.creator_binding_path(reload_operation, "reload")
+        or reload_create_journal != reload_operation / "PROD9_RELOAD_RAYJOB_CREATE.jsonl"
+    ):
+        raise ValueError("reload create evidence paths differ from the exact handoff")
+    creator, creator_file_sha256 = hardening._exact_creator_binding(
+        training_creator_binding,
+        run_name_prefix=plan["run_name"],
+        run_dir=plan["output_root"],
+        expected_gpus=8,
+        maximum_seconds=direct.MAXIMUM_SECONDS,
+    )
+    created, journal_file_sha256, capacity = _training_create_journal(
+        training_create_journal,
+        plan_sha256="sha256:" + digest(plan),
+        request_sha256="sha256:" + digest(training.job_request(plan)),
+        creator=creator,
+    )
+    candidate = skyrl_posttrain._json(training_observer)
+    training_receipt = candidate.get("receipt")
+    receipt_body = (
+        {key: item for key, item in training_receipt.items() if key != "sha256"}
+        if isinstance(training_receipt, dict)
+        else {}
+    )
+    if (
+        not isinstance(training_receipt, dict)
+        or training_receipt.get("sha256") != digest(receipt_body)
+        or training_receipt.get("status") != "native_loop_returned"
+        or training_receipt.get("plan_sha256") != digest(plan)
+        or training_receipt.get("checkpoint_global_step") != manifest["optimizer_step"]
+        or training_receipt.get("completed_batches") != len(skyrl_posttrain._expected_batches(args))
+        or training_receipt.get("optimizer_update_independently_verified") is not False
+        or training_receipt.get("checkpoint_reload_verified") is not False
+        or manifest.get("terminal_receipt_sha256") != training_receipt["sha256"]
+    ):
+        raise ValueError("training observer termination receipt differs from the exact run")
+    training_release, training_observer_file_sha256 = hardening._exact_observer(
+        training_observer,
+        creator=creator,
+        expected_gpus=8,
+        expected_receipt=training_receipt,
+    )
+    gpu, gpu_file_sha256 = hardening._receipt_file(gpu_check)
+    if (
+        gpu.get("schema") != "cyber_hf_export_check_v1"
+        or gpu.get("status") != "passed"
+        or gpu.get("export_sha256") != export_file_sha256
+        or gpu.get("export_receipt_sha256") != export_receipt["receipt_sha256"]
+        or gpu.get("checkpoint_manifest_file_sha256") != manifest_file_sha256
+        or gpu.get("checkpoint_receipt_sha256") != manifest["receipt_sha256"]
+        or gpu.get("source_plan_sha256") != digest(plan)
+        or gpu.get("model_repo") != plan["model"]["repo"]
+        or gpu.get("model_revision") != plan["model"]["revision"]
+        or gpu.get("checker_sha256") != hardening._hash(Path(skyrl_prod9_reload.__file__))
+        or gpu.get("optimizer_steps_executed") != 0
+        or gpu.get("gpus") != 1
+        or gpu.get("gpu_reload_verified") is not True
+        or gpu.get("source_unchanged") is not True
+        or gpu.get("finite_logits") is not True
+        or gpu.get("generated_tokens") != 2
+        or gpu.get("serving_qualified") is not False
+    ):
+        raise ValueError("one-GPU BF16 reload proof is incomplete")
+    reload_request = skyrl_prod9_reload.job_request(reload_spec)
+    reload_creator, reload_creator_file_sha256 = hardening._exact_creator_binding(
+        reload_creator_binding,
+        run_name_prefix=reload_request["name"],
+        run_dir=reload_spec["run_dir"],
+        expected_gpus=1,
+        maximum_seconds=skyrl_prod9_reload.MAXIMUM_SECONDS,
+    )
+    reload_created, reload_journal_file_sha256, reload_capacity = hardening._create_journal(
+        reload_create_journal,
+        created_schema=skyrl_prod9_reload.CREATED_SCHEMA,
+        plan_sha256="sha256:" + digest(plan),
+        request_sha256="sha256:" + digest(reload_request),
+        creator=reload_creator,
+        expected_gpus=1,
+    )
+    if reload_created.get("spec_sha256") != reload_spec["sha256"]:
+        raise ValueError("reload CREATED receipt differs from the exact reload specification")
+    observer, observer_file_sha256 = hardening._exact_observer(
+        reload_observer,
+        creator=reload_creator,
+        expected_gpus=1,
+        expected_receipt=gpu,
+    )
+    result = {
+        "schema": ACCEPTANCE_SCHEMA,
+        "status": "accepted",
+        "source_plan_sha256": digest(plan),
+        "checkpoint_manifest_file_sha256": manifest_file_sha256,
+        "checkpoint_manifest_receipt_sha256": manifest["receipt_sha256"],
+        "export_file_sha256": export_file_sha256,
+        "export_receipt_sha256": export_receipt["receipt_sha256"],
+        "training_creator_binding_file_sha256": creator_file_sha256,
+        "training_creator_binding_receipt_sha256": creator["sha256"],
+        "training_create_journal_file_sha256": journal_file_sha256,
+        "training_created_receipt_sha256": created["sha256"],
+        "training_capacity_gate_sha256": capacity["sha256"],
+        "training_observer_file_sha256": training_observer_file_sha256,
+        "training_observer_receipt_sha256": training_release["sha256"],
+        "training_manifest_sha256": created["manifest_sha256"],
+        "training_rayjob_name": training_release["rayjob_name"],
+        "training_rayjob_uid": training_release["rayjob_uid"],
+        "training_workload_name": training_release["workloads"][0]["name"],
+        "training_workload_uid": training_release["workloads"][0]["uid"],
+        "training_raycluster_name": training_release["rayclusters"][0]["name"],
+        "training_raycluster_uid": training_release["rayclusters"][0]["uid"],
+        "training_pod_names": [row["name"] for row in training_release["pods"]],
+        "training_pod_uids": [row["uid"] for row in training_release["pods"]],
+        "gpu_check_file_sha256": gpu_file_sha256,
+        "gpu_check_receipt_sha256": gpu["receipt_sha256"],
+        "reload_checker_file_sha256": gpu["checker_sha256"],
+        "reload_observer_file_sha256": observer_file_sha256,
+        "reload_observer_receipt_sha256": observer["sha256"],
+        "reload_creator_binding_file_sha256": reload_creator_file_sha256,
+        "reload_creator_binding_receipt_sha256": reload_creator["sha256"],
+        "reload_create_journal_file_sha256": reload_journal_file_sha256,
+        "reload_created_receipt_sha256": reload_created["sha256"],
+        "reload_capacity_gate_sha256": reload_capacity["sha256"],
+        "reload_rayjob_uid": observer["rayjob_uid"],
+        "reload_pod_uid": observer["pods"][0]["uid"],
+        "optimizer_step": args.steps,
+        "optimizer_updates_verified": True,
+        "terminal_checkpoint_sealed": True,
+        "complete_bf16_reload_verified": True,
+        "gpu_resources_released": True,
+        "private_payloads_included": False,
+        "serving_qualified": False,
+    }
+    write_receipt(output, result)
+    accepted, _ = hardening._receipt_file(output)
+    return accepted

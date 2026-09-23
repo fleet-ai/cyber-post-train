@@ -21,7 +21,13 @@ from cyber_post_train.jobs import digest
 from evals.fleet import opencode_self_hosted as fleet
 from training import dev_cleanup_observer as cleanup_observer
 from training import export as native_export
-from training import skyrl, skyrl_prod9_direct, skyrl_prod9_reload, skyrl_prod9_training
+from training import (
+    skyrl,
+    skyrl_prod9_direct,
+    skyrl_prod9_reload,
+    skyrl_prod9_training,
+    skyrl_prod10_direct,
+)
 from training import skyrl_posttrain as post
 from training import skyrl_prod9_hardening as prod9
 from training.sft_runtime import digest as file_digest
@@ -685,6 +691,88 @@ def test_rl_terminal_acceptance_requires_exact_seal_export_reload_and_release(
             reload_create_journal=paths["reload_create_journal"],
             output=paths["accepted"],
         )
+
+
+def test_prod10_terminal_acceptance_binds_exact_prod10_create_and_observer_evidence(
+    completed_prod9_rl,
+):
+    state = completed_prod9_rl
+    paths, manifest, exported = _terminal_inputs(state)
+    prod10_paths = skyrl_prod10_direct.terminal_paths(state.plan)
+    paths["training_observer"].replace(prod10_paths["training_observer"])
+    rows = [json.loads(line) for line in paths["training_create_journal"].read_text().splitlines()]
+    census = rows[0]["capacity_gate"]["capacity_census"]
+    census["limits"] = {
+        "nodes": skyrl_prod10_direct.MAX_NODES,
+        "gpus": skyrl_prod10_direct.MAX_GPUS,
+    }
+    census["sha256"] = digest({key: item for key, item in census.items() if key != "sha256"})
+    capacity = rows[0]["capacity_gate"]
+    capacity["schema"] = skyrl_prod10_direct.CAPACITY_SCHEMA
+    rows[0]["capacity_gate"] = sealed(
+        {key: item for key, item in capacity.items() if key != "sha256"}
+    )
+    preview = rows[0]["live_preview_proof"]
+    preview["schema"] = skyrl_prod9_direct.PREVIEW_SCHEMA
+    preview["plan_sha256"] = digest(state.plan)
+    for key in ("request_sha256", "manifest_sha256"):
+        preview[key] = preview[key].removeprefix("sha256:")
+    rows[0]["live_preview_proof"] = sealed(
+        {key: item for key, item in preview.items() if key != "sha256"}
+    )
+    rows[2]["schema"] = skyrl_prod10_direct.CREATED_SCHEMA
+    rows[2]["capacity_gate_sha256"] = rows[0]["capacity_gate"]["sha256"]
+    rows[2]["live_preview_proof_sha256"] = rows[0]["live_preview_proof"]["sha256"]
+    rows[2] = sealed({key: item for key, item in rows[2].items() if key != "sha256"})
+    paths["training_create_journal"].replace(prod10_paths["training_create_journal"])
+    prod10_paths["training_create_journal"].write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows)
+    )
+
+    accepted = skyrl_prod10_direct.accept_terminal(
+        state.plan,
+        checkpoint_manifest=paths["checkpoint_manifest"],
+        export=paths["export"],
+        training_observer=prod10_paths["training_observer"],
+        training_creator_binding=paths["training_creator_binding"],
+        training_create_journal=prod10_paths["training_create_journal"],
+        gpu_check=paths["gpu_check"],
+        reload_observer=paths["reload_observer"],
+        reload_creator_binding=paths["reload_creator_binding"],
+        reload_create_journal=paths["reload_create_journal"],
+        output=paths["accepted"],
+    )
+
+    assert accepted["schema"] == skyrl_prod10_direct.ACCEPTANCE_SCHEMA
+    assert accepted["checkpoint_manifest_receipt_sha256"] == manifest["receipt_sha256"]
+    assert accepted["export_receipt_sha256"] == exported["receipt_sha256"]
+    assert accepted["training_capacity_gate_sha256"] == rows[0]["capacity_gate"]["sha256"]
+    assert accepted["complete_bf16_reload_verified"] is True
+    assert accepted["gpu_resources_released"] is True
+
+
+def test_prod10_terminal_acceptance_rejects_prod9_create_evidence(completed_prod9_rl):
+    state = completed_prod9_rl
+    paths, _, _ = _terminal_inputs(state)
+    prod10_paths = skyrl_prod10_direct.terminal_paths(state.plan)
+    paths["training_observer"].replace(prod10_paths["training_observer"])
+    paths["training_create_journal"].replace(prod10_paths["training_create_journal"])
+
+    with pytest.raises(ValueError, match="prod10 create journal"):
+        skyrl_prod10_direct.accept_terminal(
+            state.plan,
+            checkpoint_manifest=paths["checkpoint_manifest"],
+            export=paths["export"],
+            training_observer=prod10_paths["training_observer"],
+            training_creator_binding=paths["training_creator_binding"],
+            training_create_journal=prod10_paths["training_create_journal"],
+            gpu_check=paths["gpu_check"],
+            reload_observer=paths["reload_observer"],
+            reload_creator_binding=paths["reload_creator_binding"],
+            reload_create_journal=paths["reload_create_journal"],
+            output=paths["accepted"],
+        )
+    assert not paths["accepted"].exists()
 
 
 @pytest.mark.parametrize(
