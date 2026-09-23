@@ -354,6 +354,32 @@ def _server_defaults_only(job: dict[str, Any], expected: dict[str, Any]) -> None
     reviewed = stable_job_preview(expected)
     _extra_keys(normalized, reviewed, set(), "Job")
     _extra_keys(normalized["metadata"], reviewed["metadata"], set(), "Job metadata")
+    actual_annotations = normalized["metadata"].get("annotations", {})
+    expected_annotations = reviewed["metadata"].get("annotations", {})
+    if actual_annotations != expected_annotations:
+        raise RenderError("server-rendered root Job annotations differ")
+    root_labels = normalized["metadata"].get("labels", {})
+    expected_root_labels = reviewed["metadata"].get("labels", {})
+    _extra_keys(
+        root_labels,
+        expected_root_labels,
+        {
+            "batch.kubernetes.io/controller-uid",
+            "batch.kubernetes.io/job-name",
+            "controller-uid",
+            "job-name",
+        },
+        "root Job labels",
+    )
+    raw_uid = job.get("metadata", {}).get("uid")
+    if any(
+        root_labels.get(key) not in (None, raw_uid)
+        for key in ("batch.kubernetes.io/controller-uid", "controller-uid")
+    ) or any(
+        root_labels.get(key) not in (None, NAME)
+        for key in ("batch.kubernetes.io/job-name", "job-name")
+    ):
+        raise RenderError("server-rendered root Job generated labels differ")
     _extra_keys(
         normalized["spec"],
         reviewed["spec"],
@@ -421,6 +447,10 @@ def _server_defaults_only(job: dict[str, Any], expected: dict[str, Any]) -> None
         raise RenderError("server-rendered Pod adds an unknown scheduling gate")
     if pod.get("initContainers") or pod.get("ephemeralContainers") or pod.get("resourceClaims"):
         raise RenderError("server-rendered Pod adds an unreviewed container or resource claim")
+    if pod.get("nodeSelector") != expected_pod.get("nodeSelector"):
+        raise RenderError("server-rendered Pod node selector differs")
+    if pod.get("tolerations") != expected_pod.get("tolerations"):
+        raise RenderError("server-rendered Pod tolerations differ")
     containers = pod.get("containers")
     expected_containers = expected_pod["containers"]
     if not isinstance(containers, list) or len(containers) != len(expected_containers):
@@ -434,6 +464,10 @@ def _server_defaults_only(job: dict[str, Any], expected: dict[str, Any]) -> None
         )
         if container.get("securityContext") not in (None, {}):
             raise RenderError("server-rendered container adds a security context")
+        if container.get("env") != expected_container.get("env"):
+            raise RenderError("server-rendered container environment differs")
+        if container.get("volumeMounts") != expected_container.get("volumeMounts"):
+            raise RenderError("server-rendered container volume mounts differ")
         resources = container.get("resources", {})
         expected_resources = expected_container.get("resources", {})
         _extra_keys(resources, expected_resources, set(), "container resources")
