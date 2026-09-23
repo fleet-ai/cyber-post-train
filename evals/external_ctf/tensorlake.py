@@ -40,7 +40,15 @@ from .protocol import (
 
 WORKER = Path(__file__).with_name("worker.py")
 QUALIFICATION_BUNDLE_CORE = {
+    "evals/external_ctf/analyze.py": ROOT / "evals/external_ctf/analyze.py",
     "evals/external_ctf/protocol.py": ROOT / "evals/external_ctf/protocol.py",
+    "evals/external_ctf/tensorlake.py": ROOT / "evals/external_ctf/tensorlake.py",
+    "evals/external_ctf/worker.py": ROOT / "evals/external_ctf/worker.py",
+    **{
+        path.relative_to(ROOT).as_posix(): path
+        for paths in RUNTIME_QUALIFICATION_SOURCE_PATHS.values()
+        for path in paths.values()
+    },
 }
 WORKER_BOOTSTRAP = """\
 import base64
