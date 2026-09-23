@@ -28,6 +28,7 @@ from evals.fleet import rollout_ledger, rollout_postgres, rollout_worker
 from evals.fleet import stored_session_reconciliation as legacy
 
 INTENT_SCHEMA = "fleet-stored-session-reconciliation-intent-v3"
+SUBSET_INTENT_SCHEMA = "fleet-stored-session-subset-reconciliation-intent-v1"
 RECEIPT_SCHEMA = "fleet-stored-session-reconciliation-v2"
 RUNTIME_FILES = (
     "stored_session_reconciliation_v2.py",
@@ -49,6 +50,7 @@ INTENT_FIELDS = {
     "expected_failure_code",
     "sha256",
 }
+SUBSET_INTENT_FIELDS = INTENT_FIELDS | {"expected_arm_state_counts", "unselected_cell_ids"}
 SUPPORTED_AGENT_OUTCOMES = {(0, "output_limit")}
 
 
@@ -61,6 +63,69 @@ def _body_digest(value: dict[str, Any]) -> str:
 def runtime_identity() -> dict[str, str]:
     root = Path(__file__).parent
     return {name: hashlib.sha256((root / name).read_bytes()).hexdigest() for name in RUNTIME_FILES}
+
+
+def _normalized_common(
+    *,
+    evaluation_plan_sha256: str,
+    runtime_files_sha256: dict[str, str],
+    serving_block: str,
+    source_output_root: str,
+    source_database: str,
+    source_job_uid: str,
+    source_job_terminal_receipt_sha256: str,
+    selected_cell_ids: tuple[str, ...],
+    expected_agent_exit_code: int,
+    expected_agent_termination: str,
+    expected_failure_code: str,
+) -> dict[str, Any]:
+    plan = rollout_ledger._require_digest(  # noqa: SLF001
+        evaluation_plan_sha256, "evaluation plan sha256"
+    )
+    runtime = runtime_identity()
+    if runtime_files_sha256 != runtime:
+        raise rollout_ledger.LedgerError("stored-session v2 runtime identity differs")
+    route = rollout_ledger._require_text(serving_block, "serving block")  # noqa: SLF001
+    output = Path(source_output_root)
+    if (
+        not output.is_absolute()
+        or output.parts[:4] != ("/", "mnt", "sfs", "jobs")
+        or ".." in output.parts
+    ):
+        raise rollout_ledger.LedgerError("source output root is not an exact SFS job path")
+    database = legacy._database_name(source_database)  # noqa: SLF001
+    try:
+        job_uid = str(uuid.UUID(source_job_uid))
+        cells = tuple(str(uuid.UUID(value)) for value in selected_cell_ids)
+    except (AttributeError, TypeError, ValueError) as exc:
+        raise rollout_ledger.LedgerError("stored-session v2 identity is malformed") from exc
+    terminal = rollout_ledger._require_digest(  # noqa: SLF001
+        source_job_terminal_receipt_sha256,
+        "source job terminal receipt sha256",
+    )
+    if not cells or len(cells) != len(set(cells)):
+        raise rollout_ledger.LedgerError("stored-session v2 roster is empty or repeated")
+    if (
+        isinstance(expected_agent_exit_code, bool)
+        or (expected_agent_exit_code, expected_agent_termination) not in SUPPORTED_AGENT_OUTCOMES
+        or not isinstance(expected_failure_code, str)
+        or not expected_failure_code
+        or len(expected_failure_code) > 128
+    ):
+        raise rollout_ledger.LedgerError("stored-session v2 outcome is unsupported")
+    return {
+        "evaluation_plan_sha256": plan,
+        "runtime_files_sha256": runtime,
+        "serving_block": route,
+        "source_output_root": str(output),
+        "source_database": database,
+        "source_job_uid": job_uid,
+        "source_job_terminal_receipt_sha256": terminal,
+        "selected_cell_ids": cells,
+        "expected_agent_exit_code": expected_agent_exit_code,
+        "expected_agent_termination": expected_agent_termination,
+        "expected_failure_code": expected_failure_code,
+    }
 
 
 @dataclass(frozen=True)
@@ -79,70 +144,107 @@ class ExactStoredSessionIntent:
     sha256: str
 
     def __post_init__(self) -> None:
-        plan = rollout_ledger._require_digest(  # noqa: SLF001
-            self.evaluation_plan_sha256, "evaluation plan sha256"
+        normalized = _normalized_common(
+            evaluation_plan_sha256=self.evaluation_plan_sha256,
+            runtime_files_sha256=self.runtime_files_sha256,
+            serving_block=self.serving_block,
+            source_output_root=self.source_output_root,
+            source_database=self.source_database,
+            source_job_uid=self.source_job_uid,
+            source_job_terminal_receipt_sha256=self.source_job_terminal_receipt_sha256,
+            selected_cell_ids=self.selected_cell_ids,
+            expected_agent_exit_code=self.expected_agent_exit_code,
+            expected_agent_termination=self.expected_agent_termination,
+            expected_failure_code=self.expected_failure_code,
         )
-        runtime = runtime_identity()
-        if self.runtime_files_sha256 != runtime:
-            raise rollout_ledger.LedgerError("stored-session v2 runtime identity differs")
-        route = rollout_ledger._require_text(self.serving_block, "serving block")  # noqa: SLF001
-        output = Path(self.source_output_root)
-        if (
-            not output.is_absolute()
-            or output.parts[:4] != ("/", "mnt", "sfs", "jobs")
-            or ".." in output.parts
-        ):
-            raise rollout_ledger.LedgerError("source output root is not an exact SFS job path")
-        database = legacy._database_name(self.source_database)  # noqa: SLF001
-        try:
-            source_job_uid = str(uuid.UUID(self.source_job_uid))
-            cells = tuple(str(uuid.UUID(value)) for value in self.selected_cell_ids)
-        except (AttributeError, TypeError, ValueError) as exc:
-            raise rollout_ledger.LedgerError("stored-session v2 identity is malformed") from exc
-        terminal = rollout_ledger._require_digest(  # noqa: SLF001
-            self.source_job_terminal_receipt_sha256,
-            "source job terminal receipt sha256",
-        )
-        if not cells or len(cells) != len(set(cells)):
-            raise rollout_ledger.LedgerError("stored-session v2 roster is empty or repeated")
-        if (
-            isinstance(self.expected_agent_exit_code, bool)
-            or (self.expected_agent_exit_code, self.expected_agent_termination)
-            not in SUPPORTED_AGENT_OUTCOMES
-            or not isinstance(self.expected_failure_code, str)
-            or not self.expected_failure_code
-            or len(self.expected_failure_code) > 128
-        ):
-            raise rollout_ledger.LedgerError("stored-session v2 outcome is unsupported")
         body = {
             "schema_version": INTENT_SCHEMA,
-            "evaluation_plan_sha256": plan,
-            "runtime_files_sha256": runtime,
-            "serving_block": route,
-            "source_output_root": str(output),
-            "source_database": database,
-            "source_job_uid": source_job_uid,
-            "source_job_terminal_receipt_sha256": terminal,
-            "selected_cell_ids": list(cells),
-            "expected_agent_exit_code": self.expected_agent_exit_code,
-            "expected_agent_termination": self.expected_agent_termination,
-            "expected_failure_code": self.expected_failure_code,
+            **normalized,
+            "selected_cell_ids": list(normalized["selected_cell_ids"]),
         }
         intent_sha256 = rollout_ledger._require_digest(self.sha256, "intent sha256")  # noqa: SLF001
         if intent_sha256 != _body_digest(body):
             raise rollout_ledger.LedgerError("stored-session v2 intent self digest differs")
-        object.__setattr__(self, "evaluation_plan_sha256", plan)
-        object.__setattr__(self, "runtime_files_sha256", runtime)
-        object.__setattr__(self, "serving_block", route)
-        object.__setattr__(self, "source_output_root", str(output))
-        object.__setattr__(self, "source_database", database)
-        object.__setattr__(self, "source_job_uid", source_job_uid)
-        object.__setattr__(self, "source_job_terminal_receipt_sha256", terminal)
-        object.__setattr__(self, "selected_cell_ids", cells)
+        for name, value in normalized.items():
+            object.__setattr__(self, name, value)
         object.__setattr__(self, "sha256", intent_sha256)
 
 
-def load_intent(path: Path) -> ExactStoredSessionIntent:
+@dataclass(frozen=True)
+class ExactStoredSessionSubsetIntent:
+    evaluation_plan_sha256: str
+    runtime_files_sha256: dict[str, str]
+    serving_block: str
+    source_output_root: str
+    source_database: str
+    source_job_uid: str
+    source_job_terminal_receipt_sha256: str
+    selected_cell_ids: tuple[str, ...]
+    unselected_cell_ids: tuple[str, ...]
+    expected_arm_state_counts: dict[str, int]
+    expected_agent_exit_code: int
+    expected_agent_termination: str
+    expected_failure_code: str
+    sha256: str
+
+    def __post_init__(self) -> None:
+        normalized = _normalized_common(
+            evaluation_plan_sha256=self.evaluation_plan_sha256,
+            runtime_files_sha256=self.runtime_files_sha256,
+            serving_block=self.serving_block,
+            source_output_root=self.source_output_root,
+            source_database=self.source_database,
+            source_job_uid=self.source_job_uid,
+            source_job_terminal_receipt_sha256=self.source_job_terminal_receipt_sha256,
+            selected_cell_ids=self.selected_cell_ids,
+            expected_agent_exit_code=self.expected_agent_exit_code,
+            expected_agent_termination=self.expected_agent_termination,
+            expected_failure_code=self.expected_failure_code,
+        )
+        try:
+            unselected = tuple(str(uuid.UUID(value)) for value in self.unselected_cell_ids)
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise rollout_ledger.LedgerError("stored-session subset identity is malformed") from exc
+        selected = normalized["selected_cell_ids"]
+        states = tuple(rollout_ledger.STATES)
+        counts = self.expected_arm_state_counts
+        if (
+            not unselected
+            or len(unselected) != len(set(unselected))
+            or set(selected) & set(unselected)
+            or not isinstance(counts, dict)
+            or set(counts) != set(states)
+            or any(type(counts[state]) is not int or counts[state] < 0 for state in states)
+            or sum(counts.values()) != len(selected) + len(unselected)
+            or counts["retry_review"] < len(selected)
+            or any(
+                counts[state] != 0
+                for state in ("pending", *rollout_ledger.ACTIVE_STATES, "terminal")
+            )
+        ):
+            raise rollout_ledger.LedgerError("stored-session subset arm census is invalid")
+        normalized_counts = {state: counts[state] for state in states}
+        body = {
+            "schema_version": SUBSET_INTENT_SCHEMA,
+            **normalized,
+            "selected_cell_ids": list(selected),
+            "unselected_cell_ids": list(unselected),
+            "expected_arm_state_counts": normalized_counts,
+        }
+        intent_sha256 = rollout_ledger._require_digest(self.sha256, "intent sha256")  # noqa: SLF001
+        if intent_sha256 != _body_digest(body):
+            raise rollout_ledger.LedgerError("stored-session subset intent self digest differs")
+        for name, value in normalized.items():
+            object.__setattr__(self, name, value)
+        object.__setattr__(self, "unselected_cell_ids", unselected)
+        object.__setattr__(self, "expected_arm_state_counts", normalized_counts)
+        object.__setattr__(self, "sha256", intent_sha256)
+
+
+StoredSessionIntent = ExactStoredSessionIntent | ExactStoredSessionSubsetIntent
+
+
+def load_intent(path: Path) -> StoredSessionIntent:
     try:
         if stat.S_IMODE(path.stat().st_mode) & 0o077:
             raise rollout_ledger.LedgerError(
@@ -153,12 +255,28 @@ def load_intent(path: Path) -> ExactStoredSessionIntent:
         raise
     except (OSError, json.JSONDecodeError) as exc:
         raise rollout_ledger.LedgerError("stored-session v2 intent is unreadable") from exc
-    if (
-        not isinstance(value, dict)
-        or set(value) != INTENT_FIELDS
-        or value.get("schema_version") != INTENT_SCHEMA
-        or not isinstance(value.get("selected_cell_ids"), list)
-    ):
+    if not isinstance(value, dict) or not isinstance(value.get("selected_cell_ids"), list):
+        raise rollout_ledger.LedgerError("stored-session v2 intent schema is unsupported")
+    if value.get("schema_version") == SUBSET_INTENT_SCHEMA and set(value) == SUBSET_INTENT_FIELDS:
+        if not isinstance(value.get("unselected_cell_ids"), list):
+            raise rollout_ledger.LedgerError("stored-session v2 intent schema is unsupported")
+        return ExactStoredSessionSubsetIntent(
+            evaluation_plan_sha256=value["evaluation_plan_sha256"],
+            runtime_files_sha256=value["runtime_files_sha256"],
+            serving_block=value["serving_block"],
+            source_output_root=value["source_output_root"],
+            source_database=value["source_database"],
+            source_job_uid=value["source_job_uid"],
+            source_job_terminal_receipt_sha256=value["source_job_terminal_receipt_sha256"],
+            selected_cell_ids=tuple(value["selected_cell_ids"]),
+            unselected_cell_ids=tuple(value["unselected_cell_ids"]),
+            expected_arm_state_counts=value["expected_arm_state_counts"],
+            expected_agent_exit_code=value["expected_agent_exit_code"],
+            expected_agent_termination=value["expected_agent_termination"],
+            expected_failure_code=value["expected_failure_code"],
+            sha256=value["sha256"],
+        )
+    if set(value) != INTENT_FIELDS or value.get("schema_version") != INTENT_SCHEMA:
         raise rollout_ledger.LedgerError("stored-session v2 intent schema is unsupported")
     return ExactStoredSessionIntent(
         evaluation_plan_sha256=value["evaluation_plan_sha256"],
@@ -176,7 +294,7 @@ def load_intent(path: Path) -> ExactStoredSessionIntent:
     )
 
 
-def _validate_artifacts(row: dict[str, Any], intent: ExactStoredSessionIntent) -> str:
+def _validate_artifacts(row: dict[str, Any], intent: StoredSessionIntent) -> str:
     normalized = legacy._validate_record_digest(row)  # noqa: SLF001
     root = Path(intent.source_output_root).resolve()
     attempt = (root / normalized["artifact_directory"]).resolve()
@@ -249,7 +367,7 @@ def _validate_artifacts(row: dict[str, Any], intent: ExactStoredSessionIntent) -
 def observe(
     dsn: str,
     *,
-    intent: ExactStoredSessionIntent,
+    intent: StoredSessionIntent,
     evaluation_directory: Path,
     client: httpx.Client,
 ) -> list[dict[str, Any]]:
@@ -290,7 +408,7 @@ def observe(
     return observations
 
 
-def accept_roster(
+def _accept_full_roster(
     dsn: str,
     *,
     intent: ExactStoredSessionIntent,
@@ -408,6 +526,204 @@ def accept_roster(
             ),
         )
     return receipt
+
+
+def _state_counts(rows: list[dict[str, Any]]) -> dict[str, int]:
+    return {state: sum(row["state"] == state for row in rows) for state in rollout_ledger.STATES}
+
+
+def _locked_arm_rows(
+    connection: Any, intent: ExactStoredSessionSubsetIntent
+) -> list[dict[str, Any]]:
+    rows = connection.execute("SELECT * FROM rollout_cells ORDER BY cell_id FOR UPDATE").fetchall()
+    expected_ids = set(intent.selected_cell_ids) | set(intent.unselected_cell_ids)
+    if (
+        len(rows) != len(expected_ids)
+        or {row["cell_id"] for row in rows} != expected_ids
+        or any(row["serving_block"] != intent.serving_block for row in rows)
+    ):
+        raise rollout_ledger.LedgerError("stored-session subset full arm census differs")
+    return rows
+
+
+def _expected_post_counts(intent: ExactStoredSessionSubsetIntent) -> dict[str, int]:
+    result = dict(intent.expected_arm_state_counts)
+    result["retry_review"] -= len(intent.selected_cell_ids)
+    result["accepted"] += len(intent.selected_cell_ids)
+    return result
+
+
+def _subset_receipt(intent: ExactStoredSessionSubsetIntent) -> dict[str, Any]:
+    post_counts = _expected_post_counts(intent)
+    body = {
+        "schema_version": RECEIPT_SCHEMA,
+        "reviewed_intent_sha256": intent.sha256,
+        "evaluation_plan_sha256": intent.evaluation_plan_sha256,
+        "source_job_uid_sha256": "sha256:"
+        + hashlib.sha256(intent.source_job_uid.encode()).hexdigest(),
+        "source_job_terminal_receipt_sha256": intent.source_job_terminal_receipt_sha256,
+        "selected_cell_count": len(intent.selected_cell_ids),
+        "source_total_cell_count": len(intent.selected_cell_ids) + len(intent.unselected_cell_ids),
+        "prior_retry_review_count": intent.expected_arm_state_counts["retry_review"],
+        "prior_arm_state_counts": intent.expected_arm_state_counts,
+        "post_arm_state_counts": post_counts,
+        "nonselected_cell_count": len(intent.unselected_cell_ids),
+        "nonselected_cells_preserved": True,
+        "accepted_existing_completed_session_count": len(intent.selected_cell_ids),
+        "source_agent_exit_code": intent.expected_agent_exit_code,
+        "source_agent_termination": intent.expected_agent_termination,
+        "source_failure_code_sha256": "sha256:"
+        + hashlib.sha256(intent.expected_failure_code.encode()).hexdigest(),
+        "action": "accept_existing_scored_session",
+        "model_generation_performed": False,
+        "scoring_call_performed": False,
+        "score_values_included": False,
+        "prompt_response_flag_reward_or_trace_content_included": False,
+        "cell_task_session_or_trace_identifiers_included": False,
+    }
+    return {**body, "receipt_sha256": crypto.digest_without(body, "receipt_sha256")}
+
+
+def _existing_receipt(connection: Any, intent: ExactStoredSessionSubsetIntent) -> dict[str, Any]:
+    existing = connection.execute(
+        "SELECT receipt_json FROM ledger_reconciliations WHERE kind = %s",
+        (RECEIPT_SCHEMA,),
+    ).fetchall()
+    matches = [json.loads(row["receipt_json"]) for row in existing]
+    matches = [row for row in matches if row.get("reviewed_intent_sha256") == intent.sha256]
+    expected = _subset_receipt(intent)
+    if len(matches) != 1 or matches[0] != expected:
+        raise rollout_ledger.LedgerError("stored-session v2 terminal receipt is ambiguous")
+    return matches[0]
+
+
+def _accept_subset_roster(
+    dsn: str,
+    *,
+    intent: ExactStoredSessionSubsetIntent,
+    observations: list[dict[str, Any]],
+) -> dict[str, Any]:
+    indexed = {row["cell_id"]: row for row in observations}
+    if set(indexed) != set(intent.selected_cell_ids) or len(indexed) != len(observations):
+        raise rollout_ledger.LedgerError("stored-session v2 observations differ from intent roster")
+    with rollout_postgres._transaction(dsn) as connection:  # noqa: SLF001
+        connection.execute("SET LOCAL statement_timeout = '30s'")
+        connection.execute("SET LOCAL lock_timeout = '5s'")
+        arm_before = _locked_arm_rows(connection, intent)
+        selected_rows = legacy._rows(connection, intent, lock=True)  # noqa: SLF001
+        selected_ids = set(intent.selected_cell_ids)
+        unselected_before = {
+            row["cell_id"]: dict(row) for row in arm_before if row["cell_id"] not in selected_ids
+        }
+        if all(
+            row["state"] == "accepted" and row["reconciliation_digest"] == intent.sha256
+            for row in selected_rows
+        ):
+            if _state_counts(arm_before) != _expected_post_counts(intent):
+                raise rollout_ledger.LedgerError("stored-session subset post-state census drifted")
+            receipt = _existing_receipt(connection, intent)
+            arm_after = connection.execute(
+                "SELECT * FROM rollout_cells ORDER BY cell_id"
+            ).fetchall()
+            unselected_after = {
+                row["cell_id"]: dict(row) for row in arm_after if row["cell_id"] not in selected_ids
+            }
+            if unselected_after != unselected_before:
+                raise rollout_ledger.LedgerError("stored-session subset complement changed")
+            return receipt
+        if _state_counts(arm_before) != intent.expected_arm_state_counts:
+            raise rollout_ledger.LedgerError("stored-session subset pre-state census drifted")
+        for row in selected_rows:
+            observation = indexed[row["cell_id"]]
+            legacy._validate_record_digest(row)  # noqa: SLF001
+            legacy._validate_cell_observation(row, observation)  # noqa: SLF001
+            if any(
+                (
+                    row["state"] != "retry_review",
+                    row["reconciliation_digest"] not in (None, intent.sha256),
+                    row["failure_code"] != intent.expected_failure_code,
+                    row["record_sha256"] != observation["local_record_sha256"],
+                    row["local_session_id"] != observation["session_id"],
+                    row["session_id"] not in (None, observation["session_id"]),
+                    row["session_ingest_status"] != "completed",
+                    row["agent_exit_code"] != intent.expected_agent_exit_code,
+                    row["agent_termination"] != intent.expected_agent_termination,
+                )
+            ):
+                raise rollout_ledger.LedgerError("stored-session v2 database evidence drifted")
+        post_counts = _expected_post_counts(intent)
+        receipt = _subset_receipt(intent)
+        for row in selected_rows:
+            observation = indexed[row["cell_id"]]
+            cell_receipt = legacy._validate_cell_observation(row, observation)  # noqa: SLF001
+            updated = connection.execute(
+                """
+                UPDATE rollout_cells
+                SET state = 'accepted', session_id = %s,
+                    completed_at = CURRENT_TIMESTAMP, heartbeat_at = CURRENT_TIMESTAMP,
+                    lease_expires_at = NULL, result_class = 'valid',
+                    receipt_digest = %s, failure_code = NULL,
+                    reconciliation_digest = %s, updated_at = CURRENT_TIMESTAMP
+                WHERE cell_id = %s AND state = 'retry_review'
+                """,
+                (
+                    observation["session_id"],
+                    cell_receipt["receipt_sha256"],
+                    intent.sha256,
+                    row["cell_id"],
+                ),
+            )
+            if updated.rowcount != 1:
+                raise rollout_ledger.LedgerError("stored-session v2 atomic acceptance lost")
+            rollout_postgres._event(  # noqa: SLF001
+                connection,
+                cell_id=row["cell_id"],
+                name="stored_scored_session_reconciled",
+                from_state="retry_review",
+                to_state="accepted",
+                worker_id=row["worker_id"],
+                claim_id=row["claim_id"],
+                detail={
+                    "reviewed_intent_sha256": intent.sha256,
+                    "cell_receipt_sha256": cell_receipt["receipt_sha256"],
+                    "source_job_terminal_receipt_sha256": (
+                        intent.source_job_terminal_receipt_sha256
+                    ),
+                    "action": "accept_existing_scored_session",
+                },
+            )
+        arm_after = connection.execute("SELECT * FROM rollout_cells ORDER BY cell_id").fetchall()
+        unselected_after = {
+            row["cell_id"]: dict(row) for row in arm_after if row["cell_id"] not in selected_ids
+        }
+        if unselected_after != unselected_before:
+            raise rollout_ledger.LedgerError("stored-session subset complement changed")
+        if _state_counts(arm_after) != post_counts:
+            raise rollout_ledger.LedgerError("stored-session subset post-state census drifted")
+        connection.execute(
+            """
+            INSERT INTO ledger_reconciliations (
+                receipt_sha256, kind, receipt_json, created_at
+            ) VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+            """,
+            (
+                receipt["receipt_sha256"],
+                RECEIPT_SCHEMA,
+                json.dumps(receipt, sort_keys=True, separators=(",", ":")),
+            ),
+        )
+    return receipt
+
+
+def accept_roster(
+    dsn: str,
+    *,
+    intent: StoredSessionIntent,
+    observations: list[dict[str, Any]],
+) -> dict[str, Any]:
+    if isinstance(intent, ExactStoredSessionSubsetIntent):
+        return _accept_subset_roster(dsn, intent=intent, observations=observations)
+    return _accept_full_roster(dsn, intent=intent, observations=observations)
 
 
 def run(

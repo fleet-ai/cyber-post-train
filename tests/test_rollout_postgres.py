@@ -21,6 +21,7 @@ from evals.fleet import (
     rollout_postgres_migrate,
     rollout_postgres_status,
     stored_session_reconciliation,
+    stored_session_reconciliation_v2,
 )
 
 
@@ -646,6 +647,149 @@ def test_stored_session_roster_rejects_a_live_owner_atomically(tmp_path, pg_dsn)
             pg_dsn, intent=intent, observations=[observation]
         )
     assert rollout_postgres.summary(pg_dsn)["by_state"]["claimed"] == 1
+
+
+def _stored_session_subset_intent(selected, unselected, counts):
+    body = {
+        "schema_version": stored_session_reconciliation_v2.SUBSET_INTENT_SCHEMA,
+        "evaluation_plan_sha256": "a" * 64,
+        "runtime_files_sha256": stored_session_reconciliation_v2.runtime_identity(),
+        "serving_block": "route",
+        "source_output_root": "/mnt/sfs/jobs/source-eval",
+        "source_database": "stored_session_test",
+        "source_job_uid": str(uuid.uuid4()),
+        "source_job_terminal_receipt_sha256": "b" * 64,
+        "selected_cell_ids": list(selected),
+        "unselected_cell_ids": list(unselected),
+        "expected_arm_state_counts": counts,
+        "expected_agent_exit_code": 0,
+        "expected_agent_termination": "output_limit",
+        "expected_failure_code": "authoritative_scoring_started.runtimeerror",
+    }
+    return stored_session_reconciliation_v2.ExactStoredSessionSubsetIntent(
+        evaluation_plan_sha256=body["evaluation_plan_sha256"],
+        runtime_files_sha256=body["runtime_files_sha256"],
+        serving_block=body["serving_block"],
+        source_output_root=body["source_output_root"],
+        source_database=body["source_database"],
+        source_job_uid=body["source_job_uid"],
+        source_job_terminal_receipt_sha256=body["source_job_terminal_receipt_sha256"],
+        selected_cell_ids=tuple(body["selected_cell_ids"]),
+        unselected_cell_ids=tuple(body["unselected_cell_ids"]),
+        expected_arm_state_counts=body["expected_arm_state_counts"],
+        expected_agent_exit_code=body["expected_agent_exit_code"],
+        expected_agent_termination=body["expected_agent_termination"],
+        expected_failure_code=body["expected_failure_code"],
+        sha256=stored_session_reconciliation_v2._body_digest(body),  # noqa: SLF001
+    )
+
+
+def test_subset_stored_session_acceptance_preserves_full_complement(tmp_path, pg_dsn):
+    rollout_postgres.initialize(pg_dsn, _plan(tmp_path / "plan.csv", count=3))
+    owners = [
+        rollout_postgres.claim(pg_dsn, worker_id=f"subset-{index}", serving_block="route")
+        for index in range(3)
+    ]
+    selected_owner = owners[0]
+    record = {
+        **_local_record(),
+        "session_id": "subset-selected-session",
+        "verifier_execution_id": "subset-selected-verifier",
+        "agent_exit_code": 0,
+        "agent_termination": "output_limit",
+    }
+    created = rollout_postgres.record_local_result(
+        pg_dsn,
+        cell_id=selected_owner["cell_id"],
+        worker_id=selected_owner["worker_id"],
+        claim_id=selected_owner["claim_id"],
+        record=record,
+    )
+    rollout_postgres.request_retry_review(
+        pg_dsn,
+        cell_id=selected_owner["cell_id"],
+        worker_id=selected_owner["worker_id"],
+        claim_id=selected_owner["claim_id"],
+        failure_code="authoritative_scoring_started.runtimeerror",
+    )
+    unselected_retry = owners[1]
+    rollout_postgres.request_retry_review(
+        pg_dsn,
+        cell_id=unselected_retry["cell_id"],
+        worker_id=unselected_retry["worker_id"],
+        claim_id=unselected_retry["claim_id"],
+        failure_code="post_claim.connecterror",
+    )
+    accepted = owners[2]
+    rollout_postgres.start(
+        pg_dsn,
+        cell_id=accepted["cell_id"],
+        worker_id=accepted["worker_id"],
+        claim_id=accepted["claim_id"],
+        session_id="already-accepted-session",
+    )
+    rollout_postgres.accept(
+        pg_dsn,
+        cell_id=accepted["cell_id"],
+        worker_id=accepted["worker_id"],
+        claim_id=accepted["claim_id"],
+        receipt_digest="f" * 64,
+    )
+    counts = {state: 0 for state in rollout_ledger.STATES}
+    counts.update(accepted=1, retry_review=2)
+    unselected_ids = [unselected_retry["cell_id"], accepted["cell_id"]]
+    intent = _stored_session_subset_intent([selected_owner["cell_id"]], unselected_ids, counts)
+    observation = _stored_session_observation(
+        selected_owner["cell_id"],
+        record["session_id"],
+        created["record_sha256"],
+        task_version_id="version-0",
+        model="endpoint",
+        verifier_execution_id=record["verifier_execution_id"],
+    )
+    with psycopg.connect(pg_dsn, row_factory=psycopg.rows.dict_row) as connection:
+        complement_before = connection.execute(
+            "SELECT * FROM rollout_cells WHERE cell_id = ANY(%s::text[]) ORDER BY cell_id",
+            (unselected_ids,),
+        ).fetchall()
+        event_count_before = connection.execute(
+            "SELECT COUNT(*) AS count FROM rollout_events"
+        ).fetchone()["count"]
+    receipt = stored_session_reconciliation_v2.accept_roster(
+        pg_dsn, intent=intent, observations=[observation]
+    )
+    assert receipt["prior_arm_state_counts"] == counts
+    assert receipt["post_arm_state_counts"]["accepted"] == 2
+    assert receipt["post_arm_state_counts"]["retry_review"] == 1
+    assert receipt["nonselected_cells_preserved"] is True
+    with psycopg.connect(pg_dsn, row_factory=psycopg.rows.dict_row) as connection:
+        complement_after = connection.execute(
+            "SELECT * FROM rollout_cells WHERE cell_id = ANY(%s::text[]) ORDER BY cell_id",
+            (unselected_ids,),
+        ).fetchall()
+        event_count_after = connection.execute(
+            "SELECT COUNT(*) AS count FROM rollout_events"
+        ).fetchone()["count"]
+        reconciliation_count = connection.execute(
+            "SELECT COUNT(*) AS count FROM ledger_reconciliations"
+        ).fetchone()["count"]
+    assert complement_after == complement_before
+    assert event_count_after == event_count_before + 1
+    assert reconciliation_count == 1
+    assert rollout_postgres.summary(pg_dsn)["by_state"] == {
+        **{state: 0 for state in rollout_ledger.STATES},
+        "accepted": 2,
+        "retry_review": 1,
+    }
+    second_receipt = stored_session_reconciliation_v2.accept_roster(
+        pg_dsn, intent=intent, observations=[observation]
+    )
+    assert second_receipt == receipt
+    with psycopg.connect(pg_dsn) as connection:
+        assert connection.execute("SELECT COUNT(*) FROM rollout_events").fetchone()[0] == (
+            event_count_after
+        )
+        assert connection.execute("SELECT COUNT(*) FROM ledger_reconciliations").fetchone()[0] == 1
 
 
 @pytest.mark.parametrize("field", ["cell_id", "worker_id", "claim_id"])

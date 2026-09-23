@@ -28,6 +28,7 @@ from evals.fleet.evaluate import stable_job_preview
 
 PACKET_SCHEMA = "cyber_fleet_existing_scored_session_reconciliation_packet_v1"
 PROOF_SCHEMA = "cyber_fleet_existing_scored_session_reconciliation_proof_v1"
+SUBSET_PROOF_SCHEMA = "cyber_fleet_existing_scored_session_subset_reconciliation_proof_v1"
 PRIVATE_INTENT_SCHEMA = "cyber_fleet_existing_scored_session_reconciliation_intent_v1"
 CLOSURE_SCHEMA = "cyber_fleet_existing_scored_session_reconciliation_closure_v1"
 NAMESPACE = "fleet-train-jobs"
@@ -140,15 +141,36 @@ def _load_json(path: Path, label: str) -> dict[str, Any]:
     return value
 
 
-def _intent_from_value(value: Any) -> reconciliation.ExactStoredSessionIntent:
-    if (
-        not isinstance(value, dict)
-        or set(value) != reconciliation.INTENT_FIELDS
-        or value.get("schema_version") != reconciliation.INTENT_SCHEMA
-        or not isinstance(value.get("selected_cell_ids"), list)
-    ):
+def _intent_from_value(value: Any) -> reconciliation.StoredSessionIntent:
+    if not isinstance(value, dict) or not isinstance(value.get("selected_cell_ids"), list):
         raise ReconciliationPacketError("private reconciliation intent schema is unsupported")
     try:
+        if (
+            value.get("schema_version") == reconciliation.SUBSET_INTENT_SCHEMA
+            and set(value) == reconciliation.SUBSET_INTENT_FIELDS
+            and isinstance(value.get("unselected_cell_ids"), list)
+        ):
+            return reconciliation.ExactStoredSessionSubsetIntent(
+                evaluation_plan_sha256=value["evaluation_plan_sha256"],
+                runtime_files_sha256=value["runtime_files_sha256"],
+                serving_block=value["serving_block"],
+                source_output_root=value["source_output_root"],
+                source_database=value["source_database"],
+                source_job_uid=value["source_job_uid"],
+                source_job_terminal_receipt_sha256=value["source_job_terminal_receipt_sha256"],
+                selected_cell_ids=tuple(value["selected_cell_ids"]),
+                unselected_cell_ids=tuple(value["unselected_cell_ids"]),
+                expected_arm_state_counts=value["expected_arm_state_counts"],
+                expected_agent_exit_code=value["expected_agent_exit_code"],
+                expected_agent_termination=value["expected_agent_termination"],
+                expected_failure_code=value["expected_failure_code"],
+                sha256=value["sha256"],
+            )
+        if (
+            value.get("schema_version") != reconciliation.INTENT_SCHEMA
+            or set(value) != reconciliation.INTENT_FIELDS
+        ):
+            raise ReconciliationPacketError("private reconciliation intent schema is unsupported")
         return reconciliation.ExactStoredSessionIntent(
             evaluation_plan_sha256=value["evaluation_plan_sha256"],
             runtime_files_sha256=value["runtime_files_sha256"],
@@ -636,7 +658,7 @@ def _source_create_evidence(
 def _terminal_source(
     source: heldout_launch.Package,
     terminal: dict[str, Any],
-    intent: reconciliation.ExactStoredSessionIntent,
+    intent: reconciliation.StoredSessionIntent,
 ) -> tuple[str, int]:
     packet = source.packet
     _terminal_receipt_schema(terminal)
@@ -660,6 +682,8 @@ def _terminal_source(
     by_state = summary["by_state"]
     total = summary.get("total")
     selected = len(intent.selected_cell_ids)
+    subset = isinstance(intent, reconciliation.ExactStoredSessionSubsetIntent)
+    expected_states = intent.expected_arm_state_counts if subset else None
     routes = source.evaluation_config.get("routes")
     route = routes.get(intent.serving_block) if isinstance(routes, dict) else None
     task_versions = route.get("task_versions") if isinstance(route, dict) else None
@@ -685,8 +709,9 @@ def _terminal_source(
         or set(by_state) != state_names
         or any(type(by_state[state]) is not int or by_state[state] < 0 for state in state_names)
         or sum(by_state.values()) != total
-        or by_state.get("retry_review") != selected
-        or by_state.get("accepted") != total - selected
+        or (subset and by_state != expected_states)
+        or (not subset and by_state.get("retry_review") != selected)
+        or (not subset and by_state.get("accepted") != total - selected)
         or any(
             by_state.get(state) != 0
             for state in ("pending", *rollout_ledger.ACTIVE_STATES, "terminal")
@@ -731,7 +756,7 @@ def _terminal_source(
             != {
                 "capability_result_status": "not_interpreted",
                 "score_blind_reconciliation_required": True,
-                "unresolved_cells": selected,
+                "unresolved_cells": by_state.get("retry_review"),
                 "rollout_retry_performed": False,
                 "score_read_or_generated": False,
             },
@@ -751,6 +776,7 @@ def _runtime_intent_value(
     source: heldout_launch.Package,
     terminal: dict[str, Any],
     selected_cell_ids: list[str],
+    unselected_cell_ids: list[str] | None = None,
 ) -> dict[str, Any]:
     job = terminal.get("job")
     database = terminal.get("database")
@@ -765,7 +791,11 @@ def _runtime_intent_value(
     ):
         raise ReconciliationPacketError("source cannot bind a private reconciliation intent")
     body = {
-        "schema_version": reconciliation.INTENT_SCHEMA,
+        "schema_version": (
+            reconciliation.SUBSET_INTENT_SCHEMA
+            if unselected_cell_ids is not None
+            else reconciliation.INTENT_SCHEMA
+        ),
         "evaluation_plan_sha256": _digest(summary.get("plan_sha256"), "source evaluation plan"),
         "runtime_files_sha256": reconciliation.runtime_identity(),
         "serving_block": next(iter(routes)),
@@ -780,6 +810,14 @@ def _runtime_intent_value(
         "expected_agent_termination": "output_limit",
         "expected_failure_code": FAILURE_CODE,
     }
+    if unselected_cell_ids is not None:
+        by_state = summary.get("by_state")
+        if not isinstance(by_state, dict):
+            raise ReconciliationPacketError("source terminal arm census differs")
+        body.update(
+            expected_arm_state_counts=dict(by_state),
+            unselected_cell_ids=list(unselected_cell_ids),
+        )
     value = {**body, "sha256": _canonical_digest(body).removeprefix("sha256:")}
     _intent_from_value(value)
     return value
@@ -959,6 +997,7 @@ def build_private_intent_value(
     source_terminal_receipt: Path,
     source_create_evidence: Path,
     selected_cell_ids: list[str],
+    unselected_cell_ids: list[str] | None = None,
     job_name: str,
     config_map_name: str,
     secret_name: str,
@@ -972,7 +1011,7 @@ def build_private_intent_value(
 
     source = heldout_launch.build_package(source_launch_packet)
     terminal = _load_json(source_terminal_receipt, "source terminal receipt")
-    runtime_value = _runtime_intent_value(source, terminal, selected_cell_ids)
+    runtime_value = _runtime_intent_value(source, terminal, selected_cell_ids, unselected_cell_ids)
     runtime_intent = _intent_from_value(runtime_value)
     _terminal_source(source, terminal, runtime_intent)
     create_evidence_sha256 = _source_create_evidence(
@@ -1143,6 +1182,14 @@ def render(
         "prompts_responses_flags_rewards_or_trace_content_included": False,
         "created_or_mutated": False,
     }
+    if isinstance(intent, reconciliation.ExactStoredSessionSubsetIntent):
+        proof_body.update(
+            schema=SUBSET_PROOF_SCHEMA,
+            source_retry_review_count=terminal["database"]["summary"]["by_state"]["retry_review"],
+            subset_reconciliation=True,
+            nonselected_cell_count=len(intent.unselected_cell_ids),
+            nonselected_cells_preserved_byte_for_byte_and_state_for_state=True,
+        )
     proof = {**proof_body, "sha256": _canonical_digest(proof_body)}
     package = Package(
         config_map=config_map,
