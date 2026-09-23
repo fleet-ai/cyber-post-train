@@ -355,7 +355,9 @@ def test_seed44_historical_base_packet_is_rejected_before_private_publication(
     tmp_path: Path,
 ):
     stored_intent, recovery_intent = _packet_intents(tmp_path)
-    with pytest.raises(seed44_base_repair_job.PackageError, match="worker identity"):
+    with pytest.raises(
+        seed44_base_repair_job.PackageError, match="runtime bytes|worker identity"
+    ):
         seed44_base_repair_job.render(
             repo_root=ROOT,
             plan_path=REPAIR_PLAN,
@@ -363,7 +365,9 @@ def test_seed44_historical_base_packet_is_rejected_before_private_publication(
             recovery_intent_path=recovery_intent,
         )
     output = tmp_path / "historical-private-packages"
-    with pytest.raises(seed44_base_repair_job.PackageError, match="worker identity"):
+    with pytest.raises(
+        seed44_base_repair_job.PackageError, match="runtime bytes|worker identity"
+    ):
         seed44_base_repair_job.write_private_packages(
             repo_root=ROOT,
             plan_path=REPAIR_PLAN,

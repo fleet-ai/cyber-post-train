@@ -192,6 +192,29 @@ def _render(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     return rendered, value, source, terminal, terminal_path, evidence, intent
 
 
+def _build_subset_authorization(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    source = _source_package(tmp_path)
+    terminal = _terminal(source, selected=7)
+    terminal_path = _terminal_path(tmp_path, terminal)
+    evidence = _create_evidence(tmp_path, source, terminal)
+    monkeypatch.setattr(packet.heldout_launch, "build_package", lambda _: source)
+    selected = [str(uuid.uuid4()) for _ in range(4)]
+    unselected = [str(uuid.uuid4()) for _ in range(13)]
+    value = packet.build_private_intent_value(
+        repo_root=ROOT,
+        source_launch_packet=source.packet.path,
+        source_terminal_receipt=terminal_path,
+        source_create_evidence=evidence,
+        selected_cell_ids=selected,
+        unselected_cell_ids=unselected,
+        job_name=JOB_NAME,
+        config_map_name=CONFIG_MAP_NAME,
+        secret_name=SECRET_NAME,
+        output_root=OUTPUT_ROOT,
+    )
+    return value, source, terminal, terminal_path, evidence
+
+
 def test_build_authorization_binds_source_create_closure_and_exact_bundle(tmp_path, monkeypatch):
     value, source, terminal, _, evidence = _build_authorization(tmp_path, monkeypatch)
     runtime = value["runtime_intent"]
@@ -213,6 +236,102 @@ def test_build_authorization_binds_source_create_closure_and_exact_bundle(tmp_pa
     assert value["sha256"] == packet._canonical_digest(  # noqa: SLF001
         {key: item for key, item in value.items() if key != "sha256"}
     )
+
+
+def test_subset_authorization_binds_full_mixed_arm_census(tmp_path, monkeypatch):
+    value, source, terminal, terminal_path, evidence = _build_subset_authorization(
+        tmp_path, monkeypatch
+    )
+    runtime = value["runtime_intent"]
+    assert runtime["schema_version"] == reconciliation.SUBSET_INTENT_SCHEMA
+    assert len(runtime["selected_cell_ids"]) == 4
+    assert len(runtime["unselected_cell_ids"]) == 13
+    assert set(runtime["selected_cell_ids"]).isdisjoint(runtime["unselected_cell_ids"])
+    assert runtime["expected_arm_state_counts"] == terminal["database"]["summary"]["by_state"]
+    intent_path = tmp_path / "subset-intent.json"
+    packet.write_private_intent(intent_path, value)
+    rendered = packet.render(
+        repo_root=ROOT,
+        source_launch_packet=source.packet.path,
+        source_terminal_receipt=terminal_path,
+        source_create_evidence=evidence,
+        private_intent=intent_path,
+        job_name=JOB_NAME,
+        config_map_name=CONFIG_MAP_NAME,
+        secret_name=SECRET_NAME,
+        output_root=OUTPUT_ROOT,
+    )
+    assert rendered.proof["subset_reconciliation"] is True
+    assert rendered.proof["selected_cell_count"] == 4
+    assert rendered.proof["source_retry_review_count"] == 7
+    assert rendered.proof["source_total_cell_count"] == 17
+    assert rendered.proof["nonselected_cell_count"] == 13
+    assert rendered.proof["nonselected_cells_preserved_byte_for_byte_and_state_for_state"] is True
+    assert rendered.proof["model_generation_allowed"] is False
+    assert rendered.proof["scoring_call_allowed"] is False
+    pod = rendered.job["spec"]["template"]["spec"]
+    assert pod["priorityClassName"] == "c1"
+    assert "nvidia.com/gpu" not in json.dumps(pod["containers"][0]["resources"])
+    assert rendered.job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+    first = _server_preview(rendered, "11111111-1111-4111-8111-111111111111")
+    second = _server_preview(rendered, "22222222-2222-4222-8222-222222222222")
+    assert packet.validate_server_previews(rendered, first, second).startswith("sha256:")
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "overlap",
+        "missing-complement",
+        "route-summary-drift",
+        "selected-overflow",
+        "active-state",
+    ],
+)
+def test_subset_authorization_rejects_nonexhaustive_or_drifting_census(
+    tmp_path, monkeypatch, fault
+):
+    source = _source_package(tmp_path)
+    terminal = _terminal(source, selected=7)
+    selected = [str(uuid.uuid4()) for _ in range(4)]
+    unselected = [str(uuid.uuid4()) for _ in range(13)]
+    if fault == "overlap":
+        unselected[0] = selected[0]
+    elif fault == "missing-complement":
+        unselected.pop()
+    elif fault == "route-summary-drift":
+        terminal["database"]["summary"]["by_state"]["accepted"] -= 1
+        terminal["database"]["summary"]["by_state"]["retry_review"] += 1
+    elif fault == "selected-overflow":
+        selected.extend(str(uuid.uuid4()) for _ in range(4))
+        unselected = unselected[:-4]
+    else:
+        terminal["database"]["summary"]["by_state"]["accepted"] -= 1
+        terminal["database"]["summary"]["by_state"]["running"] = 1
+        terminal["database"]["summary"]["by_serving_block"] = [
+            {"serving_block": "base", "state": state, "count": count}
+            for state, count in terminal["database"]["summary"]["by_state"].items()
+            if count
+        ]
+    terminal["sha256"] = packet._canonical_digest(  # noqa: SLF001
+        {key: item for key, item in terminal.items() if key != "sha256"}
+    )
+    terminal_path = _terminal_path(tmp_path, terminal)
+    evidence = _create_evidence(tmp_path, source, terminal)
+    monkeypatch.setattr(packet.heldout_launch, "build_package", lambda _: source)
+    with pytest.raises((packet.ReconciliationPacketError, rollout_ledger.LedgerError)):
+        packet.build_private_intent_value(
+            repo_root=ROOT,
+            source_launch_packet=source.packet.path,
+            source_terminal_receipt=terminal_path,
+            source_create_evidence=evidence,
+            selected_cell_ids=selected,
+            unselected_cell_ids=unselected,
+            job_name=JOB_NAME,
+            config_map_name=CONFIG_MAP_NAME,
+            secret_name=SECRET_NAME,
+            output_root=OUTPUT_ROOT,
+        )
 
 
 def test_private_authorization_is_exclusive_private(tmp_path, monkeypatch):
@@ -239,6 +358,9 @@ def test_render_is_cpu_only_score_blind_and_exact(tmp_path, monkeypatch):
     assert rendered.proof["source_job_uid"] == terminal["job"]["uid"]
     assert rendered.proof["source_config_map_uid"] == terminal["config_map"]["uid"]
     assert rendered.proof["operation"] == "accept_existing_scored_session"
+    assert rendered.proof["schema"] == packet.PROOF_SCHEMA
+    assert "subset_reconciliation" not in rendered.proof
+    assert "nonselected_cell_count" not in rendered.proof
     assert rendered.proof["model_generation_allowed"] is False
     assert rendered.proof["scoring_call_allowed"] is False
     assert rendered.proof["reviewed_intent_sha256"] == value["sha256"]
