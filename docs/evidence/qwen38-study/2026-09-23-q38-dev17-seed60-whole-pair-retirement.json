@@ -1,0 +1,156 @@
+{
+  "created_at": "2026-09-23T15:48:22.592913Z",
+  "decision": {
+    "allowlist_widened": false,
+    "candidate_evidence_preserved": true,
+    "candidate_may_not_be_spliced_into_another_seed": true,
+    "classification": "infrastructure-invalid-for-matched-comparison",
+    "gate": "NO-GO",
+    "partial_subset_reconciliation_for_seed60_base_allowed": false,
+    "reason": "The base arm contains one retry-review row with exit code 0 and termination completed. That structural outcome is outside the maintained reconciliation allowlist, so the exact seed-60 pair is retired and replaced as a whole by seed 66.",
+    "whole_pair_excluded": true
+  },
+  "evidence": {
+    "base": {
+      "score_blind_aggregate": {
+        "accepted": 10,
+        "local_results": 17,
+        "retry_review": 7,
+        "retry_review_with_artifact_session_and_verifier_evidence": 7,
+        "retry_review_without_artifact": 0,
+        "stale_active": 0,
+        "stored_sessions": 17,
+        "total": 17
+      },
+      "source_job": {
+        "name": "chris-q38-dev17-s60-base-repl-p1-v2",
+        "uid": "939b2331-ea0b-492a-8188-aab217f80e5b"
+      },
+      "terminal_collector": {
+        "condition": "Complete",
+        "config_map_uid": "fc133194-52a3-4ef3-b461-cd5f3aeb175f",
+        "exit_code": 0,
+        "job_uid": "2786d066-d27c-4602-8aa4-82bb37de716a",
+        "pod_uid": "afee1f93-7056-4d4d-8b10-df0703307190",
+        "restart_count": 0
+      },
+      "terminal_receipt": {
+        "file_sha256": "sha256:59db1b32c62e5d6d4fb997340f505f424def2c91896f8a35b0f623c70458e323",
+        "mode": "0600",
+        "self_digest_valid": true,
+        "self_sha256": "sha256:4f6fb296751a8aefbfe485b1b0249d761ad2c3f5ba72a6dd287e09ba53d1a2f2"
+      }
+    },
+    "candidate": {
+      "reconciliation_receipt": {
+        "accepted_existing_completed_session_count": 11,
+        "action": "accept_existing_scored_session",
+        "file_sha256": "sha256:79f21a552fb5aed20fe06652b65bd3501e7f97b638c185a86afb39706ccf4ffa",
+        "mode": "0600",
+        "path": "/mnt/sfs/jobs/chris-q38-s60cand-ol11-reconcile-v1/TERMINAL.json",
+        "reconciliation_receipt_sha256": "sha256:817471978fd4248751dc64a733c55d6976e888c824db40c4cd3deb28033b2696",
+        "selected_cell_count": 11,
+        "self_digest_valid": true,
+        "self_sha256": "sha256:9e7e61e3cf2306472219e4b8c74cc597a653a8b4282c242f03fbe85fabc2e112",
+        "status": "accepted"
+      },
+      "reconciliation_terminal_evidence": {
+        "file_sha256": "sha256:22602494a05e6ae62c622de5b62d54c330e688ab7b033b02a80adcf87507cce8",
+        "mode": "0600",
+        "self_digest_valid": true,
+        "self_sha256": "sha256:9f313d81b36e8261bea439532d4037b8587dd30411360c4508e0c13cb11ae0bf"
+      },
+      "score_blind_aggregate": {
+        "accepted": 17,
+        "local_results": 17,
+        "retry_review": 0,
+        "selected_reconciled": 11,
+        "stored_sessions": 17,
+        "total": 17,
+        "unselected_preserved": 6
+      },
+      "source_config_map": {
+        "name": "chris-q38-dev17-s60-t3k32s1000-repl-code-v2",
+        "uid": "ae6e2a6a-2375-4312-8be2-059badba9756"
+      },
+      "source_job": {
+        "name": "chris-q38-dev17-s60-t3k32s1000-repl-p1-v2",
+        "uid": "df2d079f-5fd0-46a9-9ef6-b1d1252c4303"
+      },
+      "source_terminal_evidence": {
+        "file_sha256": "sha256:1b3d850dc4cab216089228ae5cb1d9135c2664c43166997af2b2ce2fd571d2a4",
+        "self_sha256": "sha256:5b2468d0878b830dcbecf111d0e988613e96b7ce4992ed70496bfab95f62e96c"
+      }
+    }
+  },
+  "execution": {
+    "cluster_or_database_mutation_performed": false,
+    "create_performed": false,
+    "model_generation_performed": false,
+    "preview_performed": false,
+    "provider_calls_performed": false,
+    "replay_performed": false,
+    "rollout_collection_performed": false,
+    "scorer_calls_performed": false
+  },
+  "lineage": {
+    "mapping": "seed60->seed66",
+    "original_pair_status": "retired_from_matched_comparison",
+    "original_seed": 60,
+    "replacement_seed": 66,
+    "replacement_status": "separate_successor; not launched or mutated by this receipt",
+    "whole_pair_replacement_required": true
+  },
+  "maintained_structural_allowlist": {
+    "supported": [
+      {
+        "agent_exit_code": 0,
+        "agent_termination": "output_limit"
+      },
+      {
+        "agent_exit_code": 1,
+        "agent_termination": "process_error"
+      }
+    ],
+    "supported_observation_in_same_retry_review_cohort": {
+      "agent_exit_code": 0,
+      "agent_termination": "output_limit",
+      "arm": "base",
+      "artifact_present": true,
+      "count": 6,
+      "failure_code": "authoritative_scoring_started.runtimeerror",
+      "local_result_present": true,
+      "session_ingest_status": "completed",
+      "stored_session_present": true,
+      "verifier_evidence_present": true
+    },
+    "unsupported_observation": {
+      "agent_exit_code": 0,
+      "agent_termination": "completed",
+      "arm": "base",
+      "artifact_present": true,
+      "count": 1,
+      "failure_code": "authoritative_scoring_started.runtimeerror",
+      "local_result_present": true,
+      "session_ingest_status": "completed",
+      "stored_session_present": true,
+      "verifier_evidence_present": true
+    }
+  },
+  "privacy": {
+    "credentials_read_or_included": false,
+    "private_cell_task_session_or_verifier_ids_read_or_included": false,
+    "prompts_responses_flags_rewards_or_trace_content_read_or_included": false,
+    "score_blind": true,
+    "scores_read_or_included": false
+  },
+  "publication": {
+    "atomic_no_replace": true,
+    "directory_mode": "0700",
+    "method": "same-directory hard-link publication from fsynced O_EXCL temporary file",
+    "receipt_mode": "0600"
+  },
+  "schema": "q38_dev17_protocol_v2_seed60_whole_pair_retirement_receipt_v1",
+  "sha256": "sha256:4f8d76d751fe6d1f6697c1d8a89d01cb17f3d04a6cdfe21e67dc08f59a23b5a1",
+  "source_commit": "e6329cc81a92170fafa2c2d71fb20866ba95e010"
+}
