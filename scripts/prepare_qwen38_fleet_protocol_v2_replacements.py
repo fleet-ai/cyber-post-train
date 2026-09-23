@@ -17,8 +17,6 @@ import hashlib
 import json
 import os
 import shutil
-import subprocess
-import sys
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
@@ -70,18 +68,8 @@ FIRST_REPLACEMENT_SEED = 54
 DAILY_ROLLOUT_CAP = 500
 TASKS_PER_ARM = 17
 ARMS = ("base", "candidate")
-SEALED_EVALUATOR_MODULES = (
-    "evaluate.py",
-    "rollout_worker.py",
-    "rollout_postgres.py",
-    "rollout_ledger.py",
-    "opencode_self_hosted.py",
-    "fixed_proxy.py",
-    "exact_pass4_crypto.py",
-    "exact_pass4_universe.py",
-    "rollout_campaign.py",
-)
-SEALED_RUNTIME_IDENTITY_FILES = SEALED_EVALUATOR_MODULES[:7]
+SEALED_EVALUATOR_MODULES = heldout_launch.SEALED_EVALUATOR_MODULES
+SEALED_RUNTIME_IDENTITY_FILES = heldout_launch.SEALED_RUNTIME_IDENTITY_FILES
 ALLOWED_REASON_CLASSES = frozenset(
     {
         "terminal_replica_incomplete",
@@ -355,62 +343,7 @@ def _source_inventory(
 
 
 def _sealed_evaluation_plan(package: heldout_launch.Package) -> dict[str, Any]:
-    """Compile with the exact evaluator/runtime bytes sealed in the packet ConfigMap."""
-    data = package.config_map.get("data")
-    if not isinstance(data, dict) or any(
-        not isinstance(data.get(name), str) for name in SEALED_EVALUATOR_MODULES
-    ):
-        raise ValueError("evaluation packet lacks its complete sealed evaluator runtime")
-    scientific_config = dict(package.evaluation_config)
-    scientific_config.pop("model_artifact_binding", None)
-    with tempfile.TemporaryDirectory(prefix="fleet-sealed-evaluator-") as directory:
-        root = Path(directory)
-        package_root = root / "evals" / "fleet"
-        package_root.mkdir(parents=True, mode=0o700)
-        (root / "evals" / "__init__.py").write_text("", encoding="utf-8")
-        (package_root / "__init__.py").write_text("", encoding="utf-8")
-        for name in SEALED_EVALUATOR_MODULES:
-            (package_root / name).write_text(data[name], encoding="utf-8")
-        task_set = data.get("task-set.json")
-        task_set_name = scientific_config.get("task_set")
-        if (
-            not isinstance(task_set, str)
-            or not isinstance(task_set_name, str)
-            or not task_set_name
-            or Path(task_set_name).name != task_set_name
-        ):
-            raise ValueError("evaluation packet lacks its sealed task set")
-        (root / task_set_name).write_text(task_set, encoding="utf-8")
-        (root / "config.json").write_text(
-            json.dumps(scientific_config, sort_keys=True, separators=(",", ":")),
-            encoding="utf-8",
-        )
-        command = (
-            "import json; from pathlib import Path; from evals.fleet import evaluate; "
-            "config=json.loads(Path('config.json').read_text(encoding='utf-8')); "
-            "plan=evaluate.compile_eval(config, relative_to=Path('.')); "
-            "print(json.dumps(plan, sort_keys=True, separators=(',', ':'), allow_nan=False))"
-        )
-        try:
-            completed = subprocess.run(
-                [sys.executable, "-c", command],
-                cwd=root,
-                env={
-                    "PYTHONPATH": str(root),
-                    "PYTHONNOUSERSITE": "1",
-                    "PYTHONDONTWRITEBYTECODE": "1",
-                },
-                check=True,
-                capture_output=True,
-                text=True,
-                timeout=30,
-            )
-            plan = json.loads(completed.stdout)
-        except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as exc:
-            raise ValueError("sealed evaluator could not compile its exact plan") from exc
-    if not isinstance(plan, dict):
-        raise ValueError("sealed evaluator returned an invalid plan")
-    return plan
+    return heldout_launch.sealed_evaluation_plan(package)
 
 
 def _evaluation_binding(packet_path: Path) -> dict[str, Any]:
