@@ -1,0 +1,142 @@
+{
+  "fast3_identity": {
+    "data_root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-prod11-fast3-v1/data",
+    "output_root": "/mnt/sfs/jobs/chris-q38-rlreward-prod11-fast3",
+    "run_name": "chris-q38-rlreward-prod11-fast3",
+    "wandb_run_id": "chris-q38-rlreward-prod11-fast3"
+  },
+  "fast3_profiles": {
+    "data": {
+      "file_sha256": "sha256:84fe83fe3444837a36e90a8dc367531014316f5b8bf0b9c12f4d73fca995bf6c",
+      "path": "configs/qualification/qwen38-rl-reward-canary-data-prod11-fast3.json"
+    },
+    "identity": {
+      "file_sha256": "sha256:d77c51b8d54ce537321ff3ed366390bdb13418eb24a17ae02e4ff83d8c32a67a",
+      "path": "configs/qualification/qwen38-rl-reward-canary-prod11-fast3-identity-v1.json",
+      "self_sha256": "sha256:101bf3babf6634978bcf14f9ce2f5de277acbc505ba671757183e71089ba6651"
+    },
+    "policy": {
+      "file_sha256": "sha256:3ead20ef5330303687a377560dff0b097bef6f481194542503978b07788e577f",
+      "path": "configs/qualification/qwen38-rl-reward-canary-prod11-fast3-generation-retry-v1.json",
+      "self_sha256": "sha256:3df3abe9fbadcf4cbc89d842a857d68b2510ef36f919bc035427fd85db5b2c28"
+    },
+    "run": {
+      "file_sha256": "sha256:a9f642b167731cb30391cb09b4fdc90e2cfd10fc82b3be8ceaefd068456c9844",
+      "path": "configs/qualification/qwen38-rl-reward-canary-prod-v11-fast3.json"
+    }
+  },
+  "historical_qualification": {
+    "file_sha256": "sha256:fc53cfe9fb5c3a70520fcefbae2c023a2d82f195810010614c20be84ad9fa771",
+    "path": "configs/qualification/qwen38-rl-reward-canary-port-v8.json",
+    "self_sha256": "sha256:bf40e69106e201a0c5c8eda578aa26d04e118dcae5898c54104bc3ab7ebb984a"
+  },
+  "normalized_science": {
+    "data": {
+      "split_self_sha256": "sha256:8279ea19808ad1accb00d3f3145c3ec087030677786e0188251cfc197f306adf",
+      "task_set_self_sha256": "sha256:9b88bac1510720926ea041d942044804d6c54c083a0ea56d07cae5f448685909",
+      "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+    },
+    "horizon": {
+      "compaction_summary_tokens": 8192,
+      "compaction_trigger_tokens": 163840,
+      "context_tokens": 262144,
+      "episode_seconds": 14400,
+      "generation_chunk_tokens": 4096,
+      "max_tokens_per_turn": 32768,
+      "max_turns": 1200,
+      "response_tokens": 4194304,
+      "tool_result_chars": 50000,
+      "tool_seconds": 330
+    },
+    "model": {
+      "repo": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+      "root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+      "weight_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
+    },
+    "recipe": {
+      "checkpoint_interval": 1,
+      "eval_before_train": true,
+      "eval_interval": 1,
+      "groups": 1,
+      "keep_checkpoints": 2,
+      "lr": 1e-06,
+      "nodes": 1,
+      "samples_per_prompt": 8,
+      "seed": 42,
+      "steps": 1
+    },
+    "tasks": [
+      {
+        "environment_version_id": "d70c4fe9-70c5-4020-91b1-a23d886a1e22",
+        "split": "train",
+        "task_key": "cysec1-2-current-gen_blackbox-0708aea62e0d8ccf09331568__blackbox_ctf_v1",
+        "task_version_id": "54425601-6fd2-43d8-8cb9-e565b767676a",
+        "verifier_version_id": "14c6b6dd-f189-416c-b34d-29bf55ff1b87"
+      },
+      {
+        "environment_version_id": "a8f554e8-2d1b-4437-aa2c-b140edc781c4",
+        "split": "dev",
+        "task_key": "cysec1-2-fakelook-gen_blackbox-7317189e8fefb9033c5be097__blackbox_ctf_v1",
+        "task_version_id": "2fdc9511-f5fe-4386-a4a5-a5a16a30f359",
+        "verifier_version_id": "928e5c13-b15a-412d-a037-fbed7389572a"
+      }
+    ]
+  },
+  "operational_predecessor": {
+    "data_config_file_sha256": "sha256:2bc7c34a6877c1025310c5b9b85b0f8a7e3dacc361f8b5a6c3a103c6b803f5e7",
+    "identity_file_sha256": "sha256:d1ae811bae6e0b9ce94f8c108c7264dcea4e2c9c50bda2d6bde8a872f2d18a5f",
+    "optimizer_updates": 0,
+    "retirement": {
+      "file_sha256": "sha256:a99d7f43e2a7f202404a9903f38f5f19ed388dcd9f870bcaef5dc85649e0cf39",
+      "fresh_sfs_lstat": false,
+      "gpu_launch_attempted": false,
+      "path": "docs/evidence/qwen38-study/2026-09-23-skyrl-prod11-fast2-retirement-v1.json",
+      "self_sha256": "sha256:f8cded5039d649de08db82ff5f21deb21979ca9dade7d431c0550dc268e5552d"
+    },
+    "reward_observations": 0,
+    "run_config_file_sha256": "sha256:3e8f078b97e7fbfad3c1428fb26a2c5b0284402545b1b54bf3417610a9dcff0b",
+    "run_name": "chris-q38-rlreward-prod11-fast2",
+    "scientific_parity_claim": false,
+    "source_commit": "58f81904a7478fd90dfe988d97b8fa831fbeadc1"
+  },
+  "permitted_deltas": [
+    "fresh_identity_output_data_root",
+    "port_successor_sha256",
+    "generation_retry_policy"
+  ],
+  "port_successor_sha256": "sha256:38b2bfd0fa425c45a28cea50d488f4b9c57466cb7ffdeed952a349ca8d323f68",
+  "retry_evidence": {
+    "historical_http_status_known": false,
+    "retryability_proven": false
+  },
+  "retry_policy_sha256": "sha256:3df3abe9fbadcf4cbc89d842a857d68b2510ef36f919bc035427fd85db5b2c28",
+  "schema": "cyber_skyrl_fast3_predecessor_science_v1",
+  "scientific_predecessor": {
+    "data_config": {
+      "file_sha256": "sha256:28e30df00464fd7c8413d8ad2bd7078d3ab352adfcc5b4bac4dd6e6d91e639e9",
+      "path": "configs/qualification/qwen38-rl-reward-canary-data-prod-v11.json"
+    },
+    "eval_before_train": true,
+    "failure_diagnostic": {
+      "file_sha256": "sha256:69ced0087abecd437308c2ffb66e8a0167bf56f7a3ba3ad22f3b1c18a481c2f0",
+      "http_status_known": false,
+      "path": "docs/evidence/qwen38-study/2026-09-23-skyrl-prod11-generation-failure-diagnostic-v1.json",
+      "plan_sha256": "f86ca0c93754def88d2f9053fb7fa012af3b6d29046846fa5ad229972ce9910f",
+      "retryability_proven": false,
+      "self_sha256": "200d51089c155cac2fa777db4f84287c50d14bdb23c86e60e8e47c2d3d2fd2fe"
+    },
+    "identity": {
+      "file_sha256": "sha256:5aa3fa64fe91e9b51a920020d6c64302224cbf60a3a82c5dc6855b20139de7b3",
+      "path": "configs/qualification/qwen38-rl-reward-canary-prod11-identity-v1.json",
+      "self_sha256": "sha256:74e756a0929488b8cd596c0a28ed0c58c6f6abe254e1b0a78b9a4f0e783145d0"
+    },
+    "run_config": {
+      "file_sha256": "sha256:a7f34702b4c19df80128ed1fd8e0114502605eafd3dd63daf3105f171092038c",
+      "path": "configs/qualification/qwen38-rl-reward-canary-prod-v11.json"
+    },
+    "run_name": "chris-q38-rlreward-prod11",
+    "source_commit": "f7452d7eafb33f2d84b724f07480b58c91826207"
+  },
+  "sha256": "sha256:3dabc8a650c86586a354afb8deeda19a7a144183fe2b8b25b1b8da958a0f8cd7"
+}
