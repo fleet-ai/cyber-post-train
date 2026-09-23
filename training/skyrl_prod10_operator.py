@@ -45,9 +45,9 @@ _GUARD_ARCHIVE_NAME = "TRAINING_JOBS_API_PREFIX_GUARD.launch-v3-failed.json"
 _GUARD_ARCHIVE_RECEIPT_NAME = "TRAINING_JOBS_API_PREFIX_GUARD.launch-v3-archive.json"
 OPERATOR_NAMES = {
     "stage": "chris-q38-prod10-stage-operator-v7",
-    "manifest": "chris-q38-prod10-manifest-operator-v1",
-    "preflight": "chris-q38-prod10-preflight-operator-v2",
-    "launch": "chris-q38-prod10-launch-operator-v8",
+    "manifest": "chris-q38-prod10-manifest-operator-v2",
+    "preflight": "chris-q38-prod10-preflight-operator-v3",
+    "launch": "chris-q38-prod10-launch-operator-v9",
     "inspect": "chris-q38-prod10-launch-inspect-v6",
     "probe": "chris-q38-prod10-launch-probe-v9",
 }
@@ -621,6 +621,71 @@ _LAUNCH_V7_FAILURE = {
     "nested_jobs_created": 0,
     "gpus": 0,
 }
+_LAUNCH_V8_FAILURE = {
+    "schema": "cyber_skyrl_prod10_launch_failure_binding_v7",
+    "status": "failed_before_gpu_create_all_outer_resources_released",
+    "operator_name": "chris-q38-prod10-launch-operator-v8",
+    "source_head": "fa20aa5222a6bf7c68d0cc8468abe96f2e3becdd",
+    "packet_sha256": "sha256:c487b9590bacdf444009e49a695bc57a07d5ef92d932bd483fbf63a00f7a78d5",
+    "source_sha256": "sha256:0094a07cd18d9ef8a783b158893deb4a14d2a82167769d42e10175a88d38bd51",
+    "job_manifest_sha256": (
+        "sha256:8d60b71cd11e5083095ffdcb5fab53b522233aabaed2f92106cf9bff6a42cc21"
+    ),
+    "operator_job_uid": "2f226cd0-5dd9-4c06-b3ce-a2bf76090cbf",
+    "operator_pod_name": "chris-q38-prod10-launch-operator-v8-hccmd",
+    "operator_pod_uid": "f2e98353-f847-47c5-b06c-e512dbb66f68",
+    "operator_workload_name": "job-chris-q38-prod10-launch-operator-v8-dee9e",
+    "operator_workload_uid": "58b71f77-8f48-49dc-9faf-c5c8d84c4f0c",
+    "source_config_map_name": "chris-q38-prod10-launch-operator-v8-source",
+    "source_config_map_uid": "1b198e2f-994a-427d-96a9-e780162470fd",
+    "source_config_map_resource_version": "34178777",
+    "packet_config_map_name": "chris-q38-prod10-launch-operator-v8-packet",
+    "packet_config_map_uid": "8452ec3c-df8e-4eeb-9cac-01071d6655e7",
+    "packet_config_map_resource_version": "34178816",
+    "create_journal_file_sha256": (
+        "sha256:568dfaba717269f3778bc267afa379dab6ea655af307a4418e91d1af5c40b76b"
+    ),
+    "observer_armed_sha256": (
+        "sha256:487d8f5bf2eb0690339b08934e3ef825eb8372a105447931627c6214ffcda3c0"
+    ),
+    "observer_armed_file_sha256": (
+        "sha256:3401938794ed6e2494d0b75852b829eb60fa1abec1655bd9bdb3aff972b4da05"
+    ),
+    "creator_binding_sha256": (
+        "sha256:d102bb3620d9f7045e61c525770700aedd5cd06d84c7049ea6de413bc266e345"
+    ),
+    "creator_binding_file_sha256": (
+        "sha256:3006d815e55ff5131767a5b692f56f73e89a57bffa1bcdc01301e9c9c21083d8"
+    ),
+    "failure_receipt_sha256": (
+        "sha256:d8d41ea7a82bf0e012cf8d4629d21eef71b046f4631b9db81f48310ee659430c"
+    ),
+    "observer_result_sha256": (
+        "sha256:d366582bb38f42de344a698425ffe40f74948a413399e5d21da6fda562d56976"
+    ),
+    "observer_result_file_sha256": (
+        "sha256:c02cf5ac63d7f44a09b5d9071b5276c53dbf014a147f0586460a2e4b2816dda7"
+    ),
+    "release_observed_at": "2026-09-23T13:10:07Z",
+    "launch_stage": "live_manifest_rebuild",
+    "error_code": "launch_live_preview_changed",
+    "terminal_status": "Failed",
+    "exit_codes": [1],
+    "restarts": 0,
+    "peak_gpus": 0,
+    "inner_gpu_run_created": False,
+    "workload_resources_absent": True,
+    "config_map_cleanup_result_sha256": (
+        "sha256:d4c05baf5ea83ab3ce6e9b0c0afeba931245e8dc7d1660d0b5625bf51b3cfd71"
+    ),
+    "config_map_cleanup_result_file_sha256": (
+        "sha256:0704d3f5db107f7565ceeda1e8b23ef7ea826d47a9e4fe5552ecab62de5ad279"
+    ),
+    "config_maps_uid_rv_precondition_deleted": True,
+    "config_maps_absent": True,
+    "nested_jobs_created": 0,
+    "gpus": 0,
+}
 _PREFLIGHT_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_preflight_v1_failure_recovery_v1",
     "status": "failed_closed_released",
@@ -872,6 +937,11 @@ def launch_v7_failure_binding() -> dict[str, Any]:
     return _seal(_LAUNCH_V7_FAILURE)
 
 
+def launch_v8_failure_binding() -> dict[str, Any]:
+    """Bind the released v8 semantic-preview failure and exact cleanup."""
+    return _seal(_LAUNCH_V8_FAILURE)
+
+
 def _write_once(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=False, exist_ok=True)
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -1082,6 +1152,8 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
             raise ValueError("prod10 launch-v6 failure predecessor changed")
         if packet.get("launch_v7_failure") != launch_v7_failure_binding():
             raise ValueError("prod10 launch-v7 failure predecessor changed")
+        if packet.get("launch_v8_failure") != launch_v8_failure_binding():
+            raise ValueError("prod10 launch-v8 failure predecessor changed")
         _launch_packet_inputs(packet)
     return packet
 

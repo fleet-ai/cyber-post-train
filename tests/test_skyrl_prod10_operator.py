@@ -295,7 +295,7 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
     container = package.job["spec"]["template"]["spec"]["containers"][0]
 
     assert proof["phase"] == "launch"
-    assert proof["name"] == "chris-q38-prod10-launch-operator-v8"
+    assert proof["name"] == "chris-q38-prod10-launch-operator-v9"
     assert proof["failure_alerts"] == "off"
     assert proof["priority"] == "c1"
     assert proof["queue_priority"] == "q1"
@@ -373,6 +373,7 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
         ("inspect_v6_success", "inspector-v6 predecessor"),
         ("launch_v6_failure", "launch-v6 failure predecessor"),
         ("launch_v7_failure", "launch-v7 failure predecessor"),
+        ("launch_v8_failure", "launch-v8 failure predecessor"),
     ):
         changed = copy.deepcopy(packet)
         changed[key]["operator_job_uid"] = "00000000-0000-4000-8000-000000000001"
@@ -1305,7 +1306,8 @@ def test_prod10_live_preview_accepts_representation_drift_but_keeps_strict_polic
 
 @pytest.mark.parametrize("manifest_changed", [False, True])
 def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
-    monkeypatch: pytest.MonkeyPatch, manifest_changed: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    manifest_changed: bool,
 ) -> None:
     identity = historical.load_identity(IDENTITY)
     plan = {
@@ -1664,8 +1666,11 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
     assert created["failure_alerts"] == "off"
     journal_lines = (root / "PROD10_DIRECT_V3_CREATE.jsonl").read_text().splitlines()
     intent = json.loads(journal_lines[0])
+    assert intent["sealed_jobs_preview_sha256"] == "sha256:" + digest(source)
     assert intent["live_jobs_preview_sha256"] == "sha256:" + digest(live_source)
     assert intent["live_jobs_preview_sha256"] != "sha256:" + digest(source)
+    assert created["sealed_jobs_preview_sha256"] == intent["sealed_jobs_preview_sha256"]
+    assert created["live_jobs_preview_sha256"] == intent["live_jobs_preview_sha256"]
     assert "wandb_run_id_absent" not in intent
     assert intent["wandb_runtime_create_once"] == {
         "credential_present": True,
@@ -2093,7 +2098,7 @@ def test_prod10_manifest_operator_is_distinct_read_only_and_recovery_bound(
     assert proof == {
         **proof,
         "phase": "manifest",
-        "name": "chris-q38-prod10-manifest-operator-v1",
+        "name": "chris-q38-prod10-manifest-operator-v2",
         "failure_alerts": "off",
         "priority": "c1",
         "queue_priority": "q1",
@@ -2224,7 +2229,7 @@ def test_prod10_runtime_derives_root_job_uid_from_exact_pod_owner(
         operator._validate_runtime(packet, runner)
 
 
-def test_stage_v7_preserves_released_v6_and_rebinds_without_nested_job(
+def test_stage_v7_rejects_replay_after_bundled_runtime_changes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     identity, stage, preview, duplicate = _stage_inputs()
@@ -2461,32 +2466,13 @@ def test_stage_v7_preserves_released_v6_and_rebinds_without_nested_job(
     monkeypatch.setenv("OPERATOR_JOB_UID", "00000000-0000-4000-8000-000000000099")
     monkeypatch.setenv("OPERATOR_SOURCE_SHA256", "sha256:" + "9" * 64)
 
-    result = operator.run_stage(packet, runner=runner)
+    with pytest.raises(operator.OperatorFailure, match="stage_v6_target_manifest_rejected"):
+        operator.run_stage(packet, runner=runner)
 
-    assert result["schema"] == operator.DIRECT_STAGE_RESULT_SCHEMA
-    assert result["status"] == "stage_ready"
-    assert result["execution"] == {
-        "kind": "job",
-        "name": operator.OPERATOR_NAMES["stage"],
-        "uid": "00000000-0000-4000-8000-000000000099",
-        "image": stage["image"],
-        "source_sha256": "sha256:" + "9" * 64,
-        "sfs_output": stage["destination"],
-        "receipt_sha256": digest(raw_receipt),
-        "nested_jobs_created": 0,
-    }
-    assert not {"authorization", "created", "release"}.intersection(result)
-    assert result["execution"]["nested_jobs_created"] == 0
-    assert validated == [{**raw_receipt, "receipt_sha256": digest(raw_receipt)}]
-    assert calls and all(method == "GET" for method, _path in calls)
-    assert not (operation_root / "STAGE_OPERATOR_INTENT.v6.failed.json").is_symlink()
-    assert (operation_root / "STAGE_OPERATOR_INTENT.v6.failed.json").is_file()
-    assert (operation_root / "STAGE_OBSERVER_RESULT.v6.failed.json").is_file()
-    assert (operation_root / "PROD9_STAGE_CREATE.v6.failed.jsonl").is_file()
+    assert calls == []
+    assert validated == []
     assert (operation_root / "STAGE_OPERATOR_INTENT.json").is_file()
-    receipt = json.loads((operation_root / "STAGE_OPERATOR_RECOVERY_V7.json").read_bytes())
-    assert receipt["status"] == "v6_released_child_evidence_preserved"
-    assert receipt == operator._seal(receipt)
+    assert not (operation_root / "STAGE_OPERATOR_RECOVERY_V7.json").exists()
 
 
 def test_prod10_operator_package_rejects_root_alert_or_packet_drift() -> None:

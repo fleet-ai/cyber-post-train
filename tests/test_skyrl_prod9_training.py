@@ -974,7 +974,7 @@ def test_prod10_manifest_handoff_is_fresh_and_keeps_real_rebind_equality(
     operation_root = hardening.training_operation_root(plan)
     operation_root.mkdir(mode=0o700)
     stage_name = "chris-q38-prod10-stage-operator-v7"
-    manifest_name = "chris-q38-prod10-manifest-operator-v1"
+    manifest_name = "chris-q38-prod10-manifest-operator-v2"
     stage_result, stage_launch = _direct_stage_v2_evidence(stage, successor, identity, stage_name)
     manifest_launch = _direct_manifest_evidence(plan, stage_result, stage_launch, manifest_name)
     expected = prod9_direct.preflight_job_manifest(plan, identity=identity)

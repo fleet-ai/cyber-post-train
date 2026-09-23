@@ -25,9 +25,9 @@ from training import skyrl_prod9_hardening as hardening
 from training import skyrl_prod10_direct as launch_direct
 from training import skyrl_reward_rayjob as historical
 
-PLAN_SHA256 = "sha256:96cd9fa1343a17389c4cc0e4a6d9e3c89d2e21cc3ab45b5256bc9f0dd578fbb6"
-REQUEST_SHA256 = "sha256:9ba0700bca6c88030cd761f7ae2394c7cda3ea58558aea4339fc6bc1a3cee501"
-MANIFEST_SHA256 = "sha256:6693f547904794b6edc2b9f677a0baad2b524279959ef831128388f1e6fda329"
+PLAN_SHA256 = "sha256:8f68c9502f394fea1d2ce2339a4908b50a26c3a5a534a4c03944a5aaa7a0d7d1"
+REQUEST_SHA256 = "sha256:22965dae5ed43e1c62297522867b53daade798810cf75388b83eb56914eee5f1"
+MANIFEST_SHA256 = "sha256:151fcb31d5ba37b06320defba764ec964ee34df87bf96b49d9c1f56b7e1cba68"
 MIN_RUNTIME_PROOF_REMAINING_SECONDS = 180
 MIN_HOST_CAPACITY_REMAINING_SECONDS = 10
 
