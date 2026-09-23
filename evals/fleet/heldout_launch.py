@@ -849,8 +849,10 @@ def sealed_evaluation(package: Package) -> SealedEvaluation:
     """Compile plan and rows with the exact runtime sealed in a launch packet."""
 
     data = package.config_map.get("data")
-    if not isinstance(data, dict) or any(
-        not isinstance(data.get(name), str) for name in SEALED_EVALUATOR_MODULES
+    if (
+        not isinstance(data, dict)
+        or any(not isinstance(data.get(name), str) for name in SEALED_EVALUATOR_MODULES)
+        or not isinstance(data.get("jobs.py"), str)
     ):
         raise HeldoutLaunchError("evaluation packet lacks its complete sealed evaluator runtime")
     scientific_config = dict(package.evaluation_config)
@@ -858,9 +860,13 @@ def sealed_evaluation(package: Package) -> SealedEvaluation:
     with tempfile.TemporaryDirectory(prefix="fleet-sealed-evaluator-") as directory:
         root = Path(directory)
         package_root = root / "evals" / "fleet"
+        jobs_root = root / "cyber_post_train"
         package_root.mkdir(parents=True, mode=0o700)
+        jobs_root.mkdir(mode=0o700)
         (root / "evals" / "__init__.py").write_text("", encoding="utf-8")
         (package_root / "__init__.py").write_text("", encoding="utf-8")
+        (jobs_root / "__init__.py").write_text("", encoding="utf-8")
+        (jobs_root / "jobs.py").write_text(data["jobs.py"], encoding="utf-8")
         for name in SEALED_EVALUATOR_MODULES:
             (package_root / name).write_text(data[name], encoding="utf-8")
         task_set = data.get("task-set.json")

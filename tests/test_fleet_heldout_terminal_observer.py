@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -87,6 +88,9 @@ def _package(tmp_path: Path) -> tuple[SimpleNamespace, list[dict]]:
         name: (runtime_root / name).read_text(encoding="utf-8")
         for name in observer.heldout_launch.SEALED_EVALUATOR_MODULES
     }
+    data["jobs.py"] = (
+        Path(observer.heldout_launch.__file__).parents[2] / "cyber_post_train" / "jobs.py"
+    ).read_text(encoding="utf-8")
     data["task-set.json"] = (tmp_path / "tasks.json").read_text(encoding="utf-8")
     packet = SimpleNamespace(
         identity_sha256="sha256:" + "f" * 64,
@@ -96,6 +100,42 @@ def _package(tmp_path: Path) -> tuple[SimpleNamespace, list[dict]]:
         SimpleNamespace(packet=packet, evaluation_config=config, config_map={"data": data}),
         evaluate.plan_rows(plan),
     )
+
+
+def test_sealed_plan_materializes_its_jobs_import(tmp_path, monkeypatch):
+    package, rows = _package(tmp_path)
+
+    def inspect_materialized_runtime(command, *, cwd, **_kwargs):
+        root = Path(cwd)
+        assert command[1] == "-c"
+        assert (root / "cyber_post_train" / "__init__.py").is_file()
+        assert (root / "cyber_post_train" / "jobs.py").read_text(encoding="utf-8") == (
+            package.config_map["data"]["jobs.py"]
+        )
+        config = copy.deepcopy(package.evaluation_config)
+        config.pop("model_artifact_binding")
+        plan = evaluate.compile_eval(config, relative_to=tmp_path)
+        return SimpleNamespace(
+            stdout=json.dumps({"plan": plan, "rows": rows}),
+            stderr="",
+        )
+
+    monkeypatch.setattr(observer.heldout_launch.subprocess, "run", inspect_materialized_runtime)
+
+    sealed = observer.heldout_launch.sealed_evaluation(package)
+
+    assert list(sealed.rows) == rows
+
+
+def test_sealed_plan_rejects_missing_jobs_import(tmp_path):
+    package, _ = _package(tmp_path)
+    del package.config_map["data"]["jobs.py"]
+
+    with pytest.raises(
+        observer.heldout_launch.HeldoutLaunchError,
+        match="lacks its complete sealed evaluator runtime",
+    ):
+        observer.heldout_launch.sealed_evaluation(package)
 
 
 def test_binding_comes_from_fresh_compiled_plan(tmp_path, monkeypatch):
