@@ -87,7 +87,12 @@ import json
 import os
 from pathlib import Path
 
-from evals.fleet.heldout_launch import KubectlCluster, PostgresDatabase, collect_terminal
+from evals.fleet.heldout_launch import (
+    KubectlCluster,
+    PostgresDatabase,
+    collect_terminal,
+    terminal_receipt_path,
+)
 
 workspace = Path(__file__).resolve().parent
 token_root = Path("/var/run/secrets/kubernetes.io/serviceaccount")
@@ -117,7 +122,7 @@ os.chmod(kubeconfig, 0o600)
 os.environ["KUBECONFIG"] = str(kubeconfig)
 packet_path = workspace / os.environ["PACKET_PATH"]
 packet = json.loads(packet_path.read_text(encoding="utf-8"))
-receipt_path = Path(packet["output_root"]) / "TERMINAL_OBSERVATION.json"
+receipt_path = terminal_receipt_path(packet["output_root"], packet["job_name"])
 result = collect_terminal(
     packet_path,
     cluster=KubectlCluster("incluster"),

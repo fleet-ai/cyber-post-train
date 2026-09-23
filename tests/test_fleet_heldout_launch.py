@@ -776,3 +776,30 @@ def test_postgres_summary_rejects_query_database_overrides(monkeypatch, query):
         match="select its database only by URI path",
     ):
         launch.PostgresDatabase("TEST_ROLLOUT_DATABASE_URL").summary(DATABASE)
+
+
+def test_terminal_receipt_path_uses_existing_evaluation_output(tmp_path):
+    output = tmp_path / "evaluation"
+    output.mkdir()
+    assert launch.terminal_receipt_path(
+        str(output), JOB_NAME, fallback_root=tmp_path
+    ) == output / "TERMINAL_OBSERVATION.json"
+
+
+def test_terminal_receipt_path_falls_back_when_evaluation_never_started(tmp_path):
+    missing = tmp_path / "evaluation-never-created"
+    assert launch.terminal_receipt_path(
+        str(missing), JOB_NAME, fallback_root=tmp_path
+    ) == tmp_path / f"{JOB_NAME}-TERMINAL_OBSERVATION.json"
+
+
+def test_terminal_receipt_path_rejects_ambiguous_roots(tmp_path):
+    regular = tmp_path / "regular"
+    regular.write_text("not a directory", encoding="utf-8")
+    with pytest.raises(launch.HeldoutLaunchError, match="not a directory"):
+        launch.terminal_receipt_path(str(regular), JOB_NAME, fallback_root=tmp_path)
+
+    symlink = tmp_path / "symlink"
+    symlink.symlink_to(tmp_path, target_is_directory=True)
+    with pytest.raises(launch.HeldoutLaunchError, match="must not be a symlink"):
+        launch.terminal_receipt_path(str(symlink), JOB_NAME, fallback_root=tmp_path)

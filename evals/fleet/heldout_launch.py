@@ -1317,6 +1317,29 @@ def _terminal_resource_rows(items: list[dict[str, Any]], *, kind: str) -> list[d
     return sorted(rows, key=lambda row: (row["name"], row["uid"]))
 
 
+def terminal_receipt_path(
+    output_root: str,
+    job_name: str,
+    *,
+    fallback_root: Path = Path("/mnt/sfs/jobs"),
+) -> Path:
+    """Choose a no-overwrite receipt path even when evaluation never made output."""
+    if not isinstance(output_root, str) or not output_root:
+        raise HeldoutLaunchError("terminal output root is invalid")
+    if not isinstance(job_name, str) or KUBERNETES_NAME.fullmatch(job_name) is None:
+        raise HeldoutLaunchError("terminal Job name is invalid")
+    output = Path(output_root)
+    if output.is_symlink():
+        raise HeldoutLaunchError("terminal output root must not be a symlink")
+    if output.is_dir():
+        return output / "TERMINAL_OBSERVATION.json"
+    if output.exists():
+        raise HeldoutLaunchError("terminal output root exists but is not a directory")
+    if fallback_root.is_symlink() or not fallback_root.is_dir():
+        raise HeldoutLaunchError("terminal fallback root is not an exact directory")
+    return fallback_root / f"{job_name}-TERMINAL_OBSERVATION.json"
+
+
 def collect_terminal(
     packet_path: Path,
     *,
