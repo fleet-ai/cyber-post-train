@@ -41,6 +41,17 @@ def _migration(packet_root: Path) -> dict[str, Any]:
     arms = value.get("replacement_arms")
     migrations = value.get("migrations")
     definition = value.get("comparison_definition")
+    seed51 = protocol_v2._seed51_invalid_evidence()  # noqa: SLF001
+    expected_invalid_evidence = [
+        {
+            "seed": 51,
+            "arm_id": "base",
+            "path": str(protocol_v2.SEED51_INVALID_EVIDENCE.relative_to(ROOT)),
+            "file_sha256": _file_sha(protocol_v2.SEED51_INVALID_EVIDENCE),
+            "receipt_sha256": seed51["sha256"],
+            "reason_class": seed51["classification"]["reason_class"],
+        }
+    ]
     if (
         value.get("schema") != protocol_v2.RECEIPT_SCHEMA
         or not isinstance(arms, list)
@@ -50,6 +61,7 @@ def _migration(packet_root: Path) -> dict[str, Any]:
         or value.get("scientific_identity", {}).get("retry_limit") != 0
         or value.get("privacy", {}).get("score_values_read") is not False
         or value.get("launch_performed") is not False
+        or value.get("sanitized_invalid_replica_evidence") != expected_invalid_evidence
         or not isinstance(definition, dict)
         or definition.get("schema") != protocol_v2.COMPARISON_DEFINITION_SCHEMA
         or definition.get("sha256")

@@ -41,8 +41,11 @@ RETIREMENT_PREFLIGHT = (
 RETIREMENT_POST = (
     ROOT / "docs/evidence/qwen38-fleet-dev17-candidate-seed52-53-v2-retirement-20260923.json"
 )
+SEED51_INVALID_EVIDENCE = (
+    ROOT / "docs/evidence/qwen38-fleet-dev17-seed51-base-invalid-replica-20260923.json"
+)
 SOURCE_SEEDS = tuple(range(46, 54))
-REQUIRED_INITIAL_INVALID_SEEDS = frozenset({47, 52, 53})
+FROZEN_INVALID_SEEDS = (47, 51, 52, 53)
 FIRST_REPLACEMENT_SEED = 54
 DAILY_ROLLOUT_CAP = 500
 TASKS_PER_ARM = 17
@@ -156,8 +159,8 @@ def _load_intent(
         seeds.append(seed)
     if seeds != sorted(seeds) or len(seeds) != len(set(seeds)):
         raise ValueError("invalid original seeds must be unique and sorted ascending")
-    if not REQUIRED_INITIAL_INVALID_SEEDS.issubset(seeds):
-        raise ValueError("migration intent omits an already-proven invalid original replica")
+    if seeds != list(FROZEN_INVALID_SEEDS):
+        raise ValueError("migration intent differs from the frozen invalid-replica roster")
     return value
 
 
@@ -465,6 +468,47 @@ def _retirement_evidence(
     return value
 
 
+def _seed51_invalid_evidence() -> dict[str, Any]:
+    value = _verified(SEED51_INVALID_EVIDENCE, "seed-51 invalid-replica evidence")
+    classification = value.get("classification", {})
+    privacy = value.get("privacy", {})
+    residual = value.get("unrecoverable_residual", {})
+    if (
+        value.get("schema") != "cyber_qwen38_fleet_seed51_base_terminal_cohort_audit_v1"
+        or value.get("sampling_seed") != 51
+        or value.get("arm") != "base"
+        or value.get("arm_census")
+        != {
+            "accepted": 7,
+            "local_results": 16,
+            "retry_review": 10,
+            "stale_active": 0,
+            "total": 17,
+        }
+        or classification.get("reason_class") != "mixed_infrastructure_invalid_replica"
+        or classification.get("arm_valid_for_protocol_v1_comparison") is not False
+        or classification.get("paired_replica_valid_under_protocol_v2_whole_replica_rule")
+        is not False
+        or classification.get("external_mutations_performed") != 0
+        or classification.get("reroll_created") is not False
+        or classification.get("subset_reconciliation_created") is not False
+        or privacy.get("scores_read_or_included") is not False
+        or privacy.get("prompts_responses_flags_rewards_or_trace_content_read_or_included")
+        is not False
+        or privacy.get("credentials_included") is not False
+        or privacy.get("private_cell_task_session_or_trace_identifiers_included") is not False
+        or residual.get("count") != 1
+        or residual.get("failure_code") != "post_claim.runtimeerror"
+        or residual.get("local_result_present") is not False
+        or residual.get("database_session_binding_present") is not False
+        or residual.get("recoverable_authoritative_outcome_proven") is not False
+        or residual.get("retry_count") != 0
+        or residual.get("max_retries") != 0
+    ):
+        raise ValueError("seed-51 invalid-replica evidence differs")
+    return value
+
+
 def _configs(base_template: dict[str, Any], seed: int) -> tuple[dict[str, Any], dict[str, Any]]:
     base, candidate = source._configs(base_template, seed, candidate_generation=2)  # noqa: SLF001
     base["name"] = f"q38-dev17-s{seed}-base-replacement-p1-v2"
@@ -504,6 +548,12 @@ def prepare(
     invalid = intent["invalid_original_replicas"]
     mapping = deterministic_mapping([row["seed"] for row in invalid])
     reason_by_seed = {row["seed"]: row for row in invalid}
+    seed51_evidence = _seed51_invalid_evidence()
+    if (
+        seed51_evidence["sha256"] not in reason_by_seed[51]["evidence_receipt_sha256s"]
+        or reason_by_seed[51]["reason_class"] != seed51_evidence["classification"]["reason_class"]
+    ):
+        raise ValueError("migration intent does not bind the exact seed-51 invalid evidence")
     base_template, task_set, split, corpus, roster = source._inputs()  # noqa: SLF001
     first_seed = mapping[0]["replacement_seed"]
     parity_base, parity_candidate = _configs(base_template, first_seed)
@@ -669,6 +719,16 @@ def prepare(
                 "arm_count": len(SOURCE_SEEDS) * len(ARMS),
             },
             "migration_intent_sha256": intent["sha256"],
+            "sanitized_invalid_replica_evidence": [
+                {
+                    "seed": 51,
+                    "arm_id": "base",
+                    "path": str(SEED51_INVALID_EVIDENCE.relative_to(ROOT)),
+                    "file_sha256": _file_sha(SEED51_INVALID_EVIDENCE),
+                    "receipt_sha256": seed51_evidence["sha256"],
+                    "reason_class": seed51_evidence["classification"]["reason_class"],
+                }
+            ],
             "comparison_definition": comparison_definition,
             "comparison_definition_file_sha256": _file_sha(
                 temporary / "COMPARISON_DEFINITION.json"
@@ -698,7 +758,7 @@ def prepare(
                 "whole_replica_pairs_only": True,
                 "cell_level_replacement_forbidden": True,
                 "seed_reuse_forbidden": True,
-                "future_invalid_original_seeds_added_before_score_unseal": True,
+                "later_invalid_seed_requires_versioned_successor_before_score_unseal": True,
             },
             "capacity": {
                 "new_replacement_rollouts": planned,
