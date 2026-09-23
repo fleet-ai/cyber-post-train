@@ -8,11 +8,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+import yaml
 
 from evals.fleet import heldout_launch, model_artifact_v3
 from scripts import prepare_qwen38_fleet_seed44_two_arm_packets as shared
 from scripts import prepare_qwen38_fleet_seed46_candidate_successors as successors
 from scripts import prepare_qwen38_fleet_seed46_pass8_packets as study
+from scripts import render_fleet_heldout_launcher_jobs as launchers
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -133,3 +135,27 @@ def test_renderer_rejects_a_local_model_without_artifact_binding(tmp_path, monke
             ledger_path=study.LEDGER,
             source_files=study.V3_SOURCE_FILES,
         )
+
+
+def test_candidate_successor_launchers_are_fresh_alert_suppressed_and_cpu_only(
+    tmp_path, monkeypatch
+) -> None:
+    packets = _prepare(tmp_path, monkeypatch)
+    output = tmp_path / "candidate-launchers"
+    receipt = launchers.render(packets=packets, output=output, candidate_only=True)
+
+    assert receipt["candidate_only"] is True
+    assert len(receipt["arms"]) == 8
+    assert {row["replica"] for row in receipt["arms"]} == {
+        f"seed{seed}-candidate" for seed in range(46, 54)
+    }
+    bundle = yaml.safe_load((output / "launchers.yaml").read_text(encoding="utf-8"))
+    jobs = [item for item in bundle["items"] if item["kind"] == "Job"]
+    assert len(jobs) == 8
+    for job in jobs:
+        assert job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+        assert job["spec"]["template"]["spec"]["priorityClassName"] == "c1"
+        assert "nvidia.com/gpu" not in json.dumps(job)
+        environment = job["spec"]["template"]["spec"]["containers"][0]["env"]
+        journal = next(item["value"] for item in environment if item["name"] == "CREATE_JOURNAL")
+        assert "-p1-v2-CREATE_INTENT.jsonl" in journal
