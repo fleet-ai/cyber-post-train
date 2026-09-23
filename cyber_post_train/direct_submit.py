@@ -1282,17 +1282,38 @@ class Kubectl:
         return self._run(["get", resource, "--namespace", NAMESPACE, "--output=json"])
 
     def list_operator_resources(self, resource: str) -> dict:
-        """List only the fixed identity surfaces used by a bounded CPU operator."""
-        if resource not in {
-            "configmaps",
-            "jobs.batch",
-            "pods",
-            "workloads.kueue.x-k8s.io",
-            "rayjobs.ray.io",
-            "rayclusters.ray.io",
-        }:
+        """List compact names for the fixed bounded-operator identity surfaces."""
+        prefixes = {
+            "jobs.batch": "job.batch/",
+            "pods": "pod/",
+            "workloads.kueue.x-k8s.io": "workload.kueue.x-k8s.io/",
+            "rayjobs.ray.io": "rayjob.ray.io/",
+            "rayclusters.ray.io": "raycluster.ray.io/",
+        }
+        if resource not in prefixes:
             raise JobsError("unsupported bounded-operator inventory resource")
-        return self._run(["get", resource, "--namespace", NAMESPACE, "--output=json"])
+        output = self._run_text(
+            ["get", resource, "--namespace", NAMESPACE, "--output=name"]
+        )
+        prefix = prefixes[resource]
+        items = []
+        for line in output.splitlines():
+            if not line.startswith(prefix) or line.count("/") != 1:
+                raise JobsError("bounded-operator name inventory is invalid")
+            name = line.removeprefix(prefix)
+            if re.fullmatch(r"[a-z0-9](?:[-a-z0-9.]{0,251}[a-z0-9])?", name) is None:
+                raise JobsError("bounded-operator name inventory is invalid")
+            items.append(
+                {
+                    "metadata": {
+                        "name": name,
+                        "labels": {},
+                        "annotations": {},
+                        "ownerReferences": [],
+                    }
+                }
+            )
+        return {"kind": "PartialObjectMetadataList", "items": items}
 
     def get_operator_object(self, resource: str, name: str) -> dict | None:
         """Read one fixed helper identity when namespace-wide list is unavailable."""
