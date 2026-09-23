@@ -31,6 +31,7 @@ DUPLICATE_SCHEMA = "cyber_skyrl_prod10_direct_duplicate_absence_v1"
 CAPACITY_SCHEMA = "cyber_skyrl_prod10_direct_capacity_gate_v1"
 CREATED_SCHEMA = "cyber_skyrl_prod10_direct_created_v1"
 REVALIDATION_SCHEMA = "cyber_skyrl_prod10_preflight_revalidation_v1"
+DEV_REFRESH_SCHEMA = "cyber_skyrl_prod10_dev_jobs_preview_refresh_v1"
 MAX_NODES = 10
 MAX_GPUS = 80
 
@@ -366,6 +367,138 @@ def capacity_gate(
     )
 
 
+def _preview_binding(
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    source_preview: dict[str, Any],
+    expected: dict[str, Any],
+    value: object,
+    *,
+    context: str,
+    identity: historical.RailIdentity,
+    fresh: bool,
+) -> dict[str, Any]:
+    checked = direct._validate_seal(value, direct.PREVIEW_SCHEMA)
+    if (
+        checked.get("status") != "passed"
+        or checked.get("context") != context
+        or checked.get("plan_sha256") != digest(plan)
+        or checked.get("request_sha256") != digest(request)
+        or checked.get("manifest_sha256") != digest(expected)
+        or checked.get("name") != source_preview.get("name")
+        or checked.get("run_name_prefix") != identity.run_name
+        or checked.get("nodes") != 1
+        or checked.get("gpus") != 8
+        or checked.get("priority") != "c1"
+        or checked.get("queue_priority") != "q1"
+        or checked.get("failure_alerts") != "off"
+        or checked.get("submitted") is not False
+    ):
+        raise JobsError("prod10 direct-v3 server preview changed")
+    if fresh:
+        direct._fresh_at(checked.get("checked_at"))
+    return checked
+
+
+def refresh_dev_preview(
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    source_preview: dict[str, Any],
+    expected: dict[str, Any],
+    dev_preview: dict[str, Any],
+    *,
+    image_identity_receipt: dict[str, Any],
+    token: str,
+    identity: historical.RailIdentity,
+    jobs_factory: Callable[..., Jobs] = Jobs,
+) -> dict[str, Any]:
+    """Refresh the dev Jobs render at time of use without weakening its TTL."""
+    bound = direct._identity(plan, identity)
+    sealed_dev = _preview_binding(
+        plan,
+        request,
+        source_preview,
+        expected,
+        dev_preview,
+        context=direct.DEV_CONTEXT,
+        identity=bound,
+        fresh=False,
+    )
+    with jobs_factory(token, base_url=API_URLS["dev"]) as client:
+        fresh_source = client.preview(request)
+    if fresh_source != source_preview:
+        raise JobsError("prod10 fresh dev Jobs preview changed")
+    if expected != direct.manifest(
+        plan,
+        request,
+        fresh_source,
+        identity=bound,
+        image_identity_receipt=image_identity_receipt,
+    ):
+        raise JobsError("prod10 fresh dev Jobs manifest changed")
+    return _seal(
+        {
+            "schema": DEV_REFRESH_SCHEMA,
+            "status": "fresh_dev_jobs_preview_passed",
+            "context": direct.DEV_CONTEXT,
+            "identity_sha256": bound.sealed_mapping()["sha256"],
+            "plan_sha256": "sha256:" + digest(plan),
+            "request_sha256": "sha256:" + digest(request),
+            "source_preview_sha256": "sha256:" + digest(source_preview),
+            "manifest_sha256": "sha256:" + digest(expected),
+            "sealed_dev_server_preview_sha256": sealed_dev["sha256"],
+            "failure_alerts": "off",
+            "priority": "c1",
+            "queue_priority": "q1",
+            "gpus": 8,
+            "submitted": False,
+            "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+
+
+def _dev_refresh(
+    value: object,
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    source_preview: dict[str, Any],
+    expected: dict[str, Any],
+    dev_preview: dict[str, Any],
+    *,
+    identity: historical.RailIdentity,
+) -> dict[str, Any]:
+    bound = direct._identity(plan, identity)
+    sealed_dev = _preview_binding(
+        plan,
+        request,
+        source_preview,
+        expected,
+        dev_preview,
+        context=direct.DEV_CONTEXT,
+        identity=bound,
+        fresh=False,
+    )
+    checked = direct._validate_seal(value, DEV_REFRESH_SCHEMA)
+    if (
+        checked.get("status") != "fresh_dev_jobs_preview_passed"
+        or checked.get("context") != direct.DEV_CONTEXT
+        or checked.get("identity_sha256") != bound.sealed_mapping()["sha256"]
+        or checked.get("plan_sha256") != "sha256:" + digest(plan)
+        or checked.get("request_sha256") != "sha256:" + digest(request)
+        or checked.get("source_preview_sha256") != "sha256:" + digest(source_preview)
+        or checked.get("manifest_sha256") != "sha256:" + digest(expected)
+        or checked.get("sealed_dev_server_preview_sha256") != sealed_dev["sha256"]
+        or checked.get("failure_alerts") != "off"
+        or checked.get("priority") != "c1"
+        or checked.get("queue_priority") != "q1"
+        or checked.get("gpus") != 8
+        or checked.get("submitted") is not False
+    ):
+        raise JobsError("prod10 fresh dev Jobs preview proof changed")
+    direct._fresh_at(checked.get("checked_at"))
+    return checked
+
+
 def authorize(
     plan: dict[str, Any],
     request: dict[str, Any],
@@ -375,6 +508,7 @@ def authorize(
     revalidation: dict[str, Any],
     *,
     dev_preview: dict[str, Any],
+    dev_refresh: dict[str, Any],
     prod_preview: dict[str, Any],
     observer: dict[str, Any],
     identity: historical.RailIdentity,
@@ -387,8 +521,34 @@ def authorize(
         plan, request, source_preview, identity=bound, image_identity_receipt=image
     ):
         raise JobsError("prod10 direct-v3 GPU manifest changed")
-    previews = direct._direct_previews(
-        plan, request, source_preview, expected, [dev_preview, prod_preview], identity=bound
+    checked_dev = _preview_binding(
+        plan,
+        request,
+        source_preview,
+        expected,
+        dev_preview,
+        context=direct.DEV_CONTEXT,
+        identity=bound,
+        fresh=False,
+    )
+    refresh = _dev_refresh(
+        dev_refresh,
+        plan,
+        request,
+        source_preview,
+        expected,
+        checked_dev,
+        identity=bound,
+    )
+    checked_prod = _preview_binding(
+        plan,
+        request,
+        source_preview,
+        expected,
+        prod_preview,
+        context=direct.PROD_CONTEXT,
+        identity=bound,
+        fresh=True,
     )
     plan_sha, manifest_sha = "sha256:" + digest(plan), "sha256:" + digest(expected)
     root = hardening.training_operation_root(plan)
@@ -413,8 +573,9 @@ def authorize(
             "preflight_result": checked,
             "preflight_revalidation": fresh,
             "image_identity_receipt": image,
-            "dev_preview": previews[0],
-            "prod_preview": previews[1],
+            "dev_preview": checked_dev,
+            "dev_preview_refresh": refresh,
+            "prod_preview": checked_prod,
             "observer": armed,
             "operation_root": str(root),
             "output_absence_enforcement": "sealed_preflight_plus_fresh_launch_revalidation",
@@ -460,6 +621,7 @@ def create_once(
         auth["preflight_result"],
         auth["preflight_revalidation"],
         dev_preview=auth["dev_preview"],
+        dev_refresh=auth["dev_preview_refresh"],
         prod_preview=auth["prod_preview"],
         observer=auth["observer"],
         identity=bound,
@@ -514,7 +676,7 @@ def create_once(
             gpus=request["workers"] * request["gpus_per_worker"],
             maximum_seconds=direct.MAXIMUM_SECONDS,
         )
-        for preview in (auth["dev_preview"], auth["prod_preview"], live_preview):
+        for preview in (auth["dev_preview_refresh"], auth["prod_preview"], live_preview):
             direct._fresh_at(preview.get("checked_at"))
         direct._write_once_fsynced(
             journal,

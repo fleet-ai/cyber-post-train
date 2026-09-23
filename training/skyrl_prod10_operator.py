@@ -1718,6 +1718,20 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         identity=identity,
         image_identity_receipt=image_identity,
     )
+    token = os.environ.get("FLEET_API_KEY", "")
+    if not token or not os.environ.get("WANDB_API_KEY"):
+        raise OperatorFailure("launch_credentials_unavailable")
+    dev_refresh = launch_direct.refresh_dev_preview(
+        plan,
+        request,
+        source_preview,
+        expected,
+        packet["dev_preview"],
+        image_identity_receipt=image_identity,
+        token=token,
+        identity=identity,
+        jobs_factory=Jobs,
+    )
     authorization = launch_direct.authorize(
         plan,
         request,
@@ -1726,13 +1740,11 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         preflight,
         revalidation,
         dev_preview=packet["dev_preview"],
+        dev_refresh=dev_refresh,
         prod_preview=prod_preview,
         observer=armed,
         identity=identity,
     )
-    token = os.environ.get("FLEET_API_KEY", "")
-    if not token or not os.environ.get("WANDB_API_KEY"):
-        raise OperatorFailure("launch_credentials_unavailable")
     fresh_capacity = _fresh_capacity_census(request, runner)
     created = launch_direct.create_once(
         operation_root,

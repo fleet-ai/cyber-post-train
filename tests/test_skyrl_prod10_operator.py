@@ -703,6 +703,9 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
             "preflight_result": {},
             "preflight_revalidation": {},
             "dev_preview": {},
+            "dev_preview_refresh": {
+                "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+            },
             "prod_preview": {},
             "observer": {},
             "image_identity_receipt": {},
@@ -789,6 +792,116 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
             wandb_exists=lambda *_args: False,
         )
     assert len(posts) == 1
+
+
+def test_prod10_launch_refreshes_stale_dev_preview_at_time_of_use(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity = historical.load_identity(IDENTITY)
+    plan = {"schema": training.SCHEMA}
+    request = {"name": identity.run_name, "workers": 1, "gpus_per_worker": 8}
+    source = {"name": identity.run_name + "-00000000"}
+    expected = {"kind": "RayJob"}
+    stale_at = (datetime.now(UTC) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
+    fresh_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+    def preview(context: str, checked_at: str) -> dict:
+        return direct._seal(
+            {
+                "schema": direct.PREVIEW_SCHEMA,
+                "status": "passed",
+                "context": context,
+                "plan_sha256": digest(plan),
+                "request_sha256": digest(request),
+                "manifest_sha256": digest(expected),
+                "server_render_sha256": "0" * 64,
+                "name": source["name"],
+                "run_name_prefix": identity.run_name,
+                "nodes": 1,
+                "gpus": 8,
+                "priority": "c1",
+                "queue_priority": "q1",
+                "failure_alerts": "off",
+                "submitted": False,
+                "checked_at": checked_at,
+            }
+        )
+
+    dev = preview(direct.DEV_CONTEXT, stale_at)
+    prod = preview(direct.PROD_CONTEXT, fresh_at)
+    bases: list[str] = []
+
+    class ExactDevJobs:
+        def __init__(self, _token: str, *, base_url: str):
+            bases.append(base_url)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def preview(self, _request: dict) -> dict:
+            return source
+
+    monkeypatch.setattr(direct, "_identity", lambda _plan, bound: bound)
+    monkeypatch.setattr(direct, "manifest", lambda *_args, **_kwargs: expected)
+    image = {"status": "passed"}
+    refresh = launch_direct.refresh_dev_preview(
+        plan,
+        request,
+        source,
+        expected,
+        dev,
+        image_identity_receipt=image,
+        token="token",
+        identity=identity,
+        jobs_factory=ExactDevJobs,
+    )
+    assert bases == [launch_direct.API_URLS["dev"]]
+    assert refresh["status"] == "fresh_dev_jobs_preview_passed"
+    assert refresh["sealed_dev_server_preview_sha256"] == dev["sha256"]
+    assert refresh["checked_at"] != stale_at
+
+    preflight = {"sha256": "sha256:" + "1" * 64}
+    revalidation = {"sha256": "sha256:" + "2" * 64}
+    monkeypatch.setattr(launch_direct, "preflight_result", lambda *_args, **_kwargs: preflight)
+    monkeypatch.setattr(launch_direct, "_revalidation", lambda *_args, **_kwargs: revalidation)
+    monkeypatch.setattr(launch_direct, "image_identity", lambda *_args, **_kwargs: image)
+    monkeypatch.setattr(direct, "_jobs_api_prefix_guard", lambda *_args, **_kwargs: {})
+    monkeypatch.setattr(direct, "_canonical_operation_root", lambda _root: None)
+    authorization = launch_direct.authorize(
+        plan,
+        request,
+        source,
+        expected,
+        preflight,
+        revalidation,
+        dev_preview=dev,
+        dev_refresh=refresh,
+        prod_preview=prod,
+        observer={},
+        identity=identity,
+    )
+    assert authorization["dev_preview"] == dev
+    assert authorization["dev_preview_refresh"] == refresh
+
+    class MismatchedDevJobs(ExactDevJobs):
+        def preview(self, _request: dict) -> dict:
+            return {"name": "different-preview"}
+
+    with pytest.raises(JobsError, match="fresh dev Jobs preview changed"):
+        launch_direct.refresh_dev_preview(
+            plan,
+            request,
+            source,
+            expected,
+            dev,
+            image_identity_receipt=image,
+            token="token",
+            identity=identity,
+            jobs_factory=MismatchedDevJobs,
+        )
 
 
 def test_prod10_launch_reruns_preflight_and_freshly_dates_it(
