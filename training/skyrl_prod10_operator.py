@@ -42,7 +42,7 @@ OPERATOR_NAMES = {
     "stage": "chris-q38-prod10-stage-operator-v7",
     "manifest": "chris-q38-prod10-manifest-operator-v1",
     "preflight": "chris-q38-prod10-preflight-operator-v2",
-    "launch": "chris-q38-prod10-launch-operator-v1",
+    "launch": "chris-q38-prod10-launch-operator-v2",
     "inspect": "chris-q38-prod10-launch-inspect-v2",
     "probe": "chris-q38-prod10-launch-probe-v6",
 }
@@ -86,6 +86,19 @@ _PROBE_V5_SUCCESS = {
     "observer_sha256": "sha256:8ea93460d8a39fe344ee92941b7aebb4c85a892ead4ed4c23920dd6cfee1e3ba",
     "result_sha256": "sha256:620f41c5a4d5ef68bf09d83a0901b7bc2586bbb8ae5904f4bdb08203e9449e0e",
     "diagnosis": "dataset_cache_oserror",
+    "gpus": 0,
+}
+_PROBE_V6_SUCCESS = {
+    "schema": "cyber_skyrl_prod10_launch_probe_success_binding_v1",
+    "status": "diagnostic_succeeded_and_released",
+    "operator_name": "chris-q38-prod10-launch-probe-v6",
+    "operator_job_uid": "6a7b3779-b806-48b2-b264-10cebb7aff62",
+    "operator_pod_uid": "e6ee1488-51fb-4883-80c9-dea44f6a8741",
+    "operator_workload_uid": "46d568b9-c7a5-4ba7-ab1d-1d8b0a1d0249",
+    "receipt_sha256": "sha256:2e818e9e7e37880c5b60975f521fc9430b2314a18ad0b0eec2c19964a076fa69",
+    "observer_sha256": "sha256:0cf33da636e39511af94f6a22600c62908b25609ca9aa1ab3f5587dc79c93ed0",
+    "result_sha256": "sha256:c88a69c013f63dbd5565611cfa04d660909630dcb98f33649d520dbd0d2066ab",
+    "diagnosis": "fresh_training_preflight_passed",
     "gpus": 0,
 }
 _PREFLIGHT_V1_FAILURE = {
@@ -242,6 +255,11 @@ def probe_v5_success_binding() -> dict[str, Any]:
     return _seal(_PROBE_V5_SUCCESS)
 
 
+def probe_v6_success_binding() -> dict[str, Any]:
+    """Bind the released v6 proof that the one-variable cache repair passed."""
+    return _seal(_PROBE_V6_SUCCESS)
+
+
 def _write_once(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=False, exist_ok=True)
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -370,6 +388,10 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
             operator_name=OPERATOR_NAMES["preflight"],
         )
     else:
+        if packet.get("launch_v1_failure") != launch_v1_failure_binding():
+            raise ValueError("prod10 launch failure predecessor changed")
+        if packet.get("probe_v6_success") != probe_v6_success_binding():
+            raise ValueError("prod10 launch repair proof changed")
         direct._validate_seal(
             packet.get("preflight_launch_result"),
             direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA,

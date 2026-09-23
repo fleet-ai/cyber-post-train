@@ -323,6 +323,8 @@ def launch_packet(
             "dev_preview": dev_preview,
             "duplicate_proof": duplicate,
             "capacity_census": capacity_census,
+            "launch_v1_failure": operator.launch_v1_failure_binding(),
+            "probe_v6_success": operator.probe_v6_success_binding(),
         }
     )
 
@@ -500,11 +502,14 @@ def _job(
         {"name": "CUDA_VISIBLE_DEVICES", "value": ""},
         {"name": "NVIDIA_VISIBLE_DEVICES", "value": "none"},
     ]
+    if phase in {"launch", "probe"}:
+        environment.append(
+            {"name": "HF_DATASETS_CACHE", "value": "/work/hf-datasets"}
+        )
     if phase == "probe":
         environment.extend(
             [
                 {"name": "WANDB_API_KEY", "value": "diagnostic-not-a-credential"},
-                {"name": "HF_DATASETS_CACHE", "value": "/work/hf-datasets"},
             ]
         )
     sfs_mount: dict[str, Any] = {"name": "sfs", "mountPath": "/mnt/sfs"}

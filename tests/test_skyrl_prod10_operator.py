@@ -197,6 +197,7 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
     container = package.job["spec"]["template"]["spec"]["containers"][0]
 
     assert proof["phase"] == "launch"
+    assert proof["name"] == "chris-q38-prod10-launch-operator-v2"
     assert proof["failure_alerts"] == "off"
     assert proof["priority"] == "c1"
     assert proof["queue_priority"] == "q1"
@@ -233,6 +234,13 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
         {"secretRef": {"name": "fleet-api"}},
         {"secretRef": {"name": "wandb-api"}},
     ]
+    environment = {
+        item["name"]: item["value"]
+        for item in container["env"]
+        if "value" in item
+    }
+    assert environment["HF_DATASETS_CACHE"] == "/work/hf-datasets"
+    assert "WANDB_API_KEY" not in environment
     assert "private_rows" not in json.dumps(packet, sort_keys=True)
 
     changed = copy.deepcopy(packet)
@@ -242,6 +250,24 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
     )
     changed = operator._seal(changed)
     with pytest.raises(ValueError, match="capacity"):
+        operator_job.build_operator_package(changed)
+
+    changed = copy.deepcopy(packet)
+    changed["launch_v1_failure"]["operator_job_uid"] = (
+        "00000000-0000-4000-8000-000000000001"
+    )
+    changed["launch_v1_failure"] = operator._seal(changed["launch_v1_failure"])
+    changed = operator._seal(changed)
+    with pytest.raises(ValueError, match="failure predecessor"):
+        operator_job.build_operator_package(changed)
+
+    changed = copy.deepcopy(packet)
+    changed["probe_v6_success"]["operator_job_uid"] = (
+        "00000000-0000-4000-8000-000000000001"
+    )
+    changed["probe_v6_success"] = operator._seal(changed["probe_v6_success"])
+    changed = operator._seal(changed)
+    with pytest.raises(ValueError, match="repair proof"):
         operator_job.build_operator_package(changed)
 
 
