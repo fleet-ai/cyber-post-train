@@ -1019,6 +1019,7 @@ def _training_create_journal(
     intent, response, created = rows
     capacity = intent.get("capacity_gate")
     preview = intent.get("live_preview_proof")
+    submitter_normalization = intent.get("submitter_normalization")
     duplicate_before_guard = intent.get("duplicate_checks_before_guard")
     duplicate_before_intent = intent.get("duplicate_checks_before_intent")
     if not all(
@@ -1026,14 +1027,20 @@ def _training_create_journal(
         for value in (
             capacity,
             preview,
+            submitter_normalization,
             duplicate_before_guard,
             duplicate_before_intent,
         )
     ):
-        raise ValueError("prod10 create journal lacks capacity, preview, or duplicate evidence")
+        raise ValueError(
+            "prod10 create journal lacks capacity, preview, normalization, or duplicate evidence"
+        )
     try:
         capacity = direct._validate_seal(capacity, CAPACITY_SCHEMA)
         preview = direct._validate_seal(preview, direct.PREVIEW_SCHEMA)
+        submitter_normalization = direct._validate_seal(
+            submitter_normalization, "cyber_skyrl_prod10_submitter_normalization_v1"
+        )
         duplicate_before_guard = direct._validate_seal(duplicate_before_guard, JIT_DUPLICATE_SCHEMA)
         duplicate_before_intent = direct._validate_seal(
             duplicate_before_intent, JIT_DUPLICATE_SCHEMA
@@ -1066,6 +1073,20 @@ def _training_create_journal(
         "runtime_jobs_api_rows_checked",
         "output_absent",
         "checked_at",
+        "sha256",
+    }
+    submitter_normalization_keys = {
+        "schema",
+        "status",
+        "annotations",
+        "expected_manifest_sha256",
+        "live_manifest_sha256",
+        "normalized_manifest_sha256",
+        "expected_email_valid",
+        "expected_profile_uuid_valid",
+        "live_email_valid",
+        "live_profile_uuid_valid",
+        "values_exported",
         "sha256",
     }
 
@@ -1121,6 +1142,22 @@ def _training_create_journal(
         or created.get("gpus") != 8
         or created.get("jit_duplicate_before_guard_sha256") != duplicate_before_guard["sha256"]
         or created.get("jit_duplicate_before_intent_sha256") != duplicate_before_intent["sha256"]
+        or set(submitter_normalization) != submitter_normalization_keys
+        or submitter_normalization.get("status") != "two_server_owned_annotations_normalized"
+        or submitter_normalization.get("annotations")
+        != ["fleet.ai/submitted-by", "fleet.ai/submitted-by-profile"]
+        or submitter_normalization.get("expected_manifest_sha256") != intent["manifest_sha256"]
+        or submitter_normalization.get("normalized_manifest_sha256") != intent["manifest_sha256"]
+        or re.fullmatch(
+            r"sha256:[0-9a-f]{64}", str(submitter_normalization.get("live_manifest_sha256"))
+        )
+        is None
+        or submitter_normalization.get("expected_email_valid") is not True
+        or submitter_normalization.get("expected_profile_uuid_valid") is not True
+        or submitter_normalization.get("live_email_valid") is not True
+        or submitter_normalization.get("live_profile_uuid_valid") is not True
+        or submitter_normalization.get("values_exported") is not False
+        or created.get("submitter_normalization_sha256") != submitter_normalization["sha256"]
         or not duplicate_is_exact(duplicate_before_guard, prior=None)
         or not duplicate_is_exact(duplicate_before_intent, prior=duplicate_before_guard["sha256"])
         or duplicate_before_guard.get("fresh_host_all_context_duplicate_sha256")
@@ -1157,7 +1194,8 @@ def _training_create_journal(
         or preview.get("context") != direct.PROD_CONTEXT
         or preview.get("plan_sha256") != plan_sha256.removeprefix("sha256:")
         or preview.get("request_sha256") != request_sha256.removeprefix("sha256:")
-        or preview.get("manifest_sha256") != intent["manifest_sha256"].removeprefix("sha256:")
+        or preview.get("manifest_sha256")
+        != submitter_normalization["live_manifest_sha256"].removeprefix("sha256:")
         or preview.get("failure_alerts") != "off"
         or preview.get("priority") != "c1"
         or preview.get("queue_priority") != "q1"
@@ -1267,7 +1305,6 @@ def accept_terminal(
         or training_receipt.get("optimizer_update_independently_verified") is not False
         or training_receipt.get("checkpoint_reload_verified") is not False
         or manifest.get("terminal_receipt_sha256") != training_receipt["sha256"]
-        or candidate.get("runtime_image_identity_complete") is not True
     ):
         raise ValueError("training observer termination receipt differs from the exact run")
     training_release, training_observer_file_sha256 = hardening._exact_observer(
@@ -1276,6 +1313,8 @@ def accept_terminal(
         expected_gpus=8,
         expected_receipt=training_receipt,
     )
+    if training_release.get("runtime_image_identity_complete") is not True:
+        raise ValueError("hashed training observer lacks complete runtime image identity")
     gpu, gpu_file_sha256 = hardening._receipt_file(gpu_check)
     if (
         gpu.get("schema") != "cyber_hf_export_check_v1"

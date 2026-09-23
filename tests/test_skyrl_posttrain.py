@@ -735,8 +735,24 @@ def _prod10_terminal_inputs(state, paths):
 
     before_guard = duplicate(None)
     before_intent = duplicate(before_guard["sha256"])
+    submitter_normalization = sealed(
+        {
+            "schema": "cyber_skyrl_prod10_submitter_normalization_v1",
+            "status": "two_server_owned_annotations_normalized",
+            "annotations": ["fleet.ai/submitted-by", "fleet.ai/submitted-by-profile"],
+            "expected_manifest_sha256": rows[0]["manifest_sha256"],
+            "live_manifest_sha256": "sha256:" + "3" * 64,
+            "normalized_manifest_sha256": rows[0]["manifest_sha256"],
+            "expected_email_valid": True,
+            "expected_profile_uuid_valid": True,
+            "live_email_valid": True,
+            "live_profile_uuid_valid": True,
+            "values_exported": False,
+        }
+    )
     rows[0]["duplicate_checks_before_guard"] = before_guard
     rows[0]["duplicate_checks_before_intent"] = before_intent
+    rows[0]["submitter_normalization"] = submitter_normalization
     rows[0]["fresh_host_all_context_duplicate_sha256"] = host_duplicate_sha256
     capacity = rows[0]["capacity_gate"]
     capacity["schema"] = skyrl_prod10_direct.CAPACITY_SCHEMA
@@ -749,8 +765,10 @@ def _prod10_terminal_inputs(state, paths):
     preview = rows[0]["live_preview_proof"]
     preview["schema"] = skyrl_prod9_direct.PREVIEW_SCHEMA
     preview["plan_sha256"] = digest(state.plan)
-    for key in ("request_sha256", "manifest_sha256"):
-        preview[key] = preview[key].removeprefix("sha256:")
+    preview["request_sha256"] = preview["request_sha256"].removeprefix("sha256:")
+    preview["manifest_sha256"] = submitter_normalization["live_manifest_sha256"].removeprefix(
+        "sha256:"
+    )
     rows[0]["live_preview_proof"] = sealed(
         {key: item for key, item in preview.items() if key != "sha256"}
     )
@@ -759,6 +777,7 @@ def _prod10_terminal_inputs(state, paths):
     rows[2]["live_preview_proof_sha256"] = rows[0]["live_preview_proof"]["sha256"]
     rows[2]["jit_duplicate_before_guard_sha256"] = before_guard["sha256"]
     rows[2]["jit_duplicate_before_intent_sha256"] = before_intent["sha256"]
+    rows[2]["submitter_normalization_sha256"] = submitter_normalization["sha256"]
     rows[2] = sealed({key: item for key, item in rows[2].items() if key != "sha256"})
     paths["training_create_journal"].replace(prod10_paths["training_create_journal"])
     prod10_paths["training_create_journal"].write_text(
@@ -840,6 +859,75 @@ def test_prod10_terminal_acceptance_rejects_incomplete_prod10_evidence(completed
         prod10_paths["training_create_journal"].write_text(
             "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows)
         )
+
+    with pytest.raises(ValueError):
+        _accept_prod10(state, paths, prod10_paths)
+    assert not paths["accepted"].exists()
+
+
+def test_prod10_terminal_acceptance_checks_image_identity_on_hashed_observer(
+    completed_prod9_rl, monkeypatch
+):
+    state = completed_prod9_rl
+    paths, _, _ = _terminal_inputs(state)
+    prod10_paths, _ = _prod10_terminal_inputs(state, paths)
+    original = prod9._exact_observer
+
+    def mutate_before_hashed_read(path, **kwargs):
+        if path == prod10_paths["training_observer"]:
+            observer = json.loads(path.read_text())
+            observer["runtime_image_identity_complete"] = False
+            write(path, sealed({key: item for key, item in observer.items() if key != "sha256"}))
+        return original(path, **kwargs)
+
+    monkeypatch.setattr(prod9, "_exact_observer", mutate_before_hashed_read)
+    with pytest.raises(ValueError, match="hashed training observer"):
+        _accept_prod10(state, paths, prod10_paths)
+    assert not paths["accepted"].exists()
+
+
+@pytest.mark.parametrize(
+    "fault",
+    [
+        "normalization_schema",
+        "normalization_digest",
+        "normalization_field_set",
+        "normalization_manifest",
+        "normalization_reference",
+    ],
+)
+def test_prod10_terminal_acceptance_rejects_invalid_submitter_normalization(
+    completed_prod9_rl, fault
+):
+    state = completed_prod9_rl
+    paths, _, _ = _terminal_inputs(state)
+    prod10_paths, rows = _prod10_terminal_inputs(state, paths)
+    normalization = rows[0]["submitter_normalization"]
+    if fault == "normalization_schema":
+        normalization["schema"] = "wrong"
+        rows[0]["submitter_normalization"] = sealed(
+            {key: item for key, item in normalization.items() if key != "sha256"}
+        )
+    elif fault == "normalization_digest":
+        normalization["values_exported"] = True
+    elif fault == "normalization_field_set":
+        normalization["unexpected"] = True
+        rows[0]["submitter_normalization"] = sealed(
+            {key: item for key, item in normalization.items() if key != "sha256"}
+        )
+        rows[2]["submitter_normalization_sha256"] = rows[0]["submitter_normalization"]["sha256"]
+    elif fault == "normalization_manifest":
+        normalization["expected_manifest_sha256"] = "sha256:" + "9" * 64
+        rows[0]["submitter_normalization"] = sealed(
+            {key: item for key, item in normalization.items() if key != "sha256"}
+        )
+        rows[2]["submitter_normalization_sha256"] = rows[0]["submitter_normalization"]["sha256"]
+    else:
+        rows[2]["submitter_normalization_sha256"] = "sha256:" + "9" * 64
+    rows[2] = sealed({key: item for key, item in rows[2].items() if key != "sha256"})
+    prod10_paths["training_create_journal"].write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in rows)
+    )
 
     with pytest.raises(ValueError):
         _accept_prod10(state, paths, prod10_paths)
