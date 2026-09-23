@@ -1,0 +1,80 @@
+{
+  "classification": "whole_pair_infrastructure_invalid_requires_fresh_paired_successor",
+  "decision": {
+    "accepted_now": false,
+    "cell_level_splicing_allowed": false,
+    "existing_session_reconciliation_performed": false,
+    "next_gate": "exclude_seed55_pair_and_version_fresh_paired_successor",
+    "whole_pair_excluded": true
+  },
+  "evidence": {
+    "base_terminal_classification": {
+      "file_sha256": "sha256:d307fa5c20508f323fbb01294d613a47932165dbb48d414675d8ec5cdb2274ee",
+      "self_sha256": "sha256:7845bb4ee50f2254e56d45a7db01539e5e65fa2b313a2e677e600f27f475a542"
+    },
+    "base_terminal_observation": {
+      "file_sha256": "sha256:6d5525309f0d275f5940257fd4ec9a011134a5e9392607760187c9ca1af517d1",
+      "path": "docs/evidence/qwen38-study/2026-09-23-q38-dev17-seed55-base-terminal-observation.json",
+      "self_sha256": "sha256:ea7a7258890c1fd583dcf714c239ee84ed97aaec02808d36a72dea30b6a611fb"
+    },
+    "candidate_retirement_pre": {
+      "file_sha256": "sha256:93e68b175f1f526709c10dd5b9582b7d84c9984d455c34ea2b6f1a6c9102d11d",
+      "path": "docs/evidence/qwen38-study/2026-09-23-q38-dev17-seed55-candidate-retirement-pre.json",
+      "self_sha256": "sha256:02d5c71f722d2aecfbe3719b7f57016369ea5d09aa9eae8801ba074d6894e3e7"
+    },
+    "candidate_retirement_receipt": {
+      "file_sha256": "sha256:3ad589068ace08483d93cd36eb87de446fc02d227f207f0b3e4a5aa1a441bb81",
+      "path": "docs/evidence/qwen38-study/2026-09-23-q38-dev17-seed55-candidate-retirement-receipt.json",
+      "self_sha256": "sha256:6e6807cfddfc94a903320221221a10d79f44ed3f27b8d48ba753b2d3f119b4f9"
+    }
+  },
+  "external_mutations": 0,
+  "observed_at": "2026-09-23T11:21:54.666541Z",
+  "privacy": {
+    "cell_session_task_ids_included": false,
+    "credentials_included": false,
+    "prompts_responses_flags_rewards_or_trace_content_read_or_included": false,
+    "score_blind": true,
+    "scores_read_or_included": false
+  },
+  "reason": {
+    "cohorts": [
+      {
+        "agent_exit_code": 0,
+        "agent_termination": "output_limit",
+        "count": 4,
+        "failure_code": "authoritative_scoring_started.runtimeerror",
+        "has_complete_local_artifacts": true,
+        "has_session_and_verifier": true,
+        "session_ingest_status": "completed",
+        "structural_class": "supported_existing_session_but_not_spliced"
+      },
+      {
+        "agent_exit_code": 0,
+        "agent_termination": "malformed_trace",
+        "count": 1,
+        "failure_code": "authoritative_scoring_started.runtimeerror",
+        "has_complete_local_artifacts": true,
+        "has_session_and_verifier": true,
+        "session_ingest_status": "completed",
+        "structural_class": "unsupported_agent_outcome"
+      }
+    ],
+    "exact_valid8_required": true,
+    "replay_allowed": false,
+    "retry_limit": 0,
+    "supported_agent_outcomes": [
+      [
+        0,
+        "output_limit"
+      ],
+      [
+        1,
+        "process_error"
+      ]
+    ]
+  },
+  "schema": "q38_dev17_protocol_v2_whole_pair_invalidation_snapshot_v1",
+  "seed": 55,
+  "sha256": "sha256:321e750c7a66be292bd724dc28dfcbd8b79f02344da6ce3ddcf3a716392e7080"
+}
