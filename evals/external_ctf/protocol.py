@@ -443,7 +443,7 @@ def validate_protocol(value: dict[str, Any]) -> None:
         "capacity_successor_required": True,
         "worker_sha256": "sha256:eda973d385a913c7db2a25014700cf7af3db501d63655bfb261619440490e7ba",
         "coordinator_sha256": (
-            "sha256:045646b5e8232ef3394a50c2002367dbaf16ae066583cd45e55253b276fc1774"
+            "sha256:ef23a97611495d062d6ef65e789c385ce275af734fee2fbc70078a45376fbb18"
         ),
         "analyzer_sha256": (
             "sha256:f31861b821b9b881d4719dc22896ea16c71fecaff3e5874e87cb1977d2ab252e"
