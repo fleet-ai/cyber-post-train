@@ -1,0 +1,41 @@
+{
+  "authorized_scope": {
+    "delete_exact_job_uid": "0a86cdcb-7a3a-4b10-827e-d42d35912939",
+    "foreground": true,
+    "no_peer_mutation": true,
+    "uid_and_resource_version_preconditions": true
+  },
+  "job": {
+    "active": 0,
+    "failed": 0,
+    "name": "chris-q38-dev17-s55-t3k32s1000-repl-p1-v2",
+    "pods": [],
+    "resource_version": "33964871",
+    "started_sessions": 0,
+    "succeeded": 0,
+    "suspend": true,
+    "target_database_exists": false,
+    "uid": "0a86cdcb-7a3a-4b10-827e-d42d35912939",
+    "workload": {
+      "admitted": false,
+      "name": "job-chris-q38-dev17-s55-t3k32s1000-repl-p1-v2-abb05",
+      "resource_version": "33964875",
+      "uid": "95202092-275e-4d78-a149-89a68aabce0a"
+    }
+  },
+  "observed_at": "2026-09-23T11:21:48.074340Z",
+  "privacy": {
+    "credentials_read": false,
+    "prompts_read": false,
+    "score_blind": true,
+    "scores_read": false,
+    "traces_read": false
+  },
+  "reason": {
+    "class": "exact_valid8_replica_exclusion",
+    "detail": "base replica contains one unsupported exit0 malformed_trace row; whole matched pair excluded",
+    "seed": 55
+  },
+  "schema": "q38_dev17_protocol_v2_exact_job_retirement_pre_v1",
+  "sha256": "sha256:02d5c71f722d2aecfbe3719b7f57016369ea5d09aa9eae8801ba074d6894e3e7"
+}

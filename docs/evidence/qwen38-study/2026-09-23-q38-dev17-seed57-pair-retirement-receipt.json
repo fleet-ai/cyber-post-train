@@ -1,0 +1,102 @@
+{
+  "deletes": [
+    {
+      "name": "chris-q38-dev17-s57-t3k32s1000-repl-p1-v2",
+      "propagation_policy": "Foreground",
+      "request_count": 1,
+      "resource": "jobs.batch",
+      "resource_version": "34082244",
+      "supported_client": "KubectlCluster.delete_uid",
+      "uid": "18538644-fc77-470f-8b29-35dc8a662345",
+      "uid_and_resource_version_preconditions": true
+    },
+    {
+      "name": "chris-q38-dev17-s57-base-repl-p1-v2",
+      "propagation_policy": "Foreground",
+      "request_count": 1,
+      "resource": "jobs.batch",
+      "resource_version": "33964795",
+      "supported_client": "KubectlCluster.delete_uid",
+      "uid": "b7884b77-29e8-4ad1-9dd0-6f14b8914966",
+      "uid_and_resource_version_preconditions": true
+    }
+  ],
+  "observed_at": "2026-09-23T11:33:30.418704Z",
+  "peer_verification": [
+    {
+      "active": 0,
+      "failed": 1,
+      "name": "chris-q38-dev17-s54-t3k32s1000-repl-p1-v2",
+      "suspend": false,
+      "uid": "631ec0f9-42d7-4495-a9a5-0077d5be910f"
+    },
+    {
+      "active": 1,
+      "failed": 0,
+      "name": "chris-q38-dev17-s60-base-repl-p1-v2",
+      "suspend": false,
+      "uid": "939b2331-ea0b-492a-8188-aab217f80e5b"
+    },
+    {
+      "active": 1,
+      "failed": 0,
+      "name": "chris-q38-dev17-s60-t3k32s1000-repl-p1-v2",
+      "suspend": false,
+      "uid": "df2d079f-5fd0-46a9-9ef6-b1d1252c4303"
+    },
+    {
+      "active": 0,
+      "failed": 0,
+      "name": "chris-q38-dev17-s61-base-repl-p1-v2",
+      "suspend": true,
+      "uid": "5232b375-09d8-43ff-ac35-ab259e582d0b"
+    },
+    {
+      "active": 0,
+      "failed": 0,
+      "name": "chris-q38-dev17-s61-t3k32s1000-repl-p1-v2",
+      "suspend": true,
+      "uid": "64a42745-f7fb-4faf-9e34-a72421ff0e9f"
+    }
+  ],
+  "post_release": {
+    "candidate_database": {
+      "accepted": 6,
+      "claimed_or_running_or_grading": 3,
+      "claimed_rows_with_session_id": 0,
+      "local_results": 13,
+      "max_heartbeat_age_seconds": 153,
+      "min_lease_remaining_seconds": 147,
+      "retry_review": 8,
+      "stale_active": 0,
+      "total": 17
+    },
+    "exact_job_count": 0,
+    "exact_owner_pod_count": 0,
+    "exact_owner_workload_count": 0,
+    "kueue_quota_claims_released": true,
+    "ledger_claims_mutated": false,
+    "live_session_ids_attached_to_claims": 0,
+    "residual_lease_bound_claims_without_session": 3
+  },
+  "pre_snapshot": {
+    "file_sha256": "sha256:5a74a84acf7acf3f98831cdc5116941e373dbc85dacec306661bb8b9c41f764c",
+    "path": "/private/tmp/q38-s57-pair-invalidation.75y2g3c4/RETIREMENT_PRE.json",
+    "self_sha256": "sha256:aff75bc2005d49e77712eb9a586fe66052fde49692efa6bd1ba448767afb8cfa"
+  },
+  "privacy": {
+    "cell_session_task_ids_included": false,
+    "credentials_included": false,
+    "prompts_responses_flags_rewards_or_trace_content_read_or_included": false,
+    "score_blind": true,
+    "scores_read_or_included": false
+  },
+  "schema": "q38_dev17_protocol_v2_exact_pair_retirement_receipt_v1",
+  "scope": {
+    "other_jobs_mutated": false,
+    "seed": 57,
+    "serving_route_mutated": false,
+    "whole_pair_excluded": true
+  },
+  "sha256": "sha256:70d268a69069ee21d4a72fd08f61f9bfaded4a79dbbfbaf596c6fd955fcc0944"
+}
