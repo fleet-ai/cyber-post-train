@@ -441,7 +441,7 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     mounts = {item["name"]: item for item in container["volumeMounts"]}
     volumes = {item["name"]: item for item in pod["volumes"]}
 
-    assert proof["name"] == "chris-q38-prod10-launch-probe-v5"
+    assert proof["name"] == "chris-q38-prod10-launch-probe-v6"
     assert proof["phase"] == "probe"
     assert proof["failure_alerts"] == "off"
     assert proof["priority"] == "c1" and proof["queue_priority"] == "q1"
@@ -459,6 +459,11 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     }
     assert environment["WANDB_MODE"] == "disabled"
     assert environment["WANDB_API_KEY"] == "diagnostic-not-a-credential"
+    assert environment["HOME"] == environment["TMPDIR"] == "/work"
+    assert environment["HF_HOME"] == "/work/huggingface"
+    assert environment["HF_DATASETS_CACHE"] == "/work/huggingface/datasets"
+    assert environment["HF_HUB_OFFLINE"] == environment["TRANSFORMERS_OFFLINE"] == "1"
+    assert environment["TOKENIZERS_PARALLELISM"] == "false"
 
     monkeypatch.setattr(operator, "_identity", lambda _value: identity)
 
@@ -489,10 +494,10 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     assert len(encoded.encode()) < 3900
 
     changed = copy.deepcopy(packet)
-    changed["probe_v4_success"]["operator_job_uid"] = (
+    changed["probe_v5_success"]["operator_job_uid"] = (
         "00000000-0000-4000-8000-000000000001"
     )
-    changed["probe_v4_success"] = operator._seal(changed["probe_v4_success"])
+    changed["probe_v5_success"] = operator._seal(changed["probe_v5_success"])
     changed = operator._seal(changed)
     with pytest.raises(ValueError, match="predecessor"):
         operator_job.build_operator_package(changed)

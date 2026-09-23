@@ -374,7 +374,7 @@ def probe_packet(
             "identity": identity.sealed_mapping(),
             "plan": plan,
             "preflight_launch_result": checked_launch,
-            "probe_v4_success": operator.probe_v4_success_binding(),
+            "probe_v5_success": operator.probe_v5_success_binding(),
         }
     )
 
@@ -501,8 +501,17 @@ def _job(
         {"name": "NVIDIA_VISIBLE_DEVICES", "value": "none"},
     ]
     if phase == "probe":
-        environment.append(
-            {"name": "WANDB_API_KEY", "value": "diagnostic-not-a-credential"}
+        environment.extend(
+            [
+                {"name": "WANDB_API_KEY", "value": "diagnostic-not-a-credential"},
+                {"name": "HOME", "value": "/work"},
+                {"name": "TMPDIR", "value": "/work"},
+                {"name": "HF_HOME", "value": "/work/huggingface"},
+                {"name": "HF_DATASETS_CACHE", "value": "/work/huggingface/datasets"},
+                {"name": "HF_HUB_OFFLINE", "value": "1"},
+                {"name": "TRANSFORMERS_OFFLINE", "value": "1"},
+                {"name": "TOKENIZERS_PARALLELISM", "value": "false"},
+            ]
         )
     sfs_mount: dict[str, Any] = {"name": "sfs", "mountPath": "/mnt/sfs"}
     sfs_claim: dict[str, Any] = {"claimName": PVC}
