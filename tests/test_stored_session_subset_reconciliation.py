@@ -7,7 +7,7 @@ from contextlib import contextmanager
 
 import pytest
 
-from evals.fleet import rollout_ledger
+from evals.fleet import evaluate, rollout_ledger
 from evals.fleet import stored_session_reconciliation_v2 as reconciliation
 
 
@@ -229,6 +229,126 @@ def _observations(selected):
         }
         for index, cell_id in enumerate(selected)
     ]
+
+
+def test_observe_binds_terminal_ledger_plan_identity_not_plan_manifest(monkeypatch, tmp_path):
+    selected = [str(uuid.uuid4())]
+    unselected = [str(uuid.uuid4())]
+    counts = {state: 0 for state in rollout_ledger.STATES}
+    counts.update(accepted=1, retry_review=1)
+    intent = _intent(selected, unselected, counts)
+    monkeypatch.setattr(
+        evaluate,
+        "checked_preflight",
+        lambda _path: (
+            {"sha256": "b" * 64, "tasks": []},
+            {"task_bindings": []},
+        ),
+    )
+    monkeypatch.setattr(rollout_ledger, "_plan_rows", lambda _path: [object()])
+    monkeypatch.setattr(rollout_ledger, "_plan_digest", lambda _rows: intent.evaluation_plan_sha256)
+    monkeypatch.setattr(
+        reconciliation.rollout_postgres,
+        "verify_plan",
+        lambda _dsn, _path: {
+            "created": False,
+            "cells": 2,
+            "plan_sha256": intent.evaluation_plan_sha256,
+        },
+    )
+
+    class ObservationContinued(RuntimeError):
+        pass
+
+    @contextmanager
+    def read_transaction(_dsn):
+        yield object()
+
+    monkeypatch.setattr(reconciliation.rollout_postgres, "_read_transaction", read_transaction)
+    monkeypatch.setattr(
+        reconciliation.legacy,
+        "_rows",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(ObservationContinued()),
+    )
+    with pytest.raises(ObservationContinued):
+        reconciliation.observe(
+            "unused",
+            intent=intent,
+            evaluation_directory=tmp_path,
+            client=object(),
+        )
+
+
+def test_observe_rejects_local_ledger_plan_identity_drift_before_database(monkeypatch, tmp_path):
+    selected = [str(uuid.uuid4())]
+    unselected = [str(uuid.uuid4())]
+    counts = {state: 0 for state in rollout_ledger.STATES}
+    counts.update(accepted=1, retry_review=1)
+    intent = _intent(selected, unselected, counts)
+    monkeypatch.setattr(
+        evaluate,
+        "checked_preflight",
+        lambda _path: (
+            {"sha256": "b" * 64, "tasks": []},
+            {"task_bindings": []},
+        ),
+    )
+
+    monkeypatch.setattr(rollout_ledger, "_plan_rows", lambda _path: [object()])
+    monkeypatch.setattr(rollout_ledger, "_plan_digest", lambda _rows: "c" * 64)
+
+    def database_must_not_be_accessed(*_args, **_kwargs):
+        raise AssertionError("database must not be accessed after local ledger plan drift")
+
+    monkeypatch.setattr(
+        reconciliation.rollout_postgres, "verify_plan", database_must_not_be_accessed
+    )
+    with pytest.raises(rollout_ledger.LedgerError, match="local source ledger plan"):
+        reconciliation.observe(
+            "unused",
+            intent=intent,
+            evaluation_directory=tmp_path,
+            client=object(),
+        )
+
+
+def test_observe_rejects_database_ledger_plan_identity_drift_before_cell_observation(
+    monkeypatch, tmp_path
+):
+    selected = [str(uuid.uuid4())]
+    unselected = [str(uuid.uuid4())]
+    counts = {state: 0 for state in rollout_ledger.STATES}
+    counts.update(accepted=1, retry_review=1)
+    intent = _intent(selected, unselected, counts)
+    monkeypatch.setattr(
+        evaluate,
+        "checked_preflight",
+        lambda _path: (
+            {"sha256": "b" * 64, "tasks": []},
+            {"task_bindings": []},
+        ),
+    )
+    monkeypatch.setattr(rollout_ledger, "_plan_rows", lambda _path: [object()])
+    monkeypatch.setattr(rollout_ledger, "_plan_digest", lambda _rows: intent.evaluation_plan_sha256)
+    monkeypatch.setattr(
+        reconciliation.rollout_postgres,
+        "verify_plan",
+        lambda _dsn, _path: {"created": False, "cells": 2, "plan_sha256": "c" * 64},
+    )
+
+    def database_rows_must_not_be_read(*_args, **_kwargs):
+        raise AssertionError("cell rows must not be read after ledger plan drift")
+
+    monkeypatch.setattr(
+        reconciliation.rollout_postgres, "_read_transaction", database_rows_must_not_be_read
+    )
+    with pytest.raises(rollout_ledger.LedgerError, match="database differs"):
+        reconciliation.observe(
+            "unused",
+            intent=intent,
+            evaluation_directory=tmp_path,
+            client=object(),
+        )
 
 
 @pytest.mark.parametrize(

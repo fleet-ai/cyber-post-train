@@ -443,17 +443,29 @@ def observe(
     from evals.fleet import evaluate
 
     plan, proof = evaluate.checked_preflight(evaluation_directory)
-    observed_plan_sha256 = rollout_ledger._require_digest(  # noqa: SLF001
-        plan["sha256"], "plan sha256"
-    )
-    if observed_plan_sha256 != intent.evaluation_plan_sha256:
-        raise rollout_ledger.LedgerError("stored-session v2 intent differs from evaluation plan")
     plan = {
         **plan,
         "task_bindings": proof["task_bindings"],
         "_plan_csv": str(evaluation_directory / "plan.csv"),
     }
-    rollout_postgres.verify_plan(dsn, evaluation_directory / "plan.csv")
+    local_ledger_plan_sha256 = rollout_ledger._plan_digest(  # noqa: SLF001
+        rollout_ledger._plan_rows(evaluation_directory / "plan.csv")  # noqa: SLF001
+    )
+    if local_ledger_plan_sha256 != intent.evaluation_plan_sha256:
+        raise rollout_ledger.LedgerError(
+            "stored-session v2 intent differs from local source ledger plan"
+        )
+    ledger_plan = rollout_postgres.verify_plan(dsn, evaluation_directory / "plan.csv")
+    # The terminal source receipt exposes the score-blind PostgreSQL plan identity,
+    # which is the normalized plan.csv digest.  EVALUATION_PLAN.json has a separate
+    # self digest and is already checked by checked_preflight() above.
+    observed_plan_sha256 = rollout_ledger._require_digest(  # noqa: SLF001
+        ledger_plan["plan_sha256"], "ledger plan sha256"
+    )
+    if observed_plan_sha256 != local_ledger_plan_sha256:
+        raise rollout_ledger.LedgerError(
+            "stored-session v2 database differs from local source ledger plan"
+        )
     with rollout_postgres._read_transaction(dsn) as connection:  # noqa: SLF001
         rows = legacy._rows(connection, intent, lock=False)  # noqa: SLF001
     scientific = legacy._scientific_index(plan)  # noqa: SLF001
