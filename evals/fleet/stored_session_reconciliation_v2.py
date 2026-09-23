@@ -4,8 +4,9 @@ The historical reconciler is deliberately byte-pinned by its completed LR30
 packet.  This successor keeps that source immutable and adds one missing
 invariant: the private intent binds the exact local agent termination, exit
 code, and held failure code.  That lets an already-authoritatively-scored
-``output_limit`` rollout be accepted without either regenerating or rescoring
-it, while preventing the new path from broadening the historical policy.
+``output_limit`` or ``process_error`` rollout be accepted without either
+regenerating or rescoring it, while preventing the new path from broadening
+the historical policy.
 """
 
 from __future__ import annotations
@@ -57,7 +58,7 @@ SUBSET_LOCAL_GAPS_INTENT_FIELDS = SUBSET_INTENT_FIELDS | {
     "missing_local_result_cell_ids",
     "expected_missing_local_result_failure_code",
 }
-SUPPORTED_AGENT_OUTCOMES = {(0, "output_limit")}
+SUPPORTED_AGENT_OUTCOMES = frozenset({(0, "output_limit"), (1, "process_error")})
 MISSING_LOCAL_RESULT_FAILURE_CODE = "authoritative_scoring_started.fleetrequesterror"
 
 
@@ -113,7 +114,7 @@ def _normalized_common(
     if not cells or len(cells) != len(set(cells)):
         raise rollout_ledger.LedgerError("stored-session v2 roster is empty or repeated")
     if (
-        isinstance(expected_agent_exit_code, bool)
+        type(expected_agent_exit_code) is not int
         or (expected_agent_exit_code, expected_agent_termination) not in SUPPORTED_AGENT_OUTCOMES
         or not isinstance(expected_failure_code, str)
         or not expected_failure_code

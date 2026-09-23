@@ -303,6 +303,95 @@ def test_subset_authorization_binds_full_mixed_arm_census(tmp_path, monkeypatch)
     assert packet.validate_server_previews(rendered, first, second).startswith("sha256:")
 
 
+def test_process_error_subset_authorization_is_exact_and_score_blind(tmp_path, monkeypatch):
+    source = _source_package(tmp_path)
+    terminal = _terminal(source, selected=1)
+    terminal_path = _terminal_path(tmp_path, terminal)
+    evidence = _create_evidence(tmp_path, source, terminal)
+    monkeypatch.setattr(packet.heldout_launch, "build_package", lambda _: source)
+    selected = [str(uuid.uuid4())]
+    unselected = [str(uuid.uuid4()) for _ in range(16)]
+
+    value = packet.build_private_intent_value(
+        repo_root=ROOT,
+        source_launch_packet=source.packet.path,
+        source_terminal_receipt=terminal_path,
+        source_create_evidence=evidence,
+        selected_cell_ids=selected,
+        unselected_cell_ids=unselected,
+        expected_agent_exit_code=1,
+        expected_agent_termination="process_error",
+        job_name=JOB_NAME,
+        config_map_name=CONFIG_MAP_NAME,
+        secret_name=SECRET_NAME,
+        output_root=OUTPUT_ROOT,
+    )
+    runtime = value["runtime_intent"]
+    assert runtime["expected_agent_exit_code"] == 1
+    assert runtime["expected_agent_termination"] == "process_error"
+    assert runtime["expected_arm_state_counts"] == terminal["database"]["summary"]["by_state"]
+    intent_path = tmp_path / "process-error-intent.json"
+    packet.write_private_intent(intent_path, value)
+
+    rendered = packet.render(
+        repo_root=ROOT,
+        source_launch_packet=source.packet.path,
+        source_terminal_receipt=terminal_path,
+        source_create_evidence=evidence,
+        private_intent=intent_path,
+        job_name=JOB_NAME,
+        config_map_name=CONFIG_MAP_NAME,
+        secret_name=SECRET_NAME,
+        output_root=OUTPUT_ROOT,
+    )
+    assert rendered.proof["selected_cell_count"] == 1
+    assert rendered.proof["nonselected_cell_count"] == 16
+    assert rendered.proof["model_generation_allowed"] is False
+    assert rendered.proof["scoring_call_allowed"] is False
+    assert rendered.job["spec"]["template"]["spec"]["priorityClassName"] == "c1"
+    assert rendered.job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+    assert "nvidia.com/gpu" not in json.dumps(
+        rendered.job["spec"]["template"]["spec"]["containers"][0]["resources"]
+    )
+    assert all(cell_id not in json.dumps(rendered.proof) for cell_id in selected + unselected)
+
+
+@pytest.mark.parametrize(
+    ("exit_code", "termination"),
+    [
+        (0, "process_error"),
+        (1, "output_limit"),
+        (2, "process_error"),
+        (0.0, "output_limit"),
+        (1.0, "process_error"),
+    ],
+)
+def test_private_authorization_rejects_unsupported_agent_outcome(
+    tmp_path, monkeypatch, exit_code, termination
+):
+    source = _source_package(tmp_path)
+    terminal = _terminal(source, selected=1)
+    terminal_path = _terminal_path(tmp_path, terminal)
+    evidence = _create_evidence(tmp_path, source, terminal)
+    monkeypatch.setattr(packet.heldout_launch, "build_package", lambda _: source)
+
+    with pytest.raises(packet.ReconciliationPacketError, match="intent is invalid"):
+        packet.build_private_intent_value(
+            repo_root=ROOT,
+            source_launch_packet=source.packet.path,
+            source_terminal_receipt=terminal_path,
+            source_create_evidence=evidence,
+            selected_cell_ids=[str(uuid.uuid4())],
+            unselected_cell_ids=[str(uuid.uuid4()) for _ in range(16)],
+            expected_agent_exit_code=exit_code,
+            expected_agent_termination=termination,
+            job_name=JOB_NAME,
+            config_map_name=CONFIG_MAP_NAME,
+            secret_name=SECRET_NAME,
+            output_root=OUTPUT_ROOT,
+        )
+
+
 def test_s47_authorization_binds_exact_two_unselected_local_result_gaps(tmp_path, monkeypatch):
     (
         value,
