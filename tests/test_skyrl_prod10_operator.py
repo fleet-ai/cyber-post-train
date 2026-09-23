@@ -411,8 +411,18 @@ def test_prod10_inspection_boundary_is_fixed_and_fail_closed(
     assert operator._inspection_boundary(probes) == expected
 
 
+@pytest.mark.parametrize(
+    ("failure", "expected_class", "expected_code"),
+    [
+        (OSError("private path and errno must not escape"), "OSError", "oserror"),
+        (AssertionError("private assertion must not escape"), "AssertionError", "assertionerror"),
+    ],
+)
 def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     monkeypatch: pytest.MonkeyPatch,
+    failure: Exception,
+    expected_class: str,
+    expected_code: str,
 ) -> None:
     identity = historical.load_identity(IDENTITY)
     plan = {"schema": training.SCHEMA}
@@ -431,7 +441,7 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     mounts = {item["name"]: item for item in container["volumeMounts"]}
     volumes = {item["name"]: item for item in pod["volumes"]}
 
-    assert proof["name"] == "chris-q38-prod10-launch-probe-v3"
+    assert proof["name"] == "chris-q38-prod10-launch-probe-v4"
     assert proof["phase"] == "probe"
     assert proof["failure_alerts"] == "off"
     assert proof["priority"] == "c1" and proof["queue_priority"] == "q1"
@@ -447,7 +457,7 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
 
     def fail_preflight(_plan: dict) -> dict:
         training._PREFLIGHT_STAGE = "tokenizer"
-        raise OSError("private path and errno must not escape")
+        raise failure
 
     monkeypatch.setattr(training, "preflight", fail_preflight)
     result = operator.run_probe(
@@ -458,8 +468,9 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
         }
     )
     assert result["status"] == "passed"
-    assert result["diagnosis"] == "oserror_localized"
-    assert result["error_code"] == "launch_fresh_training_preflight_oserror"
+    assert result["diagnosis"] == "exception_localized"
+    assert result["error_class"] == expected_class
+    assert result["error_code"] == f"launch_fresh_training_preflight_{expected_code}"
     assert result["launch_stage"] == "fresh_training_preflight"
     assert result["preflight_stage"] == "tokenizer"
     assert result["error_path_exported"] is False
@@ -467,14 +478,14 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     assert result["error_message_exported"] is False
     assert result["nested_jobs_created"] == result["gpus"] == 0
     encoded = json.dumps(result, sort_keys=True)
-    assert "private path" not in encoded and "errno must not escape" not in encoded
+    assert "private path" not in encoded and "private assertion" not in encoded
     assert len(encoded.encode()) < 3900
 
     changed = copy.deepcopy(packet)
-    changed["inspect_v2_success"]["operator_job_uid"] = (
+    changed["probe_v3_failure"]["operator_job_uid"] = (
         "00000000-0000-4000-8000-000000000001"
     )
-    changed["inspect_v2_success"] = operator._seal(changed["inspect_v2_success"])
+    changed["probe_v3_failure"] = operator._seal(changed["probe_v3_failure"])
     changed = operator._seal(changed)
     with pytest.raises(ValueError, match="predecessor"):
         operator_job.build_operator_package(changed)

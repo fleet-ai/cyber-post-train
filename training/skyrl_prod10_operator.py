@@ -44,7 +44,7 @@ OPERATOR_NAMES = {
     "preflight": "chris-q38-prod10-preflight-operator-v2",
     "launch": "chris-q38-prod10-launch-operator-v1",
     "inspect": "chris-q38-prod10-launch-inspect-v2",
-    "probe": "chris-q38-prod10-launch-probe-v3",
+    "probe": "chris-q38-prod10-launch-probe-v4",
 }
 _LAUNCH_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_launch_failure_binding_v1",
@@ -73,6 +73,20 @@ _INSPECT_V2_SUCCESS = {
     "observer_sha256": "sha256:62a7cc889963bba3f561b7d3fbd00a5e1d61e328e22c59092b509638a537ef59",
     "result_sha256": "sha256:0ec4bcbe9aa48f9b96a7bb83a8c24aee7ee7c0961d5cca00afa63a04d7dfadbb",
     "launch_boundary": "before_guard_or_guard_write",
+    "gpus": 0,
+}
+_PROBE_V3_FAILURE = {
+    "schema": "cyber_skyrl_prod10_launch_probe_failure_binding_v1",
+    "status": "failed_closed_released",
+    "operator_name": "chris-q38-prod10-launch-probe-v3",
+    "operator_job_uid": "6a1cc16d-69e4-4ca8-94d0-996c94b6164e",
+    "operator_pod_uid": "96106ed8-3da1-4f7e-892f-939271dda135",
+    "operator_workload_uid": "cf844513-5f07-4fe8-9e38-955671a88136",
+    "failure_receipt_sha256": (
+        "sha256:e5cfd5f198c0d9b306c975898e824b3579c99ced4c04648227166dc4aaa902a9"
+    ),
+    "release_sha256": "sha256:cdf20dfeca53a5e40dfcbea6b0323311391a1c35c640e279caaae8f0221be921",
+    "error_class": "AssertionError",
     "gpus": 0,
 }
 _PREFLIGHT_V1_FAILURE = {
@@ -224,6 +238,11 @@ def inspect_v2_success_binding() -> dict[str, Any]:
     return _seal(_INSPECT_V2_SUCCESS)
 
 
+def probe_v3_failure_binding() -> dict[str, Any]:
+    """Bind the exact released probe-v3 failure before the diagnostic successor."""
+    return _seal(_PROBE_V3_FAILURE)
+
+
 def _write_once(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=False, exist_ok=True)
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -339,7 +358,7 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
             operator_name=OPERATOR_NAMES["preflight"],
         )
     elif phase == "probe":
-        if packet.get("inspect_v2_success") != inspect_v2_success_binding():
+        if packet.get("probe_v3_failure") != probe_v3_failure_binding():
             raise ValueError("prod10 launch probe predecessor changed")
         plan = packet.get("plan")
         if not isinstance(plan, dict):
@@ -1438,7 +1457,7 @@ def run_inspect(packet: dict[str, Any]) -> dict[str, Any]:
 
 
 def run_probe(packet: dict[str, Any]) -> dict[str, Any]:
-    """Localize a pre-guard OSError without logging its path, errno, or message."""
+    """Localize a pre-guard exception without logging args, path, errno, or message."""
     global _LAUNCH_STAGE
     identity = _identity(packet["identity"])
     plan = packet.get("plan")
@@ -1456,18 +1475,26 @@ def run_probe(packet: dict[str, Any]) -> dict[str, Any]:
     _LAUNCH_STAGE = "fresh_training_preflight"
     try:
         receipt = training.preflight(plan)
-    except OSError:
+    except Exception as error:
+        error_class, error_code = (
+            ("OSError", "oserror")
+            if isinstance(error, OSError)
+            else ("AssertionError", "assertionerror")
+            if isinstance(error, AssertionError)
+            else ("OtherException", "other_exception")
+        )
         return _seal(
             {
                 "schema": MANIFEST_RESULT_SCHEMA,
                 "status": "passed",
                 "phase": "probe",
-                "diagnosis": "oserror_localized",
-                "error_code": f"launch_{_LAUNCH_STAGE}_oserror",
+                "diagnosis": "exception_localized",
+                "error_class": error_class,
+                "error_code": f"launch_{_LAUNCH_STAGE}_{error_code}",
                 "launch_stage": _LAUNCH_STAGE,
                 "preflight_stage": training._PREFLIGHT_STAGE,
                 "preflight_launch_sha256": launch["sha256"],
-                "inspect_v2_success_sha256": inspect_v2_success_binding()["sha256"],
+                "probe_v3_failure_sha256": probe_v3_failure_binding()["sha256"],
                 "error_path_exported": False,
                 "error_errno_exported": False,
                 "error_message_exported": False,
@@ -1487,7 +1514,7 @@ def run_probe(packet: dict[str, Any]) -> dict[str, Any]:
             "launch_stage": _LAUNCH_STAGE,
             "preflight_stage": training._PREFLIGHT_STAGE,
             "preflight_launch_sha256": launch["sha256"],
-            "inspect_v2_success_sha256": inspect_v2_success_binding()["sha256"],
+            "probe_v3_failure_sha256": probe_v3_failure_binding()["sha256"],
             "nested_jobs_created": 0,
             "gpus": 0,
         }

@@ -374,7 +374,7 @@ def probe_packet(
             "identity": identity.sealed_mapping(),
             "plan": plan,
             "preflight_launch_result": checked_launch,
-            "inspect_v2_success": operator.inspect_v2_success_binding(),
+            "probe_v3_failure": operator.probe_v3_failure_binding(),
         }
     )
 
