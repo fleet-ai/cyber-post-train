@@ -19,6 +19,7 @@ from training import skyrl_prod9_direct as direct
 from training import skyrl_prod9_training as training
 from training import skyrl_prod10_direct as launch_direct
 from training import skyrl_prod10_operator as operator
+from training import skyrl_prod10_preview_diff as preview_diff
 from training import skyrl_reward_rayjob as historical
 
 from .jobs import FAILURE_ALERT_ANNOTATION, FAILURE_ALERT_OFF, JobsError, digest
@@ -387,6 +388,55 @@ def inspect_packet(
     )
 
 
+def preview_difference_packet(
+    *,
+    identity: historical.RailIdentity,
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    source_preview_sha256: str,
+    expected_pointers: dict[str, Any],
+    expected_submitter_identity: dict[str, Any],
+    image_identity_receipt: dict[str, Any],
+) -> dict[str, Any]:
+    direct._identity(plan, identity)
+    if training.job_request(plan) != request:
+        raise ValueError("prod10 preview-difference request changed")
+    expected = preview_diff.validate_pointer_proof(
+        expected_pointers,
+        expected_sha256=preview_diff.EXPECTED_POINTER_PROOF_SHA256,
+    )
+    submitter = preview_diff.validate_submitter_identity_proof(
+        expected_submitter_identity,
+        manifest_sha256=expected["manifest_sha256"],
+        expected_sha256=preview_diff.EXPECTED_SUBMITTER_PROOF_SHA256,
+    )
+    direct._image_default_identity(request, image_identity_receipt)
+    if (
+        source_preview_sha256
+        != "sha256:c33f585e0cfb15a90bc0f3034a3de6e5dfb87eeaba390caa71575865259d120d"
+        or expected.get("manifest_sha256")
+        != "sha256:151fcb31d5ba37b06320defba764ec964ee34df87bf96b49d9c1f56b7e1cba68"
+        or expected.get("unrecognized_count") != 0
+    ):
+        raise ValueError("prod10 preview-difference input changed")
+    return _seal(
+        {
+            "schema": operator.PACKET_SCHEMA,
+            "phase": "preview-diff",
+            "operator_name": operator.OPERATOR_NAMES["preview-diff"],
+            "identity": identity.sealed_mapping(),
+            "plan": plan,
+            "request": request,
+            "source_preview_sha256": source_preview_sha256,
+            "expected_pointers": expected,
+            "expected_submitter_identity": submitter,
+            "image_identity_receipt": image_identity_receipt,
+            "launch_v9_failure": operator.launch_v9_failure_binding(),
+            "host_preview_recheck": operator.host_preview_recheck_binding(),
+        }
+    )
+
+
 def probe_packet(
     *,
     launch_packet: dict[str, Any],
@@ -451,6 +501,16 @@ def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
     elif checked["phase"] == "probe":
         expected = probe_packet(
             launch_packet=checked["launch_packet"],
+        )
+    elif checked["phase"] == "preview-diff":
+        expected = preview_difference_packet(
+            identity=identity,
+            plan=checked["plan"],
+            request=checked["request"],
+            source_preview_sha256=checked["source_preview_sha256"],
+            expected_pointers=checked["expected_pointers"],
+            expected_submitter_identity=checked["expected_submitter_identity"],
+            image_identity_receipt=checked["image_identity_receipt"],
         )
     else:
         expected = launch_packet(
@@ -580,7 +640,7 @@ def _job(
             sfs_mount,
             *(
                 []
-                if phase == "inspect"
+                if phase in {"inspect", "preview-diff"}
                 or (phase == "probe" and packet.get("writable_controls_probe") is not True)
                 else [
                     {
@@ -597,6 +657,8 @@ def _job(
             {"secretRef": {"name": "fleet-api"}},
             {"secretRef": {"name": "wandb-api"}},
         ]
+    elif phase == "preview-diff":
+        container["envFrom"] = [{"secretRef": {"name": "fleet-api"}}]
     return {
         "apiVersion": "batch/v1",
         "kind": "Job",
@@ -661,7 +723,7 @@ def _job(
                         {"name": "sfs", "persistentVolumeClaim": sfs_claim},
                         *(
                             []
-                            if phase == "inspect"
+                            if phase in {"inspect", "preview-diff"}
                             or (
                                 phase == "probe"
                                 and packet.get("writable_controls_probe") is not True
@@ -750,8 +812,8 @@ def validate_operator_package(package: OperatorPackage) -> dict[str, Any]:
         or container.get("resources", {}).get("requests") != {"cpu": "2", "memory": "8Gi"}
         or mounts.get("sfs") != expected_sfs_mount
         or volumes.get("sfs") != {"name": "sfs", "persistentVolumeClaim": expected_sfs_claim}
-        or (packet["phase"] == "inspect" and "controls-rw" in mounts)
-        or (packet["phase"] == "inspect" and "controls-rw" in volumes)
+        or (packet["phase"] in {"inspect", "preview-diff"} and "controls-rw" in mounts)
+        or (packet["phase"] in {"inspect", "preview-diff"} and "controls-rw" in volumes)
         or (
             packet["phase"] == "probe"
             and mounts.get("controls-rw")
@@ -773,6 +835,8 @@ def validate_operator_package(package: OperatorPackage) -> dict[str, Any]:
                 {"secretRef": {"name": "wandb-api"}},
             ]
             if packet["phase"] == "launch"
+            else [{"secretRef": {"name": "fleet-api"}}]
+            if packet["phase"] == "preview-diff"
             else None
         )
     ):

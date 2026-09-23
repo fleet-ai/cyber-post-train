@@ -30,6 +30,7 @@ from . import skyrl_prod9_direct as direct
 from . import skyrl_prod9_hardening as hardening
 from . import skyrl_prod9_training as training
 from . import skyrl_prod10_direct as launch_direct
+from . import skyrl_prod10_preview_diff as preview_diff
 from . import skyrl_reward_rayjob as historical
 from .incluster_kubernetes import InClusterKubernetesError, InClusterKubernetesRunner
 
@@ -50,6 +51,7 @@ OPERATOR_NAMES = {
     "launch": "chris-q38-prod10-launch-operator-v9",
     "inspect": "chris-q38-prod10-launch-inspect-v6",
     "probe": "chris-q38-prod10-launch-probe-v9",
+    "preview-diff": "chris-q38-prod10-preview-diff-v1",
 }
 _LAUNCH_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_launch_failure_binding_v1",
@@ -686,6 +688,86 @@ _LAUNCH_V8_FAILURE = {
     "nested_jobs_created": 0,
     "gpus": 0,
 }
+_LAUNCH_V9_FAILURE = {
+    "schema": "cyber_skyrl_prod10_launch_failure_binding_v9",
+    "status": "failed_before_gpu_create_outer_workload_released_config_maps_preserved",
+    "operator_name": "chris-q38-prod10-launch-operator-v9",
+    "source_head": "f659379984a25bdfaec796b89e9e5cba054f662b",
+    "packet_sha256": "sha256:918fa487c1dd3540fc1626b15dd0be486d2c5cb3f29c219ccff14f9b7ecd0e39",
+    "source_sha256": "sha256:815ccea5d6c15e13120c62c0e12827193f5b1d668e15d045696bdcbe38aebb6c",
+    "job_manifest_sha256": (
+        "sha256:a0cb1fcd07487259babb720137b339bd7d9cfd9c2bf88d3b7580fb81ec9cd903"
+    ),
+    "operator_job_uid": "80947b0f-a4b5-48d8-86bb-c528ead95c3e",
+    "operator_pod_name": "chris-q38-prod10-launch-operator-v9-5hcn8",
+    "operator_pod_uid": "2300b48f-154f-4c6a-84fb-1462e7205fb2",
+    "operator_workload_name": "job-chris-q38-prod10-launch-operator-v9-fbc07",
+    "operator_workload_uid": "860cc109-aec0-4462-ab83-0e41f5432c18",
+    "source_config_map_name": "chris-q38-prod10-launch-operator-v9-source",
+    "source_config_map_uid": "53722809-058c-4214-9989-514ea51cf8f9",
+    "source_config_map_resource_version": "34234663",
+    "packet_config_map_name": "chris-q38-prod10-launch-operator-v9-packet",
+    "packet_config_map_uid": "656f0b2f-e2d2-4e69-aba6-55244da02991",
+    "packet_config_map_resource_version": "34234710",
+    "create_journal_file_sha256": (
+        "sha256:1a82970969ec58c1c7b45ed350e84db3de8e82202df4b126eb5811e65609e52e"
+    ),
+    "observer_armed_sha256": (
+        "sha256:7428a3b5388f8f836cf0d3e91344e652625f515ac2ba7bf8343a947a7c1748a7"
+    ),
+    "observer_armed_file_sha256": (
+        "sha256:2481c13ed69b170123db865411c784d97a5a7bb1c2e6b6150a16b79cd785a3ea"
+    ),
+    "creator_binding_sha256": (
+        "sha256:a9179405c06033308e796f1831e1bbd52886a6a3eab48347ee1b62013a7aee01"
+    ),
+    "creator_binding_file_sha256": (
+        "sha256:e14e1665363fe6836fce71c65ae1b15576172c8a797be42c27534283f6206177"
+    ),
+    "failure_receipt_sha256": (
+        "sha256:d8d41ea7a82bf0e012cf8d4629d21eef71b046f4631b9db81f48310ee659430c"
+    ),
+    "observer_result_sha256": (
+        "sha256:249f27b6e93e78ecfc1301d556515c18fe0cd60f958752bd0d1e9fb529a6a05e"
+    ),
+    "observer_result_file_sha256": (
+        "sha256:a2a431a17f2b8511f5c19180b61e350228ae7a980a8b9f3ae0d4fd531053ce3a"
+    ),
+    "release_observed_at": "2026-09-23T14:16:25Z",
+    "launch_stage": "live_manifest_rebuild",
+    "error_code": "launch_live_preview_changed",
+    "terminal_status": "Failed",
+    "exit_codes": [1],
+    "restarts": 0,
+    "peak_gpus": 0,
+    "inner_gpu_run_created": False,
+    "workload_resources_absent": True,
+    "config_maps_preserved_for_exact_cleanup": True,
+    "nested_jobs_created": 0,
+    "gpus": 0,
+}
+_HOST_PREVIEW_RECHECK = {
+    "schema": "q38_rl_v9_host_preview_recheck_v1",
+    "observed_at": "2026-09-23T14:29:31Z",
+    "request_sha256": "sha256:b1aa6be94c3d448f3fc961f4427a67407c80a39462c6e53fba4303f845225b0d",
+    "sealed_preview_file_sha256": (
+        "sha256:4de28449ef8f068d2dfb4a4eafb705904b7acd5eea00a2d3084a3a2ba7382ce4"
+    ),
+    "sealed_manifest_sha256": (
+        "sha256:151fcb31d5ba37b06320defba764ec964ee34df87bf96b49d9c1f56b7e1cba68"
+    ),
+    "live_manifest_sha256": (
+        "sha256:151fcb31d5ba37b06320defba764ec964ee34df87bf96b49d9c1f56b7e1cba68"
+    ),
+    "manifest_equal": True,
+    "diff_count": 0,
+    "preview_shape_equal": True,
+    "warnings_equal": True,
+    "provider_creates": 0,
+    "contains_manifest_values_or_credentials": False,
+    "self_sha256": "sha256:424b35d20dbf7ffd70c34beef02b79d0ca9d33d7c4c3b65661cc963fb8e35f16",
+    "file_sha256": "sha256:82ba08a0b889d83fe8668e2e2419622c0d27539f02a097c9247862c201445112",
+}
 _PREFLIGHT_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_preflight_v1_failure_recovery_v1",
     "status": "failed_closed_released",
@@ -942,6 +1024,16 @@ def launch_v8_failure_binding() -> dict[str, Any]:
     return _seal(_LAUNCH_V8_FAILURE)
 
 
+def launch_v9_failure_binding() -> dict[str, Any]:
+    """Bind the released v9 parsed-manifest mismatch and preserved ConfigMaps."""
+    return _seal(_LAUNCH_V9_FAILURE)
+
+
+def host_preview_recheck_binding() -> dict[str, Any]:
+    """Bind the sanitized host recheck without manufacturing new freshness."""
+    return dict(_HOST_PREVIEW_RECHECK)
+
+
 def _write_once(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=False, exist_ok=True)
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -982,6 +1074,18 @@ def _write_manifest_termination(result: dict[str, Any]) -> None:
     encoded = (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
     if len(encoded) > 3900:
         raise ValueError("prod10 sanitized manifest receipt is too large")
+    descriptor = os.open(_TERMINATION_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(descriptor, "wb") as stream:
+        stream.write(encoded)
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
+def _write_preview_diff_termination(result: dict[str, Any]) -> None:
+    value = _validate_seal(result, preview_diff.RESULT_SCHEMA)
+    encoded = (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    if len(encoded) > 3900:
+        raise ValueError("prod10 sanitized preview-difference receipt is too large")
     descriptor = os.open(_TERMINATION_PATH, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     with os.fdopen(descriptor, "wb") as stream:
         stream.write(encoded)
@@ -1123,6 +1227,41 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
         if packet.get("expected_diagnosis") != "before_guard_passed":
             raise ValueError("prod10 launch probe expected diagnosis changed")
         _launch_v2_packet(packet.get("launch_packet"))
+    elif phase == "preview-diff":
+        identity = _identity(packet.get("identity"))
+        plan, request = packet.get("plan"), packet.get("request")
+        if (
+            not isinstance(plan, dict)
+            or not isinstance(request, dict)
+            or training.job_request(plan) != request
+            or "sha256:" + digest(plan)
+            != "sha256:8f68c9502f394fea1d2ce2339a4908b50a26c3a5a534a4c03944a5aaa7a0d7d1"
+            or "sha256:" + digest(request)
+            != "sha256:22965dae5ed43e1c62297522867b53daade798810cf75388b83eb56914eee5f1"
+            or packet.get("source_preview_sha256")
+            != "sha256:c33f585e0cfb15a90bc0f3034a3de6e5dfb87eeaba390caa71575865259d120d"
+            or packet.get("launch_v9_failure") != launch_v9_failure_binding()
+            or packet.get("host_preview_recheck") != host_preview_recheck_binding()
+        ):
+            raise ValueError("prod10 preview-difference predecessor changed")
+        direct._identity(plan, identity)
+        expected = preview_diff.validate_pointer_proof(
+            packet.get("expected_pointers"),
+            expected_sha256=preview_diff.EXPECTED_POINTER_PROOF_SHA256,
+        )
+        if (
+            expected.get("manifest_sha256")
+            != ("sha256:151fcb31d5ba37b06320defba764ec964ee34df87bf96b49d9c1f56b7e1cba68")
+            or expected.get("unrecognized_count") != 0
+            or expected.get("leaf_count") != len(preview_diff.ALLOWED_POINTERS)
+        ):
+            raise ValueError("prod10 preview-difference manifest changed")
+        preview_diff.validate_submitter_identity_proof(
+            packet.get("expected_submitter_identity"),
+            manifest_sha256=expected["manifest_sha256"],
+            expected_sha256=preview_diff.EXPECTED_SUBMITTER_PROOF_SHA256,
+        )
+        direct._image_default_identity(request, packet.get("image_identity_receipt"))
     else:
         if packet.get("launch_v1_failure") != launch_v1_failure_binding():
             raise ValueError("prod10 launch failure predecessor changed")
@@ -2271,6 +2410,29 @@ def run_inspect(packet: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def run_preview_diff(packet: dict[str, Any], *, jobs_factory: Any = Jobs) -> dict[str, Any]:
+    """Make one authenticated preview read and export hashes, never values."""
+    identity = _identity(packet["identity"])
+    failure = launch_v9_failure_binding()
+    if (
+        packet.get("launch_v9_failure") != failure
+        or packet.get("host_preview_recheck") != host_preview_recheck_binding()
+    ):
+        raise ValueError("prod10 preview-difference evidence changed")
+    return preview_diff.run(
+        packet["plan"],
+        packet["request"],
+        packet["expected_pointers"],
+        packet["expected_submitter_identity"],
+        packet["image_identity_receipt"],
+        identity=identity,
+        token=os.environ.get("FLEET_API_KEY", ""),
+        launch_v9_failure_sha256=failure["sha256"],
+        source_preview_sha256=packet["source_preview_sha256"],
+        jobs_factory=jobs_factory,
+    )
+
+
 def _pre_guard_launch(packet: dict[str, Any], runner: InClusterKubernetesRunner) -> dict[str, Any]:
     """Run the exact launch sequence that precedes guard construction."""
     global _LAUNCH_STAGE
@@ -2774,10 +2936,15 @@ def run(packet_path: Path, phase: str) -> dict[str, Any]:
         result = run_inspect(packet)
     elif phase == "probe":
         result = run_probe(packet, runner=runner)
+    elif phase == "preview-diff":
+        result = run_preview_diff(packet)
     else:
         result = run_preflight(packet, runner=runner)
     if phase in {"manifest", "inspect", "probe"}:
         _write_manifest_termination(result)
+        return result
+    if phase == "preview-diff":
+        _write_preview_diff_termination(result)
         return result
     root = (
         hardening.stage_operation_root(result["stage"])
