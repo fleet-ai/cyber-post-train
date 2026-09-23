@@ -126,7 +126,11 @@ def run(plan, plan_path, *, backend):
                     stderr=subprocess.STDOUT,
                     start_new_session=True,
                 )
-                watchdog = ProgressWatchdog(time.monotonic())
+                hard_seconds = getattr(backend, "WATCHDOG_HARD_SECONDS", None)
+                if hard_seconds is None:
+                    watchdog = ProgressWatchdog(time.monotonic())
+                else:
+                    watchdog = ProgressWatchdog(time.monotonic(), hard_seconds=hard_seconds)
                 previous_checkpoint = ()
                 while process.poll() is None:
                     try:

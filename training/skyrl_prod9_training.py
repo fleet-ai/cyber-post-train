@@ -39,6 +39,7 @@ STAGE_SCHEMA = "cyber_skyrl_prod9_rebind_stage_v1"
 STAGE_RECEIPT_SCHEMA = "cyber_skyrl_prod9_rebind_stage_receipt_v1"
 TERMINATION_MESSAGE_MAX_BYTES = 16384
 PREFLIGHT_FAILURE_SCHEMA = "cyber_skyrl_prod9_training_cpu_preflight_failure_v1"
+WATCHDOG_HARD_SECONDS = legacy_direct.MAXIMUM_SECONDS
 _PREFLIGHT_STAGE = "not_started"
 RUNTIME_FILES = (
     *historical.RUNTIME_FILES,

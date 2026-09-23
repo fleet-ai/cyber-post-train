@@ -97,6 +97,54 @@ def test_fresh_wrapper_startup_incident_preserves_failure_and_release_evidence()
     assert value["scientific_result"]["capability_claim"] is False
 
 
+def test_prod9_supervisor_uses_the_existing_fourteen_hour_operation_bound(
+    prepared, monkeypatch
+) -> None:
+    from training import rl_runtime, sft_runtime
+
+    plan = copy.deepcopy(prepared.plan)
+    root = prepared.state.tmp / "prod9-watchdog"
+    root.mkdir()
+    plan["output_root"] = str(root)
+    monkeypatch.setenv("RUN_DIR", str(root))
+    monkeypatch.setattr(prod9_training, "native_source", lambda: None)
+    monkeypatch.setattr(
+        prod9_training, "native_result", lambda _: {"status": "native_loop_returned"}
+    )
+    monkeypatch.setattr(rl_runtime.os, "killpg", lambda *args: None)
+    waits, observed = [], []
+
+    def wait(**kwargs):
+        if not waits:
+            waits.append(kwargs)
+            raise subprocess.TimeoutExpired("synthetic", 60)
+        return 0
+
+    process = NS(
+        pid=12345,
+        poll=lambda: None if not waits else 0,
+        returncode=0,
+        wait=wait,
+    )
+    monkeypatch.setattr(rl_runtime.subprocess, "Popen", lambda *args, **kwargs: process)
+    monkeypatch.setattr(sft_runtime, "_utilization_snapshot", lambda: (100, 1))
+
+    class Watchdog:
+        def __init__(self, started_at, *, hard_seconds=None):
+            observed.append((started_at, hard_seconds))
+
+        def observe(self, *args, **kwargs):
+            return None
+
+    monkeypatch.setattr(sft_runtime, "ProgressWatchdog", Watchdog)
+
+    result = prod9_training.run(plan, root / "plan.json")
+
+    assert result["status"] == "native_loop_returned"
+    assert len(observed) == 1
+    assert observed[0][1] == historical_direct.MAXIMUM_SECONDS == 14 * 60 * 60
+
+
 @pytest.mark.parametrize(
     "relative",
     ("training/skyrl.py", "training/skyrl_training.py", *prod9_reload.RUNTIME_FILES),
