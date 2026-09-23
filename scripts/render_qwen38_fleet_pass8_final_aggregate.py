@@ -393,6 +393,32 @@ def _server_defaults_only(job: dict[str, Any], expected: dict[str, Any]) -> None
         },
         "Job spec",
     )
+    job_spec = normalized["spec"]
+    safe_job_defaults = {
+        "completionMode": {None, "NonIndexed"},
+        "completions": {None, 1},
+        "manualSelector": {None, False},
+        "parallelism": {None, 1},
+        "podReplacementPolicy": {None, "Failed", "TerminatingOrFailed"},
+        "suspend": {None, False},
+    }
+    if any(job_spec.get(field) not in values for field, values in safe_job_defaults.items()):
+        raise RenderError("server-rendered Job has a non-default execution policy")
+    selector = job.get("spec", {}).get("selector")
+    if selector is not None:
+        if not isinstance(selector, dict) or set(selector) - {"matchLabels", "matchExpressions"}:
+            raise RenderError("server-rendered Job selector differs")
+        selector_labels = selector.get("matchLabels")
+        expressions = selector.get("matchExpressions")
+        raw_uid = job.get("metadata", {}).get("uid")
+        if (
+            not isinstance(selector_labels, dict)
+            or not selector_labels
+            or set(selector_labels) - {"batch.kubernetes.io/controller-uid", "controller-uid"}
+            or any(value != raw_uid for value in selector_labels.values())
+            or expressions not in (None, [])
+        ):
+            raise RenderError("server-rendered Job selector differs")
     actual_template = normalized["spec"]["template"]
     expected_template = reviewed["spec"]["template"]
     _extra_keys(actual_template, expected_template, set(), "Pod template")
@@ -402,6 +428,8 @@ def _server_defaults_only(job: dict[str, Any], expected: dict[str, Any]) -> None
         {"creationTimestamp"},
         "Pod metadata",
     )
+    if actual_template["metadata"].get("creationTimestamp") is not None:
+        raise RenderError("server-rendered Pod creation timestamp is not the API default")
     labels = actual_template["metadata"].get("labels", {})
     expected_labels = expected_template["metadata"].get("labels", {})
     _extra_keys(
@@ -433,6 +461,16 @@ def _server_defaults_only(job: dict[str, Any], expected: dict[str, Any]) -> None
         },
         "Pod spec",
     )
+    safe_pod_defaults = {
+        "dnsPolicy": {None, "ClusterFirst"},
+        "enableServiceLinks": {None, True},
+        "preemptionPolicy": {None, "PreemptLowerPriority"},
+        "priority": {None, 10_000},
+        "schedulerName": {None, "default-scheduler"},
+        "terminationGracePeriodSeconds": {None, 30},
+    }
+    if any(pod.get(field) not in values for field, values in safe_pod_defaults.items()):
+        raise RenderError("server-rendered Pod has a non-default scheduling policy")
     if any(pod.get(field) is True for field in ("hostIPC", "hostNetwork", "hostPID")):
         raise RenderError("server-rendered Pod enables a host namespace")
     if pod.get("securityContext") not in (None, {}):
@@ -462,6 +500,15 @@ def _server_defaults_only(job: dict[str, Any], expected: dict[str, Any]) -> None
             {"imagePullPolicy", "terminationMessagePath", "terminationMessagePolicy"},
             "container",
         )
+        safe_container_defaults = {
+            "imagePullPolicy": {None, "IfNotPresent"},
+            "terminationMessagePath": {None, "/dev/termination-log"},
+            "terminationMessagePolicy": {None, "File"},
+        }
+        if any(
+            container.get(field) not in values for field, values in safe_container_defaults.items()
+        ):
+            raise RenderError("server-rendered container has an unsafe runtime default")
         if container.get("securityContext") not in (None, {}):
             raise RenderError("server-rendered container adds a security context")
         if container.get("env") != expected_container.get("env"):
@@ -487,6 +534,8 @@ def _server_defaults_only(job: dict[str, Any], expected: dict[str, Any]) -> None
                 {"defaultMode"},
                 "ConfigMap volume",
             )
+            if volume["configMap"].get("defaultMode") not in (None, 0o644):
+                raise RenderError("server-rendered ConfigMap volume mode differs")
         if "persistentVolumeClaim" in volume:
             _extra_keys(
                 volume["persistentVolumeClaim"],

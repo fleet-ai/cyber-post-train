@@ -989,7 +989,18 @@ def test_two_preview_validator_rejects_one_preview_replayed_twice(tmp_path: Path
         )
 
 
-@pytest.mark.parametrize("drift", ("host_network", "privileged", "env_from"))
+@pytest.mark.parametrize(
+    "drift",
+    (
+        "host_network",
+        "privileged",
+        "env_from",
+        "parallelism",
+        "manual_selector",
+        "termination_message",
+        "priority",
+    ),
+)
 def test_two_preview_validator_rejects_unsafe_admission_fields(tmp_path: Path, drift: str) -> None:
     root = tmp_path / "render"
     renderer.render(output=root, migration_receipt=_migration(tmp_path))
@@ -1005,8 +1016,19 @@ def test_two_preview_validator_rejects_unsafe_admission_fields(tmp_path: Path, d
             pod["hostNetwork"] = True
         elif drift == "privileged":
             pod["containers"][0]["securityContext"] = {"privileged": True}
-        else:
+        elif drift == "env_from":
             pod["containers"][0]["envFrom"] = [{"secretRef": {"name": "unreviewed-secret"}}]
+        elif drift == "parallelism":
+            job["spec"]["parallelism"] = 2
+        elif drift == "manual_selector":
+            job["spec"]["manualSelector"] = True
+            job["spec"]["selector"] = {"matchLabels": {"attacker.example/selected": "true"}}
+        elif drift == "termination_message":
+            pod["containers"][0]["terminationMessagePath"] = (
+                "/mnt/sfs/private/PRIVATE_SCORED_OUTCOME_INDEX.json"
+            )
+        else:
+            pod["priority"] = 1_000_000
     first = tmp_path / "first.json"
     second = tmp_path / "second.json"
     first.write_text(json.dumps(previews[0]))
