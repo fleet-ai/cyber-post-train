@@ -312,9 +312,8 @@ def validate_data_server_preview(
 ) -> dict[str, Any]:
     """Prove Kueue preserves the exact alert-safe, suspended data Job.
 
-    The shared prod9 validator owns the Kubernetes default surface.  Normalize
-    only the two explicit queue labels and explicit suspension before invoking
-    it; every other unexpected server mutation remains fatal.
+    The shared prod9 validator owns the Kubernetes default surface, including
+    the explicit queue labels and suspension used by this Job.
     """
     queue_labels = {
         "kueue.x-k8s.io/queue-name": "training-lq",
@@ -331,40 +330,11 @@ def validate_data_server_preview(
     ):
         raise JobsError("lane2 data Job queue binding changed")
 
-    normalized_expected = copy.deepcopy(expected)
-    normalized_rendered = copy.deepcopy(rendered)
-    for index, value in enumerate((normalized_expected, normalized_rendered)):
-        root_labels = value.get("metadata", {}).get("labels", {})
-        template_labels = (
-            value.get("spec", {}).get("template", {}).get("metadata", {}).get("labels", {})
-        )
-        if any(root_labels.get(key) != item for key, item in queue_labels.items()) or any(
-            template_labels.get(key) != item for key, item in queue_labels.items()
-        ):
-            raise JobsError("lane2 data Job server preview changed queue labels")
-        for key in queue_labels:
-            root_labels.pop(key)
-            template_labels.pop(key)
-        # With explicit queue labels the live API server keeps only those
-        # labels on the Job object, while still adding the controller labels
-        # to the Pod template.  The shared validator models an otherwise
-        # identical unlabelled Job, whose root receives that generated set.
-        # Copy only the already-server-generated template set into the
-        # normalized rendered root; the shared validator still proves every
-        # key/value and rejects any additional label.
-        if index == 1 and not root_labels and template_labels:
-            root_labels.update(template_labels)
-        if not root_labels:
-            value["metadata"].pop("labels")
-        if not template_labels:
-            value["spec"]["template"]["metadata"].pop("labels")
-    if normalized_rendered.get("spec", {}).get("suspend") is not True:
+    if rendered.get("spec", {}).get("suspend") is not True:
         raise JobsError("lane2 data Job server preview bypassed Kueue suspension")
-    normalized_expected["spec"].pop("suspend")
-    normalized_rendered["spec"]["suspend"] = False
     shared.validate_cpu_preview(
-        normalized_expected,
-        normalized_rendered,
+        expected,
+        rendered,
         context=context,
         purpose="stage",
     )
