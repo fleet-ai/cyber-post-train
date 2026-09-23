@@ -48,6 +48,7 @@ STAGE_AUTHORIZATION_SCHEMA = "cyber_skyrl_prod9_stage_authorization_v1"
 PREFLIGHT_AUTHORIZATION_SCHEMA = "cyber_skyrl_prod9_preflight_authorization_v1"
 AUTHORIZATION_SCHEMA = "cyber_skyrl_prod9_direct_authorization_v1"
 CPU_CREATED_SCHEMA = "cyber_skyrl_prod9_cpu_created_v1"
+CPU_DUPLICATE_PROOF_SCHEMA = "cyber_skyrl_prod9_cpu_duplicate_absence_v1"
 CREATED_SCHEMA = "cyber_skyrl_prod9_direct_created_v1"
 IMAGE_DEFAULT_IDENTITY_SCHEMA = "cyber_exact_image_default_identity_v1"
 RUNTIME_UID = 1000
@@ -539,10 +540,15 @@ def _cpu_job(
             "name": name,
             "namespace": NAMESPACE,
             "annotations": {FAILURE_ALERT_ANNOTATION: FAILURE_ALERT_OFF},
+            "labels": {
+                "kueue.x-k8s.io/queue-name": "training-lq",
+                "kueue.x-k8s.io/priority-class": "q1",
+            },
         },
         "spec": {
             "activeDeadlineSeconds": 1800,
             "backoffLimit": 0,
+            "suspend": True,
             "template": {
                 "metadata": {},
                 "spec": {
@@ -745,7 +751,7 @@ def _strip_cpu_server_defaults(
     timestamp = metadata.pop("creationTimestamp", None)
     generation = metadata.pop("generation", None)
     uid = metadata.pop("uid", None)
-    labels = metadata.pop("labels", None)
+    labels = metadata.get("labels")
     name = expected["metadata"]["name"]
     generated_labels = {
         "batch.kubernetes.io/controller-uid": uid,
@@ -765,9 +771,10 @@ def _strip_cpu_server_defaults(
             "selector",
             "suspend",
         )
+        if key not in expected["spec"]
     }
     template = spec.get("template", {})
-    template_labels = template.get("metadata", {}).pop("labels", None)
+    template_labels = template.get("metadata", {}).get("labels")
     pod = template.get("spec", {})
     pod_defaults = {
         key: pod.pop(key, None)
@@ -781,21 +788,44 @@ def _strip_cpu_server_defaults(
         _timestamp(timestamp)
     except (TypeError, ValueError, JobsError) as exc:
         raise JobsError("prod9 CPU server dry-run lacks identity defaults") from exc
+    expected_labels = expected["metadata"].get("labels", {})
+    expected_template_labels = expected["spec"]["template"].get("metadata", {}).get(
+        "labels", {}
+    )
+    if not isinstance(labels, dict) or not isinstance(template_labels, dict):
+        raise JobsError("prod9 CPU server dry-run changed Kubernetes defaults")
+    remaining_labels = {key: value for key, value in labels.items() if key not in generated_labels}
+    remaining_template_labels = {
+        key: value for key, value in template_labels.items() if key not in generated_labels
+    }
+    for key, value in generated_labels.items():
+        if labels.get(key) not in (None, value) or template_labels.get(key) != value:
+            raise JobsError("prod9 CPU server dry-run changed Kubernetes defaults")
+    if remaining_labels != expected_labels or remaining_template_labels != expected_template_labels:
+        raise JobsError("prod9 CPU server dry-run changed Kubernetes defaults")
+    if expected_labels:
+        metadata["labels"] = remaining_labels
+    else:
+        metadata.pop("labels", None)
+    template_metadata = template.get("metadata", {})
+    if expected_template_labels:
+        template_metadata["labels"] = remaining_template_labels
+    else:
+        template_metadata.pop("labels", None)
+    expected_defaults = {
+        "completionMode": "NonIndexed",
+        "completions": 1,
+        "manualSelector": False,
+        "parallelism": 1,
+        "podReplacementPolicy": "TerminatingOrFailed",
+        "selector": {"matchLabels": {"batch.kubernetes.io/controller-uid": uid}},
+    }
+    if "suspend" not in expected["spec"]:
+        expected_defaults["suspend"] = False
     if (
         status != {}
         or generation != 1
-        or labels != generated_labels
-        or template_labels != generated_labels
-        or defaults
-        != {
-            "completionMode": "NonIndexed",
-            "completions": 1,
-            "manualSelector": False,
-            "parallelism": 1,
-            "podReplacementPolicy": "TerminatingOrFailed",
-            "selector": {"matchLabels": {"batch.kubernetes.io/controller-uid": uid}},
-            "suspend": False,
-        }
+        or defaults != expected_defaults
         or pod_defaults
         != {
             "dnsPolicy": "ClusterFirst",
@@ -826,6 +856,15 @@ def validate_cpu_preview(
         != FAILURE_ALERT_OFF
         or expected.get("spec", {}).get("backoffLimit") != 0
         or expected.get("spec", {}).get("activeDeadlineSeconds") != CPU_MAXIMUM_SECONDS
+        or expected.get("spec", {}).get("suspend") is not True
+        or expected.get("metadata", {}).get("labels", {}).get(
+            "kueue.x-k8s.io/queue-name"
+        )
+        != "training-lq"
+        or expected.get("metadata", {}).get("labels", {}).get(
+            "kueue.x-k8s.io/priority-class"
+        )
+        != "q1"
         or expected.get("spec", {}).get("template", {}).get("spec", {}).get("priorityClassName")
         != "c1"
         or "nvidia.com/gpu" in json.dumps(expected, sort_keys=True)
@@ -843,11 +882,41 @@ def validate_cpu_preview(
             "server_render_sha256": "sha256:" + digest(rendered),
             "gpus": 0,
             "priority": "c1",
+            "queue_priority": "q1",
             "failure_alerts": "off",
             "submitted": False,
             "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
     )
+
+
+def validate_cpu_preview_proof(
+    expected: dict[str, Any],
+    proof: dict[str, Any],
+    *,
+    purpose: str,
+    context: str,
+    fresh: bool,
+) -> dict[str, Any]:
+    """Validate one exact cluster proof without weakening the two-proof gate."""
+    value = _validate_seal(proof, CPU_PREVIEW_SCHEMA)
+    if (
+        context not in {DEV_CONTEXT, PROD_CONTEXT}
+        or value.get("status") != "passed"
+        or value.get("purpose") != purpose
+        or value.get("context") != context
+        or value.get("name") != expected["metadata"]["name"]
+        or value.get("manifest_sha256") != "sha256:" + digest(expected)
+        or value.get("gpus") != 0
+        or value.get("priority") != "c1"
+        or value.get("queue_priority") != "q1"
+        or value.get("failure_alerts") != "off"
+        or value.get("submitted") is not False
+    ):
+        raise JobsError("prod9 CPU server preview was not accepted")
+    if fresh:
+        _fresh_at(value.get("checked_at"))
+    return value
 
 
 def _cpu_previews(
@@ -860,21 +929,15 @@ def _cpu_previews(
     observed = []
     for proof in proofs:
         value = _validate_seal(proof, CPU_PREVIEW_SCHEMA)
-        if (
-            value.get("status") != "passed"
-            or value.get("purpose") != purpose
-            or value.get("context") not in {DEV_CONTEXT, PROD_CONTEXT}
-            or value.get("name") != expected["metadata"]["name"]
-            or value.get("manifest_sha256") != "sha256:" + digest(expected)
-            or value.get("gpus") != 0
-            or value.get("priority") != "c1"
-            or value.get("failure_alerts") != "off"
-            or value.get("submitted") is not False
-        ):
-            raise JobsError("prod9 CPU server preview was not accepted")
-        if fresh:
-            _fresh_at(value.get("checked_at"))
-        observed.append(value["context"])
+        observed_context = value.get("context")
+        validate_cpu_preview_proof(
+            expected,
+            value,
+            purpose=purpose,
+            context=observed_context,
+            fresh=fresh,
+        )
+        observed.append(observed_context)
     if sorted(observed) != sorted({DEV_CONTEXT, PROD_CONTEXT}) or len(proofs) != 2:
         raise JobsError("prod9 CPU server preview set is incomplete")
     return proofs
@@ -1307,30 +1370,98 @@ def _kubectl(
     )
 
 
+def _cpu_duplicate_inventory(
+    name: str,
+    *,
+    context: str,
+    runner: Callable[..., subprocess.CompletedProcess[str]],
+) -> int:
+    if context not in {DEV_CONTEXT, PROD_CONTEXT}:
+        raise JobsError("prod9 CPU duplicate context is invalid")
+    checked = 0
+    for resource in ("job", "rayjob", "raycluster", "workload", "pod"):
+        result = _kubectl(runner, context, "get", resource, "--output=json")
+        if result.returncode:
+            raise JobsError("prod9 CPU Kubernetes duplicate inventory failed")
+        checked += 1
+        try:
+            value = json.loads(result.stdout)
+            items = value.get("items", [])
+        except (AttributeError, ValueError) as exc:
+            raise JobsError("prod9 CPU Kubernetes duplicate inventory is invalid") from exc
+        if not isinstance(value, dict) or not isinstance(items, list):
+            raise JobsError("prod9 CPU Kubernetes duplicate inventory is invalid")
+        for item in items:
+            metadata = item.get("metadata", {}) if isinstance(item, dict) else {}
+            labels = metadata.get("labels", {})
+            annotations = metadata.get("annotations", {})
+            if not isinstance(labels, dict) or not isinstance(annotations, dict):
+                raise JobsError("prod9 CPU Kubernetes duplicate inventory is invalid")
+            values = [metadata.get("name", ""), *labels.values(), *annotations.values()]
+            if any(value == name or str(value).startswith(name + "-") for value in values):
+                raise JobsError("prod9 CPU Kubernetes identity already exists")
+    return checked
+
+
+def cpu_duplicate_proof(
+    name: str,
+    *,
+    context: str,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+) -> dict[str, Any]:
+    """Seal one fresh cross-cluster absence scan for a remote coordinator.
+
+    The in-cluster coordinator has production service-account authority only.
+    A caller-side development scan is therefore transported as exact, fresh
+    evidence while production is always scanned live again immediately before
+    create.  This preserves the same two-cluster gate without projecting a
+    general kubeconfig into the coordinator.
+    """
+    if context != DEV_CONTEXT:
+        raise JobsError("remote CPU duplicate proof is development-only")
+    checked = _cpu_duplicate_inventory(name, context=context, runner=runner)
+    return _seal(
+        {
+            "schema": CPU_DUPLICATE_PROOF_SCHEMA,
+            "status": "identity_absent",
+            "context": context,
+            "namespace": NAMESPACE,
+            "name": name,
+            "kubernetes_inventories_checked": checked,
+            "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+
+
 def _cpu_duplicate_checks(
     name: str,
     *,
     runner: Callable[..., subprocess.CompletedProcess[str]],
-) -> dict[str, int]:
-    checked = 0
-    for context in (DEV_CONTEXT, PROD_CONTEXT):
-        for resource in ("job", "rayjob", "raycluster", "workload", "pod"):
-            result = _kubectl(runner, context, "get", resource, "--output=json")
-            if result.returncode:
-                raise JobsError("prod9 CPU Kubernetes duplicate inventory failed")
-            checked += 1
-            try:
-                items = json.loads(result.stdout).get("items", [])
-            except (AttributeError, ValueError) as exc:
-                raise JobsError("prod9 CPU Kubernetes duplicate inventory is invalid") from exc
-            for item in items:
-                metadata = item.get("metadata", {}) if isinstance(item, dict) else {}
-                values = [metadata.get("name", "")]
-                values.extend(metadata.get("labels", {}).values())
-                values.extend(metadata.get("annotations", {}).values())
-                if any(value == name or str(value).startswith(name + "-") for value in values):
-                    raise JobsError("prod9 CPU Kubernetes identity already exists")
-    return {"kubernetes_inventories_checked": checked}
+    dev_proof: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    if dev_proof is None:
+        checked = sum(
+            _cpu_duplicate_inventory(name, context=context, runner=runner)
+            for context in (DEV_CONTEXT, PROD_CONTEXT)
+        )
+        return {"kubernetes_inventories_checked": checked}
+    proof = _validate_seal(dev_proof, CPU_DUPLICATE_PROOF_SCHEMA)
+    if (
+        proof.get("status") != "identity_absent"
+        or proof.get("context") != DEV_CONTEXT
+        or proof.get("namespace") != NAMESPACE
+        or proof.get("name") != name
+        or proof.get("kubernetes_inventories_checked") != 5
+    ):
+        raise JobsError("prod9 CPU development duplicate proof changed")
+    _fresh_at(proof.get("checked_at"))
+    production_checked = _cpu_duplicate_inventory(
+        name, context=PROD_CONTEXT, runner=runner
+    )
+    return {
+        "kubernetes_inventories_checked": 5 + production_checked,
+        "development_duplicate_proof_sha256": proof["sha256"],
+    }
 
 
 def _write_once_fsynced(path: Path, value: dict[str, Any]) -> None:
@@ -1356,6 +1487,7 @@ def _create_cpu_once(
     name: str,
     plan_sha256: str,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+    dev_duplicate_proof: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     journal_name = (
         "PROD9_STAGE_CREATE.jsonl" if purpose == "stage" else "PROD9_PREFLIGHT_CREATE.jsonl"
@@ -1390,7 +1522,9 @@ def _create_cpu_once(
         gpus=0,
         maximum_seconds=CPU_MAXIMUM_SECONDS,
     )
-    duplicate = _cpu_duplicate_checks(name, runner=runner)
+    duplicate = _cpu_duplicate_checks(
+        name, runner=runner, dev_proof=dev_duplicate_proof
+    )
     rendered = server_dry_run(expected, context=PROD_CONTEXT, runner=runner)
     validate_cpu_preview(expected, rendered, context=PROD_CONTEXT, purpose=purpose)
     _observer_pid(
@@ -1486,6 +1620,7 @@ def create_stage_once(
     *,
     identity: historical.RailIdentity,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+    dev_duplicate_proof: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Create the one permitted zero-GPU prod9 SFS rebind Job."""
     auth = _validate_seal(authorization, STAGE_AUTHORIZATION_SCHEMA)
@@ -1510,6 +1645,7 @@ def create_stage_once(
         name=identity.stage_name,
         plan_sha256=checked["sha256"],
         runner=runner,
+        dev_duplicate_proof=dev_duplicate_proof,
     )
 
 
@@ -1522,6 +1658,7 @@ def create_preflight_once(
     *,
     identity: historical.RailIdentity,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+    dev_duplicate_proof: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Create the one permitted zero-GPU exact-image prod9 preflight Job."""
     auth = _validate_seal(authorization, PREFLIGHT_AUTHORIZATION_SCHEMA)
@@ -1555,6 +1692,7 @@ def create_preflight_once(
         name=identity.preflight_name,
         plan_sha256="sha256:" + digest(plan),
         runner=runner,
+        dev_duplicate_proof=dev_duplicate_proof,
     )
 
 

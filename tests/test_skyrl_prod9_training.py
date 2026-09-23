@@ -393,6 +393,7 @@ def _cpu_render(value: dict) -> dict:
             "generation": 1,
             "uid": uid,
             "labels": {
+                **value["metadata"].get("labels", {}),
                 "batch.kubernetes.io/controller-uid": uid,
                 "batch.kubernetes.io/job-name": name,
                 "controller-uid": uid,
@@ -409,9 +410,10 @@ def _cpu_render(value: dict) -> dict:
             "parallelism": 1,
             "podReplacementPolicy": "TerminatingOrFailed",
             "selector": {"matchLabels": {"batch.kubernetes.io/controller-uid": uid}},
-            "suspend": False,
         }
     )
+    if "suspend" not in value["spec"]:
+        rendered["spec"]["suspend"] = False
     rendered["spec"]["template"]["metadata"]["labels"] = {
         "batch.kubernetes.io/controller-uid": uid,
         "batch.kubernetes.io/job-name": name,
@@ -685,6 +687,11 @@ def test_prod9_fresh_direct_renderer_and_cpu_preflight_are_alert_safe() -> None:
     assert packet["failure_alerts"] == proof["failure_alerts"] == "off"
     assert proof["nodes"] == 1 and proof["gpus"] == 8
     assert cpu_job["metadata"]["annotations"] == {"fleet.ai/failure-alerts": "off"}
+    assert cpu_job["metadata"]["labels"] == {
+        "kueue.x-k8s.io/queue-name": "training-lq",
+        "kueue.x-k8s.io/priority-class": "q1",
+    }
+    assert cpu_job["spec"]["suspend"] is True
     assert "nvidia.com/gpu" not in json.dumps(cpu_job, sort_keys=True)
     assert _bundle({"env": environment})["module"] == prod9_training.MODULE
     assert _bundle({"env": environment})["argv"][-3:] == [
@@ -701,7 +708,12 @@ def test_prod9_fresh_direct_renderer_and_cpu_preflight_are_alert_safe() -> None:
         context=prod9_direct.PROD_CONTEXT,
         purpose="preflight",
     )
-    assert cpu_proof["gpus"] == 0 and cpu_proof["failure_alerts"] == "off"
+    assert (
+        cpu_proof["gpus"] == 0
+        and cpu_proof["failure_alerts"] == "off"
+        and cpu_proof["priority"] == "c1"
+        and cpu_proof["queue_priority"] == "q1"
+    )
     cpu_rendered["metadata"]["labels"]["job-name"] = "other"
     with pytest.raises(JobsError, match="Kubernetes defaults"):
         prod9_direct.validate_cpu_preview(

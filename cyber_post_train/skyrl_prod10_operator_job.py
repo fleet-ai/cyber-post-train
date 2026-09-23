@@ -1,0 +1,551 @@
+"""Immutable package and zero-GPU Job for the bounded prod10 coordinator."""
+
+from __future__ import annotations
+
+import base64
+import gzip
+import hashlib
+import io
+import json
+import re
+import tarfile
+from copy import deepcopy
+from dataclasses import dataclass
+from pathlib import Path, PurePosixPath
+from typing import Any
+
+from training import skyrl_prod10_operator as operator
+from training import skyrl_prod9_direct as direct
+from training import skyrl_prod9_training as training
+from training import skyrl_reward_rayjob as historical
+
+from .jobs import FAILURE_ALERT_ANNOTATION, FAILURE_ALERT_OFF, JobsError, digest
+
+NAMESPACE = "fleet-train-jobs"
+SOURCE_ANNOTATION = "cyber-post-train.fleet.ai/operator-source-sha256"
+PACKET_ANNOTATION = "cyber-post-train.fleet.ai/operator-packet-sha256"
+PHASE_ANNOTATION = "cyber-post-train.fleet.ai/operator-phase"
+QUEUE_LABEL = "kueue.x-k8s.io/queue-name"
+QUEUE_PRIORITY_LABEL = "kueue.x-k8s.io/priority-class"
+QUEUE = "training-lq"
+QUEUE_PRIORITY = "q1"
+IMAGE = training.historical.IMAGE
+PVC = "sfs-shared"
+CONTROLS_SUBPATH = "jobs/chris-q38-study-corpora-v1/launch-controls"
+CONTROLS_PATH = "/mnt/sfs/" + CONTROLS_SUBPATH
+_ROOT = Path(__file__).resolve().parents[1]
+_SOURCE_DIRS = ("training", "cyber_post_train")
+_SOURCE_FILES = (
+    "scripts/probe_qwen38_prod8_terminal.py",
+    "evals/fleet/opencode_self_hosted.py",
+)
+_BOOTSTRAP = r'''import gzip,hashlib,json,os,sys,tarfile
+from pathlib import Path,PurePosixPath
+archive=Path("/bundle/source.tgz")
+packet_gz=Path("/packet/packet.json.gz")
+source=archive.read_bytes()
+packet=packet_gz.read_bytes()
+if "sha256:"+hashlib.sha256(source).hexdigest()!=os.environ["OPERATOR_SOURCE_SHA256"]:
+    raise SystemExit("operator source digest mismatch")
+if "sha256:"+hashlib.sha256(gzip.decompress(packet)).hexdigest()!=os.environ["OPERATOR_PACKET_FILE_SHA256"]:
+    raise SystemExit("operator packet digest mismatch")
+root=Path("/runtime")
+with tarfile.open(fileobj=__import__("io").BytesIO(source),mode="r:gz") as bundle:
+    members=bundle.getmembers()
+    if not members or len(members)>512:
+        raise SystemExit("operator source inventory invalid")
+    for member in members:
+        path=PurePosixPath(member.name)
+        if path.is_absolute() or ".." in path.parts or not member.isfile():
+            raise SystemExit("operator source member invalid")
+        payload=bundle.extractfile(member)
+        if payload is None:
+            raise SystemExit("operator source member unreadable")
+        target=root.joinpath(*path.parts)
+        target.parent.mkdir(parents=True,exist_ok=True)
+        descriptor=os.open(target,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o444)
+        with os.fdopen(descriptor,"wb") as stream:
+            stream.write(payload.read())
+packet_path=Path("/work/packet.json")
+descriptor=os.open(packet_path,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o400)
+with os.fdopen(descriptor,"wb") as stream:
+    stream.write(gzip.decompress(packet))
+os.environ["PYTHONPATH"]="/runtime"
+os.chdir("/runtime")
+os.execv(sys.executable,[sys.executable,"-u","-m","training.skyrl_prod10_operator","--packet",str(packet_path),"--phase",os.environ["OPERATOR_PHASE"]])
+'''
+
+
+@dataclass(frozen=True)
+class OperatorPackage:
+    source_config_map: dict[str, Any]
+    packet_config_map: dict[str, Any]
+    job: dict[str, Any]
+    packet: dict[str, Any]
+    source_archive: bytes
+
+
+def _seal(value: dict[str, Any]) -> dict[str, Any]:
+    body = {key: item for key, item in value.items() if key != "sha256"}
+    return {**body, "sha256": "sha256:" + digest(body)}
+
+
+def _tracked_sources() -> dict[str, bytes]:
+    paths: set[Path] = set()
+    for directory in _SOURCE_DIRS:
+        paths.update((_ROOT / directory).glob("*.py"))
+    paths.update(_ROOT / value for value in _SOURCE_FILES)
+    result: dict[str, bytes] = {}
+    for path in sorted(paths):
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("prod10 operator source contains an indirect file")
+        relative = path.relative_to(_ROOT).as_posix()
+        result[relative] = path.read_bytes()
+    required = {
+        "training/skyrl_prod10_operator.py",
+        "training/incluster_kubernetes.py",
+        "training/skyrl_prod9_direct.py",
+        "training/dev_cleanup_observer.py",
+        "cyber_post_train/jobs.py",
+    }
+    if not required.issubset(result):
+        raise ValueError("prod10 operator source closure is incomplete")
+    return result
+
+
+def source_archive() -> tuple[bytes, str]:
+    stream = io.BytesIO()
+    with gzip.GzipFile(fileobj=stream, mode="wb", mtime=0) as compressed:
+        with tarfile.open(fileobj=compressed, mode="w") as archive:
+            for name, payload in _tracked_sources().items():
+                member = tarfile.TarInfo(name)
+                member.size = len(payload)
+                member.mode = 0o444
+                member.uid = member.gid = 0
+                member.uname = member.gname = ""
+                member.mtime = 0
+                archive.addfile(member, io.BytesIO(payload))
+    value = stream.getvalue()
+    return value, "sha256:" + hashlib.sha256(value).hexdigest()
+
+
+def stage_packet(
+    *,
+    identity: historical.RailIdentity,
+    stage: dict[str, Any],
+    dev_preview: dict[str, Any],
+    dev_duplicate_proof: dict[str, Any],
+) -> dict[str, Any]:
+    checked, bound = training._stage_identity(stage)
+    expected = direct.stage_job_manifest(checked, identity=identity)
+    if bound != identity:
+        raise ValueError("prod10 stage operator identity changed")
+    direct.validate_cpu_preview_proof(
+        expected,
+        dev_preview,
+        purpose="stage",
+        context=direct.DEV_CONTEXT,
+        fresh=True,
+    )
+    duplicate = direct._validate_seal(
+        dev_duplicate_proof, direct.CPU_DUPLICATE_PROOF_SCHEMA
+    )
+    if duplicate.get("name") != identity.stage_name:
+        raise ValueError("prod10 stage duplicate proof changed")
+    return _seal(
+        {
+            "schema": operator.PACKET_SCHEMA,
+            "phase": "stage",
+            "operator_name": operator.OPERATOR_NAMES["stage"],
+            "identity": identity.sealed_mapping(),
+            "stage": checked,
+            "manifest_sha256": "sha256:" + digest(expected),
+            "dev_preview": dev_preview,
+            "dev_duplicate_proof": duplicate,
+        }
+    )
+
+
+def preflight_packet(
+    *,
+    identity: historical.RailIdentity,
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    stage_result: dict[str, Any],
+    dev_preview: dict[str, Any],
+    dev_duplicate_proof: dict[str, Any],
+) -> dict[str, Any]:
+    direct._identity(plan, identity)
+    if training.job_request(plan) != request:
+        raise ValueError("prod10 preflight operator request changed")
+    checked_stage_result = operator._validate_seal(stage_result, operator.RESULT_SCHEMA)
+    if checked_stage_result.get("status") != "stage_ready":
+        raise ValueError("prod10 preflight lacks accepted stage evidence")
+    expected = direct.preflight_job_manifest(plan, identity=identity)
+    direct.validate_cpu_preview_proof(
+        expected,
+        dev_preview,
+        purpose="preflight",
+        context=direct.DEV_CONTEXT,
+        fresh=True,
+    )
+    duplicate = direct._validate_seal(
+        dev_duplicate_proof, direct.CPU_DUPLICATE_PROOF_SCHEMA
+    )
+    if duplicate.get("name") != identity.preflight_name:
+        raise ValueError("prod10 preflight duplicate proof changed")
+    return _seal(
+        {
+            "schema": operator.PACKET_SCHEMA,
+            "phase": "preflight",
+            "operator_name": operator.OPERATOR_NAMES["preflight"],
+            "identity": identity.sealed_mapping(),
+            "plan": plan,
+            "request": request,
+            "stage_result": checked_stage_result,
+            "manifest_sha256": "sha256:" + digest(expected),
+            "dev_preview": dev_preview,
+            "dev_duplicate_proof": duplicate,
+        }
+    )
+
+
+def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
+    checked = operator._packet(packet, packet.get("phase", ""))
+    identity = historical.identity_from_mapping(checked["identity"])
+    if checked["phase"] == "stage":
+        expected = stage_packet(
+            identity=identity,
+            stage=checked["stage"],
+            dev_preview=checked["dev_preview"],
+            dev_duplicate_proof=checked["dev_duplicate_proof"],
+        )
+    else:
+        expected = preflight_packet(
+            identity=identity,
+            plan=checked["plan"],
+            request=checked["request"],
+            stage_result=checked["stage_result"],
+            dev_preview=checked["dev_preview"],
+            dev_duplicate_proof=checked["dev_duplicate_proof"],
+        )
+    if checked != expected:
+        raise ValueError("prod10 operator packet differs from current exact renderer")
+    return checked
+
+
+def _config_maps(
+    *, phase: str, source: bytes, source_sha256: str, packet: dict[str, Any]
+) -> tuple[dict[str, Any], dict[str, Any], bytes]:
+    name = operator.OPERATOR_NAMES[phase]
+    packet_bytes = (json.dumps(packet, sort_keys=True, separators=(",", ":")) + "\n").encode()
+    packet_gz = gzip.compress(packet_bytes, mtime=0)
+    annotations = {
+        SOURCE_ANNOTATION: source_sha256,
+        PACKET_ANNOTATION: packet["sha256"],
+        PHASE_ANNOTATION: phase,
+    }
+    source_map = {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {
+            "name": name + "-source",
+            "namespace": NAMESPACE,
+            "annotations": deepcopy(annotations),
+        },
+        "immutable": True,
+        "binaryData": {"source.tgz": base64.b64encode(source).decode()},
+    }
+    packet_map = {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {
+            "name": name + "-packet",
+            "namespace": NAMESPACE,
+            "annotations": deepcopy(annotations),
+        },
+        "immutable": True,
+        "binaryData": {"packet.json.gz": base64.b64encode(packet_gz).decode()},
+    }
+    return source_map, packet_map, packet_bytes
+
+
+def _job(
+    *, phase: str, source_sha256: str, packet: dict[str, Any], packet_bytes: bytes
+) -> dict[str, Any]:
+    name = operator.OPERATOR_NAMES[phase]
+    annotations = {
+        FAILURE_ALERT_ANNOTATION: FAILURE_ALERT_OFF,
+        SOURCE_ANNOTATION: source_sha256,
+        PACKET_ANNOTATION: packet["sha256"],
+        PHASE_ANNOTATION: phase,
+    }
+    labels = {
+        "cyber-post-train.fleet.ai/role": "prod10-bounded-operator",
+        QUEUE_LABEL: QUEUE,
+        QUEUE_PRIORITY_LABEL: QUEUE_PRIORITY,
+    }
+    environment = [
+        {"name": "OPERATOR_PHASE", "value": phase},
+        {"name": "OPERATOR_PACKET_SHA256", "value": packet["sha256"]},
+        {
+            "name": "OPERATOR_PACKET_FILE_SHA256",
+            "value": "sha256:" + hashlib.sha256(packet_bytes).hexdigest(),
+        },
+        {"name": "OPERATOR_SOURCE_SHA256", "value": source_sha256},
+        {"name": "OPERATOR_JOB_NAME", "valueFrom": {"fieldRef": {"fieldPath": "metadata.name"}}},
+        {"name": "OPERATOR_JOB_UID", "valueFrom": {"fieldRef": {"fieldPath": "metadata.uid"}}},
+        {"name": "PYTHONDONTWRITEBYTECODE", "value": "1"},
+        {"name": "WANDB_MODE", "value": "disabled"},
+        {"name": "CUDA_VISIBLE_DEVICES", "value": ""},
+        {"name": "NVIDIA_VISIBLE_DEVICES", "value": "none"},
+    ]
+    return {
+        "apiVersion": "batch/v1",
+        "kind": "Job",
+        "metadata": {
+            "name": name,
+            "namespace": NAMESPACE,
+            "annotations": deepcopy(annotations),
+            "labels": deepcopy(labels),
+        },
+        "spec": {
+            "activeDeadlineSeconds": 2400,
+            "backoffLimit": 0,
+            "suspend": True,
+            "template": {
+                "metadata": {
+                    "annotations": deepcopy(annotations),
+                    "labels": deepcopy(labels),
+                },
+                "spec": {
+                    "automountServiceAccountToken": True,
+                    "serviceAccountName": "default",
+                    "containers": [
+                        {
+                            "name": "operator",
+                            "image": IMAGE,
+                            "imagePullPolicy": "IfNotPresent",
+                            "command": ["python", "-u", "-c", _BOOTSTRAP],
+                            "env": environment,
+                            "resources": {
+                                "requests": {"cpu": "2", "memory": "8Gi"},
+                                "limits": {"cpu": "4", "memory": "16Gi"},
+                            },
+                            "securityContext": {
+                                "allowPrivilegeEscalation": False,
+                                "capabilities": {"drop": ["ALL"]},
+                                "privileged": False,
+                                "readOnlyRootFilesystem": True,
+                                "runAsNonRoot": True,
+                                "runAsUser": 1000,
+                                "runAsGroup": 100,
+                            },
+                            "terminationMessagePath": "/dev/termination-log",
+                            "terminationMessagePolicy": "File",
+                            "volumeMounts": [
+                                {"name": "source", "mountPath": "/bundle", "readOnly": True},
+                                {"name": "packet", "mountPath": "/packet", "readOnly": True},
+                                {"name": "runtime", "mountPath": "/runtime"},
+                                {"name": "work", "mountPath": "/work"},
+                                {"name": "sfs-ro", "mountPath": "/mnt/sfs", "readOnly": True},
+                                {
+                                    "name": "controls-rw",
+                                    "mountPath": CONTROLS_PATH,
+                                    "subPath": CONTROLS_SUBPATH,
+                                },
+                            ],
+                        }
+                    ],
+                    "hostIPC": False,
+                    "hostNetwork": False,
+                    "hostPID": False,
+                    "nodeSelector": {
+                        "kubernetes.io/arch": "amd64",
+                        "workload": "fleetai-training-ng-cpu",
+                    },
+                    "priorityClassName": "c1",
+                    "restartPolicy": "Never",
+                    "securityContext": {
+                        "runAsNonRoot": True,
+                        "runAsUser": 1000,
+                        "runAsGroup": 100,
+                        "fsGroup": 100,
+                        "supplementalGroups": [2000],
+                        "seccompProfile": {"type": "RuntimeDefault"},
+                    },
+                    "terminationGracePeriodSeconds": 60,
+                    "tolerations": [
+                        {
+                            "key": "workload",
+                            "operator": "Equal",
+                            "value": "fleetai-training-ng-cpu",
+                            "effect": "NoSchedule",
+                        }
+                    ],
+                    "volumes": [
+                        {"name": "source", "configMap": {"name": name + "-source", "defaultMode": 292}},
+                        {"name": "packet", "configMap": {"name": name + "-packet", "defaultMode": 292}},
+                        {"name": "runtime", "emptyDir": {"sizeLimit": "256Mi"}},
+                        {"name": "work", "emptyDir": {"sizeLimit": "64Mi"}},
+                        {"name": "sfs-ro", "persistentVolumeClaim": {"claimName": PVC, "readOnly": True}},
+                        {"name": "controls-rw", "persistentVolumeClaim": {"claimName": PVC}},
+                    ],
+                },
+            },
+        },
+    }
+
+
+def build_operator_package(packet: dict[str, Any]) -> OperatorPackage:
+    checked = _validate_packet_semantics(packet)
+    source, source_sha256 = source_archive()
+    source_map, packet_map, packet_bytes = _config_maps(
+        phase=checked["phase"], source=source, source_sha256=source_sha256, packet=checked
+    )
+    package = OperatorPackage(
+        source_config_map=source_map,
+        packet_config_map=packet_map,
+        job=_job(
+            phase=checked["phase"],
+            source_sha256=source_sha256,
+            packet=checked,
+            packet_bytes=packet_bytes,
+        ),
+        packet=deepcopy(checked),
+        source_archive=source,
+    )
+    validate_operator_package(package)
+    return package
+
+
+def validate_operator_package(package: OperatorPackage) -> dict[str, Any]:
+    if not isinstance(package, OperatorPackage):
+        raise ValueError("prod10 operator requires one immutable package")
+    packet = _validate_packet_semantics(package.packet)
+    source, source_sha256 = source_archive()
+    source_map, packet_map, packet_bytes = _config_maps(
+        phase=packet["phase"], source=source, source_sha256=source_sha256, packet=packet
+    )
+    expected_job = _job(
+        phase=packet["phase"],
+        source_sha256=source_sha256,
+        packet=packet,
+        packet_bytes=packet_bytes,
+    )
+    if (
+        package.source_archive != source
+        or package.source_config_map != source_map
+        or package.packet_config_map != packet_map
+        or package.job != expected_job
+    ):
+        raise ValueError("prod10 operator package differs from tracked exact bytes")
+    metadata = expected_job["metadata"]
+    pod = expected_job["spec"]["template"]["spec"]
+    [container] = pod["containers"]
+    if (
+        metadata["annotations"].get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
+        or metadata["labels"].get(QUEUE_LABEL) != QUEUE
+        or metadata["labels"].get(QUEUE_PRIORITY_LABEL) != QUEUE_PRIORITY
+        or pod.get("priorityClassName") != "c1"
+        or expected_job["spec"].get("backoffLimit") != 0
+        or expected_job["spec"].get("suspend") is not True
+        or pod.get("serviceAccountName") != "default"
+        or pod.get("automountServiceAccountToken") is not True
+        or "nvidia.com/gpu" in json.dumps(expected_job, sort_keys=True)
+        or container["securityContext"].get("runAsUser") != 1000
+        or container["securityContext"].get("runAsGroup") != 100
+    ):
+        raise ValueError("prod10 operator execution policy changed")
+    return {
+        "phase": packet["phase"],
+        "name": metadata["name"],
+        "packet_sha256": packet["sha256"],
+        "source_sha256": source_sha256,
+        "source_bytes": len(source),
+        "source_config_map_sha256": "sha256:" + digest(source_map),
+        "packet_config_map_sha256": "sha256:" + digest(packet_map),
+        "job_manifest_sha256": "sha256:" + digest(expected_job),
+        "failure_alerts": "off",
+        "priority": "c1",
+        "queue_priority": "q1",
+        "gpus": 0,
+    }
+
+
+def validate_server_response(
+    actual: dict[str, Any], expected: dict[str, Any], *, require_uid: bool
+) -> dict[str, Any]:
+    """Validate reviewed fields after API defaulting without accepting mutation."""
+    if not isinstance(actual, dict) or actual.get("apiVersion") != expected.get("apiVersion") or actual.get("kind") != expected.get("kind"):
+        raise JobsError("prod10 operator server response kind changed")
+    actual_meta = actual.get("metadata", {})
+    expected_meta = expected.get("metadata", {})
+    if (
+        actual_meta.get("name") != expected_meta.get("name")
+        or actual_meta.get("namespace") != NAMESPACE
+        or actual_meta.get("annotations") != expected_meta.get("annotations")
+        or any(actual_meta.get("labels", {}).get(key) != value for key, value in expected_meta.get("labels", {}).items())
+    ):
+        raise JobsError("prod10 operator server response metadata changed")
+    if require_uid and re.fullmatch(r"[0-9a-f-]{36}", str(actual_meta.get("uid", ""))) is None:
+        raise JobsError("prod10 operator create response omitted its UID")
+    actual_spec = actual.get("spec", {})
+    expected_spec = expected.get("spec", {})
+    for key in ("activeDeadlineSeconds", "backoffLimit", "suspend"):
+        if actual_spec.get(key) != expected_spec.get(key):
+            raise JobsError("prod10 operator server response Job policy changed")
+    actual_template = actual_spec.get("template", {})
+    expected_template = expected_spec.get("template", {})
+    actual_pod = deepcopy(actual_template.get("spec", {}))
+    expected_pod = expected_template.get("spec", {})
+    for key in ("hostIPC", "hostNetwork", "hostPID"):
+        if expected_pod.get(key) is False and key not in actual_pod:
+            actual_pod[key] = False
+    actual_containers = actual_pod.get("containers")
+    expected_containers = expected_pod.get("containers")
+    if (
+        isinstance(actual_containers, list)
+        and isinstance(expected_containers, list)
+        and len(actual_containers) == len(expected_containers) == 1
+    ):
+        actual_env = actual_containers[0].get("env")
+        expected_env = expected_containers[0].get("env")
+        if (
+            isinstance(actual_env, list)
+            and isinstance(expected_env, list)
+            and len(actual_env) == len(expected_env)
+        ):
+            for actual_entry, expected_entry in zip(actual_env, expected_env, strict=True):
+                if expected_entry.get("value") == "" and "value" not in actual_entry:
+                    actual_entry["value"] = ""
+                actual_field = actual_entry.get("valueFrom", {}).get("fieldRef")
+                expected_field = expected_entry.get("valueFrom", {}).get("fieldRef")
+                if (
+                    isinstance(actual_field, dict)
+                    and isinstance(expected_field, dict)
+                    and "apiVersion" not in expected_field
+                    and actual_field.get("apiVersion") == "v1"
+                ):
+                    actual_field.pop("apiVersion")
+    if actual_template.get("metadata", {}).get("annotations") != expected_template.get("metadata", {}).get("annotations"):
+        raise JobsError("prod10 operator Pod annotations changed")
+    for key in (
+        "automountServiceAccountToken", "serviceAccountName", "containers", "hostIPC",
+        "hostNetwork", "hostPID", "nodeSelector", "priorityClassName", "restartPolicy",
+        "securityContext", "terminationGracePeriodSeconds", "tolerations", "volumes",
+    ):
+        if actual_pod.get(key) != expected_pod.get(key):
+            raise JobsError(f"prod10 operator server response Pod {key} changed")
+    if len(actual_pod.get("containers", [])) != 1 or actual_pod.get("initContainers") not in (None, []):
+        raise JobsError("prod10 operator server response gained a container")
+    return {
+        "name": actual_meta["name"],
+        "uid": actual_meta.get("uid"),
+        "manifest_sha256": "sha256:" + digest(expected),
+        "server_sha256": "sha256:" + digest(actual),
+        "failure_alerts": actual_meta["annotations"][FAILURE_ALERT_ANNOTATION],
+        "priority": actual_pod["priorityClassName"],
+        "queue_priority": actual_meta["labels"][QUEUE_PRIORITY_LABEL],
+        "gpus": 0,
+    }

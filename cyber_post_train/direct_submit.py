@@ -1281,6 +1281,57 @@ class Kubectl:
             raise JobsError("unsupported duplicate-check resource")
         return self._run(["get", resource, "--namespace", NAMESPACE, "--output=json"])
 
+    def list_operator_resources(self, resource: str) -> dict:
+        """List only the fixed identity surfaces used by a bounded CPU operator."""
+        if resource not in {
+            "configmaps",
+            "jobs.batch",
+            "pods",
+            "workloads.kueue.x-k8s.io",
+            "rayjobs.ray.io",
+            "rayclusters.ray.io",
+        }:
+            raise JobsError("unsupported bounded-operator inventory resource")
+        return self._run(["get", resource, "--namespace", NAMESPACE, "--output=json"])
+
+    def get_operator_object(self, resource: str, name: str) -> dict | None:
+        """Read one fixed helper identity when namespace-wide list is unavailable."""
+        if resource not in {"configmap", "job"} or re.fullmatch(
+            r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", name
+        ) is None:
+            raise JobsError("bounded-operator read identity is invalid")
+        output = self._run_text(
+            [
+                "get",
+                resource,
+                name,
+                "--namespace",
+                NAMESPACE,
+                "--ignore-not-found",
+                "--output=json",
+            ]
+        ).strip()
+        return _json_object(output, "get") if output else None
+
+    def delete_operator_object_uid_once(self, resource: str, name: str, uid: str) -> dict:
+        """Delete one helper object only with its immutable UID precondition."""
+        routes = {
+            "configmap": "/api/v1/namespaces/{namespace}/configmaps/{name}",
+            "job": "/apis/batch/v1/namespaces/{namespace}/jobs/{name}",
+        }
+        if resource not in routes or re.fullmatch(
+            r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", name
+        ) is None or KUBERNETES_UID_PATTERN.fullmatch(uid) is None:
+            raise JobsError("bounded-operator UID delete identity is invalid")
+        path = routes[resource].format(namespace=NAMESPACE, name=name)
+        body = {
+            "apiVersion": "v1",
+            "kind": "DeleteOptions",
+            "propagationPolicy": "Foreground",
+            "preconditions": {"uid": uid},
+        }
+        return self._run(["delete", "--raw", path, "-f", "-"], manifest=body)
+
     def get_rayjob(self, name: str) -> dict:
         if re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", name) is None:
             raise JobsError("invalid RayJob readback name")
