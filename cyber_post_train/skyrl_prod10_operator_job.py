@@ -359,7 +359,10 @@ def probe_packet(
     *,
     launch_packet: dict[str, Any],
 ) -> dict[str, Any]:
-    checked_launch = _validate_packet_semantics(launch_packet)
+    # The probe binds the exact, already-rendered launch-v2 predecessor after
+    # its time-limited duplicate proof has expired.  Validate its immutable
+    # packet contract without pretending the historical proof is fresh.
+    checked_launch = operator._packet(launch_packet, "launch")
     if checked_launch.get("phase") != "launch":
         raise ValueError("prod10 launch probe source packet changed")
     return _seal(
