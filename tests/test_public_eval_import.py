@@ -208,6 +208,19 @@ def test_infrastructure_invalid_attempt_is_disclosed_not_scored_as_zero(tmp_path
     assert public["studies"][0]["summary"]["paired_technical_failure_tasks"] == 1
 
 
+def test_rejects_final_fleet_arm_with_infrastructure_invalid_attempt(tmp_path: Path) -> None:
+    web = _write(tmp_path / "web.json", _aggregate("webexploitbench_level0"))
+    fleet = _write(
+        tmp_path / "fleet.json",
+        _aggregate("fleet_development_dev17", invalid_task=3),
+    )
+
+    with pytest.raises(
+        importer.PublicEvalImportError, match="eight valid attempts and no failures"
+    ):
+        _build(web, fleet)
+
+
 def test_rejects_symlinked_input(tmp_path: Path) -> None:
     target = _write(tmp_path / "target.json", _aggregate("webexploitbench_level0"))
     alias = tmp_path / "alias.json"
