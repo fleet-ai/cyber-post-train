@@ -20,6 +20,11 @@
     "worker_id": "q38-s44-base-repair-v3",
     "run_script_sha256": "280e4a9ee0435bed537ee0f2b3d94425453db27e45b95f3549c44955c5af60d4"
   },
+  "code_sha256_overrides": {
+    "single_rollout_repair": {
+      "evals/fleet/cluster_entry.py": "c3a1dd1b1fae2ef833e29c7e377b16b4820bd05917a0729300e866ccf5f5e14b"
+    }
+  },
   "contract": {
     "selected_cell_count": 2,
     "infrastructure_successor_generation": 3,
@@ -49,5 +54,5 @@
     "scoring_calls": 0,
     "accepted_cell_replays": 0
   },
-  "sha256": "sha256:9a0c8e74ff59633b210dc1f91a8bcdc29215fa4b8e4f16e1c11f4e02dc04aeb0"
+  "sha256": "sha256:01800d16141ea8ed9a5e914e6fe78476a413efdac26fc62dafaef880e4075a65"
 }
