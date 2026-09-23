@@ -597,6 +597,7 @@ def _job(
             "chris-q38-rlreward-prod11": "prod11-bounded-operator",
             "chris-q38-rlreward-prod11-fast1": "prod11-fast-bounded-operator",
             "chris-q38-rlreward-prod11-fast2": "prod11-fast2-bounded-operator",
+            "chris-q38-rlreward-prod11-fast3": "prod11-fast3-bounded-operator",
         }.get(packet.get("identity", {}).get("run_name"), "prod10-bounded-operator"),
         QUEUE_LABEL: QUEUE,
         QUEUE_PRIORITY_LABEL: QUEUE_PRIORITY,

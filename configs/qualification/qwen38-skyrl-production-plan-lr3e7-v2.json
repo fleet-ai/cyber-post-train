@@ -1,0 +1,440 @@
+{
+  "arguments": {
+    "checkpoint_interval": 10,
+    "context_tokens": 98304,
+    "data_manifest": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/chris-q38-skyrl10-lr3e7-inputs-v1/data/manifest.json",
+    "dev_data": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/chris-q38-skyrl10-lr3e7-inputs-v1/data/dev.jsonl",
+    "dev_rows": 20,
+    "eval_interval": 10,
+    "groups": 1,
+    "keep_checkpoints": 2,
+    "lr": 3e-07,
+    "max_turns": 600,
+    "model": "Qwen/Qwen3.8-27B",
+    "model_root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+    "name": "chris-q38-skyrl10-lr3e7",
+    "nodes": 1,
+    "output_root": "/mnt/sfs/jobs/chris-q38-skyrl10-lr3e7",
+    "response_tokens": 81920,
+    "samples_per_prompt": 8,
+    "seed": 42,
+    "steps": 10,
+    "tokens_per_turn": 4096,
+    "train_data": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/chris-q38-skyrl10-lr3e7-inputs-v1/data/train.jsonl",
+    "train_rows": 59,
+    "wandb_entity": "thefleet",
+    "wandb_project": "cyber-post-train",
+    "wandb_run_id": "chris-q38-skyrl10-lr3e7"
+  },
+  "data": {
+    "environment_creates": 0,
+    "files": {
+      "dev": {
+        "max_prompt_tokens": 1686,
+        "path": "dev.jsonl",
+        "rows": 20,
+        "sha256": "sha256:c793ef90bb69ec8217402d5337ae774465ae846de91f432408187bef1d41a65f"
+      },
+      "train": {
+        "max_prompt_tokens": 1256,
+        "path": "train.jsonl",
+        "rows": 59,
+        "sha256": "sha256:633be6a16303287b936d71aa8271ce03c11d86ed44e51f9c550ed80c57d65472"
+      }
+    },
+    "gpus": 0,
+    "limits": {
+      "context_tokens": 98304,
+      "episode_seconds": 2400,
+      "max_tokens_per_turn": 4096,
+      "max_turns": 600,
+      "response_tokens": 81920,
+      "tool_result_chars": 50000,
+      "tool_seconds": 330
+    },
+    "name": "chris-q38-skyrl10-lr3e7",
+    "schema": "cyber_skyrl_data_v1",
+    "selection_sha256": "sha256:5de88eada94119fd21ac715bb1956a745376d775c13ce7d5584936e70b3a003a",
+    "sha256": "sha256:4f3772182bbc08ab43024208311d957d66ef67be1f55106184111687bc06b6f8",
+    "split_sha256": "sha256:1f0da5054df25a7d67476f591d8c9c8d42d44de65c0b9d4b542ba9e33b132472",
+    "template_sha256": "sha256:c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+    "tokenizer": {
+      "backend_sha256": "ffb7a28b27dabcc333662fd3e0b0005d9e79a1c22e31453ab5a3017fbd5f25c0",
+      "chat_template_sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041",
+      "files": [
+        {
+          "path": "tokenizer.json",
+          "sha256": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3"
+        },
+        {
+          "path": "tokenizer_config.json",
+          "sha256": "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27"
+        },
+        {
+          "path": "chat_template.jinja",
+          "sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
+        },
+        {
+          "path": "merges.txt",
+          "sha256": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d"
+        },
+        {
+          "path": "vocab.json",
+          "sha256": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
+        }
+      ],
+      "repo": "Qwen/Qwen3.8-27B",
+      "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+    },
+    "tool_catalog_sha256": "sha256:85fad6bdc3a835bf52a11a99b3387740eb06eb3d1720ad9bb33f3feac215b44a"
+  },
+  "execution": {
+    "cluster_target": "prod",
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
+    "jobs_api_base_url": "https://api.ft.flt.build",
+    "priority": "c1",
+    "resources": {
+      "cpu_limit": "64",
+      "cpu_request": "64",
+      "memory_limit": "768Gi",
+      "memory_request": "512Gi"
+    }
+  },
+  "model": {
+    "files": [
+      {
+        "path": "tokenizer.json",
+        "sha256": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3"
+      },
+      {
+        "path": "tokenizer_config.json",
+        "sha256": "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27"
+      },
+      {
+        "path": "chat_template.jinja",
+        "sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
+      },
+      {
+        "path": "merges.txt",
+        "sha256": "a9d356d7bdf1ef4949e3e748e95b8e10ad9d4e2e838eddc38a0a7b6b94d1db8d"
+      },
+      {
+        "path": "vocab.json",
+        "sha256": "ce99b4cb2983d118806ce0a8b777a35b093e2000a503ebde25853284c9dfa003"
+      },
+      {
+        "path": "model-00001-of-00018.safetensors",
+        "sha256": "ba0ce20aae489ad196733da5064bcdf159a1fe84f53336648196e1ebb7751b1c",
+        "size": 3966730552
+      },
+      {
+        "path": "model-00002-of-00018.safetensors",
+        "sha256": "06a148c01bfbe3faa14a5f184a7ff29a706f7ae1c8b2705d2058e26d17a001fb",
+        "size": 3043080328
+      },
+      {
+        "path": "model-00003-of-00018.safetensors",
+        "sha256": "2e1bf62cbcd406eaa64b60d10353e1f0ef4039d0976e56f05cabe953454f9968",
+        "size": 2542796952
+      },
+      {
+        "path": "model-00004-of-00018.safetensors",
+        "sha256": "511e34063187882659753c4d93f3859f93c019fd438d8813071921c81d9a3f1a",
+        "size": 3988973152
+      },
+      {
+        "path": "model-00005-of-00018.safetensors",
+        "sha256": "635cb53446dc74f219740fc59e18b774f877b803b9722e289ca62575a6efa701",
+        "size": 2099339864
+      },
+      {
+        "path": "model-00006-of-00018.safetensors",
+        "sha256": "0bc5214fac607f0e6cc92eec3789d4b8559410ef9fce66621ba8158e8410dae0",
+        "size": 3979553696
+      },
+      {
+        "path": "model-00007-of-00018.safetensors",
+        "sha256": "80b0c49033e9a0d5762562aa12f4acdb7f54da586f3d0110f28c48d91cf07892",
+        "size": 2108759344
+      },
+      {
+        "path": "model-00008-of-00018.safetensors",
+        "sha256": "7192c5b66185d3592927daabee1cc19e6f6e0ce75988ee20e824b624765fda79",
+        "size": 3979553696
+      },
+      {
+        "path": "model-00009-of-00018.safetensors",
+        "sha256": "af3c48cc37af44f3db6ae0579baf019180d48d9c527caa0a1f03ff85813a56d8",
+        "size": 2108759344
+      },
+      {
+        "path": "model-00010-of-00018.safetensors",
+        "sha256": "163490a76f3bea3a40855b7efc04ce6d27afaf1a34f0bbde495b9491f76457c9",
+        "size": 3979553696
+      },
+      {
+        "path": "model-00011-of-00018.safetensors",
+        "sha256": "5f3ae1b948aeee39da77aec558e8236cd65fe4d7cb7686a76bb007acc563c6d8",
+        "size": 2108759344
+      },
+      {
+        "path": "model-00012-of-00018.safetensors",
+        "sha256": "a3de1c7114677a8f5ac5c4892c90e8238ea5c1e2038c80e757dfc87c3902ca55",
+        "size": 3979553696
+      },
+      {
+        "path": "model-00013-of-00018.safetensors",
+        "sha256": "06ab79a41f74c9c5cb734816feb0c7fc364104b227165ee7391231e1155aa02a",
+        "size": 2108759344
+      },
+      {
+        "path": "model-00014-of-00018.safetensors",
+        "sha256": "4138ed94603065ba884bbcadedb04d7718bb40117e85e6f5c6fc5b9c05b7a85b",
+        "size": 3979553696
+      },
+      {
+        "path": "model-00015-of-00018.safetensors",
+        "sha256": "69224e27b9de4e7dbf6fc936c6eaae08447bda3b80a6c31a871ab451173afd22",
+        "size": 2108759344
+      },
+      {
+        "path": "model-00016-of-00018.safetensors",
+        "sha256": "73cb9a1089fb6155cb648609478d6633be8a5c7d9ca5a05bc8925ce8a553cefe",
+        "size": 3979564040
+      },
+      {
+        "path": "model-00017-of-00018.safetensors",
+        "sha256": "beb51f01056142ac4984bd800507b0dd0fd18de57f8e9ef6ea41d1a3598983a8",
+        "size": 2108759344
+      },
+      {
+        "path": "model-00018-of-00018.safetensors",
+        "sha256": "1d3479509e21494658f9b64d317f5ea8e55c4025d28c702d6c4d0b356ce8ea06",
+        "size": 3392197344
+      },
+      {
+        "path": "model.safetensors.index.json",
+        "sha256": "sha256:77042094076611b69791a610065f28b7013b8c621795fa86ddccc8bac7d1b9df"
+      },
+      {
+        "path": "config.json",
+        "sha256": "sha256:191e0af232104ed8b65258cf3fb2b842e288008baca7633c11b82a1ac7203aab"
+      },
+      {
+        "path": "generation_config.json",
+        "sha256": "sha256:e70c136c1b78ddc1fb0905bac8e733a4dc448d4f852a5dd75143fffc70be550e"
+      },
+      {
+        "path": "preprocessor_config.json",
+        "sha256": "sha256:27225450ac9c6529872ee1924fcb0962ff5634834f817040f444118116f4e516"
+      },
+      {
+        "path": "video_preprocessor_config.json",
+        "sha256": "sha256:7768af27c1fafa9cc9011c1dc20067e03f8915e03b63504550e11d5066986d13"
+      }
+    ],
+    "repo": "Qwen/Qwen3.8-27B",
+    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+    "root": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+    "weight_manifest_sha256": "sha256:06c94e47c0e31fd331ed410665c830ab1b657f90f15a1b11e7bc45e2de00f352"
+  },
+  "native_overrides": {
+    "data.dataloader.num_workers": 0,
+    "data.train_data": [
+      "/mnt/sfs/jobs/chris-q38-study-corpora-v1/chris-q38-skyrl10-lr3e7-inputs-v1/data/train.jsonl"
+    ],
+    "data.val_data": [
+      "/mnt/sfs/jobs/chris-q38-study-corpora-v1/chris-q38-skyrl10-lr3e7-inputs-v1/data/dev.jsonl"
+    ],
+    "generator.apply_overlong_filtering": false,
+    "generator.eval_n_samples_per_prompt": 1,
+    "generator.eval_sampling_params": {
+      "logprobs": 0,
+      "max_generate_length": 4096,
+      "temperature": 0.0,
+      "top_k": -1,
+      "top_p": 1.0
+    },
+    "generator.inference_engine.enable_prefix_caching": false,
+    "generator.inference_engine.enforce_eager": true,
+    "generator.inference_engine.engine_init_kwargs.max_model_len": 98304,
+    "generator.inference_engine.language_model_only": true,
+    "generator.inference_engine.max_num_seqs": 8,
+    "generator.inference_engine.num_engines": 2,
+    "generator.inference_engine.tensor_parallel_size": 4,
+    "generator.max_input_length": 98304,
+    "generator.max_turns": 600,
+    "generator.n_samples_per_prompt": 8,
+    "generator.sampling_params": {
+      "logprobs": 0,
+      "max_generate_length": 4096,
+      "temperature": 1.0,
+      "top_k": -1,
+      "top_p": 1.0
+    },
+    "generator.step_wise_trajectories": false,
+    "generator.zero_reward_on_non_stop": false,
+    "trainer.algorithm.advantage_estimator": "grpo",
+    "trainer.algorithm.dynamic_sampling.type": null,
+    "trainer.algorithm.kl_loss_coef": 0.001,
+    "trainer.algorithm.use_entropy_loss": false,
+    "trainer.algorithm.use_kl_loss": true,
+    "trainer.algorithm.zero_variance_filter": false,
+    "trainer.ckpt_interval": 10,
+    "trainer.ckpt_path": "/mnt/sfs/jobs/chris-q38-skyrl10-lr3e7/checkpoints",
+    "trainer.critic.model.path": null,
+    "trainer.dump_data_batch": false,
+    "trainer.dump_eval_results": false,
+    "trainer.epochs": 1,
+    "trainer.eval_batch_size": 20,
+    "trainer.eval_before_train": true,
+    "trainer.eval_interval": 10,
+    "trainer.export_path": "/mnt/sfs/jobs/chris-q38-skyrl10-lr3e7/exports",
+    "trainer.flash_attn": false,
+    "trainer.gradient_checkpointing": true,
+    "trainer.hf_save_interval": -1,
+    "trainer.log_example_interval": -1,
+    "trainer.log_path": "/mnt/sfs/jobs/chris-q38-skyrl10-lr3e7/private-native-logs",
+    "trainer.logger": "wandb",
+    "trainer.max_ckpts_to_keep": 2,
+    "trainer.max_prompt_length": 16384,
+    "trainer.max_training_steps": 10,
+    "trainer.micro_forward_batch_size_per_gpu": 1,
+    "trainer.micro_train_batch_size_per_gpu": 1,
+    "trainer.num_logger_eval_samples": 0,
+    "trainer.num_logger_train_samples": 0,
+    "trainer.placement.colocate_all": true,
+    "trainer.placement.policy_num_gpus_per_node": 8,
+    "trainer.placement.policy_num_nodes": 1,
+    "trainer.placement.ref_num_gpus_per_node": 8,
+    "trainer.placement.ref_num_nodes": 1,
+    "trainer.policy.language_model_only": true,
+    "trainer.policy.model.path": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+    "trainer.policy.model_config_kwargs.fleet_force_qwen35_torch_gdn": true,
+    "trainer.policy.optimizer_config.lr": 3e-07,
+    "trainer.policy.optimizer_config.num_warmup_steps": 0,
+    "trainer.policy.optimizer_config.scheduler": "constant_with_warmup",
+    "trainer.policy.sequence_parallel_size": 1,
+    "trainer.policy_mini_batch_size": 1,
+    "trainer.print_example_interval": -1,
+    "trainer.project_name": "cyber-post-train",
+    "trainer.ref.language_model_only": true,
+    "trainer.ref.model.path": "/mnt/sfs/models/qwen3.8-27b-1d4bf0f2",
+    "trainer.ref.model_config_kwargs.fleet_force_qwen35_torch_gdn": true,
+    "trainer.ref.sequence_parallel_size": 1,
+    "trainer.remove_microbatch_padding": false,
+    "trainer.resume_mode": "none",
+    "trainer.run_name": "chris-q38-skyrl10-lr3e7",
+    "trainer.seed": 42,
+    "trainer.strategy": "fsdp",
+    "trainer.train_batch_size": 1,
+    "trainer.update_epochs_per_batch": 1
+  },
+  "native_sources": {
+    "skyrl.train.config.config": "a3b36099c5308fc9bc658394f10cfff0da3f0cadcc067aa2b44e95870a609c90",
+    "skyrl.train.dataset.dataset": "ff041e24a24e7d99c9c20052ae643b137acb0f1777016ddba79260a42226466c",
+    "skyrl.train.entrypoints.main_base": "aee8976aa5d18a0c19be93e0b99fc1d1868688af0fe26b08b8a863c0aed027d7",
+    "skyrl.train.generators.utils": "55c15b660067749febda00d4fb1c2110ff436717bbd4b73bf66055a73d0b87d5",
+    "skyrl.train.trainer": "0e3e2e4d1bbe28f8920ddd3c73999fae27308f949b60c8ea8062d41527dc3b21",
+    "skyrl.train.utils.utils": "abf91c865735dfc052ffddcc0a1ff06afe32814855b5328b08d3a3f7ca8f418c"
+  },
+  "output_root": "/mnt/sfs/jobs/chris-q38-skyrl10-lr3e7",
+  "qualification": {
+    "arm_id": "lr3e7",
+    "cluster_target": "prod",
+    "dispatch_order": 2,
+    "environment": {
+      "VLLM_USE_FLASHINFER_SAMPLER": "0"
+    },
+    "image": "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f",
+    "jobs_api_base_url": "https://api.ft.flt.build",
+    "kubernetes_context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+    "manifest_sha256": "sha256:4f3772182bbc08ab43024208311d957d66ef67be1f55106184111687bc06b6f8",
+    "model_sha256": "sha256:dcfdcd6ecb6661741cd3a4b24dc5af7259642c8a6824773e0de70d55d7501179",
+    "namespace": "fleet-train-jobs",
+    "profile": "qwen38_skyrl_production_queue_v1",
+    "release_observer": {
+      "arm_before_jobs_post": true,
+      "armed_receipt_schema": "cyber_skyrl_release_observer_armed_v1",
+      "bind_server_run_and_kubernetes_uids_after_post": true,
+      "contract_schema": "cyber_skyrl_release_observer_contract_v1",
+      "peer_workload_mutation_authorized": false,
+      "release_requires_bound_descendants_absent_and_active_gpus_zero": true
+    },
+    "schema": "cyber_qwen38_skyrl_production_plan_binding_v1",
+    "sha256": "sha256:14e2ed9cb9263c13f4df659fb804511a1a178730dee045c88c9275ee17a0a296",
+    "staged_data": {
+      "candidate_manifest_path": "configs/qualification/qwen38-skyrl-production-manifest-lr3e7-v1.json",
+      "files": [
+        {
+          "bytes": 86837,
+          "mode": "0600",
+          "path": "dev.jsonl",
+          "rows": 20,
+          "sha256": "sha256:c793ef90bb69ec8217402d5337ae774465ae846de91f432408187bef1d41a65f"
+        },
+        {
+          "bytes": 1817,
+          "mode": "0600",
+          "path": "manifest.json",
+          "sha256": "sha256:31f63eae5cc1745787fa61f05f25eb0a2ae9e2585573783ffa199377c8e65391"
+        },
+        {
+          "bytes": 16980,
+          "mode": "0600",
+          "path": "split.json",
+          "sha256": "sha256:e4cb912b1ed87122a57d7ed948765d892efa53c34f18ecd8916f4d59698f69ee"
+        },
+        {
+          "bytes": 38991,
+          "mode": "0600",
+          "path": "task-set.json",
+          "sha256": "sha256:29a83428a81bdc15277094afb25e81fd28c02e8038ae0cc253543db5f438569e"
+        },
+        {
+          "bytes": 250318,
+          "mode": "0600",
+          "path": "train.jsonl",
+          "rows": 59,
+          "sha256": "sha256:633be6a16303287b936d71aa8271ce03c11d86ed44e51f9c550ed80c57d65472"
+        }
+      ],
+      "manifest_file_sha256": "sha256:31f63eae5cc1745787fa61f05f25eb0a2ae9e2585573783ffa199377c8e65391",
+      "manifest_self_sha256": "sha256:4f3772182bbc08ab43024208311d957d66ef67be1f55106184111687bc06b6f8",
+      "root": "/mnt/sfs/jobs/chris-q38-study-corpora-v1/chris-q38-skyrl10-lr3e7-inputs-v1/data",
+      "state": "local_private_candidate_not_SFS_staged"
+    },
+    "submission_gate": {
+      "blockers": [
+        "prod8_terminal_acceptance_receipt_absent",
+        "prod8_step1_to_step2_native_resume_not_yet_qualified",
+        "broad_horizon_not_yet_ported_to_prod8_long_context_contract",
+        "broad_get_only_data_manifests_not_yet_create_once_staged_on_SFS",
+        "exact_image_cpu_preflights_not_recorded",
+        "jobs_api_server_previews_and_fresh_guard_receipts_not_recorded",
+        "uid_bound_release_observers_not_yet_armed"
+      ],
+      "preview_authorized": false,
+      "submission_authorized": false
+    },
+    "watchdog": {
+      "drain_seconds": 300,
+      "episode_ceiling_seconds": 38400,
+      "hard_seconds": 43200,
+      "idle_seconds": 1200,
+      "poll_seconds": 60,
+      "startup_seconds": 1800
+    }
+  },
+  "run_name": "chris-q38-skyrl10-lr3e7",
+  "runtime_sha256": "066743d2e29bf2f070a30f26bf3f2af162d33afd808e0cf2e65b431a96591fd3",
+  "schema": "cyber_skyrl_production_training_v1",
+  "watchdog": {
+    "drain_seconds": 300,
+    "episode_ceiling_seconds": 38400,
+    "hard_seconds": 43200,
+    "idle_seconds": 1200,
+    "poll_seconds": 60,
+    "startup_seconds": 1800
+  }
+}

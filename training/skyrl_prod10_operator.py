@@ -102,6 +102,12 @@ PROD11_FAST2_OPERATOR_NAMES = {
     "preflight": "chris-q38-prod11-fast2-preflight-operator-v1",
     "launch": "chris-q38-prod11-fast2-launch-operator-v1",
 }
+PROD11_FAST3_OPERATOR_NAMES = {
+    "stage": "chris-q38-prod11-fast3-stage-operator-v1",
+    "manifest": "chris-q38-prod11-fast3-manifest-operator-v1",
+    "preflight": "chris-q38-prod11-fast3-preflight-operator-v1",
+    "launch": "chris-q38-prod11-fast3-launch-operator-v1",
+}
 
 
 def operator_names(identity: historical.RailIdentity) -> dict[str, str]:
@@ -113,6 +119,8 @@ def operator_names(identity: historical.RailIdentity) -> dict[str, str]:
         return PROD11_FAST_OPERATOR_NAMES
     if identity.run_name == "chris-q38-rlreward-prod11-fast2":
         return PROD11_FAST2_OPERATOR_NAMES
+    if identity.run_name == "chris-q38-rlreward-prod11-fast3":
+        return PROD11_FAST3_OPERATOR_NAMES
     raise ValueError("prod10/prod11 operator identity changed")
 
 
@@ -1320,7 +1328,10 @@ def _launch_packet_inputs(packet: dict[str, Any]) -> None:
         launch_direct.SEALED_DEV_PREVIEW_PROVENANCE_SCHEMA,
     )
     identity = _identity(packet.get("identity"))
-    if identity.run_name == "chris-q38-rlreward-prod11-fast2":
+    if identity.run_name in {
+        "chris-q38-rlreward-prod11-fast2",
+        "chris-q38-rlreward-prod11-fast3",
+    }:
         launch_direct._duplicate(packet.get("duplicate_proof"), identity, fresh=False)
     else:
         direct._validate_seal(packet.get("duplicate_proof"), launch_direct.DUPLICATE_SCHEMA)
@@ -2913,6 +2924,7 @@ def _archive_launch_v3_guard(
         "chris-q38-rlreward-prod11",
         "chris-q38-rlreward-prod11-fast1",
         "chris-q38-rlreward-prod11-fast2",
+        "chris-q38-rlreward-prod11-fast3",
     }:
         return _reuse_launch_v3_guard_archive(
             guard_path=guard_path,

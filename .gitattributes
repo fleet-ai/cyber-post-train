@@ -2,3 +2,7 @@
 # including four space-only added lines. Treat it as binary evidence for
 # whitespace checking so cleanup cannot silently change the harness pin.
 evals/exploitgym/patches/exploitgym-qwen-code.patch -whitespace
+
+# Preserve the byte-identical sanitized prod11 failure receipt, including its
+# source file's trailing blank line, while keeping diff checks meaningful elsewhere.
+docs/evidence/qwen38-study/2026-09-23-skyrl-prod11-generation-failure-diagnostic-v1.json -whitespace

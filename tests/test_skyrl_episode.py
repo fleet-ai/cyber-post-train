@@ -18,6 +18,19 @@ from training import rl_episode
 from training import skyrl_episode as sky
 from training import skyrl_prod9_hardening as prod9
 
+RETRY_POLICY = {
+    "schema": "cyber_rl_reward_canary_generation_retry_binding_v1",
+    "max_http_attempts": 3,
+    "retryable_http_statuses": {"exact": [429], "inclusive_ranges": [[500, 599]]},
+    "backoff_seconds": [1, 2],
+    "transport_retry": False,
+    "follow_redirects": False,
+    "whole_episode_retry": False,
+    "failed_response_body_admitted": False,
+    "failed_response_tokens_admitted": False,
+    "admitted_response": "first_2xx_json_only",
+}
+
 
 class Tokenizer:
     chat_template = "synthetic-template"
@@ -652,6 +665,98 @@ async def test_single_attempt_http_boundary(native, monkeypatch, response):
             with pytest.raises(rl_episode.InvalidEpisode, match="unexpected"):
                 await engine._post(url, {}, headers)
     assert len(seen) == 1 and type(native) is NativeClient
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("statuses", "expected_backoffs"),
+    [
+        ([503, 503, 200], [1, 2]),
+        ([429, 200], [1]),
+    ],
+)
+async def test_generation_retryable_http_succeeds_within_bound(
+    native, monkeypatch, statuses, expected_backoffs
+):
+    responses = [
+        httpx.Response(status, json={"ok": True})
+        if status == 200
+        else httpx.Response(status, text="private")
+        for status in statuses
+    ]
+    seen, backoffs = [], []
+
+    def handler(request):
+        seen.append(request)
+        return responses.pop(0)
+
+    async def sleep(seconds):
+        backoffs.append(seconds)
+
+    monkeypatch.setattr(
+        httpx, "AsyncHTTPTransport", lambda *, retries: httpx.MockTransport(handler)
+    )
+    monkeypatch.setattr(sky.asyncio, "sleep", sleep)
+    async with sky.single_attempt_engine(
+        native, Tokenizer(), 3, generation_retry_policy=RETRY_POLICY
+    ) as engine:
+        assert await engine._post(native.proxy_url + "/inference/v1/generate", {}) == {"ok": True}
+    assert len(seen) == len(statuses)
+    assert backoffs == expected_backoffs
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [429, 500, 503, 599])
+async def test_generation_retryable_http_exhaustion_is_hard_failure(native, monkeypatch, status):
+    seen, backoffs = [], []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(status, text="private")
+
+    async def sleep(seconds):
+        backoffs.append(seconds)
+
+    monkeypatch.setattr(
+        httpx, "AsyncHTTPTransport", lambda *, retries: httpx.MockTransport(handler)
+    )
+    monkeypatch.setattr(sky.asyncio, "sleep", sleep)
+    async with sky.single_attempt_engine(
+        native, Tokenizer(), 3, generation_retry_policy=RETRY_POLICY
+    ) as engine:
+        with pytest.raises(rl_episode.GenerationHTTPFailure) as caught:
+            await engine._post(native.proxy_url + "/inference/v1/generate", {})
+    assert caught.value.http_status == status
+    assert caught.value.attempts == 3
+    assert "private" not in str(caught.value)
+    assert len(seen) == 3
+    assert backoffs == [1, 2]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [300, 400, 401, 404, 422])
+async def test_generation_nonretryable_http_fails_once(native, monkeypatch, status):
+    seen, backoffs = [], []
+
+    def handler(request):
+        seen.append(request)
+        return httpx.Response(status, text="private")
+
+    async def sleep(seconds):
+        backoffs.append(seconds)
+
+    monkeypatch.setattr(
+        httpx, "AsyncHTTPTransport", lambda *, retries: httpx.MockTransport(handler)
+    )
+    monkeypatch.setattr(sky.asyncio, "sleep", sleep)
+    async with sky.single_attempt_engine(native, Tokenizer(), 3) as engine:
+        with pytest.raises(rl_episode.GenerationHTTPFailure) as caught:
+            await engine._post(native.proxy_url + "/inference/v1/generate", {})
+    assert caught.value.http_status == status
+    assert caught.value.attempts == 1
+    assert "private" not in str(caught.value)
+    assert len(seen) == 1
+    assert backoffs == []
 
 
 @pytest.mark.asyncio

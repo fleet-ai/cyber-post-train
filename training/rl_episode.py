@@ -30,6 +30,19 @@ class InvalidEpisode(RuntimeError):
     """Safe reason code only: underlying SDK exceptions may contain task data."""
 
 
+class GenerationHTTPFailure(InvalidEpisode):
+    """One bounded, payload-free generation HTTP failure."""
+
+    def __init__(self, status: int, attempts: int):
+        if type(status) is not int or not 300 <= status <= 599:
+            raise ValueError("generation HTTP status is not allowlisted")
+        if type(attempts) is not int or not 1 <= attempts <= 3:
+            raise ValueError("generation HTTP attempt count is invalid")
+        super().__init__("generation_http_failure")
+        self.http_status = status
+        self.attempts = attempts
+
+
 class EpisodeBudgetExceeded(InvalidEpisode):
     """A declared horizon ended; no reward or optimizer input may be fabricated."""
 
@@ -78,12 +91,13 @@ def _failure(error, *, run_id, elapsed_seconds, phase):
                 for f in traceback.extract_tb(item.__traceback__)[-10:]
             ],
         }
-        if (
-            isinstance(item, InvalidEpisode)
-            and item.args
-            and isinstance(item.args[0], str)
-            and item.args[0]
-            in {
+        if isinstance(item, GenerationHTTPFailure):
+            cause["reason"] = "generation_http_failure"
+            cause["http_status"] = item.http_status
+            cause["attempts"] = item.attempts
+        elif isinstance(item, InvalidEpisode) and item.args and isinstance(item.args[0], str):
+            reason = item.args[0]
+            if reason in {
                 "generation_incomplete",
                 "generation_incomplete_length",
                 "generation_incomplete_context_full",
@@ -102,9 +116,8 @@ def _failure(error, *, run_id, elapsed_seconds, phase):
                 "turn_budget_exhausted",
                 "response_budget_exhausted",
                 "instance_release_unconfirmed",
-            }
-        ):
-            cause["reason"] = item.args[0]
+            }:
+                cause["reason"] = reason
         causes.append(cause)
         if isinstance(item, BaseExceptionGroup):
             pending.extend(item.exceptions)

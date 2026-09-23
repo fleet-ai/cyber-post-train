@@ -54,18 +54,18 @@ def test_legacy_v17_and_prod8_recompile_to_the_frozen_digests_and_resource_shape
     prod8 = value["prod8_one_step_reward_gate"]
     assert topology["gating"] is False
     assert topology["compiled_digests"] == {
-        "plan_sha256": ("sha256:c7dba701b3b8805a8efbf5cda67f346a5aec0fddd2c8356756131830beca2c40"),
+        "plan_sha256": ("sha256:1e3e3104e2d0e8632fcf7ea2ff5d50450f9e3f596c44b790b5ea0cffc20a9db5"),
         "request_sha256": (
-            "sha256:6e6826a35a45028b8ef0aad05ef476a9c941f22fcb58dbbde830712891f95d95"
+            "sha256:636caaa767dedd5113ac6b1768dfae76cbed9e54042bd882b2972f157cb537ae"
         ),
         "fleetjob_manifest_sha256": (
-            "sha256:0a8ba4e08b8a1e3149b9a19f1bba339834f0369894e9d8f42c854099fd0dae05"
+            "sha256:0a3ad4da6ee8f56c357b4b112d0e2f257cc8be4377d803cb4f6076390f72c6a4"
         ),
         "preflight_manifest_sha256": (
-            "sha256:4f97ad8c26a6a3529813218424249e5d2894f48657ac5306ae6cccce011646b4"
+            "sha256:29fe86dc5ec69cabdeb598abfd9ff0e50eabf43e8106dd2425ff354d4f02be50"
         ),
         "receipt_verifier_manifest_sha256": (
-            "sha256:4eb41b7109baae0b6d95b993dcb293a55fdaf6651ca9f517dd74f9ef87b8aa27"
+            "sha256:ae72d57f4b989e8b7e96868e65ef7ace254bcc36577b3bd8610d81554ef8f9c4"
         ),
     }
     assert topology["resource_shape"] == {
@@ -89,9 +89,9 @@ def test_legacy_v17_and_prod8_recompile_to_the_frozen_digests_and_resource_shape
     assert topology["submission_gate"]["submission_authorized"] is False
 
     assert prod8["compiled_digests"] == {
-        "plan_sha256": ("sha256:e53e407a68a5ca56752381d76e48e1459cfa038595f381197c9271e6c7cc9b1e"),
+        "plan_sha256": ("sha256:eafb3bf64fc878d74ab7fc17a8d2f78f06cce254c068f1356b6fc4a6515495ed"),
         "request_sha256": (
-            "sha256:1ec530f63e3ef1c68e77b469d9c6a6e950d9829175c0b624913d6e1d9f05fa00"
+            "sha256:e8e5ffa69c5bf2f9a661fc8e940649e1a6ea707385b69113e4fc983619cbe074"
         ),
         "sanitized_manifest_self_sha256": (
             "sha256:5561f1a349abbe1a580dd5763368c1e6c1524861c39d744f7dad4f25d9950dd3"

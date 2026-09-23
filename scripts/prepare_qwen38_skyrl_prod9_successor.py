@@ -25,7 +25,7 @@ DATA = ROOT / "configs/qualification/qwen38-rl-reward-canary-data-prod-v9.json"
 IDENTITY = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod9-identity-v1.json"
 PREDECESSOR_MANIFEST = ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json"
 RECONCILIATION = ROOT / "docs/evidence/qwen38-study/2026-09-21-skyrl-prod8-reconciliation-v1.json"
-RUNTIME_EVIDENCE = ROOT / "configs/data/qwen38-rl-reward-canary-exact-version-evidence-v8.json"
+RUNTIME_EVIDENCE = ROOT / "configs/data/qwen38-rl-reward-canary-exact-version-evidence-v10.json"
 
 
 def _load(path: Path) -> dict:

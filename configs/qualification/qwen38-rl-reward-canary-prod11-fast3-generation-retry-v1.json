@@ -1,0 +1,34 @@
+{
+  "admitted_response": "first_2xx_json_only",
+  "backoff_seconds": [
+    1,
+    2
+  ],
+  "extra_generation_compute_possible": true,
+  "failed_response_body_admitted": false,
+  "failed_response_tokens_admitted": false,
+  "follow_redirects": false,
+  "historical_failure_retryability_proven": false,
+  "max_http_attempts": 3,
+  "failure_source_diagnostic": {
+    "file_sha256": "sha256:69ced0087abecd437308c2ffb66e8a0167bf56f7a3ba3ad22f3b1c18a481c2f0",
+    "path": "../../docs/evidence/qwen38-study/2026-09-23-skyrl-prod11-generation-failure-diagnostic-v1.json",
+    "run_name": "chris-q38-rlreward-prod11",
+    "self_sha256": "200d51089c155cac2fa777db4f84287c50d14bdb23c86e60e8e47c2d3d2fd2fe"
+  },
+  "retryable_http_statuses": {
+    "exact": [
+      429
+    ],
+    "inclusive_ranges": [
+      [
+        500,
+        599
+      ]
+    ]
+  },
+  "schema": "cyber_skyrl_generation_http_retry_policy_v1",
+  "sha256": "sha256:be1bc9e95ab7061720bf7515c725f79ad7f1db373360ce184ff438b8f299bab4",
+  "transport_retry": false,
+  "whole_episode_retry": false
+}

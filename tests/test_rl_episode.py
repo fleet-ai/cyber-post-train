@@ -1005,6 +1005,39 @@ def test_unknown_invalid_episode_details_are_not_exposed(args):
     assert "private" not in json.dumps(value)
 
 
+@pytest.mark.parametrize("status", [300, 400, 429, 500, 503, 599])
+def test_generation_http_failure_preserves_only_allowlisted_numeric_status(status):
+    value = rl._failure(
+        rl.GenerationHTTPFailure(status, 3),
+        run_id="fixture",
+        elapsed_seconds=0,
+        phase="agent_interaction",
+    )
+    assert value["causes"][0]["reason"] == "generation_http_failure"
+    assert value["causes"][0]["http_status"] == status
+    assert value["causes"][0]["attempts"] == 3
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "generation_http_300",
+        "generation_http_400",
+        "generation_http_600",
+        "generation_http_private",
+    ],
+)
+def test_generation_http_failure_rejects_unallowlisted_status(reason):
+    value = rl._failure(
+        rl.InvalidEpisode(reason),
+        run_id="fixture",
+        elapsed_seconds=0,
+        phase="agent_interaction",
+    )
+    assert "reason" not in value["causes"][0]
+    assert "http_status" not in value["causes"][0]
+
+
 def test_episode_failure_bounds_groups_and_cycles():
     shared = ValueError("private")
     shared.__cause__ = shared

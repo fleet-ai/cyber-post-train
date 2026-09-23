@@ -38,13 +38,13 @@ from training.sft_runtime import (
 )
 
 ROOT = Path(__file__).resolve().parents[1]
-AUDIT = ROOT / "docs/evidence/qwen38-study/2026-09-20-skyrl-launch-readiness-audit-v1.json"
+AUDIT = ROOT / "docs/evidence/qwen38-study/2026-09-23-skyrl-launch-readiness-audit-v2.json"
 NEXT_GATES = ROOT / "docs/evidence/qwen38-study/2026-09-20-skyrl-next-gates-queue-v1.json"
 TOPOLOGY_CONFIG = ROOT / "configs/qualification/qwen38-skyrl-topology-probe-dev-v2.json"
 CANARY_DATA = ROOT / "configs/qualification/qwen38-rl-reward-canary-data-prod-v8.json"
 CANARY_RUN = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod-v8.json"
 CANARY_MANIFEST = ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json"
-CANARY_QUALIFICATION = ROOT / canary.QUALIFICATION_PATH
+CANARY_QUALIFICATION = ROOT / canary.FAST_UPDATE_3_QUALIFICATION_PATH
 MODEL_LOCK = ROOT / "configs/models/qwen38-27b-1d4bf0f2.lock.json"
 MODEL_WEIGHTS = ROOT / "configs/models/qwen38-27b-1d4bf0f2.weights.json"
 
@@ -545,7 +545,7 @@ def build() -> dict:
     ]
     return seal(
         {
-            "schema": "cyber_qwen38_skyrl_launch_readiness_audit_v1",
+            "schema": "cyber_qwen38_skyrl_launch_readiness_audit_v2",
             "status": "offline_repairs_complete_external_execution_gates_pending",
             "scope": (
                 "offline_no_submit_no_launch_no_cancel_no_private_logs_no_external_reads_or_writes"

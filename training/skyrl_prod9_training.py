@@ -565,9 +565,13 @@ def _native(plan: dict) -> None:
     import wandb
     from skyrl.backends.skyrl_train.utils.ppo_utils import sync_registries
 
+    historical.job_request(plan)
     rows, modules = historical.check_artifacts(plan), historical.native_source()
     args = skyrl.SkyRLConfig(**plan["arguments"])
     cfg = skyrl.native_config(args)
+    generation_retry_policy = (
+        plan.get("qualification", {}).get("fast_update", {}).get("generation_retry_policy")
+    )
     base = modules["skyrl.train.entrypoints.main_base"].BasePPOExp
 
     class Experiment(base):
@@ -587,6 +591,7 @@ def _native(plan: dict) -> None:
                 response_tokens=args.response_tokens,
                 repetitions={"train": args.samples_per_prompt, "eval": 1},
                 concurrency=args.groups * args.samples_per_prompt,
+                generation_retry_policy=generation_retry_policy,
             )
 
         def get_tracker(self):

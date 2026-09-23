@@ -30,7 +30,7 @@ TASK_SET = ROOT / "configs/data/qwen38-skyrl-production-task-set-v1.json"
 SPLIT = ROOT / "configs/data/qwen38-skyrl-production-split-v1.json"
 QUALIFICATION = ROOT / "configs/qualification/qwen38-skyrl-production-queue-v1.json"
 STAGING_PACKET = ROOT / "configs/qualification/qwen38-skyrl-production-data-staging-v1.json"
-EVIDENCE = ROOT / "docs/evidence/qwen38-study/2026-09-20-skyrl-production-experiment-queue-v1.json"
+EVIDENCE = ROOT / "docs/evidence/qwen38-study/2026-09-23-skyrl-production-experiment-queue-v2.json"
 
 ARMS = (
     {
@@ -283,8 +283,10 @@ def run_config(arm: dict) -> dict:
 def path_for(kind: str, arm: dict) -> Path:
     if kind == "data":
         return ROOT / f"configs/qualification/qwen38-skyrl-production-data-{arm['id']}-v1.json"
-    if kind in {"manifest", "plan", "preview", "observer"}:
+    if kind == "manifest":
         return ROOT / (f"configs/qualification/qwen38-skyrl-production-{kind}-{arm['id']}-v1.json")
+    if kind in {"plan", "preview", "observer"}:
+        return ROOT / (f"configs/qualification/qwen38-skyrl-production-{kind}-{arm['id']}-v2.json")
     return ROOT / f"configs/runs/qwen38-skyrl-production-{arm['id']}-v1.json"
 
 
@@ -555,7 +557,7 @@ def queue_evidence(artifacts: dict[Path, dict]) -> dict:
         )
     return sealed(
         {
-            "schema": "cyber_qwen38_skyrl_production_experiment_queue_evidence_v1",
+            "schema": "cyber_qwen38_skyrl_production_experiment_queue_evidence_v2",
             "regenerated_at": "2026-09-21T09:00:00Z",
             "source_base_commit": "40d55fae71510e04ed0f5a1c8c820ce34b7f612c",
             "historical_origin": {

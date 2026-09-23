@@ -45,6 +45,10 @@ class Generator(HistoricalGenerator):
     the implementation identity, so later acceptance can prove what ran.
     """
 
+    def __init__(self, *args, generation_retry_policy=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.generation_retry_policy = generation_retry_policy
+
     async def generate(self, input_batch):
         if self.busy or self.failed:
             raise rl_episode.InvalidEpisode("skyrl_batch_reentry_or_previous_failure")
@@ -68,6 +72,17 @@ class Generator(HistoricalGenerator):
                 raise rl_episode.InvalidEpisode("missing_fleet_auth")
             timeout = max(config["rl"]["episode_seconds"] for config in configs)
             semaphore = asyncio.Semaphore(self.concurrency)
+            retry_policy = getattr(self, "generation_retry_policy", None)
+            engine_context = (
+                skyrl_episode.single_attempt_engine(
+                    self.engine,
+                    self.tokenizer,
+                    timeout,
+                    generation_retry_policy=retry_policy,
+                )
+                if retry_policy is not None
+                else skyrl_episode.single_attempt_engine(self.engine, self.tokenizer, timeout)
+            )
             async with (
                 httpx.AsyncClient(
                     headers={"Authorization": f"Bearer {key}"},
@@ -75,7 +90,7 @@ class Generator(HistoricalGenerator):
                     transport=httpx.AsyncHTTPTransport(retries=0),
                     follow_redirects=False,
                 ) as client,
-                skyrl_episode.single_attempt_engine(self.engine, self.tokenizer, timeout) as engine,
+                engine_context as engine,
             ):
 
                 async def episode(index, source):

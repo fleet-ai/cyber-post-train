@@ -23,6 +23,10 @@ FAST_IDENTITY = QUALIFICATION / "qwen38-rl-reward-canary-prod11-fast1-identity-v
 FAST2_RUN = QUALIFICATION / "qwen38-rl-reward-canary-prod-v11-fast2.json"
 FAST2_DATA = QUALIFICATION / "qwen38-rl-reward-canary-data-prod11-fast2.json"
 FAST2_IDENTITY = QUALIFICATION / "qwen38-rl-reward-canary-prod11-fast2-identity-v1.json"
+FAST3_RUN = QUALIFICATION / "qwen38-rl-reward-canary-prod-v11-fast3.json"
+FAST3_DATA = QUALIFICATION / "qwen38-rl-reward-canary-data-prod11-fast3.json"
+FAST3_IDENTITY = QUALIFICATION / "qwen38-rl-reward-canary-prod11-fast3-identity-v1.json"
+FAST3_RETRY = QUALIFICATION / "qwen38-rl-reward-canary-prod11-fast3-generation-retry-v1.json"
 BASE_MANIFEST = QUALIFICATION / "qwen38-rl-reward-canary-manifest-prod-v8.json"
 
 
@@ -64,6 +68,24 @@ def _compile_fast2(monkeypatch) -> dict:
 
     monkeypatch.setattr(sft, "read_mapping", read)
     return skyrl_training.compile_rl(run, relative_to=FAST2_RUN.parent)
+
+
+def _compile_fast3(monkeypatch) -> dict:
+    run = _load(FAST3_RUN)
+    manifest = copy.deepcopy(_load(BASE_MANIFEST))
+    manifest["name"] = run["name"]
+    manifest["sha256"] = "sha256:" + digest(
+        {key: value for key, value in manifest.items() if key != "sha256"}
+    )
+    original = sft.read_mapping
+
+    def read(path: Path) -> dict:
+        if Path(path) == Path(run["data"]["manifest"]):
+            return copy.deepcopy(manifest)
+        return original(path)
+
+    monkeypatch.setattr(sft, "read_mapping", read)
+    return skyrl_training.compile_rl(run, relative_to=FAST3_RUN.parent)
 
 
 def test_fast_update_changes_only_operational_identity_and_baseline_eval() -> None:
@@ -152,6 +174,45 @@ def test_fast2_identity_is_sealed_and_retires_fast1() -> None:
     assert identity.data_root != identity.predecessor_data_root
 
 
+def test_fast3_changes_only_identity_and_declared_retry_treatment() -> None:
+    fast2, fast3 = _load(FAST2_RUN), _load(FAST3_RUN)
+    normalized = copy.deepcopy(fast3)
+    normalized["name"] = fast2["name"]
+    normalized["output_root"] = fast2["output_root"]
+    normalized["data"] = copy.deepcopy(fast2["data"])
+    normalized["wandb"]["run_id"] = fast2["wandb"]["run_id"]
+    assert normalized["qualification"] == "qwen38-rl-reward-canary-port-v9.json"
+    normalized["qualification"] = fast2["qualification"]
+    assert normalized == fast2
+
+    fast2_data, fast3_data = _load(FAST2_DATA), _load(FAST3_DATA)
+    fast3_data["name"] = fast2_data["name"]
+    fast3_data["output"] = fast2_data["output"]
+    assert fast3_data == fast2_data
+
+    identity = historical.load_identity(FAST3_IDENTITY)
+    assert identity.predecessor_run_name == "chris-q38-rlreward-prod11-fast2"
+    assert identity.run_name == "chris-q38-rlreward-prod11-fast3"
+    policy = _load(FAST3_RETRY)
+    assert policy["max_http_attempts"] == 3
+    assert policy["retryable_http_statuses"] == {
+        "exact": [429],
+        "inclusive_ranges": [[500, 599]],
+    }
+    assert policy["backoff_seconds"] == [1, 2]
+    assert policy["transport_retry"] is False
+    assert policy["follow_redirects"] is False
+    assert policy["whole_episode_retry"] is False
+    assert policy["failed_response_body_admitted"] is False
+    assert policy["failed_response_tokens_admitted"] is False
+    assert policy["admitted_response"] == "first_2xx_json_only"
+    assert policy["extra_generation_compute_possible"] is True
+    assert policy["historical_failure_retryability_proven"] is False
+    assert policy["sha256"] == "sha256:" + digest(
+        {key: value for key, value in policy.items() if key != "sha256"}
+    )
+
+
 def test_fast_update_exact_identity_compiles_and_plan_binding_revalidates(monkeypatch) -> None:
     plan = _compile_fast(monkeypatch)
 
@@ -192,6 +253,75 @@ def test_fast2_exact_identity_compiles_and_plan_binding_revalidates(monkeypatch)
     request = skyrl_training.job_request(plan)
     assert request["workers"] == 1
     assert request["gpus_per_worker"] == 8
+
+
+def test_fast3_exact_identity_binds_retry_policy_and_preserves_science(monkeypatch) -> None:
+    plan = _compile_fast3(monkeypatch)
+    retry = plan["qualification"]["fast_update"]["generation_retry_policy"]
+
+    assert plan["arguments"]["eval_before_train"] is False
+    assert plan["arguments"]["steps"] == 1
+    assert plan["arguments"]["groups"] == 1
+    assert plan["arguments"]["samples_per_prompt"] == 8
+    assert plan["arguments"]["context_tokens"] == 262144
+    assert retry["max_http_attempts"] == 3
+    assert retry["retryable_http_statuses"] == {
+        "exact": [429],
+        "inclusive_ranges": [[500, 599]],
+    }
+    assert retry["backoff_seconds"] == [1, 2]
+    assert retry["transport_retry"] is False
+    assert retry["follow_redirects"] is False
+    assert retry["whole_episode_retry"] is False
+    assert retry["failed_response_body_admitted"] is False
+    assert retry["failed_response_tokens_admitted"] is False
+    assert retry["admitted_response"] == "first_2xx_json_only"
+    assert retry["extra_generation_compute_possible"] is True
+    assert retry["failure_source_diagnostic"]["run_name"] == "chris-q38-rlreward-prod11"
+    assert retry["failure_source_diagnostic"]["retryability_proven"] is False
+    assert retry["failure_source_diagnostic"]["http_status_retained"] is False
+    assert (
+        canary.validate_plan_binding(plan["qualification"], plan["data"], plan["arguments"])
+        == plan["qualification"]
+    )
+    request = skyrl_training.job_request(plan)
+    assert request["workers"] == 1
+    assert request["gpus_per_worker"] == 8
+    assert request["failureAlerts"] is False
+
+    for legacy in (_compile_fast(monkeypatch), _compile_fast2(monkeypatch)):
+        assert "generation_retry_policy" not in legacy["qualification"]["fast_update"]
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("max_http_attempts", 4),
+        ("retryable_http_statuses", {"exact": [429, 408], "inclusive_ranges": [[500, 599]]}),
+        ("backoff_seconds", [1, 3]),
+        ("transport_retry", True),
+        ("follow_redirects", True),
+        ("whole_episode_retry", True),
+        ("failed_response_tokens_admitted", True),
+        ("admitted_response", "any_response"),
+    ],
+)
+def test_fast3_plan_rejects_retry_policy_drift(monkeypatch, field, value) -> None:
+    plan = _compile_fast3(monkeypatch)
+    retry = plan["qualification"]["fast_update"]["generation_retry_policy"]
+    retry[field] = value
+    retry["sha256"] = "sha256:" + digest(
+        {key: item for key, item in retry.items() if key != "sha256"}
+    )
+    fast = plan["qualification"]["fast_update"]
+    fast["sha256"] = "sha256:" + digest(
+        {key: item for key, item in fast.items() if key != "sha256"}
+    )
+    plan["qualification"]["sha256"] = "sha256:" + digest(
+        {key: item for key, item in plan["qualification"].items() if key != "sha256"}
+    )
+    with pytest.raises(ValueError, match="plan binding changed"):
+        skyrl_training.job_request(plan)
 
 
 @pytest.mark.parametrize(

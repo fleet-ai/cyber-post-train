@@ -24,15 +24,25 @@ IMAGE = (
 TASK_SET_PATH = "configs/data/qwen38-rl-reward-canary-task-set-v3.json"
 SPLIT_PATH = "configs/data/qwen38-rl-reward-canary-split-v1.json"
 EVIDENCE_PATH = "configs/data/qwen38-rl-reward-canary-exact-version-evidence-v3.json"
-RUNTIME_EVIDENCE_PATH = "configs/data/qwen38-rl-reward-canary-exact-version-evidence-v7.json"
+RUNTIME_EVIDENCE_PATH = "configs/data/qwen38-rl-reward-canary-exact-version-evidence-v9.json"
 HORIZON_PATH = "configs/data/qwen38-rl-reward-canary-horizon-v2.json"
 TOOL_CATALOG_PATH = "configs/data/qwen38-rl-filtered-canary-tool-catalog-v1.json"
 QUALIFICATION_PATH = "configs/qualification/qwen38-rl-reward-canary-port-v8.json"
+FAST_UPDATE_3_QUALIFICATION_PATH = "configs/qualification/qwen38-rl-reward-canary-port-v9.json"
 FAST_UPDATE_IDENTITY_PATH = (
     "configs/qualification/qwen38-rl-reward-canary-prod11-fast1-identity-v1.json"
 )
 FAST_UPDATE_2_IDENTITY_PATH = (
     "configs/qualification/qwen38-rl-reward-canary-prod11-fast2-identity-v1.json"
+)
+FAST_UPDATE_3_IDENTITY_PATH = (
+    "configs/qualification/qwen38-rl-reward-canary-prod11-fast3-identity-v1.json"
+)
+FAST_UPDATE_3_DIAGNOSTIC_PATH = (
+    "docs/evidence/qwen38-study/2026-09-23-skyrl-prod11-generation-failure-diagnostic-v1.json"
+)
+FAST_UPDATE_3_RETRY_POLICY_PATH = (
+    "configs/qualification/qwen38-rl-reward-canary-prod11-fast3-generation-retry-v1.json"
 )
 
 TASK_SET_FILE_SHA256 = "sha256:c3ee0a239dcb836b1951e65eda5a9813360a0378747716df8d8ca3753e741517"
@@ -42,10 +52,10 @@ SPLIT_SELF_SHA256 = "sha256:8279ea19808ad1accb00d3f3145c3ec087030677786e0188251c
 EVIDENCE_FILE_SHA256 = "sha256:73be894762968970c8cf0454281fe13d46615e40039b61b8f8a97c8cc883f365"
 EVIDENCE_SELF_SHA256 = "sha256:50491796b829388164faefc5fb9a9ad09fac89a8d94648a1791240f91826a285"
 RUNTIME_EVIDENCE_FILE_SHA256 = (
-    "sha256:99ee8806c5040c763e104e043b35f72ed6fb9b559c2af603a0d34d882af84626"
+    "sha256:8885e2d7cf4502db8ec77dcb07f690bdaaa1fa970946869e89e2e63d9d5d32cc"
 )
 RUNTIME_EVIDENCE_SELF_SHA256 = (
-    "sha256:9ded47c2c706c3cc164586678c20ddf3f8f46a9d413c17e9d2b4a6d1affcc6a9"
+    "sha256:809f0d8a18425ad539a6ff94caa83f83b72af78ddda51cc1ad2aa1e02752629c"
 )
 HORIZON_FILE_SHA256 = "sha256:d80cd804406ed1f181ba9cc6891cd11785d7fc3a63b84aa2f97a7238c3d435b3"
 HORIZON_SELF_SHA256 = "sha256:a2a13e123b51041b314c81772134dd63e89dd99c4f8a68822fa817968ca69182"
@@ -56,6 +66,12 @@ QUALIFICATION_FILE_SHA256 = (
 )
 QUALIFICATION_SELF_SHA256 = (
     "sha256:1754606c1e7e720e905560b92826839b1a41fb3943ef427f515c8c1e824897d5"
+)
+FAST_UPDATE_3_QUALIFICATION_FILE_SHA256 = (
+    "sha256:c6ed4d87eb91121158980c2ec1a3065304a8b9b4119aee5305dc4a5ca081464c"
+)
+FAST_UPDATE_3_QUALIFICATION_SELF_SHA256 = (
+    "sha256:79f5eec958521f2f7e1a2aa99ba11edda4f4ce5f9f4a571618c77ae35c2562c0"
 )
 FAST_UPDATE_IDENTITY_FILE_SHA256 = (
     "sha256:8d5cbe08c630dc8812473fdde35b041b59b02e4deef073aa134338437374a884"
@@ -68,6 +84,24 @@ FAST_UPDATE_2_IDENTITY_FILE_SHA256 = (
 )
 FAST_UPDATE_2_IDENTITY_SELF_SHA256 = (
     "sha256:702e67b86eff25efdcb67d93796278765ef6d665356b58c45825ea221a3d7948"
+)
+FAST_UPDATE_3_IDENTITY_FILE_SHA256 = (
+    "sha256:d77c51b8d54ce537321ff3ed366390bdb13418eb24a17ae02e4ff83d8c32a67a"
+)
+FAST_UPDATE_3_IDENTITY_SELF_SHA256 = (
+    "sha256:101bf3babf6634978bcf14f9ce2f5de277acbc505ba671757183e71089ba6651"
+)
+FAST_UPDATE_3_DIAGNOSTIC_FILE_SHA256 = (
+    "sha256:69ced0087abecd437308c2ffb66e8a0167bf56f7a3ba3ad22f3b1c18a481c2f0"
+)
+FAST_UPDATE_3_DIAGNOSTIC_SELF_SHA256 = (
+    "200d51089c155cac2fa777db4f84287c50d14bdb23c86e60e8e47c2d3d2fd2fe"
+)
+FAST_UPDATE_3_RETRY_POLICY_FILE_SHA256 = (
+    "sha256:895a4941c782f1c6936426b386d36c67055d9ca9bfd6db2a9efaff8f2159e971"
+)
+FAST_UPDATE_3_RETRY_POLICY_SELF_SHA256 = (
+    "sha256:be1bc9e95ab7061720bf7515c725f79ad7f1db373360ce184ff438b8f299bab4"
 )
 
 LIMITS = {
@@ -106,6 +140,12 @@ FAST_UPDATE_2_IDENTITY = {
     "data_root": ("/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-prod11-fast2-v1/data"),
     "wandb_run_id": "chris-q38-rlreward-prod11-fast2",
 }
+FAST_UPDATE_3_IDENTITY = {
+    "run_name": "chris-q38-rlreward-prod11-fast3",
+    "output_root": "/mnt/sfs/jobs/chris-q38-rlreward-prod11-fast3",
+    "data_root": ("/mnt/sfs/jobs/chris-q38-study-corpora-v1/rlreward-inputs-prod11-fast3-v1/data"),
+    "wandb_run_id": "chris-q38-rlreward-prod11-fast3",
+}
 FAST_UPDATE_IDENTITIES = (
     {
         "identity": FAST_UPDATE_IDENTITY,
@@ -118,6 +158,22 @@ FAST_UPDATE_IDENTITIES = (
         "path": FAST_UPDATE_2_IDENTITY_PATH,
         "file_sha256": FAST_UPDATE_2_IDENTITY_FILE_SHA256,
         "self_sha256": FAST_UPDATE_2_IDENTITY_SELF_SHA256,
+    },
+    {
+        "identity": FAST_UPDATE_3_IDENTITY,
+        "path": FAST_UPDATE_3_IDENTITY_PATH,
+        "file_sha256": FAST_UPDATE_3_IDENTITY_FILE_SHA256,
+        "self_sha256": FAST_UPDATE_3_IDENTITY_SELF_SHA256,
+        "diagnostic": {
+            "path": FAST_UPDATE_3_DIAGNOSTIC_PATH,
+            "file_sha256": FAST_UPDATE_3_DIAGNOSTIC_FILE_SHA256,
+            "self_sha256": FAST_UPDATE_3_DIAGNOSTIC_SELF_SHA256,
+        },
+        "retry_policy": {
+            "path": FAST_UPDATE_3_RETRY_POLICY_PATH,
+            "file_sha256": FAST_UPDATE_3_RETRY_POLICY_FILE_SHA256,
+            "self_sha256": FAST_UPDATE_3_RETRY_POLICY_SELF_SHA256,
+        },
     },
 )
 RESOURCES = {
@@ -163,10 +219,10 @@ RUNTIME_SOURCES = {
         "sha256:49a5032de0e18f1fdde78c0e475488bd035b107a0403633bbfcb43f1c7569b8e"
     ),
     "training/rl_episode.py": (
-        "sha256:00b6f38ebc33cead6dcb5ebb468c04d8192314333094b5767147e733cecc4ff8"
+        "sha256:09517093e141fb82a38b8ba62dafa33ae3705c2dc236e16c6d976586d766c7de"
     ),
     "training/skyrl_episode.py": (
-        "sha256:1642ffe9a51425bdc77e5ea9624efcfeecfd1c005387359df75249ebab2e421d"
+        "sha256:d630b5e6e714a2899726789e8bc36c1dbc5ab325d4573bbe917fc2053a195d2f"
     ),
     "training/skyrl_rollout.py": (
         "sha256:a9ba203eb93d0622fda161636fb8499b46b30c1bbb349df4eda484f5fd407c52"
@@ -212,6 +268,20 @@ TOPOLOGY_SUCCESSOR = {
     "required_terminal_receipt": "TOPOLOGY_PROBE.json",
     "terminal_receipt_grace_seconds": 30,
     "accepted": False,
+}
+FAST_UPDATE_3_TOPOLOGY_SUCCESSOR = {
+    **TOPOLOGY_SUCCESSOR,
+    "plan_sha256": "sha256:1e3e3104e2d0e8632fcf7ea2ff5d50450f9e3f596c44b790b5ea0cffc20a9db5",
+    "request_sha256": "sha256:636caaa767dedd5113ac6b1768dfae76cbed9e54042bd882b2972f157cb537ae",
+    "fleetjob_manifest_sha256": (
+        "sha256:0a3ad4da6ee8f56c357b4b112d0e2f257cc8be4377d803cb4f6076390f72c6a4"
+    ),
+    "preflight_manifest_sha256": (
+        "sha256:29fe86dc5ec69cabdeb598abfd9ff0e50eabf43e8106dd2425ff354d4f02be50"
+    ),
+    "receipt_verifier_manifest_sha256": (
+        "sha256:ae72d57f4b989e8b7e96868e65ef7ace254bcc36577b3bd8610d81554ef8f9c4"
+    ),
 }
 
 
@@ -572,13 +642,35 @@ def build(config: dict, *, relative_to: Path, client) -> dict:
     return generic_build(config, relative_to=relative_to, client=client)
 
 
-def _validate_qualification(path: Path) -> dict:
-    if path.resolve() != (ROOT / QUALIFICATION_PATH).resolve():
+def _qualification_spec(path: Path) -> dict:
+    choices = {
+        (ROOT / QUALIFICATION_PATH).resolve(): {
+            "schema": "cyber_qwen38_skyrl_reward_canary_port_v8",
+            "path": QUALIFICATION_PATH,
+            "file_sha256": QUALIFICATION_FILE_SHA256,
+            "self_sha256": QUALIFICATION_SELF_SHA256,
+            "topology_successor": TOPOLOGY_SUCCESSOR,
+        },
+        (ROOT / FAST_UPDATE_3_QUALIFICATION_PATH).resolve(): {
+            "schema": "cyber_qwen38_skyrl_reward_canary_port_v9",
+            "path": FAST_UPDATE_3_QUALIFICATION_PATH,
+            "file_sha256": FAST_UPDATE_3_QUALIFICATION_FILE_SHA256,
+            "self_sha256": FAST_UPDATE_3_QUALIFICATION_SELF_SHA256,
+            "topology_successor": FAST_UPDATE_3_TOPOLOGY_SUCCESSOR,
+        },
+    }
+    spec = choices.get(path.resolve())
+    if spec is None:
         raise ValueError("unknown reward-canary qualification closure")
-    value = _bound_json(path, QUALIFICATION_FILE_SHA256)
-    _sealed(value, "cyber_qwen38_skyrl_reward_canary_port_v8")
+    return spec
+
+
+def _validate_qualification(path: Path) -> dict:
+    spec = _qualification_spec(path)
+    value = _bound_json(path, spec["file_sha256"])
+    _sealed(value, spec["schema"])
     if (
-        value["sha256"] != QUALIFICATION_SELF_SHA256
+        value["sha256"] != spec["self_sha256"]
         or value["source"] != PORT_COMMITS
         or value["execution"]
         != {
@@ -587,7 +679,7 @@ def _validate_qualification(path: Path) -> dict:
             "image": IMAGE,
             "environment": {"VLLM_USE_FLASHINFER_SAMPLER": "0"},
         }
-        or value.get("topology_successor") != TOPOLOGY_SUCCESSOR
+        or value.get("topology_successor") != spec["topology_successor"]
         or value["source_closure"]
         != {
             "task_set": "../data/qwen38-rl-reward-canary-task-set-v3.json",
@@ -664,6 +756,132 @@ def _fast_update_spec(selected: dict) -> tuple[dict | None, bool]:
     return (matches[0] if matches else None), partial
 
 
+def _fast_update_expected_binding(spec: dict) -> dict:
+    result = {
+        "schema": "cyber_rl_reward_canary_fast_update_binding_v1",
+        "identity_path": spec["path"],
+        "identity_file_sha256": spec["file_sha256"],
+        "identity_self_sha256": spec["self_sha256"],
+        "eval_before_train": False,
+    }
+    diagnostic, policy = spec.get("diagnostic"), spec.get("retry_policy")
+    if diagnostic is not None or policy is not None:
+        if diagnostic is None or policy is None:
+            raise ValueError("reward-canary generation retry binding is incomplete")
+        failure_source = {
+            "schema": "cyber_rl_reward_canary_generation_failure_source_v1",
+            "path": diagnostic["path"],
+            "file_sha256": diagnostic["file_sha256"],
+            "self_sha256": diagnostic["self_sha256"],
+            "run_name": "chris-q38-rlreward-prod11",
+            "episode_index": 6,
+            "http_status_retained": False,
+            "retryability_proven": False,
+        }
+        failure_source["sha256"] = "sha256:" + digest(failure_source)
+        retry = {
+            "schema": "cyber_rl_reward_canary_generation_retry_binding_v1",
+            "policy_path": policy["path"],
+            "policy_file_sha256": policy["file_sha256"],
+            "policy_self_sha256": policy["self_sha256"],
+            "max_http_attempts": 3,
+            "retryable_http_statuses": {
+                "exact": [429],
+                "inclusive_ranges": [[500, 599]],
+            },
+            "backoff_seconds": [1, 2],
+            "transport_retry": False,
+            "follow_redirects": False,
+            "whole_episode_retry": False,
+            "failed_response_body_admitted": False,
+            "failed_response_tokens_admitted": False,
+            "admitted_response": "first_2xx_json_only",
+            "extra_generation_compute_possible": True,
+            "failure_source_diagnostic": failure_source,
+        }
+        retry["sha256"] = "sha256:" + digest(retry)
+        result["generation_retry_policy"] = retry
+    result["sha256"] = "sha256:" + digest(result)
+    return result
+
+
+def _validate_fast_update_diagnostic(spec: dict) -> None:
+    from . import skyrl_episode
+
+    binding, policy_binding = spec.get("diagnostic"), spec.get("retry_policy")
+    if binding is None and policy_binding is None:
+        return
+    if binding is None or policy_binding is None:
+        raise ValueError("reward-canary generation retry binding is incomplete")
+    policy = _bound_json(ROOT / policy_binding["path"], policy_binding["file_sha256"])
+    policy_body = {key: item for key, item in policy.items() if key != "sha256"}
+    expected_policy = {
+        "schema": "cyber_skyrl_generation_http_retry_policy_v1",
+        "max_http_attempts": 3,
+        "retryable_http_statuses": {
+            "exact": [429],
+            "inclusive_ranges": [[500, 599]],
+        },
+        "backoff_seconds": [1, 2],
+        "transport_retry": False,
+        "follow_redirects": False,
+        "whole_episode_retry": False,
+        "failed_response_body_admitted": False,
+        "failed_response_tokens_admitted": False,
+        "admitted_response": "first_2xx_json_only",
+        "extra_generation_compute_possible": True,
+        "historical_failure_retryability_proven": False,
+        "failure_source_diagnostic": {
+            "path": "../../" + binding["path"],
+            "file_sha256": binding["file_sha256"],
+            "self_sha256": binding["self_sha256"],
+            "run_name": "chris-q38-rlreward-prod11",
+        },
+    }
+    if (
+        policy_body != expected_policy
+        or policy.get("sha256") != policy_binding["self_sha256"]
+        or policy.get("sha256") != "sha256:" + digest(policy_body)
+        or expected_policy["max_http_attempts"] != skyrl_episode.GENERATION_MAX_ATTEMPTS
+        or list(skyrl_episode.GENERATION_RETRY_BACKOFF_SECONDS)
+        != expected_policy["backoff_seconds"]
+    ):
+        raise ValueError("reward-canary generation retry policy changed")
+    value = _bound_json(ROOT / binding["path"], binding["file_sha256"])
+    body = {key: item for key, item in value.items() if key != "sha256"}
+    causes = value.get("episode_failure", {}).get("causes", [])
+    source = value.get("source", {})
+    last_frames = causes[-1].get("frames", []) if len(causes) == 3 else []
+    if (
+        set(value)
+        != {
+            "schema",
+            "status",
+            "source",
+            "files",
+            "episode_failure",
+            "native_failure",
+            "failed",
+            "sfs_read_only",
+            "sha256",
+        }
+        or value.get("schema") != "cyber_rl_prod11_failure_diagnostic_v1"
+        or value.get("status") != "completed"
+        or value.get("sfs_read_only") is not True
+        or value.get("sha256") != binding["self_sha256"]
+        or value.get("sha256") != digest(body)
+        or source.get("plan_sha256")
+        != "f86ca0c93754def88d2f9053fb7fa012af3b6d29046846fa5ad229972ce9910f"
+        or source.get("episode_index") != 6
+        or len(causes) != 3
+        or causes[-1].get("error_type") != "InvalidEpisode"
+        or (last_frames[-1] if last_frames else None)
+        != {"file": "skyrl_episode.py", "function": "_post", "line": 108}
+        or any("http_status" in item for item in causes)
+    ):
+        raise ValueError("reward-canary fast-update predecessor diagnostic changed")
+
+
 def _fast_update_binding(config: dict) -> dict | None:
     selected = {
         "run_name": config.get("name"),
@@ -687,15 +905,8 @@ def _fast_update_binding(config: dict) -> dict | None:
         or selected != spec["identity"]
     ):
         raise ValueError("reward-canary fast-update identity changed")
-    result = {
-        "schema": "cyber_rl_reward_canary_fast_update_binding_v1",
-        "identity_path": spec["path"],
-        "identity_file_sha256": spec["file_sha256"],
-        "identity_self_sha256": spec["self_sha256"],
-        "eval_before_train": False,
-    }
-    result["sha256"] = "sha256:" + digest(result)
-    return result
+    _validate_fast_update_diagnostic(spec)
+    return _fast_update_expected_binding(spec)
 
 
 def validate_run_config(
@@ -706,7 +917,9 @@ def validate_run_config(
     relative_to: Path,
 ) -> dict:
     """Bind the exact v3 profile while keeping fresh identities in JSON only."""
-    qualification = _validate_qualification(relative_to / config["qualification"])
+    qualification_path = relative_to / config["qualification"]
+    qualification_spec = _qualification_spec(qualification_path)
+    qualification = _validate_qualification(qualification_path)
     proof = validate_source_package(
         ROOT / TASK_SET_PATH,
         ROOT / SPLIT_PATH,
@@ -717,6 +930,11 @@ def validate_run_config(
     output = PurePosixPath(config["output_root"])
     data_root = PurePosixPath(data["root"])
     fast_update = _fast_update_binding(config)
+    expected_qualification_path = (
+        FAST_UPDATE_3_QUALIFICATION_PATH
+        if fast_update is not None and "generation_retry_policy" in fast_update
+        else QUALIFICATION_PATH
+    )
     if (
         metadata.get("selection_sha256") != TASK_SET_SELF_SHA256
         or metadata.get("split_sha256") != SPLIT_SELF_SHA256
@@ -735,14 +953,15 @@ def validate_run_config(
         or output == data_root
         or output in data_root.parents
         or data_root in output.parents
+        or qualification_spec["path"] != expected_qualification_path
     ):
         raise ValueError("reward-canary model, data, recipe, resource, or identity drift")
     result = {
         "schema": "cyber_qwen38_skyrl_reward_canary_plan_binding_v8",
         "profile": PROFILE,
         "source_proof": proof,
-        "qualification_file_sha256": QUALIFICATION_FILE_SHA256,
-        "qualification_self_sha256": QUALIFICATION_SELF_SHA256,
+        "qualification_file_sha256": qualification_spec["file_sha256"],
+        "qualification_self_sha256": qualification_spec["self_sha256"],
         "image": qualification["execution"]["image"],
         "environment": qualification["execution"]["environment"],
         "cluster_target": qualification["execution"]["cluster_target"],
@@ -774,21 +993,25 @@ def validate_plan_binding(binding: object, metadata: dict, arguments: dict) -> d
     )
     expected_fast_update = None
     if fast_spec is not None:
-        expected_fast_update = {
-            "schema": "cyber_rl_reward_canary_fast_update_binding_v1",
-            "identity_path": fast_spec["path"],
-            "identity_file_sha256": fast_spec["file_sha256"],
-            "identity_self_sha256": fast_spec["self_sha256"],
-            "eval_before_train": False,
+        expected_fast_update = _fast_update_expected_binding(fast_spec)
+    expected_qualification = (
+        {
+            "file_sha256": FAST_UPDATE_3_QUALIFICATION_FILE_SHA256,
+            "self_sha256": FAST_UPDATE_3_QUALIFICATION_SELF_SHA256,
         }
-        expected_fast_update["sha256"] = "sha256:" + digest(expected_fast_update)
+        if fast_spec is not None and fast_spec.get("retry_policy") is not None
+        else {
+            "file_sha256": QUALIFICATION_FILE_SHA256,
+            "self_sha256": QUALIFICATION_SELF_SHA256,
+        }
+    )
     if (
         binding.get("schema") != "cyber_qwen38_skyrl_reward_canary_plan_binding_v8"
         or binding.get("sha256") != "sha256:" + digest(body)
         or binding.get("profile") != PROFILE
         or binding.get("source_proof") != source_proof()
-        or binding.get("qualification_file_sha256") != QUALIFICATION_FILE_SHA256
-        or binding.get("qualification_self_sha256") != QUALIFICATION_SELF_SHA256
+        or binding.get("qualification_file_sha256") != expected_qualification["file_sha256"]
+        or binding.get("qualification_self_sha256") != expected_qualification["self_sha256"]
         or binding.get("image") != IMAGE
         or binding.get("environment") != {"VLLM_USE_FLASHINFER_SAMPLER": "0"}
         or binding.get("cluster_target") != "prod"

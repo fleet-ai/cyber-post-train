@@ -9,6 +9,7 @@ reward, silent truncation or resampling is allowed.
 
 from __future__ import annotations
 
+import asyncio
 import copy
 import hashlib
 import importlib
@@ -25,7 +26,12 @@ from evals.fleet import opencode_self_hosted as fleet
 
 from .dense import native_helper
 from .qwen_tools import parse_tool_calls
-from .rl_episode import EpisodeBudgetExceeded, InvalidEpisode, validate_samples
+from .rl_episode import (
+    EpisodeBudgetExceeded,
+    GenerationHTTPFailure,
+    InvalidEpisode,
+    validate_samples,
+)
 
 CLIENT_MODULE = "skyrl.backends.skyrl_train.inference_servers.remote_inference_client"
 CLIENT_SHA256 = "7a798659decf8a49b9ab28c5fc299cdb0f3b1eedaa1db791e7a023f467bda174"
@@ -44,6 +50,8 @@ the available task tools, and submit the report only when it is ready.
 
 Compact working memory:
 {summary}"""
+GENERATION_MAX_ATTEMPTS = 3
+GENERATION_RETRY_BACKOFF_SECONDS = (1, 2)
 
 
 def _module(name, expected):
@@ -66,7 +74,7 @@ def parse(text):
 
 
 @asynccontextmanager
-async def single_attempt_engine(engine, tokenizer, timeout):
+async def single_attempt_engine(engine, tokenizer, timeout, *, generation_retry_policy=None):
     """Clone only data-plane routing; never alter the trainer's weight-sync client.
 
     The pinned native client retries disconnected generation POSTs. Its payload
@@ -89,6 +97,27 @@ async def single_attempt_engine(engine, tokenizer, timeout):
         or timeout <= 0
     ):
         raise InvalidEpisode("unsupported_skyrl_engine")
+    if generation_retry_policy is None:
+        max_attempts, backoffs = 1, ()
+    elif (
+        not isinstance(generation_retry_policy, dict)
+        or generation_retry_policy.get("schema")
+        != "cyber_rl_reward_canary_generation_retry_binding_v1"
+        or generation_retry_policy.get("max_http_attempts") != GENERATION_MAX_ATTEMPTS
+        or generation_retry_policy.get("retryable_http_statuses")
+        != {"exact": [429], "inclusive_ranges": [[500, 599]]}
+        or generation_retry_policy.get("backoff_seconds") != list(GENERATION_RETRY_BACKOFF_SECONDS)
+        or generation_retry_policy.get("transport_retry") is not False
+        or generation_retry_policy.get("follow_redirects") is not False
+        or generation_retry_policy.get("whole_episode_retry") is not False
+        or generation_retry_policy.get("failed_response_body_admitted") is not False
+        or generation_retry_policy.get("failed_response_tokens_admitted") is not False
+        or generation_retry_policy.get("admitted_response") != "first_2xx_json_only"
+    ):
+        raise InvalidEpisode("generation_retry_policy_invalid")
+    else:
+        max_attempts = GENERATION_MAX_ATTEMPTS
+        backoffs = GENERATION_RETRY_BACKOFF_SECONDS
     endpoint = engine.proxy_url.rstrip("/")
     async with httpx.AsyncClient(
         timeout=timeout, follow_redirects=False, transport=httpx.AsyncHTTPTransport(retries=0)
@@ -100,16 +129,23 @@ async def single_attempt_engine(engine, tokenizer, timeout):
                     "Content-Type"
                 }:
                     raise InvalidEpisode("unexpected_skyrl_data_request")
-                try:
-                    response = await client.post(url, json=json, headers=headers)
-                except httpx.HTTPError:
-                    raise InvalidEpisode("generation_transport_failure") from None
-                if not 200 <= response.status_code < 300:
-                    raise InvalidEpisode(f"generation_http_{response.status_code}")
-                try:
-                    return response.json()
-                except ValueError:
-                    raise InvalidEpisode("generation_invalid_json") from None
+                for attempt in range(max_attempts):
+                    try:
+                        response = await client.post(url, json=json, headers=headers)
+                    except httpx.HTTPError:
+                        raise InvalidEpisode("generation_transport_failure") from None
+                    if 200 <= response.status_code < 300:
+                        try:
+                            return response.json()
+                        except ValueError:
+                            raise InvalidEpisode("generation_invalid_json") from None
+                    retryable = response.status_code == 429 or 500 <= response.status_code < 600
+                    if not 300 <= response.status_code <= 599:
+                        raise InvalidEpisode("generation_http_status_unallowlisted")
+                    if not retryable or attempt + 1 == max_attempts:
+                        raise GenerationHTTPFailure(response.status_code, attempt + 1)
+                    await asyncio.sleep(backoffs[attempt])
+                raise AssertionError("unreachable generation retry state")
 
         yield SingleAttemptClient(
             proxy_url=endpoint,

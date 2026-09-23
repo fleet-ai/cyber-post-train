@@ -33,6 +33,7 @@ AUTHORIZATION_SCHEMA = "cyber_skyrl_prod10_direct_authorization_v4"
 PREFLIGHT_RESULT_SCHEMA = "cyber_skyrl_prod10_operator_result_v1"
 DUPLICATE_SCHEMA = "cyber_skyrl_prod10_direct_duplicate_absence_v1"
 HOST_IDENTITY_SCHEMA = "cyber_skyrl_prod11_fast2_host_identity_absence_v1"
+FAST3_HOST_IDENTITY_SCHEMA = "cyber_skyrl_prod11_fast3_host_identity_absence_v1"
 JIT_DUPLICATE_SCHEMA = "cyber_skyrl_prod10_jit_duplicate_absence_v2"
 CAPACITY_SCHEMA = "cyber_skyrl_prod10_direct_capacity_gate_v1"
 CREATED_SCHEMA = "cyber_skyrl_prod10_direct_created_v1"
@@ -371,20 +372,25 @@ def host_identity_proof(
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     jobs_factory: Callable[..., Jobs] = Jobs,
 ) -> dict[str, Any]:
-    """Prove only Kubernetes and Jobs API identity absence for fast2.
+    """Prove only Kubernetes and Jobs API identity absence for one successor.
 
     This receipt deliberately makes no host SFS claim. The accepted zero-GPU
     preflight binds prior SFS absence, while the in-cluster JIT rail performs
     the authoritative fresh SFS check immediately before the sole POST.
     """
-    if identity.run_name != "chris-q38-rlreward-prod11-fast2":
-        raise JobsError("prod11 fast2 host identity proof used for another run")
+    schemas = {
+        "chris-q38-rlreward-prod11-fast2": HOST_IDENTITY_SCHEMA,
+        "chris-q38-rlreward-prod11-fast3": FAST3_HOST_IDENTITY_SCHEMA,
+    }
+    schema = schemas.get(identity.run_name)
+    if schema is None:
+        raise JobsError("prod11 successor host identity proof used for another run")
     checked = direct._direct_duplicate_checks(
         identity, token=token, runner=runner, jobs_factory=jobs_factory
     )
     return _seal(
         {
-            "schema": HOST_IDENTITY_SCHEMA,
+            "schema": schema,
             "status": "kubernetes_and_jobs_identity_absent",
             "identity_sha256": identity.sealed_mapping()["sha256"],
             "run_name": identity.run_name,
@@ -401,9 +407,14 @@ def _duplicate(
     fresh: bool = True,
 ) -> dict[str, Any]:
     schema = value.get("schema") if isinstance(value, dict) else None
+    host_schemas = {
+        "chris-q38-rlreward-prod11-fast2": HOST_IDENTITY_SCHEMA,
+        "chris-q38-rlreward-prod11-fast3": FAST3_HOST_IDENTITY_SCHEMA,
+    }
+    expected_host_schema = host_schemas.get(identity.run_name)
     checked = direct._validate_seal(
         value,
-        HOST_IDENTITY_SCHEMA if schema == HOST_IDENTITY_SCHEMA else DUPLICATE_SCHEMA,
+        schema if schema in set(host_schemas.values()) else DUPLICATE_SCHEMA,
     )
     common_changed = (
         checked.get("identity_sha256") != identity.sealed_mapping()["sha256"]
@@ -412,7 +423,7 @@ def _duplicate(
         or type(checked.get("jobs_api_rows_checked")) is not int
         or checked["jobs_api_rows_checked"] < 0
     )
-    if schema == HOST_IDENTITY_SCHEMA:
+    if schema in set(host_schemas.values()):
         expected_keys = {
             "schema",
             "status",
@@ -424,7 +435,7 @@ def _duplicate(
             "sha256",
         }
         changed = (
-            identity.run_name != "chris-q38-rlreward-prod11-fast2"
+            schema != expected_host_schema
             or set(checked) != expected_keys
             or checked.get("status") != "kubernetes_and_jobs_identity_absent"
             or common_changed
