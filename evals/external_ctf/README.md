@@ -75,15 +75,21 @@ before launch; never replay a claimed cell.
 
 ## Current execution boundary
 
-The source contracts and both live model routes have been qualified. CVE-Bench
-also passes a local `linux/amd64` Docker Compose configuration check. A local
-Apple Silicon pull without the platform override fails because the official
-Kali image is amd64-only, so remote execution must explicitly request
-`linux/amd64`.
+The source contracts and both live model routes have been qualified. One exact
+task from each benchmark also passes a provider-free Docker Compose
+configuration check. A local Apple Silicon pull without the platform override
+fails because CVE-Bench's official Kali image is amd64-only, so remote execution
+must explicitly request `linux/amd64`. Docker Desktop could pull the exact
+amd64 images but could not reliably unpack and run one emulated layer; this is a
+local platform limitation, not a benchmark or model result.
 
-At the time this support was added, TensorLake already had 100 running
-sandboxes, its user-approved concurrency ceiling. No sandbox was displaced and
-no duplicate evaluation was launched. The paired plans are ready for new
-capacity. Fleet Kubernetes is not used as a fallback because these official
-benchmarks require isolated Docker workloads; forcing them into a GPU training
-node would be both less reliable and a poor use of the eight-node budget.
+On 2026-09-22, a full paginated TensorLake inventory returned 671 sandbox
+objects marked `running`, with no run named for this external-CTF study. That
+object status does not reveal how many evaluation processes are actively using
+the user-approved 100-concurrent-work ceiling, and no supported usage endpoint
+was found. No sandbox was displaced and no paid evaluation was launched without
+a trustworthy capacity check. The paired plans are ready for a Linux executor
+once active capacity is known. Fleet Kubernetes is not used as a fallback
+because these official benchmarks require isolated Docker workloads; forcing
+them into a GPU training node would be less reliable and would waste the
+eight-node training budget.
