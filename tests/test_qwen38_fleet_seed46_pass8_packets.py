@@ -130,6 +130,30 @@ def test_live_launch_evidence_is_self_digested_and_score_blind() -> None:
     assert value["privacy"]["prompts_responses_flags_rewards_or_trace_content_included"] is False
 
 
+def test_live_create_bindings_are_exact_self_digested_and_score_blind() -> None:
+    path = ROOT / "docs/evidence/qwen38-fleet-dev17-seed46to53-pass8-create-bindings-20260923.json"
+    value = json.loads(path.read_text(encoding="utf-8"))
+
+    assert value["schema"] == "cyber_qwen38_fleet_dev17_pass8_create_bindings_v1"
+    assert value["binding_count"] == len(value["rows"]) == 16
+    assert value["external_mutations"] == 0
+    assert value["score_values_included"] is False
+    assert value["prompts_responses_flags_rewards_or_trace_content_included"] is False
+    assert value["credentials_included"] is False
+    assert value["sha256"] == packets._canonical(  # noqa: SLF001
+        {key: item for key, item in value.items() if key != "sha256"}
+    )
+    assert {(row["seed"], row["arm"]) for row in value["rows"]} == {
+        (seed, arm) for seed in range(46, 54) for arm in ("base", "candidate")
+    }
+    for row in value["rows"]:
+        assert row["root_failure_alerts"] == "off"
+        assert row["job_uid"]
+        assert row["config_map_uid"]
+        assert row["evaluation_identity_sha256"].startswith("sha256:")
+        assert row["stable_server_preview_sha256"].startswith("sha256:")
+
+
 def test_renderer_prepares_terminal_collectors_without_launching(tmp_path, monkeypatch) -> None:
     packet_root, _receipt = _prepare(tmp_path, monkeypatch)
     output = tmp_path / "terminal-collectors"

@@ -201,6 +201,30 @@ Its classifier is `evals/fleet/retry_review_policy.py`. The classifier rejects
 unknown fields, including a score value, and fails closed on contradictory
 evidence.
 
+For a current one-arm campaign created by `heldout_launch.py`, use
+[`heldout_stored_session_reconciliation.py`](../evals/fleet/heldout_stored_session_reconciliation.py)
+only after `collect_terminal` has written the exact source receipt. The adapter
+requires the exact successful source-create JSONL journal as well. That journal
+must bind both the source Job UID and source ConfigMap UID later observed in the
+terminal receipt. The reviewed mode-0600 authorization binds the source launch
+packet bytes, terminal receipt, create journal bytes, database, plan digest,
+one reviewed private cell roster, every executable support file, `run.sh`, the
+immutable image, dependency versions, fresh object names, output path, and the
+canonical digest of the complete ConfigMap/Secret/Job bundle. Changing any one
+of them requires a new review.
+
+The adapter renders an immutable CPU-only `c1` bundle with root failed-job
+alerts disabled; it has no create operation. Its worker verifies the full
+executable closure before installing or running anything, accepts the already
+scored sessions only after two identical authoritative observations, and never
+calls either the model or scorer. A later operator must still perform the live
+exact-context absence census, two identical exact server previews, durable
+create intent, and one create request. A preview may differ only by the small,
+enumerated set of Kubernetes identity fields and exact API defaults; an added
+command, environment variable, init container, service account, volume,
+annotation change, or private Secret key fails closed. Do not prepare or run
+this packet while the source Job is active.
+
 ## Seed-44 Base narrow repair
 
 The seed-44 Base controller left one partial but scientifically usable arm: ten
