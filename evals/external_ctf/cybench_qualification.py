@@ -14,7 +14,14 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from .protocol import canonical, digest, file_digest, load_protocol, observed_source
+from .protocol import (
+    canonical,
+    digest,
+    file_digest,
+    git_no_replace_env,
+    load_protocol,
+    observed_source,
+)
 
 BENCHMARK = "cybench_web"
 MODEL_CREDENTIAL_ENV_VARS = frozenset(
@@ -49,6 +56,7 @@ def _git_blob(checkout: Path, commit: str, source_path: str) -> bytes:
         check=False,
         stdout=subprocess.PIPE,
         stderr=subprocess.DEVNULL,
+        env=git_no_replace_env(),
     )
     if result.returncode != 0:
         raise CybenchQualificationError("pinned_source_blob_missing")
@@ -62,6 +70,7 @@ def _git_object_exists(checkout: Path, commit: str, source_path: str) -> bool:
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            env=git_no_replace_env(),
         ).returncode
         == 0
     )

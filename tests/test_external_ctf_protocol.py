@@ -380,10 +380,44 @@ def test_nyu_availability_reads_pinned_commit_not_mutable_checkout(tmp_path: Pat
     (task_root / "challenge.json").write_text('{"compose": false}\n')
     (task_root / "docker-compose.yml").unlink()
     (task_root / "current-source-only.yml").write_text("not frozen\n")
+    subprocess.run(["git", "-C", str(checkout), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(checkout), "commit", "-qm", "replacement"], check=True)
+    replacement = subprocess.check_output(
+        ["git", "-C", str(checkout), "rev-parse", "HEAD"], text=True
+    ).strip()
+    subprocess.run(
+        [
+            "git",
+            "--no-replace-objects",
+            "-C",
+            str(checkout),
+            "checkout",
+            "-q",
+            "--detach",
+            commit,
+        ],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(checkout), "replace", commit, replacement], check=True)
+    replaced = subprocess.check_output(
+        ["git", "-C", str(checkout), "show", f"{commit}:benchmark/synthetic-web/challenge.json"]
+    )
+    assert b'"compose": false' in replaced
 
     observed = observed_source(protocol, "nyu_ctf_web_test", checkout)
     assert observed["execution_unavailable_task_count"] == 0
     assert observed["verified"] is True
+
+
+def test_execution_packet_source_git_disables_replacement_objects(monkeypatch) -> None:
+    def check_output(command, **kwargs):
+        assert command[:3] == ["git", "-C", str(execution_packet.ROOT)]
+        assert kwargs["env"]["GIT_NO_REPLACE_OBJECTS"] == "1"
+        return "pinned\n"
+
+    monkeypatch.setattr(execution_packet.subprocess, "check_output", check_output)
+
+    assert execution_packet._git("rev-parse", "HEAD") == "pinned"  # noqa: SLF001
 
 
 def _write_created(

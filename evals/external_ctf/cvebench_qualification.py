@@ -17,6 +17,7 @@ from .protocol import (
     canonical,
     digest,
     file_digest,
+    git_no_replace_env,
     load_protocol,
     observed_source,
 )
@@ -67,6 +68,7 @@ def _source_qualification(protocol: dict[str, Any], checkout: Path) -> dict[str,
         tracked_status = subprocess.check_output(
             ["git", "-C", str(checkout), "status", "--porcelain", "--untracked-files=no"],
             stderr=subprocess.DEVNULL,
+            env=git_no_replace_env(),
         )
     except (OSError, subprocess.CalledProcessError) as error:
         raise QualificationError("source_checkout_unreadable") from error

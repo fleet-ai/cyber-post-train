@@ -19,7 +19,9 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from .protocol import DEFAULT_PROTOCOL, load_protocol
+import yaml
+
+from .protocol import DEFAULT_PROTOCOL, git_no_replace_env, load_protocol
 
 BENCHMARK = "nyu_ctf_web_test"
 TASK_COUNT = 19
@@ -29,6 +31,7 @@ UNAVAILABLE = frozenset({"2021q-web-scp_terminal", "2020f-web-snailrace1", "2020
 ARMS = ("base", "step_1000")
 _SHA256 = re.compile(r"sha256:[0-9a-f]{64}")
 _COMMIT = re.compile(r"[0-9a-f]{40}")
+_REPOSITORY_DIGEST = re.compile(r"[^\s@]+@sha256:[0-9a-f]{64}")
 
 
 class NyuAdapterError(RuntimeError):
@@ -66,6 +69,7 @@ def _blob(checkout: Path, commit: str, path: str) -> bytes:
             cwd=checkout,
             check=True,
             capture_output=True,
+            env=git_no_replace_env(),
         ).stdout
     except subprocess.CalledProcessError as exc:
         raise NyuAdapterError("pinned_source_blob_missing") from exc
@@ -145,6 +149,7 @@ class NyuTask:
     _prompt: str = field(repr=False)
     _flag: str = field(repr=False)
     _attachments: tuple[tuple[str, bytes], ...] = field(repr=False)
+    _compose_images: tuple[str, ...] = field(repr=False)
 
     def agent_inputs(self) -> dict[str, object]:
         """Return only official player-visible bytes; never the hidden flag."""
@@ -184,6 +189,26 @@ def load_task(protocol: dict[str, Any], checkout: Path, task_id: str) -> NyuTask
     challenge_raw = _blob(checkout, commit, f"{root}/challenge.json")
     compose_raw = _blob(checkout, commit, f"{root}/docker-compose.yml")
     challenge = json.loads(challenge_raw)
+    try:
+        compose = yaml.safe_load(compose_raw)
+    except yaml.YAMLError as exc:
+        raise NyuAdapterError("nyu_compose_contract_invalid") from exc
+    services = compose.get("services") if isinstance(compose, dict) else None
+    if not isinstance(services, dict) or not services:
+        raise NyuAdapterError("nyu_compose_contract_invalid")
+    compose_images: list[str] = []
+    for service in services.values():
+        image = service.get("image") if isinstance(service, dict) else None
+        if (
+            not isinstance(image, str)
+            or not image
+            or image != image.strip()
+            or any(character.isspace() for character in image)
+            or "$" in image
+        ):
+            raise NyuAdapterError("nyu_compose_image_contract_invalid")
+        compose_images.append(image)
+    resolved_compose_images = tuple(sorted(set(compose_images)))
     if challenge.get("compose") is not True or challenge.get("category") != "web":
         raise NyuAdapterError("nyu_compose_contract_invalid")
     flag = challenge.get("flag")
@@ -235,6 +260,7 @@ def load_task(protocol: dict[str, Any], checkout: Path, task_id: str) -> NyuTask
         _prompt=prompt,
         _flag=flag,
         _attachments=tuple(attachments),
+        _compose_images=resolved_compose_images,
     )
 
 
@@ -298,14 +324,19 @@ def _validate_qualification(
         or qualification.get("isolated_task_network") is not True
         or not isinstance(images, list)
         or not images
+        or any(not isinstance(row, dict) for row in images)
         or images != sorted(images, key=lambda row: str(row.get("reference")))
+        or [row.get("reference") for row in images] != list(task._compose_images)
         or len({row.get("reference") for row in images}) != len(images)
         or any(
             not isinstance(row, dict)
             or set(row) != {"reference", "image_id", "repository_digest"}
             or not isinstance(row.get("reference"), str)
+            or not row["reference"]
+            or row["reference"] != row["reference"].strip()
+            or any(character.isspace() for character in row["reference"])
             or _SHA256.fullmatch(str(row.get("image_id", ""))) is None
-            or "@sha256:" not in str(row.get("repository_digest", ""))
+            or _REPOSITORY_DIGEST.fullmatch(str(row.get("repository_digest", ""))) is None
             for row in images
         )
     ):
@@ -499,10 +530,17 @@ def assert_matched_pair(base: dict[str, Any], candidate: dict[str, Any]) -> None
     def common(value: dict[str, Any]) -> dict[str, Any]:
         return {key: item for key, item in value.items() if key not in excluded}
 
+    base_model = base.get("model_binding")
+    candidate_model = candidate.get("model_binding")
     if (
         common(base) != common(candidate)
         or base.get("common_contract_sha256") != candidate.get("common_contract_sha256")
-        or base.get("model_binding") == candidate.get("model_binding")
+        or not isinstance(base_model, dict)
+        or not isinstance(candidate_model, dict)
+        or set(base_model) != {"served_model", "model_revision", "model_artifact_sha256"}
+        or set(candidate_model) != {"served_model", "model_revision", "model_artifact_sha256"}
+        or base_model["model_revision"] == candidate_model["model_revision"]
+        or base_model["model_artifact_sha256"] == candidate_model["model_artifact_sha256"]
     ):
         raise NyuAdapterError("nyu_pair_non_weight_drift")
 
@@ -545,7 +583,15 @@ def terminal_answer(trace: bytes, *, exit_code: int, timed_out: bool) -> str:
         raise NyuAdapterError("opencode_output_limit")
     if reason != "stop":
         raise NyuAdapterError("opencode_trace_not_natural")
-    for event in reversed(events[: final_index + 1]):
+    starts = [
+        index
+        for index, event in enumerate(events[:final_index])
+        if event.get("type") == "step_start"
+    ]
+    if not starts:
+        raise NyuAdapterError("opencode_trace_unfinished")
+    final_start_index = starts[-1]
+    for event in reversed(events[final_start_index + 1 : final_index]):
         part = event.get("part")
         if not isinstance(part, dict):
             continue

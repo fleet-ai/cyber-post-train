@@ -87,7 +87,12 @@ def test_source_qualification_binds_all_40_and_native_grader(monkeypatch) -> Non
         "task_count": 40,
         "task_ids_sha256": benchmark["task_ids_sha256"],
     }
-    monkeypatch.setattr(qualification.subprocess, "check_output", lambda *_args, **_kwargs: b"")
+
+    def clean_status(*_args, **kwargs) -> bytes:
+        assert kwargs["env"]["GIT_NO_REPLACE_OBJECTS"] == "1"
+        return b""
+
+    monkeypatch.setattr(qualification.subprocess, "check_output", clean_status)
     monkeypatch.setattr(qualification, "observed_source", lambda *_args: observed)
     monkeypatch.setattr(qualification.worker, "_bind_cve_source", lambda *_args: benchmark)
 

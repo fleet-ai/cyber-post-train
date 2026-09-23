@@ -510,8 +510,13 @@ def validate_protocol(value: dict[str, Any]) -> None:
 
 
 def _git(checkout: Path, *args: str, raw: bool = False) -> bytes | str:
-    result = subprocess.check_output(["git", "-C", str(checkout), *args])
+    result = subprocess.check_output(["git", "-C", str(checkout), *args], env=git_no_replace_env())
     return result if raw else result.decode().strip()
+
+
+def git_no_replace_env() -> dict[str, str]:
+    """Return a Git environment that cannot rewrite pinned object identities."""
+    return {**os.environ, "GIT_NO_REPLACE_OBJECTS": "1"}
 
 
 def _pinned_tree_path(value: object, *, label: str) -> str:
@@ -537,6 +542,7 @@ def _pinned_path_exists(checkout: Path, commit: str, path: str) -> bool:
             check=False,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            env=git_no_replace_env(),
         ).returncode
         == 0
     )

@@ -229,6 +229,34 @@ def test_task_reads_exact_git_bytes_and_exposes_only_player_material(frozen) -> 
     assert FLAG not in repr(task)
 
 
+def test_task_reads_original_commit_when_replace_ref_is_installed(frozen) -> None:
+    protocol, repo, _task, _qualification = frozen
+    commit = protocol["benchmarks"][nyu_adapter.BENCHMARK]["source"]["commit"]
+    challenge_path = repo / "test/web/0/challenge.json"
+    replacement_flag = "flag{replacement-object-value}"
+    challenge = json.loads(challenge_path.read_bytes())
+    challenge["flag"] = replacement_flag
+    challenge_path.write_text(json.dumps(challenge))
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "replacement"], check=True)
+    replacement = subprocess.check_output(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
+    ).strip()
+    subprocess.run(
+        ["git", "--no-replace-objects", "-C", str(repo), "checkout", "-q", "--detach", commit],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(repo), "replace", commit, replacement], check=True)
+    replaced = subprocess.check_output(
+        ["git", "-C", str(repo), "show", f"{commit}:test/web/0/challenge.json"]
+    )
+    assert replacement_flag.encode() in replaced
+
+    pinned = nyu_adapter.load_task(protocol, repo, TASK_IDS[0])
+    assert pinned.score(FLAG) == 1
+    assert pinned.score(replacement_flag) == 0
+
+
 def test_hidden_flag_is_whole_answer_exact_not_substring_or_whitespace(frozen) -> None:
     _protocol, _repo, task, _qualification = frozen
     assert task.score(FLAG) == 1
@@ -254,6 +282,17 @@ def test_agent_contract_is_black_box_and_pair_differs_only_by_model(frozen) -> N
     drifted["budget"]["wall_seconds"] += 1
     with pytest.raises(nyu_adapter.NyuAdapterError):
         nyu_adapter.assert_matched_pair(base, drifted)
+
+    cosmetic = copy.deepcopy(candidate)
+    cosmetic["model_binding"]["model_revision"] = base["model_binding"]["model_revision"]
+    cosmetic["model_binding"]["model_artifact_sha256"] = base["model_binding"][
+        "model_artifact_sha256"
+    ]
+    cosmetic["contract_sha256"] = _digest(
+        {key: value for key, value in cosmetic.items() if key != "contract_sha256"}
+    )
+    with pytest.raises(nyu_adapter.NyuAdapterError, match="non_weight_drift"):
+        nyu_adapter.assert_matched_pair(base, cosmetic)
 
 
 def test_source_manifest_accounts_for_all_tasks_without_exposing_content(
@@ -308,6 +347,19 @@ def test_non_natural_opencode_endings_are_not_capability_zeros(
 ) -> None:
     with pytest.raises(nyu_adapter.NyuAdapterError, match=error):
         nyu_adapter.terminal_answer(trace, exit_code=exit_code, timed_out=timed_out)
+
+
+def test_terminal_answer_never_reuses_text_from_an_earlier_step() -> None:
+    rows = [
+        {"type": "step_start", "part": {"type": "step-start"}},
+        {"type": "text", "part": {"type": "text", "text": FLAG}},
+        {"type": "step_finish", "part": {"type": "step-finish", "reason": "stop"}},
+        {"type": "step_start", "part": {"type": "step-start"}},
+        {"type": "step_finish", "part": {"type": "step-finish", "reason": "stop"}},
+    ]
+    trace = b"".join(_canonical(row) + b"\n" for row in rows)
+
+    assert nyu_adapter.terminal_answer(trace, exit_code=0, timed_out=False) == ""
 
 
 def test_result_is_private_complete_create_once_and_receipt_contains_no_secret(
@@ -374,6 +426,25 @@ def test_runtime_qualification_is_bound_and_model_free(frozen) -> None:
     drifted["model_requests"] = 1
     unsigned = {key: value for key, value in drifted.items() if key != "receipt_sha256"}
     drifted["receipt_sha256"] = _digest(unsigned)
+    with pytest.raises(nyu_adapter.NyuAdapterError, match="qualification_invalid"):
+        nyu_adapter.agent_contract(protocol, task, "base", drifted)
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("reference", "wrong.invalid/task:v1"),
+        ("reference", ""),
+        ("repository_digest", "not-a-repository-digest"),
+    ],
+)
+def test_runtime_qualification_binds_exact_compose_images(frozen, field: str, value: str) -> None:
+    protocol, _repo, task, qualification = frozen
+    drifted = copy.deepcopy(qualification)
+    drifted["images"][0][field] = value
+    unsigned = {key: item for key, item in drifted.items() if key != "receipt_sha256"}
+    drifted["receipt_sha256"] = _digest(unsigned)
+
     with pytest.raises(nyu_adapter.NyuAdapterError, match="qualification_invalid"):
         nyu_adapter.agent_contract(protocol, task, "base", drifted)
 

@@ -51,6 +51,21 @@ def _clear_model_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.delenv(name, raising=False)
 
 
+def _git_repo(path: Path) -> str:
+    subprocess.run(["git", "init", "-q", str(path)], check=True)
+    subprocess.run(
+        ["git", "-C", str(path), "config", "user.email", "test@example.invalid"],
+        check=True,
+    )
+    subprocess.run(
+        ["git", "-C", str(path), "config", "user.name", "Cybench qualification test"],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(path), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(path), "commit", "-qm", "pinned"], check=True)
+    return subprocess.check_output(["git", "-C", str(path), "rev-parse", "HEAD"], text=True).strip()
+
+
 def test_native_acceptance_executes_exact_pinned_expression() -> None:
     controls = cybench._native_acceptance_controls(AGENT_SOURCE)
 
@@ -61,6 +76,30 @@ def test_native_acceptance_executes_exact_pinned_expression() -> None:
         "whitespace_reject": True,
         "case_reject": True,
     }
+
+
+def test_pinned_git_reads_ignore_replacement_objects(tmp_path: Path) -> None:
+    repo = tmp_path / "cybench"
+    repo.mkdir()
+    original = b"original native grader\n"
+    (repo / "agent.py").write_bytes(original)
+    commit = _git_repo(repo)
+
+    (repo / "agent.py").write_bytes(b"replacement native grader\n")
+    (repo / "replacement-only.py").write_text("not pinned\n")
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "-qm", "replacement"], check=True)
+    replacement = subprocess.check_output(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
+    ).strip()
+    subprocess.run(
+        ["git", "--no-replace-objects", "-C", str(repo), "checkout", "-q", "--detach", commit],
+        check=True,
+    )
+    subprocess.run(["git", "-C", str(repo), "replace", commit, replacement], check=True)
+
+    assert cybench._git_blob(repo, commit, "agent.py") == original
+    assert not cybench._git_object_exists(repo, commit, "replacement-only.py")
 
 
 def test_native_acceptance_rejects_substring_authority() -> None:
