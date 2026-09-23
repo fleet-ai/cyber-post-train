@@ -1028,7 +1028,9 @@ def _sandbox_spec(name: str, snapshot_id: str) -> dict[str, Any]:
     return {
         "name": name,
         "snapshot_id": snapshot_id,
-        "resources": {"cpus": 8, "memory_mb": 32768, "disk_mb": 262144},
+        # The bound snapshot already carries its root disk. TensorLake only
+        # accepts disk_mb here as a growth override, so inherit it unchanged.
+        "resources": {"cpus": 8, "memory_mb": 32768},
         "timeout_secs": 21600,
         "allow_unauthenticated_access": False,
         "network": {"allow_internet_access": True, "allow_out": []},
