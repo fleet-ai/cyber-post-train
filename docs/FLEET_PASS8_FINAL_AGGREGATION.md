@@ -94,6 +94,7 @@ twice, save both JSON replies, then validate them:
 
 ```sh
 uv run python scripts/render_qwen38_fleet_pass8_final_aggregate.py \
+  --migration-receipt /reviewed/protocol-v2/MIGRATION_RECEIPT.json \
   --render-root /safe/new/fleet-pass8-final-render \
   --preview-one /safe/new/preview-1.json \
   --preview-two /safe/new/preview-2.json \
@@ -106,8 +107,11 @@ Job UIDs, and neither preview may contain a GPU resource in any container
 class. Both preview files must be distinct exact regular files and are hashed
 from the same bytes that are parsed. Before comparing either preview, the
 validator reopens the source bundle, reconstructs the exact c1 zero-GPU Job and
-immutable ConfigMap, revalidates the frozen study plan, and recomputes the full
-render receipt. Admission may add only a small set of ordinary Kubernetes
+immutable ConfigMap, rebuilds the study plan from the independently supplied
+authoritative migration receipt, and recomputes the full render receipt. The
+preview command therefore requires the same reviewed migration-receipt path;
+the plan embedded in the render is never accepted as its own authority.
+Admission may add only a small set of exact, safe Kubernetes
 defaults; a sidecar, secret source, host namespace, security privilege, volume,
 resource claim, accelerator, changed command/image, or changed service account
 fails closed. A green render or preview does not mean the 272 outcomes are

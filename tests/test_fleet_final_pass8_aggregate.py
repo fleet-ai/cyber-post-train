@@ -903,7 +903,8 @@ def _server_preview(bundle: dict[str, Any], uid: str) -> dict[str, Any]:
 
 def test_two_preview_validator_normalizes_only_server_job_identity(tmp_path: Path) -> None:
     root = tmp_path / "render"
-    renderer.render(output=root, migration_receipt=_migration(tmp_path))
+    migration = _migration(tmp_path)
+    renderer.render(output=root, migration_receipt=migration)
     bundle = yaml.safe_load((root / "final-aggregate.yaml").read_text())
     first = tmp_path / "first.json"
     second = tmp_path / "second.json"
@@ -912,6 +913,7 @@ def test_two_preview_validator_normalizes_only_server_job_identity(tmp_path: Pat
 
     receipt = renderer.validate_previews(
         render_root=root,
+        migration_receipt=migration,
         first=first,
         second=second,
         output=tmp_path / "previews.json",
@@ -925,7 +927,8 @@ def test_two_preview_validator_normalizes_only_server_job_identity(tmp_path: Pat
 
 def test_two_preview_validator_rejects_render_receipt_drift(tmp_path: Path) -> None:
     root = tmp_path / "render"
-    renderer.render(output=root, migration_receipt=_migration(tmp_path))
+    migration = _migration(tmp_path)
+    renderer.render(output=root, migration_receipt=migration)
     bundle = yaml.safe_load((root / "final-aggregate.yaml").read_text())
     first = tmp_path / "first.json"
     second = tmp_path / "second.json"
@@ -938,6 +941,7 @@ def test_two_preview_validator_rejects_render_receipt_drift(tmp_path: Path) -> N
     with pytest.raises(renderer.RenderError, match="self digest"):
         renderer.validate_previews(
             render_root=root,
+            migration_receipt=migration,
             first=first,
             second=second,
             output=tmp_path / "previews.json",
@@ -946,7 +950,8 @@ def test_two_preview_validator_rejects_render_receipt_drift(tmp_path: Path) -> N
 
 def test_two_preview_validator_rejects_admission_added_gpu(tmp_path: Path) -> None:
     root = tmp_path / "render"
-    renderer.render(output=root, migration_receipt=_migration(tmp_path))
+    migration = _migration(tmp_path)
+    renderer.render(output=root, migration_receipt=migration)
     bundle = yaml.safe_load((root / "final-aggregate.yaml").read_text())
     first_value = _server_preview(bundle, "11111111-1111-4111-8111-111111111111")
     second_value = _server_preview(bundle, "22222222-2222-4222-8222-222222222222")
@@ -967,6 +972,7 @@ def test_two_preview_validator_rejects_admission_added_gpu(tmp_path: Path) -> No
     with pytest.raises(renderer.RenderError, match="unexpectedly requests an accelerator"):
         renderer.validate_previews(
             render_root=root,
+            migration_receipt=migration,
             first=first,
             second=second,
             output=tmp_path / "previews.json",
@@ -975,7 +981,8 @@ def test_two_preview_validator_rejects_admission_added_gpu(tmp_path: Path) -> No
 
 def test_two_preview_validator_rejects_one_preview_replayed_twice(tmp_path: Path) -> None:
     root = tmp_path / "render"
-    renderer.render(output=root, migration_receipt=_migration(tmp_path))
+    migration = _migration(tmp_path)
+    renderer.render(output=root, migration_receipt=migration)
     bundle = yaml.safe_load((root / "final-aggregate.yaml").read_text())
     preview = tmp_path / "preview.json"
     preview.write_text(json.dumps(_server_preview(bundle, "11111111-1111-4111-8111-111111111111")))
@@ -983,6 +990,7 @@ def test_two_preview_validator_rejects_one_preview_replayed_twice(tmp_path: Path
     with pytest.raises(renderer.RenderError, match="distinct regular files"):
         renderer.validate_previews(
             render_root=root,
+            migration_receipt=migration,
             first=preview,
             second=preview,
             output=tmp_path / "previews.json",
@@ -1003,7 +1011,8 @@ def test_two_preview_validator_rejects_one_preview_replayed_twice(tmp_path: Path
 )
 def test_two_preview_validator_rejects_unsafe_admission_fields(tmp_path: Path, drift: str) -> None:
     root = tmp_path / "render"
-    renderer.render(output=root, migration_receipt=_migration(tmp_path))
+    migration = _migration(tmp_path)
+    renderer.render(output=root, migration_receipt=migration)
     bundle = yaml.safe_load((root / "final-aggregate.yaml").read_text())
     previews = [
         _server_preview(bundle, "11111111-1111-4111-8111-111111111111"),
@@ -1037,6 +1046,7 @@ def test_two_preview_validator_rejects_unsafe_admission_fields(tmp_path: Path, d
     with pytest.raises(renderer.RenderError):
         renderer.validate_previews(
             render_root=root,
+            migration_receipt=migration,
             first=first,
             second=second,
             output=tmp_path / "previews.json",
@@ -1047,7 +1057,8 @@ def test_preview_validator_rebuilds_render_policy_after_resigning_tamper(
     tmp_path: Path,
 ) -> None:
     root = tmp_path / "render"
-    renderer.render(output=root, migration_receipt=_migration(tmp_path))
+    migration = _migration(tmp_path)
+    renderer.render(output=root, migration_receipt=migration)
     bundle_path = root / "final-aggregate.yaml"
     bundle = yaml.safe_load(bundle_path.read_text())
     job = next(item for item in bundle["items"] if item["kind"] == "Job")
@@ -1067,6 +1078,7 @@ def test_preview_validator_rebuilds_render_policy_after_resigning_tamper(
     with pytest.raises(renderer.RenderError, match="Kubernetes objects differ"):
         renderer.validate_previews(
             render_root=root,
+            migration_receipt=migration,
             first=first,
             second=second,
             output=tmp_path / "previews.json",
@@ -1075,7 +1087,8 @@ def test_preview_validator_rebuilds_render_policy_after_resigning_tamper(
 
 def test_preview_validator_rejects_resigned_executable_bundle_tamper(tmp_path: Path) -> None:
     root = tmp_path / "render"
-    renderer.render(output=root, migration_receipt=_migration(tmp_path))
+    migration = _migration(tmp_path)
+    renderer.render(output=root, migration_receipt=migration)
     bundle_path = root / "final-aggregate.yaml"
     original = yaml.safe_load(bundle_path.read_text())
     config_map = next(item for item in original["items"] if item["kind"] == "ConfigMap")
@@ -1118,6 +1131,68 @@ def test_preview_validator_rejects_resigned_executable_bundle_tamper(tmp_path: P
     with pytest.raises(renderer.RenderError, match="executable bytes differ"):
         renderer.validate_previews(
             render_root=root,
+            migration_receipt=migration,
+            first=first,
+            second=second,
+            output=tmp_path / "previews.json",
+        )
+
+
+@pytest.mark.parametrize("drift", ("output_root", "replacement_identity"))
+def test_preview_validator_rejects_resigned_study_plan_tamper(tmp_path: Path, drift: str) -> None:
+    root = tmp_path / "render"
+    migration = _migration(tmp_path)
+    renderer.render(output=root, migration_receipt=migration)
+    bundle_path = root / "final-aggregate.yaml"
+    original = yaml.safe_load(bundle_path.read_text())
+    config_map = next(item for item in original["items"] if item["kind"] == "ConfigMap")
+    files = json.loads(gzip.decompress(base64_decode(config_map["binaryData"]["bundle.json.gz"])))
+    plan = json.loads(files["study.json"])
+    plan.pop("sha256")
+    if drift == "output_root":
+        plan["private_output_root"] = "/mnt/sfs/jobs/unreviewed-private-output"
+    else:
+        replica = next(row for row in plan["replicas"] if row["seed"] == 54)
+        replica["evaluation_identity_sha256"] = "sha256:" + "0" * 64
+    plan["sha256"] = final._digest(plan)  # noqa: SLF001
+    files["study.json"] = json.dumps(plan, indent=2, sort_keys=True) + "\n"
+    compressed = gzip.compress(
+        json.dumps(files, sort_keys=True, separators=(",", ":")).encode(),
+        compresslevel=9,
+        mtime=0,
+    )
+    compressed = compressed[:9] + b"\xff" + compressed[10:]
+    digests = {
+        name: "sha256:" + hashlib.sha256(value.encode()).hexdigest()
+        for name, value in files.items()
+    }
+    changed_map, changed_job = renderer._objects(plan, compressed, digests)  # noqa: SLF001
+    changed_bundle = {
+        "apiVersion": "v1",
+        "kind": "List",
+        "items": [changed_map, changed_job],
+    }
+    bundle_path.write_text(yaml.safe_dump(changed_bundle, sort_keys=False))
+    changed_receipt = renderer._render_receipt(  # noqa: SLF001
+        plan=plan,
+        compressed=compressed,
+        digests=digests,
+        rendered_bundle_file_sha256=final._file_digest(bundle_path),  # noqa: SLF001
+    )
+    (root / "RENDER.json").write_text(json.dumps(changed_receipt, sort_keys=True) + "\n")
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+    first.write_text(
+        json.dumps(_server_preview(changed_bundle, "11111111-1111-4111-8111-111111111111"))
+    )
+    second.write_text(
+        json.dumps(_server_preview(changed_bundle, "22222222-2222-4222-8222-222222222222"))
+    )
+
+    with pytest.raises(renderer.RenderError, match="authoritative migration evidence"):
+        renderer.validate_previews(
+            render_root=root,
+            migration_receipt=migration,
             first=first,
             second=second,
             output=tmp_path / "previews.json",

@@ -600,7 +600,7 @@ def _normalized_preview(value: dict[str, Any], expected: dict[str, Any]) -> dict
     return {"job": normalized_job, "config_map": normalized_map}
 
 
-def _validated_render(render_root: Path) -> tuple[dict[str, Any], str]:
+def _validated_render(render_root: Path, migration_receipt: Path) -> tuple[dict[str, Any], str]:
     bundle_path = render_root / "final-aggregate.yaml"
     receipt_path = render_root / "RENDER.json"
     bundle_bytes, _ = _read_regular_once(bundle_path, "rendered bundle")
@@ -656,10 +656,17 @@ def _validated_render(render_root: Path) -> tuple[dict[str, Any], str]:
     if not isinstance(plan, dict):
         raise RenderError("rendered study plan is malformed")
     try:
-        aggregate.validate_plan(plan)
+        authoritative_plan = aggregate.build_current_study_plan(
+            task_set_path=TASK_SET,
+            roster_path=ROSTER,
+            base_config_path=BASE_CONFIG,
+            migration_receipt_path=migration_receipt,
+        )
     except aggregate.FinalAggregateError as exc:
-        raise RenderError("rendered study plan differs from the frozen comparison") from exc
-    expected_compressed, expected_digests = _bundle(plan)
+        raise RenderError("authoritative migration evidence is invalid") from exc
+    if plan != authoritative_plan:
+        raise RenderError("rendered study plan differs from authoritative migration evidence")
+    expected_compressed, expected_digests = _bundle(authoritative_plan)
     if compressed != expected_compressed or digests != expected_digests:
         raise RenderError("rendered source bundle differs from the canonical package")
     expected_map, expected_job = _objects(plan, compressed, digests)
@@ -678,11 +685,16 @@ def _validated_render(render_root: Path) -> tuple[dict[str, Any], str]:
 
 
 def validate_previews(
-    *, render_root: Path, first: Path, second: Path, output: Path
+    *,
+    render_root: Path,
+    migration_receipt: Path,
+    first: Path,
+    second: Path,
+    output: Path,
 ) -> dict[str, Any]:
     if output.exists() or output.is_symlink():
         raise FileExistsError("server preview receipt already exists")
-    expected, render_receipt_file_sha256 = _validated_render(render_root)
+    expected, render_receipt_file_sha256 = _validated_render(render_root, migration_receipt)
     first_bytes, first_identity = _read_regular_once(first, "first server preview")
     second_bytes, second_identity = _read_regular_once(second, "second server preview")
     if first_identity == second_identity:
@@ -751,7 +763,7 @@ def main() -> None:
         result = render(output=args.output, migration_receipt=args.migration_receipt)
     elif (
         args.output is None
-        and args.migration_receipt is None
+        and args.migration_receipt is not None
         and all(
             value is not None
             for value in (
@@ -764,12 +776,16 @@ def main() -> None:
     ):
         result = validate_previews(
             render_root=args.render_root,
+            migration_receipt=args.migration_receipt,
             first=args.preview_one,
             second=args.preview_two,
             output=args.preview_receipt,
         )
     else:
-        parser.error("choose exactly one render or two-preview validation operation")
+        parser.error(
+            "choose exactly one render or two-preview validation operation; both require "
+            "--migration-receipt"
+        )
     print(json.dumps(result, indent=2, sort_keys=True))
 
 
