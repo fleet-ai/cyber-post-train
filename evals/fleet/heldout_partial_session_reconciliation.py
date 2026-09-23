@@ -509,7 +509,7 @@ def main() -> int:
     key = os.environ.get("FLEET_API_KEY")
     if not admin or not key:
         raise rollout_ledger.LedgerError("required runtime credentials are unavailable")
-    dsn = stored._database_dsn(admin, intent.source_database)  # noqa: SLF001
+    dsn = stored.dedicated_dsn(admin, intent.source_database)
     with httpx.Client(
         headers={"Authorization": f"Bearer {key}", "Content-Type": "application/json"},
         timeout=1800,

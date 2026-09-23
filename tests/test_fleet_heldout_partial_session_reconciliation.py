@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 import uuid
 from pathlib import Path
 
@@ -290,3 +291,51 @@ def test_accept_holds_before_transaction_when_authority_changes(
             {"config_sha256": intent.config_sha256},
             _sha("recovery"),
         )
+
+
+def test_main_resolves_real_dedicated_database_dsn(tmp_path: Path, monkeypatch, capsys) -> None:
+    intent_path = tmp_path / "intent.json"
+    intent_path.write_text(json.dumps(_intent_value(tmp_path)))
+    intent_path.chmod(0o600)
+    evaluation = tmp_path / "evaluation"
+    evaluation.mkdir()
+    admin = "postgresql://worker:secret@postgres.internal:5432/postgres?sslmode=require"
+    expected = recovery.stored.dedicated_dsn(admin, "source_eval")
+    observed = {}
+
+    def run(dsn, *, intent, evaluation_directory, client):
+        observed.update(
+            dsn=dsn,
+            database=intent.source_database,
+            evaluation_directory=evaluation_directory,
+        )
+        return {
+            "accepted_same_completed_session_count": 1,
+            "receipt_sha256": "sha256:" + _sha("accepted"),
+        }
+
+    monkeypatch.setenv("ROLLOUT_DATABASE_URL", admin)
+    monkeypatch.setenv("FLEET_API_KEY", "test-only")
+    monkeypatch.setattr(recovery, "run", run)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "heldout_partial_session_reconciliation",
+            "--intent",
+            str(intent_path),
+            "--evaluation-directory",
+            str(evaluation),
+            "--postgres-database",
+            "source_eval",
+        ],
+    )
+    assert recovery.main() == 0
+    assert observed == {
+        "dsn": expected,
+        "database": "source_eval",
+        "evaluation_directory": evaluation,
+    }
+    output = json.loads(capsys.readouterr().out)
+    assert output["accepted_same_completed_session_count"] == 1
+    assert output["new_session_created"] is False
