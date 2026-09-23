@@ -10,6 +10,7 @@ terminal status, receipt capture, and confirmed resource release.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import json
 import os
@@ -2836,10 +2837,8 @@ def main() -> None:
     try:
         value = run(args.packet, args.phase)
     except BaseException as exc:
-        try:
+        with contextlib.suppress(BaseException):
             _write_failure_termination(phase=args.phase, error=exc)
-        except BaseException:
-            pass
         print(json.dumps({"status": "failed", "error_class": type(exc).__name__}))
         raise SystemExit(1) from None
     print(json.dumps({"status": value["status"], "sha256": value["sha256"]}))

@@ -25,7 +25,6 @@ from training import skyrl_prod9_hardening as hardening
 from training import skyrl_prod10_direct as launch_direct
 from training import skyrl_reward_rayjob as historical
 
-
 PLAN_SHA256 = "sha256:96cd9fa1343a17389c4cc0e4a6d9e3c89d2e21cc3ab45b5256bc9f0dd578fbb6"
 REQUEST_SHA256 = "sha256:9ba0700bca6c88030cd761f7ae2394c7cda3ea58558aea4339fc6bc1a3cee501"
 MANIFEST_SHA256 = "sha256:6693f547904794b6edc2b9f677a0baad2b524279959ef831128388f1e6fda329"
@@ -118,7 +117,10 @@ def finalize(args: argparse.Namespace) -> dict:
         raise ValueError("operation directory must be a new empty real directory")
     if re.fullmatch(r"[0-9a-f]{40}", args.source_head) is None:
         raise ValueError("source head must be one full commit")
-    if subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip() != args.source_head:
+    if (
+        subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+        != args.source_head
+    ):
         raise ValueError("reviewed source head changed")
     if subprocess.check_output(["git", "status", "--porcelain"], cwd=root, text=True).strip():
         raise ValueError("reviewed source worktree is dirty")
@@ -220,10 +222,13 @@ def finalize(args: argparse.Namespace) -> dict:
     container = job["spec"]["template"]["spec"]["containers"][0]
     mounts = {item["name"]: item for item in container["volumeMounts"]}
     encoded = json.dumps(job, sort_keys=True)
-    gpu = expected["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]["containers"][0]["resources"]
+    gpu = expected["spec"]["rayClusterSpec"]["headGroupSpec"]["template"]["spec"]["containers"][0][
+        "resources"
+    ]
     if (
         job["metadata"]["annotations"].get("fleet.ai/failure-alerts") != "off"
-        or job["spec"]["template"]["metadata"]["annotations"].get("fleet.ai/failure-alerts") != "off"
+        or job["spec"]["template"]["metadata"]["annotations"].get("fleet.ai/failure-alerts")
+        != "off"
         or proof["priority"] != "c1"
         or proof["queue_priority"] != "q1"
         or proof["gpus"] != 0

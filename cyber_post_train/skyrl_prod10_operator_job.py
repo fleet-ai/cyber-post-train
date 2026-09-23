@@ -60,7 +60,10 @@ def bootstrap():
     packet=packet_gz.read_bytes()
     if "sha256:"+hashlib.sha256(source).hexdigest()!=os.environ["OPERATOR_SOURCE_SHA256"]:
         raise SystemExit("operator source digest mismatch")
-    if "sha256:"+hashlib.sha256(gzip.decompress(packet)).hexdigest()!=os.environ["OPERATOR_PACKET_FILE_SHA256"]:
+    if (
+        "sha256:" + hashlib.sha256(gzip.decompress(packet)).hexdigest()
+        != os.environ["OPERATOR_PACKET_FILE_SHA256"]
+    ):
         raise SystemExit("operator packet digest mismatch")
     root=Path("/runtime")
     with tarfile.open(fileobj=__import__("io").BytesIO(source),mode="r:gz") as bundle:
@@ -133,16 +136,18 @@ def _tracked_sources() -> dict[str, bytes]:
 
 def source_archive() -> tuple[bytes, str]:
     stream = io.BytesIO()
-    with gzip.GzipFile(fileobj=stream, mode="wb", mtime=0) as compressed:
-        with tarfile.open(fileobj=compressed, mode="w") as archive:
-            for name, payload in _tracked_sources().items():
-                member = tarfile.TarInfo(name)
-                member.size = len(payload)
-                member.mode = 0o444
-                member.uid = member.gid = 0
-                member.uname = member.gname = ""
-                member.mtime = 0
-                archive.addfile(member, io.BytesIO(payload))
+    with (
+        gzip.GzipFile(fileobj=stream, mode="wb", mtime=0) as compressed,
+        tarfile.open(fileobj=compressed, mode="w") as archive,
+    ):
+        for name, payload in _tracked_sources().items():
+            member = tarfile.TarInfo(name)
+            member.size = len(payload)
+            member.mode = 0o444
+            member.uid = member.gid = 0
+            member.uname = member.gname = ""
+            member.mtime = 0
+            archive.addfile(member, io.BytesIO(payload))
     value = stream.getvalue()
     return value, "sha256:" + hashlib.sha256(value).hexdigest()
 
