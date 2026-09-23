@@ -838,13 +838,46 @@ def run_preflight(
     identity = _identity(packet["identity"])
     plan = packet.get("plan")
     request = packet.get("request")
-    stage_result = _validate_seal(packet.get("stage_result"), RESULT_SCHEMA)
     if not isinstance(plan, dict) or not isinstance(request, dict):
         raise ValueError("prod10 preflight operator plan/request is invalid")
     direct._identity(plan, identity)
     if training.job_request(plan) != request:
         raise ValueError("prod10 preflight operator request changed")
-    stage, _ = training._stage_identity(stage_result.get("stage"))
+    stage, stage_identity = training._stage_identity(packet.get("stage"))
+    if stage_identity != identity:
+        raise ValueError("prod10 preflight stage identity changed")
+    stage_launch = direct._direct_stage_launch(
+        packet.get("stage_launch_result"),
+        stage,
+        identity=identity,
+        operator_name=OPERATOR_NAMES["stage"],
+        fresh=True,
+    )
+    result_path = hardening.stage_operation_root(stage) / "STAGE_OPERATOR_RESULT.json"
+    if stage_launch["observer"]["receipt"].get("result_path") != str(result_path):
+        raise OperatorFailure("direct_stage_result_path_rejected")
+    stage_result = _read_recovery_file(result_path, DIRECT_STAGE_RESULT_SCHEMA)
+    if stage_result.get("sha256") != stage_launch["observer"]["receipt"].get(
+        "result_sha256"
+    ):
+        raise OperatorFailure("direct_stage_result_digest_rejected")
+    direct._direct_stage_evidence(
+        stage,
+        stage_result,
+        stage_launch,
+        plan=plan,
+        identity=identity,
+        operator_name=OPERATOR_NAMES["stage"],
+        fresh_release=True,
+    )
+    for resource, name in (
+        ("job", OPERATOR_NAMES["stage"]),
+        ("workload", stage_launch["observer"]["workload_name"]),
+        ("configmap", stage_launch["created"]["source_config_map"]["name"]),
+        ("configmap", stage_launch["created"]["packet_config_map"]["name"]),
+        *(("pod", name) for name in stage_launch["observer"]["pod_names"]),
+    ):
+        _resource_absent(runner, resource, name, code="direct_stage_resource_still_present")
     expected = direct.preflight_job_manifest(plan, identity=identity)
     if packet.get("manifest_sha256") != "sha256:" + digest(expected):
         raise ValueError("prod10 preflight operator manifest changed")
@@ -886,15 +919,14 @@ def run_preflight(
     prod_preview = direct.validate_cpu_preview(
         expected, prod_rendered, context=direct.PROD_CONTEXT, purpose="preflight"
     )
-    authorization = direct.authorize_preflight(
+    authorization = direct.authorize_preflight_direct_stage(
         plan,
         request,
         stage,
-        stage_result["authorization"],
-        stage_result["created"],
-        stage_result["receipt"],
-        stage_result["release"],
+        stage_result,
+        stage_launch,
         expected,
+        stage_operator_name=OPERATOR_NAMES["stage"],
         dev_preview=packet["dev_preview"],
         prod_preview=prod_preview,
         observer=state["armed"],
@@ -922,6 +954,7 @@ def run_preflight(
             "plan_sha256": "sha256:" + digest(plan),
             "request_sha256": "sha256:" + digest(request),
             "stage_result_sha256": stage_result["sha256"],
+            "stage_launch_result_sha256": stage_launch["sha256"],
             "authorization": authorization,
             "created": created,
             "receipt": receipt,

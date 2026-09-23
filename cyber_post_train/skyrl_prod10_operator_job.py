@@ -169,16 +169,24 @@ def preflight_packet(
     identity: historical.RailIdentity,
     plan: dict[str, Any],
     request: dict[str, Any],
-    stage_result: dict[str, Any],
+    stage: dict[str, Any],
+    stage_launch_result: dict[str, Any],
     dev_preview: dict[str, Any],
     dev_duplicate_proof: dict[str, Any],
 ) -> dict[str, Any]:
     direct._identity(plan, identity)
     if training.job_request(plan) != request:
         raise ValueError("prod10 preflight operator request changed")
-    checked_stage_result = operator._validate_seal(stage_result, operator.RESULT_SCHEMA)
-    if checked_stage_result.get("status") != "stage_ready":
-        raise ValueError("prod10 preflight lacks accepted stage evidence")
+    checked_stage, stage_identity = training._stage_identity(stage)
+    if stage_identity != identity:
+        raise ValueError("prod10 preflight stage identity changed")
+    checked_stage_launch = direct._direct_stage_launch(
+        stage_launch_result,
+        checked_stage,
+        identity=identity,
+        operator_name=operator.OPERATOR_NAMES["stage"],
+        fresh=False,
+    )
     expected = direct.preflight_job_manifest(plan, identity=identity)
     direct.validate_cpu_preview_proof(
         expected,
@@ -200,7 +208,8 @@ def preflight_packet(
             "identity": identity.sealed_mapping(),
             "plan": plan,
             "request": request,
-            "stage_result": checked_stage_result,
+            "stage": checked_stage,
+            "stage_launch_result": checked_stage_launch,
             "manifest_sha256": "sha256:" + digest(expected),
             "dev_preview": dev_preview,
             "dev_duplicate_proof": duplicate,
@@ -221,7 +230,8 @@ def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
             identity=identity,
             plan=checked["plan"],
             request=checked["request"],
-            stage_result=checked["stage_result"],
+            stage=checked["stage"],
+            stage_launch_result=checked["stage_launch_result"],
             dev_preview=checked["dev_preview"],
             dev_duplicate_proof=checked["dev_duplicate_proof"],
         )

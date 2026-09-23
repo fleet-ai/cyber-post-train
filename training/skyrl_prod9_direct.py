@@ -46,6 +46,9 @@ CPU_JOB_SCHEMA = "cyber_skyrl_prod9_cpu_preflight_job_v1"
 CPU_PREVIEW_SCHEMA = "cyber_skyrl_prod9_cpu_job_preview_v1"
 STAGE_AUTHORIZATION_SCHEMA = "cyber_skyrl_prod9_stage_authorization_v1"
 PREFLIGHT_AUTHORIZATION_SCHEMA = "cyber_skyrl_prod9_preflight_authorization_v1"
+PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA = (
+    "cyber_skyrl_prod10_preflight_direct_stage_authorization_v2"
+)
 AUTHORIZATION_SCHEMA = "cyber_skyrl_prod9_direct_authorization_v1"
 CPU_CREATED_SCHEMA = "cyber_skyrl_prod9_cpu_created_v1"
 CPU_DUPLICATE_PROOF_SCHEMA = "cyber_skyrl_prod9_cpu_duplicate_absence_v1"
@@ -61,6 +64,10 @@ PREFLIGHT_RECEIPT = "/dev/termination-log"
 MAXIMUM_SECONDS = historical.MAXIMUM_SECONDS
 CPU_MAXIMUM_SECONDS = 1800
 EVIDENCE_MAX_AGE_SECONDS = 300
+DIRECT_STAGE_RELEASE_MAX_AGE_SECONDS = CPU_MAXIMUM_SECONDS
+DIRECT_STAGE_RESULT_SCHEMA = "cyber_skyrl_prod10_operator_direct_stage_result_v2"
+STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA = "cyber_skyrl_prod10_operator_launch_result_v1"
+STAGE_OPERATOR_TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_termination_v1"
 _CPU_DUPLICATE_NAME_PREFIXES = {
     "job": "job.batch/",
     "rayjob": "rayjob.ray.io/",
@@ -1342,6 +1349,259 @@ def authorize_preflight(
     )
 
 
+def _direct_stage_launch(
+    value: object,
+    stage: dict[str, Any],
+    *,
+    identity: historical.RailIdentity,
+    operator_name: str,
+    fresh: bool,
+) -> dict[str, Any]:
+    checked_stage, bound = training._stage_identity(stage)
+    if bound != identity:
+        raise JobsError("prod10 direct stage identity changed")
+    launch = _validate_seal(value, STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA)
+    package = launch.get("package")
+    created = launch.get("created")
+    observer = launch.get("observer")
+    if not isinstance(package, dict) or not isinstance(created, dict):
+        raise JobsError("prod10 direct stage launch evidence is incomplete")
+    created_job = created.get("job")
+    source_map = created.get("source_config_map")
+    packet_map = created.get("packet_config_map")
+    if not all(isinstance(item, dict) for item in (created_job, source_map, packet_map)):
+        raise JobsError("prod10 direct stage created identities are incomplete")
+    release = _validate_seal(observer, "cyber_direct_cleanup_observer_result_v1")
+    receipt = _validate_seal(release.get("receipt"), STAGE_OPERATOR_TERMINATION_SCHEMA)
+    try:
+        job_uid = str(UUID(created_job.get("uid")))
+        UUID(source_map.get("uid"))
+        UUID(packet_map.get("uid"))
+        UUID(release.get("workload_uid"))
+        for pod_uid in release.get("pod_uids", []):
+            UUID(pod_uid)
+    except (TypeError, ValueError) as exc:
+        raise JobsError("prod10 direct stage launch identity is invalid") from exc
+    expected_result_path = str(
+        hardening.stage_operation_root(checked_stage) / "STAGE_OPERATOR_RESULT.json"
+    )
+    if (
+        launch.get("status") != "operator_succeeded_and_released"
+        or launch.get("gpus") != 0
+        or package.get("name") != operator_name
+        or package.get("phase") != "stage"
+        or package.get("failure_alerts") != "off"
+        or package.get("priority") != "c1"
+        or package.get("queue_priority") != "q1"
+        or package.get("gpus") != 0
+        or not isinstance(package.get("packet_sha256"), str)
+        or not isinstance(package.get("source_sha256"), str)
+        or not isinstance(package.get("job_manifest_sha256"), str)
+        or source_map.get("name") != operator_name + "-source"
+        or packet_map.get("name") != operator_name + "-packet"
+        or created_job.get("name") != operator_name
+        or created_job.get("uid") != job_uid
+        or created_job.get("manifest_sha256") != package.get("job_manifest_sha256")
+        or created_job.get("failure_alerts") != "off"
+        or created_job.get("priority") != "c1"
+        or created_job.get("queue_priority") != "q1"
+        or created_job.get("gpus") != 0
+        or release.get("status") != "released"
+        or release.get("context") != PROD_CONTEXT
+        or release.get("namespace") != NAMESPACE
+        or release.get("kind") != "job"
+        or release.get("name") != operator_name
+        or release.get("uid") != job_uid
+        or release.get("plan_sha256") != package.get("packet_sha256")
+        or release.get("manifest_sha256") != package.get("job_manifest_sha256")
+        or release.get("terminal_status") != "Succeeded"
+        or release.get("exit_codes") != [0]
+        or release.get("restarts") != 0
+        or release.get("expected_gpus") != 0
+        or release.get("peak_gpus") != 0
+        or release.get("active_gpus") != 0
+        or release.get("image_ids") != [checked_stage["image"]]
+        or release.get("target_present") is not False
+        or release.get("pods_present") is not False
+        or release.get("workload_present") is not False
+        or release.get("rayjob_present") is not False
+        or release.get("raycluster_present") is not False
+        or receipt.get("status") != "passed"
+        or receipt.get("phase") != "stage"
+        or receipt.get("gpus") != 0
+        or receipt.get("result_path") != expected_result_path
+        or not isinstance(receipt.get("result_sha256"), str)
+    ):
+        raise JobsError("prod10 direct stage launch evidence changed")
+    if fresh:
+        _fresh_at(
+            release.get("release_observed_at"),
+            maximum_age=DIRECT_STAGE_RELEASE_MAX_AGE_SECONDS,
+        )
+    return launch
+
+
+def _direct_stage_evidence(
+    stage: dict[str, Any],
+    stage_result: object,
+    stage_launch_result: object,
+    *,
+    plan: dict[str, Any],
+    identity: historical.RailIdentity,
+    operator_name: str,
+    fresh_release: bool,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    checked_stage, bound = training._stage_identity(stage)
+    if bound != identity:
+        raise JobsError("prod10 direct stage identity changed")
+    result = _validate_seal(stage_result, DIRECT_STAGE_RESULT_SCHEMA)
+    launch = _direct_stage_launch(
+        stage_launch_result,
+        checked_stage,
+        identity=bound,
+        operator_name=operator_name,
+        fresh=fresh_release,
+    )
+    execution = result.get("execution")
+    if not isinstance(execution, dict):
+        raise JobsError("prod10 direct stage execution evidence is missing")
+    receipt = _stage_receipt(checked_stage, result.get("receipt"), identity=bound)
+    launch_receipt = launch["observer"]["receipt"]
+    if (
+        result.get("status") != "stage_ready"
+        or result.get("phase") != "stage"
+        or result.get("stage") != checked_stage
+        or result.get("packet_sha256") != launch["package"]["packet_sha256"]
+        or result.get("gpus") != 0
+        or receipt.get("successor_manifest") != plan.get("data")
+        or execution.get("kind") != "job"
+        or execution.get("name") != operator_name
+        or execution.get("uid") != launch["created"]["job"]["uid"]
+        or execution.get("image") != checked_stage["image"]
+        or execution.get("source_sha256") != launch["package"]["source_sha256"]
+        or execution.get("sfs_output") != checked_stage["destination"]
+        or execution.get("receipt_sha256") != receipt.get("receipt_sha256")
+        or type(execution.get("nested_jobs_created")) is not int
+        or execution.get("nested_jobs_created") != 0
+        or launch_receipt.get("result_sha256") != result.get("sha256")
+    ):
+        raise JobsError("prod10 direct stage result evidence changed")
+    return result, launch
+
+
+def _preflight_authorization_direct_stage(
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    stage: dict[str, Any],
+    stage_result: dict[str, Any],
+    stage_launch_result: dict[str, Any],
+    expected: dict[str, Any],
+    *,
+    stage_operator_name: str,
+    dev_preview: dict[str, Any],
+    prod_preview: dict[str, Any],
+    observer: dict[str, Any],
+    identity: historical.RailIdentity,
+    require_live_observer: bool,
+    fresh_stage_release: bool,
+    fresh_previews: bool,
+) -> dict[str, Any]:
+    bound = _identity(plan, identity)
+    checked_stage_result, checked_stage_launch = _direct_stage_evidence(
+        stage,
+        stage_result,
+        stage_launch_result,
+        plan=plan,
+        identity=bound,
+        operator_name=stage_operator_name,
+        fresh_release=fresh_stage_release,
+    )
+    if expected != preflight_job_manifest(plan, identity=bound):
+        raise JobsError("prod10 direct-stage CPU preflight manifest changed")
+    previews = _cpu_previews(
+        expected,
+        [dev_preview, prod_preview],
+        purpose="preflight",
+        fresh=fresh_previews,
+    )
+    plan_sha256 = "sha256:" + digest(plan)
+    manifest_sha256 = "sha256:" + digest(expected)
+    if require_live_observer:
+        armed = _observer_pid(
+            observer,
+            kind="job",
+            name=bound.preflight_name,
+            plan_sha256=plan_sha256,
+            manifest_sha256=manifest_sha256,
+            gpus=0,
+            maximum_seconds=CPU_MAXIMUM_SECONDS,
+        )
+    else:
+        armed = _validate_seal(observer, "cyber_direct_cleanup_observer_armed_v1")
+        if (
+            armed.get("context") != PROD_CONTEXT
+            or armed.get("namespace") != NAMESPACE
+            or armed.get("kind") != "job"
+            or armed.get("name") != bound.preflight_name
+            or armed.get("plan_sha256") != plan_sha256
+            or armed.get("manifest_sha256") != manifest_sha256
+            or armed.get("expected_gpus") != 0
+            or armed.get("maximum_seconds") != CPU_MAXIMUM_SECONDS
+        ):
+            raise JobsError("prod10 direct-stage preflight observer binding changed")
+    operation_root = hardening.training_operation_root(plan)
+    _operation_root(armed, expected_root=operation_root, purpose="preflight")
+    return _seal(
+        {
+            "schema": PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA,
+            "status": "authorized_for_one_create",
+            "plan_sha256": plan_sha256,
+            "request_sha256": "sha256:" + digest(request),
+            "manifest_sha256": manifest_sha256,
+            "stage_operator_name": stage_operator_name,
+            "stage_result": checked_stage_result,
+            "stage_launch_result": checked_stage_launch,
+            "dev_preview": previews[0],
+            "prod_preview": previews[1],
+            "observer": armed,
+            "operation_root": str(operation_root),
+        }
+    )
+
+
+def authorize_preflight_direct_stage(
+    plan: dict[str, Any],
+    request: dict[str, Any],
+    stage: dict[str, Any],
+    stage_result: dict[str, Any],
+    stage_launch_result: dict[str, Any],
+    expected: dict[str, Any],
+    *,
+    stage_operator_name: str,
+    dev_preview: dict[str, Any],
+    prod_preview: dict[str, Any],
+    observer: dict[str, Any],
+    identity: historical.RailIdentity,
+) -> dict[str, Any]:
+    """Authorize preflight from the released v7 root stage, without legacy fields."""
+    return _preflight_authorization_direct_stage(
+        plan,
+        request,
+        stage,
+        stage_result,
+        stage_launch_result,
+        expected,
+        stage_operator_name=stage_operator_name,
+        dev_preview=dev_preview,
+        prod_preview=prod_preview,
+        observer=observer,
+        identity=identity,
+        require_live_observer=True,
+        fresh_stage_release=True,
+        fresh_previews=True,
+    )
+
+
 def _cpu_created(
     value: object,
     *,
@@ -1502,10 +1762,13 @@ def _create_cpu_once(
     if journal.exists() or journal.is_symlink():
         raise JobsError("prod9 CPU create intent exists; reconcile, never retry")
     manifest_sha256 = "sha256:" + digest(expected)
-    auth = _validate_seal(
-        authorization,
-        STAGE_AUTHORIZATION_SCHEMA if purpose == "stage" else PREFLIGHT_AUTHORIZATION_SCHEMA,
-    )
+    if purpose == "stage":
+        authorization_schema = STAGE_AUTHORIZATION_SCHEMA
+    elif isinstance(authorization, dict) and authorization.get("schema") == PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA:
+        authorization_schema = PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA
+    else:
+        authorization_schema = PREFLIGHT_AUTHORIZATION_SCHEMA
+    auth = _validate_seal(authorization, authorization_schema)
     if (
         directory.is_symlink()
         or not directory.is_dir()
@@ -1545,7 +1808,19 @@ def _create_cpu_once(
     for preview in (auth["dev_preview"], auth["prod_preview"]):
         _fresh_at(preview.get("checked_at"))
     if purpose == "preflight":
-        _fresh_at(auth["stage_release"].get("release_observed_at"))
+        release = (
+            auth["stage_launch_result"]["observer"]
+            if authorization_schema == PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA
+            else auth["stage_release"]
+        )
+        _fresh_at(
+            release.get("release_observed_at"),
+            maximum_age=(
+                DIRECT_STAGE_RELEASE_MAX_AGE_SECONDS
+                if authorization_schema == PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA
+                else EVIDENCE_MAX_AGE_SECONDS
+            ),
+        )
     _write_once_fsynced(
         journal,
         {
@@ -1667,28 +1942,53 @@ def create_preflight_once(
     dev_duplicate_proof: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Create the one permitted zero-GPU exact-image prod9 preflight Job."""
-    auth = _validate_seal(authorization, PREFLIGHT_AUTHORIZATION_SCHEMA)
+    authorization_schema = (
+        PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA
+        if isinstance(authorization, dict)
+        and authorization.get("schema") == PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA
+        else PREFLIGHT_AUTHORIZATION_SCHEMA
+    )
+    auth = _validate_seal(authorization, authorization_schema)
     canonical = hardening.training_operation_root(plan)
     if directory.resolve() != canonical or Path(auth.get("operation_root", "")) != canonical:
         raise JobsError("prod9 CPU create directory differs from its sealed operation root")
     expected = preflight_job_manifest(plan, identity=identity)
-    if auth != _preflight_authorization(
-        plan,
-        request,
-        stage,
-        auth["stage_authorization"],
-        auth["stage_created"],
-        auth["stage_receipt"],
-        auth["stage_release"],
-        expected,
-        dev_preview=auth["dev_preview"],
-        prod_preview=auth["prod_preview"],
-        observer=auth["observer"],
-        identity=identity,
-        require_live_observer=True,
-        fresh_stage_release=True,
-        fresh_previews=True,
-    ):
+    if authorization_schema == PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA:
+        expected_auth = _preflight_authorization_direct_stage(
+            plan,
+            request,
+            stage,
+            auth["stage_result"],
+            auth["stage_launch_result"],
+            expected,
+            stage_operator_name=auth["stage_operator_name"],
+            dev_preview=auth["dev_preview"],
+            prod_preview=auth["prod_preview"],
+            observer=auth["observer"],
+            identity=identity,
+            require_live_observer=True,
+            fresh_stage_release=True,
+            fresh_previews=True,
+        )
+    else:
+        expected_auth = _preflight_authorization(
+            plan,
+            request,
+            stage,
+            auth["stage_authorization"],
+            auth["stage_created"],
+            auth["stage_receipt"],
+            auth["stage_release"],
+            expected,
+            dev_preview=auth["dev_preview"],
+            prod_preview=auth["prod_preview"],
+            observer=auth["observer"],
+            identity=identity,
+            require_live_observer=True,
+            fresh_stage_release=True,
+            fresh_previews=True,
+        )
+    if auth != expected_auth:
         raise JobsError("prod9 CPU preflight authorization changed")
     return _create_cpu_once(
         directory,

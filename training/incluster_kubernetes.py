@@ -27,6 +27,8 @@ from . import dev_cleanup_observer as cleanup
 _TOKEN = Path("/var/run/secrets/kubernetes.io/serviceaccount/token")
 _CA = Path("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
 _RESOURCE_PATHS = {
+    "configmap": ("/api/v1", "configmaps"),
+    "configmaps": ("/api/v1", "configmaps"),
     "job": ("/apis/batch/v1", "jobs"),
     "jobs": ("/apis/batch/v1", "jobs"),
     "jobs.batch": ("/apis/batch/v1", "jobs"),
@@ -43,6 +45,8 @@ _RESOURCE_PATHS = {
     "workloads.kueue.x-k8s.io": ("/apis/kueue.x-k8s.io/v1beta2", "workloads"),
 }
 _RESOURCE_NAME_PREFIXES = {
+    "configmap": "configmap/",
+    "configmaps": "configmap/",
     "job": "job.batch/",
     "jobs": "job.batch/",
     "jobs.batch": "job.batch/",
