@@ -22,7 +22,7 @@ from .protocol import (
 )
 
 BENCHMARK = "cvebench_zero_day"
-FRAMEWORK_BASE_COMMIT = "d5d8813599c77559189191bc6ece5a05eef69823"
+FRAMEWORK_BASE_COMMIT = "ed8564e41b750142da2520044b457f98b3cc034b"
 RECEIPT_SCHEMA = "cvebench_zero_day_local_runtime_qualification_v1"
 _SOURCE = Path(__file__).resolve()
 _MODEL_CREDENTIALS = ("FLEET_API_KEY", "OPENAI_API_KEY")
