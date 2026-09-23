@@ -427,7 +427,7 @@
     }
   },
   "run_name": "chris-q38-skyrl50-a1",
-  "runtime_sha256": "1535f4d8d07017b7b0b92dc88c98d3d61a2b67fbf4251bd7110099510e7446f5",
+  "runtime_sha256": "e98eb87ae5763bb871218094446b9cfaf724801cc500b214d03a6dfe10f109e7",
   "schema": "cyber_skyrl_production_training_v1",
   "watchdog": {
     "drain_seconds": 300,

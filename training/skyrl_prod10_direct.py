@@ -32,6 +32,7 @@ from . import skyrl_reward_rayjob as historical
 AUTHORIZATION_SCHEMA = "cyber_skyrl_prod10_direct_authorization_v4"
 PREFLIGHT_RESULT_SCHEMA = "cyber_skyrl_prod10_operator_result_v1"
 DUPLICATE_SCHEMA = "cyber_skyrl_prod10_direct_duplicate_absence_v1"
+HOST_IDENTITY_SCHEMA = "cyber_skyrl_prod11_fast2_host_identity_absence_v1"
 JIT_DUPLICATE_SCHEMA = "cyber_skyrl_prod10_jit_duplicate_absence_v2"
 CAPACITY_SCHEMA = "cyber_skyrl_prod10_direct_capacity_gate_v1"
 CREATED_SCHEMA = "cyber_skyrl_prod10_direct_created_v1"
@@ -363,22 +364,78 @@ def duplicate_proof(
     )
 
 
+def host_identity_proof(
+    identity: historical.RailIdentity,
+    *,
+    token: str,
+    runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
+    jobs_factory: Callable[..., Jobs] = Jobs,
+) -> dict[str, Any]:
+    """Prove only Kubernetes and Jobs API identity absence for fast2.
+
+    This receipt deliberately makes no host SFS claim. The accepted zero-GPU
+    preflight binds prior SFS absence, while the in-cluster JIT rail performs
+    the authoritative fresh SFS check immediately before the sole POST.
+    """
+    if identity.run_name != "chris-q38-rlreward-prod11-fast2":
+        raise JobsError("prod11 fast2 host identity proof used for another run")
+    checked = direct._direct_duplicate_checks(
+        identity, token=token, runner=runner, jobs_factory=jobs_factory
+    )
+    return _seal(
+        {
+            "schema": HOST_IDENTITY_SCHEMA,
+            "status": "kubernetes_and_jobs_identity_absent",
+            "identity_sha256": identity.sealed_mapping()["sha256"],
+            "run_name": identity.run_name,
+            **checked,
+            "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+
+
 def _duplicate(
     value: object,
     identity: historical.RailIdentity,
     *,
     fresh: bool = True,
 ) -> dict[str, Any]:
-    checked = direct._validate_seal(value, DUPLICATE_SCHEMA)
-    if (
-        checked.get("status") != "identity_and_output_absent"
-        or checked.get("identity_sha256") != identity.sealed_mapping()["sha256"]
+    schema = value.get("schema") if isinstance(value, dict) else None
+    checked = direct._validate_seal(
+        value,
+        HOST_IDENTITY_SCHEMA if schema == HOST_IDENTITY_SCHEMA else DUPLICATE_SCHEMA,
+    )
+    common_changed = (
+        checked.get("identity_sha256") != identity.sealed_mapping()["sha256"]
         or checked.get("run_name") != identity.run_name
-        or checked.get("output_root") != identity.output_root
         or checked.get("kubernetes_inventories_checked") != 10
         or type(checked.get("jobs_api_rows_checked")) is not int
         or checked["jobs_api_rows_checked"] < 0
-    ):
+    )
+    if schema == HOST_IDENTITY_SCHEMA:
+        expected_keys = {
+            "schema",
+            "status",
+            "identity_sha256",
+            "run_name",
+            "kubernetes_inventories_checked",
+            "jobs_api_rows_checked",
+            "checked_at",
+            "sha256",
+        }
+        changed = (
+            identity.run_name != "chris-q38-rlreward-prod11-fast2"
+            or set(checked) != expected_keys
+            or checked.get("status") != "kubernetes_and_jobs_identity_absent"
+            or common_changed
+        )
+    else:
+        changed = (
+            checked.get("status") != "identity_and_output_absent"
+            or checked.get("output_root") != identity.output_root
+            or common_changed
+        )
+    if changed:
         raise JobsError("prod10 direct-v3 duplicate proof changed")
     if fresh:
         direct._fresh_at(checked.get("checked_at"))

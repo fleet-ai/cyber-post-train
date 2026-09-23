@@ -89,9 +89,9 @@ def test_legacy_v17_and_prod8_recompile_to_the_frozen_digests_and_resource_shape
     assert topology["submission_gate"]["submission_authorized"] is False
 
     assert prod8["compiled_digests"] == {
-        "plan_sha256": ("sha256:06628d58a3f1f00c2d399a3cbb2e0d9e7eda4a207b889aae4f85f301ce7981c1"),
+        "plan_sha256": ("sha256:e53e407a68a5ca56752381d76e48e1459cfa038595f381197c9271e6c7cc9b1e"),
         "request_sha256": (
-            "sha256:72a026e13354c673f4c474c1c81edb86d9f6e8b701882ed7cc9e2e521b2e63a8"
+            "sha256:1ec530f63e3ef1c68e77b469d9c6a6e950d9829175c0b624913d6e1d9f05fa00"
         ),
         "sanitized_manifest_self_sha256": (
             "sha256:5561f1a349abbe1a580dd5763368c1e6c1524861c39d744f7dad4f25d9950dd3"

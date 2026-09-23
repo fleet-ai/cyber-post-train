@@ -32,6 +32,9 @@ PROD11_IDENTITY = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod11-i
 PROD11_FAST_IDENTITY = (
     ROOT / "configs/qualification/qwen38-rl-reward-canary-prod11-fast1-identity-v1.json"
 )
+PROD11_FAST2_IDENTITY = (
+    ROOT / "configs/qualification/qwen38-rl-reward-canary-prod11-fast2-identity-v1.json"
+)
 PROD10_MANIFEST = ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v10.json"
 
 
@@ -229,6 +232,18 @@ def _prod11_fast_stage_inputs() -> tuple[historical.RailIdentity, dict]:
     return identity, training.stage_spec(identity, predecessor)
 
 
+def _prod11_fast2_stage_inputs() -> tuple[historical.RailIdentity, dict]:
+    identity = historical.load_identity(PROD11_FAST2_IDENTITY)
+    predecessor = json.loads(
+        (ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json").read_bytes()
+    )
+    predecessor["name"] = identity.predecessor_run_name
+    predecessor["sha256"] = "sha256:" + digest(
+        {key: value for key, value in predecessor.items() if key != "sha256"}
+    )
+    return identity, training.stage_spec(identity, predecessor)
+
+
 def test_prod11_stage_package_is_fresh_alert_off_c1_q1_zero_gpu() -> None:
     identity, stage = _prod11_stage_inputs()
     packet = operator_job.stage_packet(identity=identity, stage=stage)
@@ -276,6 +291,26 @@ def test_prod11_fast_stage_package_has_unique_alert_off_zero_gpu_identity() -> N
     assert (
         package.job["metadata"]["labels"]["cyber-post-train.fleet.ai/role"]
         == "prod11-fast-bounded-operator"
+    )
+    assert "nvidia.com/gpu" not in json.dumps(package.job, sort_keys=True)
+
+
+def test_prod11_fast2_stage_package_has_unique_alert_off_zero_gpu_identity() -> None:
+    identity, stage = _prod11_fast2_stage_inputs()
+    packet = operator_job.stage_packet(identity=identity, stage=stage)
+    package = operator_job.build_operator_package(packet)
+    proof = operator_job.validate_operator_package(package)
+
+    assert packet["operator_name"] == operator.PROD11_FAST2_OPERATOR_NAMES["stage"]
+    assert packet["fresh_identity"] is True
+    assert proof["failure_alerts"] == "off"
+    assert proof["priority"] == "c1"
+    assert proof["queue_priority"] == "q1"
+    assert proof["gpus"] == 0
+    assert package.job["metadata"]["annotations"][FAILURE_ALERT_ANNOTATION] == "off"
+    assert (
+        package.job["metadata"]["labels"]["cyber-post-train.fleet.ai/role"]
+        == "prod11-fast2-bounded-operator"
     )
     assert "nvidia.com/gpu" not in json.dumps(package.job, sort_keys=True)
 
@@ -597,6 +632,68 @@ def test_prod11_launch_packet_uses_prod11_operator_names(
     assert observed and set(observed) == {operator.PROD11_OPERATOR_NAMES["preflight"]}
     assert packet["operator_name"] == operator.PROD11_OPERATOR_NAMES["launch"]
     assert package.job["metadata"]["name"] == operator.PROD11_OPERATOR_NAMES["launch"]
+
+
+def test_prod11_fast2_launch_packet_uses_truthful_host_identity_proof(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    identity = historical.load_identity(PROD11_FAST2_IDENTITY)
+    plan = {"schema": training.SCHEMA}
+    request = {"workers": 1, "gpus_per_worker": 8}
+    monkeypatch.setattr(direct, "_identity", lambda _plan, bound: bound)
+    monkeypatch.setattr(training, "job_request", lambda _plan: request)
+    monkeypatch.setattr(
+        launch_direct,
+        "_preflight_launch",
+        lambda value, *_args, **_kwargs: value,
+    )
+    monkeypatch.setattr(direct, "_source", lambda value: value)
+    preflight = direct._seal({"schema": direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA, "gpus": 0})
+    preview = direct._seal(
+        {
+            "schema": direct.PREVIEW_SCHEMA,
+            "context": direct.DEV_CONTEXT,
+            "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+    host_identity = direct._seal(
+        {
+            "schema": launch_direct.HOST_IDENTITY_SCHEMA,
+            "status": "kubernetes_and_jobs_identity_absent",
+            "identity_sha256": identity.sealed_mapping()["sha256"],
+            "run_name": identity.run_name,
+            "kubernetes_inventories_checked": 10,
+            "jobs_api_rows_checked": 0,
+            "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+    capacity = {
+        "schema": "cyber_project_gpu_capacity_census_v1",
+        "limits": {"nodes": 10, "gpus": 80},
+        "planned": {"nodes": 1, "gpus": 8},
+    }
+    capacity["sha256"] = digest(capacity)
+
+    packet = operator_job.launch_packet(
+        identity=identity,
+        plan=plan,
+        request=request,
+        preflight_launch_result=preflight,
+        source_preview={"manifest_yaml": "{}"},
+        manifest_sha256="sha256:" + "1" * 64,
+        dev_preview=preview,
+        dev_preview_provenance=_dev_preview_provenance(preview),
+        duplicate_proof=host_identity,
+        capacity_census=capacity,
+    )
+    package = operator_job.build_operator_package(packet)
+
+    assert packet["duplicate_proof"] == host_identity
+    assert "output_absent" not in packet["duplicate_proof"]
+    assert "output_root" not in packet["duplicate_proof"]
+    assert packet["operator_name"] == operator.PROD11_FAST2_OPERATOR_NAMES["launch"]
+    assert package.job["metadata"]["name"] == operator.PROD11_FAST2_OPERATOR_NAMES["launch"]
+    assert operator_job._validate_packet_semantics(packet) == packet
 
 
 def test_prod11_pre_guard_launch_binds_prod11_preflight_name(
@@ -1679,7 +1776,9 @@ def _prod11_archived_guard_state(
     }
 
 
-@pytest.mark.parametrize("identity_path", (PROD11_IDENTITY, PROD11_FAST_IDENTITY))
+@pytest.mark.parametrize(
+    "identity_path", (PROD11_IDENTITY, PROD11_FAST_IDENTITY, PROD11_FAST2_IDENTITY)
+)
 def test_prod11_reuses_exact_v10_guard_archive_without_writes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, identity_path: Path
 ) -> None:
