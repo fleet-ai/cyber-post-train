@@ -185,6 +185,19 @@ def test_prod10_operator_launcher_requires_two_alert_off_c1_q1_previews_and_abse
     )
     absence = operator_launch.duplicate_proof(package, factory=FakeKubectl)
     assert absence["kubernetes_inventories_checked"] == 12
+    refreshed_preview = copy.deepcopy(preview)
+    refreshed_preview["server_render_sha256"] = "sha256:" + "f" * 64
+    refreshed_preview = direct._seal(refreshed_preview)
+    refreshed_package = operator_job.build_operator_package(
+        operator_job.stage_packet(
+            identity=identity,
+            stage=stage,
+            dev_preview=refreshed_preview,
+            dev_duplicate_proof=duplicate,
+        )
+    )
+    assert refreshed_package.packet["sha256"] != package.packet["sha256"]
+    assert operator_launch._validate_duplicate(refreshed_package, absence) == absence
 
     changed = copy.deepcopy(previews)
     changed[0]["failure_alerts"] = "on"

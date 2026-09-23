@@ -26,7 +26,7 @@ from .skyrl_prod10_operator_job import (
 )
 
 PREVIEW_SCHEMA = "cyber_skyrl_prod10_operator_preview_v1"
-DUPLICATE_SCHEMA = "cyber_skyrl_prod10_operator_duplicate_absence_v1"
+DUPLICATE_SCHEMA = "cyber_skyrl_prod10_operator_duplicate_absence_v2"
 CREATED_SCHEMA = "cyber_skyrl_prod10_operator_created_v1"
 RESULT_SCHEMA = "cyber_skyrl_prod10_operator_launch_result_v1"
 _RESOURCES = (
@@ -232,7 +232,8 @@ def duplicate_proof(
             "schema": DUPLICATE_SCHEMA,
             "status": "identities_absent",
             "name": proof["name"],
-            "packet_sha256": proof["packet_sha256"],
+            "phase": proof["phase"],
+            "source_sha256": proof["source_sha256"],
             "names": sorted(names),
             "contexts": [direct.DEV_CONTEXT, direct.PROD_CONTEXT],
             "kubernetes_inventories_checked": checked,
@@ -254,7 +255,8 @@ def _validate_duplicate(package: OperatorPackage, value: dict[str, Any]) -> dict
     if (
         checked.get("status") != "identities_absent"
         or checked.get("name") != proof["name"]
-        or checked.get("packet_sha256") != proof["packet_sha256"]
+        or checked.get("phase") != proof["phase"]
+        or checked.get("source_sha256") != proof["source_sha256"]
         or checked.get("names") != names
         or checked.get("contexts") != [direct.DEV_CONTEXT, direct.PROD_CONTEXT]
         or checked.get("kubernetes_inventories_checked") != len(_RESOURCES) * 2

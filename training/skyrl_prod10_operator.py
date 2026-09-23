@@ -33,7 +33,7 @@ PACKET_SCHEMA = "cyber_skyrl_prod10_operator_packet_v1"
 RESULT_SCHEMA = "cyber_skyrl_prod10_operator_result_v1"
 TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_termination_v1"
 OPERATOR_NAMES = {
-    "stage": "chris-q38-prod10-stage-operator-v1",
+    "stage": "chris-q38-prod10-stage-operator-v2",
     "preflight": "chris-q38-prod10-preflight-operator-v1",
 }
 _TERMINATION_PATH = Path("/dev/termination-log")
