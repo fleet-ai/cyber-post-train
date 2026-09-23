@@ -132,6 +132,27 @@ RUNTIME_FILES = {
     "fixed_proxy.py",
     "exact_pass4_crypto.py",
 }
+EVALUATION_FIELDS = {
+    "schema",
+    "campaign_id",
+    "run_prefix",
+    "selection",
+    "tasks",
+    "models",
+    "routes",
+    "treatment",
+    "images",
+    "pass_k",
+    "concurrency",
+    "training_data_eligible",
+    "automatic_retry",
+    "max_reviewed_infrastructure_retries",
+    "runtime_files",
+    "sampling",
+    "interpretation",
+    "sha256",
+}
+SOURCE_TASK_JOB_ID = "a62dd51f-a52b-4941-8207-4679e4b25b51"
 ALLOWED_EXCLUSION_REASONS = {
     "terminal_replica_incomplete",
     "replica_not_started",
@@ -916,6 +937,8 @@ class Snapshot(Protocol):
 def _evaluation_plan(replica: Mapping[str, Any]) -> dict[str, Any]:
     path = Path(str(replica["output_root"])) / "EVAL.json"
     value = _read_json(path, f"seed {replica['seed']} {replica['arm']} EVAL")
+    if set(value) != EVALUATION_FIELDS:
+        raise FinalAggregateError("evaluation plan field roster differs")
     claimed = value.get("sha256")
     if not isinstance(claimed, str) or not re.fullmatch(r"[0-9a-f]{64}", claimed):
         raise FinalAggregateError("evaluation plan digest is invalid")
@@ -1213,6 +1236,8 @@ def _validate_eval_identity(
         (
             evaluation.get("schema") != "cyber_fleet_eval_v1",
             evaluation.get("campaign_id") != replica["experiment_id"],
+            evaluation.get("run_prefix") != replica["experiment_id"],
+            evaluation.get("selection") != {"source_job_id": SOURCE_TASK_JOB_ID},
             evaluation.get("tasks") != expected_tasks,
             evaluation.get("models") != {arm["model_id"]: arm["model"]},
             evaluation.get("routes") != {arm["serving_block"]: arm["route"]},
@@ -1220,9 +1245,11 @@ def _validate_eval_identity(
             evaluation.get("images") != plan["images"],
             evaluation.get("sampling") != {**plan["sampling"], "seed": replica["seed"]},
             evaluation.get("pass_k") != 1,
+            evaluation.get("concurrency") != 4,
             evaluation.get("automatic_retry") is not False,
             evaluation.get("max_reviewed_infrastructure_retries") != 0,
             evaluation.get("training_data_eligible") is not False,
+            evaluation.get("interpretation") != "serving-block descriptive evaluation",
         )
     ):
         raise FinalAggregateError("evaluation plan model, task, harness, or protocol differs")

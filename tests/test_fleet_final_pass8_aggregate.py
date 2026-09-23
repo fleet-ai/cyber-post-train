@@ -295,6 +295,8 @@ def _evaluation(plan: dict[str, Any], replica: dict[str, Any]) -> dict[str, Any]
     value = {
         "schema": "cyber_fleet_eval_v1",
         "campaign_id": replica["experiment_id"],
+        "run_prefix": replica["experiment_id"],
+        "selection": {"source_job_id": final.SOURCE_TASK_JOB_ID},
         "tasks": sorted(plan["tasks"], key=lambda row: row["task_version_id"]),
         "models": {arm["model_id"]: arm["model"]},
         "routes": {arm["serving_block"]: arm["route"]},
@@ -302,12 +304,14 @@ def _evaluation(plan: dict[str, Any], replica: dict[str, Any]) -> dict[str, Any]
         "images": plan["images"],
         "sampling": {**plan["sampling"], "seed": replica["seed"]},
         "pass_k": 1,
+        "concurrency": 4,
         "automatic_retry": False,
         "max_reviewed_infrastructure_retries": 0,
         "training_data_eligible": False,
         "runtime_files": {
             name: f"{index + 1:064x}" for index, name in enumerate(sorted(final.RUNTIME_FILES))
         },
+        "interpretation": "serving-block descriptive evaluation",
     }
     value["sha256"] = final._plain_digest(value)  # noqa: SLF001
     return value
@@ -604,12 +608,42 @@ def _rewrite_terminal(replica: dict[str, Any], mutate: Any) -> None:
     path.write_text(json.dumps(_signed(receipt), sort_keys=True) + "\n")
 
 
+def _rewrite_evaluation(replica: dict[str, Any], mutate: Any) -> None:
+    path = Path(replica["output_root"]) / "EVAL.json"
+    evaluation = json.loads(path.read_text())
+    evaluation.pop("sha256")
+    mutate(evaluation)
+    evaluation["sha256"] = final._plain_digest(evaluation)  # noqa: SLF001
+    path.write_text(json.dumps(evaluation, sort_keys=True) + "\n")
+
+
 def test_wrong_protocol_prevents_every_score_read(tmp_path: Path) -> None:
     plan, snapshots = _study(tmp_path)
     replica = next(row for row in plan["replicas"] if row["seed"] == 46 and row["arm"] == "base")
     _rewrite_terminal(replica, lambda receipt: receipt.update(protocol_id="wrong"))
 
     with pytest.raises(final.FinalAggregateError, match="terminal receipt identity"):
+        final.finalize(plan, snapshots, output_root=Path(plan["private_output_root"]))
+
+    assert all(snapshot.score_reads == 0 for snapshot in snapshots.values())
+
+
+@pytest.mark.parametrize("drift", ("ignored_field", "runtime"))
+def test_evaluation_schema_or_runtime_drift_prevents_every_score_read(
+    tmp_path: Path, drift: str
+) -> None:
+    plan, snapshots = _study(tmp_path)
+    replica = next(row for row in plan["replicas"] if row["seed"] == 46 and row["arm"] == "base")
+
+    def mutate(evaluation: dict[str, Any]) -> None:
+        if drift == "ignored_field":
+            evaluation["unreviewed_behavior"] = True
+        else:
+            evaluation["runtime_files"]["evaluate.py"] = "f" * 64
+
+    _rewrite_evaluation(replica, mutate)
+
+    with pytest.raises(final.FinalAggregateError):
         final.finalize(plan, snapshots, output_root=Path(plan["private_output_root"]))
 
     assert all(snapshot.score_reads == 0 for snapshot in snapshots.values())
