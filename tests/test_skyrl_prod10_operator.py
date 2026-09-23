@@ -29,6 +29,18 @@ IDENTITY = ROOT / "configs/qualification/qwen38-rl-reward-canary-prod10-identity
 PREDECESSOR = ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json"
 
 
+def _dev_preview_provenance(preview: dict) -> dict:
+    return direct._seal(
+        {
+            "schema": launch_direct.SEALED_DEV_PREVIEW_PROVENANCE_SCHEMA,
+            "status": "fresh_sealed_external_dev_server_preview_validated",
+            "context": direct.DEV_CONTEXT,
+            "sealed_dev_server_preview_sha256": preview["sha256"],
+            "checked_at": preview["checked_at"],
+        }
+    )
+
+
 def _cpu_render(value: dict) -> dict:
     rendered = copy.deepcopy(value)
     uid = "00000000-0000-4000-8000-000000000002"
@@ -193,6 +205,7 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
         source_preview={"manifest_yaml": "{}"},
         manifest_sha256="sha256:" + "1" * 64,
         dev_preview=preview,
+        dev_preview_provenance=_dev_preview_provenance(preview),
         duplicate_proof=duplicate,
         capacity_census=capacity,
     )
@@ -201,7 +214,7 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
     container = package.job["spec"]["template"]["spec"]["containers"][0]
 
     assert proof["phase"] == "launch"
-    assert proof["name"] == "chris-q38-prod10-launch-operator-v7"
+    assert proof["name"] == "chris-q38-prod10-launch-operator-v8"
     assert proof["failure_alerts"] == "off"
     assert proof["priority"] == "c1"
     assert proof["queue_priority"] == "q1"
@@ -286,6 +299,7 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
         ("launch_v5_failure", "launch-v5 failure predecessor"),
         ("inspect_v6_success", "inspector-v6 predecessor"),
         ("launch_v6_failure", "launch-v6 failure predecessor"),
+        ("launch_v7_failure", "launch-v7 failure predecessor"),
     ):
         changed = copy.deepcopy(packet)
         changed[key]["operator_job_uid"] = "00000000-0000-4000-8000-000000000001"
@@ -312,6 +326,7 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
             source_preview={"manifest_yaml": "{}"},
             manifest_sha256="sha256:" + "1" * 64,
             dev_preview=preview,
+            dev_preview_provenance=_dev_preview_provenance(preview),
             duplicate_proof=packet["duplicate_proof"],
             capacity_census=capacity,
         )
@@ -802,6 +817,7 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
         source_preview={"manifest_yaml": "{}"},
         manifest_sha256="sha256:" + "1" * 64,
         dev_preview=preview,
+        dev_preview_provenance=_dev_preview_provenance(preview),
         duplicate_proof=duplicate,
         capacity_census=capacity,
     )
@@ -1180,6 +1196,7 @@ def test_prod10_dead_guard_is_atomically_archived_and_crash_reconciled(
     assert receipt["launch_v4_failure_sha256"] == operator.launch_v4_failure_binding()["sha256"]
     assert receipt["launch_v5_failure_sha256"] == operator.launch_v5_failure_binding()["sha256"]
     assert receipt["launch_v6_failure_sha256"] == operator.launch_v6_failure_binding()["sha256"]
+    assert receipt["launch_v7_failure_sha256"] == operator.launch_v7_failure_binding()["sha256"]
 
     receipt_path.unlink()
     recovered = operator._archive_launch_v3_guard(
@@ -1252,7 +1269,7 @@ def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
     monkeypatch.setattr(direct, "validate_preview", lambda *_args, **_kwargs: preview)
     monkeypatch.setattr(
         launch_direct,
-        "sealed_dev_preview_provenance",
+        "_sealed_dev_preview_provenance",
         lambda *_args, **_kwargs: events.append("dev_provenance") or preview,
     )
     jit = iter(
@@ -1330,6 +1347,7 @@ def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
     packet = {
         "sha256": "sha256:" + "8" * 64,
         "dev_preview": {},
+        "sealed_dev_preview_provenance": {},
         "duplicate_proof": {},
         "capacity_census": {"sha256": "sha256:" + "9" * 64},
     }
@@ -1643,6 +1661,7 @@ def test_prod10_launch_validates_sealed_dev_preview_without_network_or_redating(
     )
     assert "dev_preview_refresh" not in operator._POST_PRE_GUARD_LAUNCH_STAGES
     assert "sealed_dev_preview_validate" in operator._POST_PRE_GUARD_LAUNCH_STAGES
+    assert "sealed_dev_preview_freshness" not in operator._POST_PRE_GUARD_LAUNCH_STAGES
 
     stale = preview(
         direct.DEV_CONTEXT,
@@ -1658,6 +1677,34 @@ def test_prod10_launch_validates_sealed_dev_preview_without_network_or_redating(
             image_identity_receipt=image,
             identity=identity,
         )
+
+    stale_provenance = direct._seal(
+        {
+            **{
+                key: value
+                for key, value in provenance.items()
+                if key not in {"sha256", "sealed_dev_server_preview_sha256", "checked_at"}
+            },
+            "sealed_dev_server_preview_sha256": stale["sha256"],
+            "checked_at": stale["checked_at"],
+        }
+    )
+    monkeypatch.setattr(
+        direct,
+        "_fresh_at",
+        lambda *_args, **_kwargs: pytest.fail(
+            "runtime re-enforced sealed development preview wall-clock freshness"
+        ),
+    )
+    assert launch_direct._sealed_dev_preview_provenance(
+        stale_provenance,
+        plan,
+        request,
+        source,
+        expected,
+        stale,
+        identity=identity,
+    ) == stale_provenance
 
     drifted = {**dev, "manifest_sha256": "different"}
     drifted = direct._seal(

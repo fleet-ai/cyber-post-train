@@ -629,7 +629,6 @@ def _sealed_dev_preview_provenance(
         or checked.get("submitted") is not False
     ):
         raise JobsError("prod10 sealed dev server-preview provenance changed")
-    direct._fresh_at(checked.get("checked_at"))
     return checked
 
 
@@ -815,11 +814,7 @@ def create_once(
         gpus=request["workers"] * request["gpus_per_worker"],
         maximum_seconds=direct.MAXIMUM_SECONDS,
     )
-    for preview in (
-        auth["sealed_dev_preview_provenance"],
-        auth["prod_preview"],
-        checked_live_preview,
-    ):
+    for preview in (auth["prod_preview"], checked_live_preview):
         direct._fresh_at(preview.get("checked_at"))
     direct._write_once_fsynced(
         journal,

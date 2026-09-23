@@ -46,7 +46,7 @@ OPERATOR_NAMES = {
     "stage": "chris-q38-prod10-stage-operator-v7",
     "manifest": "chris-q38-prod10-manifest-operator-v1",
     "preflight": "chris-q38-prod10-preflight-operator-v2",
-    "launch": "chris-q38-prod10-launch-operator-v7",
+    "launch": "chris-q38-prod10-launch-operator-v8",
     "inspect": "chris-q38-prod10-launch-inspect-v6",
     "probe": "chris-q38-prod10-launch-probe-v9",
 }
@@ -648,6 +648,66 @@ _LAUNCH_V6_FAILURE = {
     "nested_jobs_created": 0,
     "gpus": 0,
 }
+_LAUNCH_V7_FAILURE = {
+    "schema": "cyber_skyrl_prod10_launch_failure_binding_v6",
+    "status": "failed_before_gpu_create_all_outer_resources_released",
+    "operator_name": "chris-q38-prod10-launch-operator-v7",
+    "source_head": "c5ce6381da46ab2e0fce94898dc94bcef4441454",
+    "packet_sha256": (
+        "sha256:b55a2528b13f536351b3dd16511cba9cc99b90c5db6572ef0ef5aff8f674e7d4"
+    ),
+    "source_sha256": (
+        "sha256:af29dadbb6a8d106410645361af241dd1644156d5cbe354e154c9c713253eae1"
+    ),
+    "job_manifest_sha256": (
+        "sha256:f1b4036d70199202afd7bae450bd56a392a50aa235836cfbfe54efbe92918f1f"
+    ),
+    "operator_job_uid": "6849acbb-fcb5-415e-bfec-840865c70cd0",
+    "operator_pod_name": "chris-q38-prod10-launch-operator-v7-f6tp6",
+    "operator_pod_uid": "a9d2dd42-4a24-44bd-a901-923894f1cb58",
+    "operator_workload_name": "job-chris-q38-prod10-launch-operator-v7-380d3",
+    "operator_workload_uid": "5438097b-27aa-4771-bd1e-72ec56d587b3",
+    "source_config_map_name": "chris-q38-prod10-launch-operator-v7-source",
+    "source_config_map_uid": "5597dffa-d6cd-482a-a137-34b5c0c09c3c",
+    "packet_config_map_name": "chris-q38-prod10-launch-operator-v7-packet",
+    "packet_config_map_uid": "0449a22c-3924-4354-8b38-c40b9fea89ed",
+    "create_journal_file_sha256": (
+        "sha256:72297dd9a44c93eba61cc0e6a3a239e6268a3cbf196850b71516378c0b7d2e02"
+    ),
+    "observer_armed_sha256": (
+        "sha256:7bb7d528c7ddb2c2b164f33db4ac46319d649c6ed14cac996c167042c3f6ace9"
+    ),
+    "observer_armed_file_sha256": (
+        "sha256:3d65ad5856ed8dfd6daa40ca42106aa0eeb0e3811909ea22bb00fffd113ced4d"
+    ),
+    "failure_receipt_sha256": (
+        "sha256:3f1d7bc3677768b34587c623dc664f82482e7a48d79cd7dbb2504a73d9f1bd5d"
+    ),
+    "observer_result_sha256": (
+        "sha256:72ef5b9470f73aa327168f6b9a1981bfc78bfba37cfbd74d46e7e030e9388546"
+    ),
+    "observer_result_file_sha256": (
+        "sha256:443354ddff5ede55b1575db2769937c1bf5512c162701fd19bbe50f7e78c6d57"
+    ),
+    "release_observed_at": "2026-09-23T12:49:22Z",
+    "launch_stage": "sealed_dev_preview_validate",
+    "terminal_status": "Failed",
+    "exit_codes": [1],
+    "restarts": 0,
+    "peak_gpus": 0,
+    "inner_gpu_run_created": False,
+    "workload_resources_absent": True,
+    "config_map_cleanup_result_sha256": (
+        "sha256:775a60dc7f4a6818430120a8f6d735e39cd7c6c40a7a5d133773f1f097386af1"
+    ),
+    "config_map_cleanup_result_file_sha256": (
+        "sha256:f363c77ccacf36b8b91bfa871d520035efa7592b04de3cc7646561ef291828a7"
+    ),
+    "config_maps_uid_rv_precondition_deleted": True,
+    "config_maps_absent": True,
+    "nested_jobs_created": 0,
+    "gpus": 0,
+}
 _PREFLIGHT_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_preflight_v1_failure_recovery_v1",
     "status": "failed_closed_released",
@@ -768,7 +828,6 @@ _POST_PRE_GUARD_LAUNCH_STAGES = (
     "live_preview_validate",
     "fresh_capacity_census",
     "fresh_capacity_gate",
-    "sealed_dev_preview_freshness",
     "prod_preview_freshness",
     "live_preview_freshness",
     "duplicate_before_intent",
@@ -895,6 +954,11 @@ def launch_v6_failure_binding() -> dict[str, Any]:
     return _seal(_LAUNCH_V6_FAILURE)
 
 
+def launch_v7_failure_binding() -> dict[str, Any]:
+    """Bind the released v7 stale sealed-preview failure."""
+    return _seal(_LAUNCH_V7_FAILURE)
+
+
 def _write_once(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=False, exist_ok=True)
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -979,6 +1043,10 @@ def _launch_packet_inputs(packet: dict[str, Any]) -> None:
         direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA,
     )
     direct._validate_seal(packet.get("dev_preview"), direct.PREVIEW_SCHEMA)
+    direct._validate_seal(
+        packet.get("sealed_dev_preview_provenance"),
+        launch_direct.SEALED_DEV_PREVIEW_PROVENANCE_SCHEMA,
+    )
     direct._validate_seal(packet.get("duplicate_proof"), launch_direct.DUPLICATE_SCHEMA)
     census = packet.get("capacity_census")
     request = packet.get("request")
@@ -1099,6 +1167,8 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
             raise ValueError("prod10 launch inspector-v6 predecessor changed")
         if packet.get("launch_v6_failure") != launch_v6_failure_binding():
             raise ValueError("prod10 launch-v6 failure predecessor changed")
+        if packet.get("launch_v7_failure") != launch_v7_failure_binding():
+            raise ValueError("prod10 launch-v7 failure predecessor changed")
         _launch_packet_inputs(packet)
     return packet
 
@@ -2419,6 +2489,7 @@ def _archive_launch_v3_guard(
     launch_v5_failure = launch_v5_failure_binding()
     inspection_v6 = inspect_v6_success_binding()
     launch_v6_failure = launch_v6_failure_binding()
+    launch_v7_failure = launch_v7_failure_binding()
     first_absence = launch_direct._jit_duplicate(
         jit_before_guard,
         identity,
@@ -2517,6 +2588,7 @@ def _archive_launch_v3_guard(
             "launch_v5_failure_sha256": launch_v5_failure["sha256"],
             "inspect_v6_success_sha256": inspection_v6["sha256"],
             "launch_v6_failure_sha256": launch_v6_failure["sha256"],
+            "launch_v7_failure_sha256": launch_v7_failure["sha256"],
             "host_duplicate_sha256": packet["duplicate_proof"]["sha256"],
             "jit_duplicate_before_guard_sha256": first_absence["sha256"],
             "jit_duplicate_before_intent_sha256": final_absence["sha256"],
@@ -2565,13 +2637,13 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
     if not token or not os.environ.get("WANDB_API_KEY"):
         raise OperatorFailure("launch_credentials_unavailable")
     _LAUNCH_STAGE = "sealed_dev_preview_validate"
-    dev_provenance = launch_direct.sealed_dev_preview_provenance(
+    dev_provenance = launch_direct._sealed_dev_preview_provenance(
+        packet["sealed_dev_preview_provenance"],
         plan,
         request,
         source_preview,
         expected,
         packet["dev_preview"],
-        image_identity_receipt=image_identity,
         identity=identity,
     )
     _LAUNCH_STAGE = "duplicate_before_guard"
@@ -2616,11 +2688,10 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
     launch_direct.capacity_gate(plan, request, expected, fresh_capacity, identity=identity)
     for stage, preview in zip(
         (
-            "sealed_dev_preview_freshness",
             "prod_preview_freshness",
             "live_preview_freshness",
         ),
-        (dev_provenance, prod_preview, live_preview),
+        (prod_preview, live_preview),
         strict=True,
     ):
         _LAUNCH_STAGE = stage

@@ -292,6 +292,7 @@ def launch_packet(
     source_preview: dict[str, Any],
     manifest_sha256: str,
     dev_preview: dict[str, Any],
+    dev_preview_provenance: dict[str, Any],
     duplicate_proof: dict[str, Any],
     capacity_census: dict[str, Any],
     fresh_duplicate: bool = True,
@@ -306,7 +307,20 @@ def launch_packet(
         operator_name=operator.OPERATOR_NAMES["preflight"],
     )
     direct._source(source_preview)
-    direct._validate_seal(dev_preview, direct.PREVIEW_SCHEMA)
+    checked_dev = direct._validate_seal(dev_preview, direct.PREVIEW_SCHEMA)
+    checked_dev_provenance = direct._validate_seal(
+        dev_preview_provenance,
+        launch_direct.SEALED_DEV_PREVIEW_PROVENANCE_SCHEMA,
+    )
+    if (
+        checked_dev_provenance.get("status")
+        != "fresh_sealed_external_dev_server_preview_validated"
+        or checked_dev_provenance.get("context") != direct.DEV_CONTEXT
+        or checked_dev_provenance.get("sealed_dev_server_preview_sha256")
+        != checked_dev["sha256"]
+        or checked_dev_provenance.get("checked_at") != checked_dev.get("checked_at")
+    ):
+        raise ValueError("prod10 launch sealed dev preview provenance changed")
     duplicate = launch_direct._duplicate(duplicate_proof, identity, fresh=fresh_duplicate)
     if re.fullmatch(r"sha256:[0-9a-f]{64}", manifest_sha256) is None:
         raise ValueError("prod10 launch manifest digest changed")
@@ -322,6 +336,7 @@ def launch_packet(
             "source_preview": source_preview,
             "manifest_sha256": manifest_sha256,
             "dev_preview": dev_preview,
+            "sealed_dev_preview_provenance": checked_dev_provenance,
             "duplicate_proof": duplicate,
             "capacity_census": capacity_census,
             "launch_v1_failure": operator.launch_v1_failure_binding(),
@@ -337,6 +352,7 @@ def launch_packet(
             "launch_v5_failure": operator.launch_v5_failure_binding(),
             "inspect_v6_success": operator.inspect_v6_success_binding(),
             "launch_v6_failure": operator.launch_v6_failure_binding(),
+            "launch_v7_failure": operator.launch_v7_failure_binding(),
         }
     )
 
@@ -441,6 +457,7 @@ def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
             source_preview=checked["source_preview"],
             manifest_sha256=checked["manifest_sha256"],
             dev_preview=checked["dev_preview"],
+            dev_preview_provenance=checked["sealed_dev_preview_provenance"],
             duplicate_proof=checked["duplicate_proof"],
             capacity_census=checked["capacity_census"],
             fresh_duplicate=False,
