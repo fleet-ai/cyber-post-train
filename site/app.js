@@ -16,7 +16,7 @@ function escapeHtml(value) {
 
 function setTab() {
   const requested = location.hash.slice(1);
-  const tab = ["webexploitbench", "task-quality", "experiment-map"].includes(requested) ? requested : "webexploitbench";
+  const tab = ["webexploitbench", "training-results", "task-quality", "experiment-map"].includes(requested) ? requested : "webexploitbench";
   document.querySelectorAll("[data-tab-page]").forEach(page => { page.hidden = page.dataset.tabPage !== tab; });
   document.querySelectorAll("[data-tab-link]").forEach(link => {
     const active = link.dataset.tabLink === tab;
@@ -25,11 +25,80 @@ function setTab() {
   });
   const titles = {
     "webexploitbench": "WebExploitBench · Fleet Cyber",
+    "training-results": "Training results · Fleet Cyber",
     "task-quality": "Task quality · Fleet Cyber",
     "experiment-map": "Experiment plan · Fleet Cyber"
   };
   document.title = titles[tab];
   scrollTo({ top: 0, behavior: "instant" });
+}
+
+function signedPct(value) {
+  if (value == null) return "—";
+  const sign = value > 0 ? "+" : "";
+  return `${sign}${value.toFixed(1)} points`;
+}
+
+function attemptSummary(arm) {
+  return `${arm.valid_attempts} valid · ${arm.technical_failures} technical`;
+}
+
+function renderMatchedResults(data) {
+  const cards = document.querySelector("#matched-result-cards");
+  const tables = document.querySelector("#matched-task-tables");
+  const status = document.querySelector("#matched-results-status");
+  if (!data || data.schema_version !== "cyber_public_eval_results_v1" || !Array.isArray(data.studies) || data.studies.length === 0) {
+    cards.innerHTML = '<article class="result-card awaiting-result"><div class="card-top"><h3>No final comparison yet</h3><span>Waiting</span></div><p>The page is ready, but it will not show partial or unchecked results.</p></article>';
+    tables.innerHTML = '<p class="callout">Task-level summaries will appear after both complete studies are imported.</p>';
+    return;
+  }
+
+  status.textContent = `Both checked comparisons are available. ${data.studies.reduce((total, study) => total + study.summary.paired_valid_tasks, 0)} task comparisons have complete evidence for both models.`;
+  cards.innerHTML = data.studies.map(study => {
+    const summary = study.summary;
+    const interval = summary.confidence_interval;
+    return `<article class="result-card matched-result-card">
+      <div class="card-top"><h3>${escapeHtml(study.title)}</h3><span>Final checked summary</span></div>
+      <p class="matched-metric">${escapeHtml(study.metric)}</p>
+      <div class="matched-score-row">
+        <div><b>${pct(summary.base.metric_percent)}</b><small>Base model</small></div>
+        <div><b>${pct(summary.candidate.metric_percent)}</b><small>After training</small></div>
+        <div><b>${signedPct(summary.delta_percentage_points)}</b><small>Change</small></div>
+      </div>
+      <dl>
+        <div><dt>Complete task comparisons</dt><dd>${summary.paired_valid_tasks} / ${study.task_count}</dd></div>
+        <div><dt>Base attempts</dt><dd>${attemptSummary(summary.base)}</dd></div>
+        <div><dt>After-training attempts</dt><dd>${attemptSummary(summary.candidate)}</dd></div>
+      </dl>
+      <p>95% confidence interval for the change: ${signedPct(interval.lower)} to ${signedPct(interval.upper)}.</p>
+    </article>`;
+  }).join("");
+
+  tables.innerHTML = data.studies.map(study => `
+    <section class="matched-task-block" aria-labelledby="tasks-${escapeHtml(study.benchmark)}">
+      <h3 id="tasks-${escapeHtml(study.benchmark)}">${escapeHtml(study.title)}</h3>
+      <div class="comparison-table-wrap"><table class="comparison-table matched-task-table">
+        <thead><tr><th>Anonymous task</th><th>Base valid / technical</th><th>After training valid / technical</th><th>Base result</th><th>After-training result</th><th>Change</th></tr></thead>
+        <tbody>${study.task_rows.map(row => `<tr>
+          <th scope="row">Task ${row.public_task_index + 1}</th>
+          <td>${row.base.valid_attempts} / ${row.base.technical_failures}</td>
+          <td>${row.candidate.valid_attempts} / ${row.candidate.technical_failures}</td>
+          <td>${pct(row.base.metric_percent)}</td>
+          <td>${pct(row.candidate.metric_percent)}</td>
+          <td>${signedPct(row.delta_percentage_points)}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>
+    </section>`).join("");
+}
+
+async function loadMatchedResults() {
+  try {
+    const response = await fetch("evaluation-results.json");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    renderMatchedResults(await response.json());
+  } catch (_error) {
+    renderMatchedResults(null);
+  }
 }
 
 function renderResults() {
@@ -166,5 +235,6 @@ renderTasks();
 renderTraceFindings();
 renderFiltering();
 renderExperimentMap();
+loadMatchedResults();
 addEventListener("hashchange", setTab);
 setTab();

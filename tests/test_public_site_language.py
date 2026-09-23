@@ -9,6 +9,7 @@ PUBLIC_FILES = [
     ROOT / "site" / "report-data.js",
     ROOT / "site" / "app.js",
     ROOT / "site" / "training-decision-space.json",
+    ROOT / "site" / "evaluation-results.json",
 ]
 
 
@@ -40,6 +41,25 @@ def test_training_terms_have_visible_definitions() -> None:
     assert "Supervised fine-tuning (SFT)" in html
     assert "Reinforcement learning (RL)" in html
     assert "Select any column title to read its plain-language meaning" in html
+
+
+def test_final_matched_results_page_is_wired_to_sanitized_site_data() -> None:
+    html = (ROOT / "site" / "index.html").read_text()
+    javascript = (ROOT / "site" / "app.js").read_text()
+    data = json.loads((ROOT / "site" / "evaluation-results.json").read_text())
+
+    assert 'data-tab-link="training-results"' in html
+    assert 'data-tab-page="training-results"' in html
+    assert "95% confidence interval" in html
+    assert "Technical failures stay separate from model failures" in html
+    assert "benchmark contamination cannot be ruled out" in html
+    assert "They are not the untouched final Fleet test set" in html
+    assert "randomly reordered and numbered" in html
+    assert 'fetch("evaluation-results.json")' in javascript
+    assert "row.public_task_index" in javascript
+    assert "arm.technical_failures" in javascript
+    assert "infrastructure_invalid_attempts" not in javascript
+    assert data == {"schema_version": "cyber_public_eval_results_v1", "studies": []}
 
 
 def test_public_task_report_points_to_the_latest_exact_inventory() -> None:
