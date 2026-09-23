@@ -225,6 +225,13 @@ command, environment variable, init container, service account, volume,
 annotation change, or private Secret key fails closed. Do not prepare or run
 this packet while the source Job is active.
 
+Any observer or reconciler Pod that reads `ROLLOUT_DATABASE_URL` must carry the
+exact Pod-template label
+`cyber-post-train.fleet.ai/postgres-client: "true"`. The production PostgreSQL
+NetworkPolicy selects that label; omitting it causes a connection timeout
+before any database read. Check the label on the server-rendered Pod template
+before create. A Job-level label alone does not satisfy this requirement.
+
 ## Seed-44 Base narrow repair
 
 The seed-44 Base controller left one partial but scientifically usable arm: ten
