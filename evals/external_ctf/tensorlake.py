@@ -902,11 +902,6 @@ def create(
         rows = client.inventory()
         if any(row.get("name") == name for row in rows):
             raise ExternalCtfError("duplicate_sandbox_name")
-        active = replica_set.shared_project_capacity_count(
-            rows, refreshed["owned_names"], authority["state"]
-        )
-        if active >= PROJECT_ACTIVE_SANDBOX_LIMIT:
-            raise ExternalCtfError("shared_project_active_sandbox_limit")
         try:
             reservation, active = replica_set.reserve_shared_capacity_slot(
                 state=authority["state"],

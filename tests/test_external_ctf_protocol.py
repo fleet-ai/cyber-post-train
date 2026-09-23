@@ -627,6 +627,83 @@ def test_definitive_create_failure_reconciles_absent_without_second_post(
     )
 
 
+def test_external_create_adopts_exact_reservation_after_crash_before_claim(
+    tmp_path: Path, monkeypatch
+) -> None:
+    protocol = json.loads(PROTOCOL.read_text())
+    state = tmp_path / "state"
+    state.mkdir(mode=0o700)
+    name = cell_name("cvebench_zero_day", 5, "qualification")
+    active_names = sorted(external_names(protocol) - {name})[:99]
+    active_rows = [
+        {"id": f"active-{index:03d}", "name": active_name, "status": "running"}
+        for index, active_name in enumerate(active_names)
+    ]
+
+    class Client:
+        def __init__(self) -> None:
+            self.posts = 0
+
+        def inventory(self):
+            return list(active_rows)
+
+        def request(self, method, url, _payload=None, **_kwargs):
+            assert method == "POST"
+            assert url.endswith("/sandboxes")
+            self.posts += 1
+            return {"sandbox_id": "sandbox-qualification", "status": "running"}
+
+    client = Client()
+    monkeypatch.setattr(tensorlake, "load_protocol", lambda _path: protocol)
+    monkeypatch.setattr(
+        tensorlake,
+        "capacity_authority",
+        lambda *_args, **_kwargs: _authority(state),
+    )
+    monkeypatch.setattr(tensorlake, "_client", lambda: client)
+    _install_packet_context(monkeypatch, state)
+    arguments = {
+        "protocol_path": PROTOCOL,
+        "retry_execution_path": tmp_path / "successor.json",
+        "execution_packet_path": EXECUTION_PACKET,
+        "benchmark": "cvebench_zero_day",
+        "task_index": 5,
+        "arm": "qualification",
+    }
+    real_write_once = tensorlake._write_once  # noqa: SLF001
+    crashed = False
+
+    def crash_before_claim(path: Path, value: object) -> None:
+        nonlocal crashed
+        if path.name == f"{name}.create-claim.json" and not crashed:
+            crashed = True
+            raise RuntimeError("simulated_termination_before_create_claim")
+        real_write_once(path, value)
+
+    monkeypatch.setattr(tensorlake, "_write_once", crash_before_claim)
+    with pytest.raises(RuntimeError, match="termination_before_create_claim"):
+        tensorlake.create(**arguments)
+    assert client.posts == 0
+    assert not (state / f"{name}.create-claim.json").exists()
+    reservations = list((state / "shared-capacity-reservations").glob("*.reserved.json"))
+    assert len(reservations) == 1
+    assert (
+        tensorlake.replica_set.shared_project_capacity_count(  # noqa: SLF001
+            active_rows, external_names(protocol), state
+        )
+        == tensorlake.PROJECT_ACTIVE_SANDBOX_LIMIT
+    )
+
+    monkeypatch.setattr(tensorlake, "_write_once", real_write_once)
+    created = tensorlake.create(**arguments)
+
+    assert created["sandbox_id"] == "sandbox-qualification"
+    assert client.posts == 1
+    assert (state / f"{name}.create-claim.json").is_file()
+    assert (state / f"{name}.created.json").is_file()
+    assert len(list((state / "shared-capacity-reservations").glob("*.reserved.json"))) == 1
+
+
 def test_definitive_process_failure_reconciles_absent_and_remains_releasable(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -754,7 +831,9 @@ def test_create_holds_at_mutual_shared_capacity_before_provider_post(
     external_state = shared_state / "external-ctf"
     external_state.mkdir(mode=0o700, parents=True)
     _write_runtime_qualification_complete(external_state, protocol)
-    owned_names = {f"owned-{index:03d}" for index in range(100)}
+    active_names = {f"owned-{index:03d}" for index in range(100)}
+    owned_names = set(active_names)
+    owned_names.add(cell_name("cvebench_zero_day", 5, "step_1000"))
     authority = {
         "state": shared_state,
         "external_state": external_state,
@@ -772,7 +851,7 @@ def test_create_holds_at_mutual_shared_capacity_before_provider_post(
             self.posts = 0
 
         def inventory(self):
-            return [{"name": name, "status": "running"} for name in sorted(owned_names)]
+            return [{"name": name, "status": "running"} for name in sorted(active_names)]
 
         def request(self, method, *_args, **_kwargs):
             if method == "POST":
