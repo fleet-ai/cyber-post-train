@@ -58,6 +58,53 @@ untouched Fleet test. Qwen3.8-27B was released after WebExploitBench, so the
 matched before-and-after change is useful while the absolute score is not a
 temporally clean generalization claim.
 
+## Publishing without dropping newer pages
+
+The public URL is built from `gh-pages`, not from `main/site` directly. The two
+branches can differ because the live report may receive reviewed updates while
+a long evaluation is still running. Never replace the whole deployed branch
+with `main/site` without first comparing their file lists and visible pages.
+
+For the final matched comparison:
+
+1. Start a clean deployment worktree at the latest `origin/gh-pages` commit.
+2. Before opening results, compare the final evaluator schema names with the
+   exact schema names accepted by `public_eval_import.py`. If collection or
+   scoring moved to a newer reviewed schema during the campaign, update the
+   importer and its tests first; do not label a newer record with an older
+   schema merely to make the import pass.
+3. Import the two reviewed summaries into `site/evaluation-results.json` on a
+   clean `origin/main` worktree and run the checks below.
+4. Add the generated `evaluation-results.json` and adapt only the matched-result
+   HTML, JavaScript, and CSS from `main/site` to the current deployment. Keep
+   every newer page and data file already present on `gh-pages`.
+5. Preview every navigation tab locally, including the waiting and populated
+   matched-result states. Check narrow and wide browser widths.
+6. Review the complete deployment diff, then fast-forward `gh-pages`. Do not
+   force-push over a newer deployment.
+7. Wait for GitHub Pages to report `built`, then fetch the public HTML and JSON
+   and confirm that their SHA-256 digests match the deployed commit.
+
+Required checks before publication:
+
+```sh
+uv run --locked pytest -q \
+  tests/test_public_eval_import.py tests/test_public_site_language.py
+uv run --locked ruff check \
+  cyber_post_train/public_eval_import.py \
+  tests/test_public_eval_import.py tests/test_public_site_language.py
+uv run --locked ruff format --check \
+  cyber_post_train/public_eval_import.py \
+  tests/test_public_eval_import.py tests/test_public_site_language.py
+node --check site/app.js
+git diff --check
+```
+
+The deployment review must confirm that the public file contains no task name
+or identifier, prompt, response, trace, answer, flag, per-attempt score, private
+file path, credential, or private task-order mapping. Technical failures must
+remain visible and must never be converted into model failures.
+
 ## Writing standard
 
 Write for a reader who knows neither Fleet nor machine learning. Prefer the
