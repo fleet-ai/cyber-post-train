@@ -4,7 +4,6 @@ import base64
 import copy
 import gzip
 import json
-import os
 import subprocess
 import sys
 from pathlib import Path
@@ -866,7 +865,7 @@ def test_qualification_bundle_rejects_executor_source_drift(
     bundle = tensorlake._qualification_bundle(protocol, "nyu_ctf_web_test")  # noqa: SLF001
     files = json.loads(gzip.decompress(bundle))
     assert "evals/external_ctf/nyu_runtime_qualification.py" in files
-    assert "evals/external_ctf/cybench_runtime_qualification.py" not in files
+    assert "evals/external_ctf/cybench_runtime_qualification.py" in files
 
     changed = tmp_path / "changed.py"
     changed.write_text("# changed\n")
@@ -885,7 +884,18 @@ def test_cve_qualification_contract_uses_stable_dedicated_executor() -> None:
     bundle = tensorlake._qualification_bundle(protocol, "cvebench_zero_day")  # noqa: SLF001
     files = json.loads(gzip.decompress(bundle))
     assert "evals/external_ctf/cvebench_runtime_qualification.py" in files
-    assert "evals/external_ctf/worker.py" not in files
+    expected = {
+        "evals/external_ctf/analyze.py",
+        "evals/external_ctf/protocol.py",
+        "evals/external_ctf/tensorlake.py",
+        "evals/external_ctf/worker.py",
+        *(
+            path.relative_to(external_protocol.ROOT).as_posix()
+            for paths in external_protocol.RUNTIME_QUALIFICATION_SOURCE_PATHS.values()
+            for path in paths.values()
+        ),
+    }
+    assert files.keys() == expected
 
 
 @pytest.mark.parametrize("benchmark", ["cvebench_zero_day", "nyu_ctf_web_test", "cybench_web"])
@@ -899,20 +909,25 @@ def test_qualification_bundle_is_a_complete_protocol_runtime(
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(base64.b64decode(encoded, validate=True))
-    environment = os.environ.copy()
-    environment["PYTHONPATH"] = str(root)
+    for package in (root / "evals", root / "evals/external_ctf"):
+        (package / "__init__.py").write_bytes(b"")
     subprocess.run(
         [
             sys.executable,
+            "-I",
             "-c",
             (
+                "import sys;"
                 "from pathlib import Path;"
-                "from evals.external_ctf.protocol import load_protocol;"
-                "load_protocol(Path(__import__('sys').argv[1]))"
+                "sys.path.insert(0, sys.argv[1]);"
+                "from evals.external_ctf import protocol;"
+                "assert Path(protocol.__file__).resolve().is_relative_to("
+                "Path(sys.argv[1]).resolve());"
+                "protocol.load_protocol(Path(sys.argv[2]))"
             ),
+            str(root),
             str(PROTOCOL.resolve()),
         ],
         check=True,
         cwd=tmp_path,
-        env=environment,
     )
