@@ -56,6 +56,10 @@ def test_final_matched_results_page_is_wired_to_sanitized_site_data() -> None:
     assert "They are not the untouched final Fleet test set" in html
     assert "randomly reordered and numbered" in html
     assert 'fetch("evaluation-results.json")' in javascript
+    assert 'fetch("evaluation-interim-results.json")' in javascript
+    assert "not pass@8" in html
+    assert "has no confidence interval" in html
+    assert "cyber_public_eval_interim_results_v1" in javascript
     assert "row.public_task_index" in javascript
     assert "arm.technical_failures" in javascript
     assert "infrastructure_invalid_attempts" not in javascript

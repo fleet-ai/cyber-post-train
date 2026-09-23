@@ -59,6 +59,35 @@ untouched Fleet test. Qwen3.8-27B was released after WebExploitBench, so the
 matched before-and-after change is useful while the absolute score is not a
 temporally clean generalization claim.
 
+## Importing an interim matched WebExploitBench comparison
+
+The interim lane is separate from the final importer and final site file. It
+accepts only the public-safe `cyber_sanitized_matched_pass8_interim_v1` schema,
+requires a reviewed source-file digest, recomputes the uniform matched headline
+from anonymous task rows, and writes `evaluation-interim-results.json`:
+
+```sh
+python -m cyber_post_train.interim_eval_import \
+  --web-interim /absolute/restricted/path/web-interim-sanitized.json \
+  --web-interim-file-sha256 sha256:<reviewed-file-digest> \
+  --output site/evaluation-interim-results.json
+```
+
+The headline uses the lowest score-blind matched attempt indices and one
+uniform `k = min(complete model-pair attempts per task)` across all 15 tasks.
+It keeps the fixed 110-weakness denominator. It is a descriptive matched
+complete-case union at that explicit `k`, not pass@8, and has no confidence
+interval or inferential claim. If `k` is zero, the site may show coverage but
+must not show a headline. The final site file always takes precedence once a
+checked final comparison exists.
+
+The interim source and site payload contain only randomly reordered public task
+numbers, counts, percentages, status rosters, and evidence digests. They must
+not contain the private permutation mapping, original task indices, task names
+or IDs, prompts, responses, traces, answers, flags, per-attempt scores, file
+paths, or credentials. Review the generated file and rendered page before any
+publication. Do not pass the interim schema to `public_eval_import`.
+
 ## Publishing without dropping newer pages
 
 The public URL is built from `gh-pages`, not from `main/site` directly. The two
@@ -90,13 +119,18 @@ Required checks before publication:
 
 ```sh
 uv run --locked pytest -q \
-  tests/test_public_eval_import.py tests/test_public_site_language.py
+  tests/test_public_eval_import.py tests/test_interim_eval_import.py \
+  tests/test_public_site_language.py
 uv run --locked ruff check \
   cyber_post_train/public_eval_import.py \
-  tests/test_public_eval_import.py tests/test_public_site_language.py
+  cyber_post_train/interim_eval_import.py \
+  tests/test_public_eval_import.py tests/test_interim_eval_import.py \
+  tests/test_public_site_language.py
 uv run --locked ruff format --check \
   cyber_post_train/public_eval_import.py \
-  tests/test_public_eval_import.py tests/test_public_site_language.py
+  cyber_post_train/interim_eval_import.py \
+  tests/test_public_eval_import.py tests/test_interim_eval_import.py \
+  tests/test_public_site_language.py
 node --check site/app.js
 git diff --check
 ```

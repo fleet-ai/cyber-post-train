@@ -43,10 +43,66 @@ function attemptSummary(arm) {
   return `${arm.valid_attempts} valid · ${arm.technical_failures} technical`;
 }
 
+function renderInterimMatchedResults(data) {
+  const cards = document.querySelector("#matched-result-cards");
+  const tables = document.querySelector("#matched-task-tables");
+  const status = document.querySelector("#matched-results-status");
+  const study = data.studies[0];
+  const summary = study.summary;
+  const counts = study.coverage.counts;
+  const denominators = study.coverage.denominators;
+
+  status.textContent = summary
+    ? `A checked interim comparison is available at the same ${study.uniform_k} completed attempts per anonymous task. The planned eight-attempt comparison is not final.`
+    : "Some matched evidence is available, but at least one task has no completed pair. No interim headline is shown.";
+  if (!summary) {
+    cards.innerHTML = `<article class="result-card awaiting-result"><div class="card-top"><h3>Interim coverage only</h3><span>Not final</span></div><p>${denominators.qualified_pair_denominator} of ${denominators.planned_pair_denominator} model-pair attempts have complete evidence. A uniform comparison is not yet available.</p></article>`;
+  } else {
+    cards.innerHTML = `<article class="result-card matched-result-card">
+      <div class="card-top"><h3>${escapeHtml(study.title)}</h3><span>Interim descriptive summary</span></div>
+      <p class="matched-metric">Weaknesses found across the same ${summary.uniform_k} completed attempts per task</p>
+      <div class="matched-score-row">
+        <div><b>${pct(summary.base.metric_percent)}</b><small>Base model</small></div>
+        <div><b>${pct(summary.candidate.metric_percent)}</b><small>After training</small></div>
+        <div><b>${signedPct(summary.delta_percentage_points)}</b><small>Descriptive change</small></div>
+      </div>
+      <dl>
+        <div><dt>Matched attempts used per task</dt><dd>${summary.uniform_k} / 8 planned</dd></div>
+        <div><dt>Complete model-pair attempts</dt><dd>${denominators.qualified_pair_denominator} / ${denominators.planned_pair_denominator}</dd></div>
+        <div><dt>Score cells still missing</dt><dd>${counts.missing_cells}</dd></div>
+      </dl>
+      <p>This is a score-blind matched complete-case description, not pass@8. It has no confidence interval and makes no inferential claim.</p>
+    </article>`;
+  }
+
+  tables.innerHTML = `<section class="matched-task-block" aria-labelledby="tasks-${escapeHtml(study.benchmark)}">
+    <h3 id="tasks-${escapeHtml(study.benchmark)}">${escapeHtml(study.title)} · interim coverage</h3>
+    <div class="comparison-table-wrap"><table class="comparison-table matched-task-table">
+      <thead><tr><th>Anonymous task</th><th>Complete pairs</th><th>Base uniform result</th><th>After-training uniform result</th><th>Descriptive change</th></tr></thead>
+      <tbody>${study.task_rows.map(row => {
+        const uniform = row.uniform_headline;
+        const base = uniform?.base.metric_percent ?? null;
+        const candidate = uniform?.candidate.metric_percent ?? null;
+        return `<tr>
+          <th scope="row">Task ${row.public_task_index + 1}</th>
+          <td>${row.qualified_pair_denominator} / ${row.planned_pair_denominator}</td>
+          <td>${pct(base)}</td>
+          <td>${pct(candidate)}</td>
+          <td>${base == null || candidate == null ? "—" : signedPct(candidate - base)}</td>
+        </tr>`;
+      }).join("")}</tbody>
+    </table></div>
+  </section>`;
+}
+
 function renderMatchedResults(data) {
   const cards = document.querySelector("#matched-result-cards");
   const tables = document.querySelector("#matched-task-tables");
   const status = document.querySelector("#matched-results-status");
+  if (data?.schema_version === "cyber_public_eval_interim_results_v1" && data.status === "interim" && Array.isArray(data.studies) && data.studies.length === 1) {
+    renderInterimMatchedResults(data);
+    return;
+  }
   if (!data || data.schema_version !== "cyber_public_eval_results_v1" || !Array.isArray(data.studies) || data.studies.length === 0) {
     cards.innerHTML = '<article class="result-card awaiting-result"><div class="card-top"><h3>No final comparison yet</h3><span>Waiting</span></div><p>The page is ready, but it will not show partial or unchecked results.</p></article>';
     tables.innerHTML = '<p class="callout">Task-level summaries will appear after both complete studies are imported.</p>';
@@ -95,8 +151,19 @@ async function loadMatchedResults() {
   try {
     const response = await fetch("evaluation-results.json");
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const finalData = await response.json();
+    if (finalData.schema_version === "cyber_public_eval_results_v1" && Array.isArray(finalData.studies) && finalData.studies.length > 0) {
+      renderMatchedResults(finalData);
+      return;
+    }
+  } catch (_finalError) {
+    // A final result is optional while the fixed eight-attempt study is running.
+  }
+  try {
+    const response = await fetch("evaluation-interim-results.json");
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
     renderMatchedResults(await response.json());
-  } catch (_error) {
+  } catch (_interimError) {
     renderMatchedResults(null);
   }
 }

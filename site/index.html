@@ -114,10 +114,10 @@
         <div class="hero ruled">
           <p class="eyebrow">Same tasks and tools · before and after training</p>
           <h1 id="training-results-title">Did 1,000 training updates help?</h1>
-          <p class="dek">This page will compare the base Qwen3.8-27B model with the model saved after 1,000 training updates. Both models get the same eight chances on every task. Results appear only after both complete summaries pass the same checks.</p>
+          <p class="dek">This page compares the base Qwen3.8-27B model with the model saved after 1,000 training updates. The final result gives both models the same eight chances on every task. Before that is complete, a clearly labeled interim card may use only the same score-blind set of completed attempts for both models.</p>
           <div class="hero-meta">
             <span>OpenCode 1.18.27 only</span>
-            <span>8 attempts per model and task</span>
+            <span>8 planned attempts per model and task</span>
             <span>Public benchmark and Fleet development tasks</span>
             <span>Technical failures stay separate from model failures</span>
           </div>
@@ -125,7 +125,7 @@
 
         <aside class="finding" aria-label="Current comparison status">
           <span class="finding-label">Current status</span>
-          <p id="matched-results-status">Waiting for both final, checked summaries. Partial results are not published here.</p>
+          <p id="matched-results-status">Waiting for either the final checked summaries or a separately checked uniform matched interim summary.</p>
         </aside>
 
         <section class="section" aria-labelledby="matched-results-title">
@@ -133,13 +133,14 @@
             <p class="section-index">01</p>
             <div>
               <h2 id="matched-results-title">Results at a glance</h2>
-              <p>Each card uses only tasks with all eight valid attempts for both models. The change is the after-training result minus the base-model result.</p>
+              <p>A final card uses all eight valid attempts for both models. An interim card instead uses the same smaller number of completed attempts on every task, selected before any scores are opened. The change is the after-training result minus the base-model result.</p>
             </div>
           </div>
           <div id="matched-result-cards" class="result-grid"></div>
           <div class="metric-note">
             <p><strong>95% confidence interval</strong> is a range that shows how much the estimated change varies when the same completed tasks are repeatedly resampled. A wide range means the comparison is still uncertain.</p>
             <p>Attempts that failed for technical reasons are counted and shown, but never turned into model failures or zeros.</p>
+            <p><strong>Interim result.</strong> A descriptive interim comparison is not pass@8 and has no confidence interval. It stays explicitly separate from the final claim.</p>
           </div>
           <div class="metric-note">
             <p><strong>Public benchmark limit.</strong> Qwen3.8-27B was released after this benchmark. The before-and-after change is controlled, but benchmark contamination cannot be ruled out, so this is not proof of performance on a newly created test.</p>
@@ -152,7 +153,7 @@
             <p class="section-index">02</p>
             <div>
               <h2 id="matched-task-title">Evidence by anonymous task</h2>
-              <p>Tasks are randomly reordered and numbered here so the public page does not reveal private Fleet task names, the saved task order, or benchmark material. A blank result means at least one of the eight attempts had a technical failure.</p>
+              <p>Tasks are randomly reordered and numbered here so the public page does not reveal private Fleet task names, the saved task order, or benchmark material. In a final table, a blank result means at least one of the eight attempts had a technical failure. In an interim table, it means no uniform matched comparison is available.</p>
             </div>
           </div>
           <div id="matched-task-tables"></div>
@@ -163,7 +164,7 @@
             <p class="section-index">03</p>
             <div>
               <h2 id="matched-method-title">What is allowed onto this page</h2>
-              <p>The importer accepts only a final numerical summary tied to checked protocol, completion, scoring, and calculation records. It rejects partial studies, missing attempts, unknown fields, task identities, prompts, responses, traces, flags, per-attempt scores, and credentials.</p>
+              <p>The final importer accepts only a complete final numerical summary. A separate interim importer accepts only a score-blind, uniformly matched descriptive summary and never produces a confidence interval or pass@8 claim. Both reject unknown fields, private task identities, prompts, responses, traces, flags, per-attempt scores, paths, and credentials.</p>
             </div>
           </div>
         </section>
