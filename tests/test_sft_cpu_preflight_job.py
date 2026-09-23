@@ -87,6 +87,8 @@ def test_embedded_bundle_reopens_exact_source_and_prepared_bytes(package, monkey
             monkeypatch.setenv(name, value)
     blob = driver._bundle_from_environment()
     manifest, files = driver._inspect_bundle(blob)
+    assert len(files) <= driver.MAX_FILES
+    assert set(files) == set(manifest["files"])
     assert manifest["source_commit"] == SOURCE_COMMIT
     assert manifest["plan_sha256"] == digest(package.plan)
     assert manifest["request_sha256"] == digest(package.request)

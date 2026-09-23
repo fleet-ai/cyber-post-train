@@ -1200,6 +1200,10 @@ def _validated_receipt(message: object, *, kind: str) -> dict | None:
             "cyber_skyrl_reward_data_stage_receipt_v1",
             "cyber_skyrl_reward_cpu_preflight_v1",
             "cyber_skyrl_reward_cpu_preflight_rejection_v1",
+            "cyber_skyrl_prod10_operator_termination_v1",
+            "cyber_skyrl_prod10_rebound_manifest_result_v1",
+            "cyber_skyrl_prod10_operator_failure_v1",
+            "cyber_skyrl_prod10_bootstrap_failure_v1",
         },
         "fleetjob": {
             "cyber_skyrl_topology_probe_receipt_v1",
@@ -1292,6 +1296,12 @@ class Observer:
                 DIRECT_RESULT_SCHEMA,
                 1800,
             ),
+            "production-operator": (
+                PROD_CONTEXT,
+                DIRECT_ARMED_SCHEMA,
+                DIRECT_RESULT_SCHEMA,
+                2700,
+            ),
             "production-reload": (
                 PROD_CONTEXT,
                 DIRECT_ARMED_SCHEMA,
@@ -1322,6 +1332,8 @@ class Observer:
             raise ObserverError("production recovery observer requires a root RayJob")
         if profile == "production-cpu" and kind != "job":
             raise ObserverError("production CPU observer requires a root Job")
+        if profile == "production-operator" and kind != "job":
+            raise ObserverError("production operator observer requires a root Job")
         if profile == "production-reload" and kind != "rayjob":
             raise ObserverError("production reload observer requires a root RayJob")
         is_prod8_terminal_probe = kind == "job" and name == prod8.NAME
@@ -1373,6 +1385,7 @@ class Observer:
         self.requires_creator_binding = profile in {
             "production-direct",
             "production-cpu",
+            "production-operator",
             "production-reload",
         } and not (is_prod8_terminal_probe or expected_uid)
         if self.requires_creator_binding and (
@@ -1722,6 +1735,42 @@ class Observer:
         else:
             pods = self._list("pod", "--selector", f"job-name={self.name}")
             self._capture_pods(pods)
+        labels = resource.get("metadata", {}).get("labels", {})
+        queued = (
+            isinstance(labels, dict)
+            and labels.get("kueue.x-k8s.io/queue-name") == "training-lq"
+            and labels.get("kueue.x-k8s.io/priority-class") == "q1"
+        )
+        workloads = (
+            self._list(
+                "workload", "--selector", f"kueue.x-k8s.io/job-uid={self.snapshot.uid}"
+            )
+            if queued
+            else []
+        )
+        if len(workloads) > 1:
+            raise ObserverError("more than one Workload owns the exact Job")
+        if workloads:
+            workload = workloads[0]
+            workload_name = workload.get("metadata", {}).get("name")
+            workload_uid, _ = self._metadata(workload)
+            owners = workload.get("metadata", {}).get("ownerReferences", [])
+            if (
+                not isinstance(workload_name, str)
+                or not workload_name
+                or not any(
+                    owner.get("kind") == "Job"
+                    and owner.get("name") == self.name
+                    and owner.get("uid") == self.snapshot.uid
+                    for owner in owners
+                    if isinstance(owner, dict)
+                )
+            ):
+                raise ObserverError("Kueue Workload does not own the exact Job")
+            if self.snapshot.workload_uid and self.snapshot.workload_uid != workload_uid:
+                raise ObserverError("Workload UID changed")
+            self.snapshot.workload_name = workload_name
+            self.snapshot.workload_uid = workload_uid
         conditions = resource.get("status", {}).get("conditions", [])
         for condition in conditions:
             if condition.get("status") != "True":

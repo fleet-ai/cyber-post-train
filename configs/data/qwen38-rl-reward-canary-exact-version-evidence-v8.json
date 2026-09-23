@@ -313,7 +313,7 @@
       },
       "prod9_direct_rail": {
         "path": "../../training/skyrl_prod9_direct.py",
-        "file_sha256": "sha256:779ad241f78e8e525e13b081b1917bcb0f62f6c4dae8bfaddc8061b0a6a37f6b",
+        "file_sha256": "sha256:7c05542df6aeb2d663f86d4a88b0e82b2a89a7f2495ba64215a13c5923d5f58b",
         "symbols": [
           "manifest",
           "stage_job_manifest",
@@ -381,7 +381,7 @@
       },
       "prod9_cleanup_observer": {
         "path": "../../training/dev_cleanup_observer.py",
-        "file_sha256": "sha256:16542b681bd53e44b159bbee611eb29c9483bf4bd39ab62a29070cfad682c211",
+        "file_sha256": "sha256:722d91552b947eb8a8f0c8166156df25ba17cdc506f517abc2cda4b9d1befee6",
         "symbols": [
           "_validated_receipt",
           "Observer",
@@ -471,5 +471,5 @@
       "incident_evidence_self_sha256": "sha256:c45f12a8fa799900053a1bd7b1e33ff26e89d517ae552188bda0e66cf675ca2d"
     }
   },
-  "sha256": "sha256:0674276c9b94864c8db8ae2e271b6c9a56b7bc59107b975b780fedeb4efc3ef7"
+  "sha256": "sha256:2598e397aa883ca18d5323709bee0fa1fd7e272a459738b859c5bb0073c3d843"
 }

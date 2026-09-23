@@ -1281,6 +1281,111 @@ class Kubectl:
             raise JobsError("unsupported duplicate-check resource")
         return self._run(["get", resource, "--namespace", NAMESPACE, "--output=json"])
 
+    def list_operator_resources(self, resource: str) -> dict:
+        """List compact names for the fixed bounded-operator identity surfaces."""
+        prefixes = {
+            "jobs.batch": "job.batch/",
+            "pods": "pod/",
+            "rayjobs.ray.io": "rayjob.ray.io/",
+            "rayclusters.ray.io": "raycluster.ray.io/",
+        }
+        if resource not in prefixes:
+            raise JobsError("unsupported bounded-operator inventory resource")
+        output = self._run_text(["get", resource, "--namespace", NAMESPACE, "--output=name"])
+        prefix = prefixes[resource]
+        items = []
+        for line in output.splitlines():
+            if not line.startswith(prefix) or line.count("/") != 1:
+                raise JobsError("bounded-operator name inventory is invalid")
+            name = line.removeprefix(prefix)
+            if re.fullmatch(r"[a-z0-9](?:[-a-z0-9.]{0,251}[a-z0-9])?", name) is None:
+                raise JobsError("bounded-operator name inventory is invalid")
+            items.append(
+                {
+                    "metadata": {
+                        "name": name,
+                        "labels": {},
+                        "annotations": {},
+                        "ownerReferences": [],
+                    }
+                }
+            )
+        return {"kind": "PartialObjectMetadataList", "items": items}
+
+    def get_operator_object(self, resource: str, name: str) -> dict | None:
+        """Read one fixed helper identity when namespace-wide list is unavailable."""
+        if (
+            resource not in {"configmap", "job", "workload", "rayjob", "raycluster"}
+            or re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", name) is None
+        ):
+            raise JobsError("bounded-operator read identity is invalid")
+        output = self._run_text(
+            [
+                "get",
+                resource,
+                name,
+                "--namespace",
+                NAMESPACE,
+                "--ignore-not-found",
+                "--output=json",
+            ]
+        ).strip()
+        return _json_object(output, "get") if output else None
+
+    def list_operator_pods(self, job_name: str) -> dict:
+        """Read only Pods carrying the exact root Job owner label."""
+        if re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", job_name) is None:
+            raise JobsError("bounded-operator Pod owner identity is invalid")
+        output = self._run_text(
+            [
+                "get",
+                "pods",
+                "--namespace",
+                NAMESPACE,
+                "--selector=batch.kubernetes.io/job-name=" + job_name,
+                "--output=name",
+            ]
+        )
+        items = []
+        for line in output.splitlines():
+            if not line.startswith("pod/") or line.count("/") != 1:
+                raise JobsError("bounded-operator Pod inventory is invalid")
+            name = line.removeprefix("pod/")
+            if re.fullmatch(r"[a-z0-9](?:[-a-z0-9.]{0,251}[a-z0-9])?", name) is None:
+                raise JobsError("bounded-operator Pod inventory is invalid")
+            items.append(
+                {
+                    "metadata": {
+                        "name": name,
+                        "labels": {"batch.kubernetes.io/job-name": job_name},
+                        "annotations": {},
+                        "ownerReferences": [],
+                    }
+                }
+            )
+        return {"kind": "PartialObjectMetadataList", "items": items}
+
+    def delete_operator_object_uid_once(self, resource: str, name: str, uid: str) -> dict:
+        """Delete one helper object only with its immutable UID precondition."""
+        routes = {
+            "configmap": "/api/v1/namespaces/{namespace}/configmaps/{name}",
+            "job": "/apis/batch/v1/namespaces/{namespace}/jobs/{name}",
+        }
+        if (
+            resource not in routes
+            or re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", name) is None
+            or KUBERNETES_UID_PATTERN.fullmatch(uid) is None
+        ):
+            raise JobsError("bounded-operator UID delete identity is invalid")
+        path = routes[resource].format(namespace=NAMESPACE, name=name)
+        body = {
+            "apiVersion": "v1",
+            "kind": "DeleteOptions",
+            "propagationPolicy": "Foreground",
+            "preconditions": {"uid": uid},
+        }
+        return self._run(["delete", "--raw", path, "-f", "-"], manifest=body)
+
     def get_rayjob(self, name: str) -> dict:
         if re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", name) is None:
             raise JobsError("invalid RayJob readback name")

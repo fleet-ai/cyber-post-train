@@ -22,7 +22,9 @@ import yaml
 
 from cyber_post_train.gpu_capacity import build_capacity_census
 from cyber_post_train.jobs import JobsError, digest
+from evals.fleet import opencode_self_hosted as fleet
 from scripts import prepare_qwen38_skyrl_prod9_successor as prod9_prepare
+from training import incluster_kubernetes
 from training import skyrl_prod9_direct as prod9_direct
 from training import skyrl_prod9_hardening as hardening
 from training import skyrl_prod9_reload as prod9_reload
@@ -393,6 +395,7 @@ def _cpu_render(value: dict) -> dict:
             "generation": 1,
             "uid": uid,
             "labels": {
+                **value["metadata"].get("labels", {}),
                 "batch.kubernetes.io/controller-uid": uid,
                 "batch.kubernetes.io/job-name": name,
                 "controller-uid": uid,
@@ -409,9 +412,10 @@ def _cpu_render(value: dict) -> dict:
             "parallelism": 1,
             "podReplacementPolicy": "TerminatingOrFailed",
             "selector": {"matchLabels": {"batch.kubernetes.io/controller-uid": uid}},
-            "suspend": False,
         }
     )
+    if "suspend" not in value["spec"]:
+        rendered["spec"]["suspend"] = False
     rendered["spec"]["template"]["metadata"]["labels"] = {
         "batch.kubernetes.io/controller-uid": uid,
         "batch.kubernetes.io/job-name": name,
@@ -526,16 +530,16 @@ def _release(
     )
 
 
-def _stage_receipt(stage: dict, plan: dict, identity: historical_direct.RailIdentity) -> dict:
+def _stage_receipt(stage: dict, successor: dict, identity: historical_direct.RailIdentity) -> dict:
     files = [
         {"path": name, "bytes": 1, "sha256": "sha256:" + name.encode().hex().ljust(64, "0")}
         for name in ("manifest.json", "split.json", "task-set.json")
     ]
     files.extend(
         {
-            "path": plan["data"]["files"][split]["path"],
+            "path": successor["files"][split]["path"],
             "bytes": 1,
-            "sha256": plan["data"]["files"][split]["sha256"],
+            "sha256": successor["files"][split]["sha256"],
         }
         for split in ("train", "dev")
     )
@@ -547,8 +551,8 @@ def _stage_receipt(stage: dict, plan: dict, identity: historical_direct.RailIden
         "source": identity.predecessor_data_root,
         "destination": identity.data_root,
         "predecessor_manifest_sha256": stage["predecessor_manifest_sha256"],
-        "successor_manifest": plan["data"],
-        "successor_manifest_sha256": plan["data"]["sha256"],
+        "successor_manifest": successor,
+        "successor_manifest_sha256": successor["sha256"],
         "files": files,
         "gpus": 0,
         "runtime_user": {"uid": 1000, "gid": 100},
@@ -558,6 +562,477 @@ def _stage_receipt(stage: dict, plan: dict, identity: historical_direct.RailIden
         "checkpoints": 0,
     }
     return {**body, "receipt_sha256": digest(body)}
+
+
+def _direct_stage_v2_evidence(
+    stage: dict,
+    successor: dict,
+    identity: historical_direct.RailIdentity,
+    operator_name: str,
+) -> tuple[dict, dict]:
+    job_uid = "00000000-0000-4000-8000-000000000071"
+    pod_uid = "00000000-0000-4000-8000-000000000072"
+    workload_uid = "00000000-0000-4000-8000-000000000073"
+    source_sha256 = "sha256:" + "a" * 64
+    packet_sha256 = "sha256:" + "b" * 64
+    manifest_sha256 = "sha256:" + "c" * 64
+    receipt = _stage_receipt(stage, successor, identity)
+    stage_result = prod9_direct._seal(
+        {
+            "schema": prod9_direct.DIRECT_STAGE_RESULT_SCHEMA,
+            "status": "stage_ready",
+            "phase": "stage",
+            "packet_sha256": packet_sha256,
+            "stage": stage,
+            "receipt": receipt,
+            "recovery_sha256": "sha256:" + "d" * 64,
+            "execution": {
+                "kind": "job",
+                "name": operator_name,
+                "uid": job_uid,
+                "image": stage["image"],
+                "source_sha256": source_sha256,
+                "sfs_output": stage["destination"],
+                "receipt_sha256": receipt["receipt_sha256"],
+                "nested_jobs_created": 0,
+            },
+            "gpus": 0,
+        }
+    )
+    result_path = str(hardening.stage_operation_root(stage) / "STAGE_OPERATOR_RESULT.json")
+    termination = prod9_direct._seal(
+        {
+            "schema": prod9_direct.STAGE_OPERATOR_TERMINATION_SCHEMA,
+            "status": "passed",
+            "phase": "stage",
+            "result_path": result_path,
+            "result_sha256": stage_result["sha256"],
+            "gpus": 0,
+        }
+    )
+    release = prod9_direct._seal(
+        {
+            "schema": "cyber_direct_cleanup_observer_result_v1",
+            "status": "released",
+            "context": prod9_direct.PROD_CONTEXT,
+            "namespace": prod9_direct.NAMESPACE,
+            "kind": "job",
+            "name": operator_name,
+            "plan_sha256": packet_sha256,
+            "manifest_sha256": manifest_sha256,
+            "expected_gpus": 0,
+            "peak_gpus": 0,
+            "active_gpus": 0,
+            "terminal_status": "Succeeded",
+            "restarts": 0,
+            "exit_codes": [0],
+            "receipt": termination,
+            "uid": job_uid,
+            "pod_names": [operator_name + "-abcde"],
+            "pod_uids": [pod_uid],
+            "workload_name": "job-" + operator_name + "-abcde",
+            "workload_uid": workload_uid,
+            "image_ids": [stage["image"]],
+            "target_present": False,
+            "pods_present": False,
+            "rayjob_present": False,
+            "workload_present": False,
+            "raycluster_present": False,
+            "release_observed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+    launch = prod9_direct._seal(
+        {
+            "schema": prod9_direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA,
+            "status": "operator_succeeded_and_released",
+            "package": {
+                "name": operator_name,
+                "phase": "stage",
+                "packet_sha256": packet_sha256,
+                "source_sha256": source_sha256,
+                "job_manifest_sha256": manifest_sha256,
+                "failure_alerts": "off",
+                "priority": "c1",
+                "queue_priority": "q1",
+                "gpus": 0,
+            },
+            "created": {
+                "source_config_map": {
+                    "name": operator_name + "-source",
+                    "uid": "00000000-0000-4000-8000-000000000074",
+                },
+                "packet_config_map": {
+                    "name": operator_name + "-packet",
+                    "uid": "00000000-0000-4000-8000-000000000075",
+                },
+                "job": {
+                    "name": operator_name,
+                    "uid": job_uid,
+                    "manifest_sha256": manifest_sha256,
+                    "failure_alerts": "off",
+                    "priority": "c1",
+                    "queue_priority": "q1",
+                    "gpus": 0,
+                },
+            },
+            "observer": release,
+            "config_map_release": {"source_status": None, "packet_status": None},
+            "gpus": 0,
+        }
+    )
+    return stage_result, launch
+
+
+def _direct_manifest_evidence(
+    plan: dict,
+    stage_result: dict,
+    stage_launch: dict,
+    operator_name: str,
+) -> dict:
+    job_uid = "00000000-0000-4000-8000-000000000081"
+    packet_sha256 = "sha256:" + "e" * 64
+    source_sha256 = "sha256:" + "f" * 64
+    manifest_sha256 = "sha256:" + "1" * 64
+    receipt = prod9_direct._seal(
+        {
+            "schema": prod9_direct.DIRECT_MANIFEST_RESULT_SCHEMA,
+            "status": "passed",
+            "phase": "manifest",
+            "stage_result_sha256": stage_result["sha256"],
+            "stage_launch_result_sha256": stage_launch["sha256"],
+            "preflight_v1_failure_sha256": "sha256:" + "2" * 64,
+            "successor_manifest": plan["data"],
+            "successor_manifest_sha256": plan["data"]["sha256"],
+            "private_rows_exported": False,
+            "nested_jobs_created": 0,
+            "gpus": 0,
+        }
+    )
+    release = prod9_direct._seal(
+        {
+            "schema": "cyber_direct_cleanup_observer_result_v1",
+            "status": "released",
+            "context": prod9_direct.PROD_CONTEXT,
+            "namespace": prod9_direct.NAMESPACE,
+            "kind": "job",
+            "name": operator_name,
+            "plan_sha256": packet_sha256,
+            "manifest_sha256": manifest_sha256,
+            "expected_gpus": 0,
+            "peak_gpus": 0,
+            "active_gpus": 0,
+            "terminal_status": "Succeeded",
+            "restarts": 0,
+            "exit_codes": [0],
+            "receipt": receipt,
+            "uid": job_uid,
+            "pod_names": [operator_name + "-abcde"],
+            "pod_uids": ["00000000-0000-4000-8000-000000000082"],
+            "workload_name": "job-" + operator_name + "-abcde",
+            "workload_uid": "00000000-0000-4000-8000-000000000083",
+            "image_ids": [prod9_training.historical.IMAGE],
+            "target_present": False,
+            "pods_present": False,
+            "rayjob_present": False,
+            "workload_present": False,
+            "raycluster_present": False,
+            "release_observed_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        }
+    )
+    return prod9_direct._seal(
+        {
+            "schema": prod9_direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA,
+            "status": "operator_succeeded_and_released",
+            "package": {
+                "name": operator_name,
+                "phase": "manifest",
+                "packet_sha256": packet_sha256,
+                "source_sha256": source_sha256,
+                "job_manifest_sha256": manifest_sha256,
+                "failure_alerts": "off",
+                "priority": "c1",
+                "queue_priority": "q1",
+                "gpus": 0,
+            },
+            "created": {
+                "source_config_map": {
+                    "name": operator_name + "-source",
+                    "uid": "00000000-0000-4000-8000-000000000084",
+                },
+                "packet_config_map": {
+                    "name": operator_name + "-packet",
+                    "uid": "00000000-0000-4000-8000-000000000085",
+                },
+                "job": {
+                    "name": operator_name,
+                    "uid": job_uid,
+                    "manifest_sha256": manifest_sha256,
+                    "failure_alerts": "off",
+                    "priority": "c1",
+                    "queue_priority": "q1",
+                    "gpus": 0,
+                },
+            },
+            "observer": release,
+            "config_map_release": {"source_status": None, "packet_status": None},
+            "gpus": 0,
+        }
+    )
+
+
+def _real_rebound_manifests(
+    tmp_path: Path, identity: historical_direct.RailIdentity
+) -> tuple[dict, dict]:
+    source = tmp_path / "source"
+    destination = tmp_path / "destination"
+    source.mkdir()
+    files: dict[str, dict] = {}
+    for split in ("train", "dev"):
+        config = {"run_id": identity.predecessor_run_name, "task": "synthetic"}
+        config["config_sha256"] = fleet.digest_without(config, "config_sha256")
+        row = {
+            "split": split,
+            "cyber_config_json": fleet.canonical_json(config).decode(),
+        }
+        payload = fleet.canonical_json(row) + b"\n"
+        (source / f"{split}.jsonl").write_bytes(payload)
+        files[split] = {
+            "path": f"{split}.jsonl",
+            "rows": 1,
+            "max_prompt_tokens": 1,
+            "sha256": "sha256:" + hashlib.sha256(payload).hexdigest(),
+        }
+    (source / "split.json").write_text("{}\n")
+    (source / "task-set.json").write_text("{}\n")
+    predecessor_body = {
+        key: value
+        for key, value in json.loads(
+            (
+                ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json"
+            ).read_text()
+        ).items()
+        if key != "sha256"
+    }
+    predecessor_body.update(name=identity.predecessor_run_name, files=files)
+    predecessor = {
+        **predecessor_body,
+        "sha256": "sha256:" + digest(predecessor_body),
+    }
+    (source / "manifest.json").write_bytes(fleet.canonical_json(predecessor) + b"\n")
+    successor = historical_direct.rebind_private_source_for_identity(source, destination, identity)
+    return predecessor, successor
+
+
+def test_prod10_direct_stage_v2_authorizes_preflight_without_legacy_fields(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan, request, identity = _prod9_plan()
+    predecessor, successor = _real_rebound_manifests(tmp_path, identity)
+    plan["data"] = successor
+    request = prod9_training.job_request(plan)
+    stage = prod9_training.stage_spec(identity, predecessor)
+    root = (tmp_path / "prod9-create-once-v1").resolve()
+    root.mkdir(mode=0o700)
+    monkeypatch.setattr(hardening, "CREATE_ONCE_ROOT", root)
+    operation_root = hardening.training_operation_root(plan)
+    operation_root.mkdir(mode=0o700)
+    operator_name = "chris-q38-prod10-stage-operator-v7"
+    stage_result, stage_launch = _direct_stage_v2_evidence(
+        stage, successor, identity, operator_name
+    )
+    expected = prod9_direct.preflight_job_manifest(plan, identity=identity)
+    dev_preview = prod9_direct.validate_cpu_preview(
+        expected,
+        _cpu_render(expected),
+        context=prod9_direct.DEV_CONTEXT,
+        purpose="preflight",
+    )
+    prod_preview = prod9_direct.validate_cpu_preview(
+        expected,
+        _cpu_render(expected),
+        context=prod9_direct.PROD_CONTEXT,
+        purpose="preflight",
+    )
+    observer = _observer(
+        "job",
+        identity.preflight_name,
+        "sha256:" + digest(plan),
+        "sha256:" + digest(expected),
+        0,
+        prod9_direct.CPU_MAXIMUM_SECONDS,
+        hardening.creator_binding_path(operation_root, "preflight"),
+    )
+    authorization = prod9_direct.authorize_preflight_direct_stage(
+        plan,
+        request,
+        stage,
+        stage_result,
+        stage_launch,
+        expected,
+        stage_operator_name=operator_name,
+        dev_preview=dev_preview,
+        prod_preview=prod_preview,
+        observer=observer,
+        identity=identity,
+    )
+    assert authorization["schema"] == prod9_direct.PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA
+    assert not {
+        "stage_authorization",
+        "stage_created",
+        "stage_receipt",
+        "stage_release",
+    }.intersection(authorization)
+    assert authorization["stage_result"] == stage_result
+    assert authorization["stage_launch_result"] == stage_launch
+
+    stale = copy.deepcopy(plan)
+    stale["data"] = {
+        **predecessor,
+        "name": identity.run_name,
+    }
+    stale["data"]["sha256"] = "sha256:" + digest(
+        {key: value for key, value in stale["data"].items() if key != "sha256"}
+    )
+    assert {split: stale["data"]["files"][split]["sha256"] for split in ("train", "dev")} != {
+        split: successor["files"][split]["sha256"] for split in ("train", "dev")
+    }
+    with pytest.raises(JobsError, match="direct stage result"):
+        prod9_direct.authorize_preflight_direct_stage(
+            stale,
+            prod9_training.job_request(stale),
+            stage,
+            stage_result,
+            stage_launch,
+            prod9_direct.preflight_job_manifest(stale, identity=identity),
+            stage_operator_name=operator_name,
+            dev_preview=dev_preview,
+            prod_preview=prod_preview,
+            observer=observer,
+            identity=identity,
+        )
+
+
+def test_prod10_manifest_handoff_is_fresh_and_keeps_real_rebind_equality(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan, _request, identity = _prod9_plan()
+    predecessor, successor = _real_rebound_manifests(tmp_path, identity)
+    plan["data"] = successor
+    request = prod9_training.job_request(plan)
+    stage = prod9_training.stage_spec(identity, predecessor)
+    root = (tmp_path / "prod9-create-once-v1").resolve()
+    root.mkdir(mode=0o700)
+    monkeypatch.setattr(hardening, "CREATE_ONCE_ROOT", root)
+    operation_root = hardening.training_operation_root(plan)
+    operation_root.mkdir(mode=0o700)
+    stage_name = "chris-q38-prod10-stage-operator-v7"
+    manifest_name = "chris-q38-prod10-manifest-operator-v1"
+    stage_result, stage_launch = _direct_stage_v2_evidence(stage, successor, identity, stage_name)
+    manifest_launch = _direct_manifest_evidence(plan, stage_result, stage_launch, manifest_name)
+    expected = prod9_direct.preflight_job_manifest(plan, identity=identity)
+    dev_preview = prod9_direct.validate_cpu_preview(
+        expected,
+        _cpu_render(expected),
+        context=prod9_direct.DEV_CONTEXT,
+        purpose="preflight",
+    )
+    prod_preview = prod9_direct.validate_cpu_preview(
+        expected,
+        _cpu_render(expected),
+        context=prod9_direct.PROD_CONTEXT,
+        purpose="preflight",
+    )
+    observer = _observer(
+        "job",
+        identity.preflight_name,
+        "sha256:" + digest(plan),
+        "sha256:" + digest(expected),
+        0,
+        prod9_direct.CPU_MAXIMUM_SECONDS,
+        hardening.creator_binding_path(operation_root, "preflight"),
+    )
+    authorization = prod9_direct.authorize_preflight_direct_manifest(
+        plan,
+        request,
+        stage,
+        stage_result,
+        stage_launch,
+        manifest_launch,
+        expected,
+        stage_operator_name=stage_name,
+        manifest_operator_name=manifest_name,
+        dev_preview=dev_preview,
+        prod_preview=prod_preview,
+        observer=observer,
+        identity=identity,
+    )
+    assert authorization["schema"] == (prod9_direct.PREFLIGHT_AUTHORIZATION_DIRECT_MANIFEST_SCHEMA)
+    assert authorization["stage_result"] == stage_result
+    assert authorization["manifest_launch_result"] == manifest_launch
+
+    stale = copy.deepcopy(manifest_launch)
+    stale["observer"]["release_observed_at"] = "2020-01-01T00:00:00Z"
+    stale["observer"] = prod9_direct._seal(stale["observer"])
+    stale = prod9_direct._seal(stale)
+    with pytest.raises(JobsError, match="stale"):
+        prod9_direct.authorize_preflight_direct_manifest(
+            plan,
+            request,
+            stage,
+            stage_result,
+            stage_launch,
+            stale,
+            expected,
+            stage_operator_name=stage_name,
+            manifest_operator_name=manifest_name,
+            dev_preview=dev_preview,
+            prod_preview=prod_preview,
+            observer=observer,
+            identity=identity,
+        )
+
+    stale_plan = copy.deepcopy(plan)
+    stale_plan["data"] = {
+        **predecessor,
+        "name": identity.run_name,
+    }
+    stale_plan["data"]["sha256"] = "sha256:" + digest(
+        {key: value for key, value in stale_plan["data"].items() if key != "sha256"}
+    )
+    with pytest.raises(JobsError, match="direct stage result"):
+        prod9_direct.authorize_preflight_direct_manifest(
+            stale_plan,
+            prod9_training.job_request(stale_plan),
+            stage,
+            stage_result,
+            stage_launch,
+            manifest_launch,
+            prod9_direct.preflight_job_manifest(stale_plan, identity=identity),
+            stage_operator_name=stage_name,
+            manifest_operator_name=manifest_name,
+            dev_preview=dev_preview,
+            prod_preview=prod_preview,
+            observer=observer,
+            identity=identity,
+        )
+
+    changed = copy.deepcopy(stage_result)
+    changed["execution"]["nested_jobs_created"] = 1
+    changed = prod9_direct._seal(changed)
+    with pytest.raises(JobsError, match="direct stage result"):
+        prod9_direct.authorize_preflight_direct_stage(
+            plan,
+            request,
+            stage,
+            changed,
+            stage_launch,
+            expected,
+            stage_operator_name=stage_name,
+            dev_preview=dev_preview,
+            prod_preview=prod_preview,
+            observer=observer,
+            identity=identity,
+        )
 
 
 def _preflight_receipt(plan: dict, request: dict, identity: historical_direct.RailIdentity) -> dict:
@@ -685,6 +1160,11 @@ def test_prod9_fresh_direct_renderer_and_cpu_preflight_are_alert_safe() -> None:
     assert packet["failure_alerts"] == proof["failure_alerts"] == "off"
     assert proof["nodes"] == 1 and proof["gpus"] == 8
     assert cpu_job["metadata"]["annotations"] == {"fleet.ai/failure-alerts": "off"}
+    assert cpu_job["metadata"]["labels"] == {
+        "kueue.x-k8s.io/queue-name": "training-lq",
+        "kueue.x-k8s.io/priority-class": "q1",
+    }
+    assert cpu_job["spec"]["suspend"] is True
     assert "nvidia.com/gpu" not in json.dumps(cpu_job, sort_keys=True)
     assert _bundle({"env": environment})["module"] == prod9_training.MODULE
     assert _bundle({"env": environment})["argv"][-3:] == [
@@ -701,7 +1181,12 @@ def test_prod9_fresh_direct_renderer_and_cpu_preflight_are_alert_safe() -> None:
         context=prod9_direct.PROD_CONTEXT,
         purpose="preflight",
     )
-    assert cpu_proof["gpus"] == 0 and cpu_proof["failure_alerts"] == "off"
+    assert (
+        cpu_proof["gpus"] == 0
+        and cpu_proof["failure_alerts"] == "off"
+        and cpu_proof["priority"] == "c1"
+        and cpu_proof["queue_priority"] == "q1"
+    )
     cpu_rendered["metadata"]["labels"]["job-name"] = "other"
     with pytest.raises(JobsError, match="Kubernetes defaults"):
         prod9_direct.validate_cpu_preview(
@@ -1043,6 +1528,169 @@ def test_prod9_prior_stage_evidence_is_uid_bound_without_global_freshness() -> N
         )
 
 
+def test_prod9_cpu_duplicate_inventory_uses_only_compact_reviewed_names() -> None:
+    commands: list[list[str]] = []
+    outputs = {
+        "job": "job.batch/unrelated-job\n",
+        "rayjob": "rayjob.ray.io/unrelated-rayjob\n",
+        "raycluster": "raycluster.ray.io/unrelated-raycluster\n",
+        "workload": "workload.kueue.x-k8s.io/job-unrelated-job-abc12\n",
+        "pod": "pod/unrelated-job-abc12\n",
+    }
+
+    def runner(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        commands.append(command)
+        resource = command[-2]
+        return subprocess.CompletedProcess(command, 0, outputs[resource], "")
+
+    assert (
+        prod9_direct._cpu_duplicate_inventory(
+            "chris-q38-prod10-data-v1",
+            context=prod9_direct.PROD_CONTEXT,
+            runner=runner,
+        )
+        == 5
+    )
+    assert len(commands) == 5
+    assert all(command[-1] == "--output=name" for command in commands)
+    assert all("--output=json" not in command for command in commands)
+
+
+@pytest.mark.parametrize(
+    ("resource", "rendered_name"),
+    (
+        ("job", "job.batch/chris-q38-prod10-data-v1"),
+        ("pod", "pod/chris-q38-prod10-data-v1-abc12"),
+        (
+            "workload",
+            "workload.kueue.x-k8s.io/job-chris-q38-prod10-data-v1-abc12",
+        ),
+    ),
+)
+def test_prod9_cpu_duplicate_inventory_rejects_all_reviewed_name_forms(
+    resource: str, rendered_name: str
+) -> None:
+    def runner(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        stdout = rendered_name + "\n" if command[-2] == resource else ""
+        return subprocess.CompletedProcess(command, 0, stdout, "")
+
+    with pytest.raises(JobsError, match="identity already exists"):
+        prod9_direct._cpu_duplicate_inventory(
+            "chris-q38-prod10-data-v1",
+            context=prod9_direct.PROD_CONTEXT,
+            runner=runner,
+        )
+
+
+def test_prod9_cpu_duplicate_inventory_rejects_unreviewed_name_prefix() -> None:
+    def runner(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        stdout = "job/chris-q38-prod10-data-v1\n" if command[-2] == "job" else ""
+        return subprocess.CompletedProcess(command, 0, stdout, "")
+
+    with pytest.raises(JobsError, match="inventory is invalid"):
+        prod9_direct._cpu_duplicate_inventory(
+            "chris-q38-prod10-data-v1",
+            context=prod9_direct.PROD_CONTEXT,
+            runner=runner,
+        )
+
+
+@pytest.mark.parametrize(
+    ("resource", "path", "prefix"),
+    (
+        ("job", "/apis/batch/v1/namespaces/fleet-train-jobs/jobs", "job.batch/"),
+        ("pod", "/api/v1/namespaces/fleet-train-jobs/pods", "pod/"),
+        (
+            "rayjob",
+            "/apis/ray.io/v1/namespaces/fleet-train-jobs/rayjobs",
+            "rayjob.ray.io/",
+        ),
+        (
+            "raycluster",
+            "/apis/ray.io/v1/namespaces/fleet-train-jobs/rayclusters",
+            "raycluster.ray.io/",
+        ),
+        (
+            "workload",
+            "/apis/kueue.x-k8s.io/v1beta2/namespaces/fleet-train-jobs/workloads",
+            "workload.kueue.x-k8s.io/",
+        ),
+    ),
+)
+def test_incluster_kubernetes_converts_reviewed_lists_to_compact_names(
+    resource: str, path: str, prefix: str
+) -> None:
+    calls: list[tuple[str, str, dict[str, str]]] = []
+
+    def request(
+        method: str, requested_path: str, _body: bytes | None, headers: dict[str, str]
+    ) -> tuple[int, bytes]:
+        calls.append((method, requested_path, headers))
+        return 200, json.dumps(
+            {
+                "apiVersion": "meta.k8s.io/v1",
+                "kind": "PartialObjectMetadataList",
+                "items": [
+                    {
+                        "apiVersion": "meta.k8s.io/v1",
+                        "kind": "PartialObjectMetadata",
+                        "metadata": {"name": "first-name"},
+                    },
+                    {
+                        "apiVersion": "meta.k8s.io/v1",
+                        "kind": "PartialObjectMetadata",
+                        "metadata": {"name": "second-name"},
+                    },
+                ],
+            }
+        ).encode()
+
+    runner = incluster_kubernetes.InClusterKubernetesRunner(request=request)
+    command = [
+        "kubectl",
+        "--context",
+        prod9_direct.PROD_CONTEXT,
+        "--namespace",
+        prod9_direct.NAMESPACE,
+        "get",
+        resource,
+        "--output=name",
+    ]
+    result = runner(command)
+
+    assert result.returncode == 0
+    assert result.stdout == f"{prefix}first-name\n{prefix}second-name\n"
+    assert calls == [
+        (
+            "GET",
+            path,
+            {"Accept": ("application/json;as=PartialObjectMetadataList;g=meta.k8s.io;v=v1")},
+        )
+    ]
+
+
+def test_incluster_kubernetes_rejects_full_object_fallback_for_compact_names() -> None:
+    def request(*_args: object) -> tuple[int, bytes]:
+        return 200, b'{"apiVersion":"v1","kind":"PodList","items":[]}'
+
+    runner = incluster_kubernetes.InClusterKubernetesRunner(request=request)
+    command = [
+        "kubectl",
+        "--context",
+        prod9_direct.PROD_CONTEXT,
+        "--namespace",
+        prod9_direct.NAMESPACE,
+        "get",
+        "pod",
+        "--output=name",
+    ]
+    with pytest.raises(
+        incluster_kubernetes.InClusterKubernetesError,
+        match="name inventory is invalid",
+    ):
+        runner(command)
+
+
 def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -1110,7 +1758,8 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
             expected = json.loads(kwargs["input"])
             return NS(returncode=0, stdout=json.dumps(_cpu_render(expected)))
         if "get" in command:
-            return NS(returncode=0, stdout=json.dumps({"items": []}))
+            assert command[-1] == "--output=name"
+            return NS(returncode=0, stdout="")
         if "create" in command:
             expected = json.loads(kwargs["input"])
             return NS(
@@ -1130,7 +1779,7 @@ def test_prod9_stage_and_one_create_rail_are_fresh_and_alert_safe(
     stage_created = prod9_direct.create_stage_once(
         stage_root, stage, stage_job, stage_auth, identity=identity, runner=cpu_runner
     )
-    staged = _stage_receipt(stage, plan, identity)
+    staged = _stage_receipt(stage, plan["data"], identity)
     stage_release = _release(
         name=identity.stage_name,
         plan_sha256=stage["sha256"],
