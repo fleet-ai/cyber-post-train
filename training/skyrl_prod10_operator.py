@@ -75,6 +75,9 @@ _LAUNCH_V2_FAILURE = {
     "release_sha256": (
         "sha256:2cb973f61095c77641602fdf2ebb469c31f0a7b0aa907b053b01119dd0bc3992"
     ),
+    "launch_packet_sha256": (
+        "sha256:f0903dc2ce7768dbf81d0c91838d0bbe238c162ff2dce96c48061c124961336a"
+    ),
     "inner_gpu_run_created": False,
     "gpus": 0,
 }
@@ -418,7 +421,9 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
             raise ValueError("prod10 launch probe failure predecessor changed")
         if packet.get("inspect_v3_success") != inspect_v3_success_binding():
             raise ValueError("prod10 launch probe inspection predecessor changed")
-        _packet(packet.get("launch_packet"), "launch")
+        launch_packet = _packet(packet.get("launch_packet"), "launch")
+        if launch_packet.get("sha256") != _LAUNCH_V2_FAILURE["launch_packet_sha256"]:
+            raise ValueError("prod10 launch probe packet predecessor changed")
     else:
         if packet.get("launch_v1_failure") != launch_v1_failure_binding():
             raise ValueError("prod10 launch failure predecessor changed")

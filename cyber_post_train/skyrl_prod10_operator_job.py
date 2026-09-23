@@ -363,6 +363,9 @@ def probe_packet(
     # its time-limited duplicate proof has expired.  Validate its immutable
     # packet contract without pretending the historical proof is fresh.
     checked_launch = operator._packet(launch_packet, "launch")
+    failure = operator.launch_v2_failure_binding()
+    if checked_launch.get("sha256") != failure["launch_packet_sha256"]:
+        raise ValueError("prod10 launch probe packet predecessor changed")
     if checked_launch.get("phase") != "launch":
         raise ValueError("prod10 launch probe source packet changed")
     return _seal(
@@ -372,7 +375,7 @@ def probe_packet(
             "operator_name": operator.OPERATOR_NAMES["probe"],
             "identity": checked_launch["identity"],
             "launch_packet": checked_launch,
-            "launch_v2_failure": operator.launch_v2_failure_binding(),
+            "launch_v2_failure": failure,
             "inspect_v3_success": operator.inspect_v3_success_binding(),
         }
     )

@@ -521,6 +521,9 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
         duplicate_proof=duplicate,
         capacity_census=capacity,
     )
+    monkeypatch.setitem(
+        operator._LAUNCH_V2_FAILURE, "launch_packet_sha256", source["sha256"]
+    )
     packet = operator_job.probe_packet(launch_packet=source)
     package = operator_job.build_operator_package(packet)
     proof = operator_job.validate_operator_package(package)
@@ -605,6 +608,13 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     changed["inspect_v3_success"] = operator._seal(changed["inspect_v3_success"])
     changed = operator._seal(changed)
     with pytest.raises(ValueError, match="inspection predecessor"):
+        operator_job.build_operator_package(changed)
+
+    changed = copy.deepcopy(packet)
+    changed["launch_packet"]["unexpected"] = True
+    changed["launch_packet"] = operator._seal(changed["launch_packet"])
+    changed = operator._seal(changed)
+    with pytest.raises(ValueError, match="packet predecessor"):
         operator_job.build_operator_package(changed)
 
 
