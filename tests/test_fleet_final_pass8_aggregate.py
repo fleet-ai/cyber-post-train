@@ -1053,6 +1053,48 @@ def test_two_preview_validator_rejects_unsafe_admission_fields(tmp_path: Path, d
         )
 
 
+@pytest.mark.parametrize("drift", ("extra_secret", "config_map_data", "config_map_finalizer"))
+def test_two_preview_validator_rejects_extra_objects_or_config_map_fields(
+    tmp_path: Path, drift: str
+) -> None:
+    root = tmp_path / "render"
+    migration = _migration(tmp_path)
+    renderer.render(output=root, migration_receipt=migration)
+    bundle = yaml.safe_load((root / "final-aggregate.yaml").read_text())
+    previews = [
+        _server_preview(bundle, "11111111-1111-4111-8111-111111111111"),
+        _server_preview(bundle, "22222222-2222-4222-8222-222222222222"),
+    ]
+    for value in previews:
+        config_map = next(item for item in value["items"] if item["kind"] == "ConfigMap")
+        if drift == "extra_secret":
+            value["items"].append(
+                {
+                    "apiVersion": "v1",
+                    "kind": "Secret",
+                    "metadata": {"name": "unreviewed", "namespace": "fleet-train-jobs"},
+                    "stringData": {"private": "content"},
+                }
+            )
+        elif drift == "config_map_data":
+            config_map["data"] = {"unreviewed": "executable"}
+        else:
+            config_map["metadata"]["finalizers"] = ["attacker.example/hold"]
+    first = tmp_path / "first.json"
+    second = tmp_path / "second.json"
+    first.write_text(json.dumps(previews[0]))
+    second.write_text(json.dumps(previews[1]))
+
+    with pytest.raises(renderer.RenderError):
+        renderer.validate_previews(
+            render_root=root,
+            migration_receipt=migration,
+            first=first,
+            second=second,
+            output=tmp_path / "previews.json",
+        )
+
+
 def test_preview_validator_rebuilds_render_policy_after_resigning_tamper(
     tmp_path: Path,
 ) -> None:

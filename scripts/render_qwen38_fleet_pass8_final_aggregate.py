@@ -560,7 +560,7 @@ def _normalized_preview(value: dict[str, Any], expected: dict[str, Any]) -> dict
     items = _items(value)
     jobs = [item for item in items if item.get("kind") == "Job"]
     maps = [item for item in items if item.get("kind") == "ConfigMap"]
-    if len(jobs) != 1 or len(maps) != 1:
+    if len(items) != 2 or len(jobs) != 1 or len(maps) != 1:
         raise RenderError("server preview lacks the exact Job and ConfigMap")
     job = jobs[0]
     config_map = maps[0]
@@ -575,6 +575,21 @@ def _normalized_preview(value: dict[str, Any], expected: dict[str, Any]) -> dict
     if not _contains(normalized_job, stable_job_preview(expected_job)):
         raise RenderError("server-rendered Job differs from the immutable render")
     _server_defaults_only(job, expected_job)
+    _extra_keys(config_map, expected_map, set(), "ConfigMap")
+    metadata = config_map.get("metadata")
+    if not isinstance(metadata, dict):
+        raise RenderError("server-rendered ConfigMap metadata is missing")
+    _extra_keys(
+        metadata,
+        expected_map["metadata"],
+        {"creationTimestamp", "generation", "managedFields", "resourceVersion", "uid"},
+        "ConfigMap metadata",
+    )
+    if metadata.get("uid") is not None:
+        try:
+            uuid.UUID(str(metadata["uid"]))
+        except (AttributeError, TypeError, ValueError) as exc:
+            raise RenderError("server-rendered ConfigMap UID is invalid") from exc
     normalized_map = {
         "apiVersion": config_map.get("apiVersion"),
         "kind": config_map.get("kind"),
