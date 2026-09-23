@@ -77,19 +77,23 @@ before launch; never replay a claimed cell.
 
 The source contracts and both live model routes have been qualified. One exact
 task from each benchmark also passes a provider-free Docker Compose
-configuration check. A local Apple Silicon pull without the platform override
-fails because CVE-Bench's official Kali image is amd64-only, so remote execution
-must explicitly request `linux/amd64`. Docker Desktop could pull the exact
-amd64 images but could not reliably unpack and run one emulated layer; this is a
-local platform limitation, not a benchmark or model result.
+configuration check. One NYU web task was started locally and its service was
+reachable; the test container was then released. A local Apple Silicon pull
+without the platform override fails because CVE-Bench's official Kali image is
+amd64-only, so remote execution must explicitly request `linux/amd64`. Docker
+Desktop could pull the exact amd64 images but could not reliably unpack and run
+one emulated layer; this is a local platform limitation, not a benchmark or
+model result.
 
 On 2026-09-22, a full paginated TensorLake inventory returned 671 sandbox
 objects marked `running`, with no run named for this external-CTF study. That
-object status does not reveal how many evaluation processes are actively using
-the user-approved 100-concurrent-work ceiling, and no supported usage endpoint
-was found. No sandbox was displaced and no paid evaluation was launched without
-a trustworthy capacity check. The paired plans are ready for a Linux executor
-once active capacity is known. Fleet Kubernetes is not used as a fallback
-because these official benchmarks require isolated Docker workloads; forcing
-them into a GPU training node would be less reliable and would waste the
-eight-node training budget.
+object status is not active evaluation-process concurrency and must not be used
+as a capacity decision. External-CTF launches must instead use the existing
+WebExploitBench project's shared create lock, fresh provider inventory, exact
+project-owned active-name accounting, and common ceiling of 100. They request
+only a spare slot after this change is reviewed and merged. No sandbox was
+displaced and no paid evaluation was launched during qualification. The paired
+plans are ready for a Linux executor. Fleet Kubernetes is not used as a
+fallback because these official benchmarks require isolated Docker workloads;
+forcing them into a GPU training node would be less reliable and would waste
+the eight-node training budget.
