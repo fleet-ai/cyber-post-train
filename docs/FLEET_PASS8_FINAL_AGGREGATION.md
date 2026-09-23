@@ -8,13 +8,27 @@ all collection and score-blind reconciliation work is complete.
 ## What must be true before scores can be read
 
 The comparison consists of the same 17 exact task versions under two model
-arms. Seeds 46 through 53 are eight separately declared pass@1 replicas, so
-each task has eight attempts per arm. The final gate opens no score until it
-holds one read-only, repeatable database snapshot for all 16 replicas and has
+arms. Protocol v2 starts from original seeds 46 through 53. If score-blind
+infrastructure evidence proves any cell in one original seed unusable, the
+entire two-arm seed pair is excluded. Excluded originals, sorted ascending,
+map to fresh seeds 54, 55, and so on. The final cohort therefore still has
+exactly eight separately declared pass@1 replica pairs and each task still has
+eight attempts per arm. It never mixes one usable cell from an excluded
+original with cells from its replacement.
+
+The final gate consumes the self-digested protocol-v2 migration receipt and
+its byte-identical `COMPARISON_DEFINITION.json`. This preserves the original
+evidence hashes privately while making the final included seed roster and
+whole-pair replacements explicit. The gate opens no score until it holds one
+read-only, repeatable database snapshot for all 16 included replicas and has
 proved all of the following:
 
 - every source evaluator has an exact self-digested terminal receipt;
-- the base and candidate receipt for each seed carry the same matched protocol;
+- the base and candidate receipt for each included seed carry the same matched
+  protocol;
+- the migration uses the deterministic whole-pair replacement mapping, names
+  exactly eight unique included seeds, and supplies both arms for every fresh
+  seed;
 - every frozen evaluation plan uses the same OpenCode 1.18.27 harness files,
   treatment, images, task versions, sampling settings, and retry rule;
 - the sole intended model revision and serving route are exact for each arm;
@@ -59,13 +73,16 @@ Render the immutable CPU-only package without touching Kubernetes:
 
 ```sh
 uv run python scripts/render_qwen38_fleet_pass8_final_aggregate.py \
+  --migration-receipt /reviewed/protocol-v2/MIGRATION_RECEIPT.json \
   --output /safe/new/fleet-pass8-final-render
 ```
 
-The package contains a self-digested study plan and exact SHA-256 hashes for
-the aggregator module, runner, compressed bundle, and rendered YAML. Its Job is
-zero-GPU, c1, create-once, and carries the root annotation
-`fleet.ai/failure-alerts: "off"`.
+The renderer first checks the migration receipt, its embedded comparison
+definition, and the sibling definition file. The package then contains that
+self-digested study plan and exact SHA-256 hashes for the migration receipt,
+comparison definition, aggregator module, runner, compressed bundle, and
+rendered YAML. Its Job is zero-GPU, c1, create-once, and carries the root
+annotation `fleet.ai/failure-alerts: "off"`.
 
 Before any later create, run the exact bundle through Kubernetes server dry-run
 twice, save both JSON replies, then validate them:
@@ -83,4 +100,3 @@ selector labels. Admission, command, image, resources, priority, module bytes,
 secret reference, and the root alert annotation remain bound. A green render
 or preview does not mean the 272 outcomes are complete; the private final Job
 must still pass the live database and terminal-receipt gates above.
-

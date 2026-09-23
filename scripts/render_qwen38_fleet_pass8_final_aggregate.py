@@ -28,7 +28,7 @@ IMAGE = (
     "sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
 )
 NAMESPACE = "fleet-train-jobs"
-NAME = "chris-q38-dev17-pass8-final-v1"
+NAME = "chris-q38-dev17-pass8-final-v2"
 CONFIG_MAP = f"{NAME}-code"
 SOURCE = ROOT / "evals/fleet/final_pass8_aggregate.py"
 RUNNER = r"""from __future__ import annotations
@@ -215,7 +215,7 @@ def _objects(plan: dict[str, Any], compressed: bytes, digests: dict[str, str]) -
     return config_map, job
 
 
-def render(*, output: Path) -> dict[str, Any]:
+def render(*, output: Path, migration_receipt: Path) -> dict[str, Any]:
     if output.exists() or output.is_symlink():
         raise FileExistsError("private final aggregate render already exists")
     if not output.parent.is_dir():
@@ -224,6 +224,7 @@ def render(*, output: Path) -> dict[str, Any]:
         task_set_path=TASK_SET,
         roster_path=ROSTER,
         base_config_path=BASE_CONFIG,
+        migration_receipt_path=migration_receipt,
     )
     compressed, digests = _bundle(plan)
     config_map, job = _objects(plan, compressed, digests)
@@ -233,11 +234,15 @@ def render(*, output: Path) -> dict[str, Any]:
         bundle_path = temporary / "final-aggregate.yaml"
         bundle_path.write_text(yaml.safe_dump(bundle, sort_keys=False), encoding="utf-8")
         receipt = {
-            "schema": "cyber_fleet_matched_pass8_final_job_render_v1",
+            "schema": "cyber_fleet_matched_pass8_protocol_v2_final_job_render_v1",
             "namespace": NAMESPACE,
             "config_map_name": CONFIG_MAP,
             "job_name": NAME,
             "study_plan_sha256": plan["sha256"],
+            "migration_receipt_sha256": plan["migration_receipt_sha256"],
+            "migration_receipt_file_sha256": plan["migration_receipt_file_sha256"],
+            "comparison_definition_sha256": plan["comparison_definition_sha256"],
+            "comparison_definition_file_sha256": plan["comparison_definition_file_sha256"],
             "source_files": {
                 "aggregate.py": digests["aggregate.py"],
                 "run.py": digests["run.py"],
@@ -372,19 +377,38 @@ def validate_previews(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--migration-receipt", type=Path)
     parser.add_argument("--render-root", type=Path)
     parser.add_argument("--preview-one", type=Path)
     parser.add_argument("--preview-two", type=Path)
     parser.add_argument("--preview-receipt", type=Path)
     args = parser.parse_args()
-    if args.output is not None and all(
-        value is None
-        for value in (args.render_root, args.preview_one, args.preview_two, args.preview_receipt)
+    if (
+        args.output is not None
+        and args.migration_receipt is not None
+        and all(
+            value is None
+            for value in (
+                args.render_root,
+                args.preview_one,
+                args.preview_two,
+                args.preview_receipt,
+            )
+        )
     ):
-        result = render(output=args.output)
-    elif args.output is None and all(
-        value is not None
-        for value in (args.render_root, args.preview_one, args.preview_two, args.preview_receipt)
+        result = render(output=args.output, migration_receipt=args.migration_receipt)
+    elif (
+        args.output is None
+        and args.migration_receipt is None
+        and all(
+            value is not None
+            for value in (
+                args.render_root,
+                args.preview_one,
+                args.preview_two,
+                args.preview_receipt,
+            )
+        )
     ):
         result = validate_previews(
             render_root=args.render_root,

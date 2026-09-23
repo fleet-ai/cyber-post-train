@@ -35,11 +35,222 @@ def _signed(value: dict[str, Any], field: str = "sha256") -> dict[str, Any]:
     return {**value, field: final._digest(value)}  # noqa: SLF001
 
 
+def _protocol(seed: int, *, replacement: bool) -> dict[str, Any]:
+    suffix = "replacement-p1-v2" if replacement else "p1-v1"
+    return {
+        "seed": seed,
+        "origin": "whole_pair_replacement" if replacement else "retained_original",
+        "protocol_id": f"q38-dev17-s{seed}-base-t3k32s1000-{suffix}",
+        "comparison_protocol_sha256": "sha256:" + f"{seed + 1000:064x}",
+    }
+
+
+def _migration(tmp_path: Path, excluded: tuple[int, ...] = (47, 51, 52, 53)) -> Path:
+    migration_root = tmp_path / "migration"
+    migration_root.mkdir()
+    mapping = [
+        {"invalid_original_seed": seed, "replacement_seed": 54 + index}
+        for index, seed in enumerate(excluded)
+    ]
+    included = sorted(
+        [
+            *(seed for seed in final.SOURCE_SEEDS if seed not in excluded),
+            *(row["replacement_seed"] for row in mapping),
+        ]
+    )
+    replacement_seeds = {row["replacement_seed"] for row in mapping}
+    protocols = [_protocol(seed, replacement=seed in replacement_seeds) for seed in included]
+    base = json.loads(renderer.BASE_CONFIG.read_text())
+    comparison = _signed(
+        {
+            "schema": final.COMPARISON_DEFINITION_SCHEMA,
+            "protocol_study_id": "q38-dev17-base-step1000-p8-v2",
+            "predecessor_comparison_definition_sha256": (
+                final.PREDECESSOR_COMPARISON_DEFINITION_SHA256
+            ),
+            "aggregation": "eight_predeclared_pass1_replicas_per_task_and_arm",
+            "original_seeds": list(final.SOURCE_SEEDS),
+            "excluded_original_seeds": list(excluded),
+            "replacement_mapping": mapping,
+            "included_seeds": included,
+            "replica_protocols": protocols,
+            "task_count": final.TASK_COUNT,
+            "sessions_per_arm": final.TASK_COUNT * final.PASS_K,
+            "total_sessions": final.TASK_COUNT * final.PASS_K * len(final.ARMS),
+            "comparison_arms": list(final.ARMS),
+            "models": {
+                "base": {
+                    "model_id": "qwen3.8-27b",
+                    "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+                },
+                "candidate": {
+                    "model_id": "chris-q38-t3k32-s1000-v1",
+                    "revision": (
+                        "sha256:023c5f8b0559ba050f0d672a6bc27aabecec7d5837595f8ea5bc914446d26db5"
+                    ),
+                },
+            },
+            "task_selection_sha256": (
+                "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68"
+            ),
+            "split_manifest_sha256": (
+                "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c"
+            ),
+            "binding_roster_sha256": (
+                "sha256:39ae49c2db322725800b15347d5da5d171e7e03b21dec5b570683414d70e83c5"
+            ),
+            "harness": base["harness"],
+            "images": base["images"],
+            "sampling_without_seed": {"temperature": 0.6, "top_p": 0.95},
+            "pass_k_per_replica": 1,
+            "retry_limit": 0,
+            "training_data_eligible": False,
+            "whole_replica_pairs_only": True,
+            "cell_level_replacement_forbidden": True,
+        }
+    )
+    definition_path = migration_root / "COMPARISON_DEFINITION.json"
+    definition_path.write_text(json.dumps(comparison, sort_keys=True) + "\n")
+    protocol_by_seed = {row["seed"]: row for row in protocols}
+    migrations = []
+    replacement_protocols = []
+    replacement_arms = []
+    for row in mapping:
+        original = row["invalid_original_seed"]
+        seed = row["replacement_seed"]
+        excluded_arms = {}
+        for arm_index, arm in enumerate(final.ARMS):
+            excluded_arms[arm] = {
+                "packet_file_sha256": "sha256:" + f"{original + arm_index + 2000:064x}",
+                "evaluation_identity_sha256": ("sha256:" + f"{original + arm_index + 3000:064x}"),
+                "evaluation_config_sha256": ("sha256:" + f"{original + arm_index + 4000:064x}"),
+                "comparison_protocol_file_sha256": (
+                    "sha256:" + f"{original + arm_index + 5000:064x}"
+                ),
+                "comparison_protocol_sha256": ("sha256:" + f"{original + arm_index + 6000:064x}"),
+                "protocol_id": f"source-{original}",
+                "job_name": f"source-{original}-{arm}",
+                "config_map_name": f"source-{original}-{arm}-code",
+                "output_root": f"/private/source/{original}/{arm}",
+                "database": f"source_{original}_{arm}",
+            }
+        migrations.append(
+            {
+                **row,
+                "reason_class": "mixed_infrastructure_invalid_replica",
+                "evidence_receipt_sha256s": ["sha256:" + f"{original + 7000:064x}"],
+                "excluded_source_arms": excluded_arms,
+                "whole_pair_excluded": True,
+            }
+        )
+        replacement_protocols.append(
+            {
+                **row,
+                "protocol_id": protocol_by_seed[seed]["protocol_id"],
+                "sha256": protocol_by_seed[seed]["comparison_protocol_sha256"],
+                "file_sha256": "sha256:" + f"{seed + 8000:064x}",
+            }
+        )
+        for arm_index, arm in enumerate(final.ARMS):
+            replacement_arms.append(
+                {
+                    "arm_id": arm,
+                    **row,
+                    "packet_file_sha256": "sha256:" + f"{seed + arm_index + 9000:064x}",
+                    "evaluation_identity_sha256": ("sha256:" + f"{seed + arm_index + 10000:064x}"),
+                    "serving_proof_file_sha256": ("sha256:" + f"{seed + arm_index + 11000:064x}"),
+                    "comparison_protocol_file_sha256": (
+                        "sha256:" + f"{seed + arm_index + 12000:064x}"
+                    ),
+                    "comparison_protocol_sha256": protocol_by_seed[seed][
+                        "comparison_protocol_sha256"
+                    ],
+                    "packet_path": f"seed{seed}/{arm}/LAUNCH_PACKET.json",
+                }
+            )
+    receipt = _signed(
+        {
+            "schema": final.MIGRATION_SCHEMA,
+            "source": {
+                "protocol_study_id": "source-v1",
+                "preparation_receipt_sha256": "sha256:" + "1" * 64,
+                "preparation_receipt_file_sha256": "sha256:" + "2" * 64,
+                "seeds": list(final.SOURCE_SEEDS),
+                "arm_count": len(final.SOURCE_SEEDS) * len(final.ARMS),
+            },
+            "migration_intent_sha256": "sha256:" + "3" * 64,
+            "comparison_definition": comparison,
+            "comparison_definition_file_sha256": final._file_digest(  # noqa: SLF001
+                definition_path
+            ),
+            "mapping_rule": (
+                "invalid original seeds sorted ascending map to the smallest unused seeds "
+                "greater than 53, ascending"
+            ),
+            "migrations": migrations,
+            "excluded_original_seeds": list(excluded),
+            "included_seeds": included,
+            "replacement_protocols": replacement_protocols,
+            "replacement_arms": replacement_arms,
+            "retirement_plan": {
+                "sha256": "sha256:" + "4" * 64,
+                "file_sha256": "sha256:" + "5" * 64,
+                "targets": 0,
+                "external_mutations": 0,
+                "retirement_performed": False,
+            },
+            "scientific_identity": {
+                "task_count_per_arm": final.TASK_COUNT,
+                "comparison_arms": list(final.ARMS),
+                "pass_k": 1,
+                "retry_limit": 0,
+                "same_task_versions_models_harness_budgets_and_sampling_recipe": True,
+                "whole_replica_pairs_only": True,
+                "cell_level_replacement_forbidden": True,
+                "seed_reuse_forbidden": True,
+                "later_invalid_seed_requires_versioned_successor_before_score_unseal": True,
+            },
+            "capacity": {
+                "new_replacement_rollouts": len(mapping) * len(final.ARMS) * final.TASK_COUNT,
+                "final_comparison_rollouts": final.TASK_COUNT * final.PASS_K * len(final.ARMS),
+                "daily_rollout_cap": 500,
+                "within_daily_cap": True,
+            },
+            "selection": {
+                "selection_sha256": (
+                    "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68"
+                ),
+                "split_sha256": (
+                    "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c"
+                ),
+                "corpus_dev_windows": 17,
+                "binding_roster_sha256": (
+                    "sha256:39ae49c2db322725800b15347d5da5d171e7e03b21dec5b570683414d70e83c5"
+                ),
+            },
+            "live_parity_file_sha256": "sha256:" + "6" * 64,
+            "live_parity_receipt_sha256": "sha256:" + "7" * 64,
+            "privacy": {
+                "score_values_read": False,
+                "prompts_responses_flags_rewards_or_trace_content_read": False,
+                "infrastructure_reason_classes_only": True,
+            },
+            "external_mutations": 0,
+            "launch_performed": False,
+        }
+    )
+    receipt_path = migration_root / "MIGRATION_RECEIPT.json"
+    receipt_path.write_text(json.dumps(receipt, sort_keys=True) + "\n")
+    return receipt_path
+
+
 def _plan(tmp_path: Path) -> dict[str, Any]:
+    migration = _migration(tmp_path)
     plan = final.build_current_study_plan(
         task_set_path=renderer.TASK_SET,
         roster_path=renderer.ROSTER,
         base_config_path=renderer.BASE_CONFIG,
+        migration_receipt_path=migration,
     )
     plan = copy.deepcopy(plan)
     for replica in plan["replicas"]:
@@ -129,13 +340,14 @@ def _study(tmp_path: Path) -> tuple[dict[str, Any], dict[tuple[int, str], FakeSn
             }
             stored_plan.append({"cell_id": final._cell_id(row), **row})  # noqa: SLF001
         plan_digest = final._plain_digest(stored_plan)  # noqa: SLF001
-        protocol = "sha256:" + f"{replica['seed']:064x}"[-64:]
         terminal = _signed(
             {
                 "schema": final.TERMINAL_SCHEMA,
-                "evaluation_identity_sha256": "sha256:" + "e" * 64,
-                "comparison_protocol_sha256": protocol,
-                "protocol_id": f"q38-dev17-s{replica['seed']}-base-t3k32s1000-p1-v1",
+                "evaluation_identity_sha256": (
+                    replica["evaluation_identity_sha256"] or "sha256:" + "e" * 64
+                ),
+                "comparison_protocol_sha256": replica["comparison_protocol_sha256"],
+                "protocol_id": replica["protocol_id"],
                 "arm_id": replica["arm"],
                 "job": {
                     "name": replica["job_name"],
@@ -225,7 +437,7 @@ def _study(tmp_path: Path) -> tuple[dict[str, Any], dict[tuple[int, str], FakeSn
 
 
 def test_final_gate_opens_scores_only_after_all_replicas_and_emits_safe_public_input(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     plan, snapshots = _study(tmp_path)
 
@@ -236,6 +448,11 @@ def test_final_gate_opens_scores_only_after_all_replicas_and_emits_safe_public_i
     assert all(snapshot.score_reads == 1 for snapshot in snapshots.values())
     public_path = Path(plan["private_output_root"]) / "SANITIZED_AGGREGATE.json"
     public = json.loads(public_path.read_text())
+    monkeypatch.setitem(
+        public_eval_import.BENCHMARKS[final.BENCHMARK],
+        "comparison_definition_sha256",
+        plan["comparison_definition_sha256"],
+    )
     validated = public_eval_import._validate(public, final._file_digest(public_path))  # noqa: SLF001
     assert validated["summary"]["paired_valid_tasks"] == 17
     assert all(
@@ -269,6 +486,58 @@ def test_one_unready_cell_prevents_every_score_read(tmp_path: Path) -> None:
 
     assert all(snapshot.score_reads == 0 for snapshot in snapshots.values())
     assert not Path(plan["private_output_root"]).exists()
+
+
+def test_protocol_v2_uses_only_eight_complete_whole_replica_pairs(tmp_path: Path) -> None:
+    plan = _plan(tmp_path)
+    included = set(plan["included_seeds"])
+    excluded = set(plan["excluded_original_seeds"])
+    replacements = {row["replacement_seed"] for row in plan["replacement_mapping"]}
+
+    assert len(included) == final.PASS_K
+    assert included.isdisjoint(excluded)
+    assert replacements <= included
+    assert {(row["seed"], row["arm"]) for row in plan["replicas"]} == {
+        (seed, arm) for seed in included for arm in final.ARMS
+    }
+    assert all(
+        row["origin"] == "whole_pair_replacement"
+        for row in plan["replicas"]
+        if row["seed"] in replacements
+    )
+
+
+def test_plan_cannot_mix_an_excluded_original_with_its_replacement(tmp_path: Path) -> None:
+    plan, snapshots = _study(tmp_path)
+    replacement = plan["replacement_mapping"][0]
+    row = next(
+        item
+        for item in plan["replicas"]
+        if item["seed"] == replacement["replacement_seed"] and item["arm"] == "candidate"
+    )
+    row["seed"] = replacement["invalid_original_seed"]
+    plan.pop("sha256")
+    plan.update(sha256=final._digest(plan))  # noqa: SLF001
+
+    with pytest.raises(final.FinalAggregateError, match="eight included pairs"):
+        final.finalize(plan, snapshots, output_root=Path(plan["private_output_root"]))
+
+    assert all(snapshot.score_reads == 0 for snapshot in snapshots.values())
+
+
+def test_migration_receipt_tamper_is_rejected_before_plan_build(tmp_path: Path) -> None:
+    receipt_path = _migration(tmp_path)
+    receipt = json.loads(receipt_path.read_text())
+    receipt["included_seeds"][0] = 47
+    receipt_path.write_text(json.dumps(receipt) + "\n")
+
+    with pytest.raises(final.FinalAggregateError, match="self digest"):
+        final.build_current_study_plan(
+            task_set_path=renderer.TASK_SET,
+            roster_path=renderer.ROSTER,
+            base_config_path=renderer.BASE_CONFIG,
+            migration_receipt_path=receipt_path,
+        )
 
 
 def _rewrite_terminal(replica: dict[str, Any], mutate: Any) -> None:
@@ -344,13 +613,17 @@ def test_reviewed_stored_session_needs_matching_private_reconciliation(tmp_path:
         ),
     }
     snapshot.value.reconciliations.append(
-        {
-            "reviewed_intent_sha256": intent,
-            "accepted_existing_completed_session_count": 1,
-            "model_generation_performed": False,
-            "scoring_call_performed": False,
-            "score_values_included": False,
-        }
+        _signed(
+            {
+                "schema_version": "fleet-stored-session-reconciliation-v2",
+                "reviewed_intent_sha256": intent,
+                "accepted_existing_completed_session_count": 1,
+                "model_generation_performed": False,
+                "scoring_call_performed": False,
+                "score_values_included": False,
+            },
+            "receipt_sha256",
+        )
     )
 
     final.finalize(plan, snapshots, output_root=Path(plan["private_output_root"]))
@@ -361,7 +634,7 @@ def test_reviewed_stored_session_needs_matching_private_reconciliation(tmp_path:
 def test_renderer_is_cpu_only_c1_alert_suppressed_and_module_bound(tmp_path: Path) -> None:
     root = tmp_path / "render"
 
-    receipt = renderer.render(output=root)
+    receipt = renderer.render(output=root, migration_receipt=_migration(tmp_path))
 
     bundle = yaml.safe_load((root / "final-aggregate.yaml").read_text())
     config_map, job = bundle["items"]
@@ -409,7 +682,7 @@ def _server_preview(bundle: dict[str, Any], uid: str) -> dict[str, Any]:
 
 def test_two_preview_validator_normalizes_only_server_job_identity(tmp_path: Path) -> None:
     root = tmp_path / "render"
-    renderer.render(output=root)
+    renderer.render(output=root, migration_receipt=_migration(tmp_path))
     bundle = yaml.safe_load((root / "final-aggregate.yaml").read_text())
     first = tmp_path / "first.json"
     second = tmp_path / "second.json"
@@ -431,7 +704,7 @@ def test_two_preview_validator_normalizes_only_server_job_identity(tmp_path: Pat
 
 def test_two_preview_validator_rejects_render_receipt_drift(tmp_path: Path) -> None:
     root = tmp_path / "render"
-    renderer.render(output=root)
+    renderer.render(output=root, migration_receipt=_migration(tmp_path))
     bundle = yaml.safe_load((root / "final-aggregate.yaml").read_text())
     first = tmp_path / "first.json"
     second = tmp_path / "second.json"

@@ -25,16 +25,18 @@ from pathlib import Path
 from typing import Any, Protocol
 from urllib.parse import parse_qsl, quote, urlsplit, urlunsplit
 
-PLAN_SCHEMA = "cyber_fleet_matched_pass8_final_plan_v1"
+PLAN_SCHEMA = "cyber_fleet_matched_pass8_protocol_v2_final_plan_v1"
 PUBLIC_SCHEMA = "cyber_sanitized_matched_pass8_aggregate_v1"
 BENCHMARK = "fleet_development_dev17"
-COMPARISON_DEFINITION_SHA256 = (
+PREDECESSOR_COMPARISON_DEFINITION_SHA256 = (
     "sha256:1154b450624a8b9a567464916da95874c44933175c408b86a80ff5bca0eada70"
 )
+MIGRATION_SCHEMA = "cyber_qwen38_fleet_protocol_v2_replica_migration_receipt_v1"
+COMPARISON_DEFINITION_SCHEMA = "cyber_qwen38_fleet_dev17_pass8_comparison_definition_v2"
 TERMINAL_SCHEMA = "cyber_fleet_heldout_terminal_observation_v1"
 ACCEPTED_SCHEMA = "fleet-rollout-ledger-cell-accepted-v1"
 CONTROLLER_TERMINAL_SCHEMA = "fleet-rollout-ledger-controller-terminal-v1"
-SEEDS = tuple(range(46, 54))
+SOURCE_SEEDS = tuple(range(46, 54))
 ARMS = ("base", "candidate")
 TASK_COUNT = 17
 PASS_K = 8
@@ -115,6 +117,11 @@ RUNTIME_FILES = {
     "opencode_self_hosted.py",
     "fixed_proxy.py",
     "exact_pass4_crypto.py",
+}
+ALLOWED_EXCLUSION_REASONS = {
+    "terminal_replica_incomplete",
+    "replica_not_started",
+    "mixed_infrastructure_invalid_replica",
 }
 
 
@@ -246,12 +253,334 @@ def _task_inputs(task_set_path: Path, roster_path: Path) -> tuple[list[dict[str,
     return selected, roster
 
 
-def build_current_study_plan(
-    *, task_set_path: Path, roster_path: Path, base_config_path: Path
+def _exact_digest_fields(value: Mapping[str, Any], fields: Sequence[str], label: str) -> None:
+    for field in fields:
+        _normalized_digest(value.get(field), f"{label} {field}")
+
+
+def _deterministic_mapping(originals: Sequence[int]) -> list[dict[str, int]]:
+    if (
+        not originals
+        or list(originals) != sorted(originals)
+        or len(set(originals)) != len(originals)
+        or any(type(seed) is not int or seed not in SOURCE_SEEDS for seed in originals)
+    ):
+        raise FinalAggregateError("protocol-v2 excluded original seeds are not canonical")
+    return [
+        {"invalid_original_seed": original, "replacement_seed": 54 + index}
+        for index, original in enumerate(originals)
+    ]
+
+
+def _comparison_contract(
+    comparison: dict[str, Any],
+) -> tuple[list[dict[str, int]], list[int], dict[int, dict[str, Any]]]:
+    """Validate the stable scientific definition embedded by protocol v2."""
+
+    _require_self_digest(comparison, "sha256", "protocol-v2 comparison definition")
+    excluded = comparison.get("excluded_original_seeds")
+    if not isinstance(excluded, list):
+        raise FinalAggregateError("protocol-v2 excluded original seeds are missing")
+    mapping = _deterministic_mapping(excluded)
+    included = sorted(
+        [
+            *(seed for seed in SOURCE_SEEDS if seed not in set(excluded)),
+            *(row["replacement_seed"] for row in mapping),
+        ]
+    )
+    if any(
+        (
+            comparison.get("schema") != COMPARISON_DEFINITION_SCHEMA,
+            comparison.get("protocol_study_id") != "q38-dev17-base-step1000-p8-v2",
+            comparison.get("predecessor_comparison_definition_sha256")
+            != PREDECESSOR_COMPARISON_DEFINITION_SHA256,
+            comparison.get("aggregation") != "eight_predeclared_pass1_replicas_per_task_and_arm",
+            comparison.get("original_seeds") != list(SOURCE_SEEDS),
+            comparison.get("replacement_mapping") != mapping,
+            comparison.get("included_seeds") != included,
+            len(included) != PASS_K,
+            len(set(included)) != PASS_K,
+            comparison.get("task_count") != TASK_COUNT,
+            comparison.get("sessions_per_arm") != TASK_COUNT * PASS_K,
+            comparison.get("total_sessions") != TASK_COUNT * PASS_K * len(ARMS),
+            comparison.get("comparison_arms") != list(ARMS),
+            comparison.get("pass_k_per_replica") != 1,
+            comparison.get("retry_limit") != 0,
+            comparison.get("training_data_eligible") is not False,
+            comparison.get("whole_replica_pairs_only") is not True,
+            comparison.get("cell_level_replacement_forbidden") is not True,
+            comparison.get("task_selection_sha256")
+            != "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
+            comparison.get("split_manifest_sha256")
+            != "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
+            comparison.get("binding_roster_sha256")
+            != "sha256:39ae49c2db322725800b15347d5da5d171e7e03b21dec5b570683414d70e83c5",
+        )
+    ):
+        raise FinalAggregateError("protocol-v2 comparison identity differs")
+    expected_models = {
+        "base": {
+            "model_id": "qwen3.8-27b",
+            "revision": "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0",
+        },
+        "candidate": {
+            "model_id": "chris-q38-t3k32-s1000-v1",
+            "revision": ("sha256:023c5f8b0559ba050f0d672a6bc27aabecec7d5837595f8ea5bc914446d26db5"),
+        },
+    }
+    if (
+        comparison.get("models") != expected_models
+        or _digest(comparison.get("harness")) != EXACT_PLAN_FIELD_DIGESTS["harness"]
+        or _digest(comparison.get("images")) != EXACT_PLAN_FIELD_DIGESTS["images"]
+        or comparison.get("sampling_without_seed") != {"temperature": 0.6, "top_p": 0.95}
+    ):
+        raise FinalAggregateError("protocol-v2 model or treatment identity differs")
+    protocols = comparison.get("replica_protocols")
+    if not isinstance(protocols, list) or len(protocols) != PASS_K:
+        raise FinalAggregateError("protocol-v2 included replica protocol roster is incomplete")
+    protocol_by_seed: dict[int, dict[str, Any]] = {}
+    replacement_seeds = {row["replacement_seed"] for row in mapping}
+    for row in protocols:
+        if not isinstance(row, dict) or set(row) != {
+            "seed",
+            "origin",
+            "protocol_id",
+            "comparison_protocol_sha256",
+        }:
+            raise FinalAggregateError("protocol-v2 replica protocol row is malformed")
+        seed = row.get("seed")
+        expected_origin = (
+            "whole_pair_replacement" if seed in replacement_seeds else "retained_original"
+        )
+        if (
+            type(seed) is not int
+            or seed not in included
+            or seed in protocol_by_seed
+            or row.get("origin") != expected_origin
+            or not isinstance(row.get("protocol_id"), str)
+            or not row["protocol_id"]
+        ):
+            raise FinalAggregateError("protocol-v2 replica protocol identity differs")
+        _normalized_digest(row.get("comparison_protocol_sha256"), "replica protocol")
+        protocol_by_seed[seed] = row
+    if set(protocol_by_seed) != set(included):
+        raise FinalAggregateError("protocol-v2 included replica protocol seeds differ")
+    return mapping, included, protocol_by_seed
+
+
+def _migration_input(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    receipt = _read_json(path, "protocol-v2 migration receipt")
+    _require_self_digest(receipt, "sha256", "protocol-v2 migration receipt")
+    comparison = receipt.get("comparison_definition")
+    if not isinstance(comparison, dict):
+        raise FinalAggregateError("protocol-v2 comparison definition is missing")
+    mapping, included, protocol_by_seed = _comparison_contract(comparison)
+    comparison_path = path.parent / "COMPARISON_DEFINITION.json"
+    comparison_file = _read_json(comparison_path, "protocol-v2 comparison definition file")
+    if comparison_file != comparison or receipt.get("comparison_definition_file_sha256") != (
+        _file_digest(comparison_path)
+    ):
+        raise FinalAggregateError("protocol-v2 comparison definition file differs")
+    excluded = comparison["excluded_original_seeds"]
+    if any(
+        (
+            receipt.get("schema") != MIGRATION_SCHEMA,
+            receipt.get("excluded_original_seeds") != excluded,
+            receipt.get("included_seeds") != included,
+            receipt.get("external_mutations") != 0,
+            receipt.get("launch_performed") is not False,
+        )
+    ):
+        raise FinalAggregateError("protocol-v2 migration or comparison identity differs")
+    replacement_seeds = {row["replacement_seed"] for row in mapping}
+    migrations = receipt.get("migrations")
+    if not isinstance(migrations, list) or len(migrations) != len(mapping):
+        raise FinalAggregateError("protocol-v2 excluded source evidence is incomplete")
+    for expected, row in zip(mapping, migrations, strict=True):
+        if (
+            not isinstance(row, dict)
+            or row.get("invalid_original_seed") != expected["invalid_original_seed"]
+            or row.get("replacement_seed") != expected["replacement_seed"]
+            or row.get("reason_class") not in ALLOWED_EXCLUSION_REASONS
+            or row.get("whole_pair_excluded") is not True
+            or not isinstance(row.get("evidence_receipt_sha256s"), list)
+            or not row["evidence_receipt_sha256s"]
+            or set(row.get("excluded_source_arms", {})) != set(ARMS)
+        ):
+            raise FinalAggregateError("protocol-v2 excluded source evidence differs")
+        for value in row["evidence_receipt_sha256s"]:
+            _normalized_digest(value, "excluded source evidence")
+        source_arms = row["excluded_source_arms"]
+        for arm in ARMS:
+            evidence = source_arms[arm]
+            if not isinstance(evidence, dict):
+                raise FinalAggregateError("protocol-v2 excluded source arm evidence is invalid")
+            _exact_digest_fields(
+                evidence,
+                (
+                    "packet_file_sha256",
+                    "evaluation_identity_sha256",
+                    "evaluation_config_sha256",
+                    "comparison_protocol_file_sha256",
+                    "comparison_protocol_sha256",
+                ),
+                "excluded source arm",
+            )
+    replacement_protocols = receipt.get("replacement_protocols")
+    replacement_arms = receipt.get("replacement_arms")
+    if (
+        not isinstance(replacement_protocols, list)
+        or len(replacement_protocols) != len(mapping)
+        or not isinstance(replacement_arms, list)
+        or len(replacement_arms) != len(mapping) * len(ARMS)
+    ):
+        raise FinalAggregateError("protocol-v2 replacement evidence is incomplete")
+    replacement_protocol_by_seed: dict[int, dict[str, Any]] = {}
+    for expected, row in zip(mapping, replacement_protocols, strict=True):
+        seed = expected["replacement_seed"]
+        if (
+            not isinstance(row, dict)
+            or row.get("invalid_original_seed") != expected["invalid_original_seed"]
+            or row.get("replacement_seed") != seed
+            or row.get("protocol_id") != protocol_by_seed[seed]["protocol_id"]
+            or row.get("sha256") != protocol_by_seed[seed]["comparison_protocol_sha256"]
+        ):
+            raise FinalAggregateError("protocol-v2 replacement protocol differs")
+        _exact_digest_fields(row, ("sha256", "file_sha256"), "replacement protocol")
+        replacement_protocol_by_seed[seed] = row
+    arm_by_identity: dict[tuple[int, str], dict[str, Any]] = {}
+    original_by_replacement = {
+        row["replacement_seed"]: row["invalid_original_seed"] for row in mapping
+    }
+    for row in replacement_arms:
+        if not isinstance(row, dict):
+            raise FinalAggregateError("protocol-v2 replacement arm evidence is invalid")
+        seed = row.get("replacement_seed")
+        arm = row.get("arm_id")
+        identity = (seed, arm)
+        if (
+            type(seed) is not int
+            or seed not in replacement_seeds
+            or arm not in ARMS
+            or identity in arm_by_identity
+            or row.get("invalid_original_seed") != original_by_replacement[seed]
+            or row.get("comparison_protocol_sha256")
+            != protocol_by_seed[seed]["comparison_protocol_sha256"]
+        ):
+            raise FinalAggregateError("protocol-v2 replacement arm identity differs")
+        _exact_digest_fields(
+            row,
+            (
+                "packet_file_sha256",
+                "evaluation_identity_sha256",
+                "serving_proof_file_sha256",
+                "comparison_protocol_file_sha256",
+                "comparison_protocol_sha256",
+            ),
+            "replacement arm",
+        )
+        arm_by_identity[identity] = row
+    if set(arm_by_identity) != {(seed, arm) for seed in replacement_seeds for arm in ARMS}:
+        raise FinalAggregateError("protocol-v2 replacement arm roster differs")
+    scientific = receipt.get("scientific_identity")
+    capacity = receipt.get("capacity")
+    privacy = receipt.get("privacy")
+    selection = receipt.get("selection")
+    if any(
+        (
+            scientific
+            != {
+                "task_count_per_arm": TASK_COUNT,
+                "comparison_arms": list(ARMS),
+                "pass_k": 1,
+                "retry_limit": 0,
+                "same_task_versions_models_harness_budgets_and_sampling_recipe": True,
+                "whole_replica_pairs_only": True,
+                "cell_level_replacement_forbidden": True,
+                "seed_reuse_forbidden": True,
+                "later_invalid_seed_requires_versioned_successor_before_score_unseal": True,
+            },
+            not isinstance(capacity, dict),
+            isinstance(capacity, dict)
+            and capacity.get("new_replacement_rollouts") != len(mapping) * len(ARMS) * TASK_COUNT,
+            isinstance(capacity, dict)
+            and capacity.get("final_comparison_rollouts") != TASK_COUNT * PASS_K * len(ARMS),
+            isinstance(capacity, dict) and capacity.get("daily_rollout_cap") != 500,
+            isinstance(capacity, dict) and capacity.get("within_daily_cap") is not True,
+            privacy
+            != {
+                "score_values_read": False,
+                "prompts_responses_flags_rewards_or_trace_content_read": False,
+                "infrastructure_reason_classes_only": True,
+            },
+            not isinstance(selection, dict),
+            isinstance(selection, dict)
+            and selection.get("selection_sha256")
+            != "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
+            isinstance(selection, dict)
+            and selection.get("binding_roster_sha256")
+            != "sha256:39ae49c2db322725800b15347d5da5d171e7e03b21dec5b570683414d70e83c5",
+        )
+    ):
+        raise FinalAggregateError("protocol-v2 migration safety contract differs")
+    return receipt, comparison
+
+
+def _replica_descriptor(
+    *,
+    seed: int,
+    arm: str,
+    origin: str,
+    protocol: Mapping[str, Any],
+    replacement_evidence: Mapping[tuple[int, str], Mapping[str, Any]],
+    original_by_replacement: Mapping[int, int],
 ) -> dict[str, Any]:
-    """Build the exact score-blind gate plan for the live seed-46..53 study."""
+    if origin == "retained_original":
+        suffix = "base-p1-v1" if arm == "base" else "t3k32s1000-p1-v2"
+        experiment = f"q38-dev17-s{seed}-{suffix}"
+        job_name = f"chris-{experiment}"
+        output_root = f"/mnt/sfs/jobs/chris-q38-fleet-dev17-s{seed}-{suffix}"
+        database = experiment.replace("-", "_")
+        expected_evaluation_identity = None
+        replaces_seed = None
+    else:
+        model = "base" if arm == "base" else "t3k32s1000"
+        experiment = f"q38-dev17-s{seed}-{model}-replacement-p1-v2"
+        short = f"{model}-repl-p1-v2"
+        job_name = f"chris-q38-dev17-s{seed}-{short}"
+        output_root = f"/mnt/sfs/jobs/chris-q38-fleet-dev17-s{seed}-{short}"
+        database = f"q38_dev17_s{seed}_{model}_repl_p1_v2"
+        expected_evaluation_identity = replacement_evidence[(seed, arm)][
+            "evaluation_identity_sha256"
+        ]
+        replaces_seed = original_by_replacement[seed]
+    return {
+        "seed": seed,
+        "arm": arm,
+        "origin": origin,
+        "replaces_seed": replaces_seed,
+        "experiment_id": experiment,
+        "database": database,
+        "job_name": job_name,
+        "output_root": output_root,
+        "terminal_receipt_path": f"{output_root}/TERMINAL_OBSERVATION.json",
+        "protocol_id": protocol["protocol_id"],
+        "comparison_protocol_sha256": protocol["comparison_protocol_sha256"],
+        "evaluation_identity_sha256": expected_evaluation_identity,
+    }
+
+
+def build_current_study_plan(
+    *,
+    task_set_path: Path,
+    roster_path: Path,
+    base_config_path: Path,
+    migration_receipt_path: Path,
+) -> dict[str, Any]:
+    """Build the exact score-blind gate plan for the protocol-v2 pass@8 study."""
 
     tasks, roster = _task_inputs(task_set_path, roster_path)
+    migration, comparison = _migration_input(migration_receipt_path)
     base = _read_json(base_config_path, "base evaluation config")
     harness = base.get("harness")
     images = base.get("images")
@@ -293,28 +622,41 @@ def build_current_study_plan(
             "route": candidate_route,
         },
     }
+    replacement_evidence = {
+        (row["replacement_seed"], row["arm_id"]): row for row in migration["replacement_arms"]
+    }
+    original_by_replacement = {
+        row["replacement_seed"]: row["invalid_original_seed"]
+        for row in comparison["replacement_mapping"]
+    }
+    protocols = {row["seed"]: row for row in comparison["replica_protocols"]}
     replicas = []
-    for seed in SEEDS:
+    for seed in comparison["included_seeds"]:
         for arm in ARMS:
-            suffix = "base-p1-v1" if arm == "base" else "t3k32s1000-p1-v2"
-            experiment = f"q38-dev17-s{seed}-{suffix}"
-            output_root = f"/mnt/sfs/jobs/chris-q38-fleet-dev17-s{seed}-{suffix}"
             replicas.append(
-                {
-                    "seed": seed,
-                    "arm": arm,
-                    "experiment_id": experiment,
-                    "database": experiment.replace("-", "_"),
-                    "job_name": f"chris-{experiment}",
-                    "output_root": output_root,
-                    "terminal_receipt_path": f"{output_root}/TERMINAL_OBSERVATION.json",
-                }
+                _replica_descriptor(
+                    seed=seed,
+                    arm=arm,
+                    origin=protocols[seed]["origin"],
+                    protocol=protocols[seed],
+                    replacement_evidence=replacement_evidence,
+                    original_by_replacement=original_by_replacement,
+                )
             )
     plan = {
         "schema": PLAN_SCHEMA,
-        "study_id": "q38-dev17-seeds46to53-base-step1000-p8-v1",
+        "study_id": comparison["protocol_study_id"],
         "benchmark": BENCHMARK,
-        "comparison_definition_sha256": COMPARISON_DEFINITION_SHA256,
+        "comparison_definition": comparison,
+        "comparison_definition_sha256": comparison["sha256"],
+        "comparison_definition_file_sha256": migration["comparison_definition_file_sha256"],
+        "migration_receipt_sha256": migration["sha256"],
+        "migration_receipt_file_sha256": _file_digest(migration_receipt_path),
+        "source_seeds": list(SOURCE_SEEDS),
+        "excluded_original_seeds": comparison["excluded_original_seeds"],
+        "replacement_mapping": comparison["replacement_mapping"],
+        "included_seeds": comparison["included_seeds"],
+        "excluded_source_evidence": migration["migrations"],
         "task_set_file_sha256": _file_digest(task_set_path),
         "task_selection_sha256": (
             "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68"
@@ -323,7 +665,7 @@ def build_current_study_plan(
         "binding_roster_sha256": roster["sha256"],
         "bindings_sha256": roster["bindings_sha256"],
         "tasks": tasks,
-        "seeds": list(SEEDS),
+        "seeds": comparison["included_seeds"],
         "pass_k": PASS_K,
         "replica_pass_k": 1,
         "retry_limit": 0,
@@ -333,7 +675,7 @@ def build_current_study_plan(
         "arms": arms,
         "replicas": replicas,
         "public_output_schema": PUBLIC_SCHEMA,
-        "private_output_root": "/mnt/sfs/jobs/chris-q38-dev17-pass8-final-v1",
+        "private_output_root": "/mnt/sfs/jobs/chris-q38-dev17-pass8-final-v2",
     }
     return {**plan, "sha256": _digest(plan)}
 
@@ -342,12 +684,20 @@ def validate_plan(plan: dict[str, Any]) -> None:
     if plan.get("schema") != PLAN_SCHEMA:
         raise FinalAggregateError("final aggregate plan schema differs")
     _require_self_digest(plan, "sha256", "final aggregate plan")
+    comparison = plan.get("comparison_definition")
+    if not isinstance(comparison, dict):
+        raise FinalAggregateError("final aggregate comparison definition is missing")
+    mapping, included, protocol_by_seed = _comparison_contract(comparison)
     if any(
         (
-            plan.get("study_id") != "q38-dev17-seeds46to53-base-step1000-p8-v1",
+            plan.get("study_id") != "q38-dev17-base-step1000-p8-v2",
             plan.get("benchmark") != BENCHMARK,
-            plan.get("comparison_definition_sha256") != COMPARISON_DEFINITION_SHA256,
-            plan.get("seeds") != list(SEEDS),
+            plan.get("comparison_definition_sha256") != comparison["sha256"],
+            plan.get("source_seeds") != list(SOURCE_SEEDS),
+            plan.get("included_seeds") != included,
+            plan.get("seeds") != included,
+            plan.get("excluded_original_seeds") != comparison["excluded_original_seeds"],
+            plan.get("replacement_mapping") != mapping,
             plan.get("pass_k") != PASS_K,
             plan.get("replica_pass_k") != 1,
             plan.get("retry_limit") != 0,
@@ -365,6 +715,15 @@ def validate_plan(plan: dict[str, Any]) -> None:
         )
     ):
         raise FinalAggregateError("final aggregate study identity differs")
+    _exact_digest_fields(
+        plan,
+        (
+            "comparison_definition_file_sha256",
+            "migration_receipt_sha256",
+            "migration_receipt_file_sha256",
+        ),
+        "final aggregate plan",
+    )
     if any(
         _digest(plan.get(field)) != digest for field, digest in EXACT_PLAN_FIELD_DIGESTS.items()
     ):
@@ -379,29 +738,72 @@ def validate_plan(plan: dict[str, Any]) -> None:
         or len(tasks) != TASK_COUNT
         or len({row.get("task_version_id") for row in tasks if isinstance(row, dict)}) != TASK_COUNT
         or not isinstance(replicas, list)
-        or len(replicas) != len(SEEDS) * len(ARMS)
+        or len(replicas) != PASS_K * len(ARMS)
         or not isinstance(arms, dict)
         or set(arms) != set(ARMS)
     ):
         raise FinalAggregateError("final aggregate roster is incomplete")
     identities = {(row.get("seed"), row.get("arm")) for row in replicas if isinstance(row, dict)}
-    if identities != {(seed, arm) for seed in SEEDS for arm in ARMS}:
-        raise FinalAggregateError("final aggregate replicas are not seeds 46 through 53 once")
+    if identities != {(seed, arm) for seed in included for arm in ARMS}:
+        raise FinalAggregateError("final aggregate does not contain eight included pairs once")
+    original_by_replacement = {
+        row["replacement_seed"]: row["invalid_original_seed"] for row in mapping
+    }
+    replacement_evidence: dict[tuple[int, str], dict[str, str]] = {}
+    for replica in replicas:
+        if not isinstance(replica, dict):
+            raise FinalAggregateError("final aggregate replica identity differs")
+        seed = replica["seed"]
+        arm = replica["arm"]
+        replacement = seed in original_by_replacement
+        if replacement:
+            _normalized_digest(
+                replica.get("evaluation_identity_sha256"),
+                "replacement evaluation identity",
+            )
+            replacement_evidence[(seed, arm)] = {
+                "evaluation_identity_sha256": replica["evaluation_identity_sha256"]
+            }
+        if (
+            replica.get("origin") != protocol_by_seed[seed]["origin"]
+            or replica.get("protocol_id") != protocol_by_seed[seed]["protocol_id"]
+            or replica.get("comparison_protocol_sha256")
+            != protocol_by_seed[seed]["comparison_protocol_sha256"]
+            or (not replacement and replica.get("evaluation_identity_sha256") is not None)
+        ):
+            raise FinalAggregateError("final aggregate replica protocol identity differs")
     for replica in replicas:
         seed = replica["seed"]
         arm = replica["arm"]
-        suffix = "base-p1-v1" if arm == "base" else "t3k32s1000-p1-v2"
-        experiment = f"q38-dev17-s{seed}-{suffix}"
-        if any(
-            (
-                replica.get("experiment_id") != experiment,
-                replica.get("database") != experiment.replace("-", "_"),
-                replica.get("job_name") != f"chris-{experiment}",
-                replica.get("terminal_receipt_path")
-                != f"{replica.get('output_root')}/TERMINAL_OBSERVATION.json",
-            )
-        ):
+        expected = _replica_descriptor(
+            seed=seed,
+            arm=arm,
+            origin=protocol_by_seed[seed]["origin"],
+            protocol=protocol_by_seed[seed],
+            replacement_evidence=replacement_evidence,
+            original_by_replacement=original_by_replacement,
+        )
+        output_root = replica.get("output_root")
+        if not isinstance(output_root, str) or not output_root.startswith("/"):
+            raise FinalAggregateError("final aggregate replica output root is invalid")
+        expected["output_root"] = output_root
+        expected["terminal_receipt_path"] = f"{output_root}/TERMINAL_OBSERVATION.json"
+        if replica != expected:
             raise FinalAggregateError("final aggregate replica identity differs")
+    excluded_source_evidence = plan.get("excluded_source_evidence")
+    if not isinstance(excluded_source_evidence, list) or len(excluded_source_evidence) != len(
+        mapping
+    ):
+        raise FinalAggregateError("final aggregate excluded source evidence is incomplete")
+    for expected, evidence in zip(mapping, excluded_source_evidence, strict=True):
+        if (
+            not isinstance(evidence, dict)
+            or evidence.get("invalid_original_seed") != expected["invalid_original_seed"]
+            or evidence.get("replacement_seed") != expected["replacement_seed"]
+            or evidence.get("whole_pair_excluded") is not True
+            or evidence.get("reason_class") not in ALLOWED_EXCLUSION_REASONS
+        ):
+            raise FinalAggregateError("final aggregate excluded source evidence differs")
     if plan.get("harness", {}).get("harness_version") != "1.18.27":
         raise FinalAggregateError("final aggregate harness identity differs")
 
@@ -454,7 +856,10 @@ def _terminal_receipt(replica: Mapping[str, Any]) -> tuple[dict[str, Any], str]:
     if any(
         (
             receipt.get("schema") != TERMINAL_SCHEMA,
-            receipt.get("protocol_id") != f"q38-dev17-s{replica['seed']}-base-t3k32s1000-p1-v1",
+            receipt.get("protocol_id") != replica["protocol_id"],
+            receipt.get("comparison_protocol_sha256") != replica["comparison_protocol_sha256"],
+            replica.get("evaluation_identity_sha256") is not None
+            and receipt.get("evaluation_identity_sha256") != replica["evaluation_identity_sha256"],
             receipt.get("arm_id") != replica["arm"],
             job.get("name") != replica["job_name"],
             not terminal_counts_match,
@@ -519,8 +924,14 @@ def _validate_acceptance_evidence(
     if len(matches) != 1:
         raise FinalAggregateError("accepted reconciliation receipt is missing or ambiguous")
     evidence = matches[0]
+    _require_self_digest(evidence, "receipt_sha256", "accepted reconciliation receipt")
     if any(
         (
+            evidence.get("schema_version")
+            not in {
+                "fleet-stored-session-reconciliation-v1",
+                "fleet-stored-session-reconciliation-v2",
+            },
             evidence.get("accepted_existing_completed_session_count", 0) < 1,
             evidence.get("model_generation_performed") is not False,
             evidence.get("scoring_call_performed") is not False,
@@ -754,7 +1165,7 @@ def finalize(
         coverage[(task["task_version_id"], arm, seed)] != 1
         for task in plan["tasks"]
         for arm in ARMS
-        for seed in SEEDS
+        for seed in plan["included_seeds"]
     ):
         raise FinalAggregateError("opened outcomes do not cover each task, arm, and seed once")
 
@@ -779,10 +1190,23 @@ def finalize(
     terminal_body = {
         "schema": "cyber_fleet_matched_pass8_terminal_index_v1",
         "study_plan_sha256": plan["sha256"],
+        "protocol_v2_migration": {
+            "migration_receipt_sha256": plan["migration_receipt_sha256"],
+            "migration_receipt_file_sha256": plan["migration_receipt_file_sha256"],
+            "comparison_definition_sha256": plan["comparison_definition_sha256"],
+            "comparison_definition_file_sha256": plan["comparison_definition_file_sha256"],
+            "source_seeds": plan["source_seeds"],
+            "excluded_original_seeds": plan["excluded_original_seeds"],
+            "replacement_mapping": plan["replacement_mapping"],
+            "included_seeds": plan["included_seeds"],
+            "excluded_source_evidence": plan["excluded_source_evidence"],
+        },
         "rows": [
             {
                 "seed": replica["seed"],
                 "arm": replica["arm"],
+                "origin": replica["origin"],
+                "replaces_seed": replica["replaces_seed"],
                 "evaluation_identity_sha256": terminal["evaluation_identity_sha256"],
                 "comparison_protocol_sha256": terminal["comparison_protocol_sha256"],
                 "job_uid": terminal["job"]["uid"],
@@ -854,6 +1278,10 @@ def finalize(
         "private_scored_outcome_index_sha256": outcome_index["receipt_sha256"],
         "private_anonymization_receipt_sha256": anonymization["receipt_sha256"],
         "sanitized_aggregate_receipt_sha256": public["receipt_sha256"],
+        "comparison_definition_sha256": plan["comparison_definition_sha256"],
+        "migration_receipt_sha256": plan["migration_receipt_sha256"],
+        "included_seeds": plan["included_seeds"],
+        "excluded_original_seeds": plan["excluded_original_seeds"],
         "public_contains_private_identifiers": False,
         "prompts_responses_flags_or_traces_read": False,
     }
@@ -966,7 +1394,7 @@ def open_postgres_snapshots(
                     autocommit=False,
                     row_factory=dict_row,
                     connect_timeout=30,
-                    application_name="fleet-dev17-pass8-final-v1",
+                    application_name="fleet-dev17-pass8-final-v2",
                 )
             )
             connection.execute("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
