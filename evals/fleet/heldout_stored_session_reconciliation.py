@@ -940,6 +940,7 @@ def _objects(
                     }
                 },
                 "spec": {
+                    "automountServiceAccountToken": False,
                     "priorityClassName": "c1",
                     "restartPolicy": "Never",
                     "nodeSelector": {
@@ -1279,6 +1280,7 @@ def validate(package: Package) -> None:
             != heldout_launch.FAILURE_ALERT_OFF,
             annotations.get(heldout_launch.CREATE_ONCE_ANNOTATION) != "true",
             package.job["spec"].get("backoffLimit") != 0,
+            pod_spec.get("automountServiceAccountToken") is not False,
             pod_spec.get("priorityClassName") != "c1",
             pod_spec.get("restartPolicy") != "Never",
             len(containers) != 1,

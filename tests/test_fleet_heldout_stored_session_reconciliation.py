@@ -295,6 +295,7 @@ def test_subset_authorization_binds_full_mixed_arm_census(tmp_path, monkeypatch)
     assert rendered.proof["model_generation_allowed"] is False
     assert rendered.proof["scoring_call_allowed"] is False
     pod = rendered.job["spec"]["template"]["spec"]
+    assert pod["automountServiceAccountToken"] is False
     assert pod["priorityClassName"] == "c1"
     assert "nvidia.com/gpu" not in json.dumps(pod["containers"][0]["resources"])
     assert rendered.job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
@@ -572,6 +573,7 @@ def test_render_is_cpu_only_score_blind_and_exact(tmp_path, monkeypatch):
         "cyber-post-train.fleet.ai/create-once": "true",
     }
     assert rendered.job["spec"]["backoffLimit"] == 0
+    assert pod["automountServiceAccountToken"] is False
     assert pod["priorityClassName"] == "c1"
     assert "nvidia.com/gpu" not in json.dumps(container["resources"])
     assert rendered.proof["source_job_uid"] == terminal["job"]["uid"]
@@ -809,6 +811,20 @@ def test_server_preview_rejects_behavioral_or_private_mutation(tmp_path, monkeyp
 def test_validate_rejects_post_render_bundle_mutation(tmp_path, monkeypatch):
     rendered, *_ = _render(tmp_path, monkeypatch)
     rendered.job["spec"]["template"]["spec"]["containers"][0]["command"] = ["/bin/true"]
+    with pytest.raises(packet.ReconciliationPacketError, match="unsafe"):
+        packet.validate(rendered)
+
+
+@pytest.mark.parametrize("automount", [None, True])
+def test_validate_requires_service_account_token_automount_disabled(
+    tmp_path, monkeypatch, automount
+):
+    rendered, *_ = _render(tmp_path, monkeypatch)
+    pod = rendered.job["spec"]["template"]["spec"]
+    if automount is None:
+        pod.pop("automountServiceAccountToken")
+    else:
+        pod["automountServiceAccountToken"] = automount
     with pytest.raises(packet.ReconciliationPacketError, match="unsafe"):
         packet.validate(rendered)
 
