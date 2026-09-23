@@ -62,6 +62,19 @@ _LAUNCH_V3_GUARD_IMAGE = (
     "661864827319.dkr.ecr.us-east-1.amazonaws.com/fleet/skyrl-train"
     "@sha256:89758df2b5f35cdb19efe948c7f6ef54f11e2e2ab47a45d600c25f36914e308f"
 )
+_LAUNCH_V10_OPERATION_ID_SHA256 = (
+    "sha256:ae00d58cbffeb18ad0d31d8fb33ad012771ecda6ac67b1ed39ad3729af4f77b5"
+)
+_LAUNCH_V10_PLAN_SHA256 = "sha256:8f68c9502f394fea1d2ce2339a4908b50a26c3a5a534a4c03944a5aaa7a0d7d1"
+_LAUNCH_V10_REQUEST_SHA256 = (
+    "sha256:22965dae5ed43e1c62297522867b53daade798810cf75388b83eb56914eee5f1"
+)
+_LAUNCH_V10_MANIFEST_SHA256 = (
+    "sha256:151fcb31d5ba37b06320defba764ec964ee34df87bf96b49d9c1f56b7e1cba68"
+)
+_LAUNCH_V10_HOST_DUPLICATE_SHA256 = (
+    "sha256:03dca184d794a2fb131b68bab33e5cb858110da0e33f9fae90f1f806f4e99a9b"
+)
 OPERATOR_NAMES = {
     "stage": "chris-q38-prod10-stage-operator-v7",
     "manifest": "chris-q38-prod10-manifest-operator-v2",
@@ -2875,6 +2888,15 @@ def _archive_launch_v3_guard(
     journal_path = historical_operation_root / "PROD10_DIRECT_V3_CREATE.jsonl"
     archive_path = historical_operation_root / _GUARD_ARCHIVE_NAME
     receipt_path = historical_operation_root / _GUARD_ARCHIVE_RECEIPT_NAME
+    if identity.run_name == "chris-q38-rlreward-prod11":
+        return _reuse_launch_v3_guard_archive(
+            guard_path=guard_path,
+            binding_path=binding_path,
+            journal_path=journal_path,
+            archive_path=archive_path,
+            receipt_path=receipt_path,
+            runner=runner,
+        )
     source_exists = guard_path.exists() or guard_path.is_symlink()
     archive_exists = archive_path.exists() or archive_path.is_symlink()
     if (
@@ -2981,6 +3003,144 @@ def _archive_launch_v3_guard(
     if receipt["source_guard_absent"] is not True:
         raise OperatorFailure("launch_v3_guard_archive_source_still_present")
     _write_once(receipt_path, receipt)
+    return receipt
+
+
+def _read_owned_regular_json(path: Path, *, code: str) -> tuple[bytes, dict[str, Any]]:
+    descriptor = -1
+    try:
+        identity = path.lstat()
+        if path.is_symlink() or not stat.S_ISREG(identity.st_mode):
+            raise OperatorFailure(code)
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        opened = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or (opened.st_dev, opened.st_ino) != (identity.st_dev, identity.st_ino)
+            or (opened.st_uid, opened.st_gid) != (RUNTIME_UID, RUNTIME_GID)
+            or stat.S_IMODE(opened.st_mode) != 0o600
+            or opened.st_size > 1024 * 1024
+        ):
+            raise OperatorFailure(code)
+        chunks: list[bytes] = []
+        while chunk := os.read(descriptor, 65536):
+            chunks.append(chunk)
+        finished = os.fstat(descriptor)
+        if (
+            finished.st_dev,
+            finished.st_ino,
+            finished.st_size,
+            finished.st_mtime_ns,
+        ) != (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns):
+            raise OperatorFailure(code)
+        encoded = b"".join(chunks)
+        value = json.loads(encoded)
+    except OperatorFailure:
+        raise
+    except (OSError, ValueError) as exc:
+        raise OperatorFailure(code) from exc
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    if not isinstance(value, dict):
+        raise OperatorFailure(code)
+    return encoded, value
+
+
+def _reuse_launch_v3_guard_archive(
+    *,
+    guard_path: Path,
+    binding_path: Path,
+    journal_path: Path,
+    archive_path: Path,
+    receipt_path: Path,
+    runner: InClusterKubernetesRunner,
+) -> dict[str, Any]:
+    """Validate and reuse v10's immutable historical archive without writing it."""
+    if any(path.exists() or path.is_symlink() for path in (guard_path, binding_path, journal_path)):
+        raise OperatorFailure("launch_v3_guard_archive_reuse_state_rejected")
+    archived_bytes, archived = _read_owned_regular_json(
+        archive_path,
+        code="launch_v3_guard_archive_reuse_file_rejected",
+    )
+    _, receipt_value = _read_owned_regular_json(
+        receipt_path,
+        code="launch_v3_guard_archive_reuse_receipt_rejected",
+    )
+    guard = cleanup.JobsApiPrefixGuard(
+        context=direct.PROD_CONTEXT,
+        namespace=direct.NAMESPACE,
+        run_name_prefix=_LAUNCH_V3_GUARD_RUN_NAME,
+        run_dir=_LAUNCH_V3_GUARD_RUN_DIR,
+        image=_LAUNCH_V3_GUARD_IMAGE,
+        plan_sha256=_LAUNCH_V3_GUARD_PLAN_SHA256,
+        manifest_sha256=_LAUNCH_V3_GUARD_MANIFEST_SHA256,
+        maximum_seconds=direct.MAXIMUM_SECONDS,
+        expected_gpus=8,
+        armed_path=guard_path,
+        binding_path=binding_path,
+        run=runner,
+    )
+    try:
+        checked = guard._validate_armed(archived)
+        receipt = _validate_seal(receipt_value, GUARD_ARCHIVE_SCHEMA)
+        archived_at = direct._timestamp(receipt.get("archived_at"))
+    except (ValueError, JobsError, cleanup.ObserverError) as exc:
+        raise OperatorFailure("launch_v3_guard_archive_reuse_receipt_rejected") from exc
+    static = {
+        "status": "dead_v3_guard_archived_create_once",
+        "launch_v3_recovery_sha256": launch_v3_recovery_binding()["sha256"],
+        "inspect_v4_success_sha256": inspect_v4_success_binding()["sha256"],
+        "launch_v4_failure_sha256": launch_v4_failure_binding()["sha256"],
+        "inspect_v5_success_sha256": inspect_v5_success_binding()["sha256"],
+        "launch_v5_failure_sha256": launch_v5_failure_binding()["sha256"],
+        "inspect_v6_success_sha256": inspect_v6_success_binding()["sha256"],
+        "launch_v6_failure_sha256": launch_v6_failure_binding()["sha256"],
+        "launch_v7_failure_sha256": launch_v7_failure_binding()["sha256"],
+        "host_duplicate_sha256": _LAUNCH_V10_HOST_DUPLICATE_SHA256,
+        "guard_sha256": checked["sha256"],
+        "guard_file_sha256": inspect_v6_success_binding()["current_guard_sha256"],
+        "archived_guard_operation_id_sha256": _LAUNCH_V3_GUARD_OPERATION_ID_SHA256,
+        "archived_guard_plan_sha256": _LAUNCH_V3_GUARD_PLAN_SHA256,
+        "archived_guard_request_sha256": _LAUNCH_V3_GUARD_REQUEST_SHA256,
+        "archived_guard_manifest_sha256": _LAUNCH_V3_GUARD_MANIFEST_SHA256,
+        "successor_operation_id_sha256": _LAUNCH_V10_OPERATION_ID_SHA256,
+        "successor_plan_sha256": _LAUNCH_V10_PLAN_SHA256,
+        "successor_request_sha256": _LAUNCH_V10_REQUEST_SHA256,
+        "successor_manifest_sha256": _LAUNCH_V10_MANIFEST_SHA256,
+        "archive_name": _GUARD_ARCHIVE_NAME,
+        "archived_via_atomic_rename": True,
+        "recovered_after_atomic_rename": False,
+        "source_guard_absent": True,
+    }
+    expected_keys = {
+        "schema",
+        "sha256",
+        "archived_at",
+        "jit_duplicate_before_guard_sha256",
+        "jit_duplicate_before_intent_sha256",
+        *static,
+    }
+    dynamic_digests = (
+        receipt.get("jit_duplicate_before_guard_sha256"),
+        receipt.get("jit_duplicate_before_intent_sha256"),
+    )
+    if (
+        set(receipt) != expected_keys
+        or any(receipt.get(key) != value for key, value in static.items())
+        or any(
+            not isinstance(value, str)
+            or len(value) != 71
+            or not value.startswith("sha256:")
+            or any(character not in "0123456789abcdef" for character in value[7:])
+            for value in dynamic_digests
+        )
+        or dynamic_digests[0] == dynamic_digests[1]
+        or receipt.get("archived_at") != archived_at.strftime("%Y-%m-%dT%H:%M:%SZ")
+        or "sha256:" + hashlib.sha256(archived_bytes).hexdigest()
+        != inspect_v6_success_binding()["current_guard_sha256"]
+    ):
+        raise OperatorFailure("launch_v3_guard_archive_reuse_receipt_rejected")
     return receipt
 
 

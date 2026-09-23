@@ -1528,6 +1528,205 @@ def test_prod10_dead_guard_is_atomically_archived_and_crash_reconciled(
         )
 
 
+def _prod11_archived_guard_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> dict[str, object]:
+    controls_root = tmp_path / "controls"
+    controls_root.mkdir()
+    monkeypatch.setattr(hardening, "CREATE_ONCE_ROOT", controls_root)
+    monkeypatch.setattr(operator, "RUNTIME_UID", os.getuid())
+    monkeypatch.setattr(operator, "RUNTIME_GID", os.getgid())
+    monkeypatch.setattr(launch_direct, "_jit_duplicate", lambda value, *_args, **_kwargs: value)
+    identity = historical.load_identity(PROD11_IDENTITY)
+    plan = {"schema": training.SCHEMA, "identity": "prod11-archive-reuse"}
+    request = {
+        "name": identity.run_name,
+        "run_dir": identity.output_root,
+        "image": operator._LAUNCH_V3_GUARD_IMAGE,
+        "workers": 1,
+        "gpus_per_worker": 8,
+    }
+    expected = {"kind": "RayJob", "identity": "prod11-archive-reuse"}
+    operation_root = hardening.training_operation_root(plan)
+    historical_root = controls_root / (
+        "training-" + operator._LAUNCH_V3_GUARD_OPERATION_ID_SHA256.removeprefix("sha256:")
+    )
+    historical_root.mkdir()
+    guard_path = direct.jobs_api_guard_path(historical_root, "training")
+    binding_path = hardening.creator_binding_path(historical_root, "training")
+    archive_path = historical_root / operator._GUARD_ARCHIVE_NAME
+    receipt_path = historical_root / operator._GUARD_ARCHIVE_RECEIPT_NAME
+    historical_guard = cleanup.JobsApiPrefixGuard(
+        context=direct.PROD_CONTEXT,
+        namespace=direct.NAMESPACE,
+        run_name_prefix=operator._LAUNCH_V3_GUARD_RUN_NAME,
+        run_dir=operator._LAUNCH_V3_GUARD_RUN_DIR,
+        image=operator._LAUNCH_V3_GUARD_IMAGE,
+        plan_sha256=operator._LAUNCH_V3_GUARD_PLAN_SHA256,
+        manifest_sha256=operator._LAUNCH_V3_GUARD_MANIFEST_SHA256,
+        maximum_seconds=direct.MAXIMUM_SECONDS,
+        expected_gpus=8,
+        armed_path=guard_path,
+        binding_path=binding_path,
+        run=lambda *_args, **_kwargs: pytest.fail("archive reuse contacted Kubernetes"),
+    )
+    stored = operator._seal(
+        {
+            "schema": cleanup.JOBS_API_PREFIX_GUARD_SCHEMA,
+            "status": "armed_non_destructive_prefix_guard",
+            "context": historical_guard.context,
+            "namespace": historical_guard.namespace,
+            "run_name_prefix": historical_guard.run_name_prefix,
+            "generated_name_pattern": historical_guard.generated_name_pattern,
+            "run_dir": historical_guard.run_dir,
+            "image": historical_guard.image,
+            "plan_sha256": historical_guard.plan_sha256,
+            "manifest_sha256": historical_guard.manifest_sha256,
+            "maximum_seconds": historical_guard.maximum_seconds,
+            "expected_gpus": historical_guard.expected_gpus,
+            "armed_at": "2026-09-23T10:00:00Z",
+            "observer_pid": 1,
+            "prefix_collision_count_before_post": 0,
+        }
+    )
+    operator._write_once(archive_path, stored)
+    guard_file_sha256 = "sha256:" + hashlib.sha256(archive_path.read_bytes()).hexdigest()
+    inspection_v6 = {
+        "sha256": "sha256:" + "6" * 64,
+        "current_guard_sha256": guard_file_sha256,
+    }
+    monkeypatch.setattr(operator, "inspect_v6_success_binding", lambda: inspection_v6)
+    receipt = operator._seal(
+        {
+            "schema": operator.GUARD_ARCHIVE_SCHEMA,
+            "status": "dead_v3_guard_archived_create_once",
+            "launch_v3_recovery_sha256": operator.launch_v3_recovery_binding()["sha256"],
+            "inspect_v4_success_sha256": operator.inspect_v4_success_binding()["sha256"],
+            "launch_v4_failure_sha256": operator.launch_v4_failure_binding()["sha256"],
+            "inspect_v5_success_sha256": operator.inspect_v5_success_binding()["sha256"],
+            "launch_v5_failure_sha256": operator.launch_v5_failure_binding()["sha256"],
+            "inspect_v6_success_sha256": inspection_v6["sha256"],
+            "launch_v6_failure_sha256": operator.launch_v6_failure_binding()["sha256"],
+            "launch_v7_failure_sha256": operator.launch_v7_failure_binding()["sha256"],
+            "host_duplicate_sha256": operator._LAUNCH_V10_HOST_DUPLICATE_SHA256,
+            "jit_duplicate_before_guard_sha256": "sha256:" + "7" * 64,
+            "jit_duplicate_before_intent_sha256": "sha256:" + "8" * 64,
+            "guard_sha256": stored["sha256"],
+            "guard_file_sha256": guard_file_sha256,
+            "archived_guard_operation_id_sha256": operator._LAUNCH_V3_GUARD_OPERATION_ID_SHA256,
+            "archived_guard_plan_sha256": operator._LAUNCH_V3_GUARD_PLAN_SHA256,
+            "archived_guard_request_sha256": operator._LAUNCH_V3_GUARD_REQUEST_SHA256,
+            "archived_guard_manifest_sha256": operator._LAUNCH_V3_GUARD_MANIFEST_SHA256,
+            "successor_operation_id_sha256": operator._LAUNCH_V10_OPERATION_ID_SHA256,
+            "successor_plan_sha256": operator._LAUNCH_V10_PLAN_SHA256,
+            "successor_request_sha256": operator._LAUNCH_V10_REQUEST_SHA256,
+            "successor_manifest_sha256": operator._LAUNCH_V10_MANIFEST_SHA256,
+            "archive_name": operator._GUARD_ARCHIVE_NAME,
+            "archived_via_atomic_rename": True,
+            "recovered_after_atomic_rename": False,
+            "source_guard_absent": True,
+            "archived_at": "2026-09-23T15:31:30Z",
+        }
+    )
+    operator._write_once(receipt_path, receipt)
+    return {
+        "packet": {"duplicate_proof": {"sha256": "sha256:" + "9" * 64}},
+        "identity": identity,
+        "plan": plan,
+        "request": request,
+        "expected": expected,
+        "operation_root": operation_root,
+        "archive_path": archive_path,
+        "receipt_path": receipt_path,
+        "journal_path": historical_root / "PROD10_DIRECT_V3_CREATE.jsonl",
+        "guard_path": guard_path,
+        "receipt": receipt,
+    }
+
+
+def test_prod11_reuses_exact_v10_guard_archive_without_writes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state = _prod11_archived_guard_state(tmp_path, monkeypatch)
+    archive_path = state["archive_path"]
+    receipt_path = state["receipt_path"]
+    assert isinstance(archive_path, Path) and isinstance(receipt_path, Path)
+    before = (archive_path.read_bytes(), receipt_path.read_bytes())
+    monkeypatch.setattr(
+        operator,
+        "_write_once",
+        lambda *_args, **_kwargs: pytest.fail("prod11 archive reuse wrote a file"),
+    )
+    monkeypatch.setattr(
+        operator.os,
+        "rename",
+        lambda *_args, **_kwargs: pytest.fail("prod11 archive reuse renamed a file"),
+    )
+
+    result = operator._archive_launch_v3_guard(
+        state["packet"],
+        identity=state["identity"],
+        plan=state["plan"],
+        request=state["request"],
+        expected=state["expected"],
+        operation_root=state["operation_root"],
+        jit_before_guard={"sha256": "sha256:" + "a" * 64},
+        jit_before_intent={"sha256": "sha256:" + "b" * 64},
+        runner=object(),
+    )
+
+    assert result == state["receipt"]
+    assert (archive_path.read_bytes(), receipt_path.read_bytes()) == before
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ("missing", "altered", "symlink", "mode", "digest", "stale_marker"),
+)
+def test_prod11_guard_archive_reuse_rejects_noncanonical_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mutation: str
+) -> None:
+    state = _prod11_archived_guard_state(tmp_path, monkeypatch)
+    archive_path = state["archive_path"]
+    receipt_path = state["receipt_path"]
+    assert isinstance(archive_path, Path) and isinstance(receipt_path, Path)
+    if mutation == "missing":
+        receipt_path.unlink()
+    elif mutation == "altered":
+        altered = dict(state["receipt"])
+        altered["successor_plan_sha256"] = "sha256:" + "0" * 64
+        receipt_path.write_text(
+            json.dumps(operator._seal(altered), sort_keys=True, separators=(",", ":")) + "\n"
+        )
+    elif mutation == "symlink":
+        target = tmp_path / "receipt-target"
+        target.write_bytes(receipt_path.read_bytes())
+        target.chmod(0o600)
+        receipt_path.unlink()
+        receipt_path.symlink_to(target)
+    elif mutation == "mode":
+        receipt_path.chmod(0o640)
+    elif mutation == "digest":
+        archive_path.write_bytes(archive_path.read_bytes() + b" ")
+    else:
+        journal_path = state["journal_path"]
+        assert isinstance(journal_path, Path)
+        journal_path.write_text("intent\n")
+
+    with pytest.raises(operator.OperatorFailure, match="archive_reuse"):
+        operator._archive_launch_v3_guard(
+            state["packet"],
+            identity=state["identity"],
+            plan=state["plan"],
+            request=state["request"],
+            expected=state["expected"],
+            operation_root=state["operation_root"],
+            jit_before_guard={"sha256": "sha256:" + "a" * 64},
+            jit_before_intent={"sha256": "sha256:" + "b" * 64},
+            runner=object(),
+        )
+
+
 def test_prod10_live_preview_accepts_representation_drift_but_keeps_strict_policy(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
