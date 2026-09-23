@@ -295,7 +295,7 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
     container = package.job["spec"]["template"]["spec"]["containers"][0]
 
     assert proof["phase"] == "launch"
-    assert proof["name"] == "chris-q38-prod10-launch-operator-v9"
+    assert proof["name"] == "chris-q38-prod10-launch-operator-v10"
     assert proof["failure_alerts"] == "off"
     assert proof["priority"] == "c1"
     assert proof["queue_priority"] == "q1"
@@ -336,6 +336,11 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
     assert environment["HF_DATASETS_CACHE"] == "/work/hf-datasets"
     assert "WANDB_API_KEY" not in environment
     assert "private_rows" not in json.dumps(packet, sort_keys=True)
+    assert packet["preview_diff_v2_success"]["reported_pointer_ids"] == [
+        "/metadata/annotations/fleet.ai~1submitted-by",
+        "/metadata/annotations/fleet.ai~1submitted-by-profile",
+    ]
+    assert packet["preview_diff_v2_success"]["safe_for_repair"] is True
 
     changed = copy.deepcopy(packet)
     changed["capacity_census"]["limits"] = {"nodes": 8, "gpus": 64}
@@ -374,6 +379,8 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
         ("launch_v6_failure", "launch-v6 failure predecessor"),
         ("launch_v7_failure", "launch-v7 failure predecessor"),
         ("launch_v8_failure", "launch-v8 failure predecessor"),
+        ("launch_v9_failure", "launch-v9 failure predecessor"),
+        ("preview_diff_v2_success", "preview-difference v2 predecessor"),
     ):
         changed = copy.deepcopy(packet)
         changed[key]["operator_job_uid"] = "00000000-0000-4000-8000-000000000001"
@@ -1368,6 +1375,48 @@ def test_prod10_live_preview_accepts_representation_drift_but_keeps_strict_polic
             direct.manifest(plan, request, changed, identity=identity)
 
 
+def test_prod10_live_preview_normalizes_only_valid_submitter_identity() -> None:
+    expected = {
+        "kind": "RayJob",
+        "metadata": {
+            "annotations": {
+                "fleet.ai/failure-alerts": "off",
+                "fleet.ai/submitted-by": "sealed@example.com",
+                "fleet.ai/submitted-by-profile": "00000000-0000-4000-8000-000000000010",
+            }
+        },
+        "spec": {"suspend": False},
+    }
+    live = copy.deepcopy(expected)
+    live["metadata"]["annotations"]["fleet.ai/submitted-by"] = "live@example.com"
+    live["metadata"]["annotations"]["fleet.ai/submitted-by-profile"] = (
+        "00000000-0000-4000-8000-000000000011"
+    )
+    proof = launch_direct.live_submitter_normalization(expected, live)
+    assert proof["status"] == "two_server_owned_annotations_normalized"
+    assert proof["annotations"] == [
+        "fleet.ai/submitted-by",
+        "fleet.ai/submitted-by-profile",
+    ]
+    assert proof["expected_manifest_sha256"] == proof["normalized_manifest_sha256"]
+    assert proof["live_manifest_sha256"] != proof["expected_manifest_sha256"]
+    assert proof["values_exported"] is False
+
+    extra = copy.deepcopy(live)
+    extra["spec"]["suspend"] = True
+    with pytest.raises(JobsError, match="manifest changed"):
+        launch_direct.live_submitter_normalization(expected, extra)
+
+    invalid_expected = copy.deepcopy(expected)
+    invalid_expected["metadata"]["annotations"]["fleet.ai/submitted-by"] = "not-an-email"
+    with pytest.raises(JobsError, match="identity is invalid"):
+        launch_direct.live_submitter_normalization(invalid_expected, live)
+    invalid_live = copy.deepcopy(live)
+    invalid_live["metadata"]["annotations"]["fleet.ai/submitted-by-profile"] = "not-a-uuid"
+    with pytest.raises(JobsError, match="identity is invalid"):
+        launch_direct.live_submitter_normalization(expected, invalid_live)
+
+
 @pytest.mark.parametrize("manifest_changed", [False, True])
 def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
     monkeypatch: pytest.MonkeyPatch,
@@ -1395,7 +1444,15 @@ def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
         "manifest_yaml": "kind: RayJob\n",
     }
     live_source = {**source, "errors": [], "manifest_yaml": source["manifest_yaml"] + "\n"}
-    expected = {"kind": "RayJob"}
+    expected = {
+        "kind": "RayJob",
+        "metadata": {
+            "annotations": {
+                "fleet.ai/submitted-by": "sealed@example.com",
+                "fleet.ai/submitted-by-profile": "00000000-0000-4000-8000-000000000010",
+            }
+        },
+    }
     preview = {"checked_at": "2026-09-23T10:00:00Z", "sha256": "sha256:" + "2" * 64}
     events: list[str] = []
     monkeypatch.setenv("FLEET_API_KEY", "token")
@@ -1619,7 +1676,15 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
         "errors": [],
         "manifest_yaml": source["manifest_yaml"] + "\n",
     }
-    expected = {"kind": "RayJob"}
+    expected = {
+        "kind": "RayJob",
+        "metadata": {
+            "annotations": {
+                "fleet.ai/submitted-by": "sealed@example.com",
+                "fleet.ai/submitted-by-profile": "00000000-0000-4000-8000-000000000010",
+            }
+        },
+    }
     auth = direct._seal(
         {
             "schema": launch_direct.AUTHORIZATION_SCHEMA,
@@ -1665,7 +1730,12 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
         "jit_duplicate_proof",
         lambda *_args, **_kwargs: jit_before_intent,
     )
-    monkeypatch.setattr(direct, "manifest", lambda *_args, **_kwargs: expected)
+    live_manifest = copy.deepcopy(expected)
+    live_manifest["metadata"]["annotations"]["fleet.ai/submitted-by"] = "live@example.com"
+    live_manifest["metadata"]["annotations"]["fleet.ai/submitted-by-profile"] = (
+        "00000000-0000-4000-8000-000000000011"
+    )
+    monkeypatch.setattr(direct, "manifest", lambda *_args, **_kwargs: live_manifest)
     monkeypatch.setattr(direct, "server_dry_run", lambda *_args, **_kwargs: expected)
     live_preview = {
         "sha256": "sha256:" + "2" * 64,
@@ -1731,12 +1801,14 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
             jobs_factory=FakeJobs,
         )
 
-    monkeypatch.setattr(direct, "manifest", lambda *_args, **_kwargs: {"kind": "Other"})
+    changed_manifest = copy.deepcopy(expected)
+    changed_manifest["spec"] = {"suspend": True}
+    monkeypatch.setattr(direct, "manifest", lambda *_args, **_kwargs: changed_manifest)
     with pytest.raises(JobsError, match="live Jobs API manifest changed"):
         create()
     assert not (root / "PROD10_DIRECT_V3_CREATE.jsonl").exists()
     assert posts == []
-    monkeypatch.setattr(direct, "manifest", lambda *_args, **_kwargs: expected)
+    monkeypatch.setattr(direct, "manifest", lambda *_args, **_kwargs: live_manifest)
     monkeypatch.delenv("WANDB_API_KEY", raising=False)
     with pytest.raises(JobsError, match="runtime create-once binding"):
         create()
@@ -1752,6 +1824,20 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
     assert intent["live_jobs_preview_sha256"] != "sha256:" + digest(source)
     assert created["sealed_jobs_preview_sha256"] == intent["sealed_jobs_preview_sha256"]
     assert created["live_jobs_preview_sha256"] == intent["live_jobs_preview_sha256"]
+    assert intent["submitter_normalization"]["status"] == (
+        "two_server_owned_annotations_normalized"
+    )
+    assert (
+        intent["submitter_normalization"]["expected_manifest_sha256"]
+        == (intent["submitter_normalization"]["normalized_manifest_sha256"])
+    )
+    assert (
+        intent["submitter_normalization"]["live_manifest_sha256"]
+        != (intent["submitter_normalization"]["expected_manifest_sha256"])
+    )
+    assert (
+        created["submitter_normalization_sha256"] == (intent["submitter_normalization"]["sha256"])
+    )
     assert "wandb_run_id_absent" not in intent
     assert intent["wandb_runtime_create_once"] == {
         "credential_present": True,

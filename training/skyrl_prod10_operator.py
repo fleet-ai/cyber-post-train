@@ -66,7 +66,7 @@ OPERATOR_NAMES = {
     "stage": "chris-q38-prod10-stage-operator-v7",
     "manifest": "chris-q38-prod10-manifest-operator-v2",
     "preflight": "chris-q38-prod10-preflight-operator-v3",
-    "launch": "chris-q38-prod10-launch-operator-v9",
+    "launch": "chris-q38-prod10-launch-operator-v10",
     "inspect": "chris-q38-prod10-launch-inspect-v6",
     "probe": "chris-q38-prod10-launch-probe-v9",
     "preview-diff": "chris-q38-prod10-preview-diff-v2",
@@ -836,6 +836,69 @@ _PREVIEW_DIFF_V1_RESULT = {
     "nested_jobs_created": 0,
     "gpus": 0,
 }
+_PREVIEW_DIFF_V2_SUCCESS = {
+    "schema": "cyber_skyrl_prod10_preview_difference_v2_success_binding_v1",
+    "status": "diagnostic_completed_and_released",
+    "operator_name": "chris-q38-prod10-preview-diff-v2",
+    "source_head": "5bd6ec56823bde1eefdc8753fb0ca1b6722c439b",
+    "packet_sha256": "sha256:8be5b5cdeca21a2f445fea0453596fa9ce428bc2c1bb5fb1ed3f0e50164e254a",
+    "source_sha256": "sha256:6861a3fecd0c6f058d1b5011796ee42b3c6efff856af64c100a10dff4e6f641c",
+    "job_manifest_sha256": (
+        "sha256:a36063730d1b9b4be78a6dc7543d1bc5080ff15a0d6d11c72927cb5df3a9b616"
+    ),
+    "operator_job_uid": "a2283b51-cfb6-4731-a618-cb5a19c6b779",
+    "operator_pod_name": "chris-q38-prod10-preview-diff-v2-dkrdx",
+    "operator_pod_uid": "efc6a66a-bfb1-40d1-88b5-83b6073393a1",
+    "operator_workload_name": "job-chris-q38-prod10-preview-diff-v2-100d4",
+    "operator_workload_uid": "283b6c27-a88e-4d5a-a2d3-c3c0e0444be8",
+    "source_config_map_name": "chris-q38-prod10-preview-diff-v2-source",
+    "source_config_map_uid": "949f5a8a-bd31-4ac0-b2eb-dd25e5672268",
+    "packet_config_map_name": "chris-q38-prod10-preview-diff-v2-packet",
+    "packet_config_map_uid": "5f8d8756-5359-4560-8483-7ffa1ef34e58",
+    "create_journal_file_sha256": (
+        "sha256:7a048680028f2771740c906e226aa73b46ee6fc1cf5ae3a9913f27939663dc6f"
+    ),
+    "observer_armed_sha256": (
+        "sha256:76821f41a258fc13d8ee58f6d01012a2c87aa8bf188ea0d00e5c1596123f1916"
+    ),
+    "observer_armed_file_sha256": (
+        "sha256:8735902ec9c230b75761f599cbbdfd44262cde1de912de6ef77ee628a5416648"
+    ),
+    "creator_binding_sha256": (
+        "sha256:07f90159504e7dc9f007c7186324bc92732e212cabd1c276d174a6f327ef35eb"
+    ),
+    "creator_binding_file_sha256": (
+        "sha256:ea8312dee2bfff6dbe896d3b25845078434ad6bf7d286d7a8f8baa08d0100890"
+    ),
+    "receipt_sha256": "sha256:579ab85c4ad3aa3071b0308cf650e7e0e4dc899f5821c1b6e3a0eb1864736160",
+    "observer_result_sha256": (
+        "sha256:65ef0891846ada8e98e4cbec741d4cf725977088bacfb9cd2faa6a64264d1cfe"
+    ),
+    "observer_result_file_sha256": (
+        "sha256:0dad7d7a1275ccaeff9ae49663db70c868c6bf71e5d629e87542e21e32b4e5ab"
+    ),
+    "terminal_result_sha256": (
+        "sha256:3a2d028946532c5e955e0627c10f06d4976c8220185279194d94278c2677118c"
+    ),
+    "release_observed_at": "2026-09-23T15:00:24Z",
+    "reported_pointer_ids": [
+        "/metadata/annotations/fleet.ai~1submitted-by",
+        "/metadata/annotations/fleet.ai~1submitted-by-profile",
+    ],
+    "expected_submitter_formats_valid": True,
+    "live_submitter_formats_valid": True,
+    "unrecognized_count": 0,
+    "unreported_allowlisted_count": 0,
+    "safe_for_repair": True,
+    "jobs_api_calls": {"preview": 1, "create": 0},
+    "terminal_status": "Succeeded",
+    "exit_codes": [0],
+    "restarts": 0,
+    "peak_gpus": 0,
+    "inner_gpu_run_created": False,
+    "workload_resources_absent": True,
+    "gpus": 0,
+}
 _PREFLIGHT_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_preflight_v1_failure_recovery_v1",
     "status": "failed_closed_released",
@@ -1107,6 +1170,11 @@ def preview_diff_v1_result_binding() -> dict[str, Any]:
     return _seal(_PREVIEW_DIFF_V1_RESULT)
 
 
+def preview_diff_v2_success_binding() -> dict[str, Any]:
+    """Bind the released one-preview proof of the two server-owned differences."""
+    return _seal(_PREVIEW_DIFF_V2_SUCCESS)
+
+
 def _write_once(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=False, exist_ok=True)
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -1367,6 +1435,10 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
             raise ValueError("prod10 launch-v7 failure predecessor changed")
         if packet.get("launch_v8_failure") != launch_v8_failure_binding():
             raise ValueError("prod10 launch-v8 failure predecessor changed")
+        if packet.get("launch_v9_failure") != launch_v9_failure_binding():
+            raise ValueError("prod10 launch-v9 failure predecessor changed")
+        if packet.get("preview_diff_v2_success") != preview_diff_v2_success_binding():
+            raise ValueError("prod10 preview-difference v2 predecessor changed")
         _launch_packet_inputs(packet)
     return packet
 
@@ -2910,8 +2982,10 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         identity=identity,
         image_identity_receipt=image_identity,
     )
-    if live_expected != expected:
-        raise OperatorFailure("launch_live_preview_changed")
+    try:
+        launch_direct.live_submitter_normalization(expected, live_expected)
+    except JobsError as exc:
+        raise OperatorFailure("launch_live_preview_changed") from exc
     _LAUNCH_STAGE = "live_preview_dry_run"
     live_server_render = direct.server_dry_run(
         live_expected, context=direct.PROD_CONTEXT, runner=runner

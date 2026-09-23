@@ -12,6 +12,7 @@ import os
 import re
 import subprocess
 from collections.abc import Callable
+from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -35,12 +36,71 @@ REVALIDATION_SCHEMA = "cyber_skyrl_prod10_preflight_revalidation_v1"
 SEALED_DEV_PREVIEW_PROVENANCE_SCHEMA = (
     "cyber_skyrl_prod10_sealed_external_dev_server_preview_provenance_v1"
 )
+SUBMITTER_NORMALIZATION_SCHEMA = "cyber_skyrl_prod10_submitter_normalization_v1"
+_SUBMITTER_ANNOTATIONS = (
+    "fleet.ai/submitted-by",
+    "fleet.ai/submitted-by-profile",
+)
 MAX_NODES = 10
 MAX_GPUS = 80
 
 
 def _seal(value: dict[str, Any]) -> dict[str, Any]:
     return direct._seal(value)
+
+
+def _submitter_identity_valid(manifest: object) -> bool:
+    if not isinstance(manifest, dict):
+        return False
+    metadata = manifest.get("metadata")
+    if not isinstance(metadata, dict):
+        return False
+    annotations = metadata.get("annotations")
+    if not isinstance(annotations, dict):
+        return False
+    email = annotations.get(_SUBMITTER_ANNOTATIONS[0])
+    profile = annotations.get(_SUBMITTER_ANNOTATIONS[1])
+    if (
+        not isinstance(email, str)
+        or len(email) > 254
+        or re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9._%+\-]{0,63}@[A-Za-z0-9]"
+            r"(?:[A-Za-z0-9.\-]{0,251}[A-Za-z0-9])?",
+            email,
+        )
+        is None
+    ):
+        return False
+    try:
+        return isinstance(profile, str) and str(UUID(profile)) == profile
+    except (TypeError, ValueError):
+        return False
+
+
+def live_submitter_normalization(expected: dict[str, Any], live: dict[str, Any]) -> dict[str, Any]:
+    """Allow only the two authenticated, server-owned submitter values to differ."""
+    if not _submitter_identity_valid(expected) or not _submitter_identity_valid(live):
+        raise JobsError("prod10 live Jobs API submitter identity is invalid")
+    normalized = deepcopy(live)
+    for key in _SUBMITTER_ANNOTATIONS:
+        normalized["metadata"]["annotations"][key] = expected["metadata"]["annotations"][key]
+    if normalized != expected:
+        raise JobsError("prod10 live Jobs API manifest changed")
+    return _seal(
+        {
+            "schema": SUBMITTER_NORMALIZATION_SCHEMA,
+            "status": "two_server_owned_annotations_normalized",
+            "annotations": list(_SUBMITTER_ANNOTATIONS),
+            "expected_manifest_sha256": "sha256:" + digest(expected),
+            "live_manifest_sha256": "sha256:" + digest(live),
+            "normalized_manifest_sha256": "sha256:" + digest(normalized),
+            "expected_email_valid": True,
+            "expected_profile_uuid_valid": True,
+            "live_email_valid": True,
+            "live_profile_uuid_valid": True,
+            "values_exported": False,
+        }
+    )
 
 
 def _preflight_launch(
@@ -764,14 +824,14 @@ def create_once(
     )
     if auth != expected_auth:
         raise JobsError("prod10 direct-v3 authorization changed")
-    if expected != direct.manifest(
+    live_manifest = direct.manifest(
         plan,
         request,
         live_source_preview,
         identity=bound,
         image_identity_receipt=auth["image_identity_receipt"],
-    ):
-        raise JobsError("prod10 live Jobs API manifest changed")
+    )
+    submitter_normalization = live_submitter_normalization(expected, live_manifest)
     absence_before_guard = _jit_duplicate(duplicate, bound, host_duplicate)
     absence_before_intent = _jit_duplicate(
         final_duplicate,
@@ -805,7 +865,7 @@ def create_once(
         plan,
         request,
         source_preview,
-        expected,
+        live_manifest,
         live_preview,
         context=direct.PROD_CONTEXT,
         identity=bound,
@@ -834,6 +894,7 @@ def create_once(
             "authorization_sha256": auth["sha256"],
             "sealed_jobs_preview_sha256": "sha256:" + digest(source_preview),
             "live_jobs_preview_sha256": "sha256:" + digest(live_source_preview),
+            "submitter_normalization": submitter_normalization,
             "live_preview_proof": checked_live_preview,
             "capacity_gate": capacity,
             "duplicate_checks_before_guard": absence_before_guard,
@@ -893,6 +954,7 @@ def create_once(
             "authorization_sha256": auth["sha256"],
             "sealed_jobs_preview_sha256": "sha256:" + digest(source_preview),
             "live_jobs_preview_sha256": "sha256:" + digest(live_source_preview),
+            "submitter_normalization_sha256": submitter_normalization["sha256"],
             "live_preview_proof_sha256": live_preview["sha256"],
             "capacity_gate_sha256": capacity["sha256"],
             "jit_duplicate_before_guard_sha256": absence_before_guard["sha256"],
