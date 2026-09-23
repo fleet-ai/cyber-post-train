@@ -768,8 +768,11 @@ def test_postgres_summary_preserves_uri_scheme_when_selecting_database(monkeypat
     )
 
 
-def test_postgres_exists_retries_one_transient_connection_failure(monkeypatch):
+def test_postgres_exists_retries_two_transient_connection_failures(monkeypatch):
     class OperationalError(Exception):
+        pass
+
+    class ConnectionTimeout(OperationalError):
         pass
 
     class Connection:
@@ -785,55 +788,78 @@ def test_postgres_exists_retries_one_transient_connection_failure(monkeypatch):
             return SimpleNamespace(fetchone=lambda: (1,))
 
     calls = []
+    sleeps = []
 
     def connect(dsn, *, connect_timeout):
         calls.append((dsn, connect_timeout))
-        if len(calls) == 1:
-            raise OperationalError("transient")
+        if len(calls) < 3:
+            raise ConnectionTimeout("transient")
         return Connection()
 
     monkeypatch.setenv("TEST_ROLLOUT_DATABASE_URL", "postgresql://db/rollout")
     monkeypatch.setitem(
         sys.modules,
         "psycopg",
-        SimpleNamespace(connect=connect, OperationalError=OperationalError),
+        SimpleNamespace(
+            connect=connect,
+            OperationalError=OperationalError,
+            errors=SimpleNamespace(ConnectionTimeout=ConnectionTimeout),
+        ),
     )
+    monkeypatch.setattr(launch.time, "sleep", sleeps.append)
     assert launch.PostgresDatabase("TEST_ROLLOUT_DATABASE_URL").exists(DATABASE) is True
     assert calls == [
         ("postgresql://db/rollout", 5),
         ("postgresql://db/rollout", 5),
+        ("postgresql://db/rollout", 5),
     ]
+    assert sleeps == [5, 5]
 
 
-def test_postgres_exists_stops_after_two_transient_connection_failures(monkeypatch):
+def test_postgres_exists_stops_after_three_transient_connection_failures(monkeypatch):
     class OperationalError(Exception):
         pass
 
+    class ConnectionTimeout(OperationalError):
+        pass
+
     calls = []
+    sleeps = []
 
     def connect(dsn, *, connect_timeout):
         calls.append((dsn, connect_timeout))
-        raise OperationalError("still unavailable")
+        raise ConnectionTimeout("still unavailable")
 
     monkeypatch.setenv("TEST_ROLLOUT_DATABASE_URL", "postgresql://db/rollout")
     monkeypatch.setitem(
         sys.modules,
         "psycopg",
-        SimpleNamespace(connect=connect, OperationalError=OperationalError),
+        SimpleNamespace(
+            connect=connect,
+            OperationalError=OperationalError,
+            errors=SimpleNamespace(ConnectionTimeout=ConnectionTimeout),
+        ),
     )
+    monkeypatch.setattr(launch.time, "sleep", sleeps.append)
     with pytest.raises(launch.HeldoutLaunchError, match="database duplicate check failed"):
         launch.PostgresDatabase("TEST_ROLLOUT_DATABASE_URL").exists(DATABASE)
     assert calls == [
         ("postgresql://db/rollout", 5),
         ("postgresql://db/rollout", 5),
+        ("postgresql://db/rollout", 5),
     ]
+    assert sleeps == [5, 5]
 
 
 def test_postgres_exists_does_not_retry_non_operational_errors(monkeypatch):
     class OperationalError(Exception):
         pass
 
+    class ConnectionTimeout(OperationalError):
+        pass
+
     calls = []
+    sleeps = []
 
     def connect(dsn, *, connect_timeout):
         calls.append((dsn, connect_timeout))
@@ -843,11 +869,89 @@ def test_postgres_exists_does_not_retry_non_operational_errors(monkeypatch):
     monkeypatch.setitem(
         sys.modules,
         "psycopg",
-        SimpleNamespace(connect=connect, OperationalError=OperationalError),
+        SimpleNamespace(
+            connect=connect,
+            OperationalError=OperationalError,
+            errors=SimpleNamespace(ConnectionTimeout=ConnectionTimeout),
+        ),
     )
+    monkeypatch.setattr(launch.time, "sleep", sleeps.append)
     with pytest.raises(launch.HeldoutLaunchError, match="database duplicate check failed"):
         launch.PostgresDatabase("TEST_ROLLOUT_DATABASE_URL").exists(DATABASE)
     assert calls == [("postgresql://db/rollout", 5)]
+    assert sleeps == []
+
+
+def test_postgres_exists_does_not_retry_other_operational_errors(monkeypatch):
+    class OperationalError(Exception):
+        pass
+
+    class ConnectionTimeout(OperationalError):
+        pass
+
+    calls = []
+    sleeps = []
+
+    def connect(dsn, *, connect_timeout):
+        calls.append((dsn, connect_timeout))
+        raise OperationalError("authentication, TLS, or server error")
+
+    monkeypatch.setenv("TEST_ROLLOUT_DATABASE_URL", "postgresql://db/rollout")
+    monkeypatch.setitem(
+        sys.modules,
+        "psycopg",
+        SimpleNamespace(
+            connect=connect,
+            OperationalError=OperationalError,
+            errors=SimpleNamespace(ConnectionTimeout=ConnectionTimeout),
+        ),
+    )
+    monkeypatch.setattr(launch.time, "sleep", sleeps.append)
+    with pytest.raises(launch.HeldoutLaunchError, match="database duplicate check failed"):
+        launch.PostgresDatabase("TEST_ROLLOUT_DATABASE_URL").exists(DATABASE)
+    assert calls == [("postgresql://db/rollout", 5)]
+    assert sleeps == []
+
+
+def test_postgres_exists_does_not_retry_query_timeouts(monkeypatch):
+    class OperationalError(Exception):
+        pass
+
+    class ConnectionTimeout(OperationalError):
+        pass
+
+    class Connection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def execute(self, _query, _parameters):
+            raise ConnectionTimeout("query timeout")
+
+    calls = []
+    sleeps = []
+
+    def connect(dsn, *, connect_timeout):
+        calls.append((dsn, connect_timeout))
+        return Connection()
+
+    monkeypatch.setenv("TEST_ROLLOUT_DATABASE_URL", "postgresql://db/rollout")
+    monkeypatch.setitem(
+        sys.modules,
+        "psycopg",
+        SimpleNamespace(
+            connect=connect,
+            OperationalError=OperationalError,
+            errors=SimpleNamespace(ConnectionTimeout=ConnectionTimeout),
+        ),
+    )
+    monkeypatch.setattr(launch.time, "sleep", sleeps.append)
+    with pytest.raises(launch.HeldoutLaunchError, match="database duplicate check failed"):
+        launch.PostgresDatabase("TEST_ROLLOUT_DATABASE_URL").exists(DATABASE)
+    assert calls == [("postgresql://db/rollout", 5)]
+    assert sleeps == []
 
 
 @pytest.mark.parametrize(

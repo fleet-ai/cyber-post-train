@@ -19,6 +19,7 @@ import os
 import re
 import stat
 import subprocess
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -1606,16 +1607,19 @@ class PostgresDatabase:
         try:
             import psycopg
 
-            for attempt in range(2):
+            for attempt in range(3):
                 try:
-                    with psycopg.connect(self._dsn(), connect_timeout=5) as connection:
-                        row = connection.execute(
-                            "SELECT 1 FROM pg_database WHERE datname = %s", (database,)
-                        ).fetchone()
-                    return row is not None
-                except psycopg.OperationalError:
-                    if attempt == 1:
+                    connection = psycopg.connect(self._dsn(), connect_timeout=5)
+                except psycopg.errors.ConnectionTimeout:
+                    if attempt == 2:
                         raise
+                    time.sleep(5)
+                    continue
+                with connection:
+                    row = connection.execute(
+                        "SELECT 1 FROM pg_database WHERE datname = %s", (database,)
+                    ).fetchone()
+                return row is not None
         except HeldoutLaunchError:
             raise
         except Exception:
