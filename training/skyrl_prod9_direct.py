@@ -1986,10 +1986,7 @@ def _create_cpu_once(
         and authorization.get("schema") == PREFLIGHT_AUTHORIZATION_DIRECT_MANIFEST_SCHEMA
     ):
         authorization_schema = PREFLIGHT_AUTHORIZATION_DIRECT_MANIFEST_SCHEMA
-    elif (
-        isinstance(authorization, dict)
-        and authorization.get("schema") == PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA
-    ):
+    elif isinstance(authorization, dict) and authorization.get("schema") == PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA:
         authorization_schema = PREFLIGHT_AUTHORIZATION_DIRECT_SCHEMA
     else:
         authorization_schema = PREFLIGHT_AUTHORIZATION_SCHEMA

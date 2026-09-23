@@ -251,11 +251,7 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
         {"secretRef": {"name": "fleet-api"}},
         {"secretRef": {"name": "wandb-api"}},
     ]
-    environment = {
-        item["name"]: item["value"]
-        for item in container["env"]
-        if "value" in item
-    }
+    environment = {item["name"]: item["value"] for item in container["env"] if "value" in item}
     assert environment["HF_DATASETS_CACHE"] == "/work/hf-datasets"
     assert "WANDB_API_KEY" not in environment
     assert "private_rows" not in json.dumps(packet, sort_keys=True)
@@ -270,18 +266,14 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
         operator_job.build_operator_package(changed)
 
     changed = copy.deepcopy(packet)
-    changed["launch_v1_failure"]["operator_job_uid"] = (
-        "00000000-0000-4000-8000-000000000001"
-    )
+    changed["launch_v1_failure"]["operator_job_uid"] = "00000000-0000-4000-8000-000000000001"
     changed["launch_v1_failure"] = operator._seal(changed["launch_v1_failure"])
     changed = operator._seal(changed)
     with pytest.raises(ValueError, match="failure predecessor"):
         operator_job.build_operator_package(changed)
 
     changed = copy.deepcopy(packet)
-    changed["probe_v6_success"]["operator_job_uid"] = (
-        "00000000-0000-4000-8000-000000000001"
-    )
+    changed["probe_v6_success"]["operator_job_uid"] = "00000000-0000-4000-8000-000000000001"
     changed["probe_v6_success"] = operator._seal(changed["probe_v6_success"])
     changed = operator._seal(changed)
     with pytest.raises(ValueError, match="repair proof"):
@@ -479,9 +471,7 @@ def test_prod10_inspector_is_read_only_alert_off_c1_q1_zero_gpu(
     )
 
     changed = copy.deepcopy(packet)
-    changed["launch_v5_failure"]["operator_job_uid"] = (
-        "00000000-0000-4000-8000-000000000001"
-    )
+    changed["launch_v5_failure"]["operator_job_uid"] = "00000000-0000-4000-8000-000000000001"
     changed["launch_v5_failure"] = operator._seal(changed["launch_v5_failure"])
     changed = operator._seal(changed)
     with pytest.raises(ValueError, match="predecessor"):
@@ -574,9 +564,7 @@ def test_prod10_inspector_reads_only_allowlisted_path_metadata(
         "creator_binding",
     }
     assert result["launch_v5_failure_sha256"] == operator.launch_v5_failure_binding()["sha256"]
-    assert result["launch_packet_sha256"] == (
-        operator.launch_v5_failure_binding()["packet_sha256"]
-    )
+    assert result["launch_packet_sha256"] == (operator.launch_v5_failure_binding()["packet_sha256"])
     assert result["preflight_launch_sha256"] == checked_launch["sha256"]
     assert result["launch_boundary"] == "after_new_guard_before_intent"
     assert result["inspection_external_calls"] == 0
@@ -587,9 +575,7 @@ def test_prod10_inspector_reads_only_allowlisted_path_metadata(
     assert result["provider_create_called"] is False
     for metadata in result["paths"].values():
         assert set(metadata) <= {"state", "kind", "mode", "mtime_ns", "sha256"}
-        assert not {"uid", "gid", "readable", "traversable", "path", "content"} & set(
-            metadata
-        )
+        assert not {"uid", "gid", "readable", "traversable", "path", "content"} & set(metadata)
         if metadata["state"] == "present":
             assert metadata["kind"] == "regular"
             assert metadata["sha256"] == (
@@ -783,9 +769,7 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     identity = historical.load_identity(IDENTITY)
     plan = {"schema": training.SCHEMA}
     request = {"workers": 1, "gpus_per_worker": 8}
-    launch = direct._seal(
-        {"schema": direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA, "gpus": 0}
-    )
+    launch = direct._seal({"schema": direct.STAGE_OPERATOR_LAUNCH_RESULT_SCHEMA, "gpus": 0})
     preview = direct._seal(
         {
             "schema": direct.PREVIEW_SCHEMA,
@@ -804,9 +788,7 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     capacity["sha256"] = digest(capacity)
     monkeypatch.setattr(direct, "_identity", lambda _plan, bound: bound)
     monkeypatch.setattr(training, "job_request", lambda _plan: request)
-    monkeypatch.setattr(
-        launch_direct, "_preflight_launch", lambda value, *_args, **_kw: value
-    )
+    monkeypatch.setattr(launch_direct, "_preflight_launch", lambda value, *_args, **_kw: value)
     monkeypatch.setattr(direct, "_source", lambda value: value)
     monkeypatch.setattr(launch_direct, "_duplicate", lambda value, _identity, **_kwargs: value)
     source = operator_job.launch_packet(
@@ -831,9 +813,7 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     ):
         source.pop(key)
     source = operator._seal(source)
-    monkeypatch.setitem(
-        operator._LAUNCH_V2_FAILURE, "launch_packet_sha256", source["sha256"]
-    )
+    monkeypatch.setitem(operator._LAUNCH_V2_FAILURE, "launch_packet_sha256", source["sha256"])
     packet = operator_job.probe_packet(launch_packet=source)
     package = operator_job.build_operator_package(packet)
     proof = operator_job.validate_operator_package(package)
@@ -861,11 +841,7 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     assert "envFrom" not in container
     assert "secretRef" not in json.dumps(package.job, sort_keys=True)
     assert "nvidia.com/gpu" not in json.dumps(package.job, sort_keys=True)
-    environment = {
-        item["name"]: item["value"]
-        for item in container["env"]
-        if "value" in item
-    }
+    environment = {item["name"]: item["value"] for item in container["env"] if "value" in item}
     assert environment["WANDB_MODE"] == "disabled"
     assert environment["WANDB_API_KEY"] == "diagnostic-not-a-credential"
     assert environment["HF_DATASETS_CACHE"] == "/work/hf-datasets"
@@ -923,27 +899,21 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     assert len(encoded.encode()) < 3900
 
     changed = copy.deepcopy(packet)
-    changed["inspect_v3_success"]["operator_job_uid"] = (
-        "00000000-0000-4000-8000-000000000001"
-    )
+    changed["inspect_v3_success"]["operator_job_uid"] = "00000000-0000-4000-8000-000000000001"
     changed["inspect_v3_success"] = operator._seal(changed["inspect_v3_success"])
     changed = operator._seal(changed)
     with pytest.raises(ValueError, match="inspection predecessor"):
         operator_job.build_operator_package(changed)
 
     changed = copy.deepcopy(packet)
-    changed["probe_v7_failure"]["operator_job_uid"] = (
-        "00000000-0000-4000-8000-000000000001"
-    )
+    changed["probe_v7_failure"]["operator_job_uid"] = "00000000-0000-4000-8000-000000000001"
     changed["probe_v7_failure"] = operator._seal(changed["probe_v7_failure"])
     changed = operator._seal(changed)
     with pytest.raises(ValueError, match="v7 predecessor"):
         operator_job.build_operator_package(changed)
 
     changed = copy.deepcopy(packet)
-    changed["probe_v8_failure"]["operator_job_uid"] = (
-        "00000000-0000-4000-8000-000000000001"
-    )
+    changed["probe_v8_failure"]["operator_job_uid"] = "00000000-0000-4000-8000-000000000001"
     changed["probe_v8_failure"] = operator._seal(changed["probe_v8_failure"])
     changed = operator._seal(changed)
     with pytest.raises(ValueError, match="v8 predecessor"):
@@ -1079,9 +1049,7 @@ def test_prod10_jit_duplicate_uses_fresh_host_dev_proof_and_only_live_prod_state
     stale = direct._seal(
         {
             **{key: value for key, value in host.items() if key != "sha256"},
-            "checked_at": (datetime.now(UTC) - timedelta(hours=1)).strftime(
-                "%Y-%m-%dT%H:%M:%SZ"
-            ),
+            "checked_at": (datetime.now(UTC) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
     )
     with pytest.raises(JobsError, match="stale or future-dated"):
@@ -1315,8 +1283,7 @@ def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
     monkeypatch.setattr(
         operator,
         "_archive_launch_v3_guard",
-        lambda *_args, **_kwargs: events.append("archive")
-        or {"sha256": "sha256:" + "5" * 64},
+        lambda *_args, **_kwargs: events.append("archive") or {"sha256": "sha256:" + "5" * 64},
     )
 
     class FakeGuard:
@@ -1333,6 +1300,7 @@ def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
         "authorize",
         lambda *_args, **_kwargs: events.append("authorize") or {"sha256": "sha256:" + "6" * 64},
     )
+
     def create_once(*_args, **kwargs):
         assert "wandb_absent" not in kwargs
         events.append("create_once")
@@ -1696,20 +1664,21 @@ def test_prod10_launch_validates_sealed_dev_preview_without_network_or_redating(
             "runtime re-enforced sealed development preview wall-clock freshness"
         ),
     )
-    assert launch_direct._sealed_dev_preview_provenance(
-        stale_provenance,
-        plan,
-        request,
-        source,
-        expected,
-        stale,
-        identity=identity,
-    ) == stale_provenance
+    assert (
+        launch_direct._sealed_dev_preview_provenance(
+            stale_provenance,
+            plan,
+            request,
+            source,
+            expected,
+            stale,
+            identity=identity,
+        )
+        == stale_provenance
+    )
 
     drifted = {**dev, "manifest_sha256": "different"}
-    drifted = direct._seal(
-        {key: value for key, value in drifted.items() if key != "sha256"}
-    )
+    drifted = direct._seal({key: value for key, value in drifted.items() if key != "sha256"})
     with pytest.raises(JobsError, match="server preview changed"):
         launch_direct.sealed_dev_preview_provenance(
             plan,

@@ -530,9 +530,7 @@ def _release(
     )
 
 
-def _stage_receipt(
-    stage: dict, successor: dict, identity: historical_direct.RailIdentity
-) -> dict:
+def _stage_receipt(stage: dict, successor: dict, identity: historical_direct.RailIdentity) -> dict:
     files = [
         {"path": name, "bytes": 1, "sha256": "sha256:" + name.encode().hex().ljust(64, "0")}
         for name in ("manifest.json", "split.json", "task-set.json")
@@ -601,9 +599,7 @@ def _direct_stage_v2_evidence(
             "gpus": 0,
         }
     )
-    result_path = str(
-        hardening.stage_operation_root(stage) / "STAGE_OPERATOR_RESULT.json"
-    )
+    result_path = str(hardening.stage_operation_root(stage) / "STAGE_OPERATOR_RESULT.json")
     termination = prod9_direct._seal(
         {
             "schema": prod9_direct.STAGE_OPERATOR_TERMINATION_SCHEMA,
@@ -812,8 +808,7 @@ def _real_rebound_manifests(
         key: value
         for key, value in json.loads(
             (
-                ROOT
-                / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json"
+                ROOT / "configs/qualification/qwen38-rl-reward-canary-manifest-prod-v8.json"
             ).read_text()
         ).items()
         if key != "sha256"
@@ -824,9 +819,7 @@ def _real_rebound_manifests(
         "sha256": "sha256:" + digest(predecessor_body),
     }
     (source / "manifest.json").write_bytes(fleet.canonical_json(predecessor) + b"\n")
-    successor = historical_direct.rebind_private_source_for_identity(
-        source, destination, identity
-    )
+    successor = historical_direct.rebind_private_source_for_identity(source, destination, identity)
     return predecessor, successor
 
 
@@ -900,12 +893,8 @@ def test_prod10_direct_stage_v2_authorizes_preflight_without_legacy_fields(
     stale["data"]["sha256"] = "sha256:" + digest(
         {key: value for key, value in stale["data"].items() if key != "sha256"}
     )
-    assert {
-        split: stale["data"]["files"][split]["sha256"]
-        for split in ("train", "dev")
-    } != {
-        split: successor["files"][split]["sha256"]
-        for split in ("train", "dev")
+    assert {split: stale["data"]["files"][split]["sha256"] for split in ("train", "dev")} != {
+        split: successor["files"][split]["sha256"] for split in ("train", "dev")
     }
     with pytest.raises(JobsError, match="direct stage result"):
         prod9_direct.authorize_preflight_direct_stage(
@@ -938,12 +927,8 @@ def test_prod10_manifest_handoff_is_fresh_and_keeps_real_rebind_equality(
     operation_root.mkdir(mode=0o700)
     stage_name = "chris-q38-prod10-stage-operator-v7"
     manifest_name = "chris-q38-prod10-manifest-operator-v1"
-    stage_result, stage_launch = _direct_stage_v2_evidence(
-        stage, successor, identity, stage_name
-    )
-    manifest_launch = _direct_manifest_evidence(
-        plan, stage_result, stage_launch, manifest_name
-    )
+    stage_result, stage_launch = _direct_stage_v2_evidence(stage, successor, identity, stage_name)
+    manifest_launch = _direct_manifest_evidence(plan, stage_result, stage_launch, manifest_name)
     expected = prod9_direct.preflight_job_manifest(plan, identity=identity)
     dev_preview = prod9_direct.validate_cpu_preview(
         expected,
@@ -981,9 +966,7 @@ def test_prod10_manifest_handoff_is_fresh_and_keeps_real_rebind_equality(
         observer=observer,
         identity=identity,
     )
-    assert authorization["schema"] == (
-        prod9_direct.PREFLIGHT_AUTHORIZATION_DIRECT_MANIFEST_SCHEMA
-    )
+    assert authorization["schema"] == (prod9_direct.PREFLIGHT_AUTHORIZATION_DIRECT_MANIFEST_SCHEMA)
     assert authorization["stage_result"] == stage_result
     assert authorization["manifest_launch_result"] == manifest_launch
 
@@ -1681,12 +1664,7 @@ def test_incluster_kubernetes_converts_reviewed_lists_to_compact_names(
         (
             "GET",
             path,
-            {
-                "Accept": (
-                    "application/json;as=PartialObjectMetadataList;"
-                    "g=meta.k8s.io;v=v1"
-                )
-            },
+            {"Accept": ("application/json;as=PartialObjectMetadataList;g=meta.k8s.io;v=v1")},
         )
     ]
 

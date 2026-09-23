@@ -106,9 +106,7 @@ class _Prod10LaunchRecoveryObserver(cleanup.Observer):
         try:
             bound_uid = str(UUID(expected_uid))
         except (TypeError, ValueError) as exc:
-            raise cleanup.ObserverError(
-                "prod10 launch recovery requires an exact UID"
-            ) from exc
+            raise cleanup.ObserverError("prod10 launch recovery requires an exact UID") from exc
         armed_path = root / "OPERATOR_RECOVERY_OBSERVER_ARMED.json"
         result_path = root / "OPERATOR_RECOVERY_OBSERVER_RESULT.json"
         creator_binding_path = armed_path.with_name(armed_path.name + ".created.json")

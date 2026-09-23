@@ -62,20 +62,29 @@ def test_jit_finalizer_orders_slow_work_before_late_proofs_and_one_create() -> N
     assert source.index("operator_previews = operator_launch.server_previews") < source.index(
         "margin = validate_remaining_ttl"
     )
-    assert source.index("margin = validate_remaining_ttl") < source.index(
-        "if not args.create:"
-    )
+    assert source.index("margin = validate_remaining_ttl") < source.index("if not args.create:")
     assert source.count("operator_launch.create_once(") == 1
-    assert finalizer.parser().parse_args(
-        [
-            "--source-root", "/tmp/source",
-            "--source-head", "a" * 40,
-            "--operation-directory", "/tmp/output",
-            "--capacity", "/tmp/capacity",
-            "--manifest-result", "/tmp/manifest",
-            "--preflight-journal", "/tmp/preflight",
-        ]
-    ).create is False
+    assert (
+        finalizer.parser()
+        .parse_args(
+            [
+                "--source-root",
+                "/tmp/source",
+                "--source-head",
+                "a" * 40,
+                "--operation-directory",
+                "/tmp/output",
+                "--capacity",
+                "/tmp/capacity",
+                "--manifest-result",
+                "/tmp/manifest",
+                "--preflight-journal",
+                "/tmp/preflight",
+            ]
+        )
+        .create
+        is False
+    )
 
 
 def test_jit_finalizer_rejects_symlink_operation_directory_before_other_work(
@@ -87,12 +96,18 @@ def test_jit_finalizer_rejects_symlink_operation_directory_before_other_work(
     alias.symlink_to(target, target_is_directory=True)
     args = finalizer.parser().parse_args(
         [
-            "--source-root", str(tmp_path / "missing-source"),
-            "--source-head", "a" * 40,
-            "--operation-directory", str(alias),
-            "--capacity", str(tmp_path / "missing-capacity"),
-            "--manifest-result", str(tmp_path / "missing-manifest"),
-            "--preflight-journal", str(tmp_path / "missing-preflight"),
+            "--source-root",
+            str(tmp_path / "missing-source"),
+            "--source-head",
+            "a" * 40,
+            "--operation-directory",
+            str(alias),
+            "--capacity",
+            str(tmp_path / "missing-capacity"),
+            "--manifest-result",
+            str(tmp_path / "missing-manifest"),
+            "--preflight-journal",
+            str(tmp_path / "missing-preflight"),
         ]
     )
     with pytest.raises(JobsError, match="operation directory"):

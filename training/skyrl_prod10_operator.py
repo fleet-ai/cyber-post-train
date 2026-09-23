@@ -61,9 +61,7 @@ _LAUNCH_V1_FAILURE = {
     "failure_receipt_sha256": (
         "sha256:7c45bc3c4356b0ca94ecd0fdd312ed068dc890144dc91e5d26c6c2793a53d421"
     ),
-    "release_sha256": (
-        "sha256:c9adf0f0b995906813668bba82180c84384f9de5f0185270d3f428ae404c0292"
-    ),
+    "release_sha256": ("sha256:c9adf0f0b995906813668bba82180c84384f9de5f0185270d3f428ae404c0292"),
     "inner_gpu_run_created": False,
     "gpus": 0,
 }
@@ -77,9 +75,7 @@ _LAUNCH_V2_FAILURE = {
     "failure_receipt_sha256": (
         "sha256:6f7d724ae7a0a61179616871895c0e2cbcb496ef351279527c6d6fb4b6f145c1"
     ),
-    "release_sha256": (
-        "sha256:2cb973f61095c77641602fdf2ebb469c31f0a7b0aa907b053b01119dd0bc3992"
-    ),
+    "release_sha256": ("sha256:2cb973f61095c77641602fdf2ebb469c31f0a7b0aa907b053b01119dd0bc3992"),
     "launch_packet_sha256": (
         "sha256:f0903dc2ce7768dbf81d0c91838d0bbe238c162ff2dce96c48061c124961336a"
     ),
@@ -143,24 +139,14 @@ _PROBE_V7_FAILURE = {
     "status": "diagnostic_exception_localized_and_released",
     "operator_name": "chris-q38-prod10-launch-probe-v7",
     "source_head": "5a21af7c2808b31361d1806587fc5fd65fed0f7b",
-    "packet_sha256": (
-        "sha256:3ed99360573a11d3ce5c9868903ecba123c376dc65502e97f88ce49bcf6d40fc"
-    ),
-    "source_sha256": (
-        "sha256:7d731cc86b969c41534a360330ad51a73a3ce4a45bbd40397962b4c68535e30b"
-    ),
+    "packet_sha256": ("sha256:3ed99360573a11d3ce5c9868903ecba123c376dc65502e97f88ce49bcf6d40fc"),
+    "source_sha256": ("sha256:7d731cc86b969c41534a360330ad51a73a3ce4a45bbd40397962b4c68535e30b"),
     "operator_job_uid": "f0cd8e4a-612b-4e31-ac5e-da10c7b32ff8",
     "operator_pod_uid": "47562399-5671-4ae0-9486-f0684a7f45e5",
     "operator_workload_uid": "8bee182c-9ff3-4514-86d3-e1d6fbaa0f37",
-    "receipt_sha256": (
-        "sha256:ed63cd89ee35146e169a03ea8fa781684aaa24f387742524de9782e469cb551f"
-    ),
-    "observer_sha256": (
-        "sha256:b811ad4d2a2f55b6ae8b4263fb7819bbf6acbe9fc6ef964b3deb7cd034150782"
-    ),
-    "result_sha256": (
-        "sha256:9d9d6ee81c08e9cc2b2181a7dd19e6da7eb3e6cc5c6be94a71d7aff144364d32"
-    ),
+    "receipt_sha256": ("sha256:ed63cd89ee35146e169a03ea8fa781684aaa24f387742524de9782e469cb551f"),
+    "observer_sha256": ("sha256:b811ad4d2a2f55b6ae8b4263fb7819bbf6acbe9fc6ef964b3deb7cd034150782"),
+    "result_sha256": ("sha256:9d9d6ee81c08e9cc2b2181a7dd19e6da7eb3e6cc5c6be94a71d7aff144364d32"),
     "diagnosis": "exception_localized",
     "launch_stage": "fresh_preflight_revalidate",
     "preflight_stage": "passed",
@@ -178,27 +164,17 @@ _PROBE_V8_FAILURE = {
     "status": "diagnostic_exception_localized_and_released",
     "operator_name": "chris-q38-prod10-launch-probe-v8",
     "source_head": "a574fa6600a7b712a12f82a22d38213e1c65770b",
-    "packet_sha256": (
-        "sha256:0e38b4d21f8975405b64b137558e8a8819ac29b3079ae7ec02bfeaa29e845689"
-    ),
-    "source_sha256": (
-        "sha256:d835b90c76d49944f8b957ff0d11e853539632e6ccec59e0fe97466aee73cd7e"
-    ),
+    "packet_sha256": ("sha256:0e38b4d21f8975405b64b137558e8a8819ac29b3079ae7ec02bfeaa29e845689"),
+    "source_sha256": ("sha256:d835b90c76d49944f8b957ff0d11e853539632e6ccec59e0fe97466aee73cd7e"),
     "job_manifest_sha256": (
         "sha256:2a54ed04697b3b1ab77ac5e5a9fbbe97ea525a7bed9e80c891a4c29221f29211"
     ),
     "operator_job_uid": "c404e11f-7658-4a33-8da1-32b6d7559191",
     "operator_pod_uid": "89f8eb55-2590-4085-b916-e525f64f9eb6",
     "operator_workload_uid": "e437a89b-08ed-4aa3-a40d-ad135450a211",
-    "receipt_sha256": (
-        "sha256:eb7dc08bb9c15bccb25a725f1fee67f024fb9a2ccc2f1b9f4c2942403a68aad7"
-    ),
-    "observer_sha256": (
-        "sha256:2faaf4aea8d90e6432643e953fe8a17dee1e53c0931e1fb7d645f5f89ba8d9d7"
-    ),
-    "result_sha256": (
-        "sha256:869c916f5436dad56c430c371334598bdf3f67fa38e41167fb76a5b9d9667c5e"
-    ),
+    "receipt_sha256": ("sha256:eb7dc08bb9c15bccb25a725f1fee67f024fb9a2ccc2f1b9f4c2942403a68aad7"),
+    "observer_sha256": ("sha256:2faaf4aea8d90e6432643e953fe8a17dee1e53c0931e1fb7d645f5f89ba8d9d7"),
+    "result_sha256": ("sha256:869c916f5436dad56c430c371334598bdf3f67fa38e41167fb76a5b9d9667c5e"),
     "diagnosis": "exception_localized",
     "launch_stage": "operation_root_validate",
     "preflight_stage": "passed",
@@ -217,12 +193,8 @@ _PROBE_V9_SUCCESS = {
     "status": "diagnostic_succeeded_and_released",
     "operator_name": "chris-q38-prod10-launch-probe-v9",
     "source_head": "4b484fe8b95acc585ead8dc8b05eeb78828f77d0",
-    "packet_sha256": (
-        "sha256:032b61b0074a14772391fb72abba4bb722dec03212041fdeea9ce11a391d1d8e"
-    ),
-    "source_sha256": (
-        "sha256:3ac1f08b4f16e0d72ced9f05c0886e3018f4705146dfacc0d0d3655014862d26"
-    ),
+    "packet_sha256": ("sha256:032b61b0074a14772391fb72abba4bb722dec03212041fdeea9ce11a391d1d8e"),
+    "source_sha256": ("sha256:3ac1f08b4f16e0d72ced9f05c0886e3018f4705146dfacc0d0d3655014862d26"),
     "job_manifest_sha256": (
         "sha256:b59259e38a58be4e902851ccf73925f781f1c3cd413bf59062922cc8e9c392c4"
     ),
@@ -231,15 +203,9 @@ _PROBE_V9_SUCCESS = {
     "operator_workload_uid": "cf283cbe-e524-4c07-8346-332280f7e4b2",
     "source_config_map_uid": "bd178f72-f9df-4ac1-b7c1-7bd6996ded36",
     "packet_config_map_uid": "955aa7e1-a0a5-4d28-8ec3-ba121d82e7fd",
-    "receipt_sha256": (
-        "sha256:fcbce183246141c31ab2724449c2cfc33a299b32fccd3357c6d95a2168d4dc0c"
-    ),
-    "observer_sha256": (
-        "sha256:22f95f8ac82a4e52b289e4622dbeb9c7622c98b7bcb60fdd4e5687202ca00d49"
-    ),
-    "result_sha256": (
-        "sha256:cf6723ede2b20bba9a74fdef6ad049a52c150e929b0e5c9227ccf36b778c5ba2"
-    ),
+    "receipt_sha256": ("sha256:fcbce183246141c31ab2724449c2cfc33a299b32fccd3357c6d95a2168d4dc0c"),
+    "observer_sha256": ("sha256:22f95f8ac82a4e52b289e4622dbeb9c7622c98b7bcb60fdd4e5687202ca00d49"),
+    "result_sha256": ("sha256:cf6723ede2b20bba9a74fdef6ad049a52c150e929b0e5c9227ccf36b778c5ba2"),
     "diagnosis": "before_guard_passed",
     "launch_stage": "before_guard_passed",
     "preflight_stage": "passed",
@@ -255,12 +221,8 @@ _LAUNCH_V3_FAILURE = {
     "status": "failed_before_gpu_create_preserved_for_inspection",
     "operator_name": "chris-q38-prod10-launch-operator-v3",
     "source_head": "4aca57593c2c85621d7adbbcf601d32784621d16",
-    "packet_sha256": (
-        "sha256:fc46c321f2b1db78b4bc16f062509f0a5e21e1066bc5d7a98d1060427729f9b5"
-    ),
-    "source_sha256": (
-        "sha256:c08891d89f1c91ba8039501998f86a21111d728e3eabfd626a5b822fd5c8a9d2"
-    ),
+    "packet_sha256": ("sha256:fc46c321f2b1db78b4bc16f062509f0a5e21e1066bc5d7a98d1060427729f9b5"),
+    "source_sha256": ("sha256:c08891d89f1c91ba8039501998f86a21111d728e3eabfd626a5b822fd5c8a9d2"),
     "job_manifest_sha256": (
         "sha256:f68113d0a626c5e0011cc8074db9d0f2678707a4025297df7a46c9abffd4bd0e"
     ),
@@ -291,12 +253,8 @@ _LAUNCH_V3_RECOVERY = {
     "operator_name": "chris-q38-prod10-launch-operator-v3",
     "launch_source_head": "4aca57593c2c85621d7adbbcf601d32784621d16",
     "recovery_source_head": "4bc0eefafb8a7912ba0472f551502028a4e6acd1",
-    "packet_sha256": (
-        "sha256:fc46c321f2b1db78b4bc16f062509f0a5e21e1066bc5d7a98d1060427729f9b5"
-    ),
-    "source_sha256": (
-        "sha256:c08891d89f1c91ba8039501998f86a21111d728e3eabfd626a5b822fd5c8a9d2"
-    ),
+    "packet_sha256": ("sha256:fc46c321f2b1db78b4bc16f062509f0a5e21e1066bc5d7a98d1060427729f9b5"),
+    "source_sha256": ("sha256:c08891d89f1c91ba8039501998f86a21111d728e3eabfd626a5b822fd5c8a9d2"),
     "job_manifest_sha256": (
         "sha256:f68113d0a626c5e0011cc8074db9d0f2678707a4025297df7a46c9abffd4bd0e"
     ),
@@ -327,12 +285,8 @@ _INSPECT_V4_SUCCESS = {
     "status": "operator_succeeded_and_released",
     "operator_name": "chris-q38-prod10-launch-inspect-v4",
     "source_head": "7bf1d68fab830ae84ab33249abdc540181ac68d6",
-    "packet_sha256": (
-        "sha256:0cc7b21d135df340138ff524ba0034cd1a6bf5b7f0f67dd23ce1f5ff9f7c106d"
-    ),
-    "source_sha256": (
-        "sha256:823461183ce50dc896d105d7cbf0652677f487c2567abb27ca69ae5c19e0d480"
-    ),
+    "packet_sha256": ("sha256:0cc7b21d135df340138ff524ba0034cd1a6bf5b7f0f67dd23ce1f5ff9f7c106d"),
+    "source_sha256": ("sha256:823461183ce50dc896d105d7cbf0652677f487c2567abb27ca69ae5c19e0d480"),
     "job_manifest_sha256": (
         "sha256:230f4630337519e2ab14f8fd61c6e13e67df5616c2c873d600933874faf9fb03"
     ),
@@ -341,15 +295,9 @@ _INSPECT_V4_SUCCESS = {
     "operator_workload_uid": "592d0766-199e-444d-9c9f-7932ea56810a",
     "source_config_map_uid": "13d63940-0dc3-4a84-8247-61092992c59f",
     "packet_config_map_uid": "73e4fa42-951a-4a7d-8163-75940cacf322",
-    "receipt_sha256": (
-        "sha256:3288695e924eeff1187c4b27d59087eea45240d067ca808a6885b965726f6656"
-    ),
-    "observer_sha256": (
-        "sha256:8f5f2e535570810bddf9b62c4a065228f6a0bbc201f6ec9c0f7b66e674bf9a12"
-    ),
-    "result_sha256": (
-        "sha256:155dacd9efe4f1588ade9b7f41b8a50d173bca7587115bfe065b1e7d9985099d"
-    ),
+    "receipt_sha256": ("sha256:3288695e924eeff1187c4b27d59087eea45240d067ca808a6885b965726f6656"),
+    "observer_sha256": ("sha256:8f5f2e535570810bddf9b62c4a065228f6a0bbc201f6ec9c0f7b66e674bf9a12"),
+    "result_sha256": ("sha256:155dacd9efe4f1588ade9b7f41b8a50d173bca7587115bfe065b1e7d9985099d"),
     "launch_boundary": "after_guard_before_intent",
     "contents_read": False,
     "terminal_status": "Succeeded",
@@ -364,12 +312,8 @@ _LAUNCH_V4_FAILURE = {
     "status": "failed_before_gpu_create_all_outer_resources_released",
     "operator_name": "chris-q38-prod10-launch-operator-v4",
     "source_head": "49c88fe78c8f2763aaa452e0ac484bdd5c82ea1f",
-    "packet_sha256": (
-        "sha256:ec3170312582c30d7a92cd0f76ea24594af0f55c33ac643d138d4312e081b48d"
-    ),
-    "source_sha256": (
-        "sha256:392769fa400aef53404d9fd23440c99dd57ad701e46a6edf31132f5e168a4567"
-    ),
+    "packet_sha256": ("sha256:ec3170312582c30d7a92cd0f76ea24594af0f55c33ac643d138d4312e081b48d"),
+    "source_sha256": ("sha256:392769fa400aef53404d9fd23440c99dd57ad701e46a6edf31132f5e168a4567"),
     "job_manifest_sha256": (
         "sha256:7d89fb701828bfceb3befe83cb4c9fc5fdbbc86f4e6fdc97f87e3524ff811286"
     ),
@@ -419,12 +363,8 @@ _INSPECT_V5_SUCCESS = {
     "status": "succeeded_and_released",
     "operator_name": "chris-q38-prod10-launch-inspect-v5",
     "source_head": "06f30e39ff9243605f0671bdc5e4dca00ae77619",
-    "packet_sha256": (
-        "sha256:87e8fa0b8ceb50b8857b2ef8949e2ae4e7c019fb3e8f22a05c57dc2b58e9d998"
-    ),
-    "source_sha256": (
-        "sha256:8bea1efd9ccee1f1020d0759770a3ea7dad0e09ca65a7f6d98a33423b759b506"
-    ),
+    "packet_sha256": ("sha256:87e8fa0b8ceb50b8857b2ef8949e2ae4e7c019fb3e8f22a05c57dc2b58e9d998"),
+    "source_sha256": ("sha256:8bea1efd9ccee1f1020d0759770a3ea7dad0e09ca65a7f6d98a33423b759b506"),
     "job_manifest_sha256": (
         "sha256:59a2a4b18d847dbff73157956989e18f6c394cd8663bdd63129d7bba44426610"
     ),
@@ -436,18 +376,12 @@ _INSPECT_V5_SUCCESS = {
     "create_journal_file_sha256": (
         "sha256:4f01fc5dd037d5fec8b87bc2244dbd02f061a156379583240288b3f5faf502de"
     ),
-    "receipt_sha256": (
-        "sha256:cd92a925ba9666aa30db5b18bf8b59d4bacb194a729c481405bd4bcce8a01b5c"
-    ),
-    "observer_sha256": (
-        "sha256:2863fcb29041db2078bb6c7ee88e4d096aaf0b7f93220b21c5b2660654ee2fb0"
-    ),
+    "receipt_sha256": ("sha256:cd92a925ba9666aa30db5b18bf8b59d4bacb194a729c481405bd4bcce8a01b5c"),
+    "observer_sha256": ("sha256:2863fcb29041db2078bb6c7ee88e4d096aaf0b7f93220b21c5b2660654ee2fb0"),
     "observer_result_file_sha256": (
         "sha256:f2409a1ae3af20ed931e3ba48dba20e4afe19b4e059e2b7a871a5f57a02bded2"
     ),
-    "result_sha256": (
-        "sha256:604eb5301a9571f0a55d10cf893619701b878ff293bec3314220b6bfcebed9fe"
-    ),
+    "result_sha256": ("sha256:604eb5301a9571f0a55d10cf893619701b878ff293bec3314220b6bfcebed9fe"),
     "launch_v4_failure_sha256": (
         "sha256:69e0dbaed2120555d3de9d318f41e82e8c03ca0b9304bc292b7adea92744a4cd"
     ),
@@ -472,12 +406,8 @@ _LAUNCH_V5_FAILURE = {
     "status": "failed_before_gpu_create_all_outer_resources_released",
     "operator_name": "chris-q38-prod10-launch-operator-v5",
     "source_head": "bd85078353751589e23391a59bc415befc505db9",
-    "packet_sha256": (
-        "sha256:e4a79c34dcc803eb8409ea6e95aef95245b5eca0f20d4dce2d6aa5881cd50c5e"
-    ),
-    "source_sha256": (
-        "sha256:5c3c9768f5b6f825c984b52ed2de5ce49c3f2daffeec499cc2fc76014926f24b"
-    ),
+    "packet_sha256": ("sha256:e4a79c34dcc803eb8409ea6e95aef95245b5eca0f20d4dce2d6aa5881cd50c5e"),
+    "source_sha256": ("sha256:5c3c9768f5b6f825c984b52ed2de5ce49c3f2daffeec499cc2fc76014926f24b"),
     "job_manifest_sha256": (
         "sha256:d670eed91fae1b1df27d8c6decb9fcd4eb2a778fa392113c5afd979967117cdc"
     ),
@@ -536,12 +466,8 @@ _INSPECT_V6_SUCCESS = {
     "status": "succeeded_and_released",
     "operator_name": "chris-q38-prod10-launch-inspect-v6",
     "source_head": "2acc1a5a12a1ea016d142f7a8be03610724c0653",
-    "packet_sha256": (
-        "sha256:7974587b39a6cfc318749d8822699d60a339dd66173b4cb5792e3adc4802c844"
-    ),
-    "source_sha256": (
-        "sha256:9c80f5019ef76b875a50922c8fe92706b1e5862d04df093f386fa7b9ecda75f7"
-    ),
+    "packet_sha256": ("sha256:7974587b39a6cfc318749d8822699d60a339dd66173b4cb5792e3adc4802c844"),
+    "source_sha256": ("sha256:9c80f5019ef76b875a50922c8fe92706b1e5862d04df093f386fa7b9ecda75f7"),
     "job_manifest_sha256": (
         "sha256:044da1a2117e0c1f43d7314621452f04645595f68c1f1c525004fe6b7ba3837a"
     ),
@@ -555,18 +481,12 @@ _INSPECT_V6_SUCCESS = {
     "create_journal_file_sha256": (
         "sha256:3e72e59a655611ae5dbc9eb4ccac80ae717628f3ad5309be6c6dcfcfff64c6d8"
     ),
-    "receipt_sha256": (
-        "sha256:02b41ea17f82f995b8f105963cc355961ddd0d86053bd182726427ff3a1949d4"
-    ),
-    "observer_sha256": (
-        "sha256:c023c239f9cd43481d30e833ddd6cdc33aef92636817786c65a7c6b409058e80"
-    ),
+    "receipt_sha256": ("sha256:02b41ea17f82f995b8f105963cc355961ddd0d86053bd182726427ff3a1949d4"),
+    "observer_sha256": ("sha256:c023c239f9cd43481d30e833ddd6cdc33aef92636817786c65a7c6b409058e80"),
     "observer_result_file_sha256": (
         "sha256:a735e450416025df0ca622c7e03b78f7d2ac63a23459c28c8b7f5422c2fb26fd"
     ),
-    "result_sha256": (
-        "sha256:841598410d1445041c3be2649be6c73e716a0327e763f91cd8f7efc16ee72831"
-    ),
+    "result_sha256": ("sha256:841598410d1445041c3be2649be6c73e716a0327e763f91cd8f7efc16ee72831"),
     "launch_v5_failure_sha256": (
         "sha256:e89237593facb2e08e477a5764243389820704a5a2c431a28b4d451a86dafc0e"
     ),
@@ -594,12 +514,8 @@ _LAUNCH_V6_FAILURE = {
     "status": "failed_before_gpu_create_all_outer_resources_released",
     "operator_name": "chris-q38-prod10-launch-operator-v6",
     "source_head": "fb89dac002e5281fd5885466d72176dbbb263911",
-    "packet_sha256": (
-        "sha256:1bcf0efb8655c36b0daf54558e749e7c1446305e01012bbf1c8fa73d9e36c160"
-    ),
-    "source_sha256": (
-        "sha256:ad01b1c5c501dff7117fa95dfe409b21c7c0200796d0026d468d1503b7353663"
-    ),
+    "packet_sha256": ("sha256:1bcf0efb8655c36b0daf54558e749e7c1446305e01012bbf1c8fa73d9e36c160"),
+    "source_sha256": ("sha256:ad01b1c5c501dff7117fa95dfe409b21c7c0200796d0026d468d1503b7353663"),
     "job_manifest_sha256": (
         "sha256:a76e6395c3b1067bb109e9aa396c9293575b37635ab4fb729febd97d12654240"
     ),
@@ -654,12 +570,8 @@ _LAUNCH_V7_FAILURE = {
     "status": "failed_before_gpu_create_all_outer_resources_released",
     "operator_name": "chris-q38-prod10-launch-operator-v7",
     "source_head": "c5ce6381da46ab2e0fce94898dc94bcef4441454",
-    "packet_sha256": (
-        "sha256:b55a2528b13f536351b3dd16511cba9cc99b90c5db6572ef0ef5aff8f674e7d4"
-    ),
-    "source_sha256": (
-        "sha256:af29dadbb6a8d106410645361af241dd1644156d5cbe354e154c9c713253eae1"
-    ),
+    "packet_sha256": ("sha256:b55a2528b13f536351b3dd16511cba9cc99b90c5db6572ef0ef5aff8f674e7d4"),
+    "source_sha256": ("sha256:af29dadbb6a8d106410645361af241dd1644156d5cbe354e154c9c713253eae1"),
     "job_manifest_sha256": (
         "sha256:f1b4036d70199202afd7bae450bd56a392a50aa235836cfbfe54efbe92918f1f"
     ),
@@ -2134,9 +2046,11 @@ def _inspect_path(path: Path) -> dict[str, Any]:
         while chunk := os.read(descriptor, 65536):
             hasher.update(chunk)
         finished = os.fstat(descriptor)
-        if (
-            (finished.st_dev, finished.st_ino, finished.st_size, finished.st_mtime_ns)
-            != (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns)
+        if (finished.st_dev, finished.st_ino, finished.st_size, finished.st_mtime_ns) != (
+            opened.st_dev,
+            opened.st_ino,
+            opened.st_size,
+            opened.st_mtime_ns,
         ):
             return {"state": "digest_error"}
         result["sha256"] = "sha256:" + hasher.hexdigest()
@@ -2180,10 +2094,7 @@ def _inspection_boundary(probes: dict[str, dict[str, Any]]) -> str:
             or any(character not in "0123456789abcdef" for character in marker_sha256[7:])
         ):
             return "indeterminate_or_inconsistent"
-    states = {
-        name: probes[name].get("state")
-        for name in marker_names
-    }
+    states = {name: probes[name].get("state") for name in marker_names}
     if states == {
         "v3_guard_archive": "absent",
         "v3_guard_archive_receipt": "absent",
@@ -2239,15 +2150,9 @@ def _inspect_launch_markers(operation_root: Path) -> dict[str, dict[str, Any]]:
     """Inspect the five fixed create-once markers without following links."""
     return {
         "v3_guard_archive": _inspect_path(operation_root / _GUARD_ARCHIVE_NAME),
-        "v3_guard_archive_receipt": _inspect_path(
-            operation_root / _GUARD_ARCHIVE_RECEIPT_NAME
-        ),
-        "current_guard": _inspect_path(
-            direct.jobs_api_guard_path(operation_root, "training")
-        ),
-        "create_journal": _inspect_path(
-            operation_root / "PROD10_DIRECT_V3_CREATE.jsonl"
-        ),
+        "v3_guard_archive_receipt": _inspect_path(operation_root / _GUARD_ARCHIVE_RECEIPT_NAME),
+        "current_guard": _inspect_path(direct.jobs_api_guard_path(operation_root, "training")),
+        "create_journal": _inspect_path(operation_root / "PROD10_DIRECT_V3_CREATE.jsonl"),
         "creator_binding": _inspect_path(
             hardening.creator_binding_path(operation_root, "training")
         ),
@@ -2294,9 +2199,7 @@ def run_inspect(packet: dict[str, Any]) -> dict[str, Any]:
     )
 
 
-def _pre_guard_launch(
-    packet: dict[str, Any], runner: InClusterKubernetesRunner
-) -> dict[str, Any]:
+def _pre_guard_launch(packet: dict[str, Any], runner: InClusterKubernetesRunner) -> dict[str, Any]:
     """Run the exact launch sequence that precedes guard construction."""
     global _LAUNCH_STAGE
     _LAUNCH_STAGE = "plan_identity"
@@ -2325,13 +2228,9 @@ def _pre_guard_launch(
     if preflight.get("sha256") != receipt["result_sha256"]:
         raise OperatorFailure("launch_preflight_result_digest_rejected")
     _LAUNCH_STAGE = "sealed_preflight_validate"
-    preflight = launch_direct.preflight_result(
-        plan, request, preflight, identity=identity
-    )
+    preflight = launch_direct.preflight_result(plan, request, preflight, identity=identity)
     _LAUNCH_STAGE = "fresh_preflight_revalidate"
-    revalidation = launch_direct.revalidate_preflight(
-        plan, request, preflight, identity=identity
-    )
+    revalidation = launch_direct.revalidate_preflight(plan, request, preflight, identity=identity)
     _LAUNCH_STAGE = "image_identity"
     image_identity = launch_direct.image_identity(request, preflight)
     _LAUNCH_STAGE = "source_preview_shape"
@@ -2357,9 +2256,7 @@ def _pre_guard_launch(
     if output_root.exists() or output_root.is_symlink():
         raise OperatorFailure("launch_output_exists")
     _LAUNCH_STAGE = "server_dry_run"
-    prod_dry_run = direct.server_dry_run(
-        expected, context=direct.PROD_CONTEXT, runner=runner
-    )
+    prod_dry_run = direct.server_dry_run(expected, context=direct.PROD_CONTEXT, runner=runner)
     _LAUNCH_STAGE = "server_preview_validate"
     direct.validate_preview(
         plan,
@@ -2396,9 +2293,7 @@ def _assert_probe_markers_absent(operation_root: Path) -> None:
         raise OperatorFailure("launch_probe_marker_present")
 
 
-def run_probe(
-    packet: dict[str, Any], *, runner: InClusterKubernetesRunner
-) -> dict[str, Any]:
+def run_probe(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> dict[str, Any]:
     """Localize the pre-guard path without exposing exception details."""
     global _LAUNCH_STAGE
     launch_packet = packet.get("launch_packet")
@@ -2619,9 +2514,7 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
     source_preview, expected = pre_guard["source_preview"], pre_guard["expected"]
     operation_root = pre_guard["operation_root"]
     _LAUNCH_STAGE = "prod_preview_dry_run"
-    prod_server_render = direct.server_dry_run(
-        expected, context=direct.PROD_CONTEXT, runner=runner
-    )
+    prod_server_render = direct.server_dry_run(expected, context=direct.PROD_CONTEXT, runner=runner)
     _LAUNCH_STAGE = "prod_preview_validate"
     prod_preview = direct.validate_preview(
         plan,

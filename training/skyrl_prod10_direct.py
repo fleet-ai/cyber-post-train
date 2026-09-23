@@ -778,8 +778,7 @@ def create_once(
     }
     if (
         not os.environ.get("WANDB_API_KEY")
-        or auth["preflight_result"]["receipt"].get("wandb_create_once")
-        != expected_wandb
+        or auth["preflight_result"]["receipt"].get("wandb_create_once") != expected_wandb
     ):
         raise JobsError("prod10 W&B runtime create-once binding changed")
     wandb_runtime = {

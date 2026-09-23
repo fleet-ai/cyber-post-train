@@ -50,6 +50,10 @@ target-version = "py311"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
+[tool.ruff.lint.per-file-ignores]
+# This source is bound byte-for-byte by historical prod9 execution evidence.
+"training/skyrl_prod9_direct.py" = ["E501"]
+
 [tool.ruff.format]
 # Historical execution plans pin these source bytes. Keep their replay checks
 # intact; a functional revision needs a new plan, not a rewritten old digest.
@@ -62,4 +66,6 @@ exclude = [
   "training/register_post_sft.py",
   "training/model_stage_current_base.py",
   "training/tokenizer_equivalence.py",
+  "training/dev_cleanup_observer.py",
+  "training/skyrl_prod9_direct.py",
 ]

@@ -1291,9 +1291,7 @@ class Kubectl:
         }
         if resource not in prefixes:
             raise JobsError("unsupported bounded-operator inventory resource")
-        output = self._run_text(
-            ["get", resource, "--namespace", NAMESPACE, "--output=name"]
-        )
+        output = self._run_text(["get", resource, "--namespace", NAMESPACE, "--output=name"])
         prefix = prefixes[resource]
         items = []
         for line in output.splitlines():
@@ -1316,9 +1314,10 @@ class Kubectl:
 
     def get_operator_object(self, resource: str, name: str) -> dict | None:
         """Read one fixed helper identity when namespace-wide list is unavailable."""
-        if resource not in {"configmap", "job", "workload", "rayjob", "raycluster"} or re.fullmatch(
-            r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", name
-        ) is None:
+        if (
+            resource not in {"configmap", "job", "workload", "rayjob", "raycluster"}
+            or re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", name) is None
+        ):
             raise JobsError("bounded-operator read identity is invalid")
         output = self._run_text(
             [
@@ -1372,9 +1371,11 @@ class Kubectl:
             "configmap": "/api/v1/namespaces/{namespace}/configmaps/{name}",
             "job": "/apis/batch/v1/namespaces/{namespace}/jobs/{name}",
         }
-        if resource not in routes or re.fullmatch(
-            r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", name
-        ) is None or KUBERNETES_UID_PATTERN.fullmatch(uid) is None:
+        if (
+            resource not in routes
+            or re.fullmatch(r"[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?", name) is None
+            or KUBERNETES_UID_PATTERN.fullmatch(uid) is None
+        ):
             raise JobsError("bounded-operator UID delete identity is invalid")
         path = routes[resource].format(namespace=NAMESPACE, name=name)
         body = {

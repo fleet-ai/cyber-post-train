@@ -321,9 +321,7 @@ class InClusterKubernetesRunner:
             try:
                 template = _DRY_RUN_ONLY_CREATE_PATHS[key]
             except KeyError:
-                raise InClusterKubernetesError(
-                    "Kubernetes create kind is not reviewed"
-                ) from exc
+                raise InClusterKubernetesError("Kubernetes create kind is not reviewed") from exc
             if not dry_run:
                 raise InClusterKubernetesError(
                     "Kubernetes create kind is reviewed only for server dry-run"

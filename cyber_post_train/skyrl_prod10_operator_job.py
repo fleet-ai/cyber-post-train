@@ -318,11 +318,9 @@ def launch_packet(
         launch_direct.SEALED_DEV_PREVIEW_PROVENANCE_SCHEMA,
     )
     if (
-        checked_dev_provenance.get("status")
-        != "fresh_sealed_external_dev_server_preview_validated"
+        checked_dev_provenance.get("status") != "fresh_sealed_external_dev_server_preview_validated"
         or checked_dev_provenance.get("context") != direct.DEV_CONTEXT
-        or checked_dev_provenance.get("sealed_dev_server_preview_sha256")
-        != checked_dev["sha256"]
+        or checked_dev_provenance.get("sealed_dev_server_preview_sha256") != checked_dev["sha256"]
         or checked_dev_provenance.get("checked_at") != checked_dev.get("checked_at")
     ):
         raise ValueError("prod10 launch sealed dev preview provenance changed")
@@ -540,9 +538,7 @@ def _job(
         {"name": "NVIDIA_VISIBLE_DEVICES", "value": "none"},
     ]
     if phase in {"launch", "probe"}:
-        environment.append(
-            {"name": "HF_DATASETS_CACHE", "value": "/work/hf-datasets"}
-        )
+        environment.append({"name": "HF_DATASETS_CACHE", "value": "/work/hf-datasets"})
     if phase == "probe":
         environment.extend(
             [
