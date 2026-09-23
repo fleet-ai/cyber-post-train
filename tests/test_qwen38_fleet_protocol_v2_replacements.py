@@ -193,15 +193,10 @@ def test_preparer_replaces_complete_pairs_and_binds_new_protocols(
     assert receipt["capacity"] == {
         "new_replacement_rollouts": 238,
         "final_comparison_rollouts": 272,
-        "original_base_rollouts": 136,
-        "original_candidate_pre_model_rollouts": 0,
-        "candidate_successor_nonretired_seeds": [46, 47, 48, 49, 50, 51],
-        "candidate_successor_nonretired_rollouts_reserved": 102,
-        "candidate_successor_retired_before_start_seeds": [52, 53],
-        "candidate_successor_retired_before_start_rollouts": 0,
-        "scoring_or_metadata_cpu_model_rollouts": 0,
-        "cumulative_model_rollouts_consumed_or_planned_today": 476,
+        "actual_started_rollouts_today": 112,
+        "projected_rollouts_after_reservation": 350,
         "daily_rollout_cap": 500,
+        "remaining_after_reservation": 150,
         "within_daily_cap": True,
     }
     assert receipt["privacy"] == {
@@ -274,15 +269,16 @@ def test_preparer_replaces_complete_pairs_and_binds_new_protocols(
     assert retirement["outputs_or_databases_deleted"] is False
     assert retirement["preserved_immutable_config_maps"] == 2
 
-    daily = json.loads((output / "DAILY_BUDGET_EVIDENCE.json").read_text(encoding="utf-8"))
-    assert daily["sha256"] == receipt["daily_budget_evidence"]["sha256"]
-    assert daily["budget_date_utc"] == "2026-09-23"
-    assert daily["cumulative_model_rollouts_consumed_or_reserved"] == 476
-    assert daily["accounting_kind"] == "campaign_local_conservative_upper_bound"
-    assert daily["daily_rollout_cap_scope"] == "this_protocol_v2_campaign"
-    assert daily["unrelated_campaigns_included"] is False
-    assert daily["external_mutations"] == 0
-    assert daily["within_daily_cap"] is True
+    daily = replacements._global_daily_budget_evidence()  # noqa: SLF001
+    assert daily["sha256"] == receipt["global_daily_budget_evidence"]["sha256"]
+    assert daily["budget"] == {
+        "actual_started_rollouts": 112,
+        "daily_cap": 500,
+        "projected_after_reservation": 350,
+        "remaining_after_reservation": 150,
+        "reserved_not_started_rollouts": 238,
+        "within_cap": True,
+    }
 
     original = heldout_launch.build_package(
         source_packets / "seed46" / "base" / "LAUNCH_PACKET.json"
@@ -397,7 +393,7 @@ def test_retirement_evidence_rejects_resigned_post_state_disagreement(
     post["sha256"] = _canonical({key: item for key, item in post.items() if key != "sha256"})
     post_path.write_text(json.dumps(post, sort_keys=True), encoding="utf-8")
 
-    with pytest.raises(ValueError, match="incomplete or disagree"):
+    with pytest.raises(ValueError, match="exact reviewed bytes"):
         replacements._retirement_evidence(preflight, post_path)  # noqa: SLF001
 
 
@@ -415,7 +411,7 @@ def test_retirement_evidence_rejects_resigned_extra_deletion(tmp_path: Path) -> 
     post["sha256"] = _canonical({key: item for key, item in post.items() if key != "sha256"})
     post_path.write_text(json.dumps(post, sort_keys=True), encoding="utf-8")
 
-    with pytest.raises(ValueError, match="incomplete or disagree"):
+    with pytest.raises(ValueError, match="exact reviewed bytes"):
         replacements._retirement_evidence(preflight, post_path)  # noqa: SLF001
 
 

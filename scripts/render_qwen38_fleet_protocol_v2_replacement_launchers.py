@@ -118,13 +118,10 @@ def _migration(packet_root: Path) -> dict[str, Any]:
                 raise ValueError(f"protocol-v2 {label} arm runtime identity is invalid")
     definition_path = packet_root / "COMPARISON_DEFINITION.json"
     retirement_path = packet_root / "RETIREMENT_EVIDENCE.json"
-    daily_budget_path = packet_root / "DAILY_BUDGET_EVIDENCE.json"
     retirement = protocol_v2._verified(  # noqa: SLF001
         retirement_path, "protocol-v2 retirement evidence"
     )
-    daily_budget = protocol_v2._verified(  # noqa: SLF001
-        daily_budget_path, "protocol-v2 daily budget evidence"
-    )
+    daily_budget = protocol_v2._global_daily_budget_evidence()  # noqa: SLF001
     if (
         protocol_v2._verified(  # noqa: SLF001
             definition_path, "protocol-v2 comparison definition"
@@ -134,13 +131,12 @@ def _migration(packet_root: Path) -> dict[str, Any]:
         or retirement != protocol_v2._retirement_evidence()  # noqa: SLF001
         or retirement.get("sha256") != value.get("retirement_evidence", {}).get("sha256")
         or _file_sha(retirement_path) != value.get("retirement_evidence", {}).get("file_sha256")
-        or daily_budget != protocol_v2._daily_budget_evidence(retirement)  # noqa: SLF001
-        or value.get("daily_budget_evidence")
+        or value.get("global_daily_budget_evidence")
         != {
+            "path": str(protocol_v2.GLOBAL_DAILY_BUDGET_EVIDENCE.relative_to(ROOT)),
             "sha256": daily_budget["sha256"],
-            "file_sha256": _file_sha(daily_budget_path),
-            "budget_date_utc": daily_budget["budget_date_utc"],
-            "scope": daily_budget["scope"],
+            "file_sha256": _file_sha(protocol_v2.GLOBAL_DAILY_BUDGET_EVIDENCE),
+            "window_utc": daily_budget["window_utc"],
         }
     ):
         raise ValueError("protocol-v2 auxiliary receipts differ")
