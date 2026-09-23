@@ -1,0 +1,129 @@
+{
+  "authorization_gate": "do_not_delete_until_parent_confirms_protocol_v2_receipt_and_pr_accepted",
+  "classification": "queued_unstarted_no_execution",
+  "jobs": [
+    {
+      "config_map": {
+        "canonical_object_sha256": "sha256:c6f01287f5f12d028a4bc2eefb6c83fcb6fe3c020c3ecc7d89d672951bf63cd1",
+        "immutable": true,
+        "name": "chris-q38-dev17-s52-t3k32s1000-code-v2",
+        "owner_references": [],
+        "resource_version": "33798402",
+        "retirement_action": "preserve",
+        "uid": "2d0b8155-031d-4f3d-943a-0e7308d147c0"
+      },
+      "execution_evidence": {
+        "claims": 0,
+        "controller_pods": 0,
+        "dedicated_database_exists": false,
+        "derivation": "Job has remained suspended from creation with no startTime; Workload has no admission; no controller Pod exists; its create-once database and output root do not exist. The immutable entrypoint cannot claim cells, create sessions, or call the model before those resources exist.",
+        "model_generation_calls": 0,
+        "output_root_exists": false,
+        "sessions": 0
+      },
+      "job": {
+        "active": 0,
+        "created_at": "2026-09-23T05:37:07Z",
+        "dedicated_database": "q38_dev17_s52_t3k32s1000_p1_v2",
+        "failed": 0,
+        "gpu_resources": 0,
+        "name": "chris-q38-dev17-s52-t3k32s1000-p1-v2",
+        "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s52-t3k32s1000-p1-v2",
+        "owner_references": [],
+        "priority_class": "c1",
+        "resource_version": "33798405",
+        "root_failure_alerts": "off",
+        "start_time": null,
+        "succeeded": 0,
+        "suspend": true,
+        "uid": "55233036-1d27-4b4a-9f46-9d8e8e04a36f"
+      },
+      "seed": 52,
+      "workload": {
+        "admission": null,
+        "created_at": "2026-09-23T05:37:07Z",
+        "name": "job-chris-q38-dev17-s52-t3k32s1000-p1-v2-09558",
+        "owner_kind": "Job",
+        "owner_name": "chris-q38-dev17-s52-t3k32s1000-p1-v2",
+        "owner_uid": "55233036-1d27-4b4a-9f46-9d8e8e04a36f",
+        "priority": 10000,
+        "queue": "training-lq",
+        "resource_version": "33798410",
+        "uid": "87df4274-bb1e-4b20-9239-554d3ab8b230"
+      }
+    },
+    {
+      "config_map": {
+        "canonical_object_sha256": "sha256:12b5a4d66fe7dd37b2524f29f90ad05f44fe423b3507d9e050703b660c16a152",
+        "immutable": true,
+        "name": "chris-q38-dev17-s53-t3k32s1000-code-v2",
+        "owner_references": [],
+        "resource_version": "33798437",
+        "retirement_action": "preserve",
+        "uid": "b9e2e70c-780a-4203-9686-136b6928eea8"
+      },
+      "execution_evidence": {
+        "claims": 0,
+        "controller_pods": 0,
+        "dedicated_database_exists": false,
+        "derivation": "Job has remained suspended from creation with no startTime; Workload has no admission; no controller Pod exists; its create-once database and output root do not exist. The immutable entrypoint cannot claim cells, create sessions, or call the model before those resources exist.",
+        "model_generation_calls": 0,
+        "output_root_exists": false,
+        "sessions": 0
+      },
+      "job": {
+        "active": 0,
+        "created_at": "2026-09-23T05:37:08Z",
+        "dedicated_database": "q38_dev17_s53_t3k32s1000_p1_v2",
+        "failed": 0,
+        "gpu_resources": 0,
+        "name": "chris-q38-dev17-s53-t3k32s1000-p1-v2",
+        "output_root": "/mnt/sfs/jobs/chris-q38-fleet-dev17-s53-t3k32s1000-p1-v2",
+        "owner_references": [],
+        "priority_class": "c1",
+        "resource_version": "33798446",
+        "root_failure_alerts": "off",
+        "start_time": null,
+        "succeeded": 0,
+        "suspend": true,
+        "uid": "76ade7d1-9c35-4563-9e14-e690e05ae52e"
+      },
+      "seed": 53,
+      "workload": {
+        "admission": null,
+        "created_at": "2026-09-23T05:37:08Z",
+        "name": "job-chris-q38-dev17-s53-t3k32s1000-p1-v2-918c5",
+        "owner_kind": "Job",
+        "owner_name": "chris-q38-dev17-s53-t3k32s1000-p1-v2",
+        "owner_uid": "76ade7d1-9c35-4563-9e14-e690e05ae52e",
+        "priority": 10000,
+        "queue": "training-lq",
+        "resource_version": "33798451",
+        "uid": "4a11b78c-6a00-4f47-a6b5-6d13599404c9"
+      }
+    }
+  ],
+  "kube_context": "nebius-mk8s-fleetai-training-e04zw4ye1k7wczqdw6",
+  "mutation_performed": false,
+  "namespace": "fleet-train-jobs",
+  "observed_at": "2026-09-23T06:54:17Z",
+  "prompts_or_traces_included": false,
+  "retirement_plan": {
+    "delete_only": [
+      "Job/chris-q38-dev17-s52-t3k32s1000-p1-v2@55233036-1d27-4b4a-9f46-9d8e8e04a36f",
+      "Workload/job-chris-q38-dev17-s52-t3k32s1000-p1-v2-09558@87df4274-bb1e-4b20-9239-554d3ab8b230",
+      "Job/chris-q38-dev17-s53-t3k32s1000-p1-v2@76ade7d1-9c35-4563-9e14-e690e05ae52e",
+      "Workload/job-chris-q38-dev17-s53-t3k32s1000-p1-v2-918c5@4a11b78c-6a00-4f47-a6b5-6d13599404c9"
+    ],
+    "method": "re-read each Job and owned Workload; require same UID, suspended/unstarted/unadmitted/zero Pods; issue foreground Job DELETE with UID and current resourceVersion Preconditions; verify owner Workload is garbage-collected; fail closed on any drift",
+    "preserve": [
+      "both immutable ConfigMaps",
+      "both absent output paths",
+      "shared Secrets",
+      "all other Jobs, Workloads, Pods, outputs and databases"
+    ]
+  },
+  "schema": "cyber_fleet_eval_queued_job_retirement_preflight_v1",
+  "scores_included": false,
+  "sha256": "sha256:9a1296727060d303a3fe6d81fe51d2021482113c0dba8f4a9c4b4ba5efb1ccf3"
+}

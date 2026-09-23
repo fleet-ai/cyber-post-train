@@ -508,7 +508,13 @@ def _contains_config_map_volume(pod: dict[str, Any], name: str) -> bool:
 
 
 def _assert_cpu_only(pod: dict[str, Any]) -> None:
-    for group in ("containers", "initContainers"):
+    def is_gpu_resource(value: Any) -> bool:
+        if not isinstance(value, str):
+            raise HeldoutLaunchError("Job resource name is invalid")
+        lowered = value.lower()
+        return "gpu" in lowered or lowered.startswith("nvidia.com/")
+
+    for group in ("containers", "initContainers", "ephemeralContainers"):
         containers = pod.get(group, [])
         if not isinstance(containers, list):
             raise HeldoutLaunchError(f"Job {group} is invalid")
@@ -522,8 +528,13 @@ def _assert_cpu_only(pod: dict[str, Any]) -> None:
                 values = resources.get(limit, {})
                 if not isinstance(values, dict):
                     raise HeldoutLaunchError("Job resource quantity is invalid")
-                if "nvidia.com/gpu" in values:
+                if any(is_gpu_resource(name) for name in values):
                     raise HeldoutLaunchError("held-out evaluator must not request GPUs")
+    overhead = pod.get("overhead", {})
+    if not isinstance(overhead, dict):
+        raise HeldoutLaunchError("Job Pod overhead is invalid")
+    if any(is_gpu_resource(name) for name in overhead):
+        raise HeldoutLaunchError("held-out evaluator must not request GPUs")
 
 
 def _split_index(value: dict[str, Any], expected_sha256: str) -> dict[str, tuple[str, str]]:
@@ -1127,6 +1138,12 @@ def _validate_server_preview(response: dict[str, Any], package: Package) -> str:
         or annotations.get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
     ):
         raise HeldoutLaunchError("server-rendered root Job is missing failure-alerts off")
+    rendered_spec = job.get("spec")
+    rendered_template = rendered_spec.get("template") if isinstance(rendered_spec, dict) else None
+    rendered_pod = rendered_template.get("spec") if isinstance(rendered_template, dict) else None
+    if not isinstance(rendered_pod, dict):
+        raise HeldoutLaunchError("server-rendered Job Pod template is invalid")
+    _assert_cpu_only(rendered_pod)
     try:
         stable_job = stable_job_preview(job)
         expected_job = stable_job_preview(package.job)
@@ -1304,6 +1321,12 @@ def launch_once(
             or KUBERNETES_UID.fullmatch(config_map_uid) is None
         ):
             raise HeldoutLaunchError("create response lacks exact root alert annotation or UID")
+        created_spec = job.get("spec")
+        created_template = created_spec.get("template") if isinstance(created_spec, dict) else None
+        created_pod = created_template.get("spec") if isinstance(created_template, dict) else None
+        if not isinstance(created_pod, dict):
+            raise HeldoutLaunchError("created Job Pod template is invalid")
+        _assert_cpu_only(created_pod)
     except Exception as exc:
         observed = _created_name_observation(cluster, package.packet)
         _append_record(
