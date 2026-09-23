@@ -548,7 +548,7 @@ def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
 def _config_maps(
     *, phase: str, source: bytes, source_sha256: str, packet: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any], bytes]:
-    name = packet["operator_name"]
+    name = packet.get("operator_name", operator.OPERATOR_NAMES[phase])
     packet_bytes = (json.dumps(packet, sort_keys=True, separators=(",", ":")) + "\n").encode()
     packet_gz = gzip.compress(packet_bytes, mtime=0)
     annotations = {
@@ -584,7 +584,7 @@ def _config_maps(
 def _job(
     *, phase: str, source_sha256: str, packet: dict[str, Any], packet_bytes: bytes
 ) -> dict[str, Any]:
-    name = packet["operator_name"]
+    name = packet.get("operator_name", operator.OPERATOR_NAMES[phase])
     annotations = {
         FAILURE_ALERT_ANNOTATION: FAILURE_ALERT_OFF,
         SOURCE_ANNOTATION: source_sha256,
@@ -594,7 +594,7 @@ def _job(
     labels = {
         "cyber-post-train.fleet.ai/role": (
             "prod11-bounded-operator"
-            if packet["identity"]["run_name"] == "chris-q38-rlreward-prod11"
+            if packet.get("identity", {}).get("run_name") == "chris-q38-rlreward-prod11"
             else "prod10-bounded-operator"
         ),
         QUEUE_LABEL: QUEUE,
