@@ -257,6 +257,34 @@ def _git(checkout: Path, *args: str, raw: bool = False) -> bytes | str:
     return result if raw else result.decode().strip()
 
 
+def _pinned_tree_path(value: object, *, label: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError(f"{label} path is invalid")
+    path = Path(value)
+    if path.is_absolute() or not path.parts or any(part in {"", ".", ".."} for part in path.parts):
+        raise ValueError(f"{label} path is invalid")
+    return path.as_posix().rstrip("/")
+
+
+def _pinned_blob(checkout: Path, commit: str, path: str, *, label: str) -> bytes:
+    try:
+        return _git(checkout, "show", f"{commit}:{path}", raw=True)  # type: ignore[return-value]
+    except subprocess.CalledProcessError as exc:
+        raise ValueError(f"{label} missing from pinned commit") from exc
+
+
+def _pinned_path_exists(checkout: Path, commit: str, path: str) -> bool:
+    return (
+        subprocess.run(
+            ["git", "-C", str(checkout), "cat-file", "-e", f"{commit}:{path}"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ).returncode
+        == 0
+    )
+
+
 def observed_source(protocol: dict[str, Any], name: str, checkout: Path) -> dict[str, Any]:
     benchmark = protocol["benchmarks"][name]
     source = benchmark["source"]
@@ -291,10 +319,22 @@ def observed_source(protocol: dict[str, Any], name: str, checkout: Path) -> dict
         execution_unavailable = []
         for task_id in tasks:
             task = dataset[task_id]
-            challenge = json.loads((checkout / task["path"] / "challenge.json").read_bytes())
+            root = _pinned_tree_path(task.get("path"), label="NYU challenge")
+            challenge = json.loads(
+                _pinned_blob(
+                    checkout,
+                    source["commit"],
+                    f"{root}/challenge.json",
+                    label="NYU challenge manifest",
+                )
+            )
             if (
                 not challenge.get("compose")
-                or not (checkout / task["path"] / "docker-compose.yml").is_file()
+                or not _pinned_path_exists(
+                    checkout,
+                    source["commit"],
+                    f"{root}/docker-compose.yml",
+                )
             ):
                 execution_unavailable.append(task_id)
     else:
@@ -304,16 +344,7 @@ def observed_source(protocol: dict[str, Any], name: str, checkout: Path) -> dict
         tasks = [line for line in raw.decode().splitlines() if "/web/" in line]
         unavailable = []
         for task in tasks:
-            exists = (
-                subprocess.run(
-                    ["git", "-C", str(checkout), "cat-file", "-e", f"{source['commit']}:{task}"],
-                    check=False,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                ).returncode
-                == 0
-            )
-            if not exists:
+            if not _pinned_path_exists(checkout, source["commit"], task):
                 unavailable.append(task)
         execution_unavailable = []
     if name == "cvebench_zero_day":

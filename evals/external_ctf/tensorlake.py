@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import argparse
 import base64
+import contextlib
+import fcntl
 import json
 import os
 import re
+import stat
 import time
 import urllib.parse
+from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
@@ -101,6 +105,67 @@ def _write_once(path: Path, value: object) -> None:
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     with os.fdopen(descriptor, "wb") as stream:
         stream.write(canonical(value) + b"\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
+def _read_canonical(path: Path, label: str) -> dict[str, Any]:
+    try:
+        raw = path.read_bytes()
+        value = json.loads(raw)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ExternalCtfError(f"invalid_{label}_receipt") from exc
+    if not isinstance(value, dict) or raw != canonical(value) + b"\n" or path.read_bytes() != raw:
+        raise ExternalCtfError(f"invalid_{label}_receipt")
+    return value
+
+
+def _private_state(path: Path) -> Path:
+    absolute = Path(os.path.abspath(path))
+    if absolute.is_symlink() or absolute.resolve() != absolute:
+        raise ExternalCtfError("external_state_path_not_exact")
+    absolute.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if not absolute.is_dir() or stat.S_IMODE(absolute.stat().st_mode) & 0o077:
+        raise ExternalCtfError("external_state_not_private")
+    return absolute
+
+
+@contextlib.contextmanager
+def _state_lock(state: Path) -> Iterator[None]:
+    exact = _private_state(state)
+    path = exact / "owner.lock"
+    if path.is_symlink():
+        raise ExternalCtfError("external_state_lock_invalid")
+    descriptor = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+    handle = os.fdopen(descriptor, "a+", encoding="utf-8")
+    try:
+        if not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
+            raise ExternalCtfError("external_state_lock_invalid")
+        if stat.S_IMODE(os.fstat(handle.fileno()).st_mode) & 0o077:
+            raise ExternalCtfError("external_state_lock_not_private")
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        yield
+    finally:
+        handle.close()
+
+
+def _open_claims(state: Path, suffix: str) -> set[str]:
+    names: set[str] = set()
+    for path in state.glob(f"*{suffix}"):
+        name = path.name.removesuffix(suffix)
+        if not name or (state / f"{name}.released.json").exists():
+            continue
+        names.add(name)
+    return names
+
+
+def _enforce_single_open_cell(state: Path, *, target: str) -> None:
+    open_creates = _open_claims(state, ".create-claim.json")
+    if open_creates - {target}:
+        raise ExternalCtfError("max_parallel_cells_exceeded")
+    open_processes = _open_claims(state, ".process-claim.json")
+    if open_processes - {target}:
+        raise ExternalCtfError("max_parallel_cells_exceeded")
 
 
 def _client() -> TensorlakeClient:
@@ -139,6 +204,7 @@ def create(
     all_names = web_names | external_names(protocol)
     name = cell_name(benchmark, task_index, arm)
     client = _client()
+    state = _private_state(state)
     claim = state / f"{name}.create-claim.json"
     created = state / f"{name}.created.json"
     if claim.exists() or created.exists():
@@ -152,6 +218,7 @@ def create(
         "network": {"allow_internet_access": True, "allow_out": []},
     }
     with _shared_tensorlake_create_lock(shared_state):
+        _enforce_single_open_cell(state, target=name)
         rows = client.inventory()
         if any(row.get("name") == name for row in rows):
             raise ExternalCtfError("duplicate_sandbox_name")
@@ -161,6 +228,7 @@ def create(
         _write_once(
             claim,
             {
+                "schema": "external_ctf_sandbox_create_claim_v1",
                 **cell,
                 "name": name,
                 "protocol_sha256": protocol["protocol_sha256"],
@@ -173,7 +241,15 @@ def create(
     sandbox_id = response.get("sandbox_id")
     if not isinstance(sandbox_id, str) or re.fullmatch(r"[A-Za-z0-9._:-]+", sandbox_id) is None:
         raise ExternalCtfError("sandbox_create_response_invalid")
-    receipt = {**cell, "name": name, "sandbox_id": sandbox_id, "status": response.get("status")}
+    receipt = {
+        "schema": "external_ctf_sandbox_created_v1",
+        **cell,
+        "name": name,
+        "sandbox_id": sandbox_id,
+        "status": response.get("status"),
+        "protocol_sha256": protocol["protocol_sha256"],
+        "spec_sha256": file_digest(canonical(spec)),
+    }
     _write_once(created, receipt)
     return receipt
 
@@ -184,56 +260,88 @@ def start(
     protocol = load_protocol(protocol_path)
     cell = _cell(protocol, benchmark, task_index, arm)
     name = cell_name(benchmark, task_index, arm)
-    created = json.loads((state / f"{name}.created.json").read_bytes())
-    client = _client()
-    detail = client.request("GET", API + "/sandboxes/" + created["sandbox_id"])
-    origin = detail.get("sandbox_url")
-    if detail.get("status") != "running" or not isinstance(origin, str):
-        raise ExternalCtfError("sandbox_not_runnable")
-    fleet_key = os.environ.get("FLEET_API_KEY", "")
-    if not fleet_key or any(character.isspace() for character in fleet_key):
-        raise ExternalCtfError("fleet_credential_missing_or_invalid")
-    worker = WORKER.read_bytes()
-    env = {
-        "EXTERNAL_CTF_PROTOCOL_B64": base64.b64encode(protocol_path.read_bytes()).decode(),
-        "EXTERNAL_CTF_BENCHMARK": benchmark,
-        "EXTERNAL_CTF_TASK_ID": cell["task_id"],
-        "EXTERNAL_CTF_ARM": arm,
-        "FLEET_API_KEY": fleet_key,
-        "WORKER_B64": base64.b64encode(worker).decode(),
-        "WORKER_SHA256": file_digest(worker),
-    }
-    script = (
-        "import base64,hashlib,os,runpy,pathlib;"
-        "b=base64.b64decode(os.environ.pop('WORKER_B64'),validate=True);"
-        "assert 'sha256:'+hashlib.sha256(b).hexdigest()==os.environ.pop('WORKER_SHA256');"
-        "p=pathlib.Path('/workspace/external_ctf_worker.py');p.write_bytes(b);"
-        "runpy.run_path(str(p),run_name='__main__')"
-    )
-    response = client.request(
-        "POST",
-        origin + "/api/v1/processes",
-        {
-            "command": "/usr/bin/python3",
-            "args": ["-c", script],
-            "user": "root",
-            "env": env,
-            "stdin_mode": "closed",
-            "stdout_mode": "discard",
-            "stderr_mode": "discard",
-        },
-    )
-    pid = response.get("pid")
-    if type(pid) is not int or pid < 1:
-        raise ExternalCtfError("process_create_response_invalid")
-    receipt = {**created, "pid": pid, "worker_sha256": file_digest(worker)}
-    _write_once(state / f"{name}.process.json", receipt)
-    return receipt
+    state = _private_state(state)
+    process_claim = state / f"{name}.process-claim.json"
+    process_receipt = state / f"{name}.process.json"
+    with _state_lock(state):
+        if process_claim.exists() or process_receipt.exists():
+            raise ExternalCtfError("cell_start_already_claimed")
+        _enforce_single_open_cell(state, target=name)
+        created = _read_canonical(state / f"{name}.created.json", "created")
+        if (
+            created.get("schema") != "external_ctf_sandbox_created_v1"
+            or any(created.get(key) != value for key, value in cell.items())
+            or created.get("name") != name
+            or created.get("protocol_sha256") != protocol["protocol_sha256"]
+            or not isinstance(created.get("sandbox_id"), str)
+        ):
+            raise ExternalCtfError("created_receipt_binding_mismatch")
+        client = _client()
+        detail = client.request("GET", API + "/sandboxes/" + created["sandbox_id"])
+        origin = detail.get("sandbox_url")
+        if detail.get("status") != "running" or not isinstance(origin, str):
+            raise ExternalCtfError("sandbox_not_runnable")
+        fleet_key = os.environ.get("FLEET_API_KEY", "")
+        if not fleet_key or fleet_key.strip() != fleet_key or any(
+            character.isspace() for character in fleet_key
+        ):
+            raise ExternalCtfError("fleet_credential_missing_or_invalid")
+        worker = WORKER.read_bytes()
+        worker_sha256 = file_digest(worker)
+        env = {
+            "EXTERNAL_CTF_PROTOCOL_B64": base64.b64encode(protocol_path.read_bytes()).decode(),
+            "EXTERNAL_CTF_BENCHMARK": benchmark,
+            "EXTERNAL_CTF_TASK_ID": cell["task_id"],
+            "EXTERNAL_CTF_ARM": arm,
+            "FLEET_API_KEY": fleet_key,
+            "WORKER_B64": base64.b64encode(worker).decode(),
+            "WORKER_SHA256": worker_sha256,
+        }
+        script = (
+            "import base64,hashlib,os,runpy,pathlib;"
+            "b=base64.b64decode(os.environ.pop('WORKER_B64'),validate=True);"
+            "assert 'sha256:'+hashlib.sha256(b).hexdigest()==os.environ.pop('WORKER_SHA256');"
+            "p=pathlib.Path('/workspace/external_ctf_worker.py');p.write_bytes(b);"
+            "runpy.run_path(str(p),run_name='__main__')"
+        )
+        _write_once(
+            process_claim,
+            {
+                "schema": "external_ctf_process_claim_v1",
+                **cell,
+                "name": name,
+                "sandbox_id": created["sandbox_id"],
+                "protocol_sha256": protocol["protocol_sha256"],
+                "worker_sha256": worker_sha256,
+            },
+        )
+        response = client.request(
+            "POST",
+            origin + "/api/v1/processes",
+            {
+                "command": "/usr/bin/python3",
+                "args": ["-c", script],
+                "user": "root",
+                "env": env,
+                "stdin_mode": "closed",
+                "stdout_mode": "discard",
+                "stderr_mode": "discard",
+            },
+        )
+        pid = response.get("pid")
+        if type(pid) is not int or pid < 1:
+            raise ExternalCtfError("process_create_response_invalid")
+        receipt = {**created, "pid": pid, "worker_sha256": worker_sha256}
+        _write_once(process_receipt, receipt)
+        return receipt
 
 
 def status(state: Path, benchmark: str, task_index: int, arm: str) -> dict[str, Any]:
     name = cell_name(benchmark, task_index, arm)
-    process = json.loads((state / f"{name}.process.json").read_bytes())
+    state = _private_state(state)
+    process = _read_canonical(state / f"{name}.process.json", "process")
+    if process.get("name") != name or not isinstance(process.get("sandbox_id"), str):
+        raise ExternalCtfError("process_receipt_binding_mismatch")
     client = _client()
     detail = client.request("GET", API + "/sandboxes/" + process["sandbox_id"])
     origin = detail.get("sandbox_url")
@@ -254,7 +362,10 @@ def status(state: Path, benchmark: str, task_index: int, arm: str) -> dict[str, 
 
 def release(state: Path, benchmark: str, task_index: int, arm: str) -> dict[str, Any]:
     name = cell_name(benchmark, task_index, arm)
-    process = json.loads((state / f"{name}.process.json").read_bytes())
+    state = _private_state(state)
+    process = _read_canonical(state / f"{name}.process.json", "process")
+    if process.get("name") != name or not isinstance(process.get("sandbox_id"), str):
+        raise ExternalCtfError("process_receipt_binding_mismatch")
     client = _client()
     client.request("DELETE", API + "/sandboxes/" + process["sandbox_id"], raw=True)
     for _ in range(60):
