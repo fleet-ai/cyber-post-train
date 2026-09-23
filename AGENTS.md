@@ -110,6 +110,8 @@ Do not interpret all-zero reward as model incapability when trajectories truncat
 
 - Fetch current `origin/main` and use a dedicated clean worktree for each coherent change. Preserve unrelated user files and untracked artifacts.
 - Prefer small typed CLIs, immutable manifests, atomic no-replace publication, and explicit idempotency.
+- Prefer the smallest working implementation: minimize lines, moving parts, and abstractions. Add machinery only when a concrete invariant or observed failure requires it.
+- Debug by first running the narrowest observation that distinguishes competing explanations. Before another repair attempt, compare the new evidence with the previous attempt and step back if the same failure boundary is repeating; do not keep guessing patches in a loop.
 - Validate rendered or API-returned behavior rather than source text alone. Add cross-field invariants where one artifact identity appears in multiple stages.
 - Rebase or update before final tests, then review the final diff again. Keep one logical change per PR.
 - Store private/raw evidence only in ignored or restricted locations. Commit sanitized receipts and digests only when policy permits.
