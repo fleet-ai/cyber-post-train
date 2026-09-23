@@ -1039,7 +1039,7 @@ def _training_create_journal(
         capacity = direct._validate_seal(capacity, CAPACITY_SCHEMA)
         preview = direct._validate_seal(preview, direct.PREVIEW_SCHEMA)
         submitter_normalization = direct._validate_seal(
-            submitter_normalization, "cyber_skyrl_prod10_submitter_normalization_v1"
+            submitter_normalization, SUBMITTER_NORMALIZATION_SCHEMA
         )
         duplicate_before_guard = direct._validate_seal(duplicate_before_guard, JIT_DUPLICATE_SCHEMA)
         duplicate_before_intent = direct._validate_seal(
