@@ -1,4 +1,4 @@
-"""Regressions for the deferred, unsealed seed-65/66 matched pairs."""
+"""Regressions for the deferred, unsealed seed-65/66/67 matched pairs."""
 
 from __future__ import annotations
 
@@ -16,9 +16,21 @@ from scripts import prepare_qwen38_fleet_protocol_v2_seed62_seed63_seed64_succes
 from scripts import prepare_qwen38_fleet_protocol_v2_seed65_pair as seed65
 from scripts import prepare_qwen38_fleet_seed46_pass8_packets as source
 
-RETIREMENT = (
+SEED60_RETIREMENT = (
     Path(__file__).resolve().parents[1]
     / "docs/evidence/qwen38-study/2026-09-23-q38-dev17-seed60-whole-pair-retirement.json"
+)
+SEED64_RETIREMENT = (
+    Path(__file__).resolve().parents[1]
+    / "docs/evidence/qwen38-study/2026-09-23-q38-dev17-seed64-whole-pair-retirement.json"
+)
+SEED64_RELEASE_PRE = (
+    Path(__file__).resolve().parents[1]
+    / "docs/evidence/qwen38-study/2026-09-23-q38-dev17-seed64-candidate-release-pre.json"
+)
+SEED64_RELEASE_POST = (
+    Path(__file__).resolve().parents[1]
+    / "docs/evidence/qwen38-study/2026-09-23-q38-dev17-seed64-candidate-release-post.json"
 )
 
 
@@ -43,7 +55,10 @@ def rendered(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
     frozen_definition = {
         "sha256": seed65.FROZEN_DEFINITION_SHA256,
         "excluded_protocol_v2_seeds": [55, 56, 57, 58, 59],
-        "replacement_mapping": [{"invalid_original_seed": 53, "replacement_seed": 60}],
+        "replacement_mapping": [
+            {"invalid_original_seed": 52, "replacement_seed": 64},
+            {"invalid_original_seed": 53, "replacement_seed": 60},
+        ],
         "replica_protocols": [
             {
                 "comparison_protocol_sha256": (
@@ -95,8 +110,15 @@ def rendered(tmp_path_factory: pytest.TempPathFactory) -> tuple[Path, Path]:
     first = root / "first"
     second = root / "second"
     try:
-        seed65.prepare(frozen_packets=frozen, seed60_retirement=RETIREMENT, output=first)
-        seed65.prepare(frozen_packets=frozen, seed60_retirement=RETIREMENT, output=second)
+        kwargs = {
+            "frozen_packets": frozen,
+            "seed60_retirement": SEED60_RETIREMENT,
+            "seed64_retirement": SEED64_RETIREMENT,
+            "seed64_release_pre": SEED64_RELEASE_PRE,
+            "seed64_release_post": SEED64_RELEASE_POST,
+        }
+        seed65.prepare(**kwargs, output=first)
+        seed65.prepare(**kwargs, output=second)
     finally:
         monkeypatch.undo()
     return first, second
@@ -112,7 +134,7 @@ def test_prepare_is_deterministic_and_stays_unsealed(rendered: tuple[Path, Path]
     }
     assert first_files == second_files
     receipt = json.loads(
-        (first / "SEED65_SEED66_PREPARATION_RECEIPT_V2.json").read_text(encoding="utf-8")
+        (first / "SEED65_SEED66_SEED67_PREPARATION_RECEIPT_V3.json").read_text(encoding="utf-8")
     )
     assert receipt["sha256"] == protocol_v2._canonical(  # noqa: SLF001
         {key: value for key, value in receipt.items() if key != "sha256"}
@@ -124,8 +146,8 @@ def test_prepare_is_deterministic_and_stays_unsealed(rendered: tuple[Path, Path]
         "pass_k": 1,
         "retry_limit": 0,
         "harness": "opencode",
-        "sampling_seeds": [65, 66],
-        "rollouts_requiring_fresh_reservation": 68,
+        "sampling_seeds": [65, 66, 67],
+        "rollouts_requiring_fresh_reservation": 102,
         "frozen_parity_file_sha256": seed65._file_sha(  # noqa: SLF001
             first / "seed65" / "base" / "serving-route-proof.json"
         ),
@@ -152,15 +174,15 @@ def test_prepare_is_deterministic_and_stays_unsealed(rendered: tuple[Path, Path]
     assert receipt["server_preview_performed"] is False
     assert receipt["launch_performed"] is False
     assert "actual_started_rollouts" not in json.dumps(receipt)
-    assert len(receipt["arms"]) == 4
+    assert len(receipt["arms"]) == 6
 
 
-def test_seed65_seed66_inner_and_outer_jobs_preserve_the_exact_policy(
+def test_seed65_seed66_seed67_inner_and_outer_jobs_preserve_the_exact_policy(
     rendered: tuple[Path, Path],
 ) -> None:
     first, _second = rendered
     receipt = json.loads(
-        (first / "SEED65_SEED66_PREPARATION_RECEIPT_V2.json").read_text(encoding="utf-8")
+        (first / "SEED65_SEED66_SEED67_PREPARATION_RECEIPT_V3.json").read_text(encoding="utf-8")
     )
     task_rosters = []
     for seed in seed65.DEFERRED_SEEDS:
@@ -191,8 +213,8 @@ def test_seed65_seed66_inner_and_outer_jobs_preserve_the_exact_policy(
     bundle = yaml.safe_load((first / "launchers.yaml").read_text(encoding="utf-8"))
     jobs = [item for item in bundle["items"] if item["kind"] == "Job"]
     config_maps = [item for item in bundle["items"] if item["kind"] == "ConfigMap"]
-    assert len(jobs) == len(config_maps) == 4
-    assert len({item["metadata"]["name"] for item in bundle["items"]}) == 4
+    assert len(jobs) == len(config_maps) == 6
+    assert len({item["metadata"]["name"] for item in bundle["items"]}) == 6
     for job in jobs:
         annotations = job["metadata"]["annotations"]
         labels = job["spec"]["template"]["metadata"]["labels"]
@@ -201,31 +223,48 @@ def test_seed65_seed66_inner_and_outer_jobs_preserve_the_exact_policy(
         assert job["spec"]["template"]["spec"]["priorityClassName"] == "c1"
         assert labels[heldout_launch.POSTGRES_CLIENT_LABEL] == "true"
         assert "nvidia.com/gpu" not in json.dumps(job)
-    assert receipt["launcher_bundle"]["object_count"] == 8
+    assert receipt["launcher_bundle"]["object_count"] == 12
 
 
-def test_roster_v2_excludes_seed60_and_binds_the_exact_retirement(
+def test_roster_v3_excludes_seed60_and_seed64_and_binds_exact_retirements(
     rendered: tuple[Path, Path], tmp_path: Path
 ) -> None:
     first, _second = rendered
     receipt = json.loads(
-        (first / "SEED65_SEED66_PREPARATION_RECEIPT_V2.json").read_text(encoding="utf-8")
+        (first / "SEED65_SEED66_SEED67_PREPARATION_RECEIPT_V3.json").read_text(encoding="utf-8")
     )
-    definition_path = first / "COMPARISON_DEFINITION_V6.json"
+    definition_path = first / "COMPARISON_DEFINITION_V7.json"
     definition = json.loads(definition_path.read_text(encoding="utf-8"))
     assert definition["sha256"] == protocol_v2._canonical(  # noqa: SLF001
         {key: value for key, value in definition.items() if key != "sha256"}
     )
     assert definition["included_seeds"] == list(seed65.INCLUDED_SEEDS)
     assert 60 not in definition["included_seeds"]
+    assert 64 not in definition["included_seeds"]
     assert 60 in definition["excluded_protocol_v2_seeds"]
+    assert 64 in definition["excluded_protocol_v2_seeds"]
     replica_seeds = {row["seed"] for row in definition["replica_protocols"]}
     assert replica_seeds == set(seed65.INCLUDED_SEEDS)
+    state = definition["full_comparison_packet_state"]
+    assert state["rendered_successor_seeds"] == [62, 63]
+    assert state["retired_rendered_successor_seeds"] == [64]
+    assert state["deferred_successor_seeds"] == [65, 66, 67]
+    assert state["rendered_packet_count"] == 4
+    assert len(state["missing_packet_cells"]) == 6
+    assert state["full_roster_launch_ready"] is False
+    assert state["final_aggregation_allowed"] is False
+    assert state["score_unseal_allowed"] is False
     assert (
         next(
             row for row in definition["replacement_mapping"] if row["invalid_original_seed"] == 53
         )["replacement_seed"]
         == 66
+    )
+    assert (
+        next(
+            row for row in definition["replacement_mapping"] if row["invalid_original_seed"] == 52
+        )["replacement_seed"]
+        == 67
     )
     retirement = definition["seed60_pair_retirement_evidence"]
     assert retirement == {
@@ -234,7 +273,7 @@ def test_roster_v2_excludes_seed60_and_binds_the_exact_retirement(
         "whole_pair_excluded": True,
         "replacement_seed": 66,
     }
-    superseded = definition["superseded_replacements"][-1]
+    superseded = definition["superseded_replacements"][-2]
     assert superseded["superseded_replacement_seed"] == 60
     assert superseded["successor_seed"] == 66
     assert superseded["whole_pair_excluded"] is True
@@ -249,19 +288,84 @@ def test_roster_v2_excludes_seed60_and_binds_the_exact_retirement(
         "file_sha256": seed65.SEED60_RETIREMENT_FILE_SHA256,
         "sha256": seed65.SEED60_RETIREMENT_SHA256,
         "whole_pair_excluded": True,
+        "partial_subset_reconciliation_allowed": False,
+        "candidate_splice_allowed": False,
         "replacement_seed": 66,
     }
-    assert {row["seed"] for row in receipt["replacement_protocols"]} == {65, 66}
+    seed64_evidence = definition["seed64_pair_retirement_evidence"]
+    assert seed64_evidence == {
+        "file_sha256": seed65.SEED64_RETIREMENT_FILE_SHA256,
+        "sha256": seed65.SEED64_RETIREMENT_SHA256,
+        "terminal_file_sha256": seed65.SEED64_TERMINAL_FILE_SHA256,
+        "terminal_sha256": seed65.SEED64_TERMINAL_SHA256,
+        "candidate_launch_packet_file_sha256": seed65.SEED64_CANDIDATE_PACKET_FILE_SHA256,
+        "candidate_evaluation_identity_sha256": (
+            seed65.SEED64_CANDIDATE_EVALUATION_IDENTITY_SHA256
+        ),
+        "release_pre_file_sha256": seed65.SEED64_RELEASE_PRE_FILE_SHA256,
+        "release_pre_sha256": seed65.SEED64_RELEASE_PRE_SHA256,
+        "release_post_file_sha256": seed65.SEED64_RELEASE_POST_FILE_SHA256,
+        "release_post_sha256": seed65.SEED64_RELEASE_POST_SHA256,
+        "whole_pair_excluded": True,
+        "replacement_seed": 67,
+    }
+    seed64_superseded = definition["superseded_replacements"][-1]
+    assert seed64_superseded["superseded_replacement_seed"] == 64
+    assert seed64_superseded["successor_seed"] == 67
+    assert seed64_superseded["whole_pair_excluded"] is True
+    assert seed65.SEED64_RETIREMENT_SHA256 in seed64_superseded["evidence_receipt_sha256s"]
+    assert seed65.SEED64_RELEASE_POST_SHA256 in seed64_superseded["evidence_receipt_sha256s"]
+    assert receipt["seed64_pair_retirement"] == {
+        "path": "evidence/SEED64_RETIREMENT_RECEIPT.json",
+        "file_sha256": seed65.SEED64_RETIREMENT_FILE_SHA256,
+        "sha256": seed65.SEED64_RETIREMENT_SHA256,
+        "release_pre": {
+            "path": "evidence/SEED64_CANDIDATE_RELEASE_PRE.json",
+            "file_sha256": seed65.SEED64_RELEASE_PRE_FILE_SHA256,
+            "sha256": seed65.SEED64_RELEASE_PRE_SHA256,
+        },
+        "release_post": {
+            "path": "evidence/SEED64_CANDIDATE_RELEASE_POST.json",
+            "file_sha256": seed65.SEED64_RELEASE_POST_FILE_SHA256,
+            "sha256": seed65.SEED64_RELEASE_POST_SHA256,
+        },
+        "whole_pair_excluded": True,
+        "partial_subset_reconciliation_allowed": False,
+        "candidate_splice_allowed": False,
+        "replacement_seed": 67,
+    }
+    assert (
+        first / "evidence/SEED64_RETIREMENT_RECEIPT.json"
+    ).read_bytes() == SEED64_RETIREMENT.read_bytes()
+    assert (
+        first / "evidence/SEED64_CANDIDATE_RELEASE_PRE.json"
+    ).read_bytes() == SEED64_RELEASE_PRE.read_bytes()
+    assert (
+        first / "evidence/SEED64_CANDIDATE_RELEASE_POST.json"
+    ).read_bytes() == SEED64_RELEASE_POST.read_bytes()
+    assert {row["seed"] for row in receipt["replacement_protocols"]} == {65, 66, 67}
     assert {(row["seed"], row["arm_id"]) for row in receipt["arms"]} == {
         (seed, arm) for seed in seed65.DEFERRED_SEEDS for arm in protocol_v2.ARMS
     }
 
     drifted = tmp_path / "retirement.json"
-    value = json.loads(RETIREMENT.read_text(encoding="utf-8"))
+    value = json.loads(SEED60_RETIREMENT.read_text(encoding="utf-8"))
     value["lineage"]["replacement_seed"] = 67
     source._write_json(drifted, value)  # noqa: SLF001
     with pytest.raises(ValueError, match="retirement"):
         seed65._seed60_retirement(drifted)  # noqa: SLF001
+
+    value = json.loads(SEED64_RETIREMENT.read_text(encoding="utf-8"))
+    value["decision"]["candidate_may_not_be_spliced_into_another_seed"] = False
+    source._write_json(drifted, value)  # noqa: SLF001
+    with pytest.raises(ValueError, match="seed-64 whole-pair retirement"):
+        seed65._seed64_retirement(drifted)  # noqa: SLF001
+
+    value = json.loads(SEED64_RELEASE_POST.read_text(encoding="utf-8"))
+    value["resources_released"] = False
+    source._write_json(drifted, value)  # noqa: SLF001
+    with pytest.raises(ValueError, match="seed-64 candidate release"):
+        seed65._seed64_release(SEED64_RELEASE_PRE, drifted)  # noqa: SLF001
 
 
 def test_frozen_source_requires_exact_bytes_and_complete_prior_pair_roster(
@@ -289,7 +393,7 @@ def test_frozen_source_requires_exact_bytes_and_complete_prior_pair_roster(
             "packet_file_sha256": f"sha256:packet-{prior_seed}-{arm}",
             "evaluation_identity_sha256": f"sha256:identity-{prior_seed}-{arm}",
         }
-        for prior_seed in seed65.PRIOR_RENDERED_SEEDS
+        for prior_seed in seed65.FROZEN_PREDECESSOR_RENDERED_SEEDS
         for arm in protocol_v2.ARMS
     ]
     receipt = {
@@ -299,7 +403,7 @@ def test_frozen_source_requires_exact_bytes_and_complete_prior_pair_roster(
         "server_preview_performed": False,
         "launch_performed": False,
         "full_comparison_packet_state": {
-            "rendered_successor_seeds": list(seed65.PRIOR_RENDERED_SEEDS),
+            "rendered_successor_seeds": list(seed65.FROZEN_PREDECESSOR_RENDERED_SEEDS),
             "deferred_successor_seeds": [65],
             "missing_packet_cells": [{"seed": 65, "arm_id": arm} for arm in protocol_v2.ARMS],
             "full_roster_launch_ready": False,
