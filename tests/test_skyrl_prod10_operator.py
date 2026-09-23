@@ -285,6 +285,104 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
             operator_job.build_operator_package(changed)
 
 
+def test_prod10_launch_recovery_observer_binds_existing_job_at_construction(
+    tmp_path: Path,
+) -> None:
+    uid = "00000000-0000-4000-8000-000000000021"
+    proof = {
+        "phase": "launch",
+        "name": "chris-q38-prod10-launch-operator-v3",
+        "failure_alerts": "off",
+        "priority": "c1",
+        "queue_priority": "q1",
+        "gpus": 0,
+        "packet_sha256": "sha256:" + "1" * 64,
+        "job_manifest_sha256": "sha256:" + "2" * 64,
+    }
+
+    def runner(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
+        assert command[5:8] == ["get", "job", proof["name"]]
+        return subprocess.CompletedProcess(
+            command,
+            0,
+            stdout=json.dumps(
+                {
+                    "metadata": {
+                        "uid": uid,
+                        "creationTimestamp": "2026-09-23T10:04:17Z",
+                    }
+                }
+            ),
+            stderr="",
+        )
+
+    observer = operator_launch._Prod10LaunchRecoveryObserver(
+        proof,
+        tmp_path,
+        expected_uid=uid,
+        run=runner,
+    )
+
+    assert observer.kind == "job"
+    assert observer.profile == "production-recovery"
+    assert observer.expected_uid == uid
+    assert observer.requires_creator_binding is False
+    assert observer.armed_schema == cleanup.RECOVERY_ARMED_SCHEMA
+    assert observer.result_schema == cleanup.RECOVERY_RESULT_SCHEMA
+    assert observer.armed_path == tmp_path / "OPERATOR_RECOVERY_OBSERVER_ARMED.json"
+    assert observer.result_path == tmp_path / "OPERATOR_RECOVERY_OBSERVER_RESULT.json"
+    assert observer.snapshot.uid == ""
+    armed = observer.arm()
+    assert armed["schema"] == cleanup.RECOVERY_ARMED_SCHEMA
+    assert armed["recovered_existing_target"] is True
+    assert armed["expected_uid"] == uid
+    assert armed["target_created_at"] == "2026-09-23T10:04:17Z"
+    with pytest.raises(cleanup.ObserverError, match="only a recovery observer"):
+        cleanup.Observer(
+            context=direct.PROD_CONTEXT,
+            namespace=direct.NAMESPACE,
+            kind="job",
+            name=proof["name"],
+            maximum_seconds=2500,
+            expected_gpus=0,
+            plan_sha256=proof["packet_sha256"],
+            manifest_sha256=proof["job_manifest_sha256"],
+            armed_path=tmp_path / "generic-armed.json",
+            result_path=tmp_path / "generic-result.json",
+            profile="production-operator",
+            expected_uid=uid,
+        )
+
+
+def test_prod10_launch_recovery_observer_rejects_drift_before_arming(
+    tmp_path: Path,
+) -> None:
+    proof = {
+        "phase": "launch",
+        "name": "chris-q38-prod10-launch-operator-v3",
+        "failure_alerts": "off",
+        "priority": "c1",
+        "queue_priority": "q1",
+        "gpus": 0,
+        "packet_sha256": "sha256:" + "1" * 64,
+        "job_manifest_sha256": "sha256:" + "2" * 64,
+    }
+    (tmp_path / "OPERATOR_RECOVERY_OBSERVER_RESULT.json").write_text("existing")
+
+    with pytest.raises(cleanup.ObserverError, match="binding"):
+        operator_launch._Prod10LaunchRecoveryObserver(
+            proof,
+            tmp_path,
+            expected_uid="00000000-0000-4000-8000-000000000021",
+        )
+    with pytest.raises(cleanup.ObserverError, match="exact UID"):
+        operator_launch._Prod10LaunchRecoveryObserver(
+            proof,
+            tmp_path / "unused",
+            expected_uid="not-a-uid",
+        )
+
+
 def test_prod10_inspector_is_read_only_alert_off_c1_q1_zero_gpu(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

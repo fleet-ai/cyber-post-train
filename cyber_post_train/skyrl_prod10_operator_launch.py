@@ -92,6 +92,70 @@ class _Prod10LaunchObserver(cleanup.Observer):
         self.last_observation_error_code = ""
 
 
+class _Prod10LaunchRecoveryObserver(cleanup.Observer):
+    """Exact-UID recovery for one existing prod10 outer Job."""
+
+    def __init__(
+        self,
+        package_proof: dict[str, Any],
+        root: Path,
+        *,
+        expected_uid: str,
+        run: Any = subprocess.run,
+    ) -> None:
+        try:
+            bound_uid = str(UUID(expected_uid))
+        except (TypeError, ValueError) as exc:
+            raise cleanup.ObserverError(
+                "prod10 launch recovery requires an exact UID"
+            ) from exc
+        armed_path = root / "OPERATOR_RECOVERY_OBSERVER_ARMED.json"
+        result_path = root / "OPERATOR_RECOVERY_OBSERVER_RESULT.json"
+        creator_binding_path = armed_path.with_name(armed_path.name + ".created.json")
+        for value in (package_proof["packet_sha256"], package_proof["job_manifest_sha256"]):
+            if len(value.removeprefix("sha256:")) != 64:
+                raise cleanup.ObserverError("cleanup observer digest binding is invalid")
+        if (
+            package_proof.get("phase") != "launch"
+            or package_proof.get("failure_alerts") != "off"
+            or package_proof.get("priority") != "c1"
+            or package_proof.get("queue_priority") != "q1"
+            or package_proof.get("gpus") != 0
+            or not package_proof.get("name")
+            or any(
+                path.exists() or path.is_symlink()
+                for path in (armed_path, result_path, creator_binding_path)
+            )
+        ):
+            raise cleanup.ObserverError("prod10 launch recovery binding is invalid")
+        self.context = direct.PROD_CONTEXT
+        self.namespace = NAMESPACE
+        self.kind = "job"
+        self.name = package_proof["name"]
+        self.maximum_seconds = 2500
+        self.expected_gpus = 0
+        self.plan_sha256 = package_proof["packet_sha256"]
+        self.manifest_sha256 = package_proof["job_manifest_sha256"]
+        self.armed_path = armed_path
+        self.result_path = result_path
+        self.poll_seconds = 2.0
+        self.release_seconds = 300
+        self.profile = "production-recovery"
+        self.armed_schema = cleanup.RECOVERY_ARMED_SCHEMA
+        self.result_schema = cleanup.RECOVERY_RESULT_SCHEMA
+        self.expected_uid = bound_uid
+        self.creator_binding_path = creator_binding_path
+        self.requires_creator_binding = False
+        self._run = run
+        self.snapshot = cleanup.Snapshot()
+        self.armed_at = ""
+        self.deletion_requested_at = ""
+        self.deletion_reason = ""
+        self.observation_failures = 0
+        self.max_consecutive_observation_failures = 0
+        self.last_observation_error_code = ""
+
+
 def _seal(value: dict[str, Any]) -> dict[str, Any]:
     body = {key: item for key, item in value.items() if key != "sha256"}
     return {**body, "sha256": "sha256:" + digest(body)}
