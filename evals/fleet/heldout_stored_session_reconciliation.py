@@ -29,6 +29,7 @@ from evals.fleet.evaluate import stable_job_preview
 PACKET_SCHEMA = "cyber_fleet_existing_scored_session_reconciliation_packet_v1"
 PROOF_SCHEMA = "cyber_fleet_existing_scored_session_reconciliation_proof_v1"
 SUBSET_PROOF_SCHEMA = "cyber_fleet_existing_scored_session_subset_reconciliation_proof_v1"
+STALE_METADATA_PROOF_SCHEMA = "cyber_fleet_stale_scored_session_metadata_reconciliation_proof_v1"
 PRIVATE_INTENT_SCHEMA = "cyber_fleet_existing_scored_session_reconciliation_intent_v1"
 CLOSURE_SCHEMA = "cyber_fleet_existing_scored_session_reconciliation_closure_v1"
 NAMESPACE = "fleet-train-jobs"
@@ -143,6 +144,38 @@ def _load_json(path: Path, label: str) -> dict[str, Any]:
 
 
 def _intent_from_value(value: Any) -> reconciliation.StoredSessionIntent:
+    if (
+        isinstance(value, dict)
+        and value.get("schema_version") == reconciliation.STALE_METADATA_INTENT_SCHEMA
+        and set(value) == reconciliation.STALE_METADATA_INTENT_FIELDS
+        and isinstance(value.get("selected_cells"), list)
+        and isinstance(value.get("unselected_cell_ids"), list)
+        and isinstance(value.get("unselected_missing_local_result_cell_ids"), list)
+    ):
+        try:
+            return reconciliation.ExactStaleSessionMetadataIntent(
+                evaluation_plan_sha256=value["evaluation_plan_sha256"],
+                runtime_files_sha256=value["runtime_files_sha256"],
+                serving_block=value["serving_block"],
+                source_output_root=value["source_output_root"],
+                source_database=value["source_database"],
+                source_job_uid=value["source_job_uid"],
+                source_job_terminal_receipt_sha256=value["source_job_terminal_receipt_sha256"],
+                selected_cells=tuple(value["selected_cells"]),
+                unselected_cell_ids=tuple(value["unselected_cell_ids"]),
+                expected_arm_state_counts=value["expected_arm_state_counts"],
+                expected_terminal_local_result_count=value["expected_terminal_local_result_count"],
+                expected_terminal_stale_active_count=value["expected_terminal_stale_active_count"],
+                unselected_missing_local_result_cell_ids=tuple(
+                    value["unselected_missing_local_result_cell_ids"]
+                ),
+                expected_unselected_missing_local_result_failure_code=value[
+                    "expected_unselected_missing_local_result_failure_code"
+                ],
+                sha256=value["sha256"],
+            )
+        except (AttributeError, KeyError, TypeError, ValueError, rollout_ledger.LedgerError) as exc:
+            raise ReconciliationPacketError("private reconciliation intent is invalid") from exc
     if not isinstance(value, dict) or not isinstance(value.get("selected_cell_ids"), list):
         raise ReconciliationPacketError("private reconciliation intent schema is unsupported")
     try:
@@ -696,12 +729,18 @@ def _terminal_source(
     total = summary.get("total")
     selected = len(intent.selected_cell_ids)
     subset = isinstance(intent, reconciliation.ExactStoredSessionSubsetIntent)
-    expected_states = intent.expected_arm_state_counts if subset else None
+    stale_metadata = isinstance(intent, reconciliation.ExactStaleSessionMetadataIntent)
+    expected_states = intent.expected_arm_state_counts if (subset or stale_metadata) else None
     expected_local_results = (
-        intent.expected_local_result_count
-        if subset and intent.expected_local_result_count is not None
-        else total
+        intent.expected_terminal_local_result_count
+        if stale_metadata
+        else (
+            intent.expected_local_result_count
+            if subset and intent.expected_local_result_count is not None
+            else total
+        )
     )
+    expected_stale_active = intent.expected_terminal_stale_active_count if stale_metadata else 0
     routes = source.evaluation_config.get("routes")
     route = routes.get(intent.serving_block) if isinstance(routes, dict) else None
     task_versions = route.get("task_versions") if isinstance(route, dict) else None
@@ -727,15 +766,16 @@ def _terminal_source(
         or set(by_state) != state_names
         or any(type(by_state[state]) is not int or by_state[state] < 0 for state in state_names)
         or sum(by_state.values()) != total
-        or (subset and by_state != expected_states)
-        or (not subset and by_state.get("retry_review") != selected)
-        or (not subset and by_state.get("accepted") != total - selected)
+        or ((subset or stale_metadata) and by_state != expected_states)
+        or (not subset and not stale_metadata and by_state.get("retry_review") != selected)
+        or (not subset and not stale_metadata and by_state.get("accepted") != total - selected)
         or any(
             by_state.get(state) != 0
             for state in ("pending", *rollout_ledger.ACTIVE_STATES, "terminal")
+            if not stale_metadata
         )
         or summary.get("local_results") != expected_local_results
-        or summary.get("stale_active") != 0
+        or summary.get("stale_active") != expected_stale_active
         or not route_rows_valid
         or sum(row["count"] for row in route_counts) != total
         or {
@@ -766,19 +806,28 @@ def _terminal_source(
             intent.source_database != packet.database,
             intent.source_job_terminal_receipt_sha256 != supplied,
             (
-                intent.expected_agent_exit_code,
-                intent.expected_agent_termination,
-            )
-            not in SUPPORTED_AGENT_OUTCOMES,
-            reconciliation.SUPPORTED_AGENT_OUTCOMES != SUPPORTED_AGENT_OUTCOMES,
-            intent.expected_failure_code != FAILURE_CODE,
+                not stale_metadata
+                and (
+                    (
+                        intent.expected_agent_exit_code,
+                        intent.expected_agent_termination,
+                    )
+                    not in SUPPORTED_AGENT_OUTCOMES
+                    or reconciliation.SUPPORTED_AGENT_OUTCOMES != SUPPORTED_AGENT_OUTCOMES
+                    or intent.expected_failure_code != FAILURE_CODE
+                )
+            ),
             packet.identity.get("retry_limit") != 0,
             source.evaluation_config.get("max_reviewed_infrastructure_retries") != 0,
             decision
             != {
                 "capability_result_status": "not_interpreted",
                 "score_blind_reconciliation_required": True,
-                "unresolved_cells": by_state.get("retry_review"),
+                "unresolved_cells": (
+                    by_state.get("retry_review", 0) + by_state.get("claimed", 0)
+                    if stale_metadata
+                    else by_state.get("retry_review")
+                ),
                 "rollout_retry_performed": False,
                 "score_read_or_generated": False,
             },
@@ -857,6 +906,52 @@ def _runtime_intent_value(
         raise ReconciliationPacketError(
             "missing local-result roster requires subset reconciliation"
         )
+    value = {**body, "sha256": _canonical_digest(body).removeprefix("sha256:")}
+    _intent_from_value(value)
+    return value
+
+
+def _stale_metadata_runtime_intent_value(
+    source: heldout_launch.Package,
+    terminal: dict[str, Any],
+    *,
+    selected_cells: list[dict[str, Any]],
+    unselected_cell_ids: list[str],
+    unselected_missing_local_result_cell_ids: list[str],
+) -> dict[str, Any]:
+    job = terminal.get("job")
+    database = terminal.get("database")
+    summary = database.get("summary") if isinstance(database, dict) else None
+    routes = source.evaluation_config.get("routes")
+    if (
+        source.packet.namespace != NAMESPACE
+        or not isinstance(job, dict)
+        or not isinstance(summary, dict)
+        or not isinstance(routes, dict)
+        or len(routes) != 1
+    ):
+        raise ReconciliationPacketError("source cannot bind stale-session metadata intent")
+    body = {
+        "schema_version": reconciliation.STALE_METADATA_INTENT_SCHEMA,
+        "evaluation_plan_sha256": _digest(summary.get("plan_sha256"), "source evaluation plan"),
+        "runtime_files_sha256": reconciliation.runtime_identity(),
+        "serving_block": next(iter(routes)),
+        "source_output_root": source.packet.output_root,
+        "source_database": source.packet.database,
+        "source_job_uid": job.get("uid"),
+        "source_job_terminal_receipt_sha256": _digest(
+            terminal.get("sha256"), "source terminal receipt"
+        ),
+        "selected_cells": selected_cells,
+        "unselected_cell_ids": unselected_cell_ids,
+        "expected_arm_state_counts": summary.get("by_state"),
+        "expected_terminal_local_result_count": summary.get("local_results"),
+        "expected_terminal_stale_active_count": summary.get("stale_active"),
+        "unselected_missing_local_result_cell_ids": unselected_missing_local_result_cell_ids,
+        "expected_unselected_missing_local_result_failure_code": (
+            reconciliation.STALE_METADATA_UNSELECTED_FAILURE_CODE
+        ),
+    }
     value = {**body, "sha256": _canonical_digest(body).removeprefix("sha256:")}
     _intent_from_value(value)
     return value
@@ -1038,6 +1133,8 @@ def build_private_intent_value(
     selected_cell_ids: list[str],
     unselected_cell_ids: list[str] | None = None,
     missing_local_result_cell_ids: list[str] | None = None,
+    selected_cell_metadata: list[dict[str, Any]] | None = None,
+    unselected_missing_local_result_cell_ids: list[str] | None = None,
     job_name: str,
     config_map_name: str,
     secret_name: str,
@@ -1053,15 +1150,35 @@ def build_private_intent_value(
 
     source = heldout_launch.build_package(source_launch_packet)
     terminal = _load_json(source_terminal_receipt, "source terminal receipt")
-    runtime_value = _runtime_intent_value(
-        source,
-        terminal,
-        selected_cell_ids,
-        unselected_cell_ids,
-        missing_local_result_cell_ids,
-        expected_agent_exit_code=expected_agent_exit_code,
-        expected_agent_termination=expected_agent_termination,
-    )
+    if selected_cell_metadata is not None:
+        if (
+            unselected_cell_ids is None
+            or unselected_missing_local_result_cell_ids is None
+            or missing_local_result_cell_ids is not None
+            or [row.get("cell_id") for row in selected_cell_metadata] != selected_cell_ids
+        ):
+            raise ReconciliationPacketError("stale-session metadata roster is incomplete")
+        runtime_value = _stale_metadata_runtime_intent_value(
+            source,
+            terminal,
+            selected_cells=selected_cell_metadata,
+            unselected_cell_ids=unselected_cell_ids,
+            unselected_missing_local_result_cell_ids=unselected_missing_local_result_cell_ids,
+        )
+    else:
+        if unselected_missing_local_result_cell_ids is not None:
+            raise ReconciliationPacketError(
+                "unselected stale metadata gaps require selected cell metadata"
+            )
+        runtime_value = _runtime_intent_value(
+            source,
+            terminal,
+            selected_cell_ids,
+            unselected_cell_ids,
+            missing_local_result_cell_ids,
+            expected_agent_exit_code=expected_agent_exit_code,
+            expected_agent_termination=expected_agent_termination,
+        )
     runtime_intent = _intent_from_value(runtime_value)
     _terminal_source(source, terminal, runtime_intent)
     create_evidence_sha256 = _source_create_evidence(
@@ -1248,6 +1365,21 @@ def render(
                 selected_cells_have_local_results=True,
                 missing_local_result_cells_preserved=True,
             )
+    elif isinstance(intent, reconciliation.ExactStaleSessionMetadataIntent):
+        proof_body.update(
+            schema=STALE_METADATA_PROOF_SCHEMA,
+            subset_reconciliation=True,
+            source_claimed_count=4,
+            source_retry_review_count=8,
+            source_local_result_count=13,
+            selected_existing_local_result_count=3,
+            selected_missing_local_result_count=1,
+            restored_selected_local_result_count=1,
+            unselected_missing_local_result_count=3,
+            nonselected_cell_count=13,
+            nonselected_cells_preserved_byte_for_byte_and_state_for_state=True,
+            operation=("restore_one_local_result_and_accept_existing_scored_sessions"),
+        )
     proof = {**proof_body, "sha256": _canonical_digest(proof_body)}
     package = Package(
         config_map=config_map,

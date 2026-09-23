@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import shutil
 import uuid
@@ -240,6 +241,71 @@ def _build_s47_local_gap_authorization(tmp_path: Path, monkeypatch: pytest.Monke
     return value, source, terminal, terminal_path, evidence, selected, unselected, missing
 
 
+def _s52_stale_case(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    source = _source_package(tmp_path)
+    states = {state: 0 for state in rollout_ledger.STATES}
+    states.update(accepted=5, claimed=4, retry_review=8)
+    terminal = _terminal(source, selected=12, local_results=13)
+    terminal["database"]["summary"].update(
+        by_state=states,
+        by_serving_block=[
+            {"serving_block": "base", "state": state, "count": count}
+            for state, count in states.items()
+            if count
+        ],
+        stale_active=3,
+    )
+    terminal["decision"]["unresolved_cells"] = 12
+    terminal["sha256"] = packet._canonical_digest(  # noqa: SLF001
+        {key: item for key, item in terminal.items() if key != "sha256"}
+    )
+    terminal_path = _terminal_path(tmp_path, terminal)
+    evidence = _create_evidence(tmp_path, source, terminal)
+    monkeypatch.setattr(packet.heldout_launch, "build_package", lambda _: source)
+    selected = [str(uuid.uuid4()) for _ in range(4)]
+    unselected = [str(uuid.uuid4()) for _ in range(13)]
+    digests = iter(f"{index:064x}" for index in range(1, 100))
+    metadata = []
+    for index, cell_id in enumerate(selected):
+        completed = index == 0
+        present = index < 3
+        metadata.append(
+            {
+                "cell_id": cell_id,
+                "execution_id": "sha256:" + next(digests),
+                "expected_agent_exit_code": 0,
+                "expected_agent_termination": "completed" if completed else "output_limit",
+                "local_result_initially_present": present,
+                "local_record_sha256": next(digests) if present else None,
+                "claim_sha256": next(digests),
+                "binding_sha256": next(digests),
+                "runtime_binding_sha256": next(digests),
+                "scoring_intent_sha256": next(digests),
+                "result_sha256": next(digests),
+                "reward_sha256": next(digests),
+                "session_ingest_sha256": next(digests),
+                "cleanup_sha256": next(digests),
+                "trace_manifest_sha256": next(digests),
+                "accepted_receipt_sha256": next(digests) if completed else None,
+            }
+        )
+    value = packet.build_private_intent_value(
+        repo_root=ROOT,
+        source_launch_packet=source.packet.path,
+        source_terminal_receipt=terminal_path,
+        source_create_evidence=evidence,
+        selected_cell_ids=selected,
+        unselected_cell_ids=unselected,
+        selected_cell_metadata=metadata,
+        unselected_missing_local_result_cell_ids=unselected[:3],
+        job_name=JOB_NAME,
+        config_map_name=CONFIG_MAP_NAME,
+        secret_name=SECRET_NAME,
+        output_root=OUTPUT_ROOT,
+    )
+    return value, source, terminal, terminal_path, evidence, selected, unselected, metadata
+
+
 def test_build_authorization_binds_source_create_closure_and_exact_bundle(tmp_path, monkeypatch):
     value, source, terminal, _, evidence = _build_authorization(tmp_path, monkeypatch)
     runtime = value["runtime_intent"]
@@ -434,6 +500,313 @@ def test_s47_authorization_binds_exact_two_unselected_local_result_gaps(tmp_path
     assert terminal["database"]["summary"]["total"] == 17
     serialized_proof = json.dumps(rendered.proof)
     assert all(cell_id not in serialized_proof for cell_id in selected + unselected)
+
+
+def test_s52_stale_metadata_authorization_is_exact_cpu_only_and_score_blind(tmp_path, monkeypatch):
+    value, source, terminal, terminal_path, evidence, selected, unselected, _metadata = (
+        _s52_stale_case(tmp_path, monkeypatch)
+    )
+    runtime = value["runtime_intent"]
+    assert runtime["schema_version"] == reconciliation.STALE_METADATA_INTENT_SCHEMA
+    assert runtime["expected_arm_state_counts"]["claimed"] == 4
+    assert runtime["expected_terminal_local_result_count"] == 13
+    assert runtime["expected_terminal_stale_active_count"] == 3
+    assert sum(row["local_result_initially_present"] for row in runtime["selected_cells"]) == 3
+    assert len(runtime["unselected_missing_local_result_cell_ids"]) == 3
+    intent_path = tmp_path / "s52-stale-intent.json"
+    packet.write_private_intent(intent_path, value)
+    rendered = packet.render(
+        repo_root=ROOT,
+        source_launch_packet=source.packet.path,
+        source_terminal_receipt=terminal_path,
+        source_create_evidence=evidence,
+        private_intent=intent_path,
+        job_name=JOB_NAME,
+        config_map_name=CONFIG_MAP_NAME,
+        secret_name=SECRET_NAME,
+        output_root=OUTPUT_ROOT,
+    )
+    assert rendered.proof["schema"] == packet.STALE_METADATA_PROOF_SCHEMA
+    assert rendered.proof["operation"] == (
+        "restore_one_local_result_and_accept_existing_scored_sessions"
+    )
+    assert rendered.proof["restored_selected_local_result_count"] == 1
+    assert rendered.proof["unselected_missing_local_result_count"] == 3
+    assert rendered.proof["model_generation_allowed"] is False
+    assert rendered.proof["scoring_call_allowed"] is False
+    assert rendered.job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
+    pod = rendered.job["spec"]["template"]["spec"]
+    assert pod["priorityClassName"] == "c1"
+    assert "nvidia.com/gpu" not in json.dumps(pod["containers"][0]["resources"])
+    serialized = json.dumps(rendered.proof)
+    assert all(cell_id not in serialized for cell_id in selected + unselected)
+    first = _server_preview(rendered, "11111111-1111-4111-8111-111111111111")
+    second = _server_preview(rendered, "22222222-2222-4222-8222-222222222222")
+    assert packet.validate_server_previews(rendered, first, second).startswith("sha256:")
+
+
+@pytest.mark.parametrize(
+    "fault",
+    ["two-missing-selected", "missing-unselected", "wrong-counts", "mixed-accepted"],
+)
+def test_s52_stale_metadata_exception_cannot_broaden(tmp_path, monkeypatch, fault):
+    value, *_rest = _s52_stale_case(tmp_path, monkeypatch)
+    runtime = copy.deepcopy(value["runtime_intent"])
+    if fault == "two-missing-selected":
+        runtime["selected_cells"][1]["local_result_initially_present"] = False
+        runtime["selected_cells"][1]["local_record_sha256"] = None
+    elif fault == "missing-unselected":
+        runtime["unselected_missing_local_result_cell_ids"].pop()
+    elif fault == "wrong-counts":
+        runtime["expected_arm_state_counts"].update(accepted=6, retry_review=7)
+    else:
+        runtime["selected_cells"][1]["accepted_receipt_sha256"] = "f" * 64
+    runtime["sha256"] = reconciliation._body_digest(  # noqa: SLF001
+        {key: item for key, item in runtime.items() if key != "sha256"}
+    )
+    with pytest.raises(packet.ReconciliationPacketError, match="private reconciliation intent"):
+        packet._intent_from_value(runtime)  # noqa: SLF001
+
+
+@pytest.mark.parametrize(
+    ("termination", "claim_directory", "accepted_layout"),
+    [
+        ("completed", "claims", True),
+        ("output_limit", "claims", True),
+        ("output_limit", "execution-claims", False),
+    ],
+)
+def test_s52_reconstructs_one_exact_private_result_without_generation_or_scoring(
+    tmp_path, termination, claim_directory, accepted_layout
+):
+    root = tmp_path / "source"
+    execution_id = "sha256:" + "1" * 64
+    attempt = root / "attempts" / execution_id.removeprefix("sha256:")
+    claim_root = root / claim_directory
+    attempt.mkdir(parents=True)
+    claim_root.mkdir()
+    ledger_cell_id = str(uuid.uuid4())
+    row = {
+        "cell_id": ledger_cell_id,
+        "serving_block": "base",
+        "model_revision": "revision",
+        "task_version_id": str(uuid.uuid4()),
+        "task_key": "task-key",
+        "attempt": 1,
+        "harness_id": "opencode-v1",
+        "record_sha256": None,
+        "local_session_id": None,
+    }
+    config = {
+        "schema_version": "fleet-selfhosted-opencode-ledger-cell-v1",
+        "campaign_id": "campaign",
+        "run_id": "run",
+        "source_job_id": "source-job",
+        "task": {"key": row["task_key"], "version_id": row["task_version_id"]},
+        "environment": {
+            "id": "environment",
+            "version": "environment-version",
+            "data_id": "data",
+            "data_version": "data-version",
+        },
+        "verifier": {"version_id": "verifier-version"},
+        "authority": {
+            "provisioning_route_template": "/provision/{task_key}/{task_version_id}",
+            "scoring_route_template": "/score/{task_key}/{task_version_id}",
+            "scoring_mode": "partial",
+            "multi_app_aggregation_mode": "fractional",
+        },
+        "model": {"served_id": "model"},
+        "harness": {"name": "opencode", "version": "v1"},
+        "config_sha256": "2" * 64,
+        "execution": {
+            "cell_id": "sha256:" + "3" * 64,
+            "execution_id": execution_id,
+            "execution_generation": 1,
+            "required_task_tools": ["bash", "submit_report"],
+            "required_task_tool_catalog_sha256": "4" * 64,
+        },
+    }
+
+    def write_json(name: str, value: dict) -> tuple[Path, str]:
+        path = attempt / name
+        path.write_text(json.dumps(value, sort_keys=True), encoding="utf-8")
+        return path, hashlib.sha256(path.read_bytes()).hexdigest()
+
+    claim = reconciliation.rollout_worker._claim_receipt(config, row)  # noqa: SLF001
+    claim_path = claim_root / f"{execution_id.removeprefix('sha256:')}.json"
+    claim_path.write_text(json.dumps(claim, sort_keys=True), encoding="utf-8")
+    claim_sha256 = hashlib.sha256(claim_path.read_bytes()).hexdigest()
+    trace = attempt / "trace.jsonl"
+    trace.write_text('{"type":"metadata-only-test"}\n', encoding="utf-8")
+    trace_sha256 = hashlib.sha256(trace.read_bytes()).hexdigest()
+    instance_id = str(uuid.uuid4())
+    evidence_run_id = str(uuid.uuid4())
+    result = {
+        "run_id": config["run_id"],
+        "task_key": row["task_key"],
+        "task_version_id": row["task_version_id"],
+        "harness": config["harness"]["name"],
+        "instance_id": instance_id,
+        "evidence_run_id": evidence_run_id,
+        "session_id": "session",
+        "verifier_execution_id": "verifier",
+        "score": 0.25,
+        "session_ingest_status": "completed",
+        "agent_exit_code": 0,
+        "agent_termination": termination,
+        "elapsed_seconds": 12.5,
+    }
+    reward = {
+        "task_key": row["task_key"],
+        "task_version_id": row["task_version_id"],
+        "instance_id": instance_id,
+        "verifier_execution_id": result["verifier_execution_id"],
+        "reward": result["score"],
+    }
+    binding = {
+        field: config[field]
+        for field in (
+            "schema_version",
+            "run_id",
+            "source_job_id",
+            "task",
+            "environment",
+            "verifier",
+            "authority",
+            "model",
+            "harness",
+        )
+    }
+    binding["authority_gate"] = {
+        "mode": "openapi",
+        "routes": sorted(
+            (
+                config["authority"]["provisioning_route_template"],
+                config["authority"]["scoring_route_template"],
+            )
+        ),
+    }
+    runtime_binding = {
+        "instance_id": instance_id,
+        "evidence_run_id": evidence_run_id,
+        "env_key": config["environment"]["id"],
+        "environment_version": config["environment"]["version"],
+        "data_key": config["environment"]["data_id"],
+        "data_version": config["environment"]["data_version"],
+        "tool_names": config["execution"]["required_task_tools"],
+        "tool_catalog_sha256": config["execution"]["required_task_tool_catalog_sha256"],
+    }
+    scoring_body = {
+        "schema_version": reconciliation.self_hosted.SCORING_INTENT_SCHEMA,
+        "run_id": config["run_id"],
+        "task_key": config["task"]["key"],
+        "task_version_id": config["task"]["version_id"],
+        "instance_id": instance_id,
+        "evidence_run_id": evidence_run_id,
+        "scoring_payload_mode": None,
+        "request_keys": sorted(
+            {
+                "instance_id",
+                "scoring_mode",
+                "multi_app_aggregation_mode",
+                "final_answer",
+                "conversation",
+            }
+        ),
+        "request_sha256": "sha256:" + "5" * 64,
+    }
+    scoring_intent = {
+        **scoring_body,
+        "scoring_intent_sha256": reconciliation.crypto.digest_without(
+            scoring_body, "scoring_intent_sha256"
+        ),
+    }
+    _binding_path, binding_sha256 = write_json("binding.json", binding)
+    _runtime_path, runtime_sha256 = write_json("runtime-binding.json", runtime_binding)
+    _scoring_path, scoring_sha256 = write_json("scoring-intent.json", scoring_intent)
+    _result_path, result_sha256 = write_json("result.json", result)
+    _reward_path, reward_sha256 = write_json("reward-result.json", reward)
+    _ingest_path, ingest_sha256 = write_json(
+        "session-ingest.json",
+        {"status": "completed", "session_id": result["session_id"], "extra": "allowed"},
+    )
+    _cleanup_path, cleanup_sha256 = write_json(
+        "cleanup.json",
+        {"instance_created": True, "instance_closed": True, "containers_removed": True},
+    )
+    _manifest_path, manifest_sha256 = write_json(
+        "trace-manifest.json",
+        {
+            "canonical_trace": trace.name,
+            "canonical_trace_sha256": "sha256:" + trace_sha256,
+            "harness": config["harness"]["name"],
+            "agent_termination": termination,
+        },
+    )
+    accepted_sha256 = None
+    if termination == "completed":
+        body = {
+            "schema_version": reconciliation.rollout_worker.ACCEPTED_SCHEMA,
+            "accepted": True,
+            "campaign_id": config["campaign_id"],
+            "cell_id": config["execution"]["cell_id"],
+            "execution_id": execution_id,
+            "ledger_cell_id": ledger_cell_id,
+            "run_id": config["run_id"],
+            "serving_block": row["serving_block"],
+            "session_id": result["session_id"],
+            "verifier_execution_id": result["verifier_execution_id"],
+            "config_sha256": config["config_sha256"],
+            "session_ingest_completed": True,
+            "cleanup_completed": True,
+            "score_persisted_privately": True,
+            "scores_included": False,
+            "prompts_or_traces_included": False,
+        }
+        _accepted_path, accepted_sha256 = write_json(
+            "ACCEPTED.json",
+            {
+                **body,
+                "receipt_sha256": reconciliation.crypto.digest_without(body, "receipt_sha256"),
+            },
+        )
+    descriptor = {
+        "cell_id": ledger_cell_id,
+        "execution_id": execution_id,
+        "expected_agent_exit_code": 0,
+        "expected_agent_termination": termination,
+        "local_result_initially_present": False,
+        "local_record_sha256": None,
+        "claim_sha256": claim_sha256,
+        "binding_sha256": binding_sha256,
+        "runtime_binding_sha256": runtime_sha256,
+        "scoring_intent_sha256": scoring_sha256,
+        "result_sha256": result_sha256,
+        "reward_sha256": reward_sha256,
+        "session_ingest_sha256": ingest_sha256,
+        "cleanup_sha256": cleanup_sha256,
+        "trace_manifest_sha256": manifest_sha256,
+        "accepted_receipt_sha256": accepted_sha256,
+    }
+
+    def reconstruct():
+        return reconciliation._reconstruct_stale_local_result(  # noqa: SLF001
+            row,
+            descriptor,
+            config,
+            SimpleNamespace(source_output_root=str(root)),
+        )
+
+    if not accepted_layout:
+        with pytest.raises(rollout_ledger.LedgerError, match="attempt or claim binding"):
+            reconstruct()
+        return
+    normalized, record_sha256, artifact_binding = reconstruct()
+    assert normalized["agent_termination"] == termination
+    assert normalized["session_id"] == result["session_id"]
+    assert record_sha256 == reconciliation._body_digest(normalized)  # noqa: SLF001
+    assert len(artifact_binding) == 64
 
 
 def test_partial_local_results_require_exact_private_missing_roster(tmp_path, monkeypatch):
