@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import json
 import os
+import stat
 import subprocess
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -434,7 +435,7 @@ def test_prod10_inspector_is_read_only_alert_off_c1_q1_zero_gpu(
     assert proof == {
         **proof,
         "phase": "inspect",
-        "name": "chris-q38-prod10-launch-inspect-v4",
+        "name": "chris-q38-prod10-launch-inspect-v5",
         "failure_alerts": "off",
         "priority": "c1",
         "queue_priority": "q1",
@@ -452,10 +453,10 @@ def test_prod10_inspector_is_read_only_alert_off_c1_q1_zero_gpu(
     assert "nvidia.com/gpu" not in json.dumps(package.job, sort_keys=True)
 
     changed = copy.deepcopy(packet)
-    changed["launch_v3_failure"]["operator_job_uid"] = (
+    changed["launch_v4_failure"]["operator_job_uid"] = (
         "00000000-0000-4000-8000-000000000001"
     )
-    changed["launch_v3_failure"] = operator._seal(changed["launch_v3_failure"])
+    changed["launch_v4_failure"] = operator._seal(changed["launch_v4_failure"])
     changed = operator._seal(changed)
     with pytest.raises(ValueError, match="predecessor"):
         operator_job.build_operator_package(changed)
@@ -467,8 +468,15 @@ def test_prod10_inspector_reads_only_allowlisted_path_metadata(
 ) -> None:
     operation_root = tmp_path / "operation"
     operation_root.mkdir()
-    guard = operation_root / "TRAINING_JOBS_API_PREFIX_GUARD.json"
-    guard.touch()
+    archive = operation_root / operator._GUARD_ARCHIVE_NAME
+    archive.touch()
+    archive.chmod(0o600)
+    archive_receipt = operation_root / operator._GUARD_ARCHIVE_RECEIPT_NAME
+    archive_receipt.touch()
+    archive_receipt.chmod(0o600)
+    current_guard = operation_root / "TRAINING_JOBS_API_PREFIX_GUARD.json"
+    current_guard.touch()
+    current_guard.chmod(0o600)
     fake_identity = SimpleNamespace(output_root=str(tmp_path / "unused-output"))
     plan = {
         "schema": training.SCHEMA,
@@ -504,14 +512,33 @@ def test_prod10_inspector_reads_only_allowlisted_path_metadata(
     assert result["schema"] == operator.MANIFEST_RESULT_SCHEMA
     assert result["status"] == "passed"
     assert result["phase"] == "inspect"
-    assert result["contents_read"] is False
+    assert result["contents_exported"] is False
     assert result["nested_jobs_created"] == result["gpus"] == 0
-    assert result["paths"]["guard"]["state"] == "present"
+    assert result["paths"]["v3_guard_archive"]["state"] == "present"
+    assert result["paths"]["v3_guard_archive_receipt"]["state"] == "present"
+    assert result["paths"]["current_guard"]["state"] == "present"
     assert result["paths"]["create_journal"] == {"state": "absent"}
     assert result["paths"]["creator_binding"] == {"state": "absent"}
-    assert set(result["paths"]) == {"guard", "create_journal", "creator_binding"}
-    assert result["launch_v3_failure_sha256"] == operator.launch_v3_failure_binding()["sha256"]
-    assert result["launch_boundary"] == "after_guard_before_intent"
+    assert set(result["paths"]) == {
+        "v3_guard_archive",
+        "v3_guard_archive_receipt",
+        "current_guard",
+        "create_journal",
+        "creator_binding",
+    }
+    assert result["launch_v4_failure_sha256"] == operator.launch_v4_failure_binding()["sha256"]
+    assert result["launch_boundary"] == "after_new_guard_before_intent"
+    for metadata in result["paths"].values():
+        assert set(metadata) <= {"state", "kind", "mode", "mtime_ns", "sha256"}
+        assert not {"uid", "gid", "readable", "traversable", "path", "content"} & set(
+            metadata
+        )
+        if metadata["state"] == "present":
+            assert metadata["kind"] == "regular"
+            assert metadata["sha256"] == (
+                "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            )
+            assert type(metadata["mtime_ns"]) is int
     encoded = json.dumps(result, sort_keys=True, separators=(",", ":"))
     assert len(encoded.encode()) < 3900
     assert str(tmp_path) not in encoded
@@ -527,24 +554,130 @@ def test_prod10_inspector_reads_only_allowlisted_path_metadata(
 @pytest.mark.parametrize(
     ("states", "expected"),
     [
-        (("absent", "absent", "absent"), "before_guard_or_guard_write"),
-        (("present", "absent", "absent"), "after_guard_before_intent"),
-        (("present", "present", "absent"), "intent_crossed_never_retry"),
-        (("present", "present", "present"), "binding_present"),
-        (("absent", "present", "absent"), "indeterminate_or_inconsistent"),
-        (("lstat_error", "absent", "absent"), "indeterminate_or_inconsistent"),
+        (
+            ("absent", "absent", "present", "absent", "absent"),
+            "before_v3_guard_archive_or_archive_write",
+        ),
+        (
+            ("present", "absent", "absent", "absent", "absent"),
+            "v3_guard_archived_receipt_missing",
+        ),
+        (
+            ("present", "present", "absent", "absent", "absent"),
+            "after_v3_guard_archive_before_new_guard",
+        ),
+        (
+            ("present", "present", "present", "absent", "absent"),
+            "after_new_guard_before_intent",
+        ),
+        (
+            ("present", "present", "present", "present", "absent"),
+            "intent_crossed_never_retry",
+        ),
+        (
+            ("present", "present", "present", "present", "present"),
+            "binding_present",
+        ),
+        (
+            ("absent", "present", "absent", "absent", "absent"),
+            "indeterminate_or_inconsistent",
+        ),
+        (
+            ("lstat_error", "absent", "present", "absent", "absent"),
+            "indeterminate_or_inconsistent",
+        ),
     ],
 )
 def test_prod10_inspection_boundary_is_fixed_and_fail_closed(
-    states: tuple[str, str, str], expected: str
+    states: tuple[str, str, str, str, str], expected: str
 ) -> None:
+    present = {
+        "state": "present",
+        "kind": "regular",
+        "mode": "0600",
+        "mtime_ns": 1,
+        "sha256": "sha256:" + "1" * 64,
+    }
     probes = {
-        name: {"state": state}
+        name: dict(present) if state == "present" else {"state": state}
         for name, state in zip(
-            ("guard", "create_journal", "creator_binding"), states, strict=True
+            (
+                "v3_guard_archive",
+                "v3_guard_archive_receipt",
+                "current_guard",
+                "create_journal",
+                "creator_binding",
+            ),
+            states,
+            strict=True,
         )
     }
     assert operator._inspection_boundary(probes) == expected
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    [
+        {
+            "state": "present",
+            "kind": "symlink",
+            "mode": "0777",
+            "mtime_ns": 1,
+            "sha256": None,
+        },
+        {
+            "state": "present",
+            "kind": "directory",
+            "mode": "0700",
+            "mtime_ns": 1,
+            "sha256": None,
+        },
+        {
+            "state": "present",
+            "kind": "regular",
+            "mode": "0600",
+            "mtime_ns": 1,
+            "sha256": None,
+        },
+    ],
+)
+def test_prod10_inspection_boundary_rejects_noncanonical_present_marker(
+    malformed: dict[str, object],
+) -> None:
+    present = {
+        "state": "present",
+        "kind": "regular",
+        "mode": "0600",
+        "mtime_ns": 1,
+        "sha256": "sha256:" + "1" * 64,
+    }
+    probes = {
+        "v3_guard_archive": dict(present),
+        "v3_guard_archive_receipt": dict(present),
+        "current_guard": malformed,
+        "create_journal": {"state": "absent"},
+        "creator_binding": {"state": "absent"},
+    }
+
+    assert operator._inspection_boundary(probes) == "indeterminate_or_inconsistent"
+
+
+def test_prod10_inspection_digest_never_follows_symlinks(tmp_path: Path) -> None:
+    target = tmp_path / "private-target"
+    target.write_text("private contents must not be exported")
+    link = tmp_path / "marker"
+    link.symlink_to(target)
+
+    observed = operator._inspect_path(link)
+
+    assert observed == {
+        "state": "present",
+        "kind": "symlink",
+        "mode": f"{stat.S_IMODE(link.lstat().st_mode):04o}",
+        "mtime_ns": link.lstat().st_mtime_ns,
+        "sha256": None,
+    }
+    assert "private" not in json.dumps(observed, sort_keys=True)
 
 
 _PRE_GUARD_STAGES = (

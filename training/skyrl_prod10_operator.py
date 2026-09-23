@@ -10,6 +10,7 @@ terminal status, receipt capture, and confirmed resource release.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import stat
@@ -46,7 +47,7 @@ OPERATOR_NAMES = {
     "manifest": "chris-q38-prod10-manifest-operator-v1",
     "preflight": "chris-q38-prod10-preflight-operator-v2",
     "launch": "chris-q38-prod10-launch-operator-v4",
-    "inspect": "chris-q38-prod10-launch-inspect-v4",
+    "inspect": "chris-q38-prod10-launch-inspect-v5",
     "probe": "chris-q38-prod10-launch-probe-v9",
 }
 _LAUNCH_V1_FAILURE = {
@@ -357,6 +358,61 @@ _INSPECT_V4_SUCCESS = {
     "resources_absent": True,
     "gpus": 0,
 }
+_LAUNCH_V4_FAILURE = {
+    "schema": "cyber_skyrl_prod10_launch_failure_binding_v3",
+    "status": "failed_before_gpu_create_all_outer_resources_released",
+    "operator_name": "chris-q38-prod10-launch-operator-v4",
+    "source_head": "49c88fe78c8f2763aaa452e0ac484bdd5c82ea1f",
+    "packet_sha256": (
+        "sha256:ec3170312582c30d7a92cd0f76ea24594af0f55c33ac643d138d4312e081b48d"
+    ),
+    "source_sha256": (
+        "sha256:392769fa400aef53404d9fd23440c99dd57ad701e46a6edf31132f5e168a4567"
+    ),
+    "job_manifest_sha256": (
+        "sha256:7d89fb701828bfceb3befe83cb4c9fc5fdbbc86f4e6fdc97f87e3524ff811286"
+    ),
+    "operator_job_uid": "ddafc5eb-4203-479b-901f-55dcac7d4858",
+    "operator_pod_name": "chris-q38-prod10-launch-operator-v4-bbmwn",
+    "operator_pod_uid": "0fc22f04-aee8-4d08-b9ab-c2f7285962e1",
+    "operator_workload_name": "job-chris-q38-prod10-launch-operator-v4-e9449",
+    "operator_workload_uid": "f52b78ad-6b8a-46e7-8839-c7e702913665",
+    "source_config_map_name": "chris-q38-prod10-launch-operator-v4-source",
+    "source_config_map_uid": "ea7f16ec-7971-4107-aad8-57c4dcf45dbd",
+    "packet_config_map_name": "chris-q38-prod10-launch-operator-v4-packet",
+    "packet_config_map_uid": "542bee3a-4379-4731-bf1b-260d8de63a34",
+    "create_journal_file_sha256": (
+        "sha256:eee84b4513d2834c88df10c3f1ad9f371a95c35c58e5d4e78500f4a1c7906127"
+    ),
+    "observer_armed_sha256": (
+        "sha256:3e8440f64ee8f2de0e8290e08fb176b96363a6b0b6c5346d25ed626c0f67e102"
+    ),
+    "creator_binding_sha256": (
+        "sha256:256971c145129832e32b0cc3d91cd63d58a95fafdf582a4298bce634d4b9638d"
+    ),
+    "failure_receipt_sha256": (
+        "sha256:6f7d724ae7a0a61179616871895c0e2cbcb496ef351279527c6d6fb4b6f145c1"
+    ),
+    "observer_result_sha256": (
+        "sha256:e9e0894282c6da82781a0f4d815a4c5755ed52c523645f9a71998f0187d31c14"
+    ),
+    "release_observed_at": "2026-09-23T11:01:14Z",
+    "terminal_status": "Failed",
+    "exit_codes": [1],
+    "restarts": 0,
+    "inner_gpu_run_created": False,
+    "workload_resources_absent": True,
+    "config_map_cleanup_result_sha256": (
+        "sha256:6fdc13fc0c24a722b7b9c1c8b0d7667e4f0e420b13109ce9de3fc4ba565738bd"
+    ),
+    "config_map_cleanup_result_file_sha256": (
+        "sha256:8f36bdf485cf5653ae50deda1f6cc1380925add89d1aaf86128c42da9f66a379"
+    ),
+    "config_map_cleanup_observed_at": "2026-09-23T11:04:11Z",
+    "config_maps_uid_precondition_deleted": True,
+    "config_maps_absent": True,
+    "gpus": 0,
+}
 _PREFLIGHT_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_preflight_v1_failure_recovery_v1",
     "status": "failed_closed_released",
@@ -556,6 +612,11 @@ def inspect_v4_success_binding() -> dict[str, Any]:
     return _seal(_INSPECT_V4_SUCCESS)
 
 
+def launch_v4_failure_binding() -> dict[str, Any]:
+    """Bind the exact released v4 outer and UID-CAS ConfigMap cleanup."""
+    return _seal(_LAUNCH_V4_FAILURE)
+
+
 def _write_once(path: Path, value: dict[str, Any]) -> None:
     path.parent.mkdir(parents=False, exist_ok=True)
     descriptor = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -706,8 +767,8 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
         if duplicate.get("context") != direct.DEV_CONTEXT:
             raise ValueError("prod10 operator development proof changed")
     elif phase == "inspect":
-        if packet.get("launch_v3_failure") != launch_v3_failure_binding():
-            raise ValueError("prod10 launch inspection predecessor changed")
+        if packet.get("launch_v4_failure") != launch_v4_failure_binding():
+            raise ValueError("prod10 launch-v4 inspection predecessor changed")
         plan = packet.get("plan")
         if not isinstance(plan, dict):
             raise ValueError("prod10 launch inspection plan changed")
@@ -1674,7 +1735,7 @@ def _fresh_capacity_census(
 
 
 def _inspect_path(path: Path) -> dict[str, Any]:
-    """Return bounded lstat/access metadata without reading file contents."""
+    """Return bounded file metadata plus a digest, never a path or contents."""
     try:
         identity = path.lstat()
     except FileNotFoundError:
@@ -1690,44 +1751,123 @@ def _inspect_path(path: Path) -> dict[str, Any]:
         if stat.S_ISLNK(identity.st_mode)
         else "other"
     )
-    return {
+    result: dict[str, Any] = {
         "state": "present",
         "kind": kind,
-        "uid": identity.st_uid,
-        "gid": identity.st_gid,
         "mode": f"{stat.S_IMODE(identity.st_mode):04o}",
-        "readable": os.access(path, os.R_OK),
-        "traversable": os.access(path, os.X_OK) if kind == "directory" else False,
+        "mtime_ns": identity.st_mtime_ns,
+        "sha256": None,
     }
+    if kind != "regular":
+        return result
+    descriptor = -1
+    try:
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        opened = os.fstat(descriptor)
+        if (
+            not stat.S_ISREG(opened.st_mode)
+            or (opened.st_dev, opened.st_ino) != (identity.st_dev, identity.st_ino)
+            or opened.st_size > 1024 * 1024
+        ):
+            return {"state": "digest_error"}
+        hasher = hashlib.sha256()
+        while chunk := os.read(descriptor, 65536):
+            hasher.update(chunk)
+        finished = os.fstat(descriptor)
+        if (
+            (finished.st_dev, finished.st_ino, finished.st_size, finished.st_mtime_ns)
+            != (opened.st_dev, opened.st_ino, opened.st_size, opened.st_mtime_ns)
+        ):
+            return {"state": "digest_error"}
+        result["sha256"] = "sha256:" + hasher.hexdigest()
+        return result
+    except OSError:
+        return {"state": "digest_error"}
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
 
 
 def _inspection_boundary(probes: dict[str, dict[str, Any]]) -> str:
+    marker_names = (
+        "v3_guard_archive",
+        "v3_guard_archive_receipt",
+        "current_guard",
+        "create_journal",
+        "creator_binding",
+    )
+    for name in marker_names:
+        metadata = probes.get(name)
+        if not isinstance(metadata, dict):
+            return "indeterminate_or_inconsistent"
+        state = metadata.get("state")
+        if state == "absent":
+            if metadata != {"state": "absent"}:
+                return "indeterminate_or_inconsistent"
+            continue
+        if state != "present":
+            return "indeterminate_or_inconsistent"
+        marker_sha256 = metadata.get("sha256")
+        if (
+            set(metadata) != {"state", "kind", "mode", "mtime_ns", "sha256"}
+            or metadata.get("kind") != "regular"
+            or metadata.get("mode") != "0600"
+            or type(metadata.get("mtime_ns")) is not int
+            or metadata["mtime_ns"] < 0
+            or not isinstance(marker_sha256, str)
+            or not marker_sha256.startswith("sha256:")
+            or len(marker_sha256) != 71
+            or any(character not in "0123456789abcdef" for character in marker_sha256[7:])
+        ):
+            return "indeterminate_or_inconsistent"
     states = {
         name: probes[name].get("state")
-        for name in ("guard", "create_journal", "creator_binding")
+        for name in marker_names
     }
-    if "lstat_error" in states.values():
-        return "indeterminate_or_inconsistent"
     if states == {
-        "guard": "absent",
+        "v3_guard_archive": "absent",
+        "v3_guard_archive_receipt": "absent",
+        "current_guard": "present",
         "create_journal": "absent",
         "creator_binding": "absent",
     }:
-        return "before_guard_or_guard_write"
+        return "before_v3_guard_archive_or_archive_write"
     if states == {
-        "guard": "present",
+        "v3_guard_archive": "present",
+        "v3_guard_archive_receipt": "absent",
+        "current_guard": "absent",
         "create_journal": "absent",
         "creator_binding": "absent",
     }:
-        return "after_guard_before_intent"
+        return "v3_guard_archived_receipt_missing"
     if states == {
-        "guard": "present",
+        "v3_guard_archive": "present",
+        "v3_guard_archive_receipt": "present",
+        "current_guard": "absent",
+        "create_journal": "absent",
+        "creator_binding": "absent",
+    }:
+        return "after_v3_guard_archive_before_new_guard"
+    if states == {
+        "v3_guard_archive": "present",
+        "v3_guard_archive_receipt": "present",
+        "current_guard": "present",
+        "create_journal": "absent",
+        "creator_binding": "absent",
+    }:
+        return "after_new_guard_before_intent"
+    if states == {
+        "v3_guard_archive": "present",
+        "v3_guard_archive_receipt": "present",
+        "current_guard": "present",
         "create_journal": "present",
         "creator_binding": "absent",
     }:
         return "intent_crossed_never_retry"
     if states == {
-        "guard": "present",
+        "v3_guard_archive": "present",
+        "v3_guard_archive_receipt": "present",
+        "current_guard": "present",
         "create_journal": "present",
         "creator_binding": "present",
     }:
@@ -1736,7 +1876,7 @@ def _inspection_boundary(probes: dict[str, dict[str, Any]]) -> str:
 
 
 def run_inspect(packet: dict[str, Any]) -> dict[str, Any]:
-    """Inspect only three allowlisted SFS marker paths after the failed v3 outer."""
+    """Inspect only five allowlisted SFS marker paths after the failed v4 outer."""
     identity = _identity(packet["identity"])
     plan = packet.get("plan")
     if not isinstance(plan, dict):
@@ -1750,7 +1890,13 @@ def run_inspect(packet: dict[str, Any]) -> dict[str, Any]:
     )
     operation_root = hardening.training_operation_root(plan)
     probes = {
-        "guard": _inspect_path(direct.jobs_api_guard_path(operation_root, "training")),
+        "v3_guard_archive": _inspect_path(operation_root / _GUARD_ARCHIVE_NAME),
+        "v3_guard_archive_receipt": _inspect_path(
+            operation_root / _GUARD_ARCHIVE_RECEIPT_NAME
+        ),
+        "current_guard": _inspect_path(
+            direct.jobs_api_guard_path(operation_root, "training")
+        ),
         "create_journal": _inspect_path(operation_root / "PROD10_DIRECT_V3_CREATE.jsonl"),
         "creator_binding": _inspect_path(
             hardening.creator_binding_path(operation_root, "training")
@@ -1764,11 +1910,11 @@ def run_inspect(packet: dict[str, Any]) -> dict[str, Any]:
             "schema": MANIFEST_RESULT_SCHEMA,
             "status": "passed",
             "phase": "inspect",
-            "launch_v3_failure_sha256": launch_v3_failure_binding()["sha256"],
+            "launch_v4_failure_sha256": launch_v4_failure_binding()["sha256"],
             "preflight_launch_sha256": launch["sha256"],
             "paths": probes,
             "launch_boundary": _inspection_boundary(probes),
-            "contents_read": False,
+            "contents_exported": False,
             "nested_jobs_created": 0,
             "gpus": 0,
         }
