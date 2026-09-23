@@ -166,7 +166,15 @@ def test_prepare_replaces_only_complete_seed56_pair(
         assert package.packet.identity["retry_limit"] == 0
         assert package.evaluation_config["max_reviewed_infrastructure_retries"] == 0
         assert package.job["metadata"]["annotations"]["fleet.ai/failure-alerts"] == "off"
-        assert package.job["spec"]["template"]["spec"]["priorityClassName"] == "c1"
+        pod = package.job["spec"]["template"]["spec"]
+        assert pod["automountServiceAccountToken"] is False
+        assert pod["priorityClassName"] == "c1"
+        assert (
+            package.job["spec"]["template"]["metadata"]["labels"][
+                "cyber-post-train.fleet.ai/postgres-client"
+            ]
+            == "true"
+        )
         assert "nvidia.com/gpu" not in json.dumps(package.job)
     assert task_rosters[0] == task_rosters[1]
     assert len(task_rosters[0]) == 17

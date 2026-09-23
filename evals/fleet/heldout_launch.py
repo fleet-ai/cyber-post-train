@@ -729,6 +729,8 @@ def build_package(packet_path: Path) -> Package:
     if not isinstance(template, dict) or not isinstance(template.get("spec"), dict):
         raise HeldoutLaunchError("Job Pod template is invalid")
     pod = template["spec"]
+    if pod.get("automountServiceAccountToken") is not False:
+        raise HeldoutLaunchError("held-out evaluator must disable service account token mounting")
     if pod.get("priorityClassName") != "c1" or pod.get("restartPolicy") != "Never":
         raise HeldoutLaunchError("held-out evaluator CPU policy is invalid")
     if "nodeName" in pod:

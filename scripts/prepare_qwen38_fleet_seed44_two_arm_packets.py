@@ -472,6 +472,7 @@ def _job(arm: dict[str, Any], config_name: str) -> dict[str, Any]:
                     }
                 },
                 "spec": {
+                    "automountServiceAccountToken": False,
                     "priorityClassName": "c1",
                     "restartPolicy": "Never",
                     "nodeSelector": {

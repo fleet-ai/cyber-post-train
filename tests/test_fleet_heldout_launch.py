@@ -257,6 +257,7 @@ def _packet(tmp_path: Path) -> Path:
             "activeDeadlineSeconds": 3600,
             "template": {
                 "spec": {
+                    "automountServiceAccountToken": False,
                     "priorityClassName": "c1",
                     "restartPolicy": "Never",
                     "containers": [
@@ -396,6 +397,29 @@ def _set_postgres_label(packet: Path, value: str | None) -> None:
     job_path.write_text(yaml.safe_dump(job), encoding="utf-8")
     raw["files"]["job"]["sha256"] = _sha(job_path)
     _reseal_packet(packet, raw)
+
+
+def _set_automount_service_account_token(packet: Path, value: bool | None) -> None:
+    raw = json.loads(packet.read_text())
+    job_path = packet.parent / raw["files"]["job"]["path"]
+    job = yaml.safe_load(job_path.read_text())
+    pod = job["spec"]["template"]["spec"]
+    if value is None:
+        pod.pop("automountServiceAccountToken", None)
+    else:
+        pod["automountServiceAccountToken"] = value
+    job_path.write_text(yaml.safe_dump(job), encoding="utf-8")
+    raw["files"]["job"]["sha256"] = _sha(job_path)
+    _reseal_packet(packet, raw)
+
+
+@pytest.mark.parametrize("value", [None, True])
+def test_missing_or_enabled_service_account_token_mount_fails_render(tmp_path, value):
+    packet = _packet(tmp_path)
+    _set_automount_service_account_token(packet, value)
+
+    with pytest.raises(launch.HeldoutLaunchError, match="service account token mounting"):
+        launch.build_package(packet)
 
 
 def test_non_database_job_is_unaffected_by_postgres_client_label_gate(tmp_path):
