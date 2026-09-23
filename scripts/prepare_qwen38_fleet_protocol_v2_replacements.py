@@ -30,6 +30,7 @@ INTENT_SCHEMA = "cyber_qwen38_fleet_protocol_v2_replica_migration_intent_v1"
 RECEIPT_SCHEMA = "cyber_qwen38_fleet_protocol_v2_replica_migration_receipt_v1"
 COMPARISON_DEFINITION_SCHEMA = "cyber_qwen38_fleet_dev17_pass8_comparison_definition_v2"
 RETIREMENT_EVIDENCE_SCHEMA = "cyber_qwen38_fleet_protocol_v2_retirement_evidence_v1"
+DAILY_BUDGET_EVIDENCE_SCHEMA = "cyber_qwen38_fleet_protocol_v2_daily_budget_evidence_v1"
 PROTOCOL_V2_STUDY_ID = "q38-dev17-base-step1000-p8-v2"
 PREDECESSOR_COMPARISON_DEFINITION_SHA256 = (
     "sha256:1154b450624a8b9a567464916da95874c44933175c408b86a80ff5bca0eada70"
@@ -43,6 +44,12 @@ RETIREMENT_POST = (
 )
 SEED51_INVALID_EVIDENCE = (
     ROOT / "docs/evidence/qwen38-fleet-dev17-seed51-base-invalid-replica-20260923.json"
+)
+SOURCE_LAUNCH_EVIDENCE = (
+    ROOT / "docs/evidence/qwen38-fleet-dev17-seed46to53-pass8-launch-20260923.json"
+)
+CANDIDATE_SUCCESSOR_CREATE_EVIDENCE = (
+    ROOT / "docs/evidence/qwen38-fleet-dev17-seed46to53-candidate-successors-20260923.json"
 )
 SOURCE_SEEDS = tuple(range(46, 54))
 FROZEN_INVALID_SEEDS = (47, 51, 52, 53)
@@ -68,6 +75,69 @@ INTENT_FIELDS = {
     "sha256",
 }
 INVALID_FIELDS = {"seed", "reason_class", "evidence_receipt_sha256s"}
+FROZEN_INVALID_REPLICA_EVIDENCE: dict[int, dict[str, Any]] = {
+    47: {
+        "reason_class": "terminal_replica_incomplete",
+        "evidence_receipt_sha256s": [
+            "sha256:9bd0f1c415d32cdeae47744cbaa140c5e39781b7790ea318573d38772d8dd5bf",
+            "sha256:a8d3ca88eaab62d4642ca3fab0fdf17b21a9eb0c92bb5de8971d8d0273928b0e",
+            "sha256:7bf0cbc8715c51d6945bb133357f392646cf07ccc7e71a84dc887a30c902e083",
+        ],
+    },
+    51: {
+        "reason_class": "mixed_infrastructure_invalid_replica",
+        "evidence_receipt_sha256s": [
+            "sha256:572e330d1340e83d2aaf188665c0fd99b401e33eeec5f858717e2db60952bfa3"
+        ],
+    },
+    52: {
+        "reason_class": "mixed_infrastructure_invalid_replica",
+        "evidence_receipt_sha256s": [
+            "sha256:3a247e72e61da31593223d5fa46f902e4ff546e76277be3e27ef7407d91348c8",
+            "sha256:e1718d127e4a2da1667eaa7d2c0a7d1d219e2e0bef3dcaabd4d46aa5f5b8f97b",
+            "sha256:9a1296727060d303a3fe6d81fe51d2021482113c0dba8f4a9c4b4ba5efb1ccf3",
+            "sha256:952bbaaabbb6c3a2fa105bb3780090d2ff8cc749345ba65904fc401ddb152aad",
+        ],
+    },
+    53: {
+        "reason_class": "replica_not_started",
+        "evidence_receipt_sha256s": [
+            "sha256:fa656de6282a504ad2570a65078625a5c35e79afcf5d4d120c0803a75912ff70",
+            "sha256:ef6e969b305cecf8fa5bff882713d87bf3f8c21a44ced4f0ce54119c46c049e1",
+            "sha256:9a1296727060d303a3fe6d81fe51d2021482113c0dba8f4a9c4b4ba5efb1ccf3",
+            "sha256:952bbaaabbb6c3a2fa105bb3780090d2ff8cc749345ba65904fc401ddb152aad",
+        ],
+    },
+}
+RETIREMENT_AUTHORIZATION_GATE = (
+    "do_not_delete_until_parent_confirms_protocol_v2_receipt_and_pr_accepted"
+)
+RETIREMENT_DELETE_ONLY = [
+    "Job/chris-q38-dev17-s52-t3k32s1000-p1-v2@55233036-1d27-4b4a-9f46-9d8e8e04a36f",
+    "Workload/job-chris-q38-dev17-s52-t3k32s1000-p1-v2-09558@87df4274-bb1e-4b20-9239-554d3ab8b230",
+    "Job/chris-q38-dev17-s53-t3k32s1000-p1-v2@76ade7d1-9c35-4563-9e14-e690e05ae52e",
+    "Workload/job-chris-q38-dev17-s53-t3k32s1000-p1-v2-918c5@4a11b78c-6a00-4f47-a6b5-6d13599404c9",
+]
+RETIREMENT_METHOD = (
+    "re-read each Job and owned Workload; require same UID, "
+    "suspended/unstarted/unadmitted/zero Pods; issue foreground Job DELETE with UID and "
+    "current resourceVersion Preconditions; verify owner Workload is garbage-collected; "
+    "fail closed on any drift"
+)
+RETIREMENT_PRESERVE_PLAN = [
+    "both immutable ConfigMaps",
+    "both absent output paths",
+    "shared Secrets",
+    "all other Jobs, Workloads, Pods, outputs and databases",
+]
+RETIREMENT_PRESERVED_SCOPE = [
+    "ConfigMap/chris-q38-dev17-s52-t3k32s1000-code-v2@2d0b8155-031d-4f3d-943a-0e7308d147c0",
+    "ConfigMap/chris-q38-dev17-s53-t3k32s1000-code-v2@b9e2e70c-780a-4203-9686-136b6928eea8",
+    "both exact output paths (absent)",
+    "both exact dedicated databases (absent)",
+    "shared Secrets",
+    "all other Jobs, Workloads, Pods, outputs and databases",
+]
 
 
 def _canonical(value: Any) -> str:
@@ -161,6 +231,12 @@ def _load_intent(
         raise ValueError("invalid original seeds must be unique and sorted ascending")
     if seeds != list(FROZEN_INVALID_SEEDS):
         raise ValueError("migration intent differs from the frozen invalid-replica roster")
+    expected_rows = [
+        {"seed": seed, **FROZEN_INVALID_REPLICA_EVIDENCE[seed]}
+        for seed in FROZEN_INVALID_SEEDS
+    ]
+    if rows != expected_rows:
+        raise ValueError("migration intent differs from the exact frozen evidence contract")
     return value
 
 
@@ -335,12 +411,49 @@ def _retirement_evidence(
     post = _verified(post_path, "candidate retirement receipt")
     preflight_jobs = preflight.get("jobs")
     retirements = post.get("retirements")
+    expected_preflight_fields = {
+        "authorization_gate",
+        "classification",
+        "jobs",
+        "kube_context",
+        "mutation_performed",
+        "namespace",
+        "observed_at",
+        "prompts_or_traces_included",
+        "retirement_plan",
+        "schema",
+        "scores_included",
+        "sha256",
+    }
+    expected_post_fields = {
+        "classification",
+        "kube_context",
+        "namespace",
+        "observed_at",
+        "post_verification",
+        "prompts_or_traces_included",
+        "retirements",
+        "schema",
+        "scope",
+        "scores_included",
+        "sha256",
+        "source_preflight",
+    }
     if (
-        preflight.get("schema") != "cyber_fleet_eval_queued_job_retirement_preflight_v1"
+        set(preflight) != expected_preflight_fields
+        or set(post) != expected_post_fields
+        or preflight.get("schema") != "cyber_fleet_eval_queued_job_retirement_preflight_v1"
         or preflight.get("classification") != "queued_unstarted_no_execution"
         or preflight.get("mutation_performed") is not False
         or preflight.get("scores_included") is not False
         or preflight.get("prompts_or_traces_included") is not False
+        or preflight.get("authorization_gate") != RETIREMENT_AUTHORIZATION_GATE
+        or preflight.get("retirement_plan")
+        != {
+            "delete_only": RETIREMENT_DELETE_ONLY,
+            "method": RETIREMENT_METHOD,
+            "preserve": RETIREMENT_PRESERVE_PLAN,
+        }
         or not isinstance(preflight_jobs, list)
         or len(preflight_jobs) != 2
         or post.get("schema") != "cyber_fleet_eval_queued_job_retirement_v1"
@@ -351,6 +464,11 @@ def _retirement_evidence(
         or len(retirements) != 2
         or post.get("namespace") != preflight.get("namespace")
         or post.get("kube_context") != preflight.get("kube_context")
+        or post.get("scope")
+        != {
+            "deleted_only": RETIREMENT_DELETE_ONLY,
+            "preserved": RETIREMENT_PRESERVED_SCOPE,
+        }
         or post.get("source_preflight")
         != {
             "path": _path_label(preflight_path),
@@ -375,8 +493,21 @@ def _retirement_evidence(
         postconditions = after.get("postconditions", {})
         config_before = before.get("config_map", {})
         config_after = postconditions.get("config_map_preserved", {})
+        expected_delete_response = (
+            {
+                "accepted": True,
+                "capture": (
+                    "API returned before a local result-serialization AttributeError; "
+                    "UID-preconditioned deletion is independently proven by exact "
+                    "post-state absence"
+                ),
+            }
+            if seed == 52
+            else {"accepted": True, "kind": "Job"}
+        )
         if (
-            job_before.get("name") != job_after.get("name")
+            after.get("delete_response") != expected_delete_response
+            or job_before.get("name") != job_after.get("name")
             or job_before.get("uid") != job_after.get("uid")
             or job_before.get("resource_version")
             != job_after.get("delete_precondition_resource_version")
@@ -506,6 +637,103 @@ def _seed51_invalid_evidence() -> dict[str, Any]:
         or residual.get("max_retries") != 0
     ):
         raise ValueError("seed-51 invalid-replica evidence differs")
+    return value
+
+
+def _daily_budget_evidence(retirement: dict[str, Any]) -> dict[str, Any]:
+    source_launch = _verified(SOURCE_LAUNCH_EVIDENCE, "source launch evidence")
+    successor_create = _verified(
+        CANDIDATE_SUCCESSOR_CREATE_EVIDENCE, "candidate successor create evidence"
+    )
+    source_failure = successor_create.get("source_failure", {})
+    packet_preparation = successor_create.get("packet_preparation", {})
+    successor_rows = successor_create.get("rows")
+    privacy = successor_create.get("privacy", {})
+    source_evaluators = source_launch.get("evaluators")
+    if (
+        source_launch.get("sha256")
+        != "sha256:1154b450624a8b9a567464916da95874c44933175c408b86a80ff5bca0eada70"
+        or source_launch.get("schema")
+        != "cyber_qwen38_fleet_dev17_seed46to53_pass8_launch_v1"
+        or not str(source_launch.get("observed_at", "")).startswith("2026-09-23T")
+        or source_launch.get("study", {}).get("seeds") != list(SOURCE_SEEDS)
+        or source_launch.get("study", {}).get("sessions_per_arm") != 136
+        or source_launch.get("study", {}).get("total_sessions") != 272
+        or not isinstance(source_evaluators, list)
+        or len(source_evaluators) != 16
+        or successor_create.get("sha256")
+        != "sha256:da2a8d3e40e7c8c925164300a66976626b4c36329f2ffe20ad5627846f0f61c8"
+        or successor_create.get("schema")
+        != "cyber_qwen38_fleet_dev17_candidate_successor_create_v1"
+        or not str(successor_create.get("observed_at", "")).startswith("2026-09-23T")
+        or source_failure.get("seeds") != list(SOURCE_SEEDS)
+        or source_failure.get("uniform_class") != "missing_local_model_artifact_binding"
+        or source_failure.get("all_source_jobs_terminal_failed") is not True
+        or source_failure.get("all_source_databases_zero_rows") is not True
+        or source_failure.get("all_source_outputs_absent") is not True
+        or source_failure.get("candidate_sessions_created") != 0
+        or source_failure.get("valid_outcomes_replayed") is not False
+        or packet_preparation.get("seed_count") != 8
+        or packet_preparation.get("candidate_sessions") != 136
+        or packet_preparation.get("pass_k_per_seed") != 1
+        or packet_preparation.get("retries") != 0
+        or not isinstance(successor_rows, list)
+        or [row.get("seed") for row in successor_rows] != list(SOURCE_SEEDS)
+        or privacy
+        != {
+            "credentials_included": False,
+            "prompts_responses_flags_answers_scores_or_trace_content_included": False,
+            "scores_read": False,
+        }
+        or retirement.get("model_rollouts") != 0
+        or [row.get("seed") for row in retirement.get("targets", [])] != [52, 53]
+        or retirement.get("outputs_or_databases_deleted") is not False
+    ):
+        raise ValueError("daily budget source evidence differs from the sealed campaign")
+
+    original_base = 136
+    failed_original_candidate = 0
+    successor_seeds = [46, 47, 48, 49, 50, 51]
+    successor_reserved = len(successor_seeds) * TASKS_PER_ARM
+    replacements = len(FROZEN_INVALID_SEEDS) * len(ARMS) * TASKS_PER_ARM
+    total = original_base + failed_original_candidate + successor_reserved + replacements
+    value = {
+        "schema": DAILY_BUDGET_EVIDENCE_SCHEMA,
+        "budget_date_utc": "2026-09-23",
+        "scope": PROTOCOL_V2_STUDY_ID,
+        "authoritative_inputs": {
+            "source_launch": {
+                "path": _path_label(SOURCE_LAUNCH_EVIDENCE),
+                "file_sha256": _file_sha(SOURCE_LAUNCH_EVIDENCE),
+                "receipt_sha256": source_launch["sha256"],
+            },
+            "candidate_successor_create": {
+                "path": _path_label(CANDIDATE_SUCCESSOR_CREATE_EVIDENCE),
+                "file_sha256": _file_sha(CANDIDATE_SUCCESSOR_CREATE_EVIDENCE),
+                "receipt_sha256": successor_create["sha256"],
+            },
+            "candidate_seed52_53_retirement": {
+                "receipt_sha256": retirement["sha256"],
+                "model_rollouts": 0,
+            },
+        },
+        "line_items": {
+            "original_base_seed46_to_53": original_base,
+            "failed_original_candidate_pre_model": failed_original_candidate,
+            "candidate_successor_nonretired_seeds": successor_seeds,
+            "candidate_successor_nonretired_rollouts_reserved": successor_reserved,
+            "candidate_successor_retired_before_start_seeds": [52, 53],
+            "candidate_successor_retired_before_start_rollouts": 0,
+            "protocol_v2_whole_pair_replacements_planned": replacements,
+            "scoring_or_metadata_cpu_model_rollouts": 0,
+        },
+        "cumulative_model_rollouts_consumed_or_reserved": total,
+        "daily_rollout_cap": DAILY_ROLLOUT_CAP,
+        "within_daily_cap": total <= DAILY_ROLLOUT_CAP,
+        "score_values_read": False,
+        "prompts_responses_flags_rewards_or_trace_content_read": False,
+    }
+    value["sha256"] = _canonical(value)
     return value
 
 
@@ -707,8 +935,16 @@ def prepare(
         source._write_json(  # noqa: SLF001
             temporary / "RETIREMENT_EVIDENCE.json", retirement_evidence
         )
-        planned = len(mapping) * len(ARMS) * TASKS_PER_ARM
-        cumulative_rollouts = 136 + 102 + planned
+        daily_budget_evidence = _daily_budget_evidence(retirement_evidence)
+        source._write_json(  # noqa: SLF001
+            temporary / "DAILY_BUDGET_EVIDENCE.json", daily_budget_evidence
+        )
+        planned = daily_budget_evidence["line_items"][
+            "protocol_v2_whole_pair_replacements_planned"
+        ]
+        cumulative_rollouts = daily_budget_evidence[
+            "cumulative_model_rollouts_consumed_or_reserved"
+        ]
         receipt = {
             "schema": RECEIPT_SCHEMA,
             "source": {
@@ -720,15 +956,14 @@ def prepare(
             },
             "migration_intent_sha256": intent["sha256"],
             "sanitized_invalid_replica_evidence": [
-                {
-                    "seed": 51,
-                    "arm_id": "base",
-                    "path": str(SEED51_INVALID_EVIDENCE.relative_to(ROOT)),
-                    "file_sha256": _file_sha(SEED51_INVALID_EVIDENCE),
-                    "receipt_sha256": seed51_evidence["sha256"],
-                    "reason_class": seed51_evidence["classification"]["reason_class"],
-                }
+                {"seed": seed, **FROZEN_INVALID_REPLICA_EVIDENCE[seed]}
+                for seed in FROZEN_INVALID_SEEDS
             ],
+            "checked_in_seed51_invalid_evidence": {
+                "path": str(SEED51_INVALID_EVIDENCE.relative_to(ROOT)),
+                "file_sha256": _file_sha(SEED51_INVALID_EVIDENCE),
+                "receipt_sha256": seed51_evidence["sha256"],
+            },
             "comparison_definition": comparison_definition,
             "comparison_definition_file_sha256": _file_sha(
                 temporary / "COMPARISON_DEFINITION.json"
@@ -749,6 +984,12 @@ def prepare(
                 "model_rollouts": 0,
                 "outputs_or_databases_deleted": False,
             },
+            "daily_budget_evidence": {
+                "sha256": daily_budget_evidence["sha256"],
+                "file_sha256": _file_sha(temporary / "DAILY_BUDGET_EVIDENCE.json"),
+                "budget_date_utc": daily_budget_evidence["budget_date_utc"],
+                "scope": daily_budget_evidence["scope"],
+            },
             "scientific_identity": {
                 "task_count_per_arm": TASKS_PER_ARM,
                 "comparison_arms": list(ARMS),
@@ -763,15 +1004,30 @@ def prepare(
             "capacity": {
                 "new_replacement_rollouts": planned,
                 "final_comparison_rollouts": (TASKS_PER_ARM * len(SOURCE_SEEDS) * len(ARMS)),
-                "original_base_rollouts": 136,
-                "original_candidate_started_seeds": [46, 47, 48, 49, 50, 51],
-                "original_candidate_started_seed_rollouts": 102,
-                "original_candidate_retired_before_start_seeds": [52, 53],
-                "original_candidate_retired_before_start_rollouts": 0,
-                "scoring_or_metadata_cpu_model_rollouts": 0,
+                "original_base_rollouts": daily_budget_evidence["line_items"][
+                    "original_base_seed46_to_53"
+                ],
+                "original_candidate_pre_model_rollouts": daily_budget_evidence["line_items"][
+                    "failed_original_candidate_pre_model"
+                ],
+                "candidate_successor_nonretired_seeds": daily_budget_evidence["line_items"][
+                    "candidate_successor_nonretired_seeds"
+                ],
+                "candidate_successor_nonretired_rollouts_reserved": daily_budget_evidence[
+                    "line_items"
+                ]["candidate_successor_nonretired_rollouts_reserved"],
+                "candidate_successor_retired_before_start_seeds": daily_budget_evidence[
+                    "line_items"
+                ]["candidate_successor_retired_before_start_seeds"],
+                "candidate_successor_retired_before_start_rollouts": daily_budget_evidence[
+                    "line_items"
+                ]["candidate_successor_retired_before_start_rollouts"],
+                "scoring_or_metadata_cpu_model_rollouts": daily_budget_evidence["line_items"][
+                    "scoring_or_metadata_cpu_model_rollouts"
+                ],
                 "cumulative_model_rollouts_consumed_or_planned_today": cumulative_rollouts,
-                "daily_rollout_cap": intent["daily_rollout_cap"],
-                "within_daily_cap": cumulative_rollouts <= intent["daily_rollout_cap"],
+                "daily_rollout_cap": daily_budget_evidence["daily_rollout_cap"],
+                "within_daily_cap": daily_budget_evidence["within_daily_cap"],
             },
             "selection": {
                 "selection_sha256": task_set["selection_sha256"],

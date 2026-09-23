@@ -54,12 +54,6 @@ def _intent(
 ) -> Path:
     receipt_path = source_packets / "PREPARATION_RECEIPT.json"
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
-    reasons = {
-        47: "terminal_replica_incomplete",
-        51: "mixed_infrastructure_invalid_replica",
-        52: "mixed_infrastructure_invalid_replica",
-        53: "replica_not_started",
-    }
     body = {
         "schema": replacements.INTENT_SCHEMA,
         "source_protocol_study_id": source.PROTOCOL_STUDY_ID,
@@ -68,16 +62,13 @@ def _intent(
         "invalid_original_replicas": [
             {
                 "seed": seed,
-                "reason_class": reasons.get(seed, "terminal_replica_incomplete"),
-                "evidence_receipt_sha256s": [
-                    (
-                        json.loads(
-                            replacements.SEED51_INVALID_EVIDENCE.read_text(encoding="utf-8")
-                        )["sha256"]
-                        if seed == 51
-                        else "sha256:" + f"{seed:064x}"
-                    )
-                ],
+                **replacements.FROZEN_INVALID_REPLICA_EVIDENCE.get(
+                    seed,
+                    {
+                        "reason_class": "terminal_replica_incomplete",
+                        "evidence_receipt_sha256s": ["sha256:" + f"{seed:064x}"],
+                    },
+                ),
             }
             for seed in seeds
         ],
@@ -146,10 +137,11 @@ def test_preparer_replaces_complete_pairs_and_binds_new_protocols(
         "new_replacement_rollouts": 136,
         "final_comparison_rollouts": 272,
         "original_base_rollouts": 136,
-        "original_candidate_started_seeds": [46, 47, 48, 49, 50, 51],
-        "original_candidate_started_seed_rollouts": 102,
-        "original_candidate_retired_before_start_seeds": [52, 53],
-        "original_candidate_retired_before_start_rollouts": 0,
+        "original_candidate_pre_model_rollouts": 0,
+        "candidate_successor_nonretired_seeds": [46, 47, 48, 49, 50, 51],
+        "candidate_successor_nonretired_rollouts_reserved": 102,
+        "candidate_successor_retired_before_start_seeds": [52, 53],
+        "candidate_successor_retired_before_start_rollouts": 0,
         "scoring_or_metadata_cpu_model_rollouts": 0,
         "cumulative_model_rollouts_consumed_or_planned_today": 374,
         "daily_rollout_cap": 500,
@@ -161,19 +153,18 @@ def test_preparer_replaces_complete_pairs_and_binds_new_protocols(
         "infrastructure_reason_classes_only": True,
     }
     assert receipt["sanitized_invalid_replica_evidence"] == [
-        {
-            "seed": 51,
-            "arm_id": "base",
-            "path": ("docs/evidence/qwen38-fleet-dev17-seed51-base-invalid-replica-20260923.json"),
-            "file_sha256": (
-                "sha256:525885e6650d6d742144b12de2ac1807a77cd25f23e07cec58d2832551150497"
-            ),
-            "receipt_sha256": (
-                "sha256:572e330d1340e83d2aaf188665c0fd99b401e33eeec5f858717e2db60952bfa3"
-            ),
-            "reason_class": "mixed_infrastructure_invalid_replica",
-        }
+        {"seed": seed, **replacements.FROZEN_INVALID_REPLICA_EVIDENCE[seed]}
+        for seed in replacements.FROZEN_INVALID_SEEDS
     ]
+    assert receipt["checked_in_seed51_invalid_evidence"] == {
+        "path": "docs/evidence/qwen38-fleet-dev17-seed51-base-invalid-replica-20260923.json",
+        "file_sha256": (
+            "sha256:525885e6650d6d742144b12de2ac1807a77cd25f23e07cec58d2832551150497"
+        ),
+        "receipt_sha256": (
+            "sha256:572e330d1340e83d2aaf188665c0fd99b401e33eeec5f858717e2db60952bfa3"
+        ),
+    }
     assert len(receipt["replacement_arms"]) == 8
     assert {(row["replacement_seed"], row["arm_id"]) for row in receipt["replacement_arms"]} == {
         (seed, arm) for seed in (54, 55, 56, 57) for arm in replacements.ARMS
@@ -200,6 +191,12 @@ def test_preparer_replaces_complete_pairs_and_binds_new_protocols(
     assert retirement["model_rollouts"] == 0
     assert retirement["outputs_or_databases_deleted"] is False
     assert retirement["preserved_immutable_config_maps"] == 2
+
+    daily = json.loads((output / "DAILY_BUDGET_EVIDENCE.json").read_text(encoding="utf-8"))
+    assert daily["sha256"] == receipt["daily_budget_evidence"]["sha256"]
+    assert daily["budget_date_utc"] == "2026-09-23"
+    assert daily["cumulative_model_rollouts_consumed_or_reserved"] == 374
+    assert daily["within_daily_cap"] is True
 
     original = heldout_launch.build_package(
         source_packets / "seed46" / "base" / "LAUNCH_PACKET.json"
@@ -265,12 +262,16 @@ def test_intent_fails_closed_on_score_unseal_reason_or_source_drift(
     source_receipt_path = source_packets / "PREPARATION_RECEIPT.json"
     source_receipt = json.loads(source_receipt_path.read_text(encoding="utf-8"))
     value = json.loads(intent_path.read_text(encoding="utf-8"))
-    for mutation in ("score", "reason", "source"):
+    for mutation in ("score", "reason", "source", "evidence"):
         changed = copy.deepcopy(value)
         if mutation == "score":
             changed["score_unsealed"] = True
         elif mutation == "reason":
             changed["invalid_original_replicas"][0]["reason_class"] = "capability_result"
+        elif mutation == "evidence":
+            changed["invalid_original_replicas"][0]["evidence_receipt_sha256s"] = [
+                "sha256:" + "e" * 64
+            ]
         else:
             changed["source_preparation_receipt_sha256"] = "sha256:" + "f" * 64
         changed["sha256"] = _canonical(
@@ -305,6 +306,24 @@ def test_retirement_evidence_rejects_resigned_post_state_disagreement(
     post_path.write_text(json.dumps(post, sort_keys=True), encoding="utf-8")
 
     with pytest.raises(ValueError, match="post-verification"):
+        replacements._retirement_evidence(preflight, post_path)  # noqa: SLF001
+
+
+def test_retirement_evidence_rejects_resigned_extra_deletion(tmp_path: Path) -> None:
+    preflight = tmp_path / "preflight.json"
+    preflight.write_bytes(replacements.RETIREMENT_PREFLIGHT.read_bytes())
+    post = json.loads(replacements.RETIREMENT_POST.read_text(encoding="utf-8"))
+    post["scope"]["deleted_only"].append("Job/unrelated@00000000-0000-4000-8000-000000000000")
+    post_path = tmp_path / "post.json"
+    post["source_preflight"] = {
+        "path": str(preflight.resolve()),
+        "file_sha256": replacements._file_sha(preflight),  # noqa: SLF001
+        "self_sha256": json.loads(preflight.read_text(encoding="utf-8"))["sha256"],
+    }
+    post["sha256"] = _canonical({key: item for key, item in post.items() if key != "sha256"})
+    post_path.write_text(json.dumps(post, sort_keys=True), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="incomplete or disagree"):
         replacements._retirement_evidence(preflight, post_path)  # noqa: SLF001
 
 
@@ -351,6 +370,36 @@ def test_renderer_rejects_one_packet_byte_change(
     packet.write_text(json.dumps(value), encoding="utf-8")
     with pytest.raises((ValueError, heldout_launch.HeldoutLaunchError)):
         launchers.render(packets=packets, output=tmp_path / "bad-launchers")
+
+
+def test_renderer_rejects_unsealed_packet_sibling(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _source_packets, packets, _migration = _prepare(tmp_path, monkeypatch)
+    (packets / "seed54" / "base" / "stray-score.txt").write_text("not bundled\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="unexpected or missing file"):
+        launchers.render(packets=packets, output=tmp_path / "bad-launchers")
+
+
+def test_renderer_rejects_resigned_privacy_or_mutation_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for field in ("privacy", "external_mutations"):
+        case = tmp_path / field
+        case.mkdir()
+        _source_packets, packets, _migration = _prepare(case, monkeypatch)
+        receipt_path = packets / "MIGRATION_RECEIPT.json"
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        if field == "privacy":
+            receipt["privacy"]["prompts_responses_flags_rewards_or_trace_content_read"] = True
+        else:
+            receipt["external_mutations"] = 1
+        receipt["sha256"] = _canonical(
+            {key: item for key, item in receipt.items() if key != "sha256"}
+        )
+        receipt_path.write_text(json.dumps(receipt, sort_keys=True), encoding="utf-8")
+        with pytest.raises(ValueError, match="migration receipt is invalid"):
+            launchers.render(packets=packets, output=case / "bad-launchers")
 
 
 def test_comparison_definition_forbids_cell_level_replacement(

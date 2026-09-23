@@ -64,6 +64,7 @@ class FakeCluster:
         self.create_calls = 0
         self.list_calls: list[tuple[str, str | None, str | None]] = []
         self.missing_root_alert = False
+        self.inject_gpu: str | None = None
         self.raise_on_create = False
         self.add_job_after_second_preview = False
         self.drop_postgres_label_in_preview = False
@@ -135,6 +136,12 @@ class FakeCluster:
         if create and self.add_postgres_contract_in_create:
             labels[launch.POSTGRES_CLIENT_LABEL] = launch.POSTGRES_CLIENT_LABEL_VALUE
             environment.append({"name": launch.ROLLOUT_DATABASE_ENV, "value": "injected"})
+        if self.inject_gpu is not None:
+            resources = job["spec"]["template"]["spec"]["containers"][0].setdefault(
+                "resources", {}
+            )
+            resources.setdefault("requests", {})[self.inject_gpu] = "1"
+            resources.setdefault("limits", {})[self.inject_gpu] = "1"
         config_map = next(item for item in result["items"] if item["kind"] == "ConfigMap")
         config_map["metadata"]["uid"] = CONFIG_MAP_UID
         return result
@@ -554,6 +561,17 @@ def test_server_preview_requires_root_annotation_not_just_pod_template(tmp_path)
     cluster, database = FakeCluster(), FakeDatabase()
     cluster.missing_root_alert = True
     with pytest.raises(launch.HeldoutLaunchError, match="root Job is missing failure-alerts off"):
+        _launch(packet, cluster, database, tmp_path / "intent.jsonl")
+    assert cluster.preview_calls == 1
+    assert cluster.create_calls == 0
+
+
+@pytest.mark.parametrize("resource", ["nvidia.com/gpu", "nvidia.com/mig-1g.10gb"])
+def test_server_preview_rejects_admission_injected_gpu_before_create(tmp_path, resource):
+    packet = _packet(tmp_path)
+    cluster, database = FakeCluster(), FakeDatabase()
+    cluster.inject_gpu = resource
+    with pytest.raises(launch.HeldoutLaunchError, match="must not request GPUs"):
         _launch(packet, cluster, database, tmp_path / "intent.jsonl")
     assert cluster.preview_calls == 1
     assert cluster.create_calls == 0

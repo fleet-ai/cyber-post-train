@@ -43,15 +43,19 @@ def _migration(packet_root: Path) -> dict[str, Any]:
     definition = value.get("comparison_definition")
     seed51 = protocol_v2._seed51_invalid_evidence()  # noqa: SLF001
     expected_invalid_evidence = [
-        {
-            "seed": 51,
-            "arm_id": "base",
-            "path": str(protocol_v2.SEED51_INVALID_EVIDENCE.relative_to(ROOT)),
-            "file_sha256": _file_sha(protocol_v2.SEED51_INVALID_EVIDENCE),
-            "receipt_sha256": seed51["sha256"],
-            "reason_class": seed51["classification"]["reason_class"],
-        }
+        {"seed": seed, **protocol_v2.FROZEN_INVALID_REPLICA_EVIDENCE[seed]}
+        for seed in protocol_v2.FROZEN_INVALID_SEEDS
     ]
+    expected_checked_in_seed51 = {
+        "path": str(protocol_v2.SEED51_INVALID_EVIDENCE.relative_to(ROOT)),
+        "file_sha256": _file_sha(protocol_v2.SEED51_INVALID_EVIDENCE),
+        "receipt_sha256": seed51["sha256"],
+    }
+    expected_privacy = {
+        "score_values_read": False,
+        "prompts_responses_flags_rewards_or_trace_content_read": False,
+        "infrastructure_reason_classes_only": True,
+    }
     if (
         value.get("schema") != protocol_v2.RECEIPT_SCHEMA
         or not isinstance(arms, list)
@@ -59,9 +63,11 @@ def _migration(packet_root: Path) -> dict[str, Any]:
         or len(arms) != len(migrations) * len(protocol_v2.ARMS)
         or value.get("scientific_identity", {}).get("whole_replica_pairs_only") is not True
         or value.get("scientific_identity", {}).get("retry_limit") != 0
-        or value.get("privacy", {}).get("score_values_read") is not False
+        or value.get("privacy") != expected_privacy
+        or value.get("external_mutations") != 0
         or value.get("launch_performed") is not False
         or value.get("sanitized_invalid_replica_evidence") != expected_invalid_evidence
+        or value.get("checked_in_seed51_invalid_evidence") != expected_checked_in_seed51
         or not isinstance(definition, dict)
         or definition.get("schema") != protocol_v2.COMPARISON_DEFINITION_SCHEMA
         or definition.get("sha256")
@@ -75,8 +81,12 @@ def _migration(packet_root: Path) -> dict[str, Any]:
         raise ValueError("protocol-v2 migration receipt is invalid")
     definition_path = packet_root / "COMPARISON_DEFINITION.json"
     retirement_path = packet_root / "RETIREMENT_EVIDENCE.json"
+    daily_budget_path = packet_root / "DAILY_BUDGET_EVIDENCE.json"
     retirement = protocol_v2._verified(  # noqa: SLF001
         retirement_path, "protocol-v2 retirement evidence"
+    )
+    daily_budget = protocol_v2._verified(  # noqa: SLF001
+        daily_budget_path, "protocol-v2 daily budget evidence"
     )
     if (
         protocol_v2._verified(  # noqa: SLF001
@@ -87,9 +97,45 @@ def _migration(packet_root: Path) -> dict[str, Any]:
         or retirement != protocol_v2._retirement_evidence()  # noqa: SLF001
         or retirement.get("sha256") != value.get("retirement_evidence", {}).get("sha256")
         or _file_sha(retirement_path) != value.get("retirement_evidence", {}).get("file_sha256")
+        or daily_budget != protocol_v2._daily_budget_evidence(retirement)  # noqa: SLF001
+        or value.get("daily_budget_evidence")
+        != {
+            "sha256": daily_budget["sha256"],
+            "file_sha256": _file_sha(daily_budget_path),
+            "budget_date_utc": daily_budget["budget_date_utc"],
+            "scope": daily_budget["scope"],
+        }
     ):
         raise ValueError("protocol-v2 auxiliary receipts differ")
     return value
+
+
+def _assert_exact_packet_roster(packet_path: Path) -> None:
+    raw = protocol_v2._read(packet_path, "replacement launch packet")  # noqa: SLF001
+    files = raw.get("files")
+    if not isinstance(files, dict) or not files:
+        raise ValueError("replacement packet file roster is invalid")
+    expected = {"LAUNCH_PACKET.json"}
+    for label, binding in files.items():
+        if not isinstance(label, str) or not isinstance(binding, dict):
+            raise ValueError("replacement packet file binding is invalid")
+        relative = binding.get("path")
+        if (
+            not isinstance(relative, str)
+            or not relative
+            or Path(relative).is_absolute()
+            or Path(relative).parent != Path(".")
+            or Path(relative).name != relative
+        ):
+            raise ValueError("replacement packet file binding leaves its sealed directory")
+        expected.add(relative)
+    actual = set()
+    for child in packet_path.parent.iterdir():
+        if child.is_symlink() or not child.is_file():
+            raise ValueError("replacement packet directory contains a non-regular entry")
+        actual.add(child.name)
+    if actual != expected:
+        raise ValueError("replacement packet directory contains an unexpected or missing file")
 
 
 def _runtime_hashes() -> dict[str, str]:
@@ -126,6 +172,7 @@ def render(*, packets: Path, output: Path) -> dict[str, Any]:
             binding = expected.get((seed, arm))
             if binding is None:
                 raise ValueError("replacement packet is absent from the migration receipt")
+            _assert_exact_packet_roster(packet_path)
             package = heldout_launch.build_package(packet_path)
             identity = package.packet.identity
             if (
