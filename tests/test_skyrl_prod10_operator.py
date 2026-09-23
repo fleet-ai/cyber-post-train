@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 import stat
@@ -200,7 +201,7 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
     container = package.job["spec"]["template"]["spec"]["containers"][0]
 
     assert proof["phase"] == "launch"
-    assert proof["name"] == "chris-q38-prod10-launch-operator-v4"
+    assert proof["name"] == "chris-q38-prod10-launch-operator-v5"
     assert proof["failure_alerts"] == "off"
     assert proof["priority"] == "c1"
     assert proof["queue_priority"] == "q1"
@@ -280,6 +281,8 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
         ("probe_v9_success", "probe-v9 predecessor"),
         ("launch_v3_recovery", "launch-v3 recovery predecessor"),
         ("inspect_v4_success", "inspector-v4 predecessor"),
+        ("launch_v4_failure", "launch-v4 failure predecessor"),
+        ("inspect_v5_success", "inspector-v5 predecessor"),
     ):
         changed = copy.deepcopy(packet)
         changed[key]["operator_job_uid"] = "00000000-0000-4000-8000-000000000001"
@@ -1039,6 +1042,7 @@ def test_prod10_dead_guard_is_atomically_archived_and_crash_reconciled(
     stored = operator._seal({"schema": cleanup.JOBS_API_PREFIX_GUARD_SCHEMA})
     operator._write_once(guard_path, stored)
     source_inode = guard_path.stat().st_ino
+    guard_file_sha256 = "sha256:" + hashlib.sha256(guard_path.read_bytes()).hexdigest()
     monkeypatch.setattr(operator, "RUNTIME_UID", os.getuid())
     monkeypatch.setattr(operator, "RUNTIME_GID", os.getgid())
     monkeypatch.setattr(
@@ -1051,6 +1055,31 @@ def test_prod10_dead_guard_is_atomically_archived_and_crash_reconciled(
         "_validate_armed",
         lambda _self, value: value,
     )
+    monkeypatch.setattr(
+        operator,
+        "inspect_v5_success_binding",
+        lambda: {
+            "sha256": "sha256:" + "5" * 64,
+            "current_guard_sha256": "sha256:" + "0" * 64,
+        },
+    )
+    with pytest.raises(operator.OperatorFailure, match="archive_file"):
+        operator._archive_launch_v3_guard(
+            packet,
+            identity=identity,
+            plan=plan,
+            request=request,
+            expected=expected,
+            operation_root=operation_root,
+            jit_before_guard=first,
+            jit_before_intent=final,
+            runner=object(),
+        )
+    inspection_v5 = {
+        "sha256": "sha256:" + "5" * 64,
+        "current_guard_sha256": guard_file_sha256,
+    }
+    monkeypatch.setattr(operator, "inspect_v5_success_binding", lambda: inspection_v5)
 
     journal = operation_root / "PROD10_DIRECT_V3_CREATE.jsonl"
     journal.write_text("intent")
@@ -1084,6 +1113,9 @@ def test_prod10_dead_guard_is_atomically_archived_and_crash_reconciled(
     assert json.loads(archive_path.read_bytes()) == stored
     assert receipt["archived_via_atomic_rename"] is True
     assert receipt["recovered_after_atomic_rename"] is False
+    assert receipt["inspect_v5_success_sha256"] == inspection_v5["sha256"]
+    assert receipt["guard_file_sha256"] == guard_file_sha256
+    assert receipt["launch_v4_failure_sha256"] == operator.launch_v4_failure_binding()["sha256"]
 
     receipt_path.unlink()
     recovered = operator._archive_launch_v3_guard(
@@ -1119,7 +1151,11 @@ def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
     identity = historical.load_identity(IDENTITY)
     plan = {
         "schema": training.SCHEMA,
-        "arguments": {"wandb_entity": "e", "wandb_project": "p", "wandb_run_id": "r"},
+        "arguments": {
+            "wandb_entity": "thefleet",
+            "wandb_project": "cyber-post-train",
+            "wandb_run_id": identity.wandb_run_id,
+        },
     }
     request = {
         "name": identity.run_name,
@@ -1169,7 +1205,7 @@ def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
     monkeypatch.setattr(
         direct,
         "_wandb_exists_default",
-        lambda *_args: events.append("wandb") or False,
+        lambda *_args: pytest.fail("launch performed the non-authoritative W&B lookup"),
     )
 
     class FakeJobs:
@@ -1216,12 +1252,12 @@ def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
         "authorize",
         lambda *_args, **_kwargs: events.append("authorize") or {"sha256": "sha256:" + "6" * 64},
     )
-    monkeypatch.setattr(
-        launch_direct,
-        "create_once",
-        lambda *_args, **_kwargs: events.append("create_once")
-        or {"capacity_gate_sha256": "sha256:" + "7" * 64, "gpus": 8},
-    )
+    def create_once(*_args, **kwargs):
+        assert "wandb_absent" not in kwargs
+        events.append("create_once")
+        return {"capacity_gate_sha256": "sha256:" + "7" * 64, "gpus": 8}
+
+    monkeypatch.setattr(launch_direct, "create_once", create_once)
     monkeypatch.setattr(
         operator,
         "_observe_created_run",
@@ -1238,7 +1274,6 @@ def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
     assert events == [
         "dev_refresh",
         "jit",
-        "wandb",
         "live_preview",
         "capacity",
         "jit",
@@ -1305,7 +1340,11 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
     root.mkdir()
     plan = {
         "schema": training.SCHEMA,
-        "arguments": {"wandb_entity": "e", "wandb_project": "p", "wandb_run_id": "r"},
+        "arguments": {
+            "wandb_entity": "thefleet",
+            "wandb_project": "cyber-post-train",
+            "wandb_run_id": identity.wandb_run_id,
+        },
     }
     request = {
         "name": identity.run_name,
@@ -1318,7 +1357,16 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
         {
             "schema": launch_direct.AUTHORIZATION_SCHEMA,
             "operation_root": str(root),
-            "preflight_result": {},
+            "preflight_result": {
+                "receipt": {
+                    "wandb_create_once": {
+                        "entity": "thefleet",
+                        "project": "cyber-post-train",
+                        "run_id": identity.wandb_run_id,
+                        "resume": "never",
+                    }
+                }
+            },
             "preflight_revalidation": {},
             "dev_preview": {},
             "dev_preview_refresh": {
@@ -1397,27 +1445,8 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
                 "run_dir": identity.output_root,
             }
 
-    created = launch_direct.create_once(
-        root,
-        plan,
-        request,
-        source,
-        expected,
-        auth,
-        token="token",
-        identity=identity,
-        duplicate=jit_before_guard,
-        final_duplicate=jit_before_intent,
-        host_duplicate={},
-        census={},
-        live_preview=live_preview,
-        wandb_absent=True,
-        jobs_factory=FakeJobs,
-    )
-    assert posts == [("POST", "/v1/runs")]
-    assert created["failure_alerts"] == "off"
-    with pytest.raises(JobsError, match="create intent"):
-        launch_direct.create_once(
+    def create():
+        return launch_direct.create_once(
             root,
             plan,
             request,
@@ -1431,9 +1460,33 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
             host_duplicate={},
             census={},
             live_preview=live_preview,
-            wandb_absent=True,
             jobs_factory=FakeJobs,
         )
+
+    monkeypatch.delenv("WANDB_API_KEY", raising=False)
+    with pytest.raises(JobsError, match="runtime create-once binding"):
+        create()
+    assert not (root / "PROD10_DIRECT_V3_CREATE.jsonl").exists()
+    monkeypatch.setenv("WANDB_API_KEY", "credential-present")
+    created = create()
+    assert posts == [("POST", "/v1/runs")]
+    assert created["failure_alerts"] == "off"
+    journal_lines = (root / "PROD10_DIRECT_V3_CREATE.jsonl").read_text().splitlines()
+    intent = json.loads(journal_lines[0])
+    assert "wandb_run_id_absent" not in intent
+    assert intent["wandb_runtime_create_once"] == {
+        "credential_present": True,
+        "enforced_by": "training.skyrl_training.ScalarTracking.wandb.init",
+        "remote_lookup_performed": False,
+        "wandb_create_once": {
+            "entity": "thefleet",
+            "project": "cyber-post-train",
+            "run_id": identity.wandb_run_id,
+            "resume": "never",
+        },
+    }
+    with pytest.raises(JobsError, match="create intent"):
+        create()
     assert len(posts) == 1
 
 

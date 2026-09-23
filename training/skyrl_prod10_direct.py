@@ -730,7 +730,6 @@ def create_once(
     host_duplicate: dict[str, Any],
     census: dict[str, Any],
     live_preview: dict[str, Any],
-    wandb_absent: bool,
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     jobs_factory: Callable[..., Jobs] = Jobs,
 ) -> dict[str, Any]:
@@ -770,8 +769,24 @@ def create_once(
         host_duplicate,
         prior_sha256=absence_before_guard["sha256"],
     )
-    if wandb_absent is not True:
-        raise JobsError("W&B run ID absence changed")
+    expected_wandb = {
+        "entity": plan["arguments"].get("wandb_entity"),
+        "project": plan["arguments"].get("wandb_project"),
+        "run_id": bound.wandb_run_id,
+        "resume": "never",
+    }
+    if (
+        not os.environ.get("WANDB_API_KEY")
+        or auth["preflight_result"]["receipt"].get("wandb_create_once")
+        != expected_wandb
+    ):
+        raise JobsError("prod10 W&B runtime create-once binding changed")
+    wandb_runtime = {
+        "credential_present": True,
+        "wandb_create_once": expected_wandb,
+        "remote_lookup_performed": False,
+        "enforced_by": "training.skyrl_training.ScalarTracking.wandb.init",
+    }
     plan_sha, request_sha, manifest_sha = (
         "sha256:" + digest(plan),
         "sha256:" + digest(request),
@@ -814,7 +829,7 @@ def create_once(
             "duplicate_checks_before_guard": absence_before_guard,
             "duplicate_checks_before_intent": absence_before_intent,
             "host_duplicate_sha256": absence_before_intent["host_duplicate_sha256"],
-            "wandb_run_id_absent": True,
+            "wandb_runtime_create_once": wandb_runtime,
         },
     )
     with jobs_factory(token, base_url=API_URLS["prod"]) as client:
