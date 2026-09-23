@@ -316,14 +316,21 @@ def deterministic_mapping(invalid_original_seeds: list[int]) -> list[dict[str, i
 def _source_inventory(
     packet_root: Path, receipt: dict[str, Any]
 ) -> dict[int, dict[str, dict[str, Any]]]:
+    receipt_arms = receipt.get("arms")
     if (
         receipt.get("schema") != "cyber_qwen38_fleet_seed46_pass8_packet_preparation_v1"
         or receipt.get("protocol_study_id") != source.PROTOCOL_STUDY_ID
         or receipt.get("seeds") != list(SOURCE_SEEDS)
-        or len(receipt.get("arms", [])) != len(SOURCE_SEEDS) * len(ARMS)
+        or not isinstance(receipt_arms, list)
+        or len(receipt_arms) != len(SOURCE_SEEDS) * len(ARMS)
         or receipt.get("launch_performed") is not False
     ):
         raise ValueError("source packet preparation receipt differs")
+    receipt_by_arm = {
+        (row.get("seed"), row.get("arm_id")): row for row in receipt_arms if isinstance(row, dict)
+    }
+    if len(receipt_by_arm) != len(SOURCE_SEEDS) * len(ARMS):
+        raise ValueError("source packet preparation arm roster differs")
     result: dict[int, dict[str, dict[str, Any]]] = {}
     expected_task_versions: list[str] | None = None
     for seed in SOURCE_SEEDS:
@@ -334,8 +341,23 @@ def _source_inventory(
             identity = package.packet.identity
             route = next(iter(package.evaluation_config["routes"].values()))
             tasks = list(route["task_versions"])
+            receipt_arm = receipt_by_arm.get((seed, arm), {})
             if (
-                identity.get("arm_id") != arm
+                set(receipt_arm)
+                != {
+                    "seed",
+                    "arm_id",
+                    "packet_path",
+                    "packet_file_sha256",
+                    "evaluation_identity_sha256",
+                    "serving_proof_file_sha256",
+                }
+                or receipt_arm.get("packet_path") != f"{arm}/LAUNCH_PACKET.json"
+                or receipt_arm.get("packet_file_sha256") != _file_sha(packet_path)
+                or receipt_arm.get("evaluation_identity_sha256") != package.packet.identity_sha256
+                or receipt_arm.get("serving_proof_file_sha256")
+                != package.packet.file_sha256["serving_route_proof"]
+                or identity.get("arm_id") != arm
                 or identity.get("sampling_seed") != seed
                 or identity.get("pass_k") != 1
                 or identity.get("retry_limit") != 0
