@@ -201,7 +201,7 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
     container = package.job["spec"]["template"]["spec"]["containers"][0]
 
     assert proof["phase"] == "launch"
-    assert proof["name"] == "chris-q38-prod10-launch-operator-v6"
+    assert proof["name"] == "chris-q38-prod10-launch-operator-v7"
     assert proof["failure_alerts"] == "off"
     assert proof["priority"] == "c1"
     assert proof["queue_priority"] == "q1"
@@ -285,6 +285,7 @@ def test_prod10_launch_package_is_alert_off_c1_q1_and_capacity_bound(
         ("inspect_v5_success", "inspector-v5 predecessor"),
         ("launch_v5_failure", "launch-v5 failure predecessor"),
         ("inspect_v6_success", "inspector-v6 predecessor"),
+        ("launch_v6_failure", "launch-v6 failure predecessor"),
     ):
         changed = copy.deepcopy(packet)
         changed[key]["operator_job_uid"] = "00000000-0000-4000-8000-000000000001"
@@ -970,7 +971,7 @@ def test_prod10_launch_uses_shared_pre_guard_path_before_any_guard(
         operator.run_launch({}, runner=object())
 
 
-def test_prod10_jit_duplicate_rechecks_prod_kubernetes_both_apis_and_output(
+def test_prod10_jit_duplicate_uses_fresh_host_dev_proof_and_only_live_prod_state(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     identity = historical.load_identity(IDENTITY)
@@ -983,7 +984,7 @@ def test_prod10_jit_duplicate_rechecks_prod_kubernetes_both_apis_and_output(
             "output_root": identity.output_root,
             "kubernetes_inventories_checked": 10,
             "jobs_api_rows_checked": 0,
-            "checked_at": "2026-09-23T00:00:00Z",
+            "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
     )
     items: list[object] = []
@@ -1024,9 +1025,13 @@ def test_prod10_jit_duplicate_rechecks_prod_kubernetes_both_apis_and_output(
         jobs_factory=FakeJobs,
     )
     assert contexts == [direct.PROD_CONTEXT] * 10
-    assert bases == [launch_direct.API_URLS["dev"], launch_direct.API_URLS["prod"]] * 2
+    assert bases == [launch_direct.API_URLS["prod"]] * 2
     assert second["prior_jit_duplicate_sha256"] == first["sha256"]
-    assert second["prod_kubernetes_inventories_checked"] == 5
+    assert second["runtime_prod_kubernetes_inventories_checked"] == 5
+    assert second["runtime_jobs_api_targets_checked"] == ["prod"]
+    assert second["fresh_host_all_context_duplicate_sha256"] == host["sha256"]
+    assert "jobs_api_targets_checked" not in second
+    assert "host_duplicate_sha256" not in second
 
     items.append({"metadata": {"name": identity.run_name}, "spec": {}})
     with pytest.raises(JobsError, match="Kubernetes identity/output"):
@@ -1053,6 +1058,19 @@ def test_prod10_jit_duplicate_rechecks_prod_kubernetes_both_apis_and_output(
     with pytest.raises(JobsError, match="output root already exists"):
         launch_direct.jit_duplicate_proof(
             identity, host, token="token", runner=runner, jobs_factory=FakeJobs
+        )
+
+    stale = direct._seal(
+        {
+            **{key: value for key, value in host.items() if key != "sha256"},
+            "checked_at": (datetime.now(UTC) - timedelta(hours=1)).strftime(
+                "%Y-%m-%dT%H:%M:%SZ"
+            ),
+        }
+    )
+    with pytest.raises(JobsError, match="stale or future-dated"):
+        launch_direct.jit_duplicate_proof(
+            identity, stale, token="token", runner=runner, jobs_factory=FakeJobs
         )
 
 
@@ -1161,6 +1179,7 @@ def test_prod10_dead_guard_is_atomically_archived_and_crash_reconciled(
     assert receipt["guard_file_sha256"] == guard_file_sha256
     assert receipt["launch_v4_failure_sha256"] == operator.launch_v4_failure_binding()["sha256"]
     assert receipt["launch_v5_failure_sha256"] == operator.launch_v5_failure_binding()["sha256"]
+    assert receipt["launch_v6_failure_sha256"] == operator.launch_v6_failure_binding()["sha256"]
 
     receipt_path.unlink()
     recovered = operator._archive_launch_v3_guard(
@@ -1233,8 +1252,8 @@ def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
     monkeypatch.setattr(direct, "validate_preview", lambda *_args, **_kwargs: preview)
     monkeypatch.setattr(
         launch_direct,
-        "refresh_dev_preview",
-        lambda *_args, **_kwargs: events.append("dev_refresh") or preview,
+        "sealed_dev_preview_provenance",
+        lambda *_args, **_kwargs: events.append("dev_provenance") or preview,
     )
     jit = iter(
         [
@@ -1317,7 +1336,7 @@ def test_prod10_launch_orders_all_reads_before_new_guard_and_create(
     result = operator.run_launch(packet, runner=object())
     assert result["status"] == "gpu_run_succeeded_and_released"
     assert events == [
-        "dev_refresh",
+        "dev_provenance",
         "jit",
         "live_preview",
         "capacity",
@@ -1414,7 +1433,7 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
             },
             "preflight_revalidation": {},
             "dev_preview": {},
-            "dev_preview_refresh": {
+            "sealed_dev_preview_provenance": {
                 "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
             },
             "prod_preview": {},
@@ -1432,11 +1451,11 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
     )
     jit_before_guard = {
         "sha256": "sha256:" + "5" * 64,
-        "host_duplicate_sha256": "sha256:" + "6" * 64,
+        "fresh_host_all_context_duplicate_sha256": "sha256:" + "6" * 64,
     }
     jit_before_intent = {
         "sha256": "sha256:" + "7" * 64,
-        "host_duplicate_sha256": "sha256:" + "6" * 64,
+        "fresh_host_all_context_duplicate_sha256": "sha256:" + "6" * 64,
     }
     monkeypatch.setattr(
         launch_direct,
@@ -1535,7 +1554,7 @@ def test_prod10_direct_v3_rejects_unsealed_preflight_and_posts_once(
     assert len(posts) == 1
 
 
-def test_prod10_launch_refreshes_stale_dev_preview_at_time_of_use(
+def test_prod10_launch_validates_sealed_dev_preview_without_network_or_redating(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     identity = historical.load_identity(IDENTITY)
@@ -1543,7 +1562,6 @@ def test_prod10_launch_refreshes_stale_dev_preview_at_time_of_use(
     request = {"name": identity.run_name, "workers": 1, "gpus_per_worker": 8}
     source = {"name": identity.run_name + "-00000000"}
     expected = {"kind": "RayJob"}
-    stale_at = (datetime.now(UTC) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
     fresh_at = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     def preview(context: str, checked_at: str) -> dict:
@@ -1568,41 +1586,31 @@ def test_prod10_launch_refreshes_stale_dev_preview_at_time_of_use(
             }
         )
 
-    dev = preview(direct.DEV_CONTEXT, stale_at)
+    dev = preview(direct.DEV_CONTEXT, fresh_at)
     prod = preview(direct.PROD_CONTEXT, fresh_at)
-    bases: list[str] = []
 
-    class ExactDevJobs:
-        def __init__(self, _token: str, *, base_url: str):
-            bases.append(base_url)
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *_args):
-            return False
-
-        def preview(self, _request: dict) -> dict:
-            return source
+    class ForbiddenJobs:
+        def __init__(self, *_args, **_kwargs):
+            pytest.fail("production operator contacted the development Jobs API")
 
     monkeypatch.setattr(direct, "_identity", lambda _plan, bound: bound)
     monkeypatch.setattr(direct, "manifest", lambda *_args, **_kwargs: expected)
+    monkeypatch.setattr(launch_direct, "Jobs", ForbiddenJobs)
     image = {"status": "passed"}
-    refresh = launch_direct.refresh_dev_preview(
+    provenance = launch_direct.sealed_dev_preview_provenance(
         plan,
         request,
         source,
         expected,
         dev,
         image_identity_receipt=image,
-        token="token",
         identity=identity,
-        jobs_factory=ExactDevJobs,
     )
-    assert bases == [launch_direct.API_URLS["dev"]]
-    assert refresh["status"] == "fresh_dev_jobs_preview_passed"
-    assert refresh["sealed_dev_server_preview_sha256"] == dev["sha256"]
-    assert refresh["checked_at"] != stale_at
+    assert provenance["status"] == "fresh_sealed_external_dev_server_preview_validated"
+    assert provenance["sealed_dev_server_preview_sha256"] == dev["sha256"]
+    assert provenance["checked_at"] == dev["checked_at"]
+    assert "dev_jobs_preview_refresh" not in json.dumps(provenance, sort_keys=True)
+    assert "fresh_dev_jobs_preview_passed" not in json.dumps(provenance, sort_keys=True)
 
     preflight = {"sha256": "sha256:" + "1" * 64}
     revalidation = {"sha256": "sha256:" + "2" * 64}
@@ -1619,29 +1627,51 @@ def test_prod10_launch_refreshes_stale_dev_preview_at_time_of_use(
         preflight,
         revalidation,
         dev_preview=dev,
-        dev_refresh=refresh,
+        dev_provenance=provenance,
         prod_preview=prod,
         observer={},
         identity=identity,
     )
     assert authorization["dev_preview"] == dev
-    assert authorization["dev_preview_refresh"] == refresh
+    assert authorization["sealed_dev_preview_provenance"] == provenance
+    assert "dev_preview_refresh" not in authorization
+    assert launch_direct.AUTHORIZATION_SCHEMA.endswith("_v4")
+    assert launch_direct.JIT_DUPLICATE_SCHEMA.endswith("_v2")
+    assert (
+        launch_direct.SEALED_DEV_PREVIEW_PROVENANCE_SCHEMA
+        == "cyber_skyrl_prod10_sealed_external_dev_server_preview_provenance_v1"
+    )
+    assert "dev_preview_refresh" not in operator._POST_PRE_GUARD_LAUNCH_STAGES
+    assert "sealed_dev_preview_validate" in operator._POST_PRE_GUARD_LAUNCH_STAGES
 
-    class MismatchedDevJobs(ExactDevJobs):
-        def preview(self, _request: dict) -> dict:
-            return {"name": "different-preview"}
-
-    with pytest.raises(JobsError, match="fresh dev Jobs preview changed"):
-        launch_direct.refresh_dev_preview(
+    stale = preview(
+        direct.DEV_CONTEXT,
+        (datetime.now(UTC) - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    )
+    with pytest.raises(JobsError, match="stale or future-dated"):
+        launch_direct.sealed_dev_preview_provenance(
             plan,
             request,
             source,
             expected,
-            dev,
+            stale,
             image_identity_receipt=image,
-            token="token",
             identity=identity,
-            jobs_factory=MismatchedDevJobs,
+        )
+
+    drifted = {**dev, "manifest_sha256": "different"}
+    drifted = direct._seal(
+        {key: value for key, value in drifted.items() if key != "sha256"}
+    )
+    with pytest.raises(JobsError, match="server preview changed"):
+        launch_direct.sealed_dev_preview_provenance(
+            plan,
+            request,
+            source,
+            expected,
+            drifted,
+            image_identity_receipt=image,
+            identity=identity,
         )
 
 

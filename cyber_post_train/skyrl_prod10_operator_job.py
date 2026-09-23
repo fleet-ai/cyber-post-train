@@ -336,6 +336,7 @@ def launch_packet(
             "inspect_v5_success": operator.inspect_v5_success_binding(),
             "launch_v5_failure": operator.launch_v5_failure_binding(),
             "inspect_v6_success": operator.inspect_v6_success_binding(),
+            "launch_v6_failure": operator.launch_v6_failure_binding(),
         }
     )
 

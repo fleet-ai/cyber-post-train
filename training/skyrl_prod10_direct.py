@@ -25,14 +25,16 @@ from . import skyrl_prod9_hardening as hardening
 from . import skyrl_prod9_training as training
 from . import skyrl_reward_rayjob as historical
 
-AUTHORIZATION_SCHEMA = "cyber_skyrl_prod10_direct_authorization_v3"
+AUTHORIZATION_SCHEMA = "cyber_skyrl_prod10_direct_authorization_v4"
 PREFLIGHT_RESULT_SCHEMA = "cyber_skyrl_prod10_operator_result_v1"
 DUPLICATE_SCHEMA = "cyber_skyrl_prod10_direct_duplicate_absence_v1"
-JIT_DUPLICATE_SCHEMA = "cyber_skyrl_prod10_jit_duplicate_absence_v1"
+JIT_DUPLICATE_SCHEMA = "cyber_skyrl_prod10_jit_duplicate_absence_v2"
 CAPACITY_SCHEMA = "cyber_skyrl_prod10_direct_capacity_gate_v1"
 CREATED_SCHEMA = "cyber_skyrl_prod10_direct_created_v1"
 REVALIDATION_SCHEMA = "cyber_skyrl_prod10_preflight_revalidation_v1"
-DEV_REFRESH_SCHEMA = "cyber_skyrl_prod10_dev_jobs_preview_refresh_v1"
+SEALED_DEV_PREVIEW_PROVENANCE_SCHEMA = (
+    "cyber_skyrl_prod10_sealed_external_dev_server_preview_provenance_v1"
+)
 MAX_NODES = 10
 MAX_GPUS = 80
 
@@ -327,8 +329,8 @@ def jit_duplicate_proof(
     runner: Callable[..., subprocess.CompletedProcess[str]] = subprocess.run,
     jobs_factory: Callable[..., Jobs] = Jobs,
 ) -> dict[str, Any]:
-    """Refresh prod Kubernetes, both Jobs APIs, and mounted output at point of use."""
-    host = _duplicate(host_duplicate, identity, fresh=False)
+    """Refresh prod state while preserving fresh sealed host dev provenance."""
+    host = _duplicate(host_duplicate, identity, fresh=True)
     prior_sha256 = None
     if prior_duplicate is not None:
         prior_sha256 = _jit_duplicate(
@@ -379,18 +381,17 @@ def jit_duplicate_proof(
             ):
                 raise JobsError("prod10 JIT Kubernetes identity/output already exists")
     api_rows = 0
-    for target in ("dev", "prod"):
-        with jobs_factory(token, base_url=API_URLS[target]) as client:
-            rows = client.all_runs()
-        api_rows += len(rows)
-        for row in rows:
-            name = str(row.get("name", ""))
-            if (
-                row.get("run_dir") == output_root
-                or name in names
-                or any(name.startswith(value + "-") for value in names)
-            ):
-                raise JobsError("prod10 JIT Jobs API history already owns this identity/output")
+    with jobs_factory(token, base_url=API_URLS["prod"]) as client:
+        rows = client.all_runs()
+    api_rows += len(rows)
+    for row in rows:
+        name = str(row.get("name", ""))
+        if (
+            row.get("run_dir") == output_root
+            or name in names
+            or any(name.startswith(value + "-") for value in names)
+        ):
+            raise JobsError("prod10 JIT Jobs API history already owns this identity/output")
     output = Path(identity.output_root)
     if output.exists() or output.is_symlink():
         raise JobsError("prod10 output root already exists")
@@ -401,14 +402,16 @@ def jit_duplicate_proof(
             "identity_sha256": identity.sealed_mapping()["sha256"],
             "run_name": identity.run_name,
             "output_root": identity.output_root,
-            "host_duplicate_sha256": host["sha256"],
+            "fresh_host_all_context_duplicate_sha256": host["sha256"],
+            "fresh_host_all_context_checked_at": host["checked_at"],
             "prior_jit_duplicate_sha256": prior_sha256,
-            "historical_host_kubernetes_inventories_checked": (
+            "fresh_host_all_context_kubernetes_inventories_checked": (
                 host["kubernetes_inventories_checked"]
             ),
-            "prod_kubernetes_inventories_checked": inventories,
-            "jobs_api_targets_checked": ["dev", "prod"],
-            "jobs_api_rows_checked": api_rows,
+            "fresh_host_all_context_jobs_api_rows_checked": host["jobs_api_rows_checked"],
+            "runtime_prod_kubernetes_inventories_checked": inventories,
+            "runtime_jobs_api_targets_checked": ["prod"],
+            "runtime_jobs_api_rows_checked": api_rows,
             "output_absent": True,
             "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
         }
@@ -422,20 +425,23 @@ def _jit_duplicate(
     *,
     prior_sha256: str | None = None,
 ) -> dict[str, Any]:
-    host = _duplicate(host_duplicate, identity, fresh=False)
+    host = _duplicate(host_duplicate, identity, fresh=True)
     checked = direct._validate_seal(value, JIT_DUPLICATE_SCHEMA)
     if (
         checked.get("status") != "jit_identity_and_output_absent"
         or checked.get("identity_sha256") != identity.sealed_mapping()["sha256"]
         or checked.get("run_name") != identity.run_name
         or checked.get("output_root") != identity.output_root
-        or checked.get("host_duplicate_sha256") != host["sha256"]
+        or checked.get("fresh_host_all_context_duplicate_sha256") != host["sha256"]
+        or checked.get("fresh_host_all_context_checked_at") != host["checked_at"]
         or checked.get("prior_jit_duplicate_sha256") != prior_sha256
-        or checked.get("historical_host_kubernetes_inventories_checked") != 10
-        or checked.get("prod_kubernetes_inventories_checked") != 5
-        or checked.get("jobs_api_targets_checked") != ["dev", "prod"]
-        or type(checked.get("jobs_api_rows_checked")) is not int
-        or checked["jobs_api_rows_checked"] < 0
+        or checked.get("fresh_host_all_context_kubernetes_inventories_checked") != 10
+        or checked.get("fresh_host_all_context_jobs_api_rows_checked")
+        != host["jobs_api_rows_checked"]
+        or checked.get("runtime_prod_kubernetes_inventories_checked") != 5
+        or checked.get("runtime_jobs_api_targets_checked") != ["prod"]
+        or type(checked.get("runtime_jobs_api_rows_checked")) is not int
+        or checked["runtime_jobs_api_rows_checked"] < 0
         or checked.get("output_absent") is not True
     ):
         raise JobsError("prod10 JIT duplicate proof changed")
@@ -532,7 +538,7 @@ def _preview_binding(
     return checked
 
 
-def refresh_dev_preview(
+def sealed_dev_preview_provenance(
     plan: dict[str, Any],
     request: dict[str, Any],
     source_preview: dict[str, Any],
@@ -540,11 +546,9 @@ def refresh_dev_preview(
     dev_preview: dict[str, Any],
     *,
     image_identity_receipt: dict[str, Any],
-    token: str,
     identity: historical.RailIdentity,
-    jobs_factory: Callable[..., Jobs] = Jobs,
 ) -> dict[str, Any]:
-    """Refresh the dev Jobs render at time of use without weakening its TTL."""
+    """Validate the sealed host dev render at time of use without redating it."""
     bound = direct._identity(plan, identity)
     sealed_dev = _preview_binding(
         plan,
@@ -554,24 +558,20 @@ def refresh_dev_preview(
         dev_preview,
         context=direct.DEV_CONTEXT,
         identity=bound,
-        fresh=False,
+        fresh=True,
     )
-    with jobs_factory(token, base_url=API_URLS["dev"]) as client:
-        fresh_source = client.preview(request)
-    if fresh_source != source_preview:
-        raise JobsError("prod10 fresh dev Jobs preview changed")
     if expected != direct.manifest(
         plan,
         request,
-        fresh_source,
+        source_preview,
         identity=bound,
         image_identity_receipt=image_identity_receipt,
     ):
-        raise JobsError("prod10 fresh dev Jobs manifest changed")
+        raise JobsError("prod10 sealed dev Jobs manifest changed")
     return _seal(
         {
-            "schema": DEV_REFRESH_SCHEMA,
-            "status": "fresh_dev_jobs_preview_passed",
+            "schema": SEALED_DEV_PREVIEW_PROVENANCE_SCHEMA,
+            "status": "fresh_sealed_external_dev_server_preview_validated",
             "context": direct.DEV_CONTEXT,
             "identity_sha256": bound.sealed_mapping()["sha256"],
             "plan_sha256": "sha256:" + digest(plan),
@@ -584,12 +584,14 @@ def refresh_dev_preview(
             "queue_priority": "q1",
             "gpus": 8,
             "submitted": False,
-            "checked_at": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            # Preserve the server proof's timestamp.  Validation must never
+            # manufacture a new freshness window inside the production Pod.
+            "checked_at": sealed_dev["checked_at"],
         }
     )
 
 
-def _dev_refresh(
+def _sealed_dev_preview_provenance(
     value: object,
     plan: dict[str, Any],
     request: dict[str, Any],
@@ -610,9 +612,9 @@ def _dev_refresh(
         identity=bound,
         fresh=False,
     )
-    checked = direct._validate_seal(value, DEV_REFRESH_SCHEMA)
+    checked = direct._validate_seal(value, SEALED_DEV_PREVIEW_PROVENANCE_SCHEMA)
     if (
-        checked.get("status") != "fresh_dev_jobs_preview_passed"
+        checked.get("status") != "fresh_sealed_external_dev_server_preview_validated"
         or checked.get("context") != direct.DEV_CONTEXT
         or checked.get("identity_sha256") != bound.sealed_mapping()["sha256"]
         or checked.get("plan_sha256") != "sha256:" + digest(plan)
@@ -626,7 +628,7 @@ def _dev_refresh(
         or checked.get("gpus") != 8
         or checked.get("submitted") is not False
     ):
-        raise JobsError("prod10 fresh dev Jobs preview proof changed")
+        raise JobsError("prod10 sealed dev server-preview provenance changed")
     direct._fresh_at(checked.get("checked_at"))
     return checked
 
@@ -640,7 +642,7 @@ def authorize(
     revalidation: dict[str, Any],
     *,
     dev_preview: dict[str, Any],
-    dev_refresh: dict[str, Any],
+    dev_provenance: dict[str, Any],
     prod_preview: dict[str, Any],
     observer: dict[str, Any],
     identity: historical.RailIdentity,
@@ -663,8 +665,8 @@ def authorize(
         identity=bound,
         fresh=False,
     )
-    refresh = _dev_refresh(
-        dev_refresh,
+    provenance = _sealed_dev_preview_provenance(
+        dev_provenance,
         plan,
         request,
         source_preview,
@@ -706,7 +708,7 @@ def authorize(
             "preflight_revalidation": fresh,
             "image_identity_receipt": image,
             "dev_preview": checked_dev,
-            "dev_preview_refresh": refresh,
+            "sealed_dev_preview_provenance": provenance,
             "prod_preview": checked_prod,
             "observer": armed,
             "operation_root": str(root),
@@ -755,7 +757,7 @@ def create_once(
         auth["preflight_result"],
         auth["preflight_revalidation"],
         dev_preview=auth["dev_preview"],
-        dev_refresh=auth["dev_preview_refresh"],
+        dev_provenance=auth["sealed_dev_preview_provenance"],
         prod_preview=auth["prod_preview"],
         observer=auth["observer"],
         identity=bound,
@@ -813,7 +815,11 @@ def create_once(
         gpus=request["workers"] * request["gpus_per_worker"],
         maximum_seconds=direct.MAXIMUM_SECONDS,
     )
-    for preview in (auth["dev_preview_refresh"], auth["prod_preview"], checked_live_preview):
+    for preview in (
+        auth["sealed_dev_preview_provenance"],
+        auth["prod_preview"],
+        checked_live_preview,
+    ):
         direct._fresh_at(preview.get("checked_at"))
     direct._write_once_fsynced(
         journal,
@@ -828,7 +834,9 @@ def create_once(
             "capacity_gate": capacity,
             "duplicate_checks_before_guard": absence_before_guard,
             "duplicate_checks_before_intent": absence_before_intent,
-            "host_duplicate_sha256": absence_before_intent["host_duplicate_sha256"],
+            "fresh_host_all_context_duplicate_sha256": absence_before_intent[
+                "fresh_host_all_context_duplicate_sha256"
+            ],
             "wandb_runtime_create_once": wandb_runtime,
         },
     )
