@@ -459,11 +459,15 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     }
     assert environment["WANDB_MODE"] == "disabled"
     assert environment["WANDB_API_KEY"] == "diagnostic-not-a-credential"
-    assert environment["HOME"] == environment["TMPDIR"] == "/work"
-    assert environment["HF_HOME"] == "/work/huggingface"
-    assert environment["HF_DATASETS_CACHE"] == "/work/huggingface/datasets"
-    assert environment["HF_HUB_OFFLINE"] == environment["TRANSFORMERS_OFFLINE"] == "1"
-    assert environment["TOKENIZERS_PARALLELISM"] == "false"
+    assert environment["HF_DATASETS_CACHE"] == "/work/hf-datasets"
+    assert {
+        "HOME",
+        "TMPDIR",
+        "HF_HOME",
+        "HF_HUB_OFFLINE",
+        "TRANSFORMERS_OFFLINE",
+        "TOKENIZERS_PARALLELISM",
+    }.isdisjoint(environment)
 
     monkeypatch.setattr(operator, "_identity", lambda _value: identity)
 

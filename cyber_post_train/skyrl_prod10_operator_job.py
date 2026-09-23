@@ -504,13 +504,7 @@ def _job(
         environment.extend(
             [
                 {"name": "WANDB_API_KEY", "value": "diagnostic-not-a-credential"},
-                {"name": "HOME", "value": "/work"},
-                {"name": "TMPDIR", "value": "/work"},
-                {"name": "HF_HOME", "value": "/work/huggingface"},
-                {"name": "HF_DATASETS_CACHE", "value": "/work/huggingface/datasets"},
-                {"name": "HF_HUB_OFFLINE", "value": "1"},
-                {"name": "TRANSFORMERS_OFFLINE", "value": "1"},
-                {"name": "TOKENIZERS_PARALLELISM", "value": "false"},
+                {"name": "HF_DATASETS_CACHE", "value": "/work/hf-datasets"},
             ]
         )
     sfs_mount: dict[str, Any] = {"name": "sfs", "mountPath": "/mnt/sfs"}
