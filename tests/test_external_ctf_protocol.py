@@ -629,6 +629,8 @@ def test_definitive_create_failure_reconciles_absent_without_second_post(
         def request(self, method, url, _payload=None, **_kwargs):
             assert method == "POST"
             assert url.endswith("/sandboxes")
+            assert _payload["resources"] == {"cpus": 8, "memory_mb": 32768}
+            assert "disk_mb" not in _payload["resources"]
             self.posts += 1
             raise urllib.error.HTTPError(url, 422, "rejected", {}, None)
 
@@ -756,6 +758,17 @@ def test_external_create_adopts_exact_reservation_after_crash_before_claim(
     assert (state / f"{name}.create-claim.json").is_file()
     assert (state / f"{name}.created.json").is_file()
     assert len(list((state / "shared-capacity-reservations").glob("*.reserved.json"))) == 1
+
+
+def test_snapshot_restore_spec_inherits_root_disk_without_invalid_override() -> None:
+    spec = tensorlake._sandbox_spec(  # noqa: SLF001
+        cell_name("cvebench_zero_day", 5, "qualification"),
+        "snapshot-1",
+    )
+
+    assert spec["snapshot_id"] == "snapshot-1"
+    assert spec["resources"] == {"cpus": 8, "memory_mb": 32768}
+    assert "disk_mb" not in spec["resources"]
 
 
 def test_definitive_process_failure_reconciles_absent_and_remains_releasable(
