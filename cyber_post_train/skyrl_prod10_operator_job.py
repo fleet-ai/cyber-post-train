@@ -160,14 +160,19 @@ def stage_packet(
     checked, bound = training._stage_identity(stage)
     if bound != identity:
         raise ValueError("prod10 stage operator identity changed")
+    names = operator.operator_names(identity)
     return _seal(
         {
             "schema": operator.PACKET_SCHEMA,
             "phase": "stage",
-            "operator_name": operator.OPERATOR_NAMES["stage"],
+            "operator_name": names["stage"],
             "identity": identity.sealed_mapping(),
             "stage": checked,
-            "precreate_recovery": operator.stage_recovery_binding(),
+            **(
+                {"fresh_identity": True}
+                if identity == operator.FAST3_IDENTITY
+                else {"precreate_recovery": operator.stage_recovery_binding()}
+            ),
         }
     )
 
@@ -177,26 +182,40 @@ def manifest_packet(
     identity: historical.RailIdentity,
     stage: dict[str, Any],
     stage_launch_result: dict[str, Any],
+    plan: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     checked_stage, stage_identity = training._stage_identity(stage)
     if stage_identity != identity:
         raise ValueError("prod10 manifest stage identity changed")
+    names = operator.operator_names(identity)
     checked_launch = direct._direct_stage_launch(
         stage_launch_result,
         checked_stage,
         identity=identity,
-        operator_name=operator.OPERATOR_NAMES["stage"],
+        operator_name=names["stage"],
         fresh=False,
     )
+    if identity == operator.FAST3_IDENTITY:
+        if not isinstance(plan, dict):
+            raise ValueError("Fast3 manifest requires the full training plan")
+        try:
+            launch_direct.plan_identity(plan, identity)
+            launch_direct.training_operation_root(plan, identity=identity)
+        except (AttributeError, JobsError, TypeError, ValueError) as exc:
+            raise ValueError("Fast3 manifest requires the full training plan") from exc
     return _seal(
         {
             "schema": operator.PACKET_SCHEMA,
             "phase": "manifest",
-            "operator_name": operator.OPERATOR_NAMES["manifest"],
+            "operator_name": names["manifest"],
             "identity": identity.sealed_mapping(),
             "stage": checked_stage,
             "stage_launch_result": checked_launch,
-            "preflight_v1_failure": operator.preflight_v1_failure_binding(),
+            **(
+                {"fresh_identity": True, "plan": plan}
+                if identity == operator.FAST3_IDENTITY
+                else {"preflight_v1_failure": operator.preflight_v1_failure_binding()}
+            ),
         }
     )
 
@@ -212,8 +231,9 @@ def preflight_packet(
     dev_preview: dict[str, Any],
     dev_duplicate_proof: dict[str, Any],
 ) -> dict[str, Any]:
-    direct._identity(plan, identity)
-    if training.job_request(plan) != request:
+    names = operator.operator_names(identity)
+    launch_direct.plan_identity(plan, identity)
+    if launch_direct.job_request(plan, identity=identity) != request:
         raise ValueError("prod10 preflight operator request changed")
     checked_stage, stage_identity = training._stage_identity(stage)
     if stage_identity != identity:
@@ -222,7 +242,7 @@ def preflight_packet(
         stage_launch_result,
         checked_stage,
         identity=identity,
-        operator_name=operator.OPERATOR_NAMES["stage"],
+        operator_name=names["stage"],
         fresh=False,
     )
     checked_manifest_launch = direct._validate_seal(
@@ -239,7 +259,7 @@ def preflight_packet(
         checked_manifest_launch.get("status") != "operator_succeeded_and_released"
         or checked_manifest_launch.get("gpus") != 0
         or not isinstance(manifest_package, dict)
-        or manifest_package.get("name") != operator.OPERATOR_NAMES["manifest"]
+        or manifest_package.get("name") != names["manifest"]
         or manifest_package.get("phase") != "manifest"
         or manifest_package.get("failure_alerts") != "off"
         or manifest_package.get("priority") != "c1"
@@ -259,7 +279,7 @@ def preflight_packet(
         manifest_release.get("release_observed_at"),
         maximum_age=direct.DIRECT_STAGE_RELEASE_MAX_AGE_SECONDS,
     )
-    expected = direct.preflight_job_manifest(plan, identity=identity)
+    expected = launch_direct.preflight_job_manifest(plan, identity=identity)
     direct.validate_cpu_preview_proof(
         expected,
         dev_preview,
@@ -274,7 +294,7 @@ def preflight_packet(
         {
             "schema": operator.PACKET_SCHEMA,
             "phase": "preflight",
-            "operator_name": operator.OPERATOR_NAMES["preflight"],
+            "operator_name": names["preflight"],
             "identity": identity.sealed_mapping(),
             "plan": plan,
             "request": request,
@@ -300,16 +320,18 @@ def launch_packet(
     dev_preview_provenance: dict[str, Any],
     duplicate_proof: dict[str, Any],
     capacity_census: dict[str, Any],
+    predecessor_evidence: dict[str, Any] | None = None,
     fresh_duplicate: bool = True,
 ) -> dict[str, Any]:
-    direct._identity(plan, identity)
-    if training.job_request(plan) != request:
+    names = operator.operator_names(identity)
+    launch_direct.plan_identity(plan, identity)
+    if launch_direct.job_request(plan, identity=identity) != request:
         raise ValueError("prod10 launch request changed")
     checked_launch = launch_direct._preflight_launch(
         preflight_launch_result,
         plan,
         identity=identity,
-        operator_name=operator.OPERATOR_NAMES["preflight"],
+        operator_name=names["preflight"],
     )
     direct._source(source_preview)
     checked_dev = direct._validate_seal(dev_preview, direct.PREVIEW_SCHEMA)
@@ -325,13 +347,18 @@ def launch_packet(
     ):
         raise ValueError("prod10 launch sealed dev preview provenance changed")
     duplicate = launch_direct._duplicate(duplicate_proof, identity, fresh=fresh_duplicate)
+    fast3_evidence = (
+        operator._fast3_predecessor_evidence(predecessor_evidence)
+        if identity == operator.FAST3_IDENTITY
+        else None
+    )
     if re.fullmatch(r"sha256:[0-9a-f]{64}", manifest_sha256) is None:
         raise ValueError("prod10 launch manifest digest changed")
     return _seal(
         {
             "schema": operator.PACKET_SCHEMA,
             "phase": "launch",
-            "operator_name": operator.OPERATOR_NAMES["launch"],
+            "operator_name": names["launch"],
             "identity": identity.sealed_mapping(),
             "plan": plan,
             "request": request,
@@ -342,20 +369,29 @@ def launch_packet(
             "sealed_dev_preview_provenance": checked_dev_provenance,
             "duplicate_proof": duplicate,
             "capacity_census": capacity_census,
-            "launch_v1_failure": operator.launch_v1_failure_binding(),
-            "launch_v2_failure": operator.launch_v2_failure_binding(),
-            "probe_v6_success": operator.probe_v6_success_binding(),
-            "probe_v7_failure": operator.probe_v7_failure_binding(),
-            "probe_v8_failure": operator.probe_v8_failure_binding(),
-            "probe_v9_success": operator.probe_v9_success_binding(),
-            "launch_v3_recovery": operator.launch_v3_recovery_binding(),
-            "inspect_v4_success": operator.inspect_v4_success_binding(),
-            "launch_v4_failure": operator.launch_v4_failure_binding(),
-            "inspect_v5_success": operator.inspect_v5_success_binding(),
-            "launch_v5_failure": operator.launch_v5_failure_binding(),
-            "inspect_v6_success": operator.inspect_v6_success_binding(),
-            "launch_v6_failure": operator.launch_v6_failure_binding(),
-            "launch_v7_failure": operator.launch_v7_failure_binding(),
+            **(
+                {
+                    "fresh_identity": True,
+                    "predecessor_evidence": fast3_evidence,
+                }
+                if identity == operator.FAST3_IDENTITY
+                else {
+                    "launch_v1_failure": operator.launch_v1_failure_binding(),
+                    "launch_v2_failure": operator.launch_v2_failure_binding(),
+                    "probe_v6_success": operator.probe_v6_success_binding(),
+                    "probe_v7_failure": operator.probe_v7_failure_binding(),
+                    "probe_v8_failure": operator.probe_v8_failure_binding(),
+                    "probe_v9_success": operator.probe_v9_success_binding(),
+                    "launch_v3_recovery": operator.launch_v3_recovery_binding(),
+                    "inspect_v4_success": operator.inspect_v4_success_binding(),
+                    "launch_v4_failure": operator.launch_v4_failure_binding(),
+                    "inspect_v5_success": operator.inspect_v5_success_binding(),
+                    "launch_v5_failure": operator.launch_v5_failure_binding(),
+                    "inspect_v6_success": operator.inspect_v6_success_binding(),
+                    "launch_v6_failure": operator.launch_v6_failure_binding(),
+                    "launch_v7_failure": operator.launch_v7_failure_binding(),
+                }
+            ),
         }
     )
 
@@ -366,7 +402,7 @@ def inspect_packet(
     plan: dict[str, Any],
     preflight_launch_result: dict[str, Any],
 ) -> dict[str, Any]:
-    direct._identity(plan, identity)
+    launch_direct.plan_identity(plan, identity)
     checked_launch = launch_direct._preflight_launch(
         preflight_launch_result,
         plan,
@@ -429,6 +465,7 @@ def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
             identity=identity,
             stage=checked["stage"],
             stage_launch_result=checked["stage_launch_result"],
+            plan=checked.get("plan"),
         )
     elif checked["phase"] == "preflight":
         expected = preflight_packet(
@@ -463,6 +500,7 @@ def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
             dev_preview_provenance=checked["sealed_dev_preview_provenance"],
             duplicate_proof=checked["duplicate_proof"],
             capacity_census=checked["capacity_census"],
+            predecessor_evidence=checked.get("predecessor_evidence"),
             fresh_duplicate=False,
         )
     if checked != expected:
@@ -473,7 +511,7 @@ def _validate_packet_semantics(packet: dict[str, Any]) -> dict[str, Any]:
 def _config_maps(
     *, phase: str, source: bytes, source_sha256: str, packet: dict[str, Any]
 ) -> tuple[dict[str, Any], dict[str, Any], bytes]:
-    name = operator.OPERATOR_NAMES[phase]
+    name = packet["operator_name"]
     packet_bytes = (json.dumps(packet, sort_keys=True, separators=(",", ":")) + "\n").encode()
     packet_gz = gzip.compress(packet_bytes, mtime=0)
     annotations = {
@@ -509,7 +547,7 @@ def _config_maps(
 def _job(
     *, phase: str, source_sha256: str, packet: dict[str, Any], packet_bytes: bytes
 ) -> dict[str, Any]:
-    name = operator.OPERATOR_NAMES[phase]
+    name = packet["operator_name"]
     annotations = {
         FAILURE_ALERT_ANNOTATION: FAILURE_ALERT_OFF,
         SOURCE_ANNOTATION: source_sha256,
@@ -517,7 +555,11 @@ def _job(
         PHASE_ANNOTATION: phase,
     }
     labels = {
-        "cyber-post-train.fleet.ai/role": "prod10-bounded-operator",
+        "cyber-post-train.fleet.ai/role": (
+            "prod11-fast3-bounded-operator"
+            if packet.get("identity", {}).get("run_name") == operator.FAST3_IDENTITY.run_name
+            else "prod10-bounded-operator"
+        ),
         QUEUE_LABEL: QUEUE,
         QUEUE_PRIORITY_LABEL: QUEUE_PRIORITY,
     }
@@ -734,6 +776,8 @@ def validate_operator_package(package: OperatorPackage) -> dict[str, Any]:
         expected_sfs_claim["readOnly"] = True
     if (
         metadata["annotations"].get(FAILURE_ALERT_ANNOTATION) != FAILURE_ALERT_OFF
+        or expected_job["spec"]["template"]["metadata"]["annotations"].get(FAILURE_ALERT_ANNOTATION)
+        != FAILURE_ALERT_OFF
         or metadata["labels"].get(QUEUE_LABEL) != QUEUE
         or metadata["labels"].get(QUEUE_PRIORITY_LABEL) != QUEUE_PRIORITY
         or pod.get("priorityClassName") != "c1"

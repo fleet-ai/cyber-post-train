@@ -14,6 +14,7 @@ import contextlib
 import hashlib
 import json
 import os
+import re
 import stat
 import threading
 import time
@@ -24,6 +25,7 @@ from uuid import UUID
 
 from cyber_post_train.gpu_capacity import build_capacity_census
 from cyber_post_train.jobs import Jobs, JobsError, digest
+from cyber_post_train.sfs_output import require_output_absent
 
 from . import dev_cleanup_observer as cleanup
 from . import skyrl_prod9_direct as direct
@@ -41,6 +43,8 @@ MANIFEST_RESULT_SCHEMA = "cyber_skyrl_prod10_rebound_manifest_result_v1"
 TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_termination_v1"
 FAILURE_TERMINATION_SCHEMA = "cyber_skyrl_prod10_operator_failure_v1"
 GUARD_ARCHIVE_SCHEMA = "cyber_skyrl_prod10_dead_guard_archive_v1"
+FAST3_PREDECESSOR_EVIDENCE_SCHEMA = "cyber_skyrl_prod11_fast3_predecessor_evidence_v1"
+FAST3_MARKER_ABSENCE_SCHEMA = "cyber_skyrl_prod11_fast3_marker_absence_v1"
 _GUARD_ARCHIVE_NAME = "TRAINING_JOBS_API_PREFIX_GUARD.launch-v3-failed.json"
 _GUARD_ARCHIVE_RECEIPT_NAME = "TRAINING_JOBS_API_PREFIX_GUARD.launch-v3-archive.json"
 OPERATOR_NAMES = {
@@ -51,6 +55,24 @@ OPERATOR_NAMES = {
     "inspect": "chris-q38-prod10-launch-inspect-v6",
     "probe": "chris-q38-prod10-launch-probe-v9",
 }
+FAST3_IDENTITY = launch_direct.FAST3_IDENTITY
+FAST3_OPERATOR_NAMES = {
+    "stage": "chris-q38-prod11-fast3-stage-operator-v1",
+    "manifest": "chris-q38-prod11-fast3-manifest-operator-v1",
+    "preflight": "chris-q38-prod11-fast3-preflight-operator-v1",
+    "launch": "chris-q38-prod11-fast3-launch-operator-v1",
+}
+
+
+def operator_names(identity: historical.RailIdentity) -> dict[str, str]:
+    """Select only the frozen prod10 or exact Fast3 operator identities."""
+    if identity.run_name == "chris-q38-rlreward-prod10":
+        return OPERATOR_NAMES
+    if identity == FAST3_IDENTITY:
+        return FAST3_OPERATOR_NAMES
+    raise ValueError("prod10/Fast3 operator identity changed")
+
+
 _LAUNCH_V1_FAILURE = {
     "schema": "cyber_skyrl_prod10_launch_failure_binding_v1",
     "status": "failed_before_gpu_create_and_released",
@@ -744,6 +766,7 @@ _POST_PRE_GUARD_LAUNCH_STAGES = (
     "prod_preview_freshness",
     "live_preview_freshness",
     "duplicate_before_intent",
+    "fresh_marker_recheck",
     "guard_archive",
     "guard_construct",
     "guard_arm",
@@ -770,6 +793,63 @@ def _validate_seal(value: object, schema: str) -> dict[str, Any]:
     if not isinstance(value, dict) or value.get("schema") != schema or value != _seal(value):
         raise ValueError("prod10 operator evidence is invalid")
     return value
+
+
+def fast3_predecessor_evidence(
+    *,
+    source_head: str,
+    failure_diagnostic_file_sha256: str,
+    failure_diagnostic_self_sha256: str,
+    fast2_retirement_file_sha256: str,
+    fast2_retirement_self_sha256: str,
+    generation_retry_policy_sha256: str,
+    predecessor_science_sha256: str,
+) -> dict[str, Any]:
+    """Seal reviewed Fast3 evidence digests without inventing source bytes."""
+    values = (
+        failure_diagnostic_file_sha256,
+        failure_diagnostic_self_sha256,
+        fast2_retirement_file_sha256,
+        fast2_retirement_self_sha256,
+        generation_retry_policy_sha256,
+        predecessor_science_sha256,
+    )
+    if re.fullmatch(r"[0-9a-f]{40}", source_head) is None or any(
+        re.fullmatch(r"sha256:[0-9a-f]{64}", value) is None for value in values
+    ):
+        raise ValueError("Fast3 predecessor evidence digest changed")
+    return _seal(
+        {
+            "schema": FAST3_PREDECESSOR_EVIDENCE_SCHEMA,
+            "status": "bounded_retry_successor_evidence_bound",
+            "source_head": source_head,
+            "failure_diagnostic_file_sha256": failure_diagnostic_file_sha256,
+            "failure_diagnostic_self_sha256": failure_diagnostic_self_sha256,
+            "failure_retryability_proven": False,
+            "fast2_retirement_file_sha256": fast2_retirement_file_sha256,
+            "fast2_retirement_self_sha256": fast2_retirement_self_sha256,
+            "fast2_gpu_launch_attempted": False,
+            "generation_retry_policy_sha256": generation_retry_policy_sha256,
+            "predecessor_science_sha256": predecessor_science_sha256,
+            "exact_runtime_parity_claimed": False,
+        }
+    )
+
+
+def _fast3_predecessor_evidence(value: object) -> dict[str, Any]:
+    checked = _validate_seal(value, FAST3_PREDECESSOR_EVIDENCE_SCHEMA)
+    expected = fast3_predecessor_evidence(
+        source_head=checked.get("source_head", ""),
+        failure_diagnostic_file_sha256=checked.get("failure_diagnostic_file_sha256", ""),
+        failure_diagnostic_self_sha256=checked.get("failure_diagnostic_self_sha256", ""),
+        fast2_retirement_file_sha256=checked.get("fast2_retirement_file_sha256", ""),
+        fast2_retirement_self_sha256=checked.get("fast2_retirement_self_sha256", ""),
+        generation_retry_policy_sha256=checked.get("generation_retry_policy_sha256", ""),
+        predecessor_science_sha256=checked.get("predecessor_science_sha256", ""),
+    )
+    if checked != expected:
+        raise ValueError("Fast3 predecessor evidence changed")
+    return checked
 
 
 def stage_recovery_binding() -> dict[str, Any]:
@@ -945,8 +1025,7 @@ def _identity(value: object) -> historical.RailIdentity:
     if not isinstance(value, dict):
         raise ValueError("prod10 operator identity is invalid")
     identity = historical.identity_from_mapping(value)
-    if identity.run_name != "chris-q38-rlreward-prod10":
-        raise ValueError("prod10 operator identity changed")
+    operator_names(identity)
     return identity
 
 
@@ -960,7 +1039,12 @@ def _launch_packet_inputs(packet: dict[str, Any]) -> None:
         packet.get("sealed_dev_preview_provenance"),
         launch_direct.SEALED_DEV_PREVIEW_PROVENANCE_SCHEMA,
     )
-    direct._validate_seal(packet.get("duplicate_proof"), launch_direct.DUPLICATE_SCHEMA)
+    identity = _identity(packet.get("identity"))
+    if identity == FAST3_IDENTITY:
+        launch_direct._duplicate(packet.get("duplicate_proof"), identity, fresh=False)
+        _fast3_predecessor_evidence(packet.get("predecessor_evidence"))
+    else:
+        direct._validate_seal(packet.get("duplicate_proof"), launch_direct.DUPLICATE_SCHEMA)
     census = packet.get("capacity_census")
     request = packet.get("request")
     planned = (
@@ -1004,16 +1088,28 @@ def _launch_v2_packet(value: object) -> dict[str, Any]:
 
 def _packet(value: object, phase: str) -> dict[str, Any]:
     packet = _validate_seal(value, PACKET_SCHEMA)
-    if phase not in OPERATOR_NAMES or packet.get("phase") != phase:
+    identity = _identity(packet.get("identity"))
+    names = operator_names(identity)
+    if phase not in names or packet.get("phase") != phase:
         raise ValueError("prod10 operator phase changed")
-    if packet.get("operator_name") != OPERATOR_NAMES[phase]:
+    if packet.get("operator_name") != names[phase]:
         raise ValueError("prod10 operator name changed")
-    _identity(packet.get("identity"))
     if phase == "stage":
-        if packet.get("precreate_recovery") != stage_recovery_binding():
+        if identity == FAST3_IDENTITY:
+            if packet.get("fresh_identity") is not True:
+                raise ValueError("Fast3 stage fresh identity changed")
+        elif packet.get("precreate_recovery") != stage_recovery_binding():
             raise ValueError("prod10 stage pre-create recovery binding changed")
     elif phase == "manifest":
-        if packet.get("preflight_v1_failure") != preflight_v1_failure_binding():
+        if identity == FAST3_IDENTITY:
+            plan = packet.get("plan")
+            if packet.get("fresh_identity") is not True or not isinstance(plan, dict):
+                raise ValueError("Fast3 manifest fresh identity changed")
+            launch_direct.plan_identity(plan, identity)
+            # This deliberately exercises the full plan shape. A two-field
+            # identity dictionary cannot derive the create-once root.
+            launch_direct.training_operation_root(plan, identity=identity)
+        elif packet.get("preflight_v1_failure") != preflight_v1_failure_binding():
             raise ValueError("prod10 preflight v1 recovery binding changed")
     elif phase == "preflight":
         direct._validate_seal(packet.get("dev_preview"), direct.CPU_PREVIEW_SCHEMA)
@@ -1032,7 +1128,7 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
         plan = packet.get("plan")
         if not isinstance(plan, dict):
             raise ValueError("prod10 launch inspection plan changed")
-        direct._identity(plan, _identity(packet.get("identity")))
+        launch_direct.plan_identity(plan, _identity(packet.get("identity")))
         launch_direct._preflight_launch(
             packet.get("preflight_launch_result"),
             plan,
@@ -1054,35 +1150,40 @@ def _packet(value: object, phase: str) -> dict[str, Any]:
             raise ValueError("prod10 launch probe expected diagnosis changed")
         _launch_v2_packet(packet.get("launch_packet"))
     else:
-        if packet.get("launch_v1_failure") != launch_v1_failure_binding():
+        if identity == FAST3_IDENTITY:
+            if packet.get("fresh_identity") is not True:
+                raise ValueError("Fast3 launch fresh identity changed")
+            _launch_packet_inputs(packet)
+        elif packet.get("launch_v1_failure") != launch_v1_failure_binding():
             raise ValueError("prod10 launch failure predecessor changed")
-        if packet.get("launch_v2_failure") != launch_v2_failure_binding():
+        elif packet.get("launch_v2_failure") != launch_v2_failure_binding():
             raise ValueError("prod10 launch-v2 failure predecessor changed")
-        if packet.get("probe_v6_success") != probe_v6_success_binding():
+        elif packet.get("probe_v6_success") != probe_v6_success_binding():
             raise ValueError("prod10 launch repair proof changed")
-        if packet.get("probe_v7_failure") != probe_v7_failure_binding():
+        elif packet.get("probe_v7_failure") != probe_v7_failure_binding():
             raise ValueError("prod10 launch probe-v7 predecessor changed")
-        if packet.get("probe_v8_failure") != probe_v8_failure_binding():
+        elif packet.get("probe_v8_failure") != probe_v8_failure_binding():
             raise ValueError("prod10 launch probe-v8 predecessor changed")
-        if packet.get("probe_v9_success") != probe_v9_success_binding():
+        elif packet.get("probe_v9_success") != probe_v9_success_binding():
             raise ValueError("prod10 launch probe-v9 predecessor changed")
-        if packet.get("launch_v3_recovery") != launch_v3_recovery_binding():
+        elif packet.get("launch_v3_recovery") != launch_v3_recovery_binding():
             raise ValueError("prod10 launch-v3 recovery predecessor changed")
-        if packet.get("inspect_v4_success") != inspect_v4_success_binding():
+        elif packet.get("inspect_v4_success") != inspect_v4_success_binding():
             raise ValueError("prod10 launch inspector-v4 predecessor changed")
-        if packet.get("launch_v4_failure") != launch_v4_failure_binding():
+        elif packet.get("launch_v4_failure") != launch_v4_failure_binding():
             raise ValueError("prod10 launch-v4 failure predecessor changed")
-        if packet.get("inspect_v5_success") != inspect_v5_success_binding():
+        elif packet.get("inspect_v5_success") != inspect_v5_success_binding():
             raise ValueError("prod10 launch inspector-v5 predecessor changed")
-        if packet.get("launch_v5_failure") != launch_v5_failure_binding():
+        elif packet.get("launch_v5_failure") != launch_v5_failure_binding():
             raise ValueError("prod10 launch-v5 failure predecessor changed")
-        if packet.get("inspect_v6_success") != inspect_v6_success_binding():
+        elif packet.get("inspect_v6_success") != inspect_v6_success_binding():
             raise ValueError("prod10 launch inspector-v6 predecessor changed")
-        if packet.get("launch_v6_failure") != launch_v6_failure_binding():
+        elif packet.get("launch_v6_failure") != launch_v6_failure_binding():
             raise ValueError("prod10 launch-v6 failure predecessor changed")
-        if packet.get("launch_v7_failure") != launch_v7_failure_binding():
+        elif packet.get("launch_v7_failure") != launch_v7_failure_binding():
             raise ValueError("prod10 launch-v7 failure predecessor changed")
-        _launch_packet_inputs(packet)
+        else:
+            _launch_packet_inputs(packet)
     return packet
 
 
@@ -1608,17 +1709,29 @@ def _new_observer(
 
 def run_stage(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> dict[str, Any]:
     identity = _identity(packet["identity"])
+    names = operator_names(identity)
     stage, _ = training._stage_identity(packet.get("stage"))
     # The child manifest is historical v6 evidence only.  V7 executes the
     # already-reviewed pure rebind directly in this exact-image root Job.
     expected = direct.stage_job_manifest(stage, identity=identity)
-    operation_root = _reconcile_stage_v6_failed(
-        packet,
-        stage=stage,
-        expected=expected,
-        identity=identity,
-        runner=runner,
-    )
+    if identity == FAST3_IDENTITY:
+        if packet.get("fresh_identity") is not True:
+            raise OperatorFailure("stage_fresh_identity_rejected")
+        _existing_root()
+        operation_root = hardening.stage_operation_root(stage)
+        try:
+            require_output_absent({"run_dir": identity.data_root})
+        except ValueError as exc:
+            raise OperatorFailure("stage_destination_absence_rejected") from exc
+        _create_operation_root(operation_root)
+    else:
+        operation_root = _reconcile_stage_v6_failed(
+            packet,
+            stage=stage,
+            expected=expected,
+            identity=identity,
+            runner=runner,
+        )
     _write_once(
         operation_root / "STAGE_OPERATOR_INTENT.json",
         _seal(
@@ -1637,9 +1750,13 @@ def run_stage(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> d
         direct._stage_receipt(stage, receipt, identity=identity)
     except (JobsError, ValueError, OSError) as exc:
         raise OperatorFailure("stage_rebind_rejected") from exc
-    recovery = _read_recovery_file(
-        operation_root / "STAGE_OPERATOR_RECOVERY_V7.json",
-        "cyber_skyrl_prod10_stage_precreate_recovery_receipt_v1",
+    recovery = (
+        None
+        if identity == FAST3_IDENTITY
+        else _read_recovery_file(
+            operation_root / "STAGE_OPERATOR_RECOVERY_V7.json",
+            "cyber_skyrl_prod10_stage_precreate_recovery_receipt_v1",
+        )
     )
     return _seal(
         {
@@ -1649,10 +1766,14 @@ def run_stage(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> d
             "packet_sha256": packet["sha256"],
             "stage": stage,
             "receipt": receipt,
-            "recovery_sha256": recovery["sha256"],
+            **(
+                {"fresh_identity": True}
+                if identity == FAST3_IDENTITY
+                else {"recovery_sha256": recovery["sha256"]}
+            ),
             "execution": {
                 "kind": "job",
-                "name": packet["operator_name"],
+                "name": names["stage"],
                 "uid": os.environ["OPERATOR_JOB_UID"],
                 "image": stage["image"],
                 "source_sha256": os.environ["OPERATOR_SOURCE_SHA256"],
@@ -1667,12 +1788,13 @@ def run_stage(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> d
 
 def run_preflight(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> dict[str, Any]:
     identity = _identity(packet["identity"])
+    names = operator_names(identity)
     plan = packet.get("plan")
     request = packet.get("request")
     if not isinstance(plan, dict) or not isinstance(request, dict):
         raise ValueError("prod10 preflight operator plan/request is invalid")
-    direct._identity(plan, identity)
-    if training.job_request(plan) != request:
+    launch_direct.plan_identity(plan, identity)
+    if launch_direct.job_request(plan, identity=identity) != request:
         raise ValueError("prod10 preflight operator request changed")
     stage, stage_identity = training._stage_identity(packet.get("stage"))
     if stage_identity != identity:
@@ -1681,7 +1803,7 @@ def run_preflight(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) 
         packet.get("stage_launch_result"),
         stage,
         identity=identity,
-        operator_name=OPERATOR_NAMES["stage"],
+        operator_name=names["stage"],
         fresh=False,
     )
     result_path = hardening.stage_operation_root(stage) / "STAGE_OPERATOR_RESULT.json"
@@ -1696,7 +1818,7 @@ def run_preflight(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) 
         stage_launch,
         plan=plan,
         identity=identity,
-        operator_name=OPERATOR_NAMES["stage"],
+        operator_name=names["stage"],
         fresh_release=False,
     )
     manifest_launch = direct._direct_manifest_launch(
@@ -1704,23 +1826,23 @@ def run_preflight(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) 
         plan,
         stage_result,
         stage_launch,
-        operator_name=OPERATOR_NAMES["manifest"],
+        operator_name=names["manifest"],
         fresh=True,
     )
     for resource, name in (
-        ("job", OPERATOR_NAMES["stage"]),
+        ("job", names["stage"]),
         ("workload", stage_launch["observer"]["workload_name"]),
         ("configmap", stage_launch["created"]["source_config_map"]["name"]),
         ("configmap", stage_launch["created"]["packet_config_map"]["name"]),
         *(("pod", name) for name in stage_launch["observer"]["pod_names"]),
-        ("job", OPERATOR_NAMES["manifest"]),
+        ("job", names["manifest"]),
         ("workload", manifest_launch["observer"]["workload_name"]),
         ("configmap", manifest_launch["created"]["source_config_map"]["name"]),
         ("configmap", manifest_launch["created"]["packet_config_map"]["name"]),
         *(("pod", name) for name in manifest_launch["observer"]["pod_names"]),
     ):
         _resource_absent(runner, resource, name, code="direct_stage_resource_still_present")
-    expected = direct.preflight_job_manifest(plan, identity=identity)
+    expected = launch_direct.preflight_job_manifest(plan, identity=identity)
     if packet.get("manifest_sha256") != "sha256:" + digest(expected):
         raise ValueError("prod10 preflight operator manifest changed")
     try:
@@ -1734,7 +1856,7 @@ def run_preflight(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) 
     except JobsError as exc:
         raise OperatorFailure("preflight_development_preview_rejected") from exc
     _existing_root()
-    operation_root = hardening.training_operation_root(plan)
+    operation_root = launch_direct.training_operation_root(plan, identity=identity)
     _create_operation_root(operation_root)
     _write_once(
         operation_root / "PREFLIGHT_OPERATOR_INTENT.json",
@@ -1761,7 +1883,7 @@ def run_preflight(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) 
     prod_preview = direct.validate_cpu_preview(
         expected, prod_rendered, context=direct.PROD_CONTEXT, purpose="preflight"
     )
-    authorization = direct.authorize_preflight_direct_manifest(
+    authorization = launch_direct.authorize_preflight_direct_manifest(
         plan,
         request,
         stage,
@@ -1769,14 +1891,14 @@ def run_preflight(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) 
         stage_launch,
         manifest_launch,
         expected,
-        stage_operator_name=OPERATOR_NAMES["stage"],
-        manifest_operator_name=OPERATOR_NAMES["manifest"],
+        stage_operator_name=names["stage"],
+        manifest_operator_name=names["manifest"],
         dev_preview=packet["dev_preview"],
         prod_preview=prod_preview,
         observer=state["armed"],
         identity=identity,
     )
-    created = direct.create_preflight_once(
+    created = launch_direct.create_preflight_once(
         operation_root,
         plan,
         request,
@@ -1788,7 +1910,7 @@ def run_preflight(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) 
     )
     release = _join_observer(thread, state)
     receipt = release.get("receipt")
-    direct._preflight_receipt(plan, request, receipt, identity=identity)
+    launch_direct.preflight_receipt(plan, request, receipt, identity=identity)
     return _seal(
         {
             "schema": RESULT_SCHEMA,
@@ -1811,6 +1933,7 @@ def run_preflight(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) 
 
 def run_manifest(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> dict[str, Any]:
     identity = _identity(packet["identity"])
+    names = operator_names(identity)
     stage, stage_identity = training._stage_identity(packet.get("stage"))
     if stage_identity != identity:
         raise ValueError("prod10 manifest stage identity changed")
@@ -1818,7 +1941,7 @@ def run_manifest(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -
         packet.get("stage_launch_result"),
         stage,
         identity=identity,
-        operator_name=OPERATOR_NAMES["stage"],
+        operator_name=names["stage"],
         fresh=False,
     )
     result_path = hardening.stage_operation_root(stage) / "STAGE_OPERATOR_RESULT.json"
@@ -1832,31 +1955,56 @@ def run_manifest(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -
         stage_result,
         stage_launch,
         identity=identity,
-        operator_name=OPERATOR_NAMES["stage"],
+        operator_name=names["stage"],
         fresh_release=False,
     )
-    recovery = preflight_v1_failure_binding()
+    plan = packet.get("plan") if identity == FAST3_IDENTITY else None
+    if identity == FAST3_IDENTITY:
+        if not isinstance(plan, dict) or packet.get("fresh_identity") is not True:
+            raise OperatorFailure("manifest_fresh_identity_rejected")
+        launch_direct.plan_identity(plan, identity)
+        if successor != plan.get("data"):
+            raise OperatorFailure("manifest_successor_plan_rejected")
+    recovery = None if identity == FAST3_IDENTITY else preflight_v1_failure_binding()
     resources = [
-        ("job", OPERATOR_NAMES["stage"]),
+        ("job", names["stage"]),
         ("workload", stage_launch["observer"]["workload_name"]),
         ("configmap", stage_launch["created"]["source_config_map"]["name"]),
         ("configmap", stage_launch["created"]["packet_config_map"]["name"]),
         *(("pod", name) for name in stage_launch["observer"]["pod_names"]),
-        ("job", recovery["operator_name"]),
-        ("pod", recovery["operator_pod_name"]),
-        ("workload", recovery["operator_workload_name"]),
-        ("configmap", recovery["source_config_map_name"]),
-        ("configmap", recovery["packet_config_map_name"]),
-        ("job", recovery["child_name"]),
+        *(
+            [("job", names["preflight"]), ("job", identity.preflight_name)]
+            if recovery is None
+            else [
+                ("job", recovery["operator_name"]),
+                ("pod", recovery["operator_pod_name"]),
+                ("workload", recovery["operator_workload_name"]),
+                ("configmap", recovery["source_config_map_name"]),
+                ("configmap", recovery["packet_config_map_name"]),
+                ("job", recovery["child_name"]),
+            ]
+        ),
     ]
     for resource, name in resources:
         _resource_absent(runner, resource, name, code="manifest_predecessor_resource_still_present")
-    operation_root = Path(recovery["operation_root"])
+    operation_root = (
+        launch_direct.training_operation_root(plan, identity=identity)
+        if identity == FAST3_IDENTITY
+        else Path(recovery["operation_root"])
+    )
+    if identity == FAST3_IDENTITY:
+        _existing_root()
     if operation_root.exists() or operation_root.is_symlink():
         raise OperatorFailure("manifest_failed_preflight_root_exists")
-    output_root = Path(identity.output_root)
-    if output_root.exists() or output_root.is_symlink():
-        raise OperatorFailure("manifest_gpu_output_exists")
+    if identity == FAST3_IDENTITY:
+        try:
+            require_output_absent({"run_dir": identity.output_root})
+        except ValueError as exc:
+            raise OperatorFailure("manifest_gpu_output_absence_rejected") from exc
+    else:
+        output_root = Path(identity.output_root)
+        if output_root.exists() or output_root.is_symlink():
+            raise OperatorFailure("manifest_gpu_output_exists")
     return _seal(
         {
             "schema": MANIFEST_RESULT_SCHEMA,
@@ -1864,7 +2012,11 @@ def run_manifest(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -
             "phase": "manifest",
             "stage_result_sha256": stage_result["sha256"],
             "stage_launch_result_sha256": stage_launch["sha256"],
-            "preflight_v1_failure_sha256": recovery["sha256"],
+            **(
+                {"fresh_identity": True}
+                if identity == FAST3_IDENTITY
+                else {"preflight_v1_failure_sha256": recovery["sha256"]}
+            ),
             "successor_manifest": successor,
             "successor_manifest_sha256": successor["sha256"],
             "private_rows_exported": False,
@@ -2159,20 +2311,64 @@ def _inspect_launch_markers(operation_root: Path) -> dict[str, dict[str, Any]]:
     }
 
 
+def _fast3_marker_absence(operation_root: Path) -> dict[str, Any]:
+    """Require every guard, journal, binding, and archive marker to be absent."""
+    probes = _inspect_launch_markers(operation_root)
+    if any(value != {"state": "absent"} for value in probes.values()):
+        raise OperatorFailure("fast3_launch_marker_absence_rejected")
+    return _seal(
+        {
+            "schema": FAST3_MARKER_ABSENCE_SCHEMA,
+            "status": "all_create_once_markers_absent",
+            "markers": sorted(probes),
+        }
+    )
+
+
+def _fast3_guard_armed(operation_root: Path) -> dict[str, Any]:
+    """Prove the new guard is the only marker present before authorization."""
+    probes = _inspect_launch_markers(operation_root)
+    guard = probes.get("current_guard", {})
+    if (
+        any(
+            probes.get(name) != {"state": "absent"}
+            for name in (
+                "v3_guard_archive",
+                "v3_guard_archive_receipt",
+                "create_journal",
+                "creator_binding",
+            )
+        )
+        or guard.get("state") != "present"
+        or guard.get("kind") != "regular"
+        or guard.get("mode") != "0600"
+        or re.fullmatch(r"sha256:[0-9a-f]{64}", str(guard.get("sha256"))) is None
+    ):
+        raise OperatorFailure("fast3_launch_guard_state_rejected")
+    return _seal(
+        {
+            "schema": FAST3_MARKER_ABSENCE_SCHEMA,
+            "status": "fresh_guard_only_before_create_intent",
+            "guard_sha256": guard["sha256"],
+            "other_markers_absent": True,
+        }
+    )
+
+
 def run_inspect(packet: dict[str, Any]) -> dict[str, Any]:
     """Inspect only the five canonical SFS markers after the failed v5 outer."""
     identity = _identity(packet["identity"])
     plan = packet.get("plan")
     if not isinstance(plan, dict):
         raise ValueError("prod10 launch inspection plan changed")
-    direct._identity(plan, identity)
+    launch_direct.plan_identity(plan, identity)
     launch = launch_direct._preflight_launch(
         packet.get("preflight_launch_result"),
         plan,
         identity=identity,
         operator_name=OPERATOR_NAMES["preflight"],
     )
-    operation_root = hardening.training_operation_root(plan)
+    operation_root = launch_direct.training_operation_root(plan, identity=identity)
     probes = _inspect_launch_markers(operation_root)
     return _seal(
         {
@@ -2204,20 +2400,24 @@ def _pre_guard_launch(packet: dict[str, Any], runner: InClusterKubernetesRunner)
     global _LAUNCH_STAGE
     _LAUNCH_STAGE = "plan_identity"
     identity = _identity(packet["identity"])
+    names = operator_names(identity)
     plan = packet.get("plan")
     if not isinstance(plan, dict):
         raise ValueError("prod10 launch plan changed")
-    direct._identity(plan, identity)
+    launch_direct.plan_identity(plan, identity)
     _LAUNCH_STAGE = "request_identity"
     request = packet.get("request")
-    if not isinstance(request, dict) or training.job_request(plan) != request:
+    if (
+        not isinstance(request, dict)
+        or launch_direct.job_request(plan, identity=identity) != request
+    ):
         raise ValueError("prod10 launch request changed")
     _LAUNCH_STAGE = "preflight_launch_binding"
     preflight_launch = launch_direct._preflight_launch(
         packet.get("preflight_launch_result"),
         plan,
         identity=identity,
-        operator_name=OPERATOR_NAMES["preflight"],
+        operator_name=names["preflight"],
     )
     _LAUNCH_STAGE = "preflight_result_read"
     receipt = preflight_launch["observer"]["receipt"]
@@ -2238,7 +2438,7 @@ def _pre_guard_launch(packet: dict[str, Any], runner: InClusterKubernetesRunner)
     if not isinstance(source_preview, dict):
         raise ValueError("prod10 launch Jobs preview is invalid")
     _LAUNCH_STAGE = "manifest_rebuild"
-    expected = direct.manifest(
+    expected = launch_direct.gpu_manifest(
         plan,
         request,
         source_preview,
@@ -2249,16 +2449,22 @@ def _pre_guard_launch(packet: dict[str, Any], runner: InClusterKubernetesRunner)
     if packet.get("manifest_sha256") != "sha256:" + digest(expected):
         raise ValueError("prod10 launch GPU manifest changed")
     _LAUNCH_STAGE = "operation_root_validate"
-    operation_root = hardening.training_operation_root(plan)
+    operation_root = launch_direct.training_operation_root(plan, identity=identity)
     _canonical_directory(operation_root, code="launch_operation_root")
     _LAUNCH_STAGE = "output_absence"
-    output_root = Path(identity.output_root)
-    if output_root.exists() or output_root.is_symlink():
-        raise OperatorFailure("launch_output_exists")
+    if identity == FAST3_IDENTITY:
+        try:
+            require_output_absent({"run_dir": identity.output_root})
+        except ValueError as exc:
+            raise OperatorFailure("launch_output_absence_rejected") from exc
+    else:
+        output_root = Path(identity.output_root)
+        if output_root.exists() or output_root.is_symlink():
+            raise OperatorFailure("launch_output_exists")
     _LAUNCH_STAGE = "server_dry_run"
     prod_dry_run = direct.server_dry_run(expected, context=direct.PROD_CONTEXT, runner=runner)
     _LAUNCH_STAGE = "server_preview_validate"
-    direct.validate_preview(
+    launch_direct.validate_gpu_preview(
         plan,
         request,
         source_preview,
@@ -2513,10 +2719,12 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
     image_identity = pre_guard["image_identity"]
     source_preview, expected = pre_guard["source_preview"], pre_guard["expected"]
     operation_root = pre_guard["operation_root"]
+    fresh_fast3 = identity == FAST3_IDENTITY
+    marker_absence_before = _fast3_marker_absence(operation_root) if fresh_fast3 else None
     _LAUNCH_STAGE = "prod_preview_dry_run"
     prod_server_render = direct.server_dry_run(expected, context=direct.PROD_CONTEXT, runner=runner)
     _LAUNCH_STAGE = "prod_preview_validate"
-    prod_preview = direct.validate_preview(
+    prod_preview = launch_direct.validate_gpu_preview(
         plan,
         request,
         source_preview,
@@ -2552,21 +2760,29 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
     with Jobs(token, base_url=launch_direct.API_URLS["prod"]) as client:
         live_source = client.preview(request)
     _LAUNCH_STAGE = "live_manifest_rebuild"
-    live_expected = direct.manifest(
+    live_expected = launch_direct.gpu_manifest(
         plan,
         request,
         live_source,
         identity=identity,
         image_identity_receipt=image_identity,
     )
-    if live_source != source_preview or live_expected != expected:
+    submitter_normalization = None
+    if fresh_fast3:
+        try:
+            submitter_normalization = launch_direct.live_submitter_normalization(
+                expected, live_expected
+            )
+        except JobsError as exc:
+            raise OperatorFailure("launch_live_preview_changed") from exc
+    elif live_source != source_preview or live_expected != expected:
         raise OperatorFailure("launch_live_preview_changed")
     _LAUNCH_STAGE = "live_preview_dry_run"
     live_server_render = direct.server_dry_run(
         live_expected, context=direct.PROD_CONTEXT, runner=runner
     )
     _LAUNCH_STAGE = "live_preview_validate"
-    live_preview = direct.validate_preview(
+    live_preview = launch_direct.validate_gpu_preview(
         plan,
         request,
         live_source,
@@ -2599,18 +2815,24 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         runner=runner,
         jobs_factory=Jobs,
     )
-    _LAUNCH_STAGE = "guard_archive"
-    guard_archive = _archive_launch_v3_guard(
-        packet,
-        identity=identity,
-        plan=plan,
-        request=request,
-        expected=expected,
-        operation_root=operation_root,
-        jit_before_guard=jit_before_guard,
-        jit_before_intent=jit_before_intent,
-        runner=runner,
-    )
+    if fresh_fast3:
+        _LAUNCH_STAGE = "fresh_marker_recheck"
+        marker_absence_final = _fast3_marker_absence(operation_root)
+        guard_archive = None
+    else:
+        _LAUNCH_STAGE = "guard_archive"
+        guard_archive = _archive_launch_v3_guard(
+            packet,
+            identity=identity,
+            plan=plan,
+            request=request,
+            expected=expected,
+            operation_root=operation_root,
+            jit_before_guard=jit_before_guard,
+            jit_before_intent=jit_before_intent,
+            runner=runner,
+        )
+        marker_absence_final = None
     _LAUNCH_STAGE = "guard_construct"
     guard = cleanup.JobsApiPrefixGuard(
         context=direct.PROD_CONTEXT,
@@ -2628,6 +2850,7 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
     )
     _LAUNCH_STAGE = "guard_arm"
     armed = guard.arm()
+    guard_state = _fast3_guard_armed(operation_root) if fresh_fast3 else None
     _LAUNCH_STAGE = "authorize"
     authorization = launch_direct.authorize(
         plan,
@@ -2659,6 +2882,7 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         final_duplicate=jit_before_intent,
         host_duplicate=packet["duplicate_proof"],
         live_preview=live_preview,
+        **({"live_source_preview": live_source} if fresh_fast3 else {}),
     )
     _LAUNCH_STAGE = "observe"
     observed = _observe_created_run(operation_root, plan, created, runner=runner)
@@ -2671,7 +2895,17 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
             "preflight_result_sha256": preflight["sha256"],
             "preflight_revalidation_sha256": revalidation["sha256"],
             "authorization_sha256": authorization["sha256"],
-            "guard_archive_sha256": guard_archive["sha256"],
+            **(
+                {
+                    "marker_absence_before_sha256": marker_absence_before["sha256"],
+                    "marker_absence_before_guard_sha256": marker_absence_final["sha256"],
+                    "fresh_guard_state_sha256": guard_state["sha256"],
+                    "submitter_normalization_sha256": submitter_normalization["sha256"],
+                    "predecessor_evidence_sha256": packet["predecessor_evidence"]["sha256"],
+                }
+                if fresh_fast3
+                else {"guard_archive_sha256": guard_archive["sha256"]}
+            ),
             "jit_duplicate_before_guard_sha256": jit_before_guard["sha256"],
             "created": created,
             "exact_observer": observed,
@@ -2709,7 +2943,9 @@ def run(packet_path: Path, phase: str) -> dict[str, Any]:
     root = (
         hardening.stage_operation_root(result["stage"])
         if phase == "stage"
-        else hardening.training_operation_root(packet["plan"])
+        else launch_direct.training_operation_root(
+            packet["plan"], identity=_identity(packet["identity"])
+        )
     )
     result_name = {
         "stage": "STAGE_OPERATOR_RESULT.json",
