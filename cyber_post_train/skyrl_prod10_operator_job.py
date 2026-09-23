@@ -377,6 +377,8 @@ def probe_packet(
             "launch_packet": checked_launch,
             "launch_v2_failure": failure,
             "inspect_v3_success": operator.inspect_v3_success_binding(),
+            "probe_v7_failure": operator.probe_v7_failure_binding(),
+            "expected_diagnosis": "before_guard_passed",
         }
     )
 

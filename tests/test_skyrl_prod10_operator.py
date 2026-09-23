@@ -532,7 +532,7 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     mounts = {item["name"]: item for item in container["volumeMounts"]}
     volumes = {item["name"]: item for item in pod["volumes"]}
 
-    assert proof["name"] == "chris-q38-prod10-launch-probe-v7"
+    assert proof["name"] == "chris-q38-prod10-launch-probe-v8"
     assert proof["phase"] == "probe"
     assert proof["failure_alerts"] == "off"
     assert proof["priority"] == "c1" and proof["queue_priority"] == "q1"
@@ -596,6 +596,8 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     assert result["error_path_exported"] is False
     assert result["error_errno_exported"] is False
     assert result["error_message_exported"] is False
+    assert result["expected_diagnosis"] == "before_guard_passed"
+    assert result["probe_v7_failure_sha256"] == operator.probe_v7_failure_binding()["sha256"]
     assert result["nested_jobs_created"] == result["gpus"] == 0
     encoded = json.dumps(result, sort_keys=True)
     assert "private" not in encoded
@@ -608,6 +610,21 @@ def test_prod10_phase_probe_is_sanitized_read_only_and_zero_gpu(
     changed["inspect_v3_success"] = operator._seal(changed["inspect_v3_success"])
     changed = operator._seal(changed)
     with pytest.raises(ValueError, match="inspection predecessor"):
+        operator_job.build_operator_package(changed)
+
+    changed = copy.deepcopy(packet)
+    changed["probe_v7_failure"]["operator_job_uid"] = (
+        "00000000-0000-4000-8000-000000000001"
+    )
+    changed["probe_v7_failure"] = operator._seal(changed["probe_v7_failure"])
+    changed = operator._seal(changed)
+    with pytest.raises(ValueError, match="v7 predecessor"):
+        operator_job.build_operator_package(changed)
+
+    changed = copy.deepcopy(packet)
+    changed["expected_diagnosis"] = "exception_localized"
+    changed = operator._seal(changed)
+    with pytest.raises(ValueError, match="expected diagnosis"):
         operator_job.build_operator_package(changed)
 
     changed = copy.deepcopy(packet)
@@ -667,6 +684,8 @@ def test_prod10_probe_rechecks_markers_and_stops_before_guard(
     result = operator.run_probe(packet, runner=object())
     assert checks == [operation_root, operation_root]
     assert result["diagnosis"] == result["launch_stage"] == "before_guard_passed"
+    assert result["expected_diagnosis"] == "before_guard_passed"
+    assert result["probe_v7_failure_sha256"] == operator.probe_v7_failure_binding()["sha256"]
     assert result["nested_jobs_created"] == result["gpus"] == 0
 
 
