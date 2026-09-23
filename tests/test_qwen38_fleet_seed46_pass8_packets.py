@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -11,6 +12,8 @@ import yaml
 from evals.fleet import heldout_launch
 from scripts import prepare_qwen38_fleet_seed46_pass8_packets as packets
 from scripts import render_fleet_heldout_launcher_jobs as launchers
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _prepare(tmp_path: Path, monkeypatch) -> tuple[Path, dict]:
@@ -106,3 +109,22 @@ def test_renderer_makes_sixteen_cpu_only_alert_suppressed_launchers(tmp_path, mo
             == "true"
         )
         assert "nvidia.com/gpu" not in json.dumps(job)
+
+
+def test_live_launch_evidence_is_self_digested_and_score_blind() -> None:
+    path = ROOT / "docs/evidence/qwen38-fleet-dev17-seed46to53-pass8-launch-20260923.json"
+    value = json.loads(path.read_text(encoding="utf-8"))
+    claimed = value.pop("sha256")
+    computed = (
+        "sha256:"
+        + hashlib.sha256(
+            json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
+        ).hexdigest()
+    )
+
+    assert claimed == computed
+    assert value["study"]["total_sessions"] == 272
+    assert len(value["evaluators"]) == 16
+    assert value["launcher_repair"]["repaired_attempt_terminal_succeeded"] == 16
+    assert value["current_state"]["scores_read"] is False
+    assert value["privacy"]["prompts_responses_flags_rewards_or_trace_content_included"] is False
