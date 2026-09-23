@@ -566,6 +566,7 @@ def test_private_authorization_is_exclusive_private(tmp_path, monkeypatch):
 
 def test_render_is_cpu_only_score_blind_and_exact(tmp_path, monkeypatch):
     rendered, value, source, terminal, *_ = _render(tmp_path, monkeypatch)
+    pod_metadata = rendered.job["spec"]["template"]["metadata"]
     pod = rendered.job["spec"]["template"]["spec"]
     container = pod["containers"][0]
     assert rendered.job["metadata"]["annotations"] == {
@@ -573,6 +574,7 @@ def test_render_is_cpu_only_score_blind_and_exact(tmp_path, monkeypatch):
         "cyber-post-train.fleet.ai/create-once": "true",
     }
     assert rendered.job["spec"]["backoffLimit"] == 0
+    assert pod_metadata["labels"]["cyber-post-train.fleet.ai/postgres-client"] == "true"
     assert pod["automountServiceAccountToken"] is False
     assert pod["priorityClassName"] == "c1"
     assert "nvidia.com/gpu" not in json.dumps(container["resources"])
@@ -776,6 +778,7 @@ def test_enumerated_api_defaults_and_non_job_metadata_are_accepted(tmp_path, mon
         "command",
         "create-once",
         "init-container",
+        "postgres-network-label",
         "service-account",
         "environment",
         "volume",
@@ -795,6 +798,10 @@ def test_server_preview_rejects_behavioral_or_private_mutation(tmp_path, monkeyp
         job["metadata"]["annotations"][packet.heldout_launch.CREATE_ONCE_ANNOTATION] = "false"
     elif fault == "init-container":
         pod["initContainers"] = [{"name": "extra", "image": "busybox"}]
+    elif fault == "postgres-network-label":
+        job["spec"]["template"]["metadata"]["labels"].pop(
+            "cyber-post-train.fleet.ai/postgres-client"
+        )
     elif fault == "service-account":
         pod["serviceAccountName"] = "privileged"
     elif fault == "environment":
