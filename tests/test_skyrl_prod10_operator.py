@@ -2674,3 +2674,46 @@ def test_operator_failure_termination_receipt_is_sanitized_and_not_accepted_exec
     assert cleanup._receipt_execution_accepted(value) is False
     assert "bootstrap_failure" in operator_job._BOOTSTRAP
     assert "cyber_skyrl_prod10_bootstrap_failure_v1" in operator_job._BOOTSTRAP
+
+
+@pytest.mark.parametrize("stage", operator._POST_PRE_GUARD_LAUNCH_STAGES)
+def test_launch_jobs_error_receipt_exports_only_allowlisted_stage(
+    stage: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "termination-log"
+    monkeypatch.setattr(operator, "_TERMINATION_PATH", target)
+    monkeypatch.setattr(operator, "_LAUNCH_STAGE", stage)
+
+    operator._write_failure_termination(
+        phase="launch", error=JobsError("private path and provider response")
+    )
+
+    value = json.loads(target.read_text())
+    assert value == operator._seal(
+        {
+            "schema": operator.FAILURE_TERMINATION_SCHEMA,
+            "status": "failed",
+            "phase": "launch",
+            "error_class": "JobsError",
+            "error_code": "operator_unclassified",
+            "launch_stage": stage,
+            "gpus": 0,
+        }
+    )
+    assert "private" not in json.dumps(value)
+    assert "provider" not in json.dumps(value)
+
+
+def test_launch_failure_receipt_rejects_unlisted_stage(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    target = tmp_path / "termination-log"
+    monkeypatch.setattr(operator, "_TERMINATION_PATH", target)
+    monkeypatch.setattr(operator, "_LAUNCH_STAGE", "attacker-controlled-private-path")
+
+    operator._write_failure_termination(phase="launch", error=JobsError("secret"))
+
+    value = json.loads(target.read_text())
+    assert "launch_stage" not in value
+    assert "attacker" not in json.dumps(value)
+    assert "secret" not in json.dumps(value)

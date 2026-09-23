@@ -638,6 +638,29 @@ _POLL_SECONDS = 0.25
 RUNTIME_UID = 1000
 RUNTIME_GID = 100
 _LAUNCH_STAGE = "not_started"
+_POST_PRE_GUARD_LAUNCH_STAGES = (
+    "prod_preview_dry_run",
+    "prod_preview_validate",
+    "credentials_validate",
+    "dev_preview_refresh",
+    "duplicate_before_guard",
+    "live_preview_read",
+    "live_manifest_rebuild",
+    "live_preview_dry_run",
+    "live_preview_validate",
+    "fresh_capacity_census",
+    "fresh_capacity_gate",
+    "dev_preview_freshness",
+    "prod_preview_freshness",
+    "live_preview_freshness",
+    "duplicate_before_intent",
+    "guard_archive",
+    "guard_construct",
+    "guard_arm",
+    "authorize",
+    "create_once",
+    "observe",
+)
 
 
 class OperatorFailure(ValueError):
@@ -792,16 +815,17 @@ def _write_manifest_termination(result: dict[str, Any]) -> None:
 
 
 def _write_failure_termination(*, phase: str, error: BaseException) -> None:
-    value = _seal(
-        {
-            "schema": FAILURE_TERMINATION_SCHEMA,
-            "status": "failed",
-            "phase": phase,
-            "error_class": type(error).__name__,
-            "error_code": getattr(error, "code", "operator_unclassified"),
-            "gpus": 0,
-        }
-    )
+    body = {
+        "schema": FAILURE_TERMINATION_SCHEMA,
+        "status": "failed",
+        "phase": phase,
+        "error_class": type(error).__name__,
+        "error_code": getattr(error, "code", "operator_unclassified"),
+        "gpus": 0,
+    }
+    if phase == "launch" and _LAUNCH_STAGE in _POST_PRE_GUARD_LAUNCH_STAGES:
+        body["launch_stage"] = _LAUNCH_STAGE
+    value = _seal(body)
     encoded = (json.dumps(value, sort_keys=True, separators=(",", ":")) + "\n").encode()
     if len(encoded) > 1000:
         raise ValueError("prod10 operator failure receipt is too large")
@@ -2373,6 +2397,7 @@ def _archive_launch_v3_guard(
 
 def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> dict[str, Any]:
     """Consume the sealed direct-v3 preflight and perform the sole GPU POST."""
+    global _LAUNCH_STAGE
     pre_guard = _pre_guard_launch(packet, runner)
     identity = pre_guard["identity"]
     plan, request = pre_guard["plan"], pre_guard["request"]
@@ -2380,19 +2405,26 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
     image_identity = pre_guard["image_identity"]
     source_preview, expected = pre_guard["source_preview"], pre_guard["expected"]
     operation_root = pre_guard["operation_root"]
+    _LAUNCH_STAGE = "prod_preview_dry_run"
+    prod_server_render = direct.server_dry_run(
+        expected, context=direct.PROD_CONTEXT, runner=runner
+    )
+    _LAUNCH_STAGE = "prod_preview_validate"
     prod_preview = direct.validate_preview(
         plan,
         request,
         source_preview,
         expected,
-        direct.server_dry_run(expected, context=direct.PROD_CONTEXT, runner=runner),
+        prod_server_render,
         context=direct.PROD_CONTEXT,
         identity=identity,
         image_identity_receipt=image_identity,
     )
+    _LAUNCH_STAGE = "credentials_validate"
     token = os.environ.get("FLEET_API_KEY", "")
     if not token or not os.environ.get("WANDB_API_KEY"):
         raise OperatorFailure("launch_credentials_unavailable")
+    _LAUNCH_STAGE = "dev_preview_refresh"
     dev_refresh = launch_direct.refresh_dev_preview(
         plan,
         request,
@@ -2404,6 +2436,7 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         identity=identity,
         jobs_factory=Jobs,
     )
+    _LAUNCH_STAGE = "duplicate_before_guard"
     jit_before_guard = launch_direct.jit_duplicate_proof(
         identity,
         packet["duplicate_proof"],
@@ -2411,8 +2444,10 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         runner=runner,
         jobs_factory=Jobs,
     )
+    _LAUNCH_STAGE = "live_preview_read"
     with Jobs(token, base_url=launch_direct.API_URLS["prod"]) as client:
         live_source = client.preview(request)
+    _LAUNCH_STAGE = "live_manifest_rebuild"
     live_expected = direct.manifest(
         plan,
         request,
@@ -2422,20 +2457,37 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
     )
     if live_source != source_preview or live_expected != expected:
         raise OperatorFailure("launch_live_preview_changed")
+    _LAUNCH_STAGE = "live_preview_dry_run"
+    live_server_render = direct.server_dry_run(
+        live_expected, context=direct.PROD_CONTEXT, runner=runner
+    )
+    _LAUNCH_STAGE = "live_preview_validate"
     live_preview = direct.validate_preview(
         plan,
         request,
         live_source,
         live_expected,
-        direct.server_dry_run(live_expected, context=direct.PROD_CONTEXT, runner=runner),
+        live_server_render,
         context=direct.PROD_CONTEXT,
         identity=identity,
         image_identity_receipt=image_identity,
     )
+    _LAUNCH_STAGE = "fresh_capacity_census"
     fresh_capacity = _fresh_capacity_census(request, runner)
+    _LAUNCH_STAGE = "fresh_capacity_gate"
     launch_direct.capacity_gate(plan, request, expected, fresh_capacity, identity=identity)
-    for preview in (dev_refresh, prod_preview, live_preview):
+    for stage, preview in zip(
+        (
+            "dev_preview_freshness",
+            "prod_preview_freshness",
+            "live_preview_freshness",
+        ),
+        (dev_refresh, prod_preview, live_preview),
+        strict=True,
+    ):
+        _LAUNCH_STAGE = stage
         direct._fresh_at(preview.get("checked_at"))
+    _LAUNCH_STAGE = "duplicate_before_intent"
     jit_before_intent = launch_direct.jit_duplicate_proof(
         identity,
         packet["duplicate_proof"],
@@ -2444,6 +2496,7 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         runner=runner,
         jobs_factory=Jobs,
     )
+    _LAUNCH_STAGE = "guard_archive"
     guard_archive = _archive_launch_v3_guard(
         packet,
         identity=identity,
@@ -2455,6 +2508,7 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         jit_before_intent=jit_before_intent,
         runner=runner,
     )
+    _LAUNCH_STAGE = "guard_construct"
     guard = cleanup.JobsApiPrefixGuard(
         context=direct.PROD_CONTEXT,
         namespace=direct.NAMESPACE,
@@ -2469,7 +2523,9 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         binding_path=hardening.creator_binding_path(operation_root, "training"),
         run=runner,
     )
+    _LAUNCH_STAGE = "guard_arm"
     armed = guard.arm()
+    _LAUNCH_STAGE = "authorize"
     authorization = launch_direct.authorize(
         plan,
         request,
@@ -2483,6 +2539,7 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         observer=armed,
         identity=identity,
     )
+    _LAUNCH_STAGE = "create_once"
     created = launch_direct.create_once(
         operation_root,
         plan,
@@ -2500,6 +2557,7 @@ def run_launch(packet: dict[str, Any], *, runner: InClusterKubernetesRunner) -> 
         host_duplicate=packet["duplicate_proof"],
         live_preview=live_preview,
     )
+    _LAUNCH_STAGE = "observe"
     observed = _observe_created_run(operation_root, plan, created, runner=runner)
     return _seal(
         {
