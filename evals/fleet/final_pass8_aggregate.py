@@ -9,19 +9,23 @@ mode-0600 private receipts.
 
 from __future__ import annotations
 
+import ctypes
+import errno
 import hashlib
 import json
 import math
 import os
 import re
 import secrets
+import stat
 import tempfile
 import uuid
 from collections import Counter, defaultdict
 from collections.abc import Iterator, Mapping, Sequence
 from contextlib import ExitStack, contextmanager
 from dataclasses import dataclass
-from pathlib import Path
+from datetime import UTC, datetime
+from pathlib import Path, PurePosixPath
 from typing import Any, Protocol
 from urllib.parse import parse_qsl, quote, urlsplit, urlunsplit
 
@@ -32,7 +36,16 @@ PREDECESSOR_COMPARISON_DEFINITION_SHA256 = (
     "sha256:1154b450624a8b9a567464916da95874c44933175c408b86a80ff5bca0eada70"
 )
 FROZEN_COMPARISON_DEFINITION_SHA256 = (
-    "sha256:bff3b01e6dcc4b189c9acb6140fbf868fda74e9bef4288c39bab0490cfc49fd2"
+    "sha256:9813713ef2ab023ac6c64df494ca7cbf39b920e8fba2f05f5949daaa006479f1"
+)
+FROZEN_COMPARISON_DEFINITION_FILE_SHA256 = (
+    "sha256:1356a652628619020ab7cbdd6b599a5b162dc99b47ee71b957f8428bb49227c6"
+)
+FROZEN_MIGRATION_RECEIPT_SHA256 = (
+    "sha256:9fa3f39f9030dede9efaf38d8e0dfa218a36db885f8f6c72695ba5aa5ec13643"
+)
+FROZEN_MIGRATION_RECEIPT_FILE_SHA256 = (
+    "sha256:fcee992ba4bb81527c5a63774fa76e9334163f7d583824ddb4b9f3b46c1c84d4"
 )
 MIGRATION_SCHEMA = "cyber_qwen38_fleet_protocol_v2_replica_migration_receipt_v1"
 COMPARISON_DEFINITION_SCHEMA = "cyber_qwen38_fleet_dev17_pass8_comparison_definition_v2"
@@ -40,20 +53,26 @@ TERMINAL_SCHEMA = "cyber_fleet_heldout_terminal_observation_v1"
 ACCEPTED_SCHEMA = "fleet-rollout-ledger-cell-accepted-v1"
 CONTROLLER_TERMINAL_SCHEMA = "fleet-rollout-ledger-controller-terminal-v1"
 SOURCE_SEEDS = tuple(range(46, 54))
-FROZEN_INVALID_SEEDS = (47, 51, 52, 53)
+FROZEN_INVALID_SEEDS = (46, 47, 49, 50, 51, 52, 53)
 RETAINED_EVALUATION_IDENTITIES = {
-    (46, "base"): "sha256:68e6873311dd982e79eec72a1a3abe4ae95052c8d01c0c80f2258cb23809b037",
-    (46, "candidate"): "sha256:798de026fc49b6ae013b54018e857b42173c221036193bb6f5e69ca818d9f9c5",
     (48, "base"): "sha256:df6bdb006f7346331ba008a8bfd64e9c14ffa6367943b49832b0d5281b4c3ed4",
     (48, "candidate"): "sha256:a1a7a9f820f1c8efb47d53ca9395627bb77b0fd3c30a387620e2e08b65afa9d5",
-    (49, "base"): "sha256:355ef848fbd6f5d0a62d6a68734daacc3687b775dbb3b8fd26f2120854201362",
-    (49, "candidate"): "sha256:b0a9f9f2668c5857e80ae0f476edb17f27ae628c94a88d9f2f1fd7093b7f73c9",
-    (50, "base"): "sha256:2fd46153827937cfa144168e018f27d5a2f7fe4d27739c92bbc39bde3175a230",
-    (50, "candidate"): "sha256:40bb94f44e9a613f3ac4d409d2b56445f17d6364c2a5cd94c57303bfd743e790",
+}
+RETAINED_PACKET_FILE_SHA256 = {
+    (48, "base"): "sha256:ef004b3b69017b4fd15f938a35761fd25a6a3ffebbbe767cf416c6125a7c5431",
+    (48, "candidate"): "sha256:b4f0163672d791b5d85a09bef1c0d8d435ef69e1a7c499a1c4edf4a30f7cb449",
+}
+RETAINED_EVALUATION_PLAN_SHA256 = {
+    (48, "base"): "sha256:cbd0cd28b486fd75aea20f425e68a4990d7e0edb3e232903548790527592dc4f",
+    (48, "candidate"): "sha256:a9d98ee9fc87c3c7fb5f58fe19ad3b7ef01482504f5ce34d39da00f5c4e0f8e7",
 }
 ARMS = ("base", "candidate")
 TASK_COUNT = 17
 PASS_K = 8
+PRIVATE_OUTPUT_ROOT = (
+    "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/chris-q38-dev17-pass8-final-v2"
+)
+PRIVATE_STAGING_ROOT = "/result-staging/chris-q38-dev17-pass8-final-v2"
 EXACT_PLAN_FIELD_DIGESTS = {
     "tasks": "sha256:3398757c75f22de021ca325262914d7af52b8e8d32617cb0ba5c25ec1ee463f4",
     "harness": "sha256:cc289a5221a6bfdaf57bf24652c3a8e67d1469d21149e6af889628207a5172bb",
@@ -110,6 +129,55 @@ LOCAL_RECORD_FIELDS = (
     "agent_termination",
     "elapsed_seconds",
 )
+SCORE_BLIND_LOCAL_FIELDS = (
+    "execution_id",
+    "cell_id",
+    "run_id",
+    "session_id",
+    "verifier_execution_id",
+    "config_sha256",
+    "artifact_directory",
+    "session_ingest_status",
+    "agent_exit_code",
+    "agent_termination",
+)
+ACCEPTED_RECEIPT_FIELDS = {
+    "schema_version",
+    "accepted",
+    "campaign_id",
+    "cell_id",
+    "execution_id",
+    "ledger_cell_id",
+    "run_id",
+    "serving_block",
+    "session_id",
+    "verifier_execution_id",
+    "config_sha256",
+    "session_ingest_completed",
+    "cleanup_completed",
+    "score_persisted_privately",
+    "scores_included",
+    "prompts_or_traces_included",
+    "receipt_sha256",
+}
+ACCEPTED_EVENT_FIELDS = {"cell_id", "event", "to_state", "detail_json"}
+TERMINAL_FIELDS = {
+    "schema",
+    "observed_at",
+    "evaluation_identity_sha256",
+    "comparison_protocol_sha256",
+    "protocol_id",
+    "arm_id",
+    "job",
+    "config_map",
+    "workloads",
+    "pods",
+    "database",
+    "output_root",
+    "decision",
+    "privacy",
+    "sha256",
+}
 PLAN_STORED_FIELDS = (
     "cell_id",
     "experiment_id",
@@ -152,11 +220,204 @@ EVALUATION_FIELDS = {
     "interpretation",
     "sha256",
 }
+EVALUATION_IDENTITY_FIELDS = {
+    "protocol_id",
+    "comparison_arms",
+    "arm_id",
+    "evaluation_config_name",
+    "evaluation_config_sha256",
+    "task_selection_sha256",
+    "split_manifest_file_sha256",
+    "split_manifest_sha256",
+    "comparison_protocol_file_sha256",
+    "comparison_protocol_sha256",
+    "checkpoint_provenance_sha256",
+    "serving_route_proof_sha256",
+    "model_revision",
+    "harness",
+    "harness_version",
+    "context_management",
+    "sampling_seed",
+    "pass_k",
+    "retry_limit",
+    "output_root",
+    "database",
+}
+RETAINED_ARM_FIELDS = {
+    "seed",
+    "arm_id",
+    "evaluation_identity",
+    "evaluation_identity_sha256",
+    "evaluation_plan_sha256",
+    "runtime_files_sha256",
+    "packet_file_sha256",
+}
+MIGRATION_FIELDS = {
+    "invalid_original_seed",
+    "replacement_seed",
+    "reason_class",
+    "evidence_receipt_sha256s",
+    "excluded_source_arms",
+    "whole_pair_excluded",
+}
+EXCLUDED_SOURCE_ARM_FIELDS = {
+    "packet_file_sha256",
+    "evaluation_identity_sha256",
+    "evaluation_config_sha256",
+    "comparison_protocol_file_sha256",
+    "comparison_protocol_sha256",
+    "protocol_id",
+    "job_name",
+    "config_map_name",
+    "output_root",
+    "database",
+}
+REPLACEMENT_PROTOCOL_FIELDS = {
+    "invalid_original_seed",
+    "replacement_seed",
+    "protocol_id",
+    "sha256",
+    "file_sha256",
+}
+REPLACEMENT_ARM_FIELDS = {
+    "arm_id",
+    "invalid_original_seed",
+    "replacement_seed",
+    "evaluation_identity",
+    "evaluation_identity_sha256",
+    "evaluation_plan_sha256",
+    "runtime_files_sha256",
+    "packet_file_sha256",
+    "serving_proof_file_sha256",
+    "comparison_protocol_file_sha256",
+    "comparison_protocol_sha256",
+    "packet_path",
+}
+RETIREMENT_EVIDENCE_FIELDS = {
+    "sha256",
+    "file_sha256",
+    "targets",
+    "model_rollouts",
+    "outputs_or_databases_deleted",
+}
+CAPACITY_FIELDS = {
+    "actual_started_rollouts_today",
+    "daily_rollout_cap",
+    "final_comparison_rollouts",
+    "new_replacement_rollouts",
+    "projected_rollouts_after_reservation",
+    "remaining_after_reservation",
+    "within_daily_cap",
+}
+GLOBAL_DAILY_BUDGET_FIELDS = {"path", "sha256", "file_sha256", "window_utc"}
+SELECTION_FIELDS = {
+    "selection_sha256",
+    "split_sha256",
+    "corpus_dev_windows",
+    "binding_roster_sha256",
+}
+PRIVACY_FIELDS = {
+    "score_values_read",
+    "prompts_responses_flags_rewards_or_trace_content_read",
+    "infrastructure_reason_classes_only",
+}
+SCIENTIFIC_IDENTITY_FIELDS = {
+    "task_count_per_arm",
+    "comparison_arms",
+    "pass_k",
+    "retry_limit",
+    "same_task_versions_models_harness_budgets_and_sampling_recipe",
+    "whole_replica_pairs_only",
+    "cell_level_replacement_forbidden",
+    "seed_reuse_forbidden",
+    "later_invalid_seed_requires_versioned_successor_before_score_unseal",
+}
 SOURCE_TASK_JOB_ID = "a62dd51f-a52b-4941-8207-4679e4b25b51"
 ALLOWED_EXCLUSION_REASONS = {
     "terminal_replica_incomplete",
     "replica_not_started",
     "mixed_infrastructure_invalid_replica",
+    "persisted_transcript_prefix_mismatch",
+}
+FROZEN_INVALID_REPLICA_EVIDENCE: dict[int, dict[str, Any]] = {
+    46: {
+        "reason_class": "persisted_transcript_prefix_mismatch",
+        "evidence_receipt_sha256s": [
+            "sha256:e7b0031010f097f66dd3c87de94ecbc0d1505de97167c47d0a2d7615a0164e52"
+        ],
+    },
+    47: {
+        "reason_class": "terminal_replica_incomplete",
+        "evidence_receipt_sha256s": [
+            "sha256:9bd0f1c415d32cdeae47744cbaa140c5e39781b7790ea318573d38772d8dd5bf",
+            "sha256:a8d3ca88eaab62d4642ca3fab0fdf17b21a9eb0c92bb5de8971d8d0273928b0e",
+            "sha256:7bf0cbc8715c51d6945bb133357f392646cf07ccc7e71a84dc887a30c902e083",
+        ],
+    },
+    49: {
+        "reason_class": "persisted_transcript_prefix_mismatch",
+        "evidence_receipt_sha256s": [
+            "sha256:e7b0031010f097f66dd3c87de94ecbc0d1505de97167c47d0a2d7615a0164e52"
+        ],
+    },
+    50: {
+        "reason_class": "persisted_transcript_prefix_mismatch",
+        "evidence_receipt_sha256s": [
+            "sha256:e7b0031010f097f66dd3c87de94ecbc0d1505de97167c47d0a2d7615a0164e52"
+        ],
+    },
+    51: {
+        "reason_class": "mixed_infrastructure_invalid_replica",
+        "evidence_receipt_sha256s": [
+            "sha256:572e330d1340e83d2aaf188665c0fd99b401e33eeec5f858717e2db60952bfa3"
+        ],
+    },
+    52: {
+        "reason_class": "mixed_infrastructure_invalid_replica",
+        "evidence_receipt_sha256s": [
+            "sha256:3a247e72e61da31593223d5fa46f902e4ff546e76277be3e27ef7407d91348c8",
+            "sha256:e1718d127e4a2da1667eaa7d2c0a7d1d219e2e0bef3dcaabd4d46aa5f5b8f97b",
+            "sha256:9a1296727060d303a3fe6d81fe51d2021482113c0dba8f4a9c4b4ba5efb1ccf3",
+            "sha256:952bbaaabbb6c3a2fa105bb3780090d2ff8cc749345ba65904fc401ddb152aad",
+        ],
+    },
+    53: {
+        "reason_class": "replica_not_started",
+        "evidence_receipt_sha256s": [
+            "sha256:fa656de6282a504ad2570a65078625a5c35e79afcf5d4d120c0803a75912ff70",
+            "sha256:ef6e969b305cecf8fa5bff882713d87bf3f8c21a44ced4f0ce54119c46c049e1",
+            "sha256:9a1296727060d303a3fe6d81fe51d2021482113c0dba8f4a9c4b4ba5efb1ccf3",
+            "sha256:952bbaaabbb6c3a2fa105bb3780090d2ff8cc749345ba65904fc401ddb152aad",
+        ],
+    },
+}
+MIGRATION_RECEIPT_FIELDS = {
+    "schema",
+    "source",
+    "migration_intent_sha256",
+    "sanitized_invalid_replica_evidence",
+    "checked_in_seed51_invalid_evidence",
+    "checked_in_partial_recovery_hold_evidence",
+    "comparison_definition",
+    "comparison_definition_file_sha256",
+    "mapping_rule",
+    "migrations",
+    "excluded_original_seeds",
+    "included_seeds",
+    "replacement_protocols",
+    "replacement_arms",
+    "retained_arms",
+    "retirement_evidence",
+    "global_daily_budget_evidence",
+    "scientific_identity",
+    "capacity",
+    "selection",
+    "live_parity_file_sha256",
+    "live_parity_receipt_sha256",
+    "privacy",
+    "external_mutations",
+    "launch_performed",
+    "sha256",
 }
 
 
@@ -176,11 +437,7 @@ def _digest(value: object) -> str:
 
 
 def _file_digest(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return "sha256:" + digest.hexdigest()
+    return "sha256:" + hashlib.sha256(_read_regular_once(path, "digest input")).hexdigest()
 
 
 def _plain_digest(value: object) -> str:
@@ -200,16 +457,110 @@ def _normalized_digest(value: object, label: str) -> str:
     return value.removeprefix("sha256:")
 
 
-def _read_json(path: Path, label: str) -> dict[str, Any]:
-    if path.is_symlink() or not path.is_file():
-        raise FinalAggregateError(f"{label} is not an exact regular file")
+def _read_regular_once(path: Path, label: str) -> bytes:
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        descriptor = os.open(path, flags)
+    except OSError as exc:
+        raise FinalAggregateError(f"{label} is not an exact regular file") from exc
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode):
+            raise FinalAggregateError(f"{label} is not an exact regular file")
+        chunks = []
+        while chunk := os.read(descriptor, 1024 * 1024):
+            chunks.append(chunk)
+        after = os.fstat(descriptor)
+        if (
+            (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino)
+            or before.st_size != after.st_size
+            or before.st_mtime_ns != after.st_mtime_ns
+        ):
+            raise FinalAggregateError(f"{label} changed while it was read")
+        return b"".join(chunks)
+    finally:
+        os.close(descriptor)
+
+
+def _read_json_and_digest(path: Path, label: str) -> tuple[dict[str, Any], str]:
+    raw = _read_regular_once(path, label)
+    try:
+        value = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise FinalAggregateError(f"{label} is not readable JSON") from exc
     if not isinstance(value, dict):
         raise FinalAggregateError(f"{label} must be a JSON object")
-    return value
+    return value, "sha256:" + hashlib.sha256(raw).hexdigest()
+
+
+def _read_json(path: Path, label: str) -> dict[str, Any]:
+    return _read_json_and_digest(path, label)[0]
+
+
+def _read_json_beneath(
+    root: Path, relative: PurePosixPath, label: str
+) -> tuple[dict[str, Any], str]:
+    """Read one regular JSON file without following a relative-path symlink."""
+
+    if (
+        relative.is_absolute()
+        or not relative.parts
+        or any(part in {"", ".", ".."} for part in relative.parts)
+    ):
+        raise FinalAggregateError(f"{label} path is not an exact relative path")
+    directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(root, directory_flags)
+    except OSError as exc:
+        raise FinalAggregateError(f"{label} root is not an exact directory") from exc
+    try:
+        for part in relative.parts[:-1]:
+            try:
+                child = os.open(part, directory_flags, dir_fd=descriptor)
+            except OSError as exc:
+                raise FinalAggregateError(f"{label} parent is not an exact directory") from exc
+            os.close(descriptor)
+            descriptor = child
+        try:
+            file_descriptor = os.open(
+                relative.parts[-1],
+                os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0),
+                dir_fd=descriptor,
+            )
+        except OSError as exc:
+            raise FinalAggregateError(f"{label} is not an exact regular file") from exc
+        try:
+            before = os.fstat(file_descriptor)
+            if not stat.S_ISREG(before.st_mode):
+                raise FinalAggregateError(f"{label} is not an exact regular file")
+            chunks = []
+            while chunk := os.read(file_descriptor, 1024 * 1024):
+                chunks.append(chunk)
+            after = os.fstat(file_descriptor)
+            if (
+                (before.st_dev, before.st_ino) != (after.st_dev, after.st_ino)
+                or before.st_size != after.st_size
+                or before.st_mtime_ns != after.st_mtime_ns
+            ):
+                raise FinalAggregateError(f"{label} changed while it was read")
+            raw = b"".join(chunks)
+        finally:
+            os.close(file_descriptor)
+    finally:
+        os.close(descriptor)
+    try:
+        value = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise FinalAggregateError(f"{label} is not readable JSON") from exc
+    if not isinstance(value, dict):
+        raise FinalAggregateError(f"{label} must be a JSON object")
+    return value, "sha256:" + hashlib.sha256(raw).hexdigest()
+
+
+def _bound_path(value: str) -> Path:
+    """Resolve one plan-bound path; tests replace this without editing the plan."""
+
+    return Path(value)
 
 
 def _require_self_digest(value: dict[str, Any], field: str, label: str) -> str:
@@ -232,9 +583,52 @@ def _write_exclusive(path: Path, value: Mapping[str, Any]) -> None:
         os.fsync(stream.fileno())
 
 
-def _task_inputs(task_set_path: Path, roster_path: Path) -> tuple[list[dict[str, str]], dict]:
-    task_set = _read_json(task_set_path, "dev17 task selection")
-    roster = _read_json(roster_path, "dev17 exact binding roster")
+def _fsync_directory(path: Path) -> None:
+    flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+    descriptor = os.open(path, flags)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _rename_noreplace(source: Path, destination: Path) -> None:
+    """Atomically publish a directory without replacing a concurrent claimant."""
+
+    libc = ctypes.CDLL(None, use_errno=True)
+    source_raw = os.fsencode(source)
+    destination_raw = os.fsencode(destination)
+    if hasattr(libc, "renameat2"):
+        rename = libc.renameat2
+        rename.argtypes = [
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_int,
+            ctypes.c_char_p,
+            ctypes.c_uint,
+        ]
+        rename.restype = ctypes.c_int
+        result = rename(-100, source_raw, -100, destination_raw, 1)  # RENAME_NOREPLACE
+    elif hasattr(libc, "renamex_np"):
+        rename = libc.renamex_np
+        rename.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_uint]
+        rename.restype = ctypes.c_int
+        result = rename(source_raw, destination_raw, 0x00000004)  # RENAME_EXCL
+    else:
+        raise FinalAggregateError("atomic create-once publication is unavailable")
+    if result == 0:
+        return
+    code = ctypes.get_errno()
+    if code in {errno.EEXIST, errno.ENOTEMPTY}:
+        raise FinalAggregateError("final aggregate output was claimed concurrently")
+    raise FinalAggregateError(f"atomic create-once publication failed with errno {code}")
+
+
+def _task_inputs(
+    task_set_path: Path, roster_path: Path
+) -> tuple[list[dict[str, str]], dict, str, str]:
+    task_set, task_set_file_sha256 = _read_json_and_digest(task_set_path, "dev17 task selection")
+    roster, roster_file_sha256 = _read_json_and_digest(roster_path, "dev17 exact binding roster")
     _require_self_digest(roster, "sha256", "dev17 exact binding roster")
     if any(
         (
@@ -285,12 +679,47 @@ def _task_inputs(task_set_path: Path, roster_path: Path) -> tuple[list[dict[str,
         )
     if len({row["task_version_id"] for row in selected}) != TASK_COUNT:
         raise FinalAggregateError("dev17 task versions are not unique")
-    return selected, roster
+    return selected, roster, task_set_file_sha256, roster_file_sha256
 
 
 def _exact_digest_fields(value: Mapping[str, Any], fields: Sequence[str], label: str) -> None:
     for field in fields:
         _normalized_digest(value.get(field), f"{label} {field}")
+
+
+def _arm_evidence_binding(value: Any, *, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise FinalAggregateError(f"{label} is invalid")
+    identity = value.get("evaluation_identity")
+    runtime = value.get("runtime_files_sha256")
+    if (
+        not isinstance(identity, dict)
+        or set(identity) != EVALUATION_IDENTITY_FIELDS
+        or not isinstance(runtime, dict)
+        or set(runtime) != RUNTIME_FILES
+        or any(
+            not isinstance(digest, str) or re.fullmatch(r"[0-9a-f]{64}", digest) is None
+            for digest in runtime.values()
+        )
+    ):
+        raise FinalAggregateError(f"{label} evaluation evidence is incomplete")
+    _exact_digest_fields(
+        value,
+        ("packet_file_sha256", "evaluation_identity_sha256", "evaluation_plan_sha256"),
+        label,
+    )
+    if (
+        not str(value["evaluation_plan_sha256"]).startswith("sha256:")
+        or _digest(identity) != value["evaluation_identity_sha256"]
+    ):
+        raise FinalAggregateError(f"{label} evaluation evidence digest differs")
+    return {
+        "packet_file_sha256": value["packet_file_sha256"],
+        "evaluation_identity": identity,
+        "evaluation_identity_sha256": value["evaluation_identity_sha256"],
+        "evaluation_plan_sha256": value["evaluation_plan_sha256"],
+        "runtime_files_sha256": runtime,
+    }
 
 
 def _deterministic_mapping(originals: Sequence[int]) -> list[dict[str, int]]:
@@ -329,7 +758,7 @@ def _comparison_contract(
             comparison.get("sha256") != FROZEN_COMPARISON_DEFINITION_SHA256,
             comparison.get("schema") != COMPARISON_DEFINITION_SCHEMA,
             comparison.get("protocol_study_id") != "q38-dev17-base-step1000-p8-v2",
-            comparison.get("predecessor_comparison_definition_sha256")
+            comparison.get("predecessor_launch_receipt_sha256")
             != PREDECESSOR_COMPARISON_DEFINITION_SHA256,
             comparison.get("aggregation") != "eight_predeclared_pass1_replicas_per_task_and_arm",
             comparison.get("original_seeds") != list(SOURCE_SEEDS),
@@ -416,33 +845,119 @@ def _comparison_contract(
     return mapping, included, protocol_by_seed
 
 
-def _migration_input(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
-    receipt = _read_json(path, "protocol-v2 migration receipt")
-    _require_self_digest(receipt, "sha256", "protocol-v2 migration receipt")
+def _migration_input(path: Path) -> tuple[dict[str, Any], dict[str, Any], str, str]:
+    receipt, receipt_file_sha256 = _read_json_and_digest(path, "protocol-v2 migration receipt")
+    receipt_sha256 = _require_self_digest(receipt, "sha256", "protocol-v2 migration receipt")
+    if (
+        receipt_sha256 != FROZEN_MIGRATION_RECEIPT_SHA256
+        or receipt_file_sha256 != FROZEN_MIGRATION_RECEIPT_FILE_SHA256
+    ):
+        raise FinalAggregateError("protocol-v2 migration receipt differs from the freeze")
+    if set(receipt) != MIGRATION_RECEIPT_FIELDS:
+        raise FinalAggregateError("protocol-v2 migration receipt field roster differs")
     comparison = receipt.get("comparison_definition")
     if not isinstance(comparison, dict):
         raise FinalAggregateError("protocol-v2 comparison definition is missing")
     mapping, included, protocol_by_seed = _comparison_contract(comparison)
     comparison_path = path.parent / "COMPARISON_DEFINITION.json"
-    comparison_file = _read_json(comparison_path, "protocol-v2 comparison definition file")
-    if comparison_file != comparison or receipt.get("comparison_definition_file_sha256") != (
-        _file_digest(comparison_path)
+    comparison_file, comparison_file_sha256 = _read_json_and_digest(
+        comparison_path, "protocol-v2 comparison definition file"
+    )
+    if (
+        comparison_file != comparison
+        or comparison_file_sha256 != FROZEN_COMPARISON_DEFINITION_FILE_SHA256
+        or receipt.get("comparison_definition_file_sha256") != comparison_file_sha256
     ):
         raise FinalAggregateError("protocol-v2 comparison definition file differs")
     excluded = comparison["excluded_original_seeds"]
     source = receipt.get("source")
-    if not isinstance(source, dict):
+    if not isinstance(source, dict) or set(source) != {
+        "protocol_study_id",
+        "preparation_receipt_sha256",
+        "preparation_receipt_file_sha256",
+        "seeds",
+        "arm_count",
+        "retained_candidate_successor_preparation",
+    }:
         raise FinalAggregateError("protocol-v2 source study evidence is missing")
     _exact_digest_fields(
         source,
         ("preparation_receipt_sha256", "preparation_receipt_file_sha256"),
         "protocol-v2 source study",
     )
-    _normalized_digest(receipt.get("migration_intent_sha256"), "migration intent")
+    successor = source.get("retained_candidate_successor_preparation")
+    if (
+        not isinstance(successor, dict)
+        or set(successor) != {"path", "file_sha256", "receipt_sha256", "successor_generation"}
+        or not isinstance(successor.get("path"), str)
+        or not successor["path"]
+        or successor.get("successor_generation") != 2
+    ):
+        raise FinalAggregateError("retained candidate successor evidence is incomplete")
+    _exact_digest_fields(
+        successor,
+        ("file_sha256", "receipt_sha256"),
+        "retained candidate successor evidence",
+    )
+    if successor != {
+        "path": successor["path"],
+        "file_sha256": ("sha256:5605623bf5f6205a70a6bad0f02985f985858904badfa7be413a1cead1cbe67a"),
+        "receipt_sha256": (
+            "sha256:d3624db05e0665cf0483d802a49c54be601293e5267b5475143a282791269189"
+        ),
+        "successor_generation": 2,
+    }:
+        raise FinalAggregateError("retained candidate successor evidence differs")
+    hold = receipt.get("checked_in_partial_recovery_hold_evidence")
+    if (
+        not isinstance(hold, dict)
+        or set(hold) != {"path", "file_sha256", "receipt_sha256", "source_private_receipt_sha256"}
+        or not isinstance(hold.get("path"), str)
+        or not hold["path"]
+    ):
+        raise FinalAggregateError("partial-recovery HOLD evidence is incomplete")
+    _exact_digest_fields(
+        hold,
+        ("file_sha256", "receipt_sha256", "source_private_receipt_sha256"),
+        "partial-recovery HOLD evidence",
+    )
+    if hold != {
+        "path": "docs/evidence/qwen38-fleet-dev17-base-prefix-recovery-hold-20260923.json",
+        "file_sha256": ("sha256:d20b4fe2310de95cfd5561877f6d93133dcf7e5ed903f425addfb28bda2583ae"),
+        "receipt_sha256": (
+            "sha256:e7b0031010f097f66dd3c87de94ecbc0d1505de97167c47d0a2d7615a0164e52"
+        ),
+        "source_private_receipt_sha256": (
+            "sha256:45893e380d1d9755cbe514ec85628b7fec930d9e2bf5e61920967155112bda09"
+        ),
+    }:
+        raise FinalAggregateError("partial-recovery HOLD evidence differs")
+    checked_seed51 = receipt.get("checked_in_seed51_invalid_evidence")
+    if checked_seed51 != {
+        "path": "docs/evidence/qwen38-fleet-dev17-seed51-base-invalid-replica-20260923.json",
+        "file_sha256": ("sha256:525885e6650d6d742144b12de2ac1807a77cd25f23e07cec58d2832551150497"),
+        "receipt_sha256": (
+            "sha256:572e330d1340e83d2aaf188665c0fd99b401e33eeec5f858717e2db60952bfa3"
+        ),
+    }:
+        raise FinalAggregateError("seed-51 invalid-replica evidence differs")
+    expected_sanitized = [
+        {"seed": seed, **FROZEN_INVALID_REPLICA_EVIDENCE[seed]} for seed in FROZEN_INVALID_SEEDS
+    ]
+    if receipt.get("sanitized_invalid_replica_evidence") != expected_sanitized:
+        raise FinalAggregateError("sanitized invalid-replica evidence differs")
+    if receipt.get("migration_intent_sha256") != (
+        "sha256:0e32d785e8b3570b2e972389b93d70334e9889b8a3d2b9230f0d13ce6137c79c"
+    ):
+        raise FinalAggregateError("migration intent differs")
     if any(
         (
             receipt.get("schema") != MIGRATION_SCHEMA,
             source.get("protocol_study_id") != "q38-dev17-seeds46to53-base-step1000-p8-v1",
+            source.get("preparation_receipt_sha256")
+            != "sha256:22b59a3e9e1ea2ed8e8b92920304f27bbd953925fe0ecf709c7308433db8f0d3",
+            source.get("preparation_receipt_file_sha256")
+            != "sha256:2827250c73d024cab06906d393eba9270784f99b70bb3812d9893c53b1f84859",
             source.get("seeds") != list(SOURCE_SEEDS),
             source.get("arm_count") != len(SOURCE_SEEDS) * len(ARMS),
             receipt.get("mapping_rule")
@@ -464,9 +979,16 @@ def _migration_input(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
     for expected, row in zip(mapping, migrations, strict=True):
         if (
             not isinstance(row, dict)
+            or set(row) != MIGRATION_FIELDS
             or row.get("invalid_original_seed") != expected["invalid_original_seed"]
             or row.get("replacement_seed") != expected["replacement_seed"]
             or row.get("reason_class") not in ALLOWED_EXCLUSION_REASONS
+            or row.get("reason_class")
+            != FROZEN_INVALID_REPLICA_EVIDENCE[expected["invalid_original_seed"]]["reason_class"]
+            or row.get("evidence_receipt_sha256s")
+            != FROZEN_INVALID_REPLICA_EVIDENCE[expected["invalid_original_seed"]][
+                "evidence_receipt_sha256s"
+            ]
             or row.get("whole_pair_excluded") is not True
             or not isinstance(row.get("evidence_receipt_sha256s"), list)
             or not row["evidence_receipt_sha256s"]
@@ -478,7 +1000,7 @@ def _migration_input(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         source_arms = row["excluded_source_arms"]
         for arm in ARMS:
             evidence = source_arms[arm]
-            if not isinstance(evidence, dict):
+            if not isinstance(evidence, dict) or set(evidence) != EXCLUDED_SOURCE_ARM_FIELDS:
                 raise FinalAggregateError("protocol-v2 excluded source arm evidence is invalid")
             _exact_digest_fields(
                 evidence,
@@ -493,11 +1015,15 @@ def _migration_input(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
             )
     replacement_protocols = receipt.get("replacement_protocols")
     replacement_arms = receipt.get("replacement_arms")
+    retained_arms = receipt.get("retained_arms")
+    retained_seeds = set(included) - replacement_seeds
     if (
         not isinstance(replacement_protocols, list)
         or len(replacement_protocols) != len(mapping)
         or not isinstance(replacement_arms, list)
         or len(replacement_arms) != len(mapping) * len(ARMS)
+        or not isinstance(retained_arms, list)
+        or len(retained_arms) != len(retained_seeds) * len(ARMS)
     ):
         raise FinalAggregateError("protocol-v2 replacement evidence is incomplete")
     replacement_protocol_by_seed: dict[int, dict[str, Any]] = {}
@@ -505,6 +1031,7 @@ def _migration_input(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         seed = expected["replacement_seed"]
         if (
             not isinstance(row, dict)
+            or set(row) != REPLACEMENT_PROTOCOL_FIELDS
             or row.get("invalid_original_seed") != expected["invalid_original_seed"]
             or row.get("replacement_seed") != seed
             or row.get("protocol_id") != protocol_by_seed[seed]["protocol_id"]
@@ -514,11 +1041,29 @@ def _migration_input(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         _exact_digest_fields(row, ("sha256", "file_sha256"), "replacement protocol")
         replacement_protocol_by_seed[seed] = row
     arm_by_identity: dict[tuple[int, str], dict[str, Any]] = {}
+    for row in retained_arms:
+        if not isinstance(row, dict) or set(row) != RETAINED_ARM_FIELDS:
+            raise FinalAggregateError("protocol-v2 retained arm evidence is invalid")
+        seed = row.get("seed")
+        arm = row.get("arm_id")
+        identity = (seed, arm)
+        binding = _arm_evidence_binding(row, label="retained arm")
+        if (
+            type(seed) is not int
+            or seed not in retained_seeds
+            or arm not in ARMS
+            or identity in arm_by_identity
+            or binding["evaluation_identity_sha256"] != RETAINED_EVALUATION_IDENTITIES.get(identity)
+            or binding["packet_file_sha256"] != RETAINED_PACKET_FILE_SHA256.get(identity)
+            or binding["evaluation_plan_sha256"] != RETAINED_EVALUATION_PLAN_SHA256.get(identity)
+        ):
+            raise FinalAggregateError("protocol-v2 retained arm identity differs")
+        arm_by_identity[identity] = row
     original_by_replacement = {
         row["replacement_seed"]: row["invalid_original_seed"] for row in mapping
     }
     for row in replacement_arms:
-        if not isinstance(row, dict):
+        if not isinstance(row, dict) or set(row) != REPLACEMENT_ARM_FIELDS:
             raise FinalAggregateError("protocol-v2 replacement arm evidence is invalid")
         seed = row.get("replacement_seed")
         arm = row.get("arm_id")
@@ -544,15 +1089,30 @@ def _migration_input(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
             ),
             "replacement arm",
         )
+        binding = _arm_evidence_binding(row, label="replacement arm")
+        evaluation_identity = binding["evaluation_identity"]
+        if (
+            row.get("serving_proof_file_sha256")
+            != evaluation_identity["serving_route_proof_sha256"]
+            or row.get("serving_proof_file_sha256") != receipt.get("live_parity_file_sha256")
+            or row.get("comparison_protocol_file_sha256")
+            != evaluation_identity["comparison_protocol_file_sha256"]
+            or evaluation_identity["comparison_protocol_file_sha256"]
+            != replacement_protocol_by_seed[seed]["file_sha256"]
+            or row.get("comparison_protocol_sha256")
+            != evaluation_identity["comparison_protocol_sha256"]
+        ):
+            raise FinalAggregateError("protocol-v2 replacement arm packet identity differs")
         arm_by_identity[identity] = row
-    if set(arm_by_identity) != {(seed, arm) for seed in replacement_seeds for arm in ARMS}:
-        raise FinalAggregateError("protocol-v2 replacement arm roster differs")
+    if set(arm_by_identity) != {(seed, arm) for seed in included for arm in ARMS}:
+        raise FinalAggregateError("protocol-v2 final arm roster differs")
     scientific = receipt.get("scientific_identity")
     capacity = receipt.get("capacity")
+    daily_budget = receipt.get("global_daily_budget_evidence")
     privacy = receipt.get("privacy")
     selection = receipt.get("selection")
     retirement = receipt.get("retirement_evidence")
-    if isinstance(retirement, dict):
+    if isinstance(retirement, dict) and set(retirement) == RETIREMENT_EVIDENCE_FIELDS:
         _exact_digest_fields(
             retirement,
             ("sha256", "file_sha256"),
@@ -562,6 +1122,13 @@ def _migration_input(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
         receipt,
         ("live_parity_file_sha256", "live_parity_receipt_sha256"),
         "protocol-v2 migration",
+    )
+    if not isinstance(daily_budget, dict) or set(daily_budget) != GLOBAL_DAILY_BUDGET_FIELDS:
+        raise FinalAggregateError("protocol-v2 daily budget evidence is incomplete")
+    _exact_digest_fields(
+        daily_budget,
+        ("sha256", "file_sha256"),
+        "protocol-v2 daily budget evidence",
     )
     planned = len(mapping) * len(ARMS) * TASK_COUNT
     if any(
@@ -578,28 +1145,29 @@ def _migration_input(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
                 "seed_reuse_forbidden": True,
                 "later_invalid_seed_requires_versioned_successor_before_score_unseal": True,
             },
-            not isinstance(capacity, dict),
+            not isinstance(scientific, dict) or set(scientific) != SCIENTIFIC_IDENTITY_FIELDS,
+            not isinstance(capacity, dict) or set(capacity) != CAPACITY_FIELDS,
+            daily_budget.get("path")
+            != "docs/evidence/qwen38-fleet-global-daily-rollout-budget-20260923.json",
+            daily_budget.get("sha256")
+            != "sha256:85c5a4f38943abab21ae60db1791fbc6ab005560b665e6680dfaa7f5889819f2",
+            daily_budget.get("file_sha256")
+            != "sha256:064bad27391869368ce2c14853663e7a181020b0ef6f73a4325c5697c1b46e15",
+            daily_budget.get("window_utc")
+            != {
+                "start_inclusive": "2026-09-23T00:00:00Z",
+                "end_exclusive": "2026-09-24T00:00:00Z",
+            },
             isinstance(capacity, dict) and capacity.get("new_replacement_rollouts") != planned,
             isinstance(capacity, dict)
             and capacity.get("final_comparison_rollouts") != TASK_COUNT * PASS_K * len(ARMS),
+            isinstance(capacity, dict) and capacity.get("actual_started_rollouts_today") != 112,
             isinstance(capacity, dict)
-            and capacity.get("original_base_rollouts") != TASK_COUNT * PASS_K,
-            isinstance(capacity, dict)
-            and capacity.get("original_candidate_started_seeds") != [46, 47, 48, 49, 50, 51],
-            isinstance(capacity, dict)
-            and capacity.get("original_candidate_started_seed_rollouts") != TASK_COUNT * 6,
-            isinstance(capacity, dict)
-            and capacity.get("original_candidate_retired_before_start_seeds") != [52, 53],
-            isinstance(capacity, dict)
-            and capacity.get("original_candidate_retired_before_start_rollouts") != 0,
-            isinstance(capacity, dict)
-            and capacity.get("scoring_or_metadata_cpu_model_rollouts") != 0,
-            isinstance(capacity, dict)
-            and capacity.get("cumulative_model_rollouts_consumed_or_planned_today")
-            != TASK_COUNT * PASS_K + TASK_COUNT * 6 + planned,
+            and capacity.get("projected_rollouts_after_reservation") != 350,
+            isinstance(capacity, dict) and capacity.get("remaining_after_reservation") != 150,
             isinstance(capacity, dict) and capacity.get("daily_rollout_cap") != 500,
             isinstance(capacity, dict) and capacity.get("within_daily_cap") is not True,
-            not isinstance(retirement, dict),
+            not isinstance(retirement, dict) or set(retirement) != RETIREMENT_EVIDENCE_FIELDS,
             isinstance(retirement, dict) and retirement.get("targets") != 2,
             isinstance(retirement, dict) and retirement.get("model_rollouts") != 0,
             isinstance(retirement, dict)
@@ -610,7 +1178,8 @@ def _migration_input(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
                 "prompts_responses_flags_rewards_or_trace_content_read": False,
                 "infrastructure_reason_classes_only": True,
             },
-            not isinstance(selection, dict),
+            not isinstance(privacy, dict) or set(privacy) != PRIVACY_FIELDS,
+            not isinstance(selection, dict) or set(selection) != SELECTION_FIELDS,
             isinstance(selection, dict)
             and selection.get("selection_sha256")
             != "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68",
@@ -620,10 +1189,11 @@ def _migration_input(path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
             isinstance(selection, dict)
             and selection.get("binding_roster_sha256")
             != "sha256:39ae49c2db322725800b15347d5da5d171e7e03b21dec5b570683414d70e83c5",
+            isinstance(selection, dict) and selection.get("corpus_dev_windows") != 0,
         )
     ):
         raise FinalAggregateError("protocol-v2 migration safety contract differs")
-    return receipt, comparison
+    return receipt, comparison, receipt_file_sha256, comparison_file_sha256
 
 
 def _replica_descriptor(
@@ -632,7 +1202,7 @@ def _replica_descriptor(
     arm: str,
     origin: str,
     protocol: Mapping[str, Any],
-    replacement_evidence: Mapping[tuple[int, str], Mapping[str, Any]],
+    arm_evidence: Mapping[tuple[int, str], Mapping[str, Any]],
     original_by_replacement: Mapping[int, int],
 ) -> dict[str, Any]:
     if origin == "retained_original":
@@ -646,20 +1216,63 @@ def _replica_descriptor(
         )
         output_root = f"/mnt/sfs/jobs/chris-q38-fleet-dev17-s{seed}-{suffix}"
         database = experiment.replace("-", "_")
-        expected_evaluation_identity = RETAINED_EVALUATION_IDENTITIES[(seed, arm)]
         replaces_seed = None
     else:
         model = "base" if arm == "base" else "t3k32s1000"
-        experiment = f"q38-dev17-s{seed}-{model}-replacement-p1-v2"
+        experiment = f"q38-s{seed}-{model}-repl-p1-v2"
         short = f"{model}-repl-p1-v2"
         job_name = f"chris-q38-dev17-s{seed}-{short}"
         config_map_name = f"chris-q38-dev17-s{seed}-{model}-repl-code-v2"
         output_root = f"/mnt/sfs/jobs/chris-q38-fleet-dev17-s{seed}-{short}"
         database = f"q38_dev17_s{seed}_{model}_repl_p1_v2"
-        expected_evaluation_identity = replacement_evidence[(seed, arm)][
-            "evaluation_identity_sha256"
-        ]
         replaces_seed = original_by_replacement[seed]
+    binding = _arm_evidence_binding(arm_evidence[(seed, arm)], label="final arm")
+    identity = binding["evaluation_identity"]
+    expected_revision = (
+        "1d4bf0f2ff6012fd82039f2fa52739d0dd7c60c0"
+        if arm == "base"
+        else "sha256:023c5f8b0559ba050f0d672a6bc27aabecec7d5837595f8ea5bc914446d26db5"
+    )
+    if any(
+        (
+            identity["protocol_id"] != protocol["protocol_id"],
+            identity["comparison_arms"] != list(ARMS),
+            identity["arm_id"] != arm,
+            identity["evaluation_config_name"] != experiment,
+            identity["task_selection_sha256"]
+            != "sha256:79c834e739246da29aca9513965ecfc7032f8df7744eb2245ce0303aba1b97c5",
+            identity["split_manifest_file_sha256"]
+            != "sha256:28a3dcaf31f14d724def9023d9435681772d5b8b3a8647cacc7f72ea8fc8adcb",
+            identity["split_manifest_sha256"]
+            != "sha256:05b3a8dc90ca93adc9671942d75ecb54ff8d0951b0dd48a087e29ec1e641840c",
+            identity["comparison_protocol_sha256"] != protocol["comparison_protocol_sha256"],
+            identity["model_revision"] != expected_revision,
+            identity["harness"] != "opencode",
+            identity["harness_version"] != "1.18.27",
+            identity["context_management"] != "opencode_1.18.27_native_compaction_autocontinue_v2",
+            identity["sampling_seed"] != seed,
+            identity["pass_k"] != 1,
+            identity["retry_limit"] != 0,
+            identity["output_root"] != output_root,
+            identity["database"] != database,
+        )
+    ):
+        raise FinalAggregateError("final arm evaluation identity differs")
+    _exact_digest_fields(
+        identity,
+        (
+            "evaluation_config_sha256",
+            "comparison_protocol_file_sha256",
+            "checkpoint_provenance_sha256",
+            "serving_route_proof_sha256",
+        ),
+        "final arm evaluation identity",
+    )
+    if (
+        origin == "retained_original"
+        and binding["evaluation_identity_sha256"] != RETAINED_EVALUATION_IDENTITIES[(seed, arm)]
+    ):
+        raise FinalAggregateError("retained arm evaluation identity differs")
     return {
         "seed": seed,
         "arm": arm,
@@ -673,8 +1286,32 @@ def _replica_descriptor(
         "terminal_receipt_path": f"{output_root}/TERMINAL_OBSERVATION.json",
         "protocol_id": protocol["protocol_id"],
         "comparison_protocol_sha256": protocol["comparison_protocol_sha256"],
-        "evaluation_identity_sha256": expected_evaluation_identity,
+        **binding,
     }
+
+
+def _sanitized_excluded_source_evidence(
+    migrations: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Copy only reviewed infrastructure fields into the private plan."""
+
+    output = []
+    for row in migrations:
+        arms = row["excluded_source_arms"]
+        output.append(
+            {
+                "invalid_original_seed": row["invalid_original_seed"],
+                "replacement_seed": row["replacement_seed"],
+                "reason_class": row["reason_class"],
+                "evidence_receipt_sha256s": list(row["evidence_receipt_sha256s"]),
+                "excluded_source_arms": {
+                    arm: {field: arms[arm][field] for field in EXCLUDED_SOURCE_ARM_FIELDS}
+                    for arm in ARMS
+                },
+                "whole_pair_excluded": True,
+            }
+        )
+    return output
 
 
 def build_current_study_plan(
@@ -686,8 +1323,15 @@ def build_current_study_plan(
 ) -> dict[str, Any]:
     """Build the exact score-blind gate plan for the protocol-v2 pass@8 study."""
 
-    tasks, roster = _task_inputs(task_set_path, roster_path)
-    migration, comparison = _migration_input(migration_receipt_path)
+    tasks, roster, task_set_file_sha256, roster_file_sha256 = _task_inputs(
+        task_set_path, roster_path
+    )
+    (
+        migration,
+        comparison,
+        migration_receipt_file_sha256,
+        comparison_definition_file_sha256,
+    ) = _migration_input(migration_receipt_path)
     base = _read_json(base_config_path, "base evaluation config")
     harness = base.get("harness")
     images = base.get("images")
@@ -729,8 +1373,9 @@ def build_current_study_plan(
             "route": candidate_route,
         },
     }
-    replacement_evidence = {
-        (row["replacement_seed"], row["arm_id"]): row for row in migration["replacement_arms"]
+    arm_evidence = {
+        **{(row["seed"], row["arm_id"]): row for row in migration["retained_arms"]},
+        **{(row["replacement_seed"], row["arm_id"]): row for row in migration["replacement_arms"]},
     }
     original_by_replacement = {
         row["replacement_seed"]: row["invalid_original_seed"]
@@ -746,7 +1391,7 @@ def build_current_study_plan(
                     arm=arm,
                     origin=protocols[seed]["origin"],
                     protocol=protocols[seed],
-                    replacement_evidence=replacement_evidence,
+                    arm_evidence=arm_evidence,
                     original_by_replacement=original_by_replacement,
                 )
             )
@@ -756,19 +1401,19 @@ def build_current_study_plan(
         "benchmark": BENCHMARK,
         "comparison_definition": comparison,
         "comparison_definition_sha256": comparison["sha256"],
-        "comparison_definition_file_sha256": migration["comparison_definition_file_sha256"],
+        "comparison_definition_file_sha256": comparison_definition_file_sha256,
         "migration_receipt_sha256": migration["sha256"],
-        "migration_receipt_file_sha256": _file_digest(migration_receipt_path),
+        "migration_receipt_file_sha256": migration_receipt_file_sha256,
         "source_seeds": list(SOURCE_SEEDS),
         "excluded_original_seeds": comparison["excluded_original_seeds"],
         "replacement_mapping": comparison["replacement_mapping"],
         "included_seeds": comparison["included_seeds"],
-        "excluded_source_evidence": migration["migrations"],
-        "task_set_file_sha256": _file_digest(task_set_path),
+        "excluded_source_evidence": _sanitized_excluded_source_evidence(migration["migrations"]),
+        "task_set_file_sha256": task_set_file_sha256,
         "task_selection_sha256": (
             "sha256:38ea6686afa068c19e69fea2493e01027fdf99f7e01b20376e107b1a0cfa0b68"
         ),
-        "binding_roster_file_sha256": _file_digest(roster_path),
+        "binding_roster_file_sha256": roster_file_sha256,
         "binding_roster_sha256": roster["sha256"],
         "bindings_sha256": roster["bindings_sha256"],
         "tasks": tasks,
@@ -782,7 +1427,7 @@ def build_current_study_plan(
         "arms": arms,
         "replicas": replicas,
         "public_output_schema": PUBLIC_SCHEMA,
-        "private_output_root": "/mnt/sfs/jobs/chris-q38-dev17-pass8-final-v2",
+        "private_output_root": PRIVATE_OUTPUT_ROOT,
     }
     return {**plan, "sha256": _digest(plan)}
 
@@ -809,6 +1454,7 @@ def validate_plan(plan: dict[str, Any]) -> None:
             plan.get("replica_pass_k") != 1,
             plan.get("retry_limit") != 0,
             plan.get("public_output_schema") != PUBLIC_SCHEMA,
+            plan.get("private_output_root") != PRIVATE_OUTPUT_ROOT,
             plan.get("task_set_file_sha256")
             != "sha256:79c834e739246da29aca9513965ecfc7032f8df7744eb2245ce0303aba1b97c5",
             plan.get("task_selection_sha256")
@@ -856,21 +1502,14 @@ def validate_plan(plan: dict[str, Any]) -> None:
     original_by_replacement = {
         row["replacement_seed"]: row["invalid_original_seed"] for row in mapping
     }
-    replacement_evidence: dict[tuple[int, str], dict[str, str]] = {}
+    arm_evidence: dict[tuple[int, str], dict[str, Any]] = {}
     for replica in replicas:
         if not isinstance(replica, dict):
             raise FinalAggregateError("final aggregate replica identity differs")
         seed = replica["seed"]
         arm = replica["arm"]
         replacement = seed in original_by_replacement
-        if replacement:
-            _normalized_digest(
-                replica.get("evaluation_identity_sha256"),
-                "replacement evaluation identity",
-            )
-            replacement_evidence[(seed, arm)] = {
-                "evaluation_identity_sha256": replica["evaluation_identity_sha256"]
-            }
+        arm_evidence[(seed, arm)] = _arm_evidence_binding(replica, label="final replica")
         if (
             replica.get("origin") != protocol_by_seed[seed]["origin"]
             or replica.get("protocol_id") != protocol_by_seed[seed]["protocol_id"]
@@ -891,14 +1530,9 @@ def validate_plan(plan: dict[str, Any]) -> None:
             arm=arm,
             origin=protocol_by_seed[seed]["origin"],
             protocol=protocol_by_seed[seed],
-            replacement_evidence=replacement_evidence,
+            arm_evidence=arm_evidence,
             original_by_replacement=original_by_replacement,
         )
-        output_root = replica.get("output_root")
-        if not isinstance(output_root, str) or not output_root.startswith("/"):
-            raise FinalAggregateError("final aggregate replica output root is invalid")
-        expected["output_root"] = output_root
-        expected["terminal_receipt_path"] = f"{output_root}/TERMINAL_OBSERVATION.json"
         if replica != expected:
             raise FinalAggregateError("final aggregate replica identity differs")
     excluded_source_evidence = plan.get("excluded_source_evidence")
@@ -909,10 +1543,20 @@ def validate_plan(plan: dict[str, Any]) -> None:
     for expected, evidence in zip(mapping, excluded_source_evidence, strict=True):
         if (
             not isinstance(evidence, dict)
+            or set(evidence) != MIGRATION_FIELDS
             or evidence.get("invalid_original_seed") != expected["invalid_original_seed"]
             or evidence.get("replacement_seed") != expected["replacement_seed"]
             or evidence.get("whole_pair_excluded") is not True
             or evidence.get("reason_class") not in ALLOWED_EXCLUSION_REASONS
+        ):
+            raise FinalAggregateError("final aggregate excluded source evidence differs")
+        source_arms = evidence.get("excluded_source_arms")
+        if not isinstance(source_arms, dict) or set(source_arms) != set(ARMS):
+            raise FinalAggregateError("final aggregate excluded source evidence differs")
+        if any(
+            not isinstance(source_arms[arm], dict)
+            or set(source_arms[arm]) != EXCLUDED_SOURCE_ARM_FIELDS
+            for arm in ARMS
         ):
             raise FinalAggregateError("final aggregate excluded source evidence differs")
     if plan.get("harness", {}).get("harness_version") != "1.18.27":
@@ -935,7 +1579,7 @@ class Snapshot(Protocol):
 
 
 def _evaluation_plan(replica: Mapping[str, Any]) -> dict[str, Any]:
-    path = Path(str(replica["output_root"])) / "EVAL.json"
+    path = _bound_path(str(replica["output_root"])) / "EVAL.json"
     value = _read_json(path, f"seed {replica['seed']} {replica['arm']} EVAL")
     if set(value) != EVALUATION_FIELDS:
         raise FinalAggregateError("evaluation plan field roster differs")
@@ -954,14 +1598,83 @@ def _evaluation_plan(replica: Mapping[str, Any]) -> dict[str, Any]:
         )
     ):
         raise FinalAggregateError("evaluation runtime identity is incomplete")
+    if "sha256:" + claimed != replica.get("evaluation_plan_sha256") or runtime != replica.get(
+        "runtime_files_sha256"
+    ):
+        raise FinalAggregateError("evaluation plan or runtime differs from sealed packet evidence")
     return value
 
 
-def _terminal_receipt(replica: Mapping[str, Any]) -> tuple[dict[str, Any], str]:
-    path = Path(str(replica["terminal_receipt_path"]))
-    receipt = _read_json(path, f"seed {replica['seed']} {replica['arm']} terminal receipt")
+def _terminal_receipt(replica: Mapping[str, Any]) -> tuple[dict[str, Any], str, str]:
+    path = _bound_path(str(replica["terminal_receipt_path"]))
+    receipt, file_sha256 = _read_json_and_digest(
+        path, f"seed {replica['seed']} {replica['arm']} terminal receipt"
+    )
     self_digest = _require_self_digest(receipt, "sha256", "held-out terminal receipt")
     job = receipt.get("job", {})
+    config_map = receipt.get("config_map", {})
+    database = receipt.get("database", {})
+    summary = database.get("summary", {}) if isinstance(database, dict) else {}
+    output_root = receipt.get("output_root", {})
+    decision = receipt.get("decision", {})
+    privacy = receipt.get("privacy", {})
+    workloads = receipt.get("workloads")
+    pods = receipt.get("pods")
+    try:
+        observed_at = datetime.fromisoformat(
+            str(receipt.get("observed_at", "")).replace("Z", "+00:00")
+        )
+    except ValueError as exc:
+        raise FinalAggregateError("held-out terminal receipt shape differs") from exc
+    if (
+        set(receipt) != TERMINAL_FIELDS
+        or not all(
+            isinstance(value, dict)
+            for value in (job, config_map, database, summary, output_root, decision, privacy)
+        )
+        or set(job) != {"name", "uid", "terminal_condition", "succeeded", "failed"}
+        or set(config_map) != {"name", "uid"}
+        or set(database) != {"name", "summary"}
+        or set(summary)
+        != {
+            "total",
+            "local_results",
+            "by_state",
+            "by_serving_block",
+            "stale_active",
+            "plan_sha256",
+        }
+        or set(output_root) != {"path", "exists"}
+        or set(decision)
+        != {
+            "capability_result_status",
+            "score_blind_reconciliation_required",
+            "unresolved_cells",
+            "rollout_retry_performed",
+            "score_read_or_generated",
+        }
+        or set(privacy)
+        != {
+            "prompts_responses_flags_rewards_or_trace_content_included",
+            "score_values_included",
+            "credentials_included",
+        }
+        or observed_at.tzinfo is None
+        or observed_at.utcoffset() != UTC.utcoffset(observed_at)
+        or not isinstance(workloads, list)
+        or not isinstance(pods, list)
+        or any(
+            not isinstance(row, dict)
+            or set(row) != {"name", "uid", "phase"}
+            or not isinstance(row["name"], str)
+            or not isinstance(row["uid"], str)
+            or UUID.fullmatch(row["uid"]) is None
+            or (row["phase"] is not None and not isinstance(row["phase"], str))
+            for rows in (workloads, pods)
+            for row in rows
+        )
+    ):
+        raise FinalAggregateError("held-out terminal receipt shape differs")
     terminal_condition = job.get("terminal_condition")
     terminal_counts_match = (
         terminal_condition == "Complete" and job.get("succeeded") == 1 and job.get("failed") == 0
@@ -976,24 +1689,30 @@ def _terminal_receipt(replica: Mapping[str, Any]) -> tuple[dict[str, Any], str]:
             job.get("name") != replica["job_name"],
             not isinstance(job.get("uid"), str),
             isinstance(job.get("uid"), str) and UUID.fullmatch(job["uid"]) is None,
-            receipt.get("config_map", {}).get("name") != replica["config_map_name"],
-            not isinstance(receipt.get("config_map", {}).get("uid"), str),
-            isinstance(receipt.get("config_map", {}).get("uid"), str)
-            and UUID.fullmatch(receipt["config_map"]["uid"]) is None,
+            config_map.get("name") != replica["config_map_name"],
+            not isinstance(config_map.get("uid"), str),
+            isinstance(config_map.get("uid"), str) and UUID.fullmatch(config_map["uid"]) is None,
             not terminal_counts_match,
-            receipt.get("database", {}).get("name") != replica["database"],
-            receipt.get("output_root", {}).get("path") != replica["output_root"],
-            receipt.get("decision", {}).get("score_read_or_generated") is not False,
-            receipt.get("privacy", {}).get(
-                "prompts_responses_flags_rewards_or_trace_content_included"
-            )
-            is not False,
-            receipt.get("privacy", {}).get("score_values_included") is not False,
-            receipt.get("privacy", {}).get("credentials_included") is not False,
+            database.get("name") != replica["database"],
+            output_root.get("path") != replica["output_root"],
+            output_root.get("exists") is not True,
+            decision.get("capability_result_status") != "not_interpreted",
+            not isinstance(decision.get("score_blind_reconciliation_required"), bool),
+            type(decision.get("unresolved_cells")) is not int,
+            type(decision.get("unresolved_cells")) is int and decision["unresolved_cells"] < 0,
+            isinstance(decision.get("score_blind_reconciliation_required"), bool)
+            and type(decision.get("unresolved_cells")) is int
+            and decision["score_blind_reconciliation_required"]
+            != (decision["unresolved_cells"] > 0),
+            decision.get("rollout_retry_performed") is not False,
+            decision.get("score_read_or_generated") is not False,
+            privacy.get("prompts_responses_flags_rewards_or_trace_content_included") is not False,
+            privacy.get("score_values_included") is not False,
+            privacy.get("credentials_included") is not False,
         )
     ):
         raise FinalAggregateError("held-out terminal receipt identity differs")
-    return receipt, self_digest
+    return receipt, self_digest, file_sha256
 
 
 def _expected_task_map(plan: Mapping[str, Any]) -> dict[str, str]:
@@ -1088,7 +1807,11 @@ def _validate_acceptance_evidence(
     reconciled_cell_count: int,
 ) -> None:
     cell_events = [row for row in events if row.get("cell_id") == cell["cell_id"]]
-    if len(cell_events) != 1 or cell_events[0].get("to_state") != "accepted":
+    if (
+        len(cell_events) != 1
+        or set(cell_events[0]) != {"cell_id", "event", "to_state", "detail_json"}
+        or cell_events[0].get("to_state") != "accepted"
+    ):
         raise FinalAggregateError("accepted cell lacks one exact acceptance event")
     detail = _event_detail(cell_events[0])
     receipt = _normalized_digest(cell.get("receipt_digest"), "accepted receipt")
@@ -1097,7 +1820,7 @@ def _validate_acceptance_evidence(
         raise FinalAggregateError("accepted event receipt differs from ledger cell")
     reconciliation = cell.get("reconciliation_digest")
     if reconciliation is None:
-        if cell_events[0].get("event") != "accepted":
+        if cell_events[0].get("event") != "accepted" or set(detail) != {"receipt_digest"}:
             raise FinalAggregateError("unreconciled acceptance event kind differs")
         return
     reconciliation = _normalized_digest(reconciliation, "reconciliation digest")
@@ -1124,6 +1847,20 @@ def _validate_acceptance_evidence(
     expected_event = {
         "fleet-stored-session-reconciliation-v1": "stored_session_reconciled",
         "fleet-stored-session-reconciliation-v2": "stored_scored_session_reconciled",
+    }.get(schema)
+    expected_detail_fields = {
+        "fleet-stored-session-reconciliation-v1": {
+            "reviewed_intent_sha256",
+            "cell_receipt_sha256",
+            "source_job_terminal_receipt_sha256",
+            "failure_code",
+        },
+        "fleet-stored-session-reconciliation-v2": {
+            "reviewed_intent_sha256",
+            "cell_receipt_sha256",
+            "source_job_terminal_receipt_sha256",
+            "action",
+        },
     }.get(schema)
     source_job_uid_sha256 = "sha256:" + hashlib.sha256(source_job_uid.encode()).hexdigest()
     selected = evidence.get("selected_cell_count")
@@ -1195,6 +1932,8 @@ def _validate_acceptance_evidence(
     if any(
         (
             expected_event is None,
+            expected_detail_fields is None,
+            isinstance(expected_detail_fields, set) and set(detail) != expected_detail_fields,
             cell_events[0].get("event") != expected_event,
             _normalized_digest(
                 evidence.get("evaluation_plan_sha256"), "reconciliation evaluation plan"
@@ -1255,13 +1994,59 @@ def _validate_eval_identity(
         raise FinalAggregateError("evaluation plan model, task, harness, or protocol differs")
 
 
+def _validate_worker_accepted_receipt(
+    replica: Mapping[str, Any],
+    cell: Mapping[str, Any],
+    metadata: Mapping[str, Any],
+) -> str:
+    artifact_directory = metadata.get("artifact_directory")
+    if not isinstance(artifact_directory, str):
+        raise FinalAggregateError("accepted local result artifact directory is invalid")
+    relative = PurePosixPath(artifact_directory) / "ACCEPTED.json"
+    receipt, _file_sha256 = _read_json_beneath(
+        _bound_path(str(replica["output_root"])),
+        relative,
+        f"seed {replica['seed']} {replica['arm']} accepted cell receipt",
+    )
+    if set(receipt) != ACCEPTED_RECEIPT_FIELDS:
+        raise FinalAggregateError("accepted cell receipt shape differs")
+    receipt_sha256 = _require_self_digest(receipt, "receipt_sha256", "accepted cell receipt")
+    if any(
+        (
+            receipt.get("schema_version") != ACCEPTED_SCHEMA,
+            receipt.get("accepted") is not True,
+            receipt.get("campaign_id") != replica["experiment_id"],
+            receipt.get("cell_id") != cell["cell_id"],
+            receipt.get("ledger_cell_id") != cell["cell_id"],
+            receipt.get("execution_id") != metadata.get("execution_id"),
+            receipt.get("run_id") != metadata.get("run_id"),
+            receipt.get("serving_block") != cell["serving_block"],
+            receipt.get("session_id") != cell["session_id"],
+            receipt.get("session_id") != metadata.get("session_id"),
+            receipt.get("verifier_execution_id") != metadata.get("verifier_execution_id"),
+            _normalized_digest(receipt.get("config_sha256"), "accepted config")
+            != _normalized_digest(metadata.get("config_sha256"), "local config"),
+            receipt.get("session_ingest_completed") is not True,
+            receipt.get("cleanup_completed") is not True,
+            receipt.get("score_persisted_privately") is not True,
+            receipt.get("scores_included") is not False,
+            receipt.get("prompts_or_traces_included") is not False,
+            cell.get("reconciliation_digest") is None
+            and _normalized_digest(cell.get("receipt_digest"), "ledger accepted receipt")
+            != _normalized_digest(receipt_sha256, "accepted cell receipt"),
+        )
+    ):
+        raise FinalAggregateError("accepted cell receipt identity differs")
+    return receipt_sha256
+
+
 def validate_gate(
     plan: Mapping[str, Any],
     replica: Mapping[str, Any],
     snapshot: GateSnapshot,
     evaluation: Mapping[str, Any],
     terminal: Mapping[str, Any],
-) -> None:
+) -> dict[str, str | None]:
     """Validate one replica without reading its score column."""
 
     _validate_eval_identity(plan, replica, evaluation)
@@ -1273,11 +2058,64 @@ def validate_gate(
     cells = snapshot.cells
     if len(cells) != TASK_COUNT or {row.get("task_version_id") for row in cells} != set(tasks):
         raise FinalAggregateError("replica ledger does not contain the exact dev17 roster")
+    metadata = snapshot.local_metadata
+    counts = Counter(row.get("cell_id") for row in metadata)
+    if (
+        len(metadata) != TASK_COUNT
+        or any(
+            not isinstance(row, dict) or set(row) != set(SCORE_BLIND_LOCAL_FIELDS)
+            for row in metadata
+        )
+        or set(counts) != {row["cell_id"] for row in cells}
+        or any(count != 1 for count in counts.values())
+    ):
+        raise FinalAggregateError("accepted cells do not each have one score-blind local result")
+    cells_by_id = {row["cell_id"]: row for row in cells}
+    metadata_by_cell = {row["cell_id"]: row for row in metadata}
+    event_counts = Counter(row.get("cell_id") for row in snapshot.events if isinstance(row, dict))
+    if (
+        len(snapshot.events) != TASK_COUNT
+        or any(
+            not isinstance(row, dict)
+            or set(row) != ACCEPTED_EVENT_FIELDS
+            or row.get("to_state") != "accepted"
+            for row in snapshot.events
+        )
+        or set(event_counts) != set(cells_by_id)
+        or any(count != 1 for count in event_counts.values())
+    ):
+        raise FinalAggregateError("accepted event roster differs from the exact cell roster")
+    expected_reconciliation_intents = {
+        _normalized_digest(row["reconciliation_digest"], "reconciliation digest")
+        for row in cells
+        if row.get("reconciliation_digest") is not None
+    }
+    reconciliation_by_intent: dict[str, dict[str, Any]] = {}
+    for evidence in snapshot.reconciliations:
+        if not isinstance(evidence, dict):
+            raise FinalAggregateError("database reconciliation receipt is invalid")
+        _require_self_digest(evidence, "receipt_sha256", "database reconciliation receipt")
+        _reconciliation_shape(evidence, evidence.get("schema_version"))
+        intent = _normalized_digest(
+            evidence.get("reviewed_intent_sha256"), "reviewed reconciliation intent"
+        )
+        if intent in reconciliation_by_intent:
+            raise FinalAggregateError("database reconciliation receipt roster is ambiguous")
+        reconciliation_by_intent[intent] = evidence
+    if set(reconciliation_by_intent) != expected_reconciliation_intents:
+        raise FinalAggregateError("database reconciliation receipt roster differs")
+    for row in metadata:
+        if (
+            row.get("session_ingest_status") != "completed"
+            or row.get("session_id") != cells_by_id[row["cell_id"]]["session_id"]
+        ):
+            raise FinalAggregateError("accepted local result lacks completed session ingestion")
     reconciliation_counts = Counter(
         _normalized_digest(row["reconciliation_digest"], "reconciliation digest")
         for row in cells
         if row.get("reconciliation_digest") is not None
     )
+    accepted_receipts: dict[str, str | None] = {}
     for cell in cells:
         version = cell["task_version_id"]
         if any(
@@ -1317,6 +2155,30 @@ def validate_gate(
                 else 0
             ),
         )
+        local_row = metadata_by_cell[cell["cell_id"]]
+        if reconciliation is None:
+            expected_lifecycle = (0, "completed")
+        else:
+            reconciliation_digest = _normalized_digest(reconciliation, "reconciliation digest")
+            evidence = reconciliation_by_intent[reconciliation_digest]
+            expected_lifecycle = (
+                (1, "process_error")
+                if evidence.get("schema_version") == "fleet-stored-session-reconciliation-v1"
+                else (
+                    evidence["source_agent_exit_code"],
+                    evidence["source_agent_termination"],
+                )
+            )
+        if (
+            local_row.get("agent_exit_code"),
+            local_row.get("agent_termination"),
+        ) != expected_lifecycle:
+            raise FinalAggregateError("accepted local result lifecycle differs")
+        accepted_receipts[cell["cell_id"]] = (
+            _validate_worker_accepted_receipt(replica, cell, local_row)
+            if reconciliation is None
+            else None
+        )
     stored_plan = [
         {field: row.get(field) for field in PLAN_STORED_FIELDS}
         for row in sorted(
@@ -1331,21 +2193,10 @@ def validate_gate(
     ]
     if _plain_digest(stored_plan) != snapshot.plan_sha256:
         raise FinalAggregateError("replica immutable ledger plan digest differs")
-    metadata = snapshot.local_metadata
-    counts = Counter(row.get("cell_id") for row in metadata)
-    if (
-        len(metadata) != TASK_COUNT
-        or set(counts) != {row["cell_id"] for row in cells}
-        or any(count != 1 for count in counts.values())
-    ):
-        raise FinalAggregateError("accepted cells do not each have one private local result")
-    cells_by_id = {row["cell_id"]: row for row in cells}
-    for row in metadata:
-        if (
-            row.get("session_ingest_status") != "completed"
-            or row.get("session_id") != cells_by_id[row["cell_id"]]["session_id"]
-        ):
-            raise FinalAggregateError("accepted local result lacks completed session ingestion")
+    reconciled_count = sum(cell.get("reconciliation_digest") is not None for cell in cells)
+    if terminal["decision"]["unresolved_cells"] != reconciled_count:
+        raise FinalAggregateError("terminal unresolved census differs from reconciliation evidence")
+    return accepted_receipts
 
 
 def _validate_scored_results(
@@ -1356,9 +2207,7 @@ def _validate_scored_results(
     cells = {row["cell_id"]: row for row in snapshot.cells}
     if {row.get("cell_id") for row in scored} != set(cells):
         raise FinalAggregateError("opened scores differ from the accepted cell roster")
-    metadata_fields = tuple(field for field in LOCAL_RECORD_FIELDS if field != "score") + (
-        "record_sha256",
-    )
+    metadata_fields = SCORE_BLIND_LOCAL_FIELDS
     expected_metadata = sorted(
         ({field: row.get(field) for field in metadata_fields} for row in snapshot.local_metadata),
         key=lambda row: row["cell_id"],
@@ -1409,21 +2258,28 @@ def finalize(
     snapshots: Mapping[tuple[int, str], Snapshot],
     *,
     output_root: Path,
+    publication_root: Path | None = None,
 ) -> dict[str, Any]:
     """Gate all replicas, then and only then open scores and publish receipts."""
 
     validate_plan(plan)
-    if output_root.as_posix() != plan["private_output_root"]:
+    expected_output_root = _bound_path(str(plan["private_output_root"]))
+    if output_root != expected_output_root:
         raise FinalAggregateError("final output root differs from the sealed plan")
-    if output_root.exists() or output_root.is_symlink():
+    publication_root = output_root if publication_root is None else publication_root
+    if publication_root != output_root and publication_root.as_posix() != PRIVATE_STAGING_ROOT:
+        raise FinalAggregateError("final publication root differs from the sealed runtime")
+    if publication_root.exists() or publication_root.is_symlink():
         raise FinalAggregateError("final aggregate output already exists")
-    if not output_root.parent.is_dir() or output_root.parent.is_symlink():
+    if not publication_root.parent.is_dir() or publication_root.parent.is_symlink():
         raise FinalAggregateError("final aggregate parent is not an exact directory")
     replicas = {(row["seed"], row["arm"]): row for row in plan["replicas"]}
     if set(snapshots) != set(replicas):
         raise FinalAggregateError("database snapshots differ from the sealed replica roster")
 
-    gated: dict[tuple[int, str], tuple[GateSnapshot, dict, dict, str]] = {}
+    gated: dict[
+        tuple[int, str], tuple[GateSnapshot, dict, dict, str, str, dict[str, str | None]]
+    ] = {}
     common_runtime: dict[str, str] | None = None
     protocol_by_seed: dict[int, dict[str, str]] = defaultdict(dict)
     for identity in sorted(replicas):
@@ -1434,13 +2290,20 @@ def finalize(
             common_runtime = runtime
         elif runtime != common_runtime:
             raise FinalAggregateError("base and candidate evaluator runtime files differ")
-        terminal, terminal_sha = _terminal_receipt(replica)
+        terminal, terminal_sha, terminal_file_sha = _terminal_receipt(replica)
         protocol_by_seed[replica["seed"]][replica["arm"]] = terminal.get(
             "comparison_protocol_sha256"
         )
         snapshot = snapshots[identity].gate()
-        validate_gate(plan, replica, snapshot, evaluation, terminal)
-        gated[identity] = (snapshot, evaluation, terminal, terminal_sha)
+        accepted_receipts = validate_gate(plan, replica, snapshot, evaluation, terminal)
+        gated[identity] = (
+            snapshot,
+            evaluation,
+            terminal,
+            terminal_sha,
+            terminal_file_sha,
+            accepted_receipts,
+        )
     if any(
         set(values) != set(ARMS) or values["base"] != values["candidate"]
         for values in protocol_by_seed.values()
@@ -1452,7 +2315,14 @@ def finalize(
     outcomes: list[dict[str, Any]] = []
     for identity in sorted(replicas):
         replica = replicas[identity]
-        snapshot, evaluation, _terminal, _terminal_sha = gated[identity]
+        (
+            snapshot,
+            evaluation,
+            _terminal,
+            _terminal_sha,
+            _terminal_file_sha,
+            accepted_receipts,
+        ) = gated[identity]
         for row in _validate_scored_results(snapshot, snapshots[identity].scored_results()):
             cell = next(item for item in snapshot.cells if item["cell_id"] == row["cell_id"])
             outcomes.append(
@@ -1465,6 +2335,7 @@ def finalize(
                     "record_sha256": "sha256:" + _normalized_digest(row["record_sha256"], "record"),
                     "accepted_receipt_sha256": "sha256:"
                     + _normalized_digest(cell["receipt_digest"], "accepted receipt"),
+                    "worker_accepted_receipt_sha256": accepted_receipts[cell["cell_id"]],
                     "evaluation_plan_sha256": "sha256:" + evaluation["sha256"],
                 }
             )
@@ -1482,6 +2353,7 @@ def finalize(
     anonymization_body = {
         "schema": "cyber_private_task_anonymization_v1",
         "method": "private_random_permutation_v1",
+        "private_nonce": secrets.token_hex(32),
         "rows": [
             {
                 "public_task_index": public_index,
@@ -1518,14 +2390,14 @@ def finalize(
                 "evaluation_identity_sha256": terminal["evaluation_identity_sha256"],
                 "comparison_protocol_sha256": terminal["comparison_protocol_sha256"],
                 "job_uid": terminal["job"]["uid"],
-                "terminal_receipt_file_sha256": _file_digest(
-                    Path(replica["terminal_receipt_path"])
-                ),
+                "terminal_receipt_file_sha256": terminal_file_sha,
                 "terminal_receipt_sha256": terminal_sha,
                 "database_plan_sha256": snapshot.plan_sha256,
             }
             for identity, replica in sorted(replicas.items())
-            for snapshot, _evaluation, terminal, terminal_sha in [gated[identity]]
+            for snapshot, _evaluation, terminal, terminal_sha, terminal_file_sha, _accepted in [
+                gated[identity]
+            ]
         ],
     }
     terminal_index = {**terminal_body, "receipt_sha256": _digest(terminal_body)}
@@ -1595,7 +2467,9 @@ def finalize(
     }
     final = {**final_body, "receipt_sha256": _digest(final_body)}
 
-    temporary = Path(tempfile.mkdtemp(prefix=f".{output_root.name}.", dir=output_root.parent))
+    temporary = Path(
+        tempfile.mkdtemp(prefix=f".{publication_root.name}.", dir=publication_root.parent)
+    )
     os.chmod(temporary, 0o700)
     try:
         for name, value in (
@@ -1606,7 +2480,9 @@ def finalize(
             ("FINAL.json", final),
         ):
             _write_exclusive(temporary / name, value)
-        os.rename(temporary, output_root)
+        _fsync_directory(temporary)
+        _rename_noreplace(temporary, publication_root)
+        _fsync_directory(publication_root.parent)
     except BaseException:
         # The final path is never exposed partially. A failed temporary tree is
         # retained for private diagnosis and cannot be mistaken for acceptance.
@@ -1628,9 +2504,7 @@ class _PostgresSnapshot:
         cells = self.connection.execute(
             f"SELECT {', '.join(CELL_FIELDS)} FROM rollout_cells ORDER BY cell_id"
         ).fetchall()
-        metadata_fields = tuple(field for field in LOCAL_RECORD_FIELDS if field != "score") + (
-            "record_sha256",
-        )
+        metadata_fields = SCORE_BLIND_LOCAL_FIELDS
         metadata = self.connection.execute(
             f"SELECT {', '.join(metadata_fields)} FROM rollout_local_results ORDER BY cell_id"
         ).fetchall()
@@ -1669,13 +2543,17 @@ class _PostgresSnapshot:
 
 
 def _database_dsn(root_dsn: str, database: str) -> str:
-    parsed = urlsplit(root_dsn)
+    try:
+        parsed = urlsplit(root_dsn)
+    except ValueError as exc:
+        raise FinalAggregateError("PostgreSQL root connection is invalid") from exc
     query = {key.casefold() for key, _value in parse_qsl(parsed.query, keep_blank_values=True)}
+    authority_overrides = {"database", "dbname", "host", "hostaddr", "port", "service"}
     if (
         parsed.scheme not in {"postgres", "postgresql"}
-        or not parsed.netloc
+        or not parsed.hostname
         or parsed.fragment
-        or query & {"database", "dbname"}
+        or query & authority_overrides
         or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,62}", database)
     ):
         raise FinalAggregateError("PostgreSQL root connection or database name is invalid")
@@ -1703,6 +2581,7 @@ def open_postgres_snapshots(
                     row_factory=dict_row,
                     connect_timeout=30,
                     application_name="fleet-dev17-pass8-final-v2",
+                    options="-c default_transaction_read_only=on -c statement_timeout=30000",
                 )
             )
             connection.execute("BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
@@ -1711,9 +2590,9 @@ def open_postgres_snapshots(
 
 
 def run_from_environment(plan_path: Path) -> dict[str, Any]:
-    plan = _read_json(plan_path, "bundled final aggregate plan")
+    plan, plan_file_sha256 = _read_json_and_digest(plan_path, "bundled final aggregate plan")
     expected = os.environ.get("FINAL_STUDY_PLAN_FILE_SHA256")
-    if expected != _file_digest(plan_path):
+    if expected != plan_file_sha256:
         raise FinalAggregateError("bundled final aggregate plan bytes differ")
     validate_plan(plan)
     dsn = os.environ.get("ROLLOUT_DATABASE_URL")
@@ -1722,5 +2601,8 @@ def run_from_environment(plan_path: Path) -> dict[str, Any]:
     output = Path(os.environ.get("FINAL_OUTPUT_ROOT", ""))
     if output.as_posix() != plan["private_output_root"]:
         raise FinalAggregateError("final output environment differs from the sealed plan")
+    staging = Path(os.environ.get("FINAL_STAGING_ROOT", ""))
+    if staging.as_posix() != PRIVATE_STAGING_ROOT:
+        raise FinalAggregateError("final staging environment differs from the sealed runtime")
     with open_postgres_snapshots(plan, dsn) as snapshots:
-        return finalize(plan, snapshots, output_root=output)
+        return finalize(plan, snapshots, output_root=output, publication_root=staging)

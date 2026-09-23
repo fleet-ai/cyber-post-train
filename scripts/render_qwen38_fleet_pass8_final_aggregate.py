@@ -35,6 +35,41 @@ NAMESPACE = "fleet-train-jobs"
 NAME = "chris-q38-dev17-pass8-final-v2"
 CONFIG_MAP = f"{NAME}-code"
 SOURCE = ROOT / "evals/fleet/final_pass8_aggregate.py"
+WHEEL_LOCK = [
+    {
+        "filename": "psycopg-3.3.5-py3-none-any.whl",
+        "url": (
+            "https://files.pythonhosted.org/packages/3d/2e/"
+            "d0a645bcaadde68bd6d93c43f02f14b0191bdda367ce3f7722abe3da744a/"
+            "psycopg-3.3.5-py3-none-any.whl"
+        ),
+        "size": 213598,
+        "sha256": "ce5aa5cdb4f9379f00f487590e5890bfa7df9a164648c969ffa628505e21af4e",
+    },
+    {
+        "filename": (
+            "psycopg_binary-3.3.5-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl"
+        ),
+        "url": (
+            "https://files.pythonhosted.org/packages/21/d1/"
+            "0f244dfef389e52e9dc3056f2a9033d1f6901e97d24d9a9c8b836e32ab6b/"
+            "psycopg_binary-3.3.5-cp312-cp312-manylinux2014_x86_64."
+            "manylinux_2_17_x86_64.whl"
+        ),
+        "size": 5227752,
+        "sha256": "682a17a57415c3ca1731eec018ed031f012ffcb81ba74806eb219cb396065672",
+    },
+    {
+        "filename": "typing_extensions-4.16.0-py3-none-any.whl",
+        "url": (
+            "https://files.pythonhosted.org/packages/49/d3/"
+            "b8441a820a491ddfc024b0b0cf0393375b75ea13866d9c66727e54c2fc80/"
+            "typing_extensions-4.16.0-py3-none-any.whl"
+        ),
+        "size": 45571,
+        "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8",
+    },
+]
 RUNNER = r"""from __future__ import annotations
 
 import hashlib
@@ -55,12 +90,217 @@ module = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = module
 spec.loader.exec_module(module)
 result = module.run_from_environment(Path("study.json"))
+staging = Path(os.environ["FINAL_STAGING_ROOT"])
+if staging.as_posix() != module.PRIVATE_STAGING_ROOT:
+    raise RuntimeError("private final staging root differs")
+for child in staging.iterdir():
+    if not child.is_file() or child.is_symlink():
+        raise RuntimeError("private final staging file roster differs")
+    child.chmod(0o640)
+staging.chmod(0o750)
 print(json.dumps({
     "status": result["status"],
     "task_count": result["task_count"],
     "valid_outcomes_per_task_arm": result["valid_outcomes_per_task_arm"],
     "receipt_sha256": result["receipt_sha256"],
-}, sort_keys=True))
+}, sort_keys=True), flush=True)
+ready = staging.parent / "READY"
+descriptor = os.open(ready, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o640)
+with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+    stream.write(result["receipt_sha256"] + "\n")
+    stream.flush()
+    os.fsync(stream.fileno())
+"""
+PUBLISHER = r"""from __future__ import annotations
+
+import ctypes
+import errno
+import hashlib
+import json
+import os
+import stat
+import tempfile
+import time
+from pathlib import Path
+
+FILES = {
+    "PRIVATE_TERMINAL_INDEX.json",
+    "PRIVATE_SCORED_OUTCOME_INDEX.json",
+    "PRIVATE_ANONYMIZATION.json",
+    "SANITIZED_AGGREGATE.json",
+    "FINAL.json",
+}
+
+
+def require(condition: bool, message: str) -> None:
+    if not condition:
+        raise RuntimeError(message)
+
+
+def canonical(value: object) -> bytes:
+    return json.dumps(
+        value, sort_keys=True, separators=(",", ":"), allow_nan=False
+    ).encode()
+
+
+def read_regular_once(path: Path) -> bytes:
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        before = os.fstat(descriptor)
+        require(stat.S_ISREG(before.st_mode), "staged output is not a regular file")
+        chunks = []
+        while chunk := os.read(descriptor, 1024 * 1024):
+            chunks.append(chunk)
+        after = os.fstat(descriptor)
+        require(
+            (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns)
+            == (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns),
+            "staged output changed while read",
+        )
+        return b"".join(chunks)
+    finally:
+        os.close(descriptor)
+
+
+def checked_json(payload: bytes) -> dict:
+    value = json.loads(payload)
+    require(isinstance(value, dict), "staged output is not an object")
+    claimed = value.get("receipt_sha256")
+    body = {key: item for key, item in value.items() if key != "receipt_sha256"}
+    actual = "sha256:" + hashlib.sha256(canonical(body)).hexdigest()
+    require(claimed == actual, "staged output self digest differs")
+    return value
+
+
+def rename_noreplace(source: Path, target: Path) -> None:
+    libc = ctypes.CDLL(None, use_errno=True)
+    function = getattr(libc, "renameat2", None)
+    require(function is not None, "atomic no-replace rename is unavailable")
+    function.argtypes = [
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_int,
+        ctypes.c_char_p,
+        ctypes.c_uint,
+    ]
+    function.restype = ctypes.c_int
+    result = function(
+        -100,
+        os.fsencode(source),
+        -100,
+        os.fsencode(target),
+        1,
+    )
+    if result != 0:
+        error = ctypes.get_errno()
+        if error == errno.EEXIST:
+            raise FileExistsError("final aggregate output already exists")
+        raise OSError(error, os.strerror(error))
+
+
+source = Path(os.environ["FINAL_STAGING_ROOT"])
+target = Path(os.environ["FINAL_OUTPUT_ROOT"])
+require(source == Path("/result-staging/chris-q38-dev17-pass8-final-v2"), "stage differs")
+require(
+    target
+    == Path(
+        "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/"
+        "chris-q38-dev17-pass8-final-v2"
+    ),
+    "output differs",
+)
+require((os.geteuid(), os.getegid()) == (1000, 100), "publisher identity differs")
+deadline = time.monotonic() + 1700
+ready = source.parent / "READY"
+failed = source.parent / "FAILED"
+while not ready.is_file():
+    require(not failed.exists(), "aggregate reader failed before publication")
+    require(time.monotonic() < deadline, "aggregate reader did not finish in time")
+    time.sleep(2)
+identity = source.lstat()
+require(
+    stat.S_ISDIR(identity.st_mode)
+    and not source.is_symlink()
+    and (identity.st_uid, identity.st_gid) == (0, 100)
+    and identity.st_mode & stat.S_IRGRP
+    and identity.st_mode & stat.S_IXGRP,
+    "staging directory identity differs",
+)
+require({item.name for item in source.iterdir()} == FILES, "staged file roster differs")
+payloads = {name: read_regular_once(source / name) for name in FILES}
+values = {name: checked_json(payload) for name, payload in payloads.items()}
+terminal = values["PRIVATE_TERMINAL_INDEX.json"]
+outcome = values["PRIVATE_SCORED_OUTCOME_INDEX.json"]
+anonymization = values["PRIVATE_ANONYMIZATION.json"]
+public = values["SANITIZED_AGGREGATE.json"]
+final = values["FINAL.json"]
+require(terminal.get("schema") == "cyber_fleet_matched_pass8_terminal_index_v2", "terminal schema")
+require(
+    outcome.get("schema")
+    == "cyber_fleet_matched_pass8_protocol_v2_private_scored_outcome_index_v1",
+    "outcome schema",
+)
+require(anonymization.get("schema") == "cyber_private_task_anonymization_v1", "mapping schema")
+require(
+    public.get("schema_version") == "cyber_sanitized_matched_pass8_aggregate_v1",
+    "public schema",
+)
+require(
+    final.get("schema") == "cyber_fleet_matched_pass8_protocol_v2_final_receipt_v1"
+    and final.get("status") == "final"
+    and final.get("private_terminal_index_sha256") == terminal["receipt_sha256"]
+    and final.get("private_scored_outcome_index_sha256") == outcome["receipt_sha256"]
+    and final.get("private_anonymization_receipt_sha256") == anonymization["receipt_sha256"]
+    and final.get("sanitized_aggregate_receipt_sha256") == public["receipt_sha256"],
+    "final cross-file identity differs",
+)
+require(read_regular_once(ready).decode().strip() == final["receipt_sha256"], "ready differs")
+parent = target.parent
+parent_identity = parent.lstat()
+require(
+    stat.S_ISDIR(parent_identity.st_mode)
+    and not parent.is_symlink()
+    and (parent_identity.st_uid, parent_identity.st_gid) == (1000, 100)
+    and parent_identity.st_mode & stat.S_IWUSR
+    and parent_identity.st_mode & stat.S_IXUSR,
+    "output parent identity differs",
+)
+require(not target.exists() and not target.is_symlink(), "final output already exists")
+probe = None
+try:
+    probe = tempfile.NamedTemporaryFile(
+        mode="wb", prefix=".pass8-publisher-probe-", dir=parent, delete=False
+    )
+    probe.write(b"pass8-publisher-probe-v1\n")
+    probe.flush()
+    os.fsync(probe.fileno())
+    probe.close()
+    Path(probe.name).unlink()
+finally:
+    if probe is not None and not probe.closed:
+        probe.close()
+    if probe is not None:
+        Path(probe.name).unlink(missing_ok=True)
+temporary = Path(tempfile.mkdtemp(prefix=f".{target.name}.", dir=parent))
+os.chmod(temporary, 0o700)
+for name in sorted(FILES):
+    descriptor = os.open(temporary / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    with os.fdopen(descriptor, "wb") as stream:
+        stream.write(payloads[name])
+        stream.flush()
+        os.fsync(stream.fileno())
+directory = os.open(temporary, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+try:
+    os.fsync(directory)
+finally:
+    os.close(directory)
+rename_noreplace(temporary, target)
+directory = os.open(parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+try:
+    os.fsync(directory)
+finally:
+    os.close(directory)
+print(json.dumps({"status": "published", "receipt_sha256": final["receipt_sha256"]}))
 """
 
 
@@ -110,8 +350,10 @@ def _read_regular_once(path: Path, label: str) -> tuple[bytes, tuple[int, int]]:
 def _bundle(plan: dict[str, Any]) -> tuple[bytes, dict[str, str]]:
     files = {
         "aggregate.py": SOURCE.read_text(encoding="utf-8"),
+        "publish.py": PUBLISHER,
         "run.py": RUNNER,
         "study.json": json.dumps(plan, indent=2, sort_keys=True) + "\n",
+        "wheel-lock.json": json.dumps(WHEEL_LOCK, indent=2, sort_keys=True) + "\n",
     }
     digests = {
         name: "sha256:" + hashlib.sha256(value.encode()).hexdigest()
@@ -166,7 +408,11 @@ def _objects(plan: dict[str, Any], compressed: bytes, digests: dict[str, str]) -
                 },
                 "spec": {
                     "priorityClassName": "c1",
+                    "automountServiceAccountToken": False,
                     "restartPolicy": "Never",
+                    "securityContext": {
+                        "seccompProfile": {"type": "RuntimeDefault"},
+                    },
                     "nodeSelector": {
                         "kubernetes.io/arch": "amd64",
                         "workload": "fleetai-training-ng-cpu",
@@ -185,19 +431,134 @@ def _objects(plan: dict[str, Any], compressed: bytes, digests: dict[str, str]) -
                             "image": IMAGE,
                             "command": ["/bin/bash", "-ceu", "--"],
                             "args": [
+                                "trap 'status=$?; trap - EXIT; "
+                                'if [ "$status" -ne 0 ] && '
+                                "[ ! -f /result-staging/READY ]; then umask 027; "
+                                ": > /result-staging/FAILED || true; fi; "
+                                'exit "$status"\' EXIT\n'
                                 "python - <<'PY'\n"
-                                "import gzip,hashlib,json,os,pathlib\n"
+                                "import gzip,hashlib,io,json,os,pathlib,stat,tempfile\n"
+                                "import urllib.request,zipfile\n"
+                                "def require(condition,message):\n"
+                                " if not condition: raise RuntimeError(message)\n"
                                 "bundle=pathlib.Path('/bootstrap/bundle.json.gz').read_bytes()\n"
                                 "actual='sha256:'+hashlib.sha256(bundle).hexdigest()\n"
-                                "assert actual == os.environ['FINAL_BUNDLE_SHA256']\n"
+                                "require(actual==os.environ['FINAL_BUNDLE_SHA256'],\n"
+                                " 'final bundle digest differs')\n"
                                 "root=pathlib.Path('/workspace/source')\n"
                                 "root.mkdir(parents=True,exist_ok=False)\n"
                                 "for name,text in json.loads(gzip.decompress(bundle)).items():\n"
                                 " p=root/name; p.parent.mkdir(parents=True,exist_ok=True)\n"
                                 " p.write_text(text,encoding='utf-8')\n"
+                                "deps=pathlib.Path('/workspace/deps')\n"
+                                "deps.mkdir(parents=True,exist_ok=False)\n"
+                                "for item in json.loads((root/'wheel-lock.json').read_text()):\n"
+                                " require(\n"
+                                "  item['url'].startswith('https://files.pythonhosted.org/packages/'),\n"
+                                "  'wheel source differs'\n"
+                                " )\n"
+                                " with urllib.request.urlopen(\n"
+                                "  item['url'],timeout=120\n"
+                                " ) as response:\n"
+                                "  wheel=response.read(item['size']+1)\n"
+                                " require(len(wheel)==item['size'],'wheel size differs')\n"
+                                " require(\n"
+                                "  hashlib.sha256(wheel).hexdigest()==item['sha256'],\n"
+                                "  'wheel digest differs'\n"
+                                " )\n"
+                                " with zipfile.ZipFile(io.BytesIO(wheel)) as archive:\n"
+                                "  seen=set()\n"
+                                "  for member in archive.infolist():\n"
+                                "   relative=pathlib.PurePosixPath(member.filename)\n"
+                                "   require(\n"
+                                "    bool(relative.parts) and not relative.is_absolute(),\n"
+                                "    'wheel member path differs'\n"
+                                "   )\n"
+                                "   require('..' not in relative.parts,'wheel member escapes')\n"
+                                "   require(member.filename not in seen,'duplicate wheel member')\n"
+                                "   seen.add(member.filename)\n"
+                                "   require(\n"
+                                "    not stat.S_ISLNK(member.external_attr>>16),\n"
+                                "    'wheel symlink is forbidden'\n"
+                                "   )\n"
+                                "   target=deps.joinpath(*relative.parts)\n"
+                                "   if member.is_dir():\n"
+                                "    target.mkdir(parents=True,exist_ok=True)\n"
+                                "    continue\n"
+                                "   target.parent.mkdir(parents=True,exist_ok=True)\n"
+                                "   with target.open('xb') as stream:\n"
+                                "    stream.write(archive.read(member))\n"
+                                "output=pathlib.Path(os.environ['FINAL_OUTPUT_ROOT'])\n"
+                                "expected=pathlib.Path(\n"
+                                " '/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls/'\n"
+                                " 'chris-q38-dev17-pass8-final-v2'\n"
+                                ")\n"
+                                "require(output==expected,'final output path differs')\n"
+                                "require(\n"
+                                " (os.geteuid(),os.getegid())==(0,100),\n"
+                                " 'reader identity differs'\n"
+                                ")\n"
+                                "require(\n"
+                                " not output.exists() and not output.is_symlink(),\n"
+                                " 'final output already exists'\n"
+                                ")\n"
+                                "staging=pathlib.Path(os.environ['FINAL_STAGING_ROOT'])\n"
+                                "require(\n"
+                                " staging==pathlib.Path(\n"
+                                "  '/result-staging/chris-q38-dev17-pass8-final-v2'\n"
+                                " ),'staging root differs'\n"
+                                ")\n"
+                                "staging_identity=staging.parent.lstat()\n"
+                                "require(\n"
+                                " stat.S_ISDIR(staging_identity.st_mode)\n"
+                                " and not staging.parent.is_symlink(),\n"
+                                " 'staging parent identity differs'\n"
+                                ")\n"
+                                "require(\n"
+                                " not staging.exists() and not staging.is_symlink(),\n"
+                                " 'staging output already exists'\n"
+                                ")\n"
+                                "plan=json.loads((root/'study.json').read_text())\n"
+                                "for replica in plan['replicas']:\n"
+                                " source=pathlib.Path(replica['output_root'])\n"
+                                " source_identity=source.lstat()\n"
+                                " require(\n"
+                                "  stat.S_ISDIR(source_identity.st_mode)\n"
+                                "  and not source.is_symlink(),\n"
+                                "  'source output root is not readable as an exact directory'\n"
+                                " )\n"
+                                " terminal=pathlib.Path(replica['terminal_receipt_path'])\n"
+                                " require(\n"
+                                "  terminal.parent==source,\n"
+                                "  'terminal path escapes source root'\n"
+                                " )\n"
+                                " for evidence in (source/'EVAL.json',terminal):\n"
+                                "  descriptor=os.open(\n"
+                                "   evidence,os.O_RDONLY|getattr(os,'O_NOFOLLOW',0)\n"
+                                "  )\n"
+                                "  try:\n"
+                                "   require(\n"
+                                "    stat.S_ISREG(os.fstat(descriptor).st_mode),\n"
+                                "    'source evidence is not an exact regular file'\n"
+                                "   )\n"
+                                "  finally:\n"
+                                "   os.close(descriptor)\n"
+                                "probe=None\n"
+                                "try:\n"
+                                " probe=tempfile.NamedTemporaryFile(\n"
+                                "  mode='wb',prefix='.pass8-staging-probe-',\n"
+                                "  dir=staging.parent,delete=False\n"
+                                " )\n"
+                                " probe.write(b'pass8-write-probe-v1\\n')\n"
+                                " probe.flush(); os.fsync(probe.fileno()); probe.close()\n"
+                                " pathlib.Path(probe.name).unlink()\n"
+                                "finally:\n"
+                                " if probe is not None and not probe.closed: probe.close()\n"
+                                " if probe is not None:\n"
+                                "  pathlib.Path(probe.name).unlink(missing_ok=True)\n"
                                 "PY\n"
                                 "cd /workspace/source\n"
-                                "exec uv run --no-project --with 'psycopg[binary]==3.3.5' "
+                                "export PYTHONPATH=/workspace/deps\n"
                                 "python run.py\n"
                             ],
                             "env": [
@@ -215,6 +576,10 @@ def _objects(plan: dict[str, Any], compressed: bytes, digests: dict[str, str]) -
                                     "value": plan["private_output_root"],
                                 },
                                 {
+                                    "name": "FINAL_STAGING_ROOT",
+                                    "value": aggregate.PRIVATE_STAGING_ROOT,
+                                },
+                                {
                                     "name": "ROLLOUT_DATABASE_URL",
                                     "valueFrom": {
                                         "secretKeyRef": {
@@ -223,20 +588,123 @@ def _objects(plan: dict[str, Any], compressed: bytes, digests: dict[str, str]) -
                                         }
                                     },
                                 },
+                                {"name": "PYTHONDONTWRITEBYTECODE", "value": "1"},
+                                {"name": "TMPDIR", "value": "/tmp"},
                             ],
+                            "securityContext": {
+                                "allowPrivilegeEscalation": False,
+                                "capabilities": {"drop": ["ALL"]},
+                                "readOnlyRootFilesystem": True,
+                                "runAsNonRoot": False,
+                                "runAsUser": 0,
+                                "runAsGroup": 100,
+                            },
                             "resources": {
                                 "requests": {"cpu": "1", "memory": "2Gi"},
                                 "limits": {"cpu": "2", "memory": "4Gi"},
                             },
                             "volumeMounts": [
                                 {"name": "bootstrap", "mountPath": "/bootstrap", "readOnly": True},
-                                {"name": "sfs", "mountPath": "/mnt/sfs"},
+                                {"name": "workspace", "mountPath": "/workspace"},
+                                {"name": "tmp", "mountPath": "/tmp"},
+                                {
+                                    "name": "sfs-readonly",
+                                    "mountPath": "/mnt/sfs",
+                                    "readOnly": True,
+                                },
+                                {
+                                    "name": "result-staging",
+                                    "mountPath": "/result-staging",
+                                },
                             ],
-                        }
+                        },
+                        {
+                            "name": "publish",
+                            "image": IMAGE,
+                            "command": ["/bin/bash", "-ceu", "--"],
+                            "args": [
+                                "python - <<'PY'\n"
+                                "import gzip,hashlib,json,os,pathlib\n"
+                                "def require(condition,message):\n"
+                                " if not condition: raise RuntimeError(message)\n"
+                                "bundle=pathlib.Path('/bootstrap/bundle.json.gz').read_bytes()\n"
+                                "require(\n"
+                                " 'sha256:'+hashlib.sha256(bundle).hexdigest()\n"
+                                " ==os.environ['FINAL_BUNDLE_SHA256'],\n"
+                                " 'final bundle digest differs'\n"
+                                ")\n"
+                                "files=json.loads(gzip.decompress(bundle))\n"
+                                "source=files.get('publish.py')\n"
+                                "require(isinstance(source,str),'publisher source missing')\n"
+                                "require(\n"
+                                " 'sha256:'+hashlib.sha256(source.encode()).hexdigest()\n"
+                                " ==os.environ['FINAL_PUBLISHER_MODULE_SHA256'],\n"
+                                " 'publisher module digest differs'\n"
+                                ")\n"
+                                "exec(compile(source,'publish.py','exec'),{'__name__':'__main__'})\n"
+                                "PY\n"
+                            ],
+                            "env": [
+                                {"name": "FINAL_BUNDLE_SHA256", "value": bundle_digest},
+                                {
+                                    "name": "FINAL_PUBLISHER_MODULE_SHA256",
+                                    "value": digests["publish.py"],
+                                },
+                                {
+                                    "name": "FINAL_OUTPUT_ROOT",
+                                    "value": plan["private_output_root"],
+                                },
+                                {
+                                    "name": "FINAL_STAGING_ROOT",
+                                    "value": aggregate.PRIVATE_STAGING_ROOT,
+                                },
+                                {"name": "PYTHONDONTWRITEBYTECODE", "value": "1"},
+                                {"name": "TMPDIR", "value": "/tmp"},
+                            ],
+                            "securityContext": {
+                                "allowPrivilegeEscalation": False,
+                                "capabilities": {"drop": ["ALL"]},
+                                "readOnlyRootFilesystem": True,
+                                "runAsNonRoot": True,
+                                "runAsUser": 1000,
+                                "runAsGroup": 100,
+                            },
+                            "resources": {
+                                "requests": {"cpu": "100m", "memory": "128Mi"},
+                                "limits": {"cpu": "500m", "memory": "512Mi"},
+                            },
+                            "volumeMounts": [
+                                {"name": "bootstrap", "mountPath": "/bootstrap", "readOnly": True},
+                                {"name": "publisher-tmp", "mountPath": "/tmp"},
+                                {
+                                    "name": "result-staging",
+                                    "mountPath": "/result-staging",
+                                    "readOnly": True,
+                                },
+                                {
+                                    "name": "sfs-control",
+                                    "mountPath": (
+                                        "/mnt/sfs/jobs/chris-q38-study-corpora-v1/launch-controls"
+                                    ),
+                                    "subPath": ("jobs/chris-q38-study-corpora-v1/launch-controls"),
+                                },
+                            ],
+                        },
                     ],
                     "volumes": [
                         {"name": "bootstrap", "configMap": {"name": CONFIG_MAP}},
-                        {"name": "sfs", "persistentVolumeClaim": {"claimName": "sfs-shared"}},
+                        {"name": "workspace", "emptyDir": {}},
+                        {"name": "tmp", "emptyDir": {"sizeLimit": "128Mi"}},
+                        {"name": "publisher-tmp", "emptyDir": {"sizeLimit": "32Mi"}},
+                        {"name": "result-staging", "emptyDir": {"sizeLimit": "32Mi"}},
+                        {
+                            "name": "sfs-readonly",
+                            "persistentVolumeClaim": {"claimName": "sfs-shared"},
+                        },
+                        {
+                            "name": "sfs-control",
+                            "persistentVolumeClaim": {"claimName": "sfs-shared"},
+                        },
                     ],
                 },
             },
@@ -268,6 +736,9 @@ def _render_receipt(
         "failure_alerts": "off",
         "priority_class": "c1",
         "gpu_requests": 0,
+        "source_reader_identity": {"uid": 0, "gid": 100, "sfs_access": "read_only"},
+        "publisher_identity": {"uid": 1000, "gid": 100, "database_credential": False},
+        "writable_sfs_subpath": "jobs/chris-q38-study-corpora-v1/launch-controls",
         "create_once": True,
         "two_server_previews_required_before_create": True,
         "external_mutations": 0,
@@ -287,6 +758,7 @@ def render(*, output: Path, migration_receipt: Path) -> dict[str, Any]:
         base_config_path=BASE_CONFIG,
         migration_receipt_path=migration_receipt,
     )
+    aggregate.validate_plan(plan)
     compressed, digests = _bundle(plan)
     config_map, job = _objects(plan, compressed, digests)
     output.mkdir(mode=0o700)
@@ -473,8 +945,10 @@ def _server_defaults_only(job: dict[str, Any], expected: dict[str, Any]) -> None
         raise RenderError("server-rendered Pod has a non-default scheduling policy")
     if any(pod.get(field) is True for field in ("hostIPC", "hostNetwork", "hostPID")):
         raise RenderError("server-rendered Pod enables a host namespace")
-    if pod.get("securityContext") not in (None, {}):
-        raise RenderError("server-rendered Pod adds a security context")
+    if pod.get("automountServiceAccountToken") is not False:
+        raise RenderError("server-rendered Pod enables a service-account token")
+    if pod.get("securityContext") != expected_pod.get("securityContext"):
+        raise RenderError("server-rendered Pod weakens the reviewed security context")
     if pod.get("serviceAccountName") not in (None, "default") or pod.get("serviceAccount") not in (
         None,
         "default",
@@ -509,8 +983,8 @@ def _server_defaults_only(job: dict[str, Any], expected: dict[str, Any]) -> None
             container.get(field) not in values for field, values in safe_container_defaults.items()
         ):
             raise RenderError("server-rendered container has an unsafe runtime default")
-        if container.get("securityContext") not in (None, {}):
-            raise RenderError("server-rendered container adds a security context")
+        if container.get("securityContext") != expected_container.get("securityContext"):
+            raise RenderError("server-rendered container weakens the reviewed security context")
         if container.get("env") != expected_container.get("env"):
             raise RenderError("server-rendered container environment differs")
         if container.get("volumeMounts") != expected_container.get("volumeMounts"):
@@ -654,11 +1128,16 @@ def _validated_render(render_root: Path, migration_receipt: Path) -> tuple[dict[
         raise RenderError("rendered source bundle is unreadable") from exc
     if (
         not isinstance(files, dict)
-        or set(files) != {"aggregate.py", "run.py", "study.json"}
+        or set(files) != {"aggregate.py", "publish.py", "run.py", "study.json", "wheel-lock.json"}
         or any(not isinstance(value, str) for value in files.values())
     ):
         raise RenderError("rendered source bundle file roster differs")
-    if files["aggregate.py"] != SOURCE.read_text(encoding="utf-8") or files["run.py"] != RUNNER:
+    if (
+        files["aggregate.py"] != SOURCE.read_text(encoding="utf-8")
+        or files["publish.py"] != PUBLISHER
+        or files["run.py"] != RUNNER
+        or files["wheel-lock.json"] != json.dumps(WHEEL_LOCK, indent=2, sort_keys=True) + "\n"
+    ):
         raise RenderError("rendered executable bytes differ from the reviewed source")
     digests = {
         name: "sha256:" + hashlib.sha256(value.encode()).hexdigest()
