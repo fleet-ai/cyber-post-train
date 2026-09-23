@@ -1,0 +1,61 @@
+{
+  "base_commit": "cc07933546abb82023cf0413b4538dcf9d992ed5",
+  "eval_schedule": {
+    "eval_before_train": true,
+    "post_update_eval_required": true
+  },
+  "generation_retry_policy": {
+    "file_sha256": "sha256:3ead20ef5330303687a377560dff0b097bef6f481194542503978b07788e577f",
+    "path": "../qualification/qwen38-rl-reward-canary-prod11-fast3-generation-retry-v1.json",
+    "self_sha256": "sha256:3df3abe9fbadcf4cbc89d842a857d68b2510ef36f919bc035427fd85db5b2c28"
+  },
+  "legacy_no_policy": {
+    "adapter": "training.skyrl_episode.single_attempt_engine",
+    "rl_episode_file_sha256": "sha256:00b6f38ebc33cead6dcb5ebb468c04d8192314333094b5767147e733cecc4ff8",
+    "skyrl_episode_file_sha256": "sha256:1642ffe9a51425bdc77e5ea9624efcfeecfd1c005387359df75249ebab2e421d",
+    "unchanged": true
+  },
+  "port_successor_files": {
+    "cyber_post_train/jobs.py": "sha256:bc0d08a7a27b48ff5a21a5d824356d6e92e4856b17cc7296a976aa18a2baa40d",
+    "evals/fleet/opencode_self_hosted.py": "sha256:428e9f2e4d4c758c4f682cbed314cf96b866d051b34fa0eea8757a3aad97aa1d",
+    "training/checkpoints.py": "sha256:b2bfa604a45a7ea1ed1b195401ce3c489f6460b36d2cd39d68a43033d23873b7",
+    "training/corpus.py": "sha256:28669e75e71323252765da81b8bd605e5dafaeecda55782a6316f3a0eb39f809",
+    "training/dense.py": "sha256:712038f1abf4f461cf471afc50f7fbbfe90c9d2d7b9e0be1a81583378c933012",
+    "training/export.py": "sha256:af0fc6cc2c388f8948f6be02a3cfedc189bbafbffa9511aacae35a08ce9125b1",
+    "training/export_check.py": "sha256:a04811409178eedc6969e34766ca70c82d84c27b718944ecab93407609c4dfe7",
+    "training/io.py": "sha256:7a0b734a4ab7fb8b702430094c58c72f19ac8fc7cc5e056eb8410267e6bfdfe3",
+    "training/miles.py": "sha256:53d6bcc006e175bb2bff0011196f89759c34bed039dbaf14eff6209e98f31851",
+    "training/miles_conversion.py": "sha256:df7916887a1edf0f3f217dcc907fb514f38cf1409e07a144bab78b491120d8f0",
+    "training/models.py": "sha256:712adce5f073de13d02168cd17c2f7c396ba094a1ebc9a34decafb8639b8375e",
+    "training/post_sft_artifacts.py": "sha256:c09555c61cb25ad5867cce80ed8bef0684734231b5708b1be892e75b9dd980eb",
+    "training/post_sft_base_surface.py": "sha256:f2e82927348fe844ff685f6506e1799a53cb9ecfbe58d50c654f2b1ba70c4f4f",
+    "training/post_sft_cast.py": "sha256:9c531664dbd85b03c2f62d5847f0691ebe193154f72386c5ff395c54a74a8fc0",
+    "training/qwen_tools.py": "sha256:00e0c3f322d5416c0697d2bb4504766bfa32f1436b3b5122f6dd7326c7698fd9",
+    "training/rl_data.py": "sha256:49a5032de0e18f1fdde78c0e475488bd035b107a0403633bbfcb43f1c7569b8e",
+    "training/rl_episode.py": "sha256:00b6f38ebc33cead6dcb5ebb468c04d8192314333094b5767147e733cecc4ff8",
+    "training/rl_reward_canary.py": "sha256:c3697146823ff524ae7f867512942cab93f62a5e9a8b5fb323485194f881e6a6",
+    "training/rl_reward_fast3.py": "sha256:c452c78373cfc52233a02df96c9085861ef400dbefea7036b3870dad9297ed5e",
+    "training/rl_runtime.py": "sha256:7e748b623a0411866b4a76b76f3d907f4d84cbf0779fb6a07db85310913cc947",
+    "training/sft.py": "sha256:447dcaac2b610c1b6c124a13e7d541edc4c3145d26d8ff31577d75b37d8dd67d",
+    "training/sft_runtime.py": "sha256:8cb671f377d089e1303248e237f386c256b212b15e41dadc07ac49cf2695ee17",
+    "training/skyrl.py": "sha256:aaa3c4a2d26b3f75d521e0b37387e0a39e9f3b719038a8aa48dc6ebd3c130f74",
+    "training/skyrl_episode.py": "sha256:1642ffe9a51425bdc77e5ea9624efcfeecfd1c005387359df75249ebab2e421d",
+    "training/skyrl_fast3_posttrain.py": "sha256:24fb337c188d78116c3a018c7e052d97576e1017d95255752b3eef44e016bbce",
+    "training/skyrl_fast3_reload.py": "sha256:46c9ea1daeb6965b85f0eed8ab9dd2c50a13ef68916092b0cba306367031ee84",
+    "training/skyrl_fast3_retry.py": "sha256:efe8f97386c76c5c7aaba99c3fd325755b6fc83fa084d205aa113fdd5069b721",
+    "training/skyrl_fast3_rollout.py": "sha256:d3a85cf37cf13e15213ea54d1aee9a234887e90d89f5ef1ca6cbf8439a0c10b9",
+    "training/skyrl_fast3_training.py": "sha256:b55eb8e9f4fdd2c44a15932904c919c2b04e21267ba405de798f29edbc2fb6b8",
+    "training/skyrl_posttrain.py": "sha256:295950d3605fc45eb3cb765340e819909e82af2a4e532548a61ad561f044408e",
+    "training/skyrl_prod9_hardening.py": "sha256:ba7c6789a9fb4747968f7792935e7576b776ba8d94e7e9b8e8640290e0ec5293",
+    "training/skyrl_prod9_reload.py": "sha256:28cee8cba0ce84e5efd2e4c763bc067a6cc1cd05f220fe6ad2b297b6799f9096",
+    "training/skyrl_prod9_rollout.py": "sha256:d28d1bcb912d75e4fa4819b368c92648fcbf985f7829ec8ae280988619a46c74",
+    "training/skyrl_prod9_training.py": "sha256:6382507484f55cbfac1f8d3dbb00336138f78a8880e6cd33a3a5cebbc09a87ea",
+    "training/skyrl_reward_rayjob.py": "sha256:f99b7b47a1bdae0900a2224626fd1ef02bcdbe063e09aff07e6d0cf0a8a72411",
+    "training/skyrl_rollout.py": "sha256:a9ba203eb93d0622fda161636fb8499b46b30c1bbb349df4eda484f5fd407c52",
+    "training/skyrl_training.py": "sha256:5f282826ddf892c3486820aea0621582f4b083e9a89b3a6a361a6f2e5f68294a",
+    "training/splits.py": "sha256:b3b5dd76e9307edb7572b5d71e192a4ae7846ac78e34f61cd19b57289bfda1c5"
+  },
+  "port_successor_sha256": "sha256:38b2bfd0fa425c45a28cea50d488f4b9c57466cb7ffdeed952a349ca8d323f68",
+  "schema": "cyber_rl_fast3_current_main_runtime_evidence_v1",
+  "sha256": "sha256:50f8122021a7e96f79fbe9e2c60816394ca5202dc9f38493f7776406a80d3bdd"
+}
