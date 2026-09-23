@@ -1299,6 +1299,31 @@ def _score_blind_summary(value: Any) -> dict[str, Any]:
     }
 
 
+def _absent_database_summary() -> dict[str, Any]:
+    """Represent a twice-observed missing ledger without inventing rollout rows."""
+    return _score_blind_summary(
+        {
+            "total": 0,
+            "local_results": 0,
+            "by_state": {
+                state: 0
+                for state in (
+                    "accepted",
+                    "claimed",
+                    "grading",
+                    "pending",
+                    "retry_review",
+                    "running",
+                    "terminal",
+                )
+            },
+            "by_serving_block": [],
+            "stale_active": 0,
+            "plan_sha256": None,
+        }
+    )
+
+
 def _terminal_resource_rows(items: list[dict[str, Any]], *, kind: str) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for item in items:
@@ -1392,7 +1417,15 @@ def collect_terminal(
         raise HeldoutLaunchError("scoped Workload read differs from the created Job")
     pods = _owned_pods(cluster, packet)
     try:
-        summary = _score_blind_summary(database.summary(packet.database))
+        database_exists = database.exists(packet.database)
+        if database_exists:
+            summary = _score_blind_summary(database.summary(packet.database))
+        else:
+            if database.exists(packet.database):
+                raise HeldoutLaunchError(
+                    "terminal database appeared between absence observations"
+                )
+            summary = _absent_database_summary()
         destination_exists = output_exists(packet.output_root)
     except HeldoutLaunchError:
         raise

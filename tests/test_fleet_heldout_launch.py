@@ -28,6 +28,8 @@ ROOT = Path(__file__).resolve().parents[1]
 class FakeDatabase:
     def __init__(self) -> None:
         self.present = False
+        self.exists_calls = 0
+        self.summary_calls = 0
         self.summary_value = {
             "total": 2,
             "local_results": 2,
@@ -39,10 +41,12 @@ class FakeDatabase:
 
     def exists(self, database: str) -> bool:
         assert database == DATABASE
+        self.exists_calls += 1
         return self.present
 
     def summary(self, database: str) -> dict[str, Any]:
         assert database == DATABASE
+        self.summary_calls += 1
         return copy.deepcopy(self.summary_value)
 
 
@@ -644,10 +648,15 @@ def test_uncertain_create_is_observed_but_never_retried(tmp_path):
     assert lines[-1]["state"] == "KUBECTL_CREATE_RESPONSE_UNCERTAIN_DO_NOT_RETRY"
 
 
-def test_terminal_collection_is_score_blind_and_never_retries_or_scores(tmp_path):
+@pytest.mark.parametrize("database_present", [True, False])
+def test_terminal_collection_is_score_blind_and_never_retries_or_scores(
+    tmp_path, database_present
+):
     packet = _packet(tmp_path)
     cluster, database = FakeCluster(), FakeDatabase()
     _launch(packet, cluster, database, tmp_path / "intent.jsonl")
+    preterminal_exists_calls = database.exists_calls
+    database.present = database_present
     assert cluster.created is not None
     job = next(item for item in cluster.created["items"] if item["kind"] == "Job")
     job["status"] = {
@@ -695,12 +704,34 @@ def test_terminal_collection_is_score_blind_and_never_retries_or_scores(tmp_path
     assert receipt["job"]["terminal_condition"] == "Complete"
     assert receipt["protocol_id"] == "heldout-protocol-a1"
     assert receipt["arm_id"] == "base"
-    assert receipt["database"]["summary"]["by_state"] == {
-        "accepted": 2,
-        "claimed": 0,
-        "pending": 0,
-        "retry_review": 0,
-    }
+    if database_present:
+        assert receipt["database"]["summary"]["by_state"] == {
+            "accepted": 2,
+            "claimed": 0,
+            "pending": 0,
+            "retry_review": 0,
+        }
+        assert database.exists_calls - preterminal_exists_calls == 1
+        assert database.summary_calls == 1
+    else:
+        assert receipt["database"]["summary"] == {
+            "total": 0,
+            "local_results": 0,
+            "by_state": {
+                "accepted": 0,
+                "claimed": 0,
+                "grading": 0,
+                "pending": 0,
+                "retry_review": 0,
+                "running": 0,
+                "terminal": 0,
+            },
+            "by_serving_block": [],
+            "stale_active": 0,
+            "plan_sha256": None,
+        }
+        assert database.exists_calls - preterminal_exists_calls == 2
+        assert database.summary_calls == 0
     assert receipt["decision"] == {
         "capability_result_status": "not_interpreted",
         "score_blind_reconciliation_required": False,
