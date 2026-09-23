@@ -33,6 +33,7 @@ PRIVATE_INTENT_SCHEMA = "cyber_fleet_existing_scored_session_reconciliation_inte
 CLOSURE_SCHEMA = "cyber_fleet_existing_scored_session_reconciliation_closure_v1"
 NAMESPACE = "fleet-train-jobs"
 FAILURE_CODE = "authoritative_scoring_started.runtimeerror"
+SUPPORTED_AGENT_OUTCOMES = frozenset({(0, "output_limit"), (1, "process_error")})
 EVALUATOR_IMAGE = (
     "ghcr.io/astral-sh/uv:python3.12-bookworm@"
     "sha256:9aa60c50016c0485636ab9a830246a6ef3399aa4a8bab3d17ef4a2358fba2ca7"
@@ -764,8 +765,12 @@ def _terminal_source(
             intent.source_output_root != packet.output_root,
             intent.source_database != packet.database,
             intent.source_job_terminal_receipt_sha256 != supplied,
-            intent.expected_agent_exit_code != 0,
-            intent.expected_agent_termination != "output_limit",
+            (
+                intent.expected_agent_exit_code,
+                intent.expected_agent_termination,
+            )
+            not in SUPPORTED_AGENT_OUTCOMES,
+            reconciliation.SUPPORTED_AGENT_OUTCOMES != SUPPORTED_AGENT_OUTCOMES,
             intent.expected_failure_code != FAILURE_CODE,
             packet.identity.get("retry_limit") != 0,
             source.evaluation_config.get("max_reviewed_infrastructure_retries") != 0,
@@ -795,6 +800,9 @@ def _runtime_intent_value(
     selected_cell_ids: list[str],
     unselected_cell_ids: list[str] | None = None,
     missing_local_result_cell_ids: list[str] | None = None,
+    *,
+    expected_agent_exit_code: int = 0,
+    expected_agent_termination: str = "output_limit",
 ) -> dict[str, Any]:
     job = terminal.get("job")
     database = terminal.get("database")
@@ -820,8 +828,8 @@ def _runtime_intent_value(
             terminal.get("sha256"), "source terminal receipt"
         ),
         "selected_cell_ids": list(selected_cell_ids),
-        "expected_agent_exit_code": 0,
-        "expected_agent_termination": "output_limit",
+        "expected_agent_exit_code": expected_agent_exit_code,
+        "expected_agent_termination": expected_agent_termination,
         "expected_failure_code": FAILURE_CODE,
     }
     if unselected_cell_ids is not None:
@@ -1034,6 +1042,8 @@ def build_private_intent_value(
     config_map_name: str,
     secret_name: str,
     output_root: str,
+    expected_agent_exit_code: int = 0,
+    expected_agent_termination: str = "output_limit",
 ) -> dict[str, Any]:
     """Build a full, immutable authorization from a reviewed cell roster.
 
@@ -1049,6 +1059,8 @@ def build_private_intent_value(
         selected_cell_ids,
         unselected_cell_ids,
         missing_local_result_cell_ids,
+        expected_agent_exit_code=expected_agent_exit_code,
+        expected_agent_termination=expected_agent_termination,
     )
     runtime_intent = _intent_from_value(runtime_value)
     _terminal_source(source, terminal, runtime_intent)
