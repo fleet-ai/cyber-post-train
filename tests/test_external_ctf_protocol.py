@@ -230,7 +230,7 @@ def test_protocol_rejects_rehashed_but_nonofficial_roster() -> None:
 def test_shared_capacity_counts_only_exact_live_project_names() -> None:
     protocol = load_protocol(PROTOCOL)
     names = external_names(protocol)
-    assert len(names) == (40 + 19 + 6) * 2 + 40 + 16 + 5
+    assert len(names) == (40 + 19 + 6) * 2 + 40 + 16 + 5 + 1
     expected_qualifications = {
         *(f"extctf-cve-t{index:02d}-qual-v1" for index in range(40)),
         *(
@@ -240,6 +240,9 @@ def test_shared_capacity_counts_only_exact_live_project_names() -> None:
         *(f"extctf-cyb-t{index:02d}-qual-v1" for index in (0, 2, 3, 4, 5)),
     }
     assert {name for name in names if name.endswith("-qual-v1")} == expected_qualifications
+    assert cell_name("cvebench_zero_day", 5, "qualification") == "extctf-cve-t05-qual-v2"
+    assert "extctf-cve-t05-qual-v1" in names
+    assert "extctf-cve-t05-qual-v2" in names
     target = cell_name("cvebench_zero_day", 0, "base")
     rows = [
         {"name": target, "status": "running"},
@@ -261,7 +264,440 @@ def test_external_capacity_roster_seals_against_shared_authority(tmp_path: Path)
     )
 
     assert roster["external_sandbox_name_count"] == 191
-    assert set(roster["external_sandbox_names"]) == external_names(protocol)
+    assert set(roster["external_sandbox_names"]) == tensorlake.base_external_names(protocol)
+
+
+def _write_signed_receipt(path: Path, value: dict[str, object]) -> dict[str, object]:
+    signed = {**value, "receipt_sha256": digest(value)}
+    path.write_bytes(canonical(signed) + b"\n")
+    return signed
+
+
+def test_shared_capacity_roster_successor_is_exact_two_name_append_only(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    for name in (
+        "TENSORLAKE_API_KEY",
+        "OPENAI_API_KEY",
+        "FLEET_API_KEY",
+        "APOLLO_FLEET_API_KEY",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    predecessor_path = tmp_path / "shared-capacity-v1.json"
+    predecessor = tensorlake.seal_capacity_roster(
+        protocol_path=PROTOCOL,
+        output_path=predecessor_path,
+    )
+    terminal_path = tmp_path / "extctf-cve-t05-qual-v1.terminal.json"
+    terminal = _write_signed_receipt(
+        terminal_path,
+        {
+            "schema": "external_ctf_cell_terminal_v1",
+            "name": "extctf-cve-t05-qual-v1",
+            "benchmark": "cvebench_zero_day",
+            "task_index": 5,
+            "arm": "qualification",
+            "outcome": "infrastructure_invalid",
+            "infrastructure_error_class": "sandbox_create_definitive_failure_absent",
+            "sandbox_id": None,
+            "pid": None,
+            "result": None,
+            "protocol_sha256": "sha256:" + "1" * 64,
+            "execution_packet_receipt_sha256": "sha256:" + "2" * 64,
+        },
+    )
+    release_path = tmp_path / "extctf-cve-t05-qual-v1.released.json"
+    release = _write_signed_receipt(
+        release_path,
+        {
+            "schema": "external_ctf_sandbox_release_v1",
+            "status": "absent",
+            "name": "extctf-cve-t05-qual-v1",
+            "benchmark": "cvebench_zero_day",
+            "task_index": 5,
+            "arm": "qualification",
+            "sandbox_id": None,
+            "protocol_sha256": terminal["protocol_sha256"],
+            "execution_packet_receipt_sha256": terminal["execution_packet_receipt_sha256"],
+            "terminal_receipt_sha256": terminal["receipt_sha256"],
+        },
+    )
+    capacity_release_path = tmp_path / "capacity.released.json"
+    capacity_release = _write_signed_receipt(
+        capacity_release_path,
+        {
+            "schema_version": "tensorlake_shared_capacity_reservation_release_v1",
+            "status": "released_after_provider_terminal",
+            "sandbox_name": "extctf-cve-t05-qual-v1",
+            "provider_state": "absent",
+            "terminal_receipt_sha256": release["receipt_sha256"],
+            "reservation_receipt_sha256": "sha256:" + "7" * 64,
+        },
+    )
+
+    authority_path = tmp_path / "web-authority.json"
+    authority = _write_signed_receipt(
+        authority_path,
+        {
+            "schema_version": "webexploitbench_exact54_score_successor_authority_v3",
+            "status": "reviewed_provider_free_unlaunched",
+            "provider_calls_during_prepare": 0,
+            "score_calls_during_prepare": 0,
+            "credentials_present_during_prepare": False,
+            "roster": ["r00-t00-candidate"],
+        },
+    )
+    batch_path = tmp_path / "web-batch.json"
+    batch = _write_signed_receipt(
+        batch_path,
+        {
+            "schema_version": "webexploitbench_exact54_score_successor_batch_claim_v3",
+            "status": "claimed_once",
+            "authority_receipt_sha256": authority["receipt_sha256"],
+            "score_contents_opened": False,
+            "roster": ["r00-t00-candidate"],
+        },
+    )
+    created_path = tmp_path / "web-created.json"
+    created = _write_signed_receipt(
+        created_path,
+        {
+            "schema_version": "webexploitbench_snapshot_restore_created_v1",
+            "sandbox_name": "wbe-p8-r00-t00-candidate-gpt-exp-v1",
+            "transaction_id": "p8-r00-t00-candidate-gpt-scale-v1",
+            "sandbox_id": "sandbox-v1",
+            "snapshot_id": "snapshot-v1",
+            "spec_sha256": "sha256:" + "8" * 64,
+        },
+    )
+    web_release_path = tmp_path / "web-released.json"
+    web_release = _write_signed_receipt(
+        web_release_path,
+        {
+            "schema_version": "webexploitbench_snapshot_export_release_v1",
+            "status": "released",
+            "transaction_id": created["transaction_id"],
+            "sandbox_id": created["sandbox_id"],
+            "snapshot_id": created["snapshot_id"],
+            "provider_state_after_release": "terminated",
+            "active_inventory_absent": True,
+        },
+    )
+    owner_ready_path = tmp_path / "web-owner-ready.json"
+    owner_ready = _write_signed_receipt(
+        owner_ready_path,
+        {
+            "schema_version": "webexploitbench_bounded_capacity_owner_ready_v1",
+            "status": "bound_and_holding",
+            "owner_pid": 123,
+            "capacity_packet_receipt_sha256": "sha256:" + "9" * 64,
+            "credentials_present": False,
+            "provider_calls": 0,
+            "score_calls": 0,
+            "pump_run_called": False,
+        },
+    )
+    web_reserved_path = tmp_path / "web-capacity-reserved.json"
+    web_reserved = _write_signed_receipt(
+        web_reserved_path,
+        {
+            "schema_version": "tensorlake_shared_capacity_reservation_v1",
+            "status": "reserved_before_provider_create",
+            "creator": "web_snapshot_export",
+            "sandbox_name": created["sandbox_name"],
+            "spec_sha256": created["spec_sha256"],
+            "authority_receipt_sha256": owner_ready["capacity_packet_receipt_sha256"],
+        },
+    )
+    web_capacity_release_path = tmp_path / "web-capacity-released.json"
+    web_capacity_release = _write_signed_receipt(
+        web_capacity_release_path,
+        {
+            "schema_version": "tensorlake_shared_capacity_reservation_release_v1",
+            "status": "released_after_provider_terminal",
+            "sandbox_name": created["sandbox_name"],
+            "provider_state": "terminated",
+            "reservation_receipt_sha256": web_reserved["receipt_sha256"],
+            "terminal_receipt_sha256": web_release["receipt_sha256"],
+        },
+    )
+    owner_closed_path = tmp_path / "web-owner-closed.json"
+    owner_closed = _write_signed_receipt(
+        owner_closed_path,
+        {
+            "schema_version": "webexploitbench_bounded_capacity_owner_closed_v1",
+            "status": "closed",
+            "owner_pid": owner_ready["owner_pid"],
+            "readiness_path": str(owner_ready_path.resolve()),
+            "readiness_file_sha256": file_digest(owner_ready_path.read_bytes()),
+            "readiness_receipt_sha256": owner_ready["receipt_sha256"],
+            "credentials_present": False,
+            "provider_calls": 0,
+            "score_calls": 0,
+            "pump_run_called": False,
+        },
+    )
+    monkeypatch.setattr(
+        tensorlake.replica_set,
+        "SHARED_CAPACITY_RETIREMENT_DIGESTS",
+        {
+            "external_ctf": {
+                "terminal": (
+                    file_digest(terminal_path.read_bytes()),
+                    terminal["receipt_sha256"],
+                ),
+                "release": (
+                    file_digest(release_path.read_bytes()),
+                    release["receipt_sha256"],
+                ),
+                "capacity_release": (
+                    file_digest(capacity_release_path.read_bytes()),
+                    capacity_release["receipt_sha256"],
+                ),
+            },
+            "web_snapshot_export": {
+                "authority": (
+                    file_digest(authority_path.read_bytes()),
+                    authority["receipt_sha256"],
+                ),
+                "batch": (file_digest(batch_path.read_bytes()), batch["receipt_sha256"]),
+                "created": (
+                    file_digest(created_path.read_bytes()),
+                    created["receipt_sha256"],
+                ),
+                "release": (
+                    file_digest(web_release_path.read_bytes()),
+                    web_release["receipt_sha256"],
+                ),
+                "capacity_reserved": (
+                    file_digest(web_reserved_path.read_bytes()),
+                    web_reserved["receipt_sha256"],
+                ),
+                "capacity_release": (
+                    file_digest(web_capacity_release_path.read_bytes()),
+                    web_capacity_release["receipt_sha256"],
+                ),
+                "owner_ready": (
+                    file_digest(owner_ready_path.read_bytes()),
+                    owner_ready["receipt_sha256"],
+                ),
+                "owner_closed": (
+                    file_digest(owner_closed_path.read_bytes()),
+                    owner_closed["receipt_sha256"],
+                ),
+            },
+        },
+    )
+    output = tmp_path / "shared-capacity-successor.json"
+    successor = tensorlake.seal_capacity_roster_successor(
+        protocol_path=PROTOCOL,
+        predecessor_roster_path=predecessor_path,
+        expected_predecessor_roster_file_sha256=file_digest(predecessor_path.read_bytes()),
+        expected_predecessor_roster_receipt_sha256=predecessor["receipt_sha256"],
+        retired_terminal_path=terminal_path,
+        retired_release_path=release_path,
+        retired_capacity_release_path=capacity_release_path,
+        web_authority_path=authority_path,
+        web_batch_path=batch_path,
+        web_created_path=created_path,
+        web_release_path=web_release_path,
+        web_capacity_reserved_path=web_reserved_path,
+        web_capacity_release_path=web_capacity_release_path,
+        web_owner_ready_path=owner_ready_path,
+        web_owner_closed_path=owner_closed_path,
+        output_path=output,
+    )
+    assert successor["append_only_sandbox_names"] == [
+        {
+            "capacity_class": "rollout",
+            "name": "extctf-cve-t05-qual-v2",
+            "predecessor_name": "extctf-cve-t05-qual-v1",
+        },
+        {
+            "capacity_class": "export",
+            "name": "wbe-p8-r00-t00-candidate-gpt-exp-v2",
+            "predecessor_name": "wbe-p8-r00-t00-candidate-gpt-exp-v1",
+        },
+    ]
+    assert successor["append_only_sandbox_name_count"] == 2
+    assert successor["provider_calls"] == successor["score_calls"] == 0
+
+    state = tmp_path / "state"
+    state.mkdir(mode=0o700)
+    marker = tensorlake.replica_set.bind_shared_capacity_roster_successor(
+        state=state,
+        successor_path=output,
+        expected_successor_file_sha256=file_digest(output.read_bytes()),
+        expected_successor_receipt_sha256=successor["receipt_sha256"],
+        capacity_successor_receipt_sha256="sha256:" + "3" * 64,
+        capacity_successor_state_receipt_sha256="sha256:" + "4" * 64,
+        live_owner_receipt_sha256="sha256:" + "5" * 64,
+        inventory_sha256="sha256:" + "6" * 64,
+        inventory_count=767,
+        active_project_sandboxes=0,
+    )
+    loaded, names, export_additions, loaded_marker = (
+        tensorlake.replica_set.effective_shared_capacity_roster(
+            state=state,
+            predecessor_path=predecessor_path,
+            expected_predecessor_file_sha256=file_digest(predecessor_path.read_bytes()),
+            expected_predecessor_receipt_sha256=predecessor["receipt_sha256"],
+        )
+    )
+    assert loaded["receipt_sha256"] == successor["receipt_sha256"]
+    assert loaded_marker == marker
+    assert names == frozenset(external_names(load_protocol(PROTOCOL)))
+    assert export_additions == frozenset({"wbe-p8-r00-t00-candidate-gpt-exp-v2"})
+    assert (
+        tensorlake.replica_set.shared_project_active_sandbox_count(
+            [
+                {"name": "extctf-cve-t05-qual-v2", "status": "running"},
+                {"name": "wbe-p8-r00-t00-candidate-gpt-exp-v2", "status": "running"},
+            ],
+            names | export_additions,
+        )
+        == 2
+    )
+    monkeypatch.setattr(
+        tensorlake.replica_set,
+        "_project_owned_sandbox_names",
+        lambda *_args, **_kwargs: (frozenset({"web-rollout"}), frozenset({"web-export"})),
+    )
+    monkeypatch.setattr(
+        tensorlake.collection_replica_retry,
+        "validated_sandbox_names",
+        lambda **_kwargs: frozenset(),
+    )
+    rollout_names, export_names = tensorlake.replica_set.authoritative_project_owned_sandbox_names(
+        state=state,
+        receipt={},
+        loaded=[],
+        source_upgrade={},
+        retry_execution={
+            "shared_capacity_roster": {
+                "path": str(predecessor_path),
+                "file_sha256": file_digest(predecessor_path.read_bytes()),
+                "receipt_sha256": predecessor["receipt_sha256"],
+            }
+        },
+    )
+    assert "extctf-cve-t05-qual-v2" in rollout_names
+    assert "wbe-p8-r00-t00-candidate-gpt-exp-v2" in export_names
+
+    tampered = copy.deepcopy(successor)
+    tampered.pop("receipt_sha256")
+    tampered["append_only_sandbox_names"].append(
+        {"capacity_class": "export", "name": "unreviewed", "predecessor_name": "old"}
+    )
+    tampered_path = tmp_path / "tampered-successor.json"
+    tampered = _write_signed_receipt(tampered_path, tampered)
+    with pytest.raises(RuntimeError, match="shared_capacity_roster_successor_invalid"):
+        tensorlake.replica_set.load_shared_capacity_roster_successor(
+            tampered_path,
+            expected_file_sha256=file_digest(tampered_path.read_bytes()),
+            expected_receipt_sha256=tampered["receipt_sha256"],
+        )
+
+    monkeypatch.setattr(
+        tensorlake.collection_replica_retry,
+        "load_execution",
+        lambda _path: (
+            {"state_path": str(state)},
+            [],
+            {},
+            {
+                "shared_capacity_roster": {
+                    "path": str(predecessor_path),
+                    "file_sha256": file_digest(predecessor_path.read_bytes()),
+                    "receipt_sha256": predecessor["receipt_sha256"],
+                }
+            },
+        ),
+    )
+    monkeypatch.setattr(tensorlake.replica_set, "_global_state_root", lambda *_a, **_k: state)
+    monkeypatch.setattr(
+        tensorlake,
+        "capacity_authority",
+        lambda *_a, **_k: {"shared_capacity_roster_receipt_sha256": successor["receipt_sha256"]},
+    )
+    monkeypatch.setattr(
+        tensorlake,
+        "_client",
+        lambda: (_ for _ in ()).throw(AssertionError("provider access after bound marker")),
+    )
+    assert (
+        tensorlake.bind_capacity_roster_successor(
+            protocol_path=PROTOCOL,
+            retry_execution_path=tmp_path / "retry.json",
+            successor_roster_path=output,
+            expected_successor_roster_file_sha256=file_digest(output.read_bytes()),
+            expected_successor_roster_receipt_sha256=successor["receipt_sha256"],
+        )
+        == marker
+    )
+
+
+def test_capacity_roster_successor_bind_rejects_existing_successor_name(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state = tmp_path / "state"
+    state.mkdir()
+    predecessor = tmp_path / "predecessor.json"
+    predecessor.write_text("{}\n")
+    retry = {
+        "shared_capacity_roster": {
+            "path": str(predecessor),
+            "file_sha256": "sha256:" + "1" * 64,
+            "receipt_sha256": "sha256:" + "2" * 64,
+        }
+    }
+    authority = {
+        "state": state,
+        "snapshot_id": "snapshot-1",
+        "owned_names": {"existing-owned-name"},
+        "retry_execution_receipt_sha256": "sha256:" + "3" * 64,
+        "capacity_successor_receipt_sha256": "sha256:" + "4" * 64,
+        "capacity_successor_state_receipt_sha256": "sha256:" + "5" * 64,
+        "shared_capacity_roster_receipt_sha256": "sha256:" + "2" * 64,
+        "live_owner_receipt_sha256": "sha256:" + "6" * 64,
+    }
+
+    class Client:
+        @staticmethod
+        def inventory() -> list[dict[str, str]]:
+            return [
+                {
+                    "name": tensorlake.replica_set.SHARED_SCORING_EXPORT_APPEND_ONLY_NAME,
+                    "status": "terminated",
+                }
+            ]
+
+    monkeypatch.setattr(
+        tensorlake.collection_replica_retry,
+        "load_execution",
+        lambda _path: ({"state_path": str(state)}, [], {}, retry),
+    )
+    monkeypatch.setattr(tensorlake.replica_set, "_global_state_root", lambda *_a, **_k: state)
+    monkeypatch.setattr(tensorlake, "capacity_authority", lambda *_a, **_k: authority)
+    monkeypatch.setattr(tensorlake, "_client", Client)
+    monkeypatch.setattr(
+        tensorlake.replica_set,
+        "shared_project_capacity_count",
+        lambda *_a, **_k: 0,
+    )
+
+    with pytest.raises(
+        tensorlake.ExternalCtfError,
+        match="capacity_roster_successor_bind_requires_quiescence",
+    ):
+        tensorlake.bind_capacity_roster_successor(
+            protocol_path=PROTOCOL,
+            retry_execution_path=tmp_path / "retry.json",
+            successor_roster_path=tmp_path / "successor.json",
+            expected_successor_roster_file_sha256="sha256:" + "7" * 64,
+            expected_successor_roster_receipt_sha256="sha256:" + "8" * 64,
+        )
+    assert not (state / tensorlake.replica_set.SHARED_CAPACITY_ROSTER_SUCCESSOR_BOUND_NAME).exists()
 
 
 def test_remote_worker_fails_closed_off_linux_amd64(monkeypatch) -> None:

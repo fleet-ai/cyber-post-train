@@ -98,6 +98,7 @@ SCORED_ARMS = {"base": "b", "step_1000": "s1000"}
 ARMS = {**SCORED_ARMS, "qualification": "qual"}
 BENCHMARKS = {"cvebench_zero_day": "cve", "nyu_ctf_web_test": "nyu", "cybench_web": "cyb"}
 BENCHMARK_TASK_COUNTS = {"cvebench_zero_day": 40, "nyu_ctf_web_test": 19, "cybench_web": 6}
+QUALIFICATION_NAME_SUCCESSORS = {("cvebench_zero_day", 5): 2}
 RESULT_RECONCILE_ATTEMPTS = 6
 RESULT_RECONCILE_DELAY_SECONDS = 2
 ABSENCE_RECONCILE_ATTEMPTS = 6
@@ -130,7 +131,7 @@ def _qualification_bundle(protocol: dict[str, Any], benchmark: str) -> bytes:
     return gzip.compress(canonical(files), compresslevel=9, mtime=0)
 
 
-def external_names(protocol: dict[str, Any]) -> set[str]:
+def base_external_names(protocol: dict[str, Any]) -> set[str]:
     scored = {
         cell_name(benchmark, index, arm)
         for benchmark, count in BENCHMARK_TASK_COUNTS.items()
@@ -138,7 +139,7 @@ def external_names(protocol: dict[str, Any]) -> set[str]:
         for arm in SCORED_ARMS
     }
     qualifications = {
-        cell_name(benchmark, index, "qualification")
+        f"extctf-{BENCHMARKS[benchmark]}-t{index:02d}-qual-v1"
         for benchmark, value in protocol["benchmarks"].items()
         for index, task_id in enumerate(value["task_ids"])
         if task_id
@@ -146,6 +147,12 @@ def external_names(protocol: dict[str, Any]) -> set[str]:
         | set(value["execution_unavailable_task_ids"])
     }
     return scored | qualifications
+
+
+def external_names(protocol: dict[str, Any]) -> set[str]:
+    names = base_external_names(protocol)
+    names.add(replica_set.SHARED_EXTERNAL_CTF_APPEND_ONLY_NAME)
+    return names
 
 
 def cell_name(benchmark: str, task_index: int, arm: str) -> str:
@@ -156,7 +163,8 @@ def cell_name(benchmark: str, task_index: int, arm: str) -> str:
         except KeyError as error:
             raise ExternalCtfError("invalid_cell_identity") from error
         if 0 <= task_index < count:
-            return f"extctf-{prefix}-t{task_index:02d}-qual-v1"
+            version = QUALIFICATION_NAME_SUCCESSORS.get((benchmark, task_index), 1)
+            return f"extctf-{prefix}-t{task_index:02d}-qual-v{version}"
         raise ExternalCtfError("invalid_cell_identity")
     try:
         return f"extctf-{BENCHMARKS[benchmark]}-t{task_index:02d}-{SCORED_ARMS[arm]}-v1"
@@ -176,9 +184,8 @@ def capacity_authority(
     retry_execution_path: Path,
     *,
     require_live_owner: bool = False,
+    require_roster_successor: bool = True,
 ) -> dict[str, Any]:
-    """Load the one signed WEB/external roster used by both creators."""
-
     try:
         receipt, loaded, upgrade, retry = collection_replica_retry.load_execution(
             retry_execution_path
@@ -186,6 +193,9 @@ def capacity_authority(
         state = replica_set._global_state_root(  # noqa: SLF001
             Path(receipt["state_path"]), sealing=False
         )
+        shared = retry.get("shared_capacity_roster")
+        if not isinstance(shared, dict):
+            raise replica_set.CollectionReplicaSetError("shared_capacity_roster_not_bound")
         rollout, exports = replica_set.authoritative_project_owned_sandbox_names(
             state=state,
             receipt=receipt,
@@ -203,24 +213,48 @@ def capacity_authority(
         )
     except (KeyError, OSError, replica_set.CollectionReplicaSetError) as exc:
         raise ExternalCtfError("shared_capacity_authority_invalid") from exc
-    shared = retry.get("shared_capacity_roster")
-    if not isinstance(shared, dict):
-        raise ExternalCtfError("shared_capacity_roster_not_bound")
-    expected_external = external_names(protocol)
+    expected_base_external = base_external_names(protocol)
+    expected_external = (
+        external_names(protocol) if require_roster_successor else expected_base_external
+    )
     try:
-        roster, roster_names = replica_set.load_shared_capacity_roster(
+        base_roster, base_roster_names = replica_set.load_shared_capacity_roster(
             Path(shared["path"]),
             expected_file_sha256=shared["file_sha256"],
             expected_receipt_sha256=shared["receipt_sha256"],
         )
+        roster, roster_names, roster_export_additions, roster_successor_state = (
+            replica_set.effective_shared_capacity_roster(
+                state=state,
+                predecessor_path=Path(shared["path"]),
+                expected_predecessor_file_sha256=shared["file_sha256"],
+                expected_predecessor_receipt_sha256=shared["receipt_sha256"],
+            )
+        )
     except (KeyError, OSError, replica_set.CollectionReplicaSetError) as exc:
         raise ExternalCtfError("shared_capacity_roster_invalid") from exc
     if (
-        roster_names != expected_external
-        or roster.get("external_namespace") != replica_set.SHARED_EXTERNAL_CTF_NAMESPACE
-        or roster.get("external_name_version") != replica_set.SHARED_EXTERNAL_CTF_NAME_VERSION
+        base_roster_names != expected_base_external
+        or roster_names != expected_external
+        or roster_export_additions
+        != (
+            frozenset({replica_set.SHARED_SCORING_EXPORT_APPEND_ONLY_NAME})
+            if require_roster_successor
+            else frozenset()
+        )
+        or base_roster.get("external_namespace") != replica_set.SHARED_EXTERNAL_CTF_NAMESPACE
+        or base_roster.get("external_name_version") != replica_set.SHARED_EXTERNAL_CTF_NAME_VERSION
+        or require_roster_successor != (roster_successor_state is not None)
+        or roster_successor_state is not None
+        and (
+            roster_successor_state.get("capacity_successor_receipt_sha256")
+            != successor["receipt_sha256"]
+            or roster_successor_state.get("capacity_successor_state_receipt_sha256")
+            != successor_state["receipt_sha256"]
+        )
         or retry.get("shared_project_active_sandbox_limit") != PROJECT_ACTIVE_SANDBOX_LIMIT
         or not expected_external <= rollout
+        or not roster_export_additions <= exports
         or rollout & exports
     ):
         raise ExternalCtfError("shared_capacity_roster_binding_mismatch")
@@ -242,7 +276,7 @@ def capacity_authority(
                 retry_execution_receipt_sha256=retry["receipt_sha256"],
                 capacity_successor_receipt_sha256=successor["receipt_sha256"],
                 capacity_successor_state_receipt_sha256=successor_state["receipt_sha256"],
-                shared_capacity_roster_receipt_sha256=roster["receipt_sha256"],
+                shared_capacity_roster_receipt_sha256=base_roster["receipt_sha256"],
                 execution_source_commit=source["commit"],
                 pump_source_sha256=source_sha["collection_replica_pump"],
             )
@@ -269,9 +303,185 @@ def capacity_authority(
 def seal_capacity_roster(*, protocol_path: Path, output_path: Path) -> dict[str, Any]:
     protocol = load_protocol(protocol_path)
     return replica_set.seal_shared_capacity_roster(
-        external_sandbox_names=sorted(external_names(protocol)),
+        external_sandbox_names=sorted(base_external_names(protocol)),
         output_path=output_path,
     )
+
+
+def seal_capacity_roster_successor(
+    *,
+    protocol_path: Path,
+    predecessor_roster_path: Path,
+    expected_predecessor_roster_file_sha256: str,
+    expected_predecessor_roster_receipt_sha256: str,
+    retired_terminal_path: Path,
+    retired_release_path: Path,
+    retired_capacity_release_path: Path,
+    web_authority_path: Path,
+    web_batch_path: Path,
+    web_created_path: Path,
+    web_release_path: Path,
+    web_capacity_reserved_path: Path,
+    web_capacity_release_path: Path,
+    web_owner_ready_path: Path,
+    web_owner_closed_path: Path,
+    output_path: Path,
+) -> dict[str, Any]:
+    if any(
+        os.environ.get(name)
+        for name in (
+            "TENSORLAKE_API_KEY",
+            "OPENAI_API_KEY",
+            "FLEET_API_KEY",
+            "APOLLO_FLEET_API_KEY",
+        )
+    ):
+        raise ExternalCtfError("capacity_roster_successor_seal_requires_no_credentials")
+    protocol = load_protocol(protocol_path)
+    if (
+        cell_name("cvebench_zero_day", 5, "qualification")
+        != replica_set.SHARED_EXTERNAL_CTF_APPEND_ONLY_NAME
+        or external_names(protocol)
+        != base_external_names(protocol) | {replica_set.SHARED_EXTERNAL_CTF_APPEND_ONLY_NAME}
+        or replica_set.SHARED_SCORING_EXPORT_APPEND_ONLY_NAME
+        != "wbe-p8-r00-t00-candidate-gpt-exp-v2"
+    ):
+        raise ExternalCtfError("capacity_roster_successor_identity_invalid")
+
+    try:
+        return replica_set.seal_shared_capacity_roster_successor(
+            predecessor_path=predecessor_roster_path,
+            expected_predecessor_file_sha256=expected_predecessor_roster_file_sha256,
+            expected_predecessor_receipt_sha256=expected_predecessor_roster_receipt_sha256,
+            external_retirement_evidence={
+                "terminal": retired_terminal_path,
+                "release": retired_release_path,
+                "capacity_release": retired_capacity_release_path,
+            },
+            web_retirement_evidence={
+                "authority": web_authority_path,
+                "batch": web_batch_path,
+                "created": web_created_path,
+                "release": web_release_path,
+                "capacity_reserved": web_capacity_reserved_path,
+                "capacity_release": web_capacity_release_path,
+                "owner_ready": web_owner_ready_path,
+                "owner_closed": web_owner_closed_path,
+            },
+            output_path=output_path,
+        )
+    except (OSError, replica_set.CollectionReplicaSetError) as exc:
+        raise ExternalCtfError("capacity_roster_successor_invalid") from exc
+
+
+def bind_capacity_roster_successor(
+    *,
+    protocol_path: Path,
+    retry_execution_path: Path,
+    successor_roster_path: Path,
+    expected_successor_roster_file_sha256: str,
+    expected_successor_roster_receipt_sha256: str,
+) -> dict[str, Any]:
+    protocol = load_protocol(protocol_path)
+    try:
+        receipt, _loaded, _upgrade, retry = collection_replica_retry.load_execution(
+            retry_execution_path
+        )
+        state = replica_set._global_state_root(  # noqa: SLF001
+            Path(receipt["state_path"]), sealing=False
+        )
+        shared = retry.get("shared_capacity_roster")
+        if not isinstance(shared, dict):
+            raise replica_set.CollectionReplicaSetError("shared_capacity_roster_not_bound")
+    except (KeyError, OSError, replica_set.CollectionReplicaSetError) as exc:
+        raise ExternalCtfError("shared_capacity_authority_invalid") from exc
+    marker_path = state / replica_set.SHARED_CAPACITY_ROSTER_SUCCESSOR_BOUND_NAME
+    if marker_path.exists():
+        effective = capacity_authority(
+            protocol,
+            retry_execution_path,
+            require_live_owner=False,
+            require_roster_successor=True,
+        )
+        marker = replica_set.effective_shared_capacity_roster(
+            state=state,
+            predecessor_path=Path(shared["path"]),
+            expected_predecessor_file_sha256=shared["file_sha256"],
+            expected_predecessor_receipt_sha256=shared["receipt_sha256"],
+        )[3]
+        if (
+            effective["shared_capacity_roster_receipt_sha256"]
+            != expected_successor_roster_receipt_sha256
+            or marker is None
+        ):
+            raise ExternalCtfError("capacity_roster_successor_bind_readback_invalid")
+        return marker
+    authority = capacity_authority(
+        protocol,
+        retry_execution_path,
+        require_live_owner=True,
+        require_roster_successor=False,
+    )
+    if authority["state"] != state:
+        raise ExternalCtfError("shared_capacity_authority_changed")
+    with replica_set._shared_tensorlake_create_lock(state):  # noqa: SLF001
+        refreshed = capacity_authority(
+            protocol,
+            retry_execution_path,
+            require_live_owner=True,
+            require_roster_successor=False,
+        )
+        stable = {
+            "state",
+            "snapshot_id",
+            "owned_names",
+            "retry_execution_receipt_sha256",
+            "capacity_successor_receipt_sha256",
+            "capacity_successor_state_receipt_sha256",
+            "shared_capacity_roster_receipt_sha256",
+            "live_owner_receipt_sha256",
+        }
+        if any(refreshed.get(key) != authority.get(key) for key in stable):
+            raise ExternalCtfError("shared_capacity_authority_changed")
+        rows = _client().inventory()
+        try:
+            active = replica_set.shared_project_capacity_count(
+                rows, refreshed["owned_names"], state
+            )
+        except replica_set.CollectionReplicaSetError as exc:
+            raise ExternalCtfError(str(exc)) from exc
+        additions = {
+            replica_set.SHARED_EXTERNAL_CTF_APPEND_ONLY_NAME,
+            replica_set.SHARED_SCORING_EXPORT_APPEND_ONLY_NAME,
+        }
+        if active != 0 or any(row.get("name") in additions for row in rows):
+            raise ExternalCtfError("capacity_roster_successor_bind_requires_quiescence")
+        marker = replica_set.bind_shared_capacity_roster_successor(
+            state=state,
+            successor_path=successor_roster_path,
+            expected_successor_file_sha256=expected_successor_roster_file_sha256,
+            expected_successor_receipt_sha256=expected_successor_roster_receipt_sha256,
+            capacity_successor_receipt_sha256=refreshed["capacity_successor_receipt_sha256"],
+            capacity_successor_state_receipt_sha256=refreshed[
+                "capacity_successor_state_receipt_sha256"
+            ],
+            live_owner_receipt_sha256=refreshed["live_owner_receipt_sha256"],
+            inventory_sha256=file_digest(canonical(rows)),
+            inventory_count=len(rows),
+            active_project_sandboxes=0,
+        )
+    effective = capacity_authority(
+        protocol,
+        retry_execution_path,
+        require_live_owner=True,
+        require_roster_successor=True,
+    )
+    if (
+        effective["shared_capacity_roster_receipt_sha256"]
+        != expected_successor_roster_receipt_sha256
+    ):
+        raise ExternalCtfError("capacity_roster_successor_bind_readback_invalid")
+    return marker
 
 
 def _load_execution_packet(
@@ -2681,11 +2891,83 @@ def main() -> None:
     route_preflight.add_argument("--output", type=Path, required=True)
     roster = sub.add_parser("seal-capacity-roster")
     roster.add_argument("--output", type=Path, required=True)
+    roster_successor = sub.add_parser("seal-capacity-roster-successor")
+    roster_successor.add_argument("--predecessor-roster", type=Path, required=True)
+    roster_successor.add_argument("--expected-predecessor-roster-file-sha256", required=True)
+    roster_successor.add_argument("--expected-predecessor-roster-receipt-sha256", required=True)
+    roster_successor.add_argument("--retired-terminal", type=Path, required=True)
+    roster_successor.add_argument("--retired-release", type=Path, required=True)
+    roster_successor.add_argument("--retired-capacity-release", type=Path, required=True)
+    for label in (
+        "authority",
+        "batch",
+        "created",
+        "release",
+        "capacity-reserved",
+        "capacity-release",
+        "owner-ready",
+        "owner-closed",
+    ):
+        roster_successor.add_argument(f"--web-{label}", type=Path, required=True)
+    roster_successor.add_argument("--output", type=Path, required=True)
+    bind_roster_successor = sub.add_parser("bind-capacity-roster-successor")
+    bind_roster_successor.add_argument("--successor-roster", type=Path, required=True)
+    bind_roster_successor.add_argument("--expected-successor-roster-file-sha256", required=True)
+    bind_roster_successor.add_argument("--expected-successor-roster-receipt-sha256", required=True)
     args = parser.parse_args()
     if args.command == "seal-capacity-roster":
         print(
             json.dumps(
                 seal_capacity_roster(protocol_path=args.protocol, output_path=args.output),
+                sort_keys=True,
+            )
+        )
+        return
+    if args.command == "seal-capacity-roster-successor":
+        print(
+            json.dumps(
+                seal_capacity_roster_successor(
+                    protocol_path=args.protocol,
+                    predecessor_roster_path=args.predecessor_roster,
+                    expected_predecessor_roster_file_sha256=(
+                        args.expected_predecessor_roster_file_sha256
+                    ),
+                    expected_predecessor_roster_receipt_sha256=(
+                        args.expected_predecessor_roster_receipt_sha256
+                    ),
+                    retired_terminal_path=args.retired_terminal,
+                    retired_release_path=args.retired_release,
+                    retired_capacity_release_path=args.retired_capacity_release,
+                    web_authority_path=args.web_authority,
+                    web_batch_path=args.web_batch,
+                    web_created_path=args.web_created,
+                    web_release_path=args.web_release,
+                    web_capacity_reserved_path=args.web_capacity_reserved,
+                    web_capacity_release_path=args.web_capacity_release,
+                    web_owner_ready_path=args.web_owner_ready,
+                    web_owner_closed_path=args.web_owner_closed,
+                    output_path=args.output,
+                ),
+                sort_keys=True,
+            )
+        )
+        return
+    if args.command == "bind-capacity-roster-successor":
+        if args.web_retry_execution is None:
+            parser.error("--web-retry-execution is required")
+        print(
+            json.dumps(
+                bind_capacity_roster_successor(
+                    protocol_path=args.protocol,
+                    retry_execution_path=args.web_retry_execution,
+                    successor_roster_path=args.successor_roster,
+                    expected_successor_roster_file_sha256=(
+                        args.expected_successor_roster_file_sha256
+                    ),
+                    expected_successor_roster_receipt_sha256=(
+                        args.expected_successor_roster_receipt_sha256
+                    ),
+                ),
                 sort_keys=True,
             )
         )

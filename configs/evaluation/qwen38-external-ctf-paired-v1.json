@@ -55,7 +55,7 @@
     "capacity_authority": "web_retry_capacity_successor_v1",
     "capacity_successor_required": true,
     "worker_sha256": "sha256:eda973d385a913c7db2a25014700cf7af3db501d63655bfb261619440490e7ba",
-    "coordinator_sha256": "sha256:045646b5e8232ef3394a50c2002367dbaf16ae066583cd45e55253b276fc1774",
+    "coordinator_sha256": "sha256:c8b9470734df8f1cd2a3acaf35f212ca8c26ad0351f81243d145aad9738b0e76",
     "analyzer_sha256": "sha256:f31861b821b9b881d4719dc22896ea16c71fecaff3e5874e87cb1977d2ab252e",
     "sampling": {"temperature": 1.0, "top_p": 0.95, "top_k": null, "seed": null},
     "retry": {
@@ -374,5 +374,5 @@
       "infrastructure_failures": "reported_separately_never_model_failure"
     }
   },
-  "protocol_sha256": "sha256:fac9eb0ea381dbf05d11a5a943d43edae4e6c086696edc408a53b42bca79a459"
+  "protocol_sha256": "sha256:d91d4258c06bd9202650532ff1f40490ec4b1f199013df5b37d22754bd5629d2"
 }
