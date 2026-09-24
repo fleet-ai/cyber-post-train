@@ -223,14 +223,29 @@ def test_all_candidates_reconstruct_exact_phase1_live_binding() -> None:
 
 def test_jit_gate_requires_every_phase1_live_binding_field() -> None:
     gate = _load(PACKET)["fresh_live_jit_gate"]
-    required = set(gate["required_exact_fields"])
-    assert {
+    assert gate["required_exact_fields"] == [
         "fleet_team_id",
+        "task.id",
+        "task.key",
+        "task.version_id",
+        "task.lifecycle_status",
+        "task.prompt_sha256",
+        "task.env_variables_sha256",
+        "task.output_json_schema_sha256",
         "task.cyber_contract",
+        "environment.id",
+        "environment.version",
+        "environment.version_id",
+        "environment.data_id",
+        "environment.data_version",
+        "environment.runtime_seed_content_sha256",
         "environment.ttl_seconds",
+        "verifier.id",
+        "verifier.version_id",
+        "verifier.version",
+        "verifier.sha256",
         "verifier.function_name",
-    } <= required
-    assert "task.cyber_contract_sha256" not in required
+    ]
 
 
 def test_no_selected_group_or_component_crosses_split_roles() -> None:
