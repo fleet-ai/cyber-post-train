@@ -1,0 +1,44 @@
+{
+  "cleanup": {
+    "config_map_absent": true,
+    "job_absent": true,
+    "pods_absent": true,
+    "resource_release_confirmed": true,
+    "workloads_absent": true
+  },
+  "config_map": {
+    "name": "chris-q38-m96-bind-probe-a3-code",
+    "uid": "b025a4db-78a3-42d6-b399-0796554090ea"
+  },
+  "job": {
+    "exit_code": 0,
+    "name": "chris-q38-m96-bind-probe-a3",
+    "restart_count": 0,
+    "status": "Complete",
+    "uid": "9e5fb9db-25a4-4f75-949e-7a580b15c724"
+  },
+  "observed_at": "2026-09-24T05:05:24Z",
+  "packet_sha256": "sha256:7c07c90b5ffc2fe39411d8cc7aea6d88c694a2e18fe45f7c549b2fc607c7c825",
+  "pod": {
+    "name": "chris-q38-m96-bind-probe-a3-rjxgq",
+    "uid": "a32603ee-dc67-4629-b26a-9ce097bded79"
+  },
+  "raw_weights_prompts_traces_flags_answers_scores_or_credentials_included": false,
+  "receipt": {
+    "hf_source_status": "invalid",
+    "megatron_source_status": "invalid",
+    "paired_candidate_count": 7,
+    "paired_candidate_valid_count": 0,
+    "sha256": "sha256:0d81082a5b33e32bdec3485df61350c1d00ba26e2d3d23f68f8f3243c52b835e",
+    "sources_share_filesystem": false,
+    "status": "staging_required"
+  },
+  "resources": {
+    "failure_alerts": "off",
+    "gpus": 0,
+    "priority": "c1/q1"
+  },
+  "schema": "cyber_qwen38_miles96_binding_probe_terminal_v1",
+  "server_preview_sha256": "sha256:9d5c0ef82b4ffdaef95ba25e608930275c41b0d27ee3d86eb1082ba9fb668091",
+  "sha256": "sha256:1801ba18d416852d9075168fdc5332350952f3c5a7aed45381cb4649008953b2"
+}
