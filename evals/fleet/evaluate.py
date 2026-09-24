@@ -111,6 +111,26 @@ SERVER_PREVIEW_CONTROLLER_LABELS = {
     "controller-uid",
 }
 
+# Safety ceiling, not an expected startup duration. The old probe launched two
+# complete OpenCode processes under one 60-second budget, so a cold valid worker
+# could fail. The semantic probe below starts OpenCode once and checks its
+# writable directories directly.
+AGENT_STARTUP_PROBE_TIMEOUT_SECONDS = 300
+AGENT_STARTUP_PROBE = """
+test "$HOME" = /home/node
+test "$(id -u)" -ne 0
+for directory in \
+  "$HOME/.config/opencode" \
+  "$HOME/.cache/opencode" \
+  "$HOME/.local/state/opencode" \
+  "$HOME/.local/share/opencode"; do
+  mkdir -p "$directory"
+  probe=$(mktemp "$directory/.cyber-preflight.XXXXXX")
+  rm "$probe"
+done
+opencode --version
+""".strip()
+
 
 def stable_job_preview(value: dict) -> dict:
     """Remove only server-generated Job UID projections before evidence hashing."""
@@ -434,42 +454,45 @@ def check_images(plan: dict) -> None:
                 != plan["treatment"]["release_asset_sha256"]
             ):
                 raise RuntimeError("harness release identity differs")
-    # Version alone never initializes OpenCode's data directories. Exercise the
-    # same uid, HOME and private mount as a real agent, offline and before claims.
+    # Exercise the same non-root uid, HOME and private mount as a real agent,
+    # offline and before claims. Check OpenCode's directories directly:
+    # `opencode db path` initializes the full AppRuntime in 1.18.27, so its
+    # latency is not a reliable image or permission check.
     bind_root = os.environ.get("DOCKER_BIND_ROOT")
     if bind_root is not None and not Path(bind_root).is_dir():
         raise RuntimeError("shared Docker bind root is unavailable")
     with tempfile.TemporaryDirectory(prefix="cpt-agent-preflight-", dir=bind_root) as home:
         if os.geteuid() == 0:
             os.chown(home, 1000, 1000)
-        startup = subprocess.run(
-            [
-                "docker",
-                "run",
-                "--rm",
-                "--platform",
-                "linux/amd64",
-                "--network",
-                "none",
-                "--pull",
-                "never",
-                *harness.agent_container_user_args(),
-                "-v",
-                f"{home}:/home/node",
-                plan["images"]["agent"],
-                "bash",
-                "-lc",
-                "opencode --version && opencode db path",
-            ],
-            capture_output=True,
-            text=True,
-            check=False,
-            timeout=60,
-        )
-    if startup.returncode or startup.stdout.splitlines() != [
-        plan["treatment"]["harness_version"],
-        "/home/node/.local/share/opencode/opencode.db",
-    ]:
+        try:
+            startup = subprocess.run(
+                [
+                    "docker",
+                    "run",
+                    "--rm",
+                    "--platform",
+                    "linux/amd64",
+                    "--network",
+                    "none",
+                    "--pull",
+                    "never",
+                    *harness.agent_container_user_args(),
+                    "-v",
+                    f"{home}:/home/node",
+                    plan["images"]["agent"],
+                    "bash",
+                    "-ceu",
+                    "--",
+                    AGENT_STARTUP_PROBE,
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=AGENT_STARTUP_PROBE_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as error:
+            raise RuntimeError("harness startup probe exceeded its safety deadline") from error
+    if startup.returncode or startup.stdout.splitlines() != [plan["treatment"]["harness_version"]]:
         raise RuntimeError("harness version or writable agent-home startup differs")
 
 
